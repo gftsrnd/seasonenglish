@@ -1,0 +1,6 @@
+<!doctype html><meta charset="utf-8"><title>pdf text</title><pre id="out" style="white-space:pre-wrap;font:13px monospace">loading…</pre>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<script>
+pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+(async () => { const doc = await pdfjsLib.getDocument('placement-test.pdf').promise; let out = ''; for (let i = 1; i <= doc.numPages; i++) { const page = await doc.getPage(i); const tc = await page.getTextContent(); let last = null, line = ''; const lines = []; tc.items.forEach(it => { const y = Math.round(it.transform[5]); if (last !== null && Math.abs(y - last) > 3) { lines.push(line); line = ''; } line += it.str; last = y; }); lines.push(line); out += `\n===== PAGE ${i} =====\n` + lines.join('\n'); } document.getElementById('out').textContent = out; window.__done = true; })().catch(e => { document.getElementById('out').textContent = 'ERR ' + e.message; window.__done = true; });
+</script>

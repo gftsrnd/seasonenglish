@@ -1,0 +1,18 @@
+{
+  "name": "season-english",
+  "version": "1.0.0",
+  "description": "Season English – internal English-learning app for GFT (vanilla JS, no build step). Front-end handover package.",
+  "private": true,
+  "type": "commonjs",
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "scripts": {
+    "dev": "node server.js",
+    "start": "node server.js",
+    "check": "node -e \"new Function(require('fs').readFileSync('core.js','utf8')); console.log('core.js: syntax OK')\""
+  },
+  "dependencies": {},
+  "devDependencies": {},
+  "license": "UNLICENSED"
+}

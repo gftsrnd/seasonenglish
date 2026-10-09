@@ -1,0 +1,22 @@
+# dependencies
+node_modules/
+
+# environment / secrets
+.env
+.env.*
+!.env.example
+
+# build / packaging output
+dist/
+build/
+*.zip
+
+# local tooling
+.claude/
+*.log
+.DS_Store
+Thumbs.db
+
+# generated screenshots / scratch
+docs/screenshots/
+season-english-logic-v2/
