@@ -1,6 +1,8 @@
 import type {
   AssessmentDecisionInput, AssessmentDecisionView, AssessmentKind, AssessmentLevelFormSlotView,
   AssessmentResponseView, AssessmentReviewOverviewView, AssessmentSectionCode, AssessmentView,
+  CefrLevel, ContentLessonDraftInput, ContentLessonMatrixView, ContentLessonSetVersionView, ContentPromptKey,
+  ContentPromptSettingsView, ContentReviewView, ContentWeekFrameView, ContentWeekInput,
   LearnerHomeView, LearnerProfileData, LearnerProfileView, LearnerProgressView,
   LessonProgressView, LessonView, MicroLessonView, SessionView
 } from "@e4s/contracts";
@@ -42,6 +44,17 @@ export const apiClient: AuthClient & {
   getAssessmentReviewOverview(): Promise<AssessmentReviewOverviewView>;
   decideAssessment(attemptId: string, input: AssessmentDecisionInput): Promise<AssessmentDecisionView>;
   getAssessmentLevelForms(): Promise<AssessmentLevelFormSlotView[]>;
+  getContentWeeks(): Promise<ContentWeekFrameView>;
+  saveContentWeeks(weeks: ContentWeekInput[]): Promise<ContentWeekFrameView>;
+  getContentLessonMatrix(): Promise<ContentLessonMatrixView>;
+  getContentLessonSet(week: number, cefr: CefrLevel): Promise<ContentLessonSetVersionView>;
+  saveContentLessonDraft(week: number, cefr: CefrLevel, lessons: ContentLessonDraftInput[]): Promise<ContentLessonSetVersionView>;
+  submitContentLessonSet(versionId: string): Promise<ContentLessonSetVersionView>;
+  publishContentLessonSet(versionId: string): Promise<ContentLessonSetVersionView>;
+  retireContentLessonSet(versionId: string): Promise<ContentLessonSetVersionView>;
+  getContentReview(): Promise<ContentReviewView>;
+  getContentPrompts(): Promise<ContentPromptSettingsView>;
+  saveContentPrompts(groups: Array<{ key: ContentPromptKey; content: string }>): Promise<ContentPromptSettingsView>;
 } = {
   learnerLogin: (input: LoginCredentials) => request("/api/auth/learner/login", { method: "POST", body: JSON.stringify(input) }),
   staffLogin: (input: LoginCredentials) => request("/api/auth/staff/login", { method: "POST", body: JSON.stringify(input) }),
@@ -90,5 +103,18 @@ export const apiClient: AuthClient & {
   decideAssessment: (attemptId, input) => request(`/api/v1/assessment-reviews/${encodeURIComponent(attemptId)}/decision`, {
     method: "POST", body: JSON.stringify(input)
   }),
-  getAssessmentLevelForms: () => request("/api/v1/assessment-level-forms")
+  getAssessmentLevelForms: () => request("/api/v1/assessment-level-forms"),
+  getContentWeeks: () => request("/api/v1/content/weeks"),
+  saveContentWeeks: (weeks) => request("/api/v1/content/weeks", { method: "PUT", body: JSON.stringify({ weeks }) }),
+  getContentLessonMatrix: () => request("/api/v1/content/lesson-matrix"),
+  getContentLessonSet: (week, cefr) => request(`/api/v1/content/lesson-sets/${week}/${encodeURIComponent(cefr)}`),
+  saveContentLessonDraft: (week, cefr, lessons) => request(`/api/v1/content/lesson-sets/${week}/${encodeURIComponent(cefr)}/draft`, {
+    method: "PUT", body: JSON.stringify({ lessons })
+  }),
+  submitContentLessonSet: (versionId) => request(`/api/v1/content/lesson-set-versions/${encodeURIComponent(versionId)}/review`, { method: "POST", body: "{}" }),
+  publishContentLessonSet: (versionId) => request(`/api/v1/content/lesson-set-versions/${encodeURIComponent(versionId)}/publication`, { method: "POST", body: "{}" }),
+  retireContentLessonSet: (versionId) => request(`/api/v1/content/lesson-set-versions/${encodeURIComponent(versionId)}/retirement`, { method: "POST", body: "{}" }),
+  getContentReview: () => request("/api/v1/content/review"),
+  getContentPrompts: () => request("/api/v1/content/prompts"),
+  saveContentPrompts: (groups) => request("/api/v1/content/prompts", { method: "PUT", body: JSON.stringify({ groups }) })
 };

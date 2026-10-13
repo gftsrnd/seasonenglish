@@ -6,8 +6,10 @@ export const DEMO_IDS = {
   learner: "00000000-0000-4000-8000-000000000101",
   operator: "00000000-0000-4000-8000-000000000102",
   manager: "00000000-0000-4000-8000-000000000103",
+  checker: "00000000-0000-4000-8000-000000000104",
   program: "00000000-0000-4000-8000-000000000201",
   week: "00000000-0000-4000-8000-000000000301",
+  week2: "00000000-0000-4000-8000-000000000302",
   lessonSet: "00000000-0000-4000-8000-000000000401",
   publishedLessonSetVersion: "00000000-0000-4000-8000-000000000501",
   lessons: [
@@ -52,11 +54,21 @@ const badgeCatalog = [
 ] as const;
 
 const lessonTitles = [
-  "Giới thiệu tên và vai trò",
-  "Nói nơi bạn đến từ",
-  "Mô tả công việc hằng ngày",
-  "Hỏi lại để làm rõ",
-  "Tóm tắt và đề xuất bước tiếp theo"
+  "I work in… as…",
+  "Past simple: I joined…",
+  "What do you do?",
+  "I am working on…",
+  "be going to + verb"
+] as const;
+
+const promptDefaults = [
+  ["00000000-0000-4000-8000-000000001001", "system_rules", "You are the AI engine of Season English, an internal English-learning product for Vietnamese office staff. Adapt vocabulary, sentence length and grammar strictly to the learner's CEFR level. Use Vietnamese explanations for A1–A2 and English for B1+. Be warm but honest, point out real errors, and keep examples workplace-relevant."],
+  ["00000000-0000-4000-8000-000000001002", "assessment_scoring", "Grade the productive parts of the Workplace English CEFR Placement Test using the approved writing and speaking rubrics. Return criterion scores, one suggested CEFR level, a short Vietnamese rationale and a realistic one-month goal. Do not assess pronunciation from transcript text."],
+  ["00000000-0000-4000-8000-000000001003", "weekly_lessons", "Return valid JSON only. Create {n} CEFR-aligned workplace English lessons for {topic}, {job} and {learning_style}. Keep the approved lesson order and all required keys for objective, theory, vocabulary, pronunciation, listening, reading, writing, speaking and practice."],
+  ["00000000-0000-4000-8000-000000001004", "week_suggestions", "Return valid JSON only. Suggest three distinct workplace-English topic options for each of {n} weeks, using {learners}, {levels} and {used}. Include a concrete situation, measurable objectives, vocabulary hints and a five-day plan for every level."],
+  ["00000000-0000-4000-8000-000000001005", "micro_grading", "Return valid JSON only. Grade {answer} against {practice}, {theory} and {vocab} at {cefr_level}. Accept any grammatically correct answer that follows the taught pattern and fits the meaning. Give concise feedback without revealing the answer when retry is needed."],
+  ["00000000-0000-4000-8000-000000001006", "coach_dialogue", "You are Season, the learner's friendly conversation coach. Reply naturally at the learner's CEFR level, ask one follow-up question, score meaning, vocabulary and grammar, give at most three concrete corrections and return a corrected version when needed."],
+  ["00000000-0000-4000-8000-000000001007", "weekly_practice_grading", "Grade a learner's weekly practice with the shared rubric. Score meaning, vocabulary and grammar, calculate an overall score, name the strongest point and the most important fix, then provide at most three concrete suggestions and a corrected version." ]
 ] as const;
 
 const lessonStudyContent = [
@@ -144,6 +156,7 @@ export async function seedDemo(client: Client): Promise<void> {
   const users = [
     [DEMO_IDS.learner, "learner", "Học viên Demo", "learner@e4s.local"],
     [DEMO_IDS.operator, "operator", "Thư Demo", "operator@e4s.local"],
+    [DEMO_IDS.checker, "operator", "Minh Checker", "checker@e4s.local"],
     [DEMO_IDS.manager, "manager", "Quản lý Demo", "manager@e4s.local"]
   ] as const;
   for (const user of users) {
@@ -186,8 +199,10 @@ export async function seedDemo(client: Client): Promise<void> {
     })]
   );
   await client.query(
-    `insert into programs (id, organization_id, name, start_date, week_count, status)
-     values ($1, $2, 'E4S Pilot', current_date, 4, 'active') on conflict (id) do nothing`,
+    `insert into programs (id, organization_id, name, start_date, week_count, current_week_override, status)
+     values ($1, $2, 'E4S Pilot', date '2026-10-05', 2, 1, 'active')
+     on conflict (id) do update set start_date = excluded.start_date, week_count = excluded.week_count,
+       current_week_override = excluded.current_week_override, status = excluded.status`,
     [DEMO_IDS.program, DEMO_IDS.organization]
   );
   await client.query(
@@ -197,11 +212,33 @@ export async function seedDemo(client: Client): Promise<void> {
     [DEMO_IDS.program, DEMO_IDS.learner]
   );
   await client.query(
-    `insert into program_weeks (id, program_id, week_number, topic, description, objectives)
-     values ($1, $2, 1, 'Giới thiệu trong công việc', 'Tự giới thiệu và hỏi thông tin cơ bản', '["Tự giới thiệu 4-5 câu"]'::jsonb)
-     on conflict (id) do nothing`,
+    `insert into program_weeks (id, program_id, week_number, topic, description, objectives, key_vocab_hint)
+     values ($1, $2, 1, 'Introducing yourself & your job',
+       'Tự giới thiệu trong buổi họp đầu với khách hoặc đồng nghiệp mới.',
+       '["Nói/viết 4–6 câu về bản thân và công việc."]'::jsonb,
+       'colleague, in charge of, department, deadline')
+     on conflict (id) do update set topic = excluded.topic, description = excluded.description,
+       objectives = excluded.objectives, key_vocab_hint = excluded.key_vocab_hint`,
     [DEMO_IDS.week, DEMO_IDS.program]
   );
+  await client.query(
+    `insert into program_weeks (id, program_id, week_number, topic, description, objectives, key_vocab_hint)
+     values ($1, $2, 2, 'Emails & rescheduling meetings',
+       'Viết email ngắn xin dời lịch và xác nhận lịch mới.',
+       '["Viết email 60–100 từ xin dời lịch."]'::jsonb,
+       'reschedule, postpone, available, confirm')
+     on conflict (id) do update set topic = excluded.topic, description = excluded.description,
+       objectives = excluded.objectives, key_vocab_hint = excluded.key_vocab_hint`,
+    [DEMO_IDS.week2, DEMO_IDS.program]
+  );
+  for (const [id, taskKey, content] of promptDefaults) {
+    await client.query(
+      `insert into prompt_versions (id, organization_id, task_key, version, content, status, created_by)
+       values ($1, $2, $3, 1, $4, 'active', $5)
+       on conflict (id) do nothing`,
+      [id, DEMO_IDS.organization, taskKey, content, DEMO_IDS.operator]
+    );
+  }
   await client.query(
     `insert into lesson_sets (id, program_week_id, cefr)
      values ($1, $2, 'A2') on conflict (id) do nothing`,
@@ -211,7 +248,7 @@ export async function seedDemo(client: Client): Promise<void> {
     `insert into lesson_set_versions (id, lesson_set_id, version, status, payload, created_by, approved_by, published_at)
      values ($1, $2, 1, 'published', '{"source":"deterministic-seed"}'::jsonb, $3, $4, now())
      on conflict (id) do nothing`,
-    [DEMO_IDS.publishedLessonSetVersion, DEMO_IDS.lessonSet, DEMO_IDS.operator, DEMO_IDS.manager]
+    [DEMO_IDS.publishedLessonSetVersion, DEMO_IDS.lessonSet, DEMO_IDS.operator, DEMO_IDS.checker]
   );
 
   for (const [index, lessonId] of DEMO_IDS.lessons.entries()) {
@@ -219,7 +256,7 @@ export async function seedDemo(client: Client): Promise<void> {
     const title = lessonTitles[index] ?? `Bài ${dayNumber}`;
     await client.query(
       `insert into lessons (id, lesson_set_version_id, day_number, title)
-       values ($1, $2, $3, $4) on conflict (id) do nothing`,
+       values ($1, $2, $3, $4) on conflict (id) do update set title = excluded.title`,
       [lessonId, DEMO_IDS.publishedLessonSetVersion, dayNumber, title]
     );
     await client.query(

@@ -43,14 +43,15 @@ describe("normalized E4S database", () => {
 
   it("seeds deterministic learner, operator and manager accounts", async () => {
     const result = await client.query<{ id: string; role: string }>(
-      "select id, role from users where organization_id = $1 order by role",
+      "select id, role from users where organization_id = $1 order by role, id",
       [DEMO_IDS.organization]
     );
 
     expect(result.rows).toEqual([
       { id: DEMO_IDS.learner, role: "learner" },
       { id: DEMO_IDS.manager, role: "manager" },
-      { id: DEMO_IDS.operator, role: "operator" }
+      { id: DEMO_IDS.operator, role: "operator" },
+      { id: DEMO_IDS.checker, role: "operator" }
     ]);
   });
 

@@ -1,14 +1,16 @@
 import { useEffect, useState } from "react";
-import { BrowserRouter, Navigate, NavLink, Route, Routes, useNavigate, useParams } from "react-router";
+import { BrowserRouter, Navigate, NavLink, Route, Routes, useNavigate, useParams, useSearchParams } from "react-router";
 import type {
   AssessmentKind, AssessmentLevelFormSlotView, AssessmentReviewOverviewView, AssessmentSectionCode, AssessmentView,
+  CefrLevel, ContentLessonMatrixView, ContentLessonSetVersionView, ContentPromptSettingsView,
+  ContentReviewView, ContentWeekFrameView,
   LearnerAvatarData, LearnerHomeView, LearnerProfileData, LearnerProfileView, LearnerProgressView,
   LessonView, MicroLessonView, SessionView
 } from "@e4s/contracts";
 import { apiClient } from "./api-client.js";
 import { EntryScreen } from "./features/auth/index.js";
 import { Assessment, Avatar, Home, Lesson, Micro, Onboard, Profile } from "./pages/learner/index.js";
-import { LevelApproval, LevelForms } from "./pages/operator/index.js";
+import { LessonSet, Lessons, LevelApproval, LevelForms, Prompts, Review, Weeks } from "./pages/operator/index.js";
 
 export function App() {
   const [session, setSession] = useState<SessionView | null | undefined>(undefined);
@@ -27,7 +29,7 @@ function StaffShell({ session, onLogout }: { session: SessionView; onLogout: () 
     <aside className="sidebar">
       <a className="brand" href={operator ? "/op" : "/mgr"}><span aria-hidden="true">◆</span><span>Season English <small>· GFT</small></span></a>
       <nav aria-label={operator ? "Điều hướng người vận hành" : "Điều hướng quản lý"}>{operator ? <>
-        <NavLink end to="/op">Duyệt mức</NavLink><a href="/op/weeks">Chủ đề</a><a href="/op/lessons">Bài học</a><a href="/op/review">Đọc mẫu</a><a href="/settings">Cài đặt</a>
+        <NavLink end to="/op">Duyệt mức</NavLink><NavLink to="/op/weeks">Chủ đề</NavLink><NavLink to="/op/lessons">Bài học</NavLink><NavLink to="/op/review">Đọc mẫu</NavLink><NavLink to="/settings">Cài đặt</NavLink>
       </> : <>
         <a href="/mgr">Tiến độ</a><a href="/mgr/ops">Vận hành</a><a href="/mgr/reminders">Nhắc học</a><a href="/mgr/report">Báo cáo</a><a href="/settings">Cài đặt</a>
       </>}</nav>
@@ -38,6 +40,12 @@ function StaffShell({ session, onLogout }: { session: SessionView; onLogout: () 
       <Route path="/home" element={<Navigate replace to={operator ? "/op" : "/mgr"} />} />
       <Route path="/op" element={<LevelApprovalRoute readOnly={!operator} />} />
       <Route path="/op/levelforms" element={<LevelFormsRoute />} />
+      <Route path="/op/weeks" element={<WeeksRoute readOnly={!operator} />} />
+      <Route path="/op/lessons" element={<LessonsRoute />} />
+      <Route path="/op/lessons/:week/:cefr" element={<LessonSetRoute readOnly={!operator} />} />
+      <Route path="/op/review" element={<ReviewRoute />} />
+      <Route path="/op/prompts" element={<PromptsRoute readOnly={!operator} />} />
+      <Route path="/settings" element={<SettingsPending />} />
       <Route path="*" element={<StaffPending />} />
     </Routes></div>
   </div>;
@@ -64,7 +72,92 @@ function LevelFormsRoute() {
   return <LevelForms slots={slots} aiAvailable={false} />;
 }
 
+function WeeksRoute({ readOnly }: { readOnly: boolean }) {
+  const [view, setView] = useState<ContentWeekFrameView>();
+  const [error, setError] = useState("");
+  useEffect(() => { void apiClient.getContentWeeks().then(setView).catch(() => setError("Không tải được khung chủ đề tuần.")); }, []);
+  if (!view) return error ? <ErrorState message={error} /> : <Loading label="Đang tải khung chủ đề" />;
+  return <Weeks view={view} readOnly={readOnly} onSave={async (weeks) => {
+    setError("");
+    try { setView(await apiClient.saveContentWeeks(weeks)); }
+    catch { setError("Không lưu được khung chủ đề tuần."); }
+  }} />;
+}
+
+function LessonsRoute() {
+  const [view, setView] = useState<ContentLessonMatrixView>();
+  const [error, setError] = useState("");
+  useEffect(() => { void apiClient.getContentLessonMatrix().then(setView).catch(() => setError("Không tải được ma trận bài học.")); }, []);
+  if (!view) return error ? <ErrorState message={error} /> : <Loading label="Đang tải bài học" />;
+  return <Lessons view={view} aiAvailable={false} />;
+}
+
+function LessonSetRoute({ readOnly }: { readOnly: boolean }) {
+  const params = useParams();
+  const [searchParams] = useSearchParams();
+  const week = Number(params.week);
+  const cefr = params.cefr as CefrLevel | undefined;
+  const [view, setView] = useState<ContentLessonSetVersionView>();
+  const [error, setError] = useState("");
+  const load = async () => {
+    if (!Number.isInteger(week) || !cefr) return Promise.reject(new Error("INVALID_ROUTE"));
+    try {
+      setView(await apiClient.getContentLessonSet(week, cefr));
+    } catch (reason) {
+      if (!(reason instanceof Error) || reason.message !== "CONTENT_LESSON_SET_NOT_FOUND") throw reason;
+      const frame = await apiClient.getContentWeeks();
+      setView({
+        lessonSetId: "", versionId: "", version: 0, status: "draft", weekNumber: week,
+        topic: frame.weeks.find((item) => item.weekNumber === week)?.topic ?? `Tuần ${week}`,
+        cefr, explanationLanguage: cefr === "A1" || cefr === "A2" ? "Tiếng Việt" : "English",
+        createdBy: null, approvedBy: null, createdAt: new Date().toISOString(), publishedAt: null, lessons: []
+      });
+    }
+  };
+  useEffect(() => { void load().catch(() => setError("Không tải được bộ bài học.")); }, [week, cefr]);
+  if (!view) return error ? <ErrorState message={error} /> : <Loading label="Đang tải bộ bài" />;
+  const act = async (operation: (versionId: string) => Promise<ContentLessonSetVersionView>, message: string) => {
+    setError("");
+    try { setView(await operation(view.versionId)); }
+    catch { setError(message); }
+  };
+  return <LessonSet
+    view={view}
+    readOnly={readOnly}
+    initialEditingDay={searchParams.get("edit") === "1" ? 1 : null}
+    onSaveDraft={async (lessons) => {
+      setError("");
+      try { setView(await apiClient.saveContentLessonDraft(week, cefr!, lessons)); }
+      catch { setError("Không lưu được bản nháp. Hãy kiểm tra các mục bắt buộc trong bài."); }
+    }}
+    onSubmitReview={() => act(apiClient.submitContentLessonSet, "Không gửi duyệt được bộ bài.")}
+    onPublish={() => act(apiClient.publishContentLessonSet, "Không duyệt được bộ bài. Người soạn không thể tự duyệt.")}
+    onRetire={() => act(apiClient.retireContentLessonSet, "Không thu hồi được bộ bài.")}
+  />;
+}
+
+function ReviewRoute() {
+  const [view, setView] = useState<ContentReviewView>();
+  const [error, setError] = useState("");
+  useEffect(() => { void apiClient.getContentReview().then(setView).catch(() => setError("Không tải được dữ liệu kiểm tra AI.")); }, []);
+  if (!view) return error ? <ErrorState message={error} /> : <Loading label="Đang tải dữ liệu kiểm tra" />;
+  return <Review view={view} />;
+}
+
+function PromptsRoute({ readOnly }: { readOnly: boolean }) {
+  const [view, setView] = useState<ContentPromptSettingsView>();
+  const [error, setError] = useState("");
+  useEffect(() => { void apiClient.getContentPrompts().then(setView).catch(() => setError("Không tải được prompt và rubric.")); }, []);
+  if (!view) return error ? <ErrorState message={error} /> : <Loading label="Đang tải prompt" />;
+  return <Prompts view={view} readOnly={readOnly} onSave={async (groups) => {
+    setError("");
+    try { setView(await apiClient.saveContentPrompts(groups)); }
+    catch { setError("Không lưu được prompt và rubric."); }
+  }} />;
+}
+
 function StaffPending() { return <main className="operator-page"><h1>Nội dung đang được nối dữ liệu</h1><p>Màn này giữ nguyên trong danh sách đã chốt và sẽ được hoàn thiện ở bước tương ứng.</p></main>; }
+function SettingsPending() { return <main className="operator-page"><h1>Cài đặt</h1><p>Các khối cấu hình đã chốt được giữ tại màn này và sẽ được nối dữ liệu ở bước cài đặt chung.</p></main>; }
 
 function LearnerShell({ session, onLogout }: { session: SessionView; onLogout: () => void }) {
   const [avatar, setAvatar] = useState<LearnerAvatarData>();

@@ -51,6 +51,7 @@ export const learnerProfiles = pgTable("learner_profiles", {
 export const programs = pgTable("programs", {
   id: uuid("id").primaryKey(), organizationId: uuid("organization_id").notNull().references(() => organizations.id),
   name: text("name").notNull(), startDate: date("start_date").notNull(), weekCount: integer("week_count").notNull(),
+  currentWeekOverride: integer("current_week_override"),
   status: text("status").notNull().default("draft"), createdAt: now()
 });
 
@@ -63,7 +64,8 @@ export const enrollments = pgTable("enrollments", {
 export const programWeeks = pgTable("program_weeks", {
   id: uuid("id").primaryKey(), programId: uuid("program_id").notNull().references(() => programs.id, { onDelete: "cascade" }),
   weekNumber: integer("week_number").notNull(), topic: text("topic").notNull(),
-  description: text("description").notNull().default(""), objectives: jsonb("objectives").notNull().default(emptyArray)
+  description: text("description").notNull().default(""), objectives: jsonb("objectives").notNull().default(emptyArray),
+  keyVocabHint: text("key_vocab_hint").notNull().default("")
 }, (table) => [uniqueIndex("program_weeks_program_number_unique").on(table.programId, table.weekNumber)]);
 
 export const promptVersions = pgTable("prompt_versions", {
@@ -273,4 +275,3 @@ export const databaseSchema = {
   practiceSubmissions, programWeeks, programs, progressRecords, promptVersions,
   reminders, rewardEvents, rubricVersions, sessions, surveys, userCredentials, users
 };
-

@@ -8,6 +8,14 @@ import type {
   AssessmentSnapshot,
   BadgeRoadmapItem,
   CefrLevel,
+  ContentLessonDraftInput,
+  ContentLessonMatrixView,
+  ContentLessonSetVersionView,
+  ContentPromptKey,
+  ContentPromptSettingsView,
+  ContentReviewView,
+  ContentWeekFrameView,
+  ContentWeekInput,
   LearnerProfileData,
   LearnerProgressView,
   LevelReadinessMetric,
@@ -291,7 +299,10 @@ class LearningRepository {
        from enrollments e
        join programs p on p.id = e.program_id and p.status = 'active'
        join program_weeks pw on pw.program_id = p.id
-         and pw.week_number = greatest(1, least(p.week_count, ((current_date - p.start_date) / 7) + 1))
+         and pw.week_number = coalesce(
+           p.current_week_override,
+           greatest(1, least(p.week_count, ((current_date - p.start_date) / 7) + 1))
+         )
        where e.learner_id = $1
        limit 1`,
       [learnerId]
@@ -818,6 +829,555 @@ function mapProgress(
 class ContentRepository {
   constructor(private readonly pool: Pool) {}
 
+  async listWeeks(staffId: string): Promise<ContentWeekFrameView | null> {
+    const result = await this.pool.query<{
+      program_id: string;
+      start_date: string;
+      week_count: number;
+      current_week_override: number | null;
+      id: string | null;
+      week_number: number | null;
+      topic: string | null;
+      description: string | null;
+      objectives: unknown;
+      key_vocab_hint: string | null;
+    }>(
+      `select p.id as program_id, p.start_date::text, p.week_count, p.current_week_override,
+              pw.id, pw.week_number, pw.topic, pw.description, pw.objectives, pw.key_vocab_hint
+       from users staff
+       join programs p on p.organization_id = staff.organization_id and p.status = 'active'
+       left join program_weeks pw on pw.program_id = p.id
+       where staff.id = $1
+       order by pw.week_number`,
+      [staffId]
+    );
+    const first = result.rows[0];
+    if (!first) return null;
+    const start = new Date(`${first.start_date}T00:00:00.000Z`);
+    const today = new Date();
+    const dateText = (value: Date) => value.toISOString().slice(0, 10);
+    return {
+      pilot: { startDate: first.start_date, weekCount: first.week_count },
+      weeks: result.rows.flatMap((row) => {
+        if (!row.id || row.week_number === null || row.topic === null) return [];
+        const weekStart = new Date(start);
+        weekStart.setUTCDate(start.getUTCDate() + ((row.week_number - 1) * 7));
+        const weekEnd = new Date(weekStart);
+        weekEnd.setUTCDate(weekStart.getUTCDate() + 6);
+        const objectives = Array.isArray(row.objectives)
+          ? row.objectives.filter((value): value is string => typeof value === "string").join("; ")
+          : "";
+        return [{
+          id: row.id,
+          weekNumber: row.week_number,
+          startDate: dateText(weekStart),
+          endDate: dateText(weekEnd),
+          current: first.current_week_override !== null
+            ? row.week_number === first.current_week_override
+            : today >= weekStart && today < new Date(weekEnd.getTime() + 86_400_000),
+          topic: row.topic,
+          description: row.description ?? "",
+          objectives,
+          keyVocabHint: row.key_vocab_hint ?? ""
+        }];
+      })
+    };
+  }
+
+  async saveWeeks(actorId: string, weeks: readonly ContentWeekInput[]): Promise<ContentWeekFrameView | null> {
+    const client = await this.pool.connect();
+    try {
+      await client.query("begin");
+      const program = await client.query<{ id: string; organization_id: string; week_count: number }>(
+        `select p.id, p.organization_id, p.week_count
+         from users actor join programs p on p.organization_id = actor.organization_id and p.status = 'active'
+         where actor.id = $1 for update of p`,
+        [actorId]
+      );
+      const row = program.rows[0];
+      if (!row) throw new Error("CONTENT_PROGRAM_NOT_FOUND");
+      for (const week of weeks) {
+        if (week.weekNumber < 1 || week.weekNumber > row.week_count) throw new Error("CONTENT_WEEK_OUT_OF_RANGE");
+        await client.query(
+          `insert into program_weeks
+             (id, program_id, week_number, topic, description, objectives, key_vocab_hint)
+           values ($1, $2, $3, $4, $5, $6::jsonb, $7)
+           on conflict (program_id, week_number) do update set
+             topic = excluded.topic, description = excluded.description,
+             objectives = excluded.objectives, key_vocab_hint = excluded.key_vocab_hint`,
+          [randomUUID(), row.id, week.weekNumber, week.topic.trim(), week.description.trim(),
+            JSON.stringify(week.objectives.trim() ? [week.objectives.trim()] : []), week.keyVocabHint.trim()]
+        );
+      }
+      await client.query(
+        `insert into audit_events
+           (id, organization_id, actor_user_id, action, entity_type, entity_id, payload, trace_id)
+         values ($1, $2, $3, 'content.weeks.updated', 'program', $4, $5::jsonb, $6)`,
+        [randomUUID(), row.organization_id, actorId, row.id,
+          JSON.stringify({ weekNumbers: weeks.map((week) => week.weekNumber) }), randomUUID()]
+      );
+      await client.query("commit");
+    } catch (error) {
+      await client.query("rollback");
+      throw error;
+    } finally { client.release(); }
+    return this.listWeeks(actorId);
+  }
+
+  async lessonMatrix(staffId: string): Promise<ContentLessonMatrixView | null> {
+    const program = await this.pool.query<{ id: string }>(
+      `select p.id from users staff
+       join programs p on p.organization_id = staff.organization_id and p.status = 'active'
+       where staff.id = $1 limit 1`,
+      [staffId]
+    );
+    const programId = program.rows[0]?.id;
+    if (!programId) return null;
+    const levelsResult = await this.pool.query<{ cefr: CefrLevel; learner_count: string }>(
+      `with supported(cefr, sort_order) as (
+         values ('A1', 1), ('A2', 2), ('B1', 3), ('B2', 4)
+       ), learner_counts as (
+         select cefr, count(*)::integer as learner_count from enrollments
+         where program_id = $1 and cefr is not null group by cefr
+       )
+       select supported.cefr, coalesce(learner_counts.learner_count, 0)::text as learner_count
+       from supported left join learner_counts using (cefr)
+       order by supported.sort_order`,
+      [programId]
+    );
+    const levels = levelsResult.rows.map((row) => ({ cefr: row.cefr, learnerCount: Number(row.learner_count) }));
+    const weeksResult = await this.pool.query<{ week_number: number; topic: string }>(
+      "select week_number, topic from program_weeks where program_id = $1 order by week_number",
+      [programId]
+    );
+    const weeks: ContentLessonMatrixView["weeks"] = [];
+    for (const week of weeksResult.rows) {
+      const cells: ContentLessonMatrixView["weeks"][number]["cells"] = [];
+      for (const level of levels) {
+        const version = await this.pool.query<{
+          version_id: string;
+          version: number;
+          status: Exclude<ContentLessonSetVersionView["status"], "retired"> | "retired";
+          created_at: Date;
+          lessons: Array<{ dayNumber: number; title: string }>;
+        }>(
+          `select lsv.id as version_id, lsv.version, lsv.status, lsv.created_at,
+                  coalesce(json_agg(json_build_object('dayNumber', l.day_number, 'title', l.title)
+                    order by l.day_number) filter (where l.id is not null), '[]') as lessons
+           from lesson_sets ls
+           join program_weeks pw on pw.id = ls.program_week_id
+           join lesson_set_versions lsv on lsv.lesson_set_id = ls.id
+           left join lessons l on l.lesson_set_version_id = lsv.id
+           where pw.program_id = $1 and pw.week_number = $2 and ls.cefr = $3
+           group by lsv.id
+           order by lsv.version desc limit 1`,
+          [programId, week.week_number, level.cefr]
+        );
+        const row = version.rows[0];
+        cells.push(row ? {
+          cefr: level.cefr,
+          status: row.status,
+          versionId: row.version_id,
+          version: row.version,
+          updatedAt: row.created_at.toISOString(),
+          lessons: row.lessons
+        } : {
+          cefr: level.cefr, status: "missing", versionId: null, version: null, updatedAt: null, lessons: []
+        });
+      }
+      weeks.push({ weekNumber: week.week_number, topic: week.topic, cells });
+    }
+    return { levels, weeks };
+  }
+
+  async saveLessonDraft(
+    actorId: string,
+    weekNumber: number,
+    cefr: CefrLevel,
+    lessonDrafts: readonly ContentLessonDraftInput[]
+  ): Promise<ContentLessonSetVersionView> {
+    const client = await this.pool.connect();
+    let versionId = "";
+    try {
+      await client.query("begin");
+      const context = await client.query<{ organization_id: string; week_id: string }>(
+        `select p.organization_id, pw.id as week_id
+         from users actor
+         join programs p on p.organization_id = actor.organization_id and p.status = 'active'
+         join program_weeks pw on pw.program_id = p.id and pw.week_number = $2
+         where actor.id = $1`,
+        [actorId, weekNumber]
+      );
+      const row = context.rows[0];
+      if (!row) throw new Error("CONTENT_WEEK_NOT_FOUND");
+      const existingSet = await client.query<{ id: string }>(
+        "select id from lesson_sets where program_week_id = $1 and cefr = $2 for update",
+        [row.week_id, cefr]
+      );
+      const lessonSetId = existingSet.rows[0]?.id ?? randomUUID();
+      if (!existingSet.rows[0]) {
+        await client.query(
+          "insert into lesson_sets (id, program_week_id, cefr) values ($1, $2, $3)",
+          [lessonSetId, row.week_id, cefr]
+        );
+      }
+      const next = await client.query<{ version: number }>(
+        "select coalesce(max(version), 0) + 1 as version from lesson_set_versions where lesson_set_id = $1",
+        [lessonSetId]
+      );
+      versionId = randomUUID();
+      await client.query(
+        `insert into lesson_set_versions (id, lesson_set_id, version, status, payload, created_by)
+         values ($1, $2, $3, 'draft', $4::jsonb, $5)`,
+        [versionId, lessonSetId, next.rows[0]?.version ?? 1,
+          JSON.stringify({ source: "manual", lessonCount: lessonDrafts.length }), actorId]
+      );
+      for (const draft of lessonDrafts) {
+        const lessonId = randomUUID();
+        await client.query(
+          "insert into lessons (id, lesson_set_version_id, day_number, title) values ($1, $2, $3, $4)",
+          [lessonId, versionId, draft.dayNumber, draft.title.trim()]
+        );
+        await client.query(
+          `insert into lesson_versions (id, lesson_id, version, status, content)
+           values ($1, $2, 1, 'draft', $3::jsonb)`,
+          [randomUUID(), lessonId, JSON.stringify({ durationMinutes: draft.durationMinutes, parts: draft.parts })]
+        );
+      }
+      await client.query(
+        `insert into audit_events
+           (id, organization_id, actor_user_id, action, entity_type, entity_id, payload, trace_id)
+         values ($1, $2, $3, 'content.lesson-set.draft-created', 'lesson_set_version', $4, '{}'::jsonb, $5)`,
+        [randomUUID(), row.organization_id, actorId, versionId, randomUUID()]
+      );
+      await client.query("commit");
+    } catch (error) {
+      await client.query("rollback");
+      throw error;
+    } finally { client.release(); }
+    const saved = await this.lessonSetVersion(actorId, versionId);
+    if (!saved) throw new Error("CONTENT_VERSION_NOT_FOUND");
+    return saved;
+  }
+
+  async lessonSetVersion(staffId: string, versionId: string): Promise<ContentLessonSetVersionView | null> {
+    const version = await this.pool.query<{
+      lesson_set_id: string;
+      version_id: string;
+      version: number;
+      status: ContentLessonSetVersionView["status"];
+      week_number: number;
+      topic: string;
+      cefr: CefrLevel;
+      created_by: string | null;
+      approved_by: string | null;
+      created_at: Date;
+      published_at: Date | null;
+    }>(
+      `select ls.id as lesson_set_id, lsv.id as version_id, lsv.version, lsv.status,
+              pw.week_number, pw.topic, ls.cefr, lsv.created_by, lsv.approved_by,
+              lsv.created_at, lsv.published_at
+       from users staff
+       join programs p on p.organization_id = staff.organization_id
+       join program_weeks pw on pw.program_id = p.id
+       join lesson_sets ls on ls.program_week_id = pw.id
+       join lesson_set_versions lsv on lsv.lesson_set_id = ls.id and lsv.id = $2
+       where staff.id = $1`,
+      [staffId, versionId]
+    );
+    const row = version.rows[0];
+    if (!row) return null;
+    const lessons = await this.pool.query<{
+      id: string;
+      day_number: number;
+      title: string;
+      content: { durationMinutes?: number; parts?: ContentLessonDraftInput["parts"] };
+    }>(
+      `select l.id, l.day_number, l.title, lv.content
+       from lessons l join lateral (
+         select content from lesson_versions where lesson_id = l.id order by version desc limit 1
+       ) lv on true
+       where l.lesson_set_version_id = $1 order by l.day_number`,
+      [versionId]
+    );
+    return {
+      lessonSetId: row.lesson_set_id,
+      versionId: row.version_id,
+      version: row.version,
+      status: row.status,
+      weekNumber: row.week_number,
+      topic: row.topic,
+      cefr: row.cefr,
+      explanationLanguage: row.cefr === "A1" || row.cefr === "A2" ? "Tiếng Việt" : "English",
+      createdBy: row.created_by,
+      approvedBy: row.approved_by,
+      createdAt: row.created_at.toISOString(),
+      publishedAt: row.published_at?.toISOString() ?? null,
+      lessons: lessons.rows.map((lesson) => ({
+        id: lesson.id,
+        dayNumber: lesson.day_number,
+        title: lesson.title,
+        durationMinutes: lesson.content.durationMinutes ?? 10,
+        parts: lesson.content.parts ?? [],
+        practiceLabel: practiceLabel(lesson.content.parts ?? [])
+      }))
+    };
+  }
+
+  async latestLessonSet(staffId: string, weekNumber: number, cefr: CefrLevel): Promise<ContentLessonSetVersionView | null> {
+    const result = await this.pool.query<{ id: string }>(
+      `select lsv.id from users staff
+       join programs p on p.organization_id = staff.organization_id and p.status = 'active'
+       join program_weeks pw on pw.program_id = p.id and pw.week_number = $2
+       join lesson_sets ls on ls.program_week_id = pw.id and ls.cefr = $3
+       join lesson_set_versions lsv on lsv.lesson_set_id = ls.id
+       where staff.id = $1 order by lsv.version desc limit 1`,
+      [staffId, weekNumber, cefr]
+    );
+    const id = result.rows[0]?.id;
+    return id ? this.lessonSetVersion(staffId, id) : null;
+  }
+
+  async submitVersionForReview(actorId: string, versionId: string): Promise<ContentLessonSetVersionView | null> {
+    const updated = await this.pool.query<{ id: string }>(
+      `update lesson_set_versions lsv set status = 'review'
+       from lesson_sets ls, program_weeks pw, programs p, users actor
+       where lsv.id = $2 and lsv.status = 'draft' and lsv.created_by = $1
+         and ls.id = lsv.lesson_set_id and pw.id = ls.program_week_id and p.id = pw.program_id
+         and actor.id = $1 and actor.organization_id = p.organization_id
+       returning lsv.id`,
+      [actorId, versionId]
+    );
+    return updated.rows[0] ? this.lessonSetVersion(actorId, versionId) : null;
+  }
+
+  async publishVersion(checkerId: string, versionId: string): Promise<ContentLessonSetVersionView> {
+    const client = await this.pool.connect();
+    try {
+      await client.query("begin");
+      const version = await client.query<{
+        lesson_set_id: string;
+        created_by: string;
+        organization_id: string;
+        status: string;
+      }>(
+        `select lsv.lesson_set_id, lsv.created_by, p.organization_id, lsv.status
+         from lesson_set_versions lsv
+         join lesson_sets ls on ls.id = lsv.lesson_set_id
+         join program_weeks pw on pw.id = ls.program_week_id
+         join programs p on p.id = pw.program_id
+         join users checker on checker.id = $1 and checker.organization_id = p.organization_id
+         where lsv.id = $2 for update of lsv`,
+        [checkerId, versionId]
+      );
+      const row = version.rows[0];
+      if (!row) throw new Error("CONTENT_VERSION_NOT_FOUND");
+      if (row.status !== "review") throw new Error("CONTENT_NOT_IN_REVIEW");
+      if (row.created_by === checkerId) throw new Error("CONTENT_MAKER_CANNOT_APPROVE");
+      await client.query(
+        "update lesson_set_versions set status = 'retired' where lesson_set_id = $1 and status = 'published'",
+        [row.lesson_set_id]
+      );
+      await client.query(
+        `update lesson_set_versions
+         set status = 'published', approved_by = $2, published_at = now()
+         where id = $1`,
+        [versionId, checkerId]
+      );
+      await client.query(
+        `update lesson_versions lv set status = 'published'
+         from lessons l where l.id = lv.lesson_id and l.lesson_set_version_id = $1`,
+        [versionId]
+      );
+      await client.query(
+        `insert into audit_events
+           (id, organization_id, actor_user_id, action, entity_type, entity_id, payload, trace_id)
+         values ($1, $2, $3, 'content.lesson-set.published', 'lesson_set_version', $4, '{}'::jsonb, $5)`,
+        [randomUUID(), row.organization_id, checkerId, versionId, randomUUID()]
+      );
+      await client.query("commit");
+    } catch (error) {
+      await client.query("rollback");
+      throw error;
+    } finally { client.release(); }
+    const published = await this.lessonSetVersion(checkerId, versionId);
+    if (!published) throw new Error("CONTENT_VERSION_NOT_FOUND");
+    return published;
+  }
+
+  async retireVersion(actorId: string, versionId: string): Promise<ContentLessonSetVersionView> {
+    const client = await this.pool.connect();
+    try {
+      await client.query("begin");
+      const retired = await client.query<{ organization_id: string }>(
+        `update lesson_set_versions lsv set status = 'retired'
+         from lesson_sets ls, program_weeks pw, programs p, users actor
+         where lsv.id = $2 and lsv.status = 'published'
+           and ls.id = lsv.lesson_set_id and pw.id = ls.program_week_id and p.id = pw.program_id
+           and actor.id = $1 and actor.organization_id = p.organization_id
+         returning p.organization_id`,
+        [actorId, versionId]
+      );
+      const row = retired.rows[0];
+      if (!row) throw new Error("CONTENT_NOT_PUBLISHED");
+      await client.query(
+        `update lesson_versions lv set status = 'retired'
+         from lessons l where l.id = lv.lesson_id and l.lesson_set_version_id = $1`,
+        [versionId]
+      );
+      await client.query(
+        `insert into audit_events
+           (id, organization_id, actor_user_id, action, entity_type, entity_id, payload, trace_id)
+         values ($1, $2, $3, 'content.lesson-set.retired', 'lesson_set_version', $4, '{}'::jsonb, $5)`,
+        [randomUUID(), row.organization_id, actorId, versionId, randomUUID()]
+      );
+      await client.query("commit");
+    } catch (error) {
+      await client.query("rollback");
+      throw error;
+    } finally { client.release(); }
+    const result = await this.lessonSetVersion(actorId, versionId);
+    if (!result) throw new Error("CONTENT_VERSION_NOT_FOUND");
+    return result;
+  }
+
+  async reviewOverview(staffId: string): Promise<ContentReviewView | null> {
+    const organization = await this.pool.query<{ organization_id: string }>(
+      "select organization_id from users where id = $1", [staffId]
+    );
+    const organizationId = organization.rows[0]?.organization_id;
+    if (!organizationId) return null;
+    const counts = await this.pool.query<{
+      submissions: string; coach: string; micro: string; appeals: string; attempts: string; assessments: string;
+    }>(
+      `select
+        (select count(*) from practice_submissions ps join users u on u.id = ps.learner_id where u.organization_id = $1)::text as submissions,
+        (select count(*) from coach_turns ct join coach_sessions cs on cs.id = ct.session_id join users u on u.id = cs.learner_id where u.organization_id = $1 and ct.speaker = 'learner')::text as coach,
+        (select count(*) from micro_lessons ml join users u on u.id = ml.learner_id where u.organization_id = $1)::text as micro,
+        (select count(*) from appeals a join assessment_attempts aa on aa.id = a.attempt_id join users u on u.id = aa.learner_id where u.organization_id = $1)::text as appeals,
+        (select count(*) from assessment_attempts aa join users u on u.id = aa.learner_id where u.organization_id = $1)::text as attempts,
+        (select count(*) from assessment_versions av join assessment_definitions ad on ad.id = av.definition_id where ad.organization_id = $1)::text as assessments`,
+      [organizationId]
+    );
+    const count = counts.rows[0] ?? { submissions: "0", coach: "0", micro: "0", appeals: "0", attempts: "0", assessments: "0" };
+    const coach = await this.pool.query<{
+      id: string; learner_name: string; cefr: CefrLevel | null; week_number: number | null;
+      created_at: Date; content: Record<string, unknown>; feedback: Record<string, unknown> | null;
+    }>(
+      `select ct.id, u.display_name as learner_name, e.cefr, pw.week_number,
+              ct.created_at, ct.content, ct.feedback
+       from coach_turns ct
+       join coach_sessions cs on cs.id = ct.session_id
+       join users u on u.id = cs.learner_id and u.organization_id = $1
+       left join enrollments e on e.learner_id = u.id
+       left join programs p on p.id = e.program_id
+       left join program_weeks pw on pw.program_id = p.id
+         and pw.week_number = greatest(1, least(p.week_count, ((ct.created_at::date - p.start_date) / 7) + 1))
+       where ct.speaker = 'learner'
+       order by ct.created_at desc limit 50`,
+      [organizationId]
+    );
+    return {
+      tabs: [
+        { key: "submissions", label: "Bài nộp", count: Number(count.submissions), unreadCount: 0 },
+        { key: "coach", label: "Phản hồi coach", count: Number(count.coach) },
+        { key: "micro", label: "Bài siêu ngắn", count: Number(count.micro) },
+        { key: "appeals", label: "Kháng nghị", count: Number(count.appeals) },
+        { key: "attempts", label: "Số lần làm bài", count: Number(count.attempts) },
+        { key: "assessments", label: "Bài test", count: Number(count.assessments) }
+      ],
+      coachSamples: coach.rows.map((row) => {
+        const feedback = row.feedback ?? {};
+        const rubric = feedback.rubric && typeof feedback.rubric === "object" ? feedback.rubric as Record<string, unknown> : {};
+        return {
+          id: row.id,
+          learnerName: row.learner_name,
+          cefr: row.cefr,
+          weekNumber: row.week_number,
+          createdAt: row.created_at.toISOString(),
+          checked: Boolean(feedback.checked),
+          learnerText: typeof row.content.text === "string" ? row.content.text : "",
+          coachText: typeof feedback.coachText === "string" ? feedback.coachText : "",
+          scores: {
+            meaning: numberOrNull(rubric.meaning),
+            vocabulary: numberOrNull(rubric.vocabulary),
+            grammar: numberOrNull(rubric.grammar)
+          },
+          suggestions: Array.isArray(feedback.suggestions)
+            ? feedback.suggestions.filter((value): value is string => typeof value === "string") : []
+        };
+      })
+    };
+  }
+
+  async promptSettings(staffId: string): Promise<Omit<ContentPromptSettingsView["groups"][number], "label">[]> {
+    const organization = await this.pool.query<{ organization_id: string }>(
+      "select organization_id from users where id = $1", [staffId]
+    );
+    const organizationId = organization.rows[0]?.organization_id;
+    if (!organizationId) return [];
+    const result = await this.pool.query<{
+      task_key: ContentPromptKey; version: number; content: string; status: "draft" | "active" | "retired"; default_content: string;
+    }>(
+      `select distinct on (latest.task_key) latest.task_key, latest.version, latest.content, latest.status,
+              first_value(latest.content) over (partition by latest.task_key order by latest.version) as default_content
+       from prompt_versions latest
+       where latest.organization_id = $1
+       order by latest.task_key, latest.version desc`,
+      [organizationId]
+    );
+    return result.rows.map((row) => ({
+      key: row.task_key,
+      content: row.content,
+      defaultContent: row.default_content,
+      version: row.version,
+      status: row.status
+    }));
+  }
+
+  async savePromptDrafts(
+    actorId: string,
+    groups: readonly { key: ContentPromptKey; content: string }[]
+  ): Promise<Omit<ContentPromptSettingsView["groups"][number], "label">[]> {
+    const client = await this.pool.connect();
+    const saved: Omit<ContentPromptSettingsView["groups"][number], "label">[] = [];
+    try {
+      await client.query("begin");
+      const actor = await client.query<{ organization_id: string }>(
+        "select organization_id from users where id = $1", [actorId]
+      );
+      const organizationId = actor.rows[0]?.organization_id;
+      if (!organizationId) throw new Error("CONTENT_ACTOR_NOT_FOUND");
+      for (const group of groups) {
+        const next = await client.query<{ version: number; default_content: string }>(
+          `select coalesce(max(version), 0) + 1 as version,
+                  coalesce((array_agg(content order by version))[1], '') as default_content
+           from prompt_versions where organization_id = $1 and task_key = $2`,
+          [organizationId, group.key]
+        );
+        const version = next.rows[0]?.version ?? 1;
+        await client.query(
+          `insert into prompt_versions
+             (id, organization_id, task_key, version, content, status, created_by)
+           values ($1, $2, $3, $4, $5, 'draft', $6)`,
+          [randomUUID(), organizationId, group.key, version, group.content, actorId]
+        );
+        saved.push({
+          key: group.key,
+          content: group.content,
+          defaultContent: next.rows[0]?.default_content ?? "",
+          version,
+          status: "draft"
+        });
+      }
+      await client.query("commit");
+    } catch (error) {
+      await client.query("rollback");
+      throw error;
+    } finally { client.release(); }
+    return saved;
+  }
+
   async findPublishedLessonSet(programWeekId: string, cefr: string): Promise<PublishedLessonSet | null> {
     const result = await this.pool.query<{
       id: string;
@@ -839,6 +1399,17 @@ class ContentRepository {
       ? { id: row.id, versionId: row.version_id, version: row.version, status: row.status, payload: row.payload }
       : null;
   }
+}
+
+function practiceLabel(parts: readonly { code: string; content: Record<string, unknown> }[]): string {
+  const writing = parts.find((part) => part.code === "writing")?.content;
+  const type = writing && typeof writing.type === "string" ? writing.type : "bài tập";
+  const answer = writing && typeof writing.answer === "string" ? writing.answer : "";
+  return answer ? `${type} · đáp án: ${answer}` : type;
+}
+
+function numberOrNull(value: unknown): number | null {
+  return typeof value === "number" && Number.isFinite(value) ? value : null;
 }
 
 class AssessmentRepository {
