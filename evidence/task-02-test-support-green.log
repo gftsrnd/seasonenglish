@@ -1,0 +1,10 @@
+$ vitest run "packages/test-support/test/seed.test.ts"
+
+ RUN  v5.0.4 D:/TTS - AI Application - Huynh Doan Hoang Minh/12_10_2026 - 17_10_2026/E4S/platform
+
+
+ Test Files  1 passed (1)
+      Tests  1 passed (1)
+   Start at  17:22:16
+   Duration  374ms (import 84%, transform 15%, worker 1%, tests 1%)
+

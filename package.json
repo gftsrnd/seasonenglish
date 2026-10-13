@@ -2,20 +2,23 @@
   "name": "e4s-platform",
   "private": true,
   "version": "0.1.0",
+  "type": "module",
   "packageManager": "pnpm@12.3.4",
   "engines": {
     "node": ">=24 <27"
   },
   "scripts": {
-    "test": "vitest run",
+    "test": "node scripts/run-with-test-postgres.mjs",
+    "test:unit": "vitest run",
+    "test:db": "node scripts/run-with-test-postgres.mjs",
     "test:watch": "vitest",
     "typecheck": "tsc -b",
     "build": "pnpm -r build"
   },
   "devDependencies": {
     "@types/node": "24.10.13",
+    "embedded-postgres": "18.4.0-beta.17",
     "typescript": "7.0.2",
     "vitest": "5.0.4"
   }
 }
-

@@ -2,3 +2,5 @@ packages:
   - apps/*
   - packages/*
 
+allowBuilds:
+  '@embedded-postgres/windows-x64': true
