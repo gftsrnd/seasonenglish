@@ -4,6 +4,7 @@ import type {
   CefrLevel, ContentLessonDraftInput, ContentLessonMatrixView, ContentLessonSetVersionView, ContentPromptKey,
   ContentPromptSettingsView, ContentReviewView, ContentWeekFrameView, ContentWeekInput,
   CoachMessageInput, CoachPersona, CoachView,
+  ArenaView, DuelView, GameAnswerInput, GameHubView, GameKey, GameResultView, RewardView, SurveyView, WeeklyPracticeView,
   LearnerHomeView, LearnerProfileData, LearnerProfileView, LearnerProgressView,
   LessonProgressView, LessonView, MicroLessonView, SessionView
 } from "@e4s/contracts";
@@ -38,6 +39,19 @@ export const apiClient: AuthClient & {
   sendCoachMessage(input: CoachMessageInput): Promise<CoachView>;
   setCoachPersona(persona: CoachPersona): Promise<CoachView>;
   clearCoach(): Promise<CoachView>;
+  getWeeklyPractice(): Promise<WeeklyPracticeView>;
+  submitWeeklyPractice(input: { requestId: string; text: string }): Promise<WeeklyPracticeView>;
+  getGames(): Promise<GameHubView>;
+  generateGameWordSet(input: { requestId: string; topic: string }): Promise<GameHubView>;
+  useWeeklyGameWordSet(): Promise<GameHubView>;
+  submitGameResult(game: GameKey, input: { requestId: string; answers: GameAnswerInput[]; hintsUsed?: number }): Promise<GameResultView>;
+  getArena(): Promise<ArenaView>;
+  createDuel(input: { opponentId: string; game: Exclude<GameKey, "crossword"> }): Promise<DuelView>;
+  getDuel(id: string): Promise<DuelView>;
+  submitDuelResult(id: string, input: { requestId: string; answers: GameAnswerInput[] }): Promise<DuelView>;
+  getReward(mode: "preview" | "done"): Promise<RewardView>;
+  getSurvey(): Promise<SurveyView>;
+  submitSurvey(input: { rating: number; comment: string; studyTime: "work" | "outside" | "both" }): Promise<SurveyView>;
   getAssessment(kind: AssessmentKind | "levelup"): Promise<AssessmentView>;
   startAssessment(kind: AssessmentKind | "levelup"): Promise<AssessmentView>;
   saveAssessmentResponse(attemptId: string, section: AssessmentSectionCode, taskKey: string, input: {
@@ -91,6 +105,19 @@ export const apiClient: AuthClient & {
   sendCoachMessage: (input) => request("/api/v1/coach/messages", { method: "POST", body: JSON.stringify(input) }),
   setCoachPersona: (persona) => request("/api/v1/coach/persona", { method: "PUT", body: JSON.stringify({ persona }) }),
   clearCoach: () => request("/api/v1/coach/session", { method: "DELETE", body: "{}" }),
+  getWeeklyPractice: () => request("/api/v1/engagement/practice"),
+  submitWeeklyPractice: (input) => request("/api/v1/engagement/practice/submit", { method: "POST", body: JSON.stringify(input) }),
+  getGames: () => request("/api/v1/engagement/games"),
+  generateGameWordSet: (input) => request("/api/v1/engagement/games/word-set", { method: "POST", body: JSON.stringify(input) }),
+  useWeeklyGameWordSet: () => request("/api/v1/engagement/games/word-set", { method: "DELETE", body: "{}" }),
+  submitGameResult: (game, input) => request(`/api/v1/engagement/games/${encodeURIComponent(game)}/results`, { method: "POST", body: JSON.stringify(input) }),
+  getArena: () => request("/api/v1/engagement/arena"),
+  createDuel: (input) => request("/api/v1/engagement/duels", { method: "POST", body: JSON.stringify(input) }),
+  getDuel: (id) => request(`/api/v1/engagement/duels/${encodeURIComponent(id)}`),
+  submitDuelResult: (id, input) => request(`/api/v1/engagement/duels/${encodeURIComponent(id)}/result`, { method: "POST", body: JSON.stringify(input) }),
+  getReward: (mode) => request(`/api/v1/engagement/rewards/${mode}`),
+  getSurvey: () => request("/api/v1/engagement/survey"),
+  submitSurvey: (input) => request("/api/v1/engagement/survey", { method: "POST", body: JSON.stringify(input) }),
   getAssessment: (kind) => request(`/api/v1/assessments/${encodeURIComponent(kind)}`),
   startAssessment: (kind) => request(`/api/v1/assessments/${encodeURIComponent(kind)}/start`, { method: "POST", body: "{}" }),
   saveAssessmentResponse: (attemptId, section, taskKey, input) => request(

@@ -76,6 +76,38 @@ describe("AI service", () => {
     expect(loadPrompt).not.toHaveBeenCalled();
     expect(complete.mock.calls[0]?.[0].systemPrompt).toBe("Approved E4S coach prompt");
   });
+
+  it("validates weekly-practice grading and vocabulary-generation outputs", async () => {
+    const weekly = createAiService({
+      registry: AI_TASKS,
+      provider: fixtureProvider(vi.fn().mockResolvedValue({
+        output: {
+          score: { total: 84, rubric: { meaning: 4, vocabulary: 4, grammar: 3 } },
+          feedback: "Ý rõ và đúng bối cảnh công việc.",
+          suggestions: [{ original: "I prepare report", corrected: "I prepare reports", explanation: "Dùng danh từ số nhiều." }],
+          correctedText: "I prepare reports."
+        }, usage: {}
+      })),
+      loadPrompt: async () => "Grade safely."
+    });
+    await expect(weekly.runTask("weekly_practice_grading", {
+      text: "I prepare reports and review the work with my team every Friday.",
+      cefr: "A2", topic: "Introducing yourself & your job", rubric: ["meaning", "vocabulary", "grammar"]
+    })).resolves.toMatchObject({ output: { score: { total: 84 } } });
+
+    const vocabulary = createAiService({
+      registry: AI_TASKS,
+      provider: fixtureProvider(vi.fn().mockResolvedValue({
+        output: { topic: "Sprint planning", words: Array.from({ length: 15 }, (_, index) => ({
+          id: `word-${index + 1}`, english: `word ${index + 1}`, vietnamese: `từ ${index + 1}`,
+          definition: `definition ${index + 1}`, partOfSpeech: "noun"
+        })) }, usage: {}
+      })),
+      loadPrompt: async () => "Create a safe word set."
+    });
+    await expect(vocabulary.runTask("vocabulary_generation", { topic: "Sprint planning", cefr: "A2", count: 15 }))
+      .resolves.toMatchObject({ output: { topic: "Sprint planning", words: expect.arrayContaining([expect.objectContaining({ english: "word 1" })]) } });
+  });
 });
 
 function coachInput() {

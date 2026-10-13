@@ -195,6 +195,7 @@ export const practiceSubmissions = pgTable("practice_submissions", {
   id: uuid("id").primaryKey(), learnerId: uuid("learner_id").notNull().references(() => users.id),
   programWeekId: uuid("program_week_id").notNull().references(() => programWeeks.id), status: text("status").notNull().default("draft"),
   content: jsonb("content").notNull().default(emptyObject), score: jsonb("score"), feedback: jsonb("feedback"),
+  requestKey: text("request_key"),
   submittedAt: timestamp("submitted_at", { withTimezone: true }), reviewedAt: timestamp("reviewed_at", { withTimezone: true }),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow()
 });
@@ -237,17 +238,19 @@ export const rewardEvents = pgTable("reward_events", {
 
 export const gameSets = pgTable("game_sets", {
   id: uuid("id").primaryKey(), programWeekId: uuid("program_week_id").references(() => programWeeks.id), gameKey: text("game_key").notNull(),
-  status: text("status").notNull().default("draft"), payload: jsonb("payload").notNull(), createdAt: now()
+  learnerId: uuid("learner_id").references(() => users.id), status: text("status").notNull().default("draft"),
+  payload: jsonb("payload").notNull(), createdAt: now()
 });
 
 export const gameResults = pgTable("game_results", {
   id: uuid("id").primaryKey(), gameSetId: uuid("game_set_id").notNull().references(() => gameSets.id), learnerId: uuid("learner_id").notNull().references(() => users.id),
-  score: integer("score").notNull(), details: jsonb("details").notNull().default(emptyObject), completedAt: now()
+  score: integer("score").notNull(), gameKey: text("game_key"), maxScore: integer("max_score"), requestKey: text("request_key"),
+  duelId: uuid("duel_id"), details: jsonb("details").notNull().default(emptyObject), completedAt: now()
 });
 
 export const duels = pgTable("duels", {
   id: uuid("id").primaryKey(), gameSetId: uuid("game_set_id").notNull().references(() => gameSets.id), challengerId: uuid("challenger_id").notNull().references(() => users.id),
-  opponentId: uuid("opponent_id").notNull().references(() => users.id), state: text("state").notNull().default("open"), scores: jsonb("scores").notNull().default(emptyObject),
+  opponentId: uuid("opponent_id").notNull().references(() => users.id), gameKey: text("game_key"), state: text("state").notNull().default("open"), scores: jsonb("scores").notNull().default(emptyObject),
   createdAt: now(), completedAt: timestamp("completed_at", { withTimezone: true })
 });
 

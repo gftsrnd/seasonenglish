@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import type { Pool } from "pg";
+import type { Pool, PoolClient } from "pg";
 import type {
   AccountRole,
   AssessmentEvidenceType,
@@ -19,13 +19,22 @@ import type {
   CoachFeedbackView,
   CoachPersona,
   CoachView,
+  DuelView,
+  GameHubView,
+  GameKey,
+  GameResultView,
+  GameWordSetView,
+  LearnerAvatarData,
   LearnerProfileData,
   LearnerProgressView,
   LevelReadinessMetric,
   LevelReadinessView,
   LessonContent,
   LessonProgressView,
-  MicroLessonView
+  MicroLessonView,
+  RewardView,
+  SurveyView,
+  WeeklyPracticeView
 } from "@e4s/contracts";
 import type { StoredAssessmentDefinition } from "./assessment-blueprints.js";
 
@@ -2189,6 +2198,470 @@ function coachFeedback(value: Record<string, unknown> | null): CoachFeedbackView
 class EngagementRepository {
   constructor(private readonly pool: Pool) {}
 
+  async weeklyPractice(learnerId: string): Promise<WeeklyPracticeView | null> {
+    const context = await this.activeEngagementContext(learnerId);
+    if (!context) return null;
+    const lessons = await this.pool.query<{ total: string; completed: string }>(
+      `select count(l.id)::text as total,
+              count(l.id) filter (where pr.status = 'completed')::text as completed
+       from lesson_sets ls
+       join lesson_set_versions lsv on lsv.lesson_set_id = ls.id and lsv.status = 'published'
+       join lessons l on l.lesson_set_version_id = lsv.id
+       left join progress_records pr on pr.lesson_id = l.id and pr.learner_id = $1
+       where ls.program_week_id = $2 and ls.cefr = $3`,
+      [learnerId, context.weekId, context.cefr]
+    );
+    const submission = await this.pool.query<{
+      id: string; status: "draft" | "submitted" | "reviewed"; content: Record<string, unknown>;
+      score: Record<string, unknown> | null; feedback: Record<string, unknown> | string | null;
+      submitted_at: Date | null;
+    }>(
+      `select id, status, content, score, feedback, submitted_at
+       from practice_submissions where learner_id = $1 and program_week_id = $2 limit 1`,
+      [learnerId, context.weekId]
+    );
+    const count = lessons.rows[0] ?? { total: "0", completed: "0" };
+    const totalLessons = Number(count.total);
+    const completedLessons = Number(count.completed);
+    const row = submission.rows[0];
+    const state = row?.status ?? (totalLessons > 0 && completedLessons === totalLessons ? "open" : "locked");
+    const content = row?.content ?? {};
+    const score = row?.score ?? null;
+    const feedback = row?.feedback;
+    return {
+      state, weekId: context.weekId, weekNumber: context.weekNumber, topic: context.topic,
+      completedLessons, totalLessons,
+      task: `Viết một đoạn ngắn giới thiệu vai trò của bạn và công việc trong tuần, dùng từ vựng của chủ đề “${context.topic}”.`,
+      guidance: "Viết ít nhất 8 từ bằng tiếng Anh. Sau khi nộp, bài được giữ nguyên trên màn này để nhận phản hồi.",
+      submission: row ? {
+        id: row.id, status: row.status, text: String(content.text ?? ""),
+        submittedAt: row.submitted_at?.toISOString() ?? null,
+        score: score && typeof score.total === "number" ? {
+          total: score.total,
+          ...(score.rubric && typeof score.rubric === "object" ? { rubric: score.rubric as { meaning: number; vocabulary: number; grammar: number } } : {})
+        } : null,
+        feedback: typeof feedback === "string" ? feedback : String(feedback?.message ?? ""),
+        suggestions: feedback && typeof feedback === "object" && Array.isArray(feedback.suggestions)
+          ? feedback.suggestions as Array<{ original: string; corrected: string; explanation: string }> : [],
+        correctedText: feedback && typeof feedback === "object" ? String(feedback.correctedText ?? "") : ""
+      } : null
+    };
+  }
+
+  async submitWeeklyPractice(input: { learnerId: string; requestId: string; text: string }): Promise<WeeklyPracticeView | null> {
+    const view = await this.weeklyPractice(input.learnerId);
+    if (!view || view.state === "locked") return null;
+    const client = await this.pool.connect();
+    try {
+      await client.query("begin");
+      const existing = await client.query<{ id: string }>(
+        "select id from practice_submissions where learner_id = $1 and (program_week_id = $2 or request_key = $3) for update",
+        [input.learnerId, view.weekId, input.requestId]
+      );
+      if (!existing.rows[0]) {
+        const submissionId = randomUUID();
+        await client.query(
+          `insert into practice_submissions
+             (id, learner_id, program_week_id, status, content, request_key, submitted_at, updated_at)
+           values ($1, $2, $3, 'submitted', $4::jsonb, $5, now(), now())`,
+          [submissionId, input.learnerId, view.weekId, JSON.stringify({ text: input.text }), input.requestId]
+        );
+        await client.query(
+          `insert into reward_events (id, learner_id, badge_id, points, source_type, source_id)
+           select $1, $2, b.id, 20, 'weekly_practice', $3
+           from users u join badges b on b.organization_id = u.organization_id and b.badge_key = 'friday'
+           where u.id = $2
+           on conflict (learner_id, source_type, source_id, badge_id) do nothing`,
+          [randomUUID(), input.learnerId, submissionId]
+        );
+      }
+      await client.query("commit");
+    } catch (error) {
+      await client.query("rollback"); throw error;
+    } finally { client.release(); }
+    return this.weeklyPractice(input.learnerId);
+  }
+
+  async saveWeeklyPracticeGrade(input: {
+    learnerId: string; requestId: string; taskId: string; promptVersionId: string;
+    output: { score: { total: number; rubric: { meaning: number; vocabulary: number; grammar: number } };
+      feedback: string; suggestions: Array<{ original: string; corrected: string; explanation: string }>;
+      correctedText: string };
+    metadata: AiRunMetadataInput;
+  }): Promise<WeeklyPracticeView | null> {
+    const client = await this.pool.connect();
+    try {
+      await client.query("begin");
+      const submission = await client.query<{ id: string }>(
+        "select id from practice_submissions where learner_id = $1 and request_key = $2 for update",
+        [input.learnerId, input.requestId]
+      );
+      if (!submission.rows[0]) { await client.query("rollback"); return null; }
+      const runId = randomUUID();
+      const inserted = await insertAiRun(client, {
+        id: runId, learnerId: input.learnerId, requestId: input.requestId, taskId: input.taskId,
+        promptVersionId: input.promptVersionId, output: input.output, metadata: input.metadata
+      });
+      if (inserted) {
+        await client.query(
+          `update practice_submissions set score = $2::jsonb, feedback = $3::jsonb, updated_at = now()
+           where id = $1`,
+          [submission.rows[0].id, JSON.stringify(input.output.score), JSON.stringify({
+            message: input.output.feedback, suggestions: input.output.suggestions,
+            correctedText: input.output.correctedText, aiRunId: runId
+          })]
+        );
+      }
+      await client.query("commit");
+    } catch (error) { await client.query("rollback"); throw error; }
+    finally { client.release(); }
+    return this.weeklyPractice(input.learnerId);
+  }
+
+  async gameHub(learnerId: string): Promise<{
+    cefr: CefrLevel; wordSet: GameWordSetView; best: Partial<Record<GameKey, { score: number; maxScore: number }>>;
+  } | null> {
+    const context = await this.activeEngagementContext(learnerId);
+    if (!context) return null;
+    const result = await this.pool.query<{ id: string; learner_id: string | null; payload: Record<string, unknown> }>(
+      `select id, learner_id, payload from game_sets
+       where program_week_id = $1 and game_key = 'weekly_vocabulary' and status = 'published'
+         and (learner_id = $2 or learner_id is null)
+       order by (learner_id = $2) desc nulls last, created_at desc limit 1`,
+      [context.weekId, learnerId]
+    );
+    const row = result.rows[0];
+    if (!row) return null;
+    const payload = row.payload;
+    const words = Array.isArray(payload.words) ? payload.words as GameWordSetView["words"] : [];
+    const bestRows = await this.pool.query<{ game_key: GameKey; score: number; max_score: number }>(
+      `select distinct on (game_key) game_key, score, max_score
+       from game_results where learner_id = $1 and game_set_id = $2 and game_key is not null
+       order by game_key, (score::numeric / greatest(max_score, 1)) desc, completed_at asc`,
+      [learnerId, row.id]
+    );
+    return {
+      cefr: context.cefr,
+      wordSet: { id: row.id, topic: String(payload.topic ?? context.topic), cefr: context.cefr,
+        source: row.learner_id ? "custom" : "weekly", words },
+      best: Object.fromEntries(bestRows.rows.map((item) => [item.game_key, normalizedGameBest(item)]))
+    };
+  }
+
+  async saveGeneratedWordSet(input: {
+    learnerId: string; requestId: string; taskId: string; promptVersionId: string;
+    output: { topic: string; words: GameWordSetView["words"] }; metadata: AiRunMetadataInput;
+  }): Promise<void> {
+    const context = await this.activeEngagementContext(input.learnerId);
+    if (!context) throw new Error("GAME_CONTEXT_NOT_FOUND");
+    const client = await this.pool.connect();
+    try {
+      await client.query("begin");
+      const runId = randomUUID();
+      const inserted = await insertAiRun(client, {
+        id: runId, learnerId: input.learnerId, requestId: input.requestId, taskId: input.taskId,
+        promptVersionId: input.promptVersionId, output: input.output, metadata: input.metadata
+      });
+      if (inserted) {
+        await client.query(
+          `update game_sets set status = 'retired'
+           where program_week_id = $1 and learner_id = $2 and game_key = 'weekly_vocabulary' and status = 'published'`,
+          [context.weekId, input.learnerId]
+        );
+        await client.query(
+          `insert into game_sets (id, program_week_id, learner_id, game_key, status, payload)
+           values ($1, $2, $3, 'weekly_vocabulary', 'published', $4::jsonb)`,
+          [randomUUID(), context.weekId, input.learnerId, JSON.stringify({
+            topic: input.output.topic, cefr: context.cefr, words: input.output.words,
+            source: "ai", aiRunId: runId
+          })]
+        );
+      }
+      await client.query("commit");
+    } catch (error) { await client.query("rollback"); throw error; }
+    finally { client.release(); }
+  }
+
+  async retireGeneratedWordSet(learnerId: string): Promise<void> {
+    const context = await this.activeEngagementContext(learnerId);
+    if (!context) return;
+    await this.pool.query(
+      `update game_sets set status = 'retired'
+       where program_week_id = $1 and learner_id = $2 and game_key = 'weekly_vocabulary' and status = 'published'`,
+      [context.weekId, learnerId]
+    );
+  }
+
+  async findGameResult(learnerId: string, requestId: string): Promise<GameResultView | null> {
+    const result = await this.pool.query<{
+      id: string; game_key: GameKey; score: number; max_score: number; details: Record<string, unknown>; completed_at: Date;
+    }>(
+      "select id, game_key, score, max_score, details, completed_at from game_results where learner_id = $1 and request_key = $2 limit 1",
+      [learnerId, requestId]
+    );
+    const row = result.rows[0];
+    return row ? gameResultView(row) : null;
+  }
+
+  async saveGameResult(input: {
+    learnerId: string; setId: string; game: GameKey; requestId: string;
+    score: number; maxScore: number; correct: number; total: number; details: unknown; duelId?: string;
+  }): Promise<GameResultView> {
+    const id = randomUUID();
+    const result = await this.pool.query<{
+      id: string; game_key: GameKey; score: number; max_score: number; details: Record<string, unknown>; completed_at: Date;
+    }>(
+      `insert into game_results
+         (id, game_set_id, learner_id, game_key, score, max_score, request_key, duel_id, details)
+       values ($1, $2, $3, $4, $5, $6, $7, $8, $9::jsonb)
+       on conflict (learner_id, request_key) where request_key is not null do update set request_key = excluded.request_key
+       returning id, game_key, score, max_score, details, completed_at`,
+      [id, input.setId, input.learnerId, input.game, input.score, input.maxScore, input.requestId,
+        input.duelId ?? null, JSON.stringify({ correct: input.correct, total: input.total, evidence: input.details })]
+    );
+    return gameResultView(result.rows[0]!);
+  }
+
+  async arena(learnerId: string): Promise<{
+    cefr: CefrLevel; organizationId: string; programId: string;
+    opponents: Array<{ id: string; displayName: string; avatar?: LearnerAvatarData; cefr: CefrLevel }>;
+    leaderboard: Array<{ learnerId: string; displayName: string; avatar?: LearnerAvatarData; cefr: CefrLevel; points: number; played: number; won: number; lost: number }>;
+    duels: Array<{ id: string; game: GameKey; wordSetTopic: string; challengerId: string; opponentId: string; challengerName: string; opponentName: string; state: string; scores: Record<string, { score: number; maxScore: number }>; createdAt: Date }>;
+  } | null> {
+    const context = await this.activeEngagementContext(learnerId);
+    if (!context) return null;
+    const players = await this.pool.query<{
+      id: string; display_name: string; profile: Partial<LearnerProfileData> | null; cefr: CefrLevel; points: string; played: string; won: string; lost: string;
+    }>(
+      `with best as (
+         select distinct on (gr.learner_id, gr.game_key) gr.learner_id, gr.game_key,
+                round(100 * gr.score::numeric / greatest(gr.max_score, 1))::int as points
+         from game_results gr where gr.game_key is not null
+         order by gr.learner_id, gr.game_key, (gr.score::numeric / greatest(gr.max_score, 1)) desc
+       ), duel_scores as (
+         select d.challenger_id as learner_id,
+                case when (d.scores->d.challenger_id::text->>'score')::numeric / greatest((d.scores->d.challenger_id::text->>'maxScore')::numeric, 1)
+                           > (d.scores->d.opponent_id::text->>'score')::numeric / greatest((d.scores->d.opponent_id::text->>'maxScore')::numeric, 1) then 1 else 0 end as won,
+                case when (d.scores->d.challenger_id::text->>'score')::numeric / greatest((d.scores->d.challenger_id::text->>'maxScore')::numeric, 1)
+                           < (d.scores->d.opponent_id::text->>'score')::numeric / greatest((d.scores->d.opponent_id::text->>'maxScore')::numeric, 1) then 1 else 0 end as lost
+         from duels d where d.state = 'completed'
+         union all
+         select d.opponent_id,
+                case when (d.scores->d.opponent_id::text->>'score')::numeric / greatest((d.scores->d.opponent_id::text->>'maxScore')::numeric, 1)
+                           > (d.scores->d.challenger_id::text->>'score')::numeric / greatest((d.scores->d.challenger_id::text->>'maxScore')::numeric, 1) then 1 else 0 end,
+                case when (d.scores->d.opponent_id::text->>'score')::numeric / greatest((d.scores->d.opponent_id::text->>'maxScore')::numeric, 1)
+                           < (d.scores->d.challenger_id::text->>'score')::numeric / greatest((d.scores->d.challenger_id::text->>'maxScore')::numeric, 1) then 1 else 0 end
+         from duels d where d.state = 'completed'
+       ), duel_totals as (
+         select learner_id, sum(won)::int as won, sum(lost)::int as lost from duel_scores group by learner_id
+       )
+       select u.id, u.display_name, lp.profile, e.cefr,
+              (coalesce(sum(best.points), 0) + coalesce(dt.won, 0) * 50)::text as points,
+              count(best.game_key)::text as played, coalesce(dt.won, 0)::text as won, coalesce(dt.lost, 0)::text as lost
+       from users u join enrollments e on e.learner_id = u.id and e.program_id = $1
+       left join learner_profiles lp on lp.user_id = u.id
+       left join best on best.learner_id = u.id
+       left join duel_totals dt on dt.learner_id = u.id
+       where u.organization_id = $2 and u.role = 'learner' and u.status = 'active'
+         and e.cefr in ('B1','B2','C1') and e.cefr_approved = true
+       group by u.id, lp.profile, e.cefr, dt.won, dt.lost
+       order by (coalesce(sum(best.points), 0) + coalesce(dt.won, 0) * 50) desc, u.display_name`,
+      [context.programId, context.organizationId]
+    );
+    const duelRows = await this.pool.query<{
+      id: string; game_key: GameKey; challenger_id: string; opponent_id: string; challenger_name: string;
+      opponent_name: string; state: string; scores: Record<string, { score: number; maxScore: number }>; created_at: Date; word_set_topic: string;
+    }>(
+      `select d.id, d.game_key, d.challenger_id, d.opponent_id, cu.display_name as challenger_name,
+              ou.display_name as opponent_name, d.state, d.scores, d.created_at, coalesce(gs.payload->>'topic', '') as word_set_topic
+       from duels d join users cu on cu.id = d.challenger_id join users ou on ou.id = d.opponent_id
+       join game_sets gs on gs.id = d.game_set_id
+       where d.challenger_id = $1 or d.opponent_id = $1 order by d.created_at desc`,
+      [learnerId]
+    );
+    return {
+      cefr: context.cefr, organizationId: context.organizationId, programId: context.programId,
+      opponents: players.rows.filter((row) => row.id !== learnerId).map((row) => ({ id: row.id, displayName: row.display_name, ...(row.profile?.avatar ? { avatar: row.profile.avatar } : {}), cefr: row.cefr })),
+      leaderboard: players.rows.map((row) => ({ learnerId: row.id, displayName: row.display_name, ...(row.profile?.avatar ? { avatar: row.profile.avatar } : {}), cefr: row.cefr, points: Number(row.points), played: Number(row.played), won: Number(row.won), lost: Number(row.lost) })),
+      duels: duelRows.rows.map((row) => ({ id: row.id, game: row.game_key, wordSetTopic: row.word_set_topic, challengerId: row.challenger_id, opponentId: row.opponent_id,
+        challengerName: row.challenger_name, opponentName: row.opponent_name, state: row.state, scores: row.scores, createdAt: row.created_at }))
+    };
+  }
+
+  async createDuel(learnerId: string, opponentId: string, game: GameKey): Promise<string | null> {
+    const [arena, hub] = await Promise.all([this.arena(learnerId), this.gameHub(learnerId)]);
+    if (!arena || !hub || !arena.opponents.some((item) => item.id === opponentId)) return null;
+    const existing = await this.pool.query<{ id: string }>(
+      `select id from duels where state = 'open' and game_key = $3
+       and ((challenger_id = $1 and opponent_id = $2) or (challenger_id = $2 and opponent_id = $1)) limit 1`,
+      [learnerId, opponentId, game]
+    );
+    if (existing.rows[0]) return existing.rows[0].id;
+    const id = randomUUID();
+    const snapshotId = randomUUID();
+    const client = await this.pool.connect();
+    try {
+      await client.query("begin");
+      await client.query(
+        `insert into game_sets (id, program_week_id, learner_id, game_key, status, payload)
+         select $1, program_week_id, null, 'duel_snapshot', 'published', $3::jsonb
+         from game_sets where id = $2`,
+        [snapshotId, hub.wordSet.id, JSON.stringify({
+          topic: hub.wordSet.topic,
+          cefr: hub.wordSet.cefr,
+          words: hub.wordSet.words,
+          source: "duel",
+          sourceGameSetId: hub.wordSet.id
+        })]
+      );
+      const inserted = await client.query<{ id: string }>(
+        `insert into duels (id, game_set_id, challenger_id, opponent_id, game_key, state, scores)
+         values ($1, $2, $3, $4, $5, 'open', '{}'::jsonb)
+         on conflict do nothing returning id`,
+        [id, snapshotId, learnerId, opponentId, game]
+      );
+      if (inserted.rows[0]) {
+        await client.query("commit");
+        return inserted.rows[0].id;
+      }
+      await client.query("rollback");
+    } catch (error) {
+      await client.query("rollback");
+      throw error;
+    } finally {
+      client.release();
+    }
+    const raced = await this.pool.query<{ id: string }>(
+      `select id from duels where state = 'open' and game_key = $3
+       and ((challenger_id = $1 and opponent_id = $2) or (challenger_id = $2 and opponent_id = $1)) limit 1`,
+      [learnerId, opponentId, game]
+    );
+    return raced.rows[0]?.id ?? null;
+  }
+
+  async duel(learnerId: string, duelId: string): Promise<DuelView | null> {
+    const result = await this.pool.query<{
+      id: string; game_key: GameKey; challenger_id: string; opponent_id: string; challenger_name: string;
+      opponent_name: string; state: DuelView["state"]; scores: Record<string, { score: number; maxScore: number }>;
+      created_at: Date; game_set_id: string; payload: Record<string, unknown>;
+    }>(
+      `select d.id, d.game_key, d.challenger_id, d.opponent_id, cu.display_name as challenger_name,
+              ou.display_name as opponent_name, d.state, d.scores, d.created_at, d.game_set_id, gs.payload
+       from duels d join users cu on cu.id = d.challenger_id join users ou on ou.id = d.opponent_id
+       join game_sets gs on gs.id = d.game_set_id
+       where d.id = $1 and (d.challenger_id = $2 or d.opponent_id = $2)`,
+      [duelId, learnerId]
+    );
+    const row = result.rows[0];
+    if (!row) return null;
+    const opponentId = row.challenger_id === learnerId ? row.opponent_id : row.challenger_id;
+    const opponentName = row.challenger_id === learnerId ? row.opponent_name : row.challenger_name;
+    const myScore = row.scores[learnerId] ?? null;
+    const opponentScore = row.scores[opponentId] ?? null;
+    return {
+      id: row.id, game: row.game_key, opponent: { id: opponentId, displayName: opponentName }, state: row.state,
+      myScore, opponentScore, outcome: duelOutcome(myScore, opponentScore), challengedByMe: row.challenger_id === learnerId,
+      wordSetTopic: String(row.payload.topic ?? ""), createdAt: row.created_at.toISOString(),
+      wordSet: {
+        id: row.game_set_id, topic: String(row.payload.topic ?? ""), cefr: String(row.payload.cefr ?? "A2") as CefrLevel,
+        source: "custom",
+        words: Array.isArray(row.payload.words) ? row.payload.words as GameWordSetView["words"] : []
+      }
+    };
+  }
+
+  async saveDuelScore(input: { learnerId: string; duelId: string; result: GameResultView; requestId: string }): Promise<DuelView | "already_played" | null> {
+    const client = await this.pool.connect();
+    try {
+      await client.query("begin");
+      const locked = await client.query<{
+        challenger_id: string; opponent_id: string; scores: Record<string, { score: number; maxScore: number }>;
+      }>("select challenger_id, opponent_id, scores from duels where id = $1 for update", [input.duelId]);
+      const row = locked.rows[0];
+      if (!row || ![row.challenger_id, row.opponent_id].includes(input.learnerId)) { await client.query("rollback"); return null; }
+      if (row.scores[input.learnerId]) { await client.query("rollback"); return "already_played"; }
+      const scores = { ...row.scores, [input.learnerId]: { score: input.result.score, maxScore: input.result.maxScore } };
+      const completed = Boolean(scores[row.challenger_id] && scores[row.opponent_id]);
+      await client.query(
+        `update duels set scores = $2::jsonb, state = $3, completed_at = case when $3 = 'completed' then now() else null end where id = $1`,
+        [input.duelId, JSON.stringify(scores), completed ? "completed" : "open"]
+      );
+      await client.query("commit");
+    } catch (error) { await client.query("rollback"); throw error; }
+    finally { client.release(); }
+    return this.duel(input.learnerId, input.duelId);
+  }
+
+  async reward(learnerId: string, mode: "preview" | "done"): Promise<RewardView | null> {
+    const result = await this.pool.query<{
+      display_name: string; cefr: CefrLevel; points: string; organization_name: string; operator_name: string; manager_name: string; completed_at: Date | null;
+      badges: Array<{ key: string; label: string; description: string; earned: boolean }>;
+    }>(
+      `select u.display_name, e.cefr, o.name as organization_name, coalesce(sum(re.points), 0)::text as points, max(re.created_at) as completed_at,
+              coalesce((select x.display_name from users x where x.organization_id = u.organization_id and x.role = 'operator' and x.status = 'active' order by x.created_at limit 1), '') as operator_name,
+              coalesce((select x.display_name from users x where x.organization_id = u.organization_id and x.role = 'manager' and x.status = 'active' order by x.created_at limit 1), '') as manager_name,
+              (select coalesce(jsonb_agg(jsonb_build_object('key', b.badge_key, 'label', b.label,
+                'description', b.rule->>'description', 'earned', exists(select 1 from reward_events x where x.learner_id = u.id and x.badge_id = b.id)) order by b.badge_key), '[]'::jsonb)
+               from badges b where b.organization_id = u.organization_id) as badges
+       from users u join organizations o on o.id = u.organization_id join enrollments e on e.learner_id = u.id
+       left join reward_events re on re.learner_id = u.id where u.id = $1 group by u.id, e.cefr, o.name`,
+      [learnerId]
+    );
+    const row = result.rows[0];
+    if (!row) return null;
+    const earnedBadgeCount = row.badges.filter((badge) => badge.earned).length;
+    const printable = earnedBadgeCount === row.badges.length && row.badges.length > 0;
+    if (mode === "done" && !printable) return null;
+    const year = new Date().getUTCFullYear();
+    return {
+      mode, learnerName: row.display_name, cefr: row.cefr, cefrLabel: cefrDisplayLabel(row.cefr),
+      points: Number(row.points), displayPoints: mode === "preview" ? 420 : Number(row.points),
+      season: { name: "Mùa đông", description: "vững vàng" }, simulated: mode === "preview", earnedBadgeCount,
+      requiredBadgeCount: row.badges.length, printable, certificateNumber: `SE-${year}-${learnerId.replace(/\W/g, "").slice(-6).toUpperCase()}`,
+      completedAt: (mode === "done" ? row.completed_at : null)?.toISOString() ?? new Date().toISOString(),
+      organizationName: row.organization_name, operatorName: row.operator_name, managerName: row.manager_name, badges: row.badges
+    };
+  }
+
+  async survey(learnerId: string): Promise<SurveyView> {
+    const result = await this.pool.query<{ answers: NonNullable<SurveyView["answers"]>; submitted_at: Date }>(
+      "select answers, submitted_at from surveys where learner_id = $1 and survey_key = 'pilot_end' limit 1",
+      [learnerId]
+    );
+    const row = result.rows[0];
+    return row ? { state: "submitted", surveyKey: "pilot_end", answers: row.answers, submittedAt: row.submitted_at.toISOString() }
+      : { state: "open", surveyKey: "pilot_end" };
+  }
+
+  async submitSurvey(learnerId: string, answers: NonNullable<SurveyView["answers"]>): Promise<SurveyView | null> {
+    const result = await this.pool.query(
+      `insert into surveys (id, learner_id, survey_key, answers) values ($1, $2, 'pilot_end', $3::jsonb)
+       on conflict (learner_id, survey_key) do nothing returning id`,
+      [randomUUID(), learnerId, JSON.stringify(answers)]
+    );
+    return result.rowCount ? this.survey(learnerId) : null;
+  }
+
+  private async activeEngagementContext(learnerId: string): Promise<{
+    organizationId: string; programId: string; weekId: string; weekNumber: number; topic: string; cefr: CefrLevel;
+  } | null> {
+    const result = await this.pool.query<{
+      organization_id: string; program_id: string; week_id: string; week_number: number; topic: string; cefr: CefrLevel;
+    }>(
+      `select u.organization_id, p.id as program_id, pw.id as week_id, pw.week_number, pw.topic, e.cefr
+       from users u join enrollments e on e.learner_id = u.id and e.cefr_approved = true
+       join programs p on p.id = e.program_id and p.status = 'active'
+       join program_weeks pw on pw.program_id = p.id
+        and pw.week_number = coalesce(p.current_week_override,
+          least(p.week_count, greatest(1, floor((current_date - p.start_date) / 7.0)::int + 1)))
+       where u.id = $1 limit 1`,
+      [learnerId]
+    );
+    const row = result.rows[0];
+    return row ? { organizationId: row.organization_id, programId: row.program_id, weekId: row.week_id,
+      weekNumber: row.week_number, topic: row.topic, cefr: row.cefr } : null;
+  }
+
   async getSummary(learnerId: string): Promise<{ points: number; badges: unknown[] }> {
     const result = await this.pool.query<{ points: string; badges: unknown[] }>(
       `select coalesce(sum(re.points), 0)::text as points,
@@ -2202,6 +2675,60 @@ class EngagementRepository {
     const row = result.rows[0] ?? { points: "0", badges: [] };
     return { points: Number(row.points), badges: row.badges };
   }
+}
+
+interface AiRunMetadataInput {
+  traceId: string; provider: string; model: string; inputHash: string;
+  usage: { inputTokens?: number; outputTokens?: number; totalTokens?: number }; latencyMs: number;
+}
+
+async function insertAiRun(client: PoolClient, input: {
+  id: string; learnerId: string; requestId: string; taskId: string; promptVersionId: string;
+  output: unknown; metadata: AiRunMetadataInput;
+}): Promise<boolean> {
+  const result = await client.query(
+    `insert into ai_runs
+       (id, task_id, user_id, prompt_version_id, provider, model, status, input_hash,
+        output, usage, latency_ms, trace_id, request_key, completed_at)
+     values ($1, $2, $3, $4, $5, $6, 'succeeded', $7, $8::jsonb, $9::jsonb, $10, $11, $12, now())
+     on conflict (user_id, task_id, request_key) where request_key is not null do nothing
+     returning id`,
+    [input.id, input.taskId, input.learnerId, input.promptVersionId, input.metadata.provider,
+      input.metadata.model, input.metadata.inputHash, JSON.stringify(input.output), JSON.stringify(input.metadata.usage),
+      input.metadata.latencyMs, input.metadata.traceId, input.requestId]
+  );
+  return Boolean(result.rowCount);
+}
+
+function gameResultView(row: {
+  id: string; game_key: GameKey; score: number; max_score: number; details: Record<string, unknown>; completed_at: Date;
+}): GameResultView {
+  return {
+    id: row.id, game: row.game_key, score: row.score, maxScore: row.max_score,
+    correct: Number(row.details.correct ?? 0), total: Number(row.details.total ?? 0), completedAt: row.completed_at.toISOString()
+  };
+}
+
+function normalizedGameBest(item: { game_key: GameKey; score: number; max_score: number }) {
+  if (item.game_key === "eggs" && item.max_score > 0 && item.max_score !== 10) {
+    return { score: Math.max(0, Math.min(10, Math.round(10 * item.score / item.max_score))), maxScore: 10 };
+  }
+  return { score: item.score, maxScore: item.max_score };
+}
+
+function duelOutcome(
+  mine: { score: number; maxScore: number } | null,
+  theirs: { score: number; maxScore: number } | null
+): DuelView["outcome"] {
+  if (!mine) return "play";
+  if (!theirs) return "waiting";
+  const left = mine.score / Math.max(1, mine.maxScore);
+  const right = theirs.score / Math.max(1, theirs.maxScore);
+  return left === right ? "draw" : left > right ? "win" : "lose";
+}
+
+function cefrDisplayLabel(level: CefrLevel): string {
+  return ({ A1: "A1 – Mới bắt đầu", A2: "A2 – Sơ cấp", B1: "B1 – Trung cấp", B2: "B2 – Trên trung cấp", C1: "C1 – Nâng cao" } as const)[level];
 }
 
 class NotificationRepository {

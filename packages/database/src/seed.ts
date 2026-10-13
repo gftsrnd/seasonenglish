@@ -33,6 +33,7 @@ export const DEMO_IDS = {
   microLesson: "00000000-0000-4000-8000-000000000841",
   coachSession: "00000000-0000-4000-8000-000000000851",
   practiceSubmission: "00000000-0000-4000-8000-000000000861",
+  gameSet: "00000000-0000-4000-8000-000000000862",
   placementDefinition: "00000000-0000-4000-8000-000000000871",
   placementVersion: "00000000-0000-4000-8000-000000000872",
   placementAttempt: "00000000-0000-4000-8000-000000000873",
@@ -68,7 +69,8 @@ const promptDefaults = [
   ["00000000-0000-4000-8000-000000001004", "week_suggestions", "Return valid JSON only. Suggest three distinct workplace-English topic options for each of {n} weeks, using {learners}, {levels} and {used}. Include a concrete situation, measurable objectives, vocabulary hints and a five-day plan for every level."],
   ["00000000-0000-4000-8000-000000001005", "micro_grading", "Return valid JSON only. Grade {answer} against {practice}, {theory} and {vocab} at {cefr_level}. Accept any grammatically correct answer that follows the taught pattern and fits the meaning. Give concise feedback without revealing the answer when retry is needed."],
   ["00000000-0000-4000-8000-000000001006", "coach_dialogue", "You are Season, the learner's friendly conversation coach. Reply naturally at the learner's CEFR level, ask one follow-up question, score meaning, vocabulary and grammar, give at most three concrete corrections and return a corrected version when needed."],
-  ["00000000-0000-4000-8000-000000001007", "weekly_practice_grading", "Grade a learner's weekly practice with the shared rubric. Score meaning, vocabulary and grammar, calculate an overall score, name the strongest point and the most important fix, then provide at most three concrete suggestions and a corrected version." ]
+  ["00000000-0000-4000-8000-000000001007", "weekly_practice_grading", "Grade a learner's weekly practice with the shared rubric. Return valid JSON only. Score meaning, vocabulary and grammar from 1 to 5, calculate a total score from 0 to 100, give concise Vietnamese feedback, at most three concrete suggestions and a corrected version."],
+  ["00000000-0000-4000-8000-000000001008", "vocabulary_generation", "Return valid JSON only. Create exactly 15 useful workplace-English words or short phrases for the requested topic and CEFR level. Give a stable lowercase id, English form, concise Vietnamese meaning, simple English definition and one partOfSpeech from noun, verb, adjective, adverb, preposition or phrase. Avoid duplicates and unsafe or irrelevant content."]
 ] as const;
 
 const lessonStudyContent = [
@@ -321,6 +323,32 @@ export async function seedDemo(client: Client): Promise<void> {
        date_trunc('week', now()) - interval '3 days', date_trunc('week', now()) - interval '2 days')
      on conflict (id) do nothing`,
     [DEMO_IDS.practiceSubmission, DEMO_IDS.learner, DEMO_IDS.week]
+  );
+  await client.query(
+    `insert into game_sets (id, program_week_id, game_key, status, payload)
+     values ($1, $2, 'weekly_vocabulary', 'published', $3::jsonb)
+     on conflict (id) do update set payload = excluded.payload, status = excluded.status`,
+    [DEMO_IDS.gameSet, DEMO_IDS.week, JSON.stringify({
+      topic: "Tuần 1: Introducing yourself & your job",
+      cefr: "A2",
+      words: [
+        { id: "colleague", english: "colleague", vietnamese: "đồng nghiệp", definition: "a person you work with", partOfSpeech: "noun" },
+        { id: "in-charge-of", english: "in charge of", vietnamese: "phụ trách", definition: "responsible for something", partOfSpeech: "phrase" },
+        { id: "customer", english: "customer", vietnamese: "khách hàng", definition: "a person who buys goods or services", partOfSpeech: "noun" },
+        { id: "join", english: "join", vietnamese: "gia nhập", definition: "to become part of a group", partOfSpeech: "verb" },
+        { id: "project", english: "project", vietnamese: "dự án", definition: "a planned piece of work", partOfSpeech: "noun" },
+        { id: "finish", english: "finish", vietnamese: "hoàn thành", definition: "to complete something", partOfSpeech: "verb" },
+        { id: "deadline", english: "deadline", vietnamese: "hạn chót", definition: "the latest time work must be completed", partOfSpeech: "noun" },
+        { id: "manager", english: "manager", vietnamese: "quản lý, trưởng phòng", definition: "a person who manages a team", partOfSpeech: "noun" },
+        { id: "report-to", english: "report to", vietnamese: "báo cáo cho", definition: "to work under someone's direction", partOfSpeech: "phrase" },
+        { id: "update", english: "update", vietnamese: "bản cập nhật", definition: "new information about progress", partOfSpeech: "noun" },
+        { id: "website", english: "website", vietnamese: "trang web", definition: "a collection of web pages", partOfSpeech: "noun" },
+        { id: "app", english: "app", vietnamese: "ứng dụng", definition: "a software application", partOfSpeech: "noun" },
+        { id: "client", english: "client", vietnamese: "khách hàng (doanh nghiệp)", definition: "a person or company receiving a service", partOfSpeech: "noun" },
+        { id: "plan", english: "plan", vietnamese: "lên kế hoạch", definition: "to decide how to do something", partOfSpeech: "verb" },
+        { id: "visit", english: "visit", vietnamese: "đến thăm", definition: "to go and see a person or place", partOfSpeech: "verb" }
+      ]
+    })]
   );
 
   const assessments = [

@@ -5,6 +5,7 @@ import type { Pool } from "pg";
 import { registerAssessmentRoutes } from "./modules/assessment/index.js";
 import { registerCoachRoutes, type AiTaskRunner } from "./modules/coach/index.js";
 import { registerContentRoutes } from "./modules/content/index.js";
+import { registerEngagementRoutes } from "./modules/engagement/index.js";
 import { registerIdentityRoutes } from "./modules/identity/index.js";
 import { registerLearningRoutes } from "./modules/learning/index.js";
 
@@ -30,5 +31,6 @@ export function buildApi(options: BuildApiOptions): FastifyInstance {
   registerAssessmentRoutes(app, options.pool);
   registerContentRoutes(app, options.pool);
   registerCoachRoutes(app, options.pool, options.aiRunner);
+  registerEngagementRoutes(app, options.pool, options.aiRunner);
   return app;
 }

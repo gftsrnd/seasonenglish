@@ -3,13 +3,14 @@ import { BrowserRouter, Navigate, NavLink, Route, Routes, useNavigate, useParams
 import type {
   AssessmentKind, AssessmentLevelFormSlotView, AssessmentReviewOverviewView, AssessmentSectionCode, AssessmentView,
   CefrLevel, CoachView, ContentLessonMatrixView, ContentLessonSetVersionView, ContentPromptSettingsView,
+  ArenaView, DuelView, GameHubView, GameKey, GameResultView, RewardView, SurveyView, WeeklyPracticeView,
   ContentReviewView, ContentWeekFrameView,
   LearnerAvatarData, LearnerHomeView, LearnerProfileData, LearnerProfileView, LearnerProgressView,
   LessonView, MicroLessonView, SessionView
 } from "@e4s/contracts";
 import { apiClient } from "./api-client.js";
 import { EntryScreen } from "./features/auth/index.js";
-import { Assessment, Avatar, Coach, Home, Lesson, Micro, Onboard, Profile } from "./pages/learner/index.js";
+import { Arena, Assessment, Avatar, Coach, Duel, Game as GameScreen, Games, Home, Lesson, Micro, Onboard, Practice, Profile, Reward, Survey } from "./pages/learner/index.js";
 import { LessonSet, Lessons, LevelApproval, LevelForms, Prompts, Review, Weeks } from "./pages/operator/index.js";
 
 export function App() {
@@ -166,7 +167,7 @@ function LearnerShell({ session, onLogout }: { session: SessionView; onLogout: (
     <aside className="sidebar">
       <a className="brand" href="/home"><span aria-hidden="true">◆</span><span>Season English <small>· GFT</small></span></a>
       <nav aria-label="Điều hướng người học">
-        <NavLink to="/home">Trang chủ</NavLink><a href="/coach">Luyện với Season</a><a href="/practice">Bài tuần</a><a href="/games">Mini game</a><NavLink to="/profile">Tiến độ & hồ sơ</NavLink>
+        <NavLink to="/home">Trang chủ</NavLink><NavLink to="/coach">Luyện với Season</NavLink><NavLink to="/practice">Bài tuần</NavLink><NavLink to="/games">Mini game</NavLink><NavLink to="/profile">Tiến độ & hồ sơ</NavLink>
       </nav>
       <SidebarControls name={session.user.displayName} roleLabel="Người học" avatar={avatar} onLogout={onLogout} />
     </aside>
@@ -178,7 +179,14 @@ function LearnerShell({ session, onLogout }: { session: SessionView; onLogout: (
       <Route path="/lesson/:lessonId" element={<LessonRoute />} />
       <Route path="/micro/:microLessonId" element={<MicroRoute />} />
       <Route path="/coach" element={<CoachRoute />} />
+      <Route path="/practice" element={<PracticeRoute />} />
+      <Route path="/games" element={<GamesRoute />} />
+      <Route path="/games/:game" element={<GameRoute />} />
+      <Route path="/arena" element={<ArenaRoute />} />
+      <Route path="/duel/:duelId" element={<DuelRoute />} />
       <Route path="/profile" element={<ProfileRoute />} />
+      <Route path="/reward/:mode" element={<RewardRoute />} />
+      <Route path="/survey" element={<SurveyRoute />} />
     </Routes></div>
   </div>;
 }
@@ -323,6 +331,83 @@ function CoachRoute() {
     onPersonaChange={async (persona) => setView(await apiClient.setCoachPersona(persona))}
     onNewChat={async () => { pending.current = undefined; setView(await apiClient.clearCoach()); }}
   />;
+}
+
+function PracticeRoute() {
+  const [view, setView] = useState<WeeklyPracticeView>();
+  const [error, setError] = useState("");
+  useEffect(() => { void apiClient.getWeeklyPractice().then(setView).catch(() => setError("Không tải được bài thực hành tuần.")); }, []);
+  if (!view) return error ? <ErrorState message={error} /> : <Loading label="Đang mở bài thực hành" />;
+  return <Practice view={view} onSubmit={async (text) => setView(await apiClient.submitWeeklyPractice({ requestId: crypto.randomUUID(), text }))} />;
+}
+
+function GamesRoute() {
+  const [view, setView] = useState<GameHubView>();
+  const [error, setError] = useState("");
+  useEffect(() => { void apiClient.getGames().then(setView).catch(() => setError("Chưa có bộ từ cho mini game.")); }, []);
+  if (!view) return error ? <ErrorState message={error} /> : <Loading label="Đang mở mini game" />;
+  return <Games view={view} aiAvailable={Boolean(view.aiAvailable)}
+    onGenerate={async (topic) => setView(await apiClient.generateGameWordSet({ requestId: crypto.randomUUID(), topic }))}
+    onUseWeekly={async () => setView(await apiClient.useWeeklyGameWordSet())}
+    onDelete={async () => setView(await apiClient.useWeeklyGameWordSet())} />;
+}
+
+function GameRoute() {
+  const { game } = useParams();
+  const [view, setView] = useState<GameHubView>();
+  const [result, setResult] = useState<GameResultView>();
+  const [error, setError] = useState("");
+  useEffect(() => { void apiClient.getGames().then(setView).catch(() => setError("Chưa có bộ từ cho mini game.")); }, []);
+  if (!view) return error ? <ErrorState message={error} /> : <Loading label="Đang mở trò chơi" />;
+  const descriptor = view.games.find((item) => item.key === game);
+  if (!descriptor) return <Navigate to="/games" replace />;
+  return <GameScreen descriptor={descriptor} wordSet={view.wordSet} onFinish={async ({ answers, hintsUsed }) => setResult(await apiClient.submitGameResult(descriptor.key, {
+    requestId: crypto.randomUUID(), answers, ...(hintsUsed === undefined ? {} : { hintsUsed })
+  }))} result={result} onReplay={() => setResult(undefined)} />;
+}
+
+function ArenaRoute() {
+  const [view, setView] = useState<ArenaView>();
+  const [error, setError] = useState("");
+  const navigate = useNavigate();
+  useEffect(() => { void apiClient.getArena().then(setView).catch(() => setError("Không tải được đấu trường.")); }, []);
+  if (!view) return error ? <ErrorState message={error} /> : <Loading label="Đang mở đấu trường" />;
+  return <Arena view={view} onChallenge={async (opponentId, game) => navigate(`/duel/${(await apiClient.createDuel({ opponentId, game })).id}`)} />;
+}
+
+function DuelRoute() {
+  const { duelId } = useParams();
+  const [view, setView] = useState<DuelView>();
+  const [completion, setCompletion] = useState<DuelView>();
+  const [hub, setHub] = useState<GameHubView>();
+  const [error, setError] = useState("");
+  useEffect(() => {
+    if (!duelId) return;
+    void Promise.all([apiClient.getDuel(duelId), apiClient.getGames()]).then(([duel, games]) => { setView(duel); setHub(games); }).catch(() => setError("Không tải được trận đấu."));
+  }, [duelId]);
+  if (!view || !hub) return error ? <ErrorState message={error} /> : <Loading label="Đang mở trận đấu" />;
+  const descriptor = hub.games.find((item) => item.key === view.game);
+  if (!descriptor || !duelId) return <Navigate to="/arena" replace />;
+  if (view.myScore && !completion) return <Navigate to="/arena" replace />;
+  return <Duel view={view} completion={completion} descriptor={descriptor} onFinish={async ({ answers }) => setCompletion(await apiClient.submitDuelResult(duelId, { requestId: crypto.randomUUID(), answers }))} />;
+}
+
+function RewardRoute() {
+  const { mode } = useParams();
+  const [view, setView] = useState<RewardView>();
+  const [error, setError] = useState("");
+  const selected = mode === "done" ? "done" : "preview";
+  useEffect(() => { void apiClient.getReward(selected).then(setView).catch(() => setError("Chứng nhận chưa sẵn sàng.")); }, [selected]);
+  if (!view) return error ? <ErrorState message={error} /> : <Loading label="Đang tạo chứng nhận" />;
+  return <Reward view={view} />;
+}
+
+function SurveyRoute() {
+  const [view, setView] = useState<SurveyView>();
+  const [error, setError] = useState("");
+  useEffect(() => { void apiClient.getSurvey().then(setView).catch(() => setError("Không tải được khảo sát.")); }, []);
+  if (!view) return error ? <ErrorState message={error} /> : <Loading label="Đang mở khảo sát" />;
+  return <Survey view={view} onSubmit={async (answers) => setView(await apiClient.submitSurvey(answers))} />;
 }
 
 function ProfileRoute() {
