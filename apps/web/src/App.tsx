@@ -1,30 +1,81 @@
 import { useEffect, useState } from "react";
 import { BrowserRouter, Navigate, NavLink, Route, Routes, useNavigate, useParams } from "react-router";
 import type {
-  AssessmentKind, AssessmentSectionCode, AssessmentView, LearnerAvatarData, LearnerHomeView, LearnerProfileData, LearnerProfileView, LearnerProgressView,
+  AssessmentKind, AssessmentLevelFormSlotView, AssessmentReviewOverviewView, AssessmentSectionCode, AssessmentView,
+  LearnerAvatarData, LearnerHomeView, LearnerProfileData, LearnerProfileView, LearnerProgressView,
   LessonView, MicroLessonView, SessionView
 } from "@e4s/contracts";
 import { apiClient } from "./api-client.js";
 import { EntryScreen } from "./features/auth/index.js";
-import { Assessment, Home, Lesson, Micro, Onboard, Profile } from "./pages/learner/index.js";
+import { Assessment, Avatar, Home, Lesson, Micro, Onboard, Profile } from "./pages/learner/index.js";
+import { LevelApproval, LevelForms } from "./pages/operator/index.js";
 
 export function App() {
   const [session, setSession] = useState<SessionView | null | undefined>(undefined);
   useEffect(() => { void apiClient.currentSession().then(setSession).catch(() => setSession(null)); }, []);
   if (session === undefined) return <Loading label="Đang mở E4S" />;
   if (!session) return <EntryScreen client={apiClient} onAuthenticated={setSession} />;
-  if (session.role !== "learner") return <main className="learner-page"><h1>Khu vực nhân sự</h1><p>Các màn vận hành giữ nguyên theo prototype và đang được nối dữ liệu.</p><button onClick={() => void apiClient.logout().then(() => setSession(null))}>Đăng xuất</button></main>;
-  return <BrowserRouter><LearnerShell session={session} onLogout={() => void apiClient.logout().then(() => setSession(null))} /></BrowserRouter>;
+  const logout = () => void apiClient.logout().then(() => setSession(null));
+  return <BrowserRouter>{session.role === "learner"
+    ? <LearnerShell session={session} onLogout={logout} />
+    : <StaffShell session={session} onLogout={logout} />}</BrowserRouter>;
 }
 
+function StaffShell({ session, onLogout }: { session: SessionView; onLogout: () => void }) {
+  const operator = session.role === "operator";
+  return <div className="app-shell">
+    <aside className="sidebar">
+      <a className="brand" href={operator ? "/op" : "/mgr"}><span aria-hidden="true">◆</span><span>Season English <small>· GFT</small></span></a>
+      <nav aria-label={operator ? "Điều hướng người vận hành" : "Điều hướng quản lý"}>{operator ? <>
+        <NavLink end to="/op">Duyệt mức</NavLink><a href="/op/weeks">Chủ đề</a><a href="/op/lessons">Bài học</a><a href="/op/review">Đọc mẫu</a><a href="/settings">Cài đặt</a>
+      </> : <>
+        <a href="/mgr">Tiến độ</a><a href="/mgr/ops">Vận hành</a><a href="/mgr/reminders">Nhắc học</a><a href="/mgr/report">Báo cáo</a><a href="/settings">Cài đặt</a>
+      </>}</nav>
+      <SidebarControls name={session.user.displayName} roleLabel={operator ? "Người vận hành" : "Quản lý"} onLogout={onLogout} />
+    </aside>
+    <div className="content-shell"><Routes>
+      <Route path="/" element={<Navigate replace to={operator ? "/op" : "/mgr"} />} />
+      <Route path="/home" element={<Navigate replace to={operator ? "/op" : "/mgr"} />} />
+      <Route path="/op" element={<LevelApprovalRoute readOnly={!operator} />} />
+      <Route path="/op/levelforms" element={<LevelFormsRoute />} />
+      <Route path="*" element={<StaffPending />} />
+    </Routes></div>
+  </div>;
+}
+
+function LevelApprovalRoute({ readOnly }: { readOnly: boolean }) {
+  const [overview, setOverview] = useState<AssessmentReviewOverviewView>();
+  const [error, setError] = useState("");
+  const load = () => apiClient.getAssessmentReviewOverview().then(setOverview).catch(() => setError("Không tải được dữ liệu duyệt trình độ."));
+  useEffect(() => { void load(); }, []);
+  if (!overview) return error ? <ErrorState message={error} /> : <Loading label="Đang tải dữ liệu duyệt" />;
+  return <LevelApproval overview={overview} readOnly={readOnly} onDecision={async (attemptId, input) => {
+    setError("");
+    try { await apiClient.decideAssessment(attemptId, input); await load(); }
+    catch { setError("Không lưu được quyết định. Vui lòng kiểm tra lại trạng thái bài."); }
+  }} />;
+}
+
+function LevelFormsRoute() {
+  const [slots, setSlots] = useState<AssessmentLevelFormSlotView[]>();
+  const [error, setError] = useState("");
+  useEffect(() => { void apiClient.getAssessmentLevelForms().then(setSlots).catch(() => setError("Không tải được danh sách đề lên mức.")); }, []);
+  if (!slots) return error ? <ErrorState message={error} /> : <Loading label="Đang tải đề lên mức" />;
+  return <LevelForms slots={slots} aiAvailable={false} />;
+}
+
+function StaffPending() { return <main className="operator-page"><h1>Nội dung đang được nối dữ liệu</h1><p>Màn này giữ nguyên trong danh sách đã chốt và sẽ được hoàn thiện ở bước tương ứng.</p></main>; }
+
 function LearnerShell({ session, onLogout }: { session: SessionView; onLogout: () => void }) {
+  const [avatar, setAvatar] = useState<LearnerAvatarData>();
+  useEffect(() => { void apiClient.getProfile().then((profile) => setAvatar(profile.profile.avatar)).catch(() => undefined); }, []);
   return <div className="app-shell">
     <aside className="sidebar">
       <a className="brand" href="/home"><span aria-hidden="true">◆</span><span>Season English <small>· GFT</small></span></a>
       <nav aria-label="Điều hướng người học">
         <NavLink to="/home">Trang chủ</NavLink><a href="/coach">Luyện với Season</a><a href="/practice">Bài tuần</a><a href="/games">Mini game</a><NavLink to="/profile">Tiến độ & hồ sơ</NavLink>
       </nav>
-      <div className="sidebar-user"><strong>{session.user.displayName}</strong><span>Người học</span><button onClick={onLogout}>Đăng xuất</button></div>
+      <SidebarControls name={session.user.displayName} roleLabel="Người học" avatar={avatar} onLogout={onLogout} />
     </aside>
     <div className="content-shell"><Routes>
       <Route path="/" element={<Navigate replace to="/home" />} />
@@ -37,6 +88,22 @@ function LearnerShell({ session, onLogout }: { session: SessionView; onLogout: (
     </Routes></div>
   </div>;
 }
+
+function SidebarControls({ name, roleLabel, avatar, onLogout }: { name: string; roleLabel: string; avatar?: LearnerAvatarData | undefined; onLogout: () => void }) {
+  const [effectsOn, setEffectsOn] = useState(true);
+  const [musicOn, setMusicOn] = useState(true);
+  return <div className="sidebar-user">
+    <div className="sidebar-sound" role="group" aria-label="Âm thanh">
+      <button type="button" aria-pressed={effectsOn} aria-label={`Hiệu ứng âm thanh: ${effectsOn ? "bật" : "tắt"}`} onClick={() => setEffectsOn((value) => !value)}><SpeakerIcon /></button>
+      <button type="button" aria-pressed={musicOn} aria-label={`Nhạc nền: ${musicOn ? "bật" : "tắt"}`} onClick={() => setMusicOn((value) => !value)}><MusicIcon /></button>
+    </div>
+    <div className="sidebar-identity"><button className="sidebar-avatar" type="button" aria-label="Đổi avatar">{avatar ? <Avatar avatar={avatar} name={name} /> : <span aria-hidden="true">✣</span>}</button><div><strong>{name}</strong><span>{roleLabel}</span></div></div>
+    <button className="sidebar-logout" onClick={onLogout}>Đăng xuất</button>
+  </div>;
+}
+
+function SpeakerIcon() { return <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9v6h4l5 4V5L8 9H4Zm12 1.2c.8 1.1.8 2.5 0 3.6M18.5 8a6 6 0 0 1 0 8" /></svg>; }
+function MusicIcon() { return <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 18V6l10-2v12M9 10l10-2M9 18a3 2 0 1 1-6 0 3 2 0 1 1 6 0Zm10-2a3 2 0 1 1-6 0 3 2 0 1 1 6 0Z" /></svg>; }
 
 function AssessmentRoute() {
   const { kind: rawKind = "placement" } = useParams();

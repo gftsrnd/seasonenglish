@@ -193,6 +193,27 @@ describe("assessment API preserves the one-screen flow and server evidence", () 
     expect(managerQueue.json()).toEqual(expect.arrayContaining([
       expect.objectContaining({ attemptId: levelUpAttemptId })
     ]));
+    const overview = await app.inject({
+      method: "GET", url: "/api/v1/assessment-reviews/overview", headers: { cookie: operatorCookie }
+    });
+    expect(overview.statusCode, overview.body).toBe(200);
+    expect(overview.json()).toMatchObject({
+      pendingAssessments: [expect.objectContaining({ kind: "final", learnerId: DEMO_IDS.learner })],
+      pendingLevelUp: [expect.objectContaining({ attemptId: levelUpAttemptId, kind: "level-up" })],
+      approvedLearners: [expect.objectContaining({ learnerId: DEMO_IDS.learner, currentLevel: "A2", placementScore: 55 })],
+      unassessedLearners: []
+    });
+
+    const levelForms = await app.inject({
+      method: "GET", url: "/api/v1/assessment-level-forms", headers: { cookie: operatorCookie }
+    });
+    expect(levelForms.statusCode, levelForms.body).toBe(200);
+    expect(levelForms.json()).toEqual([
+      expect.objectContaining({ targetLevel: "A2", publishedForm: null }),
+      expect.objectContaining({ targetLevel: "B1", publishedForm: expect.objectContaining({ title: "Đề thi lên mức B1", listeningTaskCount: 5, readingTaskCount: 5 }) }),
+      expect.objectContaining({ targetLevel: "B2", publishedForm: null }),
+      expect.objectContaining({ targetLevel: "C1", publishedForm: null })
+    ]);
     const forbiddenManagerDecision = await app.inject({
       method: "POST",
       url: `/api/v1/assessment-reviews/${levelUpAttemptId}/decision`,

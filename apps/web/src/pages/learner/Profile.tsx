@@ -120,7 +120,7 @@ function AvatarPicker({ avatar, name, saving, onChange, onCancel, onSave }: {
   </div>;
 }
 
-function Avatar({ avatar, name, size }: { avatar: LearnerAvatarData; name: string; size?: "large" }) {
+export function Avatar({ avatar, name, size }: { avatar: LearnerAvatarData; name: string; size?: "large" }) {
   const color = avatarColors.find(([key]) => key === avatar.color)?.[1] ?? avatarColors[0][1];
   const initials = name.split(/\s+/).filter(Boolean).slice(-2).map((part) => part[0]?.toUpperCase()).join("");
   return <span className={`profile-avatar${size ? " profile-avatar--large" : ""}`} style={{ background: avatarBackgrounds[avatar.bg], color }} aria-hidden="true">

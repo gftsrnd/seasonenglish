@@ -150,6 +150,32 @@ export interface AssessmentDecisionRecord {
   decidedAt: Date;
 }
 
+export interface AssessmentApprovedLearnerRecord {
+  learnerId: string;
+  learnerName: string;
+  currentLevel: CefrLevel;
+  placementScore: number | null;
+  monthlyGoal: string | null;
+}
+
+export interface AssessmentUnassessedLearnerRecord {
+  learnerId: string;
+  learnerName: string;
+  profileComplete: boolean;
+}
+
+export interface AssessmentLevelFormRecord {
+  definitionId: string;
+  versionId: string;
+  title: string;
+  version: number;
+  targetLevel: Exclude<CefrLevel, "A1">;
+  publishedAt: Date | null;
+  listeningTaskCount: number;
+  readingTaskCount: number;
+  attemptCount: number;
+}
+
 class IdentityRepository {
   constructor(private readonly pool: Pool) {}
 
@@ -1128,6 +1154,119 @@ class AssessmentRepository {
       sectionScores: Object.fromEntries(Object.entries(row.section_scores ?? {}).map(([section, score]) => [section, Number(score)])),
       suggestedLevel: row.suggested_level
     }));
+  }
+
+  async getReviewOverview(reviewerId: string): Promise<{
+    pending: AssessmentReviewQueueRecord[];
+    approvedLearners: AssessmentApprovedLearnerRecord[];
+    unassessedLearners: AssessmentUnassessedLearnerRecord[];
+  }> {
+    const [pending, approved, unassessed] = await Promise.all([
+      this.listPending(reviewerId),
+      this.pool.query<{
+        learner_id: string;
+        learner_name: string;
+        current_level: CefrLevel;
+        placement_score: string | null;
+        monthly_goal: string | null;
+      }>(
+        `select learner.id as learner_id, learner.display_name as learner_name,
+                e.cefr as current_level, placement.total_score as placement_score,
+                null::text as monthly_goal
+         from users learner
+         join users reviewer on reviewer.id = $1 and reviewer.organization_id = learner.organization_id
+         join enrollments e on e.learner_id = learner.id and e.cefr_approved = true
+         left join lateral (
+           select sum(sc.score)::text as total_score
+           from assessment_attempts aa
+           join assessment_versions av on av.id = aa.assessment_version_id
+           join assessment_definitions ad on ad.id = av.definition_id and ad.kind = 'placement'
+           left join assessment_scores sc on sc.attempt_id = aa.id
+           where aa.learner_id = learner.id and aa.status = 'approved'
+           group by aa.id, aa.submitted_at
+           order by aa.submitted_at desc nulls last
+           limit 1
+         ) placement on true
+         where learner.role = 'learner'
+         order by learner.display_name`,
+        [reviewerId]
+      ),
+      this.pool.query<{
+        learner_id: string;
+        learner_name: string;
+        profile_complete: boolean;
+      }>(
+        `select learner.id as learner_id, learner.display_name as learner_name,
+                (lp.completed_at is not null) as profile_complete
+         from users learner
+         join users reviewer on reviewer.id = $1 and reviewer.organization_id = learner.organization_id
+         left join learner_profiles lp on lp.user_id = learner.id
+         where learner.role = 'learner'
+           and not exists (
+             select 1 from assessment_attempts aa
+             join assessment_versions av on av.id = aa.assessment_version_id
+             join assessment_definitions ad on ad.id = av.definition_id and ad.kind = 'placement'
+             where aa.learner_id = learner.id and aa.status = 'approved'
+           )
+         order by learner.display_name`,
+        [reviewerId]
+      )
+    ]);
+    return {
+      pending,
+      approvedLearners: approved.rows.map((row) => ({
+        learnerId: row.learner_id,
+        learnerName: row.learner_name,
+        currentLevel: row.current_level,
+        placementScore: row.placement_score === null ? null : Number(row.placement_score),
+        monthlyGoal: row.monthly_goal
+      })),
+      unassessedLearners: unassessed.rows.map((row) => ({
+        learnerId: row.learner_id,
+        learnerName: row.learner_name,
+        profileComplete: row.profile_complete
+      }))
+    };
+  }
+
+  async listLevelForms(reviewerId: string): Promise<AssessmentLevelFormRecord[]> {
+    const result = await this.pool.query<{
+      definition_id: string;
+      version_id: string;
+      title: string;
+      version: number;
+      blueprint: StoredAssessmentDefinition;
+      published_at: Date | null;
+      attempt_count: string;
+    }>(
+      `select ad.id as definition_id, av.id as version_id, ad.title, av.version,
+              av.blueprint, av.published_at, count(aa.id)::text as attempt_count
+       from assessment_definitions ad
+       join users reviewer on reviewer.id = $1 and reviewer.organization_id = ad.organization_id
+       join assessment_versions av on av.definition_id = ad.id and av.status = 'published'
+       left join assessment_attempts aa on aa.assessment_version_id = av.id
+       where ad.kind = 'level_up'
+       group by ad.id, av.id, ad.title, av.version, av.blueprint, av.published_at
+       order by av.published_at desc nulls last`,
+      [reviewerId]
+    );
+    return result.rows.flatMap((row) => {
+      const targetLevel = row.blueprint.targetLevel;
+      if (!targetLevel || targetLevel === "A1") return [];
+      const sectionCount = (code: AssessmentSectionCode) => row.blueprint.sections
+        .find((section) => section.code === code)?.groups.reduce((total, group) => total + group.tasks.length, 0) ?? 0;
+      return [{
+        definitionId: row.definition_id,
+        versionId: row.version_id,
+        title: row.title,
+        version: row.version,
+        targetLevel,
+        publishedAt: row.published_at,
+        listeningTaskCount: sectionCount("listening"),
+        readingTaskCount: sectionCount("reading"),
+        attemptCount: Number(row.attempt_count)
+      }];
+    });
   }
 
   async decide(input: {

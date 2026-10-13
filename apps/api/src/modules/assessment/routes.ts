@@ -3,6 +3,8 @@ import type {
   AssessmentDecisionView,
   AssessmentEvidenceType,
   AssessmentKind,
+  AssessmentLevelFormSlotView,
+  AssessmentReviewOverviewView,
   AssessmentReviewQueueItem,
   AssessmentSectionCode,
   AssessmentSectionStatus,
@@ -70,6 +72,31 @@ export function registerAssessmentRoutes(app: FastifyInstance, pool: Pool): void
       ...item,
       submittedAt: item.submittedAt.toISOString()
     }));
+  });
+
+  app.get("/api/v1/assessment-reviews/overview", { preHandler: assessmentReaders }, async (request): Promise<AssessmentReviewOverviewView> => {
+    const overview = await repositories.assessments.getReviewOverview(request.e4sSession!.user.id);
+    const queueView = (item: typeof overview.pending[number]): AssessmentReviewQueueItem => ({
+      ...item,
+      submittedAt: item.submittedAt.toISOString()
+    });
+    return {
+      pendingAssessments: overview.pending.filter((item) => item.kind !== "level-up").map(queueView),
+      pendingLevelUp: overview.pending.filter((item) => item.kind === "level-up").map(queueView),
+      approvedLearners: overview.approvedLearners,
+      unassessedLearners: overview.unassessedLearners
+    };
+  });
+
+  app.get("/api/v1/assessment-level-forms", { preHandler: assessmentReaders }, async (request): Promise<AssessmentLevelFormSlotView[]> => {
+    const forms = await repositories.assessments.listLevelForms(request.e4sSession!.user.id);
+    return (["A2", "B1", "B2", "C1"] as const).map((targetLevel) => {
+      const form = forms.find((candidate) => candidate.targetLevel === targetLevel);
+      return {
+        targetLevel,
+        publishedForm: form ? { ...form, publishedAt: form.publishedAt?.toISOString() ?? null } : null
+      };
+    });
   });
 
   app.post("/api/v1/assessment-reviews/:attemptId/decision", { preHandler: assessmentReviewers }, async (request, reply) => {

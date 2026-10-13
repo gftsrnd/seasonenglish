@@ -1,5 +1,6 @@
 import type {
-  AssessmentKind, AssessmentResponseView, AssessmentSectionCode, AssessmentView,
+  AssessmentDecisionInput, AssessmentDecisionView, AssessmentKind, AssessmentLevelFormSlotView,
+  AssessmentResponseView, AssessmentReviewOverviewView, AssessmentSectionCode, AssessmentView,
   LearnerHomeView, LearnerProfileData, LearnerProfileView, LearnerProgressView,
   LessonProgressView, LessonView, MicroLessonView, SessionView
 } from "@e4s/contracts";
@@ -38,6 +39,9 @@ export const apiClient: AuthClient & {
   completeAssessmentSection(attemptId: string, section: AssessmentSectionCode): Promise<AssessmentView>;
   recordAssessmentAudioPlay(attemptId: string, section: AssessmentSectionCode, groupKey: string): Promise<{ playCount: number; remaining: number }>;
   submitAssessment(attemptId: string): Promise<AssessmentView>;
+  getAssessmentReviewOverview(): Promise<AssessmentReviewOverviewView>;
+  decideAssessment(attemptId: string, input: AssessmentDecisionInput): Promise<AssessmentDecisionView>;
+  getAssessmentLevelForms(): Promise<AssessmentLevelFormSlotView[]>;
 } = {
   learnerLogin: (input: LoginCredentials) => request("/api/auth/learner/login", { method: "POST", body: JSON.stringify(input) }),
   staffLogin: (input: LoginCredentials) => request("/api/auth/staff/login", { method: "POST", body: JSON.stringify(input) }),
@@ -81,5 +85,10 @@ export const apiClient: AuthClient & {
   ),
   submitAssessment: (attemptId) => request(`/api/v1/assessment-attempts/${encodeURIComponent(attemptId)}/submit`, {
     method: "POST", body: "{}"
-  })
+  }),
+  getAssessmentReviewOverview: () => request("/api/v1/assessment-reviews/overview"),
+  decideAssessment: (attemptId, input) => request(`/api/v1/assessment-reviews/${encodeURIComponent(attemptId)}/decision`, {
+    method: "POST", body: JSON.stringify(input)
+  }),
+  getAssessmentLevelForms: () => request("/api/v1/assessment-level-forms")
 };

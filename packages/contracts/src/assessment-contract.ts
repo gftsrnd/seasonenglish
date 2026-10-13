@@ -119,3 +119,40 @@ export interface AssessmentDecisionView {
   decidedBy: string;
   decidedAt: string;
 }
+
+export interface AssessmentApprovedLearnerView {
+  learnerId: string;
+  learnerName: string;
+  currentLevel: CefrLevel;
+  placementScore: number | null;
+  monthlyGoal: string | null;
+}
+
+export interface AssessmentUnassessedLearnerView {
+  learnerId: string;
+  learnerName: string;
+  profileComplete: boolean;
+}
+
+export interface AssessmentReviewOverviewView {
+  pendingAssessments: AssessmentReviewQueueItem[];
+  pendingLevelUp: AssessmentReviewQueueItem[];
+  approvedLearners: AssessmentApprovedLearnerView[];
+  unassessedLearners: AssessmentUnassessedLearnerView[];
+}
+
+export interface AssessmentLevelFormView {
+  definitionId: string;
+  versionId: string;
+  title: string;
+  version: number;
+  publishedAt: string | null;
+  listeningTaskCount: number;
+  readingTaskCount: number;
+  attemptCount: number;
+}
+
+export interface AssessmentLevelFormSlotView {
+  targetLevel: Exclude<CefrLevel, "A1">;
+  publishedForm: AssessmentLevelFormView | null;
+}
