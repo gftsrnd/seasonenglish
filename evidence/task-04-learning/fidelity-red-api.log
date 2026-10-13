@@ -1,0 +1,261 @@
+$ node scripts/run-with-test-postgres.mjs "apps/api/test/learning.integration.test.ts"
+
+ RUN  v5.0.4 D:/TTS - AI Application - Huynh Doan Hoang Minh/12_10_2026 - 17_10_2026/E4S/platform
+
+ ❯ apps/api/test/learning.integration.test.ts (8 tests | 3 failed) 325ms
+   ❯ learner profile, home, lesson and progress API (8)
+     × returns the existing home capabilities instead of reducing home to a lesson list 35ms
+     × returns season, badge roadmap, readiness and assessment evidence for the existing profile screen 3ms
+     × persists a micro-practice attempt and completion on the same screen 1ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 3 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  apps/api/test/learning.integration.test.ts > learner profile, home, lesson and progress API > returns the existing home capabilities instead of reducing home to a lesson list
+AssertionError: expected { onboardingRequired: false, …(5) } to match object { Object (program, schedule, ...) }
+(22 matching properties omitted from actual)
+
+- Expected
++ Received
+
+  {
+-   "coach": {
+-     "href": "/coach",
+-     "targetTurns": 2,
+-     "turnsThisWeek": 2,
++   "learner": {
++     "cefr": "A2",
++     "displayName": "Học viên Demo",
+    },
+-   "finalAssessment": {
+-     "available": true,
+-     "href": "/test/final",
++   "lessons": [
++     {
++       "dayNumber": 1,
++       "id": "00000000-0000-4000-8000-000000000601",
++       "status": "completed",
++       "title": "Giới thiệu tên và vai trò",
+      },
+-   "levelReadiness": {
+-     "eligible": false,
+-     "examAvailable": true,
+-     "targetLevel": "B1",
+-     "windowDays": 14,
+-   },
+-   "practice": {
+-     "href": "/practice",
+-     "status": "locked",
+-   },
+-   "program": {
+-     "name": "E4S Pilot",
++     {
++       "dayNumber": 2,
++       "id": "00000000-0000-4000-8000-000000000602",
++       "status": "not_started",
++       "title": "Nói nơi bạn đến từ",
+      },
+-   "schedule": {
+-     "days": [
+      {
+-         "label": "T2",
+-         "status": "attended",
++       "dayNumber": 3,
++       "id": "00000000-0000-4000-8000-000000000603",
++       "status": "not_started",
++       "title": "Mô tả công việc hằng ngày",
+      },
+      {
+-         "label": "T3",
+-         "status": "today",
++       "dayNumber": 4,
++       "id": "00000000-0000-4000-8000-000000000604",
++       "status": "not_started",
++       "title": "Hỏi lại để làm rõ",
+      },
+      {
+-         "label": "T4",
+-         "status": "upcoming",
++       "dayNumber": 5,
++       "id": "00000000-0000-4000-8000-000000000605",
++       "status": "not_started",
++       "title": "Tóm tắt và đề xuất bước tiếp theo",
+      },
+-       {
+-         "label": "T5",
+-         "status": "upcoming",
++   ],
++   "metrics": {
++     "completedLessons": 1,
++     "points": 20,
++     "streakDays": 0,
++     "studyDays": 1,
++     "totalLessons": 5,
+    },
+-       {
+-         "label": "T6",
+-         "status": "upcoming",
++   "nextLesson": {
++     "dayNumber": 2,
++     "id": "00000000-0000-4000-8000-000000000602",
++     "status": "not_started",
++     "title": "Nói nơi bạn đến từ",
+    },
++   "onboardingRequired": false,
++   "week": {
++     "description": "Tự giới thiệu và hỏi thông tin cơ bản",
++     "id": "00000000-0000-4000-8000-000000000301",
++     "objectives": [
++       "Tự giới thiệu 4-5 câu",
+      ],
+-     "daysPerWeek": 5,
+-     "lessonMinutes": 10,
++     "topic": "Giới thiệu trong công việc",
++     "weekNumber": 1,
+    },
+  }
+
+ ❯ apps/api/test/learning.integration.test.ts:79:29
+     77|
+     78|     expect(response.statusCode).toBe(200);
+     79|     expect(response.json()).toMatchObject({
+       |                             ^
+     80|       program: { name: "E4S Pilot" },
+     81|       schedule: {
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/3]⎯
+
+ FAIL  apps/api/test/learning.integration.test.ts > learner profile, home, lesson and progress API > returns season, badge roadmap, readiness and assessment evidence for the existing profile screen
+AssertionError: expected { learner: { …(4) }, points: 20, …(4) } to match object { season: { …(4) }, …(3) }
+(10 matching properties omitted from actual)
+
+- Expected
++ Received
+
+  {
+-   "assessments": {
+-     "final": null,
+-     "placement": {
+-       "approvedLevel": "A2",
+-       "sections": {
+-         "listening": 14,
+-         "reading": 16,
+-         "speaking": 12,
+-         "writing": 13,
+-       },
+-       "totalScore": 55,
++   "activity": [
++     {
++       "evidence": {
++         "source": "deterministic-seed",
+        },
+-   },
+-   "levelReadiness": {
+-     "eligible": false,
+-     "targetLevel": "B1",
++       "minutes": 10,
++       "occurredAt": "2026-10-12T10:52:02.532Z",
++       "type": "lesson",
+      },
+-   "season": {
+-     "current": {
+-       "key": "spring",
+-       "level": 1,
++   ],
++   "badges": [
++     {
++       "key": "starter",
++       "label": "Khởi động",
+      },
+-     "earnedBadgeCount": 1,
+-     "next": {
+-       "key": "summer",
+-       "level": 2,
+-       "pointsRequired": 60,
++   ],
++   "learner": {
++     "cefr": "A2",
++     "displayName": "Học viên Demo",
++     "id": "00000000-0000-4000-8000-000000000101",
++     "profile": {
++       "certificates": [],
++       "concerns": "Muốn nói rõ hơn",
++       "contact": "",
++       "department": "AI",
++       "device": "both",
++       "durationMinutes": 10,
++       "email": "learner@e4s.local",
++       "environmentUse": "weekly",
++       "experience": "Học ở trường",
++       "explanationLanguage": "auto",
++       "familyUse": "none",
++       "fullName": "Học viên Demo",
++       "goals": [
++         "meeting",
++         "email",
++       ],
++       "habits": [
++         "podcast",
++         "documents",
++       ],
++       "learningStyles": [
++         "speaking",
++         "examples",
++       ],
++       "persona": "informal",
++       "position": "AI Intern",
++       "selfLevel": "A2",
++       "situations": "Họp daily với nhóm quốc tế",
+      },
+-     "requiredBadgeCount": 2,
+    },
+-   "stats": {
+-     "coachTurns": 2,
++   "points": 20,
++   "studyDays": 1,
++   "weeks": [
++     {
+        "completedLessons": 1,
+-     "studyDays": 1,
++       "topic": "Giới thiệu trong công việc",
++       "totalLessons": 5,
++       "weekNumber": 1,
+      },
++   ],
+  }
+
+ ❯ apps/api/test/learning.integration.test.ts:144:29
+    142|
+    143|     expect(response.statusCode).toBe(200);
+    144|     expect(response.json()).toMatchObject({
+       |                             ^
+    145|       season: {
+    146|         current: { key: "spring", level: 1 },
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/3]⎯
+
+ FAIL  apps/api/test/learning.integration.test.ts > learner profile, home, lesson and progress API > persists a micro-practice attempt and completion on the same screen
+AssertionError: expected 404 to be 200 // Object.is equality
+
+- Expected
++ Received
+
+- 200
++ 404
+
+ ❯ apps/api/test/learning.integration.test.ts:173:32
+    171|       payload: { answer: "Could we reschedule to 3 PM?" }
+    172|     });
+    173|     expect(attempt.statusCode).toBe(200);
+       |                                ^
+    174|     expect(attempt.json()).toMatchObject({
+    175|       id: DEMO_IDS.microLesson,
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/3]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  3 failed | 5 passed (8)
+   Start at  17:52:01
+   Duration  899ms (import 49%, tests 40%, transform 11%)
+
+[ELIFECYCLE] Test failed. See above for more details.

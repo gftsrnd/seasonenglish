@@ -1,0 +1,148 @@
+$ node scripts/run-with-test-postgres.mjs "packages/domain/test/learning.test.ts" "apps/api/test/learning.integration.test.ts" "apps/web/test/learner-screens.test.tsx"
+
+ RUN  v5.0.4 D:/TTS - AI Application - Huynh Doan Hoang Minh/12_10_2026 - 17_10_2026/E4S/platform
+
+ ❯ apps/api/test/learning.integration.test.ts (5 tests | 5 failed) 219ms
+   ❯ learner profile, home, lesson and progress API (5)
+     × protects every learner endpoint with the server-derived learner role 5ms
+     × returns and version-updates the existing one-screen profile 1ms
+     × returns the current week, five ordered lessons and the next resumable lesson 1ms
+     × preserves lesson content order and resumes server-side progress evidence 1ms
+     × returns progress evidence for the profile screen without exposing another learner 0ms
+ ❯ apps/web/test/learner-screens.test.tsx (0 test)
+ ❯ packages/domain/test/learning.test.ts (0 test)
+
+⎯⎯⎯⎯⎯⎯ Failed Suites 2 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  apps/web/test/learner-screens.test.tsx [ apps/web/test/learner-screens.test.tsx ]
+Error: Failed to resolve import "../src/pages/learner/Home.js" from "apps/web/test/learner-screens.test.tsx". Does the file exist?
+  Plugin: vite:import-analysis
+  File: D:/TTS - AI Application - Huynh Doan Hoang Minh/12_10_2026 - 17_10_2026/E4S/platform/apps/web/test/learner-screens.test.tsx:5:21
+  3  |  import { cleanup, render, screen, within } from "@testing-library/react";
+  4  |  import { afterEach, describe, expect, it, vi } from "vitest";
+  5  |  import { Home } from "../src/pages/learner/Home.js";
+     |                        ^
+  6  |  import { Lesson } from "../src/pages/learner/Lesson.js";
+  7  |  import { Micro } from "../src/pages/learner/Micro.js";
+ ❯ TransformPluginContext._formatLog node_modules/.pnpm/vite@8.3.4_@types+node@24.10.13/node_modules/vite/dist/node/chunks/node.js:8766:39
+ ❯ TransformPluginContext.error node_modules/.pnpm/vite@8.3.4_@types+node@24.10.13/node_modules/vite/dist/node/chunks/node.js:8763:14
+ ❯ normalizeUrl node_modules/.pnpm/vite@8.3.4_@types+node@24.10.13/node_modules/vite/dist/node/chunks/node.js:26632:18
+ ❯ node_modules/.pnpm/vite@8.3.4_@types+node@24.10.13/node_modules/vite/dist/node/chunks/node.js:26702:30
+ ❯ TransformPluginContext.transform node_modules/.pnpm/vite@8.3.4_@types+node@24.10.13/node_modules/vite/dist/node/chunks/node.js:26668:4
+ ❯ EnvironmentPluginContainer.transform node_modules/.pnpm/vite@8.3.4_@types+node@24.10.13/node_modules/vite/dist/node/chunks/node.js:8545:14
+ ❯ loadAndTransform node_modules/.pnpm/vite@8.3.4_@types+node@24.10.13/node_modules/vite/dist/node/chunks/node.js:20184:26
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/7]⎯
+
+ FAIL  packages/domain/test/learning.test.ts [ packages/domain/test/learning.test.ts ]
+Error: Cannot find module '../src/learning/index.js' imported from D:/TTS - AI Application - Huynh Doan Hoang Minh/12_10_2026 - 17_10_2026/E4S/platform/packages/domain/test/learning.test.ts
+ ❯ packages/domain/test/learning.test.ts:2:1
+      1| import { describe, expect, it } from "vitest";
+      2| import {
+       | ^
+      3|   canonicalLessonPartOrder,
+      4|   isLearnerProfileComplete,
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/7]⎯
+
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 5 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  apps/api/test/learning.integration.test.ts > learner profile, home, lesson and progress API > protects every learner endpoint with the server-derived learner role
+AssertionError: expected 404 to be 401 // Object.is equality
+
+- Expected
++ Received
+
+- 401
++ 404
+
+ ❯ apps/api/test/learning.integration.test.ts:45:33
+     43|   it("protects every learner endpoint with the server-derived learner …
+     44|     const response = await app.inject({ method: "GET", url: "/api/v1/l…
+     45|     expect(response.statusCode).toBe(401);
+       |                                 ^
+     46|   });
+     47|
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/7]⎯
+
+ FAIL  apps/api/test/learning.integration.test.ts > learner profile, home, lesson and progress API > returns and version-updates the existing one-screen profile
+AssertionError: expected 404 to be 200 // Object.is equality
+
+- Expected
++ Received
+
+- 200
++ 404
+
+ ❯ apps/api/test/learning.integration.test.ts:50:32
+     48|   it("returns and version-updates the existing one-screen profile", as…
+     49|     const current = await app.inject({ method: "GET", url: "/api/v1/le…
+     50|     expect(current.statusCode).toBe(200);
+       |                                ^
+     51|     expect(current.json()).toMatchObject({ completed: true, version: 1…
+     52|
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/7]⎯
+
+ FAIL  apps/api/test/learning.integration.test.ts > learner profile, home, lesson and progress API > returns the current week, five ordered lessons and the next resumable lesson
+AssertionError: expected 404 to be 200 // Object.is equality
+
+- Expected
++ Received
+
+- 200
++ 404
+
+ ❯ apps/api/test/learning.integration.test.ts:65:33
+     63|   it("returns the current week, five ordered lessons and the next resu…
+     64|     const response = await app.inject({ method: "GET", url: "/api/v1/l…
+     65|     expect(response.statusCode).toBe(200);
+       |                                 ^
+     66|     expect(response.json()).toMatchObject({
+     67|       onboardingRequired: false,
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[5/7]⎯
+
+ FAIL  apps/api/test/learning.integration.test.ts > learner profile, home, lesson and progress API > preserves lesson content order and resumes server-side progress evidence
+TypeError: Cannot read properties of undefined (reading 'id')
+ ❯ apps/api/test/learning.integration.test.ts:77:34
+     75|   it("preserves lesson content order and resumes server-side progress …
+     76|     const home = await app.inject({ method: "GET", url: "/api/v1/learn…
+     77|     const lessonId = home.json().nextLesson.id as string;
+       |                                  ^
+     78|
+     79|     const lesson = await app.inject({ method: "GET", url: `/api/v1/les…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[6/7]⎯
+
+ FAIL  apps/api/test/learning.integration.test.ts > learner profile, home, lesson and progress API > returns progress evidence for the profile screen without exposing another learner
+AssertionError: expected 404 to be 200 // Object.is equality
+
+- Expected
++ Received
+
+- 200
++ 404
+
+ ❯ apps/api/test/learning.integration.test.ts:110:33
+    108|   it("returns progress evidence for the profile screen without exposin…
+    109|     const response = await app.inject({ method: "GET", url: "/api/v1/l…
+    110|     expect(response.statusCode).toBe(200);
+       |                                 ^
+    111|     expect(response.json()).toMatchObject({ learner: { id: DEMO_IDS.le…
+    112|     expect(response.json().weeks[0]).toMatchObject({ weekNumber: 1, co…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[7/7]⎯
+
+
+ Test Files  3 failed (3)
+      Tests  5 failed (5)
+   Start at  17:38:01
+   Duration  1.39s (environment 40%, import 35%, tests 20%, transform 4%, worker 1%)
+
+    Isolate  3 workers spawned · ~220ms startup each (spawn + environment, per file)
+             at least ~440ms faster with isolate: false — reuses workers across files instead of one per file
+
+[ELIFECYCLE] Test failed. See above for more details.

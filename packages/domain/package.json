@@ -5,7 +5,9 @@
   "type": "module",
   "exports": {
     ".": "./src/index.ts",
-    "./identity": "./src/identity/index.ts"
+    "./assessment": "./src/assessment/index.ts",
+    "./identity": "./src/identity/index.ts",
+    "./learning": "./src/learning/index.ts"
   },
   "scripts": {
     "build": "tsc -p tsconfig.json",

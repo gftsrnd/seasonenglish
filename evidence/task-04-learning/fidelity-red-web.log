@@ -1,0 +1,1292 @@
+$ vitest run "apps/web/test/learner-screens.test.tsx"
+
+ RUN  v5.0.4 D:/TTS - AI Application - Huynh Doan Hoang Minh/12_10_2026 - 17_10_2026/E4S/platform
+
+ ❯ apps/web/test/learner-screens.test.tsx (7 tests | 3 failed) 543ms
+   ❯ learner screens preserve the prototype flow (7)
+     × makes today's lesson the single primary action on home without changing route order 32ms
+     × keeps certificate, explanation-language and fixed-schedule information in the one-screen profile form 12ms
+     × labels profile progress semantically instead of relying on colour 17ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 3 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  apps/web/test/learner-screens.test.tsx > learner screens preserve the prototype flow > makes today's lesson the single primary action on home without changing route order
+TestingLibraryElementError: Unable to find an accessible element with the role "region" and name `/điểm danh tuần này/i`
+
+Here are the accessible roles:
+
+  main:
+
+  Name "":
+  <main
+    class="learner-page"
+  />
+
+  --------------------------------------------------
+  banner:
+
+  Name "":
+  <header
+    class="page-heading"
+  />
+
+  --------------------------------------------------
+  paragraph:
+
+  Name "":
+  <p
+    class="eyebrow"
+  />
+
+  Name "":
+  <p />
+
+  Name "":
+  <p
+    class="eyebrow"
+  />
+
+  --------------------------------------------------
+  heading:
+
+  Name "Chào Học viên Demo!":
+  <h1 />
+
+  Name "Bài 2":
+  <h2
+    id="today-title"
+  />
+
+  Name "Lộ trình tuần 1":
+  <h2
+    id="week-path-title"
+  />
+
+  --------------------------------------------------
+  region:
+
+  Name "Bài 2":
+  <section
+    aria-labelledby="today-title"
+    class="primary-task"
+  />
+
+  Name "Lộ trình tuần 1":
+  <section
+    aria-labelledby="week-path-title"
+  />
+
+  Name "Tiến độ hiện tại":
+  <section
+    aria-label="Tiến độ hiện tại"
+    class="metric-grid"
+  />
+
+  --------------------------------------------------
+  link:
+
+  Name "Học Bài 2":
+  <a
+    class="button button--primary"
+    href="/lesson/l2"
+  />
+
+  Name "T1 · Bài 1· đã hoàn thành":
+  <a
+    href="/lesson/l1"
+  />
+
+  Name "T2 · Bài 2· chưa bắt đầu":
+  <a
+    href="/lesson/l2"
+  />
+
+  --------------------------------------------------
+  navigation:
+
+  Name "Lộ trình tuần":
+  <nav
+    aria-label="Lộ trình tuần"
+  />
+
+  --------------------------------------------------
+  list:
+
+  Name "":
+  <ol
+    class="week-path"
+  />
+
+  --------------------------------------------------
+  listitem:
+
+  Name "":
+  <li
+    data-status="completed"
+  />
+
+  Name "":
+  <li
+    data-status="not_started"
+  />
+
+  --------------------------------------------------
+  strong:
+
+  Name "":
+  <strong />
+
+  Name "":
+  <strong />
+
+  Name "":
+  <strong />
+
+  Name "":
+  <strong />
+
+  --------------------------------------------------
+
+Ignored nodes: comments, script, style
+<body>
+  <div>
+    <main
+      class="learner-page"
+    >
+      <header
+        class="page-heading"
+      >
+        <p
+          class="eyebrow"
+        >
+          Tuần 
+          1
+           · 
+          A2
+        </p>
+        <h1>
+          Chào 
+          Học viên Demo
+          !
+        </h1>
+        <p>
+          Giới thiệu trong công việc
+        </p>
+      </header>
+      <section
+        aria-labelledby="today-title"
+        class="primary-task"
+      >
+        <p
+          class="eyebrow"
+        >
+          Bài hôm nay
+        </p>
+        <h2
+          id="today-title"
+        >
+          Bài 2
+        </h2>
+        <a
+          class="button button--primary"
+          href="/lesson/l2"
+        >
+          Học 
+          Bài 2
+        </a>
+      </section>
+      <section
+        aria-labelledby="week-path-title"
+      >
+        <h2
+          id="week-path-title"
+        >
+          Lộ trình tuần 
+          1
+        </h2>
+        <nav
+          aria-label="Lộ trình tuần"
+        >
+          <ol
+            class="week-path"
+          >
+            <li
+              data-status="completed"
+            >
+              <a
+                href="/lesson/l1"
+              >
+                T
+                1
+                 · 
+                Bài 1
+                <span
+                  class="sr-only"
+                >
+                   · 
+                  đã hoàn thành
+                </span>
+              </a>
+            </li>
+            <li
+              data-status="not_started"
+            >
+              <a
+                href="/lesson/l2"
+              >
+                T
+                2
+                 · 
+                Bài 2
+                <span
+                  class="sr-only"
+                >
+                   · 
+                  chưa bắt đầu
+                </span>
+              </a>
+            </li>
+          </ol>
+        </nav>
+      </section>
+      <section
+        aria-label="Tiến độ hiện tại"
+        class="metric-grid"
+      >
+        <div
+          class="metric"
+        >
+          <strong>
+            1/2
+          </strong>
+          <span>
+            Bài đã học
+          </span>
+        </div>
+        <div
+          class="metric"
+        >
+          <strong>
+            1
+          </strong>
+          <span>
+            Ngày có học
+          </span>
+        </div>
+        <div
+          class="metric"
+        >
+          <strong>
+            1
+          </strong>
+          <span>
+            Chuỗi ngày
+          </span>
+        </div>
+        <div
+          class="metric"
+        >
+          <strong>
+            20
+          </strong>
+          <span>
+            Điểm
+          </span>
+        </div>
+      </section>
+    </main>
+  </div>
+</body>
+ ❯ Object.getElementError node_modules/.pnpm/@testing-library+dom@10.4.2/node_modules/@testing-library/dom/dist/config.js:37:19
+ ❯ node_modules/.pnpm/@testing-library+dom@10.4.2/node_modules/@testing-library/dom/dist/query-helpers.js:76:38
+ ❯ node_modules/.pnpm/@testing-library+dom@10.4.2/node_modules/@testing-library/dom/dist/query-helpers.js:52:17
+ ❯ node_modules/.pnpm/@testing-library+dom@10.4.2/node_modules/@testing-library/dom/dist/query-helpers.js:95:19
+ ❯ apps/web/test/learner-screens.test.tsx:66:19
+     64|     expect(screen.getByRole("link", { name: /học bài 2/i })).toHaveAtt…
+     65|     expect(screen.getByRole("navigation", { name: /lộ trình tuần/i }))…
+     66|     expect(screen.getByRole("region", { name: /điểm danh tuần này/i })…
+       |                   ^
+     67|     expect(screen.getByRole("link", { name: /luyện với season/i })).to…
+     68|     expect(screen.getByRole("link", { name: /bài thực hành cuối tuần/i…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/3]⎯
+
+ FAIL  apps/web/test/learner-screens.test.tsx > learner screens preserve the prototype flow > keeps certificate, explanation-language and fixed-schedule information in the one-screen profile form
+TestingLibraryElementError: Unable to find an element with the text: /a1–a2 giải thích bằng tiếng việt/i. This could be because the text is broken up by multiple elements. In this case, you can provide a function for your text matcher to make your matcher more flexible.
+
+Ignored nodes: comments, script, style
+<body>
+  <div>
+    <main
+      class="learner-page learner-page--form"
+    >
+      <header
+        class="page-heading"
+      >
+        <p
+          class="eyebrow"
+        >
+          Hồ sơ
+        </p>
+        <h1>
+          Hoàn thiện hồ sơ của bạn
+        </h1>
+        <p>
+          Mình dùng thông tin này để chọn ví dụ sát công việc và cách học hợp với bạn.
+        </p>
+      </header>
+      <form>
+        <fieldset
+          class="form-section"
+        >
+          <legend>
+            Thông tin cá nhân
+          </legend>
+          <label>
+            Họ tên 
+            <span
+              aria-hidden="true"
+            >
+              *
+            </span>
+            <input
+              autocomplete="name"
+              name="fullName"
+              required=""
+              value="Lan"
+            />
+          </label>
+          <label>
+            Email 
+            <span
+              aria-hidden="true"
+            >
+              *
+            </span>
+            <input
+              autocomplete="email"
+              name="email"
+              required=""
+              type="email"
+              value="lan@example.com"
+            />
+          </label>
+          <label>
+            Phòng ban / team
+            <input
+              name="department"
+              value=""
+            />
+          </label>
+          <label>
+            Vị trí công việc
+            <input
+              name="position"
+              value=""
+            />
+          </label>
+          <label>
+            Base username nhận nhắc học
+            <input
+              name="contact"
+              placeholder="VD: @lan.nguyen"
+              value=""
+            />
+          </label>
+          <fieldset
+            class="choice-set"
+          >
+            <legend>
+              Bạn dùng tiếng Anh ở công ty cho việc gì?
+               *
+            </legend>
+            <div
+              class="choice-grid"
+            >
+              <label>
+                <input
+                  name="goals"
+                  type="checkbox"
+                  value="customer"
+                />
+                <span>
+                  Nói chuyện với khách hàng / đối tác
+                </span>
+              </label>
+              <label>
+                <input
+                  name="goals"
+                  type="checkbox"
+                  value="email"
+                />
+                <span>
+                  Viết email, tin nhắn công việc
+                </span>
+              </label>
+              <label>
+                <input
+                  name="goals"
+                  type="checkbox"
+                  value="meeting"
+                />
+                <span>
+                  Họp và trình bày
+                </span>
+              </label>
+              <label>
+                <input
+                  name="goals"
+                  type="checkbox"
+                  value="docs"
+                />
+                <span>
+                  Đọc tài liệu, spec kỹ thuật
+                </span>
+              </label>
+              <label>
+                <input
+                  name="goals"
+                  type="checkbox"
+                  value="career"
+                />
+                <span>
+                  Thăng tiến / phỏng vấn
+                </span>
+              </label>
+              <label>
+                <input
+                  name="goals"
+                  type="checkbox"
+                  value="confidence"
+                />
+                <span>
+                  Tự tin hơn khi nói
+                </span>
+              </label>
+            </div>
+          </fieldset>
+          <fieldset
+            class="choice-set"
+          >
+            <legend>
+              Mức độ dùng tiếng Anh trong môi trường làm việc?
+               *
+            </legend>
+            <div
+              class="choice-grid"
+            >
+              <label>
+                <input
+                  name="environmentUse"
+                  required=""
+                  type="radio"
+                  value="daily"
+                />
+                <span>
+                  Hằng ngày
+                </span>
+              </label>
+              <label>
+                <input
+                  name="environmentUse"
+                  required=""
+                  type="radio"
+                  value="weekly"
+                />
+                <span>
+                  Vài lần mỗi tuần
+                </span>
+              </label>
+              <label>
+                <input
+                  name="environmentUse"
+                  required=""
+                  type="radio"
+                  value="monthly"
+                />
+                <span>
+                  Thỉnh thoảng
+                </span>
+              </label>
+              <label>
+                <input
+                  name="environmentUse"
+                  required=""
+                  type="radio"
+                  value="rarely"
+                />
+                <span>
+                  Hiếm khi / chưa dùng
+                </span>
+              </label>
+            </div>
+          </fieldset>
+          <fieldset
+            class="choice-set"
+          >
+            <legend>
+              Mức độ sử dụng tiếng Anh trong gia đình bạn?
+               *
+            </legend>
+            <div
+              class="choice-grid"
+            >
+              <label>
+                <input
+                  name="familyUse"
+                  required=""
+                  type="radio"
+                  value="daily"
+                />
+                <span>
+                  Hằng ngày
+                </span>
+              </label>
+              <label>
+                <input
+                  name="familyUse"
+                  required=""
+                  type="radio"
+                  value="weekly"
+                />
+                <span>
+                  Vài lần mỗi tuần
+                </span>
+              </label>
+              <label>
+                <input
+                  name="familyUse"
+                  required=""
+                  type="radio"
+                  value="sometimes"
+                />
+                <span>
+                  Thỉnh thoảng
+                </span>
+              </label>
+              <label>
+                <input
+                  name="familyUse"
+                  required=""
+                  type="radio"
+                  value="none"
+                />
+                <span>
+                  Không dùng
+                </span>
+              </label>
+            </div>
+          </fieldset>
+          <fieldset
+            class="choice-set"
+          >
+            <legend>
+              Thói quen dùng tiếng Anh ngoài công việc?
+               *
+            </legend>
+            <div
+              class="choice-grid"
+            >
+              <label>
+                <input
+                  name="habits"
+                  type="checkbox"
+                  value="movies"
+                />
+                <span>
+                  Xem phim / video
+                </span>
+              </label>
+              <label>
+                <input
+                  name="habits"
+                  type="checkbox"
+                  value="podcast"
+                />
+                <span>
+                  Nghe nhạc / podcast
+                </span>
+              </label>
+              <label>
+                <input
+                  name="habits"
+                  type="checkbox"
+                  value="documents"
+                />
+                <span>
+                  Đọc tin tức, tài liệu
+                </span>
+              </label>
+              <label>
+                <input
+                  name="habits"
+                  type="checkbox"
+                  value="social"
+                />
+                <span>
+                  Mạng xã hội, chat
+                </span>
+              </label>
+              <label>
+                <input
+                  name="habits"
+                  type="checkbox"
+                  value="conversation"
+                />
+                <span>
+                  Nói chuyện với người nước ngoài
+                </span>
+              </label>
+              <label>
+                <input
+                  name="habits"
+                  type="checkbox"
+                  value="course"
+                />
+                <span>
+                  Học qua app / khoá học
+                </span>
+              </label>
+            </div>
+          </fieldset>
+          <label>
+            Tình huống cụ thể hay gặp
+            <textarea
+              name="situations"
+            />
+          </label>
+        </fieldset>
+        <fieldset
+          class="form-section"
+        >
+          <legend>
+            Phong cách học yêu thích
+          </legend>
+          <fieldset
+            class="choice-set"
+          >
+            <legend>
+              Bạn học hiệu quả nhất khi…
+               *
+            </legend>
+            <div
+              class="choice-grid"
+            >
+              <label>
+                <input
+                  name="learningStyles"
+                  type="checkbox"
+                  value="reading"
+                />
+                <span>
+                  Đọc và ghi chú
+                </span>
+              </label>
+              <label>
+                <input
+                  name="learningStyles"
+                  type="checkbox"
+                  value="listening"
+                />
+                <span>
+                  Nghe và nhắc lại
+                </span>
+              </label>
+              <label>
+                <input
+                  name="learningStyles"
+                  type="checkbox"
+                  value="speaking"
+                />
+                <span>
+                  Nói / hội thoại
+                </span>
+              </label>
+              <label>
+                <input
+                  name="learningStyles"
+                  type="checkbox"
+                  value="quiz"
+                />
+                <span>
+                  Trắc nghiệm, điền từ
+                </span>
+              </label>
+              <label>
+                <input
+                  name="learningStyles"
+                  type="checkbox"
+                  value="writing"
+                />
+                <span>
+                  Viết câu, viết email
+                </span>
+              </label>
+              <label>
+                <input
+                  name="learningStyles"
+                  type="checkbox"
+                  value="examples"
+                />
+                <span>
+                  Ví dụ sát việc đang làm
+                </span>
+              </label>
+            </div>
+          </fieldset>
+          <fieldset
+            class="choice-set"
+          >
+            <legend>
+              Phong cách của Season
+               *
+            </legend>
+            <div
+              class="choice-grid"
+            >
+              <label>
+                <input
+                  name="persona"
+                  required=""
+                  type="radio"
+                  value="informal"
+                />
+                <span>
+                  Informal · Thân thiện
+                </span>
+              </label>
+              <label>
+                <input
+                  name="persona"
+                  required=""
+                  type="radio"
+                  value="formal"
+                />
+                <span>
+                  Formal · Trang trọng
+                </span>
+              </label>
+            </div>
+          </fieldset>
+          <fieldset
+            class="choice-set"
+          >
+            <legend>
+              Mỗi buổi học bao lâu là vừa?
+               *
+            </legend>
+            <div
+              class="choice-grid"
+            >
+              <label>
+                <input
+                  name="durationMinutes"
+                  required=""
+                  type="radio"
+                  value="5"
+                />
+                <span>
+                  5 phút
+                </span>
+              </label>
+              <label>
+                <input
+                  checked=""
+                  name="durationMinutes"
+                  required=""
+                  type="radio"
+                  value="10"
+                />
+                <span>
+                  10 phút
+                </span>
+              </label>
+              <label>
+                <input
+                  name="durationMinutes"
+                  required=""
+                  type="radio"
+                  value="15"
+                />
+                <span>
+                  15 phút
+                </span>
+              </label>
+              <label>
+                <input
+                  name="durationMinutes"
+                  required=""
+                  type="radio"
+                  value="20"
+                />
+                <span>
+                  20+ phút
+                </span>
+              </label>
+            </div>
+          </fieldset>
+          <fieldset
+            class="choice-set"
+          >
+            <legend>
+              Thiết bị hay dùng
+               *
+            </legend>
+            <div
+              class="choice-grid"
+            >
+              <label>
+                <input
+                  name="device"
+                  required=""
+                  type="radio"
+                  value="phone"
+                />
+                <span>
+                  Điện thoại
+                </span>
+              </label>
+              <label>
+                <input
+                  name="device"
+                  required=""
+                  type="radio"
+                  value="computer"
+                />
+                <span>
+                  Máy tính
+                </span>
+              </label>
+              <label>
+                <input
+                  name="device"
+                  required=""
+                  type="radio"
+                  value="both"
+                />
+                <span>
+                  Cả hai
+                </span>
+              </label>
+            </div>
+          </fieldset>
+        </fieldset>
+        <fieldset
+          class="form-section"
+        >
+          <legend>
+            Về tiếng Anh của bạn
+          </legend>
+          <fieldset
+            class="choice-set"
+          >
+            <legend>
+              Bạn tự thấy trình độ mình ở đâu?
+               *
+            </legend>
+            <div
+              class="choice-grid"
+            >
+              <label>
+                <input
+                  name="selfLevel"
+                  required=""
+                  type="radio"
+                  value="unknown"
+                />
+                <span>
+                  Không rõ
+                </span>
+              </label>
+              <label>
+                <input
+                  name="selfLevel"
+                  required=""
+                  type="radio"
+                  value="A1"
+                />
+                <span>
+                  Mới bắt đầu (A1)
+                </span>
+              </label>
+              <label>
+                <input
+                  name="selfLevel"
+                  required=""
+                  type="radio"
+                  value="A2"
+                />
+                <span>
+                  Sơ cấp (A2)
+                </span>
+              </label>
+              <label>
+                <input
+                  name="selfLevel"
+                  required=""
+                  type="radio"
+                  value="B1"
+                />
+                <span>
+                  Trung cấp (B1)
+                </span>
+              </label>
+              <label>
+                <input
+                  name="selfLevel"
+                  required=""
+                  type="radio"
+                  value="B2"
+                />
+                <span>
+                  Khá (B2)
+                </span>
+              </label>
+              <label>
+                <input
+                  name="selfLevel"
+                  required=""
+                  type="radio"
+                  value="C1"
+                />
+                <span>
+                  Tốt (C1)
+                </span>
+              </label>
+            </div>
+          </fieldset>
+          <label>
+            Đã học tiếng Anh thế nào trước đây?
+            <input
+              name="experience"
+              value=""
+            />
+          </label>
+          <label>
+            Điều bạn lo ngại hoặc muốn Season giúp nhất
+            <textarea
+              name="concerns"
+            />
+          </label>
+        </fieldset>
+        <div
+          class="form-actions"
+        >
+          <button
+            class="button button--primary"
+            type="submit"
+          >
+            Lưu hồ sơ
+          </button>
+        </div>
+      </form>
+    </main>
+  </div>
+</body>
+ ❯ Object.getElementError node_modules/.pnpm/@testing-library+dom@10.4.2/node_modules/@testing-library/dom/dist/config.js:37:19
+ ❯ node_modules/.pnpm/@testing-library+dom@10.4.2/node_modules/@testing-library/dom/dist/query-helpers.js:76:38
+ ❯ node_modules/.pnpm/@testing-library+dom@10.4.2/node_modules/@testing-library/dom/dist/query-helpers.js:52:17
+ ❯ node_modules/.pnpm/@testing-library+dom@10.4.2/node_modules/@testing-library/dom/dist/query-helpers.js:95:19
+ ❯ apps/web/test/learner-screens.test.tsx:78:19
+     76|     }} onSave={vi.fn()} />);
+     77|
+     78|     expect(screen.getByText(/a1–a2 giải thích bằng tiếng việt/i)).toBe…
+       |                   ^
+     79|     expect(screen.getByText(/5 ngày\/tuần/i)).toBeInTheDocument();
+     80|     expect(screen.getByRole("checkbox", { name: /toeic/i })).toBeCheck…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/3]⎯
+
+ FAIL  apps/web/test/learner-screens.test.tsx > learner screens preserve the prototype flow > labels profile progress semantically instead of relying on colour
+TestingLibraryElementError: Unable to find an accessible element with the role "region" and name `/mùa học/i`
+
+Here are the accessible roles:
+
+  main:
+
+  Name "":
+  <main
+    class="learner-page"
+  />
+
+  --------------------------------------------------
+  banner:
+
+  Name "":
+  <header
+    class="page-heading"
+  />
+
+  --------------------------------------------------
+  paragraph:
+
+  Name "":
+  <p
+    class="eyebrow"
+  />
+
+  Name "":
+  <p />
+
+  Name "":
+  <p />
+
+  Name "":
+  <p />
+
+  --------------------------------------------------
+  heading:
+
+  Name "Học viên Demo":
+  <h1 />
+
+  Name "Hồ sơ cá nhân":
+  <h2
+    id="profile-title"
+  />
+
+  Name "Điểm và huy hiệu":
+  <h2 />
+
+  Name "Tiến độ theo tuần":
+  <h2
+    id="weekly-progress"
+  />
+
+  Name "Tuần 1 · Giới thiệu":
+  <h3 />
+
+  Name "Hoạt động gần đây":
+  <h2
+    id="activity-title"
+  />
+
+  --------------------------------------------------
+  region:
+
+  Name "Hồ sơ cá nhân":
+  <section
+    aria-labelledby="profile-title"
+  />
+
+  Name "Huy hiệu":
+  <section
+    aria-label="Huy hiệu"
+    role="region"
+  />
+
+  Name "Tiến độ theo tuần":
+  <section
+    aria-labelledby="weekly-progress"
+  />
+
+  Name "Hoạt động gần đây":
+  <section
+    aria-labelledby="activity-title"
+  />
+
+  --------------------------------------------------
+  term:
+
+  Name "":
+  <dt />
+
+  Name "":
+  <dt />
+
+  --------------------------------------------------
+  definition:
+
+  Name "":
+  <dd />
+
+  Name "":
+  <dd />
+
+  --------------------------------------------------
+  link:
+
+  Name "Sửa hồ sơ":
+  <a
+    href="/onboard"
+  />
+
+  --------------------------------------------------
+  strong:
+
+  Name "":
+  <strong />
+
+  --------------------------------------------------
+  list:
+
+  Name "":
+  <ul />
+
+  --------------------------------------------------
+  listitem:
+
+  Name "":
+  <li />
+
+  --------------------------------------------------
+  article:
+
+  Name "":
+  <article />
+
+  --------------------------------------------------
+  progressbar:
+
+  Name "Tiến độ tuần 1":
+  <div
+    aria-label="Tiến độ tuần 1"
+    aria-valuemax="5"
+    aria-valuemin="0"
+    aria-valuenow="1"
+    role="progressbar"
+  />
+
+  --------------------------------------------------
+
+Ignored nodes: comments, script, style
+<body>
+  <div>
+    <main
+      class="learner-page"
+    >
+      <header
+        class="page-heading"
+      >
+        <p
+          class="eyebrow"
+        >
+          Tiến độ & hồ sơ
+        </p>
+        <h1>
+          Học viên Demo
+        </h1>
+        <p>
+          A2
+        </p>
+      </header>
+      <section
+        aria-labelledby="profile-title"
+      >
+        <h2
+          id="profile-title"
+        >
+          Hồ sơ cá nhân
+        </h2>
+        <dl>
+          <div>
+            <dt>
+              Công việc
+            </dt>
+            <dd>
+              Intern
+            </dd>
+          </div>
+          <div>
+            <dt>
+              Phòng ban
+            </dt>
+            <dd>
+              AI
+            </dd>
+          </div>
+        </dl>
+        <a
+          href="/onboard"
+        >
+          Sửa hồ sơ
+        </a>
+      </section>
+      <section
+        aria-label="Huy hiệu"
+        role="region"
+      >
+        <h2>
+          Điểm và huy hiệu
+        </h2>
+        <strong>
+          20
+           điểm
+        </strong>
+        <ul>
+          <li>
+            Khởi động
+          </li>
+        </ul>
+      </section>
+      <section
+        aria-labelledby="weekly-progress"
+      >
+        <h2
+          id="weekly-progress"
+        >
+          Tiến độ theo tuần
+        </h2>
+        <article>
+          <h3>
+            Tuần 
+            1
+             · 
+            Giới thiệu
+          </h3>
+          <div
+            aria-label="Tiến độ tuần 1"
+            aria-valuemax="5"
+            aria-valuemin="0"
+            aria-valuenow="1"
+            role="progressbar"
+          >
+            <span
+              style="width: 20%;"
+            />
+          </div>
+          <p>
+            1
+            /
+            5
+             bài
+          </p>
+        </article>
+      </section>
+      <section
+        aria-labelledby="activity-title"
+      >
+        <h2
+          id="activity-title"
+        >
+          Hoạt động gần đây
+        </h2>
+        <p>
+          1
+           ngày có học
+        </p>
+      </section>
+    </main>
+  </div>
+</body>
+ ❯ Object.getElementError node_modules/.pnpm/@testing-library+dom@10.4.2/node_modules/@testing-library/dom/dist/config.js:37:19
+ ❯ node_modules/.pnpm/@testing-library+dom@10.4.2/node_modules/@testing-library/dom/dist/query-helpers.js:76:38
+ ❯ node_modules/.pnpm/@testing-library+dom@10.4.2/node_modules/@testing-library/dom/dist/query-helpers.js:52:17
+ ❯ node_modules/.pnpm/@testing-library+dom@10.4.2/node_modules/@testing-library/dom/dist/query-helpers.js:95:19
+ ❯ apps/web/test/learner-screens.test.tsx:165:19
+    163|     expect(progress).toHaveAttribute("aria-valuenow", "1");
+    164|     expect(within(screen.getByRole("region", { name: /huy hiệu/i })).g…
+    165|     expect(screen.getByRole("region", { name: /mùa học/i })).toHaveTex…
+       |                   ^
+    166|     expect(screen.getByRole("region", { name: /đường lên mức b1/i })).…
+    167|     expect(screen.getByRole("region", { name: /điểm đầu vào/i })).toHa…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/3]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  3 failed | 4 passed (7)
+   Start at  17:51:57
+   Duration  1.28s (tests 46%, environment 37%, import 14%, transform 3%)
+
+[ELIFECYCLE] Command failed with exit code 1.

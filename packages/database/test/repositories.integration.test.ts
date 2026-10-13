@@ -59,10 +59,15 @@ describe("E4S repositories", () => {
       });
   });
 
-  it("provides stable empty read models for domains without seed activity", async () => {
+  it("provides stable seeded read models and empty optional operational domains", async () => {
     await expect(repositories.assessments.listPending()).resolves.toEqual([]);
-    await expect(repositories.coach.listForLearner(DEMO_IDS.learner)).resolves.toEqual([]);
-    await expect(repositories.engagement.getSummary(DEMO_IDS.learner)).resolves.toEqual({ points: 0, badges: [] });
+    await expect(repositories.coach.listForLearner(DEMO_IDS.learner)).resolves.toEqual([
+      expect.objectContaining({ id: DEMO_IDS.coachSession, status: "active", scenario: { title: "Daily meeting" } })
+    ]);
+    await expect(repositories.engagement.getSummary(DEMO_IDS.learner)).resolves.toEqual({
+      points: 20,
+      badges: [{ key: "starter", label: "Khởi động" }]
+    });
     await expect(repositories.notifications.listForLearner(DEMO_IDS.learner)).resolves.toEqual([]);
     await expect(repositories.files.listForOwner(DEMO_IDS.learner)).resolves.toEqual([]);
     await expect(repositories.aiRuns.listForUser(DEMO_IDS.learner)).resolves.toEqual([]);

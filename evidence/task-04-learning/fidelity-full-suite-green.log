@@ -1,0 +1,13 @@
+$ node scripts/run-with-test-postgres.mjs
+
+ RUN  v5.0.4 D:/TTS - AI Application - Huynh Doan Hoang Minh/12_10_2026 - 17_10_2026/E4S/platform
+
+
+ Test Files  11 passed (11)
+      Tests  45 passed (45)
+   Start at  17:59:14
+   Duration  5.85s (tests 54%, import 27%, environment 17%, transform 2%, worker 1%)
+
+    Isolate  11 workers spawned · ~148ms startup each (spawn + environment, per file)
+             at least ~1.48s faster with isolate: false — reuses workers across files instead of one per file
+

@@ -13,11 +13,14 @@
     "test:db": "node scripts/run-with-test-postgres.mjs",
     "test:watch": "vitest",
     "typecheck": "tsc -b",
-    "build": "pnpm -r build"
+    "build": "pnpm -r build",
+    "dev:local": "node scripts/dev-local.mjs"
   },
   "devDependencies": {
     "@types/node": "24.10.13",
     "embedded-postgres": "18.4.0-beta.17",
+    "pg": "8.23.1",
+    "tsx": "4.23.15",
     "typescript": "7.0.2",
     "vitest": "5.0.4"
   }

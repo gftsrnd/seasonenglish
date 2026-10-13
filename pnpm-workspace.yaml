@@ -4,6 +4,7 @@ packages:
 
 allowBuilds:
   '@embedded-postgres/windows-x64': true
+  esbuild: set this to true or false
 
 minimumReleaseAgeExclude:
   - fastify@5.12.7

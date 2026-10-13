@@ -1,4 +1,5 @@
 import type { Client } from "pg";
+import { finalDefinition, levelUpDefinition, placementDefinition } from "./assessment-blueprints.js";
 
 export const DEMO_IDS = {
   organization: "00000000-0000-4000-8000-000000000001",
@@ -8,8 +9,129 @@ export const DEMO_IDS = {
   program: "00000000-0000-4000-8000-000000000201",
   week: "00000000-0000-4000-8000-000000000301",
   lessonSet: "00000000-0000-4000-8000-000000000401",
-  publishedLessonSetVersion: "00000000-0000-4000-8000-000000000501"
+  publishedLessonSetVersion: "00000000-0000-4000-8000-000000000501",
+  lessons: [
+    "00000000-0000-4000-8000-000000000601",
+    "00000000-0000-4000-8000-000000000602",
+    "00000000-0000-4000-8000-000000000603",
+    "00000000-0000-4000-8000-000000000604",
+    "00000000-0000-4000-8000-000000000605"
+  ],
+  lessonVersions: [
+    "00000000-0000-4000-8000-000000000701",
+    "00000000-0000-4000-8000-000000000702",
+    "00000000-0000-4000-8000-000000000703",
+    "00000000-0000-4000-8000-000000000704",
+    "00000000-0000-4000-8000-000000000705"
+  ],
+  progress: "00000000-0000-4000-8000-000000000801",
+  activity: "00000000-0000-4000-8000-000000000811",
+  badge: "00000000-0000-4000-8000-000000000821",
+  reward: "00000000-0000-4000-8000-000000000831",
+  microLesson: "00000000-0000-4000-8000-000000000841",
+  coachSession: "00000000-0000-4000-8000-000000000851",
+  practiceSubmission: "00000000-0000-4000-8000-000000000861",
+  placementDefinition: "00000000-0000-4000-8000-000000000871",
+  placementVersion: "00000000-0000-4000-8000-000000000872",
+  placementAttempt: "00000000-0000-4000-8000-000000000873",
+  finalDefinition: "00000000-0000-4000-8000-000000000881",
+  finalVersion: "00000000-0000-4000-8000-000000000882",
+  levelUpDefinition: "00000000-0000-4000-8000-000000000891",
+  levelUpVersion: "00000000-0000-4000-8000-000000000892"
 } as const;
+
+const badgeCatalog = [
+  ["00000000-0000-4000-8000-000000000821", "starter", "Khởi động", "Hoàn thành bài học đầu tiên", 2],
+  ["00000000-0000-4000-8000-000000000822", "streak3", "Chuỗi 3 ngày", "Học 3 ngày liên tiếp từ T2–T6", 2],
+  ["00000000-0000-4000-8000-000000000823", "week_complete", "Tuần trọn vẹn", "Hoàn thành toàn bộ bài trong một tuần", 3],
+  ["00000000-0000-4000-8000-000000000824", "friday", "Đúng hẹn thứ Sáu", "Nộp bài thực hành tuần đúng hạn", 3],
+  ["00000000-0000-4000-8000-000000000825", "coach_friend", "Bạn của Season", "Hoàn thành 10 lượt luyện với Season", 3],
+  ["00000000-0000-4000-8000-000000000826", "streak5", "Chuỗi 5 ngày", "Học đủ 5 ngày trong tuần", 4],
+  ["00000000-0000-4000-8000-000000000827", "first_try", "Chuẩn ngay lần đầu", "Bốn kỹ năng đúng ở lần thử đầu", 4],
+  ["00000000-0000-4000-8000-000000000828", "wordsmith", "Thợ mở khoá", "Mở đủ ô từ bí mật với Season", 4]
+] as const;
+
+const lessonTitles = [
+  "Giới thiệu tên và vai trò",
+  "Nói nơi bạn đến từ",
+  "Mô tả công việc hằng ngày",
+  "Hỏi lại để làm rõ",
+  "Tóm tắt và đề xuất bước tiếp theo"
+] as const;
+
+const lessonStudyContent = [
+  {
+    objective: "Giới thiệu được tên, vai trò và nhóm làm việc bằng 3–4 câu ngắn.",
+    vocabulary: [
+      { word: "colleague", type: "danh từ", pronunciation: "/ˈkɒliːɡ/", meaning: "đồng nghiệp", examples: ["my colleague", "a new colleague"] },
+      { word: "role", type: "danh từ", pronunciation: "/rəʊl/", meaning: "vai trò", examples: ["my role", "project role"] },
+      { word: "work with", type: "cụm từ", pronunciation: "/wɜːk wɪð/", meaning: "làm việc cùng", examples: ["I work with the AI team."] }
+    ],
+    grammar: { formula: "I am + vai trò · I work with + nhóm", usage: "Dùng be để nói vai trò và work with để nói nhóm cộng tác.", examples: ["I am an AI intern.", "I work with the product team."] },
+    pronunciation: { focus: "/wɜː/", instruction: "Giữ âm giữa dài và không đọc thành âm /o/.", words: ["work", "worker", "working"] }
+  },
+  {
+    objective: "Hỏi và trả lời được mình đến từ đâu trong một cuộc làm quen ngắn.",
+    vocabulary: [
+      { word: "new", type: "tính từ", pronunciation: "/njuː/", meaning: "mới", examples: ["new here", "a new job", "a new team"] },
+      { word: "nice", type: "tính từ", pronunciation: "/naɪs/", meaning: "vui, dễ chịu", examples: ["nice to meet you", "a nice team"] },
+      { word: "from", type: "giới từ", pronunciation: "/frɒm/", meaning: "từ, đến từ", examples: ["from Hue", "from Vietnam", "from my team"] }
+    ],
+    grammar: { formula: "Where are you from? · I am from + nơi", usage: "Dùng khi làm quen và hỏi nguồn gốc hoặc nơi sinh sống.", examples: ["I am from Hue.", "Nice to meet you.", "I am new here."] },
+    pronunciation: { focus: "/aɪ/", instruction: "Mở rộng miệng ở âm /a/ rồi lướt nhanh sang /ɪ/.", words: ["I", "nice", "time"] }
+  },
+  {
+    objective: "Mô tả được 2–3 công việc thường làm trong một ngày.",
+    vocabulary: [
+      { word: "prepare", type: "động từ", pronunciation: "/prɪˈpeə/", meaning: "chuẩn bị", examples: ["prepare a report"] },
+      { word: "review", type: "động từ", pronunciation: "/rɪˈvjuː/", meaning: "xem lại", examples: ["review the data"] },
+      { word: "usually", type: "trạng từ", pronunciation: "/ˈjuːʒuəli/", meaning: "thường xuyên", examples: ["I usually check email."] }
+    ],
+    grammar: { formula: "I usually + động từ · I + động từ + every day", usage: "Dùng hiện tại đơn để mô tả công việc lặp lại.", examples: ["I prepare reports every day.", "I usually review the data."] },
+    pronunciation: { focus: "/juː/", instruction: "Bắt đầu nhẹ bằng /j/ rồi kéo dài âm /uː/.", words: ["usually", "you", "review"] }
+  },
+  {
+    objective: "Hỏi lại lịch sự khi chưa nghe rõ hoặc chưa hiểu một yêu cầu.",
+    vocabulary: [
+      { word: "repeat", type: "động từ", pronunciation: "/rɪˈpiːt/", meaning: "nhắc lại", examples: ["repeat that, please"] },
+      { word: "mean", type: "động từ", pronunciation: "/miːn/", meaning: "có nghĩa là", examples: ["What do you mean?"] },
+      { word: "clarify", type: "động từ", pronunciation: "/ˈklærəfaɪ/", meaning: "làm rõ", examples: ["Could you clarify that?"] }
+    ],
+    grammar: { formula: "Could you + động từ, please?", usage: "Dùng could để hỏi lại lịch sự trong công việc.", examples: ["Could you repeat that, please?", "Could you clarify the deadline?"] },
+    pronunciation: { focus: "/iː/", instruction: "Kéo dài âm /iː/ và giữ môi hơi ngang.", words: ["repeat", "mean", "please"] }
+  },
+  {
+    objective: "Tóm tắt được nội dung chính và đề xuất một bước tiếp theo rõ ràng.",
+    vocabulary: [
+      { word: "summary", type: "danh từ", pronunciation: "/ˈsʌməri/", meaning: "bản tóm tắt", examples: ["a short summary"] },
+      { word: "action item", type: "cụm danh từ", pronunciation: "/ˈækʃən ˌaɪtəm/", meaning: "việc cần làm", examples: ["confirm the action items"] },
+      { word: "next step", type: "cụm danh từ", pronunciation: "/nekst step/", meaning: "bước tiếp theo", examples: ["agree on the next step"] }
+    ],
+    grammar: { formula: "To summarise, ... · Next, we will + động từ", usage: "Dùng để kết thúc cuộc trao đổi và xác nhận hành động tiếp theo.", examples: ["To summarise, the report is ready.", "Next, we will review it."] },
+    pronunciation: { focus: "/st st/", instruction: "Nối hai cụm phụ âm trong next step, không thêm nguyên âm ở giữa.", words: ["next step", "first step", "last step"] }
+  }
+] as const;
+
+function lessonContent(dayNumber: number, title: string) {
+  const study = lessonStudyContent[dayNumber - 1] ?? lessonStudyContent[0];
+  const text = study.objective;
+  return {
+    durationMinutes: 10,
+    parts: [
+      { code: "objective", title: "Mục tiêu bài học", content: { text } },
+      { code: "instruction", title: "Hướng dẫn làm bài", content: { steps: ["Học nội dung", "Làm lần lượt các bài tập", "Xem phản hồi và làm lại"] } },
+      { code: "vocabulary", title: "Từ vựng", content: { items: study.vocabulary } },
+      { code: "grammar", title: "Ngữ pháp", content: study.grammar },
+      { code: "pronunciation", title: "Phát âm", content: study.pronunciation },
+      { code: "listening", title: "Nghe", content: { prompt: "Chọn ý chính bạn nghe được.", answer: "A", options: ["A", "B", "C"] } },
+      { code: "reading", title: "Đọc", content: { prompt: "Chọn thông tin đúng trong đoạn ngắn.", answer: "B", options: ["A", "B", "C"] } },
+      { code: "writing", title: "Viết", content: { prompt: `Viết 2–3 câu về chủ đề ngày ${dayNumber}.` } },
+      { code: "word_class", title: "Từ loại", content: { prompt: "Chọn từ loại đúng.", answer: "noun" } },
+      { code: "word_use", title: "Dùng từ", content: { prompt: "Chọn câu dùng từ đúng.", answer: "A" } },
+      { code: "speaking", title: "Nói", content: { prompt: "Ghi âm câu trả lời ngắn." } }
+    ]
+  };
+}
 
 export async function seedDemo(client: Client): Promise<void> {
   await client.query(
@@ -35,8 +157,33 @@ export async function seedDemo(client: Client): Promise<void> {
 
   await client.query(
     `insert into learner_profiles (user_id, profile, completed_at)
-     values ($1, $2::jsonb, now()) on conflict (user_id) do nothing`,
-    [DEMO_IDS.learner, JSON.stringify({ position: "AI Intern", goals: ["meeting", "email"], preferredLanguage: "vi" })]
+     values ($1, $2::jsonb, now())
+     on conflict (user_id) do update set profile = case
+       when learner_profiles.profile ? 'avatar' then learner_profiles.profile
+       else learner_profiles.profile || jsonb_build_object('avatar', excluded.profile->'avatar')
+     end`,
+    [DEMO_IDS.learner, JSON.stringify({
+      fullName: "Học viên Demo",
+      email: "learner@e4s.local",
+      department: "AI",
+      position: "AI Intern",
+      contact: "",
+      goals: ["meeting", "email"],
+      environmentUse: "weekly",
+      familyUse: "none",
+      habits: ["podcast", "documents"],
+      situations: "Họp daily với nhóm quốc tế",
+      learningStyles: ["speaking", "examples"],
+      explanationLanguage: "auto",
+      persona: "informal",
+      durationMinutes: 10,
+      device: "both",
+      selfLevel: "A2",
+      certificates: [],
+      experience: "Học ở trường",
+      concerns: "Muốn nói rõ hơn trong cuộc họp",
+      avatar: { color: "olive", acc: "sun", bg: 2 }
+    })]
   );
   await client.query(
     `insert into programs (id, organization_id, name, start_date, week_count, status)
@@ -66,5 +213,113 @@ export async function seedDemo(client: Client): Promise<void> {
      on conflict (id) do nothing`,
     [DEMO_IDS.publishedLessonSetVersion, DEMO_IDS.lessonSet, DEMO_IDS.operator, DEMO_IDS.manager]
   );
-}
 
+  for (const [index, lessonId] of DEMO_IDS.lessons.entries()) {
+    const dayNumber = index + 1;
+    const title = lessonTitles[index] ?? `Bài ${dayNumber}`;
+    await client.query(
+      `insert into lessons (id, lesson_set_version_id, day_number, title)
+       values ($1, $2, $3, $4) on conflict (id) do nothing`,
+      [lessonId, DEMO_IDS.publishedLessonSetVersion, dayNumber, title]
+    );
+    await client.query(
+      `insert into lesson_versions (id, lesson_id, version, status, content)
+       values ($1, $2, 1, 'published', $3::jsonb)
+       on conflict (id) do update set content = excluded.content`,
+      [DEMO_IDS.lessonVersions[index], lessonId, JSON.stringify(lessonContent(dayNumber, title))]
+    );
+  }
+
+  await client.query(
+    `insert into progress_records (id, learner_id, lesson_id, status, score, evidence, started_at, completed_at)
+     values ($1, $2, $3, 'completed', 90,
+       '{"completedPartCodes":["listening","reading","writing","speaking"],"evidence":{"listening":{"attempts":1,"answer":"A"},"reading":{"attempts":1,"answer":"B"},"writing":{"attempts":1,"answer":"I work in AI."},"speaking":{"attempts":1,"answer":"seed-audio"}}}'::jsonb,
+       now() - interval '1 day', now() - interval '1 day')
+     on conflict (learner_id, lesson_id) do nothing`,
+    [DEMO_IDS.progress, DEMO_IDS.learner, DEMO_IDS.lessons[0]]
+  );
+  await client.query(
+    `insert into activities (id, learner_id, activity_type, reference_type, reference_id, minutes, evidence, occurred_at)
+     values ($1, $2, 'lesson', 'lesson', $3, 10, '{"source":"deterministic-seed"}'::jsonb, date_trunc('week', now()) + interval '9 hours')
+     on conflict (id) do update set occurred_at = excluded.occurred_at`,
+    [DEMO_IDS.activity, DEMO_IDS.learner, DEMO_IDS.lessons[0]]
+  );
+  for (const [id, key, label, description, seasonLevel] of badgeCatalog) {
+    await client.query(
+      `insert into badges (id, organization_id, badge_key, label, rule)
+       values ($1, $2, $3, $4, $5::jsonb)
+       on conflict (id) do update set label = excluded.label, rule = excluded.rule`,
+      [id, DEMO_IDS.organization, key, label, JSON.stringify({ description, seasonLevel })]
+    );
+  }
+  await client.query(
+    `insert into reward_events (id, learner_id, badge_id, points, source_type, source_id)
+     values ($1, $2, $3, 20, 'lesson', $4) on conflict (id) do nothing`,
+    [DEMO_IDS.reward, DEMO_IDS.learner, DEMO_IDS.badge, DEMO_IDS.lessons[0]]
+  );
+  await client.query(
+    `insert into micro_lessons (id, learner_id, program_week_id, cefr, topic, content, source)
+     values ($1, $2, $3, 'A2', 'Email ngắn',
+       '{"durationMinutes":5,"theory":"Dùng could để yêu cầu lịch sự.","vocabulary":["could","reschedule","confirm"],"practice":{"prompt":"Chọn câu xin dời lịch lịch sự.","type":"mcq","options":["Move it.","Could we reschedule to 3 PM?","I no come."],"answer":"Could we reschedule to 3 PM?"}}'::jsonb,
+       'seed') on conflict (id) do update set content = excluded.content, source = excluded.source`,
+    [DEMO_IDS.microLesson, DEMO_IDS.learner, DEMO_IDS.week]
+  );
+
+  await client.query(
+    `insert into coach_sessions (id, learner_id, scenario, status)
+     values ($1, $2, '{"title":"Daily meeting"}'::jsonb, 'active') on conflict (id) do nothing`,
+    [DEMO_IDS.coachSession, DEMO_IDS.learner]
+  );
+  await client.query(
+    `insert into coach_turns (id, session_id, turn_number, speaker, content, feedback, created_at)
+     values
+       ('00000000-0000-4000-8000-000000000852', $1, 1, 'learner', '{"text":"I work in AI."}'::jsonb, '{"rubricScore":4.2}'::jsonb, date_trunc('week', now()) + interval '10 hours'),
+       ('00000000-0000-4000-8000-000000000853', $1, 2, 'learner', '{"text":"I prepare data."}'::jsonb, '{"rubricScore":4.4}'::jsonb, date_trunc('week', now()) + interval '11 hours')
+     on conflict (id) do nothing`,
+    [DEMO_IDS.coachSession]
+  );
+  await client.query(
+    `insert into practice_submissions (id, learner_id, program_week_id, status, content, score, submitted_at, reviewed_at)
+     values ($1, $2, $3, 'reviewed', '{"text":"Weekly sample"}'::jsonb, '{"total":86}'::jsonb,
+       date_trunc('week', now()) - interval '3 days', date_trunc('week', now()) - interval '2 days')
+     on conflict (id) do nothing`,
+    [DEMO_IDS.practiceSubmission, DEMO_IDS.learner, DEMO_IDS.week]
+  );
+
+  const assessments = [
+    [DEMO_IDS.placementDefinition, "placement-a", "placement", "Bài test đầu vào", DEMO_IDS.placementVersion, placementDefinition],
+    [DEMO_IDS.finalDefinition, "final-b", "final", "Bài kiểm tra cuối kỳ", DEMO_IDS.finalVersion, finalDefinition],
+    [DEMO_IDS.levelUpDefinition, "levelup-b1", "level_up", "Đề thi lên mức B1", DEMO_IDS.levelUpVersion, levelUpDefinition]
+  ] as const;
+  for (const [definitionId, key, kind, title, versionId, blueprint] of assessments) {
+    await client.query(
+      `insert into assessment_definitions (id, organization_id, assessment_key, kind, title)
+       values ($1, $2, $3, $4, $5) on conflict (id) do nothing`,
+      [definitionId, DEMO_IDS.organization, key, kind, title]
+    );
+    await client.query(
+      `insert into assessment_versions (id, definition_id, version, status, blueprint, published_at)
+       values ($1, $2, 1, 'published', $3::jsonb, now())
+       on conflict (id) do update set blueprint = excluded.blueprint`,
+      [versionId, definitionId, JSON.stringify(blueprint)]
+    );
+  }
+  await client.query(
+    `insert into assessment_attempts (id, assessment_version_id, learner_id, status, current_section, submitted_at)
+     values ($1, $2, $3, 'approved', 'speaking', now() - interval '5 days') on conflict (id) do nothing`,
+    [DEMO_IDS.placementAttempt, DEMO_IDS.placementVersion, DEMO_IDS.learner]
+  );
+  for (const [index, [section, score]] of [["listening", 14], ["reading", 16], ["writing", 13], ["speaking", 12]].entries()) {
+    await client.query(
+      `insert into assessment_scores (id, attempt_id, section, score, criteria, source)
+       values ($1, $2, $3, $4, '{}'::jsonb, 'human') on conflict (id) do nothing`,
+      [`00000000-0000-4000-8000-${String(900 + index).padStart(12, "0")}`, DEMO_IDS.placementAttempt, section, score]
+    );
+  }
+  await client.query(
+    `insert into assessment_decisions (id, attempt_id, suggested_level, approved_level, status, reason, decided_by, decided_at)
+     values ('00000000-0000-4000-8000-000000000910', $1, 'A2', 'A2', 'approved', 'Seeded demo decision', $2, now() - interval '4 days')
+     on conflict (id) do nothing`,
+    [DEMO_IDS.placementAttempt, DEMO_IDS.operator]
+  );
+}

@@ -12,7 +12,7 @@ const expectedTables = [
   "assessment_scores", "assessment_versions", "audit_events", "badges",
   "coach_sessions", "coach_turns", "duels", "enrollments", "files", "game_results",
   "game_sets", "idempotency_keys", "jobs", "learner_profiles", "lesson_set_versions",
-  "lesson_sets", "lesson_versions", "lessons", "notification_deliveries", "organizations",
+  "lesson_sets", "lesson_versions", "lessons", "micro_lessons", "notification_deliveries", "organizations",
   "practice_submissions", "program_weeks", "programs", "progress_records",
   "prompt_versions", "reminders", "reward_events", "rubric_versions", "sessions",
   "surveys", "user_credentials", "users"
@@ -52,6 +52,19 @@ describe("normalized E4S database", () => {
       { id: DEMO_IDS.manager, role: "manager" },
       { id: DEMO_IDS.operator, role: "operator" }
     ]);
+  });
+
+  it("keeps each seeded lesson's study content aligned with its learning objective", async () => {
+    const result = await client.query<{ content: { parts: Array<{ code: string; content: Record<string, unknown> }> } }>(
+      "select content from lesson_versions where lesson_id = $1",
+      [DEMO_IDS.lessons[1]]
+    );
+    const parts = result.rows[0]?.content.parts ?? [];
+    const vocabulary = parts.find((part) => part.code === "vocabulary")?.content.items;
+    const grammar = parts.find((part) => part.code === "grammar")?.content.formula;
+
+    expect(vocabulary).toEqual(expect.arrayContaining([expect.objectContaining({ word: "from" })]));
+    expect(grammar).toBe("Where are you from? · I am from + nơi");
   });
 
   it("enforces foreign keys for learner profiles", async () => {

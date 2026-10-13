@@ -2,7 +2,9 @@ import cookie from "@fastify/cookie";
 import rateLimit from "@fastify/rate-limit";
 import Fastify, { type FastifyInstance } from "fastify";
 import type { Pool } from "pg";
+import { registerAssessmentRoutes } from "./modules/assessment/index.js";
 import { registerIdentityRoutes } from "./modules/identity/index.js";
+import { registerLearningRoutes } from "./modules/learning/index.js";
 
 export { createRoleGuard } from "./modules/identity/index.js";
 
@@ -21,5 +23,7 @@ export function buildApi(options: BuildApiOptions): FastifyInstance {
     allowDemoLogin: options.allowDemoLogin ?? false,
     secureCookies: options.secureCookies ?? true
   });
+  registerLearningRoutes(app, options.pool);
+  registerAssessmentRoutes(app, options.pool);
   return app;
 }

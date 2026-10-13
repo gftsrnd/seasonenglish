@@ -1,0 +1,94 @@
+import type { AssessmentKind, CefrLevel } from "./domain-contract.js";
+export type AssessmentSectionCode = "listening" | "reading" | "writing" | "speaking";
+export type AssessmentScreenState = "preparation" | AssessmentSectionCode | "submitting" | "pending";
+export type AssessmentAttemptStatus = "in_progress" | "submitted" | "pending_review" | "approved" | "needs_retry";
+export type AssessmentEvidenceType = "choice" | "text" | "audio" | "transcript" | "typed_proxy" | "technical_failure";
+
+export interface AssessmentOption {
+  value: string;
+  label: string;
+}
+
+export interface AssessmentStimulus {
+  type: "audio_script" | "passage" | "message" | "table";
+  text?: string;
+  lines?: Array<{ speaker: string; text: string }>;
+  headers?: string[];
+  rows?: string[][];
+}
+
+export interface AssessmentTaskView {
+  key: string;
+  title?: string;
+  prompt: string;
+  responseType: "single_choice" | "long_text" | "speaking_evidence";
+  maxScore: number;
+  options?: AssessmentOption[];
+  minWords?: number;
+  maxWords?: number;
+  hint?: string;
+}
+
+export interface AssessmentTaskGroupView {
+  key: string;
+  title: string;
+  instruction: string;
+  stimulus?: AssessmentStimulus;
+  maxPlays?: number;
+  tasks: AssessmentTaskView[];
+}
+
+export interface AssessmentSectionView {
+  code: AssessmentSectionCode;
+  title: string;
+  durationMinutes: number;
+  maxScore: number;
+  instructions: string[];
+  groups: AssessmentTaskGroupView[];
+}
+
+export interface AssessmentDefinitionView {
+  key: string;
+  kind: AssessmentKind;
+  title: string;
+  version: number;
+  totalMinutes: number;
+  totalScore: number;
+  sections: AssessmentSectionView[];
+}
+
+export interface AssessmentResponseView {
+  section: AssessmentSectionCode;
+  taskKey: string;
+  value: string;
+  evidenceType: AssessmentEvidenceType;
+  artifactKey?: string;
+  savedAt?: string;
+}
+
+export type AssessmentSectionStatus = "locked" | "not_started" | "in_progress" | "completed";
+
+export interface AssessmentAttemptView {
+  id: string;
+  status: AssessmentAttemptStatus;
+  currentSection: AssessmentSectionCode | null;
+  startedAt: string;
+  sectionEndsAt: string | null;
+  responses: AssessmentResponseView[];
+  sectionStatuses: Record<AssessmentSectionCode, AssessmentSectionStatus>;
+  sectionScores?: Partial<Record<AssessmentSectionCode, number | null>>;
+  totalScore?: number | null;
+  suggestedLevel?: CefrLevel | null;
+}
+
+export interface AssessmentView {
+  definition: AssessmentDefinitionView;
+  screenState: AssessmentScreenState;
+  attempt: AssessmentAttemptView | null;
+}
+
+export interface SaveAssessmentResponseInput {
+  value: string;
+  evidenceType: AssessmentEvidenceType;
+  artifactKey?: string;
+}

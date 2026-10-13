@@ -1,0 +1,29 @@
+$ node scripts/run-with-test-postgres.mjs "apps/api/test/learning.integration.test.ts"
+
+ RUN  v5.0.4 D:/TTS - AI Application - Huynh Doan Hoang Minh/12_10_2026 - 17_10_2026/E4S/platform
+
+ ❯ apps/api/test/learning.integration.test.ts (8 tests | 8 skipped) 243ms
+
+⎯⎯⎯⎯⎯⎯ Failed Suites 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  apps/api/test/learning.integration.test.ts > learner profile, home, lesson and progress API
+error: new row for relation "assessment_definitions" violates check constraint "assessment_definitions_kind_check"
+ ❯ node_modules/.pnpm/pg@8.23.1/node_modules/pg/lib/client.js:694:17
+ ❯ seedDemo packages/database/src/seed.ts:233:5
+    231|   ] as const;
+    232|   for (const [definitionId, key, kind, title, versionId] of assessment…
+    233|     await client.query(
+       |     ^
+    234|       `insert into assessment_definitions (id, organization_id, assess…
+    235|        values ($1, $2, $3, $4, $5) on conflict (id) do nothing`,
+ ❯ apps/api/test/learning.integration.test.ts:21:7
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  8 skipped (8)
+   Start at  17:56:44
+   Duration  786ms (import 56%, tests 34%, transform 9%)
+
+[ELIFECYCLE] Test failed. See above for more details.

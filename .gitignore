@@ -8,5 +8,6 @@ test-results/
 !.env.example
 .superpowers/
 .tmp/
+.local/
 evidence/**/*.raw.json
 evidence/**/*secret*

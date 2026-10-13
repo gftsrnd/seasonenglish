@@ -1,0 +1,822 @@
+$ vitest run "apps/web/test/learner-screens.test.tsx" "-t" "makes today's lesson"
+
+ RUN  v5.0.4 D:/TTS - AI Application - Huynh Doan Hoang Minh/12_10_2026 - 17_10_2026/E4S/platform
+
+ ❯ apps/web/test/learner-screens.test.tsx (7 tests | 1 failed | 6 skipped) 135ms
+   ❯ learner screens preserve the prototype flow (7)
+     × makes today's lesson the single primary action on home without changing route order 134ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  apps/web/test/learner-screens.test.tsx > learner screens preserve the prototype flow > makes today's lesson the single primary action on home without changing route order
+TestingLibraryElementError: Unable to find an accessible element with the role "link" and name `/t2 · bài 1/i`
+
+Here are the accessible roles:
+
+  main:
+
+  Name "":
+  <main
+    class="learner-page"
+  />
+
+  --------------------------------------------------
+  banner:
+
+  Name "":
+  <header
+    class="page-heading"
+  />
+
+  --------------------------------------------------
+  paragraph:
+
+  Name "":
+  <p
+    class="eyebrow"
+  />
+
+  Name "":
+  <p />
+
+  Name "":
+  <p
+    class="eyebrow"
+  />
+
+  Name "":
+  <p
+    class="eyebrow"
+  />
+
+  Name "":
+  <p
+    class="supporting-text"
+  />
+
+  Name "":
+  <p
+    class="eyebrow"
+  />
+
+  Name "":
+  <p />
+
+  --------------------------------------------------
+  heading:
+
+  Name "Chào Học viên Demo!":
+  <h1 />
+
+  Name "Bài 2":
+  <h2
+    id="today-title"
+  />
+
+  Name "Lộ trình tuần 1":
+  <h2
+    id="week-path-title"
+  />
+
+  Name "Điểm danh tuần này":
+  <h2 />
+
+  Name "Đường lên mức B1":
+  <h2 />
+
+  Name "Bài kiểm tra cuối kỳ đã mở":
+  <h2 />
+
+  --------------------------------------------------
+  region:
+
+  Name "Bài 2":
+  <section
+    aria-labelledby="today-title"
+    class="primary-task"
+  />
+
+  Name "Lộ trình tuần 1":
+  <section
+    aria-labelledby="week-path-title"
+  />
+
+  Name "Tiến độ hiện tại":
+  <section
+    aria-label="Tiến độ hiện tại"
+    class="metric-grid"
+  />
+
+  Name "Điểm danh tuần này":
+  <section
+    aria-label="Điểm danh tuần này"
+    role="region"
+  />
+
+  Name "Hoạt động tuần":
+  <section
+    aria-label="Hoạt động tuần"
+    class="activity-links"
+  />
+
+  Name "Đường lên mức B1":
+  <section
+    aria-label="Đường lên mức B1"
+    class="readiness-card"
+    role="region"
+  />
+
+  --------------------------------------------------
+  link:
+
+  Name "Học Bài 2":
+  <a
+    class="button button--primary"
+    href="/lesson/l2"
+  />
+
+  Name "T1 · Bài 1· đã hoàn thành":
+  <a
+    href="/lesson/l1"
+  />
+
+  Name "T2 · Bài 2· chưa bắt đầu":
+  <a
+    href="/lesson/l2"
+  />
+
+  Name "Luyện với SeasonĐã luyện 2/2 lượt tuần này":
+  <a
+    href="/coach"
+  />
+
+  Name "Bài thực hành cuối tuầnMở khi hoàn thành đủ 5 bài.":
+  <a
+    aria-disabled="true"
+    href="/practice"
+  />
+
+  Name "Làm bài cuối kỳ":
+  <a
+    class="button button--primary"
+    href="/test/final"
+  />
+
+  --------------------------------------------------
+  navigation:
+
+  Name "Lộ trình tuần":
+  <nav
+    aria-label="Lộ trình tuần"
+  />
+
+  --------------------------------------------------
+  list:
+
+  Name "":
+  <ol
+    class="week-path"
+  />
+
+  Name "":
+  <ol
+    class="attendance-row"
+  />
+
+  --------------------------------------------------
+  listitem:
+
+  Name "":
+  <li
+    data-status="completed"
+  />
+
+  Name "":
+  <li
+    data-status="not_started"
+  />
+
+  Name "":
+  <li
+    data-status="attended"
+  />
+
+  Name "":
+  <li
+    data-status="today"
+  />
+
+  Name "":
+  <li
+    data-status="upcoming"
+  />
+
+  Name "":
+  <li
+    data-status="upcoming"
+  />
+
+  Name "":
+  <li
+    data-status="upcoming"
+  />
+
+  --------------------------------------------------
+  strong:
+
+  Name "":
+  <strong />
+
+  Name "":
+  <strong />
+
+  Name "":
+  <strong />
+
+  Name "":
+  <strong />
+
+  Name "":
+  <strong />
+
+  Name "T2: đã học":
+  <strong
+    aria-label="T2: đã học"
+  />
+
+  Name "T3: hôm nay":
+  <strong
+    aria-label="T3: hôm nay"
+  />
+
+  Name "T4: sắp tới":
+  <strong
+    aria-label="T4: sắp tới"
+  />
+
+  Name "T5: sắp tới":
+  <strong
+    aria-label="T5: sắp tới"
+  />
+
+  Name "T6: sắp tới":
+  <strong
+    aria-label="T6: sắp tới"
+  />
+
+  Name "":
+  <strong />
+
+  Name "":
+  <strong />
+
+  Name "":
+  <strong />
+
+  Name "":
+  <strong />
+
+  Name "":
+  <strong />
+
+  Name "":
+  <strong />
+
+  --------------------------------------------------
+  article:
+
+  Name "":
+  <article
+    class="criterion"
+  />
+
+  Name "":
+  <article
+    class="criterion"
+  />
+
+  Name "":
+  <article
+    class="criterion"
+  />
+
+  Name "":
+  <article
+    class="criterion"
+  />
+
+  --------------------------------------------------
+  progressbar:
+
+  Name "Bài học hoàn thành":
+  <div
+    aria-label="Bài học hoàn thành"
+    aria-valuemax="90"
+    aria-valuemin="0"
+    aria-valuenow="20"
+    role="progressbar"
+  />
+
+  Name "Phần bài đúng ngay lần đầu":
+  <div
+    aria-label="Phần bài đúng ngay lần đầu"
+    aria-valuemax="75"
+    aria-valuemin="0"
+    aria-valuenow="75"
+    role="progressbar"
+  />
+
+  Name "Bài thực hành tuần gần nhất":
+  <div
+    aria-label="Bài thực hành tuần gần nhất"
+    aria-valuemax="80"
+    aria-valuemin="0"
+    aria-valuenow="80"
+    role="progressbar"
+  />
+
+  Name "Rubric khi luyện với Season":
+  <div
+    aria-label="Rubric khi luyện với Season"
+    aria-valuemax="4"
+    aria-valuemin="0"
+    aria-valuenow="4"
+    role="progressbar"
+  />
+
+  --------------------------------------------------
+
+Ignored nodes: comments, script, style
+<body>
+  <div>
+    <main
+      class="learner-page"
+    >
+      <header
+        class="page-heading"
+      >
+        <p
+          class="eyebrow"
+        >
+          Tuần 
+          1
+           · 
+          A2
+        </p>
+        <h1>
+          Chào 
+          Học viên Demo
+          !
+        </h1>
+        <p>
+          E4S Pilot
+           · 
+          Giới thiệu trong công việc
+        </p>
+      </header>
+      <section
+        aria-labelledby="today-title"
+        class="primary-task"
+      >
+        <p
+          class="eyebrow"
+        >
+          Bài hôm nay
+        </p>
+        <h2
+          id="today-title"
+        >
+          Bài 2
+        </h2>
+        <a
+          class="button button--primary"
+          href="/lesson/l2"
+        >
+          Học 
+          Bài 2
+        </a>
+      </section>
+      <section
+        aria-labelledby="week-path-title"
+      >
+        <h2
+          id="week-path-title"
+        >
+          Lộ trình tuần 
+          1
+        </h2>
+        <nav
+          aria-label="Lộ trình tuần"
+        >
+          <ol
+            class="week-path"
+          >
+            <li
+              data-status="completed"
+            >
+              <a
+                href="/lesson/l1"
+              >
+                T
+                1
+                 · 
+                Bài 1
+                <span
+                  class="sr-only"
+                >
+                   · 
+                  đã hoàn thành
+                </span>
+              </a>
+            </li>
+            <li
+              data-status="not_started"
+            >
+              <a
+                href="/lesson/l2"
+              >
+                T
+                2
+                 · 
+                Bài 2
+                <span
+                  class="sr-only"
+                >
+                   · 
+                  chưa bắt đầu
+                </span>
+              </a>
+            </li>
+          </ol>
+        </nav>
+      </section>
+      <section
+        aria-label="Tiến độ hiện tại"
+        class="metric-grid"
+      >
+        <div
+          class="metric"
+        >
+          <strong>
+            1/2
+          </strong>
+          <span>
+            Bài đã học
+          </span>
+        </div>
+        <div
+          class="metric"
+        >
+          <strong>
+            1
+          </strong>
+          <span>
+            Ngày có học
+          </span>
+        </div>
+        <div
+          class="metric"
+        >
+          <strong>
+            1
+          </strong>
+          <span>
+            Chuỗi ngày
+          </span>
+        </div>
+        <div
+          class="metric"
+        >
+          <strong>
+            20
+          </strong>
+          <span>
+            Điểm
+          </span>
+        </div>
+      </section>
+      <section
+        aria-label="Điểm danh tuần này"
+        role="region"
+      >
+        <div
+          class="section-heading"
+        >
+          <div>
+            <p
+              class="eyebrow"
+            >
+              Lịch học
+            </p>
+            <h2>
+              Điểm danh tuần này
+            </h2>
+          </div>
+          <strong>
+            1
+            /
+            5
+             ngày
+          </strong>
+        </div>
+        <ol
+          class="attendance-row"
+        >
+          <li
+            data-status="attended"
+          >
+            <span>
+              T2
+            </span>
+            <strong
+              aria-label="T2: đã học"
+            >
+              ✓
+            </strong>
+          </li>
+          <li
+            data-status="today"
+          >
+            <span>
+              T3
+            </span>
+            <strong
+              aria-label="T3: hôm nay"
+            >
+              •
+            </strong>
+          </li>
+          <li
+            data-status="upcoming"
+          >
+            <span>
+              T4
+            </span>
+            <strong
+              aria-label="T4: sắp tới"
+            >
+              ○
+            </strong>
+          </li>
+          <li
+            data-status="upcoming"
+          >
+            <span>
+              T5
+            </span>
+            <strong
+              aria-label="T5: sắp tới"
+            >
+              ○
+            </strong>
+          </li>
+          <li
+            data-status="upcoming"
+          >
+            <span>
+              T6
+            </span>
+            <strong
+              aria-label="T6: sắp tới"
+            >
+              ○
+            </strong>
+          </li>
+        </ol>
+        <p
+          class="supporting-text"
+        >
+          T2–T6, mỗi ngày một bài khoảng 
+          10
+           phút.
+        </p>
+      </section>
+      <section
+        aria-label="Hoạt động tuần"
+        class="activity-links"
+      >
+        <a
+          href="/coach"
+        >
+          <span
+            aria-hidden="true"
+            class="activity-icon"
+          >
+            S
+          </span>
+          <strong>
+            Luyện với Season
+          </strong>
+          <small>
+            Đã luyện 
+            2
+            /
+            2
+             lượt tuần này
+          </small>
+        </a>
+        <a
+          aria-disabled="true"
+          href="/practice"
+        >
+          <span
+            aria-hidden="true"
+            class="activity-icon"
+          >
+            W
+          </span>
+          <strong>
+            Bài thực hành cuối tuần
+          </strong>
+          <small>
+            Mở khi hoàn thành đủ 5 bài.
+          </small>
+        </a>
+      </section>
+      <section
+        aria-label="Đường lên mức B1"
+        class="readiness-card"
+        role="region"
+      >
+        <div
+          class="section-heading"
+        >
+          <div>
+            <p
+              class="eyebrow"
+            >
+              14
+               ngày gần nhất
+            </p>
+            <h2>
+              Đường lên mức 
+              B1
+            </h2>
+          </div>
+          <span
+            class="status-chip "
+          >
+            Đang tích luỹ
+          </span>
+        </div>
+        <div
+          class="criteria-list"
+        >
+          <article
+            class="criterion"
+          >
+            <div>
+              <strong>
+                ○ 
+                Bài học hoàn thành
+              </strong>
+              <span>
+                1/5 bài
+              </span>
+            </div>
+            <div
+              aria-label="Bài học hoàn thành"
+              aria-valuemax="90"
+              aria-valuemin="0"
+              aria-valuenow="20"
+              role="progressbar"
+            >
+              <span
+                style="width: 22.22222222222222%;"
+              />
+            </div>
+            <small>
+              Mục tiêu: 
+              90
+              %
+            </small>
+          </article>
+          <article
+            class="criterion"
+          >
+            <div>
+              <strong>
+                ✓ 
+                Phần bài đúng ngay lần đầu
+              </strong>
+              <span>
+                4/4 phần
+              </span>
+            </div>
+            <div
+              aria-label="Phần bài đúng ngay lần đầu"
+              aria-valuemax="75"
+              aria-valuemin="0"
+              aria-valuenow="75"
+              role="progressbar"
+            >
+              <span
+                style="width: 100%;"
+              />
+            </div>
+            <small>
+              Mục tiêu: 
+              75
+              %
+            </small>
+          </article>
+          <article
+            class="criterion"
+          >
+            <div>
+              <strong>
+                ✓ 
+                Bài thực hành tuần gần nhất
+              </strong>
+              <span>
+                86/100
+              </span>
+            </div>
+            <div
+              aria-label="Bài thực hành tuần gần nhất"
+              aria-valuemax="80"
+              aria-valuemin="0"
+              aria-valuenow="80"
+              role="progressbar"
+            >
+              <span
+                style="width: 100%;"
+              />
+            </div>
+            <small>
+              Mục tiêu: 
+              80
+              %
+            </small>
+          </article>
+          <article
+            class="criterion"
+          >
+            <div>
+              <strong>
+                ✓ 
+                Rubric khi luyện với Season
+              </strong>
+              <span>
+                4.3/5
+              </span>
+            </div>
+            <div
+              aria-label="Rubric khi luyện với Season"
+              aria-valuemax="4"
+              aria-valuemin="0"
+              aria-valuenow="4"
+              role="progressbar"
+            >
+              <span
+                style="width: 100%;"
+              />
+            </div>
+            <small>
+              Mục tiêu: 
+              4
+              /5 và tối thiểu 6 lượt
+            </small>
+          </article>
+        </div>
+      </section>
+      <section
+        class="final-assessment"
+      >
+        <h2>
+          Bài kiểm tra cuối kỳ đã mở
+        </h2>
+        <p>
+          Dùng cùng rubric với bài đầu vào để nhìn thấy tiến bộ.
+        </p>
+        <a
+          class="button button--primary"
+          href="/test/final"
+        >
+          Làm bài cuối kỳ
+        </a>
+      </section>
+    </main>
+  </div>
+</body>
+ ❯ Object.getElementError node_modules/.pnpm/@testing-library+dom@10.4.2/node_modules/@testing-library/dom/dist/config.js:37:19
+ ❯ node_modules/.pnpm/@testing-library+dom@10.4.2/node_modules/@testing-library/dom/dist/query-helpers.js:76:38
+ ❯ node_modules/.pnpm/@testing-library+dom@10.4.2/node_modules/@testing-library/dom/dist/query-helpers.js:52:17
+ ❯ node_modules/.pnpm/@testing-library+dom@10.4.2/node_modules/@testing-library/dom/dist/query-helpers.js:95:19
+ ❯ apps/web/test/learner-screens.test.tsx:66:19
+     64|     expect(screen.getByRole("link", { name: /học bài 2/i })).toHaveAtt…
+     65|     expect(screen.getByRole("navigation", { name: /lộ trình tuần/i }))…
+     66|     expect(screen.getByRole("link", { name: /t2 · bài 1/i })).toBeInTh…
+       |                   ^
+     67|     expect(screen.getByRole("link", { name: /t3 · bài 2/i })).toBeInTh…
+     68|     expect(screen.getByRole("region", { name: /điểm danh tuần này/i })…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 6 skipped (7)
+   Start at  18:01:50
+   Duration  827ms (environment 58%, import 21%, tests 18%, transform 2%)
+
+[ELIFECYCLE] Command failed with exit code 1.

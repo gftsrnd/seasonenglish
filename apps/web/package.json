@@ -5,11 +5,14 @@
   "type": "module",
   "scripts": {
     "build": "vite build",
+    "dev": "vite",
+    "preview": "vite preview",
     "test": "vitest run",
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
     "@e4s/contracts": "workspace:*",
+    "@fontsource/be-vietnam-pro": "5.2.8",
     "@tanstack/react-query": "5.90.21",
     "react": "19.3.0",
     "react-dom": "19.3.0",
