@@ -3,6 +3,9 @@
   "references": [
     { "path": "./packages/contracts" },
     { "path": "./packages/database" },
-    { "path": "./packages/test-support" }
+    { "path": "./packages/test-support" },
+    { "path": "./packages/domain" },
+    { "path": "./apps/api" },
+    { "path": "./apps/web" }
   ]
 }

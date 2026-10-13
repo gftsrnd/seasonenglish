@@ -1,0 +1,27 @@
+$ node scripts/run-with-test-postgres.mjs "apps/api/test/identity.integration.test.ts"
+
+ RUN  v5.0.4 D:/TTS - AI Application - Huynh Doan Hoang Minh/12_10_2026 - 17_10_2026/E4S/platform
+
+ ❯ apps/api/test/identity.integration.test.ts (0 test)
+
+⎯⎯⎯⎯⎯⎯ Failed Suites 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  apps/api/test/identity.integration.test.ts [ apps/api/test/identity.integration.test.ts ]
+TypeError: createRoleGuard is not a function
+ ❯ apps/api/test/identity.integration.test.ts:14:45
+     12|   const pool = new Pool({ connectionString: databaseUrl });
+     13|   const app = buildApi({ pool, allowDemoLogin: true, secureCookies: fa…
+     14|   app.get("/__test/operator", { preHandler: createRoleGuard(pool, ["op…
+       |                                             ^
+     15|   let learnerCookie = "";
+     16|
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  no tests
+   Start at  17:29:23
+   Duration  533ms (worker 96%, environment 4%)
+
+[ELIFECYCLE] Test failed. See above for more details.

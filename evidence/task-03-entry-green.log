@@ -1,0 +1,10 @@
+$ node scripts/run-with-test-postgres.mjs "apps/web/test/entry-screen.test.tsx"
+
+ RUN  v5.0.4 D:/TTS - AI Application - Huynh Doan Hoang Minh/12_10_2026 - 17_10_2026/E4S/platform
+
+
+ Test Files  1 passed (1)
+      Tests  3 passed (3)
+   Start at  17:28:21
+   Duration  1.49s (tests 58%, environment 29%, import 10%, transform 2%)
+

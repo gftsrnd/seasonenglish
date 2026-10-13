@@ -1,0 +1,21 @@
+{
+  "name": "@e4s/domain",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./identity": "./src/identity/index.ts"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "test": "vitest run",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "@e4s/contracts": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/node": "24.10.13"
+  }
+}

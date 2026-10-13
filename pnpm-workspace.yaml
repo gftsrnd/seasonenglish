@@ -4,3 +4,7 @@ packages:
 
 allowBuilds:
   '@embedded-postgres/windows-x64': true
+
+minimumReleaseAgeExclude:
+  - fastify@5.12.7
+  - zod@4.6.7

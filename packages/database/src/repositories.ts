@@ -9,6 +9,15 @@ export interface UserIdentity {
   status: string;
 }
 
+export interface UserCredentialRecord extends UserIdentity {
+  credentialHash: string;
+}
+
+export interface ActiveSessionRecord extends UserIdentity {
+  sessionId: string;
+  expiresAt: Date;
+}
+
 export interface ActiveLearningContext {
   programId: string;
   programName: string;
@@ -65,6 +74,78 @@ class IdentityRepository {
     return row
       ? { id: row.id, displayName: row.display_name, email: row.email, role: row.role, status: row.status }
       : null;
+  }
+
+  async findCredentialByEmail(email: string): Promise<UserCredentialRecord | null> {
+    const result = await this.pool.query<{
+      id: string;
+      display_name: string;
+      email: string | null;
+      role: AccountRole;
+      status: string;
+      credential_hash: string;
+    }>(
+      `select u.id, u.display_name, u.email, u.role, u.status, c.credential_hash
+       from users u join user_credentials c on c.user_id = u.id
+       where lower(u.email) = lower($1) and u.status = 'active'
+       limit 1`,
+      [email]
+    );
+    const row = result.rows[0];
+    return row
+      ? {
+          id: row.id,
+          displayName: row.display_name,
+          email: row.email,
+          role: row.role,
+          status: row.status,
+          credentialHash: row.credential_hash
+        }
+      : null;
+  }
+
+  async createSession(input: { id: string; userId: string; tokenHash: string; expiresAt: Date }): Promise<void> {
+    await this.pool.query(
+      `insert into sessions (id, user_id, token_hash, expires_at) values ($1, $2, $3, $4)`,
+      [input.id, input.userId, input.tokenHash, input.expiresAt]
+    );
+  }
+
+  async findActiveSession(tokenHash: string): Promise<ActiveSessionRecord | null> {
+    const result = await this.pool.query<{
+      session_id: string;
+      expires_at: Date;
+      id: string;
+      display_name: string;
+      email: string | null;
+      role: AccountRole;
+      status: string;
+    }>(
+      `select s.id as session_id, s.expires_at, u.id, u.display_name, u.email, u.role, u.status
+       from sessions s join users u on u.id = s.user_id
+       where s.token_hash = $1 and s.revoked_at is null and s.expires_at > now() and u.status = 'active'
+       limit 1`,
+      [tokenHash]
+    );
+    const row = result.rows[0];
+    return row
+      ? {
+          sessionId: row.session_id,
+          expiresAt: row.expires_at,
+          id: row.id,
+          displayName: row.display_name,
+          email: row.email,
+          role: row.role,
+          status: row.status
+        }
+      : null;
+  }
+
+  async revokeSession(tokenHash: string): Promise<void> {
+    await this.pool.query(
+      `update sessions set revoked_at = now() where token_hash = $1 and revoked_at is null`,
+      [tokenHash]
+    );
   }
 }
 
