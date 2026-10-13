@@ -1,0 +1,23 @@
+{
+  "source": "E4S-TECHNICAL-ARCHITECTURE.md sections 8-9",
+  "decision": "Preserve Thu's approved screens and visible transitions; only entry/login may change",
+  "visibleRouteCount": 29,
+  "forbiddenStandaloneScreens": [
+    "invitation",
+    "placement-preparation",
+    "placement-result",
+    "content-review",
+    "technical-admin"
+  ],
+  "stateNotScreen": [
+    "preparation",
+    "pending",
+    "result",
+    "loading",
+    "empty",
+    "error",
+    "offline",
+    "conflict"
+  ]
+}
+

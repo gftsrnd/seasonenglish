@@ -1,0 +1,52 @@
+export type ProductRole = "public" | "learner" | "operator" | "manager";
+
+export interface VisibleScreen {
+  readonly id: string;
+  readonly path: string;
+  readonly title: string;
+  readonly roles: readonly ProductRole[];
+  readonly purpose: string;
+  readonly states?: readonly string[];
+}
+
+export const SCREEN_CONTRACT = [
+  { id: "entry", path: "/", title: "Đăng nhập", roles: ["public"], purpose: "Learner, staff và demo vào đúng cổng; role do tài khoản quyết định" },
+  { id: "onboard", path: "/onboard", title: "Hồ sơ ban đầu", roles: ["learner"], purpose: "Hoàn thiện hồ sơ học tập trước bài test" },
+  { id: "test", path: "/test/:kind", title: "Bài test", roles: ["learner"], purpose: "Thực hiện placement, final hoặc level-up trong một screen flow", states: ["preparation", "listening", "reading", "writing", "speaking", "submitting", "pending"] },
+  { id: "learner-home", path: "/home", title: "Trang chủ", roles: ["learner"], purpose: "Onboarding status hoặc chương trình tuần và bài hôm nay" },
+  { id: "micro", path: "/micro/:id", title: "Bài siêu ngắn", roles: ["learner"], purpose: "Học và luyện một nội dung ngắn" },
+  { id: "lesson", path: "/lesson/:id", title: "Bài học", roles: ["learner"], purpose: "Học đúng trình tự nội dung đã xác nhận" },
+  { id: "coach", path: "/coach", title: "Luyện với Season", roles: ["learner"], purpose: "Hội thoại, nhận phản hồi và làm lại trong cùng màn" },
+  { id: "level-challenge", path: "/challenge", title: "Thử thách lên mức", roles: ["learner"], purpose: "Làm tiếp hoặc hoàn thành thử thách đủ điều kiện" },
+  { id: "weekly-practice", path: "/practice", title: "Bài thực hành cuối tuần", roles: ["learner"], purpose: "Soạn, nộp và xem trạng thái bài cuối tuần" },
+  { id: "games", path: "/games", title: "Mini game", roles: ["learner"], purpose: "Chọn mini game" },
+  { id: "game-detail", path: "/games/:game", title: "Mini game", roles: ["learner"], purpose: "Chơi một mini game" },
+  { id: "arena", path: "/arena", title: "Arena", roles: ["learner"], purpose: "Xem điều kiện, đối thủ và trận đấu" },
+  { id: "duel", path: "/duel/:id", title: "Duel", roles: ["learner"], purpose: "Thực hiện một lượt đấu cụ thể" },
+  { id: "learner-profile", path: "/profile", title: "Tiến độ & hồ sơ", roles: ["learner"], purpose: "Xem tiến bộ và cập nhật hồ sơ" },
+  { id: "reward", path: "/reward/:mode", title: "Chứng nhận & phần thưởng", roles: ["learner", "manager"], purpose: "Xem trước hoặc nhận chứng nhận" },
+  { id: "survey", path: "/survey", title: "Khảo sát cuối pilot", roles: ["learner"], purpose: "Gửi khảo sát cuối pilot" },
+  { id: "level-approval", path: "/op", title: "Duyệt trình độ", roles: ["operator", "manager"], purpose: "Xem evidence và duyệt mức" },
+  { id: "level-forms", path: "/op/levelforms", title: "Đề thi lên mức", roles: ["operator", "manager"], purpose: "Tạo, xem và duyệt đề lên mức" },
+  { id: "week-topics", path: "/op/weeks", title: "Chủ đề tuần", roles: ["operator", "manager"], purpose: "Thiết lập chủ đề, mô tả và mục tiêu tuần" },
+  { id: "lesson-sets", path: "/op/lessons", title: "Bài học", roles: ["operator", "manager"], purpose: "Theo dõi ma trận tuần và CEFR" },
+  { id: "lesson-set-detail", path: "/op/lessons/:week/:cefr", title: "Chi tiết bộ bài", roles: ["operator", "manager"], purpose: "Soạn, sửa, xem và duyệt bộ bài" },
+  { id: "sample-review", path: "/op/review", title: "Đọc mẫu & kiểm tra AI", roles: ["operator", "manager"], purpose: "Xem bài nộp, coach, micro, kháng nghị, lượt làm và bài test" },
+  { id: "prompt-rubric", path: "/op/prompts", title: "Prompt & rubric", roles: ["operator", "manager"], purpose: "Điều chỉnh hướng dẫn AI theo quyền chuyên môn" },
+  { id: "settings", path: "/settings", title: "Cài đặt", roles: ["operator", "manager"], purpose: "Cấu hình nghiệp vụ, AI, người dùng và quyền theo vai trò" },
+  { id: "manager-progress", path: "/mgr", title: "Tiến độ", roles: ["manager"], purpose: "Theo dõi tiến độ nhóm và KPI" },
+  { id: "manager-operations", path: "/mgr/ops", title: "Vận hành", roles: ["manager"], purpose: "Theo dõi hiệu suất vận hành" },
+  { id: "manager-reminders", path: "/mgr/reminders", title: "Nhắc học", roles: ["manager"], purpose: "Xác định và gửi nhắc học" },
+  { id: "manager-report", path: "/mgr/report", title: "Báo cáo", roles: ["manager"], purpose: "Xem và xuất báo cáo pilot" },
+  { id: "manager-rewards", path: "/mgr/rewards", title: "Giả lập phần thưởng", roles: ["manager"], purpose: "Xem trước các trường hợp phần thưởng" }
+] as const satisfies readonly VisibleScreen[];
+
+export const ROLE_NAVIGATION = {
+  learner: ["/home", "/coach", "/practice", "/games", "/profile"],
+  operator: ["/op", "/op/weeks", "/op/lessons", "/op/review", "/settings"],
+  manager: ["/mgr", "/mgr/ops", "/mgr/reminders", "/mgr/report", "/settings"]
+} as const;
+
+export type ScreenId = (typeof SCREEN_CONTRACT)[number]["id"];
+export type VisibleRoute = (typeof SCREEN_CONTRACT)[number]["path"];
+

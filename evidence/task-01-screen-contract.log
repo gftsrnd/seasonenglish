@@ -1,0 +1,10 @@
+$ vitest run "packages/contracts/test/screen-contract.test.ts"
+
+ RUN  v5.0.4 D:/TTS - AI Application - Huynh Doan Hoang Minh/12_10_2026 - 17_10_2026/E4S/platform
+
+
+ Test Files  1 passed (1)
+      Tests  3 passed (3)
+   Start at  17:08:49
+   Duration  106ms (transform 56%, import 25%, tests 9%, worker 9%)
+
