@@ -69,6 +69,21 @@ function AssessmentRoute() {
       if (!attemptId) return;
       setView(await apiClient.completeAssessmentSection(attemptId, section));
     }}
+    onRecordAudioPlay={async (section, groupKey) => {
+      if (!attemptId) throw new Error("Assessment attempt is not active");
+      const recorded = await apiClient.recordAssessmentAudioPlay(attemptId, section, groupKey);
+      setView((current) => current?.attempt ? {
+        ...current,
+        attempt: {
+          ...current.attempt,
+          audioPlayCounts: {
+            ...current.attempt.audioPlayCounts,
+            [`${section}:${groupKey}`]: recorded.playCount
+          }
+        }
+      } : current);
+      return recorded;
+    }}
     onSubmit={async () => {
       if (!attemptId) return;
       setView(await apiClient.submitAssessment(attemptId));

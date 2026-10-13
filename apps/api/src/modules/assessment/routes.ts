@@ -1,7 +1,9 @@
 import type {
   AssessmentAttemptView,
+  AssessmentDecisionView,
   AssessmentEvidenceType,
   AssessmentKind,
+  AssessmentReviewQueueItem,
   AssessmentSectionCode,
   AssessmentSectionStatus,
   AssessmentView
@@ -31,10 +33,27 @@ const sectionParam = z.object({
   attemptId: z.uuid(),
   section: z.enum(["listening", "reading", "writing", "speaking"])
 });
+const audioPlayParam = z.object({
+  attemptId: z.uuid(),
+  section: z.enum(["listening", "reading", "writing", "speaking"]),
+  groupKey: z.string().trim().min(1).max(80)
+});
 const responseInput = z.object({
   value: z.string().max(20_000),
   evidenceType: z.enum(["choice", "text", "audio", "transcript", "typed_proxy", "technical_failure"]),
   artifactKey: z.string().trim().min(1).max(500).optional()
+});
+const decisionInput = z.object({
+  status: z.enum(["approved", "needs_retry"]),
+  approvedLevel: z.enum(["A1", "A2", "B1", "B2", "C1"]).optional(),
+  reason: z.string().trim().min(1).max(2_000)
+}).superRefine((value, context) => {
+  if (value.status === "approved" && !value.approvedLevel) {
+    context.addIssue({ code: "custom", path: ["approvedLevel"], message: "approvedLevel is required" });
+  }
+  if (value.status === "needs_retry" && value.approvedLevel) {
+    context.addIssue({ code: "custom", path: ["approvedLevel"], message: "approvedLevel is not allowed" });
+  }
 });
 
 const sectionOrder: AssessmentSectionCode[] = ["listening", "reading", "writing", "speaking"];
@@ -42,6 +61,32 @@ const sectionOrder: AssessmentSectionCode[] = ["listening", "reading", "writing"
 export function registerAssessmentRoutes(app: FastifyInstance, pool: Pool): void {
   const repositories = createRepositories(pool);
   const learnerOnly = createRoleGuard(pool, ["learner"]);
+  const assessmentReaders = createRoleGuard(pool, ["operator", "manager"]);
+  const assessmentReviewers = createRoleGuard(pool, ["operator"]);
+
+  app.get("/api/v1/assessment-reviews/pending", { preHandler: assessmentReaders }, async (request) => {
+    const pending = await repositories.assessments.listPending(request.e4sSession!.user.id);
+    return pending.map((item): AssessmentReviewQueueItem => ({
+      ...item,
+      submittedAt: item.submittedAt.toISOString()
+    }));
+  });
+
+  app.post("/api/v1/assessment-reviews/:attemptId/decision", { preHandler: assessmentReviewers }, async (request, reply) => {
+    const params = attemptParam.safeParse(request.params);
+    const body = decisionInput.safeParse(request.body);
+    if (!params.success || !body.success) return reply.code(400).send({ code: "INVALID_ASSESSMENT_DECISION" });
+    const decision = await repositories.assessments.decide({
+      attemptId: params.data.attemptId,
+      reviewerId: request.e4sSession!.user.id,
+      status: body.data.status,
+      approvedLevel: body.data.approvedLevel ?? null,
+      reason: body.data.reason
+    });
+    if (!decision) return reply.code(409).send({ code: "ASSESSMENT_NOT_REVIEWABLE" });
+    const view: AssessmentDecisionView = { ...decision, decidedAt: decision.decidedAt.toISOString() };
+    return view;
+  });
 
   app.get("/api/v1/assessments/:kind", { preHandler: learnerOnly }, async (request, reply) => {
     const parsed = kindParam.safeParse(request.params);
@@ -98,6 +143,31 @@ export function registerAssessmentRoutes(app: FastifyInstance, pool: Pool): void
     return saved ? responseView(saved) : reply.code(409).send({ code: "ASSESSMENT_ATTEMPT_NOT_EDITABLE" });
   });
 
+  app.post("/api/v1/assessment-attempts/:attemptId/sections/:section/groups/:groupKey/audio-play", { preHandler: learnerOnly }, async (request, reply) => {
+    const params = audioPlayParam.safeParse(request.params);
+    if (!params.success) return reply.code(400).send({ code: "INVALID_ASSESSMENT_AUDIO_GROUP" });
+    const learnerId = request.e4sSession!.user.id;
+    const attempt = await repositories.assessments.findAttempt(learnerId, params.data.attemptId);
+    if (!attempt || attempt.status !== "in_progress" || attempt.currentSection !== params.data.section) {
+      return reply.code(409).send({ code: "ASSESSMENT_ATTEMPT_NOT_EDITABLE" });
+    }
+    const definition = await definitionForAttempt(repositories.assessments, attempt);
+    if (!definition) return reply.code(404).send({ code: "ASSESSMENT_NOT_PUBLISHED" });
+    const group = sectionByCode(definition.blueprint, params.data.section)?.groups
+      .find((candidate) => candidate.key === params.data.groupKey);
+    if (!group?.maxPlays) return reply.code(400).send({ code: "ASSESSMENT_AUDIO_GROUP_NOT_PLAYABLE" });
+    const playCount = await repositories.assessments.recordAudioPlay({
+      learnerId,
+      attemptId: attempt.id,
+      section: params.data.section,
+      groupKey: group.key,
+      maxPlays: group.maxPlays
+    });
+    return playCount === null
+      ? reply.code(409).send({ code: "ASSESSMENT_AUDIO_PLAY_LIMIT_REACHED" })
+      : { playCount, remaining: Math.max(0, group.maxPlays - playCount) };
+  });
+
   app.post("/api/v1/assessment-attempts/:attemptId/sections/:section/complete", { preHandler: learnerOnly }, async (request, reply) => {
     const params = sectionParam.safeParse(request.params);
     if (!params.success) return reply.code(400).send({ code: "INVALID_ASSESSMENT_SECTION" });
@@ -125,11 +195,17 @@ export function registerAssessmentRoutes(app: FastifyInstance, pool: Pool): void
     if (!params.success) return reply.code(400).send({ code: "INVALID_ASSESSMENT_ATTEMPT" });
     const learnerId = request.e4sSession!.user.id;
     const attempt = await repositories.assessments.findAttempt(learnerId, params.data.attemptId);
-    if (!attempt || attempt.status !== "in_progress" || attempt.currentSection !== "speaking") {
+    if (!attempt) {
       return reply.code(409).send({ code: "ASSESSMENT_ATTEMPT_NOT_SUBMITTABLE" });
     }
     const definition = await definitionForAttempt(repositories.assessments, attempt);
     if (!definition) return reply.code(404).send({ code: "ASSESSMENT_NOT_PUBLISHED" });
+    if (attempt.status === "pending_review" || attempt.status === "approved") {
+      return assessmentView(definition, attempt);
+    }
+    if (attempt.status !== "in_progress" || attempt.currentSection !== "speaking") {
+      return reply.code(409).send({ code: "ASSESSMENT_ATTEMPT_NOT_SUBMITTABLE" });
+    }
 
     for (const sectionCode of ["listening", "reading"] as const) {
       const section = sectionByCode(definition.blueprint, sectionCode);
@@ -146,7 +222,11 @@ export function registerAssessmentRoutes(app: FastifyInstance, pool: Pool): void
       });
     }
     const submitted = await repositories.assessments.submitAttempt(learnerId, attempt.id);
-    return submitted ? assessmentView(definition, submitted) : reply.code(409).send({ code: "ASSESSMENT_ATTEMPT_NOT_SUBMITTABLE" });
+    if (submitted) return assessmentView(definition, submitted);
+    const raced = await repositories.assessments.findAttempt(learnerId, attempt.id);
+    return raced && (raced.status === "pending_review" || raced.status === "approved")
+      ? assessmentView(definition, raced)
+      : reply.code(409).send({ code: "ASSESSMENT_ATTEMPT_NOT_SUBMITTABLE" });
   });
 }
 
@@ -210,6 +290,7 @@ function attemptView(attempt: AssessmentAttemptRecord): AssessmentAttemptView {
     responses: attempt.responses.map(responseView),
     sectionStatuses: statuses,
     sectionScores: attempt.scores,
+    audioPlayCounts: attempt.audioPlayCounts,
     totalScore,
     suggestedLevel: attempt.suggestedLevel
   };

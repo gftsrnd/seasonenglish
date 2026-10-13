@@ -36,6 +36,7 @@ export const apiClient: AuthClient & {
     value: string; evidenceType: "choice" | "text" | "audio" | "transcript" | "typed_proxy" | "technical_failure"; artifactKey?: string;
   }): Promise<AssessmentResponseView>;
   completeAssessmentSection(attemptId: string, section: AssessmentSectionCode): Promise<AssessmentView>;
+  recordAssessmentAudioPlay(attemptId: string, section: AssessmentSectionCode, groupKey: string): Promise<{ playCount: number; remaining: number }>;
   submitAssessment(attemptId: string): Promise<AssessmentView>;
 } = {
   learnerLogin: (input: LoginCredentials) => request("/api/auth/learner/login", { method: "POST", body: JSON.stringify(input) }),
@@ -72,6 +73,10 @@ export const apiClient: AuthClient & {
   ),
   completeAssessmentSection: (attemptId, section) => request(
     `/api/v1/assessment-attempts/${encodeURIComponent(attemptId)}/sections/${encodeURIComponent(section)}/complete`,
+    { method: "POST", body: "{}" }
+  ),
+  recordAssessmentAudioPlay: (attemptId, section, groupKey) => request(
+    `/api/v1/assessment-attempts/${encodeURIComponent(attemptId)}/sections/${encodeURIComponent(section)}/groups/${encodeURIComponent(groupKey)}/audio-play`,
     { method: "POST", body: "{}" }
   ),
   submitAssessment: (attemptId) => request(`/api/v1/assessment-attempts/${encodeURIComponent(attemptId)}/submit`, {

@@ -31,7 +31,7 @@ describe("assessment remains one prototype screen flow", () => {
   it("shows the four existing sections and starts inside the same screen", async () => {
     const user = userEvent.setup();
     const onStart = vi.fn();
-    render(<Assessment view={preparation} onStart={onStart} onSaveResponse={vi.fn()} onCompleteSection={vi.fn()} onSubmit={vi.fn()} />);
+    render(<Assessment view={preparation} onStart={onStart} onSaveResponse={vi.fn()} onCompleteSection={vi.fn()} onSubmit={vi.fn()} onRecordAudioPlay={vi.fn()} />);
 
     expect(screen.getByRole("heading", { name: /workplace english cefr placement test/i })).toBeInTheDocument();
     expect(screen.getByRole("table", { name: /cấu trúc bài test/i })).toHaveTextContent(/nghe.*đọc.*viết.*nói/i);
@@ -56,7 +56,7 @@ describe("assessment remains one prototype screen flow", () => {
       }
     };
 
-    render(<Assessment view={finalView} onStart={vi.fn()} onSaveResponse={vi.fn()} onCompleteSection={vi.fn()} onSubmit={vi.fn()} />);
+    render(<Assessment view={finalView} onStart={vi.fn()} onSaveResponse={vi.fn()} onCompleteSection={vi.fn()} onSubmit={vi.fn()} onRecordAudioPlay={vi.fn()} />);
 
     expect(screen.getByText("E4S · Bài test cuối kỳ")).toBeInTheDocument();
     expect(screen.getByText(/dùng cùng rubric với bài đầu vào để nhìn thấy tiến bộ/i)).toBeInTheDocument();
@@ -74,14 +74,44 @@ describe("assessment remains one prototype screen flow", () => {
         startedAt: "2026-10-13T10:00:00.000Z",
         sectionEndsAt: "2026-10-13T10:15:00.000Z",
         responses: [],
-        sectionStatuses: { listening: "in_progress", reading: "locked", writing: "locked", speaking: "locked" }
+        sectionStatuses: { listening: "in_progress", reading: "locked", writing: "locked", speaking: "locked" },
+        audioPlayCounts: {}
       }
     };
-    render(<Assessment view={view} onStart={vi.fn()} onSaveResponse={vi.fn()} onCompleteSection={vi.fn()} onSubmit={vi.fn()} />);
+    render(<Assessment view={view} onStart={vi.fn()} onSaveResponse={vi.fn()} onCompleteSection={vi.fn()} onSubmit={vi.fn()} onRecordAudioPlay={vi.fn()} />);
 
     expect(screen.getByText(/phần 1\/4.*nghe/i)).toBeInTheDocument();
     expect(screen.getByRole("timer")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /nộp phần nghe/i })).toBeInTheDocument();
+  });
+
+  it("keeps a listening group locked after its two server-recorded plays on reload", () => {
+    const view: AssessmentView = {
+      ...preparation,
+      definition: {
+        ...preparation.definition,
+        sections: [{
+          ...preparation.definition.sections[0]!,
+          groups: [{ key: "LA", title: "Part A", instruction: "Nghe tối đa hai lần.", maxPlays: 2, tasks: [] }]
+        }, ...preparation.definition.sections.slice(1)]
+      },
+      screenState: "listening",
+      attempt: {
+        id: "00000000-0000-4000-8000-000000009001",
+        status: "in_progress",
+        currentSection: "listening",
+        startedAt: "2026-10-13T10:00:00.000Z",
+        sectionEndsAt: "2026-10-13T10:15:00.000Z",
+        responses: [],
+        sectionStatuses: { listening: "in_progress", reading: "locked", writing: "locked", speaking: "locked" },
+        audioPlayCounts: { "listening:LA": 2 }
+      }
+    };
+
+    render(<Assessment view={view} onStart={vi.fn()} onSaveResponse={vi.fn()} onCompleteSection={vi.fn()}
+      onSubmit={vi.fn()} onRecordAudioPlay={vi.fn()} />);
+
+    expect(screen.getByRole("button", { name: /nghe.*còn 0 lần/i })).toBeDisabled();
   });
 
   it("keeps audio recording or upload visible in the existing Speaking state", () => {
@@ -99,10 +129,11 @@ describe("assessment remains one prototype screen flow", () => {
       attempt: {
         id: "00000000-0000-4000-8000-000000009001", status: "in_progress", currentSection: "speaking",
         startedAt: "2026-10-13T10:00:00.000Z", sectionEndsAt: "2026-10-13T10:15:00.000Z", responses: [],
-        sectionStatuses: { listening: "completed", reading: "completed", writing: "completed", speaking: "in_progress" }
+        sectionStatuses: { listening: "completed", reading: "completed", writing: "completed", speaking: "in_progress" },
+        audioPlayCounts: {}
       }
     };
-    render(<Assessment view={view} onStart={vi.fn()} onSaveResponse={vi.fn()} onCompleteSection={vi.fn()} onSubmit={vi.fn()} />);
+    render(<Assessment view={view} onStart={vi.fn()} onSaveResponse={vi.fn()} onCompleteSection={vi.fn()} onSubmit={vi.fn()} onRecordAudioPlay={vi.fn()} />);
 
     expect(screen.getByRole("button", { name: /ghi âm/i })).toBeInTheDocument();
     expect(screen.getByLabelText(/tải file ghi âm/i)).toBeInTheDocument();

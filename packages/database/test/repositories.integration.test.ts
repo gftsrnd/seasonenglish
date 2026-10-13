@@ -60,7 +60,7 @@ describe("E4S repositories", () => {
   });
 
   it("provides stable seeded read models and empty optional operational domains", async () => {
-    await expect(repositories.assessments.listPending()).resolves.toEqual([]);
+    await expect(repositories.assessments.listPending(DEMO_IDS.operator)).resolves.toEqual([]);
     await expect(repositories.coach.listForLearner(DEMO_IDS.learner)).resolves.toEqual([
       expect.objectContaining({ id: DEMO_IDS.coachSession, status: "active", scenario: { title: "Daily meeting" } })
     ]);

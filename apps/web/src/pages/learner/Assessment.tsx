@@ -18,11 +18,15 @@ interface AssessmentProps {
   ) => void | Promise<void>;
   onCompleteSection: (section: AssessmentSectionCode) => void | Promise<void>;
   onSubmit: () => void | Promise<void>;
+  onRecordAudioPlay: (
+    section: AssessmentSectionCode,
+    groupKey: string
+  ) => Promise<{ playCount: number; remaining: number }>;
 }
 
 const sectionOrder: AssessmentSectionCode[] = ["listening", "reading", "writing", "speaking"];
 
-export function Assessment({ view, onStart, onSaveResponse, onCompleteSection, onSubmit }: AssessmentProps) {
+export function Assessment({ view, onStart, onSaveResponse, onCompleteSection, onSubmit, onRecordAudioPlay }: AssessmentProps) {
   const { definition, attempt, screenState } = view;
   const isFinalAssessment = definition.kind === "final";
   const [equipment, setEquipment] = useState<{ sound?: string; mic?: string }>({});
@@ -140,7 +144,9 @@ export function Assessment({ view, onStart, onSaveResponse, onCompleteSection, o
           group={group}
           section={currentSection.code}
           responses={attempt.responses}
+          initialPlayCount={attempt.audioPlayCounts[`${currentSection.code}:${group.key}`] ?? 0}
           onSaveResponse={onSaveResponse}
+          onRecordAudioPlay={onRecordAudioPlay}
         />)}
       </div>
     </section>
@@ -154,23 +160,32 @@ export function Assessment({ view, onStart, onSaveResponse, onCompleteSection, o
   </main>;
 }
 
-function AssessmentGroup({ group, section, responses, onSaveResponse }: {
+function AssessmentGroup({ group, section, responses, initialPlayCount, onSaveResponse, onRecordAudioPlay }: {
   group: AssessmentTaskGroupView;
   section: AssessmentSectionCode;
   responses: AssessmentResponseView[];
+  initialPlayCount: number;
   onSaveResponse: AssessmentProps["onSaveResponse"];
+  onRecordAudioPlay: AssessmentProps["onRecordAudioPlay"];
 }) {
   const responseMap = useMemo(() => new Map(responses.map((response) => [response.taskKey, response])), [responses]);
-  const [played, setPlayed] = useState(0);
+  const [played, setPlayed] = useState(initialPlayCount);
+  const [recordingPlay, setRecordingPlay] = useState(false);
   return <article className="assessment-group">
     <div className="assessment-group-heading">
       <div><h3>{group.title}</h3><p>{group.instruction}</p></div>
-      {group.maxPlays && <button disabled={played >= group.maxPlays} onClick={() => {
-        if (group.stimulus?.lines?.length && "speechSynthesis" in window) {
-          const text = group.stimulus.lines.map((line) => `${line.speaker}: ${line.text}`).join(". ");
-          window.speechSynthesis.speak(new SpeechSynthesisUtterance(text));
+      {group.maxPlays && <button disabled={recordingPlay || played >= group.maxPlays} onClick={async () => {
+        setRecordingPlay(true);
+        try {
+          const recorded = await onRecordAudioPlay(section, group.key);
+          if (group.stimulus?.lines?.length && "speechSynthesis" in window) {
+            const text = group.stimulus.lines.map((line) => `${line.speaker}: ${line.text}`).join(". ");
+            window.speechSynthesis.speak(new SpeechSynthesisUtterance(text));
+          }
+          setPlayed(recorded.playCount);
+        } finally {
+          setRecordingPlay(false);
         }
-        setPlayed((count) => Math.min(count + 1, group.maxPlays ?? count + 1));
       }}>🔊 Nghe {played ? `(còn ${Math.max(0, group.maxPlays - played)} lần)` : "đoạn này"}</button>}
     </div>
     {group.stimulus?.type !== "audio_script" && group.stimulus?.text && <div className="assessment-stimulus">{group.stimulus.text}</div>}

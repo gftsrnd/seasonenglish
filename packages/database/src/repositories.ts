@@ -126,7 +126,28 @@ export interface AssessmentAttemptRecord {
   updatedAt: Date;
   responses: AssessmentResponseRecord[];
   scores: Partial<Record<AssessmentSectionCode, number>>;
+  audioPlayCounts: Record<string, number>;
   suggestedLevel: CefrLevel | null;
+}
+
+export interface AssessmentReviewQueueRecord {
+  attemptId: string;
+  learnerId: string;
+  learnerName: string;
+  kind: AssessmentKind;
+  title: string;
+  submittedAt: Date;
+  sectionScores: Partial<Record<AssessmentSectionCode, number>>;
+  suggestedLevel: CefrLevel | null;
+}
+
+export interface AssessmentDecisionRecord {
+  attemptId: string;
+  status: "approved" | "needs_retry";
+  approvedLevel: CefrLevel | null;
+  reason: string;
+  decidedBy: string;
+  decidedAt: Date;
 }
 
 class IdentityRepository {
@@ -863,7 +884,7 @@ class AssessmentRepository {
     );
     const row = result.rows[0];
     if (!row) return null;
-    const [responses, scores] = await Promise.all([
+    const [responses, scores, audioPlays] = await Promise.all([
       this.pool.query<{
         section: AssessmentSectionCode;
         task_key: string;
@@ -876,6 +897,11 @@ class AssessmentRepository {
       ),
       this.pool.query<{ section: AssessmentSectionCode; score: string }>(
         `select section, score::text from assessment_scores where attempt_id = $1`,
+        [attemptId]
+      ),
+      this.pool.query<{ section: AssessmentSectionCode; group_key: string; play_count: number }>(
+        `select section, group_key, play_count
+         from assessment_audio_plays where attempt_id = $1`,
         [attemptId]
       )
     ]);
@@ -898,8 +924,31 @@ class AssessmentRepository {
         savedAt: response.saved_at
       })),
       scores: Object.fromEntries(scores.rows.map((score) => [score.section, Number(score.score)])),
+      audioPlayCounts: Object.fromEntries(audioPlays.rows.map((play) => [`${play.section}:${play.group_key}`, play.play_count])),
       suggestedLevel: row.suggested_level
     };
+  }
+
+  async recordAudioPlay(input: {
+    learnerId: string;
+    attemptId: string;
+    section: AssessmentSectionCode;
+    groupKey: string;
+    maxPlays: number;
+  }): Promise<number | null> {
+    const result = await this.pool.query<{ play_count: number }>(
+      `insert into assessment_audio_plays (id, attempt_id, section, group_key, play_count)
+       select $1, aa.id, $4, $5, 1
+       from assessment_attempts aa
+       where aa.id = $2 and aa.learner_id = $3
+         and aa.status = 'in_progress' and aa.current_section = $4
+       on conflict (attempt_id, section, group_key)
+       do update set play_count = assessment_audio_plays.play_count + 1, last_played_at = now()
+       where assessment_audio_plays.play_count < $6
+       returning play_count`,
+      [randomUUID(), input.attemptId, input.learnerId, input.section, input.groupKey, input.maxPlays]
+    );
+    return result.rows[0]?.play_count ?? null;
   }
 
   async startAttempt(input: {
@@ -1042,16 +1091,143 @@ class AssessmentRepository {
     return Boolean(result.rowCount);
   }
 
-  async listPending(): Promise<unknown[]> {
-    const result = await this.pool.query(
-      `select aa.id, aa.learner_id, aa.submitted_at, ad.kind, ad.title
+  async listPending(reviewerId: string): Promise<AssessmentReviewQueueRecord[]> {
+    const result = await this.pool.query<{
+      attempt_id: string;
+      learner_id: string;
+      learner_name: string;
+      kind: "placement" | "final" | "level_up";
+      title: string;
+      submitted_at: Date;
+      section_scores: Partial<Record<AssessmentSectionCode, number>> | null;
+      suggested_level: CefrLevel | null;
+    }>(
+      `select aa.id as attempt_id, aa.learner_id, learner.display_name as learner_name,
+              ad.kind, ad.title, aa.submitted_at,
+              coalesce(jsonb_object_agg(sc.section, sc.score) filter (where sc.section is not null), '{}'::jsonb) as section_scores,
+              decision.suggested_level
        from assessment_attempts aa
        join assessment_versions av on av.id = aa.assessment_version_id
        join assessment_definitions ad on ad.id = av.definition_id
+       join users learner on learner.id = aa.learner_id
+       join users reviewer on reviewer.id = $1 and reviewer.organization_id = learner.organization_id
+       left join assessment_scores sc on sc.attempt_id = aa.id
+       left join assessment_decisions decision on decision.attempt_id = aa.id
        where aa.status = 'pending_review'
-       order by aa.submitted_at nulls last, aa.started_at`
+       group by aa.id, learner.display_name, ad.kind, ad.title, decision.suggested_level
+       order by aa.submitted_at nulls last, aa.started_at`,
+      [reviewerId]
     );
-    return result.rows;
+    return result.rows.map((row) => ({
+      attemptId: row.attempt_id,
+      learnerId: row.learner_id,
+      learnerName: row.learner_name,
+      kind: row.kind === "level_up" ? "level-up" : row.kind,
+      title: row.title,
+      submittedAt: row.submitted_at,
+      sectionScores: Object.fromEntries(Object.entries(row.section_scores ?? {}).map(([section, score]) => [section, Number(score)])),
+      suggestedLevel: row.suggested_level
+    }));
+  }
+
+  async decide(input: {
+    attemptId: string;
+    reviewerId: string;
+    status: "approved" | "needs_retry";
+    approvedLevel: CefrLevel | null;
+    reason: string;
+  }): Promise<AssessmentDecisionRecord | null> {
+    const client = await this.pool.connect();
+    try {
+      await client.query("begin");
+      const locked = await client.query<{
+        learner_id: string;
+        organization_id: string;
+        status: AssessmentAttemptRecord["status"];
+      }>(
+        `select aa.learner_id, learner.organization_id, aa.status
+         from assessment_attempts aa
+         join users learner on learner.id = aa.learner_id
+         join users reviewer on reviewer.id = $2
+           and reviewer.organization_id = learner.organization_id
+           and reviewer.role = 'operator'
+         where aa.id = $1
+         for update of aa`,
+        [input.attemptId, input.reviewerId]
+      );
+      const attempt = locked.rows[0];
+      if (!attempt || !["pending_review", "approved", "needs_retry"].includes(attempt.status)) {
+        await client.query("rollback");
+        return null;
+      }
+
+      const existing = await client.query<{
+        status: "approved" | "retry";
+        approved_level: CefrLevel | null;
+        reason: string;
+        decided_by: string;
+        decided_at: Date;
+      }>(
+        `select status, approved_level, reason, decided_by, decided_at
+         from assessment_decisions where attempt_id = $1`,
+        [input.attemptId]
+      );
+      const previous = existing.rows[0];
+      if (attempt.status !== "pending_review" && previous) {
+        await client.query("commit");
+        return {
+          attemptId: input.attemptId,
+          status: previous.status === "retry" ? "needs_retry" : "approved",
+          approvedLevel: previous.approved_level,
+          reason: previous.reason,
+          decidedBy: previous.decided_by,
+          decidedAt: previous.decided_at
+        };
+      }
+
+      const decidedAt = new Date();
+      const decisionStatus = input.status === "needs_retry" ? "retry" : "approved";
+      await client.query(
+        `insert into assessment_decisions
+           (id, attempt_id, approved_level, status, reason, decided_by, decided_at)
+         values ($1, $2, $3, $4, $5, $6, $7)
+         on conflict (attempt_id) do update
+         set approved_level = excluded.approved_level, status = excluded.status,
+             reason = excluded.reason, decided_by = excluded.decided_by, decided_at = excluded.decided_at`,
+        [randomUUID(), input.attemptId, input.approvedLevel, decisionStatus, input.reason, input.reviewerId, decidedAt]
+      );
+      await client.query(
+        `update assessment_attempts set status = $2, updated_at = $3 where id = $1`,
+        [input.attemptId, input.status, decidedAt]
+      );
+      if (input.status === "approved" && input.approvedLevel) {
+        await client.query(
+          `update enrollments set cefr = $2, cefr_approved = true where learner_id = $1`,
+          [attempt.learner_id, input.approvedLevel]
+        );
+      }
+      await client.query(
+        `insert into audit_events
+           (id, organization_id, actor_user_id, action, entity_type, entity_id, payload, trace_id)
+         values ($1, $2, $3, 'assessment.decision', 'assessment_attempt', $4, $5::jsonb, $6)`,
+        [randomUUID(), attempt.organization_id, input.reviewerId, input.attemptId,
+          JSON.stringify({ status: input.status, approvedLevel: input.approvedLevel, reason: input.reason }), randomUUID()]
+      );
+      await client.query("commit");
+      return {
+        attemptId: input.attemptId,
+        status: input.status,
+        approvedLevel: input.approvedLevel,
+        reason: input.reason,
+        decidedBy: input.reviewerId,
+        decidedAt
+      };
+    } catch (error) {
+      await client.query("rollback");
+      throw error;
+    } finally {
+      client.release();
+    }
   }
 }
 

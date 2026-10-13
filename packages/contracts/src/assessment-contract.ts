@@ -77,6 +77,7 @@ export interface AssessmentAttemptView {
   responses: AssessmentResponseView[];
   sectionStatuses: Record<AssessmentSectionCode, AssessmentSectionStatus>;
   sectionScores?: Partial<Record<AssessmentSectionCode, number | null>>;
+  audioPlayCounts: Record<string, number>;
   totalScore?: number | null;
   suggestedLevel?: CefrLevel | null;
 }
@@ -91,4 +92,30 @@ export interface SaveAssessmentResponseInput {
   value: string;
   evidenceType: AssessmentEvidenceType;
   artifactKey?: string;
+}
+
+export interface AssessmentReviewQueueItem {
+  attemptId: string;
+  learnerId: string;
+  learnerName: string;
+  kind: AssessmentKind;
+  title: string;
+  submittedAt: string;
+  sectionScores: Partial<Record<AssessmentSectionCode, number>>;
+  suggestedLevel: CefrLevel | null;
+}
+
+export interface AssessmentDecisionInput {
+  status: "approved" | "needs_retry";
+  approvedLevel?: CefrLevel;
+  reason: string;
+}
+
+export interface AssessmentDecisionView {
+  attemptId: string;
+  status: "approved" | "needs_retry";
+  approvedLevel: CefrLevel | null;
+  reason: string;
+  decidedBy: string;
+  decidedAt: string;
 }
