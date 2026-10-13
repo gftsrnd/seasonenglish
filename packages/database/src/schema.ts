@@ -174,6 +174,7 @@ export const aiRuns = pgTable("ai_runs", {
   id: uuid("id").primaryKey(), taskId: uuid("task_id").notNull().references(() => aiTasks.id), userId: uuid("user_id").references(() => users.id),
   promptVersionId: uuid("prompt_version_id").references(() => promptVersions.id), provider: text("provider").notNull(), model: text("model").notNull(),
   status: text("status").notNull(), inputHash: text("input_hash").notNull(), output: jsonb("output"), usage: jsonb("usage").notNull().default(emptyObject),
+  requestKey: text("request_key"),
   latencyMs: integer("latency_ms"), traceId: text("trace_id").notNull().unique(), errorCode: text("error_code"),
   createdAt: now(), completedAt: timestamp("completed_at", { withTimezone: true })
 });

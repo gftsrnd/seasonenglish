@@ -1,15 +1,15 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { BrowserRouter, Navigate, NavLink, Route, Routes, useNavigate, useParams, useSearchParams } from "react-router";
 import type {
   AssessmentKind, AssessmentLevelFormSlotView, AssessmentReviewOverviewView, AssessmentSectionCode, AssessmentView,
-  CefrLevel, ContentLessonMatrixView, ContentLessonSetVersionView, ContentPromptSettingsView,
+  CefrLevel, CoachView, ContentLessonMatrixView, ContentLessonSetVersionView, ContentPromptSettingsView,
   ContentReviewView, ContentWeekFrameView,
   LearnerAvatarData, LearnerHomeView, LearnerProfileData, LearnerProfileView, LearnerProgressView,
   LessonView, MicroLessonView, SessionView
 } from "@e4s/contracts";
 import { apiClient } from "./api-client.js";
 import { EntryScreen } from "./features/auth/index.js";
-import { Assessment, Avatar, Home, Lesson, Micro, Onboard, Profile } from "./pages/learner/index.js";
+import { Assessment, Avatar, Coach, Home, Lesson, Micro, Onboard, Profile } from "./pages/learner/index.js";
 import { LessonSet, Lessons, LevelApproval, LevelForms, Prompts, Review, Weeks } from "./pages/operator/index.js";
 
 export function App() {
@@ -177,6 +177,7 @@ function LearnerShell({ session, onLogout }: { session: SessionView; onLogout: (
       <Route path="/test/:kind" element={<AssessmentRoute />} />
       <Route path="/lesson/:lessonId" element={<LessonRoute />} />
       <Route path="/micro/:microLessonId" element={<MicroRoute />} />
+      <Route path="/coach" element={<CoachRoute />} />
       <Route path="/profile" element={<ProfileRoute />} />
     </Routes></div>
   </div>;
@@ -299,6 +300,28 @@ function MicroRoute() {
     lesson={lesson}
     onSubmit={async (answer) => setLesson(await apiClient.submitMicroAttempt(lesson.id, answer))}
     onComplete={async () => setLesson(await apiClient.completeMicroLesson(lesson.id))}
+  />;
+}
+
+function CoachRoute() {
+  const [view, setView] = useState<CoachView>();
+  const [error, setError] = useState("");
+  const pending = useRef<{ requestId: string; message: string } | undefined>(undefined);
+  useEffect(() => { void apiClient.getCoach().then(setView).catch(() => setError("Không tải được cuộc trò chuyện với Season.")); }, []);
+  if (!view) return error ? <ErrorState message={error} /> : <Loading label="Đang mở cuộc trò chuyện" />;
+  return <Coach
+    view={view}
+    onSend={async (message) => {
+      const request = pending.current?.message === message
+        ? pending.current
+        : { requestId: crypto.randomUUID(), message };
+      pending.current = request;
+      const next = await apiClient.sendCoachMessage(request);
+      pending.current = undefined;
+      setView(next);
+    }}
+    onPersonaChange={async (persona) => setView(await apiClient.setCoachPersona(persona))}
+    onNewChat={async () => { pending.current = undefined; setView(await apiClient.clearCoach()); }}
   />;
 }
 

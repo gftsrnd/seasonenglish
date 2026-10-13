@@ -16,6 +16,9 @@ import type {
   ContentReviewView,
   ContentWeekFrameView,
   ContentWeekInput,
+  CoachFeedbackView,
+  CoachPersona,
+  CoachView,
   LearnerProfileData,
   LearnerProgressView,
   LevelReadinessMetric,
@@ -1304,7 +1307,14 @@ class ContentRepository {
             grammar: numberOrNull(rubric.grammar)
           },
           suggestions: Array.isArray(feedback.suggestions)
-            ? feedback.suggestions.filter((value): value is string => typeof value === "string") : []
+            ? feedback.suggestions.flatMap((value) => {
+                if (typeof value === "string") return [value];
+                if (!value || typeof value !== "object" || Array.isArray(value)) return [];
+                const suggestion = value as Record<string, unknown>;
+                if (typeof suggestion.original !== "string" || typeof suggestion.corrected !== "string") return [];
+                const explanation = typeof suggestion.explanation === "string" ? ` — ${suggestion.explanation}` : "";
+                return [`${suggestion.original} → ${suggestion.corrected}${explanation}`];
+              }) : []
         };
       })
     };
@@ -1952,6 +1962,228 @@ class CoachRepository {
     );
     return result.rows;
   }
+
+  async currentForLearner(learnerId: string, aiAvailable: boolean): Promise<CoachView | null> {
+    const context = await this.pool.query<{
+      display_name: string; cefr: CefrLevel; topic: string; scenario: Record<string, unknown> | null;
+      session_id: string | null;
+    }>(
+      `select u.display_name, e.cefr, pw.topic, cs.id as session_id, cs.scenario
+       from users u
+       join enrollments e on e.learner_id = u.id
+       join programs p on p.id = e.program_id and p.status = 'active'
+       join program_weeks pw on pw.program_id = p.id
+         and pw.week_number = coalesce(p.current_week_override,
+           greatest(1, least(p.week_count, ((current_date - p.start_date) / 7) + 1)))
+       left join lateral (
+         select id, scenario from coach_sessions
+         where learner_id = u.id and status = 'active'
+         order by started_at desc limit 1
+       ) cs on true
+       where u.id = $1 and u.role = 'learner' and u.status = 'active'
+       order by e.enrolled_at desc limit 1`,
+      [learnerId]
+    );
+    const row = context.rows[0];
+    if (!row) return null;
+    let sessionId = row.session_id;
+    let scenario = row.scenario ?? {};
+    if (!sessionId) {
+      sessionId = randomUUID();
+      scenario = { title: row.topic, persona: "informal" };
+      await this.pool.query(
+        `insert into coach_sessions (id, learner_id, scenario, status)
+         values ($1, $2, $3::jsonb, 'active')`,
+        [sessionId, learnerId, JSON.stringify(scenario)]
+      );
+    }
+    const [turns, counters, vocabularyRows] = await Promise.all([
+      this.pool.query<{
+        id: string; speaker: string; content: Record<string, unknown>;
+        feedback: Record<string, unknown> | null; created_at: Date;
+      }>(
+        `select id, speaker, content, feedback, created_at from coach_turns
+         where session_id = $1 order by turn_number, created_at`, [sessionId]
+      ),
+      this.pool.query<{ daily_used: string; weekly_turns: string }>(
+        `select
+           count(*) filter (where ct.speaker = 'learner' and ct.created_at >= current_date)::text as daily_used,
+           count(*) filter (where ct.speaker = 'learner' and ct.created_at >= date_trunc('week', now()))::text as weekly_turns
+         from coach_turns ct join coach_sessions cs on cs.id = ct.session_id
+         where cs.learner_id = $1`, [learnerId]
+      ),
+      this.pool.query<{ content: Record<string, unknown> }>(
+        `select lv.content
+         from enrollments e
+         join programs p on p.id = e.program_id and p.status = 'active'
+         join program_weeks pw on pw.program_id = p.id
+           and pw.week_number = coalesce(p.current_week_override,
+             greatest(1, least(p.week_count, ((current_date - p.start_date) / 7) + 1)))
+         join lesson_sets ls on ls.program_week_id = pw.id and ls.cefr = e.cefr
+         join lesson_set_versions lsv on lsv.lesson_set_id = ls.id and lsv.status = 'published'
+         join lessons l on l.lesson_set_version_id = lsv.id
+         join lateral (
+           select content from lesson_versions
+           where lesson_id = l.id and status = 'published'
+           order by version desc limit 1
+         ) lv on true
+         where e.learner_id = $1 order by l.day_number`, [learnerId]
+      )
+    ]);
+    const messages: CoachView["messages"] = [];
+    const openedWords = new Set<string>();
+    for (const turn of turns.rows) {
+      const text = typeof turn.content.text === "string" ? turn.content.text : "";
+      const feedback = coachFeedback(turn.feedback);
+      const feedbackRecord = turn.feedback ?? {};
+      if (Array.isArray(feedbackRecord.usedWords)) {
+        for (const word of feedbackRecord.usedWords) if (typeof word === "string") openedWords.add(word.toLowerCase());
+      }
+      if (turn.speaker === "coach") {
+        if (text) messages.push({ id: turn.id, speaker: "coach", text, createdAt: turn.created_at.toISOString() });
+        continue;
+      }
+      if (text) messages.push({ id: turn.id, speaker: "learner", text, createdAt: turn.created_at.toISOString() });
+      const coachText = typeof feedbackRecord.coachText === "string" ? feedbackRecord.coachText : "";
+      if (coachText) messages.push({
+        id: `${turn.id}:coach`, speaker: "coach", text: coachText,
+        createdAt: turn.created_at.toISOString(), ...(feedback ? { feedback } : {})
+      });
+    }
+    if (!messages.some((message) => message.speaker === "coach")) {
+      const firstName = row.display_name.trim().split(/\s+/).at(-1) ?? row.display_name;
+      messages.unshift({
+        id: "welcome", speaker: "coach", text: `Hi ${firstName}! I'm Season. What do you do at work?`,
+        createdAt: new Date(0).toISOString()
+      });
+    }
+    const vocabulary = vocabularyRows.rows.flatMap(({ content }) => {
+      const parts = Array.isArray(content.parts) ? content.parts : [];
+      const vocabularyPart = parts.find((part) =>
+        part && typeof part === "object" && !Array.isArray(part) && (part as Record<string, unknown>).code === "vocabulary"
+      ) as Record<string, unknown> | undefined;
+      const vocabularyContent = vocabularyPart?.content;
+      const items = vocabularyContent && typeof vocabularyContent === "object" && !Array.isArray(vocabularyContent)
+        && Array.isArray((vocabularyContent as Record<string, unknown>).items)
+        ? (vocabularyContent as Record<string, unknown>).items as unknown[] : [];
+      return items.flatMap((item) => {
+        if (!item || typeof item !== "object" || Array.isArray(item)) return [];
+        const value = item as Record<string, unknown>;
+        const word = typeof value.word === "string" ? value.word : "";
+        if (!word) return [];
+        return [{ word, meaning: typeof value.meaning === "string" ? value.meaning : "", opened: openedWords.has(word.toLowerCase()) }];
+      });
+    }).slice(0, 15);
+    const count = counters.rows[0] ?? { daily_used: "0", weekly_turns: "0" };
+    return {
+      sessionId, topic: row.topic, cefr: row.cefr,
+      persona: scenario.persona === "formal" ? "formal" : "informal",
+      aiAvailable, daily: { used: Number(count.daily_used), limit: 20 },
+      weekly: { turns: Number(count.weekly_turns), target: 2 }, messages, vocabulary
+    };
+  }
+
+  async saveAiTurn(input: {
+    learnerId: string;
+    sessionId: string;
+    requestId: string;
+    message: string;
+    taskId: string;
+    promptVersionId: string;
+    output: {
+      relevant: boolean; relevanceNote: string; reply: string;
+      rubric: { meaning: number; vocabulary: number; grammar: number };
+      suggestions: Array<{ original: string; corrected: string; explanation: string }>;
+      correctedText: string; usedWords: string[];
+    };
+    metadata: {
+      traceId: string; provider: string; model: string; inputHash: string;
+      usage: { inputTokens?: number; outputTokens?: number; totalTokens?: number }; latencyMs: number;
+    };
+  }): Promise<boolean> {
+    const client = await this.pool.connect();
+    try {
+      await client.query("begin");
+      const locked = await client.query(
+        "select id from coach_sessions where id = $1 and learner_id = $2 and status = 'active' for update",
+        [input.sessionId, input.learnerId]
+      );
+      if (!locked.rowCount) throw new Error("COACH_SESSION_NOT_FOUND");
+      const runId = randomUUID();
+      const inserted = await client.query<{ id: string }>(
+        `insert into ai_runs
+           (id, task_id, user_id, prompt_version_id, provider, model, status, input_hash,
+            output, usage, latency_ms, trace_id, request_key, completed_at)
+         values ($1, $2, $3, $4, $5, $6, 'succeeded', $7, $8::jsonb, $9::jsonb, $10, $11, $12, now())
+         on conflict (user_id, task_id, request_key) where request_key is not null do nothing
+         returning id`,
+        [runId, input.taskId, input.learnerId, input.promptVersionId, input.metadata.provider,
+          input.metadata.model, input.metadata.inputHash, JSON.stringify(input.output),
+          JSON.stringify(input.metadata.usage), input.metadata.latencyMs, input.metadata.traceId, input.requestId]
+      );
+      if (!inserted.rows[0]) {
+        await client.query("rollback");
+        return false;
+      }
+      const next = await client.query<{ number: string }>(
+        "select (coalesce(max(turn_number), 0) + 1)::text as number from coach_turns where session_id = $1",
+        [input.sessionId]
+      );
+      await client.query(
+        `insert into coach_turns (id, session_id, turn_number, speaker, content, feedback, ai_run_id)
+         values ($1, $2, $3, 'learner', $4::jsonb, $5::jsonb, $6)`,
+        [randomUUID(), input.sessionId, Number(next.rows[0]?.number ?? 1),
+          JSON.stringify({ text: input.message, requestId: input.requestId }),
+          JSON.stringify({
+            coachText: input.output.reply, relevant: input.output.relevant,
+            relevanceNote: input.output.relevanceNote, rubric: input.output.rubric,
+            suggestions: input.output.suggestions, correctedText: input.output.correctedText,
+            usedWords: input.output.usedWords, checked: false
+          }), runId]
+      );
+      await client.query("commit");
+      return true;
+    } catch (error) {
+      await client.query("rollback");
+      throw error;
+    } finally { client.release(); }
+  }
+
+  async setPersona(learnerId: string, persona: CoachPersona): Promise<void> {
+    await this.pool.query(
+      `update coach_sessions set scenario = jsonb_set(scenario, '{persona}', to_jsonb($2::text), true)
+       where id = (select id from coach_sessions where learner_id = $1 and status = 'active' order by started_at desc limit 1)`,
+      [learnerId, persona]
+    );
+  }
+
+  async archiveCurrent(learnerId: string): Promise<void> {
+    await this.pool.query(
+      `update coach_sessions set status = 'completed', completed_at = now()
+       where id = (select id from coach_sessions where learner_id = $1 and status = 'active' order by started_at desc limit 1)`,
+      [learnerId]
+    );
+  }
+}
+
+function coachFeedback(value: Record<string, unknown> | null): CoachFeedbackView | null {
+  if (!value || !value.rubric || typeof value.rubric !== "object" || Array.isArray(value.rubric)) return null;
+  const rubric = value.rubric as Record<string, unknown>;
+  const suggestions = Array.isArray(value.suggestions) ? value.suggestions.flatMap((item) => {
+    if (!item || typeof item !== "object" || Array.isArray(item)) return [];
+    const entry = item as Record<string, unknown>;
+    if (typeof entry.original !== "string" || typeof entry.corrected !== "string" || typeof entry.explanation !== "string") return [];
+    return [{ original: entry.original, corrected: entry.corrected, explanation: entry.explanation }];
+  }) : [];
+  return {
+    relevant: value.relevant !== false,
+    relevanceNote: typeof value.relevanceNote === "string" ? value.relevanceNote : "",
+    rubric: {
+      meaning: Number(rubric.meaning ?? 0), vocabulary: Number(rubric.vocabulary ?? 0), grammar: Number(rubric.grammar ?? 0)
+    },
+    suggestions,
+    correctedText: typeof value.correctedText === "string" ? value.correctedText : ""
+  };
 }
 
 class EngagementRepository {
@@ -2014,6 +2246,40 @@ class AiRunRepository {
       [userId]
     );
     return result.rows;
+  }
+
+  async requestExists(userId: string, requestKey: string, taskKey: string): Promise<boolean> {
+    const result = await this.pool.query(
+      `select 1 from ai_runs ar join ai_tasks at on at.id = ar.task_id
+       where ar.user_id = $1 and ar.request_key = $2 and at.task_key = $3 limit 1`,
+      [userId, requestKey, taskKey]
+    );
+    return Boolean(result.rowCount);
+  }
+
+  async activeTaskPrompt(userId: string, taskKey: string): Promise<{
+    taskId: string; promptVersionId: string; prompt: string;
+  } | null> {
+    const result = await this.pool.query<{ task_id: string; prompt_version_id: string; prompt: string }>(
+      `select at.id as task_id, task_prompt.id as prompt_version_id,
+              concat_ws(E'\n\n', base_prompt.content, task_prompt.content) as prompt
+       from users u
+       join ai_tasks at on at.task_key = $2
+       join lateral (
+         select id, content from prompt_versions
+         where organization_id = u.organization_id and task_key = $2 and status = 'active'
+         order by version desc limit 1
+       ) task_prompt on true
+       left join lateral (
+         select content from prompt_versions
+         where organization_id = u.organization_id and task_key = 'system_rules' and status = 'active'
+         order by version desc limit 1
+       ) base_prompt on true
+       where u.id = $1`,
+      [userId, taskKey]
+    );
+    const row = result.rows[0];
+    return row ? { taskId: row.task_id, promptVersionId: row.prompt_version_id, prompt: row.prompt } : null;
   }
 }
 

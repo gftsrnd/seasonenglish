@@ -2,7 +2,10 @@ import { spawn } from "node:child_process";
 import { existsSync } from "node:fs";
 import { mkdir } from "node:fs/promises";
 import { join, resolve } from "node:path";
+import { loadEnvFile } from "node:process";
 import EmbeddedPostgres from "embedded-postgres";
+
+if (existsSync(resolve(".env"))) loadEnvFile(resolve(".env"));
 
 const databaseDir = resolve(".local/postgres");
 await mkdir(databaseDir, { recursive: true });

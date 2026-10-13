@@ -3,6 +3,7 @@ import type {
   AssessmentResponseView, AssessmentReviewOverviewView, AssessmentSectionCode, AssessmentView,
   CefrLevel, ContentLessonDraftInput, ContentLessonMatrixView, ContentLessonSetVersionView, ContentPromptKey,
   ContentPromptSettingsView, ContentReviewView, ContentWeekFrameView, ContentWeekInput,
+  CoachMessageInput, CoachPersona, CoachView,
   LearnerHomeView, LearnerProfileData, LearnerProfileView, LearnerProgressView,
   LessonProgressView, LessonView, MicroLessonView, SessionView
 } from "@e4s/contracts";
@@ -33,6 +34,10 @@ export const apiClient: AuthClient & {
   getMicroLesson(id: string): Promise<MicroLessonView>;
   submitMicroAttempt(id: string, answer: string): Promise<MicroLessonView>;
   completeMicroLesson(id: string): Promise<MicroLessonView>;
+  getCoach(): Promise<CoachView>;
+  sendCoachMessage(input: CoachMessageInput): Promise<CoachView>;
+  setCoachPersona(persona: CoachPersona): Promise<CoachView>;
+  clearCoach(): Promise<CoachView>;
   getAssessment(kind: AssessmentKind | "levelup"): Promise<AssessmentView>;
   startAssessment(kind: AssessmentKind | "levelup"): Promise<AssessmentView>;
   saveAssessmentResponse(attemptId: string, section: AssessmentSectionCode, taskKey: string, input: {
@@ -82,6 +87,10 @@ export const apiClient: AuthClient & {
   completeMicroLesson: (id) => request(`/api/v1/micro-lessons/${encodeURIComponent(id)}/complete`, {
     method: "POST", body: "{}"
   }),
+  getCoach: () => request("/api/v1/coach"),
+  sendCoachMessage: (input) => request("/api/v1/coach/messages", { method: "POST", body: JSON.stringify(input) }),
+  setCoachPersona: (persona) => request("/api/v1/coach/persona", { method: "PUT", body: JSON.stringify({ persona }) }),
+  clearCoach: () => request("/api/v1/coach/session", { method: "DELETE", body: "{}" }),
   getAssessment: (kind) => request(`/api/v1/assessments/${encodeURIComponent(kind)}`),
   startAssessment: (kind) => request(`/api/v1/assessments/${encodeURIComponent(kind)}/start`, { method: "POST", body: "{}" }),
   saveAssessmentResponse: (attemptId, section, taskKey, input) => request(

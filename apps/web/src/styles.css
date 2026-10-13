@@ -109,6 +109,65 @@ button:disabled { cursor: not-allowed; opacity: .48; }
 .activity-links small { grid-column: 2; color: var(--muted); font-size: 11px; }
 .activity-icon { grid-row: 1 / 3; display: grid; place-items: center; width: 30px; height: 30px; border-radius: 8px; background: var(--primary-soft); color: var(--primary-dark); font-weight: 800; }
 
+.learner-page--coach { width: min(980px, calc(100% - 40px)); }
+.learner-page--coach > .coach-card { overflow: hidden; padding: 0; }
+.coach-header { display: flex; align-items: center; gap: 11px; padding: 14px 16px; border-bottom: 1px solid var(--line); }
+.season-emblem { width: 46px; height: 46px; flex: 0 0 46px; display: grid; place-items: center; border-radius: 50%; background: var(--primary-soft); }
+.season-emblem svg { width: 25px; height: 25px; fill: #f29a38; stroke: #b95d20; stroke-width: 1.8; stroke-linecap: round; }
+.coach-title { min-width: 0; flex: 1; }
+.coach-title h1 { margin: 0; font-size: 1.2rem; line-height: 1.2; }
+.coach-title p { margin: 4px 0 0; color: var(--muted); font-size: 11px; font-weight: 650; }
+.coach-actions { display: flex; gap: 7px; }
+.coach-actions button { min-height: 34px; padding: 6px 11px; font-size: 11px; }
+.coach-actions button.is-active { border-color: var(--primary); background: var(--primary); }
+.coach-warning { display: flex; align-items: center; gap: 10px; margin: 12px; border-radius: 10px; background: #fff1cf; padding: 10px 13px; font-size: 11px; }
+.season-oops { font-size: 25px; }
+.coach-limits { display: flex; align-items: flex-start; gap: 12px; padding: 8px 16px; border-bottom: 1px solid var(--line); }
+.coach-limit-badges { display: flex; flex-wrap: wrap; gap: 6px; }
+.coach-badge { border-radius: 999px; background: #f3f1ed; padding: 3px 8px; font-size: 9px; white-space: nowrap; }
+.coach-badge.is-primary { background: var(--primary); }
+.coach-badge.is-success { background: var(--success); }
+.coach-badge.is-danger { background: var(--danger-soft); }
+.coach-limits details { min-width: 210px; flex: 1; font-size: 10px; }
+.coach-limits summary { cursor: pointer; font-weight: 700; }
+.coach-limits p { margin: 6px 0 0; color: var(--muted); }
+.coach-chat { min-height: 240px; max-height: 52vh; overflow-y: auto; display: flex; flex-direction: column; gap: 9px; background: #f4f3ef; padding: 16px; }
+.coach-message-group { display: contents; }
+.coach-message { max-width: 85%; border-radius: 20px 20px 20px 6px; background: #fff; padding: 10px 14px; white-space: pre-wrap; overflow-wrap: anywhere; font-size: 12px; line-height: 1.45; }
+.coach-message--learner { align-self: flex-end; border: 1px solid #f2d8ba; border-radius: 20px 20px 6px 20px; background: #fff0dc; }
+.coach-message--coach { align-self: flex-start; }
+.coach-thinking { display: flex; align-items: center; gap: 8px; color: var(--muted); }
+.coach-feedback { align-self: flex-start; width: min(510px, 88%); border-left: 4px solid var(--primary); border-radius: 11px; background: #fff; padding: 11px 13px; font-size: 11px; }
+.coach-feedback.is-off-topic { border-left-color: #c75b4e; background: #fff0ed; }
+.coach-feedback-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 9px; }
+.coach-feedback-heading > div { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 5px; }
+.coach-feedback-heading span { border-radius: 999px; background: #edf0df; padding: 3px 7px; font-size: 9px; }
+.coach-feedback p { margin: 5px 0; }
+.coach-fix + .coach-fix { margin-top: 7px; }
+.coach-fix mark { border-radius: 5px; background: #fff0dc; padding: 1px 5px; }
+.coach-fix small { color: #5e5850; }
+.coach-corrected { margin-top: 7px !important; }
+.coach-vocabulary { border-radius: 0 !important; padding: 8px 16px 2px !important; }
+.coach-vocabulary-heading { display: flex; justify-content: space-between; gap: 12px; color: var(--muted); font-size: 9px; }
+.coach-vocabulary-heading span { border-radius: 999px; background: #f3f1ed; padding: 2px 7px; color: var(--ink); }
+.coach-word-slots { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 7px; }
+.coach-word { min-height: 27px; display: inline-flex; align-items: center; border: 1px dashed #d7d2cb; border-radius: 999px; background: #f2f0ec; padding: 4px 9px; color: #746f67; font-size: 9px; font-weight: 550; }
+.coach-word.is-open { border-style: solid; border-color: #bfce9e; background: var(--success); color: var(--ink); }
+.coach-compose { display: grid; grid-template-columns: 1fr 42px 42px; gap: 8px; padding: 10px 16px 15px; }
+.coach-compose input { min-width: 0; border-radius: 999px; }
+.coach-mic, .coach-send { width: 42px; min-height: 42px; display: grid; place-items: center; padding: 0; }
+.coach-send { border-color: #efbe8c; background: #f5c794; }
+.coach-mic svg, .coach-send svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+.coach-error { margin: -8px 16px 13px; color: #9c392f; font-size: 10px; }
+.coach-footnote { margin: 10px 0 0; color: #625e57; font-size: 10px; }
+
+@media (max-width: 680px) {
+  .coach-header { align-items: flex-start; flex-wrap: wrap; }
+  .coach-actions { width: 100%; padding-left: 57px; }
+  .coach-limits { display: grid; }
+  .coach-message, .coach-feedback { max-width: 94%; width: auto; }
+}
+
 .readiness-card .section-heading { align-items: center; }
 .status-chip { border-radius: 999px; background: #f1ede7; padding: 5px 9px; color: var(--muted); font-size: 11px; font-weight: 700; }
 .status-chip--success { background: var(--success); color: #4e5b25; }

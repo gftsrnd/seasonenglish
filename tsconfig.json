@@ -5,6 +5,7 @@
     { "path": "./packages/database" },
     { "path": "./packages/test-support" },
     { "path": "./packages/domain" },
+    { "path": "./packages/ai" },
     { "path": "./apps/api" },
     { "path": "./apps/web" }
   ]

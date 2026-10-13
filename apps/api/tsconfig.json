@@ -6,6 +6,7 @@
     "outDir": "dist"
   },
   "references": [
+    { "path": "../../packages/ai" },
     { "path": "../../packages/contracts" },
     { "path": "../../packages/database" },
     { "path": "../../packages/domain" }
