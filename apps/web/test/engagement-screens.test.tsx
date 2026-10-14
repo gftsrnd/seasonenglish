@@ -265,6 +265,22 @@ describe("engagement screens preserve Thu's visible flow", () => {
     expect(screen.getAllByTestId("typing-character").every((cell) => cell.textContent === "")).toBe(true);
   });
 
+  it("keeps a completed game retryable when saving its result fails", async () => {
+    const user = userEvent.setup();
+    const onFinish = vi.fn().mockRejectedValueOnce(new Error("offline")).mockResolvedValueOnce(undefined);
+    render(<Game descriptor={games[0]!} wordSet={{ ...wordSet, words: [
+      { id: "cat", english: "cat", vietnamese: "con mèo", definition: "a small pet", partOfSpeech: "noun" }
+    ] }} onFinish={onFinish} />);
+    await user.click(screen.getByRole("button", { name: /bắt đầu chơi/i }));
+    await user.keyboard("cat");
+
+    const retry = await screen.findByRole("button", { name: /thử gửi lại/i }, { timeout: 2_000 });
+    expect(screen.getByRole("alert")).toHaveTextContent(/chưa lưu được kết quả/i);
+    await user.click(retry);
+    await waitFor(() => expect(onFinish).toHaveBeenCalledTimes(2));
+    expect(onFinish.mock.calls[1]?.[0]).toBe(onFinish.mock.calls[0]?.[0]);
+  });
+
   it("keeps Arena locked below B1 and Duel on its own route", () => {
     const locked: ArenaView = { eligible: false, requiredLevel: "B1", currentLevel: "A2", points: 0, wordSetTopic: null, learnerId: "u1", leaderboard: [], opponents: [], duels: [] };
     const { rerender } = render(<Arena view={locked} onChallenge={vi.fn()} />);
@@ -284,6 +300,21 @@ describe("engagement screens preserve Thu's visible flow", () => {
     };
     rerender(<Duel view={duel} descriptor={games[0]!} onFinish={vi.fn()} />);
     expect(screen.getByRole("heading", { name: /thách đấu với lan/i })).toBeInTheDocument();
+  });
+
+  it("keeps an Arena challenge retryable when creating it fails", async () => {
+    const user = userEvent.setup();
+    const onChallenge = vi.fn().mockRejectedValueOnce(new Error("offline")).mockResolvedValueOnce(undefined);
+    render(<Arena view={{
+      eligible: true, requiredLevel: "B1", currentLevel: "B1", points: 0, wordSetTopic: "Sprint planning", learnerId: "u1",
+      leaderboard: [], opponents: [{ id: "u2", displayName: "Lan", cefr: "B1" }], duels: []
+    }} onChallenge={onChallenge} />);
+    await user.click(screen.getByRole("button", { name: /gửi lời thách đấu/i }));
+
+    expect(await screen.findByRole("alert")).toHaveTextContent(/chưa gửi được lời thách đấu/i);
+    expect(screen.getByLabelText("Đối thủ")).toHaveValue("u2");
+    await user.click(screen.getByRole("button", { name: /gửi lời thách đấu/i }));
+    await waitFor(() => expect(onChallenge).toHaveBeenCalledTimes(2));
   });
 
   it("keeps the certificate and pilot survey as separate one-screen flows", async () => {
@@ -310,5 +341,20 @@ describe("engagement screens preserve Thu's visible flow", () => {
     await user.selectOptions(screen.getByLabelText(/học chủ yếu lúc nào/i), "both");
     await user.click(screen.getByRole("button", { name: /gửi khảo sát/i }));
     expect(onSubmit).toHaveBeenCalledWith(expect.objectContaining({ rating: 5, studyTime: "both" }));
+  });
+
+  it("keeps survey answers available when saving fails", async () => {
+    const user = userEvent.setup();
+    const onSubmit = vi.fn().mockRejectedValueOnce(new Error("offline")).mockResolvedValueOnce(undefined);
+    render(<Survey view={{ state: "open", surveyKey: "pilot_end" }} onSubmit={onSubmit} />);
+    await user.click(screen.getByRole("button", { name: "4" }));
+    await user.selectOptions(screen.getByLabelText(/học chủ yếu lúc nào/i), "outside");
+    await user.click(screen.getByRole("button", { name: /gửi khảo sát/i }));
+
+    expect(await screen.findByRole("alert")).toHaveTextContent(/chưa gửi được khảo sát/i);
+    expect(screen.getByRole("button", { name: "4" })).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByLabelText(/học chủ yếu lúc nào/i)).toHaveValue("outside");
+    await user.click(screen.getByRole("button", { name: /gửi khảo sát/i }));
+    await waitFor(() => expect(onSubmit).toHaveBeenCalledTimes(2));
   });
 });

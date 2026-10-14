@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import type { DuelView, GameDescriptor, GameResultView, GameWordSetView } from "@e4s/contracts";
 import { CrosswordGame } from "./games/CrosswordGame.js";
 import { ScrambleGame } from "./games/ScrambleGame.js";
@@ -20,10 +20,27 @@ export function Game({ descriptor, wordSet, onFinish, backHref = "/games", resul
 }) {
   const [started, setStarted] = useState(Boolean(result));
   const [playKey, setPlayKey] = useState(0);
+  const [submissionError, setSubmissionError] = useState(false);
+  const [retrying, setRetrying] = useState(false);
+  const pendingFinish = useRef<Parameters<FinishGame>[0] | undefined>(undefined);
+  const submitResult: FinishGame = async (input) => {
+    const pending = pendingFinish.current ?? input;
+    pendingFinish.current = pending;
+    setSubmissionError(false);
+    setRetrying(true);
+    try {
+      await onFinish(pending);
+      pendingFinish.current = undefined;
+    } catch {
+      setSubmissionError(true);
+    } finally {
+      setRetrying(false);
+    }
+  };
   return <main className={`learner-page engagement-page game-screen game-screen--${descriptor.key}`}>
     <header className="engagement-title game-heading"><div><h1>{descriptor.icon} {descriptor.name}</h1><p>{wordSet.topic} · {wordSet.words.length} từ</p>{descriptor.best ? <span className="record-pill">Kỷ lục: {descriptor.best.score}/{descriptor.best.maxScore}</span> : <span className="record-pill">Kỷ lục: chưa có</span>}</div><a className="button" href={backHref}>Thoát game</a></header>
     {!started ? <section className="engagement-card game-tutorial"><div className="lively-mark" aria-hidden="true"><SeasonMark /></div><div><span className="eyebrow">Hướng dẫn chơi</span><h2>{descriptor.icon} {descriptor.name} – {descriptor.goal}</h2><ol>{descriptor.instructions.map((item) => <li key={item}>{item}</li>)}</ol><p><strong>Tính điểm:</strong> {descriptor.scoring}</p><p className="muted">Bộ từ: {wordSet.topic} · {wordSet.words.length} từ. Nút <b>Thoát game</b> dừng trò; lượt dở không được tính.</p><div className="form-action-row"><button className="button button--primary" type="button" onClick={() => setStarted(true)}>▶ Bắt đầu chơi</button><a className="button" href={backHref}>← Quay lại</a></div></div></section>
-      : <section className="engagement-card game-board"><div key={playKey}>{renderGame(descriptor.key, wordSet, onFinish)}</div>{result ? <GameOver descriptor={descriptor} wordSet={wordSet} result={result} duelOutcome={duelOutcome} onReplay={() => { setPlayKey((value) => value + 1); onReplay?.(); }} /> : null}</section>}
+      : <section className="engagement-card game-board"><div key={playKey}>{renderGame(descriptor.key, wordSet, submitResult)}</div>{submissionError ? <div className="game-submit-error" role="alert"><p>Chưa lưu được kết quả lượt này. Kiểm tra kết nối rồi thử gửi lại.</p><button className="button button--primary" type="button" disabled={retrying} onClick={() => { if (pendingFinish.current) void submitResult(pendingFinish.current); }}>{retrying ? "Đang gửi lại…" : "Thử gửi lại"}</button></div> : null}{result ? <GameOver descriptor={descriptor} wordSet={wordSet} result={result} duelOutcome={duelOutcome} onReplay={() => { pendingFinish.current = undefined; setSubmissionError(false); setPlayKey((value) => value + 1); onReplay?.(); }} /> : null}</section>}
   </main>;
 }
 

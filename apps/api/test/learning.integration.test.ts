@@ -1,5 +1,5 @@
 import { Pool } from "pg";
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { migrateDatabase, resetPublicSchema, seedDemo } from "@e4s/database";
 import { createCredentialHash } from "@e4s/domain/identity";
 import { DEMO_IDS } from "@e4s/test-support";
@@ -86,28 +86,34 @@ describe("learner profile, home, lesson and progress API", () => {
   });
 
   it("returns the existing home capabilities instead of reducing home to a lesson list", async () => {
-    const response = await app.inject({ method: "GET", url: "/api/v1/learner/home", headers: { cookie } });
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-10-13T12:00:00.000Z"));
+    try {
+      const response = await app.inject({ method: "GET", url: "/api/v1/learner/home", headers: { cookie } });
 
-    expect(response.statusCode, response.body).toBe(200);
-    expect(response.json()).toMatchObject({
-      program: { name: "E4S Pilot" },
-      schedule: {
-        daysPerWeek: 5,
-        lessonMinutes: 10,
-        days: [
-          { label: "T2", status: "attended" },
-          { label: "T3", status: "today" },
-          { label: "T4", status: "upcoming" },
-          { label: "T5", status: "upcoming" },
-          { label: "T6", status: "upcoming" }
-        ]
-      },
-      coach: { turnsThisWeek: 2, targetTurns: 2, href: "/coach" },
-      practice: { status: "locked", href: "/practice" },
-      levelReadiness: { targetLevel: "B1", windowDays: 14, eligible: false, examAvailable: true },
-      finalAssessment: { available: true, href: "/test/final" }
-    });
-    expect(response.json().levelReadiness.criteria).toHaveLength(4);
+      expect(response.statusCode, response.body).toBe(200);
+      expect(response.json()).toMatchObject({
+        program: { name: "E4S Pilot" },
+        schedule: {
+          daysPerWeek: 5,
+          lessonMinutes: 10,
+          days: [
+            { label: "T2", status: "attended" },
+            { label: "T3", status: "today" },
+            { label: "T4", status: "upcoming" },
+            { label: "T5", status: "upcoming" },
+            { label: "T6", status: "upcoming" }
+          ]
+        },
+        coach: { turnsThisWeek: 2, targetTurns: 2, href: "/coach" },
+        practice: { status: "locked", href: "/practice" },
+        levelReadiness: { targetLevel: "B1", windowDays: 14, eligible: false, examAvailable: true },
+        finalAssessment: { available: true, href: "/test/final" }
+      });
+      expect(response.json().levelReadiness.criteria).toHaveLength(4);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("preserves lesson content order and resumes server-side progress evidence", async () => {

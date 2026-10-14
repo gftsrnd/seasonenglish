@@ -3,7 +3,7 @@ import { BrowserRouter, Navigate, NavLink, Route, Routes, useNavigate, useParams
 import type {
   AssessmentKind, AssessmentLevelFormSlotView, AssessmentReviewOverviewView, AssessmentSectionCode, AssessmentView,
   CefrLevel, CoachView, ContentLessonMatrixView, ContentLessonSetVersionView, ContentPromptSettingsView,
-  ArenaView, DuelView, GameHubView, GameKey, GameResultView, RewardView, SurveyView, WeeklyPracticeView,
+  ArenaView, DuelView, GameAnswerInput, GameHubView, GameKey, GameResultView, RewardView, SurveyView, WeeklyPracticeView,
   ContentReviewView, ContentWeekFrameView,
   LearnerAvatarData, LearnerHomeView, LearnerProfileData, LearnerProfileView, LearnerProgressView,
   LessonView, MicroLessonView, SessionView
@@ -357,13 +357,24 @@ function GameRoute() {
   const [view, setView] = useState<GameHubView>();
   const [result, setResult] = useState<GameResultView>();
   const [error, setError] = useState("");
+  const pendingSubmission = useRef<{ input: { answers: GameAnswerInput[]; hintsUsed?: number }; requestId: string } | undefined>(undefined);
   useEffect(() => { void apiClient.getGames().then(setView).catch(() => setError("Chưa có bộ từ cho mini game.")); }, []);
   if (!view) return error ? <ErrorState message={error} /> : <Loading label="Đang mở trò chơi" />;
   const descriptor = view.games.find((item) => item.key === game);
   if (!descriptor) return <Navigate to="/games" replace />;
-  return <GameScreen descriptor={descriptor} wordSet={view.wordSet} onFinish={async ({ answers, hintsUsed }) => setResult(await apiClient.submitGameResult(descriptor.key, {
-    requestId: crypto.randomUUID(), answers, ...(hintsUsed === undefined ? {} : { hintsUsed })
-  }))} result={result} onReplay={() => setResult(undefined)} />;
+  return <GameScreen descriptor={descriptor} wordSet={view.wordSet} onFinish={async (input) => {
+    const pending = pendingSubmission.current?.input === input
+      ? pendingSubmission.current
+      : { input, requestId: crypto.randomUUID() };
+    pendingSubmission.current = pending;
+    const nextResult = await apiClient.submitGameResult(descriptor.key, {
+      requestId: pending.requestId,
+      answers: input.answers,
+      ...(input.hintsUsed === undefined ? {} : { hintsUsed: input.hintsUsed })
+    });
+    pendingSubmission.current = undefined;
+    setResult(nextResult);
+  }} result={result} onReplay={() => { pendingSubmission.current = undefined; setResult(undefined); }} />;
 }
 
 function ArenaRoute() {
