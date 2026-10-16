@@ -1,4 +1,5 @@
 import { useMemo, useRef, useState } from "react";
+import { Link } from "react-router";
 import { Badge, PageTitle } from "./shared.js";
 import { usePrototypeDialog } from "../shared/PrototypeModalRoot.js";
 
@@ -39,7 +40,7 @@ export function PrototypeManagerRewards() {
   };
   usePrototypeDialog(preview !== null, previewDialogRef, closePreview, previewCloseRef);
   return <div className="manager-page manager-rewards-page">
-    <PageTitle><a href="/mgr" className="small">← Tiến độ nhóm</a><h1>Giả lập phần thưởng</h1><p className="muted">Xem trước mọi trường hợp của mùa học mà học viên có thể gặp. Đây là bản giả lập: không đọc và không ghi dữ liệu của học viên nào.</p></PageTitle>
+    <PageTitle><Link to="/mgr" className="manager-page-back small">← Tiến độ nhóm</Link><h1>Giả lập phần thưởng</h1><p className="muted">Xem trước mọi trường hợp của mùa học mà học viên có thể gặp. Đây là bản giả lập: không đọc và không ghi dữ liệu của học viên nào.</p></PageTitle>
     <section className="card manager-reward-controls"><h3 className="manager-reward-controls-title">Chọn nhanh một trường hợp</h3><div className="row manager-reward-case-group" role="group" aria-label="Chọn nhanh một trường hợp" style={{ gap: 8 }}>{cases.map(([label, casePoints, caseBadges]) => <button className={`btn-sm ${points === casePoints && equalSets(earned, caseBadges) ? "btn-primary" : ""}`} type="button" key={label} aria-pressed={points === casePoints && equalSets(earned, caseBadges)} onClick={() => { setPoints(casePoints); setEarned([...caseBadges]); }}>{label}</button>)}</div>
       <div className="grid cols-2 manager-reward-config" style={{ marginTop: 14 }}><label className="field" htmlFor="reward-preview-points"><span>Số điểm giả lập (0–600)</span><input id="reward-preview-points" type="number" min="0" max="600" step="5" inputMode="numeric" value={points} onChange={(event) => setPoints(Math.max(0, Math.min(600, Math.round(Number(event.target.value) || 0))))} /></label><div className="field"><span id="reward-preview-badges-label">Huy hiệu đã có (bấm để bật/tắt)</span><div className="row manager-reward-badge-group" role="group" aria-labelledby="reward-preview-badges-label" style={{ gap: 8 }}>{badges.map(([id, icon, name, description]) => <button className={`btn-sm ${earned.includes(id) ? "btn-primary" : ""}`} type="button" key={id} title={description} aria-pressed={earned.includes(id)} onClick={() => setEarned((current) => current.includes(id) ? current.filter((item) => item !== id) : [...current, id])}>{icon} {name}</button>)}</div></div></div>
       <div className="row manager-reward-result" role="status" aria-live="polite" style={{ marginTop: 4 }}><b>Kết quả: cấp {level.index + 1}/{levels.length} · {level.name}</b></div>

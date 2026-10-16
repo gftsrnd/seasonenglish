@@ -46,6 +46,55 @@
   line-height: 1.2;
 }
 
+.manager-page-title__content > .manager-page-back {
+  display: inline-flex;
+  align-items: center;
+  min-height: 24px;
+  margin: 0 0 6px;
+  line-height: 1.3;
+  text-decoration: none;
+}
+
+.manager-page-title__content > .manager-page-back:hover {
+  text-decoration: underline;
+  text-decoration-thickness: 1.5px;
+  text-underline-offset: 3px;
+}
+
+.settings-recovery {
+  margin-top: 16px;
+  padding-top: 12px;
+  border-top: 1px solid var(--line);
+}
+
+.settings-recovery > summary {
+  cursor: pointer;
+  font-weight: 700;
+}
+
+.settings-recovery[open] > summary {
+  margin-bottom: 12px;
+}
+
+.settings-recovery__body {
+  min-width: 0;
+}
+
+.settings-recovery__body > .manager-recovery-inline {
+  margin-top: 0;
+}
+
+.manager-recovery-empty {
+  padding: 12px 14px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--surface-2);
+}
+
+.manager-recovery-empty p {
+  margin: 4px 0 0;
+}
+
 .manager-page-title__content p {
   max-width: 70ch;
   margin: 6px 0 0;

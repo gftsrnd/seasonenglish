@@ -94,6 +94,23 @@
   vertical-align: baseline;
 }
 
+/* Keep the page back-link on its own line so it cannot press into the title. */
+.prototype-operator .page-title > :first-child > .link-button:first-child {
+  display: flex;
+  width: fit-content;
+  min-height: 24px;
+  align-items: center;
+  margin: 0 0 8px;
+  line-height: 1.3;
+  text-decoration: none;
+}
+
+.prototype-operator .page-title > :first-child > .link-button:first-child:hover {
+  text-decoration: underline;
+  text-decoration-thickness: 1.5px;
+  text-underline-offset: 3px;
+}
+
 .prototype-operator .operator-page-title-actions {
   display: flex;
   align-items: center;

@@ -6,6 +6,7 @@ import { managerApiClient as apiClient } from "../../api/manager.js";
 import { PrototypeSettings } from "../settings/index.js";
 import { PrototypeManagerOperations } from "./Operations.js";
 import { PrototypeManagerProgress } from "./Progress.js";
+import { PrototypeManagerRecovery } from "./Recovery.js";
 import { PrototypeManagerReminders } from "./Reminders.js";
 import { PrototypeManagerReport } from "./Report.js";
 import { PrototypeManagerRewards } from "./Rewards.js";
@@ -40,6 +41,7 @@ export function ManagerRouteController({ role, currentUserId }: ManagerRouteCont
   return <Routes>
     <Route path="/mgr" element={role === "manager" ? <ProgressRoute /> : <Navigate replace to="/op" />} />
     <Route path="/mgr/ops" element={role === "manager" ? <OperationsRoute /> : <Navigate replace to="/op" />} />
+    <Route path="/mgr/recovery" element={<Navigate replace to={role === "manager" ? "/settings" : "/op"} />} />
     <Route path="/mgr/reminders" element={role === "manager" ? <RemindersRoute /> : <Navigate replace to="/op" />} />
     <Route path="/mgr/report" element={role === "manager" ? <ReportRoute currentUserId={currentUserId} /> : <Navigate replace to="/op" />} />
     <Route path="/mgr/rewards" element={role === "manager" ? <PrototypeManagerRewards /> : <Navigate replace to="/op" />} />
@@ -50,12 +52,11 @@ export function ManagerRouteController({ role, currentUserId }: ManagerRouteCont
 
 function ProgressRoute() {
   const [view, setView] = useState<ManagerProgressView>(); const [error, setError] = useState(""); const [notice, setNotice] = useState("");
-  const [deleteRequests, setDeleteRequests] = useState<ManagerDeleteRequestsView>(); const [trash, setTrash] = useState<ManagerTrashView>(); const [pinReports, setPinReports] = useState<ManagerPinReportsView>(); const [pinDirectory, setPinDirectory] = useState<ManagerAccountsView>(); const [reminders, setReminders] = useState<ManagerRemindersView>(); const [profile, setProfile] = useState<ManagerLearnerProfileView>();
-  const [purgeDialog, setPurgeDialog] = useState<{ accountId: string; accountName: string; confirmation: ManagerPurgeConfirmationView }>(); const [purging, setPurging] = useState(false);
+  const [deleteRequests, setDeleteRequests] = useState<ManagerDeleteRequestsView>(); const [pinReports, setPinReports] = useState<ManagerPinReportsView>(); const [pinDirectory, setPinDirectory] = useState<ManagerAccountsView>(); const [reminders, setReminders] = useState<ManagerRemindersView>(); const [profile, setProfile] = useState<ManagerLearnerProfileView>();
   const modal = usePrototypeModal();
   const load = async () => {
-    const [progress, requests, deleted, pins] = await Promise.all([apiClient.getManagerProgress(), apiClient.getManagerDeleteRequests(), apiClient.getManagerTrash(), apiClient.getManagerPinReports()]);
-    setView(progress); setDeleteRequests(requests); setTrash(deleted); setPinReports(pins);
+    const [progress, requests, pins] = await Promise.all([apiClient.getManagerProgress(), apiClient.getManagerDeleteRequests(), apiClient.getManagerPinReports()]);
+    setView(progress); setDeleteRequests(requests); setPinReports(pins);
     const [directory, queue] = await Promise.allSettled([apiClient.getManagerAccounts(), apiClient.getManagerReminders()]);
     if (directory.status === "fulfilled") setPinDirectory(directory.value);
     if (queue.status === "fulfilled") setReminders(queue.value);
@@ -71,30 +72,12 @@ function ProgressRoute() {
         if (request?.status === "pending" && await modal.confirm({ title: "Duyệt xoá tài khoản", message: <>Duyệt xoá quyền truy cập của <b>{request.learnerName}</b>? Dữ liệu học và audit vẫn được giữ để đối soát.</>, confirmLabel: "Duyệt xoá", cancelLabel: "Huỷ", tone: "danger" })) { await apiClient.decideManagerDeleteRequest(id, { status: "approved", note: "Đã xác nhận từ hàng đợi Quản lý." }); setNotice("Đã duyệt yêu cầu xoá tài khoản."); await load(); }
         return;
       }
-      if (await modal.confirm({ title: "Khôi phục tài khoản", message: "Khôi phục tài khoản này khỏi thùng rác?", confirmLabel: "Khôi phục", cancelLabel: "Huỷ" })) { await apiClient.restoreManagerTrashAccount(id); setNotice("Đã khôi phục tài khoản."); await load(); }
+      if (kind === "trash") return;
     } catch { setError("Không cập nhật được tác vụ vận hành."); }
-  };
-  const purgeOperationalItem = async (accountId: string) => {
-    setError("");
-    try {
-      const confirmation = await apiClient.requestManagerTrashPurgeConfirmation(accountId);
-      const accountName = trash?.accounts.find((account) => account.id === accountId)?.displayName ?? "tài khoản này";
-      setPurgeDialog({ accountId, accountName, confirmation });
-    } catch { setError("Không tạo được xác nhận xoá vĩnh viễn."); }
-  };
-  const confirmPurge = async (confirmationPhrase: string) => {
-    if (!purgeDialog) return;
-    setPurging(true); setError("");
-    try {
-      await apiClient.purgeManagerTrashAccount(purgeDialog.accountId, { confirmationToken: purgeDialog.confirmation.token, confirmationPhrase });
-      setPurgeDialog(undefined); setNotice("Đã xoá vĩnh viễn tài khoản."); await load();
-    } catch { setError("Không xoá vĩnh viễn được tài khoản. Token có thể đã hết hạn hoặc dữ liệu đang được tham chiếu."); }
-    finally { setPurging(false); }
   };
   const openProfile = async (learnerId: string) => { setError(""); try { setProfile(await apiClient.getManagerLearnerProfile(learnerId)); } catch { setError("Không tải được hồ sơ học viên."); } };
   const operationalProps = {
     ...(deleteRequests ? { deleteRequests: deleteRequests.requests.filter((item) => item.status === "pending").map((item) => ({ id: item.id, title: item.learnerName, detail: `${item.reason} · ${item.status}` })) } : {}),
-    ...(trash ? { trashedAccounts: trash.accounts.map((item) => ({ id: item.id, name: item.displayName, deletedAt: item.deletedAt })) } : {}),
     ...(pinReports ? { pinReports: pinReports.reports.filter((item) => item.status === "open").map((item) => ({ id: item.id, title: item.subjectName, detail: item.note })) } : {}),
     ...(pinDirectory ? { pinDirectory } : {}),
     onOpenOperationalItem: openOperationalItem
@@ -113,7 +96,7 @@ function ProgressRoute() {
     setError("");
     try { await apiClient.updateManagerAccountStatus(learnerId, "deleted"); await load(); setNotice("Đã xoá quyền truy cập của học viên."); } catch { setError("Không xoá được tài khoản học viên."); }
   };
-  return <>{notice ? <div className="banner ok"><div className="body small">{notice}</div></div> : null}<PrototypeManagerProgress view={view} {...(reminders ? { pendingReminderCount: reminders.candidates.length } : {})} onOpenLearnerProfile={openProfile} {...operationalProps} onPurgeOperationalItem={purgeOperationalItem} onDeleteLearner={deleteLearner} />{profile ? <LearnerProfileDialog view={profile} onClose={() => setProfile(undefined)} /> : null}{purgeDialog ? <PurgeConfirmationDialog accountName={purgeDialog.accountName} confirmation={purgeDialog.confirmation} busy={purging} onCancel={() => setPurgeDialog(undefined)} onConfirm={confirmPurge} /> : null}{error ? <div className="banner danger" role="alert"><div className="body small">{error}</div></div> : null}</>;
+  return <>{notice ? <div className="banner ok"><div className="body small">{notice}</div></div> : null}<PrototypeManagerProgress view={view} {...(reminders ? { pendingReminderCount: reminders.candidates.length } : {})} onOpenLearnerProfile={openProfile} {...operationalProps} onDeleteLearner={deleteLearner} />{profile ? <LearnerProfileDialog view={profile} onClose={() => setProfile(undefined)} /> : null}{error ? <div className="banner danger" role="alert"><div className="body small">{error}</div></div> : null}</>;
 }
 
 function LearnerProfileDialog({ view, onClose }: { view: ManagerLearnerProfileView; onClose: () => void }) {
@@ -273,6 +256,8 @@ function csvCell(value: unknown): string {
 
 function AccountsPanel({ view, currentUserId, reload, setError, setNotice }: { view: ManagerAccountsView; currentUserId: string; reload: () => Promise<void>; setError: (value: string) => void; setNotice: (value: string) => void }) {
   const [busyId, setBusyId] = useState<string>(); const [creating, setCreating] = useState(false);
+  const [trash, setTrash] = useState<ManagerTrashView>(); const [recoveryLoading, setRecoveryLoading] = useState(false); const [recoveryError, setRecoveryError] = useState(""); const [recoveryBusy, setRecoveryBusy] = useState(false);
+  const [purgeDialog, setPurgeDialog] = useState<{ accountId: string; accountName: string; confirmation: ManagerPurgeConfirmationView }>(); const [purging, setPurging] = useState(false);
   const modal = usePrototypeModal();
   const run = async (id: string, action: () => Promise<unknown>, message: string) => { setBusyId(id); setError(""); try { await action(); await reload(); setNotice(message); } catch { setError("Không cập nhật được tài khoản. Kiểm tra quyền và dữ liệu nhập."); } finally { setBusyId(undefined); } };
   const changeRole = async (account: ManagerAccountView, nextRole: ManagerAccountView["role"]) => {
@@ -294,9 +279,38 @@ function AccountsPanel({ view, currentUserId, reload, setError, setNotice }: { v
     const confirmed = await modal.confirm({ title: "Xoá tài khoản?", message: <>Tài khoản <b>{account.displayName}</b> sẽ mất quyền truy cập. Dữ liệu liên quan vẫn được giữ để đối soát và có thể khôi phục.</>, confirmLabel: "Xoá tài khoản", cancelLabel: "Huỷ", tone: "danger", countdownSeconds: 0 });
     if (confirmed) await run(account.id, () => apiClient.updateManagerAccountStatus(account.id, "deleted"), "Đã xoá quyền truy cập tài khoản.");
   };
+  const loadTrash = async () => {
+    setRecoveryLoading(true); setRecoveryError("");
+    try { setTrash(await apiClient.getManagerTrash()); } catch { setRecoveryError("Không tải được danh sách khôi phục."); } finally { setRecoveryLoading(false); }
+  };
+  const restore = async (accountId: string) => {
+    const account = trash?.accounts.find((item) => item.id === accountId);
+    if (!account || !(await modal.confirm({ title: "Khôi phục tài khoản", message: <>Khôi phục tài khoản <b>{account.displayName}</b> khỏi thùng rác?</>, confirmLabel: "Khôi phục", cancelLabel: "Huỷ" }))) return;
+    setRecoveryBusy(true); setRecoveryError("");
+    try { await apiClient.restoreManagerTrashAccount(accountId); setNotice("Đã khôi phục tài khoản."); await loadTrash(); } catch { setRecoveryError("Không khôi phục được tài khoản."); } finally { setRecoveryBusy(false); }
+  };
+  const requestPurge = async (accountId: string) => {
+    setRecoveryError("");
+    try {
+      const confirmation = await apiClient.requestManagerTrashPurgeConfirmation(accountId);
+      const accountName = trash?.accounts.find((account) => account.id === accountId)?.displayName ?? "tài khoản này";
+      setPurgeDialog({ accountId, accountName, confirmation });
+    } catch { setRecoveryError("Không tạo được xác nhận xoá vĩnh viễn."); }
+  };
+  const confirmPurge = async (confirmationPhrase: string) => {
+    if (!purgeDialog) return;
+    setPurging(true); setRecoveryError("");
+    try {
+      await apiClient.purgeManagerTrashAccount(purgeDialog.accountId, { confirmationToken: purgeDialog.confirmation.token, confirmationPhrase });
+      setPurgeDialog(undefined); setNotice("Đã xoá vĩnh viễn tài khoản."); await loadTrash();
+    } catch { setRecoveryError("Không xoá vĩnh viễn được tài khoản. Token có thể đã hết hạn hoặc dữ liệu đang được tham chiếu."); }
+    finally { setPurging(false); }
+  };
   const create = async (event: FormEvent<HTMLFormElement>) => { event.preventDefault(); const formElement = event.currentTarget; const form = new FormData(formElement); setCreating(true); setError(""); try { await apiClient.createManagerAccount({ displayName: String(form.get("displayName") ?? ""), email: String(form.get("email") ?? ""), role: String(form.get("role") ?? "learner") as ManagerAccountView["role"], password: String(form.get("password") ?? "") }); await reload(); formElement.reset(); setNotice("Đã tạo tài khoản."); } catch { setError("Không tạo được tài khoản. Email phải chưa tồn tại và mật khẩu có ít nhất 8 ký tự."); } finally { setCreating(false); } };
   return <section className="card"><h3>Người dùng</h3><div className="table-wrap settings-action-table" data-manager-action-table><table><thead><tr><th>Tên</th><th>Email</th><th>Vai trò</th><th>Trạng thái</th><th>Thao tác</th></tr></thead><tbody>{view.accounts.map((account) => { const self = account.id === currentUserId; const busy = busyId === account.id; return <tr key={account.id}><td><b>{account.displayName}</b>{self ? <span className="xs muted"> (bạn)</span> : null}</td><td>{account.email ?? "—"}</td><td><select aria-label={`Vai trò ${account.displayName}`} title={self ? "Không thể đổi vai trò tài khoản đang đăng nhập" : undefined} aria-busy={busy || undefined} disabled={busy || self} value={account.role} onChange={(event) => void changeRole(account, event.target.value as ManagerAccountView["role"])}><option value="learner">Người học</option><option value="operator">Người vận hành</option><option value="manager">Quản lý</option></select></td><td><span className={`badge ${account.status === "active" ? "ok" : "warn"}`}>{accountStatusLabel(account.status)}</span></td><td><div className="row"><button className="btn-sm" type="button" aria-busy={busy || undefined} title={self ? "Không thể khoá tài khoản đang đăng nhập" : undefined} disabled={busy || self} onClick={() => void toggleStatus(account)}>{account.status === "active" ? "Khoá" : "Mở"}</button><button className="btn-sm" type="button" aria-busy={busy || undefined} disabled={busy} onClick={() => void resetPassword(account)}>Đặt lại mật khẩu</button><button className="btn-sm btn-danger" type="button" title={self ? "Không thể xoá tài khoản đang đăng nhập" : undefined} disabled={busy || self} onClick={() => void deleteAccount(account)}>Xoá</button></div></td></tr>; })}</tbody></table></div>
     <form className="card soft section" onSubmit={create}><div className="grid cols-4"><label className="field"><span>Tên</span><input name="displayName" required /></label><label className="field"><span>Email</span><input name="email" type="email" required /></label><label className="field"><span>Vai trò</span><select name="role" defaultValue="learner"><option value="learner">Người học</option><option value="operator">Người vận hành</option><option value="manager">Quản lý</option></select></label><label className="field"><span>Mật khẩu ban đầu</span><input name="password" type="password" minLength={8} required /></label></div><button className="btn-primary" type="submit" disabled={creating}>{creating ? "Đang tạo…" : "+ Thêm người dùng"}</button></form>
+    <details className="settings-recovery" onToggle={(event) => { if (event.currentTarget.open && !trash && !recoveryLoading) void loadTrash(); }}><summary>Khôi phục tài khoản {trash ? <span className="badge">{trash.accounts.length}</span> : <span className="small muted">Mở khi cần</span>}</summary><div className="settings-recovery__body">{recoveryError ? <div className="banner danger" role="alert"><div className="body small">{recoveryError}</div></div> : null}{trash ? <PrototypeManagerRecovery trashedAccounts={trash.accounts.map((item) => ({ id: item.id, name: item.displayName, deletedAt: item.deletedAt }))} onRestore={restore} onPurge={requestPurge} busy={recoveryBusy || purging} /> : recoveryLoading ? <PrototypeManagerRecovery trashedAccounts={[]} loading /> : <p className="small muted">Mở mục này để tải danh sách tài khoản đã xoá.</p>}</div></details>
+    {purgeDialog ? <PurgeConfirmationDialog accountName={purgeDialog.accountName} confirmation={purgeDialog.confirmation} busy={purging} onCancel={() => setPurgeDialog(undefined)} onConfirm={confirmPurge} /> : null}
   </section>;
 }
 

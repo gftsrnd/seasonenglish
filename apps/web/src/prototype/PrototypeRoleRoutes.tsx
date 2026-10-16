@@ -7,7 +7,7 @@ const LearnerRouteController = lazy(() => import("./learner/LearnerRouteControll
 const ManagerRouteController = lazy(() => import("./manager/ManagerRouteController.js").then(({ ManagerRouteController }) => ({ default: ManagerRouteController })));
 const OperatorRouteController = lazy(() => import("./operator/OperatorRouteController.js").then(({ OperatorRouteController }) => ({ default: OperatorRouteController })));
 
-const managerRoutes = ["/mgr", "/mgr/ops", "/mgr/reminders", "/mgr/report", "/mgr/rewards"] as const;
+const managerRoutes = ["/mgr", "/mgr/ops", "/mgr/recovery", "/mgr/reminders", "/mgr/report", "/mgr/rewards"] as const;
 const operatorRoutes = ["/op", "/op/levelforms", "/op/weeks", "/op/lessons", "/op/review", "/op/prompts"] as const;
 
 export function PrototypeRoleRoutes({ session }: { session: SessionView }) {
@@ -55,6 +55,7 @@ function loadingLabel(pathname: string): string {
   if (pathname === "/mgr") return "Đang tải tiến độ nhóm";
   if (pathname === "/mgr/ops") return "Đang tải hiệu suất vận hành";
   if (pathname === "/mgr/reminders") return "Đang tải danh sách nhắc học";
+  if (pathname === "/mgr/recovery") return "Đang tải danh sách khôi phục";
   if (pathname === "/mgr/report") return "Đang tải báo cáo";
   if (pathname === "/op") return "Đang tải duyệt trình độ";
   return "Đang tải trang";
