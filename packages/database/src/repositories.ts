@@ -1692,8 +1692,10 @@ class ContentRepository {
       `with supported(cefr, sort_order) as (
          values ('A1', 1), ('A2', 2), ('B1', 3), ('B2', 4)
        ), learner_counts as (
-         select cefr, count(*)::integer as learner_count from enrollments
-         where program_id = $1 and cefr is not null group by cefr
+         select e.cefr, count(distinct e.learner_id)::integer as learner_count
+         from enrollments e
+         join users u on u.id = e.learner_id and u.role = 'learner' and u.status = 'active'
+         where e.program_id = $1 and e.cefr is not null group by e.cefr
        )
        select supported.cefr, coalesce(learner_counts.learner_count, 0)::text as learner_count
        from supported left join learner_counts using (cefr)
@@ -2210,11 +2212,11 @@ class ContentRepository {
       submissions: string; coach: string; micro: string; appeals: string; attempts: string; assessments: string;
     }>(
       `select
-        (select count(*) from practice_submissions ps join users u on u.id = ps.learner_id where u.organization_id = $1)::text as submissions,
-        (select count(*) from coach_turns ct join coach_sessions cs on cs.id = ct.session_id join users u on u.id = cs.learner_id where u.organization_id = $1 and ct.speaker = 'learner')::text as coach,
-        (select count(*) from micro_lessons ml join users u on u.id = ml.learner_id where u.organization_id = $1)::text as micro,
-        (select count(*) from appeals a join assessment_attempts aa on aa.id = a.attempt_id join users u on u.id = aa.learner_id where u.organization_id = $1)::text as appeals,
-        (select count(*) from assessment_attempts aa join users u on u.id = aa.learner_id where u.organization_id = $1)::text as attempts,
+        (select count(*) from practice_submissions ps join users u on u.id = ps.learner_id and u.status = 'active' where u.organization_id = $1)::text as submissions,
+        (select count(*) from coach_turns ct join coach_sessions cs on cs.id = ct.session_id join users u on u.id = cs.learner_id and u.status = 'active' where u.organization_id = $1 and ct.speaker = 'learner')::text as coach,
+        (select count(*) from micro_lessons ml join users u on u.id = ml.learner_id and u.status = 'active' where u.organization_id = $1)::text as micro,
+        (select count(*) from appeals a join assessment_attempts aa on aa.id = a.attempt_id join users u on u.id = aa.learner_id and u.status = 'active' where u.organization_id = $1)::text as appeals,
+        (select count(*) from assessment_attempts aa join users u on u.id = aa.learner_id and u.status = 'active' where u.organization_id = $1)::text as attempts,
         (select count(*) from assessment_versions av join assessment_definitions ad on ad.id = av.definition_id where ad.organization_id = $1)::text as assessments`,
       [organizationId]
     );
@@ -2227,7 +2229,7 @@ class ContentRepository {
               ct.created_at, ct.content, ct.feedback
        from coach_turns ct
        join coach_sessions cs on cs.id = ct.session_id
-       join users u on u.id = cs.learner_id and u.organization_id = $1
+       join users u on u.id = cs.learner_id and u.organization_id = $1 and u.status = 'active'
        left join enrollments e on e.learner_id = u.id
        left join programs p on p.id = e.program_id
        left join program_weeks pw on pw.program_id = p.id
@@ -2243,7 +2245,7 @@ class ContentRepository {
         feedback: Record<string, unknown> | null;
       }>(`select ps.id, u.display_name as learner_name, e.cefr, pw.week_number, ps.submitted_at,
                  ps.operator_checked, ps.content, ps.score, ps.feedback, pw.topic
-          from practice_submissions ps join users u on u.id = ps.learner_id
+          from practice_submissions ps join users u on u.id = ps.learner_id and u.status = 'active'
           join program_weeks pw on pw.id = ps.program_week_id
           left join enrollments e on e.learner_id = u.id and e.program_id = pw.program_id
           where u.organization_id = $1 order by ps.submitted_at desc nulls last limit 60`, [organizationId]),
@@ -2252,20 +2254,20 @@ class ContentRepository {
         completed_at: Date | null; content: Record<string, unknown>; progress: Record<string, unknown>;
       }>(`select ml.id, u.display_name as learner_name, ml.cefr, ml.topic, ml.generated_at,
                  ml.completed_at, ml.content, ml.progress
-          from micro_lessons ml join users u on u.id = ml.learner_id
+          from micro_lessons ml join users u on u.id = ml.learner_id and u.status = 'active'
           where u.organization_id = $1 order by ml.generated_at desc limit 60`, [organizationId]),
       this.pool.query<{
         id: string; learner_name: string; reason: string; status: "pending" | "accepted" | "rejected";
         resolution: string | null; created_at: Date;
       }>(`select a.id, u.display_name as learner_name, a.reason, a.status, a.resolution, a.created_at
-          from appeals a join users u on u.id = a.learner_id
+          from appeals a join users u on u.id = a.learner_id and u.status = 'active'
           where u.organization_id = $1 order by (a.status = 'pending') desc, a.created_at desc limit 60`, [organizationId]),
       this.pool.query<{
         id: string; learner_name: string; cefr: CefrLevel | null; week_number: number; day_number: number;
         title: string; evidence: Record<string, unknown>;
       }>(`select pr.id, u.display_name as learner_name, e.cefr, pw.week_number, l.day_number,
                  l.title, pr.evidence
-          from progress_records pr join users u on u.id = pr.learner_id
+          from progress_records pr join users u on u.id = pr.learner_id and u.status = 'active'
           join lessons l on l.id = pr.lesson_id
           join lesson_set_versions lsv on lsv.id = l.lesson_set_version_id
           join lesson_sets ls on ls.id = lsv.lesson_set_id
@@ -2277,7 +2279,7 @@ class ContentRepository {
         status: string; submitted_at: Date | null; total_score: string | null;
       }>(`select aa.id, u.display_name as learner_name, ad.kind, ad.title, aa.status, aa.submitted_at,
                  sum(sc.score)::text as total_score
-          from assessment_attempts aa join users u on u.id = aa.learner_id
+          from assessment_attempts aa join users u on u.id = aa.learner_id and u.status = 'active'
           join assessment_versions av on av.id = aa.assessment_version_id
           join assessment_definitions ad on ad.id = av.definition_id
           left join assessment_scores sc on sc.attempt_id = aa.id
@@ -6426,22 +6428,22 @@ class ManagerRepository {
         `select
            (select count(*) from users where organization_id = $1 and role = 'learner' and status = 'active')::text as learner_count,
            (select count(*) from (
-              select a.learner_id from activities a join users u on u.id = a.learner_id
-              where u.organization_id = $1 and u.role = 'learner' and a.occurred_at >= date_trunc('week', now())
+               select a.learner_id from activities a join users u on u.id = a.learner_id
+               where u.organization_id = $1 and u.role = 'learner' and u.status = 'active' and a.occurred_at >= date_trunc('week', now())
               group by a.learner_id having count(distinct a.occurred_at::date) >= 3
             ) regular)::text as active_learners_this_week,
            (select count(*)
             from progress_records pr
-            join users u on u.id = pr.learner_id
-            where u.organization_id = $1 and pr.status = 'completed')::text as completed_lessons,
+             join users u on u.id = pr.learner_id and u.status = 'active'
+             where u.organization_id = $1 and pr.status = 'completed')::text as completed_lessons,
            (select count(*)
             from assessment_attempts aa
-            join users u on u.id = aa.learner_id
-            where u.organization_id = $1 and aa.status = 'pending_review')::text as pending_assessments,
-           (select count(*) from surveys s join users u on u.id = s.learner_id
+             join users u on u.id = aa.learner_id and u.status = 'active'
+             where u.organization_id = $1 and aa.status = 'pending_review')::text as pending_assessments,
+           (select count(*) from surveys s join users u on u.id = s.learner_id and u.status = 'active'
             where u.organization_id = $1 and s.answers ? 'rating')::text as survey_count,
            (select round(avg((s.answers->>'rating')::numeric), 1)::text
-            from surveys s join users u on u.id = s.learner_id
+            from surveys s join users u on u.id = s.learner_id and u.status = 'active'
             where u.organization_id = $1 and (s.answers->>'rating') ~ '^[1-5](\\.0)?$') as satisfaction_average`,
         [organization.id]
       ),
@@ -6544,7 +6546,7 @@ class ManagerRepository {
                 count(*)::text as sessions,
                 coalesce(sum(a.minutes), 0)::text as minutes
          from activities a
-         join users u on u.id = a.learner_id
+         join users u on u.id = a.learner_id and u.status = 'active'
          where u.organization_id = $1 and u.role = 'learner'
            and ($2::uuid is null or a.occurred_at::date >= (select start_date from programs where id = $2))
          group by a.occurred_at::date
@@ -6668,9 +6670,9 @@ class ManagerRepository {
       ),
       this.pool.query<{ assessment_review: string; practice_review: string }>(
         `select
-           (select count(*) from assessment_attempts aa join users u on u.id = aa.learner_id
+           (select count(*) from assessment_attempts aa join users u on u.id = aa.learner_id and u.status = 'active'
             where u.organization_id = $1 and aa.status = 'pending_review')::text as assessment_review,
-           (select count(*) from practice_submissions ps join users u on u.id = ps.learner_id
+           (select count(*) from practice_submissions ps join users u on u.id = ps.learner_id and u.status = 'active'
             where u.organization_id = $1 and ps.status = 'submitted')::text as practice_review`,
         [organization.id]
       ),
@@ -6678,7 +6680,7 @@ class ManagerRepository {
         `select
            (select count(*) from jobs
             where state in ('queued', 'running') and payload ->> 'organizationId' = ($1::uuid)::text)::text as pending_jobs,
-           (select count(*) from ai_runs ar join users u on u.id = ar.user_id
+           (select count(*) from ai_runs ar join users u on u.id = ar.user_id and u.status = 'active'
             where u.organization_id = $1 and ar.status in ('failed', 'invalid_output'))::text as ai_failures`,
         [organization.id]
       ),
@@ -6771,15 +6773,21 @@ class ManagerRepository {
                 and exists (select 1 from jsonb_array_elements(coalesce(s.content->'parts','[]'::jsonb)) p where p->>'code' = 'pronunciation')
                 and (select count(*) from jsonb_array_elements(coalesce(s.content->'parts','[]'::jsonb)) p where p->>'code' in ('listening','reading','writing','speaking')) = 4)::text as full_lessons,
              (select count(*) from lesson_shape where version_count > 1)::text as edited_lessons,
-             (select count(*) from progress_records pr join owned_lessons ol on ol.id = pr.lesson_id where pr.status = 'completed')::text as completions,
-             (select round(avg(pr.score), 1)::text from progress_records pr join owned_lessons ol on ol.id = pr.lesson_id where pr.status = 'completed' and pr.score is not null) as average_score`,
+             (select count(*) from progress_records pr
+                join owned_lessons ol on ol.id = pr.lesson_id
+                join users learner on learner.id = pr.learner_id and learner.organization_id = $1 and learner.status = 'active'
+               where pr.status = 'completed')::text as completions,
+             (select round(avg(pr.score), 1)::text from progress_records pr
+                join owned_lessons ol on ol.id = pr.lesson_id
+                join users learner on learner.id = pr.learner_id and learner.organization_id = $1 and learner.status = 'active'
+               where pr.status = 'completed' and pr.score is not null) as average_score`,
           [organization.id, operator.id]
         ),
         this.pool.query<{ approvals: string; average_approval_hours: string | null }>(
           `select count(*)::text as approvals,
              round(avg(extract(epoch from (ad.decided_at - aa.submitted_at)) / 3600), 1)::text as average_approval_hours
            from assessment_decisions ad join assessment_attempts aa on aa.id = ad.attempt_id
-           join users u on u.id = aa.learner_id
+           join users u on u.id = aa.learner_id and u.status = 'active'
            where u.organization_id = $1 and ad.decided_by = $2 and ad.decided_at is not null and aa.submitted_at is not null`,
           [organization.id, operator.id]
         ),
@@ -6790,7 +6798,9 @@ class ManagerRepository {
              join programs p on p.id = pw.program_id join lessons l on l.lesson_set_version_id = lsv.id
              where p.organization_id = $1 and (lsv.created_by = $2 or lsv.approved_by = $2)
            ), part_results as (
-             select value as result from progress_records pr join owned_lessons ol on ol.id = pr.lesson_id
+             select value as result from progress_records pr
+             join owned_lessons ol on ol.id = pr.lesson_id
+             join users learner on learner.id = pr.learner_id and learner.organization_id = $1 and learner.status = 'active'
              cross join lateral jsonb_each(case when jsonb_typeof(pr.evidence->'evidence') = 'object' then pr.evidence->'evidence' else pr.evidence end)
              where jsonb_typeof(value) = 'object' and value ? 'attempts'
            ) select count(*)::text as parts,
@@ -6800,8 +6810,8 @@ class ManagerRepository {
         ),
         this.pool.query<{ submissions: string; coach: string }>(
           `select
-             (select count(*) from practice_submissions ps join users learner on learner.id = ps.learner_id where learner.organization_id = $1 and ps.checked_by = $2)::text as submissions,
-             (select count(*) from coach_turns ct join coach_sessions cs on cs.id = ct.session_id join users learner on learner.id = cs.learner_id where learner.organization_id = $1 and ct.feedback->>'checkedBy' = $2::text)::text as coach`, [organization.id, operator.id]
+             (select count(*) from practice_submissions ps join users learner on learner.id = ps.learner_id and learner.status = 'active' where learner.organization_id = $1 and ps.checked_by = $2)::text as submissions,
+             (select count(*) from coach_turns ct join coach_sessions cs on cs.id = ct.session_id join users learner on learner.id = cs.learner_id and learner.status = 'active' where learner.organization_id = $1 and ct.feedback->>'checkedBy' = $2::text)::text as coach`, [organization.id, operator.id]
         )
       ]);
       const totals = totalsResult.rows[0] ?? { sets: "0", lessons: "0", published: "0", full_lessons: "0", edited_lessons: "0", completions: "0", average_score: null };
@@ -7662,16 +7672,16 @@ class ManagerRepository {
              join lesson_sets ls on ls.id = lsv.lesson_set_id join program_weeks pw on pw.id = ls.program_week_id
              join programs p on p.id = pw.program_id where p.organization_id = $1 and lsv.status = 'published')::text as approved_lessons,
            (select count(*) from coach_turns ct join coach_sessions cs on cs.id = ct.session_id
-             join users u on u.id = cs.learner_id where u.organization_id = $1 and ct.speaker = 'learner')::text as coach_turns,
-           (select count(*) from practice_submissions ps join users u on u.id = ps.learner_id
+           join users u on u.id = cs.learner_id and u.status = 'active' where u.organization_id = $1 and ct.speaker = 'learner')::text as coach_turns,
+           (select count(*) from practice_submissions ps join users u on u.id = ps.learner_id and u.status = 'active'
              where u.organization_id = $1 and ps.submitted_at is not null)::text as practice_submissions,
-           (select count(*) from practice_submissions ps join users u on u.id = ps.learner_id
+           (select count(*) from practice_submissions ps join users u on u.id = ps.learner_id and u.status = 'active'
              where u.organization_id = $1 and ps.checked_by is not null)::text as reviewed_practice_submissions,
-           (select count(*) from reminders r join users u on u.id = r.learner_id
+           (select count(*) from reminders r join users u on u.id = r.learner_id and u.status = 'active'
              where u.organization_id = $1)::text as reminders,
-           (select count(*) from appeals a join users u on u.id = a.learner_id
+           (select count(*) from appeals a join users u on u.id = a.learner_id and u.status = 'active'
              where u.organization_id = $1)::text as appeals,
-           (select count(*) from appeals a join users u on u.id = a.learner_id
+           (select count(*) from appeals a join users u on u.id = a.learner_id and u.status = 'active'
              where u.organization_id = $1 and a.status = 'pending')::text as pending_appeals`,
         [organization.id]
       ),
@@ -7687,7 +7697,7 @@ class ManagerRepository {
                 nullif(s.answers->>'comment', '') as comment,
                 nullif(s.answers->>'studyTime', '') as study_time,
                 s.submitted_at
-         from surveys s join users u on u.id = s.learner_id
+         from surveys s join users u on u.id = s.learner_id and u.status = 'active'
          where u.organization_id = $1 and (s.answers->>'rating') ~ '^[1-5](\\.0)?$'
          order by s.submitted_at desc`,
         [organization.id]
