@@ -1212,6 +1212,8 @@
 }
 
 .prototype-operator .operator-action-table td[data-label="Thao tác"] > .row {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   align-content: flex-start;
   align-items: stretch;
   gap: 8px;
@@ -1220,6 +1222,7 @@
 
 .prototype-operator .operator-action-table td[data-label="Thao tác"] > .row > .btn,
 .prototype-operator .operator-action-table td[data-label="Thao tác"] > .row > button {
+  width: 100%;
   min-width: 0;
   max-width: 100%;
 }

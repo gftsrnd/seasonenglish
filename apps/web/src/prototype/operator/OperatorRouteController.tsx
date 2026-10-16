@@ -451,6 +451,14 @@ function PromptsRoute({ client, readOnly }: { client: OperatorApiClient; readOnl
   }} />;
 }
 
+const operatorErrorMessages: Record<string, string> = {
+  WEEK_SUGGESTION_FAILED: "Không thể tạo gợi ý tuần lúc này. Vui lòng kiểm tra kết nối AI rồi thử lại.",
+  AI_UNAVAILABLE: "AI chưa được cấu hình trên máy chủ.",
+  AI_PROMPT_NOT_READY: "Chưa có prompt AI đang hoạt động cho thao tác này.",
+  AI_OUTPUT_INVALID: "AI trả về nội dung không đúng định dạng. Vui lòng thử lại."
+};
+
 function message(reason: unknown) {
-  return reason instanceof Error ? reason.message : String(reason);
+  const raw = reason instanceof Error ? reason.message : String(reason);
+  return operatorErrorMessages[raw] ?? raw;
 }
