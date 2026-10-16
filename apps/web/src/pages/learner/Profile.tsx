@@ -14,9 +14,9 @@ export function Profile({ view, onSaveAvatar, savingAvatar = false }: {
     level,
     badges: view.badgeRoadmap.filter((badge) => badge.seasonLevel === level)
   })).filter((group) => group.badges.length > 0);
-  return <main className="learner-page">
-    <header className="page-heading profile-heading"><div><p className="eyebrow">Tiến độ & hồ sơ</p><h1>{view.learner.displayName}</h1><p>Trình độ {view.learner.cefr}</p></div><span className="level-badge">{view.learner.cefr}</span></header>
-    <section className="profile-overview" role="region" aria-label="Nhận diện người học">
+  return <main className="learner-page learner-profile">
+    <header className="page-heading profile-heading"><div><p className="eyebrow">Tiến độ & hồ sơ</p><h1>{view.learner.displayName}</h1><p>{view.learner.cefr ? `Trình độ ${view.learner.cefr} – ${cefrDescription(view.learner.cefr)}` : "Chưa duyệt trình độ"}</p></div>{view.learner.cefr ? <span className={`level-badge level-badge--${view.learner.cefr}`}>{view.learner.cefr}</span> : null}</header>
+    <section className="profile-overview prototype-card" role="region" aria-label="Nhận diện người học">
       <button className="profile-avatar-button" type="button" aria-label="Đổi avatar" onClick={() => { setDraftAvatar(savedAvatar); setAvatarOpen(true); }}><Avatar avatar={savedAvatar} name={view.learner.displayName} /></button>
       <div><strong>Avatar của bạn</strong><p>{avatarDescription(savedAvatar)}</p></div>
       <div className="profile-overview-actions"><button className="button button--primary" type="button" onClick={() => { setDraftAvatar(savedAvatar); setAvatarOpen(true); }}>Đổi avatar</button><a className="button" href="/onboard">Sửa hồ sơ</a></div>
@@ -29,55 +29,109 @@ export function Profile({ view, onSaveAvatar, savingAvatar = false }: {
       onCancel={() => setAvatarOpen(false)}
       onSave={async () => { await onSaveAvatar?.(draftAvatar); setAvatarOpen(false); }}
     /> : null}
-    <section aria-labelledby="profile-title"><div className="section-heading"><h2 id="profile-title">Hồ sơ cá nhân</h2></div><dl>
-      <div><dt>Công việc</dt><dd>{view.learner.profile.position ?? "Chưa cập nhật"}</dd></div>
-      <div><dt>Phòng ban</dt><dd>{view.learner.profile.department ?? "Chưa cập nhật"}</dd></div>
-      <div><dt>Email</dt><dd>{view.learner.profile.email ?? "Chưa cập nhật"}</dd></div>
-      <div><dt>Mục tiêu</dt><dd>{view.learner.profile.goals?.join(", ") || "Chưa cập nhật"}</dd></div>
-      <div><dt>Cách học</dt><dd>{view.learner.profile.learningStyles?.join(", ") || "Chưa cập nhật"}</dd></div>
-      <div><dt>Lịch học</dt><dd>{view.learner.profile.durationMinutes ?? 10} phút/buổi · 5 ngày/tuần</dd></div>
-      <div><dt>Tự đánh giá</dt><dd>{view.learner.profile.selfLevel ?? "Chưa rõ"}</dd></div>
-      <div><dt>Chứng chỉ</dt><dd>{view.learner.profile.certificates?.map((item) => `${item.type} ${item.result}`).join(", ") || "Chưa cập nhật"}</dd></div>
+    <section className="profile-details prototype-card prototype-card--soft" role="region" aria-labelledby="profile-title"><div className="section-heading"><h2 id="profile-title">Hồ sơ cá nhân</h2><a className="button button--small" href="/onboard">Sửa</a></div><dl>
+      <ProfileRow label="Công việc" value={[view.learner.profile.position, view.learner.profile.department].filter(Boolean).join(" · ")} />
+      <ProfileRow label="Email" value={view.learner.profile.email} />
+      <ProfileRow label="Base" value={view.learner.profile.contact} />
+      <ProfileRow label="Dùng tiếng Anh để" value={optionLabels("goals", view.learner.profile.goals)} />
+      <ProfileRow label="Mức độ dùng ở công ty" value={optionLabel("environmentUse", view.learner.profile.environmentUse)} />
+      <ProfileRow label="Dùng trong gia đình" value={optionLabel("familyUse", view.learner.profile.familyUse)} />
+      <ProfileRow label="Thói quen ngoài việc" value={optionLabels("habits", view.learner.profile.habits)} />
+      <ProfileRow label="Tình huống" value={view.learner.profile.situations} />
+      <ProfileRow label="Cách học thích" value={optionLabels("learningStyles", view.learner.profile.learningStyles)} />
+      <ProfileRow label="Giải thích bằng" value={explanationLabel(view.learner.cefr)} />
+      <ProfileRow label="Phong cách Season" value={view.learner.profile.persona === "formal" ? "Formal · Trang trọng" : "Informal · Thân thiện"} />
+      <ProfileRow label="Lịch học" value={`${view.learner.profile.durationMinutes ?? 10} phút/buổi · 5 ngày/tuần (T2–T6) · ${optionLabel("device", view.learner.profile.device) || "Cả hai"}`} />
+      <ProfileRow label="Tự đánh giá" value={optionLabel("selfLevel", view.learner.profile.selfLevel) || "Chưa rõ"} />
+      <ProfileRow label="Chứng chỉ" value={view.learner.profile.certificates?.map((item) => `${item.type} ${item.result}${item.year ? ` (${item.year})` : ""}`).join(", ") || "Chưa cập nhật"} />
+      <ProfileRow label="Đã học" value={view.learner.profile.experience} />
+      <ProfileRow label="Lo ngại / mong muốn" value={view.learner.profile.concerns} />
     </dl></section>
-    <section role="region" aria-label="Mùa học" className="season-card">
-      <div className="season-mark" aria-hidden="true">{seasonIcon(view.season.current.level)}</div>
-      <div><p className="eyebrow">Mùa học {view.season.current.level}/4</p><h2>{view.season.current.name}</h2>
-        {view.season.next ? <p>Lên {view.season.next.name} khi đủ điểm và huy hiệu của cấp đó.</p> : <p>Bạn đã ở mùa cao nhất.</p>}</div>
+    <section role="region" aria-label="Mùa học và huy hiệu" className="reward-card prototype-card">
+      <div className="season-card">
+        <div className={`season-mark season-mark--${view.season.current.level}`} aria-hidden="true">{seasonIcon(view.season.current.level)}</div>
+        <div><p className="eyebrow">Mùa học {view.season.current.level}/4</p><h2>{view.season.current.name}</h2>
+          {view.season.next ? <p>Lên <strong>{view.season.next.name}</strong> cần đủ <strong>cả hai</strong>: điểm và huy hiệu của cấp đó.</p> : <p>Cấp cao nhất – đủ điểm và đủ toàn bộ huy hiệu.</p>}</div>
+      </div>
       {view.season.next ? <div className="season-progress">
-        <div><span>Điểm</span><strong>{view.points}/{view.season.next.pointsRequired} điểm</strong><Progress value={view.points} max={view.season.next.pointsRequired} label="Điểm lên mùa tiếp theo" /></div>
-        <div><span>Huy hiệu cấp tiếp theo</span><strong>{view.season.earnedBadgeCount}/{view.season.requiredBadgeCount} huy hiệu</strong><Progress value={view.season.earnedBadgeCount} max={view.season.requiredBadgeCount} label="Huy hiệu lên mùa tiếp theo" /></div>
+        <RewardTrack title="① Điểm" value={`★ ${view.points} / ${view.season.next.pointsRequired}`} current={view.points} required={view.season.next.pointsRequired} unit="điểm" />
+        <RewardTrack title="② Huy hiệu của cấp tiếp theo" value={`${view.season.earnedBadgeCount} / ${view.season.requiredBadgeCount}`} current={view.season.earnedBadgeCount} required={view.season.requiredBadgeCount} unit="huy hiệu" />
       </div> : null}
-    </section>
-    <section role="region" aria-label="Huy hiệu"><div className="section-heading"><h2>Huy hiệu theo cấp</h2><strong>{view.badges.length}/{view.badgeRoadmap.length} huy hiệu · {view.points} điểm</strong></div>
-      <div className="badge-groups">{badgeGroups.map((group) => <section className="badge-group" key={group.level} aria-labelledby={`badge-level-${group.level}`}>
-        <h3 id={`badge-level-${group.level}`}>Cấp {group.level} · {seasonName(group.level)}</h3>
-        <div className="badge-grid">{group.badges.map((badge) => <article key={badge.key} data-earned={badge.earned}><span className="badge-icon" aria-hidden="true">{badgeIcon(badge.key)}</span><strong>{badge.label}</strong><span className="badge-state">{badge.earned ? "Đã đạt" : "Chưa đạt"}</span><p>{badge.description}</p></article>)}</div>
-      </section>)}</div>
+      {view.season.next && (view.points >= view.season.next.pointsRequired) !== (view.season.earnedBadgeCount >= view.season.requiredBadgeCount) ? <div className="reward-mismatch" role="status">{view.points >= view.season.next.pointsRequired ? <><strong>Đủ điểm nhưng chưa lên cấp</strong> vì còn thiếu huy hiệu. Điểm không thay thế được huy hiệu.</> : <><strong>Đủ huy hiệu nhưng chưa lên cấp</strong> vì chưa đủ điểm. Huy hiệu không thay thế được điểm.</>}</div> : null}
+      <div className="section-heading reward-heading"><h2>Huy hiệu theo cấp</h2><strong>{view.badges.length}/{view.badgeRoadmap.length} huy hiệu · ★ {view.points} điểm</strong></div>
+      <div className="badge-groups">{badgeGroups.map((group) => <div className="badge-group" key={group.level}>
+        <div className="badge-group-heading"><h3 className={`badge ${group.level === view.season.current.level + 1 ? "badge--warning" : ""}`}>{seasonIcon(group.level)} Cấp {group.level} · {seasonName(group.level)}</h3><span>{seasonPoints(group.level)} điểm + {group.badges.length} huy hiệu{group.level <= view.season.current.level ? " · đã đạt" : group.level === view.season.current.level + 1 ? " · cấp tiếp theo" : ""}</span></div>
+        <div className="badge-grid">{group.badges.map((badge) => <article key={badge.key} data-earned={badge.earned} title={canonicalBadge(badge.key, badge.label, badge.description).description}><span className="badge-icon" aria-hidden="true">{badgeIcon(badge.key)}</span><strong>{canonicalBadge(badge.key, badge.label, badge.description).label}</strong><span>{canonicalBadge(badge.key, badge.label, badge.description).description}</span></article>)}</div>
+      </div>)}</div>
+      <div className="reward-actions"><a className="button button--small" href={`/reward/${view.season.next ? "preview" : "done"}`}>{view.season.next ? "Xem trước màn hình khi đạt cấp cao nhất" : "Xem màn hình cấp cao nhất"}</a></div>
+      <details className="reward-rules"><summary>Cách tính điểm và lên cấp</summary><ul><li>Hoàn thành bài học và phần luyện tập để tích luỹ điểm.</li><li>Luyện với Season, nộp bài cuối tuần và duy trì nhịp học để mở huy hiệu.</li><li>Lên cấp: phải đủ <strong>điểm của cấp</strong> và <strong>mọi huy hiệu của cấp</strong>; các cấp đi lần lượt, không nhảy cấp.</li></ul></details>
     </section>
     <LevelReadinessCard readiness={view.levelReadiness} />
-    <section className="metric-grid" aria-label="Tổng quan hoạt động">
+    <section className="metric-grid profile-kpis" aria-label="Tổng quan hoạt động">
       <Metric label="Bài đã học" value={String(view.stats.completedLessons)} />
       <Metric label="Lượt luyện với Season" value={String(view.stats.coachTurns)} />
       <Metric label="Ngày có học" value={String(view.stats.studyDays)} />
     </section>
-    <section aria-labelledby="weekly-progress"><h2 id="weekly-progress">Tiến độ theo tuần</h2>{view.weeks.map((week) => <article key={week.weekNumber}>
-      <h3>Tuần {week.weekNumber} · {week.topic}</h3>
-      <div role="progressbar" aria-label={`Tiến độ tuần ${week.weekNumber}`} aria-valuemin={0} aria-valuemax={week.totalLessons} aria-valuenow={week.completedLessons}>
-        <span style={{ width: `${week.totalLessons ? week.completedLessons / week.totalLessons * 100 : 0}%` }} />
-      </div>
-      <p>{week.completedLessons}/{week.totalLessons} bài</p>
+    <section className="profile-weeks" aria-labelledby="weekly-progress"><h2 id="weekly-progress" className="sr-only">Tiến độ theo tuần</h2>{view.weeks.map((week) => <article className="profile-week-card prototype-card" key={week.weekNumber}>
+      <div className="profile-week-heading"><h3>Tuần {week.weekNumber} <span>{week.topic}</span></h3><strong>{week.completedLessons}/{week.totalLessons || "–"} bài</strong></div>
+      <div className="profile-week-dots" role="progressbar" aria-label={`Tiến độ tuần ${week.weekNumber}`} aria-valuemin={0} aria-valuemax={week.totalLessons} aria-valuenow={week.completedLessons}>{Array.from({ length: 5 }, (_, index) => <span key={index} className={index < Math.min(week.completedLessons, 5) ? "is-active" : ""} title={["T2", "T3", "T4", "T5", "T6"][index]} />)}</div>
     </article>)}</section>
-    <section aria-labelledby="activity-title"><h2 id="activity-title">Hoạt động gần đây</h2><p>{view.studyDays} ngày có học</p></section>
-    <section role="region" aria-label="Điểm đầu vào" className="assessment-comparison"><h2>Điểm đầu vào → cuối kỳ</h2>
-      {view.assessments.placement ? <div><div><p className="eyebrow">Đầu vào · {view.assessments.placement.approvedLevel}</p><strong>{view.assessments.placement.totalScore}/100</strong></div>
-        <dl className="assessment-skills">{Object.entries(view.assessments.placement.sections).map(([section, score]) => <div key={section}><dt>{skillLabel(section)}</dt><dd><Progress value={score} max={25} label={`Điểm ${skillLabel(section)}`} /><span>{score}/25</span></dd></div>)}</dl></div> : <p>Chưa có kết quả đầu vào.</p>}
+    <section role="region" aria-label="Điểm đầu vào" className="assessment-comparison prototype-card"><h2>Điểm đầu vào → cuối kỳ</h2>
+      {view.assessments.placement ? <div><div><p className="eyebrow">Đầu vào · {view.assessments.placement.approvedLevel}</p><strong>{view.assessments.placement.totalScore}<span className="sr-only">/100</span></strong></div>
+        <dl className="assessment-skills">{Object.entries(view.assessments.placement.sections).map(([section, score]) => <div key={section}><dt>{skillLabel(section)}</dt><dd><Progress value={score} max={25} label={`Điểm ${skillLabel(section)}`} /><span>{Math.round(score / 25 * 100)}%</span></dd></div>)}</dl></div> : <p>Chưa có kết quả đầu vào.</p>}
       {view.assessments.final ? <p>Cuối kỳ: {view.assessments.final.totalScore}/100</p> : <a href="/test/final">Làm bài cuối kỳ →</a>}
     </section>
   </main>;
 }
 
+function RewardTrack({ title, value, current, required, unit }: { title: string; value: string; current: number; required: number; unit: string }) {
+  const complete = current >= required;
+  return <div className={`reward-track ${complete ? "is-complete" : ""}`}><div><strong>{title}</strong><span className={`badge ${complete ? "badge--success" : "badge--warning"}`}>{complete ? "✓ Đạt" : "Chưa đạt"}</span></div><b>{value}<span className="sr-only"> {current}/{required} {unit}</span></b><Progress value={current} max={required} label={title} /><small>{complete ? `Đã đủ ${unit} cho cấp tiếp theo.` : `Còn thiếu ${Math.max(0, required - current)} ${unit}.`}</small></div>;
+}
+
 function Metric({ label, value }: { label: string; value: string }) {
   return <div className="metric"><strong>{value}</strong><span>{label}</span></div>;
+}
+
+function ProfileRow({ label, value }: { label: string; value?: string | null | undefined }) {
+  if (!value) return null;
+  return <div><dt>{label}</dt><dd>{value}</dd></div>;
+}
+
+const profileOptions = {
+  goals: {
+    customer: "Nói chuyện với khách hàng / đối tác", email: "Viết email, tin nhắn công việc",
+    meeting: "Họp và trình bày", docs: "Đọc tài liệu, spec kỹ thuật",
+    career: "Thăng tiến / phỏng vấn", confidence: "Tự tin hơn khi nói"
+  },
+  environmentUse: { daily: "Hằng ngày", weekly: "Vài lần mỗi tuần", monthly: "Thỉnh thoảng", rarely: "Hiếm khi / chưa dùng" },
+  familyUse: { daily: "Hằng ngày", weekly: "Vài lần mỗi tuần", sometimes: "Thỉnh thoảng", none: "Không dùng" },
+  habits: {
+    movies: "Xem phim / video", podcast: "Nghe nhạc / podcast", documents: "Đọc tin tức, tài liệu",
+    social: "Mạng xã hội, chat", conversation: "Nói chuyện với người nước ngoài", course: "Học qua app / khoá học",
+    none: "Chưa có thói quen nào"
+  },
+  learningStyles: {
+    reading: "Đọc và ghi chú", listening: "Nghe và nhắc lại", speaking: "Nói / hội thoại",
+    quiz: "Trắc nghiệm, điền từ", writing: "Viết câu, viết email", examples: "Ví dụ sát việc đang làm",
+    challenge: "Thử thách ngắn, có điểm"
+  },
+  device: { phone: "Điện thoại", computer: "Máy tính", both: "Cả hai" },
+  selfLevel: { unknown: "Không rõ", A1: "Mới bắt đầu (A1)", A2: "Sơ cấp (A2)", B1: "Trung cấp (B1)", B2: "Khá (B2)", C1: "Tốt (C1)" }
+} as const;
+
+function optionLabel(group: keyof typeof profileOptions, value?: string | null) {
+  if (!value) return "";
+  return (profileOptions[group] as Record<string, string>)[value] ?? value;
+}
+
+function optionLabels(group: keyof typeof profileOptions, values?: string[]) {
+  return values?.map((value) => optionLabel(group, value)).join(", ") ?? "";
+}
+
+function explanationLabel(cefr: string | null) {
+  if (!cefr) return "Tự động theo trình độ";
+  return `${cefr === "A1" || cefr === "A2" ? "Tiếng Việt" : "Tiếng Anh"} (tự động theo mức ${cefr})`;
 }
 
 function Progress({ value, max, label }: { value: number; max: number; label: string }) {
@@ -88,6 +142,14 @@ function Progress({ value, max, label }: { value: number; max: number; label: st
 
 function seasonName(level: number) {
   return ({ 2: "Mùa hạ – đón nắng", 3: "Mùa thu – gặt hái", 4: "Mùa đông – vững vàng" } as Record<number, string>)[level] ?? `Mùa ${level}`;
+}
+
+function seasonPoints(level: number) {
+  return ({ 2: 60, 3: 180, 4: 360 } as Record<number, number>)[level] ?? 0;
+}
+
+function cefrDescription(level: string) {
+  return ({ A1: "Mới bắt đầu", A2: "Sơ cấp", B1: "Trung cấp · Trình bày một vấn đề và đề xuất giải pháp.", B2: "Khá", C1: "Tốt" } as Record<string, string>)[level] ?? level;
 }
 
 const avatarColors = [
@@ -148,7 +210,21 @@ function avatarDescription(avatar: LearnerAvatarData) {
 }
 
 function badgeIcon(key: string) {
-  return ({ starter: "🐣", streak3: "🔥", week_complete: "📅", friday: "✍️", coach_friend: "💬", streak5: "🌟", first_try: "🎯", wordsmith: "🔑" } as Record<string, string>)[key] ?? "🏅";
+  return ({ first: "🐣", starter: "🐣", streak3: "🔥", week: "📅", week_complete: "📅", friday: "✍️", chat: "💬", coach_friend: "💬", streak7: "🌟", streak5: "🌟", sharp: "🎯", first_try: "🎯", words: "🔑", wordsmith: "🔑" } as Record<string, string>)[key] ?? "🏅";
+}
+
+function canonicalBadge(key: string, label: string, description: string) {
+  const values: Record<string, { label: string; description: string }> = {
+    first: { label: "Khởi động", description: "Hoàn thành bài học đầu tiên" }, starter: { label: "Khởi động", description: "Hoàn thành bài học đầu tiên" },
+    week: { label: "Tuần trọn vẹn", description: "Xong tất cả bài của một tuần" }, week_complete: { label: "Tuần trọn vẹn", description: "Xong tất cả bài của một tuần" },
+    streak3: { label: "Chuỗi 3 ngày", description: "Học 3 ngày học liên tiếp (T2–T6)" },
+    streak7: { label: "Chuỗi 5 ngày", description: "Học 5 ngày học liên tiếp (T2–T6), không tính cuối tuần" }, streak5: { label: "Chuỗi 5 ngày", description: "Học 5 ngày học liên tiếp (T2–T6), không tính cuối tuần" },
+    sharp: { label: "Chuẩn ngay lần đầu", description: "Làm đúng cả 4 kỹ năng Nghe, Đọc, Viết, Nói của một bài ngay ở lần làm đầu tiên" }, first_try: { label: "Chuẩn ngay lần đầu", description: "Làm đúng cả 4 kỹ năng Nghe, Đọc, Viết, Nói của một bài ngay ở lần làm đầu tiên" },
+    words: { label: "Thợ mở khoá", description: "Mở 10 ô từ bí mật khi chat với Season" }, wordsmith: { label: "Thợ mở khoá", description: "Mở 10 ô từ bí mật khi chat với Season" },
+    chat: { label: "Bạn của Season", description: "10 lượt luyện với Season" }, coach_friend: { label: "Bạn của Season", description: "10 lượt luyện với Season" },
+    friday: { label: "Đúng hẹn thứ Sáu", description: "Nộp bài thực hành tuần" }
+  };
+  return values[key] ?? { label, description };
 }
 
 function seasonIcon(level: number) {

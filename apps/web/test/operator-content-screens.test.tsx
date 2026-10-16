@@ -67,7 +67,12 @@ const review: ContentReviewView = {
     learnerText: "I work at marketing.", coachText: "What do you do in marketing?",
     scores: { meaning: 4, vocabulary: 3, grammar: 3 },
     suggestions: ["I work at marketing → I work in marketing – Dùng in trước tên phòng ban."]
-  }]
+  }],
+  submissions: [],
+  microLessons: [],
+  appeals: [],
+  lessonAttempts: [],
+  assessments: []
 };
 
 const prompts: ContentPromptSettingsView = {
@@ -108,6 +113,8 @@ describe("operator content screens preserve Thu's visible structure", () => {
   it("keeps the week × CEFR matrix and does not fake AI availability", () => {
     render(<MemoryRouter><Lessons view={matrix} aiAvailable={false} /></MemoryRouter>);
     expect(screen.getByRole("heading", { name: "Sinh & duyệt bài học" })).toBeInTheDocument();
+    expect(screen.getByRole("alert")).toHaveTextContent("Chưa có API key");
+    expect(screen.getByRole("note")).toHaveTextContent("“Thêm cột mức” để soạn trước cho mức chưa có ai.");
     expect(screen.getByRole("columnheader", { name: /A2 \(1 học viên\)/ })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Xem / duyệt" })).toHaveAttribute("href", "/op/lessons/1/A2");
     expect(screen.getByRole("button", { name: "Sinh" })).toBeDisabled();

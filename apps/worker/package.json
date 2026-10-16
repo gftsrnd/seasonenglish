@@ -1,0 +1,25 @@
+{
+  "name": "@e4s/worker",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "exports": {
+    ".": "./src/worker.ts"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "start": "tsx src/server.ts",
+    "test": "vitest run",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "@e4s/ai": "workspace:*",
+    "@e4s/database": "workspace:*",
+    "@e4s/storage": "workspace:*",
+    "pg": "8.23.1"
+  },
+  "devDependencies": {
+    "@types/node": "24.10.13",
+    "@types/pg": "8.23.1"
+  }
+}

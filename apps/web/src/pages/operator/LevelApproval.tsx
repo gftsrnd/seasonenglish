@@ -6,13 +6,17 @@ import type {
   CefrLevel
 } from "@e4s/contracts";
 
-export function LevelApproval({ overview, readOnly, onDecision }: {
+export function LevelApproval({ overview, readOnly, onDecision, onResolveTopicReport }: {
   overview: AssessmentReviewOverviewView;
   readOnly: boolean;
   onDecision: (attemptId: string, input: AssessmentDecisionInput) => void | Promise<void>;
+  onResolveTopicReport?: (reportId: string) => void | Promise<void>;
 }) {
+  const topicReports = overview.topicReports ?? [];
+  const levelSignals = overview.levelSignals ?? { windowDays: 14 as const, ready: [], weak: [] };
   const [selectedLevels, setSelectedLevels] = useState<Record<string, CefrLevel>>({});
   const [expandedAttempt, setExpandedAttempt] = useState<string | null>(null);
+  const [expandedLevelUp, setExpandedLevelUp] = useState<string | null>(null);
   const activeLearners = overview.approvedLearners.length + overview.unassessedLearners.length;
 
   const approve = async (item: AssessmentReviewQueueItem) => {
@@ -25,9 +29,17 @@ export function LevelApproval({ overview, readOnly, onDecision }: {
   };
 
   return <main className="operator-page">
+    {topicReports.filter((item) => item.status === "open").length ? <section className="operator-section topic-report-section" aria-labelledby="topic-reports-title">
+      <h3 id="topic-reports-title">Báo cáo nhập chủ đề mini game ({topicReports.filter((item) => item.status === "open").length})</h3>
+      <p className="supporting-text">Học viên nhập chủ đề sai hoặc vi phạm 3 lần liên tiếp. Nhắc nhở rồi bấm Đã xử lý.</p>
+      <div className="topic-report-list">{topicReports.filter((item) => item.status === "open").map((item) => <article key={item.id} data-status={item.status}>
+        <div><strong>{item.learnerName}</strong><span>{new Intl.DateTimeFormat("vi-VN", { dateStyle: "short", timeStyle: "short" }).format(new Date(item.createdAt))}</span></div>
+        <p><code>{item.topic}</code> – {item.reason} · {item.strikeCount} lần</p>
+        <button className="button--primary" type="button" disabled={readOnly || !onResolveTopicReport} onClick={() => void onResolveTopicReport?.(item.id)}>Đã xử lý</button>
+      </article>)}</div>
+    </section> : null}
     <header className="operator-heading">
       <div><h1>Duyệt trình độ</h1><p>Tuần hiện tại · English for Every Season · {activeLearners} người học đang hoạt động</p></div>
-      <a className="operator-warning" href="/settings">Chưa có API key – AI sinh bài/chấm bài chưa hoạt động</a>
     </header>
     {readOnly ? <p className="operator-readonly">Quản lý đang xem ở chế độ chỉ đọc. Người vận hành là người chốt mức.</p> : null}
 
@@ -49,16 +61,18 @@ export function LevelApproval({ overview, readOnly, onDecision }: {
         key={item.attemptId}
         item={item}
         readOnly={readOnly}
+        evidenceOpen={expandedLevelUp === item.attemptId}
+        onToggleEvidence={() => setExpandedLevelUp((current) => current === item.attemptId ? null : item.attemptId)}
         onApprove={() => void approve(item)}
         onRetry={() => void onDecision(item.attemptId, { status: "needs_retry", reason: "Cần bổ sung evidence theo rubric." })}
       />) : <p className="operator-empty">Không có yêu cầu lên mức đang chờ.</p>}
     </section>
 
     <section className="operator-section operator-section--plain" aria-labelledby="level-signals-title">
-      <h3 id="level-signals-title">Tín hiệu đổi mức (14 ngày gần nhất · ngưỡng · đề thi lên mức)</h3>
+      <h3 id="level-signals-title">Tín hiệu đổi mức <span className="supporting-text">({levelSignals.windowDays} ngày gần nhất · <a href="/settings">ngưỡng</a> · <a href="/op/levelforms">đề thi lên mức</a>)</span></h3>
       <div className="level-signal-grid">
-        <article className="level-signal level-signal--ready"><h4>Sẵn sàng thi lên level (0)</h4><p>Chưa có người học đủ toàn bộ điều kiện.</p></article>
-        <article className="level-signal level-signal--down"><h4>Nên xem xét hạ mức (0)</h4><p>Không ai sai quá ngưỡng hai tuần liền.</p></article>
+        <article className="level-signal level-signal--ready"><h4>Sẵn sàng thi lên level ({levelSignals.ready.length})</h4>{levelSignals.ready.length ? <div className="level-signal-list">{levelSignals.ready.map((item) => <div className="level-signal-item" key={item.learnerId}><strong>{item.learnerName}</strong><span><span className="level-pill">{item.currentLevel}</span> → <span className="level-pill">{item.targetLevel}</span></span><p>{item.metrics.map((metric) => `${metric.label} ${metric.display}`).join(" · ")}</p></div>)}</div> : <p>Chưa có ai đủ cả 4 tín hiệu.</p>}</article>
+        <article className="level-signal level-signal--down"><h4>Nên xem xét hạ mức ({levelSignals.weak.length})</h4>{levelSignals.weak.length ? <div className="level-signal-list">{levelSignals.weak.map((item) => <div className="level-signal-item" key={item.learnerId}><strong>{item.learnerName}</strong><span className="level-pill">{item.currentLevel}</span><p>{item.wrongWeeks.map((week) => `tuần ${week.weekNumber}: ${week.wrongPercent}% sai (${week.partCount} phần)`).join(" · ")}</p></div>)}</div> : <p>Không ai sai quá ngưỡng hai tuần liền.</p>}</article>
       </div>
     </section>
 
@@ -69,7 +83,7 @@ export function LevelApproval({ overview, readOnly, onDecision }: {
           <td><strong>{learner.learnerName}</strong></td><td><span className="level-pill">{learner.currentLevel}</span></td>
           <td>{learner.placementScore === null ? "—" : `${learner.placementScore}/100`}</td>
           <td>{learner.monthlyGoal ?? "Chưa đặt mục tiêu"}</td>
-          <td className="operator-actions"><button type="button" disabled>Đổi level</button><button type="button" disabled>Mục tiêu</button><button type="button" disabled>Bài test</button><button type="button" disabled>Hồ sơ</button></td>
+          <td className="operator-actions"><span className="muted">Đổi mức qua quy trình thi lên mức</span></td>
         </tr>)}</tbody>
       </table></div>
     </section>
@@ -78,7 +92,7 @@ export function LevelApproval({ overview, readOnly, onDecision }: {
       <h3 id="unassessed-title">Chưa làm test ({overview.unassessedLearners.length})</h3>
       {overview.unassessedLearners.length ? overview.unassessedLearners.map((learner) => <article className="unassessed-row" key={learner.learnerId}>
         <div><strong>{learner.learnerName}</strong><span>{learner.profileComplete ? "Đã điền hồ sơ" : "Chưa điền hồ sơ"}</span></div>
-        <button type="button" disabled>Đánh giá thủ công</button>
+        <span className="muted">Chờ người học hoàn thành bài đánh giá đầu vào</span>
       </article>) : <p className="operator-empty">Tất cả người học đã có kết quả đầu vào.</p>}
     </section>
   </main>;
@@ -109,13 +123,14 @@ function ReviewGroup({ title, empty, items, readOnly, selectedLevels, expandedAt
           <button type="button" onClick={() => onToggleEvidence(item.attemptId)}>Xem bài làm</button>
         </div>
       </article>;
-    }) : <p className="operator-empty">{empty}</p>}
+    }) : <div className="operator-section"><p className="operator-empty">{empty}</p></div>}
   </section>;
 }
 
-function LevelUpRequest({ item, readOnly, onApprove, onRetry }: { item: AssessmentReviewQueueItem; readOnly: boolean; onApprove: () => void; onRetry: () => void }) {
+function LevelUpRequest({ item, readOnly, evidenceOpen, onToggleEvidence, onApprove, onRetry }: { item: AssessmentReviewQueueItem; readOnly: boolean; evidenceOpen: boolean; onToggleEvidence: () => void; onApprove: () => void; onRetry: () => void }) {
   const total = scoreTotal(item);
-  return <article className="level-request"><div className="level-request-heading"><div><strong>{item.learnerName}</strong><span className="level-pill">{item.suggestedLevel ?? "—"}</span><span>gửi {formatDate(item.submittedAt)}</span></div><div><button type="button">Bài thi</button><button type="button" disabled>Thử thách</button><button className="button--primary" type="button" disabled={readOnly || !item.suggestedLevel} onClick={onApprove}>Duyệt lên mức</button><button type="button" disabled={readOnly} onClick={onRetry}>Từ chối</button></div></div><p>Bài thi: {total}/100 · {skillEntries(item).map(([label, value]) => `${label} ${value}%`).join(" · ")}</p><p>Thử thách Season: chưa đủ dữ liệu xác nhận.</p></article>;
+  const challenge = item.challenge;
+  return <article className="level-request"><div className="level-request-heading"><div><strong>{item.learnerName}</strong><span className="level-pill">{item.suggestedLevel ?? "—"}</span><span>gửi {formatDate(item.submittedAt)}</span></div><div><button type="button" onClick={onToggleEvidence}>{evidenceOpen ? "Ẩn bài thi" : "Xem bài thi"}</button><button className="button--primary" type="button" disabled={readOnly || !item.suggestedLevel || !challenge?.complete} onClick={onApprove}>Duyệt lên mức</button><button type="button" disabled={readOnly} onClick={onRetry}>Từ chối</button></div></div><p>Bài thi: {total}/100 · {skillEntries(item).map(([label, value]) => `${label} ${value}%`).join(" · ")}</p>{evidenceOpen ? <div className="review-evidence"><strong>Evidence điểm</strong><p>{skillEntries(item).map(([label, value]) => `${label} ${value}%`).join(" · ")}</p></div> : null}<p>Thử thách Season: {challenge ? `${challenge.completedTurns}/${challenge.requiredTurns} lượt · trung bình ${challenge.average.toFixed(1)}/5 · lệch chủ đề ${challenge.offTopic} · ${challenge.passed ? "đạt" : challenge.complete ? "chưa đạt" : "chưa hoàn thành"}` : "chưa bắt đầu"}.</p></article>;
 }
 
 const levelOptions: Array<[CefrLevel, string]> = [["A1", "Mới bắt đầu"], ["A2", "Sơ cấp"], ["B1", "Trung cấp"], ["B2", "Trung cao"], ["C1", "Cao cấp"]];
@@ -132,4 +147,3 @@ function skillEntries(item: AssessmentReviewQueueItem): Array<[string, number]> 
   });
 }
 function formatDate(value: string) { return new Intl.DateTimeFormat("vi-VN", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" }).format(new Date(value)); }
-

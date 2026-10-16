@@ -1,25 +1,31 @@
 import type { LearnerHomeView } from "@e4s/contracts";
 import { LevelReadinessCard } from "./LevelReadinessCard.js";
+import { SeasonMark } from "./games/season-art.js";
 
-export function Home({ view }: { view: LearnerHomeView }) {
-  if (view.onboardingRequired) return <main className="learner-page"><h1>Chào bạn!</h1><p>Hoàn thiện hồ sơ để Season chọn nội dung phù hợp.</p><a className="button button--primary" href="/onboard">Hoàn thiện hồ sơ</a></main>;
+export function Home({ view }: { view: LearnerHomeView; onGenerateMicro?: () => void | Promise<void> }) {
+  if (view.onboardingRequired) return <OnboardingHome view={view} />;
   const next = view.nextLesson;
+  const primaryTask = !view.week
+    ? <section className="primary-task primary-task--waiting" data-home-block="primary"><div><p className="eyebrow">Tuần học</p><h2>Tuần này chưa có bài</h2><p>Người vận hành chưa đặt chủ đề tuần. Bạn có thể luyện với Season trong lúc chờ.</p></div><a className="button button--primary" href="/coach">Luyện với Season</a></section>
+    : view.lessons.length === 0
+      ? <section className="primary-task primary-task--waiting" data-home-block="primary"><div><p className="eyebrow">Tuần {view.week.weekNumber} · {view.week.topic}</p><h2>Bộ bài đang được chuẩn bị</h2><p>Bộ bài mức {view.learner.cefr ?? "của bạn"} đang được duyệt. Quay lại sau hoặc luyện với Season trước.</p></div><a className="button button--primary" href="/coach">Luyện với Season</a></section>
+      : next
+        ? <section className="primary-task" data-home-block="primary" aria-labelledby="today-title"><p className="eyebrow">Bài hôm nay</p><h2 id="today-title">{next.title}</h2><p className="task-detail">{view.schedule.lessonMinutes} phút · Bài {next.dayNumber}/{view.lessons.length}</p><a className="button button--primary" href={`/lesson/${next.id}`}>Học {next.title}</a></section>
+        : <section className="primary-task primary-task--complete" data-home-block="primary"><div><p className="eyebrow">Tuần {view.week.weekNumber} · {view.week.topic}</p><h2>Xong hết {view.lessons.length} bài rồi!</h2><p>Ôn lại bài hoặc luyện thêm với Season nhé.</p></div><a className="button button--primary" href="/practice">Bài thực hành cuối tuần</a></section>;
   return <main className="learner-page">
     <header className="page-heading home-heading">
-      <div><p className="page-kicker">Thứ Ba · Tuần {view.week?.weekNumber}/2</p><h1>Chào {view.learner.displayName}!</h1></div>
+      <div><p className="page-kicker">{weekdayLabel()} · Tuần {view.week?.weekNumber}/{view.program?.weekCount ?? "—"}</p><h1>Chào {view.learner.displayName}!</h1></div>
       <span className="level-badge">Trình độ {view.learner.cefr}</span>
     </header>
     <section className="topic-summary" data-home-block="context" aria-label="Chủ đề đang học">
       <article><span>Chủ đề lớn của khoá</span><strong>{view.program?.name}</strong></article>
       <article><span>Chủ đề tuần {view.week?.weekNumber}</span><strong>{view.week?.topic}</strong></article>
     </section>
-    <aside className="learning-notice" data-home-block="notice" role="note">Lâu rồi không gặp! Học ngắn {view.schedule.lessonMinutes} phút thôi nhé?</aside>
-    {next ? <section className="primary-task" data-home-block="primary" aria-labelledby="today-title">
-      <p className="eyebrow">Bài hôm nay</p>
-      <h2 id="today-title">{next.title}</h2>
-      <p className="task-detail">{view.schedule.lessonMinutes} phút · Bài {next.dayNumber}/{view.lessons.length}</p>
-      <a className="button button--primary" href={`/lesson/${next.id}`}>Học {next.title}</a>
-    </section> : <section className="primary-task" data-home-block="primary"><h2>Đã xong bài tuần này</h2><a href="/practice">Làm bài thực hành cuối tuần</a></section>}
+    <div className="home-greeting" data-home-block="notice">
+      <span className="home-season-mark" aria-hidden="true"><SeasonMark /></span>
+      <aside className="learning-notice" role="note">Lâu rồi không gặp! Học ngắn {view.schedule.lessonMinutes} phút thôi nhé?</aside>
+    </div>
+    {primaryTask}
     <section className="metric-grid" data-home-block="metrics" aria-label="Tiến độ hiện tại">
       <Metric label="Bài đã học" value={`${view.metrics.completedLessons}/${view.metrics.totalLessons}`} />
       <Metric label="Ngày có học" value={String(view.metrics.studyDays)} />
@@ -41,11 +47,29 @@ export function Home({ view }: { view: LearnerHomeView }) {
     </section>
     <section className="activity-links" data-home-block="activities" aria-label="Hoạt động tuần">
       <a href={view.coach.href}><span className="activity-icon" aria-hidden="true">S</span><strong>Luyện với Season</strong><small>Đã luyện {view.coach.turnsThisWeek}/{view.coach.targetTurns} lượt tuần này</small></a>
-      <a href={view.practice.href} aria-disabled={view.practice.status === "locked"}><span className="activity-icon" aria-hidden="true">W</span><strong>Bài thực hành cuối tuần</strong><small>{view.practice.detail}</small></a>
+      <a href={view.practice.href} className={view.practice.status === "locked" ? "activity-link activity-link--disabled" : undefined} aria-disabled={view.practice.status === "locked" ? "true" : undefined}><span className="activity-icon" aria-hidden="true">W</span><strong>Bài thực hành cuối tuần</strong><small>{view.practice.detail}</small></a>
     </section>
     <div data-home-block="readiness"><LevelReadinessCard readiness={view.levelReadiness} /></div>
     {view.finalAssessment.available ? <section className="final-assessment"><h2>Bài kiểm tra cuối kỳ đã mở</h2><p>Dùng cùng rubric với bài đầu vào để nhìn thấy tiến bộ.</p><a className="button button--primary" href={view.finalAssessment.href}>{view.finalAssessment.label}</a></section> : null}
   </main>;
+}
+
+function OnboardingHome({ view }: { view: LearnerHomeView }) {
+  return <main className="learner-page learner-home-setup">
+    <header className="page-heading home-heading"><div><p className="page-kicker">{weekdayLabel()}</p><h1>Chào {view.learner.displayName}!</h1></div></header>
+    <section className="topic-summary" aria-label="Chủ đề đang học"><article><span>Chủ đề lớn của khoá</span><strong>{view.program?.name ?? "English for Every Season"}</strong></article><article><span>Chủ đề tuần</span><strong>{view.week?.topic ?? "Chưa đặt"}</strong></article></section>
+    <div className="home-greeting"><span className="home-season-mark" aria-hidden="true"><SeasonMark /></span><aside className="learning-notice" role="note">Mình cần biết về bạn trước nhé!</aside></div>
+    <section className="home-setup-card" aria-labelledby="setup-title"><h2 id="setup-title">3 bước để bắt đầu học</h2><ol className="home-setup-steps">
+      <li data-state="current"><span>1</span><div><div><strong>Hồ sơ cá nhân</strong><small>Đang ở bước này</small></div><p><b>Vì sao cần?</b> Bài học lấy ví dụ theo đúng công việc của bạn, và Season giải thích theo cách bạn chọn.</p><a className="button button--primary" href="/onboard">Điền hồ sơ (~2 phút)</a></div></li>
+      <li data-state="todo"><span>2</span><div><div><strong>Test đầu vào</strong><small>Mở sau khi xong hồ sơ</small></div><p><b>Vì sao cần?</b> Để xếp đúng mức CEFR: bài quá dễ thì chán, quá khó thì nản. Không cần ôn trước.</p></div></li>
+      <li data-state="todo"><span>3</span><div><div><strong>Vận hành duyệt mức</strong><small>Sau khi nộp test</small></div><p><b>Vì sao cần?</b> Một người thật xem lại gợi ý của AI trước khi mở bài, tránh xếp nhầm mức.</p></div></li>
+    </ol></section>
+  </main>;
+}
+
+function weekdayLabel() {
+  const label = new Intl.DateTimeFormat("vi-VN", { weekday: "long" }).format(new Date());
+  return label.charAt(0).toUpperCase() + label.slice(1);
 }
 
 function Metric({ label, value }: { label: string; value: string }) {

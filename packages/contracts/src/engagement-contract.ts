@@ -3,6 +3,18 @@ import type { LearnerAvatarData } from "./learning-contract.js";
 
 export type WeeklyPracticeState = "locked" | "open" | "draft" | "submitted" | "reviewed";
 
+export type WeeklyPracticeReviewState = "ungraded" | "graded-ai" | "graded-manual" | "appeal-pending" | "appeal-decided";
+
+export interface WeeklyPracticeAppealView {
+  id: string;
+  submissionId: string;
+  status: "pending" | "accepted" | "rejected";
+  reason: string;
+  resolution?: string | null;
+  createdAt: string;
+  resolvedAt?: string | null;
+}
+
 export interface WeeklyPracticeView {
   state: WeeklyPracticeState;
   weekId: string;
@@ -18,13 +30,29 @@ export interface WeeklyPracticeView {
     text: string;
     submittedAt: string | null;
     score: null | { total: number; rubric?: { meaning: number; vocabulary: number; grammar: number } };
+    gradingSource?: "ai" | "manual";
+    reviewState?: WeeklyPracticeReviewState;
     feedback: string;
     suggestions: Array<{ original: string; corrected: string; explanation: string }>;
     correctedText: string;
   };
+  reviewState?: WeeklyPracticeReviewState;
+  appeal?: WeeklyPracticeAppealView | null;
+  inputMode?: "write" | "dialogue";
+  speechSupported?: boolean;
 }
 
 export type GameKey = "scramble" | "crossword" | "eggs" | "mario" | "sort" | "typing";
+
+export type GameTopicModeration =
+  | { state: "empty" }
+  | { state: "invalid"; message: string }
+  | { state: "unsafe"; strike: 1 | 2 | 3; message: string }
+  | { state: "reported"; strike: 3; message: string; reportId?: string }
+  | { state: "ai_rejected"; message: string }
+  | { state: "loading" }
+  | { state: "success"; topic: string }
+  | { state: "error"; message: string };
 
 export interface GameWordView {
   id: string;
@@ -32,6 +60,8 @@ export interface GameWordView {
   vietnamese: string;
   definition: string;
   partOfSpeech: string;
+  /** Resolved by the server through the configured image provider and persisted with the word set. */
+  imageUrl?: string;
 }
 
 export interface GameDescriptor {
@@ -56,6 +86,7 @@ export interface GameWordSetView {
 export interface GameHubView {
   cefr: CefrLevel;
   aiAvailable?: boolean;
+  topicModeration?: GameTopicModeration;
   wordSet: GameWordSetView;
   games: GameDescriptor[];
   arena: { eligible: boolean; requiredLevel: "B1"; points: number; pendingDuels: number };
@@ -67,6 +98,18 @@ export interface GameAnswerInput {
   attempts?: number;
   usedHint?: boolean;
   combo?: number;
+}
+
+export interface GameEvidenceEventInput {
+  type: "wrong_catch" | "timeout";
+  wordId: string;
+  answer: string;
+}
+
+export interface GameFinishInput {
+  answers: GameAnswerInput[];
+  hintsUsed?: number;
+  events?: GameEvidenceEventInput[];
 }
 
 export interface GameResultView {

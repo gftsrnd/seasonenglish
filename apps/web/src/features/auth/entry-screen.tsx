@@ -11,7 +11,6 @@ export interface LoginCredentials {
 export interface AuthClient {
   learnerLogin(input: LoginCredentials): Promise<SessionView>;
   staffLogin(input: LoginCredentials): Promise<SessionView>;
-  demoLogin(): Promise<SessionView>;
 }
 
 export interface EntryScreenProps {
@@ -23,12 +22,13 @@ export function EntryScreen({ client, onAuthenticated }: EntryScreenProps) {
   const [audience, setAudience] = useState<"learner" | "staff">("learner");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [busy, setBusy] = useState(false);
+  const [pendingAction, setPendingAction] = useState<"login" | null>(null);
   const [error, setError] = useState("");
+  const busy = pendingAction !== null;
 
   const submit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    setBusy(true);
+    setPendingAction("login");
     setError("");
     try {
       const session = await (audience === "learner"
@@ -36,21 +36,9 @@ export function EntryScreen({ client, onAuthenticated }: EntryScreenProps) {
         : client.staffLogin({ email, password }));
       onAuthenticated(session);
     } catch {
-      setError("Không thể đăng nhập. Vui lòng kiểm tra thông tin và thử lại.");
+      setError("Không thể đăng nhập. Vui lòng kiểm tra email và mật khẩu.");
     } finally {
-      setBusy(false);
-    }
-  };
-
-  const startDemo = async () => {
-    setBusy(true);
-    setError("");
-    try {
-      onAuthenticated(await client.demoLogin());
-    } catch {
-      setError("Bản dùng thử hiện chưa sẵn sàng. Vui lòng thử lại sau.");
-    } finally {
-      setBusy(false);
+      setPendingAction(null);
     }
   };
 
@@ -68,6 +56,7 @@ export function EntryScreen({ client, onAuthenticated }: EntryScreenProps) {
           <button
             type="button"
             className="entry-switch"
+            disabled={busy}
             onClick={() => setAudience((value) => value === "learner" ? "staff" : "learner")}
             aria-pressed={audience === "staff"}
           >
@@ -101,16 +90,10 @@ export function EntryScreen({ client, onAuthenticated }: EntryScreenProps) {
           {error ? <p role="alert">{error}</p> : null}
 
           <button type="submit" disabled={busy}>
-            {audience === "learner" ? "Đăng nhập người học" : "Đăng nhập nhân sự"}
+            {pendingAction === "login" ? "Đang đăng nhập…" : audience === "learner" ? "Đăng nhập người học" : "Đăng nhập nhân sự"}
           </button>
         </form>
 
-        <div className="entry-demo">
-          <span aria-hidden="true" />
-          <p>Muốn xem trước trải nghiệm?</p>
-          <span aria-hidden="true" />
-        </div>
-        <button type="button" onClick={startDemo} disabled={busy}>Dùng thử</button>
       </section>
     </main>
   );

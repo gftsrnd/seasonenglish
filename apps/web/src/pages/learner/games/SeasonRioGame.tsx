@@ -1,39 +1,43 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { GameAnswerInput } from "@e4s/contracts";
-import { choices, type FinishGame, type GameWord } from "./types.js";
+import { seasonRioRoundPlan } from "@e4s/domain/engagement";
+import { choices, prepareGameAttempt, type FinishGame, type GameWord } from "./types.js";
 import { currentSeasonVisual, GiftArt, SeasonHero } from "./season-art.js";
+import { useExperience } from "../../../features/experience/Experience.js";
 
 type Quiz = { phase: "gate" | "boss"; index: number; word: GameWord };
 type GateState = "closed" | "correct" | "wrong";
 const tierOrder = [0, 60, 0, 110, 60, 0, 110, 60] as const;
 const gateLayout = tierOrder.map((tier, index) => ({ left: 360 + index * 330, tier }));
-const gatePositions = gateLayout.map((gate) => gate.left);
-const platforms = gateLayout.flatMap((gate) => gate.tier === 60
-  ? [{ left: gate.left - 10, width: 150, height: 60 }]
-  : gate.tier === 110
-    ? [{ left: gate.left - 150, width: 90, height: 55 }, { left: gate.left - 10, width: 150, height: 110 }]
-    : []);
-const bossX = 360 + gateLayout.length * 330 + 60;
-const flagX = bossX + 220;
-const worldWidth = flagX + 200;
 
-export function SeasonRioGame({ words: source, onFinish }: { words: GameWord[]; onFinish: FinishGame }) {
+export function SeasonRioGame({ words: source, onFinish, attemptSeed = 0 }: { words: GameWord[]; onFinish: FinishGame; attemptSeed?: number }) {
   const season = currentSeasonVisual();
-  const gateWords = useMemo(() => source.slice(0, 8), [source]);
-  const bossWords = useMemo(() => source.slice(8, 11).length ? source.slice(8, 11) : source.slice(0, 3), [source]);
+  const words = useMemo(() => prepareGameAttempt(source, attemptSeed), [attemptSeed, source]);
+  const roundPlan = useMemo(() => seasonRioRoundPlan(words), [words]);
+  const activeGateLayout = useMemo(() => gateLayout.slice(0, roundPlan.gateCount), [roundPlan.gateCount]);
+  const gatePositions = useMemo(() => activeGateLayout.map((gate) => gate.left), [activeGateLayout]);
+  const platforms = useMemo(() => activeGateLayout.flatMap((gate) => gate.tier === 60
+    ? [{ left: gate.left - 10, width: 150, height: 60 }]
+    : gate.tier === 110
+      ? [{ left: gate.left - 150, width: 90, height: 55 }, { left: gate.left - 10, width: 150, height: 110 }]
+      : []), [activeGateLayout]);
+  const bossX = 360 + activeGateLayout.length * 330 + 60;
+  const flagX = bossX + 220;
+  const worldWidth = flagX + 200;
   const [heroX, setHeroX] = useState(40);
   const [heroY, setHeroY] = useState(0);
-  const [gateStates, setGateStates] = useState<GateState[]>(() => Array.from({ length: 8 }, () => "closed"));
+  const [gateStates, setGateStates] = useState<GateState[]>(() => Array.from({ length: roundPlan.gateCount }, () => "closed"));
   const [quiz, setQuiz] = useState<Quiz | null>(null);
   const [lives, setLives] = useState(3);
   const [score, setScore] = useState(0);
-  const [bossHealth, setBossHealth] = useState(3);
+  const [bossHealth, setBossHealth] = useState(roundPlan.bossQuestions);
   const [bossSeconds, setBossSeconds] = useState(10);
   const [bossStarted, setBossStarted] = useState(false);
   const [answers, setAnswers] = useState<GameAnswerInput[]>([]);
   const [notice, setNotice] = useState("Chạy tới hộp quà đầu tiên.");
   const [busy, setBusy] = useState(false);
   const [ending, setEnding] = useState<"dinosaur" | "expired" | null>(null);
+  const { play } = useExperience();
   const keys = useRef<Record<string, boolean>>({});
   const velocityY = useRef(0);
   const finished = useRef(false);
@@ -80,15 +84,15 @@ export function SeasonRioGame({ words: source, onFinish }: { words: GameWord[]; 
         const gateIndex = gatePositions.findIndex((position, index) => current.gateStates[index] === "closed" && nextX >= position - 48);
         if (gateIndex >= 0) {
           nextX = gatePositions[gateIndex]! - 48;
-          const gate = gateLayout[gateIndex]!;
-          const word = gateWords[gateIndex];
-          if (word && nextY >= Math.max(0, gate.tier - 10)) { setQuiz({ phase: "gate", index: gateIndex, word }); setNotice(`Hộp quà ${gateIndex + 1}/8 đang chặn đường.`); }
+          const gate = activeGateLayout[gateIndex]!;
+          const word = roundPlan.gateWords[gateIndex];
+          if (word && nextY >= Math.max(0, gate.tier - 10)) { setQuiz({ phase: "gate", index: gateIndex, word }); setNotice(`Hộp quà ${gateIndex + 1}/${roundPlan.gateCount} đang chặn đường.`); }
           else if (gate.tier > 0) setNotice(gate.tier === 60 ? "Nhảy lên bục để chạm hộp quà." : "Leo bậc thấp rồi nhảy lên bục cao để chạm hộp quà.");
         } else if (current.gateStates.every((gate) => gate !== "closed") && current.bossHealth > 0 && nextX >= bossX - 78) {
           nextX = bossX - 78;
-          const bossIndex = 3 - current.bossHealth;
-          const word = bossWords[bossIndex % Math.max(1, bossWords.length)];
-          if (word) { setBossStarted(true); setQuiz({ phase: "boss", index: bossIndex, word }); setNotice(`Boss ${season.food.name}: trả lời đúng 3 câu trước khi hết 10 giây.`); }
+          const bossIndex = roundPlan.bossQuestions - current.bossHealth;
+          const word = roundPlan.bossWords[bossIndex % Math.max(1, roundPlan.bossWords.length)];
+          if (word) { setBossStarted(true); setQuiz({ phase: "boss", index: bossIndex, word }); setNotice(`Boss ${season.food.name}: trả lời đúng ${roundPlan.bossQuestions} câu trước khi hết 10 giây.`); }
         } else if (current.gateStates.every((gate) => gate !== "closed") && current.bossHealth <= 0 && nextX >= flagX - 30) {
           nextX = flagX - 30; void finish(current.answers, "🏁 Đã về đích!");
         }
@@ -99,7 +103,7 @@ export function SeasonRioGame({ words: source, onFinish }: { words: GameWord[]; 
     };
     frame = requestAnimationFrame(step);
     return () => cancelAnimationFrame(frame);
-  }, [bossWords, busy, gateWords, onFinish]);
+  }, [activeGateLayout, bossX, busy, flagX, gatePositions, onFinish, platforms, roundPlan]);
 
   useEffect(() => {
     if (!bossStarted || bossHealth <= 0 || busy) return;
@@ -113,6 +117,7 @@ export function SeasonRioGame({ words: source, onFinish }: { words: GameWord[]; 
   const answerQuiz = (selected: GameWord) => {
     if (!quiz || busy) return;
     const correct = selected.id === quiz.word.id;
+    play(correct ? "success" : "error");
     const answer: GameAnswerInput = { wordId: quiz.word.id, answer: selected.english, attempts: 1, usedHint: false, combo: 1 };
     const nextAnswers = [...answers, answer];
     let nextLives = lives;
@@ -137,19 +142,19 @@ export function SeasonRioGame({ words: source, onFinish }: { words: GameWord[]; 
   const jump = () => { hold("jump", true); if (velocityY.current === 0) velocityY.current = 11; };
   const camera = Math.max(0, Math.min(worldWidth - 900, heroX - 260));
   return <div className="game-runner">
-    <div className="game-hud"><h2>Season-rio</h2><span>🍄 <strong>{score}/11</strong></span><span>Quà <strong>{gateStates.filter((gate) => gate !== "closed").length}/8</strong></span><span>{season.food.emoji} {bossHealth > 0 ? `${"❤".repeat(bossHealth)} · ⏱ ${bossSeconds}s` : "xong"}</span><span aria-label={`${lives} tim`}>{"❤️".repeat(Math.max(0, lives))}{"🖤".repeat(Math.max(0, 3 - lives))}</span></div>
+    <div className="game-hud"><h2>Season-rio</h2><span>🍄 <strong>{score}/{roundPlan.total}</strong></span><span>Quà <strong>{gateStates.filter((gate) => gate !== "closed").length}/{roundPlan.gateCount}</strong></span><span>{season.food.emoji} {bossHealth > 0 ? `${"❤".repeat(bossHealth)} · ⏱ ${bossSeconds}s` : "xong"}</span><span aria-label={`${lives} tim`}>{"❤️".repeat(Math.max(0, lives))}{"🖤".repeat(Math.max(0, 3 - lives))}</span></div>
     <div className="rio-scene" role="application" aria-label="Màn chơi Season-rio" tabIndex={0}>
       <div className="rio-viewport"><div className="rio-world" style={{ width: worldWidth, transform: `translateX(-${camera}px)` }}>
         <div className="rio-cloud rio-cloud--one" /><div className="rio-cloud rio-cloud--two" />
         {platforms.map((platform, index) => <div data-testid="rio-platform" className="rio-platform" style={{ left: platform.left, width: platform.width, height: platform.height }} key={`${platform.left}-${index}`} />)}
-        {gateLayout.map((gate, index) => <div data-testid="gift-gate" data-state={gateStates[index] ?? "closed"} data-tier={gate.tier} className={`gift-gate ${(gateStates[index] ?? "closed") !== "closed" ? "is-open" : ""}`} style={{ left: gate.left, bottom: 28 + gate.tier }} key={gate.left}><i className="gate-beam" /><GiftArt state={gateStates[index] ?? "closed"} /><i className="gate-post" /></div>)}
+        {activeGateLayout.map((gate, index) => <div data-testid="gift-gate" data-state={gateStates[index] ?? "closed"} data-tier={gate.tier} className={`gift-gate ${(gateStates[index] ?? "closed") !== "closed" ? "is-open" : ""}`} style={{ left: gate.left, bottom: 28 + gate.tier }} key={gate.left}><i className="gate-beam" /><GiftArt state={gateStates[index] ?? "closed"} /><i className="gate-post" /></div>)}
         <div data-testid="season-rio-boss" className={`rio-boss ${bossHealth <= 0 ? "is-cleared" : ""}`} style={{ left: bossX }}><b>{bossHealth <= 0 ? "😋" : season.food.emoji}</b><span>{bossHealth <= 0 ? "Đã ăn xong" : `${season.food.name.toUpperCase()} KHỔNG LỒ · ${bossSeconds}s`}</span></div>
         <div data-testid="season-rio-flag" className={`rio-flag ${gateStates.every((gate) => gate !== "closed") && bossHealth <= 0 ? "is-ready" : ""}`} style={{ left: flagX }}>🚩</div>
         <div data-testid="season-rio-hero" className={`rio-hero ${heroY > 0 ? "is-jumping" : ""}`} style={{ left: heroX, bottom: 28 + heroY }}><SeasonHero pose={heroY > 0 ? "jump" : "idle"} /></div>
         <div className="rio-ground" />
       </div></div>
       <div className="mario-controls" aria-label="Điều khiển Season-rio"><div><button type="button" aria-label="Sang trái" onPointerDown={() => nudge(-1)} onPointerUp={() => hold("ArrowLeft", false)} onPointerCancel={() => hold("ArrowLeft", false)} onPointerLeave={() => hold("ArrowLeft", false)}>←</button><button type="button" aria-label="Sang phải" onPointerDown={() => nudge(1)} onPointerUp={() => hold("ArrowRight", false)} onPointerCancel={() => hold("ArrowRight", false)} onPointerLeave={() => hold("ArrowRight", false)}>→</button></div><button className="jump" type="button" aria-label="Nhảy" onPointerDown={jump} onPointerUp={() => hold("jump", false)} onPointerCancel={() => hold("jump", false)}>↑ <small>Nhảy</small></button></div>
-      {quiz ? <div className="rio-quiz" role="dialog" aria-label={quiz.phase === "gate" ? "Câu hỏi hộp quà" : "Câu hỏi Boss"}><div><span className="eyebrow">{quiz.phase === "gate" ? `Hộp quà ${quiz.index + 1}/8 hỏi` : `${season.food.emoji} Boss hỏi · ${bossSeconds}s`}</span><h3>{quiz.word.vietnamese}</h3><p>{quiz.word.definition}</p><div>{choices(source, quiz.word).map((choice) => <button type="button" disabled={busy} key={choice.id} onClick={() => answerQuiz(choice)}>{choice.english}</button>)}</div></div></div> : null}
+      {quiz ? <div className="rio-quiz" role="dialog" aria-label={quiz.phase === "gate" ? "Câu hỏi hộp quà" : "Câu hỏi Boss"}><div><span className="eyebrow">{quiz.phase === "gate" ? `Hộp quà ${quiz.index + 1}/${roundPlan.gateCount} hỏi` : `${season.food.emoji} Boss hỏi · ${bossSeconds}s`}</span><h3>{quiz.word.vietnamese}</h3><p>{quiz.word.definition}</p><div>{choices(words, quiz.word, 4, attemptSeed ^ quiz.index).map((choice) => <button type="button" disabled={busy} key={choice.id} onClick={() => answerQuiz(choice)}>{choice.english}</button>)}</div></div></div> : null}
       {ending ? <div className="game-ending" role="status"><span>{ending === "dinosaur" ? "🦖" : season.food.emoji}</span><strong>{ending === "dinosaur" ? "Hết 3 mạng!" : "Hết 10 giây!"}</strong><small>{ending === "dinosaur" ? "Khủng long đã bắt kịp bạn." : `${season.food.name} khổng lồ đã hỏng.`}</small></div> : null}
     </div>
     <p className="catch-help">Phím ← → di chuyển, Space / ↑ nhảy, hoặc dùng bộ nút trên màn chơi. Mỗi hộp quà là một cổng chắn ngang đường: chạm vào hộp hoặc cột gỗ để trả lời; trả lời xong cổng mới mở. Hộp trên bục thì phải leo lên bục trước. Đúng được nấm 🍄, sai mất ❤️. Cuối màn là {season.food.emoji} {season.food.name} khổng lồ – món khoái khẩu của {season.heroName}: trả lời đúng 3 câu trong 10 giây kể từ lúc chạm vào, quá giờ món ăn bị hỏng và thua. Xong thì chạm cờ để về đích.</p>

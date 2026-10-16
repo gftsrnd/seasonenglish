@@ -22,9 +22,74 @@ export const organizations = pgTable("organizations", {
   id: uuid("id").primaryKey(), name: text("name").notNull(), slug: text("slug").notNull().unique(), createdAt: now()
 });
 
+export const organizationSettings = pgTable("organization_settings", {
+  organizationId: uuid("organization_id").primaryKey().references(() => organizations.id, { onDelete: "cascade" }),
+  reminderInactiveDays: integer("reminder_inactive_days").notNull().default(3),
+  weeklyReportEnabled: boolean("weekly_report_enabled").notNull().default(true),
+  theme: text("theme").notNull().default("auto"),
+  vocabImageSource: text("vocab_image_source").notNull().default("wikimedia"),
+  configuration: jsonb("configuration").notNull().default(emptyObject),
+  updatedBy: uuid("updated_by").references(() => users.id),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow()
+});
+
+export const providerConfigurations = pgTable("provider_configurations", {
+  organizationId: uuid("organization_id").primaryKey().references(() => organizations.id, { onDelete: "cascade" }),
+  provider: text("provider").notNull(),
+  baseUrl: text("base_url").notNull().default(""),
+  model: text("model").notNull().default(""),
+  speechToTextModel: text("speech_to_text_model").notNull().default(""),
+  secretCiphertext: text("secret_ciphertext"),
+  secretNonce: text("secret_nonce"),
+  secretAuthTag: text("secret_auth_tag"),
+  lastTestStatus: text("last_test_status").notNull().default("never"),
+  lastTestCode: text("last_test_code"),
+  lastTestedAt: timestamp("last_tested_at", { withTimezone: true }),
+  updatedBy: uuid("updated_by").references(() => users.id),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow()
+});
+
+export const managerPinReports = pgTable("manager_pin_reports", {
+  id: uuid("id").primaryKey(),
+  organizationId: uuid("organization_id").notNull().references(() => organizations.id, { onDelete: "cascade" }),
+  subjectUserId: uuid("subject_user_id").notNull().references(() => users.id),
+  note: text("note").notNull().default(""),
+  status: text("status").notNull().default("open"),
+  createdBy: uuid("created_by").notNull().references(() => users.id),
+  resolvedBy: uuid("resolved_by").references(() => users.id),
+  createdAt: now(),
+  resolvedAt: timestamp("resolved_at", { withTimezone: true })
+});
+
+export const managerDestructiveConfirmations = pgTable("manager_destructive_confirmations", {
+  id: uuid("id").primaryKey(),
+  organizationId: uuid("organization_id").notNull().references(() => organizations.id, { onDelete: "cascade" }),
+  managerId: uuid("manager_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  action: text("action").notNull(),
+  targetId: uuid("target_id").notNull(),
+  tokenHash: text("token_hash").notNull(),
+  details: jsonb("details").notNull().default(emptyObject),
+  expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+  usedAt: timestamp("used_at", { withTimezone: true }),
+  createdAt: now()
+});
+
+export const managerMaintenanceBackups = pgTable("manager_maintenance_backups", {
+  id: uuid("id").primaryKey(),
+  organizationId: uuid("organization_id").notNull().references(() => organizations.id, { onDelete: "cascade" }),
+  managerId: uuid("manager_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  action: text("action").notNull(),
+  snapshot: jsonb("snapshot").notNull(),
+  snapshotSha256: text("snapshot_sha256").notNull(),
+  createdAt: now(),
+  expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+  consumedAt: timestamp("consumed_at", { withTimezone: true })
+});
+
 export const users = pgTable("users", {
   id: uuid("id").primaryKey(), organizationId: uuid("organization_id").notNull().references(() => organizations.id),
   role: text("role").notNull(), displayName: text("display_name").notNull(), email: text("email"),
+  avatar: jsonb("avatar").notNull().default(emptyObject),
   status: text("status").notNull().default("active"), createdAt: now(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow()
 }, (table) => [uniqueIndex("users_org_email_unique").on(table.organizationId, table.email)]);
@@ -112,6 +177,21 @@ export const progressRecords = pgTable("progress_records", {
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow()
 });
 
+export const lessonPartAttempts = pgTable("lesson_part_attempts", {
+  id: uuid("id").primaryKey(), learnerId: uuid("learner_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  lessonId: uuid("lesson_id").notNull().references(() => lessons.id, { onDelete: "cascade" }), partCode: text("part_code").notNull(),
+  requestKey: uuid("request_key").notNull(), attemptNumber: integer("attempt_number").notNull(), status: text("status").notNull(),
+  answer: text("answer"), score: numeric("score", { precision: 6, scale: 2 }), feedback: text("feedback"), artifactKey: text("artifact_key"),
+  createdAt: now()
+});
+
+export const lessonPartAppeals = pgTable("lesson_part_appeals", {
+  id: uuid("id").primaryKey(), learnerId: uuid("learner_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  lessonId: uuid("lesson_id").notNull().references(() => lessons.id, { onDelete: "cascade" }), partCode: text("part_code").notNull(),
+  reason: text("reason").notNull(), status: text("status").notNull().default("pending"), createdAt: now(),
+  resolvedAt: timestamp("resolved_at", { withTimezone: true })
+});
+
 export const activities = pgTable("activities", {
   id: uuid("id").primaryKey(), learnerId: uuid("learner_id").notNull().references(() => users.id),
   activityType: text("activity_type").notNull(), referenceType: text("reference_type").notNull(), referenceId: uuid("reference_id"),
@@ -135,6 +215,9 @@ export const assessmentAttempts = pgTable("assessment_attempts", {
   learnerId: uuid("learner_id").notNull().references(() => users.id), status: text("status").notNull().default("in_progress"),
   currentSection: text("current_section"), timingState: jsonb("timing_state").notNull().default(emptyObject),
   integrityEvents: jsonb("integrity_events").notNull().default(emptyArray), startedAt: now(),
+  violationCount: integer("violation_count").notNull().default(0), violationLimit: integer("violation_limit").notNull().default(3),
+  submitReason: text("submit_reason"), deviceEvidence: jsonb("device_evidence").notNull().default(emptyObject),
+  mediaEvidence: jsonb("media_evidence").notNull().default(emptyObject),
   submittedAt: timestamp("submitted_at", { withTimezone: true }),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow()
 });
@@ -198,6 +281,35 @@ export const practiceSubmissions = pgTable("practice_submissions", {
   requestKey: text("request_key"),
   submittedAt: timestamp("submitted_at", { withTimezone: true }), reviewedAt: timestamp("reviewed_at", { withTimezone: true }),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow()
+});
+
+export const learnerVocabularyUnlocks = pgTable("learner_vocabulary_unlocks", {
+  learnerId: uuid("learner_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  word: text("word").notNull(),
+  unlockedAt: timestamp("unlocked_at", { withTimezone: true }).notNull().defaultNow()
+});
+
+export const levelUpChallengeResults = pgTable("level_up_challenge_results", {
+  id: uuid("id").primaryKey(),
+  assessmentAttemptId: uuid("assessment_attempt_id").notNull().unique().references(() => assessmentAttempts.id, { onDelete: "cascade" }),
+  sessionId: uuid("session_id").notNull().unique().references(() => coachSessions.id, { onDelete: "cascade" }),
+  learnerId: uuid("learner_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  completedTurns: integer("completed_turns").notNull(),
+  average: numeric("average", { precision: 5, scale: 2 }).notNull(),
+  offTopic: integer("off_topic").notNull(),
+  passed: boolean("passed").notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow()
+});
+
+export const practiceAppeals = pgTable("practice_appeals", {
+  id: uuid("id").primaryKey(),
+  submissionId: uuid("submission_id").notNull().unique().references(() => practiceSubmissions.id, { onDelete: "cascade" }),
+  learnerId: uuid("learner_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  reason: text("reason").notNull(),
+  status: text("status").notNull().default("pending"),
+  resolution: text("resolution"),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  resolvedAt: timestamp("resolved_at", { withTimezone: true })
 });
 
 export const files = pgTable("files", {
@@ -275,7 +387,8 @@ export const databaseSchema = {
   assessmentDefinitions, assessmentResponses, assessmentScores, assessmentVersions,
   auditEvents, badges, coachSessions, coachTurns, duels, enrollments, files,
   gameResults, gameSets, idempotencyKeys, jobs, learnerProfiles, lessonSetVersions,
-  lessonSets, lessonVersions, lessons, notificationDeliveries, organizations,
-  practiceSubmissions, programWeeks, programs, progressRecords, promptVersions,
-  reminders, rewardEvents, rubricVersions, sessions, surveys, userCredentials, users
+  lessonPartAppeals, lessonPartAttempts, lessonSets, lessonVersions, lessons, notificationDeliveries, organizations, organizationSettings, providerConfigurations,
+  practiceSubmissions, learnerVocabularyUnlocks, levelUpChallengeResults, practiceAppeals,
+  programWeeks, programs, progressRecords, promptVersions,
+  reminders, rewardEvents, rubricVersions, sessions, surveys, userCredentials, users, managerPinReports, managerDestructiveConfirmations, managerMaintenanceBackups
 };

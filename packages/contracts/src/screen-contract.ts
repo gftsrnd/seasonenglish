@@ -12,7 +12,14 @@ export interface VisibleScreen {
 export const SCREEN_CONTRACT = [
   { id: "entry", path: "/", title: "Đăng nhập", roles: ["public"], purpose: "Learner, staff và demo vào đúng cổng; role do tài khoản quyết định" },
   { id: "onboard", path: "/onboard", title: "Hồ sơ ban đầu", roles: ["learner"], purpose: "Hoàn thiện hồ sơ học tập trước bài test" },
-  { id: "test", path: "/test/:kind", title: "Bài test", roles: ["learner"], purpose: "Thực hiện placement, final hoặc level-up trong một screen flow", states: ["preparation", "listening", "reading", "writing", "speaking", "submitting", "pending"] },
+  { id: "test", path: "/test/:kind", title: "Bài test", roles: ["learner"], purpose: "Thực hiện placement, final hoặc level-up trong một screen flow", states: [
+    "preparation", "listening", "reading", "writing", "speaking", "submitting", "pending",
+    "test.intro.fresh", "test.intro.resume", "test.review-submit",
+    "test.timer.warning-5m", "test.timer.warning-1m", "test.timer.expired-transition", "test.timer.expired-submit",
+    "test.anti-cheat.warning", "test.anti-cheat.warning.1..limit", "test.anti-cheat.auto-submit",
+    "test.device.sound", "test.device.mic.supported", "test.device.mic.unsupported", "test.device.mic.recording", "test.device.mic.playback",
+    "test.submit.confirm", "test.submit.countdown", "test.submit.grading", "test.submit.complete", "test.submit.error"
+  ] },
   { id: "learner-home", path: "/home", title: "Trang chủ", roles: ["learner"], purpose: "Onboarding status hoặc chương trình tuần và bài hôm nay" },
   { id: "micro", path: "/micro/:id", title: "Bài siêu ngắn", roles: ["learner"], purpose: "Học và luyện một nội dung ngắn" },
   { id: "lesson", path: "/lesson/:id", title: "Bài học", roles: ["learner"], purpose: "Học đúng trình tự nội dung đã xác nhận" },
@@ -34,11 +41,11 @@ export const SCREEN_CONTRACT = [
   { id: "sample-review", path: "/op/review", title: "Đọc mẫu & kiểm tra AI", roles: ["operator", "manager"], purpose: "Xem bài nộp, coach, micro, kháng nghị, lượt làm và bài test" },
   { id: "prompt-rubric", path: "/op/prompts", title: "Prompt & rubric", roles: ["operator", "manager"], purpose: "Điều chỉnh hướng dẫn AI theo quyền chuyên môn" },
   { id: "settings", path: "/settings", title: "Cài đặt", roles: ["operator", "manager"], purpose: "Cấu hình nghiệp vụ, AI, người dùng và quyền theo vai trò" },
-  { id: "manager-progress", path: "/mgr", title: "Tiến độ", roles: ["manager"], purpose: "Theo dõi tiến độ nhóm và KPI" },
-  { id: "manager-operations", path: "/mgr/ops", title: "Vận hành", roles: ["manager"], purpose: "Theo dõi hiệu suất vận hành" },
-  { id: "manager-reminders", path: "/mgr/reminders", title: "Nhắc học", roles: ["manager"], purpose: "Xác định và gửi nhắc học" },
-  { id: "manager-report", path: "/mgr/report", title: "Báo cáo", roles: ["manager"], purpose: "Xem và xuất báo cáo pilot" },
-  { id: "manager-rewards", path: "/mgr/rewards", title: "Giả lập phần thưởng", roles: ["manager"], purpose: "Xem trước các trường hợp phần thưởng" }
+  { id: "manager-progress", path: "/mgr", title: "Tiến độ", roles: ["manager"], purpose: "Theo dõi tiến độ nhóm và KPI", states: ["loading", "empty", "error", "populated"] },
+  { id: "manager-operations", path: "/mgr/ops", title: "Vận hành", roles: ["manager"], purpose: "Theo dõi hiệu suất vận hành", states: ["loading", "empty", "error", "populated"] },
+  { id: "manager-reminders", path: "/mgr/reminders", title: "Nhắc học", roles: ["manager"], purpose: "Xác định và gửi nhắc học", states: ["loading", "empty", "error", "populated"] },
+  { id: "manager-report", path: "/mgr/report", title: "Báo cáo", roles: ["manager"], purpose: "Xem và xuất báo cáo pilot", states: ["loading", "empty", "error", "populated"] },
+  { id: "manager-rewards", path: "/mgr/rewards", title: "Giả lập phần thưởng", roles: ["manager"], purpose: "Xem trước các trường hợp phần thưởng", states: ["loading", "empty", "error", "populated"] }
 ] as const satisfies readonly VisibleScreen[];
 
 export const ROLE_NAVIGATION = {
@@ -49,4 +56,3 @@ export const ROLE_NAVIGATION = {
 
 export type ScreenId = (typeof SCREEN_CONTRACT)[number]["id"];
 export type VisibleRoute = (typeof SCREEN_CONTRACT)[number]["path"];
-

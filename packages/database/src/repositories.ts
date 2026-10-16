@@ -1,47 +1,116 @@
-import { randomUUID } from "node:crypto";
+import { createCipheriv, createDecipheriv, createHash, randomBytes, randomUUID } from "node:crypto";
 import type { Pool, PoolClient } from "pg";
 import type {
   AccountRole,
+  AssessmentDeviceEvidence,
   AssessmentEvidenceType,
   AssessmentKind,
+  AssessmentMediaEvidence,
+  AssessmentDeletionRequestView,
+  AssessmentLevelFormDeleteView,
+  AssessmentLevelFormDetailView,
+  AssessmentLevelChangeInput,
+  AssessmentLevelChangeView,
+  AssessmentMonthlyGoalView,
+  AssessmentReviewAttemptDetailView,
+  AssessmentReviewChallengeView,
+  AssessmentReviewLearnerView,
+  AssessmentReviewAttemptSummaryView,
+  AssessmentRuntimeView,
   AssessmentSectionCode,
   AssessmentSnapshot,
+  AssessmentSubmitReason,
+  AssessmentViolationReason,
   BadgeRoadmapItem,
   CefrLevel,
   ContentLessonDraftInput,
+  ContentLessonMutationResult,
   ContentLessonMatrixView,
   ContentLessonSetVersionView,
   ContentPromptKey,
   ContentPromptSettingsView,
   ContentReviewView,
+  ContentReviewAssessmentDetailView,
+  ContentReviewAiGradeJobView,
   ContentWeekFrameView,
   ContentWeekInput,
   CoachFeedbackView,
+  CoachTurnClassification,
+  LevelChallengeView,
+  LevelChallengeResultView,
+  LevelChallengeRequestView,
   CoachPersona,
   CoachView,
   DuelView,
   GameHubView,
   GameKey,
   GameResultView,
+  GameTopicModeration,
   GameWordSetView,
   LearnerAvatarData,
+  LearnerNotificationView,
   LearnerProfileData,
   LearnerProgressView,
+  RewardAnnouncementView,
+  LevelUpPhase,
+  PilotPhase,
   LevelReadinessMetric,
   LevelReadinessView,
   LessonContent,
+  LessonLockView,
+  LessonPartAppealView,
+  LessonPartAttemptEvidenceInput,
+  LessonPartAttemptView,
+  LessonPartCode,
   LessonProgressView,
+  PartEvidence,
+  ManagerOperationsView,
+  ManagerAccountView,
+  ManagerAccountsView,
+  ManagerDeleteRequestsView,
+  ManagerDataExportView,
+  ManagerDataImportView,
+  ManagerImageTestView,
+  ManagerLearnerProfileView,
+  ManagerMusicTestView,
+  ManagerMaintenanceAction,
+  ManagerMaintenanceConfirmationInput,
+  ManagerMaintenanceConfirmationView,
+  ManagerMaintenanceResultView,
+  ManagerPurgeConfirmationInput,
+  ManagerPurgeConfirmationView,
+  ManagerPinReportView,
+  ManagerPinReportsView,
+  ManagerProviderKind,
+  ManagerProviderSettingsInput,
+  ManagerProviderSettingsTestInput,
+  ManagerProviderSettingsView,
+  ManagerProviderTestView,
+  ManagerProgressView,
+  ManagerReminderCandidateView,
+  ManagerReminderCopyView,
+  ManagerReminderDismissView,
+  ManagerRemindersView,
+  ManagerReminderSendView,
+  ManagerReportView,
+  ManagerSettingsView,
+  ManagerTrashView,
+  ManagerWebhookTestView,
   MicroLessonView,
   RewardView,
   SurveyView,
-  WeeklyPracticeView
+  WeeklyPracticeView,
+  WeeklyPracticeAppealView,
+  WeeklyPracticeReviewState
 } from "@e4s/contracts";
+import { seedDemo, DEMO_IDS } from "./seed.js";
 import type { StoredAssessmentDefinition } from "./assessment-blueprints.js";
 
 export interface UserIdentity {
   id: string;
   displayName: string;
   email: string | null;
+  avatar?: LearnerAvatarData;
   role: AccountRole;
   status: string;
 }
@@ -58,12 +127,14 @@ export interface ActiveSessionRecord extends UserIdentity {
 export interface ActiveLearningContext {
   programId: string;
   programName: string;
+  weekCount: number;
   weekId: string;
   weekNumber: number;
   topic: string;
   description: string;
   objectives: string[];
   cefr: string | null;
+  startDate: string;
 }
 
 export interface LearnerProfileRecord {
@@ -80,6 +151,7 @@ export interface LearnerLessonRecord {
   cefr: CefrLevel;
   content: LessonContent & { durationMinutes?: number };
   progress: LessonProgressView;
+  lock: LessonLockView | null;
 }
 
 export interface PublishedLessonSet {
@@ -106,6 +178,23 @@ export interface LeasedJob {
   attempts: number;
   maxAttempts: number;
   lockedBy: string;
+}
+
+export interface ReminderWebhookDelivery {
+  reminderId: string;
+  deliveryId: string;
+  message: string;
+  learnerName: string;
+  webhookUrl: string;
+  webhookTemplate: string;
+}
+
+export interface ReminderWebhookDeliveryUpdate {
+  reminderId: string;
+  deliveryId: string;
+  status: "sent" | "failed";
+  response: Record<string, unknown>;
+  externalId?: string | null;
 }
 
 export interface PublishedAssessmentRecord {
@@ -141,6 +230,18 @@ export interface AssessmentAttemptRecord {
       auto?: boolean;
     }>>;
   };
+  integrityEvents: Array<{
+    requestId: string;
+    reason: AssessmentViolationReason;
+    occurredAt: string;
+    recordedAt: string;
+    violationCount: number;
+  }>;
+  violationCount: number;
+  violationLimit: number;
+  submitReason: AssessmentSubmitReason | null;
+  deviceEvidence: AssessmentDeviceEvidence;
+  mediaEvidence: AssessmentMediaEvidence;
   startedAt: Date;
   submittedAt: Date | null;
   updatedAt: Date;
@@ -148,6 +249,11 @@ export interface AssessmentAttemptRecord {
   scores: Partial<Record<AssessmentSectionCode, number>>;
   audioPlayCounts: Record<string, number>;
   suggestedLevel: CefrLevel | null;
+}
+
+export interface AssessmentRescoreContext {
+  attempt: AssessmentAttemptRecord;
+  definition: StoredAssessmentDefinition;
 }
 
 export interface AssessmentReviewQueueRecord {
@@ -159,6 +265,7 @@ export interface AssessmentReviewQueueRecord {
   submittedAt: Date;
   sectionScores: Partial<Record<AssessmentSectionCode, number>>;
   suggestedLevel: CefrLevel | null;
+  challenge?: { completedTurns: number; requiredTurns: 6; average: number; offTopic: number; complete: boolean; passed: boolean };
 }
 
 export interface AssessmentDecisionRecord {
@@ -184,6 +291,17 @@ export interface AssessmentUnassessedLearnerRecord {
   profileComplete: boolean;
 }
 
+export interface AssessmentReviewFlowRecord {
+  learnerId: string;
+  learnerName: string;
+  currentLevel: CefrLevel;
+  targetLevel: CefrLevel;
+  phase: "testing" | "ungraded" | "challenge" | "failed";
+  metrics: string;
+  assessmentAttemptId: string;
+  challengeAttemptId: string | null;
+}
+
 export interface AssessmentLevelFormRecord {
   definitionId: string;
   versionId: string;
@@ -194,6 +312,7 @@ export interface AssessmentLevelFormRecord {
   listeningTaskCount: number;
   readingTaskCount: number;
   attemptCount: number;
+  status: "draft" | "published" | "retired";
 }
 
 class IdentityRepository {
@@ -204,10 +323,11 @@ class IdentityRepository {
       id: string;
       display_name: string;
       email: string | null;
+      avatar: LearnerAvatarData | Record<string, never>;
       role: AccountRole;
       status: string;
     }>(
-      `select id, display_name, email, role, status
+      `select id, display_name, email, avatar, role, status
        from users
        where lower(email) = lower($1)
        limit 1`,
@@ -215,7 +335,7 @@ class IdentityRepository {
     );
     const row = result.rows[0];
     return row
-      ? { id: row.id, displayName: row.display_name, email: row.email, role: row.role, status: row.status }
+      ? { id: row.id, displayName: row.display_name, email: row.email, ...avatarField(row.avatar), role: row.role, status: row.status }
       : null;
   }
 
@@ -224,11 +344,12 @@ class IdentityRepository {
       id: string;
       display_name: string;
       email: string | null;
+      avatar: LearnerAvatarData | Record<string, never>;
       role: AccountRole;
       status: string;
       credential_hash: string;
     }>(
-      `select u.id, u.display_name, u.email, u.role, u.status, c.credential_hash
+      `select u.id, u.display_name, u.email, u.avatar, u.role, u.status, c.credential_hash
        from users u join user_credentials c on c.user_id = u.id
        where lower(u.email) = lower($1) and u.status = 'active'
        limit 1`,
@@ -240,6 +361,7 @@ class IdentityRepository {
           id: row.id,
           displayName: row.display_name,
           email: row.email,
+          ...avatarField(row.avatar),
           role: row.role,
           status: row.status,
           credentialHash: row.credential_hash
@@ -261,10 +383,11 @@ class IdentityRepository {
       id: string;
       display_name: string;
       email: string | null;
+      avatar: LearnerAvatarData | Record<string, never>;
       role: AccountRole;
       status: string;
     }>(
-      `select s.id as session_id, s.expires_at, u.id, u.display_name, u.email, u.role, u.status
+      `select s.id as session_id, s.expires_at, u.id, u.display_name, u.email, u.avatar, u.role, u.status
        from sessions s join users u on u.id = s.user_id
        where s.token_hash = $1 and s.revoked_at is null and s.expires_at > now() and u.status = 'active'
        limit 1`,
@@ -278,10 +401,38 @@ class IdentityRepository {
           id: row.id,
           displayName: row.display_name,
           email: row.email,
+          ...avatarField(row.avatar),
           role: row.role,
           status: row.status
         }
       : null;
+  }
+
+  async updateAvatar(userId: string, avatar: LearnerAvatarData): Promise<UserIdentity> {
+    const result = await this.pool.query<{
+      id: string;
+      display_name: string;
+      email: string | null;
+      avatar: LearnerAvatarData;
+      role: AccountRole;
+      status: string;
+    }>(
+      `update users
+       set avatar = $2::jsonb, updated_at = now()
+       where id = $1 and status = 'active'
+       returning id, display_name, email, avatar, role, status`,
+      [userId, JSON.stringify(avatar)]
+    );
+    const row = result.rows[0];
+    if (!row) throw new Error("USER_NOT_FOUND");
+    return {
+      id: row.id,
+      displayName: row.display_name,
+      email: row.email,
+      avatar: row.avatar,
+      role: row.role,
+      status: row.status
+    };
   }
 
   async revokeSession(tokenHash: string): Promise<void> {
@@ -292,6 +443,12 @@ class IdentityRepository {
   }
 }
 
+function avatarField(value: LearnerAvatarData | Record<string, never>): { avatar?: LearnerAvatarData } {
+  return value && "acc" in value && "color" in value && "bg" in value
+    ? { avatar: value as LearnerAvatarData }
+    : {};
+}
+
 class LearningRepository {
   constructor(private readonly pool: Pool) {}
 
@@ -299,6 +456,8 @@ class LearningRepository {
     const result = await this.pool.query<{
       program_id: string;
       program_name: string;
+      start_date: string;
+      week_count: number;
       week_id: string;
       week_number: number;
       topic: string;
@@ -306,7 +465,7 @@ class LearningRepository {
       objectives: string[];
       cefr: string | null;
     }>(
-      `select p.id as program_id, p.name as program_name,
+      `select p.id as program_id, p.name as program_name, p.start_date::text as start_date, p.week_count,
               pw.id as week_id, pw.week_number, pw.topic, pw.description, pw.objectives, e.cefr
        from enrollments e
        join programs p on p.id = e.program_id and p.status = 'active'
@@ -324,6 +483,8 @@ class LearningRepository {
       ? {
           programId: row.program_id,
           programName: row.program_name,
+          startDate: row.start_date,
+          weekCount: row.week_count,
           weekId: row.week_id,
           weekNumber: row.week_number,
           topic: row.topic,
@@ -349,7 +510,7 @@ class LearningRepository {
     );
     const row = result.rows[0];
     return row ? {
-      profile: row.profile,
+      profile: publicLearnerProfile(row.profile),
       version: row.version,
       completedAt: row.completed_at,
       updatedAt: row.updated_at
@@ -371,7 +532,10 @@ class LearningRepository {
       `insert into learner_profiles (user_id, profile, version, completed_at)
        values ($1, $2::jsonb, 1, case when $4 then now() else null end)
        on conflict (user_id) do update
-       set profile = excluded.profile,
+       set profile = jsonb_set(
+         jsonb_set(excluded.profile, '{_operator}', coalesce(learner_profiles.profile->'_operator', '{}'::jsonb), true),
+         '{_lifecycle}', coalesce(learner_profiles.profile->'_lifecycle', '{}'::jsonb), true
+       ),
            version = learner_profiles.version + 1,
            completed_at = case when $4 then coalesce(learner_profiles.completed_at, now()) else null end,
            updated_at = now()
@@ -388,6 +552,187 @@ class LearningRepository {
     } : null;
   }
 
+  async updateMonthlyGoal(learnerId: string, monthlyGoal: string): Promise<AssessmentMonthlyGoalView | null> {
+    const client = await this.pool.connect();
+    const now = new Date();
+    try {
+      await client.query("begin");
+      const identity = await client.query<{ organization_id: string }>(
+        "select organization_id from users where id = $1 and role = 'learner' and status = 'active' for update",
+        [learnerId]
+      );
+      if (!identity.rows[0]) {
+        await client.query("rollback");
+        return null;
+      }
+      const current = await client.query<{ profile: unknown }>(
+        "select profile from learner_profiles where user_id = $1 for update", [learnerId]
+      );
+      const profile = profileObject(current.rows[0]?.profile);
+      const updated = { ...profile, monthlyGoal };
+      if (current.rows[0]) {
+        await client.query(
+          "update learner_profiles set profile = $2::jsonb, version = version + 1, updated_at = $3 where user_id = $1",
+          [learnerId, JSON.stringify(updated), now]
+        );
+      } else {
+        await client.query(
+          "insert into learner_profiles (user_id, profile, version, updated_at) values ($1, $2::jsonb, 1, $3)",
+          [learnerId, JSON.stringify(updated), now]
+        );
+      }
+      await client.query("commit");
+      return { learnerId, monthlyGoal, updatedBy: learnerId, updatedAt: now.toISOString() };
+    } catch (error) {
+      await client.query("rollback");
+      throw error;
+    } finally {
+      client.release();
+    }
+  }
+
+  async acknowledgeRewardAnnouncement(learnerId: string, announcementId: string): Promise<boolean> {
+    const current = await this.learnerLifecycle(learnerId, 0, false);
+    if (!current || current.rewardAnnouncement.kind === "normal"
+      || current.rewardAnnouncement.announcementId !== announcementId) return false;
+
+    const client = await this.pool.connect();
+    try {
+      await client.query("begin");
+      const result = await client.query<{ profile: unknown }>(
+        `select lp.profile
+         from learner_profiles lp
+         join users u on u.id = lp.user_id and u.role = 'learner' and u.status = 'active'
+         where lp.user_id = $1
+         for update`, [learnerId]
+      );
+      const row = result.rows[0];
+      if (!row) {
+        await client.query("rollback");
+        return false;
+      }
+      const profile = profileObject(row.profile);
+      const lifecycle = learnerLifecycleState(profile);
+      await client.query(
+        `update learner_profiles
+         set profile = $2::jsonb, version = version + 1, updated_at = now()
+         where user_id = $1`,
+        [learnerId, JSON.stringify({
+          ...profile,
+          _lifecycle: { ...lifecycle, rewardAnnouncementAcknowledged: announcementId }
+        })]
+      );
+      await client.query("commit");
+      return true;
+    } catch (error) {
+      await client.query("rollback");
+      throw error;
+    } finally {
+      client.release();
+    }
+  }
+
+  async learnerLifecycle(learnerId: string, points: number, eligible = false): Promise<{
+    levelUpPhase: LevelUpPhase;
+    monthlyGoal: string | null;
+    rewardAnnouncement: RewardAnnouncementView;
+  } | null> {
+    const [identity, profileResult, levelup] = await Promise.all([
+      this.pool.query<{ cefr: CefrLevel | null; cefr_approved: boolean }>(
+        `select e.cefr, e.cefr_approved from enrollments e
+         join programs p on p.id = e.program_id and p.status = 'active'
+         where e.learner_id = $1 order by e.cefr_approved desc, e.enrolled_at desc limit 1`, [learnerId]
+      ),
+      this.pool.query<{ profile: unknown }>("select profile from learner_profiles where user_id = $1", [learnerId]),
+      this.pool.query<{
+        attempt_id: string; attempt_status: string; decision_status: string | null; approved_level: CefrLevel | null;
+        target_level: CefrLevel | null; challenge_status: string | null; challenge_passed: boolean | null;
+      }>(
+        `select aa.id as attempt_id, aa.status as attempt_status,
+                decision.status as decision_status, decision.approved_level,
+                nullif(av.blueprint->>'targetLevel', '') as target_level,
+                challenge.status as challenge_status, challenge.passed as challenge_passed
+         from assessment_attempts aa
+         join assessment_versions av on av.id = aa.assessment_version_id
+         join assessment_definitions ad on ad.id = av.definition_id and ad.kind = 'level_up'
+         left join assessment_decisions decision on decision.attempt_id = aa.id
+         left join lateral (
+           select cs.status, result.passed
+           from coach_sessions cs
+           left join level_up_challenge_results result on result.session_id = cs.id
+           where cs.learner_id = aa.learner_id and cs.scenario->>'kind' = 'level_up'
+             and cs.scenario->>'assessmentAttemptId' = aa.id::text
+           order by cs.started_at desc limit 1
+         ) challenge on true
+         where aa.learner_id = $1 order by aa.started_at desc limit 1`, [learnerId]
+      )
+    ]);
+    const profile = profileObject(profileResult.rows[0]?.profile);
+    const enrollment = identity.rows[0];
+    const current = levelup.rows[0];
+    let levelUpPhase: LevelUpPhase = "none";
+    if (enrollment?.cefr_approved) {
+      if (!current) {
+        levelUpPhase = eligible ? "eligible" : "none";
+      } else if (current.attempt_status === "in_progress") {
+        levelUpPhase = "testing";
+      } else if (current.challenge_passed === true && current.decision_status === "approved") {
+        levelUpPhase = "approved";
+      } else if (current.challenge_passed === true && current.decision_status === "suggested") {
+        levelUpPhase = "requested";
+      } else if (current.challenge_passed === false || current.attempt_status === "needs_retry" || current.decision_status === "rejected") {
+        levelUpPhase = "failed";
+      } else if (current.challenge_status === "active") {
+        levelUpPhase = "challenge";
+      } else if (["submitted", "pending_review"].includes(current.attempt_status)) {
+        levelUpPhase = "ungraded";
+      } else if (current.decision_status === "approved") {
+        levelUpPhase = "approved";
+      } else {
+        levelUpPhase = "eligible";
+      }
+    }
+    const state = profile._operator && typeof profile._operator === "object" && !Array.isArray(profile._operator)
+      ? profile._operator as Record<string, unknown> : {};
+    const history = Array.isArray(state.levelHistory) ? state.levelHistory : [];
+    const latest = history.at(-1);
+    const latestChangedAt = latest && typeof latest === "object" && !Array.isArray(latest)
+      && typeof (latest as Record<string, unknown>).changedAt === "string"
+      ? new Date(String((latest as Record<string, unknown>).changedAt)) : null;
+    const newLevel = Boolean(latestChangedAt && Number.isFinite(latestChangedAt.getTime())
+      && Date.now() - latestChangedAt.getTime() < 30 * 24 * 60 * 60 * 1000);
+    const latestLevel = latest && typeof latest === "object" && !Array.isArray(latest)
+      && typeof (latest as Record<string, unknown>).to === "string"
+      ? (latest as Record<string, unknown>).to as CefrLevel : null;
+    const candidateKind = enrollment?.cefr === "C1" ? "top-level-redirect" : newLevel ? "new-level-announcement" : "normal";
+    const candidateId = candidateKind === "top-level-redirect"
+      ? `top-level:${enrollment?.cefr ?? "C1"}:${latestChangedAt?.toISOString() ?? "current"}`
+      : candidateKind === "new-level-announcement" && latestLevel && latestChangedAt
+        ? `level-up:${latestLevel}:${latestChangedAt.toISOString()}` : undefined;
+    const lifecycle = learnerLifecycleState(profile);
+    const acknowledged = Boolean(candidateId && lifecycle.rewardAnnouncementAcknowledged === candidateId);
+    const announcementKind = acknowledged ? "normal" : candidateKind;
+    const seasonName = seasonNameForDate(new Date());
+    return {
+      levelUpPhase,
+      monthlyGoal: typeof profile.monthlyGoal === "string" && profile.monthlyGoal.trim() ? profile.monthlyGoal : null,
+      rewardAnnouncement: {
+        kind: announcementKind,
+        points,
+        nextPoints: points < 60 ? 60 : null,
+        seasonName,
+        level: (newLevel ? latestLevel : enrollment?.cefr) ?? null,
+        ...(announcementKind === "normal" ? {} : {
+          ...(candidateId ? { announcementId: candidateId } : {}),
+          source: "genuine" as const,
+          rule: announcementKind === "top-level-redirect"
+            ? "Mức C1 là mức cao nhất của lộ trình hiện tại."
+            : "Mức mới chỉ được công nhận sau khi người vận hành duyệt bằng chứng học tập."
+        })
+      }
+    };
+  }
+
   async listLessons(learnerId: string, weekId: string): Promise<LearnerLessonRecord[]> {
     const result = await this.pool.query<{
       id: string;
@@ -395,23 +740,49 @@ class LearningRepository {
       day_number: number;
       cefr: CefrLevel;
       content: LessonContent & { durationMinutes?: number };
+      lesson_count: string;
+      opens_at: string;
+      opens_later: boolean;
+      blocker_id: string | null;
+      blocker_day_number: number | null;
+      blocker_title: string | null;
       progress_status: LessonProgressView["status"] | null;
       progress_score: string | null;
       progress_evidence: Record<string, unknown> | null;
       progress_updated_at: Date | null;
     }>(
       `select l.id, l.title, l.day_number, ls.cefr, lv.content,
+              (select count(*) from lessons all_lessons where all_lessons.lesson_set_version_id = lsv.id)::text as lesson_count,
+              (p.start_date + ((pw.week_number - 1) * 7 + l.day_number - 1))::text as opens_at,
+              (p.start_date + ((pw.week_number - 1) * 7 + l.day_number - 1)) > current_date as opens_later,
+              blocker.id as blocker_id, blocker.day_number as blocker_day_number, blocker.title as blocker_title,
               pr.status as progress_status, pr.score::text as progress_score,
               pr.evidence as progress_evidence, pr.updated_at as progress_updated_at
        from enrollments e
        join lesson_sets ls on ls.program_week_id = $2 and ls.cefr = e.cefr
        join lesson_set_versions lsv on lsv.lesson_set_id = ls.id and lsv.status = 'published'
+       join program_weeks pw on pw.id = ls.program_week_id
+       join programs p on p.id = pw.program_id
        join lessons l on l.lesson_set_version_id = lsv.id
        join lateral (
          select content from lesson_versions
          where lesson_id = l.id and status = 'published'
          order by version desc limit 1
        ) lv on true
+       left join lateral (
+         select previous.id, previous.day_number, previous.title
+         from lessons previous
+         where previous.lesson_set_version_id = lsv.id
+           and previous.day_number < l.day_number
+           and not exists (
+             select 1 from progress_records previous_progress
+             where previous_progress.learner_id = e.learner_id
+               and previous_progress.lesson_id = previous.id
+               and previous_progress.status = 'completed'
+           )
+         order by previous.day_number
+         limit 1
+       ) blocker on true
        left join progress_records pr on pr.lesson_id = l.id and pr.learner_id = e.learner_id
        where e.learner_id = $1
        order by l.day_number`,
@@ -427,24 +798,49 @@ class LearningRepository {
       day_number: number;
       cefr: CefrLevel;
       content: LessonContent & { durationMinutes?: number };
+      lesson_count: string;
+      opens_at: string;
+      opens_later: boolean;
+      blocker_id: string | null;
+      blocker_day_number: number | null;
+      blocker_title: string | null;
       progress_status: LessonProgressView["status"] | null;
       progress_score: string | null;
       progress_evidence: Record<string, unknown> | null;
       progress_updated_at: Date | null;
     }>(
       `select l.id, l.title, l.day_number, ls.cefr, lv.content,
+              (select count(*) from lessons all_lessons where all_lessons.lesson_set_version_id = lsv.id)::text as lesson_count,
+              (p.start_date + ((pw.week_number - 1) * 7 + l.day_number - 1))::text as opens_at,
+              (p.start_date + ((pw.week_number - 1) * 7 + l.day_number - 1)) > current_date as opens_later,
+              blocker.id as blocker_id, blocker.day_number as blocker_day_number, blocker.title as blocker_title,
               pr.status as progress_status, pr.score::text as progress_score,
               pr.evidence as progress_evidence, pr.updated_at as progress_updated_at
        from lessons l
        join lesson_set_versions lsv on lsv.id = l.lesson_set_version_id and lsv.status = 'published'
        join lesson_sets ls on ls.id = lsv.lesson_set_id
        join program_weeks pw on pw.id = ls.program_week_id
+       join programs p on p.id = pw.program_id
        join enrollments e on e.program_id = pw.program_id and e.cefr = ls.cefr and e.learner_id = $1
        join lateral (
          select content from lesson_versions
          where lesson_id = l.id and status = 'published'
          order by version desc limit 1
        ) lv on true
+       left join lateral (
+         select previous.id, previous.day_number, previous.title
+         from lessons previous
+         where previous.lesson_set_version_id = lsv.id
+           and previous.day_number < l.day_number
+           and not exists (
+             select 1 from progress_records previous_progress
+             where previous_progress.learner_id = e.learner_id
+               and previous_progress.lesson_id = previous.id
+               and previous_progress.status = 'completed'
+           )
+         order by previous.day_number
+         limit 1
+       ) blocker on true
        left join progress_records pr on pr.lesson_id = l.id and pr.learner_id = e.learner_id
        where l.id = $2
        limit 1`,
@@ -485,7 +881,184 @@ class LearningRepository {
     );
     const row = result.rows[0];
     if (!row) throw new Error("Could not persist lesson progress");
+    if (input.progress.status === "completed") {
+      await this.pool.query(
+        `insert into activities (id, learner_id, activity_type, reference_type, reference_id, minutes, evidence)
+         select $1, $2, 'lesson', 'lesson', $3, 10, $4::jsonb
+         where not exists (select 1 from activities where learner_id = $2 and reference_type = 'lesson' and reference_id = $3)`,
+        [randomUUID(), input.learnerId, input.lessonId, JSON.stringify({ score: input.progress.score ?? null })]
+      );
+      await syncLearnerRewards(this.pool, input.learnerId);
+    }
     return mapProgress(row.status, row.score, row.evidence, row.updated_at);
+  }
+
+  async submitLessonPartAttempt(input: {
+    learnerId: string;
+    lessonId: string;
+    partCode: LessonPartCode;
+    requestId: string;
+    evidence: LessonPartAttemptEvidenceInput;
+  }): Promise<LessonPartAttemptView | null> {
+    const lesson = await this.findLesson(input.learnerId, input.lessonId);
+    const part = lesson?.content.parts.find((candidate) => candidate.code === input.partCode);
+    if (!lesson || !part) return null;
+
+    const client = await this.pool.connect();
+    let attemptId: string | null = null;
+    let storedEvidence: PartEvidence | null = null;
+    try {
+      await client.query("begin");
+      const duplicate = await client.query<{
+        id: string; attempt_number: number; status: PartEvidence["status"]; answer: string | null;
+        score: string | null; feedback: string | null; artifact_key: string | null;
+      }>(
+        `select id, attempt_number, status, answer, score::text, feedback, artifact_key
+         from lesson_part_attempts where learner_id = $1 and request_key = $2`,
+        [input.learnerId, input.requestId]
+      );
+      const existing = duplicate.rows[0];
+      if (existing) {
+        attemptId = existing.id;
+        storedEvidence = mapPartEvidence(existing);
+        await client.query("commit");
+      } else {
+        const count = await client.query<{ count: string }>(
+          `select count(*)::text as count from lesson_part_attempts
+           where learner_id = $1 and lesson_id = $2 and part_code = $3`,
+          [input.learnerId, input.lessonId, input.partCode]
+        );
+        const attemptNumber = Number(count.rows[0]?.count ?? 0) + 1;
+        const graded = gradeLessonPart(part.content, input.evidence, attemptNumber);
+        const inserted = await client.query<{
+          id: string; attempt_number: number; status: PartEvidence["status"]; answer: string | null;
+          score: string | null; feedback: string | null; artifact_key: string | null;
+        }>(
+          `insert into lesson_part_attempts
+             (id, learner_id, lesson_id, part_code, request_key, attempt_number, status, answer, score, feedback, artifact_key)
+           values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+           on conflict (learner_id, request_key) do nothing
+           returning id, attempt_number, status, answer, score::text, feedback, artifact_key`,
+          [randomUUID(), input.learnerId, input.lessonId, input.partCode, input.requestId, attemptNumber,
+            graded.status, input.evidence.answer ?? null, graded.score, graded.feedback, input.evidence.artifactKey ?? null]
+        );
+        const row = inserted.rows[0];
+        if (!row) {
+          const raced = await client.query<{
+            id: string; attempt_number: number; status: PartEvidence["status"]; answer: string | null;
+            score: string | null; feedback: string | null; artifact_key: string | null;
+          }>(
+            `select id, attempt_number, status, answer, score::text, feedback, artifact_key
+             from lesson_part_attempts where learner_id = $1 and request_key = $2`,
+            [input.learnerId, input.requestId]
+          );
+          const racedRow = raced.rows[0];
+          if (!racedRow) throw new Error("LESSON_ATTEMPT_IDEMPOTENCY_RACE");
+          attemptId = racedRow.id;
+          storedEvidence = mapPartEvidence(racedRow);
+          await client.query("commit");
+        } else {
+          attemptId = row.id;
+          storedEvidence = mapPartEvidence(row);
+          const currentEvidence = lesson.progress.evidence;
+          const mergedEvidence = { ...currentEvidence, [input.partCode]: storedEvidence };
+          const partFinished = ["correct", "wrong_exhausted", "translated", "appealed"].includes(storedEvidence.status ?? "");
+          const completedPartCodes = Array.from(new Set([
+            ...lesson.progress.completedPartCodes,
+            ...(partFinished ? [input.partCode] : [])
+          ])) as LessonPartCode[];
+          const status = lesson.progress.status === "completed" ? "completed" : completedPartCodes.length ? "in_progress" : "not_started";
+          await client.query(
+            `insert into progress_records
+               (id, learner_id, lesson_id, status, score, evidence, started_at, completed_at, updated_at)
+             values ($1, $2, $3, $4, $5, $6::jsonb, now(), case when $4 = 'completed' then now() else null end, now())
+             on conflict (learner_id, lesson_id) do update
+             set status = case when progress_records.status = 'completed' then 'completed' else excluded.status end,
+                 evidence = excluded.evidence, updated_at = now()`,
+            [randomUUID(), input.learnerId, input.lessonId, status, lesson.progress.score ?? null,
+              JSON.stringify({ completedPartCodes, evidence: mergedEvidence })]
+          );
+          if (storedEvidence.status === "correct" && storedEvidence.score && storedEvidence.score > 0) {
+            await client.query(
+              `insert into reward_events (id, learner_id, badge_id, points, source_type, source_id)
+               values ($1, $2, null, $4, 'lesson_part', $3)
+               on conflict do nothing`,
+              [randomUUID(), input.learnerId, attemptId, Math.max(1, 6 - storedEvidence.attempts)]
+            );
+          }
+          await client.query("commit");
+        }
+      }
+    } catch (error) {
+      await client.query("rollback");
+      throw error;
+    } finally {
+      client.release();
+    }
+    const refreshed = await this.findLesson(input.learnerId, input.lessonId);
+    if (!refreshed || !storedEvidence || !attemptId) return null;
+    return { lessonId: input.lessonId, partCode: input.partCode, evidence: storedEvidence, progress: refreshed.progress };
+  }
+
+  async appealLessonPart(input: {
+    learnerId: string;
+    lessonId: string;
+    partCode: LessonPartCode;
+    reason: string;
+  }): Promise<LessonPartAppealView | null> {
+    const lesson = await this.findLesson(input.learnerId, input.lessonId);
+    if (!lesson || !lesson.content.parts.some((part) => part.code === input.partCode)) return null;
+    const client = await this.pool.connect();
+    try {
+      await client.query("begin");
+      const inserted = await client.query<{ id: string; status: "pending" | "accepted" | "rejected"; created_at: Date; reason: string }>(
+        `insert into lesson_part_appeals (id, learner_id, lesson_id, part_code, reason)
+         values ($1, $2, $3, $4, $5)
+         on conflict (learner_id, lesson_id, part_code) where status = 'pending' do nothing
+         returning id, status, created_at, reason`,
+        [randomUUID(), input.learnerId, input.lessonId, input.partCode, input.reason]
+      );
+      const row = inserted.rows[0] ?? (await client.query<{ id: string; status: "pending" | "accepted" | "rejected"; created_at: Date; reason: string }>(
+        `select id, status, created_at, reason from lesson_part_appeals
+         where learner_id = $1 and lesson_id = $2 and part_code = $3 and status = 'pending'`,
+        [input.learnerId, input.lessonId, input.partCode]
+      )).rows[0];
+      if (!row) throw new Error("LESSON_APPEAL_NOT_PERSISTED");
+      const current = lesson.progress.evidence[input.partCode];
+      const evidence: PartEvidence = {
+        attempts: current?.attempts ?? 0,
+        ...(current?.answer === undefined ? {} : { answer: current.answer }),
+        ...(current?.score === undefined ? {} : { score: current.score }),
+        ...(current?.artifactKey === undefined ? {} : { artifactKey: current.artifactKey }),
+        status: "appealed",
+        feedback: "Kháng nghị đã được gửi tới người vận hành."
+      };
+      const completedPartCodes = Array.from(new Set([...lesson.progress.completedPartCodes, input.partCode])) as LessonPartCode[];
+      const status = lesson.progress.status === "completed" ? "completed" : completedPartCodes.length ? "in_progress" : "not_started";
+      await client.query(
+        `insert into progress_records
+           (id, learner_id, lesson_id, status, score, evidence, started_at, completed_at, updated_at)
+         values ($1, $2, $3, $4, $5, $6::jsonb, now(), case when $4 = 'completed' then now() else null end, now())
+         on conflict (learner_id, lesson_id) do update
+         set status = case when progress_records.status = 'completed' then 'completed' else excluded.status end,
+             evidence = excluded.evidence, updated_at = now()`,
+        [randomUUID(), input.learnerId, input.lessonId, status, lesson.progress.score ?? null,
+          JSON.stringify({ completedPartCodes, evidence: { ...lesson.progress.evidence, [input.partCode]: evidence } })]
+      );
+      await client.query("commit");
+      const refreshed = await this.findLesson(input.learnerId, input.lessonId);
+      if (!refreshed) return null;
+      return {
+        lessonId: input.lessonId, partCode: input.partCode, status: row.status, reason: row.reason,
+        evidence: refreshed.progress.evidence[input.partCode] ?? evidence,
+        createdAt: row.created_at.toISOString(), progress: refreshed.progress
+      };
+    } catch (error) {
+      await client.query("rollback");
+      throw error;
+    } finally {
+      client.release();
+    }
   }
 
   async getProgressDashboard(learnerId: string): Promise<LearnerProgressView | null> {
@@ -667,15 +1240,91 @@ class LearningRepository {
       [microLessonId, learnerId]
     );
     const micro = result.rows[0];
-    return micro ? {
+    if (!micro) return null;
+    const practice = micro.content.practice as MicroLessonView["practice"] & { answer?: string };
+    return {
       id: micro.id,
       topic: micro.topic,
       cefr: micro.cefr,
       ...micro.content,
+      practice: { prompt: practice.prompt, type: practice.type, ...(practice.options ? { options: practice.options } : {}) },
       ...(micro.progress.attempt ? { attempt: micro.progress.attempt } : {}),
       ...(micro.progress.feedback ? { feedback: micro.progress.feedback } : {}),
       ...(micro.completed_at ? { completedAt: micro.completed_at.toISOString() } : {})
-    } : null;
+    };
+  }
+
+  async todayMicroLesson(learnerId: string): Promise<MicroLessonView | null> {
+    const result = await this.pool.query<{ id: string }>(
+      `select id from micro_lessons
+       where learner_id = $1 and generated_at >= date_trunc('day', now())
+       order by generated_at desc limit 1`,
+      [learnerId]
+    );
+    return result.rows[0] ? this.findMicroLesson(learnerId, result.rows[0].id) : null;
+  }
+
+  async createMicroLesson(input: {
+    learnerId: string;
+    weekId: string;
+    cefr: CefrLevel;
+    content: {
+      topic: string;
+      durationMinutes: 5 | 10 | 15 | 20;
+      theory: string;
+      vocabulary: string[];
+      practice: { prompt: string; type: "mcq" | "write" | "fill"; options?: string[] | undefined; answer: string };
+    };
+  }): Promise<MicroLessonView> {
+    const id = randomUUID();
+    const { topic, ...content } = input.content;
+    await this.pool.query(
+      `insert into micro_lessons (id, learner_id, program_week_id, cefr, topic, content, source)
+       values ($1, $2, $3, $4, $5, $6::jsonb, 'ai')`,
+      [id, input.learnerId, input.weekId, input.cefr, topic, JSON.stringify(content)]
+    );
+    return (await this.findMicroLesson(input.learnerId, id))!;
+  }
+
+  async microLessonForGrading(learnerId: string, microLessonId: string): Promise<{
+    cefr: CefrLevel;
+    theory: string;
+    vocabulary: string[];
+    practice: { prompt: string; type: "mcq" | "write" | "fill"; answer: string };
+  } | null> {
+    const result = await this.pool.query<{ cefr: CefrLevel; content: {
+      theory: string; vocabulary: string[];
+      practice: { prompt: string; type: "mcq" | "write" | "fill"; answer: string };
+    } }>(
+      `select cefr, content from micro_lessons where id = $1 and learner_id = $2`,
+      [microLessonId, learnerId]
+    );
+    return result.rows[0] ? { cefr: result.rows[0].cefr, ...result.rows[0].content } : null;
+  }
+
+  async saveMicroAttemptGrade(input: {
+    learnerId: string;
+    microLessonId: string;
+    answer: string;
+    correct: boolean | null;
+    score: number | null;
+    feedback: string;
+  }): Promise<MicroLessonView | null> {
+    const updated = await this.pool.query(
+      `update micro_lessons
+       set progress = jsonb_build_object(
+         'attempt', jsonb_build_object(
+           'answer', $3::text,
+           'attempts', coalesce((progress->'attempt'->>'attempts')::int, 0) + 1,
+           'correct', $4::boolean,
+           'score', $5::int
+         ),
+         'feedback', jsonb_build_object('status', 'ready', 'message', $6::text)
+       )
+       where id = $1 and learner_id = $2`,
+      [input.microLessonId, input.learnerId, input.answer, input.correct, input.score, input.feedback]
+    );
+    return updated.rowCount ? this.findMicroLesson(input.learnerId, input.microLessonId) : null;
   }
 
   async submitMicroAttempt(learnerId: string, microLessonId: string, answer: string): Promise<MicroLessonView | null> {
@@ -708,7 +1357,17 @@ class LearningRepository {
        where id = $1 and learner_id = $2 and progress->'feedback'->>'status' = 'ready'`,
       [microLessonId, learnerId]
     );
-    return updated.rowCount ? this.findMicroLesson(learnerId, microLessonId) : null;
+    if (!updated.rowCount) return null;
+    await this.pool.query(
+      `insert into activities (id, learner_id, activity_type, reference_type, reference_id, minutes, evidence)
+       select $1, $2, 'micro_lesson', 'micro_lesson', $3, 5,
+              jsonb_build_object('score', (progress->'attempt'->>'score')::int)
+       from micro_lessons where id = $3 and learner_id = $2
+       and not exists (select 1 from activities where learner_id = $2 and reference_type = 'micro_lesson' and reference_id = $3)`,
+      [randomUUID(), learnerId, microLessonId]
+    );
+    await syncLearnerRewards(this.pool, learnerId);
+    return this.findMicroLesson(learnerId, microLessonId);
   }
 }
 
@@ -797,6 +1456,12 @@ function mapLessonRow(row: {
   day_number: number;
   cefr: CefrLevel;
   content: LessonContent & { durationMinutes?: number };
+  lesson_count?: string;
+  opens_at?: string;
+  opens_later?: boolean;
+  blocker_id?: string | null;
+  blocker_day_number?: number | null;
+  blocker_title?: string | null;
   progress_status: LessonProgressView["status"] | null;
   progress_score: string | null;
   progress_evidence: Record<string, unknown> | null;
@@ -813,8 +1478,44 @@ function mapLessonRow(row: {
       row.progress_score,
       row.progress_evidence ?? {},
       row.progress_updated_at
-    )
+    ),
+    lock: lessonLockFor(row)
   };
+}
+
+function lessonLockFor(row: {
+  day_number: number;
+  lesson_count?: string;
+  opens_at?: string;
+  opens_later?: boolean;
+  blocker_id?: string | null;
+  blocker_day_number?: number | null;
+  blocker_title?: string | null;
+}): LessonLockView | null {
+  const totalLessons = Number(row.lesson_count ?? 0);
+  if (row.blocker_id && row.blocker_day_number && row.blocker_title) {
+    return {
+      reason: "prior",
+      message: `Bạn chưa hoàn thành ${lessonDayLabel(row.blocker_day_number)} · ${row.blocker_title} (bài ${row.blocker_day_number}/${totalLessons}). Các bài nối tiếp nhau nên không bỏ qua được: xong bài đó thì bài này tự mở.`,
+      dayNumber: row.day_number,
+      totalLessons,
+      blocker: { id: row.blocker_id, dayNumber: row.blocker_day_number, title: row.blocker_title }
+    };
+  }
+  if (row.opens_later && row.opens_at) {
+    return {
+      reason: "date",
+      message: "Bạn đã xong các bài trước; hôm nay có thể luyện thêm với Season.",
+      dayNumber: row.day_number,
+      totalLessons,
+      opensAt: row.opens_at
+    };
+  }
+  return null;
+}
+
+function lessonDayLabel(dayNumber: number): string {
+  return (["T2", "T3", "T4", "T5", "T6", "T7", "CN"] as const)[dayNumber - 1] ?? `Bài ${dayNumber}`;
 }
 
 function mapProgress(
@@ -836,6 +1537,48 @@ function mapProgress(
     ...(score !== null ? { score: Number(score) } : {}),
     ...(updatedAt ? { updatedAt: updatedAt.toISOString() } : {})
   };
+}
+
+function mapPartEvidence(row: {
+  attempt_number: number;
+  status: PartEvidence["status"];
+  answer: string | null;
+  score: string | null;
+  feedback: string | null;
+  artifact_key: string | null;
+}): PartEvidence {
+  return {
+    attempts: row.attempt_number,
+    ...(row.status === undefined ? {} : { status: row.status }),
+    ...(row.answer === null ? {} : { answer: row.answer }),
+    ...(row.score === null ? {} : { score: Number(row.score) }),
+    ...(row.feedback === null ? {} : { feedback: row.feedback }),
+    ...(row.artifact_key === null ? {} : { artifactKey: row.artifact_key })
+  };
+}
+
+function gradeLessonPart(
+  content: Record<string, unknown>,
+  input: LessonPartAttemptEvidenceInput,
+  attemptNumber: number
+): { status: Exclude<NonNullable<PartEvidence["status"]>, "unanswered" | "appealed">; score: number; feedback: string } {
+  if (input.translated) {
+    return { status: "translated", score: 0, feedback: "Bản dịch đã được mở để bạn đối chiếu." };
+  }
+  const answer = input.answer?.trim() ?? "";
+  const expected = content.answer;
+  const expectedAnswers = Array.isArray(expected) ? expected.map(String) : expected === undefined ? [] : [String(expected)];
+  const correct = expectedAnswers.length
+    ? expectedAnswers.some((candidate) => normalizeLessonAnswer(candidate) === normalizeLessonAnswer(answer))
+    : Boolean(answer || input.artifactKey);
+  if (correct) return { status: "correct", score: 100, feedback: "Đúng rồi. Bạn đã hoàn thành phần này." };
+  return attemptNumber >= 2
+    ? { status: "wrong_exhausted", score: 0, feedback: "Bạn đã hết lượt thử. Hãy xem lại phần hướng dẫn hoặc gửi kháng nghị." }
+    : { status: "wrong_retry", score: 0, feedback: "Chưa đúng. Bạn còn một lượt thử; hãy xem lại gợi ý." };
+}
+
+function normalizeLessonAnswer(value: string): string {
+  return value.normalize("NFKC").toLocaleLowerCase("en").replace(/[.!?]+$/g, "").replace(/\s+/g, " ").trim();
 }
 
 class ContentRepository {
@@ -1006,7 +1749,8 @@ class ContentRepository {
     actorId: string,
     weekNumber: number,
     cefr: CefrLevel,
-    lessonDrafts: readonly ContentLessonDraftInput[]
+    lessonDrafts: readonly ContentLessonDraftInput[],
+    source: "manual" | "ai" = "manual"
   ): Promise<ContentLessonSetVersionView> {
     const client = await this.pool.connect();
     let versionId = "";
@@ -1042,7 +1786,7 @@ class ContentRepository {
         `insert into lesson_set_versions (id, lesson_set_id, version, status, payload, created_by)
          values ($1, $2, $3, 'draft', $4::jsonb, $5)`,
         [versionId, lessonSetId, next.rows[0]?.version ?? 1,
-          JSON.stringify({ source: "manual", lessonCount: lessonDrafts.length }), actorId]
+          JSON.stringify({ source, lessonCount: lessonDrafts.length }), actorId]
       );
       for (const draft of lessonDrafts) {
         const lessonId = randomUUID();
@@ -1070,6 +1814,209 @@ class ContentRepository {
     const saved = await this.lessonSetVersion(actorId, versionId);
     if (!saved) throw new Error("CONTENT_VERSION_NOT_FOUND");
     return saved;
+  }
+
+  /**
+   * Create a new immutable draft version from the current draft/published
+   * version, applying one small authoring operation to its lesson list.
+   * Keeping the copy-on-write operation here means every client receives an
+   * authoritative version and stale editors cannot overwrite newer work.
+   */
+  private async mutateLessonSet(
+    actorId: string,
+    weekNumber: number,
+    cefr: CefrLevel,
+    expectedVersion: number | undefined,
+    action: string,
+    mutate: (lessons: ContentLessonDraftInput[]) => ContentLessonDraftInput[]
+  ): Promise<ContentLessonMutationResult> {
+    const client = await this.pool.connect();
+    let versionId = "";
+    try {
+      await client.query("begin");
+      const context = await client.query<{ organization_id: string; week_id: string }>(
+        `select p.organization_id, pw.id as week_id
+         from users actor
+         join programs p on p.organization_id = actor.organization_id and p.status = 'active'
+         join program_weeks pw on pw.program_id = p.id and pw.week_number = $2
+         where actor.id = $1 limit 1`,
+        [actorId, weekNumber]
+      );
+      const contextRow = context.rows[0];
+      if (!contextRow) throw new Error("CONTENT_WEEK_NOT_FOUND");
+
+      const setResult = await client.query<{ id: string }>(
+        `select id from lesson_sets where program_week_id = $1 and cefr = $2 for update`,
+        [contextRow.week_id, cefr]
+      );
+      let lessonSetId = setResult.rows[0]?.id;
+      if (!lessonSetId) {
+        lessonSetId = randomUUID();
+        await client.query(
+          "insert into lesson_sets (id, program_week_id, cefr) values ($1, $2, $3)",
+          [lessonSetId, contextRow.week_id, cefr]
+        );
+      }
+
+      const latestResult = await client.query<{
+        id: string; version: number; status: ContentLessonSetVersionView["status"];
+      }>(
+        `select id, version, status from lesson_set_versions
+         where lesson_set_id = $1 order by version desc limit 1 for update`,
+        [lessonSetId]
+      );
+      const latest = latestResult.rows[0];
+      const currentVersion = latest?.version ?? 0;
+      if (expectedVersion !== undefined && expectedVersion !== currentVersion) {
+        throw new Error("CONTENT_VERSION_CONFLICT");
+      }
+      if (latest?.status === "draft" && latest.version !== currentVersion) {
+        throw new Error("CONTENT_VERSION_CONFLICT");
+      }
+      if (latest?.status === "review") throw new Error("CONTENT_NOT_EDITABLE");
+
+      const baseVersionId = latest?.id ?? null;
+      const baseRows = baseVersionId ? await client.query<{
+        day_number: number; title: string; content: unknown;
+      }>(
+        `select l.day_number, l.title, lv.content
+         from lessons l join lateral (
+           select content from lesson_versions where lesson_id = l.id order by version desc limit 1
+         ) lv on true
+         where l.lesson_set_version_id = $1 order by l.day_number`,
+        [baseVersionId]
+      ) : { rows: [] };
+      const baseLessons: ContentLessonDraftInput[] = baseRows.rows.map((row) => {
+        const content = row.content && typeof row.content === "object"
+          ? row.content as { durationMinutes?: unknown; parts?: unknown }
+          : {};
+        return {
+          dayNumber: row.day_number,
+          title: row.title,
+          durationMinutes: typeof content.durationMinutes === "number" ? content.durationMinutes : 10,
+          parts: Array.isArray(content.parts) ? content.parts as ContentLessonDraftInput["parts"] : []
+        };
+      });
+      const lessons = mutate(baseLessons).sort((left, right) => left.dayNumber - right.dayNumber);
+      const nextVersion = currentVersion + 1;
+      versionId = randomUUID();
+      await client.query(
+        `update lesson_set_versions set status = 'retired'
+         where lesson_set_id = $1 and status = 'draft'`,
+        [lessonSetId]
+      );
+      await client.query(
+        `insert into lesson_set_versions (id, lesson_set_id, version, status, payload, created_by)
+         values ($1, $2, $3, 'draft', $4::jsonb, $5)`,
+        [versionId, lessonSetId, nextVersion, JSON.stringify({ source: "manual", lessonCount: lessons.length, operation: action }), actorId]
+      );
+      for (const draft of lessons) {
+        const lessonId = randomUUID();
+        await client.query(
+          "insert into lessons (id, lesson_set_version_id, day_number, title) values ($1, $2, $3, $4)",
+          [lessonId, versionId, draft.dayNumber, draft.title.trim()]
+        );
+        await client.query(
+          `insert into lesson_versions (id, lesson_id, version, status, content)
+           values ($1, $2, 1, 'draft', $3::jsonb)`,
+          [randomUUID(), lessonId, JSON.stringify({ durationMinutes: draft.durationMinutes, parts: draft.parts })]
+        );
+      }
+      await client.query(
+        `insert into audit_events
+           (id, organization_id, actor_user_id, action, entity_type, entity_id, payload, trace_id)
+         values ($1, $2, $3, $4, 'lesson_set_version', $5, $6::jsonb, $7)`,
+        [randomUUID(), contextRow.organization_id, actorId, action, versionId,
+          JSON.stringify({ weekNumber, cefr, expectedVersion: expectedVersion ?? null, version: nextVersion }), randomUUID()]
+      );
+      await client.query("commit");
+    } catch (error) {
+      await client.query("rollback");
+      throw error;
+    } finally { client.release(); }
+    const saved = await this.lessonSetVersion(actorId, versionId);
+    if (!saved) throw new Error("CONTENT_VERSION_NOT_FOUND");
+    return { ...saved, optimisticVersion: saved.version };
+  }
+
+  async upsertLessonDay(
+    actorId: string,
+    weekNumber: number,
+    cefr: CefrLevel,
+    dayNumber: number,
+    lesson: ContentLessonDraftInput,
+    expectedVersion?: number
+  ): Promise<ContentLessonMutationResult> {
+    if (lesson.dayNumber !== dayNumber || dayNumber < 1 || dayNumber > 7) throw new Error("CONTENT_DAY_MISMATCH");
+    validateLessonDraftInput(lesson);
+    return this.mutateLessonSet(actorId, weekNumber, cefr, expectedVersion, "content.lesson-day.saved", (lessons) => {
+      const withoutDay = lessons.filter((candidate) => candidate.dayNumber !== dayNumber);
+      return [...withoutDay, { ...lesson, title: lesson.title.trim() }];
+    });
+  }
+
+  async deleteLessonDay(
+    actorId: string,
+    weekNumber: number,
+    cefr: CefrLevel,
+    dayNumber: number,
+    expectedVersion?: number
+  ): Promise<ContentLessonMutationResult> {
+    return this.mutateLessonSet(actorId, weekNumber, cefr, expectedVersion, "content.lesson-day.deleted", (lessons) => {
+      if (!lessons.some((lesson) => lesson.dayNumber === dayNumber)) throw new Error("CONTENT_DAY_NOT_FOUND");
+      return lessons.filter((lesson) => lesson.dayNumber !== dayNumber);
+    });
+  }
+
+  async saveLessonJson(
+    actorId: string,
+    weekNumber: number,
+    cefr: CefrLevel,
+    lessons: readonly ContentLessonDraftInput[],
+    expectedVersion?: number
+  ): Promise<ContentLessonMutationResult> {
+    const days = new Set<number>();
+    for (const lesson of lessons) {
+      if (days.has(lesson.dayNumber)) throw new Error("CONTENT_DUPLICATE_DAY");
+      days.add(lesson.dayNumber);
+      validateLessonDraftInput(lesson);
+    }
+    return this.mutateLessonSet(actorId, weekNumber, cefr, expectedVersion, "content.lesson-set.json-saved", () => lessons.map((lesson) => ({ ...lesson, title: lesson.title.trim() })));
+  }
+
+  async deleteDraftLessonSet(actorId: string, weekNumber: number, cefr: CefrLevel): Promise<{ deleted: true }> {
+    const client = await this.pool.connect();
+    try {
+      await client.query("begin");
+      const result = await client.query<{
+        lesson_set_id: string; organization_id: string; published: boolean; enrolled: boolean;
+      }>(
+        `select ls.id as lesson_set_id, p.organization_id,
+                exists(select 1 from lesson_set_versions where lesson_set_id = ls.id and status = 'published') as published,
+                exists(select 1 from enrollments e where e.program_id = p.id and e.cefr = ls.cefr) as enrolled
+         from users actor
+         join programs p on p.organization_id = actor.organization_id and p.status = 'active'
+         join program_weeks pw on pw.program_id = p.id and pw.week_number = $2
+         join lesson_sets ls on ls.program_week_id = pw.id and ls.cefr = $3
+         where actor.id = $1 limit 1 for update of ls`,
+        [actorId, weekNumber, cefr]
+      );
+      const row = result.rows[0];
+      if (!row) throw new Error("CONTENT_DRAFT_NOT_FOUND");
+      if (row.published || row.enrolled) throw new Error("CONTENT_DRAFT_IN_USE");
+      await client.query(
+        `insert into audit_events
+           (id, organization_id, actor_user_id, action, entity_type, entity_id, payload, trace_id)
+         values ($1, $2, $3, 'content.lesson-set.draft-deleted', 'lesson_set', $4, $5::jsonb, $6)`,
+        [randomUUID(), row.organization_id, actorId, row.lesson_set_id, JSON.stringify({ weekNumber, cefr }), randomUUID()]
+      );
+      await client.query("delete from lesson_sets where id = $1", [row.lesson_set_id]);
+      await client.query("commit");
+      return { deleted: true };
+    } catch (error) {
+      await client.query("rollback");
+      throw error;
+    } finally { client.release(); }
   }
 
   async lessonSetVersion(staffId: string, versionId: string): Promise<ContentLessonSetVersionView | null> {
@@ -1289,6 +2236,54 @@ class ContentRepository {
        order by ct.created_at desc limit 50`,
       [organizationId]
     );
+    const [submissions, micros, appeals, progress, assessments] = await Promise.all([
+      this.pool.query<{
+        id: string; learner_name: string; cefr: CefrLevel | null; week_number: number; submitted_at: Date;
+        operator_checked: boolean; content: Record<string, unknown>; score: Record<string, unknown> | null; topic: string;
+        feedback: Record<string, unknown> | null;
+      }>(`select ps.id, u.display_name as learner_name, e.cefr, pw.week_number, ps.submitted_at,
+                 ps.operator_checked, ps.content, ps.score, ps.feedback, pw.topic
+          from practice_submissions ps join users u on u.id = ps.learner_id
+          join program_weeks pw on pw.id = ps.program_week_id
+          left join enrollments e on e.learner_id = u.id and e.program_id = pw.program_id
+          where u.organization_id = $1 order by ps.submitted_at desc nulls last limit 60`, [organizationId]),
+      this.pool.query<{
+        id: string; learner_name: string; cefr: CefrLevel; topic: string; generated_at: Date;
+        completed_at: Date | null; content: Record<string, unknown>; progress: Record<string, unknown>;
+      }>(`select ml.id, u.display_name as learner_name, ml.cefr, ml.topic, ml.generated_at,
+                 ml.completed_at, ml.content, ml.progress
+          from micro_lessons ml join users u on u.id = ml.learner_id
+          where u.organization_id = $1 order by ml.generated_at desc limit 60`, [organizationId]),
+      this.pool.query<{
+        id: string; learner_name: string; reason: string; status: "pending" | "accepted" | "rejected";
+        resolution: string | null; created_at: Date;
+      }>(`select a.id, u.display_name as learner_name, a.reason, a.status, a.resolution, a.created_at
+          from appeals a join users u on u.id = a.learner_id
+          where u.organization_id = $1 order by (a.status = 'pending') desc, a.created_at desc limit 60`, [organizationId]),
+      this.pool.query<{
+        id: string; learner_name: string; cefr: CefrLevel | null; week_number: number; day_number: number;
+        title: string; evidence: Record<string, unknown>;
+      }>(`select pr.id, u.display_name as learner_name, e.cefr, pw.week_number, l.day_number,
+                 l.title, pr.evidence
+          from progress_records pr join users u on u.id = pr.learner_id
+          join lessons l on l.id = pr.lesson_id
+          join lesson_set_versions lsv on lsv.id = l.lesson_set_version_id
+          join lesson_sets ls on ls.id = lsv.lesson_set_id
+          join program_weeks pw on pw.id = ls.program_week_id
+          left join enrollments e on e.learner_id = u.id and e.program_id = pw.program_id
+          where u.organization_id = $1 and pr.evidence <> '{}'::jsonb order by pr.updated_at desc limit 100`, [organizationId]),
+      this.pool.query<{
+        id: string; learner_name: string; kind: "placement" | "final" | "level_up"; title: string;
+        status: string; submitted_at: Date | null; total_score: string | null;
+      }>(`select aa.id, u.display_name as learner_name, ad.kind, ad.title, aa.status, aa.submitted_at,
+                 sum(sc.score)::text as total_score
+          from assessment_attempts aa join users u on u.id = aa.learner_id
+          join assessment_versions av on av.id = aa.assessment_version_id
+          join assessment_definitions ad on ad.id = av.definition_id
+          left join assessment_scores sc on sc.attempt_id = aa.id
+          where u.organization_id = $1
+          group by aa.id, u.display_name, ad.kind, ad.title order by aa.started_at desc limit 100`, [organizationId])
+    ]);
     return {
       tabs: [
         { key: "submissions", label: "Bài nộp", count: Number(count.submissions), unreadCount: 0 },
@@ -1325,8 +2320,267 @@ class ContentRepository {
                 return [`${suggestion.original} → ${suggestion.corrected}${explanation}`];
               }) : []
         };
-      })
+      }),
+      submissions: submissions.rows.map((row) => {
+        const rubric = row.score?.rubric && typeof row.score.rubric === "object" ? row.score.rubric as Record<string, unknown> : {};
+        const suggestions = Array.isArray(row.feedback?.suggestions) ? row.feedback.suggestions : [];
+        const storedTask = row.content.task;
+        return {
+          id: row.id, learnerName: row.learner_name, cefr: row.cefr, weekNumber: row.week_number,
+          submittedAt: row.submitted_at.toISOString(), checked: row.operator_checked,
+          type: row.content.inputMode === "dialogue" || row.content.type === "dialogue" ? "dialogue" : "writing",
+          task: typeof storedTask === "string" && storedTask.trim() ? storedTask : weeklyPracticeTask(row.topic, row.cefr ?? "A1").task,
+          text: typeof row.content.text === "string" ? row.content.text : "",
+          total: numberOrNull(row.score?.total),
+          rubric: { meaning: numberOrNull(rubric.meaning), vocabulary: numberOrNull(rubric.vocabulary), grammar: numberOrNull(rubric.grammar) },
+          feedback: typeof row.feedback?.message === "string" ? row.feedback.message : "",
+          aiGraded: row.feedback?.source === "ai",
+          suggestions: suggestions.flatMap((item) => item && typeof item === "object" && !Array.isArray(item)
+            ? [`${String((item as Record<string, unknown>).original ?? "")} → ${String((item as Record<string, unknown>).corrected ?? "")}`] : [])
+        };
+      }),
+      microLessons: micros.rows.map((row) => {
+        const vocabulary = Array.isArray(row.content.vocabulary) ? row.content.vocabulary.map(String) : [];
+        const practice = row.content.practice && typeof row.content.practice === "object" ? row.content.practice as Record<string, unknown> : {};
+        const attempt = row.progress.attempt && typeof row.progress.attempt === "object" ? row.progress.attempt as Record<string, unknown> : {};
+        return {
+          id: row.id, learnerName: row.learner_name, cefr: row.cefr, topic: row.topic,
+          generatedAt: row.generated_at.toISOString(), completed: Boolean(row.completed_at),
+          theory: typeof row.content.theory === "string" ? row.content.theory : "",
+          vocabulary, practice: typeof practice.prompt === "string" ? practice.prompt : "",
+          answer: typeof attempt.answer === "string" ? attempt.answer : null
+        };
+      }),
+      appeals: appeals.rows.map((row) => ({
+        id: row.id, learnerName: row.learner_name, reason: row.reason, status: row.status,
+        createdAt: row.created_at.toISOString(), resolution: row.resolution ?? ""
+      })),
+      lessonAttempts: progress.rows.map((row) => {
+        const source = row.evidence.evidence && typeof row.evidence.evidence === "object"
+          ? row.evidence.evidence as Record<string, unknown> : row.evidence;
+        const attempts: Partial<Record<"listening" | "reading" | "writing" | "speaking", number>> = {};
+        for (const code of ["listening", "reading", "writing", "speaking"] as const) {
+          const value = source[code];
+          if (value && typeof value === "object" && !Array.isArray(value)) {
+            const count = Number((value as Record<string, unknown>).attempts);
+            if (Number.isFinite(count) && count > 0) attempts[code] = count;
+          }
+        }
+        return { id: row.id, learnerName: row.learner_name, cefr: row.cefr, weekNumber: row.week_number,
+          dayNumber: row.day_number, lessonTitle: row.title, attempts };
+      }),
+      assessments: assessments.rows.map((row) => ({
+        id: row.id, learnerName: row.learner_name, kind: row.kind, title: row.title, status: row.status,
+        submittedAt: row.submitted_at?.toISOString() ?? null,
+        totalScore: row.total_score === null ? null : Number(row.total_score)
+      }))
     };
+  }
+
+  async setReviewChecked(actorId: string, kind: "submission" | "coach", id: string, checked: boolean): Promise<boolean> {
+    if (kind === "submission") {
+      const result = await this.pool.query(
+        `update practice_submissions ps set operator_checked = $3, checked_by = case when $3 then $1::uuid else null end
+         from users learner, users actor where ps.id = $2 and learner.id = ps.learner_id
+           and actor.id = $1 and actor.organization_id = learner.organization_id`, [actorId, id, checked]
+      );
+      return Boolean(result.rowCount);
+    }
+    const result = await this.pool.query(
+      `update coach_turns ct set feedback = coalesce(ct.feedback, '{}'::jsonb) || jsonb_build_object('checked', $3, 'checkedBy', case when $3 then $1::text else '' end)
+       from coach_sessions cs, users learner, users actor where ct.id = $2 and cs.id = ct.session_id
+         and learner.id = cs.learner_id and actor.id = $1 and actor.organization_id = learner.organization_id`,
+      [actorId, id, checked]
+    );
+    return Boolean(result.rowCount);
+  }
+
+  async deleteMicroLesson(actorId: string, id: string): Promise<boolean> {
+    const result = await this.pool.query(
+      `delete from micro_lessons ml using users learner, users actor
+       where ml.id = $2 and learner.id = ml.learner_id and actor.id = $1
+         and actor.organization_id = learner.organization_id`, [actorId, id]
+    );
+    return Boolean(result.rowCount);
+  }
+
+  async gradePracticeSubmission(actorId: string, id: string, input: {
+    meaning: number; vocabulary: number; grammar: number; feedback: string;
+  }): Promise<boolean> {
+    const total = Math.round((input.meaning * 0.4 + input.vocabulary * 0.3 + input.grammar * 0.3) * 20);
+    const result = await this.pool.query(
+      `update practice_submissions ps set status = 'reviewed',
+         score = jsonb_build_object('total', $3::numeric, 'rubric', jsonb_build_object('meaning', $4::numeric, 'vocabulary', $5::numeric, 'grammar', $6::numeric)),
+         feedback = jsonb_build_object('message', $7::text, 'source', 'human'), operator_checked = true,
+         checked_by = $1, reviewed_at = now(), updated_at = now()
+       from users learner, users actor where ps.id = $2 and learner.id = ps.learner_id
+         and actor.id = $1 and actor.organization_id = learner.organization_id`,
+      [actorId, id, total, input.meaning, input.vocabulary, input.grammar, input.feedback]
+    );
+    return Boolean(result.rowCount);
+  }
+
+  /** Load only the persisted fields an Operator may submit to the grading task. */
+  async reviewSubmissionForAi(staffId: string, id: string): Promise<{
+    id: string;
+    learnerId: string;
+    organizationId: string;
+    cefr: CefrLevel;
+    topic: string;
+    text: string;
+  } | null> {
+    const result = await this.pool.query<{
+      id: string; learner_id: string; organization_id: string; cefr: CefrLevel; topic: string; content: Record<string, unknown>;
+    }>(
+      `select ps.id, ps.learner_id, learner.organization_id, e.cefr, pw.topic, ps.content
+       from practice_submissions ps
+       join users learner on learner.id = ps.learner_id
+       join users staff on staff.id = $1 and staff.organization_id = learner.organization_id
+       join program_weeks pw on pw.id = ps.program_week_id
+       left join enrollments e on e.learner_id = learner.id and e.program_id = pw.program_id
+       where ps.id = $2
+       order by e.enrolled_at desc nulls last
+       limit 1`,
+      [staffId, id]
+    );
+    const row = result.rows[0];
+    if (!row || !row.cefr) return null;
+    return {
+      id: row.id,
+      learnerId: row.learner_id,
+      organizationId: row.organization_id,
+      cefr: row.cefr,
+      topic: row.topic,
+      text: typeof row.content?.text === "string" ? row.content.text : ""
+    };
+  }
+
+  async beginReviewAiGrade(staffId: string, submissionId: string, requestId: string): Promise<{
+    job: ContentReviewAiGradeJobView;
+    input: { id: string; learnerId: string; cefr: CefrLevel; topic: string; text: string } | null;
+    started: boolean;
+  } | null> {
+    const source = await this.reviewSubmissionForAi(staffId, submissionId);
+    if (!source) return null;
+    const idempotencyKey = `content-review-ai-grade:${submissionId}:${requestId}`;
+    const client = await this.pool.connect();
+    try {
+      await client.query("begin");
+      const inserted = await client.query<{ id: string; created_at: Date }>(
+        `insert into jobs (id, kind, payload, max_attempts, idempotency_key)
+         values ($1, 'content.review.ai-grade', $2::jsonb, 1, $3)
+         on conflict (idempotency_key) do nothing
+         returning id, created_at`,
+        [randomUUID(), JSON.stringify({ submissionId, learnerId: source.learnerId, organizationId: source.organizationId, requestId }), idempotencyKey]
+      );
+      const row = await client.query<{
+        id: string; state: "queued" | "running" | "succeeded" | "failed" | "dead"; payload: Record<string, unknown>; last_error: string | null; created_at: Date; updated_at: Date;
+      }>(
+        `select id, state, payload, last_error, created_at, updated_at from jobs where idempotency_key = $1 for update`,
+        [idempotencyKey]
+      );
+      const job = row.rows[0];
+      if (!job) { await client.query("rollback"); return null; }
+      await client.query("commit");
+      return {
+        job: reviewAiGradeJobView(job),
+        input: inserted.rowCount ? { id: source.id, learnerId: source.learnerId, cefr: source.cefr, topic: source.topic, text: source.text } : null,
+        started: Boolean(inserted.rowCount)
+      };
+    } catch (error) {
+      await client.query("rollback");
+      throw error;
+    } finally { client.release(); }
+  }
+
+  async completeReviewAiGrade(input: {
+    staffId: string;
+    submissionId: string;
+    requestId: string;
+    output: { score: { total: number; rubric: { meaning: number; vocabulary: number; grammar: number } }; feedback: string; suggestions: Array<{ original: string; corrected: string; explanation: string }>; correctedText: string };
+    taskId: string;
+    promptVersionId: string;
+    metadata: AiRunMetadataInput;
+  }): Promise<ContentReviewAiGradeJobView | null> {
+    const idempotencyKey = `content-review-ai-grade:${input.submissionId}:${input.requestId}`;
+    const client = await this.pool.connect();
+    try {
+      await client.query("begin");
+      const jobResult = await client.query<{ id: string; state: string; payload: Record<string, unknown>; created_at: Date; updated_at: Date }>(
+        `select j.id, j.state, j.payload, j.created_at, j.updated_at
+         from jobs j join users staff on staff.id = $1
+         where j.idempotency_key = $2 and (j.payload->>'organizationId')::uuid = staff.organization_id
+         for update`,
+        [input.staffId, idempotencyKey]
+      );
+      const job = jobResult.rows[0];
+      if (!job) { await client.query("rollback"); return null; }
+      if (job.state === "succeeded") { await client.query("commit"); return reviewAiGradeJobView(job); }
+      const learner = await client.query<{ learner_id: string }>(
+        `select ps.learner_id from practice_submissions ps join users staff on staff.id = $1
+         join users learner on learner.id = ps.learner_id and learner.organization_id = staff.organization_id
+         where ps.id = $2`, [input.staffId, input.submissionId]
+      );
+      const learnerId = learner.rows[0]?.learner_id;
+      if (!learnerId) { await client.query("rollback"); return null; }
+      const runId = randomUUID();
+      await insertAiRun(client, {
+        id: runId,
+        learnerId,
+        requestId: input.requestId,
+        taskId: input.taskId,
+        promptVersionId: input.promptVersionId,
+        output: input.output,
+        metadata: input.metadata
+      });
+      await client.query(
+        `update practice_submissions ps set status = 'reviewed',
+           score = $3::jsonb, feedback = $4::jsonb, operator_checked = true,
+           checked_by = $1, reviewed_at = now(), updated_at = now()
+         from users staff, users learner
+         where ps.id = $2 and staff.id = $1 and learner.id = ps.learner_id
+           and learner.organization_id = staff.organization_id`,
+        [input.staffId, input.submissionId, JSON.stringify(input.output.score), JSON.stringify({
+          message: input.output.feedback, suggestions: input.output.suggestions,
+          correctedText: input.output.correctedText, source: "ai", aiRunId: runId
+        })]
+      );
+      const payload = { ...job.payload, result: input.output };
+      const updated = await client.query<{ id: string; state: "succeeded"; payload: Record<string, unknown>; created_at: Date; updated_at: Date }>(
+        `update jobs set state = 'succeeded', payload = $2::jsonb, updated_at = now()
+         where id = $1 returning id, state, payload, created_at, updated_at`,
+        [job.id, JSON.stringify(payload)]
+      );
+      await client.query("commit");
+      return updated.rows[0] ? reviewAiGradeJobView(updated.rows[0]) : null;
+    } catch (error) {
+      await client.query("rollback");
+      throw error;
+    } finally { client.release(); }
+  }
+
+  async failReviewAiGrade(staffId: string, submissionId: string, requestId: string, errorCode: string): Promise<ContentReviewAiGradeJobView | null> {
+    const idempotencyKey = `content-review-ai-grade:${submissionId}:${requestId}`;
+    const result = await this.pool.query<{ id: string; state: "failed"; payload: Record<string, unknown>; created_at: Date; updated_at: Date }>(
+      `update jobs j set state = 'failed', last_error = $3, updated_at = now()
+       from users staff
+       where j.idempotency_key = $2 and staff.id = $1
+         and (j.payload->>'organizationId')::uuid = staff.organization_id
+       returning j.id, j.state, j.payload, j.created_at, j.updated_at`,
+      [staffId, idempotencyKey, errorCode]
+    );
+    const row = result.rows[0];
+    return row ? { ...reviewAiGradeJobView(row), errorCode } : null;
+  }
+
+  async resolveAppeal(actorId: string, id: string, status: "accepted" | "rejected", resolution: string): Promise<boolean> {
+    const result = await this.pool.query(
+      `update appeals a set status = $3, resolution = $4, resolved_by = $1, resolved_at = now()
+       from users learner, users actor where a.id = $2 and a.status = 'pending'
+         and learner.id = a.learner_id and actor.id = $1 and actor.organization_id = learner.organization_id`,
+      [actorId, id, status, resolution]
+    );
+    return Boolean(result.rowCount);
   }
 
   async promptSettings(staffId: string): Promise<Omit<ContentPromptSettingsView["groups"][number], "label">[]> {
@@ -1427,8 +2681,217 @@ function practiceLabel(parts: readonly { code: string; content: Record<string, u
   return answer ? `${type} · đáp án: ${answer}` : type;
 }
 
+function validateLessonDraftInput(lesson: ContentLessonDraftInput): void {
+  if (!Number.isInteger(lesson.dayNumber) || lesson.dayNumber < 1 || lesson.dayNumber > 7) {
+    throw new Error("CONTENT_LESSON_INVALID");
+  }
+  if (!lesson.title.trim() || !Number.isFinite(lesson.durationMinutes) || lesson.durationMinutes <= 0) {
+    throw new Error("CONTENT_LESSON_INVALID");
+  }
+  const required = [
+    "objective", "instruction", "vocabulary", "grammar", "pronunciation",
+    "listening", "reading", "writing", "speaking"
+  ];
+  const codes = new Set(lesson.parts.map((part) => part.code));
+  if (required.some((code) => !codes.has(code as typeof lesson.parts[number]["code"]))) {
+    throw new Error("CONTENT_LESSON_INVALID");
+  }
+}
+
 function numberOrNull(value: unknown): number | null {
   return typeof value === "number" && Number.isFinite(value) ? value : null;
+}
+
+type OperatorProfileState = {
+  pendingLevel?: {
+    targetLevel: CefrLevel;
+    effectiveAt: string;
+    mode: "scheduled" | "recommend_lower";
+    reason: string;
+  } | undefined;
+  levelHistory?: Array<{
+    from: CefrLevel | null;
+    to: CefrLevel;
+    changedAt: string;
+    mode: "direct" | "scheduled" | "recommend_lower";
+    reason: string;
+    evidence: string;
+    changedBy: string | null;
+  }> | undefined;
+};
+
+function profileObject(value: unknown): Record<string, unknown> {
+  return value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : {};
+}
+
+function operatorProfileState(value: unknown): OperatorProfileState {
+  const state = profileObject(profileObject(value)._operator);
+  return {
+    pendingLevel: state.pendingLevel && typeof state.pendingLevel === "object"
+      ? state.pendingLevel as OperatorProfileState["pendingLevel"] : undefined,
+    levelHistory: Array.isArray(state.levelHistory) ? state.levelHistory as OperatorProfileState["levelHistory"] : []
+  };
+}
+
+type LearnerLifecycleState = {
+  rewardAnnouncementAcknowledged?: string;
+};
+
+function learnerLifecycleState(value: unknown): LearnerLifecycleState {
+  const state = profileObject(profileObject(value)._lifecycle);
+  return typeof state.rewardAnnouncementAcknowledged === "string"
+    ? { rewardAnnouncementAcknowledged: state.rewardAnnouncementAcknowledged } : {};
+}
+
+function publicLearnerProfile(value: unknown): Partial<LearnerProfileData> {
+  const profile = profileObject(value);
+  const { _operator: _ignoredOperator, _lifecycle: _ignoredLifecycle, ...publicProfile } = profile;
+  return publicProfile as Partial<LearnerProfileData>;
+}
+
+function isDeletionRequestStatus(value: string): value is AssessmentDeletionRequestView["status"] {
+  return value === "pending" || value === "approved" || value === "rejected" || value === "cancelled";
+}
+
+function isForeignKeyViolation(error: unknown): boolean {
+  return Boolean(error && typeof error === "object" && "code" in error && (error as { code?: unknown }).code === "23503");
+}
+
+const purgeConfirmationPhrase = "XOA VINH VIEN" as const;
+const purgeConfirmationCountdownSeconds = 5 as const;
+const purgeConfirmationTtlSeconds = 60;
+const maintenanceConfirmationCountdownSeconds = 5 as const;
+const maintenanceConfirmationTtlSeconds = 300;
+const maintenanceBackupTtlSeconds = 3600;
+const maintenancePhrases = {
+  seed_demo: "GHI DE TOAN BO",
+  wipe_data: "XOA TOAN BO"
+} as const satisfies Record<ManagerMaintenanceAction, string>;
+
+function destructiveTokenHash(token: string): string {
+  return createHash("sha256").update(token).digest("hex");
+}
+
+function maintenanceSnapshotHash(snapshot: unknown): string {
+  return createHash("sha256").update(JSON.stringify(snapshot)).digest("hex");
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value && typeof value === "object" && !Array.isArray(value));
+}
+
+function isYouTubeMusicUrl(value: string, enabled: boolean): boolean {
+  if (!enabled || !value.trim()) return true;
+  try {
+    const url = new URL(value);
+    if (url.protocol !== "https:") return false;
+    const hostname = url.hostname.toLowerCase();
+    return hostname === "youtu.be" || hostname === "youtube.com" || hostname.endsWith(".youtube.com");
+  } catch {
+    return false;
+  }
+}
+
+function importedSettings(
+  current: Omit<ManagerSettingsView, "organizationName">,
+  candidate: Record<string, unknown>
+): Omit<ManagerSettingsView, "organizationName"> {
+  const next = { ...current };
+  const numberKeys = [
+    "reminderInactiveDays", "pilotWeeks", "weekOverride", "minMinutesPerDay", "coachDailyLimit", "testWarnLimit"
+  ] as const;
+  for (const key of numberKeys) if (typeof candidate[key] === "number" && Number.isFinite(candidate[key])) next[key] = candidate[key] as never;
+  if (typeof candidate.weeklyReportEnabled === "boolean") next.weeklyReportEnabled = candidate.weeklyReportEnabled;
+  if (typeof candidate.pilotStartDate === "string") next.pilotStartDate = candidate.pilotStartDate;
+  if (typeof candidate.courseTheme === "string") next.courseTheme = candidate.courseTheme;
+  if (typeof candidate.testTimed === "boolean") next.testTimed = candidate.testTimed;
+  if (typeof candidate.baseWebhookUrl === "string") next.baseWebhookUrl = candidate.baseWebhookUrl;
+  if (typeof candidate.baseWebhookTemplate === "string") next.baseWebhookTemplate = candidate.baseWebhookTemplate;
+  const music = isRecord(candidate.backgroundMusic) ? candidate.backgroundMusic : undefined;
+  if (music && typeof music.enabled === "boolean" && typeof music.url === "string" && typeof music.volume === "number") {
+    next.backgroundMusic = { enabled: music.enabled, url: music.url, volume: music.volume };
+  }
+  const times = isRecord(candidate.testTimes) ? candidate.testTimes : undefined;
+  if (times && ["listening", "reading", "writing", "speaking"].every((key) => typeof times[key] === "number")) {
+    next.testTimes = {
+      listening: times.listening as number, reading: times.reading as number,
+      writing: times.writing as number, speaking: times.speaking as number
+    };
+  }
+  const level = isRecord(candidate.levelUp) ? candidate.levelUp : undefined;
+  if (level && ["days", "lessons", "firstTry", "submission", "coach", "coachTurns", "wrong", "minParts"].every((key) => typeof level[key] === "number")) {
+    next.levelUp = {
+      days: level.days as number, lessons: level.lessons as number, firstTry: level.firstTry as number,
+      submission: level.submission as number, coach: level.coach as number, coachTurns: level.coachTurns as number,
+      wrong: level.wrong as number, minParts: level.minParts as number
+    };
+  }
+  return next;
+}
+
+const cefrOrder: CefrLevel[] = ["A1", "A2", "B1", "B2", "C1"];
+
+function cefrIndex(level: CefrLevel | null): number {
+  return level ? cefrOrder.indexOf(level) : -1;
+}
+
+function sectionTaskCount(blueprint: StoredAssessmentDefinition, code: AssessmentSectionCode): number {
+  return blueprint.sections
+    .find((section) => section.code === code)
+    ?.groups.reduce((total, group) => total + group.tasks.length, 0) ?? 0;
+}
+
+function reviewAiGradeJobView(row: {
+  id: string;
+  state: string;
+  payload: Record<string, unknown>;
+  last_error?: string | null;
+  created_at: Date;
+  updated_at: Date;
+}): ContentReviewAiGradeJobView {
+  const result = row.payload.result;
+  const parsed = result && typeof result === "object" && !Array.isArray(result) ? result as Record<string, unknown> : null;
+  const score = parsed?.score && typeof parsed.score === "object" && !Array.isArray(parsed.score) ? parsed.score as Record<string, unknown> : null;
+  const rubric = score?.rubric && typeof score.rubric === "object" && !Array.isArray(score.rubric) ? score.rubric as Record<string, unknown> : null;
+  const suggestions = Array.isArray(parsed?.suggestions) ? parsed.suggestions.flatMap((item) => {
+    if (!item || typeof item !== "object" || Array.isArray(item)) return [];
+    const entry = item as Record<string, unknown>;
+    return typeof entry.original === "string" && typeof entry.corrected === "string" && typeof entry.explanation === "string"
+      ? [{ original: entry.original, corrected: entry.corrected, explanation: entry.explanation }] : [];
+  }) : [];
+  const hasResult = Boolean(score && rubric && typeof score.total === "number" && typeof parsed?.feedback === "string");
+  return {
+    jobId: row.id,
+    submissionId: typeof row.payload.submissionId === "string" ? row.payload.submissionId : "",
+    status: row.state === "dead" ? "failed" : row.state as ContentReviewAiGradeJobView["status"],
+    requestedAt: row.created_at.toISOString(),
+    completedAt: row.state === "succeeded" || row.state === "failed" ? row.updated_at.toISOString() : null,
+    errorCode: row.last_error ?? null,
+    result: hasResult ? {
+      total: Number(score!.total),
+      rubric: { meaning: Number(rubric!.meaning), vocabulary: Number(rubric!.vocabulary), grammar: Number(rubric!.grammar) },
+      feedback: String(parsed!.feedback),
+      suggestions,
+      correctedText: typeof parsed!.correctedText === "string" ? parsed!.correctedText : ""
+    } : null
+  };
+}
+
+function nextMondayIso(): string {
+  const date = new Date();
+  const day = date.getUTCDay();
+  const days = day === 1 ? 7 : (8 - day) % 7 || 7;
+  date.setUTCDate(date.getUTCDate() + days);
+  date.setUTCHours(0, 0, 0, 0);
+  return date.toISOString();
+}
+
+function seasonNameForDate(date: Date): string {
+  const month = date.getUTCMonth() + 1;
+  if (month >= 3 && month <= 5) return "Mùa xuân – gieo hạt";
+  if (month >= 6 && month <= 8) return "Mùa hè – bứt phá";
+  if (month >= 9 && month <= 11) return "Mùa thu – trưởng thành";
+  return "Mùa đông – vững vàng";
 }
 
 class AssessmentRepository {
@@ -1470,7 +2933,7 @@ class AssessmentRepository {
     const result = await this.pool.query<{ id: string }>(
       `select id from assessment_attempts
        where learner_id = $1 and assessment_version_id = $2
-         and status in ('in_progress', 'submitted', 'pending_review')
+         and status in ('in_progress', 'submitted', 'pending_review', 'approved', 'needs_retry')
        order by started_at desc limit 1`,
       [learnerId, assessmentVersionId]
     );
@@ -1486,13 +2949,22 @@ class AssessmentRepository {
       status: AssessmentAttemptRecord["status"];
       current_section: AssessmentSectionCode | null;
       timing_state: AssessmentAttemptRecord["timingState"];
+      integrity_events: AssessmentAttemptRecord["integrityEvents"];
+      violation_count: number;
+      violation_limit: number;
+      submit_reason: AssessmentSubmitReason | null;
+      device_evidence: AssessmentDeviceEvidence;
+      media_evidence: Partial<AssessmentMediaEvidence> | null;
       started_at: Date;
       submitted_at: Date | null;
       updated_at: Date;
       suggested_level: CefrLevel | null;
+      challenge_turns: string; challenge_average: string | null; challenge_off_topic: string; challenge_status: string | null;
     }>(
       `select aa.id, aa.assessment_version_id, aa.learner_id, aa.status, aa.current_section,
-              aa.timing_state, aa.started_at, aa.submitted_at, aa.updated_at, dec.suggested_level
+              aa.timing_state, aa.integrity_events, aa.violation_count, aa.violation_limit,
+              aa.submit_reason, aa.device_evidence, aa.media_evidence,
+              aa.started_at, aa.submitted_at, aa.updated_at, dec.suggested_level
        from assessment_attempts aa
        left join assessment_decisions dec on dec.attempt_id = aa.id
        where aa.id = $1 and aa.learner_id = $2`,
@@ -1515,12 +2987,17 @@ class AssessmentRepository {
         `select section, score::text from assessment_scores where attempt_id = $1`,
         [attemptId]
       ),
-      this.pool.query<{ section: AssessmentSectionCode; group_key: string; play_count: number }>(
+       this.pool.query<{ section: AssessmentSectionCode; group_key: string; play_count: number }>(
         `select section, group_key, play_count
          from assessment_audio_plays where attempt_id = $1`,
         [attemptId]
       )
     ]);
+    const mediaEvidence = mediaEvidenceFromResponses(responses.rows.map((response) => ({
+      taskKey: response.task_key,
+      response: response.response,
+      savedAt: response.saved_at
+    })), row.media_evidence);
     return {
       id: row.id,
       assessmentVersionId: row.assessment_version_id,
@@ -1528,6 +3005,12 @@ class AssessmentRepository {
       status: row.status,
       currentSection: row.current_section,
       timingState: row.timing_state ?? {},
+      integrityEvents: Array.isArray(row.integrity_events) ? row.integrity_events : [],
+      violationCount: Number(row.violation_count ?? 0),
+      violationLimit: Number(row.violation_limit ?? 3),
+      submitReason: row.submit_reason,
+      deviceEvidence: row.device_evidence ?? defaultDeviceEvidence(),
+      mediaEvidence,
       startedAt: row.started_at,
       submittedAt: row.submitted_at,
       updatedAt: row.updated_at,
@@ -1543,6 +3026,166 @@ class AssessmentRepository {
       audioPlayCounts: Object.fromEntries(audioPlays.rows.map((play) => [`${play.section}:${play.group_key}`, play.play_count])),
       suggestedLevel: row.suggested_level
     };
+  }
+
+  async getAssessmentRuntime(learnerId: string, attemptId: string): Promise<AssessmentRuntimeView | null> {
+    const attempt = await this.findAttempt(learnerId, attemptId);
+    return attempt ? assessmentRuntimeFromAttempt(attempt) : null;
+  }
+
+  async recordAssessmentViolation(input: {
+    learnerId: string;
+    attemptId: string;
+    requestId: string;
+    reason: AssessmentViolationReason;
+    occurredAt: string;
+  }): Promise<AssessmentRuntimeView | null> {
+    const client = await this.pool.connect();
+    try {
+      await client.query("begin");
+      const scope = `assessment.violation:${input.attemptId}`;
+      // Reserve the request inside the same transaction as the attempt update.
+      // ON CONFLICT waits for an in-flight reservation, so a retry cannot race
+      // the update and increment the authoritative counter twice.
+      const reservation = await client.query<{ id: number }>(
+        `insert into idempotency_keys (scope, key, response) values ($1, $2, '{}'::jsonb)
+         on conflict (scope, key) do nothing returning id`,
+        [scope, input.requestId]
+      );
+      if (!reservation.rowCount) {
+        const existing = await client.query<{ response: AssessmentRuntimeView }>(
+          `select response from idempotency_keys where scope = $1 and key = $2`,
+          [scope, input.requestId]
+        );
+        await client.query("commit");
+        return existing.rows[0]?.response ?? null;
+      }
+
+      const locked = await client.query<{
+        id: string;
+        status: AssessmentAttemptRecord["status"];
+        violation_count: number;
+        violation_limit: number;
+        integrity_events: AssessmentAttemptRecord["integrityEvents"];
+      }>(
+        `select id, status, violation_count, violation_limit, integrity_events
+         from assessment_attempts
+         where id = $1 and learner_id = $2
+         for update`,
+        [input.attemptId, input.learnerId]
+      );
+      const attempt = locked.rows[0];
+      if (!attempt || attempt.status !== "in_progress") {
+        await client.query("rollback");
+        return null;
+      }
+
+      const violationCount = Number(attempt.violation_count ?? 0) + 1;
+      const violationLimit = Number(attempt.violation_limit ?? 3);
+      const autoSubmitted = violationCount > violationLimit;
+      const recordedAt = new Date().toISOString();
+      const event = {
+        requestId: input.requestId,
+        reason: input.reason,
+        occurredAt: input.occurredAt,
+        recordedAt,
+        violationCount
+      } satisfies AssessmentAttemptRecord["integrityEvents"][number];
+      const events = [...(Array.isArray(attempt.integrity_events) ? attempt.integrity_events : []), event];
+      await client.query(
+        `update assessment_attempts
+         set violation_count = $3,
+             integrity_events = $4::jsonb,
+             status = case when $5 then 'pending_review' else status end,
+             current_section = case when $5 then null else current_section end,
+             submitted_at = case when $5 then now() else submitted_at end,
+             submit_reason = case when $5 then 'violations' else submit_reason end,
+             updated_at = now()
+         where id = $1 and learner_id = $2`,
+        [input.attemptId, input.learnerId, violationCount, JSON.stringify(events), autoSubmitted]
+      );
+      const state = await client.query<{
+        status: AssessmentAttemptRecord["status"];
+        current_section: AssessmentSectionCode | null;
+        timing_state: AssessmentAttemptRecord["timingState"];
+        violation_count: number;
+        violation_limit: number;
+        submit_reason: AssessmentSubmitReason | null;
+        device_evidence: AssessmentDeviceEvidence;
+        media_evidence: Partial<AssessmentMediaEvidence> | null;
+      }>(
+        `select status, current_section, timing_state, violation_count, violation_limit,
+                submit_reason, device_evidence, media_evidence
+         from assessment_attempts where id = $1 and learner_id = $2`,
+        [input.attemptId, input.learnerId]
+      );
+      const updated = state.rows[0];
+      if (!updated) { await client.query("rollback"); return null; }
+      // A transaction owns one pg Client. Keep its queries sequential: pg@9
+      // removes support for overlapping client.query() calls on that client.
+      const responses = await client.query<{ task_key: string; response: { evidenceType?: AssessmentEvidenceType; artifactKey?: string }; saved_at: Date }>(
+        `select task_key, response, saved_at from assessment_responses where attempt_id = $1`, [input.attemptId]
+      );
+      const audioPlays = await client.query<{ section: AssessmentSectionCode; group_key: string; play_count: number }>(
+        `select section, group_key, play_count from assessment_audio_plays where attempt_id = $1`, [input.attemptId]
+      );
+      const mediaEvidence = mediaEvidenceFromResponses(responses.rows.map((response) => ({
+        taskKey: response.task_key, response: response.response, savedAt: response.saved_at
+      })), updated.media_evidence);
+      const runtime = {
+        ...assessmentRuntimeFromState({
+          status: updated.status,
+          currentSection: updated.current_section,
+          timingState: updated.timing_state ?? {},
+          violationCount: Number(updated.violation_count ?? 0),
+          violationLimit: Number(updated.violation_limit ?? 3),
+          submitReason: updated.submit_reason,
+          deviceEvidence: updated.device_evidence ?? defaultDeviceEvidence(),
+          mediaEvidence,
+          audioPlayCounts: Object.fromEntries(audioPlays.rows.map((play) => [`${play.section}:${play.group_key}`, play.play_count]))
+        }),
+        autoSubmitted
+      } satisfies AssessmentRuntimeView;
+      await client.query(`update idempotency_keys set response = $3::jsonb where scope = $1 and key = $2`, [scope, input.requestId, JSON.stringify(runtime)]);
+      await client.query("commit");
+      return runtime;
+    } catch (error) {
+      await client.query("rollback");
+      throw error;
+    } finally {
+      client.release();
+    }
+  }
+
+  async findAppeal(learnerId: string, attemptId: string): Promise<{
+    id: string; reason: string; status: "pending" | "accepted" | "rejected";
+    resolution: string | null; createdAt: Date; resolvedAt: Date | null;
+  } | null> {
+    const result = await this.pool.query<{
+      id: string; reason: string; status: "pending" | "accepted" | "rejected";
+      resolution: string | null; created_at: Date; resolved_at: Date | null;
+    }>(
+      `select id, reason, status, resolution, created_at, resolved_at from appeals
+       where learner_id = $1 and attempt_id = $2 order by created_at desc limit 1`,
+      [learnerId, attemptId]
+    );
+    const row = result.rows[0];
+    return row ? { id: row.id, reason: row.reason, status: row.status, resolution: row.resolution, createdAt: row.created_at, resolvedAt: row.resolved_at } : null;
+  }
+
+  async createAppeal(learnerId: string, attemptId: string, reason: string): Promise<{
+    id: string; reason: string; status: "pending"; resolution: null; createdAt: Date; resolvedAt: null;
+  } | null> {
+    const result = await this.pool.query<{ id: string; created_at: Date }>(
+      `insert into appeals (id, attempt_id, learner_id, reason)
+       select $1, aa.id, aa.learner_id, $4 from assessment_attempts aa
+       where aa.id = $2 and aa.learner_id = $3 and aa.status in ('pending_review', 'approved', 'needs_retry')
+         and not exists (select 1 from appeals a where a.attempt_id = aa.id and a.status = 'pending')
+       returning id, created_at`,
+      [randomUUID(), attemptId, learnerId, reason]
+    );
+    const row = result.rows[0];
+    return row ? { id: row.id, reason, status: "pending", resolution: null, createdAt: row.created_at, resolvedAt: null } : null;
   }
 
   async recordAudioPlay(input: {
@@ -1567,11 +3210,28 @@ class AssessmentRepository {
     return result.rows[0]?.play_count ?? null;
   }
 
+  async assessmentViolationLimit(learnerId: string): Promise<number> {
+    const result = await this.pool.query<{ violation_limit: number | null }>(
+      `select coalesce(
+                case when os.configuration->>'testWarnLimit' ~ '^[0-9]+$'
+                  then (os.configuration->>'testWarnLimit')::int end,
+                3
+              ) as violation_limit
+       from users u
+       left join organization_settings os on os.organization_id = u.organization_id
+       where u.id = $1`,
+      [learnerId]
+    );
+    const limit = Number(result.rows[0]?.violation_limit ?? 3);
+    return Number.isInteger(limit) && limit >= 1 && limit <= 10 ? limit : 3;
+  }
+
   async startAttempt(input: {
     learnerId: string;
     assessmentVersionId: string;
     firstSection: AssessmentSectionCode;
     durationMinutes: number;
+    violationLimit?: number;
   }): Promise<AssessmentAttemptRecord> {
     const active = await this.findActiveAttempt(input.learnerId, input.assessmentVersionId);
     if (active) return active;
@@ -1582,9 +3242,9 @@ class AssessmentRepository {
     try {
       await this.pool.query(
         `insert into assessment_attempts
-           (id, assessment_version_id, learner_id, status, current_section, timing_state, started_at, updated_at)
-         values ($1, $2, $3, 'in_progress', $4, $5::jsonb, $6, $6)`,
-        [id, input.assessmentVersionId, input.learnerId, input.firstSection, JSON.stringify(timingState), startedAt]
+           (id, assessment_version_id, learner_id, status, current_section, timing_state, violation_limit, started_at, updated_at)
+         values ($1, $2, $3, 'in_progress', $4, $5::jsonb, $6, $7, $7)`,
+        [id, input.assessmentVersionId, input.learnerId, input.firstSection, JSON.stringify(timingState), input.violationLimit ?? 3, startedAt]
       );
     } catch (error) {
       if ((error as { code?: string }).code !== "23505") throw error;
@@ -1674,15 +3334,80 @@ class AssessmentRepository {
     return this.findAttempt(input.learnerId, input.attemptId);
   }
 
-  async submitAttempt(learnerId: string, attemptId: string): Promise<AssessmentAttemptRecord | null> {
-    const result = await this.pool.query(
-      `update assessment_attempts
-       set status = 'pending_review', current_section = null, submitted_at = now(), updated_at = now()
-       where id = $1 and learner_id = $2 and status = 'in_progress' and current_section = 'speaking'
-       returning id`,
-      [attemptId, learnerId]
-    );
-    return result.rowCount ? this.findAttempt(learnerId, attemptId) : null;
+  async submitAttempt(learnerId: string, attemptId: string, submitReason: AssessmentSubmitReason = "manual"): Promise<AssessmentAttemptRecord | null> {
+    return this.submitAssessmentAttempt({ learnerId, attemptId, submitReason });
+  }
+
+  async submitAssessmentAttempt(input: {
+    learnerId: string;
+    attemptId: string;
+    requestId?: string;
+    submitReason?: AssessmentSubmitReason;
+  }): Promise<AssessmentAttemptRecord | null> {
+    const client = await this.pool.connect();
+    try {
+      await client.query("begin");
+      const scope = `assessment.submit:${input.attemptId}`;
+      if (input.requestId) {
+        const existing = await client.query<{ response: { attemptId: string } }>(
+          `select response from idempotency_keys where scope = $1 and key = $2`,
+          [scope, input.requestId]
+        );
+        if (existing.rows[0]) {
+          await client.query("commit");
+          return this.findAttempt(input.learnerId, input.attemptId);
+        }
+      }
+      const locked = await client.query<{
+        status: AssessmentAttemptRecord["status"];
+        current_section: AssessmentSectionCode | null;
+      }>(
+        `select status, current_section from assessment_attempts
+         where id = $1 and learner_id = $2
+         for update`,
+        [input.attemptId, input.learnerId]
+      );
+      const current = locked.rows[0];
+      if (!current) {
+        await client.query("rollback");
+        return null;
+      }
+      if (current.status !== "in_progress") {
+        await client.query("commit");
+        return this.findAttempt(input.learnerId, input.attemptId);
+      }
+      if (current.current_section !== "speaking") {
+        await client.query("rollback");
+        return null;
+      }
+      const reason = input.submitReason ?? "manual";
+      await client.query(
+        `update assessment_attempts
+         set status = 'pending_review', current_section = null, submitted_at = now(), submit_reason = $3, updated_at = now()
+         where id = $1 and learner_id = $2`,
+        [input.attemptId, input.learnerId, reason]
+      );
+      if (input.requestId) {
+        await client.query(
+          `insert into idempotency_keys (scope, key, response) values ($1, $2, $3::jsonb)`,
+          [scope, input.requestId, JSON.stringify({ attemptId: input.attemptId })]
+        );
+      }
+      await client.query("commit");
+      await this.pool.query(
+        `insert into activities (id, learner_id, activity_type, reference_type, reference_id, minutes, evidence)
+         select $1, $2, 'assessment', 'assessment_attempt', $3, 30, '{}'::jsonb
+         where not exists (select 1 from activities where learner_id = $2 and reference_type = 'assessment_attempt' and reference_id = $3)`,
+        [randomUUID(), input.learnerId, input.attemptId]
+      );
+      await syncLearnerRewards(this.pool, input.learnerId);
+      return this.findAttempt(input.learnerId, input.attemptId);
+    } catch (error) {
+      await client.query("rollback");
+      throw error;
+    } finally {
+      client.release();
+    }
   }
 
   async upsertSectionScore(input: {
@@ -1707,6 +3432,555 @@ class AssessmentRepository {
     return Boolean(result.rowCount);
   }
 
+  async saveSuggestedDecision(input: { attemptId: string; learnerId: string; suggestedLevel: CefrLevel; reason: string }): Promise<void> {
+    await this.pool.query(
+      `insert into assessment_decisions (id, attempt_id, suggested_level, status, reason)
+       select $1, aa.id, $4, 'suggested', $5 from assessment_attempts aa
+       where aa.id = $2 and aa.learner_id = $3
+       on conflict (attempt_id) do update set suggested_level = excluded.suggested_level,
+         reason = excluded.reason where assessment_decisions.status = 'suggested'`,
+      [randomUUID(), input.attemptId, input.learnerId, input.suggestedLevel, input.reason]
+    );
+  }
+
+  async getReviewLearner(reviewerId: string, learnerId: string): Promise<AssessmentReviewLearnerView | null> {
+    const learnerResult = await this.pool.query<{
+      id: string; display_name: string; email: string | null; status: string; created_at: Date;
+      cefr: CefrLevel | null; cefr_approved: boolean; profile: unknown;
+    }>(
+      `select learner.id, learner.display_name, learner.email, learner.status, learner.created_at,
+              enrollment.cefr, coalesce(enrollment.cefr_approved, false) as cefr_approved,
+              coalesce(lp.profile, '{}'::jsonb) as profile
+       from users reviewer
+       join users learner on learner.organization_id = reviewer.organization_id
+         and learner.id = $2 and learner.role = 'learner'
+       left join lateral (
+         select e.cefr, e.cefr_approved
+         from enrollments e join programs p on p.id = e.program_id and p.status = 'active'
+         where e.learner_id = learner.id order by e.cefr_approved desc, e.enrolled_at desc limit 1
+       ) enrollment on true
+       left join learner_profiles lp on lp.user_id = learner.id
+       where reviewer.id = $1 and reviewer.role in ('operator', 'manager')`,
+      [reviewerId, learnerId]
+    );
+    const learner = learnerResult.rows[0];
+    if (!learner) return null;
+    const state = operatorProfileState(learner.profile);
+    const monthlyGoalValue = profileObject(learner.profile).monthlyGoal;
+
+    const attemptsResult = await this.pool.query<{
+      id: string; kind: "placement" | "final" | "level_up"; title: string;
+      status: AssessmentReviewAttemptSummaryView["status"];
+      started_at: Date; submitted_at: Date | null; section_scores: unknown;
+      total_score: string | null; suggested_level: CefrLevel | null; approved_level: CefrLevel | null;
+    }>(
+      `select aa.id, ad.kind, ad.title, aa.status, aa.started_at, aa.submitted_at,
+              coalesce(jsonb_object_agg(sc.section, sc.score) filter (where sc.section is not null), '{}'::jsonb) as section_scores,
+              sum(sc.score)::text as total_score, decision.suggested_level, decision.approved_level
+       from assessment_attempts aa
+       join assessment_versions av on av.id = aa.assessment_version_id
+       join assessment_definitions ad on ad.id = av.definition_id
+       join users reviewer on reviewer.id = $1
+       join users learner on learner.id = aa.learner_id and learner.organization_id = reviewer.organization_id
+       left join assessment_scores sc on sc.attempt_id = aa.id
+       left join assessment_decisions decision on decision.attempt_id = aa.id
+       where aa.learner_id = $2
+       group by aa.id, ad.kind, ad.title, decision.suggested_level, decision.approved_level
+       order by aa.started_at desc`,
+      [reviewerId, learnerId]
+    );
+    const deletionResult = await this.pool.query<{
+      id: string; reason: string; status: AssessmentDeletionRequestView["status"];
+      requested_by: string; requested_at: Date; decided_by: string | null; decided_at: Date | null; note: string | null;
+    }>(
+      `select ae.id, coalesce(ae.payload->>'reason', '') as reason,
+              coalesce(ae.payload->>'status', 'pending') as status,
+              coalesce(ae.payload->>'requestedBy', ae.actor_user_id::text) as requested_by,
+              ae.created_at as requested_at,
+              ae.payload->>'decidedBy' as decided_by,
+              nullif(ae.payload->>'decidedAt', '')::timestamptz as decided_at,
+              ae.payload->>'note' as note
+       from audit_events ae
+       join users actor on actor.id = ae.actor_user_id
+       where ae.action = 'learner.deletion_requested' and ae.entity_id = $2
+         and actor.organization_id = (select organization_id from users where id = $1)
+       order by ae.created_at desc`,
+      [reviewerId, learnerId]
+    );
+    return {
+      learner: {
+        id: learner.id,
+        displayName: learner.display_name,
+        email: learner.email,
+        status: learner.status,
+        createdAt: learner.created_at.toISOString(),
+        currentLevel: learner.cefr,
+        cefrApproved: learner.cefr_approved,
+        pendingLevel: state.pendingLevel ?? null
+      },
+      profile: publicLearnerProfile(learner.profile),
+      monthlyGoal: typeof monthlyGoalValue === "string" && monthlyGoalValue.trim() ? monthlyGoalValue : null,
+      levelHistory: state.levelHistory ?? [],
+      attempts: attemptsResult.rows.map((attempt) => ({
+        id: attempt.id,
+        kind: attempt.kind,
+        title: attempt.title,
+        status: attempt.status,
+        startedAt: attempt.started_at.toISOString(),
+        submittedAt: attempt.submitted_at?.toISOString() ?? null,
+        totalScore: attempt.total_score === null ? null : Number(attempt.total_score),
+        sectionScores: Object.fromEntries(Object.entries((attempt.section_scores && typeof attempt.section_scores === "object") ? attempt.section_scores as Record<string, unknown> : {}).map(([key, value]) => [key, Number(value)])),
+        suggestedLevel: attempt.suggested_level,
+        approvedLevel: attempt.approved_level
+      })),
+      deletionRequests: deletionResult.rows.map((request) => ({
+        id: request.id,
+        learnerId,
+        learnerName: learner.display_name,
+        reason: request.reason,
+        status: request.status,
+        requestedBy: request.requested_by,
+        requestedAt: request.requested_at.toISOString(),
+        decidedBy: request.decided_by,
+        decidedAt: request.decided_at?.toISOString() ?? null,
+        note: request.note
+      }))
+    };
+  }
+
+  async getRescoreContext(reviewerId: string, attemptId: string): Promise<AssessmentRescoreContext | null> {
+    const scope = await this.pool.query<{
+      learner_id: string;
+      blueprint: StoredAssessmentDefinition;
+    }>(
+      `select aa.learner_id, av.blueprint
+       from assessment_attempts aa
+       join users learner on learner.id = aa.learner_id
+       join users reviewer on reviewer.id = $1
+         and reviewer.role = 'operator'
+         and reviewer.organization_id = learner.organization_id
+       join assessment_versions av on av.id = aa.assessment_version_id
+       where aa.id = $2 and aa.status = 'pending_review'`,
+      [reviewerId, attemptId]
+    );
+    const row = scope.rows[0];
+    if (!row) return null;
+    const attempt = await this.findAttempt(row.learner_id, attemptId);
+    return attempt ? { attempt, definition: row.blueprint } : null;
+  }
+
+  async saveAssessmentRescore(input: {
+    actorId: string;
+    attemptId: string;
+    requestId: string;
+    aiRequestKey: string;
+    taskId: string;
+    promptVersionId: string;
+    output: {
+      writingScore: number;
+      speakingScore: number;
+      suggestedLevel: CefrLevel;
+      rationale: string;
+      monthlyGoal: string;
+    };
+    metadata: AiRunMetadataInput;
+  }): Promise<"saved" | "duplicate" | null> {
+    const client = await this.pool.connect();
+    try {
+      await client.query("begin");
+      const scope = await client.query<{ organization_id: string; learner_id: string }>(
+        `select reviewer.organization_id, aa.learner_id
+         from users reviewer
+         join assessment_attempts aa on aa.id = $2 and aa.status = 'pending_review'
+         join users learner on learner.id = aa.learner_id
+           and learner.organization_id = reviewer.organization_id
+         where reviewer.id = $1 and reviewer.role = 'operator'
+         for update of aa`,
+        [input.actorId, input.attemptId]
+      );
+      const person = scope.rows[0];
+      if (!person) {
+        await client.query("rollback");
+        return null;
+      }
+      const aiRunId = randomUUID();
+      const inserted = await insertAiRun(client, {
+        id: aiRunId,
+        learnerId: input.actorId,
+        requestId: input.aiRequestKey,
+        taskId: input.taskId,
+        promptVersionId: input.promptVersionId,
+        output: input.output,
+        metadata: input.metadata
+      });
+      if (!inserted) {
+        await client.query("commit");
+        return "duplicate";
+      }
+      await client.query(
+        `insert into assessment_scores (id, attempt_id, section, score, criteria, source)
+         values ($1, $2, 'writing', $3, $4::jsonb, 'ai')
+         on conflict (attempt_id, section)
+         do update set score = excluded.score, criteria = excluded.criteria, source = 'ai', created_at = now()`,
+        [randomUUID(), input.attemptId, input.output.writingScore, JSON.stringify({
+          rationale: input.output.rationale,
+          monthlyGoal: input.output.monthlyGoal
+        })]
+      );
+      await client.query(
+        `insert into assessment_scores (id, attempt_id, section, score, criteria, source)
+         values ($1, $2, 'speaking', $3, $4::jsonb, 'ai')
+         on conflict (attempt_id, section)
+         do update set score = excluded.score, criteria = excluded.criteria, source = 'ai', created_at = now()`,
+        [randomUUID(), input.attemptId, input.output.speakingScore, JSON.stringify({
+          rationale: input.output.rationale,
+          evidencePolicy: "Pronunciation is scored only when audio evidence exists."
+        })]
+      );
+      await client.query(
+        `insert into assessment_decisions
+           (id, attempt_id, suggested_level, approved_level, status, reason, decided_by, decided_at)
+         values ($1, $2, $3, null, 'suggested', $4, null, null)
+         on conflict (attempt_id) do update
+           set suggested_level = excluded.suggested_level, reason = excluded.reason
+         where assessment_decisions.status = 'suggested'`,
+        [randomUUID(), input.attemptId, input.output.suggestedLevel, input.output.rationale]
+      );
+      await client.query(
+        `insert into audit_events
+           (id, organization_id, actor_user_id, action, entity_type, entity_id, payload, trace_id)
+         values ($1, $2, $3, 'assessment.rescored', 'assessment_attempt', $4, $5::jsonb, $6)`,
+        [
+          randomUUID(),
+          person.organization_id,
+          input.actorId,
+          input.attemptId,
+          JSON.stringify({
+            requestId: input.requestId,
+            suggestedLevel: input.output.suggestedLevel,
+            writingScore: input.output.writingScore,
+            speakingScore: input.output.speakingScore,
+            rationale: input.output.rationale,
+            monthlyGoal: input.output.monthlyGoal,
+            aiRunId
+          }),
+          randomUUID()
+        ]
+      );
+      await client.query("commit");
+      return "saved";
+    } catch (error) {
+      await client.query("rollback");
+      throw error;
+    } finally {
+      client.release();
+    }
+  }
+
+  async getReviewAttempt(reviewerId: string, attemptId: string): Promise<AssessmentReviewAttemptDetailView | null> {
+    const scope = await this.pool.query<{
+      learner_id: string; learner_name: string; kind: "placement" | "final" | "level_up"; title: string;
+      approved_level: CefrLevel | null; suggested_level: CefrLevel | null;
+      decision_status: string | null; decision_reason: string | null; decided_by: string | null; decided_at: Date | null;
+      blueprint: StoredAssessmentDefinition;
+    }>(
+      `select aa.learner_id, learner.display_name as learner_name, ad.kind, ad.title, av.blueprint,
+              decision.approved_level, decision.suggested_level, decision.status as decision_status,
+              decision.reason as decision_reason, decision.decided_by, decision.decided_at
+       from assessment_attempts aa
+       join users learner on learner.id = aa.learner_id
+       join users reviewer on reviewer.id = $1 and reviewer.organization_id = learner.organization_id
+       join assessment_versions av on av.id = aa.assessment_version_id
+       join assessment_definitions ad on ad.id = av.definition_id
+       left join assessment_decisions decision on decision.attempt_id = aa.id
+       where aa.id = $2`,
+      [reviewerId, attemptId]
+    );
+    const row = scope.rows[0];
+    if (!row) return null;
+    const attempt = await this.findAttempt(row.learner_id, attemptId);
+    if (!attempt) return null;
+    const scoreRows = await this.pool.query<{
+      section: AssessmentSectionCode; score: string; source: "deterministic" | "ai" | "human"; criteria: unknown;
+    }>(
+      `select section, score::text, source, criteria from assessment_scores where attempt_id = $1 order by section`,
+      [attemptId]
+    );
+    const prompts = new Map<string, { prompt?: string; title?: string }>();
+    for (const section of row.blueprint.sections ?? []) {
+      for (const group of section.groups ?? []) {
+        for (const task of group.tasks ?? []) prompts.set(`${section.code}:${task.key}`, {
+          prompt: task.prompt,
+          ...(task.title ? { title: task.title } : {})
+        });
+      }
+    }
+    const decisionStatus = row.decision_status === "approved" || row.decision_status === "retry"
+      ? (row.decision_status === "retry" ? "needs_retry" : "approved") : null;
+    const sectionScores = Object.values(attempt.scores);
+    return {
+      id: attempt.id,
+      kind: row.kind,
+      title: row.title,
+      status: attempt.status,
+      startedAt: attempt.startedAt.toISOString(),
+      submittedAt: attempt.submittedAt?.toISOString() ?? null,
+      totalScore: sectionScores.length ? sectionScores.reduce((total, score) => total + Number(score ?? 0), 0) : null,
+      sectionScores: attempt.scores,
+      suggestedLevel: row.suggested_level,
+      approvedLevel: row.approved_level,
+      learnerId: row.learner_id,
+      learnerName: row.learner_name,
+      responses: attempt.responses.map((response) => ({
+        section: response.section,
+        taskKey: response.taskKey,
+        value: response.value,
+        evidenceType: response.evidenceType,
+        ...(response.artifactKey ? { artifactKey: response.artifactKey } : {}),
+        savedAt: response.savedAt.toISOString(),
+        ...prompts.get(`${response.section}:${response.taskKey}`)
+      })),
+      scores: scoreRows.rows.map((score) => ({
+        section: score.section,
+        score: Number(score.score),
+        source: score.source,
+        criteria: profileObject(score.criteria)
+      })),
+      integrityEvents: attempt.integrityEvents,
+      decision: decisionStatus ? {
+        attemptId,
+        status: decisionStatus,
+        approvedLevel: row.approved_level,
+        reason: row.decision_reason ?? "",
+        decidedBy: row.decided_by ?? "",
+        decidedAt: row.decided_at?.toISOString() ?? attempt.updatedAt.toISOString()
+      } : null
+    };
+  }
+
+  async getReviewChallenge(reviewerId: string, attemptId: string): Promise<AssessmentReviewChallengeView | null> {
+    const sessionResult = await this.pool.query<{
+      session_id: string; status: "active" | "completed"; target_level: CefrLevel;
+    }>(
+      `select cs.id as session_id, cs.status,
+              coalesce(nullif(cs.scenario->>'targetLevel', ''), nullif(av.blueprint->>'targetLevel', ''), decision.suggested_level) as target_level
+       from coach_sessions cs
+       join assessment_attempts aa on aa.id = $2
+       join users learner on learner.id = aa.learner_id
+       join users reviewer on reviewer.id = $1 and reviewer.organization_id = learner.organization_id
+       join assessment_versions av on av.id = aa.assessment_version_id
+       left join assessment_decisions decision on decision.attempt_id = aa.id
+       where cs.learner_id = aa.learner_id
+         and cs.scenario->>'kind' = 'level_up'
+         and cs.scenario->>'assessmentAttemptId' = aa.id::text
+       order by cs.started_at desc limit 1`,
+      [reviewerId, attemptId]
+    );
+    const session = sessionResult.rows[0];
+    if (!session || !session.target_level) return null;
+    const turnsResult = await this.pool.query<{
+      id: string; turn_number: number; speaker: "learner" | "ai"; content: unknown;
+      feedback: Record<string, unknown> | null; created_at: Date;
+    }>(
+      `select id, turn_number, speaker, content, feedback, created_at
+       from coach_turns where session_id = $1 order by turn_number`,
+      [session.session_id]
+    );
+    const learnerTurns = turnsResult.rows.filter((turn) => turn.speaker === "learner");
+    const rubricValues = learnerTurns.flatMap((turn) => {
+      const rubric = profileObject(turn.feedback?.rubric);
+      const values = [rubric.meaning, rubric.vocabulary, rubric.grammar].filter((value): value is number => typeof value === "number");
+      return values.length ? [values.reduce((sum, value) => sum + value, 0) / values.length] : [];
+    });
+    const offTopic = learnerTurns.filter((turn) => turn.feedback?.relevant === false).length;
+    const average = rubricValues.length
+      ? Math.round(rubricValues.reduce((sum, value) => sum + value, 0) / rubricValues.length * 10) / 10
+      : 0;
+    const complete = learnerTurns.length >= 6;
+    return {
+      sessionId: session.session_id,
+      assessmentAttemptId: attemptId,
+      targetLevel: session.target_level,
+      status: session.status === "completed" ? "completed" : "active",
+      progress: { completedTurns: learnerTurns.length, requiredTurns: 6, average, offTopic, complete, passed: complete && average >= 3.5 && offTopic <= 1 },
+      turns: turnsResult.rows.map((turn) => {
+        const content = profileObject(turn.content);
+        return {
+          id: turn.id,
+          turnNumber: turn.turn_number,
+          speaker: turn.speaker === "ai" ? "coach" : "learner",
+          text: typeof content.text === "string" ? content.text : typeof content.value === "string" ? content.value : "",
+          coachText: typeof turn.feedback?.coachText === "string" ? turn.feedback.coachText : null,
+          feedback: turn.feedback,
+          createdAt: turn.created_at.toISOString()
+        };
+      })
+    };
+  }
+
+  async changeLearnerLevel(actorId: string, learnerId: string, input: AssessmentLevelChangeInput): Promise<AssessmentLevelChangeView | null> {
+    const client = await this.pool.connect();
+    try {
+      await client.query("begin");
+      const identity = await client.query<{ organization_id: string; display_name: string }>(
+        `select learner.organization_id, learner.display_name
+         from users actor join users learner on learner.organization_id = actor.organization_id
+           and learner.id = $2 and learner.role = 'learner'
+         where actor.id = $1 and actor.role = 'operator'`,
+        [actorId, learnerId]
+      );
+      const person = identity.rows[0];
+      if (!person) { await client.query("rollback"); return null; }
+      const enrollmentResult = await client.query<{ id: string; program_id: string; cefr: CefrLevel | null; cefr_approved: boolean }>(
+        `select e.id, e.program_id, e.cefr, e.cefr_approved
+         from enrollments e join programs p on p.id = e.program_id and p.status = 'active'
+         where e.learner_id = $1 and p.organization_id = $2 order by e.enrolled_at desc limit 1 for update`,
+        [learnerId, person.organization_id]
+      );
+      const enrollment = enrollmentResult.rows[0];
+      const currentLevel = enrollment?.cefr ?? null;
+      // A lower-level recommendation may intentionally reaffirm the current
+      // floor (for example A1 after a pending A2 recommendation).  Reject only
+      // upward recommendations; equal-level recommendations remain auditable
+      // and clear the pending target in the same way as the prototype flow.
+      if (input.mode === "recommend_lower" && (currentLevel === null || cefrIndex(input.targetLevel) > cefrIndex(currentLevel))) {
+        throw new Error("ASSESSMENT_LEVEL_INVALID");
+      }
+      const program = enrollment ?? (await client.query<{ id: string }>(
+        `select id from programs where organization_id = $1 and status = 'active' order by created_at limit 1`, [person.organization_id]
+      )).rows[0];
+      if (!program) throw new Error("ASSESSMENT_PROGRAM_NOT_FOUND");
+      const profileResult = await client.query<{ profile: unknown }>(
+        "select profile from learner_profiles where user_id = $1 for update", [learnerId]
+      );
+      const profile = profileObject(profileResult.rows[0]?.profile);
+      const state = operatorProfileState(profile);
+      const now = new Date();
+      let effectiveAt = now.toISOString();
+      let nextState: OperatorProfileState = { ...state };
+      if (input.mode === "direct") {
+        if (enrollment) {
+          await client.query("update enrollments set cefr = $2, cefr_approved = true where id = $1", [enrollment.id, input.targetLevel]);
+        } else {
+          await client.query(
+            "insert into enrollments (id, program_id, learner_id, cefr, cefr_approved) values ($1, $2, $3, $4, true)",
+            [randomUUID(), program.id, learnerId, input.targetLevel]
+          );
+        }
+        nextState = {
+          pendingLevel: undefined,
+          levelHistory: [...(state.levelHistory ?? []), {
+            from: currentLevel, to: input.targetLevel, changedAt: effectiveAt, mode: input.mode,
+            reason: input.reason, evidence: input.evidence, changedBy: actorId
+          }]
+        };
+      } else {
+        effectiveAt = nextMondayIso();
+        nextState = {
+          ...state,
+          pendingLevel: { targetLevel: input.targetLevel, effectiveAt, mode: input.mode, reason: input.reason }
+        };
+        if (!enrollment) {
+          await client.query(
+            "insert into enrollments (id, program_id, learner_id, cefr, cefr_approved) values ($1, $2, $3, null, false)",
+            [randomUUID(), program.id, learnerId]
+          );
+        }
+      }
+      const updatedProfile = { ...profile, _operator: nextState };
+      if (profileResult.rows[0]) {
+        await client.query(
+          "update learner_profiles set profile = $2::jsonb, version = version + 1, updated_at = now() where user_id = $1",
+          [learnerId, JSON.stringify(updatedProfile)]
+        );
+      } else {
+        await client.query(
+          "insert into learner_profiles (user_id, profile, version) values ($1, $2::jsonb, 1)",
+          [learnerId, JSON.stringify(updatedProfile)]
+        );
+      }
+      await client.query(
+        `insert into audit_events
+           (id, organization_id, actor_user_id, action, entity_type, entity_id, payload, trace_id)
+         values ($1, $2, $3, 'assessment.learner.level_changed', 'user', $4, $5::jsonb, $6)`,
+        [randomUUID(), person.organization_id, actorId, learnerId, JSON.stringify({ ...input, previousLevel: currentLevel, effectiveAt }), randomUUID()]
+      );
+      await client.query("commit");
+      return {
+        ...input,
+        learnerId,
+        previousLevel: currentLevel,
+        effectiveAt,
+        changedBy: actorId,
+        changedAt: now.toISOString()
+      };
+    } catch (error) {
+      await client.query("rollback");
+      throw error;
+    } finally { client.release(); }
+  }
+
+  async updateLearnerMonthlyGoal(actorId: string, learnerId: string, monthlyGoal: string): Promise<AssessmentMonthlyGoalView | null> {
+    const identity = await this.pool.query<{ organization_id: string }>(
+      `select learner.organization_id from users actor
+       join users learner on learner.organization_id = actor.organization_id and learner.id = $2 and learner.role = 'learner'
+       where actor.id = $1 and actor.role = 'operator'`, [actorId, learnerId]
+    );
+    const organizationId = identity.rows[0]?.organization_id;
+    if (!organizationId) return null;
+    const now = new Date();
+    const client = await this.pool.connect();
+    try {
+      await client.query("begin");
+      const profileResult = await client.query<{ profile: unknown }>("select profile from learner_profiles where user_id = $1 for update", [learnerId]);
+      const profile = profileObject(profileResult.rows[0]?.profile);
+      const updated = { ...profile, monthlyGoal };
+      if (profileResult.rows[0]) {
+        await client.query("update learner_profiles set profile = $2::jsonb, version = version + 1, updated_at = $3 where user_id = $1", [learnerId, JSON.stringify(updated), now]);
+      } else {
+        await client.query("insert into learner_profiles (user_id, profile, version) values ($1, $2::jsonb, 1)", [learnerId, JSON.stringify(updated)]);
+      }
+      await client.query(
+        `insert into audit_events (id, organization_id, actor_user_id, action, entity_type, entity_id, payload, trace_id)
+         values ($1, $2, $3, 'assessment.learner.monthly_goal_updated', 'user', $4, $5::jsonb, $6)`,
+        [randomUUID(), organizationId, actorId, learnerId, JSON.stringify({ monthlyGoal }), randomUUID()]
+      );
+      await client.query("commit");
+      return { learnerId, monthlyGoal, updatedBy: actorId, updatedAt: now.toISOString() };
+    } catch (error) {
+      await client.query("rollback");
+      throw error;
+    } finally { client.release(); }
+  }
+
+  async requestLearnerDeletion(actorId: string, learnerId: string, reason: string): Promise<AssessmentDeletionRequestView | null> {
+    const identity = await this.pool.query<{ organization_id: string; display_name: string }>(
+      `select learner.organization_id, learner.display_name from users actor
+       join users learner on learner.organization_id = actor.organization_id and learner.id = $2 and learner.role = 'learner'
+       where actor.id = $1 and actor.role = 'operator'`, [actorId, learnerId]
+    );
+    const person = identity.rows[0];
+    if (!person) return null;
+    const existing = await this.pool.query<{
+      id: string; reason: string; requested_by: string; created_at: Date;
+    }>(
+      `select id, coalesce(payload->>'reason', '') as reason,
+              coalesce(payload->>'requestedBy', actor_user_id::text) as requested_by, created_at
+       from audit_events where action = 'learner.deletion_requested' and entity_id = $1
+         and payload->>'status' = 'pending' order by created_at desc limit 1`, [learnerId]
+    );
+    const row = existing.rows[0];
+    if (row) return { id: row.id, learnerId, learnerName: person.display_name, reason: row.reason, status: "pending", requestedBy: row.requested_by, requestedAt: row.created_at.toISOString() };
+    const id = randomUUID();
+    const createdAt = new Date();
+    await this.pool.query(
+      `insert into audit_events (id, organization_id, actor_user_id, action, entity_type, entity_id, payload, trace_id)
+       values ($1, $2, $3, 'learner.deletion_requested', 'user', $4, $5::jsonb, $6)`,
+      [id, person.organization_id, actorId, learnerId, JSON.stringify({ status: "pending", reason, requestedBy: actorId }), randomUUID()]
+    );
+    return { id, learnerId, learnerName: person.display_name, reason, status: "pending", requestedBy: actorId, requestedAt: createdAt.toISOString() };
+  }
+
   async listPending(reviewerId: string): Promise<AssessmentReviewQueueRecord[]> {
     const result = await this.pool.query<{
       attempt_id: string;
@@ -1717,11 +3991,17 @@ class AssessmentRepository {
       submitted_at: Date;
       section_scores: Partial<Record<AssessmentSectionCode, number>> | null;
       suggested_level: CefrLevel | null;
+      challenge_turns: string;
+      challenge_average: string | null;
+      challenge_off_topic: string;
+      challenge_status: string | null;
     }>(
       `select aa.id as attempt_id, aa.learner_id, learner.display_name as learner_name,
               ad.kind, ad.title, aa.submitted_at,
               coalesce(jsonb_object_agg(sc.section, sc.score) filter (where sc.section is not null), '{}'::jsonb) as section_scores,
-              decision.suggested_level
+              decision.suggested_level, coalesce(challenge.turns, 0)::text as challenge_turns,
+              challenge.average::text as challenge_average, coalesce(challenge.off_topic, 0)::text as challenge_off_topic,
+              challenge.status as challenge_status
        from assessment_attempts aa
        join assessment_versions av on av.id = aa.assessment_version_id
        join assessment_definitions ad on ad.id = av.definition_id
@@ -1729,8 +4009,18 @@ class AssessmentRepository {
        join users reviewer on reviewer.id = $1 and reviewer.organization_id = learner.organization_id
        left join assessment_scores sc on sc.attempt_id = aa.id
        left join assessment_decisions decision on decision.attempt_id = aa.id
+       left join lateral (
+         select cs.status, count(ct.id) filter (where ct.speaker = 'learner') as turns,
+                avg(((ct.feedback->'rubric'->>'meaning')::numeric + (ct.feedback->'rubric'->>'vocabulary')::numeric + (ct.feedback->'rubric'->>'grammar')::numeric) / 3) filter (where ct.speaker = 'learner') as average,
+                count(ct.id) filter (where ct.speaker = 'learner' and coalesce((ct.feedback->>'relevant')::boolean, true) = false) as off_topic
+         from coach_sessions cs left join coach_turns ct on ct.session_id = cs.id
+         where cs.learner_id = aa.learner_id and cs.scenario->>'kind' = 'level_up'
+           and cs.scenario->>'assessmentAttemptId' = aa.id::text group by cs.id
+         order by cs.started_at desc limit 1
+       ) challenge on true
        where aa.status = 'pending_review'
-       group by aa.id, learner.display_name, ad.kind, ad.title, decision.suggested_level
+       group by aa.id, learner.display_name, ad.kind, ad.title, decision.suggested_level,
+                challenge.turns, challenge.average, challenge.off_topic, challenge.status
        order by aa.submitted_at nulls last, aa.started_at`,
       [reviewerId]
     );
@@ -1742,7 +4032,13 @@ class AssessmentRepository {
       title: row.title,
       submittedAt: row.submitted_at,
       sectionScores: Object.fromEntries(Object.entries(row.section_scores ?? {}).map(([section, score]) => [section, Number(score)])),
-      suggestedLevel: row.suggested_level
+      suggestedLevel: row.suggested_level,
+      ...(row.kind === "level_up" ? { challenge: {
+        completedTurns: Number(row.challenge_turns), requiredTurns: 6 as const,
+        average: Number(row.challenge_average ?? 0), offTopic: Number(row.challenge_off_topic),
+        complete: row.challenge_status === "completed",
+        passed: row.challenge_status === "completed" && Number(row.challenge_average ?? 0) >= 3.5 && Number(row.challenge_off_topic) <= 1
+      } } : {})
     }));
   }
 
@@ -1750,8 +4046,9 @@ class AssessmentRepository {
     pending: AssessmentReviewQueueRecord[];
     approvedLearners: AssessmentApprovedLearnerRecord[];
     unassessedLearners: AssessmentUnassessedLearnerRecord[];
+    inFlow: AssessmentReviewFlowRecord[];
   }> {
-    const [pending, approved, unassessed] = await Promise.all([
+    const [pending, approved, unassessed, inFlow] = await Promise.all([
       this.listPending(reviewerId),
       this.pool.query<{
         learner_id: string;
@@ -1762,10 +4059,11 @@ class AssessmentRepository {
       }>(
         `select learner.id as learner_id, learner.display_name as learner_name,
                 e.cefr as current_level, placement.total_score as placement_score,
-                null::text as monthly_goal
+                nullif(lp.profile->>'monthlyGoal', '') as monthly_goal
          from users learner
          join users reviewer on reviewer.id = $1 and reviewer.organization_id = learner.organization_id
          join enrollments e on e.learner_id = learner.id and e.cefr_approved = true
+         left join learner_profiles lp on lp.user_id = learner.id
          left join lateral (
            select sum(sc.score)::text as total_score
            from assessment_attempts aa
@@ -1800,7 +4098,8 @@ class AssessmentRepository {
            )
          order by learner.display_name`,
         [reviewerId]
-      )
+      ),
+      this.listReviewFlow(reviewerId)
     ]);
     return {
       pending,
@@ -1815,8 +4114,108 @@ class AssessmentRepository {
         learnerId: row.learner_id,
         learnerName: row.learner_name,
         profileComplete: row.profile_complete
-      }))
+      })),
+      inFlow
     };
+  }
+
+  async listReviewFlow(reviewerId: string): Promise<AssessmentReviewFlowRecord[]> {
+    const result = await this.pool.query<{
+      attempt_id: string;
+      learner_id: string;
+      learner_name: string;
+      current_level: CefrLevel;
+      target_level: CefrLevel | null;
+      attempt_status: string;
+      decision_status: string | null;
+      challenge_status: string | null;
+      challenge_passed: boolean | null;
+      challenge_turns: string;
+      challenge_average: string | null;
+      challenge_off_topic: string;
+      score_total: string | null;
+    }>(
+      `with latest_level_up as (
+         select distinct on (aa.learner_id)
+                aa.id as attempt_id, aa.learner_id, learner.display_name as learner_name,
+                enrollment.cefr as current_level,
+                nullif(av.blueprint->>'targetLevel', '') as target_level,
+                aa.status as attempt_status, decision.status as decision_status,
+                challenge.status as challenge_status, challenge.passed as challenge_passed,
+                coalesce(challenge.turns, 0)::text as challenge_turns,
+                challenge.average::text as challenge_average,
+                coalesce(challenge.off_topic, 0)::text as challenge_off_topic,
+                scores.total::text as score_total
+         from assessment_attempts aa
+         join assessment_versions av on av.id = aa.assessment_version_id
+         join assessment_definitions ad on ad.id = av.definition_id and ad.kind = 'level_up'
+         join users learner on learner.id = aa.learner_id
+         join users reviewer on reviewer.id = $1 and reviewer.organization_id = learner.organization_id
+         join lateral (
+           select e.cefr
+           from enrollments e
+           join programs p on p.id = e.program_id and p.status = 'active'
+           where e.learner_id = aa.learner_id and e.cefr_approved = true
+           order by e.enrolled_at desc limit 1
+         ) enrollment on true
+         left join assessment_decisions decision on decision.attempt_id = aa.id
+         left join lateral (
+           select cs.status, result.passed,
+                  count(ct.id) filter (where ct.speaker = 'learner') as turns,
+                  avg(((ct.feedback->'rubric'->>'meaning')::numeric + (ct.feedback->'rubric'->>'vocabulary')::numeric + (ct.feedback->'rubric'->>'grammar')::numeric) / 3) filter (where ct.speaker = 'learner') as average,
+                  count(ct.id) filter (where ct.speaker = 'learner' and coalesce((ct.feedback->>'relevant')::boolean, true) = false) as off_topic
+           from coach_sessions cs
+           left join coach_turns ct on ct.session_id = cs.id
+           left join level_up_challenge_results result on result.session_id = cs.id
+           where cs.learner_id = aa.learner_id and cs.scenario->>'kind' = 'level_up'
+             and cs.scenario->>'assessmentAttemptId' = aa.id::text
+           group by cs.id, result.passed
+           order by cs.started_at desc limit 1
+         ) challenge on true
+         left join lateral (
+           select sum(sc.score) as total
+           from assessment_scores sc
+           where sc.attempt_id = aa.id
+         ) scores on true
+         order by aa.learner_id, aa.started_at desc
+       )
+       select * from latest_level_up
+       where target_level is not null
+       order by learner_name`,
+      [reviewerId]
+    );
+    return result.rows.flatMap((row) => {
+      let phase: AssessmentReviewFlowRecord["phase"] | null = null;
+      if (row.attempt_status === "in_progress") phase = "testing";
+      else if (row.challenge_passed === false || row.attempt_status === "needs_retry" || row.decision_status === "rejected") phase = "failed";
+      else if (row.challenge_status === "active") phase = "challenge";
+      else if (row.attempt_status === "submitted" || row.attempt_status === "pending_review") phase = "ungraded";
+      if (!phase) return [];
+
+      const turns = Number(row.challenge_turns);
+      const average = row.challenge_average === null ? null : Number(row.challenge_average);
+      const offTopic = Number(row.challenge_off_topic);
+      const testSummary = row.score_total === null ? "bài thi" : `bài thi ${Number(row.score_total)}/100`;
+      const metrics = phase === "testing"
+        ? "đang làm bài thi"
+        : phase === "ungraded"
+          ? `đã nộp ${testSummary} · chờ chấm Viết/Nói`
+          : phase === "challenge"
+            ? `qua ${testSummary} · đang thử thách Season (${turns}/6)`
+            : average === null
+              ? `chưa đạt: ${testSummary} · cần thi lại`
+              : `chưa đạt: ${average}/5 · ${offTopic} lượt lạc đề`;
+      return [{
+        learnerId: row.learner_id,
+        learnerName: row.learner_name,
+        currentLevel: row.current_level,
+        targetLevel: row.target_level as CefrLevel,
+        phase,
+        metrics,
+        assessmentAttemptId: row.attempt_id,
+        challengeAttemptId: row.challenge_status ? row.attempt_id : null
+      }];
+    });
   }
 
   async listLevelForms(reviewerId: string): Promise<AssessmentLevelFormRecord[]> {
@@ -1833,7 +4232,7 @@ class AssessmentRepository {
               av.blueprint, av.published_at, count(aa.id)::text as attempt_count
        from assessment_definitions ad
        join users reviewer on reviewer.id = $1 and reviewer.organization_id = ad.organization_id
-       join assessment_versions av on av.definition_id = ad.id and av.status = 'published'
+       join assessment_versions av on av.definition_id = ad.id and av.status in ('draft', 'published')
        left join assessment_attempts aa on aa.assessment_version_id = av.id
        where ad.kind = 'level_up'
        group by ad.id, av.id, ad.title, av.version, av.blueprint, av.published_at
@@ -1855,8 +4254,209 @@ class AssessmentRepository {
         listeningTaskCount: sectionCount("listening"),
         readingTaskCount: sectionCount("reading"),
         attemptCount: Number(row.attempt_count)
+        ,status: row.published_at ? "published" : "draft"
       }];
     });
+  }
+
+  /** Return every persisted version for one target level, including retired history. */
+  async listLevelFormVersions(reviewerId: string, targetLevel: Exclude<CefrLevel, "A1">): Promise<AssessmentLevelFormRecord[]> {
+    const result = await this.pool.query<{
+      definition_id: string;
+      version_id: string;
+      title: string;
+      version: number;
+      target_level: Exclude<CefrLevel, "A1"> | null;
+      blueprint: StoredAssessmentDefinition;
+      published_at: Date | null;
+      status: "draft" | "published" | "retired";
+      attempt_count: string;
+    }>(
+      `select ad.id as definition_id, av.id as version_id, ad.title, av.version,
+              nullif(av.blueprint->>'targetLevel', '') as target_level,
+              av.blueprint, av.published_at, av.status,
+              count(aa.id)::text as attempt_count
+       from assessment_definitions ad
+       join users reviewer on reviewer.id = $1 and reviewer.organization_id = ad.organization_id
+       join assessment_versions av on av.definition_id = ad.id
+       left join assessment_attempts aa on aa.assessment_version_id = av.id
+       where ad.kind = 'level_up' and coalesce(av.blueprint->>'targetLevel', '') = $2
+       group by ad.id, av.id, ad.title, av.version, av.blueprint, av.published_at, av.status
+       order by av.version desc`,
+      [reviewerId, targetLevel]
+    );
+    return result.rows.flatMap((row) => {
+      const blueprintTarget = row.target_level ?? row.blueprint.targetLevel;
+      if (!blueprintTarget || blueprintTarget === "A1") return [];
+      const sectionCount = (code: AssessmentSectionCode) => row.blueprint.sections
+        .find((section) => section.code === code)?.groups.reduce((total, group) => total + group.tasks.length, 0) ?? 0;
+      return [{
+        definitionId: row.definition_id,
+        versionId: row.version_id,
+        title: row.title,
+        version: row.version,
+        targetLevel: blueprintTarget,
+        publishedAt: row.published_at,
+        listeningTaskCount: sectionCount("listening"),
+        readingTaskCount: sectionCount("reading"),
+        attemptCount: Number(row.attempt_count),
+        status: row.status
+      }];
+    });
+  }
+
+  async getLevelFormDetail(reviewerId: string, versionId: string): Promise<AssessmentLevelFormDetailView | null> {
+    const result = await this.pool.query<{
+      definition_id: string;
+      version_id: string;
+      title: string;
+      version: number;
+      target_level: Exclude<CefrLevel, "A1"> | null;
+      blueprint: StoredAssessmentDefinition;
+      published_at: Date | null;
+      status: "draft" | "published" | "retired";
+      attempt_count: string;
+    }>(
+      `select ad.id as definition_id, av.id as version_id, ad.title, av.version,
+              nullif(av.blueprint->>'targetLevel', '') as target_level,
+              av.blueprint, av.published_at, av.status,
+              count(aa.id)::text as attempt_count
+       from assessment_versions av
+       join assessment_definitions ad on ad.id = av.definition_id and ad.kind = 'level_up'
+       join users reviewer on reviewer.id = $1 and reviewer.organization_id = ad.organization_id
+       left join assessment_attempts aa on aa.assessment_version_id = av.id
+       where av.id = $2
+       group by ad.id, av.id, ad.title, av.version, av.blueprint, av.published_at, av.status`,
+      [reviewerId, versionId]
+    );
+    const row = result.rows[0];
+    const targetLevel = row?.target_level ?? row?.blueprint.targetLevel;
+    if (!row || !targetLevel || targetLevel === "A1") return null;
+    const summary = {
+      definitionId: row.definition_id,
+      versionId: row.version_id,
+      title: row.title,
+      version: row.version,
+      targetLevel,
+      publishedAt: row.published_at?.toISOString() ?? null,
+      listeningTaskCount: sectionTaskCount(row.blueprint, "listening"),
+      readingTaskCount: sectionTaskCount(row.blueprint, "reading"),
+      attemptCount: Number(row.attempt_count),
+      status: row.status
+    } as const;
+    const versions = (await this.listLevelFormVersions(reviewerId, targetLevel)).map((version) => ({
+      ...version,
+      publishedAt: version.publishedAt?.toISOString() ?? null
+    }));
+    const warnings: AssessmentLevelFormDetailView["warnings"] = [];
+    const expectedCounts: Record<AssessmentSectionCode, number> = { listening: 5, reading: 5, writing: 1, speaking: 1 };
+    const present = new Set(row.blueprint.sections.map((section) => section.code));
+    for (const code of ["listening", "reading", "writing", "speaking"] as const) {
+      const count = sectionTaskCount(row.blueprint, code);
+      if (!present.has(code)) warnings.push({ code: "missing_section", message: `Thiếu phần ${code}.`, severity: "error" });
+      else if (count < expectedCounts[code]) warnings.push({ code: "short_section", message: `Phần ${code} mới có ${count}/${expectedCounts[code]} câu.`, severity: "warning" });
+    }
+    for (const section of row.blueprint.sections) for (const group of section.groups) for (const task of group.tasks) {
+      if (task.responseType === "single_choice" && !task.correctAnswer) warnings.push({ code: "missing_answer_key", message: `Câu ${task.key} chưa có đáp án.`, severity: "error" });
+    }
+    if (Number(row.attempt_count) > 0) warnings.push({ code: "in_use", message: "Đề đã có bài thi nên không thể xoá.", severity: "warning" });
+    const deletable = row.status === "draft" && Number(row.attempt_count) === 0;
+    const deleteReason = deletable ? null
+      : row.status === "published" ? "Đề đã duyệt/phát hành."
+        : Number(row.attempt_count) > 0 ? "Đề đã có bài thi."
+          : "Chỉ có thể xoá bản nháp.";
+    return {
+      ...summary,
+      sections: row.blueprint.sections.map((section) => ({
+        ...section,
+        groups: section.groups.map((group) => ({
+          ...group,
+          tasks: group.tasks.map((task) => ({ ...task, correctAnswer: task.correctAnswer ?? null }))
+        }))
+      })),
+      warnings,
+      versions,
+      deletable,
+      deleteReason
+    };
+  }
+
+  async deleteLevelForm(reviewerId: string, versionId: string): Promise<AssessmentLevelFormDeleteView | null> {
+    const client = await this.pool.connect();
+    try {
+      await client.query("begin");
+      const target = await client.query<{ organization_id: string; status: "draft" | "published" | "retired"; attempt_count: string }>(
+        `select ad.organization_id, av.status, count(aa.id)::text as attempt_count
+         from assessment_versions av
+         join assessment_definitions ad on ad.id = av.definition_id
+         join users reviewer on reviewer.id = $1 and reviewer.organization_id = ad.organization_id
+         left join assessment_attempts aa on aa.assessment_version_id = av.id
+         where av.id = $2
+         group by ad.organization_id, av.id, av.status`,
+        [reviewerId, versionId]
+      );
+      const row = target.rows[0];
+      if (!row) { await client.query("rollback"); return null; }
+      if (row.status !== "draft") throw new Error("LEVEL_FORM_NOT_DELETABLE");
+      if (Number(row.attempt_count) > 0) throw new Error("LEVEL_FORM_IN_USE");
+      const deleted = await client.query("delete from assessment_versions where id = $1 and status = 'draft' returning id", [versionId]);
+      if (!deleted.rowCount) { await client.query("rollback"); return null; }
+      await client.query(
+        `insert into audit_events (id, organization_id, actor_user_id, action, entity_type, entity_id, payload, trace_id)
+         values ($1, $2, $3, 'assessment.level-form.deleted', 'assessment_version', $4, '{}'::jsonb, $5)`,
+        [randomUUID(), row.organization_id, reviewerId, versionId, randomUUID()]
+      );
+      await client.query("commit");
+      return { deleted: true, versionId };
+    } catch (error) {
+      await client.query("rollback");
+      throw error;
+    } finally { client.release(); }
+  }
+
+  async createLevelFormDraft(reviewerId: string, targetLevel: Exclude<CefrLevel, "A1">, blueprint: StoredAssessmentDefinition): Promise<AssessmentLevelFormRecord> {
+    const client = await this.pool.connect();
+    let versionId = "";
+    try {
+      await client.query("begin");
+      const actor = await client.query<{ organization_id: string }>("select organization_id from users where id = $1", [reviewerId]);
+      const organizationId = actor.rows[0]?.organization_id;
+      if (!organizationId) throw new Error("ASSESSMENT_REVIEWER_NOT_FOUND");
+      const key = `level-up-${targetLevel.toLowerCase()}`;
+      const existing = await client.query<{ id: string }>("select id from assessment_definitions where organization_id = $1 and assessment_key = $2 for update", [organizationId, key]);
+      const definitionId = existing.rows[0]?.id ?? randomUUID();
+      if (!existing.rows[0]) await client.query(
+        "insert into assessment_definitions (id, organization_id, assessment_key, kind, title) values ($1, $2, $3, 'level_up', $4)",
+        [definitionId, organizationId, key, blueprint.title]
+      );
+      await client.query("update assessment_versions set status = 'retired' where definition_id = $1 and status = 'draft'", [definitionId]);
+      const next = await client.query<{ version: number }>("select coalesce(max(version), 0) + 1 as version from assessment_versions where definition_id = $1", [definitionId]);
+      versionId = randomUUID();
+      await client.query("insert into assessment_versions (id, definition_id, version, status, blueprint) values ($1, $2, $3, 'draft', $4::jsonb)", [versionId, definitionId, next.rows[0]?.version ?? 1, JSON.stringify(blueprint)]);
+      await client.query("commit");
+    } catch (error) { await client.query("rollback"); throw error; } finally { client.release(); }
+    const forms = await this.listLevelForms(reviewerId);
+    const created = forms.find((form) => form.versionId === versionId);
+    if (!created) throw new Error("ASSESSMENT_FORM_NOT_FOUND");
+    return created;
+  }
+
+  async publishLevelForm(reviewerId: string, versionId: string): Promise<AssessmentLevelFormRecord | null> {
+    const client = await this.pool.connect();
+    try {
+      await client.query("begin");
+      const target = await client.query<{ definition_id: string }>(
+        `select av.definition_id from assessment_versions av join assessment_definitions ad on ad.id = av.definition_id
+         join users reviewer on reviewer.id = $1 and reviewer.organization_id = ad.organization_id
+         where av.id = $2 and av.status = 'draft' for update of av`, [reviewerId, versionId]
+      );
+      const definitionId = target.rows[0]?.definition_id;
+      if (!definitionId) { await client.query("rollback"); return null; }
+      await client.query("update assessment_versions set status = 'retired' where definition_id = $1 and status = 'published'", [definitionId]);
+      await client.query("update assessment_versions set status = 'published', published_at = now() where id = $1", [versionId]);
+      await client.query("commit");
+    } catch (error) { await client.query("rollback"); throw error; } finally { client.release(); }
+    return (await this.listLevelForms(reviewerId)).find((form) => form.versionId === versionId) ?? null;
   }
 
   async decide(input: {
@@ -1879,7 +4479,7 @@ class AssessmentRepository {
          join users learner on learner.id = aa.learner_id
          join users reviewer on reviewer.id = $2
            and reviewer.organization_id = learner.organization_id
-           and reviewer.role = 'operator'
+           and reviewer.role in ('operator', 'manager')
          where aa.id = $1
          for update of aa`,
         [input.attemptId, input.reviewerId]
@@ -1960,6 +4560,73 @@ class AssessmentRepository {
   }
 }
 
+function defaultDeviceEvidence(): AssessmentDeviceEvidence {
+  return { microphoneSupported: null, microphoneState: "unknown", soundCheck: "unknown", checkedAt: null };
+}
+
+function mediaEvidenceFromResponses(
+  responses: Array<{ taskKey: string; response: { evidenceType?: AssessmentEvidenceType; artifactKey?: string }; savedAt: Date }>,
+  stored: Partial<AssessmentMediaEvidence> | null | undefined
+): AssessmentMediaEvidence {
+  const recordings: AssessmentMediaEvidence["recordings"] = {};
+  if (stored?.recordings && typeof stored.recordings === "object") {
+    for (const [taskKey, value] of Object.entries(stored.recordings)) {
+      if (!value || typeof value !== "object" || typeof value.artifactKey !== "string") continue;
+      recordings[taskKey] = { ...value, taskKey };
+    }
+  }
+  if (Array.isArray(stored?.uploads)) {
+    for (const value of stored.uploads) {
+      if (!value || typeof value !== "object" || typeof value.taskKey !== "string" || typeof value.artifactKey !== "string") continue;
+      recordings[value.taskKey] = { ...value };
+    }
+  }
+  for (const response of responses) {
+    if (response.response.evidenceType !== "audio" || !response.response.artifactKey) continue;
+    const recording = {
+      taskKey: response.taskKey,
+      artifactKey: response.response.artifactKey,
+      uploadedAt: response.savedAt.toISOString()
+    };
+    recordings[response.taskKey] = recording;
+  }
+  return { recordings, uploads: Object.values(recordings) };
+}
+
+function assessmentRuntimeFromAttempt(attempt: AssessmentAttemptRecord): AssessmentRuntimeView {
+  return assessmentRuntimeFromState(attempt);
+}
+
+function assessmentRuntimeFromState(state: {
+  status: AssessmentAttemptRecord["status"];
+  currentSection: AssessmentSectionCode | null;
+  timingState: AssessmentAttemptRecord["timingState"];
+  violationCount: number;
+  violationLimit: number;
+  submitReason: AssessmentSubmitReason | null;
+  deviceEvidence: AssessmentDeviceEvidence;
+  mediaEvidence: AssessmentMediaEvidence;
+  audioPlayCounts: Record<string, number>;
+}): AssessmentRuntimeView {
+  const sectionTiming = state.currentSection ? state.timingState.sections?.[state.currentSection] : undefined;
+  const remainingSeconds = state.status !== "in_progress"
+    ? 0
+    : sectionTiming?.endsAt
+      ? Math.max(0, Math.ceil((new Date(sectionTiming.endsAt).getTime() - Date.now()) / 1000))
+      : null;
+  return {
+    remainingSeconds,
+    violationCount: state.violationCount,
+    violationLimit: state.violationLimit,
+    submitReason: state.submitReason,
+    status: state.status,
+    currentSection: state.currentSection,
+    audioPlayCounts: state.audioPlayCounts,
+    deviceEvidence: state.deviceEvidence,
+    mediaEvidence: state.mediaEvidence
+  };
+}
+
 class CoachRepository {
   constructor(private readonly pool: Pool) {}
 
@@ -1987,6 +4654,7 @@ class CoachRepository {
        left join lateral (
          select id, scenario from coach_sessions
          where learner_id = u.id and status = 'active'
+           and coalesce(scenario->>'kind', 'practice') = 'practice'
          order by started_at desc limit 1
        ) cs on true
        where u.id = $1 and u.role = 'learner' and u.status = 'active'
@@ -2006,7 +4674,7 @@ class CoachRepository {
         [sessionId, learnerId, JSON.stringify(scenario)]
       );
     }
-    const [turns, counters, vocabularyRows] = await Promise.all([
+    const [turns, counters, vocabularyRows, unlockedRows] = await Promise.all([
       this.pool.query<{
         id: string; speaker: string; content: Record<string, unknown>;
         feedback: Record<string, unknown> | null; created_at: Date;
@@ -2037,10 +4705,13 @@ class CoachRepository {
            order by version desc limit 1
          ) lv on true
          where e.learner_id = $1 order by l.day_number`, [learnerId]
+      ),
+      this.pool.query<{ word: string }>(
+        "select word from learner_vocabulary_unlocks where learner_id = $1", [learnerId]
       )
     ]);
     const messages: CoachView["messages"] = [];
-    const openedWords = new Set<string>();
+    const openedWords = new Set<string>(unlockedRows.rows.map((row) => row.word.toLowerCase()));
     for (const turn of turns.rows) {
       const text = typeof turn.content.text === "string" ? turn.content.text : "";
       const feedback = coachFeedback(turn.feedback);
@@ -2048,15 +4719,16 @@ class CoachRepository {
       if (Array.isArray(feedbackRecord.usedWords)) {
         for (const word of feedbackRecord.usedWords) if (typeof word === "string") openedWords.add(word.toLowerCase());
       }
+      const classification = coachTurnClassification(feedbackRecord);
       if (turn.speaker === "coach") {
-        if (text) messages.push({ id: turn.id, speaker: "coach", text, createdAt: turn.created_at.toISOString() });
+        if (text) messages.push({ id: turn.id, speaker: "coach", text, createdAt: turn.created_at.toISOString(), ...(classification ? { classification } : {}) });
         continue;
       }
-      if (text) messages.push({ id: turn.id, speaker: "learner", text, createdAt: turn.created_at.toISOString() });
+      if (text) messages.push({ id: turn.id, speaker: "learner", text, createdAt: turn.created_at.toISOString(), ...(classification ? { classification } : {}) });
       const coachText = typeof feedbackRecord.coachText === "string" ? feedbackRecord.coachText : "";
       if (coachText) messages.push({
         id: `${turn.id}:coach`, speaker: "coach", text: coachText,
-        createdAt: turn.created_at.toISOString(), ...(feedback ? { feedback } : {})
+        createdAt: turn.created_at.toISOString(), ...(classification ? { classification } : {}), ...(feedback ? { feedback } : {})
       });
     }
     if (!messages.some((message) => message.speaker === "coach")) {
@@ -2109,6 +4781,7 @@ class CoachRepository {
       traceId: string; provider: string; model: string; inputHash: string;
       usage: { inputTokens?: number; outputTokens?: number; totalTokens?: number }; latencyMs: number;
     };
+    challengeAttemptId?: string;
   }): Promise<boolean> {
     const client = await this.pool.connect();
     try {
@@ -2138,10 +4811,11 @@ class CoachRepository {
         "select (coalesce(max(turn_number), 0) + 1)::text as number from coach_turns where session_id = $1",
         [input.sessionId]
       );
+      const turnId = randomUUID();
       await client.query(
         `insert into coach_turns (id, session_id, turn_number, speaker, content, feedback, ai_run_id)
          values ($1, $2, $3, 'learner', $4::jsonb, $5::jsonb, $6)`,
-        [randomUUID(), input.sessionId, Number(next.rows[0]?.number ?? 1),
+        [turnId, input.sessionId, Number(next.rows[0]?.number ?? 1),
           JSON.stringify({ text: input.message, requestId: input.requestId }),
           JSON.stringify({
             coachText: input.output.reply, relevant: input.output.relevant,
@@ -2150,6 +4824,70 @@ class CoachRepository {
             usedWords: input.output.usedWords, checked: false
           }), runId]
       );
+      await client.query(
+        `insert into activities (id, learner_id, activity_type, reference_type, reference_id, minutes, evidence)
+         values ($1, $2, 'coach', 'coach_turn', $3, 2, $4::jsonb)`,
+        [randomUUID(), input.learnerId, turnId, JSON.stringify({ relevant: input.output.relevant, rubric: input.output.rubric })]
+      );
+      if (input.challengeAttemptId) {
+        const challenge = await client.query<{ completed_turns: string; average: string | null; off_topic: string }>(
+          `select count(*) filter (where speaker = 'learner')::text as completed_turns,
+                  avg(((feedback->'rubric'->>'meaning')::numeric + (feedback->'rubric'->>'vocabulary')::numeric + (feedback->'rubric'->>'grammar')::numeric) / 3)::text as average,
+                  count(*) filter (where speaker = 'learner' and coalesce((feedback->>'relevant')::boolean, true) = false)::text as off_topic
+           from coach_turns where session_id = $1`, [input.sessionId]
+        );
+        const stats = challenge.rows[0] ?? { completed_turns: "0", average: null, off_topic: "0" };
+        const completedTurns = Number(stats.completed_turns);
+        if (completedTurns >= 6) {
+          const average = stats.average === null ? 0 : Math.round(Number(stats.average) * 10) / 10;
+          const offTopic = Number(stats.off_topic);
+          const passed = average >= 3.5 && offTopic <= 1;
+          const resultId = randomUUID();
+          await client.query(
+            `insert into level_up_challenge_results
+               (id, assessment_attempt_id, session_id, learner_id, completed_turns, average, off_topic, passed)
+             values ($1, $2, $3, $4, $5, $6, $7, $8)
+             on conflict (assessment_attempt_id) do update
+             set session_id = excluded.session_id, completed_turns = excluded.completed_turns,
+                 average = excluded.average, off_topic = excluded.off_topic, passed = excluded.passed`,
+            [resultId, input.challengeAttemptId, input.sessionId, input.learnerId, completedTurns, average, offTopic, passed]
+          );
+          if (passed) {
+            await client.query(
+              `insert into assessment_decisions
+                 (id, attempt_id, suggested_level, status, reason)
+               select $1, aa.id, cs.scenario->>'targetLevel', 'suggested', $4
+               from assessment_attempts aa join coach_sessions cs on cs.id = $3
+               where aa.id = $2 and aa.learner_id = $5
+               on conflict (attempt_id) do update
+               set suggested_level = coalesce(assessment_decisions.suggested_level, excluded.suggested_level),
+                   status = case when assessment_decisions.status in ('approved', 'rejected') then assessment_decisions.status else 'suggested' end,
+                   reason = case when assessment_decisions.status in ('approved', 'rejected') then assessment_decisions.reason else excluded.reason end`,
+              [randomUUID(), input.challengeAttemptId, input.sessionId, "Season challenge passed; pending operator approval.", input.learnerId]
+            );
+          }
+          // A completed challenge is the learner's level-up submission. Move
+          // the attempt into the same review lifecycle used by the operator
+          // approval route so a pending request can actually be approved (or
+          // retried) after a reload.
+          await client.query(
+            `update assessment_attempts
+             set status = case when $3 then 'pending_review' else 'needs_retry' end,
+                 current_section = null,
+                 submitted_at = coalesce(submitted_at, now()),
+                 updated_at = now()
+             where id = $1 and learner_id = $2
+               and status in ('in_progress', 'submitted', 'pending_review', 'approved')`,
+            [input.challengeAttemptId, input.learnerId, passed]
+          );
+          await client.query(
+            `update coach_sessions set status = 'completed', completed_at = coalesce(completed_at, now())
+             where id = $1 and learner_id = $2 and scenario->>'kind' = 'level_up'`,
+            [input.sessionId, input.learnerId]
+          );
+        }
+      }
+      await syncLearnerRewards(client, input.learnerId);
       await client.query("commit");
       return true;
     } catch (error) {
@@ -2158,10 +4896,160 @@ class CoachRepository {
     } finally { client.release(); }
   }
 
+  async challengeForLearner(learnerId: string, aiAvailable: boolean): Promise<LevelChallengeView | null> {
+    const attempt = await this.pool.query<{
+      attempt_id: string; target_level: CefrLevel; session_id: string | null; session_status: string | null;
+      result_id: string | null; result_completed_turns: number | null; result_average: string | null;
+      result_off_topic: number | null; result_passed: boolean | null; result_created_at: Date | null;
+      decision_id: string | null; decision_status: string | null; decision_decided_at: Date | null;
+    }>(
+      `select aa.id as attempt_id, av.blueprint->>'targetLevel' as target_level, cs.id as session_id, cs.status as session_status,
+              result.id as result_id, result.completed_turns as result_completed_turns, result.average::text as result_average,
+              result.off_topic as result_off_topic, result.passed as result_passed, result.created_at as result_created_at,
+              decision.id as decision_id, decision.status as decision_status,
+              decision.decided_at as decision_decided_at
+       from assessment_attempts aa
+       join assessment_versions av on av.id = aa.assessment_version_id
+       join assessment_definitions ad on ad.id = av.definition_id and ad.kind = 'level_up'
+       join users learner on learner.id = aa.learner_id and learner.status = 'active'
+       left join lateral (
+         select id, status from coach_sessions
+         where learner_id = aa.learner_id and scenario->>'kind' = 'level_up'
+           and scenario->>'assessmentAttemptId' = aa.id::text
+         order by started_at desc limit 1
+       ) cs on true
+       left join level_up_challenge_results result on result.assessment_attempt_id = aa.id
+       left join assessment_decisions decision on decision.attempt_id = aa.id
+        -- The prototype opens the Season challenge as soon as a level-up
+        -- attempt is started. Keep the assessment itself authoritative while
+        -- allowing the challenge to resume for submitted/reviewed attempts.
+        where aa.learner_id = $1 and aa.status in ('in_progress', 'submitted', 'pending_review', 'approved', 'needs_retry')
+       order by aa.submitted_at desc nulls last limit 1`,
+      [learnerId]
+    );
+    const row = attempt.rows[0];
+    if (!row?.target_level) return null;
+    let sessionId = row.session_id;
+    if (!sessionId) {
+      sessionId = randomUUID();
+      await this.pool.query(
+        `insert into coach_sessions (id, learner_id, scenario, status)
+         values ($1, $2, $3::jsonb, 'active')`,
+        [sessionId, learnerId, JSON.stringify({
+          kind: "level_up", assessmentAttemptId: row.attempt_id, targetLevel: row.target_level,
+          title: `Thử thách lên mức ${row.target_level}`, persona: "formal"
+        })]
+      );
+    }
+    const [turns, counters] = await Promise.all([
+      this.pool.query<{
+        id: string; speaker: string; content: Record<string, unknown>;
+        feedback: Record<string, unknown> | null; created_at: Date;
+      }>(
+        `select id, speaker, content, feedback, created_at from coach_turns
+         where session_id = $1 order by turn_number, created_at`, [sessionId]
+      ),
+      this.pool.query<{ daily_used: string }>(
+        `select count(*) filter (where ct.speaker = 'learner' and ct.created_at >= current_date)::text as daily_used
+         from coach_turns ct join coach_sessions cs on cs.id = ct.session_id
+         where cs.learner_id = $1`, [learnerId]
+      )
+    ]);
+    const messages: LevelChallengeView["messages"] = [{
+      id: "challenge-welcome", speaker: "coach",
+      text: `Hi! This is your ${row.target_level} challenge. Tell me about a recent problem at work and how you handled it.`,
+      createdAt: new Date(0).toISOString()
+    }];
+    let scoreTotal = 0;
+    let scoredTurns = 0;
+    let offTopic = 0;
+    for (const turn of turns.rows) {
+      const text = typeof turn.content.text === "string" ? turn.content.text : "";
+      const feedback = coachFeedback(turn.feedback);
+      const feedbackRecord = turn.feedback ?? {};
+      if (turn.speaker === "coach") {
+        if (text) messages.push({ id: turn.id, speaker: "coach", text, createdAt: turn.created_at.toISOString() });
+        continue;
+      }
+      if (text) messages.push({ id: turn.id, speaker: "learner", text, createdAt: turn.created_at.toISOString() });
+      const coachText = typeof feedbackRecord.coachText === "string" ? feedbackRecord.coachText : "";
+      if (feedback) {
+        scoreTotal += (feedback.rubric.meaning + feedback.rubric.vocabulary + feedback.rubric.grammar) / 3;
+        scoredTurns += 1;
+        if (!feedback.relevant) offTopic += 1;
+      }
+      if (coachText) messages.push({
+        id: `${turn.id}:coach`, speaker: "coach", text: coachText,
+        createdAt: turn.created_at.toISOString(), ...(feedback ? { feedback } : {})
+      });
+    }
+    const average = scoredTurns ? Math.round(scoreTotal / scoredTurns * 10) / 10 : 0;
+    const complete = scoredTurns >= 6;
+    const result = row.result_id ? {
+      id: row.result_id,
+      assessmentAttemptId: row.attempt_id,
+      sessionId,
+      completedTurns: Number(row.result_completed_turns ?? scoredTurns),
+      average: Number(row.result_average ?? average),
+      offTopic: Number(row.result_off_topic ?? offTopic),
+      passed: Boolean(row.result_passed),
+      createdAt: row.result_created_at?.toISOString() ?? new Date().toISOString()
+    } satisfies LevelChallengeResultView : null;
+    const request = row.decision_id && (row.decision_status === "suggested" || row.decision_status === "approved" || row.decision_status === "rejected")
+      ? {
+          id: row.decision_id,
+          assessmentAttemptId: row.attempt_id,
+          targetLevel: row.target_level,
+          status: row.decision_status === "suggested" ? "pending" as const : row.decision_status === "approved" ? "approved" as const : "rejected" as const,
+          // assessment_decisions intentionally has no created_at column. The
+          // result is created in the same challenge transaction, so expose its
+          // timestamp as the request timestamp and fall back to the decision
+          // timestamp for legacy rows.
+          createdAt: row.result_created_at?.toISOString() ?? row.decision_decided_at?.toISOString() ?? new Date().toISOString(),
+          decidedAt: row.decision_decided_at?.toISOString() ?? null
+        } satisfies LevelChallengeRequestView : null;
+    const phase = result ? "complete" : scoredTurns ? "resume" : "new";
+    return {
+      sessionId, assessmentAttemptId: row.attempt_id, targetLevel: row.target_level, aiAvailable,
+      daily: { used: Number(counters.rows[0]?.daily_used ?? 0), limit: 20 },
+      progress: { completedTurns: scoredTurns, requiredTurns: 6, average, offTopic, complete, passed: result?.passed ?? (complete && average >= 3.5 && offTopic <= 1) },
+      phase,
+      result,
+      request,
+      retakePlan: result && (!result.passed || row.decision_status === "retry")
+        ? { status: "available", message: "Season đã tạo kế hoạch luyện lại cho bạn." } : null,
+      messages
+    };
+  }
+
+  async unlockVocabulary(learnerId: string, word: string, aiAvailable: boolean): Promise<CoachView | null> {
+    const normalized = word.normalize("NFKC").trim().toLowerCase();
+    if (!normalized) return null;
+    const current = await this.currentForLearner(learnerId, aiAvailable);
+    const item = current?.vocabulary.find((candidate) => candidate.word.normalize("NFKC").trim().toLowerCase() === normalized);
+    if (!current || !item) return null;
+    await this.pool.query(
+      `insert into learner_vocabulary_unlocks (learner_id, word)
+       values ($1, $2) on conflict (learner_id, word) do nothing`,
+      [learnerId, item.word]
+    );
+    return this.currentForLearner(learnerId, aiAvailable);
+  }
+
+  async finalizeChallenge(learnerId: string, sessionId: string): Promise<void> {
+    await this.pool.query(
+      `update coach_sessions set status = 'completed', completed_at = now()
+       where id = $1 and learner_id = $2 and scenario->>'kind' = 'level_up'
+         and (select count(*) from coach_turns where session_id = $1 and speaker = 'learner') >= 6`,
+      [sessionId, learnerId]
+    );
+  }
+
   async setPersona(learnerId: string, persona: CoachPersona): Promise<void> {
     await this.pool.query(
       `update coach_sessions set scenario = jsonb_set(scenario, '{persona}', to_jsonb($2::text), true)
-       where id = (select id from coach_sessions where learner_id = $1 and status = 'active' order by started_at desc limit 1)`,
+       where id = (select id from coach_sessions where learner_id = $1 and status = 'active'
+         and coalesce(scenario->>'kind', 'practice') = 'practice' order by started_at desc limit 1)`,
       [learnerId, persona]
     );
   }
@@ -2169,7 +5057,8 @@ class CoachRepository {
   async archiveCurrent(learnerId: string): Promise<void> {
     await this.pool.query(
       `update coach_sessions set status = 'completed', completed_at = now()
-       where id = (select id from coach_sessions where learner_id = $1 and status = 'active' order by started_at desc limit 1)`,
+       where id = (select id from coach_sessions where learner_id = $1 and status = 'active'
+         and coalesce(scenario->>'kind', 'practice') = 'practice' order by started_at desc limit 1)`,
       [learnerId]
     );
   }
@@ -2178,6 +5067,7 @@ class CoachRepository {
 function coachFeedback(value: Record<string, unknown> | null): CoachFeedbackView | null {
   if (!value || !value.rubric || typeof value.rubric !== "object" || Array.isArray(value.rubric)) return null;
   const rubric = value.rubric as Record<string, unknown>;
+  const classification = coachTurnClassification(value);
   const suggestions = Array.isArray(value.suggestions) ? value.suggestions.flatMap((item) => {
     if (!item || typeof item !== "object" || Array.isArray(item)) return [];
     const entry = item as Record<string, unknown>;
@@ -2186,12 +5076,58 @@ function coachFeedback(value: Record<string, unknown> | null): CoachFeedbackView
   }) : [];
   return {
     relevant: value.relevant !== false,
+    ...(classification ? { classification } : {}),
     relevanceNote: typeof value.relevanceNote === "string" ? value.relevanceNote : "",
     rubric: {
       meaning: Number(rubric.meaning ?? 0), vocabulary: Number(rubric.vocabulary ?? 0), grammar: Number(rubric.grammar ?? 0)
     },
     suggestions,
     correctedText: typeof value.correctedText === "string" ? value.correctedText : ""
+  };
+}
+
+function coachTurnClassification(value: Record<string, unknown>): CoachTurnClassification | null {
+  if (value.error === true || value.errorCode) return "error";
+  if (value.relevant === false) return "off-topic";
+  const suggestions = Array.isArray(value.suggestions) ? value.suggestions.length : 0;
+  if (suggestions > 0 || (typeof value.correctedText === "string" && value.correctedText.trim())) return "corrected";
+  if (typeof value.reply === "string" && value.reply.trim().split(/\s+/).length <= 5) return "curt";
+  return "normal";
+}
+
+function weeklyPracticeReviewState(
+  status: "draft" | "submitted" | "reviewed",
+  score: Record<string, unknown> | null,
+  gradingSource: "ai" | "manual" | null,
+  appealStatus: "pending" | "accepted" | "rejected" | null
+): WeeklyPracticeReviewState | undefined {
+  if (appealStatus === "pending") return "appeal-pending";
+  if (appealStatus === "accepted" || appealStatus === "rejected") return "appeal-decided";
+  if (status === "draft" || (status === "submitted" && !score)) return "ungraded";
+  if (gradingSource === "manual") return "graded-manual";
+  if (gradingSource === "ai" || score) return "graded-ai";
+  return "ungraded";
+}
+
+function weeklyPracticeTask(topic: string, cefr: CefrLevel): {
+  inputMode: "write" | "dialogue";
+  task: string;
+  guidance: string;
+} {
+  if (cefr === "A1" || cefr === "A2") return {
+    inputMode: "write",
+    task: `Write 3–5 sentences about “${topic}”. Use at least 3 words from this week's lessons.`,
+    guidance: `Viết 3–5 câu tiếng Anh về chủ đề “${topic}”. Dùng ít nhất 3 từ trong bài học tuần này.`
+  };
+  if (cefr === "B1") return {
+    inputMode: "write",
+    task: `Write a short paragraph or email (80–120 words) about “${topic}”, including one problem and one suggestion.`,
+    guidance: "Viết bằng tiếng Anh; nêu rõ một vấn đề và một đề xuất."
+  };
+  return {
+    inputMode: "dialogue",
+    task: `Write a short dialogue (8–12 lines) or a 120–180-word reflection on “${topic}”. Show a disagreement or a negotiation and how it is resolved.`,
+    guidance: "Viết bằng tiếng Anh; thể hiện bất đồng hoặc thương lượng và cách giải quyết."
   };
 }
 
@@ -2215,9 +5151,17 @@ class EngagementRepository {
       id: string; status: "draft" | "submitted" | "reviewed"; content: Record<string, unknown>;
       score: Record<string, unknown> | null; feedback: Record<string, unknown> | string | null;
       submitted_at: Date | null;
+      grading_source: "ai" | "manual" | null;
+      appeal_id: string | null; appeal_status: "pending" | "accepted" | "rejected" | null;
+      appeal_reason: string | null; appeal_resolution: string | null; appeal_created_at: Date | null; appeal_resolved_at: Date | null;
     }>(
-      `select id, status, content, score, feedback, submitted_at
-       from practice_submissions where learner_id = $1 and program_week_id = $2 limit 1`,
+      `select ps.id, ps.status, ps.content, ps.score, ps.feedback, ps.submitted_at,
+              case when ps.feedback->>'source' = 'human' then 'manual' else case when ps.score is not null then 'ai' end end as grading_source,
+              pa.id as appeal_id, pa.status as appeal_status, pa.reason as appeal_reason,
+              pa.resolution as appeal_resolution, pa.created_at as appeal_created_at, pa.resolved_at as appeal_resolved_at
+       from practice_submissions ps
+       left join practice_appeals pa on pa.submission_id = ps.id
+       where ps.learner_id = $1 and ps.program_week_id = $2 limit 1`,
       [learnerId, context.weekId]
     );
     const count = lessons.rows[0] ?? { total: "0", completed: "0" };
@@ -2228,14 +5172,19 @@ class EngagementRepository {
     const content = row?.content ?? {};
     const score = row?.score ?? null;
     const feedback = row?.feedback;
+    const reviewState = row ? weeklyPracticeReviewState(row.status, row.score, row.grading_source, row.appeal_status) : undefined;
+    const practice = weeklyPracticeTask(context.topic, context.cefr);
     return {
       state, weekId: context.weekId, weekNumber: context.weekNumber, topic: context.topic,
       completedLessons, totalLessons,
-      task: `Viết một đoạn ngắn giới thiệu vai trò của bạn và công việc trong tuần, dùng từ vựng của chủ đề “${context.topic}”.`,
-      guidance: "Viết ít nhất 8 từ bằng tiếng Anh. Sau khi nộp, bài được giữ nguyên trên màn này để nhận phản hồi.",
+      inputMode: practice.inputMode,
+      task: practice.task,
+      guidance: practice.guidance,
       submission: row ? {
         id: row.id, status: row.status, text: String(content.text ?? ""),
         submittedAt: row.submitted_at?.toISOString() ?? null,
+        ...(row.grading_source ? { gradingSource: row.grading_source } : {}),
+        ...(reviewState ? { reviewState } : {}),
         score: score && typeof score.total === "number" ? {
           total: score.total,
           ...(score.rubric && typeof score.rubric === "object" ? { rubric: score.rubric as { meaning: number; vocabulary: number; grammar: number } } : {})
@@ -2244,7 +5193,17 @@ class EngagementRepository {
         suggestions: feedback && typeof feedback === "object" && Array.isArray(feedback.suggestions)
           ? feedback.suggestions as Array<{ original: string; corrected: string; explanation: string }> : [],
         correctedText: feedback && typeof feedback === "object" ? String(feedback.correctedText ?? "") : ""
-      } : null
+      } : null,
+      ...(reviewState ? { reviewState } : {}),
+      appeal: row?.appeal_id ? {
+        id: row.appeal_id,
+        submissionId: row.id,
+        status: row.appeal_status ?? "pending",
+        reason: row.appeal_reason ?? "",
+        resolution: row.appeal_resolution,
+        createdAt: row.appeal_created_at?.toISOString() ?? new Date(0).toISOString(),
+        resolvedAt: row.appeal_resolved_at?.toISOString() ?? null
+      } satisfies WeeklyPracticeAppealView : null
     };
   }
 
@@ -2264,21 +5223,59 @@ class EngagementRepository {
           `insert into practice_submissions
              (id, learner_id, program_week_id, status, content, request_key, submitted_at, updated_at)
            values ($1, $2, $3, 'submitted', $4::jsonb, $5, now(), now())`,
-          [submissionId, input.learnerId, view.weekId, JSON.stringify({ text: input.text }), input.requestId]
+          [submissionId, input.learnerId, view.weekId, JSON.stringify({
+            text: input.text,
+            inputMode: view.inputMode ?? "write",
+            type: view.inputMode === "dialogue" ? "dialogue" : "writing"
+          }), input.requestId]
         );
         await client.query(
           `insert into reward_events (id, learner_id, badge_id, points, source_type, source_id)
-           select $1, $2, b.id, 20, 'weekly_practice', $3
+           select $1, $2, b.id, 0, 'weekly_practice', $3
            from users u join badges b on b.organization_id = u.organization_id and b.badge_key = 'friday'
            where u.id = $2
            on conflict (learner_id, source_type, source_id, badge_id) do nothing`,
           [randomUUID(), input.learnerId, submissionId]
         );
+        await client.query(
+          `insert into activities (id, learner_id, activity_type, reference_type, reference_id, minutes, evidence)
+           values ($1, $2, 'weekly_practice', 'practice_submission', $3, 10, $4::jsonb)`,
+          [randomUUID(), input.learnerId, submissionId, JSON.stringify({ wordCount: input.text.trim().split(/\s+/).length })]
+        );
+        await syncLearnerRewards(client, input.learnerId);
       }
       await client.query("commit");
     } catch (error) {
       await client.query("rollback"); throw error;
     } finally { client.release(); }
+    return this.weeklyPractice(input.learnerId);
+  }
+
+  async appealWeeklyPractice(input: { learnerId: string; submissionId: string; reason: string }): Promise<WeeklyPracticeView | null> {
+    const client = await this.pool.connect();
+    try {
+      await client.query("begin");
+      const submission = await client.query<{ id: string; status: string; program_week_id: string; score: Record<string, unknown> | null }>(
+        `select id, status, program_week_id, score from practice_submissions
+          where id = $1 and learner_id = $2 for update`, [input.submissionId, input.learnerId]
+      );
+      const row = submission.rows[0];
+      if (!row || (row.status !== "reviewed" && !(row.status === "submitted" && row.score))) {
+        await client.query("rollback");
+        return null;
+      }
+      await client.query(
+        `insert into practice_appeals (id, submission_id, learner_id, reason)
+         values ($1, $2, $3, $4) on conflict (submission_id) do nothing`,
+        [randomUUID(), input.submissionId, input.learnerId, input.reason]
+      );
+      await client.query("commit");
+    } catch (error) {
+      await client.query("rollback");
+      throw error;
+    } finally {
+      client.release();
+    }
     return this.weeklyPractice(input.learnerId);
   }
 
@@ -2307,7 +5304,7 @@ class EngagementRepository {
           `update practice_submissions set score = $2::jsonb, feedback = $3::jsonb, updated_at = now()
            where id = $1`,
           [submission.rows[0].id, JSON.stringify(input.output.score), JSON.stringify({
-            message: input.output.feedback, suggestions: input.output.suggestions,
+            message: input.output.feedback, source: "ai", suggestions: input.output.suggestions,
             correctedText: input.output.correctedText, aiRunId: runId
           })]
         );
@@ -2346,6 +5343,68 @@ class EngagementRepository {
         source: row.learner_id ? "custom" : "weekly", words },
       best: Object.fromEntries(bestRows.rows.map((item) => [item.game_key, normalizedGameBest(item)]))
     };
+  }
+
+  async gameWord(learnerId: string, setId: string, wordId: string): Promise<{
+    english: string; imageUrl: string | null;
+  } | null> {
+    const context = await this.activeEngagementContext(learnerId);
+    if (!context) return null;
+    const result = await this.pool.query<{ payload: Record<string, unknown> }>(
+      `select payload from game_sets
+       where id = $1 and program_week_id = $2 and game_key = 'weekly_vocabulary'
+         and status = 'published' and (learner_id = $3 or learner_id is null)
+       limit 1`,
+      [setId, context.weekId, learnerId]
+    );
+    const payload = result.rows[0]?.payload;
+    const words = Array.isArray(payload?.words) ? payload.words : [];
+    const word = words.find((item) => {
+      if (!item || typeof item !== "object" || Array.isArray(item)) return false;
+      return String((item as Record<string, unknown>).id ?? "") === wordId;
+    });
+    if (!word || typeof word !== "object" || Array.isArray(word)) return null;
+    const value = word as Record<string, unknown>;
+    if (typeof value.english !== "string" || !value.english.trim()) return null;
+    return {
+      english: value.english,
+      imageUrl: typeof value.imageUrl === "string" && value.imageUrl ? value.imageUrl : null
+    };
+  }
+
+  async saveGameWordImage(learnerId: string, setId: string, wordId: string, imageUrl: string): Promise<boolean> {
+    const context = await this.activeEngagementContext(learnerId);
+    if (!context) return false;
+    const client = await this.pool.connect();
+    try {
+      await client.query("begin");
+      const result = await client.query<{ payload: Record<string, unknown> }>(
+        `select payload from game_sets
+         where id = $1 and program_week_id = $2 and game_key = 'weekly_vocabulary'
+           and status = 'published' and (learner_id = $3 or learner_id is null)
+         for update`,
+        [setId, context.weekId, learnerId]
+      );
+      const payload = result.rows[0]?.payload;
+      if (!payload || !Array.isArray(payload.words)) { await client.query("rollback"); return false; }
+      let found = false;
+      const words = payload.words.map((item) => {
+        if (!item || typeof item !== "object" || Array.isArray(item)) return item;
+        const word = item as Record<string, unknown>;
+        if (String(word.id ?? "") !== wordId) return item;
+        found = true;
+        return { ...word, imageUrl };
+      });
+      if (!found) { await client.query("rollback"); return false; }
+      await client.query("update game_sets set payload = $2::jsonb where id = $1", [setId, JSON.stringify({ ...payload, words })]);
+      await client.query("commit");
+      return true;
+    } catch (error) {
+      await client.query("rollback");
+      throw error;
+    } finally {
+      client.release();
+    }
   }
 
   async saveGeneratedWordSet(input: {
@@ -2419,7 +5478,15 @@ class EngagementRepository {
       [id, input.setId, input.learnerId, input.game, input.score, input.maxScore, input.requestId,
         input.duelId ?? null, JSON.stringify({ correct: input.correct, total: input.total, evidence: input.details })]
     );
-    return gameResultView(result.rows[0]!);
+    const row = result.rows[0]!;
+    await this.pool.query(
+      `insert into activities (id, learner_id, activity_type, reference_type, reference_id, minutes, evidence)
+       select $1, $2, 'game', 'game_result', $3, 5, $4::jsonb
+       where not exists (select 1 from activities where learner_id = $2 and reference_type = 'game_result' and reference_id = $3)`,
+      [randomUUID(), input.learnerId, row.id, JSON.stringify({ game: input.game, score: input.score, maxScore: input.maxScore })]
+    );
+    await syncLearnerRewards(this.pool, input.learnerId);
+    return gameResultView(row);
   }
 
   async arena(learnerId: string): Promise<{
@@ -2734,10 +5801,27 @@ function cefrDisplayLabel(level: CefrLevel): string {
 class NotificationRepository {
   constructor(private readonly pool: Pool) {}
 
-  async listForLearner(learnerId: string): Promise<unknown[]> {
-    const result = await this.pool.query(
+  async listForLearner(learnerId: string): Promise<LearnerNotificationView[]> {
+    const result = await this.pool.query<{
+      id: string;
+      reason: string;
+      message: string;
+      status: LearnerNotificationView["status"];
+      created_at: Date;
+      deliveries: Array<{
+        provider: string;
+        status: "queued" | "sent" | "failed";
+        externalId: string | null;
+        attemptedAt: string;
+      }>;
+    }>(
       `select r.id, r.reason, r.message, r.status, r.created_at,
-              coalesce(jsonb_agg(jsonb_build_object('provider', nd.provider, 'status', nd.status))
+              coalesce(jsonb_agg(jsonb_build_object(
+                'provider', nd.provider,
+                'status', nd.status,
+                'externalId', nd.external_id,
+                'attemptedAt', nd.attempted_at
+              ) order by nd.attempted_at desc)
                 filter (where nd.id is not null), '[]'::jsonb) as deliveries
        from reminders r
        left join notification_deliveries nd on nd.reminder_id = r.id
@@ -2746,7 +5830,78 @@ class NotificationRepository {
        order by r.created_at desc`,
       [learnerId]
     );
-    return result.rows;
+    return result.rows.map((row) => ({
+      id: row.id,
+      reason: row.reason,
+      message: row.message,
+      status: row.status,
+      createdAt: row.created_at.toISOString(),
+      deliveries: row.deliveries.map((delivery) => ({
+        provider: delivery.provider,
+        status: delivery.status,
+        externalId: delivery.externalId,
+        attemptedAt: delivery.attemptedAt
+      }))
+    }));
+  }
+
+  async findWebhookDelivery(reminderId: string): Promise<ReminderWebhookDelivery | null> {
+    const result = await this.pool.query<{
+      reminder_id: string;
+      delivery_id: string;
+      message: string;
+      learner_name: string;
+      webhook_url: string | null;
+      webhook_template: string | null;
+    }>(
+      `select r.id as reminder_id, nd.id as delivery_id, r.message,
+              learner.display_name as learner_name,
+              nullif(trim(os.configuration->>'baseWebhookUrl'), '') as webhook_url,
+              coalesce(nullif(os.configuration->>'baseWebhookTemplate', ''), '{"base_content":"{message}"}') as webhook_template
+       from reminders r
+       join users learner on learner.id = r.learner_id
+       join notification_deliveries nd on nd.reminder_id = r.id
+         and nd.provider = 'base_webhook' and nd.status = 'queued'
+       left join organization_settings os on os.organization_id = learner.organization_id
+       where r.id = $1 and r.status = 'queued'
+       order by nd.attempted_at desc
+       limit 1`,
+      [reminderId]
+    );
+    const row = result.rows[0];
+    if (!row?.webhook_url || !row.webhook_template) return null;
+    return {
+      reminderId: row.reminder_id,
+      deliveryId: row.delivery_id,
+      message: row.message,
+      learnerName: row.learner_name,
+      webhookUrl: row.webhook_url,
+      webhookTemplate: row.webhook_template
+    };
+  }
+
+  async updateWebhookDelivery(input: ReminderWebhookDeliveryUpdate): Promise<void> {
+    const client = await this.pool.connect();
+    try {
+      await client.query("begin");
+      await client.query(
+        `update notification_deliveries
+         set status = $2, external_id = $3, response = $4::jsonb, attempted_at = now()
+         where id = $1`,
+        [input.deliveryId, input.status, input.externalId ?? null, JSON.stringify(input.response)]
+      );
+      await client.query(
+        `update reminders set status = $2
+         where id = $1 and status = 'queued'`,
+        [input.reminderId, input.status]
+      );
+      await client.query("commit");
+    } catch (error) {
+      await client.query("rollback");
+      throw error;
+    } finally {
+      client.release();
+    }
   }
 }
 
@@ -2760,6 +5915,49 @@ class FileRepository {
       [ownerUserId]
     );
     return result.rows;
+  }
+
+  async createForOwner(input: {
+    id: string;
+    ownerUserId: string;
+    purpose: string;
+    bucket: string;
+    objectKey: string;
+    mimeType: string;
+    sizeBytes: number;
+    sha256: string;
+  }): Promise<boolean> {
+    const result = await this.pool.query(
+      `insert into files (
+         id, organization_id, owner_user_id, purpose, bucket, object_key,
+         mime_type, size_bytes, sha256
+       )
+       select $1, u.organization_id, $2, $3, $4, $5, $6, $7, $8
+       from users u
+       where u.id = $2
+       returning id`,
+      [
+        input.id,
+        input.ownerUserId,
+        input.purpose,
+        input.bucket,
+        input.objectKey,
+        input.mimeType,
+        input.sizeBytes,
+        input.sha256
+      ]
+    );
+    return Boolean(result.rowCount);
+  }
+
+  async ownedBy(ownerUserId: string, purpose: string, objectKey: string): Promise<boolean> {
+    const result = await this.pool.query(
+      `select 1 from files
+       where owner_user_id = $1 and purpose = $2 and object_key = $3
+       limit 1`,
+      [ownerUserId, purpose, objectKey]
+    );
+    return Boolean(result.rowCount);
   }
 }
 
@@ -2782,6 +5980,20 @@ class AiRunRepository {
       [userId, requestKey, taskKey]
     );
     return Boolean(result.rowCount);
+  }
+
+  async findSucceededOutput(userId: string, requestKey: string, taskKey: string): Promise<{ output: unknown } | null> {
+    const result = await this.pool.query<{ output: unknown }>(
+      `select ar.output
+       from ai_runs ar
+       join ai_tasks at on at.id = ar.task_id
+       where ar.user_id = $1 and ar.request_key = $2 and at.task_key = $3
+         and ar.status = 'succeeded'
+       limit 1`,
+      [userId, requestKey, taskKey]
+    );
+    const row = result.rows[0];
+    return row ? { output: row.output } : null;
   }
 
   async activeTaskPrompt(userId: string, taskKey: string): Promise<{
@@ -2807,6 +6019,18 @@ class AiRunRepository {
     );
     const row = result.rows[0];
     return row ? { taskId: row.task_id, promptVersionId: row.prompt_version_id, prompt: row.prompt } : null;
+  }
+
+  async recordSucceeded(input: {
+    userId: string; requestId: string; taskId: string; promptVersionId: string; output: unknown; metadata: AiRunMetadataInput;
+  }): Promise<boolean> {
+    const client = await this.pool.connect();
+    try {
+      return await insertAiRun(client, {
+        id: randomUUID(), learnerId: input.userId, requestId: input.requestId, taskId: input.taskId,
+        promptVersionId: input.promptVersionId, output: input.output, metadata: input.metadata
+      });
+    } finally { client.release(); }
   }
 }
 
@@ -2834,7 +6058,11 @@ class JobRepository {
     }>(
       `with next_job as (
          select id from jobs
-         where state = 'queued' and run_at <= now() and attempts < max_attempts
+         where (
+           (state = 'queued' and run_at <= now())
+           or (state = 'running' and lock_expires_at <= now())
+         )
+         and attempts < max_attempts
          order by run_at, created_at
          for update skip locked
          limit 1
@@ -2860,6 +6088,2238 @@ class JobRepository {
         }
       : null;
   }
+
+  async markSucceeded(id: string, workerId: string): Promise<boolean> {
+    const result = await this.pool.query(
+      `update jobs
+       set state = 'succeeded', locked_by = null, lock_expires_at = null, updated_at = now()
+       where id = $1 and state = 'running' and locked_by = $2 and lock_expires_at > now()
+       returning id`,
+      [id, workerId]
+    );
+    return Boolean(result.rowCount);
+  }
+
+  async markFailed(id: string, workerId: string, error: string): Promise<"queued" | "dead" | null> {
+    const result = await this.pool.query<{ state: "queued" | "dead" }>(
+      `update jobs
+       set state = case when attempts >= max_attempts then 'dead' else 'queued' end,
+           run_at = case
+             when attempts >= max_attempts then run_at
+             else now() + (least(attempts, 6) * interval '10 seconds')
+           end,
+           locked_by = null,
+           lock_expires_at = null,
+           last_error = left($3, 2_000),
+           updated_at = now()
+       where id = $1 and state = 'running' and locked_by = $2 and lock_expires_at > now()
+       returning state`,
+      [id, workerId, error]
+    );
+    return result.rows[0]?.state ?? null;
+  }
+}
+
+interface ProviderConfigurationRow {
+  provider: ManagerProviderKind;
+  base_url: string;
+  model: string;
+  speech_to_text_model: string;
+  secret_ciphertext: string | null;
+  secret_nonce: string | null;
+  secret_auth_tag: string | null;
+  last_test_status: ManagerProviderTestView["status"];
+  last_test_code: string | null;
+  last_tested_at: Date | null;
+}
+
+const providerDefaults = (provider: ManagerProviderKind): Pick<ManagerProviderSettingsView, "baseUrl" | "model" | "speechToTextModel"> => {
+  if (provider === "claude") return {
+    baseUrl: "https://api.anthropic.com/v1",
+    model: "claude-3-5-sonnet-latest",
+    speechToTextModel: ""
+  };
+  if (provider === "gemini") return {
+    baseUrl: "https://generativelanguage.googleapis.com/v1beta",
+    model: "gemini-1.5-flash",
+    speechToTextModel: ""
+  };
+  return {
+    baseUrl: "https://api.groq.com/openai/v1",
+    model: "qwen/qwen3.8-27b",
+    speechToTextModel: "whisper-large-v3-turbo"
+  };
+};
+
+function providerCapabilities(provider: ManagerProviderKind): NonNullable<ManagerProviderSettingsView["capabilities"]> {
+  return { chat: true, structuredOutput: true, speechToText: provider === "openai" };
+}
+
+function mapProviderSettings(row?: ProviderConfigurationRow): ManagerProviderSettingsView {
+  const provider = row?.provider ?? "openai";
+  const defaults = providerDefaults(provider);
+  return {
+    provider,
+    configured: Boolean(row?.secret_ciphertext),
+    baseUrl: row?.base_url || defaults.baseUrl,
+    model: row?.model || defaults.model,
+    speechToTextModel: row?.speech_to_text_model || defaults.speechToTextModel,
+    capabilities: providerCapabilities(provider),
+    lastTest: {
+      status: row?.last_test_status ?? "never",
+      testedAt: row?.last_tested_at?.toISOString() ?? null,
+      code: redactProviderTestCode(row?.last_test_code ?? null)
+    }
+  };
+}
+
+function redactProviderTestCode(code: string | null): string | null {
+  if (!code || !/^[A-Z0-9_:-]{1,80}$/.test(code)) return null;
+  return code;
+}
+
+function readSettingsEncryptionKey(): Buffer {
+  const encoded = process.env.E4S_SETTINGS_ENCRYPTION_KEY?.trim();
+  if (!encoded || !/^[A-Za-z0-9+/]+={0,2}$/.test(encoded)) {
+    throw new Error("PROVIDER_SETTINGS_ENCRYPTION_KEY_MISSING");
+  }
+  const key = Buffer.from(encoded, "base64");
+  if (key.length !== 32) throw new Error("PROVIDER_SETTINGS_ENCRYPTION_KEY_INVALID");
+  return key;
+}
+
+function encryptProviderSecret(secret: string): { ciphertext: string; nonce: string; authTag: string } {
+  const nonce = randomBytes(12);
+  const cipher = createCipheriv("aes-256-gcm", readSettingsEncryptionKey(), nonce);
+  const ciphertext = Buffer.concat([cipher.update(secret, "utf8"), cipher.final()]);
+  return {
+    ciphertext: ciphertext.toString("base64"),
+    nonce: nonce.toString("base64"),
+    authTag: cipher.getAuthTag().toString("base64")
+  };
+}
+
+function decryptProviderSecret(row: Pick<ProviderConfigurationRow, "secret_ciphertext" | "secret_nonce" | "secret_auth_tag">): string {
+  if (!row.secret_ciphertext || !row.secret_nonce || !row.secret_auth_tag) return "";
+  try {
+    const decipher = createDecipheriv(
+      "aes-256-gcm",
+      readSettingsEncryptionKey(),
+      Buffer.from(row.secret_nonce, "base64")
+    );
+    decipher.setAuthTag(Buffer.from(row.secret_auth_tag, "base64"));
+    return Buffer.concat([
+      decipher.update(Buffer.from(row.secret_ciphertext, "base64")),
+      decipher.final()
+    ]).toString("utf8");
+  } catch (error) {
+    if (error instanceof Error && error.message.startsWith("PROVIDER_SETTINGS_ENCRYPTION_KEY_")) throw error;
+    throw new Error("PROVIDER_SETTINGS_DECRYPT_FAILED");
+  }
+}
+
+async function probeProvider(input: {
+  provider: ManagerProviderKind;
+  baseUrl: string;
+  model: string;
+  credential: string;
+}): Promise<Pick<ManagerProviderTestView, "status" | "code">> {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 10_000);
+  try {
+    const baseUrl = input.baseUrl.replace(/\/+$/, "");
+    if (!/^https?:\/\//i.test(baseUrl)) return { status: "error", code: "PROVIDER_ENDPOINT_INVALID" };
+    let url = `${baseUrl}/chat/completions`;
+    let headers: Record<string, string> = { "content-type": "application/json" };
+    let body: Record<string, unknown> = {
+      model: input.model,
+      messages: [{ role: "user", content: "Reply with OK." }],
+      max_tokens: 8
+    };
+    if (input.provider === "claude") {
+      url = `${baseUrl}/messages`;
+      headers = { "content-type": "application/json", "x-api-key": input.credential, "anthropic-version": "2023-06-01" };
+      body = { model: input.model, max_tokens: 8, messages: [{ role: "user", content: "Reply with OK." }] };
+    } else if (input.provider === "gemini") {
+      url = `${baseUrl}/models/${encodeURIComponent(input.model)}:generateContent`;
+      headers = { "content-type": "application/json", "x-goog-api-key": input.credential };
+      body = { contents: [{ parts: [{ text: "Reply with OK." }] }] };
+    } else {
+      headers.authorization = `Bearer ${input.credential}`;
+    }
+    const response = await fetch(url, {
+      method: "POST",
+      headers,
+      body: JSON.stringify(body),
+      signal: controller.signal
+    });
+    if (response.ok) return { status: "success", code: null };
+    return { status: "error", code: response.status >= 500 ? "PROVIDER_UNAVAILABLE" : `PROVIDER_HTTP_${response.status}` };
+  } catch (error) {
+    if (error instanceof DOMException && error.name === "AbortError") return { status: "timeout", code: "PROVIDER_TIMEOUT" };
+    return { status: "error", code: "PROVIDER_NETWORK_ERROR" };
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+class ManagerRepository {
+  constructor(private readonly pool: Pool) {}
+
+  private async organizationFor(staffId: string): Promise<{ id: string; name: string } | null> {
+    const organization = await this.pool.query<{ id: string; name: string }>(
+      `select o.id, o.name
+       from users u
+       join organizations o on o.id = u.organization_id
+       where u.id = $1`,
+      [staffId]
+    );
+    return organization.rows[0] ?? null;
+  }
+
+  private async settingsForOrganization(organizationId: string): Promise<Omit<ManagerSettingsView, "organizationName">> {
+    const defaults: Omit<ManagerSettingsView, "organizationName"> = {
+      reminderInactiveDays: 3, weeklyReportEnabled: true,
+      pilotStartDate: "2026-10-12", pilotWeeks: 2, weekOverride: 0, minMinutesPerDay: 15,
+      courseTheme: "Tiếng Anh giao tiếp công sở", coachDailyLimit: 20,
+      testTimed: true, testTimes: { listening: 15, reading: 20, writing: 20, speaking: 15 }, testWarnLimit: 3,
+      levelUp: { days: 14, lessons: 90, firstTry: 75, submission: 80, coach: 4, coachTurns: 6, wrong: 30, minParts: 4 },
+      backgroundMusic: { enabled: true, url: "", volume: 22 },
+      baseWebhookUrl: "", baseWebhookTemplate: "{\"base_content\":\"{message}\"}"
+    };
+    const result = await this.pool.query<{ reminder_inactive_days: number; weekly_report_enabled: boolean; configuration: Partial<Omit<ManagerSettingsView, "organizationName">> }>(
+      "select reminder_inactive_days, weekly_report_enabled, configuration from organization_settings where organization_id = $1",
+      [organizationId]
+    );
+    const settings = result.rows[0];
+    return settings
+      ? { ...defaults, ...settings.configuration, reminderInactiveDays: settings.reminder_inactive_days, weeklyReportEnabled: settings.weekly_report_enabled,
+          testTimes: { ...defaults.testTimes, ...settings.configuration?.testTimes },
+          levelUp: { ...defaults.levelUp, ...settings.configuration?.levelUp },
+          backgroundMusic: { ...defaults.backgroundMusic, ...settings.configuration?.backgroundMusic } }
+      : defaults;
+  }
+
+  async providerSettings(staffId: string): Promise<ManagerProviderSettingsView | null> {
+    const organization = await this.organizationFor(staffId);
+    if (!organization) return null;
+    const result = await this.pool.query<ProviderConfigurationRow>(
+      `select provider, base_url, model, speech_to_text_model, secret_ciphertext,
+              last_test_status, last_test_code, last_tested_at
+       from provider_configurations where organization_id = $1`,
+      [organization.id]
+    );
+    const row = result.rows[0];
+    return mapProviderSettings(row);
+  }
+
+  async saveProviderSettings(managerId: string, input: ManagerProviderSettingsInput): Promise<ManagerProviderSettingsView> {
+    const organization = await this.organizationFor(managerId);
+    if (!organization) throw new Error("MANAGER_ORGANIZATION_NOT_FOUND");
+    const current = await this.pool.query<ProviderConfigurationRow>(
+      `select provider, base_url, model, speech_to_text_model, secret_ciphertext, secret_nonce, secret_auth_tag,
+              last_test_status, last_test_code, last_tested_at
+       from provider_configurations where organization_id = $1`,
+      [organization.id]
+    );
+    const existing = current.rows[0];
+    const secret = typeof input.credential === "string" && input.credential.trim().length > 0
+      ? encryptProviderSecret(input.credential)
+      : existing
+        ? { ciphertext: existing.secret_ciphertext, nonce: existing.secret_nonce, authTag: existing.secret_auth_tag }
+        : { ciphertext: null, nonce: null, authTag: null };
+    await this.pool.query(
+      `insert into provider_configurations
+         (organization_id, provider, base_url, model, speech_to_text_model,
+          secret_ciphertext, secret_nonce, secret_auth_tag, last_test_status, last_test_code,
+          last_tested_at, updated_by, updated_at)
+       values ($1, $2, $3, $4, $5, $6, $7, $8, 'never', null, null, $9, now())
+       on conflict (organization_id) do update
+       set provider = excluded.provider,
+           base_url = excluded.base_url,
+           model = excluded.model,
+           speech_to_text_model = excluded.speech_to_text_model,
+           secret_ciphertext = excluded.secret_ciphertext,
+           secret_nonce = excluded.secret_nonce,
+           secret_auth_tag = excluded.secret_auth_tag,
+           last_test_status = 'never',
+           last_test_code = null,
+           last_tested_at = null,
+           updated_by = excluded.updated_by,
+           updated_at = now()`,
+      [organization.id, input.provider, input.baseUrl.trim(), input.model.trim(), input.speechToTextModel.trim(),
+        secret.ciphertext, secret.nonce, secret.authTag, managerId]
+    );
+    await this.pool.query(
+      `insert into audit_events
+         (id, organization_id, actor_user_id, action, entity_type, entity_id, payload, trace_id)
+       values ($1, $2, $3, 'provider.settings.updated', 'organization', $2, $4::jsonb, $5)`,
+      [randomUUID(), organization.id, managerId, JSON.stringify({ provider: input.provider, model: input.model.trim() }), randomUUID()]
+    );
+    const saved = await this.providerSettings(managerId);
+    if (!saved) throw new Error("MANAGER_ORGANIZATION_NOT_FOUND");
+    return saved;
+  }
+
+  async testProviderSettings(managerId: string, input?: ManagerProviderSettingsTestInput): Promise<ManagerProviderTestView> {
+    const organization = await this.organizationFor(managerId);
+    if (!organization) throw new Error("MANAGER_ORGANIZATION_NOT_FOUND");
+    const result = await this.pool.query<ProviderConfigurationRow>(
+      `select provider, base_url, model, speech_to_text_model, secret_ciphertext, secret_nonce, secret_auth_tag,
+              last_test_status, last_test_code, last_tested_at
+       from provider_configurations where organization_id = $1`,
+      [organization.id]
+    );
+    const current = result.rows[0];
+    const provider = input?.provider ?? current?.provider ?? "openai";
+    const baseUrl = input?.baseUrl?.trim() ?? current?.base_url ?? providerDefaults(provider).baseUrl;
+    const model = input?.model?.trim() ?? current?.model ?? providerDefaults(provider).model;
+    const speechToTextModel = input?.speechToTextModel?.trim() ?? current?.speech_to_text_model ?? providerDefaults(provider).speechToTextModel;
+    const credential = typeof input?.credential === "string" && input.credential.trim().length > 0
+      ? input.credential.trim()
+      : current?.secret_ciphertext
+        ? decryptProviderSecret(current)
+        : "";
+    const testedAt = new Date().toISOString();
+    const outcome = !credential
+      ? { status: "error" as const, code: "PROVIDER_NOT_CONFIGURED" }
+      : await probeProvider({ provider, baseUrl, model, credential });
+    const view: ManagerProviderTestView = { status: outcome.status, testedAt, code: outcome.code };
+    if (current) {
+      await this.pool.query(
+        `update provider_configurations
+         set last_test_status = $2, last_test_code = $3, last_tested_at = $4, updated_by = $5, updated_at = now()
+         where organization_id = $1`,
+        [organization.id, view.status, view.code, testedAt, managerId]
+      );
+    }
+    return view;
+  }
+
+  async progress(staffId: string): Promise<ManagerProgressView | null> {
+    const organization = await this.organizationFor(staffId);
+    if (!organization) return null;
+
+    const programResult = await this.pool.query<{ id: string; start_date: string; week_count: number; current_week_override: number | null }>(
+      `select id, start_date::text, week_count, current_week_override
+       from programs where organization_id = $1
+       order by (status = 'active') desc, created_at desc limit 1`,
+      [organization.id]
+    );
+    const program = programResult.rows[0];
+    const elapsedWeek = program ? Math.floor((Date.now() - new Date(`${program.start_date}T00:00:00Z`).getTime()) / 604_800_000) + 1 : 1;
+    const currentWeek = program ? Math.max(1, Math.min(program.week_count, program.current_week_override ?? elapsedWeek)) : 1;
+    const pilotWeeks = program?.week_count ?? 1;
+
+    const [summaryResult, learnersResult, activityByDayResult, regularByWeekResult] = await Promise.all([
+      this.pool.query<{
+        learner_count: string;
+        active_learners_this_week: string;
+        completed_lessons: string;
+        pending_assessments: string;
+        survey_count: string;
+        satisfaction_average: string | null;
+      }>(
+        `select
+           (select count(*) from users where organization_id = $1 and role = 'learner' and status = 'active')::text as learner_count,
+           (select count(*) from (
+              select a.learner_id from activities a join users u on u.id = a.learner_id
+              where u.organization_id = $1 and u.role = 'learner' and a.occurred_at >= date_trunc('week', now())
+              group by a.learner_id having count(distinct a.occurred_at::date) >= 3
+            ) regular)::text as active_learners_this_week,
+           (select count(*)
+            from progress_records pr
+            join users u on u.id = pr.learner_id
+            where u.organization_id = $1 and pr.status = 'completed')::text as completed_lessons,
+           (select count(*)
+            from assessment_attempts aa
+            join users u on u.id = aa.learner_id
+            where u.organization_id = $1 and aa.status = 'pending_review')::text as pending_assessments,
+           (select count(*) from surveys s join users u on u.id = s.learner_id
+            where u.organization_id = $1 and s.answers ? 'rating')::text as survey_count,
+           (select round(avg((s.answers->>'rating')::numeric), 1)::text
+            from surveys s join users u on u.id = s.learner_id
+            where u.organization_id = $1 and (s.answers->>'rating') ~ '^[1-5](\\.0)?$') as satisfaction_average`,
+        [organization.id]
+      ),
+      this.pool.query<{
+        learner_id: string;
+        learner_name: string;
+        cefr: CefrLevel | null;
+        completed_lessons: string;
+        total_lessons_this_week: string;
+        sessions_this_week: string;
+        coach_turns_this_week: string;
+        weekly_practice_score: string | null;
+        weekly_practice_status: string | null;
+        reward_points: string;
+        earned_badges: string[] | null;
+        earned_badge_details: Array<{ key: string; label: string; description: string }> | null;
+        activity_dates_this_week: string[] | null;
+        placement_score: string | null;
+        final_score: string | null;
+        missed_days: string | null;
+        last_activity_at: Date | null;
+      }>(
+        `select
+           u.id as learner_id,
+           u.display_name as learner_name,
+           (select e.cefr
+            from enrollments e
+            join programs p on p.id = e.program_id
+            where e.learner_id = u.id and p.organization_id = $1
+            order by e.enrolled_at desc
+            limit 1) as cefr,
+           (select count(*) from progress_records pr where pr.learner_id = u.id and pr.status = 'completed')::text as completed_lessons,
+           (select count(*)
+            from lessons l
+            join lesson_set_versions lsv on lsv.id = l.lesson_set_version_id and lsv.status = 'published'
+            join lesson_sets ls on ls.id = lsv.lesson_set_id
+            join program_weeks pw on pw.id = ls.program_week_id
+            where pw.program_id = $2 and pw.week_number = $3
+              and ls.cefr = (select e.cefr from enrollments e where e.learner_id = u.id and e.program_id = $2 limit 1))::text as total_lessons_this_week,
+           (select count(distinct a.occurred_at::date) from activities a
+            where a.learner_id = u.id
+              and (($2::uuid is not null
+                and a.occurred_at::date >= (select start_date + (($3 - 1) * 7) from programs where id = $2)
+                and a.occurred_at::date < (select start_date + ($3 * 7) from programs where id = $2))
+                or ($2::uuid is null and a.occurred_at >= date_trunc('week', now()))
+              ))::text as sessions_this_week,
+           (select count(*) from coach_turns ct join coach_sessions cs on cs.id = ct.session_id
+            where cs.learner_id = u.id and ct.speaker = 'learner' and ct.created_at >= date_trunc('week', now()))::text as coach_turns_this_week,
+           (select ps.score->>'total' from practice_submissions ps join program_weeks pw on pw.id = ps.program_week_id
+            where ps.learner_id = u.id and pw.program_id = $2 and pw.week_number = $3
+            order by ps.updated_at desc limit 1) as weekly_practice_score,
+           (select ps.status from practice_submissions ps join program_weeks pw on pw.id = ps.program_week_id
+            where ps.learner_id = u.id and pw.program_id = $2 and pw.week_number = $3
+            order by ps.updated_at desc limit 1) as weekly_practice_status,
+           (select coalesce(sum(re.points), 0) from reward_events re where re.learner_id = u.id)::text as reward_points,
+           (select array_agg(earned.label order by earned.label)
+            from (select distinct b.label
+                  from reward_events re join badges b on b.id = re.badge_id
+                  where re.learner_id = u.id) earned) as earned_badges,
+           (select coalesce(jsonb_agg(earned.badge_json order by earned.badge_label), '[]'::jsonb)
+            from (
+              select distinct b.label as badge_label,
+                     jsonb_build_object(
+                       'key', b.badge_key,
+                       'label', b.label,
+                       'description', coalesce(b.rule->>'description', '')
+                     ) as badge_json
+              from reward_events re
+              join badges b on b.id = re.badge_id
+              where re.learner_id = u.id
+            ) earned) as earned_badge_details,
+           (select coalesce(array_agg(activity.day order by activity.day), '{}'::text[])
+            from (select distinct a.occurred_at::date::text as day
+                  from activities a
+                  where a.learner_id = u.id
+                    and $2::uuid is not null
+                    and a.occurred_at::date >= (select start_date + (($3 - 1) * 7) from programs where id = $2)
+                    and a.occurred_at::date < (select start_date + ($3 * 7) from programs where id = $2)) activity) as activity_dates_this_week,
+           (select sum(sc.score)::text from assessment_scores sc where sc.attempt_id = (
+              select aa.id from assessment_attempts aa join assessment_versions av on av.id = aa.assessment_version_id
+              join assessment_definitions ad on ad.id = av.definition_id
+              where aa.learner_id = u.id and ad.kind = 'placement' and aa.submitted_at is not null
+              order by aa.submitted_at desc limit 1)) as placement_score,
+           (select sum(sc.score)::text from assessment_scores sc where sc.attempt_id = (
+              select aa.id from assessment_attempts aa join assessment_versions av on av.id = aa.assessment_version_id
+              join assessment_definitions ad on ad.id = av.definition_id
+              where aa.learner_id = u.id and ad.kind = 'final' and aa.submitted_at is not null
+              order by aa.submitted_at desc limit 1)) as final_score,
+           (select greatest(0, floor(extract(epoch from (now() - max(a.occurred_at))) / 86400))::int::text
+            from activities a where a.learner_id = u.id) as missed_days,
+           (select max(a.occurred_at) from activities a where a.learner_id = u.id) as last_activity_at
+         from users u
+         where u.organization_id = $1 and u.role = 'learner' and u.status = 'active'
+         order by last_activity_at desc nulls last, u.display_name asc`,
+        [organization.id, program?.id ?? null, currentWeek]
+      ),
+      this.pool.query<{ date: string; active_learners: string; sessions: string; minutes: string }>(
+        `select a.occurred_at::date::text as date,
+                count(distinct a.learner_id)::text as active_learners,
+                count(*)::text as sessions,
+                coalesce(sum(a.minutes), 0)::text as minutes
+         from activities a
+         join users u on u.id = a.learner_id
+         where u.organization_id = $1 and u.role = 'learner'
+           and ($2::uuid is null or a.occurred_at::date >= (select start_date from programs where id = $2))
+         group by a.occurred_at::date
+         order by a.occurred_at::date`,
+        [organization.id, program?.id ?? null]
+      ),
+      this.pool.query<{ week: number; regular_learners: string; total_learners: string }>(
+        `with weeks as (
+           select generate_series(1, greatest(1, $3::int))::int as week
+         ), active_learners as (
+           select u.id
+           from users u
+           join enrollments e on e.learner_id = u.id and e.program_id = $2
+           where u.organization_id = $1 and u.role = 'learner' and u.status = 'active'
+             and e.cefr is not null and e.cefr_approved
+         ), regular as (
+           select w.week, a.learner_id
+           from weeks w
+           join activities a on $2::uuid is not null
+             and a.occurred_at::date >= (select start_date + ((w.week - 1) * 7) from programs where id = $2)
+             and a.occurred_at::date < (select start_date + (w.week * 7) from programs where id = $2)
+           join active_learners al on al.id = a.learner_id
+           group by w.week, a.learner_id
+           having count(distinct a.occurred_at::date) >= 3
+         )
+         select w.week,
+                (select count(*) from regular r where r.week = w.week)::text as regular_learners,
+                (select count(*) from active_learners)::text as total_learners
+         from weeks w order by w.week`,
+        [organization.id, program?.id ?? null, pilotWeeks]
+      )
+    ]);
+    const summary = summaryResult.rows[0] ?? {
+      learner_count: "0", active_learners_this_week: "0", completed_lessons: "0", pending_assessments: "0", survey_count: "0", satisfaction_average: null
+    };
+    const learners = learnersResult.rows.map((row) => ({
+      learnerId: row.learner_id,
+      learnerName: row.learner_name,
+      cefr: row.cefr,
+      completedLessons: Number(row.completed_lessons),
+      totalLessonsThisWeek: Number(row.total_lessons_this_week),
+      sessionsThisWeek: Number(row.sessions_this_week),
+      coachTurnsThisWeek: Number(row.coach_turns_this_week),
+      weeklyPracticeScore: row.weekly_practice_score === null ? null : Number(row.weekly_practice_score),
+      weeklyPracticeStatus: row.weekly_practice_score !== null ? "scored" as const : row.weekly_practice_status ? "pending_review" as const : "not_submitted" as const,
+      rewardPoints: Number(row.reward_points),
+      earnedBadges: row.earned_badges ?? [],
+      earnedBadgeDetails: row.earned_badge_details ?? [],
+      activityDatesThisWeek: row.activity_dates_this_week ?? [],
+      placementScore: row.placement_score === null ? null : Number(row.placement_score),
+      finalScore: row.final_score === null ? null : Number(row.final_score),
+      missedDays: row.missed_days === null ? null : Number(row.missed_days),
+      lastActivityAt: row.last_activity_at?.toISOString() ?? null
+    }));
+    const completedLearners = learners.filter((row) => row.totalLessonsThisWeek > 0 && row.completedLessons >= row.totalLessonsThisWeek).length;
+    const comparableLearners = learners.filter((row) => row.placementScore !== null && row.finalScore !== null);
+    const weekStartDate = program
+      ? new Date(Date.UTC(Number(program.start_date.slice(0, 4)), Number(program.start_date.slice(5, 7)) - 1, Number(program.start_date.slice(8, 10)) + (currentWeek - 1) * 7)).toISOString().slice(0, 10)
+      : undefined;
+    return {
+      organizationName: organization.name,
+      currentWeek,
+      pilotWeeks,
+      ...(weekStartDate ? { weekStartDate } : {}),
+      activityByDay: activityByDayResult.rows.map((row) => ({
+        date: row.date,
+        activeLearners: Number(row.active_learners),
+        sessions: Number(row.sessions),
+        minutes: Number(row.minutes)
+      })),
+      regularByWeek: regularByWeekResult.rows.map((row) => {
+        const totalLearners = Number(row.total_learners);
+        const regularLearners = Number(row.regular_learners);
+        return {
+          week: row.week,
+          regularLearners,
+          totalLearners,
+          percent: totalLearners ? Math.round(regularLearners / totalLearners * 100) : 0
+        };
+      }),
+      summary: {
+        learnerCount: Number(summary.learner_count),
+        activeLearnersThisWeek: Number(summary.active_learners_this_week),
+        completedLessons: Number(summary.completed_lessons),
+        pendingAssessments: Number(summary.pending_assessments),
+        completedLearners,
+        comparableLearners: comparableLearners.length,
+        improvedLearners: comparableLearners.filter((row) => Number(row.finalScore) > Number(row.placementScore)).length,
+        surveyCount: Number(summary.survey_count),
+        satisfactionAverage: summary.satisfaction_average === null ? null : Number(summary.satisfaction_average)
+      },
+      learners
+    };
+  }
+
+  async operations(staffId: string): Promise<ManagerOperationsView | null> {
+    const organization = await this.organizationFor(staffId);
+    if (!organization) return null;
+
+    const programResult = await this.pool.query<{ id: string; start_date: string; week_count: number; current_week_override: number | null }>(
+      `select id, start_date::text, week_count, current_week_override from programs where organization_id = $1
+       order by (status = 'active') desc, created_at desc limit 1`, [organization.id]
+    );
+    const program = programResult.rows[0];
+    const elapsedWeek = program ? Math.floor((Date.now() - new Date(`${program.start_date}T00:00:00Z`).getTime()) / 604_800_000) + 1 : 1;
+    const currentWeek = program ? Math.max(1, Math.min(program.week_count, program.current_week_override ?? elapsedWeek)) : 1;
+    const pilotWeeks = program?.week_count ?? 1;
+
+    const [contentResult, queuesResult, automationResult, activityResult, operatorResult, readinessResult, orphanResult] = await Promise.all([
+      this.pool.query<{ draft: string; in_review: string; published: string }>(
+        `select
+           count(*) filter (where lsv.status = 'draft')::text as draft,
+           count(*) filter (where lsv.status = 'review')::text as in_review,
+           count(*) filter (where lsv.status = 'published')::text as published
+         from lesson_set_versions lsv
+         join lesson_sets ls on ls.id = lsv.lesson_set_id
+         join program_weeks pw on pw.id = ls.program_week_id
+         join programs p on p.id = pw.program_id
+         where p.organization_id = $1`,
+        [organization.id]
+      ),
+      this.pool.query<{ assessment_review: string; practice_review: string }>(
+        `select
+           (select count(*) from assessment_attempts aa join users u on u.id = aa.learner_id
+            where u.organization_id = $1 and aa.status = 'pending_review')::text as assessment_review,
+           (select count(*) from practice_submissions ps join users u on u.id = ps.learner_id
+            where u.organization_id = $1 and ps.status = 'submitted')::text as practice_review`,
+        [organization.id]
+      ),
+      this.pool.query<{ pending_jobs: string; ai_failures: string }>(
+        `select
+           (select count(*) from jobs
+            where state in ('queued', 'running') and payload ->> 'organizationId' = ($1::uuid)::text)::text as pending_jobs,
+           (select count(*) from ai_runs ar join users u on u.id = ar.user_id
+            where u.organization_id = $1 and ar.status in ('failed', 'invalid_output'))::text as ai_failures`,
+        [organization.id]
+      ),
+      this.pool.query<{ id: string; action: string; created_at: Date }>(
+        `select id, action, created_at
+         from audit_events
+         where organization_id = $1
+         order by created_at desc
+         limit 10`,
+        [organization.id]
+      ),
+      this.pool.query<{ id: string; display_name: string }>(
+        `select id, display_name from users where organization_id = $1 and role = 'operator' and status = 'active' order by display_name`,
+        [organization.id]
+      ),
+      this.pool.query<{ week: number; cefr: CefrLevel; has_set: boolean; ready: boolean }>(
+        `with levels as (
+           select distinct e.cefr
+           from enrollments e
+           join users u on u.id = e.learner_id
+           where e.program_id = $2 and u.organization_id = $1 and u.status = 'active'
+             and e.cefr is not null and e.cefr_approved
+         ), required as (
+           select week, cefr
+           from generate_series(1, greatest(1, $3::int)) week
+           cross join levels
+         )
+         select r.week, r.cefr,
+                exists (
+                  select 1 from lesson_sets ls join program_weeks pw on pw.id = ls.program_week_id
+                  where pw.program_id = $2 and pw.week_number = r.week and ls.cefr = r.cefr
+                ) as has_set,
+                exists (
+                  select 1 from lesson_sets ls join program_weeks pw on pw.id = ls.program_week_id
+                  join lesson_set_versions lsv on lsv.lesson_set_id = ls.id and lsv.status = 'published'
+                  where pw.program_id = $2 and pw.week_number = r.week and ls.cefr = r.cefr
+                ) as ready
+         from required r order by r.week, r.cefr`,
+        [organization.id, program?.id ?? null, currentWeek]
+      ),
+      this.pool.query<{ count: string }>(
+        `select count(*)::text as count
+         from lesson_sets ls
+         join program_weeks pw on pw.id = ls.program_week_id
+         join programs p on p.id = pw.program_id
+         where p.organization_id = $1
+           and not exists (
+             select 1 from lesson_set_versions lsv
+             where lsv.lesson_set_id = ls.id and (lsv.created_by is not null or lsv.approved_by is not null)
+           )`,
+        [organization.id]
+      )
+    ]);
+    const content = contentResult.rows[0] ?? { draft: "0", in_review: "0", published: "0" };
+    const queues = queuesResult.rows[0] ?? { assessment_review: "0", practice_review: "0" };
+    const automation = automationResult.rows[0] ?? { pending_jobs: "0", ai_failures: "0" };
+    const operators = await Promise.all(operatorResult.rows.map(async (operator) => {
+      const [byWeekResult, totalsResult, approvalResult, evidenceResult, reviewResult] = await Promise.all([
+        this.pool.query<{ week_number: number; sets: string; lessons: string; approved: string }>(
+          `select pw.week_number,
+             count(distinct ls.id)::text as sets,
+             count(distinct l.id)::text as lessons,
+             count(distinct ls.id) filter (where lsv.status = 'published')::text as approved
+           from programs p join program_weeks pw on pw.program_id = p.id
+           left join lesson_sets ls on ls.program_week_id = pw.id
+           left join lesson_set_versions lsv on lsv.lesson_set_id = ls.id and (lsv.created_by = $2 or lsv.approved_by = $2)
+           left join lessons l on l.lesson_set_version_id = lsv.id
+           where p.organization_id = $1
+           group by pw.week_number order by pw.week_number`, [organization.id, operator.id]
+        ),
+        this.pool.query<{ sets: string; lessons: string; published: string; full_lessons: string; edited_lessons: string; completions: string; average_score: string | null }>(
+          `with owned_versions as (
+             select distinct lsv.id, lsv.lesson_set_id, lsv.status from lesson_set_versions lsv
+             join lesson_sets ls on ls.id = lsv.lesson_set_id join program_weeks pw on pw.id = ls.program_week_id
+             join programs p on p.id = pw.program_id
+             where p.organization_id = $1 and (lsv.created_by = $2 or lsv.approved_by = $2)
+           ), owned_lessons as (select distinct l.id from lessons l join owned_versions ov on ov.id = l.lesson_set_version_id),
+           lesson_shape as (
+             select ol.id, latest.content,
+                    (select count(*) from lesson_versions lv2 where lv2.lesson_id = ol.id) as version_count
+             from owned_lessons ol
+             left join lateral (select lv.content from lesson_versions lv where lv.lesson_id = ol.id order by lv.version desc limit 1) latest on true
+           )
+           select (select count(distinct lesson_set_id) from owned_versions)::text as sets,
+             (select count(*) from owned_lessons)::text as lessons,
+             (select count(distinct lesson_set_id) from owned_versions where status = 'published')::text as published,
+             (select count(*) from lesson_shape s where
+                jsonb_array_length(coalesce(s.content->'parts', '[]'::jsonb)) >= 7
+                and exists (select 1 from jsonb_array_elements(coalesce(s.content->'parts','[]'::jsonb)) p where p->>'code' = 'vocabulary')
+                and exists (select 1 from jsonb_array_elements(coalesce(s.content->'parts','[]'::jsonb)) p where p->>'code' = 'pronunciation')
+                and (select count(*) from jsonb_array_elements(coalesce(s.content->'parts','[]'::jsonb)) p where p->>'code' in ('listening','reading','writing','speaking')) = 4)::text as full_lessons,
+             (select count(*) from lesson_shape where version_count > 1)::text as edited_lessons,
+             (select count(*) from progress_records pr join owned_lessons ol on ol.id = pr.lesson_id where pr.status = 'completed')::text as completions,
+             (select round(avg(pr.score), 1)::text from progress_records pr join owned_lessons ol on ol.id = pr.lesson_id where pr.status = 'completed' and pr.score is not null) as average_score`,
+          [organization.id, operator.id]
+        ),
+        this.pool.query<{ approvals: string; average_approval_hours: string | null }>(
+          `select count(*)::text as approvals,
+             round(avg(extract(epoch from (ad.decided_at - aa.submitted_at)) / 3600), 1)::text as average_approval_hours
+           from assessment_decisions ad join assessment_attempts aa on aa.id = ad.attempt_id
+           join users u on u.id = aa.learner_id
+           where u.organization_id = $1 and ad.decided_by = $2 and ad.decided_at is not null and aa.submitted_at is not null`,
+          [organization.id, operator.id]
+        ),
+        this.pool.query<{ parts: string; first_try: string; failed: string; attempts: string }>(
+          `with owned_lessons as (
+             select distinct l.id from lesson_set_versions lsv
+             join lesson_sets ls on ls.id = lsv.lesson_set_id join program_weeks pw on pw.id = ls.program_week_id
+             join programs p on p.id = pw.program_id join lessons l on l.lesson_set_version_id = lsv.id
+             where p.organization_id = $1 and (lsv.created_by = $2 or lsv.approved_by = $2)
+           ), part_results as (
+             select value as result from progress_records pr join owned_lessons ol on ol.id = pr.lesson_id
+             cross join lateral jsonb_each(case when jsonb_typeof(pr.evidence->'evidence') = 'object' then pr.evidence->'evidence' else pr.evidence end)
+             where jsonb_typeof(value) = 'object' and value ? 'attempts'
+           ) select count(*)::text as parts,
+             count(*) filter (where (result->>'attempts')::int = 1 and coalesce((result->>'score')::numeric, 100) >= 80)::text as first_try,
+             count(*) filter (where (result->>'attempts')::int >= 3 and coalesce((result->>'score')::numeric, 0) < 80)::text as failed,
+             coalesce(sum((result->>'attempts')::int),0)::text as attempts from part_results`, [organization.id, operator.id]
+        ),
+        this.pool.query<{ submissions: string; coach: string }>(
+          `select
+             (select count(*) from practice_submissions ps join users learner on learner.id = ps.learner_id where learner.organization_id = $1 and ps.checked_by = $2)::text as submissions,
+             (select count(*) from coach_turns ct join coach_sessions cs on cs.id = ct.session_id join users learner on learner.id = cs.learner_id where learner.organization_id = $1 and ct.feedback->>'checkedBy' = $2::text)::text as coach`, [organization.id, operator.id]
+        )
+      ]);
+      const totals = totalsResult.rows[0] ?? { sets: "0", lessons: "0", published: "0", full_lessons: "0", edited_lessons: "0", completions: "0", average_score: null };
+      const approval = approvalResult.rows[0] ?? { approvals: "0", average_approval_hours: null };
+      const evidence = evidenceResult.rows[0] ?? { parts: "0", first_try: "0", failed: "0", attempts: "0" };
+      const reviews = reviewResult.rows[0] ?? { submissions: "0", coach: "0" };
+      const partCount = Number(evidence.parts);
+      return {
+        operatorId: operator.id, operatorName: operator.display_name,
+        byWeek: byWeekResult.rows.map((row) => ({ week: row.week_number, sets: Number(row.sets), lessons: Number(row.lessons), approved: Number(row.approved) })),
+        sets: Number(totals.sets), lessons: Number(totals.lessons), published: Number(totals.published),
+        fullLessons: Number(totals.full_lessons), editedLessons: Number(totals.edited_lessons), completions: Number(totals.completions),
+        averageScore: totals.average_score === null ? null : Number(totals.average_score),
+        firstTryPercent: partCount ? Math.round(Number(evidence.first_try) / partCount * 100) : null,
+        failedPercent: partCount ? Math.round(Number(evidence.failed) / partCount * 100) : null,
+        averageAttempts: partCount ? Math.round(Number(evidence.attempts) / partCount * 10) / 10 : null,
+        approvals: Number(approval.approvals), averageApprovalHours: approval.average_approval_hours === null ? null : Number(approval.average_approval_hours),
+        reviewedSubmissions: Number(reviews.submissions), reviewedCoachTurns: Number(reviews.coach)
+      };
+    }));
+    return {
+      organizationName: organization.name,
+      currentWeek,
+      pilotWeeks,
+      content: { draft: Number(content.draft), inReview: Number(content.in_review), published: Number(content.published) },
+      queues: { assessmentReview: Number(queues.assessment_review), practiceReview: Number(queues.practice_review) },
+      automation: { pendingJobs: Number(automation.pending_jobs), aiFailures: Number(automation.ai_failures) },
+      readiness: {
+        requiredSets: readinessResult.rows.length,
+        readySets: readinessResult.rows.filter((row) => row.ready).length,
+        missing: readinessResult.rows.filter((row) => !row.ready).map((row) => ({
+          week: row.week,
+          cefr: row.cefr,
+          state: row.has_set ? "draft" as const : "missing" as const
+        })),
+        orphanLegacySets: Number(orphanResult.rows[0]?.count ?? 0)
+      },
+      recentActivity: activityResult.rows.map((row) => ({ id: row.id, action: row.action, createdAt: row.created_at.toISOString() })),
+      operators
+    };
+  }
+
+  async accounts(staffId: string): Promise<ManagerAccountsView | null> {
+    const organization = await this.organizationFor(staffId);
+    if (!organization) return null;
+    const accounts = await this.pool.query<{
+      id: string;
+      display_name: string;
+      email: string | null;
+      role: AccountRole;
+      status: string;
+      created_at: Date;
+    }>(
+      `select id, display_name, email, role, status, created_at
+       from users
+       where organization_id = $1 and status <> 'deleted'
+       order by case role when 'manager' then 0 when 'operator' then 1 else 2 end, display_name asc`,
+      [organization.id]
+    );
+    return {
+      organizationName: organization.name,
+      accounts: accounts.rows.map((account) => this.accountView(account))
+    };
+  }
+
+  async reminders(staffId: string): Promise<ManagerRemindersView | null> {
+    const organization = await this.organizationFor(staffId);
+    if (!organization) return null;
+    const settings = await this.settingsForOrganization(organization.id);
+    const candidates = await this.pool.query<{
+      learner_id: string;
+      learner_name: string;
+      cefr: CefrLevel | null;
+      last_activity_at: Date | null;
+      missed_days: number;
+    }>(
+      `select
+         u.id as learner_id,
+         u.display_name as learner_name,
+         (select e.cefr from enrollments e join programs p on p.id = e.program_id
+          where e.learner_id = u.id and p.organization_id = $1 order by e.enrolled_at desc limit 1) as cefr,
+         max(a.occurred_at) as last_activity_at,
+         greatest(0, current_date - coalesce(max(a.occurred_at)::date, min(u.created_at)::date))::int as missed_days
+       from users u
+       left join activities a on a.learner_id = u.id
+       where u.organization_id = $1 and u.role = 'learner' and u.status = 'active'
+         and not exists (
+           select 1 from audit_events handled
+           where handled.organization_id = $1 and handled.entity_id = u.id
+             and handled.action in ('reminder.queued', 'reminder.dismissed', 'reminder.copied')
+             and handled.created_at >= current_date
+         )
+       group by u.id
+       having coalesce(max(a.occurred_at), min(u.created_at)) < now() - make_interval(days => $2)
+       order by last_activity_at asc nulls first, learner_name asc`,
+      [organization.id, settings.reminderInactiveDays]
+    );
+    const history = await this.pool.query<{
+      reminder_id: string;
+      learner_id: string;
+      learner_name: string;
+      missed_days: string | null;
+      status: string;
+      delivery_status: string | null;
+      provider: string | null;
+      created_at: Date;
+      attempted_at: Date | null;
+    }>(
+      `select r.id as reminder_id, r.learner_id, u.display_name as learner_name,
+              case when (ae.payload->>'missedDays') ~ '^\\d+$' then ae.payload->>'missedDays' else null end as missed_days,
+              case when ae.action = 'reminder.copied' then 'copied' else r.status end as status,
+              case when ae.action = 'reminder.copied' then null else delivery.status end as delivery_status,
+              case when ae.action = 'reminder.copied' then null else delivery.provider end as provider,
+              r.created_at, case when ae.action = 'reminder.copied' then null else delivery.attempted_at end as attempted_at
+       from reminders r
+       join users u on u.id = r.learner_id
+       left join lateral (
+         select nd.status, nd.provider, nd.attempted_at
+         from notification_deliveries nd
+           where nd.reminder_id = r.id
+         order by nd.attempted_at desc limit 1
+       ) delivery on true
+       left join lateral (
+         select a.action, a.payload
+         from audit_events a
+         where a.organization_id = $1 and a.action in ('reminder.queued', 'reminder.dismissed', 'reminder.copied')
+           and a.payload->>'reminderId' = r.id::text
+         order by a.created_at desc limit 1
+       ) ae on true
+       where u.organization_id = $1
+       order by r.created_at desc
+       limit 30`,
+      [organization.id]
+    );
+    return {
+      organizationName: organization.name,
+      inactiveDays: settings.reminderInactiveDays,
+      webhookConfigured: settings.baseWebhookUrl.trim().length > 0,
+      candidates: candidates.rows.map((candidate) => ({
+        learnerId: candidate.learner_id,
+        learnerName: candidate.learner_name,
+        cefr: candidate.cefr,
+        lastActivityAt: candidate.last_activity_at?.toISOString() ?? null,
+        missedDays: candidate.missed_days
+      })),
+      history: history.rows.map((row) => ({
+        reminderId: row.reminder_id,
+        learnerId: row.learner_id,
+        learnerName: row.learner_name,
+        missedDays: row.missed_days === null ? null : Number(row.missed_days),
+        status: row.status,
+        deliveryStatus: row.delivery_status,
+        provider: row.provider,
+        createdAt: row.created_at.toISOString(),
+        attemptedAt: row.attempted_at?.toISOString() ?? null
+      }))
+    };
+  }
+
+  async queueReminder(managerId: string, learnerId: string, requestId: string): Promise<ManagerReminderSendView> {
+    const client = await this.pool.connect();
+    try {
+      await client.query("begin");
+      const organizationResult = await client.query<{ organization_id: string }>(
+        "select organization_id from users where id = $1 for update", [managerId]
+      );
+      const organizationId = organizationResult.rows[0]?.organization_id;
+      if (!organizationId) throw new Error("MANAGER_ORGANIZATION_NOT_FOUND");
+      const scope = `manager-reminder:${organizationId}`;
+      const reservation = await client.query(
+        `insert into idempotency_keys (scope, key, response)
+         values ($1, $2, '{}'::jsonb)
+         on conflict (scope, key) do nothing
+         returning id`,
+        [scope, requestId]
+      );
+      if (!reservation.rowCount) {
+        const previous = await client.query<{ response: ManagerReminderSendView }>(
+          "select response from idempotency_keys where scope = $1 and key = $2", [scope, requestId]
+        );
+        await client.query("commit");
+        const response = previous.rows[0]?.response;
+        if (!response?.reminderId) throw new Error("MANAGER_REMINDER_RETRY_UNAVAILABLE");
+        return response;
+      }
+      const learner = await client.query<{ id: string; missed_days: number }>(
+        `select u.id,
+                greatest(0, current_date - coalesce(activity.last_activity_at::date, u.created_at::date))::int as missed_days
+         from users u
+         left join lateral (select max(a.occurred_at) as last_activity_at from activities a where a.learner_id = u.id) activity on true
+         where u.id = $1 and u.organization_id = $2 and u.role = 'learner' and u.status = 'active'
+         for update of u`,
+        [learnerId, organizationId]
+      );
+      if (!learner.rowCount) throw new Error("MANAGER_REMINDER_LEARNER_NOT_FOUND");
+      const settingsResult = await client.query<{ configuration: Record<string, unknown> | null }>(
+        "select configuration from organization_settings where organization_id = $1",
+        [organizationId]
+      );
+      const configuration = settingsResult.rows[0]?.configuration;
+      const webhookUrl = typeof configuration?.baseWebhookUrl === "string" ? configuration.baseWebhookUrl.trim() : "";
+      const provider = webhookUrl ? "base_webhook" as const : "local_queue" as const;
+      const reminderId = randomUUID();
+      const response: ManagerReminderSendView = { reminderId, learnerId, status: "queued", provider };
+      await client.query(
+        `insert into reminders (id, learner_id, reason, message, status, created_by)
+         values ($1, $2, 'inactive_learning', 'Bạn chưa có hoạt động học gần đây. Hãy quay lại E4S để tiếp tục mục tiêu tuần.', 'queued', $3)`,
+        [reminderId, learnerId, managerId]
+      );
+      await client.query(
+        `insert into notification_deliveries (id, reminder_id, provider, status, response)
+         values ($1, $2, $3, 'queued', '{}'::jsonb)`,
+        [randomUUID(), reminderId, provider]
+      );
+      if (provider === "base_webhook") {
+        await client.query(
+          `insert into jobs (id, kind, payload, max_attempts, idempotency_key)
+           values ($1, 'notification.base-webhook', $2::jsonb, 3, $3)
+           on conflict (idempotency_key) do nothing`,
+          [randomUUID(), JSON.stringify({ reminderId }), `notification:${reminderId}`]
+        );
+      }
+      await client.query(
+        `insert into audit_events
+           (id, organization_id, actor_user_id, action, entity_type, entity_id, payload, trace_id)
+         values ($1, $2, $3, 'reminder.queued', 'user', $4, $5::jsonb, $6)`,
+        [randomUUID(), organizationId, managerId, learnerId, JSON.stringify({ reminderId, missedDays: learner.rows[0]?.missed_days ?? null }), randomUUID()]
+      );
+      await client.query(
+        "update idempotency_keys set response = $3::jsonb where scope = $1 and key = $2",
+        [scope, requestId, JSON.stringify(response)]
+      );
+      await client.query("commit");
+      return response;
+    } catch (error) {
+      await client.query("rollback");
+      throw error;
+    } finally { client.release(); }
+  }
+
+  async dismissReminder(managerId: string, learnerId: string): Promise<ManagerReminderDismissView> {
+    const client = await this.pool.connect();
+    try {
+      await client.query("begin");
+      const organizationResult = await client.query<{ organization_id: string }>(
+        "select organization_id from users where id = $1 and role = 'manager' and status = 'active' for update",
+        [managerId]
+      );
+      const organizationId = organizationResult.rows[0]?.organization_id;
+      if (!organizationId) throw new Error("MANAGER_ORGANIZATION_NOT_FOUND");
+
+      const learner = await client.query<{ id: string; missed_days: number }>(
+        `select u.id,
+                greatest(0, current_date - coalesce(activity.last_activity_at::date, u.created_at::date))::int as missed_days
+         from users u
+         left join lateral (
+           select max(a.occurred_at) as last_activity_at from activities a where a.learner_id = u.id
+         ) activity on true
+         where u.id = $1 and u.organization_id = $2 and u.role = 'learner' and u.status = 'active'
+         for update of u`,
+        [learnerId, organizationId]
+      );
+      if (!learner.rowCount) throw new Error("MANAGER_REMINDER_LEARNER_NOT_FOUND");
+
+      const existing = await client.query<{ id: string }>(
+        `select id from reminders
+         where learner_id = $1 and created_by = $2 and reason = 'manual' and status = 'dismissed'
+           and created_at >= current_date
+         order by created_at desc limit 1
+         for update`,
+        [learnerId, managerId]
+      );
+      const existingReminderId = existing.rows[0]?.id;
+      if (existingReminderId) {
+        await client.query("commit");
+        return { reminderId: existingReminderId, learnerId, status: "dismissed" };
+      }
+
+      const reminderId = randomUUID();
+      await client.query(
+        `insert into reminders (id, learner_id, reason, message, status, created_by)
+         values ($1, $2, 'manual', 'Đã ghi nhận quản lý nhắc học thủ công.', 'dismissed', $3)`,
+        [reminderId, learnerId, managerId]
+      );
+      await client.query(
+        `insert into audit_events
+           (id, organization_id, actor_user_id, action, entity_type, entity_id, payload, trace_id)
+         values ($1, $2, $3, 'reminder.dismissed', 'user', $4, $5::jsonb, $6)`,
+        [randomUUID(), organizationId, managerId, learnerId, JSON.stringify({ reminderId, missedDays: learner.rows[0]?.missed_days ?? null }), randomUUID()]
+      );
+      await client.query("commit");
+      return { reminderId, learnerId, status: "dismissed" };
+    } catch (error) {
+      await client.query("rollback");
+      throw error;
+    } finally { client.release(); }
+  }
+
+  async copyReminder(managerId: string, learnerId: string): Promise<ManagerReminderCopyView> {
+    const client = await this.pool.connect();
+    try {
+      await client.query("begin");
+      const organizationResult = await client.query<{ organization_id: string }>(
+        "select organization_id from users where id = $1 and role = 'manager' and status = 'active' for update",
+        [managerId]
+      );
+      const organizationId = organizationResult.rows[0]?.organization_id;
+      if (!organizationId) throw new Error("MANAGER_ORGANIZATION_NOT_FOUND");
+
+      const learner = await client.query<{ id: string; missed_days: number }>(
+        `select u.id,
+                greatest(0, current_date - coalesce(activity.last_activity_at::date, u.created_at::date))::int as missed_days
+         from users u
+         left join lateral (
+           select max(a.occurred_at) as last_activity_at from activities a where a.learner_id = u.id
+         ) activity on true
+         where u.id = $1 and u.organization_id = $2 and u.role = 'learner' and u.status = 'active'
+         for update of u`,
+        [learnerId, organizationId]
+      );
+      if (!learner.rowCount) throw new Error("MANAGER_REMINDER_LEARNER_NOT_FOUND");
+
+      const alreadyCopied = await client.query<{ id: string }>(
+        `select r.id
+         from reminders r
+         join audit_events a on a.organization_id = $3
+           and a.action = 'reminder.copied'
+           and a.payload->>'reminderId' = r.id::text
+         where r.learner_id = $1 and r.created_by = $2 and r.reason = 'inactive_learning'
+           and r.created_at >= current_date
+         order by r.created_at desc limit 1
+         for update of r`,
+        [learnerId, managerId, organizationId]
+      );
+      const copiedReminderId = alreadyCopied.rows[0]?.id;
+      if (copiedReminderId) {
+        await client.query("commit");
+        return { reminderId: copiedReminderId, learnerId, status: "copied" };
+      }
+
+      const pending = await client.query<{ id: string }>(
+        `select id from reminders
+         where learner_id = $1 and created_by = $2 and reason = 'inactive_learning'
+           and status in ('draft', 'queued') and created_at >= current_date
+         order by created_at desc limit 1
+         for update`,
+        [learnerId, managerId]
+      );
+      const reminderId = pending.rows[0]?.id ?? randomUUID();
+      if (pending.rowCount) {
+        await client.query("update reminders set status = 'cancelled' where id = $1", [reminderId]);
+      } else {
+        await client.query(
+          `insert into reminders (id, learner_id, reason, message, status, created_by)
+           values ($1, $2, 'inactive_learning', 'Bạn chưa có hoạt động học gần đây. Hãy quay lại E4S để tiếp tục mục tiêu tuần.', 'cancelled', $3)`,
+          [reminderId, learnerId, managerId]
+        );
+      }
+      await client.query(
+        `insert into audit_events
+           (id, organization_id, actor_user_id, action, entity_type, entity_id, payload, trace_id)
+         values ($1, $2, $3, 'reminder.copied', 'user', $4, $5::jsonb, $6)`,
+        [randomUUID(), organizationId, managerId, learnerId, JSON.stringify({ reminderId, missedDays: learner.rows[0]?.missed_days ?? null }), randomUUID()]
+      );
+      await client.query("commit");
+      return { reminderId, learnerId, status: "copied" };
+    } catch (error) {
+      await client.query("rollback");
+      throw error;
+    } finally { client.release(); }
+  }
+
+  async learnerProfile(managerId: string, learnerId: string): Promise<ManagerLearnerProfileView | null> {
+    const learnerResult = await this.pool.query<{
+      id: string;
+      display_name: string;
+      email: string | null;
+      status: string;
+      created_at: Date;
+      current_level: CefrLevel | null;
+      profile: unknown;
+    }>(
+      `select learner.id, learner.display_name, learner.email, learner.status, learner.created_at,
+              enrollment.cefr as current_level, coalesce(lp.profile, '{}'::jsonb) as profile
+       from users manager
+       join users learner on learner.organization_id = manager.organization_id
+         and learner.id = $2 and learner.role = 'learner'
+       left join lateral (
+         select e.cefr
+         from enrollments e join programs p on p.id = e.program_id and p.status = 'active'
+         where e.learner_id = learner.id
+         order by e.enrolled_at desc limit 1
+       ) enrollment on true
+       left join learner_profiles lp on lp.user_id = learner.id
+       where manager.id = $1`,
+      [managerId, learnerId]
+    );
+    const learner = learnerResult.rows[0];
+    if (!learner) return null;
+    const metrics = await this.pool.query<{
+      completed_lessons: string;
+      total_lessons: string;
+      coach_turns: string;
+      study_days: string;
+      reward_points: string;
+      last_activity_at: Date | null;
+    }>(
+      `select
+         (select count(*) from progress_records where learner_id = $1 and status = 'completed')::text as completed_lessons,
+         (select count(distinct l.id)
+            from enrollments e
+            join programs p on p.id = e.program_id and p.status = 'active'
+            join lesson_sets ls on ls.program_week_id in (select id from program_weeks where program_id = p.id)
+              and ls.cefr = e.cefr
+            join lesson_set_versions lsv on lsv.lesson_set_id = ls.id and lsv.status = 'published'
+            join lessons l on l.lesson_set_version_id = lsv.id
+           where e.learner_id = $1)::text as total_lessons,
+         (select count(*) from coach_turns ct join coach_sessions cs on cs.id = ct.session_id
+           where cs.learner_id = $1 and ct.speaker = 'learner')::text as coach_turns,
+         (select count(distinct occurred_at::date) from activities where learner_id = $1)::text as study_days,
+         (select coalesce(sum(points), 0) from reward_events where learner_id = $1)::text as reward_points,
+         (select max(occurred_at) from activities where learner_id = $1) as last_activity_at`,
+      [learnerId]
+    );
+    const row = metrics.rows[0];
+    return {
+      learner: {
+        id: learner.id,
+        displayName: learner.display_name,
+        email: learner.email,
+        status: learner.status,
+        createdAt: learner.created_at.toISOString(),
+        currentLevel: learner.current_level
+      },
+      profile: publicLearnerProfile(learner.profile),
+      metrics: {
+        completedLessons: Number(row?.completed_lessons ?? 0),
+        totalLessons: Number(row?.total_lessons ?? 0),
+        coachTurns: Number(row?.coach_turns ?? 0),
+        studyDays: Number(row?.study_days ?? 0),
+        rewardPoints: Number(row?.reward_points ?? 0),
+        lastActivityAt: row?.last_activity_at?.toISOString() ?? null
+      }
+    };
+  }
+
+  async deleteRequests(managerId: string): Promise<ManagerDeleteRequestsView | null> {
+    const organization = await this.organizationFor(managerId);
+    if (!organization) return null;
+    const result = await this.pool.query<{
+      id: string;
+      learner_id: string;
+      learner_name: string;
+      reason: string;
+      status: string;
+      requested_by: string;
+      requested_at: Date;
+      decided_by: string | null;
+      decided_at: Date | null;
+      note: string | null;
+    }>(
+      `select ae.id, ae.entity_id as learner_id, learner.display_name as learner_name,
+              coalesce(ae.payload->>'reason', '') as reason,
+              coalesce(ae.payload->>'status', 'pending') as status,
+              coalesce(ae.payload->>'requestedBy', ae.actor_user_id::text) as requested_by,
+              ae.created_at as requested_at,
+              ae.payload->>'decidedBy' as decided_by,
+              nullif(ae.payload->>'decidedAt', '')::timestamptz as decided_at,
+              ae.payload->>'note' as note
+       from audit_events ae
+       join users learner on learner.id = ae.entity_id and learner.organization_id = $1
+       where ae.organization_id = $1 and ae.action = 'learner.deletion_requested'
+       order by ae.created_at desc`,
+      [organization.id]
+    );
+    return {
+      requests: result.rows.map((request) => ({
+        id: request.id,
+        learnerId: request.learner_id,
+        learnerName: request.learner_name,
+        reason: request.reason,
+        status: isDeletionRequestStatus(request.status) ? request.status : "pending",
+        requestedBy: request.requested_by,
+        requestedAt: request.requested_at.toISOString(),
+        decidedBy: request.decided_by,
+        decidedAt: request.decided_at?.toISOString() ?? null,
+        note: request.note
+      }))
+    };
+  }
+
+  async decideDeleteRequest(managerId: string, requestId: string, input: { status: "approved" | "rejected"; note: string }): Promise<AssessmentDeletionRequestView> {
+    const client = await this.pool.connect();
+    try {
+      await client.query("begin");
+      const manager = await client.query<{ organization_id: string }>(
+        "select organization_id from users where id = $1 and role = 'manager' and status = 'active' for update",
+        [managerId]
+      );
+      const organizationId = manager.rows[0]?.organization_id;
+      if (!organizationId) throw new Error("MANAGER_ORGANIZATION_NOT_FOUND");
+      const result = await client.query<{
+        id: string;
+        learner_id: string;
+        learner_name: string;
+        learner_status: string;
+        reason: string;
+        payload: Record<string, unknown>;
+        requested_by: string;
+        requested_at: Date;
+      }>(
+        `select ae.id, ae.entity_id as learner_id, learner.display_name as learner_name,
+                learner.status as learner_status, coalesce(ae.payload->>'reason', '') as reason,
+                ae.payload, coalesce(ae.payload->>'requestedBy', ae.actor_user_id::text) as requested_by,
+                ae.created_at as requested_at
+         from audit_events ae
+         join users learner on learner.id = ae.entity_id and learner.organization_id = $1
+         where ae.id = $2 and ae.organization_id = $1 and ae.action = 'learner.deletion_requested'
+         for update`,
+        [organizationId, requestId]
+      );
+      const request = result.rows[0];
+      if (!request) throw new Error("MANAGER_DELETE_REQUEST_NOT_FOUND");
+      const currentStatus = typeof request.payload?.status === "string" ? request.payload.status : "pending";
+      if (currentStatus !== "pending") throw new Error("MANAGER_DELETE_REQUEST_ALREADY_DECIDED");
+      const decidedAt = new Date();
+      const payload = {
+        ...(request.payload ?? {}),
+        status: input.status,
+        decidedBy: managerId,
+        decidedAt: decidedAt.toISOString(),
+        note: input.note
+      };
+      await client.query("update audit_events set payload = $2::jsonb where id = $1", [requestId, JSON.stringify(payload)]);
+      if (input.status === "approved") {
+        await client.query(
+          "update users set status = 'deleted', updated_at = now() where id = $1 and organization_id = $2",
+          [request.learner_id, organizationId]
+        );
+        await client.query("update sessions set revoked_at = now() where user_id = $1 and revoked_at is null", [request.learner_id]);
+        await client.query(
+          `insert into audit_events
+             (id, organization_id, actor_user_id, action, entity_type, entity_id, payload, trace_id)
+           values ($1, $2, $3, 'manager.learner.deleted', 'user', $4, $5::jsonb, $6)`,
+          [randomUUID(), organizationId, managerId, request.learner_id, JSON.stringify({ requestId }), randomUUID()]
+        );
+      }
+      await client.query("commit");
+      return {
+        id: request.id,
+        learnerId: request.learner_id,
+        learnerName: request.learner_name,
+        reason: request.reason,
+        status: input.status,
+        requestedBy: request.requested_by,
+        requestedAt: request.requested_at.toISOString(),
+        decidedBy: managerId,
+        decidedAt: decidedAt.toISOString(),
+        note: input.note
+      };
+    } catch (error) {
+      await client.query("rollback");
+      throw error;
+    } finally { client.release(); }
+  }
+
+  async trash(managerId: string): Promise<ManagerTrashView | null> {
+    const organization = await this.organizationFor(managerId);
+    if (!organization) return null;
+    const result = await this.pool.query<{
+      id: string; display_name: string; email: string | null; role: AccountRole; updated_at: Date;
+    }>(
+      `select id, display_name, email, role, updated_at
+       from users where organization_id = $1 and status = 'deleted'
+       order by updated_at desc, display_name asc`,
+      [organization.id]
+    );
+    return {
+      accounts: result.rows.map((account) => ({
+        id: account.id,
+        displayName: account.display_name,
+        email: account.email,
+        role: account.role,
+        status: "deleted",
+        deletedAt: account.updated_at.toISOString()
+      }))
+    };
+  }
+
+  async restoreAccount(managerId: string, accountId: string): Promise<ManagerAccountView> {
+    const client = await this.pool.connect();
+    try {
+      await client.query("begin");
+      const actor = await client.query<{ organization_id: string }>(
+        "select organization_id from users where id = $1 and role = 'manager' and status = 'active' for update",
+        [managerId]
+      );
+      const organizationId = actor.rows[0]?.organization_id;
+      if (!organizationId) throw new Error("MANAGER_ORGANIZATION_NOT_FOUND");
+      const updated = await client.query<{
+        id: string; display_name: string; email: string | null; role: AccountRole; status: string; created_at: Date;
+      }>(
+        `update users set status = 'active', updated_at = now()
+         where id = $1 and organization_id = $2 and status = 'deleted'
+         returning id, display_name, email, role, status, created_at`,
+        [accountId, organizationId]
+      );
+      const account = updated.rows[0];
+      if (!account) throw new Error("MANAGER_TRASH_ACCOUNT_NOT_FOUND");
+      await client.query(
+        `insert into audit_events
+           (id, organization_id, actor_user_id, action, entity_type, entity_id, payload, trace_id)
+         values ($1, $2, $3, 'manager.account.restored', 'user', $4, '{}'::jsonb, $5)`,
+        [randomUUID(), organizationId, managerId, accountId, randomUUID()]
+      );
+      await client.query("commit");
+      return this.accountView(account);
+    } catch (error) {
+      await client.query("rollback");
+      throw error;
+    } finally { client.release(); }
+  }
+
+  async issuePurgeConfirmation(managerId: string, accountId: string): Promise<ManagerPurgeConfirmationView> {
+    const client = await this.pool.connect();
+    try {
+      await client.query("begin");
+      const actor = await client.query<{ organization_id: string }>(
+        "select organization_id from users where id = $1 and role = 'manager' and status = 'active' for update",
+        [managerId]
+      );
+      const organizationId = actor.rows[0]?.organization_id;
+      if (!organizationId) throw new Error("MANAGER_ORGANIZATION_NOT_FOUND");
+      const target = await client.query<{ id: string }>(
+        "select id from users where id = $1 and organization_id = $2 and status = 'deleted' for update",
+        [accountId, organizationId]
+      );
+      if (!target.rowCount) throw new Error("MANAGER_TRASH_ACCOUNT_NOT_FOUND");
+
+      const token = randomBytes(32).toString("base64url");
+      const expiresAt = new Date(Date.now() + purgeConfirmationTtlSeconds * 1000);
+      await client.query(
+        `insert into manager_destructive_confirmations
+           (id, organization_id, manager_id, action, target_id, token_hash, expires_at)
+         values ($1, $2, $3, 'purge_account', $4, $5, $6)`,
+        [randomUUID(), organizationId, managerId, accountId, destructiveTokenHash(token), expiresAt]
+      );
+      await client.query(
+        `insert into audit_events
+           (id, organization_id, actor_user_id, action, entity_type, entity_id, payload, trace_id)
+         values ($1, $2, $3, 'manager.account.purge_confirmation_issued', 'user', $4, $5::jsonb, $6)`,
+        [randomUUID(), organizationId, managerId, accountId, JSON.stringify({ action: "purge_account", expiresAt: expiresAt.toISOString() }), randomUUID()]
+      );
+      await client.query("commit");
+      return {
+        accountId,
+        token,
+        confirmationPhrase: purgeConfirmationPhrase,
+        countdownSeconds: purgeConfirmationCountdownSeconds,
+        expiresAt: expiresAt.toISOString()
+      };
+    } catch (error) {
+      await client.query("rollback");
+      throw error;
+    } finally { client.release(); }
+  }
+
+  async purgeAccount(managerId: string, accountId: string, input: ManagerPurgeConfirmationInput): Promise<void> {
+    const client = await this.pool.connect();
+    try {
+      await client.query("begin");
+      const actor = await client.query<{ organization_id: string }>(
+        "select organization_id from users where id = $1 and role = 'manager' and status = 'active' for update",
+        [managerId]
+      );
+      const organizationId = actor.rows[0]?.organization_id;
+      if (!organizationId) throw new Error("MANAGER_ORGANIZATION_NOT_FOUND");
+      const target = await client.query<{ id: string }>(
+        "select id from users where id = $1 and organization_id = $2 and status = 'deleted' for update",
+        [accountId, organizationId]
+      );
+      if (!target.rowCount) throw new Error("MANAGER_TRASH_ACCOUNT_NOT_FOUND");
+      if (input.confirmationPhrase !== purgeConfirmationPhrase) throw new Error("MANAGER_PURGE_CONFIRMATION_INVALID");
+      const confirmation = await client.query<{ id: string }>(
+        `select id
+         from manager_destructive_confirmations
+         where organization_id = $1 and manager_id = $2 and action = 'purge_account'
+           and target_id = $3 and token_hash = $4 and used_at is null and expires_at > now()
+         order by created_at desc
+         limit 1
+         for update`,
+        [organizationId, managerId, accountId, destructiveTokenHash(input.confirmationToken)]
+      );
+      if (!confirmation.rows[0]) throw new Error("MANAGER_PURGE_CONFIRMATION_INVALID");
+      await client.query("update manager_destructive_confirmations set used_at = now() where id = $1", [confirmation.rows[0].id]);
+      await client.query(
+        `insert into audit_events
+           (id, organization_id, actor_user_id, action, entity_type, entity_id, payload, trace_id)
+         values ($1, $2, $3, 'manager.account.purged', 'user', $4, '{}'::jsonb, $5)`,
+        [randomUUID(), organizationId, managerId, accountId, randomUUID()]
+      );
+      try {
+        await client.query("delete from users where id = $1 and organization_id = $2 and status = 'deleted'", [accountId, organizationId]);
+      } catch (error) {
+        if (isForeignKeyViolation(error)) throw new Error("MANAGER_ACCOUNT_PURGE_BLOCKED");
+        throw error;
+      }
+      await client.query("commit");
+    } catch (error) {
+      await client.query("rollback");
+      throw error;
+    } finally { client.release(); }
+  }
+
+  async pinReports(managerId: string): Promise<ManagerPinReportsView | null> {
+    const organization = await this.organizationFor(managerId);
+    if (!organization) return null;
+    const result = await this.pool.query<{
+      id: string; subject_user_id: string; subject_name: string; note: string; status: "open" | "done";
+      created_at: Date; resolved_at: Date | null;
+    }>(
+      `select r.id, r.subject_user_id, u.display_name as subject_name, r.note, r.status,
+              r.created_at, r.resolved_at
+       from manager_pin_reports r join users u on u.id = r.subject_user_id
+       where r.organization_id = $1 order by r.created_at desc`,
+      [organization.id]
+    );
+    return { reports: result.rows.map((report) => this.pinReportView(report)) };
+  }
+
+  async createPinReport(managerId: string, accountId: string, note: string): Promise<ManagerPinReportView> {
+    const client = await this.pool.connect();
+    try {
+      await client.query("begin");
+      const actor = await client.query<{ organization_id: string }>(
+        "select organization_id from users where id = $1 and role = 'manager' and status = 'active' for update",
+        [managerId]
+      );
+      const organizationId = actor.rows[0]?.organization_id;
+      if (!organizationId) throw new Error("MANAGER_ORGANIZATION_NOT_FOUND");
+      const subject = await client.query<{ id: string; display_name: string }>(
+        "select id, display_name from users where id = $1 and organization_id = $2 and status <> 'deleted' for update",
+        [accountId, organizationId]
+      );
+      if (!subject.rows[0]) throw new Error("MANAGER_PIN_REPORT_ACCOUNT_NOT_FOUND");
+      const id = randomUUID();
+      const created = await client.query<{
+        id: string; subject_user_id: string; subject_name: string; note: string; status: "open" | "done"; created_at: Date; resolved_at: Date | null;
+      }>(
+        `insert into manager_pin_reports (id, organization_id, subject_user_id, note, created_by)
+         values ($1, $2, $3, $4, $5)
+         returning id, subject_user_id, $6::text as subject_name, note, status, created_at, resolved_at`,
+        [id, organizationId, accountId, note, managerId, subject.rows[0].display_name]
+      );
+      await client.query(
+        `insert into audit_events
+           (id, organization_id, actor_user_id, action, entity_type, entity_id, payload, trace_id)
+         values ($1, $2, $3, 'manager.pin_report.created', 'user', $4, $5::jsonb, $6)`,
+        [randomUUID(), organizationId, managerId, accountId, JSON.stringify({ reportId: id }), randomUUID()]
+      );
+      await client.query("commit");
+      const report = created.rows[0];
+      if (!report) throw new Error("MANAGER_PIN_REPORT_CREATE_FAILED");
+      return this.pinReportView(report);
+    } catch (error) {
+      await client.query("rollback");
+      throw error;
+    } finally { client.release(); }
+  }
+
+  async resolvePinReport(managerId: string, reportId: string): Promise<ManagerPinReportView> {
+    const client = await this.pool.connect();
+    try {
+      await client.query("begin");
+      const actor = await client.query<{ organization_id: string }>(
+        "select organization_id from users where id = $1 and role = 'manager' and status = 'active' for update",
+        [managerId]
+      );
+      const organizationId = actor.rows[0]?.organization_id;
+      if (!organizationId) throw new Error("MANAGER_ORGANIZATION_NOT_FOUND");
+      const updated = await client.query<{
+        id: string; subject_user_id: string; subject_name: string; note: string; status: "open" | "done"; created_at: Date; resolved_at: Date | null;
+      }>(
+        `update manager_pin_reports r set status = 'done', resolved_by = $3, resolved_at = now()
+         from users subject
+         where r.id = $1 and r.organization_id = $2 and subject.id = r.subject_user_id
+         returning r.id, r.subject_user_id, subject.display_name as subject_name, r.note, r.status, r.created_at, r.resolved_at`,
+        [reportId, organizationId, managerId]
+      );
+      const report = updated.rows[0];
+      if (!report) throw new Error("MANAGER_PIN_REPORT_NOT_FOUND");
+      await client.query(
+        `insert into audit_events
+           (id, organization_id, actor_user_id, action, entity_type, entity_id, payload, trace_id)
+         values ($1, $2, $3, 'manager.pin_report.resolved', 'user', $4, $5::jsonb, $6)`,
+        [randomUUID(), organizationId, managerId, report.subject_user_id, JSON.stringify({ reportId }), randomUUID()]
+      );
+      await client.query("commit");
+      return this.pinReportView(report);
+    } catch (error) {
+      await client.query("rollback");
+      throw error;
+    } finally { client.release(); }
+  }
+
+  private pinReportView(report: {
+    id: string;
+    subject_user_id: string;
+    subject_name: string;
+    note: string;
+    status: "open" | "done";
+    created_at: Date;
+    resolved_at: Date | null;
+  }): ManagerPinReportView {
+    return {
+      id: report.id,
+      subjectUserId: report.subject_user_id,
+      subjectName: report.subject_name,
+      note: report.note,
+      status: report.status,
+      createdAt: report.created_at.toISOString(),
+      resolvedAt: report.resolved_at?.toISOString() ?? null
+    };
+  }
+
+  async report(staffId: string): Promise<ManagerReportView | null> {
+    const organization = await this.organizationFor(staffId);
+    if (!organization) return null;
+    const [progress, operations, levelDistributionResult, totalsResult, surveysResult] = await Promise.all([
+      this.progress(staffId),
+      this.operations(staffId),
+      this.pool.query<{ cefr: CefrLevel; learners: string }>(
+        `select e.cefr, count(distinct e.learner_id)::text as learners
+         from enrollments e
+         join programs p on p.id = e.program_id
+         join users u on u.id = e.learner_id
+         where p.organization_id = $1 and u.status = 'active' and e.cefr is not null and e.cefr_approved
+         group by e.cefr order by e.cefr`,
+        [organization.id]
+      ),
+      this.pool.query<{
+        approved_lesson_sets: string;
+        approved_lessons: string;
+        coach_turns: string;
+        practice_submissions: string;
+        reviewed_practice_submissions: string;
+        reminders: string;
+        appeals: string;
+        pending_appeals: string;
+      }>(
+        `select
+           (select count(distinct ls.id) from lesson_sets ls
+             join program_weeks pw on pw.id = ls.program_week_id join programs p on p.id = pw.program_id
+             where p.organization_id = $1 and exists (
+               select 1 from lesson_set_versions lsv where lsv.lesson_set_id = ls.id and lsv.status = 'published'
+             ))::text as approved_lesson_sets,
+           (select count(*) from lessons l join lesson_set_versions lsv on lsv.id = l.lesson_set_version_id
+             join lesson_sets ls on ls.id = lsv.lesson_set_id join program_weeks pw on pw.id = ls.program_week_id
+             join programs p on p.id = pw.program_id where p.organization_id = $1 and lsv.status = 'published')::text as approved_lessons,
+           (select count(*) from coach_turns ct join coach_sessions cs on cs.id = ct.session_id
+             join users u on u.id = cs.learner_id where u.organization_id = $1 and ct.speaker = 'learner')::text as coach_turns,
+           (select count(*) from practice_submissions ps join users u on u.id = ps.learner_id
+             where u.organization_id = $1 and ps.submitted_at is not null)::text as practice_submissions,
+           (select count(*) from practice_submissions ps join users u on u.id = ps.learner_id
+             where u.organization_id = $1 and ps.checked_by is not null)::text as reviewed_practice_submissions,
+           (select count(*) from reminders r join users u on u.id = r.learner_id
+             where u.organization_id = $1)::text as reminders,
+           (select count(*) from appeals a join users u on u.id = a.learner_id
+             where u.organization_id = $1)::text as appeals,
+           (select count(*) from appeals a join users u on u.id = a.learner_id
+             where u.organization_id = $1 and a.status = 'pending')::text as pending_appeals`,
+        [organization.id]
+      ),
+      this.pool.query<{
+        learner_id: string;
+        learner_name: string;
+        rating: string;
+        comment: string | null;
+        study_time: string | null;
+        submitted_at: Date;
+      }>(
+        `select s.learner_id, u.display_name as learner_name, s.answers->>'rating' as rating,
+                nullif(s.answers->>'comment', '') as comment,
+                nullif(s.answers->>'studyTime', '') as study_time,
+                s.submitted_at
+         from surveys s join users u on u.id = s.learner_id
+         where u.organization_id = $1 and (s.answers->>'rating') ~ '^[1-5](\\.0)?$'
+         order by s.submitted_at desc`,
+        [organization.id]
+      )
+    ]);
+    if (!progress || !operations) return null;
+    const totals = totalsResult.rows[0] ?? {
+      approved_lesson_sets: "0", approved_lessons: "0", coach_turns: "0", practice_submissions: "0",
+      reviewed_practice_submissions: "0", reminders: "0", appeals: "0", pending_appeals: "0"
+    };
+    return {
+      organizationName: progress.organizationName,
+      generatedAt: new Date().toISOString(),
+      currentWeek: progress.currentWeek,
+      pilotWeeks: progress.pilotWeeks,
+      progress: progress.summary,
+      learners: progress.learners,
+      activityByDay: progress.activityByDay ?? [],
+      regularByWeek: progress.regularByWeek ?? [],
+      levelDistribution: levelDistributionResult.rows.map((row) => ({ cefr: row.cefr, learners: Number(row.learners) })),
+      totals: {
+        approvedLessonSets: Number(totals.approved_lesson_sets),
+        approvedLessons: Number(totals.approved_lessons),
+        coachTurns: Number(totals.coach_turns),
+        practiceSubmissions: Number(totals.practice_submissions),
+        reviewedPracticeSubmissions: Number(totals.reviewed_practice_submissions),
+        reminders: Number(totals.reminders),
+        appeals: Number(totals.appeals),
+        pendingAppeals: Number(totals.pending_appeals)
+      },
+      surveyResponses: surveysResult.rows.map((row) => ({
+        learnerId: row.learner_id,
+        learnerName: row.learner_name,
+        rating: Number(row.rating),
+        comment: row.comment ?? "",
+        studyTime: row.study_time === "work" || row.study_time === "outside" || row.study_time === "both" ? row.study_time : null,
+        submittedAt: row.submitted_at.toISOString()
+      })),
+      operations: { content: operations.content, queues: operations.queues, automation: operations.automation }
+    };
+  }
+
+  async settings(staffId: string): Promise<ManagerSettingsView | null> {
+    const organization = await this.organizationFor(staffId);
+    if (!organization) return null;
+    const settings = await this.settingsForOrganization(organization.id);
+    return { organizationName: organization.name, ...settings };
+  }
+
+  async saveSettings(managerId: string, input: Omit<ManagerSettingsView, "organizationName">): Promise<ManagerSettingsView> {
+    const organization = await this.organizationFor(managerId);
+    if (!organization) throw new Error("MANAGER_ORGANIZATION_NOT_FOUND");
+    await this.pool.query(
+      `insert into organization_settings (organization_id, reminder_inactive_days, weekly_report_enabled, configuration, updated_by)
+       values ($1, $2, $3, $4::jsonb, $5)
+       on conflict (organization_id) do update
+       set reminder_inactive_days = excluded.reminder_inactive_days,
+           weekly_report_enabled = excluded.weekly_report_enabled,
+           configuration = excluded.configuration,
+           updated_by = excluded.updated_by,
+           updated_at = now()`,
+      [organization.id, input.reminderInactiveDays, input.weeklyReportEnabled, JSON.stringify(input), managerId]
+    );
+    await this.pool.query(
+      `insert into audit_events
+         (id, organization_id, actor_user_id, action, entity_type, entity_id, payload, trace_id)
+       values ($1, $2, $3, 'organisation.settings.updated', 'organization', $2, $4::jsonb, $5)`,
+      [randomUUID(), organization.id, managerId, JSON.stringify(input), randomUUID()]
+    );
+    return { organizationName: organization.name, ...input };
+  }
+
+  async clearImageCache(managerId: string): Promise<{ cleared: number }> {
+    const organization = await this.organizationFor(managerId);
+    if (!organization) throw new Error("MANAGER_ORGANIZATION_NOT_FOUND");
+    const client = await this.pool.connect();
+    let cleared = 0;
+    try {
+      await client.query("begin");
+      const sets = await client.query<{ id: string; payload: Record<string, unknown> }>(
+        `select gs.id, gs.payload
+         from game_sets gs
+         join program_weeks pw on pw.id = gs.program_week_id
+         join programs p on p.id = pw.program_id
+         where p.organization_id = $1 and jsonb_typeof(gs.payload->'words') = 'array'
+         for update of gs`,
+        [organization.id]
+      );
+      for (const set of sets.rows) {
+        const words = Array.isArray(set.payload.words) ? set.payload.words : [];
+        let changed = false;
+        const nextWords = words.map((item) => {
+          if (!item || typeof item !== "object" || Array.isArray(item)) return item;
+          const word = item as Record<string, unknown>;
+          if (!("imageUrl" in word)) return item;
+          changed = true;
+          const { imageUrl: _imageUrl, ...withoutImage } = word;
+          return withoutImage;
+        });
+        if (!changed) continue;
+        await client.query("update game_sets set payload = $2::jsonb where id = $1", [set.id, JSON.stringify({ ...set.payload, words: nextWords })]);
+        cleared += 1;
+      }
+      await client.query(
+        `insert into audit_events
+           (id, organization_id, actor_user_id, action, entity_type, entity_id, payload, trace_id)
+         values ($1, $2, $3, 'manager.image_cache.cleared', 'organization', $2, $4::jsonb, $5)`,
+        [randomUUID(), organization.id, managerId, JSON.stringify({ cleared }), randomUUID()]
+      );
+      await client.query("commit");
+      return { cleared };
+    } catch (error) {
+      await client.query("rollback");
+      throw error;
+    } finally { client.release(); }
+  }
+
+  async testMusic(managerId: string, input: ManagerSettingsView["backgroundMusic"]): Promise<ManagerMusicTestView> {
+    if (!(await this.organizationFor(managerId))) throw new Error("MANAGER_ORGANIZATION_NOT_FOUND");
+    const valid = isYouTubeMusicUrl(input.url, input.enabled);
+    return { status: valid ? "valid" : "invalid", checkedAt: new Date().toISOString() };
+  }
+
+  async resetMusic(managerId: string): Promise<ManagerSettingsView["backgroundMusic"]> {
+    const organization = await this.organizationFor(managerId);
+    if (!organization) throw new Error("MANAGER_ORGANIZATION_NOT_FOUND");
+    const settings = await this.settingsForOrganization(organization.id);
+    const backgroundMusic = { enabled: true, url: "", volume: 22 };
+    await this.saveSettings(managerId, { ...settings, backgroundMusic });
+    return backgroundMusic;
+  }
+
+  async testWebhook(managerId: string, input: { url: string; template: string }): Promise<ManagerWebhookTestView> {
+    if (!(await this.organizationFor(managerId))) throw new Error("MANAGER_ORGANIZATION_NOT_FOUND");
+    const testedAt = new Date().toISOString();
+    let target: URL;
+    let payload: unknown;
+    try {
+      target = new URL(input.url);
+      if (target.protocol !== "https:") return { status: "error", statusCode: null, testedAt };
+      payload = JSON.parse(input.template.replaceAll("{message}", "E4S kiểm tra webhook thành công."));
+    } catch {
+      return { status: "error", statusCode: null, testedAt };
+    }
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 10_000);
+    try {
+      const response = await fetch(target.toString(), {
+        method: "POST",
+        headers: { "content-type": "application/json", accept: "application/json" },
+        body: JSON.stringify(payload),
+        signal: controller.signal
+      });
+      return { status: response.ok ? "success" : "error", statusCode: response.status, testedAt };
+    } catch (error) {
+      return {
+        status: error instanceof DOMException && error.name === "AbortError" ? "timeout" : "error",
+        statusCode: null,
+        testedAt
+      };
+    } finally { clearTimeout(timeout); }
+  }
+
+  async exportData(managerId: string): Promise<ManagerDataExportView | null> {
+    const organization = await this.organizationFor(managerId);
+    if (!organization) return null;
+    const [accounts, progress] = await Promise.all([this.accounts(managerId), this.progress(managerId)]);
+    return {
+      version: 1,
+      exportedAt: new Date().toISOString(),
+      organization,
+      settings: await this.settingsForOrganization(organization.id),
+      accounts: accounts?.accounts ?? [],
+      progress: progress ? { summary: progress.summary, learners: progress.learners } : null
+    };
+  }
+
+  async importData(managerId: string, snapshot: unknown): Promise<ManagerDataImportView> {
+    if (!isRecord(snapshot) || snapshot.version !== 1 || !isRecord(snapshot.settings)) {
+      throw new Error("MANAGER_DATA_IMPORT_INVALID");
+    }
+    const organization = await this.organizationFor(managerId);
+    if (!organization) throw new Error("MANAGER_ORGANIZATION_NOT_FOUND");
+    const current = await this.settingsForOrganization(organization.id);
+    const input = importedSettings(current, snapshot.settings);
+    await this.saveSettings(managerId, input);
+    return { imported: true };
+  }
+
+  async issueMaintenanceConfirmation(managerId: string, action: ManagerMaintenanceAction): Promise<ManagerMaintenanceConfirmationView> {
+    const organization = await this.maintenanceOrganizationFor(managerId);
+    const snapshot = await this.exportData(managerId);
+    if (!snapshot) throw new Error("MANAGER_ORGANIZATION_NOT_FOUND");
+    const backupId = randomUUID();
+    const token = randomBytes(32).toString("base64url");
+    const expiresAt = new Date(Date.now() + maintenanceConfirmationTtlSeconds * 1000);
+    const backupExpiresAt = new Date(Date.now() + maintenanceBackupTtlSeconds * 1000);
+    const snapshotSha256 = maintenanceSnapshotHash(snapshot);
+    const client = await this.pool.connect();
+    try {
+      await client.query("begin");
+      await client.query(
+        `insert into manager_maintenance_backups
+           (id, organization_id, manager_id, action, snapshot, snapshot_sha256, expires_at)
+         values ($1, $2, $3, $4, $5::jsonb, $6, $7)`,
+        [backupId, organization.id, managerId, action, JSON.stringify(snapshot), snapshotSha256, backupExpiresAt]
+      );
+      await client.query(
+        `insert into manager_destructive_confirmations
+           (id, organization_id, manager_id, action, target_id, token_hash, details, expires_at)
+         values ($1, $2, $3, $4, $5, $6, $7::jsonb, $8)`,
+        [randomUUID(), organization.id, managerId, action, organization.id, destructiveTokenHash(token), JSON.stringify({ backupId, snapshotSha256 }), expiresAt]
+      );
+      await client.query(
+        `insert into audit_events
+           (id, organization_id, actor_user_id, action, entity_type, entity_id, payload, trace_id)
+         values ($1, $2, $3, 'manager.maintenance.confirmation_issued', 'organization', $2, $4::jsonb, $5)`,
+        [randomUUID(), organization.id, managerId, JSON.stringify({ action, backupId, snapshotSha256, expiresAt: expiresAt.toISOString() }), randomUUID()]
+      );
+      await client.query("commit");
+      return {
+        action,
+        token,
+        confirmationPhrase: maintenancePhrases[action],
+        countdownSeconds: maintenanceConfirmationCountdownSeconds,
+        expiresAt: expiresAt.toISOString(),
+        backupId
+      };
+    } catch (error) {
+      await client.query("rollback");
+      throw error;
+    } finally { client.release(); }
+  }
+
+  async runMaintenance(managerId: string, action: ManagerMaintenanceAction, input: ManagerMaintenanceConfirmationInput): Promise<ManagerMaintenanceResultView> {
+    if (input.confirmationPhrase !== maintenancePhrases[action]) throw new Error("MANAGER_MAINTENANCE_CONFIRMATION_INVALID");
+    const client = await this.pool.connect();
+    try {
+      await client.query("begin");
+      const actor = await client.query<{ organization_id: string }>(
+        `select u.organization_id from users u join organizations o on o.id = u.organization_id
+         where u.id = $1 and u.role = 'manager' and u.status = 'active' and o.slug = 'gft-demo'
+         and (select count(*) from organizations) = 1 for update`,
+        [managerId]
+      );
+      const organizationId = actor.rows[0]?.organization_id;
+      if (!organizationId) throw new Error("MANAGER_MAINTENANCE_TARGET_INVALID");
+      const confirmation = await client.query<{ id: string; details: Record<string, unknown> }>(
+        `select id, details
+         from manager_destructive_confirmations
+         where organization_id = $1 and manager_id = $2 and action = $3
+           and target_id = $1 and token_hash = $4 and used_at is null and expires_at > now()
+         order by created_at desc limit 1 for update`,
+        [organizationId, managerId, action, destructiveTokenHash(input.confirmationToken)]
+      );
+      const confirmationRow = confirmation.rows[0];
+      const backupId = typeof confirmationRow?.details?.backupId === "string" ? confirmationRow.details.backupId : "";
+      if (!confirmationRow || !backupId) throw new Error("MANAGER_MAINTENANCE_CONFIRMATION_INVALID");
+      const backup = await client.query<{ id: string }>(
+        `select id from manager_maintenance_backups
+         where id = $1 and organization_id = $2 and manager_id = $3 and action = $4
+           and consumed_at is null and expires_at > now()
+         for update`,
+        [backupId, organizationId, managerId, action]
+      );
+      if (!backup.rowCount) throw new Error("MANAGER_MAINTENANCE_BACKUP_REQUIRED");
+
+      await this.resetLocalMaintenanceData(client, organizationId, managerId);
+      if (action === "seed_demo") await seedDemo(client);
+      await client.query("update manager_destructive_confirmations set used_at = now() where id = $1", [confirmationRow.id]);
+      await client.query("update manager_maintenance_backups set consumed_at = now() where id = $1", [backupId]);
+      await client.query(
+        `insert into audit_events
+           (id, organization_id, actor_user_id, action, entity_type, entity_id, payload, trace_id)
+         values ($1, $2, $3, $4, 'organization', $2, $5::jsonb, $6)`,
+        [randomUUID(), organizationId, managerId, `manager.maintenance.${action}`, JSON.stringify({ backupId }), randomUUID()]
+      );
+      await client.query("commit");
+      return { action, completed: true, backupId, completedAt: new Date().toISOString() };
+    } catch (error) {
+      await client.query("rollback");
+      throw error;
+    } finally { client.release(); }
+  }
+
+  private async maintenanceOrganizationFor(managerId: string): Promise<{ id: string; name: string }> {
+    const organization = await this.pool.query<{ id: string; name: string; slug: string; organization_count: string }>(
+      `select o.id, o.name, o.slug, (select count(*)::text from organizations) as organization_count
+       from users u join organizations o on o.id = u.organization_id
+       where u.id = $1 and u.role = 'manager' and u.status = 'active'`,
+      [managerId]
+    );
+    const row = organization.rows[0];
+    if (!row) throw new Error("MANAGER_ORGANIZATION_NOT_FOUND");
+    if (row.slug !== "gft-demo" || row.organization_count !== "1") throw new Error("MANAGER_MAINTENANCE_TARGET_INVALID");
+    return { id: row.id, name: row.name };
+  }
+
+  private async resetLocalMaintenanceData(client: PoolClient, organizationId: string, managerId: string): Promise<void> {
+    const preservedTables = [
+      "organizations", "users", "user_credentials", "sessions", "audit_events",
+      "manager_destructive_confirmations", "manager_maintenance_backups", "schema_migrations"
+    ];
+    const tables = await client.query<{ table_name: string }>(
+      `select quote_ident(tablename) as table_name
+       from pg_tables
+       where schemaname = 'public' and not (tablename = any($1::text[]))
+       order by tablename`,
+      [preservedTables]
+    );
+    if (tables.rows.length) await client.query(`truncate table ${tables.rows.map((row) => row.table_name).join(", ")} cascade`);
+    await client.query("delete from sessions where user_id <> $1", [managerId]);
+    await client.query("delete from user_credentials where user_id <> $1", [managerId]);
+    await client.query("update audit_events set actor_user_id = null where organization_id = $1 and actor_user_id <> $2", [organizationId, managerId]);
+    await client.query("delete from users where organization_id = $1 and id <> $2", [organizationId, managerId]);
+  }
+
+  async changeAccountRole(managerId: string, accountId: string, nextRole: AccountRole): Promise<ManagerAccountView> {
+    const client = await this.pool.connect();
+    try {
+      await client.query("begin");
+      const organizationResult = await client.query<{ organization_id: string }>(
+        "select organization_id from users where id = $1 for update", [managerId]
+      );
+      const organizationId = organizationResult.rows[0]?.organization_id;
+      if (!organizationId) throw new Error("MANAGER_ORGANIZATION_NOT_FOUND");
+      const targetResult = await client.query<{
+        id: string;
+        display_name: string;
+        email: string | null;
+        role: AccountRole;
+        status: string;
+        created_at: Date;
+      }>(
+        `select id, display_name, email, role, status, created_at
+         from users
+         where id = $1 and organization_id = $2 and status <> 'deleted'
+         for update`,
+        [accountId, organizationId]
+      );
+      const target = targetResult.rows[0];
+      if (!target) throw new Error("MANAGER_ACCOUNT_NOT_FOUND");
+      if (target.id === managerId && target.role !== nextRole) throw new Error("MANAGER_SELF_ROLE_CHANGE_FORBIDDEN");
+      if (target.role === "manager" && target.role !== nextRole) {
+        const managers = await client.query(
+          "select id from users where organization_id = $1 and role = 'manager' and status = 'active' for update",
+          [organizationId]
+        );
+        if ((managers.rowCount ?? 0) <= 1) throw new Error("MANAGER_LAST_ADMIN_REQUIRED");
+      }
+      if (target.role === nextRole) {
+        await client.query("commit");
+        return this.accountView(target);
+      }
+      const updatedResult = await client.query<{
+        id: string;
+        display_name: string;
+        email: string | null;
+        role: AccountRole;
+        status: string;
+        created_at: Date;
+      }>(
+        `update users set role = $3, updated_at = now()
+         where id = $1 and organization_id = $2
+         returning id, display_name, email, role, status, created_at`,
+        [accountId, organizationId, nextRole]
+      );
+      const updated = updatedResult.rows[0];
+      if (!updated) throw new Error("MANAGER_ACCOUNT_NOT_FOUND");
+      await client.query(
+        `insert into audit_events
+           (id, organization_id, actor_user_id, action, entity_type, entity_id, payload, trace_id)
+         values ($1, $2, $3, 'account.role.changed', 'user', $4, $5::jsonb, $6)`,
+        [randomUUID(), organizationId, managerId, accountId, JSON.stringify({ from: target.role, to: nextRole }), randomUUID()]
+      );
+      await client.query("commit");
+      return this.accountView(updated);
+    } catch (error) {
+      await client.query("rollback");
+      throw error;
+    } finally { client.release(); }
+  }
+
+  async createAccount(managerId: string, input: {
+    displayName: string;
+    email: string;
+    role: AccountRole;
+    credentialHash: string;
+  }): Promise<ManagerAccountView> {
+    const client = await this.pool.connect();
+    try {
+      await client.query("begin");
+      const actor = await client.query<{ organization_id: string }>(
+        "select organization_id from users where id = $1 and role = 'manager' and status = 'active' for update",
+        [managerId]
+      );
+      const organizationId = actor.rows[0]?.organization_id;
+      if (!organizationId) throw new Error("MANAGER_ORGANIZATION_NOT_FOUND");
+      const duplicate = await client.query(
+        "select id from users where organization_id = $1 and lower(email) = lower($2) and status <> 'deleted'",
+        [organizationId, input.email]
+      );
+      if (duplicate.rowCount) throw new Error("MANAGER_ACCOUNT_EMAIL_EXISTS");
+      const id = randomUUID();
+      const created = await client.query<{
+        id: string; display_name: string; email: string; role: AccountRole; status: string; created_at: Date;
+      }>(
+        `insert into users (id, organization_id, role, display_name, email)
+         values ($1, $2, $3, $4, lower($5))
+         returning id, display_name, email, role, status, created_at`,
+        [id, organizationId, input.role, input.displayName, input.email]
+      );
+      await client.query(
+        "insert into user_credentials (user_id, credential_hash) values ($1, $2)",
+        [id, input.credentialHash]
+      );
+      if (input.role === "learner") {
+        await client.query("insert into learner_profiles (user_id) values ($1)", [id]);
+        await client.query(
+          `insert into enrollments (id, program_id, learner_id)
+           select $1, p.id, $2 from programs p
+           where p.organization_id = $3 and p.status = 'active'
+           order by p.start_date desc limit 1`,
+          [randomUUID(), id, organizationId]
+        );
+      }
+      await client.query(
+        `insert into audit_events
+           (id, organization_id, actor_user_id, action, entity_type, entity_id, payload, trace_id)
+         values ($1, $2, $3, 'account.created', 'user', $4, $5::jsonb, $6)`,
+        [randomUUID(), organizationId, managerId, id, JSON.stringify({ role: input.role, email: input.email }), randomUUID()]
+      );
+      await client.query("commit");
+      const row = created.rows[0];
+      if (!row) throw new Error("MANAGER_ACCOUNT_CREATE_FAILED");
+      return this.accountView(row);
+    } catch (error) {
+      await client.query("rollback");
+      throw error;
+    } finally { client.release(); }
+  }
+
+  async changeAccountStatus(managerId: string, accountId: string, status: "active" | "disabled" | "deleted"): Promise<ManagerAccountView> {
+    const client = await this.pool.connect();
+    try {
+      await client.query("begin");
+      const actor = await client.query<{ organization_id: string }>(
+        "select organization_id from users where id = $1 and role = 'manager' and status = 'active' for update",
+        [managerId]
+      );
+      const organizationId = actor.rows[0]?.organization_id;
+      if (!organizationId) throw new Error("MANAGER_ORGANIZATION_NOT_FOUND");
+      const target = await client.query<{
+        id: string; display_name: string; email: string | null; role: AccountRole; status: string; created_at: Date;
+      }>(
+        `select id, display_name, email, role, status, created_at from users
+         where id = $1 and organization_id = $2 and status <> 'deleted' for update`,
+        [accountId, organizationId]
+      );
+      const before = target.rows[0];
+      if (!before) throw new Error("MANAGER_ACCOUNT_NOT_FOUND");
+      if (before.id === managerId) throw new Error("MANAGER_SELF_STATUS_CHANGE_FORBIDDEN");
+      if (before.role === "manager" && status !== "active") {
+        const managers = await client.query(
+          "select id from users where organization_id = $1 and role = 'manager' and status = 'active' for update",
+          [organizationId]
+        );
+        if ((managers.rowCount ?? 0) <= 1) throw new Error("MANAGER_LAST_ADMIN_REQUIRED");
+      }
+      const updated = await client.query<{
+        id: string; display_name: string; email: string | null; role: AccountRole; status: string; created_at: Date;
+      }>(
+        `update users set status = $3, updated_at = now() where id = $1 and organization_id = $2
+         returning id, display_name, email, role, status, created_at`,
+        [accountId, organizationId, status]
+      );
+      await client.query("update sessions set revoked_at = now() where user_id = $1 and revoked_at is null", [accountId]);
+      await client.query(
+        `insert into audit_events
+           (id, organization_id, actor_user_id, action, entity_type, entity_id, payload, trace_id)
+         values ($1, $2, $3, 'account.status.changed', 'user', $4, $5::jsonb, $6)`,
+        [randomUUID(), organizationId, managerId, accountId, JSON.stringify({ from: before.status, to: status }), randomUUID()]
+      );
+      await client.query("commit");
+      const row = updated.rows[0];
+      if (!row) throw new Error("MANAGER_ACCOUNT_NOT_FOUND");
+      return this.accountView(row);
+    } catch (error) {
+      await client.query("rollback");
+      throw error;
+    } finally { client.release(); }
+  }
+
+  async resetAccountCredential(managerId: string, accountId: string, credentialHash: string): Promise<boolean> {
+    const client = await this.pool.connect();
+    try {
+      await client.query("begin");
+      const target = await client.query<{ organization_id: string }>(
+        `select target.organization_id from users target
+         join users manager on manager.id = $1 and manager.role = 'manager' and manager.status = 'active'
+           and manager.organization_id = target.organization_id
+         where target.id = $2 and target.status <> 'deleted' for update of target`,
+        [managerId, accountId]
+      );
+      const organizationId = target.rows[0]?.organization_id;
+      if (!organizationId) { await client.query("rollback"); return false; }
+      await client.query(
+        `insert into user_credentials (user_id, credential_hash) values ($1, $2)
+         on conflict (user_id) do update set credential_hash = excluded.credential_hash, updated_at = now()`,
+        [accountId, credentialHash]
+      );
+      await client.query("update sessions set revoked_at = now() where user_id = $1 and revoked_at is null", [accountId]);
+      await client.query(
+        `insert into audit_events
+           (id, organization_id, actor_user_id, action, entity_type, entity_id, payload, trace_id)
+         values ($1, $2, $3, 'account.credential.reset', 'user', $4, '{}'::jsonb, $5)`,
+        [randomUUID(), organizationId, managerId, accountId, randomUUID()]
+      );
+      await client.query("commit");
+      return true;
+    } catch (error) {
+      await client.query("rollback");
+      throw error;
+    } finally { client.release(); }
+  }
+
+  private accountView(account: {
+    id: string;
+    display_name: string;
+    email: string | null;
+    role: AccountRole;
+    status: string;
+    created_at: Date;
+  }): ManagerAccountView {
+    return {
+      id: account.id,
+      displayName: account.display_name,
+      email: account.email,
+      role: account.role,
+      status: account.status,
+      createdAt: account.created_at.toISOString()
+    };
+  }
+}
+
+async function syncLearnerRewards(db: Pool | PoolClient, learnerId: string): Promise<void> {
+  await db.query(
+    `insert into reward_events (id, learner_id, badge_id, points, source_type, source_id)
+     select gen_random_uuid(), a.learner_id, null,
+       case a.activity_type when 'lesson' then 10 when 'micro_lesson' then 5
+         when 'coach' then 2 when 'weekly_practice' then 20 when 'game' then 5 when 'assessment' then 10 else 0 end,
+       'activity_points', a.id
+     from activities a
+     where a.learner_id = $1
+       and (a.activity_type <> 'coach' or coalesce((a.evidence->>'relevant')::boolean, false))
+       and not exists (select 1 from reward_events re where re.learner_id = a.learner_id
+         and re.source_type = 'activity_points' and re.source_id = a.id and re.badge_id is null)`,
+    [learnerId]
+  );
+
+  const [lessons, completeWeek, coach, words, firstTry, activityDays] = await Promise.all([
+    db.query<{ count: string }>("select count(*)::text as count from progress_records where learner_id = $1 and status = 'completed'", [learnerId]),
+    db.query(`select 1 from program_weeks pw join enrollments e on e.program_id = pw.program_id and e.learner_id = $1
+      join lesson_sets ls on ls.program_week_id = pw.id and ls.cefr = e.cefr
+      join lesson_set_versions lsv on lsv.lesson_set_id = ls.id and lsv.status = 'published'
+      join lessons l on l.lesson_set_version_id = lsv.id
+      left join progress_records pr on pr.lesson_id = l.id and pr.learner_id = $1 and pr.status = 'completed'
+      group by pw.id having count(l.id) >= 5 and count(pr.id) = count(l.id) limit 1`, [learnerId]),
+    db.query<{ count: string }>(`select count(*)::text as count from coach_turns ct join coach_sessions cs on cs.id = ct.session_id
+      where cs.learner_id = $1 and ct.speaker = 'learner' and coalesce(cs.scenario->>'kind', 'practice') = 'practice'
+        and coalesce((ct.feedback->>'relevant')::boolean, true)`, [learnerId]),
+    db.query<{ count: string }>(`select count(distinct word)::text as count from coach_turns ct
+      join coach_sessions cs on cs.id = ct.session_id
+      cross join lateral jsonb_array_elements_text(coalesce(ct.feedback->'usedWords', '[]'::jsonb)) word
+      where cs.learner_id = $1 and coalesce(cs.scenario->>'kind', 'practice') = 'practice'
+        and coalesce((ct.feedback->>'relevant')::boolean, true)`, [learnerId]),
+    db.query<{ evidence: Record<string, unknown> }>(
+      "select evidence from progress_records where learner_id = $1 and status = 'completed'", [learnerId]
+    ),
+    db.query<{ day: string }>(
+      "select distinct occurred_at::date::text as day from activities where learner_id = $1 order by day", [learnerId]
+    )
+  ]);
+  const earned = new Set<string>();
+  if (Number(lessons.rows[0]?.count ?? 0) >= 1) earned.add("starter");
+  if (completeWeek.rowCount) earned.add("week_complete");
+  if (Number(coach.rows[0]?.count ?? 0) >= 10) earned.add("coach_friend");
+  if (Number(words.rows[0]?.count ?? 0) >= 15) earned.add("wordsmith");
+  if (firstTry.rows.some((row) => isFirstTryLesson(row.evidence))) earned.add("first_try");
+  const longest = longestBusinessDayStreak(activityDays.rows.map((row) => row.day));
+  if (longest >= 3) earned.add("streak3");
+  if (longest >= 5) earned.add("streak5");
+
+  for (const badgeKey of earned) {
+    await db.query(
+      `insert into reward_events (id, learner_id, badge_id, points, source_type, source_id)
+       select gen_random_uuid(), $1, b.id, 0, 'achievement', $1
+       from users u join badges b on b.organization_id = u.organization_id and b.badge_key = $2
+       where u.id = $1 and not exists (select 1 from reward_events re where re.learner_id = $1 and re.badge_id = b.id)`,
+      [learnerId, badgeKey]
+    );
+  }
+}
+
+function isFirstTryLesson(record: Record<string, unknown>): boolean {
+  const evidence = record.evidence;
+  if (!evidence || typeof evidence !== "object" || Array.isArray(evidence)) return false;
+  return (["listening", "reading", "writing", "speaking"] as const).every((key) => {
+    const item = (evidence as Record<string, unknown>)[key];
+    if (!item || typeof item !== "object" || Array.isArray(item)) return false;
+    const value = item as { attempts?: unknown; score?: unknown };
+    return value.attempts === 1 && typeof value.score === "number" && value.score >= 80;
+  });
+}
+
+function longestBusinessDayStreak(days: string[]): number {
+  let longest = 0;
+  let current = 0;
+  let previous: Date | undefined;
+  for (const day of days) {
+    const date = new Date(`${day}T00:00:00Z`);
+    const weekday = date.getUTCDay();
+    if (weekday === 0 || weekday === 6) continue;
+    const expected = previous ? nextBusinessDay(previous) : undefined;
+    current = !previous || expected?.toISOString().slice(0, 10) === day ? current + 1 : 1;
+    longest = Math.max(longest, current);
+    previous = date;
+  }
+  return longest;
+}
+
+function nextBusinessDay(date: Date): Date {
+  const next = new Date(date);
+  do next.setUTCDate(next.getUTCDate() + 1); while (next.getUTCDay() === 0 || next.getUTCDay() === 6);
+  return next;
 }
 
 export function createRepositories(pool: Pool) {
@@ -2873,7 +8333,8 @@ export function createRepositories(pool: Pool) {
     notifications: new NotificationRepository(pool),
     files: new FileRepository(pool),
     aiRuns: new AiRunRepository(pool),
-    jobs: new JobRepository(pool)
+    jobs: new JobRepository(pool),
+    manager: new ManagerRepository(pool)
   };
 }
 

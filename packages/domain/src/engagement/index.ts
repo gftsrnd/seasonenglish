@@ -17,6 +17,22 @@ export interface GameAnswer {
   combo?: number | undefined;
 }
 
+export interface SeasonRioRoundPlan<Word> {
+  gateCount: number;
+  bossQuestions: number;
+  total: number;
+  gateWords: Word[];
+  bossWords: Word[];
+}
+
+export function seasonRioRoundPlan<Word>(words: readonly Word[]): SeasonRioRoundPlan<Word> {
+  const gateWords = words.slice(0, 8);
+  const dedicatedBossWords = words.slice(gateWords.length, gateWords.length + 3);
+  const bossWords = dedicatedBossWords.length ? dedicatedBossWords : gateWords.slice(0, 3);
+  const bossQuestions = bossWords.length ? 3 : 0;
+  return { gateCount: gateWords.length, bossQuestions, total: gateWords.length + bossQuestions, gateWords, bossWords };
+}
+
 export function weeklyPracticeAvailability(completed: number, total: number, submitted: boolean): {
   state: "locked" | "open" | "submitted";
   remaining: number;
@@ -83,11 +99,8 @@ function scoreableWordOccurrences(game: GameKey, words: readonly GameWord[]): Ma
   else if (game === "sort") rounds = words.filter((word) => word.partOfSpeech.trim()).slice(0, 12);
   else if (game === "typing") rounds = words.filter((word) => /^[a-z][a-z\s'-]*$/i.test(word.english)).slice(0, 10);
   else if (game === "mario") {
-    const gates = words.slice(0, 8);
-    const bossPool = words.slice(8, 11).length ? words.slice(8, 11) : words.slice(0, 3);
-    rounds = bossPool.length
-      ? [...gates, ...Array.from({ length: 3 }, (_, index) => bossPool[index % bossPool.length]!)]
-      : gates;
+    const plan = seasonRioRoundPlan(words);
+    rounds = [...plan.gateWords, ...Array.from({ length: plan.bossQuestions }, (_, index) => plan.bossWords[index % plan.bossWords.length]!)];
   } else rounds = words.slice(0, 10);
 
   const occurrences = new Map<string, number>();
@@ -99,7 +112,7 @@ function gameRoundTotal(game: GameKey, words: readonly GameWord[], answers: read
   if (game === "scramble") return Math.min(8, words.filter((word) => normalize(word.english).replace(/[^a-z]/g, "").length >= 3).length);
   if (game === "crossword") return Math.min(10, answers.length);
   if (game === "eggs") return Math.min(10, words.length);
-  if (game === "mario") return words.length ? Math.min(8, words.length) + 3 : 0;
+  if (game === "mario") return seasonRioRoundPlan(words).total;
   if (game === "sort") return Math.min(12, words.filter((word) => word.partOfSpeech.trim()).length);
   return Math.min(10, words.filter((word) => /^[a-z][a-z\s'-]*$/i.test(word.english)).length);
 }

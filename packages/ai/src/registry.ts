@@ -1,6 +1,12 @@
 import {
   coachInputSchema, coachOutputJsonSchema, coachOutputSchema,
   vocabularyInputSchema, vocabularyOutputJsonSchema, vocabularyOutputSchema,
+  weeklyLessonsInputSchema, weeklyLessonsOutputJsonSchema, weeklyLessonsOutputSchema,
+  levelFormInputSchema, levelFormOutputJsonSchema, levelFormOutputSchema,
+  weekSuggestionsInputSchema, weekSuggestionsOutputJsonSchema, weekSuggestionsOutputSchema,
+  assessmentGradingInputSchema, assessmentGradingOutputJsonSchema, assessmentGradingOutputSchema,
+  microLessonInputSchema, microLessonOutputJsonSchema, microLessonOutputSchema,
+  microGradingInputSchema, microGradingOutputJsonSchema, microGradingOutputSchema,
   weeklyPracticeInputSchema, weeklyPracticeOutputJsonSchema, weeklyPracticeOutputSchema
 } from "./schemas.js";
 import type { AiTaskDefinition } from "./types.js";
@@ -28,8 +34,32 @@ export class AiTaskRegistry {
 
 export const AI_TASKS = new AiTaskRegistry([
   {
+    id: "micro_lesson_generation", promptKey: "micro_lesson_generation", inputSchema: microLessonInputSchema,
+    outputSchema: microLessonOutputSchema, outputJsonSchema: microLessonOutputJsonSchema
+  },
+  {
+    id: "micro_grading", promptKey: "micro_grading", inputSchema: microGradingInputSchema,
+    outputSchema: microGradingOutputSchema, outputJsonSchema: microGradingOutputJsonSchema
+  },
+  {
+    id: "assessment_scoring", promptKey: "assessment_scoring", inputSchema: assessmentGradingInputSchema,
+    outputSchema: assessmentGradingOutputSchema, outputJsonSchema: assessmentGradingOutputJsonSchema
+  },
+  {
+    id: "week_suggestions", promptKey: "week_suggestions", inputSchema: weekSuggestionsInputSchema,
+    outputSchema: weekSuggestionsOutputSchema, outputJsonSchema: weekSuggestionsOutputJsonSchema
+  },
+  {
+    id: "level_form_generation", promptKey: "level_form_generation", inputSchema: levelFormInputSchema,
+    outputSchema: levelFormOutputSchema, outputJsonSchema: levelFormOutputJsonSchema
+  },
+  {
     id: "coach_dialogue", promptKey: "coach_dialogue", inputSchema: coachInputSchema,
     outputSchema: coachOutputSchema, outputJsonSchema: coachOutputJsonSchema
+  },
+  {
+    id: "weekly_lessons", promptKey: "weekly_lessons", inputSchema: weeklyLessonsInputSchema,
+    outputSchema: weeklyLessonsOutputSchema, outputJsonSchema: weeklyLessonsOutputJsonSchema
   },
   {
     id: "weekly_practice_grading", promptKey: "weekly_practice_grading", inputSchema: weeklyPracticeInputSchema,

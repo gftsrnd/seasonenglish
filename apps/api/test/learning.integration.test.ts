@@ -83,6 +83,14 @@ describe("learner profile, home, lesson and progress API", () => {
     });
     expect(response.json().lessons).toHaveLength(5);
     expect(response.json().nextLesson).toMatchObject({ dayNumber: 2 });
+    expect(response.json().lessons[2]).toMatchObject({
+      dayNumber: 3,
+      lock: {
+        reason: "prior",
+        blocker: { id: DEMO_IDS.lessons[1], dayNumber: 2, title: "Past simple: I joined…" },
+        totalLessons: 5
+      }
+    });
   });
 
   it("returns the existing home capabilities instead of reducing home to a lesson list", async () => {
@@ -93,7 +101,7 @@ describe("learner profile, home, lesson and progress API", () => {
 
       expect(response.statusCode, response.body).toBe(200);
       expect(response.json()).toMatchObject({
-        program: { name: "E4S Pilot" },
+        program: { name: "E4S Pilot", weekCount: 2 },
         schedule: {
           daysPerWeek: 5,
           lessonMinutes: 10,
@@ -106,7 +114,7 @@ describe("learner profile, home, lesson and progress API", () => {
           ]
         },
         coach: { turnsThisWeek: 2, targetTurns: 2, href: "/coach" },
-        practice: { status: "locked", href: "/practice" },
+        practice: { status: "reviewed", href: "/practice" },
         levelReadiness: { targetLevel: "B1", windowDays: 14, eligible: false, examAvailable: true },
         finalAssessment: { available: true, href: "/test/final" }
       });
@@ -146,6 +154,30 @@ describe("learner profile, home, lesson and progress API", () => {
     expect(resumed.json().progress).toMatchObject({
       status: "in_progress",
       evidence: { listening: { answer: "A" }, reading: { answer: "B" } }
+    });
+  });
+
+  it("returns the enriched vocabulary relations used by the learner detail modals", async () => {
+    const response = await app.inject({ method: "GET", url: `/api/v1/lessons/${DEMO_IDS.lessons[0]}`, headers: { cookie } });
+    expect(response.statusCode, response.body).toBe(200);
+    const vocabulary = response.json().content.parts.find((part: { code: string }) => part.code === "vocabulary");
+    expect(vocabulary).toMatchObject({
+      content: {
+        items: expect.arrayContaining([
+          expect.objectContaining({
+            word: "colleague",
+            family: expect.arrayContaining([expect.objectContaining({ word: "collegial" })]),
+            synonyms: expect.arrayContaining([expect.objectContaining({ word: "coworker", level: "A2" })]),
+            umbrella: expect.objectContaining({ word: "people at work" }),
+            lexicalDetails: expect.arrayContaining([
+              expect.objectContaining({ kind: "synonym", word: "coworker" }),
+              expect.objectContaining({ kind: "antonym", word: "competitor" }),
+              expect.objectContaining({ kind: "slang", word: "workmate" }),
+              expect.objectContaining({ kind: "poetic", word: "fellow worker" })
+            ])
+          })
+        ])
+      }
     });
   });
 
@@ -215,5 +247,24 @@ describe("learner profile, home, lesson and progress API", () => {
       feedback: { status: "ready" }
     });
     expect(resumed.json().completedAt).toEqual(expect.any(String));
+  });
+
+  it("exposes server-owned micro regeneration availability and refuses generation without AI", async () => {
+    const current = await app.inject({
+      method: "GET",
+      url: `/api/v1/micro-lessons/${DEMO_IDS.microLesson}`,
+      headers: { cookie }
+    });
+    expect(current.statusCode).toBe(200);
+    expect(current.json()).toMatchObject({ id: DEMO_IDS.microLesson, regenerateAvailable: false });
+
+    const generated = await app.inject({
+      method: "POST",
+      url: "/api/v1/micro-lessons",
+      headers: { cookie },
+      payload: { requestId: "10000000-0000-4000-8000-000000000009", regenerate: true }
+    });
+    expect(generated.statusCode).toBe(503);
+    expect(generated.json()).toEqual({ code: "AI_UNAVAILABLE" });
   });
 });

@@ -8,7 +8,7 @@ import { Lesson } from "../src/pages/learner/Lesson.js";
 import { Micro } from "../src/pages/learner/Micro.js";
 import { Onboard } from "../src/pages/learner/Onboard.js";
 import { Profile } from "../src/pages/learner/Profile.js";
-import type { LessonPart } from "@e4s/contracts";
+import type { LearnerProgressView, LessonPart } from "@e4s/contracts";
 
 afterEach(cleanup);
 
@@ -20,7 +20,9 @@ const lessonParts: LessonPart[] = [
 describe("learner screens preserve the prototype flow", () => {
   it("keeps onboarding as one grouped form with one save action", () => {
     render(<Onboard initialProfile={{ fullName: "", email: "" }} onSave={vi.fn()} />);
-    expect(screen.getByRole("heading", { name: /hoàn thiện hồ sơ/i })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: /cho season biết về bạn nhé/i })).toBeInTheDocument();
+    expect(screen.getByText(/bước 1 · hồ sơ · đang làm/i)).toBeInTheDocument();
+    expect(screen.getByText(/bước 2 · test đầu vào · tiếp theo/i)).toBeInTheDocument();
     expect(screen.getByRole("group", { name: /thông tin cá nhân/i })).toBeInTheDocument();
     expect(screen.getByRole("group", { name: /phong cách học/i })).toBeInTheDocument();
     expect(screen.getByRole("group", { name: /về tiếng anh/i })).toBeInTheDocument();
@@ -38,7 +40,7 @@ describe("learner screens preserve the prototype flow", () => {
       ],
       nextLesson: { id: "l2", dayNumber: 2, title: "Bài 2", status: "not_started" },
       metrics: { completedLessons: 1, totalLessons: 2, studyDays: 1, streakDays: 1, points: 20 },
-      program: { name: "E4S Pilot" },
+      program: { name: "E4S Pilot", weekCount: 2 },
       schedule: {
         daysPerWeek: 5, lessonMinutes: 10,
         days: [
@@ -80,7 +82,7 @@ describe("learner screens preserve the prototype flow", () => {
       lessons: [{ id: "l1", dayNumber: 1, title: "Bài 1", status: "in_progress" }],
       nextLesson: { id: "l1", dayNumber: 1, title: "Bài 1", status: "in_progress" },
       metrics: { completedLessons: 0, totalLessons: 1, studyDays: 0, streakDays: 0, points: 0 },
-      program: { name: "Tiếng Anh giao tiếp công sở" },
+      program: { name: "Tiếng Anh giao tiếp công sở", weekCount: 2 },
       schedule: { daysPerWeek: 5, lessonMinutes: 10, days: [] },
       coach: { turnsThisWeek: 0, targetTurns: 2, href: "/coach" },
       practice: { status: "locked", detail: "Chưa mở", href: "/practice" },
@@ -94,6 +96,7 @@ describe("learner screens preserve the prototype flow", () => {
     expect(Array.from(container.querySelectorAll("[data-home-block]")).map((node) => node.getAttribute("data-home-block"))).toEqual([
       "context", "notice", "primary", "metrics", "week-path", "attendance", "activities", "readiness"
     ]);
+    expect(screen.queryByRole("region", { name: /bài học siêu ngắn/i })).not.toBeInTheDocument();
   });
 
   it("keeps certificate, explanation-language and fixed-schedule information in the one-screen profile form", () => {
@@ -245,9 +248,54 @@ describe("learner screens preserve the prototype flow", () => {
 
     expect(onSaveAvatar).toHaveBeenCalledWith({ acc: "flower", color: "rose", bg: 3 });
   });
+
+  it("keeps every prototype profile row and translates stored option keys", () => {
+    const view = profileViewFixture();
+    view.learner.profile = {
+      fullName: "Học viên Demo",
+      email: "learner@e4s.local",
+      department: "AI",
+      position: "QA lead",
+      contact: "@demo",
+      goals: ["meeting", "docs"],
+      environmentUse: "weekly",
+      familyUse: "sometimes",
+      habits: ["movies", "social"],
+      situations: "Họp daily với team Singapore",
+      learningStyles: ["reading", "examples"],
+      explanationLanguage: "auto",
+      persona: "informal",
+      durationMinutes: 10,
+      device: "phone",
+      selfLevel: "B1",
+      certificates: [{ type: "TOEIC", result: "650", year: "2023" }],
+      experience: "Học ở trường",
+      concerns: "Muốn nói trôi chảy hơn"
+    };
+
+    render(<Profile view={view} />);
+
+    const details = screen.getByRole("region", { name: /hồ sơ cá nhân/i });
+    expect(details).toHaveTextContent("QA lead · AI");
+    expect(details).toHaveTextContent("learner@e4s.local");
+    expect(details).toHaveTextContent("@demo");
+    expect(details).toHaveTextContent("Họp và trình bày, Đọc tài liệu, spec kỹ thuật");
+    expect(details).toHaveTextContent("Vài lần mỗi tuần");
+    expect(details).toHaveTextContent("Thỉnh thoảng");
+    expect(details).toHaveTextContent("Xem phim / video, Mạng xã hội, chat");
+    expect(details).toHaveTextContent("Họp daily với team Singapore");
+    expect(details).toHaveTextContent("Đọc và ghi chú, Ví dụ sát việc đang làm");
+    expect(details).toHaveTextContent("Tiếng Việt (tự động theo mức A2)");
+    expect(details).toHaveTextContent("Informal · Thân thiện");
+    expect(details).toHaveTextContent("10 phút/buổi · 5 ngày/tuần (T2–T6) · Điện thoại");
+    expect(details).toHaveTextContent("Trung cấp (B1)");
+    expect(details).toHaveTextContent("TOEIC 650 (2023)");
+    expect(details).toHaveTextContent("Học ở trường");
+    expect(details).toHaveTextContent("Muốn nói trôi chảy hơn");
+  });
 });
 
-function profileViewFixture() {
+function profileViewFixture(): LearnerProgressView {
   return {
     learner: { id: "u1", displayName: "Học viên Demo", cefr: "A2" as const, profile: { department: "AI", position: "Intern" } },
     points: 20,

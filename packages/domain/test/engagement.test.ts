@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   arenaEligible,
   decideDuel,
+  seasonRioRoundPlan,
   scoreGameAttempt,
   weeklyPracticeAvailability
 } from "../src/engagement/index.js";
@@ -72,6 +73,18 @@ describe("engagement policy", () => {
     expect(scoreGameAttempt("mario", fullSet, oneCorrect)).toMatchObject({ score: 1, maxScore: 11, correct: 1, total: 11 });
     expect(scoreGameAttempt("sort", fullSet, [{ wordId: "fixed-1", answer: "noun" }])).toMatchObject({ score: 1, maxScore: 12, correct: 1, total: 12 });
     expect(scoreGameAttempt("typing", fullSet, [{ ...oneCorrect[0]!, combo: 1 }])).toMatchObject({ score: 10, maxScore: 500, correct: 1, total: 10 });
+  });
+
+  it("plans only answerable Season-rio gates while retaining three repeatable boss questions", () => {
+    const shortSet = Array.from({ length: 4 }, (_, index) => ({
+      id: `short-${index + 1}`,
+      english: `word${index + 1}`,
+      vietnamese: `từ ${index + 1}`,
+      partOfSpeech: "noun"
+    }));
+    expect(seasonRioRoundPlan(shortSet)).toMatchObject({ gateCount: 4, bossQuestions: 3, total: 7 });
+    expect(scoreGameAttempt("mario", shortSet, [{ wordId: "short-1", answer: "word1" }]))
+      .toMatchObject({ score: 1, maxScore: 7, total: 7 });
   });
 
   it("scores a completed crossword by correct words minus individual letter hints", () => {

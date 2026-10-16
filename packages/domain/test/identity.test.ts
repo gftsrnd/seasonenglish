@@ -30,6 +30,8 @@ describe("identity domain", () => {
     expect(permissionsFor("learner")).toContain("learning:own");
     expect(permissionsFor("operator")).toContain("content:operate");
     expect(permissionsFor("manager")).toContain("report:read");
+    expect(permissionsFor("manager")).toContain("content:operate");
+    expect(permissionsFor("manager")).toContain("assessment:review");
     expect(permissionsFor("learner")).not.toContain("content:operate");
   });
 });

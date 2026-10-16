@@ -1,0 +1,74 @@
+// @ts-expect-error Vitest runs this file in Node, while the web tsconfig omits @types/node.
+import { readFileSync } from "node:fs";
+import { describe, expect, it } from "vitest";
+
+const prototypeCss = readFileSync(new URL("./styles.css", import.meta.url), "utf8");
+const cloneCss = readFileSync(new URL("../../pages/operator/styles.operator-clone.css", import.meta.url), "utf8");
+
+describe("Operator responsive layout guardrails", () => {
+  it("reserves the fixed mobile navigation clearance for both Operator shells", () => {
+    expect(prototypeCss).toMatch(/body:has\(nav\.bottomnav\):has\(\.prototype-operator\) > #root > main\s*\{[^}]*padding-bottom:\s*calc\(128px/);
+    expect(cloneCss).toMatch(/body:has\(\.operator-page\) > #root > main\s*\{[^}]*padding-bottom:\s*calc\(128px/);
+  });
+
+  it("keeps title rhythm and equal-height signal cards explicit", () => {
+    expect(prototypeCss).toMatch(/\.prototype-operator > \.page-title\s*\{[^}]*margin-bottom:\s*14px/);
+    expect(prototypeCss).toMatch(/\.prototype-operator > \.section\s*\{[^}]*margin-top:\s*22px/);
+    expect(prototypeCss).toMatch(/\.prototype-operator \.section > h3\s*\{[^}]*margin-bottom:\s*14px/);
+    expect(prototypeCss).toMatch(/\.prototype-operator \.grid\.cols-2 > \.card\s*\{[^}]*height:\s*100%/);
+    expect(cloneCss).toMatch(/\.operator-page \.level-signal-grid\s*\{[^}]*align-items:\s*stretch/);
+  });
+
+  it("keeps compact Operator controls touchable on phones", () => {
+    expect(prototypeCss).toMatch(/@media \(max-width:\s*480px\)[\s\S]*?\.prototype-operator\[aria-label="Đọc mẫu"\] \.btn-sm,[\s\S]*?\.prototype-operator\[aria-label="Prompt"\] \.btn-sm,[\s\S]*?\.prototype-operator\[aria-label="Đề thi lên mức"\] \.btn-sm[\s\S]*?min-height:\s*40px/);
+    expect(prototypeCss).toMatch(/\.prototype-operator \.tabs\.operator-review-tabs\[role="tablist"\][\s\S]*?display:\s*flex[\s\S]*?flex-wrap:\s*nowrap[\s\S]*?overflow-x:\s*auto/);
+  });
+
+  it("keeps pending review actions in an even phone grid", () => {
+    expect(prototypeCss).toMatch(/@media \(max-width:\s*480px\)[\s\S]*?\.prototype-operator\[aria-label="Duyệt trình độ"\] > \.section:first-of-type > \.card > \.row:last-child\s*\{[\s\S]*?display:\s*grid[\s\S]*?grid-template-columns:\s*repeat\(2,\s*minmax\(0,\s*1fr\)\)/);
+    expect(prototypeCss).toMatch(/\.prototype-operator\[aria-label="Duyệt trình độ"\] > \.section:first-of-type > \.card > \.row:last-child > \*\s*\{[\s\S]*?margin-left:\s*0 !important/);
+    expect(prototypeCss).toMatch(/\.prototype-operator\[aria-label="Duyệt trình độ"\] > \.section:first-of-type > \.card > \.row:last-child > \.btn-danger\s*\{[\s\S]*?grid-column:\s*2[\s\S]*?width:\s*auto/);
+  });
+
+  it("gives prompt headings their own line before the reset action", () => {
+    expect(prototypeCss).toMatch(/\.prototype-operator\[aria-label="Prompt"\] > \.card > \.row\.between\s*\{[^}]*align-items:\s*center[^}]*gap:\s*8px/);
+    expect(prototypeCss).toMatch(/\.prototype-operator\[aria-label="Prompt"\] > \.card > \.row\.between > h3\s*\{[^}]*flex:\s*0 1 auto[^}]*margin:\s*0 0 8px/);
+  });
+
+  it("lets Operator status rows wrap without icon or viewport collisions", () => {
+    expect(prototypeCss).toMatch(/\.prototype-operator \.operator-status-message,[\s\S]*?\.prototype-operator \.operator-status-legend\s*\{[^}]*flex-wrap:\s*wrap/);
+    expect(prototypeCss).toMatch(/body:has\(\.prototype-operator\)\s*\{[^}]*overflow-x:\s*clip/);
+    expect(prototypeCss).toMatch(/\.prototype-operator\[aria-label="Prompt"\] > \.card textarea\s*\{[^}]*max-width:\s*100%/);
+  });
+
+  it("wraps long prompt tokens and keeps narrow detail tables inside dialogs", () => {
+    expect(prototypeCss).toMatch(/\.prototype-operator\[aria-label="Prompt"\] > \.card > \.row\.between > h3\s*\{[\s\S]*?overflow-wrap:\s*anywhere/);
+    expect(prototypeCss).toMatch(/\.operator-modal-scope \.list \.item\s*\{[\s\S]*?display:\s*flex/);
+    expect(prototypeCss).toMatch(/\.operator-detail-modal \.table-wrap table\s*\{[\s\S]*?table-layout:\s*fixed/);
+  });
+
+  it("keeps the legacy operator shell contained at the tablet breakpoint", () => {
+    expect(cloneCss).toMatch(/@media \(min-width:\s*761px\) and \(max-width:\s*960px\)[\s\S]*?body:has\(\.operator-page\) \.topbar[\s\S]*?overflow:\s*hidden/);
+    expect(cloneCss).toMatch(/body:has\(\.operator-page\) \.topbar nav a\.active[\s\S]*?display:\s*inline-flex/);
+    expect(cloneCss).toMatch(/body:has\(\.operator-page\) \.topbar \.userchip[\s\S]*?min-width:\s*0/);
+  });
+
+  it("keeps every prototype Operator destination reachable in the tablet header", () => {
+    expect(prototypeCss).toMatch(/@media \(min-width:\s*761px\) and \(max-width:\s*960px\)[\s\S]*?body:has\(\.prototype-operator\) \.topbar nav\s*\{[\s\S]*?flex:\s*1 1 auto[\s\S]*?max-width:\s*none[\s\S]*?overflow-x:\s*auto/);
+    expect(prototypeCss).toMatch(/body:has\(\.prototype-operator\) \.topbar nav a\s*\{[\s\S]*?display:\s*inline-flex[\s\S]*?flex:\s*0 0 auto/);
+    expect(prototypeCss).not.toMatch(/body:has\(\.prototype-operator\) \.topbar nav a\s*\{[\s\S]*?display:\s*none/);
+  });
+
+  it("gives the legacy operator controls and review tabs the same touch-safe geometry", () => {
+    expect(cloneCss).toMatch(/\.operator-page button:not\(\.operator-link-button\),[\s\S]*?\.operator-page \.button-link[\s\S]*?min-height:\s*40px/);
+    expect(cloneCss).toMatch(/\.operator-page \.operator-tabs[\s\S]*?display:\s*flex/);
+    expect(cloneCss).toMatch(/\.operator-page \.operator-tabs[\s\S]*?overflow-x:\s*auto/);
+    expect(cloneCss).toMatch(/@media \(max-width:\s*480px\)[\s\S]*?\.operator-page \.operator-tabs[\s\S]*?flex-wrap:\s*nowrap/);
+  });
+
+  it("contains legacy operator dialogs without relying on shared modal geometry", () => {
+    expect(cloneCss).toMatch(/\.operator-page \.lesson-editor-backdrop[\s\S]*?padding:/);
+    expect(cloneCss).toMatch(/\.operator-page \.lesson-editor[\s\S]*?max-height:/);
+    expect(cloneCss).toMatch(/\.operator-page \.lesson-editor-heading[\s\S]*?min-width:\s*0/);
+  });
+});

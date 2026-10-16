@@ -1,0 +1,129 @@
+.manager-clone { color: var(--text); }
+.manager-clone .manager-page-title { display: flex; justify-content: space-between; align-items: flex-end; gap: 12px; flex-wrap: wrap; margin-bottom: 14px; }
+.manager-clone .manager-page-title h1 { margin: 0; font-size: 1.5rem; }
+.manager-clone .manager-page-title p { margin: 2px 0 0; color: var(--muted); }
+.manager-clone .manager-row { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
+.manager-clone .manager-between { justify-content: space-between; }
+.manager-clone .manager-card { margin-top: 12px; border: 1px solid var(--line); border-radius: 14px; background: var(--surface); padding: 18px; }
+.manager-clone .manager-card h3 { margin: 0 0 8px; }
+.manager-clone .manager-small { font-size: .85rem; }
+.manager-clone .manager-xs { font-size: .75rem; }
+.manager-clone .manager-muted { color: var(--muted); }
+.manager-clone .manager-eyebrow { margin: 0; color: var(--muted); font-size: .7rem; font-weight: 500; letter-spacing: .1em; text-transform: uppercase; }
+.manager-clone .manager-kpi-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; }
+.manager-clone .manager-kpi { display: flex; min-width: 0; flex-direction: column; gap: 4px; }
+.manager-clone .manager-kpi[data-state="good"] { background: var(--mint); }
+.manager-clone .manager-kpi[data-state="attention"] { background: var(--danger-soft); }
+.manager-clone .manager-kpi-value { font-size: 1.9rem; font-weight: 600; line-height: 1.1; letter-spacing: -.02em; }
+.manager-clone .manager-progress-card { margin-top: 12px; }
+.manager-clone .manager-reminder-link { background: var(--warn-soft); }
+.manager-clone .manager-progress-table { min-width: 1060px; }
+.manager-clone .manager-progress-table td { white-space: nowrap; }
+.manager-clone .manager-waiting-list { display: grid; gap: 8px; }
+.manager-clone .manager-waiting-list article { display: flex; align-items: center; gap: 12px; border-radius: 12px; background: var(--surface); box-shadow: inset 0 0 0 1px var(--line); padding: 12px 14px; }
+.manager-clone .manager-waiting-list p { margin: 2px 0 0; color: var(--muted); font-size: .75rem; }
+.manager-clone .manager-week-dots { display: inline-flex; gap: 3px; margin: 0; vertical-align: middle; }
+.manager-clone .manager-week-dots span { width: 9px; height: 9px; border-radius: 50%; background: var(--track); }
+.manager-clone .manager-week-dots span.is-on { background: var(--primary); }
+.manager-clone .manager-badge { display: inline-flex; align-items: center; border-radius: 8px; background: var(--surface-3); box-shadow: inset 0 0 0 1px var(--line); padding: 3px 9px; font-size: .72rem; white-space: nowrap; }
+.manager-clone .manager-badge.is-good { background: var(--ok-tint); box-shadow: inset 0 0 0 1px var(--ok-line); color: var(--olive-dark); }
+.manager-clone .manager-badge.is-warning { background: var(--warn-soft); box-shadow: inset 0 0 0 1px var(--warn-line); color: var(--warn); }
+.manager-clone .manager-badge.is-danger { background: var(--danger-soft); box-shadow: inset 0 0 0 1px var(--danger-line); color: var(--danger); }
+.manager-clone .manager-level { background: var(--primary); box-shadow: none; color: var(--primary-ink); }
+.manager-clone .manager-readiness[data-state="attention"] { background: var(--warn-soft); }
+.manager-clone .manager-readiness[data-state="good"] { background: var(--mint); }
+.manager-clone .manager-operator-card { margin-top: 12px; }
+.manager-clone .manager-operator-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; margin-top: 10px; }
+.manager-clone .manager-operator-title { display: flex; align-items: center; gap: 10px; }
+.manager-clone .manager-staff-avatar { width: 44px; height: 44px; display: grid; flex: 0 0 44px; place-items: center; border-radius: 50%; background: var(--primary-soft); box-shadow: inset 0 0 0 1px var(--primary-line); font-weight: 600; }
+.manager-clone .manager-metric-line { display: flex; align-items: center; justify-content: space-between; gap: 12px; border-bottom: 1px dashed var(--line); padding: 3px 0; font-size: .85rem; }
+.manager-clone .manager-subheading { margin: 10px 0 4px; }
+.manager-clone .manager-reminder-banner { display: flex; gap: 12px; align-items: center; margin: 0 0 12px; border: 1px solid var(--primary-line); border-radius: 14px; background: var(--primary-soft); padding: 12px 14px; }
+.manager-clone .manager-reminder-banner > span { width: 32px; height: 32px; display: grid; flex: 0 0 32px; place-items: center; border-radius: 50%; background: var(--surface); font-weight: 600; }
+.manager-clone .manager-reminder-banner p { margin: 2px 0 0; font-size: .82rem; }
+.manager-clone .manager-notice { border-radius: 10px; background: var(--primary-soft); padding: 10px 12px; }
+.manager-clone .manager-reminder-list { display: grid; gap: 12px; }
+.manager-clone .manager-reminder-list .manager-card { margin: 0; }
+.manager-clone .manager-reminder-heading { display: flex; justify-content: space-between; align-items: center; gap: 12px; }
+.manager-clone .manager-reminder-heading > span { color: var(--muted); font-size: .75rem; }
+.manager-clone .manager-reminder-message { margin: 8px 0; border-radius: 10px; background: var(--surface-3); padding: 10px; white-space: pre-wrap; font-size: .82rem; }
+.manager-clone .manager-reminder-empty { display: flex; align-items: center; gap: 14px; }
+.manager-clone .manager-reminder-empty > span { width: 48px; height: 48px; display: grid; flex: 0 0 48px; place-items: center; border-radius: 50%; background: var(--ok-tint); color: var(--ok); font-size: 1.4rem; }
+.manager-clone .manager-reminder-empty h3, .manager-clone .manager-reminder-empty p { margin: 0; }
+.manager-clone .manager-reminder-empty p { color: var(--muted); font-size: .82rem; }
+.manager-clone.manager-report-page { width: min(1056px, calc(100% - 64px)); }
+.manager-clone .manager-report { max-width: 960px; margin: 0 auto; border: 1px solid var(--line); border-radius: 14px; background: var(--surface); padding: 28px; overflow-x: auto; }
+.manager-clone .manager-report-head { display: flex; justify-content: space-between; gap: 16px; align-items: flex-start; border-bottom: 1px solid var(--line); padding-bottom: 14px; margin-bottom: 16px; }
+.manager-clone .manager-report-head > div:last-child { text-align: right; font-size: .85rem; line-height: 1.5; color: var(--muted); }
+.manager-clone .manager-report h3 { margin: 22px 0 8px; border-left: 4px solid var(--primary); padding-left: 10px; font-size: 1.05rem; }
+.manager-clone .manager-report-summary { margin: 0; border-radius: 10px; background: var(--surface-3); padding: 14px 16px; line-height: 1.5; }
+.manager-clone .manager-report-summary.is-good { background: var(--mint); }
+.manager-clone .manager-report-summary.is-warning { background: var(--warn-soft); }
+.manager-clone .manager-report-two { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; align-items: start; }
+.manager-clone .manager-report-questions { max-width: 960px; margin: 12px auto 0; }
+.manager-clone .manager-report-questions ul { margin: 0; padding-left: 20px; }
+.manager-clone .manager-report-value { font-size: 1.25rem; }
+.manager-clone .report-progress { height: 8px; min-width: 100px; overflow: hidden; border-radius: 999px; background: var(--track); }
+.manager-clone .report-progress i { display: block; height: 100%; border-radius: inherit; background: var(--primary); }
+.manager-clone .report-progress.is-good i { background: var(--olive); }
+.manager-clone .report-progress.is-danger i { background: var(--brown); }
+.manager-clone .report-pill { display: inline-flex; border-radius: 8px; background: var(--surface-3); padding: 3px 9px; font-size: .72rem; white-space: nowrap; }
+.manager-clone .report-pill.is-good { background: var(--ok-tint); color: var(--olive-dark); }
+.manager-clone .report-pill.is-danger { background: var(--danger-soft); color: var(--danger); }
+.manager-clone .report-level { display: flex; gap: 8px; align-items: center; margin: 4px 0; font-size: .85rem; }
+.manager-clone .report-level > span { width: 64px; }
+.manager-clone .report-level .report-progress { flex: 1; }
+.manager-clone .report-level > b { width: 60px; text-align: right; }
+.manager-clone .manager-report-actions { margin: 0; padding-left: 20px; font-size: .85rem; line-height: 1.6; }
+.manager-clone .manager-report > footer { margin-top: 20px; border-top: 1px solid var(--line); padding-top: 10px; color: var(--muted); font-size: .75rem; }
+.manager-clone .manager-reward-controls { margin-top: 0; }
+.manager-clone .manager-case-buttons { margin-top: 6px; }
+.manager-clone .manager-case-buttons .button, .manager-clone .manager-reward-inputs .button { min-height: 32px; padding: 0 12px; font-size: .82rem; }
+.manager-clone .manager-reward-inputs { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; margin-top: 14px; }
+.manager-clone .manager-reward-inputs > label, .manager-clone .manager-reward-inputs > div { display: grid; align-content: start; gap: 4px; }
+.manager-clone .manager-reward-inputs > label > span, .manager-clone .manager-reward-inputs > div > span { color: var(--muted); font-size: .85rem; font-weight: 500; }
+.manager-clone .manager-reward-inputs input { width: 100%; min-height: 42px; border: 1px solid var(--line); border-radius: 10px; padding: 8px 11px; }
+.manager-clone .manager-reward-result { margin: 6px 0 0; font-size: .85rem; }
+.manager-clone .manager-reward-preview-title { margin: 16px 0 0; }
+.manager-clone .manager-reward-head { display: flex; gap: 16px; align-items: center; }
+.manager-clone .manager-reward-head h2 { margin: 2px 0; font-size: 1.5rem; }
+.manager-clone .manager-reward-head p:last-child { margin: 0; font-size: .85rem; }
+.manager-clone .manager-season-figure { position: relative; display: inline-grid; flex: 0 0 auto; place-items: center; border-radius: 50%; line-height: 1; }
+.manager-clone .manager-reward-tracks { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; margin-top: 12px; }
+.manager-clone .manager-reward-track { border: 1px dashed var(--line); border-radius: 14px; padding: 18px; }
+.manager-clone .manager-reward-track.is-good { background: var(--mint); }
+.manager-clone .manager-reward-track > strong { display: block; margin: 2px 0; font-size: 1.3rem; }
+.manager-clone .manager-reward-track small { display: block; margin-top: 4px; color: var(--muted); }
+.manager-clone .manager-progress { height: 6px; overflow: hidden; border-radius: 999px; background: var(--track); }
+.manager-clone .manager-progress i { display: block; height: 100%; border-radius: inherit; background: var(--primary); }
+.manager-clone .manager-warning { margin-top: 10px; border-radius: 10px; background: var(--warn-soft); padding: 12px 14px; font-size: .85rem; }
+.manager-clone .manager-badges-title { margin-top: 14px; }
+.manager-clone .manager-badges-title h3 { margin: 0; }
+.manager-clone .manager-badges-title > span, .manager-clone .manager-badge-tier > .manager-row > span:last-child { color: var(--muted); font-size: .8rem; }
+.manager-clone .manager-badge-tier { margin-top: 12px; }
+.manager-clone .manager-earned-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 10px; margin-top: 6px; }
+.manager-clone .manager-earned { display: flex; flex-direction: column; align-items: center; gap: 2px; border-radius: 12px; background: var(--surface); box-shadow: inset 0 0 0 1px var(--line); padding: 14px 8px; text-align: center; }
+.manager-clone .manager-earned.is-off { opacity: .5; filter: grayscale(1); }
+.manager-clone .manager-earned > span { font-size: 1.8rem; line-height: 1.2; }
+.manager-clone .manager-earned small { color: var(--muted); font-size: .75rem; }
+.manager-clone .manager-reward-card details { margin-top: 10px; }
+.manager-clone .manager-reward-card summary { cursor: pointer; font-size: .85rem; font-weight: 500; }
+.manager-clone .manager-reward-card details ul { margin: 6px 0 0; padding-left: 20px; font-size: .85rem; }
+.manager-clone .manager-level-table { margin-top: 12px; }
+.manager-clone .manager-visually-hidden { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+
+@media (max-width: 900px) {
+  .manager-clone .manager-kpi-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .manager-clone .manager-operator-grid, .manager-clone .manager-report-two, .manager-clone .manager-reward-inputs, .manager-clone .manager-reward-tracks { grid-template-columns: 1fr; }
+}
+@media (max-width: 620px) {
+  .manager-clone .manager-kpi-grid { grid-template-columns: 1fr; }
+  .manager-clone .manager-report { padding: 18px; }
+  .manager-clone .manager-report-head, .manager-clone .manager-reminder-heading { align-items: flex-start; flex-direction: column; }
+  .manager-clone .manager-report-head > div:last-child { text-align: left; }
+}
+
+@media print {
+  .manager-clone .no-print { display: none !important; }
+  .manager-clone .manager-report { max-width: none; border: 0; box-shadow: none; }
+}

@@ -6,7 +6,9 @@
     { "path": "./packages/test-support" },
     { "path": "./packages/domain" },
     { "path": "./packages/ai" },
+    { "path": "./packages/storage" },
     { "path": "./apps/api" },
+    { "path": "./apps/worker" },
     { "path": "./apps/web" }
   ]
 }

@@ -1,0 +1,97 @@
+import { Pool } from "pg";
+import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
+import { migrateDatabase, resetPublicSchema, seedDemo } from "@e4s/database";
+import { createCredentialHash } from "@e4s/domain/identity";
+import { DEMO_IDS } from "@e4s/test-support";
+import { buildApi } from "../src/app.js";
+
+const databaseUrl = process.env.TEST_DATABASE_URL
+  ?? "postgres://e4s:e4s_test_password@127.0.0.1:55432/e4s_test";
+const levels = ["A1", "A2", "B1", "B2"] as const;
+
+function option(index: number) {
+  return {
+    topic: `Topic ${index}`,
+    description: "Một tình huống giao tiếp trong công việc.",
+    objectives: "Nêu mục tiêu và bước tiếp theo rõ ràng.",
+    keyVocabHint: "meeting, deadline, update",
+    plan: Object.fromEntries(levels.map((level) => [level, ["Khởi động", "Từ vựng", "Nghe", "Nói", "Ôn tập"]]))
+  };
+}
+
+describe("week suggestion parity API", () => {
+  const pool = new Pool({ connectionString: databaseUrl });
+  let trace = 0;
+  const runTask = vi.fn(async (taskKey: string) => ({
+    output: taskKey === "week_suggestions"
+      ? { weeks: [{ weekNumber: 1, levels: [...levels], options: [option(1), option(2), option(3)] }] }
+      : {},
+    metadata: {
+      traceId: `trace-week-${++trace}`, taskId: taskKey, provider: "fixture", model: "fixture-model",
+      attempts: 1, latencyMs: 1, inputHash: "a".repeat(64), schemaValid: true as const, usage: {}
+    }
+  }));
+  const app = buildApi({ pool, allowDemoLogin: true, secureCookies: false, aiRunner: { runTask } });
+  let operatorCookie = "";
+  let managerCookie = "";
+
+  beforeAll(async () => {
+    const client = await pool.connect();
+    try {
+      await resetPublicSchema(client);
+      await migrateDatabase(client);
+      await seedDemo(client);
+      await client.query(
+        "insert into user_credentials (user_id, credential_hash) values ($1, $2), ($3, $4)",
+        [
+          DEMO_IDS.operator, await createCredentialHash("operator-pass"),
+          DEMO_IDS.manager, await createCredentialHash("manager-pass")
+        ]
+      );
+    } finally { client.release(); }
+    await app.ready();
+    const login = async (email: string, password: string) => {
+      const response = await app.inject({ method: "POST", url: "/api/auth/staff/login", payload: { email, password } });
+      expect(response.statusCode, response.body).toBe(200);
+      return String(response.headers["set-cookie"]).split(";")[0] ?? "";
+    };
+    operatorCookie = await login("operator@e4s.local", "operator-pass");
+    managerCookie = await login("manager@e4s.local", "manager-pass");
+  }, 30_000);
+
+  afterAll(async () => { await app.close(); await pool.end(); });
+
+  it("returns three options with active CEFR five-day plans and keeps Manager read-only", async () => {
+    const manager = await app.inject({
+      method: "POST", url: "/api/v1/content/weeks/suggestions", headers: { cookie: managerCookie }, payload: { weekNumbers: [1] }
+    });
+    expect(manager.statusCode).toBe(403);
+
+    const response = await app.inject({
+      method: "POST", url: "/api/v1/content/weeks/suggestions", headers: { cookie: operatorCookie }, payload: { weekNumbers: [1] }
+    });
+    expect(response.statusCode, response.body).toBe(200);
+    const week = response.json().weeks[0];
+    expect(week).toMatchObject({ weekNumber: 1, levels: levels, options: expect.any(Array) });
+    expect(week.options).toHaveLength(3);
+    for (const suggestion of week.options) {
+      expect(Object.keys(suggestion.plan).sort()).toEqual([...levels].sort());
+      for (const level of levels) expect(suggestion.plan[level]).toHaveLength(5);
+    }
+  });
+
+  it("rejects malformed AI output before persistence instead of rendering empty plans", async () => {
+    runTask.mockResolvedValueOnce({
+      output: { weeks: [{ weekNumber: 1, levels: ["A2"], options: [option(1), option(2)] }] },
+      metadata: {
+        traceId: "trace-week-invalid", taskId: "week_suggestions", provider: "fixture", model: "fixture-model",
+        attempts: 1, latencyMs: 1, inputHash: "b".repeat(64), schemaValid: true as const, usage: {}
+      }
+    });
+    const response = await app.inject({
+      method: "POST", url: "/api/v1/content/weeks/suggestions", headers: { cookie: operatorCookie }, payload: { weekNumbers: [1] }
+    });
+    expect(response.statusCode).toBe(502);
+    expect(response.json()).toEqual({ code: "AI_OUTPUT_INVALID" });
+  });
+});

@@ -9,12 +9,26 @@ await client.connect();
 try {
   await migrateDatabase(client);
   await seedDemo(client);
+  await client.query(
+    `update sessions
+     set revoked_at = coalesce(revoked_at, now())
+     where user_id = any($1::uuid[])
+       and revoked_at is null`,
+    [[DEMO_IDS.learner, DEMO_IDS.operator, DEMO_IDS.checker, DEMO_IDS.manager]]
+  );
   const credentials = [
     [DEMO_IDS.learner, "learner-pass"],
     [DEMO_IDS.operator, "staff-pass"],
+    [DEMO_IDS.checker, "checker-pass"],
     [DEMO_IDS.manager, "manager-pass"]
   ] as const;
   for (const [userId, password] of credentials) {
+    await client.query(
+      `update users
+       set status = 'active', updated_at = now()
+       where id = $1`,
+      [userId]
+    );
     await client.query(
       `insert into user_credentials (user_id, credential_hash)
        values ($1, $2)

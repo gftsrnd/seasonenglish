@@ -1,0 +1,146 @@
+name: e4s-local
+
+services:
+  postgres:
+    image: pgvector/pgvector:pg18
+    environment:
+      POSTGRES_DB: e4s
+      POSTGRES_USER: e4s
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-e4s_local_password}
+    ports:
+      - "${E4S_POSTGRES_PORT:-5433}:5432"
+    volumes:
+      - e4s-postgres:/var/lib/postgresql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U e4s -d e4s"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  minio:
+    image: minio/minio:latest
+    command: server /data --console-address :9001
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-e4s_minio}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-e4s_local_minio_password}
+    ports:
+      - "${E4S_MINIO_PORT:-9002}:9000"
+      - "${E4S_MINIO_CONSOLE_PORT:-9003}:9001"
+    volumes:
+      - e4s-minio:/data
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:9000/minio/health/live"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  minio-init:
+    image: minio/mc:latest
+    depends_on:
+      minio:
+        condition: service_healthy
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-e4s_minio}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-e4s_local_minio_password}
+    entrypoint:
+      - /bin/sh
+      - -ec
+      - |
+        mc alias set e4s http://minio:9000 "$${MINIO_ROOT_USER}" "$${MINIO_ROOT_PASSWORD}"
+        mc mb --ignore-existing e4s/e4s-evidence
+    restart: "no"
+
+  migrate:
+    build:
+      context: .
+      dockerfile: Dockerfile.local
+      target: local-runtime
+    command: ["pnpm", "exec", "tsx", "scripts/prepare-local.ts"]
+    environment:
+      DATABASE_URL: postgres://e4s:${POSTGRES_PASSWORD:-e4s_local_password}@postgres:5432/e4s
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: "no"
+
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile.local
+      target: local-runtime
+    command: ["pnpm", "exec", "tsx", "apps/api/src/server.ts"]
+    environment:
+      HOST: 0.0.0.0
+      PORT: 3001
+      DATABASE_URL: postgres://e4s:${POSTGRES_PASSWORD:-e4s_local_password}@postgres:5432/e4s
+      ALLOW_DEMO_LOGIN: "true"
+      COOKIE_SECURE: "false"
+      S3_ENDPOINT: http://minio:9000
+      S3_REGION: us-east-1
+      S3_ACCESS_KEY: ${MINIO_ROOT_USER:-e4s_minio}
+      S3_SECRET_KEY: ${MINIO_ROOT_PASSWORD:-e4s_local_minio_password}
+      GROQ_API_KEY: ${GROQ_API_KEY:?GROQ_API_KEY must be set in .env for local AI}
+      GROQ_MODEL: ${GROQ_MODEL:-qwen/qwen3.8-27b}
+      VOCAB_IMAGE_SOURCE: ${VOCAB_IMAGE_SOURCE:-wikimedia}
+      PEXELS_API_KEY: ${PEXELS_API_KEY:-}
+      PIXABAY_API_KEY: ${PIXABAY_API_KEY:-}
+    ports:
+      - "${E4S_API_PORT:-3002}:3001"
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      minio-init:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://localhost:3001/api/readiness').then(r => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  worker:
+    build:
+      context: .
+      dockerfile: Dockerfile.local
+      target: local-runtime
+    command: ["pnpm", "exec", "tsx", "apps/worker/src/server.ts"]
+    environment:
+      DATABASE_URL: postgres://e4s:${POSTGRES_PASSWORD:-e4s_local_password}@postgres:5432/e4s
+      WORKER_POLL_MS: 1000
+      WORKER_LEASE_SECONDS: 60
+      S3_ENDPOINT: http://minio:9000
+      S3_REGION: us-east-1
+      S3_ACCESS_KEY: ${MINIO_ROOT_USER:-e4s_minio}
+      S3_SECRET_KEY: ${MINIO_ROOT_PASSWORD:-e4s_local_minio_password}
+      S3_BUCKET: e4s-evidence
+      GROQ_API_KEY: ${GROQ_API_KEY:?GROQ_API_KEY must be set in .env for local AI}
+      GROQ_MODEL: ${GROQ_MODEL:-qwen/qwen3.8-27b}
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      minio-init:
+        condition: service_completed_successfully
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "node", "-e", "process.kill(1, 0)"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+
+  web:
+    build:
+      context: .
+      dockerfile: Dockerfile.web
+    ports:
+      - "${E4S_WEB_PORT:-4174}:80"
+    depends_on:
+      api:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O - http://127.0.0.1/ >/dev/null 2>&1"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+volumes:
+  e4s-postgres:
+  e4s-minio:

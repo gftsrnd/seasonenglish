@@ -1,5 +1,8 @@
+import "../../styles.learner-clone.css";
+
 export * from "./Assessment.js";
 export * from "./Coach.js";
+export * from "./Challenge.js";
 export * from "./Arena.js";
 export * from "./Duel.js";
 export * from "./Game.js";

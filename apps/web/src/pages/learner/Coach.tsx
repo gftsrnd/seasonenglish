@@ -12,6 +12,7 @@ export function Coach({ view, onSend, onPersonaChange, onNewChat }: CoachProps) 
   const [message, setMessage] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  const [recording, setRecording] = useState(false);
   const capped = view.daily.used >= view.daily.limit;
   const canSend = view.aiAvailable && !capped && !busy;
 
@@ -31,6 +32,20 @@ export function Coach({ view, onSend, onPersonaChange, onNewChat }: CoachProps) 
     try { await operation(); }
     catch { setError("Chưa lưu được thay đổi. Vui lòng thử lại."); }
     finally { setBusy(false); }
+  };
+
+  const dictate = () => {
+    const SpeechRecognition = (window as Window & { SpeechRecognition?: SpeechRecognitionConstructor; webkitSpeechRecognition?: SpeechRecognitionConstructor }).SpeechRecognition
+      ?? (window as Window & { webkitSpeechRecognition?: SpeechRecognitionConstructor }).webkitSpeechRecognition;
+    if (!SpeechRecognition) { setError("Trình duyệt này chưa hỗ trợ nhập bằng giọng nói. Bạn vẫn có thể gõ câu trả lời."); return; }
+    const recognition = new SpeechRecognition();
+    recognition.lang = "en-US";
+    recognition.interimResults = false;
+    recognition.maxAlternatives = 1;
+    recognition.onresult = (event) => setMessage((current) => `${current}${current ? " " : ""}${event.results[0]?.[0]?.transcript.trim() ?? ""}`.trim());
+    recognition.onerror = () => setError("Không nghe được giọng nói. Hãy cho phép micro rồi thử lại.");
+    recognition.onend = () => setRecording(false);
+    setError(""); setRecording(true); recognition.start();
   };
 
   return <main className="learner-page learner-page--coach">
@@ -80,7 +95,7 @@ export function Coach({ view, onSend, onPersonaChange, onNewChat }: CoachProps) 
 
       <form className="coach-compose" onSubmit={(event) => void submit(event)}>
         <input value={message} onChange={(event) => setMessage(event.target.value)} disabled={!view.aiAvailable || capped || busy} autoComplete="off" placeholder="Viết câu trả lời bằng tiếng Anh…" />
-        <button className="coach-mic" type="button" aria-label="Nói" disabled={!view.aiAvailable || capped || busy}><MicIcon /></button>
+        <button className={`coach-mic ${recording ? "is-recording" : ""}`} type="button" aria-label={recording ? "Đang nghe" : "Nói"} disabled={!view.aiAvailable || capped || busy || recording} onClick={dictate}><MicIcon /></button>
         <button className="coach-send" type="submit" aria-label="Gửi" disabled={!canSend || !message.trim()}><SendIcon /></button>
       </form>
       {error ? <p className="coach-error" role="alert">{error}</p> : null}
@@ -88,6 +103,18 @@ export function Coach({ view, onSend, onPersonaChange, onNewChat }: CoachProps) 
     <p className="coach-footnote">Mỗi lượt Season trả lời, chấm 3 tiêu chí (đúng ý · từ vựng · ngữ pháp) và gợi ý tối đa 3 chỗ sửa. Mục tiêu: ≥{view.weekly.target} lượt mỗi tuần.</p>
   </main>;
 }
+
+type SpeechRecognitionResultEvent = { readonly results: ArrayLike<ArrayLike<{ readonly transcript: string }>> };
+type SpeechRecognitionInstance = {
+  lang: string;
+  interimResults: boolean;
+  maxAlternatives: number;
+  onresult: ((event: SpeechRecognitionResultEvent) => void) | null;
+  onerror: (() => void) | null;
+  onend: (() => void) | null;
+  start: () => void;
+};
+type SpeechRecognitionConstructor = new () => SpeechRecognitionInstance;
 
 function CoachFeedback({ feedback }: { feedback: CoachView["messages"][number]["feedback"] }) {
   if (!feedback) return null;

@@ -150,6 +150,45 @@ describe("practice, games, arena, rewards and survey API", () => {
     await pool.query("delete from game_results where learner_id = $1 and game_key = 'eggs'", [DEMO_IDS.learner]);
   });
 
+  it("persists Season catch wrong-catch evidence separately from the server-scored answer", async () => {
+    const hub = await app.inject({ method: "GET", url: "/api/v1/engagement/games", headers: { cookie } });
+    const words = hub.json().wordSet.words as Array<{ id: string; english: string }>;
+    const target = words[0]!;
+    const firstWrong = words[1]!;
+    const secondWrong = words[2]!;
+    const requestId = "10000000-0000-4000-8000-000000000024";
+
+    const completed = await app.inject({
+      method: "POST", url: "/api/v1/engagement/games/eggs/results", headers: { cookie },
+      payload: {
+        requestId,
+        answers: [{ wordId: target.id, answer: target.english }],
+        events: [
+          { type: "wrong_catch", wordId: target.id, answer: firstWrong.english },
+          { type: "wrong_catch", wordId: target.id, answer: secondWrong.english }
+        ]
+      }
+    });
+    expect(completed.statusCode, completed.body).toBe(200);
+    expect(completed.json()).toMatchObject({ score: 1, correct: 1, total: 10 });
+
+    const stored = await pool.query<{ details: { evidence: { events: Array<{ type: string; wordId: string; answer: string }> } } }>(
+      "select details from game_results where learner_id = $1 and request_key = $2",
+      [DEMO_IDS.learner, requestId]
+    );
+    expect(stored.rows[0]?.details.evidence.events).toEqual(expect.arrayContaining([
+      { type: "wrong_catch", wordId: target.id, answer: firstWrong.english },
+      { type: "wrong_catch", wordId: target.id, answer: secondWrong.english },
+      expect.objectContaining({ type: "scored_answer", wordId: target.id, answer: target.english })
+    ]));
+
+    const duplicate = await app.inject({
+      method: "POST", url: "/api/v1/engagement/games/eggs/results", headers: { cookie },
+      payload: { requestId, answers: [{ wordId: target.id, answer: "wrong" }], events: [] }
+    });
+    expect(duplicate.json()).toMatchObject({ id: completed.json().id, score: 1, correct: 1 });
+  });
+
   it("creates and removes a private AI vocabulary set without changing the weekly set", async () => {
     const generated = await app.inject({
       method: "POST", url: "/api/v1/engagement/games/word-set", headers: { cookie },
@@ -197,6 +236,21 @@ describe("practice, games, arena, rewards and survey API", () => {
       payload: { requestId: "10000000-0000-4000-8000-000000000003", answers: [{ wordId: word.id, answer: word.english }] }
     });
     expect(first.statusCode, first.body).toBe(200);
+    expect(first.json()).toMatchObject({
+      outcome: "waiting",
+      myScore: { score: 2, maxScore: expect.any(Number) },
+      opponentScore: null
+    });
+    const retry = await app.inject({
+      method: "POST", url: `/api/v1/engagement/duels/${duelId}/result`, headers: { cookie },
+      payload: { requestId: "10000000-0000-4000-8000-000000000003", answers: [{ wordId: word.id, answer: "wrong" }] }
+    });
+    expect(retry.statusCode, retry.body).toBe(200);
+    expect(retry.json()).toMatchObject({
+      id: first.json().id,
+      result: { id: first.json().result.id, score: 2, maxScore: first.json().result.maxScore },
+      myScore: { score: 2, maxScore: first.json().myScore.maxScore }
+    });
     const second = await app.inject({
       method: "POST", url: `/api/v1/engagement/duels/${duelId}/result`, headers: { cookie },
       payload: { requestId: "10000000-0000-4000-8000-000000000004", answers: [{ wordId: word.id, answer: word.english }] }

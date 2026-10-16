@@ -1,12 +1,14 @@
 // @vitest-environment jsdom
 import "@testing-library/jest-dom/vitest";
-import { cleanup, render, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { userEvent } from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { Arena, Duel, Game, Games, Practice, Reward, Survey } from "../src/pages/learner/index.js";
+import { SeasonCatchGame } from "../src/pages/learner/games/SeasonCatchGame.js";
 import type { ArenaView, DuelView, GameHubView, WeeklyPracticeView } from "@e4s/contracts";
 
 afterEach(() => {
+  vi.useRealTimers();
   cleanup();
   delete document.documentElement.dataset.theme;
 });
@@ -79,13 +81,17 @@ describe("engagement screens preserve Thu's visible flow", () => {
     expect(screen.queryByText("◆")).not.toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: /bắt đầu chơi/i }));
     expect(screen.getByText(/từ 1\/2/i)).toBeInTheDocument();
-    for (const letter of "cat") await user.click(screen.getByRole("button", { name: new RegExp(`^chữ ${letter} `, "i") }));
+    const firstWord = shortSet.words.find((word) => screen.queryByText(word.vietnamese));
+    expect(firstWord).toBeDefined();
+    for (const letter of firstWord!.english) await user.click(screen.getByRole("button", { name: new RegExp(`^chữ ${letter} `, "i") }));
     expect(screen.getByRole("heading", { name: "Từ 1/2" })).toBeInTheDocument();
-    expect(screen.getByText(/cat \+2/i)).toBeInTheDocument();
+    expect(screen.getByText(new RegExp(`${firstWord!.english} \\+2`, "i"))).toBeInTheDocument();
     expect(await screen.findByText(/từ 2\/2/i, {}, { timeout: 1_600 })).toBeInTheDocument();
-    for (const letter of "dog") await user.click(screen.getByRole("button", { name: new RegExp(`^chữ ${letter} `, "i") }));
+    const secondWord = shortSet.words.find((word) => screen.queryByText(word.vietnamese));
+    expect(secondWord).toBeDefined();
+    for (const letter of secondWord!.english) await user.click(screen.getByRole("button", { name: new RegExp(`^chữ ${letter} `, "i") }));
     await waitFor(() => expect(onFinish).toHaveBeenCalledWith(expect.objectContaining({
-      answers: expect.arrayContaining([expect.objectContaining({ wordId: "cat", answer: "cat" })])
+      answers: expect.arrayContaining([expect.objectContaining({ wordId: firstWord!.id, answer: firstWord!.english })])
     })), { timeout: 1_600 });
     expect(onFinish.mock.calls[0]?.[0]).not.toHaveProperty("score");
   });
@@ -173,6 +179,40 @@ describe("engagement screens preserve Thu's visible flow", () => {
     expect(screen.getByRole("img", { name: /sóc mùa thu/i })).toBeInTheDocument();
   });
 
+  it("keeps each non-fatal wrong Season catch in evidence before the final dropped target", async () => {
+    vi.useFakeTimers();
+    vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockReturnValue({
+      bottom: 100, height: 100, left: 0, right: 100, toJSON: () => ({}), top: 0, width: 100, x: 0, y: 0
+    });
+    const onFinish = vi.fn();
+    render(<SeasonCatchGame cefr="A2" attemptSeed={2} onFinish={onFinish} words={[
+      { id: "alpha", english: "alpha", vietnamese: "alpha", definition: "first", partOfSpeech: "noun" },
+      { id: "bravo", english: "bravo", vietnamese: "bravo", definition: "second", partOfSpeech: "noun" },
+      { id: "charlie", english: "charlie", vietnamese: "charlie", definition: "third", partOfSpeech: "noun" },
+      { id: "delta", english: "delta", vietnamese: "delta", definition: "fourth", partOfSpeech: "noun" }
+    ]} />);
+    const scene = screen.getByRole("application", { name: /màn chơi season catch/i });
+
+    fireEvent.pointerMove(scene, { clientX: 87.5 });
+    await act(async () => { await vi.advanceTimersByTimeAsync(3_100); });
+    expect(screen.getByText(/alpha.*không khớp/i)).toBeInTheDocument();
+
+    fireEvent.pointerMove(scene, { clientX: 62.5 });
+    await act(async () => { await vi.advanceTimersByTimeAsync(1_300); });
+    expect(screen.getByText(/bravo.*không khớp/i)).toBeInTheDocument();
+
+    fireEvent.pointerMove(scene, { clientX: 50 });
+    await act(async () => { await vi.advanceTimersByTimeAsync(5_000); });
+    await act(async () => { await vi.advanceTimersByTimeAsync(1_000); });
+    expect(onFinish).toHaveBeenCalledWith({
+      answers: [expect.objectContaining({ wordId: "charlie", answer: "[dropped]" })],
+      events: [
+        { type: "wrong_catch", wordId: "charlie", answer: "alpha" },
+        { type: "wrong_catch", wordId: "charlie", answer: "bravo" }
+      ]
+    });
+  }, 10_000);
+
   it("runs Season-rio as a platformer with eight gates, a boss and a finish flag", async () => {
     const user = userEvent.setup();
     document.documentElement.dataset.theme = "autumn";
@@ -194,14 +234,29 @@ describe("engagement screens preserve Thu's visible flow", () => {
     expect(hero).toHaveStyle({ left: "48px" });
   });
 
+  it("renders only answerable Season-rio gates for a short word set", async () => {
+    const user = userEvent.setup();
+    render(<Game descriptor={games[3]!} wordSet={{ ...wordSet, words: wordSet.words.slice(0, 4) }} onFinish={vi.fn()} />);
+    await user.click(screen.getByRole("button", { name: /bắt đầu chơi/i }));
+
+    expect(screen.getAllByTestId("gift-gate")).toHaveLength(4);
+    expect(screen.getByText(/quà/i, { selector: ".game-hud span" })).toHaveTextContent("0/4");
+    expect(screen.getByText("0/7")).toBeInTheDocument();
+  });
+
   it("keeps Thu's distinct bomb feedback when a Season-rio gate answer is wrong", async () => {
     const user = userEvent.setup();
     render(<Game descriptor={games[3]!} wordSet={wordSet} onFinish={vi.fn()} />);
     await user.click(screen.getByRole("button", { name: /bắt đầu chơi/i }));
     const moveRight = screen.getByRole("button", { name: "Sang phải" });
     for (let step = 0; step < 34; step += 1) await user.click(moveRight);
-    await screen.findByRole("dialog", { name: /câu hỏi hộp quà/i });
-    await user.click(screen.getByRole("button", { name: "prepare" }));
+    const dialog = await screen.findByRole("dialog", { name: /câu hỏi hộp quà/i });
+    const prompt = within(dialog).getByRole("heading", { level: 3 }).textContent;
+    const currentWord = wordSet.words.find((word) => word.vietnamese === prompt);
+    expect(currentWord).toBeDefined();
+    const wrongChoice = within(dialog).getAllByRole("button").find((button) => button.textContent !== currentWord!.english);
+    expect(wrongChoice).toBeDefined();
+    await user.click(wrongChoice!);
     expect(screen.getAllByTestId("gift-gate")[0]).toHaveAttribute("data-state", "wrong");
   });
 
@@ -214,7 +269,7 @@ describe("engagement screens preserve Thu's visible flow", () => {
     expect(choices).toBeInTheDocument();
     expect(getComputedStyle(choices).display).toBe("grid");
     expect(screen.getByRole("button", { name: "Noun" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /nghe colleague/i })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /^nghe /i })).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Preposition" })).not.toBeInTheDocument();
   });
 
@@ -263,6 +318,22 @@ describe("engagement screens preserve Thu's visible flow", () => {
     expect(onFinish).not.toHaveBeenCalled();
     expect(screen.getByRole("heading", { name: "Từ 1/1" })).toBeInTheDocument();
     expect(screen.getAllByTestId("typing-character").every((cell) => cell.textContent === "")).toBe(true);
+  });
+
+  it("records a Typing race timeout as learning evidence for the target word", async () => {
+    vi.useFakeTimers();
+    const onFinish = vi.fn();
+    render(<Game descriptor={games[5]!} wordSet={{ ...wordSet, words: [
+      { id: "cat", english: "cat", vietnamese: "con mèo", definition: "a small pet", partOfSpeech: "noun" }
+    ] }} onFinish={onFinish} />);
+
+    fireEvent.click(screen.getByRole("button", { name: /bắt đầu chơi/i }));
+    await act(async () => { await vi.advanceTimersByTimeAsync(5_300); });
+
+    expect(onFinish).toHaveBeenCalledWith({
+      answers: [expect.objectContaining({ wordId: "cat", answer: "[timeout]" })],
+      events: [expect.objectContaining({ type: "timeout", wordId: "cat", answer: "[timeout]" })]
+    });
   });
 
   it("keeps a completed game retryable when saving its result fails", async () => {

@@ -13,6 +13,21 @@ export type LessonPartCode =
   | "word_use"
   | "speaking";
 
+export type PilotPhase = "before_pilot" | "in_pilot" | "after_pilot";
+export type LevelUpPhase = "none" | "eligible" | "testing" | "ungraded" | "challenge" | "requested" | "approved" | "failed";
+
+export interface RewardAnnouncementView {
+  kind: "normal" | "new-level-announcement" | "top-level-redirect";
+  points: number;
+  nextPoints: number | null;
+  seasonName: string;
+  level?: CefrLevel | null;
+  /** Stable server key used to acknowledge a one-time celebration. */
+  announcementId?: string;
+  source?: "genuine" | "simulated";
+  rule?: string;
+}
+
 export interface LearnerAvatarData {
   color: "ink" | "brown" | "olive" | "taupe" | "orange" | "rose";
   acc: "none" | "leaf" | "sun" | "flower" | "cloud" | "star" | "drop" | "snow";
@@ -59,12 +74,106 @@ export interface LessonContent {
   parts: LessonPart[];
 }
 
+export type VocabularyLexicalKind = "synonym" | "antonym" | "slang" | "poetic";
+
+export interface LessonVocabularyFamilyWord {
+  word: string;
+  type?: string;
+  meaning?: string;
+  pronunciation?: string;
+}
+
+export interface LessonVocabularySynonym {
+  word: string;
+  level: CefrLevel;
+  note?: string;
+  pronunciation?: string;
+}
+
+export interface LessonVocabularyUmbrella {
+  word: string;
+  meaning: string;
+  siblings: LessonVocabularyFamilyWord[];
+}
+
+export interface LessonVocabularyLexicalDetail {
+  kind: VocabularyLexicalKind;
+  word: string;
+  definition?: string;
+  example?: string;
+  context?: string;
+  note?: string;
+  source?: string;
+}
+
+/** Enriched vocabulary supplied by published lesson content. */
+export interface LessonVocabularyItem {
+  word: string;
+  type?: string;
+  pronunciation?: string;
+  meaning?: string;
+  /** Optional published image; the learner UI supplies a local illustration when absent. */
+  imageUrl?: string;
+  examples?: string[];
+  family?: LessonVocabularyFamilyWord[];
+  synonyms?: LessonVocabularySynonym[];
+  umbrella?: LessonVocabularyUmbrella;
+  /** An explicitly empty array means the learner can open the empty detail state. */
+  lexicalDetails?: LessonVocabularyLexicalDetail[];
+}
+
+export interface LessonVocabularyContent {
+  items: LessonVocabularyItem[];
+}
+
+export interface LessonLockView {
+  reason: "prior" | "date";
+  message: string;
+  dayNumber: number;
+  totalLessons: number;
+  blocker?: { id: string; dayNumber: number; title: string };
+  opensAt?: string;
+}
+
+export type LessonPartOutcome =
+  | "unanswered"
+  | "wrong_retry"
+  | "wrong_exhausted"
+  | "correct"
+  | "translated"
+  | "appealed";
+
 export interface PartEvidence {
   attempts: number;
+  /** Set by the lesson-attempt endpoint; React must not infer this state. */
+  status?: LessonPartOutcome;
   answer?: string | undefined;
   score?: number | undefined;
   feedback?: string | undefined;
   artifactKey?: string | undefined;
+}
+
+export interface LessonPartAttemptEvidenceInput {
+  answer?: string;
+  artifactKey?: string;
+  translated?: boolean;
+}
+
+export interface LessonPartAttemptView {
+  lessonId: string;
+  partCode: LessonPartCode;
+  evidence: PartEvidence;
+  progress: LessonProgressView;
+}
+
+export interface LessonPartAppealView {
+  lessonId: string;
+  partCode: LessonPartCode;
+  status: "pending" | "accepted" | "rejected";
+  reason: string;
+  evidence: PartEvidence;
+  createdAt: string;
+  progress: LessonProgressView;
 }
 
 export interface LessonProgressView {
@@ -83,6 +192,8 @@ export interface LessonView {
   cefr: CefrLevel;
   content: LessonContent;
   progress: LessonProgressView;
+  /** Server-derived access state; clients must not infer lesson locks. */
+  lock?: LessonLockView | null;
 }
 
 export interface LessonSummary {
@@ -90,6 +201,8 @@ export interface LessonSummary {
   dayNumber: number;
   title: string;
   status: LessonProgressView["status"];
+  /** Server-derived access state; clients must not infer lesson locks. */
+  lock?: LessonLockView | null;
 }
 
 export interface WeekView {
@@ -103,10 +216,17 @@ export interface WeekView {
 export interface LearnerHomeView {
   onboardingRequired: boolean;
   learner: { displayName: string; cefr: CefrLevel | null };
-  program: { name: string } | null;
+  program: { name: string; weekCount: number } | null;
   week: WeekView | null;
   lessons: LessonSummary[];
   nextLesson: LessonSummary | null;
+  microLesson?: {
+    id: string;
+    topic: string;
+    durationMinutes: number;
+    completed: boolean;
+  } | null;
+  microGenerationAvailable?: boolean;
   metrics: {
     completedLessons: number;
     totalLessons: number;
@@ -121,12 +241,17 @@ export interface LearnerHomeView {
   };
   coach: { turnsThisWeek: number; targetTurns: number; href: "/coach" };
   practice: {
-    status: "locked" | "available" | "draft" | "submitted" | "reviewed";
+    status: "locked" | "open" | "draft" | "submitted" | "reviewed";
     detail: string;
     href: "/practice";
   };
   levelReadiness: LevelReadinessView;
   finalAssessment: { available: boolean; label: string; href: "/test/final" };
+  /** Lifecycle fields are server-derived; older clients may omit them while rolling out. */
+  pilotPhase?: PilotPhase;
+  levelUpPhase?: LevelUpPhase;
+  monthlyGoal?: string | null;
+  rewardAnnouncement?: RewardAnnouncementView;
 }
 
 export type LevelReadinessKey = "lessonCompletion" | "firstTryAccuracy" | "weeklyPractice" | "coachRubric";
@@ -209,10 +334,12 @@ export interface MicroLessonView {
   topic: string;
   cefr: CefrLevel;
   durationMinutes: number;
+  /** Server-derived capability for the learner's "Tạo bài khác" action. */
+  regenerateAvailable?: boolean;
   theory: string;
   vocabulary: string[];
-  practice: { prompt: string; type: "mcq" | "write" | "say"; options?: string[] };
-  attempt?: { answer: string; attempts: number; correct: boolean | null };
+  practice: { prompt: string; type: "mcq" | "write" | "fill"; options?: string[] };
+  attempt?: { answer: string; attempts: number; correct: boolean | null; score?: number };
   feedback?: { status: "waiting" | "ready" | "error"; message: string };
   completedAt?: string;
 }

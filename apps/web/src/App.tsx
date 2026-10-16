@@ -1,17 +1,27 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { BrowserRouter, Navigate, NavLink, Route, Routes, useNavigate, useParams, useSearchParams } from "react-router";
 import type {
   AssessmentKind, AssessmentLevelFormSlotView, AssessmentReviewOverviewView, AssessmentSectionCode, AssessmentView,
-  CefrLevel, CoachView, ContentLessonMatrixView, ContentLessonSetVersionView, ContentPromptSettingsView,
-  ArenaView, DuelView, GameAnswerInput, GameHubView, GameKey, GameResultView, RewardView, SurveyView, WeeklyPracticeView,
+  CefrLevel, CoachView, ContentLessonDraftInput, ContentLessonMatrixView, ContentLessonSetVersionView, ContentPromptSettingsView,
+  ArenaView, DuelView, GameFinishInput, GameHubView, GameKey, GameResultView, RewardView, SurveyView, WeeklyPracticeView,
   ContentReviewView, ContentWeekFrameView,
   LearnerAvatarData, LearnerHomeView, LearnerProfileData, LearnerProfileView, LearnerProgressView,
-  LessonView, MicroLessonView, SessionView
+  LessonView, LevelChallengeView, ManagerAccountsView, ManagerOperationsView, ManagerProgressView, ManagerRemindersView, ManagerReportView, ManagerSettingsView, MicroLessonView, ProductPreferencesView, SessionView, SystemCapabilitiesView
 } from "@e4s/contracts";
 import { apiClient } from "./api-client.js";
 import { EntryScreen } from "./features/auth/index.js";
-import { Arena, Assessment, Avatar, Coach, Duel, Game as GameScreen, Games, Home, Lesson, Micro, Onboard, Practice, Profile, Reward, Survey } from "./pages/learner/index.js";
+import { staffNavigation } from "./features/authorization/RoleScopeNotice.js";
+import { SettingsWorkspace } from "./features/authorization/SettingsWorkspace.js";
+import { Arena, Assessment, Avatar, Challenge, Coach, Duel, Game as GameScreen, Games, Home, Lesson, Micro, Onboard, Practice, Profile, Reward, Survey } from "./pages/learner/index.js";
 import { LessonSet, Lessons, LevelApproval, LevelForms, Prompts, Review, Weeks } from "./pages/operator/index.js";
+import { ManagerOperations } from "./pages/manager/Operations.js";
+import { ManagerProgress } from "./pages/manager/Progress.js";
+import { ManagerAccounts } from "./pages/manager/Accounts.js";
+import { ManagerReminders } from "./pages/manager/Reminders.js";
+import { ManagerReport } from "./pages/manager/Report.js";
+import { ManagerRewardPreview } from "./pages/manager/Rewards.js";
+import { ExperienceProvider, useExperience } from "./features/experience/Experience.js";
+import { autoSeasonTheme, SeasonMark } from "./pages/learner/games/season-art.js";
 
 export function App() {
   const [session, setSession] = useState<SessionView | null | undefined>(undefined);
@@ -19,78 +29,278 @@ export function App() {
   if (session === undefined) return <Loading label="Đang mở E4S" />;
   if (!session) return <EntryScreen client={apiClient} onAuthenticated={setSession} />;
   const logout = () => void apiClient.logout().then(() => setSession(null));
-  return <BrowserRouter>{session.role === "learner"
+  return <ExperienceProvider><BrowserRouter>{session.role === "learner"
     ? <LearnerShell session={session} onLogout={logout} />
-    : <StaffShell session={session} onLogout={logout} />}</BrowserRouter>;
+    : <StaffShell session={session} onLogout={logout} />}</BrowserRouter></ExperienceProvider>;
 }
 
 function StaffShell({ session, onLogout }: { session: SessionView; onLogout: () => void }) {
   const operator = session.role === "operator";
+  const staffCanOperate = session.role === "operator";
+  const role = operator ? "operator" : "manager";
+  const [capabilities, setCapabilities] = useState<SystemCapabilitiesView>();
+  const [preferences, setPreferences] = useState<ProductPreferencesView>();
+  useEffect(() => {
+    const load = apiClient.getSystemCapabilities?.();
+    if (load) void load.then(setCapabilities).catch(() => setCapabilities(undefined));
+    const preferenceLoad = apiClient.getProductPreferences?.();
+    if (preferenceLoad) void preferenceLoad.then((next) => { setPreferences(next); applyProductTheme(next); }).catch(() => undefined);
+  }, []);
+  const operatorScreen = (screen: ReactNode) => staffCanOperate ? screen : <ManagerOperatorPreview>{screen}</ManagerOperatorPreview>;
   return <div className="app-shell">
     <aside className="sidebar">
-      <a className="brand" href={operator ? "/op" : "/mgr"}><span aria-hidden="true">◆</span><span>Season English <small>· GFT</small></span></a>
-      <nav aria-label={operator ? "Điều hướng người vận hành" : "Điều hướng quản lý"}>{operator ? <>
-        <NavLink end to="/op">Duyệt mức</NavLink><NavLink to="/op/weeks">Chủ đề</NavLink><NavLink to="/op/lessons">Bài học</NavLink><NavLink to="/op/review">Đọc mẫu</NavLink><NavLink to="/settings">Cài đặt</NavLink>
-      </> : <>
-        <a href="/mgr">Tiến độ</a><a href="/mgr/ops">Vận hành</a><a href="/mgr/reminders">Nhắc học</a><a href="/mgr/report">Báo cáo</a><a href="/settings">Cài đặt</a>
-      </>}</nav>
+      <a className="brand" href={operator ? "/op" : "/mgr"}><span aria-hidden="true"><SeasonMark /></span><span>Season English <small>· GFT</small></span></a>
+      <nav aria-label={operator ? "Điều hướng người vận hành" : "Điều hướng quản lý"}>{staffNavigation[role].filter((item) => item.visible !== false).map((item) => <NavLink end={item.to === "/op" || item.to === "/mgr"} to={item.to} key={item.to}>{item.label}</NavLink>)}</nav>
       <SidebarControls name={session.user.displayName} roleLabel={operator ? "Người vận hành" : "Quản lý"} onLogout={onLogout} />
     </aside>
     <div className="content-shell"><Routes>
       <Route path="/" element={<Navigate replace to={operator ? "/op" : "/mgr"} />} />
       <Route path="/home" element={<Navigate replace to={operator ? "/op" : "/mgr"} />} />
-      <Route path="/op" element={<LevelApprovalRoute readOnly={!operator} />} />
-      <Route path="/op/levelforms" element={<LevelFormsRoute />} />
-      <Route path="/op/weeks" element={<WeeksRoute readOnly={!operator} />} />
-      <Route path="/op/lessons" element={<LessonsRoute />} />
-      <Route path="/op/lessons/:week/:cefr" element={<LessonSetRoute readOnly={!operator} />} />
-      <Route path="/op/review" element={<ReviewRoute />} />
-      <Route path="/op/prompts" element={<PromptsRoute readOnly={!operator} />} />
-      <Route path="/settings" element={<SettingsPending />} />
-      <Route path="*" element={<StaffPending />} />
+      <Route path="/op" element={operatorScreen(<LevelApprovalRoute readOnly={!staffCanOperate} />)} />
+      <Route path="/op/levelforms" element={operatorScreen(<LevelFormsRoute aiAvailable={capabilities?.ai ?? false} readOnly={!staffCanOperate} />)} />
+      <Route path="/op/weeks" element={operatorScreen(<WeeksRoute readOnly={!staffCanOperate} />)} />
+      <Route path="/op/lessons" element={operatorScreen(<LessonsRoute aiAvailable={capabilities?.ai ?? false} readOnly={!staffCanOperate} />)} />
+      <Route path="/op/lessons/:week/:cefr" element={operatorScreen(<LessonSetRoute readOnly={!staffCanOperate} />)} />
+      <Route path="/op/review" element={operatorScreen(<ReviewRoute readOnly={!staffCanOperate} />)} />
+      <Route path="/op/prompts" element={operatorScreen(<PromptsRoute readOnly={!staffCanOperate} />)} />
+      <Route path="/mgr" element={!operator ? <ManagerProgressRoute /> : <Navigate replace to="/op" />} />
+      <Route path="/mgr/ops" element={!operator ? <ManagerOperationsRoute /> : <Navigate replace to="/op" />} />
+      <Route path="/mgr/reminders" element={!operator ? <ManagerRemindersRoute /> : <Navigate replace to="/op" />} />
+      <Route path="/mgr/report" element={!operator ? <ManagerReportRoute /> : <Navigate replace to="/op" />} />
+      <Route path="/mgr/rewards" element={!operator ? <ManagerRewardPreviewRoute /> : <Navigate replace to="/op" />} />
+      <Route path="/settings" element={<SettingsRoute role={role} currentUserId={session.user.id} capabilities={capabilities} preferences={preferences} onPreferences={setPreferences} />} />
+      <Route path="*" element={<Navigate replace to={operator ? "/op" : "/mgr"} />} />
     </Routes></div>
   </div>;
+}
+
+function ManagerOperatorPreview({ children }: { children: ReactNode }) {
+  const links = [
+    ["/op", "Duyệt mức"], ["/op/weeks", "Chủ đề tuần"], ["/op/lessons", "Bài học"],
+    ["/op/review", "Đọc mẫu"], ["/op/prompts", "Prompt"], ["/op/levelforms", "Đề lên mức"]
+  ] as const;
+  return <><section className="manager-operator-preview banner info" aria-label="Chế độ xem của Quản lý">
+    <div className="body small"><strong>Chế độ xem của Quản lý</strong> – bạn thấy đúng màn hình của Người vận hành nhưng không thao tác được.
+      <nav className="row" aria-label="Chuyển màn hình Người vận hành"><a className="button-link button-link--small" href="/mgr/ops">← Hiệu suất vận hành</a>{links.map(([to, label]) => <NavLink className={({ isActive }) => `button-link button-link--small${isActive ? " button--primary" : ""}`} end={to === "/op"} key={to} to={to}>{label}</NavLink>)}</nav>
+    </div>
+  </section>{children}</>;
+}
+
+function ManagerProgressRoute() {
+  const [view, setView] = useState<ManagerProgressView>();
+  const [error, setError] = useState("");
+  useEffect(() => { void apiClient.getManagerProgress().then(setView).catch(() => setError("Không tải được tiến độ của tổ chức.")); }, []);
+  if (!view) return error ? <ErrorState message={error} /> : <Loading label="Đang tải tiến độ nhóm" />;
+  return <ManagerProgress view={view} />;
+}
+
+function ManagerOperationsRoute() {
+  const [view, setView] = useState<ManagerOperationsView>();
+  const [error, setError] = useState("");
+  useEffect(() => { void apiClient.getManagerOperations().then(setView).catch(() => setError("Không tải được dữ liệu vận hành.")); }, []);
+  if (!view) return error ? <ErrorState message={error} /> : <Loading label="Đang tải vận hành" />;
+  return <ManagerOperations view={view} />;
+}
+
+function ManagerRemindersRoute() {
+  const [view, setView] = useState<ManagerRemindersView>();
+  const [error, setError] = useState("");
+  const [sendingLearnerId, setSendingLearnerId] = useState<string>();
+  const [notice, setNotice] = useState("");
+  const { notify } = useExperience();
+  useEffect(() => { void apiClient.getManagerReminders().then(setView).catch(() => setError("Không tải được danh sách nhắc học.")); }, []);
+  if (!view) return error ? <ErrorState message={error} /> : <Loading label="Đang tải danh sách nhắc học" />;
+  const send = async (learnerId: string) => {
+    setError(""); setNotice(""); setSendingLearnerId(learnerId);
+    try { await apiClient.sendManagerReminder(learnerId, crypto.randomUUID()); setNotice("Đã xếp hàng nhắc học và ghi nhận vào lịch sử vận hành."); notify("Đã xếp hàng nhắc học.", "success"); }
+    catch { setError("Không gửi được nhắc học. Hãy thử lại với cùng chính sách hiện tại."); notify("Không gửi được nhắc học.", "error"); }
+    finally { setSendingLearnerId(undefined); }
+  };
+  return <ManagerReminders view={view} sendingLearnerId={sendingLearnerId} notice={error || notice} onSend={send} />;
+}
+
+function ManagerReportRoute() {
+  const [view, setView] = useState<ManagerReportView>();
+  const [error, setError] = useState("");
+  useEffect(() => { void apiClient.getManagerReport().then(setView).catch(() => setError("Không tải được báo cáo tổ chức.")); }, []);
+  if (!view) return error ? <ErrorState message={error} /> : <Loading label="Đang tải báo cáo tổ chức" />;
+  return <ManagerReport view={view} />;
+}
+
+function ManagerRewardPreviewRoute() {
+  const [view, setView] = useState<ManagerProgressView>();
+  const [error, setError] = useState("");
+  useEffect(() => { void apiClient.getManagerProgress().then(setView).catch(() => setError("Không tải được dữ liệu phần thưởng.")); }, []);
+  if (!view) return error ? <ErrorState message={error} /> : <Loading label="Đang tải điều kiện phần thưởng" />;
+  return <ManagerRewardPreview view={view} />;
+}
+
+function SettingsRoute({ role, currentUserId, capabilities, preferences, onPreferences }: {
+  role: "operator" | "manager"; currentUserId: string; capabilities?: SystemCapabilitiesView | undefined;
+  preferences?: ProductPreferencesView | undefined; onPreferences: (value: ProductPreferencesView) => void;
+}) {
+  const [accounts, setAccounts] = useState<ManagerAccountsView>();
+  const [settings, setSettings] = useState<ManagerSettingsView>();
+  const [error, setError] = useState("");
+  const [changingAccountId, setChangingAccountId] = useState<string>();
+  const { notify } = useExperience();
+  useEffect(() => {
+    if (role === "manager") void Promise.all([apiClient.getManagerAccounts(), apiClient.getManagerSettings()])
+      .then(([nextAccounts, nextSettings]) => { setAccounts(nextAccounts); setSettings(nextSettings); })
+      .catch(() => setError("Không tải được cài đặt quản lý."));
+  }, [role]);
+  const savePreferences = async (input: ProductPreferencesView) => {
+    const saved = await apiClient.saveProductPreferences(input); onPreferences(saved); applyProductTheme(saved); notify("Đã lưu giao diện và nguồn ảnh.", "success");
+  };
+  if (role === "operator") return <SettingsWorkspace role="operator" capabilities={capabilities} preferences={preferences} onSavePreferences={savePreferences} />;
+  if (!accounts || !settings) return error ? <ErrorState message={error} /> : <Loading label="Đang tải cài đặt quản lý" />;
+  const changeRole = async (accountId: string, nextRole: "learner" | "operator" | "manager") => {
+    setError("");
+    setChangingAccountId(accountId);
+    try {
+      const updated = await apiClient.updateManagerAccountRole(accountId, nextRole);
+      setAccounts((current) => current && { ...current, accounts: current.accounts.map((account) => account.id === updated.id ? updated : account) });
+      notify("Đã cập nhật vai trò tài khoản.", "success");
+    } catch { setError("Không đổi được vai trò. Hãy kiểm tra lại quyền quản lý và trạng thái tài khoản."); notify("Không đổi được vai trò tài khoản.", "error"); }
+    finally { setChangingAccountId(undefined); }
+  };
+  const createAccount = async (input: { displayName: string; email: string; role: "learner" | "operator" | "manager"; password: string }) => {
+    setError("");
+    try {
+      const created = await apiClient.createManagerAccount(input);
+      setAccounts((current) => current && { ...current, accounts: [...current.accounts, created] });
+      notify("Đã tạo tài khoản và ghi nhận vào hệ thống.", "success");
+    } catch { setError("Không tạo được tài khoản. Kiểm tra email chưa tồn tại và mật khẩu có ít nhất 8 ký tự."); notify("Không tạo được tài khoản.", "error"); throw new Error("ACCOUNT_CREATE_FAILED"); }
+  };
+  const changeStatus = async (accountId: string, status: "active" | "disabled" | "deleted") => {
+    setError(""); setChangingAccountId(accountId);
+    try {
+      const updated = await apiClient.updateManagerAccountStatus(accountId, status);
+      setAccounts((current) => current && { ...current, accounts: status === "deleted"
+        ? current.accounts.filter((account) => account.id !== accountId)
+        : current.accounts.map((account) => account.id === updated.id ? updated : account) });
+      notify(status === "active" ? "Đã mở khóa tài khoản." : status === "disabled" ? "Đã khóa tài khoản." : "Đã xóa quyền truy cập tài khoản.", "success");
+    } catch { setError("Không cập nhật được trạng thái tài khoản."); notify("Không cập nhật được tài khoản.", "error"); throw new Error("ACCOUNT_STATUS_FAILED"); }
+    finally { setChangingAccountId(undefined); }
+  };
+  const resetPassword = async (accountId: string, password: string) => {
+    setError("");
+    try { await apiClient.resetManagerAccountPassword(accountId, password); notify("Đã đặt lại mật khẩu và đăng xuất các phiên cũ.", "success"); }
+    catch { setError("Không đặt lại được mật khẩu."); notify("Không đặt lại được mật khẩu.", "error"); throw new Error("PASSWORD_RESET_FAILED"); }
+  };
+  const savePolicy = async (input: Omit<ManagerSettingsView, "organizationName">) => {
+    setError("");
+    try { setSettings(await apiClient.saveManagerSettings(input)); notify("Đã lưu chính sách vận hành.", "success"); }
+    catch { setError("Không lưu được chính sách. Giá trị ngày nhắc phải từ 1 đến 30."); notify("Không lưu được chính sách vận hành.", "error"); }
+  };
+  return <SettingsWorkspace role="manager" capabilities={capabilities} preferences={preferences} onSavePreferences={savePreferences} managerConfiguration={settings} onSaveManagerSettings={savePolicy} managerAccounts={<ManagerAccounts
+    view={accounts}
+    currentUserId={currentUserId}
+    changingAccountId={changingAccountId}
+    error={error}
+    onChangeRole={changeRole}
+    onCreate={createAccount}
+    onChangeStatus={changeStatus}
+    onResetPassword={resetPassword}
+  />} />;
 }
 
 function LevelApprovalRoute({ readOnly }: { readOnly: boolean }) {
   const [overview, setOverview] = useState<AssessmentReviewOverviewView>();
   const [error, setError] = useState("");
+  const { notify } = useExperience();
   const load = () => apiClient.getAssessmentReviewOverview().then(setOverview).catch(() => setError("Không tải được dữ liệu duyệt trình độ."));
   useEffect(() => { void load(); }, []);
   if (!overview) return error ? <ErrorState message={error} /> : <Loading label="Đang tải dữ liệu duyệt" />;
   return <LevelApproval overview={overview} readOnly={readOnly} onDecision={async (attemptId, input) => {
     setError("");
-    try { await apiClient.decideAssessment(attemptId, input); await load(); }
-    catch { setError("Không lưu được quyết định. Vui lòng kiểm tra lại trạng thái bài."); }
+    try { await apiClient.decideAssessment(attemptId, input); await load(); notify("Đã lưu quyết định duyệt trình độ.", "success"); }
+    catch { setError("Không lưu được quyết định. Vui lòng kiểm tra lại trạng thái bài."); notify("Không lưu được quyết định duyệt trình độ.", "error"); }
+  }} onResolveTopicReport={async (reportId) => {
+    try { await apiClient.resolveTopicReport(reportId); await load(); notify("Đã đóng báo cáo chủ đề.", "success"); }
+    catch { setError("Không xử lý được báo cáo chủ đề."); notify("Không xử lý được báo cáo chủ đề.", "error"); }
   }} />;
 }
 
-function LevelFormsRoute() {
+function LevelFormsRoute({ aiAvailable, readOnly }: { aiAvailable: boolean; readOnly: boolean }) {
   const [slots, setSlots] = useState<AssessmentLevelFormSlotView[]>();
   const [error, setError] = useState("");
-  useEffect(() => { void apiClient.getAssessmentLevelForms().then(setSlots).catch(() => setError("Không tải được danh sách đề lên mức.")); }, []);
+  const load = () => apiClient.getAssessmentLevelForms().then(setSlots);
+  useEffect(() => { void load().catch(() => setError("Không tải được danh sách đề lên mức.")); }, []);
   if (!slots) return error ? <ErrorState message={error} /> : <Loading label="Đang tải đề lên mức" />;
-  return <LevelForms slots={slots} aiAvailable={false} />;
+  return <LevelForms slots={slots} aiAvailable={aiAvailable} readOnly={readOnly} onGenerate={async (targetLevel) => {
+    setError("");
+    try { await apiClient.generateAssessmentLevelForm(targetLevel); await load(); }
+    catch { setError("Không sinh được đề. Kiểm tra kết nối AI và prompt đang hoạt động."); }
+  }} onPublish={async (versionId) => {
+    setError("");
+    try { await apiClient.publishAssessmentLevelForm(versionId); await load(); }
+    catch { setError("Không duyệt được đề lên mức."); }
+  }} />;
 }
 
 function WeeksRoute({ readOnly }: { readOnly: boolean }) {
   const [view, setView] = useState<ContentWeekFrameView>();
   const [error, setError] = useState("");
+  const { notify } = useExperience();
   useEffect(() => { void apiClient.getContentWeeks().then(setView).catch(() => setError("Không tải được khung chủ đề tuần.")); }, []);
   if (!view) return error ? <ErrorState message={error} /> : <Loading label="Đang tải khung chủ đề" />;
-  return <Weeks view={view} readOnly={readOnly} onSave={async (weeks) => {
+  return <Weeks view={view} readOnly={readOnly} error={error} onSuggest={async (weekNumbers) => (await apiClient.suggestContentWeeks(weekNumbers)).weeks} onSave={async (weeks) => {
     setError("");
-    try { setView(await apiClient.saveContentWeeks(weeks)); }
-    catch { setError("Không lưu được khung chủ đề tuần."); }
+    try { setView(await apiClient.saveContentWeeks(weeks)); notify("Đã lưu khung chủ đề tuần.", "success"); }
+    catch { setError("Không lưu được khung chủ đề tuần."); notify("Không lưu được khung chủ đề tuần.", "error"); }
   }} />;
 }
 
-function LessonsRoute() {
+function LessonsRoute({ aiAvailable, readOnly }: { aiAvailable: boolean; readOnly: boolean }) {
   const [view, setView] = useState<ContentLessonMatrixView>();
   const [error, setError] = useState("");
+  const navigate = useNavigate();
+  const { notify } = useExperience();
   useEffect(() => { void apiClient.getContentLessonMatrix().then(setView).catch(() => setError("Không tải được ma trận bài học.")); }, []);
   if (!view) return error ? <ErrorState message={error} /> : <Loading label="Đang tải bài học" />;
-  return <Lessons view={view} aiAvailable={false} />;
+  return <Lessons view={view} aiAvailable={aiAvailable} readOnly={readOnly} error={error} onGenerate={async (weekNumber, cefr) => {
+    setError("");
+    try {
+      const generated = await apiClient.generateContentLessonDraft(weekNumber, cefr);
+      notify("AI đã sinh đủ 5 bài và lưu thành bản nháp để kiểm tra.", "success");
+      navigate(`/op/lessons/${generated.weekNumber}/${generated.cefr}`);
+    } catch { setError("Không sinh được bộ bài. Kiểm tra kết nối AI và prompt đang hoạt động."); notify("Không sinh được bộ bài bằng AI.", "error"); }
+  }} onCreateStarter={async (weekNumber, cefr) => {
+    const topic = view.weeks.find((week) => week.weekNumber === weekNumber)?.topic ?? `Tuần ${weekNumber}`;
+    setError("");
+    try {
+      await apiClient.saveContentLessonDraft(weekNumber, cefr, Array.from({ length: 5 }, (_, index) => starterLesson(topic, cefr, index + 1)));
+      notify("Đã tạo khung 5 bài để soạn và duyệt.", "success");
+      navigate(`/op/lessons/${weekNumber}/${cefr}`);
+    } catch { setError("Không tạo được khung 5 bài. Hãy kiểm tra lại chủ đề tuần trước khi thử lại."); notify("Không tạo được khung 5 bài.", "error"); }
+  }} />;
+}
+
+function starterLesson(topic: string, cefr: CefrLevel, dayNumber: number): ContentLessonDraftInput {
+  const focus = ["Mở đầu tình huống", "Từ vựng trọng tâm", "Mẫu câu công việc", "Luyện hội thoại", "Ôn và áp dụng"][dayNumber - 1] ?? "Luyện tập";
+  const topicWord = topic.trim() || "work";
+  const example = `I can talk about ${topicWord.toLowerCase()} at work.`;
+  return {
+    dayNumber,
+    title: `${focus}: ${topicWord}`,
+    durationMinutes: 10,
+    parts: [
+      { code: "objective", title: "Mục tiêu bài học", content: { text: `Người học dùng được một câu ngắn về ${topicWord} ở mức ${cefr}.` } },
+      { code: "instruction", title: "Hướng dẫn làm bài", content: { steps: ["Đọc từ và câu mẫu", "Nghe, đọc thành tiếng", "Làm bài ngắn rồi tự sửa"] } },
+      { code: "vocabulary", title: "Từ vựng", content: { items: [
+        { word: topicWord, pronunciation: "/ˈwɜːrk/", meaning: `từ khóa của ${topicWord}`, examples: [`talk about ${topicWord}`] },
+        { word: "team", pronunciation: "/tiːm/", meaning: "nhóm", examples: ["my team"] },
+        { word: "update", pronunciation: "/ʌpˈdeɪt/", meaning: "cập nhật", examples: ["give an update"] }
+      ] } },
+      { code: "grammar", title: "Ngữ pháp", content: { formula: "I can + verb …", examples: [example, "I can give an update to my team."] } },
+      { code: "pronunciation", title: "Phát âm", content: { focus: "/iː/", words: ["team", "meeting", "please"], instruction: "Kéo dài âm /iː/ trong từ mẫu." } },
+      { code: "listening", title: "Nghe", content: { script: example, prompt: "What can the speaker talk about?", options: [topicWord, "weather", "food", "travel"], answer: topicWord } },
+      { code: "reading", title: "Đọc", content: { text: `In a short meeting, I give an update about ${topicWord}.`, prompt: "What does the speaker give?", options: ["an update", "a gift", "a ticket", "a map"], answer: "an update" } },
+      { code: "writing", title: "Viết", content: { type: "free", prompt: `Viết một câu về ${topicWord} trong công việc.`, options: [], answer: example } },
+      { code: "speaking", title: "Nói", content: { instruction: "Nói to câu mẫu sau.", prompt: example } }
+    ]
+  };
 }
 
 function LessonSetRoute({ readOnly }: { readOnly: boolean }) {
@@ -100,6 +310,7 @@ function LessonSetRoute({ readOnly }: { readOnly: boolean }) {
   const cefr = params.cefr as CefrLevel | undefined;
   const [view, setView] = useState<ContentLessonSetVersionView>();
   const [error, setError] = useState("");
+  const { notify } = useExperience();
   const load = async () => {
     if (!Number.isInteger(week) || !cefr) return Promise.reject(new Error("INVALID_ROUTE"));
     try {
@@ -119,17 +330,18 @@ function LessonSetRoute({ readOnly }: { readOnly: boolean }) {
   if (!view) return error ? <ErrorState message={error} /> : <Loading label="Đang tải bộ bài" />;
   const act = async (operation: (versionId: string) => Promise<ContentLessonSetVersionView>, message: string) => {
     setError("");
-    try { setView(await operation(view.versionId)); }
-    catch { setError(message); }
+    try { setView(await operation(view.versionId)); notify("Đã cập nhật trạng thái bộ bài.", "success"); }
+    catch { setError(message); notify(message, "error"); }
   };
   return <LessonSet
     view={view}
     readOnly={readOnly}
+    error={error}
     initialEditingDay={searchParams.get("edit") === "1" ? 1 : null}
     onSaveDraft={async (lessons) => {
       setError("");
-      try { setView(await apiClient.saveContentLessonDraft(week, cefr!, lessons)); }
-      catch { setError("Không lưu được bản nháp. Hãy kiểm tra các mục bắt buộc trong bài."); }
+      try { setView(await apiClient.saveContentLessonDraft(week, cefr!, lessons)); notify("Đã lưu bản nháp bộ bài.", "success"); }
+      catch { setError("Không lưu được bản nháp. Hãy kiểm tra các mục bắt buộc trong bài."); notify("Không lưu được bản nháp.", "error"); }
     }}
     onSubmitReview={() => act(apiClient.submitContentLessonSet, "Không gửi duyệt được bộ bài.")}
     onPublish={() => act(apiClient.publishContentLessonSet, "Không duyệt được bộ bài. Người soạn không thể tự duyệt.")}
@@ -137,12 +349,21 @@ function LessonSetRoute({ readOnly }: { readOnly: boolean }) {
   />;
 }
 
-function ReviewRoute() {
+function ReviewRoute({ readOnly }: { readOnly: boolean }) {
   const [view, setView] = useState<ContentReviewView>();
   const [error, setError] = useState("");
   useEffect(() => { void apiClient.getContentReview().then(setView).catch(() => setError("Không tải được dữ liệu kiểm tra AI.")); }, []);
   if (!view) return error ? <ErrorState message={error} /> : <Loading label="Đang tải dữ liệu kiểm tra" />;
-  return <Review view={view} />;
+  const reload = () => apiClient.getContentReview().then(setView);
+  return <Review view={view} readOnly={readOnly} onChecked={async (kind, id, checked) => {
+    await apiClient.setContentReviewChecked(kind, id, checked); await reload();
+  }} onDeleteMicro={async (id) => {
+    await apiClient.deleteReviewedMicroLesson(id); await reload();
+  }} onManualGrade={async (id, input) => {
+    await apiClient.gradeReviewedSubmission(id, input); await reload();
+  }} onAppealDecision={async (id, status, resolution) => {
+    await apiClient.decideReviewedAppeal(id, { status, resolution }); await reload();
+  }} />;
 }
 
 function PromptsRoute({ readOnly }: { readOnly: boolean }) {
@@ -157,15 +378,15 @@ function PromptsRoute({ readOnly }: { readOnly: boolean }) {
   }} />;
 }
 
-function StaffPending() { return <main className="operator-page"><h1>Nội dung đang được nối dữ liệu</h1><p>Màn này giữ nguyên trong danh sách đã chốt và sẽ được hoàn thiện ở bước tương ứng.</p></main>; }
-function SettingsPending() { return <main className="operator-page"><h1>Cài đặt</h1><p>Các khối cấu hình đã chốt được giữ tại màn này và sẽ được nối dữ liệu ở bước cài đặt chung.</p></main>; }
-
 function LearnerShell({ session, onLogout }: { session: SessionView; onLogout: () => void }) {
   const [avatar, setAvatar] = useState<LearnerAvatarData>();
-  useEffect(() => { void apiClient.getProfile().then((profile) => setAvatar(profile.profile.avatar)).catch(() => undefined); }, []);
+  useEffect(() => {
+    void apiClient.getProfile().then((profile) => setAvatar(profile.profile.avatar)).catch(() => undefined);
+    void apiClient.getProductPreferences().then(applyProductTheme).catch(() => undefined);
+  }, []);
   return <div className="app-shell">
     <aside className="sidebar">
-      <a className="brand" href="/home"><span aria-hidden="true">◆</span><span>Season English <small>· GFT</small></span></a>
+      <a className="brand" href="/home"><span aria-hidden="true"><SeasonMark /></span><span>Season English <small>· GFT</small></span></a>
       <nav aria-label="Điều hướng người học">
         <NavLink to="/home">Trang chủ</NavLink><NavLink to="/coach">Luyện với Season</NavLink><NavLink to="/practice">Bài tuần</NavLink><NavLink to="/games">Mini game</NavLink><NavLink to="/profile">Tiến độ & hồ sơ</NavLink>
       </nav>
@@ -179,6 +400,7 @@ function LearnerShell({ session, onLogout }: { session: SessionView; onLogout: (
       <Route path="/lesson/:lessonId" element={<LessonRoute />} />
       <Route path="/micro/:microLessonId" element={<MicroRoute />} />
       <Route path="/coach" element={<CoachRoute />} />
+      <Route path="/challenge" element={<ChallengeRoute />} />
       <Route path="/practice" element={<PracticeRoute />} />
       <Route path="/games" element={<GamesRoute />} />
       <Route path="/games/:game" element={<GameRoute />} />
@@ -187,25 +409,29 @@ function LearnerShell({ session, onLogout }: { session: SessionView; onLogout: (
       <Route path="/profile" element={<ProfileRoute />} />
       <Route path="/reward/:mode" element={<RewardRoute />} />
       <Route path="/survey" element={<SurveyRoute />} />
+      <Route path="*" element={<Navigate replace to="/home" />} />
     </Routes></div>
   </div>;
 }
 
 function SidebarControls({ name, roleLabel, avatar, onLogout }: { name: string; roleLabel: string; avatar?: LearnerAvatarData | undefined; onLogout: () => void }) {
-  const [effectsOn, setEffectsOn] = useState(true);
-  const [musicOn, setMusicOn] = useState(true);
+  const { effectsOn, musicOn, toggleEffects, toggleMusic } = useExperience();
   return <div className="sidebar-user">
     <div className="sidebar-sound" role="group" aria-label="Âm thanh">
-      <button type="button" aria-pressed={effectsOn} aria-label={`Hiệu ứng âm thanh: ${effectsOn ? "bật" : "tắt"}`} onClick={() => setEffectsOn((value) => !value)}><SpeakerIcon /></button>
-      <button type="button" aria-pressed={musicOn} aria-label={`Nhạc nền: ${musicOn ? "bật" : "tắt"}`} onClick={() => setMusicOn((value) => !value)}><MusicIcon /></button>
+      <button type="button" aria-pressed={effectsOn} aria-label={`Hiệu ứng âm thanh: ${effectsOn ? "bật" : "tắt"}`} onClick={toggleEffects}><SpeakerIcon /></button>
+      <button type="button" aria-pressed={musicOn} aria-label={`Nhạc nền: ${musicOn ? "bật" : "tắt"}`} onClick={toggleMusic}><MusicIcon /></button>
     </div>
-    <div className="sidebar-identity"><button className="sidebar-avatar" type="button" aria-label="Đổi avatar">{avatar ? <Avatar avatar={avatar} name={name} /> : <span aria-hidden="true">✣</span>}</button><div><strong>{name}</strong><span>{roleLabel}</span></div></div>
+    <div className="sidebar-identity">{avatar ? <a className="sidebar-avatar" href="/profile" aria-label="Mở hồ sơ và đổi avatar"><Avatar avatar={avatar} name={name} /></a> : <span className="sidebar-avatar" aria-hidden="true">✣</span>}<div><strong>{name}</strong><span>{roleLabel}</span></div></div>
     <button className="sidebar-logout" onClick={onLogout}>Đăng xuất</button>
   </div>;
 }
 
-function SpeakerIcon() { return <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9v6h4l5 4V5L8 9H4Zm12 1.2c.8 1.1.8 2.5 0 3.6M18.5 8a6 6 0 0 1 0 8" /></svg>; }
-function MusicIcon() { return <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 18V6l10-2v12M9 10l10-2M9 18a3 2 0 1 1-6 0 3 2 0 1 1 6 0Zm10-2a3 2 0 1 1-6 0 3 2 0 1 1 6 0Z" /></svg>; }
+function SpeakerIcon() { return <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4.5 9.5h3l4.5-4v13l-4.5-4h-3z" /><path d="M15.5 9a4 4 0 0 1 0 6" /></svg>; }
+function MusicIcon() { return <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 18V6l10-2v12" /></svg>; }
+
+function applyProductTheme(preferences: ProductPreferencesView) {
+  document.documentElement.dataset.theme = preferences.theme === "auto" ? autoSeasonTheme() : preferences.theme;
+}
 
 function AssessmentRoute() {
   const { kind: rawKind = "placement" } = useParams();
@@ -223,6 +449,7 @@ function AssessmentRoute() {
   return <Assessment
     view={view}
     onStart={async () => setView(await apiClient.startAssessment(kind))}
+    onUploadAudio={async (file, filename) => (await apiClient.uploadAssessmentAudio(file, filename)).artifactKey}
     onSaveResponse={async (section, taskKey, input) => {
       if (!attemptId) return;
       const response = await apiClient.saveAssessmentResponse(attemptId, section, taskKey, input);
@@ -257,6 +484,11 @@ function AssessmentRoute() {
       if (!attemptId) return;
       setView(await apiClient.submitAssessment(attemptId));
     }}
+    onAppeal={async (reason) => {
+      if (!attemptId) return;
+      const appeal = await apiClient.createAssessmentAppeal(attemptId, reason);
+      setView((current) => current ? { ...current, appeal } : current);
+    }}
   />;
 }
 
@@ -267,7 +499,10 @@ function HomeRoute() {
   if (error) return <ErrorState message={error} />;
   if (!view) return <Loading label="Đang tải trang chủ" />;
   if (view.onboardingRequired) return <Navigate replace to="/onboard" />;
-  return <Home view={view} />;
+  return <Home view={view} onGenerateMicro={async () => {
+    const lesson = await apiClient.generateMicroLesson(crypto.randomUUID());
+    window.location.assign(`/micro/${lesson.id}`);
+  }} />;
 }
 
 function OnboardRoute() {
@@ -333,6 +568,21 @@ function CoachRoute() {
   />;
 }
 
+function ChallengeRoute() {
+  const [view, setView] = useState<LevelChallengeView>();
+  const [error, setError] = useState("");
+  const pending = useRef<{ requestId: string; message: string } | undefined>(undefined);
+  useEffect(() => { void apiClient.getLevelChallenge().then(setView).catch(() => setError("Chưa có thử thách lên mức đang mở.")); }, []);
+  if (!view) return error ? <ErrorState message={error} /> : <Loading label="Đang mở thử thách lên mức" />;
+  return <Challenge view={view} onSend={async (message) => {
+    const request = pending.current?.message === message ? pending.current : { requestId: crypto.randomUUID(), message };
+    pending.current = request;
+    const next = await apiClient.sendLevelChallengeMessage(request);
+    pending.current = undefined;
+    setView(next);
+  }} />;
+}
+
 function PracticeRoute() {
   const [view, setView] = useState<WeeklyPracticeView>();
   const [error, setError] = useState("");
@@ -357,12 +607,14 @@ function GameRoute() {
   const [view, setView] = useState<GameHubView>();
   const [result, setResult] = useState<GameResultView>();
   const [error, setError] = useState("");
-  const pendingSubmission = useRef<{ input: { answers: GameAnswerInput[]; hintsUsed?: number }; requestId: string } | undefined>(undefined);
+  const pendingSubmission = useRef<{ input: GameFinishInput; requestId: string } | undefined>(undefined);
   useEffect(() => { void apiClient.getGames().then(setView).catch(() => setError("Chưa có bộ từ cho mini game.")); }, []);
   if (!view) return error ? <ErrorState message={error} /> : <Loading label="Đang mở trò chơi" />;
   const descriptor = view.games.find((item) => item.key === game);
   if (!descriptor) return <Navigate to="/games" replace />;
-  return <GameScreen descriptor={descriptor} wordSet={view.wordSet} onFinish={async (input) => {
+  return <GameScreen descriptor={descriptor} wordSet={view.wordSet}
+    onResolveWordImage={async (setId, wordId) => (await apiClient.resolveGameWordImage(setId, wordId)).imageUrl}
+    onFinish={async (input) => {
     const pending = pendingSubmission.current?.input === input
       ? pendingSubmission.current
       : { input, requestId: crypto.randomUUID() };
@@ -370,7 +622,8 @@ function GameRoute() {
     const nextResult = await apiClient.submitGameResult(descriptor.key, {
       requestId: pending.requestId,
       answers: input.answers,
-      ...(input.hintsUsed === undefined ? {} : { hintsUsed: input.hintsUsed })
+      ...(input.hintsUsed === undefined ? {} : { hintsUsed: input.hintsUsed }),
+      ...(input.events?.length ? { events: input.events } : {})
     });
     pendingSubmission.current = undefined;
     setResult(nextResult);

@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { ROLE_NAVIGATION, SCREEN_CONTRACT } from "../src/screen-contract.js";
+import { ROLE_PERMISSIONS } from "../src/session-contract.js";
+import { ROLE_NAVIGATION, SCREEN_CONTRACT, type VisibleScreen } from "../src/screen-contract.js";
 
 const expectedRoutes = [
   "/",
@@ -74,5 +75,29 @@ describe("approved E4S screen contract", () => {
       "/settings"
     ]);
   });
-});
 
+  it("makes Manager the Product Admin while keeping organisation administration outside Operator", () => {
+    expect([...ROLE_PERMISSIONS.manager]).toEqual(expect.arrayContaining([...ROLE_PERMISSIONS.operator]));
+    expect(ROLE_PERMISSIONS.manager).toEqual(expect.arrayContaining([
+      "account:manage",
+      "role:manage",
+      "organisation:manage",
+      "settings:manage"
+    ]));
+    expect(ROLE_PERMISSIONS.operator).not.toEqual(expect.arrayContaining([
+      "account:manage",
+      "role:manage",
+      "organisation:manage",
+      "settings:manage"
+    ]));
+  });
+
+  it("requires every manager route to declare real data states instead of a pending placeholder", () => {
+    const managerScreens: readonly VisibleScreen[] = SCREEN_CONTRACT.filter((screen) => screen.path.startsWith("/mgr"));
+
+    expect(managerScreens).toHaveLength(5);
+    for (const screen of managerScreens) {
+      expect(screen.states).toEqual(expect.arrayContaining(["loading", "empty", "error", "populated"]));
+    }
+  });
+});

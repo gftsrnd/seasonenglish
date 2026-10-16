@@ -1,5 +1,6 @@
 import type { FormEvent } from "react";
 import type { LearnerProfileData } from "@e4s/contracts";
+import { SeasonMark } from "./games/season-art.js";
 
 export interface OnboardProps {
   initialProfile: Partial<LearnerProfileData>;
@@ -47,12 +48,17 @@ export function Onboard({ initialProfile, onSave, saving = false, error }: Onboa
 
   return <main className="learner-page learner-page--form">
     <a className="back-link" href={isEditing ? "/profile" : "/home"}>← Quay lại</a>
-    <header className="page-heading">
-      <p className="eyebrow">Hồ sơ</p>
-      <h1>{isEditing ? "Sửa hồ sơ của bạn" : "Hoàn thiện hồ sơ của bạn"}</h1>
-      <p className="profile-intro">Mình dùng thông tin này để chọn ví dụ sát công việc và cách học hợp với bạn. Khoảng 2 phút thôi.</p>
-      <p className="required-note">Các mục có dấu <strong>* bắt buộc</strong> là bắt buộc; các mục còn lại có thể bỏ trống.</p>
+    <header className="page-heading onboard-heading">
+      <span className="home-season-mark" aria-hidden="true"><SeasonMark /></span>
+      <div><p className="eyebrow">{isEditing ? "Hồ sơ" : "Bước 1/2 · Hồ sơ"}</p>
+        <h1>{isEditing ? "Sửa hồ sơ của bạn" : "Cho Season biết về bạn nhé"}</h1>
+        <p className="profile-intro">Mình dùng thông tin này để chọn ví dụ sát công việc và cách học hợp với bạn. Khoảng 2 phút thôi.</p></div>
     </header>
+    {!isEditing ? <section className="onboard-steps" aria-label="Các bước bắt đầu học">
+      <article><p className="eyebrow">Bước 1 · Hồ sơ · đang làm</p><p><strong>Vì sao cần?</strong> Bài học lấy ví dụ theo đúng công việc của bạn, và Season giải thích theo cách bạn chọn (tiếng Việt hay tiếng Anh, bài ngắn hay hội thoại).</p></article>
+      <article><p className="eyebrow">Bước 2 · Test đầu vào · tiếp theo</p><p><strong>Vì sao cần?</strong> Để xếp đúng mức CEFR: bài quá dễ thì chán, quá khó thì nản. Hồ sơ không thay thế được test vì tự đánh giá thường lệch.</p></article>
+    </section> : null}
+    <p className="required-note">Các mục có dấu <strong>* bắt buộc</strong> là bắt buộc; các mục còn lại có thể bỏ trống.</p>
     <form onSubmit={submit} aria-describedby={error ? "profile-error" : undefined}>
       <fieldset className="form-section">
         <legend>Thông tin cá nhân</legend>

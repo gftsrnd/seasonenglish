@@ -1,5 +1,6 @@
 import { useState, type FormEvent } from "react";
 import type { GameHubView } from "@e4s/contracts";
+import { useExperience } from "../../features/experience/Experience.js";
 
 export function Games({ view, aiAvailable = view.aiAvailable ?? false, onGenerate, onUseWeekly, onDelete }: {
   view: GameHubView; aiAvailable?: boolean;
@@ -9,10 +10,19 @@ export function Games({ view, aiAvailable = view.aiAvailable ?? false, onGenerat
 }) {
   const [topic, setTopic] = useState("");
   const [busy, setBusy] = useState(false);
+  const [topicError, setTopicError] = useState("");
+  const { speak } = useExperience();
   const submit = async (event: FormEvent) => {
     event.preventDefault();
     if (!topic.trim() || !onGenerate || busy) return;
-    setBusy(true); try { await onGenerate(topic.trim()); setTopic(""); } finally { setBusy(false); }
+    setBusy(true); setTopicError("");
+    try { await onGenerate(topic.trim()); setTopic(""); }
+    catch (error) {
+      const code = error instanceof Error ? error.message : "";
+      setTopicError(code === "TOPIC_CREATION_TEMPORARILY_LOCKED"
+        ? "Bạn đã nhập 3 chủ đề không hợp lệ. Tạo bộ từ được mở lại sau 30 phút; người vận hành đã nhận được báo cáo."
+        : code === "VOCABULARY_TOPIC_REJECTED" ? "Chủ đề này không có nghĩa hoặc không phù hợp cho học tập. Hãy nhập một chủ đề đời sống hoặc công việc rõ ràng." : "Không tạo được bộ từ. Vui lòng thử lại.");
+    } finally { setBusy(false); }
   };
   return <main className="learner-page engagement-page">
     <header className="engagement-title"><div><span className="eyebrow">Mini game</span><h1>Game từ vựng</h1><p>Nhập chủ đề bạn thích, Season tạo bộ từ đúng level {view.cefr}, rồi bắt đầu chơi thôi!</p></div></header>
@@ -22,6 +32,7 @@ export function Games({ view, aiAvailable = view.aiAvailable ?? false, onGenerat
         <button className="button button--primary" type="submit" disabled={!topic.trim() || !aiAvailable || !onGenerate || busy}>{busy ? "Đang tạo…" : "Tạo bộ từ"}</button>
         <button className="button" type="button" onClick={() => void onUseWeekly?.()}>Dùng từ vựng tuần này</button>
       </form>
+      {topicError ? <p className="form-error" role="alert">{topicError}</p> : null}
       {!aiAvailable ? <p className="muted">Chưa có API key nên chỉ dùng được từ vựng tuần này – báo vận hành nhập key trong Cài đặt.</p> : null}
       <div className="topic-source"><strong>{view.wordSet.topic}</strong><span>{view.wordSet.words.length} từ</span>
         <button className="text-button" type="button" onClick={() => void onDelete?.()}>🗑 Xoá bộ này</button></div>
@@ -30,9 +41,4 @@ export function Games({ view, aiAvailable = view.aiAvailable ?? false, onGenerat
     <section className="engagement-card"><h2>3. Chọn trò chơi</h2><div className="game-grid">{view.games.map((game) => <a className={`game-tile game-tile--${game.key}`} href={`/games/${game.key}`} key={game.key}><span className="game-icon" aria-hidden="true">{game.icon}</span><strong>{game.name}</strong><small>{game.description}</small>{game.best ? <em>Tốt nhất: {game.best.score}/{game.best.maxScore}</em> : null}</a>)}</div></section>
     <a className={`arena-entry ${view.arena.eligible ? "is-open" : "is-locked"}`} href="/arena"><div><span className="eyebrow">{view.arena.eligible ? "Đấu trường nội bộ" : "🔒 Đấu trường nội bộ · mở từ B1"}</span><p>{view.arena.eligible ? `Bạn có ${view.arena.points} điểm${view.arena.pendingDuels ? ` · ${view.arena.pendingDuels} lời thách đấu đang chờ` : ""}` : "Xếp hạng và thi đấu với đồng nghiệp từ mức B1 trở lên."}</p></div><b>{view.arena.eligible ? "Vào →" : "B1+"}</b></a>
   </main>;
-}
-
-function speak(text: string) {
-  if (!("speechSynthesis" in window)) return;
-  window.speechSynthesis.cancel(); window.speechSynthesis.speak(new SpeechSynthesisUtterance(text));
 }

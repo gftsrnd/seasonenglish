@@ -13,6 +13,7 @@ describe("identity API", () => {
   const app = buildApi({ pool, allowDemoLogin: true, secureCookies: false });
   app.get("/__test/operator", { preHandler: createRoleGuard(pool, ["operator"]) }, async (request) => request.e4sSession);
   let learnerCookie = "";
+  let managerCookie = "";
 
   beforeAll(async () => {
     const client = await pool.connect();
@@ -22,9 +23,10 @@ describe("identity API", () => {
       await seedDemo(client);
       const learnerHash = await createCredentialHash("learner-pass");
       const operatorHash = await createCredentialHash("staff-pass");
+      const managerHash = await createCredentialHash("manager-pass");
       await client.query(
-        `insert into user_credentials (user_id, credential_hash) values ($1, $2), ($3, $4)`,
-        [DEMO_IDS.learner, learnerHash, DEMO_IDS.operator, operatorHash]
+        `insert into user_credentials (user_id, credential_hash) values ($1, $2), ($3, $4), ($5, $6)`,
+        [DEMO_IDS.learner, learnerHash, DEMO_IDS.operator, operatorHash, DEMO_IDS.manager, managerHash]
       );
     } finally {
       client.release();
@@ -70,11 +72,21 @@ describe("identity API", () => {
     expect(staffAtLearner.statusCode).toBe(403);
   });
 
-  it("creates a demo learner session without accepting a role selection", async () => {
-    const response = await app.inject({ method: "POST", url: "/api/auth/demo", payload: { role: "manager" } });
+  it("canonicalizes the login email without changing the audience guard", async () => {
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/auth/staff/login",
+      payload: { email: "  OPERATOR@E4S.LOCAL  ", password: "staff-pass" }
+    });
 
-    expect(response.statusCode).toBe(200);
-    expect(response.json()).toMatchObject({ user: { id: DEMO_IDS.learner }, role: "learner" });
+    expect(response.statusCode, response.body).toBe(200);
+    expect(response.json()).toMatchObject({ user: { email: "operator@e4s.local" }, role: "operator" });
+  });
+
+  it("does not expose the removed demo login", async () => {
+    const response = await app.inject({ method: "POST", url: "/api/auth/demo", payload: {} });
+
+    expect(response.statusCode).toBe(404);
   });
 
   it("resolves and revokes the opaque HttpOnly session", async () => {
@@ -126,5 +138,37 @@ describe("identity API", () => {
     const allowed = await app.inject({ method: "GET", url: "/__test/operator", headers: { cookie: operatorCookie } });
     expect(allowed.statusCode).toBe(200);
     expect(allowed.json()).toMatchObject({ role: "operator" });
+  });
+
+  it("persists the signed-in staff avatar and returns it with the session", async () => {
+    const login = await app.inject({
+      method: "POST",
+      url: "/api/auth/staff/login",
+      payload: { email: "manager@e4s.local", password: "manager-pass" }
+    });
+    managerCookie = String(login.headers["set-cookie"]).split(";")[0] ?? "";
+
+    const saved = await app.inject({
+      method: "PATCH",
+      url: "/api/v1/me/avatar",
+      headers: { cookie: managerCookie },
+      payload: { acc: "leaf", color: "olive", bg: 2 }
+    });
+    expect(saved.statusCode).toBe(200);
+    expect(saved.json()).toMatchObject({ user: { avatar: { acc: "leaf", color: "olive", bg: 2 } }, role: "manager" });
+
+    const current = await app.inject({ method: "GET", url: "/api/session", headers: { cookie: managerCookie } });
+    expect(current.statusCode).toBe(200);
+    expect(current.json()).toMatchObject({ user: { avatar: { acc: "leaf", color: "olive", bg: 2 } } });
+  });
+
+  it("rejects invalid avatar values", async () => {
+    const response = await app.inject({
+      method: "PATCH",
+      url: "/api/v1/me/avatar",
+      headers: { cookie: managerCookie },
+      payload: { acc: "rocket", color: "olive", bg: 99 }
+    });
+    expect(response.statusCode).toBe(400);
   });
 });

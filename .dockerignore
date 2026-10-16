@@ -1,0 +1,13 @@
+.git
+.env
+node_modules
+**/node_modules
+dist
+**/dist
+.local
+.tmp
+.superpowers
+evidence
+coverage
+playwright-report
+test-results

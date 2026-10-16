@@ -12,6 +12,7 @@ describe("assessment API preserves the one-screen flow and server evidence", () 
   const pool = new Pool({ connectionString: databaseUrl });
   const app = buildApi({ pool, allowDemoLogin: true, secureCookies: false });
   let cookie = "";
+  let freshCookie = "";
   let operatorCookie = "";
   let managerCookie = "";
   let levelUpAttemptId = "";
@@ -23,9 +24,15 @@ describe("assessment API preserves the one-screen flow and server evidence", () 
       await migrateDatabase(client);
       await seedDemo(client);
       await client.query(
-        "insert into user_credentials (user_id, credential_hash) values ($1, $2), ($3, $4), ($5, $6)",
+        `insert into users (id, organization_id, role, display_name, email)
+         values ('00000000-0000-4000-8000-000000000109', $1, 'learner', 'Học viên Mới', 'fresh@e4s.local')`,
+        [DEMO_IDS.organization]
+      );
+      await client.query(
+        "insert into user_credentials (user_id, credential_hash) values ($1, $2), ($3, $4), ($5, $6), ($7, $8)",
         [
           DEMO_IDS.learner, await createCredentialHash("learner-pass"),
+          "00000000-0000-4000-8000-000000000109", await createCredentialHash("fresh-pass"),
           DEMO_IDS.operator, await createCredentialHash("operator-pass"),
           DEMO_IDS.manager, await createCredentialHash("manager-pass")
         ]
@@ -37,6 +44,11 @@ describe("assessment API preserves the one-screen flow and server evidence", () 
       payload: { email: "learner@e4s.local", password: "learner-pass" }
     });
     cookie = String(login.headers["set-cookie"]).split(";")[0] ?? "";
+    const freshLogin = await app.inject({
+      method: "POST", url: "/api/auth/learner/login",
+      payload: { email: "fresh@e4s.local", password: "fresh-pass" }
+    });
+    freshCookie = String(freshLogin.headers["set-cookie"]).split(";")[0] ?? "";
     const operatorLogin = await app.inject({
       method: "POST", url: "/api/auth/staff/login",
       payload: { email: "operator@e4s.local", password: "operator-pass" }
@@ -52,7 +64,7 @@ describe("assessment API preserves the one-screen flow and server evidence", () 
   afterAll(async () => { await app.close(); await pool.end(); });
 
   it("returns preparation for a fresh placement attempt", async () => {
-    const response = await app.inject({ method: "GET", url: "/api/v1/assessments/placement", headers: { cookie } });
+    const response = await app.inject({ method: "GET", url: "/api/v1/assessments/placement", headers: { cookie: freshCookie } });
     expect(response.statusCode, response.body).toBe(200);
     expect(response.json()).toMatchObject({
       screenState: "preparation",
@@ -62,7 +74,7 @@ describe("assessment API preserves the one-screen flow and server evidence", () 
   });
 
   it("starts, saves and resumes Listening on the same assessment attempt", async () => {
-    const started = await app.inject({ method: "POST", url: "/api/v1/assessments/placement/start", headers: { cookie }, payload: {} });
+    const started = await app.inject({ method: "POST", url: "/api/v1/assessments/placement/start", headers: { cookie: freshCookie }, payload: {} });
     expect(started.statusCode, started.body).toBe(201);
     expect(started.json()).toMatchObject({ screenState: "listening", attempt: { status: "in_progress", currentSection: "listening" } });
 
@@ -70,12 +82,12 @@ describe("assessment API preserves the one-screen flow and server evidence", () 
     const saved = await app.inject({
       method: "PUT",
       url: `/api/v1/assessment-attempts/${attemptId}/responses/listening/LA_0`,
-      headers: { cookie },
+      headers: { cookie: freshCookie },
       payload: { value: "B", evidenceType: "choice" }
     });
     expect(saved.statusCode, saved.body).toBe(200);
 
-    const resumed = await app.inject({ method: "GET", url: "/api/v1/assessments/placement", headers: { cookie } });
+    const resumed = await app.inject({ method: "GET", url: "/api/v1/assessments/placement", headers: { cookie: freshCookie } });
     expect(resumed.json()).toMatchObject({
       screenState: "listening",
       attempt: { id: attemptId, responses: [{ section: "listening", taskKey: "LA_0", value: "B", evidenceType: "choice" }] }
@@ -86,7 +98,7 @@ describe("assessment API preserves the one-screen flow and server evidence", () 
     const response = await app.inject({
       method: "PUT",
       url: `/api/v1/assessment-attempts/${DEMO_IDS.placementAttempt}/responses/listening/LA_0`,
-      headers: { cookie },
+      headers: { cookie: freshCookie },
       payload: { value: "B", evidenceType: "choice" }
     });
     expect(response.statusCode).toBe(409);
@@ -163,9 +175,27 @@ describe("assessment API preserves the one-screen flow and server evidence", () 
     expect(resumed.json()).toMatchObject({
       attempt: { id: attemptId, audioPlayCounts: { "listening:LA": 2 } }
     });
+
+    const overview = await app.inject({
+      method: "GET", url: "/api/v1/assessment-reviews/overview", headers: { cookie: operatorCookie }
+    });
+    expect(overview.statusCode, overview.body).toBe(200);
+    expect(overview.json()).toMatchObject({
+      levelSignals: {
+        inFlow: [expect.objectContaining({
+          learnerId: DEMO_IDS.learner,
+          currentLevel: "A2",
+          targetLevel: "B1",
+          phase: "testing",
+          assessmentAttemptId: attemptId,
+          challengeAttemptId: null,
+          metrics: "đang làm bài thi"
+        })]
+      }
+    });
   });
 
-  it("lets an operator review a submitted level-up attempt and records the approved level", async () => {
+  it("lets the manager administer a submitted level-up attempt and records the approved level", async () => {
     for (const section of ["listening", "reading", "writing"] as const) {
       const advanced = await app.inject({
         method: "POST",
@@ -201,7 +231,17 @@ describe("assessment API preserves the one-screen flow and server evidence", () 
       pendingAssessments: [expect.objectContaining({ kind: "final", learnerId: DEMO_IDS.learner })],
       pendingLevelUp: [expect.objectContaining({ attemptId: levelUpAttemptId, kind: "level-up" })],
       approvedLearners: [expect.objectContaining({ learnerId: DEMO_IDS.learner, currentLevel: "A2", placementScore: 55 })],
-      unassessedLearners: []
+      unassessedLearners: [expect.objectContaining({ learnerId: "00000000-0000-4000-8000-000000000109" })],
+      levelSignals: {
+        inFlow: [expect.objectContaining({
+          learnerId: DEMO_IDS.learner,
+          currentLevel: "A2",
+          targetLevel: "B1",
+          phase: "ungraded",
+          assessmentAttemptId: levelUpAttemptId,
+          challengeAttemptId: null
+        })]
+      }
     });
 
     const levelForms = await app.inject({
@@ -214,31 +254,23 @@ describe("assessment API preserves the one-screen flow and server evidence", () 
       expect.objectContaining({ targetLevel: "B2", publishedForm: null }),
       expect.objectContaining({ targetLevel: "C1", publishedForm: null })
     ]);
-    const forbiddenManagerDecision = await app.inject({
+    const managerDecision = await app.inject({
       method: "POST",
       url: `/api/v1/assessment-reviews/${levelUpAttemptId}/decision`,
       headers: { cookie: managerCookie },
-      payload: { status: "approved", approvedLevel: "B1", reason: "Manager may not decide." }
-    });
-    expect(forbiddenManagerDecision.statusCode).toBe(403);
-
-    const decided = await app.inject({
-      method: "POST",
-      url: `/api/v1/assessment-reviews/${levelUpAttemptId}/decision`,
-      headers: { cookie: operatorCookie },
       payload: { status: "approved", approvedLevel: "B1", reason: "Đủ bằng chứng theo rubric." }
     });
-    expect(decided.statusCode, decided.body).toBe(200);
-    expect(decided.json()).toMatchObject({
+    expect(managerDecision.statusCode, managerDecision.body).toBe(200);
+    expect(managerDecision.json()).toMatchObject({
       attemptId: levelUpAttemptId,
       status: "approved",
       approvedLevel: "B1",
-      decidedBy: DEMO_IDS.operator
+      decidedBy: DEMO_IDS.manager
     });
     const repeatedDecision = await app.inject({
       method: "POST",
       url: `/api/v1/assessment-reviews/${levelUpAttemptId}/decision`,
-      headers: { cookie: operatorCookie },
+      headers: { cookie: managerCookie },
       payload: { status: "approved", approvedLevel: "B1", reason: "Đủ bằng chứng theo rubric." }
     });
     expect(repeatedDecision.statusCode, repeatedDecision.body).toBe(200);

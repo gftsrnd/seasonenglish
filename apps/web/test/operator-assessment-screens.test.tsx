@@ -23,17 +23,31 @@ const overview: AssessmentReviewOverviewView = {
     learnerId: "learner-3", learnerName: "Học viên A", currentLevel: "A2", placementScore: 55,
     monthlyGoal: "Viết email ngắn xin dời lịch họp."
   }],
-  unassessedLearners: [{ learnerId: "learner-4", learnerName: "Học viên G", profileComplete: false }]
+  unassessedLearners: [{ learnerId: "learner-4", learnerName: "Học viên G", profileComplete: false }],
+  levelSignals: {
+    windowDays: 14,
+    ready: [{
+      learnerId: "learner-3", learnerName: "Học viên A", currentLevel: "A2", targetLevel: "B1",
+      metrics: [
+        { key: "lessonCompletion", label: "bài", current: 100, target: 90, display: "5/5 bài", met: true },
+        { key: "firstTryAccuracy", label: "đúng lần 1", current: 80, target: 75, display: "4/5 phần", met: true },
+        { key: "weeklyPractice", label: "thực hành", current: 86, target: 80, display: "86/100", met: true },
+        { key: "coachRubric", label: "Season", current: 4.3, target: 4, display: "4.3/5 · 8 lượt", met: true }
+      ]
+    }],
+    weak: [],
+    inFlow: []
+  }
 };
 
 const levelForms: AssessmentLevelFormSlotView[] = [
-  { targetLevel: "A2", publishedForm: null },
+  { targetLevel: "A2", publishedForm: null, draftForm: null },
   { targetLevel: "B1", publishedForm: {
     definitionId: "definition-b1", versionId: "version-b1", title: "Đề thi lên mức B1", version: 1,
-    publishedAt: "2026-10-13T09:00:00.000Z", listeningTaskCount: 5, readingTaskCount: 5, attemptCount: 1
-  } },
-  { targetLevel: "B2", publishedForm: null },
-  { targetLevel: "C1", publishedForm: null }
+    publishedAt: "2026-10-13T09:00:00.000Z", listeningTaskCount: 5, readingTaskCount: 5, attemptCount: 1, status: "published"
+  }, draftForm: null },
+  { targetLevel: "B2", publishedForm: null, draftForm: null },
+  { targetLevel: "C1", publishedForm: null, draftForm: null }
 ];
 
 describe("operator assessment screens preserve Thu's visible structure", () => {
@@ -46,6 +60,8 @@ describe("operator assessment screens preserve Thu's visible structure", () => {
     expect(screen.getByRole("heading", { name: "Chờ duyệt (1)" })).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "Yêu cầu lên mức chờ duyệt (1)" })).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: /Tín hiệu đổi mức/ })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Sẵn sàng thi lên level (1)" })).toBeInTheDocument();
+    expect(screen.getByText(/bài 5\/5 bài · đúng lần 1 4\/5 phần · thực hành 86\/100 · Season 4.3\/5 · 8 lượt/i)).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "Đã duyệt (1)" })).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "Chưa làm test (1)" })).toBeInTheDocument();
 

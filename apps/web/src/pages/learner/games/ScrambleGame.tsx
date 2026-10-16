@@ -1,9 +1,10 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { GameAnswerInput } from "@e4s/contracts";
-import { letters, seededShuffle, type FinishGame, type GameWord } from "./types.js";
+import { letters, prepareGameAttempt, seededShuffle, type FinishGame, type GameWord } from "./types.js";
+import { useExperience } from "../../../features/experience/Experience.js";
 
-export function ScrambleGame({ words: source, onFinish }: { words: GameWord[]; onFinish: FinishGame }) {
-  const words = useMemo(() => source.filter((word) => letters(word.english).length >= 3).slice(0, 8), [source]);
+export function ScrambleGame({ words: source, onFinish, attemptSeed = 0 }: { words: GameWord[]; onFinish: FinishGame; attemptSeed?: number }) {
+  const words = useMemo(() => prepareGameAttempt(source.filter((word) => letters(word.english).length >= 3), attemptSeed).slice(0, 8), [attemptSeed, source]);
   const [index, setIndex] = useState(0);
   const [picked, setPicked] = useState<number[]>([]);
   const [wrong, setWrong] = useState(0);
@@ -14,18 +15,19 @@ export function ScrambleGame({ words: source, onFinish }: { words: GameWord[]; o
   const [busy, setBusy] = useState(false);
   const [locked, setLocked] = useState(false);
   const [revealed, setRevealed] = useState("");
+  const { play } = useExperience();
   const timer = useRef<number | null>(null);
   const word = words[index];
   const target = word ? letters(word.english) : "";
   const tiles = useMemo(() => {
     if (!target) return [];
     const raw = target.split("").map((character, tileIndex) => ({ character, tileIndex }));
-    let shuffled = seededShuffle(raw, index + target.length);
+    let shuffled = seededShuffle(raw, attemptSeed ^ index ^ target.length);
     if (target.length > 2 && shuffled.map((tile) => tile.character).join("") === target) {
       shuffled = [...shuffled.slice(1), shuffled[0]!];
     }
     return shuffled.map((tile, tileIndex) => ({ ...tile, tileIndex }));
-  }, [index, target]);
+  }, [attemptSeed, index, target]);
   const assembled = revealed || picked.map((tileIndex) => tiles[tileIndex]?.character ?? "").join("");
 
   useEffect(() => () => { if (timer.current !== null) window.clearTimeout(timer.current); }, []);
@@ -53,6 +55,7 @@ export function ScrambleGame({ words: source, onFinish }: { words: GameWord[]; o
     if (!word || busy || locked) return;
     const correct = answer === target;
     if (!correct && wrong < 1) {
+      play("error");
       setWrong(wrong + 1);
       setNotice("Chưa đúng – xếp lại nhé.");
       setLocked(true);
@@ -62,6 +65,7 @@ export function ScrambleGame({ words: source, onFinish }: { words: GameWord[]; o
     const nextAnswer: GameAnswerInput = { wordId: word.id, answer: correct ? word.english : answer, attempts: wrong + 1, usedHint: hintWasUsed, combo: 1 };
     const nextAnswers = [...answers, nextAnswer];
     const earned = hintWasUsed || wrong ? 1 : 2;
+    play(correct ? "success" : "error");
     if (correct) setPoints((value) => value + earned);
     setRevealed(target);
     setNotice(correct ? `✅ ${word.english} +${earned}` : `❌ Từ đúng: ${word.english}`);

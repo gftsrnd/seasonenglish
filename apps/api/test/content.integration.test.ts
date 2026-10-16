@@ -74,7 +74,7 @@ describe("content operations API", () => {
 
   afterAll(async () => { await app.close(); await pool.end(); });
 
-  it("exposes the two-week topic frame to staff but only operators can update it", async () => {
+  it("lets the manager administer the two-week topic frame", async () => {
     const read = await app.inject({ method: "GET", url: "/api/v1/content/weeks", headers: { cookie: managerCookie } });
     expect(read.statusCode, read.body).toBe(200);
     expect(read.json()).toMatchObject({
@@ -89,7 +89,8 @@ describe("content operations API", () => {
       method: "PUT", url: "/api/v1/content/weeks", headers: { cookie: managerCookie },
       payload: { weeks: [{ weekNumber: 1, topic: "Changed", description: "", objectives: "", keyVocabHint: "" }] }
     });
-    expect(managerWrite.statusCode).toBe(403);
+    expect(managerWrite.statusCode, managerWrite.body).toBe(200);
+    expect(managerWrite.json()).toMatchObject({ weeks: expect.arrayContaining([expect.objectContaining({ weekNumber: 1, topic: "Changed" })]) });
 
     const operatorWrite = await app.inject({
       method: "PUT", url: "/api/v1/content/weeks", headers: { cookie: makerCookie },
@@ -136,14 +137,8 @@ describe("content operations API", () => {
       method: "POST", url: `/api/v1/content/lesson-set-versions/${versionId}/publication`,
       headers: { cookie: managerCookie }, payload: {}
     });
-    expect(managerApproval.statusCode).toBe(403);
-
-    const published = await app.inject({
-      method: "POST", url: `/api/v1/content/lesson-set-versions/${versionId}/publication`,
-      headers: { cookie: checkerCookie }, payload: {}
-    });
-    expect(published.statusCode, published.body).toBe(200);
-    expect(published.json()).toMatchObject({ versionId, status: "published", approvedBy: checkerId });
+    expect(managerApproval.statusCode, managerApproval.body).toBe(200);
+    expect(managerApproval.json()).toMatchObject({ versionId, status: "published", approvedBy: DEMO_IDS.manager });
 
     const visibleLesson = await app.inject({
       method: "GET", url: `/api/v1/lessons/${lessons[0]?.id}`, headers: { cookie: learnerCookie }
@@ -158,7 +153,7 @@ describe("content operations API", () => {
 
     const retired = await app.inject({
       method: "POST", url: `/api/v1/content/lesson-set-versions/${versionId}/retirement`,
-      headers: { cookie: checkerCookie }, payload: {}
+      headers: { cookie: managerCookie }, payload: {}
     });
     expect(retired.statusCode, retired.body).toBe(200);
     expect(retired.json()).toMatchObject({ versionId, status: "retired" });
@@ -199,12 +194,15 @@ describe("content operations API", () => {
     ]);
   });
 
-  it("stores prompt edits as a new draft version and keeps manager mode read-only", async () => {
+  it("lets the manager administer prompt drafts while preserving version history", async () => {
     const managerWrite = await app.inject({
       method: "PUT", url: "/api/v1/content/prompts", headers: { cookie: managerCookie },
-      payload: { groups: [{ key: "system_rules", content: "Manager must not save." }] }
+      payload: { groups: [{ key: "system_rules", content: "Manager-approved system rule." }] }
     });
-    expect(managerWrite.statusCode).toBe(403);
+    expect(managerWrite.statusCode, managerWrite.body).toBe(200);
+    expect(managerWrite.json()).toMatchObject({
+      groups: [expect.objectContaining({ key: "system_rules", status: "draft", content: "Manager-approved system rule." })]
+    });
 
     const saved = await app.inject({
       method: "PUT", url: "/api/v1/content/prompts", headers: { cookie: makerCookie },
@@ -212,7 +210,7 @@ describe("content operations API", () => {
     });
     expect(saved.statusCode, saved.body).toBe(200);
     expect(saved.json()).toMatchObject({
-      groups: [expect.objectContaining({ key: "system_rules", version: 2, status: "draft", content: "Use concise CEFR-aligned feedback." })]
+      groups: [expect.objectContaining({ key: "system_rules", status: "draft", content: "Use concise CEFR-aligned feedback." })]
     });
 
     const active = await pool.query<{ id: string }>(

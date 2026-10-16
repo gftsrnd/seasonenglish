@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import type { AccountRole, SessionView } from "@e4s/contracts";
+import type { AccountRole, LearnerAvatarData, SessionView } from "@e4s/contracts";
 import { createRepositories, type DatabaseRepositories, type UserCredentialRecord, type UserIdentity } from "@e4s/database";
 import { issueSessionToken, permissionsFor, sessionTokenHash, verifyCredential } from "@e4s/domain/identity";
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
@@ -7,12 +7,16 @@ import type { Pool } from "pg";
 import { z } from "zod";
 
 const COOKIE_NAME = "e4s_session";
-const loginInput = z.object({ email: z.string().email(), password: z.string().min(1) });
+const loginInput = z.object({ email: z.string().trim().email(), password: z.string().min(1) });
 const versionedLoginInput = loginInput.extend({ audience: z.enum(["learner", "staff"]) });
+const avatarInput = z.object({
+  acc: z.enum(["none", "leaf", "sun", "flower", "cloud", "star", "drop", "snow"]),
+  color: z.enum(["ink", "brown", "olive", "taupe", "orange", "rose"]),
+  bg: z.number().int().min(0).max(5)
+}).strict();
 
 export interface IdentityRouteOptions {
   pool: Pool;
-  allowDemoLogin: boolean;
   secureCookies: boolean;
   sessionTtlMs?: number;
 }
@@ -57,12 +61,6 @@ export function registerIdentityRoutes(app: FastifyInstance, options: IdentityRo
 
   app.post("/api/auth/learner/login", loginRateLimit, (request, reply) => login(request, reply, "learner", request.body));
   app.post("/api/auth/staff/login", loginRateLimit, (request, reply) => login(request, reply, "staff", request.body));
-  app.post("/api/auth/demo", loginRateLimit, async (_request, reply) => {
-    if (!options.allowDemoLogin) return reply.code(404).send({ code: "DEMO_DISABLED" });
-    const account = await repositories.identity.findUserByEmail("learner@e4s.local");
-    if (!account) return reply.code(503).send({ code: "DEMO_NOT_SEEDED" });
-    return createSession(reply, repositories, account, options.secureCookies, sessionTtlMs);
-  });
   app.get("/api/session", currentSession);
   app.post("/api/logout", logout);
 
@@ -72,6 +70,14 @@ export function registerIdentityRoutes(app: FastifyInstance, options: IdentityRo
     return login(request, reply, parsed.data.audience, parsed.data);
   });
   app.get("/api/v1/me", currentSession);
+  app.patch("/api/v1/me/avatar", async (request, reply) => {
+    const account = await resolveSession(request, repositories);
+    if (!account) return reply.code(401).send({ code: "UNAUTHENTICATED" });
+    const parsed = avatarInput.safeParse(request.body);
+    if (!parsed.success) return reply.code(400).send({ code: "INVALID_AVATAR" });
+    const updated = await repositories.identity.updateAvatar(account.id, parsed.data as LearnerAvatarData);
+    return sessionView(updated);
+  });
   app.delete("/api/v1/sessions/current", logout);
 }
 
@@ -111,7 +117,7 @@ export async function resolveSession(request: FastifyRequest, repositories: Data
 
 export function sessionView(account: UserIdentity): SessionView {
   return {
-    user: { id: account.id, displayName: account.displayName, email: account.email },
+    user: { id: account.id, displayName: account.displayName, email: account.email, ...(account.avatar ? { avatar: account.avatar } : {}) },
     role: account.role,
     permissions: permissionsFor(account.role)
   };

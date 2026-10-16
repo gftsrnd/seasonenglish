@@ -1,0 +1,541 @@
+import { createRepositories } from "@e4s/database";
+import type { AccountRole } from "@e4s/contracts";
+import { createCredentialHash } from "@e4s/domain/identity";
+import type { FastifyInstance } from "fastify";
+import type { Pool } from "pg";
+import { z } from "zod";
+import { createRoleGuard } from "../identity/policy.js";
+import { createVocabularyImageResolver } from "../engagement/vocabulary-image.js";
+
+const accountRoles = new Set<AccountRole>(["learner", "operator", "manager"]);
+const accountCreateInput = z.object({
+  displayName: z.string().trim().min(2).max(120),
+  email: z.string().trim().email().max(254),
+  role: z.enum(["learner", "operator", "manager"]),
+  password: z.string().min(8).max(128)
+});
+const accountStatusInput = z.object({ status: z.enum(["active", "disabled", "deleted"]) });
+const resetPasswordInput = z.object({ password: z.string().min(8).max(128) });
+const managerSettingsInput = z.object({
+  reminderInactiveDays: z.number().int().min(1).max(30), weeklyReportEnabled: z.boolean(),
+  pilotStartDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/), pilotWeeks: z.number().int().min(2).max(4),
+  weekOverride: z.number().int().min(0).max(4), minMinutesPerDay: z.number().int().min(5).max(60),
+  courseTheme: z.string().max(160), coachDailyLimit: z.number().int().min(1).max(200),
+  testTimed: z.boolean(), testTimes: z.object({ listening: z.number().int().min(1).max(60), reading: z.number().int().min(1).max(60), writing: z.number().int().min(1).max(60), speaking: z.number().int().min(1).max(60) }),
+  testWarnLimit: z.number().int().min(1).max(10),
+  levelUp: z.object({ days: z.number().int().min(1).max(60), lessons: z.number().min(1).max(100), firstTry: z.number().min(1).max(100), submission: z.number().min(1).max(100), coach: z.number().min(0).max(5), coachTurns: z.number().int().min(0).max(100), wrong: z.number().min(1).max(100), minParts: z.number().int().min(1).max(50) }),
+  backgroundMusic: z.object({ enabled: z.boolean(), url: z.string().max(1000), volume: z.number().int().min(0).max(100) }),
+  baseWebhookUrl: z.string().max(1000), baseWebhookTemplate: z.string().max(4000)
+});
+const managerProviderSettingsInput = z.object({
+  provider: z.enum(["claude", "gemini", "openai"]),
+  baseUrl: z.string().trim().url().max(1000),
+  model: z.string().trim().min(1).max(200),
+  speechToTextModel: z.string().trim().max(200),
+  credential: z.string().max(4000).optional()
+});
+const managerProviderTestInput = managerProviderSettingsInput.partial();
+const managerDeleteDecisionInput = z.object({ status: z.enum(["approved", "rejected"]), note: z.string().trim().max(2000).default("") });
+const managerPinReportInput = z.object({ accountId: z.string().uuid(), note: z.string().trim().min(1).max(2000) });
+const managerPurgeConfirmationInput = z.object({});
+const managerPurgeInput = z.object({ confirmationToken: z.string().trim().min(20).max(200), confirmationPhrase: z.string().trim().min(1).max(80) });
+const managerMaintenanceConfirmationInput = z.object({});
+const managerMaintenanceInput = z.object({ confirmationToken: z.string().trim().min(20).max(200), confirmationPhrase: z.string().trim().min(1).max(80) });
+const managerImageTestInput = z.object({ source: z.enum(["pexels", "pixabay", "openverse", "wikimedia", "disabled"]), word: z.string().trim().min(1).max(120).default("notebook") });
+const accountIdParams = z.object({ accountId: z.uuid() });
+const learnerIdParams = z.object({ learnerId: z.uuid() });
+const requestIdParams = z.object({ requestId: z.uuid() });
+const reportIdParams = z.object({ reportId: z.uuid() });
+const managerMusicTestInput = z.object({ enabled: z.boolean(), url: z.string().max(1000), volume: z.number().int().min(0).max(100) });
+const managerWebhookTestInput = z.object({ url: z.string().trim().max(1000), template: z.string().max(4000) });
+const managerImportInput = z.object({
+  snapshot: z.object({ version: z.literal(1), settings: managerSettingsInput }).passthrough()
+});
+
+function isAccountRole(value: unknown): value is AccountRole {
+  return typeof value === "string" && accountRoles.has(value as AccountRole);
+}
+
+export function registerManagerRoutes(app: FastifyInstance, pool: Pool, options: { maintenanceEnabled?: boolean } = {}): void {
+  const repositories = createRepositories(pool);
+  const managerOnly = createRoleGuard(pool, ["manager"]);
+  const maintenanceEnabled = options.maintenanceEnabled === true;
+
+  app.get("/api/v1/manager/progress", { preHandler: managerOnly }, async (request, reply) => {
+    const view = await repositories.manager.progress(request.e4sSession!.user.id);
+    return view ?? reply.code(404).send({ code: "MANAGER_ORGANIZATION_NOT_FOUND" });
+  });
+
+  app.get("/api/v1/manager/operations", { preHandler: managerOnly }, async (request, reply) => {
+    const view = await repositories.manager.operations(request.e4sSession!.user.id);
+    return view ?? reply.code(404).send({ code: "MANAGER_ORGANIZATION_NOT_FOUND" });
+  });
+
+  app.get<{ Params: { learnerId: string } }>("/api/v1/manager/learners/:learnerId", { preHandler: managerOnly }, async (request, reply) => {
+    const params = learnerIdParams.safeParse(request.params);
+    if (!params.success) return reply.code(400).send({ code: "MANAGER_LEARNER_ID_INVALID" });
+    const view = await repositories.manager.learnerProfile(request.e4sSession!.user.id, params.data.learnerId);
+    return view ?? reply.code(404).send({ code: "MANAGER_LEARNER_NOT_FOUND" });
+  });
+
+  app.get("/api/v1/manager/delete-requests", { preHandler: managerOnly }, async (request, reply) => {
+    const view = await repositories.manager.deleteRequests(request.e4sSession!.user.id);
+    return view ?? reply.code(404).send({ code: "MANAGER_ORGANIZATION_NOT_FOUND" });
+  });
+
+  app.post<{ Params: { requestId: string } }>(
+    "/api/v1/manager/delete-requests/:requestId/decision",
+    { preHandler: managerOnly },
+    async (request, reply) => {
+      const params = requestIdParams.safeParse(request.params);
+      if (!params.success) return reply.code(400).send({ code: "MANAGER_DELETE_REQUEST_ID_INVALID" });
+      const parsed = managerDeleteDecisionInput.safeParse(request.body);
+      if (!parsed.success) return reply.code(400).send({ code: "MANAGER_DELETE_DECISION_INVALID" });
+      try {
+        return await repositories.manager.decideDeleteRequest(request.e4sSession!.user.id, params.data.requestId, parsed.data);
+      } catch (error) {
+        if (error instanceof Error && [
+          "MANAGER_ORGANIZATION_NOT_FOUND", "MANAGER_DELETE_REQUEST_NOT_FOUND", "MANAGER_DELETE_REQUEST_ALREADY_DECIDED"
+        ].includes(error.message)) return reply.code(error.message === "MANAGER_ORGANIZATION_NOT_FOUND" ? 404 : 409).send({ code: error.message });
+        throw error;
+      }
+    }
+  );
+
+  app.get("/api/v1/manager/trash", { preHandler: managerOnly }, async (request, reply) => {
+    const view = await repositories.manager.trash(request.e4sSession!.user.id);
+    return view ?? reply.code(404).send({ code: "MANAGER_ORGANIZATION_NOT_FOUND" });
+  });
+
+  app.post<{ Params: { accountId: string } }>(
+    "/api/v1/manager/trash/:accountId/restore",
+    { preHandler: managerOnly },
+    async (request, reply) => {
+      const params = accountIdParams.safeParse(request.params);
+      if (!params.success) return reply.code(400).send({ code: "MANAGER_ACCOUNT_ID_INVALID" });
+      try {
+        return await repositories.manager.restoreAccount(request.e4sSession!.user.id, params.data.accountId);
+      } catch (error) {
+        if (error instanceof Error && ["MANAGER_ORGANIZATION_NOT_FOUND", "MANAGER_TRASH_ACCOUNT_NOT_FOUND"].includes(error.message)) {
+          return reply.code(error.message === "MANAGER_ORGANIZATION_NOT_FOUND" ? 404 : 409).send({ code: error.message });
+        }
+        throw error;
+      }
+    }
+  );
+
+  app.post<{ Params: { accountId: string } }>(
+    "/api/v1/manager/trash/:accountId/purge-confirmation",
+    { preHandler: managerOnly },
+    async (request, reply) => {
+      const params = accountIdParams.safeParse(request.params);
+      if (!params.success) return reply.code(400).send({ code: "MANAGER_ACCOUNT_ID_INVALID" });
+      const parsed = managerPurgeConfirmationInput.safeParse(request.body ?? {});
+      if (!parsed.success) return reply.code(400).send({ code: "MANAGER_PURGE_CONFIRMATION_INVALID" });
+      try {
+        return await repositories.manager.issuePurgeConfirmation(request.e4sSession!.user.id, params.data.accountId);
+      } catch (error) {
+        if (error instanceof Error && ["MANAGER_ORGANIZATION_NOT_FOUND", "MANAGER_TRASH_ACCOUNT_NOT_FOUND"].includes(error.message)) {
+          return reply.code(error.message === "MANAGER_ORGANIZATION_NOT_FOUND" ? 404 : 409).send({ code: error.message });
+        }
+        throw error;
+      }
+    }
+  );
+
+  app.delete<{ Params: { accountId: string } }>(
+    "/api/v1/manager/trash/:accountId",
+    { preHandler: managerOnly },
+    async (request, reply) => {
+      const params = accountIdParams.safeParse(request.params);
+      if (!params.success) return reply.code(400).send({ code: "MANAGER_ACCOUNT_ID_INVALID" });
+      const parsed = managerPurgeInput.safeParse(request.body);
+      if (!parsed.success) return reply.code(400).send({ code: "MANAGER_PURGE_CONFIRMATION_INVALID" });
+      try {
+        await repositories.manager.purgeAccount(request.e4sSession!.user.id, params.data.accountId, parsed.data);
+        return reply.code(204).send();
+      } catch (error) {
+        if (error instanceof Error && [
+          "MANAGER_ORGANIZATION_NOT_FOUND", "MANAGER_TRASH_ACCOUNT_NOT_FOUND", "MANAGER_ACCOUNT_PURGE_BLOCKED", "MANAGER_PURGE_CONFIRMATION_INVALID"
+        ].includes(error.message)) return reply.code(error.message === "MANAGER_ORGANIZATION_NOT_FOUND" ? 404 : 409).send({ code: error.message });
+        throw error;
+      }
+    }
+  );
+
+  app.get("/api/v1/manager/pin-reports", { preHandler: managerOnly }, async (request, reply) => {
+    const view = await repositories.manager.pinReports(request.e4sSession!.user.id);
+    return view ?? reply.code(404).send({ code: "MANAGER_ORGANIZATION_NOT_FOUND" });
+  });
+
+  app.post("/api/v1/manager/pin-reports", { preHandler: managerOnly }, async (request, reply) => {
+    const parsed = managerPinReportInput.safeParse(request.body);
+    if (!parsed.success) return reply.code(400).send({ code: "MANAGER_PIN_REPORT_INVALID" });
+    try {
+      const report = await repositories.manager.createPinReport(request.e4sSession!.user.id, parsed.data.accountId, parsed.data.note);
+      return reply.code(201).send(report);
+    } catch (error) {
+      if (error instanceof Error && ["MANAGER_ORGANIZATION_NOT_FOUND", "MANAGER_PIN_REPORT_ACCOUNT_NOT_FOUND"].includes(error.message)) {
+        return reply.code(error.message === "MANAGER_ORGANIZATION_NOT_FOUND" ? 404 : 400).send({ code: error.message });
+      }
+      throw error;
+    }
+  });
+
+  app.post<{ Params: { reportId: string } }>(
+    "/api/v1/manager/pin-reports/:reportId/resolve",
+    { preHandler: managerOnly },
+    async (request, reply) => {
+      const params = reportIdParams.safeParse(request.params);
+      if (!params.success) return reply.code(400).send({ code: "MANAGER_PIN_REPORT_ID_INVALID" });
+      try {
+        return await repositories.manager.resolvePinReport(request.e4sSession!.user.id, params.data.reportId);
+      } catch (error) {
+        if (error instanceof Error && ["MANAGER_ORGANIZATION_NOT_FOUND", "MANAGER_PIN_REPORT_NOT_FOUND"].includes(error.message)) {
+          return reply.code(error.message === "MANAGER_ORGANIZATION_NOT_FOUND" ? 404 : 409).send({ code: error.message });
+        }
+        throw error;
+      }
+    }
+  );
+
+  app.post("/api/v1/manager/settings/image-test", { preHandler: managerOnly }, async (request, reply) => {
+    const parsed = managerImageTestInput.safeParse(request.body);
+    if (!parsed.success) return reply.code(400).send({ code: "MANAGER_IMAGE_TEST_INVALID" });
+    try {
+      const imageUrl = await createVocabularyImageResolver(parsed.data.source).resolve(parsed.data.word);
+      return {
+        status: imageUrl ? "available" : "unavailable",
+        source: parsed.data.source,
+        imageUrl,
+        testedAt: new Date().toISOString()
+      } as const;
+    } catch {
+      return reply.code(502).send({ code: "MANAGER_IMAGE_TEST_UNAVAILABLE" });
+    }
+  });
+
+  app.post("/api/v1/manager/settings/image-cache", { preHandler: managerOnly }, async (request, reply) => {
+    try {
+      return await repositories.manager.clearImageCache(request.e4sSession!.user.id);
+    } catch (error) {
+      return sendManagerOperationsError(reply, error);
+    }
+  });
+
+  app.post("/api/v1/manager/settings/music-test", { preHandler: managerOnly }, async (request, reply) => {
+    const parsed = managerMusicTestInput.safeParse(request.body);
+    if (!parsed.success) return reply.code(400).send({ code: "MANAGER_MUSIC_TEST_INVALID" });
+    try {
+      return await repositories.manager.testMusic(request.e4sSession!.user.id, parsed.data);
+    } catch (error) {
+      return sendManagerOperationsError(reply, error);
+    }
+  });
+
+  app.post("/api/v1/manager/settings/music-reset", { preHandler: managerOnly }, async (request, reply) => {
+    try {
+      return await repositories.manager.resetMusic(request.e4sSession!.user.id);
+    } catch (error) {
+      return sendManagerOperationsError(reply, error);
+    }
+  });
+
+  app.post("/api/v1/manager/settings/webhook-test", { preHandler: managerOnly }, async (request, reply) => {
+    const parsed = managerWebhookTestInput.safeParse(request.body);
+    if (!parsed.success) return reply.code(400).send({ code: "MANAGER_WEBHOOK_TEST_INVALID" });
+    try {
+      return await repositories.manager.testWebhook(request.e4sSession!.user.id, parsed.data);
+    } catch (error) {
+      return sendManagerOperationsError(reply, error);
+    }
+  });
+
+  app.get("/api/v1/manager/settings/export", { preHandler: managerOnly }, async (request, reply) => {
+    try {
+      const view = await repositories.manager.exportData(request.e4sSession!.user.id);
+      return view ?? reply.code(404).send({ code: "MANAGER_ORGANIZATION_NOT_FOUND" });
+    } catch (error) {
+      return sendManagerOperationsError(reply, error);
+    }
+  });
+
+  app.post("/api/v1/manager/settings/import", { preHandler: managerOnly }, async (request, reply) => {
+    const parsed = managerImportInput.safeParse(request.body);
+    if (!parsed.success) return reply.code(400).send({ code: "MANAGER_DATA_IMPORT_INVALID" });
+    try {
+      return await repositories.manager.importData(request.e4sSession!.user.id, parsed.data.snapshot);
+    } catch (error) {
+      if (error instanceof Error && error.message === "MANAGER_DATA_IMPORT_INVALID") return reply.code(400).send({ code: error.message });
+      return sendManagerOperationsError(reply, error);
+    }
+  });
+
+  app.post("/api/v1/manager/settings/seed-confirmation", { preHandler: managerOnly }, async (request, reply) => {
+    if (!maintenanceEnabled) return reply.code(404).send({ code: "MANAGER_MAINTENANCE_DISABLED" });
+    const parsed = managerMaintenanceConfirmationInput.safeParse(request.body ?? {});
+    if (!parsed.success) return reply.code(400).send({ code: "MANAGER_MAINTENANCE_CONFIRMATION_INVALID" });
+    try {
+      return await repositories.manager.issueMaintenanceConfirmation(request.e4sSession!.user.id, "seed_demo");
+    } catch (error) {
+      return sendMaintenanceError(reply, error);
+    }
+  });
+
+  app.post("/api/v1/manager/settings/seed", { preHandler: managerOnly }, async (request, reply) => {
+    if (!maintenanceEnabled) return reply.code(404).send({ code: "MANAGER_MAINTENANCE_DISABLED" });
+    const parsed = managerMaintenanceInput.safeParse(request.body);
+    if (!parsed.success) return reply.code(400).send({ code: "MANAGER_MAINTENANCE_CONFIRMATION_INVALID" });
+    try {
+      return await repositories.manager.runMaintenance(request.e4sSession!.user.id, "seed_demo", parsed.data);
+    } catch (error) {
+      return sendMaintenanceError(reply, error);
+    }
+  });
+
+  app.post("/api/v1/manager/settings/wipe-confirmation", { preHandler: managerOnly }, async (request, reply) => {
+    if (!maintenanceEnabled) return reply.code(404).send({ code: "MANAGER_MAINTENANCE_DISABLED" });
+    const parsed = managerMaintenanceConfirmationInput.safeParse(request.body ?? {});
+    if (!parsed.success) return reply.code(400).send({ code: "MANAGER_MAINTENANCE_CONFIRMATION_INVALID" });
+    try {
+      return await repositories.manager.issueMaintenanceConfirmation(request.e4sSession!.user.id, "wipe_data");
+    } catch (error) {
+      return sendMaintenanceError(reply, error);
+    }
+  });
+
+  app.post("/api/v1/manager/settings/wipe", { preHandler: managerOnly }, async (request, reply) => {
+    if (!maintenanceEnabled) return reply.code(404).send({ code: "MANAGER_MAINTENANCE_DISABLED" });
+    const parsed = managerMaintenanceInput.safeParse(request.body);
+    if (!parsed.success) return reply.code(400).send({ code: "MANAGER_MAINTENANCE_CONFIRMATION_INVALID" });
+    try {
+      return await repositories.manager.runMaintenance(request.e4sSession!.user.id, "wipe_data", parsed.data);
+    } catch (error) {
+      return sendMaintenanceError(reply, error);
+    }
+  });
+
+  app.get("/api/v1/manager/provider-settings", { preHandler: managerOnly }, async (request, reply) => {
+    try {
+      const view = await repositories.manager.providerSettings(request.e4sSession!.user.id);
+      return view ?? reply.code(404).send({ code: "MANAGER_ORGANIZATION_NOT_FOUND" });
+    } catch (error) {
+      return sendProviderSettingsError(reply, error);
+    }
+  });
+
+  app.put("/api/v1/manager/provider-settings", { preHandler: managerOnly }, async (request, reply) => {
+    const parsed = managerProviderSettingsInput.safeParse(request.body);
+    if (!parsed.success) return reply.code(400).send({ code: "PROVIDER_SETTINGS_INPUT_INVALID" });
+    try {
+      return await repositories.manager.saveProviderSettings(request.e4sSession!.user.id, parsed.data);
+    } catch (error) {
+      return sendProviderSettingsError(reply, error);
+    }
+  });
+
+  app.post("/api/v1/manager/provider-settings/test", { preHandler: managerOnly }, async (request, reply) => {
+    const parsed = managerProviderTestInput.safeParse(request.body ?? {});
+    if (!parsed.success) return reply.code(400).send({ code: "PROVIDER_SETTINGS_TEST_INPUT_INVALID" });
+    try {
+      return await repositories.manager.testProviderSettings(request.e4sSession!.user.id, parsed.data);
+    } catch (error) {
+      return sendProviderSettingsError(reply, error);
+    }
+  });
+
+  app.get("/api/v1/manager/accounts", { preHandler: managerOnly }, async (request, reply) => {
+    const view = await repositories.manager.accounts(request.e4sSession!.user.id);
+    return view ?? reply.code(404).send({ code: "MANAGER_ORGANIZATION_NOT_FOUND" });
+  });
+
+  app.post("/api/v1/manager/accounts", { preHandler: managerOnly }, async (request, reply) => {
+    const parsed = accountCreateInput.safeParse(request.body);
+    if (!parsed.success) return reply.code(400).send({ code: "MANAGER_ACCOUNT_INPUT_INVALID" });
+    try {
+      const account = await repositories.manager.createAccount(request.e4sSession!.user.id, {
+        ...parsed.data,
+        credentialHash: await createCredentialHash(parsed.data.password)
+      });
+      return reply.code(201).send(account);
+    } catch (error) {
+      if (error instanceof Error && error.message === "MANAGER_ACCOUNT_EMAIL_EXISTS") {
+        return reply.code(409).send({ code: error.message });
+      }
+      throw error;
+    }
+  });
+
+  app.patch<{ Params: { accountId: string }; Body: { role?: unknown } }>(
+    "/api/v1/manager/accounts/:accountId/role",
+    { preHandler: managerOnly },
+    async (request, reply) => {
+      const params = accountIdParams.safeParse(request.params);
+      if (!params.success) return reply.code(400).send({ code: "MANAGER_ACCOUNT_ID_INVALID" });
+      const role = request.body?.role;
+      if (!isAccountRole(role)) return reply.code(400).send({ code: "MANAGER_ROLE_INVALID" });
+      try {
+        return await repositories.manager.changeAccountRole(request.e4sSession!.user.id, params.data.accountId, role);
+      } catch (error) {
+        if (error instanceof Error && error.message === "MANAGER_ACCOUNT_NOT_FOUND") return reply.code(404).send({ code: error.message });
+        if (error instanceof Error && ["MANAGER_LAST_ADMIN_REQUIRED", "MANAGER_SELF_ROLE_CHANGE_FORBIDDEN"].includes(error.message)) {
+          return reply.code(409).send({ code: error.message });
+        }
+        throw error;
+      }
+    }
+  );
+
+  app.patch("/api/v1/manager/accounts/:accountId/status", { preHandler: managerOnly }, async (request, reply) => {
+    const body = accountStatusInput.safeParse(request.body);
+    const params = accountIdParams.safeParse(request.params);
+    if (!body.success) return reply.code(400).send({ code: "MANAGER_ACCOUNT_STATUS_INVALID" });
+    if (!params.success) return reply.code(400).send({ code: "MANAGER_ACCOUNT_ID_INVALID" });
+    try {
+      return await repositories.manager.changeAccountStatus(request.e4sSession!.user.id, params.data.accountId, body.data.status);
+    } catch (error) {
+      if (error instanceof Error && error.message === "MANAGER_ACCOUNT_NOT_FOUND") return reply.code(404).send({ code: error.message });
+      if (error instanceof Error && ["MANAGER_LAST_ADMIN_REQUIRED", "MANAGER_SELF_STATUS_CHANGE_FORBIDDEN"].includes(error.message)) {
+        return reply.code(409).send({ code: error.message });
+      }
+      throw error;
+    }
+  });
+
+  app.post("/api/v1/manager/accounts/:accountId/password-reset", { preHandler: managerOnly }, async (request, reply) => {
+    const body = resetPasswordInput.safeParse(request.body);
+    const params = accountIdParams.safeParse(request.params);
+    if (!body.success) return reply.code(400).send({ code: "MANAGER_ACCOUNT_PASSWORD_INVALID" });
+    if (!params.success) return reply.code(400).send({ code: "MANAGER_ACCOUNT_ID_INVALID" });
+    const saved = await repositories.manager.resetAccountCredential(
+      request.e4sSession!.user.id, params.data.accountId, await createCredentialHash(body.data.password)
+    );
+    return saved ? { saved: true } : reply.code(404).send({ code: "MANAGER_ACCOUNT_NOT_FOUND" });
+  });
+
+  app.get("/api/v1/manager/reminders", { preHandler: managerOnly }, async (request, reply) => {
+    const view = await repositories.manager.reminders(request.e4sSession!.user.id);
+    return view ?? reply.code(404).send({ code: "MANAGER_ORGANIZATION_NOT_FOUND" });
+  });
+
+  app.post<{ Params: { learnerId: string }; Body: { requestId?: unknown } }>(
+    "/api/v1/manager/reminders/:learnerId",
+    { preHandler: managerOnly },
+    async (request, reply) => {
+      const params = learnerIdParams.safeParse(request.params);
+      if (!params.success) return reply.code(400).send({ code: "MANAGER_REMINDER_LEARNER_ID_INVALID" });
+      const requestId = request.body?.requestId;
+      if (typeof requestId !== "string" || requestId.length < 1 || requestId.length > 128) {
+        return reply.code(400).send({ code: "MANAGER_REMINDER_REQUEST_ID_INVALID" });
+      }
+      try {
+        const queued = await repositories.manager.queueReminder(request.e4sSession!.user.id, params.data.learnerId, requestId);
+        return { ...queued, deliveryStatus: "queued" as const, provider: queued.provider ?? "local_queue" as const };
+      } catch (error) {
+        if (error instanceof Error && error.message === "MANAGER_REMINDER_LEARNER_NOT_FOUND") return reply.code(404).send({ code: error.message });
+        if (error instanceof Error && error.message === "MANAGER_REMINDER_RETRY_UNAVAILABLE") return reply.code(409).send({ code: error.message });
+        throw error;
+      }
+    }
+  );
+
+  app.post<{ Params: { learnerId: string } }>(
+    "/api/v1/manager/reminders/:learnerId/dismiss",
+    { preHandler: managerOnly },
+    async (request, reply) => {
+      const params = learnerIdParams.safeParse(request.params);
+      if (!params.success) return reply.code(400).send({ code: "MANAGER_REMINDER_LEARNER_ID_INVALID" });
+      try {
+        return await repositories.manager.dismissReminder(request.e4sSession!.user.id, params.data.learnerId);
+      } catch (error) {
+        if (error instanceof Error && error.message === "MANAGER_ORGANIZATION_NOT_FOUND") {
+          return reply.code(404).send({ code: error.message });
+        }
+        if (error instanceof Error && error.message === "MANAGER_REMINDER_LEARNER_NOT_FOUND") {
+          return reply.code(404).send({ code: error.message });
+        }
+        throw error;
+      }
+    }
+  );
+
+  app.post<{ Params: { learnerId: string } }>(
+    "/api/v1/manager/reminders/:learnerId/copy",
+    { preHandler: managerOnly },
+    async (request, reply) => {
+      const params = learnerIdParams.safeParse(request.params);
+      if (!params.success) return reply.code(400).send({ code: "MANAGER_REMINDER_LEARNER_ID_INVALID" });
+      try {
+        return await repositories.manager.copyReminder(request.e4sSession!.user.id, params.data.learnerId);
+      } catch (error) {
+        if (error instanceof Error && error.message === "MANAGER_ORGANIZATION_NOT_FOUND") {
+          return reply.code(404).send({ code: error.message });
+        }
+        if (error instanceof Error && error.message === "MANAGER_REMINDER_LEARNER_NOT_FOUND") {
+          return reply.code(404).send({ code: error.message });
+        }
+        throw error;
+      }
+    }
+  );
+
+  app.get("/api/v1/manager/report", { preHandler: managerOnly }, async (request, reply) => {
+    const view = await repositories.manager.report(request.e4sSession!.user.id);
+    return view ?? reply.code(404).send({ code: "MANAGER_ORGANIZATION_NOT_FOUND" });
+  });
+
+  app.get("/api/v1/manager/settings", { preHandler: managerOnly }, async (request, reply) => {
+    const view = await repositories.manager.settings(request.e4sSession!.user.id);
+    return view ?? reply.code(404).send({ code: "MANAGER_ORGANIZATION_NOT_FOUND" });
+  });
+
+  app.put(
+    "/api/v1/manager/settings",
+    { preHandler: managerOnly },
+    async (request, reply) => {
+      const parsed = managerSettingsInput.safeParse(request.body);
+      if (!parsed.success) {
+        return reply.code(400).send({ code: "MANAGER_SETTINGS_INVALID" });
+      }
+      const saved = await repositories.manager.saveSettings(request.e4sSession!.user.id, parsed.data);
+      return saved ?? reply.code(404).send({ code: "MANAGER_ORGANIZATION_NOT_FOUND" });
+    }
+  );
+}
+
+function sendProviderSettingsError(reply: { code: (status: number) => { send: (payload: unknown) => unknown } }, error: unknown): unknown {
+  if (error instanceof Error && error.message === "MANAGER_ORGANIZATION_NOT_FOUND") {
+    return reply.code(404).send({ code: error.message });
+  }
+  if (error instanceof Error && [
+    "PROVIDER_SETTINGS_ENCRYPTION_KEY_MISSING",
+    "PROVIDER_SETTINGS_ENCRYPTION_KEY_INVALID",
+    "PROVIDER_SETTINGS_DECRYPT_FAILED"
+  ].includes(error.message)) {
+    return reply.code(503).send({ code: "PROVIDER_SETTINGS_ENCRYPTION_UNAVAILABLE" });
+  }
+  return reply.code(500).send({ code: "PROVIDER_SETTINGS_UNAVAILABLE" });
+}
+
+function sendManagerOperationsError(reply: { code: (status: number) => { send: (payload: unknown) => unknown } }, error: unknown): unknown {
+  if (error instanceof Error && error.message === "MANAGER_ORGANIZATION_NOT_FOUND") {
+    return reply.code(404).send({ code: error.message });
+  }
+  if (error instanceof Error && error.message === "MANAGER_DATA_IMPORT_INVALID") {
+    return reply.code(400).send({ code: error.message });
+  }
+  return reply.code(500).send({ code: "MANAGER_OPERATION_UNAVAILABLE" });
+}
+
+function sendMaintenanceError(reply: { code: (status: number) => { send: (payload: unknown) => unknown } }, error: unknown): unknown {
+  if (error instanceof Error && error.message === "MANAGER_ORGANIZATION_NOT_FOUND") {
+    return reply.code(404).send({ code: error.message });
+  }
+  if (error instanceof Error && error.message === "MANAGER_MAINTENANCE_TARGET_INVALID") {
+    return reply.code(409).send({ code: error.message });
+  }
+  if (error instanceof Error && ["MANAGER_MAINTENANCE_CONFIRMATION_INVALID", "MANAGER_MAINTENANCE_BACKUP_REQUIRED"].includes(error.message)) {
+    return reply.code(409).send({ code: error.message });
+  }
+  return reply.code(500).send({ code: "MANAGER_MAINTENANCE_UNAVAILABLE" });
+}

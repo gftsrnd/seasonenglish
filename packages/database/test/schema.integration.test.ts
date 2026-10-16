@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import { Client } from "pg";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { migrateDatabase, resetPublicSchema } from "../src/migrate.js";
@@ -11,11 +12,11 @@ const expectedTables = [
   "assessment_decisions", "assessment_definitions", "assessment_responses",
   "assessment_scores", "assessment_versions", "audit_events", "badges",
   "coach_sessions", "coach_turns", "duels", "enrollments", "files", "game_results",
-  "game_sets", "idempotency_keys", "jobs", "learner_profiles", "lesson_set_versions",
-  "lesson_sets", "lesson_versions", "lessons", "micro_lessons", "notification_deliveries", "organizations",
-  "practice_submissions", "program_weeks", "programs", "progress_records",
-  "prompt_versions", "reminders", "reward_events", "rubric_versions", "sessions",
-  "surveys", "user_credentials", "users"
+  "game_sets", "idempotency_keys", "jobs", "learner_profiles", "learner_vocabulary_unlocks", "level_up_challenge_results", "lesson_set_versions",
+  "lesson_sets", "lesson_versions", "lessons", "lesson_part_appeals", "lesson_part_attempts", "micro_lessons", "notification_deliveries", "organization_settings", "organizations",
+  "practice_appeals", "practice_submissions", "program_weeks", "programs", "progress_records",
+  "manager_destructive_confirmations", "manager_maintenance_backups", "manager_pin_reports", "prompt_versions", "provider_configurations", "reminders", "reward_events", "rubric_versions", "sessions",
+  "surveys", "topic_reports", "topic_strikes", "user_credentials", "users"
 ].sort();
 
 describe("normalized E4S database", () => {
@@ -55,6 +56,58 @@ describe("normalized E4S database", () => {
     ]);
   });
 
+  it("repairs canonical demo account identity when the local seed is rerun", async () => {
+    await client.query(
+      `update users
+       set role = 'manager', display_name = 'Stale operator', email = 'stale@e4s.local', status = 'disabled'
+       where id = $1`,
+      [DEMO_IDS.operator]
+    );
+
+    await seedDemo(client);
+
+    const result = await client.query<{ role: string; display_name: string; email: string; status: string }>(
+      "select role, display_name, email, status from users where id = $1",
+      [DEMO_IDS.operator]
+    );
+
+    expect(result.rows).toEqual([{
+      role: "operator",
+      display_name: "Thư Demo",
+      email: "operator@e4s.local",
+      status: "active"
+    }]);
+  });
+
+  it("keeps the seeded learner at the first unlocked next lesson", async () => {
+    await client.query(
+      `insert into progress_records
+         (id, learner_id, lesson_id, status, score, evidence, started_at, completed_at)
+       values ($1, $2, $3, 'completed', 100, '{}'::jsonb, now(), now())`,
+      [randomUUID(), DEMO_IDS.learner, DEMO_IDS.lessons[1]]
+    );
+
+    await seedDemo(client);
+
+    const result = await client.query<{ day_number: number; status: string | null }>(
+      `select l.day_number, pr.status
+       from lessons l
+       left join progress_records pr
+         on pr.lesson_id = l.id and pr.learner_id = $1
+       where l.id = any($2::uuid[])
+       order by l.day_number`,
+      [DEMO_IDS.learner, DEMO_IDS.lessons]
+    );
+
+    expect(result.rows).toEqual([
+      { day_number: 1, status: "completed" },
+      { day_number: 2, status: null },
+      { day_number: 3, status: null },
+      { day_number: 4, status: null },
+      { day_number: 5, status: null }
+    ]);
+  });
+
   it("keeps each seeded lesson's study content aligned with its learning objective", async () => {
     const result = await client.query<{ content: { parts: Array<{ code: string; content: Record<string, unknown> }> } }>(
       "select content from lesson_versions where lesson_id = $1",
@@ -63,9 +116,13 @@ describe("normalized E4S database", () => {
     const parts = result.rows[0]?.content.parts ?? [];
     const vocabulary = parts.find((part) => part.code === "vocabulary")?.content.items;
     const grammar = parts.find((part) => part.code === "grammar")?.content.formula;
+    const listening = parts.find((part) => part.code === "listening")?.content;
+    const reading = parts.find((part) => part.code === "reading")?.content;
 
     expect(vocabulary).toEqual(expect.arrayContaining([expect.objectContaining({ word: "from" })]));
     expect(grammar).toBe("Where are you from? · I am from + nơi");
+    expect(listening).toMatchObject({ script: expect.any(String), options: expect.arrayContaining([expect.any(String)]) });
+    expect(reading).toMatchObject({ text: expect.any(String), options: expect.arrayContaining([expect.any(String)]) });
   });
 
   it("enforces foreign keys for learner profiles", async () => {

@@ -1,0 +1,514 @@
+/* Operator screens intentionally mirror Thu's prototype vocabulary:
+   card, row, banner, badge, list and item. Keep these styles scoped so the
+   real application shell and the learner/manager surfaces remain untouched. */
+.operator-page .operator-card {
+  border: 1px solid var(--line);
+  border-radius: var(--radius, 14px);
+  background: var(--surface, #fff);
+  padding: 18px;
+}
+
+.operator-page .operator-card--soft {
+  background: var(--surface-3, #f7f4ef);
+}
+
+.operator-page .operator-card--flat {
+  border-style: dashed;
+  background: var(--surface, #fff);
+}
+
+.operator-page .operator-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.operator-page .operator-row--between {
+  justify-content: space-between;
+}
+
+.operator-page .level-column-actions {
+  align-items: center;
+  flex-wrap: nowrap;
+}
+
+.operator-page .level-column-actions select {
+  flex: 0 1 14rem;
+  min-width: 11rem;
+  width: auto;
+}
+
+.operator-page .operator-banner {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  border-radius: 12px;
+  padding: 12px 14px;
+  color: var(--text, #292723);
+}
+
+.operator-page .operator-banner__body {
+  flex: 1;
+  min-width: 0;
+  line-height: 1.5;
+}
+
+.operator-page .operator-banner--info {
+  border-left: 4px solid var(--lav, #ddd5f3);
+  background: var(--surface-3, #f7f4ef);
+  box-shadow: inset 0 0 0 1px var(--line);
+}
+
+.operator-page .operator-banner--warn {
+  background: var(--warn-soft, #fff4d5);
+  box-shadow: inset 0 0 0 1px var(--warn-line, #ecd79c);
+}
+
+.operator-page .operator-banner--ok {
+  background: var(--ok-tint, #ecf4e6);
+  box-shadow: inset 0 0 0 1px var(--ok-line, #bad4ab);
+}
+
+.operator-page .operator-badge {
+  display: inline-flex;
+  align-items: center;
+  width: fit-content;
+  border-radius: 8px;
+  background: var(--surface-3, #f7f4ef);
+  box-shadow: inset 0 0 0 1px var(--line);
+  padding: 3px 9px;
+  color: var(--text, #292723);
+  font-size: .72rem;
+  font-weight: 500;
+  line-height: 1.3;
+  white-space: nowrap;
+}
+
+.operator-page .operator-badge--ok {
+  background: var(--ok-tint, #ecf4e6);
+  box-shadow: inset 0 0 0 1px var(--ok-line, #bad4ab);
+  color: var(--olive-dark, #425434);
+}
+
+.operator-page .operator-badge--warn {
+  background: var(--warn-soft, #fff4d5);
+  box-shadow: inset 0 0 0 1px var(--warn-line, #ecd79c);
+  color: var(--warn, #795f12);
+}
+
+.operator-page .operator-badge--primary {
+  background: var(--primary);
+  box-shadow: none;
+  color: var(--primary-ink, #2e2117);
+}
+
+.operator-page .operator-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.operator-page .operator-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  border-radius: 12px;
+  background: var(--surface, #fff);
+  box-shadow: inset 0 0 0 1px var(--line);
+  padding: 12px 14px;
+}
+
+.operator-page .operator-item > :first-child {
+  flex: 1;
+  min-width: 0;
+}
+
+.operator-page .operator-button--small {
+  min-height: 32px;
+  padding: 6px 12px;
+  font-size: .82rem;
+}
+
+.operator-page .operator-button--danger {
+  border-color: var(--danger-line, #dfb2ab);
+  color: var(--danger, #9b453c);
+}
+
+.operator-page .button-link.is-disabled {
+  pointer-events: none;
+  opacity: .48;
+}
+
+.operator-page .operator-link-button {
+  min-height: auto;
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+  padding: 0;
+  color: inherit;
+  text-decoration: underline;
+}
+
+.operator-page .operator-tabs {
+  display: inline-flex;
+  max-width: 100%;
+  overflow-x: auto;
+  gap: 4px;
+  margin-bottom: 14px;
+  border: 0;
+  border-radius: 10px;
+  background: var(--surface-3, #f7f4ef);
+  box-shadow: inset 0 0 0 1px var(--line);
+  padding: 3px;
+  scrollbar-width: none;
+}
+
+.operator-page .operator-tabs::-webkit-scrollbar {
+  display: none;
+}
+
+.operator-page .operator-tabs button {
+  min-height: 36px;
+  flex: 0 0 auto;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  box-shadow: none;
+  padding: 0 16px;
+  color: var(--muted);
+  font-size: .88rem;
+  font-weight: 400;
+  white-space: nowrap;
+}
+
+.operator-page .operator-tabs button.active,
+.operator-page .operator-tabs button[aria-selected="true"] {
+  background: var(--surface, #fff);
+  box-shadow: none;
+  color: var(--text, #292723);
+  font-weight: 500;
+}
+
+.operator-page .lesson-level-help,
+.operator-page .checklist-banner {
+  margin: 12px 0;
+}
+
+.operator-page .lesson-matrix-card {
+  margin-top: 12px;
+  padding: 0;
+  overflow: hidden;
+}
+
+.operator-page .week-suggestion-panel {
+  margin: 0 0 10px;
+  padding: 10px;
+}
+
+.operator-page .week-suggestion-list {
+  display: grid;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.operator-page .week-suggestion-objective {
+  margin: 6px 0 0;
+  color: var(--muted);
+  font-size: .78rem;
+}
+
+.operator-page .form-detail-list {
+  display: grid;
+  gap: 5px;
+  margin: 10px 0 0;
+}
+
+.operator-page .form-detail-list > div {
+  display: grid;
+  grid-template-columns: 90px 1fr;
+  gap: 8px;
+}
+
+.operator-page .form-detail-list dt {
+  color: var(--muted);
+}
+
+.operator-page .form-detail-list dd {
+  margin: 0;
+}
+
+.operator-page .pronunciation-editor-grid,
+.operator-page .option-editor-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 6px;
+  grid-column: 1 / -1;
+}
+
+.operator-page .option-editor-grid {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.operator-page .question-editor > label:last-child {
+  grid-column: 1 / -1;
+  width: min(260px, 100%);
+}
+
+.operator-page .lesson-editor-problems {
+  margin-top: 10px;
+}
+
+.operator-page .lesson-editor-problems ul {
+  margin: 4px 0 0;
+  padding-left: 18px;
+}
+
+.operator-page .lesson-editor-problems p {
+  margin: 6px 0 0;
+}
+
+.operator-page .lesson-part-preview {
+  display: grid;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.operator-page .lesson-part-preview__section {
+  border-radius: 10px;
+  background: var(--surface-3, #f7f4ef);
+  padding: 10px 12px;
+}
+
+.operator-page .lesson-part-preview__section h4,
+.operator-page .lesson-part-preview__section p,
+.operator-page .lesson-part-preview__section ul,
+.operator-page .lesson-part-preview__section ol {
+  margin: 0 0 6px;
+}
+
+.operator-page .lesson-part-preview__section small {
+  display: block;
+  color: var(--muted);
+}
+
+.operator-page .lesson-part-options .is-answer {
+  color: var(--olive-dark, #425434);
+  font-weight: 700;
+}
+
+@media (max-width: 760px) {
+  .operator-page .level-column-actions {
+    flex-wrap: wrap;
+  }
+
+  .operator-page .level-column-actions select {
+    flex: 1 1 12rem;
+    max-width: 100%;
+  }
+
+  .operator-page .operator-item,
+  .operator-page .operator-row--between,
+  .operator-page .review-card-title,
+  .operator-page .level-request-heading {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .operator-page .operator-item > button,
+  .operator-page .operator-row--between > button {
+    width: 100%;
+  }
+
+  .operator-page .pronunciation-editor-grid,
+  .operator-page .option-editor-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* Keep the legacy Operator shell aligned with the prototype geometry. */
+.operator-page > .operator-heading {
+  margin-bottom: 8px;
+}
+
+.operator-page > .operator-section {
+  margin-top: 8px;
+}
+
+.operator-page .level-signal-grid {
+  align-items: stretch;
+}
+
+.operator-page .level-signal {
+  height: 100%;
+}
+
+@media (max-width: 760px) {
+  body:has(.operator-page) > #root > main {
+    padding-bottom: calc(128px + env(safe-area-inset-bottom, 0px)) !important;
+    scroll-padding-bottom: calc(128px + env(safe-area-inset-bottom, 0px));
+  }
+}
+
+/* Keep the legacy Operator surface contained when the shell is between the
+   phone and wide-desktop breakpoints. The shared shell remains untouched. */
+.operator-page {
+  width: 100%;
+  min-width: 0;
+  overflow-x: clip;
+}
+
+.operator-page > .page-title,
+.operator-page > .operator-heading {
+  align-items: flex-start;
+  gap: 12px;
+  min-width: 0;
+}
+
+.operator-page > .page-title > :first-child,
+.operator-page > .operator-heading > :first-child {
+  flex: 1 1 0;
+  min-width: 0;
+}
+
+.operator-page > .page-title > .operator-row,
+.operator-page > .operator-heading > .operator-row {
+  flex: 0 1 auto;
+  min-width: 0;
+}
+
+.operator-page .operator-row > * {
+  min-width: 0;
+}
+
+/* Use the same deliberate control geometry as the rebuilt Operator shell. */
+.operator-page button:not(.operator-link-button),
+.operator-page .button-link {
+  min-height: 40px;
+  border: 1px solid var(--border, #d6d1c8);
+  border-radius: 10px;
+  background: var(--surface, #fff);
+  box-shadow: inset 0 0 0 1px rgb(214 209 200 / 0.15);
+  color: var(--text);
+  font-weight: 600;
+  line-height: 1.2;
+}
+
+.operator-page .operator-button--small,
+.operator-page .button-link--small {
+  min-height: 32px;
+  padding: 6px 12px;
+  font-size: .82rem;
+  white-space: nowrap;
+}
+
+.operator-page .operator-tabs {
+  display: flex;
+  width: 100%;
+  max-width: 100%;
+  flex-wrap: nowrap;
+  justify-content: flex-start;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+.operator-page .operator-tabs button {
+  flex: 0 0 auto;
+  white-space: nowrap;
+}
+
+.operator-page .lesson-editor-backdrop {
+  box-sizing: border-box;
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding: clamp(10px, 3vw, 28px) 18px;
+}
+
+.operator-page .lesson-editor {
+  width: min(780px, 100%);
+  max-height: min(92vh, 900px);
+  min-width: 0;
+  overflow: auto;
+}
+
+.operator-page .lesson-editor-heading {
+  min-width: 0;
+}
+
+.operator-page .lesson-editor-heading h3 {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.operator-page .lesson-editor-heading > button {
+  flex: 0 0 auto;
+  white-space: nowrap;
+}
+
+@media (min-width: 761px) and (max-width: 960px) {
+  body:has(.operator-page) .topbar {
+    min-width: 0;
+    overflow: hidden;
+  }
+
+  body:has(.operator-page) .topbar .brand {
+    flex: 1 1 auto;
+    min-width: 0;
+    max-width: none;
+  }
+
+  body:has(.operator-page) .topbar nav {
+    flex: 0 1 112px;
+    min-width: 64px;
+    max-width: 112px;
+    margin-left: 0;
+    overflow: hidden;
+  }
+
+  body:has(.operator-page) .topbar nav a {
+    display: none;
+    min-width: 0;
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  body:has(.operator-page) .topbar nav a.active {
+    display: inline-flex;
+  }
+
+  body:has(.operator-page) .topbar .userchip {
+    flex: 0 1 330px;
+    min-width: 0;
+    max-width: 330px;
+  }
+}
+
+@media (max-width: 760px) {
+  .operator-page .lesson-editor-backdrop {
+    padding: 10px;
+  }
+
+  .operator-page .lesson-editor {
+    max-height: calc(100dvh - 20px);
+  }
+}
+
+@media (max-width: 480px) {
+  .operator-page .operator-tabs {
+    flex-wrap: nowrap;
+    scrollbar-width: none;
+  }
+
+  .operator-page .operator-tabs::-webkit-scrollbar {
+    display: none;
+  }
+
+  .operator-page .operator-tabs button,
+  .operator-page .operator-button--small,
+  .operator-page .button-link--small {
+    min-height: 40px;
+  }
+}

@@ -68,9 +68,16 @@ try {
   await runOnce("pnpm", ["exec", "tsx", "scripts/prepare-local.ts"], { DATABASE_URL: databaseUrl });
   run("pnpm", ["exec", "tsx", "apps/api/src/server.ts"], {
     DATABASE_URL: databaseUrl,
-    ALLOW_DEMO_LOGIN: "true",
     COOKIE_SECURE: "false",
-    PORT: "3001"
+    PORT: "3001",
+    // Keep the Windows dev-local process connected to the E4S MinIO service
+    // exposed by the Ubuntu/WSL compose stack. Without this, buildApi omits
+    // file routes entirely and learner speaking uploads fail with a misleading
+    // 404 even though the UI and API are otherwise healthy.
+    S3_ENDPOINT: process.env.S3_ENDPOINT ?? "http://127.0.0.1:9002",
+    S3_REGION: process.env.S3_REGION ?? "us-east-1",
+    S3_ACCESS_KEY: process.env.S3_ACCESS_KEY ?? process.env.MINIO_ROOT_USER ?? "e4s_minio",
+    S3_SECRET_KEY: process.env.S3_SECRET_KEY ?? process.env.MINIO_ROOT_PASSWORD ?? "e4s_local_minio_password"
   });
   run("pnpm", ["--filter", "@e4s/web", "dev", "--", "--host", "127.0.0.1", "--port", "4173"]);
   process.stdout.write("E4S local: http://127.0.0.1:4173\n");

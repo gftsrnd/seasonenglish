@@ -7,6 +7,7 @@ import type {
   AssessmentView,
   SaveAssessmentResponseInput
 } from "@e4s/contracts";
+import { useExperience } from "../../features/experience/Experience.js";
 
 interface AssessmentProps {
   view: AssessmentView;
@@ -22,25 +23,26 @@ interface AssessmentProps {
     section: AssessmentSectionCode,
     groupKey: string
   ) => Promise<{ playCount: number; remaining: number }>;
+  onUploadAudio?: (file: Blob, filename: string) => Promise<string>;
+  onAppeal?: ((reason: string) => Promise<void>) | undefined;
 }
 
 const sectionOrder: AssessmentSectionCode[] = ["listening", "reading", "writing", "speaking"];
 
-export function Assessment({ view, onStart, onSaveResponse, onCompleteSection, onSubmit, onRecordAudioPlay }: AssessmentProps) {
+export function Assessment({ view, onStart, onSaveResponse, onCompleteSection, onSubmit, onRecordAudioPlay, onUploadAudio, onAppeal }: AssessmentProps) {
   const { definition, attempt, screenState } = view;
   const isFinalAssessment = definition.kind === "final";
   const [equipment, setEquipment] = useState<{ sound?: string; mic?: string }>({});
+  const [appealReason, setAppealReason] = useState("");
+  const [appealBusy, setAppealBusy] = useState(false);
+  const { speak } = useExperience();
   const testSound = () => {
     if (!("speechSynthesis" in window)) {
       setEquipment((current) => ({ ...current, sound: "Trình duyệt không hỗ trợ phát câu mẫu." }));
       return;
     }
-    const utterance = new SpeechSynthesisUtterance("Đây là câu kiểm tra âm thanh. Nếu bạn nghe rõ, tai nghe đã sẵn sàng.");
-    utterance.lang = "vi-VN";
-    utterance.onend = () => setEquipment((current) => ({ ...current, sound: "Đã phát câu mẫu. Nếu nghe rõ, tai nghe đã sẵn sàng ✓" }));
-    window.speechSynthesis.cancel();
-    window.speechSynthesis.speak(utterance);
-    setEquipment((current) => ({ ...current, sound: "Đang phát câu mẫu…" }));
+    speak("Đây là câu kiểm tra âm thanh. Nếu bạn nghe rõ, tai nghe đã sẵn sàng.", "vi-VN");
+    setEquipment((current) => ({ ...current, sound: "Đã phát câu mẫu. Nếu nghe rõ, tai nghe đã sẵn sàng ✓" }));
   };
   const testMicrophone = async () => {
     if (!navigator.mediaDevices?.getUserMedia) {
@@ -107,7 +109,16 @@ export function Assessment({ view, onStart, onSaveResponse, onCompleteSection, o
         <div className="assessment-season-mark" aria-hidden="true"><span>✓</span></div>
         <h1>{screenState === "submitting" ? "Đang nộp bài" : "Bài đã được ghi nhận"}</h1>
         <p>Phần Nghe và Đọc được chấm tự động. Phần Viết và Nói chờ chấm theo rubric và bằng chứng đã nộp.</p>
-        <a className="button button--primary" href="/home">Về trang chủ</a>
+        {attempt.status === "approved" || attempt.status === "needs_retry" ? <div className="assessment-result-summary">
+          <strong>{attempt.status === "approved" ? `Kết quả đã duyệt${attempt.suggestedLevel ? ` · ${attempt.suggestedLevel}` : ""}` : "Cần thực hiện lại theo phản hồi"}</strong>
+          {attempt.totalScore !== null && attempt.totalScore !== undefined ? <span>Tổng điểm: {attempt.totalScore}/100</span> : null}
+        </div> : null}
+        {view.appeal ? <div className="assessment-appeal-status"><strong>Kháng nghị: {view.appeal.status === "pending" ? "đang chờ xử lý" : view.appeal.status === "accepted" ? "đã chấp nhận" : "giữ nguyên kết quả"}</strong><p>{view.appeal.reason}</p>{view.appeal.resolution ? <p>Phản hồi: {view.appeal.resolution}</p> : null}</div>
+          : attempt.status === "approved" || attempt.status === "needs_retry" ? <form className="assessment-appeal-form" onSubmit={(event) => {
+            event.preventDefault(); setAppealBusy(true);
+            if (!onAppeal) return; void onAppeal(appealReason).finally(() => setAppealBusy(false));
+          }}><label>Thấy kết quả chưa đúng?<textarea required minLength={10} maxLength={2000} value={appealReason} onChange={(event) => setAppealReason(event.target.value)} placeholder="Nêu phần cần kiểm tra lại và lý do…" /></label><button type="submit" disabled={!onAppeal || appealBusy || appealReason.trim().length < 10}>{appealBusy ? "Đang gửi…" : "Gửi kháng nghị"}</button></form> : null}
+        {definition.kind === "level-up" ? <a className="button button--primary" href="/challenge">Tiếp tục thử thách với Season</a> : <a className="button button--primary" href="/home">Về trang chủ</a>}
       </section>
     </main>;
   }
@@ -147,6 +158,7 @@ export function Assessment({ view, onStart, onSaveResponse, onCompleteSection, o
           initialPlayCount={attempt.audioPlayCounts[`${currentSection.code}:${group.key}`] ?? 0}
           onSaveResponse={onSaveResponse}
           onRecordAudioPlay={onRecordAudioPlay}
+          onUploadAudio={onUploadAudio}
         />)}
       </div>
     </section>
@@ -160,14 +172,16 @@ export function Assessment({ view, onStart, onSaveResponse, onCompleteSection, o
   </main>;
 }
 
-function AssessmentGroup({ group, section, responses, initialPlayCount, onSaveResponse, onRecordAudioPlay }: {
+function AssessmentGroup({ group, section, responses, initialPlayCount, onSaveResponse, onRecordAudioPlay, onUploadAudio }: {
   group: AssessmentTaskGroupView;
   section: AssessmentSectionCode;
   responses: AssessmentResponseView[];
   initialPlayCount: number;
   onSaveResponse: AssessmentProps["onSaveResponse"];
   onRecordAudioPlay: AssessmentProps["onRecordAudioPlay"];
+  onUploadAudio: AssessmentProps["onUploadAudio"];
 }) {
+  const { speak } = useExperience();
   const responseMap = useMemo(() => new Map(responses.map((response) => [response.taskKey, response])), [responses]);
   const [played, setPlayed] = useState(initialPlayCount);
   const [recordingPlay, setRecordingPlay] = useState(false);
@@ -180,7 +194,7 @@ function AssessmentGroup({ group, section, responses, initialPlayCount, onSaveRe
           const recorded = await onRecordAudioPlay(section, group.key);
           if (group.stimulus?.lines?.length && "speechSynthesis" in window) {
             const text = group.stimulus.lines.map((line) => `${line.speaker}: ${line.text}`).join(". ");
-            window.speechSynthesis.speak(new SpeechSynthesisUtterance(text));
+            speak(text);
           }
           setPlayed(recorded.playCount);
         } finally {
@@ -209,7 +223,9 @@ function AssessmentGroup({ group, section, responses, initialPlayCount, onSaveRe
       return <div key={task.key} className="assessment-task assessment-task--text">
         <label htmlFor={`assessment-${task.key}`}><strong>{label}</strong></label>
         {task.hint && <span>{task.hint}</span>}
-        {task.responseType === "speaking_evidence" && <SpeakingEvidenceControls taskKey={task.key} onEvidence={(input) => onSaveResponse(section, task.key, input)} />}
+        {task.responseType === "speaking_evidence" && <SpeakingEvidenceControls taskKey={task.key}
+          {...(onUploadAudio ? { onUploadAudio } : {})}
+          onEvidence={(input) => onSaveResponse(section, task.key, input)} />}
         <textarea id={`assessment-${task.key}`} defaultValue={saved?.value} rows={task.responseType === "speaking_evidence" ? 5 : 8}
           aria-describedby={task.responseType === "speaking_evidence" ? `assessment-${task.key}-evidence-note` : undefined}
           placeholder={task.responseType === "speaking_evidence" ? "Lời chép từ file ghi âm hoặc nội dung bạn đã nói…" : "Nhập câu trả lời…"}
@@ -224,19 +240,37 @@ function AssessmentGroup({ group, section, responses, initialPlayCount, onSaveRe
   </article>;
 }
 
-function SpeakingEvidenceControls({ taskKey, onEvidence }: {
+function SpeakingEvidenceControls({ taskKey, onEvidence, onUploadAudio }: {
   taskKey: string;
   onEvidence: (input: SaveAssessmentResponseInput) => void | Promise<void>;
+  onUploadAudio?: (file: Blob, filename: string) => Promise<string>;
 }) {
   const [recording, setRecording] = useState(false);
   const [fileName, setFileName] = useState("Chưa có file ghi âm");
   const recorder = useRef<MediaRecorder | null>(null);
   const chunks = useRef<Blob[]>([]);
   const canRecord = typeof navigator.mediaDevices !== "undefined" && typeof MediaRecorder !== "undefined";
+  const { holdMusic } = useExperience();
+
+  const submitAudio = async (file: Blob, name: string, value: string) => {
+    if (!onUploadAudio) {
+      setFileName("Chưa kết nối được nơi lưu file. Hãy thử lại sau.");
+      return;
+    }
+    setFileName(`Đang lưu ${name}…`);
+    try {
+      const artifactKey = await onUploadAudio(file, name);
+      await onEvidence({ value, evidenceType: "audio", artifactKey });
+      setFileName(`Đã lưu ${name}`);
+    } catch {
+      setFileName(`Chưa lưu được ${name}. Hãy thử lại.`);
+    }
+  };
 
   const toggleRecording = async () => {
     if (recording && recorder.current) {
       recorder.current.stop();
+      holdMusic(false);
       setRecording(false);
       return;
     }
@@ -247,11 +281,12 @@ function SpeakingEvidenceControls({ taskKey, onEvidence }: {
     next.ondataavailable = (event) => { if (event.data.size) chunks.current.push(event.data); };
     next.onstop = () => {
       stream.getTracks().forEach((track) => track.stop());
+      holdMusic(false);
       const name = `${taskKey}-${Date.now()}.webm`;
-      setFileName(`Đã ghi ${name}`);
-      void onEvidence({ value: "Bản ghi âm đã nộp", evidenceType: "audio", artifactKey: `local:${name}` });
+      void submitAudio(new Blob(chunks.current, { type: next.mimeType || "audio/webm" }), name, "Bản ghi âm đã nộp");
     };
     recorder.current = next;
+    holdMusic(true);
     next.start();
     setRecording(true);
   };
@@ -262,8 +297,7 @@ function SpeakingEvidenceControls({ taskKey, onEvidence }: {
     <input id={`audio-${taskKey}`} className="sr-only" type="file" accept="audio/*" aria-label="Tải file ghi âm" onChange={(event) => {
       const file = event.currentTarget.files?.[0];
       if (!file) return;
-      setFileName(file.name);
-      void onEvidence({ value: "File ghi âm đã nộp", evidenceType: "audio", artifactKey: `local:${file.name}` });
+      void submitAudio(file, file.name, "File ghi âm đã nộp");
     }} />
     <span>{fileName}</span>
   </div>;

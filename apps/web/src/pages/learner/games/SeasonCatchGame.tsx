@@ -1,15 +1,16 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import type { GameAnswerInput, GameWordSetView } from "@e4s/contracts";
-import { choices, type FinishGame, type GameWord } from "./types.js";
+import type { GameAnswerInput, GameEvidenceEventInput, GameWordSetView } from "@e4s/contracts";
+import { choices, prepareGameAttempt, type FinishGame, type GameWord } from "./types.js";
 import { currentSeasonVisual, SeasonCatchItem, SeasonHero } from "./season-art.js";
+import { useExperience } from "../../../features/experience/Experience.js";
 
 type FallingItem = { word: GameWord; x: number; y: number; speed: number };
 type CatchEvent = { kind: "caught" | "dropped"; item: FallingItem };
 const speedByLevel: Record<GameWordSetView["cefr"], number> = { A1: 1, A2: 1.5, B1: 2, B2: 2.5, C1: 3 };
 
-export function SeasonCatchGame({ words: source, cefr, onFinish }: { words: GameWord[]; cefr: GameWordSetView["cefr"]; onFinish: FinishGame }) {
+export function SeasonCatchGame({ words: source, cefr, onFinish, attemptSeed = 0 }: { words: GameWord[]; cefr: GameWordSetView["cefr"]; onFinish: FinishGame; attemptSeed?: number }) {
   const season = currentSeasonVisual();
-  const words = useMemo(() => source.slice(0, 10), [source]);
+  const words = useMemo(() => prepareGameAttempt(source, attemptSeed).slice(0, 10), [attemptSeed, source]);
   const [round, setRound] = useState(0);
   const [score, setScore] = useState(0);
   const [lives, setLives] = useState(3);
@@ -17,21 +18,23 @@ export function SeasonCatchGame({ words: source, cefr, onFinish }: { words: Game
   const basketRef = useRef(50);
   const [items, setItems] = useState<FallingItem[]>([]);
   const [answers, setAnswers] = useState<GameAnswerInput[]>([]);
+  const [events, setEvents] = useState<GameEvidenceEventInput[]>([]);
   const [notice, setNotice] = useState("");
   const [event, setEvent] = useState<CatchEvent | null>(null);
   const [busy, setBusy] = useState(false);
   const [gameOver, setGameOver] = useState(false);
+  const { play } = useExperience();
   const current = words[round];
   const eventPending = useRef(false);
 
   useEffect(() => { basketRef.current = basketX; }, [basketX]);
   useEffect(() => {
     if (!current) return;
-    const options = choices(source, current);
+    const options = choices(words, current, 4, attemptSeed ^ round);
     const startingHeights = [-2, 10, 22, 34];
     setItems(options.map((word, index) => ({ word, x: 12.5 + index * 25, y: startingHeights[index] ?? -2, speed: 7 + index * .7 + round * .22 })));
     eventPending.current = false;
-  }, [current, round, source]);
+  }, [attemptSeed, current, round, words]);
 
   useEffect(() => {
     if (!current || busy) return;
@@ -66,32 +69,36 @@ export function SeasonCatchGame({ words: source, cefr, onFinish }: { words: Game
     if (!event || !current || busy) return;
     const correct = event.kind === "caught" && event.item.word.id === current.id;
     if (event.kind === "caught" && !correct) {
+      play("error");
+      const nextEvents = [...events, { type: "wrong_catch" as const, wordId: current.id, answer: event.item.word.english }];
       const nextLives = lives - 1;
       setLives(nextLives);
+      setEvents(nextEvents);
       setNotice(`💔 “${event.item.word.english}” không khớp với gợi ý.`);
       setEvent(null);
       eventPending.current = false;
       if (nextLives <= 0) {
         const nextAnswers = [...answers, { wordId: current.id, answer: event.item.word.english, attempts: 1, usedHint: false, combo: 1 }];
         setBusy(true); setGameOver(true);
-        window.setTimeout(() => void onFinish({ answers: nextAnswers }), 850);
+        window.setTimeout(() => void onFinish({ answers: nextAnswers, events: nextEvents }), 850);
       }
       return;
     }
     const answer: GameAnswerInput = { wordId: current.id, answer: correct ? current.english : "[dropped]", attempts: 1, usedHint: false, combo: 1 };
     const nextAnswers = [...answers, answer];
     const nextLives = correct ? lives : lives - 1;
-    if (correct) { setScore((value) => value + 1); setNotice(`✅ Đã hứng đúng “${current.english}”.`); }
-    else { setLives(nextLives); setNotice(`💔 “${current.english}” đã rơi xuống đất.`); }
+    if (correct) { play("success"); setScore((value) => value + 1); setNotice(`✅ Đã hứng đúng “${current.english}”.`); }
+    else { play("error"); setLives(nextLives); setNotice(`💔 “${current.english}” đã rơi xuống đất.`); }
     setEvent(null);
     if (round >= words.length - 1 || nextLives <= 0) {
       setBusy(true);
-      if (nextLives <= 0) { setGameOver(true); window.setTimeout(() => void onFinish({ answers: nextAnswers }), 850); }
-      else void onFinish({ answers: nextAnswers });
+      const result = events.length ? { answers: nextAnswers, events } : { answers: nextAnswers };
+      if (nextLives <= 0) { setGameOver(true); window.setTimeout(() => void onFinish(result), 850); }
+      else void onFinish(result);
     } else {
       setAnswers(nextAnswers); setRound((value) => value + 1);
     }
-  }, [answers, busy, current, event, lives, onFinish, round, words.length]);
+  }, [answers, busy, current, event, events, lives, onFinish, round, words.length]);
 
   useEffect(() => {
     const keydown = (event: KeyboardEvent) => {

@@ -28,7 +28,7 @@ describe("E4S repositories", () => {
   it("exposes repositories for every planned domain", () => {
     expect(Object.keys(repositories).sort()).toEqual([
       "aiRuns", "assessments", "coach", "content", "engagement",
-      "files", "identity", "jobs", "learning", "notifications"
+      "files", "identity", "jobs", "learning", "manager", "notifications"
     ]);
   });
 
@@ -87,5 +87,51 @@ describe("E4S repositories", () => {
 
     expect(first).toMatchObject({ id, state: "running", lockedBy: "worker-a", attempts: 1 });
     expect(second).toBeNull();
+  });
+
+  it("releases an expired worker lease so another worker can retry the job", async () => {
+    const id = randomUUID();
+    await repositories.jobs.enqueue({
+      id,
+      kind: "storage.cleanup",
+      payload: { bucket: "assessment-evidence" },
+      idempotencyKey: `expired-lease:${id}`
+    });
+
+    const first = await repositories.jobs.leaseNext("worker-a", 30);
+    expect(first).toMatchObject({ id, lockedBy: "worker-a", attempts: 1 });
+    await pool.query("update jobs set lock_expires_at = now() - interval '1 second' where id = $1", [id]);
+
+    const recovered = await repositories.jobs.leaseNext("worker-b", 30);
+
+    expect(recovered).toMatchObject({ id, state: "running", lockedBy: "worker-b", attempts: 2 });
+  });
+
+  it("marks a job succeeded only for the worker that holds its lease", async () => {
+    const id = randomUUID();
+    await repositories.jobs.enqueue({ id, kind: "ai.coach-feedback", payload: { learnerId: DEMO_IDS.learner } });
+    await expect(repositories.jobs.leaseNext("worker-a", 30)).resolves.toMatchObject({ id });
+
+    const completed = await (repositories.jobs as typeof repositories.jobs & {
+      markSucceeded(id: string, workerId: string): Promise<boolean>;
+    }).markSucceeded(id, "worker-a");
+
+    expect(completed).toBe(true);
+    await expect(pool.query("select state, locked_by from jobs where id = $1", [id]))
+      .resolves.toMatchObject({ rows: [{ state: "succeeded", locked_by: null }] });
+  });
+
+  it("dead-letters a failed job after its final allowed attempt", async () => {
+    const id = randomUUID();
+    await repositories.jobs.enqueue({ id, kind: "ai.coach-feedback", payload: { learnerId: DEMO_IDS.learner }, maxAttempts: 1 });
+    await expect(repositories.jobs.leaseNext("worker-a", 30)).resolves.toMatchObject({ id, attempts: 1 });
+
+    const state = await (repositories.jobs as typeof repositories.jobs & {
+      markFailed(id: string, workerId: string, error: string): Promise<"queued" | "dead" | null>;
+    }).markFailed(id, "worker-a", "provider unavailable");
+
+    expect(state).toBe("dead");
+    await expect(pool.query("select state, locked_by, last_error from jobs where id = $1", [id]))
+      .resolves.toMatchObject({ rows: [{ state: "dead", locked_by: null, last_error: "provider unavailable" }] });
   });
 });

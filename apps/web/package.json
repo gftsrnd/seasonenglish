@@ -12,8 +12,10 @@
   },
   "dependencies": {
     "@e4s/contracts": "workspace:*",
+    "@e4s/domain": "workspace:*",
     "@fontsource/be-vietnam-pro": "5.2.8",
     "@tanstack/react-query": "5.90.21",
+    "lucide-react": "^1.57.0",
     "react": "19.3.0",
     "react-dom": "19.3.0",
     "react-hook-form": "7.71.2",

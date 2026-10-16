@@ -1,20 +1,22 @@
 import { useMemo, useRef, useState } from "react";
 import type { GameAnswerInput } from "@e4s/contracts";
-import { letters, type FinishGame, type GameWord } from "./types.js";
+import { letters, prepareGameAttempt, type FinishGame, type GameWord } from "./types.js";
+import { useExperience } from "../../../features/experience/Experience.js";
 
 type Entry = { value: string; word: GameWord };
 type Direction = "across" | "down";
 type Placed = Entry & { row: number; column: number; direction: Direction; number?: number };
 type Crossword = { cells: Array<Array<string | null>>; placed: Placed[]; numbers: Record<string, number> };
 
-export function CrosswordGame({ words, onFinish }: { words: GameWord[]; onFinish: FinishGame }) {
-  const crossword = useMemo(() => buildCrossword(words.map((word) => ({ value: letters(word.english), word })).filter((entry) => entry.value.length >= 3)), [words]);
+export function CrosswordGame({ words, onFinish, attemptSeed = 0 }: { words: GameWord[]; onFinish: FinishGame; attemptSeed?: number }) {
+  const crossword = useMemo(() => buildCrossword(prepareGameAttempt(words, attemptSeed).map((word) => ({ value: letters(word.english), word })).filter((entry) => entry.value.length >= 3)), [attemptSeed, words]);
   const [values, setValues] = useState<Record<string, string>>({});
   const [states, setStates] = useState<Record<string, "ok" | "bad">>({});
   const [hints, setHints] = useState(0);
   const [checks, setChecks] = useState(0);
   const [notice, setNotice] = useState("");
   const [busy, setBusy] = useState(false);
+  const { play } = useExperience();
   const inputRefs = useRef<Record<string, HTMLInputElement | null>>({});
   const activeCells = useMemo(() => crossword.cells.flatMap((row, rowIndex) => row.flatMap((wanted, columnIndex) => wanted ? [`${rowIndex},${columnIndex}`] : [])), [crossword]);
   if (crossword.placed.length < 3) return <p className="muted">Không đan được lưới từ bộ này — cần ít nhất 3 từ có chữ cái chung.</p>;
@@ -47,9 +49,11 @@ export function CrosswordGame({ words, onFinish }: { words: GameWord[]; onFinish
     setChecks((value) => value + 1);
     const correctWords = crossword.placed.filter((entry) => readWord(entry) === entry.value).length;
     if (correctCells !== crossword.cells.flat().filter(Boolean).length) {
+      play("error");
       setNotice(`${correctWords}/${crossword.placed.length} từ đúng · ${correctCells} ô đúng.`);
       return;
     }
+    play("success");
     const answers: GameAnswerInput[] = crossword.placed.map((entry) => ({ wordId: entry.word.id, answer: entry.word.english, attempts: checks + 1, combo: 1 }));
     setBusy(true);
     await onFinish({ answers, hintsUsed: hints });

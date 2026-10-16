@@ -1,0 +1,412 @@
+/* Prototype-fidelity refinements scoped to learner pages only. */
+.learner-home-setup .home-setup-card {
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: var(--surface);
+  padding: 18px;
+}
+
+.learner-home-setup .home-setup-card > h2 {
+  margin: 0 0 10px;
+  font-size: 1.1rem;
+}
+
+.learner-home-setup .home-setup-steps {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.learner-home-setup .home-setup-steps > li {
+  display: grid;
+  grid-template-columns: 34px 1fr;
+  gap: 10px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 12px;
+}
+
+.learner-home-setup .home-setup-steps > li[data-state="current"] { background: var(--primary-soft); }
+
+.learner-home-setup .home-setup-steps > li > span {
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  background: var(--surface);
+  font-weight: 700;
+}
+
+.learner-home-setup .home-setup-steps li > div > div {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.learner-home-setup .home-setup-steps small {
+  border-radius: 999px;
+  background: var(--surface-3);
+  padding: 3px 8px;
+  font-size: .7rem;
+}
+
+.learner-home-setup .home-setup-steps p {
+  margin: 5px 0 9px;
+  font-size: .8rem;
+}
+
+.learner-page .onboard-heading {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.learner-page .onboard-heading > .home-season-mark {
+  width: 76px;
+  height: 76px;
+  flex: 0 0 76px;
+}
+
+.learner-page .onboard-heading h1,
+.learner-page .onboard-heading p {
+  margin-top: 2px;
+  margin-bottom: 6px;
+}
+
+.learner-page .onboard-steps {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  padding: 0;
+  background: transparent;
+}
+
+.learner-page .onboard-steps article {
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: var(--surface);
+  padding: 14px;
+}
+
+.learner-page .onboard-steps article:first-child {
+  background: var(--primary-soft);
+}
+
+.learner-page .onboard-steps p {
+  margin: 4px 0 0;
+  font-size: .78rem;
+}
+
+.learner-page .onboard-steps .eyebrow {
+  margin: 0;
+}
+
+.learner-page .button--small {
+  min-height: 30px;
+  padding: 5px 10px;
+  font-size: .72rem;
+}
+
+@media (max-width: 700px) {
+  .learner-page .onboard-steps {
+    grid-template-columns: 1fr;
+  }
+
+  .learner-page .onboard-heading {
+    align-items: flex-start;
+  }
+
+  .learner-page .onboard-heading > .home-season-mark {
+    width: 58px;
+    height: 58px;
+    flex-basis: 58px;
+  }
+}
+
+/* Profile follows Thu's prototype hierarchy: page title, avatar card, soft profile,
+   one consolidated reward card, KPI row, weekly cards and assessment comparison. */
+.learner-profile .prototype-card {
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: var(--surface);
+  padding: 18px;
+}
+
+.learner-profile .prototype-card--soft {
+  background: var(--surface-3);
+}
+
+.learner-profile > .prototype-card + .prototype-card,
+.learner-profile > .prototype-card + .readiness-card,
+.learner-profile > .readiness-card + .profile-kpis {
+  margin-top: 12px;
+}
+
+.learner-profile .profile-details dl {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-top: 6px;
+}
+
+.learner-profile .profile-details dl > div {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  border: 0;
+  padding: 0;
+}
+
+.learner-profile .profile-details dt {
+  width: 120px;
+  flex: 0 0 120px;
+  color: var(--muted);
+  font-size: .75rem;
+  font-weight: 500;
+}
+
+.learner-profile .profile-details dd {
+  margin: 0;
+  font-size: .9rem;
+  font-weight: 400;
+}
+
+.learner-profile .reward-card {
+  margin-top: 12px;
+}
+
+.learner-profile .reward-card .season-card {
+  grid-template-columns: auto 1fr;
+  padding: 0;
+}
+
+.learner-profile .reward-card .season-mark {
+  width: 76px;
+  height: 76px;
+  display: inline-grid;
+  place-items: center;
+  flex: 0 0 76px;
+  border-radius: 50%;
+  background: var(--mint);
+  color: var(--text);
+  font-size: 2.2rem;
+}
+
+.learner-profile .reward-card .season-mark--2 { background: var(--primary); }
+.learner-profile .reward-card .season-mark--3 { background: var(--peach); }
+.learner-profile .reward-card .season-mark--4 { width: 100px; height: 100px; flex-basis: 100px; background: var(--lav); }
+
+.learner-profile .reward-card .season-card h2 {
+  font-size: 1.5rem;
+}
+
+.learner-profile .season-progress {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  margin-top: 12px;
+}
+
+.learner-profile .reward-track {
+  display: grid;
+  gap: 4px;
+  border: 1px dashed var(--line);
+  border-radius: 14px;
+  background: var(--surface);
+  padding: 14px;
+}
+
+.learner-profile .reward-track.is-complete {
+  border-style: solid;
+  border-color: var(--ok-line);
+  background: var(--ok-tint);
+}
+
+.learner-profile .reward-track > div {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.learner-profile .reward-track > b {
+  font-size: 1.3rem;
+  font-weight: 600;
+}
+
+.learner-profile .reward-track small {
+  color: var(--muted);
+  font-size: .75rem;
+}
+
+.learner-profile .reward-mismatch {
+  margin-top: 10px;
+  border: 1px solid var(--warn-line);
+  border-radius: 12px;
+  background: var(--warn-soft);
+  padding: 11px 14px;
+  font-size: .85rem;
+}
+
+.learner-profile .badge {
+  display: inline-flex;
+  align-items: center;
+  border-radius: 8px;
+  background: var(--surface-3);
+  box-shadow: inset 0 0 0 1px var(--line);
+  padding: 3px 9px;
+  font-size: .72rem;
+  white-space: nowrap;
+}
+
+.learner-profile .badge--success {
+  background: var(--ok-tint);
+  box-shadow: inset 0 0 0 1px var(--ok-line);
+  color: var(--olive-dark);
+}
+
+.learner-profile .badge--warning {
+  background: var(--warn-soft);
+  box-shadow: inset 0 0 0 1px var(--warn-line);
+  color: var(--warn);
+}
+
+.learner-profile .reward-heading {
+  align-items: baseline;
+  margin-top: 14px;
+}
+
+.learner-profile .badge-group-heading {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 12px 0 6px;
+}
+
+.learner-profile .badge-group-heading h3 {
+  margin: 0;
+  font-weight: 500;
+  letter-spacing: 0;
+}
+
+.learner-profile .badge-group-heading > span:last-child {
+  color: var(--muted);
+  font-size: .75rem;
+  font-weight: 500;
+}
+
+.learner-profile .badge-grid {
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: 10px;
+}
+
+.learner-profile .badge-grid article {
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  border: 0;
+  border-radius: 12px;
+  background: var(--surface);
+  box-shadow: inset 0 0 0 1px var(--line);
+  padding: 14px 8px;
+  text-align: center;
+}
+
+.learner-profile .badge-grid article[data-earned="false"] {
+  border: 0;
+  background: var(--surface);
+  box-shadow: inset 0 0 0 1px dashed var(--line);
+  opacity: .5;
+}
+
+.learner-profile .badge-grid article > span:last-child {
+  color: #4a4640;
+  font-size: .75rem;
+}
+
+.learner-profile .reward-actions {
+  margin-top: 12px;
+}
+
+.learner-profile .reward-rules {
+  margin-top: 10px;
+}
+
+.learner-profile .reward-rules summary {
+  cursor: pointer;
+  font-size: .9rem;
+  font-weight: 500;
+}
+
+.learner-profile .reward-rules ul {
+  margin: 6px 0 0;
+  padding-left: 20px;
+  font-size: .88rem;
+}
+
+.learner-profile .profile-kpis {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  margin-top: 12px;
+}
+
+.learner-profile .profile-kpis .metric {
+  align-items: start;
+  justify-items: start;
+  border: 1px solid var(--line);
+  text-align: left;
+}
+
+.learner-profile .profile-kpis .metric strong {
+  min-width: 0;
+  min-height: 0;
+  border: 0;
+  padding: 0;
+  font-size: 1.9rem;
+  font-weight: 600;
+}
+
+.learner-profile .profile-weeks {
+  gap: 0;
+  margin-top: 0;
+}
+
+.learner-profile .profile-week-card {
+  margin-top: 12px;
+}
+
+.learner-profile .profile-week-dots span {
+  width: 10px;
+  height: 10px;
+  background: var(--track);
+}
+
+.learner-profile .profile-week-dots span.is-active {
+  background: var(--olive);
+  box-shadow: none;
+}
+
+.learner-profile .assessment-comparison {
+  margin-top: 12px;
+}
+
+@media (max-width: 700px) {
+  .learner-profile .season-progress,
+  .learner-profile .profile-kpis {
+    grid-template-columns: 1fr;
+  }
+
+  .learner-profile .profile-details dl > div {
+    display: grid;
+    gap: 2px;
+  }
+
+  .learner-profile .profile-details dt {
+    width: auto;
+  }
+}

@@ -1,0 +1,1268 @@
+/* Prototype game surfaces: preserve the six existing game flows while making
+   controls, feedback, loading and focus states read as one consistent screen. */
+.game-page #gm-board {
+  margin-top: 18px;
+}
+
+.prototype-learner-page.game-page > .btn-danger {
+  align-self: flex-start;
+  margin-top: 8px;
+}
+
+.game-board > .card,
+.game-runner {
+  min-width: 0;
+}
+
+.game-board > .card {
+  display: grid;
+  gap: 16px;
+  margin: 0;
+  border: 1px solid var(--line);
+  background: var(--surface);
+}
+
+.game-board > .card .stat {
+  width: min(220px, 100%);
+  margin: 0;
+}
+
+.game-board > .card > .btn,
+.game-board > .card > button {
+  justify-self: start;
+}
+
+.game-runner {
+  display: grid;
+  gap: 16px;
+  position: relative;
+}
+
+.game-runner[aria-busy="true"] {
+  cursor: wait;
+}
+
+.game-hud {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+  padding: 0 0 14px;
+  border-bottom: 1px solid var(--line);
+}
+
+.game-hud h2 {
+  flex: 1 1 180px;
+  min-width: 0;
+  margin: 0;
+  font-size: 1rem;
+}
+
+.game-hud > span {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-height: 32px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--surface-3);
+  padding: 4px 10px;
+  color: var(--muted);
+  font-size: .75rem;
+  line-height: 1.25;
+  white-space: nowrap;
+}
+
+.game-hud > span strong {
+  color: var(--text);
+}
+
+.game-hud > span.is-danger {
+  border-color: var(--danger-line);
+  background: var(--danger-soft);
+  color: var(--danger);
+}
+
+.game-runner button,
+.game-runner input {
+  transition: background .15s, border-color .15s, box-shadow .15s, opacity .15s, transform .08s;
+}
+
+.game-runner button {
+  min-height: 44px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--surface);
+  color: var(--text);
+  padding: 8px 12px;
+  font: inherit;
+  cursor: pointer;
+}
+
+.game-runner button:hover:not(:disabled) {
+  border-color: var(--primary-line);
+  background: var(--primary-soft);
+}
+
+.game-runner button:active:not(:disabled) {
+  transform: translateY(1px);
+}
+
+.game-runner button:focus-visible,
+.game-runner input:focus-visible,
+.game-runner [role="application"]:focus-visible {
+  outline: 3px solid var(--primary);
+  outline-offset: 3px;
+  box-shadow: 0 0 0 6px var(--primary-glow);
+}
+
+.game-runner button:disabled,
+.game-runner input:disabled {
+  border-color: var(--line);
+  background: var(--surface-3);
+  color: var(--muted);
+  cursor: not-allowed;
+  opacity: .52;
+}
+
+.game-loading {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  justify-self: center;
+  min-height: 28px;
+  color: var(--muted);
+  font-size: .82rem;
+}
+
+.game-loading::before {
+  width: 14px;
+  height: 14px;
+  border: 2px solid var(--primary-line);
+  border-top-color: var(--primary);
+  border-radius: 50%;
+  content: "";
+  animation: game-spin .75s linear infinite;
+}
+
+@keyframes game-spin {
+  to { transform: rotate(360deg); }
+}
+
+.scramble-scene,
+.crossword-scene,
+.sort-scene,
+.typing-scene {
+  display: grid;
+  align-content: center;
+  justify-items: center;
+  gap: 14px;
+  min-height: 220px;
+  margin: 0;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--surface-3);
+  padding: 22px;
+  text-align: center;
+}
+
+.scramble-scene p,
+.typing-scene p {
+  margin: 0;
+}
+
+.scramble-scene > p,
+.typing-clue {
+  display: grid;
+  gap: 5px;
+}
+
+.scramble-scene > p strong,
+.typing-clue > div > strong {
+  font-size: 1.15rem;
+}
+
+.scramble-scene > p small,
+.typing-clue small,
+.catch-help {
+  color: var(--muted);
+}
+
+.answer-slots,
+.letter-bank {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 8px;
+  width: 100%;
+}
+
+.answer-slots span,
+.letter-bank button {
+  display: grid;
+  place-items: center;
+  min-width: 40px;
+  height: 44px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--surface);
+  font-size: 1.05rem;
+  font-weight: 600;
+  text-transform: uppercase;
+}
+
+.answer-slots span:empty {
+  border-style: dashed;
+  background: transparent;
+}
+
+.letter-bank button.is-used {
+  border-color: var(--primary-line);
+  background: var(--primary-soft);
+  color: var(--muted);
+  opacity: .45;
+  transform: translateY(2px);
+}
+
+.scramble-scene.is-shaking .answer-slots {
+  animation: game-shake .35s ease;
+}
+
+@keyframes game-shake {
+  25% { transform: translateX(-7px); }
+  50% { transform: translateX(7px); }
+  75% { transform: translateX(-4px); }
+}
+
+.mini-actions,
+.crossword-actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 8px;
+}
+
+.mini-actions button {
+  min-height: 44px;
+  border-radius: 999px;
+  background: var(--surface);
+  padding: 6px 12px;
+  font-size: .82rem;
+}
+
+.crossword-scene {
+  align-content: start;
+  justify-items: stretch;
+  min-width: 0;
+  overflow-x: visible;
+  overscroll-behavior-inline: contain;
+  scroll-padding-inline: 12px;
+  text-align: left;
+}
+
+.crossword-mode {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 8px 14px;
+  min-height: 38px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--surface);
+  padding: 6px 10px;
+  color: var(--muted);
+  font-size: .78rem;
+}
+
+.crossword-mode b {
+  color: var(--text);
+}
+
+.crossword-mode .btn-sm {
+  min-height: 34px;
+  padding: 5px 9px;
+}
+
+.crossword-scroll-hint {
+  display: none;
+  margin: 0;
+  color: var(--muted);
+  font-size: .75rem;
+  text-align: center;
+}
+
+.crossword-grid {
+  display: grid;
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  overflow-x: auto;
+  margin: 0 auto;
+  gap: 3px;
+}
+
+.crossword-grid > [role="row"] {
+  display: contents;
+}
+
+.crossword-block,
+.crossword-cell {
+  position: relative;
+  min-width: 30px;
+  aspect-ratio: 1;
+}
+
+.crossword-block {
+  background: transparent;
+}
+
+.crossword-cell {
+  display: grid;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--surface);
+}
+
+.crossword-cell.ok {
+  border-color: var(--ok-line);
+  background: var(--ok-tint);
+}
+
+.crossword-cell.is-active-entry {
+  border-color: color-mix(in srgb, var(--primary) 52%, var(--line));
+  background: color-mix(in srgb, var(--primary-soft) 70%, var(--surface));
+}
+
+.crossword-cell.is-active {
+  z-index: 1;
+  border-color: var(--primary);
+  box-shadow: 0 0 0 3px var(--primary-glow);
+}
+
+.crossword-cell.bad {
+  border-color: var(--danger-line);
+  background: var(--danger-soft);
+}
+
+.crossword-cell small {
+  position: absolute;
+  top: 2px;
+  left: 3px;
+  z-index: 1;
+  color: var(--muted);
+  font-size: .56rem;
+  line-height: 1;
+  pointer-events: none;
+}
+
+.crossword-cell input {
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  padding: 7px 2px 1px;
+  text-align: center;
+  text-transform: uppercase;
+  font-weight: 600;
+}
+
+.crossword-actions span {
+  max-width: 100%;
+  overflow-wrap: anywhere;
+  color: var(--muted);
+  font-size: .75rem;
+  text-align: center;
+}
+
+.crossword-clues {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+  padding-top: 2px;
+}
+
+.crossword-clues section {
+  min-width: 0;
+  border-radius: 10px;
+  padding: 8px;
+}
+
+.crossword-clues section.is-active {
+  background: var(--surface-3);
+}
+
+.crossword-clues h3 {
+  margin: 0;
+  font-size: .78rem;
+  letter-spacing: .05em;
+  text-transform: uppercase;
+}
+
+.crossword-clues h3 .game-control-icon {
+  width: 12px;
+  height: 12px;
+  margin-inline-start: 2px;
+  vertical-align: -2px;
+}
+
+.crossword-clues ol {
+  margin: 7px 0 0;
+  padding: 0;
+  list-style: none;
+  font-size: .78rem;
+  line-height: 1.6;
+}
+
+.crossword-clues small {
+  color: var(--muted);
+}
+
+.catch-arena,
+.rio-scene {
+  position: relative;
+  overflow: hidden;
+  width: 100%;
+  margin: 0;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  outline: none;
+}
+
+.catch-arena {
+  height: 440px;
+  touch-action: none;
+  background: linear-gradient(#dff3ff 0 82%, #9bc154 82%);
+}
+
+.catch-prompt {
+  position: absolute;
+  top: 12px;
+  left: 50%;
+  z-index: 4;
+  display: grid;
+  gap: 3px;
+  min-width: min(520px, calc(100% - 28px));
+  margin: 0;
+  transform: translateX(-50%);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--surface);
+  padding: 9px 14px;
+  text-align: center;
+}
+
+.catch-prompt > img {
+  width: 32px;
+  height: 32px;
+  justify-self: center;
+  object-fit: contain;
+}
+
+.catch-prompt small {
+  color: var(--muted);
+  font-size: .72rem;
+}
+
+.catch-sky .cloud,
+.rio-cloud {
+  position: absolute;
+  width: 70px;
+  height: 22px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, .82);
+}
+
+.cloud--one { top: 95px; left: 8%; }
+.cloud--two { top: 145px; right: 14%; transform: scale(1.35); }
+
+.falling-item {
+  position: absolute;
+  z-index: 2;
+  display: grid;
+  justify-items: center;
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+  transition: top 45ms linear;
+}
+
+.falling-item > img {
+  width: 56px;
+  height: 56px;
+  object-fit: contain;
+  filter: drop-shadow(0 4px 3px rgba(0, 0, 0, .12));
+}
+
+.falling-item b {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, .95);
+  padding: 3px 7px;
+  font-size: .72rem;
+}
+
+.catch-hero {
+  position: absolute;
+  bottom: 25px;
+  z-index: 3;
+  display: grid;
+  justify-items: center;
+  transform: translateX(-50%);
+  transition: left 70ms linear;
+}
+
+.catch-hero .basket {
+  z-index: 2;
+  margin-bottom: -9px;
+  font-size: 46px;
+  line-height: .8;
+}
+
+.catch-hero .season-animal {
+  width: 64px;
+  height: 64px;
+  object-fit: contain;
+}
+
+.catch-ground,
+.rio-ground {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  height: 26px;
+  background: repeating-linear-gradient(90deg, #648f34 0 18px, #7ca541 18px 36px);
+}
+
+.catch-help {
+  margin: -4px 0 0;
+  text-align: center;
+  font-size: .75rem;
+}
+
+.game-ending {
+  position: absolute;
+  inset: 0;
+  z-index: 9;
+  display: grid;
+  place-content: center;
+  justify-items: center;
+  gap: 5px;
+  background: color-mix(in srgb, var(--surface) 90%, transparent);
+  padding: 20px;
+  text-align: center;
+}
+
+.game-ending > span:not(.dino) {
+  font-size: 78px;
+  line-height: 1;
+}
+
+.game-ending .dino {
+  line-height: 0;
+  filter: drop-shadow(0 8px 16px rgba(30, 30, 30, .18));
+}
+
+.game-ending strong {
+  font-size: 1.2rem;
+}
+
+.game-ending small {
+  color: var(--muted);
+}
+
+.rio-scene {
+  background: #dff3ff;
+  touch-action: none;
+}
+
+.rio-viewport,
+.rio-world {
+  height: 320px;
+}
+
+.rio-viewport {
+  overflow: hidden;
+}
+
+.rio-world {
+  position: relative;
+  transition: transform 80ms linear;
+  background: linear-gradient(#dff3ff 0 87.5%, #9bc154 87.5%);
+}
+
+.rio-cloud--one { top: 38px; left: 120px; }
+.rio-cloud--two { top: 76px; left: 900px; transform: scale(1.45); }
+
+.rio-platform {
+  position: absolute;
+  bottom: 26px;
+  border: 1px solid #5a3e28;
+  background: repeating-linear-gradient(90deg, #a97648 0 20px, #bd8955 20px 40px);
+}
+
+.gift-gate {
+  position: absolute;
+  top: 0;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  flex-direction: column;
+  justify-content: flex-end;
+  width: 48px;
+}
+
+.gift-gate .gate-beam {
+  position: absolute;
+  top: 0;
+  bottom: 90px;
+  width: 4px;
+  border: 0;
+  background: repeating-linear-gradient(#f2c14e 0 10px, transparent 10px 18px);
+  opacity: .55;
+}
+
+.gift-gate .gate-post {
+  width: 18px;
+  height: 44px;
+  flex: 0 0 44px;
+  border: 1px solid #4b3424;
+  background: repeating-linear-gradient(#9b6a42 0 13px, #b17b4c 13px 26px);
+}
+
+.gift-gate > span {
+  position: relative;
+  z-index: 2;
+  display: block;
+  width: 48px;
+  height: 48px;
+  margin-bottom: -2px;
+  filter: drop-shadow(0 4px 2px rgba(0, 0, 0, .12));
+}
+
+.gift-gate > span > img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+.gift-gate > span > .gift-reward {
+  position: absolute;
+  top: -15px;
+  left: 12px;
+  width: 25px;
+  height: 25px;
+}
+
+.gift-gate.is-open {
+  opacity: .55;
+  pointer-events: none;
+}
+
+.gift-gate.is-open .gate-beam,
+.gift-gate.is-open .gate-post {
+  display: none;
+}
+
+.rio-hero {
+  position: absolute;
+  z-index: 3;
+  width: 58px;
+  height: 58px;
+  transform: translateX(-50%);
+  transition: left 30ms linear, bottom 30ms linear;
+}
+
+.rio-hero img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+.rio-hero.is-jumping {
+  filter: drop-shadow(0 8px 3px rgba(0, 0, 0, .12));
+}
+
+.rio-boss {
+  position: absolute;
+  bottom: 26px;
+  display: grid;
+  justify-items: center;
+  width: 170px;
+}
+
+.rio-boss b {
+  font-size: 92px;
+  line-height: 1;
+}
+
+.rio-boss span {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface);
+  padding: 3px 7px;
+  font-size: .66rem;
+  font-weight: 600;
+}
+
+.rio-boss.is-cleared b { font-size: 44px; }
+
+.rio-flag {
+  position: absolute;
+  bottom: 26px;
+  color: var(--muted);
+  font-size: 86px;
+  filter: grayscale(1);
+}
+
+.rio-flag.is-ready {
+  color: inherit;
+  filter: none;
+}
+
+.rio-quiz {
+  position: absolute;
+  inset: 0;
+  z-index: 6;
+  display: grid;
+  place-items: center;
+  background: rgba(30, 30, 30, .42);
+  padding: 16px;
+}
+
+.rio-quiz > div {
+  width: min(520px, 100%);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  padding: 20px;
+  transform: translateY(-34px);
+  text-align: center;
+}
+
+.rio-quiz h3 {
+  margin: 4px 0;
+  font-size: 1.25rem;
+}
+
+.rio-quiz p {
+  margin: 4px 0 14px;
+  color: var(--muted);
+}
+
+.rio-quiz > div > div {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.rio-quiz button {
+  min-height: 44px;
+  background: var(--surface-3);
+}
+
+.mario-controls {
+  position: relative;
+  right: auto;
+  bottom: auto;
+  left: auto;
+  z-index: 7;
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  margin: 10px 12px 12px;
+  pointer-events: auto;
+}
+
+.mario-controls > div {
+  display: flex;
+  gap: 8px;
+}
+
+.mario-controls button {
+  min-width: 62px;
+  min-height: 58px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, .92);
+  padding: 8px 12px;
+  font-weight: 600;
+  box-shadow: 0 4px 14px rgba(46, 39, 31, .16);
+  pointer-events: auto;
+}
+
+.mario-controls .jump {
+  min-width: 72px;
+  min-height: 72px;
+}
+
+.mario-controls small {
+  display: block;
+  font-size: .65rem;
+}
+
+/* The vocabulary dialog is modal: disabled movement controls should not sit
+   underneath its card and compete for attention on touch screens. */
+.rio-scene:has(.rio-quiz) .mario-controls {
+  visibility: hidden;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.sort-scene {
+  gap: 16px;
+}
+
+.sort-word-line {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+
+.sort-word-line > strong {
+  font-size: 2rem;
+  letter-spacing: -.03em;
+}
+
+.sort-speak,
+.typing-clue-speak {
+  display: grid;
+  place-items: center;
+  min-width: 40px;
+  min-height: 40px;
+  border-radius: 999px;
+  background: var(--surface);
+  padding: 6px;
+}
+
+.sort-bins {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+  width: 100%;
+  margin-top: 4px;
+}
+
+.sort-bins button {
+  display: grid;
+  gap: 3px;
+  width: 100%;
+  min-width: 0;
+  min-height: 64px;
+  background: var(--surface);
+  padding: 12px 8px;
+}
+
+.sort-bins button small {
+  color: var(--muted);
+}
+
+.sort-bins button.is-correct {
+  border-color: var(--ok-line);
+  background: var(--ok-tint);
+}
+
+.sort-bins button.is-correct:disabled,
+.sort-bins button.is-wrong:disabled {
+  opacity: 1;
+}
+
+.sort-bins button.is-wrong {
+  border-color: var(--danger-line);
+  background: var(--danger-soft);
+}
+
+.typing-scene {
+  gap: 16px;
+}
+
+.typing-clue {
+  grid-template-columns: 72px 44px minmax(0, 1fr);
+  align-items: center;
+  width: min(620px, 100%);
+  text-align: left;
+}
+
+.typing-clue-copy {
+  display: grid;
+  gap: 5px;
+  min-width: 0;
+}
+
+.typing-clue-copy > strong,
+.typing-clue-copy > small {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.typing-clue-image {
+  display: grid;
+  place-items: center;
+  width: 72px;
+  height: 72px;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--primary-soft);
+  color: var(--muted);
+  font-size: 1.6rem;
+}
+
+.typing-clue-image .game-image-placeholder {
+  color: var(--muted);
+}
+
+.typing-clue-image .game-image-placeholder--loading {
+  animation: game-spin .9s linear infinite;
+}
+
+.typing-clue-image img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.typing-clue-speak {
+  min-width: 44px;
+  min-height: 44px;
+  border-radius: 12px;
+  font-size: 1.15rem;
+}
+
+.typing-timer {
+  width: min(620px, 100%);
+  height: 8px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: var(--track);
+}
+
+.typing-timer i {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--olive);
+  transition: width 80ms linear;
+}
+
+.typing-word {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 6px;
+  min-height: 44px;
+}
+
+.typing-word span {
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 40px;
+  border-bottom: 3px solid var(--border);
+  background: var(--surface);
+  font-weight: 600;
+}
+
+.typing-word span.is-correct {
+  border-color: var(--olive);
+  color: var(--olive-dark);
+}
+
+.typing-word span.is-wrong {
+  border-color: var(--danger);
+  color: var(--danger);
+}
+
+.virtual-keyboard {
+  display: grid;
+  gap: 6px;
+  width: min(620px, 100%);
+}
+
+.keyboard-row {
+  display: flex;
+  justify-content: center;
+  gap: 5px;
+}
+
+.virtual-keyboard button {
+  min-width: 34px;
+  min-height: 44px;
+  border-radius: 9px;
+  background: var(--surface);
+  padding: 7px 6px;
+  text-transform: uppercase;
+}
+
+.keyboard-row--actions button:first-child { flex: 3; }
+.keyboard-row--actions button { flex: 1; }
+.keyboard-row--actions button.is-enter {
+  border-color: var(--primary-line);
+  background: var(--primary-soft);
+}
+
+.game-notice {
+  min-height: 1.5em;
+  margin: 0;
+  color: var(--muted);
+  text-align: center;
+  font-size: .82rem;
+}
+
+.game-notice.is-success {
+  color: var(--olive-dark);
+}
+
+.game-notice.is-error {
+  color: var(--danger);
+}
+
+.game-notice.is-warning {
+  color: var(--warn);
+}
+
+@media (max-width: 720px) {
+  .game-board > .card,
+  .game-runner {
+    gap: 16px;
+  }
+
+  .scramble-scene,
+  .crossword-scene,
+  .sort-scene,
+  .typing-scene {
+    padding: 16px 12px;
+  }
+
+  .typing-scene {
+    padding: 14px 12px;
+  }
+
+  .catch-arena {
+    height: 390px;
+  }
+
+  .rio-viewport,
+  .rio-world {
+    height: 300px;
+  }
+
+  .mario-controls {
+    margin: 10px 12px 12px;
+  }
+
+  .crossword-clues {
+    grid-template-columns: 1fr;
+    gap: 12px;
+  }
+
+  .crossword-scroll-hint {
+    display: block;
+    justify-self: stretch;
+    width: 100%;
+    max-width: 100%;
+    min-width: 0;
+    box-sizing: border-box;
+    text-align: center;
+  }
+
+  .sort-bins {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .typing-clue {
+    grid-template-columns: 60px 42px minmax(0, 1fr);
+  }
+
+  .typing-clue-image {
+    width: 60px;
+    height: 60px;
+  }
+
+  .virtual-keyboard button {
+    min-width: 0;
+    padding-inline: 3px;
+  }
+}
+
+@media (max-width: 420px) {
+  .game-hud {
+    align-items: flex-start;
+  }
+
+  .game-hud h2 {
+    flex-basis: 100%;
+  }
+
+  .catch-prompt {
+    min-width: calc(100% - 20px);
+    padding-inline: 9px;
+  }
+
+  .keyboard-row {
+    gap: 3px;
+  }
+
+  .typing-clue {
+    grid-template-columns: 52px 38px minmax(0, 1fr);
+    gap: 8px;
+  }
+
+  .typing-clue-image {
+    width: 52px;
+    height: 52px;
+  }
+
+  .typing-clue > div > strong {
+    font-size: 1rem;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .game-runner button,
+  .game-runner input,
+  .falling-item,
+  .catch-hero,
+  .rio-world,
+  .rio-hero,
+  .typing-timer i {
+    transition: none;
+  }
+
+  .game-loading::before,
+  .scramble-scene.is-shaking .answer-slots {
+    animation: none;
+  }
+}
+
+/* Games hub: keep the existing prototype order while making each responsive
+   group use the available width instead of shrinking to its content. */
+.prototype-learner-page.games-page,
+.prototype-learner-page.game-page {
+  min-width: 0;
+  padding-bottom: 24px;
+}
+
+.prototype-learner-page.games-page > .card {
+  min-width: 0;
+  overflow: hidden;
+}
+
+.prototype-learner-page.games-page .topic-create {
+  gap: 10px !important;
+}
+
+.prototype-learner-page.games-page .btn-sm,
+.prototype-learner-page.game-page .btn-sm {
+  min-height: 44px !important;
+}
+
+.prototype-learner-page.games-page .word-chip-list {
+  gap: 10px !important;
+}
+
+.prototype-learner-page.games-page .game-grid {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  align-items: stretch;
+}
+
+.prototype-learner-page.games-page .game-tile {
+  box-sizing: border-box;
+  min-width: 0;
+  height: 100%;
+  overflow: hidden;
+  overflow-wrap: anywhere;
+  gap: 8px !important;
+}
+
+.prototype-learner-page.games-page .game-tile > .game-icon {
+  font-size: 1.8rem;
+  line-height: 1;
+}
+
+.prototype-learner-page.games-page .game-tile > h3 {
+  min-width: 0;
+  margin: 0;
+  font-size: .98rem;
+  line-height: 1.25;
+  overflow-wrap: anywhere;
+}
+
+.prototype-learner-page.games-page .game-tile > p {
+  min-width: 0;
+  margin: 0;
+  font-size: .82rem;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+
+.prototype-learner-page.games-page .game-tile > b {
+  min-width: 0;
+  font-size: .75rem;
+  line-height: 1.3;
+  overflow-wrap: anywhere;
+}
+
+.prototype-learner-page.games-page .word-chip {
+  box-sizing: border-box;
+  min-width: 0;
+  max-width: 100%;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+.prototype-learner-page.games-page .arena-entry {
+  min-width: 0;
+  overflow: hidden;
+}
+
+.prototype-learner-page.games-page .arena-entry > div {
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+.prototype-learner-page.games-page .arena-entry > div p {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.prototype-learner-page.games-page .arena-entry > b {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  flex: 0 0 auto;
+  margin-left: 16px;
+  white-space: nowrap;
+}
+
+.prototype-learner-page.games-page .game-control-icon,
+.prototype-learner-page.game-page .game-control-icon,
+.game-runner .game-control-icon {
+  display: inline-block;
+  flex: 0 0 auto;
+  stroke-width: 2;
+  pointer-events: none;
+}
+
+.prototype-learner-page.game-page > .page-title {
+  margin-bottom: 18px !important;
+}
+
+@media (max-width: 720px) {
+  .prototype-learner-page.game-page,
+  .prototype-learner-page.games-page {
+    padding-bottom: calc(128px + env(safe-area-inset-bottom));
+  }
+
+  .prototype-learner-page.games-page .game-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .prototype-learner-page.games-page .arena-entry {
+    align-items: flex-start;
+    gap: 12px;
+  }
+}

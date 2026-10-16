@@ -1,4 +1,5 @@
-import type { GameDescriptor, GameKey } from "@e4s/contracts";
+import type { GameDescriptor, GameKey, GameTopicModeration } from "@e4s/contracts";
+import { randomUUID } from "node:crypto";
 import { vocabularyOutputSchema, weeklyPracticeOutputSchema } from "@e4s/ai";
 import { arenaEligible, scoreGameAttempt } from "@e4s/domain/engagement";
 import { createRepositories } from "@e4s/database";
@@ -7,16 +8,22 @@ import type { Pool } from "pg";
 import { z } from "zod";
 import { createRoleGuard } from "../identity/policy.js";
 import type { AiTaskRunner } from "../coach/index.js";
+import { createVocabularyImageResolver } from "./vocabulary-image.js";
 
 const gameKey = z.enum(["scramble", "crossword", "eggs", "mario", "sort", "typing"]);
 const answer = z.object({
   wordId: z.string().min(1), answer: z.string().max(200), attempts: z.number().int().min(1).max(20).optional(),
   usedHint: z.boolean().optional(), combo: z.number().int().min(1).max(5).optional()
 });
-const resultInput = z.object({
-  requestId: z.uuid(), claimedScore: z.number().optional(), hintsUsed: z.number().int().min(0).max(100).optional(),
-  answers: z.array(answer).min(1).max(30)
+const gameEvent = z.object({
+  type: z.enum(["wrong_catch", "timeout"]), wordId: z.string().min(1), answer: z.string().max(200)
 });
+const resultInput = z.object({
+  requestId: z.uuid(), hintsUsed: z.number().int().min(0).max(100).optional(),
+  answers: z.array(answer).min(1).max(30), events: z.array(gameEvent).max(60).optional()
+});
+const practiceAppealParams = z.object({ submissionId: z.uuid() });
+const practiceAppealInput = z.object({ reason: z.string().trim().min(3).max(2_000) });
 
 const GAME_DESCRIPTORS: ReadonlyArray<Omit<GameDescriptor, "best">> = [
   { key: "scramble", icon: "🔤", name: "Word scramble", description: "Các chữ cái bị xáo trộn, xếp lại thành đúng từ", goal: "Xếp đúng càng nhiều từ càng tốt (8 từ).", instructions: ["Đọc gợi ý (nghĩa tiếng Việt / định nghĩa) và các ô chữ cái bị xáo trộn.", "Bấm từng chữ cái theo đúng thứ tự (hoặc gõ phím) để xếp vào ô trống; ⌫ để bỏ chữ cuối.", "Xếp đủ chữ mà sai thì ô rung và xoá để xếp lại; mỗi từ được 2 lần sai.", "Bí quá thì bấm Gợi ý: mở chữ cái tiếp theo (trừ nửa điểm của từ đó)."], scoring: "+2 điểm mỗi từ xếp đúng ngay, +1 nếu dùng gợi ý hoặc sai một lần." },
@@ -62,6 +69,18 @@ export function registerEngagementRoutes(app: FastifyInstance, pool: Pool, aiRun
     }
   });
 
+  app.post("/api/v1/engagement/practice/:submissionId/appeals", { preHandler: learnerOnly }, async (request, reply) => {
+    const params = practiceAppealParams.safeParse(request.params);
+    const body = practiceAppealInput.safeParse(request.body);
+    if (!params.success || !body.success) return reply.code(400).send({ code: "INVALID_PRACTICE_APPEAL" });
+    const view = await repositories.engagement.appealWeeklyPractice({
+      learnerId: request.e4sSession!.user.id,
+      submissionId: params.data.submissionId,
+      reason: body.data.reason
+    });
+    return view ?? reply.code(409).send({ code: "PRACTICE_APPEAL_NOT_AVAILABLE" });
+  });
+
   app.get("/api/v1/engagement/games", { preHandler: learnerOnly }, async (request, reply) => {
     const view = await gameHubView(repositories, request.e4sSession!.user.id, Boolean(aiRunner));
     return view ?? reply.code(404).send({ code: "GAME_SET_NOT_FOUND" });
@@ -72,8 +91,41 @@ export function registerEngagementRoutes(app: FastifyInstance, pool: Pool, aiRun
   }, async (request, reply) => {
     const parsed = z.object({ requestId: z.uuid(), topic: z.string().trim().min(2).max(200) }).safeParse(request.body);
     if (!parsed.success) return reply.code(400).send({ code: "INVALID_VOCABULARY_TOPIC" });
-    if (!aiRunner) return reply.code(503).send({ code: "AI_UNAVAILABLE" });
     const learnerId = request.e4sSession!.user.id;
+    const recentStrikes = await pool.query<{ count: string; blocked_until: Date | null }>(
+      `select count(*)::text as count, max(created_at + interval '30 minutes') as blocked_until
+       from topic_strikes where learner_id = $1 and created_at > now() - interval '30 minutes'`,
+      [learnerId]
+    );
+    const strikeCount = Number(recentStrikes.rows[0]?.count ?? 0);
+    if (strikeCount >= 3) return reply.code(429).send({
+      code: "TOPIC_CREATION_TEMPORARILY_LOCKED",
+      moderation: { state: "reported", strike: 3, message: "Tạo bộ từ được mở lại sau 30 phút; người vận hành đã nhận được báo cáo." } satisfies GameTopicModeration
+    });
+    const invalidReason = validateVocabularyTopic(parsed.data.topic);
+    if (invalidReason) {
+      const nextStrike = strikeCount + 1;
+      await pool.query(
+        "insert into topic_strikes (id, learner_id, topic, reason) values ($1, $2, $3, $4)",
+        [randomUUID(), learnerId, parsed.data.topic, invalidReason]
+      );
+      let reportId: string | undefined;
+      if (nextStrike >= 3) {
+        const report = await pool.query<{ id: string }>(
+        `insert into topic_reports (id, learner_id, topic, reason, strike_count)
+         values ($1, $2, $3, $4, $5) returning id`,
+          [randomUUID(), learnerId, parsed.data.topic, invalidReason, nextStrike]
+        );
+        reportId = report.rows[0]?.id;
+      }
+      const moderation: GameTopicModeration = nextStrike >= 3
+        ? { state: "reported", strike: 3, ...(reportId ? { reportId } : {}), message: "Đã báo người vận hành sau ba lần vi phạm." }
+        : isUnsafeTopic(parsed.data.topic)
+          ? { state: "unsafe", strike: Math.min(3, nextStrike) as 1 | 2 | 3, message: invalidReason }
+          : { state: "invalid", message: invalidReason };
+      return reply.code(422).send({ code: "VOCABULARY_TOPIC_REJECTED", strikes: nextStrike, moderation });
+    }
+    if (!aiRunner) return reply.code(503).send({ code: "AI_UNAVAILABLE" });
     if (await repositories.aiRuns.requestExists(learnerId, parsed.data.requestId, "vocabulary_generation")) {
       return await gameHubView(repositories, learnerId, true);
     }
@@ -85,15 +137,17 @@ export function registerEngagementRoutes(app: FastifyInstance, pool: Pool, aiRun
         topic: parsed.data.topic, cefr: current.cefr, count: 15
       }, { systemPrompt: task.prompt });
       const output = vocabularyOutputSchema.safeParse(result.output);
-      if (!output.success) return reply.code(502).send({ code: "AI_OUTPUT_INVALID" });
+      if (!output.success) return reply.code(502).send({ code: "AI_OUTPUT_INVALID", moderation: { state: "ai_rejected", message: "AI không trả về được bộ từ hợp lệ." } satisfies GameTopicModeration });
       await repositories.engagement.saveGeneratedWordSet({
         learnerId, requestId: parsed.data.requestId, taskId: task.taskId, promptVersionId: task.promptVersionId,
-        output: output.data, metadata: result.metadata
+        output: { topic: output.data.topic, words: output.data.words.map(({ imageUrl, ...word }) => ({
+          ...word, ...(imageUrl ? { imageUrl } : {})
+        })) }, metadata: result.metadata
       });
-      return await gameHubView(repositories, learnerId, true);
+      return { ...(await gameHubView(repositories, learnerId, true)), topicModeration: { state: "success", topic: output.data.topic } satisfies GameTopicModeration };
     } catch (error) {
       request.log.warn({ code: safeAiErrorCode(error) }, "Vocabulary generation failed");
-      return reply.code(aiErrorStatus(error)).send({ code: safeAiErrorCode(error) });
+      return reply.code(aiErrorStatus(error)).send({ code: safeAiErrorCode(error), moderation: { state: "error", message: "Không tạo được bộ từ. Vui lòng thử lại." } satisfies GameTopicModeration });
     }
   });
 
@@ -102,6 +156,26 @@ export function registerEngagementRoutes(app: FastifyInstance, pool: Pool, aiRun
     await repositories.engagement.retireGeneratedWordSet(learnerId);
     return await gameHubView(repositories, learnerId, Boolean(aiRunner))
       ?? reply.code(404).send({ code: "GAME_SET_NOT_FOUND" });
+  });
+
+  app.get("/api/v1/engagement/game-sets/:setId/words/:wordId/image", {
+    preHandler: learnerOnly, config: { rateLimit: { max: 30, timeWindow: "1 minute" } }
+  }, async (request, reply) => {
+    const params = z.object({ setId: z.uuid(), wordId: z.string().min(1).max(160) }).safeParse(request.params);
+    if (!params.success) return reply.code(400).send({ code: "INVALID_GAME_WORD" });
+    const learnerId = request.e4sSession!.user.id;
+    const word = await repositories.engagement.gameWord(learnerId, params.data.setId, params.data.wordId);
+    if (!word) return reply.code(404).send({ code: "GAME_WORD_NOT_FOUND" });
+    if (word.imageUrl) return { imageUrl: word.imageUrl };
+    const sourceResult = await pool.query<{ source: string }>(
+      `select coalesce(os.vocab_image_source, 'wikimedia') as source from users u
+       left join organization_settings os on os.organization_id = u.organization_id where u.id = $1`,
+      [learnerId]
+    );
+    const imageResolver = createVocabularyImageResolver(sourceResult.rows[0]?.source);
+    const imageUrl = await imageResolver.resolve(word.english);
+    if (imageUrl) await repositories.engagement.saveGameWordImage(learnerId, params.data.setId, params.data.wordId, imageUrl);
+    return { imageUrl };
   });
 
   app.post("/api/v1/engagement/games/:game/results", { preHandler: learnerOnly }, async (request, reply) => {
@@ -118,7 +192,8 @@ export function registerEngagementRoutes(app: FastifyInstance, pool: Pool, aiRun
       learnerId, setId: hub.wordSet.id, game: params.data.game, requestId: body.data.requestId,
       ...scored, details: {
         hintsUsed: body.data.hintsUsed,
-        answers: body.data.answers.map(({ wordId, attempts, usedHint, combo }) => ({ wordId, attempts, usedHint, combo }))
+        answers: body.data.answers.map(({ wordId, attempts, usedHint, combo }) => ({ wordId, attempts, usedHint, combo })),
+        events: gameEvidence(hub.wordSet.words, body.data.answers, body.data.events ?? [])
       }
     });
   });
@@ -159,11 +234,20 @@ export function registerEngagementRoutes(app: FastifyInstance, pool: Pool, aiRun
 
   app.post("/api/v1/engagement/duels/:duelId/result", { preHandler: learnerOnly }, async (request, reply) => {
     const params = z.object({ duelId: z.uuid() }).safeParse(request.params);
-    const body = resultInput.omit({ claimedScore: true }).safeParse(request.body);
+    const body = resultInput.safeParse(request.body);
     if (!params.success || !body.success) return reply.code(400).send({ code: "INVALID_DUEL_RESULT" });
     const learnerId = request.e4sSession!.user.id;
     const duel = await repositories.engagement.duel(learnerId, params.data.duelId);
     if (!duel) return reply.code(404).send({ code: "DUEL_NOT_FOUND" });
+    const duplicate = await pool.query<{ duel_id: string | null }>(
+      "select duel_id from game_results where learner_id = $1 and request_key = $2 limit 1",
+      [learnerId, body.data.requestId]
+    );
+    if (duplicate.rows[0]) {
+      if (duplicate.rows[0].duel_id !== params.data.duelId) return reply.code(409).send({ code: "DUEL_REQUEST_ID_REUSED" });
+      const result = await repositories.engagement.findGameResult(learnerId, body.data.requestId);
+      return result ? { ...duel, result } : reply.code(409).send({ code: "DUEL_RESULT_NOT_AVAILABLE" });
+    }
     if (duel.myScore) return reply.code(409).send({ code: "DUEL_ALREADY_PLAYED" });
     const scored = scoreGameAttempt(duel.game, duel.wordSet.words, body.data.answers, { hintsUsed: body.data.hintsUsed });
     const result = await repositories.engagement.saveGameResult({
@@ -196,12 +280,42 @@ export function registerEngagementRoutes(app: FastifyInstance, pool: Pool, aiRun
   });
 }
 
+function validateVocabularyTopic(topic: string): string | null {
+  const normalized = topic.normalize("NFKC").trim();
+  const letters = normalized.match(/\p{L}/gu)?.join("") ?? "";
+  if (letters.length < 2) return "Chủ đề không có đủ từ có nghĩa.";
+  if (/[^\p{L}\p{N}\s&+,'’().\-/]/u.test(normalized)) return "Chủ đề chứa ký tự không phù hợp.";
+  if (/(.)\1{5,}/iu.test(normalized) || !/[aeiouyàáảãạăằắẳẵặâầấẩẫậèéẻẽẹêềếểễệìíỉĩịòóỏõọôồốổỗộơờớởỡợùúủũụưừứửữự]/iu.test(letters)) {
+    return "Chủ đề có dấu hiệu là chuỗi vô nghĩa.";
+  }
+  const blocked = /\b(?:porn|sex|nude|kill|murder|suicide|ma túy|thuốc phiện|khiêu dâm|giết người)\b/iu;
+  if (blocked.test(normalized)) return "Chủ đề không phù hợp với môi trường học tập.";
+  return null;
+}
+
+function isUnsafeTopic(topic: string): boolean {
+  return /\b(?:porn|sex|nude|kill|murder|suicide|ma túy|thuốc phiện|khiêu dâm|giết người)\b/iu.test(topic.normalize("NFKC").trim());
+}
+
+function gameEvidence(
+  words: ReadonlyArray<{ id: string; english: string }>,
+  answers: ReadonlyArray<{ wordId: string; answer: string; attempts?: number | undefined; usedHint?: boolean | undefined; combo?: number | undefined }>,
+  events: ReadonlyArray<{ type: "wrong_catch" | "timeout"; wordId: string; answer: string }>
+) {
+  const knownWordIds = new Set(words.map((word) => word.id));
+  const observed = events.filter((event) => knownWordIds.has(event.wordId));
+  const scored = answers
+    .filter((answer) => knownWordIds.has(answer.wordId))
+    .map(({ wordId, answer, attempts, usedHint, combo }) => ({ type: "scored_answer" as const, wordId, answer, attempts, usedHint, combo }));
+  return [...observed, ...scored];
+}
+
 async function gameHubView(repositories: ReturnType<typeof createRepositories>, learnerId: string, aiAvailable: boolean) {
   const [hub, arena] = await Promise.all([repositories.engagement.gameHub(learnerId), repositories.engagement.arena(learnerId)]);
   if (!hub) return null;
   const own = arena?.leaderboard.find((item) => item.learnerId === learnerId);
   return {
-    cefr: hub.cefr, aiAvailable, wordSet: hub.wordSet,
+    cefr: hub.cefr, aiAvailable, topicModeration: { state: "empty" } satisfies GameTopicModeration, wordSet: hub.wordSet,
     games: GAME_DESCRIPTORS.map((game) => ({ ...game, best: hub.best[game.key] ?? null })),
     arena: { eligible: arenaEligible(hub.cefr), requiredLevel: "B1" as const, points: own?.points ?? 0,
       pendingDuels: arena?.duels.filter((duel) => duel.state === "open" && !duel.scores[learnerId]).length ?? 0 }

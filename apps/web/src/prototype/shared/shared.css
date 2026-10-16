@@ -1,0 +1,520 @@
+.prototype-brand-mark {
+  width: 22px;
+  height: 22px;
+}
+
+/* Shared shell controls: make state and focus easy to see without changing the flow. */
+.topbar .brand,
+.topbar nav,
+.topbar .userchip,
+.topbar .userchip > .small {
+  min-width: 0;
+}
+
+.topbar {
+  min-width: 0;
+  overflow-x: clip;
+}
+
+.topbar .brand > span:last-child,
+.topbar .userchip > .small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.topbar .userchip {
+  gap: 8px;
+}
+
+.topbar .audio-ctl {
+  gap: 6px !important;
+}
+
+.topbar .audio-ctl button {
+  width: 34px;
+  min-width: 34px;
+  min-height: 32px;
+  padding: 0;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--surface);
+  color: var(--muted);
+  box-shadow: none;
+  transition: background .15s, border-color .15s, color .15s, transform .08s;
+}
+
+.topbar .audio-ctl button:hover:not(:disabled) {
+  border-color: var(--primary-line);
+  background: var(--surface-3);
+  color: var(--text);
+}
+
+.topbar .audio-ctl button[aria-pressed="true"] {
+  border-color: var(--primary-line);
+  background: var(--primary-soft);
+  color: var(--text);
+}
+
+.topbar .audio-ctl button:disabled,
+.topbar .userchip button:disabled {
+  border-color: var(--line);
+  background: var(--surface-3);
+  color: var(--muted);
+  cursor: not-allowed;
+  opacity: .5;
+}
+
+.topbar .userchip > .btn-ghost[aria-label="Đổi avatar"] {
+  /* Keep the avatar artwork compact, but give its action a full HCI touch
+     target so the header does not make the only profile control fiddly. */
+  width: 44px;
+  min-width: 44px;
+  min-height: 44px;
+  flex: 0 0 44px;
+  padding: 5px !important;
+  display: inline-grid;
+  place-items: center;
+  border-radius: 999px;
+}
+
+.topbar .userchip > .btn-ghost[aria-label="Đổi avatar"]:hover:not(:disabled) {
+  background: var(--surface-3) !important;
+}
+
+.topbar .userchip > [data-action="logout"] {
+  min-height: 32px;
+  border: 1px solid var(--line);
+  box-shadow: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.topbar .userchip > [data-action="logout"]:hover:not(:disabled) {
+  background: var(--surface-3);
+}
+
+.topbar a:focus-visible,
+.topbar button:focus-visible,
+.bottomnav a:focus-visible,
+#modal button:focus-visible {
+  outline: 2px solid var(--text);
+  outline-offset: 2px;
+  box-shadow: none;
+}
+
+.bottomnav a {
+  min-height: 44px;
+  justify-content: center;
+}
+
+/* Keep the fixed mobile navigation from obscuring transient feedback. */
+@media (max-width: 760px) {
+  html,
+  body,
+  main {
+    scroll-padding-bottom: calc(128px + env(safe-area-inset-bottom, 0px));
+  }
+
+  /* The bottom nav is fixed. Reserve its full visual footprint in every
+     staff route, including Settings, so the last actionable row can scroll
+     above it instead of being hidden behind it. */
+  main {
+    padding-bottom: calc(128px + env(safe-area-inset-bottom, 0px)) !important;
+  }
+
+  /* prototype.css also declares an important main padding. Keep the shell's
+     actual fixed-nav clearance authoritative regardless of stylesheet import
+     order, without changing the route or the mobile navigation flow. */
+  body:has(nav.bottomnav) main {
+    padding-bottom: calc(128px + env(safe-area-inset-bottom, 0px)) !important;
+  }
+
+  /* Keep the mobile shell as a three-row viewport layout. A fixed nav can
+     hide the middle of a long card while the page is still at scrollTop 0;
+     making main the scroll container gives the nav its own real row without
+     changing routes or the order of the screen content. */
+  body:has(nav.bottomnav) {
+    overflow: hidden !important;
+  }
+
+  body:has(nav.bottomnav) > #root {
+    display: flex !important;
+    flex-direction: column;
+    height: 100dvh !important;
+    min-height: 100dvh !important;
+    overflow: hidden !important;
+  }
+
+  body:has(nav.bottomnav) > #root > .topbar {
+    flex: 0 0 auto;
+  }
+
+  body:has(nav.bottomnav) > #root > main {
+    flex: 1 1 auto !important;
+    min-height: 0 !important;
+    width: 100%;
+    overflow-x: hidden !important;
+    overflow-y: auto !important;
+    padding-bottom: 24px !important;
+  }
+
+  body:has(nav.bottomnav) > #root > .bottomnav {
+    position: static !important;
+    flex: 0 0 auto !important;
+    width: 100% !important;
+  }
+
+  #toast {
+    bottom: calc(84px + env(safe-area-inset-bottom, 0px));
+    max-width: calc(100vw - 24px);
+  }
+}
+
+#modal .prototype-modal-close {
+  border: 1px solid var(--line);
+  background: var(--surface);
+  color: var(--text);
+  box-shadow: none;
+  transition: background .15s, border-color .15s, transform .08s;
+}
+
+#modal .prototype-modal-close:hover:not(:disabled) {
+  border-color: var(--primary-line);
+  background: var(--surface-3);
+}
+
+#modal .prototype-modal-close:active:not(:disabled) {
+  transform: scale(.96);
+}
+
+:where([aria-busy="true"] button:disabled, [aria-busy="true"] [role="button"]) {
+  cursor: wait;
+}
+
+section.welcome.prototype-entry {
+  align-items: stretch;
+  gap: 32px;
+}
+
+section.welcome.prototype-entry > .body {
+  display: flex;
+  flex: 1 1 0;
+  flex-direction: column;
+  justify-content: center;
+}
+
+section.welcome.prototype-entry .prototype-entry-card {
+  flex: 0 1 390px;
+  min-width: 0;
+  padding: 20px;
+}
+
+section.welcome.prototype-entry .prototype-entry-card .tabs {
+  gap: 6px;
+  margin-bottom: var(--hci-space-group, 16px);
+}
+
+section.welcome.prototype-entry .prototype-entry-card form.stack.section {
+  gap: var(--hci-space-control, 10px);
+  margin-top: var(--hci-space-group, 16px);
+}
+
+section.welcome.prototype-entry .prototype-entry-card .field {
+  gap: 6px;
+}
+
+/* Entry is rendered before authentication, but it reuses the same topbar
+   markup as the authenticated shell. Keep the unauthenticated header in the
+   normal document flow so the desktop sidebar rules cannot shift the form. */
+.topbar.prototype-entry-topbar {
+  position: sticky;
+}
+
+main.prototype-entry-main {
+  margin-left: 0;
+}
+
+@media (min-width: 961px) {
+  .topbar.prototype-entry-topbar {
+    position: sticky;
+    top: 0;
+    left: auto;
+    right: auto;
+    bottom: auto;
+    width: auto;
+    height: 60px;
+    flex-direction: row;
+    align-items: center;
+    gap: 12px;
+    padding: 0 20px;
+    border-right: 0;
+    border-bottom: 1px solid #E4E2DC;
+  }
+
+  .topbar.prototype-entry-topbar .brand {
+    padding: 0;
+  }
+
+  .topbar.prototype-entry-topbar .userchip {
+    margin: 0 0 0 auto;
+    padding-top: 0;
+    border-top: 0;
+    flex-wrap: nowrap;
+  }
+
+  main.prototype-entry-main {
+    box-sizing: border-box;
+    width: 100%;
+    max-width: 1040px;
+    margin: 0 auto;
+    padding: 20px 20px 48px;
+  }
+}
+
+@media (max-width: 760px) {
+  /* The global mobile shell reserves space for its fixed bottom navigation;
+     entry has no bottom navigation, so keep its document rhythm compact. */
+  main.prototype-entry-main {
+    padding-bottom: 48px !important;
+  }
+}
+
+input:disabled,
+select:disabled,
+textarea:disabled {
+  background: var(--surface-3);
+  cursor: not-allowed;
+  opacity: .55;
+}
+
+body.prototype-modal-open {
+  overflow: hidden;
+}
+
+#modal {
+  overscroll-behavior: contain;
+  overflow-y: auto;
+}
+
+#modal .dialog {
+  position: relative;
+}
+
+#modal .dialog > h3:first-of-type {
+  padding-right: 48px;
+}
+
+.prototype-modal-close {
+  border-radius: 999px;
+  font-size: 1.25rem;
+  line-height: 1;
+  min-height: 44px;
+  padding: 0;
+  position: absolute;
+  right: 10px;
+  top: 10px;
+  width: 44px;
+}
+
+/* Keep the tablet shell aligned with the compact prototype controls. */
+@media (min-width: 761px) and (max-width: 960px) {
+  /* At tablet width the full five-item staff nav competes with audio, avatar
+     and account controls. Keep the active destination discoverable and give
+     the controls a stable, non-overlapping lane. */
+  .topbar {
+    gap: 8px;
+    padding-inline: 12px;
+  }
+
+  .topbar .brand {
+    flex: 0 1 210px;
+    min-width: 200px !important;
+    max-width: 210px;
+    overflow: hidden;
+  }
+
+  .topbar nav {
+    flex: 1 1 0;
+    min-width: 92px;
+    max-width: none;
+    margin-left: 0;
+    overflow-x: auto;
+    overflow-y: hidden;
+    scrollbar-width: thin;
+  }
+
+  .topbar nav a {
+    display: inline-flex;
+    flex: 0 0 auto;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .topbar nav a.active {
+    display: inline-flex;
+    max-width: none;
+  }
+
+  .topbar .userchip {
+    flex: 0 1 auto;
+    max-width: 330px;
+    gap: 4px;
+  }
+
+  .topbar .userchip > .small {
+    max-width: 122px;
+    white-space: nowrap;
+  }
+
+  .topbar .audio-ctl {
+    gap: 4px !important;
+  }
+
+  .topbar .audio-ctl button {
+    width: 34px;
+    min-width: 34px;
+    min-height: 32px;
+    flex: 0 0 34px;
+  }
+
+  .topbar .userchip > .btn-ghost[aria-label="Đổi avatar"] {
+    width: 44px;
+    min-width: 44px;
+    min-height: 44px;
+    flex: 0 0 44px;
+  }
+
+  .topbar .userchip > [data-action="logout"] {
+    min-height: 32px;
+  }
+}
+
+@media (min-width: 961px) {
+  /* Keep the full canonical brand inside the 232px desktop sidebar. The
+     shared avatar is wider than the prototype leaf mark, so trim only the
+     surrounding gap/padding instead of ellipsizing the organisation name. */
+  .topbar.topbar > .brand {
+    gap: 8px;
+    max-width: 100%;
+    overflow: visible;
+    padding: 4px 0;
+    font-size: 1rem;
+  }
+
+  .topbar.topbar > .brand > span:last-child {
+    overflow: visible;
+    text-overflow: clip;
+  }
+}
+
+@media (max-width: 720px) {
+  .topbar {
+    gap: 8px;
+    padding-inline: 12px;
+    min-width: 0;
+    overflow-x: clip;
+  }
+
+  .topbar .brand {
+    gap: 8px;
+    flex: 1 1 auto;
+    min-width: 0;
+  }
+
+  .topbar .userchip {
+    gap: 4px !important;
+    flex: 0 0 auto;
+    min-width: 0;
+  }
+
+  .topbar .userchip > .small {
+    max-width: 8rem;
+  }
+
+  .topbar .audio-ctl {
+    gap: 2px !important;
+  }
+
+  .topbar .audio-ctl button {
+    width: 34px;
+    min-width: 34px;
+  }
+
+  .topbar .userchip > [data-action="logout"] {
+    padding-inline: 10px;
+  }
+
+  section.welcome.prototype-entry {
+    flex-direction: column;
+    gap: 20px;
+  }
+
+  section.welcome.prototype-entry .prototype-entry-card {
+    flex-basis: auto;
+    width: 100%;
+  }
+
+  section.welcome.prototype-entry .prototype-entry-card > .row.between {
+    flex-wrap: wrap;
+  }
+
+  #modal {
+    padding: 12px;
+  }
+
+  #modal .dialog {
+    max-height: calc(100dvh - 24px);
+  }
+}
+
+@media (max-width: 420px) {
+  .topbar .brand > span:last-child {
+    overflow: visible;
+    text-overflow: clip;
+    white-space: nowrap;
+  }
+
+  .topbar .brand > span:last-child > .muted {
+    display: inline;
+  }
+
+  .topbar .userchip > .small {
+    flex: 0 0 0;
+    max-width: 0;
+  }
+
+  .topbar .userchip > [data-action="logout"] {
+    width: 34px;
+    min-width: 34px;
+    padding-inline: 0;
+    justify-content: center;
+  }
+
+  .topbar .userchip > [data-action="logout"] .logout-label {
+    display: none;
+  }
+}
+
+@media (max-width: 760px) {
+  body main:has(.prototype-operator) {
+    padding-bottom: calc(108px + env(safe-area-inset-bottom, 0px)) !important;
+  }
+}
+
+/* At tablet width, coordinator.css caps the nav at 150px and leaves the
+   account lane's auto margin to consume the remaining header space. Let the
+   shared shell use that space for a horizontally scrollable nav instead. */
+@media (min-width: 761px) and (max-width: 960px) {
+  .topbar.topbar > nav {
+    flex: 1 1 0;
+    max-width: none;
+    overflow-x: auto;
+    overflow-y: hidden;
+  }
+
+  .topbar.topbar > .userchip {
+    margin-left: 0;
+  }
+}

@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import "@testing-library/jest-dom/vitest";
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, render, screen, waitFor } from "@testing-library/react";
 import { userEvent } from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { AssessmentView } from "@e4s/contracts";
@@ -138,5 +138,38 @@ describe("assessment remains one prototype screen flow", () => {
     expect(screen.getByRole("button", { name: /ghi âm/i })).toBeInTheDocument();
     expect(screen.getByLabelText(/tải file ghi âm/i)).toBeInTheDocument();
     expect(screen.getByText(/lời chép/i)).toBeInTheDocument();
+  });
+
+  it("uploads a speaking file before saving its server-issued artifact key", async () => {
+    const user = userEvent.setup();
+    const onSaveResponse = vi.fn();
+    const onUploadAudio = vi.fn().mockResolvedValue("assessment-audio/learner-id/speaking.webm");
+    const speaking = preparation.definition.sections[3]!;
+    const view: AssessmentView = {
+      ...preparation,
+      definition: { ...preparation.definition, sections: [
+        ...preparation.definition.sections.slice(0, 3),
+        { ...speaking, groups: [{
+          key: "S", title: "Speaking tasks", instruction: "Nộp bằng chứng nói.",
+          tasks: [{ key: "S1", prompt: "Introduce yourself.", responseType: "speaking_evidence", maxScore: 5 }]
+        }] }
+      ] },
+      screenState: "speaking",
+      attempt: {
+        id: "00000000-0000-4000-8000-000000009001", status: "in_progress", currentSection: "speaking",
+        startedAt: "2026-10-13T10:00:00.000Z", sectionEndsAt: "2026-10-13T10:15:00.000Z", responses: [],
+        sectionStatuses: { listening: "completed", reading: "completed", writing: "completed", speaking: "in_progress" },
+        audioPlayCounts: {}
+      }
+    };
+
+    render(<Assessment view={view} onStart={vi.fn()} onSaveResponse={onSaveResponse} onCompleteSection={vi.fn()}
+      onSubmit={vi.fn()} onRecordAudioPlay={vi.fn()} {...({ onUploadAudio } as object)} />);
+    await user.upload(screen.getByLabelText(/tải file ghi âm/i), new File(["voice"], "speaking.webm", { type: "audio/webm" }));
+
+    await waitFor(() => expect(onUploadAudio).toHaveBeenCalledWith(expect.any(File), "speaking.webm"));
+    await waitFor(() => expect(onSaveResponse).toHaveBeenCalledWith("speaking", "S1", {
+      value: "File ghi âm đã nộp", evidenceType: "audio", artifactKey: "assessment-audio/learner-id/speaking.webm"
+    }));
   });
 });
