@@ -862,6 +862,88 @@
   overflow-wrap: anywhere;
 }
 
+/* Keep assessment-form details readable: the shared `.item` layout is a
+   horizontal learner-row pattern and makes a `<details>` section too tight. */
+.operator-detail-modal > .operator-detail-dialog > .row.between {
+  align-items: flex-start;
+  gap: 12px;
+  margin-bottom: 14px;
+}
+
+.operator-detail-modal > .operator-detail-dialog > .row.between h3 {
+  margin: 0;
+  line-height: 1.3;
+}
+
+.operator-detail-modal > .operator-detail-dialog > .row.between p {
+  margin: 6px 0 0;
+  line-height: 1.45;
+}
+
+.operator-detail-modal > .operator-detail-dialog > .list {
+  gap: 12px;
+}
+
+.operator-detail-modal > .operator-detail-dialog > .list > details.item {
+  display: block;
+  padding: 14px 16px;
+  line-height: 1.45;
+}
+
+.operator-detail-modal > .operator-detail-dialog > .list > details.item > summary {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 6px 8px;
+  line-height: 1.4;
+}
+
+.operator-detail-modal > .operator-detail-dialog > .list > details.item > summary + .small {
+  margin-top: 10px;
+  line-height: 1.5;
+}
+
+.operator-detail-modal > .operator-detail-dialog > .list > details.item > .card.flat {
+  margin-top: 12px;
+  padding: 14px 16px;
+  line-height: 1.5;
+}
+
+.operator-detail-modal > .operator-detail-dialog > .list > details.item > .card.flat + .card.flat {
+  margin-top: 10px;
+}
+
+.operator-detail-modal > .operator-detail-dialog > .list > details.item > .card.flat p {
+  margin: 6px 0 8px;
+  line-height: 1.45;
+}
+
+.operator-detail-modal > .operator-detail-dialog > .list > details.item > .card.flat > .small + .small {
+  margin-top: 6px;
+}
+
+.prototype-operator .operator-level-form-item {
+  align-items: flex-start;
+  flex-wrap: wrap;
+  gap: 10px 12px;
+}
+
+.prototype-operator .operator-level-form-item > .body {
+  flex: 1 1 20rem;
+}
+
+.prototype-operator .operator-level-form-item > .body > .title {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 8px;
+  line-height: 1.45;
+}
+
+.prototype-operator .operator-level-form-item > .body > .title > .badge {
+  flex: 0 0 auto;
+}
+
 @media (max-width: 720px) {
   .operator-detail-modal {
     align-items: flex-start;

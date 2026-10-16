@@ -3453,7 +3453,7 @@ class AssessmentRepository {
               coalesce(lp.profile, '{}'::jsonb) as profile
        from users reviewer
        join users learner on learner.organization_id = reviewer.organization_id
-         and learner.id = $2 and learner.role = 'learner'
+         and learner.id = $2 and learner.role = 'learner' and learner.status = 'active'
        left join lateral (
          select e.cefr, e.cefr_approved
          from enrollments e join programs p on p.id = e.program_id and p.status = 'active'
@@ -3482,6 +3482,7 @@ class AssessmentRepository {
        join assessment_definitions ad on ad.id = av.definition_id
        join users reviewer on reviewer.id = $1
        join users learner on learner.id = aa.learner_id and learner.organization_id = reviewer.organization_id
+         and learner.status = 'active'
        left join assessment_scores sc on sc.attempt_id = aa.id
        left join assessment_decisions decision on decision.attempt_id = aa.id
        where aa.learner_id = $2
@@ -3555,7 +3556,7 @@ class AssessmentRepository {
     }>(
       `select aa.learner_id, av.blueprint
        from assessment_attempts aa
-       join users learner on learner.id = aa.learner_id
+       join users learner on learner.id = aa.learner_id and learner.status = 'active'
        join users reviewer on reviewer.id = $1
          and reviewer.role = 'operator'
          and reviewer.organization_id = learner.organization_id
@@ -3593,7 +3594,7 @@ class AssessmentRepository {
          from users reviewer
          join assessment_attempts aa on aa.id = $2 and aa.status = 'pending_review'
          join users learner on learner.id = aa.learner_id
-           and learner.organization_id = reviewer.organization_id
+           and learner.organization_id = reviewer.organization_id and learner.status = 'active'
          where reviewer.id = $1 and reviewer.role = 'operator'
          for update of aa`,
         [input.actorId, input.attemptId]
@@ -3688,7 +3689,7 @@ class AssessmentRepository {
               decision.approved_level, decision.suggested_level, decision.status as decision_status,
               decision.reason as decision_reason, decision.decided_by, decision.decided_at
        from assessment_attempts aa
-       join users learner on learner.id = aa.learner_id
+       join users learner on learner.id = aa.learner_id and learner.status = 'active'
        join users reviewer on reviewer.id = $1 and reviewer.organization_id = learner.organization_id
        join assessment_versions av on av.id = aa.assessment_version_id
        join assessment_definitions ad on ad.id = av.definition_id
@@ -3766,7 +3767,7 @@ class AssessmentRepository {
               coalesce(nullif(cs.scenario->>'targetLevel', ''), nullif(av.blueprint->>'targetLevel', ''), decision.suggested_level) as target_level
        from coach_sessions cs
        join assessment_attempts aa on aa.id = $2
-       join users learner on learner.id = aa.learner_id
+       join users learner on learner.id = aa.learner_id and learner.status = 'active'
        join users reviewer on reviewer.id = $1 and reviewer.organization_id = learner.organization_id
        join assessment_versions av on av.id = aa.assessment_version_id
        left join assessment_decisions decision on decision.attempt_id = aa.id
@@ -3825,7 +3826,7 @@ class AssessmentRepository {
       const identity = await client.query<{ organization_id: string; display_name: string }>(
         `select learner.organization_id, learner.display_name
          from users actor join users learner on learner.organization_id = actor.organization_id
-           and learner.id = $2 and learner.role = 'learner'
+           and learner.id = $2 and learner.role = 'learner' and learner.status = 'active'
          where actor.id = $1 and actor.role = 'operator'`,
         [actorId, learnerId]
       );
@@ -3923,7 +3924,8 @@ class AssessmentRepository {
   async updateLearnerMonthlyGoal(actorId: string, learnerId: string, monthlyGoal: string): Promise<AssessmentMonthlyGoalView | null> {
     const identity = await this.pool.query<{ organization_id: string }>(
       `select learner.organization_id from users actor
-       join users learner on learner.organization_id = actor.organization_id and learner.id = $2 and learner.role = 'learner'
+       join users learner on learner.organization_id = actor.organization_id and learner.id = $2
+         and learner.role = 'learner' and learner.status = 'active'
        where actor.id = $1 and actor.role = 'operator'`, [actorId, learnerId]
     );
     const organizationId = identity.rows[0]?.organization_id;
@@ -3956,7 +3958,8 @@ class AssessmentRepository {
   async requestLearnerDeletion(actorId: string, learnerId: string, reason: string): Promise<AssessmentDeletionRequestView | null> {
     const identity = await this.pool.query<{ organization_id: string; display_name: string }>(
       `select learner.organization_id, learner.display_name from users actor
-       join users learner on learner.organization_id = actor.organization_id and learner.id = $2 and learner.role = 'learner'
+       join users learner on learner.organization_id = actor.organization_id and learner.id = $2
+         and learner.role = 'learner' and learner.status = 'active'
        where actor.id = $1 and actor.role = 'operator'`, [actorId, learnerId]
     );
     const person = identity.rows[0];
@@ -4005,7 +4008,7 @@ class AssessmentRepository {
        from assessment_attempts aa
        join assessment_versions av on av.id = aa.assessment_version_id
        join assessment_definitions ad on ad.id = av.definition_id
-       join users learner on learner.id = aa.learner_id
+       join users learner on learner.id = aa.learner_id and learner.status = 'active'
        join users reviewer on reviewer.id = $1 and reviewer.organization_id = learner.organization_id
        left join assessment_scores sc on sc.attempt_id = aa.id
        left join assessment_decisions decision on decision.attempt_id = aa.id
@@ -4075,7 +4078,7 @@ class AssessmentRepository {
            order by aa.submitted_at desc nulls last
            limit 1
          ) placement on true
-         where learner.role = 'learner'
+         where learner.role = 'learner' and learner.status = 'active'
          order by learner.display_name`,
         [reviewerId]
       ),
@@ -4089,7 +4092,7 @@ class AssessmentRepository {
          from users learner
          join users reviewer on reviewer.id = $1 and reviewer.organization_id = learner.organization_id
          left join learner_profiles lp on lp.user_id = learner.id
-         where learner.role = 'learner'
+         where learner.role = 'learner' and learner.status = 'active'
            and not exists (
              select 1 from assessment_attempts aa
              join assessment_versions av on av.id = aa.assessment_version_id
@@ -4149,7 +4152,7 @@ class AssessmentRepository {
          from assessment_attempts aa
          join assessment_versions av on av.id = aa.assessment_version_id
          join assessment_definitions ad on ad.id = av.definition_id and ad.kind = 'level_up'
-         join users learner on learner.id = aa.learner_id
+         join users learner on learner.id = aa.learner_id and learner.status = 'active'
          join users reviewer on reviewer.id = $1 and reviewer.organization_id = learner.organization_id
          join lateral (
            select e.cefr
@@ -7185,7 +7188,7 @@ class ManagerRepository {
               enrollment.cefr as current_level, coalesce(lp.profile, '{}'::jsonb) as profile
        from users manager
        join users learner on learner.organization_id = manager.organization_id
-         and learner.id = $2 and learner.role = 'learner'
+         and learner.id = $2 and learner.role = 'learner' and learner.status = 'active'
        left join lateral (
          select e.cefr
          from enrollments e join programs p on p.id = e.program_id and p.status = 'active'

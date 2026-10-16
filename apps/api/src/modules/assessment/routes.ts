@@ -112,7 +112,7 @@ export function registerAssessmentRoutes(app: FastifyInstance, pool: Pool, aiRun
     }>(
       `select tr.id, tr.learner_id, learner.display_name as learner_name, tr.topic, tr.reason,
               tr.strike_count, tr.status, tr.created_at
-       from topic_reports tr join users learner on learner.id = tr.learner_id
+       from topic_reports tr join users learner on learner.id = tr.learner_id and learner.status = 'active'
        join users reviewer on reviewer.id = $1 and reviewer.organization_id = learner.organization_id
       order by (tr.status = 'open') desc, tr.created_at desc limit 50`,
       [request.e4sSession!.user.id]

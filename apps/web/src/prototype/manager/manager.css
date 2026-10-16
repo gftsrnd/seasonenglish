@@ -504,11 +504,51 @@
   .manager-rewards-table table {
     width: 100%;
     min-width: 0;
+    table-layout: fixed;
+  }
+
+  /* Keep the badge and action columns readable instead of letting the
+     browser compress them around the illustration column. */
+  .manager-rewards-table th:nth-child(1),
+  .manager-rewards-table td:nth-child(1) {
+    width: 24%;
+  }
+
+  .manager-rewards-table th:nth-child(2),
+  .manager-rewards-table td:nth-child(2) {
+    width: 18%;
+  }
+
+  .manager-rewards-table th:nth-child(3),
+  .manager-rewards-table td:nth-child(3) {
+    width: 11%;
+  }
+
+  .manager-rewards-table th:nth-child(4),
+  .manager-rewards-table td:nth-child(4) {
+    width: 27%;
+  }
+
+  .manager-rewards-table th:nth-child(5),
+  .manager-rewards-table td:nth-child(5) {
+    width: 20%;
+  }
+
+  .manager-rewards-table td:nth-child(4) {
+    overflow-wrap: anywhere;
+    line-height: 1.35;
   }
 
   .manager-rewards-table th:last-child,
   .manager-rewards-table td:last-child {
     min-width: 124px;
+  }
+
+  .manager-rewards-table td:last-child .btn,
+  .manager-rewards-table td:last-child .btn-sm {
+    max-width: 100%;
+    white-space: normal;
+    text-align: center;
   }
 }
 
