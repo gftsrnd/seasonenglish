@@ -1,14 +1,14 @@
 import { Link } from "react-router";
 
 const previewBadges = [
-  ["🐣", "Khởi động", "Hoàn thành bài học đầu tiên"],
-  ["📅", "Tuần trọn vẹn", "Xong tất cả bài của một tuần"],
-  ["🔥", "Chuỗi 3 ngày", "Học 3 ngày học liên tiếp (T2–T6)"],
-  ["🌟", "Chuỗi 5 ngày", "Học 5 ngày học liên tiếp (T2–T6), không tính cuối tuần"],
-  ["🎯", "Chuẩn ngay lần đầu", "Làm đúng cả 4 kỹ năng Nghe, Đọc, Viết, Nói của một bài ngay ở lần làm đầu tiên"],
-  ["🔑", "Thợ mở khoá", "Mở 10 ô từ bí mật khi chat với Season"],
-  ["💬", "Bạn của Season", "10 lượt luyện với Season"],
-  ["✍️", "Đúng hẹn thứ Sáu", "Nộp bài thực hành tuần"]
+  ["🐣", "Khởi động", "Hoàn thành bài học đầu tiên"], // media-scan: allow-avatar-reward -- deliberate badge symbol
+  ["📅", "Tuần trọn vẹn", "Xong tất cả bài của một tuần"], // media-scan: allow-avatar-reward -- deliberate badge symbol
+  ["🔥", "Chuỗi 3 ngày", "Học 3 ngày học liên tiếp (T2–T6)"], // media-scan: allow-avatar-reward -- deliberate badge symbol
+  ["🌟", "Chuỗi 5 ngày", "Học 5 ngày học liên tiếp (T2–T6), không tính cuối tuần"], // media-scan: allow-avatar-reward -- deliberate badge symbol
+  ["🎯", "Chuẩn ngay lần đầu", "Làm đúng cả 4 kỹ năng Nghe, Đọc, Viết, Nói của một bài ngay ở lần làm đầu tiên"], // media-scan: allow-avatar-reward -- deliberate badge symbol
+  ["🔑", "Thợ mở khoá", "Mở 10 ô từ bí mật khi chat với Season"], // media-scan: allow-avatar-reward -- deliberate badge symbol
+  ["💬", "Bạn của Season", "10 lượt luyện với Season"], // media-scan: allow-avatar-reward -- deliberate badge symbol
+  ["✍️", "Đúng hẹn thứ Sáu", "Nộp bài thực hành tuần"] // media-scan: allow-avatar-reward -- deliberate badge symbol
 ] as const;
 
 /** The Manager reward link is a deterministic CMS preview, never a learner certificate. */

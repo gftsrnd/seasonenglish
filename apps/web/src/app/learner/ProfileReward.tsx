@@ -7,20 +7,20 @@ import { ErrorText, Notice, PageTitle, Progress, AppLink } from "./ui.js";
 import { PersonalPreferences } from "../settings/PersonalPreferences.js";
 
 const BADGE_ICONS: Record<string, string> = {
-  first: "🐣", starter: "🐣",
-  week: "📅", week_complete: "📅",
-  streak3: "🔥",
-  streak7: "🌟", streak5: "🌟",
-  sharp: "🎯", first_try: "🎯",
-  words: "🔑", wordsmith: "🔑",
-  chat: "💬", coach_friend: "💬",
-  friday: "✍️"
+  first: "🐣", starter: "🐣", // media-scan: allow-avatar-reward -- deliberate badge symbol
+  week: "📅", week_complete: "📅", // media-scan: allow-avatar-reward -- deliberate badge symbol
+  streak3: "🔥", // media-scan: allow-avatar-reward -- deliberate badge symbol
+  streak7: "🌟", streak5: "🌟", // media-scan: allow-avatar-reward -- deliberate badge symbol
+  sharp: "🎯", first_try: "🎯", // media-scan: allow-avatar-reward -- deliberate badge symbol
+  words: "🔑", wordsmith: "🔑", // media-scan: allow-avatar-reward -- deliberate badge symbol
+  chat: "💬", coach_friend: "💬", // media-scan: allow-avatar-reward -- deliberate badge symbol
+  friday: "✍️" // media-scan: allow-avatar-reward -- deliberate badge symbol
 };
 const SEASON_META = {
-  1: { icon: "🌱", name: "Mùa xuân – gieo hạt", points: 0 },
-  2: { icon: "☀️", name: "Mùa hạ – đón nắng", points: 60 },
-  3: { icon: "🍂", name: "Mùa thu – gặt hái", points: 180 },
-  4: { icon: "❄️", name: "Mùa đông – vững vàng", points: 360 }
+  1: { icon: "🌱", name: "Mùa xuân – gieo hạt", points: 0 }, // media-scan: allow-avatar-reward -- deliberate reward symbol
+  2: { icon: "☀️", name: "Mùa hạ – đón nắng", points: 60 }, // media-scan: allow-avatar-reward -- deliberate reward symbol
+  3: { icon: "🍂", name: "Mùa thu – gặt hái", points: 180 }, // media-scan: allow-avatar-reward -- deliberate reward symbol
+  4: { icon: "❄️", name: "Mùa đông – vững vàng", points: 360 } // media-scan: allow-avatar-reward -- deliberate reward symbol
 } as const;
 
 export function LearnerSurvey({ view, actions }: { view: SurveyView; actions: LearnerCallbacks }) {
@@ -127,10 +127,10 @@ function Avatar({ avatar, name, size = 88 }: { avatar: Partial<LearnerAvatarData
 export function AvatarMark({ acc, size = 32 }: { acc: Exclude<LearnerAvatarData["acc"], "none">; size?: number }) { const icons: Record<typeof acc, LucideIcon> = { leaf: Leaf, sun: Sun, flower: Flower2, cloud: Cloud, star: Star, drop: Droplets, snow: Snowflake }; const Icon = icons[acc]; return <Icon size={size} strokeWidth={1.7} aria-hidden="true" />; }
 function SeasonFigure({ level }: { level: number }) {
   const season = [
-    { name: "Mùa xuân", icon: "🌱", color: "var(--mint)", size: 64 },
-    { name: "Mùa hạ", icon: "☀️", color: "var(--primary)", size: 76 },
-    { name: "Mùa thu", icon: "🍂", color: "var(--peach)", size: 88 },
-    { name: "Mùa đông", icon: "❄️", color: "var(--lav)", size: 100 }
+    { name: "Mùa xuân", icon: "🌱", color: "var(--mint)", size: 64 }, // media-scan: allow-avatar-reward -- deliberate reward symbol
+    { name: "Mùa hạ", icon: "☀️", color: "var(--primary)", size: 76 }, // media-scan: allow-avatar-reward -- deliberate reward symbol
+    { name: "Mùa thu", icon: "🍂", color: "var(--peach)", size: 88 }, // media-scan: allow-avatar-reward -- deliberate reward symbol
+    { name: "Mùa đông", icon: "❄️", color: "var(--lav)", size: 100 } // media-scan: allow-avatar-reward -- deliberate reward symbol
   ][Math.max(0, Math.min(3, level - 1))]!;
   const outerSize = season.size + 28;
   return <span role="img" aria-label={season.name} style={{ position: "relative", display: "inline-grid", placeItems: "center", flexShrink: 0, width: outerSize, height: outerSize, borderRadius: "50%", background: season.color }}><span className="profile-season-figure-emoji" aria-hidden="true">{season.icon}</span></span>;

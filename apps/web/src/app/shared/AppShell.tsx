@@ -2,12 +2,12 @@ import { useEffect, useRef, useState, type ReactNode } from "react";
 import { Link, useLocation } from "react-router";
 import { Bell, BookOpen, CalendarDays, ChartColumn, Check, FileText, Gamepad2, House, LogOut, MessageSquare, Music2, Pencil, Search, Settings, UserRound, Volume2 } from "lucide-react";
 import type { AccountRole, SessionView } from "@e4s/contracts";
-import { SeasonMark } from "../games/season-art.js";
+import { SeasonMark } from "./SeasonMark.js";
 import { AvatarMark } from "../learner/ProfileReward.js";
 import { useExperience } from "../../features/experience/Experience.js";
 import "./shared.css";
 
-export { SeasonMark } from "../games/season-art.js";
+export { SeasonMark } from "./SeasonMark.js";
 
 type ShellRole = Extract<AccountRole, "learner" | "operator" | "manager">;
 

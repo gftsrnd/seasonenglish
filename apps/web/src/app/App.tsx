@@ -6,7 +6,7 @@ import { ExperienceProvider } from "../features/experience/Experience.js";
 import { EntryScreen } from "./shared/EntryScreen.js";
 import { AppShell } from "./shared/AppShell.js";
 import { ModalProvider } from "./shared/ModalProvider.js";
-import { autoSeasonTheme } from "./games/season-art.js";
+import { autoSeasonTheme } from "./games/season-visual.js";
 import { RoleRoutes } from "./RoleRoutes.js";
 import { AvatarDialog } from "./learner/ProfileReward.js";
 import "./app-layout.css";

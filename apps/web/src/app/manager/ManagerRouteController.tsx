@@ -13,7 +13,7 @@ import { ManagerRewards } from "./Rewards.js";
 import { ManagerRewardCertificate } from "./RewardCertificate.js";
 import { downloadText, PageTitle } from "./shared.js";
 import { useDialog, useModal } from "../shared/ModalProvider.js";
-import { autoSeasonTheme } from "../games/season-art.js";
+import { autoSeasonTheme } from "../games/season-visual.js";
 import { OperatorRouteController } from "../operator/OperatorRouteController.js";
 
 export type ManagerRouteControllerProps = { role: "manager" | "operator"; currentUserId: string };

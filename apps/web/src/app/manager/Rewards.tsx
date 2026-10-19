@@ -4,20 +4,20 @@ import { Badge, PageTitle } from "./shared.js";
 import { useDialog } from "../shared/ModalProvider.js";
 
 const badges = [
-  ["first", "🐣", "Khởi động", "Hoàn thành bài học đầu tiên"],
-  ["week", "📅", "Tuần trọn vẹn", "Xong tất cả bài của một tuần"],
-  ["streak3", "🔥", "Chuỗi 3 ngày", "Học 3 ngày học liên tiếp (T2–T6)"],
-  ["streak7", "🌟", "Chuỗi 5 ngày", "Học 5 ngày học liên tiếp (T2–T6), không tính cuối tuần"],
-  ["sharp", "🎯", "Chuẩn ngay lần đầu", "Làm đúng cả 4 kỹ năng Nghe, Đọc, Viết, Nói của một bài ngay ở lần làm đầu tiên"],
-  ["words", "🔑", "Thợ mở khoá", "Mở 10 ô từ bí mật khi chat với Season"],
-  ["chat", "💬", "Bạn của Season", "10 lượt luyện với Season"],
-  ["friday", "✍️", "Đúng hẹn thứ Sáu", "Nộp bài thực hành tuần"]
+  ["first", "🐣", "Khởi động", "Hoàn thành bài học đầu tiên"], // media-scan: allow-avatar-reward -- deliberate badge symbol
+  ["week", "📅", "Tuần trọn vẹn", "Xong tất cả bài của một tuần"], // media-scan: allow-avatar-reward -- deliberate badge symbol
+  ["streak3", "🔥", "Chuỗi 3 ngày", "Học 3 ngày học liên tiếp (T2–T6)"], // media-scan: allow-avatar-reward -- deliberate badge symbol
+  ["streak7", "🌟", "Chuỗi 5 ngày", "Học 5 ngày học liên tiếp (T2–T6), không tính cuối tuần"], // media-scan: allow-avatar-reward -- deliberate badge symbol
+  ["sharp", "🎯", "Chuẩn ngay lần đầu", "Làm đúng cả 4 kỹ năng Nghe, Đọc, Viết, Nói của một bài ngay ở lần làm đầu tiên"], // media-scan: allow-avatar-reward -- deliberate badge symbol
+  ["words", "🔑", "Thợ mở khoá", "Mở 10 ô từ bí mật khi chat với Season"], // media-scan: allow-avatar-reward -- deliberate badge symbol
+  ["chat", "💬", "Bạn của Season", "10 lượt luyện với Season"], // media-scan: allow-avatar-reward -- deliberate badge symbol
+  ["friday", "✍️", "Đúng hẹn thứ Sáu", "Nộp bài thực hành tuần"] // media-scan: allow-avatar-reward -- deliberate badge symbol
 ] as const;
 const levels = [
-  { name: "Mùa xuân – gieo hạt", icon: "🌱", min: 0, required: [] as readonly string[], color: "var(--mint)", size: 64 },
-  { name: "Mùa hạ – đón nắng", icon: "☀️", min: 60, required: ["first", "streak3"], color: "var(--primary)", size: 76 },
-  { name: "Mùa thu – gặt hái", icon: "🍂", min: 180, required: ["week", "friday", "chat"], color: "var(--peach)", size: 88 },
-  { name: "Mùa đông – vững vàng", icon: "❄️", min: 360, required: ["streak7", "sharp", "words"], color: "var(--lav)", size: 100 }
+  { name: "Mùa xuân – gieo hạt", icon: "🌱", min: 0, required: [] as readonly string[], color: "var(--mint)", size: 64 }, // media-scan: allow-avatar-reward -- deliberate reward symbol
+  { name: "Mùa hạ – đón nắng", icon: "☀️", min: 60, required: ["first", "streak3"], color: "var(--primary)", size: 76 }, // media-scan: allow-avatar-reward -- deliberate reward symbol
+  { name: "Mùa thu – gặt hái", icon: "🍂", min: 180, required: ["week", "friday", "chat"], color: "var(--peach)", size: 88 }, // media-scan: allow-avatar-reward -- deliberate reward symbol
+  { name: "Mùa đông – vững vàng", icon: "❄️", min: 360, required: ["streak7", "sharp", "words"], color: "var(--lav)", size: 100 } // media-scan: allow-avatar-reward -- deliberate reward symbol
 ];
 const cases = [
   ["Mới bắt đầu", 0, []], ["Cấp 1 · đủ điểm, thiếu huy hiệu", 80, ["first"]], ["Cấp 1 · đủ huy hiệu, thiếu điểm", 40, ["first", "streak3"]],

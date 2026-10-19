@@ -1,7 +1,7 @@
 import "./games.css";
 
 export * from "./types.js";
-export * from "./season-art.js";
+export * from "./season-visual.js";
 export * from "./ScrambleGame.js";
 export * from "./CrosswordGame.js";
 export * from "./SeasonCatchGame.js";

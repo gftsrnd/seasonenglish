@@ -50,6 +50,7 @@ describe("app media source gate", () => {
       "ProfileReward.tsx": [
         "// media-scan: allow-avatar-reward -- deliberate badge symbol",
         "export const badge = { icon: '🏆' };",
+        "export const inlineBadge = { icon: '🌟' }; // media-scan: allow-avatar-reward -- deliberate badge symbol",
         "export const celebration = '🎉';",
         "// media-scan: allow-avatar-reward -- does not cross a blank line",
         "",
@@ -65,8 +66,22 @@ describe("app media source gate", () => {
 
     expect(issues).toEqual([
       expect.objectContaining({ file: "Decorative.tsx", line: 2, rule: "illustrative-emoji" }),
-      expect.objectContaining({ file: "ProfileReward.tsx", line: 3, rule: "illustrative-emoji" }),
-      expect.objectContaining({ file: "ProfileReward.tsx", line: 6, rule: "illustrative-emoji" })
+      expect.objectContaining({ file: "ProfileReward.tsx", line: 4, rule: "illustrative-emoji" }),
+      expect.objectContaining({ file: "ProfileReward.tsx", line: 7, rule: "illustrative-emoji" })
+    ]);
+  });
+
+  it("allows only line-scoped SVG used by the preserved brand mark", async () => {
+    const rootDir = await fixture({
+      "shared/SeasonMark.tsx": [
+        "// media-scan: allow-brand -- existing product branding",
+        "export const Mark = () => <svg aria-hidden />;",
+        "export const Other = () => <svg aria-hidden />;"
+      ].join("\n")
+    });
+
+    expect(await scanAppMedia({ rootDir })).toEqual([
+      expect.objectContaining({ file: "shared/SeasonMark.tsx", line: 3, rule: "generated-svg" })
     ]);
   });
 });

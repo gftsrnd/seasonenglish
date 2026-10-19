@@ -11,7 +11,7 @@ const gameIdentity: GameIdentity[] = [
   { key: "scramble", icon: "🔀", iconElement: <Shuffle size={28} strokeWidth={2} aria-hidden="true" />, name: "Xếp chữ", description: "Xếp chữ thành từ đúng." },
   { key: "crossword", icon: "▦", iconElement: <Grid3X3 size={28} strokeWidth={2} aria-hidden="true" />, name: "Ô chữ", description: "Điền từ theo gợi ý." },
   { key: "eggs", icon: "🥚", iconElement: <Egg size={28} strokeWidth={2} aria-hidden="true" />, name: "Season catch", description: "Hứng đúng vật phẩm, giữ 3 mạng." },
-  { key: "mario", icon: "☀", iconElement: <Sun size={28} strokeWidth={2} aria-hidden="true" />, name: "Season-rio", description: "Vượt cổng, đánh boss từ vựng." },
+  { key: "mario", icon: "", iconElement: <Sun size={28} strokeWidth={2} aria-hidden="true" />, name: "Season-rio", description: "Vượt cổng, đánh boss từ vựng." },
   { key: "sort", icon: "↔", iconElement: <ArrowLeftRight size={28} strokeWidth={2} aria-hidden="true" />, name: "Phân loại từ", description: "Xếp từ theo nhóm nghĩa." },
   { key: "typing", icon: "⌨", iconElement: <Keyboard size={28} strokeWidth={2} aria-hidden="true" />, name: "Đua gõ từ", description: "Gõ từ trước khi hết giờ." }
 ];

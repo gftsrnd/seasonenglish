@@ -154,7 +154,7 @@ describe("assessment HCI states", () => {
   });
 
   it("uses a clock icon for automatic submission", async () => {
-    const runtime = makeRuntime({ status: "submitted", autoSubmitted: true, submitReason: "time_expired", remainingSeconds: 0 });
+    const runtime = makeRuntime({ status: "submitted", autoSubmitted: true, submitReason: "timeout", remainingSeconds: 0 });
     render(<AssessmentRuntime view={makeView({ runtime, attempt: { ...makeView().attempt!, status: "submitted", runtime } })} actions={makeActions()}>{(state) => <span>{state.formattedTime}</span>}</AssessmentRuntime>);
 
     const heading = await screen.findByRole("heading", { name: "Tự động nộp bài" });

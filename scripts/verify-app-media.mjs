@@ -5,14 +5,16 @@ import { pathToFileURL } from "node:url";
 const SOURCE_EXTENSIONS = new Set([".css", ".js", ".jsx", ".ts", ".tsx"]);
 const TEST_FILE_PATTERN = /(?:^|\.)((?:test)|(?:spec))\.[^.]+$/i;
 const ALLOW_ANNOTATION = "media-scan: allow-avatar-reward";
+const ALLOW_BRAND_ANNOTATION = "media-scan: allow-brand";
 const AVATAR_REWARD_CONTEXT = /(?:avatar|reward|badge|certificate|profile-reward)/i;
+const BRAND_CONTEXT = /(?:^|\/)SeasonMark\.tsx$/;
 
 const RULES = [
   { id: "generated-svg", pattern: /<svg\b/i, message: "inline or generated SVG artwork" },
   { id: "data-image", pattern: /data:image\//i, message: "data-URI image" },
   {
     id: "fake-art-helper",
-    pattern: /\b(?:SeasonMark|SeasonHero|GiftArt|DinoGameOverArt|DINO_SVG|svgDataUri|vocabularyIllustration|giftBoxSvg|giftOpenSvg|mushroomSvg|bombSvg|heroSvg|catchSvg)\b|season-art(?:\.js|\.tsx)?/i,
+    pattern: /\b(?:SeasonHero|GiftArt|DinoGameOverArt|DINO_SVG|svgDataUri|vocabularyIllustration|giftBoxSvg|giftOpenSvg|mushroomSvg|bombSvg|heroSvg|catchSvg)\b|season-art(?:\.js|\.tsx)?/,
     message: "known generated-art helper"
   },
   {
@@ -42,7 +44,9 @@ export async function scanAppMedia(options = {}) {
       const line = lines[index];
       for (const rule of RULES) {
         const column = line.search(rule.pattern);
-        if (column >= 0) issues.push(issue(relativePath, index, column, rule.id, rule.message, line));
+        if (column >= 0 && !hasRuleExemption({ rule: rule.id, filePath: relativePath, previousLine: lines[index - 1] ?? "" })) {
+          issues.push(issue(relativePath, index, column, rule.id, rule.message, line));
+        }
       }
 
       const emoji = firstEmoji(line);
@@ -86,7 +90,12 @@ function firstEmoji(line) {
 }
 
 function hasAvatarRewardExemption({ filePath, line, previousLine }) {
-  return previousLine.includes(ALLOW_ANNOTATION) && AVATAR_REWARD_CONTEXT.test(`${filePath} ${line}`);
+  const previousIsAnnotation = previousLine.trimStart().startsWith("//") && previousLine.includes(ALLOW_ANNOTATION);
+  return (line.includes(ALLOW_ANNOTATION) || previousIsAnnotation) && AVATAR_REWARD_CONTEXT.test(`${filePath} ${line}`);
+}
+
+function hasRuleExemption({ rule, filePath, previousLine }) {
+  return rule === "generated-svg" && previousLine.includes(ALLOW_BRAND_ANNOTATION) && BRAND_CONTEXT.test(filePath);
 }
 
 function issue(file, zeroBasedLine, zeroBasedColumn, rule, message, sourceLine) {

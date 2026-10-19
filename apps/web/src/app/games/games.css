@@ -485,18 +485,6 @@
   font-size: .72rem;
 }
 
-.catch-sky .cloud,
-.rio-cloud {
-  position: absolute;
-  width: 70px;
-  height: 22px;
-  border-radius: 50%;
-  background: rgba(255, 255, 255, .82);
-}
-
-.cloud--one { top: 95px; left: 8%; }
-.cloud--two { top: 145px; right: 14%; transform: scale(1.35); }
-
 .falling-item {
   position: absolute;
   z-index: 2;
@@ -621,9 +609,6 @@
   transition: transform 80ms linear;
   background: linear-gradient(#dff3ff 0 87.5%, #9bc154 87.5%);
 }
-
-.rio-cloud--one { top: 38px; left: 120px; }
-.rio-cloud--two { top: 76px; left: 900px; transform: scale(1.45); }
 
 .rio-platform {
   position: absolute;
