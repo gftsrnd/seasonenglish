@@ -4,6 +4,7 @@ import {
   bigserial,
   boolean,
   date,
+  index,
   integer,
   jsonb,
   numeric,
@@ -319,6 +320,32 @@ export const files = pgTable("files", {
   sha256: text("sha256").notNull(), retentionUntil: timestamp("retention_until", { withTimezone: true }), createdAt: now()
 });
 
+export const mediaAssets = pgTable("media_assets", {
+  id: uuid("id").primaryKey(),
+  organizationId: uuid("organization_id").notNull().references(() => organizations.id, { onDelete: "cascade" }),
+  requestFingerprint: text("request_fingerprint").notNull(),
+  normalizedQuery: text("normalized_query").notNull(),
+  provider: text("provider").notNull(),
+  providerAssetId: text("provider_asset_id"),
+  status: text("status").notNull(),
+  sourceUrl: text("source_url"),
+  sourcePageUrl: text("source_page_url"),
+  creator: text("creator"),
+  licence: text("licence"),
+  licenceUrl: text("licence_url"),
+  objectKey: text("object_key"),
+  mimeType: text("mime_type"),
+  width: integer("width"),
+  height: integer("height"),
+  sha256: text("sha256"),
+  expiresAt: timestamp("expires_at", { withTimezone: true }),
+  createdAt: now(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow()
+}, (table) => [
+  uniqueIndex("media_assets_organization_fingerprint_unique").on(table.organizationId, table.requestFingerprint),
+  index("media_assets_status_expires_index").on(table.status, table.expiresAt)
+]);
+
 export const jobs = pgTable("jobs", {
   id: uuid("id").primaryKey(), kind: text("kind").notNull(), payload: jsonb("payload").notNull(), state: text("state").notNull().default("queued"),
   attempts: integer("attempts").notNull().default(0), maxAttempts: integer("max_attempts").notNull().default(3),
@@ -385,7 +412,7 @@ export const idempotencyKeys = pgTable("idempotency_keys", {
 export const databaseSchema = {
   activities, aiRuns, aiTasks, appeals, assessmentAttempts, assessmentDecisions,
   assessmentDefinitions, assessmentResponses, assessmentScores, assessmentVersions,
-  auditEvents, badges, coachSessions, coachTurns, duels, enrollments, files,
+  auditEvents, badges, coachSessions, coachTurns, duels, enrollments, files, mediaAssets,
   gameResults, gameSets, idempotencyKeys, jobs, learnerProfiles, lessonSetVersions,
   lessonPartAppeals, lessonPartAttempts, lessonSets, lessonVersions, lessons, notificationDeliveries, organizations, organizationSettings, providerConfigurations,
   practiceSubmissions, learnerVocabularyUnlocks, levelUpChallengeResults, practiceAppeals,

@@ -13,7 +13,7 @@ const expectedTables = [
   "assessment_scores", "assessment_versions", "audit_events", "badges",
   "coach_sessions", "coach_turns", "duels", "enrollments", "files", "game_results",
   "game_sets", "idempotency_keys", "jobs", "learner_profiles", "learner_vocabulary_unlocks", "level_up_challenge_results", "lesson_set_versions",
-  "lesson_sets", "lesson_versions", "lessons", "lesson_part_appeals", "lesson_part_attempts", "micro_lessons", "notification_deliveries", "organization_settings", "organizations",
+  "lesson_sets", "lesson_versions", "lessons", "lesson_part_appeals", "lesson_part_attempts", "media_assets", "micro_lessons", "notification_deliveries", "organization_settings", "organizations",
   "practice_appeals", "practice_submissions", "program_weeks", "programs", "progress_records",
   "manager_destructive_confirmations", "manager_maintenance_backups", "manager_pin_reports", "prompt_versions", "provider_configurations", "reminders", "reward_events", "rubric_versions", "sessions",
   "surveys", "topic_reports", "topic_strikes", "user_credentials", "users"
@@ -40,6 +40,25 @@ describe("normalized E4S database", () => {
     );
 
     expect(result.rows.map((row) => row.table_name)).toEqual(expectedTables);
+  });
+
+  it("creates the organization-scoped media cache columns and indexes", async () => {
+    const columns = await client.query<{ column_name: string }>(
+      "select column_name from information_schema.columns where table_schema = 'public' and table_name = 'media_assets' order by ordinal_position"
+    );
+    const indexes = await client.query<{ indexname: string }>(
+      "select indexname from pg_indexes where schemaname = 'public' and tablename = 'media_assets' order by indexname"
+    );
+
+    expect(columns.rows.map((row) => row.column_name)).toEqual([
+      "id", "organization_id", "request_fingerprint", "normalized_query", "provider", "provider_asset_id",
+      "status", "source_url", "source_page_url", "creator", "licence", "licence_url", "object_key",
+      "mime_type", "width", "height", "sha256", "expires_at", "created_at", "updated_at"
+    ]);
+    expect(indexes.rows.map((row) => row.indexname)).toEqual(expect.arrayContaining([
+      "media_assets_organization_fingerprint_unique",
+      "media_assets_status_expires_index"
+    ]));
   });
 
   it("seeds deterministic learner, operator and manager accounts", async () => {
