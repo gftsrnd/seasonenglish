@@ -139,18 +139,22 @@ describe("learner game visual and interaction regressions", () => {
     expect(container.querySelector(".typing-clue-copy")).toBeInTheDocument();
   });
 
-  it("keeps Typing race on its static game fallback without calling the media resolver", () => {
+  it("loads Typing race artwork through the game media resolver and keeps a fallback when unavailable", async () => {
     vi.stubGlobal("requestAnimationFrame", vi.fn(() => 1));
     vi.stubGlobal("cancelAnimationFrame", vi.fn());
-    const resolveGameWordImage = vi.fn().mockResolvedValue({ status: "available", imageUrl: "https://provider.invalid/image.jpg", alt: "colleague" });
+    const resolveGameWordImage = vi.fn().mockResolvedValue({
+      status: "available",
+      imageUrl: "https://provider.invalid/image.jpg",
+      alt: "colleague",
+      attribution: { creator: null, licence: "CC0", licenceUrl: "https://creativecommons.org/publicdomain/zero/1.0/", sourceUrl: "https://commons.wikimedia.org/wiki/File:Colleague.jpg" }
+    });
     const typing = descriptor("typing", []);
     render(<LearnerGame descriptor={typing} wordSet={wordSet} result={null} actions={{ ...actions, resolveGameWordImage } as unknown as LearnerCallbacks} />);
 
     fireEvent.click(screen.getByRole("button", { name: "Bắt đầu chơi" }));
 
-    expect(screen.getByRole("img", { name: /Chưa có ảnh minh hoạ cho/i })).toBeInTheDocument();
-    expect(screen.queryByRole("status", { name: /đang tải hình/i })).not.toBeInTheDocument();
-    expect(resolveGameWordImage).not.toHaveBeenCalled();
+    expect(await screen.findByRole("img", { name: "colleague" })).toHaveAttribute("src", "https://provider.invalid/image.jpg");
+    expect(resolveGameWordImage).toHaveBeenCalledWith("word-set-1", expect.any(String));
   });
 
   it("ignores browser modifier shortcuts instead of typing into the answer", () => {
