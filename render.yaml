@@ -6,7 +6,7 @@ services:
     region: singapore
     branch: gftsaimedia-cpu
     buildCommand: corepack enable && pnpm install --frozen-lockfile && pnpm build
-    startCommand: pnpm exec tsx scripts/prepare-local.ts && pnpm --filter @e4s/api start
+    startCommand: sh -c 'pnpm exec tsx scripts/prepare-local.ts && (pnpm exec tsx apps/worker/src/server.ts &) && exec pnpm --filter @e4s/api start'
     healthCheckPath: /api/readiness
     envVars:
       - key: NODE_ENV
@@ -39,38 +39,6 @@ services:
         sync: false
       - key: PIXABAY_API_KEY
         sync: false
-
-  - type: worker
-    name: e4s-worker
-    runtime: node
-    plan: starter
-    region: singapore
-    branch: gftsaimedia-cpu
-    buildCommand: corepack enable && pnpm install --frozen-lockfile && pnpm build
-    startCommand: pnpm --filter @e4s/worker start
-    envVars:
-      - key: NODE_ENV
-        value: production
-      - key: WORKER_POLL_MS
-        value: "1000"
-      - key: WORKER_LEASE_SECONDS
-        value: "60"
-      - key: DATABASE_URL
-        sync: false
-      - key: S3_ENDPOINT
-        sync: false
-      - key: S3_REGION
-        value: us-east-1
-      - key: S3_ACCESS_KEY
-        sync: false
-      - key: S3_SECRET_KEY
-        sync: false
-      - key: S3_EVIDENCE_BUCKET
-        value: e4s-evidence
-      - key: GROQ_API_KEY
-        sync: false
-      - key: GROQ_MODEL
-        value: qwen/qwen3.8-27b
 
   - type: web
     name: e4s-web
