@@ -2,7 +2,7 @@ import type {
   AssessmentDeletionRequestView, ManagerAccountView, ManagerAccountsView, ManagerDataExportView,
   ManagerDataImportView, ManagerDeleteRequestsView, ManagerImageTestView, ManagerLearnerProfileView,
   ManagerMaintenanceConfirmationInput, ManagerMaintenanceConfirmationView, ManagerMaintenanceResultView,
-  ManagerMusicTestView, ManagerOperationsView, ManagerPinReportsView, ManagerPinReportView,
+  ManagerMusicTestView, ManagerOperationsView,
   ManagerProgressView, ManagerProviderSettingsInput, ManagerProviderSettingsTestInput,
   ManagerProviderSettingsView, ManagerProviderTestView, ManagerPurgeConfirmationInput,
   ManagerPurgeConfirmationView, ManagerReminderCopyView, ManagerReminderDismissView,
@@ -21,9 +21,6 @@ export interface ManagerApiClient {
   restoreManagerTrashAccount(accountId: string): Promise<ManagerAccountView>;
   requestManagerTrashPurgeConfirmation(accountId: string): Promise<ManagerPurgeConfirmationView>;
   purgeManagerTrashAccount(accountId: string, input: ManagerPurgeConfirmationInput): Promise<void>;
-  getManagerPinReports(): Promise<ManagerPinReportsView>;
-  createManagerPinReport(input: { accountId: string; note: string }): Promise<ManagerPinReportView>;
-  resolveManagerPinReport(reportId: string): Promise<ManagerPinReportView>;
   testManagerImage(input: { source: ProductPreferencesView["vocabImageSource"]; word?: string }): Promise<ManagerImageTestView>;
   clearManagerImageCache(): Promise<{ cleared: number }>;
   testManagerMusic(input: ManagerSettingsView["backgroundMusic"]): Promise<ManagerMusicTestView>;
@@ -65,9 +62,6 @@ export const managerApiClient: ManagerApiClient = {
   restoreManagerTrashAccount: (accountId) => request(`/api/v1/manager/trash/${encodeURIComponent(accountId)}/restore`, { method: "POST", body: "{}" }),
   requestManagerTrashPurgeConfirmation: (accountId) => request(`/api/v1/manager/trash/${encodeURIComponent(accountId)}/purge-confirmation`, { method: "POST", body: "{}" }),
   purgeManagerTrashAccount: (accountId, input) => request(`/api/v1/manager/trash/${encodeURIComponent(accountId)}`, { method: "DELETE", body: JSON.stringify(input) }),
-  getManagerPinReports: () => request("/api/v1/manager/pin-reports"),
-  createManagerPinReport: (input) => request("/api/v1/manager/pin-reports", { method: "POST", body: JSON.stringify(input) }),
-  resolveManagerPinReport: (reportId) => request(`/api/v1/manager/pin-reports/${encodeURIComponent(reportId)}/resolve`, { method: "POST", body: "{}" }),
   testManagerImage: (input) => request("/api/v1/manager/settings/image-test", { method: "POST", body: JSON.stringify(input) }),
   clearManagerImageCache: () => request("/api/v1/manager/settings/image-cache", { method: "POST", body: "{}" }),
   testManagerMusic: (input) => request("/api/v1/manager/settings/music-test", { method: "POST", body: JSON.stringify(input) }),
