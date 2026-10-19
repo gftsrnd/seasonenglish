@@ -5,7 +5,6 @@ import { userEvent } from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { ManagerSettingsView, ProductPreferencesView, SystemCapabilitiesView } from "@e4s/contracts";
 import { SettingsPage } from "./index.js";
-import { ExperienceProvider } from "../../features/experience/Experience.js";
 
 beforeEach(() => window.localStorage.clear());
 afterEach(cleanup);
@@ -37,7 +36,7 @@ describe("new Settings app branch", () => {
   it("keeps Manager sections in app order", () => {
     const { container } = render(<SettingsPage role="manager" manager={manager} product={product} capabilities={capabilities} ai={{ provider: "openai", configured: true, baseUrl: "https://api.groq.com/openai/v1", model: "qwen/qwen3.8-27b", speechToTextModel: "whisper-large-v3-turbo" }} actions={actions()} accounts={<section><h3>Người dùng</h3></section>} />);
     expect([...container.querySelectorAll("h3")].map((node) => node.textContent)).toEqual([
-      "Tùy chọn cá nhân", "Kết nối AI", "Lịch pilot", "Ảnh minh hoạ từ vựng", "Bài test đầu vào / cuối kỳ", "Ngưỡng xét lên / hạ mức", "Giao diện theo mùa / lễ", "Nhạc nền của Season", "Nhắc học qua Base.vn (Base Message incoming webhook)", "Chính sách nhắc học và báo cáo", "Dữ liệu", "Người dùng"
+      "Kết nối AI", "Lịch pilot", "Ảnh minh hoạ từ vựng", "Bài test đầu vào / cuối kỳ", "Ngưỡng xét lên / hạ mức", "Giao diện theo mùa / lễ", "Nhạc nền của Season", "Nhắc học qua Base.vn (Base Message incoming webhook)", "Chính sách nhắc học và báo cáo", "Dữ liệu", "Người dùng"
     ]);
     expect(screen.getByText(/Khoá nhà cung cấp được lưu an toàn ở server/)).toBeInTheDocument();
     expect(screen.getByText("Xuất JSON")).toBeInTheDocument();
@@ -108,7 +107,7 @@ describe("new Settings app branch", () => {
 
   it("shows only operator-owned settings and working prompt link for Operator", () => {
     const { container } = render(<SettingsPage role="operator" product={product} capabilities={capabilities} ai={{ provider: "openai", configured: true, baseUrl: "https://api.groq.com/openai/v1", model: "qwen/qwen3.8-27b", speechToTextModel: "whisper-large-v3-turbo" }} actions={actions()} />);
-    expect([...container.querySelectorAll("h3")].map((node) => node.textContent)).toEqual(["Prompt & rubric", "Tùy chọn cá nhân"]);
+    expect([...container.querySelectorAll("h3")].map((node) => node.textContent)).toEqual(["Prompt & rubric"]);
     expect(screen.queryByRole("heading", { name: "Lịch pilot" })).not.toBeInTheDocument();
     expect(screen.queryByRole("heading", { name: "Dữ liệu" })).not.toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "Prompt & rubric" })).toBeInTheDocument();
@@ -116,20 +115,19 @@ describe("new Settings app branch", () => {
     expect(screen.queryByRole("heading", { name: "Kết nối AI" })).not.toBeInTheDocument();
     expect(screen.queryByRole("heading", { name: "Ảnh minh hoạ từ vựng" })).not.toBeInTheDocument();
     expect(screen.queryByRole("heading", { name: "Giao diện theo mùa / lễ" })).not.toBeInTheDocument();
-    expect(screen.getByRole("checkbox", { name: "Hiệu ứng âm thanh" })).toBeInTheDocument();
-    expect(screen.getByRole("checkbox", { name: "Nhạc nền" })).toBeInTheDocument();
+    expect(screen.queryByRole("checkbox", { name: "Hiệu ứng âm thanh" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("checkbox", { name: "Nhạc nền" })).not.toBeInTheDocument();
   });
 
-  it("stores personal sound preferences locally", async () => {
-    render(<ExperienceProvider><SettingsPage role="operator" product={product} capabilities={capabilities} actions={actions()} /></ExperienceProvider>);
-    const effects = screen.getByRole("checkbox", { name: "Hiệu ứng âm thanh" });
-    const music = screen.getByRole("checkbox", { name: "Nhạc nền" });
-    expect(effects).toBeChecked();
-    expect(music).toBeChecked();
-    await userEvent.setup().click(effects);
-    await userEvent.setup().click(music);
-    expect(window.localStorage.getItem("e4s:effects")).toBe("off");
-    expect(window.localStorage.getItem("e4s:music")).toBe("off");
+  it("does not put personal sound preferences into Settings for any role", () => {
+    const { rerender } = render(<SettingsPage role="manager" manager={manager} product={product} capabilities={capabilities} ai={{ provider: "openai", configured: true, baseUrl: "https://api.groq.com/openai/v1", model: "demo", speechToTextModel: "whisper" }} actions={actions()} />);
+    expect(screen.queryByRole("heading", { name: "Tùy chọn cá nhân" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("checkbox", { name: "Hiệu ứng âm thanh" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("checkbox", { name: "Nhạc nền" })).not.toBeInTheDocument();
+    rerender(<SettingsPage role="operator" product={product} capabilities={capabilities} actions={actions()} />);
+    expect(screen.queryByRole("heading", { name: "Tùy chọn cá nhân" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("checkbox", { name: "Hiệu ứng âm thanh" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("checkbox", { name: "Nhạc nền" })).not.toBeInTheDocument();
   });
 
   it.each([

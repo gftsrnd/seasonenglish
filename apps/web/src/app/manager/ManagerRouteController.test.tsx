@@ -414,7 +414,9 @@ describe("ManagerRouteController", () => {
     renderManager(<MemoryRouter initialEntries={["/settings"]}><ManagerRouteController role="operator" currentUserId="operator-1" /></MemoryRouter>);
     await screen.findByRole("heading", { name: "Prompt & rubric" });
     expect(screen.getByRole("heading", { name: "Cài đặt" })).toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: "Tùy chọn cá nhân" })).toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "Tùy chọn cá nhân" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("checkbox", { name: "Hiệu ứng âm thanh" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("checkbox", { name: "Nhạc nền" })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Kiểm tra kết nối" })).not.toBeInTheDocument();
     expect(screen.queryByLabelText("Nguồn ảnh")).not.toBeInTheDocument();
     expect(screen.queryByLabelText("Chủ đề giao diện (áp dụng ngay khi chọn)")).not.toBeInTheDocument();
