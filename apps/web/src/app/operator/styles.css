@@ -3,6 +3,34 @@
   min-width: 0;
 }
 
+/* Every subroute gets one stable escape hatch back to its role-owned
+   operations root.  This is separate from route-specific links such as
+   “Ma trận bài học”, so deep links never strand the user. */
+.app-operator .operator-route-back {
+  display: flex;
+  min-width: 0;
+  margin: 0 0 10px;
+  line-height: 1.35;
+}
+
+.app-operator .operator-route-back__link {
+  display: inline-flex;
+  min-height: 24px;
+  align-items: center;
+  max-width: 100%;
+  color: var(--text);
+  font-size: .88rem;
+  font-weight: 500;
+  overflow-wrap: anywhere;
+  text-decoration: none;
+}
+
+.app-operator .operator-route-back__link:hover {
+  text-decoration: underline;
+  text-decoration-thickness: 1.5px;
+  text-underline-offset: 3px;
+}
+
 /* Keep page context, instructions, and the first working surface visually distinct. */
 .app-operator > .page-title {
   margin-bottom: 14px;
@@ -1654,6 +1682,13 @@ body:has(.app-operator) #modal > .dialog > .row {
   line-height: 1.5;
 }
 
+.app-operator[aria-label="Đọc mẫu"] .operator-card-header > :first-child > .xs,
+.app-operator[aria-label="Đọc mẫu"] .operator-review-item-heading > :first-child > .xs {
+  display: block;
+  margin-top: 4px;
+  line-height: 1.45;
+}
+
 .app-operator[aria-label="Đọc mẫu"] .operator-card-header > label,
 .app-operator[aria-label="Đọc mẫu"] .operator-review-item-heading > label {
   flex: 0 0 auto;
@@ -1691,6 +1726,32 @@ body:has(.app-operator) #modal > .dialog > .row {
   border-top: 1px solid var(--line);
   line-height: 1.55;
   overflow-wrap: anywhere;
+}
+
+/* Keep lesson titles and their status badges on one readable alignment track
+   instead of relying on whitespace between anonymous inline children. */
+.app-operator .operator-card-header h3 {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px 8px;
+  line-height: 1.35;
+}
+
+.app-operator .operator-card-header h3 > .badge {
+  flex: 0 0 auto;
+}
+
+/* Action cells are the one place where a row must never drift above its
+   badge/status cells when neighbouring copy wraps. */
+.app-operator .operator-action-table th:last-child,
+.app-operator .operator-action-table td:last-child,
+.app-operator .operator-action-table td[data-label="Thao tác"] {
+  vertical-align: middle;
+}
+
+.app-operator .operator-action-table td[data-label="Thao tác"] > .row {
+  align-items: center;
 }
 
 @media (max-width: 480px) {

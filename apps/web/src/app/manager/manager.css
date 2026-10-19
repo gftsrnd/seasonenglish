@@ -615,6 +615,17 @@
   line-height: 1.35;
 }
 
+.settings-action-table th,
+.settings-action-table td {
+  padding-block: 12px;
+}
+
+.settings-action-table td:nth-child(3),
+.settings-action-table td:nth-child(4),
+.settings-action-table td:last-child {
+  white-space: nowrap;
+}
+
 .settings-action-table td .badge {
   display: inline-flex;
   align-items: center;
@@ -776,6 +787,12 @@
   align-items: center;
   flex-wrap: nowrap;
   row-gap: 0;
+}
+
+.manager-action-table td:last-child,
+.manager-action-table td:last-child > .row,
+.manager-action-table td:last-child .btn-sm {
+  vertical-align: middle;
 }
 
 .manager-action-table td:last-child .btn-sm {

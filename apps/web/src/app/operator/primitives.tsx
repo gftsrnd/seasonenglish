@@ -1,8 +1,27 @@
 import type { ButtonHTMLAttributes, ReactNode } from "react";
+import { Link, useInRouterContext, useLocation } from "react-router";
 import type { Cefr, RubricScore, Suggestion } from "./types.js";
 
 export function OperatorPage({ children, title }: { children: ReactNode; title: string }) {
-  return <div className="app-operator" aria-label={title}>{children}</div>;
+  const inRouter = useInRouterContext();
+  if (!inRouter) {
+    return <div className="app-operator" aria-label={title}>{children}</div>;
+  }
+  return <OperatorPageWithNavigation title={title}>{children}</OperatorPageWithNavigation>;
+}
+
+function OperatorPageWithNavigation({ children, title }: { children: ReactNode; title: string }) {
+  const location = useLocation();
+  const managerOperations = location.pathname.startsWith("/mgr/ops/");
+  const rootPath = managerOperations ? "/mgr/ops" : "/op";
+  const rootLabel = managerOperations ? "Hiệu suất vận hành" : "Vận hành";
+  const isRoot = location.pathname === rootPath;
+  return <div className="app-operator" aria-label={title}>
+    {!isRoot && <nav className="operator-route-back" aria-label="Điều hướng vận hành">
+      <Link className="operator-route-back__link" to={rootPath}>← {rootLabel}</Link>
+    </nav>}
+    {children}
+  </div>;
 }
 
 export function PageTitle({ children, actions }: { children: ReactNode; actions?: ReactNode }) {

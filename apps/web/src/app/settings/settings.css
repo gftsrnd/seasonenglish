@@ -329,7 +329,9 @@
 
 .settings-page > .card > h3:first-child + p,
 .settings-page > .card > h3:first-child + .banner {
-  margin-top: -4px;
+  /* The card grid already supplies the section rhythm.  A negative margin
+     makes the heading and its description visually merge on narrow screens. */
+  margin-top: 0;
 }
 
 .settings-page > .card > .banner,
