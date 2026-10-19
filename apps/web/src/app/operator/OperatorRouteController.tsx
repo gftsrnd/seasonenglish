@@ -180,6 +180,7 @@ function DashboardRoute({ client, readOnly }: { client: OperatorApiClient; readO
   const showChallenge = (attemptId: string) => void client.getAssessmentReviewChallenge(attemptId).then(detail => { setActionError(undefined); setDialog({ kind: "challenge", detail, learnerName: view.levelRequests.find(item => item.id === attemptId)?.learnerName ?? "" }); }).catch(reason => setActionError(message(reason)));
   const showProfile = (learnerId: string) => void client.getAssessmentReviewLearner(learnerId).then(detail => { setActionError(undefined); setDialog({ kind: "profile", detail }); }).catch(reason => setActionError(message(reason)));
   const changeLevel = async (learnerId: string, mode: "direct" | "scheduled" | "recommend_lower") => {
+    if (readOnly) return;
     const ordered: CefrLevel[] = ["A1", "A2", "B1", "B2", "C1"];
     const currentLevel = [...view.weak, ...view.approved, ...view.ready].find(item => item.id === learnerId)?.cefr;
     const lowerIndex = currentLevel ? ordered.indexOf(currentLevel) - 1 : -1;
@@ -193,14 +194,17 @@ function DashboardRoute({ client, readOnly }: { client: OperatorApiClient; readO
     refresh(client.changeAssessmentReviewLearnerLevel(learnerId, { mode, targetLevel, reason, evidence }));
   };
   const editGoal = async (learnerId: string) => {
+    if (readOnly) return;
     const goal = (await modal.prompt({ title: "Cập nhật mục tiêu tháng", label: "Mục tiêu tháng mới", confirmLabel: "Lưu" }))?.trim();
     if (goal) refresh(client.updateAssessmentReviewMonthlyGoal(learnerId, goal));
   };
   const requestDeletion = async (learnerId: string) => {
+    if (readOnly) return;
     const reason = (await modal.prompt({ title: "Yêu cầu xoá học viên", message: "Yêu cầu sẽ được chuyển cho Quản lý duyệt.", label: "Lý do", confirmLabel: "Gửi yêu cầu", tone: "danger" }))?.trim();
     if (reason) refresh(client.requestAssessmentReviewLearnerDeletion(learnerId, reason));
   };
   const rescore = (attemptId: string) => {
+    if (readOnly) return;
     if (typeof client.rescoreAssessment !== "function") return;
     setRescoreBusy(attemptId);
     const requestId = typeof crypto !== "undefined" && typeof crypto.randomUUID === "function"
@@ -212,10 +216,10 @@ function DashboardRoute({ client, readOnly }: { client: OperatorApiClient; readO
       .finally(() => setRescoreBusy(undefined));
   };
   return <>{actionError && <Banner tone="danger"><b>Thao tác chưa hoàn tất:</b> {actionError}</Banner>}<OperatorDashboard view={view} readOnly={readOnly} unavailable={missing} actions={{
-    onResolveTopicReport: id => refresh(client.resolveTopicReport(id)),
-    onApprovePlacement: (id, cefr) => { if (typeof client.decideAssessment === "function") refresh(client.decideAssessment(id, { status: "approved", approvedLevel: cefr, reason: "Duyệt mức đầu vào" })); },
-    onApproveLevelRequest: id => { const target = targetFor(id); if (target && typeof client.decideAssessment === "function") refresh(client.decideAssessment(id, { status: "approved", approvedLevel: target, reason: "Duyệt yêu cầu lên mức" })); },
-    onRejectLevelRequest: id => { if (typeof client.decideAssessment !== "function") return; void modal.prompt({ title: "Từ chối yêu cầu lên mức", message: "Học viên sẽ nhìn thấy nội dung này.", label: "Lý do từ chối", confirmLabel: "Từ chối", tone: "danger" }).then(reason => { if (reason?.trim()) refresh(client.decideAssessment(id, { status: "needs_retry", reason: reason.trim() })); }); },
+    onResolveTopicReport: id => { if (!readOnly) refresh(client.resolveTopicReport(id)); },
+    onApprovePlacement: (id, cefr) => { if (!readOnly && typeof client.decideAssessment === "function") refresh(client.decideAssessment(id, { status: "approved", approvedLevel: cefr, reason: "Duyệt mức đầu vào" })); },
+    onApproveLevelRequest: id => { const target = targetFor(id); if (!readOnly && target && typeof client.decideAssessment === "function") refresh(client.decideAssessment(id, { status: "approved", approvedLevel: target, reason: "Duyệt yêu cầu lên mức" })); },
+    onRejectLevelRequest: id => { if (readOnly || typeof client.decideAssessment !== "function") return; void modal.prompt({ title: "Từ chối yêu cầu lên mức", message: "Học viên sẽ nhìn thấy nội dung này.", label: "Lý do từ chối", confirmLabel: "Từ chối", tone: "danger" }).then(reason => { if (reason?.trim()) refresh(client.decideAssessment(id, { status: "needs_retry", reason: reason.trim() })); }); },
     onViewTest: showAttempt, onRescore: rescore, onDeleteLearner: id => requestDeletion(learnerIdFor(id)), onViewChallenge: showChallenge,
     onDemote: id => changeLevel(id, "recommend_lower"), onChangeLevel: id => changeLevel(id, "scheduled"), onEditGoal: editGoal, onViewProfile: showProfile, onSetLevelDirect: id => changeLevel(id, "direct"),
     onOpenAppeals: () => navigate(paths.review, { state: { reviewTab: "appeals" } }), onOpenSettings: () => navigate("/settings"), onOpenWeeks: () => navigate(paths.weeks), onOpenLevelForms: () => navigate(paths.levelForms)
@@ -340,9 +344,9 @@ function LevelFormsRoute({ client, readOnly }: { client: OperatorApiClient; read
   };
   return <><OperatorLevelForms readOnly={readOnly} unavailable={missing} view={adaptLevelForms(data, { aiConnected: capabilities?.ai ?? false, generatingTarget: generating })} actions={{
     onBack: () => navigate(paths.root), onOpenSettings: () => navigate("/settings"),
-    onGenerate: target => { setGenerating(target); refresh(client.generateAssessmentLevelForm(target as Exclude<CefrLevel, "A1">)); },
-    onApprove: id => refresh(client.publishAssessmentLevelForm(id)), onView: show,
-    onDelete: id => { if (typeof client.deleteAssessmentLevelForm !== "function") return; void modal.confirm({ title: "Xoá bản nháp đề thi?", message: "Bản nháp này sẽ bị xoá khỏi danh sách đề lên mức.", confirmLabel: "Xoá bản nháp", tone: "danger" }).then(confirmed => { if (confirmed) refresh(client.deleteAssessmentLevelForm(id)); }); }
+    onGenerate: target => { if (readOnly) return; setGenerating(target); refresh(client.generateAssessmentLevelForm(target as Exclude<CefrLevel, "A1">)); },
+    onApprove: id => { if (!readOnly) refresh(client.publishAssessmentLevelForm(id)); }, onView: show,
+    onDelete: id => { if (readOnly || typeof client.deleteAssessmentLevelForm !== "function") return; void modal.confirm({ title: "Xoá bản nháp đề thi?", message: "Bản nháp này sẽ bị xoá khỏi danh sách đề lên mức.", confirmLabel: "Xoá bản nháp", tone: "danger" }).then(confirmed => { if (confirmed) refresh(client.deleteAssessmentLevelForm(id)); }); }
   }} />{dialog && <OperatorLevelFormDetail detail={dialog} onClose={() => setDialog(undefined)} />}</>;
 }
 
@@ -358,8 +362,8 @@ function WeeksRoute({ client, readOnly }: { client: OperatorApiClient; readOnly:
   if (error) return <Status tone="error">Không tải được khung chủ đề: {error}</Status>;
   if (!data) return <Status>Đang tải khung chủ đề…</Status>;
   const inputs = (source = data) => source.weeks.map(week => ({ weekNumber: week.weekNumber, topic: week.topic, description: week.description, objectives: week.objectives, keyVocabHint: week.keyVocabHint }));
-  const suggest = (numbers: number[]) => { numbers.forEach(number => setSuggestions(current => ({ ...current, [number]: { state: "loading" } }))); void client.suggestContentWeeks(numbers).then(result => { const next: Record<number, WeekSuggestion> = {}; result.weeks.forEach(week => { next[week.weekNumber] = { state: "options", levels: week.levels ?? [], options: week.options.map(option => ({ ...option, plan: option.plan ?? {} })) }; }); setSuggestions(current => ({ ...current, ...next })); setStatus("Đã tải 3 phương án chủ đề kèm kế hoạch CEFR × 5 ngày."); }).catch(reason => { const failure = message(reason); setSuggestions(current => ({ ...current, ...Object.fromEntries(numbers.map(number => [number, { state: "error", message: failure }])) })); setStatus(""); }); };
-  const save = (source = data) => void client.saveContentWeeks(inputs(source)).then(saved => { setData(saved); setStatus("Đã lưu khung chủ đề."); }).catch(reason => setError(message(reason)));
+  const suggest = (numbers: number[]) => { if (readOnly) return; numbers.forEach(number => setSuggestions(current => ({ ...current, [number]: { state: "loading" } }))); void client.suggestContentWeeks(numbers).then(result => { const next: Record<number, WeekSuggestion> = {}; result.weeks.forEach(week => { next[week.weekNumber] = { state: "options", levels: week.levels ?? [], options: week.options.map(option => ({ ...option, plan: option.plan ?? {} })) }; }); setSuggestions(current => ({ ...current, ...next })); setStatus("Đã tải 3 phương án chủ đề kèm kế hoạch CEFR × 5 ngày."); }).catch(reason => { const failure = message(reason); setSuggestions(current => ({ ...current, ...Object.fromEntries(numbers.map(number => [number, { state: "error", message: failure }])) })); setStatus(""); }); };
+  const save = (source = data) => { if (readOnly) return; void client.saveContentWeeks(inputs(source)).then(saved => { setData(saved); setStatus("Đã lưu khung chủ đề."); }).catch(reason => setError(message(reason))); };
   const view = adaptWeeks(data, { aiConnected: capabilities?.ai ?? false, status, suggestions });
   return <OperatorWeeks readOnly={readOnly} view={view} actions={{
     onSuggestAll: () => suggest(data.weeks.filter(week => !week.topic.trim()).map(week => week.weekNumber).length ? data.weeks.filter(week => !week.topic.trim()).map(week => week.weekNumber) : data.weeks.map(week => week.weekNumber)),
@@ -373,8 +377,8 @@ function WeeksRoute({ client, readOnly }: { client: OperatorApiClient; readOnly:
           : { state: "error", message: "Các phương án cũ không còn trong API response; bấm Gợi ý để tải lại." }
       };
     }),
-    onConfirmSuggestion: (weekNumber, index) => { const suggestion = suggestions[weekNumber]; if (suggestion?.state !== "options") return; const option = suggestion.options[index]; if (!option) return; const updated = { ...data, weeks: data.weeks.map(week => week.weekNumber === weekNumber ? { ...week, topic: option.topic, description: option.description, objectives: option.objectives, keyVocabHint: option.keyVocabHint } : week) }; setData(updated); setSuggestions(current => ({ ...current, [weekNumber]: { state: "confirmed", topic: option.topic, levels: suggestion.levels, options: suggestion.options } })); save(updated); },
-    onChangeWeek: (weekNumber, patch) => setData(current => current ? { ...current, weeks: current.weeks.map(week => week.weekNumber === weekNumber ? { ...week, ...patch } : week) } : current), onSave: () => save(), onOpenLessons: () => navigate(paths.lessons)
+    onConfirmSuggestion: (weekNumber, index) => { if (readOnly) return; const suggestion = suggestions[weekNumber]; if (suggestion?.state !== "options") return; const option = suggestion.options[index]; if (!option) return; const updated = { ...data, weeks: data.weeks.map(week => week.weekNumber === weekNumber ? { ...week, topic: option.topic, description: option.description, objectives: option.objectives, keyVocabHint: option.keyVocabHint } : week) }; setData(updated); setSuggestions(current => ({ ...current, [weekNumber]: { state: "confirmed", topic: option.topic, levels: suggestion.levels, options: suggestion.options } })); save(updated); },
+    onChangeWeek: (weekNumber, patch) => { if (!readOnly) setData(current => current ? { ...current, weeks: current.weeks.map(week => week.weekNumber === weekNumber ? { ...week, ...patch } : week) } : current); }, onSave: () => save(), onOpenLessons: () => navigate(paths.lessons)
   }} />;
 }
 
@@ -393,7 +397,7 @@ function LessonsRoute({ client, readOnly }: { client: OperatorApiClient; readOnl
   const produce = (week: number, cefr: Cefr, promise: Promise<ContentLessonSetVersionView>) => { setGenerating({ week, cefr, message: "Đang chuẩn bị bộ 5 bài…" }); void promise.then(() => open(week, cefr)).catch(reason => setError(message(reason))).finally(() => setGenerating(null)); };
   const extended = { ...data, levels: [...data.levels, ...extraLevels.filter(level => !data.levels.some(item => item.cefr === level)).map(cefr => ({ cefr, learnerCount: 0 }))] };
   return <OperatorLessons readOnly={readOnly} view={adaptLessonMatrix(extended, { aiConnected: capabilities?.ai ?? false, extraLevels: (["A1", "A2", "B1", "B2", "C1"] as Cefr[]).filter(level => !extended.levels.some(item => item.cefr === level)), generating })} actions={{
-    onOpenSettings: () => navigate("/settings"), onAddLevel: cefr => setExtraLevels(current => current.includes(cefr) ? current : [...current, cefr]), onGenerate: (week, cefr) => produce(week, cefr, client.generateContentLessonDraft(week, cefr)), onCreateManual: (week, cefr) => produce(week, cefr, client.saveContentLessonDraft(week, cefr, [])), onOpenSet: open
+    onOpenSettings: () => navigate("/settings"), onAddLevel: cefr => { if (!readOnly) setExtraLevels(current => current.includes(cefr) ? current : [...current, cefr]); }, onGenerate: (week, cefr) => { if (!readOnly) produce(week, cefr, client.generateContentLessonDraft(week, cefr)); }, onCreateManual: (week, cefr) => { if (!readOnly) produce(week, cefr, client.saveContentLessonDraft(week, cefr, [])); }, onOpenSet: open
   }} />;
 }
 
@@ -410,18 +414,19 @@ function LessonSetRoute({ client, readOnly, week, cefr }: { client: OperatorApiC
   useEffect(() => { void load(); }, [client, week, cefr]);
   if (error) return <Status tone="error">Không tải được bộ bài: {error}</Status>;
   if (!data) return <Status>Đang tải bộ bài…</Status>;
-  const mutate = (promise: Promise<ContentLessonSetVersionView>) => { setBusy(true); void promise.then(setData).then(() => setEditor(undefined)).catch(reason => setError(message(reason))).finally(() => setBusy(false)); };
-  const publish = () => { setBusy(true); const prepared = data.status === "draft" ? client.submitContentLessonSet(data.versionId) : Promise.resolve(data); void prepared.then(version => client.publishContentLessonSet(version.versionId)).then(setData).catch(reason => setError(message(reason))).finally(() => setBusy(false)); };
+  const mutate = (promise: Promise<ContentLessonSetVersionView>) => { if (readOnly) return; setBusy(true); void promise.then(setData).then(() => setEditor(undefined)).catch(reason => setError(message(reason))).finally(() => setBusy(false)); };
+  const publish = () => { if (readOnly) return; setBusy(true); const prepared = data.status === "draft" ? client.submitContentLessonSet(data.versionId) : Promise.resolve(data); void prepared.then(version => client.publishContentLessonSet(version.versionId)).then(setData).catch(reason => setError(message(reason))).finally(() => setBusy(false)); };
   const saveLesson = (lesson: ContentLessonDraftInput) => mutate(client.upsertContentLessonDay(week, cefr, lesson.dayNumber, lesson, data.version));
   const openEditor = (day: number, id?: string) => {
     const current = id ? data.lessons.find(lesson => lesson.id === id) : data.lessons.find(lesson => lesson.dayNumber === day);
     setEditor(current ? { dayNumber: current.dayNumber, title: current.title, durationMinutes: current.durationMinutes, parts: current.parts } : emptyLesson(day));
   };
   const deleteLesson = async (id: string) => {
+    if (readOnly) return;
     const lesson = data.lessons.find(candidate => candidate.id === id);
     if (lesson && await modal.confirm({ title: `Xoá ${lesson.title}?`, message: "Bài học sẽ bị xoá khỏi bộ bài nháp.", confirmLabel: "Xoá bài", tone: "danger" })) mutate(client.deleteContentLessonDay(week, cefr, lesson.dayNumber, data.version));
   };
-  const deleteSet = async () => { if (await modal.confirm({ title: "Xoá toàn bộ bộ bài nháp?", message: `Toàn bộ bài tuần ${week} · ${cefr} sẽ bị xoá.`, confirmLabel: "Xoá bộ bài", tone: "danger" })) { setBusy(true); void client.deleteContentLessonDraftSet(week, cefr).then(() => navigate(paths.lessons)).catch(reason => setError(message(reason))).finally(() => setBusy(false)); } };
+  const deleteSet = async () => { if (readOnly) return; if (await modal.confirm({ title: "Xoá toàn bộ bộ bài nháp?", message: `Toàn bộ bài tuần ${week} · ${cefr} sẽ bị xoá.`, confirmLabel: "Xoá bộ bài", tone: "danger" })) { setBusy(true); void client.deleteContentLessonDraftSet(week, cefr).then(() => navigate(paths.lessons)).catch(reason => setError(message(reason))).finally(() => setBusy(false)); } };
   const unavailableSet = {
     ...(typeof client.fillContentLessonPhrases !== "function" ? { fillPhrases: unavailable("endpoint bổ sung cụm từ cho bộ bài") } : {}),
     ...(typeof client.enrichContentLessonDraft !== "function" ? { enrich: unavailable("endpoint bổ sung chi tiết cho bộ bài") } : {})
@@ -455,12 +460,13 @@ function ReviewRoute({ client, readOnly }: { client: OperatorApiClient; readOnly
     return Number.isFinite(value) && value >= 0 && value <= 5 ? value : null;
   };
   const manualGrade = async (id: string) => { const meaning = await askScore("Đúng ý"); if (meaning == null) return; const vocabulary = await askScore("Từ vựng"); if (vocabulary == null) return; const grammar = await askScore("Ngữ pháp"); if (grammar == null) return; const feedback = await modal.prompt({ title: "Nhận xét bài làm", label: "Nhận xét", confirmLabel: "Lưu điểm" }) ?? ""; refresh(client.gradeReviewedSubmission(id, { meaning, vocabulary, grammar, feedback })); };
-  const decide = async (id: string, accepted: boolean) => { const resolution = await modal.prompt({ title: accepted ? "Chấp nhận kháng nghị" : "Từ chối kháng nghị", label: "Nội dung xử lý / giải thích cho học viên", confirmLabel: accepted ? "Chấp nhận" : "Từ chối", tone: accepted ? "primary" : "danger" }); if (resolution?.trim()) refresh(client.decideReviewedAppeal(id, { status: accepted ? "accepted" : "rejected", resolution: resolution.trim() })); };
+  const decide = async (id: string, accepted: boolean) => { if (readOnly) return; const resolution = await modal.prompt({ title: accepted ? "Chấp nhận kháng nghị" : "Từ chối kháng nghị", label: "Nội dung xử lý / giải thích cho học viên", confirmLabel: accepted ? "Chấp nhận" : "Từ chối", tone: accepted ? "primary" : "danger" }); if (resolution?.trim()) refresh(client.decideReviewedAppeal(id, { status: accepted ? "accepted" : "rejected", resolution: resolution.trim() })); };
   const missing = {
     ...(typeof client.gradeReviewedSubmissionAi !== "function" ? { gradeAi: unavailable("endpoint chấm bài review bằng AI") } : {}),
     ...(typeof client.getContentReviewAssessment !== "function" ? { viewTest: unavailable("endpoint xem chi tiết bài test") } : {})
   };
   const gradeAi = (id: string) => {
+    if (readOnly) return;
     if (typeof client.gradeReviewedSubmissionAi !== "function") return;
     refresh(client.gradeReviewedSubmissionAi(id));
   };
@@ -468,8 +474,9 @@ function ReviewRoute({ client, readOnly }: { client: OperatorApiClient; readOnly
     if (typeof client.getContentReviewAssessment !== "function") return;
     void client.getContentReviewAssessment(attemptId).then(setDialog).catch(reason => setError(message(reason)));
   };
+  const guardedManualGrade = (id: string) => { if (!readOnly) void manualGrade(id); };
   return <><OperatorReview readOnly={readOnly} unavailable={missing} view={adaptReview(data, reviewToApi[tab], { aiConnected: capabilities?.ai ?? false })} actions={{
-    onTabChange: setTab, onMarkSubmission: (id, checked) => refresh(client.setContentReviewChecked("submission", id, checked)), onMarkCoachTurn: (id, checked) => refresh(client.setContentReviewChecked("coach", id, checked)), onDeleteMicroLesson: id => refresh(client.deleteReviewedMicroLesson(id)), onGradeAi: gradeAi, onGradeManual: manualGrade, onDecideAppeal: decide, onViewTest: viewTest
+    onTabChange: setTab, onMarkSubmission: (id, checked) => { if (!readOnly) refresh(client.setContentReviewChecked("submission", id, checked)); }, onMarkCoachTurn: (id, checked) => { if (!readOnly) refresh(client.setContentReviewChecked("coach", id, checked)); }, onDeleteMicroLesson: id => { if (!readOnly) refresh(client.deleteReviewedMicroLesson(id)); }, onGradeAi: gradeAi, onGradeManual: guardedManualGrade, onDecideAppeal: decide, onViewTest: viewTest
   }} />{dialog && <OperatorReviewAssessmentDetail detail={dialog} onClose={() => setDialog(undefined)} />}</>;
 }
 
@@ -483,8 +490,8 @@ function PromptsRoute({ client, readOnly }: { client: OperatorApiClient; readOnl
   if (!data) return <Status>Đang tải prompt…</Status>;
   return <OperatorPrompts readOnly={readOnly} view={adaptPrompts(data, { saveState: saving ? "loading" : "idle" })} actions={{
     onBack: () => navigate("/settings"),
-    onReset: key => setData(current => current ? { ...current, groups: current.groups.map(group => group.key === promptToApi[key] ? { ...group, content: group.defaultContent } : group) } : current),
-    onSave: values => { setSaving(true); void client.saveContentPrompts(Object.entries(values).map(([key, content]) => ({ key: promptToApi[key as PromptKey], content }))).then(setData).catch(reason => setError(message(reason))).finally(() => setSaving(false)); }
+    onReset: key => { if (!readOnly) setData(current => current ? { ...current, groups: current.groups.map(group => group.key === promptToApi[key] ? { ...group, content: group.defaultContent } : group) } : current); },
+    onSave: values => { if (readOnly) return; setSaving(true); void client.saveContentPrompts(Object.entries(values).map(([key, content]) => ({ key: promptToApi[key as PromptKey], content }))).then(setData).catch(reason => setError(message(reason))).finally(() => setSaving(false)); }
   }} />;
 }
 
