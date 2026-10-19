@@ -26,8 +26,12 @@ export function createOpenverseProvider(options: ProviderOptions = {}): {
       for (const value of asArray(response?.results)) {
         const item = asObject(value);
         if (!item || item.mature === true) continue;
-        const filetype = stringValue(item.filetype)?.toLowerCase();
-        if (!filetype || !["jpg", "jpeg", "png", "webp"].includes(filetype)) continue;
+        // Openverse currently returns real bitmap thumbnails with `filetype` and
+        // `format` empty for a number of sources. The download safety layer still
+        // verifies the response bytes and MIME type, so an omitted hint must not
+        // discard an otherwise fully attributed candidate.
+        const filetype = stringValue(item.filetype)?.toLowerCase() ?? stringValue(item.format)?.toLowerCase();
+        if (filetype && !["jpg", "jpeg", "png", "webp"].includes(filetype)) continue;
         const id = stringValue(item.id);
         const downloadUrl = safeHttpsUrl(item.thumbnail, new Set([API_HOST]));
         const sourcePageUrl = safeHttpsUrl(item.foreign_landing_url);

@@ -144,9 +144,49 @@ const lessonStudyContent = [
   {
     objective: "Hỏi và trả lời được mình đến từ đâu trong một cuộc làm quen ngắn.",
     vocabulary: [
-      { word: "new", type: "tính từ", pronunciation: "/njuː/", meaning: "mới", examples: ["new here", "a new job", "a new team"] },
-      { word: "nice", type: "tính từ", pronunciation: "/naɪs/", meaning: "vui, dễ chịu", examples: ["nice to meet you", "a nice team"] },
-      { word: "from", type: "giới từ", pronunciation: "/frɒm/", meaning: "từ, đến từ", examples: ["from Hue", "from Vietnam", "from my team"] }
+      {
+        word: "new", type: "tính từ", pronunciation: "/njuː/", meaning: "mới", examples: ["new here", "a new job", "a new team"],
+        family: [
+          { word: "newly", type: "adverb", meaning: "mới đây, vừa mới", pronunciation: "/ˈnjuːli/" },
+          { word: "newness", type: "noun", meaning: "tính mới mẻ", pronunciation: "/ˈnjuːnəs/" }
+        ],
+        synonyms: [
+          { word: "recent", level: "A2", note: "xảy ra hoặc xuất hiện gần đây", pronunciation: "/ˈriːsənt/" },
+          { word: "modern", level: "A2", note: "mới và phù hợp với hiện tại", pronunciation: "/ˈmɒdən/" }
+        ],
+        lexicalDetails: [
+          { kind: "synonym", word: "recent", definition: "having happened or appeared not long ago", example: "This is a recent project.", context: "workplace", source: "published-lesson" },
+          { kind: "antonym", word: "old", definition: "having existed for a long time", example: "This is an old process.", context: "workplace", source: "published-lesson" }
+        ]
+      },
+      {
+        word: "nice", type: "tính từ", pronunciation: "/naɪs/", meaning: "vui, dễ chịu", examples: ["nice to meet you", "a nice team"],
+        family: [
+          { word: "nicely", type: "adverb", meaning: "một cách dễ chịu", pronunciation: "/ˈnaɪsli/" },
+          { word: "niceness", type: "noun", meaning: "sự dễ chịu, tử tế", pronunciation: "/ˈnaɪsnəs/" }
+        ],
+        synonyms: [
+          { word: "pleasant", level: "A2", note: "dễ chịu hoặc thân thiện", pronunciation: "/ˈplezənt/" },
+          { word: "friendly", level: "A2", note: "thân thiện với người khác", pronunciation: "/ˈfrendli/" }
+        ],
+        lexicalDetails: [
+          { kind: "synonym", word: "pleasant", definition: "friendly, enjoyable, or satisfying", example: "It was a pleasant meeting.", context: "workplace", source: "published-lesson" },
+          { kind: "antonym", word: "unpleasant", definition: "not enjoyable or friendly", example: "The delay was unpleasant.", context: "workplace", source: "published-lesson" }
+        ]
+      },
+      {
+        word: "from", type: "giới từ", pronunciation: "/frɒm/", meaning: "từ, đến từ", examples: ["from Hue", "from Vietnam", "from my team"],
+        umbrella: {
+          word: "prepositions of origin", meaning: "giới từ chỉ nơi bắt đầu, nguồn gốc hoặc điểm xuất phát",
+          siblings: [
+            { word: "to", type: "preposition", meaning: "đến, tới", pronunciation: "/tuː/" },
+            { word: "in", type: "preposition", meaning: "ở trong, tại", pronunciation: "/ɪn/" }
+          ]
+        },
+        lexicalDetails: [
+          { kind: "synonym", word: "out of", definition: "starting at or coming from a place", example: "She is from out of town.", context: "origin", note: "dùng trong một số ngữ cảnh cụ thể", source: "published-lesson" }
+        ]
+      }
     ],
     grammar: { formula: "Where are you from? · I am from + nơi", usage: "Dùng khi làm quen và hỏi nguồn gốc hoặc nơi sinh sống.", examples: ["I am from Hue.", "Nice to meet you.", "I am new here."] },
     pronunciation: { focus: "/aɪ/", instruction: "Mở rộng miệng ở âm /a/ rồi lướt nhanh sang /ɪ/.", words: ["I", "nice", "time"] },

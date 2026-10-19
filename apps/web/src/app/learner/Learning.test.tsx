@@ -43,14 +43,12 @@ describe("learner lesson study content", () => {
     expect(screen.getByRole("button", { name: "new here" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Nghe từ phát âm: I" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Nghe từ phát âm: nice" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Chi tiết từ liên quan" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Chi tiết từ liên quan" })).not.toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: "new here" }));
     expect(speak).toHaveBeenCalledWith("new here");
     fireEvent.click(screen.getByRole("button", { name: "Nghe từ phát âm: I" }));
     expect(speak).toHaveBeenCalledWith("I");
-    fireEvent.click(screen.getByRole("button", { name: "Chi tiết từ liên quan" }));
-    expect(screen.getByRole("dialog", { name: "Chi tiết từ liên quan" })).toHaveTextContent("Chưa có chi tiết từ liên quan");
     expect(document.querySelector('img[src^="data:image"]')).not.toBeInTheDocument();
   });
 

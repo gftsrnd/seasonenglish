@@ -610,7 +610,6 @@ function VocabularyCard({
   resolveImage?: LearnerCallbacks["resolveLessonVocabularyImage"];
 }) {
   const phrases = item.examples?.slice(0, 3) ?? [];
-  const hasRelatedDetails = Boolean(item.family || item.synonyms || item.umbrella || item.lexicalDetails !== undefined);
   const loadImage = () => {
     if (resolveImage) return resolveImage(itemIndex);
     if (item.imageUrl?.trim() && item.imageAttribution) return Promise.resolve({ status: "available", imageUrl: item.imageUrl.trim(), alt: item.word, attribution: item.imageAttribution } as const);
@@ -632,7 +631,6 @@ function VocabularyCard({
       {item.umbrella ? <button className="btn-sm btn-ghost" type="button" onClick={() => openModal({ kind: "umbrella", item })}>Từ bao quát</button> : null}
       {item.lexicalDetails !== undefined ? <button className="btn-sm btn-ghost" type="button" onClick={() => openModal({ kind: "lexical", item })}>Chi tiết từ liên quan</button> : null}
       {item.lexicalDetails?.map((detail) => <button className="btn-sm btn-ghost" type="button" key={`${detail.kind}-${detail.word}`} onClick={() => openModal({ kind: "lexical", item, detail })}>{lexicalKindLabel(detail.kind)} · {detail.word}</button>)}
-      {!hasRelatedDetails ? <button className="btn-sm btn-ghost" type="button" onClick={() => openModal({ kind: "lexical", item })} title="Mở chi tiết từ liên quan">Chi tiết từ liên quan</button> : null}
     </div>
   </article>;
 }
