@@ -1,4 +1,5 @@
 import cookie from "@fastify/cookie";
+import cors from "@fastify/cors";
 import multipart from "@fastify/multipart";
 import rateLimit from "@fastify/rate-limit";
 import type { ObjectStorage } from "@e4s/storage";
@@ -28,6 +29,8 @@ export interface BuildApiOptions {
   mediaService?: ContentMediaService;
   /** Enables destructive demo maintenance only for an explicitly local/test process. */
   maintenanceEnabled?: boolean;
+  /** Comma-separated browser origins allowed to use credentialed API requests. */
+  webOrigin?: string;
   /** Reports image-provider readiness without exposing credentials to the browser. */
   imageProviders?: {
     pexels: boolean;
@@ -41,6 +44,18 @@ export function buildApi(options: BuildApiOptions): FastifyInstance {
   // is mounted until a matching object purge/backup workflow exists.
   const maintenanceEnabled = (options.maintenanceEnabled ?? false) && !options.storage;
   void app.register(cookie);
+  const webOrigins = (options.webOrigin ?? "")
+    .split(",")
+    .map((origin) => origin.trim())
+    .filter(Boolean);
+  if (webOrigins.length > 0) {
+    const firstOrigin = webOrigins[0];
+    if (webOrigins.length === 1 && firstOrigin) {
+      void app.register(cors, { origin: firstOrigin, credentials: true });
+    } else {
+      void app.register(cors, { origin: webOrigins, credentials: true });
+    }
+  }
   void app.register(rateLimit, { global: false });
   registerIdentityRoutes(app, {
     pool: options.pool,

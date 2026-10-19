@@ -126,7 +126,7 @@ async function createSession(
     path: "/",
     httpOnly: true,
     secure: secureCookies,
-    sameSite: "lax",
+    sameSite: secureCookies ? "none" : "lax",
     expires: expiresAt
   });
   return sessionView(account);

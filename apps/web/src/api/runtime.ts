@@ -1,5 +1,11 @@
+export function apiUrl(url: string, apiOrigin = import.meta.env.VITE_API_BASE_URL ?? ""): string {
+  const origin = apiOrigin.trim().replace(/\/+$/, "");
+  const path = url.startsWith("/") ? url : `/${url}`;
+  return `${origin}${path}`;
+}
+
 export async function request<T>(url: string, init?: RequestInit): Promise<T> {
-  const response = await fetch(url, {
+  const response = await fetch(apiUrl(url), {
     ...init,
     credentials: "include",
     headers: { "content-type": "application/json", ...init?.headers }
@@ -16,7 +22,7 @@ export async function request<T>(url: string, init?: RequestInit): Promise<T> {
 export async function uploadMultipart<T>(url: string, file: Blob, filename: string): Promise<T> {
   const body = new FormData();
   body.append("file", file, filename);
-  const response = await fetch(url, { method: "POST", credentials: "include", body });
+  const response = await fetch(apiUrl(url), { method: "POST", credentials: "include", body });
   if (!response.ok) {
     const payload = await response.json().catch(() => ({})) as { code?: string };
     throw new Error(payload.code ?? `HTTP_${response.status}`);

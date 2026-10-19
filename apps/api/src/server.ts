@@ -26,6 +26,7 @@ const mediaService = storage ? createProductionMediaService(storage) : undefined
 const app = buildApi({
   pool,
   secureCookies: process.env.COOKIE_SECURE === "true",
+  ...(process.env.WEB_ORIGIN ? { webOrigin: process.env.WEB_ORIGIN } : {}),
   maintenanceEnabled: process.env.E4S_ENABLE_MAINTENANCE === "true" && process.env.NODE_ENV !== "production",
   imageProviders: {
     pexels: Boolean(process.env.PEXELS_API_KEY?.trim()),
