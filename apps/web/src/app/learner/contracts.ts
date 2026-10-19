@@ -71,11 +71,8 @@ export interface MicroView extends MicroLessonView {
   regenerateError?: string;
 }
 
-export type LessonSpeechStatus = "started" | "ended" | "error" | "unsupported";
-
-export interface LessonSpeechOptions {
-  onStatus?: (status: LessonSpeechStatus) => void;
-}
+export type { LessonSpeechOptions, LessonSpeechStatus } from "../../features/experience/contracts.js";
+import type { LessonSpeechOptions } from "../../features/experience/contracts.js";
 
 export interface CoachView extends CoachContractView {
   levelApproved?: boolean;

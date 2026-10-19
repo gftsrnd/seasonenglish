@@ -1,17 +1,64 @@
-import type { ApiClient } from "../api-client.js";
+import type {
+  ArenaView, AssessmentAppealView, AssessmentKind, AssessmentMonthlyGoalView, AssessmentResponseView,
+  AssessmentRuntimeView, AssessmentSectionCode, AssessmentView, AssessmentViolationInput, CoachMessageInput,
+  CoachPersona, CoachView, DuelView, GameAnswerInput, GameFinishInput, GameHubView, GameKey, GameResultView,
+  LearnerHomeView, LearnerProfileData, LearnerProfileView, LearnerProgressView, LessonPartAppealView,
+  LessonPartAttemptEvidenceInput, LessonPartAttemptView, LessonPartCode, LessonProgressView, LessonView,
+  LevelChallengeView, MicroLessonView, RewardView, SurveyView, WeeklyPracticeView
+} from "@e4s/contracts";
 import { request, uploadMultipart } from "./runtime.js";
 
-export type LearnerApiClient = Pick<ApiClient,
-  "getProfile" | "saveProfile" | "updateLearnerMonthlyGoal" | "getHome" | "acknowledgeRewardAnnouncement" | "getProgress" |
-  "getLesson" | "saveLessonProgress" | "submitLessonPartAttempt" | "appealLessonPart" | "getMicroLesson" | "generateMicroLesson" |
-  "submitMicroAttempt" | "completeMicroLesson" | "getCoach" | "sendCoachMessage" | "setCoachPersona" | "clearCoach" |
-  "unlockCoachVocabulary" | "getLevelChallenge" | "sendLevelChallengeMessage" | "getWeeklyPractice" | "submitWeeklyPractice" |
-  "appealWeeklyPractice" | "getGames" | "generateGameWordSet" | "useWeeklyGameWordSet" | "deleteGameWordSet" |
-  "resolveGameWordImage" | "submitGameResult" | "getArena" | "createDuel" | "getDuel" | "submitDuelResult" | "getReward" |
-  "getSurvey" | "submitSurvey" | "getAssessment" | "startAssessment" | "uploadAssessmentAudio" | "getAssessmentAudioReadUrl" |
-  "saveAssessmentResponse" | "completeAssessmentSection" | "recordAssessmentAudioPlay" | "recordAssessmentViolation" |
-  "submitAssessment" | "createAssessmentAppeal"
->;
+export interface LearnerApiClient {
+  getProfile(): Promise<LearnerProfileView>;
+  saveProfile(profile: LearnerProfileData, version: number): Promise<LearnerProfileView>;
+  updateLearnerMonthlyGoal(monthlyGoal: string): Promise<AssessmentMonthlyGoalView>;
+  getHome(): Promise<LearnerHomeView>;
+  acknowledgeRewardAnnouncement(announcementId: string): Promise<{ acknowledged: true; announcementId: string }>;
+  getProgress(): Promise<LearnerProgressView>;
+  getLesson(id: string): Promise<LessonView>;
+  saveLessonProgress(id: string, progress: LessonProgressView): Promise<LessonProgressView>;
+  submitLessonPartAttempt(lessonId: string, partCode: LessonPartCode, requestId: string, evidence: LessonPartAttemptEvidenceInput): Promise<LessonPartAttemptView>;
+  appealLessonPart(lessonId: string, partCode: LessonPartCode, reason: string): Promise<LessonPartAppealView>;
+  getMicroLesson(id: string): Promise<MicroLessonView>;
+  generateMicroLesson(requestId: string, regenerate?: boolean): Promise<MicroLessonView>;
+  submitMicroAttempt(id: string, answer: string): Promise<MicroLessonView>;
+  completeMicroLesson(id: string): Promise<MicroLessonView>;
+  getCoach(): Promise<CoachView>;
+  sendCoachMessage(input: CoachMessageInput): Promise<CoachView>;
+  setCoachPersona(persona: CoachPersona): Promise<CoachView>;
+  clearCoach(): Promise<CoachView>;
+  unlockCoachVocabulary(word: string): Promise<CoachView>;
+  getLevelChallenge(): Promise<LevelChallengeView>;
+  sendLevelChallengeMessage(input: CoachMessageInput): Promise<LevelChallengeView>;
+  getWeeklyPractice(): Promise<WeeklyPracticeView>;
+  submitWeeklyPractice(input: { requestId: string; text: string }): Promise<WeeklyPracticeView>;
+  appealWeeklyPractice(submissionId: string, reason: string): Promise<WeeklyPracticeView>;
+  getGames(): Promise<GameHubView>;
+  generateGameWordSet(input: { requestId: string; topic: string }): Promise<GameHubView>;
+  useWeeklyGameWordSet(): Promise<GameHubView>;
+  deleteGameWordSet(): Promise<GameHubView>;
+  resolveGameWordImage(setId: string, wordId: string): Promise<{ imageUrl: string | null }>;
+  submitGameResult(game: GameKey, input: { requestId: string } & GameFinishInput): Promise<GameResultView>;
+  getArena(): Promise<ArenaView>;
+  createDuel(input: { opponentId: string; game: Exclude<GameKey, "crossword"> }): Promise<DuelView>;
+  getDuel(id: string): Promise<DuelView>;
+  submitDuelResult(id: string, input: { requestId: string; answers: GameAnswerInput[] }): Promise<DuelView>;
+  getReward(mode: "preview" | "done"): Promise<RewardView>;
+  getSurvey(): Promise<SurveyView>;
+  submitSurvey(input: { rating: number; comment: string; studyTime: "work" | "outside" | "both" }): Promise<SurveyView>;
+  getAssessment(kind: AssessmentKind | "levelup"): Promise<AssessmentView>;
+  startAssessment(kind: AssessmentKind | "levelup"): Promise<AssessmentView>;
+  uploadAssessmentAudio(file: Blob, filename: string): Promise<{ artifactKey: string }>;
+  getAssessmentAudioReadUrl(artifactKey: string): Promise<{ url: string; expiresAt: string }>;
+  saveAssessmentResponse(attemptId: string, section: AssessmentSectionCode, taskKey: string, input: {
+    value: string; evidenceType: "choice" | "text" | "audio" | "transcript" | "typed_proxy" | "technical_failure"; artifactKey?: string;
+  }): Promise<AssessmentResponseView>;
+  completeAssessmentSection(attemptId: string, section: AssessmentSectionCode): Promise<AssessmentView>;
+  recordAssessmentAudioPlay(attemptId: string, section: AssessmentSectionCode, groupKey: string): Promise<{ playCount: number; remaining: number }>;
+  recordAssessmentViolation(attemptId: string, input: AssessmentViolationInput): Promise<AssessmentRuntimeView>;
+  submitAssessment(attemptId: string): Promise<AssessmentView>;
+  createAssessmentAppeal(attemptId: string, reason: string): Promise<AssessmentAppealView>;
+}
 
 export const learnerApiClient: LearnerApiClient = {
   getProfile: () => request("/api/v1/learner/profile"),

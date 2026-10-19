@@ -1,17 +1,59 @@
-import type { ApiClient } from "../api-client.js";
+import type {
+  AssessmentDeletionRequestView, ManagerAccountView, ManagerAccountsView, ManagerDataExportView,
+  ManagerDataImportView, ManagerDeleteRequestsView, ManagerImageTestView, ManagerLearnerProfileView,
+  ManagerMaintenanceConfirmationInput, ManagerMaintenanceConfirmationView, ManagerMaintenanceResultView,
+  ManagerMusicTestView, ManagerOperationsView, ManagerPinReportsView, ManagerPinReportView,
+  ManagerProgressView, ManagerProviderSettingsInput, ManagerProviderSettingsTestInput,
+  ManagerProviderSettingsView, ManagerProviderTestView, ManagerPurgeConfirmationInput,
+  ManagerPurgeConfirmationView, ManagerReminderCopyView, ManagerReminderDismissView,
+  ManagerReminderSendView, ManagerRemindersView, ManagerReportView, ManagerSettingsView, ManagerTrashView,
+  ManagerWebhookTestView, ProductPreferencesView, SystemCapabilitiesView
+} from "@e4s/contracts";
 import { request } from "./runtime.js";
 
-export type ManagerApiClient = Pick<ApiClient,
-  "getManagerProgress" | "getManagerLearnerProfile" | "getManagerOperations" | "getManagerDeleteRequests" | "decideManagerDeleteRequest" |
-  "getManagerTrash" | "restoreManagerTrashAccount" | "requestManagerTrashPurgeConfirmation" | "purgeManagerTrashAccount" |
-  "getManagerPinReports" | "createManagerPinReport" | "resolveManagerPinReport" | "testManagerImage" | "clearManagerImageCache" |
-  "testManagerMusic" | "resetManagerMusic" | "testManagerWebhook" | "exportManagerData" | "importManagerData" |
-  "requestManagerSeedConfirmation" | "seedManagerData" | "requestManagerWipeConfirmation" | "wipeManagerData" |
-  "getManagerProviderSettings" | "saveManagerProviderSettings" | "testManagerProviderSettings" | "getManagerAccounts" |
-  "createManagerAccount" | "updateManagerAccountRole" | "updateManagerAccountStatus" | "resetManagerAccountPassword" |
-  "getManagerReminders" | "sendManagerReminder" | "dismissManagerReminder" | "copyManagerReminder" | "getManagerReport" |
-  "getManagerSettings" | "saveManagerSettings" | "getProductPreferences" | "saveProductPreferences" | "getSystemCapabilities"
->;
+export interface ManagerApiClient {
+  getManagerProgress(): Promise<ManagerProgressView>;
+  getManagerLearnerProfile(learnerId: string): Promise<ManagerLearnerProfileView>;
+  getManagerOperations(): Promise<ManagerOperationsView>;
+  getManagerDeleteRequests(): Promise<ManagerDeleteRequestsView>;
+  decideManagerDeleteRequest(requestId: string, input: { status: "approved" | "rejected"; note: string }): Promise<AssessmentDeletionRequestView>;
+  getManagerTrash(): Promise<ManagerTrashView>;
+  restoreManagerTrashAccount(accountId: string): Promise<ManagerAccountView>;
+  requestManagerTrashPurgeConfirmation(accountId: string): Promise<ManagerPurgeConfirmationView>;
+  purgeManagerTrashAccount(accountId: string, input: ManagerPurgeConfirmationInput): Promise<void>;
+  getManagerPinReports(): Promise<ManagerPinReportsView>;
+  createManagerPinReport(input: { accountId: string; note: string }): Promise<ManagerPinReportView>;
+  resolveManagerPinReport(reportId: string): Promise<ManagerPinReportView>;
+  testManagerImage(input: { source: ProductPreferencesView["vocabImageSource"]; word?: string }): Promise<ManagerImageTestView>;
+  clearManagerImageCache(): Promise<{ cleared: number }>;
+  testManagerMusic(input: ManagerSettingsView["backgroundMusic"]): Promise<ManagerMusicTestView>;
+  resetManagerMusic(): Promise<ManagerSettingsView["backgroundMusic"]>;
+  testManagerWebhook(input: { url: string; template: string }): Promise<ManagerWebhookTestView>;
+  exportManagerData(): Promise<ManagerDataExportView>;
+  importManagerData(snapshot: unknown): Promise<ManagerDataImportView>;
+  requestManagerSeedConfirmation(): Promise<ManagerMaintenanceConfirmationView>;
+  seedManagerData(input: ManagerMaintenanceConfirmationInput): Promise<ManagerMaintenanceResultView>;
+  requestManagerWipeConfirmation(): Promise<ManagerMaintenanceConfirmationView>;
+  wipeManagerData(input: ManagerMaintenanceConfirmationInput): Promise<ManagerMaintenanceResultView>;
+  getManagerProviderSettings(): Promise<ManagerProviderSettingsView>;
+  saveManagerProviderSettings(input: ManagerProviderSettingsInput): Promise<ManagerProviderSettingsView>;
+  testManagerProviderSettings(input?: ManagerProviderSettingsTestInput): Promise<ManagerProviderTestView>;
+  getManagerAccounts(): Promise<ManagerAccountsView>;
+  createManagerAccount(input: { displayName: string; email: string; role: ManagerAccountView["role"]; password: string }): Promise<ManagerAccountView>;
+  updateManagerAccountRole(accountId: string, role: ManagerAccountView["role"]): Promise<ManagerAccountView>;
+  updateManagerAccountStatus(accountId: string, status: "active" | "disabled" | "deleted"): Promise<ManagerAccountView>;
+  resetManagerAccountPassword(accountId: string, password: string): Promise<{ saved: boolean }>;
+  getManagerReminders(): Promise<ManagerRemindersView>;
+  sendManagerReminder(learnerId: string, requestId: string): Promise<ManagerReminderSendView>;
+  dismissManagerReminder(learnerId: string): Promise<ManagerReminderDismissView>;
+  copyManagerReminder(learnerId: string): Promise<ManagerReminderCopyView>;
+  getManagerReport(): Promise<ManagerReportView>;
+  getManagerSettings(): Promise<ManagerSettingsView>;
+  saveManagerSettings(input: Omit<ManagerSettingsView, "organizationName">): Promise<ManagerSettingsView>;
+  getProductPreferences(): Promise<ProductPreferencesView>;
+  saveProductPreferences(input: ProductPreferencesView): Promise<ProductPreferencesView>;
+  getSystemCapabilities(): Promise<SystemCapabilitiesView>;
+}
 
 export const managerApiClient: ManagerApiClient = {
   getManagerProgress: () => request("/api/v1/manager/progress"),

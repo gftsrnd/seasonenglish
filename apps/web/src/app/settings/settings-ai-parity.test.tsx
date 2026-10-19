@@ -14,7 +14,6 @@ const client = vi.hoisted(() => ({
   testManagerWebhook: vi.fn(), exportManagerData: vi.fn(), importManagerData: vi.fn()
 }));
 
-vi.mock("../../api-client.js", () => ({ apiClient: client }));
 vi.mock("../../api/shared.js", () => ({ sharedApiClient: client }));
 vi.mock("../../api/manager.js", () => ({ managerApiClient: client }));
 

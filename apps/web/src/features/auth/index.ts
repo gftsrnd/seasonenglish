@@ -1,1 +1,1 @@
-export * from "./entry-screen.js";
+export * from "./contracts.js";

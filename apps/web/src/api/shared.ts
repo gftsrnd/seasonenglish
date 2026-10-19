@@ -1,10 +1,14 @@
-import type { ApiClient } from "../api-client.js";
+import type { LearnerAvatarData, ProductPreferencesView, SessionView } from "@e4s/contracts";
+import type { AuthClient } from "../features/auth/contracts.js";
 import { request } from "./runtime.js";
 
-export type SharedApiClient = Pick<ApiClient,
-  "learnerLogin" | "staffLogin" | "currentSession" | "saveSessionAvatar" | "logout" |
-  "getProductPreferences" | "saveProductPreferences"
->;
+export interface SharedApiClient extends AuthClient {
+  currentSession(): Promise<SessionView>;
+  saveSessionAvatar(avatar: LearnerAvatarData): Promise<SessionView>;
+  logout(): Promise<void>;
+  getProductPreferences(): Promise<ProductPreferencesView>;
+  saveProductPreferences(input: ProductPreferencesView): Promise<ProductPreferencesView>;
+}
 
 export const sharedApiClient: SharedApiClient = {
   learnerLogin: (input) => request("/api/auth/learner/login", { method: "POST", body: JSON.stringify(input) }),

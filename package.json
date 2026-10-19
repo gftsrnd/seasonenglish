@@ -15,7 +15,6 @@
     "typecheck": "tsc -b",
     "build": "pnpm -r build",
     "dev:local": "node scripts/dev-local.mjs",
-    "parity:ledger": "node scripts/generate-parity-ledger.mjs",
     "clean:generated": "node scripts/clean-generated.mjs"
   },
   "devDependencies": {

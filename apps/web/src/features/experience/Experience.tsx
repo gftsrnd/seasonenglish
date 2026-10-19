@@ -1,5 +1,5 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import type { LessonSpeechOptions, LessonSpeechStatus } from "../../app/learner/contracts.js";
+import type { LessonSpeechOptions, LessonSpeechStatus } from "./contracts.js";
 
 type FeedbackTone = "click" | "success" | "error" | "warning" | "celebrate";
 type NoticeTone = "success" | "error" | "info";

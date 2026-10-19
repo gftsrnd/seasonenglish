@@ -80,7 +80,7 @@ async function pageState(page) {
 async function screenshot(page, role, run, step) {
   const file = pathOf(role, run, step);
   await mkdir(join(evidenceRoot, role, `run-${run}`), { recursive: true });
-  // Capture the actual viewport: the prototype intentionally keeps the bottom
+  // Capture the actual viewport: the app intentionally keeps the bottom
   // navigation fixed, so a full-page capture places that navigation halfway
   // down a long document and creates a false overlap signal in the evidence.
   await page.screenshot({ path: file, fullPage: false });

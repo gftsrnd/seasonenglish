@@ -1,18 +1,58 @@
-import type { ApiClient } from "../api-client.js";
+import type {
+  AssessmentDecisionInput, AssessmentDecisionView, AssessmentDeletionRequestView, AssessmentLevelChangeInput,
+  AssessmentLevelChangeView, AssessmentLevelFormDeleteView, AssessmentLevelFormDetailView,
+  AssessmentLevelFormSlotView, AssessmentLevelFormView, AssessmentMonthlyGoalView,
+  AssessmentReviewAttemptDetailView, AssessmentReviewChallengeView, AssessmentReviewLearnerView,
+  AssessmentReviewOverviewView, CefrLevel, ContentLessonDraftInput, ContentLessonMatrixView,
+  ContentLessonMutationResult, ContentLessonSetVersionView, ContentPromptKey, ContentPromptSettingsView,
+  ContentReviewAiGradeJobView, ContentReviewAssessmentDetailView, ContentReviewView, ContentWeekFrameView,
+  ContentWeekInput, ContentWeekSuggestionView, SystemCapabilitiesView
+} from "@e4s/contracts";
 import { request } from "./runtime.js";
 
-export type OperatorApiClient = Pick<ApiClient,
-  "getAssessmentReviewOverview" | "getAssessmentReviewLearner" | "getAssessmentReviewAttempt" | "getAssessmentReviewChallenge" |
-  "rescoreAssessment" | "changeAssessmentReviewLearnerLevel" | "updateAssessmentReviewMonthlyGoal" |
-  "requestAssessmentReviewLearnerDeletion" | "decideAssessment" | "resolveTopicReport" |
-  "getAssessmentLevelForms" | "getAssessmentLevelForm" | "generateAssessmentLevelForm" | "publishAssessmentLevelForm" | "deleteAssessmentLevelForm" |
-  "getContentWeeks" | "saveContentWeeks" | "suggestContentWeeks" | "getContentLessonMatrix" | "getContentLessonSet" |
-  "upsertContentLessonDay" | "deleteContentLessonDay" | "saveContentLessonJson" | "enrichContentLessonDraft" |
-  "fillContentLessonPhrases" | "deleteContentLessonDraftSet" | "saveContentLessonDraft" | "generateContentLessonDraft" |
-  "submitContentLessonSet" | "publishContentLessonSet" | "retireContentLessonSet" | "getContentReview" |
-  "getContentReviewAssessment" | "setContentReviewChecked" | "deleteReviewedMicroLesson" | "gradeReviewedSubmission" |
-  "gradeReviewedSubmissionAi" | "decideReviewedAppeal" | "getContentPrompts" | "saveContentPrompts" | "getSystemCapabilities"
->;
+export interface OperatorApiClient {
+  getAssessmentReviewOverview(): Promise<AssessmentReviewOverviewView>;
+  getAssessmentReviewLearner(learnerId: string): Promise<AssessmentReviewLearnerView>;
+  getAssessmentReviewAttempt(attemptId: string): Promise<AssessmentReviewAttemptDetailView>;
+  getAssessmentReviewChallenge(attemptId: string): Promise<AssessmentReviewChallengeView>;
+  rescoreAssessment(attemptId: string, requestId: string): Promise<AssessmentReviewAttemptDetailView>;
+  changeAssessmentReviewLearnerLevel(learnerId: string, input: AssessmentLevelChangeInput): Promise<AssessmentLevelChangeView>;
+  updateAssessmentReviewMonthlyGoal(learnerId: string, monthlyGoal: string): Promise<AssessmentMonthlyGoalView>;
+  requestAssessmentReviewLearnerDeletion(learnerId: string, reason: string): Promise<AssessmentDeletionRequestView>;
+  decideAssessment(attemptId: string, input: AssessmentDecisionInput): Promise<AssessmentDecisionView>;
+  resolveTopicReport(reportId: string): Promise<{ saved: boolean }>;
+  getAssessmentLevelForms(): Promise<AssessmentLevelFormSlotView[]>;
+  getAssessmentLevelForm(versionId: string): Promise<AssessmentLevelFormDetailView>;
+  generateAssessmentLevelForm(targetLevel: Exclude<CefrLevel, "A1">): Promise<AssessmentLevelFormView>;
+  publishAssessmentLevelForm(versionId: string): Promise<AssessmentLevelFormView>;
+  deleteAssessmentLevelForm(versionId: string): Promise<AssessmentLevelFormDeleteView>;
+  getContentWeeks(): Promise<ContentWeekFrameView>;
+  saveContentWeeks(weeks: ContentWeekInput[]): Promise<ContentWeekFrameView>;
+  suggestContentWeeks(weekNumbers: number[]): Promise<{ weeks: ContentWeekSuggestionView[] }>;
+  getContentLessonMatrix(): Promise<ContentLessonMatrixView>;
+  getContentLessonSet(week: number, cefr: CefrLevel): Promise<ContentLessonSetVersionView>;
+  upsertContentLessonDay(week: number, cefr: CefrLevel, dayNumber: number, lesson: ContentLessonDraftInput, expectedVersion?: number): Promise<ContentLessonMutationResult>;
+  deleteContentLessonDay(week: number, cefr: CefrLevel, dayNumber: number, expectedVersion?: number): Promise<ContentLessonMutationResult>;
+  saveContentLessonJson(week: number, cefr: CefrLevel, lessons: ContentLessonDraftInput[], expectedVersion?: number): Promise<ContentLessonMutationResult>;
+  enrichContentLessonDraft(week: number, cefr: CefrLevel, expectedVersion?: number): Promise<ContentLessonMutationResult>;
+  fillContentLessonPhrases(week: number, cefr: CefrLevel, expectedVersion?: number): Promise<ContentLessonMutationResult>;
+  deleteContentLessonDraftSet(week: number, cefr: CefrLevel): Promise<{ deleted: true }>;
+  saveContentLessonDraft(week: number, cefr: CefrLevel, lessons: ContentLessonDraftInput[]): Promise<ContentLessonSetVersionView>;
+  generateContentLessonDraft(week: number, cefr: CefrLevel): Promise<ContentLessonSetVersionView>;
+  submitContentLessonSet(versionId: string): Promise<ContentLessonSetVersionView>;
+  publishContentLessonSet(versionId: string): Promise<ContentLessonSetVersionView>;
+  retireContentLessonSet(versionId: string): Promise<ContentLessonSetVersionView>;
+  getContentReview(): Promise<ContentReviewView>;
+  getContentReviewAssessment(attemptId: string): Promise<ContentReviewAssessmentDetailView>;
+  setContentReviewChecked(kind: "submission" | "coach", id: string, checked: boolean): Promise<{ checked: boolean }>;
+  deleteReviewedMicroLesson(id: string): Promise<void>;
+  gradeReviewedSubmission(id: string, input: { meaning: number; vocabulary: number; grammar: number; feedback: string }): Promise<{ saved: boolean }>;
+  gradeReviewedSubmissionAi(id: string, requestId?: string): Promise<ContentReviewAiGradeJobView>;
+  decideReviewedAppeal(id: string, input: { status: "accepted" | "rejected"; resolution: string }): Promise<{ saved: boolean }>;
+  getContentPrompts(): Promise<ContentPromptSettingsView>;
+  saveContentPrompts(groups: Array<{ key: ContentPromptKey; content: string }>): Promise<ContentPromptSettingsView>;
+  getSystemCapabilities(): Promise<SystemCapabilitiesView>;
+}
 
 export const operatorApiClient: OperatorApiClient = {
   getAssessmentReviewOverview: () => request("/api/v1/assessment-reviews/overview"),

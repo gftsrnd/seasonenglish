@@ -3,12 +3,10 @@ import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 
 const appCss = readFileSync(new URL("./styles.css", import.meta.url), "utf8");
-const cloneCss = readFileSync(new URL("../../pages/operator/styles.operator-clone.css", import.meta.url), "utf8");
 
 describe("Operator responsive layout guardrails", () => {
-  it("reserves the fixed mobile navigation clearance for both Operator shells", () => {
+  it("reserves the fixed mobile navigation clearance", () => {
     expect(appCss).toMatch(/body:has\(nav\.bottomnav\):has\(\.app-operator\) > #root > main\s*\{[^}]*padding-bottom:\s*calc\(128px/);
-    expect(cloneCss).toMatch(/body:has\(\.operator-page\) > #root > main\s*\{[^}]*padding-bottom:\s*calc\(128px/);
   });
 
   it("keeps title rhythm and equal-height signal cards explicit", () => {
@@ -16,7 +14,6 @@ describe("Operator responsive layout guardrails", () => {
     expect(appCss).toMatch(/\.app-operator > \.section\s*\{[^}]*margin-top:\s*22px/);
     expect(appCss).toMatch(/\.app-operator \.section > h3\s*\{[^}]*margin-bottom:\s*14px/);
     expect(appCss).toMatch(/\.app-operator \.grid\.cols-2 > \.card\s*\{[^}]*height:\s*100%/);
-    expect(cloneCss).toMatch(/\.operator-page \.level-signal-grid\s*\{[^}]*align-items:\s*stretch/);
   });
 
   it("keeps compact Operator controls touchable on phones", () => {
@@ -47,28 +44,10 @@ describe("Operator responsive layout guardrails", () => {
     expect(appCss).toMatch(/\.operator-detail-modal \.table-wrap table\s*\{[\s\S]*?table-layout:\s*fixed/);
   });
 
-  it("keeps the legacy operator shell contained at the tablet breakpoint", () => {
-    expect(cloneCss).toMatch(/@media \(min-width:\s*761px\) and \(max-width:\s*960px\)[\s\S]*?body:has\(\.operator-page\) \.topbar[\s\S]*?overflow:\s*hidden/);
-    expect(cloneCss).toMatch(/body:has\(\.operator-page\) \.topbar nav a\.active[\s\S]*?display:\s*inline-flex/);
-    expect(cloneCss).toMatch(/body:has\(\.operator-page\) \.topbar \.userchip[\s\S]*?min-width:\s*0/);
-  });
-
   it("keeps every app Operator destination reachable in the tablet header", () => {
     expect(appCss).toMatch(/@media \(min-width:\s*761px\) and \(max-width:\s*960px\)[\s\S]*?body:has\(\.app-operator\) \.topbar nav\s*\{[\s\S]*?flex:\s*1 1 auto[\s\S]*?max-width:\s*none[\s\S]*?overflow-x:\s*auto/);
     expect(appCss).toMatch(/body:has\(\.app-operator\) \.topbar nav a\s*\{[\s\S]*?display:\s*inline-flex[\s\S]*?flex:\s*0 0 auto/);
     expect(appCss).not.toMatch(/body:has\(\.app-operator\) \.topbar nav a\s*\{[\s\S]*?display:\s*none/);
   });
 
-  it("gives the legacy operator controls and review tabs the same touch-safe geometry", () => {
-    expect(cloneCss).toMatch(/\.operator-page button:not\(\.operator-link-button\),[\s\S]*?\.operator-page \.button-link[\s\S]*?min-height:\s*40px/);
-    expect(cloneCss).toMatch(/\.operator-page \.operator-tabs[\s\S]*?display:\s*flex/);
-    expect(cloneCss).toMatch(/\.operator-page \.operator-tabs[\s\S]*?overflow-x:\s*auto/);
-    expect(cloneCss).toMatch(/@media \(max-width:\s*480px\)[\s\S]*?\.operator-page \.operator-tabs[\s\S]*?flex-wrap:\s*nowrap/);
-  });
-
-  it("contains legacy operator dialogs without relying on shared modal geometry", () => {
-    expect(cloneCss).toMatch(/\.operator-page \.lesson-editor-backdrop[\s\S]*?padding:/);
-    expect(cloneCss).toMatch(/\.operator-page \.lesson-editor[\s\S]*?max-height:/);
-    expect(cloneCss).toMatch(/\.operator-page \.lesson-editor-heading[\s\S]*?min-width:\s*0/);
-  });
 });

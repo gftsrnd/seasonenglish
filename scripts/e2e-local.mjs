@@ -431,7 +431,7 @@ async function checkEntryNotice() {
     const tabs = [...document.querySelectorAll('[role="tab"]')];
     const switchButton = document.querySelector('button.entry-switch');
     return {
-      mode: document.querySelector('.prototype-entry-card') ? 'prototype' : 'react',
+      mode: document.querySelector('.app-entry-card') ? 'app' : 'unknown',
       submitMinHeight: submit ? getComputedStyle(submit).minHeight : '',
       submitRadius: submit ? getComputedStyle(submit).borderRadius : '',
       submitCursor: submit ? getComputedStyle(submit).cursor : '',
@@ -444,8 +444,8 @@ async function checkEntryNotice() {
   assert(entryStyles.submitMinHeight === "40px", `Entry submit control min-height is ${entryStyles.submitMinHeight}, expected 40px`);
   assert(entryStyles.submitRadius === "10px", `Entry submit control radius is ${entryStyles.submitRadius}, expected 10px`);
   assert(entryStyles.submitCursor === "pointer", `Entry submit control cursor is ${entryStyles.submitCursor}, expected pointer`);
-  if (entryStyles.mode === "prototype") {
-    assert(entryStyles.tabCount === 2 && entryStyles.selectedTabCount === 1 && entryStyles.panelLabelledByTab, "Prototype entry audience tabs do not expose the expected selection semantics");
+  if (entryStyles.mode === "app") {
+    assert(entryStyles.tabCount === 2 && entryStyles.selectedTabCount === 1 && entryStyles.panelLabelledByTab, "App entry audience tabs do not expose the expected selection semantics");
   } else {
     assert(entryStyles.switchBackground === "rgba(0, 0, 0, 0)", `Entry audience switch background is ${entryStyles.switchBackground}, expected transparent`);
   }
@@ -478,13 +478,13 @@ async function checkEntryNotice() {
         disabled: Boolean(submit?.disabled),
         label: (submit?.textContent || '').trim(),
         opacity: submit ? getComputedStyle(submit).opacity : '',
-        expectedOpacity: document.querySelector('.prototype-entry-card') ? '0.5' : '0.48'
+        expectedOpacity: document.querySelector('.app-entry-card') ? '0.5' : '0.48'
       };
     })()`);
     assert(loading.disabled, "Entry submit control did not become disabled during login");
     assert(loading.label === "Đang đăng nhập…", `Unexpected login loading label: ${loading.label}`);
     assert(loading.opacity === loading.expectedOpacity, `Disabled login opacity is ${loading.opacity}, expected ${loading.expectedOpacity}`);
-    console.log("ok entry loading: login control is disabled with the prototype loading label");
+    console.log("ok entry loading: login control is disabled with the app loading label");
     await page.evaluate("window.__e4sReleaseLogin?.()");
     await page.waitFor("auth notice", "Boolean(document.querySelector('[role=alert]'))");
     const alert = await page.evaluate("document.querySelector('[role=alert]')?.textContent || ''");
@@ -530,21 +530,21 @@ async function checkLearnerSession(webUrl) {
     gridGap: getComputedStyle(document.querySelector('main [data-home-block="metrics"]')).gap,
     gridAlign: getComputedStyle(document.querySelector('main [data-home-block="metrics"]')).alignItems,
     cardPadding: getComputedStyle(document.querySelector('main [data-home-block="primary"]')).padding,
-    mode: document.querySelector('.topbar') ? 'prototype' : 'react',
+    mode: document.querySelector('.topbar') ? 'app' : 'unknown',
     primaryKind: document.querySelector('main [data-home-block="primary"]')?.classList.contains('hero') ? 'hero' : 'card',
     headingWeight: getComputedStyle(document.querySelector('main h1')).fontWeight
   }))()`);
   assert(shell.navCount === 5, `Learner shell nav count changed: ${shell.navCount}`);
   assert(shell.primaryBlock, "Learner home primary block is missing its semantic data-home-block marker");
-  const expectedShell = shell.mode === "prototype"
+  const expectedShell = shell.mode === "app"
     ? { sectionMarginTop: "16px", gridGap: "12px", gridAlign: "stretch", cardPadding: shell.primaryKind === "hero" ? "18px 20px" : "20px" }
     : { sectionMarginTop: "10px", gridGap: "10px", gridAlign: "normal", cardPadding: "18px" };
   assert(shell.sectionMarginTop === expectedShell.sectionMarginTop, `Learner section spacing is ${shell.sectionMarginTop}, expected ${expectedShell.sectionMarginTop}`);
-  const metricsGapAllowed = shell.mode === "prototype" ? ["10px", "12px"] : [expectedShell.gridGap];
+  const metricsGapAllowed = shell.mode === "app" ? ["10px", "12px"] : [expectedShell.gridGap];
   assert(metricsGapAllowed.includes(shell.gridGap), `Learner metrics gap is ${shell.gridGap}, expected one of ${metricsGapAllowed.join(", ")}`);
   assert(shell.gridAlign === expectedShell.gridAlign, `Learner metrics alignment is ${shell.gridAlign}, expected ${expectedShell.gridAlign}`);
   assert(shell.cardPadding === expectedShell.cardPadding, `Learner primary card padding is ${shell.cardPadding}, expected ${expectedShell.cardPadding}`);
-  assert(shell.headingWeight === "600", `Prototype heading weight is ${shell.headingWeight}, expected 600`);
+  assert(shell.headingWeight === "600", `App heading weight is ${shell.headingWeight}, expected 600`);
   console.log("ok learner shell: session, nav, spacing, grid and typography");
 
   const notifications = await page.evaluate(`fetch('/api/v1/notifications', { credentials: 'include', cache: 'no-store' })
@@ -667,12 +667,12 @@ async function checkOperatorRoute(webUrl) {
   }
   const lessonSemantics = await page.evaluate(`(() => {
     const note = [...document.querySelectorAll('[role=note]')].find((element) => (element.textContent || '').includes('Thêm cột mức'));
-    const prototype = Boolean(document.querySelector('.prototype-operator'));
+    const appRuntime = Boolean(document.querySelector('.app-operator'));
     const select = document.querySelector('select[aria-label="Mức cần thêm"], select[aria-label="Mức CEFR cần thêm"]');
     const addButton = [...document.querySelectorAll('button')].find((element) => (element.textContent || '').trim() === 'Thêm cột mức');
     const group = addButton?.closest('.operator-page-title-actions, .level-column-actions');
     return {
-      prototype,
+      appRuntime,
       noteText: note?.textContent || '',
       selectLabel: select?.getAttribute('aria-label') || '',
       addButtonFound: Boolean(addButton),
@@ -681,7 +681,7 @@ async function checkOperatorRoute(webUrl) {
     };
   })()`);
   assert(lessonSemantics.noteText.includes("Mỗi cột là một mức CEFR"), "Operator lessons rationale feedback is missing");
-  const expectedAddLevelLabel = lessonSemantics.prototype ? "Mức cần thêm" : "Mức CEFR cần thêm";
+  const expectedAddLevelLabel = lessonSemantics.appRuntime ? "Mức cần thêm" : "Mức CEFR cần thêm";
   assert(lessonSemantics.addButtonFound && lessonSemantics.selectLabel === expectedAddLevelLabel, `Operator add-level target label is ${lessonSemantics.selectLabel}, expected ${expectedAddLevelLabel}`);
   assert(lessonSemantics.addButtonEnabled, "Operator add-level action is unexpectedly disabled");
   assert(lessonSemantics.sameActionGroup, "Operator add-level controls are not grouped as one task");
@@ -732,7 +732,7 @@ async function checkManagerGuardAndModal(webUrl) {
   await waitForText("Prompt & rubric", "operator prompt route");
   const guard = await page.evaluate(`(() => {
     const button = [...document.querySelectorAll('button')].find((element) => (element.textContent || '').trim() === 'Lưu prompt');
-    const textarea = document.querySelector('.prompt-card textarea, .prototype-operator textarea');
+    const textarea = document.querySelector('.prompt-card textarea, .app-operator textarea');
     return {
       exists: Boolean(button),
       disabled: Boolean(button?.disabled),
@@ -769,12 +769,12 @@ async function checkManagerGuardAndModal(webUrl) {
   await page.waitFor("account password modal", "Boolean(document.querySelector('[role=\"dialog\"], .review-dialog'))");
   const dialog = await page.evaluate(`(() => {
     const modal = document.querySelector('[role="dialog"]') || document.querySelector('.review-dialog');
-    const prototypeModal = modal?.matches('[role="dialog"]') === true;
+    const appModal = modal?.matches('[role="dialog"]') === true;
     const cancel = modal?.querySelector('button[data-action="modal-cancel"]')
       || [...(modal?.querySelectorAll('button') ?? [])].find((element) => (element.textContent || '').trim() === 'Hủy');
     return {
       text: modal?.textContent || '',
-      prototypeModal,
+      appModal,
       modal: modal?.getAttribute('aria-modal') || '',
       focusedInside: Boolean(modal && modal.contains(document.activeElement)),
       cancel: Boolean(cancel),
@@ -783,7 +783,7 @@ async function checkManagerGuardAndModal(webUrl) {
     };
   })()`);
   assert(dialog.text.includes("Mật khẩu mới"), `Unexpected shared modal: ${dialog.text}`);
-  if (dialog.prototypeModal) {
+  if (dialog.appModal) {
     assert(dialog.modal === "true" && dialog.focusedInside && dialog.cancel && dialog.primary, "Password modal semantics or focus behavior are incomplete");
   } else {
     assert(dialog.password && dialog.cancel && dialog.primary, "Password modal fields or actions are incomplete");
