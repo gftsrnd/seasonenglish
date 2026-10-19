@@ -87,16 +87,18 @@ export function OperatorRouteController({ session, client = apiClient, basePath 
 function OperatorRouteControllerContent({ session, client, paths }: { session: SessionView; client: OperatorApiClient; paths: OperatorRoutePaths }) {
   const location = useLocation();
   if (session.role !== "operator" && session.role !== "manager") return <Status tone="error">Tài khoản này không có quyền mở khu vực vận hành.</Status>;
-  const props = { client, readOnly: session.role === "manager" };
+  const readOnly = session.role === "manager";
+  const props = { client, readOnly };
   const detail = location.pathname.match(new RegExp(`^${escapeRegExp(paths.lessons)}/(\\d+)/(A1|A2|B1|B2|C1)$`));
-  if (detail) return <LessonSetRoute {...props} week={Number(detail[1])} cefr={detail[2] as Cefr} />;
-  if (location.pathname === paths.root) return <DashboardRoute {...props} />;
-  if (location.pathname === paths.levelForms) return <LevelFormsRoute {...props} />;
-  if (location.pathname === paths.weeks) return <WeeksRoute {...props} />;
-  if (location.pathname === paths.lessons) return <LessonsRoute {...props} />;
-  if (location.pathname === paths.review) return <ReviewRoute {...props} />;
-  if (location.pathname === paths.prompts) return <PromptsRoute {...props} />;
-  return <Status tone="error">Đường dẫn vận hành không tồn tại.</Status>;
+  const content = detail ? <LessonSetRoute {...props} week={Number(detail[1])} cefr={detail[2] as Cefr} />
+    : location.pathname === paths.root ? <DashboardRoute {...props} />
+      : location.pathname === paths.levelForms ? <LevelFormsRoute {...props} />
+        : location.pathname === paths.weeks ? <WeeksRoute {...props} />
+          : location.pathname === paths.lessons ? <LessonsRoute {...props} />
+            : location.pathname === paths.review ? <ReviewRoute {...props} />
+              : location.pathname === paths.prompts ? <PromptsRoute {...props} />
+                : <Status tone="error">Đường dẫn vận hành không tồn tại.</Status>;
+  return readOnly ? <div className="manager-operator-inspection" data-read-only-inspection="true"><div className="manager-inspection-context" role="note"><b>Chế độ xem của Quản lý</b><span>Đang xem dữ liệu vận hành ở chế độ chỉ đọc; các thao tác thay đổi bị tắt.</span></div>{content}</div> : content;
 }
 
 function routePathsFor(basePath: "/op" | "/mgr/ops"): OperatorRoutePaths {
@@ -342,7 +344,7 @@ function LevelFormsRoute({ client, readOnly }: { client: OperatorApiClient; read
     if (typeof client.getAssessmentLevelForm !== "function") return;
     void client.getAssessmentLevelForm(versionId).then(setDialog).catch(reason => setError(message(reason)));
   };
-  return <><OperatorLevelForms readOnly={readOnly} unavailable={missing} view={adaptLevelForms(data, { aiConnected: capabilities?.ai ?? false, generatingTarget: generating })} actions={{
+  return <><OperatorLevelForms readOnly={readOnly} showReadOnlyBanner={!readOnly} unavailable={missing} view={adaptLevelForms(data, { aiConnected: capabilities?.ai ?? false, generatingTarget: generating })} actions={{
     onBack: () => navigate(paths.root), onOpenSettings: () => navigate("/settings"),
     onGenerate: target => { if (readOnly) return; setGenerating(target); refresh(client.generateAssessmentLevelForm(target as Exclude<CefrLevel, "A1">)); },
     onApprove: id => { if (!readOnly) refresh(client.publishAssessmentLevelForm(id)); }, onView: show,

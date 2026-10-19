@@ -1479,6 +1479,73 @@ body:has(.app-operator) #modal > .dialog > .row {
   margin-top: 0;
 }
 
+/* Manager inspection owns the surrounding context. Keep the reused Operator
+   screen readable without adding a second shell or another competing banner. */
+.manager-operator-inspection {
+  min-width: 0;
+}
+
+.manager-inspection-context {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 6px 12px;
+  margin: 0 0 14px;
+  padding: 10px 14px;
+  border: 1px solid var(--line);
+  border-left: 4px solid var(--primary);
+  border-radius: 12px;
+  background: var(--surface-2);
+  line-height: 1.45;
+}
+
+.manager-inspection-context span {
+  color: var(--muted);
+}
+
+.manager-operator-inspection > .app-operator {
+  min-width: 0;
+}
+
+/* The Operator profile dialog presents the same learner evidence as Manager.
+   Use the same row rhythm so switching between the two entry points does not
+   change how the information is scanned. */
+.operator-modal-scope.operator-profile-modal > .operator-profile-dialog {
+  flex-basis: 620px;
+  max-width: 620px;
+}
+
+.operator-profile-card {
+  margin-top: 0;
+  padding: 16px;
+  background: var(--surface-3);
+}
+
+.operator-profile-rows {
+  gap: 0;
+  margin-top: 0;
+}
+
+.operator-profile-row {
+  grid-template-columns: minmax(128px, 36%) minmax(0, 1fr);
+  gap: 12px;
+  padding: 9px 0;
+  border-bottom: 1px solid var(--line);
+  line-height: 1.45;
+}
+
+.operator-profile-row:last-child {
+  padding-bottom: 0;
+  border-bottom: 0;
+}
+
+@media (max-width: 520px) {
+  .operator-profile-row {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 3px;
+  }
+}
+
 /* The shared shell has a more-specific mobile-nav rule; this route-scoped
    selector wins without changing shared/global styles. */
 @media (max-width: 760px) {
