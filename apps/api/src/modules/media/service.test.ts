@@ -125,12 +125,12 @@ describe("ContentMediaService resolution", () => {
     expect(fixture.savedAvailable).toHaveLength(1);
   });
 
-  it("does not persist provider metadata when the object upload fails", async () => {
+  it("keeps the validated provider image as a browser fallback when the object upload fails", async () => {
     const fixture = createFixture({ putError: new Error("storage unavailable") });
     fixture.providers.exactWikipedia.mockResolvedValue(candidate("wikipedia"));
 
     await expect(fixture.service.resolveForUser("user-a", { term: "notebook", partOfSpeech: "noun" }))
-      .resolves.toEqual({ status: "unavailable" });
+      .resolves.toMatchObject({ status: "available", imageUrl: "https://upload.wikimedia.org/media.png" });
     expect(fixture.savedAvailable).toHaveLength(0);
     expect(fixture.savedUnavailable).toHaveLength(0);
   });

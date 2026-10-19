@@ -116,12 +116,17 @@ export function createContentMediaService(options: {
         });
       } catch {
         await options.storage.deleteObject(bucket, objectKey).catch(() => undefined);
-        return unavailable(false);
+        return { image: candidateView(candidate, input.request.term), provider: candidate.provider, cached: false };
       }
       const view = await viewFromRecord(stored, input.request.term, options.storage, bucket);
-      return view ? { image: view, provider: candidate.provider, cached: false } : unavailable(false);
+      return view
+        ? { image: view, provider: candidate.provider, cached: false }
+        : { image: candidateView(candidate, input.request.term), provider: candidate.provider, cached: false };
     } catch {
-      return unavailable(false);
+      // The provider candidate has already passed URL and licence validation.
+      // Keep it as a real browser fallback when MinIO/download is temporarily
+      // unavailable instead of turning a valid illustration into a blank card.
+      return { image: candidateView(candidate, input.request.term), provider: candidate.provider, cached: false };
     }
   }
 
@@ -232,6 +237,20 @@ async function viewFromRecord(
 
 function unavailable(cached: boolean): ContentImageDiagnosticView {
   return { image: { status: "unavailable" }, provider: null, cached };
+}
+
+function candidateView(candidate: ProviderCandidate, term: string): Extract<ContentImageView, { status: "available" }> {
+  return {
+    status: "available",
+    imageUrl: candidate.downloadUrl,
+    alt: term,
+    attribution: {
+      creator: candidate.creator,
+      licence: candidate.licence,
+      licenceUrl: candidate.licenceUrl,
+      sourceUrl: candidate.sourcePageUrl
+    }
+  };
 }
 
 function hostsFor(provider: ProviderCandidate["provider"]): ReadonlySet<string> {

@@ -1,6 +1,6 @@
 .content-image {
-  width: 60px;
-  min-width: 60px;
+  width: 88px;
+  min-width: 88px;
   margin: 0;
   border-radius: 12px;
   overflow: hidden;
@@ -23,10 +23,12 @@
 .content-image--available { overflow: hidden; }
 .content-image--available img {
   display: block;
-  width: 60px;
+  width: 88px;
+  height: 88px;
   aspect-ratio: 1;
   object-fit: cover;
   border-radius: 12px;
+  image-rendering: auto;
 }
 
 .vocabulary-card-heading {
@@ -98,7 +100,9 @@
 .typing-clue-image .content-image__source { display: none; }
 
 @media (max-width: 560px) {
-  .vocabulary-card-heading { gap: 8px; }
+  .content-image,
+  .content-image--available img { width: 76px; min-width: 76px; height: 76px; }
+  .vocabulary-card-heading { gap: 10px; }
 }
 
 @keyframes content-image-spin { to { transform: rotate(360deg); } }

@@ -49,12 +49,19 @@ export function ContentImage({ term, load }: {
   }, [term]);
 
   if (state.status === "unavailable") {
-    return <div className="content-image content-image--fallback" role="status"><ImageOff size={18} aria-hidden="true" /><span>Chưa có ảnh minh hoạ</span></div>;
+    return <div className="content-image content-image--fallback" role="img" aria-label={`Minh hoạ ${term}`}><ImageOff size={18} aria-hidden="true" /><span>Chưa có ảnh minh hoạ</span></div>;
   }
   if (state.status === "available") {
     const { image } = state;
     return <figure className="content-image content-image--available">
-      <img src={image.imageUrl} alt={image.alt || term} loading="lazy" decoding="async" onError={() => setState({ status: "unavailable" })} />
+      <img
+        src={image.imageUrl}
+        alt={image.alt || term}
+        loading="eager"
+        decoding="async"
+        onLoad={(event) => { if (event.currentTarget.naturalWidth < 1) setState({ status: "unavailable" }); }}
+        onError={() => setState({ status: "unavailable" })}
+      />
     </figure>;
   }
   return <div ref={hostRef} className="content-image content-image--loading" role="status" aria-label={`Đang tải ảnh minh hoạ cho ${term}`}><LoaderCircle size={18} aria-hidden="true" /><span className="sr-only">Đang tải ảnh minh hoạ</span></div>;

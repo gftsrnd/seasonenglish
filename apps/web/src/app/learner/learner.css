@@ -810,6 +810,48 @@ h1,h2,h3,h4,h1 b,h2 b,h3 b,h4 b{font-weight:600 !important}
 .lesson-page .lesson-part{border-radius:14px;padding:18px}
 @media(max-width:720px){.app-learner-page .path{justify-content:flex-start;gap:0;overflow:auto;padding-bottom:4px}.app-learner-page .path>li{flex:0 0 96px}.app-learner-page .profile-form [aria-label="Về tiếng Anh"]>div>.row{flex-wrap:wrap!important}.app-learner-page .profile-form [aria-label="Về tiếng Anh"]>div>.row>.opt{flex:1 1 100%!important}.app-learner-page .profile-form [aria-label="Về tiếng Anh"]>div>.row>input{flex:1 1 calc(50% - 4px);min-width:0}.lesson-page .lesson-surface{padding:12px}.lesson-page .lesson-part{padding:14px}}
 
+/* Vocabulary is intentionally one predictable reading column: image, word, audio,
+   meaning, collocations, then optional lexical links. */
+.lesson-page .vocabulary-card {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  align-items: start;
+  gap: 12px;
+  min-width: 0;
+  margin-top: 10px;
+  padding: 16px;
+  box-sizing: border-box;
+  text-align: left;
+}
+.lesson-page .vocabulary-card-heading {
+  display: grid;
+  grid-template-columns: 88px minmax(0, 1fr);
+  align-items: start;
+  gap: 14px;
+  min-width: 0;
+}
+.lesson-page .vocabulary-card-main { min-width: 0; }
+.lesson-page .vocabulary-card-word { align-items: center; }
+.lesson-page .vocabulary-card-word h3 { font-size: 1.12rem; }
+.lesson-page .vocabulary-card-main .lesson-speech-control { margin-top: 6px; }
+.lesson-page .lesson-speech-control { display: grid; gap: 6px; min-width: 0; }
+.lesson-page .lesson-speech-control > button { width: max-content; max-width: 100%; min-height: 36px; padding: 6px 10px; }
+.lesson-page .vocabulary-card-meaning,
+.lesson-page .vocabulary-card-example { display: grid; gap: 4px; margin: 0; line-height: 1.45; }
+.lesson-page .vocabulary-card-label { color: var(--muted); font-size: .72rem; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; }
+.lesson-page .vocabulary-card-phrases { display: grid; gap: 7px; margin: 0; min-width: 0; }
+.lesson-page .vocabulary-card-phrase-list { display: flex; flex-wrap: wrap; gap: 7px; min-width: 0; }
+.lesson-page .vocabulary-card-phrase-list button { min-height: 34px; max-width: 100%; }
+.lesson-page .vocabulary-card-relations { display: flex; flex-wrap: wrap; gap: 7px; margin: 0; padding-top: 2px; }
+.lesson-page .vocabulary-card-relations .chip { display: inline-flex; align-items: center; gap: 5px; min-height: 30px; padding: 5px 10px; }
+.lesson-page .vocabulary-card-chip-count { font-size: .7rem; opacity: .72; }
+.lesson-page .vocabulary-card .content-image--fallback { min-height: 88px; }
+@media (max-width: 560px) {
+  .lesson-page .vocabulary-card { padding: 14px; }
+  .lesson-page .vocabulary-card-heading { grid-template-columns: 76px minmax(0, 1fr); gap: 10px; }
+  .lesson-page .vocabulary-card .content-image--fallback { min-height: 76px; }
+}
+
 /* coach header controls: keep persona choice visibly grouped like the app segmented control */
 .coach-actions{gap:6px;flex-wrap:wrap;justify-content:flex-end}
 .coach-persona{display:inline-flex;gap:3px;padding:3px;border-radius:10px;background:var(--surface-3)}
