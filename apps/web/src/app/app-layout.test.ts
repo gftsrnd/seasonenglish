@@ -32,8 +32,9 @@ describe("global app HCI rhythm", () => {
     expect(css).toMatch(/\.btn-sm\s*\{[\s\S]*?min-height:\s*40px/);
     expect(css).toMatch(/\.word-chip\s*\{[\s\S]*?min-height:\s*44px\s*!important/);
     expect(css).toMatch(/\.hero,\.party,\.welcome\s*\{[\s\S]*?isolation:\s*isolate/);
-    expect(css).toMatch(/\.hero::after,\.party::after\s*\{[\s\S]*?z-index:\s*0/);
     expect(css).toMatch(/\.hero > \*,\.party > \*,\.welcome \.body,\.welcome \.pills\s*\{[\s\S]*?z-index:\s*1/);
+    expect(css).toMatch(/\.welcome \.sky\s*\{[\s\S]*?z-index:\s*0/);
+    expect(css).toMatch(/\.welcome \.art\s*\{[\s\S]*?z-index:\s*2/);
     expect(css).toMatch(/\.game-icon,\.game-control-icon,\.status-icon,\.app-brand-mark,\.avatar\s*\{[\s\S]*?flex-shrink:\s*0/);
   });
 });

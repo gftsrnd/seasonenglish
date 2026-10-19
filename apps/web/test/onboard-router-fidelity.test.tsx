@@ -36,11 +36,12 @@ const home: LearnerHomeView = {
 
 describe("onboarding and learner router fidelity", () => {
   it("keeps the canonical new-learner onboarding framing and choice groups", () => {
-    render(<LearnerOnboard view={{ mode: "new", profile: {} }} actions={actions()} />);
+    const { container } = render(<LearnerOnboard view={{ mode: "new", profile: {} }} actions={actions()} />);
 
     expect(screen.getByText("Bước 1/2 · Hồ sơ")).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "Cho Season biết về bạn nhé" })).toBeInTheDocument();
-    expect(screen.getByTestId("season-mark")).toBeInTheDocument();
+    expect(container.querySelector("img[data-product-art='mascot']")).toHaveAttribute("src", "/media/mascot/season-bear.png");
+    expect(screen.queryByTestId("season-mark")).not.toBeInTheDocument();
     expect(screen.getByText(/dùng thông tin này để chọn ví dụ sát công việc và cách học hợp với bạn/i)).toBeInTheDocument();
     expect(screen.getByText(/bước 1 · hồ sơ · đang làm/i)).toBeInTheDocument();
     expect(screen.getByText(/bước 2 · test đầu vào · tiếp theo/i)).toBeInTheDocument();

@@ -80,7 +80,8 @@ describe("learner lifecycle app states", () => {
     const locked = screen.getByRole("link", { name: /t4 · my department.*chưa mở/i });
     expect(locked).toHaveAttribute("aria-disabled", "true");
     expect(locked).toHaveAttribute("title", "My department – mở sau khi xong bài trước");
-    expect(locked).toHaveTextContent("🔒");
+    expect(locked.querySelector("svg.lucide-lock-keyhole")).toBeInTheDocument();
+    expect(locked).not.toHaveTextContent("🔒");
     expect(within(locked).queryByText(/xong t3 trước/i)).not.toBeInTheDocument();
 
     await user.click(locked);
