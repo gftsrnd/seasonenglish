@@ -2,7 +2,7 @@ import { mkdir } from "node:fs/promises";
 import { chromium } from "playwright";
 
 const baseUrl = process.env.E4S_VISUAL_BASE ?? "http://127.0.0.1:4175";
-const outputDir = process.env.E4S_VISUAL_OUT ?? ".tmp/app-hci-postpatch";
+const outputDir = process.env.E4S_VISUAL_OUT ?? ".tmp/evidence/app-visual";
 const routes = [
   { name: "home", path: "/home" },
   { name: "games", path: "/games" },

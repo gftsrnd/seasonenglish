@@ -1,10 +1,10 @@
 import { chromium } from "playwright";
 import fs from "node:fs/promises";
 
-const repoRoot = "D:/TTS - AI Application - Huynh Doan Hoang Minh/12_10_2026 - 17_10_2026/E4S/platform";
+const repoRoot = process.cwd().replaceAll("\\", "/");
 const evidenceRoot = process.env.E4S_MANAGER_EVIDENCE_ROOT
   ? process.env.E4S_MANAGER_EVIDENCE_ROOT.replaceAll("\\", "/")
-  : `${repoRoot}/apps/web/src/app/manager/evidence/visual-slice-2026-10-16/fresh-current-2026-10-16`;
+  : `${repoRoot}/.tmp/evidence/manager-visual`;
 const sizes = [[390, 827], [827, 900]];
 const routes = [
   ["progress", "/mgr"],

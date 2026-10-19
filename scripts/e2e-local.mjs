@@ -17,7 +17,7 @@ const explicitApiUrl = process.env.E4S_E2E_API_URL ?? process.env.E4S_API_URL;
 const shouldStartLocal = process.env.E4S_E2E_START !== "false";
 const startupTimeoutMs = Number(process.env.E4S_E2E_STARTUP_TIMEOUT_MS ?? 120_000);
 const freshScreenshotPath = process.env.E4S_E2E_SCREENSHOT_PATH
-  ?? join(root, "docs", "lead-review", "2026-10-16-e4s-prototype-comparison", "e2e-post-patch-390.png");
+  ?? join(root, ".tmp", "evidence", "e2e-local", "e2e-post-patch-390.png");
 const demoManagerId = "00000000-0000-4000-8000-000000000103";
 const localRoleFixtures = [
   { label: "learner", email: "learner@e4s.local", password: "learner-pass", audience: "learner", role: "learner" },
@@ -363,8 +363,8 @@ class CdpPage {
     const filled = await this.evaluate(`(() => {
       const element = document.querySelector(${encodedSelector});
       if (!element) return false;
-      const prototype = element instanceof HTMLTextAreaElement ? HTMLTextAreaElement.prototype : HTMLInputElement.prototype;
-      const setter = Object.getOwnPropertyDescriptor(prototype, 'value')?.set;
+      const nativePrototype = element instanceof HTMLTextAreaElement ? HTMLTextAreaElement.prototype : HTMLInputElement.prototype;
+      const setter = Object.getOwnPropertyDescriptor(nativePrototype, 'value')?.set;
       setter?.call(element, ${encodedValue});
       element.dispatchEvent(new Event('input', { bubbles: true }));
       element.dispatchEvent(new Event('change', { bubbles: true }));

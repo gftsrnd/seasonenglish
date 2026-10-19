@@ -27,3 +27,19 @@ node scripts/verify-local-compose.mjs
 ```
 
 Không chạy `docker compose down -v` trong bước trên: named volumes giữ dữ liệu PostgreSQL và MinIO. Chỉ dùng `down -v` khi chủ động muốn xóa toàn bộ dữ liệu local E4S.
+
+## Tài khoản local
+
+`prepare-local` chỉ tạo ba tài khoản demo chính:
+
+- `manager@e4s.local` / `manager-pass`
+- `operator@e4s.local` / `staff-pass`
+- `learner@e4s.local` / `learner-pass`
+
+Checker và fixture phụ chỉ tồn tại trong database kiểm thử. Để kiểm tra tài khoản test cũ trong PostgreSQL local mà không thay đổi dữ liệu:
+
+```bash
+DATABASE_URL=postgres://e4s:e4s_local_password@127.0.0.1:54329/e4s pnpm cleanup:local-users
+```
+
+Chỉ thêm `--apply` sau khi đã đọc danh sách tài khoản và số bản ghi trong báo cáo dry-run.

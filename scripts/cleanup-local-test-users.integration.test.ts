@@ -4,7 +4,7 @@ import { resolve } from "node:path";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { Pool } from "pg";
 import { createCredentialHash } from "../packages/domain/src/identity/index.js";
-import { DEMO_IDS } from "../packages/database/src/index.js";
+import { DEMO_IDS, migrateDatabase, resetPublicSchema } from "../packages/database/src/index.js";
 
 const execFileAsync = promisify(execFile);
 const databaseUrl = process.env.TEST_DATABASE_URL
@@ -16,6 +16,13 @@ describe("local test-user cleanup", () => {
   const pool = new Pool({ connectionString: databaseUrl });
 
   beforeAll(async () => {
+    const client = await pool.connect();
+    try {
+      await resetPublicSchema(client);
+      await migrateDatabase(client);
+    } finally {
+      client.release();
+    }
     await execFileAsync(process.execPath, [resolve("node_modules/tsx/dist/cli.mjs"), "scripts/prepare-local.ts"], {
       cwd: process.cwd(), env: { ...process.env, DATABASE_URL: databaseUrl }
     });
