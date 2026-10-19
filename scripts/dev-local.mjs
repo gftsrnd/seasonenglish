@@ -4,6 +4,7 @@ import { mkdir } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { loadEnvFile } from "node:process";
 import EmbeddedPostgres from "embedded-postgres";
+import { verifyLocalObjectStorage, waitForHttpReady } from "./local-storage-preflight.mjs";
 
 if (existsSync(resolve(".env"))) loadEnvFile(resolve(".env"));
 
@@ -60,6 +61,7 @@ process.on("SIGINT", () => void stop());
 process.on("SIGTERM", () => void stop());
 
 try {
+  const storageStatus = await verifyLocalObjectStorage();
   if (!existsSync(join(databaseDir, "PG_VERSION"))) await postgres.initialise();
   await postgres.start();
   await postgres.createDatabase("e4s").catch((error) => {
@@ -80,7 +82,18 @@ try {
     S3_SECRET_KEY: process.env.S3_SECRET_KEY ?? process.env.MINIO_ROOT_PASSWORD ?? "e4s_local_minio_password"
   });
   run("pnpm", ["--filter", "@e4s/web", "dev", "--", "--host", "127.0.0.1", "--port", "4175"]);
-  process.stdout.write("E4S local: http://127.0.0.1:4175\n");
+  await Promise.all([
+    waitForHttpReady("API", "http://127.0.0.1:3001/api/readiness"),
+    waitForHttpReady("Web", "http://127.0.0.1:4175")
+  ]);
+  process.stdout.write([
+    "E4S local đã sẵn sàng:",
+    "  Web        ✓ http://127.0.0.1:4175",
+    "  API        ✓ http://127.0.0.1:3001",
+    `  PostgreSQL ✓ ${databasePort}`,
+    `  MinIO      ✓ ${storageStatus.endpoint} · bucket ${storageStatus.bucket}`,
+    ""
+  ].join("\n"));
   await new Promise(() => undefined);
 } catch (error) {
   process.stderr.write(`${error instanceof Error ? error.stack : String(error)}\n`);

@@ -14,6 +14,18 @@ node scripts/verify-local-compose.mjs
 
 Mở `http://127.0.0.1:4174`. Demo login được bật cho local; Groq key chỉ được đọc ở API từ `.env`, không được gửi xuống web.
 
+## Chạy Web/API trực tiếp trên Windows
+
+`pnpm dev:local` dùng Web `4175`, API `3001`, PostgreSQL nhúng `54329` và kết nối MinIO E4S tại `9002`. Trước khi chạy, bật đúng storage từ Ubuntu/WSL:
+
+```bash
+docker compose up -d minio minio-init
+```
+
+Sau đó chạy `pnpm dev:local` trên Windows. Script kiểm tra cả MinIO lẫn bucket `e4s-evidence` trước khi mở API; nếu thiếu sẽ dừng và in lại đúng lệnh trên. Khi sẵn sàng, terminal in trạng thái và URL của Web, API, PostgreSQL và MinIO.
+
+`GROQ_API_KEY` là tùy chọn khi chỉ chạy chức năng không dùng AI. Nếu có key, đặt trong `.env`; không commit key vào Git.
+
 ## Kiểm chứng persistence
 
 Sau smoke test đầu tiên, chạy:

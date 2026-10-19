@@ -79,7 +79,7 @@ services:
       S3_REGION: us-east-1
       S3_ACCESS_KEY: ${MINIO_ROOT_USER:-e4s_minio}
       S3_SECRET_KEY: ${MINIO_ROOT_PASSWORD:-e4s_local_minio_password}
-      GROQ_API_KEY: ${GROQ_API_KEY:?GROQ_API_KEY must be set in .env for local AI}
+      GROQ_API_KEY: ${GROQ_API_KEY:-}
       GROQ_MODEL: ${GROQ_MODEL:-qwen/qwen3.8-27b}
       VOCAB_IMAGE_SOURCE: ${VOCAB_IMAGE_SOURCE:-wikimedia}
       PEXELS_API_KEY: ${PEXELS_API_KEY:-}
@@ -112,7 +112,7 @@ services:
       S3_ACCESS_KEY: ${MINIO_ROOT_USER:-e4s_minio}
       S3_SECRET_KEY: ${MINIO_ROOT_PASSWORD:-e4s_local_minio_password}
       S3_BUCKET: e4s-evidence
-      GROQ_API_KEY: ${GROQ_API_KEY:?GROQ_API_KEY must be set in .env for local AI}
+      GROQ_API_KEY: ${GROQ_API_KEY:-}
       GROQ_MODEL: ${GROQ_MODEL:-qwen/qwen3.8-27b}
     depends_on:
       migrate:
