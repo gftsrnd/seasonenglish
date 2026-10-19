@@ -1,8 +1,7 @@
-import type { ObjectStorage } from "@e4s/storage";
+import { EVIDENCE_BUCKET, MEDIA_BUCKET, type ObjectStorage } from "@e4s/storage";
 import type { FastifyInstance } from "fastify";
 import type { Pool } from "pg";
 import { z } from "zod";
-import { EVIDENCE_BUCKET } from "../files/constants.js";
 import { createRoleGuard } from "../identity/policy.js";
 
 export function registerSystemRoutes(
@@ -83,7 +82,7 @@ export function registerSystemRoutes(
 async function objectStorageAvailable(storage: ObjectStorage | undefined): Promise<boolean> {
   if (!storage) return false;
   try {
-    await storage.ready(EVIDENCE_BUCKET);
+    await Promise.all([EVIDENCE_BUCKET, MEDIA_BUCKET].map((bucket) => storage.ready(bucket)));
     return true;
   } catch {
     return false;
