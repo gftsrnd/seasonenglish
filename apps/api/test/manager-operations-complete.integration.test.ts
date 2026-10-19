@@ -14,6 +14,9 @@ const purgeEnrollmentId = "00000000-0000-4000-8000-000000000906";
 const purgeReminderId = "00000000-0000-4000-8000-000000000907";
 const purgeActivityId = "00000000-0000-4000-8000-000000000908";
 const purgeFileId = "00000000-0000-4000-8000-000000000909";
+const purgeAttemptId = "00000000-0000-4000-8000-000000000910";
+const purgeScoreId = "00000000-0000-4000-8000-000000000911";
+const purgeDecisionId = "00000000-0000-4000-8000-000000000912";
 
 describe("complete Manager learner and account operations API", () => {
   const pool = new Pool({ connectionString: databaseUrl });
@@ -72,6 +75,22 @@ describe("complete Manager learner and account operations API", () => {
         `insert into files (id, organization_id, owner_user_id, purpose, bucket, object_key, mime_type, size_bytes, sha256)
          values ($1, $2, $3, 'assessment_audio', 'e4s-evidence', 'assessment-audio/purge/private.webm', 'audio/webm', 12, 'purge-sha')`,
         [purgeFileId, DEMO_IDS.organization, purgeAccountId]
+      );
+      await client.query(
+        `insert into assessment_attempts (id, assessment_version_id, learner_id, status)
+         select $1, id, $2, 'pending_review' from assessment_versions
+         where status = 'published' order by published_at desc nulls last limit 1`,
+        [purgeAttemptId, purgeAccountId]
+      );
+      await client.query(
+        `insert into assessment_scores (id, attempt_id, section, score, criteria, source)
+         values ($1, $2, 'writing', 12, $3::jsonb, 'ai')`,
+        [purgeScoreId, purgeAttemptId, JSON.stringify({ rationale: "Nguyễn Văn Test nêu thông tin riêng" })]
+      );
+      await client.query(
+        `insert into assessment_decisions (id, attempt_id, suggested_level, status, reason)
+         values ($1, $2, 'B1', 'suggested', $3)`,
+        [purgeDecisionId, purgeAttemptId, "Nguyễn Văn Test cần được xem xét thêm"]
       );
     } finally { client.release(); }
     await app.ready();
@@ -153,6 +172,8 @@ describe("complete Manager learner and account operations API", () => {
     await expect(pool.query("select cefr from enrollments where learner_id = $1", [purgeAccountId])).resolves.toMatchObject({ rows: [{ cefr: "A2" }] });
     await expect(pool.query("select minutes, evidence from activities where learner_id = $1", [purgeAccountId])).resolves.toMatchObject({ rows: [{ minutes: 10, evidence: {} }] });
     await expect(pool.query("select reason, message from reminders where learner_id = $1", [purgeAccountId])).resolves.toMatchObject({ rows: [{ reason: "Tài khoản đã ẩn danh", message: "Nội dung đã được xoá khi ẩn danh tài khoản." }] });
+    await expect(pool.query("select criteria from assessment_scores where attempt_id = $1", [purgeAttemptId])).resolves.toMatchObject({ rows: [{ criteria: {} }] });
+    await expect(pool.query("select reason from assessment_decisions where id = $1", [purgeDecisionId])).resolves.toMatchObject({ rows: [{ reason: "Nội dung đã được xoá khi ẩn danh tài khoản." }] });
     const accountsAfterPurge = await app.inject({ method: "GET", url: "/api/v1/manager/accounts", headers: { cookie: managerCookie } });
     const trashAfterPurge = await app.inject({ method: "GET", url: "/api/v1/manager/trash", headers: { cookie: managerCookie } });
     expect(accountsAfterPurge.body).not.toContain(purgeAccountId);

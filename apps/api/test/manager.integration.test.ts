@@ -333,6 +333,12 @@ describe("manager progress and operations API", () => {
     expect(retried.statusCode, retried.body).toBe(200);
     expect(sent.json()).toMatchObject({ learnerId: reminderLearnerId, status: "queued", deliveryStatus: "queued", provider: "local_queue" });
     expect(retried.json()).toMatchObject({ reminderId: sent.json().reminderId });
+    const reusedForDifferentLearner = await app.inject({
+      method: "POST", url: `/api/v1/manager/reminders/${copiedReminderLearnerId}`, headers: { cookie: managerCookie },
+      payload: { requestId: "reminder-retry-1" }
+    });
+    expect(reusedForDifferentLearner.statusCode, reusedForDifferentLearner.body).toBe(409);
+    expect(reusedForDifferentLearner.json()).toEqual({ code: "MANAGER_REMINDER_REQUEST_REUSED" });
     await expect(pool.query("select count(*)::int as count from reminders where learner_id = $1", [reminderLearnerId]))
       .resolves.toMatchObject({ rows: [{ count: 1 }] });
     await expect(pool.query("select count(*)::int as count from audit_events where action = 'reminder.queued' and entity_id = $1", [reminderLearnerId]))

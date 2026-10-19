@@ -7080,9 +7080,16 @@ class ManagerRepository {
         const previous = await client.query<{ response: ManagerReminderSendView }>(
           "select response from idempotency_keys where scope = $1 and key = $2", [scope, requestId]
         );
-        await client.query("commit");
         const response = previous.rows[0]?.response;
-        if (!response?.reminderId) throw new Error("MANAGER_REMINDER_RETRY_UNAVAILABLE");
+        if (!response?.reminderId) {
+          await client.query("rollback");
+          throw new Error("MANAGER_REMINDER_RETRY_UNAVAILABLE");
+        }
+        if (response.learnerId !== learnerId) {
+          await client.query("rollback");
+          throw new Error("MANAGER_REMINDER_REQUEST_REUSED");
+        }
+        await client.query("commit");
         return response;
       }
       const learner = await this.requireEligibleReminderLearner(client, organizationId, learnerId);
@@ -7607,6 +7614,16 @@ class ManagerRepository {
       );
       await client.query(
         `update assessment_responses set response = '{}'::jsonb
+         where attempt_id in (select id from assessment_attempts where learner_id = $1)`,
+        [accountId]
+      );
+      await client.query(
+        `update assessment_scores set criteria = '{}'::jsonb
+         where attempt_id in (select id from assessment_attempts where learner_id = $1)`,
+        [accountId]
+      );
+      await client.query(
+        `update assessment_decisions set reason = 'Nội dung đã được xoá khi ẩn danh tài khoản.'
          where attempt_id in (select id from assessment_attempts where learner_id = $1)`,
         [accountId]
       );
