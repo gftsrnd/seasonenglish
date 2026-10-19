@@ -316,6 +316,61 @@
   }
 }
 
+/* Settings uses the same visual hierarchy for Manager and Operator while
+   leaving each role's available controls untouched. */
+.settings-page > .card {
+  background: var(--surface);
+  box-shadow: 0 1px 0 rgb(30 30 30 / .03);
+}
+
+.settings-page > .card > h3:first-child {
+  line-height: 1.35;
+}
+
+.settings-page > .card > h3:first-child + p,
+.settings-page > .card > h3:first-child + .banner {
+  margin-top: -4px;
+}
+
+.settings-page > .card > .banner,
+.settings-page > .card > .card,
+.settings-page > .card > details {
+  border-color: var(--line);
+  background: var(--surface-3);
+}
+
+.settings-page .row > .badge,
+.settings-page .row > .chip {
+  white-space: normal;
+  text-align: left;
+}
+
+.settings-page .table-wrap {
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--surface);
+}
+
+.settings-page .table-wrap table {
+  margin: 0;
+}
+
+@media (max-width: 520px) {
+  .settings-page {
+    gap: 14px;
+    padding-top: 6px;
+  }
+
+  .settings-page > .page-title {
+    margin-bottom: 6px;
+  }
+
+  .settings-page > .card {
+    gap: 14px;
+    padding: 16px;
+  }
+}
+
 @media (max-width: 520px) {
   .settings-page > .card {
     padding: 18px;

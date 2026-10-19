@@ -271,6 +271,203 @@
   }
 }
 
+/* Evidence-backed hierarchy pass: give Manager data surfaces clear section
+   headers, deliberate table overflow, and a readable profile dialog. */
+.manager-section-heading {
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 8px 16px;
+  margin-bottom: 14px;
+}
+
+.manager-section-heading > h3 {
+  margin: 0;
+  line-height: 1.35;
+}
+
+.manager-table-card {
+  padding: 18px;
+}
+
+.manager-progress-table,
+.manager-rewards-table {
+  width: 100%;
+  max-width: 100%;
+  overflow-x: auto;
+  overscroll-behavior-inline: contain;
+  scrollbar-gutter: stable;
+  scrollbar-width: thin;
+  padding-bottom: 4px;
+}
+
+.manager-progress-table table {
+  min-width: 1040px;
+}
+
+.manager-progress-table th,
+.manager-progress-table td,
+.manager-rewards-table th,
+.manager-rewards-table td {
+  vertical-align: top;
+  line-height: 1.45;
+}
+
+.manager-progress-table .badge,
+.manager-rewards-table .badge {
+  white-space: normal;
+}
+
+.manager-inspection-card > h3,
+.manager-readiness-card > .manager-section-heading,
+.manager-operator-card > .manager-operator-card-heading {
+  margin-top: 0;
+}
+
+.manager-inspection-card > p,
+.manager-readiness-card > p {
+  margin: 6px 0 0;
+  line-height: 1.55;
+}
+
+.manager-inspection-links {
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 14px;
+}
+
+.manager-inspection-links > .btn {
+  flex: 0 0 auto;
+}
+
+.manager-operator-card-heading {
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px 16px;
+}
+
+.manager-operator-card-heading > :first-child {
+  flex: 1 1 280px;
+}
+
+.manager-operator-grid {
+  align-items: stretch;
+  gap: 18px;
+  margin-top: 16px;
+}
+
+.manager-metric-group {
+  min-width: 0;
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--surface-3);
+}
+
+.manager-metric-group > .eyebrow:first-child {
+  margin-bottom: 8px;
+  color: var(--text);
+}
+
+.manager-metric-subheading {
+  margin-top: 16px;
+  margin-bottom: 8px;
+  color: var(--text);
+}
+
+.manager-metric-group .table-wrap {
+  margin-bottom: 10px;
+  background: var(--surface);
+}
+
+.manager-rewards-table table {
+  min-width: 720px;
+}
+
+.manager-learner-profile-dialog {
+  width: min(620px, 100%);
+  padding: 22px;
+}
+
+.manager-dialog-heading {
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 14px;
+}
+
+.manager-dialog-heading h3 {
+  min-width: 0;
+  margin: 0;
+  line-height: 1.3;
+  overflow-wrap: anywhere;
+}
+
+.manager-profile-card {
+  margin: 0;
+  padding: 16px;
+  background: var(--surface-3);
+}
+
+.manager-profile-title {
+  padding-bottom: 10px;
+  border-bottom: 1px solid var(--line);
+}
+
+.manager-profile-rows {
+  display: grid;
+  gap: 0;
+}
+
+.manager-profile-row {
+  display: grid;
+  grid-template-columns: minmax(128px, 36%) minmax(0, 1fr);
+  align-items: start;
+  gap: 12px;
+  padding: 9px 0;
+  border-bottom: 1px solid var(--line);
+}
+
+.manager-profile-row:last-child {
+  padding-bottom: 0;
+  border-bottom: 0;
+}
+
+.manager-profile-label,
+.manager-profile-value {
+  min-width: 0;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+
+.manager-profile-label {
+  font-weight: 600;
+}
+
+@media (min-width: 761px) {
+  .manager-rewards-table table {
+    min-width: 0;
+  }
+}
+
+@media (max-width: 520px) {
+  .manager-table-card,
+  .manager-learner-profile-dialog {
+    padding: 16px;
+  }
+
+  .manager-operator-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .manager-metric-group {
+    padding: 12px;
+  }
+
+  .manager-profile-row {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 3px;
+  }
+}
+
 .manager-reward-result {
   margin-top: 6px !important;
   line-height: 1.4;

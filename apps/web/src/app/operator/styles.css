@@ -1581,3 +1581,91 @@ body:has(.app-operator) #modal > .dialog > .row {
     word-break: break-word;
   }
 }
+
+/* Review queues need a visible hierarchy between the page, the queue surface,
+   and each individual response. Keep this route-scoped so other Operator
+   lists retain their existing density. */
+.app-operator[aria-label="Đọc mẫu"] .operator-review-card-list {
+  display: grid;
+  gap: 14px;
+}
+
+.app-operator[aria-label="Đọc mẫu"] .operator-review-card-list > .operator-review-card {
+  margin: 0;
+}
+
+.app-operator[aria-label="Đọc mẫu"] .operator-review-card,
+.app-operator[aria-label="Đọc mẫu"] .operator-review-panel {
+  padding: 18px;
+  border-color: #d8d2c8;
+  box-shadow: 0 1px 0 rgb(30 30 30 / .03);
+}
+
+.app-operator[aria-label="Đọc mẫu"] .operator-card-header,
+.app-operator[aria-label="Đọc mẫu"] .operator-review-item-heading {
+  align-items: flex-start;
+  flex-wrap: wrap;
+  gap: 8px 14px;
+}
+
+.app-operator[aria-label="Đọc mẫu"] .operator-card-header > :first-child,
+.app-operator[aria-label="Đọc mẫu"] .operator-review-item-heading > :first-child {
+  flex: 1 1 280px;
+  min-width: 0;
+  line-height: 1.5;
+}
+
+.app-operator[aria-label="Đọc mẫu"] .operator-card-header > label,
+.app-operator[aria-label="Đọc mẫu"] .operator-review-item-heading > label {
+  flex: 0 0 auto;
+  min-height: 32px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.app-operator[aria-label="Đọc mẫu"] .operator-review-intro {
+  max-width: 74ch;
+  margin: 0;
+  line-height: 1.55;
+}
+
+.app-operator[aria-label="Đọc mẫu"] .operator-coach-list {
+  gap: 12px;
+  margin-top: 16px;
+}
+
+.app-operator[aria-label="Đọc mẫu"] .operator-coach-list > .item {
+  padding: 16px;
+  background: var(--surface-3);
+  box-shadow: none;
+}
+
+.app-operator[aria-label="Đọc mẫu"] .operator-coach-list .body {
+  display: grid;
+  gap: 8px;
+  width: 100%;
+}
+
+.app-operator[aria-label="Đọc mẫu"] .operator-review-copy {
+  padding-top: 8px;
+  border-top: 1px solid var(--line);
+  line-height: 1.55;
+  overflow-wrap: anywhere;
+}
+
+@media (max-width: 480px) {
+  .app-operator[aria-label="Đọc mẫu"] .operator-review-card,
+  .app-operator[aria-label="Đọc mẫu"] .operator-review-panel {
+    padding: 14px;
+  }
+
+  .app-operator[aria-label="Đọc mẫu"] .operator-card-header > :first-child,
+  .app-operator[aria-label="Đọc mẫu"] .operator-review-item-heading > :first-child {
+    flex-basis: 100%;
+  }
+
+  .app-operator[aria-label="Đọc mẫu"] .operator-coach-list > .item {
+    padding: 14px;
+  }
+}
