@@ -43,13 +43,14 @@
   flex: 1 1 auto;
 }
 
-.vocabulary-card-topline {
+.vocabulary-card-audio {
   display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 8px;
+  justify-content: flex-start;
   min-width: 0;
 }
+
+.vocabulary-card-audio [role="group"] { display: block; }
+.vocabulary-card-audio [role="group"] > button { min-height: 36px; }
 
 .vocabulary-card-word {
   display: flex;
@@ -98,7 +99,6 @@
 
 @media (max-width: 560px) {
   .vocabulary-card-heading { gap: 8px; }
-  .vocabulary-card-topline { gap: 6px; }
 }
 
 @keyframes content-image-spin { to { transform: rotate(360deg); } }

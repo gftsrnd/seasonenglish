@@ -62,8 +62,8 @@ const lesson: LessonView = {
 
 describe("lesson vocabulary relation modals", () => {
   it.each([
-    ["Xem họ từ", "modal.vocab-family", "Họ từ", "collegial"],
-    ["Xem tất cả từ đồng nghĩa", "modal.vocab-all-synonyms", "Tất cả từ đồng nghĩa", "associate"],
+    ["Họ từ", "modal.vocab-family", "Họ từ", "collegial"],
+    ["Đồng nghĩa", "modal.vocab-all-synonyms", "Đồng nghĩa", "associate"],
     ["Từ bao quát", "modal.vocab-umbrella", "Từ bao quát", "people at work"]
   ])("opens the %s modal from server-provided vocabulary metadata", async (buttonLabel, testId, title, expected) => {
     const user = userEvent.setup();
@@ -80,23 +80,20 @@ describe("lesson vocabulary relation modals", () => {
     const user = userEvent.setup();
     render(<LearnerLesson view={{ lesson }} actions={actions()} />);
     const card = screen.getByRole("article", { name: /colleague/i });
-    await user.click(within(card).getByRole("button", { name: /coworker/i }));
+    await user.click(within(card).getByRole("button", { name: "Khẩu ngữ" }));
     const modal = screen.getByTestId("modal.vocab-lexical-detail");
-    expect(modal).toHaveTextContent(/đồng nghĩa/i);
-    expect(modal).toHaveTextContent("a person you work with");
-    expect(modal).toHaveTextContent("My coworker joined the call.");
+    expect(modal).toHaveTextContent(/khẩu ngữ/i);
+    expect(modal).toHaveTextContent("a colleague");
     await user.click(within(modal).getAllByRole("button", { name: /đóng/i })[0]!);
     expect(screen.queryByTestId("modal.vocab-lexical-detail")).not.toBeInTheDocument();
   });
 
-  it("shows an explicit empty lexical detail state when the server has no detail", async () => {
-    const user = userEvent.setup();
+  it("does not render a misleading related-word chip when the server has no detail", () => {
     const emptyLesson = {
       ...lesson,
       content: { parts: [{ ...vocabularyPart, content: { items: [{ word: "role", meaning: "vai trò", lexicalDetails: [] }] } }] }
     } as LessonView;
     render(<LearnerLesson view={{ lesson: emptyLesson }} actions={actions()} />);
-    await user.click(screen.getByRole("button", { name: /chi tiết từ liên quan/i }));
-    expect(screen.getByTestId("modal.vocab-lexical-detail")).toHaveTextContent(/chưa có chi tiết/i);
+    expect(screen.queryByRole("button", { name: /chi tiết từ liên quan/i })).not.toBeInTheDocument();
   });
 });
