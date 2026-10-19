@@ -2,7 +2,7 @@ import { useEffect, useRef, useState, type FormEvent, type KeyboardEvent as Reac
 import { Check, CheckCircle2, Circle, Cloud, Droplets, Flower2, Leaf, Snowflake, Star, Sun, type LucideIcon } from "lucide-react";
 import type { LearnerAvatarData, RewardView, SurveyView } from "@e4s/contracts";
 import type { LearnerCallbacks, ProfileView } from "./contracts.js";
-import { SeasonMark } from "../games/season-art.js";
+import { ProductArt } from "../shared/media/ProductArt.js";
 import { ErrorText, Notice, PageTitle, Progress, AppLink } from "./ui.js";
 import { PersonalPreferences } from "../settings/PersonalPreferences.js";
 
@@ -32,7 +32,7 @@ export function LearnerSurvey({ view, actions }: { view: SurveyView; actions: Le
   if (view.state === "submitted") return <div className="app-learner-page survey-page">
     <PageTitle title="Khảo sát cuối pilot" />
     <section className="card survey-complete">
-      <div className="bao-row"><SeasonMark className="bao" /><div><h3>Cảm ơn bạn!</h3><p className="small">Bạn đã đánh giá {view.answers?.rating ?? "—"}/5. {view.answers?.comment ? `“${view.answers.comment}”` : ""}</p><AppLink className="btn" href="/profile" navigate={actions.navigate}>Xem tiến độ</AppLink></div></div>
+      <div className="bao-row"><ProductArt id="mascot" className="learner-mascot learner-mascot--survey" decorative /><div><h3>Cảm ơn bạn!</h3><p className="small">Bạn đã đánh giá {view.answers?.rating ?? "—"}/5. {view.answers?.comment ? `“${view.answers.comment}”` : ""}</p><AppLink className="btn" href="/profile" navigate={actions.navigate}>Xem tiến độ</AppLink></div></div>
     </section>
   </div>;
   const submit = async (event: FormEvent) => {
@@ -46,7 +46,7 @@ export function LearnerSurvey({ view, actions }: { view: SurveyView; actions: Le
   return <div className="app-learner-page survey-page">
     <PageTitle title="Khảo sát cuối pilot" />
     <form className="card" aria-busy={submitting || undefined} onSubmit={(event) => void submit(event)}>
-      <div className="bao-row"><SeasonMark className="bao" /><div className="bubble">Học với mình 2 tuần qua có hữu ích không?</div></div>
+      <div className="bao-row"><ProductArt id="mascot" className="learner-mascot learner-mascot--survey" decorative /><div className="bubble">Học với mình 2 tuần qua có hữu ích không?</div></div>
       <fieldset className="survey-rating"><legend className="sr-only">Mức độ hữu ích</legend><div className="row">{[1, 2, 3, 4, 5].map((n) => <button type="button" className={`btn-lg${rating === n ? " active" : ""}`} aria-pressed={rating === n} aria-label={`${n} trên 5`} onClick={() => setRating(n)} key={n}>{n}</button>)}</div><p className="xs muted">1 = không hữu ích · 5 = rất hữu ích</p></fieldset>
       <label className="field"><span>Điều gì hữu ích nhất? Điều gì nên đổi?</span><textarea value={comment} onChange={(event) => setComment(event.target.value)} /></label>
       <label className="field"><span>Bạn học chủ yếu lúc nào?</span><select value={studyTime} onChange={(event) => setStudyTime(event.target.value as typeof studyTime)}><option value="work">Trong giờ làm</option><option value="outside">Ngoài giờ</option><option value="both">Cả hai</option></select></label>

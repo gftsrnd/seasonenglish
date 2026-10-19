@@ -11,6 +11,12 @@ afterEach(cleanup);
 const actions = { navigate: vi.fn(), saveProfile: vi.fn(), saveProfileDraft: vi.fn() } as unknown as LearnerCallbacks;
 
 describe("app onboard affordances", () => {
+  it("uses the verified raster mascot without replacing it with the seasonal mark", () => {
+    const { container } = render(<LearnerOnboard view={{ profile: {}, mode: "new" }} actions={actions} />);
+    expect(container.querySelector("img[data-product-art='mascot']")).toHaveAttribute("src", "/media/mascot/season-bear.png");
+    expect(container.querySelector("[data-testid='season-mark']")).not.toBeInTheDocument();
+  });
+
   it("shows custom validation for required fields and focuses the first invalid control", async () => {
     const user = userEvent.setup();
     render(<LearnerOnboard view={{ profile: {}, mode: "new" }} actions={actions} />);

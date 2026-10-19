@@ -105,6 +105,15 @@ describe("app profile avatar dialog affordances", () => {
 });
 
 describe("app end-of-pilot survey states", () => {
+  it.each([
+    ["open", { state: "open", surveyKey: "pilot_end" }],
+    ["submitted", { state: "submitted", surveyKey: "pilot_end", answers: { rating: 5, comment: "Rất hữu ích", studyTime: "both" } }]
+  ] as const)("uses the verified raster mascot in the %s state", (_label, surveyView) => {
+    const { container } = render(<LearnerSurvey view={surveyView} actions={actions} />);
+    expect(container.querySelector("img[data-product-art='mascot']")).toHaveAttribute("src", "/media/mascot/season-bear.png");
+    expect(container.querySelector("[data-testid='season-mark']")).not.toBeInTheDocument();
+  });
+
   it("keeps submission gated until a rating is selected and submits canonical values", async () => {
     const user = userEvent.setup();
     const surveyActions = { ...actions, submitSurvey: vi.fn() } as unknown as LearnerCallbacks;

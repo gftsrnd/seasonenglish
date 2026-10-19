@@ -1,0 +1,7 @@
+.product-art {
+  display: block;
+  max-width: 100%;
+  object-fit: contain;
+  object-position: center;
+  user-select: none;
+}

@@ -721,6 +721,12 @@ h1,h2,h3,h4,h1 b,h2 b,h3 b,h4 b{font-weight:600 !important}
 .survey-page .survey-complete .bao-row{align-items:center}
 @media(max-width:480px){.survey-page .survey-rating>.row{gap:6px}.survey-page .survey-rating button{width:48px;min-height:48px}}
 
+/* Real CC0 mascot artwork is presentation-only; reward and avatar symbols stay unchanged. */
+.learner-mascot{display:block;flex:0 0 auto;width:88px;height:88px;object-fit:contain;image-rendering:auto}
+.learner-mascot--onboard{width:104px;height:90px}
+.learner-mascot--survey{width:84px;height:72px}
+@media(max-width:480px){.learner-mascot--onboard{width:82px;height:70px}.learner-mascot--survey{width:68px;height:60px}}
+
 /* Learner lesson: mirror the canonical two-step study card and completion gate. */
 .app-learner-page.lesson-page{max-width:960px}
 .lesson-page .lesson-back{width:42px;height:42px;display:inline-grid;place-items:center;border-radius:10px;background:var(--surface);box-shadow:inset 0 0 0 1px var(--line);font-size:1.8rem;line-height:1;text-decoration:none}

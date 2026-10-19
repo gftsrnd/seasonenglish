@@ -1,7 +1,7 @@
 import { useRef, useState, type FormEvent } from "react";
 import type { LearnerProfileData } from "@e4s/contracts";
 import type { LearnerCallbacks, OnboardView } from "./contracts.js";
-import { SeasonMark } from "../games/season-art.js";
+import { ProductArt } from "../shared/media/ProductArt.js";
 import { ErrorText, Notice, AppLink } from "./ui.js";
 
 const defaults: LearnerProfileData = { fullName: "", email: "", goals: [], environmentUse: "", familyUse: "", habits: [], learningStyles: [], explanationLanguage: "auto", persona: "informal", durationMinutes: 10, device: "both", selfLevel: "unknown", certificates: [] };
@@ -32,7 +32,7 @@ export function LearnerOnboard({ view, actions }: { view: OnboardView; actions: 
   const invalid = (target: ValidationTarget) => localError?.target === target;
   return <div className="app-learner-page" style={{ width: "100%", maxWidth: 960, minWidth: 0, boxSizing: "border-box", paddingBottom: "calc(88px + env(safe-area-inset-bottom))" }}>
      <AppLink className="btn btn-sm profile-form-back" href={back} navigate={actions.navigate} disabled={busy} title={busy ? "Đang lưu hồ sơ…" : undefined}>← Quay lại</AppLink>
-    <header className="bao-row" style={{ marginBottom: 16, gap: 12, alignItems: "flex-start", flexWrap: "wrap" }}><SeasonMark className="bao" /><div style={{ minWidth: 0, flex: "1 1 240px" }}><div className="eyebrow">{editing ? "Hồ sơ" : "Bước 1/2 · Hồ sơ"}</div><h1 style={{ margin: "2px 0 6px" }}>{editing ? "Sửa hồ sơ của bạn" : "Cho Season biết về bạn nhé"}</h1><div className="bubble" style={{ display: "inline-block", maxWidth: "100%" }}>Mình dùng thông tin này để chọn ví dụ sát công việc và cách học hợp với bạn. Khoảng 2 phút thôi.</div></div></header>
+    <header className="bao-row" style={{ marginBottom: 16, gap: 12, alignItems: "flex-start", flexWrap: "wrap" }}><ProductArt id="mascot" className="learner-mascot learner-mascot--onboard" decorative /><div style={{ minWidth: 0, flex: "1 1 240px" }}><div className="eyebrow">{editing ? "Hồ sơ" : "Bước 1/2 · Hồ sơ"}</div><h1 style={{ margin: "2px 0 6px" }}>{editing ? "Sửa hồ sơ của bạn" : "Cho Season biết về bạn nhé"}</h1><div className="bubble" style={{ display: "inline-block", maxWidth: "100%" }}>Mình dùng thông tin này để chọn ví dụ sát công việc và cách học hợp với bạn. Khoảng 2 phút thôi.</div></div></header>
     {!editing ? <div className="grid cols-2" style={{ marginBottom: 12 }}><section className="card flat"><div className="eyebrow">Bước 1 · Hồ sơ · đang làm</div><p className="small"><b>Vì sao cần?</b> Bài học lấy ví dụ theo đúng công việc của bạn, và Season giải thích theo cách bạn chọn (tiếng Việt hay tiếng Anh, bài ngắn hay hội thoại).</p></section><section className="card flat"><div className="eyebrow">Bước 2 · Test đầu vào · tiếp theo</div><p className="small"><b>Vì sao cần?</b> Để xếp đúng mức CEFR: bài quá dễ thì chán, quá khó thì nản. Hồ sơ không thay thế được test vì tự đánh giá thường lệch.</p></section></div> : null}
     {view.draftAvailable ? <Notice>Đã khôi phục phần bạn <b>lưu tạm</b> lần trước. Điền nốt rồi bấm Lưu.</Notice> : null}<p className="small" style={{ margin: "0 0 8px", fontWeight: 800 }}>Các mục có dấu <RequiredMark /> là bắt buộc; các mục còn lại có thể bỏ trống.</p><ErrorText message={errorMessage} id={errorId} />
     <form ref={formRef} onSubmit={(event) => void submit(event)} noValidate className="stack profile-form" style={{ gap: 20, minWidth: 0 }} aria-busy={busy || undefined} aria-describedby={errorMessage ? errorId : undefined}>
