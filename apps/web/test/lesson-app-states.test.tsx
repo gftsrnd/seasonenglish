@@ -172,7 +172,7 @@ describe("app lesson evidence states", () => {
     expect(submit).toHaveBeenCalledWith("listening", { answer: "Nice to meet you." });
   });
 
-  it("keeps lesson speech playback single-flight and announces its loading state", async () => {
+  it("keeps the lesson speech button label while playing", async () => {
     Object.defineProperty(window, "speechSynthesis", { configurable: true, value: {} });
     vi.stubGlobal("SpeechSynthesisUtterance", class {});
     let reportStatus!: (status: "started" | "ended" | "error" | "unsupported") => void;
@@ -188,12 +188,12 @@ describe("app lesson evidence states", () => {
     await openPractice(user);
     await user.click(screen.getByRole("button", { name: "Nghe đoạn nghe" }));
     expect(speak).toHaveBeenCalledTimes(1);
-    expect(screen.getByRole("button", { name: "Đang phát…" })).toBeDisabled();
-    expect(screen.getByRole("button", { name: "Đang phát…" })).toHaveAttribute("aria-busy", "true");
+    expect(screen.getByRole("button", { name: "Nghe đoạn nghe" })).toBeEnabled();
+    expect(screen.getByRole("button", { name: "Nghe đoạn nghe" })).not.toHaveAttribute("aria-busy");
 
     reportStatus("ended");
     await waitFor(() => expect(screen.getByRole("button", { name: "Nghe đoạn nghe" })).toBeEnabled());
-    expect(screen.getByText("Đã phát xong.")).toBeInTheDocument();
+    expect(screen.queryByText("Đã phát xong.")).not.toBeInTheDocument();
   });
 
   it("submits part evidence and exposes server-returned retry feedback", async () => {
