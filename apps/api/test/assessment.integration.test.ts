@@ -260,17 +260,26 @@ describe("assessment API preserves the one-screen flow and server evidence", () 
       headers: { cookie: managerCookie },
       payload: { status: "approved", approvedLevel: "B1", reason: "Đủ bằng chứng theo rubric." }
     });
-    expect(managerDecision.statusCode, managerDecision.body).toBe(200);
-    expect(managerDecision.json()).toMatchObject({
+    expect(managerDecision.statusCode, managerDecision.body).toBe(403);
+    expect(managerDecision.json()).toEqual({ code: "FORBIDDEN" });
+
+    const operatorDecision = await app.inject({
+      method: "POST",
+      url: `/api/v1/assessment-reviews/${levelUpAttemptId}/decision`,
+      headers: { cookie: operatorCookie },
+      payload: { status: "approved", approvedLevel: "B1", reason: "Đủ bằng chứng theo rubric." }
+    });
+    expect(operatorDecision.statusCode, operatorDecision.body).toBe(200);
+    expect(operatorDecision.json()).toMatchObject({
       attemptId: levelUpAttemptId,
       status: "approved",
       approvedLevel: "B1",
-      decidedBy: DEMO_IDS.manager
+      decidedBy: DEMO_IDS.operator
     });
     const repeatedDecision = await app.inject({
       method: "POST",
       url: `/api/v1/assessment-reviews/${levelUpAttemptId}/decision`,
-      headers: { cookie: managerCookie },
+      headers: { cookie: operatorCookie },
       payload: { status: "approved", approvedLevel: "B1", reason: "Đủ bằng chứng theo rubric." }
     });
     expect(repeatedDecision.statusCode, repeatedDecision.body).toBe(200);

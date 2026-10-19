@@ -7,7 +7,7 @@ import { createRoleGuard } from "../identity/policy.js";
 
 export function registerSystemRoutes(app: FastifyInstance, pool: Pool, storage?: ObjectStorage, aiAvailable = false, maintenanceEnabled = false): void {
   const authenticated = createRoleGuard(pool, ["learner", "operator", "manager"]);
-  const staff = createRoleGuard(pool, ["operator", "manager"]);
+  const managerOnly = createRoleGuard(pool, ["manager"]);
   app.get("/api/health", async () => ({ status: "ok" }));
 
   app.get("/api/v1/product-preferences", { preHandler: authenticated }, async (request) => {
@@ -20,7 +20,7 @@ export function registerSystemRoutes(app: FastifyInstance, pool: Pool, storage?:
     return { theme: row.theme, vocabImageSource: row.vocab_image_source };
   });
 
-  app.put("/api/v1/product-preferences", { preHandler: staff }, async (request, reply) => {
+  app.put("/api/v1/product-preferences", { preHandler: managerOnly }, async (request, reply) => {
     const parsed = z.object({
       theme: z.enum(["auto", "spring", "summer", "autumn", "winter", "tet", "midautumn", "christmas"]),
       vocabImageSource: z.enum(["pexels", "pixabay", "wikimedia", "openverse", "disabled"])

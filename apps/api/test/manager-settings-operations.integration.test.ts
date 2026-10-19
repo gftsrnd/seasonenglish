@@ -126,6 +126,22 @@ describe("Manager settings operational actions", () => {
     }
   });
 
+  it("keeps organization product preferences Manager-only", async () => {
+    const manager = await app.inject({
+      method: "PUT", url: "/api/v1/product-preferences", headers: { cookie: managerCookie },
+      payload: { theme: "winter", vocabImageSource: "wikimedia" }
+    });
+    expect(manager.statusCode, manager.body).toBe(200);
+    expect(manager.json()).toEqual({ theme: "winter", vocabImageSource: "wikimedia" });
+
+    const operator = await app.inject({
+      method: "PUT", url: "/api/v1/product-preferences", headers: { cookie: operatorCookie },
+      payload: { theme: "summer", vocabImageSource: "openverse" }
+    });
+    expect(operator.statusCode, operator.body).toBe(403);
+    expect(operator.json()).toEqual({ code: "FORBIDDEN" });
+  });
+
   it("requires local maintenance confirmation and an export backup before seed or wipe", async () => {
     const capabilities = await app.inject({ method: "GET", url: "/api/v1/system/capabilities", headers: { cookie: managerCookie } });
     expect(capabilities.statusCode, capabilities.body).toBe(200);
