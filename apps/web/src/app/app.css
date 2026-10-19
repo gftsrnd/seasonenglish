@@ -160,7 +160,6 @@ button:disabled{opacity:.5;cursor:not-allowed}
 .card.soft .btn-sm,.card.soft button:not(.btn-primary):not(.btn-ok):not(.btn-danger):not(.btn-ghost){background:var(--surface)}
 .card.soft .btn-sm:hover,.card.soft button:not(.btn-primary):not(.btn-ok):not(.btn-danger):not(.btn-ghost):hover{background:#E4E2DC}
 input,select,textarea{font:inherit;font-size:.95rem;color:var(--text);background:var(--surface-2);border:0;border-radius:var(--radius-sm);padding:13px 16px;width:100%;min-height:50px}
-select{padding-right:36px;appearance:none;-webkit-appearance:none;background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%231E1E1E' stroke-width='1.7' stroke-linecap='round' stroke-linejoin='round'><path d='M6 9.5l6 6 6-6'/></svg>");background-repeat:no-repeat;background-position:right 12px center;background-size:18px}
 input[type="checkbox"],input[type="radio"]{min-height:0;width:18px;height:18px;padding:0;accent-color:var(--primary)}
 input[type="file"]{padding:10px 14px}
 input:focus,select:focus,textarea:focus{outline:0;box-shadow:inset 0 0 0 2px var(--primary)}
@@ -323,11 +322,6 @@ td input,td select{min-height:40px;padding:8px 12px}
 .rubric .r span{font-size:.75rem;color:var(--muted)}
 .card.soft .rubric .r{background:var(--surface)}
 .hero{background:var(--primary);color:var(--primary-ink);border:0;border-radius:28px;padding:22px;display:flex;flex-direction:column;gap:12px;position:relative;overflow:hidden}
-/* rolling hills in the corner of hero cards (design board 08 "Bài học hôm nay") */
-.hero::after,.party::after{content:"";position:absolute;right:0;bottom:0;width:260px;height:64px;pointer-events:none;opacity:.9;background:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 260 120' preserveAspectRatio='xMidYMax slice'><path d='M0 86 C40 66 80 70 120 82 C160 94 210 70 260 78 V120 H0 Z' fill='%23A8BF55'/><path d='M0 100 C50 84 110 88 150 100 C190 110 230 96 260 92 V120 H0 Z' fill='%237E9A35'/><g fill='%233F6B2E'><path d='M14 104 l9 -34 l9 34 Z'/><path d='M30 106 l7 -24 l7 24 Z'/><path d='M226 100 l8 -30 l8 30 Z'/><path d='M242 104 l6 -20 l6 20 Z'/></g><path d='M0 112 C70 104 150 106 260 110 V120 H0 Z' fill='%235E7F2A'/></svg>") right bottom/260px 64px no-repeat;-webkit-mask:linear-gradient(90deg,transparent,#000 35%);mask:linear-gradient(90deg,transparent,#000 35%)}
-.hero > *{position:relative;z-index:1}
-.party::after{width:100%;height:70px;opacity:.85;-webkit-mask:none;mask:none;background-size:100% 70px}
-.party > *{position:relative;z-index:1}
 .hero .eyebrow{color:inherit;opacity:.75}
 .hero h2{font-size:1.6rem;line-height:1.15;color:inherit}
 .hero .btn,.hero button:not(.btn-ghost){background:var(--ink);color:#fff;box-shadow:none}
@@ -364,11 +358,7 @@ td input,td select{min-height:40px;padding:8px 12px}
 /* entry screen: sun over the hills (design board 01 "Chào mừng") */
 .welcome{position:relative;overflow:hidden;display:flex;flex-direction:column;gap:0;background:var(--primary);color:var(--primary-ink);border:0;border-radius:28px;padding:0;margin:4px 0 20px}
 .welcome .sky{position:relative;height:200px;overflow:hidden}
-.welcome .sky::before,.welcome .sky::after{content:"";position:absolute;width:44px;height:10px;border-radius:999px;background:#fff;opacity:.9}
-.welcome .sky::before{left:12%;top:46px}.welcome .sky::after{right:14%;top:70px}
 .welcome .art{position:absolute;left:50%;top:14px;transform:translateX(-50%);width:auto;height:auto;background:transparent;border:0;display:block;z-index:1}
-.welcome .land{position:absolute;left:0;right:0;bottom:-2px;pointer-events:none;line-height:0;text-align:center}
-.welcome .land svg{width:100%;height:110px}
 .welcome .body{padding:22px 26px 26px}
 .welcome h1{color:inherit;font-size:2.2rem;margin:2px 0 10px;line-height:1.1;letter-spacing:-.02em}
 .welcome .eyebrow{color:inherit;opacity:.75}
@@ -429,9 +419,6 @@ td input,td select{min-height:40px;padding:8px 12px}
 .prep svg{width:30px;height:30px}
 .party{position:relative;overflow:hidden;text-align:center;background:var(--primary);color:var(--primary-ink);border:0;border-radius:28px;padding:30px 18px 24px}
 .party h1{color:inherit;font-size:2rem;margin:6px 0 4px}
-.party .conf{position:absolute;top:-14px;width:10px;height:16px;border-radius:3px;border:0;animation:fall linear infinite;pointer-events:none}
-@keyframes fall{0%{transform:translateY(-20px) rotate(0)}100%{transform:translateY(520px) rotate(540deg)}}
-@media (prefers-reduced-motion:reduce){.party .conf{animation:none;top:8px}}
 .party .crown{display:inline-block;padding:8px 18px;border:0;border-radius:999px;background:var(--surface);color:var(--text);font-weight:600;font-size:1.1rem}
 .ribbon{display:inline-block;padding:4px 14px;border:1.5px dashed var(--border);border-radius:999px;background:var(--surface);color:var(--text);font-size:.72rem;font-weight:600;letter-spacing:.1em;text-transform:uppercase}
 .cert{border:1px solid var(--line);border-radius:18px;background:var(--surface);padding:20px;text-align:center}
@@ -594,7 +581,6 @@ label.field > span{font-size:.8rem;color:var(--muted)}
 .correction{border-radius:14px;background:var(--surface);box-shadow:inset 0 0 0 1px var(--line);border-left:4px solid var(--primary)}
 .bubble{border-radius:12px;box-shadow:inset 0 0 0 1px var(--line);font-size:1rem;font-weight:400;padding:12px 16px}
 .hero{background:var(--surface) !important;color:var(--text) !important;border:1px solid var(--line);border-left:4px solid var(--primary);border-radius:var(--radius);padding:18px 20px}
-.hero::after{display:none}
 .hero .eyebrow{color:var(--muted);opacity:1}
 .hero h2{font-size:1.25rem}
 .hero .btn,.hero button:not(.btn-ghost){background:var(--primary);color:var(--text)}
@@ -619,7 +605,6 @@ label.field > span{font-size:.8rem;color:var(--muted)}
 .setup .num{background:var(--surface-3)}
 .prep > span{border-radius:10px}
 .party{background:var(--surface);color:var(--text);border:1px solid var(--line);border-radius:var(--radius);padding:26px 18px}
-.party::after{display:none}
 .party .crown{background:var(--primary-soft);box-shadow:inset 0 0 0 1px var(--primary-line)}
 .cert{border-radius:12px}
 .banner{border-radius:12px;padding:12px 14px}
@@ -640,7 +625,6 @@ label.field > span{font-size:.8rem;color:var(--muted)}
 /* entry: compact, neutral */
 .welcome{flex-direction:row;align-items:center;gap:20px;background:var(--surface);color:var(--text);border:1px solid var(--line);border-radius:var(--radius);padding:22px 24px;margin:0 0 20px}
 .welcome .sky{position:static;height:auto;width:72px;flex-shrink:0;overflow:visible}
-.welcome .sky::before,.welcome .sky::after{display:none}
 .welcome .art{position:static;transform:none;width:72px;height:72px;border-radius:50%;background:var(--primary-soft);display:grid;place-items:center}
 .welcome .art svg{width:40px;height:40px}
 .welcome .body{padding:0;flex:1;min-width:0}
@@ -785,10 +769,8 @@ button,.btn{min-height:var(--hci-touch-target)}
 /* Decorative art and transient icons must never become a competing layer for
    readable content or shrink away from their text/control group. */
 .hero,.party,.welcome{isolation:isolate}
-.hero::after,.party::after{z-index:0}
 .hero > *,.party > *,.welcome .body,.welcome .pills{position:relative;z-index:1}
-.welcome .sky,.welcome .land{z-index:0}
+.welcome .sky{z-index:0}
 .welcome .art{z-index:2}
-.party .conf{z-index:0}
 .game-icon,.game-control-icon,.status-icon,.app-brand-mark,.avatar{flex-shrink:0}
 .card > .row > svg,.card > .row > .status-icon,.banner > svg{flex:0 0 auto}
