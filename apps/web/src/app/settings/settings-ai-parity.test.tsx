@@ -168,6 +168,17 @@ describe("Manager AI provider settings", () => {
     expect(client.exportManagerData).toHaveBeenCalledOnce();
   });
 
+  it("offers only automatic open media or disabled and normalizes legacy sources", async () => {
+    client.getProductPreferences.mockResolvedValue({ theme: "auto", vocabImageSource: "pexels" });
+    window.history.pushState({}, "", "/settings");
+    render(<App />);
+
+    const source = await screen.findByLabelText("Nguồn ảnh");
+    expect(source).toHaveValue("wikimedia");
+    expect(screen.getAllByRole("option", { name: /nguồn mở|Tắt ảnh/ })).toHaveLength(2);
+    expect(screen.queryByRole("option", { name: /Pexels|Pixabay|Openverse/ })).not.toBeInTheDocument();
+  });
+
   it("keeps the app header avatar actionable for Manager", async () => {
     const user = userEvent.setup();
     window.history.pushState({}, "", "/settings");

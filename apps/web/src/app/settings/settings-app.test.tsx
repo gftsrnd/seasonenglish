@@ -48,10 +48,9 @@ describe("new Settings app branch", () => {
 
     expect(screen.getByText(/Mỗi phần tính giờ riêng; hết giờ tự nộp/)).toBeInTheDocument();
     expect(screen.getByText(/Đổi màu và icon; không đổi bố cục, nội dung, dữ liệu/)).toBeInTheDocument();
-    expect(screen.getByText(/Ảnh miễn phí theo từ tiếng Anh, không dùng AI/)).toBeInTheDocument();
-    expect(screen.getByText("Pexels: đã cấu hình")).toBeInTheDocument();
-    expect(screen.getByText("Pixabay: chưa cấu hình")).toBeInTheDocument();
-    expect(screen.getByText("Openverse/Wikimedia: không cần API key")).toBeInTheDocument();
+    expect(screen.getByText(/Tự động tìm ảnh có giấy phép mở/)).toBeInTheDocument();
+    expect(screen.getByRole("option", { name: "Tự động từ nguồn mở" })).toBeInTheDocument();
+    expect(screen.queryByText(/Pexels:|Pixabay:/)).not.toBeInTheDocument();
   });
 
   it("uses semantic Lucide marks for seasonal controls", () => {

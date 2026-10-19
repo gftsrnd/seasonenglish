@@ -4,13 +4,19 @@ import { migrateDatabase, resetPublicSchema, seedDemo } from "@e4s/database";
 import { createCredentialHash } from "@e4s/domain/identity";
 import { DEMO_IDS } from "@e4s/test-support";
 import { buildApi } from "../src/app.js";
+import type { ContentMediaService } from "../src/modules/media/index.js";
 
 const databaseUrl = process.env.TEST_DATABASE_URL
   ?? "postgres://e4s:e4s_test_password@127.0.0.1:55432/e4s_test";
 
 describe("Manager settings operational actions", () => {
   const pool = new Pool({ connectionString: databaseUrl });
-  const app = buildApi({ pool, allowDemoLogin: true, secureCookies: false, maintenanceEnabled: true });
+  const mediaService: ContentMediaService = {
+    resolveForUser: vi.fn().mockResolvedValue({ status: "unavailable" }),
+    diagnoseForUser: vi.fn().mockResolvedValue({ image: { status: "unavailable" }, provider: null, cached: false }),
+    clearForUser: vi.fn().mockResolvedValue({ cleared: 0 })
+  };
+  const app = buildApi({ pool, allowDemoLogin: true, secureCookies: false, maintenanceEnabled: true, mediaService });
   let managerCookie = "";
   let operatorCookie = "";
 
@@ -41,19 +47,41 @@ describe("Manager settings operational actions", () => {
   afterAll(async () => { await app.close(); await pool.end(); });
 
   it("tests and clears vocabulary images only for a Manager", async () => {
-    vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response(JSON.stringify({
-      type: "standard", thumbnail: { source: "https://images.example/notebook.jpg" }
-    }), { status: 200, headers: { "content-type": "application/json" } }));
+    vi.mocked(mediaService.diagnoseForUser).mockResolvedValueOnce({
+      image: {
+        status: "available",
+        imageUrl: "https://storage.test/notebook.jpg",
+        alt: "notebook",
+        attribution: {
+          creator: "Fixture creator",
+          licence: "CC BY",
+          licenceUrl: "https://creativecommons.org/licenses/by/4.0/",
+          sourceUrl: "https://commons.wikimedia.org/wiki/File:Notebook.jpg"
+        }
+      },
+      provider: "wikimedia",
+      cached: true
+    });
+    vi.mocked(mediaService.clearForUser).mockResolvedValueOnce({ cleared: 3 });
     const manager = await app.inject({
       method: "POST", url: "/api/v1/manager/settings/image-test", headers: { cookie: managerCookie },
       payload: { source: "wikimedia", word: "notebook" }
     });
     expect(manager.statusCode, manager.body).toBe(200);
-    expect(manager.json()).toMatchObject({ status: "available", source: "wikimedia", imageUrl: "https://images.example/notebook.jpg" });
+    expect(manager.json()).toMatchObject({
+      status: "available",
+      source: "wikimedia",
+      provider: "wikimedia",
+      cached: true,
+      imageUrl: "https://storage.test/notebook.jpg",
+      attribution: { creator: "Fixture creator", licence: "CC BY" }
+    });
+    expect(mediaService.diagnoseForUser).toHaveBeenCalledWith(DEMO_IDS.manager, { term: "notebook", partOfSpeech: "noun" });
 
     const cleared = await app.inject({ method: "POST", url: "/api/v1/manager/settings/image-cache", headers: { cookie: managerCookie }, payload: {} });
     expect(cleared.statusCode, cleared.body).toBe(200);
-    expect(cleared.json()).toEqual({ cleared: expect.any(Number) });
+    expect(cleared.json()).toEqual({ cleared: 3 });
+    expect(mediaService.clearForUser).toHaveBeenCalledWith(DEMO_IDS.manager);
 
     const operator = await app.inject({ method: "POST", url: "/api/v1/manager/settings/image-test", headers: { cookie: operatorCookie }, payload: { source: "wikimedia", word: "notebook" } });
     expect(operator.statusCode).toBe(403);

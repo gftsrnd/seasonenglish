@@ -49,7 +49,10 @@ export function buildApi(options: BuildApiOptions): FastifyInstance {
   registerLearningRoutes(app, options.pool, options.aiRunner, options.mediaService);
   registerAssessmentRoutes(app, options.pool, options.aiRunner);
   registerContentRoutes(app, options.pool, options.aiRunner, options.storage);
-  registerManagerRoutes(app, options.pool, { maintenanceEnabled });
+  registerManagerRoutes(app, options.pool, {
+    maintenanceEnabled,
+    ...(options.mediaService ? { mediaService: options.mediaService } : {})
+  });
   registerNotificationRoutes(app, options.pool);
   registerCoachRoutes(app, options.pool, options.aiRunner);
   registerEngagementRoutes(app, options.pool, options.aiRunner, options.mediaService);

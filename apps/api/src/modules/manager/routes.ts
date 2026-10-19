@@ -5,7 +5,7 @@ import type { FastifyInstance } from "fastify";
 import type { Pool } from "pg";
 import { z } from "zod";
 import { createRoleGuard } from "../identity/policy.js";
-import { createVocabularyImageResolver } from "../engagement/vocabulary-image.js";
+import type { ContentMediaService } from "../media/index.js";
 
 const accountRoles = new Set<AccountRole>(["learner", "operator", "manager"]);
 const accountCreateInput = z.object({
@@ -56,7 +56,7 @@ function isAccountRole(value: unknown): value is AccountRole {
   return typeof value === "string" && accountRoles.has(value as AccountRole);
 }
 
-export function registerManagerRoutes(app: FastifyInstance, pool: Pool, options: { maintenanceEnabled?: boolean } = {}): void {
+export function registerManagerRoutes(app: FastifyInstance, pool: Pool, options: { maintenanceEnabled?: boolean; mediaService?: ContentMediaService } = {}): void {
   const repositories = createRepositories(pool);
   const managerOnly = createRoleGuard(pool, ["manager"]);
   const maintenanceEnabled = options.maintenanceEnabled === true;
@@ -202,13 +202,24 @@ export function registerManagerRoutes(app: FastifyInstance, pool: Pool, options:
   app.post("/api/v1/manager/settings/image-test", { preHandler: managerOnly }, async (request, reply) => {
     const parsed = managerImageTestInput.safeParse(request.body);
     if (!parsed.success) return reply.code(400).send({ code: "MANAGER_IMAGE_TEST_INVALID" });
+    const testedAt = new Date().toISOString();
+    if (parsed.data.source === "disabled" || !options.mediaService) {
+      return { status: "unavailable", source: parsed.data.source, provider: null, cached: false, imageUrl: null, attribution: null, testedAt } as const;
+    }
     try {
-      const imageUrl = await createVocabularyImageResolver(parsed.data.source).resolve(parsed.data.word);
+      const result = await options.mediaService.diagnoseForUser(request.e4sSession!.user.id, {
+        term: parsed.data.word,
+        partOfSpeech: "noun"
+      });
+      const image = result.image;
       return {
-        status: imageUrl ? "available" : "unavailable",
+        status: image.status,
         source: parsed.data.source,
-        imageUrl,
-        testedAt: new Date().toISOString()
+        provider: result.provider,
+        cached: result.cached,
+        imageUrl: image.status === "available" ? image.imageUrl : null,
+        attribution: image.status === "available" ? image.attribution : null,
+        testedAt
       } as const;
     } catch {
       return reply.code(502).send({ code: "MANAGER_IMAGE_TEST_UNAVAILABLE" });
@@ -217,7 +228,9 @@ export function registerManagerRoutes(app: FastifyInstance, pool: Pool, options:
 
   app.post("/api/v1/manager/settings/image-cache", { preHandler: managerOnly }, async (request, reply) => {
     try {
-      return await repositories.manager.clearImageCache(request.e4sSession!.user.id);
+      return options.mediaService
+        ? await options.mediaService.clearForUser(request.e4sSession!.user.id)
+        : { cleared: 0 };
     } catch (error) {
       return sendManagerOperationsError(reply, error);
     }
