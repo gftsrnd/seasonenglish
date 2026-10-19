@@ -1,0 +1,61 @@
+/* Coordinator integration guard: keep the shared shell readable at tablet widths.
+   The route order and navigation model stay unchanged; the horizontal nav is
+   clipped only by its available lane so the app still exposes the next
+   destinations instead of deleting every inactive link. */
+@media (min-width: 761px) and (max-width: 960px) {
+  .topbar {
+    gap: 8px;
+    padding-inline: 16px;
+  }
+
+  .topbar > .brand {
+    flex: 0 1 210px;
+    min-width: 200px !important;
+  }
+
+  .topbar > .brand > span:last-child {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .topbar > nav {
+    flex: 0 1 150px;
+    width: auto;
+    max-width: 150px;
+    min-width: 92px;
+    margin-left: 0;
+    overflow: hidden;
+  }
+
+  .topbar > nav a {
+    flex: 0 0 auto;
+    max-width: none;
+  }
+
+  .topbar > nav a.active {
+    max-width: none;
+    overflow: hidden;
+    padding-inline: 10px;
+    text-overflow: ellipsis;
+  }
+
+  .topbar > .userchip {
+    flex: 0 1 auto;
+    min-width: 0;
+    gap: 6px;
+  }
+
+  .topbar > .userchip > .small {
+    min-width: 0;
+    max-width: 11rem;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .topbar > .userchip > [data-action="logout"] {
+    flex: 0 0 auto;
+  }
+}

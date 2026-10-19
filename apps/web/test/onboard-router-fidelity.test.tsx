@@ -4,19 +4,19 @@ import { cleanup, render, screen, waitFor } from "@testing-library/react";
 import { userEvent } from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { LearnerHomeView } from "@e4s/contracts";
-import type { LearnerPrototypeCallbacks } from "../src/prototype/learner/contracts.js";
-import { PrototypeOnboard } from "../src/prototype/learner/Onboard.js";
-import { LearnerPrototypeController, normalizeLearnerPrototypePath } from "../src/prototype/learner/Router.js";
+import type { LearnerCallbacks } from "../src/app/learner/contracts.js";
+import { LearnerOnboard } from "../src/app/learner/Onboard.js";
+import { LearnerController, normalizeLearnerPath } from "../src/app/learner/Router.js";
 
 afterEach(cleanup);
 
-function actions(overrides: Partial<LearnerPrototypeCallbacks> = {}) {
+function actions(overrides: Partial<LearnerCallbacks> = {}) {
   return {
     navigate: vi.fn(),
     saveProfileDraft: vi.fn(),
     saveProfile: vi.fn(),
     ...overrides
-  } as unknown as LearnerPrototypeCallbacks;
+  } as unknown as LearnerCallbacks;
 }
 
 const home: LearnerHomeView = {
@@ -36,7 +36,7 @@ const home: LearnerHomeView = {
 
 describe("onboarding and learner router fidelity", () => {
   it("keeps the canonical new-learner onboarding framing and choice groups", () => {
-    render(<PrototypeOnboard view={{ mode: "new", profile: {} }} actions={actions()} />);
+    render(<LearnerOnboard view={{ mode: "new", profile: {} }} actions={actions()} />);
 
     expect(screen.getByText("Bước 1/2 · Hồ sơ")).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "Cho Season biết về bạn nhé" })).toBeInTheDocument();
@@ -56,7 +56,7 @@ describe("onboarding and learner router fidelity", () => {
     const saveProfile = vi.fn();
     const saveProfileDraft = vi.fn().mockResolvedValue(undefined);
     const navigate = vi.fn();
-    render(<PrototypeOnboard view={{ mode: "new", profile: { fullName: "Lan", email: "lan@example.com" } }} actions={actions({ saveProfile, saveProfileDraft, navigate })} />);
+    render(<LearnerOnboard view={{ mode: "new", profile: { fullName: "Lan", email: "lan@example.com" } }} actions={actions({ saveProfile, saveProfileDraft, navigate })} />);
 
     await user.click(screen.getByRole("button", { name: /lưu và làm test đầu vào/i }));
     expect(screen.getByRole("alert")).toHaveTextContent(/chọn ít nhất một mục đích dùng tiếng anh/i);
@@ -68,7 +68,7 @@ describe("onboarding and learner router fidelity", () => {
   });
 
   it("keeps edit mode as the canonical profile screen without the setup draft action", () => {
-    render(<PrototypeOnboard view={{ mode: "edit", profile: {
+    render(<LearnerOnboard view={{ mode: "edit", profile: {
       fullName: "Lan", email: "lan@example.com", goals: ["email"], environmentUse: "weekly", familyUse: "never",
       habits: ["movies"], learningStyles: ["reading"], explanationLanguage: "auto", persona: "formal", durationMinutes: 10,
       device: "both", selfLevel: "A2", certificates: [{ type: "TOEIC", result: "650", year: "2023" }]
@@ -84,14 +84,14 @@ describe("onboarding and learner router fidelity", () => {
   });
 
   it("normalizes canonical hash/query paths and keeps root and invalid child routes explicit", () => {
-    expect(normalizeLearnerPrototypePath("#/home/?from=onboard")).toBe("/home");
-    expect(normalizeLearnerPrototypePath("#/")) .toBe("/");
+    expect(normalizeLearnerPath("#/home/?from=onboard")).toBe("/home");
+    expect(normalizeLearnerPath("#/")) .toBe("/");
 
-    render(<LearnerPrototypeController path="#/" contracts={{ home }} callbacks={actions()} />);
+    render(<LearnerController path="#/" contracts={{ home }} callbacks={actions()} />);
     expect(screen.getByRole("heading", { name: "Chào Lan!" })).toBeInTheDocument();
     cleanup();
 
-    render(<LearnerPrototypeController path="/games/not-a-game" contracts={{ games: {
+    render(<LearnerController path="/games/not-a-game" contracts={{ games: {
       cefr: "A2", wordSet: { id: "set-1", topic: "Meetings", cefr: "A2", source: "weekly", words: [] }, games: [],
       arena: { eligible: false, requiredLevel: "B1", points: 0, pendingDuels: 0 }
     } }} callbacks={actions()} />);

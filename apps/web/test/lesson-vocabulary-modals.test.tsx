@@ -4,12 +4,12 @@ import { cleanup, render, screen, within } from "@testing-library/react";
 import { userEvent } from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { LessonPart, LessonView } from "@e4s/contracts";
-import { PrototypeLesson } from "../src/prototype/learner/Learning.js";
-import type { LearnerPrototypeCallbacks } from "../src/prototype/learner/contracts.js";
+import { LearnerLesson } from "../src/app/learner/Learning.js";
+import type { LearnerCallbacks } from "../src/app/learner/contracts.js";
 
 afterEach(cleanup);
 
-const actions = (): LearnerPrototypeCallbacks => ({
+const actions = (): LearnerCallbacks => ({
   navigate: vi.fn(), saveProfileDraft: vi.fn(), saveProfile: vi.fn(), startAssessment: vi.fn(),
   saveAssessmentResponse: vi.fn(), completeAssessmentSection: vi.fn(), submitAssessment: vi.fn(),
   uploadAssessmentAudio: vi.fn(async () => "artifact"), recordAssessmentAudioPlay: vi.fn(async () => ({ playCount: 1, remaining: 1 })),
@@ -67,7 +67,7 @@ describe("lesson vocabulary relation modals", () => {
     ["Từ bao quát", "modal.vocab-umbrella", "Từ bao quát", "people at work"]
   ])("opens the %s modal from server-provided vocabulary metadata", async (buttonLabel, testId, title, expected) => {
     const user = userEvent.setup();
-    render(<PrototypeLesson view={{ lesson }} actions={actions()} />);
+    render(<LearnerLesson view={{ lesson }} actions={actions()} />);
     await user.click(screen.getByRole("button", { name: new RegExp(buttonLabel, "i") }));
     const modal = screen.getByTestId(testId);
     expect(modal).toBeInTheDocument();
@@ -78,7 +78,7 @@ describe("lesson vocabulary relation modals", () => {
 
   it("opens reusable lexical detail cards for synonym, antonym, slang and poetic relations", async () => {
     const user = userEvent.setup();
-    render(<PrototypeLesson view={{ lesson }} actions={actions()} />);
+    render(<LearnerLesson view={{ lesson }} actions={actions()} />);
     const card = screen.getByRole("article", { name: /colleague/i });
     await user.click(within(card).getByRole("button", { name: /coworker/i }));
     const modal = screen.getByTestId("modal.vocab-lexical-detail");
@@ -95,7 +95,7 @@ describe("lesson vocabulary relation modals", () => {
       ...lesson,
       content: { parts: [{ ...vocabularyPart, content: { items: [{ word: "role", meaning: "vai trò", lexicalDetails: [] }] } }] }
     } as LessonView;
-    render(<PrototypeLesson view={{ lesson: emptyLesson }} actions={actions()} />);
+    render(<LearnerLesson view={{ lesson: emptyLesson }} actions={actions()} />);
     await user.click(screen.getByRole("button", { name: /chi tiết từ liên quan/i }));
     expect(screen.getByTestId("modal.vocab-lexical-detail")).toHaveTextContent(/chưa có chi tiết/i);
   });

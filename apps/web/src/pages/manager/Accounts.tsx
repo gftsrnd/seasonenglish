@@ -1,6 +1,6 @@
 import { useState, type FormEvent } from "react";
 import type { ManagerAccountView, ManagerAccountsView } from "@e4s/contracts";
-import { PrototypeModalProvider, usePrototypeModal } from "../../prototype/shared/PrototypeModalRoot.js";
+import { ModalProvider, useModal } from "../../app/shared/ModalProvider.js";
 
 const roleLabel: Record<ManagerAccountView["role"], string> = {
   learner: "Người học",
@@ -20,7 +20,7 @@ type ManagerAccountsProps = {
 };
 
 export function ManagerAccounts(props: ManagerAccountsProps) {
-  return <PrototypeModalProvider><ManagerAccountsContent {...props} /></PrototypeModalProvider>;
+  return <ModalProvider><ManagerAccountsContent {...props} /></ModalProvider>;
 }
 
 function ManagerAccountsContent({
@@ -35,7 +35,7 @@ function ManagerAccountsContent({
 }: ManagerAccountsProps) {
   const [creating, setCreating] = useState(false);
   const [resetTarget, setResetTarget] = useState<ManagerAccountView>();
-  const modal = usePrototypeModal();
+  const modal = useModal();
   const submitAccount = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     const formElement = event.currentTarget;

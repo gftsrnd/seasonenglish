@@ -1,4 +1,4 @@
-/* Operator screens intentionally mirror Thu's prototype vocabulary:
+/* Operator screens intentionally mirror Thu's app vocabulary:
    card, row, banner, badge, list and item. Keep these styles scoped so the
    real application shell and the learner/manager surfaces remain untouched. */
 .operator-page .operator-card {
@@ -327,7 +327,7 @@
   }
 }
 
-/* Keep the legacy Operator shell aligned with the prototype geometry. */
+/* Keep the legacy Operator shell aligned with the app geometry. */
 .operator-page > .operator-heading {
   margin-bottom: 8px;
 }

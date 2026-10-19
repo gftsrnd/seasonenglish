@@ -16,7 +16,7 @@ export function Profile({ view, onSaveAvatar, savingAvatar = false }: {
   })).filter((group) => group.badges.length > 0);
   return <main className="learner-page learner-profile">
     <header className="page-heading profile-heading"><div><p className="eyebrow">Tiến độ & hồ sơ</p><h1>{view.learner.displayName}</h1><p>{view.learner.cefr ? `Trình độ ${view.learner.cefr} – ${cefrDescription(view.learner.cefr)}` : "Chưa duyệt trình độ"}</p></div>{view.learner.cefr ? <span className={`level-badge level-badge--${view.learner.cefr}`}>{view.learner.cefr}</span> : null}</header>
-    <section className="profile-overview prototype-card" role="region" aria-label="Nhận diện người học">
+    <section className="profile-overview app-card" role="region" aria-label="Nhận diện người học">
       <button className="profile-avatar-button" type="button" aria-label="Đổi avatar" onClick={() => { setDraftAvatar(savedAvatar); setAvatarOpen(true); }}><Avatar avatar={savedAvatar} name={view.learner.displayName} /></button>
       <div><strong>Avatar của bạn</strong><p>{avatarDescription(savedAvatar)}</p></div>
       <div className="profile-overview-actions"><button className="button button--primary" type="button" onClick={() => { setDraftAvatar(savedAvatar); setAvatarOpen(true); }}>Đổi avatar</button><a className="button" href="/onboard">Sửa hồ sơ</a></div>
@@ -29,7 +29,7 @@ export function Profile({ view, onSaveAvatar, savingAvatar = false }: {
       onCancel={() => setAvatarOpen(false)}
       onSave={async () => { await onSaveAvatar?.(draftAvatar); setAvatarOpen(false); }}
     /> : null}
-    <section className="profile-details prototype-card prototype-card--soft" role="region" aria-labelledby="profile-title"><div className="section-heading"><h2 id="profile-title">Hồ sơ cá nhân</h2><a className="button button--small" href="/onboard">Sửa</a></div><dl>
+    <section className="profile-details app-card app-card--soft" role="region" aria-labelledby="profile-title"><div className="section-heading"><h2 id="profile-title">Hồ sơ cá nhân</h2><a className="button button--small" href="/onboard">Sửa</a></div><dl>
       <ProfileRow label="Công việc" value={[view.learner.profile.position, view.learner.profile.department].filter(Boolean).join(" · ")} />
       <ProfileRow label="Email" value={view.learner.profile.email} />
       <ProfileRow label="Base" value={view.learner.profile.contact} />
@@ -47,7 +47,7 @@ export function Profile({ view, onSaveAvatar, savingAvatar = false }: {
       <ProfileRow label="Đã học" value={view.learner.profile.experience} />
       <ProfileRow label="Lo ngại / mong muốn" value={view.learner.profile.concerns} />
     </dl></section>
-    <section role="region" aria-label="Mùa học và huy hiệu" className="reward-card prototype-card">
+    <section role="region" aria-label="Mùa học và huy hiệu" className="reward-card app-card">
       <div className="season-card">
         <div className={`season-mark season-mark--${view.season.current.level}`} aria-hidden="true">{seasonIcon(view.season.current.level)}</div>
         <div><p className="eyebrow">Mùa học {view.season.current.level}/4</p><h2>{view.season.current.name}</h2>
@@ -72,11 +72,11 @@ export function Profile({ view, onSaveAvatar, savingAvatar = false }: {
       <Metric label="Lượt luyện với Season" value={String(view.stats.coachTurns)} />
       <Metric label="Ngày có học" value={String(view.stats.studyDays)} />
     </section>
-    <section className="profile-weeks" aria-labelledby="weekly-progress"><h2 id="weekly-progress" className="sr-only">Tiến độ theo tuần</h2>{view.weeks.map((week) => <article className="profile-week-card prototype-card" key={week.weekNumber}>
+    <section className="profile-weeks" aria-labelledby="weekly-progress"><h2 id="weekly-progress" className="sr-only">Tiến độ theo tuần</h2>{view.weeks.map((week) => <article className="profile-week-card app-card" key={week.weekNumber}>
       <div className="profile-week-heading"><h3>Tuần {week.weekNumber} <span>{week.topic}</span></h3><strong>{week.completedLessons}/{week.totalLessons || "–"} bài</strong></div>
       <div className="profile-week-dots" role="progressbar" aria-label={`Tiến độ tuần ${week.weekNumber}`} aria-valuemin={0} aria-valuemax={week.totalLessons} aria-valuenow={week.completedLessons}>{Array.from({ length: 5 }, (_, index) => <span key={index} className={index < Math.min(week.completedLessons, 5) ? "is-active" : ""} title={["T2", "T3", "T4", "T5", "T6"][index]} />)}</div>
     </article>)}</section>
-    <section role="region" aria-label="Điểm đầu vào" className="assessment-comparison prototype-card"><h2>Điểm đầu vào → cuối kỳ</h2>
+    <section role="region" aria-label="Điểm đầu vào" className="assessment-comparison app-card"><h2>Điểm đầu vào → cuối kỳ</h2>
       {view.assessments.placement ? <div><div><p className="eyebrow">Đầu vào · {view.assessments.placement.approvedLevel}</p><strong>{view.assessments.placement.totalScore}<span className="sr-only">/100</span></strong></div>
         <dl className="assessment-skills">{Object.entries(view.assessments.placement.sections).map(([section, score]) => <div key={section}><dt>{skillLabel(section)}</dt><dd><Progress value={score} max={25} label={`Điểm ${skillLabel(section)}`} /><span>{Math.round(score / 25 * 100)}%</span></dd></div>)}</dl></div> : <p>Chưa có kết quả đầu vào.</p>}
       {view.assessments.final ? <p>Cuối kỳ: {view.assessments.final.totalScore}/100</p> : <a href="/test/final">Làm bài cuối kỳ →</a>}

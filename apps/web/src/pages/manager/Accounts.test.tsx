@@ -14,7 +14,7 @@ const view: ManagerAccountsView = {
 };
 
 describe("ManagerAccounts", () => {
-  it("uses the prototype confirmation modal for account deletion", async () => {
+  it("uses the app confirmation modal for account deletion", async () => {
     const user = userEvent.setup();
     const onChangeStatus = vi.fn().mockResolvedValue(undefined);
     render(<ManagerAccounts view={view} currentUserId="manager-1" onChangeRole={vi.fn()} onCreate={vi.fn()} onChangeStatus={onChangeStatus} onResetPassword={vi.fn()} />);

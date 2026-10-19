@@ -1,4 +1,4 @@
-/* Prototype-fidelity refinements scoped to learner pages only. */
+/* Application-fidelity refinements scoped to learner pages only. */
 .learner-home-setup .home-setup-card {
   border: 1px solid var(--line);
   border-radius: 14px;
@@ -127,21 +127,21 @@
   }
 }
 
-/* Profile follows Thu's prototype hierarchy: page title, avatar card, soft profile,
+/* Profile follows Thu's app hierarchy: page title, avatar card, soft profile,
    one consolidated reward card, KPI row, weekly cards and assessment comparison. */
-.learner-profile .prototype-card {
+.learner-profile .app-card {
   border: 1px solid var(--line);
   border-radius: 14px;
   background: var(--surface);
   padding: 18px;
 }
 
-.learner-profile .prototype-card--soft {
+.learner-profile .app-card--soft {
   background: var(--surface-3);
 }
 
-.learner-profile > .prototype-card + .prototype-card,
-.learner-profile > .prototype-card + .readiness-card,
+.learner-profile > .app-card + .app-card,
+.learner-profile > .app-card + .readiness-card,
 .learner-profile > .readiness-card + .profile-kpis {
   margin-top: 12px;
 }

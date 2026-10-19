@@ -24,7 +24,7 @@ const operations: ManagerOperationsView = {
   operators: [{ operatorId: "op-1", operatorName: "Vận hành Demo", byWeek: [{ week: 1, sets: 1, lessons: 5, approved: 1 }], sets: 1, lessons: 5, published: 1, fullLessons: 5, editedLessons: 0, completions: 1, averageScore: 80, firstTryPercent: 75, failedPercent: 0, averageAttempts: 1.2, approvals: 1, averageApprovalHours: 2, reviewedSubmissions: 1, reviewedCoachTurns: 2 }]
 };
 
-describe("Manager prototype clone", () => {
+describe("Manager app clone", () => {
   it("keeps the full progress dashboard blocks and learner columns", () => {
     render(<ManagerProgress view={progress} />);
     expect(screen.getByRole("heading", { name: "Tiến độ nhóm" })).toBeInTheDocument();
@@ -42,7 +42,7 @@ describe("Manager prototype clone", () => {
     expect(screen.getByText("Chất lượng qua kết quả học viên")).toBeInTheDocument();
   });
 
-  it("keeps reminder message actions from the prototype", async () => {
+  it("keeps reminder message actions from the app", async () => {
     const send = vi.fn();
     const reminders: ManagerRemindersView = { organizationName: "GFT Demo", inactiveDays: 2, candidates: [{ learnerId: "learner-2", learnerName: "Học viên Cần nhắc", cefr: "A2", lastActivityAt: null }] };
     render(<ManagerReminders view={reminders} onSend={send} />);

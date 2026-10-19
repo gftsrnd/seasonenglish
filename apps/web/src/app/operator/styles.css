@@ -1,0 +1,1587 @@
+.app-operator {
+  width: 100%;
+  min-width: 0;
+}
+
+/* Keep page context, instructions, and the first working surface visually distinct. */
+.app-operator > .page-title {
+  margin-bottom: 14px;
+}
+
+/* Keep section labels readable when the supporting links wrap on mobile. */
+.app-operator .section > h3 {
+  margin-bottom: 14px;
+  line-height: 1.35;
+}
+
+.app-operator .section > h3 .small {
+  line-height: 1.45;
+}
+
+.app-operator > .banner + .banner,
+.app-operator > .banner + .card,
+.app-operator > .banner + .empty,
+.app-operator > [aria-live="polite"] + .card,
+.app-operator > [aria-live="polite"] + .empty {
+  margin-top: 12px;
+}
+
+/* Keep remediation controls together instead of interrupting warning copy. */
+.app-operator .operator-banner-actions {
+  display: inline-flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-left: 8px;
+  vertical-align: middle;
+}
+
+.app-operator .operator-banner-actions > .btn {
+  flex: 0 0 auto;
+}
+
+/* Prompt cards keep their long, contract-defined labels readable at every width. */
+.app-operator[aria-label="Prompt"] > .card,
+.app-operator[aria-label="Prompt"] > .card > .row.between {
+  min-width: 0;
+  max-width: 100%;
+}
+
+.app-operator[aria-label="Prompt"] > .card > .row.between {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.app-operator[aria-label="Prompt"] > .card > .row.between > h3 {
+  flex: 0 1 auto;
+  min-width: 0;
+  max-width: 100%;
+  margin: 0 0 8px;
+  overflow-wrap: anywhere;
+}
+
+.app-operator[aria-label="Prompt"] > .card > .row.between > .btn {
+  flex: 0 1 auto;
+  max-width: 100%;
+  white-space: nowrap;
+}
+
+/* The shell owns the fixed mobile nav; contain operator content and preserve its safe area. */
+@media (max-width: 760px) {
+  body:has(.app-operator) {
+    overflow-x: clip;
+  }
+
+  main:has(.app-operator) {
+    padding-bottom: calc(92px + env(safe-area-inset-bottom)) !important;
+  }
+}
+
+.app-operator .link-button {
+  background: transparent;
+  border: 0;
+  box-shadow: none;
+  color: inherit;
+  cursor: pointer;
+  font: inherit;
+  line-height: inherit;
+  min-height: 0;
+  padding: 0;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  vertical-align: baseline;
+}
+
+/* Keep the page back-link on its own line so it cannot press into the title. */
+.app-operator .page-title > :first-child > .link-button:first-child {
+  display: flex;
+  width: fit-content;
+  min-height: 24px;
+  align-items: center;
+  margin: 0 0 8px;
+  line-height: 1.3;
+  text-decoration: none;
+}
+
+.app-operator .page-title > :first-child > .link-button:first-child:hover {
+  text-decoration: underline;
+  text-decoration-thickness: 1.5px;
+  text-underline-offset: 3px;
+}
+
+.app-operator .operator-page-title-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  flex-wrap: nowrap;
+  gap: 8px;
+  min-width: 0;
+}
+
+.app-operator .operator-page-title-actions > * {
+  min-width: 0;
+}
+
+.app-operator .operator-page-title-actions select {
+  flex: 0 0 auto;
+  min-width: 0;
+  max-width: 100%;
+  width: auto;
+}
+
+.app-operator .operator-page-title-actions button {
+  flex: 0 0 auto;
+  white-space: nowrap;
+}
+
+/* Card titles and their controls must stack instead of competing for one line. */
+.app-operator .operator-card-header {
+  align-items: flex-start;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.app-operator .operator-card-header > :first-child {
+  flex: 1 1 16rem;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.app-operator .operator-card-header > .row {
+  flex: 0 1 auto;
+  flex-wrap: wrap;
+  min-width: 0;
+  gap: 8px;
+}
+
+.app-operator .operator-card-header > .row > * {
+  flex: 0 0 auto;
+}
+
+/* Operator dialogs use a local wrapper instead of the shared #modal mount. */
+.operator-modal-scope {
+  position: fixed;
+  inset: 0;
+  z-index: 90;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  overflow: auto;
+  background: rgba(30, 30, 30, .45);
+}
+
+.operator-modal-scope > .dialog {
+  flex: 0 1 860px;
+  margin: auto;
+}
+
+.operator-modal-scope .row.between {
+  min-width: 0;
+  align-items: flex-start;
+  flex-wrap: nowrap;
+}
+
+.operator-modal-scope .row.between > :first-child {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.operator-modal-scope .row.between > .link-button,
+.operator-modal-scope .row.between > .btn,
+.operator-modal-scope .row.between > button {
+  flex: 0 0 auto;
+  white-space: nowrap;
+}
+
+/* Keep the segmented review navigation readable on narrow screens. */
+.app-operator .tabs[role="tablist"] {
+  display: flex;
+  width: 100%;
+  max-width: 100%;
+  flex-wrap: nowrap;
+  justify-content: flex-start;
+  overflow-x: auto;
+  scrollbar-width: thin;
+}
+
+.app-operator .tabs[role="tablist"] > button {
+  flex: 0 0 auto;
+  white-space: nowrap;
+}
+
+.operator-modal-scope .operator-lesson-editor {
+  max-height: 92vh;
+  overflow: auto;
+}
+
+.operator-modal-scope .operator-editor-section {
+  border: 0;
+  margin: 8px 0 0;
+  min-width: 0;
+  padding: 8px 0 0;
+}
+
+.operator-modal-scope .operator-editor-section legend {
+  font-weight: 700;
+  margin: 0;
+  padding: 0;
+}
+
+.operator-modal-scope .operator-editor-section textarea {
+  min-height: 58px;
+}
+
+.operator-modal-scope .operator-lesson-editor .grid > * {
+  min-width: 0;
+}
+
+.operator-modal-scope .operator-lesson-editor input,
+.operator-modal-scope .operator-lesson-editor select,
+.operator-modal-scope .operator-lesson-editor textarea {
+  min-width: 0;
+}
+
+.operator-modal-scope .operator-vocabulary-grid { display: grid; gap: 6px; margin: 6px 0; }
+.operator-modal-scope .operator-editor-actions { justify-content: flex-end; margin-top: 10px; }
+.operator-modal-scope .operator-editor-actions button { white-space: nowrap; }
+.app-operator .operator-lesson-preview {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 4px 0 2px;
+}
+
+.app-operator .operator-lesson-preview > section {
+  margin: 0;
+  padding: 14px 16px;
+  border: 1px solid var(--line);
+  border-left: 4px solid var(--primary);
+  border-radius: 14px;
+  background: var(--surface-2);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .35);
+}
+
+.app-operator .operator-lesson-preview > section:nth-child(3n + 2) {
+  border-left-color: var(--secondary);
+  background: var(--surface-3);
+}
+
+.app-operator .operator-lesson-preview > section:nth-child(3n + 3) {
+  border-left-color: var(--primary-line);
+  background: var(--surface);
+}
+
+.app-operator .operator-lesson-preview__heading {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 12px;
+  padding-bottom: 9px;
+  border-bottom: 1px solid var(--line);
+}
+
+.app-operator .operator-lesson-preview__heading h4 {
+  margin: 0;
+  font-size: .96rem;
+  line-height: 1.35;
+}
+
+.app-operator .operator-lesson-preview__number {
+  display: inline-grid;
+  flex: 0 0 30px;
+  width: 30px;
+  height: 30px;
+  place-items: center;
+  border-radius: 9px;
+  background: var(--primary);
+  color: var(--primary-ink);
+  font-size: .72rem;
+  font-weight: 700;
+}
+
+.app-operator .operator-lesson-preview__section:nth-child(3n + 2) .operator-lesson-preview__number {
+  background: var(--secondary);
+}
+
+.app-operator .operator-lesson-preview__section:nth-child(3n + 3) .operator-lesson-preview__number {
+  background: var(--primary-line);
+}
+
+.app-operator .operator-lesson-preview p:last-child,
+.app-operator .operator-lesson-preview ul:last-child,
+.app-operator .operator-lesson-preview ol:last-child {
+  margin-bottom: 0;
+}
+
+.app-operator .operator-answer-options { margin: 4px 0; padding-left: 24px; }
+
+@media (max-width: 720px) {
+  .app-operator .operator-page-title-actions {
+    justify-content: flex-start;
+    flex-wrap: nowrap;
+    width: auto;
+    max-width: 100%;
+  }
+
+  .app-operator .operator-page-title-actions select {
+    flex: 0 0 auto;
+    min-width: 0;
+    max-width: 100%;
+  }
+
+  .operator-modal-scope {
+    align-items: flex-start;
+    padding: 10px;
+  }
+
+  .operator-modal-scope > .dialog {
+    max-height: calc(100vh - 20px);
+  }
+}
+
+/* Keep the pending-review actions in a predictable two-column rhythm on
+   phones. The delete action previously inherited an auto margin and became
+   a lone, right-aligned third row inside every review card. */
+@media (max-width: 480px) {
+  .app-operator[aria-label="Duyệt trình độ"] > .section:first-of-type > .card > .row:last-child {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    align-items: stretch;
+    gap: 8px;
+  }
+
+  .app-operator[aria-label="Duyệt trình độ"] > .section:first-of-type > .card > .row:last-child > * {
+    width: 100%;
+    min-width: 0;
+    margin-left: 0 !important;
+  }
+
+  /* Keep the destructive action on the same visual edge as the app.
+     With the optional AI-rescore control present there are five actions, so
+     normal grid placement creates a third row with “Xoá học viên” on the
+     left. Reserve the right column and let the button keep its natural
+     compact width instead of stretching into an orphaned full-width row. */
+  .app-operator[aria-label="Duyệt trình độ"] > .section:first-of-type > .card > .row:last-child > .btn-danger {
+    grid-column: 2;
+    justify-self: end;
+    width: auto;
+  }
+
+  .app-operator[aria-label="Duyệt trình độ"] > .section:first-of-type > .card > .row:last-child select {
+    padding-inline: 10px;
+  }
+}
+
+/* Operator controls stay legible and touchable without changing shared app styles. */
+.app-operator button:not(.link-button),
+.app-operator .btn,
+.operator-modal-scope button:not(.link-button),
+.operator-modal-scope .btn {
+  min-height: 40px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface);
+  box-shadow: 0 1px 1px rgba(30, 30, 30, .04);
+  padding: 9px 14px;
+  color: var(--text);
+  font-weight: 600;
+  line-height: 1.2;
+  transition: background-color .15s ease, border-color .15s ease, box-shadow .15s ease, color .15s ease, transform .08s ease;
+}
+
+.app-operator .btn-sm,
+.operator-modal-scope .btn-sm {
+  min-height: 40px;
+  padding: 8px 12px;
+  font-size: .84rem;
+}
+
+.app-operator button:not(.link-button):hover:not(:disabled),
+.app-operator .btn:hover:not(:disabled),
+.operator-modal-scope button:not(.link-button):hover:not(:disabled),
+.operator-modal-scope .btn:hover:not(:disabled) {
+  border-color: var(--primary-dark);
+  background: var(--surface-3);
+  box-shadow: 0 2px 6px rgba(30, 30, 30, .08);
+}
+
+.app-operator button:not(.link-button):active:not(:disabled),
+.app-operator .btn:active:not(:disabled),
+.operator-modal-scope button:not(.link-button):active:not(:disabled),
+.operator-modal-scope .btn:active:not(:disabled) {
+  transform: translateY(1px);
+}
+
+.app-operator .btn-primary,
+.operator-modal-scope .btn-primary {
+  border-color: transparent;
+  background: var(--primary);
+  box-shadow: none;
+  color: var(--primary-ink);
+}
+
+.app-operator .btn-primary:hover:not(:disabled),
+.operator-modal-scope .btn-primary:hover:not(:disabled) {
+  border-color: transparent;
+  background: var(--primary-hover);
+  box-shadow: 0 2px 7px rgba(30, 30, 30, .12);
+}
+
+.app-operator .btn-danger,
+.operator-modal-scope .btn-danger {
+  border-color: var(--danger-line);
+  background: var(--danger-soft);
+  box-shadow: none;
+  color: var(--danger);
+}
+
+.app-operator .btn-danger:hover:not(:disabled),
+.operator-modal-scope .btn-danger:hover:not(:disabled) {
+  border-color: var(--danger);
+  background: var(--danger);
+  color: #fff;
+}
+
+.app-operator button:not(.link-button):focus-visible,
+.app-operator .btn:focus-visible,
+.app-operator input:focus-visible,
+.app-operator select:focus-visible,
+.app-operator textarea:focus-visible,
+.operator-modal-scope button:not(.link-button):focus-visible,
+.operator-modal-scope .btn:focus-visible,
+.operator-modal-scope input:focus-visible,
+.operator-modal-scope select:focus-visible,
+.operator-modal-scope textarea:focus-visible {
+  outline: 3px solid var(--primary-glow);
+  outline-offset: 2px;
+  border-color: var(--primary-dark);
+}
+
+.app-operator button:not(.link-button):disabled,
+.app-operator .btn:disabled,
+.operator-modal-scope button:not(.link-button):disabled,
+.operator-modal-scope .btn:disabled {
+  cursor: not-allowed;
+  opacity: .5;
+  box-shadow: none;
+  transform: none;
+}
+
+.app-operator button[aria-busy="true"],
+.operator-modal-scope button[aria-busy="true"] {
+  cursor: progress;
+  min-width: 7rem;
+}
+
+.app-operator .row,
+.operator-modal-scope .row {
+  min-width: 0;
+}
+
+.app-operator .row > *,
+.operator-modal-scope .row > * {
+  min-width: 0;
+}
+
+.app-operator input:not([type="checkbox"]):not([type="radio"]):not([type="range"]),
+.app-operator select,
+.app-operator textarea,
+.operator-modal-scope input:not([type="checkbox"]):not([type="radio"]):not([type="range"]),
+.operator-modal-scope select,
+.operator-modal-scope textarea {
+  min-height: 40px;
+  width: 100%;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface);
+  padding: 9px 12px;
+  color: var(--text);
+  line-height: 1.35;
+}
+
+.app-operator textarea,
+.operator-modal-scope textarea {
+  min-height: 84px;
+  resize: vertical;
+}
+
+.app-operator input[readonly],
+.app-operator textarea[readonly],
+.operator-modal-scope input[readonly],
+.operator-modal-scope textarea[readonly] {
+  background: var(--surface-3);
+  color: var(--muted);
+}
+
+.app-operator input[type="checkbox"],
+.app-operator input[type="radio"],
+.operator-modal-scope input[type="checkbox"],
+.operator-modal-scope input[type="radio"] {
+  min-height: 16px;
+  width: auto;
+  accent-color: var(--primary-dark);
+}
+
+.app-operator .field,
+.operator-modal-scope .field {
+  gap: 6px;
+}
+
+.app-operator .table-wrap,
+.operator-modal-scope .table-wrap {
+  max-width: 100%;
+  overflow-x: auto;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  -webkit-overflow-scrolling: touch;
+}
+
+.app-operator .table-wrap table,
+.operator-modal-scope .table-wrap table {
+  min-width: 560px;
+}
+
+.app-operator .table-wrap th,
+.app-operator .table-wrap td,
+.operator-modal-scope .table-wrap th,
+.operator-modal-scope .table-wrap td {
+  padding: 12px;
+}
+
+.app-operator .tabs[role="tablist"] {
+  gap: 4px;
+  padding: 4px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--surface-3);
+}
+
+.app-operator .tabs[role="tablist"] > button {
+  min-height: 40px;
+  border: 1px solid transparent;
+  box-shadow: none;
+  border-radius: 8px;
+  padding: 8px 14px;
+  background: transparent;
+  color: var(--muted);
+}
+
+.app-operator .tabs[role="tablist"] > button:hover:not(:disabled) {
+  border-color: var(--line);
+  background: var(--surface);
+  color: var(--text);
+  box-shadow: none;
+}
+
+.app-operator .tabs[role="tablist"] > button.active {
+  border-color: var(--primary-line);
+  background: var(--surface);
+  color: var(--text);
+  box-shadow: 0 1px 3px rgba(30, 30, 30, .08);
+  font-weight: 700;
+}
+
+.operator-modal-scope {
+  align-items: center;
+  padding: clamp(10px, 3vw, 24px);
+}
+
+.operator-modal-scope > .dialog {
+  width: min(860px, 100%);
+  max-height: min(92vh, 900px);
+  overflow: auto;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  padding: clamp(16px, 3vw, 24px);
+  box-shadow: 0 24px 60px rgba(30, 30, 30, .22);
+}
+
+.operator-modal-scope .row.between {
+  gap: 12px;
+  align-items: flex-start;
+  flex-wrap: nowrap;
+}
+
+.operator-modal-scope .row.between > :first-child {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.operator-modal-scope .row.between > button,
+.operator-modal-scope .row.between > .btn {
+  flex: 0 0 auto;
+}
+
+.operator-modal-scope .dialog > h4 {
+  margin-top: 20px;
+  padding-top: 12px;
+  border-top: 1px solid var(--line);
+}
+
+.operator-modal-scope .dialog > .row:last-child,
+.operator-modal-scope .operator-editor-actions {
+  justify-content: flex-end;
+  margin-top: 16px;
+  padding-top: 12px;
+  border-top: 1px solid var(--line);
+}
+
+@media (max-width: 720px) {
+  .app-operator .page-title {
+    align-items: flex-start;
+  }
+
+  .app-operator .page-title > .row,
+  .app-operator .operator-editor-actions,
+  .operator-modal-scope .operator-editor-actions {
+    width: 100%;
+  }
+
+  .app-operator .page-title > .row > button,
+  .app-operator .operator-editor-actions > button,
+  .operator-modal-scope .operator-editor-actions > button {
+    flex: 1 1 10rem;
+  }
+
+  .app-operator .page-title > .operator-page-title-actions > button {
+    flex: 0 0 auto;
+  }
+
+  .operator-modal-scope {
+    align-items: flex-start;
+  }
+
+  .operator-modal-scope > .dialog {
+    max-height: calc(100vh - 20px);
+  }
+
+  .operator-modal-scope .row.between > button,
+  .operator-modal-scope .row.between > .btn {
+    flex: 0 0 auto;
+  }
+
+  .app-operator .operator-banner-actions {
+    display: flex;
+    align-items: flex-start;
+    margin: 10px 0 0;
+  }
+}
+
+/* Final sizing guard: keep the level selector usable beside its action button. */
+.app-operator .operator-page-title-actions select {
+  flex: 0 1 14rem;
+  min-width: 11rem;
+  width: auto;
+}
+
+.app-operator .btn-sm,
+.operator-modal-scope .btn-sm {
+  white-space: nowrap;
+}
+
+@media (max-width: 720px) {
+  .app-operator .operator-page-title-actions {
+    width: 100%;
+    max-width: 100%;
+    flex-wrap: nowrap;
+  }
+
+  .app-operator .operator-page-title-actions select {
+    flex: 1 1 auto;
+    min-width: 0;
+    max-width: none;
+  }
+}
+
+/* Let long page instructions share the desktop title row with its actions. */
+.app-operator .page-title > :first-child {
+  flex: 1 1 0;
+  min-width: 0;
+}
+
+.app-operator .page-title > .operator-page-title-actions {
+  flex: 0 0 auto;
+}
+
+@media (max-width: 720px) {
+  .app-operator .page-title > :first-child {
+    flex-basis: 100%;
+  }
+}
+
+/* Slice C fidelity: restore the canonical compact controls after the shared
+   operator usability guards above. Keep these rules route-scoped. */
+.app-operator[aria-label="Đọc mẫu"] > .page-title {
+  margin-bottom: 13px;
+}
+
+.app-operator[aria-label="Prompt"] > .page-title,
+.app-operator[aria-label="Đề thi lên mức"] > .page-title {
+  margin-bottom: 14px;
+}
+
+.app-operator .operator-review-tabs {
+  gap: 4px;
+  margin-bottom: 14px;
+  padding: 3px;
+  border: 0;
+  border-radius: 10px;
+  background: var(--surface-3);
+  box-shadow: inset 0 0 0 1px var(--line);
+}
+
+.app-operator .operator-review-tabs > button {
+  min-height: 36px;
+  padding: 0 16px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  box-shadow: none;
+  color: var(--muted);
+  font-size: .88rem;
+  font-weight: 400;
+}
+
+.app-operator .operator-review-tabs > button:hover:not(:disabled) {
+  border: 0;
+  background: rgba(255, 255, 255, .5);
+  box-shadow: none;
+  color: var(--text);
+}
+
+.app-operator .operator-review-tabs > button.active {
+  border: 0;
+  background: var(--surface);
+  box-shadow: none;
+  color: var(--text);
+  font-weight: 500;
+}
+
+.app-operator .operator-coach-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 14px;
+}
+
+.app-operator .operator-coach-list > .item {
+  align-items: flex-start;
+  margin: 0;
+  padding: 14px 16px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--surface);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .35);
+}
+
+.app-operator .operator-coach-list > .item + .item {
+  border-top: 1px solid var(--line);
+}
+
+.app-operator .operator-coach-list .body {
+  min-width: 0;
+  line-height: 1.5;
+}
+
+.app-operator .operator-coach-list .body > .row.between {
+  gap: 10px;
+  margin-bottom: 8px;
+}
+
+.app-operator[aria-label="Đọc mẫu"] .btn-sm,
+.app-operator[aria-label="Prompt"] .btn-sm,
+.app-operator[aria-label="Đề thi lên mức"] .btn-sm,
+.operator-detail-modal button.btn-sm {
+  min-height: 32px;
+  padding: 0 12px;
+  border: 0;
+  border-radius: 10px;
+  background: var(--surface);
+  box-shadow: inset 0 0 0 1px var(--line);
+  font-size: .82rem;
+  font-weight: 500;
+}
+
+.app-operator[aria-label="Đọc mẫu"] .btn-sm.btn-primary,
+.app-operator[aria-label="Prompt"] .btn-sm.btn-primary,
+.app-operator[aria-label="Đề thi lên mức"] .btn-sm.btn-primary {
+  background: var(--primary);
+  box-shadow: none;
+}
+
+.app-operator[aria-label="Đọc mẫu"] .btn-sm.btn-danger,
+.app-operator[aria-label="Prompt"] .btn-sm.btn-danger,
+.app-operator[aria-label="Đề thi lên mức"] .btn-sm.btn-danger {
+  background: var(--surface);
+  box-shadow: inset 0 0 0 1px var(--danger-line);
+  color: var(--danger);
+}
+
+.app-operator[aria-label="Đọc mẫu"] button:focus-visible,
+.app-operator[aria-label="Prompt"] button:focus-visible,
+.app-operator[aria-label="Đề thi lên mức"] button:focus-visible,
+.operator-detail-modal button:focus-visible {
+  outline: 2px solid var(--text);
+  outline-offset: 2px;
+  border-color: transparent;
+}
+
+.app-operator[aria-label="Prompt"] textarea:focus-visible {
+  outline: 0;
+  border-color: var(--primary);
+  box-shadow: 0 0 0 3px var(--primary-glow);
+}
+
+.operator-detail-modal {
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  overflow: hidden;
+  background: rgba(30, 30, 30, .45);
+}
+
+.operator-detail-modal > .operator-detail-dialog {
+  width: 100%;
+  max-width: 860px;
+  max-height: 90vh;
+  margin: auto;
+  overflow: auto;
+  border: 0;
+  border-radius: 16px;
+  padding: 22px;
+  box-shadow: 0 24px 60px rgba(30, 30, 30, .25);
+}
+
+.operator-detail-modal > .operator-detail-dialog code {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+/* Keep assessment-form details readable: the shared `.item` layout is a
+   horizontal learner-row pattern and makes a `<details>` section too tight. */
+.operator-detail-modal > .operator-detail-dialog > .row.between {
+  align-items: flex-start;
+  gap: 12px;
+  margin-bottom: 14px;
+}
+
+.operator-detail-modal > .operator-detail-dialog > .row.between h3 {
+  margin: 0;
+  line-height: 1.3;
+}
+
+.operator-detail-modal > .operator-detail-dialog > .row.between p {
+  margin: 6px 0 0;
+  line-height: 1.45;
+}
+
+.operator-detail-modal > .operator-detail-dialog > .list {
+  gap: 12px;
+}
+
+.operator-detail-modal > .operator-detail-dialog > .list > details.item {
+  display: block;
+  padding: 14px 16px;
+  line-height: 1.45;
+}
+
+.operator-detail-modal > .operator-detail-dialog > .list > details.item > summary {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 6px 8px;
+  line-height: 1.4;
+}
+
+.operator-detail-modal > .operator-detail-dialog > .list > details.item > summary + .small {
+  margin-top: 10px;
+  line-height: 1.5;
+}
+
+.operator-detail-modal > .operator-detail-dialog > .list > details.item > .card.flat {
+  margin-top: 12px;
+  padding: 14px 16px;
+  line-height: 1.5;
+}
+
+.operator-detail-modal > .operator-detail-dialog > .list > details.item > .card.flat + .card.flat {
+  margin-top: 10px;
+}
+
+.operator-detail-modal > .operator-detail-dialog > .list > details.item > .card.flat p {
+  margin: 6px 0 8px;
+  line-height: 1.45;
+}
+
+.operator-detail-modal > .operator-detail-dialog > .list > details.item > .card.flat > .small + .small {
+  margin-top: 6px;
+}
+
+.app-operator .operator-level-form-item {
+  align-items: flex-start;
+  flex-wrap: wrap;
+  gap: 10px 12px;
+}
+
+.app-operator .operator-level-form-item > .body {
+  flex: 1 1 20rem;
+}
+
+.app-operator .operator-level-form-item > .body > .title {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 8px;
+  line-height: 1.45;
+}
+
+.app-operator .operator-level-form-item > .body > .title > .badge {
+  flex: 0 0 auto;
+}
+
+@media (max-width: 720px) {
+  .operator-detail-modal {
+    align-items: flex-start;
+    padding: 10px;
+  }
+
+  .operator-detail-modal > .operator-detail-dialog {
+    max-height: calc(100dvh - 20px);
+  }
+}
+
+/* Final responsive guard for the Operator shell. The shared shell stays
+   untouched; these rules only apply while an Operator page is mounted. */
+@media (min-width: 761px) and (max-width: 960px) {
+  body:has(.app-operator) .topbar {
+    min-width: 0;
+    overflow: hidden;
+  }
+
+  body:has(.app-operator) .topbar .brand {
+    flex: 1 1 auto;
+    min-width: 0;
+    max-width: none;
+  }
+
+  body:has(.app-operator) .topbar nav {
+    flex: 1 1 auto;
+    min-width: 0;
+    max-width: none;
+    margin-left: 0;
+    overflow-x: auto;
+    overflow-y: hidden;
+    scrollbar-width: thin;
+  }
+
+  body:has(.app-operator) .topbar nav a {
+    display: inline-flex;
+    flex: 0 0 auto;
+    min-width: 0;
+    max-width: none;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  body:has(.app-operator) .topbar nav a.active {
+    display: inline-flex;
+  }
+
+  body:has(.app-operator) .topbar .userchip {
+    flex: 0 1 330px;
+    min-width: 0;
+    max-width: 330px;
+  }
+}
+
+/* Fixed mobile navigation must not cover the final Operator action row. */
+@media (max-width: 760px) {
+  html:has(.app-operator),
+  body:has(.app-operator),
+  body:has(.app-operator) main {
+    scroll-padding-bottom: calc(128px + env(safe-area-inset-bottom, 0px));
+  }
+
+  body:has(.app-operator) main {
+    padding-bottom: calc(128px + env(safe-area-inset-bottom, 0px)) !important;
+  }
+
+  body:has(.app-operator) .topbar .brand > span:last-child {
+    min-width: 0;
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .app-operator .card {
+    scroll-margin-bottom: calc(128px + env(safe-area-inset-bottom, 0px));
+  }
+
+  .app-operator[aria-label="Prompt"] {
+    max-width: 100%;
+    min-width: 0;
+    overflow-x: clip;
+  }
+
+  .app-operator[aria-label="Prompt"] > .card {
+    max-width: 100%;
+    min-width: 0;
+    overflow: hidden;
+  }
+
+  .app-operator[aria-label="Prompt"] > .card textarea {
+    box-sizing: border-box;
+    min-width: 0;
+    max-width: 100%;
+  }
+}
+
+/* Give section headings a deliberate pause before their working surface. */
+.app-operator .section > h3 {
+  margin-bottom: 14px;
+}
+
+/* Keep Operator status and action glyphs optically aligned without using
+   platform-dependent emoji glyphs for interface chrome. */
+.app-operator .operator-banner-icon {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  min-width: 18px;
+  line-height: 1;
+}
+
+.app-operator .operator-banner-svg,
+.app-operator .operator-button-icon,
+.app-operator .operator-heading-icon,
+.app-operator .operator-inline-icon,
+.app-operator .operator-status-icon {
+  display: inline-block;
+  flex: 0 0 auto;
+  vertical-align: -0.18em;
+}
+
+.app-operator .operator-button-icon {
+  margin-right: 6px;
+}
+
+.app-operator .operator-heading-icon {
+  margin-right: 7px;
+}
+
+.app-operator .operator-status-message,
+.app-operator .operator-status-legend {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.app-operator .operator-status-legend span {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 3px;
+}
+
+.app-operator .operator-answer-options .operator-inline-icon {
+  margin-right: 5px;
+}
+
+/* Keep matrix actions on one shared vertical track even when a cell has an
+   extra status badge or a longer generated-at line. */
+.app-operator .operator-lesson-matrix {
+  table-layout: fixed;
+}
+
+.app-operator .operator-lesson-matrix th:first-child,
+.app-operator .operator-lesson-matrix td:first-child {
+  width: 19%;
+}
+
+.app-operator .operator-lesson-matrix th:not(:first-child),
+.app-operator .operator-lesson-matrix td:not(:first-child) {
+  width: 16.2%;
+}
+
+.app-operator .operator-lesson-matrix th,
+.app-operator .operator-lesson-matrix td {
+  min-width: 0;
+  vertical-align: top;
+}
+
+.app-operator .operator-lesson-cell {
+  display: flex;
+  min-width: 0;
+  min-height: 100%;
+  flex-direction: column;
+}
+
+.app-operator .operator-lesson-cell__status {
+  display: flex;
+  min-height: 76px;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+  line-height: 1.35;
+}
+
+.app-operator .operator-lesson-cell__status .badge {
+  max-width: 100%;
+  white-space: normal;
+}
+
+.app-operator .operator-lesson-cell__action {
+  display: flex;
+  min-height: 48px;
+  align-items: flex-start;
+}
+
+.app-operator .operator-lesson-cell__action > .row {
+  align-items: stretch;
+  gap: 6px;
+  row-gap: 6px;
+}
+
+.app-operator .operator-lesson-cell__action > .row > *,
+.app-operator .operator-lesson-cell__action > button {
+  min-width: 0;
+}
+
+.app-operator .operator-lesson-days {
+  flex: 1 1 auto;
+  margin: 0;
+  line-height: 1.45;
+}
+
+.app-operator .operator-lesson-days li {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+/* The approved-learner table has variable button counts and goal lengths;
+   reserve a stable action column and give each control breathing room. */
+.app-operator .operator-action-table {
+  table-layout: fixed;
+}
+
+.app-operator .operator-action-table th:first-child,
+.app-operator .operator-action-table td:first-child {
+  width: 19%;
+}
+
+.app-operator .operator-action-table th:nth-child(2),
+.app-operator .operator-action-table td:nth-child(2) {
+  width: 13%;
+}
+
+.app-operator .operator-action-table th:nth-child(3),
+.app-operator .operator-action-table td:nth-child(3) {
+  width: 14%;
+}
+
+.app-operator .operator-action-table th:nth-child(4),
+.app-operator .operator-action-table td:nth-child(4) {
+  width: 21%;
+}
+
+.app-operator .operator-action-table th:last-child,
+.app-operator .operator-action-table td:last-child {
+  width: 33%;
+}
+
+.app-operator .operator-action-table td {
+  vertical-align: top;
+  line-height: 1.45;
+}
+
+.app-operator .operator-action-table td[data-label="Mức"] .badge {
+  display: inline-flex;
+  max-width: 100%;
+  margin: 2px 4px 2px 0;
+  white-space: normal;
+  vertical-align: middle;
+}
+
+.app-operator .operator-action-table td[data-label="Thao tác"] > .row {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  align-content: flex-start;
+  align-items: stretch;
+  gap: 8px;
+  row-gap: 8px;
+}
+
+.app-operator .operator-action-table td[data-label="Thao tác"] > .row > .btn,
+.app-operator .operator-action-table td[data-label="Thao tác"] > .row > button {
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+}
+
+/* Shared prompt dialogs are rendered outside the Operator page root. Scope
+   them through the mounted route so their label, field and actions do not
+   collapse into one tight strip. */
+body:has(.app-operator) #modal {
+  padding: clamp(14px, 3vw, 24px);
+}
+
+body:has(.app-operator) #modal > .dialog {
+  width: min(520px, calc(100vw - 28px));
+  padding: 24px;
+}
+
+body:has(.app-operator) #modal > .dialog > h3 {
+  margin: 0 32px 16px 0;
+}
+
+body:has(.app-operator) #modal > .dialog > .field {
+  margin: 0;
+}
+
+body:has(.app-operator) #modal > .dialog > .field > span {
+  margin-bottom: 8px;
+}
+
+body:has(.app-operator) #modal > .dialog > .row {
+  gap: 10px;
+  margin-top: 18px;
+  padding-top: 14px;
+  border-top: 1px solid var(--line);
+}
+
+/* Profile evidence is intentionally airy: labels stay intact and long values
+   wrap in their value area instead of making the whole modal hard to scan. */
+.operator-modal-scope > .dialog {
+  scrollbar-gutter: stable;
+}
+
+.operator-modal-scope .row.between {
+  margin-bottom: 4px;
+}
+
+.operator-modal-scope .grid.cols-2 {
+  gap: 14px;
+  margin-top: 14px;
+}
+
+.operator-modal-scope .grid.cols-2 > .card {
+  padding: 16px;
+}
+
+.operator-modal-scope .dialog > h4 {
+  margin: 22px 0 10px;
+  line-height: 1.3;
+}
+
+.operator-modal-scope .dialog > .list {
+  gap: 10px;
+}
+
+.operator-modal-scope .list .item {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 6px 10px;
+  line-height: 1.45;
+}
+
+.operator-modal-scope .list .item > b {
+  flex: 0 0 auto;
+  white-space: nowrap;
+}
+
+.operator-modal-scope .list .item > span {
+  min-width: 0;
+  flex: 1 1 12rem;
+  overflow-wrap: anywhere;
+}
+
+.operator-modal-scope .list .item > div {
+  min-width: 0;
+  flex: 1 1 100%;
+}
+
+/* Operator learner profiles follow the Manager profile modal: one compact
+   personal-profile card with a fixed label column and a wrapping value column. */
+.operator-profile-modal {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  display: grid;
+  place-items: center;
+  box-sizing: border-box;
+  align-items: flex-start;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: max(16px, env(safe-area-inset-top, 0px)) 16px max(16px, env(safe-area-inset-bottom, 0px));
+}
+
+.operator-modal-scope.operator-profile-modal > .operator-profile-dialog {
+  flex: 0 1 560px;
+  width: 100%;
+  max-width: 560px;
+  max-height: min(90dvh, 760px);
+  margin: auto;
+  overflow: auto;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
+}
+
+.operator-profile-modal > .operator-profile-dialog:focus-visible {
+  outline: 2px solid var(--text);
+  outline-offset: 3px;
+}
+
+.operator-profile-card {
+  margin-top: 10px;
+}
+
+.operator-profile-rows {
+  display: grid;
+  gap: 4px;
+  margin-top: 6px;
+}
+
+.operator-profile-row {
+  display: grid;
+  grid-template-columns: minmax(120px, max-content) minmax(0, 1fr);
+  align-items: start;
+  gap: 6px;
+  min-width: 0;
+}
+
+.operator-profile-label {
+  min-width: 0;
+  font-weight: 800;
+}
+
+.operator-profile-value {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.app-operator[aria-label="Prompt"] > .card > .row.between > h3 {
+  flex: 0 1 auto;
+  min-width: 0;
+  max-width: 100%;
+}
+
+/* At phone width, operational tables become labelled records so their actions
+   remain visible and clickable without a hidden horizontal-scroll gesture. */
+@media (max-width: 480px) {
+  .app-operator[aria-label="Đọc mẫu"] .btn-sm,
+  .app-operator[aria-label="Prompt"] .btn-sm,
+  .app-operator[aria-label="Đề thi lên mức"] .btn-sm {
+    min-height: 40px;
+    padding: 8px 12px;
+  }
+
+  .app-operator .operator-action-table-wrap,
+  .app-operator .operator-lesson-matrix-wrap {
+    overflow-x: clip;
+  }
+
+  .app-operator .table-wrap table.operator-action-table,
+  .app-operator .table-wrap table.operator-lesson-matrix {
+    min-width: 0;
+    width: 100%;
+  }
+
+  .app-operator .operator-action-table thead,
+  .app-operator .operator-lesson-matrix thead {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+
+  .app-operator .operator-action-table tbody,
+  .app-operator .operator-action-table tr,
+  .app-operator .operator-action-table td,
+  .app-operator .operator-lesson-matrix tbody,
+  .app-operator .operator-lesson-matrix tr,
+  .app-operator .operator-lesson-matrix td {
+    display: block;
+    width: 100%;
+  }
+
+  .app-operator .operator-action-table tr,
+  .app-operator .operator-lesson-matrix tr {
+    padding: 8px 0;
+  }
+
+  .app-operator .operator-action-table tr + tr,
+  .app-operator .operator-lesson-matrix tr + tr {
+    border-top: 1px solid var(--line);
+  }
+
+  .app-operator .operator-action-table td,
+  .app-operator .operator-lesson-matrix td {
+    border: 0;
+    padding: 8px 10px;
+  }
+
+  .app-operator .operator-action-table td::before,
+  .app-operator .operator-lesson-matrix td::before {
+    display: block;
+    margin-bottom: 4px;
+    color: var(--muted);
+    content: attr(data-label);
+    font-size: .72rem;
+    font-weight: 700;
+    letter-spacing: .02em;
+    text-transform: uppercase;
+  }
+
+.app-operator .operator-action-table td[data-label="Thao tác"] > .row,
+.app-operator .operator-lesson-matrix td > .operator-lesson-cell > .operator-lesson-cell__action > .row {
+  justify-content: flex-start;
+  flex-wrap: wrap;
+}
+
+  .app-operator .operator-lesson-matrix td::before {
+    line-height: 1.25;
+  }
+}
+
+/* Core Operator geometry: keep title-to-surface spacing intentional and make
+   adjacent status cards share one row height. */
+.app-operator > .page-title {
+  margin-bottom: 14px;
+}
+
+.app-operator > .section {
+  margin-top: 22px;
+}
+
+.app-operator .grid.cols-2 {
+  align-items: stretch;
+}
+
+.app-operator .grid.cols-2 > .card {
+  height: 100%;
+  margin-top: 0;
+}
+
+.app-operator .grid.cols-2 > .card + .card {
+  margin-top: 0;
+}
+
+/* The shared shell has a more-specific mobile-nav rule; this route-scoped
+   selector wins without changing shared/global styles. */
+@media (max-width: 760px) {
+  body:has(nav.bottomnav):has(.app-operator) > #root > main {
+    padding-bottom: calc(128px + env(safe-area-inset-bottom, 0px)) !important;
+    scroll-padding-bottom: calc(128px + env(safe-area-inset-bottom, 0px));
+  }
+}
+
+/* Match the app's single-row review strip on phones. The remaining
+   categories stay reachable by horizontal scrolling instead of changing the
+   screen into a taller three-row block. */
+@media (max-width: 480px) {
+  .app-operator .tabs.operator-review-tabs[role="tablist"] {
+    display: flex;
+    width: 100%;
+    max-width: 100%;
+    flex-wrap: nowrap;
+    justify-content: flex-start;
+    overflow-x: auto;
+    gap: 4px;
+    scrollbar-width: none;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .app-operator .tabs.operator-review-tabs[role="tablist"] > button {
+    flex: 0 0 auto;
+    width: auto;
+    min-width: max-content;
+    min-height: 36px;
+    padding: 0 16px;
+    white-space: nowrap;
+    text-align: left;
+  }
+
+  .app-operator[aria-label="Prompt"] > .card > .row.between > h3 {
+    flex: 0 1 100%;
+    width: 100%;
+    margin-bottom: 8px;
+    min-width: 0;
+    overflow-wrap: anywhere;
+    word-break: break-word;
+  }
+
+  /* Prompt names contain literal template paths such as
+     `weeks[].week/options[].title`.  Those tokens must wrap inside the card;
+     otherwise the mobile page acquires a hidden 700px-wide scroll surface. */
+  .app-operator[aria-label="Prompt"] > .card > .row.between {
+    min-width: 0;
+    max-width: 100%;
+    flex-wrap: wrap;
+    align-items: flex-start;
+  }
+
+  /* Keep profile/evidence labels intact in the narrow modal.  The shared
+     `.item` grid gives a short label too little width, which turns `email:`
+     into `ema`/`il:` on a phone. */
+  .operator-modal-scope .list .item {
+    display: flex;
+    align-items: baseline;
+    flex-wrap: wrap;
+    gap: 4px 8px;
+  }
+
+  .operator-modal-scope .list .item > b {
+    flex: 0 0 auto;
+    min-width: max-content;
+  }
+
+  .operator-modal-scope .list .item > span {
+    min-width: 0;
+    flex: 1 1 12rem;
+    overflow-wrap: anywhere;
+  }
+
+  .operator-modal-scope .list .item > div {
+    flex: 1 1 100%;
+    min-width: 0;
+  }
+
+  /* Detail modals contain small evidence/version tables.  On a phone they
+     should wrap within the dialog instead of exposing a clipped 560px table
+     with the last columns unreachable. */
+  .operator-detail-modal .table-wrap {
+    overflow-x: hidden;
+  }
+
+  .operator-detail-modal .table-wrap table {
+    width: 100%;
+    min-width: 0;
+    table-layout: fixed;
+  }
+
+  .operator-detail-modal .table-wrap th,
+  .operator-detail-modal .table-wrap td {
+    min-width: 0;
+    padding: 8px 6px;
+    overflow-wrap: anywhere;
+    word-break: break-word;
+  }
+
+  .operator-detail-modal .table-wrap code {
+    overflow-wrap: anywhere;
+    word-break: break-word;
+  }
+}

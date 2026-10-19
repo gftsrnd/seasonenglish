@@ -17,7 +17,7 @@ const lessonParts: LessonPart[] = [
   "listening", "reading", "writing", "word_class", "word_use", "speaking"
 ].map((code) => ({ code: code as LessonPart["code"], title: code, content: { text: code } }));
 
-describe("learner screens preserve the prototype flow", () => {
+describe("learner screens preserve the app flow", () => {
   it("keeps onboarding as one grouped form with one save action", () => {
     render(<Onboard initialProfile={{ fullName: "", email: "" }} onSave={vi.fn()} />);
     expect(screen.getByRole("heading", { name: /cho season biết về bạn nhé/i })).toBeInTheDocument();
@@ -74,7 +74,7 @@ describe("learner screens preserve the prototype flow", () => {
     expect(screen.getByRole("link", { name: /làm bài cuối kỳ/i })).toHaveAttribute("href", "/test/final");
   });
 
-  it("keeps the prototype home hierarchy instead of introducing a new dashboard order", () => {
+  it("keeps the app home hierarchy instead of introducing a new dashboard order", () => {
     const { container } = render(<Home view={{
       onboardingRequired: false,
       learner: { displayName: "Học viên Demo", cefr: "A2" },
@@ -110,7 +110,7 @@ describe("learner screens preserve the prototype flow", () => {
     expect(screen.getByLabelText(/kết quả toeic/i)).toHaveValue("650");
   });
 
-  it("uses the prototype edit-profile heading, guidance and action row for an existing learner", () => {
+  it("uses the app edit-profile heading, guidance and action row for an existing learner", () => {
     render(<Onboard initialProfile={{ fullName: "Lan", email: "lan@example.com" }} onSave={vi.fn()} />);
     expect(screen.getByRole("heading", { name: /sửa hồ sơ của bạn/i })).toBeInTheDocument();
     expect(screen.getByText(/khoảng 2 phút thôi/i)).toBeInTheDocument();
@@ -154,7 +154,7 @@ describe("learner screens preserve the prototype flow", () => {
     }));
   });
 
-  it("renders structured lesson content as the vocabulary, grammar and pronunciation blocks from the prototype", () => {
+  it("renders structured lesson content as the vocabulary, grammar and pronunciation blocks from the app", () => {
     const structuredParts: LessonPart[] = [
       { code: "vocabulary", title: "Từ vựng", content: { items: [{ word: "from", type: "giới từ", pronunciation: "/frɒm/", meaning: "từ, đến từ", examples: ["from Hue", "from Vietnam"] }] } },
       { code: "grammar", title: "Ngữ pháp", content: { formula: "Where are you from?", usage: "I am from + nơi", examples: ["I am from Hue."] } },
@@ -249,7 +249,7 @@ describe("learner screens preserve the prototype flow", () => {
     expect(onSaveAvatar).toHaveBeenCalledWith({ acc: "flower", color: "rose", bg: 3 });
   });
 
-  it("keeps every prototype profile row and translates stored option keys", () => {
+  it("keeps every app profile row and translates stored option keys", () => {
     const view = profileViewFixture();
     view.learner.profile = {
       fullName: "Học viên Demo",

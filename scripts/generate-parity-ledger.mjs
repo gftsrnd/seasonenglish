@@ -4,10 +4,10 @@ import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
-const matrixRelativePath = "docs/prototype-parity/route-state-matrix.md";
+const matrixRelativePath = "docs/app-parity/route-state-matrix.md";
 const matrixPath = resolve(repoRoot, matrixRelativePath);
-const jsonPath = resolve(repoRoot, "docs/prototype-parity/parity-ledger.json");
-const markdownPath = resolve(repoRoot, "docs/prototype-parity/parity-ledger.md");
+const jsonPath = resolve(repoRoot, "docs/app-parity/parity-ledger.json");
+const markdownPath = resolve(repoRoot, "docs/app-parity/parity-ledger.md");
 const matrix = readFileSync(matrixPath, "utf8");
 
 const validPrefixes = [
@@ -134,9 +134,9 @@ function addRecord({ id, route, role, condition }) {
     role,
     condition: cleanMarkdown(condition) || id,
     sourceAnchor: `research/seasonenglish/core.js#route:${route}|state:${id}`,
-    contract: status === "missing_contract" ? "Thiếu contract biểu diễn đầy đủ trạng thái này." : "Cần đối chiếu contract hiện có với prototype.",
+    contract: status === "missing_contract" ? "Thiếu contract biểu diễn đầy đủ trạng thái này." : "Cần đối chiếu contract hiện có với app.",
     api: status === "missing_api" ? "Thiếu hoặc chưa hoàn thiện endpoint/persistence cho trạng thái này." : "Cần kiểm chứng bằng response và dữ liệu lưu thực tế.",
-    ui: status === "missing_ui" ? "Thiếu nhánh UI hoặc modal tương ứng trong bản React." : "Cần đối chiếu trực quan với prototype gốc.",
+    ui: status === "missing_ui" ? "Thiếu nhánh UI hoặc modal tương ứng trong bản React." : "Cần đối chiếu trực quan với app gốc.",
     automatedProof: proofFor(role),
     browserEvidence: "Chưa có — cần ảnh chụp đúng route, vai trò và fixture sau khi test tự động đạt.",
     blocker: hasPrefix(id, blockerPrefixes),
@@ -195,11 +195,11 @@ const approvedExceptions = new Set([
 
 for (const record of records) {
   if (!approvedExceptions.has(record.id)) continue;
-  record.contract = "Ngoại lệ đã được Minh–Thư chốt: dùng đăng nhập và phân quyền thật thay cho bộ chọn vai trò/tài khoản của prototype.";
-  record.api = "Identity API và session thật thay thế local demo users/PIN của prototype.";
-  record.ui = "Màn đăng nhập thật được phép khác prototype; không được dùng lại ba lựa chọn đăng nhập demo.";
+  record.contract = "Ngoại lệ đã được Minh–Thư chốt: dùng đăng nhập và phân quyền thật thay cho bộ chọn vai trò/tài khoản của app.";
+  record.api = "Identity API và session thật thay thế local demo users/PIN của app.";
+  record.ui = "Màn đăng nhập thật được phép khác app; không được dùng lại ba lựa chọn đăng nhập demo.";
   record.automatedProof = "Được kiểm tra trong identity/session và role-guard tests.";
-  record.browserEvidence = "evidence/parity/auth-root/local-auth-root-2026-10-15.png; evidence/parity/auth-root/prototype-role-choice-2026-10-15.png";
+  record.browserEvidence = "evidence/parity/auth-root/local-auth-root-2026-10-15.png; evidence/parity/auth-root/app-role-choice-2026-10-15.png";
   record.blocker = false;
   record.status = "approved_exception";
 }
@@ -210,31 +210,31 @@ for (const record of records) {
 const verifiedEvidence = {
   "shell.guest": {
     automatedProof: "apps/web/test/entry-screen.test.tsx",
-    browserEvidence: "evidence/parity/auth-root/local-auth-root-2026-10-15.png; evidence/parity/auth-root/prototype-role-choice-2026-10-15.png"
+    browserEvidence: "evidence/parity/auth-root/local-auth-root-2026-10-15.png; evidence/parity/auth-root/app-role-choice-2026-10-15.png"
   },
   "op.learners.populated": {
-    automatedProof: "apps/web/test/operator-assessment-screens.test.tsx; apps/web/src/prototype/operator/operator-prototype.test.tsx; apps/api/test/operator-learner-operations.integration.test.ts",
-    browserEvidence: "evidence/parity/operator-root/local-operator-root-2026-10-15.png; evidence/parity/operator-root/prototype-operator-root-2026-10-15.png"
+    automatedProof: "apps/web/test/operator-assessment-screens.test.tsx; apps/web/src/app/operator/operator-app.test.tsx; apps/api/test/operator-learner-operations.integration.test.ts",
+    browserEvidence: "evidence/parity/operator-root/local-operator-root-2026-10-15.png; evidence/parity/operator-root/app-operator-root-2026-10-15.png"
   },
   "op.level-flow.approved": {
     automatedProof: "apps/web/test/operator-assessment-screens.test.tsx; apps/api/test/assessment.integration.test.ts",
-    browserEvidence: "evidence/parity/operator-root/local-operator-root-2026-10-15.png; evidence/parity/operator-root/prototype-operator-root-2026-10-15.png"
+    browserEvidence: "evidence/parity/operator-root/local-operator-root-2026-10-15.png; evidence/parity/operator-root/app-operator-root-2026-10-15.png"
   },
   "op.level-signal.none": {
     automatedProof: "apps/web/test/operator-assessment-screens.test.tsx",
-    browserEvidence: "evidence/parity/operator-root/local-operator-root-2026-10-15.png; evidence/parity/operator-root/prototype-operator-root-2026-10-15.png"
+    browserEvidence: "evidence/parity/operator-root/local-operator-root-2026-10-15.png; evidence/parity/operator-root/app-operator-root-2026-10-15.png"
   },
   "op.tests.none": {
-    automatedProof: "apps/web/test/operator-assessment-screens.test.tsx; apps/web/src/prototype/operator/operator-prototype.test.tsx",
-    browserEvidence: "evidence/parity/operator-root/local-operator-root-2026-10-15.png; evidence/parity/operator-root/prototype-operator-root-2026-10-15.png"
+    automatedProof: "apps/web/test/operator-assessment-screens.test.tsx; apps/web/src/app/operator/operator-app.test.tsx",
+    browserEvidence: "evidence/parity/operator-root/local-operator-root-2026-10-15.png; evidence/parity/operator-root/app-operator-root-2026-10-15.png"
   },
   "weeks.complete": {
-    automatedProof: "apps/web/src/prototype/operator/OperatorRouteController.test.tsx; apps/web/test/operator-content-screens.test.tsx; apps/web/src/pages/operator/Weeks.prototype.test.tsx; apps/api/test/content.integration.test.ts",
-    browserEvidence: "evidence/parity/operator-weeks/local-weeks-complete-2026-10-15.png; evidence/parity/operator-weeks/prototype-weeks-complete-2026-10-15.png"
+    automatedProof: "apps/web/src/app/operator/OperatorRouteController.test.tsx; apps/web/test/operator-content-screens.test.tsx; apps/web/src/pages/operator/Weeks.app.test.tsx; apps/api/test/content.integration.test.ts",
+    browserEvidence: "evidence/parity/operator-weeks/local-weeks-complete-2026-10-15.png; evidence/parity/operator-weeks/app-weeks-complete-2026-10-15.png"
   },
   "weeks.save.idle": {
-    automatedProof: "apps/web/src/prototype/operator/OperatorRouteController.test.tsx; apps/web/test/operator-content-screens.test.tsx",
-    browserEvidence: "evidence/parity/operator-weeks/local-weeks-complete-2026-10-15.png; evidence/parity/operator-weeks/prototype-weeks-complete-2026-10-15.png"
+    automatedProof: "apps/web/src/app/operator/OperatorRouteController.test.tsx; apps/web/test/operator-content-screens.test.tsx",
+    browserEvidence: "evidence/parity/operator-weeks/local-weeks-complete-2026-10-15.png; evidence/parity/operator-weeks/app-weeks-complete-2026-10-15.png"
   }
 };
 
@@ -279,9 +279,9 @@ const statusLabel = {
 };
 
 const markdown = [
-  "# Bảng đối chiếu prototype và hệ thống hiện tại",
+  "# Bảng đối chiếu app và hệ thống hiện tại",
   "",
-  `Nguồn chuẩn: \`${matrixRelativePath}\` và prototype thật trong \`research/seasonenglish/\`.`,
+  `Nguồn chuẩn: \`${matrixRelativePath}\` và app thật trong \`research/seasonenglish/\`.`,
   "",
   "Không state nào được ghi hoàn thành chỉ vì đã có code. Một state chỉ được chuyển sang **Đã kiểm chứng** sau khi có cả test tự động và ảnh browser đúng vai trò/dữ liệu.",
   "",

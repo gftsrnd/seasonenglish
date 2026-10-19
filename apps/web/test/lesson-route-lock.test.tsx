@@ -3,8 +3,8 @@ import "@testing-library/jest-dom/vitest";
 import { cleanup, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { LessonView } from "@e4s/contracts";
-import { LearnerPrototypeController } from "../src/prototype/learner/Router.js";
-import type { LearnerPrototypeCallbacks } from "../src/prototype/learner/contracts.js";
+import { LearnerController } from "../src/app/learner/Router.js";
+import type { LearnerCallbacks } from "../src/app/learner/contracts.js";
 
 afterEach(cleanup);
 
@@ -16,7 +16,7 @@ const callbacks = {
   sendChallengeMessage: vi.fn(), submitWeeklyPractice: vi.fn(), submitSurvey: vi.fn(), saveAvatar: vi.fn(), printReward: vi.fn(),
   speak: vi.fn(), generateGameSet: vi.fn(), useWeeklyGameSet: vi.fn(), deleteGameSet: vi.fn(), finishGame: vi.fn(), resetGameResult: vi.fn(),
   resolveGameWordImage: vi.fn(), createDuel: vi.fn()
-} as unknown as LearnerPrototypeCallbacks;
+} as unknown as LearnerCallbacks;
 
 const lesson: LessonView = {
   id: "00000000-0000-4000-8000-000000000602",
@@ -37,7 +37,7 @@ const lesson: LessonView = {
 
 describe("learner lesson route lock binding", () => {
   it("renders the server-provided lock instead of exposing future lesson content", () => {
-    render(<LearnerPrototypeController path={`/lesson/${lesson.id}`} contracts={{ lesson }} callbacks={callbacks} />);
+    render(<LearnerController path={`/lesson/${lesson.id}`} contracts={{ lesson }} callbacks={callbacks} />);
 
     expect(screen.getByRole("heading", { name: /học bù bài trước đã nhé/i })).toBeInTheDocument();
     expect(screen.getByText(/bạn chưa hoàn thành/i)).toBeInTheDocument();
@@ -45,8 +45,8 @@ describe("learner lesson route lock binding", () => {
   });
 
   it("renders the schedule date lock with the recoverable coach/home actions", () => {
-    const { rerender } = render(<LearnerPrototypeController path={`/lesson/${lesson.id}`} contracts={{ lesson }} callbacks={callbacks} />);
-    rerender(<LearnerPrototypeController path={`/lesson/${lesson.id}`} contracts={{ lesson: {
+    const { rerender } = render(<LearnerController path={`/lesson/${lesson.id}`} contracts={{ lesson }} callbacks={callbacks} />);
+    rerender(<LearnerController path={`/lesson/${lesson.id}`} contracts={{ lesson: {
       ...lesson,
       lock: {
         reason: "date",

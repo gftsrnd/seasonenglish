@@ -3,14 +3,14 @@ import "@testing-library/jest-dom/vitest";
 import { cleanup, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { GameHubView } from "@e4s/contracts";
-import { PrototypeGames } from "../src/prototype/learner/Games.js";
-import type { LearnerPrototypeCallbacks } from "../src/prototype/learner/contracts.js";
+import { LearnerGames } from "../src/app/learner/Games.js";
+import type { LearnerCallbacks } from "../src/app/learner/contracts.js";
 
 afterEach(cleanup);
 
 const actions = {
   navigate: vi.fn(), generateGameSet: vi.fn(), useWeeklyGameSet: vi.fn(), deleteGameSet: vi.fn(), speak: vi.fn()
-} as unknown as LearnerPrototypeCallbacks;
+} as unknown as LearnerCallbacks;
 
 const view = (topicModeration: GameHubView["topicModeration"]): GameHubView => ({
   cefr: "A2", aiAvailable: true,
@@ -19,7 +19,7 @@ const view = (topicModeration: GameHubView["topicModeration"]): GameHubView => (
   games: [], arena: { eligible: false, requiredLevel: "B1", points: 0, pendingDuels: 0 }
 });
 
-describe("prototype game moderation states", () => {
+describe("app game moderation states", () => {
   it.each([
     [{ state: "empty" }, /nhập chủ đề/i],
     [{ state: "loading" }, /đang kiểm tra/i],
@@ -30,7 +30,7 @@ describe("prototype game moderation states", () => {
     [{ state: "ai_rejected", message: "AI không trả về được bộ từ hợp lệ." }, /ai từ chối/i],
     [{ state: "error", message: "Không thể kiểm tra chủ đề." }, /không thể kiểm tra chủ đề/i]
   ] as const)("renders server topic state %#", (topicModeration, expected) => {
-    render(<PrototypeGames view={view(topicModeration)} actions={actions} />);
+    render(<LearnerGames view={view(topicModeration)} actions={actions} />);
     expect(screen.getByText(expected)).toBeInTheDocument();
   });
 });

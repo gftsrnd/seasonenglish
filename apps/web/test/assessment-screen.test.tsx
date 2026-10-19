@@ -27,7 +27,7 @@ const preparation: AssessmentView = {
   attempt: null
 };
 
-describe("assessment remains one prototype screen flow", () => {
+describe("assessment remains one app screen flow", () => {
   it("shows the four existing sections and starts inside the same screen", async () => {
     const user = userEvent.setup();
     const onStart = vi.fn();

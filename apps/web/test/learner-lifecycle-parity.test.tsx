@@ -3,12 +3,12 @@ import "@testing-library/jest-dom/vitest";
 import { cleanup, render, screen, within } from "@testing-library/react";
 import { userEvent } from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { PrototypeHome, PrototypeCoach, PrototypeChallenge, PrototypePractice } from "../src/prototype/learner/index.js";
-import type { LearnerPrototypeCallbacks } from "../src/prototype/learner/contracts.js";
+import { LearnerHome, LearnerCoach, LearnerChallenge, LearnerPractice } from "../src/app/learner/index.js";
+import type { LearnerCallbacks } from "../src/app/learner/contracts.js";
 
 afterEach(cleanup);
 
-const actions = (): LearnerPrototypeCallbacks => ({
+const actions = (): LearnerCallbacks => ({
   navigate: vi.fn(), saveProfileDraft: vi.fn(), saveProfile: vi.fn(), startAssessment: vi.fn(),
   saveAssessmentResponse: vi.fn(), completeAssessmentSection: vi.fn(), submitAssessment: vi.fn(),
   uploadAssessmentAudio: vi.fn(async () => "artifact"), recordAssessmentAudioPlay: vi.fn(async () => ({ playCount: 1, remaining: 1 })),
@@ -32,10 +32,10 @@ const home = {
   pilotPhase: "in_pilot", levelUpPhase: "requested", monthlyGoal: "Speak clearly", rewardAnnouncement: { kind: "new-level-announcement", points: 20, nextPoints: 60, seasonName: "Mùa thu" }
 } as any;
 
-describe("learner lifecycle prototype states", () => {
+describe("learner lifecycle app states", () => {
   it("renders server-owned Home phase and reward announcement without React inference", () => {
     const callback = actions();
-    const { container } = render(<PrototypeHome view={{ ...home, rewardAnnouncement: { ...home.rewardAnnouncement, announcementId: "level-change-1", level: "B1", kind: "new-level-announcement" } }} actions={callback} />);
+    const { container } = render(<LearnerHome view={{ ...home, rewardAnnouncement: { ...home.rewardAnnouncement, announcementId: "level-change-1", level: "B1", kind: "new-level-announcement" } }} actions={callback} />);
     expect(container).toHaveTextContent(/đang trong giai đoạn pilot/i);
     expect(container).toHaveTextContent(/yêu cầu lên mức đang chờ duyệt/i);
     expect(container).toHaveTextContent(/mục tiêu tháng.*speak clearly/i);
@@ -45,7 +45,7 @@ describe("learner lifecycle prototype states", () => {
   it("shows the level-up celebration modal and persists its acknowledgement", async () => {
     const callback = actions();
     const user = userEvent.setup();
-    render(<PrototypeHome view={{ ...home, rewardAnnouncement: { ...home.rewardAnnouncement, announcementId: "level-change-1", level: "B1", kind: "new-level-announcement" } }} actions={callback} />);
+    render(<LearnerHome view={{ ...home, rewardAnnouncement: { ...home.rewardAnnouncement, announcementId: "level-change-1", level: "B1", kind: "new-level-announcement" } }} actions={callback} />);
     const modal = screen.getByTestId("modal.level-up-celebration");
     expect(modal).toHaveTextContent(/thông báo thật/i);
     expect(modal).toHaveTextContent(/mùa thu/i);
@@ -58,7 +58,7 @@ describe("learner lifecycle prototype states", () => {
   it("renders server-owned lesson locks in the week path and blocks deep-link navigation", async () => {
     const callback = actions();
     const user = userEvent.setup();
-    render(<PrototypeHome view={{
+    render(<LearnerHome view={{
       ...home,
       lessons: [
         { id: "l1", dayNumber: 1, title: "I work in…", status: "completed", lock: null },
@@ -94,7 +94,7 @@ describe("learner lifecycle prototype states", () => {
       vocabulary: [{ word: "deadline", meaning: "hạn chót", opened: false }]
     } as any;
     const callback = actions();
-    render(<PrototypeCoach view={coach} actions={callback} />);
+    render(<LearnerCoach view={coach} actions={callback} />);
     expect(screen.getByRole("button", { name: /mở deadline/i })).toBeEnabled();
   });
 
@@ -111,7 +111,7 @@ describe("learner lifecycle prototype states", () => {
         ]
       }}]
     } as any;
-    render(<PrototypeCoach view={coach} actions={actions()} />);
+    render(<LearnerCoach view={coach} actions={actions()} />);
     expect(screen.getByText("I do not like my job.")).toBeInTheDocument();
     expect(screen.getByText("I don't like it.")).toBeInTheDocument();
     expect(consoleError.mock.calls.some((call) => call.some((value) => String(value).includes("same key")))).toBe(false);
@@ -124,10 +124,10 @@ describe("learner lifecycle prototype states", () => {
       daily: { used: 6, limit: 20 }, progress: { completedTurns: 6, requiredTurns: 6, average: 4, offTopic: 0, complete: true, passed: true },
       messages: [], phase: "complete", result: { passed: true }, request: { status: "pending" }
     } as any;
-    const { rerender } = render(<PrototypeChallenge view={pass} actions={actions()} />);
+    const { rerender } = render(<LearnerChallenge view={pass} actions={actions()} />);
     expect(screen.getByText(/yêu cầu lên mức đã được gửi/i)).toBeInTheDocument();
     const fail = { ...pass, progress: { ...pass.progress, average: 2.4, passed: false }, result: { passed: false }, request: null, retakePlan: { status: "available" } };
-    rerender(<PrototypeChallenge view={fail} actions={actions()} />);
+    rerender(<LearnerChallenge view={fail} actions={actions()} />);
     expect(screen.getByText(/kế hoạch luyện lại/i)).toBeInTheDocument();
   });
 
@@ -138,11 +138,11 @@ describe("learner lifecycle prototype states", () => {
         score: { total: 70 }, feedback: "Feedback", suggestions: [], correctedText: "" }, appeal: null
     } as any;
     const callback = actions();
-    const { rerender } = render(<PrototypePractice view={base} actions={callback} />);
+    const { rerender } = render(<LearnerPractice view={base} actions={callback} />);
     expect(screen.getByRole("button", { name: /gửi kháng nghị/i })).toBeInTheDocument();
-    rerender(<PrototypePractice view={{ ...base, appeal: { status: "pending", reason: "reason" } }} actions={callback} />);
+    rerender(<LearnerPractice view={{ ...base, appeal: { status: "pending", reason: "reason" } }} actions={callback} />);
     expect(screen.getByText(/kháng nghị.*pending/i)).toBeInTheDocument();
-    rerender(<PrototypePractice view={{ ...base, appeal: { status: "accepted", reason: "reason", resolution: "Đã chấp nhận" } }} actions={callback} />);
+    rerender(<LearnerPractice view={{ ...base, appeal: { status: "accepted", reason: "reason", resolution: "Đã chấp nhận" } }} actions={callback} />);
     expect(screen.getByText(/đã chấp nhận/i)).toBeInTheDocument();
   });
 });

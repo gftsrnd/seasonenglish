@@ -20,7 +20,7 @@ const api = vi.hoisted(() => ({
 
 vi.mock("../src/api/learner.js", () => ({ learnerApiClient: api }));
 
-import { LearnerRouteController, printLearnerReward, resolveLearnerRoute } from "../src/prototype/learner/LearnerRouteController.js";
+import { LearnerRouteController, printLearnerReward, resolveLearnerRoute } from "../src/app/learner/LearnerRouteController.js";
 
 afterEach(() => { cleanup(); vi.clearAllMocks(); });
 
@@ -100,7 +100,7 @@ describe("learner route integration controller", () => {
     await waitFor(() => expect(api.saveProfile).toHaveBeenCalledWith(expect.objectContaining({ fullName: "Lan", email: "lan@example.com" }), 7));
   });
 
-  it("passes the explicit regenerate command through the prototype controller", async () => {
+  it("passes the explicit regenerate command through the app controller", async () => {
     const user = userEvent.setup();
     const micro: MicroLessonView = {
       id: "m-1", topic: "Meetings", cefr: "A2", durationMinutes: 5,

@@ -67,14 +67,14 @@ function workspacePath(...segments: string[]) {
   return resolve(root, ...segments);
 }
 
-describe("executable prototype parity ledger", () => {
-  it("exists and gives every prototype state a unique, reviewable classification", () => {
-    const ledgerPath = workspacePath("docs", "prototype-parity", "parity-ledger.json");
+describe("executable app parity ledger", () => {
+  it("exists and gives every app state a unique, reviewable classification", () => {
+    const ledgerPath = workspacePath("docs", "app-parity", "parity-ledger.json");
     expect(existsSync(ledgerPath), "parity-ledger.json must be generated from the route-state matrix").toBe(true);
 
     const ledger = JSON.parse(readFileSync(ledgerPath, "utf8")) as ParityLedger;
-    expect(ledger.generatedFrom).toBe("docs/prototype-parity/route-state-matrix.md");
-    const matrix = readFileSync(workspacePath("docs", "prototype-parity", "route-state-matrix.md"));
+    expect(ledger.generatedFrom).toBe("docs/app-parity/route-state-matrix.md");
+    const matrix = readFileSync(workspacePath("docs", "app-parity", "route-state-matrix.md"));
     expect(ledger.sourceSha256, "ledger is stale; run pnpm parity:ledger").toBe(
       createHash("sha256").update(matrix).digest("hex")
     );

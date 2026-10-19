@@ -3,17 +3,17 @@ import "@testing-library/jest-dom/vitest";
 import { cleanup, render, screen, within } from "@testing-library/react";
 import { userEvent } from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { PrototypeProfile } from "../src/prototype/learner/ProfileReward.js";
-import type { LearnerPrototypeCallbacks, ProfilePrototypeView } from "../src/prototype/learner/contracts.js";
+import { LearnerProfile } from "../src/app/learner/ProfileReward.js";
+import type { LearnerCallbacks, ProfileView } from "../src/app/learner/contracts.js";
 
 afterEach(() => { cleanup(); vi.clearAllMocks(); });
 
 const actions = {
   navigate: vi.fn(),
   saveAvatar: vi.fn()
-} as unknown as LearnerPrototypeCallbacks;
+} as unknown as LearnerCallbacks;
 
-const view: ProfilePrototypeView = {
+const view: ProfileView = {
   learner: {
     id: "learner-c",
     displayName: "Học viên C",
@@ -82,9 +82,9 @@ const view: ProfilePrototypeView = {
   surveyAvailable: false
 };
 
-describe("learner profile prototype parity", () => {
-  it("renders the full prototype profile from real contract data", () => {
-    const { container } = render(<PrototypeProfile view={view} actions={actions} />);
+describe("learner profile app parity", () => {
+  it("renders the full app profile from real contract data", () => {
+    const { container } = render(<LearnerProfile view={view} actions={actions} />);
 
     expect(screen.getByRole("heading", { name: "Học viên C" })).toBeInTheDocument();
     expect(screen.getByText(/Trình độ B1 – Trung cấp/)).toBeInTheDocument();
@@ -125,9 +125,9 @@ describe("learner profile prototype parity", () => {
     expect(container.textContent).not.toContain("weekly");
   });
 
-  it("keeps the prototype avatar picker as a real persisted interaction", async () => {
+  it("keeps the app avatar picker as a real persisted interaction", async () => {
     const user = userEvent.setup();
-    render(<PrototypeProfile view={view} actions={actions} />);
+    render(<LearnerProfile view={view} actions={actions} />);
 
     await user.click(screen.getAllByRole("button", { name: "Đổi avatar" })[0]!);
     const dialog = screen.getByRole("dialog", { name: "Avatar của bạn" });
@@ -142,8 +142,8 @@ describe("learner profile prototype parity", () => {
     expect(actions.saveAvatar).toHaveBeenCalledWith({ acc: "flower", color: "rose", bg: 3 });
   });
 
-  it("keeps the prototype badge art for the API's persisted badge keys", () => {
-    render(<PrototypeProfile view={{ ...view, badges: [{ key: "starter", label: "Khởi động" }], badgeRoadmap: [{ key: "starter", label: "Khởi động", description: "Hoàn thành bài học đầu tiên", seasonLevel: 2, earned: true }, { key: "coach_friend", label: "Bạn của Season", description: "Hoàn thành 10 lượt luyện với Season", seasonLevel: 3, earned: false }, { key: "wordsmith", label: "Thợ mở khoá", description: "Mở đủ ô từ bí mật với Season", seasonLevel: 4, earned: false }] }} actions={actions} />);
+  it("keeps the app badge art for the API's persisted badge keys", () => {
+    render(<LearnerProfile view={{ ...view, badges: [{ key: "starter", label: "Khởi động" }], badgeRoadmap: [{ key: "starter", label: "Khởi động", description: "Hoàn thành bài học đầu tiên", seasonLevel: 2, earned: true }, { key: "coach_friend", label: "Bạn của Season", description: "Hoàn thành 10 lượt luyện với Season", seasonLevel: 3, earned: false }, { key: "wordsmith", label: "Thợ mở khoá", description: "Mở đủ ô từ bí mật với Season", seasonLevel: 4, earned: false }] }} actions={actions} />);
     const season = screen.getByRole("region", { name: "Mùa học" });
     expect(season.querySelector("svg.lucide-award")).not.toBeNull();
     expect(season.querySelector("svg.lucide-message-circle")).not.toBeNull();

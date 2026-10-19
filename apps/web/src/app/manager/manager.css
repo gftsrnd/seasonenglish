@@ -1,0 +1,750 @@
+/* Manager-only responsive affordances. Keep the route order, copy and data model intact. */
+
+.manager-page,
+.manager-page-title {
+  min-width: 0;
+}
+
+.manager-page {
+  min-width: 0;
+  /* The shell already supplies the canonical 20px content inset.  A second
+     inset here pushed every Manager title and first card 12px too low. */
+  padding-top: 0;
+  padding-bottom: 32px;
+}
+
+.manager-page > .page-title,
+.manager-page-title {
+  align-items: flex-start;
+  gap: 12px;
+  margin-bottom: 14px;
+}
+
+/* Keep title actions as their own row, as in the canonical Manager screens.
+   Letting the action group sit beside a narrowed description makes the title
+   wrap unpredictably at tablet widths and changes the title-to-card rhythm. */
+.manager-page > .page-title {
+  flex-wrap: wrap;
+}
+
+.manager-page > .page-title .manager-page-title__content {
+  flex: 1 1 100%;
+}
+
+.manager-page > .page-title .manager-page-title__actions {
+  flex: 1 1 100%;
+  justify-content: flex-start;
+}
+
+.manager-page-title__content {
+  flex: 1 1 360px;
+  min-width: 0;
+}
+
+.manager-page-title__content h1 {
+  margin: 0;
+  line-height: 1.2;
+}
+
+.manager-page-title__content > .manager-page-back {
+  display: inline-flex;
+  align-items: center;
+  min-height: 24px;
+  margin: 0 0 6px;
+  line-height: 1.3;
+  text-decoration: none;
+}
+
+.manager-page-title__content > .manager-page-back:hover {
+  text-decoration: underline;
+  text-decoration-thickness: 1.5px;
+  text-underline-offset: 3px;
+}
+
+.settings-recovery {
+  margin-top: 16px;
+  padding-top: 12px;
+  border-top: 1px solid var(--line);
+}
+
+.settings-recovery > summary {
+  cursor: pointer;
+  font-weight: 700;
+}
+
+.settings-recovery[open] > summary {
+  margin-bottom: 12px;
+}
+
+.settings-recovery__body {
+  min-width: 0;
+}
+
+.settings-recovery__body > .manager-recovery-inline {
+  margin-top: 0;
+}
+
+.manager-recovery-empty {
+  padding: 12px 14px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--surface-2);
+}
+
+.manager-recovery-empty p {
+  margin: 4px 0 0;
+}
+
+.manager-page-title__content p {
+  max-width: 70ch;
+  margin: 6px 0 0;
+  line-height: 1.55;
+}
+
+.manager-operations-page .manager-page-title__content p {
+  max-width: none;
+}
+
+.manager-page-title__actions {
+  flex: 0 1 auto;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 10px;
+  max-width: 100%;
+}
+
+.manager-page-title__actions > * {
+  white-space: nowrap;
+}
+
+/* The read-only Operator preview uses the app's compact 40px action
+   rhythm. Keep this scoped to the preview nav so the global 44px touch target
+   is unchanged elsewhere in Manager. */
+.manager-operations-page nav[aria-label="Màn hình vận hành (chỉ xem)"] > .btn {
+  min-height: 40px;
+}
+
+.manager-page > .manager-operational-card {
+  margin-top: 0 !important;
+  margin-bottom: 0 !important;
+}
+
+.manager-page > .manager-operational-card + .manager-operational-card {
+  margin-top: 16px !important;
+}
+
+.manager-page > .manager-operational-card + .manager-kpi-grid,
+.manager-page > .manager-operational-card + .section,
+.manager-page > .manager-kpi-grid + .section {
+  margin-top: 16px;
+}
+
+.manager-section-card {
+  min-width: 0;
+}
+
+.manager-operational-card--attention {
+  background: var(--warn-soft);
+}
+
+.manager-operational-card--delete {
+  background: var(--butter);
+}
+
+.manager-kpi-grid {
+  align-items: stretch;
+  gap: 12px;
+}
+
+.manager-kpi-grid > .card {
+  min-height: auto;
+}
+
+.manager-kpi-grid > .kpi[data-state="good"] {
+  background: var(--mint);
+}
+
+.manager-kpi-grid > .kpi[data-state="bad"] {
+  background: var(--peach);
+}
+
+.manager-page > .section {
+  margin-top: 16px;
+}
+
+.manager-operator-identity {
+  min-width: 0;
+  align-items: center;
+  gap: 10px;
+}
+
+.manager-operator-mark {
+  display: inline-flex;
+  flex: 0 0 44px;
+  width: 44px;
+  height: 44px;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  background: var(--peach);
+  color: var(--danger);
+}
+
+.manager-operator-identity h3 {
+  margin: 0;
+  font-size: 1.2rem;
+  line-height: 1.2;
+}
+
+.manager-rewards-page > .page-title {
+  margin-bottom: 14px;
+}
+
+.manager-rewards-page > .page-title p {
+  margin-top: 6px;
+  line-height: 1.5;
+}
+
+.manager-reward-controls-title {
+  margin-bottom: 12px !important;
+  line-height: 1.35;
+}
+
+.manager-reward-case-group,
+.manager-reward-badge-group {
+  row-gap: 8px !important;
+  line-height: 1.4;
+}
+
+.manager-reward-badge-group {
+  row-gap: 6px !important;
+}
+
+/* These compact simulator controls follow the app's 32px visual
+   rhythm. The surrounding cards and primary actions retain their larger
+   touch targets; keeping only these dense option chips compact prevents the
+   390px viewport from pushing the next field beneath the fixed nav. */
+.manager-reward-case-group > .btn-sm,
+.manager-reward-badge-group > .btn-sm {
+  min-height: 32px;
+  padding: 0 12px;
+  font-size: .82rem;
+}
+
+.manager-reward-config {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  align-items: start;
+  column-gap: 14px !important;
+  row-gap: 12px !important;
+  margin-top: 14px !important;
+}
+
+.manager-reward-config > .field {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 6px;
+  margin: 0;
+}
+
+.manager-reward-config > .field > span {
+  display: block;
+  min-height: 1.2em;
+}
+
+.manager-reward-config > .field > input {
+  width: 100%;
+}
+
+.manager-reward-badge-group {
+  width: 100%;
+  min-width: 0;
+  align-content: flex-start;
+  align-items: flex-start;
+  justify-content: flex-start;
+}
+
+@media (max-width: 520px) {
+  .manager-reward-config {
+    grid-template-columns: 1fr;
+  }
+}
+
+.manager-reward-result {
+  margin-top: 6px !important;
+  line-height: 1.4;
+}
+
+.manager-reward-preview-title {
+  margin: 18px 0 12px !important;
+  line-height: 1.35;
+}
+
+.manager-reward-preview-card {
+  margin-top: 0;
+}
+
+.manager-reward-track-grid {
+  align-items: stretch;
+  grid-auto-rows: 1fr;
+}
+
+.manager-reward-track-grid > .card.flat {
+  height: 100%;
+  margin-top: 0 !important;
+}
+
+.manager-page .page-title > div,
+.manager-page-title > div,
+.manager-page .card,
+.manager-page .banner,
+.manager-page section,
+.manager-page article {
+  min-width: 0;
+}
+
+.manager-page .page-title > .row {
+  max-width: 100%;
+  row-gap: 8px;
+}
+
+.manager-page .section > h3,
+.manager-page .manager-section-card > h3 {
+  margin-top: 0;
+}
+
+.manager-feedback {
+  margin-bottom: 12px;
+}
+
+.manager-page > .banner + .card,
+.manager-page > .banner + section.card {
+  margin-top: 16px;
+}
+
+.manager-route-state {
+  display: grid;
+  gap: 12px;
+}
+
+.manager-operational-row > .body {
+  overflow-wrap: anywhere;
+}
+
+.manager-operational-actions {
+  flex: 0 0 auto;
+  max-width: 100%;
+}
+
+.manager-operational-actions .btn-sm {
+  min-height: 44px;
+}
+
+.manager-account-actions {
+  min-width: 260px;
+}
+
+.manager-inline-status {
+  min-height: 1.2em;
+}
+
+.manager-page .table-wrap {
+  max-width: 100%;
+  overflow-x: auto;
+  overscroll-behavior-inline: contain;
+  scrollbar-width: thin;
+  padding-bottom: 4px;
+}
+
+.manager-page .report,
+.manager-page .rhead,
+.manager-page .report > * {
+  min-width: 0;
+}
+
+.manager-page .rhead,
+.manager-page .report > * {
+  max-width: 100%;
+}
+
+.manager-report-page .report {
+  overflow: hidden;
+}
+
+.manager-report-page .report > h3 {
+  margin: 24px 0 10px;
+  line-height: 1.35;
+}
+
+.manager-report-page .report > .summary + h3 {
+  margin-top: 20px;
+}
+
+.manager-report-page .report .grid {
+  gap: 16px;
+}
+
+.manager-report-page .manager-report-scale {
+  align-items: stretch;
+}
+
+.manager-report-page .manager-report-level-distribution {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+}
+
+.manager-report-page .manager-report-level-distribution > .barrow {
+  min-height: 36px;
+}
+
+.manager-report-page .manager-report-level-distribution > .barrow[data-empty="true"] {
+  opacity: .58;
+}
+
+.manager-report-page .manager-report-activity-table {
+  align-self: stretch;
+}
+
+.manager-report-page .manager-next-actions {
+  display: grid;
+  gap: 10px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.manager-report-page .manager-next-action {
+  margin: 0;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--surface-2);
+  padding: 10px 12px;
+  line-height: 1.45;
+}
+
+.manager-report-page .manager-next-action-names {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.manager-report-page .manager-next-action-names > span {
+  max-width: 100%;
+  border-radius: 7px;
+  background: var(--surface);
+  padding: 3px 8px;
+  overflow-wrap: anywhere;
+  font-size: .8rem;
+}
+
+.manager-report-page .meta,
+.manager-report-page .report td,
+.manager-report-page .report th {
+  overflow-wrap: anywhere;
+}
+
+.manager-reminder-actions {
+  min-width: 0;
+  flex-wrap: wrap !important;
+}
+
+.manager-reminder-actions .btn-sm {
+  min-height: 44px;
+}
+
+.manager-action-table th:last-child,
+.manager-action-table td:last-child {
+  position: sticky;
+  right: 0;
+  z-index: 2;
+  background: var(--surface);
+  box-shadow: -8px 0 14px -12px rgba(30, 30, 30, .45);
+}
+
+.manager-action-table th:last-child {
+  z-index: 3;
+}
+
+.manager-action-table td:last-child > .row {
+  min-width: 122px;
+  flex-wrap: wrap;
+  row-gap: 6px;
+}
+
+.manager-action-table td:last-child .btn-sm {
+  min-width: 54px;
+  min-height: 44px;
+}
+
+.manager-progress-table th,
+.manager-progress-table td {
+  padding-inline: 9px;
+}
+
+.manager-progress-table td:first-child {
+  min-width: 92px;
+}
+
+.manager-progress-table td:last-child {
+  min-width: 130px;
+}
+
+.manager-progress-table table,
+.manager-rewards-table table {
+  min-width: max-content;
+}
+
+/* At desktop width the canonical rewards table keeps the action column in
+   view.  Let the five columns share the available card width; mobile keeps
+   the intrinsic width above so its table remains horizontally scrollable. */
+@media (min-width: 761px) {
+  .manager-rewards-table table {
+    width: 100%;
+    min-width: 0;
+    table-layout: fixed;
+  }
+
+  /* Keep the badge and action columns readable instead of letting the
+     browser compress them around the illustration column. */
+  .manager-rewards-table th:nth-child(1),
+  .manager-rewards-table td:nth-child(1) {
+    width: 24%;
+  }
+
+  .manager-rewards-table th:nth-child(2),
+  .manager-rewards-table td:nth-child(2) {
+    width: 18%;
+  }
+
+  .manager-rewards-table th:nth-child(3),
+  .manager-rewards-table td:nth-child(3) {
+    width: 11%;
+  }
+
+  .manager-rewards-table th:nth-child(4),
+  .manager-rewards-table td:nth-child(4) {
+    width: 27%;
+  }
+
+  .manager-rewards-table th:nth-child(5),
+  .manager-rewards-table td:nth-child(5) {
+    width: 20%;
+  }
+
+  .manager-rewards-table td:nth-child(4) {
+    overflow-wrap: anywhere;
+    line-height: 1.35;
+  }
+
+  .manager-rewards-table th:last-child,
+  .manager-rewards-table td:last-child {
+    min-width: 124px;
+  }
+
+  .manager-rewards-table td:last-child .btn,
+  .manager-rewards-table td:last-child .btn-sm {
+    max-width: 100%;
+    white-space: normal;
+    text-align: center;
+  }
+}
+
+.manager-extra-reward {
+  margin-top: 12px;
+}
+
+.manager-extra-reward .eyebrow {
+  margin-bottom: 4px;
+}
+
+.manager-extra-reward p {
+  margin: 0;
+}
+
+.manager-rewards-page h2 {
+  font-size: 1.2rem !important;
+  line-height: 1.25 !important;
+}
+
+.manager-rewards-page .manager-reward-preview-card > .row:first-child {
+  gap: 14px !important;
+}
+
+.manager-rewards-page .manager-reward-preview-card > .row:first-child > div:last-child {
+  min-width: 0 !important;
+}
+
+.manager-rewards-page .manager-reward-preview-title {
+  font-size: 1rem;
+}
+
+.manager-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  display: grid;
+  place-items: center;
+  box-sizing: border-box;
+  background: rgb(30 30 30 / .45);
+  align-items: flex-start;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: max(16px, env(safe-area-inset-top, 0px)) 16px max(16px, env(safe-area-inset-bottom, 0px));
+}
+
+.manager-modal-backdrop > .dialog {
+  margin: auto;
+  max-height: min(90dvh, 760px);
+  overflow: auto;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
+}
+
+.manager-modal-backdrop > .dialog:focus-visible {
+  outline: 2px solid var(--text);
+  outline-offset: 3px;
+}
+
+@media (max-width: 480px) {
+  .manager-operations-page .card.section > .grid.cols-2,
+  .manager-report-page .report > .grid.cols-2 {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+@media (max-width: 760px) {
+  .manager-page .page-title > .row {
+    justify-content: flex-start;
+  }
+
+  .manager-action-table th:last-child,
+  .manager-action-table td:last-child {
+    box-shadow: -10px 0 16px -12px rgba(30, 30, 30, .6);
+  }
+
+  .manager-page-title__actions {
+    flex: 1 1 100%;
+    justify-content: flex-start;
+  }
+}
+
+/* Settings is rendered by the shared settings component, but this selector
+   is Manager-only and restores the app's single title inset and card
+   rhythm without changing the shared/operator settings screen. */
+.settings-page[data-settings-role="manager"] {
+  padding-top: 0;
+  row-gap: 12px;
+}
+
+.settings-page[data-settings-role="manager"] > .page-title {
+  margin-bottom: 2px;
+}
+
+@media (max-width: 520px) {
+  .manager-page > .page-title,
+  .manager-page-title {
+    margin-bottom: 14px;
+  }
+
+  .manager-page-title__actions > * {
+    flex: 1 1 auto;
+  }
+
+  /* Report actions follow the canonical compact wrap: natural button widths
+     keep the third action on the next line instead of stretching every action
+     edge-to-edge. */
+  .manager-report-page .manager-page-title__actions > * {
+    flex: 0 0 auto;
+  }
+
+  .manager-operational-row {
+    flex-wrap: wrap;
+    gap: 10px;
+  }
+
+  .manager-operational-row > .body {
+    flex: 1 1 100%;
+  }
+
+  .manager-operational-actions {
+    flex: 1 1 100%;
+    flex-wrap: wrap !important;
+    justify-content: flex-end;
+  }
+
+  .manager-action-table td:last-child > .row {
+    min-width: 136px;
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .manager-action-table td:last-child .btn-sm {
+    width: 100%;
+  }
+
+  .manager-account-actions {
+    min-width: 136px;
+  }
+
+  .manager-reminder-actions {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .manager-reminder-actions .btn-sm {
+    width: 100%;
+    min-width: 0;
+  }
+
+  .manager-reminder-actions .btn-sm:last-child {
+    grid-column: 1 / -1;
+  }
+
+  .manager-modal-backdrop {
+    padding-inline: 12px;
+  }
+
+  .manager-modal-backdrop > .dialog {
+    max-height: calc(100dvh - 24px);
+  }
+}
+
+/* The shared mobile shell uses an internal main scroller for learner and
+   operator screens. Manager screens follow the canonical app instead:
+   the document owns the long scroll and the five-item nav stays fixed. Scope
+   this correction to the Manager navigation so operator mobile keeps its
+   existing shell and route structure. */
+@media (max-width: 760px) {
+  body:has(> #root > .topbar nav[aria-label="Điều hướng quản lý"]) {
+    /* shared.css deliberately locks the generic mobile shell with !important;
+       Manager follows the canonical document-scroll layout, so this scoped
+       override must win for every long Manager/Settings screen. */
+    overflow: visible !important;
+  }
+
+  body:has(> #root > .topbar nav[aria-label="Điều hướng quản lý"]) > #root {
+    display: block !important;
+    height: auto !important;
+    min-height: 100dvh !important;
+    overflow: visible !important;
+  }
+
+  body:has(> #root > .topbar nav[aria-label="Điều hướng quản lý"]) > #root > main {
+    flex: none !important;
+    min-height: auto !important;
+    overflow: visible !important;
+    padding-bottom: calc(116px + env(safe-area-inset-bottom, 0px)) !important;
+  }
+
+  body:has(> #root > .topbar nav[aria-label="Điều hướng quản lý"]) > #root > .bottomnav {
+    position: fixed !important;
+    left: 0 !important;
+    right: 0 !important;
+    bottom: 0 !important;
+    width: 100% !important;
+    z-index: 20;
+  }
+}
