@@ -104,11 +104,12 @@ describe("new Manager app branch", () => {
     };
     Object.defineProperty(navigator, "clipboard", { configurable: true, value: { writeText: vi.fn().mockResolvedValue(undefined) } });
     render(<ManagerReminders view={reminders} onSend={send} onDismiss={dismiss} onCopy={copy} />);
-    expect(screen.getByText("Tự phát hiện người bỏ ≥2 ngày liên tiếp. Gửi qua Base Message webhook hoặc copy tin nhắn để gửi tay.")).toBeInTheDocument();
+    expect(screen.getByText("Tự phát hiện người bỏ ≥2 ngày liên tiếp. Gửi qua Base Message webhook hoặc ghi nhận để gửi tay.")).toBeInTheDocument();
     expect(screen.getByRole("note")).toHaveTextContent("Chưa có webhook Base.vn");
-    expect(screen.getByRole("note")).toHaveTextContent("trong Cài đặt, hoặc dùng nút Copy để gửi tay");
-    expect(screen.getByRole("button", { name: /Gửi tất cả \(1\)/ })).toBeDisabled();
-    expect(screen.getByRole("button", { name: "Gửi qua Base.vn" })).toHaveAttribute("title", "Chưa cấu hình webhook");
+    expect(screen.getByRole("note")).toHaveTextContent("Hệ thống chỉ ghi nhận vào hàng chờ gửi tay");
+    expect(screen.getByRole("button", { name: /Ghi nhận tất cả \(1\)/ })).toBeEnabled();
+    expect(screen.getByRole("button", { name: "Ghi nhận gửi tay" })).toBeEnabled();
+    expect(screen.getByText("Chờ gửi tay")).toBeInTheDocument();
     expect(screen.getByText("bỏ 5 ngày")).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "Lịch sử nhắc" })).toBeInTheDocument();
     expect(screen.getByText(/14[-/]10/)).toBeInTheDocument();

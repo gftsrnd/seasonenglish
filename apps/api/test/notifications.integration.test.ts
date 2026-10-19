@@ -7,6 +7,7 @@ import { buildApi } from "../src/app.js";
 
 const databaseUrl = process.env.TEST_DATABASE_URL
   ?? "postgres://e4s:e4s_test_password@127.0.0.1:55432/e4s_test";
+const webhookReminderLearnerId = "00000000-0000-4000-8000-000000000120";
 
 describe("learner notifications API", () => {
   const pool = new Pool({ connectionString: databaseUrl });
@@ -24,6 +25,13 @@ describe("learner notifications API", () => {
           DEMO_IDS.learner, await createCredentialHash("learner-pass"),
           DEMO_IDS.manager, await createCredentialHash("manager-pass")
         ]
+      );
+      await client.query("update users set created_at = now() - interval '5 days' where id = $1", [DEMO_IDS.learner]);
+      await client.query("update activities set occurred_at = now() - interval '5 days' where learner_id = $1", [DEMO_IDS.learner]);
+      await client.query(
+        `insert into users (id, organization_id, role, display_name, email, created_at)
+         values ($1, $2, 'learner', 'Học viên Webhook', 'webhook-reminder@e4s.local', now() - interval '5 days')`,
+        [webhookReminderLearnerId, DEMO_IDS.organization]
       );
     } finally {
       client.release();
@@ -97,7 +105,7 @@ describe("learner notifications API", () => {
     const managerCookie = String(managerLogin.headers["set-cookie"]).split(";")[0] ?? "";
     const queued = await app.inject({
       method: "POST",
-      url: `/api/v1/manager/reminders/${DEMO_IDS.learner}`,
+      url: `/api/v1/manager/reminders/${webhookReminderLearnerId}`,
       headers: { cookie: managerCookie },
       payload: { requestId: "notification-webhook-focused-1" }
     });

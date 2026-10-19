@@ -109,6 +109,29 @@ describe("ManagerRouteController", () => {
     expect(dismiss).toHaveBeenCalledWith("learner-1");
   });
 
+  it("reports a local reminder as recorded for manual sending", async () => {
+    vi.spyOn(apiClient, "getManagerReminders").mockResolvedValue({
+      organizationName: "GFT", inactiveDays: 3, webhookConfigured: false,
+      candidates: [{ learnerId: "learner-1", learnerName: "Học viên Demo", cefr: "A2", lastActivityAt: null, missedDays: 3 }], history: []
+    });
+    vi.spyOn(apiClient, "sendManagerReminder").mockResolvedValue({ reminderId: "reminder-1", learnerId: "learner-1", status: "queued", deliveryStatus: "queued", provider: "local_queue" });
+    renderManager(<MemoryRouter initialEntries={["/mgr/reminders"]}><ManagerRouteController role="manager" currentUserId="manager-1" /></MemoryRouter>);
+    await userEvent.setup().click(await screen.findByRole("button", { name: "Ghi nhận gửi tay" }));
+    expect(await screen.findByRole("status")).toHaveTextContent("Đã ghi nhận để gửi tay");
+    expect(screen.queryByText(/đã gửi qua Base/i)).not.toBeInTheDocument();
+  });
+
+  it("explains when reminder eligibility changed after loading", async () => {
+    vi.spyOn(apiClient, "getManagerReminders").mockResolvedValue({
+      organizationName: "GFT", inactiveDays: 3, webhookConfigured: true,
+      candidates: [{ learnerId: "learner-1", learnerName: "Học viên Demo", cefr: "A2", lastActivityAt: null, missedDays: 3 }], history: []
+    });
+    vi.spyOn(apiClient, "sendManagerReminder").mockRejectedValue(new Error("MANAGER_REMINDER_NOT_ELIGIBLE"));
+    renderManager(<MemoryRouter initialEntries={["/mgr/reminders"]}><ManagerRouteController role="manager" currentUserId="manager-1" /></MemoryRouter>);
+    await userEvent.setup().click(await screen.findByRole("button", { name: "Gửi qua Base.vn" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent("Người học không còn đủ điều kiện nhắc");
+  });
+
   it("keeps the manual reminder error state honest when the API rejects", async () => {
     vi.spyOn(apiClient, "getManagerReminders").mockResolvedValue({
       organizationName: "GFT", inactiveDays: 3, webhookConfigured: false,

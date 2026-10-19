@@ -12,6 +12,9 @@ const outsideOrganizationId = "00000000-0000-4000-8000-000000000003";
 const emptyManagerId = "00000000-0000-4000-8000-000000000105";
 const outsideLearnerId = "00000000-0000-4000-8000-000000000106";
 const reminderLearnerId = "00000000-0000-4000-8000-000000000107";
+const copiedReminderLearnerId = "00000000-0000-4000-8000-000000000108";
+const dismissedReminderLearnerId = "00000000-0000-4000-8000-000000000109";
+const staleReminderLearnerId = "00000000-0000-4000-8000-000000000110";
 
 describe("manager progress and operations API", () => {
   const pool = new Pool({ connectionString: databaseUrl });
@@ -277,9 +280,13 @@ describe("manager progress and operations API", () => {
   it("selects inactive learners and sends an idempotent audited reminder", async () => {
     await pool.query(
       `insert into users (id, organization_id, role, display_name, email, created_at)
-       values ($1, $2, 'learner', 'Học viên Cần nhắc', 'reminder@e4s.local', now() - interval '5 days')
+       values
+         ($1, $2, 'learner', 'Học viên Cần nhắc', 'reminder@e4s.local', now() - interval '5 days'),
+         ($3, $2, 'learner', 'Học viên Copy', 'reminder-copy@e4s.local', now() - interval '5 days'),
+         ($4, $2, 'learner', 'Học viên Nhắc tay', 'reminder-dismiss@e4s.local', now() - interval '5 days'),
+         ($5, $2, 'learner', 'Học viên Vừa học lại', 'reminder-stale@e4s.local', now() - interval '5 days')
        on conflict (id) do nothing`,
-      [reminderLearnerId, DEMO_IDS.organization]
+      [reminderLearnerId, DEMO_IDS.organization, copiedReminderLearnerId, dismissedReminderLearnerId, staleReminderLearnerId]
     );
     const candidates = await app.inject({ method: "GET", url: "/api/v1/manager/reminders", headers: { cookie: managerCookie } });
     expect(candidates.statusCode, candidates.body).toBe(200);
@@ -320,38 +327,59 @@ describe("manager progress and operations API", () => {
     });
   });
 
+  it("rejects every reminder action when a previously listed learner is no longer eligible", async () => {
+    await pool.query(
+      `insert into activities (id, learner_id, activity_type, reference_type, minutes, evidence, occurred_at)
+       values ('00000000-0000-4000-8000-000000000111', $1, 'lesson', 'lesson', 10, '{}'::jsonb, now())`,
+      [staleReminderLearnerId]
+    );
+    const sent = await app.inject({
+      method: "POST", url: `/api/v1/manager/reminders/${staleReminderLearnerId}`, headers: { cookie: managerCookie },
+      payload: { requestId: "stale-reminder-request" }
+    });
+    const copied = await app.inject({ method: "POST", url: `/api/v1/manager/reminders/${staleReminderLearnerId}/copy`, headers: { cookie: managerCookie } });
+    const dismissed = await app.inject({ method: "POST", url: `/api/v1/manager/reminders/${staleReminderLearnerId}/dismiss`, headers: { cookie: managerCookie } });
+
+    for (const response of [sent, copied, dismissed]) {
+      expect(response.statusCode, response.body).toBe(409);
+      expect(response.json()).toEqual({ code: "MANAGER_REMINDER_NOT_ELIGIBLE" });
+    }
+    await expect(pool.query("select count(*)::int as count from reminders where learner_id = $1", [staleReminderLearnerId]))
+      .resolves.toMatchObject({ rows: [{ count: 0 }] });
+  });
+
   it("records a copied reminder in history, removes it from pending and keeps the action Manager-only", async () => {
     const copied = await app.inject({
       method: "POST",
-      url: `/api/v1/manager/reminders/${reminderLearnerId}/copy`,
+      url: `/api/v1/manager/reminders/${copiedReminderLearnerId}/copy`,
       headers: { cookie: managerCookie }
     });
     const forbidden = await app.inject({
       method: "POST",
-      url: `/api/v1/manager/reminders/${reminderLearnerId}/copy`,
+      url: `/api/v1/manager/reminders/${copiedReminderLearnerId}/copy`,
       headers: { cookie: checkerCookie }
     });
     const afterCopy = await app.inject({ method: "GET", url: "/api/v1/manager/reminders", headers: { cookie: managerCookie } });
 
     expect(copied.statusCode, copied.body).toBe(200);
     expect(forbidden.statusCode).toBe(403);
-    expect(copied.json()).toMatchObject({ learnerId: reminderLearnerId, status: "copied" });
+    expect(copied.json()).toMatchObject({ learnerId: copiedReminderLearnerId, status: "copied" });
     expect(afterCopy.json().candidates).not.toEqual(
-      expect.arrayContaining([expect.objectContaining({ learnerId: reminderLearnerId })])
+      expect.arrayContaining([expect.objectContaining({ learnerId: copiedReminderLearnerId })])
     );
     expect(afterCopy.json().history).toEqual(
-      expect.arrayContaining([expect.objectContaining({ learnerId: reminderLearnerId, status: "copied" })])
+      expect.arrayContaining([expect.objectContaining({ learnerId: copiedReminderLearnerId, status: "copied" })])
     );
     await expect(pool.query(
       "select count(*)::int as count from audit_events where action = 'reminder.copied' and entity_id = $1",
-      [reminderLearnerId]
+      [copiedReminderLearnerId]
     )).resolves.toMatchObject({ rows: [{ count: 1 }] });
   });
 
-  it("records an idempotent manual reminder dismissal for a Manager", async () => {
+  it("records one manual reminder dismissal and rejects a stale retry", async () => {
     const request = {
       method: "POST" as const,
-      url: `/api/v1/manager/reminders/${reminderLearnerId}/dismiss`,
+      url: `/api/v1/manager/reminders/${dismissedReminderLearnerId}/dismiss`,
       headers: { cookie: managerCookie }
     };
     const dismissed = await app.inject(request);
@@ -359,17 +387,17 @@ describe("manager progress and operations API", () => {
     const operator = await app.inject({ ...request, headers: { cookie: checkerCookie } });
 
     expect(dismissed.statusCode, dismissed.body).toBe(200);
-    expect(retried.statusCode, retried.body).toBe(200);
     expect(operator.statusCode).toBe(403);
-    expect(dismissed.json()).toMatchObject({ learnerId: reminderLearnerId, status: "dismissed" });
-    expect(retried.json()).toMatchObject({ reminderId: dismissed.json().reminderId });
+    expect(dismissed.json()).toMatchObject({ learnerId: dismissedReminderLearnerId, status: "dismissed" });
+    expect(retried.statusCode).toBe(409);
+    expect(retried.json()).toEqual({ code: "MANAGER_REMINDER_NOT_ELIGIBLE" });
     await expect(pool.query(
       "select count(*)::int as count from reminders where learner_id = $1 and status = 'dismissed'",
-      [reminderLearnerId]
+      [dismissedReminderLearnerId]
     )).resolves.toMatchObject({ rows: [{ count: 1 }] });
     await expect(pool.query(
       "select count(*)::int as count from audit_events where action = 'reminder.dismissed' and entity_id = $1",
-      [reminderLearnerId]
+      [dismissedReminderLearnerId]
     )).resolves.toMatchObject({ rows: [{ count: 1 }] });
   });
 

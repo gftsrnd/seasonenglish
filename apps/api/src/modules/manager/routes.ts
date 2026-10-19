@@ -433,7 +433,7 @@ export function registerManagerRoutes(app: FastifyInstance, pool: Pool, options:
         return { ...queued, deliveryStatus: "queued" as const, provider: queued.provider ?? "local_queue" as const };
       } catch (error) {
         if (error instanceof Error && error.message === "MANAGER_REMINDER_LEARNER_NOT_FOUND") return reply.code(404).send({ code: error.message });
-        if (error instanceof Error && error.message === "MANAGER_REMINDER_RETRY_UNAVAILABLE") return reply.code(409).send({ code: error.message });
+        if (error instanceof Error && ["MANAGER_REMINDER_RETRY_UNAVAILABLE", "MANAGER_REMINDER_NOT_ELIGIBLE"].includes(error.message)) return reply.code(409).send({ code: error.message });
         throw error;
       }
     }
@@ -454,6 +454,9 @@ export function registerManagerRoutes(app: FastifyInstance, pool: Pool, options:
         if (error instanceof Error && error.message === "MANAGER_REMINDER_LEARNER_NOT_FOUND") {
           return reply.code(404).send({ code: error.message });
         }
+        if (error instanceof Error && error.message === "MANAGER_REMINDER_NOT_ELIGIBLE") {
+          return reply.code(409).send({ code: error.message });
+        }
         throw error;
       }
     }
@@ -473,6 +476,9 @@ export function registerManagerRoutes(app: FastifyInstance, pool: Pool, options:
         }
         if (error instanceof Error && error.message === "MANAGER_REMINDER_LEARNER_NOT_FOUND") {
           return reply.code(404).send({ code: error.message });
+        }
+        if (error instanceof Error && error.message === "MANAGER_REMINDER_NOT_ELIGIBLE") {
+          return reply.code(409).send({ code: error.message });
         }
         throw error;
       }

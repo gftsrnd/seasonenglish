@@ -199,7 +199,15 @@ function RemindersRoute() {
   const load = () => apiClient.getManagerReminders().then(setView);
   useEffect(() => { void load().catch(() => setError("Không tải được danh sách nhắc học.")); }, []);
   if (!view) return <RouteState error={error} title="Nhắc học" label="Đang tải danh sách nhắc học" />;
-  return <ManagerReminders view={view} sendingLearnerId={sending} notice={error || notice} noticeTone={error ? "danger" : "info"} onSend={async (learnerId) => { setSending(learnerId); setError(""); try { await apiClient.sendManagerReminder(learnerId, crypto.randomUUID()); await load(); setNotice("Đã xếp hàng nhắc học và ghi nhận vào lịch sử."); } catch { setError("Không gửi được nhắc học qua Base.vn."); } finally { setSending(null); } }} onDismiss={async (learnerId) => { setError(""); try { await apiClient.dismissManagerReminder(learnerId); await load(); setNotice("Đã ghi nhận nhắc thủ công."); } catch { setError("Không ghi nhận được nhắc học thủ công."); throw new Error("REMINDER_DISMISS_FAILED"); } }} onCopy={async (learnerId) => { setError(""); try { await apiClient.copyManagerReminder(learnerId); await load(); setNotice("Đã copy tin nhắn và ghi nhận vào lịch sử."); } catch { setError("Không ghi nhận được việc copy tin nhắn."); } }} />;
+  const reminderError = (cause: unknown, fallback: string) => {
+    const code = cause instanceof Error ? cause.message : "";
+    if (code === "MANAGER_REMINDER_NOT_ELIGIBLE") return "Người học không còn đủ điều kiện nhắc. Danh sách đã được cập nhật; có thể họ vừa học lại hoặc đã được xử lý trong hôm nay.";
+    if (code === "BASE_WEBHOOK_NOT_CONFIGURED") return "Webhook Base.vn chưa được cấu hình. Hãy ghi nhận để gửi tay hoặc cập nhật trong Cài đặt.";
+    if (code === "BASE_WEBHOOK_TIMEOUT") return "Webhook Base.vn phản hồi quá chậm. Hãy thử lại hoặc gửi tay.";
+    if (code === "BASE_WEBHOOK_NETWORK_ERROR") return "Không kết nối được webhook Base.vn. Kiểm tra mạng hoặc gửi tay.";
+    return fallback;
+  };
+  return <ManagerReminders view={view} sendingLearnerId={sending} notice={error || notice} noticeTone={error ? "danger" : "info"} onSend={async (learnerId) => { setSending(learnerId); setError(""); try { const result = await apiClient.sendManagerReminder(learnerId, crypto.randomUUID()); await load(); setNotice(result.provider === "local_queue" ? "Đã ghi nhận để gửi tay và lưu vào lịch sử." : "Đã xếp hàng gửi qua Base.vn và lưu vào lịch sử."); } catch (cause) { setError(reminderError(cause, "Không xử lý được nhắc học. Vui lòng thử lại.")); } finally { setSending(null); } }} onDismiss={async (learnerId) => { setError(""); try { await apiClient.dismissManagerReminder(learnerId); await load(); setNotice("Đã ghi nhận nhắc thủ công."); } catch (cause) { setError(reminderError(cause, "Không ghi nhận được nhắc học thủ công.")); throw new Error("REMINDER_DISMISS_FAILED"); } }} onCopy={async (learnerId) => { setError(""); try { await apiClient.copyManagerReminder(learnerId); await load(); setNotice("Đã copy tin nhắn và ghi nhận vào lịch sử."); } catch (cause) { setError(reminderError(cause, "Không ghi nhận được việc copy tin nhắn.")); } }} />;
 }
 
 function ReportRoute({ currentUserId }: { currentUserId: string }) {

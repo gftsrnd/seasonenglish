@@ -6267,6 +6267,66 @@ async function probeProvider(input: {
 class ManagerRepository {
   constructor(private readonly pool: Pool) {}
 
+  private async eligibleReminderLearners(db: Pool | PoolClient, organizationId: string, learnerId?: string): Promise<Array<{
+    learner_id: string;
+    learner_name: string;
+    cefr: CefrLevel | null;
+    last_activity_at: Date | null;
+    missed_days: number;
+  }>> {
+    const result = await db.query<{
+      learner_id: string;
+      learner_name: string;
+      cefr: CefrLevel | null;
+      last_activity_at: Date | null;
+      missed_days: number;
+    }>(
+      `select
+         u.id as learner_id,
+         u.display_name as learner_name,
+         (select e.cefr from enrollments e join programs p on p.id = e.program_id
+          where e.learner_id = u.id and p.organization_id = $1 order by e.enrolled_at desc limit 1) as cefr,
+         activity.last_activity_at,
+         inactivity.missed_days
+       from users u
+       left join organization_settings settings on settings.organization_id = u.organization_id
+       left join lateral (
+         select max(a.occurred_at) as last_activity_at from activities a where a.learner_id = u.id
+       ) activity on true
+       cross join lateral (
+         select greatest(0, current_date - coalesce(activity.last_activity_at::date, u.created_at::date))::int as missed_days
+       ) inactivity
+       where u.organization_id = $1 and u.role = 'learner' and u.status = 'active'
+         and inactivity.missed_days >= coalesce(settings.reminder_inactive_days, 3)
+         and not exists (
+           select 1 from audit_events handled
+           where handled.organization_id = $1 and handled.entity_id = u.id
+             and handled.action in ('reminder.queued', 'reminder.dismissed', 'reminder.copied')
+             and handled.created_at >= current_date
+         )
+         ${learnerId ? "and u.id = $2" : ""}
+       order by activity.last_activity_at asc nulls first, u.display_name asc
+       ${learnerId ? "for update of u" : ""}`,
+      learnerId ? [organizationId, learnerId] : [organizationId]
+    );
+    return result.rows;
+  }
+
+  private async requireEligibleReminderLearner(db: PoolClient, organizationId: string, learnerId: string): Promise<{
+    learner_id: string;
+    missed_days: number;
+  }> {
+    const eligible = (await this.eligibleReminderLearners(db, organizationId, learnerId))[0];
+    if (eligible) return eligible;
+    const target = await db.query(
+      `select 1 from users
+       where id = $1 and organization_id = $2 and role = 'learner' and status = 'active'`,
+      [learnerId, organizationId]
+    );
+    if (!target.rowCount) throw new Error("MANAGER_REMINDER_LEARNER_NOT_FOUND");
+    throw new Error("MANAGER_REMINDER_NOT_ELIGIBLE");
+  }
+
   private async organizationFor(staffId: string): Promise<{ id: string; name: string } | null> {
     const organization = await this.pool.query<{ id: string; name: string }>(
       `select o.id, o.name
@@ -6877,34 +6937,7 @@ class ManagerRepository {
     const organization = await this.organizationFor(staffId);
     if (!organization) return null;
     const settings = await this.settingsForOrganization(organization.id);
-    const candidates = await this.pool.query<{
-      learner_id: string;
-      learner_name: string;
-      cefr: CefrLevel | null;
-      last_activity_at: Date | null;
-      missed_days: number;
-    }>(
-      `select
-         u.id as learner_id,
-         u.display_name as learner_name,
-         (select e.cefr from enrollments e join programs p on p.id = e.program_id
-          where e.learner_id = u.id and p.organization_id = $1 order by e.enrolled_at desc limit 1) as cefr,
-         max(a.occurred_at) as last_activity_at,
-         greatest(0, current_date - coalesce(max(a.occurred_at)::date, min(u.created_at)::date))::int as missed_days
-       from users u
-       left join activities a on a.learner_id = u.id
-       where u.organization_id = $1 and u.role = 'learner' and u.status = 'active'
-         and not exists (
-           select 1 from audit_events handled
-           where handled.organization_id = $1 and handled.entity_id = u.id
-             and handled.action in ('reminder.queued', 'reminder.dismissed', 'reminder.copied')
-             and handled.created_at >= current_date
-         )
-       group by u.id
-       having coalesce(max(a.occurred_at), min(u.created_at)) < now() - make_interval(days => $2)
-       order by last_activity_at asc nulls first, learner_name asc`,
-      [organization.id, settings.reminderInactiveDays]
-    );
+    const candidates = await this.eligibleReminderLearners(this.pool, organization.id);
     const history = await this.pool.query<{
       reminder_id: string;
       learner_id: string;
@@ -6946,7 +6979,7 @@ class ManagerRepository {
       organizationName: organization.name,
       inactiveDays: settings.reminderInactiveDays,
       webhookConfigured: settings.baseWebhookUrl.trim().length > 0,
-      candidates: candidates.rows.map((candidate) => ({
+      candidates: candidates.map((candidate) => ({
         learnerId: candidate.learner_id,
         learnerName: candidate.learner_name,
         cefr: candidate.cefr,
@@ -6993,16 +7026,7 @@ class ManagerRepository {
         if (!response?.reminderId) throw new Error("MANAGER_REMINDER_RETRY_UNAVAILABLE");
         return response;
       }
-      const learner = await client.query<{ id: string; missed_days: number }>(
-        `select u.id,
-                greatest(0, current_date - coalesce(activity.last_activity_at::date, u.created_at::date))::int as missed_days
-         from users u
-         left join lateral (select max(a.occurred_at) as last_activity_at from activities a where a.learner_id = u.id) activity on true
-         where u.id = $1 and u.organization_id = $2 and u.role = 'learner' and u.status = 'active'
-         for update of u`,
-        [learnerId, organizationId]
-      );
-      if (!learner.rowCount) throw new Error("MANAGER_REMINDER_LEARNER_NOT_FOUND");
+      const learner = await this.requireEligibleReminderLearner(client, organizationId, learnerId);
       const settingsResult = await client.query<{ configuration: Record<string, unknown> | null }>(
         "select configuration from organization_settings where organization_id = $1",
         [organizationId]
@@ -7034,7 +7058,7 @@ class ManagerRepository {
         `insert into audit_events
            (id, organization_id, actor_user_id, action, entity_type, entity_id, payload, trace_id)
          values ($1, $2, $3, 'reminder.queued', 'user', $4, $5::jsonb, $6)`,
-        [randomUUID(), organizationId, managerId, learnerId, JSON.stringify({ reminderId, missedDays: learner.rows[0]?.missed_days ?? null }), randomUUID()]
+        [randomUUID(), organizationId, managerId, learnerId, JSON.stringify({ reminderId, missedDays: learner.missed_days }), randomUUID()]
       );
       await client.query(
         "update idempotency_keys set response = $3::jsonb where scope = $1 and key = $2",
@@ -7059,18 +7083,7 @@ class ManagerRepository {
       const organizationId = organizationResult.rows[0]?.organization_id;
       if (!organizationId) throw new Error("MANAGER_ORGANIZATION_NOT_FOUND");
 
-      const learner = await client.query<{ id: string; missed_days: number }>(
-        `select u.id,
-                greatest(0, current_date - coalesce(activity.last_activity_at::date, u.created_at::date))::int as missed_days
-         from users u
-         left join lateral (
-           select max(a.occurred_at) as last_activity_at from activities a where a.learner_id = u.id
-         ) activity on true
-         where u.id = $1 and u.organization_id = $2 and u.role = 'learner' and u.status = 'active'
-         for update of u`,
-        [learnerId, organizationId]
-      );
-      if (!learner.rowCount) throw new Error("MANAGER_REMINDER_LEARNER_NOT_FOUND");
+      const learner = await this.requireEligibleReminderLearner(client, organizationId, learnerId);
 
       const existing = await client.query<{ id: string }>(
         `select id from reminders
@@ -7096,7 +7109,7 @@ class ManagerRepository {
         `insert into audit_events
            (id, organization_id, actor_user_id, action, entity_type, entity_id, payload, trace_id)
          values ($1, $2, $3, 'reminder.dismissed', 'user', $4, $5::jsonb, $6)`,
-        [randomUUID(), organizationId, managerId, learnerId, JSON.stringify({ reminderId, missedDays: learner.rows[0]?.missed_days ?? null }), randomUUID()]
+        [randomUUID(), organizationId, managerId, learnerId, JSON.stringify({ reminderId, missedDays: learner.missed_days }), randomUUID()]
       );
       await client.query("commit");
       return { reminderId, learnerId, status: "dismissed" };
@@ -7117,18 +7130,7 @@ class ManagerRepository {
       const organizationId = organizationResult.rows[0]?.organization_id;
       if (!organizationId) throw new Error("MANAGER_ORGANIZATION_NOT_FOUND");
 
-      const learner = await client.query<{ id: string; missed_days: number }>(
-        `select u.id,
-                greatest(0, current_date - coalesce(activity.last_activity_at::date, u.created_at::date))::int as missed_days
-         from users u
-         left join lateral (
-           select max(a.occurred_at) as last_activity_at from activities a where a.learner_id = u.id
-         ) activity on true
-         where u.id = $1 and u.organization_id = $2 and u.role = 'learner' and u.status = 'active'
-         for update of u`,
-        [learnerId, organizationId]
-      );
-      if (!learner.rowCount) throw new Error("MANAGER_REMINDER_LEARNER_NOT_FOUND");
+      const learner = await this.requireEligibleReminderLearner(client, organizationId, learnerId);
 
       const alreadyCopied = await client.query<{ id: string }>(
         `select r.id
@@ -7170,7 +7172,7 @@ class ManagerRepository {
         `insert into audit_events
            (id, organization_id, actor_user_id, action, entity_type, entity_id, payload, trace_id)
          values ($1, $2, $3, 'reminder.copied', 'user', $4, $5::jsonb, $6)`,
-        [randomUUID(), organizationId, managerId, learnerId, JSON.stringify({ reminderId, missedDays: learner.rows[0]?.missed_days ?? null }), randomUUID()]
+        [randomUUID(), organizationId, managerId, learnerId, JSON.stringify({ reminderId, missedDays: learner.missed_days }), randomUUID()]
       );
       await client.query("commit");
       return { reminderId, learnerId, status: "copied" };
