@@ -610,27 +610,35 @@ function VocabularyCard({
   resolveImage?: LearnerCallbacks["resolveLessonVocabularyImage"];
 }) {
   const phrases = item.examples?.slice(0, 3) ?? [];
+  const lexicalDetails = item.lexicalDetails ?? [];
+  const synonymDetail = lexicalDetails.find((detail) => detail.kind === "synonym");
+  const antonymDetail = lexicalDetails.find((detail) => detail.kind === "antonym");
+  const relatedDetails = lexicalDetails.filter((detail, index, details) => detail.kind !== "synonym" && detail.kind !== "antonym" && details.findIndex((candidate) => candidate.kind === detail.kind) === index);
   const loadImage = () => {
     if (resolveImage) return resolveImage(itemIndex);
     if (item.imageUrl?.trim() && item.imageAttribution) return Promise.resolve({ status: "available", imageUrl: item.imageUrl.trim(), alt: item.word, attribution: item.imageAttribution } as const);
     return Promise.resolve({ status: "unavailable" } as const);
   };
   return <article className="word-card" aria-label={item.word} style={{ display: "grid", gap: 10, minWidth: 0, padding: 16, marginTop: 10, boxSizing: "border-box" }}>
-    <div className="vocabulary-card-heading" style={{ display: "grid", gridTemplateColumns: "minmax(0, auto) minmax(0, 1fr) auto", gap: 12, alignItems: "center", textAlign: "left" }}>
+    <div className="vocabulary-card-heading">
       <ContentImage term={item.word} load={loadImage} />
-      <div style={{ minWidth: 0 }}><h3>{item.word}</h3>{item.type ? <span className="badge" style={{ fontSize: ".72rem", padding: "2px 8px" }}>{item.type}</span> : null}</div>
-      <SpeechButton text={item.word} label="Nghe từ" speak={speak} />
+      <div className="vocabulary-card-main">
+        <div className="vocabulary-card-topline">
+          <div className="vocabulary-card-word"><h3>{item.word}</h3>{item.type ? <span className="badge vocabulary-card-type" style={{ fontSize: ".72rem", padding: "2px 8px" }}>{item.type}</span> : null}</div>
+          <SpeechButton text={item.word} label="Nghe từ" speak={speak} />
+        </div>
+        {item.pronunciation ? <span className="ipa vocabulary-card-pronunciation">{item.pronunciation}</span> : null}
+      </div>
     </div>
-    {item.pronunciation ? <span className="ipa">{item.pronunciation}</span> : null}
-    <p>{item.meaning}</p>
-    {phrases.length ? <div className="stack" style={{ gap: 8, marginTop: 4 }}><span className="small muted">Cụm từ hay dùng</span><div className="row" style={{ justifyContent: "flex-start", flexWrap: "wrap", gap: 8 }}>{phrases.map((phrase) => <button className="btn-sm btn-ghost" style={listenButtonStyle} type="button" key={phrase} onClick={() => speak(phrase)} title="Nghe cụm từ"><Volume2 size={14} aria-hidden="true" />{phrase}</button>)}</div></div> : null}
+    <p className="vocabulary-card-meaning">{item.meaning}</p>
+    {phrases.length ? <div className="vocabulary-card-phrases"><span className="small muted">Cụm từ hay dùng</span><div className="row" style={{ justifyContent: "flex-start", flexWrap: "wrap", gap: 8 }}>{phrases.map((phrase) => <button className="btn-sm btn-ghost" style={listenButtonStyle} type="button" key={phrase} onClick={() => speak(phrase)} title="Nghe cụm từ"><Volume2 size={14} aria-hidden="true" />{phrase}</button>)}</div></div> : null}
     {item.examples?.slice(3).map((example) => <small key={example}>{example}</small>)}
-    <div className="row" style={{ justifyContent: "flex-start", flexWrap: "wrap", gap: 8, marginTop: 4 }}>
-      {item.family ? <button className="btn-sm btn-ghost" type="button" onClick={() => openModal({ kind: "family", item })}>Xem họ từ</button> : null}
-      {item.synonyms ? <button className="btn-sm btn-ghost" type="button" onClick={() => openModal({ kind: "synonyms", item })}>Xem tất cả từ đồng nghĩa</button> : null}
-      {item.umbrella ? <button className="btn-sm btn-ghost" type="button" onClick={() => openModal({ kind: "umbrella", item })}>Từ bao quát</button> : null}
-      {item.lexicalDetails !== undefined ? <button className="btn-sm btn-ghost" type="button" onClick={() => openModal({ kind: "lexical", item })}>Chi tiết từ liên quan</button> : null}
-      {item.lexicalDetails?.map((detail) => <button className="btn-sm btn-ghost" type="button" key={`${detail.kind}-${detail.word}`} onClick={() => openModal({ kind: "lexical", item, detail })}>{lexicalKindLabel(detail.kind)} · {detail.word}</button>)}
+    <div className="vocabulary-card-relations" aria-label="Các nhóm từ liên quan">
+      {item.family?.length ? <button className="chip good" type="button" onClick={() => openModal({ kind: "family", item })}>Họ từ</button> : null}
+      {item.synonyms?.length ? <button className="chip mid" type="button" onClick={() => openModal({ kind: "synonyms", item })}>Đồng nghĩa</button> : synonymDetail ? <button className="chip mid" type="button" onClick={() => openModal({ kind: "lexical", item, detail: synonymDetail })}>Đồng nghĩa</button> : null}
+      {antonymDetail ? <button className="chip low" type="button" onClick={() => openModal({ kind: "lexical", item, detail: antonymDetail })}>Trái nghĩa</button> : null}
+      {item.umbrella ? <button className="chip umb" type="button" onClick={() => openModal({ kind: "umbrella", item })}>Từ bao quát</button> : null}
+      {relatedDetails.map((detail) => <button className="chip" type="button" key={detail.kind} onClick={() => openModal({ kind: "lexical", item, detail })}>{lexicalKindLabel(detail.kind)}</button>)}
     </div>
   </article>;
 }
@@ -647,9 +655,9 @@ function VocabularyModal({
   const { item } = state;
   const labels = {
     family: "Họ từ",
-    synonyms: "Tất cả từ đồng nghĩa",
+    synonyms: "Đồng nghĩa",
     umbrella: "Từ bao quát",
-    lexical: "Chi tiết từ liên quan"
+    lexical: "Từ liên quan"
   } as const;
   return <div className="modal-backdrop" role="presentation">
     <section className="dialog wide" role="dialog" aria-modal="true" aria-label={labels[state.kind]} data-testid={`modal.vocab-${state.kind === "synonyms" ? "all-synonyms" : state.kind === "lexical" ? "lexical-detail" : state.kind}`} data-modal={`vocab-${state.kind === "synonyms" ? "all-synonyms" : state.kind === "lexical" ? "lexical-detail" : state.kind}`}>
@@ -679,7 +687,7 @@ function UmbrellaModal({ item, speak }: { item: LessonVocabularyItem; speak: (te
 function LexicalModal({ item, detail, speak }: { item: LessonVocabularyItem; detail?: LessonVocabularyLexicalDetail; speak: (text: string) => void }) {
   const details = item.lexicalDetails ?? [];
   const [selected, setSelected] = useState<LessonVocabularyLexicalDetail | null>(detail ?? null);
-  if (!details.length) return <Notice tone="info">Chưa có chi tiết từ liên quan cho từ này.</Notice>;
+  if (!details.length) return <Notice tone="info">Chưa có dữ liệu từ liên quan cho từ này.</Notice>;
   const active = selected ?? details[0]!;
   return <div className="stack" style={{ gap: 12 }}><div className="row" style={{ flexWrap: "wrap", gap: 8 }}>{details.map((candidate) => <button className={candidate === active ? "btn-primary" : ""} type="button" key={`${candidate.kind}-${candidate.word}`} onClick={() => { setSelected(candidate); speak(candidate.word); }}>{lexicalKindLabel(candidate.kind)} · {candidate.word}</button>)}</div><article className="card flat"><div className="row between" style={{ gap: 12, alignItems: "flex-start" }}><div style={{ minWidth: 0 }}><div className="eyebrow">{lexicalKindLabel(active.kind)}</div><h3>{active.word}</h3></div><button type="button" style={listenButtonStyle} onClick={() => speak(active.word)}><Volume2 size={14} aria-hidden="true" />Nghe</button></div>{active.definition ? <p><b>Định nghĩa:</b> {active.definition}</p> : null}{active.example ? <p><b>Ví dụ:</b> {active.example}</p> : null}{active.context ? <p><b>Ngữ cảnh:</b> {active.context}</p> : null}{active.note ? <p><b>Ghi chú:</b> {active.note}</p> : null}{active.source ? <p className="small muted">Nguồn: {active.source}</p> : null}</article></div>;
 }

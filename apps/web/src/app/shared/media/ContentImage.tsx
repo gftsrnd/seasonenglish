@@ -55,10 +55,6 @@ export function ContentImage({ term, load }: {
     const { image } = state;
     return <figure className="content-image content-image--available">
       <img src={image.imageUrl} alt={image.alt || term} loading="lazy" decoding="async" onError={() => setState({ status: "unavailable" })} />
-      <details className="content-image__source">
-        <summary>Nguồn ảnh</summary>
-        <div><a href={image.attribution.sourceUrl} target="_blank" rel="noreferrer">Xem ảnh gốc</a>{image.attribution.creator ? <span>{image.attribution.creator}</span> : null}<a href={image.attribution.licenceUrl} target="_blank" rel="noreferrer">{image.attribution.licence}</a></div>
-      </details>
     </figure>;
   }
   return <div ref={hostRef} className="content-image content-image--loading" role="status" aria-label={`Đang tải ảnh minh hoạ cho ${term}`}><LoaderCircle size={18} aria-hidden="true" /><span className="sr-only">Đang tải ảnh minh hoạ</span></div>;
