@@ -4,6 +4,7 @@ import type { LearnerAvatarData, RewardView, SurveyView } from "@e4s/contracts";
 import type { LearnerCallbacks, ProfileView } from "./contracts.js";
 import { SeasonMark } from "../games/season-art.js";
 import { ErrorText, Notice, PageTitle, Progress, AppLink } from "./ui.js";
+import { PersonalPreferences } from "../settings/PersonalPreferences.js";
 
 const BADGE_ICONS: Record<string, string> = {
   first: "🐣", starter: "🐣",
@@ -80,6 +81,7 @@ export function LearnerProfile({ view, actions }: { view: ProfileView; actions: 
         <div className="row" style={{ gap: 8 }}><button className="btn-primary" type="button" onClick={openAvatar}>Đổi avatar</button><AppLink className="btn" href="/onboard" navigate={actions.navigate}>Sửa hồ sơ</AppLink></div>
       </div>
     </section>
+    <PersonalPreferences />
     <ProfileCard view={view} actions={actions} />
     {level ? <SeasonCard view={view} actions={actions} /> : null}
     {level ? <ReadinessCard view={view} actions={actions} /> : null}
@@ -91,9 +93,10 @@ export function LearnerProfile({ view, actions }: { view: ProfileView; actions: 
 }
 
 function ProfileCard({ view, actions }: { view: ProfileView; actions: LearnerCallbacks }) {
+  const [open, setOpen] = useState(false);
   return <section className="card soft" style={{ marginTop: 16, minWidth: 0 }} aria-label="Hồ sơ cá nhân">
-    <div className="row between" style={{ gap: 12, minWidth: 0 }}><b>Hồ sơ cá nhân</b><AppLink className="btn btn-sm" style={{ minHeight: 32, flexShrink: 0 }} href="/onboard" navigate={actions.navigate}>Sửa</AppLink></div>
-    <div className="stack profile-details" style={{ gap: 12, marginTop: 12, minWidth: 0 }}>{profileRows(view).filter(([, value]) => value).map(([label, value]) => <div className="row profile-detail-row" style={{ display: "grid", gridTemplateColumns: "minmax(104px, .38fr) minmax(0, 1fr)", gap: 12, alignItems: "start", minWidth: 0 }} key={label}><span className="xs muted profile-detail-label" style={{ minWidth: 0, fontWeight: 800 }}>{label}</span><span className="small profile-detail-value" style={{ minWidth: 0, overflowWrap: "anywhere" }}>{value}</span></div>)}</div>
+    <div className="row between" style={{ gap: 12, minWidth: 0 }}><div><b>Hồ sơ cá nhân</b><div className="xs muted">Thông tin công việc và nhu cầu học của bạn.</div></div><button className="btn btn-sm" type="button" aria-expanded={open} onClick={() => setOpen((value) => !value)}>{open ? "Đóng thông tin cá nhân" : "Chỉnh sửa thông tin cá nhân"}</button></div>
+    {open ? <><div className="stack profile-details" style={{ gap: 12, marginTop: 12, minWidth: 0 }}>{profileRows(view).filter(([, value]) => value).map(([label, value]) => <div className="row profile-detail-row" style={{ display: "grid", gridTemplateColumns: "minmax(104px, .38fr) minmax(0, 1fr)", gap: 12, alignItems: "start", minWidth: 0 }} key={label}><span className="xs muted profile-detail-label" style={{ minWidth: 0, fontWeight: 800 }}>{label}</span><span className="small profile-detail-value" style={{ minWidth: 0, overflowWrap: "anywhere" }}>{value}</span></div>)}</div><div className="row" style={{ marginTop: 12 }}><AppLink className="btn btn-sm" style={{ minHeight: 32 }} href="/onboard" navigate={actions.navigate}>Cập nhật hồ sơ</AppLink></div></> : null}
   </section>;
 }
 
@@ -186,6 +189,7 @@ function profileRows(view: ProfileView): Array<[string, string]> {
   const level = view.learner.cefr;
   const explanation = p.explanationLanguage === "vi" ? "Tiếng Việt" : p.explanationLanguage === "en" ? "Tiếng Anh" : level ? `${level === "A1" || level === "A2" ? "Tiếng Việt" : "Tiếng Anh"} (tự động theo mức ${level})` : "Tự động theo trình độ";
   return [
+    ["Họ và tên", p.fullName ?? view.learner.displayName],
     ["Công việc", [p.position, p.department].filter(Boolean).join(" · ")],
     ["Email", p.email ?? ""],
     ["Base", p.contact ?? ""],

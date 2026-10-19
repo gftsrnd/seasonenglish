@@ -277,6 +277,28 @@ describe("manager progress and operations API", () => {
     })).statusCode).toBe(200);
   });
 
+  it("creates a learner account that can sign in with its initial password", async () => {
+    const email = "new-learner-api@e4s.local";
+    const created = await app.inject({
+      method: "POST", url: "/api/v1/manager/accounts", headers: { cookie: managerCookie },
+      payload: { displayName: "Học viên mới", email, role: "learner", password: "learner-pass-123" }
+    });
+    expect(created.statusCode, created.body).toBe(201);
+    expect(created.json()).toMatchObject({ displayName: "Học viên mới", email, role: "learner", status: "active" });
+
+    const login = await app.inject({
+      method: "POST", url: "/api/auth/learner/login", payload: { email, password: "learner-pass-123" }
+    });
+    expect(login.statusCode, login.body).toBe(200);
+    expect(login.json()).toMatchObject({ role: "learner", user: { displayName: "Học viên mới", email } });
+
+    const accounts = await app.inject({
+      method: "GET", url: "/api/v1/manager/accounts", headers: { cookie: managerCookie }
+    });
+    expect(accounts.statusCode, accounts.body).toBe(200);
+    expect(accounts.json().accounts).toContainEqual(expect.objectContaining({ email, role: "learner", status: "active" }));
+  });
+
   it("selects inactive learners and sends an idempotent audited reminder", async () => {
     await pool.query(
       `insert into users (id, organization_id, role, display_name, email, created_at)

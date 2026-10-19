@@ -2,10 +2,12 @@
 import "@testing-library/jest-dom/vitest";
 import { cleanup, render, screen, waitFor } from "@testing-library/react";
 import { userEvent } from "@testing-library/user-event";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { ManagerSettingsView, ProductPreferencesView, SystemCapabilitiesView } from "@e4s/contracts";
 import { SettingsPage } from "./index.js";
+import { ExperienceProvider } from "../../features/experience/Experience.js";
 
+beforeEach(() => window.localStorage.clear());
 afterEach(cleanup);
 
 const manager: ManagerSettingsView = {
@@ -29,7 +31,7 @@ describe("new Settings app branch", () => {
   it("keeps Manager sections in app order", () => {
     const { container } = render(<SettingsPage role="manager" manager={manager} product={product} capabilities={capabilities} ai={{ provider: "openai", configured: true, baseUrl: "https://api.groq.com/openai/v1", model: "qwen/qwen3.8-27b", speechToTextModel: "whisper-large-v3-turbo" }} actions={actions()} accounts={<section><h3>Người dùng</h3></section>} />);
     expect([...container.querySelectorAll("h3")].map((node) => node.textContent)).toEqual([
-      "Kết nối AI", "Lịch pilot", "Ảnh minh hoạ từ vựng", "Bài test đầu vào / cuối kỳ", "Ngưỡng xét lên / hạ mức", "Giao diện theo mùa / lễ", "Nhạc nền của Season", "Nhắc học qua Base.vn (Base Message incoming webhook)", "Chính sách nhắc học và báo cáo", "Dữ liệu", "Người dùng"
+      "Tùy chọn cá nhân", "Kết nối AI", "Lịch pilot", "Ảnh minh hoạ từ vựng", "Bài test đầu vào / cuối kỳ", "Ngưỡng xét lên / hạ mức", "Giao diện theo mùa / lễ", "Nhạc nền của Season", "Nhắc học qua Base.vn (Base Message incoming webhook)", "Chính sách nhắc học và báo cáo", "Dữ liệu", "Người dùng"
     ]);
     expect(screen.getByText(/Khoá nhà cung cấp được lưu an toàn ở server/)).toBeInTheDocument();
     expect(screen.getByText("Xuất JSON")).toBeInTheDocument();
@@ -97,23 +99,29 @@ describe("new Settings app branch", () => {
   });
 
   it("shows only operator-owned settings and working prompt link for Operator", () => {
-    render(<SettingsPage role="operator" product={product} capabilities={capabilities} ai={{ provider: "openai", configured: true, baseUrl: "https://api.groq.com/openai/v1", model: "qwen/qwen3.8-27b", speechToTextModel: "whisper-large-v3-turbo" }} actions={actions()} />);
+    const { container } = render(<SettingsPage role="operator" product={product} capabilities={capabilities} ai={{ provider: "openai", configured: true, baseUrl: "https://api.groq.com/openai/v1", model: "qwen/qwen3.8-27b", speechToTextModel: "whisper-large-v3-turbo" }} actions={actions()} />);
+    expect([...container.querySelectorAll("h3")].map((node) => node.textContent)).toEqual(["Prompt & rubric", "Tùy chọn cá nhân"]);
     expect(screen.queryByRole("heading", { name: "Lịch pilot" })).not.toBeInTheDocument();
     expect(screen.queryByRole("heading", { name: "Dữ liệu" })).not.toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "Prompt & rubric" })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Mở trình sửa prompt" })).toHaveAttribute("href", "/op/prompts");
-    expect(screen.getByText(/Chỉ xem cấu hình do Quản lý áp dụng; chỉ Quản lý lưu thay đổi tổ chức, AI và dữ liệu hệ thống/i)).toBeInTheDocument();
-    expect(screen.getByLabelText("Nguồn ảnh")).toBeDisabled();
-    expect(screen.getByLabelText("Chủ đề giao diện (áp dụng ngay khi chọn)")).toBeDisabled();
-    expect(screen.queryByRole("button", { name: "Lưu nguồn ảnh" })).not.toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "Lưu giao diện" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "Kết nối AI" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "Ảnh minh hoạ từ vựng" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "Giao diện theo mùa / lễ" })).not.toBeInTheDocument();
+    expect(screen.getByRole("checkbox", { name: "Hiệu ứng âm thanh" })).toBeInTheDocument();
+    expect(screen.getByRole("checkbox", { name: "Nhạc nền" })).toBeInTheDocument();
   });
 
-  it("explains that AI configuration is Manager-owned when Operator has no provider view", () => {
-    render(<SettingsPage role="operator" product={product} capabilities={capabilities} actions={actions()} />);
-    expect(screen.getByText(/Chỉ xem trạng thái kết nối AI/i)).toBeInTheDocument();
-    expect(screen.getByText(/do Quản lý quản trị/i)).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "Lưu kết nối AI" })).not.toBeInTheDocument();
+  it("stores personal sound preferences locally", async () => {
+    render(<ExperienceProvider><SettingsPage role="operator" product={product} capabilities={capabilities} actions={actions()} /></ExperienceProvider>);
+    const effects = screen.getByRole("checkbox", { name: "Hiệu ứng âm thanh" });
+    const music = screen.getByRole("checkbox", { name: "Nhạc nền" });
+    expect(effects).toBeChecked();
+    expect(music).toBeChecked();
+    await userEvent.setup().click(effects);
+    await userEvent.setup().click(music);
+    expect(window.localStorage.getItem("e4s:effects")).toBe("off");
+    expect(window.localStorage.getItem("e4s:music")).toBe("off");
   });
 });
 

@@ -28,6 +28,17 @@ const view = {
 } as unknown as ProfileView;
 
 describe("app profile avatar dialog affordances", () => {
+  it("keeps personal information collapsed until the learner asks to view it", async () => {
+    render(<LearnerProfile view={view} actions={actions} />);
+    expect(screen.getByRole("heading", { name: "Tùy chọn cá nhân" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Chỉnh sửa thông tin cá nhân" })).toHaveAttribute("aria-expanded", "false");
+    expect(screen.queryByText("Học viên Demo", { selector: ".profile-detail-value" })).not.toBeInTheDocument();
+    await userEvent.setup().click(screen.getByRole("button", { name: "Chỉnh sửa thông tin cá nhân" }));
+    expect(screen.getByRole("button", { name: "Đóng thông tin cá nhân" })).toHaveAttribute("aria-expanded", "true");
+    expect(screen.getByText("Học viên Demo", { selector: ".profile-detail-value" })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Cập nhật hồ sơ" })).toHaveAttribute("href", "/onboard");
+  });
+
   it("uses library icons for the selected avatar accessory", () => {
     render(<LearnerProfile view={view} actions={actions} />);
     expect(screen.getByLabelText("Avatar của Học viên Demo").querySelector("svg.lucide-sun")).toBeInTheDocument();

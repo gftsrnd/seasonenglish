@@ -317,6 +317,9 @@ describe("ManagerRouteController", () => {
     const user = userEvent.setup();
     renderManager(<MemoryRouter initialEntries={["/settings"]}><ManagerRouteController role="manager" currentUserId="manager-1" /></MemoryRouter>);
     expect(await screen.findByRole("heading", { name: "Người dùng" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Tạo tài khoản mới" })).toBeInTheDocument();
+    expect(screen.getByLabelText("Vai trò")).toHaveValue("learner");
+    expect(screen.getByText(/Người học có thể đăng nhập ngay bằng email và mật khẩu ban đầu/)).toBeInTheDocument();
     await user.type(screen.getByLabelText("Tên"), "Người mới");
     await user.type(screen.getByLabelText("Email"), "new@e4s.local");
     await user.type(screen.getByLabelText("Mật khẩu ban đầu"), "password-123");
@@ -404,17 +407,17 @@ describe("ManagerRouteController", () => {
     expect(screen.getByRole("link", { name: "← Quay lại" })).toHaveAttribute("href", "/mgr/rewards");
   });
 
-  it("loads operator-owned settings read-only and hides Manager-only actions", async () => {
+  it("shows only operator-owned settings and hides Manager-only configuration", async () => {
     vi.spyOn(apiClient, "getProductPreferences").mockResolvedValue(product);
     vi.spyOn(apiClient, "getSystemCapabilities").mockResolvedValue(capabilities);
     const save = vi.spyOn(apiClient, "saveProductPreferences").mockResolvedValue({ ...product, theme: "winter" });
     renderManager(<MemoryRouter initialEntries={["/settings"]}><ManagerRouteController role="operator" currentUserId="operator-1" /></MemoryRouter>);
-    await screen.findByText(/Chỉ xem trạng thái kết nối AI/i);
+    await screen.findByRole("heading", { name: "Prompt & rubric" });
     expect(screen.getByRole("heading", { name: "Cài đặt" })).toBeInTheDocument();
-    expect(screen.getByText(/Chỉ xem trạng thái kết nối AI/i)).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Tùy chọn cá nhân" })).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Kiểm tra kết nối" })).not.toBeInTheDocument();
-    expect(screen.getByLabelText("Nguồn ảnh")).toBeDisabled();
-    expect(screen.getByLabelText("Chủ đề giao diện (áp dụng ngay khi chọn)")).toBeDisabled();
+    expect(screen.queryByLabelText("Nguồn ảnh")).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("Chủ đề giao diện (áp dụng ngay khi chọn)")).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Lưu giao diện" })).not.toBeInTheDocument();
     expect(save).not.toHaveBeenCalled();
     expect(screen.queryByRole("heading", { name: "Dữ liệu" })).not.toBeInTheDocument();

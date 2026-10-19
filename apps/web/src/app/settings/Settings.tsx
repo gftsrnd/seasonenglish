@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, type ButtonHTMLAttributes, type ReactNode 
 import type { ManagerProviderSettingsInput, ManagerProviderSettingsView, ManagerSettingsInput, ManagerSettingsView, ProductPreferencesView, SystemCapabilitiesView } from "@e4s/contracts";
 import { Flower2, Gift, Leaf, MoonStar, Snowflake, Sparkles, Star, Sun } from "lucide-react";
 import { autoSeasonTheme } from "../games/season-art.js";
+import { PersonalPreferences } from "./PersonalPreferences.js";
 
 export type AiConfigurationView = ManagerProviderSettingsView;
 export type AiConfigurationInput = ManagerProviderSettingsInput;
@@ -72,7 +73,8 @@ export function SettingsPage({ role, manager, product, capabilities, ai, actions
   useEffect(() => setProductDraft(product), [product]);
   return <div className="settings-page" data-settings-role={role}>
     <div className="page-title"><h1>Cài đặt</h1></div>
-    {role === "manager" && aiDraft && ai ? <AiSection draft={aiDraft} configured={ai.configured} lastTest={ai.lastTest} capabilities={capabilities} onChange={setAiDraft} {...(actions.onSaveAi ? { onSave: () => actions.onSaveAi!(aiDraft) } : {})} {...(actions.onTestAi ? { onTest: () => actions.onTestAi!(aiDraft) } : {})} /> : <UnavailableAiSection capabilities={capabilities} role={role} />}
+    {role === "manager" ? <PersonalPreferences /> : null}
+    {role === "manager" ? aiDraft && ai ? <AiSection draft={aiDraft} configured={ai.configured} lastTest={ai.lastTest} capabilities={capabilities} onChange={setAiDraft} {...(actions.onSaveAi ? { onSave: () => actions.onSaveAi!(aiDraft) } : {})} {...(actions.onTestAi ? { onTest: () => actions.onTestAi!(aiDraft) } : {})} /> : <UnavailableAiSection capabilities={capabilities} role={role} /> : null}
     {role === "manager" && managerDraft ? <>
       <PilotSection value={managerDraft} onChange={setManagerDraft} {...(actions.onSaveManager ? { onSave: () => actions.onSaveManager!(toInput(managerDraft)) } : {})} />
       <ImageSection value={productDraft} onChange={setProductDraft} {...(actions.onSaveProduct ? { onSave: () => actions.onSaveProduct!(productDraft) } : {})} {...(actions.onTestImage ? { onTest: () => actions.onTestImage!(productDraft) } : {})} {...(actions.onClearImageCache ? { onClear: actions.onClearImageCache } : {})} />
@@ -85,10 +87,8 @@ export function SettingsPage({ role, manager, product, capabilities, ai, actions
       <DataSection actions={actions} capabilities={capabilities} />
       {accounts}
     </> : <>
-      <div className="banner info" role="note"><div className="body small"><b>Phạm vi Người vận hành:</b> Chỉ xem cấu hình do Quản lý áp dụng; chỉ Quản lý lưu thay đổi tổ chức, AI và dữ liệu hệ thống.</div></div>
-      <ImageSection value={productDraft} onChange={setProductDraft} readOnly />
-      <ThemeSection value={productDraft} onChange={setProductDraft} readOnly />
       <section className="card"><h3>Prompt & rubric</h3><p className="small muted">Sửa hướng dẫn AI sinh bài, coach và chấm bài. Để trống dùng mặc định.</p><a className="btn" href="/op/prompts">Mở trình sửa prompt</a></section>
+      <PersonalPreferences />
     </>}
   </div>;
 }

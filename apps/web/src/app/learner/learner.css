@@ -990,6 +990,7 @@ h1,h2,h3,h4,h1 b,h2 b,h3 b,h4 b{font-weight:600 !important}
    shrinkable and give each row enough air so long Vietnamese copy cannot look
    fused at the narrow app viewport. */
 .profile-page .profile-details{gap:8px}
+.profile-page > .settings-personal-preferences{margin-top:16px}
 .profile-page .profile-detail-row{gap:10px;align-items:flex-start;line-height:1.4}
 .profile-page .profile-detail-label{flex:0 0 120px;min-width:0!important}
 .profile-page .profile-detail-value{min-width:0;overflow-wrap:anywhere;line-height:1.45}
