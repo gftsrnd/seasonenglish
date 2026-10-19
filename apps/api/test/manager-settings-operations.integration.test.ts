@@ -85,12 +85,50 @@ describe("Manager settings operational actions", () => {
       payload: { url: "https://hooks.example.test/e4s", template: "{\"base_content\":\"{message}\"}" }
     });
     expect(manager.statusCode, manager.body).toBe(200);
-    expect(manager.json()).toMatchObject({ status: "success", statusCode: 204 });
+    expect(manager.json()).toMatchObject({ status: "success", statusCode: 204, code: null });
     expect(manager.body).not.toContain("hooks.example.test");
     expect(fetchMock).toHaveBeenCalledTimes(1);
 
     const operator = await app.inject({ method: "POST", url: "/api/v1/manager/settings/webhook-test", headers: { cookie: operatorCookie }, payload: { url: "https://hooks.example.test/e4s", template: "{}" } });
     expect(operator.statusCode).toBe(403);
+  });
+
+  it("returns redacted webhook diagnostics for validation and delivery failures", async () => {
+    const invalidUrl = await app.inject({
+      method: "POST", url: "/api/v1/manager/settings/webhook-test", headers: { cookie: managerCookie },
+      payload: { url: "http://hooks.example.test/e4s", template: "{}" }
+    });
+    expect(invalidUrl.json()).toMatchObject({ status: "error", statusCode: null, code: "WEBHOOK_URL_HTTPS_REQUIRED" });
+
+    const invalidJson = await app.inject({
+      method: "POST", url: "/api/v1/manager/settings/webhook-test", headers: { cookie: managerCookie },
+      payload: { url: "https://hooks.example.test/e4s", template: "not-json" }
+    });
+    expect(invalidJson.json()).toMatchObject({ status: "error", statusCode: null, code: "WEBHOOK_TEMPLATE_INVALID" });
+
+    const fetchMock = vi.spyOn(globalThis, "fetch");
+    fetchMock.mockResolvedValueOnce(new Response(null, { status: 401 }));
+    const rejected = await app.inject({
+      method: "POST", url: "/api/v1/manager/settings/webhook-test", headers: { cookie: managerCookie },
+      payload: { url: "https://hooks.example.test/e4s", template: "{}" }
+    });
+    expect(rejected.json()).toMatchObject({ status: "error", statusCode: 401, code: "WEBHOOK_HTTP_401" });
+
+    fetchMock.mockRejectedValueOnce(new TypeError("network details must stay private"));
+    const network = await app.inject({
+      method: "POST", url: "/api/v1/manager/settings/webhook-test", headers: { cookie: managerCookie },
+      payload: { url: "https://hooks.example.test/e4s", template: "{}" }
+    });
+    expect(network.json()).toMatchObject({ status: "error", statusCode: null, code: "WEBHOOK_NETWORK_ERROR" });
+    expect(network.body).not.toContain("network details");
+
+    fetchMock.mockRejectedValueOnce(new DOMException("aborted", "AbortError"));
+    const timeout = await app.inject({
+      method: "POST", url: "/api/v1/manager/settings/webhook-test", headers: { cookie: managerCookie },
+      payload: { url: "https://hooks.example.test/e4s", template: "{}" }
+    });
+    expect(timeout.json()).toMatchObject({ status: "timeout", statusCode: null, code: "WEBHOOK_TIMEOUT" });
+    fetchMock.mockRestore();
   });
 
   it("exports a safe organization snapshot and rejects malformed imports", async () => {

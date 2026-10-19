@@ -279,6 +279,8 @@ export interface ManagerMusicTestView {
 export interface ManagerWebhookTestView {
   readonly status: "success" | "error" | "timeout";
   readonly statusCode: number | null;
+  /** Stable, redacted diagnostic code; never include a webhook URL, payload or response body. */
+  readonly code: string | null;
   readonly testedAt: string;
 }
 

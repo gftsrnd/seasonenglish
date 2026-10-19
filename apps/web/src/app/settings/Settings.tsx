@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type ButtonHTMLAttributes, type ReactNode } from "react";
-import type { ManagerProviderSettingsInput, ManagerProviderSettingsView, ManagerSettingsInput, ManagerSettingsView, ProductPreferencesView, SystemCapabilitiesView } from "@e4s/contracts";
+import type { ManagerProviderSettingsInput, ManagerProviderSettingsView, ManagerSettingsInput, ManagerSettingsView, ManagerWebhookTestView, ProductPreferencesView, SystemCapabilitiesView } from "@e4s/contracts";
 import { Flower2, Gift, Leaf, MoonStar, Snowflake, Sparkles, Star, Sun } from "lucide-react";
 import { autoSeasonTheme } from "../games/season-art.js";
 import { PersonalPreferences } from "./PersonalPreferences.js";
@@ -47,7 +47,7 @@ export type SettingsActions = {
   onClearImageCache: () => void | Promise<void>;
   onTestMusic: (input: ManagerSettingsView["backgroundMusic"]) => void | Promise<void>;
   onResetMusic: () => void | Promise<void>;
-  onTestWebhook: (url: string, template: string) => void | Promise<void>;
+  onTestWebhook: (url: string, template: string) => Promise<ManagerWebhookTestView>;
   onExportJson: () => void | Promise<void>;
   onImportJson: (file: File) => void | Promise<void>;
   onExportCsv: () => void | Promise<void>;
@@ -150,7 +150,11 @@ function ThemeSection({ value, onChange, onSave, readOnly = false }: { value: Pr
 
 function MusicSection({ value, onChange, onSave, onTest, onReset }: ManagerSectionProps & { onTest?: SettingsActions["onTestMusic"]; onReset?: SettingsActions["onResetMusic"] }) { const music = value.backgroundMusic; const setMusic = (next: Partial<ManagerSettingsView["backgroundMusic"]>) => onChange({ ...value, backgroundMusic: { ...music, ...next } }); return <section className="card"><h3>Nhạc nền của Season</h3><p className="small muted">Nhạc YouTube ẩn, cần mạng; chỉ dùng nhạc không bản quyền. Dán link video/playlist; để trống dùng mặc định. Mỗi người bật/tắt trên đầu trang; nhạc tự tắt khi làm phần Nghe hoặc có giọng đọc.</p><label className="check"><input type="checkbox" checked={music.enabled} onChange={(event) => setMusic({ enabled: event.target.checked })} /> Cho phép nhạc nền trong app</label><Field label="Link YouTube (video hoặc playlist)"><input value={music.url} onChange={(event) => setMusic({ url: event.target.value })} /></Field><Field label={`Âm lượng: ${music.volume}/100`}><input type="range" min="0" max="100" value={music.volume} onChange={(event) => setMusic({ volume: Number(event.target.value) })} /></Field><div className="row"><Save label="Lưu nhạc nền" onSave={onSave} /><AsyncButton action={onTest ? () => onTest(music) : undefined} disabled={!onTest} busyLabel="Đang kiểm tra…" title={!onTest ? "Chưa có endpoint nghe thử nhạc" : undefined}>Lưu &amp; nghe thử</AsyncButton><AsyncButton className="btn-ghost" action={onReset} disabled={!onReset} busyLabel="Đang đặt lại…" title={!onReset ? "Chưa có endpoint đặt lại nhạc" : undefined}>Về nhạc mặc định</AsyncButton></div></section>; }
 
-function WebhookSection({ value, onChange, onSave, onTest }: ManagerSectionProps & { onTest?: SettingsActions["onTestWebhook"] }) { return <section className="card"><h3>Nhắc học qua Base.vn (Base Message incoming webhook)</h3><p className="small muted">Dán URL incoming webhook của Base Message. Payload dùng <code>base_content</code>; hỗ trợ <code>{"{message}"}</code> và <code>{"{name}"}</code>. Gửi từ trình duyệt local có thể không đọc được phản hồi do CORS.</p><Field label="Webhook URL"><input value={value.baseWebhookUrl} onChange={(event) => onChange({ ...value, baseWebhookUrl: event.target.value })} /></Field><Field label="Mẫu payload (JSON)"><textarea value={value.baseWebhookTemplate} onChange={(event) => onChange({ ...value, baseWebhookTemplate: event.target.value })} /></Field><div className="row"><Save label="Lưu webhook" onSave={onSave} /><AsyncButton action={onTest ? () => onTest(value.baseWebhookUrl, value.baseWebhookTemplate) : undefined} disabled={!onTest} busyLabel="Đang gửi…" title={!onTest ? "Chưa có endpoint gửi webhook thử" : undefined}>Gửi tin thử</AsyncButton></div></section>; }
+function WebhookSection({ value, onChange, onSave, onTest }: ManagerSectionProps & { onTest?: SettingsActions["onTestWebhook"] }) {
+  const [lastTest, setLastTest] = useState<ManagerWebhookTestView>();
+  const test = onTest ? async () => { setLastTest(await onTest(value.baseWebhookUrl, value.baseWebhookTemplate)); } : undefined;
+  return <section className="card"><h3>Nhắc học qua Base.vn (Base Message incoming webhook)</h3><p className="small muted">Dán URL incoming webhook của Base Message. Payload dùng <code>base_content</code>; hỗ trợ <code>{"{message}"}</code> và <code>{"{name}"}</code>. Việc kiểm tra được thực hiện ở server và không hiển thị URL, payload hoặc phản hồi thô.</p><Field label="Webhook URL"><input value={value.baseWebhookUrl} onChange={(event) => onChange({ ...value, baseWebhookUrl: event.target.value })} /></Field><Field label="Mẫu payload (JSON)"><textarea value={value.baseWebhookTemplate} onChange={(event) => onChange({ ...value, baseWebhookTemplate: event.target.value })} /></Field><div className="row"><Save label="Lưu webhook" onSave={onSave} /><AsyncButton action={test} disabled={!test} busyLabel="Đang gửi…" title={!test ? "Chưa có endpoint gửi webhook thử" : undefined}>Gửi tin thử</AsyncButton>{lastTest ? <span className="small muted" role="status" aria-live="polite">{webhookTestLabel(lastTest)}</span> : null}</div></section>;
+}
 
 function PolicySection({ value, onChange, onSave }: ManagerSectionProps) { return <section className="card"><h3>Chính sách nhắc học và báo cáo</h3><NumberField label="Số ngày không hoạt động trước khi nhắc" value={value.reminderInactiveDays} min={1} max={30} onChange={(reminderInactiveDays) => onChange({ ...value, reminderInactiveDays })} /><label className="check"><input type="checkbox" checked={value.weeklyReportEnabled} onChange={(event) => onChange({ ...value, weeklyReportEnabled: event.target.checked })} /> Bật báo cáo tuần</label><Save label="Lưu chính sách" onSave={onSave} /></section>; }
 
@@ -180,7 +184,7 @@ function AsyncButton({ action, busyLabel = "Đang xử lý…", children, disabl
   const run = async () => {
     if (!action || busy) return;
     setBusy(true);
-    try { await action(); } finally { setBusy(false); }
+    try { await action(); } catch { /* The owning controller renders the actionable error. */ } finally { setBusy(false); }
   };
   return <button {...props} type={type} disabled={Boolean(disabled || !action || busy)} aria-busy={busy ? "true" : undefined} onClick={() => void run()}>{busy ? <><span className="spinner" aria-hidden="true" /> {busyLabel}</> : children}</button>;
 }
@@ -200,4 +204,29 @@ function pilotWeekSummary(value: ManagerSettingsView): string {
   return `Tuần hiện tại theo cấu hình: Tuần ${week} (${format.format(weekStart)} → ${format.format(weekEnd)}).`;
 }
 function clampNumber(value: number, min: number, max: number): number { return Math.min(Math.max(value, min), Math.max(min, max)); }
-function lastTestLabel(test: ManagerProviderSettingsView["lastTest"]): string { return test?.status === "success" ? "Kiểm tra gần nhất: thành công" : test?.status === "timeout" ? "Kiểm tra gần nhất: hết thời gian" : test?.status === "error" ? "Kiểm tra gần nhất: lỗi" : "Chưa kiểm tra kết nối"; }
+function lastTestLabel(test: ManagerProviderSettingsView["lastTest"]): string {
+  if (!test || test.status === "never") return "Chưa kiểm tra kết nối";
+  if (test.status === "success") return "Kiểm tra gần nhất: thành công.";
+  return providerTestLabel(test.code);
+}
+
+export function providerTestLabel(code: string | null | undefined): string {
+  if (code === "PROVIDER_NOT_CONFIGURED") return "Chưa lưu API key. Hãy nhập key, lưu rồi kiểm tra lại.";
+  if (code === "PROVIDER_ENDPOINT_INVALID") return "Base URL không hợp lệ. Hãy kiểm tra địa chỉ nhà cung cấp.";
+  if (code === "PROVIDER_NETWORK_ERROR") return "Không kết nối được nhà cung cấp. Hãy kiểm tra mạng và Base URL.";
+  if (code === "PROVIDER_TIMEOUT") return "Nhà cung cấp phản hồi quá thời gian. Hãy thử lại sau.";
+  if (code === "PROVIDER_UNAVAILABLE") return "Nhà cung cấp đang tạm thời không sẵn sàng. Hãy thử lại sau.";
+  if (code?.startsWith("PROVIDER_HTTP_")) return `Nhà cung cấp từ chối yêu cầu (HTTP ${code.slice("PROVIDER_HTTP_".length)}). Hãy kiểm tra key, model và quyền truy cập.`;
+  return "Kiểm tra AI chưa thành công. Hãy kiểm tra cấu hình rồi thử lại.";
+}
+
+export function webhookTestLabel(test: ManagerWebhookTestView): string {
+  if (test.status === "success") return "Webhook đã nhận tin thử.";
+  if (test.code === "WEBHOOK_URL_INVALID") return "Webhook URL không hợp lệ.";
+  if (test.code === "WEBHOOK_URL_HTTPS_REQUIRED") return "Webhook URL phải dùng HTTPS.";
+  if (test.code === "WEBHOOK_TEMPLATE_INVALID") return "Mẫu payload chưa phải JSON hợp lệ.";
+  if (test.code === "WEBHOOK_TIMEOUT") return "Webhook phản hồi quá thời gian. Hãy thử lại hoặc kiểm tra phía Base.vn.";
+  if (test.code === "WEBHOOK_NETWORK_ERROR") return "Server không kết nối được webhook. Hãy kiểm tra URL và mạng.";
+  if (test.code?.startsWith("WEBHOOK_HTTP_")) return `Webhook từ chối yêu cầu (HTTP ${test.statusCode ?? test.code.slice("WEBHOOK_HTTP_".length)}).`;
+  return "Webhook chưa nhận được tin thử.";
+}

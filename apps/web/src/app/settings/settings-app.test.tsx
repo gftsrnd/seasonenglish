@@ -123,6 +123,25 @@ describe("new Settings app branch", () => {
     expect(window.localStorage.getItem("e4s:effects")).toBe("off");
     expect(window.localStorage.getItem("e4s:music")).toBe("off");
   });
+
+  it.each([
+    ["PROVIDER_NOT_CONFIGURED", "Chưa lưu API key"],
+    ["PROVIDER_ENDPOINT_INVALID", "Base URL không hợp lệ"],
+    ["PROVIDER_NETWORK_ERROR", "Không kết nối được nhà cung cấp"],
+    ["PROVIDER_TIMEOUT", "Nhà cung cấp phản hồi quá thời gian"],
+    ["PROVIDER_HTTP_401", "Nhà cung cấp từ chối yêu cầu (HTTP 401)"]
+  ])("explains the safe AI diagnostic %s", (code, message) => {
+    render(<SettingsPage role="manager" manager={manager} product={product} capabilities={capabilities} ai={{ provider: "openai", configured: code !== "PROVIDER_NOT_CONFIGURED", baseUrl: "https://api.groq.com/openai/v1", model: "demo", speechToTextModel: "whisper", lastTest: { status: code === "PROVIDER_TIMEOUT" ? "timeout" : "error", testedAt: "2026-10-19T10:00:00.000Z", code } }} actions={actions()} />);
+    expect(screen.getByText(message, { exact: false })).toBeInTheDocument();
+  });
+
+  it("shows the latest webhook diagnostic with an action to take", async () => {
+    const callbacks = actions();
+    callbacks.onTestWebhook = vi.fn().mockResolvedValue({ status: "error", statusCode: null, code: "WEBHOOK_TEMPLATE_INVALID", testedAt: "2026-10-19T10:00:00.000Z" });
+    render(<SettingsPage role="manager" manager={manager} product={product} capabilities={capabilities} actions={callbacks} />);
+    await userEvent.setup().click(screen.getByRole("button", { name: "Gửi tin thử" }));
+    expect(await screen.findByText("Mẫu payload chưa phải JSON hợp lệ.")).toBeInTheDocument();
+  });
 });
 
 function actions() {

@@ -58,7 +58,7 @@ beforeEach(() => {
   client.clearManagerImageCache.mockResolvedValue({ cleared: 1 });
   client.testManagerMusic.mockResolvedValue({ status: "valid", checkedAt: "2026-10-15T09:00:00.000Z" });
   client.resetManagerMusic.mockResolvedValue({ enabled: true, url: "", volume: 22 });
-  client.testManagerWebhook.mockResolvedValue({ status: "success", statusCode: 204, testedAt: "2026-10-15T09:00:00.000Z" });
+  client.testManagerWebhook.mockResolvedValue({ status: "success", statusCode: 204, code: null, testedAt: "2026-10-15T09:00:00.000Z" });
   client.exportManagerData.mockResolvedValue({ version: 1, exportedAt: "2026-10-15T09:00:00.000Z", organization: { id: "org-1", name: "GFT Demo" }, settings: {}, accounts: [], progress: null });
   client.importManagerData.mockResolvedValue({ imported: true });
 });

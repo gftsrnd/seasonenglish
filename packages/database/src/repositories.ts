@@ -7954,10 +7954,14 @@ class ManagerRepository {
     let payload: unknown;
     try {
       target = new URL(input.url);
-      if (target.protocol !== "https:") return { status: "error", statusCode: null, testedAt };
-      payload = JSON.parse(input.template.replaceAll("{message}", "E4S kiểm tra webhook thành công."));
     } catch {
-      return { status: "error", statusCode: null, testedAt };
+      return { status: "error", statusCode: null, code: "WEBHOOK_URL_INVALID", testedAt };
+    }
+    if (target.protocol !== "https:") return { status: "error", statusCode: null, code: "WEBHOOK_URL_HTTPS_REQUIRED", testedAt };
+    try {
+      payload = JSON.parse(input.template.replaceAll("{message}", "E4S kiểm tra webhook thành công.").replaceAll("{name}", "E4S"));
+    } catch {
+      return { status: "error", statusCode: null, code: "WEBHOOK_TEMPLATE_INVALID", testedAt };
     }
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 10_000);
@@ -7968,11 +7972,13 @@ class ManagerRepository {
         body: JSON.stringify(payload),
         signal: controller.signal
       });
-      return { status: response.ok ? "success" : "error", statusCode: response.status, testedAt };
+      return { status: response.ok ? "success" : "error", statusCode: response.status, code: response.ok ? null : `WEBHOOK_HTTP_${response.status}`, testedAt };
     } catch (error) {
+      const timedOut = error instanceof DOMException && error.name === "AbortError";
       return {
-        status: error instanceof DOMException && error.name === "AbortError" ? "timeout" : "error",
+        status: timedOut ? "timeout" : "error",
         statusCode: null,
+        code: timedOut ? "WEBHOOK_TIMEOUT" : "WEBHOOK_NETWORK_ERROR",
         testedAt
       };
     } finally { clearTimeout(timeout); }
