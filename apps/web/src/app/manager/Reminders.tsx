@@ -52,7 +52,7 @@ export function ManagerReminders({ view, sendingLearnerId, notice, noticeTone = 
   </div>;
 }
 
-function reminderMessage(name: string, missedDays: number) { return `Chào ${name}, bạn đã ${missedDays} ngày chưa vào học tiếng Anh. Chỉ cần 15 phút hôm nay thôi – vào học một bài ngắn hoặc luyện một lượt với Season nhé! 💪`; }
+function reminderMessage(name: string, missedDays: number) { return `Chào ${name}, bạn đã ${missedDays} ngày chưa vào học tiếng Anh. Chỉ cần 15 phút hôm nay thôi – vào học một bài ngắn hoặc luyện một lượt với Season nhé!`; }
 function formatReminderDate(value: string) { return new Intl.DateTimeFormat("vi-VN", { day: "2-digit", month: "2-digit" }).format(new Date(value)); }
 function statusLabel(status: string, provider?: string | null) { if (status === "queued" && provider === "local_queue") return "Chờ gửi tay"; return ({ queued: "Đã xếp hàng", sent: "Đã gửi webhook", delivered: "Đã giao", failed: "Gửi lỗi", copied: "Đã copy", dismissed: "Nhắc tay", resolved: "Đã quay lại học" } as Record<string, string>)[status] ?? status; }
 function statusTone(status: string): "" | "ok" | "warn" | "danger" | "primary" { return status === "delivered" || status === "sent" ? "ok" : status === "failed" ? "danger" : status === "resolved" ? "primary" : "warn"; }

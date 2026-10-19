@@ -46,7 +46,7 @@ export function LearnerHome({ view, actions }: { view: LearnerHomeView; actions:
             ariaLabel={`T${lesson.dayNumber + 1}${lesson.status === "in_progress" && !lock ? " · hôm nay" : ""} · ${lesson.title}${lock ? ` · ${lockLabel}` : ""}`}
             title={lock ? `${lesson.title} – ${lock.reason === "date" ? "chưa đến ngày mở" : "mở sau khi xong bài trước"}` : undefined}
           >
-            <span className="node" style={{ display: "grid", placeItems: "center", position: "relative", zIndex: 1 }}>{lesson.status === "completed" ? <Check className="status-icon" aria-hidden="true" /> : lock ? <><span className="sr-only">🔒</span><LockKeyhole className="status-icon" aria-hidden="true" /></> : lesson.status === "in_progress" ? <Play className="status-icon" aria-hidden="true" fill="currentColor" /> : <span aria-hidden="true">{lesson.dayNumber}</span>}</span>
+            <span className="node" style={{ display: "grid", placeItems: "center", position: "relative", zIndex: 1 }}>{lesson.status === "completed" ? <Check className="status-icon" aria-hidden="true" /> : lock ? <LockKeyhole className="status-icon" aria-hidden="true" /> : lesson.status === "in_progress" ? <Play className="status-icon" aria-hidden="true" fill="currentColor" /> : <span aria-hidden="true">{lesson.dayNumber}</span>}</span>
             <span className="d">T{lesson.dayNumber + 1}{lesson.status === "in_progress" && !lock ? " · hôm nay" : ""}</span>
             <span className="ttl">{lesson.title}</span>
           </AppLink>
@@ -142,8 +142,8 @@ function ClockIcon() {
 }
 
 function lessonLockLabel(lock: NonNullable<LearnerHomeView["lessons"][number]["lock"]>) {
-  if (lock.reason === "date") return `🔒 Chưa mở${lock.opensAt ? ` · mở vào ${formatLessonDate(lock.opensAt)}` : ""}`;
-  return `🔒 Chưa mở${lock.blocker ? ` · xong T${lock.blocker.dayNumber + 1} trước` : " · xong bài trước"}`;
+  if (lock.reason === "date") return `Chưa mở${lock.opensAt ? ` · mở vào ${formatLessonDate(lock.opensAt)}` : ""}`;
+  return `Chưa mở${lock.blocker ? ` · xong T${lock.blocker.dayNumber + 1} trước` : " · xong bài trước"}`;
 }
 
 function formatLessonDate(value: string) {

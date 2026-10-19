@@ -152,6 +152,8 @@ describe("learner Home parity", () => {
     const path = document.querySelector('[data-home-block="week-path"]');
     expect(path?.querySelector("svg.lucide-check")).toBeInTheDocument();
     expect(path?.querySelector("svg.lucide-lock-keyhole")).toBeInTheDocument();
+    expect(path).not.toHaveTextContent("🔒");
+    expect(within(path as HTMLElement).getByRole("link", { name: /Bài bị khoá · Chưa mở/ })).toHaveAttribute("aria-disabled", "true");
   });
 
   it("shows a real onboarding placement-pending state without inviting a duplicate test", () => {

@@ -127,8 +127,39 @@ describe("assessment HCI states", () => {
   });
 
   it("keeps the preparation table inside the mobile card", () => {
-    render(<LearnerAssessment view={makeView({ screenState: "preparation", attempt: null })} actions={makeActions()} />);
+    const { container } = render(<LearnerAssessment view={makeView({ screenState: "preparation", attempt: null })} actions={makeActions()} />);
     expect(screen.getByRole("table", { name: "Cấu trúc bài test" })).toHaveStyle({ width: "100%", tableLayout: "fixed" });
+    expect(screen.getByText("Bắt buộc").closest("article")?.querySelector("svg.lucide-circle-check-big, svg.lucide-check-circle-2")).toBeInTheDocument();
+    expect(screen.getByText("Không được phép").closest("article")?.querySelector("svg.lucide-ban")).toBeInTheDocument();
+    const equipment = screen.getByRole("group", { name: "Cần chuẩn bị: tai nghe hoặc loa, và micro" });
+    expect(equipment.querySelector("svg.lucide-headphones")).toBeInTheDocument();
+    expect(equipment.querySelector("svg.lucide-mic")).toBeInTheDocument();
+    expect(container).not.toHaveTextContent(/✅|⛔|🎧|🎙/u);
+  });
+
+  it("uses a warning icon while keeping the integrity warning in accessible text", async () => {
+    const recordAssessmentViolation = vi.fn().mockResolvedValue({
+      ...makeRuntime(), violationCount: 1, violationLimit: 3
+    });
+    render(<AssessmentRuntime view={makeView()} actions={makeActions({ recordAssessmentViolation })}>{(state) => <span>{state.formattedTime}</span>}</AssessmentRuntime>);
+
+    await act(async () => {
+      window.dispatchEvent(new Event("blur"));
+      await Promise.resolve();
+    });
+
+    const heading = await screen.findByRole("heading", { name: "Cảnh báo 1/3" });
+    expect(heading.querySelector("svg.lucide-triangle-alert")).toBeInTheDocument();
+    expect(heading).not.toHaveTextContent("⚠️");
+  });
+
+  it("uses a clock icon for automatic submission", async () => {
+    const runtime = makeRuntime({ status: "submitted", autoSubmitted: true, submitReason: "time_expired", remainingSeconds: 0 });
+    render(<AssessmentRuntime view={makeView({ runtime, attempt: { ...makeView().attempt!, status: "submitted", runtime } })} actions={makeActions()}>{(state) => <span>{state.formattedTime}</span>}</AssessmentRuntime>);
+
+    const heading = await screen.findByRole("heading", { name: "Tự động nộp bài" });
+    expect(heading.querySelector("svg.lucide-clock-3")).toBeInTheDocument();
+    expect(heading).not.toHaveTextContent("⏰");
   });
 
   it("offers a retry when an integrity warning cannot be recorded", async () => {

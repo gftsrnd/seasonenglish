@@ -39,6 +39,7 @@ describe("learner lesson study content", () => {
     expect(screen.getAllByRole("list", { name: "Các bước thực hiện" })[0]!.querySelectorAll("li")).toHaveLength(5);
     expect(screen.getByText("tính từ")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Nghe từ" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Nghe từ" }).querySelector("svg.lucide-volume-2")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "new here" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Nghe từ phát âm: I" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Nghe từ phát âm: nice" })).toBeInTheDocument();
@@ -104,7 +105,19 @@ describe("learner lesson study content", () => {
     render(<LearnerLesson view={{ lesson: retryableLesson, lock: null }} actions={{ navigate: vi.fn(), speak: vi.fn(), saveLessonProgress: vi.fn() } as any} />);
 
     expect(screen.getByRole("tab", { name: /2\. bài tập/i })).toBeDisabled();
+    expect(screen.getByRole("tab", { name: /2\. bài tập/i }).querySelector("svg.lucide-lock-keyhole")).toBeInTheDocument();
     expect(screen.queryByRole("radio", { name: "A" })).not.toBeInTheDocument();
+  });
+
+  it("uses an accessible lock icon without an emoji for a locked lesson", () => {
+    const lesson = {
+      id: "lesson-locked", title: "Bài chưa mở", dayNumber: 2, durationMinutes: 10, cefr: "A2",
+      content: { parts: [] }, progress: { status: "not_started", completedPartCodes: [], evidence: {} }
+    } as any;
+    const { container } = render(<LearnerLesson view={{ lesson, lock: { reason: "date", message: "Chưa đến ngày mở", dayNumber: 2, totalLessons: 5, opensAt: "2026-10-16" } }} actions={{ navigate: vi.fn(), speak: vi.fn(), saveLessonProgress: vi.fn() } as any} />);
+
+    expect(container.querySelector("svg.lucide-lock-keyhole")).toBeInTheDocument();
+    expect(container).not.toHaveTextContent("🔒");
   });
 
   it("allows a study-only lesson to complete after the study gate", async () => {
@@ -124,7 +137,9 @@ describe("learner lesson study content", () => {
     } as any;
     render(<LearnerLesson view={{ lesson: studyOnlyLesson, lock: null }} actions={{ navigate: vi.fn(), speak: vi.fn(), saveLessonProgress } as any} />);
 
-    await user.click(screen.getByRole("button", { name: /đã học xong.*làm bài tập/i }));
+    const finishStudy = screen.getByRole("button", { name: /đã học xong.*làm bài tập/i });
+    expect(finishStudy.querySelector("svg.lucide-circle-check-big, svg.lucide-check-circle-2")).toBeInTheDocument();
+    await user.click(finishStudy);
     const complete = screen.getByRole("button", { name: /hoàn thành bài/i });
     expect(complete).toBeEnabled();
     await user.click(complete);
