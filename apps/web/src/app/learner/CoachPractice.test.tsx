@@ -223,7 +223,7 @@ describe("app coach and weekly practice speech input", () => {
 
   it("uses a standard lock icon for unopened vocabulary", () => {
     render(<LearnerCoach view={{ ...coach, vocabulary: [{ word: "colleague", meaning: "đồng nghiệp", opened: false }] }} actions={actions()} />);
-    expect(screen.getByRole("button", { name: "Mở colleague" }).querySelector("svg.lucide-lock-keyhole")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Mở từ bí mật" }).querySelector("svg.lucide-lock-keyhole")).toBeInTheDocument();
   });
 
   it("starts and stops recognition and appends Coach transcripts to the draft", async () => {

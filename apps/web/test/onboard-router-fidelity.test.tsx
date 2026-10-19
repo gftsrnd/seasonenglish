@@ -41,13 +41,13 @@ describe("onboarding and learner router fidelity", () => {
     expect(screen.getByText("Bước 1/2 · Hồ sơ")).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "Cho Season biết về bạn nhé" })).toBeInTheDocument();
     expect(screen.getByTestId("season-mark")).toBeInTheDocument();
-    expect(screen.getByText(/dùng thông tin này để chọn ví dụ và cách học hợp với bạn/i)).toBeInTheDocument();
+    expect(screen.getByText(/dùng thông tin này để chọn ví dụ sát công việc và cách học hợp với bạn/i)).toBeInTheDocument();
     expect(screen.getByText(/bước 1 · hồ sơ · đang làm/i)).toBeInTheDocument();
     expect(screen.getByText(/bước 2 · test đầu vào · tiếp theo/i)).toBeInTheDocument();
     expect(screen.getByRole("checkbox", { name: /nói chuyện với khách hàng/i })).toBeInTheDocument();
     expect(screen.getByRole("checkbox", { name: /chưa có thói quen nào/i })).toBeInTheDocument();
     expect(screen.getByRole("radio", { name: /informal · thân thiện/i })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /lưu tạm/i })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /lưu nháp/i })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /lưu và làm test đầu vào/i })).not.toBeDisabled();
   });
 
@@ -62,7 +62,7 @@ describe("onboarding and learner router fidelity", () => {
     expect(screen.getByRole("alert")).toHaveTextContent(/chọn ít nhất một mục đích dùng tiếng anh/i);
     expect(saveProfile).not.toHaveBeenCalled();
 
-    await user.click(screen.getByRole("button", { name: /lưu tạm/i }));
+    await user.click(screen.getByRole("button", { name: /lưu nháp/i }));
     await waitFor(() => expect(saveProfileDraft).toHaveBeenCalledWith(expect.objectContaining({ fullName: "Lan", email: "lan@example.com" })));
     expect(navigate).toHaveBeenCalledWith("/home");
   });
@@ -77,7 +77,7 @@ describe("onboarding and learner router fidelity", () => {
     expect(screen.getByText("Hồ sơ")).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "Sửa hồ sơ của bạn" })).toBeInTheDocument();
     expect(screen.queryByText(/bước 1 · hồ sơ · đang làm/i)).not.toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: /lưu tạm/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /lưu nháp/i })).not.toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Huỷ" })).toHaveAttribute("href", "/profile");
     expect(screen.getByRole("checkbox", { name: /toeic/i })).toBeChecked();
     expect(screen.getByLabelText(/năm thi toeic/i)).toHaveValue("2023");

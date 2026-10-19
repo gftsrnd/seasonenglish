@@ -108,8 +108,8 @@ describe("learner profile app parity", () => {
     expect(within(season).getByText("② Huy hiệu của cấp tiếp theo")).toBeInTheDocument();
     expect(within(season).getByText("2 / 3")).toBeInTheDocument();
     expect(within(season).getByText(/Còn thiếu: Bạn của Season/)).toBeInTheDocument();
-    expect(season.querySelector("svg.lucide-award")).not.toBeNull();
-    expect(season.querySelector("svg.lucide-message-circle")).not.toBeNull();
+    expect(within(season).getByRole("img", { name: "Biểu tượng Khởi động" })).toHaveTextContent("🐣");
+    expect(within(season).getByRole("img", { name: "Biểu tượng Bạn của Season" })).toHaveTextContent("💬");
     expect(within(season).getByRole("link", { name: "Xem trước màn hình khi đạt cấp cao nhất" })).toHaveAttribute("href", "/reward/preview");
     expect(within(season).getByText("Cách tính điểm và lên cấp")).toBeInTheDocument();
 
@@ -145,9 +145,9 @@ describe("learner profile app parity", () => {
   it("keeps the app badge art for the API's persisted badge keys", () => {
     render(<LearnerProfile view={{ ...view, badges: [{ key: "starter", label: "Khởi động" }], badgeRoadmap: [{ key: "starter", label: "Khởi động", description: "Hoàn thành bài học đầu tiên", seasonLevel: 2, earned: true }, { key: "coach_friend", label: "Bạn của Season", description: "Hoàn thành 10 lượt luyện với Season", seasonLevel: 3, earned: false }, { key: "wordsmith", label: "Thợ mở khoá", description: "Mở đủ ô từ bí mật với Season", seasonLevel: 4, earned: false }] }} actions={actions} />);
     const season = screen.getByRole("region", { name: "Mùa học" });
-    expect(season.querySelector("svg.lucide-award")).not.toBeNull();
-    expect(season.querySelector("svg.lucide-message-circle")).not.toBeNull();
-    expect(season.querySelector("svg.lucide-key-round")).not.toBeNull();
+    expect(within(season).getByRole("img", { name: "Biểu tượng Khởi động" })).toHaveTextContent("🐣");
+    expect(within(season).getByRole("img", { name: "Biểu tượng Bạn của Season" })).toHaveTextContent("💬");
+    expect(within(season).getByRole("img", { name: "Biểu tượng Thợ mở khoá" })).toHaveTextContent("🔑");
     expect(within(season).queryByText("🏅")).not.toBeInTheDocument();
   });
 });

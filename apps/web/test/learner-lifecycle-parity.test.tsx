@@ -95,7 +95,7 @@ describe("learner lifecycle app states", () => {
     } as any;
     const callback = actions();
     render(<LearnerCoach view={coach} actions={callback} />);
-    expect(screen.getByRole("button", { name: /mở deadline/i })).toBeEnabled();
+    expect(screen.getByRole("button", { name: "Mở từ bí mật" })).toBeEnabled();
   });
 
   it("keeps multiple corrections for the same original phrase stable", () => {

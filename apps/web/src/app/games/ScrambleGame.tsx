@@ -41,12 +41,9 @@ export function ScrambleGame({ words: source, onFinish, attemptSeed = 0 }: { wor
 
   useEffect(() => {
     if (locked || busy) return;
-    const frame = window.requestAnimationFrame(() => {
-      const nextButton = bankRef.current?.querySelector<HTMLButtonElement>("button:not(:disabled)");
-      if (nextButton) nextButton.focus({ preventScroll: true });
-      else sceneRef.current?.focus({ preventScroll: true });
-    });
-    return () => window.cancelAnimationFrame(frame);
+    const nextButton = bankRef.current?.querySelector<HTMLButtonElement>("button:not(:disabled)");
+    if (nextButton) nextButton.focus({ preventScroll: true });
+    else sceneRef.current?.focus({ preventScroll: true });
   }, [busy, index, locked, notice, picked]);
 
   const scheduleNext = (nextAnswers: GameAnswerInput[], delay: number) => {

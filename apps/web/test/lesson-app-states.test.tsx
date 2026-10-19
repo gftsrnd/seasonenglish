@@ -55,7 +55,7 @@ describe("app lesson evidence states", () => {
     const save = within(listening as HTMLElement).getByRole("button", { name: /nộp bài/i });
 
     expect(save).toBeDisabled();
-    await user.click(within(listening as HTMLElement).getByRole("radio", { name: "A" }));
+    await user.click(within(listening as HTMLElement).getByRole("radio", { name: /^A\. A$/ }));
     expect(save).toBeEnabled();
   });
 
@@ -67,7 +67,7 @@ describe("app lesson evidence states", () => {
     await openPractice(user);
     const listening = screen.getAllByTestId("app-lesson-part").find((part) => part.dataset.part === "listening");
 
-    await user.click(within(listening as HTMLElement).getByRole("radio", { name: "A" }));
+    await user.click(within(listening as HTMLElement).getByRole("radio", { name: /^A\. A$/ }));
     await user.click(within(listening as HTMLElement).getByRole("button", { name: /nộp bài/i }));
 
     expect(within(listening as HTMLElement).getByRole("button", { name: "Đang lưu…" })).toBeDisabled();
@@ -82,7 +82,7 @@ describe("app lesson evidence states", () => {
     await openPractice(user);
     const listening = screen.getAllByTestId("app-lesson-part").find((part) => part.dataset.part === "listening");
 
-    await user.click(within(listening as HTMLElement).getByRole("radio", { name: "A" }));
+    await user.click(within(listening as HTMLElement).getByRole("radio", { name: /^A\. A$/ }));
     await user.click(within(listening as HTMLElement).getByRole("button", { name: /nộp bài/i }));
 
     expect(await screen.findByRole("alert")).toHaveTextContent("Chưa lưu được câu trả lời");
@@ -116,7 +116,7 @@ describe("app lesson evidence states", () => {
 
     const instruction = screen.getAllByTestId("app-lesson-part").find((part) => part.dataset.part === "instruction");
     expect(instruction).toBeDefined();
-    expect(within(instruction as HTMLElement).getByRole("heading", { name: "Hướng dẫn làm bài" })).toBeInTheDocument();
+    expect(within(instruction as HTMLElement).getByRole("heading", { name: /Hướng dẫn làm bài/ })).toBeInTheDocument();
     expect(within(instruction as HTMLElement).getByRole("list")).toHaveClass("lesson-instruction-list");
     // The app keeps the three authored guidance steps and appends the
     // two lifecycle gates that explain how the learner unlocks and completes
@@ -133,13 +133,13 @@ describe("app lesson evidence states", () => {
 
     const practiceTab = screen.getByRole("tab", { name: /2\. bài tập/i });
     expect(practiceTab).toBeDisabled();
-    expect(screen.queryByRole("radio", { name: "A" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("radio", { name: /^A\. A$/ })).not.toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: /đã học xong.*làm bài tập/i }));
 
     expect(practiceTab).toBeEnabled();
     expect(practiceTab).toHaveAttribute("aria-selected", "true");
-    expect(screen.getAllByRole("radio", { name: "A" }).length).toBeGreaterThan(0);
+    expect(screen.getAllByRole("radio", { name: /^A\. A$/ }).length).toBeGreaterThan(0);
     expect(screen.getByRole("button", { name: /hoàn thành bài/i })).toBeDisabled();
   });
 
@@ -166,7 +166,7 @@ describe("app lesson evidence states", () => {
     await openPractice(user);
     expect(screen.getByRole("button", { name: /nghe đoạn nghe/i })).toBeInTheDocument();
     expect(screen.getByText("Lan is new to the product team.")).toBeInTheDocument();
-    await user.click(screen.getByRole("radio", { name: "Nice to meet you." }));
+    await user.click(screen.getByRole("radio", { name: /^B\. Nice to meet you\.$/ }));
     const listening = screen.getAllByTestId("app-lesson-part").find((part) => part.dataset.part === "listening");
     await user.click(within(listening as HTMLElement).getByRole("button", { name: /nộp bài/i }));
     expect(submit).toHaveBeenCalledWith("listening", { answer: "Nice to meet you." });
@@ -203,7 +203,7 @@ describe("app lesson evidence states", () => {
     await openPractice(user);
     const listening = screen.getAllByTestId("app-lesson-part").find((part) => part.dataset.part === "listening");
     expect(listening).toBeDefined();
-    await user.click(within(listening as HTMLElement).getByRole("radio", { name: "B" }));
+    await user.click(within(listening as HTMLElement).getByRole("radio", { name: /^B\. B$/ }));
     await user.click(within(listening as HTMLElement).getByRole("button", { name: /nộp bài/i }));
     expect(submit).toHaveBeenCalledWith("listening", { answer: "B" });
   });

@@ -53,14 +53,14 @@ describe("lesson exercise evidence API", () => {
 
     const duplicate = await app.inject({
       method: "POST", url: `/api/v1/lessons/${lessonId}/parts/listening/attempts`, headers: { cookie },
-      payload: { requestId: "30000000-0000-4000-8000-000000000001", evidence: { answer: "A" } }
+      payload: { requestId: "30000000-0000-4000-8000-000000000001", evidence: { answer: "In 2023" } }
     });
     expect(duplicate.statusCode, duplicate.body).toBe(200);
     expect(duplicate.json()).toMatchObject({ evidence: { status: "wrong_retry", attempts: 1, answer: "B" } });
 
     const retry = await app.inject({
       method: "POST", url: `/api/v1/lessons/${lessonId}/parts/listening/attempts`, headers: { cookie },
-      payload: { requestId: "30000000-0000-4000-8000-000000000002", evidence: { answer: "A" } }
+      payload: { requestId: "30000000-0000-4000-8000-000000000002", evidence: { answer: "In 2023" } }
     });
     expect(retry.statusCode, retry.body).toBe(200);
     expect(retry.json()).toMatchObject({ evidence: { status: "correct", attempts: 2, score: 100 } });

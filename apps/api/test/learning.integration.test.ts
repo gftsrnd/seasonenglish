@@ -97,6 +97,10 @@ describe("learner profile, home, lesson and progress API", () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date("2026-10-13T12:00:00.000Z"));
     try {
+      await pool.query(
+        "update activities set occurred_at = '2026-10-12T09:00:00.000Z' where id = $1",
+        [DEMO_IDS.activity]
+      );
       const response = await app.inject({ method: "GET", url: "/api/v1/learner/home", headers: { cookie } });
 
       expect(response.statusCode, response.body).toBe(200);

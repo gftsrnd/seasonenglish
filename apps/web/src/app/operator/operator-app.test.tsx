@@ -200,7 +200,7 @@ describe("Operator app rebuild", () => {
     const onApprove = vi.fn();
     render(<OperatorLessonSet view={{ week: 1, cefr: "A2", status: "draft", topic: "Meetings", explanationLanguage: "tiếng Việt", aiConnected: true, warnings: { incomplete: 1, level: ["T2: vượt mức"], phrases: 1, details: 1 }, lessons: [{ id: "l1", day: 1, dayLabel: "T2", title: "Opening a meeting", durationMin: 10, practiceKind: "điền từ", practiceAnswer: "start", manual: true, complete: false, intro: "Mở đầu cuộc họp", content: <p>Nội dung thật từ API</p> }] } as any} actions={{ onBack: vi.fn(), onApprove, onUnapprove: vi.fn(), onRegenerate: vi.fn(), onDeleteSet: vi.fn(), onFillPhrases: vi.fn(), onEnrich: vi.fn(), onEditLesson: vi.fn(), onDeleteLesson: vi.fn(), onComposeDay: vi.fn() }} />);
     expect(screen.getByText(/Checklist duyệt/)).toBeInTheDocument();
-    expect(screen.getByText(/chưa theo cấu trúc chuẩn/)).toBeInTheDocument();
+    expect(screen.getByText(/thiếu thành phần bắt buộc/)).toBeInTheDocument();
     expect(screen.getByText(/chưa đủ 3 cụm từ/)).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: /Soạn bài trực tiếp/ })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Duyệt bộ bài" }).parentElement).toHaveClass("operator-page-title-actions");

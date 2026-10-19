@@ -270,7 +270,7 @@ describe("OperatorRouteController", () => {
     };
     const getAssessmentReviewLearner = vi.fn().mockResolvedValue({
       learner: { id: "u1", displayName: "Lan", email: null, status: "active", createdAt: "2026-10-01", currentLevel: "A2", cefrApproved: true, pendingLevel: null },
-      profile: { job: "QA" }, monthlyGoal: "Email khách hàng", levelHistory: [], attempts: [], deletionRequests: []
+      profile: { position: "QA" }, monthlyGoal: "Email khách hàng", levelHistory: [], attempts: [], deletionRequests: []
     });
     render(<MemoryRouter initialEntries={["/op"]}><OperatorRouteController session={operator} client={{ getAssessmentReviewOverview: vi.fn().mockResolvedValue(overview), getAssessmentReviewLearner } as any} /></MemoryRouter>);
     const profileButton = await screen.findByRole("button", { name: "Hồ sơ" });
