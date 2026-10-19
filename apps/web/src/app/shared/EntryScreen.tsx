@@ -11,7 +11,7 @@ export function EntryScreen({ client, onAuthenticated }: { client: AuthClient; o
   const confirmPasswordId = "app-register-confirm-password";
   const errorId = "app-login-error";
   const [audience, setAudience] = useState<"learner" | "staff">("learner");
-  const [mode, setMode] = useState<"login" | "register">("login");
+  const [mode, setMode] = useState<"login" | "register">(() => window.location.pathname === "/register" ? "register" : "login");
   const [displayName, setDisplayName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -24,15 +24,27 @@ export function EntryScreen({ client, onAuthenticated }: { client: AuthClient; o
   const errorRef = useRef<HTMLDivElement>(null);
   const busy = pendingAction !== null;
 
-  const switchAudience = (next: "learner" | "staff") => {
-    if (next === audience || busy) return;
-    setAudience(next);
-    setMode("login");
+  useEffect(() => {
+    const onPopState = () => setMode(window.location.pathname === "/register" ? "register" : "login");
+    window.addEventListener("popstate", onPopState);
+    return () => window.removeEventListener("popstate", onPopState);
+  }, []);
+
+  const navigateEntry = (next: "login" | "register") => {
+    const path = next === "register" ? "/register" : "/";
+    window.history.pushState(window.history.state, "", path);
+    setMode(next);
     setDisplayName("");
     setEmail("");
     setPassword("");
     setConfirmPassword("");
     setError("");
+  };
+
+  const switchAudience = (next: "learner" | "staff") => {
+    if (next === audience || busy) return;
+    setAudience(next);
+    navigateEntry("login");
     emailInput.current?.focus();
   };
 
@@ -62,12 +74,12 @@ export function EntryScreen({ client, onAuthenticated }: { client: AuthClient; o
   const navigateAudience = (event: KeyboardEvent<HTMLButtonElement>) => {
     const next = event.key === "Home" ? "learner" : event.key === "End" ? "staff" : event.key === "ArrowLeft" || event.key === "ArrowRight" ? (audience === "learner" ? "staff" : "learner") : null;
     if (!next) return;
-    event.preventDefault(); setAudience(next); setMode("login"); setDisplayName(""); setEmail(""); setPassword(""); setConfirmPassword(""); setError("");
+    event.preventDefault(); setAudience(next); navigateEntry("login");
     (next === "learner" ? learnerTab : staffTab).current?.focus();
   };
 
-  const showRegistration = () => { setMode("register"); setDisplayName(""); setEmail(""); setPassword(""); setConfirmPassword(""); setError(""); };
-  const showLogin = () => { setMode("login"); setDisplayName(""); setEmail(""); setPassword(""); setConfirmPassword(""); setError(""); };
+  const showRegistration = () => navigateEntry("register");
+  const showLogin = () => navigateEntry("login");
 
   return <>
     <header className="topbar app-entry-topbar">
@@ -81,19 +93,19 @@ export function EntryScreen({ client, onAuthenticated }: { client: AuthClient; o
           <h1>Học tiếng Anh cho công việc</h1>
           <p>Học ngắn mỗi ngày, luyện tình huống thực tế và nhận phản hồi để làm tốt hơn ở lần tiếp theo.</p>
         </div>
-        <div className="card app-entry-card" aria-label="Đăng nhập E4S" aria-busy={busy || undefined}>
-          <div className="tabs" role="tablist" aria-label="Loại tài khoản" aria-orientation="horizontal">
+        <div className="card app-entry-card" aria-label={mode === "register" ? "Đăng ký E4S" : "Đăng nhập E4S"} aria-busy={busy || undefined}>
+          {mode === "login" ? <div className="tabs" role="tablist" aria-label="Loại tài khoản" aria-orientation="horizontal">
             <button ref={learnerTab} id="app-login-learner-tab" className={audience === "learner" ? "active" : ""} type="button" role="tab" aria-controls={loginPanelId} aria-selected={audience === "learner"} tabIndex={audience === "learner" ? 0 : -1} disabled={busy} onKeyDown={navigateAudience} onClick={() => switchAudience("learner")}>Người học</button>
             <button ref={staffTab} id="app-login-staff-tab" className={audience === "staff" ? "active" : ""} type="button" role="tab" aria-controls={loginPanelId} aria-selected={audience === "staff"} tabIndex={audience === "staff" ? 0 : -1} disabled={busy} onKeyDown={navigateAudience} onClick={() => switchAudience("staff")}>Nhân sự</button>
-          </div>
-          <form id={loginPanelId} className="stack section" role="tabpanel" tabIndex={0} aria-labelledby={`app-login-${audience}-tab`} aria-busy={busy || undefined} aria-describedby={error ? errorId : undefined} onSubmit={submit}>
-            {mode === "register" ? <><div className="app-register-heading"><h2>Đăng ký người học</h2><p className="small muted">Tạo tài khoản để bắt đầu điền hồ sơ và học.</p></div><label className="field" htmlFor={displayNameId}><span>Họ và tên</span><input id={displayNameId} name="displayName" autoComplete="name" minLength={2} maxLength={120} required disabled={busy} value={displayName} onChange={(event) => setDisplayName(event.target.value)} /></label></> : null}
+          </div> : <div id="app-register-heading" className="app-register-heading"><div className="eyebrow">Tài khoản mới · Không cần mã tổ chức</div><h2>Đăng ký người học</h2><p className="small muted">Tạo tài khoản miễn phí để điền hồ sơ và bắt đầu học.</p></div>}
+          <form id={loginPanelId} className="stack section" role="tabpanel" tabIndex={0} aria-labelledby={mode === "register" ? "app-register-heading" : `app-login-${audience}-tab`} aria-busy={busy || undefined} aria-describedby={error ? errorId : undefined} onSubmit={submit}>
+            {mode === "register" ? <label className="field" htmlFor={displayNameId}><span>Họ và tên</span><input id={displayNameId} name="displayName" autoComplete="name" minLength={2} maxLength={120} required disabled={busy} value={displayName} onChange={(event) => setDisplayName(event.target.value)} /></label> : null}
             <label className="field" htmlFor={emailId}><span>Email</span><input ref={emailInput} id={emailId} name="email" type="email" autoComplete="username" required disabled={busy} value={email} aria-invalid={Boolean(error)} aria-describedby={error ? errorId : undefined} onChange={(event) => setEmail(event.target.value)} /></label>
             <label className="field" htmlFor={passwordId}><span>Mật khẩu</span><input id={passwordId} name="password" type="password" autoComplete={mode === "register" ? "new-password" : "current-password"} minLength={mode === "register" ? 8 : undefined} required disabled={busy} value={password} aria-invalid={Boolean(error)} aria-describedby={error ? errorId : undefined} onChange={(event) => setPassword(event.target.value)} /></label>
             {mode === "register" ? <label className="field" htmlFor={confirmPasswordId}><span>Xác nhận mật khẩu</span><input id={confirmPasswordId} name="confirmPassword" type="password" autoComplete="new-password" minLength={8} required disabled={busy} value={confirmPassword} aria-invalid={Boolean(error)} aria-describedby={error ? errorId : undefined} onChange={(event) => setConfirmPassword(event.target.value)} /></label> : null}
             {error ? <div ref={errorRef} id={errorId} className="banner danger" role="alert" tabIndex={-1}><div className="body small">{error}</div></div> : null}
             <button className="btn-primary btn-block" type="submit" disabled={busy} aria-busy={busy || undefined}>{pendingAction === "register" ? "Đang tạo tài khoản…" : pendingAction === "login" ? "Đang đăng nhập…" : mode === "register" ? "Đăng ký và bắt đầu" : audience === "learner" ? "Đăng nhập người học" : "Đăng nhập nhân sự"}</button>
-            {audience === "learner" ? <button className="btn-ghost btn-block" type="button" disabled={busy} onClick={mode === "register" ? showLogin : showRegistration}>{mode === "register" ? "Quay lại đăng nhập" : "Tạo tài khoản người học"}</button> : null}
+            {mode === "register" ? <button className="btn-ghost btn-block" type="button" disabled={busy} onClick={showLogin}>Đã có tài khoản? Đăng nhập</button> : audience === "learner" ? <button className="btn-ghost btn-block" type="button" disabled={busy} onClick={showRegistration}>Tạo tài khoản người học</button> : null}
           </form>
         </div>
       </section>

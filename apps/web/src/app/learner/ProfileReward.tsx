@@ -4,7 +4,6 @@ import type { LearnerAvatarData, RewardView, SurveyView } from "@e4s/contracts";
 import type { LearnerCallbacks, ProfileView } from "./contracts.js";
 import { ProductArt } from "../shared/media/ProductArt.js";
 import { ErrorText, Notice, PageTitle, Progress, AppLink } from "./ui.js";
-import { PersonalPreferences } from "../settings/PersonalPreferences.js";
 
 const BADGE_ICONS: Record<string, string> = {
   first: "🐣", starter: "🐣", // media-scan: allow-avatar-reward -- deliberate badge symbol
@@ -81,7 +80,6 @@ export function LearnerProfile({ view, actions }: { view: ProfileView; actions: 
         <div className="row" style={{ gap: 8 }}><button className="btn-primary" type="button" onClick={openAvatar}>Đổi avatar</button><AppLink className="btn" href="/onboard" navigate={actions.navigate}>Sửa hồ sơ</AppLink></div>
       </div>
     </section>
-    <PersonalPreferences />
     <ProfileCard view={view} actions={actions} />
     {level ? <SeasonCard view={view} actions={actions} /> : null}
     {level ? <ReadinessCard view={view} actions={actions} /> : null}

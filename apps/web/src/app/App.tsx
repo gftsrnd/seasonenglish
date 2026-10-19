@@ -96,12 +96,12 @@ export function AppStatus({ children }: { children: ReactNode }) {
 export function resolveSessionEntryPath(role: SessionView["role"], pathname: string): string {
   const current = normalizePathname(pathname);
   if (role === "learner") {
-    return isStaffOnlyPath(current) ? "/home" : current === "/" ? "/home" : current;
+    return isStaffOnlyPath(current) || current === "/register" ? "/home" : current === "/" ? "/home" : current;
   }
   if (role === "operator") {
-    return current === "/" || current === "/home" || isLearnerPath(current) || isManagerPath(current) ? "/op" : current;
+    return current === "/" || current === "/register" || current === "/home" || isLearnerPath(current) || isManagerPath(current) ? "/op" : current;
   }
-  return current === "/" || current === "/home" || isLearnerPath(current) ? "/mgr" : current;
+  return current === "/" || current === "/register" || current === "/home" || isLearnerPath(current) ? "/mgr" : current;
 }
 
 function applySessionEntryRoute(nextSession: SessionView): void {

@@ -30,7 +30,7 @@ const view = {
 describe("app profile avatar dialog affordances", () => {
   it("keeps personal information collapsed until the learner asks to view it", async () => {
     render(<LearnerProfile view={view} actions={actions} />);
-    expect(screen.getByRole("heading", { name: "Tùy chọn cá nhân" })).toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "Tùy chọn cá nhân" })).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Chỉnh sửa thông tin cá nhân" })).toHaveAttribute("aria-expanded", "false");
     expect(screen.queryByText("Học viên Demo", { selector: ".profile-detail-value" })).not.toBeInTheDocument();
     await userEvent.setup().click(screen.getByRole("button", { name: "Chỉnh sửa thông tin cá nhân" }));
