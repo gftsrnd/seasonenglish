@@ -18,3 +18,10 @@ HTML prototype gốc là tài liệu tham khảo nằm ngoài runtime và không
 - `scripts/prepare-local.ts` luôn dùng seed `local`.
 - `scripts/cleanup-local-test-users.ts` mặc định chỉ dry-run, chỉ chấp nhận PostgreSQL loopback và cần `--apply` để xóa. Nội dung dùng chung được chuyển về Manager/Operator trước khi dữ liệu riêng và tài khoản test bị xóa.
 - Evidence mới mặc định được ghi vào `.tmp/evidence`, đã bị Git ignore.
+
+## Ảnh nội dung có nguồn
+
+- Bài học và Typing Race dùng chung `ContentMediaService`; trình duyệt không gọi trực tiếp dịch vụ ảnh công cộng và không cần API key ảnh.
+- Danh từ cụ thể được tra chính xác qua Wikipedia; nội dung có `imageQuery` được tìm qua Wikimedia Commons rồi Openverse. Từ trừu tượng không có truy vấn đã duyệt sẽ không tự gán ảnh.
+- Mọi ảnh khả dụng phải có URL nguồn, tác giả khi có, tên giấy phép và URL giấy phép. Ảnh tải về được kiểm tra định dạng rồi lưu trong bucket MinIO `e4s-media`.
+- Kết quả tìm kiếm được cache theo tổ chức. Manager có thể kiểm tra nguồn và xoá cache trong Cài đặt; thao tác này không xoá bucket evidence.

@@ -31,7 +31,7 @@ const actions = {
   navigate: vi.fn(),
   finishGame: vi.fn().mockResolvedValue(undefined),
   resetGameResult: vi.fn(),
-  resolveGameWordImage: vi.fn().mockResolvedValue(null),
+  resolveGameWordImage: vi.fn().mockResolvedValue({ status: "unavailable" }),
   useWeeklyGameSet: vi.fn().mockResolvedValue(undefined),
   deleteGameSet: vi.fn().mockResolvedValue(undefined),
   speak: vi.fn()
@@ -113,6 +113,37 @@ describe("learner game visual and interaction regressions", () => {
     const { container } = render(<TypingRaceGame words={[wordSet.words[0]!]} onFinish={vi.fn()} />);
 
     expect(container.querySelector(".typing-clue-copy")).toBeInTheDocument();
+  });
+
+  it("renders attributed open media in the typing clue", async () => {
+    vi.stubGlobal("requestAnimationFrame", vi.fn(() => 1));
+    vi.stubGlobal("cancelAnimationFrame", vi.fn());
+    const onResolveImage = vi.fn().mockResolvedValue({
+      status: "available",
+      imageUrl: "https://storage.example/colleague.jpg",
+      alt: "colleague",
+      attribution: {
+        creator: "Open artist",
+        licence: "CC BY 4.0",
+        licenceUrl: "https://creativecommons.org/licenses/by/4.0/",
+        sourceUrl: "https://commons.wikimedia.org/wiki/File:Colleague.jpg"
+      }
+    });
+    render(<TypingRaceGame words={[wordSet.words[0]!]} onFinish={vi.fn()} onResolveImage={onResolveImage} />);
+
+    expect(await screen.findByRole("img", { name: "colleague" })).toHaveAttribute("src", "https://storage.example/colleague.jpg");
+    expect(screen.getByText("Nguồn ảnh")).toBeInTheDocument();
+    expect(onResolveImage).toHaveBeenCalledWith("word-1");
+  });
+
+  it("shows a compact fallback for unavailable and legacy image-less words", async () => {
+    vi.stubGlobal("requestAnimationFrame", vi.fn(() => 1));
+    vi.stubGlobal("cancelAnimationFrame", vi.fn());
+    const view = render(<TypingRaceGame words={[wordSet.words[0]!]} onFinish={vi.fn()} onResolveImage={() => Promise.resolve({ status: "unavailable" })} />);
+    expect(await screen.findByText("Chưa có ảnh minh hoạ")).toBeInTheDocument();
+
+    view.rerender(<TypingRaceGame words={[wordSet.words[0]!]} onFinish={vi.fn()} />);
+    expect(await screen.findByText("Chưa có ảnh minh hoạ")).toBeInTheDocument();
   });
 
   it("ignores browser modifier shortcuts instead of typing into the answer", () => {

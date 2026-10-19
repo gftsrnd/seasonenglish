@@ -34,3 +34,7 @@
 .content-image__source div { display: grid; gap: 2px; padding-top: 4px; }
 
 @keyframes content-image-spin { to { transform: rotate(360deg); } }
+
+.typing-clue-image .content-image { width: 100%; min-width: 0; }
+.typing-clue-image .content-image--available img { width: 100%; }
+.typing-clue-image .content-image__source { max-width: 100%; }

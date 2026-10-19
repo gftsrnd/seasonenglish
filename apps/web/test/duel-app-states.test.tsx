@@ -12,7 +12,7 @@ const actions = {
   navigate: vi.fn(),
   finishGame: vi.fn(),
   resetGameResult: vi.fn(),
-  resolveGameWordImage: vi.fn(async () => null)
+  resolveGameWordImage: vi.fn(async () => ({ status: "unavailable" as const }))
 } as unknown as LearnerCallbacks;
 
 const descriptor: GameDescriptor = {

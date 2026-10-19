@@ -42,7 +42,7 @@ const callbacks = (): LearnerCallbacks => ({
   deleteGameSet: vi.fn(),
   finishGame: vi.fn(),
   resetGameResult: vi.fn(),
-  resolveGameWordImage: vi.fn(async () => null),
+  resolveGameWordImage: vi.fn(async () => ({ status: "unavailable" as const })),
   createDuel: vi.fn()
 });
 

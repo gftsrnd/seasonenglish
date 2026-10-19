@@ -22,7 +22,9 @@ Mở `http://127.0.0.1:4174`. Demo login được bật cho local; Groq key ch�
 docker compose up -d minio minio-init
 ```
 
-Sau đó chạy `pnpm dev:local` trên Windows. Script kiểm tra cả MinIO lẫn bucket `e4s-evidence` trước khi mở API; nếu thiếu sẽ dừng và in lại đúng lệnh trên. Khi sẵn sàng, terminal in trạng thái và URL của Web, API, PostgreSQL và MinIO.
+Sau đó chạy `pnpm dev:local` trên Windows. Script kiểm tra MinIO cùng hai bucket `e4s-evidence` (file ghi âm/evidence) và `e4s-media` (ảnh nội dung có nguồn) trước khi mở API; nếu thiếu sẽ dừng và in lại đúng lệnh trên. Khi sẵn sàng, terminal in trạng thái và URL của Web, API, PostgreSQL và MinIO.
+
+Ảnh từ vựng không cần Pexels/Pixabay key. API tra nguồn mở theo quy tắc bảo thủ, lưu ảnh hợp lệ vào `e4s-media` và trả kèm attribution; từ không phù hợp sẽ hiển thị trạng thái không có ảnh thay vì icon/SVG giả. Manager có thể xoá cache ảnh tại Cài đặt để buộc tra lại.
 
 `GROQ_API_KEY` là tùy chọn khi chỉ chạy chức năng không dùng AI. Nếu có key, đặt trong `.env`; không commit key vào Git.
 

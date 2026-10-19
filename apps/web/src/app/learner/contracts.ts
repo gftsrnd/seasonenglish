@@ -150,6 +150,6 @@ export interface LearnerCallbacks {
   deleteGameSet: () => void | Promise<void>;
   finishGame: (input: GameFinishInput) => void | Promise<void>;
   resetGameResult: () => void;
-  resolveGameWordImage: (setId: string, wordId: string) => Promise<string | null>;
+  resolveGameWordImage: (setId: string, wordId: string) => Promise<ContentImageView>;
   createDuel: (opponentId: string, game: Exclude<GameDescriptor["key"], "crossword">) => void | Promise<void>;
 }

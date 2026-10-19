@@ -1,15 +1,16 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import type { GameAnswerInput, GameEvidenceEventInput } from "@e4s/contracts";
-import { CornerDownLeft, Delete, ImageOff, LoaderCircle, Volume2 } from "lucide-react";
+import type { ContentImageView, GameAnswerInput, GameEvidenceEventInput } from "@e4s/contracts";
+import { CornerDownLeft, Delete, Volume2 } from "lucide-react";
 import { normalize, prepareGameAttempt, type FinishGame, type GameWord } from "./types.js";
 import { useExperience } from "../../features/experience/Experience.js";
+import { ContentImage } from "../shared/media/ContentImage.js";
 
 const keyboardRows = ["qwertyuiop", "asdfghjkl", "zxcvbnm"];
 const timeFor = (word: string) => Math.max(4_000, word.replace(/\s/g, "").length * 900);
 
 export function TypingRaceGame({ words: source, onFinish, attemptSeed = 0, onResolveImage }: {
   words: GameWord[]; onFinish: FinishGame; attemptSeed?: number;
-  onResolveImage?: ((wordId: string) => Promise<string | null>) | undefined;
+  onResolveImage?: ((wordId: string) => Promise<ContentImageView>) | undefined;
 }) {
   const words = useMemo(() => prepareGameAttempt(source.filter((word) => /^[a-z][a-z\s'-]*$/i.test(word.english)), attemptSeed).slice(0, 10), [attemptSeed, source]);
   const [index, setIndex] = useState(0);
@@ -22,9 +23,6 @@ export function TypingRaceGame({ words: source, onFinish, attemptSeed = 0, onRes
   const [busy, setBusy] = useState(false);
   const [locked, setLocked] = useState(false);
   const [notice, setNotice] = useState("");
-  const [imageFailed, setImageFailed] = useState(false);
-  const [resolvedImageUrl, setResolvedImageUrl] = useState<string | null>(null);
-  const [imageLoading, setImageLoading] = useState(false);
   const { play, speak } = useExperience();
   const sceneRef = useRef<HTMLDivElement | null>(null);
   const deadline = useRef(performance.now() + remaining);
@@ -96,18 +94,6 @@ export function TypingRaceGame({ words: source, onFinish, attemptSeed = 0, onRes
   }, [busy, index, locked]);
   useEffect(() => () => { if (transitionTimer.current !== null) window.clearTimeout(transitionTimer.current); }, []);
   useEffect(() => {
-    let active = true;
-    setImageFailed(false);
-    setResolvedImageUrl(word?.imageUrl ?? null);
-    if (!word || word.imageUrl || !onResolveImage) { setImageLoading(false); return () => { active = false; }; }
-    setImageLoading(true);
-    void onResolveImage(word.id)
-      .then((url) => { if (active) setResolvedImageUrl(url); })
-      .catch(() => { if (active) setResolvedImageUrl(null); })
-      .finally(() => { if (active) setImageLoading(false); });
-    return () => { active = false; };
-  }, [onResolveImage, word?.id, word?.imageUrl]);
-  useEffect(() => {
     const keydown = (event: KeyboardEvent) => {
       // Browser/application shortcuts must never become game answers.
       if (event.ctrlKey || event.metaKey || event.altKey) return;
@@ -119,12 +105,16 @@ export function TypingRaceGame({ words: source, onFinish, attemptSeed = 0, onRes
     return () => window.removeEventListener("keydown", keydown);
   });
   if (!word) return <p className="muted">Bộ từ chưa đủ từ phù hợp cho Typing race.</p>;
-  const imageUrl = resolvedImageUrl ?? word.imageUrl;
+  const loadImage = () => {
+    if (onResolveImage) return onResolveImage(word.id);
+    if (word.imageUrl?.trim() && word.imageAttribution) return Promise.resolve({ status: "available", imageUrl: word.imageUrl.trim(), alt: word.english, attribution: word.imageAttribution } as const);
+    return Promise.resolve({ status: "unavailable" } as const);
+  };
   const noticeTone = notice.startsWith("✅") ? "is-success" : notice.startsWith("❌") ? "is-error" : notice.startsWith("⏱") ? "is-warning" : "";
   return <div className="game-runner" aria-busy={busy || undefined}>
     <div className="game-hud"><h2>Từ {index + 1}/{words.length}</h2><span>Điểm <strong>{score}</strong></span><span>Combo ×{combo}</span></div>
     <div ref={sceneRef} className="typing-scene">
-      <div className="typing-clue"><div className="typing-clue-image" role="img" aria-label={imageUrl && !imageFailed ? `Hình minh hoạ: ${word.english}` : imageLoading ? `Đang tải hình minh hoạ cho ${word.english}` : `Chưa tìm thấy hình minh hoạ cho ${word.english}`}>{imageUrl && !imageFailed ? <img src={imageUrl} alt="" onError={() => setImageFailed(true)} /> : imageLoading ? <LoaderCircle className="game-control-icon game-image-placeholder game-image-placeholder--loading" size={22} strokeWidth={1.8} aria-hidden="true" /> : <ImageOff className="game-control-icon game-image-placeholder" size={22} strokeWidth={1.8} aria-hidden="true" />}</div><button type="button" className="typing-clue-speak" aria-label={`Nghe ${word.english}`} onClick={() => speak(word.english)}><Volume2 className="game-control-icon" size={18} strokeWidth={2} aria-hidden="true" /></button><div className="typing-clue-copy"><span className="eyebrow">Gợi ý</span><strong>{word.vietnamese}</strong><small>{word.definition} · {target.replace(/\s/g, "").length} chữ cái{target.includes(" ") ? ", có dấu cách" : ""}</small></div></div>
+      <div className="typing-clue"><div className="typing-clue-image"><ContentImage term={word.english} load={loadImage} required /></div><button type="button" className="typing-clue-speak" aria-label={`Nghe ${word.english}`} onClick={() => speak(word.english)}><Volume2 className="game-control-icon" size={18} strokeWidth={2} aria-hidden="true" /></button><div className="typing-clue-copy"><span className="eyebrow">Gợi ý</span><strong>{word.vietnamese}</strong><small>{word.definition} · {target.replace(/\s/g, "").length} chữ cái{target.includes(" ") ? ", có dấu cách" : ""}</small></div></div>
       <div className="typing-timer" role="progressbar" aria-label="Thời gian còn lại" aria-valuemin={0} aria-valuemax={maximum} aria-valuenow={Math.round(remaining)}><i style={{ width: `${Math.max(0, Math.min(100, remaining / maximum * 100))}%` }} /></div>
       <div className="typing-word" aria-label="Từ đang gõ">{target.split("").map((character, characterIndex) => { const value = typed[characterIndex]; const state = value === undefined ? "" : value === character ? "is-correct" : "is-wrong"; return <span data-testid="typing-character" className={state} key={characterIndex}>{character === " " ? " " : value?.toUpperCase() ?? ""}</span>; })}</div>
       <div className="virtual-keyboard" role="group" aria-label="Bàn phím ảo">{keyboardRows.map((row) => <div className="keyboard-row" key={row}>{row.split("").map((letter) => <button type="button" disabled={busy || locked} key={letter} onClick={() => press(letter)}>{letter}</button>)}</div>)}<div className="keyboard-row keyboard-row--actions"><button type="button" disabled={busy || locked} onClick={() => press(" ")}>Dấu cách</button><button type="button" aria-label="Xoá ký tự cuối" disabled={busy || locked} onClick={() => press("backspace")}><Delete className="game-control-icon" size={16} strokeWidth={2} aria-hidden="true" /></button><button className="is-enter" type="button" aria-label="Nhập" disabled={busy || locked} onClick={() => press("enter")}><CornerDownLeft className="game-control-icon" size={16} strokeWidth={2} aria-hidden="true" /></button></div></div>

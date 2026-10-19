@@ -411,10 +411,7 @@ export function LearnerRouteController() {
       gamePending.current = undefined; setUiState((current) => ({ ...current, gameResult: result }));
     },
     resetGameResult: () => { gamePending.current = undefined; setUiState((current) => ({ ...current, gameResult: null })); },
-    resolveGameWordImage: async (setId, wordId) => {
-      const image = await apiClient.resolveGameWordImage(setId, wordId);
-      return image.status === "available" ? image.imageUrl : null;
-    },
+    resolveGameWordImage: (setId, wordId) => apiClient.resolveGameWordImage(setId, wordId),
     createDuel: async (opponentId, game) => navigate(`/duel/${(await apiClient.createDuel({ opponentId, game })).id}`)
   };
 
