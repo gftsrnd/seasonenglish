@@ -140,8 +140,8 @@ export function registerEngagementRoutes(app: FastifyInstance, pool: Pool, aiRun
       if (!output.success) return reply.code(502).send({ code: "AI_OUTPUT_INVALID", moderation: { state: "ai_rejected", message: "AI không trả về được bộ từ hợp lệ." } satisfies GameTopicModeration });
       await repositories.engagement.saveGeneratedWordSet({
         learnerId, requestId: parsed.data.requestId, taskId: task.taskId, promptVersionId: task.promptVersionId,
-        output: { topic: output.data.topic, words: output.data.words.map(({ imageUrl, ...word }) => ({
-          ...word, ...(imageUrl ? { imageUrl } : {})
+        output: { topic: output.data.topic, words: output.data.words.map(({ imageQuery, ...word }) => ({
+          ...word, ...(imageQuery ? { imageQuery } : {})
         })) }, metadata: result.metadata
       });
       return { ...(await gameHubView(repositories, learnerId, true)), topicModeration: { state: "success", topic: output.data.topic } satisfies GameTopicModeration };

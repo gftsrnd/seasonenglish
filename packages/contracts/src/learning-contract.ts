@@ -1,4 +1,5 @@
 import type { CefrLevel } from "./domain-contract.js";
+import type { ContentImageAttribution } from "./media-contract.js";
 
 export type LessonPartCode =
   | "objective"
@@ -112,8 +113,10 @@ export interface LessonVocabularyItem {
   type?: string;
   pronunciation?: string;
   meaning?: string;
-  /** Optional published image; the learner UI supplies a local illustration when absent. */
+  /** Optional published image; usable only when imageAttribution is complete. */
   imageUrl?: string;
+  imageQuery?: string;
+  imageAttribution?: ContentImageAttribution;
   examples?: string[];
   family?: LessonVocabularyFamilyWord[];
   synonyms?: LessonVocabularySynonym[];

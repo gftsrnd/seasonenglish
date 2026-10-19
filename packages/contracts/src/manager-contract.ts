@@ -1,6 +1,7 @@
 import type { AccountRole, CefrLevel } from "./domain-contract.js";
 import type { AssessmentDeletionRequestView } from "./assessment-contract.js";
 import type { LearnerProfileData } from "./learning-contract.js";
+import type { ContentImageAttribution } from "./media-contract.js";
 
 export interface ManagerProgressView {
   readonly organizationName: string;
@@ -267,7 +268,10 @@ export interface ManagerPinReportsView {
 export interface ManagerImageTestView {
   readonly status: "available" | "unavailable";
   readonly source: ProductPreferencesView["vocabImageSource"];
+  readonly provider: "wikipedia" | "wikimedia" | "openverse" | "explicit" | null;
+  readonly cached: boolean;
   readonly imageUrl: string | null;
+  readonly attribution: ContentImageAttribution | null;
   readonly testedAt: string;
 }
 

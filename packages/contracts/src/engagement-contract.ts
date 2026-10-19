@@ -1,5 +1,6 @@
 import type { CefrLevel } from "./domain-contract.js";
 import type { LearnerAvatarData } from "./learning-contract.js";
+import type { ContentImageAttribution } from "./media-contract.js";
 
 export type WeeklyPracticeState = "locked" | "open" | "draft" | "submitted" | "reviewed";
 
@@ -62,6 +63,8 @@ export interface GameWordView {
   partOfSpeech: string;
   /** Resolved by the server through the configured image provider and persisted with the word set. */
   imageUrl?: string;
+  imageQuery?: string;
+  imageAttribution?: ContentImageAttribution;
 }
 
 export interface GameDescriptor {

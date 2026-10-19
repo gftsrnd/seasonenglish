@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { weekSuggestionsOutputSchema } from "../src/schemas.js";
+import {
+  vocabularyOutputJsonSchema,
+  vocabularyOutputSchema,
+  weekSuggestionsOutputSchema
+} from "../src/schemas.js";
 
 const option = {
   topic: "Meetings",
@@ -23,5 +27,41 @@ describe("operator AI parity schemas", () => {
       weeks: [{ weekNumber: 1, options: [{ ...option, plan: undefined }, { ...option, plan: undefined }, { ...option, plan: undefined }] }]
     });
     expect(parsed.success).toBe(false);
+  });
+});
+
+const vocabularyWord = {
+  id: "word-1",
+  english: "notebook",
+  vietnamese: "sổ tay",
+  definition: "A small book for writing notes.",
+  partOfSpeech: "noun" as const
+};
+
+const vocabularyOutput = (firstWord: Record<string, unknown>) => ({
+  topic: "Office supplies",
+  words: Array.from({ length: 15 }, (_, index) => index === 0
+    ? { ...vocabularyWord, ...firstWord }
+    : { ...vocabularyWord, id: `word-${index + 1}`, english: `notebook ${index + 1}` })
+});
+
+describe("vocabulary media schema", () => {
+  it("accepts a curated image query and publishes it in the provider JSON schema", () => {
+    const parsed = vocabularyOutputSchema.safeParse(vocabularyOutput({ imageQuery: "paper notebook on desk" }));
+
+    expect(parsed.success).toBe(true);
+    if (parsed.success) expect(parsed.data.words[0]?.imageQuery).toBe("paper notebook on desk");
+    expect(vocabularyOutputJsonSchema.properties.words.items.properties).toHaveProperty("imageQuery");
+    expect(vocabularyOutputJsonSchema.properties.words.items.properties).not.toHaveProperty("imageUrl");
+  });
+
+  it("rejects an AI-generated image URL", () => {
+    const parsed = vocabularyOutputSchema.safeParse(vocabularyOutput({ imageUrl: "https://images.example/notebook.jpg" }));
+
+    expect(parsed.success).toBe(false);
+  });
+
+  it("keeps image guidance optional", () => {
+    expect(vocabularyOutputSchema.safeParse(vocabularyOutput({})).success).toBe(true);
   });
 });

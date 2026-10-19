@@ -126,8 +126,8 @@ const vocabularyWordSchema = z.object({
   vietnamese: z.string().trim().min(1).max(200),
   definition: z.string().trim().min(1).max(300),
   partOfSpeech: z.enum(["noun", "verb", "adjective", "adverb", "preposition", "phrase"]),
-  imageUrl: z.string().url().max(1_000).optional()
-});
+  imageQuery: z.string().trim().min(2).max(200).optional()
+}).strict();
 
 export const vocabularyInputSchema = z.object({
   topic: z.string().trim().min(2).max(200),
@@ -154,7 +154,7 @@ export const vocabularyOutputJsonSchema = {
         required: ["id", "english", "vietnamese", "definition", "partOfSpeech"],
         properties: {
           id: { type: "string" }, english: { type: "string" }, vietnamese: { type: "string" },
-          definition: { type: "string" }, imageUrl: { type: "string" },
+          definition: { type: "string" }, imageQuery: { type: "string", minLength: 2, maxLength: 200 },
           partOfSpeech: { type: "string", enum: ["noun", "verb", "adjective", "adverb", "preposition", "phrase"] }
         }
       }

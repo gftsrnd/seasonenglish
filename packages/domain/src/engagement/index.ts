@@ -1,4 +1,4 @@
-import type { CefrLevel } from "@e4s/contracts";
+import type { CefrLevel, ContentImageAttribution } from "@e4s/contracts";
 
 export type GameKey = "scramble" | "crossword" | "eggs" | "mario" | "sort" | "typing";
 
@@ -7,6 +7,9 @@ export interface GameWord {
   english: string;
   vietnamese: string;
   partOfSpeech: string;
+  imageQuery?: string;
+  imageUrl?: string;
+  imageAttribution?: ContentImageAttribution;
 }
 
 export interface GameAnswer {
