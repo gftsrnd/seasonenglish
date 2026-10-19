@@ -47,5 +47,7 @@ services:
     buildCommand: pnpm install --frozen-lockfile && pnpm --filter @e4s/web build
     staticPublishPath: apps/web/dist
     envVars:
+      - key: SKIP_INSTALL_DEPS
+        value: "true"
       - key: VITE_API_BASE_URL
         value: https://e4s-api.onrender.com
