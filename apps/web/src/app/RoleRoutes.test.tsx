@@ -117,11 +117,11 @@ describe("RoleRoutes authorization boundary", () => {
     expect(screen.queryByRole("alert")).not.toBeInTheDocument();
   });
 
-  it("keeps Manager access to Operator routes", () => {
+  it("redirects Manager away from direct Operator routes", () => {
     renderRoute("/op/not-a-real-route", manager);
 
-    expect(screen.getByRole("alert")).toHaveTextContent("Đường dẫn vận hành không tồn tại.");
-    expect(screen.queryByText(/không có quyền/i)).not.toBeInTheDocument();
+    expect(screen.getByRole("status")).toHaveTextContent("Đang tải hiệu suất vận hành");
+    expect(screen.queryByText("Đường dẫn vận hành không tồn tại.")).not.toBeInTheDocument();
   });
 
   it("shows the existing not-found fallback for an unknown nested Manager route", () => {

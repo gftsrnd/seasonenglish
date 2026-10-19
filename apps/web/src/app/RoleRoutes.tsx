@@ -18,7 +18,7 @@ export function RoleRoutes({ session }: { session: SessionView }) {
   const managerArea = isRouteOrChild(pathname, "/mgr");
   const settingsArea = isRouteOrChild(pathname, "/settings");
   const rewardPreviewRoute = isRouteOrChild(pathname, "/reward/preview");
-  const managerRoute = managerRoutes.some((route) => route === pathname);
+  const managerRoute = managerRoutes.some((route) => route === pathname) || (role === "manager" && isKnownManagerInspectionRoute(pathname));
   if (!isSupportedRole(role)) return <AccessFallback home="/" message="Vai trò tài khoản này không được hỗ trợ. Vui lòng quay lại trang bắt đầu." />;
   if (role === "learner") {
     if (operatorRoute) return <AccessFallback home="/home" message="Tài khoản này không có quyền mở khu vực vận hành." />;
@@ -28,6 +28,9 @@ export function RoleRoutes({ session }: { session: SessionView }) {
   }
   if (pathname === "/" || pathname === "/home") return <Navigate replace to={role === "operator" ? "/op" : "/mgr"} />;
   if (role === "operator" && (managerArea || rewardPreviewRoute || (settingsArea && pathname !== "/settings"))) return <AccessFallback home="/op" message="Tài khoản này không có quyền mở khu vực quản lý." />;
+  if (role === "manager" && operatorRoute) {
+    return <Navigate replace to="/mgr/ops" state={{ accessNotice: "Quản lý chỉ xem dữ liệu vận hành trong khu vực kiểm tra riêng." }} />;
+  }
   if (pathname === "/settings" || managerRoute || (role === "manager" && pathname === "/reward/preview")) {
     return <RoleRouteLoadingBoundary label={loadingLabel(pathname)}><ManagerRouteController role={role} currentUserId={session.user.id} /></RoleRouteLoadingBoundary>;
   }
@@ -48,6 +51,11 @@ function OperatorRouteNotFound() {
 
 function isKnownOperatorRoute(pathname: string): boolean {
   return operatorRoutes.some((route) => route === pathname) || /^\/op\/lessons\/\d+\/(A1|A2|B1|B2|C1)$/.test(pathname);
+}
+
+function isKnownManagerInspectionRoute(pathname: string): boolean {
+  return ["/mgr/ops/levels", "/mgr/ops/weeks", "/mgr/ops/lessons", "/mgr/ops/review", "/mgr/ops/prompts", "/mgr/ops/level-forms"].includes(pathname)
+    || /^\/mgr\/ops\/lessons\/\d+\/(A1|A2|B1|B2|C1)$/.test(pathname);
 }
 
 function loadingLabel(pathname: string): string {
@@ -74,6 +82,6 @@ function isRouteOrChild(pathname: string, route: string): boolean {
   return pathname === route || pathname.startsWith(`${route}/`);
 }
 
-function AccessFallback({ message, home }: { message: string; home?: "/" | "/home" | "/op" }) {
+function AccessFallback({ message, home }: { message: string; home?: "/" | "/home" | "/op" | "/mgr/ops" }) {
   return <section className="empty"><div className="big" aria-hidden="true"><LockKeyhole size={32} strokeWidth={1.8} /></div><p role="alert">{message}</p>{home ? <Link className="btn" to={home}>Về trang chủ</Link> : null}</section>;
 }

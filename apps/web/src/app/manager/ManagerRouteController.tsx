@@ -14,6 +14,7 @@ import { ManagerRewardCertificate } from "./RewardCertificate.js";
 import { downloadText, PageTitle } from "./shared.js";
 import { useDialog, useModal } from "../shared/ModalProvider.js";
 import { autoSeasonTheme } from "../games/season-art.js";
+import { OperatorRouteController } from "../operator/OperatorRouteController.js";
 
 export type ManagerRouteControllerProps = { role: "manager" | "operator"; currentUserId: string };
 
@@ -41,6 +42,7 @@ export function ManagerRouteController({ role, currentUserId }: ManagerRouteCont
   return <Routes>
     <Route path="/mgr" element={role === "manager" ? <ProgressRoute /> : <Navigate replace to="/op" />} />
     <Route path="/mgr/ops" element={role === "manager" ? <OperationsRoute /> : <Navigate replace to="/op" />} />
+    <Route path="/mgr/ops/*" element={role === "manager" ? <OperatorRouteController basePath="/mgr/ops" session={{ role: "manager", user: { id: currentUserId, displayName: "Quản lý", email: null }, permissions: [] }} /> : <Navigate replace to="/op" />} />
     <Route path="/mgr/recovery" element={<Navigate replace to={role === "manager" ? "/settings" : "/op"} />} />
     <Route path="/mgr/reminders" element={role === "manager" ? <RemindersRoute /> : <Navigate replace to="/op" />} />
     <Route path="/mgr/report" element={role === "manager" ? <ReportRoute currentUserId={currentUserId} /> : <Navigate replace to="/op" />} />
@@ -178,16 +180,18 @@ export function MaintenanceConfirmationDialog({ confirmation, busy, onCancel, on
 }
 
 function OperationsRoute() {
+  const location = useLocation();
   const [view, setView] = useState<ManagerOperationsView>(); const [deleteRequests, setDeleteRequests] = useState<ManagerDeleteRequestsView>(); const [error, setError] = useState("");
+  const accessNotice = (location.state as { accessNotice?: string } | null)?.accessNotice;
   const load = async () => {
     setView(await apiClient.getManagerOperations());
     const requests = await apiClient.getManagerDeleteRequests().catch(() => undefined);
     if (requests) setDeleteRequests(requests);
   };
   useEffect(() => { void load().catch(() => setError("Không tải được hiệu suất vận hành.")); }, []);
-  if (!view) return <RouteState error={error} title="Hiệu suất vận hành" label="Đang tải hiệu suất vận hành" />;
+  if (!view) return <>{accessNotice ? <div className="banner info" role="status"><div className="body small">{accessNotice}</div></div> : null}<RouteState error={error} title="Hiệu suất vận hành" label="Đang tải hiệu suất vận hành" /></>;
   const deleteRequestCounts = deleteRequests?.requests.reduce<Record<string, number>>((counts, request) => { counts[request.requestedBy] = (counts[request.requestedBy] ?? 0) + 1; return counts; }, {});
-  return <>{error ? <div className="banner danger" role="alert"><div className="body small">{error}</div></div> : null}<ManagerOperations view={view} {...(deleteRequestCounts ? { deleteRequestCounts } : {})} /></>;
+  return <>{accessNotice ? <div className="banner info" role="status"><div className="body small">{accessNotice}</div></div> : null}{error ? <div className="banner danger" role="alert"><div className="body small">{error}</div></div> : null}<ManagerOperations view={view} {...(deleteRequestCounts ? { deleteRequestCounts } : {})} /></>;
 }
 
 function RemindersRoute() {

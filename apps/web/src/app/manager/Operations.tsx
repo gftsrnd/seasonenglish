@@ -5,8 +5,8 @@ import { Badge, OperationalCards, PageTitle, type ManagerOperationalProps } from
 export type ManagerOperationsProps = ManagerOperationalProps & { view: ManagerOperationsView; deleteRequestCounts?: Readonly<Record<string, number>> };
 
 const operatorLinks = [
-  ["/op", "Duyệt mức"], ["/op/weeks", "Chủ đề tuần"], ["/op/lessons", "Bài học"],
-  ["/op/review", "Đọc mẫu"], ["/op/prompts", "Prompt"], ["/op/levelforms", "Đề lên mức"]
+  ["/mgr/ops/levels", "Duyệt mức"], ["/mgr/ops/weeks", "Chủ đề tuần"], ["/mgr/ops/lessons", "Bài học"],
+  ["/mgr/ops/review", "Đọc mẫu"], ["/mgr/ops/prompts", "Prompt"], ["/mgr/ops/level-forms", "Đề lên mức"]
 ] as const;
 
 export function ManagerOperations({ view, deleteRequestCounts, ...operational }: ManagerOperationsProps) {

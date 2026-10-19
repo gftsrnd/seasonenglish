@@ -39,6 +39,17 @@ describe("OperatorRouteController", () => {
     expect(screen.getByRole("textbox", { name: "Quy tắc chung (mọi lời gọi trừ sinh bài siêu ngắn)" })).toHaveAttribute("readonly");
   });
 
+  it("renders Manager inspection routes under the Manager-owned path", async () => {
+    const client = { getContentPrompts: vi.fn().mockResolvedValue({ groups: [
+      { key: "system_rules", label: "Quy tắc chung", content: "current", defaultContent: "default", version: 1, status: "active" }
+    ] }), saveContentPrompts: vi.fn() };
+    render(<MemoryRouter initialEntries={["/mgr/ops/prompts"]}><OperatorRouteController session={manager} client={client as any} basePath="/mgr/ops" /></MemoryRouter>);
+
+    expect(await screen.findByRole("heading", { name: "Prompt & rubric" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Lưu prompt" })).toBeDisabled();
+    expect(client.saveContentPrompts).not.toHaveBeenCalled();
+  });
+
   it("disables dashboard actions whose backend endpoint is absent and explains why", async () => {
     const client = { getAssessmentReviewOverview: vi.fn().mockResolvedValue({
       pendingAssessments: [{ attemptId: "a1", learnerId: "u1", learnerName: "Lan", kind: "placement", title: "Đầu vào", submittedAt: "2026-10-14", sectionScores: { listening: 70 }, suggestedLevel: "A2" }],

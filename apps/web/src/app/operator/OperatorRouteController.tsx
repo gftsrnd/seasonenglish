@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { createContext, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useLocation, useNavigate } from "react-router";
 import "./styles.css";
 import type {
@@ -35,6 +35,18 @@ import type { Cefr, PromptKey, ReviewTab, WeekSuggestion } from "./types.js";
 
 export type OperatorApiClient = typeof apiClient;
 
+type OperatorRoutePaths = {
+  root: string;
+  levelForms: string;
+  weeks: string;
+  lessons: string;
+  review: string;
+  prompts: string;
+};
+
+const defaultOperatorRoutePaths = routePathsFor("/op");
+const OperatorRoutePathsContext = createContext<OperatorRoutePaths>(defaultOperatorRoutePaths);
+
 const unavailable = (feature: string) => `API hiện chưa cung cấp ${feature}.`;
 const reviewToApi: Record<ReviewTab, ContentReviewTabKey> = { subs: "submissions", coach: "coach", micro: "micro", appeals: "appeals", attempts: "attempts", tests: "assessments" };
 const promptToApi: Record<PromptKey, ContentPromptKey> = { base: "system_rules", placement: "assessment_scoring", lesson: "weekly_lessons", weeks: "week_suggestions", mgrade: "micro_grading", coach: "coach_dialogue", grade: "weekly_practice_grading" };
@@ -67,23 +79,43 @@ function formatOperatorCertificate(certificate: { type: string; result: string; 
   return [name, certificate.result, certificate.year ? `(${certificate.year})` : ""].filter(Boolean).join(" ");
 }
 
-export function OperatorRouteController({ session, client = apiClient }: { session: SessionView; client?: OperatorApiClient }) {
-  return <ModalProvider><OperatorRouteControllerContent session={session} client={client} /></ModalProvider>;
+export function OperatorRouteController({ session, client = apiClient, basePath = "/op" }: { session: SessionView; client?: OperatorApiClient; basePath?: "/op" | "/mgr/ops" }) {
+  const paths = routePathsFor(basePath);
+  return <ModalProvider><OperatorRoutePathsContext.Provider value={paths}><OperatorRouteControllerContent session={session} client={client} paths={paths} /></OperatorRoutePathsContext.Provider></ModalProvider>;
 }
 
-function OperatorRouteControllerContent({ session, client }: { session: SessionView; client: OperatorApiClient }) {
+function OperatorRouteControllerContent({ session, client, paths }: { session: SessionView; client: OperatorApiClient; paths: OperatorRoutePaths }) {
   const location = useLocation();
   if (session.role !== "operator" && session.role !== "manager") return <Status tone="error">Tài khoản này không có quyền mở khu vực vận hành.</Status>;
   const props = { client, readOnly: session.role === "manager" };
-  const detail = location.pathname.match(/^\/op\/lessons\/(\d+)\/(A1|A2|B1|B2|C1)$/);
+  const detail = location.pathname.match(new RegExp(`^${escapeRegExp(paths.lessons)}/(\\d+)/(A1|A2|B1|B2|C1)$`));
   if (detail) return <LessonSetRoute {...props} week={Number(detail[1])} cefr={detail[2] as Cefr} />;
-  if (location.pathname === "/op") return <DashboardRoute {...props} />;
-  if (location.pathname === "/op/levelforms") return <LevelFormsRoute {...props} />;
-  if (location.pathname === "/op/weeks") return <WeeksRoute {...props} />;
-  if (location.pathname === "/op/lessons") return <LessonsRoute {...props} />;
-  if (location.pathname === "/op/review") return <ReviewRoute {...props} />;
-  if (location.pathname === "/op/prompts") return <PromptsRoute {...props} />;
+  if (location.pathname === paths.root) return <DashboardRoute {...props} />;
+  if (location.pathname === paths.levelForms) return <LevelFormsRoute {...props} />;
+  if (location.pathname === paths.weeks) return <WeeksRoute {...props} />;
+  if (location.pathname === paths.lessons) return <LessonsRoute {...props} />;
+  if (location.pathname === paths.review) return <ReviewRoute {...props} />;
+  if (location.pathname === paths.prompts) return <PromptsRoute {...props} />;
   return <Status tone="error">Đường dẫn vận hành không tồn tại.</Status>;
+}
+
+function routePathsFor(basePath: "/op" | "/mgr/ops"): OperatorRoutePaths {
+  return {
+    root: basePath === "/op" ? basePath : `${basePath}/levels`,
+    levelForms: basePath === "/op" ? `${basePath}/levelforms` : `${basePath}/level-forms`,
+    weeks: `${basePath}/weeks`,
+    lessons: `${basePath}/lessons`,
+    review: `${basePath}/review`,
+    prompts: `${basePath}/prompts`
+  };
+}
+
+function useOperatorRoutePaths(): OperatorRoutePaths {
+  return useContext(OperatorRoutePathsContext);
+}
+
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
 function Status({ children, tone = "loading" }: { children: ReactNode; tone?: "loading" | "error" }) {
@@ -99,6 +131,7 @@ function useCapabilities(client: OperatorApiClient) {
 function DashboardRoute({ client, readOnly }: { client: OperatorApiClient; readOnly: boolean }) {
   const modal = useModal();
   const navigate = useNavigate();
+  const paths = useOperatorRoutePaths();
   const [data, setData] = useState<AssessmentReviewOverviewView>();
   const [weekFrame, setWeekFrame] = useState<ContentWeekFrameView>();
   const [error, setError] = useState<string>();
@@ -185,7 +218,7 @@ function DashboardRoute({ client, readOnly }: { client: OperatorApiClient; readO
     onRejectLevelRequest: id => { if (typeof client.decideAssessment !== "function") return; void modal.prompt({ title: "Từ chối yêu cầu lên mức", message: "Học viên sẽ nhìn thấy nội dung này.", label: "Lý do từ chối", confirmLabel: "Từ chối", tone: "danger" }).then(reason => { if (reason?.trim()) refresh(client.decideAssessment(id, { status: "needs_retry", reason: reason.trim() })); }); },
     onViewTest: showAttempt, onRescore: rescore, onDeleteLearner: id => requestDeletion(learnerIdFor(id)), onViewChallenge: showChallenge,
     onDemote: id => changeLevel(id, "recommend_lower"), onChangeLevel: id => changeLevel(id, "scheduled"), onEditGoal: editGoal, onViewProfile: showProfile, onSetLevelDirect: id => changeLevel(id, "direct"),
-    onOpenAppeals: () => navigate("/op/review", { state: { reviewTab: "appeals" } }), onOpenSettings: () => navigate("/settings"), onOpenWeeks: () => navigate("/op/weeks"), onOpenLevelForms: () => navigate("/op/levelforms")
+    onOpenAppeals: () => navigate(paths.review, { state: { reviewTab: "appeals" } }), onOpenSettings: () => navigate("/settings"), onOpenWeeks: () => navigate(paths.weeks), onOpenLevelForms: () => navigate(paths.levelForms)
   }} />
   {assessmentDialog && <OperatorReviewAssessmentDetail detail={assessmentDialog} onClose={() => setAssessmentDialog(undefined)} />}
   {dialog && <OperatorDashboardDialog dialog={dialog} onClose={() => setDialog(undefined)} />}
@@ -286,6 +319,7 @@ function OperatorChallengeEvidence({ detail }: { detail: AssessmentReviewChallen
 function LevelFormsRoute({ client, readOnly }: { client: OperatorApiClient; readOnly: boolean }) {
   const modal = useModal();
   const navigate = useNavigate();
+  const paths = useOperatorRoutePaths();
   const [data, setData] = useState<AssessmentLevelFormSlotView[]>();
   const [generating, setGenerating] = useState<Cefr | null>(null);
   const [error, setError] = useState<string>();
@@ -305,7 +339,7 @@ function LevelFormsRoute({ client, readOnly }: { client: OperatorApiClient; read
     void client.getAssessmentLevelForm(versionId).then(setDialog).catch(reason => setError(message(reason)));
   };
   return <><OperatorLevelForms readOnly={readOnly} unavailable={missing} view={adaptLevelForms(data, { aiConnected: capabilities?.ai ?? false, generatingTarget: generating })} actions={{
-    onBack: () => navigate("/op"), onOpenSettings: () => navigate("/settings"),
+    onBack: () => navigate(paths.root), onOpenSettings: () => navigate("/settings"),
     onGenerate: target => { setGenerating(target); refresh(client.generateAssessmentLevelForm(target as Exclude<CefrLevel, "A1">)); },
     onApprove: id => refresh(client.publishAssessmentLevelForm(id)), onView: show,
     onDelete: id => { if (typeof client.deleteAssessmentLevelForm !== "function") return; void modal.confirm({ title: "Xoá bản nháp đề thi?", message: "Bản nháp này sẽ bị xoá khỏi danh sách đề lên mức.", confirmLabel: "Xoá bản nháp", tone: "danger" }).then(confirmed => { if (confirmed) refresh(client.deleteAssessmentLevelForm(id)); }); }
@@ -314,6 +348,7 @@ function LevelFormsRoute({ client, readOnly }: { client: OperatorApiClient; read
 
 function WeeksRoute({ client, readOnly }: { client: OperatorApiClient; readOnly: boolean }) {
   const navigate = useNavigate();
+  const paths = useOperatorRoutePaths();
   const [data, setData] = useState<ContentWeekFrameView>();
   const [suggestions, setSuggestions] = useState<Record<number, WeekSuggestion>>({});
   const [status, setStatus] = useState("");
@@ -339,12 +374,13 @@ function WeeksRoute({ client, readOnly }: { client: OperatorApiClient; readOnly:
       };
     }),
     onConfirmSuggestion: (weekNumber, index) => { const suggestion = suggestions[weekNumber]; if (suggestion?.state !== "options") return; const option = suggestion.options[index]; if (!option) return; const updated = { ...data, weeks: data.weeks.map(week => week.weekNumber === weekNumber ? { ...week, topic: option.topic, description: option.description, objectives: option.objectives, keyVocabHint: option.keyVocabHint } : week) }; setData(updated); setSuggestions(current => ({ ...current, [weekNumber]: { state: "confirmed", topic: option.topic, levels: suggestion.levels, options: suggestion.options } })); save(updated); },
-    onChangeWeek: (weekNumber, patch) => setData(current => current ? { ...current, weeks: current.weeks.map(week => week.weekNumber === weekNumber ? { ...week, ...patch } : week) } : current), onSave: () => save(), onOpenLessons: () => navigate("/op/lessons")
+    onChangeWeek: (weekNumber, patch) => setData(current => current ? { ...current, weeks: current.weeks.map(week => week.weekNumber === weekNumber ? { ...week, ...patch } : week) } : current), onSave: () => save(), onOpenLessons: () => navigate(paths.lessons)
   }} />;
 }
 
 function LessonsRoute({ client, readOnly }: { client: OperatorApiClient; readOnly: boolean }) {
   const navigate = useNavigate();
+  const paths = useOperatorRoutePaths();
   const [data, setData] = useState<ContentLessonMatrixView>();
   const [extraLevels, setExtraLevels] = useState<Cefr[]>([]);
   const [generating, setGenerating] = useState<{ week: number; cefr: Cefr; message?: string } | null>(null);
@@ -353,7 +389,7 @@ function LessonsRoute({ client, readOnly }: { client: OperatorApiClient; readOnl
   useEffect(() => { void client.getContentLessonMatrix().then(setData).catch(reason => setError(message(reason))); }, [client]);
   if (error) return <Status tone="error">Không tải được ma trận bài học: {error}</Status>;
   if (!data) return <Status>Đang tải ma trận bài học…</Status>;
-  const open = (week: number, cefr: Cefr) => navigate(`/op/lessons/${week}/${cefr}`);
+  const open = (week: number, cefr: Cefr) => navigate(`${paths.lessons}/${week}/${cefr}`);
   const produce = (week: number, cefr: Cefr, promise: Promise<ContentLessonSetVersionView>) => { setGenerating({ week, cefr, message: "Đang chuẩn bị bộ 5 bài…" }); void promise.then(() => open(week, cefr)).catch(reason => setError(message(reason))).finally(() => setGenerating(null)); };
   const extended = { ...data, levels: [...data.levels, ...extraLevels.filter(level => !data.levels.some(item => item.cefr === level)).map(cefr => ({ cefr, learnerCount: 0 }))] };
   return <OperatorLessons readOnly={readOnly} view={adaptLessonMatrix(extended, { aiConnected: capabilities?.ai ?? false, extraLevels: (["A1", "A2", "B1", "B2", "C1"] as Cefr[]).filter(level => !extended.levels.some(item => item.cefr === level)), generating })} actions={{
@@ -364,6 +400,7 @@ function LessonsRoute({ client, readOnly }: { client: OperatorApiClient; readOnl
 function LessonSetRoute({ client, readOnly, week, cefr }: { client: OperatorApiClient; readOnly: boolean; week: number; cefr: Cefr }) {
   const modal = useModal();
   const navigate = useNavigate();
+  const paths = useOperatorRoutePaths();
   const [data, setData] = useState<ContentLessonSetVersionView>();
   const [error, setError] = useState<string>();
   const [busy, setBusy] = useState(false);
@@ -384,13 +421,13 @@ function LessonSetRoute({ client, readOnly, week, cefr }: { client: OperatorApiC
     const lesson = data.lessons.find(candidate => candidate.id === id);
     if (lesson && await modal.confirm({ title: `Xoá ${lesson.title}?`, message: "Bài học sẽ bị xoá khỏi bộ bài nháp.", confirmLabel: "Xoá bài", tone: "danger" })) mutate(client.deleteContentLessonDay(week, cefr, lesson.dayNumber, data.version));
   };
-  const deleteSet = async () => { if (await modal.confirm({ title: "Xoá toàn bộ bộ bài nháp?", message: `Toàn bộ bài tuần ${week} · ${cefr} sẽ bị xoá.`, confirmLabel: "Xoá bộ bài", tone: "danger" })) { setBusy(true); void client.deleteContentLessonDraftSet(week, cefr).then(() => navigate("/op/lessons")).catch(reason => setError(message(reason))).finally(() => setBusy(false)); } };
+  const deleteSet = async () => { if (await modal.confirm({ title: "Xoá toàn bộ bộ bài nháp?", message: `Toàn bộ bài tuần ${week} · ${cefr} sẽ bị xoá.`, confirmLabel: "Xoá bộ bài", tone: "danger" })) { setBusy(true); void client.deleteContentLessonDraftSet(week, cefr).then(() => navigate(paths.lessons)).catch(reason => setError(message(reason))).finally(() => setBusy(false)); } };
   const unavailableSet = {
     ...(typeof client.fillContentLessonPhrases !== "function" ? { fillPhrases: unavailable("endpoint bổ sung cụm từ cho bộ bài") } : {}),
     ...(typeof client.enrichContentLessonDraft !== "function" ? { enrich: unavailable("endpoint bổ sung chi tiết cho bộ bài") } : {})
   };
   return <><OperatorLessonSet readOnly={readOnly} unavailable={unavailableSet} view={adaptLessonSet(data, { aiConnected: capabilities?.ai ?? false, mutationState: busy ? "loading" : "idle" })} actions={{
-    onBack: () => navigate("/op/lessons"), onApprove: publish, onUnapprove: () => mutate(client.retireContentLessonSet(data.versionId)), onRegenerate: () => mutate(client.generateContentLessonDraft(week, cefr)), onDeleteSet: deleteSet,
+    onBack: () => navigate(paths.lessons), onApprove: publish, onUnapprove: () => mutate(client.retireContentLessonSet(data.versionId)), onRegenerate: () => mutate(client.generateContentLessonDraft(week, cefr)), onDeleteSet: deleteSet,
     onFillPhrases: () => { if (typeof client.fillContentLessonPhrases === "function") mutate(client.fillContentLessonPhrases(week, cefr, data.version)); },
     onEnrich: () => { if (typeof client.enrichContentLessonDraft === "function") mutate(client.enrichContentLessonDraft(week, cefr, data.version)); },
     onEditLesson: id => openEditor(0, id), onDeleteLesson: deleteLesson, onComposeDay: openEditor

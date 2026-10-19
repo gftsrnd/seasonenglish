@@ -7,6 +7,7 @@ import type { ReactElement } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { ManagerLearnerProfileView, ManagerOperationsView, ManagerProgressView, ManagerProviderSettingsView, ManagerReportView, ManagerSettingsView, ProductPreferencesView, SystemCapabilitiesView } from "@e4s/contracts";
 import { managerApiClient as apiClient } from "../../api/manager.js";
+import { operatorApiClient } from "../../api/operator.js";
 import { MaintenanceConfirmationDialog, ManagerRouteController, PurgeConfirmationDialog } from "./ManagerRouteController.js";
 import { RoleRoutes } from "../RoleRoutes.js";
 import { ModalProvider } from "../shared/ModalProvider.js";
@@ -56,6 +57,26 @@ describe("ManagerRouteController", () => {
     expect(apiClient.getManagerOperations).toHaveBeenCalledOnce();
     expect(screen.getByText("1/2 bộ đã duyệt")).toBeInTheDocument();
     expect(screen.queryByRole("heading", { name: /^Mã PIN/ })).not.toBeInTheDocument();
+  });
+
+  it("mounts the read-only operations inspection inside Manager routes", async () => {
+    vi.spyOn(operatorApiClient, "getContentPrompts").mockResolvedValue({ groups: [
+      { key: "system_rules", label: "Quy tắc chung", content: "current", defaultContent: "default", version: 1, status: "active" }
+    ] });
+    const save = vi.spyOn(operatorApiClient, "saveContentPrompts");
+
+    renderManager(<MemoryRouter initialEntries={["/mgr/ops/prompts"]}><ManagerRouteController role="manager" currentUserId="manager-1" /></MemoryRouter>);
+
+    expect(await screen.findByRole("heading", { name: "Prompt & rubric" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Lưu prompt" })).toBeDisabled();
+    expect(save).not.toHaveBeenCalled();
+  });
+
+  it("explains why a direct Operator URL was redirected to Manager operations", async () => {
+    vi.spyOn(apiClient, "getManagerOperations").mockResolvedValue(operations);
+    renderManager(<MemoryRouter initialEntries={[{ pathname: "/mgr/ops", state: { accessNotice: "Quản lý chỉ xem dữ liệu vận hành trong khu vực kiểm tra riêng." } }]}><ManagerRouteController role="manager" currentUserId="manager-1" /></MemoryRouter>);
+
+    expect(await screen.findByRole("status")).toHaveTextContent("Quản lý chỉ xem dữ liệu vận hành trong khu vực kiểm tra riêng.");
   });
 
   it("opens the real learner quick-view and shows Manager operational queues", async () => {

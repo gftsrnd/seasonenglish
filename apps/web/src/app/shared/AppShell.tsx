@@ -109,7 +109,7 @@ export function AppShell({ session, children, onLogout, onAvatarClick, organisat
       return location.pathname === "/mgr" || (location.pathname.startsWith("/mgr/") && !items.some((item) => item.to !== "/mgr" && matchesPath(location.pathname, item.to)));
     }
     if (to === "/op" || to === "/mgr") return location.pathname === to;
-    if (to === "/mgr/ops") return location.pathname.startsWith(to) || location.pathname.startsWith("/op");
+    if (to === "/mgr/ops") return location.pathname.startsWith(to);
     return location.pathname.startsWith(to);
   };
   const links = (mobile = false) => items.map((item) => <Link className={active(item.to) ? "active" : ""} key={item.to} to={item.to} aria-current={active(item.to) ? "page" : undefined}>{mobile ? <span className="ico">{item.icon}</span> : null}{item.label}</Link>);
@@ -147,7 +147,7 @@ export function AppShell({ session, children, onLogout, onAvatarClick, organisat
         <span role="status" aria-label="Trạng thái đăng xuất" aria-live="polite" style={visuallyHiddenStyle}>{logoutPending ? "Đang đăng xuất…" : ""}</span>
       </div>
     </header>
-    <main>{role === "manager" && location.pathname.startsWith("/op") ? <ManagerOperatorPreview /> : null}{children}</main>
+    <main>{children}</main>
     <nav className="bottomnav" aria-label="Điều hướng trên thiết bị di động">{links(true)}</nav>
     <div id="toast" />
     <div id="saved" aria-live="polite">✓ Đã lưu</div>
@@ -166,12 +166,6 @@ function clearSharedDeviceState() {
     }
   }
   document.body.classList.remove("app-modal-open");
-}
-
-function ManagerOperatorPreview() {
-  const location = useLocation();
-  const links = [["/op", "Duyệt mức"], ["/op/weeks", "Chủ đề tuần"], ["/op/lessons", "Bài học"], ["/op/review", "Đọc mẫu"], ["/op/prompts", "Prompt"], ["/op/levelforms", "Đề lên mức"]] as const;
-  return <div className="banner info" style={{ marginBottom: 12 }}><div className="body small"><b>Chế độ xem của Quản lý</b> – bạn thấy đúng màn hình của Người vận hành nhưng không thao tác được. <span className="row" style={{ gap: 6, marginTop: 6 }}><Link className="btn btn-sm" to="/mgr/ops">← Hiệu suất vận hành</Link>{links.map(([to, label]) => <Link className={`btn btn-sm ${(to === "/op" ? location.pathname === to : location.pathname.startsWith(to)) ? "btn-primary" : ""}`} key={to} to={to}>{label}</Link>)}</span></div></div>;
 }
 
 export function AudioControls() {

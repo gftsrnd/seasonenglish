@@ -80,14 +80,14 @@ describe("new Manager app branch", () => {
     render(<ManagerOperations view={operations} deleteRequestCounts={{ "op-1": 2 }} />);
     expect(screen.getByText("Bạn thấy đúng những gì vận hành thấy, ở chế độ chỉ xem.")).toBeInTheDocument();
     expect(screen.getByRole("navigation", { name: "Màn hình vận hành (chỉ xem)" })).toHaveAttribute("data-read-only-preview", "true");
-    expect(screen.getByRole("link", { name: "Chủ đề tuần" })).toHaveAttribute("href", "/op/weeks");
-    expect(screen.getByRole("link", { name: "Prompt" })).toHaveAttribute("href", "/op/prompts");
+    expect(screen.getByRole("link", { name: "Chủ đề tuần" })).toHaveAttribute("href", "/mgr/ops/weeks");
+    expect(screen.getByRole("link", { name: "Prompt" })).toHaveAttribute("href", "/mgr/ops/prompts");
     expect(screen.getByRole("heading", { name: "Bộ bài đã sẵn sàng đến tuần 1" })).toBeInTheDocument();
     expect(screen.getByText("1/2 bộ đã duyệt")).toBeInTheDocument();
     expect(screen.getByText(/Tuần 1 · B1 \(chưa sinh\)/)).toBeInTheDocument();
     expect(screen.getByText(/1 bộ bài cũ chưa có thông tin người soạn/)).toBeInTheDocument();
     expect(screen.getByText("Yêu cầu xoá tài khoản đã gửi").parentElement).toHaveTextContent("2");
-    expect(screen.getByRole("link", { name: "Đề lên mức" })).toHaveAttribute("href", "/op/levelforms");
+    expect(screen.getByRole("link", { name: "Đề lên mức" })).toHaveAttribute("href", "/mgr/ops/level-forms");
   });
 
   it("keeps the operations introduction concise while retaining both metrics", () => {
