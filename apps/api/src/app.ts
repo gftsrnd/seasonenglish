@@ -26,6 +26,11 @@ export interface BuildApiOptions {
   storage?: ObjectStorage;
   /** Enables destructive demo maintenance only for an explicitly local/test process. */
   maintenanceEnabled?: boolean;
+  /** Reports image-provider readiness without exposing credentials to the browser. */
+  imageProviders?: {
+    pexels: boolean;
+    pixabay: boolean;
+  };
 }
 
 export function buildApi(options: BuildApiOptions): FastifyInstance {
@@ -46,7 +51,7 @@ export function buildApi(options: BuildApiOptions): FastifyInstance {
   registerNotificationRoutes(app, options.pool);
   registerCoachRoutes(app, options.pool, options.aiRunner);
   registerEngagementRoutes(app, options.pool, options.aiRunner);
-  registerSystemRoutes(app, options.pool, options.storage, Boolean(options.aiRunner), maintenanceEnabled);
+  registerSystemRoutes(app, options.pool, options.storage, Boolean(options.aiRunner), maintenanceEnabled, options.imageProviders);
   if (options.storage) {
     void app.register(multipart, { limits: { files: 1, fileSize: 20 * 1024 * 1024 } });
     registerFileRoutes(app, options.pool, options.storage);

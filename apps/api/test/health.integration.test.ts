@@ -19,7 +19,8 @@ describe("local service health", () => {
     pool,
     storage,
     secureCookies: false,
-    aiRunner: { runTask: vi.fn() }
+    aiRunner: { runTask: vi.fn() },
+    imageProviders: { pexels: true, pixabay: false }
   });
   let managerCookie = "";
 
@@ -70,10 +71,12 @@ describe("local service health", () => {
       database: true,
       ai: true,
       objectStorage: true,
-      maintenance: false
+      maintenance: false,
+      imageProviders: { pexels: true, pixabay: false }
     });
     expect(capabilities.body).not.toContain("manager-pass");
     expect(capabilities.body).not.toContain("e4s_test_password");
+    expect(capabilities.body).not.toContain("PEXELS_API_KEY");
   });
 
   it("marks MinIO unavailable when its evidence bucket probe fails", async () => {

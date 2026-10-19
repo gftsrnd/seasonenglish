@@ -21,6 +21,10 @@ const app = buildApi({
   pool,
   secureCookies: process.env.COOKIE_SECURE === "true",
   maintenanceEnabled: process.env.E4S_ENABLE_MAINTENANCE === "true" && process.env.NODE_ENV !== "production",
+  imageProviders: {
+    pexels: Boolean(process.env.PEXELS_API_KEY?.trim()),
+    pixabay: Boolean(process.env.PIXABAY_API_KEY?.trim())
+  },
   ...(storage ? { storage } : {}),
   ...(aiRunner ? { aiRunner } : {})
 });

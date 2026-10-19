@@ -442,7 +442,7 @@ const operations: ManagerOperationsView = {
   readiness: { requiredSets: 2, readySets: 1, missing: [{ week: 1, cefr: "B1", state: "missing" }], orphanLegacySets: 0 }, operators: []
 };
 const product: ProductPreferencesView = { theme: "auto", vocabImageSource: "wikimedia" };
-const capabilities: SystemCapabilitiesView = { api: true, database: true, ai: true, objectStorage: true };
+const capabilities: SystemCapabilitiesView = { api: true, database: true, ai: true, objectStorage: true, imageProviders: { pexels: false, pixabay: false } };
 const managerProgress: ManagerProgressView = {
   organizationName: "GFT", currentWeek: 1, pilotWeeks: 2,
   summary: { learnerCount: 1, activeLearnersThisWeek: 1, completedLessons: 4, pendingAssessments: 0, completedLearners: 0, comparableLearners: 0, improvedLearners: 0, surveyCount: 0, satisfactionAverage: null },

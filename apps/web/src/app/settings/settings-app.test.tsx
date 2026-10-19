@@ -18,7 +18,13 @@ const manager: ManagerSettingsView = {
   backgroundMusic: { enabled: true, url: "", volume: 22 }, baseWebhookUrl: "", baseWebhookTemplate: "{\"base_content\":\"{message}\"}"
 };
 const product: ProductPreferencesView = { theme: "auto", vocabImageSource: "wikimedia" };
-const capabilities: SystemCapabilitiesView = { api: true, database: true, ai: true, objectStorage: true };
+const capabilities: SystemCapabilitiesView = {
+  api: true,
+  database: true,
+  ai: true,
+  objectStorage: true,
+  imageProviders: { pexels: true, pixabay: false }
+};
 
 describe("new Settings app branch", () => {
   it("keeps the Settings title on the shared page-title layout", () => {
@@ -43,6 +49,9 @@ describe("new Settings app branch", () => {
     expect(screen.getByText(/Mỗi phần tính giờ riêng; hết giờ tự nộp/)).toBeInTheDocument();
     expect(screen.getByText(/Đổi màu và icon; không đổi bố cục, nội dung, dữ liệu/)).toBeInTheDocument();
     expect(screen.getByText(/Ảnh miễn phí theo từ tiếng Anh, không dùng AI/)).toBeInTheDocument();
+    expect(screen.getByText("Pexels: đã cấu hình")).toBeInTheDocument();
+    expect(screen.getByText("Pixabay: chưa cấu hình")).toBeInTheDocument();
+    expect(screen.getByText("Openverse/Wikimedia: không cần API key")).toBeInTheDocument();
   });
 
   it("uses semantic Lucide marks for seasonal controls", () => {

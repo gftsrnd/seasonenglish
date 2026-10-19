@@ -401,6 +401,11 @@ export interface SystemCapabilitiesView {
   readonly database: true;
   readonly ai: boolean;
   readonly objectStorage: boolean;
+  /** Only configuration readiness is exposed; provider credentials never leave the API. */
+  readonly imageProviders: {
+    readonly pexels: boolean;
+    readonly pixabay: boolean;
+  };
   /** Demo seed/wipe are available only when the API explicitly enables local maintenance. */
   readonly maintenance?: boolean;
 }

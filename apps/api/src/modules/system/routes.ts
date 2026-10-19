@@ -5,7 +5,14 @@ import { z } from "zod";
 import { EVIDENCE_BUCKET } from "../files/constants.js";
 import { createRoleGuard } from "../identity/policy.js";
 
-export function registerSystemRoutes(app: FastifyInstance, pool: Pool, storage?: ObjectStorage, aiAvailable = false, maintenanceEnabled = false): void {
+export function registerSystemRoutes(
+  app: FastifyInstance,
+  pool: Pool,
+  storage?: ObjectStorage,
+  aiAvailable = false,
+  maintenanceEnabled = false,
+  imageProviders = { pexels: false, pixabay: false }
+): void {
   const authenticated = createRoleGuard(pool, ["learner", "operator", "manager"]);
   const managerOnly = createRoleGuard(pool, ["manager"]);
   app.get("/api/health", async () => ({ status: "ok" }));
@@ -51,7 +58,8 @@ export function registerSystemRoutes(app: FastifyInstance, pool: Pool, storage?:
       database: true,
       ai: aiAvailable,
       objectStorage: await objectStorageAvailable(storage),
-      maintenance: maintenanceEnabled
+      maintenance: maintenanceEnabled,
+      imageProviders
     } as const;
   });
 
