@@ -9,6 +9,11 @@ const databaseUrl = process.env.TEST_DATABASE_URL
   ?? "postgres://e4s:e4s_test_password@127.0.0.1:55432/e4s_test";
 const deleteRequestId = "00000000-0000-4000-8000-000000000901";
 const purgeAccountId = "00000000-0000-4000-8000-000000000902";
+const purgeSessionId = "00000000-0000-4000-8000-000000000905";
+const purgeEnrollmentId = "00000000-0000-4000-8000-000000000906";
+const purgeReminderId = "00000000-0000-4000-8000-000000000907";
+const purgeActivityId = "00000000-0000-4000-8000-000000000908";
+const purgeFileId = "00000000-0000-4000-8000-000000000909";
 
 describe("complete Manager learner and account operations API", () => {
   const pool = new Pool({ connectionString: databaseUrl });
@@ -34,9 +39,39 @@ describe("complete Manager learner and account operations API", () => {
           JSON.stringify({ status: "pending", reason: "Yêu cầu xoá từ người học", requestedBy: DEMO_IDS.operator }), "00000000-0000-4000-8000-000000000904"]
       );
       await client.query(
-        `insert into users (id, organization_id, role, display_name, email, status)
-         values ($1, $2, 'learner', 'Tài khoản chờ xoá', 'purge@e4s.local', 'deleted')`,
+        `insert into users (id, organization_id, role, display_name, email, avatar, status)
+         values ($1, $2, 'learner', 'Tài khoản chờ xoá', 'purge@e4s.local', '{"color":"rose","acc":"star","bg":2}'::jsonb, 'deleted')`,
         [purgeAccountId, DEMO_IDS.organization]
+      );
+      await client.query("insert into user_credentials (user_id, credential_hash) values ($1, $2)", [purgeAccountId, await createCredentialHash("purge-pass")]);
+      await client.query(
+        "insert into sessions (id, user_id, token_hash, expires_at) values ($1, $2, 'purge-session-token', now() + interval '1 day')",
+        [purgeSessionId, purgeAccountId]
+      );
+      await client.query(
+        `insert into learner_profiles (user_id, profile, completed_at)
+         values ($1, '{"fullName":"Nguyễn Văn Test","contact":"base-user","concerns":"Thông tin riêng"}'::jsonb, now())`,
+        [purgeAccountId]
+      );
+      await client.query(
+        `insert into enrollments (id, program_id, learner_id, cefr, cefr_approved)
+         select $1, id, $2, 'A2', true from programs where organization_id = $3 order by start_date desc limit 1`,
+        [purgeEnrollmentId, purgeAccountId, DEMO_IDS.organization]
+      );
+      await client.query(
+        `insert into reminders (id, learner_id, reason, message, status, created_by)
+         values ($1, $2, 'Có email purge@e4s.local', 'Chào Nguyễn Văn Test', 'queued', $3)`,
+        [purgeReminderId, purgeAccountId, DEMO_IDS.manager]
+      );
+      await client.query(
+        `insert into activities (id, learner_id, activity_type, reference_type, minutes, evidence)
+         values ($1, $2, 'lesson', 'lesson', 10, '{"freeText":"Nguyễn Văn Test"}'::jsonb)`,
+        [purgeActivityId, purgeAccountId]
+      );
+      await client.query(
+        `insert into files (id, organization_id, owner_user_id, purpose, bucket, object_key, mime_type, size_bytes, sha256)
+         values ($1, $2, $3, 'assessment_audio', 'e4s-evidence', 'assessment-audio/purge/private.webm', 'audio/webm', 12, 'purge-sha')`,
+        [purgeFileId, DEMO_IDS.organization, purgeAccountId]
       );
     } finally { client.release(); }
     await app.ready();
@@ -67,7 +102,7 @@ describe("complete Manager learner and account operations API", () => {
     expect(operatorRequests.statusCode).toBe(403);
   });
 
-  it("lets a Manager decide a deletion request, restore the trash item, and purge an empty tombstone", async () => {
+  it("lets a Manager restore trash and anonymize a deleted account without breaking history", async () => {
     const requests = await app.inject({ method: "GET", url: "/api/v1/manager/delete-requests", headers: { cookie: managerCookie } });
     expect(requests.statusCode, requests.body).toBe(200);
     expect(requests.json()).toMatchObject({ requests: [expect.objectContaining({ id: deleteRequestId, status: "pending", learnerId: DEMO_IDS.learner })] });
@@ -110,7 +145,18 @@ describe("complete Manager learner and account operations API", () => {
     });
     expect(purged.statusCode, purged.body).toBe(204);
     await expect(pool.query("select used_at from manager_destructive_confirmations where target_id = $1", [purgeAccountId])).resolves.toMatchObject({ rows: [expect.objectContaining({ used_at: expect.anything() })] });
-    await expect(pool.query("select id from users where id = $1", [purgeAccountId])).resolves.toMatchObject({ rows: [] });
+    await expect(pool.query("select display_name, email, avatar, status from users where id = $1", [purgeAccountId])).resolves.toMatchObject({ rows: [{ display_name: "Người học đã xoá", email: null, avatar: {}, status: "purged" }] });
+    await expect(pool.query("select count(*)::int as count from user_credentials where user_id = $1", [purgeAccountId])).resolves.toMatchObject({ rows: [{ count: 0 }] });
+    await expect(pool.query("select count(*)::int as count from sessions where user_id = $1", [purgeAccountId])).resolves.toMatchObject({ rows: [{ count: 0 }] });
+    await expect(pool.query("select count(*)::int as count from learner_profiles where user_id = $1", [purgeAccountId])).resolves.toMatchObject({ rows: [{ count: 0 }] });
+    await expect(pool.query("select count(*)::int as count from files where owner_user_id = $1", [purgeAccountId])).resolves.toMatchObject({ rows: [{ count: 0 }] });
+    await expect(pool.query("select cefr from enrollments where learner_id = $1", [purgeAccountId])).resolves.toMatchObject({ rows: [{ cefr: "A2" }] });
+    await expect(pool.query("select minutes, evidence from activities where learner_id = $1", [purgeAccountId])).resolves.toMatchObject({ rows: [{ minutes: 10, evidence: {} }] });
+    await expect(pool.query("select reason, message from reminders where learner_id = $1", [purgeAccountId])).resolves.toMatchObject({ rows: [{ reason: "Tài khoản đã ẩn danh", message: "Nội dung đã được xoá khi ẩn danh tài khoản." }] });
+    const accountsAfterPurge = await app.inject({ method: "GET", url: "/api/v1/manager/accounts", headers: { cookie: managerCookie } });
+    const trashAfterPurge = await app.inject({ method: "GET", url: "/api/v1/manager/trash", headers: { cookie: managerCookie } });
+    expect(accountsAfterPurge.body).not.toContain(purgeAccountId);
+    expect(trashAfterPurge.body).not.toContain(purgeAccountId);
     const reusedConfirmation = await app.inject({
       method: "DELETE", url: `/api/v1/manager/trash/${purgeAccountId}`, headers: { cookie: managerCookie },
       payload: { confirmationToken: confirmation.json().token, confirmationPhrase: confirmation.json().confirmationPhrase }

@@ -338,6 +338,8 @@ describe("ManagerRouteController", () => {
     await userEvent.setup().click(screen.getByRole("button", { name: "Xoá vĩnh viễn" }));
     expect(confirmation).toHaveBeenCalledWith("trash-1");
     expect(screen.getByRole("dialog", { name: "Xác nhận xoá vĩnh viễn" })).toBeInTheDocument();
+    expect(screen.getByText(/Thông tin đăng nhập và dữ liệu nhận dạng cá nhân sẽ bị xoá/)).toBeInTheDocument();
+    expect(screen.getByText(/Lịch sử học tập và đối soát được giữ lại dưới dạng ẩn danh/)).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Xoá vĩnh viễn tài khoản" })).toBeDisabled();
     expect(purge).not.toHaveBeenCalled();
   });

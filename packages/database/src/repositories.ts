@@ -2755,10 +2755,6 @@ function isDeletionRequestStatus(value: string): value is AssessmentDeletionRequ
   return value === "pending" || value === "approved" || value === "rejected" || value === "cancelled";
 }
 
-function isForeignKeyViolation(error: unknown): boolean {
-  return Boolean(error && typeof error === "object" && "code" in error && (error as { code?: unknown }).code === "23503");
-}
-
 const purgeConfirmationPhrase = "XOA VINH VIEN" as const;
 const purgeConfirmationCountdownSeconds = 5 as const;
 const purgeConfirmationTtlSeconds = 60;
@@ -6867,7 +6863,7 @@ class ManagerRepository {
     }>(
       `select id, display_name, email, role, status, created_at
        from users
-       where organization_id = $1 and status <> 'deleted'
+       where organization_id = $1 and status in ('active', 'disabled')
        order by case role when 'manager' then 0 when 'operator' then 1 else 2 end, display_name asc`,
       [organization.id]
     );
@@ -7489,11 +7485,13 @@ class ManagerRepository {
       );
       const organizationId = actor.rows[0]?.organization_id;
       if (!organizationId) throw new Error("MANAGER_ORGANIZATION_NOT_FOUND");
-      const target = await client.query<{ id: string }>(
-        "select id from users where id = $1 and organization_id = $2 and status = 'deleted' for update",
+      if (managerId === accountId) throw new Error("MANAGER_SELF_PURGE_FORBIDDEN");
+      const target = await client.query<{ id: string; role: AccountRole }>(
+        "select id, role from users where id = $1 and organization_id = $2 and status = 'deleted' for update",
         [accountId, organizationId]
       );
-      if (!target.rowCount) throw new Error("MANAGER_TRASH_ACCOUNT_NOT_FOUND");
+      const targetAccount = target.rows[0];
+      if (!targetAccount) throw new Error("MANAGER_TRASH_ACCOUNT_NOT_FOUND");
       if (input.confirmationPhrase !== purgeConfirmationPhrase) throw new Error("MANAGER_PURGE_CONFIRMATION_INVALID");
       const confirmation = await client.query<{ id: string }>(
         `select id
@@ -7506,19 +7504,88 @@ class ManagerRepository {
         [organizationId, managerId, accountId, destructiveTokenHash(input.confirmationToken)]
       );
       if (!confirmation.rows[0]) throw new Error("MANAGER_PURGE_CONFIRMATION_INVALID");
+      const anonymousName = targetAccount.role === "learner"
+        ? "Người học đã xoá"
+        : targetAccount.role === "operator"
+          ? "Người vận hành đã xoá"
+          : "Quản lý đã xoá";
+
+      // Remove authentication and direct profile/file identifiers first. Every
+      // statement runs in this transaction, so a failed scrub restores all rows.
+      await client.query("delete from sessions where user_id = $1", [accountId]);
+      await client.query("delete from user_credentials where user_id = $1", [accountId]);
+      await client.query("delete from learner_profiles where user_id = $1", [accountId]);
+      await client.query("delete from files where owner_user_id = $1", [accountId]);
+
+      // Keep operational and learning history, but remove free-form content that
+      // can contain names, contact details, speech, or other personal data.
+      await client.query("update progress_records set evidence = '{}'::jsonb where learner_id = $1", [accountId]);
+      await client.query("update activities set evidence = '{}'::jsonb where learner_id = $1", [accountId]);
+      await client.query(
+        `update assessment_attempts
+         set timing_state = '{}'::jsonb, integrity_events = '[]'::jsonb,
+             device_evidence = '{}'::jsonb, media_evidence = '{}'::jsonb
+         where learner_id = $1`,
+        [accountId]
+      );
+      await client.query(
+        `update assessment_responses set response = '{}'::jsonb
+         where attempt_id in (select id from assessment_attempts where learner_id = $1)`,
+        [accountId]
+      );
+      await client.query(
+        `update appeals set reason = 'Nội dung đã được xoá khi ẩn danh tài khoản.', resolution = null
+         where learner_id = $1`,
+        [accountId]
+      );
+      await client.query("update ai_runs set user_id = null, output = null where user_id = $1", [accountId]);
+      await client.query("update coach_sessions set scenario = '{}'::jsonb where learner_id = $1", [accountId]);
+      await client.query(
+        `update coach_turns set content = '{}'::jsonb, feedback = null
+         where session_id in (select id from coach_sessions where learner_id = $1)`,
+        [accountId]
+      );
+      await client.query("update practice_submissions set content = '{}'::jsonb, feedback = null where learner_id = $1", [accountId]);
+      await client.query(
+        `update reminders
+         set reason = 'Tài khoản đã ẩn danh', message = 'Nội dung đã được xoá khi ẩn danh tài khoản.'
+         where learner_id = $1`,
+        [accountId]
+      );
+      await client.query(
+        `update notification_deliveries set external_id = null, response = '{}'::jsonb
+         where reminder_id in (select id from reminders where learner_id = $1)`,
+        [accountId]
+      );
+      await client.query("update game_results set details = '{}'::jsonb where learner_id = $1", [accountId]);
+      await client.query("update surveys set answers = '{}'::jsonb where learner_id = $1", [accountId]);
+      await client.query("update micro_lessons set content = '{}'::jsonb, progress = '{}'::jsonb where learner_id = $1", [accountId]);
+      await client.query("update topic_strikes set topic = 'Đã ẩn danh', reason = 'Nội dung đã được xoá.' where learner_id = $1", [accountId]);
+      await client.query("update topic_reports set topic = 'Đã ẩn danh', reason = 'Nội dung đã được xoá.' where learner_id = $1", [accountId]);
+      await client.query("update lesson_part_attempts set answer = null, feedback = null, artifact_key = null where learner_id = $1", [accountId]);
+      await client.query("update lesson_part_appeals set reason = 'Nội dung đã được xoá.' where learner_id = $1", [accountId]);
+      await client.query("update practice_appeals set reason = 'Nội dung đã được xoá.', resolution = null where learner_id = $1", [accountId]);
+      await client.query("update manager_pin_reports set note = 'Nội dung đã được xoá khi ẩn danh tài khoản.' where subject_user_id = $1", [accountId]);
+      await client.query(
+        `update audit_events set payload = '{}'::jsonb
+         where (entity_type = 'user' and entity_id = $1) or actor_user_id = $1`,
+        [accountId]
+      );
+
+      await client.query(
+        `update users
+         set display_name = $3, email = null, avatar = '{}'::jsonb, status = 'purged', updated_at = now()
+         where id = $1 and organization_id = $2`,
+        [accountId, organizationId, anonymousName]
+      );
       await client.query("update manager_destructive_confirmations set used_at = now() where id = $1", [confirmation.rows[0].id]);
       await client.query(
         `insert into audit_events
            (id, organization_id, actor_user_id, action, entity_type, entity_id, payload, trace_id)
-         values ($1, $2, $3, 'manager.account.purged', 'user', $4, '{}'::jsonb, $5)`,
-        [randomUUID(), organizationId, managerId, accountId, randomUUID()]
+         values ($1, $2, $3, 'manager.account.purged', 'user', $4, $5::jsonb, $6)`,
+        [randomUUID(), organizationId, managerId, accountId,
+          JSON.stringify({ piiRemoved: true, authenticationRemoved: true, historyRetained: true }), randomUUID()]
       );
-      try {
-        await client.query("delete from users where id = $1 and organization_id = $2 and status = 'deleted'", [accountId, organizationId]);
-      } catch (error) {
-        if (isForeignKeyViolation(error)) throw new Error("MANAGER_ACCOUNT_PURGE_BLOCKED");
-        throw error;
-      }
       await client.query("commit");
     } catch (error) {
       await client.query("rollback");
@@ -7553,7 +7620,7 @@ class ManagerRepository {
       const organizationId = actor.rows[0]?.organization_id;
       if (!organizationId) throw new Error("MANAGER_ORGANIZATION_NOT_FOUND");
       const subject = await client.query<{ id: string; display_name: string }>(
-        "select id, display_name from users where id = $1 and organization_id = $2 and status <> 'deleted' for update",
+        "select id, display_name from users where id = $1 and organization_id = $2 and status in ('active', 'disabled') for update",
         [accountId, organizationId]
       );
       if (!subject.rows[0]) throw new Error("MANAGER_PIN_REPORT_ACCOUNT_NOT_FOUND");
@@ -8034,7 +8101,7 @@ class ManagerRepository {
       }>(
         `select id, display_name, email, role, status, created_at
          from users
-         where id = $1 and organization_id = $2 and status <> 'deleted'
+         where id = $1 and organization_id = $2 and status in ('active', 'disabled')
          for update`,
         [accountId, organizationId]
       );
@@ -8097,7 +8164,7 @@ class ManagerRepository {
       const organizationId = actor.rows[0]?.organization_id;
       if (!organizationId) throw new Error("MANAGER_ORGANIZATION_NOT_FOUND");
       const duplicate = await client.query(
-        "select id from users where organization_id = $1 and lower(email) = lower($2) and status <> 'deleted'",
+        "select id from users where organization_id = $1 and lower(email) = lower($2) and status in ('active', 'disabled')",
         [organizationId, input.email]
       );
       if (duplicate.rowCount) throw new Error("MANAGER_ACCOUNT_EMAIL_EXISTS");
@@ -8154,7 +8221,7 @@ class ManagerRepository {
         id: string; display_name: string; email: string | null; role: AccountRole; status: string; created_at: Date;
       }>(
         `select id, display_name, email, role, status, created_at from users
-         where id = $1 and organization_id = $2 and status <> 'deleted' for update`,
+         where id = $1 and organization_id = $2 and status in ('active', 'disabled') for update`,
         [accountId, organizationId]
       );
       const before = target.rows[0];
@@ -8199,7 +8266,7 @@ class ManagerRepository {
         `select target.organization_id from users target
          join users manager on manager.id = $1 and manager.role = 'manager' and manager.status = 'active'
            and manager.organization_id = target.organization_id
-         where target.id = $2 and target.status <> 'deleted' for update of target`,
+         where target.id = $2 and target.status in ('active', 'disabled') for update of target`,
         [managerId, accountId]
       );
       const organizationId = target.rows[0]?.organization_id;

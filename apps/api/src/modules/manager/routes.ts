@@ -156,7 +156,7 @@ export function registerManagerRoutes(app: FastifyInstance, pool: Pool, options:
         return reply.code(204).send();
       } catch (error) {
         if (error instanceof Error && [
-          "MANAGER_ORGANIZATION_NOT_FOUND", "MANAGER_TRASH_ACCOUNT_NOT_FOUND", "MANAGER_ACCOUNT_PURGE_BLOCKED", "MANAGER_PURGE_CONFIRMATION_INVALID"
+          "MANAGER_ORGANIZATION_NOT_FOUND", "MANAGER_TRASH_ACCOUNT_NOT_FOUND", "MANAGER_SELF_PURGE_FORBIDDEN", "MANAGER_PURGE_CONFIRMATION_INVALID"
         ].includes(error.message)) return reply.code(error.message === "MANAGER_ORGANIZATION_NOT_FOUND" ? 404 : 409).send({ code: error.message });
         throw error;
       }
