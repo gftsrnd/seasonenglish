@@ -72,11 +72,13 @@ describe("ManagerRouteController", () => {
     expect(save).not.toHaveBeenCalled();
   });
 
-  it("explains why a direct Operator URL was redirected to Manager operations", async () => {
+  it("opens Manager operations without an Operator preview banner", async () => {
     vi.spyOn(apiClient, "getManagerOperations").mockResolvedValue(operations);
-    renderManager(<MemoryRouter initialEntries={[{ pathname: "/mgr/ops", state: { accessNotice: "Đã chuyển sang khu vực vận hành của Quản lý." } }]}><ManagerRouteController role="manager" currentUserId="manager-1" /></MemoryRouter>);
+    renderManager(<MemoryRouter initialEntries={["/mgr/ops"]}><ManagerRouteController role="manager" currentUserId="manager-1" /></MemoryRouter>);
 
-    expect(await screen.findByRole("status")).toHaveTextContent("Đã chuyển sang khu vực vận hành của Quản lý.");
+    expect(await screen.findByText("1/2 bộ đã duyệt")).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Hiệu suất vận hành" })).toBeInTheDocument();
+    expect(screen.queryByText(/chế độ xem của quản lý|chỉ xem|Operator/i)).not.toBeInTheDocument();
   });
 
   it("opens the real learner quick-view and shows Manager operational queues", async () => {

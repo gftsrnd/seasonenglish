@@ -106,6 +106,8 @@ describe("manager progress and operations API", () => {
       weekStartDate: expect.stringMatching(/^\d{4}-\d{2}-\d{2}$/),
     });
     expect(JSON.stringify(progress.json())).not.toContain("Học viên Ngoài tổ chức");
+    expect(progress.json().learners).toEqual(expect.arrayContaining([expect.objectContaining({ learnerName: "Học viên Demo" })]));
+    expect(progress.json().learners).not.toEqual(expect.arrayContaining([expect.objectContaining({ learnerName: "Thư Demo" })]));
 
     expect(operations.statusCode, operations.body).toBe(200);
     expect(operations.json()).toMatchObject({
@@ -118,7 +120,8 @@ describe("manager progress and operations API", () => {
         readySets: expect.any(Number),
         missing: expect.any(Array),
         orphanLegacySets: expect.any(Number)
-      })
+      }),
+      operators: expect.arrayContaining([expect.objectContaining({ operatorName: "Thư Demo" })])
     });
   });
 

@@ -89,7 +89,7 @@ describe("Operator assessment AI rescore", () => {
 
   afterAll(async () => { await app.close(); await pool.end(); });
 
-  it("rescores a pending assessment once, persists AI evidence, and keeps Manager/Learner read-only", async () => {
+  it("rescores a pending assessment once, persists AI evidence, and rejects only Learner", async () => {
     const request = {
       method: "POST" as const,
       url: `/api/v1/assessment-reviews/${DEMO_IDS.placementAttempt}/rescore`,
@@ -131,7 +131,7 @@ describe("Operator assessment AI rescore", () => {
     expect(audit.rows[0]).toMatchObject({ payload: { requestId: "operator-rescore-1", suggestedLevel: "B1" } });
 
     const manager = await app.inject({ ...request, headers: { cookie: managerCookie } });
-    expect(manager.statusCode).toBe(403);
+    expect(manager.statusCode, manager.body).toBe(200);
     const learner = await app.inject({ ...request, headers: { cookie: learnerCookie } });
     expect(learner.statusCode).toBe(403);
   });

@@ -79,10 +79,13 @@ function formatOperatorCertificate(certificate: { type: string; result: string; 
   return [name, certificate.result, certificate.year ? `(${certificate.year})` : ""].filter(Boolean).join(" ");
 }
 
-export function OperatorRouteController({ session, client = apiClient, basePath = "/op" }: { session: SessionView; client?: OperatorApiClient; basePath?: "/op" | "/mgr/ops" }) {
+export function OperationsRouteController({ session, client = apiClient, basePath = "/op" }: { session: SessionView; client?: OperatorApiClient; basePath?: "/op" | "/mgr/ops" }) {
   const paths = routePathsFor(basePath);
   return <ModalProvider><OperatorRoutePathsContext.Provider value={paths}><OperatorRouteControllerContent session={session} client={client} paths={paths} /></OperatorRoutePathsContext.Provider></ModalProvider>;
 }
+
+// Kept as the Operator-facing name so existing Operator imports and tests do not change.
+export const OperatorRouteController = OperationsRouteController;
 
 function OperatorRouteControllerContent({ session, client, paths }: { session: SessionView; client: OperatorApiClient; paths: OperatorRoutePaths }) {
   const location = useLocation();

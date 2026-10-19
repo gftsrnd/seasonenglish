@@ -78,16 +78,17 @@ describe("new Manager app branch", () => {
 
   it("uses backend readiness instead of deriving fake set counts", () => {
     render(<ManagerOperations view={operations} deleteRequestCounts={{ "op-1": 2 }} />);
-    expect(screen.getByText("Quản lý có thể trực tiếp xem và thực hiện các thao tác nội dung, duyệt bài, prompt và đánh giá.")).toBeInTheDocument();
-    expect(screen.getByRole("navigation", { name: "Màn hình vận hành" })).not.toHaveAttribute("data-read-only-preview");
-    expect(screen.getByRole("link", { name: "Chủ đề tuần" })).toHaveAttribute("href", "/mgr/ops/weeks");
-    expect(screen.getByRole("link", { name: "Prompt" })).toHaveAttribute("href", "/mgr/ops/prompts");
+    expect(screen.getByRole("heading", { name: "Người vận hành" })).toBeInTheDocument();
+    expect(screen.getByText("Theo dõi nhanh người soạn/duyệt và chất lượng đầu ra. Danh sách này chỉ gồm tài khoản vận hành, không trộn vào bảng học viên.")).toBeInTheDocument();
+    expect(screen.getByText("Thư Demo")).toBeInTheDocument();
+    expect(screen.getByText("Thư Demo").closest("summary")).toHaveTextContent("1 bộ · 5 bài");
+    expect(screen.getByText("Thư Demo").closest("summary")).toHaveTextContent("1 duyệt · 1 bài đọc · 1 hoàn thành");
+    expect(screen.queryByRole("navigation", { name: "Màn hình vận hành" })).not.toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "Bộ bài đã sẵn sàng đến tuần 1" })).toBeInTheDocument();
     expect(screen.getByText("1/2 bộ đã duyệt")).toBeInTheDocument();
     expect(screen.getByText(/Tuần 1 · B1 \(chưa sinh\)/)).toBeInTheDocument();
     expect(screen.getByText(/1 bộ bài cũ chưa có thông tin người soạn/)).toBeInTheDocument();
     expect(screen.getByText("Yêu cầu xoá tài khoản đã gửi").parentElement).toHaveTextContent("2");
-    expect(screen.getByRole("link", { name: "Đề lên mức" })).toHaveAttribute("href", "/mgr/ops/level-forms");
   });
 
   it("keeps the operations introduction concise while retaining both metrics", () => {

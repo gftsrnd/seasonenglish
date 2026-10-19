@@ -74,7 +74,7 @@ describe("content operations API", () => {
 
   afterAll(async () => { await app.close(); await pool.end(); });
 
-  it("lets the manager read the topic frame but keeps writes Operator-only", async () => {
+  it("lets the Manager administer the two-week topic frame", async () => {
     const read = await app.inject({ method: "GET", url: "/api/v1/content/weeks", headers: { cookie: managerCookie } });
     expect(read.statusCode, read.body).toBe(200);
     expect(read.json()).toMatchObject({
@@ -89,8 +89,8 @@ describe("content operations API", () => {
       method: "PUT", url: "/api/v1/content/weeks", headers: { cookie: managerCookie },
       payload: { weeks: [{ weekNumber: 1, topic: "Changed", description: "", objectives: "", keyVocabHint: "" }] }
     });
-    expect(managerWrite.statusCode, managerWrite.body).toBe(403);
-    expect(managerWrite.json()).toEqual({ code: "FORBIDDEN" });
+    expect(managerWrite.statusCode, managerWrite.body).toBe(200);
+    expect(managerWrite.json()).toMatchObject({ weeks: expect.arrayContaining([expect.objectContaining({ weekNumber: 1, topic: "Changed" })]) });
 
     const operatorWrite = await app.inject({
       method: "PUT", url: "/api/v1/content/weeks", headers: { cookie: makerCookie },
@@ -137,14 +137,8 @@ describe("content operations API", () => {
       method: "POST", url: `/api/v1/content/lesson-set-versions/${versionId}/publication`,
       headers: { cookie: managerCookie }, payload: {}
     });
-    expect(managerApproval.statusCode, managerApproval.body).toBe(403);
-
-    const checkerApproval = await app.inject({
-      method: "POST", url: `/api/v1/content/lesson-set-versions/${versionId}/publication`,
-      headers: { cookie: checkerCookie }, payload: {}
-    });
-    expect(checkerApproval.statusCode, checkerApproval.body).toBe(200);
-    expect(checkerApproval.json()).toMatchObject({ versionId, status: "published", approvedBy: checkerId });
+    expect(managerApproval.statusCode, managerApproval.body).toBe(200);
+    expect(managerApproval.json()).toMatchObject({ versionId, status: "published", approvedBy: DEMO_IDS.manager });
 
     const visibleLesson = await app.inject({
       method: "GET", url: `/api/v1/lessons/${lessons[0]?.id}`, headers: { cookie: learnerCookie }
@@ -161,12 +155,8 @@ describe("content operations API", () => {
       method: "POST", url: `/api/v1/content/lesson-set-versions/${versionId}/retirement`,
       headers: { cookie: managerCookie }, payload: {}
     });
-    expect(managerRetirement.statusCode, managerRetirement.body).toBe(403);
-
-    const retired = await app.inject({
-      method: "POST", url: `/api/v1/content/lesson-set-versions/${versionId}/retirement`,
-      headers: { cookie: checkerCookie }, payload: {}
-    });
+    expect(managerRetirement.statusCode, managerRetirement.body).toBe(200);
+    const retired = managerRetirement;
     expect(retired.statusCode, retired.body).toBe(200);
     expect(retired.json()).toMatchObject({ versionId, status: "retired" });
 
@@ -206,13 +196,13 @@ describe("content operations API", () => {
     ]);
   });
 
-  it("keeps prompt writes Operator-only while preserving version history", async () => {
+  it("lets Manager update prompts while preserving version history", async () => {
     const managerWrite = await app.inject({
       method: "PUT", url: "/api/v1/content/prompts", headers: { cookie: managerCookie },
       payload: { groups: [{ key: "system_rules", content: "Manager-approved system rule." }] }
     });
-    expect(managerWrite.statusCode, managerWrite.body).toBe(403);
-    expect(managerWrite.json()).toEqual({ code: "FORBIDDEN" });
+    expect(managerWrite.statusCode, managerWrite.body).toBe(200);
+    expect(managerWrite.json()).toMatchObject({ groups: [expect.objectContaining({ key: "system_rules", content: "Manager-approved system rule." })] });
 
     const saved = await app.inject({
       method: "PUT", url: "/api/v1/content/prompts", headers: { cookie: makerCookie },

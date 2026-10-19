@@ -117,12 +117,6 @@
   white-space: nowrap;
 }
 
-/* The Manager-owned operations links keep the same compact action rhythm as
-   the operational screens they open. */
-.manager-operations-page nav[aria-label="Màn hình vận hành"] > .btn {
-  min-height: 40px;
-}
-
 .manager-page > .manager-operational-card {
   margin-top: 0 !important;
   margin-bottom: 0 !important;
@@ -304,7 +298,12 @@
 }
 
 .manager-progress-table th,
-.manager-progress-table td,
+.manager-progress-table td {
+  vertical-align: middle;
+  white-space: nowrap;
+  line-height: 1.45;
+}
+
 .manager-rewards-table th,
 .manager-rewards-table td {
   vertical-align: top;
@@ -316,36 +315,86 @@
   white-space: normal;
 }
 
-.manager-operations-links-card > h3,
 .manager-readiness-card > .manager-section-heading,
-.manager-operator-card > .manager-operator-card-heading {
+.manager-operators-section > .manager-section-heading {
   margin-top: 0;
 }
 
-.manager-operations-links-card > p,
 .manager-readiness-card > p {
   margin: 6px 0 0;
   line-height: 1.55;
 }
 
-.manager-operations-links {
-  flex-wrap: wrap;
+.manager-operators-section > .manager-section-heading > div {
+  min-width: 0;
+}
+
+.manager-operators-section > .manager-section-heading p {
+  margin: 5px 0 0;
+  line-height: 1.5;
+}
+
+.manager-operator-list {
+  display: grid;
   gap: 8px;
   margin-top: 14px;
+  overflow-x: auto;
+  overscroll-behavior-inline: contain;
+  scrollbar-gutter: stable;
+  scrollbar-width: thin;
+  padding-bottom: 4px;
 }
 
-.manager-operations-links > .btn {
-  flex: 0 0 auto;
+.manager-operator-row {
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--surface-3);
 }
 
-.manager-operator-card-heading {
+.manager-operator-summary {
+  display: grid;
+  grid-template-columns: 20px minmax(170px, 1.2fr) minmax(110px, .7fr) minmax(90px, .6fr) minmax(120px, .7fr) minmax(220px, 1.4fr) auto;
   align-items: center;
-  flex-wrap: wrap;
-  gap: 10px 16px;
+  gap: 12px;
+  min-width: 900px;
+  padding: 12px 14px;
+  cursor: pointer;
+  list-style: none;
 }
 
-.manager-operator-card-heading > :first-child {
-  flex: 1 1 280px;
+.manager-operator-summary::-webkit-details-marker {
+  display: none;
+}
+
+.manager-operator-summary::before {
+  content: "›";
+  color: var(--muted);
+  font-size: 20px;
+  line-height: 1;
+}
+
+.manager-operator-row[open] .manager-operator-summary::before {
+  content: "⌄";
+}
+
+.manager-operator-name {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.manager-operator-toggle {
+  color: var(--muted);
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.manager-operator-detail {
+  border-top: 1px solid var(--line);
+  padding: 14px;
+  background: var(--surface);
 }
 
 .manager-operator-grid {
@@ -541,6 +590,40 @@
   min-width: 260px;
 }
 
+.settings-action-table th,
+.settings-action-table td {
+  vertical-align: middle;
+  line-height: 1.35;
+}
+
+.settings-action-table td .badge {
+  display: inline-flex;
+  align-items: center;
+  min-height: 28px;
+  line-height: 1.2;
+  white-space: nowrap;
+}
+
+.settings-action-table td select,
+.settings-action-table td .btn-sm,
+.settings-action-table td > .row {
+  line-height: 1.2;
+}
+
+.settings-action-table td select,
+.settings-action-table td .btn-sm {
+  min-height: 44px;
+  display: inline-flex;
+  align-items: center;
+}
+
+.settings-action-table td:last-child > .row {
+  align-items: center;
+  flex-wrap: nowrap;
+  min-height: 44px;
+  white-space: nowrap;
+}
+
 .manager-inline-status {
   min-height: 1.2em;
 }
@@ -660,14 +743,20 @@
   box-shadow: -8px 0 14px -12px rgba(30, 30, 30, .45);
 }
 
+.manager-action-table td:last-child {
+  vertical-align: middle;
+  white-space: nowrap;
+}
+
 .manager-action-table th:last-child {
   z-index: 3;
 }
 
 .manager-action-table td:last-child > .row {
   min-width: 122px;
-  flex-wrap: wrap;
-  row-gap: 6px;
+  align-items: center;
+  flex-wrap: nowrap;
+  row-gap: 0;
 }
 
 .manager-action-table td:last-child .btn-sm {
@@ -873,12 +962,11 @@
 
   .manager-action-table td:last-child > .row {
     min-width: 136px;
-    flex-direction: column;
-    align-items: stretch;
+    align-items: center;
   }
 
   .manager-action-table td:last-child .btn-sm {
-    width: 100%;
+    width: auto;
   }
 
   .manager-account-actions {

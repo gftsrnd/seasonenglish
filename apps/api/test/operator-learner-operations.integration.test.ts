@@ -76,13 +76,14 @@ describe("Operator learner/test operations", () => {
     });
   });
 
-  it("keeps learner operations Operator-only and persists level/goal/deletion evidence", async () => {
+  it("lets both staff roles manage learner operations and persists evidence", async () => {
     const managerLevel = await app.inject({
       method: "PATCH", url: `/api/v1/assessment-reviews/learners/${DEMO_IDS.learner}/level`,
       headers: { cookie: managerCookie },
-      payload: { mode: "direct", targetLevel: "B1", reason: "Manager preview must remain read-only", evidence: "review" }
+      payload: { mode: "direct", targetLevel: "B1", reason: "Manager review", evidence: "review" }
     });
-    expect(managerLevel.statusCode).toBe(403);
+    expect(managerLevel.statusCode, managerLevel.body).toBe(200);
+    expect(managerLevel.json()).toMatchObject({ learnerId: DEMO_IDS.learner, mode: "direct", targetLevel: "B1" });
 
     const level = await app.inject({
       method: "PATCH", url: `/api/v1/assessment-reviews/learners/${freshLearnerId}/level`,

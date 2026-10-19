@@ -19,8 +19,9 @@ describe("Manager layout rhythm contract", () => {
     expect(css).toMatch(/\.settings-page\[data-settings-role="manager"\]\s*>\s*\.page-title\s*\{[\s\S]*?margin-bottom:\s*2px/);
   });
 
-  it("keeps Manager-owned operations actions on the app rhythm", () => {
-    expect(css).toMatch(/\.manager-operations-page\s+nav\[aria-label="Màn hình vận hành"\]\s*>\s*\.btn\s*\{[\s\S]*?min-height:\s*40px/);
+  it("keeps the Manager operator summary compact and horizontally scannable", () => {
+    expect(css).toMatch(/\.manager-operator-summary\s*\{[\s\S]*?min-width:\s*900px/);
+    expect(css).toMatch(/\.manager-operator-list\s*\{[\s\S]*?overflow-x:\s*auto/);
   });
 
   it("keeps Manager modals fixed to the viewport instead of the long page document", () => {

@@ -61,11 +61,12 @@ describe("week suggestion parity API", () => {
 
   afterAll(async () => { await app.close(); await pool.end(); });
 
-  it("returns three options with active CEFR five-day plans and keeps Manager read-only", async () => {
+  it("returns three options with active CEFR five-day plans for Manager and Operator", async () => {
     const manager = await app.inject({
       method: "POST", url: "/api/v1/content/weeks/suggestions", headers: { cookie: managerCookie }, payload: { weekNumbers: [1] }
     });
-    expect(manager.statusCode).toBe(403);
+    expect(manager.statusCode, manager.body).toBe(200);
+    expect(manager.json().weeks[0]).toMatchObject({ weekNumber: 1, levels, options: expect.any(Array) });
 
     const response = await app.inject({
       method: "POST", url: "/api/v1/content/weeks/suggestions", headers: { cookie: operatorCookie }, payload: { weekNumbers: [1] }
