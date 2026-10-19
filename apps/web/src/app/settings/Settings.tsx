@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, type ButtonHTMLAttributes, type ReactNode 
 import type { ManagerProviderSettingsInput, ManagerProviderSettingsView, ManagerSettingsInput, ManagerSettingsView, ManagerWebhookTestView, ProductPreferencesView, SystemCapabilitiesView } from "@e4s/contracts";
 import { Flower2, Gift, Leaf, MoonStar, Snowflake, Sparkles, Star, Sun } from "lucide-react";
 import { autoSeasonTheme } from "../games/season-visual.js";
+import { PersonalPreferences } from "./PersonalPreferences.js";
 
 export type AiConfigurationView = ManagerProviderSettingsView;
 export type AiConfigurationInput = ManagerProviderSettingsInput;
@@ -86,6 +87,7 @@ export function SettingsPage({ role, manager, product, capabilities, ai, actions
       {accounts}
     </> : <>
       <section className="card"><h3>Prompt & rubric</h3><p className="small muted">Sửa hướng dẫn AI sinh bài, coach và chấm bài. Để trống dùng mặc định.</p><a className="btn" href="/op/prompts">Mở trình sửa prompt</a></section>
+      <PersonalPreferences />
     </>}
   </div>;
 }

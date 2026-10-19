@@ -1,4 +1,5 @@
 import { createRequire } from "node:module";
+import { createServer } from "node:net";
 
 const requireFromStoragePackage = createRequire(new URL("../packages/storage/package.json", import.meta.url));
 const { HeadBucketCommand, S3Client } = requireFromStoragePackage("@aws-sdk/client-s3");
@@ -6,6 +7,13 @@ const { HeadBucketCommand, S3Client } = requireFromStoragePackage("@aws-sdk/clie
 export const LOCAL_STORAGE_RECOVERY_COMMAND = "docker compose up -d minio minio-init";
 export const LOCAL_EVIDENCE_BUCKET = "e4s-evidence";
 export const LOCAL_MEDIA_BUCKET = "e4s-media";
+export const LOCAL_DEV_PORTS = Object.freeze({
+  web: 4175,
+  api: 3001,
+  postgres: 54329,
+  minio: 9002,
+  minioConsole: 9003
+});
 
 export async function verifyLocalObjectStorage(options = {}) {
   const endpoint = options.endpoint ?? process.env.S3_ENDPOINT ?? "http://127.0.0.1:9002";
@@ -67,8 +75,19 @@ export async function waitForHttpReady(name, url, options = {}) {
   throw new Error(`${name} chưa sẵn sàng tại ${url} sau ${timeoutMs}ms.`);
 }
 
+export function assertLocalPortAvailable(name, port, options = {}) {
+  const host = options.host ?? "127.0.0.1";
+  return new Promise((resolve, reject) => {
+    const server = createServer();
+    server.once("error", () => reject(new Error(`${name} đang chiếm cổng ${host}:${port}. Hãy dừng tiến trình cũ rồi chạy lại E4S local.`)));
+    server.listen({ host, port }, () => {
+      server.close((error) => error ? reject(error) : resolve());
+    });
+  });
+}
+
 function localStorageError(reason) {
-  return new Error(`${reason}\nKhởi động đúng storage của E4S rồi chạy lại:\n${LOCAL_STORAGE_RECOVERY_COMMAND}`);
+  return new Error(`${reason}\nMinIO API mặc định: http://127.0.0.1:${LOCAL_DEV_PORTS.minio}; Console: http://127.0.0.1:${LOCAL_DEV_PORTS.minioConsole}.\nKhởi động đúng storage của E4S rồi chạy lại:\n${LOCAL_STORAGE_RECOVERY_COMMAND}`);
 }
 
 function delay(milliseconds) {

@@ -107,7 +107,7 @@ describe("new Settings app branch", () => {
 
   it("shows only operator-owned settings and working prompt link for Operator", () => {
     const { container } = render(<SettingsPage role="operator" product={product} capabilities={capabilities} ai={{ provider: "openai", configured: true, baseUrl: "https://api.groq.com/openai/v1", model: "qwen/qwen3.8-27b", speechToTextModel: "whisper-large-v3-turbo" }} actions={actions()} />);
-    expect([...container.querySelectorAll("h3")].map((node) => node.textContent)).toEqual(["Prompt & rubric"]);
+    expect([...container.querySelectorAll("h3")].map((node) => node.textContent)).toEqual(["Prompt & rubric", "Tùy chọn cá nhân"]);
     expect(screen.queryByRole("heading", { name: "Lịch pilot" })).not.toBeInTheDocument();
     expect(screen.queryByRole("heading", { name: "Dữ liệu" })).not.toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "Prompt & rubric" })).toBeInTheDocument();
@@ -115,19 +115,17 @@ describe("new Settings app branch", () => {
     expect(screen.queryByRole("heading", { name: "Kết nối AI" })).not.toBeInTheDocument();
     expect(screen.queryByRole("heading", { name: "Ảnh minh hoạ từ vựng" })).not.toBeInTheDocument();
     expect(screen.queryByRole("heading", { name: "Giao diện theo mùa / lễ" })).not.toBeInTheDocument();
-    expect(screen.queryByRole("checkbox", { name: "Hiệu ứng âm thanh" })).not.toBeInTheDocument();
-    expect(screen.queryByRole("checkbox", { name: "Nhạc nền" })).not.toBeInTheDocument();
+    expect(screen.getByRole("checkbox", { name: "Hiệu ứng âm thanh" })).toBeInTheDocument();
+    expect(screen.getByRole("checkbox", { name: "Nhạc nền" })).toBeInTheDocument();
   });
 
-  it("does not put personal sound preferences into Settings for any role", () => {
+  it("keeps personal sound preferences out of Manager organisation settings", () => {
     const { rerender } = render(<SettingsPage role="manager" manager={manager} product={product} capabilities={capabilities} ai={{ provider: "openai", configured: true, baseUrl: "https://api.groq.com/openai/v1", model: "demo", speechToTextModel: "whisper" }} actions={actions()} />);
     expect(screen.queryByRole("heading", { name: "Tùy chọn cá nhân" })).not.toBeInTheDocument();
     expect(screen.queryByRole("checkbox", { name: "Hiệu ứng âm thanh" })).not.toBeInTheDocument();
     expect(screen.queryByRole("checkbox", { name: "Nhạc nền" })).not.toBeInTheDocument();
     rerender(<SettingsPage role="operator" product={product} capabilities={capabilities} actions={actions()} />);
-    expect(screen.queryByRole("heading", { name: "Tùy chọn cá nhân" })).not.toBeInTheDocument();
-    expect(screen.queryByRole("checkbox", { name: "Hiệu ứng âm thanh" })).not.toBeInTheDocument();
-    expect(screen.queryByRole("checkbox", { name: "Nhạc nền" })).not.toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Tùy chọn cá nhân" })).toBeInTheDocument();
   });
 
   it.each([

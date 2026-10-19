@@ -16,13 +16,13 @@ Mở `http://127.0.0.1:4175`. Demo login được bật cho local; Groq key ch�
 
 ## Chạy Web/API trực tiếp trên Windows
 
-`pnpm dev:local` dùng Web `4175`, API `3001`, PostgreSQL nhúng `54329` và kết nối MinIO E4S tại `9002`. Trước khi chạy, bật đúng storage từ Ubuntu/WSL:
+`pnpm dev:local` dùng Web `4175`, API `3001`, PostgreSQL nhúng `54329`, MinIO API `9002` và MinIO Console `9003`. Trước khi chạy, bật đúng storage từ Ubuntu/WSL:
 
 ```bash
 docker compose up -d minio minio-init
 ```
 
-Sau đó chạy `pnpm dev:local` trên Windows. Script kiểm tra MinIO cùng hai bucket `e4s-evidence` (file ghi âm/evidence) và `e4s-media` (ảnh nội dung có nguồn) trước khi mở API; nếu thiếu sẽ dừng và in lại đúng lệnh trên. Khi sẵn sàng, terminal in trạng thái và URL của Web, API, PostgreSQL và MinIO.
+Sau đó chạy `pnpm dev:local` trên Windows. Script kiểm tra MinIO API, Console và hai bucket `e4s-evidence` (file ghi âm/evidence) và `e4s-media` (ảnh nội dung có nguồn), đồng thời báo lỗi rõ nếu `3001`, `4175` hoặc `54329` đang bị chiếm, trước khi mở API. Khi sẵn sàng, terminal in trạng thái và URL của Web, API, PostgreSQL, MinIO API và MinIO Console.
 
 Ảnh từ vựng không cần Pexels/Pixabay key. API tra nguồn mở theo quy tắc bảo thủ, lưu ảnh hợp lệ vào `e4s-media` và trả kèm attribution; từ không phù hợp sẽ hiển thị trạng thái không có ảnh thay vì icon/SVG giả. Manager có thể xoá cache ảnh tại Cài đặt để buộc tra lại.
 
