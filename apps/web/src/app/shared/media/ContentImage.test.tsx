@@ -42,14 +42,14 @@ describe("ContentImage", () => {
     expect(await screen.findByRole("img", { name: "notebook" })).toHaveAttribute("src", available.imageUrl);
   });
 
-  it("shows attributed media and safe source links", async () => {
+  it("does not render attribution source links", async () => {
     vi.stubGlobal("IntersectionObserver", undefined);
     render(<ContentImage term="notebook" load={() => Promise.resolve(available)} />);
     expect(await screen.findByRole("img", { name: "notebook" })).toBeInTheDocument();
-    fireEvent.click(screen.getByText("Nguồn ảnh"));
-    expect(screen.getByRole("link", { name: "Xem ảnh gốc" })).toHaveAttribute("href", available.attribution.sourceUrl);
-    expect(screen.getByRole("link", { name: "CC BY 4.0" })).toHaveAttribute("href", available.attribution.licenceUrl);
-    expect(screen.getByText("Open artist")).toBeInTheDocument();
+    expect(screen.queryByText("Nguồn ảnh")).not.toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "Xem ảnh gốc" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "CC BY 4.0" })).not.toBeInTheDocument();
+    expect(screen.queryByText("Open artist")).not.toBeInTheDocument();
   });
 
   it("shows an explicit placeholder when optional media is unavailable", async () => {
