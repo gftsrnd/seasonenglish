@@ -27,26 +27,27 @@ describe("OperatorRouteController", () => {
     await waitFor(() => expect(client.saveContentWeeks).toHaveBeenCalledWith([{ weekNumber: 1, topic: "Customer calls", description: "", objectives: "", keyVocabHint: "" }]));
   });
 
-  it("renders the same prompt controls for Manager but keeps every mutation disabled", async () => {
+  it("renders prompt controls that Manager can mutate in the owned operations area", async () => {
     const client = { getContentPrompts: vi.fn().mockResolvedValue({ groups: [
       { key: "system_rules", label: "Quy tắc chung", content: "current", defaultContent: "default", version: 1, status: "active" },
       { key: "assessment_scoring", label: "Chấm test", content: "score", defaultContent: "score default", version: 1, status: "active" }
     ] }) };
-    render(<MemoryRouter initialEntries={["/op/prompts"]}><OperatorRouteController session={manager} client={client as any} /></MemoryRouter>);
+    render(<MemoryRouter initialEntries={["/mgr/ops/prompts"]}><OperatorRouteController session={manager} client={client as any} basePath="/mgr/ops" /></MemoryRouter>);
     expect(await screen.findByRole("heading", { name: "Prompt & rubric" })).toBeInTheDocument();
-    screen.getAllByRole("button", { name: "Về mặc định" }).forEach(button => expect(button).toBeDisabled());
-    expect(screen.getByRole("button", { name: "Lưu prompt" })).toBeDisabled();
-    expect(screen.getByRole("textbox", { name: "Quy tắc chung (mọi lời gọi trừ sinh bài siêu ngắn)" })).toHaveAttribute("readonly");
+    screen.getAllByRole("button", { name: "Về mặc định" }).forEach(button => expect(button).toBeEnabled());
+    expect(screen.getByRole("button", { name: "Lưu prompt" })).toBeEnabled();
+    expect(screen.getByRole("textbox", { name: "Quy tắc chung (mọi lời gọi trừ sinh bài siêu ngắn)" })).not.toHaveAttribute("readonly");
   });
 
-  it("renders Manager inspection routes under the Manager-owned path", async () => {
+  it("renders Manager-owned routes without an inspection banner", async () => {
     const client = { getContentPrompts: vi.fn().mockResolvedValue({ groups: [
       { key: "system_rules", label: "Quy tắc chung", content: "current", defaultContent: "default", version: 1, status: "active" }
     ] }), saveContentPrompts: vi.fn() };
     render(<MemoryRouter initialEntries={["/mgr/ops/prompts"]}><OperatorRouteController session={manager} client={client as any} basePath="/mgr/ops" /></MemoryRouter>);
 
     expect(await screen.findByRole("heading", { name: "Prompt & rubric" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Lưu prompt" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Lưu prompt" })).toBeEnabled();
+    expect(screen.queryByText(/chế độ chỉ đọc/i)).not.toBeInTheDocument();
     expect(client.saveContentPrompts).not.toHaveBeenCalled();
   });
 
@@ -184,7 +185,7 @@ describe("OperatorRouteController", () => {
     expect(await screen.findByRole("dialog", { name: "Chi tiết bài test của Lan" })).toBeInTheDocument();
   });
 
-  it("wires the Operator rescore action to the real client and keeps Manager read-only", async () => {
+  it("wires the rescore action for both Operator and Manager operations", async () => {
     const user = userEvent.setup();
     const overview = {
       pendingAssessments: [{ attemptId: "a1", learnerId: "u1", learnerName: "Lan", kind: "placement", title: "Đầu vào", submittedAt: "2026-10-14", sectionScores: { listening: 70 }, suggestedLevel: "A2" }],
@@ -207,7 +208,10 @@ describe("OperatorRouteController", () => {
     cleanup();
     render(<MemoryRouter initialEntries={["/op"]}><OperatorRouteController session={manager} client={client as any} /></MemoryRouter>);
     expect(await screen.findByRole("heading", { name: "Duyệt trình độ" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Chấm lại bằng AI" })).toBeDisabled();
+    const managerButton = screen.getByRole("button", { name: "Chấm lại bằng AI" });
+    expect(managerButton).toBeEnabled();
+    await user.click(managerButton);
+    await waitFor(() => expect(rescoreAssessment).toHaveBeenCalledWith("a1", expect.any(String)));
   });
 
   it("keeps the dashboard visible when a rescore request fails", async () => {
@@ -432,7 +436,7 @@ describe("OperatorRouteController", () => {
     expect(screen.queryByText(/API chưa cung cấp/i)).not.toBeInTheDocument();
   });
 
-  it("exposes persisted lesson enrichment actions to Operator and keeps them read-only for Manager", async () => {
+  it("exposes persisted lesson enrichment actions to both Operator and Manager", async () => {
     const user = userEvent.setup();
     const detail: ContentLessonSetVersionView = {
       lessonSetId: "ls", versionId: "v1", version: 1, status: "draft", weekNumber: 2, topic: "Meetings", cefr: "A2",
@@ -471,8 +475,12 @@ describe("OperatorRouteController", () => {
     cleanup();
     render(<MemoryRouter initialEntries={["/op/lessons/2/A2"]}><OperatorRouteController session={manager} client={client as any} /></MemoryRouter>);
     expect(await screen.findByRole("heading", { name: /Tuần 2 · Mức A2/ })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /Bổ sung cụm từ bằng AI/ })).toBeDisabled();
-    expect(screen.getByRole("button", { name: /Bổ sung bằng AI/ })).toBeDisabled();
+    expect(screen.getByRole("button", { name: /Bổ sung cụm từ bằng AI/ })).toBeEnabled();
+    expect(screen.getByRole("button", { name: /Bổ sung bằng AI/ })).toBeEnabled();
+    await user.click(screen.getByRole("button", { name: /Bổ sung cụm từ bằng AI/ }));
+    await waitFor(() => expect(fillContentLessonPhrases).toHaveBeenCalledWith(2, "A2", 1));
+    await user.click(screen.getByRole("button", { name: /Bổ sung bằng AI/ }));
+    await waitFor(() => expect(enrichContentLessonDraft).toHaveBeenCalledWith(2, "A2", 1));
   });
 
   it("renders structured lesson content instead of transport JSON", async () => {

@@ -93,8 +93,8 @@ export function registerAssessmentRoutes(app: FastifyInstance, pool: Pool, aiRun
   const repositories = createRepositories(pool);
   const learnerOnly = createRoleGuard(pool, ["learner"]);
   const assessmentReaders = createRoleGuard(pool, ["operator", "manager"]);
-  const assessmentReviewers = createRoleGuard(pool, ["operator"]);
-  const assessmentOperators = createRoleGuard(pool, ["operator"]);
+  const assessmentReviewers = createRoleGuard(pool, ["operator", "manager"]);
+  const assessmentOperators = createRoleGuard(pool, ["operator", "manager"]);
 
   app.get("/api/v1/assessment-reviews/pending", { preHandler: assessmentReaders }, async (request) => {
     const pending = await repositories.assessments.listPending(request.e4sSession!.user.id);

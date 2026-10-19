@@ -89,8 +89,8 @@ const ASSESSMENT_AUDIO_PRESIGN_TTL_SECONDS = 300;
 export function registerContentRoutes(app: FastifyInstance, pool: Pool, aiRunner?: AiTaskRunner, storage?: ObjectStorage): void {
   const repositories = createRepositories(pool);
   const readers = createRoleGuard(pool, ["operator", "manager"]);
-  const operators = createRoleGuard(pool, ["operator"]);
-  const authors = createRoleGuard(pool, ["operator"]);
+  const operators = createRoleGuard(pool, ["operator", "manager"]);
+  const authors = createRoleGuard(pool, ["operator", "manager"]);
 
   app.get("/api/v1/content/weeks", { preHandler: readers }, async (request, reply) => {
     const frame = await repositories.content.listWeeks(request.e4sSession!.user.id);

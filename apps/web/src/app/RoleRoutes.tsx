@@ -29,7 +29,7 @@ export function RoleRoutes({ session }: { session: SessionView }) {
   if (pathname === "/" || pathname === "/home") return <Navigate replace to={role === "operator" ? "/op" : "/mgr"} />;
   if (role === "operator" && (managerArea || rewardPreviewRoute || (settingsArea && pathname !== "/settings"))) return <AccessFallback home="/op" message="Tài khoản này không có quyền mở khu vực quản lý." />;
   if (role === "manager" && operatorRoute) {
-    return <Navigate replace to="/mgr/ops" state={{ accessNotice: "Quản lý chỉ xem dữ liệu vận hành trong khu vực kiểm tra riêng." }} />;
+    return <Navigate replace to="/mgr/ops" state={{ accessNotice: "Đã chuyển sang khu vực vận hành của Quản lý." }} />;
   }
   if (pathname === "/settings" || managerRoute || (role === "manager" && pathname === "/reward/preview")) {
     return <RoleRouteLoadingBoundary label={loadingLabel(pathname)}><ManagerRouteController role={role} currentUserId={session.user.id} /></RoleRouteLoadingBoundary>;

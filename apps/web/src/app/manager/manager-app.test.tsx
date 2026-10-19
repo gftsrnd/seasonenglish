@@ -78,8 +78,8 @@ describe("new Manager app branch", () => {
 
   it("uses backend readiness instead of deriving fake set counts", () => {
     render(<ManagerOperations view={operations} deleteRequestCounts={{ "op-1": 2 }} />);
-    expect(screen.getByText("Bạn thấy đúng những gì vận hành thấy, ở chế độ chỉ xem.")).toBeInTheDocument();
-    expect(screen.getByRole("navigation", { name: "Màn hình vận hành (chỉ xem)" })).toHaveAttribute("data-read-only-preview", "true");
+    expect(screen.getByText("Quản lý có thể trực tiếp xem và thực hiện các thao tác nội dung, duyệt bài, prompt và đánh giá.")).toBeInTheDocument();
+    expect(screen.getByRole("navigation", { name: "Màn hình vận hành" })).not.toHaveAttribute("data-read-only-preview");
     expect(screen.getByRole("link", { name: "Chủ đề tuần" })).toHaveAttribute("href", "/mgr/ops/weeks");
     expect(screen.getByRole("link", { name: "Prompt" })).toHaveAttribute("href", "/mgr/ops/prompts");
     expect(screen.getByRole("heading", { name: "Bộ bài đã sẵn sàng đến tuần 1" })).toBeInTheDocument();

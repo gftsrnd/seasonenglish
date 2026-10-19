@@ -117,10 +117,9 @@
   white-space: nowrap;
 }
 
-/* The read-only Operator preview uses the app's compact 40px action
-   rhythm. Keep this scoped to the preview nav so the global 44px touch target
-   is unchanged elsewhere in Manager. */
-.manager-operations-page nav[aria-label="Màn hình vận hành (chỉ xem)"] > .btn {
+/* The Manager-owned operations links keep the same compact action rhythm as
+   the operational screens they open. */
+.manager-operations-page nav[aria-label="Màn hình vận hành"] > .btn {
   min-height: 40px;
 }
 
@@ -317,25 +316,25 @@
   white-space: normal;
 }
 
-.manager-inspection-card > h3,
+.manager-operations-links-card > h3,
 .manager-readiness-card > .manager-section-heading,
 .manager-operator-card > .manager-operator-card-heading {
   margin-top: 0;
 }
 
-.manager-inspection-card > p,
+.manager-operations-links-card > p,
 .manager-readiness-card > p {
   margin: 6px 0 0;
   line-height: 1.55;
 }
 
-.manager-inspection-links {
+.manager-operations-links {
   flex-wrap: wrap;
   gap: 8px;
   margin-top: 14px;
 }
 
-.manager-inspection-links > .btn {
+.manager-operations-links > .btn {
   flex: 0 0 auto;
 }
 

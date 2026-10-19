@@ -132,7 +132,7 @@ describe("Operator app rebuild", () => {
 
     cleanup();
     render(<OperatorLevelForms readOnly view={{ aiConnected: true, generatingTarget: null, targets: [{ target: "A2", forms: [{ id: "draft-2", title: "Bản nháp A2", status: "draft", createdAt: "14/10/2026", byName: "AI", listeningQuestions: 5, readingQuestions: 5, attempts: 0 }] }] } as any} actions={actions} />);
-    expect(screen.getByText(/quản lý đang xem đúng màn hình/i)).toBeInTheDocument();
+    expect(screen.getByText(/màn hình đang ở chế độ chỉ đọc/i)).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Duyệt" })).toBeDisabled();
     expect(screen.getByRole("button", { name: "Xoá" })).toBeDisabled();
     await user.click(screen.getByRole("button", { name: "Xem" }));

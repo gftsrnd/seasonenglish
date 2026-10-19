@@ -1479,34 +1479,6 @@ body:has(.app-operator) #modal > .dialog > .row {
   margin-top: 0;
 }
 
-/* Manager inspection owns the surrounding context. Keep the reused Operator
-   screen readable without adding a second shell or another competing banner. */
-.manager-operator-inspection {
-  min-width: 0;
-}
-
-.manager-inspection-context {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: baseline;
-  gap: 6px 12px;
-  margin: 0 0 14px;
-  padding: 10px 14px;
-  border: 1px solid var(--line);
-  border-left: 4px solid var(--primary);
-  border-radius: 12px;
-  background: var(--surface-2);
-  line-height: 1.45;
-}
-
-.manager-inspection-context span {
-  color: var(--muted);
-}
-
-.manager-operator-inspection > .app-operator {
-  min-width: 0;
-}
-
 /* The Operator profile dialog presents the same learner evidence as Manager.
    Use the same row rhythm so switching between the two entry points does not
    change how the information is scanned. */

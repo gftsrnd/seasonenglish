@@ -17,11 +17,10 @@ type OperatorLevelFormsProps = {
   view: LevelFormsUiView;
   actions: OperatorLevelFormsActions;
   readOnly?: boolean;
-  showReadOnlyBanner?: boolean;
   unavailable?: Partial<Record<LevelFormActionKey, string>>;
 };
 
-export function OperatorLevelForms({ view, actions, readOnly = false, showReadOnlyBanner = true, unavailable = {} }: OperatorLevelFormsProps) {
+export function OperatorLevelForms({ view, actions, readOnly = false, unavailable = {} }: OperatorLevelFormsProps) {
   const blocked = (key: LevelFormActionKey) => unavailable[key];
   const generating = Boolean(view.generatingTarget) || view.generateState === "loading";
   const mutationBusy = view.mutationState === "loading";
@@ -30,7 +29,7 @@ export function OperatorLevelForms({ view, actions, readOnly = false, showReadOn
   const pageTitle = <PageTitle actions={!view.aiConnected ? <a className="badge warn" href="/settings" onClick={event => { event.preventDefault(); actions.onOpenSettings(); }}>Chưa có API key – không sinh đề được</a> : undefined}><a className="link-button small" href="/op" onClick={event => { event.preventDefault(); actions.onBack(); }}>← Duyệt trình độ</a><h1>Đề thi lên mức</h1><p className="muted">Mỗi mức đích cần một đề ngắn được duyệt: 1 đoạn nghe (5 câu × 5đ), 1 bài đọc (5 câu × 5đ), viết 80–120 từ, 1 task nói – tất cả ở mức đích. Học viên đủ tín hiệu thi đề của mức kế tiếp, thời gian mỗi phần bằng nửa bài đầu vào.</p></PageTitle>;
 
   return <OperatorPage title="Đề thi lên mức">{pageTitle}
-    {readOnly && showReadOnlyBanner && <Banner tone="info"><span className="small">Quản lý đang xem đúng màn hình của Người vận hành ở chế độ chỉ đọc.</span></Banner>}
+    {readOnly && <Banner tone="info"><span className="small">Màn hình đang ở chế độ chỉ đọc.</span></Banner>}
     {!view.aiConnected && <Banner tone="warn"><span className="small"><b>AI chưa kết nối.</b> Chưa thể sinh đề mới; các đề đã có vẫn có thể xem. <a className="link-button" href="/settings" onClick={event => { event.preventDefault(); actions.onOpenSettings(); }}>Mở Cài đặt AI</a></span></Banner>}
     {view.generateError && <div className="banner warn" role="alert"><div className="body small">{view.generateError}</div></div>}
     {view.mutationMessage && <div className="small muted" aria-live="polite">{mutationBusy && <span className="spinner" aria-hidden="true" />} {view.mutationMessage}</div>}

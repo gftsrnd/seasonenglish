@@ -3605,7 +3605,7 @@ class AssessmentRepository {
        from assessment_attempts aa
        join users learner on learner.id = aa.learner_id and learner.status = 'active'
        join users reviewer on reviewer.id = $1
-         and reviewer.role = 'operator'
+         and reviewer.role in ('operator', 'manager')
          and reviewer.organization_id = learner.organization_id
        join assessment_versions av on av.id = aa.assessment_version_id
        where aa.id = $2 and aa.status = 'pending_review'`,
@@ -3642,7 +3642,7 @@ class AssessmentRepository {
          join assessment_attempts aa on aa.id = $2 and aa.status = 'pending_review'
          join users learner on learner.id = aa.learner_id
            and learner.organization_id = reviewer.organization_id and learner.status = 'active'
-         where reviewer.id = $1 and reviewer.role = 'operator'
+         where reviewer.id = $1 and reviewer.role in ('operator', 'manager')
          for update of aa`,
         [input.actorId, input.attemptId]
       );
@@ -3874,7 +3874,7 @@ class AssessmentRepository {
         `select learner.organization_id, learner.display_name
          from users actor join users learner on learner.organization_id = actor.organization_id
            and learner.id = $2 and learner.role = 'learner' and learner.status = 'active'
-         where actor.id = $1 and actor.role = 'operator'`,
+         where actor.id = $1 and actor.role in ('operator', 'manager')`,
         [actorId, learnerId]
       );
       const person = identity.rows[0];
@@ -3973,7 +3973,7 @@ class AssessmentRepository {
       `select learner.organization_id from users actor
        join users learner on learner.organization_id = actor.organization_id and learner.id = $2
          and learner.role = 'learner' and learner.status = 'active'
-       where actor.id = $1 and actor.role = 'operator'`, [actorId, learnerId]
+       where actor.id = $1 and actor.role in ('operator', 'manager')`, [actorId, learnerId]
     );
     const organizationId = identity.rows[0]?.organization_id;
     if (!organizationId) return null;
@@ -4007,7 +4007,7 @@ class AssessmentRepository {
       `select learner.organization_id, learner.display_name from users actor
        join users learner on learner.organization_id = actor.organization_id and learner.id = $2
          and learner.role = 'learner' and learner.status = 'active'
-       where actor.id = $1 and actor.role = 'operator'`, [actorId, learnerId]
+       where actor.id = $1 and actor.role in ('operator', 'manager')`, [actorId, learnerId]
     );
     const person = identity.rows[0];
     if (!person) return null;
