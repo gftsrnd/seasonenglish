@@ -4,9 +4,9 @@ import { createCredentialHash } from "../packages/domain/src/identity/index.js";
 
 const databaseUrl = process.env.DATABASE_URL;
 if (!databaseUrl) throw new Error("DATABASE_URL is required");
-const client = new Client({ connectionString: databaseUrl });
-await client.connect();
+const client = new Client({ connectionString: databaseUrl, connectionTimeoutMillis: 10_000 });
 try {
+  await client.connect();
   await migrateDatabase(client);
   await seedDemo(client, { mode: "local" });
   await client.query(
@@ -35,6 +35,15 @@ try {
       [userId, await createCredentialHash(password)]
     );
   }
+} catch (error) {
+  const failure = error as { code?: unknown; message?: unknown; detail?: unknown; hint?: unknown };
+  console.error("prepare-local failed", JSON.stringify({
+    code: failure.code ?? null,
+    message: failure.message ?? String(error),
+    detail: failure.detail ?? null,
+    hint: failure.hint ?? null
+  }));
+  process.exitCode = 1;
 } finally {
-  await client.end();
+  await client.end().catch(() => undefined);
 }
