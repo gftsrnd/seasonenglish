@@ -7576,6 +7576,22 @@ class ManagerRepository {
       await client.query("delete from sessions where user_id = $1", [accountId]);
       await client.query("delete from user_credentials where user_id = $1", [accountId]);
       await client.query("delete from learner_profiles where user_id = $1", [accountId]);
+      const privateFiles = await client.query<{ bucket: string; object_key: string }>(
+        "select bucket, object_key from files where owner_user_id = $1 for update",
+        [accountId]
+      );
+      for (const file of privateFiles.rows) {
+        await client.query(
+          `insert into jobs (id, kind, payload, max_attempts, idempotency_key)
+           values ($1, 'storage.cleanup', $2::jsonb, 3, $3)
+           on conflict (idempotency_key) do nothing`,
+          [
+            randomUUID(),
+            JSON.stringify({ bucket: file.bucket, objectKey: file.object_key, reason: "account_purge" }),
+            `account-purge:${accountId}:${file.bucket}:${file.object_key}`
+          ]
+        );
+      }
       await client.query("delete from files where owner_user_id = $1", [accountId]);
 
       // Keep operational and learning history, but remove free-form content that

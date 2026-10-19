@@ -23,6 +23,16 @@ export function registerFileRoutes(app: FastifyInstance, pool: Pool, storage: Ob
     if (!presignGetObject) {
       return reply.code(503).send({ code: "ASSESSMENT_AUDIO_READ_UNAVAILABLE" });
     }
+    if (storage.objectExists) {
+      try {
+        if (!await storage.objectExists(EVIDENCE_BUCKET, artifactKey)) {
+          return reply.code(404).send({ code: "ASSESSMENT_AUDIO_NOT_FOUND" });
+        }
+      } catch (error) {
+        logStorageFailure(request, "objectExists", error);
+        return reply.code(503).send({ code: "ASSESSMENT_AUDIO_READ_UNAVAILABLE" });
+      }
+    }
     let signed: Awaited<ReturnType<typeof presignGetObject>>;
     try {
       signed = await presignGetObject({

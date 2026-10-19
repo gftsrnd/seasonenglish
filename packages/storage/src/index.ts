@@ -34,8 +34,8 @@ export interface ObjectStorage {
   presignGetObject?(input: PresignObjectInput): Promise<PresignedObject>;
 }
 
-export const EVIDENCE_BUCKET = "e4s-evidence";
-export const MEDIA_BUCKET = "e4s-media";
+export const EVIDENCE_BUCKET = process.env.S3_EVIDENCE_BUCKET?.trim() || "e4s-evidence";
+export const MEDIA_BUCKET = process.env.S3_MEDIA_BUCKET?.trim() || "e4s-media";
 
 export interface S3StorageOptions {
   endpoint: string;

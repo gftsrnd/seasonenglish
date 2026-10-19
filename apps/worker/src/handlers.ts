@@ -60,29 +60,34 @@ export function createWorkerHandlers(input: {
       const reminderId = stringValue(objectPayload(job.payload).reminderId);
       const delivery = await input.notifications!.findWebhookDelivery(reminderId);
       if (!delivery) return;
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 10_000);
       try {
         const response = await fetch(delivery.webhookUrl, {
           method: "POST",
           headers: { "content-type": "application/json" },
-          body: JSON.stringify(renderWebhookPayload(delivery.webhookTemplate, delivery.message, delivery.learnerName))
+          body: JSON.stringify(renderWebhookPayload(delivery.webhookTemplate, delivery.message, delivery.learnerName)),
+          signal: controller.signal
         });
-        const responseBody = await response.text().catch(() => "");
         if (!response.ok) throw new Error(`NOTIFICATION_PROVIDER_HTTP_${response.status}`);
         await input.notifications!.updateWebhookDelivery({
           reminderId: delivery.reminderId,
           deliveryId: delivery.deliveryId,
           status: "sent",
           externalId: response.headers.get("x-request-id"),
-          response: { statusCode: response.status, body: responseBody.slice(0, 2_000) }
+          response: { statusCode: response.status }
         });
       } catch (error) {
+        const code = notificationErrorCode(error);
         await input.notifications!.updateWebhookDelivery({
           reminderId: delivery.reminderId,
           deliveryId: delivery.deliveryId,
           status: "failed",
-          response: { error: errorMessage(error) }
+          response: { code }
         });
-        throw error;
+        throw new Error(code);
+      } finally {
+        clearTimeout(timeout);
       }
     };
   }
@@ -125,8 +130,10 @@ function replaceTemplateValue(value: unknown, message: string, learnerName: stri
   return value;
 }
 
-function errorMessage(error: unknown): string {
-  return error instanceof Error ? error.message : String(error);
+function notificationErrorCode(error: unknown): string {
+  if (error instanceof Error && /^NOTIFICATION_PROVIDER_HTTP_\d{3}$/.test(error.message)) return error.message;
+  if (error instanceof DOMException && error.name === "AbortError") return "NOTIFICATION_PROVIDER_TIMEOUT";
+  return "NOTIFICATION_PROVIDER_NETWORK_ERROR";
 }
 
 function objectPayload(payload: unknown): Record<string, unknown> {

@@ -1,1 +1,1 @@
-export const EVIDENCE_BUCKET = "e4s-evidence";
+export { EVIDENCE_BUCKET } from "@e4s/storage";

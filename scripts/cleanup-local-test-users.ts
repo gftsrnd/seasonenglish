@@ -77,6 +77,21 @@ async function transferSharedOwnership(client: Client, targetIds: string[]) {
 }
 
 async function deletePrivateData(client: Client, targetIds: string[]) {
+  const privateFiles = await client.query<{ owner_user_id: string; bucket: string; object_key: string }>(
+    "select owner_user_id, bucket, object_key from files where owner_user_id = any($1::uuid[]) for update",
+    [targetIds]
+  );
+  for (const file of privateFiles.rows) {
+    await client.query(
+      `insert into jobs (id, kind, payload, max_attempts, idempotency_key)
+       values (gen_random_uuid(), 'storage.cleanup', $1::jsonb, 3, $2)
+       on conflict (idempotency_key) do nothing`,
+      [
+        JSON.stringify({ bucket: file.bucket, objectKey: file.object_key, reason: "local_test_user_cleanup" }),
+        `local-test-cleanup:${file.owner_user_id}:${file.bucket}:${file.object_key}`
+      ]
+    );
+  }
   await client.query("delete from notification_deliveries where reminder_id in (select id from reminders where learner_id = any($1::uuid[]))", [targetIds]);
   await client.query("delete from manager_pin_reports where subject_user_id = any($1::uuid[])", [targetIds]);
   await client.query("delete from level_up_challenge_results where learner_id = any($1::uuid[])", [targetIds]);

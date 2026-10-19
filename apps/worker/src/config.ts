@@ -37,7 +37,7 @@ export function loadWorkerConfig(env: NodeJS.ProcessEnv = process.env): WorkerCo
       region: env.S3_REGION?.trim() || "us-east-1",
       accessKeyId,
       secretAccessKey,
-      bucket: env.S3_BUCKET?.trim() || "e4s-evidence"
+      bucket: env.S3_BUCKET?.trim() || env.S3_EVIDENCE_BUCKET?.trim() || "e4s-evidence"
     },
     ...(groqApiKey ? {
       groq: {
