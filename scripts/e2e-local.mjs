@@ -6,12 +6,11 @@ import { dirname, join } from "node:path";
 import { createServer } from "node:net";
 
 const root = process.cwd();
-// The hand-off stack uses the separately running Web instance on 4175. Keep
-// that as the default so an E2E run cannot silently validate a stale 4173
-// process. The 4173 URL remains the explicit fallback only when this harness
-// starts its own dev-local process.
+// The canonical local application runs on 4175. Keep one URL for both an
+// already-running stack and the stack started by this harness so an E2E run
+// cannot silently validate a stale server on another port.
 const defaultWebUrl = "http://127.0.0.1:4175";
-const localStackWebUrl = "http://127.0.0.1:4173";
+const localStackWebUrl = defaultWebUrl;
 const explicitWebUrl = process.env.E4S_E2E_WEB_URL ?? process.env.E4S_WEB_URL;
 const explicitApiUrl = process.env.E4S_E2E_API_URL ?? process.env.E4S_API_URL;
 const shouldStartLocal = process.env.E4S_E2E_START !== "false";

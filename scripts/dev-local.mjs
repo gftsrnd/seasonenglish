@@ -79,8 +79,8 @@ try {
     S3_ACCESS_KEY: process.env.S3_ACCESS_KEY ?? process.env.MINIO_ROOT_USER ?? "e4s_minio",
     S3_SECRET_KEY: process.env.S3_SECRET_KEY ?? process.env.MINIO_ROOT_PASSWORD ?? "e4s_local_minio_password"
   });
-  run("pnpm", ["--filter", "@e4s/web", "dev", "--", "--host", "127.0.0.1", "--port", "4173"]);
-  process.stdout.write("E4S local: http://127.0.0.1:4173\n");
+  run("pnpm", ["--filter", "@e4s/web", "dev", "--", "--host", "127.0.0.1", "--port", "4175"]);
+  process.stdout.write("E4S local: http://127.0.0.1:4175\n");
   await new Promise(() => undefined);
 } catch (error) {
   process.stderr.write(`${error instanceof Error ? error.stack : String(error)}\n`);
