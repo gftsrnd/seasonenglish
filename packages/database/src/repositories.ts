@@ -46,6 +46,7 @@ import type {
   GameKey,
   GameResultView,
   GameTopicModeration,
+  GameWordView,
   GameWordSetView,
   LearnerAvatarData,
   LearnerNotificationView,
@@ -5394,9 +5395,10 @@ class EngagementRepository {
     };
   }
 
-  async gameWord(learnerId: string, setId: string, wordId: string): Promise<{
-    english: string; imageUrl: string | null;
-  } | null> {
+  async gameWord(learnerId: string, setId: string, wordId: string): Promise<Pick<
+    GameWordView,
+    "english" | "partOfSpeech" | "imageQuery" | "imageUrl" | "imageAttribution"
+  > | null> {
     const context = await this.activeEngagementContext(learnerId);
     if (!context) return null;
     const result = await this.pool.query<{ payload: Record<string, unknown> }>(
@@ -5415,9 +5417,18 @@ class EngagementRepository {
     if (!word || typeof word !== "object" || Array.isArray(word)) return null;
     const value = word as Record<string, unknown>;
     if (typeof value.english !== "string" || !value.english.trim()) return null;
+    const partOfSpeech = typeof value.partOfSpeech === "string" && value.partOfSpeech.trim()
+      ? value.partOfSpeech.trim().toLowerCase()
+      : "";
+    if (!partOfSpeech) return null;
     return {
       english: value.english,
-      imageUrl: typeof value.imageUrl === "string" && value.imageUrl ? value.imageUrl : null
+      partOfSpeech,
+      ...(typeof value.imageQuery === "string" && value.imageQuery.trim() ? { imageQuery: value.imageQuery } : {}),
+      ...(typeof value.imageUrl === "string" && value.imageUrl.trim() ? { imageUrl: value.imageUrl } : {}),
+      ...(value.imageAttribution && typeof value.imageAttribution === "object" && !Array.isArray(value.imageAttribution)
+        ? { imageAttribution: value.imageAttribution as NonNullable<GameWordView["imageAttribution"]> }
+        : {})
     };
   }
 

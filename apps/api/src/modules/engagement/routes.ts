@@ -8,7 +8,7 @@ import type { Pool } from "pg";
 import { z } from "zod";
 import { createRoleGuard } from "../identity/policy.js";
 import type { AiTaskRunner } from "../coach/index.js";
-import { createVocabularyImageResolver } from "./vocabulary-image.js";
+import type { ContentMediaService } from "../media/index.js";
 
 const gameKey = z.enum(["scramble", "crossword", "eggs", "mario", "sort", "typing"]);
 const answer = z.object({
@@ -34,7 +34,12 @@ const GAME_DESCRIPTORS: ReadonlyArray<Omit<GameDescriptor, "best">> = [
   { key: "typing", icon: "⌨️", name: "Typing race", description: "Type đúng từ trước khi thanh thời gian cạn!", goal: "Gõ đúng 10 từ thật nhanh, giữ chuỗi combo càng dài càng nhiều điểm.", instructions: ["Mỗi từ có gợi ý: nghĩa tiếng Việt, định nghĩa tiếng Anh và hình minh hoạ (nếu có).", "Thanh thời gian chạy rất nhanh – gõ từ bằng bàn phím ảo (hoặc bàn phím thật) rồi bấm ↵; phím vừa gõ sáng lên.", "Đúng: +10 điểm × combo (combo tăng mỗi từ đúng liên tiếp, tối đa ×5). Sai hoặc hết giờ: combo về 1.", "Chữ đã gõ đúng hiện xanh, sai hiện đỏ – sửa ngay bằng ⌫."], scoring: "10 điểm × combo cho mỗi từ đúng; tối đa 10 từ." }
 ];
 
-export function registerEngagementRoutes(app: FastifyInstance, pool: Pool, aiRunner?: AiTaskRunner): void {
+export function registerEngagementRoutes(
+  app: FastifyInstance,
+  pool: Pool,
+  aiRunner?: AiTaskRunner,
+  mediaService?: ContentMediaService
+): void {
   const repositories = createRepositories(pool);
   const learnerOnly = createRoleGuard(pool, ["learner"]);
 
@@ -166,16 +171,18 @@ export function registerEngagementRoutes(app: FastifyInstance, pool: Pool, aiRun
     const learnerId = request.e4sSession!.user.id;
     const word = await repositories.engagement.gameWord(learnerId, params.data.setId, params.data.wordId);
     if (!word) return reply.code(404).send({ code: "GAME_WORD_NOT_FOUND" });
-    if (word.imageUrl) return { imageUrl: word.imageUrl };
-    const sourceResult = await pool.query<{ source: string }>(
-      `select coalesce(os.vocab_image_source, 'wikimedia') as source from users u
-       left join organization_settings os on os.organization_id = u.organization_id where u.id = $1`,
-      [learnerId]
-    );
-    const imageResolver = createVocabularyImageResolver(sourceResult.rows[0]?.source);
-    const imageUrl = await imageResolver.resolve(word.english);
-    if (imageUrl) await repositories.engagement.saveGameWordImage(learnerId, params.data.setId, params.data.wordId, imageUrl);
-    return { imageUrl };
+    if (!mediaService) return { status: "unavailable" };
+    try {
+      return await mediaService.resolveForUser(learnerId, {
+        term: word.english,
+        partOfSpeech: word.partOfSpeech,
+        ...(word.imageQuery ? { imageQuery: word.imageQuery } : {}),
+        ...(word.imageUrl ? { explicitImageUrl: word.imageUrl } : {}),
+        ...(word.imageAttribution ? { explicitAttribution: word.imageAttribution } : {})
+      });
+    } catch {
+      return { status: "unavailable" };
+    }
   });
 
   app.post("/api/v1/engagement/games/:game/results", { preHandler: learnerOnly }, async (request, reply) => {

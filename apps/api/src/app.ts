@@ -52,7 +52,7 @@ export function buildApi(options: BuildApiOptions): FastifyInstance {
   registerManagerRoutes(app, options.pool, { maintenanceEnabled });
   registerNotificationRoutes(app, options.pool);
   registerCoachRoutes(app, options.pool, options.aiRunner);
-  registerEngagementRoutes(app, options.pool, options.aiRunner);
+  registerEngagementRoutes(app, options.pool, options.aiRunner, options.mediaService);
   registerSystemRoutes(app, options.pool, options.storage, Boolean(options.aiRunner), maintenanceEnabled, options.imageProviders);
   if (options.storage) {
     void app.register(multipart, { limits: { files: 1, fileSize: 20 * 1024 * 1024 } });

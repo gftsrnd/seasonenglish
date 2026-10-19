@@ -1,15 +1,21 @@
 import { Pool } from "pg";
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { migrateDatabase, resetPublicSchema, seedDemo } from "@e4s/database";
 import { createCredentialHash } from "@e4s/domain/identity";
 import { DEMO_IDS } from "@e4s/test-support";
 import { buildApi } from "../src/app.js";
+import type { ContentMediaService } from "../src/modules/media/index.js";
 
 const databaseUrl = process.env.TEST_DATABASE_URL
   ?? "postgres://e4s:e4s_test_password@127.0.0.1:55432/e4s_test";
 
 describe("practice, games, arena, rewards and survey API", () => {
   const pool = new Pool({ connectionString: databaseUrl });
+  const mediaService: ContentMediaService = {
+    resolveForUser: vi.fn().mockResolvedValue({ status: "unavailable" }),
+    diagnoseForUser: vi.fn().mockResolvedValue({ image: { status: "unavailable" }, provider: null, cached: false }),
+    clearForUser: vi.fn().mockResolvedValue({ cleared: 0 })
+  };
   const app = buildApi({ pool, allowDemoLogin: true, secureCookies: false, aiRunner: {
     runTask: async (taskId) => ({
       output: taskId === "weekly_practice_grading" ? {
@@ -18,12 +24,13 @@ describe("practice, games, arena, rewards and survey API", () => {
       } : {
         topic: "Sprint planning",
         words: Array.from({ length: 15 }, (_, index) => ({ id: `sprint-${index + 1}`, english: `term ${index + 1}`,
-          vietnamese: `từ ${index + 1}`, definition: `definition ${index + 1}`, partOfSpeech: "noun" }))
+          vietnamese: `từ ${index + 1}`, definition: `definition ${index + 1}`, partOfSpeech: "noun",
+          ...(index === 0 ? { imageQuery: "sprint planning board" } : {}) }))
       },
       metadata: { traceId: `trace-${taskId}`, taskId, provider: "fixture", model: "fixture-model", attempts: 1,
         latencyMs: 5, inputHash: "a".repeat(64), schemaValid: true as const, usage: {} }
     })
-  } });
+  }, mediaService });
   let cookie = "";
 
   beforeAll(async () => {
@@ -132,6 +139,48 @@ describe("practice, games, arena, rewards and survey API", () => {
     expect(count.rows[0].count).toBe(2);
   });
 
+  it("resolves a game word through shared attributed media after ownership succeeds", async () => {
+    const hub = await app.inject({ method: "GET", url: "/api/v1/engagement/games", headers: { cookie } });
+    const setId = hub.json().wordSet.id as string;
+    const word = hub.json().wordSet.words[0] as { id: string; english: string; partOfSpeech: string };
+    vi.mocked(mediaService.resolveForUser).mockResolvedValueOnce({
+      status: "available",
+      imageUrl: "https://storage.test/game-word.png",
+      alt: word.english,
+      attribution: {
+        creator: "Fixture creator",
+        licence: "CC BY",
+        licenceUrl: "https://creativecommons.org/licenses/by/4.0/",
+        sourceUrl: "https://commons.wikimedia.org/wiki/File:Game_word.png"
+      }
+    });
+
+    const response = await app.inject({
+      method: "GET",
+      url: `/api/v1/engagement/game-sets/${setId}/words/${encodeURIComponent(word.id)}/image`,
+      headers: { cookie }
+    });
+
+    expect(response.statusCode, response.body).toBe(200);
+    expect(response.json()).toMatchObject({ status: "available", imageUrl: "https://storage.test/game-word.png" });
+    expect(mediaService.resolveForUser).toHaveBeenLastCalledWith(DEMO_IDS.learner, expect.objectContaining({
+      term: word.english,
+      partOfSpeech: word.partOfSpeech
+    }));
+  });
+
+  it("returns unavailable and does not resolve a game word outside the learner set", async () => {
+    vi.mocked(mediaService.resolveForUser).mockClear();
+    const response = await app.inject({
+      method: "GET",
+      url: "/api/v1/engagement/game-sets/99999999-9999-4999-8999-999999999999/words/missing/image",
+      headers: { cookie }
+    });
+
+    expect(response.statusCode).toBe(404);
+    expect(mediaService.resolveForUser).not.toHaveBeenCalled();
+  });
+
   it("shows a legacy Season catch record on the current ten-point scale", async () => {
     await pool.query("delete from game_results where learner_id = $1 and game_key = 'eggs'", [DEMO_IDS.learner]);
     await pool.query(
@@ -196,6 +245,21 @@ describe("practice, games, arena, rewards and survey API", () => {
     });
     expect(generated.statusCode, generated.body).toBe(200);
     expect(generated.json()).toMatchObject({ wordSet: { topic: "Sprint planning", words: expect.arrayContaining([expect.objectContaining({ english: "term 1" })]) } });
+
+    vi.mocked(mediaService.resolveForUser).mockClear().mockResolvedValueOnce({ status: "unavailable" });
+    const generatedSet = generated.json().wordSet as { id: string; words: Array<{ id: string }> };
+    const image = await app.inject({
+      method: "GET",
+      url: `/api/v1/engagement/game-sets/${generatedSet.id}/words/${generatedSet.words[0]!.id}/image`,
+      headers: { cookie }
+    });
+    expect(image.statusCode, image.body).toBe(200);
+    expect(image.json()).toEqual({ status: "unavailable" });
+    expect(mediaService.resolveForUser).toHaveBeenCalledWith(DEMO_IDS.learner, expect.objectContaining({
+      term: "term 1",
+      partOfSpeech: "noun",
+      imageQuery: "sprint planning board"
+    }));
 
     const removed = await app.inject({ method: "DELETE", url: "/api/v1/engagement/games/word-set", headers: { cookie } });
     expect(removed.statusCode, removed.body).toBe(200);

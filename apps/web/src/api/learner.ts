@@ -4,7 +4,7 @@ import type {
   CoachPersona, CoachView, DuelView, GameAnswerInput, GameFinishInput, GameHubView, GameKey, GameResultView,
   LearnerHomeView, LearnerProfileData, LearnerProfileView, LearnerProgressView, LessonPartAppealView,
   LessonPartAttemptEvidenceInput, LessonPartAttemptView, LessonPartCode, LessonProgressView, LessonView,
-  LevelChallengeView, MicroLessonView, RewardView, SurveyView, WeeklyPracticeView
+  ContentImageView, LevelChallengeView, MicroLessonView, RewardView, SurveyView, WeeklyPracticeView
 } from "@e4s/contracts";
 import { request, uploadMultipart } from "./runtime.js";
 
@@ -37,7 +37,7 @@ export interface LearnerApiClient {
   generateGameWordSet(input: { requestId: string; topic: string }): Promise<GameHubView>;
   useWeeklyGameWordSet(): Promise<GameHubView>;
   deleteGameWordSet(): Promise<GameHubView>;
-  resolveGameWordImage(setId: string, wordId: string): Promise<{ imageUrl: string | null }>;
+  resolveGameWordImage(setId: string, wordId: string): Promise<ContentImageView>;
   submitGameResult(game: GameKey, input: { requestId: string } & GameFinishInput): Promise<GameResultView>;
   getArena(): Promise<ArenaView>;
   createDuel(input: { opponentId: string; game: Exclude<GameKey, "crossword"> }): Promise<DuelView>;
