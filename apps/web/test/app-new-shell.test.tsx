@@ -53,7 +53,8 @@ describe("new binding-app shell", () => {
     let resolveLogin!: (session: typeof learnerSession) => void;
     const client = {
       learnerLogin: vi.fn(() => new Promise<typeof learnerSession>((resolve) => { resolveLogin = resolve; })),
-      staffLogin: vi.fn()
+      staffLogin: vi.fn(),
+      registerLearner: vi.fn()
     };
     const user = userEvent.setup();
     render(<EntryScreen client={client} onAuthenticated={vi.fn()} />);
@@ -71,7 +72,7 @@ describe("new binding-app shell", () => {
   });
 
   it("supports arrow-key navigation for the account-type tabs", async () => {
-    const client = { learnerLogin: vi.fn(), staffLogin: vi.fn() };
+    const client = { learnerLogin: vi.fn(), staffLogin: vi.fn(), registerLearner: vi.fn() };
     const user = userEvent.setup();
     render(<EntryScreen client={client} onAuthenticated={vi.fn()} />);
 
@@ -94,7 +95,8 @@ describe("new binding-app shell", () => {
   it("associates login fields with the error and moves focus to failed-login feedback", async () => {
     const client = {
       learnerLogin: vi.fn().mockRejectedValue(new Error("invalid credentials")),
-      staffLogin: vi.fn()
+      staffLogin: vi.fn(),
+      registerLearner: vi.fn()
     };
     const user = userEvent.setup();
     render(<EntryScreen client={client} onAuthenticated={vi.fn()} />);

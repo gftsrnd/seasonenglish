@@ -56,6 +56,51 @@ describe("identity API", () => {
     expect(setCookie).toMatch(/SameSite=Lax/i);
   });
 
+  it("registers a learner into the current active program and signs them in", async () => {
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/auth/learner/register",
+      payload: { displayName: "Học viên mới", email: "registered@e4s.local", password: "registered-pass" }
+    });
+
+    expect(response.statusCode, response.body).toBe(201);
+    expect(response.json()).toMatchObject({
+      user: { displayName: "Học viên mới", email: "registered@e4s.local" },
+      role: "learner"
+    });
+    expect(response.body).not.toMatch(/token|credentialHash|password/i);
+    expect(response.headers["set-cookie"]).toMatch(/HttpOnly/i);
+
+    const stored = await pool.query(
+      `select u.role, u.status, lp.user_id as profile_id, e.learner_id as enrollment_id
+       from users u
+       join learner_profiles lp on lp.user_id = u.id
+       join enrollments e on e.learner_id = u.id
+       join programs p on p.id = e.program_id and p.status = 'active'
+       where u.email = $1`,
+      ["registered@e4s.local"]
+    );
+    expect(stored.rows).toEqual([expect.objectContaining({ role: "learner", status: "active", profile_id: expect.any(String), enrollment_id: expect.any(String) })]);
+
+    const duplicate = await app.inject({
+      method: "POST",
+      url: "/api/auth/learner/register",
+      payload: { displayName: "Tên khác", email: "REGISTERED@e4s.local", password: "registered-pass" }
+    });
+    expect(duplicate.statusCode).toBe(409);
+    expect(duplicate.json()).toEqual({ code: "LEARNER_REGISTRATION_EMAIL_EXISTS" });
+  });
+
+  it("rejects malformed learner registration input", async () => {
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/auth/learner/register",
+      payload: { displayName: "A", email: "not-an-email", password: "short" }
+    });
+    expect(response.statusCode).toBe(400);
+    expect(response.json()).toEqual({ code: "INVALID_LEARNER_REGISTRATION" });
+  });
+
   it("rejects an account when it enters through the wrong audience path", async () => {
     const learnerAtStaff = await app.inject({
       method: "POST",

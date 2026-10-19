@@ -224,6 +224,16 @@ section.welcome.app-entry .app-entry-card .field {
   gap: 6px;
 }
 
+section.welcome.app-entry .app-register-heading {
+  display: grid;
+  gap: 4px;
+}
+
+section.welcome.app-entry .app-register-heading h2,
+section.welcome.app-entry .app-register-heading p {
+  margin: 0;
+}
+
 /* Entry is rendered before authentication, but it reuses the same topbar
    markup as the authenticated shell. Keep the unauthenticated header in the
    normal document flow so the desktop sidebar rules cannot shift the form. */

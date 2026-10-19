@@ -13,6 +13,7 @@ export interface SharedApiClient extends AuthClient {
 export const sharedApiClient: SharedApiClient = {
   learnerLogin: (input) => request("/api/auth/learner/login", { method: "POST", body: JSON.stringify(input) }),
   staffLogin: (input) => request("/api/auth/staff/login", { method: "POST", body: JSON.stringify(input) }),
+  registerLearner: (input) => request("/api/auth/learner/register", { method: "POST", body: JSON.stringify(input) }),
   currentSession: () => request("/api/session"),
   saveSessionAvatar: (avatar) => request("/api/v1/me/avatar", { method: "PATCH", body: JSON.stringify(avatar) }),
   logout: () => request("/api/logout", { method: "POST", body: "{}" }),

@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import type { AccountRole, LearnerAvatarData, SessionView } from "@e4s/contracts";
 import { createRepositories, type DatabaseRepositories, type UserCredentialRecord, type UserIdentity } from "@e4s/database";
-import { issueSessionToken, permissionsFor, sessionTokenHash, verifyCredential } from "@e4s/domain/identity";
+import { createCredentialHash, issueSessionToken, permissionsFor, sessionTokenHash, verifyCredential } from "@e4s/domain/identity";
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import type { Pool } from "pg";
 import { z } from "zod";
@@ -9,6 +9,11 @@ import { z } from "zod";
 const COOKIE_NAME = "e4s_session";
 const loginInput = z.object({ email: z.string().trim().email(), password: z.string().min(1) });
 const versionedLoginInput = loginInput.extend({ audience: z.enum(["learner", "staff"]) });
+const learnerRegistrationInput = z.object({
+  displayName: z.string().trim().min(2).max(120),
+  email: z.string().trim().email().max(320),
+  password: z.string().min(8).max(200)
+}).strict();
 const avatarInput = z.object({
   acc: z.enum(["none", "leaf", "sun", "flower", "cloud", "star", "drop", "snow"]),
   color: z.enum(["ink", "brown", "olive", "taupe", "orange", "rose"]),
@@ -61,6 +66,23 @@ export function registerIdentityRoutes(app: FastifyInstance, options: IdentityRo
 
   app.post("/api/auth/learner/login", loginRateLimit, (request, reply) => login(request, reply, "learner", request.body));
   app.post("/api/auth/staff/login", loginRateLimit, (request, reply) => login(request, reply, "staff", request.body));
+  app.post("/api/auth/learner/register", { config: { rateLimit: { max: 5, timeWindow: "1 minute" } } }, async (request, reply) => {
+    const parsed = learnerRegistrationInput.safeParse(request.body);
+    if (!parsed.success) return reply.code(400).send({ code: "INVALID_LEARNER_REGISTRATION" });
+    try {
+      const account = await repositories.identity.registerLearner({
+        displayName: parsed.data.displayName,
+        email: parsed.data.email,
+        credentialHash: await createCredentialHash(parsed.data.password)
+      });
+      reply.code(201);
+      return createSession(reply, repositories, account, options.secureCookies, sessionTtlMs);
+    } catch (error) {
+      if (error instanceof Error && error.message === "LEARNER_REGISTRATION_EMAIL_EXISTS") return reply.code(409).send({ code: error.message });
+      if (error instanceof Error && error.message === "LEARNER_REGISTRATION_UNAVAILABLE") return reply.code(503).send({ code: error.message });
+      throw error;
+    }
+  });
   app.get("/api/session", currentSession);
   app.post("/api/logout", logout);
 

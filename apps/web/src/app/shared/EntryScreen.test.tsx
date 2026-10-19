@@ -18,7 +18,8 @@ afterEach(cleanup);
 function stubClient(): AuthClient {
   return {
     learnerLogin: vi.fn().mockRejectedValue(new Error("invalid credentials")),
-    staffLogin: vi.fn().mockResolvedValue(learnerSession)
+    staffLogin: vi.fn().mockResolvedValue(learnerSession),
+    registerLearner: vi.fn().mockResolvedValue(learnerSession)
   };
 }
 
@@ -40,5 +41,39 @@ describe("EntryScreen interaction", () => {
     expect(screen.getByLabelText("Email")).toHaveFocus();
     expect(screen.getByLabelText("Email")).toHaveValue("");
     expect(screen.getByLabelText("Mật khẩu")).toHaveValue("");
+  });
+
+  it("registers a learner from the public entry screen", async () => {
+    const user = userEvent.setup();
+    const client = stubClient();
+    const onAuthenticated = vi.fn();
+    render(<EntryScreen client={client} onAuthenticated={onAuthenticated} />);
+
+    await user.click(screen.getByRole("button", { name: "Tạo tài khoản người học" }));
+    expect(screen.getByRole("heading", { name: "Đăng ký người học" })).toBeInTheDocument();
+    await user.type(screen.getByLabelText("Họ và tên"), "Học viên mới");
+    await user.type(screen.getByLabelText("Email"), "new@e4s.local");
+    await user.type(screen.getByLabelText("Mật khẩu"), "new-password");
+    await user.type(screen.getByLabelText("Xác nhận mật khẩu"), "new-password");
+    await user.click(screen.getByRole("button", { name: "Đăng ký và bắt đầu" }));
+
+    expect(client.registerLearner).toHaveBeenCalledWith({ displayName: "Học viên mới", email: "new@e4s.local", password: "new-password" });
+    expect(onAuthenticated).toHaveBeenCalledWith(learnerSession);
+  });
+
+  it("does not submit registration when password confirmation differs", async () => {
+    const user = userEvent.setup();
+    const client = stubClient();
+    render(<EntryScreen client={client} onAuthenticated={() => undefined} />);
+
+    await user.click(screen.getByRole("button", { name: "Tạo tài khoản người học" }));
+    await user.type(screen.getByLabelText("Họ và tên"), "Học viên mới");
+    await user.type(screen.getByLabelText("Email"), "new@e4s.local");
+    await user.type(screen.getByLabelText("Mật khẩu"), "new-password");
+    await user.type(screen.getByLabelText("Xác nhận mật khẩu"), "different-password");
+    await user.click(screen.getByRole("button", { name: "Đăng ký và bắt đầu" }));
+
+    expect(await screen.findByRole("alert")).toHaveTextContent("Mật khẩu xác nhận chưa khớp");
+    expect(client.registerLearner).not.toHaveBeenCalled();
   });
 });

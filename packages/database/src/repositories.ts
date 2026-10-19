@@ -315,8 +315,56 @@ export interface AssessmentLevelFormRecord {
   status: "draft" | "published" | "retired";
 }
 
+function isPostgresUniqueViolation(error: unknown): boolean {
+  return typeof error === "object" && error !== null && "code" in error && (error as { code?: unknown }).code === "23505";
+}
+
 class IdentityRepository {
   constructor(private readonly pool: Pool) {}
+
+  async registerLearner(input: { displayName: string; email: string; credentialHash: string }): Promise<UserIdentity> {
+    const client = await this.pool.connect();
+    try {
+      await client.query("begin");
+      const targets = await client.query<{ organization_id: string; program_id: string }>(
+        `select o.id as organization_id, p.id as program_id
+         from organizations o
+         join lateral (
+           select id from programs
+           where organization_id = o.id and status = 'active'
+           order by start_date desc, created_at desc
+           limit 1
+         ) p on true`
+      );
+      if (targets.rowCount !== 1 || !targets.rows[0]) throw new Error("LEARNER_REGISTRATION_UNAVAILABLE");
+      const duplicate = await client.query("select 1 from users where lower(email) = lower($1) limit 1", [input.email]);
+      if (duplicate.rowCount) throw new Error("LEARNER_REGISTRATION_EMAIL_EXISTS");
+
+      const id = randomUUID();
+      const target = targets.rows[0];
+      await client.query(
+        `insert into users (id, organization_id, role, display_name, email)
+         values ($1, $2, 'learner', $3, lower($4))`,
+        [id, target.organization_id, input.displayName, input.email]
+      );
+      await client.query("insert into user_credentials (user_id, credential_hash) values ($1, $2)", [id, input.credentialHash]);
+      await client.query("insert into learner_profiles (user_id) values ($1)", [id]);
+      await client.query("insert into enrollments (id, program_id, learner_id) values ($1, $2, $3)", [randomUUID(), target.program_id, id]);
+      await client.query(
+        `insert into audit_events (id, organization_id, actor_user_id, action, entity_type, entity_id, payload, trace_id)
+         values ($1, $2, $3, 'account.self_registered', 'user', $3, $4::jsonb, $5)`,
+        [randomUUID(), target.organization_id, id, JSON.stringify({ role: "learner" }), randomUUID()]
+      );
+      await client.query("commit");
+      return { id, displayName: input.displayName, email: input.email.toLowerCase(), role: "learner", status: "active" };
+    } catch (error) {
+      await client.query("rollback");
+      if (isPostgresUniqueViolation(error)) throw new Error("LEARNER_REGISTRATION_EMAIL_EXISTS");
+      throw error;
+    } finally {
+      client.release();
+    }
+  }
 
   async findUserByEmail(email: string): Promise<UserIdentity | null> {
     const result = await this.pool.query<{

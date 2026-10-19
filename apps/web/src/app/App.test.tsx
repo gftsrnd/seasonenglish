@@ -8,6 +8,7 @@ const client = vi.hoisted(() => ({
   currentSession: vi.fn(),
   learnerLogin: vi.fn(),
   staffLogin: vi.fn(),
+  registerLearner: vi.fn(),
   getProductPreferences: vi.fn(),
   getProfile: vi.fn(),
   logout: vi.fn()
