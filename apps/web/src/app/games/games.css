@@ -77,6 +77,24 @@
   color: var(--text);
 }
 
+.game-life-count,
+.game-boss-status,
+.game-notice-content {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.game-life-count svg {
+  flex: 0 0 auto;
+}
+
+.game-hud-art {
+  width: 22px;
+  height: 22px;
+  object-fit: contain;
+}
+
 .game-hud > span.is-danger {
   border-color: var(--danger-line);
   background: var(--danger-soft);
@@ -516,9 +534,10 @@
 
 .catch-hero .basket {
   z-index: 2;
+  width: 54px;
+  height: 42px;
   margin-bottom: -9px;
-  font-size: 46px;
-  line-height: .8;
+  object-fit: contain;
 }
 
 .catch-hero .season-animal {
@@ -562,8 +581,17 @@
 }
 
 .game-ending .dino {
+  width: 150px;
+  height: 112px;
+  object-fit: contain;
   line-height: 0;
   filter: drop-shadow(0 8px 16px rgba(30, 30, 30, .18));
+}
+
+.game-ending-art {
+  width: 92px;
+  height: 92px;
+  object-fit: contain;
 }
 
 .game-ending strong {
@@ -633,7 +661,7 @@
   background: repeating-linear-gradient(#9b6a42 0 13px, #b17b4c 13px 26px);
 }
 
-.gift-gate > span {
+.gift-gate > .gift-art {
   position: relative;
   z-index: 2;
   display: block;
@@ -643,13 +671,13 @@
   filter: drop-shadow(0 4px 2px rgba(0, 0, 0, .12));
 }
 
-.gift-gate > span > img {
+.gift-gate > .gift-art > img {
   width: 100%;
   height: 100%;
   object-fit: contain;
 }
 
-.gift-gate > span > .gift-reward {
+.gift-gate > .gift-art > .gift-reward {
   position: absolute;
   top: -15px;
   left: 12px;
@@ -694,9 +722,10 @@
   width: 170px;
 }
 
-.rio-boss b {
-  font-size: 92px;
-  line-height: 1;
+.rio-boss-art {
+  width: 92px;
+  height: 92px;
+  object-fit: contain;
 }
 
 .rio-boss span {
@@ -708,14 +737,22 @@
   font-weight: 600;
 }
 
-.rio-boss.is-cleared b { font-size: 44px; }
+.rio-boss.is-cleared .rio-boss-art {
+  width: 52px;
+  height: 52px;
+  opacity: .62;
+}
 
 .rio-flag {
   position: absolute;
   bottom: 26px;
-  color: var(--muted);
-  font-size: 86px;
   filter: grayscale(1);
+}
+
+.rio-flag img {
+  width: 72px;
+  height: 86px;
+  object-fit: contain;
 }
 
 .rio-flag.is-ready {
@@ -1010,6 +1047,10 @@
   color: var(--muted);
   text-align: center;
   font-size: .82rem;
+}
+
+.game-notice-content {
+  justify-content: center;
 }
 
 .game-notice.is-success {

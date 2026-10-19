@@ -29,14 +29,14 @@ const compactTutorial: Record<GameKey, string[]> = {
   ],
   eggs: [
     "Đưa rổ hứng vật phẩm đúng theo gợi ý; kéo/chạm hoặc dùng ← → để di chuyển.",
-    "Hứng đúng được +1; hứng nhầm hoặc bỏ lỡ mất ❤️. Tốc độ tăng theo CEFR.",
-    "Mất 3 ❤️ thì kết thúc."
+    "Hứng đúng được +1; hứng nhầm hoặc bỏ lỡ mất một mạng. Tốc độ tăng theo CEFR.",
+    "Mất 3 mạng thì kết thúc."
   ],
   mario: [
     "Chạy bằng phím ← →, nhảy bằng Space hoặc ↑ (điện thoại: 3 nút dưới màn hình).",
-    "Mỗi hộp quà ? đứng trên một cột gỗ chắn ngang đường: chạm vào hộp hoặc cột → câu hỏi từ vựng, chọn 1 trong 4. Đúng: 🍄 (+1). Sai: mất 1 ❤️. Trả lời xong (đúng hay sai) cổng mới mở, nên không bỏ qua hộp nào được.",
-    "Đường khúc khuỷu: có hộp đặt trên bục gỗ, có hộp trên bục cao phải leo bậc. Cuối màn là món ăn khoái khẩu KHỔNG LỒ của nhân vật (thỏ – cà rốt, sóc – hạt dẻ, cánh cụt – cá…): chạm vào là đồng hồ 10 giây chạy; mỗi câu đúng ăn 1 miếng (3 miếng), sai mất 1 ❤️; quá 10 giây món ăn bị hỏng → thua.",
-    "Ăn hết món khổng lồ rồi chạm cờ để về đích. Hết 3 ❤️ hoặc để món ăn hỏng là thua."
+    "Mỗi hộp quà đứng trên một cột gỗ chắn ngang đường: chạm vào hộp hoặc cột → câu hỏi từ vựng, chọn 1 trong 4. Đúng được +1; sai mất một mạng. Trả lời xong cổng mới mở, nên không bỏ qua hộp nào được.",
+    "Đường khúc khuỷu: có hộp đặt trên bục gỗ, có hộp trên bục cao phải leo bậc. Cuối màn là món ăn khoái khẩu KHỔNG LỒ của nhân vật (thỏ – cà rốt, sóc – hạt dẻ, cánh cụt – cá…): chạm vào là đồng hồ 10 giây chạy; mỗi câu đúng ăn 1 miếng (3 miếng), sai mất một mạng; quá 10 giây món ăn bị hỏng → thua.",
+    "Ăn hết món khổng lồ rồi chạm cờ để về đích. Hết 3 mạng hoặc để món ăn hỏng là thua."
   ],
   sort: [
     "Mỗi lượt có một từ, nghĩa và các nhóm từ loại.",

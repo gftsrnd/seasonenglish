@@ -1,15 +1,24 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { GameAnswerInput } from "@e4s/contracts";
 import { seasonRioRoundPlan } from "@e4s/domain/engagement";
-import { ArrowLeft, ArrowRight, ArrowUp } from "lucide-react";
+import { ArrowLeft, ArrowRight, ArrowUp, CheckCircle2, Heart, HeartCrack, Timer, XCircle } from "lucide-react";
 import { choices, prepareGameAttempt, type FinishGame, type GameWord } from "./types.js";
-import { currentSeasonVisual, DinoGameOverArt, GiftArt, SeasonHero } from "./season-art.js";
+import { currentSeasonVisual } from "./season-visual.js";
+import { ProductArt } from "../shared/media/ProductArt.js";
 import { useExperience } from "../../features/experience/Experience.js";
 
 type Quiz = { phase: "gate" | "boss"; index: number; word: GameWord };
-type GateState = "closed" | "correct" | "wrong";
+export type GateState = "closed" | "correct" | "wrong";
+type NoticeTone = "neutral" | "success" | "error" | "warning";
 const tierOrder = [0, 60, 0, 110, 60, 0, 110, 60] as const;
 const gateLayout = tierOrder.map((tier, index) => ({ left: 360 + index * 330, tier }));
+
+export function giftVisualIds(state: GateState) {
+  return {
+    gift: `gift-${state}` as const,
+    result: state === "correct" ? "mushroom" as const : state === "wrong" ? "bomb" as const : null
+  };
+}
 
 export function SeasonRioGame({ words: source, onFinish, attemptSeed = 0 }: { words: GameWord[]; onFinish: FinishGame; attemptSeed?: number }) {
   const season = currentSeasonVisual();
@@ -35,7 +44,7 @@ export function SeasonRioGame({ words: source, onFinish, attemptSeed = 0 }: { wo
   const [bossSeconds, setBossSeconds] = useState(10);
   const [bossStarted, setBossStarted] = useState(false);
   const [answers, setAnswers] = useState<GameAnswerInput[]>([]);
-  const [notice, setNotice] = useState("Chạy tới hộp quà đầu tiên.");
+  const [notice, setNotice] = useState<{ text: string; tone: NoticeTone }>({ text: "Chạy tới hộp quà đầu tiên.", tone: "neutral" });
   const [busy, setBusy] = useState(false);
   const [ending, setEnding] = useState<"dinosaur" | "expired" | null>(null);
   const { play } = useExperience();
@@ -48,9 +57,9 @@ export function SeasonRioGame({ words: source, onFinish, attemptSeed = 0 }: { wo
   const state = useRef({ heroX, heroY, gateStates, quiz, lives, bossHealth, bossStarted, answers });
   state.current = { heroX, heroY, gateStates, quiz, lives, bossHealth, bossStarted, answers };
 
-  const finish = async (nextAnswers: GameAnswerInput[], reason: string) => {
+  const finish = async (nextAnswers: GameAnswerInput[], reason: string, tone: NoticeTone) => {
     if (finished.current) return;
-    finished.current = true; setBusy(true); setNotice(reason);
+    finished.current = true; setBusy(true); setNotice({ text: reason, tone });
     if (reason.includes("Hết 3 mạng")) { setEnding("dinosaur"); await new Promise((resolve) => window.setTimeout(resolve, 850)); }
     if (reason.includes("hết giờ")) { setEnding("expired"); await new Promise((resolve) => window.setTimeout(resolve, 850)); }
     await onFinish({ answers: nextAnswers });
@@ -103,15 +112,15 @@ export function SeasonRioGame({ words: source, onFinish, attemptSeed = 0 }: { wo
           nextX = gatePositions[gateIndex]! - 48;
           const gate = activeGateLayout[gateIndex]!;
           const word = roundPlan.gateWords[gateIndex];
-          if (word && nextY >= Math.max(0, gate.tier - 10)) { setQuiz({ phase: "gate", index: gateIndex, word }); setNotice(`Hộp quà ${gateIndex + 1}/${roundPlan.gateCount} đang chặn đường.`); }
-          else if (gate.tier > 0) setNotice(gate.tier === 60 ? "Đi lên bục để chạm hộp quà." : "Leo bậc thấp rồi lên bục cao để chạm hộp quà.");
+          if (word && nextY >= Math.max(0, gate.tier - 10)) { setQuiz({ phase: "gate", index: gateIndex, word }); setNotice({ text: `Hộp quà ${gateIndex + 1}/${roundPlan.gateCount} đang chặn đường.`, tone: "neutral" }); }
+          else if (gate.tier > 0) setNotice({ text: gate.tier === 60 ? "Đi lên bục để chạm hộp quà." : "Leo bậc thấp rồi lên bục cao để chạm hộp quà.", tone: "neutral" });
         } else if (current.gateStates.every((gate) => gate !== "closed") && current.bossHealth > 0 && nextX >= bossX - 78) {
           nextX = bossX - 78;
           const bossIndex = roundPlan.bossQuestions - current.bossHealth;
           const word = roundPlan.bossWords[bossIndex % Math.max(1, roundPlan.bossWords.length)];
-          if (word) { setBossStarted(true); setQuiz({ phase: "boss", index: bossIndex, word }); setNotice(`Boss ${season.food.name}: trả lời đúng ${roundPlan.bossQuestions} câu trước khi hết 10 giây.`); }
+          if (word) { setBossStarted(true); setQuiz({ phase: "boss", index: bossIndex, word }); setNotice({ text: `Boss ${season.food.name}: trả lời đúng ${roundPlan.bossQuestions} câu trước khi hết 10 giây.`, tone: "neutral" }); }
         } else if (current.gateStates.every((gate) => gate !== "closed") && current.bossHealth <= 0 && nextX >= flagX - 30) {
-          nextX = flagX - 30; void finish(current.answers, "🏁 Đã về đích!");
+          nextX = flagX - 30; void finish(current.answers, "Đã về đích!", "success");
         }
         if (nextX !== current.heroX) setHeroX(nextX);
         if (nextY !== current.heroY) setHeroY(nextY);
@@ -125,7 +134,7 @@ export function SeasonRioGame({ words: source, onFinish, attemptSeed = 0 }: { wo
   useEffect(() => {
     if (!bossStarted || bossHealth <= 0 || busy) return;
     const timer = window.setInterval(() => setBossSeconds((value) => {
-      if (value <= 1) { window.clearInterval(timer); void finish(state.current.answers, `⏱ ${season.food.name} khổng lồ đã hỏng — hết giờ.`); return 0; }
+      if (value <= 1) { window.clearInterval(timer); void finish(state.current.answers, `${season.food.name} khổng lồ đã hỏng — hết giờ.`, "warning"); return 0; }
       return value - 1;
     }), 1000);
     return () => window.clearInterval(timer);
@@ -153,13 +162,13 @@ export function SeasonRioGame({ words: source, onFinish, attemptSeed = 0 }: { wo
     else { nextLives -= 1; setLives(nextLives); }
     if (quiz.phase === "gate") {
       setGateStates((current) => current.map((value, index) => index === quiz.index ? (correct ? "correct" : "wrong") : value));
-      setNotice(correct ? "🍄 Đúng — cổng đã mở." : `💔 Sai — đáp án là “${quiz.word.english}”, cổng vẫn mở.`);
+      setNotice(correct ? { text: "Đúng — cổng đã mở.", tone: "success" } : { text: `Sai — đáp án là “${quiz.word.english}”, cổng vẫn mở.`, tone: "error" });
     } else {
-      if (correct) { setBossHealth((value) => Math.max(0, value - 1)); setNotice(bossHealth <= 1 ? `😋 Đã ăn hết ${season.food.name} khổng lồ — chạy tới cờ!` : `${season.food.emoji} Đúng — Boss mất một miếng.`); }
-      else setNotice(`💔 Sai — đáp án là “${quiz.word.english}”.`);
+      if (correct) { setBossHealth((value) => Math.max(0, value - 1)); setNotice(bossHealth <= 1 ? { text: `Đã ăn hết ${season.food.name} khổng lồ — chạy tới cờ!`, tone: "success" } : { text: "Đúng — Boss mất một miếng.", tone: "success" }); }
+      else setNotice({ text: `Sai — đáp án là “${quiz.word.english}”.`, tone: "error" });
     }
     setAnswers(nextAnswers); setQuiz(null);
-    if (nextLives <= 0) void finish(nextAnswers, "Hết 3 mạng — khủng long đã xuất hiện.");
+    if (nextLives <= 0) void finish(nextAnswers, "Hết 3 mạng — khủng long đã xuất hiện.", "error");
   };
 
   const hold = (key: string, pressed: boolean) => { keys.current[key] = pressed; };
@@ -172,26 +181,25 @@ export function SeasonRioGame({ words: source, onFinish, attemptSeed = 0 }: { wo
   const cameraLimit = Math.max(0, worldWidth - 900);
   const camera = Math.min(cameraLimit, Math.max(0, heroX * .35, heroX - 760));
   const isMoving = keys.current.ArrowLeft || keys.current.ArrowRight || keys.current.a || keys.current.d;
-  const heroPose = heroY > 0 ? "jump" : isMoving ? (Math.floor(heroX / 8) % 2 ? "run1" : "run2") : "idle";
-  const noticeTone = notice.startsWith("🍄") || notice.startsWith("🏁") ? "is-success" : notice.startsWith("💔") || notice.startsWith("Hết 3") ? "is-error" : notice.startsWith("⏱") ? "is-warning" : "";
+  const noticeTone = notice.tone === "success" ? "is-success" : notice.tone === "error" ? "is-error" : notice.tone === "warning" ? "is-warning" : "";
   return <div className="game-runner" aria-busy={busy || undefined}>
-    <div className="game-hud"><h2>Season-rio</h2><span>🍄 <strong>{score}/{roundPlan.total}</strong></span><span>Quà <strong>{gateStates.filter((gate) => gate !== "closed").length}/{roundPlan.gateCount}</strong></span><span>{season.food.emoji} {bossHealth > 0 ? `${"❤".repeat(bossHealth)} · ⏱ ${bossSeconds}s` : "xong"}</span><span aria-label={`${lives} tim`}>{"❤️".repeat(Math.max(0, lives))}{"🖤".repeat(Math.max(0, 3 - lives))}</span></div>
+    <div className="game-hud"><h2>Season-rio</h2><span aria-label={`Điểm ${score} trên ${roundPlan.total}`}><CheckCircle2 size={17} aria-hidden="true" /><strong>{score}/{roundPlan.total}</strong></span><span>Quà <strong>{gateStates.filter((gate) => gate !== "closed").length}/{roundPlan.gateCount}</strong></span><span className="game-boss-status"><ProductArt id={`food-${season.hero}`} decorative className="game-hud-art" /><span>{bossHealth > 0 ? `Boss ${bossHealth}/${roundPlan.bossQuestions}` : "Boss đã xong"}</span><Timer size={16} aria-hidden="true" /><span>{bossSeconds} giây</span></span><span className="game-life-count" aria-label={`${lives} mạng còn lại trên 3`}>{Array.from({ length: 3 }, (_, index) => index < lives ? <Heart key={index} size={18} fill="currentColor" aria-hidden="true" /> : <HeartCrack key={index} size={18} aria-hidden="true" />)}</span></div>
     <div ref={sceneRef} className="rio-scene" role="application" aria-label="Màn chơi Season-rio" tabIndex={0} onBlur={(event) => { if (!event.currentTarget.contains(event.relatedTarget as Node | null)) keys.current = {}; }}>
       <div className="rio-viewport"><div className="rio-world" style={{ width: worldWidth, transform: `translateX(-${camera}px)` }}>
         <div className="rio-cloud rio-cloud--one" /><div className="rio-cloud rio-cloud--two" />
         {platforms.map((platform, index) => <div data-testid="rio-platform" className="rio-platform" style={{ left: platform.left, width: platform.width, height: platform.height }} key={`${platform.left}-${index}`} />)}
-        {activeGateLayout.map((gate, index) => <div data-testid="gift-gate" data-state={gateStates[index] ?? "closed"} data-tier={gate.tier} className={`gift-gate ${(gateStates[index] ?? "closed") !== "closed" ? "is-open" : ""}`} style={{ left: gate.left, bottom: 28 + gate.tier }} key={gate.left}><i className="gate-beam" /><GiftArt state={gateStates[index] ?? "closed"} /><i className="gate-post" /></div>)}
-        <div data-testid="season-rio-boss" className={`rio-boss ${bossHealth <= 0 ? "is-cleared" : ""}`} style={{ left: bossX }}><b>{bossHealth <= 0 ? "😋" : season.food.emoji}</b><span>{bossHealth <= 0 ? "Đã ăn xong" : `${season.food.name.toUpperCase()} KHỔNG LỒ · ${bossSeconds}s`}</span></div>
-        <div data-testid="season-rio-flag" className={`rio-flag ${gateStates.every((gate) => gate !== "closed") && bossHealth <= 0 ? "is-ready" : ""}`} style={{ left: flagX }}>🚩</div>
-        <div data-testid="season-rio-hero" className={`rio-hero ${heroY > 0 ? "is-jumping" : isMoving ? "is-running" : ""}`} style={{ left: heroX, bottom: 28 + heroY }}><SeasonHero pose={heroPose} /></div>
+        {activeGateLayout.map((gate, index) => { const gateState = gateStates[index] ?? "closed"; const art = giftVisualIds(gateState); return <div data-testid="gift-gate" data-state={gateState} data-tier={gate.tier} aria-label={`Hộp quà ${index + 1}: ${gateState === "closed" ? "chưa trả lời" : gateState === "correct" ? "đúng" : "sai"}`} className={`gift-gate ${gateState !== "closed" ? "is-open" : ""}`} style={{ left: gate.left, bottom: 28 + gate.tier }} key={gate.left}><i className="gate-beam" /><span className="gift-art"><ProductArt id={art.gift} decorative />{art.result ? <ProductArt id={art.result} decorative className="gift-reward" /> : null}</span><i className="gate-post" /></div>; })}
+        <div data-testid="season-rio-boss" className={`rio-boss ${bossHealth <= 0 ? "is-cleared" : ""}`} aria-label={bossHealth <= 0 ? `Đã ăn xong ${season.food.name}` : `Boss ${season.food.name}, còn ${bossHealth} phần`} style={{ left: bossX }}><ProductArt id={`food-${season.hero}`} decorative className="rio-boss-art" /><span>{bossHealth <= 0 ? "Đã ăn xong" : `${season.food.name.toUpperCase()} KHỔNG LỒ · ${bossSeconds}s`}</span></div>
+        <div data-testid="season-rio-flag" className={`rio-flag ${gateStates.every((gate) => gate !== "closed") && bossHealth <= 0 ? "is-ready" : ""}`} aria-label="Cờ về đích" style={{ left: flagX }}><ProductArt id="flag" decorative /></div>
+        <div data-testid="season-rio-hero" className={`rio-hero ${heroY > 0 ? "is-jumping" : isMoving ? "is-running" : ""}`} aria-label={`${season.heroName} trong màn chơi`} style={{ left: heroX, bottom: 28 + heroY }}><ProductArt id={`hero-${season.hero}`} decorative /></div>
         <div className="rio-ground" />
       </div></div>
        <div className="mario-controls" aria-label="Điều khiển Season-rio"><div><button type="button" aria-label="Sang trái" disabled={busy || Boolean(quiz)} onPointerDown={(event) => { event.preventDefault(); nudge(-1); }} onPointerUp={(event) => { event.preventDefault(); hold("ArrowLeft", false); }} onPointerCancel={() => hold("ArrowLeft", false)} onPointerLeave={() => hold("ArrowLeft", false)}><ArrowLeft className="game-control-icon" size={24} strokeWidth={2} aria-hidden="true" /></button><button type="button" aria-label="Sang phải" disabled={busy || Boolean(quiz)} onPointerDown={(event) => { event.preventDefault(); nudge(1); }} onPointerUp={(event) => { event.preventDefault(); hold("ArrowRight", false); }} onPointerCancel={() => hold("ArrowRight", false)} onPointerLeave={() => hold("ArrowRight", false)}><ArrowRight className="game-control-icon" size={24} strokeWidth={2} aria-hidden="true" /></button></div><button className="jump" type="button" aria-label="Lên" disabled={busy || Boolean(quiz)} onPointerDown={(event) => { event.preventDefault(); jump(); }} onPointerUp={(event) => { event.preventDefault(); hold("jump", false); }} onPointerCancel={() => hold("jump", false)}><ArrowUp className="game-control-icon" size={24} strokeWidth={2} aria-hidden="true" /></button></div>
-      {quiz ? <div ref={quizDialogRef} className="rio-quiz" role="dialog" aria-modal="true" aria-label={quiz.phase === "gate" ? "Câu hỏi hộp quà" : "Câu hỏi Boss"} tabIndex={-1}><div><span className="eyebrow">{quiz.phase === "gate" ? `Hộp quà ${quiz.index + 1}/${roundPlan.gateCount} hỏi` : `${season.food.emoji} Boss hỏi · ${bossSeconds}s`}</span><h3>{quiz.word.vietnamese}</h3><p>{quiz.word.definition}</p><div>{choices(words, quiz.word, 4, attemptSeed ^ quiz.index).map((choice) => <button type="button" disabled={busy} key={choice.id} onClick={() => answerQuiz(choice)}>{choice.english}</button>)}</div></div></div> : null}
-      {ending ? <div className="game-ending" role="status">{ending === "dinosaur" ? <DinoGameOverArt /> : <span>{season.food.emoji}</span>}<strong>{ending === "dinosaur" ? "Hết mạng!" : "Hết 10 giây!"}</strong><small>{ending === "dinosaur" ? "Khủng long đã bắt kịp bạn." : `${season.food.name} khổng lồ đã hỏng.`}</small></div> : null}
+      {quiz ? <div ref={quizDialogRef} className="rio-quiz" role="dialog" aria-modal="true" aria-label={quiz.phase === "gate" ? "Câu hỏi hộp quà" : "Câu hỏi Boss"} tabIndex={-1}><div><span className="eyebrow">{quiz.phase === "gate" ? `Hộp quà ${quiz.index + 1}/${roundPlan.gateCount} hỏi` : `Boss hỏi · ${bossSeconds}s`}</span><h3>{quiz.word.vietnamese}</h3><p>{quiz.word.definition}</p><div>{choices(words, quiz.word, 4, attemptSeed ^ quiz.index).map((choice) => <button type="button" disabled={busy} key={choice.id} onClick={() => answerQuiz(choice)}>{choice.english}</button>)}</div></div></div> : null}
+      {ending ? <div className="game-ending" role="status">{ending === "dinosaur" ? <ProductArt id="dinosaur" decorative className="dino" /> : <ProductArt id={`food-${season.hero}`} decorative className="game-ending-art" />}<strong>{ending === "dinosaur" ? "Hết mạng!" : "Hết 10 giây!"}</strong><small>{ending === "dinosaur" ? "Khủng long đã bắt kịp bạn." : `${season.food.name} khổng lồ đã hỏng.`}</small></div> : null}
     </div>
-    <p className="catch-help">← → di chuyển hoặc dùng nút. Chạm hộp/cột để trả lời; trả lời xong cổng mở, sai mất ❤️. Hộp trên bục cần leo lên trước. Cuối màn, chạm {season.food.emoji} rồi trả lời đúng 3 câu trong 10 giây; sau đó chạm cờ về đích.</p>
+    <p className="catch-help">← → di chuyển hoặc dùng nút. Chạm hộp/cột để trả lời; trả lời xong cổng mở, sai mất một mạng. Hộp trên bục cần leo lên trước. Cuối màn, chạm món ăn của nhân vật rồi trả lời đúng 3 câu trong 10 giây; sau đó chạm cờ về đích.</p>
      {busy ? <span className="game-loading" role="status">Đang lưu kết quả…</span> : null}
-     <p className={`game-notice ${noticeTone}`} aria-live="polite">{notice}</p>
+     <p className={`game-notice ${noticeTone}`} aria-live="polite"><span className="game-notice-content">{notice.tone === "success" ? <CheckCircle2 size={17} aria-hidden="true" /> : notice.tone === "error" ? <XCircle size={17} aria-hidden="true" /> : notice.tone === "warning" ? <Timer size={17} aria-hidden="true" /> : null}<span>{notice.text}</span></span></p>
   </div>;
 }

@@ -5,7 +5,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import type { GameDescriptor, GameHubView, GameWordSetView } from "@e4s/contracts";
 import { CrosswordGame } from "../games/CrosswordGame.js";
 import { SeasonCatchGame } from "../games/SeasonCatchGame.js";
-import { SeasonRioGame } from "../games/SeasonRioGame.js";
+import { giftVisualIds, SeasonRioGame } from "../games/SeasonRioGame.js";
 import { TypingRaceGame } from "../games/TypingRaceGame.js";
 import { LearnerGame, LearnerGames } from "./Games.js";
 import type { LearnerCallbacks } from "./contracts.js";
@@ -13,6 +13,8 @@ import type { LearnerCallbacks } from "./contracts.js";
 afterEach(() => {
   cleanup();
   vi.restoreAllMocks();
+  vi.unstubAllGlobals();
+  delete document.documentElement.dataset.theme;
 });
 
 const wordSet: GameWordSetView = {
@@ -60,6 +62,37 @@ const hubView: GameHubView = {
 };
 
 describe("learner game visual and interaction regressions", () => {
+  it("maps every Season-rio gift outcome to verified product artwork", () => {
+    expect(giftVisualIds("closed")).toEqual({ gift: "gift-closed", result: null });
+    expect(giftVisualIds("correct")).toEqual({ gift: "gift-correct", result: "mushroom" });
+    expect(giftVisualIds("wrong")).toEqual({ gift: "gift-wrong", result: "bomb" });
+  });
+
+  it("renders seasonal product art and accessible life counts without changing initial mechanics", () => {
+    document.documentElement.dataset.theme = "autumn";
+    vi.stubGlobal("requestAnimationFrame", vi.fn(() => 1));
+    vi.stubGlobal("cancelAnimationFrame", vi.fn());
+
+    const catchView = render(<SeasonCatchGame words={wordSet.words} cefr="A2" onFinish={vi.fn()} />);
+    expect(screen.getByLabelText("3 mạng còn lại trên 3")).toBeInTheDocument();
+    expect(catchView.container.querySelector('[data-product-art="catch-autumn"]')).toBeInTheDocument();
+    expect(catchView.container.querySelector('[data-product-art="basket"]')).toBeInTheDocument();
+    expect(catchView.container.querySelector('[data-product-art="hero-squirrel"]')).toBeInTheDocument();
+    expect(screen.getAllByTestId("falling-item")).toHaveLength(3);
+    expect(catchView.container).not.toHaveTextContent(/[❤️🖤💔✅]/u);
+    catchView.unmount();
+
+    const rioView = render(<SeasonRioGame words={wordSet.words} onFinish={vi.fn()} />);
+    expect(screen.getByLabelText("3 mạng còn lại trên 3")).toBeInTheDocument();
+    expect(rioView.container.querySelector('[data-product-art="gift-closed"]')).toBeInTheDocument();
+    expect(rioView.container.querySelector('[data-product-art="food-squirrel"]')).toBeInTheDocument();
+    expect(rioView.container.querySelector('[data-product-art="flag"]')).toBeInTheDocument();
+    expect(rioView.container.querySelector('[data-product-art="hero-squirrel"]')).toBeInTheDocument();
+    expect(screen.getAllByTestId("gift-gate")).toHaveLength(3);
+    expect(screen.getAllByTestId("gift-gate").map((gate) => gate.dataset.state)).toEqual(["closed", "closed", "closed"]);
+    expect(rioView.container).not.toHaveTextContent(/[❤️🖤💔🍄🏁⏱😋🚩]/u);
+  });
+
   it("keeps hub descriptions concise while preserving each game's core action", () => {
     render(<LearnerGames view={hubView} actions={actions} />);
 
@@ -85,7 +118,7 @@ describe("learner game visual and interaction regressions", () => {
     expect(screen.getByText("Kỷ lục: chưa có")).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Thoát game" })).toHaveClass("btn", "btn-sm");
     expect(screen.getByText("Hướng dẫn chơi", { exact: false })).toBeInTheDocument();
-    expect(screen.getByText(/Mỗi hộp quà \? đứng trên một cột gỗ chắn ngang đường/i)).toBeInTheDocument();
+    expect(screen.getByText(/Mỗi hộp quà đứng trên một cột gỗ chắn ngang đường/i)).toBeInTheDocument();
     expect(screen.getByText(/món ăn khoái khẩu KHỔNG LỒ/i)).toBeInTheDocument();
     expect(screen.getByText(/Bộ từ: Introducing yourself · 3 từ/i)).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Bắt đầu chơi" })).toBeInTheDocument();
