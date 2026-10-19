@@ -105,6 +105,25 @@
   max-width: none;
 }
 
+.manager-operations-actions .manager-section-heading {
+  margin-bottom: 12px;
+}
+
+.manager-operations-actions .manager-section-heading h3,
+.manager-operations-actions .manager-section-heading p {
+  margin-top: 0;
+}
+
+.manager-operations-action-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.manager-operations-action-list .btn {
+  flex: 0 0 auto;
+}
+
 .manager-page-title__actions {
   flex: 0 1 auto;
   justify-content: flex-end;

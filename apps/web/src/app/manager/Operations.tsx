@@ -12,6 +12,17 @@ export function ManagerOperations({ view, deleteRequestCounts, ...operational }:
       <div className="row between manager-section-heading"><h3>Bộ bài đã sẵn sàng đến tuần {view.currentWeek}</h3>{readiness ? <Badge tone={readiness.readySets === readiness.requiredSets ? "ok" : "warn"}>{readiness.readySets}/{readiness.requiredSets} bộ đã duyệt</Badge> : <Badge>Chưa có dữ liệu</Badge>}</div>
       {!readiness ? <p className="muted">API chưa trả dữ liệu bộ bài bắt buộc.</p> : readiness.requiredSets === 0 ? <p>Chưa có học viên được duyệt mức nên chưa cần bộ bài nào.</p> : readiness.missing.length ? <p>Còn thiếu: {readiness.missing.map((item) => `Tuần ${item.week} · ${item.cefr} (${item.state === "draft" ? "bản nháp chưa duyệt" : "chưa sinh"})`).join("; ")}.</p> : <p>Mọi mức đang có học viên đều đã có bộ bài được duyệt.</p>}
     </section>
+    <section className="card section manager-operations-actions" aria-label="Thao tác vận hành của Quản lý">
+      <div className="manager-section-heading"><h3>Thao tác vận hành</h3><p className="small muted">Quản lý có thể mở và xử lý trực tiếp các phần vận hành như Người vận hành.</p></div>
+      <nav className="manager-operations-action-list" aria-label="Các phần vận hành">
+        <a className="btn" href="/mgr/ops/levels">Duyệt mức</a>
+        <a className="btn" href="/mgr/ops/weeks">Chủ đề tuần</a>
+        <a className="btn" href="/mgr/ops/lessons">Bài học</a>
+        <a className="btn" href="/mgr/ops/review">Đọc mẫu & kiểm tra</a>
+        <a className="btn" href="/mgr/ops/prompts">Prompt & rubric</a>
+        <a className="btn" href="/mgr/ops/level-forms">Đề lên mức</a>
+      </nav>
+    </section>
     <section className="card section manager-operators-section" aria-label="Theo dõi người vận hành">
       <div className="row between manager-section-heading"><div><h3>Người vận hành</h3><p className="small muted">Theo dõi nhanh người soạn/duyệt và chất lượng đầu ra. Danh sách này chỉ gồm tài khoản vận hành, không trộn vào bảng học viên.</p></div><span className="xs muted">{view.operators.length} người</span></div>
       {view.operators.length ? <div className="manager-operator-list">{view.operators.map((operator) => <OperatorRow key={operator.operatorId} operator={operator} currentWeek={view.currentWeek} {...(deleteRequestCounts ? { deleteRequestCount: deleteRequestCounts[operator.operatorId] ?? 0 } : {})} />)}</div> : <p className="muted">Chưa có tài khoản Người vận hành.</p>}
