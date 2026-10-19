@@ -776,6 +776,13 @@ h1,h2,h3,h4,h1 b,h2 b,h3 b,h4 b{font-weight:600 !important}
 .lesson-page .lesson-completion .row{flex:0 0 auto}
 @media(max-width:720px){.lesson-page .lesson-surface{padding:12px}.lesson-page .lesson-study-cta,.lesson-page .lesson-completion{align-items:stretch;flex-direction:column}.lesson-page .lesson-study-cta button,.lesson-page .lesson-completion .row,.lesson-page .lesson-completion .row>*{width:100%}.lesson-page .ltabs button{flex:1}.lesson-page .word-card{grid-template-columns:auto 1fr}}
 
+/* Vocabulary cards are a single readable vertical flow on every viewport. */
+.lesson-page .word-card{grid-template-columns:minmax(0,1fr)}
+.lesson-page .word-card>.vocabulary-card-heading,
+.lesson-page .word-card>.vocabulary-card-meaning,
+.lesson-page .word-card>.vocabulary-card-phrases,
+.lesson-page .word-card>.vocabulary-card-relations{grid-column:1/-1}
+
 /* React learner parity: restore canonical control geometry after the mount aliases. */
 .app-learner-page .path{display:flex;align-items:flex-start;justify-content:space-between;position:relative;margin-top:6px;gap:0;overflow:visible}
 .app-learner-page .path>li{position:relative;flex:1;min-width:0;list-style:none}
