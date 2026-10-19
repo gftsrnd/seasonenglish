@@ -15,7 +15,6 @@ describe("local demo fixture preparation", () => {
   const credentials = [
     ["learner@e4s.local", "learner-pass", "learner"],
     ["operator@e4s.local", "staff-pass", "operator"],
-    ["checker@e4s.local", "checker-pass", "operator"],
     ["manager@e4s.local", "manager-pass", "manager"]
   ] as const;
 
@@ -60,5 +59,16 @@ describe("local demo fixture preparation", () => {
       expect(session.statusCode, session.body).toBe(200);
       expect(session.json()).toMatchObject({ role });
     }
+  });
+
+  it("keeps test-only accounts out of the local fixture", async () => {
+    const accounts = await pool.query<{ email: string }>(
+      "select email from users where email like '%@e4s.local' order by email"
+    );
+    expect(accounts.rows.map(({ email }) => email)).toEqual([
+      "learner@e4s.local",
+      "manager@e4s.local",
+      "operator@e4s.local"
+    ]);
   });
 });

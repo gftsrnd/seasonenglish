@@ -336,7 +336,10 @@ function lessonContent(dayNumber: number, title: string) {
   };
 }
 
-export async function seedDemo(client: Client): Promise<void> {
+export type SeedDemoMode = "local" | "test";
+
+export async function seedDemo(client: Client, options: { mode?: SeedDemoMode } = {}): Promise<void> {
+  const mode = options.mode ?? "test";
   await client.query(
     `insert into organizations (id, name, slug)
      values ($1, 'GFT Demo', 'gft-demo')
@@ -347,8 +350,10 @@ export async function seedDemo(client: Client): Promise<void> {
   const users = [
     [DEMO_IDS.learner, "learner", "Học viên Demo", "learner@e4s.local"],
     [DEMO_IDS.operator, "operator", "Thư Demo", "operator@e4s.local"],
-    [DEMO_IDS.checker, "operator", "Minh Checker", "checker@e4s.local"],
-    [DEMO_IDS.manager, "manager", "Quản lý Demo", "manager@e4s.local"]
+    [DEMO_IDS.manager, "manager", "Quản lý Demo", "manager@e4s.local"],
+    ...(mode === "test"
+      ? [[DEMO_IDS.checker, "operator", "Minh Checker", "checker@e4s.local"]] as const
+      : [])
   ] as const;
   for (const user of users) {
     await client.query(
@@ -447,7 +452,7 @@ export async function seedDemo(client: Client): Promise<void> {
     `insert into lesson_set_versions (id, lesson_set_id, version, status, payload, created_by, approved_by, published_at)
      values ($1, $2, 1, 'published', '{"source":"deterministic-seed"}'::jsonb, $3, $4, now())
      on conflict (id) do nothing`,
-    [DEMO_IDS.publishedLessonSetVersion, DEMO_IDS.lessonSet, DEMO_IDS.operator, DEMO_IDS.checker]
+    [DEMO_IDS.publishedLessonSetVersion, DEMO_IDS.lessonSet, DEMO_IDS.operator, mode === "test" ? DEMO_IDS.checker : DEMO_IDS.operator]
   );
 
   for (const [index, lessonId] of DEMO_IDS.lessons.entries()) {

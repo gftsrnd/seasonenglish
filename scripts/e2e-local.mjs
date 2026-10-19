@@ -22,7 +22,6 @@ const demoManagerId = "00000000-0000-4000-8000-000000000103";
 const localRoleFixtures = [
   { label: "learner", email: "learner@e4s.local", password: "learner-pass", audience: "learner", role: "learner" },
   { label: "operator", email: "operator@e4s.local", password: "staff-pass", audience: "staff", role: "operator" },
-  { label: "checker", email: "checker@e4s.local", password: "checker-pass", audience: "staff", role: "operator" },
   { label: "manager", email: "manager@e4s.local", password: "manager-pass", audience: "staff", role: "manager" }
 ];
 
