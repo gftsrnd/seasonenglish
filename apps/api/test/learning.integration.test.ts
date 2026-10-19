@@ -4,14 +4,31 @@ import { migrateDatabase, resetPublicSchema, seedDemo } from "@e4s/database";
 import { createCredentialHash } from "@e4s/domain/identity";
 import { DEMO_IDS } from "@e4s/test-support";
 import { buildApi } from "../src/app.js";
+import type { ContentMediaService } from "../src/modules/media/index.js";
 
 const databaseUrl = process.env.TEST_DATABASE_URL
   ?? "postgres://e4s:e4s_test_password@127.0.0.1:55432/e4s_test";
 
 describe("learner profile, home, lesson and progress API", () => {
   const pool = new Pool({ connectionString: databaseUrl });
-  const app = buildApi({ pool, allowDemoLogin: true, secureCookies: false });
+  const mediaService: ContentMediaService = {
+    resolveForUser: vi.fn().mockResolvedValue({ status: "unavailable" }),
+    diagnoseForUser: vi.fn().mockResolvedValue({ image: { status: "unavailable" }, provider: null, cached: false }),
+    clearForUser: vi.fn().mockResolvedValue({ cleared: 0 })
+  };
+  const app = buildApi({ pool, allowDemoLogin: true, secureCookies: false, mediaService });
   let cookie = "";
+  let operatorCookie = "";
+  let managerCookie = "";
+
+  async function loginStaff(email: string, password: string): Promise<string> {
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/auth/staff/login",
+      payload: { email, password }
+    });
+    return String(response.headers["set-cookie"]).split(";")[0] ?? "";
+  }
 
   beforeAll(async () => {
     const client = await pool.connect();
@@ -20,8 +37,12 @@ describe("learner profile, home, lesson and progress API", () => {
       await migrateDatabase(client);
       await seedDemo(client);
       await client.query(
-        "insert into user_credentials (user_id, credential_hash) values ($1, $2)",
-        [DEMO_IDS.learner, await createCredentialHash("learner-pass")]
+        "insert into user_credentials (user_id, credential_hash) values ($1, $2), ($3, $4), ($5, $6)",
+        [
+          DEMO_IDS.learner, await createCredentialHash("learner-pass"),
+          DEMO_IDS.operator, await createCredentialHash("operator-pass"),
+          DEMO_IDS.manager, await createCredentialHash("manager-pass")
+        ]
       );
     } finally {
       client.release();
@@ -33,6 +54,8 @@ describe("learner profile, home, lesson and progress API", () => {
       payload: { email: "learner@e4s.local", password: "learner-pass" }
     });
     cookie = String(login.headers["set-cookie"]).split(";")[0] ?? "";
+    operatorCookie = await loginStaff("operator@e4s.local", "operator-pass");
+    managerCookie = await loginStaff("manager@e4s.local", "manager-pass");
   }, 30_000);
 
   afterAll(async () => {
@@ -183,6 +206,76 @@ describe("learner profile, home, lesson and progress API", () => {
         ])
       }
     });
+  });
+
+  it("resolves an accessible vocabulary item only after lesson access succeeds", async () => {
+    vi.mocked(mediaService.resolveForUser).mockResolvedValueOnce({
+      status: "available",
+      imageUrl: "https://storage.test/colleague.jpg",
+      alt: "colleague",
+      attribution: {
+        creator: "Fixture creator",
+        licence: "CC BY",
+        licenceUrl: "https://creativecommons.org/licenses/by/4.0/",
+        sourceUrl: "https://commons.wikimedia.org/wiki/File:Colleague.jpg"
+      }
+    });
+
+    const response = await app.inject({
+      method: "GET",
+      url: `/api/v1/lessons/${DEMO_IDS.lessons[0]}/vocabulary/0/image`,
+      headers: { cookie }
+    });
+
+    expect(response.statusCode, response.body).toBe(200);
+    expect(response.json()).toMatchObject({ status: "available", alt: "colleague" });
+    expect(mediaService.resolveForUser).toHaveBeenLastCalledWith(DEMO_IDS.learner, expect.objectContaining({
+      term: "colleague",
+      partOfSpeech: "noun"
+    }));
+  });
+
+  it("does not resolve media for an invalid or inaccessible lesson item", async () => {
+    vi.mocked(mediaService.resolveForUser).mockClear();
+    const invalidIndex = await app.inject({
+      method: "GET",
+      url: `/api/v1/lessons/${DEMO_IDS.lessons[0]}/vocabulary/99/image`,
+      headers: { cookie }
+    });
+    const inaccessible = await app.inject({
+      method: "GET",
+      url: "/api/v1/lessons/99999999-9999-4999-8999-999999999999/vocabulary/0/image",
+      headers: { cookie }
+    });
+
+    expect(invalidIndex.statusCode).toBe(404);
+    expect(inaccessible.statusCode).toBe(404);
+    expect(mediaService.resolveForUser).not.toHaveBeenCalled();
+  });
+
+  it("denies Operator and Manager access to learner vocabulary media", async () => {
+    vi.mocked(mediaService.resolveForUser).mockClear();
+    for (const staffCookie of [operatorCookie, managerCookie]) {
+      const response = await app.inject({
+        method: "GET",
+        url: `/api/v1/lessons/${DEMO_IDS.lessons[0]}/vocabulary/0/image`,
+        headers: { cookie: staffCookie }
+      });
+      expect(response.statusCode).toBe(403);
+    }
+    expect(mediaService.resolveForUser).not.toHaveBeenCalled();
+  });
+
+  it("degrades resolver failures to an unavailable image", async () => {
+    vi.mocked(mediaService.resolveForUser).mockRejectedValueOnce(new Error("storage unavailable"));
+    const response = await app.inject({
+      method: "GET",
+      url: `/api/v1/lessons/${DEMO_IDS.lessons[0]}/vocabulary/0/image`,
+      headers: { cookie }
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toEqual({ status: "unavailable" });
   });
 
   it("returns progress evidence for the profile screen without exposing another learner", async () => {

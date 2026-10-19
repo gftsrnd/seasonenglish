@@ -5,6 +5,7 @@ import type {
   LearnerProfileView,
   LessonPartCode,
   LessonPartAttemptEvidenceInput,
+  LessonVocabularyContent,
   LessonView,
   MicroLessonView,
   PilotPhase
@@ -17,6 +18,7 @@ import type { Pool } from "pg";
 import { z } from "zod";
 import { createRoleGuard } from "../identity/policy.js";
 import type { AiTaskRunner } from "../coach/index.js";
+import type { ContentMediaService } from "../media/index.js";
 
 const partCode = z.enum([
   "objective", "instruction", "vocabulary", "grammar", "pronunciation",
@@ -82,7 +84,12 @@ const lessonAppealInput = z.object({ reason: z.string().trim().min(3).max(2_000)
 const monthlyGoalInput = z.object({ monthlyGoal: z.string().trim().min(1).max(2_000) });
 const rewardAnnouncementAcknowledgeInput = z.object({ announcementId: z.string().trim().min(1).max(200) });
 
-export function registerLearningRoutes(app: FastifyInstance, pool: Pool, aiRunner?: AiTaskRunner): void {
+export function registerLearningRoutes(
+  app: FastifyInstance,
+  pool: Pool,
+  aiRunner?: AiTaskRunner,
+  mediaService?: ContentMediaService
+): void {
   const repositories = createRepositories(pool);
   const learnerOnly = createRoleGuard(pool, ["learner"]);
 
@@ -212,6 +219,30 @@ export function registerLearningRoutes(app: FastifyInstance, pool: Pool, aiRunne
     const lesson = await repositories.learning.findLesson(request.e4sSession!.user.id, params.data.lessonId);
     if (!lesson) return reply.code(404).send({ code: "LESSON_NOT_FOUND" });
     return lessonView(lesson);
+  });
+
+  app.get("/api/v1/lessons/:lessonId/vocabulary/:itemIndex/image", { preHandler: learnerOnly }, async (request, reply) => {
+    const params = z.object({ lessonId: z.uuid(), itemIndex: z.coerce.number().int().nonnegative() }).safeParse(request.params);
+    if (!params.success) return reply.code(404).send({ code: "VOCABULARY_IMAGE_NOT_FOUND" });
+    const learnerId = request.e4sSession!.user.id;
+    const lesson = await repositories.learning.findLesson(learnerId, params.data.lessonId);
+    if (!lesson) return reply.code(404).send({ code: "LESSON_NOT_FOUND" });
+    const vocabulary = lesson.content.parts.find((part) => part.code === "vocabulary")?.content as LessonVocabularyContent | undefined;
+    const item = vocabulary?.items[params.data.itemIndex];
+    if (!item) return reply.code(404).send({ code: "VOCABULARY_IMAGE_NOT_FOUND" });
+    if (!mediaService) return { status: "unavailable" };
+    try {
+      const partOfSpeech = canonicalPartOfSpeech(item.type);
+      return await mediaService.resolveForUser(learnerId, {
+        term: item.word,
+        ...(partOfSpeech ? { partOfSpeech } : {}),
+        ...(item.imageQuery ? { imageQuery: item.imageQuery } : {}),
+        ...(item.imageUrl ? { explicitImageUrl: item.imageUrl } : {}),
+        ...(item.imageAttribution ? { explicitAttribution: item.imageAttribution } : {})
+      });
+    } catch {
+      return { status: "unavailable" };
+    }
   });
 
   app.put("/api/v1/lessons/:lessonId/progress", { preHandler: learnerOnly }, async (request, reply) => {
@@ -402,6 +433,15 @@ function profileView(record: {
     version: record.version,
     updatedAt: record.updatedAt.toISOString()
   };
+}
+
+function canonicalPartOfSpeech(value: string | undefined): string | undefined {
+  const normalized = value?.normalize("NFKC").trim().toLowerCase();
+  if (normalized === "noun" || normalized === "danh từ") return "noun";
+  if (normalized === "verb" || normalized === "động từ") return "verb";
+  if (normalized === "adjective" || normalized === "tính từ") return "adjective";
+  if (normalized === "adverb" || normalized === "trạng từ") return "adverb";
+  return normalized || undefined;
 }
 
 function lessonView(lesson: LearnerLessonRecord): LessonView {

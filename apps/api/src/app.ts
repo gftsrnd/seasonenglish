@@ -12,6 +12,7 @@ import { registerFileRoutes } from "./modules/files/index.js";
 import { registerIdentityRoutes } from "./modules/identity/index.js";
 import { registerLearningRoutes } from "./modules/learning/index.js";
 import { registerManagerRoutes } from "./modules/manager/index.js";
+import type { ContentMediaService } from "./modules/media/index.js";
 import { registerNotificationRoutes } from "./modules/notifications/index.js";
 import { registerSystemRoutes } from "./modules/system/index.js";
 
@@ -24,6 +25,7 @@ export interface BuildApiOptions {
   secureCookies?: boolean;
   aiRunner?: AiTaskRunner;
   storage?: ObjectStorage;
+  mediaService?: ContentMediaService;
   /** Enables destructive demo maintenance only for an explicitly local/test process. */
   maintenanceEnabled?: boolean;
   /** Reports image-provider readiness without exposing credentials to the browser. */
@@ -44,7 +46,7 @@ export function buildApi(options: BuildApiOptions): FastifyInstance {
     pool: options.pool,
     secureCookies: options.secureCookies ?? true
   });
-  registerLearningRoutes(app, options.pool, options.aiRunner);
+  registerLearningRoutes(app, options.pool, options.aiRunner, options.mediaService);
   registerAssessmentRoutes(app, options.pool, options.aiRunner);
   registerContentRoutes(app, options.pool, options.aiRunner, options.storage);
   registerManagerRoutes(app, options.pool, { maintenanceEnabled });

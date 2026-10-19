@@ -1,7 +1,12 @@
 import { AI_TASKS, createAiService, createGroqProvider } from "@e4s/ai";
-import { createS3Storage } from "@e4s/storage";
+import { createMediaRepository } from "@e4s/database";
+import { createS3Storage, type ObjectStorage } from "@e4s/storage";
 import { Pool } from "pg";
 import { buildApi } from "./app.js";
+import { createContentMediaService } from "./modules/media/index.js";
+import { createOpenverseProvider } from "./modules/media/providers/openverse.js";
+import { createWikimediaProvider } from "./modules/media/providers/wikimedia.js";
+import { createWikipediaProvider } from "./modules/media/providers/wikipedia.js";
 
 const databaseUrl = process.env.DATABASE_URL;
 if (!databaseUrl) throw new Error("DATABASE_URL is required");
@@ -17,6 +22,7 @@ const aiRunner = process.env.GROQ_API_KEY
     })
   : undefined;
 const storage = createStorageFromEnvironment();
+const mediaService = storage ? createProductionMediaService(storage) : undefined;
 const app = buildApi({
   pool,
   secureCookies: process.env.COOKIE_SECURE === "true",
@@ -26,6 +32,7 @@ const app = buildApi({
     pixabay: Boolean(process.env.PIXABAY_API_KEY?.trim())
   },
   ...(storage ? { storage } : {}),
+  ...(mediaService ? { mediaService } : {}),
   ...(aiRunner ? { aiRunner } : {})
 });
 const port = Number(process.env.PORT ?? 3001);
@@ -47,5 +54,20 @@ function createStorageFromEnvironment() {
     region: process.env.S3_REGION ?? "us-east-1",
     accessKeyId,
     secretAccessKey
+  });
+}
+
+function createProductionMediaService(storage: ObjectStorage) {
+  const wikipedia = createWikipediaProvider();
+  const wikimedia = createWikimediaProvider();
+  const openverse = createOpenverseProvider();
+  return createContentMediaService({
+    repository: createMediaRepository(pool),
+    storage,
+    providers: {
+      exactWikipedia: wikipedia.exact,
+      searchCommons: wikimedia.search,
+      searchOpenverse: openverse.search
+    }
   });
 }
