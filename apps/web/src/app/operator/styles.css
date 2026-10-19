@@ -1488,30 +1488,26 @@ body:has(.app-operator) #modal > .dialog > .row {
   }
 }
 
-/* Match the app's single-row review strip on phones. The remaining
-   categories stay reachable by horizontal scrolling instead of changing the
-   screen into a taller three-row block. */
+/* Keep every review category visible on phones. A horizontal strip exposed
+   only the first two tabs without a reliable scroll cue, so reviewers could
+   miss the remaining queues. */
 @media (max-width: 480px) {
   .app-operator .tabs.operator-review-tabs[role="tablist"] {
-    display: flex;
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
     width: 100%;
     max-width: 100%;
-    flex-wrap: nowrap;
-    justify-content: flex-start;
-    overflow-x: auto;
+    overflow: visible;
     gap: 4px;
-    scrollbar-width: none;
-    -webkit-overflow-scrolling: touch;
   }
 
   .app-operator .tabs.operator-review-tabs[role="tablist"] > button {
-    flex: 0 0 auto;
-    width: auto;
-    min-width: max-content;
-    min-height: 36px;
-    padding: 0 16px;
-    white-space: nowrap;
-    text-align: left;
+    width: 100%;
+    min-width: 0;
+    min-height: 42px;
+    padding: 6px 10px;
+    white-space: normal;
+    text-align: center;
   }
 
   .app-operator[aria-label="Prompt"] > .card > .row.between > h3 {
