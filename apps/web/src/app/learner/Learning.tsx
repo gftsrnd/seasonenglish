@@ -10,6 +10,7 @@ import type {
 } from "@e4s/contracts";
 import type { LearnerCallbacks, LessonView, LessonSpeechOptions, LessonSpeechStatus, MicroView } from "./contracts.js";
 import { ErrorText, Notice, PageTitle, AppLink } from "./ui.js";
+import { ContentImage } from "../shared/media/ContentImage.js";
 
 const studyCodes: LessonPartCode[] = ["objective", "instruction", "vocabulary", "grammar", "pronunciation"];
 const practiceCodes: LessonPartCode[] = ["listening", "reading", "writing", "word_class", "word_use", "speaking"];
@@ -195,7 +196,7 @@ export function LearnerLesson({ view, actions }: { view: LessonView; actions: Le
         const partEvidence = evidence[part.code];
         const done = partIsDone(partEvidence, lesson.progress.completedPartCodes.includes(part.code));
         return <li className={`card lesson-part lesson-part--${part.code}`} data-part={part.code} data-testid="app-lesson-part" key={part.code} style={{ boxSizing: "border-box", minWidth: 0, display: "grid", gap: 12, padding: 18 }}>
-          <PartContent sectionNumber={index + 1} part={part} speak={actions.speak} openVocabularyModal={setVocabularyModal} />
+          <PartContent sectionNumber={index + 1} part={part} speak={actions.speak} openVocabularyModal={setVocabularyModal} resolveVocabularyImage={actions.resolveLessonVocabularyImage} />
           {practiceCodes.includes(part.code) ? <div className="stack lesson-answer" aria-busy={busyAction === part.code || undefined} style={{ gap: 12, minWidth: 0 }}>
             {part.code === "speaking" ? <SpeakingEvidenceControls artifactKey={mediaArtifacts[part.code]} onUploaded={(artifactKey) => setMediaArtifacts((current) => ({ ...current, [part.code]: artifactKey }))} uploadAudio={actions.uploadAssessmentAudio} getAudioReadUrl={actions.getAssessmentAudioReadUrl} /> : null}
             <LessonAnswerControl part={part} value={answers[part.code] ?? ""} disabled={done || Boolean(busyAction)} onChange={(value) => setAnswers((current) => ({ ...current, [part.code]: value }))} />
@@ -511,12 +512,14 @@ function PartContent({
   sectionNumber,
   part,
   speak,
-  openVocabularyModal
+  openVocabularyModal,
+  resolveVocabularyImage
 }: {
   sectionNumber: number;
   part: LessonPart;
   speak: LearnerCallbacks["speak"];
   openVocabularyModal: (state: VocabularyModalState) => void;
+  resolveVocabularyImage?: LearnerCallbacks["resolveLessonVocabularyImage"];
 }) {
   const content = part.content as {
     text?: string;
@@ -552,7 +555,7 @@ function PartContent({
     {content.focus ? <p><b>{content.focus}</b> · {content.instruction}</p> : null}
     {part.code === "speaking" && (content.answer || content.modelAnswer) ? <div className="card flat" style={{ display: "grid", gap: 8, marginTop: 4, padding: 14, background: "var(--primary-soft)", border: "1px solid var(--primary-line)" }}><strong>{content.answer ?? content.modelAnswer}</strong><SpeechButton text={content.answer ?? content.modelAnswer ?? ""} label="Nghe câu mẫu" speak={speak} /></div> : null}
     {part.code === "pronunciation" && content.words?.length ? <div className="stack" aria-label="Luyện từ phát âm" style={{ gap: 8, marginTop: 10 }}><span className="small muted">Luyện từ mẫu</span><div className="row" style={{ flexWrap: "wrap", gap: 8 }}>{content.words.map((word) => <button className="btn-sm btn-ghost" style={listenButtonStyle} type="button" key={word} aria-label={`Nghe từ phát âm: ${word}`} title="Nghe từ phát âm" onClick={() => speak(word)}><Volume2 size={14} aria-hidden="true" />{word}</button>)}</div></div> : null}
-    {part.code === "vocabulary" ? words.map((item) => <VocabularyCard key={item.word} item={item} speak={speak} openModal={openVocabularyModal} />) : null}
+    {part.code === "vocabulary" ? words.map((item, itemIndex) => <VocabularyCard key={item.word} item={item} itemIndex={itemIndex} speak={speak} openModal={openVocabularyModal} resolveImage={resolveVocabularyImage} />) : null}
     {part.code !== "vocabulary" ? content.items?.map((item) => <article className="word-card" key={item.word}><h3>{item.word}</h3><span className="ipa">{item.pronunciation}</span><p>{item.meaning}</p>{item.examples?.map((example) => <small key={example}>{example}</small>)}</article>) : null}
     {content.examples?.length ? <ul>{content.examples.map((example) => <li key={example}>{example}</li>)}</ul> : null}
   </>;
@@ -593,51 +596,29 @@ function isAudioUrl(value: string): boolean {
   return /^(?:https?:|blob:|data:audio\/|\/)/i.test(value) || /\.(?:mp3|m4a|wav|ogg|oga|webm|aac|flac|amr|3gp)(?:[?#].*)?$/i.test(value);
 }
 
-const vocabularyIllustrations: Record<string, { symbol: string; background: string; accent: string }> = {
-  colleague: { symbol: "👥", background: "#E8F1D9", accent: "#7E9A35" },
-  role: { symbol: "🎭", background: "#F9E9D9", accent: "#D9893D" },
-  "work with": { symbol: "🤝", background: "#E5EEF8", accent: "#6E95C2" },
-  new: { symbol: "✨", background: "#FFF0CF", accent: "#E4A63B" },
-  nice: { symbol: "😊", background: "#FBE1E0", accent: "#D17C78" },
-  from: { symbol: "📍", background: "#E4EFF5", accent: "#6A9CB3" },
-  prepare: { symbol: "📝", background: "#F4E8D7", accent: "#C58A52" },
-  review: { symbol: "🔎", background: "#E6ECF7", accent: "#718BB6" },
-  usually: { symbol: "🔁", background: "#EAE8F7", accent: "#8A7BB8" },
-  repeat: { symbol: "🔄", background: "#E5F2E9", accent: "#6C9D77" },
-  mean: { symbol: "💡", background: "#FFF2CB", accent: "#D9A83D" },
-  clarify: { symbol: "💬", background: "#E4F0F5", accent: "#6A9CB3" },
-  summary: { symbol: "📄", background: "#E9EAF2", accent: "#7D849F" },
-  "action item": { symbol: "✅", background: "#E5F2E9", accent: "#6C9D77" },
-  "next step": { symbol: "➡️", background: "#E8F1D9", accent: "#7E9A35" }
-};
-
-function vocabularyIllustrationSrc(word: string, type?: string): string {
-  const key = word.trim().toLowerCase();
-  const illustration = vocabularyIllustrations[key] ?? {
-    symbol: type?.toLowerCase().includes("cụm") ? "💬" : "🔤",
-    background: "#F0ECE5",
-    accent: "#8A8175"
-  };
-  const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 96 96"><rect width="96" height="96" rx="22" fill="${illustration.background}"/><circle cx="76" cy="20" r="18" fill="${illustration.accent}" opacity=".14"/><circle cx="20" cy="78" r="23" fill="${illustration.accent}" opacity=".1"/><text x="48" y="60" text-anchor="middle" font-size="42" font-family="Segoe UI Emoji,Apple Color Emoji,sans-serif">${illustration.symbol}</text></svg>`;
-  return `data:image/svg+xml,${encodeURIComponent(svg)}`;
-}
-
 function VocabularyCard({
   item,
+  itemIndex,
   speak,
-  openModal
+  openModal,
+  resolveImage
 }: {
   item: LessonVocabularyItem;
+  itemIndex: number;
   speak: (text: string) => void;
   openModal: (state: VocabularyModalState) => void;
+  resolveImage?: LearnerCallbacks["resolveLessonVocabularyImage"];
 }) {
   const phrases = item.examples?.slice(0, 3) ?? [];
   const hasRelatedDetails = Boolean(item.family || item.synonyms || item.umbrella || item.lexicalDetails !== undefined);
-  const fallbackImage = vocabularyIllustrationSrc(item.word, item.type);
-  const imageSrc = item.imageUrl?.trim() || fallbackImage;
+  const loadImage = () => {
+    if (resolveImage) return resolveImage(itemIndex);
+    if (item.imageUrl?.trim() && item.imageAttribution) return Promise.resolve({ status: "available", imageUrl: item.imageUrl.trim(), alt: item.word, attribution: item.imageAttribution } as const);
+    return Promise.resolve({ status: "unavailable" } as const);
+  };
   return <article className="word-card" aria-label={item.word} style={{ display: "grid", gap: 10, minWidth: 0, padding: 16, marginTop: 10, boxSizing: "border-box" }}>
-    <div className="vocabulary-card-heading" style={{ display: "grid", gridTemplateColumns: "60px minmax(0, 1fr) auto", gap: 12, alignItems: "center", textAlign: "left" }}>
-      <img className="vimg" src={imageSrc} alt={`Hình minh họa cho từ ${item.word}`} loading="lazy" decoding="async" onError={(event) => { if (event.currentTarget.src !== fallbackImage) event.currentTarget.src = fallbackImage; }} />
+    <div className="vocabulary-card-heading" style={{ display: "grid", gridTemplateColumns: "minmax(0, auto) minmax(0, 1fr) auto", gap: 12, alignItems: "center", textAlign: "left" }}>
+      <ContentImage term={item.word} load={loadImage} />
       <div style={{ minWidth: 0 }}><h3>{item.word}</h3>{item.type ? <span className="badge" style={{ fontSize: ".72rem", padding: "2px 8px" }}>{item.type}</span> : null}</div>
       <SpeechButton text={item.word} label="Nghe từ" speak={speak} />
     </div>

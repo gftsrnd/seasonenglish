@@ -50,6 +50,38 @@ describe("learner lesson study content", () => {
     expect(speak).toHaveBeenCalledWith("I");
     fireEvent.click(screen.getByRole("button", { name: "Chi tiết từ liên quan" }));
     expect(screen.getByRole("dialog", { name: "Chi tiết từ liên quan" })).toHaveTextContent("Chưa có chi tiết từ liên quan");
+    expect(document.querySelector('img[src^="data:image"]')).not.toBeInTheDocument();
+  });
+
+  it("loads a real attributed image path for concrete vocabulary", async () => {
+    const resolveLessonVocabularyImage = vi.fn().mockResolvedValueOnce({
+      status: "available",
+      imageUrl: "https://storage.example/colleague.jpg",
+      alt: "colleague",
+      attribution: {
+        creator: "Open artist",
+        licence: "CC BY 4.0",
+        licenceUrl: "https://creativecommons.org/licenses/by/4.0/",
+        sourceUrl: "https://commons.wikimedia.org/wiki/File:Colleague.jpg"
+      }
+    }).mockResolvedValueOnce({ status: "unavailable" });
+    const lesson = {
+      id: "lesson-media",
+      title: "Introducing yourself",
+      dayNumber: 1,
+      durationMinutes: 10,
+      cefr: "A2",
+      content: { parts: [{ code: "vocabulary", title: "Từ vựng", content: { items: [
+        { word: "colleague", type: "danh từ", meaning: "đồng nghiệp" },
+        { word: "reliable", type: "tính từ", meaning: "đáng tin cậy" }
+      ] } }] },
+      progress: { status: "not_started", completedPartCodes: [], evidence: {} }
+    } as any;
+    render(<LearnerLesson view={{ lesson, lock: null }} actions={{ navigate: vi.fn(), speak: vi.fn(), saveLessonProgress: vi.fn(), resolveLessonVocabularyImage } as any} />);
+
+    expect(await screen.findByRole("img", { name: "colleague" })).toHaveAttribute("src", "https://storage.example/colleague.jpg");
+    expect(resolveLessonVocabularyImage).toHaveBeenCalledWith(0);
+    expect(resolveLessonVocabularyImage).toHaveBeenCalledWith(1);
   });
 
   it("keeps practice locked when a retryable answer exists without study confirmation", () => {

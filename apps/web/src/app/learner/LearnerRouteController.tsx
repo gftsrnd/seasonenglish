@@ -323,6 +323,10 @@ export function LearnerRouteController() {
       setContracts((current) => current.lesson ? { lesson: { ...current.lesson, progress: result.progress } } : current);
       return result;
     },
+    resolveLessonVocabularyImage: async (itemIndex) => {
+      if (route.name !== "lesson") throw new Error("LESSON_ROUTE_NOT_ACTIVE");
+      return apiClient.resolveLessonVocabularyImage(route.params.id, itemIndex);
+    },
     submitMicroAnswer: async (answer) => {
       if (route.name !== "micro") throw new Error("MICRO_ROUTE_NOT_ACTIVE");
       setContracts({ micro: await apiClient.submitMicroAttempt(route.params.id, answer) });

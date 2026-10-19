@@ -1,0 +1,36 @@
+.content-image {
+  width: 60px;
+  min-width: 60px;
+  margin: 0;
+  border-radius: 12px;
+  overflow: hidden;
+  background: var(--surface-2);
+  color: var(--muted);
+}
+
+.content-image--loading,
+.content-image--fallback {
+  aspect-ratio: 1;
+  display: grid;
+  place-items: center;
+  text-align: center;
+  font-size: .68rem;
+  line-height: 1.25;
+  padding: 6px;
+}
+
+.content-image--loading svg { animation: content-image-spin 1s linear infinite; }
+.content-image--available { overflow: visible; }
+.content-image--available img {
+  display: block;
+  width: 60px;
+  aspect-ratio: 1;
+  object-fit: cover;
+  border-radius: 12px;
+}
+
+.content-image__source { width: max-content; max-width: 180px; margin-top: 4px; font-size: .68rem; }
+.content-image__source summary { cursor: pointer; text-decoration: underline; text-underline-offset: 2px; }
+.content-image__source div { display: grid; gap: 2px; padding-top: 4px; }
+
+@keyframes content-image-spin { to { transform: rotate(360deg); } }

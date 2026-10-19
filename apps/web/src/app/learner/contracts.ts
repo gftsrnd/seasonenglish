@@ -5,6 +5,7 @@ import type {
   AssessmentViolationInput,
   AssessmentView as AssessmentContractView,
   CoachPersona,
+  ContentImageView,
   CoachView as CoachContractView,
   DuelView,
   GameDescriptor,
@@ -128,6 +129,7 @@ export interface LearnerCallbacks {
   saveLessonProgress: (progress: LessonProgressView) => void | Promise<void>;
   submitLessonPartAttempt?: (partCode: LessonPartCode, evidence: LessonPartAttemptEvidenceInput) => Promise<LessonPartAttemptView>;
   appealLessonPart?: (partCode: LessonPartCode, reason: string) => Promise<LessonPartAppealView>;
+  resolveLessonVocabularyImage?: (itemIndex: number) => Promise<ContentImageView>;
   submitMicroAnswer: (answer: string) => void | Promise<void>;
   completeMicroLesson: () => void | Promise<void>;
   regenerateMicroLesson: () => void | Promise<void>;
