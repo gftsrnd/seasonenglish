@@ -4,13 +4,18 @@ const requireFromStoragePackage = createRequire(new URL("../packages/storage/pac
 const { HeadBucketCommand, S3Client } = requireFromStoragePackage("@aws-sdk/client-s3");
 
 export const LOCAL_STORAGE_RECOVERY_COMMAND = "docker compose up -d minio minio-init";
+export const LOCAL_EVIDENCE_BUCKET = "e4s-evidence";
+export const LOCAL_MEDIA_BUCKET = "e4s-media";
 
 export async function verifyLocalObjectStorage(options = {}) {
   const endpoint = options.endpoint ?? process.env.S3_ENDPOINT ?? "http://127.0.0.1:9002";
   const region = options.region ?? process.env.S3_REGION ?? "us-east-1";
   const accessKeyId = options.accessKeyId ?? process.env.S3_ACCESS_KEY ?? process.env.MINIO_ROOT_USER ?? "e4s_minio";
   const secretAccessKey = options.secretAccessKey ?? process.env.S3_SECRET_KEY ?? process.env.MINIO_ROOT_PASSWORD ?? "e4s_local_minio_password";
-  const bucket = options.bucket ?? process.env.S3_BUCKET ?? "e4s-evidence";
+  const buckets = options.buckets ?? [
+    process.env.S3_EVIDENCE_BUCKET ?? process.env.S3_BUCKET ?? LOCAL_EVIDENCE_BUCKET,
+    process.env.S3_MEDIA_BUCKET ?? LOCAL_MEDIA_BUCKET
+  ];
   const fetchImpl = options.fetchImpl ?? fetch;
   const healthUrl = `${endpoint.replace(/\/$/, "")}/minio/health/ready`;
 
@@ -31,13 +36,15 @@ export async function verifyLocalObjectStorage(options = {}) {
     await client.send(new HeadBucketCommand({ Bucket: bucketName }));
   });
 
-  try {
-    await headBucket(bucket);
-  } catch {
-    throw localStorageError(`Bucket ${bucket} chưa sẵn sàng trên MinIO E4S.`);
+  for (const bucket of buckets) {
+    try {
+      await headBucket(bucket);
+    } catch {
+      throw localStorageError(`Bucket ${bucket} chưa sẵn sàng trên MinIO E4S.`);
+    }
   }
 
-  return { endpoint, bucket };
+  return { endpoint, buckets };
 }
 
 export async function waitForHttpReady(name, url, options = {}) {

@@ -91,7 +91,7 @@ try {
     "  Web        ✓ http://127.0.0.1:4175",
     "  API        ✓ http://127.0.0.1:3001",
     `  PostgreSQL ✓ ${databasePort}`,
-    `  MinIO      ✓ ${storageStatus.endpoint} · bucket ${storageStatus.bucket}`,
+    `  MinIO      ✓ ${storageStatus.endpoint} · buckets ${storageStatus.buckets.join(", ")}`,
     ""
   ].join("\n"));
   await new Promise(() => undefined);

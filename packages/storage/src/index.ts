@@ -2,6 +2,7 @@ import {
   DeleteObjectCommand,
   GetObjectCommand,
   HeadBucketCommand,
+  HeadObjectCommand,
   PutObjectCommand,
   S3Client
 } from "@aws-sdk/client-s3";
@@ -28,9 +29,13 @@ export interface PresignedObject {
 export interface ObjectStorage {
   putObject(input: PutObjectInput): Promise<void>;
   deleteObject(bucket: string, objectKey: string): Promise<void>;
+  objectExists?(bucket: string, objectKey: string): Promise<boolean>;
   ready(bucket: string): Promise<void>;
   presignGetObject?(input: PresignObjectInput): Promise<PresignedObject>;
 }
+
+export const EVIDENCE_BUCKET = "e4s-evidence";
+export const MEDIA_BUCKET = "e4s-media";
 
 export interface S3StorageOptions {
   endpoint: string;
@@ -62,6 +67,15 @@ export function createS3Storage(options: S3StorageOptions): ObjectStorage {
     async deleteObject(bucket, objectKey) {
       await client.send(new DeleteObjectCommand({ Bucket: bucket, Key: objectKey }));
     },
+    async objectExists(bucket, objectKey) {
+      try {
+        await client.send(new HeadObjectCommand({ Bucket: bucket, Key: objectKey }));
+        return true;
+      } catch (error) {
+        if (isMissingObject(error)) return false;
+        throw error;
+      }
+    },
     async ready(bucket) {
       await client.send(new HeadBucketCommand({ Bucket: bucket }));
     },
@@ -75,4 +89,12 @@ export function createS3Storage(options: S3StorageOptions): ObjectStorage {
       return { url, expiresAt: new Date(Date.now() + expiresInSeconds * 1000) };
     }
   };
+}
+
+function isMissingObject(error: unknown): boolean {
+  if (!error || typeof error !== "object") return false;
+  const value = error as { name?: unknown; $metadata?: { httpStatusCode?: unknown } };
+  return value.$metadata?.httpStatusCode === 404
+    || value.name === "NotFound"
+    || value.name === "NoSuchKey";
 }
