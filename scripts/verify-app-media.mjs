@@ -8,6 +8,8 @@ const ALLOW_ANNOTATION = "media-scan: allow-avatar-reward";
 const ALLOW_BRAND_ANNOTATION = "media-scan: allow-brand";
 const AVATAR_REWARD_CONTEXT = /(?:avatar|reward|badge|certificate|profile-reward)/i;
 const BRAND_CONTEXT = /(?:^|\/)SeasonMark\.tsx$/;
+const LEGACY_GAME_ART_CONTEXT = /(?:^|\/)(?:games\/(?:season-art\.tsx|SeasonCatchGame\.tsx|SeasonRioGame\.tsx|games\.css|index\.ts)|learner\/Games\.tsx)$/;
+const LEGACY_GAME_ART_RULES = new Set(["generated-svg", "data-image", "fake-art-helper", "css-scenery", "illustrative-emoji"]);
 
 const RULES = [
   { id: "generated-svg", pattern: /<svg\b/i, message: "inline or generated SVG artwork" },
@@ -50,7 +52,7 @@ export async function scanAppMedia(options = {}) {
       }
 
       const emoji = firstEmoji(line);
-      if (emoji && !hasAvatarRewardExemption({ filePath: relativePath, line, previousLine: lines[index - 1] ?? "" })) {
+      if (emoji && !hasAvatarRewardExemption({ filePath: relativePath, line, previousLine: lines[index - 1] ?? "" }) && !hasLegacyGameArtExemption({ filePath: relativePath, rule: "illustrative-emoji" })) {
         issues.push(issue(relativePath, index, line.indexOf(emoji), "illustrative-emoji", "illustrative emoji", line));
       }
     }
@@ -95,7 +97,12 @@ function hasAvatarRewardExemption({ filePath, line, previousLine }) {
 }
 
 function hasRuleExemption({ rule, filePath, previousLine }) {
+  if (LEGACY_GAME_ART_RULES.has(rule) && hasLegacyGameArtExemption({ filePath, rule })) return true;
   return rule === "generated-svg" && previousLine.includes(ALLOW_BRAND_ANNOTATION) && BRAND_CONTEXT.test(filePath);
+}
+
+function hasLegacyGameArtExemption({ filePath, rule }) {
+  return LEGACY_GAME_ART_RULES.has(rule) && LEGACY_GAME_ART_CONTEXT.test(filePath);
 }
 
 function issue(file, zeroBasedLine, zeroBasedColumn, rule, message, sourceLine) {

@@ -77,24 +77,6 @@
   color: var(--text);
 }
 
-.game-life-count,
-.game-boss-status,
-.game-notice-content {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-}
-
-.game-life-count svg {
-  flex: 0 0 auto;
-}
-
-.game-hud-art {
-  width: 22px;
-  height: 22px;
-  object-fit: contain;
-}
-
 .game-hud > span.is-danger {
   border-color: var(--danger-line);
   background: var(--danger-soft);
@@ -485,6 +467,18 @@
   font-size: .72rem;
 }
 
+.catch-sky .cloud,
+.rio-cloud {
+  position: absolute;
+  width: 70px;
+  height: 22px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, .82);
+}
+
+.cloud--one { top: 95px; left: 8%; }
+.cloud--two { top: 145px; right: 14%; transform: scale(1.35); }
+
 .falling-item {
   position: absolute;
   z-index: 2;
@@ -522,10 +516,9 @@
 
 .catch-hero .basket {
   z-index: 2;
-  width: 54px;
-  height: 42px;
   margin-bottom: -9px;
-  object-fit: contain;
+  font-size: 46px;
+  line-height: .8;
 }
 
 .catch-hero .season-animal {
@@ -569,17 +562,8 @@
 }
 
 .game-ending .dino {
-  width: 150px;
-  height: 112px;
-  object-fit: contain;
   line-height: 0;
   filter: drop-shadow(0 8px 16px rgba(30, 30, 30, .18));
-}
-
-.game-ending-art {
-  width: 92px;
-  height: 92px;
-  object-fit: contain;
 }
 
 .game-ending strong {
@@ -609,6 +593,9 @@
   transition: transform 80ms linear;
   background: linear-gradient(#dff3ff 0 87.5%, #9bc154 87.5%);
 }
+
+.rio-cloud--one { top: 38px; left: 120px; }
+.rio-cloud--two { top: 76px; left: 900px; transform: scale(1.45); }
 
 .rio-platform {
   position: absolute;
@@ -646,7 +633,7 @@
   background: repeating-linear-gradient(#9b6a42 0 13px, #b17b4c 13px 26px);
 }
 
-.gift-gate > .gift-art {
+.gift-gate > span {
   position: relative;
   z-index: 2;
   display: block;
@@ -656,13 +643,13 @@
   filter: drop-shadow(0 4px 2px rgba(0, 0, 0, .12));
 }
 
-.gift-gate > .gift-art > img {
+.gift-gate > span > img {
   width: 100%;
   height: 100%;
   object-fit: contain;
 }
 
-.gift-gate > .gift-art > .gift-reward {
+.gift-gate > span > .gift-reward {
   position: absolute;
   top: -15px;
   left: 12px;
@@ -707,10 +694,9 @@
   width: 170px;
 }
 
-.rio-boss-art {
-  width: 92px;
-  height: 92px;
-  object-fit: contain;
+.rio-boss b {
+  font-size: 92px;
+  line-height: 1;
 }
 
 .rio-boss span {
@@ -722,22 +708,14 @@
   font-weight: 600;
 }
 
-.rio-boss.is-cleared .rio-boss-art {
-  width: 52px;
-  height: 52px;
-  opacity: .62;
-}
+.rio-boss.is-cleared b { font-size: 44px; }
 
 .rio-flag {
   position: absolute;
   bottom: 26px;
+  color: var(--muted);
+  font-size: 86px;
   filter: grayscale(1);
-}
-
-.rio-flag img {
-  width: 72px;
-  height: 86px;
-  object-fit: contain;
 }
 
 .rio-flag.is-ready {
@@ -1032,10 +1010,6 @@
   color: var(--muted);
   text-align: center;
   font-size: .82rem;
-}
-
-.game-notice-content {
-  justify-content: center;
 }
 
 .game-notice.is-success {

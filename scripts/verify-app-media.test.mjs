@@ -84,6 +84,22 @@ describe("app media source gate", () => {
       expect.objectContaining({ file: "shared/SeasonMark.tsx", line: 3, rule: "generated-svg" })
     ]);
   });
+
+  it("allows legacy artwork only in the explicitly scoped game files", async () => {
+    const rootDir = await fixture({
+      "games/season-art.tsx": "export const art = '<svg /> 🧺';\n",
+      "games/SeasonCatchGame.tsx": "export const art = '🧺';\n",
+      "games/Other.tsx": "export const art = '<svg /> SeasonHero 🧺';\n"
+    });
+
+    const issues = await scanAppMedia({ rootDir });
+
+    expect(issues).toEqual([
+      expect.objectContaining({ file: "games/Other.tsx", rule: "generated-svg" }),
+      expect.objectContaining({ file: "games/Other.tsx", rule: "fake-art-helper" }),
+      expect.objectContaining({ file: "games/Other.tsx", rule: "illustrative-emoji" })
+    ]);
+  });
 });
 
 async function fixture(files) {

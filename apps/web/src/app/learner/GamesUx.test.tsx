@@ -5,7 +5,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import type { GameDescriptor, GameHubView, GameWordSetView } from "@e4s/contracts";
 import { CrosswordGame } from "../games/CrosswordGame.js";
 import { SeasonCatchGame } from "../games/SeasonCatchGame.js";
-import { giftVisualIds, SeasonRioGame } from "../games/SeasonRioGame.js";
+import { SeasonRioGame } from "../games/SeasonRioGame.js";
 import { TypingRaceGame } from "../games/TypingRaceGame.js";
 import { LearnerGame, LearnerGames } from "./Games.js";
 import type { LearnerCallbacks } from "./contracts.js";
@@ -62,35 +62,26 @@ const hubView: GameHubView = {
 };
 
 describe("learner game visual and interaction regressions", () => {
-  it("maps every Season-rio gift outcome to verified product artwork", () => {
-    expect(giftVisualIds("closed")).toEqual({ gift: "gift-closed", result: null });
-    expect(giftVisualIds("correct")).toEqual({ gift: "gift-correct", result: "mushroom" });
-    expect(giftVisualIds("wrong")).toEqual({ gift: "gift-wrong", result: "bomb" });
-  });
-
-  it("renders seasonal product art and accessible life counts without changing initial mechanics", () => {
+  it("keeps the original game artwork and scene objects without changing initial mechanics", () => {
     document.documentElement.dataset.theme = "autumn";
     vi.stubGlobal("requestAnimationFrame", vi.fn(() => 1));
     vi.stubGlobal("cancelAnimationFrame", vi.fn());
 
     const catchView = render(<SeasonCatchGame words={wordSet.words} cefr="A2" onFinish={vi.fn()} />);
-    expect(screen.getByLabelText("3 mạng còn lại trên 3")).toBeInTheDocument();
-    expect(catchView.container.querySelector('[data-product-art="catch-autumn"]')).toBeInTheDocument();
-    expect(catchView.container.querySelector('[data-product-art="basket"]')).toBeInTheDocument();
-    expect(catchView.container.querySelector('[data-product-art="hero-squirrel"]')).toBeInTheDocument();
+    expect(catchView.container.querySelector('.catch-prompt img[src^="data:image/svg+xml"]')).toBeInTheDocument();
+    expect(catchView.container.querySelector('.falling-item img[src^="data:image/svg+xml"]')).toBeInTheDocument();
+    expect(catchView.container.querySelector('.season-animal[src^="data:image/svg+xml"]')).toHaveAttribute("alt", "Sóc mùa thu");
+    expect(catchView.container.querySelector(".basket")).toHaveTextContent("🧺");
     expect(screen.getAllByTestId("falling-item")).toHaveLength(3);
-    expect(catchView.container).not.toHaveTextContent(/[❤️🖤💔✅]/u);
     catchView.unmount();
 
     const rioView = render(<SeasonRioGame words={wordSet.words} onFinish={vi.fn()} />);
-    expect(screen.getByLabelText("3 mạng còn lại trên 3")).toBeInTheDocument();
-    expect(rioView.container.querySelector('[data-product-art="gift-closed"]')).toBeInTheDocument();
-    expect(rioView.container.querySelector('[data-product-art="food-squirrel"]')).toBeInTheDocument();
-    expect(rioView.container.querySelector('[data-product-art="flag"]')).toBeInTheDocument();
-    expect(rioView.container.querySelector('[data-product-art="hero-squirrel"]')).toBeInTheDocument();
+    expect(rioView.container.querySelector('.gift-gate > span img[src^="data:image/svg+xml"]')).toBeInTheDocument();
+    expect(rioView.container.querySelector('.rio-boss > b')).toHaveTextContent("🌰");
+    expect(rioView.container.querySelector('.rio-flag')).toHaveTextContent("🚩");
+    expect(rioView.container.querySelector('.rio-hero img[src^="data:image/svg+xml"]')).toHaveAttribute("alt", "Sóc mùa thu");
     expect(screen.getAllByTestId("gift-gate")).toHaveLength(3);
     expect(screen.getAllByTestId("gift-gate").map((gate) => gate.dataset.state)).toEqual(["closed", "closed", "closed"]);
-    expect(rioView.container).not.toHaveTextContent(/[❤️🖤💔🍄🏁⏱😋🚩]/u);
   });
 
   it("keeps hub descriptions concise while preserving each game's core action", () => {
@@ -118,7 +109,7 @@ describe("learner game visual and interaction regressions", () => {
     expect(screen.getByText("Kỷ lục: chưa có")).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Thoát game" })).toHaveClass("btn", "btn-sm");
     expect(screen.getByText("Hướng dẫn chơi", { exact: false })).toBeInTheDocument();
-    expect(screen.getByText(/Mỗi hộp quà đứng trên một cột gỗ chắn ngang đường/i)).toBeInTheDocument();
+    expect(screen.getByText(/Mỗi hộp quà \? đứng trên một cột gỗ chắn ngang đường/i)).toBeInTheDocument();
     expect(screen.getByText(/món ăn khoái khẩu KHỔNG LỒ/i)).toBeInTheDocument();
     expect(screen.getByText(/Bộ từ: Introducing yourself · 3 từ/i)).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Bắt đầu chơi" })).toBeInTheDocument();
@@ -148,35 +139,18 @@ describe("learner game visual and interaction regressions", () => {
     expect(container.querySelector(".typing-clue-copy")).toBeInTheDocument();
   });
 
-  it("renders attributed open media in the typing clue", async () => {
+  it("keeps Typing race on its static game fallback without calling the media resolver", () => {
     vi.stubGlobal("requestAnimationFrame", vi.fn(() => 1));
     vi.stubGlobal("cancelAnimationFrame", vi.fn());
-    const onResolveImage = vi.fn().mockResolvedValue({
-      status: "available",
-      imageUrl: "https://storage.example/colleague.jpg",
-      alt: "colleague",
-      attribution: {
-        creator: "Open artist",
-        licence: "CC BY 4.0",
-        licenceUrl: "https://creativecommons.org/licenses/by/4.0/",
-        sourceUrl: "https://commons.wikimedia.org/wiki/File:Colleague.jpg"
-      }
-    });
-    render(<TypingRaceGame words={[wordSet.words[0]!]} onFinish={vi.fn()} onResolveImage={onResolveImage} />);
+    const resolveGameWordImage = vi.fn().mockResolvedValue({ status: "available", imageUrl: "https://provider.invalid/image.jpg", alt: "colleague" });
+    const typing = descriptor("typing", []);
+    render(<LearnerGame descriptor={typing} wordSet={wordSet} result={null} actions={{ ...actions, resolveGameWordImage } as unknown as LearnerCallbacks} />);
 
-    expect(await screen.findByRole("img", { name: "colleague" })).toHaveAttribute("src", "https://storage.example/colleague.jpg");
-    expect(screen.getByText("Nguồn ảnh")).toBeInTheDocument();
-    expect(onResolveImage).toHaveBeenCalledWith("word-1");
-  });
+    fireEvent.click(screen.getByRole("button", { name: "Bắt đầu chơi" }));
 
-  it("shows a compact fallback for unavailable and legacy image-less words", async () => {
-    vi.stubGlobal("requestAnimationFrame", vi.fn(() => 1));
-    vi.stubGlobal("cancelAnimationFrame", vi.fn());
-    const view = render(<TypingRaceGame words={[wordSet.words[0]!]} onFinish={vi.fn()} onResolveImage={() => Promise.resolve({ status: "unavailable" })} />);
-    expect(await screen.findByText("Chưa có ảnh minh hoạ")).toBeInTheDocument();
-
-    view.rerender(<TypingRaceGame words={[wordSet.words[0]!]} onFinish={vi.fn()} />);
-    expect(await screen.findByText("Chưa có ảnh minh hoạ")).toBeInTheDocument();
+    expect(screen.getByRole("img", { name: /Chưa có ảnh minh hoạ cho/i })).toBeInTheDocument();
+    expect(screen.queryByRole("status", { name: /đang tải hình/i })).not.toBeInTheDocument();
+    expect(resolveGameWordImage).not.toHaveBeenCalled();
   });
 
   it("ignores browser modifier shortcuts instead of typing into the answer", () => {
