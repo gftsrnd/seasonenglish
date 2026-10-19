@@ -1,10 +1,10 @@
 // @vitest-environment jsdom
 import "@testing-library/jest-dom/vitest";
 import { cleanup, render, screen, within } from "@testing-library/react";
-import type { ComponentProps } from "react";
 import { userEvent } from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import type { ManagerAccountsView, ManagerOperationsView, ManagerProgressView, ManagerRemindersView, ManagerReportView } from "@e4s/contracts";
+import { MemoryRouter } from "react-router";
+import type { ManagerOperationsView, ManagerProgressView, ManagerRemindersView, ManagerReportView } from "@e4s/contracts";
 import {
   ManagerOperations,
   ManagerProgress,
@@ -33,6 +33,10 @@ const operations: ManagerOperationsView = {
   readiness: { requiredSets: 2, readySets: 1, missing: [{ week: 1, cefr: "B1", state: "missing" }], orphanLegacySets: 1 },
   operators: [{ operatorId: "op-1", operatorName: "Thư Demo", byWeek: [{ week: 1, sets: 1, lessons: 5, approved: 1 }], sets: 1, lessons: 5, published: 1, fullLessons: 5, editedLessons: 1, completions: 1, averageScore: 80, firstTryPercent: 75, failedPercent: 0, averageAttempts: 1.2, approvals: 1, averageApprovalHours: 2, reviewedSubmissions: 1, reviewedCoachTurns: 2 }]
 };
+
+function renderRewards() {
+  return render(<MemoryRouter><ManagerRewards /></MemoryRouter>);
+}
 
 describe("new Manager app branch", () => {
   it("preserves progress block order and wires learner actions", async () => {
@@ -66,18 +70,10 @@ describe("new Manager app branch", () => {
     expect(screen.getByTitle(/Khởi động: Hoàn thành bài học đầu tiên/)).toBeInTheDocument();
   });
 
-  it("renders the Manager PIN disclosure accordion from safe account data", () => {
-    const accounts: ManagerAccountsView = {
-      organizationName: "GFT Demo",
-      accounts: [{ id: "learner-1", displayName: "Học viên Demo", email: "learner@e4s.local", role: "learner", status: "active", createdAt: "2026-10-01T09:00:00.000Z" }]
-    };
-    const props = { view: progress, pinDirectory: accounts } as ComponentProps<typeof ManagerProgress>;
-    render(<ManagerProgress {...props} />);
-    expect(screen.getByRole("heading", { name: "Mã PIN" })).toBeInTheDocument();
-    expect(screen.getByText("Tất cả mã PIN trong hệ thống (chỉ Quản lý xem được)")).toBeInTheDocument();
-    expect(screen.getAllByText("Học viên Demo").length).toBeGreaterThanOrEqual(2);
-    expect(screen.getByText("Không hiển thị")).toBeInTheDocument();
-    expect(screen.queryByText("learner-pass")).not.toBeInTheDocument();
+  it("does not expose PIN data on the Manager progress screen", () => {
+    render(<ManagerProgress view={progress} />);
+    expect(screen.queryByRole("heading", { name: /Mã PIN/ })).not.toBeInTheDocument();
+    expect(screen.queryByText(/PIN trong hệ thống/)).not.toBeInTheDocument();
   });
 
   it("uses backend readiness instead of deriving fake set counts", () => {
@@ -188,7 +184,7 @@ describe("new Manager app branch", () => {
   });
 
   it("keeps the nine reward cases and changes simulation state", async () => {
-    render(<ManagerRewards />);
+    renderRewards();
     const quickCases = screen.getByRole("group", { name: "Chọn nhanh một trường hợp" });
     expect(within(quickCases).getAllByRole("button")).toHaveLength(9);
     await userEvent.setup().click(within(quickCases).getByRole("button", { name: "Cấp cao nhất" }));
@@ -204,7 +200,7 @@ describe("new Manager app branch", () => {
 
   it("exposes reward promotion previews as dismissible modal dialogs", async () => {
     const user = userEvent.setup();
-    render(<ManagerRewards />);
+    renderRewards();
     const trigger = screen.getAllByRole("button", { name: "Xem màn lên cấp" })[0]!;
     await user.click(trigger);
 
@@ -227,18 +223,18 @@ describe("new Manager app branch", () => {
   });
 
   it("keeps the reward table in its own horizontal scroll flow", () => {
-    render(<ManagerRewards />);
+    renderRewards();
     expect(document.querySelector("[data-manager-action-table]")).not.toHaveClass("manager-action-table");
   });
 
   it("keeps Manager title and operational cards on stable spacing hooks", () => {
     render(<>
       <PageTitle actions={<button type="button">Tác vụ</button>}><h1>Tiến độ nhóm</h1><p>Mô tả</p></PageTitle>
-      <OperationalCards pinReports={[{ id: "pin-1", title: "Học viên Demo", detail: "Đang chờ" }]} />
+      <OperationalCards deleteRequests={[{ id: "delete-1", title: "Học viên Demo", detail: "Đang chờ" }]} />
     </>);
 
     expect(screen.getByRole("heading", { name: "Tiến độ nhóm" }).parentElement).toHaveClass("manager-page-title__content");
     expect(screen.getByRole("button", { name: "Tác vụ" }).parentElement).toHaveClass("manager-page-title__actions");
-    expect(screen.getByRole("heading", { name: /^Mã PIN/ }).closest("section")).toHaveClass("manager-section-card");
+    expect(screen.getByRole("heading", { name: /^Yêu cầu xoá tài khoản/ }).closest("section")).toHaveClass("manager-section-card");
   });
 });

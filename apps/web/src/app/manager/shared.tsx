@@ -1,16 +1,12 @@
 import type { ReactNode } from "react";
-import type { ManagerAccountsView } from "@e4s/contracts";
 
 export type OperationalRequest = { id: string; title: string; detail: string };
 export type TrashedAccount = { id: string; name: string; deletedAt: string };
 
 export type ManagerOperationalProps = {
-  pinReports?: readonly OperationalRequest[];
-  /** Safe account metadata used to render the Manager-only PIN disclosure state. */
-  pinDirectory?: ManagerAccountsView;
   deleteRequests?: readonly OperationalRequest[];
   trashedAccounts?: readonly TrashedAccount[];
-  onOpenOperationalItem?: (kind: "pin" | "delete" | "trash", id: string) => void;
+  onOpenOperationalItem?: (kind: "delete" | "trash", id: string) => void;
   onPurgeOperationalItem?: (id: string) => void;
   /** Shared cards can render their loading/error state when a route owns the request. */
   loading?: boolean;

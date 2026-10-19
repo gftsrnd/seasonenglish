@@ -50,31 +50,25 @@ describe("ManagerRouteController", () => {
 
   it("loads the real operations view for /mgr/ops", async () => {
     vi.spyOn(apiClient, "getManagerOperations").mockResolvedValue(operations);
-    vi.spyOn(apiClient, "getManagerPinReports").mockResolvedValue({ reports: [] });
-    vi.spyOn(apiClient, "getManagerAccounts").mockResolvedValue({ organizationName: "GFT", accounts: [] });
     renderManager(<MemoryRouter initialEntries={["/mgr/ops"]}><ManagerRouteController role="manager" currentUserId="manager-1" /></MemoryRouter>);
     await screen.findByText("1/2 bộ đã duyệt");
     expect(screen.getByRole("heading", { name: "Hiệu suất vận hành" })).toBeInTheDocument();
     expect(apiClient.getManagerOperations).toHaveBeenCalledOnce();
     expect(screen.getByText("1/2 bộ đã duyệt")).toBeInTheDocument();
-    expect(await screen.findByRole("heading", { name: /^Mã PIN/ })).toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: /^Mã PIN/ })).not.toBeInTheDocument();
   });
 
   it("opens the real learner quick-view and shows Manager operational queues", async () => {
     vi.spyOn(apiClient, "getManagerProgress").mockResolvedValue(managerProgress);
     vi.spyOn(apiClient, "getManagerDeleteRequests").mockResolvedValue({ requests: [{ id: "delete-1", learnerId: "learner-1", learnerName: "Học viên Demo", reason: "Xin xoá", status: "pending", requestedBy: "operator-1", requestedAt: "2026-10-14T09:00:00.000Z" }] });
     vi.spyOn(apiClient, "getManagerTrash").mockResolvedValue({ accounts: [{ id: "trash-1", displayName: "Tài khoản cũ", email: "old@e4s.local", role: "learner", status: "deleted", deletedAt: "2026-10-14T09:00:00.000Z" }] });
-    vi.spyOn(apiClient, "getManagerPinReports").mockResolvedValue({ reports: [{ id: "pin-1", subjectUserId: "learner-1", subjectName: "Học viên Demo", note: "Quên PIN", status: "open", createdAt: "2026-10-14T09:00:00.000Z", resolvedAt: null }] });
     const profile: ManagerLearnerProfileView = { learner: { id: "learner-1", displayName: "Học viên Demo", email: "learner@e4s.local", status: "active", createdAt: "2026-10-01T09:00:00.000Z", currentLevel: "A2" }, profile: { goals: ["Giao tiếp"] }, metrics: { completedLessons: 4, totalLessons: 10, coachTurns: 6, studyDays: 3, rewardPoints: 20, lastActivityAt: "2026-10-14T09:00:00.000Z" } };
     const openProfile = vi.spyOn(apiClient, "getManagerLearnerProfile").mockResolvedValue(profile);
     renderManager(<MemoryRouter initialEntries={["/mgr"]}><ManagerRouteController role="manager" currentUserId="manager-1" /></MemoryRouter>);
-    await screen.findByRole("heading", { name: /^Mã PIN/ });
+    await screen.findByRole("button", { name: "Hồ sơ Học viên Demo" });
     expect(screen.getByRole("heading", { name: "Tiến độ nhóm" })).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: /^Yêu cầu xoá tài khoản/ })).toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: /^Tài khoản đã duyệt xoá/ })).toBeInTheDocument();
-    const resolvePin = vi.spyOn(apiClient, "resolveManagerPinReport").mockResolvedValue({ id: "pin-1", subjectUserId: "learner-1", subjectName: "Học viên Demo", note: "Quên PIN", status: "done", createdAt: "2026-10-14T09:00:00.000Z", resolvedAt: "2026-10-15T09:00:00.000Z" });
-    await userEvent.setup().click(screen.getByRole("button", { name: "Đã báo lại" }));
-    expect(resolvePin).toHaveBeenCalledWith("pin-1");
+    expect(screen.queryByRole("heading", { name: /^Mã PIN/ })).not.toBeInTheDocument();
     await userEvent.setup().click(screen.getByRole("button", { name: "Hồ sơ Học viên Demo" }));
     expect(openProfile).toHaveBeenCalledWith("learner-1");
     expect(await screen.findByRole("dialog")).toHaveTextContent("Học viên Demo");
@@ -156,7 +150,6 @@ describe("ManagerRouteController", () => {
     vi.spyOn(apiClient, "getManagerProgress").mockResolvedValue(managerProgress);
     vi.spyOn(apiClient, "getManagerDeleteRequests").mockResolvedValue({ requests: [{ id: "delete-1", learnerId: "learner-1", learnerName: "Học viên Demo", reason: "Xin xoá", status: "pending", requestedBy: "operator-1", requestedAt: "2026-10-14T09:00:00.000Z" }] });
     vi.spyOn(apiClient, "getManagerTrash").mockResolvedValue({ accounts: [{ id: "trash-1", displayName: "Tài khoản cũ", email: "old@e4s.local", role: "learner", status: "deleted", deletedAt: "2026-10-14T09:00:00.000Z" }] });
-    vi.spyOn(apiClient, "getManagerPinReports").mockResolvedValue({ reports: [] });
     vi.spyOn(apiClient, "getManagerAccounts").mockResolvedValue({ organizationName: "GFT", accounts: [] });
     vi.spyOn(apiClient, "getManagerReminders").mockResolvedValue({ organizationName: "GFT", inactiveDays: 3, candidates: [], history: [] });
     const decide = vi.spyOn(apiClient, "decideManagerDeleteRequest").mockResolvedValue({ id: "delete-1", learnerId: "learner-1", learnerName: "Học viên Demo", reason: "Xin xoá", status: "approved", requestedBy: "operator-1", requestedAt: "2026-10-14T09:00:00.000Z", decidedAt: "2026-10-15T09:00:00.000Z", note: "Đã xác nhận từ hàng đợi Quản lý." });
@@ -173,7 +166,15 @@ describe("ManagerRouteController", () => {
     await new Promise((resolve) => setTimeout(resolve, 5_200));
     expect(decide).toHaveBeenCalledWith("delete-1", { status: "approved", note: "Đã xác nhận từ hàng đợi Quản lý." });
 
-    await user.click(screen.getByRole("button", { name: "Khôi phục" }));
+    cleanup();
+    vi.spyOn(apiClient, "getProductPreferences").mockResolvedValue(product);
+    vi.spyOn(apiClient, "getSystemCapabilities").mockResolvedValue(capabilities);
+    vi.spyOn(apiClient, "getManagerSettings").mockResolvedValue(managerSettings);
+    vi.spyOn(apiClient, "getManagerProviderSettings").mockResolvedValue(managerProvider);
+    renderManager(<MemoryRouter initialEntries={["/settings"]}><ManagerRouteController role="manager" currentUserId="manager-1" /></MemoryRouter>);
+    expect(await screen.findByRole("heading", { name: "Người dùng" })).toBeInTheDocument();
+    await user.click(screen.getByText(/Khôi phục tài khoản/));
+    await user.click(await screen.findByRole("button", { name: "Khôi phục" }));
     const restoreDialog = await screen.findByRole("dialog", { name: "Khôi phục tài khoản" });
     await user.click(within(restoreDialog).getByRole("button", { name: "Khôi phục" }));
     expect(restore).toHaveBeenCalledWith("trash-1");
@@ -301,13 +302,17 @@ describe("ManagerRouteController", () => {
   });
 
   it("exposes a Manager-only purge action for deleted accounts", async () => {
-    vi.spyOn(apiClient, "getManagerProgress").mockResolvedValue(managerProgress);
-    vi.spyOn(apiClient, "getManagerDeleteRequests").mockResolvedValue({ requests: [] });
+    vi.spyOn(apiClient, "getProductPreferences").mockResolvedValue(product);
+    vi.spyOn(apiClient, "getSystemCapabilities").mockResolvedValue(capabilities);
+    vi.spyOn(apiClient, "getManagerSettings").mockResolvedValue(managerSettings);
+    vi.spyOn(apiClient, "getManagerProviderSettings").mockResolvedValue(managerProvider);
+    vi.spyOn(apiClient, "getManagerAccounts").mockResolvedValue({ organizationName: "GFT", accounts: [] });
     vi.spyOn(apiClient, "getManagerTrash").mockResolvedValue({ accounts: [{ id: "trash-1", displayName: "Tài khoản cũ", email: "old@e4s.local", role: "learner", status: "deleted", deletedAt: "2026-10-14T09:00:00.000Z" }] });
-    vi.spyOn(apiClient, "getManagerPinReports").mockResolvedValue({ reports: [] });
     const confirmation = vi.spyOn(apiClient, "requestManagerTrashPurgeConfirmation").mockResolvedValue({ accountId: "trash-1", token: "server-token", confirmationPhrase: "XOA VINH VIEN", countdownSeconds: 5, expiresAt: "2026-10-15T09:01:00.000Z" });
     const purge = vi.spyOn(apiClient, "purgeManagerTrashAccount").mockResolvedValue(undefined);
-    renderManager(<MemoryRouter initialEntries={["/mgr"]}><ManagerRouteController role="manager" currentUserId="manager-1" /></MemoryRouter>);
+    renderManager(<MemoryRouter initialEntries={["/settings"]}><ManagerRouteController role="manager" currentUserId="manager-1" /></MemoryRouter>);
+    expect(await screen.findByRole("heading", { name: "Người dùng" })).toBeInTheDocument();
+    await userEvent.setup().click(screen.getByText(/Khôi phục tài khoản/));
     expect(await screen.findByRole("heading", { name: /^Tài khoản đã duyệt xoá/ })).toBeInTheDocument();
     await userEvent.setup().click(screen.getByRole("button", { name: "Xoá vĩnh viễn" }));
     expect(confirmation).toHaveBeenCalledWith("trash-1");

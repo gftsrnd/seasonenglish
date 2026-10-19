@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import "./manager.css";
 import { Navigate, Route, Routes, useLocation } from "react-router";
-import type { ManagerAccountView, ManagerAccountsView, ManagerDeleteRequestsView, ManagerLearnerProfileView, ManagerMaintenanceAction, ManagerMaintenanceConfirmationInput, ManagerMaintenanceConfirmationView, ManagerOperationsView, ManagerPinReportsView, ManagerProgressView, ManagerProviderSettingsInput, ManagerProviderSettingsView, ManagerPurgeConfirmationView, ManagerRemindersView, ManagerReportView, ManagerSettingsInput, ManagerSettingsView, ManagerTrashView, ProductPreferencesView, SystemCapabilitiesView } from "@e4s/contracts";
+import type { ManagerAccountView, ManagerAccountsView, ManagerDeleteRequestsView, ManagerLearnerProfileView, ManagerMaintenanceAction, ManagerMaintenanceConfirmationInput, ManagerMaintenanceConfirmationView, ManagerOperationsView, ManagerProgressView, ManagerProviderSettingsInput, ManagerProviderSettingsView, ManagerPurgeConfirmationView, ManagerRemindersView, ManagerReportView, ManagerSettingsInput, ManagerSettingsView, ManagerTrashView, ProductPreferencesView, SystemCapabilitiesView } from "@e4s/contracts";
 import { managerApiClient as apiClient } from "../../api/manager.js";
 import { SettingsPage } from "../settings/index.js";
 import { ManagerOperations } from "./Operations.js";
@@ -52,21 +52,19 @@ export function ManagerRouteController({ role, currentUserId }: ManagerRouteCont
 
 function ProgressRoute() {
   const [view, setView] = useState<ManagerProgressView>(); const [error, setError] = useState(""); const [notice, setNotice] = useState("");
-  const [deleteRequests, setDeleteRequests] = useState<ManagerDeleteRequestsView>(); const [pinReports, setPinReports] = useState<ManagerPinReportsView>(); const [pinDirectory, setPinDirectory] = useState<ManagerAccountsView>(); const [reminders, setReminders] = useState<ManagerRemindersView>(); const [profile, setProfile] = useState<ManagerLearnerProfileView>();
+  const [deleteRequests, setDeleteRequests] = useState<ManagerDeleteRequestsView>(); const [reminders, setReminders] = useState<ManagerRemindersView>(); const [profile, setProfile] = useState<ManagerLearnerProfileView>();
   const modal = useModal();
   const load = async () => {
-    const [progress, requests, pins] = await Promise.all([apiClient.getManagerProgress(), apiClient.getManagerDeleteRequests(), apiClient.getManagerPinReports()]);
-    setView(progress); setDeleteRequests(requests); setPinReports(pins);
-    const [directory, queue] = await Promise.allSettled([apiClient.getManagerAccounts(), apiClient.getManagerReminders()]);
-    if (directory.status === "fulfilled") setPinDirectory(directory.value);
-    if (queue.status === "fulfilled") setReminders(queue.value);
+    const [progress, requests] = await Promise.all([apiClient.getManagerProgress(), apiClient.getManagerDeleteRequests()]);
+    setView(progress); setDeleteRequests(requests);
+    const queue = await apiClient.getManagerReminders().catch(() => undefined);
+    if (queue) setReminders(queue);
   };
   useEffect(() => { void load().catch(() => setError("Không tải được tiến độ nhóm.")); }, []);
   if (!view) return <RouteState error={error} title="Tiến độ nhóm" label="Đang tải tiến độ nhóm" />;
-  const openOperationalItem = async (kind: "pin" | "delete" | "trash", id: string) => {
+  const openOperationalItem = async (kind: "delete" | "trash", id: string) => {
     setError("");
     try {
-      if (kind === "pin") { await apiClient.resolveManagerPinReport(id); setNotice("Đã ghi nhận báo cáo PIN."); await load(); return; }
       if (kind === "delete") {
         const request = deleteRequests?.requests.find((item) => item.id === id);
         if (request?.status === "pending" && await modal.confirm({ title: "Duyệt xoá tài khoản", message: <>Duyệt xoá quyền truy cập của <b>{request.learnerName}</b>? Dữ liệu học và audit vẫn được giữ để đối soát.</>, confirmLabel: "Duyệt xoá", cancelLabel: "Huỷ", tone: "danger" })) { await apiClient.decideManagerDeleteRequest(id, { status: "approved", note: "Đã xác nhận từ hàng đợi Quản lý." }); setNotice("Đã duyệt yêu cầu xoá tài khoản."); await load(); }
@@ -78,8 +76,6 @@ function ProgressRoute() {
   const openProfile = async (learnerId: string) => { setError(""); try { setProfile(await apiClient.getManagerLearnerProfile(learnerId)); } catch { setError("Không tải được hồ sơ học viên."); } };
   const operationalProps = {
     ...(deleteRequests ? { deleteRequests: deleteRequests.requests.filter((item) => item.status === "pending").map((item) => ({ id: item.id, title: item.learnerName, detail: `${item.reason} · ${item.status}` })) } : {}),
-    ...(pinReports ? { pinReports: pinReports.reports.filter((item) => item.status === "open").map((item) => ({ id: item.id, title: item.subjectName, detail: item.note })) } : {}),
-    ...(pinDirectory ? { pinDirectory } : {}),
     onOpenOperationalItem: openOperationalItem
   };
   const deleteLearner = async (learnerId: string) => {
@@ -182,18 +178,16 @@ export function MaintenanceConfirmationDialog({ confirmation, busy, onCancel, on
 }
 
 function OperationsRoute() {
-  const [view, setView] = useState<ManagerOperationsView>(); const [pinReports, setPinReports] = useState<ManagerPinReportsView>(); const [pinDirectory, setPinDirectory] = useState<ManagerAccountsView>(); const [deleteRequests, setDeleteRequests] = useState<ManagerDeleteRequestsView>(); const [error, setError] = useState(""); const [notice, setNotice] = useState("");
+  const [view, setView] = useState<ManagerOperationsView>(); const [deleteRequests, setDeleteRequests] = useState<ManagerDeleteRequestsView>(); const [error, setError] = useState("");
   const load = async () => {
     setView(await apiClient.getManagerOperations());
-    const [reports, directory, requests] = await Promise.allSettled([apiClient.getManagerPinReports(), apiClient.getManagerAccounts(), apiClient.getManagerDeleteRequests()]);
-    if (reports.status === "fulfilled") setPinReports(reports.value);
-    if (directory.status === "fulfilled") setPinDirectory(directory.value);
-    if (requests.status === "fulfilled") setDeleteRequests(requests.value);
+    const requests = await apiClient.getManagerDeleteRequests().catch(() => undefined);
+    if (requests) setDeleteRequests(requests);
   };
   useEffect(() => { void load().catch(() => setError("Không tải được hiệu suất vận hành.")); }, []);
   if (!view) return <RouteState error={error} title="Hiệu suất vận hành" label="Đang tải hiệu suất vận hành" />;
   const deleteRequestCounts = deleteRequests?.requests.reduce<Record<string, number>>((counts, request) => { counts[request.requestedBy] = (counts[request.requestedBy] ?? 0) + 1; return counts; }, {});
-  return <>{error || notice ? <div className={`banner ${error ? "danger" : "ok"}`} role={error ? "alert" : "status"}><div className="body small">{error || notice}</div></div> : null}<ManagerOperations view={view} {...(pinReports ? { pinReports: pinReports.reports.filter((item) => item.status === "open").map((item) => ({ id: item.id, title: item.subjectName, detail: item.note })) } : {})} {...(pinDirectory ? { pinDirectory } : {})} {...(deleteRequestCounts ? { deleteRequestCounts } : {})} onOpenOperationalItem={async (kind, id) => { if (kind !== "pin") return; setError(""); try { await apiClient.resolveManagerPinReport(id); setNotice("Đã ghi nhận báo cáo PIN."); await load(); } catch { setError("Không cập nhật được báo cáo PIN."); } }} /></>;
+  return <>{error ? <div className="banner danger" role="alert"><div className="body small">{error}</div></div> : null}<ManagerOperations view={view} {...(deleteRequestCounts ? { deleteRequestCounts } : {})} /></>;
 }
 
 function RemindersRoute() {
