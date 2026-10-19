@@ -158,6 +158,12 @@ describe("Manager settings operational actions", () => {
     });
     expect(seeded.statusCode, seeded.body).toBe(200);
     expect(seeded.json()).toMatchObject({ action: "seed_demo", completed: true, backupId: seedConfirmation.json().backupId });
+    await expect(pool.query("select email from users where organization_id = $1 order by email", [DEMO_IDS.organization]))
+      .resolves.toMatchObject({ rows: [
+        { email: "learner@e4s.local" },
+        { email: "manager@e4s.local" },
+        { email: "operator@e4s.local" }
+      ] });
 
     const wipeConfirmation = await app.inject({ method: "POST", url: "/api/v1/manager/settings/wipe-confirmation", headers: { cookie: managerCookie }, payload: {} });
     expect(wipeConfirmation.statusCode, wipeConfirmation.body).toBe(200);

@@ -3,9 +3,14 @@ import { DEMO_IDS } from "../packages/database/src/index.js";
 
 const KEEP_IDS = [DEMO_IDS.manager, DEMO_IDS.operator, DEMO_IDS.learner] as const;
 const LOCAL_HOSTS = new Set(["127.0.0.1", "localhost", "::1", "[::1]"]);
+const TEST_FIXTURE_EMAIL = /^(?:checker|core-check-[^@]+|core-double-check-[^@]+|core-flow-[^@]+)@e4s\.local$/i;
 
 type Account = { id: string; email: string | null; displayName: string; role: string; status: string };
 type ReferenceImpact = { table: string; column: string; count: number };
+
+function isTestFixtureAccount(account: Account) {
+  return account.id === DEMO_IDS.checker || TEST_FIXTURE_EMAIL.test(account.email?.trim() ?? "");
+}
 
 function assertLocalDatabase(connectionString: string) {
   const parsed = new URL(connectionString);
@@ -108,14 +113,16 @@ export async function cleanupLocalTestUsers(connectionString: string, apply: boo
       throw new Error("CANONICAL_LOCAL_ACCOUNTS_MISSING");
     }
     const organizationId = canonical.rows[0]!.organization_id;
-    const target = await client.query<{ id: string; email: string | null; display_name: string; role: string; status: string }>(
+    const candidates = await client.query<{ id: string; email: string | null; display_name: string; role: string; status: string }>(
       `select id, email, display_name, role, status from users
        where organization_id = $1 and not (id = any($2::uuid[])) order by email nulls last, id for update`,
       [organizationId, KEEP_IDS]
     );
-    const accounts: Account[] = target.rows.map((row) => ({
+    const nonCanonicalAccounts: Account[] = candidates.rows.map((row) => ({
       id: row.id, email: row.email, displayName: row.display_name, role: row.role, status: row.status
     }));
+    const accounts = nonCanonicalAccounts.filter(isTestFixtureAccount);
+    const preservedAccounts = nonCanonicalAccounts.filter((account) => !isTestFixtureAccount(account));
     const targetIds = accounts.map(({ id }) => id);
     const references = await referenceImpact(client, targetIds);
     const baseReport = {
@@ -124,12 +131,13 @@ export async function cleanupLocalTestUsers(connectionString: string, apply: boo
       organizationId,
       keepAccountIds: [...KEEP_IDS],
       accounts,
+      preservedAccounts,
       references,
       affectedReferences: references.reduce((sum, item) => sum + item.count, 0)
     };
     if (!apply || !targetIds.length) {
       await client.query("rollback");
-      return { ...baseReport, remainingAccounts: canonical.rowCount };
+      return { ...baseReport, remainingAccounts: (canonical.rowCount ?? 0) + nonCanonicalAccounts.length };
     }
     await transferSharedOwnership(client, targetIds);
     await deletePrivateData(client, targetIds);
@@ -138,7 +146,16 @@ export async function cleanupLocalTestUsers(connectionString: string, apply: boo
       [organizationId]
     );
     const remainingAccounts = remaining.rows[0]?.count ?? 0;
-    if (remainingAccounts !== KEEP_IDS.length) throw new Error(`UNEXPECTED_REMAINING_ACCOUNT_COUNT:${remainingAccounts}`);
+    const remainingTargets = await client.query<{ count: number }>(
+      "select count(*)::int as count from users where id = any($1::uuid[])",
+      [targetIds]
+    );
+    if ((remainingTargets.rows[0]?.count ?? 0) !== 0) throw new Error("TEST_FIXTURE_ACCOUNTS_REMAIN");
+    const remainingCanonical = await client.query<{ count: number }>(
+      "select count(*)::int as count from users where id = any($1::uuid[])",
+      [KEEP_IDS]
+    );
+    if ((remainingCanonical.rows[0]?.count ?? 0) !== KEEP_IDS.length) throw new Error("CANONICAL_LOCAL_ACCOUNTS_MISSING_AFTER_CLEANUP");
     await client.query("commit");
     return { ...baseReport, remainingAccounts };
   } catch (error) {

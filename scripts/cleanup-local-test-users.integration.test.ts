@@ -11,6 +11,7 @@ const databaseUrl = process.env.TEST_DATABASE_URL
   ?? "postgres://e4s:e4s_test_password@127.0.0.1:55432/e4s_test";
 const testOperatorId = "10000000-0000-4000-8000-000000000104";
 const testLearnerId = "10000000-0000-4000-8000-000000000105";
+const legitimateLearnerId = "10000000-0000-4000-8000-000000000107";
 
 describe("local test-user cleanup", () => {
   const pool = new Pool({ connectionString: databaseUrl });
@@ -29,8 +30,9 @@ describe("local test-user cleanup", () => {
     await pool.query(
       `insert into users (id, organization_id, role, display_name, email) values
          ($1, $3, 'operator', 'Core check operator', 'core-check-operator@e4s.local'),
-         ($2, $3, 'learner', 'Core check learner', 'core-check-learner@e4s.local')`,
-      [testOperatorId, testLearnerId, DEMO_IDS.organization]
+         ($2, $3, 'learner', 'Core check learner', 'core-check-learner@e4s.local'),
+         ($4, $3, 'learner', 'Nguyen Van An', 'an.nguyen@e4s.local')`,
+      [testOperatorId, testLearnerId, DEMO_IDS.organization, legitimateLearnerId]
     );
     await pool.query(
       "insert into user_credentials (user_id, credential_hash) values ($1, $2), ($3, $4)",
@@ -65,6 +67,7 @@ describe("local test-user cleanup", () => {
     ]);
     expect(report.affectedReferences).toBeGreaterThan(2);
     expect(await pool.query("select 1 from users where id = $1", [testLearnerId])).toHaveProperty("rowCount", 1);
+    expect(await pool.query("select 1 from users where id = $1", [legitimateLearnerId])).toHaveProperty("rowCount", 1);
   });
 
   it("refuses a non-local database before connecting", async () => {
@@ -78,19 +81,20 @@ describe("local test-user cleanup", () => {
   it("transfers shared authorship and removes private test-user data atomically", async () => {
     const { stdout } = await cleanup("--apply");
     const report = JSON.parse(stdout) as { mode: string; remainingAccounts: number };
-    expect(report).toMatchObject({ mode: "apply", remainingAccounts: 3 });
+    expect(report).toMatchObject({ mode: "apply", remainingAccounts: 4 });
 
     const users = await pool.query<{ email: string }>(
       "select email from users where organization_id = $1 order by email",
       [DEMO_IDS.organization]
     );
     expect(users.rows.map(({ email }) => email)).toEqual([
-      "learner@e4s.local", "manager@e4s.local", "operator@e4s.local"
+      "an.nguyen@e4s.local", "learner@e4s.local", "manager@e4s.local", "operator@e4s.local"
     ]);
     const prompt = await pool.query<{ created_by: string }>(
       "select created_by from prompt_versions where version = 99 and task_key = 'system_rules'"
     );
     expect(prompt.rows[0]?.created_by).toBe(DEMO_IDS.operator);
     expect(await pool.query("select 1 from learner_profiles where user_id = $1", [testLearnerId])).toHaveProperty("rowCount", 0);
+    expect(await pool.query("select 1 from users where id = $1", [legitimateLearnerId])).toHaveProperty("rowCount", 1);
   });
 });

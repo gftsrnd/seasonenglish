@@ -7966,7 +7966,7 @@ class ManagerRepository {
       if (!backup.rowCount) throw new Error("MANAGER_MAINTENANCE_BACKUP_REQUIRED");
 
       await this.resetLocalMaintenanceData(client, organizationId, managerId);
-      if (action === "seed_demo") await seedDemo(client);
+      if (action === "seed_demo") await seedDemo(client, { mode: "local" });
       await client.query("update manager_destructive_confirmations set used_at = now() where id = $1", [confirmationRow.id]);
       await client.query("update manager_maintenance_backups set consumed_at = now() where id = $1", [backupId]);
       await client.query(
