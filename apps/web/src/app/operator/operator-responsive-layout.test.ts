@@ -18,7 +18,7 @@ describe("Operator responsive layout guardrails", () => {
 
   it("keeps compact Operator controls touchable on phones", () => {
     expect(appCss).toMatch(/@media \(max-width:\s*480px\)[\s\S]*?\.app-operator\[aria-label="Đọc mẫu"\] \.btn-sm,[\s\S]*?\.app-operator\[aria-label="Prompt"\] \.btn-sm,[\s\S]*?\.app-operator\[aria-label="Đề thi lên mức"\] \.btn-sm[\s\S]*?min-height:\s*40px/);
-    expect(appCss).toMatch(/\.app-operator \.tabs\.operator-review-tabs\[role="tablist"\][\s\S]*?display:\s*flex[\s\S]*?flex-wrap:\s*nowrap[\s\S]*?overflow-x:\s*auto/);
+    expect(appCss).toMatch(/\.app-operator \.tabs\.operator-review-tabs\[role="tablist"\][\s\S]*?display:\s*grid[\s\S]*?grid-template-columns:\s*repeat\(2,\s*minmax\(0,\s*1fr\)\)[\s\S]*?overflow:\s*visible/);
   });
 
   it("keeps pending review actions in an even phone grid", () => {

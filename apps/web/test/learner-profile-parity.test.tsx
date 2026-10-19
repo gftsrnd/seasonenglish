@@ -83,7 +83,7 @@ const view: ProfileView = {
 };
 
 describe("learner profile app parity", () => {
-  it("renders the full app profile from real contract data", () => {
+  it("renders the full app profile from real contract data after the learner opens personal details", async () => {
     const { container } = render(<LearnerProfile view={view} actions={actions} />);
 
     expect(screen.getByRole("heading", { name: "Học viên C" })).toBeInTheDocument();
@@ -94,6 +94,8 @@ describe("learner profile app parity", () => {
     expect(screen.getByText("Nắng · nét ô liu")).toBeInTheDocument();
 
     const profile = screen.getByRole("region", { name: "Hồ sơ cá nhân" });
+    expect(within(profile).queryByText("Họp và trình bày, Đọc tài liệu, spec kỹ thuật")).not.toBeInTheDocument();
+    await userEvent.setup().click(within(profile).getByRole("button", { name: "Chỉnh sửa thông tin cá nhân" }));
     expect(within(profile).getByText("Họp và trình bày, Đọc tài liệu, spec kỹ thuật")).toBeInTheDocument();
     expect(within(profile).getByText("Vài lần mỗi tuần")).toBeInTheDocument();
     expect(within(profile).getByText("Tiếng Anh (tự động theo mức B1)")).toBeInTheDocument();

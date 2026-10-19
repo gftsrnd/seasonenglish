@@ -25,12 +25,12 @@ describe("new binding-app shell", () => {
     expect(screen.getByRole("button", { name: "Hiệu ứng âm thanh: bật" }).querySelector("svg")).toHaveAttribute("width", "18");
   });
 
-  it("keeps manager navigation and read-only operator overlay from the app", () => {
+  it("keeps Manager navigation free of the former nested Operator overlay", () => {
     const session = { ...learnerSession, role: "manager" as const, permissions: ["settings:manage" as const] };
     render(<MemoryRouter initialEntries={["/op/lessons"]}><AppShell session={session} onLogout={vi.fn()}><section>Bài học</section></AppShell></MemoryRouter>);
     expect(within(screen.getByRole("navigation", { name: "Điều hướng quản lý" })).getAllByRole("link").map((link) => link.textContent)).toEqual(["Tiến độ", "Vận hành", "Nhắc học", "Báo cáo", "Cài đặt"]);
-    expect(screen.getByText("Chế độ xem của Quản lý")).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "Đề lên mức" })).toBeInTheDocument();
+    expect(screen.queryByText("Chế độ xem của Quản lý")).not.toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "Đề lên mức" })).not.toBeInTheDocument();
   });
 
   it("keeps the learner shell avatar as a real avatar-picker trigger", async () => {
