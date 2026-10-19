@@ -4,8 +4,8 @@
   "version": "0.1.0",
   "type": "module",
   "exports": {
-    ".": "./src/index.ts",
-    "./seed": "./src/seed.ts"
+    ".": "./dist/src/index.js",
+    "./seed": "./dist/src/seed.js"
   },
   "scripts": {
     "build": "tsc -p tsconfig.json",

@@ -4,12 +4,12 @@
   "version": "0.1.0",
   "type": "module",
   "exports": {
-    ".": "./src/index.ts",
-    "./assessment": "./src/assessment/index.ts",
-    "./content": "./src/content/index.ts",
-    "./engagement": "./src/engagement/index.ts",
-    "./identity": "./src/identity/index.ts",
-    "./learning": "./src/learning/index.ts"
+    ".": "./dist/src/index.js",
+    "./assessment": "./dist/src/assessment/index.js",
+    "./content": "./dist/src/content/index.js",
+    "./engagement": "./dist/src/engagement/index.js",
+    "./identity": "./dist/src/identity/index.js",
+    "./learning": "./dist/src/learning/index.js"
   },
   "scripts": {
     "build": "tsc -p tsconfig.json",

@@ -4,8 +4,8 @@
   "version": "0.1.0",
   "type": "module",
   "exports": {
-    ".": "./src/index.ts",
-    "./groq": "./src/providers/groq.ts"
+    ".": "./dist/src/index.js",
+    "./groq": "./dist/src/providers/groq.js"
   },
   "scripts": {
     "build": "tsc -p tsconfig.json",
