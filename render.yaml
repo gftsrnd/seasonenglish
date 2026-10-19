@@ -5,7 +5,7 @@ services:
     plan: free
     region: singapore
     branch: gftsaimedia-cpu
-    buildCommand: corepack enable && pnpm install --frozen-lockfile && pnpm build
+    buildCommand: pnpm install --frozen-lockfile && pnpm build
     startCommand: sh -c 'pnpm exec tsx scripts/prepare-local.ts && (pnpm exec tsx apps/worker/src/server.ts &) && exec pnpm --filter @e4s/api start'
     healthCheckPath: /api/readiness
     envVars:
@@ -44,7 +44,7 @@ services:
     name: e4s-web
     runtime: static
     branch: gftsaimedia-cpu
-    buildCommand: corepack enable && pnpm install --frozen-lockfile && pnpm --filter @e4s/web build
+    buildCommand: pnpm install --frozen-lockfile && pnpm --filter @e4s/web build
     staticPublishPath: apps/web/dist
     envVars:
       - key: VITE_API_BASE_URL
