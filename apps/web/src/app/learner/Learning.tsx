@@ -347,9 +347,7 @@ function SpeechButton({ text, label, speak }: { text: string; label: string; spe
     ? "Trình duyệt không hỗ trợ đọc văn bản. Bạn vẫn có thể đọc nội dung trên màn hình."
     : status === "error"
       ? "Không phát được âm thanh. Bạn có thể thử lại."
-      : status === "ended"
-        ? "Đã phát xong."
-        : status === "started"
+      : status === "started"
           ? "Đang phát…"
           : "";
   const playing = status === "started";
