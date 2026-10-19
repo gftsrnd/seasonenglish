@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { CheckCircle2, LoaderCircle, LockKeyhole, Mic, RotateCcw, Square, Upload, Volume2 } from "lucide-react";
+import { CheckCircle2, LockKeyhole, Mic, RotateCcw, Square, Upload, Volume2 } from "lucide-react";
 import type {
   LessonPart,
   LessonPartAttemptEvidenceInput,
@@ -8,7 +8,7 @@ import type {
   LessonVocabularyLexicalDetail,
   PartEvidence
 } from "@e4s/contracts";
-import type { LearnerCallbacks, LessonView, LessonSpeechOptions, LessonSpeechStatus, MicroView } from "./contracts.js";
+import type { LearnerCallbacks, LessonView, MicroView } from "./contracts.js";
 import { ErrorText, Notice, PageTitle, AppLink } from "./ui.js";
 import { ContentImage } from "../shared/media/ContentImage.js";
 
@@ -324,36 +324,33 @@ function formatLessonDate(value: string): string {
 type LessonAudioSource = { text?: string; src?: string };
 
 function SpeechButton({ text, label, speak }: { text: string; label: string; speak: LearnerCallbacks["speak"] }) {
-  const [status, setStatus] = useState<LessonSpeechStatus | "idle">("idle");
+  const [error, setError] = useState<"error" | "unsupported" | null>(null);
   const play = () => {
-    if (status === "started") return;
+    setError(null);
     if (!text.trim()) {
-      setStatus("error");
+      setError("error");
       return;
     }
     if (!("speechSynthesis" in window) || typeof SpeechSynthesisUtterance === "undefined") {
-      setStatus("unsupported");
+      setError("unsupported");
       return;
     }
-    setStatus("started");
-    const options: LessonSpeechOptions = { onStatus: setStatus };
     try {
-      speak(text, "en-US", options);
+      speak(text, "en-US", { onStatus: (status) => {
+        if (status === "error" || status === "unsupported") setError(status);
+      } });
     } catch {
-      setStatus("error");
+      setError("error");
     }
   };
-  const message = status === "unsupported"
+  const message = error === "unsupported"
     ? "Trình duyệt không hỗ trợ đọc văn bản. Bạn vẫn có thể đọc nội dung trên màn hình."
-    : status === "error"
+    : error === "error"
       ? "Không phát được âm thanh. Bạn có thể thử lại."
-      : status === "started"
-          ? "Đang phát…"
-          : "";
-  const playing = status === "started";
+      : "";
   return <div className="stack" role="group" aria-label={label} aria-live="polite">
-    <button className="btn-sm btn-ghost" type="button" aria-busy={playing || undefined} disabled={playing} style={{ alignItems: "center", display: "inline-flex", gap: 6, minHeight: 44 }} onClick={play}>{status === "error" ? <><RotateCcw size={16} aria-hidden="true" /> Thử lại {label.toLowerCase()}</> : playing ? <><LoaderCircle className="spinner" size={16} aria-hidden="true" /> Đang phát…</> : <><Volume2 size={16} aria-hidden="true" /> {label}</>}</button>
-    {message ? <Notice tone={status === "error" || status === "unsupported" ? "warn" : "info"}>{message}</Notice> : null}
+    <button className="btn-sm btn-ghost" type="button" style={{ alignItems: "center", display: "inline-flex", gap: 6, minHeight: 44 }} onClick={play}><Volume2 size={16} aria-hidden="true" /> {label}</button>
+    {message ? <Notice tone="warn">{message}</Notice> : null}
   </div>;
 }
 
