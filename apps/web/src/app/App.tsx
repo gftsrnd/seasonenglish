@@ -62,6 +62,7 @@ export function App({ children }: { children?: (session: SessionView) => ReactNo
   }, [session]);
   if (session === undefined || (session && !routeReady)) return <AppStatus>Đang mở E4S…</AppStatus>;
   if (!session) return <ExperienceProvider musicAllowed={musicAllowed}><EntryScreen client={sharedApiClient} onAuthenticated={(nextSession) => { applySessionEntryRoute(nextSession); setRouteReady(true); setSession(nextSession); }} /></ExperienceProvider>;
+  if (!isSupportedSessionRole(session.role)) return <AppStatus>Không thể mở tài khoản này. Vui lòng đăng nhập lại.</AppStatus>;
   const logout = () => {
     setLogoutError("");
     void sharedApiClient.logout().then(() => { setRouteReady(true); setSession(null); }).catch(() => setLogoutError("Không đăng xuất được. Vui lòng thử lại."));
@@ -128,4 +129,8 @@ function isLearnerPath(pathname: string): boolean {
 
 function isRouteOrChild(pathname: string, route: string): boolean {
   return pathname === route || pathname.startsWith(`${route}/`);
+}
+
+function isSupportedSessionRole(role: unknown): role is SessionView["role"] {
+  return role === "learner" || role === "operator" || role === "manager";
 }
