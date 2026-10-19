@@ -56,16 +56,36 @@ describe("ContentMediaService resolution", () => {
     expect(fixture.savedAvailable[0]?.objectKey).toMatch(/^e4s-media\/org-a\/[a-f0-9]{64}\.png$/);
   });
 
-  it("searches exact Wikipedia only for an uncurated noun", async () => {
+  it("uses open providers when an uncurated noun has no exact Wikipedia image", async () => {
     const fixture = createFixture();
-    fixture.providers.exactWikipedia.mockResolvedValue(candidate("wikipedia"));
+    fixture.providers.exactWikipedia.mockResolvedValue(null);
+    fixture.providers.searchCommons.mockResolvedValue(null);
+    fixture.providers.searchOpenverse.mockResolvedValue(candidate("openverse"));
 
-    await fixture.service.resolveForUser("user-a", { term: "notebook", partOfSpeech: "noun" });
-    await fixture.service.resolveForUser("user-a", { term: "reliable", partOfSpeech: "adjective" });
+    const result = await fixture.service.resolveForUser("user-a", { term: "notebook", partOfSpeech: "noun", allowProviderFallback: true });
 
     expect(fixture.providers.exactWikipedia).toHaveBeenCalledOnce();
     expect(fixture.providers.exactWikipedia).toHaveBeenCalledWith("notebook");
-    expect(fixture.savedUnavailable).toHaveLength(1);
+    expect(fixture.providers.searchCommons).toHaveBeenCalledWith("notebook");
+    expect(fixture.providers.searchOpenverse).toHaveBeenCalledWith("notebook");
+    expect(result).toMatchObject({ status: "available", imageUrl: expect.any(String) });
+  });
+
+  it("falls back through open providers for adjective and preposition vocabulary", async () => {
+    const fixture = createFixture();
+    fixture.providers.searchCommons
+      .mockResolvedValueOnce(null)
+      .mockResolvedValueOnce(candidate("wikimedia"));
+    fixture.providers.searchOpenverse.mockResolvedValueOnce(candidate("openverse"));
+
+    const adjective = await fixture.service.resolveForUser("user-a", { term: "reliable", partOfSpeech: "adjective", allowProviderFallback: true });
+    const preposition = await fixture.service.resolveForUser("user-a", { term: "from", partOfSpeech: "preposition", allowProviderFallback: true });
+
+    expect(fixture.providers.searchCommons).toHaveBeenNthCalledWith(1, "reliable");
+    expect(fixture.providers.searchOpenverse).toHaveBeenCalledWith("reliable");
+    expect(fixture.providers.searchCommons).toHaveBeenNthCalledWith(2, "from");
+    expect(adjective).toMatchObject({ status: "available", imageUrl: expect.any(String) });
+    expect(preposition).toMatchObject({ status: "available", imageUrl: expect.any(String) });
   });
 
   it("serves a positive cache through a short-lived presigned URL", async () => {

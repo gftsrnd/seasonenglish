@@ -236,6 +236,7 @@ export function registerLearningRoutes(
       return await mediaService.resolveForUser(learnerId, {
         term: item.word,
         ...(partOfSpeech ? { partOfSpeech } : {}),
+        allowProviderFallback: true,
         ...(item.imageQuery ? { imageQuery: item.imageQuery } : {}),
         ...(item.imageUrl ? { explicitImageUrl: item.imageUrl } : {}),
         ...(item.imageAttribution ? { explicitAttribution: item.imageAttribution } : {})

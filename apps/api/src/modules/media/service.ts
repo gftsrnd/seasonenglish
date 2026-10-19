@@ -73,7 +73,7 @@ export function createContentMediaService(options: {
       return { image: explicit, provider: "explicit", cached: false };
     }
 
-    const providerForMiss: MediaProvider = input.request.imageQuery ? "wikimedia" : "wikipedia";
+    const providerForMiss: MediaProvider = input.request.imageQuery || input.request.allowProviderFallback ? "wikimedia" : "wikipedia";
     let candidate: ProviderCandidate | null;
     try {
       candidate = await findCandidate(options.providers, input.request);
@@ -154,6 +154,7 @@ type NormalizedRequest = {
   term: string;
   partOfSpeech?: string;
   imageQuery?: string;
+  allowProviderFallback?: boolean;
   explicitImageUrl?: string;
   explicitAttribution?: ContentImageAttribution;
 };
@@ -165,6 +166,7 @@ function normalizeRequest(request: ContentImageRequest): NormalizedRequest {
   const explicitImageUrl = request.explicitImageUrl?.trim();
   if (partOfSpeech) normalized.partOfSpeech = partOfSpeech;
   if (imageQuery) normalized.imageQuery = imageQuery;
+  if (request.allowProviderFallback === true) normalized.allowProviderFallback = true;
   if (explicitImageUrl) normalized.explicitImageUrl = explicitImageUrl;
   if (request.explicitAttribution) normalized.explicitAttribution = request.explicitAttribution;
   return normalized;
@@ -174,7 +176,12 @@ async function findCandidate(providers: OpenMediaProviders, request: NormalizedR
   if (request.imageQuery) {
     return await providers.searchCommons(request.imageQuery) ?? await providers.searchOpenverse(request.imageQuery);
   }
-  return request.partOfSpeech === "noun" ? providers.exactWikipedia(request.term) : null;
+  if (request.partOfSpeech === "noun") {
+    const exact = await providers.exactWikipedia(request.term);
+    if (exact || !request.allowProviderFallback) return exact;
+  }
+  if (!request.allowProviderFallback) return null;
+  return await providers.searchCommons(request.term) ?? await providers.searchOpenverse(request.term);
 }
 
 function explicitView(request: NormalizedRequest): Extract<ContentImageView, { status: "available" }> | null {

@@ -235,6 +235,24 @@ describe("learner profile, home, lesson and progress API", () => {
     }));
   });
 
+  it("enables provider fallback for non-noun lesson vocabulary", async () => {
+    vi.mocked(mediaService.resolveForUser).mockClear().mockResolvedValueOnce({ status: "unavailable" });
+
+    const response = await app.inject({
+      method: "GET",
+      url: `/api/v1/lessons/${DEMO_IDS.lessons[1]}/vocabulary/0/image`,
+      headers: { cookie }
+    });
+
+    expect(response.statusCode, response.body).toBe(200);
+    expect(response.json()).toEqual({ status: "unavailable" });
+    expect(mediaService.resolveForUser).toHaveBeenCalledWith(DEMO_IDS.learner, {
+      term: "new",
+      partOfSpeech: "adjective",
+      allowProviderFallback: true
+    });
+  });
+
   it("does not resolve media for an invalid or inaccessible lesson item", async () => {
     vi.mocked(mediaService.resolveForUser).mockClear();
     const invalidIndex = await app.inject({

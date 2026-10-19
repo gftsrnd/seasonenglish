@@ -9,6 +9,8 @@ export interface ContentImageRequest {
   term: string;
   partOfSpeech?: string;
   imageQuery?: string;
+  /** Enables generic open-provider lookup for lesson content without changing game lookup behaviour. */
+  allowProviderFallback?: boolean;
   explicitImageUrl?: string;
   explicitAttribution?: ContentImageAttribution;
 }

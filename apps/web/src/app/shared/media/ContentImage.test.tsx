@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import "@testing-library/jest-dom/vitest";
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { ContentImageView } from "@e4s/contracts";
 import { ContentImage } from "./ContentImage.js";
@@ -52,10 +52,10 @@ describe("ContentImage", () => {
     expect(screen.getByText("Open artist")).toBeInTheDocument();
   });
 
-  it("collapses optional unavailable media", async () => {
+  it("shows an explicit placeholder when optional media is unavailable", async () => {
     vi.stubGlobal("IntersectionObserver", undefined);
-    const { container } = render(<ContentImage term="reliable" load={() => Promise.resolve({ status: "unavailable" })} />);
-    await waitFor(() => expect(container).toBeEmptyDOMElement());
+    render(<ContentImage term="reliable" load={() => Promise.resolve({ status: "unavailable" })} />);
+    expect(await screen.findByText("Chưa có ảnh minh hoạ")).toBeInTheDocument();
   });
 
   it.each([

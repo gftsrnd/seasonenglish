@@ -8,7 +8,7 @@ type ContentImageState =
   | { status: "available"; image: Extract<ContentImageView, { status: "available" }> }
   | { status: "unavailable" };
 
-export function ContentImage({ term, load, required = false }: {
+export function ContentImage({ term, load }: {
   term: string;
   load: () => Promise<ContentImageView>;
   required?: boolean;
@@ -48,7 +48,6 @@ export function ContentImage({ term, load, required = false }: {
     return () => { live = false; observer.disconnect(); };
   }, [term]);
 
-  if (state.status === "unavailable" && !required) return null;
   if (state.status === "unavailable") {
     return <div className="content-image content-image--fallback" role="status"><ImageOff size={18} aria-hidden="true" /><span>Chưa có ảnh minh hoạ</span></div>;
   }

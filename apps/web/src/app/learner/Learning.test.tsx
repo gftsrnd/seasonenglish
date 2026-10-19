@@ -85,6 +85,41 @@ describe("learner lesson study content", () => {
     expect(resolveLessonVocabularyImage).toHaveBeenCalledWith(1);
   });
 
+  it("renders real lesson media and a visible placeholder when the next vocabulary image is unavailable", async () => {
+    const resolveLessonVocabularyImage = vi.fn()
+      .mockResolvedValueOnce({
+        status: "available",
+        imageUrl: "https://storage.example/new.jpg",
+        alt: "new",
+        attribution: {
+          creator: "Open artist",
+          licence: "CC BY 4.0",
+          licenceUrl: "https://creativecommons.org/licenses/by/4.0/",
+          sourceUrl: "https://commons.wikimedia.org/wiki/File:New.jpg"
+        }
+      })
+      .mockResolvedValueOnce({ status: "unavailable" });
+    const lesson = {
+      id: "lesson-media-states",
+      title: "Introducing yourself",
+      dayNumber: 1,
+      durationMinutes: 10,
+      cefr: "A2",
+      content: { parts: [{ code: "vocabulary", title: "Từ vựng", content: { items: [
+        { word: "new", type: "tính từ", meaning: "mới" },
+        { word: "from", type: "giới từ", meaning: "từ" }
+      ] } }] },
+      progress: { status: "not_started", completedPartCodes: [], evidence: {} }
+    } as any;
+
+    render(<LearnerLesson view={{ lesson, lock: null }} actions={{ navigate: vi.fn(), speak: vi.fn(), saveLessonProgress: vi.fn(), resolveLessonVocabularyImage } as any} />);
+
+    expect(await screen.findByRole("img", { name: "new" })).toHaveAttribute("src", "https://storage.example/new.jpg");
+    expect(await screen.findByText("Chưa có ảnh minh hoạ")).toBeInTheDocument();
+    expect(resolveLessonVocabularyImage).toHaveBeenNthCalledWith(1, 0);
+    expect(resolveLessonVocabularyImage).toHaveBeenNthCalledWith(2, 1);
+  });
+
   it("keeps practice locked when a retryable answer exists without study confirmation", () => {
     const retryableLesson = {
       id: "lesson-gated",
