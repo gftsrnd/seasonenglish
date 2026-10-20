@@ -19,6 +19,7 @@ export function EntryScreen({ client, onAuthenticated }: { client: AuthClient; o
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [capsLockOn, setCapsLockOn] = useState(false);
+  const [resetNotice, setResetNotice] = useState("");
   const [pendingAction, setPendingAction] = useState<"login" | "register" | null>(null);
   const [error, setError] = useState("");
   const learnerTab = useRef<HTMLButtonElement>(null);
@@ -44,6 +45,7 @@ export function EntryScreen({ client, onAuthenticated }: { client: AuthClient; o
     setShowPassword(false);
     setShowConfirmPassword(false);
     setCapsLockOn(false);
+    setResetNotice("");
     setError("");
   };
 
@@ -86,6 +88,7 @@ export function EntryScreen({ client, onAuthenticated }: { client: AuthClient; o
 
   const showRegistration = () => navigateEntry("register");
   const showLogin = () => navigateEntry("login");
+  const showResetRequest = () => setResetNotice("Quên mật khẩu? Hãy liên hệ người vận hành hoặc quản lý để được cấp lại mật khẩu.");
   const updateCapsLock = (event: KeyboardEvent<HTMLInputElement>) => setCapsLockOn(event.getModifierState("CapsLock"));
 
   return <>
@@ -124,8 +127,9 @@ export function EntryScreen({ client, onAuthenticated }: { client: AuthClient; o
               </span>
             </label> : null}
             {error ? <div ref={errorRef} id={errorId} className="banner danger" role="alert" tabIndex={-1}><div className="body small">{error}</div></div> : null}
+            {resetNotice ? <div className="banner info" role="status" aria-live="polite"><div className="body small">{resetNotice}</div></div> : null}
             <button className="btn-primary btn-block" type="submit" disabled={busy} aria-busy={busy || undefined}>{pendingAction === "register" ? "Đang tạo tài khoản…" : pendingAction === "login" ? "Đang đăng nhập…" : mode === "register" ? "Đăng ký và bắt đầu" : audience === "learner" ? "Đăng nhập người học" : "Đăng nhập nhân sự"}</button>
-            {mode === "register" ? <button className="btn-ghost btn-block" type="button" disabled={busy} onClick={showLogin}>Đã có tài khoản? Đăng nhập</button> : audience === "learner" ? <button className="btn-ghost btn-block" type="button" disabled={busy} onClick={showRegistration}>Tạo tài khoản người học</button> : null}
+            {mode === "register" ? <button className="btn-ghost btn-block" type="button" disabled={busy} onClick={showLogin}>Đã có tài khoản? Đăng nhập</button> : audience === "learner" ? <><button className="btn-ghost btn-block" type="button" disabled={busy} onClick={showRegistration}>Tạo tài khoản người học</button><button className="btn-ghost btn-block" type="button" disabled={busy} onClick={showResetRequest}>Quên mật khẩu?</button></> : null}
           </form>
         </div>
       </section>

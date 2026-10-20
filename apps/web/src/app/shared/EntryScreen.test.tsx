@@ -96,6 +96,14 @@ describe("EntryScreen interaction", () => {
     expect(await screen.findByRole("alert")).toHaveTextContent("Hãy chọn tab Nhân sự");
   });
 
+  it("shows the current email/password reset path for learner login", async () => {
+    const user = userEvent.setup();
+    const client = stubClient();
+    render(<EntryScreen client={client} onAuthenticated={() => undefined} />);
+    await user.click(screen.getByRole("button", { name: "Quên mật khẩu?" }));
+    expect(screen.getAllByRole("status").some((status) => status.textContent?.includes("liên hệ người vận hành hoặc quản lý để được cấp lại mật khẩu"))).toBe(true);
+  });
+
   it("warns when Caps Lock is active while entering the email", async () => {
     const user = userEvent.setup();
     render(<EntryScreen client={stubClient()} onAuthenticated={() => undefined} />);
