@@ -2,11 +2,14 @@ import { useEffect, useState, type ReactNode } from "react";
 import { BrowserRouter } from "react-router";
 import type { LearnerAvatarData, LearnerProfileView, SessionView } from "@e4s/contracts";
 import { sharedApiClient } from "../api/shared.js";
+import { ApiError } from "../api/runtime.js";
 import { ExperienceProvider } from "../features/experience/Experience.js";
 import { EntryScreen } from "./shared/EntryScreen.js";
 import { AppShell } from "./shared/AppShell.js";
 import { ModalProvider } from "./shared/ModalProvider.js";
-import { autoSeasonTheme } from "./games/season-visual.js";
+import { ToastProvider } from "./shared/design-system.js";
+import { useToast } from "./shared/design-system.js";
+import { ThemeProvider, useTheme } from "./shared/ThemeProvider.js";
 import { RoleRoutes } from "./RoleRoutes.js";
 import { AvatarDialog } from "./learner/ProfileReward.js";
 import "./app-layout.css";
@@ -16,12 +19,24 @@ import "./app-layout.css";
  * app shell without importing any component from the superseded pages.
  */
 export function App({ children }: { children?: (session: SessionView) => ReactNode }) {
+  return <ThemeProvider><ToastProvider><AppContent>{children}</AppContent></ToastProvider></ThemeProvider>;
+}
+
+function AppContent({ children }: { children?: ((session: SessionView) => ReactNode) | undefined }) {
+  const { setTheme } = useTheme();
+  const { show: showToast } = useToast();
   const [session, setSession] = useState<SessionView | null | undefined>(undefined);
   const [routeReady, setRouteReady] = useState(false);
+  const [bootstrapError, setBootstrapError] = useState(false);
+  const [bootstrapAttempt, setBootstrapAttempt] = useState(0);
   const [profileRecord, setProfileRecord] = useState<LearnerProfileView>();
   const [avatarOpen, setAvatarOpen] = useState(false);
   const [musicAllowed, setMusicAllowed] = useState(true);
-  const [logoutError, setLogoutError] = useState("");
+  const [sandboxMode, setSandboxMode] = useState(() => typeof window !== "undefined" && (new URL(window.location.href).searchParams.get("sandbox") === "1" || window.sessionStorage.getItem("e4s:sandbox:active") === "1"));
+  useEffect(() => {
+    if (!sandboxMode || typeof window === "undefined") return;
+    window.sessionStorage.setItem("e4s:sandbox:active", "1");
+  }, [sandboxMode]);
   useEffect(() => {
     let live = true;
     void sharedApiClient.currentSession().then((nextSession) => {
@@ -33,22 +48,27 @@ export function App({ children }: { children?: (session: SessionView) => ReactNo
       if (nextSession) applySessionEntryRoute(nextSession);
       setSession(nextSession);
       setRouteReady(true);
-    }).catch(() => {
+    }).catch((caught: unknown) => {
       if (!live) return;
-      setSession(null);
-      setRouteReady(true);
+      if (isUnauthenticatedSessionError(caught)) {
+        setSession(null);
+        setRouteReady(true);
+        return;
+      }
+      // A failed session probe is not an unauthenticated session. Keep the
+      // entry screen hidden so a degraded API cannot look like a logout.
+      setSession(undefined);
+      setRouteReady(false);
+      setBootstrapError(true);
     });
     return () => { live = false; };
-  }, []);
+  }, [bootstrapAttempt]);
   useEffect(() => {
-    if (!session) {
-      document.documentElement.dataset.theme = autoSeasonTheme();
-      return;
-    }
+    if (!session) return;
     void sharedApiClient.getProductPreferences().then((preferences) => {
-      document.documentElement.dataset.theme = preferences.theme === "auto" ? autoSeasonTheme() : preferences.theme;
-    }).catch(() => { document.documentElement.dataset.theme = autoSeasonTheme(); });
-  }, [session]);
+      setTheme(preferences.theme);
+    }).catch(() => { /* Keep the device-stored theme when preferences are unavailable. */ });
+  }, [session, setTheme]);
   useEffect(() => {
     if (session?.role !== "manager") { setMusicAllowed(true); return; }
     void import("../api/manager.js").then(({ managerApiClient }) => managerApiClient.getManagerSettings())
@@ -60,12 +80,18 @@ export function App({ children }: { children?: (session: SessionView) => ReactNo
     void import("../api/learner.js").then(({ learnerApiClient }) => learnerApiClient.getProfile())
       .then(setProfileRecord).catch(() => setProfileRecord(undefined));
   }, [session]);
+  if (bootstrapError) return <AppStatus tone="error" onRetry={() => { setBootstrapError(false); setSession(undefined); setRouteReady(false); setBootstrapAttempt((attempt) => attempt + 1); }}>E4S hiện chưa thể kết nối. Kiểm tra mạng hoặc máy chủ rồi thử lại.</AppStatus>;
   if (session === undefined || (session && !routeReady)) return <AppStatus>Đang mở E4S…</AppStatus>;
   if (!session) return <ExperienceProvider musicAllowed={musicAllowed}><EntryScreen client={sharedApiClient} onAuthenticated={(nextSession) => { applySessionEntryRoute(nextSession); setRouteReady(true); setSession(nextSession); }} /></ExperienceProvider>;
   if (!isSupportedSessionRole(session.role)) return <AppStatus>Không thể mở tài khoản này. Vui lòng đăng nhập lại.</AppStatus>;
-  const logout = () => {
-    setLogoutError("");
-    void sharedApiClient.logout().then(() => { setRouteReady(true); setSession(null); }).catch(() => setLogoutError("Không đăng xuất được. Vui lòng thử lại."));
+  const logout = async () => {
+    try {
+      await sharedApiClient.logout();
+      setRouteReady(true);
+      setSession(null);
+    } catch {
+      showToast({ message: "Không đăng xuất được. Vui lòng thử lại.", tone: "danger" });
+    }
   };
   const saveAvatar = async (avatar: LearnerAvatarData) => {
     if (session.role === "learner") {
@@ -80,11 +106,15 @@ export function App({ children }: { children?: (session: SessionView) => ReactNo
   };
   const avatar = session.role === "learner" ? profileRecord?.profile.avatar : session.user.avatar;
   const avatarReady = session.role !== "learner" || Boolean(profileRecord);
-  return <ExperienceProvider musicAllowed={musicAllowed}><BrowserRouter><ModalProvider><AppShell session={session} avatar={avatar} onAvatarClick={avatarReady ? () => setAvatarOpen(true) : undefined} onLogout={logout}>{logoutError ? <div className="banner danger" role="alert"><div className="body small">{logoutError}</div></div> : null}{children ? children(session) : <RoleRoutes session={session} />}</AppShell>{avatarOpen && avatarReady ? <AvatarDialog initial={avatar} onClose={() => setAvatarOpen(false)} onSave={(nextAvatar) => void saveAvatar(nextAvatar)} /> : null}</ModalProvider></BrowserRouter></ExperienceProvider>;
+  return <ExperienceProvider musicAllowed={musicAllowed}><BrowserRouter><ModalProvider><AppShell session={session} avatar={avatar} onAvatarClick={avatarReady ? () => setAvatarOpen(true) : undefined} onLogout={logout}>{sandboxMode ? <div role="status" data-sandbox-mode="true" className="banner info">Chế độ thử (sandbox): dữ liệu hồ sơ chỉ lưu trong trình duyệt này.</div> : null}{children ? children(session) : <RoleRoutes session={session} />}</AppShell>{avatarOpen && avatarReady ? <AvatarDialog initial={avatar} onClose={() => setAvatarOpen(false)} onSave={(nextAvatar) => void saveAvatar(nextAvatar)} /> : null}</ModalProvider></BrowserRouter></ExperienceProvider>;
 }
 
-export function AppStatus({ children }: { children: ReactNode }) {
-  return <section className="card" role="status"><div className="row"><span className="spinner" aria-hidden="true" /><p>{children}</p></div></section>;
+function isUnauthenticatedSessionError(error: unknown): error is ApiError {
+  return error instanceof ApiError && (error.status === 401 || error.code === "UNAUTHENTICATED");
+}
+
+export function AppStatus({ children, tone = "loading", onRetry }: { children: ReactNode; tone?: "loading" | "error"; onRetry?: () => void }) {
+  return <section className={`card${tone === "error" ? " danger" : ""}`} role={tone === "error" ? "alert" : "status"}><div className="row">{tone === "loading" ? <span className="spinner" aria-hidden="true" /> : null}<div><p>{children}</p>{onRetry ? <button className="btn-primary" type="button" onClick={onRetry}>Thử lại</button> : null}</div></div></section>;
 }
 
 /**
@@ -107,7 +137,7 @@ export function resolveSessionEntryPath(role: SessionView["role"], pathname: str
 function applySessionEntryRoute(nextSession: SessionView): void {
   const current = normalizePathname(window.location.pathname);
   const target = resolveSessionEntryPath(nextSession.role, current);
-  if (target !== current) window.history.replaceState(window.history.state, "", target);
+  if (target !== current) window.history.replaceState(window.history.state, "", `${target}${window.location.search}${window.location.hash}`);
 }
 
 function normalizePathname(pathname: string): string {

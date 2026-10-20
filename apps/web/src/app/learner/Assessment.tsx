@@ -4,10 +4,12 @@ import type { AssessmentResponseView, AssessmentSectionCode, AssessmentTaskView,
 import type { AssessmentView, LearnerCallbacks } from "./contracts.js";
 import { AssessmentRecorder, AssessmentRuntime, type AssessmentRuntimeState } from "./AssessmentRuntime.js";
 import { ErrorText, Notice, PageTitle, Progress, AppLink } from "./ui.js";
+import { useExperience } from "../../features/experience/Experience.js";
 
 const sectionOrder: AssessmentSectionCode[] = ["listening", "reading", "writing", "speaking"];
 
 export function LearnerAssessment({ view, actions }: { view: AssessmentView; actions: LearnerCallbacks }) {
+  const experience = useExperience();
   const [local, setLocal] = useState<Record<string, string>>(() => Object.fromEntries((view.attempt?.responses ?? []).map((item) => [item.taskKey, item.value])));
   const [busy, setBusy] = useState(false);
   const [savingCount, setSavingCount] = useState(0);
@@ -19,6 +21,19 @@ export function LearnerAssessment({ view, actions }: { view: AssessmentView; act
   const definition = view.definition;
   const targetLevel = assessmentTargetLevel(view);
   const microphoneSupported = view.microphoneSupported ?? view.runtime?.deviceEvidence.microphoneSupported ?? view.attempt?.runtime?.deviceEvidence.microphoneSupported;
+
+  useEffect(() => {
+    const listening = view.screenState === "listening";
+    experience.holdMusic(listening);
+    return () => experience.holdMusic(false);
+  }, [experience, view.screenState]);
+
+  useEffect(() => {
+    setLocal(Object.fromEntries((view.attempt?.responses ?? []).map((item) => [item.taskKey, item.value])));
+    setLocalError(undefined);
+    setSavingCount(0);
+    savingCountRef.current = 0;
+  }, [view.attempt?.id]);
 
   const checkSound = () => {
     setLocalError(undefined);
@@ -231,10 +246,24 @@ function AssessmentResult({ attempt }: { attempt: NonNullable<AssessmentView["at
 }
 
 function Stimulus({ stimulus, maxPlays, played, onPlay }: { stimulus: AssessmentView["definition"]["sections"][number]["groups"][number]["stimulus"]; maxPlays: number; played: number; onPlay: (text: string) => Promise<number | null> }) {
+  const [playCount, setPlayCount] = useState(played);
+  const [playError, setPlayError] = useState(false);
+  useEffect(() => {
+    setPlayCount((current) => Math.max(current, played));
+  }, [played]);
   if (!stimulus) return null;
   const text = stimulus.text ?? stimulus.lines?.map((line) => `${line.speaker}: ${line.text}`).join("\n") ?? "";
-  const remaining = Math.max(0, maxPlays - played);
-  return <div className="card soft">{stimulus.type === "audio_script" ? <button className="btn-sm" type="button" disabled={maxPlays > 0 && remaining === 0} onClick={() => void onPlay(text)}><Volume2 size={16} aria-hidden="true" /> {maxPlays > 0 && remaining === 0 ? "Đã hết lượt nghe" : `Nghe${maxPlays > 0 ? ` (còn ${remaining} lần)` : " audio"}`}</button> : <p style={{ whiteSpace: "pre-line" }}>{text}</p>}</div>;
+  const remaining = Math.max(0, maxPlays - playCount);
+  const play = async () => {
+    setPlayError(false);
+    const nextCount = await onPlay(text);
+    if (nextCount == null) {
+      setPlayError(true);
+      return;
+    }
+    setPlayCount((current) => Math.max(current, nextCount));
+  };
+  return <div className="card soft">{stimulus.type === "audio_script" ? <><button className="btn-sm" type="button" disabled={maxPlays > 0 && remaining === 0} onClick={() => void play()}><Volume2 size={16} aria-hidden="true" /> {maxPlays > 0 && remaining === 0 ? "Đã hết lượt nghe" : `Nghe${maxPlays > 0 ? ` (còn ${remaining} lần)` : " audio"}`}</button>{playError ? <p className="small form-error" role="alert">Không phát được audio lúc này. Hãy kiểm tra âm thanh rồi thử lại.</p> : null}</> : <p style={{ whiteSpace: "pre-line" }}>{text}</p>}</div>;
 }
 
 function Task({ task, number, value, view, actions, section, onSave }: { task: AssessmentTaskView; number: number; value: string; view: AssessmentView; actions: LearnerCallbacks; section: AssessmentSectionCode; onSave: (input: SaveAssessmentResponseInput) => void }) {

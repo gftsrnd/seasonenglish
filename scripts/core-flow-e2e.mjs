@@ -744,6 +744,36 @@ async function learnerRun(page, run, viewport) {
     return { email: profile.body.profile.email, displayName: profile.body.profile.fullName, completed: profile.body.completed, homeStatus: home.status, profileResetStatus: reset.status };
   });
 
+  if (process.env.E4S_CORE_FLOW_SKIP_SANDBOX !== "1") await step(page, role, run, "sandbox-profile-isolation", async () => {
+    const sandboxText = `Sandbox-only checkpoint ${viewport.key} run ${run}`;
+    await page.goto(`${webUrl}/home`, { waitUntil: "networkidle" });
+    await page.getByRole("link", { name: /Điền hồ sơ/ }).click();
+    await page.waitForURL(/\/onboard$/);
+    await page.evaluate(() => window.history.replaceState(window.history.state, "", "/onboard?sandbox=1"));
+    await page.reload({ waitUntil: "networkidle" });
+    assert(new URL(page.url()).pathname === "/onboard" && new URL(page.url()).searchParams.get("sandbox") === "1", `Sandbox navigation was redirected to ${page.url()}`);
+    await page.waitForTimeout(1000);
+    assert(new URL(page.url()).pathname === "/onboard" && new URL(page.url()).searchParams.get("sandbox") === "1", `Sandbox route changed after app load to ${page.url()}`);
+    assert(await page.evaluate(() => window.sessionStorage.getItem("e4s:sandbox:active")), `Sandbox marker was not activated at ${page.url()}`);
+    await page.getByRole("status").filter({ hasText: "Chế độ thử (sandbox)" }).waitFor();
+    const sandboxField = await visibleSituationTextarea(page);
+    await sandboxField.fill(sandboxText);
+    await page.getByRole("button", { name: "Lưu nháp", exact: true }).click();
+    await page.reload({ waitUntil: "networkidle" });
+    assert((await (await visibleSituationTextarea(page)).inputValue()) === sandboxText, "Sandbox draft did not survive sandbox reload");
+    const sandboxApi = await jsonFromPage(page, "/api/v1/learner/profile");
+    assert(sandboxApi.status === 200 && sandboxApi.body.sandbox === true && sandboxApi.body.profile?.situations === sandboxText, `Sandbox profile API state was not isolated: ${JSON.stringify(sandboxApi.body)}`);
+    await page.evaluate(() => window.sessionStorage.removeItem("e4s:sandbox:active"));
+    await page.goto(`${webUrl}/onboard`, { waitUntil: "networkidle" });
+    const realField = await visibleSituationTextarea(page);
+    const realValue = await realField.inputValue();
+    const realApi = await jsonFromPage(page, "/api/v1/learner/profile");
+    assert(realApi.status === 200 && realApi.body.sandbox !== true, "Real profile API was marked sandbox");
+    assert(realValue !== sandboxText && realApi.body.profile?.situations !== sandboxText, "Sandbox draft leaked into real profile state");
+    await page.evaluate(() => { window.localStorage.removeItem("e4s:sandbox:learner-profile"); window.sessionStorage.removeItem("e4s:sandbox:active"); });
+    return { sandboxRoute: "/onboard?sandbox=1", sandboxReload: true, sandboxApiStatus: sandboxApi.status, realRoute: "/onboard", realApiStatus: realApi.status, realValue, isolated: true };
+  });
+
   await step(page, role, run, "profile-draft-and-placement", async () => {
     await resetSecondaryLearnerProfile(page);
     await page.goto(`${webUrl}/onboard`, { waitUntil: "networkidle" });
@@ -871,6 +901,68 @@ async function learnerRun(page, run, viewport) {
     await logout(page);
     await login(page, role);
     return { route: "/home", afterToggle: false, afterReload: false, afterAccountSwitch: false, preferenceKey: "e4s:music" };
+  });
+
+  if (process.env.E4S_CORE_FLOW_SKIP_AUDIO !== "1") await step(page, role, run, "audio-precedence-speech-and-listening", async () => {
+    const music = page.getByRole("button", { name: /Nhạc nền:/ }).first();
+    if (await music.getAttribute("aria-pressed") === "false") await music.click();
+    await page.getByRole("link", { name: /Trang chủ/ }).first().click().catch(() => undefined);
+    await page.waitForTimeout(300);
+    const audioSupport = await page.evaluate(() => Boolean(window.AudioContext));
+    if (!audioSupport) throw new Unverified("Trình duyệt không cung cấp AudioContext để xác nhận nhạc nền.");
+    await page.evaluate(() => {
+      const synthesis = window.speechSynthesis;
+      const prototype = Object.getPrototypeOf(synthesis);
+      const originalSpeak = prototype.speak;
+      const originalCancel = prototype.cancel;
+      window.__e4sAudioSpeechEvidence = { started: false, ended: false, utterance: null };
+      prototype.cancel = function instrumentedCancel() { /* preserve the harness utterance for the explicit end transition */ };
+      prototype.speak = function instrumentedSpeak(utterance) {
+        window.__e4sAudioSpeechEvidence.utterance = utterance;
+        utterance.onstart?.(new Event("start"));
+        window.__e4sAudioSpeechEvidence.started = true;
+      };
+      window.__e4sAudioSpeechEvidence.restore = () => { prototype.speak = originalSpeak; prototype.cancel = originalCancel; };
+    });
+    const audioLessonId = home?.nextLesson?.id;
+    assert(audioLessonId, "Audio precedence probe could not resolve the canonical lesson");
+    await page.goto(`${webUrl}/lesson/${audioLessonId}`, { waitUntil: "networkidle" }).catch(() => undefined);
+    const listen = page.getByRole("button", { name: "Nghe từ", exact: true }).first();
+    await listen.waitFor();
+    await listen.click();
+    await page.waitForFunction(() => document.documentElement.dataset.e4sAudioMusic === "stopped");
+    const paused = await page.evaluate(() => ({ source: "speech", music: document.documentElement.dataset.e4sAudioMusic, started: window.__e4sAudioSpeechEvidence?.started }));
+    await page.evaluate(() => {
+      const utterance = window.__e4sAudioSpeechEvidence?.utterance;
+      utterance?.onend?.(new Event("end"));
+    });
+    await page.waitForFunction(() => document.documentElement.dataset.e4sAudioMusic === "running");
+    const resumed = await page.evaluate(() => ({ source: "music", music: document.documentElement.dataset.e4sAudioMusic, ended: true }));
+    await page.evaluate(() => window.__e4sAudioSpeechEvidence?.restore?.());
+
+    await logout(page);
+    await loginWithFixture(page, secondaryLearner, "learner");
+    const secondaryProfile = await jsonFromPage(page, "/api/v1/learner/profile");
+    const completedSecondary = await jsonRequestFromPage(page, "/api/v1/learner/profile", "PUT", {
+      ...secondaryLearner.resetProfile,
+      goals: ["conversation"],
+      environmentUse: "daily",
+      familyUse: "none",
+      habits: ["video"],
+      situations: "Audio precedence assessment fixture",
+      learningStyles: ["visual"],
+      version: secondaryProfile.body.version
+    });
+    assert(completedSecondary.status === 200 && completedSecondary.body.completed === true, `Could not prepare secondary assessment: ${JSON.stringify(completedSecondary.body)}`);
+    await page.goto(`${webUrl}/test/placement`, { waitUntil: "networkidle" });
+    const start = page.getByRole("button", { name: "Bắt đầu phần Nghe", exact: true });
+    await start.waitFor();
+    await start.click();
+    await page.waitForFunction(() => document.documentElement.dataset.e4sAudioMusicHeld === "true");
+    const listening = await page.evaluate(() => ({ route: location.pathname, music: document.documentElement.dataset.e4sAudioMusic, held: document.documentElement.dataset.e4sAudioMusicHeld }));
+    await logout(page);
+    await login(page, role);
+    return { paused, resumed, listening, controller: "document.documentElement[data-e4s-audio-music*]" };
   });
 
   const lessonId = home?.nextLesson?.id;
@@ -1275,6 +1367,18 @@ async function learnerRun(page, run, viewport) {
     return { progressStatus: progress.status, points, readiness, rewardStatus: reward.status, rewardPreview: true, printable: reward.body.printable };
   });
 
+  await step(page, role, run, "language-sweep-learner-desktop", async () => {
+    const manifest = [];
+    manifest.push(await languageSurface(page, "/home", ["Hôm nay học gì nào", "Tiến độ & hồ sơ"]));
+    manifest.push(await languageSurface(page, "/lesson/" + encodeURIComponent(lessonId), ["1. Học", "2. Bài tập", "TỪ VỰNG"], ["new"]));
+    manifest.push(await languageSurface(page, "/coach", ["Season", "Xoá chat", "Gửi"]));
+    manifest.push(await languageSurface(page, "/practice", ["Bài thực hành cuối tuần"]));
+    manifest.push(await languageSurface(page, "/profile", ["Tiến độ", "Hồ sơ"]));
+    manifest.push(await languageSurface(page, "/games", ["Game từ vựng"]));
+    manifest.push(await languageSurface(page, "/reward/preview", ["CHỨNG NHẬN HOÀN THÀNH"], ["Certificate of Completion"]));
+    return { role, surfaces: manifest };
+  });
+
   await step(page, role, run, "mini-game-start", async () => {
     await page.goto(`${webUrl}/games`, { waitUntil: "networkidle" });
     await page.getByRole("heading", { name: "Game từ vựng", exact: true }).waitFor();
@@ -1334,6 +1438,14 @@ async function learnerRun(page, run, viewport) {
     const result = await resultResponse.json().catch(() => ({}));
     return { hubStatus: response.status, game: "scramble", wordCount, started: true, heading, scoring: { immediate: 2, afterWrong: 1, afterHint: 1, wordsPlayed: 8 }, resultStatus: resultResponse.status(), points: result.points };
   });
+}
+
+async function languageSurface(page, route, required, englishContent = []) {
+  await page.goto(`${webUrl}${route}`, { waitUntil: "networkidle" });
+  const body = await page.locator("body").innerText();
+  for (const label of required) assert(body.includes(label), `${route} language manifest is missing Vietnamese UI label ${label}`);
+  for (const phrase of englishContent) assert(body.includes(phrase), `${route} language manifest is missing English learning content ${phrase}`);
+  return { route, required, englishContent, bodySample: body.slice(0, 240) };
 }
 
 async function loginStaff(page, role) {
@@ -1513,6 +1625,14 @@ async function operatorRun(page, run) {
       publishAction: "manager-review-then-operator-publication"
     };
   });
+
+  await step(page, role, run, "language-sweep-operator-desktop", async () => {
+    const manifest = [];
+    manifest.push(await languageSurface(page, "/op", ["Duyệt trình độ", "Chờ duyệt"]));
+    manifest.push(await languageSurface(page, "/op/lessons", ["Bài học"]));
+    manifest.push(await languageSurface(page, "/op/review", ["Đọc mẫu", "Bài nộp"]));
+    return { role, surfaces: manifest };
+  });
 }
 
 async function managerRun(page, run) {
@@ -1567,6 +1687,15 @@ async function managerRun(page, run) {
     assert(await save.isEnabled(), "Manager-owned prompt screen does not expose an enabled save action");
     await checkNoOverflow(page);
     return { route: "/mgr/ops/prompts", saveEnabled: await save.isEnabled() };
+  });
+
+  await step(page, role, run, "language-sweep-manager-desktop", async () => {
+    const manifest = [];
+    manifest.push(await languageSurface(page, "/mgr", ["Tiến độ nhóm"]));
+    manifest.push(await languageSurface(page, "/mgr/ops", ["Hiệu suất vận hành"]));
+    manifest.push(await languageSurface(page, "/settings", ["Giao diện theo mùa / lễ", "Người dùng"]));
+    manifest.push(await languageSurface(page, "/mgr/ops/prompts", ["Prompt & rubric", "Lưu prompt"]));
+    return { role, surfaces: manifest };
   });
 }
 

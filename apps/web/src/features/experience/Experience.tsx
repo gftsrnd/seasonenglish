@@ -1,5 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import type { LessonSpeechOptions, LessonSpeechStatus } from "./contracts.js";
+import { cancelExclusiveAudio, claimExclusiveAudio, isExclusiveAudioActive, releaseExclusiveAudio } from "./audio-precedence.js";
 
 type FeedbackTone = "click" | "success" | "error" | "warning" | "celebrate";
 type NoticeTone = "success" | "error" | "info";
@@ -49,6 +50,8 @@ function storePreference(key: string, value: boolean) {
 export function ExperienceProvider({ children, musicAllowed = true }: { children: ReactNode; musicAllowed?: boolean }) {
   const [effectsOn, setEffectsOn] = useState(() => savedPreference(EFFECTS_KEY, true));
   const [musicOn, setMusicOn] = useState(() => musicAllowed && savedPreference(MUSIC_KEY, true));
+  const [musicHeld, setMusicHeld] = useState(false);
+  const [musicRunning, setMusicRunning] = useState(false);
   const [notices, setNotices] = useState<readonly Notice[]>([]);
   const audio = useRef<{ context?: AudioContext; musicTimer?: number; musicGain?: GainNode }>({});
   const noticeId = useRef(0);
@@ -61,21 +64,33 @@ export function ExperienceProvider({ children, musicAllowed = true }: { children
     return current;
   }, []);
 
-  const stopMusic = useCallback(() => {
+  const stopMusicPlayback = useCallback(() => {
     if (audio.current.musicTimer !== undefined) window.clearInterval(audio.current.musicTimer);
     delete audio.current.musicTimer;
     audio.current.musicGain?.disconnect();
     delete audio.current.musicGain;
+    setMusicRunning(false);
   }, []);
 
+  const stopMusic = useCallback(() => {
+    cancelExclusiveAudio("music");
+    stopMusicPlayback();
+  }, [stopMusicPlayback]);
+
   const startMusic = useCallback((force = false) => {
-    if (!musicAllowed || audio.current.musicTimer !== undefined || (!musicOn && !force)) return;
+    if (!musicAllowed || musicHeld || audio.current.musicTimer !== undefined || (!musicOn && !force)) return;
+    if (isExclusiveAudioActive("speech") || isExclusiveAudioActive("media") || isExclusiveAudioActive("microphone")) return;
     const current = context();
     if (!current) return;
     const gain = current.createGain();
     gain.gain.value = 0.026;
     gain.connect(current.destination);
     audio.current.musicGain = gain;
+    const release = claimExclusiveAudio("music", stopMusicPlayback, () => startMusic());
+    if (!release) {
+      stopMusicPlayback();
+      return;
+    }
     const notes = [261.63, 329.63, 392, 329.63, 293.66, 349.23, 440, 349.23];
     let beat = 0;
     const playNote = () => {
@@ -94,7 +109,8 @@ export function ExperienceProvider({ children, musicAllowed = true }: { children
     };
     playNote();
     audio.current.musicTimer = window.setInterval(playNote, 510);
-  }, [context, musicAllowed, musicOn]);
+    setMusicRunning(true);
+  }, [context, musicAllowed, musicOn, stopMusicPlayback]);
 
   const play = useCallback((tone: FeedbackTone) => {
     if (!effectsOn) return;
@@ -140,32 +156,38 @@ export function ExperienceProvider({ children, musicAllowed = true }: { children
       onStatus?.("ended" satisfies LessonSpeechStatus);
       return;
     }
-    const current = context();
-    const gain = audio.current.musicGain;
-    if (gain && current) gain.gain.setTargetAtTime(0.006, current.currentTime, 0.06);
+    cancelExclusiveAudio("speech");
+    const release = claimExclusiveAudio("speech", () => window.speechSynthesis.cancel(), () => startMusic());
+    if (!release) return;
     window.speechSynthesis.cancel();
     const speech = new SpeechSynthesisUtterance(text);
     speech.lang = language;
     speech.rate = 0.9;
     speech.onstart = () => onStatus?.("started" satisfies LessonSpeechStatus);
     const restore = (status: LessonSpeechStatus) => {
-      if (gain && current) gain.gain.setTargetAtTime(0.026, current.currentTime, 0.12);
+      releaseExclusiveAudio("speech");
       onStatus?.(status);
     };
     speech.onend = () => restore("ended");
     speech.onerror = () => restore("error");
     try {
+      window.speechSynthesis.resume();
       window.speechSynthesis.speak(speech);
     } catch {
       restore("error");
     }
-  }, [context]);
+  }, [startMusic]);
 
   const holdMusic = useCallback((held: boolean) => {
-    const current = audio.current.context;
-    const gain = audio.current.musicGain;
-    if (current && gain) gain.gain.setTargetAtTime(held ? 0.004 : 0.026, current.currentTime, held ? 0.04 : 0.12);
-  }, []);
+    setMusicHeld(held);
+    if (held) stopMusic();
+    else if (musicOn) startMusic(true);
+  }, [musicOn, startMusic, stopMusic]);
+
+  useEffect(() => {
+    document.documentElement.dataset.e4sAudioMusic = musicRunning ? "running" : "stopped";
+    document.documentElement.dataset.e4sAudioMusicHeld = musicHeld ? "true" : "false";
+  }, [musicHeld, musicOn, musicRunning]);
 
   useEffect(() => {
     storePreference(EFFECTS_KEY, effectsOn);
@@ -182,6 +204,18 @@ export function ExperienceProvider({ children, musicAllowed = true }: { children
     setMusicOn(false);
     stopMusic();
   }, [musicAllowed, stopMusic]);
+
+  useEffect(() => {
+    const handleVisibility = () => {
+      if (document.visibilityState === "hidden") {
+        stopMusic();
+        return;
+      }
+      if (musicOn) startMusic();
+    };
+    document.addEventListener("visibilitychange", handleVisibility);
+    return () => document.removeEventListener("visibilitychange", handleVisibility);
+  }, [musicOn, startMusic, stopMusic]);
 
   useEffect(() => {
     const beginAudio = (event: PointerEvent) => {
