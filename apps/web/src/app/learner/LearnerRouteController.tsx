@@ -199,6 +199,11 @@ export function LearnerRouteController() {
         }
         case "onboard": { const profile = await apiClient.getProfile(); accept({ onboard: profile }, profile, { onboard: { mode: profile.completed ? "edit" : "new" } }); break; }
         case "assessment": {
+          const profile = await apiClient.getProfile();
+          if (!profile.completed) {
+            navigate("/onboard", { replace: true });
+            return;
+          }
           const assessment = await apiClient.getAssessment(route.params.kind);
           if (shouldRedirectApprovedPlacement(route.params.kind, assessment.attempt?.status)) {
             navigate("/home", { replace: true });

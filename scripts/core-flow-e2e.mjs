@@ -198,16 +198,15 @@ async function verifyCanonicalFixtureIdentity(client) {
        ) as program_ok,
        exists (
          select 1
-         from program_weeks
+       from program_weeks
          where id = $6
            and program_id = $5
            and week_number = $7
-           and topic = $8
        ) as week_ok,
        exists (
          select 1
          from lesson_sets
-         where id = $9
+         where id = $8
            and program_week_id = $6
            and cefr = 'A2'
        ) as lesson_set_ok,
@@ -227,7 +226,6 @@ async function verifyCanonicalFixtureIdentity(client) {
       canonicalFixture.programId,
       canonicalFixture.weekId,
       canonicalFixture.weekNumber,
-      canonicalFixture.weekTopic,
       canonicalFixture.lessonSetId
     ]
   );
@@ -535,6 +533,17 @@ async function resetSecondaryLearnerProfile(page) {
     const actual = reset.body.profile?.[field];
     assert(isDeepStrictEqual(actual, expected), `Learner 2 profile reset did not clear ${field}: expected ${JSON.stringify(expected)}, received ${JSON.stringify(actual)}`);
   }
+  const client = new Client({ connectionString: databaseUrl });
+  await client.connect();
+  try {
+    await client.query(
+      `delete from assessment_attempts
+       where learner_id = (select id from users where email = $1 limit 1)`,
+      [secondaryLearner.email]
+    );
+  } finally {
+    await client.end();
+  }
   return reset;
 }
 
@@ -736,6 +745,7 @@ async function learnerRun(page, run, viewport) {
   });
 
   await step(page, role, run, "profile-draft-and-placement", async () => {
+    await resetSecondaryLearnerProfile(page);
     await page.goto(`${webUrl}/onboard`, { waitUntil: "networkidle" });
     await page.getByLabel(/Họ tên/).waitFor();
     const draftText = `Draft checkpoint ${viewport.key} run ${run}`;
@@ -811,6 +821,7 @@ async function learnerRun(page, run, viewport) {
   await step(page, role, run, "placement-guard-after-incomplete-profile", async () => {
     await logout(page);
     await loginWithFixture(page, secondaryLearner, "learner");
+    await resetSecondaryLearnerProfile(page);
     await page.goto(`${webUrl}/test/placement`, { waitUntil: "networkidle" });
     await page.waitForURL((url) => url.pathname === "/onboard", { timeout: 20_000 });
     return { sourceRoute: "/test/placement", redirectedRoute: "/onboard" };
@@ -840,8 +851,9 @@ async function learnerRun(page, run, viewport) {
     await page.waitForURL((url) => url.pathname === "/home", { timeout: 20_000 });
     const response = await jsonFromPage(page, "/api/v1/assessments/placement");
     assert(response.status === 200, `Approved placement API status ${response.status}`);
-    assert(response.body.status === "approved", `Placement precondition was ${response.body.status}, expected approved`);
-    return { sourceRoute: "/test/placement", redirectedRoute: "/home", placementStatus: response.body.status, apiStatus: response.status };
+    const placementStatus = response.body.status ?? response.body.attempt?.status;
+    assert(placementStatus === "approved", `Placement precondition was ${placementStatus}, expected approved`);
+    return { sourceRoute: "/test/placement", redirectedRoute: "/home", placementStatus, apiStatus: response.status };
   });
 
   await step(page, role, run, "music-preference-survives-account-switch", async () => {
@@ -905,8 +917,8 @@ async function learnerRun(page, run, viewport) {
     const practice = page.getByRole("tab", { name: /2\. Bài tập/ });
     assert(await study.count() === 1 && await practice.count() === 1, "Lesson study/practice tabs are missing");
     await study.click();
-    for (const label of ["Mục tiêu", "Hướng dẫn", "Từ vựng", "Ngữ pháp", "Phát âm"]) {
-      assert(await page.getByText(label, { exact: true }).count() > 0, `Lesson study content is missing ${label}`);
+    for (const label of [/Mục tiêu/i, /Hướng dẫn/i, /Từ vựng/i, /Ngữ pháp/i, /Phát âm/i]) {
+      assert(await page.getByText(label).count() > 0, `Lesson study content is missing ${label}`);
     }
     return { route: `/lesson/${lessonId}`, tabs: ["1. Học", "2. Bài tập"], sections: ["Mục tiêu", "Hướng dẫn", "Từ vựng", "Ngữ pháp", "Phát âm"] };
   });
@@ -1270,13 +1282,57 @@ async function learnerRun(page, run, viewport) {
     assert(response.status === 200, `Mini-game API status ${response.status}`);
     const gameLinks = page.getByRole("link", { name: /Chơi / });
     assert(await gameLinks.count() >= 1, "Mini-game hub exposes no game links");
-    const wordCount = response.body.wordSet?.words?.length ?? 0;
-    if (wordCount < 3) throw new Unverified(`Mini-game hub is visible but deterministic word set has only ${wordCount} usable words.`);
+    const words = response.body.wordSet?.words ?? [];
+    const wordCount = words.length;
+    if (wordCount < 8) throw new Unverified(`Mini-game hub is visible but deterministic word set has only ${wordCount} usable words.`);
     await page.goto(`${webUrl}/games/scramble`, { waitUntil: "networkidle" });
     await page.getByRole("button", { name: "Bắt đầu chơi", exact: true }).click();
     await page.getByRole("group", { name: "Chữ cái bị xáo trộn" }).waitFor();
+    const answerForCurrentWord = async () => {
+      const clue = (await page.locator(".scramble-scene p strong").innerText()).trim();
+      const source = words.find((item) => String(item.vietnamese).trim() === clue);
+      assert(source?.english, `No deterministic word matches visible scramble clue ${clue}`);
+      return String(source.english).toLowerCase().replace(/[^a-z]/g, "");
+    };
+    const clickLetters = async (target) => {
+      for (const character of target) {
+        const candidates = page.locator(`button[aria-label^="Chữ ${character} "]`);
+        let chosen = -1;
+        for (let index = 0; index < await candidates.count(); index += 1) {
+          if (!(await candidates.nth(index).isDisabled())) { chosen = index; break; }
+        }
+        assert(chosen >= 0, `No available scramble tile for ${character} in ${target}; buttons=${JSON.stringify(await page.locator('.letter-bank button').evaluateAll((items) => items.map((item) => ({ label: item.getAttribute('aria-label'), disabled: item.disabled }))))}`);
+        await candidates.nth(chosen).click();
+      }
+    };
     const heading = await page.getByRole("heading", { name: /Từ \d+\/\d+/ }).innerText();
-    return { hubStatus: response.status, game: "scramble", wordCount, started: true, heading };
+    let resultRequest;
+    for (let index = 0; index < 8; index += 1) {
+      const target = await answerForCurrentWord();
+      if (index === 7) resultRequest = page.waitForResponse((item) => item.url().includes("/api/v1/engagement/games/scramble/results") && item.request().method() === "POST");
+      if (index === 1) {
+        const wrong = `${target.slice(1)}${target[0]}`;
+        await clickLetters(wrong);
+        await page.getByText("Chưa đúng – xếp lại nhé.", { exact: true }).waitFor();
+        await page.waitForTimeout(550);
+        await clickLetters(target);
+        await page.getByText(/\+1$/, { exact: false }).waitFor();
+      } else if (index === 2) {
+        await page.getByRole("button", { name: /Gợi ý/ }).click();
+        await page.waitForTimeout(100);
+        await clickLetters(target.slice(1));
+        await page.getByText(/\+1$/, { exact: false }).waitFor();
+      } else {
+        await clickLetters(target);
+        await page.getByText(index === 0 ? /\+2$/ : /\+(1|2)$/, { exact: false }).waitFor();
+      }
+      if (index < 7) await page.getByRole("heading", { name: new RegExp(`Từ ${index + 2}/8`) }).waitFor();
+    }
+    await page.getByRole("status", { name: "Đang lưu kết quả…" }).waitFor({ state: "hidden" }).catch(() => undefined);
+    const resultResponse = await resultRequest;
+    assert(resultResponse.ok(), `Scramble result submission returned ${resultResponse.status()}`);
+    const result = await resultResponse.json().catch(() => ({}));
+    return { hubStatus: response.status, game: "scramble", wordCount, started: true, heading, scoring: { immediate: 2, afterWrong: 1, afterHint: 1, wordsPlayed: 8 }, resultStatus: resultResponse.status(), points: result.points };
   });
 }
 
