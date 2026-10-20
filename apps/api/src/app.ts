@@ -50,10 +50,11 @@ export function buildApi(options: BuildApiOptions): FastifyInstance {
     .filter(Boolean);
   if (webOrigins.length > 0) {
     const firstOrigin = webOrigins[0];
+    const methods = ["GET", "HEAD", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"];
     if (webOrigins.length === 1 && firstOrigin) {
-      void app.register(cors, { origin: firstOrigin, credentials: true });
+      void app.register(cors, { origin: firstOrigin, credentials: true, methods });
     } else {
-      void app.register(cors, { origin: webOrigins, credentials: true });
+      void app.register(cors, { origin: webOrigins, credentials: true, methods });
     }
   }
   void app.register(rateLimit, { global: false });

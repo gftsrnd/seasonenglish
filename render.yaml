@@ -46,6 +46,10 @@ services:
     branch: gftsaimedia-cpu
     buildCommand: pnpm install --frozen-lockfile && pnpm --filter @e4s/web... build
     staticPublishPath: apps/web/dist
+    routes:
+      - type: rewrite
+        source: /*
+        destination: /index.html
     envVars:
       - key: SKIP_INSTALL_DEPS
         value: "true"
