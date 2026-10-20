@@ -224,7 +224,19 @@ function DashboardRoute({ client, readOnly }: { client: OperatorApiClient; readO
   };
   return <>{actionError && <Banner tone="danger"><b>Thao tác chưa hoàn tất:</b> {actionError}</Banner>}<OperatorDashboard view={view} readOnly={readOnly} unavailable={missing} actions={{
     onResolveTopicReport: id => { if (!readOnly) refresh(client.resolveTopicReport(id)); },
-    onApprovePlacement: (id, cefr) => { if (!readOnly && typeof client.decideAssessment === "function") refresh(client.decideAssessment(id, { status: "approved", approvedLevel: cefr, reason: "Duyệt mức đầu vào" })); },
+    onApprovePlacement: (id, cefr) => {
+      if (readOnly || typeof client.decideAssessment !== "function") return;
+      void modal.prompt({ title: "Duyệt mức đầu vào", message: `Mức được duyệt: ${cefr}. Hãy ghi rõ lý do để lưu quyết định.`, label: "Lý do", confirmLabel: "Duyệt mức" })
+        .then(reason => {
+          const trimmed = reason?.trim();
+          if (!trimmed) {
+            setActionError("Lý do duyệt mức là bắt buộc; quyết định chưa được lưu.");
+            return;
+          }
+          setActionError(undefined);
+          refresh(client.decideAssessment(id, { status: "approved", approvedLevel: cefr, reason: trimmed }));
+        });
+    },
     onApproveLevelRequest: id => { const target = targetFor(id); if (!readOnly && target && typeof client.decideAssessment === "function") refresh(client.decideAssessment(id, { status: "approved", approvedLevel: target, reason: "Duyệt yêu cầu lên mức" })); },
     onRejectLevelRequest: id => { if (readOnly || typeof client.decideAssessment !== "function") return; void modal.prompt({ title: "Từ chối yêu cầu lên mức", message: "Học viên sẽ nhìn thấy nội dung này.", label: "Lý do từ chối", confirmLabel: "Từ chối", tone: "danger" }).then(reason => { if (reason?.trim()) refresh(client.decideAssessment(id, { status: "needs_retry", reason: reason.trim() })); }); },
     onViewTest: showAttempt, onRescore: rescore, onDeleteLearner: id => requestDeletion(learnerIdFor(id)), onViewChallenge: showChallenge,

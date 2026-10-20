@@ -774,6 +774,11 @@ async function learnerRun(page, run, viewport) {
     await page.waitForURL((url) => url.pathname === "/test/placement", { timeout: 20_000 });
     const placement = await jsonFromPage(page, "/api/v1/assessments/placement");
     assertJsonStatus("Placement API", placement, 200);
+    const table = page.getByRole("table", { name: "Cấu trúc bài test" });
+    assert(await table.count() === 1, "Placement introduction table is missing");
+    const tableText = await table.innerText();
+    for (const expected of ["Nghe", "Đọc", "Viết", "Nói", "15 phút", "25 phút", "20 phút"]) assert(tableText.includes(expected), `Placement timing table is missing ${expected}`);
+    for (const expected of ["Bắt buộc", "Không được phép", "Lưu ý", "Thử tai nghe", "Thử micro (3 giây)", "Bắt đầu phần Nghe"]) assert((await page.getByText(expected, { exact: true }).count()) > 0 || (await page.getByRole("button", { name: expected, exact: true }).count()) > 0, `Placement introduction is missing ${expected}`);
     return {
       draftPersisted: true,
       draftResponseStatus: draftResponse.status(),
@@ -782,10 +787,34 @@ async function learnerRun(page, run, viewport) {
       profileCompletionStatus: completionResponse.status(),
       placementRoute: "/test/placement",
       placementStatus: placement.status,
-      placementTitle: placement.body.title
+      placementTitle: placement.body.title,
+      introduction: { table: true, rules: ["Bắt buộc", "Không được phép", "Lưu ý"], durations: [15, 25, 20, 15] }
     };
   });
 
+  await step(page, role, run, "profile-edit-returns-progress", async () => {
+    await page.goto(`${webUrl}/onboard`, { waitUntil: "networkidle" });
+    await page.getByLabel(/Họ tên/).waitFor();
+    const editedSituation = `Edited profile checkpoint ${viewport.key} run ${run}`;
+    await (await visibleSituationTextarea(page)).fill(editedSituation);
+    const request = page.waitForResponse((response) => response.url().includes("/api/v1/learner/profile") && response.request().method() === "PUT");
+    await page.getByRole("button", { name: /Lưu hồ sơ|Lưu thay đổi|Lưu nháp/ }).last().click();
+    const response = await request;
+    assert(response.ok(), `Profile edit returned ${response.status()}`);
+    await page.waitForURL((url) => url.pathname === "/profile", { timeout: 20_000 });
+    const persisted = await jsonFromPage(page, "/api/v1/learner/profile");
+    assert(persisted.status === 200 && persisted.body.completed === true, "Edited completed profile did not remain complete");
+    assert(persisted.body.profile?.situations === editedSituation, "Edited profile value was not persisted");
+    return { saveStatus: response.status(), returnRoute: "/profile", completed: persisted.body.completed };
+  });
+
+  await step(page, role, run, "placement-guard-after-incomplete-profile", async () => {
+    await logout(page);
+    await loginWithFixture(page, secondaryLearner, "learner");
+    await page.goto(`${webUrl}/test/placement`, { waitUntil: "networkidle" });
+    await page.waitForURL((url) => url.pathname === "/onboard", { timeout: 20_000 });
+    return { sourceRoute: "/test/placement", redirectedRoute: "/onboard" };
+  });
   await logout(page);
   await login(page, role);
 
@@ -804,6 +833,32 @@ async function learnerRun(page, run, viewport) {
       availableLessonIds: (response.body.lessons ?? []).map((lesson) => lesson.id).filter(Boolean),
       homeStatus: response.status
     };
+  });
+
+  await step(page, role, run, "approved-placement-guard", async () => {
+    await page.goto(`${webUrl}/test/placement`, { waitUntil: "networkidle" });
+    await page.waitForURL((url) => url.pathname === "/home", { timeout: 20_000 });
+    const response = await jsonFromPage(page, "/api/v1/assessments/placement");
+    assert(response.status === 200, `Approved placement API status ${response.status}`);
+    assert(response.body.status === "approved", `Placement precondition was ${response.body.status}, expected approved`);
+    return { sourceRoute: "/test/placement", redirectedRoute: "/home", placementStatus: response.body.status, apiStatus: response.status };
+  });
+
+  await step(page, role, run, "music-preference-survives-account-switch", async () => {
+    const music = page.getByRole("button", { name: /Nhạc nền:/ }).first();
+    await music.waitFor();
+    await music.click();
+    assert(await music.getAttribute("aria-pressed") === "false", "Music toggle did not turn off");
+    await page.reload({ waitUntil: "networkidle" });
+    const reloaded = page.getByRole("button", { name: /Nhạc nền:/ }).first();
+    assert(await reloaded.getAttribute("aria-pressed") === "false", "Music preference did not survive reload");
+    await logout(page);
+    await loginWithFixture(page, secondaryLearner, "learner");
+    const switched = page.getByRole("button", { name: /Nhạc nền:/ }).first();
+    assert(await switched.getAttribute("aria-pressed") === "false", "Music preference changed with account instead of device");
+    await logout(page);
+    await login(page, role);
+    return { route: "/home", afterToggle: false, afterReload: false, afterAccountSwitch: false, preferenceKey: "e4s:music" };
   });
 
   const lessonId = home?.nextLesson?.id;
@@ -843,6 +898,17 @@ async function learnerRun(page, run, viewport) {
     assert(required.every((code) => codes.includes(code)), `Lesson does not expose all six practice parts: ${codes.join(",")}`);
     assert(await page.getByRole("tab", { name: /1\. Học/ }).count() === 1, "Study tab is missing");
     return { lessonId, codes, progress: response.body.progress };
+  });
+
+  await step(page, role, run, "lesson-tabs-and-study-content", async () => {
+    const study = page.getByRole("tab", { name: /1\. Học/ });
+    const practice = page.getByRole("tab", { name: /2\. Bài tập/ });
+    assert(await study.count() === 1 && await practice.count() === 1, "Lesson study/practice tabs are missing");
+    await study.click();
+    for (const label of ["Mục tiêu", "Hướng dẫn", "Từ vựng", "Ngữ pháp", "Phát âm"]) {
+      assert(await page.getByText(label, { exact: true }).count() > 0, `Lesson study content is missing ${label}`);
+    }
+    return { route: `/lesson/${lessonId}`, tabs: ["1. Học", "2. Bài tập"], sections: ["Mục tiêu", "Hướng dẫn", "Từ vựng", "Ngữ pháp", "Phát âm"] };
   });
 
   await step(page, role, run, "vocabulary-media-and-forbidden-statuses", async () => {
@@ -1263,13 +1329,26 @@ async function operatorRun(page, run) {
     await step(page, role, run, "approve-pending-assessment", async () => {
       const select = page.locator(`select[aria-label="Mức duyệt cho ${target.learnerName}"]`).first();
       await select.waitFor();
-      await select.selectOption(String(target.suggestedLevel));
+      const levels = await select.locator("option").evaluateAll((options) => options.map((option) => option.value).filter(Boolean));
+      const differentLevel = levels.find((level) => level !== String(target.suggestedLevel));
+      assert(differentLevel, `No alternate approval level available for ${target.learnerName}`);
       const card = select.locator("xpath=ancestor::div[contains(@class,'card')][1]");
       const button = card.getByRole("button", { name: "Duyệt mức", exact: true });
       await button.waitFor();
       assert(!(await button.isDisabled()), `Approve button is disabled for ${target.learnerName}`);
+      await select.selectOption(differentLevel);
+      await button.click();
+      const dialog = page.getByRole("dialog", { name: "Duyệt mức đầu vào" });
+      await dialog.waitFor();
+      await dialog.getByRole("button", { name: "Duyệt mức", exact: true }).click();
+      await page.waitForTimeout(250);
+      assert(await page.locator(`select[aria-label="Mức duyệt cho ${target.learnerName}"]`).count() === 1, "Blank-reason attempt removed the pending learner");
+      await page.locator(`select[aria-label="Mức duyệt cho ${target.learnerName}"]`).selectOption(differentLevel);
       const request = page.waitForResponse((response) => response.url().includes(`/api/v1/assessment-reviews/${target.attemptId}/decision`) && response.request().method() === "POST");
       await button.click();
+      const approvalDialog = page.getByRole("dialog", { name: "Duyệt mức đầu vào" });
+      await approvalDialog.getByRole("textbox", { name: "Lý do" }).fill(`Duyệt khác bảng điểm để kiểm tra tiêu chí (${run})`);
+      await approvalDialog.getByRole("button", { name: "Duyệt mức", exact: true }).click();
       const response = await request;
       assert(response.ok(), `Assessment decision returned ${response.status()}`);
       await page.waitForFunction(async (attemptId) => {
@@ -1277,7 +1356,12 @@ async function operatorRun(page, run) {
         const pending = await response.json().catch(() => []);
         return response.ok && !pending.some((item) => item.attemptId === attemptId);
       }, target.attemptId);
-      return { attemptId: target.attemptId, learnerName: target.learnerName, approvedLevel: target.suggestedLevel, responseStatus: response.status() };
+      const decision = await jsonFromPage(page, `/api/v1/assessment-reviews/attempts/${target.attemptId}`);
+      assert(decision.status === 200, `Decision detail returned ${decision.status}`);
+      assert(decision.body.suggestedLevel === target.suggestedLevel, `Suggested level was not retained: ${JSON.stringify(decision.body)}`);
+      assert(decision.body.approvedLevel === differentLevel, `Different approved level was not retained: ${JSON.stringify(decision.body)}`);
+      assert(decision.body.decision?.reason, `Approval reason was not persisted: ${JSON.stringify(decision.body)}`);
+      return { attemptId: target.attemptId, learnerName: target.learnerName, suggestedLevel: target.suggestedLevel, approvedLevel: differentLevel, reasonRequired: true, responseStatus: response.status(), decisionStatus: decision.status };
     });
   }
 
@@ -1405,8 +1489,18 @@ async function managerRun(page, run) {
     if (disabledCount) {
       assert((await disabled.evaluate((element) => getComputedStyle(element).opacity)) === "1", "Manager disabled setting is unreadable");
     }
+    const themeSelect = page.locator('select').filter({ has: page.locator('option[value="tet"]') }).first();
+    await themeSelect.waitFor();
+    const themes = ["spring", "summer", "autumn", "winter", "tet", "midautumn", "christmas", "auto"];
+    const applied = [];
+    for (const theme of themes) {
+      await themeSelect.selectOption(theme);
+      await page.waitForFunction((expected) => document.documentElement.dataset.theme === expected || (expected === "auto" && Boolean(document.documentElement.dataset.theme)), theme);
+      applied.push({ theme, resolved: await page.locator("html").getAttribute("data-theme") });
+    }
+    assert(new Set(applied.map((item) => item.resolved)).size >= 7, `Theme changes did not alter the palette: ${JSON.stringify(applied)}`);
     await checkNoOverflow(page);
-    return { route: "/settings", disabledSelectCount: disabledCount };
+    return { route: "/settings", disabledSelectCount: disabledCount, appliedThemes: applied };
   });
 
   await step(page, role, run, "manager-operational-subroute", async () => {
