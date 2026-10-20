@@ -51,6 +51,28 @@ describe("app onboard affordances", () => {
     expect(screen.getByRole("group", { name: "Bạn dùng tiếng Anh ở công ty cho việc gì? *" })).toHaveAttribute("aria-invalid", "true");
   });
 
+  it("shows the email format error while the learner is typing", async () => {
+    const user = userEvent.setup();
+    render(<LearnerOnboard view={{ profile: { fullName: "Lan", email: "lan@example.com" }, mode: "new" }} actions={actions} />);
+
+    const email = screen.getByRole("textbox", { name: "Email *" });
+    await user.clear(email);
+    await user.type(email, "abc");
+
+    expect(screen.getByRole("alert")).toHaveTextContent("Email chưa đúng định dạng");
+    expect(email).toHaveAttribute("aria-invalid", "true");
+  });
+
+  it("normalizes a valid uppercase email before saving the profile", async () => {
+    const user = userEvent.setup();
+    const saveProfile = vi.fn().mockResolvedValue(undefined);
+    render(<LearnerOnboard view={{ profile: { fullName: "Lan", email: "JAME@GMAIL.COM", goals: ["email"], environmentUse: "weekly", familyUse: "never", habits: ["app"], learningStyles: ["reading"] }, mode: "new" }} actions={{ ...actions, saveProfile }} />);
+
+    await user.click(screen.getByRole("button", { name: /lưu và làm test đầu vào/i }));
+
+    expect(saveProfile).toHaveBeenCalledWith(expect.objectContaining({ email: "jame@gmail.com" }));
+  });
+
   it("exposes profile choices as named groups and locks navigation while saving", () => {
     render(<LearnerOnboard view={{ profile: {}, mode: "new", saving: true }} actions={actions} />);
 

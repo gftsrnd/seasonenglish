@@ -76,4 +76,35 @@ describe("EntryScreen interaction", () => {
     expect(await screen.findByRole("alert")).toHaveTextContent("Mật khẩu xác nhận chưa khớp");
     expect(client.registerLearner).not.toHaveBeenCalled();
   });
+  it("reveals the password and explains when the account uses another login path", async () => {
+    const user = userEvent.setup();
+    const client = stubClient();
+    client.learnerLogin = vi.fn().mockRejectedValue(new Error("WRONG_LOGIN_PATH"));
+    window.history.replaceState({}, "", "/");
+    render(<EntryScreen client={client} onAuthenticated={() => undefined} />);
+
+    await user.type(screen.getByLabelText("Email"), "operator@e4s.local");
+    await user.type(screen.getByLabelText("Mật khẩu"), "staff-pass");
+    await user.click(screen.getByRole("button", { name: "Hiện mật khẩu" }));
+
+    expect(screen.getByLabelText("Mật khẩu")).toHaveAttribute("type", "text");
+    expect(screen.getByRole("button", { name: "Ẩn mật khẩu" })).toHaveAttribute("aria-pressed", "true");
+
+    await user.click(screen.getByRole("button", { name: "Ẩn mật khẩu" }));
+    await user.click(screen.getByRole("button", { name: "Đăng nhập người học" }));
+
+    expect(await screen.findByRole("alert")).toHaveTextContent("Hãy chọn tab Nhân sự");
+  });
+
+  it("warns when Caps Lock is active while entering the email", async () => {
+    const user = userEvent.setup();
+    render(<EntryScreen client={stubClient()} onAuthenticated={() => undefined} />);
+
+    const email = screen.getByLabelText("Email");
+    await user.click(email);
+    await user.keyboard("{CapsLock}");
+    await user.keyboard("A");
+
+    expect(screen.getAllByRole("status").some((status) => status.textContent?.includes("Caps Lock đang bật"))).toBe(true);
+  });
 });
