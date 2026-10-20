@@ -44,7 +44,7 @@ services:
     name: e4s-web
     runtime: static
     branch: gftsaimedia-cpu
-    buildCommand: pnpm install --frozen-lockfile && pnpm --filter @e4s/web build
+    buildCommand: pnpm install --frozen-lockfile && pnpm --filter @e4s/web... build
     staticPublishPath: apps/web/dist
     envVars:
       - key: SKIP_INSTALL_DEPS
