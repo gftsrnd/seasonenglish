@@ -4,6 +4,7 @@
   "version": "0.1.0",
   "type": "module",
   "scripts": {
+    "prebuild": "pnpm --filter @e4s/domain... build",
     "build": "vite build",
     "dev": "vite",
     "preview": "vite preview",
