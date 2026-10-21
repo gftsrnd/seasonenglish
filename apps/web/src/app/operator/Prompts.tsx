@@ -7,7 +7,7 @@ export function OperatorPrompts({ view, actions, readOnly = false }: { view: Ope
   const [values, setValues] = useState<Record<PromptKey, string>>(makeValues);
   const saving = view.saveState === "loading";
   useEffect(() => setValues(makeValues()), [view.prompts]);
-  return <OperatorPage title="Prompt"><PageTitle><a className="link-button small" href="/settings" onClick={event => { event.preventDefault(); actions.onBack(); }}>← Cài đặt</a><h1>Prompt & rubric</h1><p className="muted">Đây là hướng dẫn hệ thống gửi cho AI. Sửa khi thấy AI lệch mức, sửa sai hoặc khen quá tay. Để trống ô = dùng mặc định.</p></PageTitle>
+  return <OperatorPage title="Prompt" hideRouteBack><PageTitle><a className="link-button small" href="/settings" onClick={event => { event.preventDefault(); actions.onBack(); }}>← Cài đặt</a><h1>Prompt & rubric</h1><p className="muted">Đây là hướng dẫn hệ thống gửi cho AI. Sửa khi thấy AI lệch mức, sửa sai hoặc khen quá tay. Để trống ô = dùng mặc định.</p></PageTitle>
     {view.prompts.map(([key, label]) => {
       const headingId = `prompt-${key}-label`;
       const textareaId = `prompt-${key}`;

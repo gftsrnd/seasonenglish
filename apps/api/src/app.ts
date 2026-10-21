@@ -25,6 +25,7 @@ export interface BuildApiOptions {
   allowDemoLogin?: boolean;
   secureCookies?: boolean;
   aiRunner?: AiTaskRunner;
+  aiRunnerFactory?: (actorId: string) => Promise<AiTaskRunner | undefined>;
   storage?: ObjectStorage;
   mediaService?: ContentMediaService;
   /** Enables destructive demo maintenance only for an explicitly local/test process. */
@@ -63,8 +64,8 @@ export function buildApi(options: BuildApiOptions): FastifyInstance {
     secureCookies: options.secureCookies ?? true
   });
   registerLearningRoutes(app, options.pool, options.aiRunner, options.mediaService);
-  registerAssessmentRoutes(app, options.pool, options.aiRunner);
-  registerContentRoutes(app, options.pool, options.aiRunner, options.storage);
+  registerAssessmentRoutes(app, options.pool, options.aiRunner, options.aiRunnerFactory);
+  registerContentRoutes(app, options.pool, options.aiRunner, options.storage, options.aiRunnerFactory);
   registerManagerRoutes(app, options.pool, {
     maintenanceEnabled,
     ...(options.mediaService ? { mediaService: options.mediaService } : {})
@@ -72,7 +73,7 @@ export function buildApi(options: BuildApiOptions): FastifyInstance {
   registerNotificationRoutes(app, options.pool);
   registerCoachRoutes(app, options.pool, options.aiRunner);
   registerEngagementRoutes(app, options.pool, options.aiRunner, options.mediaService);
-  registerSystemRoutes(app, options.pool, options.storage, Boolean(options.aiRunner), maintenanceEnabled, options.imageProviders);
+  registerSystemRoutes(app, options.pool, options.storage, Boolean(options.aiRunner), maintenanceEnabled, options.imageProviders, Boolean(options.aiRunnerFactory));
   if (options.storage) {
     void app.register(multipart, { limits: { files: 1, fileSize: 20 * 1024 * 1024 } });
     registerFileRoutes(app, options.pool, options.storage);

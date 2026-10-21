@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type ButtonHTMLAttributes, type ReactNode } from "react";
-import type { ManagerProviderSettingsInput, ManagerProviderSettingsView, ManagerSettingsInput, ManagerSettingsView, ManagerWebhookTestView, ProductPreferencesView, SystemCapabilitiesView } from "@e4s/contracts";
+import type { ManagerProviderSettingsInput, ManagerProviderSettingsView, ManagerSettingsInput, ManagerSettingsView, ManagerWebhookTestView, OperatorSettingsOverviewView, ProductPreferencesView, SystemCapabilitiesView } from "@e4s/contracts";
 import { Flower2, Gift, Leaf, MoonStar, Snowflake, Sparkles, Star, Sun } from "lucide-react";
 import { autoSeasonTheme } from "../games/season-visual.js";
 import { PersonalPreferences } from "./PersonalPreferences.js";
@@ -60,20 +60,21 @@ export type SettingsProps = {
   product: ProductPreferencesView;
   capabilities: SystemCapabilitiesView;
   ai?: AiConfigurationView;
+  operatorOverview?: OperatorSettingsOverviewView;
   actions: Partial<SettingsActions>;
   accounts?: ReactNode;
 };
 
-export function SettingsPage({ role, manager, product, capabilities, ai, actions, accounts }: SettingsProps) {
+export function SettingsPage({ role, manager, product, capabilities, ai, operatorOverview, actions, accounts }: SettingsProps) {
   const [aiDraft, setAiDraft] = useState<AiConfigurationInput | null>(ai ? { provider: ai.provider, baseUrl: ai.baseUrl, model: ai.model, speechToTextModel: ai.speechToTextModel } : null);
-  const [managerDraft, setManagerDraft] = useState(manager);
+  const [managerDraft, setManagerDraft] = useState(manager ?? operatorOverview?.settings);
   const [productDraft, setProductDraft] = useState(() => normalizeProductPreferences(product));
   useEffect(() => setAiDraft(ai ? { provider: ai.provider, baseUrl: ai.baseUrl, model: ai.model, speechToTextModel: ai.speechToTextModel } : null), [ai]);
-  useEffect(() => setManagerDraft(manager), [manager]);
+  useEffect(() => setManagerDraft(manager ?? operatorOverview?.settings), [manager, operatorOverview]);
   useEffect(() => setProductDraft(normalizeProductPreferences(product)), [product]);
   return <div className="settings-page" data-settings-role={role}>
     <div className="page-title"><h1>Cài đặt</h1></div>
-    {role === "manager" ? aiDraft && ai ? <AiSection draft={aiDraft} configured={ai.configured} lastTest={ai.lastTest} capabilities={capabilities} onChange={setAiDraft} {...(actions.onSaveAi ? { onSave: () => actions.onSaveAi!(aiDraft) } : {})} {...(actions.onTestAi ? { onTest: () => actions.onTestAi!(aiDraft) } : {})} /> : <UnavailableAiSection capabilities={capabilities} role={role} /> : null}
+    {aiDraft && ai ? <AiSection draft={aiDraft} configured={ai.configured} lastTest={ai.lastTest} capabilities={capabilities} onChange={setAiDraft} {...(actions.onSaveAi ? { onSave: () => actions.onSaveAi!(aiDraft) } : {})} {...(actions.onTestAi ? { onTest: () => actions.onTestAi!(aiDraft) } : {})} /> : <UnavailableAiSection capabilities={capabilities} role={role} />}
     {role === "manager" && managerDraft ? <>
       <PilotSection value={managerDraft} onChange={setManagerDraft} {...(actions.onSaveManager ? { onSave: () => actions.onSaveManager!(toInput(managerDraft)) } : {})} />
       <ImageSection value={productDraft} onChange={setProductDraft} {...(actions.onSaveProduct ? { onSave: () => actions.onSaveProduct!(productDraft) } : {})} {...(actions.onTestImage ? { onTest: () => actions.onTestImage!(productDraft) } : {})} {...(actions.onClearImageCache ? { onClear: actions.onClearImageCache } : {})} />
@@ -87,15 +88,27 @@ export function SettingsPage({ role, manager, product, capabilities, ai, actions
       {accounts}
     </> : <>
       <section className="card"><h3>Prompt & rubric</h3><p className="small muted">Sửa hướng dẫn AI sinh bài, coach và chấm bài. Để trống dùng mặc định.</p><a className="btn" href="/op/prompts">Mở trình sửa prompt</a></section>
+      {operatorOverview && managerDraft ? <>
+        <PilotSection value={managerDraft} onChange={setManagerDraft} {...(actions.onSaveManager ? { onSave: () => actions.onSaveManager!(toInput(managerDraft)) } : {})} />
+        <TestSection value={managerDraft} onChange={setManagerDraft} {...(actions.onSaveManager ? { onSave: () => actions.onSaveManager!(toInput(managerDraft)) } : {})} />
+        <LevelSection value={managerDraft} onChange={setManagerDraft} {...(actions.onSaveManager ? { onSave: () => actions.onSaveManager!(toInput(managerDraft)) } : {})} />
+        <OperatorAccountsSection overview={operatorOverview} />
+      </> : null}
       <PersonalPreferences />
     </>}
   </div>;
+}
+
+function OperatorAccountsSection({ overview }: { overview: OperatorSettingsOverviewView }) {
+  const roleLabel = (role: string) => role === "learner" ? "Người học" : role === "operator" ? "Người vận hành" : "Quản lý";
+  return <section className="card"><h3>Người dùng</h3><p className="small muted">Danh sách tài khoản trong tổ chức. Operator được chỉnh cấu hình vận hành nhưng không được thêm, xoá hoặc đổi thông tin học viên.</p><div className="table-wrap"><table><thead><tr><th>Tên</th><th>Email</th><th>Vai trò</th><th>Mức</th><th>Điểm đầu vào</th><th>Trạng thái</th></tr></thead><tbody>{overview.accounts.map(account => <tr key={account.id}><td>{account.displayName}</td><td>{account.email || "—"}</td><td>{roleLabel(account.role)}</td><td>{account.role === "learner" ? account.cefr ?? "—" : "—"}</td><td>{account.role !== "learner" ? "—" : account.placementScore == null ? "Chưa có bài test" : `${account.placementScore}/100`}</td><td>{account.status === "active" ? "Đang hoạt động" : account.status}</td></tr>)}</tbody></table></div></section>;
 }
 
 function UnavailableAiSection({ capabilities, role }: { capabilities: SystemCapabilitiesView; role: "manager" | "operator" }) { return <section className="card"><h3>Kết nối AI</h3><div className="banner info"><div className="body small">{role === "operator" ? <>Chỉ xem trạng thái kết nối AI ({capabilities.ai ? "đang hoạt động" : "chưa hoạt động"}). Nhà cung cấp, model và khoá do Quản lý quản trị; khoá không hiển thị trên trình duyệt.</> : <>API chỉ trả trạng thái AI {capabilities.ai ? "đang hoạt động" : "chưa hoạt động"}; chưa có endpoint lưu hoặc kiểm tra cấu hình. Điều khiển được tắt để tránh tạo cấu hình giả.</>}</div></div>{role === "operator" ? <span className={`badge ${capabilities.ai ? "ok" : "warn"}`}>{capabilities.ai ? "đang hoạt động" : "chưa sẵn sàng"}</span> : <div className="row"><button className="btn-primary" type="button" disabled>Lưu kết nối AI</button><button type="button" disabled>Kiểm tra kết nối</button></div>}</section>; }
 
 function AiSection({ draft, configured, lastTest, capabilities, onChange, onSave, onTest }: { draft: AiConfigurationInput; configured: boolean; lastTest?: ManagerProviderSettingsView["lastTest"]; capabilities: SystemCapabilitiesView; onChange: (value: AiConfigurationInput) => void; onSave?: () => void | Promise<void>; onTest?: () => void | Promise<void> }) {
   const openAiPreset = draft.provider === "openai" ? openAiPresetFor(draft.baseUrl) : "custom";
+  const connectionLabel = configured && capabilities.ai ? "đã kết nối" : lastTest?.status === "success" ? "đã kiểm tra · chưa lưu" : "chưa sẵn sàng";
   const changeProvider = (provider: AiConfigurationInput["provider"]) => onChange({ ...draft, provider, ...aiProviderDefaults[provider], credential: undefined });
   return <section className="card"><h3>Kết nối AI</h3><p className="small muted">Khoá nhà cung cấp được lưu an toàn ở server; trình duyệt chỉ gửi giá trị mới khi bạn chủ động thay đổi.</p>
     <label className="field"><span>Nhà cung cấp</span><select value={draft.provider} onChange={(event) => changeProvider(event.target.value as AiConfigurationInput["provider"])}><option value="claude">Claude (Anthropic)</option><option value="gemini">Google Gemini</option><option value="openai">OpenAI-compatible</option></select></label>
@@ -103,7 +116,7 @@ function AiSection({ draft, configured, lastTest, capabilities, onChange, onSave
     {draft.provider === "openai" ? <label className="field"><span>Base URL</span><input value={draft.baseUrl} onChange={(event) => onChange({ ...draft, baseUrl: event.target.value })} placeholder="https://api.groq.com/openai/v1" /></label> : null}
     <div className="grid cols-2"><label className="field"><span>API key mới (để trống = giữ key đang lưu)</span><input type="password" autoComplete="new-password" value={draft.credential ?? ""} onChange={(event) => onChange(withCredential(draft, event.target.value))} /></label><label className="field"><span>Tên model</span><input value={draft.model} onChange={(event) => onChange({ ...draft, model: event.target.value })} /></label></div>
     {draft.provider === "openai" ? <label className="field"><span>Model chép lời file ghi âm</span><input value={draft.speechToTextModel} onChange={(event) => onChange({ ...draft, speechToTextModel: event.target.value })} /></label> : null}
-    <div className="row"><AsyncButton className="btn-primary" action={onSave} disabled={!onSave} busyLabel="Đang lưu…">Lưu kết nối AI</AsyncButton><AsyncButton action={onTest} disabled={!onTest} busyLabel="Đang kiểm tra…" aria-label="Kiểm tra kết nối AI">Kiểm tra kết nối</AsyncButton><span className={`badge ${configured && capabilities.ai ? "ok" : "warn"}`}>{configured && capabilities.ai ? "đã kết nối" : "chưa sẵn sàng"}</span><span className="small muted" role="status" aria-live="polite">{lastTestLabel(lastTest)}</span></div>
+    <div className="row"><AsyncButton className="btn-primary" action={onSave} disabled={!onSave} busyLabel="Đang lưu…">Lưu kết nối AI</AsyncButton><AsyncButton action={onTest} disabled={!onTest} busyLabel="Đang kiểm tra…" aria-label="Kiểm tra kết nối AI">Kiểm tra kết nối</AsyncButton><span className={`badge ${configured && capabilities.ai ? "ok" : "warn"}`}>{connectionLabel}</span><span className="small muted" role="status" aria-live="polite">{lastTestLabel(lastTest)}</span></div>
   </section>;
 }
 

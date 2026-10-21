@@ -7,6 +7,7 @@ import type {
   ManagerProviderSettingsView, ManagerProviderTestView, ManagerPurgeConfirmationInput,
   ManagerPurgeConfirmationView, ManagerReminderCopyView, ManagerReminderDismissView,
   ManagerReminderSendView, ManagerRemindersView, ManagerReportView, ManagerSettingsView, ManagerTrashView,
+  OperatorSettingsOverviewView,
   ManagerWebhookTestView, ProductPreferencesView, SystemCapabilitiesView
 } from "@e4s/contracts";
 import { request } from "./runtime.js";
@@ -46,7 +47,9 @@ export interface ManagerApiClient {
   copyManagerReminder(learnerId: string): Promise<ManagerReminderCopyView>;
   getManagerReport(): Promise<ManagerReportView>;
   getManagerSettings(): Promise<ManagerSettingsView>;
+  getOperatorSettingsOverview(): Promise<OperatorSettingsOverviewView>;
   saveManagerSettings(input: Omit<ManagerSettingsView, "organizationName">): Promise<ManagerSettingsView>;
+  saveOperatorSettings(input: Omit<ManagerSettingsView, "organizationName">): Promise<ManagerSettingsView>;
   getProductPreferences(): Promise<ProductPreferencesView>;
   saveProductPreferences(input: ProductPreferencesView): Promise<ProductPreferencesView>;
   getSystemCapabilities(): Promise<SystemCapabilitiesView>;
@@ -87,7 +90,9 @@ export const managerApiClient: ManagerApiClient = {
   copyManagerReminder: (learnerId) => request(`/api/v1/manager/reminders/${encodeURIComponent(learnerId)}/copy`, { method: "POST", body: "{}" }),
   getManagerReport: () => request("/api/v1/manager/report"),
   getManagerSettings: () => request("/api/v1/manager/settings"),
+  getOperatorSettingsOverview: () => request("/api/v1/operator/settings-overview"),
   saveManagerSettings: (input) => request("/api/v1/manager/settings", { method: "PUT", body: JSON.stringify(input) }),
+  saveOperatorSettings: (input) => request("/api/v1/operator/settings", { method: "PUT", body: JSON.stringify(input) }),
   getProductPreferences: () => request("/api/v1/product-preferences"),
   saveProductPreferences: (input) => request("/api/v1/product-preferences", { method: "PUT", body: JSON.stringify(input) }),
   getSystemCapabilities: () => request("/api/v1/system/capabilities")

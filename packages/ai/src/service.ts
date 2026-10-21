@@ -87,7 +87,7 @@ function normalizeError(error: unknown): AiGatewayError | AiProviderError {
 
 function isRetryable(error: unknown): boolean {
   return (error instanceof AiProviderError && error.retryable)
-    || (error instanceof AiGatewayError && error.code === "AI_TIMEOUT");
+    || (error instanceof AiGatewayError && (error.code === "AI_TIMEOUT" || error.code === "AI_OUTPUT_INVALID"));
 }
 
 function stableJson(value: unknown): string {

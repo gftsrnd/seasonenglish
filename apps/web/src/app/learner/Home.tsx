@@ -5,9 +5,22 @@ import { Notice, PageTitle, Progress, AppLink } from "./ui.js";
 
 export function LearnerHome({ view, actions }: { view: LearnerHomeView; actions: LearnerCallbacks }) {
   const [celebration, setCelebration] = useState(view.rewardAnnouncement?.kind === "new-level-announcement" || view.rewardAnnouncement?.kind === "top-level-redirect" ? view.rewardAnnouncement : null);
+  const [assessmentCelebration, setAssessmentCelebration] = useState(false);
   useEffect(() => {
     setCelebration(view.rewardAnnouncement?.kind === "new-level-announcement" || view.rewardAnnouncement?.kind === "top-level-redirect" ? view.rewardAnnouncement : null);
   }, [view.rewardAnnouncement?.announcementId, view.rewardAnnouncement?.kind]);
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    try {
+      if (window.sessionStorage.getItem("e4s:assessment-complete-celebration") !== "1") return;
+      window.sessionStorage.removeItem("e4s:assessment-complete-celebration");
+    } catch {
+      return;
+    }
+    setAssessmentCelebration(true);
+    const timer = window.setTimeout(() => setAssessmentCelebration(false), 4_500);
+    return () => window.clearTimeout(timer);
+  }, []);
   if (view.onboardingRequired || view.learner.cefr === null) return <OnboardingHome view={view} actions={actions} />;
   const next = view.nextLesson;
   const showLifecycle = Boolean(
@@ -63,7 +76,17 @@ export function LearnerHome({ view, actions }: { view: LearnerHomeView; actions:
     {view.reward ? <section className="card home-reward" style={{ marginTop: 16 }} data-home-block="reward" aria-label="Mùa học hiện tại"><div className="row between"><div><div className="eyebrow">Mùa học</div><h2>{view.reward.seasonName}</h2></div><strong>{view.reward.points} điểm</strong></div>{view.reward.nextPoints !== null ? <p className="small muted" style={{ marginBottom: 0 }}>Còn {Math.max(0, view.reward.nextPoints - view.reward.points)} điểm để mở cấp tiếp theo.</p> : <p className="small muted" style={{ marginBottom: 0 }}>Bạn đã đạt cấp cao nhất của chương trình.</p>}</section> : null}
     {showFinalAssessment ? <section className="card" style={{ marginTop: 16 }} data-home-block="final"><div className="row between"><div><div className="eyebrow">Chặng cuối</div><h2>Bài kiểm tra cuối kỳ đã mở</h2><p className="muted">Cùng rubric bài đầu vào để thấy tiến bộ.</p></div><AppLink className="btn btn-primary" href={view.finalAssessment.href} navigate={actions.navigate}>{view.finalAssessment.label}</AppLink></div></section> : null}
     {celebration ? <LevelUpCelebration announcement={celebration} displayName={view.learner.displayName} onClose={async () => { if (celebration.announcementId) await actions.acknowledgeRewardAnnouncement?.(celebration.announcementId); setCelebration(null); }} /> : null}
+    {assessmentCelebration ? <AssessmentCelebration /> : null}
   </div>;
+}
+
+function AssessmentCelebration() {
+  const particles = Array.from({ length: 36 }, (_, index) => {
+    const burst = index % 3;
+    const angle = (index % 12) * 30;
+    return <i key={index} style={{ "--burst": burst, "--angle": `${angle}deg`, "--delay": `${(index % 6) * 70}ms` } as CSSProperties} />;
+  });
+  return <div className="assessment-celebration-fireworks" data-testid="assessment-celebration-fireworks" role="status" aria-label="Chúc mừng bạn đã hoàn thành bài kiểm tra">{particles}<span className="sr-only">Chúc mừng bạn đã hoàn thành bài kiểm tra.</span></div>;
 }
 
 function LevelUpCelebration({
@@ -157,29 +180,45 @@ function isFinalWeek(view: LearnerHomeView) {
 }
 
 function OnboardingHome({ view, actions }: { view: LearnerHomeView; actions: LearnerCallbacks }) {
+  const [hasOnboardDraft, setHasOnboardDraft] = useState(() => readOnboardDraftAvailable());
+  useEffect(() => {
+    const syncDraftState = () => setHasOnboardDraft(readOnboardDraftAvailable());
+    window.addEventListener("storage", syncDraftState);
+    return () => window.removeEventListener("storage", syncDraftState);
+  }, []);
   const stage = view.approvalPending ? 3 : view.placementDraft || (!view.onboardingRequired && view.learner.cefr === null) ? 2 : 1;
   const steps = [
-    ["Hồ sơ cá nhân", "Bài học lấy ví dụ theo công việc của bạn."],
-    ["Test đầu vào", "Xếp đúng mức CEFR để bài vừa sức."],
-    ["Vận hành duyệt mức", "Người thật xem lại gợi ý trước khi mở bài."]
+    ["Hồ sơ cá nhân", "Vì sao cần? Bài học sẽ sát với công việc và cách bạn muốn học."],
+    ["Test đầu vào", "Vì sao cần? Để chọn mức bài vừa sức, không quá khó hay quá dễ."],
+    ["Vận hành duyệt mức", "Vì sao cần? Người vận hành xem lại trước khi bài học được mở."]
   ] as const;
-  return <div className="app-learner-page"><PageTitle title={`Chào ${view.learner.displayName}!`} detail="Mình cần biết về bạn trước nhé!" /><section className="card setup"><h2>3 bước để bắt đầu học</h2>{steps.map(([title, text], index) => {
+  return <div className="app-learner-page"><PageTitle title={`Chào ${view.learner.displayName}!`} detail="Mình cần biết về bạn trước nhé!" /><section className="card setup onboarding-steps"><h2>3 bước để bắt đầu học</h2>{steps.map(([title, text], index) => {
     const step = index + 1;
     const done = stage > step;
     const current = stage === step;
     const badge = done ? "Đã xong" : current ? stage === 3 ? "Đang chờ duyệt" : "Đang ở bước này" : "Sắp tới";
     const detail = stage === 3 && step === 3
       ? "Bài đã gửi. Bạn không cần làm gì thêm; bài học tự mở ngay khi có mức."
-      : text;
+      : step === 2
+        ? "Vì sao cần? Để xếp đúng mức CEFR: bài quá dễ thì chán, quá khó thì nản. Không cần ôn trước."
+        : text;
     return <div className={`st ${current ? "cur" : done ? "done" : "todo"}`} key={title}>
       <span className="num">{done ? "✓" : step}</span>
       <div style={{ flex: 1, minWidth: 0 }}>
         <div className="row between" style={{ alignItems: "flex-start", gap: 8 }}><h3>{title}</h3><span className={`badge ${done ? "ok" : current ? "primary" : ""}`}>{badge}</span></div>
         <p>{detail}</p>
-        {current && step < 3 ? <AppLink className="btn btn-primary" href={step === 1 ? "/onboard" : "/test/placement"} navigate={actions.navigate}>{step === 1 ? "Điền hồ sơ (~2 phút)" : view.placementDraft ? "Tiếp tục bài test" : "Làm test đầu vào"}</AppLink> : null}
+        {step === 1 && done ? <AppLink className="btn btn-sm" href="/onboard" navigate={actions.navigate}>← Xem / sửa hồ sơ</AppLink> : current && step < 3 ? <><AppLink className="btn btn-primary" href={step === 1 ? "/onboard" : "/test/placement"} navigate={actions.navigate}>{step === 1 ? hasOnboardDraft ? "Tiếp tục phần đã lưu" : "Điền hồ sơ (~2 phút)" : view.placementDraft ? "Tiếp tục bài test" : "Bắt đầu test (tối đa 70 phút)"}</AppLink>{step === 2 && !view.placementDraft ? <div className="onboarding-test-note" role="note"><Clock3 size={16} aria-hidden="true" /><span><b>4 phần</b><span>Nghe · Đọc · Viết · Nói</span></span><span className="onboarding-test-note-separator" aria-hidden="true">·</span><span>Tai nghe + micro</span></div> : null}</> : null}
       </div>
     </div>;
   })}</section></div>;
+}
+
+function readOnboardDraftAvailable() {
+  try {
+    return Boolean(window.localStorage.getItem("e4s:learner-onboard-draft"));
+  } catch {
+    return false;
+  }
 }
 
 function Metric({ label, value, percent, color = "var(--olive)" }: { label: string; value: string; percent: number; color?: string }) {

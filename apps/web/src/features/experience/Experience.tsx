@@ -4,6 +4,7 @@ import { cancelExclusiveAudio, claimExclusiveAudio, isExclusiveAudioActive, rele
 
 type FeedbackTone = "click" | "success" | "error" | "warning" | "celebrate";
 type NoticeTone = "success" | "error" | "info";
+type FeedbackOptions = { force?: boolean };
 
 type Notice = { readonly id: number; readonly message: string; readonly tone: NoticeTone };
 
@@ -11,7 +12,7 @@ type Experience = {
   readonly effectsOn: boolean;
   readonly musicOn: boolean;
   readonly musicAllowed: boolean;
-  readonly play: (tone: FeedbackTone) => void;
+  readonly play: (tone: FeedbackTone, options?: FeedbackOptions) => void;
   readonly toggleEffects: () => void;
   readonly toggleMusic: () => void;
   readonly notify: (message: string, tone?: NoticeTone) => void;
@@ -83,7 +84,9 @@ export function ExperienceProvider({ children, musicAllowed = true }: { children
     const current = context();
     if (!current) return;
     const gain = current.createGain();
-    gain.gain.value = 0.026;
+    // Keep the compact controls unchanged; make the default feedback audible
+    // on ordinary laptop speakers without overriding the user's system volume.
+    gain.gain.value = 0.32;
     gain.connect(current.destination);
     audio.current.musicGain = gain;
     const release = claimExclusiveAudio("music", stopMusicPlayback, () => startMusic());
@@ -100,7 +103,7 @@ export function ExperienceProvider({ children, musicAllowed = true }: { children
       oscillator.type = "sine";
       oscillator.frequency.value = notes[beat % notes.length]!;
       envelope.gain.setValueAtTime(0.0001, now);
-      envelope.gain.exponentialRampToValueAtTime(0.38, now + 0.025);
+      envelope.gain.exponentialRampToValueAtTime(0.55, now + 0.025);
       envelope.gain.exponentialRampToValueAtTime(0.0001, now + 0.36);
       oscillator.connect(envelope).connect(gain);
       oscillator.start(now);
@@ -112,8 +115,8 @@ export function ExperienceProvider({ children, musicAllowed = true }: { children
     setMusicRunning(true);
   }, [context, musicAllowed, musicOn, stopMusicPlayback]);
 
-  const play = useCallback((tone: FeedbackTone) => {
-    if (!effectsOn) return;
+  const play = useCallback((tone: FeedbackTone, options?: FeedbackOptions) => {
+    if (!effectsOn && !options?.force) return;
     const current = context();
     if (!current) return;
     const now = current.currentTime;
@@ -131,7 +134,7 @@ export function ExperienceProvider({ children, musicAllowed = true }: { children
     sound.frequency.setValueAtTime(from, now);
     sound.frequency.exponentialRampToValueAtTime(to, now + duration);
     gain.gain.setValueAtTime(0.0001, now);
-    gain.gain.exponentialRampToValueAtTime(tone === "click" ? 0.045 : 0.1, now + 0.012);
+    gain.gain.exponentialRampToValueAtTime(tone === "click" ? 0.42 : 0.52, now + 0.012);
     gain.gain.exponentialRampToValueAtTime(0.0001, now + duration);
     sound.connect(gain).connect(current.destination);
     sound.start(now);
@@ -148,12 +151,53 @@ export function ExperienceProvider({ children, musicAllowed = true }: { children
 
   const speak = useCallback((text: string, language = "en-US", options?: LessonSpeechOptions) => {
     const onStatus = options?.onStatus;
+    if (!text.trim()) {
+      onStatus?.("ended" satisfies LessonSpeechStatus);
+      return;
+    }
+    if (options?.audioSrc) {
+      cancelExclusiveAudio("speech");
+      let audioElement: HTMLAudioElement;
+      try {
+        audioElement = new Audio(options.audioSrc);
+      } catch {
+        onStatus?.("error" satisfies LessonSpeechStatus);
+        return;
+      }
+      audioElement.preload = "auto";
+      const release = claimExclusiveAudio("speech", () => {
+        audioElement.pause();
+        audioElement.currentTime = 0;
+      }, () => startMusic());
+      if (!release) return;
+      let restored = false;
+      const restore = (status: LessonSpeechStatus) => {
+        if (restored) return;
+        restored = true;
+        releaseExclusiveAudio("speech");
+        onStatus?.(status);
+      };
+      audioElement.onplay = () => onStatus?.("started" satisfies LessonSpeechStatus);
+      audioElement.onended = () => restore("ended");
+      audioElement.onerror = () => restore("error");
+      try {
+        void audioElement.play().catch(() => restore("error"));
+      } catch {
+        restore("error");
+      }
+      return;
+    }
     if (!("speechSynthesis" in window) || typeof SpeechSynthesisUtterance === "undefined") {
       onStatus?.("unsupported" satisfies LessonSpeechStatus);
       return;
     }
-    if (!text.trim()) {
-      onStatus?.("ended" satisfies LessonSpeechStatus);
+    const requestedLanguage = language.toLowerCase();
+    const languagePrefix = requestedLanguage.split("-")[0];
+    const voices = window.speechSynthesis.getVoices();
+    const voice = voices.find((candidate) => candidate.lang.toLowerCase() === requestedLanguage)
+      ?? voices.find((candidate) => candidate.lang.toLowerCase().startsWith(`${languagePrefix}-`));
+    if (languagePrefix === "vi" && !voice) {
+      onStatus?.("no_voice" satisfies LessonSpeechStatus);
       return;
     }
     cancelExclusiveAudio("speech");
@@ -162,6 +206,7 @@ export function ExperienceProvider({ children, musicAllowed = true }: { children
     window.speechSynthesis.cancel();
     const speech = new SpeechSynthesisUtterance(text);
     speech.lang = language;
+    if (voice) speech.voice = voice;
     speech.rate = 0.9;
     speech.onstart = () => onStatus?.("started" satisfies LessonSpeechStatus);
     const restore = (status: LessonSpeechStatus) => {

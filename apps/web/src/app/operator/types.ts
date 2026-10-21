@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import type { ContentLessonDraftInput, LessonPartCode } from "@e4s/contracts";
+import type { AssessmentReviewLearnerView, ContentLessonDraftInput, LessonPartCode } from "@e4s/contracts";
 
 export type Cefr = "A1" | "A2" | "B1" | "B2" | "C1";
 export type AsyncState = "idle" | "loading" | "success" | "error";
@@ -37,6 +37,7 @@ export interface SectionScore {
 
 export interface PendingPlacement {
   id: string;
+  learnerId?: string;
   name: string;
   submittedAt: string;
   total?: number | undefined;
@@ -104,16 +105,22 @@ export interface TopicReport {
 export interface OperatorDashboardView {
   week: { current?: number; total?: number; topic?: string | null | undefined };
   aiConnected: boolean;
+  aiConfigured?: boolean;
+  aiProvider?: string | null;
   openAppeals: number;
   windowDays?: number;
   topicReports: TopicReport[];
   pending: PendingPlacement[];
+  pendingProfiles?: Record<string, AssessmentReviewLearnerView | null>;
+  expandedPendingProfiles?: Record<string, true>;
   levelRequests: LevelRequest[];
   ready: LevelSignalPerson[];
   weak: LevelSignalPerson[];
   inFlow: LevelSignalPerson[];
   approved: ApprovedLearner[];
   unassessed: UnassessedLearner[];
+  inProgress: UnassessedLearner[];
+  retry: UnassessedLearner[];
   deletionRequests?: ReactNode;
   trash?: ReactNode;
 }
@@ -131,6 +138,7 @@ export interface OperatorDashboardActions {
   onChangeLevel(id: string): void;
   onEditGoal(id: string): void;
   onViewProfile(id: string): void;
+  onTogglePendingProfile?: (id: string) => void;
   onSetLevelDirect(id: string): void;
   onOpenAppeals(): void;
   onOpenSettings(): void;

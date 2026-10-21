@@ -27,8 +27,9 @@ import { OperatorLessonSet, OperatorLessons } from "./Lessons.js";
 import { emptyLesson, LessonFormEditor } from "./LessonFormEditor.js";
 import { OperatorPrompts } from "./Prompts.js";
 import { OperatorReview, OperatorReviewAssessmentDetail } from "./Review.js";
+import type { ManualScoreInput } from "./AssessmentManualScore.js";
 import { OperatorWeeks } from "./Weeks.js";
-import { Badge, Banner } from "./primitives.js";
+import { Badge } from "./primitives.js";
 import { ModalProvider, useModal } from "../shared/ModalProvider.js";
 import { adaptAssessmentOverview, adaptLevelForms, adaptLessonMatrix, adaptLessonSet, adaptPrompts, adaptReview, adaptWeeks } from "./adapters.js";
 import type { Cefr, PromptKey, ReviewTab, WeekSuggestion } from "./types.js";
@@ -129,6 +130,34 @@ function Status({ children, tone = "loading" }: { children: ReactNode; tone?: "l
   return <section className={`card ${tone === "error" ? "danger" : ""}`} role={tone === "error" ? "alert" : "status"}><div className="row">{tone === "loading" && <span className="spinner" aria-hidden="true" />}<p>{children}</p></div></section>;
 }
 
+function cefrFromTotal(total: number | null): Cefr | undefined {
+  if (total === null) return undefined;
+  if (total >= 85) return "C1";
+  if (total >= 65) return "B2";
+  if (total >= 45) return "B1";
+  if (total >= 25) return "A2";
+  return "A1";
+}
+
+function placementDetail(detail: ContentReviewAssessmentDetailView, profile?: AssessmentReviewLearnerView) {
+  const criteria = [...detail.scores.map(score => score.criteria), ...(detail.sections ?? []).map(section => section.criteria)];
+  const criterion = (key: "rationale" | "monthlyGoal") => criteria.map(item => item[key]).find((value): value is string => typeof value === "string" && Boolean(value.trim())) ?? null;
+  const labels: Record<string, string> = { listening: "Nghe", reading: "Đọc", writing: "Viết", speaking: "Nói" };
+  const sectionScores = (detail.sections ?? detail.scores.map(score => ({ ...score, label: labels[score.section], maxScore: score.section === "reading" ? 40 : 20 }))).map(section => ({
+    label: section.label ?? labels[section.section] ?? section.section,
+    percent: section.score == null || !section.maxScore ? 0 : Math.round(section.score / section.maxScore * 1_000) / 10
+  }));
+  const total = detail.totalScore ?? detail.scores.reduce((sum, score) => sum + score.score, 0);
+  return {
+    total,
+    rawLevel: (detail.overallCefr ?? cefrFromTotal(total)) as Cefr,
+    sectionScores,
+    rationale: criterion("rationale"),
+    monthlyGoal: profile?.monthlyGoal ?? criterion("monthlyGoal"),
+    aiScored: detail.scores.some(score => score.source === "ai")
+  };
+}
+
 function useCapabilities(client: OperatorApiClient) {
   const [capabilities, setCapabilities] = useState<SystemCapabilitiesView | null>(null);
   useEffect(() => { if (typeof client.getSystemCapabilities !== "function") return; void client.getSystemCapabilities().then(setCapabilities).catch(() => setCapabilities(null)); }, [client]);
@@ -143,12 +172,44 @@ function DashboardRoute({ client, readOnly }: { client: OperatorApiClient; readO
   const [weekFrame, setWeekFrame] = useState<ContentWeekFrameView>();
   const [error, setError] = useState<string>();
   const [assessmentDialog, setAssessmentDialog] = useState<ContentReviewAssessmentDetailView>();
+  const [manualScoreBusy, setManualScoreBusy] = useState(false);
   const [dialog, setDialog] = useState<OperatorDashboardDialog>();
+  const [pendingProfiles, setPendingProfiles] = useState<Record<string, AssessmentReviewLearnerView | null>>({});
+  const [expandedPendingProfiles, setExpandedPendingProfiles] = useState<Record<string, true>>({});
+  const [pendingAssessmentDetails, setPendingAssessmentDetails] = useState<Record<string, ContentReviewAssessmentDetailView>>({});
   const [rescoreBusy, setRescoreBusy] = useState<string>();
-  const [actionError, setActionError] = useState<string>();
+  const [toast, setToast] = useState<{ tone: "success" | "danger" | "info"; message: string }>();
   const capabilities = useCapabilities(client);
+  const notify = (message: string, tone: "success" | "danger" | "info" = "success") => setToast({ tone, message });
+  useEffect(() => {
+    if (!toast) return;
+    const timer = window.setTimeout(() => setToast(undefined), 4200);
+    return () => window.clearTimeout(timer);
+  }, [toast]);
   const load = () => client.getAssessmentReviewOverview().then(setData).catch(reason => setError(message(reason)));
   useEffect(() => { void load(); }, [client]);
+  useEffect(() => {
+    if (!data) return;
+    let live = true;
+    const pending = data.pendingAssessments;
+    if (typeof client.getContentReviewAssessment === "function") {
+      void Promise.all(pending.map(async item => {
+        try { return [item.attemptId, await client.getContentReviewAssessment!(item.attemptId)] as const; }
+        catch { return null; }
+      })).then(entries => {
+        if (live) setPendingAssessmentDetails(Object.fromEntries(entries.filter((entry): entry is NonNullable<typeof entry> => entry !== null)));
+      });
+    }
+    if (typeof client.getAssessmentReviewLearner === "function") {
+      void Promise.all(pending.map(async item => {
+        try { return [item.attemptId, await client.getAssessmentReviewLearner!(item.learnerId)] as const; }
+        catch { return null; }
+      })).then(entries => {
+        if (live) setPendingProfiles(Object.fromEntries(entries.filter((entry): entry is NonNullable<typeof entry> => entry !== null)));
+      });
+    }
+    return () => { live = false; };
+  }, [client, data]);
   useEffect(() => {
     if (typeof client.getContentWeeks !== "function") return;
     void client.getContentWeeks().then(setWeekFrame).catch(() => setWeekFrame(undefined));
@@ -158,14 +219,17 @@ function DashboardRoute({ client, readOnly }: { client: OperatorApiClient; readO
   const currentWeek = weekFrame?.weeks.find(week => week.current);
   const view = adaptAssessmentOverview(data, {
     aiConnected: capabilities?.ai ?? false,
+    ...(capabilities?.aiConfigured === undefined ? {} : { aiConfigured: capabilities.aiConfigured }),
+    ...(capabilities?.aiProvider === undefined ? {} : { aiProvider: capabilities.aiProvider }),
     openAppeals: 0,
     rescoreBusy,
+    placementDetails: Object.fromEntries(Object.entries(pendingAssessmentDetails).map(([attemptId, detail]) => [attemptId, placementDetail(detail, pendingProfiles[attemptId] ?? undefined)])),
     ...(currentWeek ? { currentWeek: currentWeek.weekNumber, topic: currentWeek.topic } : {}),
     ...(weekFrame ? { pilotWeeks: weekFrame.pilot.weekCount } : {})
   });
   const targetFor = (attemptId: string) => view.levelRequests.find(item => item.id === attemptId)?.to;
   const learnerIdFor = (id: string) => data.pendingAssessments.find(item => item.attemptId === id)?.learnerId ?? id;
-  const refresh = (promise: Promise<unknown>) => void promise.then(() => { setActionError(undefined); return load(); }).catch(reason => setActionError(message(reason)));
+  const refresh = (promise: Promise<unknown>) => void promise.then(() => { notify("Đã cập nhật trạng thái."); return load(); }).catch(reason => notify(message(reason), "danger"));
   const missing = {
     ...(typeof client.decideAssessment !== "function" ? { approvePlacement: unavailable("endpoint duyệt mức đầu vào"), decideLevelRequest: unavailable("endpoint xử lý yêu cầu lên mức") } : {}),
     ...(typeof client.getContentReviewAssessment !== "function" ? { viewTest: unavailable("endpoint xem chi tiết bài test của học viên") } : {}),
@@ -182,10 +246,33 @@ function DashboardRoute({ client, readOnly }: { client: OperatorApiClient; readO
   };
   const showAttempt = (attemptId: string) => {
     if (typeof client.getContentReviewAssessment !== "function") return;
-    void client.getContentReviewAssessment(attemptId).then(detail => { setActionError(undefined); setAssessmentDialog(detail); }).catch(reason => setActionError(message(reason)));
+    void client.getContentReviewAssessment(attemptId).then(detail => { setAssessmentDialog(detail); }).catch(reason => notify(message(reason), "danger"));
   };
-  const showChallenge = (attemptId: string) => void client.getAssessmentReviewChallenge(attemptId).then(detail => { setActionError(undefined); setDialog({ kind: "challenge", detail, learnerName: view.levelRequests.find(item => item.id === attemptId)?.learnerName ?? "" }); }).catch(reason => setActionError(message(reason)));
-  const showProfile = (learnerId: string) => void client.getAssessmentReviewLearner(learnerId).then(detail => { setActionError(undefined); setDialog({ kind: "profile", detail }); }).catch(reason => setActionError(message(reason)));
+  const saveManualScore = (input: ManualScoreInput) => {
+    if (!assessmentDialog || typeof client.manualScoreAssessment !== "function" || readOnly) return;
+    setManualScoreBusy(true);
+    void client.manualScoreAssessment(assessmentDialog.attemptId, input)
+      .then(() => client.getContentReviewAssessment(assessmentDialog.attemptId))
+      .then(detail => { setAssessmentDialog(detail); notify("Đã lưu điểm chấm tay."); })
+      .catch(reason => notify(message(reason), "danger"))
+      .finally(() => setManualScoreBusy(false));
+  };
+  const showChallenge = (attemptId: string) => void client.getAssessmentReviewChallenge(attemptId).then(detail => { setDialog({ kind: "challenge", detail, learnerName: view.levelRequests.find(item => item.id === attemptId)?.learnerName ?? "" }); }).catch(reason => notify(message(reason), "danger"));
+  const showProfile = (learnerId: string) => void client.getAssessmentReviewLearner(learnerId).then(detail => { setDialog({ kind: "profile", detail }); }).catch(reason => notify(message(reason), "danger"));
+  const togglePendingProfile = (attemptId: string) => {
+    if (expandedPendingProfiles[attemptId]) {
+      setExpandedPendingProfiles(current => { const next = { ...current }; delete next[attemptId]; return next; });
+      return;
+    }
+    setExpandedPendingProfiles(current => ({ ...current, [attemptId]: true }));
+    if (Object.prototype.hasOwnProperty.call(pendingProfiles, attemptId)) return;
+    const pending = data.pendingAssessments.find(item => item.attemptId === attemptId);
+    if (!pending || typeof client.getAssessmentReviewLearner !== "function") return;
+    setPendingProfiles(current => ({ ...current, [attemptId]: null }));
+    void client.getAssessmentReviewLearner(pending.learnerId)
+      .then(detail => setPendingProfiles(current => ({ ...current, [attemptId]: detail })))
+      .catch(reason => { setPendingProfiles(current => { const next = { ...current }; delete next[attemptId]; return next; }); notify(message(reason), "danger"); });
+  };
   const changeLevel = async (learnerId: string, mode: "direct" | "scheduled" | "recommend_lower") => {
     if (readOnly) return;
     const ordered: CefrLevel[] = ["A1", "A2", "B1", "B2", "C1"];
@@ -218,11 +305,11 @@ function DashboardRoute({ client, readOnly }: { client: OperatorApiClient; readO
       ? crypto.randomUUID()
       : `${attemptId}:${Date.now()}`;
     void client.rescoreAssessment(attemptId, requestId)
-      .then(() => { setActionError(undefined); return load(); })
-      .catch(reason => setActionError(message(reason)))
+      .then(() => { notify("Đã chấm lại bài bằng AI."); return load(); })
+      .catch(reason => notify(message(reason), "danger"))
       .finally(() => setRescoreBusy(undefined));
   };
-  return <>{actionError && <Banner tone="danger"><b>Thao tác chưa hoàn tất:</b> {actionError}</Banner>}<OperatorDashboard view={view} readOnly={readOnly} unavailable={missing} actions={{
+  return <><OperatorDashboard view={{ ...view, pendingProfiles, expandedPendingProfiles }} readOnly={readOnly} unavailable={missing} actions={{
     onResolveTopicReport: id => { if (!readOnly) refresh(client.resolveTopicReport(id)); },
     onApprovePlacement: (id, cefr) => {
       if (readOnly || typeof client.decideAssessment !== "function") return;
@@ -230,21 +317,21 @@ function DashboardRoute({ client, readOnly }: { client: OperatorApiClient; readO
         .then(reason => {
           const trimmed = reason?.trim();
           if (!trimmed) {
-            setActionError("Lý do duyệt mức là bắt buộc; quyết định chưa được lưu.");
+            notify("Lý do duyệt mức là bắt buộc; quyết định chưa được lưu.", "danger");
             return;
           }
-          setActionError(undefined);
           refresh(client.decideAssessment(id, { status: "approved", approvedLevel: cefr, reason: trimmed }));
         });
     },
     onApproveLevelRequest: id => { const target = targetFor(id); if (!readOnly && target && typeof client.decideAssessment === "function") refresh(client.decideAssessment(id, { status: "approved", approvedLevel: target, reason: "Duyệt yêu cầu lên mức" })); },
     onRejectLevelRequest: id => { if (readOnly || typeof client.decideAssessment !== "function") return; void modal.prompt({ title: "Từ chối yêu cầu lên mức", message: "Học viên sẽ nhìn thấy nội dung này.", label: "Lý do từ chối", confirmLabel: "Từ chối", tone: "danger" }).then(reason => { if (reason?.trim()) refresh(client.decideAssessment(id, { status: "needs_retry", reason: reason.trim() })); }); },
     onViewTest: showAttempt, onRescore: rescore, onDeleteLearner: id => requestDeletion(learnerIdFor(id)), onViewChallenge: showChallenge,
-    onDemote: id => changeLevel(id, "recommend_lower"), onChangeLevel: id => changeLevel(id, "scheduled"), onEditGoal: editGoal, onViewProfile: showProfile, onSetLevelDirect: id => changeLevel(id, "direct"),
+    onDemote: id => changeLevel(id, "recommend_lower"), onChangeLevel: id => changeLevel(id, "scheduled"), onEditGoal: editGoal, onViewProfile: showProfile, onTogglePendingProfile: togglePendingProfile, onSetLevelDirect: id => changeLevel(id, "direct"),
     onOpenAppeals: () => navigate(paths.review, { state: { reviewTab: "appeals" } }), onOpenSettings: () => navigate("/settings"), onOpenWeeks: () => navigate(paths.weeks), onOpenLevelForms: () => navigate(paths.levelForms)
   }} />
-  {assessmentDialog && <OperatorReviewAssessmentDetail detail={assessmentDialog} onClose={() => setAssessmentDialog(undefined)} />}
+  {assessmentDialog && <OperatorReviewAssessmentDetail detail={assessmentDialog} onClose={() => setAssessmentDialog(undefined)} {...(typeof client.manualScoreAssessment === "function" && !readOnly && (assessmentDialog.status === "pending_review" || assessmentDialog.status === "submitted") ? { onSaveManualScore: saveManualScore } : {})} savingManualScore={manualScoreBusy} />}
   {dialog && <OperatorDashboardDialog dialog={dialog} onClose={() => setDialog(undefined)} />}
+  {toast && <div className={`operator-toast operator-toast-${toast.tone}`} role={toast.tone === "danger" ? "alert" : "status"} aria-live={toast.tone === "danger" ? "assertive" : "polite"}>{toast.message}</div>}
   </>;
 }
 
@@ -374,19 +461,39 @@ function WeeksRoute({ client, readOnly }: { client: OperatorApiClient; readOnly:
   const paths = useOperatorRoutePaths();
   const [data, setData] = useState<ContentWeekFrameView>();
   const [suggestions, setSuggestions] = useState<Record<number, WeekSuggestion>>({});
-  const [status, setStatus] = useState("");
+  const [toast, setToast] = useState<{ tone: "success" | "danger"; message: string }>();
+  const [generatingWeek, setGeneratingWeek] = useState<number | null>(null);
+  const [generationStatus, setGenerationStatus] = useState("");
   const [error, setError] = useState<string>();
+  const saveQueue = useRef<Promise<unknown>>(Promise.resolve());
   const capabilities = useCapabilities(client);
+  const notify = (message: string, tone: "success" | "danger" = "success") => setToast({ tone, message });
+  useEffect(() => {
+    if (!toast) return;
+    const timer = window.setTimeout(() => setToast(undefined), 4200);
+    return () => window.clearTimeout(timer);
+  }, [toast]);
   useEffect(() => { void client.getContentWeeks().then(setData).catch(reason => setError(message(reason))); }, [client]);
   if (error) return <Status tone="error">Không tải được khung chủ đề: {error}</Status>;
   if (!data) return <Status>Đang tải khung chủ đề…</Status>;
-  const inputs = (source = data) => source.weeks.map(week => ({ weekNumber: week.weekNumber, topic: week.topic, description: week.description, objectives: week.objectives, keyVocabHint: week.keyVocabHint }));
-  const suggest = (numbers: number[]) => { if (readOnly) return; numbers.forEach(number => setSuggestions(current => ({ ...current, [number]: { state: "loading" } }))); void client.suggestContentWeeks(numbers).then(result => { const next: Record<number, WeekSuggestion> = {}; result.weeks.forEach(week => { next[week.weekNumber] = { state: "options", levels: week.levels ?? [], options: week.options.map(option => ({ ...option, plan: option.plan ?? {} })) }; }); setSuggestions(current => ({ ...current, ...next })); setStatus("Đã tải 3 phương án chủ đề kèm kế hoạch CEFR × 5 ngày."); }).catch(reason => { const failure = message(reason); setSuggestions(current => ({ ...current, ...Object.fromEntries(numbers.map(number => [number, { state: "error", message: failure }])) })); setStatus(""); }); };
-  const save = (source = data) => { if (readOnly) return; void client.saveContentWeeks(inputs(source)).then(saved => { setData(saved); setStatus("Đã lưu khung chủ đề."); }).catch(reason => setError(message(reason))); };
-  const view = adaptWeeks(data, { aiConnected: capabilities?.ai ?? false, status, suggestions });
-  return <OperatorWeeks readOnly={readOnly} view={view} actions={{
-    onSuggestAll: () => suggest(data.weeks.filter(week => !week.topic.trim()).map(week => week.weekNumber).length ? data.weeks.filter(week => !week.topic.trim()).map(week => week.weekNumber) : data.weeks.map(week => week.weekNumber)),
-    onSuggestWeek: week => suggest([week]), onCloseSuggestion: week => setSuggestions(current => { const next = { ...current }; delete next[week]; return next; }), onReopenSuggestion: week => setSuggestions(current => {
+  const inputs = (source = data) => source.weeks.map(week => ({ weekNumber: week.weekNumber, topic: week.topic, description: week.description, objectives: week.objectives, keyVocabHint: week.keyVocabHint, ...(week.plan ? { plan: week.plan } : {}) }));
+  const suggest = (numbers: number[]) => { if (readOnly) return; numbers.forEach(number => setSuggestions(current => ({ ...current, [number]: { state: "loading" } }))); void client.suggestContentWeeks(numbers).then(result => { const next: Record<number, WeekSuggestion> = {}; result.weeks.forEach(week => { next[week.weekNumber] = { state: "options", levels: week.levels ?? [], options: week.options.map(option => ({ ...option, plan: option.plan ?? {} })) }; }); setSuggestions(current => ({ ...current, ...next })); notify("Đã tải 3 phương án chủ đề kèm kế hoạch CEFR × 5 ngày."); }).catch(reason => { setSuggestions(current => { const next = { ...current }; numbers.forEach(number => delete next[number]); return next; }); notify(message(reason), "danger"); }); };
+  const save = (source = data) => {
+    if (readOnly) return Promise.resolve(undefined);
+    const payload = inputs(source);
+    const request = saveQueue.current.catch(() => undefined).then(() => client.saveContentWeeks(payload));
+    saveQueue.current = request.then(() => undefined, () => undefined);
+    const completed = request.then(saved => {
+      notify("Đã lưu khung chủ đề.");
+      return saved;
+    });
+    void completed.catch(reason => notify(message(reason), "danger"));
+    return completed;
+  };
+  const view = adaptWeeks(data, { aiConnected: capabilities?.ai ?? false, status: generationStatus, suggestions });
+  return <><OperatorWeeks readOnly={readOnly} view={view} actions={{
+    onSuggestAll: () => { if (!generatingWeek) suggest(data.weeks.filter(week => !week.topic.trim()).map(week => week.weekNumber).length ? data.weeks.filter(week => !week.topic.trim()).map(week => week.weekNumber) : data.weeks.map(week => week.weekNumber)); },
+    onSuggestWeek: week => { if (!generatingWeek) suggest([week]); }, onCloseSuggestion: week => setSuggestions(current => { const next = { ...current }; delete next[week]; return next; }), onReopenSuggestion: week => setSuggestions(current => {
       const suggestion = current[week];
       if (suggestion?.state !== "confirmed") return current;
       return {
@@ -396,9 +503,38 @@ function WeeksRoute({ client, readOnly }: { client: OperatorApiClient; readOnly:
           : { state: "error", message: "Các phương án cũ không còn trong API response; bấm Gợi ý để tải lại." }
       };
     }),
-    onConfirmSuggestion: (weekNumber, index) => { if (readOnly) return; const suggestion = suggestions[weekNumber]; if (suggestion?.state !== "options") return; const option = suggestion.options[index]; if (!option) return; const updated = { ...data, weeks: data.weeks.map(week => week.weekNumber === weekNumber ? { ...week, topic: option.topic, description: option.description, objectives: option.objectives, keyVocabHint: option.keyVocabHint } : week) }; setData(updated); setSuggestions(current => ({ ...current, [weekNumber]: { state: "confirmed", topic: option.topic, levels: suggestion.levels, options: suggestion.options } })); save(updated); },
-    onChangeWeek: (weekNumber, patch) => { if (!readOnly) setData(current => current ? { ...current, weeks: current.weeks.map(week => week.weekNumber === weekNumber ? { ...week, ...patch } : week) } : current); }, onSave: () => save(), onOpenLessons: () => navigate(paths.lessons)
-  }} />;
+    onConfirmSuggestion: (weekNumber, index) => {
+      if (readOnly || generatingWeek) return;
+      const suggestion = suggestions[weekNumber];
+      if (suggestion?.state !== "options") return;
+      const option = suggestion.options[index];
+      if (!option) return;
+      const updated = { ...data, weeks: data.weeks.map(week => week.weekNumber === weekNumber ? { ...week, topic: option.topic, description: option.description, objectives: option.objectives, keyVocabHint: option.keyVocabHint, plan: option.plan } : week) };
+      const levels = suggestion.levels ?? [];
+      setData(updated);
+      setSuggestions(current => ({ ...current, [weekNumber]: { state: "confirmed", topic: option.topic, levels, options: suggestion.options } }));
+      setGeneratingWeek(weekNumber);
+      setGenerationStatus(`Đang lưu chủ đề tuần ${weekNumber} trước khi sinh bài…`);
+      void (async () => {
+        try {
+          await save(updated);
+          for (const [index, level] of levels.entries()) {
+            setGenerationStatus(`Đang sinh bộ 5 bài T2–T6 cho mức ${level} (${index + 1}/${levels.length})…`);
+            await client.generateContentLessonDraft(weekNumber, level);
+          }
+          setGenerationStatus(`✓ Đã sinh đủ ${levels.length * 5} bài theo thứ tự từng mức, không chạy song song.`);
+          notify(`Đã lưu chủ đề và sinh đủ ${levels.length * 5} bài T2–T6.`);
+          navigate(paths.lessons);
+        } catch (reason) {
+          setGenerationStatus(`✗ Sinh bài bị dừng: ${message(reason)} Các bộ đã hoàn tất vẫn được lưu.`);
+          notify(`Chủ đề đã lưu; sinh bài dừng ở phần lỗi: ${message(reason)}`, "danger");
+        } finally {
+          setGeneratingWeek(null);
+        }
+      })();
+    },
+    onChangeWeek: (weekNumber, patch) => { if (!readOnly) setData(current => current ? { ...current, weeks: current.weeks.map(week => week.weekNumber === weekNumber ? { ...week, ...patch } : week) } : current); }, onSave: () => { void save().catch(() => undefined); }, onOpenLessons: () => navigate(paths.lessons)
+  }} />{toast && <div className={`operator-toast operator-toast-${toast.tone}`} role={toast.tone === "danger" ? "alert" : "status"} aria-live={toast.tone === "danger" ? "assertive" : "polite"}>{toast.message}</div>}</>;
 }
 
 function LessonsRoute({ client, readOnly }: { client: OperatorApiClient; readOnly: boolean }) {
@@ -408,16 +544,23 @@ function LessonsRoute({ client, readOnly }: { client: OperatorApiClient; readOnl
   const [extraLevels, setExtraLevels] = useState<Cefr[]>([]);
   const [generating, setGenerating] = useState<{ week: number; cefr: Cefr; message?: string } | null>(null);
   const [error, setError] = useState<string>();
+  const [toast, setToast] = useState<{ tone: "danger"; message: string }>();
   const capabilities = useCapabilities(client);
+  const notify = (message: string) => setToast({ tone: "danger", message });
+  useEffect(() => {
+    if (!toast) return;
+    const timer = window.setTimeout(() => setToast(undefined), 4200);
+    return () => window.clearTimeout(timer);
+  }, [toast]);
   useEffect(() => { void client.getContentLessonMatrix().then(setData).catch(reason => setError(message(reason))); }, [client]);
   if (error) return <Status tone="error">Không tải được ma trận bài học: {error}</Status>;
   if (!data) return <Status>Đang tải ma trận bài học…</Status>;
   const open = (week: number, cefr: Cefr) => navigate(`${paths.lessons}/${week}/${cefr}`);
-  const produce = (week: number, cefr: Cefr, promise: Promise<ContentLessonSetVersionView>) => { setGenerating({ week, cefr, message: "Đang chuẩn bị bộ 5 bài…" }); void promise.then(() => open(week, cefr)).catch(reason => setError(message(reason))).finally(() => setGenerating(null)); };
+  const produce = (week: number, cefr: Cefr, promise: Promise<ContentLessonSetVersionView>) => { setGenerating({ week, cefr, message: "Đang chuẩn bị bộ 5 bài…" }); void promise.then(() => open(week, cefr)).catch(reason => notify(message(reason))).finally(() => setGenerating(null)); };
   const extended = { ...data, levels: [...data.levels, ...extraLevels.filter(level => !data.levels.some(item => item.cefr === level)).map(cefr => ({ cefr, learnerCount: 0 }))] };
-  return <OperatorLessons readOnly={readOnly} view={adaptLessonMatrix(extended, { aiConnected: capabilities?.ai ?? false, extraLevels: (["A1", "A2", "B1", "B2", "C1"] as Cefr[]).filter(level => !extended.levels.some(item => item.cefr === level)), generating })} actions={{
+  return <><OperatorLessons readOnly={readOnly} view={adaptLessonMatrix(extended, { aiConnected: capabilities?.ai ?? false, extraLevels: (["A1", "A2", "B1", "B2", "C1"] as Cefr[]).filter(level => !extended.levels.some(item => item.cefr === level)), generating })} actions={{
     onOpenSettings: () => navigate("/settings"), onAddLevel: cefr => { if (!readOnly) setExtraLevels(current => current.includes(cefr) ? current : [...current, cefr]); }, onGenerate: (week, cefr) => { if (!readOnly) produce(week, cefr, client.generateContentLessonDraft(week, cefr)); }, onCreateManual: (week, cefr) => { if (!readOnly) produce(week, cefr, client.saveContentLessonDraft(week, cefr, [])); }, onOpenSet: open
-  }} />;
+  }} />{toast && <div className="operator-toast operator-toast-danger" role="alert" aria-live="assertive">{toast.message}</div>}</>;
 }
 
 function LessonSetRoute({ client, readOnly, week, cefr }: { client: OperatorApiClient; readOnly: boolean; week: number; cefr: Cefr }) {
@@ -518,10 +661,24 @@ const operatorErrorMessages: Record<string, string> = {
   WEEK_SUGGESTION_FAILED: "Không thể tạo gợi ý tuần lúc này. Vui lòng kiểm tra kết nối AI rồi thử lại.",
   AI_UNAVAILABLE: "AI chưa được cấu hình trên máy chủ.",
   AI_PROMPT_NOT_READY: "Chưa có prompt AI đang hoạt động cho thao tác này.",
-  AI_OUTPUT_INVALID: "AI trả về nội dung không đúng định dạng. Vui lòng thử lại."
+  AI_OUTPUT_INVALID: "AI trả về nội dung không đúng định dạng.",
+  AI_INPUT_INVALID: "Dữ liệu gửi cho AI không hợp lệ.",
+  AI_PROMPT_NOT_FOUND: "Không tìm thấy prompt AI đang dùng.",
+  AI_PROVIDER_FAILED: "Nhà cung cấp AI không trả lời hoặc trả lỗi.",
+  AI_TIMEOUT: "AI xử lý quá thời gian cho phép.",
+  AI_LESSON_SET_INVALID: "AI trả về bộ bài chưa đủ 5 ngày hoặc sai cấu trúc.",
+  HTTP_429: "AI đang bị giới hạn số lượt gọi; hãy thử lại sau một chút.",
+  CONTENT_WEEK_NOT_FOUND: "Không tìm thấy tuần cần sinh bài."
 };
 
 function message(reason: unknown) {
   const raw = reason instanceof Error ? reason.message : String(reason);
-  return operatorErrorMessages[raw] ?? raw;
+  const label = operatorErrorMessages[raw] ?? raw;
+  const details = reason && typeof reason === "object" && "details" in reason ? (reason as { details?: unknown }).details : undefined;
+  const issues = details && typeof details === "object" && "issues" in details ? (details as { issues?: unknown }).issues : undefined;
+  if (Array.isArray(issues) && issues.length) {
+    const summary = issues.slice(0, 2).map(issue => typeof issue === "string" ? issue : issue && typeof issue === "object" && "message" in issue ? String((issue as { message: unknown }).message) : String(issue)).join("; ");
+    return `${label} Chi tiết: ${summary}`;
+  }
+  return label;
 }

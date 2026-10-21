@@ -2,11 +2,19 @@ import { AI_TASKS, createAiService, createGroqProvider } from "@e4s/ai";
 import { createMediaRepository } from "@e4s/database";
 import { createS3Storage, type ObjectStorage } from "@e4s/storage";
 import { Pool } from "pg";
+import { loadEnvFile } from "node:process";
 import { buildApi } from "./app.js";
+import { createOrganizationAiRunnerFactory } from "./modules/ai/runtime.js";
 import { createContentMediaService } from "./modules/media/index.js";
 import { createOpenverseProvider } from "./modules/media/providers/openverse.js";
 import { createWikimediaProvider } from "./modules/media/providers/wikimedia.js";
 import { createWikipediaProvider } from "./modules/media/providers/wikipedia.js";
+
+try {
+  loadEnvFile(new URL("../../../.env", import.meta.url));
+} catch {
+  // Environment variables supplied by the process remain the source of truth.
+}
 
 const databaseUrl = process.env.DATABASE_URL;
 if (!databaseUrl) throw new Error("DATABASE_URL is required");
@@ -21,6 +29,7 @@ const aiRunner = process.env.GROQ_API_KEY
       loadPrompt: async () => ""
     })
   : undefined;
+const aiRunnerFactory = createOrganizationAiRunnerFactory(pool, aiRunner);
 const storage = createStorageFromEnvironment();
 const mediaService = storage ? createProductionMediaService(storage) : undefined;
 const app = buildApi({
@@ -34,7 +43,8 @@ const app = buildApi({
   },
   ...(storage ? { storage } : {}),
   ...(mediaService ? { mediaService } : {}),
-  ...(aiRunner ? { aiRunner } : {})
+  ...(aiRunner ? { aiRunner } : {}),
+  aiRunnerFactory
 });
 const port = Number(process.env.PORT ?? 3001);
 await app.listen({ host: process.env.HOST ?? "127.0.0.1", port });

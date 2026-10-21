@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import "@testing-library/jest-dom/vitest";
 import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { userEvent } from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { AssessmentRuntimeView, AssessmentSectionCode } from "@e4s/contracts";
 import type { AssessmentView, LearnerCallbacks } from "../src/app/learner/contracts.js";
@@ -28,10 +29,10 @@ const runtime = (overrides: Partial<AssessmentRuntimeView> = {}): AssessmentRunt
 const baseView = (runtimeState = runtime()): AssessmentView => ({
   definition: {
     key: "placement-a", kind: "placement", title: "Workplace English CEFR Placement Test", version: 1,
-    totalMinutes: 75, totalScore: 100,
+    totalMinutes: 70, totalScore: 100,
     sections: [
       { code: "listening", title: "Nghe", durationMinutes: 15, maxScore: 20, instructions: [], groups: [{ key: "LA", title: "Part A", instruction: "Nghe tối đa hai lần.", maxPlays: 2, stimulus: { type: "audio_script", lines: [{ speaker: "Manager", text: "Hello." }] }, tasks: [] }] },
-      { code: "reading", title: "Đọc", durationMinutes: 25, maxScore: 40, instructions: [], groups: [] },
+      { code: "reading", title: "Đọc", durationMinutes: 20, maxScore: 40, instructions: [], groups: [] },
       { code: "writing", title: "Viết", durationMinutes: 20, maxScore: 20, instructions: [], groups: [] },
       { code: "speaking", title: "Nói", durationMinutes: 15, maxScore: 20, instructions: [], groups: [] }
     ]
@@ -65,7 +66,12 @@ describe("app assessment runtime", () => {
   it("shows the server-owned timer and five-minute warning state", () => {
     render(<LearnerAssessment view={baseView(runtime({ remainingSeconds: 300 }))} actions={callbacks()} />);
     expect(screen.getByRole("timer")).toHaveTextContent("05:00");
-    expect(screen.getByText(/còn 5 phút/i)).toBeInTheDocument();
+    const warning = screen.getByText(/còn 5 phút/i).closest(".assessment-toast");
+    expect(warning).toBeInTheDocument();
+    expect(warning).toHaveClass("assessment-toast-warn");
+    expect(warning).toHaveAttribute("role", "status");
+    expect(warning).toHaveAttribute("aria-live", "polite");
+    expect(document.querySelector(".test-page > .banner.warn")).not.toBeInTheDocument();
   });
 
   it("shows the one-minute warning from the server runtime", () => {
@@ -84,10 +90,36 @@ describe("app assessment runtime", () => {
     expect(recordViolation).toHaveBeenCalledWith(baseView().attempt!.id, expect.objectContaining({ reason: "visibility_hidden" }));
     const dialog = await screen.findByRole("dialog");
     expect(dialog).toHaveTextContent(/cảnh báo 1\/3/i);
+    expect(dialog).toHaveTextContent(/thời gian vẫn đang chạy/i);
+    expect(dialog.querySelectorAll("p")).toHaveLength(2);
+    expect(dialog).toHaveTextContent(/bài test vẫn tiếp tục/i);
+    expect(dialog).not.toHaveTextContent(/còn 2 lần cảnh báo/i);
     expect(dialog).toHaveFocus();
     expect(screen.getByRole("button", { name: /đã hiểu, tiếp tục/i })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /đã hiểu, tiếp tục/i })).not.toHaveClass("btn-sm");
     fireEvent.click(screen.getByRole("button", { name: /đã hiểu, tiếp tục/i }));
     expect(screen.getByRole("button", { name: /nghe \(còn 2 lần\)/i })).toHaveFocus();
+  });
+
+  it("keeps listening audio playable without rendering a decorative waveform", () => {
+    render(<LearnerAssessment view={baseView()} actions={callbacks()} />);
+
+    expect(screen.getByRole("button", { name: /nghe \(còn 2 lần\)/i })).toBeInTheDocument();
+    expect(document.querySelector(".assessment-audio-wave")).not.toBeInTheDocument();
+  });
+
+  it("requires confirmation before using the final listening play", async () => {
+    const user = userEvent.setup();
+    const recordAudioPlay = vi.fn(async () => ({ playCount: 1, remaining: 1 }));
+    render(<LearnerAssessment view={baseView()} actions={callbacks({ recordAssessmentAudioPlay: recordAudioPlay })} />);
+
+    await user.click(screen.getByRole("button", { name: /nghe \(còn 2 lần\)/i }));
+    expect(recordAudioPlay).toHaveBeenCalledTimes(1);
+    await user.click(screen.getByRole("button", { name: /nghe \(còn 1 lần\)/i }));
+    expect(screen.getByRole("dialog", { name: "Nghe lần cuối?" })).toBeInTheDocument();
+    expect(recordAudioPlay).toHaveBeenCalledTimes(1);
+    await user.click(screen.getByRole("button", { name: "Nghe lần cuối" }));
+    expect(recordAudioPlay).toHaveBeenCalledTimes(2);
   });
 
   it("shows the auto-submit countdown when the server reports the violation limit crossed", async () => {
@@ -108,6 +140,20 @@ describe("app assessment runtime", () => {
     render(<LearnerAssessment view={speaking} actions={callbacks()} />);
     expect(screen.getByText(/trình duyệt này không ghi âm được/i)).toBeInTheDocument();
     expect(screen.getByLabelText(/tải file ghi âm/i)).toBeInTheDocument();
+  });
+
+  it("keeps speaking controls and file status on separate rows", () => {
+    const speaking = baseView(runtime({ currentSection: "speaking" }));
+    speaking.screenState = "speaking";
+    speaking.attempt!.currentSection = "speaking";
+    speaking.attempt!.sectionStatuses = { listening: "completed", reading: "completed", writing: "completed", speaking: "in_progress" };
+    speaking.definition.sections[3]!.groups = [{ key: "S", title: "Speaking", instruction: "Nộp bằng chứng nói.", tasks: [{ key: "S1", prompt: "Introduce yourself.", responseType: "speaking_evidence", maxScore: 20 }] }];
+    const { container } = render(<LearnerAssessment view={speaking} actions={callbacks()} />);
+
+    const controls = container.querySelector(".speaking-evidence-controls");
+    expect(controls?.querySelector(".speaking-evidence-actions")).toBeInTheDocument();
+    expect(controls?.querySelector(".speaking-evidence-status")).toBeInTheDocument();
+    expect(controls?.querySelector(".speaking-evidence-actions")?.parentElement?.querySelector(".speaking-evidence-status")).toBeInTheDocument();
   });
 
   it("uploads speaking evidence through the existing artifact callback and saves its evidence key", async () => {

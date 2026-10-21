@@ -6,7 +6,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { LearnerHome } from "./Home.js";
 import type { LearnerHomeView, LearnerCallbacks } from "./contracts.js";
 
-afterEach(() => cleanup());
+afterEach(() => { cleanup(); window.localStorage.clear(); });
 
 const actions = { navigate: vi.fn() } as unknown as LearnerCallbacks;
 
@@ -63,6 +63,16 @@ function makeView(overrides: Partial<LearnerHomeView> = {}) {
 }
 
 describe("learner Home parity", () => {
+  it("shows a short fireworks celebration after a completed assessment", () => {
+    window.sessionStorage.setItem("e4s:assessment-complete-celebration", "1");
+    render(<LearnerHome view={makeView()} actions={actions} />);
+
+    const fireworks = screen.getByTestId("assessment-celebration-fireworks");
+    expect(fireworks).toBeInTheDocument();
+    expect(fireworks).toHaveAttribute("aria-label", "Chúc mừng bạn đã hoàn thành bài kiểm tra");
+    expect(window.sessionStorage.getItem("e4s:assessment-complete-celebration")).toBeNull();
+  });
+
   it("traps focus and closes the level-up celebration with Escape", async () => {
     const user = userEvent.setup();
     const acknowledgeRewardAnnouncement = vi.fn();
@@ -170,6 +180,14 @@ describe("learner Home parity", () => {
     expect(within(setup!).getByText(/bạn không cần làm gì thêm/i)).toBeInTheDocument();
     expect(within(setup!).queryByRole("link", { name: /test đầu vào/i })).not.toBeInTheDocument();
     expect(within(setup!).getAllByText("Đã xong")).toHaveLength(2);
+  });
+
+  it("offers to continue a saved onboarding draft", () => {
+    window.localStorage.setItem("e4s:learner-onboard-draft", JSON.stringify({ fullName: "Học viên Demo" }));
+    render(<LearnerHome view={makeView({ onboardingRequired: true, learner: { displayName: "Học viên Demo", cefr: null } })} actions={actions} />);
+
+    expect(screen.getByRole("link", { name: "Tiếp tục phần đã lưu" })).toHaveAttribute("href", "/onboard");
+    expect(screen.queryByRole("link", { name: /Điền hồ sơ/ })).not.toBeInTheDocument();
   });
 
   it("exposes the next action for an in-progress level-up lifecycle", () => {

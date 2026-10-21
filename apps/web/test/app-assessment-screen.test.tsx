@@ -63,11 +63,11 @@ function view(overrides: Partial<AssessmentView> = {}): AssessmentView {
       kind: "placement",
       title: "Workplace English CEFR Placement Test",
       version: 1,
-      totalMinutes: 75,
+      totalMinutes: 70,
       totalScore: 100,
       sections: [
         { code: "listening", title: "Nghe", durationMinutes: 15, maxScore: 20, instructions: [], groups: [] },
-        { code: "reading", title: "Đọc, Ngữ pháp & Từ vựng", durationMinutes: 25, maxScore: 40, instructions: [], groups: [] },
+        { code: "reading", title: "Đọc, Ngữ pháp & Từ vựng", durationMinutes: 20, maxScore: 40, instructions: [], groups: [] },
         { code: "writing", title: "Viết", durationMinutes: 20, maxScore: 20, instructions: [], groups: [] },
         { code: "speaking", title: "Nói", durationMinutes: 15, maxScore: 20, instructions: [], groups: [] }
       ]
@@ -107,7 +107,11 @@ describe("app assessment screen affordances", () => {
 
     render(<LearnerAssessment view={active} actions={actions()} />);
 
-    expect(screen.getByRole("progressbar", { name: "Tiến độ bài thi" })).toHaveAttribute("aria-valuenow", "2");
+    const progress = screen.getByRole("progressbar", { name: "Tiến độ bài thi" });
+    expect(progress).toHaveAttribute("aria-valuenow", "2");
+    expect(progress.querySelectorAll("i.is-complete")).toHaveLength(1);
+    expect(progress.querySelectorAll("i.is-active")).toHaveLength(1);
+    expect(progress.querySelectorAll("i.is-upcoming")).toHaveLength(2);
     expect(screen.getByRole("group", { name: /choose the best answer/i })).toBeInTheDocument();
     expect(screen.getByRole("radio", { name: "Answer A" })).toBeInTheDocument();
     expect(screen.getByRole("textbox", { name: /explain your answer/i })).toHaveAttribute("aria-describedby", "assessment-task-R1-Q2-hint");
@@ -121,6 +125,7 @@ describe("app assessment screen affordances", () => {
 
     const button = screen.getByRole("button", { name: /bắt đầu phần nghe/i });
     fireEvent.click(button);
+    fireEvent.click(screen.getByRole("button", { name: "Tôi đã sẵn sàng, bắt đầu" }));
     expect(button).toBeDisabled();
     expect(button).toHaveAttribute("aria-busy", "true");
 

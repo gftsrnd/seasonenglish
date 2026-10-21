@@ -43,6 +43,19 @@ describe("AI service", () => {
     await expect(service.runTask("coach_dialogue", coachInput())).rejects.toMatchObject({ code: "AI_OUTPUT_INVALID" });
   });
 
+  it("retries a schema-invalid model response once before accepting a valid retry", async () => {
+    const complete = vi.fn()
+      .mockResolvedValueOnce({ output: { reply: "Missing scores" }, usage: {} })
+      .mockResolvedValueOnce({ output: validCoachOutput, usage: {} });
+    const service = createAiService({ registry: AI_TASKS, provider: fixtureProvider(complete), loadPrompt: async () => "Coach safely.", maxAttempts: 2 });
+
+    await expect(service.runTask("coach_dialogue", coachInput())).resolves.toMatchObject({
+      output: validCoachOutput,
+      metadata: { attempts: 2 }
+    });
+    expect(complete).toHaveBeenCalledTimes(2);
+  });
+
   it("aborts a provider call at the timeout boundary", async () => {
     const provider = fixtureProvider(vi.fn(async ({ signal }: { signal: AbortSignal }) => new Promise((_resolve, reject) => {
       signal.addEventListener("abort", () => reject(new DOMException("aborted", "AbortError")), { once: true });

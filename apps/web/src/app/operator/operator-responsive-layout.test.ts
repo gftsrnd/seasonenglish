@@ -27,6 +27,10 @@ describe("Operator responsive layout guardrails", () => {
     expect(appCss).toMatch(/\.app-operator\[aria-label="Duyệt trình độ"\] > \.section:first-of-type > \.card > \.row:last-child > \.btn-danger\s*\{[\s\S]*?grid-column:\s*2[\s\S]*?width:\s*auto/);
   });
 
+  it("keeps approved learner actions on one desktop row", () => {
+    expect(appCss).toMatch(/\.app-operator \.operator-action-table td\[data-label="Thao tác"\] > \.row\s*\{[^}]*display:\s*flex[^}]*flex-wrap:\s*nowrap/);
+  });
+
   it("gives prompt headings their own line before the reset action", () => {
     expect(appCss).toMatch(/\.app-operator\[aria-label="Prompt"\] > \.card > \.row\.between\s*\{[^}]*align-items:\s*center[^}]*gap:\s*8px/);
     expect(appCss).toMatch(/\.app-operator\[aria-label="Prompt"\] > \.card > \.row\.between > h3\s*\{[^}]*flex:\s*0 1 auto[^}]*margin:\s*0 0 8px/);

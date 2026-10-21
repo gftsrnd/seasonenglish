@@ -40,7 +40,12 @@ export function registerIdentityRoutes(app: FastifyInstance, options: IdentityRo
     if (!parsed.success) return reply.code(400).send({ code: "INVALID_LOGIN_INPUT" });
 
     const account = await repositories.identity.findCredentialByEmail(parsed.data.email);
-    if (!account || !(await verifyCredential(parsed.data.password, account.credentialHash))) {
+    if (!account) {
+      const deletedAccount = await repositories.identity.findUserByEmail(parsed.data.email);
+      if (deletedAccount?.status === "deleted") return reply.code(403).send({ code: "ACCOUNT_DELETED" });
+      return reply.code(401).send({ code: "INVALID_CREDENTIALS" });
+    }
+    if (!(await verifyCredential(parsed.data.password, account.credentialHash))) {
       return reply.code(401).send({ code: "INVALID_CREDENTIALS" });
     }
     if (!roleMatchesAudience(account.role, audience)) {
@@ -78,7 +83,9 @@ export function registerIdentityRoutes(app: FastifyInstance, options: IdentityRo
       reply.code(201);
       return createSession(reply, repositories, account, options.secureCookies, sessionTtlMs);
     } catch (error) {
-      if (error instanceof Error && error.message === "LEARNER_REGISTRATION_EMAIL_EXISTS") return reply.code(409).send({ code: error.message });
+      if (error instanceof Error && ["LEARNER_REGISTRATION_EMAIL_EXISTS", "LEARNER_REGISTRATION_EMAIL_DELETED"].includes(error.message)) {
+        return reply.code(409).send({ code: error.message });
+      }
       if (error instanceof Error && error.message === "LEARNER_REGISTRATION_UNAVAILABLE") return reply.code(503).send({ code: error.message });
       throw error;
     }

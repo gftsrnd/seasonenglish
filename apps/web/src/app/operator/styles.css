@@ -46,6 +46,11 @@
   line-height: 1.45;
 }
 
+.app-operator .operator-approved-panel > h3 {
+  margin: 0 0 14px;
+  line-height: 1.35;
+}
+
 .app-operator > .banner + .banner,
 .app-operator > .banner + .card,
 .app-operator > .banner + .empty,
@@ -188,6 +193,33 @@
   flex: 0 0 auto;
 }
 
+.app-operator .operator-week-suggestion-option {
+  margin-top: 12px;
+  padding: 14px 16px;
+}
+
+.app-operator .operator-week-suggestion-copy {
+  min-width: 0;
+  line-height: 1.45;
+}
+
+.app-operator .operator-week-suggestion-copy > * {
+  display: block;
+}
+
+.app-operator .operator-week-suggestion-copy > * + * {
+  margin-top: 6px;
+}
+
+.app-operator .operator-week-description-field {
+  gap: 9px;
+  margin-top: 8px;
+}
+
+.app-operator .operator-week-description-field > span {
+  line-height: 1.4;
+}
+
 /* Operator dialogs use a local wrapper instead of the shared #modal mount. */
 .operator-modal-scope {
   position: fixed;
@@ -242,8 +274,16 @@
 }
 
 .operator-modal-scope .operator-lesson-editor {
+  width: min(980px, calc(100vw - 32px));
+  max-width: 100%;
+  box-sizing: border-box;
   max-height: 92vh;
   overflow: auto;
+}
+
+.operator-modal-scope .operator-lesson-editor > * {
+  min-width: 0;
+  max-width: 100%;
 }
 
 .operator-modal-scope .operator-editor-section {
@@ -271,74 +311,103 @@
 .operator-modal-scope .operator-lesson-editor select,
 .operator-modal-scope .operator-lesson-editor textarea {
   min-width: 0;
+  width: 100%;
+  max-width: 100%;
+  box-sizing: border-box;
 }
 
 .operator-modal-scope .operator-vocabulary-grid { display: grid; gap: 6px; margin: 6px 0; }
+.operator-modal-scope .operator-vocabulary-grid .grid.cols-4 { grid-template-columns: repeat(4, minmax(0, 1fr)); }
 .operator-modal-scope .operator-editor-actions { justify-content: flex-end; margin-top: 10px; }
 .operator-modal-scope .operator-editor-actions button { white-space: nowrap; }
 .app-operator .operator-lesson-preview {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-  padding: 4px 0 2px;
+  display: block;
+  padding: 0;
+  border: 0;
+  background: transparent;
 }
 
-.app-operator .operator-lesson-preview > section {
-  margin: 0;
-  padding: 14px 16px;
+.app-operator .operator-lesson-preview .lesson-surface {
+  display: grid;
+  gap: 16px;
+  min-width: 0;
+  padding: 16px;
   border: 1px solid var(--line);
-  border-left: 4px solid var(--primary);
   border-radius: 14px;
-  background: var(--surface-2);
-  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .35);
-}
-
-.app-operator .operator-lesson-preview > section:nth-child(3n + 2) {
-  border-left-color: var(--secondary);
-  background: var(--surface-3);
-}
-
-.app-operator .operator-lesson-preview > section:nth-child(3n + 3) {
-  border-left-color: var(--primary-line);
   background: var(--surface);
 }
 
-.app-operator .operator-lesson-preview__heading {
+.app-operator .operator-lesson-preview .lesson-skill-map {
   display: flex;
-  align-items: center;
-  gap: 10px;
-  margin-bottom: 12px;
-  padding-bottom: 9px;
-  border-bottom: 1px solid var(--line);
+  flex-wrap: wrap;
+  gap: 5px;
+  margin-bottom: 10px;
 }
 
-.app-operator .operator-lesson-preview__heading h4 {
-  margin: 0;
-  font-size: .96rem;
-  line-height: 1.35;
+.app-operator .operator-lesson-preview .lesson-skill-map span {
+  border-radius: 7px;
+  background: var(--primary-soft);
+  box-shadow: inset 0 0 0 1px var(--primary-line);
+  padding: 3px 8px;
+  font-size: .72rem;
+  font-weight: 500;
 }
 
-.app-operator .operator-lesson-preview__number {
-  display: inline-grid;
-  flex: 0 0 30px;
-  width: 30px;
-  height: 30px;
-  place-items: center;
+.app-operator .operator-lesson-preview .lesson-skill-map span[data-kind="study"] {
+  background: var(--ok-tint);
+  box-shadow: inset 0 0 0 1px var(--ok-line);
+}
+
+.app-operator .operator-lesson-preview .ltabs {
+  display: flex;
+  width: 100%;
+  margin-bottom: 0;
   border-radius: 9px;
+  background: var(--surface-2);
+  padding: 3px;
+}
+
+.app-operator .operator-lesson-preview .ltabs button {
+  flex: 0 1 150px;
+  min-height: 44px;
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+  color: var(--muted);
+}
+
+.app-operator .operator-lesson-preview .ltabs button.active {
   background: var(--primary);
   color: var(--primary-ink);
-  font-size: .72rem;
-  font-weight: 700;
 }
 
-.app-operator .operator-lesson-preview__section:nth-child(3n + 2) .operator-lesson-preview__number {
-  background: var(--secondary);
+.app-operator .operator-lesson-preview .lesson-parts {
+  display: grid;
+  gap: 12px;
 }
 
-.app-operator .operator-lesson-preview__section:nth-child(3n + 3) .operator-lesson-preview__number {
-  background: var(--primary-line);
+.app-operator .operator-lesson-preview > .lesson-parts > section {
+  margin: 0;
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-radius: 11px;
+  background: var(--surface);
+  box-shadow: none;
 }
 
+.app-operator .operator-lesson-preview .lesson-part--objective { background: var(--primary-soft); border-color: var(--primary-line); }
+.app-operator .operator-lesson-preview .lesson-part--instruction { background: var(--warn-soft); border-color: var(--warn-line); }
+.app-operator .operator-lesson-preview .lesson-part--grammar,
+.app-operator .operator-lesson-preview .lesson-part--pronunciation { background: var(--surface-3); }
+.app-operator .operator-lesson-preview .lesson-part h2 { margin: 0; font-size: .82rem; letter-spacing: .08em; text-transform: uppercase; }
+.app-operator .operator-lesson-preview .lesson-part > p:last-child { margin-bottom: 0; }
+.app-operator .operator-lesson-preview .lesson-part .card.flat { margin-top: 6px; border-radius: 10px; background: var(--surface); padding: 12px; }
+.app-operator .operator-lesson-preview .lesson-part ul { margin: 8px 0 0; padding-left: 20px; }
+.app-operator .operator-lesson-preview .vocabulary-list { display: grid; gap: 8px; }
+.app-operator .operator-lesson-preview .word-card { display: grid; grid-template-columns: minmax(0, 1fr); gap: 4px; border-radius: 10px; background: var(--surface); padding: 13px 14px; }
+.app-operator .operator-lesson-preview .word-card h3 { margin: 0; font-size: 1.05rem; }
+.app-operator .operator-lesson-preview .word-card p { margin: 0; }
+.app-operator .operator-lesson-preview .word-card ul { margin: 4px 0 0; }
 .app-operator .operator-lesson-preview p:last-child,
 .app-operator .operator-lesson-preview ul:last-child,
 .app-operator .operator-lesson-preview ol:last-child {
@@ -457,6 +526,19 @@
   border-color: transparent;
   background: var(--primary-hover);
   box-shadow: 0 2px 7px rgba(30, 30, 30, .12);
+}
+
+/* The topic-frame save action is the primary prototype action, including in read-only preview. */
+.app-operator .weeks-save-button {
+  border-color: transparent !important;
+  background: #ef9634 !important;
+  color: #1e1e1e !important;
+  box-shadow: none !important;
+}
+
+.app-operator .weeks-save-button:hover:not(:disabled) {
+  border-color: transparent !important;
+  background: #df8530 !important;
 }
 
 .app-operator .btn-danger,
@@ -839,6 +921,13 @@
 .app-operator[aria-label="Prompt"] .btn-sm.btn-primary,
 .app-operator[aria-label="Đề thi lên mức"] .btn-sm.btn-primary {
   background: var(--primary);
+  box-shadow: none;
+}
+
+.operator-detail-modal button.btn-sm.btn-primary {
+  border-color: transparent;
+  background: var(--primary);
+  color: var(--primary-ink);
   box-shadow: none;
 }
 
@@ -1231,6 +1320,11 @@
   line-height: 1.45;
 }
 
+.app-operator .operator-action-table td[data-label="Điểm đầu vào"],
+.app-operator .operator-action-table td[data-label="Mục tiêu tháng"] {
+  vertical-align: middle;
+}
+
 .app-operator .operator-action-table td[data-label="Mức"] .badge {
   display: inline-flex;
   max-width: 100%;
@@ -1240,19 +1334,17 @@
 }
 
 .app-operator .operator-action-table td[data-label="Thao tác"] > .row {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  align-content: flex-start;
+  display: flex;
   align-items: stretch;
+  flex-wrap: nowrap;
   gap: 8px;
-  row-gap: 8px;
 }
 
 .app-operator .operator-action-table td[data-label="Thao tác"] > .row > .btn,
 .app-operator .operator-action-table td[data-label="Thao tác"] > .row > button {
-  width: 100%;
+  flex: 1 1 0;
   min-width: 0;
-  max-width: 100%;
+  white-space: nowrap;
 }
 
 /* Shared prompt dialogs are rendered outside the Operator page root. Scope
@@ -1397,6 +1489,41 @@ body:has(.app-operator) #modal > .dialog > .row {
   overflow-wrap: anywhere;
 }
 
+.app-operator button.operator-profile-disclosure {
+  display: block;
+  width: 100%;
+  min-height: 0;
+  margin-top: 8px;
+  padding: 2px 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+  color: var(--text);
+  text-align: left;
+  font: inherit;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.app-operator button.operator-profile-disclosure:hover:not(:disabled),
+.app-operator button.operator-profile-disclosure:active:not(:disabled) {
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+  transform: none;
+}
+
+.operator-inline-profile {
+  margin-top: 8px;
+  padding: 16px 18px;
+  background: var(--surface-3);
+}
+
+.operator-inline-profile .operator-profile-rows {
+  margin-top: 8px;
+}
+
 .app-operator[aria-label="Prompt"] > .card > .row.between > h3 {
   flex: 0 1 auto;
   min-width: 0;
@@ -1492,6 +1619,48 @@ body:has(.app-operator) #modal > .dialog > .row {
 
 .app-operator > .section {
   margin-top: 22px;
+}
+
+.app-operator[aria-label="Duyệt trình độ"] .btn-danger {
+  border-color: var(--danger-line);
+  background: var(--danger-soft);
+  color: var(--danger);
+}
+
+.app-operator[aria-label="Duyệt trình độ"] .btn-primary {
+  border-color: transparent;
+  background: var(--primary);
+  color: var(--primary-ink);
+}
+
+.app-operator .operator-lesson-cell__action .btn-primary,
+.app-operator .operator-lesson-cell__action .btn-primary:disabled {
+  border-color: transparent;
+  background: #ef9634;
+  color: #1e1e1e;
+  opacity: 1;
+}
+
+.app-operator .operator-lesson-cell__action .btn-primary:hover:not(:disabled) {
+  background: #df8530;
+}
+
+/* Dashboard sections follow Manager's scan pattern: the heading belongs to
+   the large white surface instead of floating above separate cards. */
+.app-operator[aria-label="Duyệt trình độ"] > .section {
+  padding: 18px;
+  background: var(--surface, #fff);
+  border: 1px solid var(--border, #e6e0d8);
+  border-radius: 18px;
+}
+
+.app-operator[aria-label="Duyệt trình độ"] > .section > h3 {
+  margin-top: 0;
+  color: var(--text, #1f2933);
+}
+
+.app-operator[aria-label="Duyệt trình độ"] > .section > .card:first-of-type {
+  margin-top: 0;
 }
 
 .app-operator .grid.cols-2 {
@@ -1754,6 +1923,126 @@ body:has(.app-operator) #modal > .dialog > .row {
   align-items: center;
 }
 
+.operator-toast {
+  position: fixed;
+  left: 50%;
+  bottom: 24px;
+  transform: translateX(-50%);
+  z-index: 120;
+  width: min(420px, calc(100vw - 36px));
+  padding: 12px 16px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--surface);
+  color: var(--text);
+  box-shadow: 0 12px 28px rgb(30 30 30 / .16);
+  line-height: 1.45;
+  animation: operator-toast-in .18s ease-out;
+}
+
+.operator-toast-success { border-color: var(--ok-line, #bfd9bb); background: var(--ok-tint, #edf7eb); }
+.operator-toast-danger { border-color: var(--danger-line, #e9b7ae); background: var(--danger-soft, #fff0ed); }
+.operator-toast-info { border-color: var(--line); background: var(--surface-2, #f7f5f1); }
+
+.operator-detail-modal > .operator-assessment-dialog {
+  width: min(820px, calc(100vw - 32px));
+  max-width: 820px;
+  max-height: calc(100dvh - 32px);
+  border: 1px solid #222;
+  border-radius: 12px;
+  padding: 16px 20px 18px;
+  font-size: 14px;
+  line-height: 1.35;
+}
+
+.operator-assessment-dialog h4 { margin: 14px 0 8px; }
+.operator-assessment-dialog > .table-wrap { margin-top: 8px !important; }
+.operator-assessment-dialog > .table-wrap th,
+.operator-assessment-dialog > .table-wrap td { padding: 7px 10px; }
+.operator-assessment-document { margin: 0; }
+.operator-answer-sections { display: block; margin-top: 0; }
+.operator-answer-section { margin: 0; border: 0; padding: 0; background: transparent; }
+.operator-answer-section-summary { cursor: pointer; padding: 12px 0 5px; font-size: 1rem; }
+.operator-answer-section-content { margin: 0; padding: 0; }
+.operator-answer-empty { margin: 0 0 8px; }
+.operator-answer-group-details { margin: 0; border: 0; padding: 5px 0 7px; }
+.operator-answer-group-heading { cursor: pointer; padding: 0 0 4px; }
+.operator-answer-group-heading b { font-weight: 650; }
+.operator-answer-group-static > .operator-answer-group-heading { cursor: default; }
+.operator-answer-rows { display: block; padding: 1px 0 0; }
+.operator-answer-row { display: block; padding: 2px 0; border: 0; }
+.operator-answer-question,
+.operator-answer-result,
+.operator-answer-task-title,
+.operator-answer-response p { margin: 0; white-space: pre-wrap; line-height: 1.35; }
+.operator-answer-question b { font-weight: 650; }
+.operator-answer-result { color: var(--muted); }
+.operator-answer-correct,
+.operator-answer-wrong { display: inline-block; border-radius: 7px; padding: 1px 7px; }
+.operator-answer-correct { border: 1px solid #cbdca6; background: #edf5d4; color: #3b5e24; }
+.operator-answer-wrong { border: 1px solid #edc8bc; background: #fbe8e2; color: #8a3025; }
+.operator-answer-arrow { color: var(--muted); }
+.operator-answer-response { display: grid; gap: 3px; }
+.operator-answer-value { min-height: 38px; margin: 3px 0 4px !important; border: 1px solid var(--line); border-radius: 8px; background: #f8f6f2; padding: 10px 12px; color: var(--text); }
+.operator-answer-audio-missing { order: -1; }
+.operator-answer-instruction { margin: 2px 0 4px; }
+.operator-stimulus { margin: 0 0 7px; color: var(--muted); white-space: pre-wrap; line-height: 1.35; }
+.operator-stimulus-label { color: var(--text); }
+.operator-stimulus-table { margin: 4px 0 7px; }
+.operator-detail-section-title { margin: 14px 0 4px; padding-top: 10px; border-top: 1px solid var(--line); }
+
+.operator-integrity-log,
+.operator-processing-log { margin: 0; border-top: 1px solid var(--line); padding: 8px 0; }
+
+.operator-processing-log > summary,
+.operator-integrity-log > summary {
+  cursor: pointer;
+  color: var(--text);
+  font-weight: 600;
+}
+
+.operator-processing-log > ul,
+.operator-processing-log > p,
+.operator-integrity-log > ul,
+.operator-integrity-log > p {
+  margin: 10px 0 0;
+}
+
+.operator-total-row {
+  border-top: 2px solid var(--line);
+  background: var(--surface-2, #f7f5f1);
+}
+
+.operator-manual-score { display: block; margin: 0; border: 0; padding: 0; }
+
+.operator-manual-score > .btn-primary {
+  width: auto;
+  min-width: 0;
+  margin-top: 8px;
+}
+
+.operator-manual-score-section { display: block; padding: 0; border: 0; border-radius: 0; background: transparent; }
+.operator-manual-task-list { display: grid; gap: 4px; }
+.operator-manual-task-list > div { display: block; }
+.operator-manual-task-list span { margin-left: 6px; }
+.operator-manual-rubric { margin: 7px 0 3px; }
+.operator-manual-rubric > p { margin: 6px 0 0; }
+.operator-rubric-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+.operator-rubric-field, .operator-manual-comment { display: grid; gap: 4px; color: var(--muted); font-size: 12px; }
+.operator-rubric-field input, .operator-manual-comment textarea { width: 100%; box-sizing: border-box; }
+.operator-rubric-field input { min-height: 38px; }
+.operator-manual-comment { margin-top: 8px; }
+.operator-confirm-dialog { max-width: 420px; }
+
+@media (max-width: 640px) {
+  .operator-rubric-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+
+@keyframes operator-toast-in {
+  from { opacity: 0; transform: translate(-50%, 8px); }
+  to { opacity: 1; transform: translateX(-50%); }
+}
+
 @media (max-width: 480px) {
   .app-operator[aria-label="Đọc mẫu"] .operator-review-card,
   .app-operator[aria-label="Đọc mẫu"] .operator-review-panel {
@@ -1767,5 +2056,10 @@ body:has(.app-operator) #modal > .dialog > .row {
 
   .app-operator[aria-label="Đọc mẫu"] .operator-coach-list > .item {
     padding: 14px;
+  }
+
+  .operator-toast {
+    bottom: calc(84px + env(safe-area-inset-bottom, 0px));
+    width: calc(100vw - 24px);
   }
 }

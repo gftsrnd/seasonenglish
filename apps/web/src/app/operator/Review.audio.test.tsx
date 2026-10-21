@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import "@testing-library/jest-dom/vitest";
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { userEvent } from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { ContentReviewAssessmentDetailView } from "@e4s/contracts";
@@ -23,6 +23,12 @@ function assessmentDetail(): ContentReviewAssessmentDetailView {
     startedAt: "2026-10-15T08:00:00.000Z",
     submittedAt: "2026-10-15T08:30:00.000Z",
     totalScore: 75,
+    taskPrompts: [
+      { section: "writing", taskKey: "W1", title: "Task 1 – Phản hồi nhanh", prompt: "Write a short reply." },
+      { section: "writing", taskKey: "W2", title: "Task 2 – Báo cáo / đề xuất", prompt: "Write a formal email." },
+      { section: "speaking", taskKey: "S1", title: "Task 1 – Warm-up", prompt: "Answer the questions."
+      }
+    ],
     answers: [{
       section: "speaking",
       taskKey: "S1",
@@ -78,6 +84,47 @@ function reviewActions(overrides: Partial<OperatorReviewActions> = {}): Operator
 }
 
 describe("Operator assessment audio playback", () => {
+  it("shows CEFR and actual duration columns with a total row", () => {
+    const detail = assessmentDetail();
+    detail.totalScore = 75;
+    detail.overallCefr = "B1";
+    detail.totalTimeSeconds = 3_600;
+    detail.totalTimeLimitMinutes = 70;
+    detail.sections = [
+      { section: "listening", label: "Nghe", maxScore: 20, durationMinutes: 15, actualSeconds: 900, score: 18, cefr: "B2", source: "deterministic", criteria: {}, state: "scored", groups: [] },
+      { section: "reading", label: "Đọc", maxScore: 40, durationMinutes: 20, actualSeconds: 1_200, score: 32, cefr: "B2", source: "deterministic", criteria: {}, state: "scored", groups: [] },
+      { section: "writing", label: "Viết", maxScore: 20, durationMinutes: 20, actualSeconds: 900, score: 12, cefr: "A2", source: "human", criteria: {}, state: "scored", groups: [] },
+      { section: "speaking", label: "Nói", maxScore: 20, durationMinutes: 15, actualSeconds: 600, score: 13, cefr: "B1", source: "human", criteria: {}, state: "scored", groups: [] }
+    ];
+
+    render(<OperatorReviewAssessmentDetail detail={detail} onClose={vi.fn()} />);
+
+    expect(screen.getByText("CEFR")).toBeInTheDocument();
+    expect(screen.getByText("Thời gian làm")).toBeInTheDocument();
+    expect(screen.getByText("Tổng")).toBeInTheDocument();
+    expect(screen.getByText("1:00:00 / 70 phút")).toBeInTheDocument();
+    expect(screen.getByText("A2")).toHaveClass("badge", "lvl", "lvl-A2");
+    expect(screen.queryByText("deterministic")).not.toBeInTheDocument();
+    expect(screen.queryByText("human")).not.toBeInTheDocument();
+  });
+
+  it("keeps the prototype score shape for sections that still need manual scoring", () => {
+    const detail = assessmentDetail();
+    detail.totalScore = null;
+    detail.sections = [
+      { section: "listening", label: "Nghe", maxScore: 20, durationMinutes: 15, actualSeconds: null, score: null, cefr: null, source: null, criteria: {}, state: "not_scored", groups: [] },
+      { section: "reading", label: "Đọc", maxScore: 40, durationMinutes: 20, actualSeconds: null, score: null, cefr: null, source: null, criteria: {}, state: "not_scored", groups: [] },
+      { section: "writing", label: "Viết", maxScore: 20, durationMinutes: 20, actualSeconds: null, score: null, cefr: null, source: null, criteria: {}, state: "not_scored", groups: [] },
+      { section: "speaking", label: "Nói", maxScore: 20, durationMinutes: 15, actualSeconds: null, score: null, cefr: null, source: null, criteria: {}, state: "not_scored", groups: [] }
+    ];
+
+    const { container } = render(<OperatorReviewAssessmentDetail detail={detail} onClose={vi.fn()} />);
+
+    expect(screen.getByText("0/20")).toBeInTheDocument();
+    expect(screen.getAllByText("0/20*")).toHaveLength(2);
+    expect(screen.getByText("0/100")).toBeInTheDocument();
+  });
+
   it("renders persisted signed audio as a playable control", () => {
     render(<OperatorReviewAssessmentDetail detail={assessmentDetail()} onClose={vi.fn()} />);
 
@@ -93,6 +140,100 @@ describe("Operator assessment audio playback", () => {
     fireEvent.error(screen.getByLabelText("Phát audio S1"));
 
     expect(screen.getByRole("alert")).toHaveTextContent("Không phát được audio");
+  });
+
+  it("shows every task and marks missing answers instead of hiding the task", () => {
+    const { container } = render(<OperatorReviewAssessmentDetail detail={assessmentDetail()} onClose={vi.fn()} />);
+
+    expect(screen.getByText(/Task 1 – Phản hồi nhanh/)).toBeInTheDocument();
+    expect(screen.getByText(/Task 2 – Báo cáo \/ đề xuất/)).toBeInTheDocument();
+    expect(screen.getAllByText("(không có bài viết)")).toHaveLength(2);
+    expect(container.querySelectorAll("[data-assessment-section]")).toHaveLength(4);
+  });
+
+  it("keeps listening parts collapsed by default with their score visible", () => {
+    const detail = assessmentDetail();
+    detail.taskPrompts = [{ section: "listening", taskKey: "LA_0", title: "Part A", prompt: "What time is the meeting?" }];
+    detail.sections = [{
+      section: "listening", label: "Nghe", maxScore: 20, durationMinutes: 15, actualSeconds: 600,
+      score: 2, cefr: "A1", source: "deterministic", criteria: {}, state: "scored",
+      groups: [{ key: "part-a", label: "Part A – Thông báo của quản lý", tasks: [{ taskKey: "LA_0", title: "Part A", prompt: "What time is the meeting?", answer: null, maxScore: 5 }] }]
+    }];
+
+    const { container } = render(<OperatorReviewAssessmentDetail detail={detail} onClose={vi.fn()} />);
+
+    const part = screen.getByText(/Part A – Thông báo của quản lý/).closest("details");
+    const listening = container.querySelector('[data-assessment-section="listening"]');
+    expect(part).not.toBeNull();
+    expect(listening).toHaveAttribute("open");
+    expect(part).not.toHaveAttribute("open");
+    expect(within(part!).getByText(/0\/5 điểm/)).toBeInTheDocument();
+    expect(screen.getByText(/What time is the meeting\?/)).not.toBeVisible();
+    fireEvent.click(within(part!).getByText(/Part A – Thông báo của quản lý/));
+    expect(screen.getByText(/What time is the meeting\?/)).toBeVisible();
+    expect(screen.getByText("bỏ qua")).toBeVisible();
+  });
+
+  it("keeps objective section lists open and manual scoring sections collapsed", () => {
+    const detail = assessmentDetail();
+    detail.sections = [
+      { section: "listening", label: "Nghe", maxScore: 20, durationMinutes: 15, actualSeconds: 600, score: 2, cefr: "A1", source: "deterministic", criteria: {}, state: "scored", groups: [] },
+      { section: "reading", label: "Đọc", maxScore: 40, durationMinutes: 20, actualSeconds: 600, score: 1, cefr: "A1", source: "deterministic", criteria: {}, state: "scored", groups: [] },
+      { section: "writing", label: "Viết", maxScore: 20, durationMinutes: 20, actualSeconds: 10, score: 0, cefr: "A1", source: "human", criteria: {}, state: "scored", groups: [] },
+      { section: "speaking", label: "Nói", maxScore: 20, durationMinutes: 15, actualSeconds: 20, score: 0, cefr: "A1", source: "human", criteria: {}, state: "scored", groups: [] }
+    ];
+
+    const { container } = render(<OperatorReviewAssessmentDetail detail={detail} onClose={vi.fn()} onSaveManualScore={vi.fn()} />);
+
+    for (const section of ["listening", "reading", "writing", "speaking"]) {
+      const panel = container.querySelector(`[data-assessment-section="${section}"]`);
+      expect(panel?.tagName).toBe("DETAILS");
+    }
+    expect(container.querySelector('[data-assessment-section="listening"]')).toHaveAttribute("open");
+    expect(container.querySelector('[data-assessment-section="reading"]')).toHaveAttribute("open");
+    expect(container.querySelector('[data-assessment-section="writing"]')).not.toHaveAttribute("open");
+    expect(container.querySelector('[data-assessment-section="speaking"]')).not.toHaveAttribute("open");
+    expect(screen.getByText("Viết · 0/20")).toBeVisible();
+
+    fireEvent.click(screen.getByText("Viết · 0/20"));
+
+    expect(container.querySelector('[data-assessment-section="writing"]')).toHaveAttribute("open");
+    expect(screen.getByLabelText("Task achievement")).toBeVisible();
+  });
+
+  it("uses the prototype document flow instead of separate evidence and grading cards", () => {
+    const detail = assessmentDetail();
+    detail.sections = [
+      { section: "listening", label: "Nghe", maxScore: 20, durationMinutes: 15, actualSeconds: 600, score: 2, cefr: "A1", source: "deterministic", criteria: {}, state: "scored", groups: [] },
+      { section: "reading", label: "Đọc", maxScore: 40, durationMinutes: 20, actualSeconds: 600, score: 1, cefr: "A1", source: "deterministic", criteria: {}, state: "scored", groups: [] },
+      { section: "writing", label: "Viết", maxScore: 20, durationMinutes: 20, actualSeconds: 10, score: null, cefr: "A1", source: null, criteria: {}, state: "not_scored", groups: [] },
+      { section: "speaking", label: "Nói", maxScore: 20, durationMinutes: 15, actualSeconds: 20, score: null, cefr: "A1", source: null, criteria: {}, state: "not_scored", groups: [] }
+    ];
+
+    const { container } = render(<OperatorReviewAssessmentDetail detail={detail} onClose={vi.fn()} onSaveManualScore={vi.fn()} />);
+
+    expect(container.querySelector(".operator-evidence-panel")).not.toBeInTheDocument();
+    expect(container.querySelector(".operator-grading-panel")).not.toBeInTheDocument();
+    const writing = container.querySelector('[data-assessment-section="writing"]');
+    const speaking = container.querySelector('[data-assessment-section="speaking"]');
+    expect(writing).toContainElement(container.querySelector('[data-manual-rubric="writing"]'));
+    expect(speaking).toContainElement(container.querySelector('[data-manual-rubric="speaking"]'));
+  });
+
+  it("keeps the anti-cheat log collapsed and translates technical events for operators", () => {
+    const detail = assessmentDetail();
+    detail.integrityEvents = [{ reason: "window_blur", occurredAt: "2026-10-15T08:32:05.780Z", violationCount: 1, requestId: "secret-request-id" }];
+
+    render(<OperatorReviewAssessmentDetail detail={detail} onClose={vi.fn()} />);
+
+    const summary = screen.getByText(/Nhật ký cảnh báo/);
+    const log = summary.closest("details");
+    expect(log).not.toBeNull();
+    expect(log).not.toHaveAttribute("open");
+    expect(within(log!).getByText(/Rời khỏi cửa sổ bài test/)).toBeInTheDocument();
+    expect(screen.queryByText(/secret-request-id|recordedAt|violationCount/)).not.toBeInTheDocument();
+    const evidenceHeading = screen.getByRole("heading", { name: "Bài làm và bằng chứng" });
+    expect(log!.compareDocumentPosition(evidenceHeading) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
 
   it("focuses the modal, closes with Escape, and restores the opener focus", () => {

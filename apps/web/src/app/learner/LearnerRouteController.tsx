@@ -63,12 +63,14 @@ export function shouldRedirectUnavailableChallenge(route: ResolvedLearnerRoute["
   return route === "challenge" && reason instanceof Error && reason.message === "LEVEL_CHALLENGE_NOT_AVAILABLE";
 }
 
-function showLearnerToast(message: string) {
+const assessmentCelebrationKey = "e4s:assessment-complete-celebration";
+
+function showLearnerToast(message: string, tone: "info" | "ok" | "danger" = "info") {
   if (typeof document === "undefined") return;
   const host = document.getElementById("toast");
   if (!host) return;
   const toast = document.createElement("div");
-  toast.className = "toast";
+  toast.className = `toast ${tone === "danger" ? "err" : tone}`;
   toast.textContent = message;
   host.replaceChildren(toast);
   window.setTimeout(() => {
@@ -173,7 +175,16 @@ export function LearnerRouteController() {
       }
       setError(loadError(route.name)); setLoading(false);
     };
+    const needsPlacementUnlock = route.name !== "home" && route.name !== "onboard" && !(route.name === "assessment" && route.params.kind === "placement");
     const load = async () => {
+      if (needsPlacementUnlock) {
+        const home = await apiClient.getHome();
+        if (home.onboardingRequired || home.learner.cefr === null) {
+          showLearnerToast("Hoàn thành hồ sơ và test đầu vào để mở khu vực học.");
+          navigate("/home", { replace: true });
+          return;
+        }
+      }
       switch (route.name) {
         case "home": {
           const home = await apiClient.getHome();
@@ -270,7 +281,15 @@ export function LearnerRouteController() {
     submitAssessment: async () => {
       const attempt = contracts.assessment?.attempt;
       if (!attempt) throw new Error("ASSESSMENT_ATTEMPT_NOT_ACTIVE");
-      setContracts({ assessment: await apiClient.submitAssessment(attempt.id) });
+      const assessment = await apiClient.submitAssessment(attempt.id);
+      setContracts({ assessment });
+      const submitReason = assessment.attempt?.runtime?.submitReason ?? assessment.runtime?.submitReason;
+      if (submitReason === "manual") {
+        try { window.sessionStorage.setItem(assessmentCelebrationKey, "1"); } catch { /* keep navigation safe in restricted storage */ }
+        experience.play("celebrate");
+        showLearnerToast("Đã nộp bài thành công. Chúc mừng bạn đã hoàn thành!", "ok");
+        navigate("/home");
+      }
     },
     recordAssessmentViolation: async (attemptId: string, input: AssessmentViolationInput) => {
       const runtime = await apiClient.recordAssessmentViolation(attemptId, input);

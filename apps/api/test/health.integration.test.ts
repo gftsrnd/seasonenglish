@@ -66,10 +66,14 @@ describe("local service health", () => {
     });
 
     expect(capabilities.statusCode, capabilities.body).toBe(200);
-    expect(capabilities.json()).toEqual({
+    expect(capabilities.json()).toMatchObject({
       api: true,
       database: true,
       ai: true,
+      aiConfigured: false,
+      aiProvider: null,
+      aiModel: null,
+      aiLastTest: null,
       objectStorage: true,
       maintenance: false,
       imageProviders: { pexels: true, pixabay: false }

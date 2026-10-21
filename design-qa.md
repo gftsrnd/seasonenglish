@@ -30,3 +30,21 @@ Phạm vi: năm màn đã được Thư xác định trong prototype; không th�
 - Huy hiệu không chỉ dựa vào màu: mỗi thẻ có icon và chữ **Đã đạt/Chưa đạt**.
 
 Kết luận: **passed** cho phạm vi visual QA hiện có. Các màn tiếp theo chỉ được phát triển trong screen contract đã chốt.
+
+## Xem bài làm của bài test — 21/10/2026
+
+- Nguồn đối chiếu: ba ảnh prototype `codex-clipboard-d3f01112…`, `codex-clipboard-e14309a0…`, `codex-clipboard-9d88312f…` do người dùng cung cấp.
+- Modal bản chạy được kiểm tra ở viewport 1280×720 trên local `127.0.0.1:4182`.
+- Đã xác nhận cấu trúc liền mạch, không còn hai card lớn “bằng chứng/chấm điểm”; Nghe và Đọc dùng danh sách câu dày, đáp án đúng/sai là chip nhỏ; Viết và Nói chứa rubric ngay trong từng phần; nút lưu nhỏ theo prototype.
+- Nhật ký xử lý và nhật ký cảnh báo đứng ngoài, trước phần “Bài làm và bằng chứng”.
+- Các nhóm Part của Nghe và Questions của Đọc là disclosure thật: mặc định thu gọn, vẫn hiện điểm đạt/tổng điểm trên dòng tiêu đề và bấm mở lại được. Viết/Nói giữ nội dung và rubric hiển thị trực tiếp.
+- Dữ liệu hiển thị tiếp tục lấy từ assessment detail API; không thêm dữ liệu mẫu vào ứng dụng. Fixture trực quan tạm thời chỉ dùng để chụp đối chiếu và đã được xoá.
+
+Final result: passed
+
+## Hồ sơ trên thẻ chờ duyệt — 21/10/2026
+
+- Nguồn đối chiếu: ảnh prototype `codex-clipboard-5af8340c-5274-4d67-ba9b-53f8a19b1cc5.png` do người dùng cung cấp.
+- Trạng thái thu gọn là đúng một dòng disclosure “Hồ sơ: …”, không có nút “Hồ sơ” riêng và không có khung/card bao quanh.
+- Dữ liệu thẻ chờ duyệt được lấy từ assessment-detail và learner-profile API đang chạy; không chèn dữ liệu demo.
+- Đã kiểm tra trực quan trên local `127.0.0.1:4182`; kết quả: passed.

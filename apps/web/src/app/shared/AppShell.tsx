@@ -82,17 +82,19 @@ const nav: Record<ShellRole, readonly NavItem[]> = {
   ]
 };
 
-export function AppShell({ session, children, onLogout, onAvatarClick, organisationName = "GFT", avatar }: {
+export function AppShell({ session, children, onLogout, onAvatarClick, organisationName = "GFT", avatar, onboardingComplete = true, learnerHomeOnly = false }: {
   session: SessionView;
   children: ReactNode;
   onLogout: () => void | Promise<void>;
   onAvatarClick?: (() => void) | undefined;
   organisationName?: string;
   avatar?: { color?: string; acc?: string; bg?: number } | undefined;
+  onboardingComplete?: boolean;
+  learnerHomeOnly?: boolean;
   }) {
   const location = useLocation();
   const role = session.role as ShellRole;
-  const items = nav[role];
+  const items = role === "learner" && (onboardingComplete === false || learnerHomeOnly) ? nav[role].slice(0, 1) : nav[role];
   const [logoutPending, setLogoutPending] = useState(false);
   const logoutTimer = useRef<number | undefined>(undefined);
   useEffect(() => () => {

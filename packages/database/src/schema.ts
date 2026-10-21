@@ -131,7 +131,7 @@ export const programWeeks = pgTable("program_weeks", {
   id: uuid("id").primaryKey(), programId: uuid("program_id").notNull().references(() => programs.id, { onDelete: "cascade" }),
   weekNumber: integer("week_number").notNull(), topic: text("topic").notNull(),
   description: text("description").notNull().default(""), objectives: jsonb("objectives").notNull().default(emptyArray),
-  keyVocabHint: text("key_vocab_hint").notNull().default("")
+  keyVocabHint: text("key_vocab_hint").notNull().default(""), aiPlan: jsonb("ai_plan").notNull().default(emptyObject)
 }, (table) => [uniqueIndex("program_weeks_program_number_unique").on(table.programId, table.weekNumber)]);
 
 export const promptVersions = pgTable("prompt_versions", {

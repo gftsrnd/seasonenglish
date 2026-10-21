@@ -281,6 +281,7 @@ export const weeklyLessonsInputSchema = z.object({
   objectives: z.string().trim().max(2_000),
   keyVocabHint: z.string().trim().max(1_000),
   cefr: z.enum(["A1", "A2", "B1", "B2", "C1"]),
+  plan: z.array(z.string().trim().max(300)).length(5).optional(),
   lessonCount: z.literal(5)
 });
 

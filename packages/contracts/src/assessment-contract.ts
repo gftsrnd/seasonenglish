@@ -158,6 +158,8 @@ export interface AssessmentReviewQueueItem {
   attemptId: string;
   learnerId: string;
   learnerName: string;
+  /** Same profile-completion projection used by the unassessed learner lists. */
+  profileComplete?: boolean;
   kind: AssessmentKind;
   title: string;
   submittedAt: string;
@@ -193,6 +195,8 @@ export interface AssessmentUnassessedLearnerView {
   learnerId: string;
   learnerName: string;
   profileComplete: boolean;
+  lifecycle?: "not_started" | "in_progress" | "needs_retry";
+  lastAttemptAt?: string | null;
 }
 
 export type AssessmentReviewFlowPhase = "testing" | "ungraded" | "challenge" | "failed";
@@ -215,6 +219,8 @@ export interface AssessmentReviewOverviewView {
   pendingLevelUp: AssessmentReviewQueueItem[];
   approvedLearners: AssessmentApprovedLearnerView[];
   unassessedLearners: AssessmentUnassessedLearnerView[];
+  inProgressLearners?: AssessmentUnassessedLearnerView[];
+  retryLearners?: AssessmentUnassessedLearnerView[];
   levelSignals: {
     windowDays: 14;
     ready: Array<{
@@ -349,15 +355,60 @@ export interface AssessmentReviewLearnerView {
 export interface AssessmentReviewAttemptDetailView extends AssessmentReviewAttemptSummaryView {
   learnerId: string;
   learnerName: string;
+  taskPrompts?: Array<{
+    section: AssessmentSectionCode;
+    taskKey: string;
+    title?: string;
+    prompt: string;
+  }>;
   responses: Array<AssessmentResponseView & { prompt?: string; title?: string }>;
+  overallCefr?: CefrLevel | null;
+  totalTimeSeconds?: number | null;
+  totalTimeLimitMinutes?: number;
   scores: Array<{
     section: AssessmentSectionCode;
     score: number;
     source: "deterministic" | "ai" | "human";
     criteria: Record<string, unknown>;
   }>;
+  sections?: Array<{
+    section: AssessmentSectionCode;
+    label: string;
+    maxScore?: number;
+    durationMinutes?: number;
+    actualSeconds?: number | null;
+    score: number | null;
+    cefr?: CefrLevel | null;
+    source: "deterministic" | "ai" | "human" | null;
+    criteria: Record<string, unknown>;
+    comment?: string | null;
+    state: "scored" | "not_scored";
+    groups?: Array<{
+      key: string;
+      label: string;
+      tasks: Array<{ taskKey: string; title?: string; prompt: string; answer: string | null }>;
+    }>;
+  }>;
   integrityEvents: Array<Record<string, unknown>>;
+  activity?: Array<{ at: string; label: string; detail?: string }>;
   decision: AssessmentDecisionView | null;
+}
+
+export interface ManualAssessmentScoreInput {
+  writingCriteria: {
+    taskAchievement: number;
+    organization: number;
+    vocabulary: number;
+    grammar: number;
+    workplaceCommunication: number;
+  };
+  speakingCriteria: {
+    fluency: number;
+    grammar: number;
+    vocabulary: number;
+    professionalCommunication: number;
+  };
+  comment: string;
 }
 
 export interface AssessmentReviewChallengeView {

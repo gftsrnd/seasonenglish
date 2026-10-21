@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, type FormEvent, type KeyboardEvent } from "react";
+import { Award, BriefcaseBusiness, Clock3, Eye, EyeOff, Leaf, MessageSquare } from "lucide-react";
 import type { SessionView } from "@e4s/contracts";
 import type { AuthClient } from "../../features/auth/index.js";
 import { AudioControls, SeasonMark } from "./AppShell.js";
@@ -71,7 +72,7 @@ export function EntryScreen({ client, onAuthenticated }: { client: AuthClient; o
       const session = mode === "register"
         ? await client.registerLearner({ displayName, email, password })
         : await (audience === "learner" ? client.learnerLogin({ email, password }) : client.staffLogin({ email, password }));
-      if (mode === "register") window.history.replaceState(window.history.state, "", "/onboard");
+      if (mode === "register") window.history.replaceState(window.history.state, "", "/home");
       onAuthenticated(session);
     } catch (caught) {
       const code = caught instanceof Error ? caught.message : "";
@@ -89,7 +90,12 @@ export function EntryScreen({ client, onAuthenticated }: { client: AuthClient; o
   const showRegistration = () => navigateEntry("register");
   const showLogin = () => navigateEntry("login");
   const showResetRequest = () => setResetNotice("Quên mật khẩu? Hãy liên hệ người vận hành hoặc quản lý để được cấp lại mật khẩu.");
-  const updateCapsLock = (event: KeyboardEvent<HTMLInputElement>) => setCapsLockOn(event.getModifierState("CapsLock"));
+  const updateCapsLock = (event: KeyboardEvent<HTMLInputElement>) => {
+    // Navigation keys can fire after blur while Caps Lock remains toggled;
+    // they must not resurrect a warning the user has already dismissed.
+    if (event.key === "Tab" || event.key === "Shift" || event.key === "Control" || event.key === "Alt" || event.key === "Meta") return;
+    setCapsLockOn(event.getModifierState("CapsLock"));
+  };
 
   return <>
     <header className="topbar app-entry-topbar">
@@ -99,10 +105,26 @@ export function EntryScreen({ client, onAuthenticated }: { client: AuthClient; o
     <main className="app-entry-main">
       <section className="welcome app-entry">
         <div className="body">
+          <div className="entry-hero-art" aria-hidden="true">
+            <Leaf className="entry-hero-leaf entry-hero-leaf-main" size={58} strokeWidth={1.35} />
+            <Leaf className="entry-hero-leaf entry-hero-leaf-small" size={30} strokeWidth={1.5} />
+            <Leaf className="entry-hero-leaf entry-hero-leaf-wide" size={42} strokeWidth={1.35} />
+            <Leaf className="entry-hero-leaf entry-hero-leaf-light" size={25} strokeWidth={1.5} />
+            <Leaf className="entry-hero-leaf entry-hero-leaf-tiny" size={22} strokeWidth={1.55} />
+            <Leaf className="entry-hero-leaf entry-hero-leaf-faint" size={19} strokeWidth={1.55} />
+          </div>
           <div className="eyebrow">E4S · English for Every Season</div>
-          <h1>Học tiếng Anh cho công việc</h1>
-          <p>Học ngắn mỗi ngày, luyện tình huống thực tế và nhận phản hồi để làm tốt hơn ở lần tiếp theo.</p>
-        </div>
+          <h1>Mỗi ngày một chút nắng</h1>
+          <p>Tựa cây non âm thầm lớn lên qua bốn mùa, hãy cho mình mỗi ngày một chút nắng: thực hành tình huống thực tế và nhận góp ý để ngày càng tự tin hơn.</p>
+          <section className="entry-learning-card" aria-label="Điểm nổi bật của E4S">
+            <div className="entry-benefit-row">
+              <span className="entry-benefit-pill"><Clock3 size={17} aria-hidden="true" /><span>10 phút mỗi ngày, T2–T6</span></span>
+              <span className="entry-benefit-pill"><MessageSquare size={17} aria-hidden="true" /><span>Luyện chat với Season</span></span>
+              <span className="entry-benefit-pill"><Award size={17} aria-hidden="true" /><span>Điểm thưởng và huy hiệu</span></span>
+              <span className="entry-benefit-pill"><BriefcaseBusiness size={17} aria-hidden="true" /><span>Bài học sát công việc</span></span>
+            </div>
+          </section>
+          </div>
         <div className="card app-entry-card" aria-label={mode === "register" ? "Đăng ký E4S" : "Đăng nhập E4S"} aria-busy={busy || undefined}>
           {mode === "login" ? <div className="tabs" role="tablist" aria-label="Loại tài khoản" aria-orientation="horizontal">
             <button ref={learnerTab} id="app-login-learner-tab" className={audience === "learner" ? "active" : ""} type="button" role="tab" aria-controls={loginPanelId} aria-selected={audience === "learner"} tabIndex={audience === "learner" ? 0 : -1} disabled={busy} onKeyDown={navigateAudience} onClick={() => switchAudience("learner")}>Người học</button>
@@ -113,23 +135,23 @@ export function EntryScreen({ client, onAuthenticated }: { client: AuthClient; o
             <label className="field" htmlFor={emailId}><span>Email</span><input ref={emailInput} id={emailId} name="email" type="email" autoComplete="username" required disabled={busy} value={email} aria-invalid={Boolean(error)} aria-describedby={error ? errorId : undefined} onChange={(event) => setEmail(event.target.value)} onKeyDown={updateCapsLock} onKeyUp={updateCapsLock} onBlur={() => setCapsLockOn(false)} /></label>
             <label className="field" htmlFor={passwordId}>
               <span>Mật khẩu</span>
-              <span className="row" style={{ gap: 8, alignItems: "stretch", flexWrap: "nowrap" }}>
-                <input id={passwordId} name="password" type={showPassword ? "text" : "password"} autoComplete={mode === "register" ? "new-password" : "current-password"} minLength={mode === "register" ? 8 : undefined} required disabled={busy} value={password} aria-invalid={Boolean(error)} aria-describedby={error ? errorId : undefined} onChange={(event) => setPassword(event.target.value)} onKeyDown={updateCapsLock} onKeyUp={updateCapsLock} onBlur={() => setCapsLockOn(false)} style={{ flex: "1 1 auto", minWidth: 0 }} />
-                <button className="btn-ghost" type="button" disabled={busy} aria-label={showPassword ? "Ẩn mật khẩu" : "Hiện mật khẩu"} aria-pressed={showPassword} onClick={() => setShowPassword((value) => !value)}>{showPassword ? "Ẩn" : "Hiện"}</button>
+              <span className="password-control">
+                <input id={passwordId} name="password" type={showPassword ? "text" : "password"} autoComplete={mode === "register" ? "new-password" : "current-password"} minLength={mode === "register" ? 8 : undefined} required disabled={busy} value={password} aria-invalid={Boolean(error)} aria-describedby={error ? errorId : undefined} onChange={(event) => setPassword(event.target.value)} onKeyDown={updateCapsLock} onKeyUp={updateCapsLock} onBlur={() => setCapsLockOn(false)} onFocus={() => setCapsLockOn(false)} />
+                <button className="password-toggle" type="button" disabled={busy} aria-label={showPassword ? "Ẩn mật khẩu" : "Hiện mật khẩu"} aria-pressed={showPassword} onClick={() => setShowPassword((value) => !value)}>{showPassword ? <EyeOff size={18} aria-hidden="true" /> : <Eye size={18} aria-hidden="true" />}</button>
               </span>
               {capsLockOn ? <span className="small muted" role="status" aria-live="polite">Caps Lock đang bật</span> : null}
             </label>
             {mode === "register" ? <label className="field" htmlFor={confirmPasswordId}>
               <span>Xác nhận mật khẩu</span>
-              <span className="row" style={{ gap: 8, alignItems: "stretch", flexWrap: "nowrap" }}>
-                <input id={confirmPasswordId} name="confirmPassword" type={showConfirmPassword ? "text" : "password"} autoComplete="new-password" minLength={8} required disabled={busy} value={confirmPassword} aria-invalid={Boolean(error)} aria-describedby={error ? errorId : undefined} onChange={(event) => setConfirmPassword(event.target.value)} onKeyDown={updateCapsLock} onKeyUp={updateCapsLock} onBlur={() => setCapsLockOn(false)} style={{ flex: "1 1 auto", minWidth: 0 }} />
-                <button className="btn-ghost" type="button" disabled={busy} aria-label={showConfirmPassword ? "Ẩn xác nhận mật khẩu" : "Hiện xác nhận mật khẩu"} aria-pressed={showConfirmPassword} onClick={() => setShowConfirmPassword((value) => !value)}>{showConfirmPassword ? "Ẩn" : "Hiện"}</button>
+              <span className="password-control">
+                <input id={confirmPasswordId} name="confirmPassword" type={showConfirmPassword ? "text" : "password"} autoComplete="new-password" minLength={8} required disabled={busy} value={confirmPassword} aria-invalid={Boolean(error)} aria-describedby={error ? errorId : undefined} onChange={(event) => setConfirmPassword(event.target.value)} onKeyDown={updateCapsLock} onKeyUp={updateCapsLock} onBlur={() => setCapsLockOn(false)} onFocus={() => setCapsLockOn(false)} />
+                <button className="password-toggle" type="button" disabled={busy} aria-label={showConfirmPassword ? "Ẩn xác nhận mật khẩu" : "Hiện xác nhận mật khẩu"} aria-pressed={showConfirmPassword} onClick={() => setShowConfirmPassword((value) => !value)}>{showConfirmPassword ? <EyeOff size={18} aria-hidden="true" /> : <Eye size={18} aria-hidden="true" />}</button>
               </span>
             </label> : null}
             {error ? <div ref={errorRef} id={errorId} className="banner danger" role="alert" tabIndex={-1}><div className="body small">{error}</div></div> : null}
             {resetNotice ? <div className="banner info" role="status" aria-live="polite"><div className="body small">{resetNotice}</div></div> : null}
             <button className="btn-primary btn-block" type="submit" disabled={busy} aria-busy={busy || undefined}>{pendingAction === "register" ? "Đang tạo tài khoản…" : pendingAction === "login" ? "Đang đăng nhập…" : mode === "register" ? "Đăng ký và bắt đầu" : audience === "learner" ? "Đăng nhập người học" : "Đăng nhập nhân sự"}</button>
-            {mode === "register" ? <button className="btn-ghost btn-block" type="button" disabled={busy} onClick={showLogin}>Đã có tài khoản? Đăng nhập</button> : audience === "learner" ? <><button className="btn-ghost btn-block" type="button" disabled={busy} onClick={showRegistration}>Tạo tài khoản người học</button><button className="btn-ghost btn-block" type="button" disabled={busy} onClick={showResetRequest}>Quên mật khẩu?</button></> : null}
+            {mode === "register" ? <div className="app-entry-secondary-actions"><button className="app-entry-link" type="button" disabled={busy} onClick={showLogin}>Đã có tài khoản? Đăng nhập</button></div> : audience === "learner" ? <div className="app-entry-secondary-actions"><button className="app-entry-link" type="button" disabled={busy} onClick={showRegistration}>Tạo tài khoản người học</button><span className="app-entry-secondary-separator" aria-hidden="true">·</span><button className="app-entry-link" type="button" disabled={busy} onClick={showResetRequest}>Quên mật khẩu?</button></div> : null}
           </form>
         </div>
       </section>
@@ -138,12 +160,14 @@ export function EntryScreen({ client, onAuthenticated }: { client: AuthClient; o
 }
 
 function registrationError(code: string): string {
+  if (code === "LEARNER_REGISTRATION_EMAIL_DELETED") return "Tài khoản này đã bị xoá và đang nằm trong thùng rác. Hãy khôi phục hoặc xoá vĩnh viễn tài khoản trước khi đăng ký lại.";
   if (code === "LEARNER_REGISTRATION_EMAIL_EXISTS") return "Email này đã có tài khoản. Hãy đăng nhập hoặc dùng email khác.";
   if (code === "LEARNER_REGISTRATION_UNAVAILABLE") return "Hiện chưa thể đăng ký. Vui lòng liên hệ quản lý chương trình.";
   return "Không thể tạo tài khoản. Vui lòng kiểm tra thông tin và thử lại.";
 }
 
 function loginError(code: string, audience: "learner" | "staff"): string {
+  if (code === "ACCOUNT_DELETED") return "Tài khoản này đã bị xoá và đang nằm trong thùng rác. Hãy liên hệ quản lý để khôi phục hoặc xoá vĩnh viễn tài khoản.";
   if (code === "WRONG_LOGIN_PATH") {
     return audience === "learner"
       ? "Tài khoản này dành cho người vận hành hoặc quản lý. Hãy chọn tab Nhân sự."

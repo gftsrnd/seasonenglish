@@ -19,6 +19,12 @@ describe("Groq provider", () => {
     expect(fetch).toHaveBeenCalledWith("https://api.groq.com/openai/v1/chat/completions", expect.objectContaining({ method: "POST" }));
     const init = fetch.mock.calls[0]?.[1] as RequestInit;
     expect(new Headers(init.headers).get("authorization")).toBe("Bearer test-secret-key");
+    expect(JSON.parse(String(init.body))).toMatchObject({
+      response_format: {
+        type: "json_schema",
+        json_schema: { name: "coach_dialogue_output", strict: false, schema: { type: "object" } }
+      }
+    });
     expect(JSON.stringify(result)).not.toContain("test-secret-key");
   });
 

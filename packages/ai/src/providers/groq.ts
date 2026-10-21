@@ -28,7 +28,14 @@ export function createGroqProvider(options: {
           body: JSON.stringify({
             model,
             temperature: 0.2,
-            response_format: { type: "json_object" },
+            response_format: {
+              type: "json_schema",
+              json_schema: {
+                name: `${request.taskId}_output`,
+                strict: false,
+                schema: request.outputJsonSchema
+              }
+            },
             messages: [
               { role: "system", content: `${request.systemPrompt}\nReturn only JSON matching this schema: ${JSON.stringify(request.outputJsonSchema)}` },
               { role: "user", content: JSON.stringify(request.input) }

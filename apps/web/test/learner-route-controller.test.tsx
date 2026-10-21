@@ -50,7 +50,7 @@ describe("learner route integration controller", () => {
     render(<MemoryRouter initialEntries={["/onboard"]}><LearnerRouteController /></MemoryRouter>);
 
     expect(await screen.findByRole("heading", { name: "Cho Season biết về bạn nhé" })).toBeInTheDocument();
-    expect(screen.getByText("Bước 1/2 · Hồ sơ")).toBeInTheDocument();
+    expect(screen.getByText("Hồ sơ")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Lưu nháp" })).toBeInTheDocument();
   });
 
@@ -95,7 +95,7 @@ describe("learner route integration controller", () => {
     await user.click(within(screen.getByRole("group", { name: "Mức độ dùng tiếng Anh trong môi trường làm việc? *" })).getByRole("radio", { name: "Hằng ngày" }));
     await user.click(within(screen.getByRole("group", { name: "Mức độ sử dụng tiếng Anh trong gia đình bạn? *" })).getByRole("radio", { name: "Hằng ngày (người thân nói tiếng Anh)" }));
     await user.click(within(screen.getByRole("group", { name: "Thói quen dùng tiếng Anh ngoài công việc? *" })).getByRole("checkbox", { name: "Xem phim / video tiếng Anh" }));
-    await user.click(within(screen.getByRole("group", { name: "Bạn học hiệu quả nhất khi… *" })).getByRole("checkbox", { name: "Đọc và ghi chú" }));
+    await user.click(within(screen.getByRole("group", { name: "Bạn học hiệu quả nhất khi… *" })).getByRole("checkbox", { name: "Đọc & ghi chú" }));
     await user.click(await screen.findByRole("button", { name: "Lưu hồ sơ" }));
     await waitFor(() => expect(api.saveProfile).toHaveBeenCalledWith(expect.objectContaining({ fullName: "Lan", email: "lan@example.com" }), 7));
   });

@@ -89,6 +89,27 @@ describe("identity API", () => {
     });
     expect(duplicate.statusCode).toBe(409);
     expect(duplicate.json()).toEqual({ code: "LEARNER_REGISTRATION_EMAIL_EXISTS" });
+
+    await pool.query(
+      `insert into users (id, organization_id, role, display_name, email, status)
+       values ('00000000-0000-4000-8000-000000000901', $1, 'learner', 'Học viên đã xoá', 'deleted@e4s.local', 'deleted')`,
+      [DEMO_IDS.organization]
+    );
+    const deletedDuplicate = await app.inject({
+      method: "POST",
+      url: "/api/auth/learner/register",
+      payload: { displayName: "Tên mới", email: "DELETED@e4s.local", password: "registered-pass" }
+    });
+    expect(deletedDuplicate.statusCode).toBe(409);
+    expect(deletedDuplicate.json()).toEqual({ code: "LEARNER_REGISTRATION_EMAIL_DELETED" });
+
+    const deletedLogin = await app.inject({
+      method: "POST",
+      url: "/api/auth/learner/login",
+      payload: { email: "deleted@e4s.local", password: "registered-pass" }
+    });
+    expect(deletedLogin.statusCode).toBe(403);
+    expect(deletedLogin.json()).toEqual({ code: "ACCOUNT_DELETED" });
   });
 
   it("rejects malformed learner registration input", async () => {

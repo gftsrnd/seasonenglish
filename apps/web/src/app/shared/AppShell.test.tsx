@@ -75,6 +75,14 @@ describe("app shell navigation and logout", () => {
     expect(links.map((link) => link.getAttribute("href"))).not.toEqual(expect.arrayContaining(["/op", "/mgr", "/settings"]));
   });
 
+  it("hides learner destinations until onboarding is complete", () => {
+    render(<ExperienceProvider><MemoryRouter initialEntries={["/home"]}><AppShell session={session("learner")} onboardingComplete={false} onLogout={() => undefined}><div /></AppShell></MemoryRouter></ExperienceProvider>);
+
+    expect(screen.queryByRole("link", { name: "Luyện với Season" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "Bài tuần" })).not.toBeInTheDocument();
+    expect(screen.getAllByRole("link", { name: "Trang chủ" })).toHaveLength(2);
+  });
+
   it("keeps the primary operator item active for an unlisted operator child route", () => {
     render(<ExperienceProvider><MemoryRouter initialEntries={["/op/prompts"]}><AppShell session={session("operator")} onLogout={() => undefined}><div /></AppShell></MemoryRouter></ExperienceProvider>);
 

@@ -121,6 +121,16 @@ describe("E4S repositories", () => {
       .resolves.toMatchObject({ rows: [{ state: "succeeded", locked_by: null }] });
   });
 
+  it("keeps existing lesson content visible after the week topic changes", async () => {
+    await pool.query("update program_weeks set topic = $1 where id = $2", ["Scheduling Internal Meetings", DEMO_IDS.week]);
+
+    const matrix = await repositories.content.lessonMatrix(DEMO_IDS.operator);
+    const a2 = matrix?.weeks.find((week) => week.weekNumber === 1)?.cells.find((cell) => cell.cefr === "A2");
+
+    expect(a2).toMatchObject({ status: "published", versionId: DEMO_IDS.publishedLessonSetVersion });
+    expect(a2?.lessons).toHaveLength(5);
+  });
+
   it("dead-letters a failed job after its final allowed attempt", async () => {
     const id = randomUUID();
     await repositories.jobs.enqueue({ id, kind: "ai.coach-feedback", payload: { learnerId: DEMO_IDS.learner }, maxAttempts: 1 });

@@ -87,7 +87,7 @@ export function Modal({ open = true, title, description, children, actions, onCl
     }
   };
   return <div className="modal-backdrop" role="presentation"><section ref={dialogRef} className={["dialog", className].filter(Boolean).join(" ")} role="dialog" aria-modal="true" aria-labelledby={titleId} aria-describedby={description ? descriptionId : undefined} tabIndex={-1} onKeyDown={handleKeyDown}>
-    <div className="row between"><h2 id={titleId}>{title}</h2>{onClose ? <Button variant="ghost" size="sm" aria-label="Đóng hộp thoại" onClick={onClose}>×</Button> : null}</div>
+    <div className="row between"><h2 id={titleId}>{title}</h2>{onClose ? <Button className="modal-close-button" variant="ghost" size="sm" aria-label="Đóng hộp thoại" onClick={onClose}>×</Button> : null}</div>
     {description ? <p id={descriptionId} className="small">{description}</p> : null}
     {children}
     {actions ? <div className="row" style={{ justifyContent: "flex-end", marginTop: 12 }}>{actions}</div> : null}
@@ -98,15 +98,22 @@ export function Notice({ tone = "info", children }: { tone?: "info" | "warn" | "
   return <div className={`banner ${tone}`} role={tone === "danger" ? "alert" : "note"} aria-atomic="true"><div className="body small">{children}</div></div>;
 }
 
+export function Toast({ tone = "info", children, actions }: { tone?: "info" | "warn" | "danger" | "ok"; children: ReactNode; actions?: ReactNode }) {
+  return <div className={`assessment-toast assessment-toast-${tone}`} role={tone === "danger" ? "alert" : "status"} aria-live={tone === "danger" ? "assertive" : "polite"} aria-atomic="true">
+    <div className="assessment-toast-body">{children}</div>
+    {actions ? <div className="assessment-toast-actions">{actions}</div> : null}
+  </div>;
+}
+
 export function PageTitle({ eyebrow, title, detail, aside }: { eyebrow?: string; title: string; detail?: ReactNode; aside?: ReactNode }) {
   return <header className="page-title"><div>{eyebrow ? <div className="eyebrow">{eyebrow}</div> : null}<h1>{title}</h1>{detail ? <p className="muted">{detail}</p> : null}</div>{aside}</header>;
 }
 
-export function Progress({ value, max, label }: { value: number; max: number; label: string }) {
+export function Progress({ value, max, label, segmented = false }: { value: number; max: number; label: string; segmented?: boolean }) {
   const safeMax = Math.max(0, max);
   const safeValue = Math.max(0, Math.min(safeMax, value));
   const percent = safeMax > 0 ? Math.round(safeValue / safeMax * 100) : 0;
-  return <div className="progress" role="progressbar" aria-label={label} aria-valuemin={0} aria-valuemax={safeMax} aria-valuenow={safeValue}><i style={{ width: `${percent}%` }} /></div>;
+  return <div className={`progress${segmented ? " progress-segmented" : ""}`} role="progressbar" aria-label={label} aria-valuemin={0} aria-valuemax={safeMax} aria-valuenow={safeValue} style={segmented ? { gridTemplateColumns: `repeat(${Math.max(safeMax, 1)}, minmax(0, 1fr))` } : undefined}>{segmented ? Array.from({ length: safeMax }, (_, index) => <i className={index === safeValue - 1 ? "is-active" : index < safeValue ? "is-complete" : "is-upcoming"} key={index} />) : <i style={{ width: `${percent}%` }} />}</div>;
 }
 
 export function ErrorText({ message, id, className }: { message?: string | undefined; id?: string | undefined; className?: string | undefined }) {

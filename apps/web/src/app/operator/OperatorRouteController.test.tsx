@@ -27,6 +27,115 @@ describe("OperatorRouteController", () => {
     await waitFor(() => expect(client.saveContentWeeks).toHaveBeenCalledWith([{ weekNumber: 1, topic: "Customer calls", description: "", objectives: "", keyVocabHint: "" }]));
   });
 
+  it("shows week save feedback as a toast instead of below the topic instructions", async () => {
+    const user = userEvent.setup();
+    const weeks = { pilot: { startDate: "2026-10-05", weekCount: 1 }, weeks: [{ id: "w1", weekNumber: 1, startDate: "2026-10-05", endDate: "2026-10-11", current: true, topic: "Meetings", description: "", objectives: "", keyVocabHint: "" }] };
+    const client = { getContentWeeks: vi.fn().mockResolvedValue(weeks), saveContentWeeks: vi.fn().mockResolvedValue(weeks), suggestContentWeeks: vi.fn() };
+    render(<MemoryRouter initialEntries={["/op/weeks"]}><OperatorRouteController session={operator} client={client as any} /></MemoryRouter>);
+
+    await user.click(await screen.findByRole("button", { name: "Lưu khung chủ đề" }));
+
+    const feedback = await screen.findByText("Đã lưu khung chủ đề.");
+    expect(feedback.closest(".operator-toast")).not.toBeNull();
+    expect(document.querySelector(".operator-status-message")).toBeNull();
+  });
+
+  it("persists the confirmed five-day plan with the week frame", async () => {
+    const user = userEvent.setup();
+    const weeks = { pilot: { startDate: "2026-10-05", weekCount: 1 }, weeks: [{ id: "w1", weekNumber: 1, startDate: "2026-10-05", endDate: "2026-10-11", current: true, topic: "", description: "", objectives: "", keyVocabHint: "" }] };
+    const plan = { A2: ["Mon", "Tue", "Wed", "Thu", "Fri"] };
+    const saveContentWeeks = vi.fn().mockResolvedValue(weeks);
+    const client = {
+      getContentWeeks: vi.fn().mockResolvedValue(weeks),
+      saveContentWeeks,
+      suggestContentWeeks: vi.fn().mockResolvedValue({ weeks: [{ weekNumber: 1, levels: ["A2"], options: [{ topic: "Meetings", description: "Lịch họp", objectives: "Xác nhận lịch", keyVocabHint: "schedule", plan }] }] }),
+      getSystemCapabilities: vi.fn().mockResolvedValue({ ai: true })
+    };
+    render(<MemoryRouter initialEntries={["/op/weeks"]}><OperatorRouteController session={operator} client={client as any} /></MemoryRouter>);
+
+    await user.click(await screen.findByRole("button", { name: "Gợi ý" }));
+    await user.click(await screen.findByRole("button", { name: "Xác nhận phương án này" }));
+
+    await waitFor(() => expect(saveContentWeeks).toHaveBeenCalledWith([{ weekNumber: 1, topic: "Meetings", description: "Lịch họp", objectives: "Xác nhận lịch", keyVocabHint: "schedule", plan }]));
+  });
+
+  it("generates every level sequentially after confirming a week", async () => {
+    const user = userEvent.setup();
+    const weeks = { pilot: { startDate: "2026-10-05", weekCount: 1 }, weeks: [{ id: "w1", weekNumber: 1, startDate: "2026-10-05", endDate: "2026-10-11", current: true, topic: "", description: "", objectives: "", keyVocabHint: "" }] };
+    const plan = { A1: ["Hello", "Name", "Job", "Ask", "Goodbye"], A2: ["Meet", "Role", "Team", "Ask", "Close"] };
+    let running = 0;
+    let maxRunning = 0;
+    const order: string[] = [];
+    const generateContentLessonDraft = vi.fn(async (_week: number, cefr: string) => {
+      running += 1;
+      maxRunning = Math.max(maxRunning, running);
+      order.push(`start-${cefr}`);
+      await Promise.resolve();
+      order.push(`end-${cefr}`);
+      running -= 1;
+      return {};
+    });
+    const client = {
+      getContentWeeks: vi.fn().mockResolvedValue(weeks),
+      saveContentWeeks: vi.fn().mockResolvedValue(weeks),
+      suggestContentWeeks: vi.fn().mockResolvedValue({ weeks: [{ weekNumber: 1, levels: ["A1", "A2"], options: [{ topic: "Meetings", description: "Lịch họp", objectives: "Xác nhận lịch", keyVocabHint: "schedule", plan }] }] }),
+      generateContentLessonDraft,
+      getContentLessonMatrix: vi.fn().mockResolvedValue({ levels: [{ cefr: "A1", learnerCount: 0 }, { cefr: "A2", learnerCount: 0 }], weeks: [{ weekNumber: 1, topic: "Meetings", cells: [] }] }),
+      getSystemCapabilities: vi.fn().mockResolvedValue({ ai: true })
+    };
+    render(<MemoryRouter initialEntries={["/op/weeks"]}><OperatorRouteController session={operator} client={client as any} /></MemoryRouter>);
+
+    await user.click(await screen.findByRole("button", { name: "Gợi ý" }));
+    await user.click(await screen.findByRole("button", { name: "Xác nhận phương án này" }));
+
+    await waitFor(() => expect(generateContentLessonDraft).toHaveBeenCalledTimes(2));
+    expect(maxRunning).toBe(1);
+    expect(order).toEqual(["start-A1", "end-A1", "start-A2", "end-A2"]);
+  });
+
+  it("does not let an older week save overwrite a newer save", async () => {
+    const user = userEvent.setup();
+    const weeks = { pilot: { startDate: "2026-10-05", weekCount: 1 }, weeks: [{ id: "w1", weekNumber: 1, startDate: "2026-10-05", endDate: "2026-10-11", current: true, topic: "Old topic", description: "", objectives: "", keyVocabHint: "" }] };
+    const firstWeek = weeks.weeks[0]!;
+    let resolveFirstSave!: (value: typeof weeks) => void;
+    const saveContentWeeks = vi.fn((payload: Array<{ weekNumber: number; topic: string; description: string; objectives: string; keyVocabHint: string }>) => {
+      if (saveContentWeeks.mock.calls.length === 1) {
+        return new Promise<typeof weeks>(resolve => { resolveFirstSave = resolve; });
+      }
+      return Promise.resolve({ ...weeks, weeks: [{ ...firstWeek, topic: payload[0]!.topic }] });
+    });
+    const client = { getContentWeeks: vi.fn().mockResolvedValue(weeks), saveContentWeeks, suggestContentWeeks: vi.fn() };
+    render(<MemoryRouter initialEntries={["/op/weeks"]}><OperatorRouteController session={operator} client={client as any} /></MemoryRouter>);
+
+    const topic = await screen.findByLabelText("Chủ đề *");
+    await user.clear(topic);
+    await user.type(topic, "New topic");
+    await user.click(screen.getByRole("button", { name: "Lưu khung chủ đề" }));
+    await user.clear(topic);
+    await user.type(topic, "Latest topic");
+    await user.click(screen.getByRole("button", { name: "Lưu khung chủ đề" }));
+    expect(saveContentWeeks).toHaveBeenCalledTimes(1);
+
+    resolveFirstSave({ ...weeks, weeks: [{ ...firstWeek, topic: "New topic" }] });
+    await waitFor(() => expect(saveContentWeeks).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(screen.getByLabelText("Chủ đề *")).toHaveValue("Latest topic"));
+  });
+
+  it("keeps the lesson matrix open when AI generation returns invalid structured output", async () => {
+    const user = userEvent.setup();
+    const client = {
+      getContentLessonMatrix: vi.fn().mockResolvedValue({ levels: [{ cefr: "A2", learnerCount: 1 }], weeks: [{ weekNumber: 1, topic: "Meetings", cells: [] }] }),
+      getSystemCapabilities: vi.fn().mockResolvedValue({ ai: true }),
+      generateContentLessonDraft: vi.fn().mockRejectedValue(new Error("AI_OUTPUT_INVALID"))
+    };
+    render(<MemoryRouter initialEntries={["/op/lessons"]}><OperatorRouteController session={operator} client={client as any} /></MemoryRouter>);
+
+    await user.click(await screen.findByRole("button", { name: "Sinh" }));
+
+    expect(await screen.findByText("AI trả về nội dung không đúng định dạng.")).toHaveClass("operator-toast");
+    expect(screen.getByRole("heading", { name: "Sinh & duyệt bài học" })).toBeInTheDocument();
+  });
+
   it("renders prompt controls that Manager can mutate in the owned operations area", async () => {
     const client = { getContentPrompts: vi.fn().mockResolvedValue({ groups: [
       { key: "system_rules", label: "Quy tắc chung", content: "current", defaultContent: "default", version: 1, status: "active" },
@@ -60,12 +169,12 @@ describe("OperatorRouteController", () => {
     render(<MemoryRouter initialEntries={["/op"]}><OperatorRouteController session={operator} client={client as any} /></MemoryRouter>);
     const unavailable = await screen.findByRole("button", { name: "Xem bài làm" });
     expect(unavailable).toBeDisabled();
-    expect(unavailable).toHaveAttribute("title", expect.stringMatching(/API/i));
+    expect(unavailable).not.toHaveAttribute("title");
     expect(screen.getByRole("button", { name: "Duyệt mức" })).toBeDisabled();
-    expect(screen.getByRole("button", { name: "Duyệt mức" })).toHaveAttribute("title", expect.stringMatching(/API/i));
+    expect(screen.getByRole("button", { name: "Duyệt mức" })).not.toHaveAttribute("title");
     expect(screen.getByRole("button", { name: "Duyệt lên mức" })).toBeDisabled();
     expect(screen.getByRole("button", { name: "Từ chối" })).toBeDisabled();
-    expect(screen.getByText(/Một số thao tác đang khóa vì API/i)).toBeInTheDocument();
+    expect(screen.queryByText(/Một số thao tác hiện chưa khả dụng/i)).not.toBeInTheDocument();
   });
 
   it("uses the learner id when deleting a learner from a pending assessment card", async () => {
@@ -248,6 +357,10 @@ describe("OperatorRouteController", () => {
         } }
       ],
       scores: [{ section: "writing", score: 18, source: "ai", criteria: { rationale: "Rõ ý" } }],
+      sections: [
+        { section: "writing", label: "Viết", maxScore: 20, score: 18, source: "ai", criteria: { rationale: "Rõ ý" }, state: "scored", groups: [{ key: "writing", label: "Viết", tasks: [{ taskKey: "W1", prompt: "Viết email xác nhận.", answer: "I can cover the inbox.", maxScore: 20 }] }] },
+        { section: "speaking", label: "Nói", maxScore: 20, score: null, source: null, criteria: {}, state: "not_scored", groups: [{ key: "speaking", label: "Nói", tasks: [{ taskKey: "S1", prompt: "Giới thiệu công việc.", answer: "audio evidence", maxScore: 20 }] }] }
+      ],
       integrityEvents: [{ reason: "window_blur", occurredAt: "2026-10-14T08:10:00.000Z" }],
       decision: null, appeal: null
     };
@@ -261,10 +374,11 @@ describe("OperatorRouteController", () => {
     expect(detailDialog).toHaveAttribute("aria-modal", "true");
     expect(detailDialog).toHaveClass("dialog");
     expect(detailDialog.parentElement).toHaveClass("modal-backdrop");
-    expect(screen.getByText(/Bài test đầu vào · placement · pending_review/)).toBeInTheDocument();
-    expect(screen.getByText(/Viết email xác nhận\./)).toBeInTheDocument();
-    expect(screen.getByText(/window_blur/)).toBeInTheDocument();
-    expect(within(detailDialog).getByText("ai")).toBeInTheDocument();
+    expect(screen.getByText(/Bài test đầu vào · Chờ duyệt/)).toBeInTheDocument();
+    expect(screen.getByText("I can cover the inbox.")).toBeInTheDocument();
+    expect(screen.getByText(/Rời khỏi cửa sổ bài test/)).toBeInTheDocument();
+    expect(screen.queryByText(/window_blur/)).not.toBeInTheDocument();
+    expect(within(detailDialog).queryByText("ai")).not.toBeInTheDocument();
     expect(within(detailDialog).getByLabelText("Phát audio S1")).toHaveAttribute("src", detail.answers[1]!.audioArtifact!.signedUrl!);
     expect(getContentReviewAssessment).toHaveBeenCalledWith("a1");
 
@@ -276,34 +390,66 @@ describe("OperatorRouteController", () => {
     expect(screen.getByRole("button", { name: "Chấm lại bằng AI" })).toBeDisabled();
   });
 
-  it("opens profile evidence in the app modal layer", async () => {
+  it("opens the pending learner profile inline inside the assessment card", async () => {
     const user = userEvent.setup();
     const overview = {
-      pendingAssessments: [], pendingLevelUp: [], approvedLearners: [],
-      unassessedLearners: [{ learnerId: "u1", learnerName: "Lan", profileComplete: true }],
+      pendingAssessments: [{ attemptId: "attempt-1", learnerId: "u1", learnerName: "Lan", kind: "placement", title: "Bài test đầu vào", submittedAt: "2026-10-21T08:00:00.000Z", sectionScores: {}, suggestedLevel: null, profileComplete: true }], pendingLevelUp: [], approvedLearners: [],
+      unassessedLearners: [],
       levelSignals: { windowDays: 14, ready: [], weak: [] }, topicReports: []
     };
     const getAssessmentReviewLearner = vi.fn().mockResolvedValue({
       learner: { id: "u1", displayName: "Lan", email: null, status: "active", createdAt: "2026-10-01", currentLevel: "A2", cefrApproved: true, pendingLevel: null },
-      profile: { position: "QA" }, monthlyGoal: "Email khách hàng", levelHistory: [], attempts: [], deletionRequests: []
+      profile: { position: "QA", email: "lan@example.com" }, monthlyGoal: "Email khách hàng", levelHistory: [], attempts: [], deletionRequests: []
     });
     render(<MemoryRouter initialEntries={["/op"]}><OperatorRouteController session={operator} client={{ getAssessmentReviewOverview: vi.fn().mockResolvedValue(overview), getAssessmentReviewLearner } as any} /></MemoryRouter>);
-    const profileButton = await screen.findByRole("button", { name: "Hồ sơ" });
+    const profileButton = await screen.findByRole("button", { name: /Hồ sơ:/i });
+    expect(screen.queryByRole("button", { name: "Hồ sơ" })).not.toBeInTheDocument();
     await user.click(profileButton);
 
-    const dialog = await screen.findByRole("dialog", { name: "Hồ sơ · Lan" });
-    expect(dialog).toHaveClass("dialog");
-    expect(dialog).not.toHaveClass("wide");
-    expect(dialog.parentElement).toHaveClass("modal-backdrop");
-    expect(within(dialog).getByRole("heading", { name: "Lan" })).toBeInTheDocument();
-    expect(within(dialog).getByText(/QA/)).toBeInTheDocument();
+    const profile = await screen.findByRole("region", { name: "Hồ sơ cá nhân" });
+    expect(profile).toHaveTextContent("lan@example.com");
     expect(getAssessmentReviewLearner).toHaveBeenCalledWith("u1");
-    expect(within(dialog).getByRole("button", { name: "Đóng" })).toHaveFocus();
-
-    await user.keyboard("{Escape}");
-
     expect(screen.queryByRole("dialog", { name: "Hồ sơ · Lan" })).not.toBeInTheDocument();
-    expect(profileButton).toHaveFocus();
+
+    await user.click(screen.getByRole("button", { name: /Hồ sơ:/i }));
+    expect(screen.queryByRole("region", { name: "Hồ sơ cá nhân" })).not.toBeInTheDocument();
+  });
+
+  it("hydrates a pending card from the persisted attempt and learner profile", async () => {
+    const overview = {
+      pendingAssessments: [{ attemptId: "attempt-1", learnerId: "learner-1", learnerName: "Media GFT", kind: "placement", title: "Bài test đầu vào", submittedAt: "2026-10-21T08:57:43.626Z", sectionScores: {}, suggestedLevel: "A1", profileComplete: true }],
+      pendingLevelUp: [], approvedLearners: [], unassessedLearners: [],
+      levelSignals: { windowDays: 14, ready: [], weak: [] }, topicReports: []
+    };
+    const detail: ContentReviewAssessmentDetailView = {
+      attemptId: "attempt-1", learnerId: "learner-1", learnerName: "Media GFT", kind: "placement", title: "Bài test đầu vào",
+      status: "pending_review", startedAt: "2026-10-21T08:31:32.829Z", submittedAt: "2026-10-21T08:57:43.626Z", totalScore: 3, overallCefr: "A1",
+      answers: [{ section: "writing", taskKey: "W1", value: "A real saved answer", evidenceType: "text" }],
+      sections: [
+        { section: "listening", label: "Nghe", maxScore: 20, score: 2, source: "deterministic", criteria: {}, state: "scored" },
+        { section: "reading", label: "Đọc", maxScore: 40, score: 1, source: "deterministic", criteria: {}, state: "scored" },
+        { section: "writing", label: "Viết", maxScore: 20, score: 0, source: "ai", criteria: { rationale: "Nhận xét thật từ lần chấm AI", monthlyGoal: "Luyện email công việc" }, state: "scored" },
+        { section: "speaking", label: "Nói", maxScore: 20, score: 0, source: "ai", criteria: {}, state: "scored" }
+      ],
+      scores: [{ section: "writing", score: 0, source: "ai", criteria: { rationale: "Nhận xét thật từ lần chấm AI", monthlyGoal: "Luyện email công việc" } }],
+      integrityEvents: [], decision: null, appeal: null
+    };
+    const profile = {
+      learner: { id: "learner-1", displayName: "Media GFT", email: "gfts.aimedia@gmail.com", status: "active", createdAt: "2026-10-01", currentLevel: "A1", cefrApproved: false, pendingLevel: null },
+      profile: { selfLevel: "unknown", learningStyles: ["reading"] }, monthlyGoal: "Luyện email công việc", levelHistory: [], attempts: [], deletionRequests: []
+    };
+    const getContentReviewAssessment = vi.fn().mockResolvedValue(detail);
+    const getAssessmentReviewLearner = vi.fn().mockResolvedValue(profile);
+
+    render(<MemoryRouter initialEntries={["/op"]}><OperatorRouteController session={operator} client={{ getAssessmentReviewOverview: vi.fn().mockResolvedValue(overview), getContentReviewAssessment, getAssessmentReviewLearner } as any} /></MemoryRouter>);
+
+    expect(await screen.findByText(/tổng 3\/100/)).toBeInTheDocument();
+    expect(screen.getByText("10%")).toBeInTheDocument();
+    expect(screen.getByText("2.5%")).toBeInTheDocument();
+    expect(screen.getByText("Nhận xét thật từ lần chấm AI")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Hồ sơ:.*Không rõ.*Đọc và ghi chú/i })).toBeInTheDocument();
+    expect(getContentReviewAssessment).toHaveBeenCalledWith("attempt-1");
+    expect(getAssessmentReviewLearner).toHaveBeenCalledWith("learner-1");
   });
 
   it("opens persisted level-up challenge evidence instead of hiding the action", async () => {
@@ -388,13 +534,14 @@ describe("OperatorRouteController", () => {
       levels: [{ cefr: "A2", learnerCount: 1 }],
       weeks: [{
         weekNumber: 1, topic: "Meetings", cells: [{
-          cefr: "A2", status: "published", versionId: "version-1", version: 1, updatedAt: "2026-10-14T08:00:00.000Z", lessons: []
+          cefr: "A2", status: "missing", versionId: null, version: null, updatedAt: null, plan: ["Ask the time", "Confirm the time", "Name the room", "Invite a colleague", "Close the meeting"], lessons: []
         }]
       }]
     };
     render(<MemoryRouter initialEntries={["/op/lessons"]}><OperatorRouteController session={operator} client={{ getContentLessonMatrix: vi.fn().mockResolvedValue(matrix), getSystemCapabilities: vi.fn().mockResolvedValue({ ai: false }) } as any} /></MemoryRouter>);
 
-    expect(await screen.findByText(/0 bài · 14\/10 \d{2}:\d{2}/)).toBeInTheDocument();
+    expect(await screen.findByText("Ask the time (kế hoạch)")).toBeInTheDocument();
+    expect(screen.getByText("Close the meeting (kế hoạch)")).toBeInTheDocument();
   });
 
   it("uses a neutral raw-level fallback for assessments without persisted scoring", async () => {

@@ -81,6 +81,23 @@ describe("week suggestion parity API", () => {
     }
   });
 
+  it("removes a suggestion that repeats an existing week topic", async () => {
+    runTask.mockResolvedValueOnce({
+      output: { weeks: [{ weekNumber: 1, levels: [...levels], options: [{ ...option(1), topic: "Introducing Yourself at Work" }, option(2), option(3)] }] },
+      metadata: {
+        traceId: "trace-week-duplicate", taskId: "week_suggestions", provider: "fixture", model: "fixture-model",
+        attempts: 1, latencyMs: 1, inputHash: "c".repeat(64), schemaValid: true as const, usage: {}
+      }
+    });
+
+    const response = await app.inject({
+      method: "POST", url: "/api/v1/content/weeks/suggestions", headers: { cookie: operatorCookie }, payload: { weekNumbers: [1] }
+    });
+
+    expect(response.statusCode, response.body).toBe(200);
+    expect(response.json().weeks[0].options.map((item: { topic: string }) => item.topic)).toEqual(["Topic 2", "Topic 3"]);
+  });
+
   it("rejects malformed AI output before persistence instead of rendering empty plans", async () => {
     runTask.mockResolvedValueOnce({
       output: { weeks: [{ weekNumber: 1, levels: ["A2"], options: [option(1), option(2)] }] },

@@ -2,7 +2,7 @@
 import "@testing-library/jest-dom/vitest";
 import { cleanup, render, screen } from "@testing-library/react";
 import { userEvent } from "@testing-library/user-event";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { SessionView } from "@e4s/contracts";
 import type { AuthClient } from "../../features/auth/index.js";
 import { EntryScreen } from "./EntryScreen.js";
@@ -14,6 +14,7 @@ const learnerSession: SessionView = {
 };
 
 afterEach(cleanup);
+beforeEach(() => window.history.replaceState({}, "", "/"));
 
 function stubClient(): AuthClient {
   return {
@@ -55,10 +56,13 @@ describe("EntryScreen interaction", () => {
     await user.type(screen.getByLabelText("Email"), "new@e4s.local");
     await user.type(screen.getByLabelText("Mật khẩu"), "new-password");
     await user.type(screen.getByLabelText("Xác nhận mật khẩu"), "new-password");
+    expect(screen.getByRole("button", { name: "Hiện mật khẩu" })).not.toHaveTextContent("Hiện");
+    expect(screen.getByRole("button", { name: "Hiện xác nhận mật khẩu" })).not.toHaveTextContent("Hiện");
     await user.click(screen.getByRole("button", { name: "Đăng ký và bắt đầu" }));
 
     expect(client.registerLearner).toHaveBeenCalledWith({ displayName: "Học viên mới", email: "new@e4s.local", password: "new-password" });
     expect(onAuthenticated).toHaveBeenCalledWith(learnerSession);
+    expect(window.location.pathname).toBe("/home");
   });
 
   it("does not submit registration when password confirmation differs", async () => {
@@ -76,6 +80,23 @@ describe("EntryScreen interaction", () => {
     expect(await screen.findByRole("alert")).toHaveTextContent("Mật khẩu xác nhận chưa khớp");
     expect(client.registerLearner).not.toHaveBeenCalled();
   });
+
+  it("explains that a deleted account must be restored or purged before re-registering", async () => {
+    const user = userEvent.setup();
+    const client = stubClient();
+    client.registerLearner = vi.fn().mockRejectedValue(new Error("LEARNER_REGISTRATION_EMAIL_DELETED"));
+    render(<EntryScreen client={client} onAuthenticated={() => undefined} />);
+
+    await user.click(screen.getByRole("button", { name: "Tạo tài khoản người học" }));
+    await user.type(screen.getByLabelText("Họ và tên"), "Học viên mới");
+    await user.type(screen.getByLabelText("Email"), "deleted@e4s.local");
+    await user.type(screen.getByLabelText("Mật khẩu"), "new-password");
+    await user.type(screen.getByLabelText("Xác nhận mật khẩu"), "new-password");
+    await user.click(screen.getByRole("button", { name: "Đăng ký và bắt đầu" }));
+
+    expect(await screen.findByRole("alert")).toHaveTextContent("khôi phục hoặc xoá vĩnh viễn");
+  });
+
   it("reveals the password and explains when the account uses another login path", async () => {
     const user = userEvent.setup();
     const client = stubClient();
@@ -96,6 +117,19 @@ describe("EntryScreen interaction", () => {
     expect(await screen.findByRole("alert")).toHaveTextContent("Hãy chọn tab Nhân sự");
   });
 
+  it("explains when login is blocked because the account is in the trash", async () => {
+    const user = userEvent.setup();
+    const client = stubClient();
+    client.learnerLogin = vi.fn().mockRejectedValue(new Error("ACCOUNT_DELETED"));
+    render(<EntryScreen client={client} onAuthenticated={() => undefined} />);
+
+    await user.type(screen.getByLabelText("Email"), "deleted@e4s.local");
+    await user.type(screen.getByLabelText("Mật khẩu"), "new-password");
+    await user.click(screen.getByRole("button", { name: "Đăng nhập người học" }));
+
+    expect(await screen.findByRole("alert")).toHaveTextContent("đang nằm trong thùng rác");
+  });
+
   it("shows the current email/password reset path for learner login", async () => {
     const user = userEvent.setup();
     const client = stubClient();
@@ -114,5 +148,7 @@ describe("EntryScreen interaction", () => {
     await user.keyboard("A");
 
     expect(screen.getAllByRole("status").some((status) => status.textContent?.includes("Caps Lock đang bật"))).toBe(true);
+    await user.tab();
+    expect(screen.getAllByRole("status").some((status) => status.textContent?.includes("Caps Lock đang bật"))).toBe(false);
   });
 });

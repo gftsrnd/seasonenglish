@@ -136,23 +136,31 @@ export const placementDefinition: StoredAssessmentDefinition = {
   kind: "placement",
   title: "Workplace English CEFR Placement Test",
   version: 1,
-  totalMinutes: 75,
+  totalMinutes: 70,
   totalScore: 100,
   sections: [
     { code: "listening", title: "Nghe", durationMinutes: 15, maxScore: 20, instructions: ["Mỗi đoạn nghe được phát tối đa 2 lần."], groups: listeningGroups },
-    { code: "reading", title: "Đọc, Ngữ pháp & Từ vựng", durationMinutes: 25, maxScore: 40, instructions: ["40 câu, mỗi câu 1 điểm."], groups: readingGroups },
-    { code: "writing", title: "Viết", durationMinutes: 20, maxScore: 20, instructions: ["Hoàn thành cả hai task trong thời gian của phần Viết."], groups: [
-      { key: "W", title: "Writing tasks", instruction: "Rubric gồm 5 tiêu chí; Task 1 quy đổi 7 điểm và Task 2 quy đổi 13 điểm.", tasks: [
-        { key: "W1", title: "Task 1 – Phản hồi nhanh", prompt: "Một đồng nghiệp cần nghỉ gấp sáng mai và nhờ bạn theo dõi hộp thư hỗ trợ từ 9:00 đến 12:00. Viết thư trả lời: đồng ý giúp và hỏi các ticket cần ưu tiên.", responseType: "long_text", maxScore: 7, minWords: 50, maxWords: 80 },
-        { key: "W2", title: "Task 2 – Email đề xuất", prompt: "Nhân viên chưa chắc quy trình chăm sóc khách hàng nào là mới nhất. Viết email trang trọng: nêu một rủi ro nghiêm trọng và đề xuất cách để nhóm tìm, dùng đúng tài liệu mới nhất.", responseType: "long_text", maxScore: 13, minWords: 120, maxWords: 150 }
+    { code: "reading", title: "Đọc, Ngữ pháp & Từ vựng", durationMinutes: 20, maxScore: 40, instructions: ["40 câu, mỗi câu 1 điểm."], groups: readingGroups },
+    { code: "writing", title: "Viết", durationMinutes: 20, maxScore: 20, instructions: ["Rubric chung: task achievement · organization · vocabulary · grammar · workplace communication (mỗi tiêu chí 1–5)."], groups: [
+      { key: "W1", title: "Task 1 – Phản hồi nhanh (7 phút · A2–B1)", instruction: "You receive this message from a colleague:", stimulus: { type: "message", text: "Hi! I need to take tomorrow morning off urgently for a family matter. Could you help me monitor the customer support inbox from 9 AM to 12 PM? I owe you one!" }, tasks: [
+        { key: "W1", prompt: "Write a short reply (50–80 words): agree to help and ask whether there are any important tickets you should pay special attention to.", responseType: "long_text", maxScore: 7, minWords: 50, maxWords: 80 }
+      ] },
+      { key: "W2", title: "Task 2 – Báo cáo / đề xuất (13 phút · B2–C1)", instruction: "You work for a company that is updating its customer-service procedures. Your manager has sent you this message:", stimulus: { type: "message", text: "Hi,\nSeveral employees have said that they are sometimes unsure which customer-service procedure is the most recent one." }, tasks: [
+        { key: "W2", prompt: "Write a formal email (120–150 words) replying to your manager: explain one serious problem this confusion could cause (for example, giving a customer the wrong refund information) and propose a solution that makes it easy for the team to find and use the latest documents.", responseType: "long_text", maxScore: 13, minWords: 120, maxWords: 150 }
       ] }
     ] },
-    { code: "speaking", title: "Nói", durationMinutes: 15, maxScore: 20, instructions: ["Nộp audio khi có thể. Transcript hoặc câu trả lời gõ chỉ là bằng chứng nội dung và không chứng minh phát âm."], groups: [
-      { key: "S", title: "Speaking tasks", instruction: "Mỗi task cung cấp bằng chứng cho rubric nội dung Nói.", tasks: [
-        { key: "S1", title: "Task 1 – Warm-up", prompt: "Giới thiệu công việc, trách nhiệm, cách dùng tiếng Anh và một tình huống bạn thấy khó.", responseType: "speaking_evidence", maxScore: 5, hint: "Trả lời lần lượt bốn câu hỏi, mỗi câu 2–4 câu nói." },
-        { key: "S2", title: "Task 2 – Data description", prompt: "Mô tả xu hướng khiếu nại Q1: 120 (delayed shipping), Q2: 115 (delayed shipping), Q3: 280 (software bugs), rồi đề xuất một hành động ngắn hạn.", responseType: "speaking_evidence", maxScore: 5, hint: "Nêu xu hướng, thay đổi lớn nhất và một hành động." },
-        { key: "S3", title: "Task 3 – Roleplay", prompt: "Khách hàng tức giận vì hoàn tiền trễ quá 5 ngày. Hãy xoa dịu, giải thích lỗi hệ thống kế toán và cam kết giải pháp rõ ràng.", responseType: "speaking_evidence", maxScore: 5, hint: "Giao tiếp trực tiếp như đang nói với khách hàng." },
-        { key: "S4", title: "Task 4 – Monologue", prompt: "Trình bày lợi ích và thách thức của một nền tảng kiến thức nội bộ tập trung, có ví dụ và kết luận.", responseType: "speaking_evidence", maxScore: 5, hint: "Nêu ít nhất hai lợi ích và hai thách thức." }
+    { code: "speaking", title: "Nói", durationMinutes: 15, maxScore: 20, instructions: ["Nộp file ghi âm cho từng task (mp3, m4a, wav hoặc webm; tối đa 20 MB). Bạn có thể ghi âm trực tiếp hoặc tải file có sẵn, sau đó gõ lại nội dung đã nói vào ô bên dưới để được chấm."], groups: [
+      { key: "S1", title: "Task 1 – Warm-up (3 phút · A1–A2)", instruction: "The examiner asks:", tasks: [
+        { key: "S1", prompt: "1. What do you do?\n2. What are your main responsibilities?\n3. What English do you use at work?\n4. What is one situation in which you find English difficult?", responseType: "speaking_evidence", maxScore: 5, hint: "Trả lời lần lượt 4 câu hỏi, mỗi câu 2–4 câu nói." }
+      ] },
+      { key: "S2", title: "Task 2 – Data description (4 phút · B1–B2)", instruction: "You are in a team meeting. The table shows the number of customer complaints in the last three quarters. You have 30 seconds to look at the data. Then speak for 1–2 minutes:", stimulus: { type: "table", headers: ["Quarter", "Total complaints", "Most common issue"], rows: [["Q1", "120", "Delayed shipping"], ["Q2", "115", "Delayed shipping"], ["Q3", "280", "Software bugs"]] }, tasks: [
+        { key: "S2", prompt: "1. Summarise the main trend in the numbers.\n2. Point out the biggest change in Q3.\n3. Suggest one short-term action the team should take to deal with the Q3 problem.", responseType: "speaking_evidence", maxScore: 5, hint: "Dùng từ vựng mô tả số liệu: increase, decrease, remain stable, the biggest change…" }
+      ] },
+      { key: "S3", title: "Task 3 – Roleplay (4 phút · B2–C1)", instruction: "You are a Customer Care Specialist. The examiner plays a customer who is very upset because the refund has not arrived, although the customer was told it would arrive within five days.", tasks: [
+        { key: "S3", prompt: "Apologise, explain the accounting system error and clearly commit to a solution.", responseType: "speaking_evidence", maxScore: 5, hint: "Giao tiếp trực tiếp như đang nói với khách hàng." }
+      ] },
+      { key: "S4", title: "Task 4 – Monologue (4 phút · B2–C1)", instruction: "You are presenting to your team.", tasks: [
+        { key: "S4", prompt: "Present the benefits and challenges of a centralised internal knowledge platform. Include examples and a conclusion.", responseType: "speaking_evidence", maxScore: 5, hint: "Nêu ít nhất hai lợi ích và hai thách thức." }
       ] }
     ] }
   ]

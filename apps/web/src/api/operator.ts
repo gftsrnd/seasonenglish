@@ -6,6 +6,7 @@ import type {
   AssessmentReviewOverviewView, CefrLevel, ContentLessonDraftInput, ContentLessonMatrixView,
   ContentLessonMutationResult, ContentLessonSetVersionView, ContentPromptKey, ContentPromptSettingsView,
   ContentReviewAiGradeJobView, ContentReviewAssessmentDetailView, ContentReviewView, ContentWeekFrameView,
+  ManualAssessmentScoreInput,
   ContentWeekInput, ContentWeekSuggestionView, SystemCapabilitiesView
 } from "@e4s/contracts";
 import { request } from "./runtime.js";
@@ -15,6 +16,7 @@ export interface OperatorApiClient {
   getAssessmentReviewLearner(learnerId: string): Promise<AssessmentReviewLearnerView>;
   getAssessmentReviewAttempt(attemptId: string): Promise<AssessmentReviewAttemptDetailView>;
   getAssessmentReviewChallenge(attemptId: string): Promise<AssessmentReviewChallengeView>;
+  manualScoreAssessment?(attemptId: string, input: ManualAssessmentScoreInput): Promise<AssessmentReviewAttemptDetailView>;
   rescoreAssessment(attemptId: string, requestId: string): Promise<AssessmentReviewAttemptDetailView>;
   changeAssessmentReviewLearnerLevel(learnerId: string, input: AssessmentLevelChangeInput): Promise<AssessmentLevelChangeView>;
   updateAssessmentReviewMonthlyGoal(learnerId: string, monthlyGoal: string): Promise<AssessmentMonthlyGoalView>;
@@ -59,6 +61,7 @@ export const operatorApiClient: OperatorApiClient = {
   getAssessmentReviewLearner: (learnerId) => request(`/api/v1/assessment-reviews/learners/${encodeURIComponent(learnerId)}`),
   getAssessmentReviewAttempt: (attemptId) => request(`/api/v1/assessment-reviews/attempts/${encodeURIComponent(attemptId)}`),
   getAssessmentReviewChallenge: (attemptId) => request(`/api/v1/assessment-reviews/challenges/${encodeURIComponent(attemptId)}`),
+  manualScoreAssessment: (attemptId, input) => request(`/api/v1/assessment-reviews/${encodeURIComponent(attemptId)}/manual-score`, { method: "POST", body: JSON.stringify(input) }),
   rescoreAssessment: (attemptId, requestId) => request(`/api/v1/assessment-reviews/${encodeURIComponent(attemptId)}/rescore`, { method: "POST", body: JSON.stringify({ requestId }) }),
   changeAssessmentReviewLearnerLevel: (learnerId, input) => request(`/api/v1/assessment-reviews/learners/${encodeURIComponent(learnerId)}/level`, { method: "PATCH", body: JSON.stringify(input) }),
   updateAssessmentReviewMonthlyGoal: (learnerId, monthlyGoal) => request(`/api/v1/assessment-reviews/learners/${encodeURIComponent(learnerId)}/monthly-goal`, { method: "PATCH", body: JSON.stringify({ monthlyGoal }) }),

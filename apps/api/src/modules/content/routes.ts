@@ -22,7 +22,12 @@ const weekInput = z.object({
   topic: z.string().trim().min(1).max(200),
   description: z.string().trim().max(2_000),
   objectives: z.string().trim().max(2_000),
-  keyVocabHint: z.string().trim().max(1_000)
+  keyVocabHint: z.string().trim().max(1_000),
+  plan: z.object({
+    A1: z.array(z.string().trim().min(1).max(300)).length(5), A2: z.array(z.string().trim().min(1).max(300)).length(5),
+    B1: z.array(z.string().trim().min(1).max(300)).length(5), B2: z.array(z.string().trim().min(1).max(300)).length(5),
+    C1: z.array(z.string().trim().min(1).max(300)).length(5)
+  }).partial().optional()
 });
 const weeksInput = z.object({ weeks: z.array(weekInput).min(1).max(52) });
 const weekSuggestionsInput = z.object({ weekNumbers: z.array(z.int().min(1).max(52)).min(1).max(12) });
@@ -78,7 +83,7 @@ const promptInput = z.object({
 const promptLabels: Record<ContentPromptKey, string> = {
   system_rules: "Quy tắc chung (mọi lời gọi trừ sinh bài siêu ngắn)",
   assessment_scoring: "Chấm test & xếp trình độ",
-  weekly_lessons: "Sinh 5 bài siêu ngắn cho tuần",
+  weekly_lessons: "Sinh 5 bài T2–T6 theo chủ đề và kế hoạch đã duyệt",
   week_suggestions: "Gợi ý khung chủ đề tuần",
   micro_grading: "Chấm bài thực hành siêu ngắn",
   coach_dialogue: "AI coach hội thoại",
@@ -86,8 +91,15 @@ const promptLabels: Record<ContentPromptKey, string> = {
 };
 const ASSESSMENT_AUDIO_PRESIGN_TTL_SECONDS = 300;
 
-export function registerContentRoutes(app: FastifyInstance, pool: Pool, aiRunner?: AiTaskRunner, storage?: ObjectStorage): void {
+export function registerContentRoutes(
+  app: FastifyInstance,
+  pool: Pool,
+  aiRunner?: AiTaskRunner,
+  storage?: ObjectStorage,
+  aiRunnerFactory?: (actorId: string) => Promise<AiTaskRunner | undefined>
+): void {
   const repositories = createRepositories(pool);
+  const runnerFor = (actorId: string) => aiRunnerFactory ? aiRunnerFactory(actorId) : Promise.resolve(aiRunner);
   const readers = createRoleGuard(pool, ["operator", "manager"]);
   const operators = createRoleGuard(pool, ["operator", "manager"]);
   const authors = createRoleGuard(pool, ["operator", "manager"]);
@@ -116,20 +128,21 @@ export function registerContentRoutes(app: FastifyInstance, pool: Pool, aiRunner
   }, async (request, reply) => {
     const input = weekSuggestionsInput.safeParse(request.body);
     if (!input.success) return reply.code(400).send({ code: "INVALID_WEEK_SUGGESTION_REQUEST" });
-    if (!aiRunner) return reply.code(503).send({ code: "AI_UNAVAILABLE" });
     const actorId = request.e4sSession!.user.id;
+    const runner = await runnerFor(actorId);
+    if (!runner) return reply.code(503).send({ code: "AI_UNAVAILABLE" });
     const [frame, matrix, task] = await Promise.all([
       repositories.content.listWeeks(actorId), repositories.content.lessonMatrix(actorId),
       repositories.aiRuns.activeTaskPrompt(actorId, "week_suggestions")
     ]);
     if (!frame || !matrix || !task) return reply.code(503).send({ code: "AI_PROMPT_NOT_READY" });
     try {
-      const result = await aiRunner.runTask("week_suggestions", {
+      const result = await runner.runTask("week_suggestions", {
         weekNumbers: input.data.weekNumbers, levels: matrix.levels.map((level) => level.cefr),
         usedTopics: frame.weeks.map((week) => week.topic).filter(Boolean)
       }, { systemPrompt: task.prompt });
       const output = weekSuggestionsOutputSchema.safeParse(result.output);
-      if (!output.success) return reply.code(502).send({ code: "AI_OUTPUT_INVALID" });
+      if (!output.success) return reply.code(502).send({ code: "AI_OUTPUT_INVALID", issues: output.error.issues.slice(0, 8).map(issue => ({ path: issue.path.join("."), message: issue.message })) });
       const activeLevels = matrix.levels.map((level) => level.cefr);
       const activeLevelSet = new Set(activeLevels);
       const requestedWeeks = new Set(input.data.weekNumbers);
@@ -141,11 +154,19 @@ export function registerContentRoutes(app: FastifyInstance, pool: Pool, aiRunner
       for (const week of output.data.weeks) {
         const levels = week.levels.filter((level) => activeLevelSet.has(level));
         if (!levels.length || levels.length !== week.levels.length) return reply.code(502).send({ code: "AI_OUTPUT_INVALID" });
-        for (const option of week.options) {
+        const usedTopicKeys = new Set(frame.weeks.map((candidate) => candidate.topic.trim().toLocaleLowerCase()).filter(Boolean));
+        const freshOptions = week.options.filter((option) => {
+          const topicKey = option.topic.trim().toLocaleLowerCase();
+          if (!topicKey || usedTopicKeys.has(topicKey)) return false;
+          usedTopicKeys.add(topicKey);
+          return true;
+        });
+        if (!freshOptions.length) return reply.code(502).send({ code: "AI_OUTPUT_INVALID" });
+        for (const option of freshOptions) {
           for (const level of levels) if ((option.plan[level] ?? []).length !== 5) return reply.code(502).send({ code: "AI_OUTPUT_INVALID" });
           for (const level of Object.keys(option.plan)) if (!activeLevelSet.has(level as typeof activeLevels[number])) return reply.code(502).send({ code: "AI_OUTPUT_INVALID" });
         }
-        expanded.push({ ...week, levels, options: week.options.map((option) => ({ ...option, plan: Object.fromEntries(levels.map((level) => [level, option.plan[level]!])) })) });
+        expanded.push({ ...week, levels, options: freshOptions.map((option) => ({ ...option, plan: Object.fromEntries(levels.map((level) => [level, option.plan[level]!])) })) });
       }
       try {
         await repositories.aiRuns.recordSucceeded({
@@ -258,7 +279,8 @@ export function registerContentRoutes(app: FastifyInstance, pool: Pool, aiRunner
       // These operations intentionally do not fabricate lexical material. A
       // provider-specific AI task/validated output contract must be configured
       // before the action can mutate an authoritative draft version.
-      return reply.code(503).send({ code: aiRunner ? "AI_PROMPT_NOT_READY" : "AI_UNAVAILABLE" });
+      const runner = await runnerFor(request.e4sSession!.user.id);
+      return reply.code(503).send({ code: runner ? "AI_PROMPT_NOT_READY" : "AI_UNAVAILABLE" });
     });
   }
 
@@ -295,20 +317,22 @@ export function registerContentRoutes(app: FastifyInstance, pool: Pool, aiRunner
   }, async (request, reply) => {
     const params = lessonSetParams.safeParse(request.params);
     if (!params.success) return reply.code(400).send({ code: "INVALID_CONTENT_LESSON_SET" });
-    if (!aiRunner) return reply.code(503).send({ code: "AI_UNAVAILABLE" });
     const actorId = request.e4sSession!.user.id;
+    const runner = await runnerFor(actorId);
+    if (!runner) return reply.code(503).send({ code: "AI_UNAVAILABLE" });
     const frame = await repositories.content.listWeeks(actorId);
     const week = frame?.weeks.find((candidate) => candidate.weekNumber === params.data.week);
     const task = await repositories.aiRuns.activeTaskPrompt(actorId, "weekly_lessons");
     if (!week || !task) return reply.code(503).send({ code: "AI_PROMPT_NOT_READY" });
     try {
-      const result = await aiRunner.runTask("weekly_lessons", {
+      const result = await runner.runTask("weekly_lessons", {
         weekNumber: week.weekNumber, topic: week.topic, description: week.description,
         objectives: week.objectives, keyVocabHint: week.keyVocabHint,
+        ...(week.plan?.[params.data.cefr]?.length === 5 ? { plan: week.plan[params.data.cefr] } : {}),
         cefr: params.data.cefr, lessonCount: 5
-      }, { systemPrompt: task.prompt });
+      }, { systemPrompt: `${task.prompt}\n\nImplementation contract: the saved five-day plan is authoritative when provided. Keep the weekly topic as the context; use each plan item as that day's lesson focus and do not invent a replacement weekly title. The returned lesson content must be the concrete content that the learner lesson screen will render.` });
       const output = weeklyLessonsOutputSchema.safeParse(result.output);
-      if (!output.success) return reply.code(502).send({ code: "AI_OUTPUT_INVALID" });
+      if (!output.success) return reply.code(502).send({ code: "AI_OUTPUT_INVALID", issues: output.error.issues.slice(0, 8).map(issue => ({ path: issue.path.join("."), message: issue.message })) });
       const lessons = output.data.lessons as ContentLessonDraftInput[];
       const validation = validateLessonDraft(lessons);
       const days = [...new Set(lessons.map((lesson) => lesson.dayNumber))].sort((a, b) => a - b);
@@ -428,6 +452,10 @@ export function registerContentRoutes(app: FastifyInstance, pool: Pool, aiRunner
       startedAt: detail.startedAt,
       submittedAt: detail.submittedAt,
       totalScore: detail.totalScore,
+      overallCefr: detail.overallCefr ?? null,
+      totalTimeSeconds: detail.totalTimeSeconds ?? null,
+      totalTimeLimitMinutes: detail.totalTimeLimitMinutes ?? 70,
+      ...(detail.taskPrompts ? { taskPrompts: detail.taskPrompts } : {}),
       answers: detail.responses.map((answer) => {
         const artifact = answer.artifactKey ? byArtifact.get(answer.artifactKey) : undefined;
         const signed = answer.artifactKey ? signedArtifacts.get(answer.artifactKey) : undefined;
@@ -443,6 +471,8 @@ export function registerContentRoutes(app: FastifyInstance, pool: Pool, aiRunner
         };
       }),
       scores: detail.scores,
+      ...(detail.sections ? { sections: detail.sections } : {}),
+      ...(detail.activity ? { activity: detail.activity } : {}),
       integrityEvents: detail.integrityEvents,
       decision: detail.decision,
       appeal: appeal.rows[0] ? { ...appeal.rows[0], createdAt: appeal.rows[0].created_at.toISOString() } : null
@@ -458,7 +488,8 @@ export function registerContentRoutes(app: FastifyInstance, pool: Pool, aiRunner
     const started = await repositories.content.beginReviewAiGrade(actorId, params.data.id, requestId);
     if (!started) return reply.code(404).send({ code: "SUBMISSION_NOT_FOUND" });
     if (!started.started) return started.job;
-    if (!aiRunner) {
+    const runner = await runnerFor(actorId);
+    if (!runner) {
       await repositories.content.failReviewAiGrade(actorId, params.data.id, requestId, "AI_UNAVAILABLE");
       return reply.code(503).send({ code: "AI_UNAVAILABLE" });
     }
@@ -478,7 +509,7 @@ export function registerContentRoutes(app: FastifyInstance, pool: Pool, aiRunner
       return reply.code(400).send({ code: "AI_INPUT_INVALID" });
     }
     try {
-      const result = await aiRunner.runTask("weekly_practice_grading", input.data, { systemPrompt: task.prompt });
+      const result = await runner.runTask("weekly_practice_grading", input.data, { systemPrompt: task.prompt });
       const output = weeklyPracticeOutputSchema.safeParse(result.output);
       if (!output.success) {
         await repositories.content.failReviewAiGrade(actorId, params.data.id, requestId, "AI_OUTPUT_INVALID");

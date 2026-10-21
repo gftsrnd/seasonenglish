@@ -2,22 +2,22 @@ import type { ButtonHTMLAttributes, ReactNode } from "react";
 import { Link, useInRouterContext, useLocation } from "react-router";
 import type { Cefr, RubricScore, Suggestion } from "./types.js";
 
-export function OperatorPage({ children, title }: { children: ReactNode; title: string }) {
+export function OperatorPage({ children, title, hideRouteBack = false }: { children: ReactNode; title: string; hideRouteBack?: boolean }) {
   const inRouter = useInRouterContext();
   if (!inRouter) {
     return <div className="app-operator" aria-label={title}>{children}</div>;
   }
-  return <OperatorPageWithNavigation title={title}>{children}</OperatorPageWithNavigation>;
+  return <OperatorPageWithNavigation title={title} hideRouteBack={hideRouteBack}>{children}</OperatorPageWithNavigation>;
 }
 
-function OperatorPageWithNavigation({ children, title }: { children: ReactNode; title: string }) {
+function OperatorPageWithNavigation({ children, title, hideRouteBack }: { children: ReactNode; title: string; hideRouteBack: boolean }) {
   const location = useLocation();
   const managerOperations = location.pathname.startsWith("/mgr/ops/");
   const rootPath = managerOperations ? "/mgr/ops" : "/op";
   const rootLabel = managerOperations ? "Hiệu suất vận hành" : "Vận hành";
   const isRoot = location.pathname === rootPath;
   return <div className="app-operator" aria-label={title}>
-    {!isRoot && <nav className="operator-route-back" aria-label="Điều hướng vận hành">
+    {!isRoot && !hideRouteBack && <nav className="operator-route-back" aria-label="Điều hướng vận hành">
       <Link className="operator-route-back__link" to={rootPath}>← {rootLabel}</Link>
     </nav>}
     {children}
@@ -30,7 +30,9 @@ export function PageTitle({ children, actions }: { children: ReactNode; actions?
 
 export function Button({ small, primary, danger, busy = false, className = "", children, disabled, ...props }: ButtonHTMLAttributes<HTMLButtonElement> & { small?: boolean; primary?: boolean; danger?: boolean; busy?: boolean }) {
   const classes = [small && "btn-sm", primary && "btn-primary", danger && "btn-danger", className].filter(Boolean).join(" ");
-  return <button {...props} className={classes} disabled={disabled || busy} aria-busy={busy ? "true" : undefined}>{busy && <span className="spinner" aria-hidden="true" />}{children}</button>;
+  const isDisabled = Boolean(disabled || busy);
+  const { title, ...buttonProps } = props;
+  return <button {...buttonProps} {...(!isDisabled && title ? { title } : {})} className={classes} disabled={isDisabled} aria-busy={busy ? "true" : undefined}>{busy && <span className="spinner" aria-hidden="true" />}{children}</button>;
 }
 
 export function Badge({ children, tone = "" }: { children: ReactNode; tone?: "" | "ok" | "warn" | "danger" | "primary" }) {

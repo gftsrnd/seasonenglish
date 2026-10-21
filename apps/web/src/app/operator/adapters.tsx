@@ -1,3 +1,4 @@
+import { useState } from "react";
 import type {
   AssessmentLevelFormSlotView,
   AssessmentReviewOverviewView,
@@ -101,6 +102,8 @@ export interface DashboardAdapterContext {
   pilotWeeks?: number;
   topic?: string | null;
   aiConnected: boolean;
+  aiConfigured?: boolean;
+  aiProvider?: string | null;
   openAppeals: number;
   rescoreBusy?: string | undefined;
   placementDetails?: Record<string, {
@@ -116,6 +119,7 @@ export interface DashboardAdapterContext {
 }
 
 export function adaptAssessmentOverview(source: AssessmentReviewOverviewView, context: DashboardAdapterContext): OperatorDashboardView {
+  const mapUnassessed = (item: AssessmentReviewOverviewView["unassessedLearners"][number]) => ({ id: item.learnerId, name: item.learnerName, hasProfile: item.profileComplete, profileSummary: item.profileComplete ? "Đã điền hồ sơ" : "Chưa điền hồ sơ" });
   return {
     week: {
       ...(context.currentWeek == null ? {} : { current: context.currentWeek }),
@@ -123,13 +127,25 @@ export function adaptAssessmentOverview(source: AssessmentReviewOverviewView, co
       ...(context.topic === undefined ? {} : { topic: context.topic })
     },
     aiConnected: context.aiConnected,
+    ...(context.aiConfigured === undefined ? {} : { aiConfigured: context.aiConfigured }),
+    ...(context.aiProvider === undefined ? {} : { aiProvider: context.aiProvider }),
     openAppeals: context.openAppeals,
     windowDays: source.levelSignals.windowDays,
     topicReports: (source.topicReports ?? []).filter(report => report.status === "open").map(report => ({ id: report.id, learnerName: report.learnerName, at: operatorDateTime(report.createdAt), inputs: [{ input: report.topic, reason: report.reason }] })),
     pending: source.pendingAssessments.map(item => {
       const detail = context.placementDetails?.[item.attemptId];
       const labels: Record<string, string> = { listening: "Nghe", reading: "Đọc", writing: "Viết", speaking: "Nói" };
-      return { id: item.attemptId, name: item.learnerName, submittedAt: operatorDateTime(item.submittedAt), total: detail?.total, rawLevel: detail?.rawLevel, aiSuggestedCefr: item.suggestedLevel as Cefr | null, sectionScores: detail?.sectionScores ?? Object.entries(item.sectionScores).map(([key, percent]) => ({ label: labels[key] ?? key, percent })), rationale: detail?.rationale, monthlyGoal: detail?.monthlyGoal, profileSummary: detail?.profileSummary, suggestedLevel: (item.suggestedLevel ?? detail?.rawLevel) as Cefr | undefined, levels: CEFR_LEVELS, aiScored: detail?.aiScored, canRescore: true, rescoreBusy: context.rescoreBusy === item.attemptId };
+      const detailScores = new Map((detail?.sectionScores ?? []).map(score => [score.label.toLowerCase(), score]));
+      const sectionScores = (["listening", "reading", "writing", "speaking"] as const).map((key) => {
+        const label = labels[key]!;
+        const score = detailScores.get(label.toLowerCase()) ?? detailScores.get(key);
+        return {
+          label,
+          percent: Number(score?.percent ?? item.sectionScores[key] ?? 0),
+          ...(score?.heuristic ? { heuristic: true } : {})
+        };
+      });
+      return { id: item.attemptId, learnerId: item.learnerId, name: item.learnerName, submittedAt: operatorDateTime(item.submittedAt), total: detail?.total, rawLevel: detail?.rawLevel, aiSuggestedCefr: item.suggestedLevel as Cefr | null, sectionScores, rationale: detail?.rationale, monthlyGoal: detail?.monthlyGoal, profileSummary: detail?.profileSummary ?? (item.profileComplete === undefined ? undefined : item.profileComplete ? "Đã điền hồ sơ" : "Chưa điền hồ sơ"), suggestedLevel: (item.suggestedLevel ?? detail?.rawLevel) as Cefr | undefined, levels: CEFR_LEVELS, aiScored: detail?.aiScored, canRescore: true, rescoreBusy: context.rescoreBusy === item.attemptId };
     }),
     levelRequests: source.pendingLevelUp.map(item => {
       const levels = context.levelRequestDetails?.[item.attemptId];
@@ -139,8 +155,25 @@ export function adaptAssessmentOverview(source: AssessmentReviewOverviewView, co
     weak: source.levelSignals.weak.map(item => ({ id: item.learnerId, name: item.learnerName, cefr: item.currentLevel as Cefr, metrics: item.wrongWeeks.map(week => `tuần ${week.weekNumber}: ${week.wrongPercent}% sai (${week.partCount} phần)`).join(" · ") })),
     inFlow: (source.levelSignals.inFlow ?? []).map(item => ({ id: item.learnerId, name: item.learnerName, cefr: item.currentLevel as Cefr, target: item.targetLevel as Cefr, metrics: item.metrics, testId: item.assessmentAttemptId, challengeId: item.challengeAttemptId })),
     approved: source.approvedLearners.map(item => ({ id: item.learnerId, name: item.learnerName, cefr: item.currentLevel as Cefr, placementScore: item.placementScore, monthlyGoal: item.monthlyGoal })),
-    unassessed: source.unassessedLearners.map(item => ({ id: item.learnerId, name: item.learnerName, hasProfile: item.profileComplete, profileSummary: item.profileComplete ? "Đã điền hồ sơ" : "Chưa điền hồ sơ" }))
+    unassessed: source.unassessedLearners.map(mapUnassessed),
+    inProgress: (source.inProgressLearners ?? []).map(mapUnassessed),
+    retry: (source.retryLearners ?? []).map(mapUnassessed)
   };
+}
+
+function compactPlanTitle(value: string, topic: string): string {
+  const cleaned = value.replace(/^T[2-6]\s*[:.\-–]?\s*/i, "").replace(/\s*\(kế hoạch\)\s*$/i, "").trim();
+  const words = cleaned.split(/\s+/).filter(Boolean);
+  if (words.length <= 8 && cleaned.length <= 56) return cleaned;
+  const subject = topic.trim().split(/\s+/).slice(0, 2).join(" ") || "Weekly";
+  const lower = cleaned.toLocaleLowerCase();
+  if (/(từ vựng|vocabulary|words?)/i.test(lower)) return `${subject} vocabulary`;
+  if (/(viết|write|email|tóm tắt)/i.test(lower)) return `${subject} writing`;
+  if (/(nghe|listen|audio)/i.test(lower)) return `${subject} listening`;
+  if (/(đọc|read|reading)/i.test(lower)) return `${subject} reading`;
+  if (/(hỏi|ask|question|trả lời)/i.test(lower)) return `${subject} questions`;
+  if (/(đóng vai|role-play|role play)/i.test(lower)) return `${subject} role-play`;
+  return words.slice(0, 7).join(" ") + (words.length > 7 ? "…" : "");
 }
 
 export function adaptLevelForms(slots: AssessmentLevelFormSlotView[], options: { aiConnected: boolean; generatingTarget?: Cefr | null; generateError?: string | null }): OperatorLevelFormsView {
@@ -160,15 +193,23 @@ export function adaptWeeks(source: ContentWeekFrameView, options: { aiConnected:
 }
 
 export function adaptLessonMatrix(source: ContentLessonMatrixView, options: { aiConnected: boolean; extraLevels?: Cefr[]; generating?: OperatorLessonsView["generating"]; generateError?: string | null }): OperatorLessonsView {
-  return { aiConnected: options.aiConnected, extraLevels: options.extraLevels ?? CEFR_LEVELS.filter(level => !source.levels.some(item => item.cefr === level)), levels: source.levels.map(level => ({ cefr: level.cefr as Cefr, learnerCount: level.learnerCount })), generating: options.generating, generateError: options.generateError, weeks: source.weeks.map(week => ({ number: week.weekNumber, topic: week.topic, cells: week.cells.map(cell => ({ cefr: cell.cefr as Cefr, status: cell.status === "published" ? "approved" : cell.status === "missing" ? "empty" : "draft", generatedAt: operatorDateTime(cell.updatedAt), incomplete: cell.lessons.length > 0 && cell.lessons.length < 5, lessons: cell.lessons.length, days: [1, 2, 3, 4, 5].map((day, index) => ({ day: ["T2", "T3", "T4", "T5", "T6"][index]!, title: cell.lessons.find(lesson => lesson.dayNumber === day)?.title ?? null })) })) })) };
+  return { aiConnected: options.aiConnected, extraLevels: options.extraLevels ?? CEFR_LEVELS.filter(level => !source.levels.some(item => item.cefr === level)), levels: source.levels.map(level => ({ cefr: level.cefr as Cefr, learnerCount: level.learnerCount })), generating: options.generating, generateError: options.generateError, weeks: source.weeks.map(week => ({ number: week.weekNumber, topic: week.topic, cells: week.cells.map(cell => ({ cefr: cell.cefr as Cefr, status: cell.status === "published" ? "approved" : cell.status === "missing" ? "empty" : "draft", generatedAt: operatorDateTime(cell.updatedAt), incomplete: cell.lessons.length > 0 && cell.lessons.length < 5, lessons: cell.lessons.length, days: [1, 2, 3, 4, 5].map((day, index) => { const lesson = cell.lessons.find(candidate => candidate.dayNumber === day); return { day: ["T2", "T3", "T4", "T5", "T6"][index]!, title: lesson?.title ?? (cell.plan?.[index] ? compactPlanTitle(cell.plan[index]!, week.topic) : null), planned: !lesson && Boolean(cell.plan?.[index]) }; }) })) })) };
 }
 
 export function adaptLessonSet(source: ContentLessonSetVersionView, options: { aiConnected: boolean; warnings?: OperatorLessonSetView["warnings"]; mutationState?: OperatorLessonSetView["mutationState"]; mutationMessage?: string | null }): OperatorLessonSetView {
   return {
     week: source.weekNumber, cefr: source.cefr as Cefr, status: source.status === "published" ? "approved" : "draft", topic: source.topic, explanationLanguage: source.explanationLanguage === "Tiếng Việt" ? "tiếng Việt" : "tiếng Anh", aiConnected: options.aiConnected, mutationState: options.mutationState, mutationMessage: options.mutationMessage,
     warnings: options.warnings ?? lessonSetWarnings(source),
-    lessons: source.lessons.map(lesson => ({ id: lesson.id, day: lesson.dayNumber, dayLabel: ["T2", "T3", "T4", "T5", "T6"][lesson.dayNumber - 1] ?? `Bài ${lesson.dayNumber}`, title: lesson.title, durationMin: lesson.durationMinutes, practiceKind: lesson.practiceLabel.includes("điền") ? "điền từ" : lesson.practiceLabel.includes("trắc") ? "trắc nghiệm" : "tự viết", practiceAnswer: persistedPracticeAnswer(lesson.practiceLabel), complete: REQUIRED_LESSON_PARTS.every(code => lesson.parts.some(part => part.code === code)), content: <div className="operator-lesson-preview">{lesson.parts.map((part, index) => <section className={`operator-lesson-preview__section operator-lesson-preview__section--${part.code}`} key={part.code}><div className="operator-lesson-preview__heading"><span className="operator-lesson-preview__number">{String(index + 1).padStart(2, "0")}</span><h4>{part.title}</h4></div>{renderLessonPart(part.code, part.content)}</section>)}</div> }))
+    lessons: source.lessons.map(lesson => ({ id: lesson.id, day: lesson.dayNumber, dayLabel: ["T2", "T3", "T4", "T5", "T6"][lesson.dayNumber - 1] ?? `Bài ${lesson.dayNumber}`, title: lesson.title, durationMin: lesson.durationMinutes, practiceKind: lesson.practiceLabel.includes("điền") ? "điền từ" : lesson.practiceLabel.includes("trắc") ? "trắc nghiệm" : "tự viết", practiceAnswer: persistedPracticeAnswer(lesson.practiceLabel), complete: REQUIRED_LESSON_PARTS.every(code => lesson.parts.some(part => part.code === code)), content: <OperatorLessonPreview parts={lesson.parts} /> }))
   };
+}
+
+const learnerStudyCodes = new Set(["objective", "instruction", "vocabulary", "grammar", "pronunciation"]);
+
+function OperatorLessonPreview({ parts }: { parts: ContentLessonSetVersionView["lessons"][number]["parts"] }) {
+  const [tab, setTab] = useState<"study" | "practice">("study");
+  const visible = parts.filter(part => tab === "study" ? learnerStudyCodes.has(part.code) : !learnerStudyCodes.has(part.code));
+  return <div className="operator-lesson-preview lesson-page"><div className="lesson-surface"><div className="lesson-skill-map" aria-label="Kỹ năng trong bài">{parts.filter(part => part.code !== "objective" && part.code !== "instruction").map(part => <span data-kind={learnerStudyCodes.has(part.code) ? "study" : "practice"} key={part.code}>{part.title}</span>)}</div><div className="ltabs" role="tablist" aria-label="Các bước trong bài học"><button type="button" className={tab === "study" ? "active" : ""} role="tab" aria-selected={tab === "study"} onClick={() => setTab("study")}>1. Học</button><button type="button" className={tab === "practice" ? "active" : ""} role="tab" aria-selected={tab === "practice"} onClick={() => setTab("practice")}>2. Bài tập</button></div><div className="lesson-parts" aria-label={tab === "study" ? "Nội dung học" : "Nội dung bài tập"}>{visible.map((part, index) => <section className={`card lesson-part lesson-part--${part.code}`} key={part.code}><div className="row between"><h2>{index + 1}. {part.title}</h2></div>{renderLessonPart(part.code, part.content)}</section>)}</div></div></div>;
 }
 
 function renderLessonPart(code: string, value: unknown) {
@@ -179,7 +220,7 @@ function renderLessonPart(code: string, value: unknown) {
   if (code === "instruction") return <PreviewList values={strings("steps")} />;
   if (code === "vocabulary") {
     const items = (asArray(content.items) ?? []).map(asRecord).filter((item): item is Record<string, unknown> => item !== undefined);
-    return <div className="grid cols-3">{items.map((item, index) => <div className="card flat" key={`${String(item.word)}-${index}`}><b>{String(item.word ?? "—")}</b>{item.pronunciation ? <span className="muted"> {String(item.pronunciation)}</span> : null}<div className="small">{String(item.meaning ?? "")}</div><PreviewList values={(asArray(item.collocations ?? item.examples) ?? []).filter((entry): entry is string => typeof entry === "string")} /></div>)}</div>;
+    return <div className="vocabulary-list">{items.map((item, index) => <article className="word-card" key={`${String(item.word)}-${index}`}><h3>{String(item.word ?? "—")}</h3>{item.pronunciation ? <span className="ipa">{String(item.pronunciation)}</span> : null}<p>{String(item.meaning ?? "")}</p><PreviewList values={(asArray(item.collocations ?? item.examples) ?? []).filter((entry): entry is string => typeof entry === "string")} /></article>)}</div>;
   }
   if (code === "grammar") return <div className="small"><p>{text("formula", "theory") || "—"}</p>{text("usage") && <p className="muted">{text("usage")}</p>}<PreviewList values={strings("examples")} /></div>;
   if (code === "pronunciation") return <div className="small"><p><b>{text("focus") || "—"}</b>{strings("words").length ? ` · ${strings("words").join(" · ")}` : ""}</p><p>{text("instruction", "tip")}</p></div>;

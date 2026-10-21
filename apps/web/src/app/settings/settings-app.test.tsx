@@ -3,7 +3,7 @@ import "@testing-library/jest-dom/vitest";
 import { cleanup, render, screen, waitFor } from "@testing-library/react";
 import { userEvent } from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { ManagerSettingsView, ProductPreferencesView, SystemCapabilitiesView } from "@e4s/contracts";
+import type { ManagerSettingsView, OperatorSettingsOverviewView, ProductPreferencesView, SystemCapabilitiesView } from "@e4s/contracts";
 import { SettingsPage } from "./index.js";
 
 beforeEach(() => window.localStorage.clear());
@@ -105,14 +105,28 @@ describe("new Settings app branch", () => {
     expect(importButton).not.toHaveAttribute("aria-busy");
   });
 
-  it("shows only operator-owned settings and working prompt link for Operator", () => {
-    const { container } = render(<SettingsPage role="operator" product={product} capabilities={capabilities} ai={{ provider: "openai", configured: true, baseUrl: "https://api.groq.com/openai/v1", model: "qwen/qwen3.8-27b", speechToTextModel: "whisper-large-v3-turbo" }} actions={actions()} />);
-    expect([...container.querySelectorAll("h3")].map((node) => node.textContent)).toEqual(["Prompt & rubric", "Tùy chọn cá nhân"]);
-    expect(screen.queryByRole("heading", { name: "Lịch pilot" })).not.toBeInTheDocument();
-    expect(screen.queryByRole("heading", { name: "Dữ liệu" })).not.toBeInTheDocument();
+  it("lets Operator manage the organization AI credential and working prompt link", () => {
+    const overview: OperatorSettingsOverviewView = {
+      organizationName: "GFT Demo",
+      settings: manager,
+      pilot: { startDate: "2026-10-12", weeks: 2, weekOverride: 0, minMinutesPerDay: 15, courseTheme: "Tiếng Anh giao tiếp công sở", coachDailyLimit: 20 },
+      test: { timed: true, times: { listening: 15, reading: 20, writing: 20, speaking: 15 }, warnLimit: 3 },
+      levelUp: manager.levelUp,
+      accounts: [{ id: "learner-1", displayName: "Học viên A", email: "a@example.com", role: "learner", status: "active", createdAt: "2026-10-12T00:00:00.000Z" }]
+    };
+    const { container } = render(<SettingsPage role="operator" operatorOverview={overview} product={product} capabilities={capabilities} ai={{ provider: "openai", configured: true, baseUrl: "https://api.groq.com/openai/v1", model: "qwen/qwen3.8-27b", speechToTextModel: "whisper-large-v3-turbo" }} actions={actions()} />);
+    expect([...container.querySelectorAll("h3")].map((node) => node.textContent)).toEqual(["Kết nối AI", "Prompt & rubric", "Lịch pilot", "Bài test đầu vào / cuối kỳ", "Ngưỡng xét lên / hạ mức", "Người dùng", "Tùy chọn cá nhân"]);
+    expect(screen.getByText("Học viên A")).toBeInTheDocument();
+    expect(screen.getByLabelText("Ngày bắt đầu (Thứ Hai tuần 1)")).not.toBeDisabled();
+    expect(screen.getByLabelText("Nghe (phút)")).toHaveValue(15);
+    expect(screen.getByRole("button", { name: "Lưu lịch pilot" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Lưu bài test" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Lưu ngưỡng" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /Thêm học viên/i })).not.toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "Prompt & rubric" })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Mở trình sửa prompt" })).toHaveAttribute("href", "/op/prompts");
-    expect(screen.queryByRole("heading", { name: "Kết nối AI" })).not.toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Kết nối AI" })).toBeInTheDocument();
+    expect(screen.getByLabelText("API key mới (để trống = giữ key đang lưu)")).toBeInTheDocument();
     expect(screen.queryByRole("heading", { name: "Ảnh minh hoạ từ vựng" })).not.toBeInTheDocument();
     expect(screen.queryByRole("heading", { name: "Giao diện theo mùa / lễ" })).not.toBeInTheDocument();
     expect(screen.getByRole("checkbox", { name: "Hiệu ứng âm thanh" })).toBeInTheDocument();

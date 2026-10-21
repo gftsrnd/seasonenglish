@@ -10,7 +10,8 @@ export function registerSystemRoutes(
   storage?: ObjectStorage,
   aiAvailable = false,
   maintenanceEnabled = false,
-  imageProviders = { pexels: false, pixabay: false }
+  imageProviders = { pexels: false, pixabay: false },
+  aiRuntimeEnabled = false
 ): void {
   const authenticated = createRoleGuard(pool, ["learner", "operator", "manager"]);
   const managerOnly = createRoleGuard(pool, ["manager"]);
@@ -46,16 +47,35 @@ export function registerSystemRoutes(
 
   app.get("/api/v1/system/capabilities", {
     preHandler: createRoleGuard(pool, ["operator", "manager"])
-  }, async (_request, reply) => {
+  }, async (request, reply) => {
     try {
       await pool.query("select 1");
     } catch {
       return reply.code(503).send({ code: "SYSTEM_DATABASE_UNAVAILABLE" });
     }
+    const provider = await pool.query<{
+      provider: "claude" | "gemini" | "openai" | null;
+      model: string | null;
+      configured: boolean;
+      last_test_status: "never" | "success" | "error" | "timeout" | null;
+    }>(
+      `select pc.provider, pc.model, (pc.secret_ciphertext is not null) as configured,
+              pc.last_test_status
+       from users u left join provider_configurations pc on pc.organization_id = u.organization_id
+       where u.id = $1`,
+      [request.e4sSession!.user.id]
+    );
+    const providerRow = provider.rows[0];
+    const aiConfigured = Boolean(providerRow?.configured);
+    const ai = aiAvailable || (aiRuntimeEnabled && aiConfigured && providerRow?.provider === "openai");
     return {
       api: true,
       database: true,
-      ai: aiAvailable,
+      ai,
+      aiConfigured,
+      aiProvider: providerRow?.provider ?? null,
+      aiModel: providerRow?.model ?? null,
+      aiLastTest: providerRow?.last_test_status ?? null,
       objectStorage: await objectStorageAvailable(storage),
       maintenance: maintenanceEnabled,
       imageProviders

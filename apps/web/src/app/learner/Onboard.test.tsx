@@ -6,7 +6,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { LearnerOnboard } from "./Onboard.js";
 import type { LearnerCallbacks } from "./contracts.js";
 
-afterEach(cleanup);
+afterEach(() => { cleanup(); window.localStorage.clear(); });
 
 const actions = { navigate: vi.fn(), saveProfile: vi.fn(), saveProfileDraft: vi.fn() } as unknown as LearnerCallbacks;
 
@@ -78,20 +78,48 @@ describe("app onboard affordances", () => {
 
     expect(screen.getByRole("group", { name: "Bạn dùng tiếng Anh ở công ty cho việc gì? *" })).toBeInTheDocument();
     expect(screen.getByRole("group", { name: "Mức độ dùng tiếng Anh trong môi trường làm việc? *" })).toBeInTheDocument();
-    expect(screen.getAllByRole("link", { name: "← Quay lại" })).toHaveLength(2);
-    expect(screen.getAllByRole("link", { name: "← Quay lại" }).every((link) => link.getAttribute("aria-disabled") === "true")).toBe(true);
-    expect(screen.getAllByRole("link", { name: "← Quay lại" }).every((link) => link.getAttribute("tabindex") === "-1")).toBe(true);
+    expect(screen.getAllByRole("button", { name: "← Quay lại" })).toHaveLength(2);
+    expect(screen.getAllByRole("button", { name: "← Quay lại" }).every((button) => (button as HTMLButtonElement).disabled)).toBe(true);
     expect(screen.getByRole("button", { name: /lưu nháp/i })).toBeDisabled();
     expect(screen.getByRole("button", { name: /đang lưu/i })).toBeDisabled();
     expect(document.querySelector("form.profile-form")).toHaveAttribute("aria-busy", "true");
+  });
+
+  it("marks selected checkbox and radio controls for neutral styling", () => {
+    render(<LearnerOnboard view={{ profile: { goals: ["email"], environmentUse: "weekly" }, mode: "new" }} actions={actions} />);
+
+    expect(screen.getByRole("checkbox", { name: /viết email/i })).toHaveClass("profile-choice-input");
+    expect(screen.getByRole("group", { name: "Mức độ dùng tiếng Anh trong môi trường làm việc? *" }).querySelector("input[type='radio'][value='weekly']")).toHaveClass("profile-choice-input");
   });
 
   it("keeps onboarding guidance concise without dropping the key reasons", () => {
     render(<LearnerOnboard view={{ profile: {}, mode: "new" }} actions={actions} />);
 
     expect(screen.getByText("Mình dùng thông tin này để chọn ví dụ sát công việc và cách học hợp với bạn. Khoảng 2 phút thôi.")).toBeInTheDocument();
-    expect(screen.getByText("Bài học lấy ví dụ theo đúng công việc của bạn, và Season giải thích theo cách bạn chọn (tiếng Việt hay tiếng Anh, bài ngắn hay hội thoại).")).toBeInTheDocument();
-    expect(screen.getByText("Để xếp đúng mức CEFR: bài quá dễ thì chán, quá khó thì nản. Hồ sơ không thay thế được test vì tự đánh giá thường lệch.")).toBeInTheDocument();
+    expect(screen.queryByText("Cá nhân hoá ví dụ và cách giải thích.")).not.toBeInTheDocument();
+    expect(screen.queryByText("Xếp CEFR để bài học vừa sức.")).not.toBeInTheDocument();
     expect(screen.getByText((_, element) => element?.tagName === "P" && element.textContent === "Các mục có dấu * bắt buộc là bắt buộc; các mục còn lại có thể bỏ trống.")).toBeInTheDocument();
+    expect(screen.getByText("Hồ sơ")).toBeInTheDocument();
+    expect(screen.getByRole("group", { name: "Phong cách của Season" }).querySelector(".persona-choice-grid")).toBeInTheDocument();
+  });
+
+  it("places validation feedback beside the invalid field instead of only at the top", async () => {
+    const user = userEvent.setup();
+    const { container } = render(<LearnerOnboard view={{ profile: {}, mode: "new" }} actions={actions} />);
+
+    await user.click(screen.getByRole("button", { name: /lưu và làm test đầu vào/i }));
+
+    const nameInput = screen.getByRole("textbox", { name: "Họ tên *" });
+    expect(nameInput.parentElement).toContainElement(screen.getByText("Nhập họ tên"));
+    expect(container.querySelector("form > .form-error")).not.toBeInTheDocument();
+  });
+
+  it("shows a saved-draft confirmation before returning home", async () => {
+    const user = userEvent.setup();
+    const saveProfileDraft = vi.fn().mockResolvedValue(undefined);
+    render(<LearnerOnboard view={{ profile: {}, mode: "new" }} actions={{ ...actions, saveProfileDraft }} />);
+
+    await user.click(screen.getByRole("button", { name: /lưu nháp/i }));
+    expect(await screen.findByText(/đã lưu nháp/i)).toBeInTheDocument();
   });
 });

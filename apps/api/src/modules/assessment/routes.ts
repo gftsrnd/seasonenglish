@@ -16,7 +16,8 @@ import type {
   AssessmentSectionCode,
   AssessmentSectionStatus,
   AssessmentView,
-  CefrLevel
+  CefrLevel,
+  ManualAssessmentScoreInput
 } from "@e4s/contracts";
 import { assessmentGradingOutputSchema, levelFormOutputSchema, type LevelFormTaskOutput } from "@e4s/ai";
 import {
@@ -79,6 +80,23 @@ const reviewLevelInput = z.object({
 const monthlyGoalInput = z.object({ monthlyGoal: z.string().trim().min(1).max(2_000) });
 const deletionRequestInput = z.object({ reason: z.string().trim().min(1).max(2_000) });
 const rescoreInput = z.object({ requestId: z.string().trim().min(1).max(160) });
+const manualScoreValue = z.number().int().min(0).max(5);
+const manualScoreInput = z.object({
+  writingCriteria: z.object({
+    taskAchievement: manualScoreValue,
+    organization: manualScoreValue,
+    vocabulary: manualScoreValue,
+    grammar: manualScoreValue,
+    workplaceCommunication: manualScoreValue
+  }).strict(),
+  speakingCriteria: z.object({
+    fluency: manualScoreValue,
+    grammar: manualScoreValue,
+    vocabulary: manualScoreValue,
+    professionalCommunication: manualScoreValue
+  }).strict(),
+  comment: z.string().trim().max(5_000)
+}) satisfies z.ZodType<ManualAssessmentScoreInput>;
 const violationInput = z.object({
   requestId: z.string().trim().min(1).max(160),
   reason: z.enum(["visibility_hidden", "window_blur"]),
@@ -89,8 +107,9 @@ const sectionOrder: AssessmentSectionCode[] = ["listening", "reading", "writing"
 const levelFormParam = z.object({ targetLevel: z.enum(["A2", "B1", "B2", "C1"]) });
 const levelFormVersionParam = z.object({ versionId: z.uuid() });
 
-export function registerAssessmentRoutes(app: FastifyInstance, pool: Pool, aiRunner?: AiTaskRunner): void {
+export function registerAssessmentRoutes(app: FastifyInstance, pool: Pool, aiRunner?: AiTaskRunner, aiRunnerFactory?: (actorId: string) => Promise<AiTaskRunner | undefined>): void {
   const repositories = createRepositories(pool);
+  const runnerFor = (actorId: string) => aiRunnerFactory ? aiRunnerFactory(actorId) : Promise.resolve(aiRunner);
   const learnerOnly = createRoleGuard(pool, ["learner"]);
   const assessmentReaders = createRoleGuard(pool, ["operator", "manager"]);
   const assessmentReviewers = createRoleGuard(pool, ["operator", "manager"]);
@@ -178,7 +197,9 @@ export function registerAssessmentRoutes(app: FastifyInstance, pool: Pool, aiRun
       pendingAssessments: overview.pending.filter((item) => item.kind !== "level-up").map(queueView),
       pendingLevelUp: overview.pending.filter((item) => item.kind === "level-up").map(queueView),
       approvedLearners: overview.approvedLearners,
-      unassessedLearners: overview.unassessedLearners,
+      unassessedLearners: overview.unassessedLearners.map((learner) => ({ ...learner, lastAttemptAt: learner.lastAttemptAt?.toISOString() ?? null })),
+      inProgressLearners: overview.inProgressLearners.map((learner) => ({ ...learner, lastAttemptAt: learner.lastAttemptAt?.toISOString() ?? null })),
+      retryLearners: overview.retryLearners.map((learner) => ({ ...learner, lastAttemptAt: learner.lastAttemptAt?.toISOString() ?? null })),
       levelSignals: { windowDays: 14, ready, weak, inFlow: overview.inFlow },
       topicReports: topicReports.rows.map((item) => ({
         id: item.id, learnerId: item.learner_id, learnerName: item.learner_name, topic: item.topic,
@@ -208,6 +229,20 @@ export function registerAssessmentRoutes(app: FastifyInstance, pool: Pool, aiRun
     return view ?? reply.code(404).send({ code: "ASSESSMENT_CHALLENGE_NOT_FOUND" });
   });
 
+  app.post("/api/v1/assessment-reviews/:attemptId/manual-score", { preHandler: assessmentOperators }, async (request, reply): Promise<AssessmentReviewAttemptDetailView | void> => {
+    const params = attemptParam.safeParse(request.params);
+    const body = manualScoreInput.safeParse(request.body);
+    if (!params.success || !body.success) return reply.code(400).send({ code: "INVALID_ASSESSMENT_MANUAL_SCORE" });
+    const saved = await repositories.assessments.saveManualAssessmentScore({
+      actorId: request.e4sSession!.user.id,
+      attemptId: params.data.attemptId,
+      ...body.data
+    });
+    if (!saved) return reply.code(409).send({ code: "ASSESSMENT_MANUAL_SCORE_NOT_ALLOWED" });
+    const view = await repositories.assessments.getReviewAttempt(request.e4sSession!.user.id, params.data.attemptId);
+    return view ?? reply.code(404).send({ code: "ASSESSMENT_ATTEMPT_NOT_FOUND" });
+  });
+
   app.post("/api/v1/assessment-reviews/:attemptId/rescore", {
     preHandler: assessmentOperators,
     config: { rateLimit: { max: 4, timeWindow: "1 minute" } }
@@ -218,7 +253,8 @@ export function registerAssessmentRoutes(app: FastifyInstance, pool: Pool, aiRun
     const actorId = request.e4sSession!.user.id;
     const context = await repositories.assessments.getRescoreContext(actorId, params.data.attemptId);
     if (!context) return reply.code(409).send({ code: "ASSESSMENT_RESCORE_NOT_ALLOWED" });
-    if (!aiRunner) return reply.code(503).send({ code: "AI_UNAVAILABLE" });
+    const runner = await runnerFor(actorId);
+    if (!runner) return reply.code(503).send({ code: "AI_UNAVAILABLE" });
 
     const aiRequestKey = `${params.data.attemptId}:${body.data.requestId}`;
     const existing = await repositories.aiRuns.findSucceededOutput(actorId, aiRequestKey, "assessment_scoring");
@@ -233,7 +269,7 @@ export function registerAssessmentRoutes(app: FastifyInstance, pool: Pool, aiRun
     if (!writing || !speaking) return reply.code(409).send({ code: "ASSESSMENT_PRODUCTIVE_SECTIONS_MISSING" });
     const answerFor = (section: AssessmentSectionCode, taskKey: string) => context.attempt.responses.find((response) => response.section === section && response.taskKey === taskKey);
     try {
-      const result = await aiRunner.runTask("assessment_scoring", {
+      const result = await runner.runTask("assessment_scoring", {
         kind: context.definition.kind,
         writing: writing.groups.flatMap((group) => group.tasks).map((item) => ({ prompt: item.prompt, answer: answerFor("writing", item.key)?.value ?? "" })),
         speaking: speaking.groups.flatMap((group) => group.tasks).map((item) => {
@@ -351,12 +387,13 @@ export function registerAssessmentRoutes(app: FastifyInstance, pool: Pool, aiRun
   }, async (request, reply) => {
     const params = levelFormParam.safeParse(request.params);
     if (!params.success) return reply.code(400).send({ code: "INVALID_TARGET_LEVEL" });
-    if (!aiRunner) return reply.code(503).send({ code: "AI_UNAVAILABLE" });
     const actorId = request.e4sSession!.user.id;
+    const runner = await runnerFor(actorId);
+    if (!runner) return reply.code(503).send({ code: "AI_UNAVAILABLE" });
     const task = await repositories.aiRuns.activeTaskPrompt(actorId, "level_form_generation");
     if (!task) return reply.code(503).send({ code: "AI_PROMPT_NOT_READY" });
     try {
-      const result = await aiRunner.runTask("level_form_generation", {
+      const result = await runner.runTask("level_form_generation", {
         targetLevel: params.data.targetLevel, context: "workplace_english", listeningQuestions: 5, readingQuestions: 5
       }, { systemPrompt: task.prompt });
       const output = levelFormOutputSchema.safeParse(result.output);
@@ -585,6 +622,7 @@ export function registerAssessmentRoutes(app: FastifyInstance, pool: Pool, aiRun
     const params = attemptParam.safeParse(request.params);
     if (!params.success) return reply.code(400).send({ code: "INVALID_ASSESSMENT_ATTEMPT" });
     const learnerId = request.e4sSession!.user.id;
+    const runner = await runnerFor(learnerId);
     let attempt = await repositories.assessments.findAttempt(learnerId, params.data.attemptId);
     if (!attempt) {
       return reply.code(409).send({ code: "ASSESSMENT_ATTEMPT_NOT_SUBMITTABLE" });
@@ -614,14 +652,14 @@ export function registerAssessmentRoutes(app: FastifyInstance, pool: Pool, aiRun
         criteria: { answered: score.answered, total: score.total, maxScore: score.maxScore }, source: "deterministic"
       });
     }
-    if (aiRunner && !await repositories.aiRuns.requestExists(learnerId, attempt.id, "assessment_scoring")) {
+    if (runner && !await repositories.aiRuns.requestExists(learnerId, attempt.id, "assessment_scoring")) {
       const task = await repositories.aiRuns.activeTaskPrompt(learnerId, "assessment_scoring");
       const writing = sectionByCode(definition.blueprint, "writing");
       const speaking = sectionByCode(definition.blueprint, "speaking");
       if (task && writing && speaking) {
         const answerFor = (section: AssessmentSectionCode, taskKey: string) => attempt.responses.find((response) => response.section === section && response.taskKey === taskKey);
         try {
-          const result = await aiRunner.runTask("assessment_scoring", {
+          const result = await runner.runTask("assessment_scoring", {
             kind: definition.blueprint.kind,
             writing: writing.groups.flatMap((group) => group.tasks).map((item) => ({ prompt: item.prompt, answer: answerFor("writing", item.key)?.value ?? "" })),
             speaking: speaking.groups.flatMap((group) => group.tasks).map((item) => { const answer = answerFor("speaking", item.key); return { prompt: item.prompt, answer: answer?.value ?? "", evidenceType: answer?.evidenceType ?? "technical_failure" }; }),

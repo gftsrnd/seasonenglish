@@ -8,7 +8,7 @@ import type {
 import { useExperience } from "../../features/experience/Experience.js";
 import { Clock3, Mic, Play, Square, TriangleAlert, Upload } from "lucide-react";
 import type { AssessmentView, LearnerCallbacks } from "./contracts.js";
-import { Notice } from "./ui.js";
+import { Notice, Toast } from "./ui.js";
 
 export interface AssessmentRuntimeState {
   remainingSeconds: number | null;
@@ -40,6 +40,7 @@ let filePickerGraceUntil = 0;
  * the API; the local clock is only a display between server snapshots.
  */
 export function AssessmentRuntime({ view, actions, children }: AssessmentRuntimeProps) {
+  const { play } = useExperience();
   const attempt = view.attempt;
   const serverRuntime = view.runtime ?? attempt?.runtime;
   const section = attempt?.currentSection ?? (isSection(view.screenState) ? view.screenState : null);
@@ -107,6 +108,14 @@ export function AssessmentRuntime({ view, actions, children }: AssessmentRuntime
   }, [actions, autoCountdown, section]);
 
   useEffect(() => {
+    if (autoCountdown !== null && autoCountdown > 0) play("warning", { force: true });
+  }, [autoCountdown, play]);
+
+  useEffect(() => {
+    if (remainingSeconds === 300 || remainingSeconds === 60) play("warning", { force: true });
+  }, [play, remainingSeconds]);
+
+  useEffect(() => {
     if (!violationDialog) return;
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key !== "Escape") return;
@@ -136,6 +145,7 @@ export function AssessmentRuntime({ view, actions, children }: AssessmentRuntime
     if (previous?.reason === reason && now - previous.at < 1_000) return;
     lastViolation.current = { reason, at: now };
     const input = { requestId: requestId(), reason, occurredAt: new Date(now).toISOString() };
+    play("warning", { force: true });
     const optimisticCount = (serverRuntime?.violationCount ?? 0) + 1;
     try {
       if (!actions.recordAssessmentViolation) {
@@ -172,7 +182,7 @@ export function AssessmentRuntime({ view, actions, children }: AssessmentRuntime
       document.removeEventListener("visibilitychange", onVisibilityChange);
       window.removeEventListener("blur", onBlur);
     };
-  }, [attempt, section, serverRuntime?.status, serverRuntime?.violationCount, serverRuntime?.violationLimit, actions]);
+  }, [attempt, section, serverRuntime?.status, serverRuntime?.violationCount, serverRuntime?.violationLimit, actions, play]);
 
   const runtimeState: AssessmentRuntimeState = {
     remainingSeconds,
@@ -205,16 +215,14 @@ export function AssessmentRuntime({ view, actions, children }: AssessmentRuntime
 
   return <>
     {children(runtimeState)}
-    {runtimeError ? <Notice tone="danger"><span>{runtimeError}</span>{autoSubmitFailed || failedViolationReason ? <button className="btn-sm" type="button" style={{ marginLeft: 8 }} onClick={retryRuntimeError}>Thử lại</button> : null}</Notice> : null}
-    {violationDialog ? <div className="modal-backdrop" role="presentation"><div ref={runtimeDialogRef} className="dialog" role="dialog" aria-modal="true" aria-labelledby="assessment-violation-title" aria-describedby="assessment-violation-description" tabIndex={-1} onKeyDown={trapDialogFocus}>
-      <h2 id="assessment-violation-title"><TriangleAlert size={22} aria-hidden="true" /> Cảnh báo {violationDialog.count}/{violationDialog.limit}</h2>
-      <p id="assessment-violation-description">{violationDialog.reason === "visibility_hidden" ? "Bạn đã rời khỏi trang bài test." : "Cửa sổ bài test vừa mất trạng thái tập trung."}</p>
-      <p className="small muted">{violationDialog.count >= violationDialog.limit
-        ? "Đây là cảnh báo cuối cùng. Lần tiếp theo bài sẽ tự động nộp."
-        : `Bạn còn ${Math.max(0, violationDialog.limit - violationDialog.count)} lần cảnh báo trước khi bài tự động nộp.`}</p>
-      <button className="btn-primary" type="button" onClick={() => setViolationDialog(null)}>Đã hiểu, tiếp tục</button>
+    {runtimeError ? <Toast tone="danger">{runtimeError}{autoSubmitFailed || failedViolationReason ? <button className="btn-sm" type="button" onClick={retryRuntimeError}>Thử lại</button> : null}</Toast> : null}
+    {violationDialog ? <div className="modal-backdrop" role="presentation"><div ref={runtimeDialogRef} className="dialog assessment-violation-dialog" role="dialog" aria-modal="true" aria-labelledby="assessment-violation-title" aria-describedby="assessment-violation-description" tabIndex={-1} onKeyDown={trapDialogFocus}>
+      <h2 id="assessment-violation-title"><TriangleAlert size={22} aria-hidden="true" /><span>Cảnh báo {violationDialog.count}/{violationDialog.limit}</span></h2>
+      <p id="assessment-violation-description">{violationDialog.reason === "visibility_hidden" ? "Bạn vừa rời khỏi màn hình bài thi." : "Cửa sổ bài thi vừa mất trạng thái tập trung."} Trong lúc thi, <strong>không được mở tab, cửa sổ hay pop-up khác</strong>.</p>
+      <p className="small muted"><strong>Bài test vẫn tiếp tục</strong>; thời gian vẫn đang chạy.</p>
+      <div className="row" style={{ justifyContent: "flex-end", marginTop: 16 }}><button className="btn-primary" type="button" onClick={() => setViolationDialog(null)}>Đã hiểu, tiếp tục</button></div>
     </div></div> : null}
-    {autoCountdown !== null ? <div className="modal-backdrop" role="presentation"><div ref={runtimeDialogRef} className="dialog" role="dialog" aria-modal="true" aria-labelledby="assessment-auto-submit-title" aria-describedby="assessment-auto-submit-description" tabIndex={-1} onKeyDown={trapDialogFocus}>
+    {autoCountdown !== null ? <div className="modal-backdrop" role="presentation"><div ref={runtimeDialogRef} className="dialog assessment-auto-submit-dialog" role="dialog" aria-modal="true" aria-labelledby="assessment-auto-submit-title" aria-describedby="assessment-auto-submit-description" tabIndex={-1} onKeyDown={trapDialogFocus}>
       <h2 id="assessment-auto-submit-title"><Clock3 size={22} aria-hidden="true" /> Tự động nộp bài</h2>
       <p id="assessment-auto-submit-description">{(autoSubmitReason ?? serverRuntime?.submitReason) === "violations" ? "Bạn đã vượt quá số lần cảnh báo cho phép." : "Hết giờ phần thi. Hệ thống sẽ tự động nộp."}</p>
       <p className="small muted">Tự thực hiện sau</p><strong className="assessment-auto-countdown" aria-live="assertive">{Math.max(0, autoCountdown)}</strong>
@@ -312,19 +320,23 @@ export function AssessmentRecorder({ taskKey, view, actions, onEvidence }: Asses
 
   return <div className="speaking-evidence-controls">
     {!canRecord ? <Notice tone="warn">Trình duyệt này không ghi âm được. Bạn vẫn có thể tải file ghi âm.</Notice> : null}
-    <button className={`btn-sm ${recording ? "btn-danger" : ""}`} type="button" aria-pressed={recording} disabled={!canRecord || busy} onClick={() => recording ? stopRecording() : void startRecording()}>{recording ? <><Square size={15} fill="currentColor" aria-hidden="true" /> Dừng ghi</> : <><Mic size={16} aria-hidden="true" /> Ghi âm</>}</button>
-    {audioUrl ? <button className="btn-sm btn-ghost" type="button" disabled={busy} onClick={() => void replayAudio()}><Play size={16} fill="currentColor" aria-hidden="true" /> Nghe lại ghi âm</button> : null}
-    <button className="btn btn-sm" type="button" disabled={busy} onClick={() => {
-      filePickerGraceUntil = Date.now() + 2_000;
-      fileInput.current?.click();
-    }}><Upload size={16} aria-hidden="true" /> Tải file ghi âm</button>
+    <div className="speaking-evidence-actions">
+      <button className={`btn-sm ${recording ? "btn-danger" : ""}`} type="button" aria-pressed={recording} disabled={!canRecord || busy} onClick={() => recording ? stopRecording() : void startRecording()}>{recording ? <><Square size={15} fill="currentColor" aria-hidden="true" /> Dừng ghi</> : <><Mic size={16} aria-hidden="true" /> Ghi âm</>}</button>
+      {audioUrl ? <button className="btn-sm btn-ghost" type="button" disabled={busy} onClick={() => void replayAudio()}><Play size={16} fill="currentColor" aria-hidden="true" /> Nghe lại ghi âm</button> : null}
+      <button className="btn btn-sm" type="button" disabled={busy} onClick={() => {
+        filePickerGraceUntil = Date.now() + 2_000;
+        fileInput.current?.click();
+      }}><Upload size={16} aria-hidden="true" /> Tải file ghi âm</button>
+    </div>
     <input ref={fileInput} id={`assessment-audio-${taskKey}`} className="sr-only" type="file" accept="audio/*" aria-label="Tải file ghi âm" tabIndex={-1} disabled={busy} onChange={(event) => {
       const file = event.currentTarget.files?.[0];
       event.currentTarget.value = "";
       if (file) void submitAudio(file, file.name, "File ghi âm đã nộp");
     }} />
-    <span aria-live="polite">{fileName}</span>
-    {error ? <ErrorMessage>{error}</ErrorMessage> : null}
+    <div className="speaking-evidence-status">
+      <span aria-live="polite">{fileName}</span>
+      {error ? <ErrorMessage>{error}</ErrorMessage> : null}
+    </div>
   </div>;
 }
 

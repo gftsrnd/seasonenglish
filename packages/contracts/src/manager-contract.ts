@@ -119,10 +119,35 @@ export interface ManagerAccountView {
   readonly role: AccountRole;
   readonly status: string;
   readonly createdAt: string;
+  /** Learner-facing data shown in the Operator directory when available. */
+  readonly cefr?: CefrLevel | null;
+  readonly placementScore?: number | null;
 }
 
 export interface ManagerAccountsView {
   readonly organizationName: string;
+  readonly accounts: readonly ManagerAccountView[];
+}
+
+/** Read-only organisation snapshot available to Operators; no account mutation is exposed. */
+export interface OperatorSettingsOverviewView {
+  readonly organizationName: string;
+  /** Full persisted settings so Operators can edit and save the same runtime configuration. */
+  readonly settings: ManagerSettingsView;
+  readonly pilot: {
+    readonly startDate: string;
+    readonly weeks: number;
+    readonly weekOverride: number;
+    readonly minMinutesPerDay: number;
+    readonly courseTheme: string;
+    readonly coachDailyLimit: number;
+  };
+  readonly test: {
+    readonly timed: boolean;
+    readonly times: ManagerSettingsView["testTimes"];
+    readonly warnLimit: number;
+  };
+  readonly levelUp: ManagerSettingsView["levelUp"];
   readonly accounts: readonly ManagerAccountView[];
 }
 
@@ -404,6 +429,11 @@ export interface SystemCapabilitiesView {
   readonly api: true;
   readonly database: true;
   readonly ai: boolean;
+  /** Whether Manager has saved an encrypted provider credential for this organization. */
+  readonly aiConfigured?: boolean;
+  readonly aiProvider?: ManagerProviderKind | null;
+  readonly aiModel?: string | null;
+  readonly aiLastTest?: ManagerProviderTestStatus | null;
   readonly objectStorage: boolean;
   /** Only configuration readiness is exposed; provider credentials never leave the API. */
   readonly imageProviders: {

@@ -51,7 +51,7 @@ describe("assessment runtime API", () => {
     expect(response.statusCode, response.body).toBe(409);
   });
 
-  it("deduplicates events and auto-submits only after the warning limit", async () => {
+  it("deduplicates events and keeps the learner in the test while warnings are being tested", async () => {
     const started = await app.inject({ method: "POST", url: "/api/v1/assessments/final/start", headers: { cookie: runtimeCookie }, payload: {} });
     const attemptId = started.json().attempt.id as string;
     await pool.query("update assessment_attempts set violation_limit = 1 where id = $1", [attemptId]);
@@ -71,10 +71,10 @@ describe("assessment runtime API", () => {
     expect(duplicate.statusCode, duplicate.body).toBe(200);
     expect(duplicate.json()).toMatchObject({ violationCount: 1 });
     expect(automatic.statusCode, automatic.body).toBe(200);
-    expect(automatic.json()).toMatchObject({ violationCount: 2, submitReason: "violations", status: "pending_review", autoSubmitted: true });
+    expect(automatic.json()).toMatchObject({ violationCount: 2, submitReason: null, status: "in_progress", autoSubmitted: false });
     const duplicateAutomatic = await send("api-event-2");
     expect(duplicateAutomatic.statusCode, duplicateAutomatic.body).toBe(200);
-    expect(duplicateAutomatic.json()).toMatchObject({ violationCount: 2, autoSubmitted: true });
+    expect(duplicateAutomatic.json()).toMatchObject({ violationCount: 2, autoSubmitted: false });
   });
 
   it("lets the server advance an expired section instead of trusting the browser clock", async () => {

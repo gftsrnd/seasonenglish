@@ -1,4 +1,4 @@
-import type { AssessmentDecisionView, AssessmentResponseView, AssessmentSectionCode, AssessmentSectionStatus, AssessmentAttemptStatus } from "./assessment-contract.js";
+import type { AssessmentDecisionView, AssessmentOption, AssessmentResponseView, AssessmentSectionCode, AssessmentSectionStatus, AssessmentAttemptStatus, AssessmentStimulus } from "./assessment-contract.js";
 import type { CefrLevel } from "./domain-contract.js";
 import type { LessonPart } from "./learning-contract.js";
 
@@ -14,6 +14,8 @@ export interface ContentWeekTopicView {
   description: string;
   objectives: string;
   keyVocabHint: string;
+  /** AI's accepted five-day outline, retained separately from full lesson content. */
+  plan?: Partial<Record<CefrLevel, string[]>>;
 }
 
 export interface ContentWeekFrameView {
@@ -27,6 +29,7 @@ export interface ContentWeekInput {
   description: string;
   objectives: string;
   keyVocabHint: string;
+  plan?: Partial<Record<CefrLevel, string[]>>;
 }
 
 export interface ContentWeekSuggestionView {
@@ -93,6 +96,7 @@ export interface ContentLessonMatrixView {
       version: number | null;
       updatedAt: string | null;
       lessons: Array<{ dayNumber: number; title: string }>;
+      plan?: string[];
     }>;
   }>;
 }
@@ -157,6 +161,40 @@ export interface ContentReviewAssessmentAnswerView extends AssessmentResponseVie
   } | null;
 }
 
+export interface ContentReviewAssessmentGroupView {
+  key: string;
+  label: string;
+  instruction?: string;
+  stimulus?: AssessmentStimulus;
+  maxPlays?: number;
+  tasks: Array<{
+    taskKey: string;
+    title?: string;
+    prompt: string;
+    answer: string | null;
+    maxScore?: number;
+    minWords?: number;
+    maxWords?: number;
+    options?: AssessmentOption[];
+    correctAnswer?: string | null;
+  }>;
+}
+
+export interface ContentReviewAssessmentSectionView {
+  section: AssessmentSectionCode;
+  label: string;
+  maxScore?: number;
+  durationMinutes?: number;
+  actualSeconds?: number | null;
+  score: number | null;
+  cefr?: CefrLevel | null;
+  source: "deterministic" | "ai" | "human" | null;
+  criteria: Record<string, unknown>;
+  comment?: string | null;
+  state: "scored" | "not_scored";
+  groups?: ContentReviewAssessmentGroupView[];
+}
+
 export interface ContentReviewAssessmentDetailView {
   attemptId: string;
   learnerId: string;
@@ -167,7 +205,17 @@ export interface ContentReviewAssessmentDetailView {
   startedAt: string;
   submittedAt: string | null;
   totalScore: number | null;
+  overallCefr?: CefrLevel | null;
+  totalTimeSeconds?: number | null;
+  totalTimeLimitMinutes?: number;
+  taskPrompts?: Array<{
+    section: AssessmentSectionCode;
+    taskKey: string;
+    title?: string;
+    prompt: string;
+  }>;
   answers: ContentReviewAssessmentAnswerView[];
+  sections?: ContentReviewAssessmentSectionView[];
   scores: Array<{
     section: AssessmentSectionCode;
     score: number;
@@ -175,6 +223,7 @@ export interface ContentReviewAssessmentDetailView {
     criteria: Record<string, unknown>;
   }>;
   integrityEvents: Array<Record<string, unknown>>;
+  activity?: Array<{ at: string; label: string; detail?: string }>;
   decision: AssessmentDecisionView | null;
   appeal: { id: string; reason: string; status: "pending" | "accepted" | "rejected"; resolution: string | null; createdAt: string } | null;
 }

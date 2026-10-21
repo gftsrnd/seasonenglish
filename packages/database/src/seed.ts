@@ -1,5 +1,6 @@
 import type { Client } from "pg";
 import { finalDefinition, levelUpDefinition, placementDefinition } from "./assessment-blueprints.js";
+import { prototypePromptDefaults } from "./prototype-prompts.js";
 
 export const DEMO_IDS = {
   organization: "00000000-0000-4000-8000-000000000001",
@@ -62,14 +63,42 @@ const lessonTitles = [
   "be going to + verb"
 ] as const;
 
+const weeklyLessonsPrompt = `Chỉ trả về JSON hợp lệ, không bọc markdown, không giải thích.
+Bạn là người thiết kế bài học tiếng Anh công sở cho Season English. Tạo đúng 5 bài cho tuần được cung cấp, tương ứng dayNumber 1, 2, 3, 4, 5 (T2 đến T6). Cả 5 bài dùng cùng chủ đề tuần nhưng mỗi ngày phải dạy một mẫu câu, cấu trúc hoặc kỹ năng khác nhau, đi từ dễ đến khó, không lặp lại. Nếu input có plan gồm 5 mục thì plan là kế hoạch đã được operator duyệt: dùng từng mục làm trọng tâm của đúng ngày đó, không tự thay bằng chủ đề tuần khác và không bỏ qua mục nào.
+
+Nguyên tắc theo mức CEFR và ngôn ngữ:
+- Bám chặt cefr, topic, description, objectives và keyVocabHint trong input. Nội dung phải thực tế, liên quan công việc và phù hợp với người học Việt Nam.
+- A1–A2: phần giải thích, hướng dẫn và phản hồi bằng tiếng Việt; câu và từ tiếng Anh giữ nguyên. B1 trở lên: phần giải thích bằng tiếng Anh, trừ khi input yêu cầu khác.
+- Tiêu đề là tên ngắn của mẫu câu/kỹ năng trong ngày, tối đa 6 từ, không phải tên chủ đề tuần. durationMinutes là 5, 10, 15 hoặc 20.
+- Không dùng placeholder, dữ liệu giả kiểu “...” hoặc nội dung chung chung. Mọi content đều là tài liệu người học có thể đọc, nghe, nói hoặc làm ngay.
+
+Mỗi lesson phải có đúng một lần 9 part code sau, theo thứ tự này: objective, instruction, vocabulary, grammar, pronunciation, listening, reading, writing, speaking.
+
+Quy tắc nội dung từng part:
+1. objective: content.text là đúng 1 câu cụ thể, đo được, nói rõ sau bài người học làm được gì.
+2. instruction: content.steps là danh sách 3–5 bước ngắn: học nội dung, làm lần lượt bài tập, kiểm tra/hoàn thành. Viết rõ ràng theo mức CEFR.
+3. vocabulary: content.items có đúng 3 từ hoặc cụm từ cần cho mẫu câu. Mỗi item có word, pronunciation (IPA), meaning và collocations là đúng 3 cụm thông dụng dài 2–5 từ có chứa nguyên từ đó. Mỗi từ phải xuất hiện trong ví dụ của bài; không dùng tên người, công ty, quốc gia, thành phố hay địa danh làm từ vựng hoặc đáp án.
+4. grammar: content.formula là công thức có đủ thành phần; content.usage nói khi nào dùng; content.examples là 2–3 câu tiếng Anh hoàn chỉnh, dùng từ vựng của bài. A1–A2 có nghĩa tiếng Việt ngắn nếu cần. Không ghi kế hoạch thay cho nội dung dạy.
+5. pronunciation: content.focus là một âm mục tiêu duy nhất, content.tip là hướng dẫn phát âm, content.words là đúng 3 từ tiếng Anh kèm IPA đầy đủ; cả 3 IPA phải thật sự chứa âm mục tiêu.
+6. listening: content.audio là đoạn tiếng Anh 15–30 từ để máy đọc, content.prompt là một câu hỏi tiếng Anh, content.options là đúng 4 lựa chọn tiếng Anh, content.answer là nguyên văn đúng 1 lựa chọn. Nội dung phải khác reading.
+7. reading: content.text là đoạn tiếng Anh 2–4 câu, content.prompt là câu hỏi, content.options là đúng 4 lựa chọn, content.answer là nguyên văn đúng 1 lựa chọn. B1 trở lên phải hỏi suy luận, không chép nguyên đáp án từ đoạn đọc.
+8. writing: content.type là fill, mcq hoặc write. Fill chỉ có một chỗ trống và gợi ý nghĩa ngay sau chỗ trống; mcq có đúng 4 lựa chọn và một đáp án; write yêu cầu viết 1–2 câu theo mẫu và có một câu mẫu tham khảo. Chỉ dùng mẫu câu và từ vựng của bài.
+9. speaking: content.prompt là yêu cầu nói bằng ngôn ngữ giải thích, content.answer là đúng một câu tiếng Anh mẫu dài 6–14 từ, dùng mẫu câu và ít nhất một từ vựng của bài.
+
+Các câu trắc nghiệm phải có đúng 4 lựa chọn, chỉ một đáp án đúng; lựa chọn sai phải sai rõ về nghĩa hoặc ngữ pháp nhưng vẫn cùng ngữ cảnh. Không Việt hoá lựa chọn tiếng Anh. Bắt buộc đủ cả 9 part và không để content trống.
+
+JSON bắt buộc có đúng dạng:
+{"lessons":[{"dayNumber":1,"title":"...","durationMinutes":10,"parts":[{"code":"objective","title":"Mục tiêu bài học","content":{"text":"..."}},{"code":"instruction","title":"Hướng dẫn làm bài","content":{"steps":["..."]}},{"code":"vocabulary","title":"Từ vựng","content":{"items":[{"word":"...","pronunciation":"/.../","meaning":"...","collocations":["...","...","..."]}]}},{"code":"grammar","title":"Ngữ pháp","content":{"formula":"...","usage":"...","examples":["...","..."]}},{"code":"pronunciation","title":"Phát âm","content":{"focus":"...","tip":"...","words":[{"word":"...","ipa":"/.../"},{"word":"...","ipa":"/.../"},{"word":"...","ipa":"/.../"}]}},{"code":"listening","title":"Nghe","content":{"audio":"...","prompt":"...","options":["...","...","...","..."],"answer":"..."}},{"code":"reading","title":"Đọc","content":{"text":"...","prompt":"...","options":["...","...","...","..."],"answer":"..."}},{"code":"writing","title":"Viết","content":{"type":"fill|mcq|write","prompt":"...","options":["...","...","...","..."],"answer":"..."}},{"code":"speaking","title":"Nói","content":{"prompt":"...","answer":"..."}}]}]}
+Mỗi lesson phải đủ nội dung learner-facing để màn Học hiển thị mục tiêu, hướng dẫn, từ vựng, ngữ pháp, phát âm và bốn kỹ năng; không trả về chỉ tiêu đề hoặc kế hoạch.`;
+
 const promptDefaults = [
-  ["00000000-0000-4000-8000-000000001001", "system_rules", "You are the AI engine of Season English, an internal English-learning product for Vietnamese office staff. Adapt vocabulary, sentence length and grammar strictly to the learner's CEFR level. Use Vietnamese explanations for A1–A2 and English for B1+. Be warm but honest, point out real errors, and keep examples workplace-relevant."],
-  ["00000000-0000-4000-8000-000000001002", "assessment_scoring", "Grade the productive parts of the Workplace English CEFR Placement Test using the approved writing and speaking rubrics. Return criterion scores, one suggested CEFR level, a short Vietnamese rationale and a realistic one-month goal. Do not assess pronunciation from transcript text."],
-  ["00000000-0000-4000-8000-000000001003", "weekly_lessons", "Return valid JSON only. Create exactly five CEFR-aligned workplace-English lessons for the supplied week and level. Each lesson must use dayNumber 1-5 and contain exactly these nine parts once: objective, instruction, vocabulary, grammar, pronunciation, listening, reading, writing, speaking. Every content object must include concrete learner-facing material; never return placeholder text."],
-  ["00000000-0000-4000-8000-000000001004", "week_suggestions", "Return valid JSON only. Suggest three distinct workplace-English topic options for each of {n} weeks, using {learners}, {levels} and {used}. Include a concrete situation, measurable objectives, vocabulary hints and a five-day plan for every level."],
-  ["00000000-0000-4000-8000-000000001005", "micro_grading", "Return valid JSON only. Grade {answer} against {practice}, {theory} and {vocab} at {cefr_level}. Accept any grammatically correct answer that follows the taught pattern and fits the meaning. Give concise feedback without revealing the answer when retry is needed."],
-  ["00000000-0000-4000-8000-000000001006", "coach_dialogue", "You are Season, the learner's friendly conversation coach. Reply naturally at the learner's CEFR level, ask one follow-up question, score meaning, vocabulary and grammar, give at most three concrete corrections and return a corrected version when needed."],
-  ["00000000-0000-4000-8000-000000001007", "weekly_practice_grading", "Grade a learner's weekly practice with the shared rubric. Return valid JSON only. Score meaning, vocabulary and grammar from 1 to 5, calculate a total score from 0 to 100, give concise Vietnamese feedback, at most three concrete suggestions and a corrected version."],
+  ["00000000-0000-4000-8000-000000001001", "system_rules", prototypePromptDefaults.base],
+  ["00000000-0000-4000-8000-000000001002", "assessment_scoring", prototypePromptDefaults.placement],
+  ["00000000-0000-4000-8000-000000001003", "weekly_lessons", prototypePromptDefaults.lesson],
+  ["00000000-0000-4000-8000-000000001004", "week_suggestions", prototypePromptDefaults.weeks],
+  ["00000000-0000-4000-8000-000000001005", "micro_grading", prototypePromptDefaults.mgrade],
+  ["00000000-0000-4000-8000-000000001006", "coach_dialogue", prototypePromptDefaults.coach],
+  ["00000000-0000-4000-8000-000000001007", "weekly_practice_grading", prototypePromptDefaults.grade],
   ["00000000-0000-4000-8000-000000001008", "vocabulary_generation", "Return valid JSON only. Create exactly 15 useful workplace-English words or short phrases for the requested topic and CEFR level. Give a stable lowercase id, English form, concise Vietnamese meaning, simple English definition and one partOfSpeech from noun, verb, adjective, adverb, preposition or phrase. Avoid duplicates and unsafe or irrelevant content."],
   ["00000000-0000-4000-8000-000000001009", "micro_lesson_generation", "Return valid JSON only. Create one short personalized workplace-English micro lesson for the learner. It must fit the supplied CEFR, weekly topic, goals, work context, preferred learning style and duration. Include a concise explanation, 3-5 useful vocabulary items and one answerable practice task. For mcq include 2-5 options and the correct answer; otherwise include a clear reference answer. Never use placeholder content."]
 ] as const;
@@ -442,7 +471,7 @@ export async function seedDemo(client: Client, options: { mode?: SeedDemoMode } 
   );
   await client.query(
     `insert into programs (id, organization_id, name, start_date, week_count, current_week_override, status)
-     values ($1, $2, 'E4S Pilot', date '2026-10-05', 2, 1, 'active')
+     values ($1, $2, 'E4S Pilot', (current_date - (extract(isodow from current_date)::int - 1)), 2, null, 'active')
      on conflict (id) do update set start_date = excluded.start_date, week_count = excluded.week_count,
        current_week_override = excluded.current_week_override, status = excluded.status`,
     [DEMO_IDS.program, DEMO_IDS.organization]

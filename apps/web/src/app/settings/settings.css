@@ -6,6 +6,21 @@
   padding-top: 12px;
 }
 
+.settings-toast {
+  position: fixed;
+  left: 50%;
+  bottom: 24px;
+  z-index: 120;
+  width: min(520px, calc(100vw - 36px));
+  transform: translateX(-50%);
+  padding: 12px 16px;
+  border: 1px solid #bfd9bb;
+  border-radius: 12px;
+  background: #edf7eb;
+  box-shadow: 0 12px 28px rgb(30 30 30 / .16);
+}
+.settings-toast-danger { border-color: #e9b7ae; background: #fff0ed; }
+
 .settings-page > .page-title {
   margin-bottom: 12px;
 }

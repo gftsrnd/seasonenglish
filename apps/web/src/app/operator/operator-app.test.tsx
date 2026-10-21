@@ -12,12 +12,26 @@ import {
   OperatorReview,
   OperatorWeeks
 } from "./index.js";
-import { adaptLevelForms } from "./adapters.js";
+import { adaptAssessmentOverview, adaptLevelForms } from "./adapters.js";
 import { OperatorLevelFormDetail } from "./LevelForms.js";
 
 afterEach(cleanup);
 
 describe("Operator app rebuild", () => {
+  it("carries completed profile state into the pending assessment card", () => {
+    const view = adaptAssessmentOverview({
+      pendingAssessments: [{
+        attemptId: "attempt-1", learnerId: "learner-1", learnerName: "Media GFT", kind: "placement",
+        title: "Bài test đầu vào", submittedAt: "2026-10-21T08:00:00.000Z", sectionScores: {}, suggestedLevel: null,
+        profileComplete: true
+      }],
+      pendingLevelUp: [], approvedLearners: [], unassessedLearners: [], inProgressLearners: [], retryLearners: [],
+      levelSignals: { windowDays: 14, ready: [], weak: [], inFlow: [] }, topicReports: []
+    }, { aiConnected: false, openAppeals: 0 });
+
+    expect(view.pending[0]?.profileSummary).toBe("Đã điền hồ sơ");
+  });
+
   it("preserves every dashboard block and routes visible actions to callbacks", async () => {
     const user = userEvent.setup();
     const onResolveTopicReport = vi.fn();
@@ -34,6 +48,7 @@ describe("Operator app rebuild", () => {
       weak: [{ id: "u3", name: "Nam", cefr: "B1", metrics: "tuần 1: 72% sai" }],
       inFlow: [{ id: "u4", name: "An", cefr: "A2", target: "B1", detail: "đang làm bài thi" }],
       approved: [{ id: "u5", name: "Vy", cefr: "B1", placementScore: 81, monthlyGoal: "Email khách hàng" }],
+      inProgress: [{ id: "u7", name: "Mai", profileSummary: "Đã điền hồ sơ" }],
       unassessed: [{ id: "u6", name: "Long", profileSummary: "Chưa điền hồ sơ" }]
     } as any} actions={{
       onResolveTopicReport,
@@ -59,11 +74,20 @@ describe("Operator app rebuild", () => {
     expect(screen.getByText(/kháng nghị chấm điểm đang chờ duyệt tay/i)).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: /Báo cáo nhập chủ đề mini game/ })).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: /Chờ duyệt/ })).toBeInTheDocument();
+    const noAiNote = screen.getByText("Không có nhận xét AI. Xem bài làm để quyết định.");
+    const profileSummary = screen.getByRole("button", { name: /Hồ sơ: Tester · QA/ });
+    expect(noAiNote.closest(".grid.cols-2")).toBeNull();
+    expect(profileSummary.compareDocumentPosition(noAiNote) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(screen.getByRole("heading", { name: /Yêu cầu lên mức chờ duyệt/ })).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: /Tín hiệu đổi mức/ })).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: /Đã duyệt/ })).toBeInTheDocument();
+    const inProgressSection = screen.getByRole("heading", { name: /Đang làm test/ }).closest("section");
+    expect(inProgressSection).not.toBeNull();
+    expect(inProgressSection?.querySelector(".card")).toBeNull();
     expect(screen.getByRole("heading", { name: /Chưa làm test/ })).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: /Chưa có API key/ })).toHaveAttribute("href", "/settings");
+    expect(screen.getByRole("option", { name: "A1 – Mới bắt đầu" })).toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: /Chưa có API key/ })).not.toBeInTheDocument();
+    expect(screen.queryByText(/Một số thao tác có thể bị khóa vì chức năng tương ứng/i)).not.toBeInTheDocument();
     expect(screen.getByRole("link", { name: "ngưỡng" })).toHaveAttribute("href", "/settings");
     expect(screen.getByRole("link", { name: "đề thi lên mức" })).toHaveAttribute("href", "/op/levelforms");
     await user.click(screen.getByRole("button", { name: "Đã xử lý" }));
@@ -76,6 +100,9 @@ describe("Operator app rebuild", () => {
     expect(screen.getByRole("table")).toHaveClass("operator-action-table");
     expect(within(screen.getByTestId("approved-u5")).getByText("Vy").closest("td")).toHaveAttribute("data-label", "Người học");
     expect(within(screen.getByTestId("approved-u5")).getByRole("button", { name: "Đổi level" }).closest("td")).toHaveAttribute("data-label", "Thao tác");
+    expect(within(screen.getByTestId("approved-u5")).queryByRole("button", { name: "Xoá" })).not.toBeInTheDocument();
+    expect(screen.getAllByRole("button", { name: "Xoá học viên" })).toHaveLength(1);
+    expect(screen.queryByRole("button", { name: "Đánh giá thủ công" })).not.toBeInTheDocument();
   });
 
   it("keeps the complete level-form screen visible but disables mutations in read-only mode", async () => {
@@ -126,9 +153,9 @@ describe("Operator app rebuild", () => {
     expect(screen.getByRole("button", { name: "Đang sinh…" })).toBeDisabled();
     expect(screen.getByRole("button", { name: "Duyệt" })).toBeDisabled();
     expect(screen.getAllByRole("button", { name: "Xem" })).toHaveLength(2);
-    expect(screen.getAllByRole("button", { name: "Xem" })[0]).toHaveAttribute("title", "Không có endpoint xem");
+    expect(screen.getAllByRole("button", { name: "Xem" })[0]).not.toHaveAttribute("title");
     expect(screen.getAllByRole("button", { name: "Xoá" })[0]).toBeDisabled();
-    expect(screen.getAllByRole("button", { name: "Xoá" })[0]).toHaveAttribute("title", "Không có endpoint xoá");
+    expect(screen.getAllByRole("button", { name: "Xoá" })[0]).not.toHaveAttribute("title");
 
     cleanup();
     render(<OperatorLevelForms readOnly view={{ aiConnected: true, generatingTarget: null, targets: [{ target: "A2", forms: [{ id: "draft-2", title: "Bản nháp A2", status: "draft", createdAt: "14/10/2026", byName: "AI", listeningQuestions: 5, readingQuestions: 5, attempts: 0 }] }] } as any} actions={actions} />);
@@ -180,8 +207,23 @@ describe("Operator app rebuild", () => {
 
     cleanup();
     render(<OperatorWeeks view={{ pilotStartDate: "05/10/2026", pilotWeeks: 1, aiConnected: true, status: "", weeks: [{ number: 1, dateRange: "05/10/2026 – 11/10/2026", current: true, topic: "Meetings", description: "", objectives: "", keyVocabHint: "", suggestion: { state: "confirmed", topic: "Meetings" } }] } as any} actions={{ onSuggestAll: vi.fn(), onSuggestWeek: vi.fn(), onCloseSuggestion: vi.fn(), onConfirmSuggestion: vi.fn(), onReopenSuggestion, onChangeWeek: vi.fn(), onSave: vi.fn(), onOpenLessons: vi.fn() }} />);
-    await user.click(screen.getByRole("button", { name: "Xem lại các phương án" }));
-    expect(onReopenSuggestion).toHaveBeenCalledWith(1);
+    expect(screen.queryByText(/Đã xác nhận và lưu chủ đề/)).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Xem lại các phương án" })).not.toBeInTheDocument();
+  });
+
+  it("keeps the topic guidance explicit and makes saving visibly primary", () => {
+    render(<OperatorWeeks view={{ pilotStartDate: "12/10/2026", pilotWeeks: 2, aiConnected: true, status: "", weeks: [{ number: 1, dateRange: "12/10/2026 – 18/10/2026", current: true, topic: "Meetings", description: "", objectives: "", keyVocabHint: "" }] } as any} actions={{ onSuggestAll: vi.fn(), onSuggestWeek: vi.fn(), onCloseSuggestion: vi.fn(), onConfirmSuggestion: vi.fn(), onReopenSuggestion: vi.fn(), onChangeWeek: vi.fn(), onSave: vi.fn(), onOpenLessons: vi.fn() }} />);
+    expect(screen.getByRole("note")).toHaveTextContent(/3 phương án/);
+    expect(screen.getByRole("note")).toHaveTextContent(/kế hoạch 5 ngày T2–T6 cho từng mức/);
+    expect(screen.getByRole("button", { name: "Lưu khung chủ đề" })).toHaveClass("btn-primary");
+  });
+
+  it("does not render a generic unavailable-actions banner on the level review screen", () => {
+    render(<OperatorDashboard unavailable={{ viewTest: "Không có endpoint" }} view={{
+      week: { current: 1, total: 2, topic: "Introducing yourself & your job" }, aiConnected: false, openAppeals: 0, topicReports: [],
+      pending: [], levelRequests: [], ready: [], weak: [], inFlow: [], approved: [], inProgress: [], retry: [], unassessed: [], windowDays: 14
+    } as any} actions={{} as any} />);
+    expect(screen.queryByText("Một số thao tác hiện chưa khả dụng.")).not.toBeInTheDocument();
   });
 
   it("renders matrix states and the complete lesson-set review workflow", async () => {

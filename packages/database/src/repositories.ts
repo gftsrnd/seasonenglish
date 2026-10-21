@@ -1,5 +1,8 @@
 import { createCipheriv, createDecipheriv, createHash, randomBytes, randomUUID } from "node:crypto";
 import type { Pool, PoolClient } from "pg";
+function assessmentViolationAutoSubmitEnabled() {
+  return process.env.E4S_ENABLE_ASSESSMENT_VIOLATION_AUTO_SUBMIT === "true";
+}
 import type {
   AccountRole,
   AssessmentDeviceEvidence,
@@ -88,6 +91,7 @@ import type {
   ManagerProviderSettingsView,
   ManagerProviderTestView,
   ManagerProgressView,
+  OperatorSettingsOverviewView,
   ManagerReminderCandidateView,
   ManagerReminderCopyView,
   ManagerReminderDismissView,
@@ -106,6 +110,17 @@ import type {
 } from "@e4s/contracts";
 import { seedDemo, DEMO_IDS } from "./seed.js";
 import type { StoredAssessmentDefinition } from "./assessment-blueprints.js";
+
+function normalizeWeekPlan(value: unknown): Partial<Record<CefrLevel, string[]>> {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return {};
+  const source = value as Record<string, unknown>;
+  const plan: Partial<Record<CefrLevel, string[]>> = {};
+  for (const level of ["A1", "A2", "B1", "B2", "C1"] as const) {
+    const days = source[level];
+    if (Array.isArray(days) && days.length === 5 && days.every((day): day is string => typeof day === "string" && day.trim().length > 0)) plan[level] = days.map(day => day.trim());
+  }
+  return plan;
+}
 
 export interface UserIdentity {
   id: string;
@@ -261,6 +276,7 @@ export interface AssessmentReviewQueueRecord {
   attemptId: string;
   learnerId: string;
   learnerName: string;
+  profileComplete: boolean;
   kind: AssessmentKind;
   title: string;
   submittedAt: Date;
@@ -290,6 +306,8 @@ export interface AssessmentUnassessedLearnerRecord {
   learnerId: string;
   learnerName: string;
   profileComplete: boolean;
+  lifecycle: "not_started" | "in_progress" | "needs_retry";
+  lastAttemptAt: Date | null;
 }
 
 export interface AssessmentReviewFlowRecord {
@@ -338,8 +356,11 @@ class IdentityRepository {
          ) p on true`
       );
       if (targets.rowCount !== 1 || !targets.rows[0]) throw new Error("LEARNER_REGISTRATION_UNAVAILABLE");
-      const duplicate = await client.query("select 1 from users where lower(email) = lower($1) limit 1", [input.email]);
-      if (duplicate.rowCount) throw new Error("LEARNER_REGISTRATION_EMAIL_EXISTS");
+      const duplicate = await client.query<{ status: string }>("select status from users where lower(email) = lower($1) limit 1", [input.email]);
+      if (duplicate.rowCount) {
+        if (duplicate.rows[0]?.status === "deleted") throw new Error("LEARNER_REGISTRATION_EMAIL_DELETED");
+        throw new Error("LEARNER_REGISTRATION_EMAIL_EXISTS");
+      }
 
       const id = randomUUID();
       const target = targets.rows[0];
@@ -1639,15 +1660,18 @@ class ContentRepository {
       start_date: string;
       week_count: number;
       current_week_override: number | null;
+      today: string;
       id: string | null;
       week_number: number | null;
       topic: string | null;
       description: string | null;
       objectives: unknown;
       key_vocab_hint: string | null;
+      ai_plan: unknown;
     }>(
       `select p.id as program_id, p.start_date::text, p.week_count, p.current_week_override,
-              pw.id, pw.week_number, pw.topic, pw.description, pw.objectives, pw.key_vocab_hint
+              current_date::text as today,
+              pw.id, pw.week_number, pw.topic, pw.description, pw.objectives, pw.key_vocab_hint, pw.ai_plan
        from users staff
        join programs p on p.organization_id = staff.organization_id and p.status = 'active'
        left join program_weeks pw on pw.program_id = p.id
@@ -1658,7 +1682,7 @@ class ContentRepository {
     const first = result.rows[0];
     if (!first) return null;
     const start = new Date(`${first.start_date}T00:00:00.000Z`);
-    const today = new Date();
+    const today = new Date(`${first.today}T00:00:00.000Z`);
     const dateText = (value: Date) => value.toISOString().slice(0, 10);
     return {
       pilot: { startDate: first.start_date, weekCount: first.week_count },
@@ -1682,7 +1706,8 @@ class ContentRepository {
           topic: row.topic,
           description: row.description ?? "",
           objectives,
-          keyVocabHint: row.key_vocab_hint ?? ""
+          keyVocabHint: row.key_vocab_hint ?? "",
+          plan: normalizeWeekPlan(row.ai_plan)
         }];
       })
     };
@@ -1702,15 +1727,28 @@ class ContentRepository {
       if (!row) throw new Error("CONTENT_PROGRAM_NOT_FOUND");
       for (const week of weeks) {
         if (week.weekNumber < 1 || week.weekNumber > row.week_count) throw new Error("CONTENT_WEEK_OUT_OF_RANGE");
+        const nextPlan = JSON.stringify(normalizeWeekPlan(week.plan));
+        // Retain stale lesson versions for audit history, but stop exposing
+        // them when the saved topic or five-day plan changes.
+        await client.query(
+          `update lesson_set_versions lsv set status = 'retired'
+           from lesson_sets ls, program_weeks pw
+           where lsv.lesson_set_id = ls.id and ls.program_week_id = pw.id
+             and pw.program_id = $1 and pw.week_number = $2
+             and lsv.status <> 'retired'
+             and (pw.topic <> $3 or pw.ai_plan <> $4::jsonb)`,
+          [row.id, week.weekNumber, week.topic.trim(), nextPlan]
+        );
         await client.query(
           `insert into program_weeks
-             (id, program_id, week_number, topic, description, objectives, key_vocab_hint)
-           values ($1, $2, $3, $4, $5, $6::jsonb, $7)
+             (id, program_id, week_number, topic, description, objectives, key_vocab_hint, ai_plan)
+           values ($1, $2, $3, $4, $5, $6::jsonb, $7, $8::jsonb)
            on conflict (program_id, week_number) do update set
              topic = excluded.topic, description = excluded.description,
-             objectives = excluded.objectives, key_vocab_hint = excluded.key_vocab_hint`,
+             objectives = excluded.objectives, key_vocab_hint = excluded.key_vocab_hint,
+             ai_plan = case when excluded.ai_plan = '{}'::jsonb then program_weeks.ai_plan else excluded.ai_plan end`,
           [randomUUID(), row.id, week.weekNumber, week.topic.trim(), week.description.trim(),
-            JSON.stringify(week.objectives.trim() ? [week.objectives.trim()] : []), week.keyVocabHint.trim()]
+            JSON.stringify(week.objectives.trim() ? [week.objectives.trim()] : []), week.keyVocabHint.trim(), JSON.stringify(normalizeWeekPlan(week.plan))]
         );
       }
       await client.query(
@@ -1752,13 +1790,14 @@ class ContentRepository {
       [programId]
     );
     const levels = levelsResult.rows.map((row) => ({ cefr: row.cefr, learnerCount: Number(row.learner_count) }));
-    const weeksResult = await this.pool.query<{ week_number: number; topic: string }>(
-      "select week_number, topic from program_weeks where program_id = $1 order by week_number",
+    const weeksResult = await this.pool.query<{ week_number: number; topic: string; ai_plan: unknown }>(
+      "select week_number, topic, ai_plan from program_weeks where program_id = $1 order by week_number",
       [programId]
     );
     const weeks: ContentLessonMatrixView["weeks"] = [];
     for (const week of weeksResult.rows) {
       const cells: ContentLessonMatrixView["weeks"][number]["cells"] = [];
+      const plan = normalizeWeekPlan(week.ai_plan);
       for (const level of levels) {
         const version = await this.pool.query<{
           version_id: string;
@@ -1775,6 +1814,7 @@ class ContentRepository {
            join lesson_set_versions lsv on lsv.lesson_set_id = ls.id
            left join lessons l on l.lesson_set_version_id = lsv.id
            where pw.program_id = $1 and pw.week_number = $2 and ls.cefr = $3
+             and lsv.status <> 'retired'
            group by lsv.id
            order by lsv.version desc limit 1`,
           [programId, week.week_number, level.cefr]
@@ -1786,9 +1826,10 @@ class ContentRepository {
           versionId: row.version_id,
           version: row.version,
           updatedAt: row.created_at.toISOString(),
-          lessons: row.lessons
+          lessons: row.lessons,
+          ...(plan[level.cefr] ? { plan: plan[level.cefr] } : {})
         } : {
-          cefr: level.cefr, status: "missing", versionId: null, version: null, updatedAt: null, lessons: []
+          cefr: level.cefr, status: "missing", versionId: null, version: null, updatedAt: null, lessons: [], ...(plan[level.cefr] ? { plan: plan[level.cefr] } : {})
         });
       }
       weeks.push({ weekNumber: week.week_number, topic: week.topic, cells });
@@ -1807,8 +1848,8 @@ class ContentRepository {
     let versionId = "";
     try {
       await client.query("begin");
-      const context = await client.query<{ organization_id: string; week_id: string }>(
-        `select p.organization_id, pw.id as week_id
+      const context = await client.query<{ organization_id: string; week_id: string; topic: string }>(
+        `select p.organization_id, pw.id as week_id, pw.topic
          from users actor
          join programs p on p.organization_id = actor.organization_id and p.status = 'active'
          join program_weeks pw on pw.program_id = p.id and pw.week_number = $2
@@ -1837,7 +1878,7 @@ class ContentRepository {
         `insert into lesson_set_versions (id, lesson_set_id, version, status, payload, created_by)
          values ($1, $2, $3, 'draft', $4::jsonb, $5)`,
         [versionId, lessonSetId, next.rows[0]?.version ?? 1,
-          JSON.stringify({ source, lessonCount: lessonDrafts.length }), actorId]
+          JSON.stringify({ source, lessonCount: lessonDrafts.length, topic: row.topic }), actorId]
       );
       for (const draft of lessonDrafts) {
         const lessonId = randomUUID();
@@ -1885,8 +1926,8 @@ class ContentRepository {
     let versionId = "";
     try {
       await client.query("begin");
-      const context = await client.query<{ organization_id: string; week_id: string }>(
-        `select p.organization_id, pw.id as week_id
+      const context = await client.query<{ organization_id: string; week_id: string; topic: string }>(
+        `select p.organization_id, pw.id as week_id, pw.topic
          from users actor
          join programs p on p.organization_id = actor.organization_id and p.status = 'active'
          join program_weeks pw on pw.program_id = p.id and pw.week_number = $2
@@ -1959,7 +2000,7 @@ class ContentRepository {
       await client.query(
         `insert into lesson_set_versions (id, lesson_set_id, version, status, payload, created_by)
          values ($1, $2, $3, 'draft', $4::jsonb, $5)`,
-        [versionId, lessonSetId, nextVersion, JSON.stringify({ source: "manual", lessonCount: lessons.length, operation: action }), actorId]
+        [versionId, lessonSetId, nextVersion, JSON.stringify({ source: "manual", lessonCount: lessons.length, operation: action, topic: contextRow.topic }), actorId]
       );
       for (const draft of lessons) {
         const lessonId = randomUUID();
@@ -2141,7 +2182,8 @@ class ContentRepository {
        join program_weeks pw on pw.program_id = p.id and pw.week_number = $2
        join lesson_sets ls on ls.program_week_id = pw.id and ls.cefr = $3
        join lesson_set_versions lsv on lsv.lesson_set_id = ls.id
-       where staff.id = $1 order by lsv.version desc limit 1`,
+       where staff.id = $1 and lsv.status <> 'retired'
+       order by lsv.version desc limit 1`,
       [staffId, weekNumber, cefr]
     );
     const id = result.rows[0]?.id;
@@ -2644,7 +2686,12 @@ class ContentRepository {
       task_key: ContentPromptKey; version: number; content: string; status: "draft" | "active" | "retired"; default_content: string;
     }>(
       `select distinct on (latest.task_key) latest.task_key, latest.version, latest.content, latest.status,
-              first_value(latest.content) over (partition by latest.task_key order by latest.version) as default_content
+              coalesce((select active.content from prompt_versions active
+                        where active.organization_id = latest.organization_id
+                          and active.task_key = latest.task_key
+                          and active.status = 'active'
+                        order by active.version desc limit 1),
+                       first_value(latest.content) over (partition by latest.task_key order by latest.version)) as default_content
        from prompt_versions latest
        where latest.organization_id = $1
        order by latest.task_key, latest.version desc`,
@@ -2675,7 +2722,7 @@ class ContentRepository {
       for (const group of groups) {
         const next = await client.query<{ version: number; default_content: string }>(
           `select coalesce(max(version), 0) + 1 as version,
-                  coalesce((array_agg(content order by version))[1], '') as default_content
+                  coalesce((array_agg(content order by status = 'active' desc, version desc))[1], '') as default_content
            from prompt_versions where organization_id = $1 and task_key = $2`,
           [organizationId, group.key]
         );
@@ -2773,6 +2820,21 @@ type OperatorProfileState = {
 
 function profileObject(value: unknown): Record<string, unknown> {
   return value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : {};
+}
+
+function reviewCefrFromScore(score: number | null, maxScore: number): CefrLevel | null {
+  if (score == null || maxScore <= 0) return null;
+  const percent = Math.max(0, Math.min(100, score / maxScore * 100));
+  return percent < 25 ? "A1" : percent < 45 ? "A2" : percent < 65 ? "B1" : percent < 85 ? "B2" : "C1";
+}
+
+function actualSectionSeconds(timingState: AssessmentAttemptRecord["timingState"], section: AssessmentSectionCode): number | null {
+  const timing = timingState.sections?.[section];
+  if (!timing?.startedAt || !timing.completedAt) return null;
+  const started = Date.parse(timing.startedAt);
+  const completed = Date.parse(timing.completedAt);
+  if (!Number.isFinite(started) || !Number.isFinite(completed)) return null;
+  return Math.max(0, Math.round((completed - started) / 1000));
 }
 
 function operatorProfileState(value: unknown): OperatorProfileState {
@@ -3111,11 +3173,13 @@ class AssessmentRepository {
       const locked = await client.query<{
         id: string;
         status: AssessmentAttemptRecord["status"];
+        current_section: AssessmentSectionCode | null;
+        timing_state: AssessmentAttemptRecord["timingState"];
         violation_count: number;
         violation_limit: number;
         integrity_events: AssessmentAttemptRecord["integrityEvents"];
       }>(
-        `select id, status, violation_count, violation_limit, integrity_events
+        `select id, status, current_section, timing_state, violation_count, violation_limit, integrity_events
          from assessment_attempts
          where id = $1 and learner_id = $2
          for update`,
@@ -3129,7 +3193,7 @@ class AssessmentRepository {
 
       const violationCount = Number(attempt.violation_count ?? 0) + 1;
       const violationLimit = Number(attempt.violation_limit ?? 3);
-      const autoSubmitted = violationCount > violationLimit;
+      const autoSubmitted = assessmentViolationAutoSubmitEnabled() && violationCount > violationLimit;
       const recordedAt = new Date().toISOString();
       const event = {
         requestId: input.requestId,
@@ -3139,17 +3203,24 @@ class AssessmentRepository {
         violationCount
       } satisfies AssessmentAttemptRecord["integrityEvents"][number];
       const events = [...(Array.isArray(attempt.integrity_events) ? attempt.integrity_events : []), event];
+      const timingState = attempt.timing_state ?? {};
+      if (autoSubmitted && attempt.current_section) {
+        timingState.sections ??= {};
+        const current = timingState.sections[attempt.current_section];
+        if (current) timingState.sections[attempt.current_section] = { ...current, completedAt: recordedAt, auto: true };
+      }
       await client.query(
         `update assessment_attempts
          set violation_count = $3,
              integrity_events = $4::jsonb,
-             status = case when $5 then 'pending_review' else status end,
-             current_section = case when $5 then null else current_section end,
-             submitted_at = case when $5 then now() else submitted_at end,
-             submit_reason = case when $5 then 'violations' else submit_reason end,
+             timing_state = $5::jsonb,
+             status = case when $6 then 'pending_review' else status end,
+             current_section = case when $6 then null else current_section end,
+             submitted_at = case when $6 then now() else submitted_at end,
+             submit_reason = case when $6 then 'violations' else submit_reason end,
              updated_at = now()
          where id = $1 and learner_id = $2`,
-        [input.attemptId, input.learnerId, violationCount, JSON.stringify(events), autoSubmitted]
+        [input.attemptId, input.learnerId, violationCount, JSON.stringify(events), JSON.stringify(timingState), autoSubmitted]
       );
       const state = await client.query<{
         status: AssessmentAttemptRecord["status"];
@@ -3408,8 +3479,9 @@ class AssessmentRepository {
       const locked = await client.query<{
         status: AssessmentAttemptRecord["status"];
         current_section: AssessmentSectionCode | null;
+        timing_state: AssessmentAttemptRecord["timingState"];
       }>(
-        `select status, current_section from assessment_attempts
+        `select status, current_section, timing_state from assessment_attempts
          where id = $1 and learner_id = $2
          for update`,
         [input.attemptId, input.learnerId]
@@ -3428,11 +3500,17 @@ class AssessmentRepository {
         return null;
       }
       const reason = input.submitReason ?? "manual";
+      const timingState = current.timing_state ?? {};
+      if (current.current_section) {
+        timingState.sections ??= {};
+        const currentTiming = timingState.sections[current.current_section];
+        if (currentTiming) timingState.sections[current.current_section] = { ...currentTiming, completedAt: new Date().toISOString(), ...(reason === "timeout" || reason === "violations" ? { auto: true } : {}) };
+      }
       await client.query(
         `update assessment_attempts
-         set status = 'pending_review', current_section = null, submitted_at = now(), submit_reason = $3, updated_at = now()
+         set status = 'pending_review', current_section = null, timing_state = $4::jsonb, submitted_at = now(), submit_reason = $3, updated_at = now()
          where id = $1 and learner_id = $2`,
-        [input.attemptId, input.learnerId, reason]
+        [input.attemptId, input.learnerId, reason, JSON.stringify(timingState)]
       );
       if (input.requestId) {
         await client.query(
@@ -3725,6 +3803,62 @@ class AssessmentRepository {
     }
   }
 
+  async saveManualAssessmentScore(input: {
+    actorId: string;
+    attemptId: string;
+    writingCriteria: Record<string, number>;
+    speakingCriteria: Record<string, number>;
+    comment: string;
+  }): Promise<boolean | null> {
+    const client = await this.pool.connect();
+    try {
+      await client.query("begin");
+      const scope = await client.query<{ organization_id: string; learner_id: string }>(
+        `select reviewer.organization_id, aa.learner_id
+         from users reviewer
+         join assessment_attempts aa on aa.id = $2 and aa.status in ('pending_review', 'submitted')
+         join users learner on learner.id = aa.learner_id
+           and learner.organization_id = reviewer.organization_id and learner.status = 'active'
+         where reviewer.id = $1 and reviewer.role in ('operator', 'manager')
+         for update of aa`,
+        [input.actorId, input.attemptId]
+      );
+      const person = scope.rows[0];
+      if (!person) {
+        await client.query("rollback");
+        return null;
+      }
+      const writingScore = Math.round((Object.values(input.writingCriteria).reduce((sum, score) => sum + score, 0) * 20 / 25 + Number.EPSILON) * 100) / 100;
+      const speakingScore = Object.values(input.speakingCriteria).reduce((sum, score) => sum + score, 0);
+      const criteria = (values: Record<string, number>) => ({ ...values, comment: input.comment });
+      for (const [section, score, sectionCriteria] of [
+        ["writing", writingScore, criteria(input.writingCriteria)],
+        ["speaking", speakingScore, criteria(input.speakingCriteria)]
+      ] as const) {
+        await client.query(
+          `insert into assessment_scores (id, attempt_id, section, score, criteria, source)
+           values ($1, $2, $3, $4, $5::jsonb, 'human')
+           on conflict (attempt_id, section)
+           do update set score = excluded.score, criteria = excluded.criteria, source = 'human', created_at = now()`,
+          [randomUUID(), input.attemptId, section, score, JSON.stringify(sectionCriteria)]
+        );
+      }
+      await client.query(
+        `insert into audit_events
+           (id, organization_id, actor_user_id, action, entity_type, entity_id, payload, trace_id)
+         values ($1, $2, $3, 'assessment.manual_score', 'assessment_attempt', $4, $5::jsonb, $6)`,
+        [randomUUID(), person.organization_id, input.actorId, input.attemptId, JSON.stringify({ writingScore, speakingScore }), randomUUID()]
+      );
+      await client.query("commit");
+      return true;
+    } catch (error) {
+      await client.query("rollback");
+      throw error;
+    } finally {
+      client.release();
+    }
+  }
+
   async getReviewAttempt(reviewerId: string, attemptId: string): Promise<AssessmentReviewAttemptDetailView | null> {
     const scope = await this.pool.query<{
       learner_id: string; learner_name: string; kind: "placement" | "final" | "level_up"; title: string;
@@ -3754,7 +3888,28 @@ class AssessmentRepository {
       `select section, score::text, source, criteria from assessment_scores where attempt_id = $1 order by section`,
       [attemptId]
     );
+    const activityRows = await this.pool.query<{
+      at: Date;
+      source: string;
+      detail: unknown;
+    }>(
+      `select occurred_at as at, 'submitted' as source, evidence as detail
+       from activities
+       where reference_type = 'assessment_attempt' and reference_id = $1
+       union all
+       select created_at as at, action as source, payload as detail
+       from audit_events
+       where entity_type = 'assessment_attempt' and entity_id = $1
+       order by at`,
+      [attemptId]
+    );
     const prompts = new Map<string, { prompt?: string; title?: string }>();
+    const taskPrompts = (row.blueprint.sections ?? []).flatMap((section) => section.groups.flatMap((group) => group.tasks.map((task) => ({
+      section: section.code,
+      taskKey: task.key,
+      ...(group.title ? { title: group.title } : {}),
+      prompt: task.prompt
+    }))));
     for (const section of row.blueprint.sections ?? []) {
       for (const group of section.groups ?? []) {
         for (const task of group.tasks ?? []) prompts.set(`${section.code}:${task.key}`, {
@@ -3766,6 +3921,52 @@ class AssessmentRepository {
     const decisionStatus = row.decision_status === "approved" || row.decision_status === "retry"
       ? (row.decision_status === "retry" ? "needs_retry" : "approved") : null;
     const sectionScores = Object.values(attempt.scores);
+    const scoreBySection = new Map(scoreRows.rows.map((score) => [score.section, score]));
+    const sectionLabels: Record<AssessmentSectionCode, string> = { listening: "Nghe", reading: "Đọc", writing: "Viết", speaking: "Nói" };
+    const sectionDefinitions = new Map((row.blueprint.sections ?? []).map(section => [section.code, section]));
+    const sectionGroups = (section: AssessmentSectionCode) => (sectionDefinitions.get(section)?.groups ?? []).map(group => ({
+      key: group.key,
+      label: group.title,
+      instruction: group.instruction,
+      ...(group.stimulus ? { stimulus: group.stimulus } : {}),
+      ...(group.maxPlays == null ? {} : { maxPlays: group.maxPlays }),
+      tasks: group.tasks.map(task => ({
+        taskKey: task.key,
+        ...(task.title ? { title: task.title } : {}),
+        prompt: task.prompt,
+        answer: attempt.responses.find(response => response.section === section && response.taskKey === task.key)?.value ?? null,
+        ...(task.maxScore == null ? {} : { maxScore: task.maxScore }),
+        ...(task.minWords == null ? {} : { minWords: task.minWords }),
+        ...(task.maxWords == null ? {} : { maxWords: task.maxWords }),
+        ...(task.options ? { options: task.options } : {}),
+        ...(task.correctAnswer == null ? {} : { correctAnswer: task.correctAnswer })
+      }))
+    }));
+    const reviewedSections = (["listening", "reading", "writing", "speaking"] as const).map((section) => {
+      const score = scoreBySection.get(section);
+      const definition = sectionDefinitions.get(section);
+      const criteria = score ? profileObject(score.criteria) : {};
+      const sectionScore = score ? Number(score.score) : null;
+      return {
+        section,
+        label: sectionLabels[section],
+        maxScore: definition?.maxScore ?? 0,
+        durationMinutes: definition?.durationMinutes ?? 0,
+        actualSeconds: actualSectionSeconds(attempt.timingState, section),
+        score: sectionScore,
+        cefr: reviewCefrFromScore(sectionScore, definition?.maxScore ?? 0),
+        source: score?.source ?? null,
+        criteria,
+        comment: typeof criteria.comment === "string" ? criteria.comment : typeof criteria.note === "string" ? criteria.note : null,
+        state: score ? "scored" as const : "not_scored" as const,
+        groups: sectionGroups(section)
+      };
+    });
+    const completedTimes = reviewedSections.map(section => section.actualSeconds);
+    const totalTimeSeconds = completedTimes.every((seconds): seconds is number => seconds !== null)
+      ? completedTimes.reduce((sum, seconds) => sum + seconds, 0) : null;
+    const totalScore = sectionScores.length ? sectionScores.reduce((total, score) => total + Number(score ?? 0), 0) : null;
+    const allSectionsScored = reviewedSections.every(section => section.score !== null);
     return {
       id: attempt.id,
       kind: row.kind,
@@ -3773,12 +3974,16 @@ class AssessmentRepository {
       status: attempt.status,
       startedAt: attempt.startedAt.toISOString(),
       submittedAt: attempt.submittedAt?.toISOString() ?? null,
-      totalScore: sectionScores.length ? sectionScores.reduce((total, score) => total + Number(score ?? 0), 0) : null,
+      totalScore,
+      overallCefr: allSectionsScored ? reviewCefrFromScore(totalScore, row.blueprint.totalScore) : null,
+      totalTimeSeconds,
+      totalTimeLimitMinutes: row.blueprint.totalMinutes,
       sectionScores: attempt.scores,
       suggestedLevel: row.suggested_level,
       approvedLevel: row.approved_level,
       learnerId: row.learner_id,
       learnerName: row.learner_name,
+      taskPrompts,
       responses: attempt.responses.map((response) => ({
         section: response.section,
         taskKey: response.taskKey,
@@ -3794,6 +3999,18 @@ class AssessmentRepository {
         source: score.source,
         criteria: profileObject(score.criteria)
       })),
+      sections: reviewedSections,
+      activity: activityRows.rows.map((event) => {
+        const label = event.source === "submitted" ? "Đã nộp bài"
+          : event.source === "assessment.rescored" ? "Đã chấm lại bằng AI"
+            : event.source === "assessment.manual_score" ? "Đã lưu điểm chấm tay"
+              : event.source === "assessment.decision" ? "Operator đã ra quyết định"
+                : event.source === "assessment.violation" ? "Đã ghi nhận cảnh báo" : "Hoạt động xử lý";
+        const detail = event.source === "assessment.manual_score" ? "Đã cập nhật điểm Viết và Nói bằng rubric thủ công."
+          : event.source === "assessment.rescored" ? "Đã cập nhật kết quả chấm AI."
+            : event.source === "assessment.decision" ? "Đã cập nhật quyết định duyệt mức." : undefined;
+        return { at: event.at.toISOString(), label, ...(detail ? { detail } : {}) };
+      }),
       integrityEvents: attempt.integrityEvents,
       decision: decisionStatus ? {
         attemptId,
@@ -4036,6 +4253,7 @@ class AssessmentRepository {
       attempt_id: string;
       learner_id: string;
       learner_name: string;
+      profile_complete: boolean;
       kind: "placement" | "final" | "level_up";
       title: string;
       submitted_at: Date;
@@ -4047,6 +4265,7 @@ class AssessmentRepository {
       challenge_status: string | null;
     }>(
       `select aa.id as attempt_id, aa.learner_id, learner.display_name as learner_name,
+              (lp.completed_at is not null) as profile_complete,
               ad.kind, ad.title, aa.submitted_at,
               coalesce(jsonb_object_agg(sc.section, sc.score) filter (where sc.section is not null), '{}'::jsonb) as section_scores,
               decision.suggested_level, coalesce(challenge.turns, 0)::text as challenge_turns,
@@ -4057,6 +4276,7 @@ class AssessmentRepository {
        join assessment_definitions ad on ad.id = av.definition_id
        join users learner on learner.id = aa.learner_id and learner.status = 'active'
        join users reviewer on reviewer.id = $1 and reviewer.organization_id = learner.organization_id
+       left join learner_profiles lp on lp.user_id = learner.id
        left join assessment_scores sc on sc.attempt_id = aa.id
        left join assessment_decisions decision on decision.attempt_id = aa.id
        left join lateral (
@@ -4069,7 +4289,7 @@ class AssessmentRepository {
          order by cs.started_at desc limit 1
        ) challenge on true
        where aa.status = 'pending_review'
-       group by aa.id, learner.display_name, ad.kind, ad.title, decision.suggested_level,
+       group by aa.id, learner.display_name, lp.completed_at, ad.kind, ad.title, decision.suggested_level,
                 challenge.turns, challenge.average, challenge.off_topic, challenge.status
        order by aa.submitted_at nulls last, aa.started_at`,
       [reviewerId]
@@ -4078,6 +4298,7 @@ class AssessmentRepository {
       attemptId: row.attempt_id,
       learnerId: row.learner_id,
       learnerName: row.learner_name,
+      profileComplete: row.profile_complete,
       kind: row.kind === "level_up" ? "level-up" : row.kind,
       title: row.title,
       submittedAt: row.submitted_at,
@@ -4096,6 +4317,8 @@ class AssessmentRepository {
     pending: AssessmentReviewQueueRecord[];
     approvedLearners: AssessmentApprovedLearnerRecord[];
     unassessedLearners: AssessmentUnassessedLearnerRecord[];
+    inProgressLearners: AssessmentUnassessedLearnerRecord[];
+    retryLearners: AssessmentUnassessedLearnerRecord[];
     inFlow: AssessmentReviewFlowRecord[];
   }> {
     const [pending, approved, unassessed, inFlow] = await Promise.all([
@@ -4133,24 +4356,48 @@ class AssessmentRepository {
         learner_id: string;
         learner_name: string;
         profile_complete: boolean;
+        attempt_status: string | null;
+        last_attempt_at: Date | null;
       }>(
         `select learner.id as learner_id, learner.display_name as learner_name,
-                (lp.completed_at is not null) as profile_complete
+                (lp.completed_at is not null) as profile_complete,
+                latest.attempt_status, latest.last_attempt_at
          from users learner
          join users reviewer on reviewer.id = $1 and reviewer.organization_id = learner.organization_id
          left join learner_profiles lp on lp.user_id = learner.id
+         left join lateral (
+           select aa.status as attempt_status,
+                  coalesce(aa.submitted_at, aa.updated_at, aa.started_at) as last_attempt_at
+           from assessment_attempts aa
+           join assessment_versions av on av.id = aa.assessment_version_id
+           join assessment_definitions ad on ad.id = av.definition_id and ad.kind = 'placement'
+           where aa.learner_id = learner.id
+           order by coalesce(aa.submitted_at, aa.updated_at, aa.started_at) desc nulls last
+           limit 1
+         ) latest on true
          where learner.role = 'learner' and learner.status = 'active'
            and not exists (
              select 1 from assessment_attempts aa
              join assessment_versions av on av.id = aa.assessment_version_id
              join assessment_definitions ad on ad.id = av.definition_id and ad.kind = 'placement'
-             where aa.learner_id = learner.id and aa.status = 'approved'
+             where aa.learner_id = learner.id and aa.status in ('pending_review', 'approved')
            )
          order by learner.display_name`,
         [reviewerId]
       ),
       this.listReviewFlow(reviewerId)
     ]);
+    const learnerBuckets = unassessed.rows.map((row) => ({
+      learnerId: row.learner_id,
+      learnerName: row.learner_name,
+      profileComplete: row.profile_complete,
+      lifecycle: row.attempt_status === "needs_retry"
+        ? "needs_retry" as const
+        : row.attempt_status === "in_progress" || row.attempt_status === "submitted"
+          ? "in_progress" as const
+          : "not_started" as const,
+      lastAttemptAt: row.last_attempt_at
+    }));
     return {
       pending,
       approvedLearners: approved.rows.map((row) => ({
@@ -4160,11 +4407,9 @@ class AssessmentRepository {
         placementScore: row.placement_score === null ? null : Number(row.placement_score),
         monthlyGoal: row.monthly_goal
       })),
-      unassessedLearners: unassessed.rows.map((row) => ({
-        learnerId: row.learner_id,
-        learnerName: row.learner_name,
-        profileComplete: row.profile_complete
-      })),
+      unassessedLearners: learnerBuckets.filter((learner) => learner.lifecycle === "not_started"),
+      inProgressLearners: learnerBuckets.filter((learner) => learner.lifecycle === "in_progress"),
+      retryLearners: learnerBuckets.filter((learner) => learner.lifecycle === "needs_retry"),
       inFlow
     };
   }
@@ -6193,6 +6438,13 @@ interface ProviderConfigurationRow {
   last_tested_at: Date | null;
 }
 
+export interface ManagerAiRuntimeSettings {
+  provider: ManagerProviderKind;
+  baseUrl: string;
+  model: string;
+  credential: string;
+}
+
 const providerDefaults = (provider: ManagerProviderKind): Pick<ManagerProviderSettingsView, "baseUrl" | "model" | "speechToTextModel"> => {
   if (provider === "claude") return {
     baseUrl: "https://api.anthropic.com/v1",
@@ -6398,9 +6650,26 @@ class ManagerRepository {
   }
 
   private async settingsForOrganization(organizationId: string): Promise<Omit<ManagerSettingsView, "organizationName">> {
+    const program = await this.pool.query<{ start_date: string; week_count: number; current_week_override: number | null }>(
+      `select start_date::text, week_count, current_week_override
+       from programs
+       where organization_id = $1 and status = 'active'
+       order by start_date desc
+       limit 1`,
+      [organizationId]
+    );
+    const activeProgram = program.rows[0];
+    const today = new Date();
+    const monday = new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate()));
+    const day = monday.getUTCDay() || 7;
+    monday.setUTCDate(monday.getUTCDate() - day + 1);
+    const currentMonday = monday.toISOString().slice(0, 10);
     const defaults: Omit<ManagerSettingsView, "organizationName"> = {
       reminderInactiveDays: 3, weeklyReportEnabled: true,
-      pilotStartDate: "2026-10-12", pilotWeeks: 2, weekOverride: 0, minMinutesPerDay: 15,
+      pilotStartDate: activeProgram?.start_date ?? currentMonday,
+      pilotWeeks: activeProgram?.week_count ?? 2,
+      weekOverride: activeProgram?.current_week_override ?? 0,
+      minMinutesPerDay: 15,
       courseTheme: "Tiếng Anh giao tiếp công sở", coachDailyLimit: 20,
       testTimed: true, testTimes: { listening: 15, reading: 20, writing: 20, speaking: 15 }, testWarnLimit: 3,
       levelUp: { days: 14, lessons: 90, firstTry: 75, submission: 80, coach: 4, coachTurns: 6, wrong: 30, minParts: 4 },
@@ -6431,6 +6700,27 @@ class ManagerRepository {
     );
     const row = result.rows[0];
     return mapProviderSettings(row);
+  }
+
+  /** Loads the encrypted provider credential only for server-side AI wiring. */
+  async providerRuntime(staffId: string): Promise<ManagerAiRuntimeSettings | null> {
+    const organization = await this.organizationFor(staffId);
+    if (!organization) return null;
+    const result = await this.pool.query<ProviderConfigurationRow>(
+      `select provider, base_url, model, speech_to_text_model, secret_ciphertext,
+              secret_nonce, secret_auth_tag, last_test_status, last_test_code, last_tested_at
+       from provider_configurations where organization_id = $1`,
+      [organization.id]
+    );
+    const row = result.rows[0];
+    if (!row?.secret_ciphertext) return null;
+    const defaults = providerDefaults(row.provider);
+    return {
+      provider: row.provider,
+      baseUrl: row.base_url || defaults.baseUrl,
+      model: row.model || defaults.model,
+      credential: decryptProviderSecret(row)
+    };
   }
 
   async saveProviderSettings(managerId: string, input: ManagerProviderSettingsInput): Promise<ManagerProviderSettingsView> {
@@ -6979,9 +7269,39 @@ class ManagerRepository {
       role: AccountRole;
       status: string;
       created_at: Date;
+      cefr: CefrLevel | null;
+      placement_score: string | null;
     }>(
       `select id, display_name, email, role, status, created_at
+              ,learner_data.cefr
+              ,learner_data.placement_score
        from users
+       left join lateral (
+         select latest_enrollment.cefr,
+                latest_placement.placement_score
+         from lateral (
+           select e.cefr
+           from enrollments e
+           where e.learner_id = users.id
+           order by e.enrolled_at desc
+           limit 1
+         ) latest_enrollment
+         cross join lateral (
+           select sum(sc.score)::text as placement_score
+           from assessment_scores sc
+           where sc.attempt_id = (
+             select aa.id
+             from assessment_attempts aa
+             join assessment_versions av on av.id = aa.assessment_version_id
+             join assessment_definitions ad on ad.id = av.definition_id
+             where aa.learner_id = users.id
+               and ad.kind = 'placement'
+               and aa.submitted_at is not null
+             order by aa.submitted_at desc
+             limit 1
+           )
+         ) latest_placement
+       ) learner_data on true
        where organization_id = $1 and status in ('active', 'disabled')
        order by case role when 'manager' then 0 when 'operator' then 1 else 2 end, display_name asc`,
       [organization.id]
@@ -6989,6 +7309,29 @@ class ManagerRepository {
     return {
       organizationName: organization.name,
       accounts: accounts.rows.map((account) => this.accountView(account))
+    };
+  }
+
+  async operatorSettingsOverview(staffId: string): Promise<OperatorSettingsOverviewView | null> {
+    const organization = await this.organizationFor(staffId);
+    if (!organization) return null;
+    const settings = await this.settingsForOrganization(organization.id);
+    const directory = await this.accounts(staffId);
+    if (!directory) return null;
+    return {
+      organizationName: organization.name,
+      pilot: {
+        startDate: settings.pilotStartDate,
+        weeks: settings.pilotWeeks,
+        weekOverride: settings.weekOverride,
+        minMinutesPerDay: settings.minMinutesPerDay,
+        courseTheme: settings.courseTheme,
+        coachDailyLimit: settings.coachDailyLimit
+      },
+      settings: { organizationName: organization.name, ...settings },
+      test: { timed: settings.testTimed, times: settings.testTimes, warnLimit: settings.testWarnLimit },
+      levelUp: settings.levelUp,
+      accounts: directory.accounts
     };
   }
 
@@ -7928,6 +8271,14 @@ class ManagerRepository {
        values ($1, $2, $3, 'organisation.settings.updated', 'organization', $2, $4::jsonb, $5)`,
       [randomUUID(), organization.id, managerId, JSON.stringify(input), randomUUID()]
     );
+    await this.pool.query(
+      `update programs
+       set start_date = $2::date,
+           week_count = $3,
+           current_week_override = nullif($4, 0)
+       where organization_id = $1 and status = 'active'`,
+      [organization.id, input.pilotStartDate, input.pilotWeeks, input.weekOverride]
+    );
     return { organizationName: organization.name, ...input };
   }
 
@@ -8398,6 +8749,8 @@ class ManagerRepository {
     role: AccountRole;
     status: string;
     created_at: Date;
+    cefr?: CefrLevel | null;
+    placement_score?: string | null;
   }): ManagerAccountView {
     return {
       id: account.id,
@@ -8405,7 +8758,9 @@ class ManagerRepository {
       email: account.email,
       role: account.role,
       status: account.status,
-      createdAt: account.created_at.toISOString()
+      createdAt: account.created_at.toISOString(),
+      cefr: account.cefr ?? null,
+      placementScore: account.placement_score == null ? null : Number(account.placement_score)
     };
   }
 }

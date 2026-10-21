@@ -324,7 +324,7 @@ function formatLessonDate(value: string): string {
 type LessonAudioSource = { text?: string; src?: string };
 
 function SpeechButton({ text, label, speak }: { text: string; label: string; speak: LearnerCallbacks["speak"] }) {
-  const [error, setError] = useState<"error" | "unsupported" | null>(null);
+  const [error, setError] = useState<"error" | "unsupported" | "no_voice" | null>(null);
   const play = () => {
     setError(null);
     if (!text.trim()) {
@@ -337,7 +337,7 @@ function SpeechButton({ text, label, speak }: { text: string; label: string; spe
     }
     try {
       speak(text, "en-US", { onStatus: (status) => {
-        if (status === "error" || status === "unsupported") setError(status);
+        if (status === "error" || status === "unsupported" || status === "no_voice") setError(status);
       } });
     } catch {
       setError("error");
@@ -345,6 +345,8 @@ function SpeechButton({ text, label, speak }: { text: string; label: string; spe
   };
   const message = error === "unsupported"
     ? "Trình duyệt không hỗ trợ đọc văn bản. Bạn vẫn có thể đọc nội dung trên màn hình."
+    : error === "no_voice"
+      ? "Chưa có giọng tiếng Việt trên máy. Hãy cài hoặc bật giọng Việt trong cài đặt hệ điều hành."
     : error === "error"
       ? "Không phát được âm thanh. Bạn có thể thử lại."
       : "";

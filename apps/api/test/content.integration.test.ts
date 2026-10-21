@@ -92,6 +92,29 @@ describe("content operations API", () => {
     expect(managerWrite.statusCode, managerWrite.body).toBe(200);
     expect(managerWrite.json()).toMatchObject({ weeks: expect.arrayContaining([expect.objectContaining({ weekNumber: 1, topic: "Changed" })]) });
 
+    const plan = { A2: ["T2", "T3", "T4", "T5", "T6"] };
+    const planWrite = await app.inject({
+      method: "PUT", url: "/api/v1/content/weeks", headers: { cookie: managerCookie },
+      payload: { weeks: [{ weekNumber: 1, topic: "Changed", description: "", objectives: "", keyVocabHint: "", plan }] }
+    });
+    expect(planWrite.statusCode, planWrite.body).toBe(200);
+    expect(planWrite.json()).toMatchObject({ weeks: expect.arrayContaining([expect.objectContaining({ weekNumber: 1, plan })]) });
+
+    const replacementPlan = { A2: ["Mới 1", "Mới 2", "Mới 3", "Mới 4", "Mới 5"] };
+    const replacementWrite = await app.inject({
+      method: "PUT", url: "/api/v1/content/weeks", headers: { cookie: managerCookie },
+      payload: { weeks: [{ weekNumber: 1, topic: "Changed", description: "", objectives: "", keyVocabHint: "", plan: replacementPlan }] }
+    });
+    expect(replacementWrite.statusCode, replacementWrite.body).toBe(200);
+    expect(replacementWrite.json()).toMatchObject({ weeks: expect.arrayContaining([expect.objectContaining({ weekNumber: 1, plan: replacementPlan })]) });
+
+    const metadataOnlyWrite = await app.inject({
+      method: "PUT", url: "/api/v1/content/weeks", headers: { cookie: managerCookie },
+      payload: { weeks: [{ weekNumber: 1, topic: "Changed again", description: "", objectives: "", keyVocabHint: "" }] }
+    });
+    expect(metadataOnlyWrite.statusCode, metadataOnlyWrite.body).toBe(200);
+    expect(metadataOnlyWrite.json()).toMatchObject({ weeks: expect.arrayContaining([expect.objectContaining({ weekNumber: 1, topic: "Changed again", plan })]) });
+
     const operatorWrite = await app.inject({
       method: "PUT", url: "/api/v1/content/weeks", headers: { cookie: makerCookie },
       payload: { weeks: [{
