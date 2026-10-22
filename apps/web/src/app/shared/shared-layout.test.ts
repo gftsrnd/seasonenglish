@@ -56,6 +56,15 @@ describe("tablet shell navigation", () => {
   });
 });
 
+describe("seasonal pattern accessibility", () => {
+  it("renders decoration behind content and disables it for reduced transparency and forced colours", () => {
+    expect(coordinatorCss).toMatch(/body::before[\s\S]*?background-image:\s*var\(--season-pattern-image/);
+    expect(coordinatorCss).toMatch(/body\s*>\s*#root[\s\S]*?position:\s*relative[\s\S]*?z-index:\s*1/);
+    expect(coordinatorCss).toMatch(/@media \(prefers-reduced-transparency:\s*reduce\)[\s\S]*?body::before[\s\S]*?display:\s*none/);
+    expect(coordinatorCss).toMatch(/@media \(forced-colors:\s*active\)[\s\S]*?body::before[\s\S]*?display:\s*none/);
+  });
+});
+
 describe("Manager and Settings page geometry", () => {
   it("keeps page titles clear of the shell and their first card at narrow and tablet widths", () => {
     // The shared shell supplies the content inset; Manager must not add a

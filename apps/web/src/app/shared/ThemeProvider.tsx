@@ -4,6 +4,15 @@ import { resolveAutomaticTheme, useAutomaticTheme } from "../../features/experie
 export const themePreferences = ["auto", "spring", "summer", "autumn", "winter", "tet", "midautumn", "christmas"] as const;
 export type ThemePreference = typeof themePreferences[number];
 const themeStorageKey = "e4s:theme";
+export const themePatternUrls: Record<Exclude<ThemePreference, "auto">, string> = {
+  spring: "/patterns/season-spring.png",
+  summer: "/patterns/season-summer.png",
+  autumn: "/patterns/season-autumn.png",
+  winter: "/patterns/season-winter.png",
+  tet: "/patterns/season-tet.png",
+  midautumn: "/patterns/season-midautumn.png",
+  christmas: "/patterns/season-christmas.png"
+};
 type ThemeApi = { theme: ThemePreference; resolvedTheme: Exclude<ThemePreference, "auto">; setTheme: (theme: ThemePreference) => void };
 const fallbackTheme: ThemeApi = { theme: "auto", resolvedTheme: resolveAutomaticTheme(new Date()), setTheme: persistTheme };
 const ThemeContext = createContext<ThemeApi>(fallbackTheme);
@@ -17,14 +26,20 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
     setThemeState(nextTheme);
     persistTheme(nextTheme);
   }, []);
-  useEffect(() => { document.documentElement.dataset.theme = resolvedTheme; }, [resolvedTheme]);
+  useEffect(() => { applyResolvedTheme(resolvedTheme); }, [resolvedTheme]);
   const value = useMemo(() => ({ theme, resolvedTheme, setTheme }), [resolvedTheme, setTheme, theme]);
   return <ThemeContext.Provider value={value}>{children}</ThemeContext.Provider>;
 }
 
 function persistTheme(theme: ThemePreference): void {
   try { window.localStorage.setItem(themeStorageKey, theme); } catch { /* Storage is optional in privacy mode. */ }
-  document.documentElement.dataset.theme = theme === "auto" ? resolveAutomaticTheme(new Date()) : theme;
+  applyResolvedTheme(theme === "auto" ? resolveAutomaticTheme(new Date()) : theme);
+}
+
+function applyResolvedTheme(theme: Exclude<ThemePreference, "auto">): void {
+  document.documentElement.dataset.theme = theme;
+  document.documentElement.dataset.themePattern = theme;
+  document.documentElement.style.setProperty("--season-pattern-image", `url("${themePatternUrls[theme]}")`);
 }
 
 function readStoredTheme(): ThemePreference {

@@ -30,7 +30,7 @@ vi.mock("../api/learner.js", () => ({ learnerApiClient: learnerClient }));
 vi.mock("../api/manager.js", () => ({ managerApiClient: managerClient }));
 
 import { App, resolveSessionEntryPath } from "./App.js";
-import { useTheme } from "./shared/ThemeProvider.js";
+import { themePatternUrls, useTheme } from "./shared/ThemeProvider.js";
 import { useExperience } from "../features/experience/Experience.js";
 
 const learnerSession = {
@@ -72,6 +72,18 @@ beforeEach(() => {
 });
 
 describe("App session shell", () => {
+  it("maps every resolved season to a dedicated pattern asset", () => {
+    expect(themePatternUrls).toEqual({
+      spring: "/patterns/season-spring.png",
+      summer: "/patterns/season-summer.png",
+      autumn: "/patterns/season-autumn.png",
+      winter: "/patterns/season-winter.png",
+      tet: "/patterns/season-tet.png",
+      midautumn: "/patterns/season-midautumn.png",
+      christmas: "/patterns/season-christmas.png"
+    });
+  });
+
   it.each([
     ["learner", "/mgr", "/home"],
     ["operator", "/home", "/op"],
@@ -144,6 +156,8 @@ describe("App session shell", () => {
     expect(await screen.findByTestId("resolved-theme")).toHaveTextContent("winter");
     await waitFor(() => expect(screen.getByTestId("music-allowed")).toHaveTextContent("false"));
     expect(client.getOrganisationExperience).toHaveBeenCalledOnce();
+    expect(document.documentElement.dataset.themePattern).toBe("winter");
+    expect(document.documentElement.style.getPropertyValue("--season-pattern-image")).toContain("season-winter.png");
   });
 
   it("normalizes the stale route after a new learner sign-in", async () => {

@@ -1,3 +1,29 @@
+body::before {
+  position: fixed;
+  z-index: 0;
+  inset: 0;
+  background-image: var(--season-pattern-image, none);
+  background-position: center top;
+  background-repeat: repeat;
+  background-size: 360px 360px;
+  content: "";
+  opacity: .08;
+  pointer-events: none;
+}
+
+body > #root {
+  position: relative;
+  z-index: 1;
+}
+
+@media (prefers-reduced-transparency: reduce) {
+  body::before { display: none; }
+}
+
+@media (forced-colors: active) {
+  body::before { display: none; }
+}
+
 /* Coordinator integration guard: keep the shared shell readable at tablet widths.
    The route order and navigation model stay unchanged; the horizontal nav is
    clipped only by its available lane so the app still exposes the next
