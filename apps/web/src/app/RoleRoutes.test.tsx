@@ -133,6 +133,12 @@ describe("RoleRoutes authorization boundary", () => {
     expect(screen.queryByRole("alert")).not.toBeInTheDocument();
   });
 
+  it("does not expose the prompt editor route to Operator", () => {
+    renderRoute("/op/prompts", operator);
+
+    expect(screen.getByRole("alert")).toHaveTextContent("Đường dẫn vận hành không tồn tại.");
+  });
+
   it("redirects Manager away from direct Operator routes", () => {
     renderRoute("/op/not-a-real-route", manager);
 

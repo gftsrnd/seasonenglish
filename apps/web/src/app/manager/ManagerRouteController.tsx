@@ -223,7 +223,7 @@ function ReportRoute({ currentUserId }: { currentUserId: string }) {
 function SettingsRoute({ role, currentUserId }: ManagerRouteControllerProps) {
   const [manager, setManager] = useState<ManagerSettingsView>(); const [provider, setProvider] = useState<ManagerProviderSettingsView>(); const [operatorOverview, setOperatorOverview] = useState<OperatorSettingsOverviewView>(); const [product, setProduct] = useState<ProductPreferencesView>(); const [capabilities, setCapabilities] = useState<SystemCapabilitiesView>(); const [accounts, setAccounts] = useState<ManagerAccountsView>(); const [error, setError] = useState(""); const [notice, setNotice] = useState(""); const [maintenanceDialog, setMaintenanceDialog] = useState<{ action: ManagerMaintenanceAction; confirmation: ManagerMaintenanceConfirmationView }>(); const [maintenanceBusy, setMaintenanceBusy] = useState(false);
   const loadAccounts = () => apiClient.getManagerAccounts().then(setAccounts);
-  const providerClientAvailable = typeof apiClient.getManagerProviderSettings === "function";
+  const providerClientAvailable = role === "manager" && typeof apiClient.getManagerProviderSettings === "function";
   useEffect(() => {
     const requests: Promise<unknown>[] = [apiClient.getProductPreferences().then(setProduct), apiClient.getSystemCapabilities().then(setCapabilities)];
     if (role === "manager") {

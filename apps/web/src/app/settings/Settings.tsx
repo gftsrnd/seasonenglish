@@ -74,7 +74,7 @@ export function SettingsPage({ role, manager, product, capabilities, ai, operato
   useEffect(() => setProductDraft(normalizeProductPreferences(product)), [product]);
   return <div className="settings-page" data-settings-role={role}>
     <div className="page-title"><h1>Cài đặt</h1></div>
-    {aiDraft && ai ? <AiSection draft={aiDraft} configured={ai.configured} lastTest={ai.lastTest} capabilities={capabilities} onChange={setAiDraft} {...(actions.onSaveAi ? { onSave: () => actions.onSaveAi!(aiDraft) } : {})} {...(actions.onTestAi ? { onTest: () => actions.onTestAi!(aiDraft) } : {})} /> : <UnavailableAiSection capabilities={capabilities} role={role} />}
+    {role === "manager" ? aiDraft && ai ? <AiSection draft={aiDraft} configured={ai.configured} lastTest={ai.lastTest} capabilities={capabilities} onChange={setAiDraft} {...(actions.onSaveAi ? { onSave: () => actions.onSaveAi!(aiDraft) } : {})} {...(actions.onTestAi ? { onTest: () => actions.onTestAi!(aiDraft) } : {})} /> : <UnavailableAiSection capabilities={capabilities} role={role} /> : null}
     {role === "manager" && managerDraft ? <>
       <PilotSection value={managerDraft} onChange={setManagerDraft} {...(actions.onSaveManager ? { onSave: () => actions.onSaveManager!(toInput(managerDraft)) } : {})} />
       <ImageSection value={productDraft} onChange={setProductDraft} {...(actions.onSaveProduct ? { onSave: () => actions.onSaveProduct!(productDraft) } : {})} {...(actions.onTestImage ? { onTest: () => actions.onTestImage!(productDraft) } : {})} {...(actions.onClearImageCache ? { onClear: actions.onClearImageCache } : {})} />
@@ -87,7 +87,6 @@ export function SettingsPage({ role, manager, product, capabilities, ai, operato
       <DataSection actions={actions} capabilities={capabilities} />
       {accounts}
     </> : <>
-      <section className="card"><h3>Prompt & rubric</h3><p className="small muted">Sửa hướng dẫn AI sinh bài, coach và chấm bài. Để trống dùng mặc định.</p><a className="btn" href="/op/prompts">Mở trình sửa prompt</a></section>
       {operatorOverview && managerDraft ? <>
         <PilotSection value={managerDraft} onChange={setManagerDraft} {...(actions.onSaveManager ? { onSave: () => actions.onSaveManager!(toInput(managerDraft)) } : {})} />
         <TestSection value={managerDraft} onChange={setManagerDraft} {...(actions.onSaveManager ? { onSave: () => actions.onSaveManager!(toInput(managerDraft)) } : {})} />

@@ -102,7 +102,7 @@ function OperatorRouteControllerContent({ session, client, paths }: { session: S
         : location.pathname === paths.weeks ? <WeeksRoute {...props} />
           : location.pathname === paths.lessons ? <LessonsRoute {...props} />
             : location.pathname === paths.review ? <ReviewRoute {...props} />
-              : location.pathname === paths.prompts ? <PromptsRoute {...props} />
+              : session.role === "manager" && location.pathname === paths.prompts ? <PromptsRoute {...props} />
                 : <Status tone="error">Đường dẫn vận hành không tồn tại.</Status>;
   return content;
 }

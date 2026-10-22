@@ -120,7 +120,7 @@ describe("new Settings app branch", () => {
     expect(importButton).not.toHaveAttribute("aria-busy");
   });
 
-  it("lets Operator manage the organization AI credential and working prompt link", () => {
+  it("keeps provider credentials and prompt controls out of Operator settings", () => {
     const overview: OperatorSettingsOverviewView = {
       organizationName: "GFT Demo",
       settings: manager,
@@ -130,7 +130,7 @@ describe("new Settings app branch", () => {
       accounts: [{ id: "learner-1", displayName: "Học viên A", email: "a@example.com", role: "learner", status: "active", createdAt: "2026-10-12T00:00:00.000Z" }]
     };
     const { container } = render(<SettingsPage role="operator" operatorOverview={overview} product={product} capabilities={capabilities} ai={{ provider: "openai", configured: true, baseUrl: "https://api.groq.com/openai/v1", model: "qwen/qwen3.8-27b", speechToTextModel: "whisper-large-v3-turbo" }} actions={actions()} />);
-    expect([...container.querySelectorAll("h3")].map((node) => node.textContent)).toEqual(["Kết nối AI", "Prompt & rubric", "Lịch pilot", "Bài test đầu vào / cuối kỳ", "Ngưỡng xét lên / hạ mức", "Người dùng", "Tùy chọn cá nhân"]);
+    expect([...container.querySelectorAll("h3")].map((node) => node.textContent)).toEqual(["Lịch pilot", "Bài test đầu vào / cuối kỳ", "Ngưỡng xét lên / hạ mức", "Người dùng", "Tùy chọn cá nhân"]);
     expect(screen.getByText("Học viên A")).toBeInTheDocument();
     expect(screen.getByLabelText("Ngày bắt đầu (Thứ Hai tuần 1)")).not.toBeDisabled();
     expect(screen.getByLabelText("Nghe (phút)")).toHaveValue(15);
@@ -138,10 +138,12 @@ describe("new Settings app branch", () => {
     expect(screen.getByRole("button", { name: "Lưu bài test" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Lưu ngưỡng" })).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /Thêm học viên/i })).not.toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: "Prompt & rubric" })).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "Mở trình sửa prompt" })).toHaveAttribute("href", "/op/prompts");
-    expect(screen.getByRole("heading", { name: "Kết nối AI" })).toBeInTheDocument();
-    expect(screen.getByLabelText("API key mới (để trống = giữ key đang lưu)")).toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "Prompt & rubric" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "Mở trình sửa prompt" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "Kết nối AI" })).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("API key mới (để trống = giữ key đang lưu)")).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("Nhà cung cấp")).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("Model")).not.toBeInTheDocument();
     expect(screen.queryByRole("heading", { name: "Ảnh minh hoạ từ vựng" })).not.toBeInTheDocument();
     expect(screen.queryByRole("heading", { name: "Giao diện theo mùa / lễ" })).not.toBeInTheDocument();
     expect(screen.getByRole("checkbox", { name: "Hiệu ứng âm thanh" })).toBeInTheDocument();

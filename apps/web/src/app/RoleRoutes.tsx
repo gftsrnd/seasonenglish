@@ -8,7 +8,7 @@ const ManagerRouteController = lazy(() => import("./manager/ManagerRouteControll
 const OperatorRouteController = lazy(() => import("./operator/OperatorRouteController.js").then(({ OperatorRouteController }) => ({ default: OperatorRouteController })));
 
 const managerRoutes = ["/mgr", "/mgr/ops", "/mgr/recovery", "/mgr/reminders", "/mgr/report", "/mgr/rewards"] as const;
-const operatorRoutes = ["/op", "/op/levelforms", "/op/weeks", "/op/lessons", "/op/review", "/op/prompts"] as const;
+const operatorRoutes = ["/op", "/op/levelforms", "/op/weeks", "/op/lessons", "/op/review"] as const;
 
 export function RoleRoutes({ session }: { session: SessionView }) {
   const location = useLocation();

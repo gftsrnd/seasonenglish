@@ -412,7 +412,7 @@ describe("ManagerRouteController", () => {
   it("shows operator-owned settings and hides Manager-only organization configuration", async () => {
     vi.spyOn(apiClient, "getProductPreferences").mockResolvedValue(product);
     vi.spyOn(apiClient, "getSystemCapabilities").mockResolvedValue(capabilities);
-    vi.spyOn(apiClient, "getManagerProviderSettings").mockResolvedValue(managerProvider);
+    const getProvider = vi.spyOn(apiClient, "getManagerProviderSettings").mockResolvedValue(managerProvider);
     vi.spyOn(apiClient, "getOperatorSettingsOverview").mockResolvedValue({
       organizationName: "GFT",
       settings: managerSettings,
@@ -423,12 +423,15 @@ describe("ManagerRouteController", () => {
     } satisfies OperatorSettingsOverviewView);
     const save = vi.spyOn(apiClient, "saveProductPreferences").mockResolvedValue({ ...product, theme: "winter" });
     renderManager(<MemoryRouter initialEntries={["/settings"]}><ManagerRouteController role="operator" currentUserId="operator-1" /></MemoryRouter>);
-    await screen.findByRole("heading", { name: "Prompt & rubric" });
+    await screen.findByRole("heading", { name: "Cài đặt" });
     expect(screen.getByRole("heading", { name: "Cài đặt" })).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "Tùy chọn cá nhân" })).toBeInTheDocument();
     expect(screen.getByRole("checkbox", { name: "Hiệu ứng âm thanh" })).toBeInTheDocument();
     expect(screen.getByRole("checkbox", { name: "Nhạc nền" })).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Kiểm tra kết nối" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "Kết nối AI" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "Prompt & rubric" })).not.toBeInTheDocument();
+    expect(getProvider).not.toHaveBeenCalled();
     expect(screen.queryByLabelText("Nguồn ảnh")).not.toBeInTheDocument();
     expect(screen.queryByLabelText("Chủ đề giao diện (áp dụng ngay khi chọn)")).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Lưu giao diện" })).not.toBeInTheDocument();
