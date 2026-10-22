@@ -36,11 +36,12 @@ export function autoSeasonTheme(date = new Date()): SeasonTheme {
   const year = date.getFullYear();
   const month = date.getMonth() + 1;
   const day = date.getDate();
-  const time = date.getTime();
+  const localDay = Date.UTC(year, month - 1, day);
   const near = (iso: string | undefined, before: number, after: number) => {
     if (!iso) return false;
-    const center = new Date(`${iso}T00:00:00`).getTime();
-    return time >= center - before * 86_400_000 && time <= center + after * 86_400_000;
+    const [isoYear, isoMonth, isoDay] = iso.split("-").map(Number);
+    const center = Date.UTC(isoYear!, isoMonth! - 1, isoDay!);
+    return localDay >= center - before * 86_400_000 && localDay <= center + after * 86_400_000;
   };
   if (near(tetDates[year], 7, 10) || near(tetDates[year + 1], 7, 10)) return "tet";
   if (near(midautumnDates[year], 5, 5)) return "midautumn";
@@ -50,6 +51,8 @@ export function autoSeasonTheme(date = new Date()): SeasonTheme {
   if (month >= 8 && month <= 10) return "autumn";
   return "winter";
 }
+
+export const resolveAutomaticTheme = autoSeasonTheme;
 
 export function currentSeasonTheme(): SeasonTheme {
   const configured = typeof document === "undefined" ? undefined : document.documentElement.dataset.theme;

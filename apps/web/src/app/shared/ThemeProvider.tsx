@@ -1,18 +1,18 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
-import { autoSeasonTheme } from "../games/season-visual.js";
+import { resolveAutomaticTheme, useAutomaticTheme } from "../../features/experience/useAutomaticTheme.js";
 
 export const themePreferences = ["auto", "spring", "summer", "autumn", "winter", "tet", "midautumn", "christmas"] as const;
 export type ThemePreference = typeof themePreferences[number];
 const themeStorageKey = "e4s:theme";
 type ThemeApi = { theme: ThemePreference; resolvedTheme: Exclude<ThemePreference, "auto">; setTheme: (theme: ThemePreference) => void };
-const fallbackTheme: ThemeApi = { theme: "auto", resolvedTheme: autoSeasonTheme(), setTheme: persistTheme };
+const fallbackTheme: ThemeApi = { theme: "auto", resolvedTheme: resolveAutomaticTheme(new Date()), setTheme: persistTheme };
 const ThemeContext = createContext<ThemeApi>(fallbackTheme);
 
 export function useTheme(): ThemeApi { return useContext(ThemeContext); }
 
 export function ThemeProvider({ children }: { children: ReactNode }) {
   const [theme, setThemeState] = useState<ThemePreference>(() => readStoredTheme());
-  const resolvedTheme = theme === "auto" ? autoSeasonTheme() : theme;
+  const resolvedTheme = useAutomaticTheme(theme);
   const setTheme = useCallback((nextTheme: ThemePreference) => {
     setThemeState(nextTheme);
     persistTheme(nextTheme);
@@ -24,7 +24,7 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
 
 function persistTheme(theme: ThemePreference): void {
   try { window.localStorage.setItem(themeStorageKey, theme); } catch { /* Storage is optional in privacy mode. */ }
-  document.documentElement.dataset.theme = theme === "auto" ? autoSeasonTheme() : theme;
+  document.documentElement.dataset.theme = theme === "auto" ? resolveAutomaticTheme(new Date()) : theme;
 }
 
 function readStoredTheme(): ThemePreference {
