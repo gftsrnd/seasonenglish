@@ -227,13 +227,27 @@ function SettingsRoute({ role, currentUserId }: ManagerRouteControllerProps) {
   const loadAccounts = () => apiClient.getManagerAccounts().then(setAccounts);
   const providerClientAvailable = role === "manager" && typeof apiClient.getManagerProviderSettings === "function";
   useEffect(() => {
-    const requests: Promise<unknown>[] = [apiClient.getProductPreferences().then(setProduct), apiClient.getOrganisationExperience().then(setExperience), apiClient.getSystemCapabilities().then(setCapabilities)];
+    const requests: Promise<unknown>[] = [apiClient.getProductPreferences().then(setProduct), apiClient.getOrganisationExperience().then(setExperience).catch(() => undefined), apiClient.getSystemCapabilities().then(setCapabilities)];
     if (role === "manager") {
       requests.push(apiClient.getManagerSettings().then(setManager), loadAccounts());
     } else requests.push(apiClient.getOperatorSettingsOverview().then(setOperatorOverview));
     if (providerClientAvailable) requests.push(apiClient.getManagerProviderSettings().then(setProvider));
     void Promise.all(requests).catch(() => setError("Không tải được cấu hình hệ thống."));
   }, [providerClientAvailable, role]);
+  useEffect(() => {
+    if (experience || !product) return;
+    const legacySettings = manager ?? operatorOverview?.settings;
+    if (!legacySettings) return;
+    setExperience({
+      theme: product.theme,
+      backgroundMusic: {
+        enabled: legacySettings.backgroundMusic.enabled,
+        playlistId: "auto",
+        customUrl: legacySettings.backgroundMusic.url,
+        volume: legacySettings.backgroundMusic.volume
+      }
+    });
+  }, [experience, manager, operatorOverview, product]);
   useEffect(() => {
     if (!error && !notice) return;
     const timer = window.setTimeout(() => { setError(""); setNotice(""); }, 4200);

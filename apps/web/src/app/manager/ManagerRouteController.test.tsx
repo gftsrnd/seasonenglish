@@ -450,6 +450,26 @@ describe("ManagerRouteController", () => {
     expect(saveProduct).not.toHaveBeenCalled();
     expect(screen.queryByRole("heading", { name: "Dữ liệu" })).not.toBeInTheDocument();
   });
+
+  it("keeps Operator settings usable while an older API lacks organisation experience", async () => {
+    vi.mocked(apiClient.getOrganisationExperience).mockRejectedValueOnce(new Error("404"));
+    vi.spyOn(apiClient, "getProductPreferences").mockResolvedValue(product);
+    vi.spyOn(apiClient, "getSystemCapabilities").mockResolvedValue(capabilities);
+    vi.spyOn(apiClient, "getOperatorSettingsOverview").mockResolvedValue({
+      organizationName: "GFT",
+      settings: managerSettings,
+      pilot: { startDate: managerSettings.pilotStartDate, weeks: managerSettings.pilotWeeks, weekOverride: managerSettings.weekOverride, minMinutesPerDay: managerSettings.minMinutesPerDay, courseTheme: managerSettings.courseTheme, coachDailyLimit: managerSettings.coachDailyLimit },
+      test: { timed: managerSettings.testTimed, times: managerSettings.testTimes, warnLimit: managerSettings.testWarnLimit },
+      levelUp: managerSettings.levelUp,
+      accounts: []
+    });
+
+    renderManager(<MemoryRouter initialEntries={["/settings"]}><ManagerRouteController role="operator" currentUserId="operator-1" /></MemoryRouter>);
+
+    expect(await screen.findByRole("heading", { name: "Giao diện theo mùa / lễ" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Nhạc nền của Season" })).toBeInTheDocument();
+    expect(screen.queryByText("Không tải được cấu hình hệ thống.")).not.toBeInTheDocument();
+  });
 });
 
 const managerSettings = {
