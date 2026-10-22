@@ -65,6 +65,26 @@ describe("app audio controls", () => {
 });
 
 describe("app shell navigation and logout", () => {
+  it.each(["A1", "A2", "B1", "B2", "C1"] as const)("shows the learner role icon and real %s level badge", (cefr) => {
+    const { container } = render(<ExperienceProvider><MemoryRouter initialEntries={["/home"]}><AppShell session={session("learner")} learnerCefr={cefr} onLogout={() => undefined}><div /></AppShell></MemoryRouter></ExperienceProvider>);
+
+    expect(screen.getByLabelText("Vai trò: Người học").querySelector("svg")).toHaveClass("lucide-graduation-cap");
+    expect(screen.getByText(cefr, { selector: ".account-level-badge" })).toHaveClass(`lvl-${cefr}`);
+    expect(container.querySelector(".account-identity")).toBeInTheDocument();
+  });
+
+  it("does not invent a level badge when learner CEFR is unavailable", () => {
+    render(<ExperienceProvider><MemoryRouter initialEntries={["/home"]}><AppShell session={session("learner")} onLogout={() => undefined}><div /></AppShell></MemoryRouter></ExperienceProvider>);
+    expect(document.querySelector(".account-level-badge")).not.toBeInTheDocument();
+  });
+
+  it("leaves non-learner identity unchanged", () => {
+    render(<ExperienceProvider><MemoryRouter initialEntries={["/op"]}><AppShell session={session("operator")} learnerCefr="B1" onLogout={() => undefined}><div /></AppShell></MemoryRouter></ExperienceProvider>);
+    expect(screen.queryByLabelText("Vai trò: Người học")).not.toBeInTheDocument();
+    expect(document.querySelector(".account-level-badge")).not.toBeInTheDocument();
+    expect(screen.getByText(/Người vận hành/)).toBeInTheDocument();
+  });
+
   it("keeps Learner navigation scoped to Learner routes", () => {
     render(<ExperienceProvider><MemoryRouter initialEntries={["/home"]}><AppShell session={session("learner")} onLogout={() => undefined}><div /></AppShell></MemoryRouter></ExperienceProvider>);
 

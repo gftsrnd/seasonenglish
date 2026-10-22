@@ -17,6 +17,7 @@ const client = vi.hoisted(() => ({
 
 const learnerClient = vi.hoisted(() => ({
   getProfile: vi.fn(),
+  getProgress: vi.fn(),
   getAssessment: vi.fn(),
   saveProfile: vi.fn()
 }));
@@ -69,6 +70,7 @@ beforeEach(() => {
     version: 1
   });
   learnerClient.getAssessment.mockResolvedValue({ attempt: { status: "approved" } });
+  learnerClient.getProgress.mockResolvedValue({ learner: { id: "learner-1", displayName: "Nguyễn Minh Anh", cefr: "A2", profile: {} }, points: 0, badges: [], weeks: [] });
 });
 
 describe("App session shell", () => {
@@ -158,6 +160,12 @@ describe("App session shell", () => {
     expect(client.getOrganisationExperience).toHaveBeenCalledOnce();
     expect(document.documentElement.dataset.themePattern).toBe("winter");
     expect(document.documentElement.style.getPropertyValue("--season-pattern-image")).toContain("season-winter.png");
+  });
+
+  it("passes the learner's approved CEFR into the account badge", async () => {
+    render(<App>{() => <h1>Trang học</h1>}</App>);
+    expect(await screen.findByText("A2", { selector: ".account-level-badge" })).toBeInTheDocument();
+    expect(learnerClient.getProgress).toHaveBeenCalledOnce();
   });
 
   it("normalizes the stale route after a new learner sign-in", async () => {

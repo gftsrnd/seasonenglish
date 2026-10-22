@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { Link, useLocation } from "react-router";
-import { Bell, BookOpen, CalendarDays, ChartColumn, Check, FileText, Gamepad2, House, LogOut, MessageSquare, Music2, Pencil, Search, Settings, UserRound, Volume2 } from "lucide-react";
-import type { AccountRole, SessionView } from "@e4s/contracts";
+import { Bell, BookOpen, CalendarDays, ChartColumn, Check, FileText, Gamepad2, GraduationCap, House, LogOut, MessageSquare, Music2, Pencil, Search, Settings, UserRound, Volume2 } from "lucide-react";
+import type { AccountRole, CefrLevel, SessionView } from "@e4s/contracts";
 import { SeasonMark } from "./SeasonMark.js";
 import { AvatarMark } from "../learner/ProfileReward.js";
 import { useExperience } from "../../features/experience/Experience.js";
@@ -82,7 +82,7 @@ const nav: Record<ShellRole, readonly NavItem[]> = {
   ]
 };
 
-export function AppShell({ session, children, onLogout, onAvatarClick, organisationName = "GFT", avatar, onboardingComplete = true, learnerHomeOnly = false }: {
+export function AppShell({ session, children, onLogout, onAvatarClick, organisationName = "GFT", avatar, onboardingComplete = true, learnerHomeOnly = false, learnerCefr }: {
   session: SessionView;
   children: ReactNode;
   onLogout: () => void | Promise<void>;
@@ -91,6 +91,7 @@ export function AppShell({ session, children, onLogout, onAvatarClick, organisat
   avatar?: { color?: string; acc?: string; bg?: number } | undefined;
   onboardingComplete?: boolean;
   learnerHomeOnly?: boolean;
+  learnerCefr?: CefrLevel;
   }) {
   const location = useLocation();
   const role = session.role as ShellRole;
@@ -144,7 +145,7 @@ export function AppShell({ session, children, onLogout, onAvatarClick, organisat
       <div className="userchip" aria-busy={logoutPending || undefined}>
         <AudioControls />
         <button className="btn-ghost" type="button" aria-label="Đổi avatar" title="Đổi avatar" disabled={!onAvatarClick} onClick={onAvatarClick} style={{ padding: 0, border: 0, background: "transparent" }}><AccountAvatar name={session.user.displayName} avatar={avatar} size={32} /></button>
-        <span className="small"><b>{session.user.displayName}</b> <span className="muted">· {roleNames[role]}</span></span>
+        <span className="small account-identity"><b className="account-name">{session.user.displayName}</b>{role === "learner" ? <span className="muted account-role" aria-label="Vai trò: Người học"><GraduationCap size={15} strokeWidth={2} aria-hidden="true" /> Người học</span> : <span className="muted">· {roleNames[role]}</span>}{role === "learner" && learnerCefr ? <span className={`badge account-level-badge lvl-${learnerCefr}`}>{learnerCefr}</span> : null}</span>
         <button className="btn-sm btn-ghost" type="button" data-action="logout" onClick={logout} disabled={logoutPending} title={logoutPending ? "Đang đăng xuất…" : "Đăng xuất khỏi tài khoản này"} aria-label={logoutPending ? "Đang đăng xuất…" : "Đăng xuất khỏi tài khoản này"}>{logoutPending ? <span className="logout-label">Đang đăng xuất…</span> : <><LogOut size={16} strokeWidth={2} aria-hidden="true" /><span className="logout-label">Đăng xuất</span></>}</button>
         <span role="status" aria-label="Trạng thái đăng xuất" aria-live="polite" style={visuallyHiddenStyle}>{logoutPending ? "Đang đăng xuất…" : ""}</span>
       </div>
