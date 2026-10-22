@@ -80,7 +80,7 @@ describe("new Settings app branch", () => {
     render(<SettingsPage role="manager" manager={manager} product={product} capabilities={capabilities} ai={{ provider: "openai", configured: true, baseUrl: "https://api.groq.com/openai/v1", model: "qwen/qwen3.8-27b", speechToTextModel: "whisper-large-v3-turbo" }} actions={actions()} />);
 
     expect(screen.getByText(/số lượt cho phép/i)).toBeInTheDocument();
-    expect(screen.getByText(/cần mạng.*không bản quyền.*mặc định.*bật\/tắt/i)).toBeInTheDocument();
+    expect(screen.getByText(/cần mạng.*giấy phép mở.*mùa.*giờ học.*bật\/tắt/i)).toBeInTheDocument();
     const webhook = screen.getByRole("heading", { name: "Nhắc học qua Base.vn (Base Message incoming webhook)" }).closest("section");
     expect(webhook).toHaveTextContent(/base_content.*\{message\}.*\{name\}/i);
   });
@@ -152,14 +152,41 @@ describe("new Settings app branch", () => {
     expect(callbacks.onSaveExperience).toHaveBeenCalledWith(expect.objectContaining({ theme: "winter" }));
     await userEvent.setup().clear(screen.getByLabelText("Link YouTube tùy chỉnh (không bắt buộc)"));
     await userEvent.setup().type(screen.getByLabelText("Link YouTube tùy chỉnh (không bắt buộc)"), "https://www.youtube.com/watch?v=study");
-    await userEvent.setup().clear(screen.getByLabelText("Danh sách nhạc"));
-    await userEvent.setup().type(screen.getByLabelText("Danh sách nhạc"), "focus-afternoon");
+    await userEvent.setup().selectOptions(screen.getByLabelText("Danh sách nhạc"), "steady-afternoon");
     await userEvent.setup().click(screen.getByRole("checkbox", { name: "Cho phép nhạc nền trong app" }));
     fireEvent.change(screen.getByRole("slider", { name: "Âm lượng: 22/100" }), { target: { value: "37" } });
     await userEvent.setup().click(screen.getByRole("button", { name: "Lưu nhạc nền" }));
-    expect(callbacks.onSaveExperience).toHaveBeenLastCalledWith(expect.objectContaining({ backgroundMusic: expect.objectContaining({ enabled: false, playlistId: "focus-afternoon", customUrl: "https://www.youtube.com/watch?v=study", volume: 37 }) }));
+    expect(callbacks.onSaveExperience).toHaveBeenLastCalledWith(expect.objectContaining({ backgroundMusic: expect.objectContaining({ enabled: false, playlistId: "steady-afternoon", customUrl: "https://www.youtube.com/watch?v=study", volume: 37 }) }));
     expect(screen.getByRole("checkbox", { name: "Hiệu ứng âm thanh" })).toBeInTheDocument();
     expect(screen.getByRole("checkbox", { name: "Nhạc nền" })).toBeInTheDocument();
+  });
+
+  it("groups licensed presets, previews the draft volume and does not save a failed preview", async () => {
+    const callbacks = actions();
+    const play = vi.fn().mockRejectedValue(new Error("unavailable"));
+    const pause = vi.fn();
+    const created: Array<{ src: string; volume: number }> = [];
+    vi.stubGlobal("Audio", class {
+      preload = "";
+      volume = 1;
+      constructor(readonly src: string) { created.push(this); }
+      play = play;
+      pause = pause;
+    });
+    render(<SettingsPage role="operator" product={product} experience={experience} capabilities={capabilities} actions={callbacks} />);
+
+    expect(screen.getByRole("group", { name: "Buổi sáng" })).toBeInTheDocument();
+    expect(screen.getByRole("group", { name: "Buổi chiều" })).toBeInTheDocument();
+    expect(screen.getByRole("group", { name: "Buổi tối" })).toBeInTheDocument();
+    await userEvent.setup().selectOptions(screen.getByLabelText("Danh sách nhạc"), "steady-afternoon");
+    fireEvent.change(screen.getByRole("slider", { name: "Âm lượng: 22/100" }), { target: { value: "37" } });
+    await userEvent.setup().click(screen.getByRole("button", { name: "Nghe thử" }));
+
+    expect(created[0]).toMatchObject({ src: expect.stringContaining("Soft_Corporate"), volume: 0.37 });
+    expect(await screen.findByRole("status")).toHaveTextContent("Cấu hình đang lưu không bị thay đổi");
+    expect(callbacks.onSaveExperience).not.toHaveBeenCalled();
+    await userEvent.setup().click(screen.getByRole("button", { name: "Về nhạc tự động" }));
+    expect(screen.getByLabelText("Danh sách nhạc")).toHaveValue("auto");
   });
 
   it("keeps personal sound preferences out of Manager organisation settings", () => {

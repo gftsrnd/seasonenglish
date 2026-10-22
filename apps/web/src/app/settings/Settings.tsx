@@ -2,6 +2,8 @@ import { useEffect, useRef, useState, type ButtonHTMLAttributes, type ReactNode 
 import type { ManagerProviderSettingsInput, ManagerProviderSettingsView, ManagerSettingsInput, ManagerSettingsView, ManagerWebhookTestView, OperatorSettingsOverviewView, OrganisationExperienceInput, OrganisationExperienceView, ProductPreferencesView, SystemCapabilitiesView } from "@e4s/contracts";
 import { Flower2, Gift, Leaf, MoonStar, Snowflake, Sparkles, Star, Sun } from "lucide-react";
 import { autoSeasonTheme } from "../games/season-visual.js";
+import { MUSIC_PRESETS, musicPresetFor, type StudyPeriod } from "../../features/experience/music-presets.js";
+import { resolveBackgroundMusic, studyPeriodFor } from "../../features/experience/music-selection.js";
 import { PersonalPreferences } from "./PersonalPreferences.js";
 
 export type AiConfigurationView = ManagerProviderSettingsView;
@@ -173,7 +175,43 @@ function ThemeMark({ theme }: { theme: Exclude<ProductPreferencesView["theme"], 
   return <Sparkles {...props} />;
 }
 
-function MusicSection({ value, onChange, onSave }: { value: OrganisationExperienceView; onChange: (value: OrganisationExperienceView) => void; onSave?: () => void | Promise<void> }) { const music = value.backgroundMusic; const setMusic = (next: Partial<OrganisationExperienceView["backgroundMusic"]>) => onChange({ ...value, backgroundMusic: { ...music, ...next } }); return <section className="card"><h3>Nhạc nền của Season</h3><p className="small muted">Nhạc cần mạng và chỉ dùng nguồn không bản quyền; để danh sách ở “auto” làm mặc định. Thiết lập áp dụng toàn tổ chức, mỗi người vẫn có thể bật/tắt; nhạc dừng khi làm phần Nghe hoặc phát giọng đọc.</p><label className="check"><input type="checkbox" checked={music.enabled} onChange={(event) => setMusic({ enabled: event.target.checked })} /> Cho phép nhạc nền trong app</label><Field label="Danh sách nhạc"><input value={music.playlistId} onChange={(event) => setMusic({ playlistId: event.target.value })} /></Field><Field label="Link YouTube tùy chỉnh (không bắt buộc)"><input value={music.customUrl} onChange={(event) => setMusic({ customUrl: event.target.value })} /></Field><Field label={`Âm lượng: ${music.volume}/100`}><input type="range" min="0" max="100" value={music.volume} onChange={(event) => setMusic({ volume: Number(event.target.value) })} /></Field><Save label="Lưu nhạc nền" onSave={onSave} /></section>; }
+function MusicSection({ value, onChange, onSave }: { value: OrganisationExperienceView; onChange: (value: OrganisationExperienceView) => void; onSave?: () => void | Promise<void> }) {
+  const music = value.backgroundMusic;
+  const preview = useRef<HTMLAudioElement | null>(null);
+  const [previewStatus, setPreviewStatus] = useState("");
+  const setMusic = (next: Partial<OrganisationExperienceView["backgroundMusic"]>) => onChange({ ...value, backgroundMusic: { ...music, ...next } });
+  const activeTheme = value.theme === "auto" ? autoSeasonTheme() : value.theme;
+  const selectedPreset = music.playlistId === "auto" ? musicPresetFor(activeTheme, studyPeriodFor(new Date())) : MUSIC_PRESETS.find((preset) => preset.id === music.playlistId);
+  const stopPreview = () => { preview.current?.pause(); preview.current = null; };
+  useEffect(() => () => stopPreview(), []);
+  const playPreview = async () => {
+    stopPreview();
+    setPreviewStatus("");
+    const selection = resolveBackgroundMusic({ theme: activeTheme, date: new Date(), config: { ...music, enabled: true }, personalEnabled: true, suspended: false });
+    if (!selection.enabled) return;
+    try {
+      const player = new Audio(selection.url);
+      player.preload = "auto";
+      player.volume = selection.volume;
+      preview.current = player;
+      await player.play();
+      setPreviewStatus("Đang nghe thử. Cấu hình chưa được lưu.");
+    } catch {
+      stopPreview();
+      setPreviewStatus("Không phát được nguồn nhạc này. Cấu hình đang lưu không bị thay đổi.");
+    }
+  };
+  const periods: readonly StudyPeriod[] = ["morning", "afternoon", "evening"];
+  const periodLabels: Record<StudyPeriod, string> = { morning: "Buổi sáng", afternoon: "Buổi chiều", evening: "Buổi tối" };
+  return <section className="card"><h3>Nhạc nền của Season</h3><p className="small muted">Nhạc cần mạng, có giấy phép mở và được chọn theo mùa cùng giờ học. Thiết lập áp dụng toàn tổ chức; mỗi người vẫn có thể bật/tắt và nhạc sẽ dừng khi làm phần Nghe hoặc phát giọng đọc.</p>
+    <label className="check"><input type="checkbox" checked={music.enabled} onChange={(event) => setMusic({ enabled: event.target.checked })} /> Cho phép nhạc nền trong app</label>
+    <Field label="Danh sách nhạc"><select value={music.playlistId} onChange={(event) => setMusic({ playlistId: event.target.value })}><option value="auto">Tự động theo mùa và giờ học</option>{periods.map((period) => <optgroup label={periodLabels[period]} key={period}>{MUSIC_PRESETS.filter((preset) => preset.period === period).map((preset) => <option value={preset.id} key={preset.id}>{preset.label}</option>)}</optgroup>)}</select></Field>
+    <Field label="Link YouTube tùy chỉnh (không bắt buộc)"><input value={music.customUrl} onChange={(event) => setMusic({ customUrl: event.target.value })} placeholder="https://www.youtube.com/watch?v=…" /></Field>
+    <Field label={`Âm lượng: ${music.volume}/100`}><input type="range" min="0" max="100" value={music.volume} onChange={(event) => setMusic({ volume: Number(event.target.value) })} /></Field>
+    {selectedPreset ? <p className="xs muted">{selectedPreset.attribution} · {selectedPreset.licence} · <a href={selectedPreset.sourceUrl} target="_blank" rel="noreferrer">Xem nguồn</a></p> : null}
+    <div className="row"><Save label="Lưu nhạc nền" onSave={onSave} /><AsyncButton action={playPreview} busyLabel="Đang mở…">Nghe thử</AsyncButton><button className="btn-ghost" type="button" onClick={() => { stopPreview(); setMusic({ playlistId: "auto", customUrl: "" }); setPreviewStatus("Đã trở về nhạc tự động. Nhấn Lưu để áp dụng cho tổ chức."); }}>Về nhạc tự động</button>{previewStatus ? <span className="small muted" role="status">{previewStatus}</span> : null}</div>
+  </section>;
+}
 
 function WebhookSection({ value, onChange, onSave, onTest }: ManagerSectionProps & { onTest?: SettingsActions["onTestWebhook"] }) {
   const [lastTest, setLastTest] = useState<ManagerWebhookTestView>();
