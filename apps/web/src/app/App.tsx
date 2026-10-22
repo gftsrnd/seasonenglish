@@ -65,16 +65,11 @@ function AppContent({ children }: { children?: ((session: SessionView) => ReactN
   }, [bootstrapAttempt]);
   useEffect(() => {
     if (!session) return;
-    void sharedApiClient.getProductPreferences().then((preferences) => {
-      setTheme(preferences.theme);
-    }).catch(() => { /* Keep the device-stored theme when preferences are unavailable. */ });
+    void sharedApiClient.getOrganisationExperience().then((experience) => {
+      setTheme(experience.theme);
+      setMusicAllowed(experience.backgroundMusic.enabled);
+    }).catch(() => { /* Keep device preferences when organisation experience is unavailable. */ });
   }, [session, setTheme]);
-  useEffect(() => {
-    if (session?.role !== "manager") { setMusicAllowed(true); return; }
-    void import("../api/manager.js").then(({ managerApiClient }) => managerApiClient.getManagerSettings())
-      .then((settings) => setMusicAllowed(settings.backgroundMusic.enabled))
-      .catch(() => setMusicAllowed(true));
-  }, [session]);
   useEffect(() => {
     if (session?.role !== "learner") { setProfileRecord(undefined); setAvatarOpen(false); return; }
     void import("../api/learner.js").then(({ learnerApiClient }) => learnerApiClient.getProfile())

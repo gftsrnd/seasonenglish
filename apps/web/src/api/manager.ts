@@ -7,7 +7,7 @@ import type {
   ManagerProviderSettingsView, ManagerProviderTestView, ManagerPurgeConfirmationInput,
   ManagerPurgeConfirmationView, ManagerReminderCopyView, ManagerReminderDismissView,
   ManagerReminderSendView, ManagerRemindersView, ManagerReportView, ManagerSettingsView, ManagerTrashView,
-  OperatorSettingsOverviewView,
+  OperatorSettingsOverviewView, OrganisationExperienceInput, OrganisationExperienceView,
   ManagerWebhookTestView, ProductPreferencesView, SystemCapabilitiesView
 } from "@e4s/contracts";
 import { request } from "./runtime.js";
@@ -53,6 +53,8 @@ export interface ManagerApiClient {
   getProductPreferences(): Promise<ProductPreferencesView>;
   saveProductPreferences(input: ProductPreferencesView): Promise<ProductPreferencesView>;
   getSystemCapabilities(): Promise<SystemCapabilitiesView>;
+  getOrganisationExperience(): Promise<OrganisationExperienceView>;
+  saveOrganisationExperience(input: OrganisationExperienceInput): Promise<OrganisationExperienceView>;
 }
 
 export const managerApiClient: ManagerApiClient = {
@@ -95,5 +97,7 @@ export const managerApiClient: ManagerApiClient = {
   saveOperatorSettings: (input) => request("/api/v1/operator/settings", { method: "PUT", body: JSON.stringify(input) }),
   getProductPreferences: () => request("/api/v1/product-preferences"),
   saveProductPreferences: (input) => request("/api/v1/product-preferences", { method: "PUT", body: JSON.stringify(input) }),
-  getSystemCapabilities: () => request("/api/v1/system/capabilities")
+  getSystemCapabilities: () => request("/api/v1/system/capabilities"),
+  getOrganisationExperience: () => request("/api/v1/organisation-experience"),
+  saveOrganisationExperience: (input) => request("/api/v1/organisation-experience", { method: "PUT", body: JSON.stringify(input) })
 };

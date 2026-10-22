@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import "@testing-library/jest-dom/vitest";
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, render, screen, waitFor } from "@testing-library/react";
 import { userEvent } from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -10,6 +10,7 @@ const client = vi.hoisted(() => ({
   staffLogin: vi.fn(),
   registerLearner: vi.fn(),
   getProductPreferences: vi.fn(),
+  getOrganisationExperience: vi.fn(),
   getProfile: vi.fn(),
   logout: vi.fn()
 }));
@@ -29,6 +30,8 @@ vi.mock("../api/learner.js", () => ({ learnerApiClient: learnerClient }));
 vi.mock("../api/manager.js", () => ({ managerApiClient: managerClient }));
 
 import { App, resolveSessionEntryPath } from "./App.js";
+import { useTheme } from "./shared/ThemeProvider.js";
+import { useExperience } from "../features/experience/Experience.js";
 
 const learnerSession = {
   user: { id: "learner-1", displayName: "Nguyễn Minh Anh", email: "learner@example.test" },
@@ -54,6 +57,7 @@ beforeEach(() => {
   window.history.replaceState({}, "", "/home");
   client.currentSession.mockResolvedValue(learnerSession);
   client.getProductPreferences.mockResolvedValue({ theme: "summer", vocabImageSource: "wikimedia" });
+  client.getOrganisationExperience.mockResolvedValue({ theme: "winter", backgroundMusic: { enabled: false, playlistId: "auto", customUrl: "", volume: 18 } });
   client.getProfile.mockResolvedValue({
     profile: { fullName: "Nguyễn Minh Anh", avatar: { color: "olive", acc: "leaf", bg: 0 } },
     version: 1
@@ -133,6 +137,15 @@ describe("App session shell", () => {
     expect(window.location.pathname).toBe(expected);
   });
 
+  it.each([learnerSession, operatorSession, managerSession])("loads the organisation experience for the active $role session", async (activeSession) => {
+    client.currentSession.mockResolvedValue(activeSession);
+    render(<App>{() => <ExperienceProbe />}</App>);
+
+    expect(await screen.findByTestId("resolved-theme")).toHaveTextContent("winter");
+    await waitFor(() => expect(screen.getByTestId("music-allowed")).toHaveTextContent("false"));
+    expect(client.getOrganisationExperience).toHaveBeenCalledOnce();
+  });
+
   it("normalizes the stale route after a new learner sign-in", async () => {
     const user = userEvent.setup();
     window.history.replaceState({}, "", "/mgr");
@@ -158,3 +171,9 @@ describe("App session shell", () => {
     expect(screen.getByRole("heading", { name: "Trang học" })).toBeInTheDocument();
   });
 });
+
+function ExperienceProbe() {
+  const { resolvedTheme } = useTheme();
+  const { musicAllowed } = useExperience();
+  return <><span data-testid="resolved-theme">{resolvedTheme}</span><span data-testid="music-allowed">{String(musicAllowed)}</span></>;
+}

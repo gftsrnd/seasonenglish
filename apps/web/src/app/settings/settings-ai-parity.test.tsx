@@ -6,6 +6,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const client = vi.hoisted(() => ({
   currentSession: vi.fn(), logout: vi.fn(), getProductPreferences: vi.fn(), getSystemCapabilities: vi.fn(),
+  getOrganisationExperience: vi.fn(), saveOrganisationExperience: vi.fn(),
   saveProductPreferences: vi.fn(),
   saveSessionAvatar: vi.fn(),
   getManagerSettings: vi.fn(), getManagerAccounts: vi.fn(), getManagerProviderSettings: vi.fn(),
@@ -32,6 +33,8 @@ beforeEach(() => {
     role: "manager", permissions: ["settings:manage"]
   });
   client.getProductPreferences.mockResolvedValue({ theme: "auto", vocabImageSource: "wikimedia" });
+  client.getOrganisationExperience.mockResolvedValue({ theme: "auto", backgroundMusic: { enabled: true, playlistId: "auto", customUrl: "", volume: 22 } });
+  client.saveOrganisationExperience.mockImplementation(async (input) => input);
   client.saveProductPreferences.mockResolvedValue({ theme: "auto", vocabImageSource: "wikimedia" });
   client.getSystemCapabilities.mockResolvedValue({ api: true, database: true, ai: true, objectStorage: false });
   client.getManagerSettings.mockResolvedValue({
@@ -119,7 +122,6 @@ describe("Manager AI provider settings", () => {
 
   it("applies the saved seasonal theme to the live app shell", async () => {
     const user = userEvent.setup();
-    client.saveProductPreferences.mockResolvedValue({ theme: "winter", vocabImageSource: "wikimedia" });
     window.history.pushState({}, "", "/settings");
     render(<App />);
 
@@ -127,11 +129,12 @@ describe("Manager AI provider settings", () => {
     await user.selectOptions(screen.getByLabelText("Chủ đề giao diện (áp dụng ngay khi chọn)"), "winter");
     await user.click(screen.getByRole("button", { name: "Lưu giao diện" }));
 
-    expect(client.saveProductPreferences).toHaveBeenCalledWith({ theme: "winter", vocabImageSource: "wikimedia" });
+    expect(client.saveOrganisationExperience).toHaveBeenCalledWith({ theme: "winter", backgroundMusic: { enabled: true, playlistId: "auto", customUrl: "", volume: 22 } });
     expect(document.documentElement.dataset.theme).toBe("winter");
   });
 
   it("honors the Manager-wide BGM policy in the app shell", async () => {
+    client.getOrganisationExperience.mockResolvedValue({ theme: "auto", backgroundMusic: { enabled: false, playlistId: "auto", customUrl: "", volume: 22 } });
     client.getManagerSettings.mockResolvedValue({
       organizationName: "GFT Demo", reminderInactiveDays: 3, weeklyReportEnabled: true,
       pilotStartDate: "2026-10-12", pilotWeeks: 2, weekOverride: 0, minMinutesPerDay: 15,
@@ -155,15 +158,13 @@ describe("Manager AI provider settings", () => {
 
     await user.click(screen.getByRole("button", { name: /Thử ảnh/ }));
     await user.click(screen.getByRole("button", { name: "Xoá cache ảnh" }));
-    await user.click(screen.getByRole("button", { name: "Lưu & nghe thử" }));
-    await user.click(screen.getByRole("button", { name: "Về nhạc mặc định" }));
+    await user.click(screen.getByRole("button", { name: "Lưu nhạc nền" }));
     await user.click(screen.getByRole("button", { name: "Gửi tin thử" }));
     await user.click(screen.getByRole("button", { name: "Xuất JSON" }));
 
     expect(client.testManagerImage).toHaveBeenCalledWith({ source: "wikimedia" });
     expect(client.clearManagerImageCache).toHaveBeenCalledOnce();
-    expect(client.testManagerMusic).toHaveBeenCalledWith({ enabled: true, url: "", volume: 22 });
-    expect(client.resetManagerMusic).toHaveBeenCalledOnce();
+    expect(client.saveOrganisationExperience).toHaveBeenCalledWith({ theme: "auto", backgroundMusic: { enabled: true, playlistId: "auto", customUrl: "", volume: 22 } });
     expect(client.testManagerWebhook).toHaveBeenCalledWith({ url: "", template: "{\"base_content\":\"{message}\"}" });
     expect(client.exportManagerData).toHaveBeenCalledOnce();
   });

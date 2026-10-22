@@ -4,8 +4,8 @@ import { act, cleanup, fireEvent, render, screen, within } from "@testing-librar
 import { userEvent } from "@testing-library/user-event";
 import { MemoryRouter } from "react-router";
 import type { ReactElement } from "react";
-import { afterEach, describe, expect, it, vi } from "vitest";
-import type { ManagerLearnerProfileView, ManagerOperationsView, ManagerProgressView, ManagerProviderSettingsView, ManagerReportView, ManagerSettingsView, OperatorSettingsOverviewView, ProductPreferencesView, SystemCapabilitiesView } from "@e4s/contracts";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import type { ManagerLearnerProfileView, ManagerOperationsView, ManagerProgressView, ManagerProviderSettingsView, ManagerReportView, ManagerSettingsView, OperatorSettingsOverviewView, OrganisationExperienceView, ProductPreferencesView, SystemCapabilitiesView } from "@e4s/contracts";
 import { managerApiClient as apiClient } from "../../api/manager.js";
 import { operatorApiClient } from "../../api/operator.js";
 import { MaintenanceConfirmationDialog, ManagerRouteController, PurgeConfirmationDialog } from "./ManagerRouteController.js";
@@ -13,6 +13,10 @@ import { RoleRoutes } from "../RoleRoutes.js";
 import { ModalProvider } from "../shared/ModalProvider.js";
 
 afterEach(() => { cleanup(); vi.useRealTimers(); vi.restoreAllMocks(); });
+beforeEach(() => {
+  vi.spyOn(apiClient, "getOrganisationExperience").mockResolvedValue(organisationExperience);
+  vi.spyOn(apiClient, "saveOrganisationExperience").mockImplementation(async (input) => input);
+});
 
 function renderManager(element: ReactElement) {
   return render(<ModalProvider>{element}</ModalProvider>);
@@ -410,6 +414,7 @@ describe("ManagerRouteController", () => {
   });
 
   it("shows operator-owned settings and hides Manager-only organization configuration", async () => {
+    const user = userEvent.setup();
     vi.spyOn(apiClient, "getProductPreferences").mockResolvedValue(product);
     vi.spyOn(apiClient, "getSystemCapabilities").mockResolvedValue(capabilities);
     const getProvider = vi.spyOn(apiClient, "getManagerProviderSettings").mockResolvedValue(managerProvider);
@@ -421,7 +426,8 @@ describe("ManagerRouteController", () => {
       levelUp: managerSettings.levelUp,
       accounts: []
     } satisfies OperatorSettingsOverviewView);
-    const save = vi.spyOn(apiClient, "saveProductPreferences").mockResolvedValue({ ...product, theme: "winter" });
+    const saveProduct = vi.spyOn(apiClient, "saveProductPreferences").mockResolvedValue({ ...product, theme: "winter" });
+    const saveExperience = vi.mocked(apiClient.saveOrganisationExperience);
     renderManager(<MemoryRouter initialEntries={["/settings"]}><ManagerRouteController role="operator" currentUserId="operator-1" /></MemoryRouter>);
     await screen.findByRole("heading", { name: "Cài đặt" });
     expect(screen.getByRole("heading", { name: "Cài đặt" })).toBeInTheDocument();
@@ -433,9 +439,15 @@ describe("ManagerRouteController", () => {
     expect(screen.queryByRole("heading", { name: "Prompt & rubric" })).not.toBeInTheDocument();
     expect(getProvider).not.toHaveBeenCalled();
     expect(screen.queryByLabelText("Nguồn ảnh")).not.toBeInTheDocument();
-    expect(screen.queryByLabelText("Chủ đề giao diện (áp dụng ngay khi chọn)")).not.toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "Lưu giao diện" })).not.toBeInTheDocument();
-    expect(save).not.toHaveBeenCalled();
+    expect(screen.getByLabelText("Chủ đề giao diện (áp dụng ngay khi chọn)")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Lưu giao diện" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Lưu nhạc nền" })).toBeInTheDocument();
+    expect(saveProduct).not.toHaveBeenCalled();
+    expect(saveExperience).not.toHaveBeenCalled();
+    await user.selectOptions(screen.getByLabelText("Chủ đề giao diện (áp dụng ngay khi chọn)"), "winter");
+    await user.click(screen.getByRole("button", { name: "Lưu giao diện" }));
+    expect(saveExperience).toHaveBeenCalledWith({ theme: "winter", backgroundMusic: { enabled: true, playlistId: "auto", customUrl: "", volume: 22 } });
+    expect(saveProduct).not.toHaveBeenCalled();
     expect(screen.queryByRole("heading", { name: "Dữ liệu" })).not.toBeInTheDocument();
   });
 });
@@ -448,6 +460,7 @@ const managerSettings = {
   levelUp: { days: 14, lessons: 90, firstTry: 75, submission: 80, coach: 4, coachTurns: 6, wrong: 30, minParts: 4 },
   backgroundMusic: { enabled: true, url: "", volume: 22 }, baseWebhookUrl: "", baseWebhookTemplate: "{}"
 } satisfies ManagerSettingsView;
+const organisationExperience = { theme: "auto", backgroundMusic: { enabled: true, playlistId: "auto", customUrl: "", volume: 22 } } satisfies OrganisationExperienceView;
 const managerProvider = {
   provider: "openai", configured: true, baseUrl: "https://api.groq.com/openai/v1", model: "qwen/qwen3.8-27b", speechToTextModel: "whisper-large-v3-turbo",
   capabilities: { chat: true, structuredOutput: true, speechToText: true }, lastTest: { status: "success", testedAt: "2026-10-15T09:00:00.000Z", code: null }

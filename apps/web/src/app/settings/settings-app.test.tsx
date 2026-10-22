@@ -1,9 +1,9 @@
 // @vitest-environment jsdom
 import "@testing-library/jest-dom/vitest";
-import { cleanup, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { userEvent } from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { ManagerSettingsView, OperatorSettingsOverviewView, ProductPreferencesView, SystemCapabilitiesView } from "@e4s/contracts";
+import type { ManagerSettingsView, OperatorSettingsOverviewView, OrganisationExperienceView, ProductPreferencesView, SystemCapabilitiesView } from "@e4s/contracts";
 import { SettingsPage } from "./index.js";
 
 beforeEach(() => window.localStorage.clear());
@@ -17,6 +17,7 @@ const manager: ManagerSettingsView = {
   backgroundMusic: { enabled: true, url: "", volume: 22 }, baseWebhookUrl: "", baseWebhookTemplate: "{\"base_content\":\"{message}\"}"
 };
 const product: ProductPreferencesView = { theme: "auto", vocabImageSource: "wikimedia" };
+const experience: OrganisationExperienceView = { theme: "auto", backgroundMusic: { enabled: true, playlistId: "auto", customUrl: "", volume: 22 } };
 const capabilities: SystemCapabilitiesView = {
   api: true,
   database: true,
@@ -120,7 +121,7 @@ describe("new Settings app branch", () => {
     expect(importButton).not.toHaveAttribute("aria-busy");
   });
 
-  it("keeps provider credentials and prompt controls out of Operator settings", () => {
+  it("lets Operator save organisation theme and music without exposing Manager-only controls", async () => {
     const overview: OperatorSettingsOverviewView = {
       organizationName: "GFT Demo",
       settings: manager,
@@ -129,8 +130,9 @@ describe("new Settings app branch", () => {
       levelUp: manager.levelUp,
       accounts: [{ id: "learner-1", displayName: "Học viên A", email: "a@example.com", role: "learner", status: "active", createdAt: "2026-10-12T00:00:00.000Z" }]
     };
-    const { container } = render(<SettingsPage role="operator" operatorOverview={overview} product={product} capabilities={capabilities} ai={{ provider: "openai", configured: true, baseUrl: "https://api.groq.com/openai/v1", model: "qwen/qwen3.8-27b", speechToTextModel: "whisper-large-v3-turbo" }} actions={actions()} />);
-    expect([...container.querySelectorAll("h3")].map((node) => node.textContent)).toEqual(["Lịch pilot", "Bài test đầu vào / cuối kỳ", "Ngưỡng xét lên / hạ mức", "Người dùng", "Tùy chọn cá nhân"]);
+    const callbacks = actions();
+    const { container } = render(<SettingsPage role="operator" operatorOverview={overview} product={product} experience={experience} capabilities={capabilities} ai={{ provider: "openai", configured: true, baseUrl: "https://api.groq.com/openai/v1", model: "qwen/qwen3.8-27b", speechToTextModel: "whisper-large-v3-turbo" }} actions={callbacks} />);
+    expect([...container.querySelectorAll("h3")].map((node) => node.textContent)).toEqual(["Giao diện theo mùa / lễ", "Nhạc nền của Season", "Lịch pilot", "Bài test đầu vào / cuối kỳ", "Ngưỡng xét lên / hạ mức", "Người dùng", "Tùy chọn cá nhân"]);
     expect(screen.getByText("Học viên A")).toBeInTheDocument();
     expect(screen.getByLabelText("Ngày bắt đầu (Thứ Hai tuần 1)")).not.toBeDisabled();
     expect(screen.getByLabelText("Nghe (phút)")).toHaveValue(15);
@@ -145,7 +147,17 @@ describe("new Settings app branch", () => {
     expect(screen.queryByLabelText("Nhà cung cấp")).not.toBeInTheDocument();
     expect(screen.queryByLabelText("Model")).not.toBeInTheDocument();
     expect(screen.queryByRole("heading", { name: "Ảnh minh hoạ từ vựng" })).not.toBeInTheDocument();
-    expect(screen.queryByRole("heading", { name: "Giao diện theo mùa / lễ" })).not.toBeInTheDocument();
+    await userEvent.setup().selectOptions(screen.getByLabelText("Chủ đề giao diện (áp dụng ngay khi chọn)"), "winter");
+    await userEvent.setup().click(screen.getByRole("button", { name: "Lưu giao diện" }));
+    expect(callbacks.onSaveExperience).toHaveBeenCalledWith(expect.objectContaining({ theme: "winter" }));
+    await userEvent.setup().clear(screen.getByLabelText("Link YouTube tùy chỉnh (không bắt buộc)"));
+    await userEvent.setup().type(screen.getByLabelText("Link YouTube tùy chỉnh (không bắt buộc)"), "https://www.youtube.com/watch?v=study");
+    await userEvent.setup().clear(screen.getByLabelText("Danh sách nhạc"));
+    await userEvent.setup().type(screen.getByLabelText("Danh sách nhạc"), "focus-afternoon");
+    await userEvent.setup().click(screen.getByRole("checkbox", { name: "Cho phép nhạc nền trong app" }));
+    fireEvent.change(screen.getByRole("slider", { name: "Âm lượng: 22/100" }), { target: { value: "37" } });
+    await userEvent.setup().click(screen.getByRole("button", { name: "Lưu nhạc nền" }));
+    expect(callbacks.onSaveExperience).toHaveBeenLastCalledWith(expect.objectContaining({ backgroundMusic: expect.objectContaining({ enabled: false, playlistId: "focus-afternoon", customUrl: "https://www.youtube.com/watch?v=study", volume: 37 }) }));
     expect(screen.getByRole("checkbox", { name: "Hiệu ứng âm thanh" })).toBeInTheDocument();
     expect(screen.getByRole("checkbox", { name: "Nhạc nền" })).toBeInTheDocument();
   });
@@ -181,7 +193,7 @@ describe("new Settings app branch", () => {
 
 function actions() {
   return {
-    onSaveAi: vi.fn(), onTestAi: vi.fn(), onSaveManager: vi.fn(), onSaveProduct: vi.fn(), onTestImage: vi.fn(), onClearImageCache: vi.fn(), onTestMusic: vi.fn(), onResetMusic: vi.fn(), onTestWebhook: vi.fn(),
+    onSaveAi: vi.fn(), onTestAi: vi.fn(), onSaveManager: vi.fn(), onSaveProduct: vi.fn(), onSaveExperience: vi.fn(), onTestImage: vi.fn(), onClearImageCache: vi.fn(), onTestMusic: vi.fn(), onResetMusic: vi.fn(), onTestWebhook: vi.fn(),
     onExportJson: vi.fn(), onImportJson: vi.fn(), onExportCsv: vi.fn(), onSeedData: vi.fn(), onWipeData: vi.fn()
   };
 }

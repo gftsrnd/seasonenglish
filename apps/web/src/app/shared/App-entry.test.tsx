@@ -6,6 +6,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 const client = vi.hoisted(() => ({
   currentSession: vi.fn(),
   getProductPreferences: vi.fn(),
+  getOrganisationExperience: vi.fn(),
   getProfile: vi.fn()
 }));
 
@@ -20,11 +21,13 @@ describe("App entry bootstrap", () => {
     window.history.replaceState({}, "", "/");
     client.currentSession.mockResolvedValue(null);
     client.getProductPreferences.mockResolvedValue({ theme: "summer", vocabImageSource: "wikimedia" });
+    client.getOrganisationExperience.mockResolvedValue({ theme: "summer", backgroundMusic: { enabled: true, playlistId: "auto", customUrl: "", volume: 22 } });
 
     render(<App />);
 
     expect(await screen.findByRole("button", { name: "Đăng nhập người học" })).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Dùng thử" })).not.toBeInTheDocument();
     expect(client.getProductPreferences).not.toHaveBeenCalled();
+    expect(client.getOrganisationExperience).not.toHaveBeenCalled();
   });
 });

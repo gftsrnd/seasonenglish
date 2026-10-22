@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type ButtonHTMLAttributes, type ReactNode } from "react";
-import type { ManagerProviderSettingsInput, ManagerProviderSettingsView, ManagerSettingsInput, ManagerSettingsView, ManagerWebhookTestView, OperatorSettingsOverviewView, ProductPreferencesView, SystemCapabilitiesView } from "@e4s/contracts";
+import type { ManagerProviderSettingsInput, ManagerProviderSettingsView, ManagerSettingsInput, ManagerSettingsView, ManagerWebhookTestView, OperatorSettingsOverviewView, OrganisationExperienceInput, OrganisationExperienceView, ProductPreferencesView, SystemCapabilitiesView } from "@e4s/contracts";
 import { Flower2, Gift, Leaf, MoonStar, Snowflake, Sparkles, Star, Sun } from "lucide-react";
 import { autoSeasonTheme } from "../games/season-visual.js";
 import { PersonalPreferences } from "./PersonalPreferences.js";
@@ -43,6 +43,7 @@ export type SettingsActions = {
   onTestAi: (input: AiConfigurationInput) => void | Promise<void>;
   onSaveManager: (input: ManagerSettingsInput) => void | Promise<void>;
   onSaveProduct: (input: ProductPreferencesView) => void | Promise<void>;
+  onSaveExperience: (input: OrganisationExperienceInput) => void | Promise<void>;
   onTestImage: (input: ProductPreferencesView) => void | Promise<void>;
   onClearImageCache: () => void | Promise<void>;
   onTestMusic: (input: ManagerSettingsView["backgroundMusic"]) => void | Promise<void>;
@@ -58,6 +59,7 @@ export type SettingsProps = {
   role: "manager" | "operator";
   manager?: ManagerSettingsView;
   product: ProductPreferencesView;
+  experience?: OrganisationExperienceView;
   capabilities: SystemCapabilitiesView;
   ai?: AiConfigurationView;
   operatorOverview?: OperatorSettingsOverviewView;
@@ -65,13 +67,15 @@ export type SettingsProps = {
   accounts?: ReactNode;
 };
 
-export function SettingsPage({ role, manager, product, capabilities, ai, operatorOverview, actions, accounts }: SettingsProps) {
+export function SettingsPage({ role, manager, product, experience, capabilities, ai, operatorOverview, actions, accounts }: SettingsProps) {
   const [aiDraft, setAiDraft] = useState<AiConfigurationInput | null>(ai ? { provider: ai.provider, baseUrl: ai.baseUrl, model: ai.model, speechToTextModel: ai.speechToTextModel } : null);
   const [managerDraft, setManagerDraft] = useState(manager ?? operatorOverview?.settings);
   const [productDraft, setProductDraft] = useState(() => normalizeProductPreferences(product));
+  const [experienceDraft, setExperienceDraft] = useState<OrganisationExperienceView>(() => experience ?? legacyExperience(product, manager ?? operatorOverview?.settings));
   useEffect(() => setAiDraft(ai ? { provider: ai.provider, baseUrl: ai.baseUrl, model: ai.model, speechToTextModel: ai.speechToTextModel } : null), [ai]);
   useEffect(() => setManagerDraft(manager ?? operatorOverview?.settings), [manager, operatorOverview]);
   useEffect(() => setProductDraft(normalizeProductPreferences(product)), [product]);
+  useEffect(() => setExperienceDraft(experience ?? legacyExperience(product, manager ?? operatorOverview?.settings)), [experience, manager, operatorOverview, product]);
   return <div className="settings-page" data-settings-role={role}>
     <div className="page-title"><h1>Cài đặt</h1></div>
     {role === "manager" ? aiDraft && ai ? <AiSection draft={aiDraft} configured={ai.configured} lastTest={ai.lastTest} capabilities={capabilities} onChange={setAiDraft} {...(actions.onSaveAi ? { onSave: () => actions.onSaveAi!(aiDraft) } : {})} {...(actions.onTestAi ? { onTest: () => actions.onTestAi!(aiDraft) } : {})} /> : <UnavailableAiSection capabilities={capabilities} role={role} /> : null}
@@ -80,13 +84,15 @@ export function SettingsPage({ role, manager, product, capabilities, ai, operato
       <ImageSection value={productDraft} onChange={setProductDraft} {...(actions.onSaveProduct ? { onSave: () => actions.onSaveProduct!(productDraft) } : {})} {...(actions.onTestImage ? { onTest: () => actions.onTestImage!(productDraft) } : {})} {...(actions.onClearImageCache ? { onClear: actions.onClearImageCache } : {})} />
       <TestSection value={managerDraft} onChange={setManagerDraft} {...(actions.onSaveManager ? { onSave: () => actions.onSaveManager!(toInput(managerDraft)) } : {})} />
       <LevelSection value={managerDraft} onChange={setManagerDraft} {...(actions.onSaveManager ? { onSave: () => actions.onSaveManager!(toInput(managerDraft)) } : {})} />
-      <ThemeSection value={productDraft} onChange={setProductDraft} {...(actions.onSaveProduct ? { onSave: () => actions.onSaveProduct!(productDraft) } : {})} />
-      <MusicSection value={managerDraft} onChange={setManagerDraft} {...(actions.onSaveManager ? { onSave: () => actions.onSaveManager!(toInput(managerDraft)) } : {})} {...(actions.onTestMusic ? { onTest: actions.onTestMusic } : {})} {...(actions.onResetMusic ? { onReset: actions.onResetMusic } : {})} />
+      <ThemeSection value={experienceDraft} onChange={setExperienceDraft} {...(actions.onSaveExperience ? { onSave: () => actions.onSaveExperience!(experienceDraft) } : actions.onSaveProduct ? { onSave: () => actions.onSaveProduct!({ ...productDraft, theme: experienceDraft.theme }) } : {})} />
+      <MusicSection value={experienceDraft} onChange={setExperienceDraft} {...(actions.onSaveExperience ? { onSave: () => actions.onSaveExperience!(experienceDraft) } : {})} />
       <WebhookSection value={managerDraft} onChange={setManagerDraft} {...(actions.onSaveManager ? { onSave: () => actions.onSaveManager!(toInput(managerDraft)) } : {})} {...(actions.onTestWebhook ? { onTest: actions.onTestWebhook } : {})} />
       <PolicySection value={managerDraft} onChange={setManagerDraft} {...(actions.onSaveManager ? { onSave: () => actions.onSaveManager!(toInput(managerDraft)) } : {})} />
       <DataSection actions={actions} capabilities={capabilities} />
       {accounts}
     </> : <>
+      <ThemeSection value={experienceDraft} onChange={setExperienceDraft} {...(actions.onSaveExperience ? { onSave: () => actions.onSaveExperience!(experienceDraft) } : {})} />
+      <MusicSection value={experienceDraft} onChange={setExperienceDraft} {...(actions.onSaveExperience ? { onSave: () => actions.onSaveExperience!(experienceDraft) } : {})} />
       {operatorOverview && managerDraft ? <>
         <PilotSection value={managerDraft} onChange={setManagerDraft} {...(actions.onSaveManager ? { onSave: () => actions.onSaveManager!(toInput(managerDraft)) } : {})} />
         <TestSection value={managerDraft} onChange={setManagerDraft} {...(actions.onSaveManager ? { onSave: () => actions.onSaveManager!(toInput(managerDraft)) } : {})} />
@@ -131,16 +137,28 @@ function normalizeProductPreferences(value: ProductPreferencesView): ProductPref
   return { ...value, vocabImageSource: normalizeImageSource(value.vocabImageSource) };
 }
 
+function legacyExperience(product: ProductPreferencesView, settings?: ManagerSettingsView): OrganisationExperienceView {
+  return {
+    theme: product.theme,
+    backgroundMusic: {
+      enabled: settings?.backgroundMusic.enabled ?? true,
+      playlistId: "auto",
+      customUrl: settings?.backgroundMusic.url ?? "",
+      volume: settings?.backgroundMusic.volume ?? 22
+    }
+  };
+}
+
 function TestSection({ value, onChange, onSave }: ManagerSectionProps) { const updateTime = (key: keyof ManagerSettingsView["testTimes"], next: number) => onChange({ ...value, testTimes: { ...value.testTimes, [key]: next } }); return <section className="card"><h3>Bài test đầu vào / cuối kỳ</h3><p className="small muted">&quot;Workplace English CEFR Placement Test (Refined)&quot;: Nghe 20 · Đọc, Ngữ pháp &amp; Từ vựng 40 · Viết 20 (2 task) · Nói 20 (4 task), tổng 100 điểm. Mỗi phần tính giờ riêng; hết giờ tự nộp. Rời màn hình bị cảnh báo; quá số lần cho phép cũng tự nộp.</p><label className="check"><input type="checkbox" checked={value.testTimed} onChange={(event) => onChange({ ...value, testTimed: event.target.checked })} /> Bật tính giờ</label><div className="grid cols-4">{(["listening", "reading", "writing", "speaking"] as const).map((key) => <NumberField key={key} label={`${({ listening: "Nghe", reading: "Đọc", writing: "Viết", speaking: "Nói" })[key]} (phút)`} value={value.testTimes[key]} min={1} max={60} onChange={(next) => updateTime(key, next)} />)}</div><NumberField label="Số lần cảnh báo (kèm âm thanh) khi rời màn hình; vi phạm lần kế tiếp thì tự nộp" value={value.testWarnLimit} min={1} max={10} onChange={(testWarnLimit) => onChange({ ...value, testWarnLimit })} /><Save label="Lưu bài test" onSave={onSave} /></section>; }
 
 function LevelSection({ value, onChange, onSave }: ManagerSectionProps) { const labels: Record<keyof ManagerSettingsView["levelUp"], string> = { days: "Số ngày xét", lessons: "Bài học hoàn thành ≥ (%)", firstTry: "Đúng ngay lần đầu ≥ (%)", submission: "Bài thực hành gần nhất ≥ (/100)", coach: "Rubric Season trung bình ≥ (/5)", coachTurns: "Số lượt chat tối thiểu", wrong: "Hạ mức: tỉ lệ sai > (%)", minParts: "Hạ mức: số phần tối thiểu/tuần" }; return <section className="card"><h3>Ngưỡng xét lên / hạ mức</h3><p className="small muted">Xét trong số ngày gần nhất: đủ 4 ngưỡng đầu = &quot;Sẵn sàng thi lên level&quot; (trừ C1). Hai tuần liền sai quá số lượt cho phép = &quot;Nên xem xét hạ mức&quot; (trừ A1).</p><div className="grid cols-4">{(Object.keys(labels) as (keyof ManagerSettingsView["levelUp"])[]).map((key) => <NumberField key={key} label={labels[key]} value={value.levelUp[key]} min={key === "coach" ? 0 : 1} max={key === "coach" ? 5 : key === "days" ? 60 : 100} step={key === "coach" ? 0.5 : 1} onChange={(next) => onChange({ ...value, levelUp: { ...value.levelUp, [key]: next } })} />)}</div><Save label="Lưu ngưỡng" onSave={onSave} /></section>; }
 
-function ThemeSection({ value, onChange, onSave, readOnly = false }: { value: ProductPreferencesView; onChange: (value: ProductPreferencesView) => void; onSave?: () => void | Promise<void>; readOnly?: boolean }) {
-  const themes: [ProductPreferencesView["theme"], string][] = [["auto", "Tự động theo ngày"], ["spring", "Mùa xuân"], ["summer", "Mùa hạ"], ["autumn", "Mùa thu"], ["winter", "Mùa đông"], ["tet", "Tết Nguyên đán"], ["midautumn", "Trung thu"], ["christmas", "Giáng sinh – Năm mới"]];
+function ThemeSection({ value, onChange, onSave, readOnly = false }: { value: OrganisationExperienceView; onChange: (value: OrganisationExperienceView) => void; onSave?: () => void | Promise<void>; readOnly?: boolean }) {
+  const themes: [OrganisationExperienceView["theme"], string][] = [["auto", "Tự động theo ngày"], ["spring", "Mùa xuân"], ["summer", "Mùa hạ"], ["autumn", "Mùa thu"], ["winter", "Mùa đông"], ["tet", "Tết Nguyên đán"], ["midautumn", "Trung thu"], ["christmas", "Giáng sinh – Năm mới"]];
   useEffect(() => {
     document.documentElement.dataset.theme = value.theme === "auto" ? autoSeasonTheme() : value.theme;
   }, [value.theme]);
-  return <section className="card"><h3>Giao diện theo mùa / lễ</h3><p className="small muted">Đổi màu và icon; không đổi bố cục, nội dung, dữ liệu. Tự động: Tết (−7/+10 ngày), Trung thu (±5 ngày), Giáng sinh–Năm mới (15/12–2/1); còn lại theo mùa: xuân 2–4, hạ 5–7, thu 8–10, đông 11–1.</p><Field label="Chủ đề giao diện (áp dụng ngay khi chọn)"><select value={value.theme} disabled={readOnly} onChange={(event) => onChange({ ...value, theme: event.target.value as ProductPreferencesView["theme"] })}>{themes.map(([id, label]) => <option value={id} key={id}>{label}</option>)}</select></Field><div className="row">{themes.slice(1).map(([id, label]) => <span className="badge settings-theme-badge" key={id}><ThemeMark theme={id as Exclude<ProductPreferencesView["theme"], "auto">} />{label}</span>)}</div>{readOnly ? null : <Save label="Lưu giao diện" onSave={onSave} />}</section>;
+  return <section className="card"><h3>Giao diện theo mùa / lễ</h3><p className="small muted">Đổi màu và icon; không đổi bố cục, nội dung, dữ liệu. Thiết lập áp dụng cho toàn tổ chức và chế độ tự động cập nhật theo ngày địa phương.</p><Field label="Chủ đề giao diện (áp dụng ngay khi chọn)"><select value={value.theme} disabled={readOnly} onChange={(event) => onChange({ ...value, theme: event.target.value as OrganisationExperienceView["theme"] })}>{themes.map(([id, label]) => <option value={id} key={id}>{label}</option>)}</select></Field><div className="row">{themes.slice(1).map(([id, label]) => <span className="badge settings-theme-badge" key={id}><ThemeMark theme={id as Exclude<OrganisationExperienceView["theme"], "auto">} />{label}</span>)}</div>{readOnly ? null : <Save label="Lưu giao diện" onSave={onSave} />}</section>;
 }
 
 function ThemeMark({ theme }: { theme: Exclude<ProductPreferencesView["theme"], "auto"> }) {
@@ -155,7 +173,7 @@ function ThemeMark({ theme }: { theme: Exclude<ProductPreferencesView["theme"], 
   return <Sparkles {...props} />;
 }
 
-function MusicSection({ value, onChange, onSave, onTest, onReset }: ManagerSectionProps & { onTest?: SettingsActions["onTestMusic"]; onReset?: SettingsActions["onResetMusic"] }) { const music = value.backgroundMusic; const setMusic = (next: Partial<ManagerSettingsView["backgroundMusic"]>) => onChange({ ...value, backgroundMusic: { ...music, ...next } }); return <section className="card"><h3>Nhạc nền của Season</h3><p className="small muted">Nhạc YouTube ẩn, cần mạng; chỉ dùng nhạc không bản quyền. Dán link video/playlist; để trống dùng mặc định. Mỗi người bật/tắt trên đầu trang; nhạc tự tắt khi làm phần Nghe hoặc có giọng đọc.</p><label className="check"><input type="checkbox" checked={music.enabled} onChange={(event) => setMusic({ enabled: event.target.checked })} /> Cho phép nhạc nền trong app</label><Field label="Link YouTube (video hoặc playlist)"><input value={music.url} onChange={(event) => setMusic({ url: event.target.value })} /></Field><Field label={`Âm lượng: ${music.volume}/100`}><input type="range" min="0" max="100" value={music.volume} onChange={(event) => setMusic({ volume: Number(event.target.value) })} /></Field><div className="row"><Save label="Lưu nhạc nền" onSave={onSave} /><AsyncButton action={onTest ? () => onTest(music) : undefined} disabled={!onTest} busyLabel="Đang kiểm tra…" title={!onTest ? "Chưa có endpoint nghe thử nhạc" : undefined}>Lưu &amp; nghe thử</AsyncButton><AsyncButton className="btn-ghost" action={onReset} disabled={!onReset} busyLabel="Đang đặt lại…" title={!onReset ? "Chưa có endpoint đặt lại nhạc" : undefined}>Về nhạc mặc định</AsyncButton></div></section>; }
+function MusicSection({ value, onChange, onSave }: { value: OrganisationExperienceView; onChange: (value: OrganisationExperienceView) => void; onSave?: () => void | Promise<void> }) { const music = value.backgroundMusic; const setMusic = (next: Partial<OrganisationExperienceView["backgroundMusic"]>) => onChange({ ...value, backgroundMusic: { ...music, ...next } }); return <section className="card"><h3>Nhạc nền của Season</h3><p className="small muted">Nhạc cần mạng và chỉ dùng nguồn không bản quyền; để danh sách ở “auto” làm mặc định. Thiết lập áp dụng toàn tổ chức, mỗi người vẫn có thể bật/tắt; nhạc dừng khi làm phần Nghe hoặc phát giọng đọc.</p><label className="check"><input type="checkbox" checked={music.enabled} onChange={(event) => setMusic({ enabled: event.target.checked })} /> Cho phép nhạc nền trong app</label><Field label="Danh sách nhạc"><input value={music.playlistId} onChange={(event) => setMusic({ playlistId: event.target.value })} /></Field><Field label="Link YouTube tùy chỉnh (không bắt buộc)"><input value={music.customUrl} onChange={(event) => setMusic({ customUrl: event.target.value })} /></Field><Field label={`Âm lượng: ${music.volume}/100`}><input type="range" min="0" max="100" value={music.volume} onChange={(event) => setMusic({ volume: Number(event.target.value) })} /></Field><Save label="Lưu nhạc nền" onSave={onSave} /></section>; }
 
 function WebhookSection({ value, onChange, onSave, onTest }: ManagerSectionProps & { onTest?: SettingsActions["onTestWebhook"] }) {
   const [lastTest, setLastTest] = useState<ManagerWebhookTestView>();
