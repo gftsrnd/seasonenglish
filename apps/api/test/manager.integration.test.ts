@@ -108,9 +108,9 @@ describe("manager progress and operations API", () => {
     expect(progress.statusCode, progress.body).toBe(200);
     expect(progress.json()).toMatchObject({
       organizationName: "GFT Demo",
-      summary: expect.objectContaining({ learnerCount: 1, completedLessons: 1 }),
+      summary: expect.objectContaining({ learnerCount: 1, completedLessons: 5 }),
       learners: [expect.objectContaining({
-        learnerName: "Học viên Demo", completedLessons: 1,
+        learnerName: "Học viên Demo", completedLessons: 5,
         activityDatesThisWeek: expect.any(Array),
         earnedBadgeDetails: expect.arrayContaining([expect.objectContaining({ key: expect.any(String), label: expect.any(String), description: expect.any(String) })])
       })],
