@@ -29,6 +29,13 @@ export const DEMO_IDS = {
     "00000000-0000-4000-8000-000000000705"
   ],
   progress: "00000000-0000-4000-8000-000000000801",
+  progressRecords: [
+    "00000000-0000-4000-8000-000000000801",
+    "00000000-0000-4000-8000-000000000802",
+    "00000000-0000-4000-8000-000000000803",
+    "00000000-0000-4000-8000-000000000804",
+    "00000000-0000-4000-8000-000000000805"
+  ],
   activity: "00000000-0000-4000-8000-000000000811",
   badge: "00000000-0000-4000-8000-000000000821",
   reward: "00000000-0000-4000-8000-000000000831",
@@ -557,29 +564,25 @@ export async function seedDemo(client: Client, options: { mode?: SeedDemoMode } 
     );
   }
 
-  // Keep the local demo learner deterministic across repeated prepare-local/E2E runs:
-  // lesson 1 represents the already completed day, while lesson 2 must remain the
-  // first unlocked lesson for the learner core flow. Older local runs may have
-  // completed later lessons, so remove only those demo progress rows here.
-  await client.query(
-    `delete from progress_records
-     where learner_id = $1 and lesson_id = any($2::uuid[])`,
-    [DEMO_IDS.learner, DEMO_IDS.lessons.slice(1)]
-  );
-  await client.query(
-    `insert into progress_records (id, learner_id, lesson_id, status, score, evidence, started_at, completed_at)
-     values ($1, $2, $3, 'completed', 90,
-       '{"completedPartCodes":["listening","reading","writing","speaking"],"evidence":{"listening":{"attempts":1,"answer":"Customer emails"},"reading":{"attempts":1,"answer":"Our website"},"writing":{"attempts":1,"answer":"I work in AI."},"speaking":{"attempts":1,"answer":"seed-audio"}}}'::jsonb,
-       now() - interval '1 day', now() - interval '1 day')
-     on conflict (learner_id, lesson_id) do update set
-       status = excluded.status,
-       score = excluded.score,
-       evidence = excluded.evidence,
-       started_at = excluded.started_at,
-       completed_at = excluded.completed_at,
-       updated_at = now()`,
-    [DEMO_IDS.progress, DEMO_IDS.learner, DEMO_IDS.lessons[0]]
-  );
+  // Keep the demo learner at 5/5 completed lessons so the real weekly-practice
+  // flow is available to inspect. The practice submission itself is deliberately
+  // not seeded: learners still see and submit the blank weekly task normally.
+  for (const [index, lessonId] of DEMO_IDS.lessons.entries()) {
+    await client.query(
+      `insert into progress_records (id, learner_id, lesson_id, status, score, evidence, started_at, completed_at)
+       values ($1, $2, $3, 'completed', 90,
+         '{"completedPartCodes":["listening","reading","writing","speaking"],"evidence":{"listening":{"attempts":1,"answer":"Customer emails"},"reading":{"attempts":1,"answer":"Our website"},"writing":{"attempts":1,"answer":"I work in AI."},"speaking":{"attempts":1,"answer":"seed-audio"}}}'::jsonb,
+         now() - (($4::int + 1) * interval '1 day'), now() - (($4::int + 1) * interval '1 day'))
+       on conflict (learner_id, lesson_id) do update set
+         status = excluded.status,
+         score = excluded.score,
+         evidence = excluded.evidence,
+         started_at = excluded.started_at,
+         completed_at = excluded.completed_at,
+         updated_at = now()`,
+      [DEMO_IDS.progressRecords[index], DEMO_IDS.learner, lessonId, 4 - index]
+    );
+  }
   await client.query(
     `insert into activities (id, learner_id, activity_type, reference_type, reference_id, minutes, evidence, occurred_at)
      values ($1, $2, 'lesson', 'lesson', $3, 10, '{"source":"deterministic-seed"}'::jsonb, date_trunc('week', now()) + interval '9 hours')
@@ -620,46 +623,6 @@ export async function seedDemo(client: Client, options: { mode?: SeedDemoMode } 
      on conflict (id) do nothing`,
     [DEMO_IDS.coachSession]
   );
-  await client.query(
-    `insert into practice_submissions (id, learner_id, program_week_id, status, content, score, submitted_at, reviewed_at)
-     values ($1, $2, $3, 'reviewed', '{"text":"Weekly sample"}'::jsonb, '{"total":86,"rubric":{"meaning":4,"vocabulary":4,"grammar":4}}'::jsonb,
-       date_trunc('week', now()) - interval '3 days', date_trunc('week', now()) - interval '2 days')
-     on conflict (id) do update set
-       status = excluded.status,
-       content = excluded.content,
-       score = excluded.score,
-       submitted_at = excluded.submitted_at,
-       reviewed_at = excluded.reviewed_at,
-       updated_at = now()`,
-    [DEMO_IDS.practiceSubmission, DEMO_IDS.learner, DEMO_IDS.week]
-  );
-  await client.query(
-    `insert into game_sets (id, program_week_id, game_key, status, payload)
-     values ($1, $2, 'weekly_vocabulary', 'published', $3::jsonb)
-     on conflict (id) do update set payload = excluded.payload, status = excluded.status`,
-    [DEMO_IDS.gameSet, DEMO_IDS.week, JSON.stringify({
-      topic: "Tuần 1: Introducing yourself & your job",
-      cefr: "A2",
-      words: [
-        { id: "colleague", english: "colleague", vietnamese: "đồng nghiệp", definition: "a person you work with", partOfSpeech: "noun" },
-        { id: "in-charge-of", english: "in charge of", vietnamese: "phụ trách", definition: "responsible for something", partOfSpeech: "phrase" },
-        { id: "customer", english: "customer", vietnamese: "khách hàng", definition: "a person who buys goods or services", partOfSpeech: "noun" },
-        { id: "join", english: "join", vietnamese: "gia nhập", definition: "to become part of a group", partOfSpeech: "verb" },
-        { id: "project", english: "project", vietnamese: "dự án", definition: "a planned piece of work", partOfSpeech: "noun" },
-        { id: "finish", english: "finish", vietnamese: "hoàn thành", definition: "to complete something", partOfSpeech: "verb" },
-        { id: "deadline", english: "deadline", vietnamese: "hạn chót", definition: "the latest time work must be completed", partOfSpeech: "noun" },
-        { id: "manager", english: "manager", vietnamese: "quản lý, trưởng phòng", definition: "a person who manages a team", partOfSpeech: "noun" },
-        { id: "report-to", english: "report to", vietnamese: "báo cáo cho", definition: "to work under someone's direction", partOfSpeech: "phrase" },
-        { id: "update", english: "update", vietnamese: "bản cập nhật", definition: "new information about progress", partOfSpeech: "noun" },
-        { id: "website", english: "website", vietnamese: "trang web", definition: "a collection of web pages", partOfSpeech: "noun" },
-        { id: "app", english: "app", vietnamese: "ứng dụng", definition: "a software application", partOfSpeech: "noun" },
-        { id: "client", english: "client", vietnamese: "khách hàng (doanh nghiệp)", definition: "a person or company receiving a service", partOfSpeech: "noun" },
-        { id: "plan", english: "plan", vietnamese: "lên kế hoạch", definition: "to decide how to do something", partOfSpeech: "verb" },
-        { id: "visit", english: "visit", vietnamese: "đến thăm", definition: "to go and see a person or place", partOfSpeech: "verb" }
-      ]
-    })]
-  );
-
   const assessments = [
     [DEMO_IDS.placementDefinition, "placement-a", "placement", "Bài test đầu vào", DEMO_IDS.placementVersion, placementDefinition],
     [DEMO_IDS.finalDefinition, "final-b", "final", "Bài kiểm tra cuối kỳ", DEMO_IDS.finalVersion, finalDefinition],

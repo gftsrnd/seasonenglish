@@ -1,4 +1,6 @@
 import { randomUUID } from "node:crypto";
+import { readFile } from "node:fs/promises";
+import { resolve } from "node:path";
 import { Client, Pool } from "pg";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { migrateDatabase, resetPublicSchema } from "../src/migrate.js";
@@ -93,6 +95,56 @@ describe("E4S repositories", () => {
     await expect(repositories.notifications.listForLearner(DEMO_IDS.learner)).resolves.toEqual([]);
     await expect(repositories.files.listForOwner(DEMO_IDS.learner)).resolves.toEqual([]);
     await expect(repositories.aiRuns.listForUser(DEMO_IDS.learner)).resolves.toEqual([]);
+  });
+
+  it("starts the demo learner without a fake weekly submission or active game set", async () => {
+    const result = await pool.query<{ practice_count: string; game_count: string }>(
+      `select
+         (select count(*) from practice_submissions where id = $1)::text as practice_count,
+         (select count(*) from game_sets where id = $2)::text as game_count`,
+      [DEMO_IDS.practiceSubmission, DEMO_IDS.gameSet]
+    );
+
+    expect(result.rows[0]).toEqual({ practice_count: "0", game_count: "0" });
+  });
+
+  it("keeps the demo learner's full week completed so weekly practice is available", async () => {
+    const result = await pool.query<{ completed_count: string }>(
+      `select count(*)::text as completed_count
+       from progress_records
+       where learner_id = $1
+         and lesson_id = any($2::uuid[])
+         and status = 'completed'`,
+      [DEMO_IDS.learner, DEMO_IDS.lessons]
+    );
+
+    expect(result.rows[0]?.completed_count).toBe("5");
+  });
+
+  it("removes only the fixed demo activity IDs during migration cleanup", async () => {
+    const realPracticeId = randomUUID();
+    const realGameSetId = randomUUID();
+    await pool.query(
+      `insert into practice_submissions (id, learner_id, program_week_id, status, content)
+       values ($1, $2, $3, 'submitted', '{"text":"Real learner work"}'::jsonb)`,
+      [realPracticeId, DEMO_IDS.learner, DEMO_IDS.week2]
+    );
+    await pool.query(
+      `insert into game_sets (id, program_week_id, game_key, status, payload)
+       values ($1, $2, 'weekly_vocabulary', 'published', '{"topic":"Real set","words":[]}'::jsonb)`,
+      [realGameSetId, DEMO_IDS.week2]
+    );
+
+    const cleanup = await readFile(resolve("packages/database/migrations/0048_remove_demo_learner_activity.sql"), "utf8");
+    await pool.query(cleanup);
+
+    const remaining = await pool.query<{ practice: string; game_set: string }>(
+      `select
+         (select count(*) from practice_submissions where id = $1)::text as practice,
+         (select count(*) from game_sets where id = $2)::text as game_set`,
+      [realPracticeId, realGameSetId]
+    );
+    expect(remaining.rows[0]).toEqual({ practice: "1", game_set: "1" });
   });
 
   it("persists explicit Coach translations while keeping legacy turns readable", async () => {
