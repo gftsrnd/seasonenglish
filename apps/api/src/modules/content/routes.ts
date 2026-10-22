@@ -111,6 +111,7 @@ export function registerContentRoutes(
   const readers = createRoleGuard(pool, ["operator", "manager"]);
   const operators = createRoleGuard(pool, ["operator", "manager"]);
   const authors = createRoleGuard(pool, ["operator", "manager"]);
+  const managers = createRoleGuard(pool, ["manager"]);
 
   app.get("/api/v1/content/weeks", { preHandler: readers }, async (request, reply) => {
     const frame = await repositories.content.listWeeks(request.e4sSession!.user.id);
@@ -694,7 +695,7 @@ export function registerContentRoutes(
     return saved ? { saved: true } : reply.code(409).send({ code: "APPEAL_NOT_PENDING" });
   });
 
-  app.get("/api/v1/content/prompts", { preHandler: readers }, async (request): Promise<ContentPromptSettingsView> => {
+  app.get("/api/v1/content/prompts", { preHandler: managers }, async (request): Promise<ContentPromptSettingsView> => {
     const stored = await repositories.content.promptSettings(request.e4sSession!.user.id);
     const byKey = new Map(stored.map((group) => [group.key, group]));
     return {
@@ -705,7 +706,7 @@ export function registerContentRoutes(
     };
   });
 
-  app.put("/api/v1/content/prompts", { preHandler: operators }, async (request, reply) => {
+  app.put("/api/v1/content/prompts", { preHandler: managers }, async (request, reply) => {
     const input = promptInput.safeParse(request.body);
     if (!input.success) return reply.code(400).send({ code: "INVALID_CONTENT_PROMPTS" });
     const stored = await repositories.content.savePromptDrafts(request.e4sSession!.user.id, input.data.groups);

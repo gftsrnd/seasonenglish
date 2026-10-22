@@ -331,7 +331,7 @@ export function registerManagerRoutes(app: FastifyInstance, pool: Pool, options:
     }
   });
 
-  app.get("/api/v1/manager/provider-settings", { preHandler: staffReadOnly }, async (request, reply) => {
+  app.get("/api/v1/manager/provider-settings", { preHandler: managerOnly }, async (request, reply) => {
     try {
       const view = await repositories.manager.providerSettings(request.e4sSession!.user.id);
       return view ?? reply.code(404).send({ code: "MANAGER_ORGANIZATION_NOT_FOUND" });
@@ -340,7 +340,7 @@ export function registerManagerRoutes(app: FastifyInstance, pool: Pool, options:
     }
   });
 
-  app.put("/api/v1/manager/provider-settings", { preHandler: staffReadOnly }, async (request, reply) => {
+  app.put("/api/v1/manager/provider-settings", { preHandler: managerOnly }, async (request, reply) => {
     const parsed = managerProviderSettingsInput.safeParse(request.body);
     if (!parsed.success) return reply.code(400).send({ code: "PROVIDER_SETTINGS_INPUT_INVALID" });
     try {
@@ -350,7 +350,7 @@ export function registerManagerRoutes(app: FastifyInstance, pool: Pool, options:
     }
   });
 
-  app.post("/api/v1/manager/provider-settings/test", { preHandler: staffReadOnly }, async (request, reply) => {
+  app.post("/api/v1/manager/provider-settings/test", { preHandler: managerOnly }, async (request, reply) => {
     const parsed = managerProviderTestInput.safeParse(request.body ?? {});
     if (!parsed.success) return reply.code(400).send({ code: "PROVIDER_SETTINGS_TEST_INPUT_INVALID" });
     try {

@@ -278,7 +278,9 @@ describe("content operations API", () => {
       "submissions", "coach", "micro", "appeals", "attempts", "assessments"
     ]);
 
-    const prompts = await app.inject({ method: "GET", url: "/api/v1/content/prompts", headers: { cookie: makerCookie } });
+    const operatorPrompts = await app.inject({ method: "GET", url: "/api/v1/content/prompts", headers: { cookie: makerCookie } });
+    const prompts = await app.inject({ method: "GET", url: "/api/v1/content/prompts", headers: { cookie: managerCookie } });
+    expect(operatorPrompts.statusCode).toBe(403);
     expect(prompts.statusCode, prompts.body).toBe(200);
     expect(prompts.json().groups).toHaveLength(7);
     expect(prompts.json().groups.map((group: { key: string }) => group.key)).toEqual([
@@ -322,14 +324,11 @@ describe("content operations API", () => {
     expect(managerWrite.statusCode, managerWrite.body).toBe(200);
     expect(managerWrite.json()).toMatchObject({ groups: [expect.objectContaining({ key: "system_rules", content: "Manager-approved system rule." })] });
 
-    const saved = await app.inject({
+    const operatorWrite = await app.inject({
       method: "PUT", url: "/api/v1/content/prompts", headers: { cookie: makerCookie },
       payload: { groups: [{ key: "system_rules", content: "Use concise CEFR-aligned feedback." }] }
     });
-    expect(saved.statusCode, saved.body).toBe(200);
-    expect(saved.json()).toMatchObject({
-      groups: [expect.objectContaining({ key: "system_rules", status: "draft", content: "Use concise CEFR-aligned feedback." })]
-    });
+    expect(operatorWrite.statusCode).toBe(403);
 
     const active = await pool.query<{ id: string }>(
       "select id from prompt_versions where task_key = 'system_rules' and status = 'active'"

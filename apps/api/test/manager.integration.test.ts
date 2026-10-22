@@ -84,6 +84,23 @@ describe("manager progress and operations API", () => {
     expect(operatorRoleChange.statusCode).toBe(403);
   });
 
+  it("keeps provider configuration Manager-only", async () => {
+    const managerRead = await app.inject({ method: "GET", url: "/api/v1/manager/provider-settings", headers: { cookie: managerCookie } });
+    const operatorRead = await app.inject({ method: "GET", url: "/api/v1/manager/provider-settings", headers: { cookie: operatorCookie } });
+    const provider = { provider: "openai", baseUrl: "https://api.groq.com/openai/v1", model: "qwen/qwen3.8-27b", speechToTextModel: "whisper-large-v3-turbo" };
+    const managerWrite = await app.inject({ method: "PUT", url: "/api/v1/manager/provider-settings", headers: { cookie: managerCookie }, payload: provider });
+    const operatorWrite = await app.inject({ method: "PUT", url: "/api/v1/manager/provider-settings", headers: { cookie: operatorCookie }, payload: provider });
+    const managerTest = await app.inject({ method: "POST", url: "/api/v1/manager/provider-settings/test", headers: { cookie: managerCookie }, payload: {} });
+    const operatorTest = await app.inject({ method: "POST", url: "/api/v1/manager/provider-settings/test", headers: { cookie: operatorCookie }, payload: {} });
+
+    expect(managerRead.statusCode, managerRead.body).toBe(200);
+    expect(managerWrite.statusCode, managerWrite.body).toBe(200);
+    expect(managerTest.statusCode, managerTest.body).not.toBe(403);
+    expect(operatorRead.statusCode).toBe(403);
+    expect(operatorWrite.statusCode).toBe(403);
+    expect(operatorTest.statusCode).toBe(403);
+  });
+
   it("returns organisation-scoped progress and operational data for a Manager", async () => {
     const progress = await app.inject({ method: "GET", url: "/api/v1/manager/progress", headers: { cookie: managerCookie } });
     const operations = await app.inject({ method: "GET", url: "/api/v1/manager/operations", headers: { cookie: managerCookie } });
