@@ -1104,11 +1104,14 @@ h1,h2,h3,h4,h1 b,h2 b,h3 b,h4 b{font-weight:600 !important}
 .coach-page .coach-feedback-score>span{display:flex;align-items:baseline;gap:6px;min-width:0}
 .coach-page .coach-feedback-score b{font-size:.78rem;line-height:1.15;color:var(--muted);font-weight:600;white-space:nowrap}
 .coach-page .coach-feedback-score strong{font-size:1rem;line-height:1.15;color:var(--brown);white-space:nowrap;font-variant-numeric:tabular-nums}
+.coach-page .coach-feedback-next{display:grid;gap:6px}
 .coach-page .coach-feedback-disclosure{border-top:1px solid var(--line);padding-top:9px}
 .coach-page .coach-feedback-disclosure summary{width:max-content;max-width:100%;cursor:pointer;color:var(--brown);font-size:.84rem;font-weight:700;list-style-position:inside}
 .coach-page .coach-feedback-disclosures{display:grid;gap:8px}
 .coach-page .coach-feedback-disclosure[open]{padding-bottom:2px}
 .coach-page .coach-feedback-translation{margin:8px 0 0;color:var(--muted);font-size:.86rem;line-height:1.45}
+.coach-page .coach-feedback-translation-block{display:grid;gap:2px}
+.coach-page .coach-feedback-translation-block>b{font-size:.8rem;color:var(--text)}
 .coach-page .coach-feedback-details{display:grid;gap:10px;padding-top:10px}
 .coach-page .coach-feedback-criteria{display:grid;gap:4px;color:var(--muted);font-size:.8rem;line-height:1.4}
 .coach-page .coach-feedback-criteria p{margin:0}

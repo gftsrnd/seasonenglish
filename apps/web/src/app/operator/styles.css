@@ -410,11 +410,36 @@
 }
 .operator-modal-scope .operator-vocabulary-row {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 6px;
+  gap: 8px;
   min-width: 0;
   max-width: 100%;
   box-sizing: border-box;
+}
+.operator-modal-scope .operator-vocabulary-base {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 6px;
+}
+.operator-modal-scope .operator-vocabulary-base > :last-child {
+  grid-column: 1 / -1;
+}
+.operator-modal-scope .operator-vocabulary-advanced {
+  border-top: 1px solid var(--line);
+  padding-top: 8px;
+}
+.operator-modal-scope .operator-vocabulary-advanced > summary {
+  width: max-content;
+  max-width: 100%;
+  cursor: pointer;
+  color: var(--brown);
+  font-size: .84rem;
+  font-weight: 700;
+}
+.operator-modal-scope .operator-vocabulary-advanced-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px 12px;
+  margin-top: 10px;
 }
 @media (max-width: 840px) {
   .operator-modal-scope .operator-lesson-editor { padding: 16px; }
@@ -424,13 +449,14 @@
     width: auto;
     padding: 9px 16px 7px;
   }
-  .operator-modal-scope .operator-vocabulary-row { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .operator-modal-scope .operator-vocabulary-base { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
 @media (max-width: 560px) {
   .operator-modal-scope .operator-editor-heading { justify-content: flex-start; padding: 0 56px 0 0; }
   .operator-modal-scope .operator-editor-heading h3 { text-align: left; }
   .operator-modal-scope .operator-editor-section { padding: 14px; }
-  .operator-modal-scope .operator-vocabulary-row { grid-template-columns: 1fr; }
+  .operator-modal-scope .operator-vocabulary-base,
+  .operator-modal-scope .operator-vocabulary-advanced-grid { grid-template-columns: 1fr; }
 }
 .app-operator .operator-lesson-preview {
   display: block;
@@ -1485,10 +1511,12 @@
 .app-operator .operator-banner-icon {
   display: inline-flex;
   flex: 0 0 auto;
+  align-self: flex-start;
   align-items: center;
   justify-content: center;
   width: 18px;
   min-width: 18px;
+  margin-top: .2em;
   line-height: 1;
 }
 
@@ -1500,6 +1528,22 @@
   display: inline-block;
   flex: 0 0 auto;
   vertical-align: -0.18em;
+}
+
+.app-operator .operator-banner-svg {
+  display: block;
+  vertical-align: 0;
+}
+
+.app-operator .operator-lesson-set-title {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.app-operator .operator-lesson-set-title > .badge {
+  flex: 0 0 auto;
 }
 
 .app-operator .operator-button-icon {

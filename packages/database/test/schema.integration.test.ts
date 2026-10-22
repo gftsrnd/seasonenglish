@@ -98,18 +98,19 @@ describe("normalized E4S database", () => {
     }]);
   });
 
-  it("keeps the seeded learner at the first unlocked next lesson", async () => {
+  it("keeps the seeded learner at 5/5 lessons without submitting weekly practice", async () => {
     await client.query(
-      `insert into progress_records
-         (id, learner_id, lesson_id, status, score, evidence, started_at, completed_at)
-       values ($1, $2, $3, 'completed', 100, '{}'::jsonb, now(), now())`,
-      [randomUUID(), DEMO_IDS.learner, DEMO_IDS.lessons[1]]
+      `update progress_records
+       set status = 'in_progress', completed_at = null
+       where learner_id = $1 and lesson_id = $2`,
+      [DEMO_IDS.learner, DEMO_IDS.lessons[1]]
     );
 
     await seedDemo(client);
 
-    const result = await client.query<{ day_number: number; status: string | null }>(
+    const result = await client.query<{ day_number: number; status: string | null; practice_count: string }>(
       `select l.day_number, pr.status
+        , (select count(*) from practice_submissions ps where ps.learner_id = $1)::text as practice_count
        from lessons l
        left join progress_records pr
          on pr.lesson_id = l.id and pr.learner_id = $1
@@ -119,11 +120,11 @@ describe("normalized E4S database", () => {
     );
 
     expect(result.rows).toEqual([
-      { day_number: 1, status: "completed" },
-      { day_number: 2, status: null },
-      { day_number: 3, status: null },
-      { day_number: 4, status: null },
-      { day_number: 5, status: null }
+      { day_number: 1, status: "completed", practice_count: "0" },
+      { day_number: 2, status: "completed", practice_count: "0" },
+      { day_number: 3, status: "completed", practice_count: "0" },
+      { day_number: 4, status: "completed", practice_count: "0" },
+      { day_number: 5, status: "completed", practice_count: "0" }
     ]);
   });
 

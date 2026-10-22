@@ -84,4 +84,47 @@ describe("operator granular lesson editor", () => {
       sample: "Your report is good."
     }));
   });
+
+  it("round-trips manually edited vocabulary relationships", async () => {
+    const user = userEvent.setup();
+    const onSave = vi.fn().mockResolvedValue(undefined);
+    vi.spyOn(window, "confirm").mockReturnValue(true);
+    render(<LessonFormEditor weekNumber={1} cefr="A2" initial={emptyLesson(1)} onSave={onSave} onCancel={() => undefined} />);
+
+    await user.click(screen.getByText("Mở rộng từ 1"));
+    await user.type(screen.getByLabelText("Word family từ 1"), "colleague | noun | đồng nghiệp; collegial | adjective | mang tính đồng nghiệp");
+    await user.type(screen.getByLabelText("Từ đồng nghĩa từ 1"), "coworker | A2 | phổ biến; associate | B1 | trang trọng");
+    await user.type(screen.getByLabelText("Từ trái nghĩa từ 1"), "competitor | B1 | đối thủ");
+    await user.type(screen.getByLabelText("Từ bao trùm từ 1"), "people at work");
+    await user.type(screen.getByLabelText("Nghĩa từ bao trùm từ 1"), "người trong công việc");
+    await user.type(screen.getByLabelText("Từ cùng nhóm từ 1"), "manager | quản lý; client | khách hàng");
+    await user.click(screen.getByRole("button", { name: "Kiểm tra & lưu" }));
+    await user.click(screen.getByRole("button", { name: "Lưu dù còn thiếu" }));
+
+    const saved = onSave.mock.calls[0]?.[0];
+    const vocabulary = saved.parts.find((part: { code: string }) => part.code === "vocabulary")?.content.items[0];
+    expect(vocabulary).toEqual(expect.objectContaining({
+      family: [
+        { word: "colleague", type: "noun", meaning: "đồng nghiệp" },
+        { word: "collegial", type: "adjective", meaning: "mang tính đồng nghiệp" }
+      ],
+      synonyms: [
+        { word: "coworker", level: "A2", note: "phổ biến" },
+        { word: "associate", level: "B1", note: "trang trọng" }
+      ],
+      antonyms: [{ word: "competitor", level: "B1", note: "đối thủ" }],
+      umbrella: {
+        word: "people at work",
+        meaning: "người trong công việc",
+        siblings: [{ word: "manager", meaning: "quản lý" }, { word: "client", meaning: "khách hàng" }]
+      }
+    }));
+
+    cleanup();
+    render(<LessonFormEditor weekNumber={1} cefr="A2" initial={saved} onSave={vi.fn()} onCancel={() => undefined} />);
+    expect(screen.getByLabelText("Word family từ 1")).toHaveValue("colleague | noun | đồng nghiệp; collegial | adjective | mang tính đồng nghiệp");
+    expect(screen.getByLabelText("Từ đồng nghĩa từ 1")).toHaveValue("coworker | A2 | phổ biến; associate | B1 | trang trọng");
+    expect(screen.getByLabelText("Từ trái nghĩa từ 1")).toHaveValue("competitor | B1 | đối thủ");
+    expect(screen.getByLabelText("Từ cùng nhóm từ 1")).toHaveValue("manager | quản lý; client | khách hàng");
+  });
 });

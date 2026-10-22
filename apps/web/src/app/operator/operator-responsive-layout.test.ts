@@ -42,6 +42,16 @@ describe("Operator responsive layout guardrails", () => {
     expect(appCss).toMatch(/\.app-operator\[aria-label="Prompt"\] > \.card textarea\s*\{[^}]*max-width:\s*100%/);
   });
 
+  it("aligns warning icons with the first line instead of shifting the SVG baseline", () => {
+    expect(appCss).toMatch(/\.app-operator \.operator-banner-icon\s*\{[^}]*align-self:\s*flex-start[^}]*margin-top:\s*\.2em/);
+    expect(appCss).toMatch(/\.app-operator \.operator-banner-svg\s*\{[^}]*display:\s*block[^}]*vertical-align:\s*0/);
+  });
+
+  it("keeps the lesson-set status badge centered beside the page heading", () => {
+    expect(appCss).toMatch(/\.app-operator \.operator-lesson-set-title\s*\{[^}]*display:\s*flex[^}]*align-items:\s*center[^}]*gap:\s*8px/);
+    expect(appCss).toMatch(/\.app-operator \.operator-lesson-set-title > \.badge\s*\{[^}]*flex:\s*0 0 auto/);
+  });
+
   it("wraps long prompt tokens and keeps narrow detail tables inside dialogs", () => {
     expect(appCss).toMatch(/\.app-operator\[aria-label="Prompt"\] > \.card > \.row\.between > h3\s*\{[\s\S]*?overflow-wrap:\s*anywhere/);
     expect(appCss).toMatch(/\.operator-modal-scope \.list \.item\s*\{[\s\S]*?display:\s*flex/);

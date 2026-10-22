@@ -137,7 +137,7 @@ describe("app coach and weekly practice speech input", () => {
     const feedback = screen.getByRole("region", { name: "Phản hồi của Season" });
     expect(feedback).not.toHaveClass("correction");
     expect(feedback).toHaveClass("coach-feedback-flat");
-    expect(within(feedback).getByText("Lời chào chưa trả lời câu hỏi của Season.")).toBeInTheDocument();
+    expect(within(feedback).queryByText("Lời chào chưa trả lời câu hỏi của Season.")).not.toBeInTheDocument();
     expect(within(feedback).queryByText("Hãy thử nói về slide.")).not.toBeInTheDocument();
     expect(feedback.querySelectorAll(".coach-feedback-score")).toHaveLength(3);
     expect(feedback.querySelectorAll(".coach-feedback-score svg")).toHaveLength(3);
@@ -147,16 +147,18 @@ describe("app coach and weekly practice speech input", () => {
     expect(within(feedback).getByText("Ý nghĩa").closest(".coach-feedback-score")).toHaveTextContent("Ý nghĩa1/5");
     expect(within(feedback).getByText("Từ vựng").closest(".coach-feedback-score")).toHaveTextContent("Từ vựng1/5");
     expect(within(feedback).getByText("Ngữ pháp").closest(".coach-feedback-score")).toHaveTextContent("Ngữ pháp3/5");
-    const seasonTranslation = within(feedback).getByText("Season vừa nói").closest("details");
-    const nextSentence = within(feedback).getByText("Bạn có thể nói tiếp").closest("details");
-    const explanation = within(feedback).getByText("Vì sao cần sửa").closest("details");
-    expect(seasonTranslation).not.toHaveAttribute("open");
-    expect(nextSentence).not.toHaveAttribute("open");
-    expect(explanation).not.toHaveAttribute("open");
+    expect(within(feedback).queryByText("Điểm cho biết: đúng câu hỏi · dùng từ phù hợp · cấu trúc chính xác.")).not.toBeInTheDocument();
+    const meaningAndTranslation = within(feedback).getByText("Ý nghĩa & bản dịch").closest("details");
+    expect(feedback.querySelectorAll("details")).toHaveLength(1);
+    expect(meaningAndTranslation).not.toHaveAttribute("open");
+    expect(meaningAndTranslation).toContainElement(within(feedback).getByText("Đúng câu hỏi và diễn đạt rõ ý"));
+    expect(meaningAndTranslation).toContainElement(within(feedback).getByText("Dùng từ đúng và phù hợp với trình độ"));
+    expect(meaningAndTranslation).toContainElement(within(feedback).getByText("Cấu trúc câu và độ chính xác"));
+    expect(feedback).toContainElement(within(feedback).getByText("hello"));
     const correction = within(feedback).getByText("The slide has too much text.");
-    expect(nextSentence).toContainElement(correction);
+    expect(meaningAndTranslation).not.toContainElement(correction);
     expect(correction).toHaveClass("coach-feedback-correction");
-    expect(explanation).toContainElement(within(feedback).getByText("Trả lời đúng chủ đề."));
+    expect(within(feedback).queryByText("Trả lời đúng chủ đề.")).not.toBeInTheDocument();
   });
 
   it("does not repeat the AI relevance explanation for an on-topic answer", () => {
@@ -193,14 +195,16 @@ describe("app coach and weekly practice speech input", () => {
     }] }} actions={actions()} />);
 
     const feedback = screen.getByRole("region", { name: "Phản hồi của Season" });
-    expect(within(feedback).getByText("Bạn có thể nói tiếp")).toBeInTheDocument();
-    expect(within(feedback).queryByText("The slide has too much text. Could we make it shorter?")).not.toBeInTheDocument();
+    expect(within(feedback).getByText("Câu bạn nên nói tiếp")).toBeInTheDocument();
+    expect(within(feedback).getByText("Ý nghĩa & bản dịch")).toBeInTheDocument();
+    expect(within(feedback).getByText("The slide has too much text. Could we make it shorter?")).toBeInTheDocument();
     expect(within(feedback).getAllByText("Could we make the text on the slide shorter?")).toHaveLength(1);
+    expect(within(feedback).queryByText("A more direct alternative.")).not.toBeInTheDocument();
     expect(within(feedback).getByText("Season vừa nói")).toBeInTheDocument();
-    expect(within(feedback).getByText("Vì sao cần sửa")).toBeInTheDocument();
+    expect(within(feedback).queryByText("Vì sao cần sửa")).not.toBeInTheDocument();
   });
 
-  it("shows deduplicated Coach translations in compact disclosure sections", () => {
+  it("shows corrections and translations in one compact disclosure", () => {
     render(<LearnerCoach view={{ ...coach, messages: [{
       id: "coach-translated", speaker: "coach", text: "Could you shorten the bullet points?", createdAt: "2026-10-22T00:00:00.000Z",
       feedback: {
@@ -224,13 +228,27 @@ describe("app coach and weekly practice speech input", () => {
     }] }} actions={actions()} />);
 
     const feedback = screen.getByRole("region", { name: "Phản hồi của Season" });
+    const message = feedback.closest("article")!;
+    const nextQuestion = within(message).getByText("Could you shorten the bullet points?");
+    const feedbackHeading = within(feedback).getByText("Phản hồi");
+    const nextSentenceHeading = within(feedback).getByText("Câu bạn nên nói tiếp");
+    const meaningHeading = within(feedback).getByText("Ý nghĩa & bản dịch");
+    expect(nextQuestion.compareDocumentPosition(feedbackHeading) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(feedbackHeading.compareDocumentPosition(nextSentenceHeading) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(nextSentenceHeading.compareDocumentPosition(meaningHeading) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(feedback.querySelectorAll("details")).toHaveLength(1);
+    expect(within(feedback).getByText("Câu bạn nên nói tiếp")).toBeInTheDocument();
+    expect(within(feedback).getByText("Ý nghĩa & bản dịch")).toBeInTheDocument();
     expect(within(feedback).getByText("Season vừa nói")).toBeInTheDocument();
-    expect(within(feedback).getByText("Bạn có thể nói tiếp")).toBeInTheDocument();
-    expect(within(feedback).getByText("Vì sao cần sửa")).toBeInTheDocument();
+    expect(within(feedback).queryByText("Bạn có thể nói tiếp")).not.toBeInTheDocument();
+    expect(within(feedback).queryByText("Vì sao cần sửa")).not.toBeInTheDocument();
     expect(within(feedback).getByText("Bạn có thể rút ngắn các gạch đầu dòng không?")).toBeInTheDocument();
+    expect(within(feedback).getByText("Season vừa nói")).toBeInTheDocument();
+    expect(within(feedback).getByText("Bản dịch câu bạn nên nói tiếp")).toBeInTheDocument();
     expect(within(feedback).getAllByText("The slide has too much text.")).toHaveLength(1);
     expect(within(feedback).getAllByText("Trang chiếu có quá nhiều chữ.")).toHaveLength(1);
-    expect(within(feedback).queryByText("The slide have too much text.")).not.toBeInTheDocument();
+    expect(within(feedback).getAllByText("The slide have too much text.")).toHaveLength(1);
+    expect(within(feedback).queryByText("Use has with the singular subject slide.")).not.toBeInTheDocument();
     expect(within(feedback).queryByText("Duplicate provider suggestion.")).not.toBeInTheDocument();
   });
 

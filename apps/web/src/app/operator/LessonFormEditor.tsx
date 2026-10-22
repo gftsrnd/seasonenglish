@@ -4,7 +4,19 @@ import { TriangleAlert } from "lucide-react";
 import { Banner, Button } from "./primitives.js";
 
 const lessonPartOrder = ["objective", "instruction", "vocabulary", "grammar", "pronunciation", "listening", "reading", "writing", "word_class", "word_use", "speaking"] as const;
-type VocabularyRow = { word: string; type: string; pronunciation: string; meaning: string; examples: string };
+type VocabularyRow = {
+  word: string;
+  type: string;
+  pronunciation: string;
+  meaning: string;
+  examples: string;
+  family: string;
+  synonyms: string;
+  antonyms: string;
+  umbrellaWord: string;
+  umbrellaMeaning: string;
+  umbrellaSiblings: string;
+};
 type EditorState = {
   title: string; objective: string; grammar: string; grammarExamples: string; vocabulary: VocabularyRow[];
   pronunciationFocus: string; pronunciationWords: string; pronunciationTip: string;
@@ -112,7 +124,7 @@ export function LessonFormEditor({
     <div className="operator-lesson-editor-form">
       <EditorSection title="Chung" disabled={busy}><Field label="Tiêu đề bài" hint="Tên ngắn của mẫu câu, bằng tiếng Anh. VD: I work as…"><input aria-label="Tiêu đề bài" value={state.title} onChange={event => set("title", event.target.value)} /></Field><Field label="Mục tiêu bài học" hint="Sau bài này học viên làm được gì (1 câu)."><textarea value={state.objective} onChange={event => set("objective", event.target.value)} /></Field></EditorSection>
       <EditorSection title="Ngữ pháp" disabled={busy}><Field label="Ngữ pháp" hint="Công thức + dùng khi nào + 2–3 câu ví dụ có dùng từ vựng."><textarea value={state.grammar} onChange={event => set("grammar", event.target.value)} /></Field><Field label="Câu ví dụ để đọc thành tiếng" hint="2–3 câu tiếng Anh, cách nhau bằng dấu ;"><textarea value={state.grammarExamples} placeholder="I work as a tester.; She works in the sales team." onChange={event => set("grammarExamples", event.target.value)} /></Field></EditorSection>
-      <EditorSection title="Từ vựng (3 từ)" disabled={busy}><div className="operator-vocabulary-grid">{state.vocabulary.map((row, index) => <div className="operator-vocabulary-row" aria-label={`Từ vựng ${index + 1}`} key={index}><input aria-label={`Từ ${index + 1}`} value={row.word} onChange={event => setVocabulary(index, "word", event.target.value)} placeholder={`Từ ${index + 1}`} /><input aria-label={`Từ loại từ ${index + 1}`} value={row.type} onChange={event => setVocabulary(index, "type", event.target.value)} placeholder="Từ loại" /><input aria-label={`Phiên âm từ ${index + 1}`} value={row.pronunciation} onChange={event => setVocabulary(index, "pronunciation", event.target.value)} placeholder="Phiên âm /…/" /><input aria-label={`Nghĩa từ ${index + 1}`} value={row.meaning} onChange={event => setVocabulary(index, "meaning", event.target.value)} placeholder="Nghĩa tiếng Việt" /><input aria-label={`Cụm từ ${index + 1}`} value={row.examples} onChange={event => setVocabulary(index, "examples", event.target.value)} placeholder="3 cụm từ, cách nhau bằng ;" /></div>)}</div><span className="xs muted">Mỗi từ: từ tiếng Anh, từ loại, phiên âm, nghĩa tiếng Việt và 3 cụm từ có chứa từ đó (cách nhau bằng dấu ;).</span></EditorSection>
+      <EditorSection title="Từ vựng (3 từ)" disabled={busy}><div className="operator-vocabulary-grid">{state.vocabulary.map((row, index) => <div className="operator-vocabulary-row" aria-label={`Từ vựng ${index + 1}`} key={index}><div className="operator-vocabulary-base"><input aria-label={`Từ ${index + 1}`} value={row.word} onChange={event => setVocabulary(index, "word", event.target.value)} placeholder={`Từ ${index + 1}`} /><input aria-label={`Từ loại từ ${index + 1}`} value={row.type} onChange={event => setVocabulary(index, "type", event.target.value)} placeholder="Từ loại" /><input aria-label={`Phiên âm từ ${index + 1}`} value={row.pronunciation} onChange={event => setVocabulary(index, "pronunciation", event.target.value)} placeholder="Phiên âm /…/" /><input aria-label={`Nghĩa từ ${index + 1}`} value={row.meaning} onChange={event => setVocabulary(index, "meaning", event.target.value)} placeholder="Nghĩa tiếng Việt" /><input aria-label={`Cụm từ ${index + 1}`} value={row.examples} onChange={event => setVocabulary(index, "examples", event.target.value)} placeholder="3 cụm từ, cách nhau bằng ;" /></div><details className="operator-vocabulary-advanced"><summary>Mở rộng từ {index + 1}</summary><div className="operator-vocabulary-advanced-grid"><Field label={`Word family từ ${index + 1}`} hint="Mỗi mục: từ | từ loại | nghĩa; cách nhau bằng dấu ;"><textarea aria-label={`Word family từ ${index + 1}`} value={row.family} onChange={event => setVocabulary(index, "family", event.target.value)} placeholder="colleague | noun | đồng nghiệp" /></Field><Field label={`Từ đồng nghĩa từ ${index + 1}`} hint="Mỗi mục: từ | level | ghi chú"><textarea aria-label={`Từ đồng nghĩa từ ${index + 1}`} value={row.synonyms} onChange={event => setVocabulary(index, "synonyms", event.target.value)} placeholder="coworker | A2 | phổ biến" /></Field><Field label={`Từ trái nghĩa từ ${index + 1}`} hint="Để trống nếu không có từ trái nghĩa tự nhiên"><textarea aria-label={`Từ trái nghĩa từ ${index + 1}`} value={row.antonyms} onChange={event => setVocabulary(index, "antonyms", event.target.value)} placeholder="old | A2 | trái nghĩa của new" /></Field><Field label={`Từ bao trùm từ ${index + 1}`}><input aria-label={`Từ bao trùm từ ${index + 1}`} value={row.umbrellaWord} onChange={event => setVocabulary(index, "umbrellaWord", event.target.value)} placeholder="work communication" /></Field><Field label={`Nghĩa từ bao trùm từ ${index + 1}`}><input aria-label={`Nghĩa từ bao trùm từ ${index + 1}`} value={row.umbrellaMeaning} onChange={event => setVocabulary(index, "umbrellaMeaning", event.target.value)} placeholder="giao tiếp công việc" /></Field><Field label={`Từ cùng nhóm từ ${index + 1}`} hint="Mỗi mục: từ | nghĩa; cách nhau bằng dấu ;"><textarea aria-label={`Từ cùng nhóm từ ${index + 1}`} value={row.umbrellaSiblings} onChange={event => setVocabulary(index, "umbrellaSiblings", event.target.value)} placeholder="manager | quản lý; client | khách hàng" /></Field></div></details></div>)}</div><span className="xs muted">Mỗi từ có thông tin chính và một mục mở rộng để sửa word family, từ đồng nghĩa, từ trái nghĩa và nhóm từ.</span></EditorSection>
       <EditorSection title="Phát âm" disabled={busy}><div className="grid cols-3"><Field label="Âm mục tiêu"><input value={state.pronunciationFocus} onChange={event => set("pronunciationFocus", event.target.value)} /></Field><Field label="3 từ luyện âm"><input value={state.pronunciationWords} onChange={event => set("pronunciationWords", event.target.value)} /></Field><Field label="Mẹo phát âm"><input value={state.pronunciationTip} onChange={event => set("pronunciationTip", event.target.value)} /></Field></div></EditorSection>
       <EditorSection title="Nghe" disabled={busy}><Field label="Đoạn audio (máy đọc, học viên không thấy chữ)"><textarea value={state.listeningScript} placeholder="1–2 câu tiếng Anh" onChange={event => set("listeningScript", event.target.value)} /></Field><QuestionFields prefix="Nghe" question={state.listeningQuestion} options={state.listeningOptions} answer={state.listeningAnswer} onQuestion={value => set("listeningQuestion", value)} onOptions={value => set("listeningOptions", value)} onAnswer={value => set("listeningAnswer", value)} /></EditorSection>
       <EditorSection title="Đọc" disabled={busy}><Field label="Đoạn văn"><textarea value={state.readingPassage} placeholder="2–4 câu tiếng Anh" onChange={event => set("readingPassage", event.target.value)} /></Field><QuestionFields prefix="Đọc" question={state.readingQuestion} options={state.readingOptions} answer={state.readingAnswer} onQuestion={value => set("readingQuestion", value)} onOptions={value => set("readingOptions", value)} onAnswer={value => set("readingAnswer", value)} /></EditorSection>
@@ -142,7 +154,46 @@ function readLesson(lesson: ContentLessonDraftInput): EditorState {
   const items = Array.isArray(vocabulary.items) ? vocabulary.items.map(record) : [];
   const readOptions = (value: unknown) => [...listValue(value), "", "", "", ""].slice(0, 4);
   const listeningOptions = readOptions(listening.options), readingOptions = readOptions(reading.options);
-  return { title: lesson.title, objective: stringValue(objective.text), grammar: [stringValue(grammar.formula), stringValue(grammar.usage)].filter(Boolean).join("\n"), grammarExamples: listValue(grammar.examples).join("; "), vocabulary: [0, 1, 2].map(index => ({ word: stringValue(items[index]?.word ?? items[index]?.e), type: stringValue(items[index]?.type ?? items[index]?.partOfSpeech ?? items[index]?.pos), pronunciation: stringValue(items[index]?.pronunciation ?? items[index]?.ipa), meaning: stringValue(items[index]?.meaning ?? items[index]?.v), examples: listValue(items[index]?.collocations ?? items[index]?.phrases ?? items[index]?.examples).join("; ") })), pronunciationFocus: stringValue(pronunciation.focus), pronunciationWords: (Array.isArray(pronunciation.words) ? pronunciation.words.map(value => typeof value === "string" ? value : stringValue(record(value).word ?? record(value).w)).filter(Boolean) : []).join(", "), pronunciationTip: stringValue(pronunciation.instruction || pronunciation.tip), listeningScript: stringValue(listening.audio || listening.script || listening.text), listeningQuestion: stringValue(listening.prompt || listening.question), listeningOptions, listeningAnswer: Math.max(0, listeningOptions.indexOf(stringValue(listening.answer))), readingPassage: stringValue(reading.text || reading.passage), readingQuestion: stringValue(reading.prompt || reading.question), readingOptions, readingAnswer: Math.max(0, readingOptions.indexOf(stringValue(reading.answer))), writingType: normalizeWritingType(stringValue(writing.type)), writingPrompt: stringValue(writing.prompt), writingOptions: readOptions(writing.options), writingAnswer: stringValue(writing.answer), speakingInstruction: stringValue(speaking.instruction || speaking.prompt) || "Nói to câu sau.", speakingSample: stringValue(speaking.sample || speaking.answer || speaking.modelAnswer) };
+  return {
+    title: lesson.title,
+    objective: stringValue(objective.text),
+    grammar: [stringValue(grammar.formula), stringValue(grammar.usage)].filter(Boolean).join("\n"),
+    grammarExamples: listValue(grammar.examples).join("; "),
+    vocabulary: [0, 1, 2].map(index => {
+      const item = items[index] ?? {};
+      const umbrella = record(item.umbrella);
+      return {
+        word: stringValue(item.word ?? item.e),
+        type: stringValue(item.type ?? item.partOfSpeech ?? item.pos),
+        pronunciation: stringValue(item.pronunciation ?? item.ipa),
+        meaning: stringValue(item.meaning ?? item.v),
+        examples: listValue(item.collocations ?? item.phrases ?? item.examples).join("; "),
+        family: formatStructuredEntries(item.family, ["type", "meaning"]),
+        synonyms: formatStructuredEntries(item.synonyms ?? item.syn, ["level", "note"]),
+        antonyms: formatStructuredEntries(item.antonyms ?? item.ant, ["level", "note"]),
+        umbrellaWord: stringValue(umbrella.word ?? umbrella.w),
+        umbrellaMeaning: stringValue(umbrella.meaning ?? umbrella.v),
+        umbrellaSiblings: formatStructuredEntries(umbrella.siblings ?? umbrella.words, ["meaning"])
+      };
+    }),
+    pronunciationFocus: stringValue(pronunciation.focus),
+    pronunciationWords: (Array.isArray(pronunciation.words) ? pronunciation.words.map(value => typeof value === "string" ? value : stringValue(record(value).word ?? record(value).w)).filter(Boolean) : []).join(", "),
+    pronunciationTip: stringValue(pronunciation.instruction || pronunciation.tip),
+    listeningScript: stringValue(listening.audio || listening.script || listening.text),
+    listeningQuestion: stringValue(listening.prompt || listening.question),
+    listeningOptions,
+    listeningAnswer: Math.max(0, listeningOptions.indexOf(stringValue(listening.answer))),
+    readingPassage: stringValue(reading.text || reading.passage),
+    readingQuestion: stringValue(reading.prompt || reading.question),
+    readingOptions,
+    readingAnswer: Math.max(0, readingOptions.indexOf(stringValue(reading.answer))),
+    writingType: normalizeWritingType(stringValue(writing.type)),
+    writingPrompt: stringValue(writing.prompt),
+    writingOptions: readOptions(writing.options),
+    writingAnswer: stringValue(writing.answer),
+    speakingInstruction: stringValue(speaking.instruction || speaking.prompt) || "Nói to câu sau.",
+    speakingSample: stringValue(speaking.sample || speaking.answer || speaking.modelAnswer)
+  };
 }
 
 function validateLesson(state: EditorState): string[] {
@@ -172,7 +223,7 @@ function buildLesson(initial: ContentLessonDraftInput, state: EditorState): Cont
   const known: ContentLessonDraftInput["parts"] = [
     { code: "objective", title: "Mục tiêu bài học", content: { ...prior("objective"), text: state.objective.trim() } },
     { code: "instruction", title: "Hướng dẫn làm bài", content: { ...prior("instruction"), steps: listValue(prior("instruction").steps).length ? listValue(prior("instruction").steps) : ["Học nội dung", "Làm lần lượt các bài tập", "Xem phản hồi và làm lại"] } },
-    { code: "vocabulary", title: "Từ vựng", content: { ...priorVocabulary, items: state.vocabulary.map((row, index) => ({ ...record(priorVocabularyItems[index]), word: row.word.trim(), type: row.type.trim(), pronunciation: row.pronunciation.trim(), meaning: row.meaning.trim(), collocations: splitValues(row.examples, /[;\n]/), examples: splitValues(row.examples, /[;\n]/) })) } },
+    { code: "vocabulary", title: "Từ vựng", content: { ...priorVocabulary, items: state.vocabulary.map((row, index) => ({ ...record(priorVocabularyItems[index]), word: row.word.trim(), type: row.type.trim(), pronunciation: row.pronunciation.trim(), meaning: row.meaning.trim(), collocations: splitValues(row.examples, /[;\n]/), examples: splitValues(row.examples, /[;\n]/), family: parseStructuredEntries(row.family, ["type", "meaning"]), synonyms: parseStructuredEntries(row.synonyms, ["level", "note"]), antonyms: parseStructuredEntries(row.antonyms, ["level", "note"]), umbrella: buildUmbrella(row) })) } },
     { code: "grammar", title: "Ngữ pháp", content: { ...prior("grammar"), formula: state.grammar.trim(), examples: splitValues(state.grammarExamples, /[;\n]/) } },
     { code: "pronunciation", title: "Phát âm", content: { ...prior("pronunciation"), focus: state.pronunciationFocus.trim(), words: splitValues(state.pronunciationWords, /[,;\n]/), instruction: state.pronunciationTip.trim() } },
     { code: "listening", title: "Nghe", content: { ...prior("listening"), script: state.listeningScript.trim(), prompt: state.listeningQuestion.trim(), options: state.listeningOptions.map(value => value.trim()).filter(Boolean), answer: state.listeningOptions[state.listeningAnswer]?.trim() ?? "" } },
@@ -187,6 +238,35 @@ function buildLesson(initial: ContentLessonDraftInput, state: EditorState): Cont
 
 function normalizeWritingType(value: string): EditorState["writingType"] { if (value === "choice" || value === "mcq") return "mcq"; if (value === "free" || value === "write") return "write"; return "fill"; }
 function splitValues(value: string, separator: RegExp): string[] { return value.split(separator).map(item => item.trim()).filter(Boolean); }
+function formatStructuredEntries(value: unknown, fields: Array<"type" | "meaning" | "level" | "note">): string {
+  if (!Array.isArray(value)) return "";
+  return value.map(entry => {
+    const item = record(entry);
+    const word = stringValue(item.word ?? item.w).trim();
+    if (!word) return "";
+    const values = fields.map(field => {
+      if (field === "type") return stringValue(item.type ?? item.pos).trim();
+      if (field === "meaning") return stringValue(item.meaning ?? item.v).trim();
+      return stringValue(item[field]).trim();
+    });
+    while (values.length && !values[values.length - 1]) values.pop();
+    return [word, ...values].join(" | ");
+  }).filter(Boolean).join("; ");
+}
+function parseStructuredEntries(value: string, fields: Array<"type" | "meaning" | "level" | "note">): Array<Record<string, string>> {
+  return splitValues(value, /[;\n]/).flatMap(segment => {
+    const [word = "", ...values] = segment.split("|").map(part => part.trim());
+    if (!word) return [];
+    const entry: Record<string, string> = { word };
+    fields.forEach((field, index) => { if (values[index]) entry[field] = values[index]!; });
+    return [entry];
+  });
+}
+function buildUmbrella(row: VocabularyRow): Record<string, unknown> | null {
+  const siblings = parseStructuredEntries(row.umbrellaSiblings, ["meaning"]);
+  if (!row.umbrellaWord.trim() && !row.umbrellaMeaning.trim() && !siblings.length) return null;
+  return { word: row.umbrellaWord.trim(), meaning: row.umbrellaMeaning.trim(), siblings };
+}
 function record(value: unknown): Record<string, unknown> { return value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : {}; }
 function stringValue(value: unknown): string { return typeof value === "string" ? value : ""; }
 function listValue(value: unknown): string[] { return Array.isArray(value) ? value.filter((item): item is string => typeof item === "string") : []; }

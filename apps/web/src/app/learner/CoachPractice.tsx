@@ -152,43 +152,37 @@ function CoachFeedback({ coachText, feedback }: { coachText: string; feedback: N
     { label: "Từ vựng", description: "Dùng từ đúng và phù hợp với trình độ", score: feedback.rubric.vocabulary, Icon: BookOpen },
     { label: "Ngữ pháp", description: "Cấu trúc câu và độ chính xác", score: feedback.rubric.grammar, Icon: SpellCheck2 }
   ] as const;
-  const relevanceNote = feedback.relevant ? "" : shortCoachRelevanceNote(feedback.relevanceNote);
   const displaySuggestions = feedback.suggestions.filter((suggestion, index, suggestions) => {
     const corrected = suggestion.corrected.trim().replace(/\s+/g, " ").toLocaleLowerCase();
     return suggestions.findIndex((candidate) => candidate.corrected.trim().replace(/\s+/g, " ").toLocaleLowerCase() === corrected) === index;
   });
   return <section className="coach-feedback coach-feedback-flat" role="region" aria-label="Phản hồi của Season">
-    {relevanceNote ? <p className="coach-feedback-note">{relevanceNote}</p> : null}
     <div className="coach-feedback-summary">
       <div className="coach-feedback-heading">{feedback.relevant ? "Phản hồi" : "Hãy quay lại chủ đề nhé"}</div>
-      <div className="coach-feedback-scores">{scores.map(({ label, score, Icon }) => <div className="coach-feedback-score" key={label}>
+      <div className="coach-feedback-scores">{scores.map(({ label, description, score, Icon }) => <div className="coach-feedback-score" title={description} key={label}>
         <Icon className="coach-feedback-score-icon" size={18} strokeWidth={2.25} aria-hidden="true" />
         <span><b>{label}</b><strong aria-label={`${label}: ${score} trên 5 điểm`}>{score}/5</strong></span>
       </div>)}</div>
     </div>
+    {displaySuggestions.length > 0 ? <div className="coach-feedback-next">
+      <div className="coach-feedback-suggestion-label">Câu bạn nên nói tiếp</div>
+      <div className="coach-feedback-suggestions">{displaySuggestions.map((suggestion, index) => <div className="coach-feedback-suggestion" key={`${suggestion.corrected}-${index}`}>
+        <div className="coach-feedback-change"><del>{suggestion.original}</del><span aria-hidden="true">→</span><strong className="coach-feedback-correction">{suggestion.corrected}</strong></div>
+      </div>)}</div>
+    </div> : null}
     <div className="coach-feedback-disclosures">
-      <details className="coach-feedback-disclosure" aria-label={`Bản dịch câu Season: ${coachText}`}>
-        <summary>Season vừa nói</summary>
-        <p className="coach-feedback-translation">{feedback.replyTranslation || "Bản dịch chưa có cho lượt chat cũ này."}</p>
+      <details className="coach-feedback-disclosure" aria-label={`Ý nghĩa điểm và bản dịch cho câu Season: ${coachText}`}>
+        <summary>Ý nghĩa &amp; bản dịch</summary>
+        <div className="coach-feedback-details">
+          <div className="coach-feedback-criteria">{scores.map(({ label, description }) => <p key={label}><b>{label}:</b> {description}</p>)}</div>
+          <div className="coach-feedback-translation-block"><b>Season vừa nói</b><p className="coach-feedback-translation">{feedback.replyTranslation || "Bản dịch chưa có cho lượt chat cũ này."}</p></div>
+          {displaySuggestions.map((suggestion, index) => <div className="coach-feedback-translation-block" key={`${suggestion.corrected}-translation-${index}`}>
+            <b>Bản dịch câu bạn nên nói tiếp</b><p className="coach-feedback-translation">{suggestion.translation || "Bản dịch gợi ý chưa có cho lượt chat cũ này."}</p>
+          </div>)}
+        </div>
       </details>
-      {displaySuggestions.length ? <details className="coach-feedback-disclosure">
-        <summary>Bạn có thể nói tiếp</summary>
-        <div className="coach-feedback-suggestions">{displaySuggestions.map((suggestion, index) => <div className="coach-feedback-suggestion" key={`${suggestion.corrected}-${index}`}>
-          <strong className="coach-feedback-correction">{suggestion.corrected}</strong>
-          <p className="coach-feedback-translation">{suggestion.translation || "Bản dịch gợi ý chưa có cho lượt chat cũ này."}</p>
-        </div>)}</div>
-      </details> : null}
-      {displaySuggestions.length ? <details className="coach-feedback-disclosure">
-        <summary>Vì sao cần sửa</summary>
-        <div className="coach-feedback-explanations">{displaySuggestions.map((suggestion, index) => <p className="coach-feedback-explanation" key={`${suggestion.corrected}-${index}`}>{suggestion.explanation}</p>)}</div>
-      </details> : null}
     </div>
   </section>;
-}
-
-function shortCoachRelevanceNote(note: string): string {
-  const normalized = note.trim().replace(/\s+/g, " ");
-  return normalized.match(/^.*?[.!?](?=\s|$)/)?.[0] ?? normalized;
 }
 
 function uniqueCoachVocabulary(items: CoachView["vocabulary"]): CoachView["vocabulary"] {
