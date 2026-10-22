@@ -1,8 +1,12 @@
 import { EVIDENCE_BUCKET, MEDIA_BUCKET, type ObjectStorage } from "@e4s/storage";
+import { createRepositories } from "@e4s/database";
+import type { OrganisationExperienceView } from "@e4s/contracts";
 import type { FastifyInstance } from "fastify";
 import type { Pool } from "pg";
 import { z } from "zod";
 import { createRoleGuard } from "../identity/policy.js";
+
+const organisationExperienceThemes = ["auto", "spring", "summer", "autumn", "winter", "tet", "midautumn", "christmas"] as const;
 
 export function registerSystemRoutes(
   app: FastifyInstance,
@@ -13,9 +17,33 @@ export function registerSystemRoutes(
   imageProviders = { pexels: false, pixabay: false },
   aiRuntimeEnabled = false
 ): void {
+  const repositories = createRepositories(pool);
   const authenticated = createRoleGuard(pool, ["learner", "operator", "manager"]);
+  const staff = createRoleGuard(pool, ["operator", "manager"]);
   const managerOnly = createRoleGuard(pool, ["manager"]);
   app.get("/api/health", async () => ({ status: "ok" }));
+
+  app.get("/api/v1/organisation-experience", { preHandler: authenticated }, async (request, reply): Promise<OrganisationExperienceView | void> => {
+    const view = await repositories.manager.organisationExperience(request.e4sSession!.user.id);
+    return view ?? reply.code(404).send({ code: "ORGANISATION_EXPERIENCE_NOT_FOUND" });
+  });
+
+  const customMusicUrl = z.string().trim().max(1000).refine((value) => !value || isYouTubeUrl(value));
+  const organisationExperienceInput = z.object({
+    theme: z.enum(organisationExperienceThemes),
+    backgroundMusic: z.object({
+      enabled: z.boolean(),
+      playlistId: z.string().trim().min(1).max(160),
+      customUrl: customMusicUrl,
+      volume: z.number().int().min(0).max(100)
+    }).strict()
+  }).strict();
+
+  app.put("/api/v1/organisation-experience", { preHandler: staff }, async (request, reply) => {
+    const parsed = organisationExperienceInput.safeParse(request.body);
+    if (!parsed.success) return reply.code(400).send({ code: "INVALID_ORGANISATION_EXPERIENCE" });
+    return await repositories.manager.saveOrganisationExperience(request.e4sSession!.user.id, parsed.data);
+  });
 
   app.get("/api/v1/product-preferences", { preHandler: authenticated }, async (request) => {
     const result = await pool.query<{ theme: string; vocab_image_source: string }>(
@@ -97,6 +125,17 @@ export function registerSystemRoutes(
       return reply.code(503).send({ status: "not_ready" });
     }
   });
+}
+
+function isYouTubeUrl(value: string): boolean {
+  try {
+    const url = new URL(value);
+    if (url.protocol !== "https:") return false;
+    const host = url.hostname.toLocaleLowerCase().replace(/^www\./, "");
+    return host === "youtu.be" || host === "youtube.com" || host === "music.youtube.com";
+  } catch {
+    return false;
+  }
 }
 
 async function objectStorageAvailable(storage: ObjectStorage | undefined): Promise<boolean> {

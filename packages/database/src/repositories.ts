@@ -93,6 +93,8 @@ import type {
   ManagerProviderTestView,
   ManagerProgressView,
   OperatorSettingsOverviewView,
+  OrganisationExperienceInput,
+  OrganisationExperienceView,
   ManagerReminderCandidateView,
   ManagerReminderCopyView,
   ManagerReminderDismissView,
@@ -8486,6 +8488,45 @@ class ManagerRepository {
     if (!organization) return null;
     const settings = await this.settingsForOrganization(organization.id);
     return { organizationName: organization.name, ...settings };
+  }
+
+  async organisationExperience(userId: string): Promise<OrganisationExperienceView | null> {
+    const result = await this.pool.query<{ theme: OrganisationExperienceView["theme"]; configuration: Record<string, unknown> }>(
+      `select coalesce(os.theme, 'auto') as theme, coalesce(os.configuration, '{}'::jsonb) as configuration
+       from users u
+       left join organization_settings os on os.organization_id = u.organization_id
+       where u.id = $1`,
+      [userId]
+    );
+    const row = result.rows[0];
+    if (!row) return null;
+    const configured = isRecord(row.configuration.backgroundMusic) ? row.configuration.backgroundMusic : {};
+    return {
+      theme: row.theme,
+      backgroundMusic: {
+        enabled: typeof configured.enabled === "boolean" ? configured.enabled : true,
+        playlistId: typeof configured.playlistId === "string" && configured.playlistId.trim() ? configured.playlistId : "auto",
+        customUrl: typeof configured.customUrl === "string" ? configured.customUrl : typeof configured.url === "string" ? configured.url : "",
+        volume: typeof configured.volume === "number" ? configured.volume : 22
+      }
+    };
+  }
+
+  async saveOrganisationExperience(userId: string, input: OrganisationExperienceInput): Promise<OrganisationExperienceView> {
+    const result = await this.pool.query<{ theme: OrganisationExperienceView["theme"]; configuration: Record<string, unknown> }>(
+      `insert into organization_settings (organization_id, theme, configuration, updated_by)
+       select organization_id, $2, jsonb_build_object('backgroundMusic', $3::jsonb), $1
+       from users where id = $1
+       on conflict (organization_id) do update
+       set theme = excluded.theme,
+           configuration = jsonb_set(organization_settings.configuration, '{backgroundMusic}', $3::jsonb, true),
+           updated_by = excluded.updated_by,
+           updated_at = now()
+       returning theme, configuration`,
+      [userId, input.theme, JSON.stringify(input.backgroundMusic)]
+    );
+    if (!result.rowCount) throw new Error("ORGANISATION_EXPERIENCE_NOT_FOUND");
+    return input;
   }
 
   async saveSettings(managerId: string, input: Omit<ManagerSettingsView, "organizationName">): Promise<ManagerSettingsView> {
