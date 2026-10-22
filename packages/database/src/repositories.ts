@@ -5265,9 +5265,9 @@ class CoachRepository {
     taskId: string;
     promptVersionId: string;
     output: {
-      relevant: boolean; relevanceNote: string; reply: string;
+      relevant: boolean; relevanceNote: string; reply: string; replyTranslation: string;
       rubric: { meaning: number; vocabulary: number; grammar: number };
-      suggestions: Array<{ original: string; corrected: string; explanation: string }>;
+      suggestions: Array<{ original: string; corrected: string; translation: string; explanation: string }>;
       correctedText: string; usedWords: string[];
     };
     metadata: {
@@ -5311,7 +5311,7 @@ class CoachRepository {
         [turnId, input.sessionId, Number(next.rows[0]?.number ?? 1),
           JSON.stringify({ text: input.message, requestId: input.requestId }),
           JSON.stringify({
-            coachText: input.output.reply, relevant: input.output.relevant,
+            coachText: input.output.reply, replyTranslation: input.output.replyTranslation, relevant: input.output.relevant,
             relevanceNote: input.output.relevanceNote, rubric: input.output.rubric,
             suggestions: input.output.suggestions, correctedText: input.output.correctedText,
             usedWords: input.output.usedWords, checked: false
@@ -5579,12 +5579,18 @@ function coachFeedback(value: Record<string, unknown> | null): CoachFeedbackView
     if (!item || typeof item !== "object" || Array.isArray(item)) return [];
     const entry = item as Record<string, unknown>;
     if (typeof entry.original !== "string" || typeof entry.corrected !== "string" || typeof entry.explanation !== "string") return [];
-    return [{ original: entry.original, corrected: entry.corrected, explanation: entry.explanation }];
+    return [{
+      original: entry.original,
+      corrected: entry.corrected,
+      ...(typeof entry.translation === "string" ? { translation: entry.translation } : {}),
+      explanation: entry.explanation
+    }];
   }) : [];
   return {
     relevant: value.relevant !== false,
     ...(classification ? { classification } : {}),
     relevanceNote: typeof value.relevanceNote === "string" ? value.relevanceNote : "",
+    ...(typeof value.replyTranslation === "string" ? { replyTranslation: value.replyTranslation } : {}),
     rubric: {
       meaning: Number(rubric.meaning ?? 0), vocabulary: Number(rubric.vocabulary ?? 0), grammar: Number(rubric.grammar ?? 0)
     },

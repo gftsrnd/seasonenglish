@@ -12,8 +12,12 @@ const aiOutput = {
   relevant: true,
   relevanceNote: "",
   reply: "Good correction. What do you do in the product team?",
+  replyTranslation: "Bạn sửa đúng rồi. Bạn làm công việc gì trong nhóm sản phẩm?",
   rubric: { meaning: 4, vocabulary: 4, grammar: 3 },
-  suggestions: [{ original: "at product", corrected: "in product", explanation: "Use in before a department." }],
+  suggestions: [{
+    original: "at product", corrected: "in product", translation: "trong bộ phận sản phẩm",
+    explanation: "Use in before a department."
+  }],
   correctedText: "I work in product.",
   usedWords: ["product"]
 };

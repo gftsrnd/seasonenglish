@@ -138,7 +138,7 @@ export function LearnerCoach({ view, actions }: { view: CoachView; actions: Lear
     {!view.aiAvailable ? <Notice tone="warn">AI chưa kết nối nên Season chưa trả lời. Báo người vận hành nhập API key trong Cài đặt.</Notice> : null}
     <div className="coach-limit-row"><span className="row coach-counters"><span className={`badge ${capped ? "danger" : view.daily.used >= view.daily.limit * .8 ? "warn" : "primary"}`}>Hôm nay {view.daily.used}/{view.daily.limit} lượt</span><span className={`badge ${view.weekly.turns >= view.weekly.target ? "ok" : ""}`}>Tuần này {view.weekly.turns} lượt{view.weekly.turns >= view.weekly.target ? " ✓" : ` · mục tiêu ≥${view.weekly.target}`}</span></span><details className="xs coach-limit-details"><summary>Giới hạn chat hoạt động thế nào?</summary><div className="muted coach-limit-copy coach-limit-copy--full coach-limit-copy--plain">1 lượt = 1 tin nhắn bạn gửi và Season trả lời kèm chấm điểm. Tối đa <b>{view.daily.limit} lượt/ngày</b>; bộ đếm về 0 lúc 0 giờ. Xoá chat không trả lại lượt. Tin nhắn lỗi mạng không tính lượt. Mục tiêu: ít nhất {view.weekly.target} lượt/tuần; không có giới hạn theo tuần.</div></details></div>
     {capped ? <Notice tone="warn"><b>Đã dùng hết {view.daily.limit} lượt chat hôm nay.</b> Ô nhập mở lại ngày mai; bạn có thể ôn bài tuần này.</Notice> : null}
-    <section className="chat" aria-label="Cuộc trò chuyện với Season" aria-busy={view.thinking || sending || undefined} style={chatStyle}>{view.messages.length === 0 ? <div className="msg ai"><p>Chào bạn! Hôm nay mình luyện một tình huống thật nhé.</p></div> : view.messages.map((item) => <article className={`msg ${item.speaker === "coach" ? "ai" : "user"}`} key={item.id}><div className="eyebrow">{item.speaker === "coach" ? "Season" : "Bạn"}</div><p>{item.text}</p>{item.feedback ? <CoachFeedback feedback={item.feedback} /> : null}</article>)}{sending && pendingMessage ? <article className="msg user coach-message-pending" aria-label="Tin nhắn đang gửi"><div className="eyebrow">Bạn</div><p>{pendingMessage}</p><span className="xs muted">Đang gửi…</span></article> : null}{view.thinking ? <div className="msg ai" role="status">Season đang nghĩ…</div> : null}</section>{coachError ? <div className="coach-error-row"><ErrorText id="coach-error" message={coachError} /></div> : null}
+    <section className="chat" aria-label="Cuộc trò chuyện với Season" aria-busy={view.thinking || sending || undefined} style={chatStyle}>{view.messages.length === 0 ? <div className="msg ai"><p>Chào bạn! Hôm nay mình luyện một tình huống thật nhé.</p></div> : view.messages.map((item) => <article className={`msg ${item.speaker === "coach" ? "ai" : "user"}`} key={item.id}><div className="eyebrow">{item.speaker === "coach" ? "Season" : "Bạn"}</div><p>{item.text}</p>{item.feedback ? <CoachFeedback coachText={item.text} feedback={item.feedback} /> : null}</article>)}{sending && pendingMessage ? <article className="msg user coach-message-pending" aria-label="Tin nhắn đang gửi"><div className="eyebrow">Bạn</div><p>{pendingMessage}</p><span className="xs muted">Đang gửi…</span></article> : null}{view.thinking ? <div className="msg ai" role="status">Season đang nghĩ…</div> : null}</section>{coachError ? <div className="coach-error-row"><ErrorText id="coach-error" message={coachError} /></div> : null}
     <section className="card coach-vocabulary"><h2>Từ bí mật</h2><div className="row coach-word-list">{vocabulary.map((item, index) => <button className={`word-card coach-word-chip${item.opened ? " is-opened" : " is-locked"}`} type="button" title={item.opened ? item.meaning : `Mở từ bí mật ${index + 1}`} key={item.word.toLocaleLowerCase()} aria-label={item.opened ? `Nghe từ ${item.word}${item.meaning ? `: ${item.meaning}` : ""}` : `Mở từ bí mật ${index + 1}`} onClick={() => item.opened ? actions.speak(item.word) : void actions.unlockCoachVocabulary?.(item.word)}>{item.opened ? <b>{item.word}</b> : <LockKeyhole className="status-icon" aria-hidden="true" />}</button>)}</div></section>
     <form className="chat-compose" aria-busy={view.thinking || sending || undefined} onSubmit={send} style={composeStyle}><textarea rows={1} aria-label="Tin nhắn cho Season" aria-describedby={coachError ? "coach-error" : undefined} value={message} disabled={view.thinking || sending || !view.aiAvailable || capped} onChange={(event) => setMessage(event.target.value)} placeholder={view.thinking || sending ? "Season đang trả lời…" : view.cefr === "A1" || view.cefr === "A2" ? "Viết câu trả lời bằng tiếng Anh…" : "Type your reply in English…"} style={composeInputStyle} /><div style={composeActionsStyle}>{speechSupported ? <button className={`coach-mic coach-compose-icon ${recording ? "is-recording" : ""}`} type="button" aria-label={recording ? "Đang nghe" : "Nói"} aria-pressed={recording} title={recording ? "Dừng nghe" : "Nói"} disabled={view.thinking || sending || (!recording && (!view.aiAvailable || capped))} onClick={recording ? stopListening : startListening}><MicIcon /></button> : null}<button className="btn-primary coach-compose-icon coach-send" type="submit" aria-label={view.thinking || sending ? "Đang gửi…" : "Gửi"} title={view.thinking || sending ? "Đang gửi…" : "Gửi"} disabled={view.thinking || sending || !view.aiAvailable || capped || !message.trim() || recording}><Send size={20} aria-hidden="true" /></button></div></form></div>
     <p className="xs muted">Mỗi lượt Season trả lời và chấm 3 tiêu chí (đúng ý · từ vựng · ngữ pháp), gợi ý tối đa 3 chỗ sửa. Mục tiêu: ≥{view.weekly.target} lượt/tuần.</p>
@@ -146,16 +146,13 @@ export function LearnerCoach({ view, actions }: { view: CoachView; actions: Lear
   </div>;
 }
 
-function CoachFeedback({ feedback }: { feedback: NonNullable<CoachView["messages"][number]["feedback"]> }) {
+function CoachFeedback({ coachText, feedback }: { coachText: string; feedback: NonNullable<CoachView["messages"][number]["feedback"]> }) {
   const scores = [
     { label: "Ý nghĩa", description: "Đúng câu hỏi và diễn đạt rõ ý", score: feedback.rubric.meaning, Icon: MessageCircle },
     { label: "Từ vựng", description: "Dùng từ đúng và phù hợp với trình độ", score: feedback.rubric.vocabulary, Icon: BookOpen },
     { label: "Ngữ pháp", description: "Cấu trúc câu và độ chính xác", score: feedback.rubric.grammar, Icon: SpellCheck2 }
   ] as const;
   const relevanceNote = feedback.relevant ? "" : shortCoachRelevanceNote(feedback.relevanceNote);
-  const suggestionsAreRefinements = feedback.relevant
-    && feedback.rubric.meaning >= 4
-    && feedback.rubric.grammar >= 4;
   const displaySuggestions = feedback.suggestions.filter((suggestion, index, suggestions) => {
     const corrected = suggestion.corrected.trim().replace(/\s+/g, " ").toLocaleLowerCase();
     return suggestions.findIndex((candidate) => candidate.corrected.trim().replace(/\s+/g, " ").toLocaleLowerCase() === corrected) === index;
@@ -169,18 +166,23 @@ function CoachFeedback({ feedback }: { feedback: NonNullable<CoachView["messages
         <span><b>{label}</b><strong aria-label={`${label}: ${score} trên 5 điểm`}>{score}/5</strong></span>
       </div>)}</div>
     </div>
-    {displaySuggestions.length ? <div className={`coach-feedback-suggestions${suggestionsAreRefinements ? " is-refinement" : ""}`}>
-      {suggestionsAreRefinements ? <div className="coach-feedback-suggestion-label">Gợi ý diễn đạt</div> : null}
-      {displaySuggestions.map((suggestion, index) => <div className="coach-feedback-suggestion" key={`${suggestion.original}-${suggestion.corrected}-${index}`}>
-      <div className="coach-feedback-change">{suggestionsAreRefinements ? null : <><del>{suggestion.original}</del><span aria-hidden="true">→</span></>}<strong className="coach-feedback-correction">{suggestion.corrected}</strong></div>
-    </div>)}</div> : null}
-    <details className="coach-feedback-disclosure">
-      <summary>Xem giải thích &amp; bản dịch</summary>
-      <div className="coach-feedback-details">
-        <div className="coach-feedback-criteria">{scores.map(({ label, description }) => <p key={label}><b>{label}:</b> {description}</p>)}</div>
-        {displaySuggestions.length ? <div className="coach-feedback-explanations">{displaySuggestions.map((suggestion, index) => <p className="coach-feedback-explanation" key={`${suggestion.corrected}-${index}`}>{suggestion.explanation}</p>)}</div> : null}
-      </div>
-    </details>
+    <div className="coach-feedback-disclosures">
+      <details className="coach-feedback-disclosure" aria-label={`Bản dịch câu Season: ${coachText}`}>
+        <summary>Season vừa nói</summary>
+        <p className="coach-feedback-translation">{feedback.replyTranslation || "Bản dịch chưa có cho lượt chat cũ này."}</p>
+      </details>
+      {displaySuggestions.length ? <details className="coach-feedback-disclosure">
+        <summary>Bạn có thể nói tiếp</summary>
+        <div className="coach-feedback-suggestions">{displaySuggestions.map((suggestion, index) => <div className="coach-feedback-suggestion" key={`${suggestion.corrected}-${index}`}>
+          <strong className="coach-feedback-correction">{suggestion.corrected}</strong>
+          <p className="coach-feedback-translation">{suggestion.translation || "Bản dịch gợi ý chưa có cho lượt chat cũ này."}</p>
+        </div>)}</div>
+      </details> : null}
+      {displaySuggestions.length ? <details className="coach-feedback-disclosure">
+        <summary>Vì sao cần sửa</summary>
+        <div className="coach-feedback-explanations">{displaySuggestions.map((suggestion, index) => <p className="coach-feedback-explanation" key={`${suggestion.corrected}-${index}`}>{suggestion.explanation}</p>)}</div>
+      </details> : null}
+    </div>
   </section>;
 }
 

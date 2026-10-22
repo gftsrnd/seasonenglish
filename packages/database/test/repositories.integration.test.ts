@@ -95,6 +95,69 @@ describe("E4S repositories", () => {
     await expect(repositories.aiRuns.listForUser(DEMO_IDS.learner)).resolves.toEqual([]);
   });
 
+  it("persists explicit Coach translations while keeping legacy turns readable", async () => {
+    const prompt = await pool.query<{ id: string; task_id: string }>(
+      `select pv.id, task.id as task_id from prompt_versions pv
+       join ai_tasks task on task.task_key = pv.task_key
+       where pv.organization_id = $1 and pv.task_key = 'coach_dialogue' and pv.status = 'active'
+       order by pv.version desc limit 1`,
+      [DEMO_IDS.organization]
+    );
+    const requestId = randomUUID();
+    const saved = await repositories.coach.saveAiTurn({
+      learnerId: DEMO_IDS.learner,
+      sessionId: DEMO_IDS.coachSession,
+      requestId,
+      message: "I work at product.",
+      taskId: prompt.rows[0]!.task_id,
+      promptVersionId: prompt.rows[0]!.id,
+      output: {
+        relevant: true,
+        relevanceNote: "",
+        reply: "Thanks. What are you working on this week?",
+        replyTranslation: "Cảm ơn. Tuần này bạn đang làm việc gì?",
+        rubric: { meaning: 4, vocabulary: 4, grammar: 3 },
+        suggestions: [{
+          original: "at product",
+          corrected: "in product",
+          translation: "trong bộ phận sản phẩm",
+          explanation: "Use in before a department."
+        }],
+        correctedText: "I work in product.",
+        usedWords: ["product"]
+      },
+      metadata: {
+        traceId: randomUUID(), provider: "fixture", model: "fixture-model", inputHash: "a".repeat(64),
+        usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 }, latencyMs: 12
+      }
+    });
+    expect(saved).toBe(true);
+
+    await pool.query(
+      `insert into coach_turns (id, session_id, turn_number, speaker, content, feedback)
+       values ($1, $2, 999, 'learner', $3::jsonb, $4::jsonb)`,
+      [randomUUID(), DEMO_IDS.coachSession, JSON.stringify({ text: "Legacy answer." }), JSON.stringify({
+        coachText: "Legacy reply.", relevant: true, relevanceNote: "",
+        rubric: { meaning: 3, vocabulary: 3, grammar: 3 },
+        suggestions: [{ original: "old", corrected: "older", explanation: "Legacy reason." }],
+        correctedText: "Legacy answer."
+      })]
+    );
+
+    const view = await repositories.coach.currentForLearner(DEMO_IDS.learner, true);
+    const translated = view?.messages.find((message) => message.text === "Thanks. What are you working on this week?");
+    expect(translated?.feedback).toMatchObject({
+      replyTranslation: "Cảm ơn. Tuần này bạn đang làm việc gì?",
+      suggestions: [expect.objectContaining({ translation: "trong bộ phận sản phẩm" })]
+    });
+    const legacy = view?.messages.find((message) => message.text === "Legacy reply.");
+    expect(legacy?.feedback).toMatchObject({
+      suggestions: [expect.objectContaining({ original: "old", corrected: "older", explanation: "Legacy reason." })]
+    });
+    expect(legacy?.feedback).not.toHaveProperty("replyTranslation");
+    expect(legacy?.feedback?.suggestions[0]).not.toHaveProperty("translation");
+  });
+
   it("leases a queued job once so concurrent workers cannot duplicate it", async () => {
     const id = randomUUID();
     await repositories.jobs.enqueue({

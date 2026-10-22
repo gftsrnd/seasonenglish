@@ -12,6 +12,7 @@ const goodCoachOutput = {
   relevant: true,
   relevanceNote: "",
   reply: "Tell me one more detail about the problem and how you solved it.",
+  replyTranslation: "Hãy kể thêm một chi tiết về vấn đề và cách bạn đã giải quyết.",
   rubric: { meaning: 4, vocabulary: 4, grammar: 4 },
   suggestions: [],
   correctedText: "",

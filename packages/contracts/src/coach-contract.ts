@@ -13,6 +13,7 @@ export interface CoachVocabularyView {
 export interface CoachSuggestionView {
   original: string;
   corrected: string;
+  translation?: string;
   explanation: string;
 }
 
@@ -20,6 +21,7 @@ export interface CoachFeedbackView {
   relevant: boolean;
   classification?: CoachTurnClassification;
   relevanceNote: string;
+  replyTranslation?: string;
   rubric: { meaning: number; vocabulary: number; grammar: number };
   suggestions: CoachSuggestionView[];
   correctedText: string;
