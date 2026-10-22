@@ -1,19 +1,40 @@
 import { describe, expect, it, vi } from "vitest";
 import { createAiService } from "../src/service.js";
 import { AI_TASKS } from "../src/registry.js";
+import { coachOutputJsonSchema, coachOutputSchema } from "../src/schemas.js";
 import { AiProviderError, type AiProvider } from "../src/types.js";
 
 const validCoachOutput = {
   relevant: true,
   relevanceNote: "",
   reply: "I work in product. What are you working on this week?",
+  replyTranslation: "Tôi làm việc trong bộ phận sản phẩm. Tuần này bạn đang làm gì?",
   rubric: { meaning: 4, vocabulary: 4, grammar: 3 },
-  suggestions: [{ original: "at product", corrected: "in product", explanation: "Use in before a department." }],
+  suggestions: [{
+    original: "at product",
+    corrected: "in product",
+    translation: "trong bộ phận sản phẩm",
+    explanation: "Use in before a department."
+  }],
   correctedText: "I work in product.",
   usedWords: ["product"]
 };
 
 describe("AI service", () => {
+  it("requires explicit Vietnamese translations for the coach reply and every suggestion", () => {
+    const withoutReplyTranslation = { ...validCoachOutput, replyTranslation: undefined };
+    const withoutSuggestionTranslation = {
+      ...validCoachOutput,
+      suggestions: validCoachOutput.suggestions.map(({ translation: _translation, ...suggestion }) => suggestion)
+    };
+
+    expect(coachOutputSchema.safeParse(validCoachOutput).success).toBe(true);
+    expect(coachOutputSchema.safeParse(withoutReplyTranslation).success).toBe(false);
+    expect(coachOutputSchema.safeParse(withoutSuggestionTranslation).success).toBe(false);
+    expect(coachOutputJsonSchema.required).toContain("replyTranslation");
+    expect(coachOutputJsonSchema.properties.suggestions.items.required).toContain("translation");
+  });
+
   it("validates input/output and only sends allowlisted learner context", async () => {
     const complete = vi.fn().mockResolvedValue({ output: validCoachOutput, usage: { inputTokens: 20, outputTokens: 30 } });
     const service = createAiService({ registry: AI_TASKS, provider: fixtureProvider(complete), loadPrompt: async () => "Coach safely." });

@@ -15,6 +15,7 @@ export const coachOutputSchema = z.object({
   relevant: z.boolean(),
   relevanceNote: z.string().trim().max(500),
   reply: z.string().trim().min(1).max(2_000),
+  replyTranslation: z.string().trim().min(1).max(2_000),
   rubric: z.object({
     meaning: z.number().int().min(1).max(5),
     vocabulary: z.number().int().min(1).max(5),
@@ -23,6 +24,7 @@ export const coachOutputSchema = z.object({
   suggestions: z.array(z.object({
     original: z.string().trim().min(1).max(500),
     corrected: z.string().trim().min(1).max(500),
+    translation: z.string().trim().min(1).max(500),
     explanation: z.string().trim().min(1).max(500)
   })).max(3),
   correctedText: z.string().trim().max(2_000),
@@ -35,11 +37,12 @@ export type CoachTaskOutput = z.infer<typeof coachOutputSchema>;
 export const coachOutputJsonSchema = {
   type: "object",
   additionalProperties: false,
-  required: ["relevant", "relevanceNote", "reply", "rubric", "suggestions", "correctedText", "usedWords"],
+  required: ["relevant", "relevanceNote", "reply", "replyTranslation", "rubric", "suggestions", "correctedText", "usedWords"],
   properties: {
     relevant: { type: "boolean" },
     relevanceNote: { type: "string" },
     reply: { type: "string" },
+    replyTranslation: { type: "string" },
     rubric: {
       type: "object", additionalProperties: false,
       required: ["meaning", "vocabulary", "grammar"],
@@ -53,8 +56,11 @@ export const coachOutputJsonSchema = {
       type: "array", maxItems: 3,
       items: {
         type: "object", additionalProperties: false,
-        required: ["original", "corrected", "explanation"],
-        properties: { original: { type: "string" }, corrected: { type: "string" }, explanation: { type: "string" } }
+        required: ["original", "corrected", "translation", "explanation"],
+        properties: {
+          original: { type: "string" }, corrected: { type: "string" },
+          translation: { type: "string" }, explanation: { type: "string" }
+        }
       }
     },
     correctedText: { type: "string" },
