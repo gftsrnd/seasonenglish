@@ -2,15 +2,22 @@
 import "@testing-library/jest-dom/vitest";
 import { cleanup, render, screen } from "@testing-library/react";
 import { userEvent } from "@testing-library/user-event";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ExperienceProvider, useExperience } from "./Experience.js";
+import { cancelExclusiveAudio } from "./audio-precedence.js";
 
 afterEach(() => {
+  cancelExclusiveAudio("speech");
+  cancelExclusiveAudio("media");
+  cancelExclusiveAudio("microphone");
+  cancelExclusiveAudio("music");
   cleanup();
   vi.unstubAllGlobals();
   Reflect.deleteProperty(window, "speechSynthesis");
   Reflect.deleteProperty(window, "SpeechSynthesisUtterance");
 });
+
+beforeEach(() => window.localStorage.clear());
 
 function SpeechProbe({ onStatus }: { onStatus: (status: string) => void }) {
   const { speak } = useExperience();
@@ -20,6 +27,11 @@ function SpeechProbe({ onStatus }: { onStatus: (status: string) => void }) {
 function AudioProbe({ onStatus }: { onStatus: (status: string) => void }) {
   const { speak } = useExperience();
   return <button type="button" onClick={() => speak("Xin chào", "vi-VN", { audioSrc: "/media/audio/sound-check-vi.mp3", onStatus })}>Nghe</button>;
+}
+
+function MusicLifecycleProbe() {
+  const { holdMusic } = useExperience();
+  return <><button type="button">Bắt đầu</button><button type="button" onClick={() => holdMusic(true)}>Giữ nhạc</button></>;
 }
 
 describe("experience speech voice selection", () => {
@@ -40,7 +52,7 @@ describe("experience speech voice selection", () => {
     });
 
     const statuses: string[] = [];
-    render(<ExperienceProvider><SpeechProbe onStatus={(status) => statuses.push(status)} /></ExperienceProvider>);
+    render(<ExperienceProvider musicAllowed={false}><SpeechProbe onStatus={(status) => statuses.push(status)} /></ExperienceProvider>);
     await user.click(screen.getByRole("button", { name: "Nghe" }));
 
     expect(speak).not.toHaveBeenCalled();
@@ -61,10 +73,37 @@ describe("experience speech voice selection", () => {
       pause = vi.fn();
     });
 
-    render(<ExperienceProvider><AudioProbe onStatus={(status) => statuses.push(status)} /></ExperienceProvider>);
+    render(<ExperienceProvider musicAllowed={false}><AudioProbe onStatus={(status) => statuses.push(status)} /></ExperienceProvider>);
     await user.click(screen.getByRole("button", { name: "Nghe" }));
 
     expect(play).toHaveBeenCalledTimes(1);
     expect(statuses).toEqual([]);
+  });
+
+  it("plays the selected licensed track at organisation volume and suspends it for exclusive audio", async () => {
+    const user = userEvent.setup();
+    const play = vi.fn().mockResolvedValue(undefined);
+    const pause = vi.fn();
+    const created: Array<{ src: string; volume: number }> = [];
+    vi.stubGlobal("Audio", class {
+      onplay: (() => void) | null = null;
+      onended: (() => void) | null = null;
+      onerror: (() => void) | null = null;
+      preload = "";
+      loop = false;
+      volume = 1;
+      currentTime = 0;
+      constructor(readonly src: string) { created.push(this); }
+      play = () => { this.onplay?.(); return play(); };
+      pause = pause;
+    });
+
+    render(<ExperienceProvider musicTheme="autumn" musicConfig={{ enabled: true, playlistId: "steady-afternoon", customUrl: "", volume: 37 }}><MusicLifecycleProbe /></ExperienceProvider>);
+    await user.click(screen.getByRole("button", { name: "Bắt đầu" }));
+
+    expect(created[0]).toMatchObject({ src: expect.stringContaining("Soft_Corporate"), volume: 0.37 });
+    expect(play).toHaveBeenCalledOnce();
+    await user.click(screen.getByRole("button", { name: "Giữ nhạc" }));
+    expect(pause).toHaveBeenCalled();
   });
 });

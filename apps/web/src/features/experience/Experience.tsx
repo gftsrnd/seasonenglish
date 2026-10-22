@@ -1,6 +1,9 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import type { OrganisationBackgroundMusicView } from "@e4s/contracts";
+import type { SeasonTheme } from "../../app/games/season-visual.js";
 import type { LessonSpeechOptions, LessonSpeechStatus } from "./contracts.js";
 import { cancelExclusiveAudio, claimExclusiveAudio, isExclusiveAudioActive, releaseExclusiveAudio } from "./audio-precedence.js";
+import { resolveBackgroundMusic } from "./music-selection.js";
 
 type FeedbackTone = "click" | "success" | "error" | "warning" | "celebrate";
 type NoticeTone = "success" | "error" | "info";
@@ -48,13 +51,16 @@ function storePreference(key: string, value: boolean) {
   try { window.localStorage.setItem(key, value ? "on" : "off"); } catch { /* browser privacy mode: keep this session only */ }
 }
 
-export function ExperienceProvider({ children, musicAllowed = true }: { children: ReactNode; musicAllowed?: boolean }) {
+const defaultMusicConfig: OrganisationBackgroundMusicView = { enabled: true, playlistId: "auto", customUrl: "", volume: 22 };
+
+export function ExperienceProvider({ children, musicAllowed = true, musicConfig = defaultMusicConfig, musicTheme = "summer" }: { children: ReactNode; musicAllowed?: boolean; musicConfig?: OrganisationBackgroundMusicView; musicTheme?: SeasonTheme }) {
+  const organisationMusicAllowed = musicAllowed && musicConfig.enabled;
   const [effectsOn, setEffectsOn] = useState(() => savedPreference(EFFECTS_KEY, true));
-  const [musicOn, setMusicOn] = useState(() => musicAllowed && savedPreference(MUSIC_KEY, true));
+  const [musicOn, setMusicOn] = useState(() => organisationMusicAllowed && savedPreference(MUSIC_KEY, true));
   const [musicHeld, setMusicHeld] = useState(false);
   const [musicRunning, setMusicRunning] = useState(false);
   const [notices, setNotices] = useState<readonly Notice[]>([]);
-  const audio = useRef<{ context?: AudioContext; musicTimer?: number; musicGain?: GainNode }>({});
+  const audio = useRef<{ context?: AudioContext; music?: HTMLAudioElement }>({});
   const noticeId = useRef(0);
 
   const context = useCallback(() => {
@@ -66,10 +72,11 @@ export function ExperienceProvider({ children, musicAllowed = true }: { children
   }, []);
 
   const stopMusicPlayback = useCallback(() => {
-    if (audio.current.musicTimer !== undefined) window.clearInterval(audio.current.musicTimer);
-    delete audio.current.musicTimer;
-    audio.current.musicGain?.disconnect();
-    delete audio.current.musicGain;
+    if (audio.current.music) {
+      audio.current.music.pause();
+      audio.current.music.currentTime = 0;
+      delete audio.current.music;
+    }
     setMusicRunning(false);
   }, []);
 
@@ -79,41 +86,25 @@ export function ExperienceProvider({ children, musicAllowed = true }: { children
   }, [stopMusicPlayback]);
 
   const startMusic = useCallback((force = false) => {
-    if (!musicAllowed || musicHeld || audio.current.musicTimer !== undefined || (!musicOn && !force)) return;
+    if (!organisationMusicAllowed || musicHeld || audio.current.music || (!musicOn && !force)) return;
     if (isExclusiveAudioActive("speech") || isExclusiveAudioActive("media") || isExclusiveAudioActive("microphone")) return;
-    const current = context();
-    if (!current) return;
-    const gain = current.createGain();
-    // Keep the compact controls unchanged; make the default feedback audible
-    // on ordinary laptop speakers without overriding the user's system volume.
-    gain.gain.value = 0.32;
-    gain.connect(current.destination);
-    audio.current.musicGain = gain;
+    const selection = resolveBackgroundMusic({ theme: musicTheme, date: new Date(), config: musicConfig, personalEnabled: musicOn || force, suspended: musicHeld });
+    if (!selection.enabled) return;
+    let music: HTMLAudioElement;
+    try { music = new Audio(selection.url); } catch { return; }
+    music.preload = "auto";
+    music.loop = true;
+    music.volume = selection.volume;
+    audio.current.music = music;
     const release = claimExclusiveAudio("music", stopMusicPlayback, () => startMusic());
     if (!release) {
       stopMusicPlayback();
       return;
     }
-    const notes = [261.63, 329.63, 392, 329.63, 293.66, 349.23, 440, 349.23];
-    let beat = 0;
-    const playNote = () => {
-      const oscillator = current.createOscillator();
-      const envelope = current.createGain();
-      const now = current.currentTime;
-      oscillator.type = "sine";
-      oscillator.frequency.value = notes[beat % notes.length]!;
-      envelope.gain.setValueAtTime(0.0001, now);
-      envelope.gain.exponentialRampToValueAtTime(0.55, now + 0.025);
-      envelope.gain.exponentialRampToValueAtTime(0.0001, now + 0.36);
-      oscillator.connect(envelope).connect(gain);
-      oscillator.start(now);
-      oscillator.stop(now + 0.39);
-      beat += 1;
-    };
-    playNote();
-    audio.current.musicTimer = window.setInterval(playNote, 510);
-    setMusicRunning(true);
-  }, [context, musicAllowed, musicOn, stopMusicPlayback]);
+    music.onplay = () => setMusicRunning(true);
+    music.onerror = () => stopMusic();
+    try { void music.play().catch(() => stopMusic()); } catch { stopMusic(); }
+  }, [musicConfig, musicHeld, musicOn, musicTheme, organisationMusicAllowed, stopMusic, stopMusicPlayback]);
 
   const play = useCallback((tone: FeedbackTone, options?: FeedbackOptions) => {
     if (!effectsOn && !options?.force) return;
@@ -245,10 +236,10 @@ export function ExperienceProvider({ children, musicAllowed = true }: { children
   }, [musicOn, stopMusic]);
 
   useEffect(() => {
-    if (musicAllowed) return;
+    if (organisationMusicAllowed) return;
     setMusicOn(false);
     stopMusic();
-  }, [musicAllowed, stopMusic]);
+  }, [organisationMusicAllowed, stopMusic]);
 
   useEffect(() => {
     const handleVisibility = () => {
@@ -280,11 +271,11 @@ export function ExperienceProvider({ children, musicAllowed = true }: { children
   const value = useMemo<Experience>(() => ({
     effectsOn,
     musicOn,
-    musicAllowed,
+    musicAllowed: organisationMusicAllowed,
     play,
     toggleEffects: () => setEffectsOn((value) => !value),
     toggleMusic: () => setMusicOn((value) => {
-      if (!musicAllowed) {
+      if (!organisationMusicAllowed) {
         stopMusic();
         return false;
       }
@@ -296,7 +287,7 @@ export function ExperienceProvider({ children, musicAllowed = true }: { children
     notify,
     speak,
     holdMusic
-  }), [effectsOn, holdMusic, musicAllowed, musicOn, notify, play, speak, startMusic, stopMusic]);
+  }), [effectsOn, holdMusic, organisationMusicAllowed, musicOn, notify, play, speak, startMusic, stopMusic]);
 
   return <ExperienceContext.Provider value={value}>{children}<div className="experience-notices" aria-live="polite" aria-atomic="true">{notices.map((notice) => <p className={`experience-notice experience-notice--${notice.tone}`} key={notice.id}>{notice.message}</p>)}</div></ExperienceContext.Provider>;
 }

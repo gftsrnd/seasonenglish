@@ -1,6 +1,6 @@
 import { useEffect, useState, type ReactNode } from "react";
 import { BrowserRouter } from "react-router";
-import type { LearnerAvatarData, LearnerProfileView, SessionView } from "@e4s/contracts";
+import type { LearnerAvatarData, LearnerProfileView, OrganisationBackgroundMusicView, SessionView } from "@e4s/contracts";
 import { sharedApiClient } from "../api/shared.js";
 import { ApiError } from "../api/runtime.js";
 import { ExperienceProvider } from "../features/experience/Experience.js";
@@ -23,7 +23,7 @@ export function App({ children }: { children?: (session: SessionView) => ReactNo
 }
 
 function AppContent({ children }: { children?: ((session: SessionView) => ReactNode) | undefined }) {
-  const { setTheme } = useTheme();
+  const { resolvedTheme, setTheme } = useTheme();
   const { show: showToast } = useToast();
   const [session, setSession] = useState<SessionView | null | undefined>(undefined);
   const [routeReady, setRouteReady] = useState(false);
@@ -32,6 +32,7 @@ function AppContent({ children }: { children?: ((session: SessionView) => ReactN
   const [profileRecord, setProfileRecord] = useState<LearnerProfileView>();
   const [avatarOpen, setAvatarOpen] = useState(false);
   const [musicAllowed, setMusicAllowed] = useState(true);
+  const [musicConfig, setMusicConfig] = useState<OrganisationBackgroundMusicView>({ enabled: true, playlistId: "auto", customUrl: "", volume: 22 });
   const [sandboxMode, setSandboxMode] = useState(() => typeof window !== "undefined" && (new URL(window.location.href).searchParams.get("sandbox") === "1" || window.sessionStorage.getItem("e4s:sandbox:active") === "1"));
   useEffect(() => {
     if (!sandboxMode || typeof window === "undefined") return;
@@ -68,6 +69,7 @@ function AppContent({ children }: { children?: ((session: SessionView) => ReactN
     void sharedApiClient.getOrganisationExperience().then((experience) => {
       setTheme(experience.theme);
       setMusicAllowed(experience.backgroundMusic.enabled);
+      setMusicConfig(experience.backgroundMusic);
     }).catch(() => { /* Keep device preferences when organisation experience is unavailable. */ });
   }, [session, setTheme]);
   useEffect(() => {
@@ -77,7 +79,7 @@ function AppContent({ children }: { children?: ((session: SessionView) => ReactN
   }, [session]);
   if (bootstrapError) return <AppStatus tone="error" onRetry={() => { setBootstrapError(false); setSession(undefined); setRouteReady(false); setBootstrapAttempt((attempt) => attempt + 1); }}>E4S hiện chưa thể kết nối. Kiểm tra mạng hoặc máy chủ rồi thử lại.</AppStatus>;
   if (session === undefined || (session && !routeReady)) return <AppStatus>Đang mở E4S…</AppStatus>;
-  if (!session) return <ExperienceProvider musicAllowed={musicAllowed}><EntryScreen client={sharedApiClient} onAuthenticated={(nextSession) => { applySessionEntryRoute(nextSession); setRouteReady(true); setSession(nextSession); }} /></ExperienceProvider>;
+  if (!session) return <ExperienceProvider musicAllowed={musicAllowed} musicConfig={musicConfig} musicTheme={resolvedTheme}><EntryScreen client={sharedApiClient} onAuthenticated={(nextSession) => { applySessionEntryRoute(nextSession); setRouteReady(true); setSession(nextSession); }} /></ExperienceProvider>;
   if (!isSupportedSessionRole(session.role)) return <AppStatus>Không thể mở tài khoản này. Vui lòng đăng nhập lại.</AppStatus>;
   const logout = async () => {
     try {
@@ -102,7 +104,7 @@ function AppContent({ children }: { children?: ((session: SessionView) => ReactN
   const avatar = session.role === "learner" ? profileRecord?.profile.avatar : session.user.avatar;
   const avatarReady = session.role !== "learner" || Boolean(profileRecord);
   const learnerProfileComplete = session.role !== "learner" || profileRecord?.completed === true;
-  return <ExperienceProvider musicAllowed={musicAllowed}><BrowserRouter><ModalProvider><AppShell session={session} avatar={avatar} onboardingComplete={learnerProfileComplete} onAvatarClick={avatarReady ? () => setAvatarOpen(true) : undefined} onLogout={logout}>{sandboxMode ? <div role="status" data-sandbox-mode="true" className="banner info">Chế độ thử (sandbox): dữ liệu hồ sơ chỉ lưu trong trình duyệt này.</div> : null}{children ? children(session) : <RoleRoutes session={session} />}</AppShell>{avatarOpen && avatarReady ? <AvatarDialog initial={avatar} onClose={() => setAvatarOpen(false)} onSave={(nextAvatar) => void saveAvatar(nextAvatar)} /> : null}</ModalProvider></BrowserRouter></ExperienceProvider>;
+  return <ExperienceProvider musicAllowed={musicAllowed} musicConfig={musicConfig} musicTheme={resolvedTheme}><BrowserRouter><ModalProvider><AppShell session={session} avatar={avatar} onboardingComplete={learnerProfileComplete} onAvatarClick={avatarReady ? () => setAvatarOpen(true) : undefined} onLogout={logout}>{sandboxMode ? <div role="status" data-sandbox-mode="true" className="banner info">Chế độ thử (sandbox): dữ liệu hồ sơ chỉ lưu trong trình duyệt này.</div> : null}{children ? children(session) : <RoleRoutes session={session} />}</AppShell>{avatarOpen && avatarReady ? <AvatarDialog initial={avatar} onClose={() => setAvatarOpen(false)} onSave={(nextAvatar) => void saveAvatar(nextAvatar)} /> : null}</ModalProvider></BrowserRouter></ExperienceProvider>;
 }
 
 function isUnauthenticatedSessionError(error: unknown): error is ApiError {
