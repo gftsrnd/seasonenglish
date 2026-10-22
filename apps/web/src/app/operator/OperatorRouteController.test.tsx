@@ -1,16 +1,24 @@
 // @vitest-environment jsdom
 import "@testing-library/jest-dom/vitest";
-import { cleanup, render, screen, waitFor, within } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { userEvent } from "@testing-library/user-event";
 import { MemoryRouter } from "react-router";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { ContentLessonMatrixView, ContentLessonSetVersionView, ContentReviewAssessmentDetailView, ContentReviewView, SessionView } from "@e4s/contracts";
+import { ApiError } from "../../api/runtime.js";
 import { OperatorRouteController } from "./OperatorRouteController.js";
 
 afterEach(cleanup);
 
 const operator = { role: "operator", user: { id: "op", displayName: "Operator", email: null }, permissions: ["content:operate", "assessment:review", "prompt:manage"] } as SessionView;
 const manager = { role: "manager", user: { id: "mgr", displayName: "Manager", email: null }, permissions: ["content:operate", "assessment:review", "prompt:manage"] } as SessionView;
+
+const lessonSet = (status: ContentLessonSetVersionView["status"]): ContentLessonSetVersionView => ({
+  lessonSetId: "ls", versionId: "v1", version: 1, status, weekNumber: 2, topic: "Meetings", cefr: "A2",
+  explanationLanguage: "Tiếng Việt", createdBy: "op", approvedBy: status === "published" ? "op" : null,
+  createdAt: "2026-10-14", publishedAt: status === "published" ? "2026-10-15" : null,
+  lessons: [{ id: "lesson-1", dayNumber: 1, title: "Mở đầu cuộc họp", durationMinutes: 10, practiceLabel: "điền từ", parts: [] }]
+});
 
 describe("OperatorRouteController", () => {
   it("loads the real week contract for /op/weeks and persists edited frames", async () => {
@@ -40,11 +48,11 @@ describe("OperatorRouteController", () => {
     expect(document.querySelector(".operator-status-message")).toBeNull();
   });
 
-  it("persists the confirmed five-day plan with the week frame", async () => {
+  it("only applies a confirmed suggestion locally until the operator saves it", async () => {
     const user = userEvent.setup();
     const weeks = { pilot: { startDate: "2026-10-05", weekCount: 1 }, weeks: [{ id: "w1", weekNumber: 1, startDate: "2026-10-05", endDate: "2026-10-11", current: true, topic: "", description: "", objectives: "", keyVocabHint: "" }] };
     const plan = { A2: ["Mon", "Tue", "Wed", "Thu", "Fri"] };
-    const saveContentWeeks = vi.fn().mockResolvedValue(weeks);
+    const saveContentWeeks = vi.fn().mockResolvedValue({ ...weeks, weeks: [{ ...weeks.weeks[0]!, topic: "Meetings", description: "Lịch họp", objectives: "Xác nhận lịch", keyVocabHint: "schedule" }] });
     const client = {
       getContentWeeks: vi.fn().mockResolvedValue(weeks),
       saveContentWeeks,
@@ -56,10 +64,11 @@ describe("OperatorRouteController", () => {
     await user.click(await screen.findByRole("button", { name: "Gợi ý" }));
     await user.click(await screen.findByRole("button", { name: "Xác nhận phương án này" }));
 
-    await waitFor(() => expect(saveContentWeeks).toHaveBeenCalledWith([{ weekNumber: 1, topic: "Meetings", description: "Lịch họp", objectives: "Xác nhận lịch", keyVocabHint: "schedule", plan }]));
+    expect(saveContentWeeks).not.toHaveBeenCalled();
+    expect(screen.getByLabelText("Chủ đề *")).toHaveValue("Meetings");
   });
 
-  it("generates every level sequentially after confirming a week", async () => {
+  it("generates every level sequentially only after saving the confirmed week", async () => {
     const user = userEvent.setup();
     const weeks = { pilot: { startDate: "2026-10-05", weekCount: 1 }, weeks: [{ id: "w1", weekNumber: 1, startDate: "2026-10-05", endDate: "2026-10-11", current: true, topic: "", description: "", objectives: "", keyVocabHint: "" }] };
     const plan = { A1: ["Hello", "Name", "Job", "Ask", "Goodbye"], A2: ["Meet", "Role", "Team", "Ask", "Close"] };
@@ -77,7 +86,7 @@ describe("OperatorRouteController", () => {
     });
     const client = {
       getContentWeeks: vi.fn().mockResolvedValue(weeks),
-      saveContentWeeks: vi.fn().mockResolvedValue(weeks),
+      saveContentWeeks: vi.fn().mockResolvedValue({ ...weeks, weeks: [{ ...weeks.weeks[0]!, topic: "Meetings", description: "Lịch họp", objectives: "Xác nhận lịch", keyVocabHint: "schedule", plan }] }),
       suggestContentWeeks: vi.fn().mockResolvedValue({ weeks: [{ weekNumber: 1, levels: ["A1", "A2"], options: [{ topic: "Meetings", description: "Lịch họp", objectives: "Xác nhận lịch", keyVocabHint: "schedule", plan }] }] }),
       generateContentLessonDraft,
       getContentLessonMatrix: vi.fn().mockResolvedValue({ levels: [{ cefr: "A1", learnerCount: 0 }, { cefr: "A2", learnerCount: 0 }], weeks: [{ weekNumber: 1, topic: "Meetings", cells: [] }] }),
@@ -87,6 +96,10 @@ describe("OperatorRouteController", () => {
 
     await user.click(await screen.findByRole("button", { name: "Gợi ý" }));
     await user.click(await screen.findByRole("button", { name: "Xác nhận phương án này" }));
+
+    expect(generateContentLessonDraft).not.toHaveBeenCalled();
+    await user.click(screen.getByRole("button", { name: "Lưu khung chủ đề" }));
+    await user.click(await screen.findByRole("button", { name: /^Xác nhận sinh bài$/ }));
 
     await waitFor(() => expect(generateContentLessonDraft).toHaveBeenCalledTimes(2));
     expect(maxRunning).toBe(1);
@@ -126,14 +139,35 @@ describe("OperatorRouteController", () => {
     const client = {
       getContentLessonMatrix: vi.fn().mockResolvedValue({ levels: [{ cefr: "A2", learnerCount: 1 }], weeks: [{ weekNumber: 1, topic: "Meetings", cells: [] }] }),
       getSystemCapabilities: vi.fn().mockResolvedValue({ ai: true }),
-      generateContentLessonDraft: vi.fn().mockRejectedValue(new Error("AI_OUTPUT_INVALID"))
+      generateContentLessonDraft: vi.fn().mockRejectedValue(Object.assign(new Error("AI_OUTPUT_INVALID"), {
+        details: { issues: [
+          { path: "lessons.0.parts.0.content.steps", message: "Invalid input: expected array, received string" },
+          { path: "lessons.1.title", message: "Too big: expected string to have exactly 5 characters" }
+        ] }
+      }))
     };
     render(<MemoryRouter initialEntries={["/op/lessons"]}><OperatorRouteController session={operator} client={client as any} /></MemoryRouter>);
 
     await user.click(await screen.findByRole("button", { name: "Sinh" }));
 
-    expect(await screen.findByText("AI trả về nội dung không đúng định dạng.")).toHaveClass("operator-toast");
+    expect(await screen.findByText(/lessons\.0\.parts\.0\.content\.steps: Invalid input: expected array, received string/)).toHaveClass("operator-toast");
     expect(screen.getByRole("heading", { name: "Sinh & duyệt bài học" })).toBeInTheDocument();
+  });
+
+  it("shows preparation as a green bottom toast while one lesson set is generating", async () => {
+    const user = userEvent.setup();
+    let resolveGeneration!: (value: ContentLessonSetVersionView) => void;
+    const client = {
+      getContentLessonMatrix: vi.fn().mockResolvedValue({ levels: [{ cefr: "A2", learnerCount: 1 }], weeks: [{ weekNumber: 1, topic: "Meetings", cells: [] }] }),
+      getSystemCapabilities: vi.fn().mockResolvedValue({ ai: true }),
+      generateContentLessonDraft: vi.fn().mockReturnValue(new Promise<ContentLessonSetVersionView>(resolve => { resolveGeneration = resolve; }))
+    };
+    render(<MemoryRouter initialEntries={["/op/lessons"]}><OperatorRouteController session={operator} client={client as any} /></MemoryRouter>);
+
+    await user.click(await screen.findByRole("button", { name: "Sinh" }));
+
+    expect(await screen.findByText("Đang chuẩn bị bộ 5 bài…")).toHaveClass("operator-toast-success");
+    resolveGeneration({} as ContentLessonSetVersionView);
   });
 
   it("renders prompt controls that Manager can mutate in the owned operations area", async () => {
@@ -415,6 +449,44 @@ describe("OperatorRouteController", () => {
     expect(screen.queryByRole("region", { name: "Hồ sơ cá nhân" })).not.toBeInTheDocument();
   });
 
+  it("connects approved-learner level, goal, and profile buttons to their APIs", async () => {
+    const user = userEvent.setup();
+    const overview = {
+      pendingAssessments: [], pendingLevelUp: [], unassessedLearners: [], topicReports: [],
+      approvedLearners: [{ learnerId: "u5", learnerName: "Vy", currentLevel: "A2", placementScore: 81, monthlyGoal: "Email khách hàng" }],
+      levelSignals: { windowDays: 14, ready: [], weak: [] }
+    };
+    const getAssessmentReviewOverview = vi.fn().mockResolvedValue(overview);
+    const changeAssessmentReviewLearnerLevel = vi.fn().mockResolvedValue({});
+    const updateAssessmentReviewMonthlyGoal = vi.fn().mockResolvedValue({});
+    const getAssessmentReviewLearner = vi.fn().mockResolvedValue({
+      learner: { id: "u5", displayName: "Vy", email: "vy@example.com", status: "active", createdAt: "2026-10-01", currentLevel: "A2", cefrApproved: true, pendingLevel: null },
+      profile: { position: "Tester" }, monthlyGoal: "Email khách hàng", levelHistory: [], attempts: [], deletionRequests: []
+    });
+    const client = { getAssessmentReviewOverview, changeAssessmentReviewLearnerLevel, updateAssessmentReviewMonthlyGoal, getAssessmentReviewLearner };
+    render(<MemoryRouter initialEntries={["/op"]}><OperatorRouteController session={operator} client={client as any} /></MemoryRouter>);
+
+    await user.click(await screen.findByRole("button", { name: "Đổi level" }));
+    await user.type(screen.getByLabelText("Mức CEFR (A1/A2/B1/B2/C1)"), "B1");
+    await user.click(screen.getByRole("button", { name: "Tiếp tục" }));
+    await user.type(await screen.findByLabelText("Lý do"), "Đã sẵn sàng");
+    await user.click(screen.getByRole("button", { name: "Tiếp tục" }));
+    await user.type(await screen.findByLabelText("Bằng chứng / ghi chú"), "Kết quả học tập");
+    await user.click(screen.getByRole("button", { name: "Xác nhận" }));
+    await waitFor(() => expect(changeAssessmentReviewLearnerLevel).toHaveBeenCalledWith("u5", {
+      mode: "direct", targetLevel: "B1", reason: "Đã sẵn sàng", evidence: "Kết quả học tập"
+    }));
+
+    await user.click(screen.getByRole("button", { name: "Mục tiêu" }));
+    await user.type(await screen.findByLabelText("Mục tiêu tháng mới"), "Luyện họp ngắn");
+    await user.click(screen.getByRole("button", { name: "Lưu" }));
+    await waitFor(() => expect(updateAssessmentReviewMonthlyGoal).toHaveBeenCalledWith("u5", "Luyện họp ngắn"));
+
+    await user.click(screen.getByRole("button", { name: "Hồ sơ" }));
+    expect(await screen.findByRole("dialog", { name: "Hồ sơ · Vy" })).toHaveTextContent("vy@example.com");
+    expect(getAssessmentReviewLearner).toHaveBeenCalledWith("u5");
+  });
+
   it("hydrates a pending card from the persisted attempt and learner profile", async () => {
     const overview = {
       pendingAssessments: [{ attemptId: "attempt-1", learnerId: "learner-1", learnerName: "Media GFT", kind: "placement", title: "Bài test đầu vào", submittedAt: "2026-10-21T08:57:43.626Z", sectionScores: {}, suggestedLevel: "A1", profileComplete: true }],
@@ -572,6 +644,145 @@ describe("OperatorRouteController", () => {
     expect(client.getContentLessonSet).toHaveBeenCalledWith(2, "A2");
   });
 
+  it("requires primary confirmation before publishing a draft lesson set", async () => {
+    const user = userEvent.setup();
+    const draft = lessonSet("draft");
+    const submitted = { ...draft, status: "submitted" as const };
+    const approved = { ...draft, status: "approved" as const, approvedBy: "op", publishedAt: "2026-10-15" };
+    const submitContentLessonSet = vi.fn().mockResolvedValue(submitted);
+    const publishContentLessonSet = vi.fn().mockResolvedValue(approved);
+    const client = { getContentLessonSet: vi.fn().mockResolvedValue(draft), submitContentLessonSet, publishContentLessonSet };
+    render(<MemoryRouter initialEntries={["/op/lessons/2/A2"]}><OperatorRouteController session={operator} client={client as any} /></MemoryRouter>);
+
+    const approve = await screen.findByRole("button", { name: "Duyệt bộ bài" });
+    await user.click(approve);
+
+    expect(submitContentLessonSet).not.toHaveBeenCalled();
+    const dialog = screen.getByRole("dialog", { name: "Duyệt bộ bài?" });
+    expect(within(dialog).getByRole("button", { name: "Duyệt bộ bài" })).toHaveClass("btn-primary");
+    await user.click(within(dialog).getByRole("button", { name: "Huỷ" }));
+    expect(submitContentLessonSet).not.toHaveBeenCalled();
+
+    await user.click(approve);
+    await user.click(within(screen.getByRole("dialog", { name: "Duyệt bộ bài?" })).getByRole("button", { name: "Duyệt bộ bài" }));
+    await waitFor(() => expect(submitContentLessonSet).toHaveBeenCalledWith("v1"));
+    await waitFor(() => expect(publishContentLessonSet).toHaveBeenCalledWith("v1"));
+  });
+
+  it("keeps lesson content visible when publication fails", async () => {
+    const user = userEvent.setup();
+    const draft = lessonSet("draft");
+    const submitted = { ...draft, status: "review" as const };
+    const client = {
+      getContentLessonSet: vi.fn().mockResolvedValue(draft),
+      submitContentLessonSet: vi.fn().mockResolvedValue(submitted),
+      publishContentLessonSet: vi.fn().mockRejectedValue(new Error("CONTENT_NOT_PUBLISHABLE"))
+    };
+    render(<MemoryRouter initialEntries={["/op/lessons/2/A2"]}><OperatorRouteController session={operator} client={client as any} /></MemoryRouter>);
+
+    await user.click(await screen.findByRole("button", { name: "Duyệt bộ bài" }));
+    await user.click(within(screen.getByRole("dialog", { name: "Duyệt bộ bài?" })).getByRole("button", { name: "Duyệt bộ bài" }));
+
+    expect(await screen.findByRole("alert")).toHaveTextContent("CONTENT_NOT_PUBLISHABLE");
+    expect(screen.getByRole("heading", { name: /Tuần 2 · Mức A2/ })).toBeInTheDocument();
+    expect(screen.getByText(draft.topic)).toBeInTheDocument();
+  });
+
+  it("requires primary confirmation before regenerating a lesson set", async () => {
+    const user = userEvent.setup();
+    const draft = lessonSet("draft");
+    const generateContentLessonDraft = vi.fn().mockResolvedValue(draft);
+    const client = {
+      getContentLessonSet: vi.fn().mockResolvedValue(draft),
+      getSystemCapabilities: vi.fn().mockResolvedValue({ ai: true }),
+      generateContentLessonDraft
+    };
+    render(<MemoryRouter initialEntries={["/op/lessons/2/A2"]}><OperatorRouteController session={operator} client={client as any} /></MemoryRouter>);
+
+    await user.click(await screen.findByRole("button", { name: "Sinh lại" }));
+
+    expect(generateContentLessonDraft).not.toHaveBeenCalled();
+    const dialog = screen.getByRole("dialog", { name: "Sinh lại bộ bài?" });
+    expect(within(dialog).getByRole("button", { name: "Sinh lại" })).toHaveClass("btn-primary");
+    await user.click(within(dialog).getByRole("button", { name: "Sinh lại" }));
+    await waitFor(() => expect(generateContentLessonDraft).toHaveBeenCalledWith(2, "A2"));
+  });
+
+  it("keeps the lesson visible when deleting the set fails", async () => {
+    const draft = lessonSet("draft");
+    const client = {
+      getContentLessonSet: vi.fn().mockResolvedValue(draft),
+      deleteContentLessonDraftSet: vi.fn().mockRejectedValue(new Error("CONTENT_DRAFT_IN_USE"))
+    };
+    render(<MemoryRouter initialEntries={["/op/lessons/2/A2"]}><OperatorRouteController session={operator} client={client as any} /></MemoryRouter>);
+
+    fireEvent.click(await screen.findByRole("button", { name: "Xoá" }));
+    const dialog = screen.getByRole("dialog", { name: "Xoá toàn bộ bộ bài nháp?" });
+    vi.useFakeTimers();
+    try {
+      fireEvent.click(within(dialog).getByRole("button", { name: "Xoá bộ bài" }));
+      for (let tick = 0; tick < 5; tick += 1) {
+        await act(async () => { vi.advanceTimersByTime(1_000); await Promise.resolve(); });
+      }
+      await act(async () => { await Promise.resolve(); });
+      expect(client.deleteContentLessonDraftSet).toHaveBeenCalledWith(2, "A2");
+    } finally {
+      vi.useRealTimers();
+    }
+    expect(await screen.findByRole("alert")).toHaveTextContent("CONTENT_DRAFT_IN_USE");
+    expect(screen.getByRole("heading", { name: /Tuần 2 · Mức A2/ })).toBeInTheDocument();
+  });
+
+  it("requires danger confirmation before retiring an approved lesson set", async () => {
+    const approved = lessonSet("published");
+    const retireContentLessonSet = vi.fn().mockResolvedValue({ ...approved, status: "retired" as const, approvedBy: null, publishedAt: null });
+    const client = { getContentLessonSet: vi.fn().mockResolvedValue(approved), retireContentLessonSet };
+    render(<MemoryRouter initialEntries={["/op/lessons/2/A2"]}><OperatorRouteController session={operator} client={client as any} /></MemoryRouter>);
+
+    fireEvent.click(await screen.findByRole("button", { name: "Thu hồi duyệt" }));
+
+    expect(retireContentLessonSet).not.toHaveBeenCalled();
+    const dialog = screen.getByRole("dialog", { name: "Thu hồi duyệt bộ bài?" });
+    expect(within(dialog).getByRole("button", { name: "Thu hồi duyệt" })).toHaveClass("btn-danger");
+
+    vi.useFakeTimers();
+    try {
+      fireEvent.click(within(dialog).getByRole("button", { name: "Thu hồi duyệt" }));
+      expect(retireContentLessonSet).not.toHaveBeenCalled();
+      expect(screen.getByRole("dialog", { name: "Thu hồi duyệt sau 5 giây…" })).toBeInTheDocument();
+      for (let tick = 0; tick < 5; tick += 1) {
+        await act(async () => { vi.advanceTimersByTime(1_000); await Promise.resolve(); });
+      }
+      expect(retireContentLessonSet).toHaveBeenCalledWith("v1");
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("does not create a draft when opening and cancelling a manual lesson editor", async () => {
+    const user = userEvent.setup();
+    const matrix: ContentLessonMatrixView = {
+      levels: [{ cefr: "B1", learnerCount: 0 }],
+      weeks: [{ weekNumber: 2, topic: "Emails & rescheduling meetings", cells: [] }]
+    };
+    const saveContentLessonDraft = vi.fn();
+    const client = {
+      getContentLessonMatrix: vi.fn().mockResolvedValue(matrix),
+      getSystemCapabilities: vi.fn().mockResolvedValue({ ai: true }),
+      getContentLessonSet: vi.fn().mockRejectedValue(new ApiError("CONTENT_LESSON_SET_NOT_FOUND", "http", 404)),
+      saveContentLessonDraft
+    };
+
+    render(<MemoryRouter initialEntries={["/op/lessons"]}><OperatorRouteController session={operator} client={client as any} /></MemoryRouter>);
+    await user.click(await screen.findByRole("button", { name: "Soạn tay" }));
+    expect(await screen.findByRole("heading", { name: /Tuần 2 · Mức B1/ })).toBeInTheDocument();
+    expect(saveContentLessonDraft).not.toHaveBeenCalled();
+
+    await user.click(screen.getByRole("link", { name: "← Ma trận bài học" }));
+    expect(await screen.findByRole("heading", { name: "Sinh & duyệt bài học" })).toBeInTheDocument();
+    expect(screen.getByText("Chưa có")).toBeInTheDocument();
+  });
+
   it("renders the persisted lesson practice answer instead of a transport placeholder", async () => {
     const client = { getContentLessonSet: vi.fn().mockResolvedValue({
       lessonSetId: "ls", versionId: "v1", version: 1, status: "draft", weekNumber: 2, topic: "Meetings", cefr: "A2", explanationLanguage: "Tiếng Việt", createdBy: "op", approvedBy: null, createdAt: "2026-10-14", publishedAt: null,
@@ -618,6 +829,7 @@ describe("OperatorRouteController", () => {
     await waitFor(() => expect(fillContentLessonPhrases).toHaveBeenCalledWith(2, "A2", 1));
     await user.click(enrichButton);
     await waitFor(() => expect(enrichContentLessonDraft).toHaveBeenCalledWith(2, "A2", 1));
+    expect(await screen.findByText("Đã tự động điền các nội dung còn thiếu. Vui lòng kiểm tra lại trước khi duyệt.")).toBeInTheDocument();
 
     cleanup();
     render(<MemoryRouter initialEntries={["/op/lessons/2/A2"]}><OperatorRouteController session={manager} client={client as any} /></MemoryRouter>);
@@ -628,9 +840,11 @@ describe("OperatorRouteController", () => {
     await waitFor(() => expect(fillContentLessonPhrases).toHaveBeenCalledWith(2, "A2", 1));
     await user.click(screen.getByRole("button", { name: /Bổ sung bằng AI/ }));
     await waitFor(() => expect(enrichContentLessonDraft).toHaveBeenCalledWith(2, "A2", 1));
+    expect(await screen.findByText("Đã tự động điền các nội dung còn thiếu. Vui lòng kiểm tra lại trước khi duyệt.")).toBeInTheDocument();
   });
 
   it("renders structured lesson content instead of transport JSON", async () => {
+    const user = userEvent.setup();
     const detail: ContentLessonSetVersionView = {
       lessonSetId: "ls", versionId: "v1", version: 1, status: "draft", weekNumber: 2, topic: "Meetings", cefr: "A2",
       explanationLanguage: "Tiếng Việt", createdBy: "op", approvedBy: null, createdAt: "2026-10-14", publishedAt: null,
@@ -643,6 +857,7 @@ describe("OperatorRouteController", () => {
     render(<MemoryRouter initialEntries={["/op/lessons/2/A2"]}><OperatorRouteController session={operator} client={{ getContentLessonSet: vi.fn().mockResolvedValue(detail) } as any} /></MemoryRouter>);
     expect(await screen.findByText("Mở đầu cuộc họp rõ ràng.")).toBeInTheDocument();
     expect(screen.getByText("agenda")).toBeInTheDocument();
+    await user.click(screen.getByRole("tab", { name: "2. Bài tập" }));
     const correctOption = screen.getByText("The meeting", { exact: true }).closest("li");
     expect(correctOption?.querySelector("svg.lucide-check")).not.toBeNull();
     expect(screen.queryByText(/\"script\":/)).not.toBeInTheDocument();

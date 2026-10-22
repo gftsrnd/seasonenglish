@@ -1,50 +1,37 @@
-# E4S visual QA
+# Design QA
 
-Ngày kiểm tra: 13/10/2026  
-Phạm vi: năm màn đã được Thư xác định trong prototype; không thêm, bỏ, gộp hoặc đổi thứ tự màn.
+## Scope
 
-## Ranh giới thiết kế đã chốt
+- Operator lesson matrix and lesson detail
+- Shared Operator/Learner vocabulary cards
+- Manual lesson editor
+- Learner study and exercise sections
 
-- Giữ nguyên chức năng, màn hình và luồng người dùng của prototype.
-- Được sắp xếp lại khối nội dung trong cùng màn để rõ hành động chính, thứ bậc và trạng thái.
-- Avatar theo mùa, màu sắc, huy hiệu, biểu tượng và trạng thái đạt/chưa đạt là tài sản thiết kế của Thư; không tự thay hoặc cắt.
-- Thay đổi công nghệ, route nội bộ, API và database không được làm thay đổi trải nghiệm nhìn thấy.
+## Automated evidence
 
-## Đối chiếu
+- Shared vocabulary card rendering, image states, audio controls, relation chips: passed.
+- Learner grammar/example audio and lesson media: passed.
+- Manual editor vocabulary rows and part-of-speech field: passed.
+- Confirmation modals and lesson-set operations: passed.
+- Responsive overflow protections and production CSS bundle: built successfully.
 
-| Màn | Nguồn tham chiếu | Bằng chứng bản chạy | Kết quả |
-|---|---|---|---|
-| Home | `evidence/task-04-learning/prototype-audit/01-home.png` | `evidence/task-04-learning/design-qa/home-pass-1.png` | Đạt; giữ lộ trình T2–T6 và hành động chính. |
-| Onboard | `evidence/task-04-learning/prototype-audit/02-onboard.png` | `evidence/task-04-learning/design-qa/onboard-pass-1.png` | Đạt; một form, không tách thêm màn. |
-| Profile | `evidence/task-04-learning/prototype-audit/03-profile.png` | `evidence/task-04-learning/design-qa/profile-pass-4.png` | Đạt sau khi khôi phục phần nhìn sinh động. |
-| Avatar | Prototype `core.js`: 8 dấu mùa × 6 màu nét × 6 màu nền | `evidence/task-04-learning/design-qa/profile-avatar-picker-pass-1.png` | Đạt; lựa chọn được lưu và đọc lại từ PostgreSQL. |
-| Lesson | `evidence/task-04-learning/prototype-audit/04-lesson.png` | `evidence/task-04-learning/design-qa/lesson-pass-3.png` | Đạt; Học/Bài tập vẫn trong cùng màn. |
-| Mobile | Khung nhìn 390×844 | `evidence/task-04-learning/design-qa/mobile-390-pass-1.png` | Đạt; không thấy tràn ngang ở năm màn. |
+## Visual review
 
-## Kiểm tra hành vi liên quan phần nhìn
+- Visual source of truth: the attached prototype captures, especially
+  `C:/Users/TT5~1.01A/AppData/Local/Temp/codex-clipboard-bb69ec75-e09d-44b2-bb29-23e0cbef5fa6.png`,
+  `C:/Users/TT5~1.01A/AppData/Local/Temp/codex-clipboard-fa35a1e7-3aad-4ede-817a-741f48523fc5.png`,
+  `C:/Users/TT5~1.01A/AppData/Local/Temp/codex-clipboard-b739a5e0-56bc-4930-8524-b00f0bf192b2.png`, and
+  `C:/Users/TT5~1.01A/AppData/Local/Temp/codex-clipboard-c3e6d537-d645-4f1d-97d6-40940d2431ef.png`.
+- Browser implementation checked live at `http://127.0.0.1:4175/op/lessons/1/A1` in the Codex in-app browser (narrow 320 px-class viewport).
+- Authenticated Operator review passed for the pale concise objective, unnumbered pale instruction block, compact vocabulary media, word/type/IPA/meaning hierarchy, orange umbrella control, green synonyms, red antonyms, and gray grammar/pronunciation blocks.
+- Learner exercise review now uses six low-saturation skill surfaces (Nghe, Đọc, Viết, Từ loại, Dùng từ, Nói) instead of one long white sheet; the redundant six-part overview is removed.
+- Learner/Operator speaking parity is protected by tests: the Vietnamese requirement and English model sentence remain separate, while the model and its audio control share one card.
+- Interaction review passed: umbrella, synonym, antonym, and word-family controls open centered detail lists whose words are individually playable; the sticky close action remains in the modal header; Learn/Exercise tabs switch correctly.
+- Responsive review passed after moving the meaning to a full-width row and preventing the word/audio header from squeezing Vietnamese text into a one-character column.
+- Real image resolution passed through the API and UI: Pixabay is preferred, Openverse and Wikimedia are resilient fallbacks, and every accepted image is a bitmap with source/licence metadata; diagram/timeline/icon-like results are rejected.
+- Real configured AI runtime review passed without saving generated lessons: 5 lessons, 5 concise objectives, one-sentence grammar explanations, and 15/15 unique vocabulary words after duplicate-repair hardening.
+- The repository documents that the original HTML prototype is not shipped with the runtime, so the attached prototype captures were used for the fidelity comparison rather than inventing an unavailable local prototype URL.
 
-- Component avatar: mở hộp chọn bằng cả hình avatar và nút **Đổi avatar**.
-- Hộp chọn có nhãn, trạng thái đang chọn và thao tác Huỷ/Lưu rõ ràng.
-- API chấp nhận avatar, tăng version hồ sơ, đọc lại đúng sau lần GET tiếp theo.
-- Dữ liệu mẫu được khôi phục về **Nắng · nét ô liu · nền 3** sau kiểm thử.
-- Huy hiệu không chỉ dựa vào màu: mỗi thẻ có icon và chữ **Đã đạt/Chưa đạt**.
+## Result
 
-Kết luận: **passed** cho phạm vi visual QA hiện có. Các màn tiếp theo chỉ được phát triển trong screen contract đã chốt.
-
-## Xem bài làm của bài test — 21/10/2026
-
-- Nguồn đối chiếu: ba ảnh prototype `codex-clipboard-d3f01112…`, `codex-clipboard-e14309a0…`, `codex-clipboard-9d88312f…` do người dùng cung cấp.
-- Modal bản chạy được kiểm tra ở viewport 1280×720 trên local `127.0.0.1:4182`.
-- Đã xác nhận cấu trúc liền mạch, không còn hai card lớn “bằng chứng/chấm điểm”; Nghe và Đọc dùng danh sách câu dày, đáp án đúng/sai là chip nhỏ; Viết và Nói chứa rubric ngay trong từng phần; nút lưu nhỏ theo prototype.
-- Nhật ký xử lý và nhật ký cảnh báo đứng ngoài, trước phần “Bài làm và bằng chứng”.
-- Các nhóm Part của Nghe và Questions của Đọc là disclosure thật: mặc định thu gọn, vẫn hiện điểm đạt/tổng điểm trên dòng tiêu đề và bấm mở lại được. Viết/Nói giữ nội dung và rubric hiển thị trực tiếp.
-- Dữ liệu hiển thị tiếp tục lấy từ assessment detail API; không thêm dữ liệu mẫu vào ứng dụng. Fixture trực quan tạm thời chỉ dùng để chụp đối chiếu và đã được xoá.
-
-Final result: passed
-
-## Hồ sơ trên thẻ chờ duyệt — 21/10/2026
-
-- Nguồn đối chiếu: ảnh prototype `codex-clipboard-5af8340c-5274-4d67-ba9b-53f8a19b1cc5.png` do người dùng cung cấp.
-- Trạng thái thu gọn là đúng một dòng disclosure “Hồ sơ: …”, không có nút “Hồ sơ” riêng và không có khung/card bao quanh.
-- Dữ liệu thẻ chờ duyệt được lấy từ assessment-detail và learner-profile API đang chạy; không chèn dữ liệu demo.
-- Đã kiểm tra trực quan trên local `127.0.0.1:4182`; kết quả: passed.
+**PASSED** — authenticated browser comparison, responsive interaction review, focused tests, real AI/API generation, attributed image resolution, and production build all completed successfully.

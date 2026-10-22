@@ -61,6 +61,7 @@ import type {
   LevelReadinessMetric,
   LevelReadinessView,
   LessonContent,
+  LessonPart,
   LessonLockView,
   LessonPartAppealView,
   LessonPartAttemptEvidenceInput,
@@ -1157,18 +1158,28 @@ class LearningRepository {
          from reward_events re left join badges b on b.id = re.badge_id
          where re.learner_id = $1`, [learnerId]
       ),
-      this.pool.query<{ week_number: number; topic: string; completed_lessons: string; total_lessons: string }>(
-        `select pw.week_number, pw.topic,
+      this.pool.query<{
+        week_number: number; topic: string; completed_lessons: string; total_lessons: string;
+        start_date: string; today: string;
+        lesson_days: Array<{ dayNumber: number; status: string | null; completedAt: string | null }>;
+      }>(
+        `select pw.week_number, pw.topic, p.start_date::text as start_date, current_date::text as today,
                 count(pr.id) filter (where pr.status = 'completed')::text as completed_lessons,
-                count(l.id)::text as total_lessons
+                count(l.id)::text as total_lessons,
+                coalesce(jsonb_agg(jsonb_build_object(
+                  'dayNumber', l.day_number,
+                  'status', pr.status,
+                  'completedAt', pr.completed_at
+                ) order by l.day_number) filter (where l.id is not null), '[]'::jsonb) as lesson_days
          from enrollments e
+         join programs p on p.id = e.program_id
          join program_weeks pw on pw.program_id = e.program_id
          left join lesson_sets ls on ls.program_week_id = pw.id and ls.cefr = e.cefr
          left join lesson_set_versions lsv on lsv.lesson_set_id = ls.id and lsv.status = 'published'
          left join lessons l on l.lesson_set_version_id = lsv.id
          left join progress_records pr on pr.lesson_id = l.id and pr.learner_id = e.learner_id
          where e.learner_id = $1
-         group by pw.id order by pw.week_number`, [learnerId]
+         group by pw.id, p.start_date order by pw.week_number`, [learnerId]
       ),
       this.pool.query<{ count: string }>(
         `select count(distinct occurred_at::date)::text as count from activities where learner_id = $1`, [learnerId]
@@ -1184,13 +1195,14 @@ class LearningRepository {
          join users u on u.organization_id = b.organization_id and u.id = $1
          order by coalesce((b.rule->>'seasonLevel')::int, 99), b.badge_key`, [learnerId]
       ),
-      this.pool.query<{ turns_this_week: string; turns_14_days: string; rubric_average: string | null }>(
+      this.pool.query<{ turns_today: string; turns_this_week: string; turns_14_days: string; rubric_average: string | null }>(
         `select
+           count(*) filter (where ct.speaker = 'learner' and ct.created_at >= current_date)::text as turns_today,
            count(*) filter (where ct.speaker = 'learner' and ct.created_at >= date_trunc('week', now()))::text as turns_this_week,
            count(*) filter (where ct.speaker = 'learner' and ct.created_at >= now() - interval '14 days')::text as turns_14_days,
-           avg((ct.feedback->>'rubricScore')::numeric) filter (
+           avg(((ct.feedback->'rubric'->>'meaning')::numeric + (ct.feedback->'rubric'->>'vocabulary')::numeric + (ct.feedback->'rubric'->>'grammar')::numeric) / 3) filter (
              where ct.speaker = 'learner' and ct.created_at >= now() - interval '14 days'
-               and ct.feedback ? 'rubricScore'
+               and ct.feedback ? 'rubric'
            )::text as rubric_average
          from coach_sessions cs left join coach_turns ct on ct.session_id = cs.id
          where cs.learner_id = $1`, [learnerId]
@@ -1238,7 +1250,7 @@ class LearningRepository {
       seasonLevel: normalizeSeasonLevel(badge.rule.seasonLevel),
       earned: badge.earned
     }));
-    const coachSummary = coach.rows[0] ?? { turns_this_week: "0", turns_14_days: "0", rubric_average: null };
+    const coachSummary = coach.rows[0] ?? { turns_today: "0", turns_this_week: "0", turns_14_days: "0", rubric_average: null };
     const latestPractice = practice.rows[0];
     const totalLessons = weeks.rows.reduce((sum, week) => sum + Number(week.total_lessons), 0);
     const completedLessons = weeks.rows.reduce((sum, week) => sum + Number(week.completed_lessons), 0);
@@ -1269,7 +1281,8 @@ class LearningRepository {
         weekNumber: week.week_number,
         topic: week.topic,
         completedLessons: Number(week.completed_lessons),
-        totalLessons: Number(week.total_lessons)
+        totalLessons: Number(week.total_lessons),
+        days: buildWeekDayStatuses(week)
       })),
       studyDays: Number(study.rows[0]?.count ?? 0),
       activity: activity.rows.map((item) => ({
@@ -1289,6 +1302,7 @@ class LearningRepository {
       stats: {
         completedLessons,
         coachTurns: Number(coachSummary.turns_this_week),
+        coachTurnsToday: Number(coachSummary.turns_today),
         studyDays: Number(study.rows[0]?.count ?? 0)
       },
       assessments: assessmentViews,
@@ -1475,6 +1489,32 @@ function nextCefr(level: CefrLevel | null): CefrLevel | null {
   return index >= 0 && index < order.length - 1 ? order[index + 1] ?? null : null;
 }
 
+function buildWeekDayStatuses(week: {
+  week_number: number;
+  start_date: string;
+  today: string;
+  lesson_days: Array<{ dayNumber: number; status: string | null; completedAt: string | null }>;
+}): NonNullable<LearnerProgressView["weeks"][number]["days"]> {
+  const lessonByDay = new Map(week.lesson_days.map((lesson) => [lesson.dayNumber, lesson]));
+  return (["T2", "T3", "T4", "T5", "T6"] as const).map((label, index) => {
+    const dayNumber = index + 1;
+    const lesson = lessonByDay.get(dayNumber);
+    if (!lesson) return { label, status: "upcoming" as const };
+    const dueDate = addUtcDays(week.start_date, (week.week_number - 1) * 7 + index);
+    if (lesson.status === "completed") {
+      const completedDate = lesson.completedAt?.slice(0, 10);
+      return { label, status: !completedDate || completedDate <= dueDate ? "on_time" as const : "late" as const };
+    }
+    return { label, status: dueDate < week.today ? "late" as const : "upcoming" as const };
+  });
+}
+
+function addUtcDays(date: string, days: number): string {
+  const value = new Date(`${date}T00:00:00.000Z`);
+  value.setUTCDate(value.getUTCDate() + days);
+  return value.toISOString().slice(0, 10);
+}
+
 function buildLevelReadiness(input: {
   cefr: CefrLevel | null;
   lessonCompletion: number; completedLessons: number; totalLessons: number;
@@ -1542,7 +1582,7 @@ function mapLessonRow(row: {
     title: row.title,
     dayNumber: row.day_number,
     cefr: row.cefr,
-    content: row.content,
+    content: { ...row.content, parts: normalizeLessonParts(row.content.parts ?? [], row.cefr) },
     progress: mapProgress(
       row.progress_status ?? "not_started",
       row.progress_score,
@@ -1653,6 +1693,28 @@ function normalizeLessonAnswer(value: string): string {
 
 class ContentRepository {
   constructor(private readonly pool: Pool) {}
+
+  async setLessonMatrixLevels(staffId: string, levels: readonly CefrLevel[]): Promise<ContentLessonMatrixView | null> {
+    const uniqueLevels = [...new Set(levels)];
+    if (!uniqueLevels.length || uniqueLevels.some((level) => !["A1", "A2", "B1", "B2", "C1"].includes(level))) {
+      throw new Error("CONTENT_LESSON_LEVELS_INVALID");
+    }
+    const program = await this.pool.query<{ id: string }>(
+      `select p.id from users staff
+       join programs p on p.organization_id = staff.organization_id and p.status = 'active'
+       where staff.id = $1 limit 1`,
+      [staffId]
+    );
+    const programId = program.rows[0]?.id;
+    if (!programId) return null;
+    await this.pool.query(
+      `insert into content_lesson_level_settings (program_id, levels, updated_at)
+       values ($1, $2::text[], now())
+       on conflict (program_id) do update set levels = excluded.levels, updated_at = now()`,
+      [programId, uniqueLevels]
+    );
+    return this.lessonMatrix(staffId);
+  }
 
   async listWeeks(staffId: string): Promise<ContentWeekFrameView | null> {
     const result = await this.pool.query<{
@@ -1775,9 +1837,15 @@ class ContentRepository {
     );
     const programId = program.rows[0]?.id;
     if (!programId) return null;
+    const settings = await this.pool.query<{ levels: CefrLevel[] | null }>(
+      "select levels from content_lesson_level_settings where program_id = $1",
+      [programId]
+    );
+    const activeLevels = settings.rows[0]?.levels?.filter((level): level is CefrLevel => ["A1", "A2", "B1", "B2", "C1"].includes(level))
+      ?? ["A1", "A2", "B1", "B2"];
     const levelsResult = await this.pool.query<{ cefr: CefrLevel; learner_count: string }>(
       `with supported(cefr, sort_order) as (
-         values ('A1', 1), ('A2', 2), ('B1', 3), ('B2', 4)
+         values ('A1', 1), ('A2', 2), ('B1', 3), ('B2', 4), ('C1', 5)
        ), learner_counts as (
          select e.cefr, count(distinct e.learner_id)::integer as learner_count
          from enrollments e
@@ -1786,8 +1854,9 @@ class ContentRepository {
        )
        select supported.cefr, coalesce(learner_counts.learner_count, 0)::text as learner_count
        from supported left join learner_counts using (cefr)
+       where supported.cefr = any($2::text[])
        order by supported.sort_order`,
-      [programId]
+      [programId, activeLevels]
     );
     const levels = levelsResult.rows.map((row) => ({ cefr: row.cefr, learnerCount: Number(row.learner_count) }));
     const weeksResult = await this.pool.query<{ week_number: number; topic: string; ai_plan: unknown }>(
@@ -1802,21 +1871,34 @@ class ContentRepository {
         const version = await this.pool.query<{
           version_id: string;
           version: number;
-          status: Exclude<ContentLessonSetVersionView["status"], "retired"> | "retired";
+          status: Extract<ContentLessonSetVersionView["status"], "draft" | "review" | "published">;
           created_at: Date;
-          lessons: Array<{ dayNumber: number; title: string }>;
+          lessons: Array<{ dayNumber: number; title: string; content?: { parts?: ContentLessonDraftInput["parts"] } }>;
         }>(
-          `select lsv.id as version_id, lsv.version, lsv.status, lsv.created_at,
-                  coalesce(json_agg(json_build_object('dayNumber', l.day_number, 'title', l.title)
+          `select latest.version_id, latest.version, latest.status, latest.created_at,
+                  coalesce(json_agg(json_build_object('dayNumber', l.day_number, 'title', l.title, 'content', lv.content)
                     order by l.day_number) filter (where l.id is not null), '[]') as lessons
-           from lesson_sets ls
-           join program_weeks pw on pw.id = ls.program_week_id
-           join lesson_set_versions lsv on lsv.lesson_set_id = ls.id
-           left join lessons l on l.lesson_set_version_id = lsv.id
-           where pw.program_id = $1 and pw.week_number = $2 and ls.cefr = $3
-             and lsv.status <> 'retired'
-           group by lsv.id
-           order by lsv.version desc limit 1`,
+           from program_weeks pw
+           join lateral (
+             select candidate.id as version_id, candidate.version, candidate.status, candidate.created_at
+             from lesson_sets ls
+             join lesson_set_versions candidate on candidate.lesson_set_id = ls.id
+             where ls.program_week_id = pw.id
+               and ls.cefr = $3
+               and candidate.status in ('draft', 'review', 'published')
+             order by candidate.version desc, candidate.created_at desc, candidate.id desc
+             limit 1
+           ) latest on true
+           left join lessons l on l.lesson_set_version_id = latest.version_id
+           left join lateral (
+             select lesson_version.content
+             from lesson_versions lesson_version
+             where lesson_version.lesson_id = l.id
+             order by lesson_version.version desc
+             limit 1
+           ) lv on true
+           where pw.program_id = $1 and pw.week_number = $2
+           group by latest.version_id, latest.version, latest.status, latest.created_at`,
           [programId, week.week_number, level.cefr]
         );
         const row = version.rows[0];
@@ -1826,7 +1908,10 @@ class ContentRepository {
           versionId: row.version_id,
           version: row.version,
           updatedAt: row.created_at.toISOString(),
-          lessons: row.lessons,
+          lessons: row.lessons.map((lesson) => ({
+            dayNumber: lesson.dayNumber,
+            title: normalizeLessonTitle(lesson.title, lesson.content?.parts ?? [])
+          })),
           ...(plan[level.cefr] ? { plan: plan[level.cefr] } : {})
         } : {
           cefr: level.cefr, status: "missing", versionId: null, version: null, updatedAt: null, lessons: [], ...(plan[level.cefr] ? { plan: plan[level.cefr] } : {})
@@ -1835,6 +1920,42 @@ class ContentRepository {
       weeks.push({ weekNumber: week.week_number, topic: week.topic, cells });
     }
     return { levels, weeks };
+  }
+
+  async usedLessonVocabulary(staffId: string): Promise<string[]> {
+    const result = await this.pool.query<{ word: string }>(
+      `with latest_sets as (
+         select distinct on (ls.id) lsv.id, lsv.created_at
+         from users staff
+         join programs p on p.organization_id = staff.organization_id and p.status = 'active'
+         join program_weeks pw on pw.program_id = p.id
+         join lesson_sets ls on ls.program_week_id = pw.id
+         join lesson_set_versions lsv on lsv.lesson_set_id = ls.id and lsv.status <> 'retired'
+         where staff.id = $1
+         order by ls.id, lsv.version desc, lsv.created_at desc, lsv.id desc
+       ), vocabulary as (
+         select lower(trim(item ->> 'word')) as word, max(latest_sets.created_at) as last_used_at
+         from latest_sets
+         join lessons lesson on lesson.lesson_set_version_id = latest_sets.id
+         join lateral (
+           select lesson_version.content
+           from lesson_versions lesson_version
+           where lesson_version.lesson_id = lesson.id
+           order by lesson_version.version desc
+           limit 1
+         ) current_lesson on true
+         cross join lateral jsonb_array_elements(coalesce(current_lesson.content -> 'parts', '[]'::jsonb)) part
+         cross join lateral jsonb_array_elements(
+           case when jsonb_typeof(part -> 'content' -> 'items') = 'array'
+             then part -> 'content' -> 'items' else '[]'::jsonb end
+         ) item
+         where part ->> 'code' = 'vocabulary' and trim(coalesce(item ->> 'word', '')) <> ''
+         group by lower(trim(item ->> 'word'))
+       )
+       select word from vocabulary order by last_used_at desc, word`,
+      [staffId]
+    );
+    return result.rows.map((row) => row.word);
   }
 
   async saveLessonDraft(
@@ -2167,9 +2288,9 @@ class ContentRepository {
       lessons: lessons.rows.map((lesson) => ({
         id: lesson.id,
         dayNumber: lesson.day_number,
-        title: lesson.title,
+        title: normalizeLessonTitle(lesson.title, lesson.content.parts ?? []),
         durationMinutes: lesson.content.durationMinutes ?? 10,
-        parts: lesson.content.parts ?? [],
+        parts: normalizeLessonParts(lesson.content.parts ?? [], row.cefr),
         practiceLabel: practiceLabel(lesson.content.parts ?? [])
       }))
     };
@@ -2225,7 +2346,6 @@ class ContentRepository {
       const row = version.rows[0];
       if (!row) throw new Error("CONTENT_VERSION_NOT_FOUND");
       if (row.status !== "review") throw new Error("CONTENT_NOT_IN_REVIEW");
-      if (row.created_by === checkerId) throw new Error("CONTENT_MAKER_CANNOT_APPROVE");
       await client.query(
         "update lesson_set_versions set status = 'retired' where lesson_set_id = $1 and status = 'published'",
         [row.lesson_set_id]
@@ -2770,6 +2890,75 @@ class ContentRepository {
       ? { id: row.id, versionId: row.version_id, version: row.version, status: row.status, payload: row.payload }
       : null;
   }
+}
+
+function normalizeLessonParts(parts: readonly LessonPart[], cefr: CefrLevel): LessonPart[] {
+  return parts.map((part) => ({ ...part, content: normalizeLessonPartContent(part.code, part.content, cefr) }));
+}
+
+function normalizeLessonPartContent(code: string, raw: Record<string, unknown>, cefr: CefrLevel): Record<string, unknown> {
+  if (code !== "vocabulary") return raw;
+  const items = Array.isArray(raw.items) ? raw.items : [];
+  return {
+    ...raw,
+    items: items.map((value) => {
+      if (!value || typeof value !== "object" || Array.isArray(value)) return value;
+      const item = value as Record<string, unknown>;
+      return {
+        ...item,
+        collocations: normalizeStringList(item.collocations ?? item.phrases ?? item.examples),
+        family: normalizeFamily(item.family),
+        synonyms: normalizeLexicalList(item.synonyms, cefr),
+        antonyms: normalizeLexicalList(item.antonyms, cefr),
+        umbrella: normalizeUmbrella(item.umbrella)
+      };
+    })
+  };
+}
+
+function normalizeStringList(value: unknown): string[] {
+  if (Array.isArray(value)) return value.filter((item): item is string => typeof item === "string" && Boolean(item.trim())).map((item) => item.trim());
+  if (typeof value === "string") return value.split(/[;,\n]/).map((item) => item.trim()).filter(Boolean);
+  return [];
+}
+
+function normalizeFamily(value: unknown): Array<{ word: string; type?: string; meaning?: string }> {
+  if (Array.isArray(value)) return value.flatMap((entry) => {
+    if (typeof entry === "string" && entry.trim()) return [{ word: entry.trim() }];
+    if (entry && typeof entry === "object" && !Array.isArray(entry) && typeof (entry as Record<string, unknown>).word === "string") return [entry as { word: string; type?: string; meaning?: string }];
+    return [];
+  });
+  if (typeof value !== "string" || !value.trim() || value.trim() === "—") return [];
+  return value.split(/[;,\n]/).map((entry) => entry.trim()).filter(Boolean).map((entry) => {
+    const match = /^(.*?)\s*\(([^)]+)\)\s*$/.exec(entry);
+    return match ? { word: match[1]!.trim(), type: match[2]!.trim() } : { word: entry };
+  });
+}
+
+function normalizeLexicalList(value: unknown, cefr: CefrLevel): Array<{ word: string; level: CefrLevel }> {
+  if (Array.isArray(value)) return value.flatMap((entry) => {
+    if (typeof entry === "string" && entry.trim()) return [{ word: entry.trim(), level: cefr }];
+    if (entry && typeof entry === "object" && !Array.isArray(entry) && typeof (entry as Record<string, unknown>).word === "string") {
+      const object = entry as Record<string, unknown>;
+      return [{ ...object, level: typeof object.level === "string" ? object.level : cefr } as { word: string; level: CefrLevel }];
+    }
+    return [];
+  });
+  return typeof value === "string" ? value.split(/[;,\n]/).map((entry) => entry.trim()).filter(Boolean).filter((entry) => entry !== "—").map((word) => ({ word, level: cefr })) : [];
+}
+
+function normalizeUmbrella(value: unknown): { word: string; meaning: string; siblings: Array<{ word: string }> } | undefined {
+  if (value && typeof value === "object" && !Array.isArray(value) && typeof (value as Record<string, unknown>).word === "string") {
+    const object = value as Record<string, unknown>;
+    return { word: object.word as string, meaning: typeof object.meaning === "string" ? object.meaning : "", siblings: Array.isArray(object.siblings) ? object.siblings as Array<{ word: string }> : [] };
+  }
+  return typeof value === "string" && value.trim() && value.trim() !== "—" ? { word: value.trim(), meaning: "", siblings: [] } : undefined;
+}
+
+function normalizeLessonTitle(title: string, parts: readonly { code: string; content: Record<string, unknown> }[]): string {
+  const formula = parts.find((part) => part.code === "grammar")?.content.formula;
+  if (typeof formula !== "string" || !formula.trim() || !/[+/?…]/.test(formula) || title.trim() === formula.trim()) return title;
+  return formula.trim().replace(/danh từ số ít/gi, "noun").replace(/danh từ số nhiều/gi, "plural noun");
 }
 
 function practiceLabel(parts: readonly { code: string; content: Record<string, unknown> }[]): string {
@@ -4937,9 +5126,10 @@ class CoachRepository {
   async currentForLearner(learnerId: string, aiAvailable: boolean): Promise<CoachView | null> {
     const context = await this.pool.query<{
       display_name: string; cefr: CefrLevel; topic: string; scenario: Record<string, unknown> | null;
-      session_id: string | null;
+      session_id: string | null; coach_daily_limit: number;
     }>(
-      `select u.display_name, e.cefr, pw.topic, cs.id as session_id, cs.scenario
+      `select u.display_name, e.cefr, pw.topic, cs.id as session_id, cs.scenario,
+              coalesce((os.configuration->>'coachDailyLimit')::int, 20) as coach_daily_limit
        from users u
        join enrollments e on e.learner_id = u.id
        join programs p on p.id = e.program_id and p.status = 'active'
@@ -4952,6 +5142,7 @@ class CoachRepository {
            and coalesce(scenario->>'kind', 'practice') = 'practice'
          order by started_at desc limit 1
        ) cs on true
+       left join organization_settings os on os.organization_id = u.organization_id
        where u.id = $1 and u.role = 'learner' and u.status = 'active'
        order by e.enrolled_at desc limit 1`,
       [learnerId]
@@ -5029,11 +5220,11 @@ class CoachRepository {
     if (!messages.some((message) => message.speaker === "coach")) {
       const firstName = row.display_name.trim().split(/\s+/).at(-1) ?? row.display_name;
       messages.unshift({
-        id: "welcome", speaker: "coach", text: `Hi ${firstName}! I'm Season. What do you do at work?`,
+        id: "welcome", speaker: "coach", text: coachOpeningQuestion(firstName, row.topic),
         createdAt: new Date(0).toISOString()
       });
     }
-    const vocabulary = vocabularyRows.rows.flatMap(({ content }) => {
+    const vocabularyCandidates = vocabularyRows.rows.flatMap(({ content }) => {
       const parts = Array.isArray(content.parts) ? content.parts : [];
       const vocabularyPart = parts.find((part) =>
         part && typeof part === "object" && !Array.isArray(part) && (part as Record<string, unknown>).code === "vocabulary"
@@ -5049,12 +5240,19 @@ class CoachRepository {
         if (!word) return [];
         return [{ word, meaning: typeof value.meaning === "string" ? value.meaning : "", opened: openedWords.has(word.toLowerCase()) }];
       });
-    }).slice(0, 15);
+    });
+    const vocabularyByWord = new Map<string, CoachView["vocabulary"][number]>();
+    for (const item of vocabularyCandidates) {
+      const key = item.word.trim().toLocaleLowerCase();
+      if (!key || vocabularyByWord.has(key)) continue;
+      vocabularyByWord.set(key, item);
+    }
+    const vocabulary = [...vocabularyByWord.values()].slice(0, 12);
     const count = counters.rows[0] ?? { daily_used: "0", weekly_turns: "0" };
     return {
       sessionId, topic: row.topic, cefr: row.cefr,
       persona: scenario.persona === "formal" ? "formal" : "informal",
-      aiAvailable, daily: { used: Number(count.daily_used), limit: 20 },
+      aiAvailable, daily: { used: Number(count.daily_used), limit: row.coach_daily_limit },
       weekly: { turns: Number(count.weekly_turns), target: 2 }, messages, vocabulary
     };
   }
@@ -5357,6 +5555,20 @@ class CoachRepository {
       [learnerId]
     );
   }
+}
+
+function coachOpeningQuestion(firstName: string, topic: string): string {
+  const normalized = topic.toLocaleLowerCase();
+  if (normalized.includes("feedback")) {
+    return `Hi ${firstName}! Let's practise giving feedback. A colleague's report is clear, but one slide has too much text. What would you say?`;
+  }
+  if (normalized.includes("email") || normalized.includes("reschedul")) {
+    return `Hi ${firstName}! Let's practise rescheduling a meeting. You need to move tomorrow's meeting to Friday. What would you write?`;
+  }
+  if (normalized.includes("introduc") || normalized.includes("your job")) {
+    return `Hi ${firstName}! Let's practise a short introduction. Imagine you're meeting a new colleague. How would you introduce yourself and your role?`;
+  }
+  return `Hi ${firstName}! Let's practise “${topic}”. Think of a real situation at work. What would you say first?`;
 }
 
 function coachFeedback(value: Record<string, unknown> | null): CoachFeedbackView | null {
@@ -6301,6 +6513,23 @@ class AiRunRepository {
     return row ? { output: row.output } : null;
   }
 
+  async findSucceededOutputForOrganization(actorId: string, requestKey: string, taskKey: string): Promise<{ output: unknown } | null> {
+    const result = await this.pool.query<{ output: unknown }>(
+      `select ar.output
+       from users actor
+       join users run_user on run_user.organization_id = actor.organization_id
+       join ai_runs ar on ar.user_id = run_user.id
+       join ai_tasks at on at.id = ar.task_id
+       where actor.id = $1 and ar.request_key = $2 and at.task_key = $3
+         and ar.status = 'succeeded'
+       order by ar.completed_at desc nulls last, ar.created_at desc
+       limit 1`,
+      [actorId, requestKey, taskKey]
+    );
+    const row = result.rows[0];
+    return row ? { output: row.output } : null;
+  }
+
   async activeTaskPrompt(userId: string, taskKey: string): Promise<{
     taskId: string; promptVersionId: string; prompt: string;
   } | null> {
@@ -6448,7 +6677,7 @@ export interface ManagerAiRuntimeSettings {
 const providerDefaults = (provider: ManagerProviderKind): Pick<ManagerProviderSettingsView, "baseUrl" | "model" | "speechToTextModel"> => {
   if (provider === "claude") return {
     baseUrl: "https://api.anthropic.com/v1",
-    model: "claude-3-5-sonnet-latest",
+    model: "claude-haiku-5-5",
     speechToTextModel: ""
   };
   if (provider === "gemini") return {
@@ -6650,8 +6879,8 @@ class ManagerRepository {
   }
 
   private async settingsForOrganization(organizationId: string): Promise<Omit<ManagerSettingsView, "organizationName">> {
-    const program = await this.pool.query<{ start_date: string; week_count: number; current_week_override: number | null }>(
-      `select start_date::text, week_count, current_week_override
+    const program = await this.pool.query<{ name: string; start_date: string; week_count: number; current_week_override: number | null }>(
+      `select name, start_date::text, week_count, current_week_override
        from programs
        where organization_id = $1 and status = 'active'
        order by start_date desc
@@ -6665,6 +6894,7 @@ class ManagerRepository {
     monday.setUTCDate(monday.getUTCDate() - day + 1);
     const currentMonday = monday.toISOString().slice(0, 10);
     const defaults: Omit<ManagerSettingsView, "organizationName"> = {
+      programName: activeProgram?.name ?? "Chương trình tiếng Anh",
       reminderInactiveDays: 3, weeklyReportEnabled: true,
       pilotStartDate: activeProgram?.start_date ?? currentMonday,
       pilotWeeks: activeProgram?.week_count ?? 2,
@@ -6683,6 +6913,7 @@ class ManagerRepository {
     const settings = result.rows[0];
     return settings
       ? { ...defaults, ...settings.configuration, reminderInactiveDays: settings.reminder_inactive_days, weeklyReportEnabled: settings.weekly_report_enabled,
+          programName: activeProgram?.name ?? defaults.programName,
           testTimes: { ...defaults.testTimes, ...settings.configuration?.testTimes },
           levelUp: { ...defaults.levelUp, ...settings.configuration?.levelUp },
           backgroundMusic: { ...defaults.backgroundMusic, ...settings.configuration?.backgroundMusic } }
@@ -8273,13 +8504,14 @@ class ManagerRepository {
     );
     await this.pool.query(
       `update programs
-       set start_date = $2::date,
-           week_count = $3,
-           current_week_override = nullif($4, 0)
+       set name = $2,
+           start_date = $3::date,
+           week_count = $4,
+           current_week_override = nullif($5, 0)
        where organization_id = $1 and status = 'active'`,
-      [organization.id, input.pilotStartDate, input.pilotWeeks, input.weekOverride]
+      [organization.id, input.programName.trim(), input.pilotStartDate, input.pilotWeeks, input.weekOverride]
     );
-    return { organizationName: organization.name, ...input };
+    return { organizationName: organization.name, ...input, programName: input.programName.trim() };
   }
 
   async clearImageCache(managerId: string): Promise<{ cleared: number }> {

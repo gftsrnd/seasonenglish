@@ -1,7 +1,7 @@
 import { normalizeLicence, validateProviderUrl } from "./safety.js";
 
 export interface ProviderCandidate {
-  provider: "wikipedia" | "wikimedia" | "openverse";
+  provider: "wikipedia" | "wikimedia" | "openverse" | "pixabay";
   providerAssetId: string;
   downloadUrl: string;
   sourcePageUrl: string;
@@ -13,6 +13,7 @@ export interface ProviderCandidate {
 export interface OpenMediaProviders {
   exactWikipedia(term: string): Promise<ProviderCandidate | null>;
   searchCommons(query: string): Promise<ProviderCandidate | null>;
+  searchPixabay(query: string): Promise<ProviderCandidate | null>;
   searchOpenverse(query: string): Promise<ProviderCandidate | null>;
 }
 
@@ -95,7 +96,7 @@ export function candidateFromWikimediaPage(
   const page = asObject(value);
   const title = stringValue(page?.title);
   const imageInfo = asObject(asArray(page?.imageinfo)[0]);
-  if (!page || !title || !imageInfo || isSensitiveMedia(page, imageInfo)) return null;
+  if (!page || !title || !imageInfo || isSensitiveMedia(page, imageInfo) || isNonPhotographicMedia(page, imageInfo)) return null;
   const mime = stringValue(imageInfo.mime)?.toLowerCase();
   if (!mime || !["image/jpeg", "image/png", "image/webp"].includes(mime)) return null;
   const downloadUrl = safeHttpsUrl(imageInfo.thumburl ?? imageInfo.url, new Set(["upload.wikimedia.org"]));
@@ -113,6 +114,37 @@ export function candidateFromWikimediaPage(
     licence,
     licenceUrl
   };
+}
+
+export function looksLikeVisualArtifact(value: unknown): boolean {
+  if (typeof value !== "string") return false;
+  const normalized = value.normalize("NFKC").replace(/[_-]+/g, " ").toLowerCase();
+  return /\b(?:diagram|chart|graph|timeline|flowchart|schematic|screenshot|logo|icon|symbol|infographic|clipart|wireframe|blueprint)\b/.test(normalized);
+}
+
+const PHOTO_SEARCH_STOP_WORDS = new Set([
+  "a", "an", "the", "and", "or", "of", "on", "in", "at", "to", "for", "from", "with", "while", "beside",
+  "show", "showing", "shown", "giving", "simple", "small", "top", "clean", "layout", "green", "printed", "mark", "page", "pile",
+  "slide", "screen", "bar", "chart", "graph", "diagram", "screenshot", "icon", "logo", "text"
+]);
+
+export function photoSearchQuery(rawQuery: string): string {
+  const normalized = rawQuery.trim().replace(/\s+/g, " ").slice(0, 160);
+  const words = normalized.toLowerCase().match(/[a-z0-9]+/g) ?? [];
+  if (words.length <= 5) return normalized.slice(0, 100);
+  const keywords = [...new Set(words.filter(word => !PHOTO_SEARCH_STOP_WORDS.has(word)))].slice(0, 5);
+  if (keywords.length < 3 && !keywords.includes("workplace")) keywords.push("workplace");
+  return keywords.join(" ").slice(0, 100);
+}
+
+function isNonPhotographicMedia(page: JsonObject, imageInfo: JsonObject): boolean {
+  const metadata = asObject(imageInfo.extmetadata);
+  return [
+    stringValue(page.title),
+    metadataValue(metadata, "Categories"),
+    metadataValue(metadata, "ImageDescription"),
+    metadataValue(metadata, "ObjectName")
+  ].some(looksLikeVisualArtifact);
 }
 
 function isSensitiveMedia(page: JsonObject, imageInfo: JsonObject): boolean {

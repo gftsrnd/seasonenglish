@@ -36,14 +36,14 @@ describe("content publishing policy", () => {
     });
   });
 
-  it("moves a valid draft to review but prevents the maker from approving it", () => {
+  it("moves a valid draft to review and allows the maker to approve it", () => {
     expect(() => submitContentForReview({ status: "draft", lessons: [completeLesson] }))
       .toThrowError("CONTENT_LESSON_SET_INCOMPLETE");
     const fiveLessons = [1, 2, 3, 4, 5].map((dayNumber) => ({ ...completeLesson, dayNumber }));
     expect(submitContentForReview({ status: "draft", lessons: fiveLessons })).toEqual({ status: "review" });
 
-    expect(() => approveContentVersion({ status: "review", createdBy: "operator-a", checkerId: "operator-a" }))
-      .toThrowError("CONTENT_MAKER_CANNOT_APPROVE");
+    expect(approveContentVersion({ status: "review", createdBy: "operator-a", checkerId: "operator-a" }))
+      .toEqual({ status: "published", approvedBy: "operator-a" });
     expect(approveContentVersion({ status: "review", createdBy: "operator-a", checkerId: "operator-b" }))
       .toEqual({ status: "published", approvedBy: "operator-b" });
   });

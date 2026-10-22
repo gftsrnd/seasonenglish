@@ -33,13 +33,16 @@ describe("assessment runtime persistence", () => {
   });
 
   it("keeps violations, remaining time and media evidence after reload", async () => {
-    const attempt = await repositories.assessments.startAttempt({
-      learnerId,
-      assessmentVersionId: DEMO_IDS.placementVersion,
-      firstSection: "listening",
-      durationMinutes: 5
-    });
-    await pool.query("update assessment_attempts set violation_limit = 1 where id = $1", [attempt.id]);
+    const prior = process.env.E4S_ENABLE_ASSESSMENT_VIOLATION_AUTO_SUBMIT;
+    process.env.E4S_ENABLE_ASSESSMENT_VIOLATION_AUTO_SUBMIT = "true";
+    try {
+      const attempt = await repositories.assessments.startAttempt({
+        learnerId,
+        assessmentVersionId: DEMO_IDS.placementVersion,
+        firstSection: "listening",
+        durationMinutes: 5
+      });
+      await pool.query("update assessment_attempts set violation_limit = 1 where id = $1", [attempt.id]);
 
     const first = await repositories.assessments.recordAssessmentViolation({
       learnerId,
@@ -68,9 +71,13 @@ describe("assessment runtime persistence", () => {
     });
     expect(automatic).toMatchObject({ violationCount: 2, violationLimit: 1, submitReason: "violations", status: "pending_review", autoSubmitted: true });
 
-    const reloaded = await repositories.assessments.getAssessmentRuntime(learnerId, attempt.id);
-    expect(reloaded).toMatchObject({ violationCount: 2, submitReason: "violations", status: "pending_review" });
-    expect(reloaded?.remainingSeconds).toBe(0);
+      const reloaded = await repositories.assessments.getAssessmentRuntime(learnerId, attempt.id);
+      expect(reloaded).toMatchObject({ violationCount: 2, submitReason: "violations", status: "pending_review" });
+      expect(reloaded?.remainingSeconds).toBe(0);
+    } finally {
+      if (prior === undefined) delete process.env.E4S_ENABLE_ASSESSMENT_VIOLATION_AUTO_SUBMIT;
+      else process.env.E4S_ENABLE_ASSESSMENT_VIOLATION_AUTO_SUBMIT = prior;
+    }
   });
 
   it("returns the same submitted result for duplicate submission", async () => {

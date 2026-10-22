@@ -3,7 +3,24 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import type { Client } from "pg";
 
-const migrationsDirectory = dirname(fileURLToPath(new URL("../migrations/0001_initial.sql", import.meta.url)));
+async function findMigrationsDirectory(): Promise<string> {
+  // In development this file runs from src/, while the package build runs from
+  // dist/src/. Prefer the repository migrations in both cases so a new SQL
+  // migration is not silently skipped just because dist/ is stale.
+  const candidates = [
+    dirname(fileURLToPath(new URL("../../migrations/0001_initial.sql", import.meta.url))),
+    dirname(fileURLToPath(new URL("../migrations/0001_initial.sql", import.meta.url)))
+  ];
+  for (const candidate of candidates) {
+    try {
+      await readdir(candidate);
+      return candidate;
+    } catch {
+      // Try the next package layout.
+    }
+  }
+  throw new Error("DATABASE_MIGRATIONS_NOT_FOUND");
+}
 
 export async function resetPublicSchema(client: Client): Promise<void> {
   await client.query("drop schema if exists public cascade");
@@ -18,6 +35,7 @@ export async function migrateDatabase(client: Client): Promise<void> {
     )
   `);
 
+  const migrationsDirectory = await findMigrationsDirectory();
   const files = (await readdir(migrationsDirectory))
     .filter((file) => /^\d+_[a-z0-9_-]+\.sql$/i.test(file))
     .sort();

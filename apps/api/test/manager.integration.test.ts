@@ -467,7 +467,7 @@ describe("manager progress and operations API", () => {
     });
     const saved = await app.inject({
       method: "PUT", url: "/api/v1/manager/settings", headers: { cookie: managerCookie },
-      payload: { ...(current.json() as Record<string, unknown>), organizationName: undefined, reminderInactiveDays: 5, weeklyReportEnabled: false }
+      payload: { ...(current.json() as Record<string, unknown>), organizationName: undefined, programName: "E4S Workplace", reminderInactiveDays: 5, weeklyReportEnabled: false }
     });
     const reloaded = await app.inject({ method: "GET", url: "/api/v1/manager/settings", headers: { cookie: managerCookie } });
 
@@ -475,7 +475,9 @@ describe("manager progress and operations API", () => {
     expect(invalid.statusCode).toBe(400);
     expect(saved.statusCode, saved.body).toBe(200);
     expect(reloaded.statusCode, reloaded.body).toBe(200);
-    expect(reloaded.json()).toMatchObject({ reminderInactiveDays: 5, weeklyReportEnabled: false });
+    expect(reloaded.json()).toMatchObject({ programName: "E4S Workplace", reminderInactiveDays: 5, weeklyReportEnabled: false });
+    const activeProgram = await pool.query("select name from programs where organization_id = $1 and status = 'active'", [DEMO_IDS.organization]);
+    expect(activeProgram.rows[0]?.name).toBe("E4S Workplace");
     expect(JSON.stringify(reloaded.json())).not.toMatch(/secret|api.?key|provider.?key/i);
   });
 });

@@ -579,6 +579,7 @@ label.field > span{font-size:.8rem;color:var(--muted)}
 .correction{border-radius:14px;background:var(--surface);box-shadow:inset 0 0 0 1px var(--line);border-left:4px solid var(--primary)}
 .bubble{border-radius:12px;box-shadow:inset 0 0 0 1px var(--line);font-size:1rem;font-weight:400;padding:12px 16px}
 .hero{background:var(--surface) !important;color:var(--text) !important;border:1px solid var(--line);border-left:4px solid var(--primary);border-radius:var(--radius);padding:18px 20px}
+.home-page .home-primary-lesson{border-right:4px solid var(--secondary)}
 .hero .eyebrow{color:var(--muted);opacity:1}
 .hero h2{font-size:1.25rem}
 .hero .btn,.hero button:not(.btn-ghost){background:var(--primary);color:var(--text)}
@@ -819,10 +820,12 @@ h1,h2,h3,h4,h1 b,h2 b,h3 b,h4 b{font-weight:600 !important}
 
 /* Learner lesson: mirror the canonical two-step study card and completion gate. */
 .app-learner-page.lesson-page{max-width:960px}
-.lesson-page .lesson-back{width:42px;height:42px;display:inline-grid;place-items:center;border-radius:10px;background:var(--surface);box-shadow:inset 0 0 0 1px var(--line);font-size:1.8rem;line-height:1;text-decoration:none}
-.lesson-page .lesson-back span{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
-.lesson-page>.page-title{margin:8px 0 10px}
-.lesson-page>.page-title h1{margin-top:4px;font-size:1.55rem}
+.lesson-page .lesson-heading{display:grid;grid-template-columns:32px minmax(0,1fr);gap:10px;align-items:start}
+.lesson-page .lesson-back{width:32px;height:32px;display:inline-grid;place-items:center;color:var(--text);line-height:1;text-decoration:none}
+.lesson-page .lesson-back svg{display:block}
+.lesson-page .lesson-back:hover{color:var(--primary-dark)}
+.lesson-page .lesson-heading>.page-title{margin:0}
+.lesson-page .lesson-heading>.page-title h1{margin-top:4px;font-size:1.55rem}
 .lesson-page .lesson-surface{border:1px solid var(--line);border-radius:14px;background:var(--surface);padding:16px}
 .lesson-page .lesson-skill-map{display:flex;flex-wrap:wrap;gap:5px;margin-bottom:10px}
 .lesson-page .lesson-skill-map span{border-radius:7px;background:var(--primary-soft);box-shadow:inset 0 0 0 1px var(--primary-line);padding:3px 8px;font-size:.72rem;font-weight:500}
@@ -834,8 +837,8 @@ h1,h2,h3,h4,h1 b,h2 b,h3 b,h4 b{font-weight:600 !important}
 .lesson-page .lesson-parts{margin:0;gap:12px}
 .lesson-page .lesson-part{margin:0;border-radius:11px;padding:14px}
 .lesson-page .lesson-part>p:last-child{margin-bottom:0}
-.lesson-page .lesson-part--objective{background:var(--primary-soft);border-color:var(--primary-line)}
-.lesson-page .lesson-part--instruction{background:var(--warn-soft);border-color:var(--warn-line)}
+.lesson-page .lesson-part--objective{border:2px solid #ed8d2c;background:linear-gradient(135deg,#fff1df,#ffe0b8);box-shadow:0 5px 14px rgb(176 91 18 / .10)}
+.lesson-page .lesson-part--instruction{background:#fff1df!important;border-color:#efc99f!important;font-weight:700}
 .lesson-page .lesson-part--grammar,.lesson-page .lesson-part--pronunciation{background:var(--surface-3)}
 .lesson-page .lesson-part h2{margin:0;font-size:.82rem;letter-spacing:.08em;text-transform:uppercase}
 .lesson-page .lesson-part .row.between>h2{margin-bottom:4px}
@@ -937,6 +940,8 @@ h1,h2,h3,h4,h1 b,h2 b,h3 b,h4 b{font-weight:600 !important}
 .lesson-page .vocabulary-card-phrase-list button { min-height: 34px; max-width: 100%; }
 .lesson-page .vocabulary-card-relations { display: flex; flex-wrap: wrap; gap: 7px; margin: 0; padding-top: 2px; }
 .lesson-page .vocabulary-card-relations .chip { display: inline-flex; align-items: center; gap: 5px; min-height: 30px; padding: 5px 10px; }
+.lesson-page .vocabulary-card-relations .chip.umb { flex: 1 0 100%; min-height: 42px; justify-content: flex-start; }
+.lesson-page .vocabulary-card-sound--icon { width: 36px; min-width: 36px; min-height: 36px; padding: 0; border-radius: 999px; }
 .lesson-page .vocabulary-card-chip-count { font-size: .7rem; opacity: .72; }
 .lesson-page .vocabulary-card .content-image--fallback { min-height: 88px; }
 @media (max-width: 560px) {
@@ -1027,6 +1032,108 @@ h1,h2,h3,h4,h1 b,h2 b,h3 b,h4 b{font-weight:600 !important}
   gap:6px;
   min-width:0;
 }
+.home-page .home-lifecycle-card{
+  margin-bottom:16px;
+  background:var(--primary-soft);
+  box-shadow:inset 0 0 0 1px var(--primary-line);
+}
+.app-learner-page .readiness-metric{
+  margin-top:10px;
+}
+.app-learner-page .readiness-heading{
+  display:grid;
+  grid-template-columns:minmax(0,1fr) auto;
+  align-items:start;
+  gap:12px;
+  font-weight:700;
+}
+.app-learner-page .readiness-current{
+  flex:0 0 auto;
+  color:var(--text);
+  font-variant-numeric:tabular-nums;
+}
+.app-learner-page .readiness-track{
+  position:relative;
+  height:8px;
+  margin-top:4px;
+  overflow:hidden;
+  border-radius:999px;
+  background:var(--surface-3);
+  box-shadow:inset 0 0 0 1px var(--line);
+}
+.app-learner-page .readiness-fill{
+  display:block;
+  height:100%;
+  border-radius:inherit;
+  background:var(--primary);
+}
+.app-learner-page .readiness-target{
+  position:absolute;
+  top:-1px;
+  bottom:-1px;
+  width:2px;
+  background:var(--text);
+  transform:translateX(-1px);
+  opacity:.6;
+}
+.app-learner-page .readiness-actual{
+  margin-top:3px;
+  line-height:1.35;
+  font-variant-numeric:tabular-nums;
+}
+
+.coach-page .coach-header{display:grid;grid-template-columns:44px minmax(0,1fr);gap:10px;align-items:start;padding:16px}
+.coach-page .coach-header>.page-title{padding:0;margin:0}
+.coach-page .coach-brand-icon{width:44px;height:44px;border-radius:50%;display:grid;place-items:center;background:var(--primary-soft);color:var(--accent)}
+.coach-page .coach-brand-icon svg{width:23px;height:23px}
+.coach-page .coach-limit-row{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:8px 14px;align-items:center;padding:0 16px 10px}
+.coach-page .coach-counters{grid-column:1;grid-row:1}
+.coach-page .coach-limit-details{display:contents}
+.coach-page .coach-limit-details summary{grid-column:2;grid-row:1;white-space:nowrap;cursor:pointer}
+.coach-page .coach-limit-copy{grid-column:1/-1;padding-top:2px;line-height:1.45}
+.coach-page .coach-vocabulary{margin:0;padding:14px 16px;border-radius:0}
+.coach-page .coach-vocabulary h2{margin:0 0 8px;font-size:1rem}
+.coach-page .coach-feedback{display:grid;gap:10px;width:100%;margin-top:12px;padding-top:12px;border-top:1px solid var(--line)}
+.coach-page .coach-feedback-summary{display:grid;grid-template-columns:auto minmax(0,1fr);align-items:center;gap:14px}
+.coach-page .coach-feedback-heading{font-weight:700;font-size:1rem}
+.coach-page .coach-feedback-note{margin:0;color:var(--muted);font-size:.9rem;line-height:1.5}
+.coach-page .coach-feedback-scores{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:0;padding:7px 0;border-block:1px solid var(--line)}
+.coach-page .coach-feedback-score{display:flex;align-items:center;justify-content:center;gap:7px;min-width:0;padding:0 10px;background:transparent;text-align:left}
+.coach-page .coach-feedback-score+.coach-feedback-score{border-left:1px solid var(--line)}
+.coach-page .coach-feedback-score-icon{flex:0 0 auto;width:20px;height:20px;color:var(--secondary)}
+.coach-page .coach-feedback-score>span{display:flex;align-items:baseline;gap:6px;min-width:0}
+.coach-page .coach-feedback-score b{font-size:.78rem;line-height:1.15;color:var(--muted);font-weight:600;white-space:nowrap}
+.coach-page .coach-feedback-score strong{font-size:1rem;line-height:1.15;color:var(--brown);white-space:nowrap;font-variant-numeric:tabular-nums}
+.coach-page .coach-feedback-disclosure{border-top:1px solid var(--line);padding-top:9px}
+.coach-page .coach-feedback-disclosure summary{width:max-content;max-width:100%;cursor:pointer;color:var(--brown);font-size:.84rem;font-weight:700;list-style-position:inside}
+.coach-page .coach-feedback-details{display:grid;gap:10px;padding-top:10px}
+.coach-page .coach-feedback-criteria{display:grid;gap:4px;color:var(--muted);font-size:.8rem;line-height:1.4}
+.coach-page .coach-feedback-criteria p{margin:0}
+.coach-page .coach-feedback-suggestions{display:grid;gap:10px}
+.coach-page .coach-feedback-suggestion-label{color:var(--muted);font-size:.76rem;font-weight:700;letter-spacing:.03em;text-transform:uppercase}
+.coach-page .coach-feedback-suggestions.is-refinement{gap:6px}
+.coach-page .coach-feedback-suggestion{display:grid;gap:5px;padding-top:10px;border-top:1px solid var(--line)}
+.coach-page .coach-feedback-suggestions.is-refinement .coach-feedback-suggestion{padding-top:0;border-top:0}
+.coach-page .coach-feedback-change{display:flex;align-items:baseline;gap:8px;flex-wrap:wrap;line-height:1.45}
+.coach-page .coach-feedback-suggestions.is-refinement .coach-feedback-change::before{content:"•";color:var(--secondary);font-weight:800}
+.coach-page .coach-feedback-change del{color:var(--muted)}
+.coach-page .coach-feedback-original--accepted{color:var(--text)}
+.coach-page .coach-feedback-correction{font-size:.95rem}
+.coach-page .coach-feedback-explanation{margin:0;color:var(--muted);font-size:.84rem;line-height:1.45}
+.coach-page .coach-feedback-explanations{display:grid;gap:6px}
+.coach-page .coach-word-list{gap:7px;align-items:center}
+.coach-page .coach-surface .coach-word-chip{min-height:36px;padding:6px 10px;border-radius:999px}
+.coach-page .chat-compose textarea{border-radius:999px;padding:11px 16px}
+.coach-page .coach-compose-icon{width:46px;height:46px;min-width:46px;min-height:46px;padding:0;border-radius:50%;align-self:center}
+.coach-page .coach-send svg{width:20px;height:20px}
+@media(max-width:720px){
+  .coach-page .coach-limit-row{grid-template-columns:1fr}
+  .coach-page .coach-limit-details summary{grid-column:1;grid-row:2;justify-self:start}
+  .coach-page .coach-limit-copy{grid-row:3}
+  .coach-page .coach-header{grid-template-columns:38px minmax(0,1fr)}
+  .coach-page .coach-brand-icon{width:38px;height:38px}
+  .coach-page .coach-feedback-summary{grid-template-columns:1fr;gap:8px}
+}
 .app-learner-page .celebration-icon{
   display:block;
   width:44px;
@@ -1041,6 +1148,32 @@ h1,h2,h3,h4,h1 b,h2 b,h3 b,h4 b{font-weight:600 !important}
 .app-learner-page.home-page .stats .stat{
   min-height:108px;
   justify-content:center;
+}
+.home-page [data-home-block="attendance"] .day i{
+  width:40px;
+  height:40px;
+}
+.home-page [data-home-block="attendance"] .day i.miss{
+  background:var(--danger-soft);
+  color:var(--danger);
+}
+.home-page [data-home-block="attendance"] .day i.on{
+  background:var(--surface-2);
+  color:var(--muted);
+}
+.home-page [data-home-block="attendance"] .day i.today{
+  background:var(--primary);
+  color:var(--primary-ink);
+  box-shadow:none;
+}
+.home-page [data-home-block="attendance"] .day i.upcoming{
+  background:var(--surface-3);
+  color:var(--muted);
+  box-shadow:inset 0 0 0 1px var(--line);
+}
+.attendance-schedule-note{
+  margin-top:16px;
+  margin-bottom:0;
 }
 @media(max-width:480px){
   .app-learner-page.home-page .stats{
@@ -1146,6 +1279,28 @@ h1,h2,h3,h4,h1 b,h2 b,h3 b,h4 b{font-weight:600 !important}
   box-shadow:inset 0 0 0 1px var(--primary-line);
   opacity:1;
 }
+
+/* Practice cards use one restrained workplace surface. Neutral borders,
+   spacing and a soft shadow separate the skills without colour coding. */
+.lesson-page .lesson-part--listening,
+.lesson-page .lesson-part--reading,
+.lesson-page .lesson-part--writing,
+.lesson-page .lesson-part--word_class,
+.lesson-page .lesson-part--word_use,
+.lesson-page .lesson-part--speaking { border-color: #d8d4cc !important; background: #f6f5f2 !important; }
+.lesson-page .lesson-part--listening,
+.lesson-page .lesson-part--reading,
+.lesson-page .lesson-part--writing,
+.lesson-page .lesson-part--word_class,
+.lesson-page .lesson-part--word_use,
+.lesson-page .lesson-part--speaking { box-shadow: 0 2px 8px rgb(35 31 26 / .055) !important; }
+.lesson-page .lesson-answer .opt { border: 1px solid var(--line); border-radius: 12px; background: var(--surface); padding: 11px 13px; }
+.lesson-page .lesson-answer .opt.sel { border-color: var(--primary); background: var(--primary-soft); box-shadow: inset 0 0 0 1px var(--primary); }
+.lesson-page .lesson-grammar-card > .row { align-items: flex-start; gap: 12px; }
+.lesson-page .lesson-example-list { display: grid; gap: 8px; }
+.lesson-page .lesson-example-card { display: flex; align-items: center; justify-content: space-between; gap: 12px; border: 1px solid var(--line); border-radius: 11px; background: var(--surface); padding: 10px 12px; }
+.lesson-page .lesson-example-card > span { min-width: 0; line-height: 1.45; }
+@media(max-width:560px){.lesson-page .lesson-example-card{align-items:flex-start;flex-direction:column}}
 
 /* Lesson detail: separate navigation, study context and each content block so
    long bilingual copy remains scannable at both app viewports. */
@@ -1263,8 +1418,22 @@ h1,h2,h3,h4,h1 b,h2 b,h3 b,h4 b{font-weight:600 !important}
 .profile-page .profile-week-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
 .profile-page .profile-week-card{min-width:0;margin:0;padding:16px}
 .profile-page .profile-week-card h3{min-width:0;overflow-wrap:anywhere}
+.profile-page .profile-week-days{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));margin-top:12px}
+.profile-page .profile-week-days .day i{width:38px;height:38px;border:0;box-shadow:inset 0 0 0 1px #ddd8d0;background:#f4f3f0}
+.profile-page .profile-week-days .day i.on-time{background:#dfe8cb;box-shadow:none}
+.profile-page .profile-week-days .day i.late{background:#f5d0c8;box-shadow:none}
+.profile-page .profile-week-days .day i.upcoming{background:#f5f4f1;box-shadow:inset 0 0 0 1px #e5e1db}
 .profile-page .profile-assessment-section{padding:18px}
-.profile-page .profile-assessment-grid{gap:12px}
+.profile-page .profile-assessment-grid{gap:48px;margin-top:14px}
+.profile-page .profile-assessment-result{display:grid;align-content:start;gap:8px;min-width:0}
+.profile-page .profile-assessment-total{font-family:var(--font-display);font-size:3rem;line-height:1;font-variant-numeric:tabular-nums}
+.profile-page .profile-assessment-skills{display:grid;gap:8px;margin-top:6px}
+.profile-page .profile-assessment-skill{display:grid;grid-template-columns:82px minmax(80px,1fr) 44px;gap:12px;align-items:center;min-width:0;color:var(--muted);font-size:.86rem;font-variant-numeric:tabular-nums}
+.profile-page .profile-assessment-skill>i{height:8px;overflow:hidden;border-radius:999px;background:#d9d7d1}
+.profile-page .profile-assessment-skill>i>b{display:block;height:100%;border-radius:inherit;background:var(--primary)}
+.profile-page .profile-assessment-skill>small{color:var(--text);font-size:.82rem;text-align:right}
+.profile-page .profile-assessment-result--empty{gap:10px}
+.profile-page .profile-assessment-cta{width:max-content;min-height:0!important;min-width:0!important;color:var(--text);text-decoration-color:var(--primary);text-underline-offset:4px}
 .profile-page .profile-assessment-actions{gap:8px;margin-top:12px;flex-wrap:wrap}
 .profile-page .profile-season-heading{flex-wrap:wrap}
 .profile-page .profile-season-copy{display:grid;gap:4px;min-width:0}
@@ -1294,8 +1463,130 @@ h1,h2,h3,h4,h1 b,h2 b,h3 b,h4 b{font-weight:600 !important}
   .profile-page .profile-section-heading{align-items:flex-start;flex-direction:column;gap:4px}
   .profile-page .profile-week-grid{grid-template-columns:1fr}
   .profile-page .profile-assessment-section{padding:16px}
+  .profile-page .profile-assessment-grid{grid-template-columns:1fr;gap:28px}
   .profile-page .profile-season-level-heading{grid-template-columns:1fr;align-items:flex-start}
   .profile-page .profile-season-level .badges{grid-template-columns:repeat(2,minmax(0,1fr))}
   .profile-page .profile-season-tracks{gap:12px}
   .profile-page .profile-season-warning{display:grid;gap:2px}
+}
+
+/* Final lesson parity: keep study content compact and visually scannable. */
+.lesson-page .vocabulary-card { gap: 13px; padding: 16px; }
+.lesson-page .vocabulary-card-heading { grid-template-columns: 62px minmax(0,1fr); gap: 11px; }
+.lesson-page .vocabulary-card-meaning { margin-top: 5px; color: #6e4219; font-weight: 600; }
+.lesson-page .vocabulary-card-relations .chip.umb { flex: 0 1 auto; min-height: 34px; }
+.lesson-page .lesson-part--objective { border: 1px solid #efc99f; background: #fff1df !important; padding: 18px 20px !important; }
+.lesson-page .lesson-objective-text { margin: 7px 0 0; font-size: 1rem; font-weight: 800; line-height: 1.45; }
+.lesson-page .lesson-part--objective h2 { color: #241407; }
+.lesson-page .lesson-part--vocabulary .lesson-vocabulary-heading {
+  margin: 0 0 12px;
+  color: #70685e;
+  font-family: inherit;
+  font-size: .78rem;
+  font-weight: 600;
+  letter-spacing: .09em;
+  line-height: 1.35;
+}
+.lesson-page .lesson-part--grammar,
+.lesson-page .lesson-part--pronunciation,
+.lesson-page .lesson-grammar-card,
+.lesson-page .lesson-pronunciation-summary { background: #efede8 !important; }
+.lesson-page .lesson-grammar-card,
+.lesson-page .lesson-pronunciation-summary { border: 1px solid #d8d4cc; border-radius: 11px; padding: 11px 12px; }
+.lesson-page .lesson-pronunciation-summary p { margin: 7px 0 0; line-height: 1.45; }
+.lesson-page .lesson-audio-icon { width: 36px !important; min-width: 36px; padding: 0 !important; place-content: center; border-radius: 999px; }
+.lesson-page .lesson-audio-primary { border-color: #df8422 !important; background: #ef9634 !important; color: #211205 !important; font-weight: 700; }
+.lesson-page .lesson-part--listening .lesson-speech-control { margin-top: 7px; }
+.lesson-page .lesson-speaking-instruction { margin: 0; color: #655e55; line-height: 1.5; }
+.lesson-page .lesson-speaking-model { display: grid; gap: 8px; margin-top: 4px; padding: 14px; border: 1px solid #dfd9d0; background: #f7f6f3; }
+.lesson-page .lesson-speaking-model--inline { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.lesson-page .lesson-speaking-model--inline > strong { min-width: 0; }
+.lesson-page .lesson-speaking-model--inline .lesson-speech-control { flex: 0 0 auto; margin: 0; }
+.lesson-page .lesson-speaking-answer { gap: 10px; }
+.lesson-page .lesson-speaking-answer > strong { font-size: .92rem; }
+.lesson-page .lesson-reading-passage { margin: 7px 0 4px; border: 1px solid #efb17d; border-radius: 11px; background: #fffaf5; padding: 13px 14px; font-weight: 600; line-height: 1.55; }
+@media(max-width:560px){
+  .lesson-page .vocabulary-card-heading { grid-template-columns: 58px minmax(0,1fr) 36px; }
+  .lesson-page .lesson-speaking-model--inline { align-items: flex-start; flex-direction: column; }
+}
+
+/* Screenshot-locked lesson presentation. Content stays API-driven. */
+.lesson-page .vocabulary-card{gap:9px;padding:12px 14px;border:1px solid #e4e0da;border-radius:12px;background:#fff}
+.lesson-page .vocabulary-card-heading{grid-template-columns:68px minmax(0,1fr);gap:12px}
+.lesson-page .vocabulary-card-word{align-items:baseline;gap:6px 8px}
+.lesson-page .vocabulary-card-word h3{font-size:1.17rem;line-height:1.2}
+.lesson-page .vocabulary-card-type{border:1px solid #e2ded7;border-radius:999px;background:#fff;padding:1px 6px;color:#222;font-size:.72rem}
+.lesson-page .vocabulary-card-pronunciation{color:#827b72;font-size:.88rem}
+.lesson-page .vocabulary-card-main>.vocabulary-card-meaning{margin:2px 0 0;color:#111;font-size:.95rem;font-weight:500}
+.lesson-page .vocabulary-card-phrase-list{gap:7px}
+.lesson-page .vocabulary-card-phrase-list .vocabulary-card-sound{min-height:38px;padding:7px 11px;border:1px solid #e5e0da;border-radius:8px;background:#faf9f7}
+.lesson-page .vocabulary-card-relations{flex-wrap:wrap;gap:5px;padding-top:0}
+.lesson-page .vocabulary-card-relations .chip{min-height:38px;padding:6px 11px;border-radius:8px;font-size:.83rem}
+.lesson-page .vocabulary-card-relations .chip.umb{flex:0 1 auto;min-height:38px}
+.lesson-page .vocabulary-card-relations .chip{max-width:100%;min-width:0}
+.lesson-page .vocabulary-card-relations .chip svg{flex:0 0 auto}
+.lesson-page .vocabulary-card-chip-label{min-width:0;overflow-wrap:anywhere;text-align:left}
+.lesson-page .vocabulary-card-chip-count{flex:0 0 auto}
+.lesson-page .vocabulary-card-chip-count{border-radius:999px;background:#ffe3bd;padding:1px 6px;font-size:.72rem}
+.lesson-page .lesson-part--grammar,.lesson-page .lesson-part--pronunciation{padding:20px 21px!important;border:1px solid #e3dfd8!important;border-radius:14px!important;background:#f4f3f0!important}
+.lesson-page .lesson-study-block{display:grid;gap:10px}
+.lesson-page .lesson-study-panel-header{align-items:center;gap:16px}
+.lesson-page .lesson-study-panel-header h2{margin:0;color:#70685e;font-size:.78rem;font-weight:600;letter-spacing:.09em;text-transform:uppercase}
+.lesson-page .lesson-study-audio{display:inline-flex;width:max-content;min-height:38px;align-items:center;gap:7px;border:1px solid #e2ded7;border-radius:12px;background:#fff;padding:7px 12px}
+.lesson-page .lesson-grammar-copy{display:grid;gap:3px}
+.lesson-page .lesson-grammar-copy p{margin:0;line-height:1.42}
+.lesson-page .lesson-study-focus{margin:0;color:#191510;font-size:1rem;line-height:1.4}
+.lesson-page .lesson-study-explanation{margin:0;color:#766f66;font-size:.92rem;font-weight:400;line-height:1.48}
+.lesson-page .lesson-example-list{display:flex;flex-wrap:wrap;gap:8px}
+.lesson-page .lesson-example-card{display:inline-flex;width:auto;min-height:38px;align-items:center;justify-content:flex-start;gap:7px;border-radius:8px;padding:7px 11px;color:inherit;font:inherit;cursor:pointer}
+.lesson-page .lesson-pronunciation-summary{display:grid;gap:10px;border:0;border-radius:0;background:transparent!important;padding:0}
+.lesson-page .lesson-pronunciation-summary p{margin:0;line-height:1.45}
+.lesson-page .lesson-pronunciation-words{flex-wrap:wrap;gap:8px;margin:0}
+.lesson-page .lesson-pronunciation-words .btn-sm{min-height:38px;border:1px solid #e2ded7!important;border-radius:8px!important;background:#fff!important;padding:7px 11px!important}
+@media(max-width:560px){.lesson-page .vocabulary-card-heading{grid-template-columns:58px minmax(0,1fr) 36px}.lesson-page .lesson-study-panel-header{align-items:flex-start;flex-direction:column}}
+
+/* Season chat: one cohesive conversation surface with system controls. */
+.coach-page .coach-surface{border:1px solid #ded9d1;box-shadow:0 14px 36px rgb(55 43 31 / .09)}
+.coach-page .coach-header{align-items:center;border-bottom:1px solid #e8e3dc;background:linear-gradient(135deg,#fff 0%,#fbfaf7 100%)}
+.coach-page .coach-brand-icon{width:28px;height:28px;border-radius:0;background:transparent;color:#b75c22}
+.coach-page .coach-brand-icon svg{width:28px;height:28px}
+.coach-page .coach-actions{align-items:center;gap:10px}
+.coach-page .coach-persona-toggle{position:relative;display:grid;grid-template-columns:1fr 1fr;isolation:isolate;min-width:150px;height:34px;appearance:none;border:0!important;outline:0;border-radius:0;background:transparent!important;box-shadow:none!important;padding:0;color:#716a62;font:inherit;font-size:.8rem;cursor:pointer}
+.coach-page .coach-persona-toggle>span{z-index:1;display:grid;place-items:center;padding:0 11px;transition:color .18s ease}
+.coach-page .coach-persona-toggle>span.active{color:#944716;font-weight:700}
+.coach-page .coach-persona-toggle:focus-visible{box-shadow:0 0 0 3px rgb(233 151 62 / .28)}
+.coach-page .coach-message-pending{opacity:.78}
+.coach-page .coach-error-row{margin:8px 14px 0;padding:9px 12px;border:1px solid #efc6b8;border-radius:10px;background:#fff7f3}
+.coach-page .coach-error-row .form-error{margin:0;font-size:.82rem;line-height:1.4}
+.coach-page .coach-limit-row{display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:center;gap:8px 12px;padding:16px 16px 8px;border-bottom:1px solid #e8e3dc;background:#fff}
+.coach-page .coach-counters{gap:7px;flex-wrap:wrap}
+.coach-page .coach-limit-details{display:contents}
+.coach-page .coach-limit-details summary{grid-column:2;grid-row:1;align-self:center;width:max-content;margin:0;cursor:pointer;font-weight:650;line-height:1.25}
+.coach-page .coach-limit-copy--full{grid-column:1/-1;grid-row:2;width:100%;box-sizing:border-box;margin-top:0;border-radius:9px;background:#f5f4f1;padding:10px 12px;line-height:1.5}
+.coach-page .coach-limit-copy--full.coach-limit-copy--plain{width:100%;max-width:none;border-radius:0;background:transparent;padding:4px 0 2px;font-size:.78rem;line-height:1.45}
+.coach-page .coach-surface>.chat{min-height:210px;margin:12px 14px 0!important;border:1px solid #e9bd8b;border-radius:16px!important;background:linear-gradient(180deg,#faf9f6 0%,#f3f1ed 100%)!important;box-shadow:0 0 0 3px rgb(233 151 62 / .08),0 10px 24px rgb(64 48 33 / .06);padding:18px 20px!important}
+.coach-page .chat .msg{box-shadow:0 4px 12px rgb(50 39 29 / .06)}
+.coach-page .chat .msg.ai{border:1px solid #e2ddd5;background:#fff}
+.coach-page .chat .msg.user{border:1px solid #e7b87f;background:#fff0dc}
+.coach-page .coach-vocabulary{margin-top:14px!important;border-top:1px solid #eee8df!important;border-bottom:1px solid #e8e3dc!important;background:#fff!important}
+.coach-page .coach-vocabulary h2{color:#4c453e;font-size:.9rem;letter-spacing:.01em}
+.coach-page .coach-word-list{gap:8px}
+.coach-page .coach-surface .coach-word-chip{width:38px;height:38px;min-width:38px;min-height:38px;justify-content:center;border:1px solid #ddd8d0;border-radius:11px;background:#f5f4f1;padding:0;color:#746d65;box-shadow:none}
+.coach-page .coach-surface .coach-word-chip.is-locked:hover{border-color:#c78342;background:#fff5e8;color:#9f4c18;transform:translateY(-1px)}
+.coach-page .coach-surface .coach-word-chip.is-opened{width:auto;max-width:180px;padding:0 12px;border-color:#bdc991;background:#eef2df;color:#33451f}
+.coach-page .coach-surface .coach-word-chip.is-opened b{max-width:150px;overflow:hidden;text-overflow:ellipsis}
+.coach-page .chat-compose{gap:7px!important;margin:10px 14px 12px!important;padding-top:0!important;border-top:0!important}
+.coach-page .chat-compose textarea{height:42px!important;min-height:42px!important;max-height:42px!important;border-radius:14px;padding:10px 14px;overflow:hidden}
+.coach-page .coach-compose-icon{width:42px;height:42px;min-width:42px;min-height:42px;border-radius:13px}
+.coach-page .coach-send{border-radius:13px;background:#e9973e}
+@media(max-width:720px){
+  .coach-page .coach-header{grid-template-columns:28px minmax(0,1fr)}
+  .coach-page .coach-brand-icon{width:24px;height:24px}
+  .coach-page .coach-brand-icon svg{width:23px;height:23px}
+  .coach-page .coach-actions{width:100%;align-items:flex-start}
+  .coach-page .coach-persona-toggle{min-width:150px}
+  .coach-page .coach-limit-row{grid-template-columns:1fr}
+  .coach-page .coach-limit-details summary{grid-column:1;grid-row:2;justify-self:start;margin:0}
+  .coach-page .coach-limit-copy--full{grid-row:3}
+  .coach-page .coach-surface>.chat{padding:14px!important}
 }

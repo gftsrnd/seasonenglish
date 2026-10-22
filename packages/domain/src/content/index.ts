@@ -66,7 +66,6 @@ export function approveContentVersion(input: {
   checkerId: string;
 }): { status: "published"; approvedBy: string } {
   if (input.status !== "review") throw new Error("CONTENT_NOT_IN_REVIEW");
-  if (input.createdBy === input.checkerId) throw new Error("CONTENT_MAKER_CANNOT_APPROVE");
   return { status: "published", approvedBy: input.checkerId };
 }
 

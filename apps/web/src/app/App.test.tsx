@@ -16,6 +16,7 @@ const client = vi.hoisted(() => ({
 
 const learnerClient = vi.hoisted(() => ({
   getProfile: vi.fn(),
+  getAssessment: vi.fn(),
   saveProfile: vi.fn()
 }));
 
@@ -58,6 +59,12 @@ beforeEach(() => {
     version: 1
   });
   client.logout.mockRejectedValue(new Error("network unavailable"));
+  learnerClient.getProfile.mockResolvedValue({
+    profile: { fullName: "Nguyễn Minh Anh", avatar: { color: "olive", acc: "leaf", bg: 0 } },
+    completed: true,
+    version: 1
+  });
+  learnerClient.getAssessment.mockResolvedValue({ attempt: { status: "approved" } });
 });
 
 describe("App session shell", () => {
@@ -91,6 +98,14 @@ describe("App session shell", () => {
 
     expect(await screen.findByRole("heading", { name: "Trang học" })).toBeInTheDocument();
     expect(window.location.pathname).toBe("/home");
+  });
+
+  it("keeps learner destinations visible when an approved learner has a newer placement awaiting review", async () => {
+    learnerClient.getAssessment.mockResolvedValueOnce({ attempt: { status: "pending_review" } });
+    render(<App>{() => <h1>Trang học</h1>}</App>);
+
+    expect(await screen.findAllByRole("link", { name: "Luyện với Season" })).toHaveLength(2);
+    expect(screen.getAllByRole("link", { name: "Bài tuần" })).toHaveLength(2);
   });
 
   it.each([

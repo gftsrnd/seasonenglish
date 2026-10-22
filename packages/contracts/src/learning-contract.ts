@@ -118,8 +118,10 @@ export interface LessonVocabularyItem {
   imageQuery?: string;
   imageAttribution?: ContentImageAttribution;
   examples?: string[];
+  collocations?: string[];
   family?: LessonVocabularyFamilyWord[];
   synonyms?: LessonVocabularySynonym[];
+  antonyms?: LessonVocabularySynonym[];
   umbrella?: LessonVocabularyUmbrella;
   /** An explicitly empty array means the learner can open the empty detail state. */
   lexicalDetails?: LessonVocabularyLexicalDetail[];
@@ -242,7 +244,7 @@ export interface LearnerHomeView {
     lessonMinutes: number;
     days: Array<{ label: string; date: string; status: "attended" | "today" | "missed" | "upcoming" }>;
   };
-  coach: { turnsThisWeek: number; targetTurns: number; href: "/coach" };
+  coach: { turnsToday?: number; turnsThisWeek: number; targetTurns: number; href: "/coach" };
   practice: {
     status: "locked" | "open" | "draft" | "submitted" | "reviewed";
     detail: string;
@@ -311,6 +313,10 @@ export interface LearnerProgressView {
     topic: string;
     completedLessons: number;
     totalLessons: number;
+    days?: Array<{
+      label: "T2" | "T3" | "T4" | "T5" | "T6";
+      status: "on_time" | "late" | "upcoming";
+    }>;
   }>;
   studyDays: number;
   activity: Array<{
@@ -327,7 +333,7 @@ export interface LearnerProgressView {
   };
   badgeRoadmap: BadgeRoadmapItem[];
   levelReadiness: LevelReadinessView;
-  stats: { completedLessons: number; coachTurns: number; studyDays: number };
+  stats: { completedLessons: number; coachTurns: number; coachTurnsToday?: number; studyDays: number };
   assessments: { placement: AssessmentSnapshot | null; final: AssessmentSnapshot | null };
   finalAssessmentAvailable: boolean;
 }

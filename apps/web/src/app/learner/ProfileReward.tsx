@@ -1,5 +1,5 @@
-import { useEffect, useRef, useState, type FormEvent, type KeyboardEvent as ReactKeyboardEvent, type MouseEvent } from "react";
-import { Check, CheckCircle2, Circle, Cloud, Droplets, Flower2, Leaf, Snowflake, Star, Sun, type LucideIcon } from "lucide-react";
+import { useEffect, useRef, useState, type FormEvent, type KeyboardEvent as ReactKeyboardEvent, type MouseEvent, type ReactNode } from "react";
+import { Check, Cloud, Droplets, Flower2, Leaf, Snowflake, Star, Sun, type LucideIcon } from "lucide-react";
 import type { LearnerAvatarData, RewardView, SurveyView } from "@e4s/contracts";
 import type { LearnerCallbacks, ProfileView } from "./contracts.js";
 import { ProductArt } from "../shared/media/ProductArt.js";
@@ -84,8 +84,8 @@ export function LearnerProfile({ view, actions }: { view: ProfileView; actions: 
     {level ? <SeasonCard view={view} actions={actions} /> : null}
     {level ? <ReadinessCard view={view} actions={actions} /> : null}
     <section className="profile-progress-section" aria-label="Tổng quan tiến độ"><div className="profile-section-heading"><div><div className="eyebrow">Tổng quan học tập</div><h2>Nhịp học hiện tại</h2></div><span className="small muted">Tóm tắt từ dữ liệu đã ghi nhận</span></div><div className="grid cols-3 profile-kpi-grid"><div className="card kpi"><span className="val">{view.stats.completedLessons}</span><span className="lbl">bài đã học</span></div><div className="card kpi"><span className="val">{view.stats.coachTurns}</span><span className="lbl">lượt luyện với Season</span></div><div className="card kpi"><span className="val">{view.stats.studyDays}</span><span className="lbl">ngày có học</span></div></div></section>
-    <section className="profile-progress-section profile-weeks-section" aria-label="Tiến độ theo tuần"><div className="profile-section-heading"><div><div className="eyebrow">Lộ trình học</div><h2>Tiến độ theo tuần</h2></div><span className="small muted">Theo dõi từng ngày T2–T6</span></div><div className="profile-week-grid">{view.weeks.map((week) => <article className="card profile-week-card" key={week.weekNumber}><div className="row between" style={{ gap: 12, alignItems: "flex-start" }}><h3>Tuần {week.weekNumber} <span className="small muted">{week.topic}</span></h3><span className="small muted" style={{ fontWeight: 800, whiteSpace: "nowrap" }}>{week.completedLessons}/{week.totalLessons || "–"} bài</span></div><WeekDays completed={week.completedLessons} total={week.totalLessons} /><Progress value={week.completedLessons} max={week.totalLessons} label={`Tiến độ tuần ${week.weekNumber}`} /></article>)}</div></section>
-    <section className="card profile-progress-section profile-assessment-section" aria-label="Kết quả đánh giá"><div className="profile-section-heading"><div><div className="eyebrow">Đánh giá năng lực</div><h2>Điểm đầu vào → cuối kỳ</h2></div><span className="small muted">So sánh trước và sau pilot</span></div><div className="grid cols-2 profile-assessment-grid"><AssessmentResult label="Điểm đầu vào" result={view.assessments.placement} /><AssessmentResult label="Điểm cuối kỳ" result={view.assessments.final} /></div><div className="row profile-assessment-actions">{view.finalAssessmentAvailable && !view.assessments.final ? <AppLink className="btn btn-primary" href="/test/final" navigate={actions.navigate}>Làm bài cuối kỳ</AppLink> : null}{view.surveyAvailable ? <AppLink className="btn" href="/survey" navigate={actions.navigate}>Trả lời khảo sát cuối pilot</AppLink> : null}</div></section>
+    <section className="profile-progress-section profile-weeks-section" aria-label="Tiến độ theo tuần"><div className="profile-section-heading"><div><div className="eyebrow">Lộ trình học</div><h2>Tiến độ theo tuần</h2></div><span className="small muted">Theo dõi từng ngày T2–T6</span></div><div className="profile-week-grid">{view.weeks.map((week) => <article className="card profile-week-card" key={week.weekNumber}><div className="row between" style={{ gap: 12, alignItems: "flex-start" }}><h3>Tuần {week.weekNumber} <span className="small muted">{week.topic}</span></h3><span className="small muted" style={{ fontWeight: 800, whiteSpace: "nowrap" }}>{week.completedLessons}/{week.totalLessons || "–"} bài</span></div><WeekDays days={week.days} /></article>)}</div></section>
+    <section className="card profile-progress-section profile-assessment-section" aria-label="Kết quả đánh giá"><div className="profile-section-heading"><div><div className="eyebrow">Đánh giá năng lực</div><h2>Điểm đầu vào → cuối kỳ</h2></div><span className="small muted">So sánh trước và sau pilot</span></div><div className="grid cols-2 profile-assessment-grid"><AssessmentResult label="Điểm đầu vào" result={view.assessments.placement} /><AssessmentResult label="Điểm cuối kỳ" result={view.assessments.final} action={view.finalAssessmentAvailable && !view.assessments.final ? <AppLink className="profile-assessment-cta" href="/test/final" navigate={actions.navigate} ariaLabel="Làm bài cuối kỳ">Làm bài cuối kỳ →</AppLink> : null} /></div>{view.surveyAvailable ? <div className="row profile-assessment-actions"><AppLink className="btn" href="/survey" navigate={actions.navigate}>Trả lời khảo sát cuối pilot</AppLink></div> : null}</section>
     {avatarOpen ? <AvatarDialog initial={view.learner.profile.avatar} name={view.learner.displayName} onClose={closeAvatar} onSave={async (avatar) => { await actions.saveAvatar(avatar); closeAvatar(); }} /> : null}
   </div>;
 }
@@ -116,11 +116,73 @@ function SeasonCard({ view, actions }: { view: ProfileView; actions: LearnerCall
 
 function SeasonTrack({ met, title, value, current, target, note }: { met: boolean; title: string; value: string; current: number; target: number; note: string }) { return <div className="card flat" style={{ background: met ? "var(--mint)" : "var(--surface)" }}><div className="row between"><b className="small">{title}</b><span className={`badge ${met ? "ok" : "warn"}`}>{met ? <><Check className="status-icon" aria-hidden="true" /> Đạt</> : "Chưa đạt"}</span></div><div style={{ fontFamily: "var(--font-display)", fontWeight: 800, fontSize: "1.3rem", margin: "2px 0" }}>{value}</div><Progress value={current} max={target} label={title} /><div className="xs muted" style={{ marginTop: 4 }}>{note}</div></div>; }
 
-function ReadinessCard({ view, actions }: { view: ProfileView; actions: LearnerCallbacks }) { const readiness = view.levelReadiness; const target = readiness.targetLevel; return <section className="card" style={{ marginTop: 16 }} aria-label={readiness.eligible && target ? `Sẵn sàng thi lên ${target}` : `Đường lên mức ${target ?? "tiếp theo"}`}><div className="row between" style={{ alignItems: "baseline" }}><h3>{target ? readiness.eligible ? `Sẵn sàng thi lên ${target}` : `Đường lên mức ${target}` : "Bạn đang ở mức cao nhất"}</h3><span className="small muted" style={{ fontWeight: 800 }}>{readiness.windowDays} ngày gần nhất</span></div>{readiness.criteria.map((criterion) => <div style={{ marginTop: 8 }} key={criterion.key}><div className="row between small" style={{ fontWeight: 800 }}><span className="readiness-label">{criterion.met ? <CheckCircle2 className="status-icon" aria-hidden="true" /> : <Circle className="status-icon" aria-hidden="true" />} {criterion.label}</span><span className={criterion.met ? "" : "muted"}>{criterion.display}</span></div><Progress value={criterion.current} max={criterion.target} label={criterion.label} /></div>)}{readiness.eligible && readiness.examAvailable && target ? <div className="card flat" style={{ marginTop: 16, background: "var(--mint)" }}><b>Bạn đủ điều kiện thi lên mức {target}.</b><div className="small" style={{ margin: "4px 0 8px" }}>Đề ngắn (≈35 phút, 4 phần), rồi 6 lượt thử thách với Season. Chuẩn bị tai nghe và micro như bài đầu vào.</div><AppLink className="btn btn-primary" href="/test/level-up" navigate={actions.navigate}>Thi lên mức</AppLink></div> : null}<p className="xs muted" style={{ margin: "10px 0 0" }}>{target ? readiness.eligible ? "Đủ cả 4 mục – được thi lên mức khi đề được duyệt." : "Đủ cả 4 mục để thi lên mức." : "Giữ nhịp học để duy trì mức C1."}</p></section>; }
+function ReadinessCard({ view, actions }: { view: ProfileView; actions: LearnerCallbacks }) {
+  const readiness = view.levelReadiness;
+  const target = readiness.targetLevel;
+  return <section className="card" style={{ marginTop: 16 }} aria-label={readiness.eligible && target ? `Sẵn sàng thi lên ${target}` : `Đường lên mức ${target ?? "tiếp theo"}`}>
+    <div className="row between" style={{ alignItems: "baseline" }}>
+      <h3>{target ? readiness.eligible ? `Sẵn sàng thi lên ${target}` : `Đường lên mức ${target}` : "Bạn đang ở mức cao nhất"}</h3>
+      <span className="small muted" style={{ fontWeight: 800 }}>{readiness.windowDays} ngày gần nhất</span>
+    </div>
+    {readiness.criteria.map((criterion) => <div className="readiness-metric" data-readiness-key={criterion.key} key={criterion.key}>
+      <div className="small readiness-heading">
+        <span className="readiness-label">{criterion.label}</span>
+        <span className="readiness-current">{profileReadinessCurrent(criterion)}</span>
+      </div>
+      <ProfileReadinessBar criterion={criterion} />
+      <div className="readiness-actual small muted">{criterion.display}</div>
+    </div>)}
+    {readiness.eligible && readiness.examAvailable && target ? <div className="card flat" style={{ marginTop: 16, background: "var(--mint)" }}><b>Bạn đủ điều kiện thi lên mức {target}.</b><div className="small" style={{ margin: "4px 0 8px" }}>Đề ngắn (≈35 phút, 4 phần), rồi 6 lượt thử thách với Season. Chuẩn bị tai nghe và micro như bài đầu vào.</div><AppLink className="btn btn-primary" href="/test/level-up" navigate={actions.navigate}>Thi lên mức</AppLink></div> : null}
+    <p className="xs muted" style={{ margin: "10px 0 0" }}>{target ? readiness.eligible ? "Đủ cả 4 mục – được thi lên mức khi đề được duyệt." : "Đủ cả 4 mục để thi lên mức." : "Giữ nhịp học để duy trì mức C1."}</p>
+  </section>;
+}
 
-function WeekDays({ completed, total }: { completed: number; total: number }) { return <div className="days" style={{ gridTemplateColumns: "repeat(5,1fr)" }}>{["T2", "T3", "T4", "T5", "T6"].map((day, index) => <div className="day" key={day}><span>{day}</span><i className={index < Math.min(completed, total) ? "on" : ""}>{index < Math.min(completed, total) ? <Check className="status-icon" aria-hidden="true" /> : <Circle className="status-icon" aria-hidden="true" />}</i></div>)}</div>; }
+type ProfileReadinessCriterion = ProfileView["levelReadiness"]["criteria"][number];
 
-function AssessmentResult({ label, result }: { label: string; result: ProfileView["assessments"]["placement"] }) { if (!result) return <div className="item"><b>{label}</b><span className="muted">{label === "Điểm cuối kỳ" ? "Chưa làm" : "Chưa có"}</span></div>; return <div className="item" role="region" aria-label={label}><div className="row between"><b>{label}</b><strong>{result.totalScore}/100 · {result.approvedLevel}</strong></div>{Object.entries(result.sections).map(([section, score]) => <div key={section}><span className="small">{SECTION_LABELS[section] ?? section}</span><Progress value={score ?? 0} max={100} label={`Điểm ${SECTION_LABELS[section]?.toLowerCase() ?? section}`} /></div>)}</div>; }
+function profileReadinessScale(key: ProfileReadinessCriterion["key"]) {
+  return key === "coachRubric" ? 5 : 100;
+}
+
+function profileReadinessCurrent(criterion: ProfileReadinessCriterion) {
+  return criterion.key === "coachRubric" ? `${criterion.current}/5` : `${criterion.current}%`;
+}
+
+function ProfileReadinessBar({ criterion }: { criterion: ProfileReadinessCriterion }) {
+  const max = profileReadinessScale(criterion.key);
+  const current = Math.max(0, Math.min(max, criterion.current));
+  const valuePercent = (current / max) * 100;
+  const targetPercent = Math.max(0, Math.min(100, (criterion.target / max) * 100));
+  return <div className="readiness-track" role="progressbar" aria-label={criterion.label} aria-valuemin={0} aria-valuemax={max} aria-valuenow={current}>
+    <i className="readiness-fill" style={{ width: `${valuePercent}%` }} />
+    <i className="readiness-target" data-testid="readiness-target" style={{ left: `${targetPercent}%` }} />
+  </div>;
+}
+
+function WeekDays({ days }: { days: ProfileView["weeks"][number]["days"] }) {
+  const statuses = new Map(days?.map((day) => [day.label, day.status]) ?? []);
+  return <div className="days profile-week-days">{(["T2", "T3", "T4", "T5", "T6"] as const).map((label) => {
+    const status = statuses.get(label) ?? "upcoming";
+    const description = status === "on_time" ? "đúng hạn" : status === "late" ? "trễ hạn" : "chưa đến hạn";
+    return <div className="day" key={label}><span>{label}</span><i className={status.replace("_", "-")} role="img" aria-label={`${label}: ${description}`} /></div>;
+  })}</div>;
+}
+
+function AssessmentResult({ label, result, action }: { label: string; result: ProfileView["assessments"]["placement"]; action?: ReactNode }) {
+  const shortLabel = label === "Điểm đầu vào" ? "Đầu vào" : "Cuối kỳ";
+  if (!result) return <div className="profile-assessment-result profile-assessment-result--empty" role="region" aria-label={label}>
+    <div className="eyebrow">{shortLabel}</div>
+    <span className="muted">{label === "Điểm cuối kỳ" ? "Chưa làm" : "Chưa có"}</span>
+    {action}
+  </div>;
+  return <div className="profile-assessment-result" role="region" aria-label={label}>
+    <div className="eyebrow">{shortLabel}{result.approvedLevel ? ` · ${result.approvedLevel}` : ""}</div>
+    <strong className="profile-assessment-total">{result.totalScore}</strong>
+    <div className="profile-assessment-skills">{ASSESSMENT_SKILLS.map((section) => {
+      const score = Math.max(0, Math.min(100, result.sections[section] ?? 0));
+      return <div className="profile-assessment-skill" key={section}><span>{SECTION_LABELS[section]}</span><i aria-hidden="true"><b style={{ width: `${score}%` }} /></i><small>{score}%</small></div>;
+    })}</div>
+  </div>;
+}
 function Avatar({ avatar, name, size = 88 }: { avatar: Partial<LearnerAvatarData> | undefined; name: string; size?: number }) { const acc = avatar?.acc ?? "none"; const color = avatar?.color ?? "olive"; const bg = avatar?.bg ?? 0; return <span className="app-avatar" style={{ width: size, height: size, minWidth: size, minHeight: size, boxSizing: "border-box", background: AVATAR_BG[bg], color: AVATAR_COLOR_HEX[color] }} aria-label={`Avatar của ${name}`}>{acc !== "none" ? <AvatarMark acc={acc} size={Math.round(size * .58)} /> : name.split(/\s+/).slice(-2).map((word) => word[0]).join("").toUpperCase()}</span>; }
 export function AvatarMark({ acc, size = 32 }: { acc: Exclude<LearnerAvatarData["acc"], "none">; size?: number }) { const icons: Record<typeof acc, LucideIcon> = { leaf: Leaf, sun: Sun, flower: Flower2, cloud: Cloud, star: Star, drop: Droplets, snow: Snowflake }; const Icon = icons[acc]; return <Icon size={size} strokeWidth={1.7} aria-hidden="true" />; }
 function SeasonFigure({ level }: { level: number }) {
@@ -215,6 +277,7 @@ const HABITS: Record<string, string> = { movies: "Xem phim / video tiếng Anh",
 const LEARNING_STYLES: Record<string, string> = { reading: "Đọc và ghi chú", listening: "Nghe và nhắc lại", speaking: "Nói / hội thoại", quiz: "Trắc nghiệm, điền từ", practice: "Thử thách ngắn", writing: "Viết câu, viết email", examples: "Ví dụ sát việc đang làm", games: "Thử thách ngắn, có điểm" };
 const DEVICES: Record<string, string> = { phone: "Điện thoại", laptop: "Máy tính", computer: "Máy tính", both: "Cả hai" };
 const SELF_LEVELS: Record<string, string> = { unknown: "Không rõ", A1: "Mới bắt đầu (A1)", A2: "Sơ cấp (A2)", B1: "Trung cấp (B1)", B2: "Khá (B2)", C1: "Tốt (C1)" };
+const ASSESSMENT_SKILLS = ["listening", "reading", "writing", "speaking"] as const;
 const SECTION_LABELS: Record<string, string> = { listening: "Nghe", reading: "Đọc", writing: "Viết", speaking: "Nói" };
 const AVATAR_ACC_LABELS: Record<string, string> = { none: "Chữ cái đầu", leaf: "Lá", sun: "Nắng", flower: "Hoa", cloud: "Mây", star: "Sao", drop: "Giọt mưa", snow: "Tuyết" };
 const AVATAR_COLOR_LABELS: Record<string, string> = { ink: "Mực", brown: "Nâu", olive: "Ô liu", taupe: "Xám nâu", orange: "Cam", rose: "Đỏ hồng" };

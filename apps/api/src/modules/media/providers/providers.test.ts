@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { createOpenverseProvider } from "./openverse.js";
+import { createPixabayProvider } from "./pixabay.js";
 import { createWikimediaProvider } from "./wikimedia.js";
 import { createWikipediaProvider } from "./wikipedia.js";
 
@@ -74,13 +75,14 @@ describe("exact Wikipedia media", () => {
 });
 
 describe("Wikimedia Commons search", () => {
-  it("skips non-bitmap, sensitive, and unlicensed rows before returning attributed media", async () => {
+  it("skips non-bitmap, sensitive, unlicensed and diagram-like rows before returning attributed media", async () => {
     const fetchImpl = vi.fn().mockResolvedValue(jsonResponse({
       query: { pages: {
         1: imagePage(1, "File:Notebook.svg", "image/svg+xml", "CC0", false),
         2: imagePage(2, "File:Nude notebook campaign.jpg", "image/jpeg", "CC BY 4.0", false),
         3: imagePage(3, "File:Unlicensed notebook.jpg", "image/jpeg", "", false),
-        4: imagePage(4, "File:Paper notebook.jpg", "image/jpeg", "CC BY 4.0", false)
+        4: imagePage(4, "File:Notebook implementation timeline diagram.png", "image/png", "CC BY 4.0", false),
+        5: imagePage(5, "File:Paper notebook.jpg", "image/jpeg", "CC BY 4.0", false)
       } }
     }));
 
@@ -147,6 +149,48 @@ describe("Openverse search", () => {
 
     await expect(createOpenverseProvider({ fetchImpl, timeoutMs: 5 }).search("notebook")).resolves.toBeNull();
     expect(Date.now() - startedAt).toBeLessThan(100);
+  });
+});
+
+describe("Pixabay search", () => {
+  it("returns a safe photo with Pixabay attribution and requests photo-only safe search", async () => {
+    const fetchImpl = vi.fn().mockResolvedValue(jsonResponse({ hits: [{
+      id: 42,
+      pageURL: "https://pixabay.com/photos/team-meeting-42/",
+      previewURL: "https://cdn.pixabay.com/photo/2026/01/01/team-meeting_150.jpg",
+      user: "Photo Author",
+      tags: "team, meeting, office",
+      imageWidth: 1920,
+      imageHeight: 1280
+    }] }));
+
+    await expect(createPixabayProvider({ apiKey: "test-key", fetchImpl }).search("office team meeting")).resolves.toEqual({
+      provider: "pixabay",
+      providerAssetId: "42",
+      downloadUrl: "https://cdn.pixabay.com/photo/2026/01/01/team-meeting_150.jpg",
+      sourcePageUrl: "https://pixabay.com/photos/team-meeting-42/",
+      creator: "Photo Author",
+      licence: "Pixabay Content License",
+      licenceUrl: "https://pixabay.com/service/license-summary/"
+    });
+    const url = new URL(String(fetchImpl.mock.calls[0]?.[0]));
+    expect(url.hostname).toBe("pixabay.com");
+    expect(url.searchParams.get("q")).toBe("office team meeting");
+    expect(url.searchParams.get("image_type")).toBe("photo");
+    expect(url.searchParams.get("safesearch")).toBe("true");
+  });
+
+  it("does not call Pixabay when no API key is configured", async () => {
+    const fetchImpl = vi.fn();
+    await expect(createPixabayProvider({ apiKey: "", fetchImpl }).search("meeting")).resolves.toBeNull();
+    expect(fetchImpl).not.toHaveBeenCalled();
+  });
+
+  it("condenses verbose AI prompts into photo-search keywords", async () => {
+    const fetchImpl = vi.fn().mockResolvedValue(jsonResponse({ hits: [] }));
+    await createPixabayProvider({ apiKey: "test-key", fetchImpl }).search("a presentation slide on a laptop screen showing a simple bar chart with clean layout");
+    const url = new URL(String(fetchImpl.mock.calls[0]?.[0]));
+    expect(url.searchParams.get("q")).toBe("presentation laptop workplace");
   });
 });
 

@@ -128,7 +128,9 @@ describe("Operator review detail and AI grade API", () => {
     expect(runTask).toHaveBeenCalledTimes(1);
 
     const manager = await app.inject({ ...request, headers: { cookie: managerCookie } });
-    expect(manager.statusCode).toBe(403);
+    expect(manager.statusCode, manager.body).toBe(200);
+    expect(manager.json()).toMatchObject({ jobId: first.json().jobId, status: "succeeded", result: { total: 90 } });
+    expect(runTask).toHaveBeenCalledTimes(1);
 
     const manual = await app.inject({
       method: "POST", url: `/api/v1/content/review/submissions/${DEMO_IDS.practiceSubmission}/manual-grade`,

@@ -3,6 +3,7 @@ import { z } from "zod";
 export const coachInputSchema = z.object({
   message: z.string().trim().min(1).max(2_000),
   cefr: z.enum(["A1", "A2", "B1", "B2", "C1"]),
+  persona: z.enum(["informal", "formal"]),
   scenario: z.string().trim().min(1).max(500),
   priorTurns: z.array(z.object({
     speaker: z.enum(["learner", "coach"]),
@@ -244,11 +245,18 @@ const legacyLessonPartCodes = [
   "listening", "reading", "writing", "speaking"
 ] as const;
 
+function isGrammarPatternTitle(value: string): boolean {
+  const normalized = value.trim();
+  if (/[.!;]/.test(normalized)) return false;
+  if (/\b(?:about|describing|talking|learning|practicing|using)\b/i.test(normalized)) return false;
+  return /[+/?…]|\b(?:S|V|O|subject|verb)\b|^\s*(?:I|you|we|they|he|she|it|do|does|can|could|will|would|should|have|has|be|there|what|how|where)\b/i.test(normalized);
+}
+
 const generatedLessonPartsSchema = z.array(z.object({
   code: lessonPartCodeSchema,
   title: z.string().trim().min(1).max(100),
   content: z.record(z.string(), z.unknown())
-})).min(9).max(11).superRefine((parts, ctx) => {
+})).length(11).superRefine((parts, ctx) => {
   const codes = parts.map((part) => part.code);
   const codeSet = new Set(codes);
 
@@ -258,18 +266,108 @@ const generatedLessonPartsSchema = z.array(z.object({
     }
   }
 
-  if (codes.length > legacyLessonPartCodes.length && (!codeSet.has("word_class") || !codeSet.has("word_use"))) {
+  if (!codeSet.has("word_class") || !codeSet.has("word_use")) {
     ctx.addIssue({ code: "custom", message: "Enriched lessons must include word_class and word_use" });
   }
 
   if (codeSet.size !== codes.length) {
     ctx.addIssue({ code: "custom", message: "Lesson part codes must be unique" });
   }
+
+  const expectedOrder = [...legacyLessonPartCodes.slice(0, -1), "word_class", "word_use", "speaking"] as const;
+  if (codes.some((code, index) => code !== expectedOrder[index])) {
+    ctx.addIssue({ code: "custom", message: "Lesson part codes must follow the required order" });
+  }
+
+  for (const [index, part] of parts.entries()) validateGeneratedPartContent(part.code, part.content, ctx, index);
 });
+
+function validateGeneratedPartContent(code: z.infer<typeof lessonPartCodeSchema>, content: Record<string, unknown>, ctx: z.RefinementCtx, index: number): void {
+  const path = (key: string) => [index, "content", key] as (string | number)[];
+  const stringField = (key: string, max = 2_000) => {
+    const value = content[key];
+    if (typeof value !== "string" || !value.trim() || value.trim().length > max) ctx.addIssue({ code: "custom", path: path(key), message: `${code}.content.${key} must be a non-empty string` });
+    return typeof value === "string" ? value.trim() : "";
+  };
+  const stringList = (key: string, min: number, max: number) => {
+    const value = content[key];
+    if (!Array.isArray(value) || value.length < min || value.length > max || value.some((item) => typeof item !== "string" || !item.trim())) {
+      ctx.addIssue({ code: "custom", path: path(key), message: `${code}.content.${key} must contain ${min === max ? min : `${min}-${max}`} non-empty strings` });
+      return [] as string[];
+    }
+    return value.map((item) => String(item).trim());
+  };
+  const choiceQuestion = (bodyKey: "audio" | "text") => {
+    stringField(bodyKey, 4_000);
+    stringField("prompt", 1_000);
+    const options = stringList("options", 4, 4);
+    const answer = stringField("answer", 500);
+    if (options.length === 4 && answer && !options.includes(answer)) ctx.addIssue({ code: "custom", path: path("answer"), message: "answer must exactly match one option" });
+  };
+
+  switch (code) {
+    case "objective": stringField("text", 500); return;
+    case "instruction": stringList("steps", 3, 5); return;
+    case "vocabulary": {
+      const items = content.items;
+      if (!Array.isArray(items) || items.length !== 3) {
+        ctx.addIssue({ code: "custom", path: path("items"), message: "vocabulary.content.items must contain exactly 3 words" });
+        return;
+      }
+      for (const [itemIndex, raw] of items.entries()) {
+        if (!raw || typeof raw !== "object" || Array.isArray(raw)) {
+          ctx.addIssue({ code: "custom", path: [...path("items"), itemIndex], message: "vocabulary item must be an object" });
+          continue;
+        }
+        const item = raw as Record<string, unknown>;
+        for (const key of ["word", "pronunciation", "meaning", "imageQuery"] as const) {
+          const value = item[key];
+          if (typeof value !== "string" || !value.trim()) ctx.addIssue({ code: "custom", path: [...path("items"), itemIndex, key], message: `${key} is required` });
+        }
+        const collocations = item.collocations;
+        if (!Array.isArray(collocations) || collocations.length !== 3 || collocations.some((value) => typeof value !== "string" || !value.trim())) ctx.addIssue({ code: "custom", path: [...path("items"), itemIndex, "collocations"], message: "exactly 3 collocations are required" });
+        for (const key of ["family", "synonyms", "antonyms"] as const) {
+          const value = item[key];
+          if (!Array.isArray(value) || value.some((entry) => !entry || typeof entry !== "object" || Array.isArray(entry))) ctx.addIssue({ code: "custom", path: [...path("items"), itemIndex, key], message: `${key} must be an array of word objects` });
+        }
+        const umbrella = item.umbrella;
+        if (!umbrella || typeof umbrella !== "object" || Array.isArray(umbrella)) ctx.addIssue({ code: "custom", path: [...path("items"), itemIndex, "umbrella"], message: "umbrella word is required" });
+      }
+      return;
+    }
+    case "grammar": stringField("formula", 300); stringField("usage", 1_000); stringList("examples", 2, 3); return;
+    case "pronunciation": {
+      stringField("focus", 100); stringField("tip", 500);
+      const words = content.words;
+      if (!Array.isArray(words) || words.length !== 3 || words.some((item) => !item || typeof item !== "object" || Array.isArray(item))) ctx.addIssue({ code: "custom", path: path("words"), message: "exactly 3 pronunciation word objects are required" });
+      return;
+    }
+    case "listening": choiceQuestion("audio"); return;
+    case "reading": choiceQuestion("text"); return;
+    case "writing": {
+      const type = stringField("type", 20);
+      if (!new Set(["fill", "mcq", "write"]).has(type)) ctx.addIssue({ code: "custom", path: path("type"), message: "writing.type must be fill, mcq or write" });
+      stringField("prompt", 1_000); stringField("answer", 1_000);
+      if (type === "mcq") stringList("options", 4, 4);
+      return;
+    }
+    case "word_class":
+    case "word_use": {
+      stringField("prompt", 1_000);
+      const options = stringList("options", 4, 4);
+      const answer = stringField("answer", 500);
+      if (options.length === 4 && answer && !options.includes(answer)) ctx.addIssue({ code: "custom", path: path("answer"), message: "answer must exactly match one option" });
+      return;
+    }
+    case "speaking": stringField("prompt", 1_000); stringField("answer", 500); return;
+  }
+}
 
 const generatedLessonSchema = z.object({
   dayNumber: z.number().int().min(1).max(5),
-  title: z.string().trim().min(1).max(200),
+  title: z.string().trim().min(1).max(60).refine(isGrammarPatternTitle, {
+    message: "Lesson title must be a short grammar pattern or sentence frame, not a descriptive phrase"
+  }),
   durationMinutes: z.number().int().min(5).max(20),
   parts: generatedLessonPartsSchema
 });
@@ -285,35 +383,464 @@ export const weeklyLessonsInputSchema = z.object({
   lessonCount: z.literal(5)
 });
 
-export const weeklyLessonsOutputSchema = z.object({ lessons: z.array(generatedLessonSchema).length(5) });
+export const weeklyLessonDayInputSchema = weeklyLessonsInputSchema
+  .omit({ plan: true, lessonCount: true })
+  .extend({
+    dayNumber: z.number().int().min(1).max(5),
+    lessonFocus: z.string().trim().min(1).max(300),
+    allLessonFocuses: z.array(z.string().trim().min(1).max(300)).length(5)
+  });
+
+export const weeklyLessonVocabularyInputSchema = weeklyLessonDayInputSchema.extend({
+  grammarFormula: z.string().trim().min(1).max(300),
+  grammarExamples: z.array(z.string().trim().min(1).max(500)).length(2),
+  excludedVocabulary: z.array(z.string().trim().min(1).max(100)).max(100).optional()
+});
+
+export const weeklyLessonSkillsInputSchema = weeklyLessonVocabularyInputSchema.extend({
+  vocabularyWords: z.array(z.string().trim().min(1).max(100)).length(3)
+});
+
+const weeklyLessonsBaseOutputSchema = z.object({ lessons: z.array(generatedLessonSchema).length(5) });
+export const weeklyLessonsOutputSchema = z.preprocess(normalizeWeeklyLessonTitles, weeklyLessonsBaseOutputSchema);
 export type WeeklyLessonsTaskOutput = z.infer<typeof weeklyLessonsOutputSchema>;
 
-export const weeklyLessonsOutputJsonSchema = {
-  type: "object", additionalProperties: false, required: ["lessons"],
-  properties: {
-    lessons: {
-      type: "array", minItems: 5, maxItems: 5,
-      items: {
-        type: "object", additionalProperties: false,
-        required: ["dayNumber", "title", "durationMinutes", "parts"],
-        properties: {
-          dayNumber: { type: "integer", minimum: 1, maximum: 5 },
-          title: { type: "string" },
-          durationMinutes: { type: "integer", minimum: 5, maximum: 20 },
-          parts: {
-            type: "array", minItems: 9, maxItems: 11,
-            items: {
-              type: "object", additionalProperties: false, required: ["code", "title", "content"],
-              properties: {
-                code: { type: "string", enum: ["objective", "instruction", "vocabulary", "grammar", "pronunciation", "listening", "reading", "writing", "word_class", "word_use", "speaking"] },
-                title: { type: "string" }, content: { type: "object" }
-              }
-            }
-          }
-        }
-      }
-    }
+const weeklyLessonDayBaseOutputSchema = z.object({ lesson: generatedLessonSchema });
+export const weeklyLessonDayOutputSchema = z.preprocess((value) => {
+  const parsed = parseModelJson(value);
+  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return parsed;
+  const output = parsed as Record<string, unknown>;
+  const normalized = normalizeWeeklyLessonTitles({ lessons: [output.lesson] });
+  if (!normalized || typeof normalized !== "object" || Array.isArray(normalized)) return parsed;
+  const lessons = (normalized as { lessons?: unknown }).lessons;
+  return { lesson: Array.isArray(lessons) ? lessons[0] : output.lesson };
+}, weeklyLessonDayBaseOutputSchema);
+export type WeeklyLessonDayTaskOutput = z.infer<typeof weeklyLessonDayOutputSchema>;
+
+const strictWordSlotSchema = z.object({ word: z.string().trim().min(1), ipa: z.string().trim().min(1) });
+export const weeklyLessonFoundationOutputSchema = z.object({
+  title: z.string().trim().min(1).max(60),
+  durationMinutes: z.union([z.literal(5), z.literal(10), z.literal(15), z.literal(20)]),
+  objective: z.object({
+    title: z.string().trim().min(1),
+    text: z.string().trim().min(1).refine((value) => value.split(/\s+/).filter(Boolean).length <= 24, { message: "Objective must contain at most 24 words" })
+  }),
+  instruction: z.object({ title: z.string().trim().min(1), step1: z.string().trim().min(1), step2: z.string().trim().min(1), step3: z.string().trim().min(1) }),
+  grammar: z.object({
+    title: z.string().trim().min(1), formula: z.string().trim().min(1), usage: z.string().trim().min(1),
+    example1: z.string().trim().min(1), example2: z.string().trim().min(1)
+  }),
+  pronunciation: z.object({
+    title: z.string().trim().min(1), focus: z.string().trim().min(1), tip: z.string().trim().min(1),
+    word1: strictWordSlotSchema, word2: strictWordSlotSchema, word3: strictWordSlotSchema
+  })
+});
+
+const strictVocabularyRelationSchema = z.object({ word: z.string().trim().min(1), type: z.string().trim().min(1), meaning: z.string().trim().min(1) });
+const strictVocabularyLevelRelationSchema = z.object({ word: z.string().trim().min(1), level: z.string().trim().min(1), note: z.string().trim().min(1) });
+const strictWordMeaningSchema = z.object({ word: z.string().trim().min(1), meaning: z.string().trim().min(1) });
+const strictVocabularyItemSchema = z.object({
+  word: z.string().trim().min(1), partOfSpeech: z.string().trim().min(1).max(40),
+  pronunciation: z.string().trim().min(1), meaning: z.string().trim().min(1), imageQuery: z.string().trim().min(1),
+  collocation1: z.string().trim().min(1), collocation2: z.string().trim().min(1), collocation3: z.string().trim().min(1),
+  family1: strictVocabularyRelationSchema.nullable(), family2: strictVocabularyRelationSchema.nullable(),
+  umbrellaWord: z.string().trim().min(1), umbrellaMeaning: z.string().trim().min(1),
+  sibling1: strictWordMeaningSchema.nullable(), sibling2: strictWordMeaningSchema.nullable(), sibling3: strictWordMeaningSchema.nullable(),
+  synonym1: strictVocabularyLevelRelationSchema.nullable(), synonym2: strictVocabularyLevelRelationSchema.nullable(),
+  antonym1: strictVocabularyLevelRelationSchema.nullable()
+}).superRefine((item, ctx) => {
+  if (!item.family1) ctx.addIssue({ code: "custom", path: ["family1"], message: "At least one real word-family relation is required" });
+  if (!item.synonym1) ctx.addIssue({ code: "custom", path: ["synonym1"], message: "At least one real synonym is required" });
+  const word = item.word.toLocaleLowerCase("en-US");
+  const collocations = [item.collocation1, item.collocation2, item.collocation3];
+  if (new Set(collocations.map((value) => value.toLocaleLowerCase("en-US"))).size !== 3) {
+    ctx.addIssue({ code: "custom", path: ["collocation1"], message: "The three examples must be different" });
   }
+  if (collocations.some((value) => !value.toLocaleLowerCase("en-US").includes(word))) {
+    ctx.addIssue({ code: "custom", path: ["collocation1"], message: "Every example must contain the vocabulary word" });
+  }
+});
+export const weeklyLessonVocabularyOutputSchema = z.object({
+  title: z.string().trim().min(1),
+  word1: strictVocabularyItemSchema,
+  word2: strictVocabularyItemSchema,
+  word3: strictVocabularyItemSchema
+});
+
+const strictChoiceOutputSchema = z.object({
+  title: z.string().trim().min(1), body: z.string().trim().min(1), prompt: z.string().trim().min(1),
+  option1: z.string().trim().min(1), option2: z.string().trim().min(1), option3: z.string().trim().min(1), option4: z.string().trim().min(1),
+  answer: z.string().trim().min(1)
+});
+const strictQuestionOutputSchema = strictChoiceOutputSchema.omit({ body: true });
+export const weeklyLessonSkillsOutputSchema = z.object({
+  listening: strictChoiceOutputSchema,
+  reading: strictChoiceOutputSchema,
+  writing: z.object({
+    title: z.string().trim().min(1), type: z.enum(["fill", "mcq", "write"]), prompt: z.string().trim().min(1),
+    option1: z.string().trim().nullable(), option2: z.string().trim().nullable(), option3: z.string().trim().nullable(), option4: z.string().trim().nullable(),
+    answer: z.string().trim().min(1)
+  }),
+  wordClass: strictQuestionOutputSchema,
+  wordUse: strictQuestionOutputSchema,
+  speaking: z.object({ title: z.string().trim().min(1), prompt: z.string().trim().min(1), answer: z.string().trim().min(1) })
+});
+
+/** Make the learner-facing title deterministic; model-generated headings are never authoritative. */
+function normalizeWeeklyLessonTitles(value: unknown): unknown {
+  value = parseModelJson(value);
+  if (!value || typeof value !== "object" || Array.isArray(value)) return value;
+  const output = value as Record<string, unknown>;
+  let rawLessons = parseModelJson(output.lessons);
+  if (rawLessons && typeof rawLessons === "object" && !Array.isArray(rawLessons)) {
+    const lessonObject = rawLessons as Record<string, unknown>;
+    rawLessons = lessonObject.lessons ?? fixedSlotValues(lessonObject, ["day1", "day2", "day3", "day4", "day5"]);
+  }
+  if (!Array.isArray(rawLessons)) return value;
+  return {
+    ...output,
+    lessons: rawLessons.map((rawLesson, lessonIndex) => {
+      if (!rawLesson || typeof rawLesson !== "object" || Array.isArray(rawLesson)) return rawLesson;
+      const lesson = rawLesson as Record<string, unknown>;
+      const parts = normalizeLessonParts(lesson.parts);
+      if (!Array.isArray(parts)) return lesson;
+      const grammar = parts.find((part) => part && typeof part === "object" && !Array.isArray(part)
+        && (part as Record<string, unknown>).code === "grammar") as Record<string, unknown> | undefined;
+      const content = grammar?.content;
+      const grammarContent = content && typeof content === "object" && !Array.isArray(content)
+        ? content as Record<string, unknown> : {};
+      const formula = typeof grammarContent.formula === "string" ? grammarContent.formula.trim() : "";
+      const examples = Array.isArray(grammarContent.examples) ? grammarContent.examples : [];
+      const title = [formula, ...examples.map(inferGrammarPatternFromExample), lesson.title]
+        .find((candidate): candidate is string => typeof candidate === "string" && candidate.trim().length <= 60 && isGrammarPatternTitle(candidate));
+      return {
+        ...lesson,
+        dayNumber: lessonIndex + 1,
+        parts,
+        title: title?.trim() ?? inferGrammarPatternFromDescription(`${lesson.title ?? ""} ${formula} ${grammarContent.usage ?? ""}`)
+      };
+    })
+  };
+}
+
+const lessonPartOrder = [
+  "objective", "instruction", "vocabulary", "grammar", "pronunciation",
+  "listening", "reading", "writing", "word_class", "word_use", "speaking"
+] as const;
+
+function normalizeLessonParts(value: unknown): unknown {
+  if (Array.isArray(value)) return value;
+  if (!value || typeof value !== "object") return value;
+  const object = value as Record<string, unknown>;
+  return lessonPartOrder.map((code) => normalizeLessonPart(code, object[code]));
+}
+
+function normalizeLessonPart(code: typeof lessonPartOrder[number], value: unknown): unknown {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return value;
+  const part = value as Record<string, unknown>;
+  const rawContent = part.content;
+  if (!rawContent || typeof rawContent !== "object" || Array.isArray(rawContent)) return { ...part, code };
+  const content = { ...(rawContent as Record<string, unknown>) };
+
+  if (code === "instruction") content.steps = fixedSlotValues(content.steps, ["step1", "step2", "step3"]);
+  if (code === "grammar") content.examples = fixedSlotValues(content.examples, ["example1", "example2"]);
+  if (code === "pronunciation") content.words = fixedSlotValues(content.words, ["word1", "word2", "word3"]);
+  if (["listening", "reading", "word_class", "word_use"].includes(code)) {
+    content.options = fixedSlotValues(content.options, ["option1", "option2", "option3", "option4"]);
+  }
+  if (code === "writing") {
+    content.options = fixedSlotValues(content.options, ["option1", "option2", "option3", "option4"], true);
+  }
+  if (code === "vocabulary") {
+    const items = fixedSlotValues(content.items, ["word1", "word2", "word3"]);
+    content.items = Array.isArray(items) ? items.map(normalizeVocabularyItem) : items;
+  }
+  return { ...part, code, content };
+}
+
+function normalizeVocabularyItem(value: unknown): unknown {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return value;
+  const item = value as Record<string, unknown>;
+  const umbrella = item.umbrella && typeof item.umbrella === "object" && !Array.isArray(item.umbrella)
+    ? item.umbrella as Record<string, unknown> : undefined;
+  return {
+    ...item,
+    collocations: fixedSlotValues(item.collocations, ["collocation1", "collocation2", "collocation3"]),
+    family: fixedSlotValues(item.family, ["item1", "item2"], true),
+    synonyms: fixedSlotValues(item.synonyms, ["item1", "item2"], true),
+    antonyms: fixedSlotValues(item.antonyms, ["item1"], true),
+    ...(umbrella
+      ? { umbrella: { ...umbrella, siblings: fixedSlotValues(umbrella.siblings, ["item1", "item2", "item3"], true) } }
+      : {})
+  };
+}
+
+function fixedSlotValues(value: unknown, names: string[], omitNull = false): unknown {
+  if (Array.isArray(value)) return value;
+  if (!value || typeof value !== "object") return value;
+  const object = value as Record<string, unknown>;
+  const values = names.map((name) => object[name]);
+  return omitNull ? values.filter((item) => item !== null && item !== undefined) : values;
+}
+
+function parseModelJson(value: unknown): unknown {
+  if (typeof value !== "string") return value;
+  const text = value.trim().replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/, "");
+  try {
+    return JSON.parse(text) as unknown;
+  } catch {
+    return value;
+  }
+}
+
+function inferGrammarPatternFromExample(value: unknown): string | undefined {
+  if (typeof value !== "string") return undefined;
+  const example = value.trim().replace(/[.!?]+$/, "");
+  if (!example) return undefined;
+  if (/^(?:what|where|when|why|who|how)\b/i.test(example)) return "Wh- + auxiliary + S + V?";
+
+  const words = example.match(/[A-Za-z]+(?:'[A-Za-z]+)?/g) ?? [];
+  if (words.length < 2) return undefined;
+  const subject = /^(?:i|you|we|they|he|she|it|[A-Z][a-z]+)$/i.test(words[0]!);
+  if (!subject) return undefined;
+  const second = words[1]!.toLowerCase();
+  if (["am", "is", "are", "was", "were"].includes(second)) return "S + be + complement";
+  if (["can", "could", "will", "would", "should", "must", "may", "might"].includes(second)) return "S + modal + V";
+  if (["have", "has", "had"].includes(second) && words.length > 2 && /(?:ed|en|known|done|made|seen|gone|been)$/i.test(words[2]!)) return "S + have/has + V3";
+  if (["do", "does", "did"].includes(second)) return "Do/Does/Did + S + V?";
+  return words.length > 2 ? "S + V + O" : "S + V";
+}
+
+function inferGrammarPatternFromDescription(value: string): string {
+  const description = value.toLowerCase();
+  if (/present\s+continuous|present\s+progressive/.test(description)) return "S + am/is/are + V-ing";
+  if (/past\s+continuous|past\s+progressive/.test(description)) return "S + was/were + V-ing";
+  if (/present\s+perfect/.test(description)) return "S + have/has + V3";
+  if (/past\s+simple|simple\s+past/.test(description)) return "S + V2/ed";
+  if (/future|be going to/.test(description)) return "S + will/be going to + V";
+  if (/present\s+simple|simple\s+present|routine|habit/.test(description)) return "S + V(s)";
+  if (/question|interrogative/.test(description)) return "Auxiliary + S + V?";
+  return "S + V";
+}
+
+const strictObject = (required: string[], properties: Record<string, unknown>) => ({
+  type: "object", additionalProperties: false, required, properties
+});
+const nullable = (schema: Record<string, unknown>) => ({ anyOf: [schema, { type: "null" }] });
+const fixedSlots = (names: string[], schema: Record<string, unknown>, nullableItems = false) => strictObject(
+  names,
+  Object.fromEntries(names.map((name) => [name, nullableItems ? nullable(schema) : schema]))
+);
+const stringSchema = { type: "string" };
+
+const foundationWordJsonSchema = strictObject(
+  ["word", "ipa"],
+  { word: stringSchema, ipa: stringSchema }
+);
+
+export const weeklyLessonFoundationOutputJsonSchema = strictObject(
+  ["title", "durationMinutes", "objective", "instruction", "grammar", "pronunciation"],
+  {
+    title: stringSchema,
+    durationMinutes: { type: "integer", enum: [5, 10, 15, 20] },
+    objective: strictObject(["title", "text"], { title: stringSchema, text: stringSchema }),
+    instruction: strictObject(
+      ["title", "step1", "step2", "step3"],
+      { title: stringSchema, step1: stringSchema, step2: stringSchema, step3: stringSchema }
+    ),
+    grammar: strictObject(
+      ["title", "formula", "usage", "example1", "example2"],
+      {
+        title: stringSchema, formula: stringSchema, usage: stringSchema,
+        example1: stringSchema, example2: stringSchema
+      }
+    ),
+    pronunciation: strictObject(
+      ["title", "focus", "tip", "word1", "word2", "word3"],
+      {
+        title: stringSchema, focus: stringSchema, tip: stringSchema,
+        word1: foundationWordJsonSchema,
+        word2: foundationWordJsonSchema,
+        word3: foundationWordJsonSchema
+      }
+    )
+  }
+) satisfies Record<string, unknown>;
+
+const compactVocabularyItemJsonSchema = strictObject(
+  [
+    "word", "partOfSpeech", "pronunciation", "meaning", "imageQuery",
+    "collocation1", "collocation2", "collocation3",
+    "family1", "family2", "umbrellaWord", "umbrellaMeaning",
+    "sibling1", "sibling2", "sibling3",
+    "synonym1", "synonym2", "antonym1"
+  ],
+  {
+    word: stringSchema, partOfSpeech: stringSchema, pronunciation: stringSchema, meaning: stringSchema, imageQuery: stringSchema,
+    collocation1: stringSchema, collocation2: stringSchema, collocation3: stringSchema,
+    family1: nullable({ $ref: "#/$defs/relation" }), family2: nullable({ $ref: "#/$defs/relation" }),
+    umbrellaWord: stringSchema, umbrellaMeaning: stringSchema,
+    sibling1: nullable({ $ref: "#/$defs/wordMeaning" }),
+    sibling2: nullable({ $ref: "#/$defs/wordMeaning" }),
+    sibling3: nullable({ $ref: "#/$defs/wordMeaning" }),
+    synonym1: nullable({ $ref: "#/$defs/levelRelation" }),
+    synonym2: nullable({ $ref: "#/$defs/levelRelation" }),
+    antonym1: nullable({ $ref: "#/$defs/levelRelation" })
+  }
+);
+
+export const weeklyLessonVocabularyOutputJsonSchema = {
+  ...strictObject(
+    ["title", "word1", "word2", "word3"],
+    {
+      title: stringSchema,
+      word1: { $ref: "#/$defs/item" },
+      word2: { $ref: "#/$defs/item" },
+      word3: { $ref: "#/$defs/item" }
+    }
+  ),
+  $defs: {
+    item: compactVocabularyItemJsonSchema,
+    relation: strictObject(["word", "type", "meaning"], { word: stringSchema, type: stringSchema, meaning: stringSchema }),
+    levelRelation: strictObject(["word", "level", "note"], { word: stringSchema, level: stringSchema, note: stringSchema }),
+    wordMeaning: strictObject(["word", "meaning"], { word: stringSchema, meaning: stringSchema })
+  }
+} satisfies Record<string, unknown>;
+
+const compactChoiceJsonSchema = (includeBody: boolean) => strictObject(
+  includeBody
+    ? ["title", "body", "prompt", "option1", "option2", "option3", "option4", "answer"]
+    : ["title", "prompt", "option1", "option2", "option3", "option4", "answer"],
+  {
+    title: stringSchema,
+    ...(includeBody ? { body: stringSchema } : {}),
+    prompt: stringSchema,
+    option1: stringSchema, option2: stringSchema, option3: stringSchema, option4: stringSchema,
+    answer: stringSchema
+  }
+);
+
+export const weeklyLessonSkillsOutputJsonSchema = strictObject(
+  ["listening", "reading", "writing", "wordClass", "wordUse", "speaking"],
+  {
+    listening: compactChoiceJsonSchema(true),
+    reading: compactChoiceJsonSchema(true),
+    writing: strictObject(
+      ["title", "type", "prompt", "option1", "option2", "option3", "option4", "answer"],
+      {
+        title: stringSchema, type: { type: "string", enum: ["fill", "mcq", "write"] }, prompt: stringSchema,
+        option1: nullable(stringSchema), option2: nullable(stringSchema),
+        option3: nullable(stringSchema), option4: nullable(stringSchema), answer: stringSchema
+      }
+    ),
+    wordClass: compactChoiceJsonSchema(false),
+    wordUse: compactChoiceJsonSchema(false),
+    speaking: strictObject(["title", "prompt", "answer"], { title: stringSchema, prompt: stringSchema, answer: stringSchema })
+  }
+) satisfies Record<string, unknown>;
+
+const vocabularyRelationJsonSchema = strictObject(
+  ["word", "type", "meaning"],
+  { word: stringSchema, type: stringSchema, meaning: stringSchema }
+);
+const vocabularyLevelRelationJsonSchema = strictObject(
+  ["word", "level", "note"],
+  { word: stringSchema, level: stringSchema, note: stringSchema }
+);
+const wordMeaningJsonSchema = strictObject(
+  ["word", "meaning"],
+  { word: stringSchema, meaning: stringSchema }
+);
+const optionSlotsJsonSchema = fixedSlots(["option1", "option2", "option3", "option4"], stringSchema);
+const nullableOptionSlotsJsonSchema = fixedSlots(["option1", "option2", "option3", "option4"], stringSchema, true);
+const lessonPartJsonSchema = (content: Record<string, unknown>) => strictObject(
+  ["title", "content"],
+  { title: stringSchema, content }
+);
+const choiceJsonSchema = (bodyKey: "audio" | "text") => strictObject(
+  [bodyKey, "prompt", "options", "answer"],
+  { [bodyKey]: stringSchema, prompt: stringSchema, options: optionSlotsJsonSchema, answer: stringSchema }
+);
+
+const weeklyLessonJsonSchema = strictObject(
+  ["title", "durationMinutes", "parts"],
+  {
+    title: { type: "string", description: "Short grammar formula copied from parts.grammar.content.formula; never a descriptive topic label." },
+    durationMinutes: { type: "integer", enum: [5, 10, 15, 20] },
+    parts: strictObject(
+      [...lessonPartOrder],
+      {
+        objective: lessonPartJsonSchema(strictObject(["text"], { text: stringSchema })),
+        instruction: lessonPartJsonSchema(strictObject(["steps"], {
+          steps: fixedSlots(["step1", "step2", "step3"], stringSchema)
+        })),
+        vocabulary: lessonPartJsonSchema(strictObject(["items"], {
+          items: fixedSlots(["word1", "word2", "word3"], { $ref: "#/$defs/vocabularyItem" })
+        })),
+        grammar: lessonPartJsonSchema(strictObject(["formula", "usage", "examples"], {
+          formula: stringSchema,
+          usage: stringSchema,
+          examples: fixedSlots(["example1", "example2"], stringSchema)
+        })),
+        pronunciation: lessonPartJsonSchema(strictObject(["focus", "tip", "words"], {
+          focus: stringSchema,
+          tip: stringSchema,
+          words: fixedSlots(["word1", "word2", "word3"], strictObject(["word", "ipa"], { word: stringSchema, ipa: stringSchema }))
+        })),
+        listening: lessonPartJsonSchema(choiceJsonSchema("audio")),
+        reading: lessonPartJsonSchema(choiceJsonSchema("text")),
+        writing: lessonPartJsonSchema(strictObject(["type", "prompt", "options", "answer"], {
+          type: { type: "string", enum: ["fill", "mcq", "write"] },
+          prompt: stringSchema,
+          options: nullableOptionSlotsJsonSchema,
+          answer: stringSchema
+        })),
+        word_class: lessonPartJsonSchema(strictObject(["prompt", "options", "answer"], {
+          prompt: stringSchema, options: optionSlotsJsonSchema, answer: stringSchema
+        })),
+        word_use: lessonPartJsonSchema(strictObject(["prompt", "options", "answer"], {
+          prompt: stringSchema, options: optionSlotsJsonSchema, answer: stringSchema
+        })),
+        speaking: lessonPartJsonSchema(strictObject(["prompt", "answer"], { prompt: stringSchema, answer: stringSchema }))
+      }
+    )
+  }
+);
+
+const weeklyLessonVocabularyItemJsonSchema = strictObject(
+  ["word", "pronunciation", "meaning", "imageQuery", "collocations", "family", "umbrella", "synonyms", "antonyms"],
+  {
+    word: stringSchema,
+    pronunciation: stringSchema,
+    meaning: stringSchema,
+    imageQuery: stringSchema,
+    collocations: fixedSlots(["collocation1", "collocation2", "collocation3"], stringSchema),
+    family: fixedSlots(["item1", "item2"], vocabularyRelationJsonSchema, true),
+    umbrella: strictObject(["word", "meaning", "siblings"], {
+      word: stringSchema,
+      meaning: stringSchema,
+      siblings: fixedSlots(["item1", "item2", "item3"], wordMeaningJsonSchema, true)
+    }),
+    synonyms: fixedSlots(["item1", "item2"], vocabularyLevelRelationJsonSchema, true),
+    antonyms: fixedSlots(["item1"], vocabularyLevelRelationJsonSchema, true)
+  }
+);
+
+const weeklyLessonJsonDefinitions = {
+  lesson: weeklyLessonJsonSchema,
+  vocabularyItem: weeklyLessonVocabularyItemJsonSchema
+};
+
+export const weeklyLessonsOutputJsonSchema = {
+  ...strictObject(["lessons"], {
+    lessons: fixedSlots(["day1", "day2", "day3", "day4", "day5"], { $ref: "#/$defs/lesson" })
+  }),
+  $defs: weeklyLessonJsonDefinitions
+} satisfies Record<string, unknown>;
+
+export const weeklyLessonDayOutputJsonSchema = {
+  ...strictObject(["lesson"], { lesson: { $ref: "#/$defs/lesson" } }),
+  $defs: weeklyLessonJsonDefinitions
 } satisfies Record<string, unknown>;
 
 const assessmentChoiceSchema = z.object({
@@ -366,7 +893,7 @@ const weekSuggestionPlanSchema = z.partialRecord(
   z.array(z.string().trim().min(1).max(500)).length(5)
 ).refine((plan) => Object.keys(plan).length > 0, { message: "At least one active CEFR plan is required" });
 const weekSuggestionOptionSchema = z.object({
-  topic: z.string().trim().min(1).max(200), description: z.string().trim().min(1).max(2_000),
+  topic: z.string().trim().min(1).max(60).refine((value) => value.split(/\s+/).filter(Boolean).length <= 6, { message: "Topic must be a concise learning title" }), description: z.string().trim().min(1).max(2_000),
   objectives: z.string().trim().min(1).max(2_000), keyVocabHint: z.string().trim().min(1).max(1_000),
   plan: weekSuggestionPlanSchema
 });
@@ -383,7 +910,7 @@ export const weekSuggestionsOutputJsonSchema = {
       weekNumber: { type: "integer" }, levels: { type: "array", minItems: 1, items: { type: "string", enum: ["A1", "A2", "B1", "B2", "C1"] } }, options: { type: "array", minItems: 3, maxItems: 3, items: {
         type: "object", additionalProperties: false, required: ["topic", "description", "objectives", "keyVocabHint", "plan"],
         properties: {
-          topic: { type: "string" }, description: { type: "string" }, objectives: { type: "string" }, keyVocabHint: { type: "string" },
+          topic: { type: "string", maxLength: 60 }, description: { type: "string" }, objectives: { type: "string" }, keyVocabHint: { type: "string" },
           plan: { type: "object", minProperties: 1, additionalProperties: { type: "array", minItems: 5, maxItems: 5, items: { type: "string" } } }
         }
       } }

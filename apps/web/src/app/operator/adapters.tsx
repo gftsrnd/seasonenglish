@@ -1,15 +1,19 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import type {
   AssessmentLevelFormSlotView,
   AssessmentReviewOverviewView,
   ContentLessonMatrixView,
   ContentLessonSetVersionView,
+  ContentImageView,
+  LessonVocabularyItem,
   ContentPromptSettingsView,
   ContentReviewView,
   ContentWeekFrameView
 } from "@e4s/contracts";
 import type {
   Cefr,
+  LessonSetActionKey,
   OperatorDashboardView,
   OperatorLessonSetView,
   OperatorLessonsView,
@@ -22,7 +26,9 @@ import type {
   ReviewSubmission,
   WeekSuggestion
 } from "./types.js";
-import { Check } from "lucide-react";
+import { Check, Mic, Square, Volume2 } from "lucide-react";
+import { VocabularyCard as SharedVocabularyCard, type VocabularyRelationChip } from "../shared/lesson/VocabularyCard.js";
+import { conciseGrammarExample, conciseLessonObjective, conciseSpeakingInstruction, conciseSpeakingModel } from "../shared/lesson/presentation.js";
 
 const CEFR_LEVELS: Cefr[] = ["A1", "A2", "B1", "B2", "C1"];
 const REVIEW_TAB_MAP = { submissions: "subs", coach: "coach", micro: "micro", appeals: "appeals", attempts: "attempts", assessments: "tests" } as const;
@@ -38,7 +44,7 @@ const PROMPT_KEY_MAP: Record<string, PromptKey> = {
 const PROMPT_LABELS: Record<PromptKey, string> = {
   base: "Quy tắc chung (mọi lời gọi trừ sinh bài siêu ngắn)",
   placement: "Chấm test & xếp trình độ",
-  lesson: "Sinh 5 bài siêu ngắn cho tuần (giữ nguyên các biến {n} {cefr_level} {topic} {job} {learning_style} {explain_lang} và key JSON lessons[].day/title/objective/theory/vocab/pron/listening/reading/speaking/practice)",
+  lesson: "Sinh đúng 5 bài T2–T6 theo schema lessons[].dayNumber/title/durationMinutes/parts[] gồm đúng 11 phần; tiêu đề là công thức khung câu; từ vựng phải có cụm từ, họ từ, từ bao trùm, đồng nghĩa và trái nghĩa; phần nghe phải có audio cùng 4 lựa chọn.",
   weeks: "Gợi ý khung chủ đề tuần (giữ các biến {n} {learners} {levels} {used} và key weeks[].week/options[].topic/description/objectives/keyVocabHint/levels[].cefr/days[5])",
   mgrade: "Chấm bài thực hành siêu ngắn (giữ các biến {cefr_level} {explain_lang} {theory} {vocab} {practice} {answer} và key score/ok/feedback/fix)",
   coach: "AI coach hội thoại",
@@ -76,6 +82,7 @@ function lessonSetWarnings(source: ContentLessonSetVersionView): OperatorLessonS
   let incomplete = 0;
   let phrases = 0;
   let details = 0;
+  const detailIssues: NonNullable<OperatorLessonSetView["warnings"]["detailIssues"]> = [];
   for (const lesson of source.lessons) {
     const parts = new Map(lesson.parts.map(part => [part.code, part]));
     if (REQUIRED_LESSON_PARTS.some(code => !parts.has(code))) incomplete += 1;
@@ -83,7 +90,7 @@ function lessonSetWarnings(source: ContentLessonSetVersionView): OperatorLessonS
     const vocabulary = asRecord(parts.get("vocabulary")?.content);
     const items = asArray(vocabulary?.items)?.map(asRecord).filter((item): item is Record<string, unknown> => item !== undefined) ?? [];
     if (items.length > 0 && items.some(item => {
-      const phrases = asArray(item.collocations ?? item.examples);
+      const phrases = asArray(item.collocations ?? item.phrases ?? item.examples);
       return !phrases || phrases.length < 3;
     })) phrases += 1;
 
@@ -91,10 +98,38 @@ function lessonSetWarnings(source: ContentLessonSetVersionView): OperatorLessonS
     const readingOptions = asArray(asRecord(parts.get("reading")?.content)?.options);
     const missingNewParts = !parts.has("word_class") || !parts.has("word_use");
     const shortQuestions = !listeningOptions || listeningOptions.length < 4 || !readingOptions || readingOptions.length < 4;
-    const missingWordDetails = items.some(item => !Array.isArray(item.synonyms) || !Array.isArray(item.antonyms) || typeof item.wordFamily !== "string");
-    if (missingNewParts || shortQuestions || missingWordDetails) details += 1;
+    const missingWordStructure = items.some(item => !hasLegacyOrStructuredValue(item.family) || !hasLegacyOrStructuredValue(item.umbrella));
+    const missingSynonymCoverage = items.length > 0 && !items.some(item => hasLegacyOrStructuredValue(item.synonyms));
+    const missingAntonymCoverage = items.length > 0 && !items.some(item => hasLegacyOrStructuredValue(item.antonyms));
+    const missingWordDetails = missingWordStructure || missingSynonymCoverage || missingAntonymCoverage;
+    if (missingNewParts || shortQuestions || missingWordDetails) {
+      details += 1;
+      const missing: string[] = [];
+      if (!parts.has("word_class")) missing.push("bài tập Từ loại");
+      if (!parts.has("word_use")) missing.push("bài tập Dùng từ");
+      if (!listeningOptions || listeningOptions.length < 4) missing.push("Nghe chưa đủ 4 lựa chọn");
+      if (!readingOptions || readingOptions.length < 4) missing.push("Đọc chưa đủ 4 lựa chọn");
+      for (const item of items) {
+        const word = typeof item.word === "string" && item.word.trim() ? item.word.trim() : "Từ vựng";
+        if (!hasLegacyOrStructuredValue(item.family)) missing.push(`${word}: word family`);
+        if (!hasLegacyOrStructuredValue(item.umbrella)) missing.push(`${word}: từ bao trùm`);
+      }
+      if (missingSynonymCoverage) missing.push("từ đồng nghĩa");
+      if (missingAntonymCoverage) missing.push("từ trái nghĩa");
+      detailIssues.push({
+        lessonId: lesson.id,
+        dayLabel: ["T2", "T3", "T4", "T5", "T6"][lesson.dayNumber - 1] ?? `Bài ${lesson.dayNumber}`,
+        title: lesson.title,
+        missing
+      });
+    }
   }
-  return { incomplete, level: [], phrases, details };
+  return { incomplete, level: [], phrases, details, detailIssues };
+}
+
+function hasLegacyOrStructuredValue(value: unknown): boolean {
+  if (Array.isArray(value)) return value.length > 0;
+  return typeof value === "string" ? value.trim().length > 0 && value.trim() !== "—" : Boolean(value && typeof value === "object");
 }
 
 export interface DashboardAdapterContext {
@@ -188,50 +223,240 @@ export function adaptLevelForms(slots: AssessmentLevelFormSlotView[], options: {
   };
 }
 
-export function adaptWeeks(source: ContentWeekFrameView, options: { aiConnected: boolean; status?: string; suggestions?: Record<number, WeekSuggestion>; saveState?: OperatorWeeksView["saveState"]; saveError?: string | null }): OperatorWeeksView {
-  return { pilotStartDate: operatorCalendarDate(source.pilot.startDate), pilotWeeks: source.pilot.weekCount, aiConnected: options.aiConnected, status: options.status ?? "", saveState: options.saveState, saveError: options.saveError, weeks: source.weeks.map(week => ({ number: week.weekNumber, dateRange: `${operatorCalendarDate(week.startDate)} – ${operatorCalendarDate(week.endDate)}`, current: week.current, topic: week.topic, description: week.description, objectives: week.objectives, keyVocabHint: week.keyVocabHint, suggestion: options.suggestions?.[week.weekNumber] })) };
+export function adaptWeeks(source: ContentWeekFrameView, options: { aiConnected: boolean; status?: string; suggestions?: Record<number, WeekSuggestion>; saveState?: OperatorWeeksView["saveState"]; saveError?: string | null; generationDialog?: OperatorWeeksView["generationDialog"] }): OperatorWeeksView {
+  return { pilotStartDate: operatorCalendarDate(source.pilot.startDate), pilotWeeks: source.pilot.weekCount, aiConnected: options.aiConnected, status: options.status ?? "", saveState: options.saveState, saveError: options.saveError, generationDialog: options.generationDialog, weeks: source.weeks.map(week => ({ number: week.weekNumber, dateRange: `${operatorCalendarDate(week.startDate)} – ${operatorCalendarDate(week.endDate)}`, current: week.current, topic: week.topic, description: week.description, objectives: week.objectives, keyVocabHint: week.keyVocabHint, suggestion: options.suggestions?.[week.weekNumber] })) };
 }
 
 export function adaptLessonMatrix(source: ContentLessonMatrixView, options: { aiConnected: boolean; extraLevels?: Cefr[]; generating?: OperatorLessonsView["generating"]; generateError?: string | null }): OperatorLessonsView {
-  return { aiConnected: options.aiConnected, extraLevels: options.extraLevels ?? CEFR_LEVELS.filter(level => !source.levels.some(item => item.cefr === level)), levels: source.levels.map(level => ({ cefr: level.cefr as Cefr, learnerCount: level.learnerCount })), generating: options.generating, generateError: options.generateError, weeks: source.weeks.map(week => ({ number: week.weekNumber, topic: week.topic, cells: week.cells.map(cell => ({ cefr: cell.cefr as Cefr, status: cell.status === "published" ? "approved" : cell.status === "missing" ? "empty" : "draft", generatedAt: operatorDateTime(cell.updatedAt), incomplete: cell.lessons.length > 0 && cell.lessons.length < 5, lessons: cell.lessons.length, days: [1, 2, 3, 4, 5].map((day, index) => { const lesson = cell.lessons.find(candidate => candidate.dayNumber === day); return { day: ["T2", "T3", "T4", "T5", "T6"][index]!, title: lesson?.title ?? (cell.plan?.[index] ? compactPlanTitle(cell.plan[index]!, week.topic) : null), planned: !lesson && Boolean(cell.plan?.[index]) }; }) })) })) };
+  return { aiConnected: options.aiConnected, extraLevels: options.extraLevels ?? CEFR_LEVELS.filter(level => !source.levels.some(item => item.cefr === level)), levels: source.levels.map(level => ({ cefr: level.cefr as Cefr, learnerCount: level.learnerCount })), generating: options.generating, generateError: options.generateError, weeks: source.weeks.map(week => ({ number: week.weekNumber, topic: week.topic, cells: week.cells.map(cell => ({ cefr: cell.cefr as Cefr, status: cell.status === "published" ? "approved" : cell.status === "review" ? "review" : cell.status === "missing" ? "empty" : "draft", generatedAt: operatorDateTime(cell.updatedAt), incomplete: cell.lessons.length > 0 && cell.lessons.length < 5, lessons: cell.lessons.length, days: [1, 2, 3, 4, 5].map((day, index) => { const lesson = cell.lessons.find(candidate => candidate.dayNumber === day); return { day: ["T2", "T3", "T4", "T5", "T6"][index]!, title: lesson?.title ?? (cell.plan?.[index] ? compactPlanTitle(cell.plan[index]!, week.topic) : null), planned: !lesson && Boolean(cell.plan?.[index]) }; }) })) })) };
 }
 
-export function adaptLessonSet(source: ContentLessonSetVersionView, options: { aiConnected: boolean; warnings?: OperatorLessonSetView["warnings"]; mutationState?: OperatorLessonSetView["mutationState"]; mutationMessage?: string | null }): OperatorLessonSetView {
+export function adaptLessonSet(source: ContentLessonSetVersionView, options: { aiConnected: boolean; warnings?: OperatorLessonSetView["warnings"]; mutationState?: OperatorLessonSetView["mutationState"]; mutationMessage?: string | null; activeMutation?: LessonSetActionKey; resolveVocabularyImage?: (lessonId: string, itemIndex: number) => Promise<ContentImageView> }): OperatorLessonSetView {
   return {
-    week: source.weekNumber, cefr: source.cefr as Cefr, status: source.status === "published" ? "approved" : "draft", topic: source.topic, explanationLanguage: source.explanationLanguage === "Tiếng Việt" ? "tiếng Việt" : "tiếng Anh", aiConnected: options.aiConnected, mutationState: options.mutationState, mutationMessage: options.mutationMessage,
+    week: source.weekNumber, cefr: source.cefr as Cefr, status: source.status === "published" ? "approved" : source.status === "review" ? "review" : "draft", topic: source.topic, explanationLanguage: source.explanationLanguage === "Tiếng Việt" ? "tiếng Việt" : "tiếng Anh", aiConnected: options.aiConnected, mutationState: options.mutationState, mutationMessage: options.mutationMessage, activeMutation: options.activeMutation,
     warnings: options.warnings ?? lessonSetWarnings(source),
-    lessons: source.lessons.map(lesson => ({ id: lesson.id, day: lesson.dayNumber, dayLabel: ["T2", "T3", "T4", "T5", "T6"][lesson.dayNumber - 1] ?? `Bài ${lesson.dayNumber}`, title: lesson.title, durationMin: lesson.durationMinutes, practiceKind: lesson.practiceLabel.includes("điền") ? "điền từ" : lesson.practiceLabel.includes("trắc") ? "trắc nghiệm" : "tự viết", practiceAnswer: persistedPracticeAnswer(lesson.practiceLabel), complete: REQUIRED_LESSON_PARTS.every(code => lesson.parts.some(part => part.code === code)), content: <OperatorLessonPreview parts={lesson.parts} /> }))
+    lessons: source.lessons.map(lesson => ({ id: lesson.id, day: lesson.dayNumber, dayLabel: ["T2", "T3", "T4", "T5", "T6"][lesson.dayNumber - 1] ?? `Bài ${lesson.dayNumber}`, title: lesson.title, durationMin: lesson.durationMinutes, practiceKind: lesson.practiceLabel.includes("điền") ? "điền từ" : lesson.practiceLabel.includes("trắc") ? "trắc nghiệm" : "tự viết", practiceAnswer: persistedPracticeAnswer(lesson.practiceLabel), complete: REQUIRED_LESSON_PARTS.every(code => lesson.parts.some(part => part.code === code)), content: <OperatorLessonPreview lessonId={lesson.id} parts={lesson.parts} resolveVocabularyImage={options.resolveVocabularyImage} /> }))
   };
 }
 
-const learnerStudyCodes = new Set(["objective", "instruction", "vocabulary", "grammar", "pronunciation"]);
+const learnerStudyCodes = new Set(["objective", "vocabulary", "grammar", "pronunciation"]);
 
-function OperatorLessonPreview({ parts }: { parts: ContentLessonSetVersionView["lessons"][number]["parts"] }) {
+function OperatorLessonPreview({ lessonId, parts, resolveVocabularyImage }: { lessonId: string; parts: ContentLessonSetVersionView["lessons"][number]["parts"]; resolveVocabularyImage?: ((lessonId: string, itemIndex: number) => Promise<ContentImageView>) | undefined }) {
   const [tab, setTab] = useState<"study" | "practice">("study");
   const visible = parts.filter(part => tab === "study" ? learnerStudyCodes.has(part.code) : !learnerStudyCodes.has(part.code));
-  return <div className="operator-lesson-preview lesson-page"><div className="lesson-surface"><div className="lesson-skill-map" aria-label="Kỹ năng trong bài">{parts.filter(part => part.code !== "objective" && part.code !== "instruction").map(part => <span data-kind={learnerStudyCodes.has(part.code) ? "study" : "practice"} key={part.code}>{part.title}</span>)}</div><div className="ltabs" role="tablist" aria-label="Các bước trong bài học"><button type="button" className={tab === "study" ? "active" : ""} role="tab" aria-selected={tab === "study"} onClick={() => setTab("study")}>1. Học</button><button type="button" className={tab === "practice" ? "active" : ""} role="tab" aria-selected={tab === "practice"} onClick={() => setTab("practice")}>2. Bài tập</button></div><div className="lesson-parts" aria-label={tab === "study" ? "Nội dung học" : "Nội dung bài tập"}>{visible.map((part, index) => <section className={`card lesson-part lesson-part--${part.code}`} key={part.code}><div className="row between"><h2>{index + 1}. {part.title}</h2></div>{renderLessonPart(part.code, part.content)}</section>)}</div></div></div>;
+  return <div className="operator-lesson-preview lesson-page"><div className="lesson-surface"><div className="ltabs" role="tablist" aria-label="Các bước trong bài học"><button type="button" className={tab === "study" ? "active" : ""} role="tab" aria-selected={tab === "study"} onClick={() => setTab("study")}>1. Học</button><button type="button" className={tab === "practice" ? "active" : ""} role="tab" aria-selected={tab === "practice"} onClick={() => setTab("practice")}>2. Bài tập</button></div><div className="lesson-parts" aria-label={tab === "study" ? "Nội dung học" : "Nội dung bài tập"}>{visible.map((part, index) => {
+    const exerciseNumber = visible.slice(0, index).filter(candidate => candidate.code !== "instruction").length + 1;
+    return <section className={`card lesson-part lesson-part--${part.code}`} key={part.code}>{part.code === "grammar" || part.code === "pronunciation" ? null : <div className="row between"><h2 className={part.code === "vocabulary" ? "lesson-vocabulary-heading" : undefined}>{part.code === "objective" ? "MỤC TIÊU BÀI HỌC" : part.code === "instruction" ? "HƯỚNG DẪN LÀM BÀI" : part.code === "vocabulary" ? "TỪ VỰNG" : `${exerciseNumber}. ${operatorPartHeading(part.code, part.title)}`}</h2></div>}{renderLessonPart(part.code, part.content, { lessonId, resolveVocabularyImage })}</section>;
+  })}</div></div></div>;
 }
 
-function renderLessonPart(code: string, value: unknown) {
+function renderLessonPart(code: string, value: unknown, media?: { lessonId: string; resolveVocabularyImage?: ((lessonId: string, itemIndex: number) => Promise<ContentImageView>) | undefined } | undefined) {
   const content = asRecord(value) ?? {};
   const text = (...keys: string[]) => keys.map(key => content[key]).find(item => typeof item === "string") as string | undefined;
   const strings = (key: string) => (asArray(content[key]) ?? []).filter((item): item is string => typeof item === "string");
-  if (code === "objective") return <p className="small">{text("text") || "—"}</p>;
+  const pronunciationWords = (asArray(content.words) ?? []).flatMap(item => {
+    if (typeof item === "string" && item.trim()) return [{ word: item.trim(), ipa: "" }];
+    const record = asRecord(item);
+    if (!record || typeof record.word !== "string") return [];
+    return [{ word: record.word, ipa: typeof record.ipa === "string" ? record.ipa.trim() : "" }];
+  });
+  if (code === "objective") return <p className="lesson-objective-text">{conciseLessonObjective(text("text"))}</p>;
   if (code === "instruction") return <PreviewList values={strings("steps")} />;
   if (code === "vocabulary") {
     const items = (asArray(content.items) ?? []).map(asRecord).filter((item): item is Record<string, unknown> => item !== undefined);
-    return <div className="vocabulary-list">{items.map((item, index) => <article className="word-card" key={`${String(item.word)}-${index}`}><h3>{String(item.word ?? "—")}</h3>{item.pronunciation ? <span className="ipa">{String(item.pronunciation)}</span> : null}<p>{String(item.meaning ?? "")}</p><PreviewList values={(asArray(item.collocations ?? item.examples) ?? []).filter((entry): entry is string => typeof entry === "string")} /></article>)}</div>;
+    return <div className="vocabulary-list">{items.map((item, index) => <OperatorVocabularyCard item={item} index={index} media={media} key={`${String(item.word)}-${index}`} />)}</div>;
   }
-  if (code === "grammar") return <div className="small"><p>{text("formula", "theory") || "—"}</p>{text("usage") && <p className="muted">{text("usage")}</p>}<PreviewList values={strings("examples")} /></div>;
-  if (code === "pronunciation") return <div className="small"><p><b>{text("focus") || "—"}</b>{strings("words").length ? ` · ${strings("words").join(" · ")}` : ""}</p><p>{text("instruction", "tip")}</p></div>;
-  if (code === "listening" || code === "reading") return <div className="small"><p>{text(code === "listening" ? "script" : "text", "passage") || "—"}</p><p><b>Câu hỏi:</b> {text("prompt", "question") || "—"}</p><AnswerOptions options={strings("options")} answer={text("answer")} /></div>;
-  if (code === "writing") return <div className="small"><p><b>Đề bài:</b> {text("prompt") || "—"}</p><AnswerOptions options={strings("options")} answer={text("answer")} /></div>;
-  if (code === "speaking") return <div className="small"><p>{text("instruction")}</p><p><b>Câu mẫu:</b> {text("sample", "prompt") || "—"}</p></div>;
+  if (code === "grammar") {
+    const formula = text("formula", "theory") || "—";
+    const examples = strings("examples").slice(0, 3);
+    return <div className="operator-study-block"><div className="lesson-study-panel-header"><h2>NGỮ PHÁP</h2></div><div className="lesson-grammar-copy"><p className="lesson-study-focus"><strong>{formula}</strong></p>{text("usage") ? <p className="lesson-study-explanation">{grammarUsageCopy(text("usage")!)}</p> : null}</div>{examples.length ? <div className="lesson-example-list" aria-label="Câu ví dụ ngữ pháp">{examples.map((example, index) => { const concise = conciseGrammarExample(example); return <button className="lesson-example-card" type="button" aria-label={`Nghe câu ví dụ ${index + 1}`} onClick={() => speakOperatorText(concise)} key={`${example}-${index}`}><Volume2 size={15} aria-hidden="true" /><span>{concise}</span></button>; })}</div> : null}</div>;
+  }
+  if (code === "pronunciation") {
+    const focus = text("focus") || "—";
+    const targetSound = pronunciationTarget(focus);
+    const referenceWord = pronunciationWords[0]?.word;
+    return <div className="operator-study-block operator-pronunciation"><div className="lesson-study-panel-header"><h2>PHÁT ÂM</h2></div><p className="lesson-study-focus"><strong>Âm {targetSound}{referenceWord ? ` như trong “${referenceWord}”` : ""}</strong></p>{text("instruction", "tip") ? <p className="operator-pronunciation-tip lesson-study-explanation">{text("instruction", "tip")}</p> : null}{pronunciationWords.length ? <div className="operator-pronunciation-words" aria-label="Luyện từ phát âm">{pronunciationWords.slice(0, 3).map(item => <button className="btn-sm btn-ghost operator-audio-button" type="button" key={item.word} aria-label={`Nghe từ phát âm: ${item.word}`} onClick={() => speakOperatorText(item.word)}><Volume2 size={15} aria-hidden="true" /><strong>{item.word}</strong>{item.ipa ? <span>{item.ipa}</span> : null}</button>)}</div> : null}</div>;
+  }
+  if (code === "listening") {
+    const audio = operatorAudioSource(content);
+    return <div className="operator-practice-content"><OperatorAudioControl source={audio} /><p className="operator-practice-transcript">{text("script") || (audio.src ? "" : audio.text) || "—"}</p><p className="operator-question"><strong>Câu hỏi:</strong> {text("prompt", "question") || "—"}</p><AnswerOptions options={strings("options")} answer={text("answer")} /></div>;
+  }
+  if (code === "reading") return <div className="operator-practice-content"><div className="operator-reading-passage">{text("text", "passage", "script") || "—"}</div><p className="operator-question"><strong>Câu hỏi:</strong> {text("prompt", "question") || "—"}</p><AnswerOptions options={strings("options")} answer={text("answer")} /></div>;
+  if (code === "writing") return <div className="operator-practice-content"><p className="operator-question"><strong>Đề bài:</strong> {text("prompt") || "—"}</p><AnswerOptions options={strings("options")} answer={text("answer")} /></div>;
+  if (code === "word_class" || code === "word_use") return <div className="operator-practice-content"><p className="operator-question"><strong>{code === "word_class" ? "Nhận diện từ loại:" : "Chọn cách dùng đúng:"}</strong> {text("prompt", "question") || "—"}</p><AnswerOptions options={strings("options")} answer={text("answer")} /></div>;
+  if (code === "speaking") {
+    const model = conciseSpeakingModel(text("answer", "modelAnswer", "sample"));
+    const instruction = conciseSpeakingInstruction(text("instruction", "prompt"));
+    return <div className="operator-practice-content"><p className="operator-speaking-instruction"><strong>Yêu cầu:</strong> {instruction}</p><div className="operator-speaking-model"><strong>{model}</strong><OperatorSpeechButton text={model} label="Nghe câu mẫu" /></div><OperatorRecordingPreview /></div>;
+  }
   return <div className="small">{humanizeContent(content)}</div>;
 }
 
+function operatorPartHeading(code: string, title: string): string {
+  const english: Record<string, string> = { listening: "Listening", reading: "Reading", writing: "Writing", word_class: "Word class", word_use: "Word use", speaking: "Speaking" };
+  return english[code] ? `${title} · ${english[code]}` : title;
+}
+
+type OperatorAudioSource = { text?: string; src?: string };
+
+function operatorAudioSource(content: Record<string, unknown>): OperatorAudioSource {
+  const candidate = content.audioUrl ?? content.audio;
+  if (typeof candidate === "string" && candidate.trim()) return isOperatorAudioUrl(candidate) ? { src: candidate } : { text: candidate };
+  const record = asRecord(candidate);
+  if (record) {
+    const src = typeof record.url === "string" ? record.url : typeof record.src === "string" ? record.src : undefined;
+    const text = typeof record.text === "string" ? record.text : typeof record.script === "string" ? record.script : undefined;
+    if (src || text) return { ...(src ? { src } : {}), ...(text ? { text } : {}) };
+  }
+  return typeof content.script === "string" && content.script.trim() ? { text: content.script } : {};
+}
+
+function isOperatorAudioUrl(value: string): boolean {
+  return /^(?:https?:|blob:|data:audio\/|\/)/i.test(value) || /\.(?:mp3|m4a|wav|ogg|oga|webm|aac|flac|amr|3gp)(?:[?#].*)?$/i.test(value);
+}
+
+function OperatorSpeechButton({ text, label, iconOnly = false, primary = false }: { text: string; label: string; iconOnly?: boolean; primary?: boolean }) {
+  return <button className={`btn-sm btn-ghost operator-audio-button${iconOnly ? " operator-audio-button--icon" : ""}${primary ? " operator-audio-button--primary" : ""}`} type="button" aria-label={label} title={label} onClick={() => speakOperatorText(text)}><Volume2 size={16} aria-hidden="true" />{iconOnly ? null : ` ${label}`}</button>;
+}
+
+function OperatorAudioControl({ source }: { source: OperatorAudioSource }) {
+  if (source.src) return <audio controls preload="metadata" src={source.src} aria-label="Nghe đoạn audio" />;
+  if (source.text) return <OperatorSpeechButton text={source.text} label="Nghe đoạn audio" primary />;
+  return <p className="operator-audio-missing">Chưa có nội dung âm thanh.</p>;
+}
+
+function OperatorRecordingPreview() {
+  const [recording, setRecording] = useState(false);
+  const [audioUrl, setAudioUrl] = useState("");
+  const [error, setError] = useState("");
+  const recorder = useRef<MediaRecorder | null>(null);
+  const stream = useRef<MediaStream | null>(null);
+  const chunks = useRef<Blob[]>([]);
+  useEffect(() => () => {
+    if (recorder.current?.state === "recording") recorder.current.stop();
+    stream.current?.getTracks().forEach(track => track.stop());
+    if (audioUrl) URL.revokeObjectURL(audioUrl);
+  }, [audioUrl]);
+  const toggle = async () => {
+    if (recording && recorder.current) {
+      recorder.current.stop();
+      return;
+    }
+    if (typeof navigator === "undefined" || !navigator.mediaDevices?.getUserMedia || typeof MediaRecorder === "undefined") {
+      setError("Trình duyệt này chưa cấp quyền micro.");
+      return;
+    }
+    try {
+      const nextStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const nextRecorder = new MediaRecorder(nextStream);
+      stream.current = nextStream;
+      recorder.current = nextRecorder;
+      chunks.current = [];
+      nextRecorder.ondataavailable = event => { if (event.data.size) chunks.current.push(event.data); };
+      nextRecorder.onstop = () => {
+        nextStream.getTracks().forEach(track => track.stop());
+        setRecording(false);
+        const blob = new Blob(chunks.current, { type: nextRecorder.mimeType || "audio/webm" });
+        setAudioUrl(current => {
+          if (current) URL.revokeObjectURL(current);
+          return URL.createObjectURL(blob);
+        });
+      };
+      nextRecorder.start();
+      setError("");
+      setRecording(true);
+    } catch {
+      setError("Không dùng được micro. Hãy kiểm tra quyền truy cập micro.");
+    }
+  };
+  return <div className="operator-speaking-recorder"><button className="btn-sm btn-ghost" type="button" aria-label="Ghi âm câu trả lời" onClick={() => void toggle()}>{recording ? <><Square size={15} aria-hidden="true" /> Dừng ghi</> : <><Mic size={16} aria-hidden="true" /> Ghi âm câu trả lời</>}</button>{error ? <p className="operator-recording-error">{error}</p> : null}{audioUrl ? <audio controls preload="metadata" src={audioUrl} aria-label="Nghe lại câu trả lời" /> : null}</div>;
+}
+
+function OperatorVocabularyCard({ item, index, media }: { item: Record<string, unknown>; index: number; media?: { lessonId: string; resolveVocabularyImage?: ((lessonId: string, itemIndex: number) => Promise<ContentImageView>) | undefined } | undefined }) {
+  const [detail, setDetail] = useState<{ title: string; description?: string; words: Array<{ word: string; meaning?: string; current?: boolean }> } | null>(null);
+  const word = String(item.word ?? "—");
+  const phrases = (asArray(item.collocations ?? item.phrases ?? item.examples) ?? (typeof item.collocations === "string" ? [item.collocations] : []))
+    .filter((entry): entry is string => typeof entry === "string" && Boolean(entry.trim()))
+    .slice(0, 3);
+  const family = relationWords(item.family);
+  const synonyms = relationWords(item.synonyms);
+  const antonyms = relationWords(item.antonyms);
+  const umbrella = asRecord(item.umbrella);
+  const vocabularyItem: LessonVocabularyItem = {
+    word,
+    ...(typeof item.type === "string" && item.type.trim() ? { type: item.type.trim() } : {}),
+    ...(typeof item.pronunciation === "string" && item.pronunciation.trim() ? { pronunciation: item.pronunciation.trim() } : {}),
+    ...(typeof item.meaning === "string" && item.meaning.trim() ? { meaning: item.meaning.trim() } : {}),
+    ...(phrases.length ? { collocations: phrases } : {})
+  };
+  const umbrellaWord = typeof umbrella?.word === "string" ? umbrella.word : "";
+  const umbrellaMeaning = typeof umbrella?.meaning === "string" ? umbrella.meaning.trim() : "";
+  const siblingEntries = relationEntries(umbrella?.siblings);
+  const umbrellaWords = umbrella ? [{ word, ...(typeof item.meaning === "string" && item.meaning.trim() ? { meaning: item.meaning.trim() } : {}), current: true }, ...siblingEntries] : [];
+  const relations: VocabularyRelationChip[] = [
+    ...(umbrellaWord ? [{ label: `TỪ BAO TRÙM ${umbrellaWord}`, ariaLabel: `Từ bao trùm: ${umbrellaWord}`, icon: "umbrella" as const, tone: "umb" as const, count: Math.max(0, umbrellaWords.length - 1), onClick: () => setDetail({ title: `${umbrellaWord}${umbrellaMeaning ? ` – ${umbrellaMeaning}` : ""}`, description: `“${umbrellaWord}” là từ bao trùm (nhóm nghĩa rộng hơn) của “${word}”. Các từ dưới đây cùng nằm trong nhóm đó.`, words: umbrellaWords }) }] : []),
+    ...synonyms.map(value => ({ label: value, ariaLabel: `Nghe từ đồng nghĩa: ${value}`, tone: "synonym" as const, onClick: () => speakOperatorText(value) })),
+    ...antonyms.map(value => ({ label: value, ariaLabel: `Nghe từ trái nghĩa: ${value}`, tone: "antonym" as const, onClick: () => speakOperatorText(value) })),
+    ...(family.length ? [{ label: `Word family (${family.length})`, ariaLabel: `Word family (${family.length})`, icon: "family" as const, tone: "family" as const, onClick: () => setDetail({ title: "Word family", words: relationEntries(item.family) }) }] : [])
+  ];
+  const loadImage = () => {
+    if (media?.resolveVocabularyImage) return media.resolveVocabularyImage(media.lessonId, index);
+    const imageUrl = typeof item.imageUrl === "string" ? item.imageUrl.trim() : "";
+    const attribution = contentImageAttribution(item.imageAttribution);
+    if (imageUrl && attribution) return Promise.resolve({ status: "available", imageUrl, alt: word, attribution } as const);
+    return Promise.resolve({ status: "unavailable" } as const);
+  };
+  const modal = detail && typeof document !== "undefined" ? createPortal(<div className="modal-backdrop vocabulary-relation-modal" role="presentation"><section className="dialog" role="dialog" aria-modal="true" aria-label={detail.title}><div className="row between vocabulary-relation-modal-header"><strong className="vocabulary-relation-title">{detail.title}</strong><button className="btn-sm" type="button" onClick={() => setDetail(null)}>Đóng</button></div>{detail.description ? <p className="muted vocabulary-relation-description">{detail.description}</p> : null}<div className="vocabulary-relation-audio-list">{detail.words.map(value => <button className="btn-sm btn-ghost operator-audio-button vocabulary-relation-audio-item" type="button" aria-label={`Nghe ${value.word}`} onClick={() => speakOperatorText(value.word)} key={`${value.word}-${value.meaning ?? ""}`}><span><strong>{value.word}</strong>{value.current ? <small className="vocabulary-current-word">từ của bài</small> : null}{value.meaning ? <small>{value.meaning}</small> : null}</span><Volume2 size={16} aria-hidden="true" /></button>)}</div></section></div>, document.body) : null;
+  return <><SharedVocabularyCard item={vocabularyItem} loadImage={loadImage} speak={speakOperatorText} relations={relations} />{modal}</>;
+}
+
+function contentImageAttribution(value: unknown): Extract<ContentImageView, { status: "available" }>["attribution"] | undefined {
+  const record = asRecord(value);
+  if (!record || typeof record.licence !== "string" || typeof record.licenceUrl !== "string" || typeof record.sourceUrl !== "string") return undefined;
+  return { creator: typeof record.creator === "string" ? record.creator : null, licence: record.licence, licenceUrl: record.licenceUrl, sourceUrl: record.sourceUrl };
+}
+
+function speakOperatorText(text: string) {
+  if (typeof window === "undefined" || !("speechSynthesis" in window) || typeof SpeechSynthesisUtterance === "undefined") return;
+  const utterance = new SpeechSynthesisUtterance(text);
+  utterance.lang = "en-US";
+  window.speechSynthesis.cancel();
+  window.speechSynthesis.speak(utterance);
+}
+
+function relationWords(value: unknown): string[] {
+  if (Array.isArray(value)) return value.flatMap(entry => typeof entry === "string" ? [entry] : typeof asRecord(entry)?.word === "string" ? [String(asRecord(entry)?.word)] : []);
+  return typeof value === "string" && value.trim() && value.trim() !== "—" ? [value.trim()] : [];
+}
+
+function relationEntries(value: unknown): Array<{ word: string; meaning?: string }> {
+  if (!Array.isArray(value)) return relationWords(value).map(word => ({ word }));
+  return value.flatMap(entry => {
+    if (typeof entry === "string" && entry.trim()) return [{ word: entry.trim() }];
+    const record = asRecord(entry);
+    if (!record || typeof record.word !== "string" || !record.word.trim()) return [];
+    return [{ word: record.word.trim(), ...(typeof record.meaning === "string" && record.meaning.trim() ? { meaning: record.meaning.trim() } : {}) }];
+  });
+}
+
+function grammarUsageCopy(value: string): string {
+  const cleaned = value.trim().replace(/^Dùng\s+(?:khi|để)\s+/i, "");
+  const firstSentence = cleaned.split(/(?<=[.!?])\s+|;\s*/u)[0]?.trim() || cleaned;
+  const explanation = firstSentence.replace(/[.!?]+$/u, "");
+  return explanation ? `Dùng để ${explanation.charAt(0).toLocaleLowerCase()}${explanation.slice(1)}.` : value.trim();
+}
+
+function pronunciationTarget(value: string): string {
+  return value.match(/\/[^/]+\//)?.[0] ?? value.trim();
+}
+
+function formatLegacyDetail(label: string, value: unknown): string {
+  const values = Array.isArray(value) ? value.flatMap((entry) => typeof entry === "string" ? [entry] : entry && typeof entry === "object" && typeof (entry as Record<string, unknown>).word === "string" ? [(entry as Record<string, unknown>).word as string] : []) : typeof value === "string" && value.trim() && value.trim() !== "—" ? [value.trim()] : [];
+  return values.length ? ` · ${label}: ${values.join(", ")}` : "";
+}
+
 function PreviewList({ values }: { values: string[] }) { return values.length ? <ul className="small">{values.map((value, index) => <li key={`${value}-${index}`}>{value}</li>)}</ul> : <p className="small muted">—</p>; }
-function AnswerOptions({ options, answer }: { options: string[]; answer?: string | undefined }) { return options.length ? <ol className="operator-answer-options">{options.map((option, index) => <li key={`${option}-${index}`}>{option === answer ? <><Check className="operator-inline-icon" size={15} strokeWidth={2.5} aria-hidden="true" />{option}</> : option}</li>)}</ol> : answer ? <p><b>Đáp án:</b> {answer}</p> : null; }
+function AnswerOptions({ options, answer }: { options: string[]; answer?: string | undefined }) { return options.length ? <ol className="operator-answer-options">{options.map((option, index) => <li className={`operator-answer-choice${option === answer ? " is-answer" : ""}`} key={`${option}-${index}`}><span className="operator-answer-letter">{String.fromCharCode(65 + index)}</span><span>{option}</span>{option === answer ? <Check className="operator-inline-icon" size={15} strokeWidth={2.5} aria-label="Đáp án đúng" /> : null}</li>)}</ol> : answer ? <p className="operator-answer-key"><b>Đáp án mẫu:</b> {answer}</p> : null; }
 function humanizeContent(content: Record<string, unknown>): string { return Object.values(content).flatMap(value => Array.isArray(value) ? value : [value]).filter(value => typeof value === "string" || typeof value === "number").join(" · ") || "—"; }
 
 export interface ReviewAdapterDetails {

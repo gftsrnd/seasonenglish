@@ -26,6 +26,6 @@ export type ContentImageView =
 
 export interface ContentImageDiagnosticView {
   image: ContentImageView;
-  provider: "wikipedia" | "wikimedia" | "openverse" | "explicit" | null;
+  provider: "wikipedia" | "wikimedia" | "openverse" | "pixabay" | "explicit" | null;
   cached: boolean;
 }

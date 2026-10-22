@@ -35,8 +35,8 @@ export function Button({ small, primary, danger, busy = false, className = "", c
   return <button {...buttonProps} {...(!isDisabled && title ? { title } : {})} className={classes} disabled={isDisabled} aria-busy={busy ? "true" : undefined}>{busy && <span className="spinner" aria-hidden="true" />}{children}</button>;
 }
 
-export function Badge({ children, tone = "" }: { children: ReactNode; tone?: "" | "ok" | "warn" | "danger" | "primary" }) {
-  return <span className={`badge ${tone}`.trim()}>{children}</span>;
+export function Badge({ children, tone = "", className = "" }: { children: ReactNode; tone?: "" | "ok" | "warn" | "danger" | "primary"; className?: string }) {
+  return <span className={`badge ${tone} ${className}`.trim()}>{children}</span>;
 }
 
 export function LevelChip({ level }: { level: Cefr }) {

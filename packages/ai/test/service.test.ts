@@ -19,14 +19,14 @@ describe("AI service", () => {
     const service = createAiService({ registry: AI_TASKS, provider: fixtureProvider(complete), loadPrompt: async () => "Coach safely." });
 
     const result = await service.runTask("coach_dialogue", {
-      message: "I work at product.", cefr: "A2", scenario: "Daily meeting", priorTurns: [],
+      message: "I work at product.", cefr: "A2", persona: "formal", scenario: "Daily meeting", priorTurns: [],
       email: "private@example.com", browserApiKey: "must-not-leave-browser"
     });
 
     expect(result.output).toEqual(validCoachOutput);
     expect(complete).toHaveBeenCalledTimes(1);
     const request = complete.mock.calls[0]?.[0];
-    expect(request.input).toEqual({ message: "I work at product.", cefr: "A2", scenario: "Daily meeting", priorTurns: [] });
+    expect(request.input).toEqual({ message: "I work at product.", cefr: "A2", persona: "formal", scenario: "Daily meeting", priorTurns: [] });
     expect(JSON.stringify(request)).not.toContain("private@example.com");
     expect(JSON.stringify(request)).not.toContain("must-not-leave-browser");
     expect(result.metadata).toMatchObject({ provider: "fixture", model: "fixture-model", attempts: 1, schemaValid: true });
@@ -43,17 +43,15 @@ describe("AI service", () => {
     await expect(service.runTask("coach_dialogue", coachInput())).rejects.toMatchObject({ code: "AI_OUTPUT_INVALID" });
   });
 
-  it("retries a schema-invalid model response once before accepting a valid retry", async () => {
+  it("repairs a schema-invalid model response once before returning it", async () => {
     const complete = vi.fn()
       .mockResolvedValueOnce({ output: { reply: "Missing scores" }, usage: {} })
       .mockResolvedValueOnce({ output: validCoachOutput, usage: {} });
     const service = createAiService({ registry: AI_TASKS, provider: fixtureProvider(complete), loadPrompt: async () => "Coach safely.", maxAttempts: 2 });
 
-    await expect(service.runTask("coach_dialogue", coachInput())).resolves.toMatchObject({
-      output: validCoachOutput,
-      metadata: { attempts: 2 }
-    });
+    await expect(service.runTask("coach_dialogue", coachInput())).resolves.toMatchObject({ output: validCoachOutput, metadata: { attempts: 2 } });
     expect(complete).toHaveBeenCalledTimes(2);
+    expect(complete.mock.calls[1]?.[0].systemPrompt).toContain("REPAIR REQUIRED");
   });
 
   it("aborts a provider call at the timeout boundary", async () => {
@@ -124,7 +122,7 @@ describe("AI service", () => {
 });
 
 function coachInput() {
-  return { message: "I work at product.", cefr: "A2", scenario: "Daily meeting", priorTurns: [] };
+  return { message: "I work at product.", cefr: "A2", persona: "informal", scenario: "Daily meeting", priorTurns: [] };
 }
 
 function fixtureProvider(complete: ReturnType<typeof vi.fn>): AiProvider {

@@ -28,6 +28,72 @@ const view = {
 } as unknown as ProfileView;
 
 describe("app profile avatar dialog affordances", () => {
+  it("uses the same compact readiness format as the home page", () => {
+    const readinessView = {
+      ...view,
+      levelReadiness: {
+        targetLevel: "B2",
+        windowDays: 14,
+        eligible: false,
+        examAvailable: false,
+        criteria: [
+          { key: "lessonCompletion", label: "Bài học hoàn thành", current: 20, target: 90, display: "1/5 bài", met: false },
+          { key: "firstTryAccuracy", label: "Phần bài đúng ngay lần đầu", current: 67, target: 75, display: "4/6 phần", met: false },
+          { key: "weeklyPractice", label: "Bài thực hành tuần gần nhất", current: 86, target: 80, display: "86/100", met: true },
+          { key: "coachRubric", label: "Rubric khi luyện với Season", current: 4.3, target: 4, display: "4.3/5 · 8 lượt", met: true }
+        ]
+      }
+    } as unknown as ProfileView;
+
+    render(<LearnerProfile view={readinessView} actions={actions} />);
+
+    const readiness = screen.getByRole("region", { name: "Đường lên mức B2" });
+    const lessons = readiness.querySelector<HTMLElement>('[data-readiness-key="lessonCompletion"]')!;
+    const firstTry = readiness.querySelector<HTMLElement>('[data-readiness-key="firstTryAccuracy"]')!;
+    const practice = readiness.querySelector<HTMLElement>('[data-readiness-key="weeklyPractice"]')!;
+    const coach = readiness.querySelector<HTMLElement>('[data-readiness-key="coachRubric"]')!;
+
+    expect(within(lessons).getByText("20%", { exact: true })).toHaveClass("readiness-current");
+    expect(within(lessons).getByText("1/5 bài", { exact: true })).toHaveClass("readiness-actual");
+    expect(within(lessons).getByRole("progressbar", { name: "Bài học hoàn thành" })).toHaveAttribute("aria-valuemax", "100");
+    expect(within(practice).getByText("86%", { exact: true })).toBeInTheDocument();
+    expect(within(coach).getByText("4.3/5", { exact: true })).toBeInTheDocument();
+    expect(within(lessons).getByTestId("readiness-target")).toHaveStyle({ left: "90%" });
+    expect(within(firstTry).getByTestId("readiness-target")).toHaveStyle({ left: "75%" });
+    expect(within(practice).getByTestId("readiness-target")).toHaveStyle({ left: "80%" });
+    expect(within(coach).getByRole("progressbar", { name: "Rubric khi luyện với Season" })).toHaveAttribute("aria-valuemax", "5");
+    expect(within(coach).getByTestId("readiness-target")).toHaveStyle({ left: "80%" });
+    expect(readiness.querySelector(".readiness-label svg")).not.toBeInTheDocument();
+  });
+
+  it("presents the real assessment total and every skill on its own percentage row", () => {
+    const assessmentView = {
+      ...view,
+      finalAssessmentAvailable: true,
+      assessments: {
+        placement: {
+          totalScore: 55,
+          approvedLevel: "A1",
+          sections: { listening: 55, reading: 60, writing: 50, speaking: 50 }
+        },
+        final: null
+      }
+    } as unknown as ProfileView;
+
+    render(<LearnerProfile view={assessmentView} actions={actions} />);
+
+    const assessment = screen.getByRole("region", { name: "Kết quả đánh giá" });
+    const placement = within(assessment).getByRole("region", { name: "Điểm đầu vào" });
+    expect(within(placement).getByText("55", { exact: true })).toHaveClass("profile-assessment-total");
+    expect(within(placement).getByText(/Đầu vào · A1/)).toBeInTheDocument();
+    expect(placement.querySelectorAll(".profile-assessment-skill")).toHaveLength(4);
+    expect(within(placement).getByText("Nghe").closest(".profile-assessment-skill")).toHaveTextContent("55%");
+    expect(within(placement).getByText("Đọc").closest(".profile-assessment-skill")).toHaveTextContent("60%");
+    expect(within(placement).getByText("Viết").closest(".profile-assessment-skill")).toHaveTextContent("50%");
+    expect(within(placement).getByText("Nói").closest(".profile-assessment-skill")).toHaveTextContent("50%");
+    expect(within(assessment).getByRole("link", { name: "Làm bài cuối kỳ" })).toHaveAttribute("href", "/test/final");
+  });
+
   it("keeps personal information collapsed until the learner asks to view it", async () => {
     render(<LearnerProfile view={view} actions={actions} />);
     expect(screen.queryByRole("heading", { name: "Tùy chọn cá nhân" })).not.toBeInTheDocument();

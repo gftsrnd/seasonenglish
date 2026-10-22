@@ -1,5 +1,6 @@
 import type {
   ContentLessonDraftInput,
+  LessonVocabularyContent,
   ContentPromptKey,
   ContentPromptSettingsView,
   ContentWeekInput,
@@ -7,7 +8,7 @@ import type {
   ContentReviewAssessmentDetailView,
   ContentReviewAiGradeJobView
 } from "@e4s/contracts";
-import { weeklyLessonsOutputSchema, weeklyPracticeInputSchema, weeklyPracticeOutputSchema, weekSuggestionsOutputSchema } from "@e4s/ai";
+import { weeklyPracticeInputSchema, weeklyPracticeOutputSchema, weekSuggestionsOutputSchema } from "@e4s/ai";
 import { createRepositories } from "@e4s/database";
 import { approveContentVersion, retirePublishedContent, submitContentForReview, validateLessonDraft } from "@e4s/domain/content";
 import type { ObjectStorage } from "@e4s/storage";
@@ -16,6 +17,9 @@ import type { Pool } from "pg";
 import { z } from "zod";
 import { createRoleGuard } from "../identity/policy.js";
 import type { AiTaskRunner } from "../coach/index.js";
+import type { ContentMediaService } from "../media/index.js";
+import { mergeGeneratedLessons, type LessonRepairMode } from "./enrichment.js";
+import { generateWeeklyLessons } from "./weekly-generation.js";
 
 const weekInput = z.object({
   weekNumber: z.int().min(1).max(52),
@@ -59,6 +63,10 @@ const lessonSetParams = z.object({
   week: z.coerce.number().int().min(1).max(52),
   cefr: z.enum(["A1", "A2", "B1", "B2", "C1"])
 });
+const lessonLevelsInput = z.object({
+  levels: z.array(z.enum(["A1", "A2", "B1", "B2", "C1"])).min(1).max(5)
+    .refine((levels) => new Set(levels).size === levels.length, "Mỗi mức chỉ được chọn một lần")
+});
 const versionParams = z.object({ versionId: z.uuid() });
 const reviewItemParams = z.object({ kind: z.enum(["submission", "coach"]), id: z.uuid() });
 const reviewCheckedInput = z.object({ checked: z.boolean() });
@@ -90,13 +98,13 @@ const promptLabels: Record<ContentPromptKey, string> = {
   weekly_practice_grading: "Chấm bài thực hành thứ Sáu"
 };
 const ASSESSMENT_AUDIO_PRESIGN_TTL_SECONDS = 300;
-
 export function registerContentRoutes(
   app: FastifyInstance,
   pool: Pool,
   aiRunner?: AiTaskRunner,
   storage?: ObjectStorage,
-  aiRunnerFactory?: (actorId: string) => Promise<AiTaskRunner | undefined>
+  aiRunnerFactory?: (actorId: string) => Promise<AiTaskRunner | undefined>,
+  mediaService?: ContentMediaService
 ): void {
   const repositories = createRepositories(pool);
   const runnerFor = (actorId: string) => aiRunnerFactory ? aiRunnerFactory(actorId) : Promise.resolve(aiRunner);
@@ -148,12 +156,26 @@ export function registerContentRoutes(
       const requestedWeeks = new Set(input.data.weekNumbers);
       const returnedWeeks = new Set(output.data.weeks.map((week) => week.weekNumber));
       if (output.data.weeks.length !== requestedWeeks.size || returnedWeeks.size !== requestedWeeks.size || [...requestedWeeks].some((weekNumber) => !returnedWeeks.has(weekNumber))) {
-        return reply.code(502).send({ code: "AI_OUTPUT_INVALID" });
+        return reply.code(502).send({
+          code: "AI_OUTPUT_INVALID",
+          issues: [{
+            path: "weeks",
+            message: `Expected exactly one result for each requested week (${[...requestedWeeks].join(", ")}), received ${output.data.weeks.length}.`
+          }]
+        });
       }
       const expanded: ContentWeekSuggestionView[] = [];
       for (const week of output.data.weeks) {
         const levels = week.levels.filter((level) => activeLevelSet.has(level));
-        if (!levels.length || levels.length !== week.levels.length) return reply.code(502).send({ code: "AI_OUTPUT_INVALID" });
+        if (levels.length !== activeLevels.length || levels.length !== week.levels.length || activeLevels.some((level) => !levels.includes(level))) {
+          return reply.code(502).send({
+            code: "AI_OUTPUT_INVALID",
+            issues: [{
+              path: `weeks.${week.weekNumber}.levels`,
+              message: `CEFR levels must exactly match the active matrix: ${activeLevels.join(", ")}.`
+            }]
+          });
+        }
         const usedTopicKeys = new Set(frame.weeks.map((candidate) => candidate.topic.trim().toLocaleLowerCase()).filter(Boolean));
         const freshOptions = week.options.filter((option) => {
           const topicKey = option.topic.trim().toLocaleLowerCase();
@@ -161,10 +183,38 @@ export function registerContentRoutes(
           usedTopicKeys.add(topicKey);
           return true;
         });
-        if (!freshOptions.length) return reply.code(502).send({ code: "AI_OUTPUT_INVALID" });
+        if (!freshOptions.length) {
+          return reply.code(502).send({
+            code: "AI_OUTPUT_INVALID",
+            issues: [{
+              path: `weeks.${week.weekNumber}.options`,
+              message: "All returned topic options were empty or duplicated an existing week topic."
+            }]
+          });
+        }
         for (const option of freshOptions) {
-          for (const level of levels) if ((option.plan[level] ?? []).length !== 5) return reply.code(502).send({ code: "AI_OUTPUT_INVALID" });
-          for (const level of Object.keys(option.plan)) if (!activeLevelSet.has(level as typeof activeLevels[number])) return reply.code(502).send({ code: "AI_OUTPUT_INVALID" });
+          for (const level of levels) {
+            if ((option.plan[level] ?? []).length !== 5) {
+              return reply.code(502).send({
+                code: "AI_OUTPUT_INVALID",
+                issues: [{
+                  path: `weeks.${week.weekNumber}.options.${option.topic}.plan.${level}`,
+                  message: "Each active CEFR level must contain exactly 5 day-plan items."
+                }]
+              });
+            }
+          }
+          for (const level of Object.keys(option.plan)) {
+            if (!activeLevelSet.has(level as typeof activeLevels[number])) {
+              return reply.code(502).send({
+                code: "AI_OUTPUT_INVALID",
+                issues: [{
+                  path: `weeks.${week.weekNumber}.options.${option.topic}.plan.${level}`,
+                  message: `The plan contains inactive CEFR level ${level}.`
+                }]
+              });
+            }
+          }
         }
         expanded.push({ ...week, levels, options: freshOptions.map((option) => ({ ...option, plan: Object.fromEntries(levels.map((level) => [level, option.plan[level]!])) })) });
       }
@@ -193,6 +243,17 @@ export function registerContentRoutes(
     return matrix ?? reply.code(404).send({ code: "CONTENT_PROGRAM_NOT_FOUND" });
   });
 
+  app.put("/api/v1/content/lesson-levels", { preHandler: operators }, async (request, reply) => {
+    const input = lessonLevelsInput.safeParse(request.body);
+    if (!input.success) return reply.code(400).send({ code: "INVALID_CONTENT_LESSON_LEVELS" });
+    try {
+      const matrix = await repositories.content.setLessonMatrixLevels(request.e4sSession!.user.id, input.data.levels);
+      return matrix ?? reply.code(404).send({ code: "CONTENT_PROGRAM_NOT_FOUND" });
+    } catch (error) {
+      return reply.code(409).send({ code: errorCode(error, "CONTENT_LESSON_LEVELS_NOT_SAVED") });
+    }
+  });
+
   app.get("/api/v1/content/lesson-sets/:week/:cefr", { preHandler: readers }, async (request, reply) => {
     const params = lessonSetParams.safeParse(request.params);
     if (!params.success) return reply.code(400).send({ code: "INVALID_CONTENT_LESSON_SET" });
@@ -200,6 +261,31 @@ export function registerContentRoutes(
       request.e4sSession!.user.id, params.data.week, params.data.cefr
     );
     return version ?? reply.code(404).send({ code: "CONTENT_LESSON_SET_NOT_FOUND" });
+  });
+
+  app.get("/api/v1/content/lesson-sets/:week/:cefr/lessons/:lessonId/vocabulary/:itemIndex/image", { preHandler: readers }, async (request, reply) => {
+    const params = lessonSetParams.extend({ lessonId: z.uuid(), itemIndex: z.coerce.number().int().nonnegative() }).safeParse(request.params);
+    if (!params.success) return reply.code(404).send({ code: "VOCABULARY_IMAGE_NOT_FOUND" });
+    const actorId = request.e4sSession!.user.id;
+    const version = await repositories.content.latestLessonSet(actorId, params.data.week, params.data.cefr);
+    const lesson = version?.lessons.find((candidate) => candidate.id === params.data.lessonId);
+    const vocabulary = lesson?.parts.find((part) => part.code === "vocabulary")?.content as LessonVocabularyContent | undefined;
+    const item = vocabulary?.items[params.data.itemIndex];
+    if (!lesson || !item) return reply.code(404).send({ code: "VOCABULARY_IMAGE_NOT_FOUND" });
+    if (!mediaService) return { status: "unavailable" };
+    try {
+      const partOfSpeech = canonicalPartOfSpeech(item.type);
+      return await mediaService.resolveForUser(actorId, {
+        term: item.word,
+        ...(partOfSpeech ? { partOfSpeech } : {}),
+        allowProviderFallback: true,
+        ...(item.imageQuery ? { imageQuery: item.imageQuery } : {}),
+        ...(item.imageUrl ? { explicitImageUrl: item.imageUrl } : {}),
+        ...(item.imageAttribution ? { explicitAttribution: item.imageAttribution } : {})
+      });
+    } catch {
+      return { status: "unavailable" };
+    }
   });
 
   app.put("/api/v1/content/lesson-sets/:week/:cefr/draft/lessons/:dayNumber", { preHandler: authors }, async (request, reply) => {
@@ -276,11 +362,48 @@ export function registerContentRoutes(
       const params = lessonSetParams.safeParse(request.params);
       const body = lessonActionInput.safeParse(request.body ?? {});
       if (!params.success || !body.success) return reply.code(400).send({ code: "INVALID_CONTENT_LESSON_ACTION" });
-      // These operations intentionally do not fabricate lexical material. A
-      // provider-specific AI task/validated output contract must be configured
-      // before the action can mutate an authoritative draft version.
-      const runner = await runnerFor(request.e4sSession!.user.id);
-      return reply.code(503).send({ code: runner ? "AI_PROMPT_NOT_READY" : "AI_UNAVAILABLE" });
+      const actorId = request.e4sSession!.user.id;
+      const runner = await runnerFor(actorId);
+      if (!runner) return reply.code(503).send({ code: "AI_UNAVAILABLE" });
+      const frame = await repositories.content.listWeeks(actorId);
+      const week = frame?.weeks.find((candidate) => candidate.weekNumber === params.data.week);
+      const task = await repositories.aiRuns.activeTaskPrompt(actorId, "weekly_lessons");
+      const current = await repositories.content.latestLessonSet(actorId, params.data.week, params.data.cefr);
+      if (!week || !task) return reply.code(503).send({ code: "AI_PROMPT_NOT_READY" });
+      if (!current) return reply.code(404).send({ code: "CONTENT_LESSON_SET_NOT_FOUND" });
+      try {
+        const excludedVocabulary = await repositories.content.usedLessonVocabulary(actorId);
+        const generated = await generateWeeklyLessons(week, params.data.cefr, task, runner, { excludedVocabulary });
+        const existing = current.lessons.map((lesson) => ({
+          dayNumber: lesson.dayNumber,
+          title: lesson.title,
+          durationMinutes: lesson.durationMinutes,
+          parts: lesson.parts
+        })) as ContentLessonDraftInput[];
+        const lessons = mergeGeneratedLessons(existing, generated.lessons, action as LessonRepairMode);
+        const validation = validateLessonDraft(lessons);
+        if (!validation.valid) {
+          return reply.code(502).send({ code: "AI_LESSON_SET_INVALID", issues: validation.issues });
+        }
+        try {
+          await repositories.aiRuns.recordSucceeded({
+            userId: actorId,
+            requestId: `weekly-lessons-repair:${params.data.week}:${params.data.cefr}:${action}:${Date.now()}`,
+            taskId: task.taskId,
+            promptVersionId: task.promptVersionId,
+            output: generated.output,
+            metadata: generated.result.metadata
+          });
+        } catch (error) {
+          request.log.warn({ code: errorCode(error, "AI_RUN_RECORD_FAILED") }, "Lesson repair audit record failed");
+        }
+        return reply.code(201).send(await repositories.content.saveLessonDraft(actorId, params.data.week, params.data.cefr, lessons, "ai"));
+      } catch (error) {
+        const code = errorCode(error, "AI_LESSON_REPAIR_FAILED");
+        request.log.warn({ code, message: error instanceof Error ? error.message : String(error) }, "Weekly lesson repair failed");
+        const issues = error && typeof error === "object" && "issues" in error ? (error as { issues?: unknown }).issues : undefined;
+        return reply.code(502).send({ code, ...(issues ? { issues } : {}) });
+      }
     });
   }
 
@@ -318,6 +441,10 @@ export function registerContentRoutes(
     const params = lessonSetParams.safeParse(request.params);
     if (!params.success) return reply.code(400).send({ code: "INVALID_CONTENT_LESSON_SET" });
     const actorId = request.e4sSession!.user.id;
+    const matrix = await repositories.content.lessonMatrix(actorId);
+    if (!matrix?.levels.some((level) => level.cefr === params.data.cefr)) {
+      return reply.code(409).send({ code: "CONTENT_LEVEL_NOT_ACTIVE" });
+    }
     const runner = await runnerFor(actorId);
     if (!runner) return reply.code(503).send({ code: "AI_UNAVAILABLE" });
     const frame = await repositories.content.listWeeks(actorId);
@@ -325,32 +452,34 @@ export function registerContentRoutes(
     const task = await repositories.aiRuns.activeTaskPrompt(actorId, "weekly_lessons");
     if (!week || !task) return reply.code(503).send({ code: "AI_PROMPT_NOT_READY" });
     try {
-      const result = await runner.runTask("weekly_lessons", {
-        weekNumber: week.weekNumber, topic: week.topic, description: week.description,
-        objectives: week.objectives, keyVocabHint: week.keyVocabHint,
-        ...(week.plan?.[params.data.cefr]?.length === 5 ? { plan: week.plan[params.data.cefr] } : {}),
-        cefr: params.data.cefr, lessonCount: 5
-      }, { systemPrompt: `${task.prompt}\n\nImplementation contract: the saved five-day plan is authoritative when provided. Keep the weekly topic as the context; use each plan item as that day's lesson focus and do not invent a replacement weekly title. The returned lesson content must be the concrete content that the learner lesson screen will render.` });
-      const output = weeklyLessonsOutputSchema.safeParse(result.output);
-      if (!output.success) return reply.code(502).send({ code: "AI_OUTPUT_INVALID", issues: output.error.issues.slice(0, 8).map(issue => ({ path: issue.path.join("."), message: issue.message })) });
-      const lessons = output.data.lessons as ContentLessonDraftInput[];
-      const validation = validateLessonDraft(lessons);
-      const days = [...new Set(lessons.map((lesson) => lesson.dayNumber))].sort((a, b) => a - b);
-      if (!validation.valid || days.length !== 5 || days.some((day, index) => day !== index + 1)) {
-        return reply.code(502).send({ code: "AI_LESSON_SET_INVALID", issues: validation.issues });
+      const excludedVocabulary = await repositories.content.usedLessonVocabulary(actorId);
+      const generated = await generateWeeklyLessons(week, params.data.cefr, task, runner, { excludedVocabulary });
+      const saved = await repositories.content.saveLessonDraft(actorId, week.weekNumber, params.data.cefr, generated.lessons, "ai");
+      try {
+        await repositories.aiRuns.recordSucceeded({
+          userId: actorId,
+          requestId: `weekly-lessons:${week.weekNumber}:${params.data.cefr}:${Date.now()}`,
+          taskId: task.taskId,
+          promptVersionId: task.promptVersionId,
+          output: generated.output,
+          metadata: generated.result.metadata
+        });
+      } catch (error) {
+        request.log.warn({ code: errorCode(error, "AI_RUN_RECORD_FAILED") }, "Lesson generation audit record failed");
       }
-      await repositories.aiRuns.recordSucceeded({
-        userId: actorId,
-        requestId: `weekly-lessons:${week.weekNumber}:${params.data.cefr}:${Date.now()}`,
-        taskId: task.taskId,
-        promptVersionId: task.promptVersionId,
-        output: output.data,
-        metadata: result.metadata
-      });
-      return reply.code(201).send(await repositories.content.saveLessonDraft(actorId, week.weekNumber, params.data.cefr, lessons, "ai"));
+      return reply.code(201).send(saved);
     } catch (error) {
-      request.log.warn({ code: errorCode(error, "AI_LESSON_GENERATION_FAILED") }, "Weekly lesson generation failed");
-      return reply.code(502).send({ code: errorCode(error, "AI_LESSON_GENERATION_FAILED") });
+      request.log.warn({
+        code: errorCode(error, "AI_LESSON_GENERATION_FAILED"),
+        issues: error && typeof error === "object" && "details" in error ? (error as { details?: unknown }).details : undefined
+      }, "Weekly lesson generation failed");
+      const code = errorCode(error, "AI_LESSON_GENERATION_FAILED");
+      const issues = error && typeof error === "object" && "issues" in error
+        ? (error as { issues?: unknown }).issues
+        : error && typeof error === "object" && "details" in error && (error as { details?: unknown }).details && typeof (error as { details?: unknown }).details === "object" && "issues" in (error as { details: { issues?: unknown } }).details
+          ? (error as { details: { issues?: unknown } }).details.issues
+          : undefined;
+      return reply.code(502).send({ code, ...(issues ? { issues } : {}) });
     }
   });
 
@@ -586,4 +715,13 @@ export function registerContentRoutes(
 
 function errorCode(error: unknown, fallback: string): string {
   return error instanceof Error && /^[A-Z0-9_]+$/.test(error.message) ? error.message : fallback;
+}
+
+function canonicalPartOfSpeech(value: string | undefined): string | undefined {
+  const normalized = value?.normalize("NFKC").trim().toLowerCase();
+  if (normalized === "noun" || normalized === "danh từ") return "noun";
+  if (normalized === "verb" || normalized === "động từ") return "verb";
+  if (normalized === "adjective" || normalized === "tính từ") return "adjective";
+  if (normalized === "adverb" || normalized === "trạng từ") return "adverb";
+  return normalized || undefined;
 }

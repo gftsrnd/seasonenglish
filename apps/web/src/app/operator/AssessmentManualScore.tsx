@@ -83,7 +83,8 @@ export function AssessmentManualScore({ writingCriteria, speakingCriteria, comme
         <p className="small muted">Phát âm không chấm được từ bản ghi chữ; điểm Nói quy đổi từ 4 tiêu chí (× 1–5 = 20) về 20 điểm.</p>
       </div>
     </details>
-    <label className="operator-manual-comment">Nhận xét<textarea aria-label="Nhận xét" value={note} rows={3} onChange={event => setNote(event.target.value)} /></label>
+    <h4 className="operator-detail-section-title operator-manual-comment-title">Nhận xét</h4>
+    <label className="operator-manual-comment"><span className="sr-only">Nhận xét</span><textarea aria-label="Nhận xét" value={note} rows={3} onChange={event => setNote(event.target.value)} /></label>
     <button className="btn-sm btn-primary" type="button" disabled={!canSave || saving} onClick={requestSave}>{saving ? "Đang lưu…" : "Lưu điểm chấm tay"}</button>
     {!canSave && <p className="small muted" role="status">Nhập đủ điểm 0–5 cho 9 tiêu chí trước khi lưu.</p>}
     {confirming && <div className="modal-backdrop operator-modal-scope" role="presentation"><section className="dialog operator-confirm-dialog" role="dialog" aria-modal="true" aria-label="Xác nhận lưu điểm"><h3>Xác nhận lưu điểm</h3><p className="small">Điểm chấm tay sẽ thay thế kết quả Viết/Nói hiện tại và ghi vào nhật ký xử lý.</p><div className="row end"><button className="btn-sm" type="button" onClick={() => setConfirming(false)}>Hủy</button><button className="btn-sm btn-primary" type="button" onClick={() => { setConfirming(false); onSave({ writingCriteria: writing as ManualScoreInput["writingCriteria"], speakingCriteria: speaking as ManualScoreInput["speakingCriteria"], comment: note }); }}>Xác nhận</button></div></section></div>}

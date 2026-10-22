@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type CSSProperties, type KeyboardEvent as ReactKeyboardEvent } from "react";
-import { Check, CheckCircle2, Circle, Clock3, LockKeyhole, MessageCircle, PenLine, Play, Sprout } from "lucide-react";
+import { Check, Circle, Clock3, LockKeyhole, MessageCircle, PenLine, Play, Sprout } from "lucide-react";
 import type { LearnerHomeView, LearnerCallbacks } from "./contracts.js";
 import { Notice, PageTitle, Progress, AppLink } from "./ui.js";
 
@@ -37,7 +37,7 @@ export function LearnerHome({ view, actions }: { view: LearnerHomeView; actions:
     </section>
     <div className="bao-row" style={{ marginBottom: 16 }} aria-label="Lời chào của Season"><div className="bubble" style={{ flex: 1 }}>Hôm nay học gì nào?</div></div>
     {!view.aiAvailable && view.aiAvailable !== undefined ? <Notice tone="warn">AI chưa kết nối (chưa có API key). Bạn vẫn làm test và học bài đã duyệt; báo người vận hành để bật AI coach.</Notice> : null}
-    {showLifecycle ? <section className="card home-lifecycle" data-home-block="lifecycle" aria-label="Trạng thái pilot"><div className="row between"><div><div className="eyebrow">Trạng thái chương trình</div><h3>{pilotPhaseLabel(view.weekPhase)}</h3></div>{view.levelUpPhase && view.levelUpPhase !== "none" ? <span className="badge warn">Đang theo dõi lên mức</span> : null}</div>{view.monthlyGoal ? <p className="small" style={{ marginBottom: 0 }}><b>Mục tiêu tháng:</b> {view.monthlyGoal}</p> : null}</section> : null}
+    {showLifecycle ? <section className="card home-lifecycle home-lifecycle-card" data-home-block="lifecycle" aria-label="Trạng thái pilot"><div className="row between"><div><div className="eyebrow">Trạng thái chương trình</div><h3>{pilotPhaseLabel(view.weekPhase)}</h3></div>{view.levelUpPhase && view.levelUpPhase !== "none" ? <span className="badge warn">Đang theo dõi lên mức</span> : null}</div>{view.monthlyGoal ? <p className="small" style={{ marginBottom: 0 }}><b>Mục tiêu tháng:</b> {view.monthlyGoal}</p> : null}</section> : null}
     <PrimaryLesson view={view} next={next} actions={actions} />
     <section className="stats" data-home-block="metrics" aria-label="Tiến độ hiện tại">
       <Metric label="Bài tuần này" value={`${view.metrics.completedLessons}/${view.metrics.totalLessons}`} percent={ratio(view.metrics.completedLessons, view.metrics.totalLessons)} />
@@ -49,6 +49,7 @@ export function LearnerHome({ view, actions }: { view: LearnerHomeView; actions:
       <ol className="path home-week-axis" aria-label="Lộ trình tuần" style={{ display: "grid", gridTemplateColumns: `repeat(${Math.max(view.lessons.length, 1)}, minmax(0, 1fr))`, gap: 12, alignItems: "start", margin: "12px 0 0", padding: 0, minWidth: 0, width: "100%" }}>{view.lessons.map((lesson) => {
         const lock = lesson.lock ?? null;
         const lockLabel = lock ? lessonLockLabel(lock) : "";
+        const timingLabel = lessonTimingLabel(view, lesson);
         const linkClass = lesson.status === "completed" ? "done" : lock ? "locked" : lesson.status === "in_progress" ? "today" : undefined;
         return <li key={lesson.id} data-state={lesson.status} data-lock-reason={lock?.reason ?? undefined} style={{ minWidth: 0, position: "relative", zIndex: 1 }}>
           <AppLink
@@ -56,19 +57,19 @@ export function LearnerHome({ view, actions }: { view: LearnerHomeView; actions:
             navigate={actions.navigate}
             disabled={Boolean(lock)}
             className={linkClass}
-            ariaLabel={`T${lesson.dayNumber + 1}${lesson.status === "in_progress" && !lock ? " · hôm nay" : ""} · ${lesson.title}${lock ? ` · ${lockLabel}` : ""}`}
+            ariaLabel={`T${lesson.dayNumber + 1}${timingLabel ? ` · ${timingLabel}` : ""} · ${lesson.title}${lock ? ` · ${lockLabel}` : ""}`}
             title={lock ? `${lesson.title} – ${lock.reason === "date" ? "chưa đến ngày mở" : "mở sau khi xong bài trước"}` : undefined}
           >
             <span className="node" style={{ display: "grid", placeItems: "center", position: "relative", zIndex: 1 }}>{lesson.status === "completed" ? <Check className="status-icon" aria-hidden="true" /> : lock ? <LockKeyhole className="status-icon" aria-hidden="true" /> : lesson.status === "in_progress" ? <Play className="status-icon" aria-hidden="true" fill="currentColor" /> : <span aria-hidden="true">{lesson.dayNumber}</span>}</span>
-            <span className="d">T{lesson.dayNumber + 1}{lesson.status === "in_progress" && !lock ? " · hôm nay" : ""}</span>
+            <span className="d">T{lesson.dayNumber + 1}{timingLabel ? ` · ${timingLabel}` : ""}</span>
             <span className="ttl">{lesson.title}</span>
           </AppLink>
         </li>;
       })}</ol>
     </section> : null}
-    <section className="card" style={{ marginTop: 16 }} data-home-block="attendance" aria-label="Điểm danh tuần này"><div className="row between"><h3>Điểm danh tuần này</h3><strong>{view.schedule.days.filter((day) => day.status === "attended").length}/{view.schedule.daysPerWeek} ngày</strong></div><ol className="days home-week-axis" style={{ display: "grid", gridTemplateColumns: `repeat(${Math.max(view.schedule.days.length, 1)}, minmax(0, 1fr))`, gap: 12, alignItems: "start", margin: "12px 0 0", padding: 0, minWidth: 0, width: "100%" }}> {view.schedule.days.map((day) => <li className="day" key={day.date}><span>{day.label}</span><i className={day.status === "today" ? "today" : ""}>{day.status === "attended" ? <Check className="status-icon" aria-label="Đã học" /> : day.status === "today" ? <Circle className="status-icon" aria-label="Hôm nay" fill="currentColor" /> : <Circle className="status-icon" aria-label="Chưa học" />}</i></li>)}</ol><p className="xs muted" style={{ margin: "10px 0 0" }}>Lịch cố định {view.schedule.daysPerWeek} ngày/tuần (T2–T6), 1 bài/ngày, ≥{view.schedule.lessonMinutes} phút. {view.monthlyGoal ?? ""}</p></section>
+    <section className="card" style={{ marginTop: 16 }} data-home-block="attendance" aria-label="Điểm danh tuần này"><div className="row between"><h3>Điểm danh tuần này</h3><strong>{view.schedule.days.filter((day) => day.status === "attended").length}/{view.schedule.daysPerWeek} ngày</strong></div><ol className="days home-week-axis" style={{ display: "grid", gridTemplateColumns: `repeat(${Math.max(view.schedule.days.length, 1)}, minmax(0, 1fr))`, gap: 12, alignItems: "start", margin: "12px 0 0", padding: 0, minWidth: 0, width: "100%" }}> {view.schedule.days.map((day) => <li className="day" data-status={day.status} key={day.date}><span>{day.label}</span><i className={day.status === "attended" ? "on" : day.status === "missed" ? "miss" : day.status}>{day.status === "attended" ? <Check className="status-icon" aria-label="Đã học" /> : day.status === "today" ? <Circle className="status-icon" aria-label="Hôm nay" fill="currentColor" /> : day.status === "missed" ? <span className="sr-only">Đã bỏ lỡ</span> : <Circle className="status-icon" aria-label="Chưa học" />}</i></li>)}</ol><p className="xs muted attendance-schedule-note">Lịch cố định {view.schedule.daysPerWeek} ngày/tuần (T2–T6), 1 bài/ngày, ≥{view.schedule.lessonMinutes} phút. {view.monthlyGoal ?? ""}</p></section>
     <section className="grid cols-2" style={{ marginTop: 16, alignItems: "stretch", gridAutoRows: "1fr", minWidth: 0 }} data-home-block="activities" aria-label="Hoạt động tuần">
-      <AppLink className="tile peach" style={{ height: "100%", minWidth: 0, boxSizing: "border-box" }} href="/coach" navigate={actions.navigate}><ActivityIcon kind="chat" /><span className="t">Luyện với Season</span><span className="s">{view.coach.turnsThisWeek >= view.coach.targetTurns ? `Đã đạt mục tiêu tuần ✓ (${view.coach.turnsThisWeek} lượt)` : `Mục tiêu tuần: đã luyện ${view.coach.turnsThisWeek}/${view.coach.targetTurns} lượt`}</span></AppLink>
+      <AppLink className={`tile ${(view.coach.turnsToday ?? 0) > 0 ? "mint" : "peach"}`} style={{ height: "100%", minWidth: 0, boxSizing: "border-box" }} href="/coach" navigate={actions.navigate}><ActivityIcon kind="chat" /><span className="t">Luyện với Season</span><span className="s">{(view.coach.turnsToday ?? 0) > 0 ? `Đã luyện hôm nay ✓ (${view.coach.turnsToday} lượt)${view.coach.turnsThisWeek >= view.coach.targetTurns ? ` · tuần ${view.coach.turnsThisWeek} lượt` : ""}` : view.coach.turnsThisWeek >= view.coach.targetTurns ? `Đã đạt mục tiêu tuần ✓ (${view.coach.turnsThisWeek} lượt)` : `Mục tiêu tuần: đã luyện ${view.coach.turnsThisWeek}/${view.coach.targetTurns} lượt`}</span></AppLink>
       <AppLink className="tile butter" style={{ height: "100%", minWidth: 0, boxSizing: "border-box" }} href="/practice" navigate={actions.navigate}><ActivityIcon kind="pen" />{view.practice.status === "locked" ? <><LockKeyhole className="status-icon" aria-hidden="true" /><span className="badge warn">Chưa mở</span></> : <span className="badge">{practiceStatusLabel(view.practice.status)}</span>}<span className="t">Bài thực hành cuối tuần</span><span className="s">{view.practice.detail}</span></AppLink>
     </section>
     <Readiness view={view} actions={actions} />
@@ -145,14 +146,19 @@ function PrimaryLesson({ view, next, actions }: { view: LearnerHomeView; next: L
   if (!next && (!view.week || !view.lessons.length)) return <section className="card" data-home-block="primary"><h2>{view.week ? view.week.topic ? `Tuần ${view.week.weekNumber}: ${view.week.topic}` : `Tuần ${view.week.weekNumber} chưa có bài` : "Tuần này chưa có bài"}</h2><p>{view.week?.topic ? `Bộ bài mức ${view.learner.cefr ?? "—"} đang được chuẩn bị và duyệt. Quay lại sau nhé, hoặc luyện với Season trước.` : "Người vận hành chưa đặt chủ đề tuần. Bạn có thể luyện với Season trong lúc chờ."}</p></section>;
   if (!next) return <section className="hero" style={{ background: "var(--mint)", color: "var(--text)" }} data-home-block="primary"><div className="eyebrow">Tuần {view.week?.weekNumber ?? "—"}</div><h2>Xong hết {view.lessons.length} bài rồi!</h2><p>Ôn lại bài hoặc luyện thêm với Season nhé.</p></section>;
   if (next.lock) return <section className="hero" style={{ background: "var(--mint)", color: "var(--text)" }} data-home-block="primary"><div className="eyebrow">Tuần {view.week?.weekNumber ?? "—"}</div><h2>Xong bài hôm nay rồi!</h2><p>{next.lock.reason === "date" ? `Bài tiếp theo (T${next.dayNumber + 1} · ${next.title}) ${next.lock.opensAt ? `mở vào ${formatLessonDate(next.lock.opensAt)}` : "chưa mở"}. Trong lúc chờ, luyện với Season nhé.` : next.lock.message}</p></section>;
-  return <section className="hero" data-home-block="primary"><div><div className="eyebrow">Bài hôm nay · T{next.dayNumber + 1} · Tuần {view.week?.weekNumber ?? "—"}{isCatchUp(next) ? " · học bù" : ""}</div><h2>{next.title}</h2>{view.week?.topic ? <div style={{ fontWeight: 700 }}>{view.week.topic}</div> : null}</div><div className="row" style={{ gap: 14, fontWeight: 800, fontSize: ".9rem" }}><span className="row" style={{ gap: 6 }}><ClockIcon /> {view.schedule.lessonMinutes} phút</span><span>Bài {next.dayNumber}/{view.lessons.length}</span></div><AppLink className="btn btn-primary btn-lg btn-block" href={`/lesson/${next.id}`} navigate={actions.navigate}>Học ngay</AppLink></section>;
+  const catchUp = isCatchUp(view, next);
+  return <section className="hero home-primary-lesson" data-home-block="primary"><div><div className="eyebrow">{catchUp ? "Bài học bù" : "Bài hôm nay"} · T{next.dayNumber + 1} · Tuần {view.week?.weekNumber ?? "—"}</div><h2>{next.title}</h2>{view.week?.topic ? <div style={{ fontWeight: 700 }}>{view.week.topic}</div> : null}</div><div className="row" style={{ gap: 14, fontWeight: 800, fontSize: ".9rem" }}><span className="row" style={{ gap: 6 }}><ClockIcon /> {view.schedule.lessonMinutes} phút</span><span>Bài {next.dayNumber}/{view.lessons.length}</span></div><AppLink className="btn btn-primary btn-lg btn-block" href={`/lesson/${next.id}`} navigate={actions.navigate}>Học ngay</AppLink></section>;
 }
 
-function isCatchUp(next: LearnerHomeView["nextLesson"]) {
+function lessonTimingLabel(view: LearnerHomeView, lesson: LearnerHomeView["lessons"][number]) {
+  if (lesson.status !== "in_progress" || lesson.lock) return "";
+  const todayLabel = view.schedule.days.find((day) => day.status === "today")?.label;
+  return todayLabel === `T${lesson.dayNumber + 1}` ? "hôm nay" : "học bù";
+}
+
+function isCatchUp(view: LearnerHomeView, next: LearnerHomeView["nextLesson"]) {
   if (!next) return false;
-  const day = new Date().getDay();
-  const weekday = day === 0 ? 7 : day;
-  return weekday >= 1 && weekday <= 5 && next.dayNumber < weekday;
+  return lessonTimingLabel(view, next) === "học bù";
 }
 
 function ActivityIcon({ kind }: { kind: "chat" | "pen" }) {
@@ -253,13 +259,32 @@ function Readiness({ view, actions }: { view: LearnerHomeView; actions: LearnerC
   return <section className="card" style={{ marginTop: 12 }} data-home-block="readiness" aria-label={target ? view.levelReadiness.eligible ? `Sẵn sàng thi lên ${target}` : `Đường lên mức ${target}` : "Bạn đang ở mức cao nhất"}>
     <div className="row between" style={{ alignItems: "baseline" }}><h3>{title}</h3><span className="small muted" style={{ fontWeight: 800 }}>{view.levelReadiness.windowDays} ngày gần nhất</span></div>
     {levelStatus ? <p className="small muted" style={{ margin: "4px 0 0" }}>{levelStatus}</p> : null}
-    {view.levelReadiness.criteria.map((metric) => <div style={{ marginTop: 8 }} key={metric.key}><div className="row between small" style={{ fontWeight: 800 }}><span className="readiness-label">{metric.met ? <CheckCircle2 className="status-icon" aria-hidden="true" /> : <Circle className="status-icon" aria-hidden="true" />} {metric.label}</span><span className={metric.met ? "" : "muted"}>{metric.display}</span></div><Progress value={metric.current} max={metric.target} label={metric.label} /></div>)}
+    {view.levelReadiness.criteria.map((metric) => <div className="readiness-metric" data-readiness-key={metric.key} key={metric.key}><div className="small readiness-heading"><span className="readiness-label">{metric.label}</span><span className="readiness-current">{readinessCurrent(metric)}</span></div><ReadinessBar metric={metric} /><div className="readiness-actual small muted">{metric.display}</div></div>)}
     {view.levelUpPhase === "testing" && target ? <div className="card flat" style={{ marginTop: 12, background: "var(--mint)" }}><b>Bài thi lên mức {target} đang dang dở.</b><div className="small" style={{ margin: "4px 0 8px" }}>Tiếp tục từ phần đang làm; bài thi vẫn theo thứ tự 4 kỹ năng.</div><AppLink className="btn btn-primary" href="/test/level-up" navigate={actions.navigate}>Tiếp tục bài thi</AppLink></div> : null}
     {view.levelUpPhase === "challenge" && target ? <div className="card flat" style={{ marginTop: 12, background: "var(--mint)" }}><b>Bạn đã qua bài thi lên mức {target}.</b><div className="small" style={{ margin: "4px 0 8px" }}>Hoàn thành 6 lượt thử thách với Season để gửi yêu cầu duyệt mức.</div><AppLink className="btn btn-primary" href="/challenge" navigate={actions.navigate}>Mở thử thách</AppLink></div> : null}
     {(!view.levelUpPhase || view.levelUpPhase === "eligible") && view.levelReadiness.eligible && view.levelReadiness.examAvailable && target ? <div className="card flat" style={{ marginTop: 12, background: "var(--mint)" }}><b>Bạn đủ điều kiện thi lên mức {target}.</b><div className="small" style={{ margin: "4px 0 8px" }}>Đề ngắn (≈35 phút, 4 phần), rồi 6 lượt thử thách với Season. Chuẩn bị tai nghe và micro như bài đầu vào.</div><AppLink className="btn btn-primary" href="/test/level-up" navigate={actions.navigate}>Thi lên mức</AppLink></div> : null}
     {view.levelUpPhase === "eligible" && !view.levelReadiness.examAvailable && target ? <Notice tone="info">Bạn đã đủ điều kiện thi lên mức {target}; đề sẽ mở ngay khi được vận hành duyệt.</Notice> : null}
     <p className="xs muted" style={{ margin: "10px 0 0" }}>{target ? view.levelReadiness.eligible ? "Đủ cả 4 mục – được thi lên mức khi đề được duyệt." : "Đủ cả 4 mục để thi lên mức." : "Giữ nhịp học để duy trì mức C1."}</p>
   </section>;
+}
+
+function readinessScale(key: LearnerHomeView["levelReadiness"]["criteria"][number]["key"]): number {
+  return key === "coachRubric" ? 5 : 100;
+}
+
+function readinessCurrent(metric: LearnerHomeView["levelReadiness"]["criteria"][number]): string {
+  return metric.key === "coachRubric" ? `${metric.current}/5` : `${metric.current}%`;
+}
+
+function ReadinessBar({ metric }: { metric: LearnerHomeView["levelReadiness"]["criteria"][number] }) {
+  const max = readinessScale(metric.key);
+  const current = Math.max(0, Math.min(max, metric.current));
+  const valuePercent = max ? current / max * 100 : 0;
+  const targetPercent = max ? Math.max(0, Math.min(100, metric.target / max * 100)) : 0;
+  return <div className="readiness-track" role="progressbar" aria-label={metric.label} aria-valuemin={0} aria-valuemax={max} aria-valuenow={current}>
+    <i className="readiness-fill" style={{ width: `${valuePercent}%` }} />
+    <i className="readiness-target" data-testid="readiness-target" aria-hidden="true" style={{ left: `${targetPercent}%` }} />
+  </div>;
 }
 
 

@@ -5,10 +5,21 @@ import { migrateDatabase, resetPublicSchema, seedDemo } from "@e4s/database";
 import { createCredentialHash } from "@e4s/domain/identity";
 import { DEMO_IDS } from "@e4s/test-support";
 import { buildApi } from "../src/app.js";
+import type { AiTaskRunner } from "../src/modules/coach/index.js";
+import type { ContentMediaService } from "../src/modules/media/index.js";
 
 const databaseUrl = process.env.TEST_DATABASE_URL
   ?? "postgres://e4s:e4s_test_password@127.0.0.1:55432/e4s_test";
 const checkerId = "00000000-0000-4000-8000-000000000104";
+const mediaRequests: Array<{ userId: string; term: string }> = [];
+const mediaService: ContentMediaService = {
+  async resolveForUser(userId, request) {
+    mediaRequests.push({ userId, term: request.term });
+    return { status: "available", imageUrl: "https://upload.wikimedia.org/example.jpg", alt: request.term, attribution: { creator: "Example", licence: "CC BY 4.0", licenceUrl: "https://creativecommons.org/licenses/by/4.0/", sourceUrl: "https://commons.wikimedia.org/wiki/File:Example.jpg" } };
+  },
+  async diagnoseForUser() { return { image: { status: "unavailable" }, provider: null, cached: false }; },
+  async clearForUser() { return { cleared: 0 }; }
+};
 
 function lesson(dayNumber: number) {
   return {
@@ -29,9 +40,53 @@ function lesson(dayNumber: number) {
   };
 }
 
+const repairRunner: AiTaskRunner = {
+  async runTask(taskKey, rawInput) {
+    const dayNumber = Number((rawInput as { dayNumber?: number }).dayNumber ?? 1);
+    const dayWords = [
+      ["department", "role", "project"],
+      ["manager", "designer", "tester"],
+      ["meeting", "report", "email"],
+      ["schedule", "deadline", "task"],
+      ["feedback", "comment", "idea"]
+    ][dayNumber - 1] ?? ["office", "team", "work"];
+    const vocabularyItem = (word: string) => ({
+      word, partOfSpeech: "noun", pronunciation: "/word/", meaning: "Từ vựng công việc", imageQuery: `${word} office`,
+      collocation1: `a ${word}`, collocation2: `new ${word}`, collocation3: `work ${word}`,
+      family1: { word: `${word}s`, type: "noun", meaning: "dạng số nhiều" }, family2: null,
+      umbrellaWord: "work", umbrellaMeaning: "công việc", sibling1: null, sibling2: null, sibling3: null,
+      synonym1: { word: `workplace ${word}`, level: "A1", note: "từ gần nghĩa" }, synonym2: null, antonym1: null
+    });
+    const output = taskKey === "weekly_lesson_foundation" ? {
+      title: "S + V + O", durationMinutes: 10,
+      objective: { title: "Mục tiêu bài học", text: "Nói một câu ngắn về công việc." },
+      instruction: { title: "Hướng dẫn làm bài", step1: "Đọc từ vựng.", step2: "Xem công thức.", step3: "Làm bài tập." },
+      grammar: { title: "Ngữ pháp", formula: "S + V + O", usage: "Dùng để nói ngắn về công việc.", example1: "I do my work.", example2: "She checks the file." },
+      pronunciation: { title: "Phát âm", focus: "/w/", tip: "Mở môi tròn khi phát âm.", word1: { word: "work", ipa: "/wɜːk/" }, word2: { word: "week", ipa: "/wiːk/" }, word3: { word: "well", ipa: "/wel/" } }
+    } : taskKey === "weekly_lesson_vocabulary" ? {
+      title: "Từ vựng", word1: vocabularyItem(dayWords[0]!), word2: vocabularyItem(dayWords[1]!), word3: vocabularyItem(dayWords[2]!)
+    } : {
+      listening: { title: "Nghe", body: "I work in AI with my small team every weekday.", prompt: "Where does the speaker work?", option1: "AI", option2: "HR", option3: "Sales", option4: "Finance", answer: "AI" },
+      reading: { title: "Đọc", body: "Lan works in AI with a small team. She checks one report every morning and sends it to her manager.", prompt: "What does Lan check?", option1: "A report", option2: "An email", option3: "A meeting", option4: "A customer", answer: "A report" },
+      writing: { title: "Viết", type: "fill", prompt: "I work in ___.", option1: null, option2: null, option3: null, option4: null, answer: "AI" },
+      wordClass: { title: "Từ loại", body: undefined, prompt: "What part of speech is work?", option1: "noun", option2: "verb", option3: "adjective", option4: "adverb", answer: "noun" },
+      wordUse: { title: "Dùng từ", body: undefined, prompt: "Which sentence uses work correctly?", option1: "I have work.", option2: "I work at GFT.", option3: "Work is blue.", option4: "I workly today.", answer: "I work at GFT." },
+      speaking: { title: "Nói", prompt: "Nói nơi bạn làm việc.", answer: "I work in AI." }
+    };
+    return {
+      output,
+      metadata: {
+        traceId: "test-trace", taskId: "weekly_lessons", provider: "test", model: "test-model",
+        attempts: 1, latencyMs: 1, inputHash: "test-hash", schemaValid: true,
+        usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 }
+      }
+    };
+  }
+};
+
 describe("content operations API", () => {
   const pool = new Pool({ connectionString: databaseUrl });
-  const app = buildApi({ pool, allowDemoLogin: true, secureCookies: false });
+  const app = buildApi({ pool, allowDemoLogin: true, secureCookies: false, aiRunner: repairRunner, mediaService });
   let learnerCookie = "";
   let makerCookie = "";
   let checkerCookie = "";
@@ -74,6 +129,26 @@ describe("content operations API", () => {
 
   afterAll(async () => { await app.close(); await pool.end(); });
 
+  it("resolves a real vocabulary image for the operator preview without asking AI for an image", async () => {
+    mediaRequests.length = 0;
+    const setResponse = await app.inject({ method: "GET", url: "/api/v1/content/lesson-sets/1/A2", headers: { cookie: makerCookie } });
+    expect(setResponse.statusCode).toBe(200);
+    const set = setResponse.json() as { lessons: Array<{ id: string; parts: Array<{ code: string; content: { items?: Array<{ word?: string }> } }> }> };
+    const lesson = set.lessons.find((candidate) => candidate.parts.some((part) => part.code === "vocabulary" && part.content.items?.length));
+    expect(lesson).toBeDefined();
+
+    const response = await app.inject({
+      method: "GET",
+      url: `/api/v1/content/lesson-sets/1/A2/lessons/${lesson!.id}/vocabulary/0/image`,
+      headers: { cookie: makerCookie }
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toMatchObject({ status: "available", imageUrl: "https://upload.wikimedia.org/example.jpg" });
+    expect(mediaRequests).toHaveLength(1);
+    expect(mediaRequests[0]?.term).toBeTruthy();
+  });
+
   it("lets the Manager administer the two-week topic frame", async () => {
     const read = await app.inject({ method: "GET", url: "/api/v1/content/weeks", headers: { cookie: managerCookie } });
     expect(read.statusCode, read.body).toBe(200);
@@ -113,7 +188,7 @@ describe("content operations API", () => {
       payload: { weeks: [{ weekNumber: 1, topic: "Changed again", description: "", objectives: "", keyVocabHint: "" }] }
     });
     expect(metadataOnlyWrite.statusCode, metadataOnlyWrite.body).toBe(200);
-    expect(metadataOnlyWrite.json()).toMatchObject({ weeks: expect.arrayContaining([expect.objectContaining({ weekNumber: 1, topic: "Changed again", plan })]) });
+    expect(metadataOnlyWrite.json()).toMatchObject({ weeks: expect.arrayContaining([expect.objectContaining({ weekNumber: 1, topic: "Changed again", plan: replacementPlan })]) });
 
     const operatorWrite = await app.inject({
       method: "PUT", url: "/api/v1/content/weeks", headers: { cookie: makerCookie },
@@ -128,7 +203,7 @@ describe("content operations API", () => {
     expect(operatorWrite.statusCode, operatorWrite.body).toBe(200);
   });
 
-  it("enforces draft → review → checker publication and hides drafts from learners", async () => {
+  it("allows an operator to publish their own lesson set and hides drafts from learners", async () => {
     const created = await app.inject({
       method: "PUT", url: "/api/v1/content/lesson-sets/1/A2/draft", headers: { cookie: makerCookie },
       payload: { lessons: [1, 2, 3, 4, 5].map(lesson) }
@@ -153,15 +228,8 @@ describe("content operations API", () => {
       method: "POST", url: `/api/v1/content/lesson-set-versions/${versionId}/publication`,
       headers: { cookie: makerCookie }, payload: {}
     });
-    expect(selfApproval.statusCode).toBe(409);
-    expect(selfApproval.json()).toMatchObject({ code: "CONTENT_MAKER_CANNOT_APPROVE" });
-
-    const managerApproval = await app.inject({
-      method: "POST", url: `/api/v1/content/lesson-set-versions/${versionId}/publication`,
-      headers: { cookie: managerCookie }, payload: {}
-    });
-    expect(managerApproval.statusCode, managerApproval.body).toBe(200);
-    expect(managerApproval.json()).toMatchObject({ versionId, status: "published", approvedBy: DEMO_IDS.manager });
+    expect(selfApproval.statusCode, selfApproval.body).toBe(200);
+    expect(selfApproval.json()).toMatchObject({ versionId, status: "published", approvedBy: DEMO_IDS.operator });
 
     const visibleLesson = await app.inject({
       method: "GET", url: `/api/v1/lessons/${lessons[0]?.id}`, headers: { cookie: learnerCookie }
@@ -219,6 +287,33 @@ describe("content operations API", () => {
     ]);
   });
 
+  it("persists the active lesson levels so C1 can be added or hidden without deleting content", async () => {
+    const added = await app.inject({
+      method: "PUT", url: "/api/v1/content/lesson-levels", headers: { cookie: makerCookie },
+      payload: { levels: ["A1", "A2", "B1", "B2", "C1"] }
+    });
+    expect(added.statusCode, added.body).toBe(200);
+    expect(added.json().levels.map((level: { cefr: string }) => level.cefr)).toEqual(["A1", "A2", "B1", "B2", "C1"]);
+
+    const reloaded = await app.inject({ method: "GET", url: "/api/v1/content/lesson-matrix", headers: { cookie: makerCookie } });
+    expect(reloaded.json().levels.map((level: { cefr: string }) => level.cefr)).toEqual(["A1", "A2", "B1", "B2", "C1"]);
+
+    const hidden = await app.inject({
+      method: "PUT", url: "/api/v1/content/lesson-levels", headers: { cookie: makerCookie },
+      payload: { levels: ["A1", "A2", "B1", "B2"] }
+    });
+    expect(hidden.statusCode, hidden.body).toBe(200);
+    expect(hidden.json().levels.map((level: { cefr: string }) => level.cefr)).toEqual(["A1", "A2", "B1", "B2"]);
+  });
+
+  it("does not generate a hidden CEFR level through a direct cell request", async () => {
+    const response = await app.inject({
+      method: "POST", url: "/api/v1/content/lesson-sets/1/C1/generate", headers: { cookie: makerCookie }, payload: {}
+    });
+    expect(response.statusCode, response.body).toBe(409);
+    expect(response.json()).toEqual({ code: "CONTENT_LEVEL_NOT_ACTIVE" });
+  });
+
   it("lets Manager update prompts while preserving version history", async () => {
     const managerWrite = await app.inject({
       method: "PUT", url: "/api/v1/content/prompts", headers: { cookie: managerCookie },
@@ -241,5 +336,22 @@ describe("content operations API", () => {
     );
     await expect(pool.query("update prompt_versions set content = 'changed' where id = $1", [active.rows[0]?.id]))
       .rejects.toThrow(/immutable/i);
+  });
+
+  it("repairs an existing lesson set through the validated weekly lesson contract", async () => {
+    const created = await app.inject({
+      method: "PUT", url: "/api/v1/content/lesson-sets/1/A1/draft", headers: { cookie: makerCookie },
+      payload: { lessons: [1, 2, 3, 4, 5].map(lesson) }
+    });
+    expect(created.statusCode, created.body).toBe(201);
+
+    const repaired = await app.inject({
+      method: "POST", url: "/api/v1/content/lesson-sets/1/A1/draft/enrich", headers: { cookie: makerCookie }, payload: {}
+    });
+    expect(repaired.statusCode, repaired.body).toBe(201);
+    const repairedBody = repaired.json() as { status: string; lessons: Array<{ title: string }> };
+    expect(repairedBody.status).toBe("draft");
+    expect(repairedBody.lessons).toHaveLength(5);
+    expect(repairedBody.lessons.every((item) => item.title.trim() && item.title !== "S + V + O")).toBe(true);
   });
 });

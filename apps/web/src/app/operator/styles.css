@@ -320,6 +320,118 @@
 .operator-modal-scope .operator-vocabulary-grid .grid.cols-4 { grid-template-columns: repeat(4, minmax(0, 1fr)); }
 .operator-modal-scope .operator-editor-actions { justify-content: flex-end; margin-top: 10px; }
 .operator-modal-scope .operator-editor-actions button { white-space: nowrap; }
+.operator-modal-scope .operator-editor-actions .operator-lesson-save-button {
+  border-color: #e47f1d !important;
+  background: #f39a35 !important;
+  color: #241408 !important;
+  box-shadow: none !important;
+}
+.operator-modal-scope .operator-editor-actions .operator-lesson-save-button:hover:not(:disabled) {
+  border-color: #d66f0d !important;
+  background: #e98a25 !important;
+}
+
+/* Lesson editor fidelity: keep the day title centered and every field inside
+   its card, even when the generated content is long. */
+.operator-modal-scope .operator-editor-heading {
+  position: relative;
+  min-height: 34px;
+  justify-content: center;
+  align-items: center;
+  padding: 0 48px;
+}
+.operator-modal-scope .operator-editor-heading h3 {
+  min-width: 0;
+  margin: 0;
+  text-align: center;
+  overflow-wrap: anywhere;
+}
+.operator-modal-scope .operator-editor-heading > button {
+  position: absolute;
+  right: 0;
+  top: -2px;
+  min-height: 34px;
+  padding: 6px 12px;
+}
+.operator-modal-scope .operator-vocabulary-grid,
+.operator-modal-scope .operator-vocabulary-grid .grid.cols-4 {
+  min-width: 0;
+  max-width: 100%;
+}
+.operator-modal-scope .operator-vocabulary-grid .grid.cols-4 {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+.operator-modal-scope .operator-editor-section {
+  min-width: 0;
+  overflow: hidden;
+}
+
+/* Canonical lesson editor: section labels remain inside their cards and long
+   generated values can shrink without pushing fields through the dialog. */
+.operator-modal-scope .operator-lesson-editor {
+  overflow-x: hidden;
+  padding: 22px;
+}
+.operator-modal-scope .operator-editor-sticky-header {
+  position: sticky;
+  z-index: 8;
+  top: -22px;
+  margin: -22px -22px 0;
+  width: auto;
+  max-width: none;
+  box-sizing: border-box;
+  padding: 10px 22px 7px;
+  border-bottom: 1px solid var(--line);
+  background: var(--surface);
+}
+.operator-modal-scope .operator-editor-description {
+  margin: 10px 0 0;
+}
+.operator-modal-scope .operator-editor-section {
+  display: grid;
+  gap: 12px;
+  margin-top: 14px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: var(--surface-2);
+  padding: 18px;
+  overflow: visible;
+}
+.operator-modal-scope .operator-editor-section legend {
+  max-width: calc(100% - 20px);
+  margin-left: 0;
+  padding: 0;
+  color: var(--text);
+  line-height: 1.3;
+  white-space: normal;
+}
+.operator-modal-scope .operator-vocabulary-grid {
+  gap: 12px;
+}
+.operator-modal-scope .operator-vocabulary-row {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 6px;
+  min-width: 0;
+  max-width: 100%;
+  box-sizing: border-box;
+}
+@media (max-width: 840px) {
+  .operator-modal-scope .operator-lesson-editor { padding: 16px; }
+  .operator-modal-scope .operator-editor-sticky-header {
+    top: -16px;
+    margin: -16px -16px 0;
+    width: auto;
+    padding: 9px 16px 7px;
+  }
+  .operator-modal-scope .operator-vocabulary-row { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@media (max-width: 560px) {
+  .operator-modal-scope .operator-editor-heading { justify-content: flex-start; padding: 0 56px 0 0; }
+  .operator-modal-scope .operator-editor-heading h3 { text-align: left; }
+  .operator-modal-scope .operator-editor-section { padding: 14px; }
+  .operator-modal-scope .operator-vocabulary-row { grid-template-columns: 1fr; }
+}
 .app-operator .operator-lesson-preview {
   display: block;
   padding: 0;
@@ -386,7 +498,7 @@
   gap: 12px;
 }
 
-.app-operator .operator-lesson-preview > .lesson-parts > section {
+.app-operator .operator-lesson-preview .lesson-surface > .lesson-parts > section {
   margin: 0;
   padding: 14px;
   border: 1px solid var(--line);
@@ -395,10 +507,29 @@
   box-shadow: none;
 }
 
-.app-operator .operator-lesson-preview .lesson-part--objective { background: var(--primary-soft); border-color: var(--primary-line); }
-.app-operator .operator-lesson-preview .lesson-part--instruction { background: var(--warn-soft); border-color: var(--warn-line); }
+.app-operator .operator-lesson-preview .lesson-part--objective {
+  border: 2px solid #ed8d2c;
+  background: linear-gradient(135deg, #fff1df, #ffe0b8);
+  box-shadow: 0 5px 14px rgb(176 91 18 / .10);
+}
+.app-operator .operator-lesson-preview .lesson-surface > .lesson-parts > .lesson-part--instruction { background: #fff1df !important; border-color: #efc99f !important; padding: 18px 20px; font-weight: 700; }
 .app-operator .operator-lesson-preview .lesson-part--grammar,
 .app-operator .operator-lesson-preview .lesson-part--pronunciation { background: var(--surface-3); }
+.app-operator .operator-lesson-preview .lesson-part--listening { border-color: #9ac5eb !important; background: #eef7ff !important; }
+.app-operator .operator-lesson-preview .lesson-part--reading { border-color: #b8d6a6 !important; background: #f2f8ed !important; }
+.app-operator .operator-lesson-preview .lesson-part--writing { border-color: #e7b7d4 !important; background: #fff2f8 !important; }
+.app-operator .operator-lesson-preview .lesson-part--word_class { border-color: #d7be85 !important; background: #fff8e8 !important; }
+.app-operator .operator-lesson-preview .lesson-part--word_use { border-color: #c5b6e9 !important; background: #f7f3ff !important; }
+.app-operator .operator-lesson-preview .lesson-part--speaking { border-color: #efb17d !important; background: #fff4eb !important; }
+.app-operator .operator-lesson-preview .lesson-part--listening,
+.app-operator .operator-lesson-preview .lesson-part--reading,
+.app-operator .operator-lesson-preview .lesson-part--writing,
+.app-operator .operator-lesson-preview .lesson-part--word_class,
+.app-operator .operator-lesson-preview .lesson-part--word_use,
+.app-operator .operator-lesson-preview .lesson-part--speaking {
+  border: 1px dashed #ded9d1 !important;
+  background: #fff !important;
+}
 .app-operator .operator-lesson-preview .lesson-part h2 { margin: 0; font-size: .82rem; letter-spacing: .08em; text-transform: uppercase; }
 .app-operator .operator-lesson-preview .lesson-part > p:last-child { margin-bottom: 0; }
 .app-operator .operator-lesson-preview .lesson-part .card.flat { margin-top: 6px; border-radius: 10px; background: var(--surface); padding: 12px; }
@@ -408,13 +539,72 @@
 .app-operator .operator-lesson-preview .word-card h3 { margin: 0; font-size: 1.05rem; }
 .app-operator .operator-lesson-preview .word-card p { margin: 0; }
 .app-operator .operator-lesson-preview .word-card ul { margin: 4px 0 0; }
+.app-operator .operator-lesson-preview .operator-vocabulary-card { gap: 12px; padding: 16px; }
+.app-operator .operator-lesson-preview .vocabulary-card-heading { display: grid; grid-template-columns: 88px minmax(0, 1fr); gap: 14px; min-width: 0; }
+.app-operator .operator-lesson-preview .vocabulary-card-main { min-width: 0; }
+.app-operator .operator-lesson-preview .vocabulary-card-word { display: flex; flex-wrap: wrap; align-items: center; gap: 7px; }
+.app-operator .operator-lesson-preview .vocabulary-card-type { border: 0; background: transparent; color: var(--muted); }
+.app-operator .operator-lesson-preview .operator-vocabulary-image,
+.app-operator .operator-lesson-preview .operator-vocabulary-image-placeholder { width: 88px; height: 88px; border-radius: 11px; box-sizing: border-box; }
+.app-operator .operator-lesson-preview .operator-vocabulary-image { display: block; object-fit: cover; }
+.app-operator .operator-lesson-preview .operator-vocabulary-image-placeholder { display: grid; place-items: center; border: 1px dashed var(--line); background: var(--surface-2); padding: 8px; color: var(--muted); font-size: .72rem; text-align: center; }
+.app-operator .operator-lesson-preview .vocabulary-card-meaning,
+.app-operator .operator-lesson-preview .vocabulary-card-phrases,
+.app-operator .operator-lesson-preview .vocabulary-card-relations { display: grid; gap: 7px; margin: 0; }
+.app-operator .operator-lesson-preview .vocabulary-card-label { color: var(--muted); font-size: .72rem; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; }
+.app-operator .operator-lesson-preview .vocabulary-card-phrase-list,
+.app-operator .operator-lesson-preview .vocabulary-card-relations { display: flex; flex-wrap: wrap; gap: 7px; }
+.app-operator .operator-lesson-preview .operator-vocabulary-sound { width: max-content; max-width: 100%; min-height: 34px; padding: 6px 9px; }
+.app-operator .operator-lesson-preview .vocabulary-card-relations .chip { min-height: 30px; display: inline-flex; align-items: center; gap: 4px; padding: 5px 10px; }
+.app-operator .operator-lesson-preview .vocabulary-card-relations .chip.umb { flex: 1 0 100%; min-height: 42px; justify-content: flex-start; }
+.app-operator .operator-lesson-preview .vocabulary-card-sound--icon { width: 36px; min-width: 36px; min-height: 36px; padding: 0; border-radius: 999px; }
+@media (max-width: 560px) {
+  .app-operator .operator-lesson-preview .vocabulary-card-heading { grid-template-columns: 72px minmax(0, 1fr); gap: 10px; }
+  .app-operator .operator-lesson-preview .operator-vocabulary-image,
+  .app-operator .operator-lesson-preview .operator-vocabulary-image-placeholder { width: 72px; height: 72px; }
+}
 .app-operator .operator-lesson-preview p:last-child,
 .app-operator .operator-lesson-preview ul:last-child,
 .app-operator .operator-lesson-preview ol:last-child {
   margin-bottom: 0;
 }
 
-.app-operator .operator-answer-options { margin: 4px 0; padding-left: 24px; }
+.app-operator .operator-lesson-preview .operator-study-block,
+.app-operator .operator-lesson-preview .operator-practice-content { display: grid; gap: 12px; min-width: 0; }
+.app-operator .operator-lesson-preview .lesson-grammar-card { border: 1px solid var(--primary-line); background: var(--primary-soft) !important; }
+.app-operator .operator-lesson-preview .lesson-grammar-card > .row,
+.app-operator .operator-lesson-preview .lesson-example-card { align-items: flex-start; gap: 12px; }
+.app-operator .operator-lesson-preview .lesson-example-list { display: grid; gap: 8px; }
+.app-operator .operator-lesson-preview .lesson-example-card { display: flex; justify-content: space-between; border: 1px solid var(--line); border-radius: 11px; background: var(--surface); padding: 10px 12px; }
+.app-operator .operator-lesson-preview .operator-audio-button { display: inline-flex; align-items: center; gap: 6px; width: max-content; max-width: 100%; min-height: 40px; }
+.app-operator .operator-lesson-preview .operator-audio-button--primary { border-color: #df8422 !important; background: #ef9634 !important; color: #211205 !important; font-weight: 700; }
+.app-operator .operator-lesson-preview .lesson-part--listening .operator-practice-content { margin-top: 7px; gap: 16px; }
+.app-operator .operator-lesson-preview .operator-pronunciation-focus,
+.app-operator .operator-lesson-preview .operator-pronunciation-tip { margin: 0; }
+.app-operator .operator-lesson-preview .operator-pronunciation-tip { border-left: 4px solid var(--primary); border-radius: 6px; background: var(--surface); padding: 10px 12px; }
+.app-operator .operator-lesson-preview .operator-pronunciation-words { display: flex; flex-wrap: wrap; gap: 8px; }
+.app-operator .operator-lesson-preview .operator-pronunciation-words button span { color: var(--muted); }
+.app-operator .operator-lesson-preview .operator-practice-transcript { margin: 0; color: var(--muted); font-style: italic; }
+.app-operator .operator-lesson-preview .operator-question { margin: 0; font-size: .9rem; }
+.app-operator .operator-lesson-preview .operator-reading-passage { margin: 7px 0 4px; border: 1px solid #efb17d; border-radius: 11px; background: #fffaf5; padding: 13px 14px; font-weight: 600; line-height: 1.55; }
+.app-operator .operator-lesson-preview .operator-speaking-model { display: flex; align-items: center; justify-content: space-between; gap: 12px; border: 1px solid var(--primary-line); border-radius: 11px; background: var(--surface); padding: 12px; }
+.app-operator .operator-lesson-preview .operator-speaking-instruction { margin: 0; color: #655e55; line-height: 1.5; }
+.app-operator .operator-lesson-preview .operator-speaking-recorder { display: grid; justify-items: start; gap: 8px; }
+.app-operator .operator-lesson-preview .operator-speaking-recorder button { display: inline-flex; align-items: center; gap: 6px; min-height: 42px; border-color: #df8133; color: #8b3f00; }
+.app-operator .operator-lesson-preview .operator-speaking-recorder audio,
+.app-operator .operator-lesson-preview .operator-practice-content > audio { width: 100%; max-width: 100%; }
+.app-operator .operator-lesson-preview .operator-recording-error,
+.app-operator .operator-lesson-preview .operator-audio-missing { margin: 0; color: var(--danger); font-size: .78rem; }
+.app-operator .operator-answer-options { display: grid; gap: 8px; margin: 0; padding: 0; list-style: none; }
+.app-operator .operator-answer-choice { display: grid; grid-template-columns: 28px minmax(0, 1fr) auto; align-items: center; gap: 8px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); padding: 9px 11px; }
+.app-operator .operator-answer-choice.is-answer { border-color: var(--ok); background: var(--ok-tint); }
+.app-operator .operator-answer-letter { display: grid; width: 25px; height: 25px; place-items: center; border-radius: 7px; background: var(--surface-2); font-weight: 700; }
+.app-operator .operator-answer-key { border-radius: 9px; background: var(--surface); padding: 10px 12px; }
+
+@media (max-width: 560px) {
+  .app-operator .operator-lesson-preview .lesson-example-card,
+  .app-operator .operator-lesson-preview .operator-speaking-model { align-items: flex-start; flex-direction: column; }
+}
 
 @media (max-width: 720px) {
   .app-operator .operator-page-title-actions {
@@ -471,6 +661,131 @@
   .app-operator[aria-label="Duyệt trình độ"] > .section:first-of-type > .card > .row:last-child select {
     padding-inline: 10px;
   }
+}
+
+/* Canonical lesson authoring/preview rules. Kept last so older prototype rules
+   cannot reintroduce grey day badges or overflowing editor fields. */
+.app-operator .operator-lesson-day-badge {
+  background: #ef9634 !important;
+  color: #241407 !important;
+  border-color: #df8530 !important;
+  box-shadow: none !important;
+}
+.app-operator .operator-lesson-set-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 7px;
+  margin-top: 7px;
+}
+.app-operator .operator-lesson-set-meta strong { color: var(--text); }
+.app-operator .operator-lesson-set-meta span {
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--surface);
+  color: var(--muted);
+  padding: 3px 8px;
+  font-size: .76rem;
+}
+.app-operator .operator-modal-scope .operator-lesson-editor,
+.app-operator .operator-modal-scope .operator-lesson-editor * { box-sizing: border-box; min-width: 0; }
+.app-operator .operator-modal-scope .operator-lesson-editor { overflow-x: hidden; }
+.app-operator .operator-modal-scope .operator-editor-heading { background: var(--surface); }
+.app-operator .operator-modal-scope .operator-editor-section { max-width: 100%; overflow: hidden; }
+.app-operator .operator-modal-scope .operator-editor-section input,
+.app-operator .operator-modal-scope .operator-editor-section textarea,
+.app-operator .operator-modal-scope .operator-editor-section select { width: 100%; max-width: 100%; }
+.app-operator .operator-lesson-preview .vocabulary-card { display: grid; gap: 12px; padding: 16px; }
+.app-operator .operator-lesson-preview .vocabulary-card-sound { display: inline-flex; align-items: center; gap: 6px; }
+.app-operator .operator-lesson-detail-issues { display: grid; gap: 8px; margin: 12px 0 0; padding: 0; list-style: none; }
+.app-operator .operator-lesson-detail-issues li { display: flex; align-items: center; justify-content: space-between; gap: 12px; border-top: 1px solid rgb(120 83 35 / .18); padding-top: 8px; }
+.app-operator .operator-lesson-detail-issues li > span { min-width: 0; line-height: 1.45; }
+
+/* Screenshot-locked lesson presentation. Content stays API-driven. */
+.app-operator .operator-lesson-preview .vocabulary-card {
+  gap: 9px;
+  padding: 12px 14px;
+  border: 1px solid #e4e0da;
+  border-radius: 12px;
+  background: #fff;
+}
+.app-operator .operator-lesson-preview .vocabulary-card-heading { grid-template-columns: 68px minmax(0,1fr); gap: 12px; }
+.app-operator .operator-lesson-preview .vocabulary-card-word { align-items: baseline; gap: 6px 8px; }
+.app-operator .operator-lesson-preview .vocabulary-card-word h3 { font-size: 1.17rem; line-height: 1.2; }
+.app-operator .operator-lesson-preview .vocabulary-card-type { border: 1px solid #e2ded7; border-radius: 999px; padding: 1px 6px; color: #222; font-size: .72rem; }
+.app-operator .operator-lesson-preview .vocabulary-card-pronunciation { color: #827b72; font-size: .88rem; }
+.app-operator .operator-lesson-preview .vocabulary-card-main > .vocabulary-card-meaning { margin: 2px 0 0; color: #111; font-size: .95rem; font-weight: 500; }
+.app-operator .operator-lesson-preview .vocabulary-card-phrase-list { gap: 7px; }
+.app-operator .operator-lesson-preview .vocabulary-card-phrase-list .vocabulary-card-sound { min-height: 38px; padding: 7px 11px; border: 1px solid #e5e0da; border-radius: 8px; background: #faf9f7; }
+.app-operator .operator-lesson-preview .vocabulary-card-relations { flex-wrap: wrap; gap: 5px; padding-top: 0; }
+.app-operator .operator-lesson-preview .vocabulary-card-relations .chip { min-height: 38px; padding: 6px 11px; border-radius: 8px; font-size: .83rem; }
+.app-operator .operator-lesson-preview .vocabulary-card-relations .chip.umb { flex: 0 1 auto; min-height: 38px; text-transform: none; }
+.app-operator .operator-lesson-preview .vocabulary-card-relations .chip.umb svg + * { text-transform: none; }
+.app-operator .operator-lesson-preview .vocabulary-card-chip-count { border-radius: 999px; background: #ffe3bd; padding: 1px 6px; font-size: .72rem; }
+.app-operator .operator-lesson-preview .lesson-part--grammar,
+.app-operator .operator-lesson-preview .lesson-part--pronunciation {
+  padding: 20px 21px !important;
+  border: 1px solid #e3dfd8 !important;
+  border-radius: 14px !important;
+  background: #f4f3f0 !important;
+}
+.app-operator .operator-lesson-preview .operator-study-block { gap: 10px; }
+.app-operator .operator-lesson-preview .lesson-study-panel-header { align-items: center; gap: 16px; }
+.app-operator .operator-lesson-preview .lesson-study-panel-header h2 { margin: 0; color: #70685e; font-size: .78rem; font-weight: 600; letter-spacing: .09em; text-transform: uppercase; }
+.app-operator .operator-lesson-preview .lesson-study-panel-header .operator-audio-button { min-height: 38px; border: 1px solid #e2ded7; border-radius: 12px; background: #fff; padding: 7px 12px; }
+.app-operator .operator-lesson-preview .lesson-grammar-copy { display: grid; gap: 3px; }
+.app-operator .operator-lesson-preview .lesson-grammar-copy p { margin: 0; line-height: 1.42; }
+.app-operator .operator-lesson-preview .lesson-study-focus { margin: 0; color: #191510; font-size: 1rem; line-height: 1.4; }
+.app-operator .operator-lesson-preview .lesson-study-explanation { margin: 0; color: #766f66; font-size: .92rem; font-weight: 400; line-height: 1.48; }
+.app-operator .operator-lesson-preview .lesson-example-list { display: flex; flex-wrap: wrap; gap: 8px; }
+.app-operator .operator-lesson-preview .lesson-example-card { display: inline-flex; width: auto; min-height: 38px; align-items: center; justify-content: flex-start; gap: 7px; border-radius: 8px; padding: 7px 11px; color: inherit; font: inherit; cursor: pointer; }
+.app-operator .operator-lesson-preview .operator-pronunciation-tip,
+.app-operator .operator-lesson-preview .operator-pronunciation-requirement { margin: 0; border: 0; background: transparent !important; padding: 0; line-height: 1.45; }
+.app-operator .operator-lesson-preview .operator-pronunciation-words { gap: 8px; }
+.app-operator .operator-lesson-preview .operator-pronunciation-words .operator-audio-button { min-height: 38px; border: 1px solid #e2ded7; border-radius: 8px; background: #fff; padding: 7px 11px; }
+.app-operator .vocabulary-relation-modal .dialog { width: min(630px,100%); max-width: 630px; border-radius: 18px; padding: 24px; }
+.app-operator .vocabulary-relation-title { font-size: 1.1rem; }
+.app-operator .vocabulary-relation-description { margin: 8px 0 16px; line-height: 1.45; }
+.app-operator .vocabulary-relation-audio-list { gap: 9px; }
+.app-operator .vocabulary-relation-audio-item { display: flex !important; width: 100% !important; min-height: 72px !important; align-items: center !important; justify-content: space-between; border: 1px solid #e4e0da; border-radius: 12px; background: #fff; padding: 10px 14px !important; text-align: left; }
+.app-operator .vocabulary-relation-audio-item > span { display: grid; gap: 2px; }
+.app-operator .vocabulary-relation-audio-item small { color: var(--muted); font-weight: 400; }
+.app-operator .vocabulary-relation-audio-item .vocabulary-current-word { display: inline-block; width: max-content; border-radius: 7px; background: #ef9634; color: #211205; padding: 2px 7px; font-size: .72rem; font-weight: 700; }
+@media(max-width:560px){
+  .app-operator .operator-lesson-preview .vocabulary-card-heading { grid-template-columns: 58px minmax(0,1fr) 36px; }
+  .app-operator .operator-lesson-preview .lesson-study-panel-header { align-items: flex-start; flex-direction: column; }
+}
+
+/* Final lesson parity: compact media, semantic lexical chips and quiet study cards. */
+.app-operator .operator-lesson-preview .vocabulary-card { gap: 13px; padding: 16px; }
+.app-operator .operator-lesson-preview .vocabulary-card-heading { grid-template-columns: 62px minmax(0, 1fr); gap: 11px; }
+.app-operator .operator-lesson-preview .vocabulary-card-main { align-self: start; }
+.app-operator .operator-lesson-preview .vocabulary-card-meaning { margin-top: 5px; color: #6e4219; font-weight: 600; }
+.app-operator .operator-lesson-preview .vocabulary-card-relations { display: flex; gap: 7px; }
+.app-operator .operator-lesson-preview .vocabulary-card-relations .chip.umb { flex: 0 1 auto; min-height: 34px; }
+.app-operator .operator-lesson-preview .lesson-part--objective { border: 1px solid #efc99f; background: #fff1df !important; padding: 18px 20px !important; }
+.app-operator .operator-lesson-preview .lesson-objective-text { margin: 7px 0 0; font-size: 1rem; font-weight: 800; line-height: 1.45; }
+.app-operator .operator-lesson-preview .lesson-part--objective h2 { color: #241407; }
+.app-operator .operator-lesson-preview .lesson-part--vocabulary .lesson-vocabulary-heading {
+  margin: 0 0 12px;
+  color: #70685e;
+  font-family: inherit;
+  font-size: .78rem;
+  font-weight: 600;
+  letter-spacing: .09em;
+  line-height: 1.35;
+}
+.app-operator .operator-lesson-preview .lesson-part--grammar,
+.app-operator .operator-lesson-preview .lesson-part--pronunciation,
+.app-operator .operator-lesson-preview .lesson-grammar-card,
+.app-operator .operator-lesson-preview .operator-pronunciation-tip { background: #efede8 !important; }
+.app-operator .operator-lesson-preview .lesson-grammar-card { border-color: #d8d4cc; }
+.app-operator .operator-lesson-preview .operator-audio-button--icon { width: 36px; min-width: 36px; padding: 0; justify-content: center; border-radius: 999px; }
+.app-operator .operator-lesson-preview .operator-pronunciation-focus { font-size: 1rem; }
+.app-operator .operator-lesson-preview .vocabulary-relation-audio-list { display: grid; gap: 8px; margin-top: 12px; }
+.app-operator .operator-lesson-preview .vocabulary-relation-modal .dialog { max-width: 520px; }
+@media (max-width:560px) {
+  .app-operator .operator-lesson-preview .vocabulary-card-heading { grid-template-columns: 58px minmax(0,1fr) 36px; }
 }
 
 /* Operator controls stay legible and touchable without changing shared app styles. */
@@ -1283,6 +1598,131 @@
   min-width: 0;
   overflow-wrap: anywhere;
 }
+.app-operator .operator-lesson-days li > b {
+  display: inline;
+  min-width: 0;
+  min-height: 0;
+  margin-right: 0;
+  border-radius: 0;
+  background: transparent;
+  color: inherit;
+  font-size: inherit;
+  font-weight: 400;
+}
+.app-operator .operator-lesson-day-badge {
+  background: var(--surface-3);
+  color: var(--text);
+  box-shadow: inset 0 0 0 1px var(--line);
+}
+.app-operator .operator-lesson-cell__action > .row > button:last-child {
+  background: var(--surface);
+  color: var(--text);
+  box-shadow: inset 0 0 0 1px var(--line);
+}
+.app-operator .operator-lesson-cell__action > .row > button:last-child:hover:not(:disabled) {
+  background: var(--surface-3);
+}
+
+/* Matrix content is dense by nature, but the day plan must remain scannable
+   at normal browser zoom. Give each column enough breathing room and avoid
+   relying on the global `xs` size for learner-facing lesson titles. */
+.app-operator .operator-lesson-matrix {
+  font-size: .9rem;
+}
+.app-operator .operator-lesson-matrix th,
+.app-operator .operator-lesson-matrix td {
+  padding: 14px 12px;
+  line-height: 1.4;
+}
+.app-operator .operator-lesson-matrix th:first-child,
+.app-operator .operator-lesson-matrix td:first-child {
+  width: 21%;
+}
+.app-operator .operator-lesson-matrix th:not(:first-child),
+.app-operator .operator-lesson-matrix td:not(:first-child) {
+  width: 19.75%;
+}
+.app-operator .operator-lesson-days.xs {
+  margin-top: 2px;
+  font-size: .88rem;
+  line-height: 1.5;
+}
+.app-operator .operator-lesson-days li + li {
+  margin-top: 3px;
+}
+.app-operator[aria-label^="Bài tuần"] > .card:last-child .row > button {
+  background: var(--surface);
+  color: var(--text);
+  box-shadow: inset 0 0 0 1px var(--line);
+}
+.app-operator[aria-label^="Bài tuần"] > .card:last-child .row > button:hover:not(:disabled) {
+  background: var(--surface-3);
+}
+.app-operator .btn-danger {
+  background: var(--surface);
+  box-shadow: inset 0 0 0 1px var(--danger-line);
+  color: var(--danger);
+}
+.app-operator .btn-danger:hover:not(:disabled) {
+  background: var(--danger-soft);
+  color: var(--danger);
+}
+
+/* Lesson-set actions use stable semantic colours even when generic button
+   guards later in this stylesheet override the shared button variants. */
+.app-operator[aria-label^="Bài tuần"] .operator-lesson-approve-button {
+  border-color: #e47f1d !important;
+  background: #f39a35 !important;
+  color: #241408 !important;
+  box-shadow: none !important;
+}
+.app-operator[aria-label^="Bài tuần"] .operator-lesson-approve-button:hover:not(:disabled) {
+  border-color: #d66f0d !important;
+  background: #e98a25 !important;
+}
+.app-operator[aria-label^="Bài tuần"] .operator-lesson-delete-button {
+  border: 1px solid #dc2626 !important;
+  background: #fff !important;
+  color: #b91c1c !important;
+  box-shadow: none !important;
+}
+.app-operator[aria-label^="Bài tuần"] .operator-lesson-delete-button:hover:not(:disabled) {
+  border-color: #b91c1c !important;
+  background: #fff1f2 !important;
+  color: #991b1b !important;
+}
+.app-operator[aria-label^="Bài tuần"] .operator-lesson-edit-button {
+  border-color: var(--line) !important;
+  background: #fff !important;
+  color: var(--text) !important;
+  box-shadow: none !important;
+}
+.app-operator[aria-label^="Bài tuần"] .operator-lesson-edit-button:hover:not(:disabled) {
+  border-color: var(--border) !important;
+  background: #f8fafc !important;
+}
+.app-operator[aria-label^="Bài tuần"] .operator-lesson-day-edit-button {
+  border-color: var(--line) !important;
+  background: #fff !important;
+  color: var(--text) !important;
+  box-shadow: none !important;
+}
+.app-operator[aria-label^="Bài tuần"] .operator-lesson-day-edit-button:hover:not(:disabled) {
+  border-color: var(--border) !important;
+  background: #f8fafc !important;
+}
+@media (max-width: 760px) {
+  .operator-modal-scope .operator-vocabulary-grid .grid.cols-4,
+  .operator-modal-scope .operator-editor-section .grid.cols-4 {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+@media (max-width: 480px) {
+  .operator-modal-scope .operator-vocabulary-grid .grid.cols-4,
+  .operator-modal-scope .operator-editor-section .grid.cols-4 {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
 
 /* The approved-learner table has variable button counts and goal lengths;
    reserve a stable action column and give each control breathing room. */
@@ -1316,7 +1756,7 @@
 }
 
 .app-operator .operator-action-table td {
-  vertical-align: top;
+  vertical-align: middle;
   line-height: 1.45;
 }
 
@@ -1962,6 +2402,17 @@ body:has(.app-operator) #modal > .dialog > .row {
 .operator-assessment-document { margin: 0; }
 .operator-answer-sections { display: block; margin-top: 0; }
 .operator-answer-section { margin: 0; border: 0; padding: 0; background: transparent; }
+.operator-answer-sections > .operator-answer-section + .operator-answer-section,
+.operator-manual-score > .operator-answer-section + .operator-answer-section {
+  border-top: 1px solid var(--line);
+  margin-top: 8px;
+  padding-top: 8px;
+}
+.operator-answer-sections > .operator-manual-score {
+  border-top: 1px solid var(--line);
+  margin-top: 8px;
+  padding-top: 8px;
+}
 .operator-answer-section-summary { cursor: pointer; padding: 12px 0 5px; font-size: 1rem; }
 .operator-answer-section-content { margin: 0; padding: 0; }
 .operator-answer-empty { margin: 0 0 8px; }
@@ -1991,8 +2442,9 @@ body:has(.app-operator) #modal > .dialog > .row {
 .operator-stimulus-table { margin: 4px 0 7px; }
 .operator-detail-section-title { margin: 14px 0 4px; padding-top: 10px; border-top: 1px solid var(--line); }
 
+.operator-log-group { border-top: 1px solid var(--line); }
 .operator-integrity-log,
-.operator-processing-log { margin: 0; border-top: 1px solid var(--line); padding: 8px 0; }
+.operator-processing-log { margin: 0; border: 0; padding: 8px 0; }
 
 .operator-processing-log > summary,
 .operator-integrity-log > summary {
@@ -2032,7 +2484,115 @@ body:has(.app-operator) #modal > .dialog > .row {
 .operator-rubric-field input, .operator-manual-comment textarea { width: 100%; box-sizing: border-box; }
 .operator-rubric-field input { min-height: 38px; }
 .operator-manual-comment { margin-top: 8px; }
+.operator-manual-comment-title { margin-bottom: 8px; }
 .operator-confirm-dialog { max-width: 420px; }
+
+/* The generation confirmation is a real modal, not content appended below
+   the weeks form. Keep it centered in the viewport while the page remains
+   scrollable behind the dimmed backdrop. */
+.app-operator .operator-generation-modal {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  display: grid;
+  place-items: center;
+  padding: 20px;
+  background: rgb(30 30 30 / .35);
+}
+
+.app-operator .operator-generation-dialog {
+  width: min(520px, calc(100vw - 40px));
+  max-height: min(680px, calc(100vh - 40px));
+  overflow-y: auto;
+  box-sizing: border-box;
+}
+
+.app-operator .operator-generation-dialog h3 {
+  margin-top: 0;
+}
+
+.app-operator .operator-generation-week-list {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  margin: 16px 0;
+}
+
+.app-operator .operator-generation-dialog .btn-primary {
+  border-color: transparent;
+  background: #ef9634;
+  color: #1e1e1e;
+}
+
+.app-operator .operator-generation-dialog .btn-primary:hover:not(:disabled) {
+  background: #df8530;
+}
+
+.app-operator .operator-generation-week {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--surface);
+  cursor: pointer;
+  transition: background-color .15s ease, border-color .15s ease, box-shadow .15s ease;
+}
+
+.app-operator .operator-generation-week:hover {
+  border-color: var(--primary-dark);
+  background: var(--surface-3);
+}
+
+.app-operator .operator-generation-week.is-selected {
+  border-color: var(--primary);
+  background: var(--primary-soft);
+  box-shadow: inset 0 0 0 1px var(--primary);
+}
+
+.app-operator .operator-generation-week input[type="checkbox"] {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+.app-operator .operator-generation-week-indicator {
+  display: inline-grid;
+  place-items: center;
+  flex: 0 0 20px;
+  width: 20px;
+  height: 20px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--surface);
+  color: var(--primary-ink);
+  font-size: 13px;
+  font-weight: 800;
+  line-height: 1;
+}
+
+.app-operator .operator-generation-week.is-selected .operator-generation-week-indicator {
+  border-color: var(--primary);
+  background: var(--primary);
+}
+
+.app-operator .operator-generation-week input[type="checkbox"]:focus-visible + .operator-generation-week-indicator {
+  outline: 3px solid var(--primary-glow);
+  outline-offset: 2px;
+}
+
+@media (max-width: 520px) {
+  .app-operator .operator-generation-week-list {
+    grid-template-columns: 1fr;
+  }
+}
 
 @media (max-width: 640px) {
   .operator-rubric-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
@@ -2063,3 +2623,20 @@ body:has(.app-operator) #modal > .dialog > .row {
     width: calc(100vw - 24px);
   }
 }
+
+/* Final lesson-specific overrides. */
+.app-operator .operator-lesson-day-badge {
+  background: #ef9634 !important;
+  color: #241407 !important;
+  border-color: #df8530 !important;
+  box-shadow: none !important;
+}
+.app-operator .operator-modal-scope .operator-lesson-editor,
+.app-operator .operator-modal-scope .operator-lesson-editor * { box-sizing: border-box; min-width: 0; }
+.app-operator .operator-modal-scope .operator-lesson-editor { overflow-x: hidden; }
+.app-operator .operator-modal-scope .operator-editor-section { max-width: 100%; overflow: hidden; }
+.app-operator .operator-modal-scope .operator-editor-section input,
+.app-operator .operator-modal-scope .operator-editor-section textarea,
+.app-operator .operator-modal-scope .operator-editor-section select { width: 100%; max-width: 100%; }
+.app-operator .operator-lesson-preview .vocabulary-card { display: grid; gap: 12px; padding: 16px; }
+.app-operator .operator-lesson-preview .vocabulary-card-sound { display: inline-flex; align-items: center; gap: 6px; }

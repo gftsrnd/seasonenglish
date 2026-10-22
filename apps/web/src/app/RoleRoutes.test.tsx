@@ -3,7 +3,7 @@ import "@testing-library/jest-dom/vitest";
 import { cleanup, render, screen } from "@testing-library/react";
 import { MemoryRouter } from "react-router";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import type { RewardView, SessionView } from "@e4s/contracts";
+import type { LearnerHomeView, RewardView, SessionView } from "@e4s/contracts";
 import { RoleRoutes } from "./RoleRoutes.js";
 import { learnerApiClient as apiClient } from "../api/learner.js";
 
@@ -33,6 +33,20 @@ const manager: SessionView = {
 function renderRoute(pathname: string, session: SessionView) {
   return render(<MemoryRouter initialEntries={[pathname]}><RoleRoutes session={session} /></MemoryRouter>);
 }
+
+const unlockedHome: LearnerHomeView = {
+  onboardingRequired: false,
+  learner: { displayName: "Học viên Demo", cefr: "A2" },
+  program: { name: "English for Every Season", weekCount: 2 },
+  week: { id: "week-1", weekNumber: 1, topic: "Meetings", description: "", objectives: [] },
+  lessons: [], nextLesson: null,
+  metrics: { completedLessons: 0, totalLessons: 0, studyDays: 0, streakDays: 0, points: 0 },
+  schedule: { daysPerWeek: 5, lessonMinutes: 10, days: [] },
+  coach: { turnsThisWeek: 0, targetTurns: 2, href: "/coach" },
+  practice: { status: "locked", detail: "Chưa mở", href: "/practice" },
+  levelReadiness: { targetLevel: "B1", windowDays: 14, eligible: false, examAvailable: false, criteria: [] },
+  finalAssessment: { available: false, label: "Làm bài cuối kỳ", href: "/test/final" }
+};
 
 describe("RoleRoutes authorization boundary", () => {
   it.each([
@@ -73,6 +87,7 @@ describe("RoleRoutes authorization boundary", () => {
       managerName: "Quản lý Demo",
       badges: []
     };
+    vi.spyOn(apiClient, "getHome").mockResolvedValue(unlockedHome);
     const getReward = vi.spyOn(apiClient, "getReward").mockResolvedValue(reward);
 
     renderRoute("/reward/preview", learner);
@@ -102,6 +117,7 @@ describe("RoleRoutes authorization boundary", () => {
       managerName: "Quản lý Demo",
       badges: []
     };
+    vi.spyOn(apiClient, "getHome").mockResolvedValue(unlockedHome);
     vi.spyOn(apiClient, "getReward").mockResolvedValue(reward);
 
     renderRoute("/reward/preview/", learner);

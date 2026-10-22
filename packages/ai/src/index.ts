@@ -3,3 +3,4 @@ export * from "./schemas.js";
 export * from "./service.js";
 export * from "./types.js";
 export * from "./providers/groq.js";
+export * from "./providers/anthropic.js";

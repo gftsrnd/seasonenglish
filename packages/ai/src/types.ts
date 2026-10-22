@@ -13,6 +13,7 @@ export interface AiProviderRequest {
   systemPrompt: string;
   input: unknown;
   outputJsonSchema: Record<string, unknown>;
+  maxOutputTokens?: number;
   signal: AbortSignal;
   traceId: string;
 }
@@ -35,14 +36,18 @@ export interface AiProvider {
 }
 
 export class AiProviderError extends Error {
-  constructor(public readonly code: string, public readonly retryable: boolean) {
+  constructor(
+    public readonly code: string,
+    public readonly retryable: boolean,
+    public readonly details?: unknown
+  ) {
     super(code);
     this.name = "AiProviderError";
   }
 }
 
 export class AiGatewayError extends Error {
-  constructor(public readonly code: string) {
+  constructor(public readonly code: string, public readonly details?: unknown) {
     super(code);
     this.name = "AiGatewayError";
   }

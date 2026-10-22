@@ -293,7 +293,7 @@ export interface ManagerPinReportsView {
 export interface ManagerImageTestView {
   readonly status: "available" | "unavailable";
   readonly source: ProductPreferencesView["vocabImageSource"];
-  readonly provider: "wikipedia" | "wikimedia" | "openverse" | "explicit" | null;
+  readonly provider: "wikipedia" | "wikimedia" | "openverse" | "pixabay" | "explicit" | null;
   readonly cached: boolean;
   readonly imageUrl: string | null;
   readonly attribution: ContentImageAttribution | null;
@@ -359,6 +359,7 @@ export interface ManagerReportView {
 
 export interface ManagerSettingsView {
   readonly organizationName: string;
+  readonly programName: string;
   readonly reminderInactiveDays: number;
   readonly weeklyReportEnabled: boolean;
   readonly pilotStartDate: string;

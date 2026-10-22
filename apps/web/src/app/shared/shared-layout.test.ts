@@ -32,7 +32,7 @@ describe("desktop shell layout", () => {
 
 describe("entry shell layout", () => {
   it("does not inherit the authenticated desktop sidebar geometry", () => {
-    expect(sharedCss).toMatch(/\.topbar\.app-entry-topbar\s*\{[\s\S]*?position:\s*sticky/);
+    expect(sharedCss).toMatch(/\.topbar\.app-entry-topbar\s*\{[\s\S]*?position:\s*static\s*!important/);
     expect(sharedCss).toMatch(/main\.app-entry-main\s*\{[\s\S]*?margin-left:\s*0/);
     expect(sharedCss).toMatch(/main\.app-entry-main\s*\{[\s\S]*?margin:\s*0\s+auto/);
     expect(sharedCss).toMatch(/main\.app-entry-main\s*\{[\s\S]*?padding-bottom:\s*48px\s*!important/);

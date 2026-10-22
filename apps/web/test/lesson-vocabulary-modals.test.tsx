@@ -38,6 +38,7 @@ const vocabularyPart: LessonPart = {
         { word: "coworker", level: "A2", note: "dùng trong giao tiếp công việc" },
         { word: "associate", level: "B1", note: "trang trọng hơn" }
       ],
+      antonyms: [{ word: "competitor", level: "B1", note: "đối lập trong ngữ cảnh kinh doanh" }],
       umbrella: {
         word: "people at work",
         meaning: "những người trong môi trường làm việc",
@@ -61,31 +62,35 @@ const lesson: LessonView = {
 };
 
 describe("lesson vocabulary relation modals", () => {
-  it.each([
-    ["Họ từ", "modal.vocab-family", "Họ từ", "collegial"],
-    ["Đồng nghĩa", "modal.vocab-all-synonyms", "Đồng nghĩa", "associate"],
-    ["Từ bao quát", "modal.vocab-umbrella", "Từ bao quát", "people at work"]
-  ])("opens the %s modal from server-provided vocabulary metadata", async (buttonLabel, testId, title, expected) => {
+  it("opens only the umbrella modal with playable related words", async () => {
     const user = userEvent.setup();
     render(<LearnerLesson view={{ lesson }} actions={actions()} />);
-    await user.click(screen.getByRole("button", { name: new RegExp(buttonLabel, "i") }));
-    const modal = screen.getByTestId(testId);
+    await user.click(screen.getByRole("button", { name: /Từ bao trùm: people at work/i }));
+    const modal = screen.getByTestId("modal.vocab-umbrella");
     expect(modal).toBeInTheDocument();
-    expect(within(modal).getByRole("heading", { name: new RegExp(title, "i") })).toBeInTheDocument();
-    expect(modal).toHaveTextContent(expected);
+    expect(within(modal).getByRole("heading", { name: /Từ bao quát/i })).toBeInTheDocument();
+    expect(modal).toHaveTextContent("people at work");
+    expect(within(modal).getByRole("article", { name: "Từ bao quát people at work" })).toHaveClass("vocabulary-umbrella-summary");
     expect(within(modal).getAllByRole("button", { name: /nghe/i }).length).toBeGreaterThan(0);
   });
 
-  it("opens reusable lexical detail cards for synonym, antonym, slang and poetic relations", async () => {
+  it("speaks synonym and antonym directly while keeping the family table centered", async () => {
     const user = userEvent.setup();
-    render(<LearnerLesson view={{ lesson }} actions={actions()} />);
+    const callbacks = actions();
+    render(<LearnerLesson view={{ lesson }} actions={callbacks} />);
     const card = screen.getByRole("article", { name: /colleague/i });
-    await user.click(within(card).getByRole("button", { name: "Khẩu ngữ" }));
-    const modal = screen.getByTestId("modal.vocab-lexical-detail");
-    expect(modal).toHaveTextContent(/khẩu ngữ/i);
-    expect(modal).toHaveTextContent("a colleague");
-    await user.click(within(modal).getAllByRole("button", { name: /đóng/i })[0]!);
-    expect(screen.queryByTestId("modal.vocab-lexical-detail")).not.toBeInTheDocument();
+    await user.click(within(card).getByRole("button", { name: "Nghe từ đồng nghĩa: coworker" }));
+    expect(callbacks.speak).toHaveBeenLastCalledWith("coworker");
+    expect(screen.queryByTestId("modal.vocab-all-synonyms")).not.toBeInTheDocument();
+    await user.click(within(card).getByRole("button", { name: "Nghe từ trái nghĩa: competitor" }));
+    expect(callbacks.speak).toHaveBeenLastCalledWith("competitor");
+    expect(screen.queryByTestId("modal.vocab-antonyms")).not.toBeInTheDocument();
+    await user.click(within(card).getByRole("button", { name: "Word family (2)" }));
+    const modal = screen.getByTestId("modal.vocab-family");
+    expect(modal.parentElement?.parentElement).toBe(document.body);
+    expect(within(modal).getByText("collegial")).toBeInTheDocument();
+    await user.click(within(modal).getAllByRole("button", { name: /Nghe/i })[0]!);
+    expect(callbacks.speak).toHaveBeenCalled();
   });
 
   it("does not render a misleading related-word chip when the server has no detail", () => {

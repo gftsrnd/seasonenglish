@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { ImageOff, LoaderCircle } from "lucide-react";
+import { LoaderCircle } from "lucide-react";
 import type { ContentImageView } from "@e4s/contracts";
 import "./content-image.css";
 
@@ -49,7 +49,9 @@ export function ContentImage({ term, load }: {
   }, [term]);
 
   if (state.status === "unavailable") {
-    return <div className="content-image content-image--fallback" role="img" aria-label={`Minh hoạ ${term}`}><ImageOff size={18} aria-hidden="true" /><span>Chưa có ảnh minh hoạ</span></div>;
+    return <figure className="content-image content-image--available content-image--fallback">
+      <img src="/media/mascot/season-bear.png" alt={`Minh hoạ ${term}`} />
+    </figure>;
   }
   if (state.status === "available") {
     const { image } = state;

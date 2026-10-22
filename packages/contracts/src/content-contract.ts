@@ -85,6 +85,7 @@ export interface ContentLessonMutationResult extends ContentLessonSetVersionView
 }
 
 export interface ContentLessonMatrixView {
+  /** CEFR columns enabled for this program. Hidden columns retain their lesson data. */
   levels: Array<{ cefr: CefrLevel; learnerCount: number }>;
   weeks: Array<{
     weekNumber: number;

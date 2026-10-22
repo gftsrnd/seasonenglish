@@ -147,7 +147,7 @@ export function registerLearningRoutes(
     const summaries = lessons.map((lesson) => ({
       id: lesson.id,
       dayNumber: lesson.dayNumber,
-      title: lesson.title,
+      title: learnerLessonDisplayTitle(lesson),
       status: lesson.progress.status,
       lock: lesson.lock
     }));
@@ -182,7 +182,7 @@ export function registerLearningRoutes(
         Number(progress.learner.profile.durationMinutes ?? 10),
         progress.activity.map((item) => item.occurredAt)
       ),
-      coach: { turnsThisWeek: progress.stats.coachTurns, targetTurns: 2, href: "/coach" },
+      coach: { turnsToday: progress.stats.coachTurnsToday ?? 0, turnsThisWeek: progress.stats.coachTurns, targetTurns: 2, href: "/coach" },
       practice: {
         status: weeklyPractice?.state ?? "locked",
         detail: weeklyPractice?.state === "reviewed" ? "Bài đã được phản hồi theo rubric."
@@ -448,7 +448,7 @@ function canonicalPartOfSpeech(value: string | undefined): string | undefined {
 function lessonView(lesson: LearnerLessonRecord): LessonView {
   return {
     id: lesson.id,
-    title: lesson.title,
+    title: learnerLessonDisplayTitle(lesson),
     dayNumber: lesson.dayNumber,
     durationMinutes: lesson.content.durationMinutes ?? 10,
     cefr: lesson.cefr,
@@ -456,6 +456,18 @@ function lessonView(lesson: LearnerLessonRecord): LessonView {
     progress: lesson.progress,
     lock: lesson.lock
   };
+}
+
+export function learnerLessonDisplayTitle(lesson: LearnerLessonRecord): string {
+  const title = lesson.title.trim();
+  if (!/^S\s*\+\s*V(?:\s*\+\s*O)?$/i.test(title)) return title;
+  const grammar = lesson.content.parts.find((part) => part.code === "grammar");
+  const examples = grammar?.content && typeof grammar.content === "object"
+    ? (grammar.content as { examples?: unknown }).examples
+    : undefined;
+  const example = Array.isArray(examples) && typeof examples[0] === "string" ? examples[0].trim() : "";
+  const englishExample = example.split(/\s+\(/, 1)[0]?.trim() ?? "";
+  return englishExample ? englishExample.replace(/[.!?]+$/, "").slice(0, 60) : title;
 }
 
 function calculateCurrentStreak(occurredAt: string[]): number {

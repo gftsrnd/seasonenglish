@@ -88,7 +88,7 @@ describe("Manager AI provider settings", () => {
     const model = screen.getByLabelText("Tên model");
 
     await user.selectOptions(provider, "claude");
-    expect(model).toHaveValue("claude-3-5-sonnet-latest");
+    expect(model).toHaveValue("claude-haiku-5-5");
     expect(screen.queryByLabelText("Model chép lời file ghi âm")).not.toBeInTheDocument();
 
     await user.selectOptions(provider, "gemini");

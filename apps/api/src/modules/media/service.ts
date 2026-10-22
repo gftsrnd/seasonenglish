@@ -3,7 +3,7 @@ import type { ContentImageAttribution, ContentImageDiagnosticView, ContentImageR
 import type { MediaAssetRecord, MediaProvider, MediaRepository } from "@e4s/database";
 import { MEDIA_BUCKET, type ObjectStorage } from "@e4s/storage";
 import { downloadBitmap, normalizeLicence, type SafeBitmap } from "./safety.js";
-import type { OpenMediaProviders, ProviderCandidate } from "./types.js";
+import { photoSearchQuery, type OpenMediaProviders, type ProviderCandidate } from "./types.js";
 
 export interface ContentMediaService {
   resolveForUser(userId: string, request: ContentImageRequest): Promise<ContentImageView>;
@@ -179,14 +179,81 @@ function normalizeRequest(request: ContentImageRequest): NormalizedRequest {
 
 async function findCandidate(providers: OpenMediaProviders, request: NormalizedRequest): Promise<ProviderCandidate | null> {
   if (request.imageQuery) {
-    return await providers.searchCommons(request.imageQuery) ?? await providers.searchOpenverse(request.imageQuery);
+    const curatedQuery = photoSearchQuery(request.imageQuery);
+    for (const query of adjectivePixabayQueries(request.term, request.partOfSpeech)) {
+      const semanticPhoto = await safely(() => providers.searchPixabay(query));
+      if (semanticPhoto) return semanticPhoto;
+    }
+    const curated = await firstAvailable([
+      () => providers.searchPixabay(curatedQuery),
+      () => providers.searchOpenverse(curatedQuery),
+      () => providers.searchCommons(curatedQuery)
+    ]);
+    if (curated) return curated;
+    if (request.partOfSpeech === "noun") {
+      const exact = await safely(() => providers.exactWikipedia(request.term));
+      if (exact) return exact;
+      const termCandidate = await firstAvailable([
+        () => providers.searchPixabay(request.term),
+        () => providers.searchCommons(request.term),
+        () => providers.searchOpenverse(request.term)
+      ]);
+      if (termCandidate) return termCandidate;
+    }
+    for (const query of workplacePhotoQueries(request.term)) {
+      const fallback = await firstAvailable([
+        () => providers.searchPixabay(query),
+        () => providers.searchOpenverse(query),
+        () => providers.searchCommons(query)
+      ]);
+      if (fallback) return fallback;
+    }
+    return null;
   }
   if (request.partOfSpeech === "noun") {
-    const exact = await providers.exactWikipedia(request.term);
+    const exact = await safely(() => providers.exactWikipedia(request.term));
     if (exact || !request.allowProviderFallback) return exact;
   }
   if (!request.allowProviderFallback) return null;
-  return await providers.searchCommons(request.term) ?? await providers.searchOpenverse(request.term);
+  return firstAvailable([
+    () => providers.searchPixabay(request.term),
+    () => providers.searchCommons(request.term),
+    () => providers.searchOpenverse(request.term)
+  ]);
+}
+
+function adjectivePixabayQueries(term: string, partOfSpeech?: string): readonly string[] {
+  if (partOfSpeech !== "adjective") return [];
+  const queries: Record<string, readonly string[]> = {
+    good: ["office work"],
+    bad: ["broken coffee mug", "workplace mistake"],
+    fine: ["healthy person", "office notebook"],
+    nice: ["friendly office colleague", "welcoming workplace"]
+  };
+  return queries[term.toLocaleLowerCase("en-US")] ?? [];
+}
+
+async function safely(search: () => Promise<ProviderCandidate | null>): Promise<ProviderCandidate | null> {
+  try { return await search(); } catch { return null; }
+}
+
+async function firstAvailable(searches: Array<() => Promise<ProviderCandidate | null>>): Promise<ProviderCandidate | null> {
+  for (const search of searches) {
+    const candidate = await safely(search);
+    if (candidate) return candidate;
+  }
+  return null;
+}
+
+function workplacePhotoQueries(term: string): readonly string[] {
+  const queries = [
+    "office colleagues discussion photograph",
+    "office meeting photograph",
+    "business meeting office photograph"
+  ] as const;
+  const hash = [...term].reduce((total, character) => total + character.codePointAt(0)!, 0);
+  const offset = hash % queries.length;
+  return [...queries.slice(offset), ...queries.slice(0, offset)];
 }
 
 function explicitView(request: NormalizedRequest): Extract<ContentImageView, { status: "available" }> | null {
@@ -254,6 +321,7 @@ function candidateView(candidate: ProviderCandidate, term: string): Extract<Cont
 }
 
 function hostsFor(provider: ProviderCandidate["provider"]): ReadonlySet<string> {
+  if (provider === "pixabay") return new Set(["cdn.pixabay.com"]);
   return provider === "openverse" ? new Set(["api.openverse.org"]) : new Set(["upload.wikimedia.org"]);
 }
 

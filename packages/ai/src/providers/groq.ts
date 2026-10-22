@@ -28,6 +28,9 @@ export function createGroqProvider(options: {
           body: JSON.stringify({
             model,
             temperature: 0.2,
+            // Keep the model-safe default for Groq; Anthropic's weekly lesson
+            // request may opt into a larger budget through maxOutputTokens.
+            max_tokens: Math.min(request.maxOutputTokens ?? 8192, 8192),
             response_format: {
               type: "json_schema",
               json_schema: {
@@ -37,7 +40,7 @@ export function createGroqProvider(options: {
               }
             },
             messages: [
-              { role: "system", content: `${request.systemPrompt}\nReturn only JSON matching this schema: ${JSON.stringify(request.outputJsonSchema)}` },
+              { role: "system", content: `${request.systemPrompt}\nReturn only JSON matching the supplied response schema. Do not add prose, markdown, legacy keys, or omit required nested fields.` },
               { role: "user", content: JSON.stringify(request.input) }
             ]
           })
@@ -52,6 +55,9 @@ export function createGroqProvider(options: {
         throw new AiProviderError("AI_PROVIDER_REJECTED", false);
       }
       const body = await response.json().catch(() => null) as GroqResponse | null;
+      if (body?.choices?.[0]?.finish_reason === "length") {
+        throw new AiProviderError("AI_OUTPUT_TRUNCATED", false);
+      }
       const content = body?.choices?.[0]?.message?.content;
       if (typeof content !== "string") throw new AiProviderError("AI_PROVIDER_MALFORMED_RESPONSE", false);
       let output: unknown;
@@ -68,8 +74,7 @@ export function createGroqProvider(options: {
     }
   };
 }
-
 interface GroqResponse {
-  choices?: Array<{ message?: { content?: string } }>;
+  choices?: Array<{ finish_reason?: string; message?: { content?: string } }>;
   usage?: { prompt_tokens?: number; completion_tokens?: number; total_tokens?: number };
 }

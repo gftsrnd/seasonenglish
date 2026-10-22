@@ -13,7 +13,7 @@ await mkdir(databaseDir, { recursive: true });
 const databasePort = LOCAL_DEV_PORTS.postgres;
 const apiUrl = `http://127.0.0.1:${LOCAL_DEV_PORTS.api}`;
 const webUrl = `http://127.0.0.1:${LOCAL_DEV_PORTS.web}`;
-const minioConsoleUrl = `http://127.0.0.1:${LOCAL_DEV_PORTS.minioConsole}`;
+const minioConsoleUrl = process.env.E4S_MINIO_CONSOLE_URL ?? `http://127.0.0.1:${LOCAL_DEV_PORTS.minioConsole}`;
 const databaseUrl = `postgres://e4s:e4s_local_password@127.0.0.1:${databasePort}/e4s`;
 const postgres = new EmbeddedPostgres({
   databaseDir,

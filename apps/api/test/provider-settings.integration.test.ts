@@ -128,7 +128,7 @@ describe("Manager provider settings API", () => {
     expect(success.json()).toMatchObject({ status: "success", code: null, testedAt: expect.any(String) });
     expect(success.body).not.toContain("provider-secret-that-must-not-leak");
     expect(fetchSpy).toHaveBeenCalledWith(
-      "https://api.example.test/v1/chat/completions",
+      "https://api.groq.com/openai/v1/chat/completions",
       expect.objectContaining({ headers: expect.objectContaining({ authorization: expect.stringContaining("Bearer ") }) })
     );
 

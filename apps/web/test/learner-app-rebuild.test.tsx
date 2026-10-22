@@ -164,6 +164,7 @@ describe("new learner app frontend", () => {
     expect(screen.getByText("Quy định làm bài – đọc trước khi bắt đầu")).toBeInTheDocument();
     expect(screen.getByText(/Nghe → Đọc → Viết → Nói/)).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Bắt đầu phần Nghe" }));
+    fireEvent.click(screen.getByRole("button", { name: "Tôi đã sẵn sàng, bắt đầu" }));
     expect(actions.startAssessment).toHaveBeenCalledOnce();
   });
 });

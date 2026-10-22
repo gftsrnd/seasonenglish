@@ -3,6 +3,7 @@ import {
   asArray,
   asObject,
   fetchProviderJson,
+  looksLikeVisualArtifact,
   safeHttpsUrl,
   stringValue,
   type ProviderCandidate,
@@ -22,10 +23,10 @@ export function createOpenverseProvider(options: ProviderOptions = {}): {
       url.searchParams.set("q", query);
       url.searchParams.set("page_size", "10");
       url.searchParams.set("mature", "false");
-      const response = await fetchProviderJson(url, API_HOST, { ...options, timeoutMs: options.timeoutMs ?? 800 });
+      const response = await fetchProviderJson(url, API_HOST, { ...options, timeoutMs: options.timeoutMs ?? 5_000 });
       for (const value of asArray(response?.results)) {
         const item = asObject(value);
-        if (!item || item.mature === true) continue;
+        if (!item || item.mature === true || looksLikeVisualArtifact(stringValue(item.title))) continue;
         // Openverse currently returns real bitmap thumbnails with `filetype` and
         // `format` empty for a number of sources. The download safety layer still
         // verifies the response bytes and MIME type, so an omitted hint must not

@@ -229,7 +229,7 @@ describe("Operator app rebuild", () => {
   it("renders matrix states and the complete lesson-set review workflow", async () => {
     const user = userEvent.setup();
     const onOpenSet = vi.fn();
-    render(<OperatorLessons view={{ aiConnected: false, extraLevels: ["B1"], levels: [{ cefr: "A2", learnerCount: 2 }], weeks: [{ number: 1, topic: "Meetings", cells: [{ cefr: "A2", status: "draft", generatedAt: "14/10/2026", incomplete: true, lessons: 4, days: [{ day: "T2", title: "Opening" }, { day: "T3", title: "—" }, { day: "T4", title: "—" }, { day: "T5", title: "—" }, { day: "T6", title: "—" }] }] }] } as any} actions={{ onOpenSettings: vi.fn(), onAddLevel: vi.fn(), onGenerate: vi.fn(), onCreateManual: vi.fn(), onOpenSet }} />);
+    render(<OperatorLessons view={{ aiConnected: false, extraLevels: ["B1"], levels: [{ cefr: "A2", learnerCount: 2 }], weeks: [{ number: 1, topic: "Meetings", cells: [{ cefr: "A2", status: "draft", generatedAt: "14/10/2026", incomplete: true, lessons: 4, days: [{ day: "T2", title: "Opening" }, { day: "T3", title: "—" }, { day: "T4", title: "—" }, { day: "T5", title: "—" }, { day: "T6", title: "—" }] }] }] } as any} actions={{ onOpenSettings: vi.fn(), onAddLevel: vi.fn(), onRemoveLevel: vi.fn(), onGenerate: vi.fn(), onCreateManual: vi.fn(), onOpenSet }} />);
     expect(screen.getByText(/Chưa có API key nên không sinh bài được/)).toBeInTheDocument();
     expect(screen.getByText("chưa đủ 4 kỹ năng")).toBeInTheDocument();
     expect(screen.getByRole("table")).toHaveClass("operator-lesson-matrix");
@@ -251,16 +251,52 @@ describe("Operator app rebuild", () => {
     expect(onApprove).toHaveBeenCalledTimes(1);
   });
 
-  it("keeps the add-level control in a dedicated page-title action group", () => {
-    render(<OperatorLessons view={{ aiConnected: true, extraLevels: ["B1"], levels: [], weeks: [] } as any} actions={{ onOpenSettings: vi.fn(), onAddLevel: vi.fn(), onGenerate: vi.fn(), onCreateManual: vi.fn(), onOpenSet: vi.fn() }} />);
+  it("shows AI enrichment progress", () => {
+    render(<OperatorLessonSet view={{
+      week: 1, cefr: "A2", status: "draft", topic: "Meetings", explanationLanguage: "tiếng Việt",
+      aiConnected: true, mutationState: "loading", activeMutation: "enrich", mutationMessage: "AI đang bổ sung chi tiết cho 1 bài…",
+      warnings: { incomplete: 0, level: [], phrases: 0, details: 1, detailIssues: [{ lessonId: "l1", dayLabel: "T2", title: "Opening a meeting", missing: ["bài tập Từ loại", "Nghe chưa đủ 4 lựa chọn"] }] },
+      lessons: [{ id: "l1", day: 1, dayLabel: "T2", title: "Opening a meeting", durationMin: 10, practiceKind: "điền từ", practiceAnswer: "start", complete: true, content: <p>Nội dung</p> }]
+    } as any} actions={{ onBack: vi.fn(), onApprove: vi.fn(), onUnapprove: vi.fn(), onRegenerate: vi.fn(), onDeleteSet: vi.fn(), onFillPhrases: vi.fn(), onEnrich: vi.fn(), onEditLesson: vi.fn(), onDeleteLesson: vi.fn(), onComposeDay: vi.fn() }} />);
 
-    expect(screen.getByLabelText("Mức cần thêm").parentElement).toHaveClass("operator-page-title-actions");
+    expect(screen.getByRole("button", { name: "Đang bổ sung…" })).toBeDisabled();
+    expect(screen.getByText("AI đang bổ sung chi tiết cho 1 bài…")).toBeInTheDocument();
+    expect(screen.getByText(/T2 · Opening a meeting/)).toBeInTheDocument();
+    expect(screen.getByText(/bài tập Từ loại · Nghe chưa đủ 4 lựa chọn/)).toBeInTheDocument();
+  });
+
+  it("routes a missing-detail row to the correct lesson editor", async () => {
+    const user = userEvent.setup();
+    const onEditLesson = vi.fn();
+    render(<OperatorLessonSet view={{
+      week: 1, cefr: "A2", status: "draft", topic: "Meetings", explanationLanguage: "tiếng Việt", aiConnected: true,
+      warnings: { incomplete: 0, level: [], phrases: 0, details: 1, detailIssues: [{ lessonId: "l1", dayLabel: "T2", title: "Opening a meeting", missing: ["bài tập Từ loại"] }] },
+      lessons: [{ id: "l1", day: 1, dayLabel: "T2", title: "Opening a meeting", durationMin: 10, practiceKind: "điền từ", practiceAnswer: "start", complete: true, content: <p>Nội dung</p> }]
+    } as any} actions={{ onBack: vi.fn(), onApprove: vi.fn(), onUnapprove: vi.fn(), onRegenerate: vi.fn(), onDeleteSet: vi.fn(), onFillPhrases: vi.fn(), onEnrich: vi.fn(), onEditLesson, onDeleteLesson: vi.fn(), onComposeDay: vi.fn() }} />);
+
+    const issueList = document.querySelector(".operator-lesson-detail-issues");
+    expect(issueList).not.toBeNull();
+    await user.click(within(issueList as HTMLElement).getByRole("button", { name: "Sửa T2" }));
+    expect(onEditLesson).toHaveBeenCalledWith("l1");
+  });
+
+  it("keeps only the optional C1 action in the page-title action group", () => {
+    render(<OperatorLessons view={{ aiConnected: true, extraLevels: ["C1"], levels: [], weeks: [] } as any} actions={{ onOpenSettings: vi.fn(), onAddLevel: vi.fn(), onRemoveLevel: vi.fn(), onGenerate: vi.fn(), onCreateManual: vi.fn(), onOpenSet: vi.fn() }} />);
+
+    expect(screen.getByRole("button", { name: "Thêm cột C1" }).parentElement).toHaveClass("operator-page-title-actions");
+    expect(screen.queryByRole("button", { name: /Xóa cột/ })).not.toBeInTheDocument();
+
+    cleanup();
+    render(<OperatorLessons view={{ aiConnected: true, extraLevels: [], levels: [{ cefr: "A1", learnerCount: 0 }, { cefr: "A2", learnerCount: 0 }, { cefr: "B1", learnerCount: 0 }, { cefr: "B2", learnerCount: 0 }, { cefr: "C1", learnerCount: 0 }], weeks: [] } as any} actions={{ onOpenSettings: vi.fn(), onAddLevel: vi.fn(), onRemoveLevel: vi.fn(), onGenerate: vi.fn(), onCreateManual: vi.fn(), onOpenSet: vi.fn() }} />);
+    expect(screen.getByRole("button", { name: "Xóa cột C1" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /Xóa cột A1/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /Xóa cột A2/ })).not.toBeInTheDocument();
   });
 
   it("uses links for AI setup shortcuts in unavailable states", async () => {
     const user = userEvent.setup();
     const onOpenSettings = vi.fn();
-    render(<OperatorLessons view={{ aiConnected: false, extraLevels: [], levels: [], weeks: [] } as any} actions={{ onOpenSettings, onAddLevel: vi.fn(), onGenerate: vi.fn(), onCreateManual: vi.fn(), onOpenSet: vi.fn() }} />);
+    render(<OperatorLessons view={{ aiConnected: false, extraLevels: [], levels: [], weeks: [] } as any} actions={{ onOpenSettings, onAddLevel: vi.fn(), onRemoveLevel: vi.fn(), onGenerate: vi.fn(), onCreateManual: vi.fn(), onOpenSet: vi.fn() }} />);
     const lessonsSettings = screen.getByRole("link", { name: "Cài đặt" });
     expect(lessonsSettings).toHaveAttribute("href", "/settings");
     await user.click(lessonsSettings);

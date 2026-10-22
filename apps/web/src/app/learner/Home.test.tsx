@@ -41,7 +41,7 @@ function makeView(overrides: Partial<LearnerHomeView> = {}) {
         { label: "T6", date: "2026-10-16", status: "upcoming" }
       ]
     },
-    coach: { turnsThisWeek: 8, targetTurns: 2, href: "/coach" as const },
+    coach: { turnsToday: 0, turnsThisWeek: 8, targetTurns: 2, href: "/coach" as const },
     practice: { status: "reviewed" as const, detail: "Bài đã được phản hồi theo rubric.", href: "/practice" as const },
     levelReadiness: {
       targetLevel: "B1" as const,
@@ -107,6 +107,11 @@ describe("learner Home parity", () => {
     ]);
   });
 
+  it("highlights Season in leaf green after a real turn today", () => {
+    render(<LearnerHome view={makeView({ coach: { turnsToday: 1, turnsThisWeek: 2, targetTurns: 2, href: "/coach" } })} actions={actions} />);
+    expect(screen.getByRole("link", { name: /Đã luyện hôm nay/ })).toHaveClass("tile", "mint");
+  });
+
   it("uses the canonical readiness heading, criteria, and level-up CTA", () => {
     render(<LearnerHome view={makeView({ levelReadiness: { ...makeView().levelReadiness, eligible: true, examAvailable: true, criteria: makeView().levelReadiness.criteria.map((criterion) => ({ ...criterion, met: true })) } })} actions={actions} />);
 
@@ -116,6 +121,51 @@ describe("learner Home parity", () => {
     expect(within(readiness!).getByText("14 ngày gần nhất")).toBeInTheDocument();
     expect(within(readiness!).getByRole("link", { name: "Thi lên mức" })).toHaveAttribute("href", "/test/level-up");
     expect(within(readiness!).getByText("Bài học hoàn thành", { exact: false })).toBeInTheDocument();
+  });
+
+  it("separates readiness progress from the actual evidence shown below each bar", () => {
+    render(<LearnerHome view={makeView({ levelReadiness: {
+      ...makeView().levelReadiness,
+      criteria: [
+        { key: "lessonCompletion", label: "Bài học hoàn thành", current: 20, target: 90, display: "1/5 bài", met: false },
+        { key: "firstTryAccuracy", label: "Phần bài đúng ngay lần đầu", current: 67, target: 75, display: "4/6 phần", met: false },
+        { key: "weeklyPractice", label: "Bài thực hành tuần gần nhất", current: 86, target: 80, display: "86/100", met: true },
+        { key: "coachRubric", label: "Rubric khi luyện với Season", current: 4.3, target: 4, display: "4.3/5 · 8 lượt", met: true }
+      ]
+    } })} actions={actions} />);
+
+    const readiness = document.querySelector<HTMLElement>('[data-home-block="readiness"]')!;
+    const lessons = readiness.querySelector<HTMLElement>('[data-readiness-key="lessonCompletion"]')!;
+    const firstTry = readiness.querySelector<HTMLElement>('[data-readiness-key="firstTryAccuracy"]')!;
+    const practice = readiness.querySelector<HTMLElement>('[data-readiness-key="weeklyPractice"]')!;
+    const coach = readiness.querySelector<HTMLElement>('[data-readiness-key="coachRubric"]')!;
+
+    expect(within(lessons).getByText("20%", { exact: true })).toHaveClass("readiness-current");
+    expect(within(lessons).getByText("1/5 bài", { exact: true })).toHaveClass("readiness-actual");
+    expect(within(lessons).getByRole("progressbar", { name: "Bài học hoàn thành" })).toHaveAttribute("aria-valuemax", "100");
+    expect(within(practice).getByText("86%", { exact: true })).toBeInTheDocument();
+    expect(within(coach).getByText("4.3/5", { exact: true })).toBeInTheDocument();
+    expect(within(lessons).getByTestId("readiness-target")).toHaveStyle({ left: "90%" });
+    expect(within(firstTry).getByTestId("readiness-target")).toHaveStyle({ left: "75%" });
+    expect(within(practice).getByTestId("readiness-target")).toHaveStyle({ left: "80%" });
+    expect(within(coach).getByRole("progressbar", { name: "Rubric khi luyện với Season" })).toHaveAttribute("aria-valuemax", "5");
+    expect(within(coach).getByTestId("readiness-target")).toHaveStyle({ left: "80%" });
+    expect(readiness.querySelector(".readiness-label svg")).not.toBeInTheDocument();
+  });
+
+  it("keeps the program status as a softly tinted card separated from today's lesson", () => {
+    render(<LearnerHome view={makeView({ monthlyGoal: "Tự tin góp ý trong công việc" })} actions={actions} />);
+
+    const lifecycle = document.querySelector<HTMLElement>('[data-home-block="lifecycle"]')!;
+    const primary = document.querySelector<HTMLElement>('[data-home-block="primary"]')!;
+    expect(lifecycle).toHaveClass("home-lifecycle-card");
+    expect(lifecycle.nextElementSibling).toBe(primary);
+  });
+
+  it("frames the active lesson card with matching left and right accents", () => {
+    render(<LearnerHome view={makeView()} actions={actions} />);
+
+    expect(document.querySelector('[data-home-block="primary"]')).toHaveClass("home-primary-lesson");
   });
 
   it("does not render a dead week path when the learner has no lessons", () => {
@@ -164,6 +214,37 @@ describe("learner Home parity", () => {
     expect(path?.querySelector("svg.lucide-lock-keyhole")).toBeInTheDocument();
     expect(path).not.toHaveTextContent("🔒");
     expect(within(path as HTMLElement).getByRole("link", { name: /Bài bị khoá · Chưa mở/ })).toHaveAttribute("aria-disabled", "true");
+  });
+
+  it("labels an overdue in-progress lesson as make-up instead of today", () => {
+    render(<LearnerHome view={makeView()} actions={actions} />);
+
+    const path = document.querySelector<HTMLElement>('[data-home-block="week-path"]');
+    const primary = document.querySelector<HTMLElement>('[data-home-block="primary"]');
+
+    expect(path).not.toBeNull();
+    expect(within(path!).getByRole("link", { name: /T2 · học bù/ })).toBeInTheDocument();
+    expect(within(path!).queryByText("T2 · hôm nay")).not.toBeInTheDocument();
+    expect(primary).not.toBeNull();
+    expect(within(primary!).getByText(/Bài học bù · T2 · Tuần 1/)).toBeInTheDocument();
+  });
+
+  it("exposes prototype attendance states and separates the fixed-schedule note", () => {
+    const view = makeView();
+    render(<LearnerHome view={{ ...view, schedule: { ...view.schedule, days: [
+      { label: "T2", date: "2026-10-12", status: "missed" },
+      { label: "T3", date: "2026-10-13", status: "missed" },
+      { label: "T4", date: "2026-10-14", status: "attended" },
+      { label: "T5", date: "2026-10-15", status: "today" },
+      { label: "T6", date: "2026-10-16", status: "upcoming" }
+    ] } }} actions={actions} />);
+
+    const attendance = document.querySelector<HTMLElement>('[data-home-block="attendance"]');
+    expect(attendance).not.toBeNull();
+    expect(within(attendance!).getByText("T2").closest("li")?.querySelector("i")).toHaveClass("miss");
+    expect(within(attendance!).getByText("T4").closest("li")?.querySelector("i")).toHaveClass("on");
+    expect(within(attendance!).getByText("T5").closest("li")?.querySelector("i")).toHaveClass("today");
+    expect(within(attendance!).getByText(/Lịch cố định/)).toHaveClass("attendance-schedule-note");
   });
 
   it("shows a real onboarding placement-pending state without inviting a duplicate test", () => {

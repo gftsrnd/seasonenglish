@@ -1,6 +1,7 @@
 import type { Client } from "pg";
 import { finalDefinition, levelUpDefinition, placementDefinition } from "./assessment-blueprints.js";
 import { prototypePromptDefaults } from "./prototype-prompts.js";
+import { planCanonicalPromptPublication } from "./prompt-sync.js";
 
 export const DEMO_IDS = {
   organization: "00000000-0000-4000-8000-000000000001",
@@ -69,32 +70,34 @@ Bạn là người thiết kế bài học tiếng Anh công sở cho Season Eng
 Nguyên tắc theo mức CEFR và ngôn ngữ:
 - Bám chặt cefr, topic, description, objectives và keyVocabHint trong input. Nội dung phải thực tế, liên quan công việc và phù hợp với người học Việt Nam.
 - A1–A2: phần giải thích, hướng dẫn và phản hồi bằng tiếng Việt; câu và từ tiếng Anh giữ nguyên. B1 trở lên: phần giải thích bằng tiếng Anh, trừ khi input yêu cầu khác.
-- Tiêu đề là tên ngắn của mẫu câu/kỹ năng trong ngày, tối đa 6 từ, không phải tên chủ đề tuần. durationMinutes là 5, 10, 15 hoặc 20.
+- Tiêu đề phải là MẪU CÂU cụ thể của đúng ngày để người học biết mình sẽ nói gì, tối đa 6 từ; ví dụ "It is + adjective", "Could I + V?", "I work in… as…". Không dùng công thức chung chung như "S + V" hoặc "S + V + O", không lặp cùng tiêu đề cho nhiều ngày, không viết tên hoạt động như "Talking about..."; không dùng dấu chấm cuối và không đặt chủ đề tuần làm tiêu đề. durationMinutes là 5, 10, 15 hoặc 20.
 - Không dùng placeholder, dữ liệu giả kiểu “...” hoặc nội dung chung chung. Mọi content đều là tài liệu người học có thể đọc, nghe, nói hoặc làm ngay.
 
-Mỗi lesson phải có đúng một lần 9 part code sau, theo thứ tự này: objective, instruction, vocabulary, grammar, pronunciation, listening, reading, writing, speaking.
+Mỗi lesson phải có đúng một lần 11 part code sau, theo đúng thứ tự này: objective, instruction, vocabulary, grammar, pronunciation, listening, reading, writing, word_class, word_use, speaking. Không đổi tên key, không dùng schema prototype cũ như day/theory/examples/vocab/pron.
 
 Quy tắc nội dung từng part:
-1. objective: content.text là đúng 1 câu cụ thể, đo được, nói rõ sau bài người học làm được gì.
+1. objective: content.text là đúng 1 câu cụ thể, đo được, tối đa 16 từ; đi thẳng vào kỹ năng, không mở đầu bằng “Sau bài học, bạn có thể”.
 2. instruction: content.steps là danh sách 3–5 bước ngắn: học nội dung, làm lần lượt bài tập, kiểm tra/hoàn thành. Viết rõ ràng theo mức CEFR.
-3. vocabulary: content.items có đúng 3 từ hoặc cụm từ cần cho mẫu câu. Mỗi item có word, pronunciation (IPA), meaning và collocations là đúng 3 cụm thông dụng dài 2–5 từ có chứa nguyên từ đó. Mỗi từ phải xuất hiện trong ví dụ của bài; không dùng tên người, công ty, quốc gia, thành phố hay địa danh làm từ vựng hoặc đáp án.
+3. vocabulary: content.items có đúng 3 từ hoặc cụm từ cần cho mẫu câu. Mỗi item có word, pronunciation (IPA), meaning, imageQuery là truy vấn tiếng Anh ngắn mô tả một ảnh chụp công sở có vật/hành động mục tiêu rõ ràng; cấm URL, emoji, icon, logo, sơ đồ, biểu đồ, screenshot hoặc ảnh nhiều chữ. collocations đúng 3 cụm thông dụng dài 2–5 từ có chứa nguyên từ đó, family tối đa 2 mục, umbrella có tối đa 2 siblings, synonyms tối đa 2 mục và antonyms tối đa 2 mục; mỗi quan hệ chỉ cần word + level/note ngắn. Không bịa imageUrl hoặc nguồn ảnh; hệ thống sẽ tự tìm và kiểm duyệt ảnh từ provider có attribution. Mỗi từ phải xuất hiện trong ví dụ của bài; không dùng tên người, công ty, quốc gia, thành phố hay địa danh làm từ vựng hoặc đáp án.
 4. grammar: content.formula là công thức có đủ thành phần; content.usage nói khi nào dùng; content.examples là 2–3 câu tiếng Anh hoàn chỉnh, dùng từ vựng của bài. A1–A2 có nghĩa tiếng Việt ngắn nếu cần. Không ghi kế hoạch thay cho nội dung dạy.
-5. pronunciation: content.focus là một âm mục tiêu duy nhất, content.tip là hướng dẫn phát âm, content.words là đúng 3 từ tiếng Anh kèm IPA đầy đủ; cả 3 IPA phải thật sự chứa âm mục tiêu.
+5. pronunciation: content.focus là một âm mục tiêu duy nhất, content.tip là hướng dẫn phát âm, content.words là đúng 3 object {word,ipa}; cả 3 IPA phải thật sự chứa âm mục tiêu.
 6. listening: content.audio là đoạn tiếng Anh 15–30 từ để máy đọc, content.prompt là một câu hỏi tiếng Anh, content.options là đúng 4 lựa chọn tiếng Anh, content.answer là nguyên văn đúng 1 lựa chọn. Nội dung phải khác reading.
 7. reading: content.text là đoạn tiếng Anh 2–4 câu, content.prompt là câu hỏi, content.options là đúng 4 lựa chọn, content.answer là nguyên văn đúng 1 lựa chọn. B1 trở lên phải hỏi suy luận, không chép nguyên đáp án từ đoạn đọc.
 8. writing: content.type là fill, mcq hoặc write. Fill chỉ có một chỗ trống và gợi ý nghĩa ngay sau chỗ trống; mcq có đúng 4 lựa chọn và một đáp án; write yêu cầu viết 1–2 câu theo mẫu và có một câu mẫu tham khảo. Chỉ dùng mẫu câu và từ vựng của bài.
-9. speaking: content.prompt là yêu cầu nói bằng ngôn ngữ giải thích, content.answer là đúng một câu tiếng Anh mẫu dài 6–14 từ, dùng mẫu câu và ít nhất một từ vựng của bài.
+9. word_class: content.prompt hỏi từ loại của một từ trong câu tiếng Anh của bài, content.options đúng 4 lựa chọn noun/verb/adjective/adverb, content.answer trùng nguyên văn một lựa chọn.
+10. word_use: content.prompt hỏi câu nào dùng đúng một từ vựng của bài, content.options đúng 4 câu tiếng Anh, content.answer trùng nguyên văn một lựa chọn.
+11. speaking: content.prompt là yêu cầu nói bằng ngôn ngữ giải thích, content.answer là đúng một câu tiếng Anh mẫu dài 6–14 từ, dùng mẫu câu và ít nhất một từ vựng của bài.
 
-Các câu trắc nghiệm phải có đúng 4 lựa chọn, chỉ một đáp án đúng; lựa chọn sai phải sai rõ về nghĩa hoặc ngữ pháp nhưng vẫn cùng ngữ cảnh. Không Việt hoá lựa chọn tiếng Anh. Bắt buộc đủ cả 9 part và không để content trống.
+Các câu trắc nghiệm phải có đúng 4 lựa chọn, chỉ một đáp án đúng; lựa chọn sai phải sai rõ về nghĩa hoặc ngữ pháp nhưng vẫn cùng ngữ cảnh. Không Việt hoá lựa chọn tiếng Anh. Bắt buộc đủ cả 11 part và không để content trống. Phần Nghe phải luôn có audio dạng text để nút máy đọc hoạt động; không được bỏ audio chỉ vì không có file mp3.
 
 JSON bắt buộc có đúng dạng:
-{"lessons":[{"dayNumber":1,"title":"...","durationMinutes":10,"parts":[{"code":"objective","title":"Mục tiêu bài học","content":{"text":"..."}},{"code":"instruction","title":"Hướng dẫn làm bài","content":{"steps":["..."]}},{"code":"vocabulary","title":"Từ vựng","content":{"items":[{"word":"...","pronunciation":"/.../","meaning":"...","collocations":["...","...","..."]}]}},{"code":"grammar","title":"Ngữ pháp","content":{"formula":"...","usage":"...","examples":["...","..."]}},{"code":"pronunciation","title":"Phát âm","content":{"focus":"...","tip":"...","words":[{"word":"...","ipa":"/.../"},{"word":"...","ipa":"/.../"},{"word":"...","ipa":"/.../"}]}},{"code":"listening","title":"Nghe","content":{"audio":"...","prompt":"...","options":["...","...","...","..."],"answer":"..."}},{"code":"reading","title":"Đọc","content":{"text":"...","prompt":"...","options":["...","...","...","..."],"answer":"..."}},{"code":"writing","title":"Viết","content":{"type":"fill|mcq|write","prompt":"...","options":["...","...","...","..."],"answer":"..."}},{"code":"speaking","title":"Nói","content":{"prompt":"...","answer":"..."}}]}]}
-Mỗi lesson phải đủ nội dung learner-facing để màn Học hiển thị mục tiêu, hướng dẫn, từ vựng, ngữ pháp, phát âm và bốn kỹ năng; không trả về chỉ tiêu đề hoặc kế hoạch.`;
+{"lessons":[{"dayNumber":1,"title":"...","durationMinutes":10,"parts":[{"code":"objective","title":"Mục tiêu bài học","content":{"text":"..."}},{"code":"instruction","title":"Hướng dẫn làm bài","content":{"steps":["...","...","..."]}},{"code":"vocabulary","title":"Từ vựng","content":{"items":[{"word":"...","pronunciation":"/.../","meaning":"...","imageQuery":"real office object photo","collocations":["...","...","..."],"family":[{"word":"...","type":"noun","meaning":"..."}],"umbrella":{"word":"...","meaning":"...","siblings":[]},"synonyms":[{"word":"...","level":"B1","note":"..."}],"antonyms":[]}]}},{"code":"grammar","title":"Ngữ pháp","content":{"formula":"S + V + O","usage":"...","examples":["...","..."]}},{"code":"pronunciation","title":"Phát âm","content":{"focus":"...","tip":"...","words":[{"word":"...","ipa":"/.../"},{"word":"...","ipa":"/.../"},{"word":"...","ipa":"/.../"}]}},{"code":"listening","title":"Nghe","content":{"audio":"...","prompt":"...","options":["...","...","...","..."],"answer":"..."}},{"code":"reading","title":"Đọc","content":{"text":"...","prompt":"...","options":["...","...","...","..."],"answer":"..."}},{"code":"writing","title":"Viết","content":{"type":"fill","prompt":"...","options":[],"answer":"..."}},{"code":"word_class","title":"Từ loại","content":{"prompt":"...","options":["noun","verb","adjective","adverb"],"answer":"noun"}},{"code":"word_use","title":"Dùng từ","content":{"prompt":"...","options":["...","...","...","..."],"answer":"..."}},{"code":"speaking","title":"Nói","content":{"prompt":"...","answer":"..."}}]}]}
+Mỗi lesson phải đủ nội dung learner-facing để màn Học hiển thị mục tiêu, hướng dẫn, từ vựng, ngữ pháp, phát âm và màn Bài tập hiển thị Nghe/Đọc/Viết/Từ loại/Dùng từ/Nói; giữ câu trả lời ngắn, không lặp lại giải thích, tổng output vừa đủ để 5 bài nằm trong giới hạn token.`;
 
 const promptDefaults = [
   ["00000000-0000-4000-8000-000000001001", "system_rules", prototypePromptDefaults.base],
   ["00000000-0000-4000-8000-000000001002", "assessment_scoring", prototypePromptDefaults.placement],
-  ["00000000-0000-4000-8000-000000001003", "weekly_lessons", prototypePromptDefaults.lesson],
+  ["00000000-0000-4000-8000-000000001003", "weekly_lessons", weeklyLessonsPrompt],
   ["00000000-0000-4000-8000-000000001004", "week_suggestions", prototypePromptDefaults.weeks],
   ["00000000-0000-4000-8000-000000001005", "micro_grading", prototypePromptDefaults.mgrade],
   ["00000000-0000-4000-8000-000000001006", "coach_dialogue", prototypePromptDefaults.coach],
@@ -490,8 +493,7 @@ export async function seedDemo(client: Client, options: { mode?: SeedDemoMode } 
        'Tự giới thiệu trong buổi họp đầu với khách hoặc đồng nghiệp mới.',
        '["Nói/viết 4–6 câu về bản thân và công việc."]'::jsonb,
        'colleague, in charge of, department, deadline')
-     on conflict (id) do update set topic = excluded.topic, description = excluded.description,
-       objectives = excluded.objectives, key_vocab_hint = excluded.key_vocab_hint`,
+     on conflict (id) do nothing`,
     [DEMO_IDS.week, DEMO_IDS.program]
   );
   await client.query(
@@ -500,8 +502,7 @@ export async function seedDemo(client: Client, options: { mode?: SeedDemoMode } 
        'Viết email ngắn xin dời lịch và xác nhận lịch mới.',
        '["Viết email 60–100 từ xin dời lịch."]'::jsonb,
        'reschedule, postpone, available, confirm')
-     on conflict (id) do update set topic = excluded.topic, description = excluded.description,
-       objectives = excluded.objectives, key_vocab_hint = excluded.key_vocab_hint`,
+     on conflict (id) do nothing`,
     [DEMO_IDS.week2, DEMO_IDS.program]
   );
   for (const [id, taskKey, content] of promptDefaults) {
@@ -511,6 +512,22 @@ export async function seedDemo(client: Client, options: { mode?: SeedDemoMode } 
        on conflict (organization_id, task_key, version) do nothing`,
       [id, DEMO_IDS.organization, taskKey, content, DEMO_IDS.operator]
     );
+    if (mode === "local" && taskKey === "weekly_lessons") {
+      const versions = await client.query<{ version: number; status: string; content: string }>(
+        `select version, status, content from prompt_versions
+         where organization_id = $1 and task_key = $2
+         order by version desc`,
+        [DEMO_IDS.organization, taskKey]
+      );
+      const publication = planCanonicalPromptPublication(versions.rows, content);
+      if (publication.shouldPublish) {
+        await client.query(
+          `insert into prompt_versions (id, organization_id, task_key, version, content, status, created_by)
+           values (gen_random_uuid(), $1, $2, $3, $4, 'active', $5)`,
+          [DEMO_IDS.organization, taskKey, publication.nextVersion, content, DEMO_IDS.operator]
+        );
+      }
+    }
   }
   await client.query(
     `insert into lesson_sets (id, program_week_id, cefr)

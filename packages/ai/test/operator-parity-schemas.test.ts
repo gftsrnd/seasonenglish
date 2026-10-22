@@ -28,6 +28,17 @@ describe("operator AI parity schemas", () => {
     });
     expect(parsed.success).toBe(false);
   });
+
+  it("keeps week topics as concise learning titles instead of long descriptions", () => {
+    const concise = weekSuggestionsOutputSchema.safeParse({
+      weeks: [{ weekNumber: 1, levels: ["A2"], options: [{ ...option, topic: "Introducing yourself & your job" }, { ...option, topic: "Introducing yourself & your job" }, { ...option, topic: "Introducing yourself & your job" }] }]
+    });
+    const long = weekSuggestionsOutputSchema.safeParse({
+      weeks: [{ weekNumber: 1, levels: ["A2"], options: [{ ...option, topic: "Introducing yourself and your job at work" }, { ...option, topic: "Introducing yourself and your job at work" }, { ...option, topic: "Introducing yourself and your job at work" }] }]
+    });
+    expect(concise.success).toBe(true);
+    expect(long.success).toBe(false);
+  });
 });
 
 const vocabularyWord = {

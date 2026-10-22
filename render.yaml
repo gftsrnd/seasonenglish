@@ -31,6 +31,12 @@ services:
         value: e4s-evidence
       - key: S3_MEDIA_BUCKET
         value: e4s-media
+      - key: AI_PROVIDER
+        value: anthropic
+      - key: ANTHROPIC_API_KEY
+        sync: false
+      - key: ANTHROPIC_MODEL
+        value: claude-haiku-5-5
       - key: GROQ_API_KEY
         sync: false
       - key: GROQ_MODEL

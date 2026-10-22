@@ -65,13 +65,13 @@ export function buildApi(options: BuildApiOptions): FastifyInstance {
   });
   registerLearningRoutes(app, options.pool, options.aiRunner, options.mediaService);
   registerAssessmentRoutes(app, options.pool, options.aiRunner, options.aiRunnerFactory);
-  registerContentRoutes(app, options.pool, options.aiRunner, options.storage, options.aiRunnerFactory);
+  registerContentRoutes(app, options.pool, options.aiRunner, options.storage, options.aiRunnerFactory, options.mediaService);
   registerManagerRoutes(app, options.pool, {
     maintenanceEnabled,
     ...(options.mediaService ? { mediaService: options.mediaService } : {})
   });
   registerNotificationRoutes(app, options.pool);
-  registerCoachRoutes(app, options.pool, options.aiRunner);
+  registerCoachRoutes(app, options.pool, options.aiRunner, options.aiRunnerFactory);
   registerEngagementRoutes(app, options.pool, options.aiRunner, options.mediaService);
   registerSystemRoutes(app, options.pool, options.storage, Boolean(options.aiRunner), maintenanceEnabled, options.imageProviders, Boolean(options.aiRunnerFactory));
   if (options.storage) {

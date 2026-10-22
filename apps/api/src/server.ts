@@ -1,4 +1,4 @@
-import { AI_TASKS, createAiService, createGroqProvider } from "@e4s/ai";
+import { AI_TASKS, createAiService, createAnthropicProvider } from "@e4s/ai";
 import { createMediaRepository } from "@e4s/database";
 import { createS3Storage, type ObjectStorage } from "@e4s/storage";
 import { Pool } from "pg";
@@ -7,6 +7,7 @@ import { buildApi } from "./app.js";
 import { createOrganizationAiRunnerFactory } from "./modules/ai/runtime.js";
 import { createContentMediaService } from "./modules/media/index.js";
 import { createOpenverseProvider } from "./modules/media/providers/openverse.js";
+import { createPixabayProvider } from "./modules/media/providers/pixabay.js";
 import { createWikimediaProvider } from "./modules/media/providers/wikimedia.js";
 import { createWikipediaProvider } from "./modules/media/providers/wikipedia.js";
 
@@ -19,17 +20,28 @@ try {
 const databaseUrl = process.env.DATABASE_URL;
 if (!databaseUrl) throw new Error("DATABASE_URL is required");
 const pool = new Pool({ connectionString: databaseUrl });
-const aiRunner = process.env.GROQ_API_KEY
+const configuredAiTimeoutMs = Number(process.env.AI_TIMEOUT_MS ?? 60_000);
+const aiTimeoutMs = Number.isFinite(configuredAiTimeoutMs) && configuredAiTimeoutMs > 0 ? configuredAiTimeoutMs : 60_000;
+const configuredAiMaxAttempts = Number(process.env.AI_MAX_ATTEMPTS ?? 2);
+const aiMaxAttempts = Number.isFinite(configuredAiMaxAttempts)
+  ? Math.max(1, Math.min(2, Math.trunc(configuredAiMaxAttempts)))
+  : 2;
+const aiRunner = process.env.AI_PROVIDER === "anthropic" && process.env.ANTHROPIC_API_KEY
   ? createAiService({
       registry: AI_TASKS,
-      provider: createGroqProvider({
-        apiKey: process.env.GROQ_API_KEY,
-        ...(process.env.GROQ_MODEL ? { model: process.env.GROQ_MODEL } : {})
+      provider: createAnthropicProvider({
+        apiKey: process.env.ANTHROPIC_API_KEY,
+        ...(process.env.ANTHROPIC_MODEL ? { model: process.env.ANTHROPIC_MODEL } : {})
       }),
+      timeoutMs: aiTimeoutMs,
+      maxAttempts: aiMaxAttempts,
       loadPrompt: async () => ""
     })
   : undefined;
-const aiRunnerFactory = createOrganizationAiRunnerFactory(pool, aiRunner);
+const aiRunnerFactory = createOrganizationAiRunnerFactory(pool, aiRunner, {
+  timeoutMs: aiTimeoutMs,
+  maxAttempts: aiMaxAttempts
+});
 const storage = createStorageFromEnvironment();
 const mediaService = storage ? createProductionMediaService(storage) : undefined;
 const app = buildApi({
@@ -72,12 +84,14 @@ function createProductionMediaService(storage: ObjectStorage) {
   const wikipedia = createWikipediaProvider();
   const wikimedia = createWikimediaProvider();
   const openverse = createOpenverseProvider();
+  const pixabay = createPixabayProvider(process.env.PIXABAY_API_KEY ? { apiKey: process.env.PIXABAY_API_KEY } : {});
   return createContentMediaService({
     repository: createMediaRepository(pool),
     storage,
     providers: {
       exactWikipedia: wikipedia.exact,
       searchCommons: wikimedia.search,
+      searchPixabay: pixabay.search,
       searchOpenverse: openverse.search
     }
   });

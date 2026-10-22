@@ -2,6 +2,11 @@ import {
   coachInputSchema, coachOutputJsonSchema, coachOutputSchema,
   vocabularyInputSchema, vocabularyOutputJsonSchema, vocabularyOutputSchema,
   weeklyLessonsInputSchema, weeklyLessonsOutputJsonSchema, weeklyLessonsOutputSchema,
+  weeklyLessonDayInputSchema, weeklyLessonDayOutputJsonSchema, weeklyLessonDayOutputSchema,
+  weeklyLessonVocabularyInputSchema, weeklyLessonSkillsInputSchema,
+  weeklyLessonFoundationOutputJsonSchema, weeklyLessonFoundationOutputSchema,
+  weeklyLessonVocabularyOutputJsonSchema, weeklyLessonVocabularyOutputSchema,
+  weeklyLessonSkillsOutputJsonSchema, weeklyLessonSkillsOutputSchema,
   levelFormInputSchema, levelFormOutputJsonSchema, levelFormOutputSchema,
   weekSuggestionsInputSchema, weekSuggestionsOutputJsonSchema, weekSuggestionsOutputSchema,
   assessmentGradingInputSchema, assessmentGradingOutputJsonSchema, assessmentGradingOutputSchema,
@@ -60,6 +65,22 @@ export const AI_TASKS = new AiTaskRegistry([
   {
     id: "weekly_lessons", promptKey: "weekly_lessons", inputSchema: weeklyLessonsInputSchema,
     outputSchema: weeklyLessonsOutputSchema, outputJsonSchema: weeklyLessonsOutputJsonSchema
+  },
+  {
+    id: "weekly_lesson_day", promptKey: "weekly_lessons", inputSchema: weeklyLessonDayInputSchema,
+    outputSchema: weeklyLessonDayOutputSchema, outputJsonSchema: weeklyLessonDayOutputJsonSchema
+  },
+  {
+    id: "weekly_lesson_foundation", promptKey: "weekly_lessons", inputSchema: weeklyLessonDayInputSchema,
+    outputSchema: weeklyLessonFoundationOutputSchema, outputJsonSchema: weeklyLessonFoundationOutputJsonSchema
+  },
+  {
+    id: "weekly_lesson_vocabulary", promptKey: "weekly_lessons", inputSchema: weeklyLessonVocabularyInputSchema,
+    outputSchema: weeklyLessonVocabularyOutputSchema, outputJsonSchema: weeklyLessonVocabularyOutputJsonSchema
+  },
+  {
+    id: "weekly_lesson_skills", promptKey: "weekly_lessons", inputSchema: weeklyLessonSkillsInputSchema,
+    outputSchema: weeklyLessonSkillsOutputSchema, outputJsonSchema: weeklyLessonSkillsOutputJsonSchema
   },
   {
     id: "weekly_practice_grading", promptKey: "weekly_practice_grading", inputSchema: weeklyPracticeInputSchema,

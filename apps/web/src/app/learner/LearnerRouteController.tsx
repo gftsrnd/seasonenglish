@@ -393,7 +393,10 @@ export function LearnerRouteController() {
         return { ...current, coach: { ...coach, thinking: true } };
       });
       try { const coach = await apiClient.sendCoachMessage(pending); setContracts({ coach }); }
-      catch { setUiState((current) => ({ ...current, coach: { ...current.coach, thinking: false, error: "Season chưa trả lời được lúc này. Hãy thử lại sau." } })); }
+      catch (error) {
+        setUiState((current) => ({ ...current, coach: { ...current.coach, thinking: false, error: "Season chưa trả lời được lúc này. Hãy thử lại sau." } }));
+        throw error;
+      }
       finally { coachPending.current = undefined; setUiState((current) => ({ ...current, coach: { ...current.coach, thinking: false } })); }
     },
     changeCoachPersona: async (persona) => setContracts({ coach: await apiClient.setCoachPersona(persona) }),

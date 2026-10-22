@@ -76,7 +76,7 @@ describe("Manager settings operational actions", () => {
       imageUrl: "https://storage.test/notebook.jpg",
       attribution: { creator: "Fixture creator", licence: "CC BY" }
     });
-    expect(mediaService.diagnoseForUser).toHaveBeenCalledWith(DEMO_IDS.manager, { term: "notebook", partOfSpeech: "noun" });
+    expect(mediaService.diagnoseForUser).toHaveBeenCalledWith(DEMO_IDS.manager, { term: "notebook", partOfSpeech: "noun", allowProviderFallback: true });
 
     const cleared = await app.inject({ method: "POST", url: "/api/v1/manager/settings/image-cache", headers: { cookie: managerCookie }, payload: {} });
     expect(cleared.statusCode, cleared.body).toBe(200);

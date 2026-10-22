@@ -20,12 +20,25 @@ describe("Groq provider", () => {
     const init = fetch.mock.calls[0]?.[1] as RequestInit;
     expect(new Headers(init.headers).get("authorization")).toBe("Bearer test-secret-key");
     expect(JSON.parse(String(init.body))).toMatchObject({
+      max_tokens: 8192,
       response_format: {
         type: "json_schema",
         json_schema: { name: "coach_dialogue_output", strict: false, schema: { type: "object" } }
       }
     });
     expect(JSON.stringify(result)).not.toContain("test-secret-key");
+  });
+
+  it("fails clearly when the provider truncates the JSON at its output limit", async () => {
+    const fetch = vi.fn().mockResolvedValue(new Response(JSON.stringify({
+      choices: [{ finish_reason: "length", message: { content: '{"lessons":[' } }]
+    }), { status: 200, headers: { "content-type": "application/json" } }));
+    const provider = createGroqProvider({ apiKey: "test-secret-key", fetch });
+
+    await expect(provider.complete({
+      taskId: "weekly_lessons", systemPrompt: "Return lessons.", input: {},
+      outputJsonSchema: { type: "object" }, signal: new AbortController().signal, traceId: "trace-truncated"
+    })).rejects.toMatchObject({ code: "AI_OUTPUT_TRUNCATED", retryable: false });
   });
 
   it("marks 429 and 5xx responses as retryable without exposing response bodies", async () => {
@@ -37,4 +50,5 @@ describe("Groq provider", () => {
       outputJsonSchema: { type: "object" }, signal: new AbortController().signal, traceId: "trace-2"
     })).rejects.toMatchObject({ code: "AI_PROVIDER_RATE_LIMIT", retryable: true });
   });
+
 });

@@ -20,7 +20,7 @@ export function createAiService(options: {
     async runTask<TOutput = unknown>(
       taskId: string,
       rawInput: unknown,
-      runOptions?: { systemPrompt?: string }
+      runOptions?: { systemPrompt?: string; maxOutputTokens?: number }
     ): Promise<AiRunResult<TOutput>> {
       const task = options.registry.get(taskId);
       const inputResult = task.inputSchema.safeParse(rawInput);
@@ -32,20 +32,26 @@ export function createAiService(options: {
       const inputHash = createHash("sha256").update(stableJson(input)).digest("hex");
       const startedAt = now();
       let lastError: unknown;
+      let attemptPrompt = systemPrompt;
 
       for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
         const controller = new AbortController();
         try {
           const response = await callWithTimeout(
             () => options.provider.complete({
-              taskId, systemPrompt, input, outputJsonSchema: task.outputJsonSchema,
+              taskId, systemPrompt: attemptPrompt, input, outputJsonSchema: task.outputJsonSchema,
+              ...(runOptions?.maxOutputTokens === undefined ? {} : { maxOutputTokens: runOptions.maxOutputTokens }),
               signal: controller.signal, traceId
             }),
             timeoutMs,
             controller
           );
           const outputResult = task.outputSchema.safeParse(response.output);
-          if (!outputResult.success) throw new AiGatewayError("AI_OUTPUT_INVALID");
+          if (!outputResult.success) {
+            throw new AiGatewayError("AI_OUTPUT_INVALID", {
+              issues: outputResult.error.issues.slice(0, 8).map(issue => ({ path: issue.path.join("."), message: issue.message }))
+            });
+          }
           return {
             output: outputResult.data as TOutput,
             metadata: {
@@ -56,6 +62,13 @@ export function createAiService(options: {
           };
         } catch (error) {
           lastError = normalizeError(error);
+          if (lastError instanceof AiGatewayError && lastError.code === "AI_OUTPUT_INVALID") {
+            const details = lastError.details as { issues?: Array<{ path: string; message: string }> } | undefined;
+            const issues = Array.isArray(details?.issues)
+              ? details.issues.slice(0, 8).map((issue) => `${issue.path}: ${issue.message}`).join("; ")
+              : "The previous structured output did not satisfy the schema.";
+            attemptPrompt = `${systemPrompt}\n\nREPAIR REQUIRED: ${issues} Return a complete corrected result; never leave required strings empty.`;
+          }
           if (!isRetryable(lastError) || attempt === maxAttempts) throw lastError;
         }
       }

@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import type { Pool } from "pg";
 
-export type MediaProvider = "wikipedia" | "wikimedia" | "openverse" | "explicit";
+export type MediaProvider = "wikipedia" | "wikimedia" | "openverse" | "pixabay" | "explicit";
 export type MediaAssetStatus = "available" | "unavailable";
 
 export interface MediaAssetRecord {

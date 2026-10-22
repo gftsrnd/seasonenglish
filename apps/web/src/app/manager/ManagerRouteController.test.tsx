@@ -5,7 +5,7 @@ import { userEvent } from "@testing-library/user-event";
 import { MemoryRouter } from "react-router";
 import type { ReactElement } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import type { ManagerLearnerProfileView, ManagerOperationsView, ManagerProgressView, ManagerProviderSettingsView, ManagerReportView, ManagerSettingsView, ProductPreferencesView, SystemCapabilitiesView } from "@e4s/contracts";
+import type { ManagerLearnerProfileView, ManagerOperationsView, ManagerProgressView, ManagerProviderSettingsView, ManagerReportView, ManagerSettingsView, OperatorSettingsOverviewView, ProductPreferencesView, SystemCapabilitiesView } from "@e4s/contracts";
 import { managerApiClient as apiClient } from "../../api/manager.js";
 import { operatorApiClient } from "../../api/operator.js";
 import { MaintenanceConfirmationDialog, ManagerRouteController, PurgeConfirmationDialog } from "./ManagerRouteController.js";
@@ -409,16 +409,25 @@ describe("ManagerRouteController", () => {
     expect(screen.getByRole("link", { name: "← Quay lại" })).toHaveAttribute("href", "/mgr/rewards");
   });
 
-  it("shows only operator-owned settings and hides Manager-only configuration", async () => {
+  it("shows operator-owned settings and hides Manager-only organization configuration", async () => {
     vi.spyOn(apiClient, "getProductPreferences").mockResolvedValue(product);
     vi.spyOn(apiClient, "getSystemCapabilities").mockResolvedValue(capabilities);
+    vi.spyOn(apiClient, "getManagerProviderSettings").mockResolvedValue(managerProvider);
+    vi.spyOn(apiClient, "getOperatorSettingsOverview").mockResolvedValue({
+      organizationName: "GFT",
+      settings: managerSettings,
+      pilot: { startDate: managerSettings.pilotStartDate, weeks: managerSettings.pilotWeeks, weekOverride: managerSettings.weekOverride, minMinutesPerDay: managerSettings.minMinutesPerDay, courseTheme: managerSettings.courseTheme, coachDailyLimit: managerSettings.coachDailyLimit },
+      test: { timed: managerSettings.testTimed, times: managerSettings.testTimes, warnLimit: managerSettings.testWarnLimit },
+      levelUp: managerSettings.levelUp,
+      accounts: []
+    } satisfies OperatorSettingsOverviewView);
     const save = vi.spyOn(apiClient, "saveProductPreferences").mockResolvedValue({ ...product, theme: "winter" });
     renderManager(<MemoryRouter initialEntries={["/settings"]}><ManagerRouteController role="operator" currentUserId="operator-1" /></MemoryRouter>);
     await screen.findByRole("heading", { name: "Prompt & rubric" });
     expect(screen.getByRole("heading", { name: "Cài đặt" })).toBeInTheDocument();
-    expect(screen.queryByRole("heading", { name: "Tùy chọn cá nhân" })).not.toBeInTheDocument();
-    expect(screen.queryByRole("checkbox", { name: "Hiệu ứng âm thanh" })).not.toBeInTheDocument();
-    expect(screen.queryByRole("checkbox", { name: "Nhạc nền" })).not.toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Tùy chọn cá nhân" })).toBeInTheDocument();
+    expect(screen.getByRole("checkbox", { name: "Hiệu ứng âm thanh" })).toBeInTheDocument();
+    expect(screen.getByRole("checkbox", { name: "Nhạc nền" })).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Kiểm tra kết nối" })).not.toBeInTheDocument();
     expect(screen.queryByLabelText("Nguồn ảnh")).not.toBeInTheDocument();
     expect(screen.queryByLabelText("Chủ đề giao diện (áp dụng ngay khi chọn)")).not.toBeInTheDocument();
@@ -429,7 +438,7 @@ describe("ManagerRouteController", () => {
 });
 
 const managerSettings = {
-  organizationName: "GFT", reminderInactiveDays: 3, weeklyReportEnabled: true,
+  organizationName: "GFT", programName: "E4S Pilot", reminderInactiveDays: 3, weeklyReportEnabled: true,
   pilotStartDate: "2026-10-12", pilotWeeks: 2, weekOverride: 0, minMinutesPerDay: 15,
   courseTheme: "Tiếng Anh giao tiếp công sở", coachDailyLimit: 20,
   testTimed: true, testTimes: { listening: 15, reading: 20, writing: 20, speaking: 15 }, testWarnLimit: 3,

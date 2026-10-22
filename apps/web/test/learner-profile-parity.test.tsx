@@ -43,8 +43,10 @@ const view: ProfileView = {
   points: 201,
   badges: [{ key: "first", label: "Khởi động" }, { key: "streak3", label: "Ba ngày liền" }],
   weeks: [
-    { weekNumber: 1, topic: "Introducing yourself", completedLessons: 4, totalLessons: 5 },
-    { weekNumber: 2, topic: "Emails & meetings", completedLessons: 2, totalLessons: 5 }
+    { weekNumber: 1, topic: "Introducing yourself", completedLessons: 4, totalLessons: 5, days: [
+      { label: "T2", status: "on_time" }, { label: "T3", status: "late" }, { label: "T4", status: "upcoming" }, { label: "T5", status: "upcoming" }, { label: "T6", status: "upcoming" }
+    ] },
+    { weekNumber: 2, topic: "Emails & meetings", completedLessons: 2, totalLessons: 5, days: [] }
   ],
   studyDays: 6,
   activity: [],
@@ -123,7 +125,16 @@ describe("learner profile app parity", () => {
 
     expect(screen.getAllByText("T2").length).toBeGreaterThan(0);
     expect(screen.getAllByText("T6").length).toBeGreaterThan(0);
-    expect(screen.getByRole("progressbar", { name: "Điểm nghe" })).toHaveAttribute("aria-valuemax", "100");
+    const weeklyProgress = screen.getByRole("region", { name: "Tiến độ theo tuần" });
+    expect(within(weeklyProgress).queryByRole("progressbar")).not.toBeInTheDocument();
+    expect(within(weeklyProgress).getByLabelText("T2: đúng hạn")).toHaveClass("on-time");
+    expect(within(weeklyProgress).getByLabelText("T3: trễ hạn")).toHaveClass("late");
+    expect(within(weeklyProgress).getAllByLabelText("T4: chưa đến hạn")[0]).toHaveClass("upcoming");
+    const assessment = screen.getByRole("region", { name: "Kết quả đánh giá" });
+    expect(within(assessment).getByRole("region", { name: "Điểm đầu vào" })).toHaveClass("profile-assessment-result");
+    const placement = within(assessment).getByRole("region", { name: "Điểm đầu vào" });
+    expect(within(placement).getByText("Đầu vào · B1")).toBeInTheDocument();
+    expect(within(placement).getByText("62")).toBeInTheDocument();
     expect(container.textContent).not.toContain("weekly");
   });
 

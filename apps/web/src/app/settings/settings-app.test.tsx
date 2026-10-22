@@ -10,7 +10,7 @@ beforeEach(() => window.localStorage.clear());
 afterEach(cleanup);
 
 const manager: ManagerSettingsView = {
-  organizationName: "GFT Demo", reminderInactiveDays: 3, weeklyReportEnabled: true,
+  organizationName: "GFT Demo", programName: "E4S Pilot", reminderInactiveDays: 3, weeklyReportEnabled: true,
   pilotStartDate: "2026-10-12", pilotWeeks: 2, weekOverride: 0, minMinutesPerDay: 15, courseTheme: "Tiếng Anh giao tiếp công sở", coachDailyLimit: 20,
   testTimed: true, testTimes: { listening: 15, reading: 20, writing: 20, speaking: 15 }, testWarnLimit: 3,
   levelUp: { days: 14, lessons: 90, firstTry: 75, submission: 80, coach: 4, coachTurns: 6, wrong: 30, minParts: 4 },
@@ -50,6 +50,21 @@ describe("new Settings app branch", () => {
     expect(screen.getByText(/Tự động tìm ảnh có giấy phép mở/)).toBeInTheDocument();
     expect(screen.getByRole("option", { name: "Tự động từ nguồn mở" })).toBeInTheDocument();
     expect(screen.queryByText(/Pexels:|Pixabay:/)).not.toBeInTheDocument();
+  });
+
+  it.each(["manager", "operator"] as const)("lets %s edit the active program name", (role) => {
+    const overview: OperatorSettingsOverviewView = {
+      organizationName: "GFT Demo",
+      settings: manager,
+      pilot: { startDate: "2026-10-12", weeks: 2, weekOverride: 0, minMinutesPerDay: 15, courseTheme: "Tiếng Anh giao tiếp công sở", coachDailyLimit: 20 },
+      test: { timed: true, times: { listening: 15, reading: 20, writing: 20, speaking: 15 }, warnLimit: 3 },
+      levelUp: manager.levelUp,
+      accounts: []
+    };
+    if (role === "manager") render(<SettingsPage role="manager" manager={manager} product={product} capabilities={capabilities} actions={actions()} />);
+    else render(<SettingsPage role="operator" operatorOverview={overview} product={product} capabilities={capabilities} actions={actions()} />);
+
+    expect(screen.getByRole("textbox", { name: "Tên chương trình" })).toHaveValue("E4S Pilot");
   });
 
   it("uses semantic Lucide marks for seasonal controls", () => {

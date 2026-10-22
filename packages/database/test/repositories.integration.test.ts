@@ -59,6 +59,28 @@ describe("E4S repositories", () => {
       });
   });
 
+  it("publishes a canonical weekly lesson prompt after local seed refresh", async () => {
+    await pool.query(
+      `insert into prompt_versions (id, organization_id, task_key, version, content, status, created_by)
+       values ($1, $2, 'weekly_lessons', 99, 'legacy nine-part prompt', 'active', $3)`,
+      [randomUUID(), DEMO_IDS.organization, DEMO_IDS.operator]
+    );
+
+    await seedDemo(client, { mode: "local" });
+
+    const active = await pool.query<{ id: string; version: number; content: string }>(
+      `select id, version, content
+       from prompt_versions
+       where organization_id = $1 and task_key = 'weekly_lessons' and status = 'active'
+       order by version desc`,
+      [DEMO_IDS.organization]
+    );
+
+    expect(active.rows[0]?.version).toBe(100);
+    expect(active.rows[0]?.content).toContain("Mỗi lesson phải có đúng một lần 11 part code");
+    expect(active.rows[0]?.content).not.toContain("Mỗi lesson phải có đúng một lần 9 part code");
+  });
+
   it("provides stable seeded read models and empty optional operational domains", async () => {
     await expect(repositories.assessments.listPending(DEMO_IDS.operator)).resolves.toEqual([]);
     await expect(repositories.coach.listForLearner(DEMO_IDS.learner)).resolves.toEqual([
@@ -129,6 +151,56 @@ describe("E4S repositories", () => {
 
     expect(a2).toMatchObject({ status: "published", versionId: DEMO_IDS.publishedLessonSetVersion });
     expect(a2?.lessons).toHaveLength(5);
+  });
+
+  it("uses all saved lesson titles from the latest draft or published matrix version", async () => {
+    const draftVersionId = randomUUID();
+    const reviewVersionId = randomUUID();
+    const draftTitles = [
+      "Draft Monday",
+      "Draft Tuesday",
+      "Draft Wednesday",
+      "Draft Thursday",
+      "Draft Friday"
+    ];
+
+    try {
+      await pool.query(
+        `insert into lesson_set_versions (id, lesson_set_id, version, status, payload, created_by)
+         values ($1, $2, 2, 'draft', '{}'::jsonb, $3),
+                ($4, $2, 3, 'review', '{}'::jsonb, $3)`,
+        [draftVersionId, DEMO_IDS.lessonSet, DEMO_IDS.operator, reviewVersionId]
+      );
+      for (const [index, title] of draftTitles.entries()) {
+        await pool.query(
+          `insert into lessons (id, lesson_set_version_id, day_number, title)
+           values ($1, $2, $3, $4)`,
+          [randomUUID(), draftVersionId, index + 1, title]
+        );
+      }
+      await pool.query(
+        `insert into lessons (id, lesson_set_version_id, day_number, title)
+         values ($1, $2, 1, 'Review Monday')`,
+        [randomUUID(), reviewVersionId]
+      );
+
+      const matrix = await repositories.content.lessonMatrix(DEMO_IDS.operator);
+      const a2 = matrix?.weeks.find((week) => week.weekNumber === 1)?.cells.find((cell) => cell.cefr === "A2");
+
+      expect(a2).toMatchObject({ status: "review", versionId: reviewVersionId, version: 3 });
+      expect(a2?.lessons).toEqual([{ dayNumber: 1, title: "Review Monday" }]);
+    } finally {
+      await pool.query("delete from lesson_set_versions where id = any($1::uuid[])", [[draftVersionId, reviewVersionId]]);
+    }
+  });
+
+  it("does not reset a saved week topic during local seed refresh", async () => {
+    await pool.query("update program_weeks set topic = $1 where id = $2", ["Saved operator topic", DEMO_IDS.week2]);
+
+    await seedDemo(client, { mode: "local" });
+
+    await expect(pool.query<{ topic: string }>("select topic from program_weeks where id = $1", [DEMO_IDS.week2]))
+      .resolves.toMatchObject({ rows: [{ topic: "Saved operator topic" }] });
   });
 
   it("dead-letters a failed job after its final allowed attempt", async () => {

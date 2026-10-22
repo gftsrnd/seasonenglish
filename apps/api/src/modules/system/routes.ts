@@ -67,7 +67,7 @@ export function registerSystemRoutes(
     );
     const providerRow = provider.rows[0];
     const aiConfigured = Boolean(providerRow?.configured);
-    const ai = aiAvailable || (aiRuntimeEnabled && aiConfigured && providerRow?.provider === "openai");
+    const ai = aiAvailable || (aiRuntimeEnabled && aiConfigured && ["openai", "claude"].includes(providerRow?.provider ?? ""));
     return {
       api: true,
       database: true,

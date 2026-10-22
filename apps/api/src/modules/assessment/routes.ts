@@ -257,7 +257,7 @@ export function registerAssessmentRoutes(app: FastifyInstance, pool: Pool, aiRun
     if (!runner) return reply.code(503).send({ code: "AI_UNAVAILABLE" });
 
     const aiRequestKey = `${params.data.attemptId}:${body.data.requestId}`;
-    const existing = await repositories.aiRuns.findSucceededOutput(actorId, aiRequestKey, "assessment_scoring");
+    const existing = await repositories.aiRuns.findSucceededOutputForOrganization(actorId, aiRequestKey, "assessment_scoring");
     if (existing) {
       const view = await repositories.assessments.getReviewAttempt(actorId, params.data.attemptId);
       return view ?? reply.code(404).send({ code: "ASSESSMENT_ATTEMPT_NOT_FOUND" });

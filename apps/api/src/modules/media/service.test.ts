@@ -7,6 +7,35 @@ import { createContentMediaService } from "./service.js";
 const NOW = new Date("2026-10-19T12:00:00.000Z");
 
 describe("ContentMediaService resolution", () => {
+  it("prefers Pixabay photography for a curated image query", async () => {
+    const fixture = createFixture();
+    fixture.providers.searchPixabay.mockResolvedValue(candidate("pixabay"));
+
+    const result = await fixture.service.diagnoseForUser("user-a", {
+      term: "meeting",
+      imageQuery: "office team meeting"
+    });
+
+    expect(fixture.providers.searchPixabay).toHaveBeenCalledWith("office team meeting");
+    expect(fixture.providers.searchOpenverse).not.toHaveBeenCalled();
+    expect(result.provider).toBe("pixabay");
+  });
+
+  it("continues to another real-image provider when Pixabay is rate limited", async () => {
+    const fixture = createFixture();
+    fixture.providers.searchPixabay.mockRejectedValue(new Error("rate limited"));
+    fixture.providers.searchOpenverse.mockResolvedValue(candidate("openverse"));
+
+    const result = await fixture.service.diagnoseForUser("user-a", {
+      term: "meeting",
+      imageQuery: "office team meeting"
+    });
+
+    expect(fixture.providers.searchOpenverse).toHaveBeenCalledWith("office team meeting");
+    expect(result.provider).toBe("openverse");
+    expect(result.image.status).toBe("available");
+  });
+
   it("returns a fully attributed explicit HTTPS image without downloading it", async () => {
     const fixture = createFixture();
     const result = await fixture.service.diagnoseForUser("user-a", {
@@ -39,9 +68,8 @@ describe("ContentMediaService resolution", () => {
     expect(fixture.providers.searchCommons).not.toHaveBeenCalled();
   });
 
-  it("uses Commons then Openverse for a curated image query", async () => {
+  it("prefers Openverse photography before Commons for a curated image query", async () => {
     const fixture = createFixture();
-    fixture.providers.searchCommons.mockResolvedValue(null);
     fixture.providers.searchOpenverse.mockResolvedValue(candidate("openverse"));
 
     const result = await fixture.service.diagnoseForUser("user-a", {
@@ -49,11 +77,64 @@ describe("ContentMediaService resolution", () => {
       imageQuery: "office wall calendar deadline"
     });
 
-    expect(fixture.providers.searchCommons).toHaveBeenCalledWith("office wall calendar deadline");
     expect(fixture.providers.searchOpenverse).toHaveBeenCalledWith("office wall calendar deadline");
+    expect(fixture.providers.searchCommons).not.toHaveBeenCalled();
     expect(result.provider).toBe("openverse");
     expect(result.image.status).toBe("available");
     expect(fixture.savedAvailable[0]?.objectKey).toMatch(/^e4s-media\/org-a\/[a-f0-9]{64}\.png$/);
+  });
+
+  it("uses a deterministic workplace-photo query when specific providers cannot find a safe visual", async () => {
+    const fixture = createFixture();
+    fixture.providers.searchCommons.mockImplementation(async (query) =>
+      query.includes("photograph") ? candidate("wikimedia") : null
+    );
+
+    const result = await fixture.service.diagnoseForUser("user-a", {
+      term: "tentative",
+      imageQuery: "A colleague giving tentative feedback beside a report"
+    });
+
+    expect(fixture.providers.searchCommons.mock.calls.map(([query]) => query)).toEqual([
+      "colleague tentative feedback report",
+      expect.stringMatching(/office|business/)
+    ]);
+    expect(result).toMatchObject({ provider: "wikimedia", image: { status: "available" } });
+  });
+
+  it("does not search an abstract adjective by itself after its photo query misses", async () => {
+    const fixture = createFixture();
+    fixture.providers.searchPixabay.mockImplementation(async (query) =>
+      query.includes("office") ? candidate("pixabay") : null
+    );
+
+    const result = await fixture.service.diagnoseForUser("user-a", {
+      term: "fine",
+      partOfSpeech: "adjective",
+      imageQuery: "a presentation slide on a laptop screen showing a simple bar chart with clean layout",
+      allowProviderFallback: true
+    });
+
+    expect(fixture.providers.searchCommons).not.toHaveBeenCalledWith("fine");
+    expect(result.provider).toBe("pixabay");
+  });
+
+  it("uses distinct concrete Pixabay searches for common abstract adjectives", async () => {
+    const fixture = createFixture();
+    fixture.providers.searchPixabay.mockImplementation(async (query) =>
+      query === "broken coffee mug" ? candidate("pixabay") : null
+    );
+
+    const result = await fixture.service.diagnoseForUser("user-a", {
+      term: "bad",
+      partOfSpeech: "adjective",
+      imageQuery: "manager reading a bad report",
+      allowProviderFallback: true
+    });
+
+    expect(fixture.providers.searchPixabay).toHaveBeenCalledWith("broken coffee mug");
+    expect(fixture.providers.searchOpenverse).not.toHaveBeenCalled();
+    expect(result.provider).toBe("pixabay");
   });
 
   it("uses open providers when an uncurated noun has no exact Wikipedia image", async () => {
@@ -227,6 +308,7 @@ function createFixture(options: {
   const providers = {
     exactWikipedia: vi.fn<OpenMediaProviders["exactWikipedia"]>().mockResolvedValue(null),
     searchCommons: vi.fn<OpenMediaProviders["searchCommons"]>().mockResolvedValue(null),
+    searchPixabay: vi.fn<OpenMediaProviders["searchPixabay"]>().mockResolvedValue(null),
     searchOpenverse: vi.fn<OpenMediaProviders["searchOpenverse"]>().mockResolvedValue(null)
   };
   const download = vi.fn(async () => ({

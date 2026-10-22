@@ -97,26 +97,33 @@ describe("assessment runtime API", () => {
   });
 
   it("returns the authoritative pending view when a stale section submit follows auto-submit", async () => {
-    const started = await app.inject({ method: "POST", url: "/api/v1/assessments/level-up/start", headers: { cookie: runtimeCookie }, payload: {} });
-    const attemptId = started.json().attempt.id as string;
-    await pool.query("update assessment_attempts set violation_limit = 1 where id = $1", [attemptId]);
-    const send = (requestId: string) => app.inject({
-      method: "POST",
-      url: `/api/v1/assessment-attempts/${attemptId}/violations`,
-      headers: { cookie: runtimeCookie },
-      payload: { requestId, reason: "visibility_hidden", occurredAt: new Date().toISOString() }
-    });
-    await send("stale-submit-event-1");
-    const automatic = await send("stale-submit-event-2");
-    expect(automatic.json()).toMatchObject({ status: "pending_review", autoSubmitted: true });
+    const prior = process.env.E4S_ENABLE_ASSESSMENT_VIOLATION_AUTO_SUBMIT;
+    process.env.E4S_ENABLE_ASSESSMENT_VIOLATION_AUTO_SUBMIT = "true";
+    try {
+      const started = await app.inject({ method: "POST", url: "/api/v1/assessments/level-up/start", headers: { cookie: runtimeCookie }, payload: {} });
+      const attemptId = started.json().attempt.id as string;
+      await pool.query("update assessment_attempts set violation_limit = 1 where id = $1", [attemptId]);
+      const send = (requestId: string) => app.inject({
+        method: "POST",
+        url: `/api/v1/assessment-attempts/${attemptId}/violations`,
+        headers: { cookie: runtimeCookie },
+        payload: { requestId, reason: "visibility_hidden", occurredAt: new Date().toISOString() }
+      });
+      await send("stale-submit-event-1");
+      const automatic = await send("stale-submit-event-2");
+      expect(automatic.json()).toMatchObject({ status: "pending_review", autoSubmitted: true });
 
-    const response = await app.inject({
-      method: "POST",
-      url: `/api/v1/assessment-attempts/${attemptId}/sections/listening/complete`,
-      headers: { cookie: runtimeCookie },
-      payload: {}
-    });
-    expect(response.statusCode, response.body).toBe(200);
-    expect(response.json()).toMatchObject({ screenState: "pending", attempt: { status: "pending_review", currentSection: null } });
+      const response = await app.inject({
+        method: "POST",
+        url: `/api/v1/assessment-attempts/${attemptId}/sections/listening/complete`,
+        headers: { cookie: runtimeCookie },
+        payload: {}
+      });
+      expect(response.statusCode, response.body).toBe(200);
+      expect(response.json()).toMatchObject({ screenState: "pending", attempt: { status: "pending_review", currentSection: null } });
+    } finally {
+      if (prior === undefined) delete process.env.E4S_ENABLE_ASSESSMENT_VIOLATION_AUTO_SUBMIT;
+      else process.env.E4S_ENABLE_ASSESSMENT_VIOLATION_AUTO_SUBMIT = prior;
+    }
   });
 });

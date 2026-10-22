@@ -17,6 +17,7 @@ const accountCreateInput = z.object({
 const accountStatusInput = z.object({ status: z.enum(["active", "disabled", "deleted"]) });
 const resetPasswordInput = z.object({ password: z.string().min(8).max(128) });
 const managerSettingsInput = z.object({
+  programName: z.string().trim().min(1).max(120),
   reminderInactiveDays: z.number().int().min(1).max(30), weeklyReportEnabled: z.boolean(),
   pilotStartDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/), pilotWeeks: z.number().int().min(2).max(4),
   weekOverride: z.number().int().min(0).max(4), minMinutesPerDay: z.number().int().min(5).max(60),
@@ -210,7 +211,8 @@ export function registerManagerRoutes(app: FastifyInstance, pool: Pool, options:
     try {
       const result = await options.mediaService.diagnoseForUser(request.e4sSession!.user.id, {
         term: parsed.data.word,
-        partOfSpeech: "noun"
+        partOfSpeech: "noun",
+        allowProviderFallback: true
       });
       const image = result.image;
       return {

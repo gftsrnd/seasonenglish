@@ -87,16 +87,123 @@ describe("app coach and weekly practice speech input", () => {
     expect(screen.getByText("Hôm nay 0/20 lượt")).toBeInTheDocument();
     expect(screen.getByText("Tuần này 1 lượt · mục tiêu ≥2")).toBeInTheDocument();
     expect(screen.getByText("Giới hạn chat hoạt động thế nào?")).toBeInTheDocument();
+    expect(document.querySelector(".coach-brand-icon")).toBeInTheDocument();
+    expect(screen.getByTestId("season-mark")).toHaveClass("coach-season-mark");
+    const personaSwitch = screen.getByRole("switch", { name: "Phong cách của Season" });
+    expect(personaSwitch).toHaveAttribute("aria-checked", "false");
+    expect(personaSwitch.querySelector(".coach-persona-indicator")).not.toBeInTheDocument();
+    await user.click(personaSwitch);
+    expect(callback.changeCoachPersona).toHaveBeenCalledWith("formal");
+    expect(screen.getByRole("button", { name: "Xoá chat" })).toHaveClass("btn-danger");
 
     await user.click(screen.getByRole("button", { name: "Xoá chat" }));
     const dialog = screen.getByRole("dialog", { name: "Xoá đoạn chat này?" });
     expect(dialog).toHaveTextContent(/không khôi phục lại được/i);
+    expect(dialog).not.toHaveTextContent(/ô từ đã mở sẽ biến mất/i);
     await user.click(within(dialog).getByRole("button", { name: "Xoá chat" }));
     expect(callback.startNewCoachChat).toHaveBeenCalledTimes(1);
 
     rerender(<LearnerCoach view={{ ...coach, daily: { used: 20, limit: 20 } }} actions={callback} />);
     expect(screen.getByText(/đã dùng hết 20 lượt chat hôm nay/i)).toBeInTheDocument();
     expect(screen.getByRole("textbox", { name: "Tin nhắn cho Season" })).toBeDisabled();
+  });
+
+  it("keeps the chat-limit summary fixed while its explanation expands below", async () => {
+    const user = userEvent.setup();
+    render(<LearnerCoach view={coach} actions={actions()} />);
+    const summary = screen.getByText("Giới hạn chat hoạt động thế nào?");
+    const details = summary.closest("details");
+    expect(details).not.toHaveAttribute("open");
+    await user.click(summary);
+    expect(details).toHaveAttribute("open");
+    expect(document.querySelector(".coach-limit-copy")).toHaveClass("coach-limit-copy--full");
+    expect(document.querySelector(".coach-limit-copy")).toHaveClass("coach-limit-copy--plain");
+    await user.click(summary);
+    expect(details).not.toHaveAttribute("open");
+  });
+
+  it("separates coach feedback into a note, three /5 scores, and readable suggestions", () => {
+    render(<LearnerCoach view={{ ...coach, messages: [{
+      id: "coach-feedback", speaker: "coach", text: "Please try again.", createdAt: "2026-10-22T00:00:00.000Z",
+      feedback: {
+        relevant: false,
+        relevanceNote: "Lời chào chưa trả lời câu hỏi của Season. Hãy thử nói về slide.",
+        rubric: { meaning: 1, vocabulary: 1, grammar: 3 },
+        suggestions: [{ original: "hello", corrected: "The slide has too much text.", explanation: "Trả lời đúng chủ đề." }],
+        correctedText: "The slide has too much text."
+      }
+    }] }} actions={actions()} />);
+
+    const feedback = screen.getByRole("region", { name: "Phản hồi của Season" });
+    expect(feedback).not.toHaveClass("correction");
+    expect(feedback).toHaveClass("coach-feedback-flat");
+    expect(within(feedback).getByText("Lời chào chưa trả lời câu hỏi của Season.")).toBeInTheDocument();
+    expect(within(feedback).queryByText("Hãy thử nói về slide.")).not.toBeInTheDocument();
+    expect(feedback.querySelectorAll(".coach-feedback-score")).toHaveLength(3);
+    expect(feedback.querySelectorAll(".coach-feedback-score svg")).toHaveLength(3);
+    const summary = feedback.querySelector(".coach-feedback-summary");
+    expect(summary).toContainElement(within(feedback).getByText("Hãy quay lại chủ đề nhé"));
+    expect(summary?.querySelector(".coach-feedback-scores")).not.toBeNull();
+    expect(within(feedback).getByText("Ý nghĩa").closest(".coach-feedback-score")).toHaveTextContent("Ý nghĩa1/5");
+    expect(within(feedback).getByText("Từ vựng").closest(".coach-feedback-score")).toHaveTextContent("Từ vựng1/5");
+    expect(within(feedback).getByText("Ngữ pháp").closest(".coach-feedback-score")).toHaveTextContent("Ngữ pháp3/5");
+    const details = within(feedback).getByText("Xem giải thích & bản dịch").closest("details");
+    expect(details).not.toHaveAttribute("open");
+    expect(details).toContainElement(within(feedback).getByText("Đúng câu hỏi và diễn đạt rõ ý"));
+    const correction = within(feedback).getByText("The slide has too much text.");
+    expect(details).not.toContainElement(correction);
+    expect(correction).toHaveClass("coach-feedback-correction");
+    expect(details).toContainElement(within(feedback).getByText("Trả lời đúng chủ đề."));
+  });
+
+  it("does not repeat the AI relevance explanation for an on-topic answer", () => {
+    render(<LearnerCoach view={{ ...coach, messages: [{
+      id: "coach-relevant", speaker: "coach", text: "Good suggestion.", createdAt: "2026-10-22T00:00:00.000Z",
+      feedback: {
+        relevant: true,
+        relevanceNote: "The learner is on topic and answers the question clearly.",
+        rubric: { meaning: 4, vocabulary: 3, grammar: 4 }, suggestions: [], correctedText: ""
+      }
+    }] }} actions={actions()} />);
+
+    expect(screen.queryByText("The learner is on topic and answers the question clearly.")).not.toBeInTheDocument();
+  });
+
+  it("presents a high-scoring rewrite as an optional phrasing improvement instead of an error", () => {
+    render(<LearnerCoach view={{ ...coach, messages: [{
+      id: "coach-refinement", speaker: "coach", text: "That is a clear request.", createdAt: "2026-10-22T00:00:00.000Z",
+      feedback: {
+        relevant: true,
+        relevanceNote: "",
+        rubric: { meaning: 4, vocabulary: 3, grammar: 4 },
+        suggestions: [{
+          original: "The slide has too much text. Could we make it shorter?",
+          corrected: "Could we make the text on the slide shorter?",
+          explanation: "A more direct alternative."
+        }, {
+          original: "The slide has too much text. Could we make it shorter?",
+          corrected: "Could we make the text on the slide shorter?",
+          explanation: "Duplicate provider suggestion."
+        }],
+        correctedText: ""
+      }
+    }] }} actions={actions()} />);
+
+    const feedback = screen.getByRole("region", { name: "Phản hồi của Season" });
+    expect(within(feedback).getByText("Gợi ý diễn đạt")).toBeInTheDocument();
+    expect(within(feedback).queryByText("The slide has too much text. Could we make it shorter?")).not.toBeInTheDocument();
+    expect(within(feedback).getAllByText("Could we make the text on the slide shorter?")).toHaveLength(1);
+    expect(within(feedback).getByText("Xem giải thích & bản dịch")).toBeInTheDocument();
+  });
+
+  it("uses compact vocabulary and rounded icon controls", () => {
+    enableSpeechRecognition();
+    render(<LearnerCoach view={{ ...coach, vocabulary: [{ word: "agenda", meaning: "chương trình họp", opened: false }] }} actions={actions()} />);
+
+    expect(screen.getByRole("button", { name: "Mở từ bí mật 1" })).toHaveClass("coach-word-chip");
+    expect(screen.getByRole("button", { name: "Nói" })).toHaveClass("coach-compose-icon");
+    expect(screen.getByRole("button", { name: "Gửi" })).toHaveClass("coach-send");
+    expect(screen.getByRole("button", { name: "Gửi" }).querySelector("svg")).toBeInTheDocument();
   });
 
   it("matches the canonical active challenge header, threshold copy, and daily-cap state", () => {
@@ -201,10 +308,15 @@ describe("app coach and weekly practice speech input", () => {
 
     expect(screen.getByRole("button", { name: "Đang gửi…" })).toBeDisabled();
     expect(draft).toBeDisabled();
+    expect(draft).toHaveValue("I coordinate the weekly meeting.");
+    expect(screen.getByLabelText("Tin nhắn đang gửi")).toHaveTextContent("I coordinate the weekly meeting.");
     expect(sendCoachMessage).toHaveBeenCalledWith("I coordinate the weekly meeting.");
 
     rejectSend(new Error("COACH_SEND_FAILED"));
-    expect(await screen.findByRole("alert")).toHaveTextContent("Chưa gửi được tin nhắn");
+    const error = await screen.findByRole("alert");
+    expect(error).toHaveTextContent("Chưa gửi được tin nhắn");
+    expect(error.parentElement).toHaveClass("coach-error-row");
+    expect(screen.queryByLabelText("Tin nhắn đang gửi")).not.toBeInTheDocument();
     await waitFor(() => expect(draft).toHaveValue("I coordinate the weekly meeting."));
     expect(screen.getByRole("button", { name: "Gửi" })).toBeEnabled();
     expect(draft).toBeEnabled();
@@ -222,10 +334,17 @@ describe("app coach and weekly practice speech input", () => {
   });
 
   it("uses a standard lock icon for unopened vocabulary", () => {
-    render(<LearnerCoach view={{ ...coach, vocabulary: [{ word: "colleague", meaning: "đồng nghiệp", opened: false }] }} actions={actions()} />);
-    const button = screen.getByRole("button", { name: "Mở từ bí mật" });
+    render(<LearnerCoach view={{ ...coach, vocabulary: [{ word: "colleague", meaning: "đồng nghiệp", opened: false }, { word: "colleague", meaning: "đồng nghiệp", opened: false }] }} actions={actions()} />);
+    const button = screen.getByRole("button", { name: "Mở từ bí mật 1" });
     expect(button.querySelector("svg.lucide-lock-keyhole")).toBeInTheDocument();
     expect(button).not.toHaveTextContent("🔒");
+    expect(button).not.toHaveTextContent("Mở từ");
+    expect(screen.getAllByRole("button", { name: /Mở từ bí mật/ })).toHaveLength(1);
+  });
+
+  it("keeps the message composer to one compact line", () => {
+    render(<LearnerCoach view={coach} actions={actions()} />);
+    expect(screen.getByRole("textbox", { name: "Tin nhắn cho Season" })).toHaveAttribute("rows", "1");
   });
 
   it("starts and stops recognition and appends Coach transcripts to the draft", async () => {

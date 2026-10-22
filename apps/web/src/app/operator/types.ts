@@ -212,6 +212,7 @@ export interface OperatorWeeksView {
   status: string;
   saveState?: AsyncState | undefined;
   saveError?: string | null | undefined;
+  generationDialog?: { weeks: number[]; selectedWeeks: number[]; levelCount: number } | undefined;
   weeks: WeekFrame[];
 }
 
@@ -223,6 +224,9 @@ export interface OperatorWeeksActions {
   onReopenSuggestion(week: number): void;
   onChangeWeek(week: number, patch: Partial<Pick<WeekFrame, "topic" | "description" | "objectives" | "keyVocabHint">>): void;
   onSave(): void;
+  onToggleGenerationWeek?(week: number): void;
+  onCancelGeneration?(): void;
+  onStartGeneration?(weeks: number[]): void;
   onOpenLessons(): void;
 }
 
@@ -234,7 +238,7 @@ export interface LessonMatrixDay {
 
 export interface LessonMatrixCell {
   cefr: Cefr;
-  status: "empty" | "draft" | "approved";
+  status: "empty" | "draft" | "review" | "approved";
   generatedAt?: string | null;
   incomplete?: boolean;
   lessons: number;
@@ -253,6 +257,7 @@ export interface OperatorLessonsView {
 export interface OperatorLessonsActions {
   onOpenSettings(): void;
   onAddLevel(cefr: Cefr): void;
+  onRemoveLevel(cefr: Cefr): void;
   onGenerate(week: number, cefr: Cefr): void;
   onCreateManual(week: number, cefr: Cefr): void;
   onOpenSet(week: number, cefr: Cefr): void;
@@ -276,17 +281,19 @@ export interface LessonSetLesson {
 export interface OperatorLessonSetView {
   week: number;
   cefr: Cefr;
-  status: "draft" | "approved";
+  status: "draft" | "review" | "approved";
   topic: string;
   explanationLanguage: "tiếng Việt" | "tiếng Anh";
   aiConnected: boolean;
   mutationState?: AsyncState | undefined;
   mutationMessage?: string | null | undefined;
+  activeMutation?: LessonSetActionKey | undefined;
   warnings: {
     incomplete: number;
     level: string[];
     phrases: number;
     details: number;
+    detailIssues?: Array<{ lessonId: string; dayLabel: string; title: string; missing: string[] }> | undefined;
   };
   lessons: LessonSetLesson[];
 }

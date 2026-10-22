@@ -34,6 +34,10 @@ describe("learner responsive shell rules", () => {
     expect(css).toMatch(/\.app-learner-page\.home-page\s+\.home-context\s*>\s*\.card\s*\+\s*\.card\s*\{[^}]*margin-top:\s*4px/s);
   });
 
+  it("uses the same accent color on both sides of the active lesson card", () => {
+    expect(css).toMatch(/\.home-page\s+\.home-primary-lesson\s*\{[^}]*border-right:\s*4px\s+solid\s+var\(--secondary\)/s);
+  });
+
   it("stacks the profile assessment score before its skill progress rows on narrow screens", () => {
     expect(css).toMatch(
       /\.app-learner-page\.profile-page\s+\[aria-label="Kết quả đánh giá"\]\s*>\s*\.grid\s*>\s*\.item\[role="region"\]\s*\{[^}]*display:\s*block/s,
@@ -47,6 +51,19 @@ describe("learner responsive shell rules", () => {
     expect(css).toMatch(/\.app-learner-page\.home-page\s+\.stats\s*\{[^}]*align-items:\s*stretch/s);
     expect(css).toMatch(/@media\s*\(max-width:480px\)\s*\{[^}]*\.app-learner-page\.home-page\s+\.stats\s*\{[^}]*grid-template-columns:\s*repeat\(2/s);
     expect(css).toMatch(/\.app-learner-page\.home-page\s+\.stats\s+\.stat\s*\{[^}]*min-height:/s);
+  });
+
+  it("matches the prototype attendance markers and note spacing", () => {
+    expect(css).toMatch(/\.home-page\s+\[data-home-block="attendance"\]\s+\.day\s+i\s*\{[^}]*width:\s*40px[^}]*height:\s*40px/s);
+    expect(css).toMatch(/\.home-page\s+\[data-home-block="attendance"\]\s+\.day\s+i\.miss\s*\{[^}]*background:\s*var\(--danger-soft\)/s);
+    expect(css).toMatch(/\.home-page\s+\[data-home-block="attendance"\]\s+\.day\s+i\.today\s*\{[^}]*background:\s*var\(--primary\)/s);
+    expect(css).toMatch(/\.attendance-schedule-note\s*\{[^}]*margin-top:\s*16px/s);
+  });
+
+  it("keeps readiness labels and goal values in separate columns on narrow screens", () => {
+    expect(css).toMatch(/\.app-learner-page\s+\.readiness-heading\s*\{[^}]*display:\s*grid[^}]*grid-template-columns:\s*minmax\(0,1fr\)\s+auto/s);
+    expect(css).toMatch(/\.app-learner-page\s+\.readiness-track\s*\{[^}]*background:\s*var\(--surface-3\)/s);
+    expect(css).toMatch(/\.app-learner-page\s+\.readiness-fill\s*\{[^}]*background:\s*var\(--primary\)/s);
   });
 
   it("uses a consistent learner status icon box instead of oversized inline glyphs", () => {

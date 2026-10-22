@@ -218,6 +218,8 @@ describe("Operator assessment audio playback", () => {
     const speaking = container.querySelector('[data-assessment-section="speaking"]');
     expect(writing).toContainElement(container.querySelector('[data-manual-rubric="writing"]'));
     expect(speaking).toContainElement(container.querySelector('[data-manual-rubric="speaking"]'));
+    expect(screen.getByRole("heading", { name: "Nhận xét", level: 4 })).toHaveClass("operator-detail-section-title");
+    expect(screen.getByRole("heading", { name: "Nhận xét" }).compareDocumentPosition(speaking!) & Node.DOCUMENT_POSITION_PRECEDING).toBeTruthy();
   });
 
   it("keeps the anti-cheat log collapsed and translates technical events for operators", () => {
@@ -228,7 +230,10 @@ describe("Operator assessment audio playback", () => {
 
     const summary = screen.getByText(/Nhật ký cảnh báo/);
     const log = summary.closest("details");
+    const processingLog = screen.getByText(/Nhật ký xử lý/).closest("details");
     expect(log).not.toBeNull();
+    expect(processingLog?.parentElement).toBe(log?.parentElement);
+    expect(log?.parentElement).toHaveClass("operator-log-group");
     expect(log).not.toHaveAttribute("open");
     expect(within(log!).getByText(/Rời khỏi cửa sổ bài test/)).toBeInTheDocument();
     expect(screen.queryByText(/secret-request-id|recordedAt|violationCount/)).not.toBeInTheDocument();

@@ -102,29 +102,29 @@ describe("app lesson evidence states", () => {
     resolveSave();
   });
 
-  it("renders ordered instruction steps inside the existing study card", () => {
-    const instructionLesson: typeof lesson = {
+  it("renders ordered instruction steps at the start of the practice tab", async () => {
+    const user = userEvent.setup();
+    const instructionLesson: LessonView["lesson"] = {
       ...lesson,
       content: {
         parts: [
           { code: "objective", title: "Mục tiêu", content: { text: "Mục tiêu" } },
           { code: "instruction", title: "Hướng dẫn làm bài", content: { steps: ["Học nội dung", "Làm lần lượt các bài tập", "Xem phản hồi và làm lại"] } }
         ]
-      }
+      },
+      progress: { ...lesson.progress, status: "in_progress", completedPartCodes: ["objective"] }
     };
     render(<LearnerLesson view={{ lesson: instructionLesson }} actions={callbacks()} />);
 
+    expect(screen.queryByRole("heading", { name: /hướng dẫn làm bài/i })).not.toBeInTheDocument();
+    await user.click(screen.getByRole("tab", { name: /2\. bài tập/i }));
+
     const instruction = screen.getAllByTestId("app-lesson-part").find((part) => part.dataset.part === "instruction");
     expect(instruction).toBeDefined();
-    expect(within(instruction as HTMLElement).getByRole("heading", { name: /Hướng dẫn làm bài/ })).toBeInTheDocument();
+    expect(within(instruction as HTMLElement).getByRole("heading", { name: /hướng dẫn làm bài/i })).toBeInTheDocument();
     expect(within(instruction as HTMLElement).getByRole("list")).toHaveClass("lesson-instruction-list");
-    // The app keeps the three authored guidance steps and appends the
-    // two lifecycle gates that explain how the learner unlocks and completes
-    // the practice step.
-    expect(within(instruction as HTMLElement).getAllByRole("listitem")).toHaveLength(5);
+    expect(within(instruction as HTMLElement).getAllByRole("listitem")).toHaveLength(3);
     expect(within(instruction as HTMLElement).getByText("Làm lần lượt các bài tập")).toBeInTheDocument();
-    expect(within(instruction as HTMLElement).getByText(/Đã học xong.*mở phần Bài tập/)).toBeInTheDocument();
-    expect(within(instruction as HTMLElement).getByText(/Xong hết các phần.*Hoàn thành bài/)).toBeInTheDocument();
   });
 
   it("keeps exercises locked until the learner confirms the study step", async () => {
@@ -164,8 +164,8 @@ describe("app lesson evidence states", () => {
     } }} actions={callbacks({ submitLessonPartAttempt: submit })} />);
 
     await openPractice(user);
-    expect(screen.getByRole("button", { name: /nghe đoạn nghe/i })).toBeInTheDocument();
-    expect(screen.getByText("Lan is new to the product team.")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /nghe đoạn audio/i })).toBeInTheDocument();
+    expect(screen.getByText("Lan is new to the product team.")).toHaveClass("lesson-reading-passage");
     await user.click(screen.getByRole("radio", { name: /^B\. Nice to meet you\.$/ }));
     const listening = screen.getAllByTestId("app-lesson-part").find((part) => part.dataset.part === "listening");
     await user.click(within(listening as HTMLElement).getByRole("button", { name: /nộp bài/i }));
@@ -186,13 +186,13 @@ describe("app lesson evidence states", () => {
     } }} actions={callbacks({ speak })} />);
 
     await openPractice(user);
-    await user.click(screen.getByRole("button", { name: "Nghe đoạn nghe" }));
+    await user.click(screen.getByRole("button", { name: "Nghe đoạn audio" }));
     expect(speak).toHaveBeenCalledTimes(1);
-    expect(screen.getByRole("button", { name: "Nghe đoạn nghe" })).toBeEnabled();
-    expect(screen.getByRole("button", { name: "Nghe đoạn nghe" })).not.toHaveAttribute("aria-busy");
+    expect(screen.getByRole("button", { name: "Nghe đoạn audio" })).toBeEnabled();
+    expect(screen.getByRole("button", { name: "Nghe đoạn audio" })).not.toHaveAttribute("aria-busy");
 
     reportStatus("ended");
-    await waitFor(() => expect(screen.getByRole("button", { name: "Nghe đoạn nghe" })).toBeEnabled());
+    await waitFor(() => expect(screen.getByRole("button", { name: "Nghe đoạn audio" })).toBeEnabled());
     expect(screen.queryByText("Đã phát xong.")).not.toBeInTheDocument();
   });
 
@@ -291,7 +291,7 @@ describe("app lesson evidence states", () => {
       artifactKey: "lesson-audio/learner-1/speaking.webm"
     });
 
-    await user.click(screen.getByRole("button", { name: /nghe đoạn nghe/i }));
+    await user.click(screen.getByRole("button", { name: /nghe đoạn audio/i }));
     expect(screen.getByText(/không phát được âm thanh|không hỗ trợ đọc văn bản/i)).toBeInTheDocument();
   });
 

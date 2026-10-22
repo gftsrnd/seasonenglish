@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import "@testing-library/jest-dom/vitest";
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import { userEvent } from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { LearnerLesson } from "./Learning.js";
@@ -20,12 +20,12 @@ describe("learner lesson study content", () => {
         parts: [
           { code: "objective", title: "Mục tiêu bài học", content: { text: "Kể ngắn về công việc." } },
           { code: "instruction", title: "Hướng dẫn làm bài", content: { steps: ["Học nội dung", "Làm lần lượt các bài tập", "Xem phản hồi và làm lại"] } },
-          { code: "vocabulary", title: "Từ vựng", content: { items: [{ word: "new", type: "tính từ", pronunciation: "/njuː/", meaning: "mới", examples: ["new here", "a new job", "a new team"] }] } },
+          { code: "vocabulary", title: "Từ vựng", content: { items: [{ word: "new", type: "tính từ", pronunciation: "/njuː/", meaning: "mới", examples: ["new here", "a new job", "a new team"], antonyms: [{ word: "old", level: "A1", note: "đối lập về tuổi/thời gian" }] }] } },
           { code: "grammar", title: "Ngữ pháp", content: { formula: "I am from + nơi", usage: "Dùng khi làm quen." } },
-          { code: "pronunciation", title: "Phát âm", content: { focus: "/aɪ/", words: ["I", "nice", "time"], instruction: "Luyện âm mẫu." } }
+          { code: "pronunciation", title: "Phát âm", content: { focus: "/aɪ/", words: [{ word: "I", ipa: "/aɪ/" }, { word: "nice", ipa: "/naɪs/" }, { word: "time", ipa: "/taɪm/" }], instruction: "Luyện âm mẫu." } }
         ]
       },
-      progress: { status: "not_started", completedPartCodes: [], evidence: {}, updatedAt: "2026-10-15T00:00:00Z" }
+      progress: { status: "in_progress", completedPartCodes: ["objective", "vocabulary", "grammar", "pronunciation"], evidence: {}, updatedAt: "2026-10-15T00:00:00Z" }
     } as any;
     const actions = {
       navigate: vi.fn(),
@@ -33,23 +33,36 @@ describe("learner lesson study content", () => {
       saveLessonProgress: vi.fn()
     } as any;
 
-    render(<LearnerLesson view={{ lesson, lock: null }} actions={actions} />);
+    const { container } = render(<LearnerLesson view={{ lesson, lock: null }} actions={actions} />);
 
-    expect(screen.getAllByRole("list", { name: "Các bước thực hiện" })[0]!).toHaveTextContent("Bấm “Đã học xong” để mở phần Bài tập");
-    expect(screen.getAllByRole("list", { name: "Các bước thực hiện" })[0]!.querySelectorAll("li")).toHaveLength(5);
+    const lessonHeading = container.querySelector<HTMLElement>(".lesson-heading");
+    expect(lessonHeading).not.toBeNull();
+    const homeLink = within(lessonHeading!).getByRole("link", { name: "Về trang chủ" });
+    expect(homeLink).toHaveAttribute("href", "/home");
+    expect(homeLink.querySelector("svg.lucide-chevron-left")).toBeInTheDocument();
+    expect(homeLink.querySelector("span")).not.toBeInTheDocument();
+
+    expect(screen.queryByRole("heading", { name: "HƯỚNG DẪN LÀM BÀI" })).not.toBeInTheDocument();
     expect(screen.getByText("tính từ")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Nghe từ" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Nghe từ" }).querySelector("svg.lucide-volume-2")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "new here" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Nghe từ new" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Nghe từ new" }).querySelector("svg.lucide-volume-2")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Nghe ví dụ: new here" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Nghe từ phát âm: I" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Nghe từ phát âm: nice" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Nghe mẫu ngữ pháp" })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Chi tiết từ liên quan" })).not.toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole("button", { name: "new here" }));
+    fireEvent.click(screen.getByRole("tab", { name: /2\. Bài tập/i }));
+    expect(screen.getByRole("heading", { name: "HƯỚNG DẪN LÀM BÀI" })).toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: /\d+\. HƯỚNG DẪN LÀM BÀI/ })).not.toBeInTheDocument();
+    expect(screen.getByText("Học nội dung")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("tab", { name: /1\. Học/i }));
+
+    fireEvent.click(screen.getByRole("button", { name: "Nghe ví dụ: new here" }));
     expect(speak).toHaveBeenCalledWith("new here");
     fireEvent.click(screen.getByRole("button", { name: "Nghe từ phát âm: I" }));
     expect(speak).toHaveBeenCalledWith("I");
-    expect(document.querySelector('img[src^="data:image"]')).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Nghe âm /aɪ/" })).not.toBeInTheDocument();
   });
 
   it("loads a real attributed image path for concrete vocabulary", async () => {
@@ -83,7 +96,7 @@ describe("learner lesson study content", () => {
     expect(resolveLessonVocabularyImage).toHaveBeenCalledWith(1);
   });
 
-  it("renders real lesson media and a visible placeholder when the next vocabulary image is unavailable", async () => {
+  it("renders real lesson media and a bundled bitmap fallback when providers are unavailable", async () => {
     const resolveLessonVocabularyImage = vi.fn()
       .mockResolvedValueOnce({
         status: "available",
@@ -113,7 +126,7 @@ describe("learner lesson study content", () => {
     render(<LearnerLesson view={{ lesson, lock: null }} actions={{ navigate: vi.fn(), speak: vi.fn(), saveLessonProgress: vi.fn(), resolveLessonVocabularyImage } as any} />);
 
     expect(await screen.findByRole("img", { name: "new" })).toHaveAttribute("src", "https://storage.example/new.jpg");
-    expect(await screen.findByText("Chưa có ảnh minh hoạ")).toBeInTheDocument();
+    expect(await screen.findByRole("img", { name: "Minh hoạ from" })).toHaveAttribute("src", "/media/mascot/season-bear.png");
     expect(resolveLessonVocabularyImage).toHaveBeenNthCalledWith(1, 0);
     expect(resolveLessonVocabularyImage).toHaveBeenNthCalledWith(2, 1);
   });
@@ -140,6 +153,64 @@ describe("learner lesson study content", () => {
     expect(screen.getByRole("tab", { name: /2\. bài tập/i })).toBeDisabled();
     expect(screen.getByRole("tab", { name: /2\. bài tập/i }).querySelector("svg.lucide-lock-keyhole")).toBeInTheDocument();
     expect(screen.queryByRole("radio", { name: "A" })).not.toBeInTheDocument();
+  });
+
+  it("opens practice without repeating the six-part overview", () => {
+    const lesson = {
+      id: "lesson-practice-no-overview",
+      title: "Giving feedback",
+      dayNumber: 1,
+      durationMinutes: 10,
+      cefr: "A2",
+      content: { parts: [
+        { code: "objective", title: "Mục tiêu", content: { text: "Đưa ra góp ý ngắn." } },
+        { code: "instruction", title: "Hướng dẫn làm bài", content: { steps: ["Đọc yêu cầu", "Làm từng phần"] } },
+        { code: "listening", title: "Nghe", content: { prompt: "Choose.", options: ["A", "B", "C", "D"] } },
+        { code: "reading", title: "Đọc", content: { text: "A short report.", prompt: "Choose.", options: ["A", "B", "C", "D"] } },
+        { code: "writing", title: "Viết", content: { prompt: "Write one sentence." } },
+        { code: "word_class", title: "Từ loại", content: { prompt: "Choose the adjective." } },
+        { code: "word_use", title: "Dùng từ", content: { prompt: "Choose the correct sentence." } },
+        { code: "speaking", title: "Nói", content: { instruction: "Nói một câu ngắn.", answer: "Your report is good." } }
+      ] },
+      progress: { status: "in_progress", completedPartCodes: ["objective"], evidence: {} }
+    } as any;
+
+    render(<LearnerLesson view={{ lesson, lock: null }} actions={{ navigate: vi.fn(), speak: vi.fn(), saveLessonProgress: vi.fn() } as any} />);
+    fireEvent.click(screen.getByRole("tab", { name: /2\. Bài tập/i }));
+
+    expect(screen.queryByRole("heading", { name: "6 phần bài tập" })).not.toBeInTheDocument();
+    expect(screen.queryByText("Làm lần lượt từng kỹ năng, xem phản hồi rồi làm lại nếu cần.")).not.toBeInTheDocument();
+    expect(screen.getAllByTestId("app-lesson-part")).toHaveLength(7);
+  });
+
+  it("renders the Operator speaking instruction and sample in separate roles", () => {
+    const speak = vi.fn();
+    const lesson = {
+      id: "lesson-speaking-parity",
+      title: "Giving feedback",
+      dayNumber: 1,
+      durationMinutes: 10,
+      cefr: "A2",
+      content: { parts: [
+        { code: "objective", title: "Mục tiêu", content: { text: "Đưa ra góp ý ngắn." } },
+        { code: "instruction", title: "Hướng dẫn làm bài", content: { steps: ["Đọc yêu cầu"] } },
+        { code: "speaking", title: "Nói", content: { instruction: "Nói một điểm tốt về công việc.", sample: "Your report is good." } }
+      ] },
+      progress: { status: "in_progress", completedPartCodes: ["objective"], evidence: {} }
+    } as any;
+
+    render(<LearnerLesson view={{ lesson, lock: null }} actions={{ navigate: vi.fn(), speak, saveLessonProgress: vi.fn() } as any} />);
+    fireEvent.click(screen.getByRole("tab", { name: /2\. Bài tập/i }));
+
+    expect(screen.getByText("Nói một điểm tốt về công việc.")).toBeInTheDocument();
+    expect(screen.getByText("Your report is good.")).toBeInTheDocument();
+    const listen = screen.getByRole("button", { name: "Nghe câu mẫu" });
+    expect(listen.closest(".lesson-speaking-model")).toHaveTextContent("Your report is good.");
+    expect(listen.closest(".lesson-speaking-model")).toHaveClass("lesson-speaking-model--inline");
+    const answerArea = screen.getByText("Bài làm của bạn").closest(".lesson-speaking-answer");
+    expect(answerArea).not.toBeNull();
+    expect(within(answerArea as HTMLElement).getByRole("button", { name: "Ghi âm" })).toBeInTheDocument();
+    expect(within(answerArea as HTMLElement).getByText("Tải file ghi âm")).toBeInTheDocument();
   });
 
   it("uses an accessible lock icon without an emoji for a locked lesson", () => {

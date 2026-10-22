@@ -10,7 +10,7 @@ export interface AiTaskRunner {
   runTask(
     taskId: string,
     input: unknown,
-    options?: { systemPrompt?: string }
+    options?: { systemPrompt?: string; maxOutputTokens?: number }
   ): Promise<AiRunResult>;
 }
 
@@ -21,22 +21,30 @@ const messageInput = z.object({
 const personaInput = z.object({ persona: z.enum(["informal", "formal"]) });
 const vocabularyUnlockParams = z.object({ word: z.string().trim().min(1).max(160) });
 
-export function registerCoachRoutes(app: FastifyInstance, pool: Pool, aiRunner?: AiTaskRunner): void {
+export function registerCoachRoutes(
+  app: FastifyInstance,
+  pool: Pool,
+  aiRunner?: AiTaskRunner,
+  aiRunnerFactory?: (actorId: string) => Promise<AiTaskRunner | undefined>
+): void {
   const repositories = createRepositories(pool);
   const learnerOnly = createRoleGuard(pool, ["learner"]);
+  const runnerFor = (actorId: string) => aiRunnerFactory ? aiRunnerFactory(actorId) : Promise.resolve(aiRunner);
 
   app.get("/api/v1/coach", { preHandler: learnerOnly }, async (request, reply) => {
-    const view = await repositories.coach.currentForLearner(request.e4sSession!.user.id, Boolean(aiRunner));
+    const learnerId = request.e4sSession!.user.id;
+    const view = await repositories.coach.currentForLearner(learnerId, Boolean(await runnerFor(learnerId)));
     return view ?? reply.code(404).send({ code: "COACH_CONTEXT_NOT_FOUND" });
   });
 
   app.post("/api/v1/coach/vocabulary/:word/unlock", { preHandler: learnerOnly }, async (request, reply) => {
     const params = vocabularyUnlockParams.safeParse(request.params);
     if (!params.success) return reply.code(400).send({ code: "INVALID_COACH_VOCABULARY" });
+    const learnerId = request.e4sSession!.user.id;
     const view = await repositories.coach.unlockVocabulary(
-      request.e4sSession!.user.id,
+      learnerId,
       params.data.word,
-      Boolean(aiRunner)
+      Boolean(await runnerFor(learnerId))
     );
     return view ?? reply.code(404).send({ code: "COACH_VOCABULARY_NOT_FOUND" });
   });
@@ -47,9 +55,9 @@ export function registerCoachRoutes(app: FastifyInstance, pool: Pool, aiRunner?:
   }, async (request, reply) => {
     const parsed = messageInput.safeParse(request.body);
     if (!parsed.success) return reply.code(400).send({ code: "INVALID_COACH_MESSAGE" });
-    if (!aiRunner) return reply.code(503).send({ code: "AI_UNAVAILABLE" });
-
     const learnerId = request.e4sSession!.user.id;
+    const runner = await runnerFor(learnerId);
+    if (!runner) return reply.code(503).send({ code: "AI_UNAVAILABLE" });
     const existing = await repositories.coach.currentForLearner(learnerId, true);
     if (!existing) return reply.code(404).send({ code: "COACH_CONTEXT_NOT_FOUND" });
     if (await repositories.aiRuns.requestExists(learnerId, parsed.data.requestId, "coach_dialogue")) return existing;
@@ -58,12 +66,13 @@ export function registerCoachRoutes(app: FastifyInstance, pool: Pool, aiRunner?:
     const task = await repositories.aiRuns.activeTaskPrompt(learnerId, "coach_dialogue");
     if (!task) return reply.code(503).send({ code: "AI_PROMPT_NOT_READY" });
     try {
-      const result = await aiRunner.runTask("coach_dialogue", {
+      const result = await runner.runTask("coach_dialogue", {
         message: parsed.data.message,
         cefr: existing.cefr,
+        persona: existing.persona,
         scenario: existing.topic,
         priorTurns: existing.messages.slice(-8).map((message) => ({ speaker: message.speaker, text: message.text }))
-      }, { systemPrompt: task.prompt });
+      }, { systemPrompt: coachPersonaPrompt(task.prompt, existing.persona) });
       const output = coachOutputSchema.safeParse(result.output);
       if (!output.success) return reply.code(502).send({ code: "AI_OUTPUT_INVALID" });
       await repositories.coach.saveAiTurn({
@@ -94,19 +103,21 @@ export function registerCoachRoutes(app: FastifyInstance, pool: Pool, aiRunner?:
     const parsed = personaInput.safeParse(request.body);
     if (!parsed.success) return reply.code(400).send({ code: "INVALID_COACH_PERSONA" });
     const learnerId = request.e4sSession!.user.id;
-    await repositories.coach.currentForLearner(learnerId, Boolean(aiRunner));
+    const aiAvailable = Boolean(await runnerFor(learnerId));
+    await repositories.coach.currentForLearner(learnerId, aiAvailable);
     await repositories.coach.setPersona(learnerId, parsed.data.persona);
-    return await repositories.coach.currentForLearner(learnerId, Boolean(aiRunner));
+    return await repositories.coach.currentForLearner(learnerId, aiAvailable);
   });
 
   app.delete("/api/v1/coach/session", { preHandler: learnerOnly }, async (request) => {
     const learnerId = request.e4sSession!.user.id;
     await repositories.coach.archiveCurrent(learnerId);
-    return await repositories.coach.currentForLearner(learnerId, Boolean(aiRunner));
+    return await repositories.coach.currentForLearner(learnerId, Boolean(await runnerFor(learnerId)));
   });
 
   app.get("/api/v1/challenge", { preHandler: learnerOnly }, async (request, reply) => {
-    const view = await repositories.coach.challengeForLearner(request.e4sSession!.user.id, Boolean(aiRunner));
+    const learnerId = request.e4sSession!.user.id;
+    const view = await repositories.coach.challengeForLearner(learnerId, Boolean(await runnerFor(learnerId)));
     return view ?? reply.code(404).send({ code: "LEVEL_CHALLENGE_NOT_AVAILABLE" });
   });
 
@@ -116,8 +127,9 @@ export function registerCoachRoutes(app: FastifyInstance, pool: Pool, aiRunner?:
   }, async (request, reply) => {
     const parsed = messageInput.safeParse(request.body);
     if (!parsed.success) return reply.code(400).send({ code: "INVALID_CHALLENGE_MESSAGE" });
-    if (!aiRunner) return reply.code(503).send({ code: "AI_UNAVAILABLE" });
     const learnerId = request.e4sSession!.user.id;
+    const runner = await runnerFor(learnerId);
+    if (!runner) return reply.code(503).send({ code: "AI_UNAVAILABLE" });
     const existing = await repositories.coach.challengeForLearner(learnerId, true);
     if (!existing) return reply.code(404).send({ code: "LEVEL_CHALLENGE_NOT_AVAILABLE" });
     if (existing.progress.complete) return existing;
@@ -126,12 +138,13 @@ export function registerCoachRoutes(app: FastifyInstance, pool: Pool, aiRunner?:
     const task = await repositories.aiRuns.activeTaskPrompt(learnerId, "coach_dialogue");
     if (!task) return reply.code(503).send({ code: "AI_PROMPT_NOT_READY" });
     try {
-      const result = await aiRunner.runTask("coach_dialogue", {
+      const result = await runner.runTask("coach_dialogue", {
         message: parsed.data.message,
         cefr: existing.targetLevel,
+        persona: "formal",
         scenario: `Level-up challenge for ${existing.targetLevel}. Ask one workplace follow-up question at a time.`,
         priorTurns: existing.messages.slice(-8).map((message) => ({ speaker: message.speaker, text: message.text }))
-      }, { systemPrompt: task.prompt });
+      }, { systemPrompt: coachPersonaPrompt(task.prompt, "formal") });
       const output = coachOutputSchema.safeParse(result.output);
       if (!output.success) return reply.code(502).send({ code: "AI_OUTPUT_INVALID" });
       await repositories.coach.saveAiTurn({
@@ -148,6 +161,14 @@ export function registerCoachRoutes(app: FastifyInstance, pool: Pool, aiRunner?:
       return reply.code(aiErrorStatus(error)).send({ code: safeAiErrorCode(error) });
     }
   });
+}
+
+export function coachPersonaPrompt(prompt: string, persona: "informal" | "formal"): string {
+  const instruction = persona === "formal"
+    ? "FORMAL STYLE: Use professional, courteous workplace English. Avoid slang, contractions, emojis, and overly familiar language."
+    : "INFORMAL STYLE: Use warm, friendly, natural workplace English. Contractions are welcome, but keep the language respectful and CEFR-appropriate.";
+  const correctionGuard = "CORRECTIONS ONLY: Only put genuine language errors in suggestions. If the learner's message is grammatical, relevant, and answers the question—even if it is brief or less specific—return suggestions: [] and correctedText: \"\". Do not rewrite a correct answer merely to make it longer, more detailed, or stylistically different. Invite more detail only in the conversational reply or follow-up question, without marking the learner's answer as wrong. For A1/A2, each genuine correction explanation must include a natural Vietnamese translation of the corrected sentence, followed by one short reason.";
+  return `${prompt}\n\n${instruction}\n\n${correctionGuard}`;
 }
 
 function safeAiErrorCode(error: unknown): string {

@@ -2,10 +2,9 @@ import { useEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, 
 import type { ContentLessonDraftInput, LessonPartCode } from "@e4s/contracts";
 import { TriangleAlert } from "lucide-react";
 import { Banner, Button } from "./primitives.js";
-import { LessonJsonEditor } from "./LessonJsonEditor.js";
 
-const requiredParts = ["objective", "instruction", "vocabulary", "grammar", "pronunciation", "listening", "reading", "writing", "speaking"] as const;
-type VocabularyRow = { word: string; pronunciation: string; meaning: string; examples: string };
+const lessonPartOrder = ["objective", "instruction", "vocabulary", "grammar", "pronunciation", "listening", "reading", "writing", "word_class", "word_use", "speaking"] as const;
+type VocabularyRow = { word: string; type: string; pronunciation: string; meaning: string; examples: string };
 type EditorState = {
   title: string; objective: string; grammar: string; grammarExamples: string; vocabulary: VocabularyRow[];
   pronunciationFocus: string; pronunciationWords: string; pronunciationTip: string;
@@ -14,8 +13,6 @@ type EditorState = {
   writingType: "fill" | "mcq" | "write"; writingPrompt: string; writingOptions: string[]; writingAnswer: string;
   speakingInstruction: string; speakingSample: string;
 };
-type EditorTab = "form" | "json";
-
 const focusableSelector = "button:not(:disabled), input:not(:disabled), select:not(:disabled), textarea:not(:disabled), [href], [tabindex]:not([tabindex='-1'])";
 
 function focusableElements(container: HTMLElement): HTMLElement[] {
@@ -31,7 +28,7 @@ export function emptyLesson(dayNumber: number): ContentLessonDraftInput {
     dayNumber,
     title: `Bài T${dayNumber + 1}`,
     durationMinutes: 10,
-    parts: requiredParts.map(code => ({ code, title: code, content: {} }))
+    parts: lessonPartOrder.map(code => ({ code, title: code, content: {} }))
   };
 }
 
@@ -53,7 +50,6 @@ export function LessonFormEditor({
   const [state, setState] = useState<EditorState>(() => readLesson(initial));
   const [problems, setProblems] = useState<string[]>([]);
   const [forceSave, setForceSave] = useState(false);
-  const [tab, setTab] = useState<EditorTab>("form");
   const [saveError, setSaveError] = useState<string>();
   const dialogRef = useRef<HTMLElement>(null);
   const editing = initial.parts.some(part => Object.keys(record(part.content)).length > 0);
@@ -102,6 +98,7 @@ export function LessonFormEditor({
     if (busy) return;
     const nextProblems = validateLesson(state);
     if (nextProblems.length && !forceSave) { setProblems(nextProblems); setForceSave(true); return; }
+    if (!window.confirm(forceSave ? "Bài vẫn còn nội dung cần bổ sung. Bạn có chắc muốn lưu tạm?" : "Bạn có chắc muốn kiểm tra và lưu bài này?")) return;
     setSaveError(undefined);
     try {
       await onSave(buildLesson(initial, state));
@@ -109,24 +106,13 @@ export function LessonFormEditor({
       setSaveError(describeSaveError(reason));
     }
   };
-  const saveJson = async (lesson: ContentLessonDraftInput) => {
-    await onSave(lesson);
-    setState(readLesson(lesson));
-    setProblems([]);
-    setForceSave(false);
-    setTab("form");
-  };
   return <div className="modal-backdrop operator-modal-scope" role="presentation" onClick={event => { if (event.target === event.currentTarget && !busy) onCancel(); }}><section ref={dialogRef} className="dialog wide operator-lesson-editor" role="dialog" aria-modal="true" aria-labelledby="lesson-editor-title" aria-describedby="lesson-editor-description" aria-busy={busy || undefined} tabIndex={-1} onKeyDown={handleKeyDown}>
-    <div className="row between"><h3 id="lesson-editor-title">{heading}</h3><Button type="button" small disabled={busy} onClick={onCancel}>Đóng</Button></div>
-      <p id="lesson-editor-description" className="xs muted">Mỗi bài cần 3 từ (mỗi từ 3 cụm), ngữ pháp, phát âm (1 âm + 3 từ) và 4 phần Nghe/Đọc/Viết/Nói. {cefr === "A1" || cefr === "A2" ? "A1–A2: giải thích tiếng Việt." : "B1+: dùng tiếng Anh."}</p>
-    <div className="tabs" role="tablist" aria-label="Chế độ soạn bài" style={{ display: "flex", gap: 4, maxWidth: "100%", overflowX: "auto", marginTop: 10 }}>
-      <Button type="button" id="lesson-form-tab" role="tab" className={tab === "form" ? "active" : ""} aria-selected={tab === "form"} aria-controls="lesson-form-panel" disabled={busy} onClick={() => setTab("form")}>Biểu mẫu</Button>
-      <Button type="button" id="lesson-json-tab" role="tab" className={tab === "json" ? "active" : ""} aria-selected={tab === "json"} aria-controls="lesson-json-panel" disabled={busy} onClick={() => setTab("json")}>JSON nâng cao</Button>
-    </div>
-    {tab === "form" ? <div id="lesson-form-panel" role="tabpanel" aria-labelledby="lesson-form-tab">
+    <header className="operator-editor-sticky-header"><div className="row between operator-editor-heading"><h3 id="lesson-editor-title">{heading}</h3><Button type="button" small disabled={busy} onClick={onCancel}>Đóng</Button></div></header>
+    <p id="lesson-editor-description" className="xs muted operator-editor-description">Mỗi bài cần 3 từ (mỗi từ 3 cụm), ngữ pháp, phát âm (1 âm + 3 từ) và 4 phần Nghe/Đọc/Viết/Nói. {cefr === "A1" || cefr === "A2" ? "A1–A2: giải thích tiếng Việt." : "B1+: dùng tiếng Anh."}</p>
+    <div className="operator-lesson-editor-form">
       <EditorSection title="Chung" disabled={busy}><Field label="Tiêu đề bài" hint="Tên ngắn của mẫu câu, bằng tiếng Anh. VD: I work as…"><input aria-label="Tiêu đề bài" value={state.title} onChange={event => set("title", event.target.value)} /></Field><Field label="Mục tiêu bài học" hint="Sau bài này học viên làm được gì (1 câu)."><textarea value={state.objective} onChange={event => set("objective", event.target.value)} /></Field></EditorSection>
       <EditorSection title="Ngữ pháp" disabled={busy}><Field label="Ngữ pháp" hint="Công thức + dùng khi nào + 2–3 câu ví dụ có dùng từ vựng."><textarea value={state.grammar} onChange={event => set("grammar", event.target.value)} /></Field><Field label="Câu ví dụ để đọc thành tiếng" hint="2–3 câu tiếng Anh, cách nhau bằng dấu ;"><textarea value={state.grammarExamples} placeholder="I work as a tester.; She works in the sales team." onChange={event => set("grammarExamples", event.target.value)} /></Field></EditorSection>
-      <EditorSection title="Từ vựng (3 từ)" disabled={busy}><div className="operator-vocabulary-grid">{state.vocabulary.map((row, index) => <div className="grid cols-4" key={index}><input aria-label={`Từ ${index + 1}`} value={row.word} onChange={event => setVocabulary(index, "word", event.target.value)} placeholder={`Từ ${index + 1}`} /><input aria-label={`Phiên âm từ ${index + 1}`} value={row.pronunciation} onChange={event => setVocabulary(index, "pronunciation", event.target.value)} placeholder="Phiên âm /…/" /><input aria-label={`Nghĩa từ ${index + 1}`} value={row.meaning} onChange={event => setVocabulary(index, "meaning", event.target.value)} placeholder="Nghĩa tiếng Việt" /><input aria-label={`Cụm từ ${index + 1}`} value={row.examples} onChange={event => setVocabulary(index, "examples", event.target.value)} placeholder="3 cụm từ, cách nhau bằng ;" /></div>)}</div><span className="xs muted">Mỗi từ cần nghĩa và 3 cụm từ có chứa chính từ đó.</span></EditorSection>
+      <EditorSection title="Từ vựng (3 từ)" disabled={busy}><div className="operator-vocabulary-grid">{state.vocabulary.map((row, index) => <div className="operator-vocabulary-row" aria-label={`Từ vựng ${index + 1}`} key={index}><input aria-label={`Từ ${index + 1}`} value={row.word} onChange={event => setVocabulary(index, "word", event.target.value)} placeholder={`Từ ${index + 1}`} /><input aria-label={`Từ loại từ ${index + 1}`} value={row.type} onChange={event => setVocabulary(index, "type", event.target.value)} placeholder="Từ loại" /><input aria-label={`Phiên âm từ ${index + 1}`} value={row.pronunciation} onChange={event => setVocabulary(index, "pronunciation", event.target.value)} placeholder="Phiên âm /…/" /><input aria-label={`Nghĩa từ ${index + 1}`} value={row.meaning} onChange={event => setVocabulary(index, "meaning", event.target.value)} placeholder="Nghĩa tiếng Việt" /><input aria-label={`Cụm từ ${index + 1}`} value={row.examples} onChange={event => setVocabulary(index, "examples", event.target.value)} placeholder="3 cụm từ, cách nhau bằng ;" /></div>)}</div><span className="xs muted">Mỗi từ: từ tiếng Anh, từ loại, phiên âm, nghĩa tiếng Việt và 3 cụm từ có chứa từ đó (cách nhau bằng dấu ;).</span></EditorSection>
       <EditorSection title="Phát âm" disabled={busy}><div className="grid cols-3"><Field label="Âm mục tiêu"><input value={state.pronunciationFocus} onChange={event => set("pronunciationFocus", event.target.value)} /></Field><Field label="3 từ luyện âm"><input value={state.pronunciationWords} onChange={event => set("pronunciationWords", event.target.value)} /></Field><Field label="Mẹo phát âm"><input value={state.pronunciationTip} onChange={event => set("pronunciationTip", event.target.value)} /></Field></div></EditorSection>
       <EditorSection title="Nghe" disabled={busy}><Field label="Đoạn audio (máy đọc, học viên không thấy chữ)"><textarea value={state.listeningScript} placeholder="1–2 câu tiếng Anh" onChange={event => set("listeningScript", event.target.value)} /></Field><QuestionFields prefix="Nghe" question={state.listeningQuestion} options={state.listeningOptions} answer={state.listeningAnswer} onQuestion={value => set("listeningQuestion", value)} onOptions={value => set("listeningOptions", value)} onAnswer={value => set("listeningAnswer", value)} /></EditorSection>
       <EditorSection title="Đọc" disabled={busy}><Field label="Đoạn văn"><textarea value={state.readingPassage} placeholder="2–4 câu tiếng Anh" onChange={event => set("readingPassage", event.target.value)} /></Field><QuestionFields prefix="Đọc" question={state.readingQuestion} options={state.readingOptions} answer={state.readingAnswer} onQuestion={value => set("readingQuestion", value)} onOptions={value => set("readingOptions", value)} onAnswer={value => set("readingAnswer", value)} /></EditorSection>
@@ -134,8 +120,8 @@ export function LessonFormEditor({
       <EditorSection title="Nói" disabled={busy}><Field label="Yêu cầu"><input value={state.speakingInstruction} placeholder="Nói to câu sau." onChange={event => set("speakingInstruction", event.target.value)} /></Field><Field label="Câu mẫu học viên phải nói"><textarea value={state.speakingSample} onChange={event => set("speakingSample", event.target.value)} /></Field></EditorSection>
       {saveError && <div role="alert"><Banner tone="danger" icon={<TriangleAlert className="operator-banner-svg" size={17} strokeWidth={2.25} />}>{saveError}</Banner></div>}
       {problems.length > 0 && <div role="alert"><Banner tone="warn"><div className="small"><b>{problems.length} mục cần bổ sung:</b><ul>{problems.map(problem => <li key={problem}>{problem}</li>)}</ul><p>Bạn có thể sửa tiếp, hoặc lưu tạm: bài sẽ bị gắn nhãn &quot;chưa đủ 4 kỹ năng&quot; cho đến khi bổ sung.</p></div></Banner></div>}
-      <div className="row operator-editor-actions"><Button type="button" disabled={busy} onClick={onCancel}>Huỷ</Button>{busy && <span className="small muted" role="status" aria-live="polite">Đang lưu…</span>}<Button type="button" primary={!forceSave} busy={busy} disabled={busy} onClick={() => void submit()}>{busy ? "Đang lưu…" : forceSave ? "Lưu dù còn thiếu" : "Kiểm tra & lưu"}</Button></div>
-    </div> : <div id="lesson-json-panel" role="tabpanel" aria-labelledby="lesson-json-tab"><LessonJsonEditor embedded lesson={buildLesson(initial, state)} onSave={saveJson} onCancel={() => setTab("form")} busy={busy} /></div>}
+      <div className="row operator-editor-actions"><Button type="button" disabled={busy} onClick={onCancel}>Huỷ</Button>{busy && <span className="small muted" role="status" aria-live="polite">Đang lưu…</span>}<Button type="button" className="operator-lesson-save-button" primary busy={busy} disabled={busy} onClick={() => void submit()}>{busy ? "Đang lưu…" : forceSave ? "Lưu dù còn thiếu" : "Kiểm tra & lưu"}</Button></div>
+    </div>
   </section></div>;
 }
 
@@ -156,7 +142,7 @@ function readLesson(lesson: ContentLessonDraftInput): EditorState {
   const items = Array.isArray(vocabulary.items) ? vocabulary.items.map(record) : [];
   const readOptions = (value: unknown) => [...listValue(value), "", "", "", ""].slice(0, 4);
   const listeningOptions = readOptions(listening.options), readingOptions = readOptions(reading.options);
-  return { title: lesson.title, objective: stringValue(objective.text), grammar: [stringValue(grammar.formula), stringValue(grammar.usage)].filter(Boolean).join("\n"), grammarExamples: listValue(grammar.examples).join("; "), vocabulary: [0, 1, 2].map(index => ({ word: stringValue(items[index]?.word), pronunciation: stringValue(items[index]?.pronunciation), meaning: stringValue(items[index]?.meaning), examples: listValue(items[index]?.examples).join("; ") })), pronunciationFocus: stringValue(pronunciation.focus), pronunciationWords: listValue(pronunciation.words).join(", "), pronunciationTip: stringValue(pronunciation.instruction || pronunciation.tip), listeningScript: stringValue(listening.script || listening.text), listeningQuestion: stringValue(listening.prompt || listening.question), listeningOptions, listeningAnswer: Math.max(0, listeningOptions.indexOf(stringValue(listening.answer))), readingPassage: stringValue(reading.text || reading.passage), readingQuestion: stringValue(reading.prompt || reading.question), readingOptions, readingAnswer: Math.max(0, readingOptions.indexOf(stringValue(reading.answer))), writingType: normalizeWritingType(stringValue(writing.type)), writingPrompt: stringValue(writing.prompt), writingOptions: readOptions(writing.options), writingAnswer: stringValue(writing.answer), speakingInstruction: stringValue(speaking.instruction) || "Nói to câu sau.", speakingSample: stringValue(speaking.sample || speaking.prompt) };
+  return { title: lesson.title, objective: stringValue(objective.text), grammar: [stringValue(grammar.formula), stringValue(grammar.usage)].filter(Boolean).join("\n"), grammarExamples: listValue(grammar.examples).join("; "), vocabulary: [0, 1, 2].map(index => ({ word: stringValue(items[index]?.word ?? items[index]?.e), type: stringValue(items[index]?.type ?? items[index]?.partOfSpeech ?? items[index]?.pos), pronunciation: stringValue(items[index]?.pronunciation ?? items[index]?.ipa), meaning: stringValue(items[index]?.meaning ?? items[index]?.v), examples: listValue(items[index]?.collocations ?? items[index]?.phrases ?? items[index]?.examples).join("; ") })), pronunciationFocus: stringValue(pronunciation.focus), pronunciationWords: (Array.isArray(pronunciation.words) ? pronunciation.words.map(value => typeof value === "string" ? value : stringValue(record(value).word ?? record(value).w)).filter(Boolean) : []).join(", "), pronunciationTip: stringValue(pronunciation.instruction || pronunciation.tip), listeningScript: stringValue(listening.audio || listening.script || listening.text), listeningQuestion: stringValue(listening.prompt || listening.question), listeningOptions, listeningAnswer: Math.max(0, listeningOptions.indexOf(stringValue(listening.answer))), readingPassage: stringValue(reading.text || reading.passage), readingQuestion: stringValue(reading.prompt || reading.question), readingOptions, readingAnswer: Math.max(0, readingOptions.indexOf(stringValue(reading.answer))), writingType: normalizeWritingType(stringValue(writing.type)), writingPrompt: stringValue(writing.prompt), writingOptions: readOptions(writing.options), writingAnswer: stringValue(writing.answer), speakingInstruction: stringValue(speaking.instruction || speaking.prompt) || "Nói to câu sau.", speakingSample: stringValue(speaking.sample || speaking.answer || speaking.modelAnswer) };
 }
 
 function validateLesson(state: EditorState): string[] {
@@ -181,18 +167,22 @@ function checkQuestion(problems: string[], label: string, body: string, question
 
 function buildLesson(initial: ContentLessonDraftInput, state: EditorState): ContentLessonDraftInput {
   const prior = (code: LessonPartCode) => record(initial.parts.find(part => part.code === code)?.content);
+  const priorVocabulary = prior("vocabulary");
+  const priorVocabularyItems = Array.isArray(priorVocabulary.items) ? priorVocabulary.items : [];
   const known: ContentLessonDraftInput["parts"] = [
     { code: "objective", title: "Mục tiêu bài học", content: { ...prior("objective"), text: state.objective.trim() } },
     { code: "instruction", title: "Hướng dẫn làm bài", content: { ...prior("instruction"), steps: listValue(prior("instruction").steps).length ? listValue(prior("instruction").steps) : ["Học nội dung", "Làm lần lượt các bài tập", "Xem phản hồi và làm lại"] } },
-    { code: "vocabulary", title: "Từ vựng", content: { ...prior("vocabulary"), items: state.vocabulary.map(row => ({ word: row.word.trim(), pronunciation: row.pronunciation.trim(), meaning: row.meaning.trim(), examples: splitValues(row.examples, /[;\n]/) })) } },
+    { code: "vocabulary", title: "Từ vựng", content: { ...priorVocabulary, items: state.vocabulary.map((row, index) => ({ ...record(priorVocabularyItems[index]), word: row.word.trim(), type: row.type.trim(), pronunciation: row.pronunciation.trim(), meaning: row.meaning.trim(), collocations: splitValues(row.examples, /[;\n]/), examples: splitValues(row.examples, /[;\n]/) })) } },
     { code: "grammar", title: "Ngữ pháp", content: { ...prior("grammar"), formula: state.grammar.trim(), examples: splitValues(state.grammarExamples, /[;\n]/) } },
     { code: "pronunciation", title: "Phát âm", content: { ...prior("pronunciation"), focus: state.pronunciationFocus.trim(), words: splitValues(state.pronunciationWords, /[,;\n]/), instruction: state.pronunciationTip.trim() } },
     { code: "listening", title: "Nghe", content: { ...prior("listening"), script: state.listeningScript.trim(), prompt: state.listeningQuestion.trim(), options: state.listeningOptions.map(value => value.trim()).filter(Boolean), answer: state.listeningOptions[state.listeningAnswer]?.trim() ?? "" } },
     { code: "reading", title: "Đọc", content: { ...prior("reading"), text: state.readingPassage.trim(), prompt: state.readingQuestion.trim(), options: state.readingOptions.map(value => value.trim()).filter(Boolean), answer: state.readingOptions[state.readingAnswer]?.trim() ?? "" } },
     { code: "writing", title: "Viết", content: { ...prior("writing"), type: state.writingType, prompt: state.writingPrompt.trim(), options: state.writingOptions.map(value => value.trim()).filter(Boolean), answer: state.writingAnswer.trim() } },
-    { code: "speaking", title: "Nói", content: { ...prior("speaking"), instruction: state.speakingInstruction.trim(), prompt: state.speakingSample.trim() } }
+    initial.parts.find(part => part.code === "word_class") ?? { code: "word_class", title: "Từ loại", content: {} },
+    initial.parts.find(part => part.code === "word_use") ?? { code: "word_use", title: "Dùng từ", content: {} },
+    { code: "speaking", title: "Nói", content: { ...prior("speaking"), instruction: state.speakingInstruction.trim(), sample: state.speakingSample.trim(), answer: state.speakingSample.trim() } }
   ];
-  return { dayNumber: initial.dayNumber, title: state.title.trim(), durationMinutes: initial.durationMinutes || 10, parts: [...known, ...initial.parts.filter(part => !requiredParts.includes(part.code as typeof requiredParts[number]))] };
+  return { dayNumber: initial.dayNumber, title: state.title.trim(), durationMinutes: initial.durationMinutes || 10, parts: [...known, ...initial.parts.filter(part => !lessonPartOrder.includes(part.code as typeof lessonPartOrder[number]))] };
 }
 
 function normalizeWritingType(value: string): EditorState["writingType"] { if (value === "choice" || value === "mcq") return "mcq"; if (value === "free" || value === "write") return "write"; return "fill"; }

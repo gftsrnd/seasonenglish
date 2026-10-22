@@ -303,6 +303,40 @@ describe("learner profile, home, lesson and progress API", () => {
     expect(response.json().weeks[0]).toMatchObject({ weekNumber: 1, completedLessons: 1, totalLessons: 5 });
   });
 
+  it("marks profile days from real deadlines instead of colouring incomplete future days red", async () => {
+    const previousProgram = await pool.query<{ start_date: string }>(
+      "select start_date::text from programs where id = $1",
+      [DEMO_IDS.program]
+    );
+    const previousProgress = await pool.query<{ completed_at: Date | null }>(
+      "select completed_at from progress_records where learner_id = $1 and lesson_id = $2",
+      [DEMO_IDS.learner, DEMO_IDS.lessons[0]]
+    );
+    await pool.query("update programs set start_date = current_date where id = $1", [DEMO_IDS.program]);
+    await pool.query(
+      "update progress_records set status = 'completed', completed_at = now() where learner_id = $1 and lesson_id = $2",
+      [DEMO_IDS.learner, DEMO_IDS.lessons[0]]
+    );
+
+    try {
+      const response = await app.inject({ method: "GET", url: "/api/v1/learner/progress", headers: { cookie } });
+      expect(response.statusCode, response.body).toBe(200);
+      expect(response.json().weeks[0].days).toEqual([
+        { label: "T2", status: "on_time" },
+        { label: "T3", status: "upcoming" },
+        { label: "T4", status: "upcoming" },
+        { label: "T5", status: "upcoming" },
+        { label: "T6", status: "upcoming" }
+      ]);
+    } finally {
+      await pool.query("update programs set start_date = $2::date where id = $1", [DEMO_IDS.program, previousProgram.rows[0]!.start_date]);
+      await pool.query(
+        "update progress_records set completed_at = $3 where learner_id = $1 and lesson_id = $2",
+        [DEMO_IDS.learner, DEMO_IDS.lessons[0], previousProgress.rows[0]?.completed_at ?? null]
+      );
+    }
+  });
+
   it("returns season, badge roadmap, readiness and assessment evidence for the existing profile screen", async () => {
     const response = await app.inject({ method: "GET", url: "/api/v1/learner/progress", headers: { cookie } });
 

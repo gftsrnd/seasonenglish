@@ -1,11 +1,22 @@
+import { useRef } from "react";
 import { Banner, Button, LevelChip, OperatorPage, PageTitle } from "./primitives.js";
+import { useDialog } from "../shared/ModalProvider.js";
 import type { OperatorWeeksActions, OperatorWeeksView, WeekFrame } from "./types.js";
 
 const DAY_LABELS = ["T2", "T3", "T4", "T5", "T6"];
 
+function GenerationConfirmationDialog({ generationDialog, estimateMinutes, actions }: { generationDialog: NonNullable<OperatorWeeksView["generationDialog"]>; estimateMinutes: number; actions: OperatorWeeksActions }) {
+  const dialogRef = useRef<HTMLElement>(null);
+  const firstWeekRef = useRef<HTMLInputElement>(null);
+  useDialog(true, dialogRef, () => actions.onCancelGeneration?.(), firstWeekRef);
+  return <div className="modal-backdrop operator-modal-scope operator-generation-modal" role="presentation" onClick={event => { if (event.target === event.currentTarget) actions.onCancelGeneration?.(); }}><section ref={dialogRef} className="dialog operator-generation-dialog" role="dialog" aria-modal="true" aria-labelledby="generation-dialog-title" tabIndex={-1}><h3 id="generation-dialog-title">Sinh bài học</h3><p className="small">Chọn tuần cần sinh đủ 5 bài T2–T6.</p><div className="operator-generation-week-list">{generationDialog.weeks.map((week, index) => { const selected = generationDialog.selectedWeeks.includes(week); return <label className={`operator-generation-week${selected ? " is-selected" : ""}`} key={week}><input ref={index === 0 ? firstWeekRef : undefined} type="checkbox" checked={selected} onChange={() => actions.onToggleGenerationWeek?.(week)} /><span className="operator-generation-week-indicator" aria-hidden="true">{selected ? "✓" : ""}</span><span>Tuần {week}</span></label>; })}</div><p className="small muted">{generationDialog.selectedWeeks.length} tuần · {generationDialog.levelCount} mức · {generationDialog.selectedWeeks.length * generationDialog.levelCount * 5} bài. Nút sẽ khóa trong khi sinh.</p><div className="row end"><Button onClick={() => actions.onCancelGeneration?.()}>Để sau</Button><Button primary disabled={!generationDialog.selectedWeeks.length} onClick={() => actions.onStartGeneration?.(generationDialog.selectedWeeks)}>Xác nhận sinh bài</Button></div></section></div>;
+}
+
 export function OperatorWeeks({ view, actions, readOnly = false }: { view: OperatorWeeksView; actions: OperatorWeeksActions; readOnly?: boolean }) {
   const update = (week: WeekFrame, key: "topic" | "description" | "objectives" | "keyVocabHint", value: string) => actions.onChangeWeek(week.number, { [key]: value });
   const generating = (view.status ?? "").startsWith("Đang");
+  const generationDialog = view.generationDialog;
+  const estimateMinutes = generationDialog ? Math.max(1, Math.ceil(generationDialog.selectedWeeks.length * generationDialog.levelCount * 60 / 60)) : 0;
   return <OperatorPage title="Chủ đề tuần"><PageTitle actions={<Button onClick={actions.onSuggestAll} disabled={readOnly || !view.aiConnected || generating}>Gợi ý các tuần còn trống</Button>}><h1>Khung chủ đề tuần</h1><p className="muted">Mỗi tuần có 1 chủ đề chung; AI sinh bài theo mức. Pilot: {view.pilotWeeks} tuần, từ {view.pilotStartDate}.</p></PageTitle>
       <Banner tone="info"><span className="small">Mỗi tuần dùng một chủ đề chung cho cả nhóm. Bấm <b>Gợi ý</b> để xem 3 phương án; mỗi phương án có <b>kế hoạch 5 ngày T2–T6 cho từng mức</b>. Chọn <b>Xác nhận</b> để điền vào tuần, sau đó có thể sửa tay và bấm <b>Lưu khung chủ đề</b> để cập nhật ngày/chủ đề.</span></Banner>
     {view.status && <Banner tone={view.status.startsWith("✗") ? "warn" : "info"}>{view.status}</Banner>}
@@ -16,6 +27,7 @@ export function OperatorWeeks({ view, actions, readOnly = false }: { view: Opera
       <label className="field operator-week-description-field"><span>Mô tả ngắn / tình huống</span><textarea value={week.description} readOnly={readOnly} placeholder="VD: Giới thiệu bản thân trong buổi họp; nói về vai trò và dự án" onChange={event => update(week, "description", event.target.value)} /></label>
       <div className="grid cols-2"><label className="field"><span>Mục tiêu học</span><textarea value={week.objectives} readOnly={readOnly} placeholder="VD: Nói được 5 câu về công việc; dùng present simple" onChange={event => update(week, "objectives", event.target.value)} /></label><label className="field"><span>Gợi ý từ khoá (tuỳ chọn)</span><textarea value={week.keyVocabHint} readOnly={readOnly} placeholder="VD: role, responsible for, in charge of, deadline" onChange={event => update(week, "keyVocabHint", event.target.value)} /></label></div>
     </div>; })}
-    <div className="row" style={{ marginTop: 12 }}><Button primary className="weeks-save-button" onClick={actions.onSave} disabled={readOnly || view.saveState === "loading" || generating}>{view.saveState === "loading" ? <><span className="spinner" /> Đang lưu…</> : "Lưu khung chủ đề"}</Button><Button onClick={actions.onOpenLessons}>Đi tới sinh bài →</Button>{view.saveError && <span className="small muted">{view.saveError}</span>}</div>
+    <div className="row" style={{ marginTop: 12 }}><Button primary className="weeks-save-button" onClick={actions.onSave} disabled={readOnly || view.saveState === "loading" || generating}>{view.saveState === "loading" ? <><span className="spinner" /> Đang lưu…</> : "Lưu khung chủ đề"}</Button><Button onClick={actions.onOpenLessons} disabled={generating}>Đi tới sinh bài →</Button>{view.saveError && <span className="small muted">{view.saveError}</span>}</div>
+    {generationDialog && <GenerationConfirmationDialog generationDialog={generationDialog} estimateMinutes={estimateMinutes} actions={actions} />}
   </OperatorPage>;
 }

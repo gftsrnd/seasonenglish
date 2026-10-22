@@ -52,10 +52,10 @@ describe("ContentImage", () => {
     expect(screen.queryByText("Open artist")).not.toBeInTheDocument();
   });
 
-  it("shows an explicit placeholder when optional media is unavailable", async () => {
+  it("shows the bundled bitmap fallback when all real-image providers are unavailable", async () => {
     vi.stubGlobal("IntersectionObserver", undefined);
     render(<ContentImage term="reliable" load={() => Promise.resolve({ status: "unavailable" })} />);
-    expect(await screen.findByText("Chưa có ảnh minh hoạ")).toBeInTheDocument();
+    expect(await screen.findByRole("img", { name: "Minh hoạ reliable" })).toHaveAttribute("src", "/media/mascot/season-bear.png");
   });
 
   it.each([
@@ -64,13 +64,13 @@ describe("ContentImage", () => {
   ])("shows a compact required fallback when loading is %s", async (_label, load) => {
     vi.stubGlobal("IntersectionObserver", undefined);
     render(<ContentImage term="reliable" required load={load} />);
-    expect(await screen.findByText("Chưa có ảnh minh hoạ")).toBeInTheDocument();
+    expect(await screen.findByRole("img", { name: "Minh hoạ reliable" })).toHaveAttribute("src", "/media/mascot/season-bear.png");
   });
 
   it("falls back safely when the downloaded image cannot render", async () => {
     vi.stubGlobal("IntersectionObserver", undefined);
     render(<ContentImage term="notebook" required load={() => Promise.resolve(available)} />);
     fireEvent.error(await screen.findByRole("img", { name: "notebook" }));
-    expect(await screen.findByText("Chưa có ảnh minh hoạ")).toBeInTheDocument();
+    expect(await screen.findByRole("img", { name: "Minh hoạ notebook" })).toHaveAttribute("src", "/media/mascot/season-bear.png");
   });
 });

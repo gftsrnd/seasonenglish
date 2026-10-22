@@ -68,7 +68,7 @@ describe("assessment API preserves the one-screen flow and server evidence", () 
     expect(response.statusCode, response.body).toBe(200);
     expect(response.json()).toMatchObject({
       screenState: "preparation",
-      definition: { kind: "placement", totalMinutes: 75, totalScore: 100 },
+      definition: { kind: "placement", totalMinutes: 70, totalScore: 100 },
       attempt: null
     });
   });
@@ -231,7 +231,8 @@ describe("assessment API preserves the one-screen flow and server evidence", () 
       pendingAssessments: [expect.objectContaining({ kind: "final", learnerId: DEMO_IDS.learner })],
       pendingLevelUp: [expect.objectContaining({ attemptId: levelUpAttemptId, kind: "level-up" })],
       approvedLearners: [expect.objectContaining({ learnerId: DEMO_IDS.learner, currentLevel: "A2", placementScore: 55 })],
-      unassessedLearners: [expect.objectContaining({ learnerId: "00000000-0000-4000-8000-000000000109" })],
+      unassessedLearners: [],
+      inProgressLearners: [expect.objectContaining({ learnerId: "00000000-0000-4000-8000-000000000109" })],
       levelSignals: {
         inFlow: [expect.objectContaining({
           learnerId: DEMO_IDS.learner,

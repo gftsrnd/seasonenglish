@@ -115,6 +115,7 @@ describe("level-form preview/version/delete API", () => {
     const managerDelete = await app.inject({
       method: "DELETE", url: `/api/v1/assessment-level-forms/${inUseVersionId}`, headers: { cookie: managerCookie }
     });
-    expect(managerDelete.statusCode).toBe(403);
+    expect(managerDelete.statusCode).toBe(409);
+    expect(managerDelete.json()).toEqual({ code: "LEVEL_FORM_IN_USE" });
   });
 });
