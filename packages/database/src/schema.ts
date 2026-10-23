@@ -279,10 +279,15 @@ export const practiceSubmissions = pgTable("practice_submissions", {
   id: uuid("id").primaryKey(), learnerId: uuid("learner_id").notNull().references(() => users.id),
   programWeekId: uuid("program_week_id").notNull().references(() => programWeeks.id), status: text("status").notNull().default("draft"),
   content: jsonb("content").notNull().default(emptyObject), score: jsonb("score"), feedback: jsonb("feedback"),
+  promptSnapshot: jsonb("prompt_snapshot").notNull().default(emptyObject), cefrSnapshot: text("cefr_snapshot"),
+  vocabularySnapshot: jsonb("vocabulary_snapshot").notNull().default(emptyArray), supersededAt: timestamp("superseded_at", { withTimezone: true }),
   requestKey: text("request_key"),
   submittedAt: timestamp("submitted_at", { withTimezone: true }), reviewedAt: timestamp("reviewed_at", { withTimezone: true }),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow()
-});
+}, (table) => ({
+  canonicalLearnerWeek: uniqueIndex("practice_submissions_learner_week_canonical_unique")
+    .on(table.learnerId, table.programWeekId).where(sql`${table.supersededAt} is null`)
+}));
 
 export const learnerVocabularyUnlocks = pgTable("learner_vocabulary_unlocks", {
   learnerId: uuid("learner_id").notNull().references(() => users.id, { onDelete: "cascade" }),
@@ -312,6 +317,32 @@ export const practiceAppeals = pgTable("practice_appeals", {
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   resolvedAt: timestamp("resolved_at", { withTimezone: true })
 });
+
+export const levelUpRetryPlans = pgTable("level_up_retry_plans", {
+  id: uuid("id").primaryKey(),
+  assessmentAttemptId: uuid("assessment_attempt_id").notNull().unique().references(() => assessmentAttempts.id, { onDelete: "cascade" }),
+  learnerId: uuid("learner_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  eligibleAt: timestamp("eligible_at", { withTimezone: true }).notNull(), weakestSkill: text("weakest_skill").notNull(),
+  readinessSnapshot: jsonb("readiness_snapshot").notNull(), createdAt: now()
+}, (table) => ({ learnerEligible: index("level_up_retry_plans_learner_eligible_idx").on(table.learnerId, table.eligibleAt) }));
+
+export const scheduledLevelChanges = pgTable("scheduled_level_changes", {
+  id: uuid("id").primaryKey(), learnerId: uuid("learner_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  assessmentAttemptId: uuid("assessment_attempt_id").notNull().unique().references(() => assessmentAttempts.id, { onDelete: "cascade" }),
+  fromCefr: text("from_cefr").notNull(), toCefr: text("to_cefr").notNull(),
+  effectiveAt: timestamp("effective_at", { withTimezone: true }).notNull(), status: text("status").notNull().default("scheduled"),
+  approvedBy: uuid("approved_by").notNull().references(() => users.id), reason: text("reason"),
+  evidence: jsonb("evidence").notNull().default(emptyObject), appliedAt: timestamp("applied_at", { withTimezone: true }), createdAt: now()
+}, (table) => ({ due: index("scheduled_level_changes_due_idx").on(table.status, table.effectiveAt) }));
+
+export const certificateIssuances = pgTable("certificate_issuances", {
+  id: uuid("id").primaryKey(), learnerId: uuid("learner_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  programId: uuid("program_id").notNull().references(() => programs.id, { onDelete: "cascade" }),
+  certificateCode: text("certificate_code").notNull().unique(), level: text("level").notNull(),
+  learnerName: text("learner_name").notNull(), organizationName: text("organization_name").notNull(),
+  badgesSnapshot: jsonb("badges_snapshot").notNull().default(emptyArray), signaturesSnapshot: jsonb("signatures_snapshot").notNull().default(emptyObject),
+  issuedAt: timestamp("issued_at", { withTimezone: true }).notNull().defaultNow()
+}, (table) => ({ learnerProgram: uniqueIndex("certificate_issuances_learner_program_unique").on(table.learnerId, table.programId) }));
 
 export const files = pgTable("files", {
   id: uuid("id").primaryKey(), organizationId: uuid("organization_id").notNull().references(() => organizations.id),
@@ -373,7 +404,7 @@ export const badges = pgTable("badges", {
 export const rewardEvents = pgTable("reward_events", {
   id: uuid("id").primaryKey(), learnerId: uuid("learner_id").notNull().references(() => users.id), badgeId: uuid("badge_id").references(() => badges.id),
   points: integer("points").notNull().default(0), sourceType: text("source_type").notNull(), sourceId: uuid("source_id").notNull(), createdAt: now()
-});
+}, (table) => ({ learnerSource: uniqueIndex("reward_events_learner_source_unique").on(table.learnerId, table.sourceType, table.sourceId) }));
 
 export const gameSets = pgTable("game_sets", {
   id: uuid("id").primaryKey(), programWeekId: uuid("program_week_id").references(() => programWeeks.id), gameKey: text("game_key").notNull(),
