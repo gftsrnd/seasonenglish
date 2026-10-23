@@ -256,4 +256,36 @@ describe("weekly lesson generation orchestration", () => {
       expect.objectContaining({ type: "language", assessmentCode: "speaking", text: expect.stringMatching(/^SWBAT use\b/i) })
     ]);
   });
+
+  it("restores missing instruction steps before validating AI foundation content", async () => {
+    const foundationWithMissingSteps = {
+      ...foundation,
+      instruction: { title: "Hướng dẫn", step3: "Hoàn thành bài tập và kiểm tra đáp án." }
+    };
+    const runTask = vi.fn(async (taskId: string, input: unknown) => {
+      const dayNumber = (input as { dayNumber: number }).dayNumber;
+      if (taskId === "weekly_lesson_grammar_classifier") return { output: grammarClassification, metadata };
+      if (taskId === "weekly_lesson_foundation") return { output: foundationWithMissingSteps, metadata };
+      if (taskId === "weekly_lesson_vocabulary") return { output: vocabularyForDay(dayNumber), metadata };
+      if (taskId === "weekly_lesson_skills") return { output: skills, metadata };
+      throw new Error(`UNEXPECTED_TASK:${taskId}`);
+    });
+    const week = {
+      weekNumber: 1,
+      topic: "Giving project updates",
+      description: "Report progress in a weekly meeting",
+      objectives: "Report progress and risks",
+      keyVocabHint: "on track, blocker, next steps",
+      plan: { A1: ["day one", "day two", "day three", "day four", "day five"] }
+    } as ContentWeekInput;
+
+    const generated = await generateWeeklyLessons(week, "A1", { prompt: "Generate lessons." }, { runTask } as unknown as AiTaskRunner);
+    const steps = generated.lessons[0]?.parts.find((part) => part.code === "instruction")?.content.steps;
+
+    expect(steps).toEqual([
+      "Đọc mục tiêu và mẫu câu trọng tâm của bài.",
+      "Ôn từ vựng rồi luyện nghe, đọc và nói theo hướng dẫn.",
+      "Hoàn thành bài tập và kiểm tra đáp án."
+    ]);
+  });
 });

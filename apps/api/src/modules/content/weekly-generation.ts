@@ -105,7 +105,7 @@ export async function generateWeeklyLessons(
       maxOutputTokens: FOUNDATION_OUTPUT_TOKEN_LIMIT
     });
     const output = normalizeFoundationObjectives(
-      parseComponent(weeklyLessonFoundationOutputSchema, result.output, input.dayNumber, "foundation"),
+      parseComponent(weeklyLessonFoundationOutputSchema, normalizeFoundationInstruction(result.output), input.dayNumber, "foundation"),
       input.cefr
     );
     const objectiveValidation = validateLessonObjectives({
@@ -291,6 +291,30 @@ type Skills = ReturnType<typeof weeklyLessonSkillsOutputSchema.parse>;
 type VocabularyItem = Vocabulary["word1"];
 
 const OBSERVABLE_OBJECTIVE_VERB = /\b(?:identify|select|match|list|describe|ask|answer|write|say|give|use|compare|summarize|complete|respond|present|pronounce|produce|distinguish)\b/i;
+
+function normalizeFoundationInstruction(value: unknown): unknown {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return value;
+  const foundation = value as Record<string, unknown>;
+  const rawInstruction = foundation.instruction;
+  const instruction = rawInstruction && typeof rawInstruction === "object" && !Array.isArray(rawInstruction)
+    ? rawInstruction as Record<string, unknown>
+    : {};
+  const steps = Array.isArray(instruction.steps) ? instruction.steps : [];
+  return {
+    ...foundation,
+    instruction: {
+      ...instruction,
+      title: nonEmptyString(instruction.title) ?? "Hướng dẫn",
+      step1: nonEmptyString(instruction.step1) ?? nonEmptyString(steps[0]) ?? "Đọc mục tiêu và mẫu câu trọng tâm của bài.",
+      step2: nonEmptyString(instruction.step2) ?? nonEmptyString(steps[1]) ?? "Ôn từ vựng rồi luyện nghe, đọc và nói theo hướng dẫn.",
+      step3: nonEmptyString(instruction.step3) ?? nonEmptyString(steps[2]) ?? "Hoàn thành các bài tập rồi kiểm tra đáp án."
+    }
+  };
+}
+
+function nonEmptyString(value: unknown): string | undefined {
+  return typeof value === "string" && value.trim() ? value.trim() : undefined;
+}
 
 function normalizeFoundationObjectives(foundation: Foundation, cefr: string): Foundation {
   const items = foundation.objective.items.map((objective) => ({
