@@ -22,3 +22,4 @@ Thumbs.db
 .local/
 evidence/**/*.raw.json
 evidence/**/*secret*
+artifacts/

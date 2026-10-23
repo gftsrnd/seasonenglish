@@ -49,8 +49,8 @@ const defaultOperatorRoutePaths = routePathsFor("/op");
 const OperatorRoutePathsContext = createContext<OperatorRoutePaths>(defaultOperatorRoutePaths);
 
 const unavailable = (feature: string) => `API hiện chưa cung cấp ${feature}.`;
-const reviewToApi: Record<ReviewTab, ContentReviewTabKey> = { subs: "submissions", coach: "coach", micro: "micro", appeals: "appeals", attempts: "attempts", tests: "assessments" };
-const promptToApi: Record<PromptKey, ContentPromptKey> = { base: "system_rules", placement: "assessment_scoring", lesson: "weekly_lessons", weeks: "week_suggestions", mgrade: "micro_grading", coach: "coach_dialogue", grade: "weekly_practice_grading" };
+const reviewToApi = { subs: "submissions", coach: "coach", weekly: "weekly_practices", appeals: "appeals", attempts: "attempts", tests: "assessments" } as const satisfies Record<ReviewTab, ContentReviewTabKey>;
+const promptToApi: Record<PromptKey, ContentPromptKey> = { base: "system_rules", placement: "assessment_scoring", lesson: "weekly_lessons", weeks: "week_suggestions", coach: "coach_dialogue", grade: "weekly_practice_grading" };
 
 type OperatorDashboardDialog =
   | { kind: "challenge"; detail: AssessmentReviewChallengeView; learnerName: string }
@@ -101,7 +101,7 @@ function OperatorRouteControllerContent({ session, client, paths }: { session: S
       : location.pathname === paths.levelForms ? <LevelFormsRoute {...props} />
         : location.pathname === paths.weeks ? <WeeksRoute {...props} />
           : location.pathname === paths.lessons ? <LessonsRoute {...props} />
-            : location.pathname === paths.review ? <ReviewRoute {...props} />
+            : location.pathname === paths.review ? <ReviewRoute {...props} canEditWeeklyPractice={session.role === "operator"} />
               : session.role === "manager" && location.pathname === paths.prompts ? <PromptsRoute {...props} />
                 : <Status tone="error">Đường dẫn vận hành không tồn tại.</Status>;
   return content;
@@ -145,16 +145,17 @@ function placementDetail(detail: ContentReviewAssessmentDetailView, profile?: As
   const labels: Record<string, string> = { listening: "Nghe", reading: "Đọc", writing: "Viết", speaking: "Nói" };
   const sectionScores = (detail.sections ?? detail.scores.map(score => ({ ...score, label: labels[score.section], maxScore: score.section === "reading" ? 40 : 20 }))).map(section => ({
     label: section.label ?? labels[section.section] ?? section.section,
-    percent: section.score == null || !section.maxScore ? 0 : Math.round(section.score / section.maxScore * 1_000) / 10
+    percent: section.score == null || !section.maxScore ? null : Math.round(section.score / section.maxScore * 1_000) / 10
   }));
-  const total = detail.totalScore ?? detail.scores.reduce((sum, score) => sum + score.score, 0);
+  const total = detail.totalScore;
   return {
     total,
-    rawLevel: (detail.overallCefr ?? cefrFromTotal(total)) as Cefr,
+    rawLevel: (detail.overallCefr ?? cefrFromTotal(total)) as Cefr | undefined,
     sectionScores,
     rationale: criterion("rationale"),
     monthlyGoal: profile?.monthlyGoal ?? criterion("monthlyGoal"),
-    aiScored: detail.scores.some(score => score.source === "ai")
+    aiScored: detail.scores.some(score => score.source === "ai"),
+    humanScored: detail.scores.some(score => score.source === "human")
   };
 }
 
@@ -178,6 +179,7 @@ function DashboardRoute({ client, readOnly }: { client: OperatorApiClient; readO
   const [expandedPendingProfiles, setExpandedPendingProfiles] = useState<Record<string, true>>({});
   const [pendingAssessmentDetails, setPendingAssessmentDetails] = useState<Record<string, ContentReviewAssessmentDetailView>>({});
   const [rescoreBusy, setRescoreBusy] = useState<string>();
+  const [deletionPendingLearners, setDeletionPendingLearners] = useState<Set<string>>(() => new Set());
   const [toast, setToast] = useState<{ tone: "success" | "danger" | "info"; message: string }>();
   const capabilities = useCapabilities(client);
   const notify = (message: string, tone: "success" | "danger" | "info" = "success") => setToast({ tone, message });
@@ -217,7 +219,7 @@ function DashboardRoute({ client, readOnly }: { client: OperatorApiClient; readO
   if (error) return <Status tone="error">Không tải được duyệt trình độ: {error}</Status>;
   if (!data) return <Status>Đang tải duyệt trình độ…</Status>;
   const currentWeek = weekFrame?.weeks.find(week => week.current);
-  const view = adaptAssessmentOverview(data, {
+  const adaptedView = adaptAssessmentOverview(data, {
     aiConnected: capabilities?.ai ?? false,
     ...(capabilities?.aiConfigured === undefined ? {} : { aiConfigured: capabilities.aiConfigured }),
     ...(capabilities?.aiProvider === undefined ? {} : { aiProvider: capabilities.aiProvider }),
@@ -227,6 +229,14 @@ function DashboardRoute({ client, readOnly }: { client: OperatorApiClient; readO
     ...(currentWeek ? { currentWeek: currentWeek.weekNumber, topic: currentWeek.topic } : {}),
     ...(weekFrame ? { pilotWeeks: weekFrame.pilot.weekCount } : {})
   });
+  const view = {
+    ...adaptedView,
+    pending: adaptedView.pending.map((item) => ({
+      ...item,
+      deletionPending: deletionPendingLearners.has(item.learnerId ?? item.id)
+        || Boolean(pendingProfiles[item.id]?.deletionRequests.some((request) => request.status === "pending"))
+    }))
+  };
   const targetFor = (attemptId: string) => view.levelRequests.find(item => item.id === attemptId)?.to;
   const learnerIdFor = (id: string) => data.pendingAssessments.find(item => item.attemptId === id)?.learnerId ?? id;
   const refresh = (promise: Promise<unknown>) => void promise.then(() => { notify("Đã cập nhật trạng thái."); return load(); }).catch(reason => notify(message(reason), "danger"));
@@ -237,6 +247,7 @@ function DashboardRoute({ client, readOnly }: { client: OperatorApiClient; readO
     ...(typeof client.changeAssessmentReviewLearnerLevel !== "function" ? { changeLevel: unavailable("endpoint đổi level trực tiếp"), demote: unavailable("endpoint hạ mức"), setLevelDirect: unavailable("endpoint xếp mức trực tiếp") } : {}),
     ...(typeof client.updateAssessmentReviewMonthlyGoal !== "function" ? { editGoal: unavailable("endpoint sửa mục tiêu tháng") } : {}),
     ...(typeof client.getAssessmentReviewLearner !== "function" ? { viewProfile: unavailable("endpoint đọc hồ sơ theo học viên") } : {}),
+    ...(typeof client.assignAssessmentReviewWeeklyPractice !== "function" ? { assignWeeklyPractice: unavailable("endpoint giao bài thực hành tuần") } : {}),
     ...(typeof client.requestAssessmentReviewLearnerDeletion !== "function" ? { deleteLearner: unavailable("endpoint xoá học viên") } : {}),
     ...(typeof client.rescoreAssessment !== "function"
       ? { rescore: unavailable("endpoint chấm lại bài test bằng AI") }
@@ -292,10 +303,30 @@ function DashboardRoute({ client, readOnly }: { client: OperatorApiClient; readO
     const goal = (await modal.prompt({ title: "Cập nhật mục tiêu tháng", label: "Mục tiêu tháng mới", confirmLabel: "Lưu" }))?.trim();
     if (goal) refresh(client.updateAssessmentReviewMonthlyGoal(learnerId, goal));
   };
+  const assignWeeklyPractice = async (learnerId: string) => {
+    if (readOnly || typeof client.assignAssessmentReviewWeeklyPractice !== "function") return;
+    const learner = view.approved.find((item) => item.id === learnerId);
+    if (!learner) return;
+    const confirmed = await modal.confirm({ title: "Giao bài thực hành tuần", message: <>Giao bài thực hành của tuần hiện tại cho <b>{learner.name}</b>? Nếu đã giao, hệ thống sẽ giữ nguyên bài cũ.</>, confirmLabel: "Giao bài tuần", cancelLabel: "Huỷ" });
+    if (!confirmed) return;
+    try {
+      const assignment = await client.assignAssessmentReviewWeeklyPractice(learnerId);
+      notify(assignment.status === "assigned" ? `Đã giao bài tuần ${assignment.weekNumber}: ${assignment.topic}.` : `Bài tuần ${assignment.weekNumber} đã được giao trước đó.`);
+      await load();
+    } catch (reason) { notify(message(reason), "danger"); }
+  };
   const requestDeletion = async (learnerId: string) => {
     if (readOnly) return;
     const reason = (await modal.prompt({ title: "Yêu cầu xoá học viên", message: "Yêu cầu sẽ được chuyển cho Quản lý duyệt.", label: "Lý do", confirmLabel: "Gửi yêu cầu", tone: "danger" }))?.trim();
-    if (reason) refresh(client.requestAssessmentReviewLearnerDeletion(learnerId, reason));
+    if (!reason) return;
+    try {
+      await client.requestAssessmentReviewLearnerDeletion(learnerId, reason);
+      setDeletionPendingLearners((current) => new Set(current).add(learnerId));
+      notify("Đã gửi yêu cầu xoá cho Quản lý duyệt.");
+      await load();
+    } catch (reason) {
+      notify(message(reason), "danger");
+    }
   };
   const rescore = (attemptId: string) => {
     if (readOnly) return;
@@ -326,7 +357,7 @@ function DashboardRoute({ client, readOnly }: { client: OperatorApiClient; readO
     onApproveLevelRequest: id => { const target = targetFor(id); if (!readOnly && target && typeof client.decideAssessment === "function") refresh(client.decideAssessment(id, { status: "approved", approvedLevel: target, reason: "Duyệt yêu cầu lên mức" })); },
     onRejectLevelRequest: id => { if (readOnly || typeof client.decideAssessment !== "function") return; void modal.prompt({ title: "Từ chối yêu cầu lên mức", message: "Học viên sẽ nhìn thấy nội dung này.", label: "Lý do từ chối", confirmLabel: "Từ chối", tone: "danger" }).then(reason => { if (reason?.trim()) refresh(client.decideAssessment(id, { status: "needs_retry", reason: reason.trim() })); }); },
     onViewTest: showAttempt, onRescore: rescore, onDeleteLearner: id => requestDeletion(learnerIdFor(id)), onViewChallenge: showChallenge,
-    onDemote: id => changeLevel(id, "recommend_lower"), onChangeLevel: id => changeLevel(id, "direct"), onEditGoal: editGoal, onViewProfile: showProfile, onTogglePendingProfile: togglePendingProfile, onSetLevelDirect: id => changeLevel(id, "direct"),
+    onDemote: id => changeLevel(id, "recommend_lower"), onChangeLevel: id => changeLevel(id, "direct"), onEditGoal: editGoal, onViewProfile: showProfile, onAssignWeeklyPractice: assignWeeklyPractice, onTogglePendingProfile: togglePendingProfile, onSetLevelDirect: id => changeLevel(id, "direct"),
     onOpenAppeals: () => navigate(paths.review, { state: { reviewTab: "appeals" } }), onOpenSettings: () => navigate("/settings"), onOpenWeeks: () => navigate(paths.weeks), onOpenLevelForms: () => navigate(paths.levelForms)
   }} />
   {assessmentDialog && <OperatorReviewAssessmentDetail detail={assessmentDialog} onClose={() => setAssessmentDialog(undefined)} {...(typeof client.manualScoreAssessment === "function" && !readOnly && (assessmentDialog.status === "pending_review" || assessmentDialog.status === "submitted") ? { onSaveManualScore: saveManualScore } : {})} savingManualScore={manualScoreBusy} />}
@@ -465,7 +496,8 @@ function WeeksRoute({ client, readOnly }: { client: OperatorApiClient; readOnly:
   const [generatingWeek, setGeneratingWeek] = useState<number | null>(null);
   const [generationStatus, setGenerationStatus] = useState("");
   const [generationLevels, setGenerationLevels] = useState<Cefr[]>(["A1", "A2", "B1", "B2"]);
-  const [generationDialog, setGenerationDialog] = useState<{ weeks: number[]; selectedWeeks: number[]; levelCount: number }>();
+  const [occupiedWeeks, setOccupiedWeeks] = useState<number[]>([]);
+  const [generationDialog, setGenerationDialog] = useState<{ weeks: number[]; selectedWeeks: number[]; replacementWeeks: number[]; levelCount: number }>();
   const [preferredGenerationWeek, setPreferredGenerationWeek] = useState<number>();
   const [error, setError] = useState<string>();
   const saveQueue = useRef<Promise<unknown>>(Promise.resolve());
@@ -482,6 +514,7 @@ function WeeksRoute({ client, readOnly }: { client: OperatorApiClient; readOnly:
     void client.getContentLessonMatrix().then(matrix => {
       const levels = matrix.levels.map(level => level.cefr as Cefr);
       if (levels.length) setGenerationLevels(levels);
+      setOccupiedWeeks(matrix.weeks.filter(week => week.cells.some(cell => cell.status !== "missing" || cell.lessons.length > 0)).map(week => week.weekNumber));
     }).catch(() => undefined);
   }, [client]);
   if (error) return <Status tone="error">Không tải được khung chủ đề: {error}</Status>;
@@ -501,7 +534,7 @@ function WeeksRoute({ client, readOnly }: { client: OperatorApiClient; readOnly:
         const preferredWeek = preferredGenerationWeek && weeks.includes(preferredGenerationWeek)
           ? preferredGenerationWeek
           : saved.weeks.find(week => week.current && weeks.includes(week.weekNumber))?.weekNumber ?? weeks[0];
-        if (weeks.length && preferredWeek) setGenerationDialog({ weeks, selectedWeeks: [preferredWeek], levelCount: generationLevels.length });
+        if (weeks.length && preferredWeek) setGenerationDialog({ weeks, selectedWeeks: [preferredWeek], replacementWeeks: occupiedWeeks.filter(week => weeks.includes(week)), levelCount: generationLevels.length });
         else notify("Đã lưu khung chủ đề. Chưa có tuần nào có chủ đề để sinh bài.", "danger");
       }
       return saved;
@@ -633,7 +666,8 @@ function LessonSetRoute({ client, readOnly, week, cefr }: { client: OperatorApiC
   const manualTopic = (location.state as { topic?: string } | null)?.topic ?? "";
   const transientManualSet = (): ContentLessonSetVersionView => ({
     lessonSetId: "", versionId: "", version: 0, status: "draft", weekNumber: week, topic: manualTopic,
-    cefr, explanationLanguage: "Tiếng Việt", createdBy: null, approvedBy: null, createdAt: new Date().toISOString(), publishedAt: null, lessons: []
+    cefr, explanationLanguage: "Tiếng Việt", createdBy: null, approvedBy: null, createdAt: new Date().toISOString(), publishedAt: null,
+    weeklyPractice: { task: `Write 3–5 sentences about “${manualTopic || "this week's topic"}”.`, guidance: "Use at least 3 words from this week's lessons.", inputMode: "text_or_dictation", requiredVocabulary: [] }, lessons: []
   });
   const load = () => client.getContentLessonSet(week, cefr).then(setData).catch(reason => {
     if (manualCreate && reason instanceof Error && reason.message === "CONTENT_LESSON_SET_NOT_FOUND") setData(transientManualSet());
@@ -710,10 +744,10 @@ function LessonSetRoute({ client, readOnly, week, cefr }: { client: OperatorApiC
   }} />{!readOnly && editor && <LessonFormEditor weekNumber={week} cefr={cefr} initial={editor} onSave={saveLesson} onCancel={() => setEditor(undefined)} busy={busy} />}</>;
 }
 
-function ReviewRoute({ client, readOnly }: { client: OperatorApiClient; readOnly: boolean }) {
+function ReviewRoute({ client, readOnly, canEditWeeklyPractice }: { client: OperatorApiClient; readOnly: boolean; canEditWeeklyPractice: boolean }) {
   const modal = useModal();
   const location = useLocation();
-  const initialTab = (location.state as { reviewTab?: ReviewTab } | null)?.reviewTab ?? "subs";
+  const initialTab = (location.state as { reviewTab?: ReviewTab } | null)?.reviewTab ?? "weekly";
   const [tab, setTab] = useState<ReviewTab>(initialTab);
   const [data, setData] = useState<ContentReviewView>();
   const [error, setError] = useState<string>();
@@ -769,7 +803,13 @@ function ReviewRoute({ client, readOnly }: { client: OperatorApiClient; readOnly
   };
   const guardedManualGrade = (id: string) => { if (!readOnly) void manualGrade(id); };
   return <><OperatorReview readOnly={readOnly} unavailable={missing} view={adaptReview(data, reviewToApi[tab], { aiConnected: capabilities?.ai ?? false })} actions={{
-    onTabChange: setTab, onMarkSubmission: (id, checked) => { if (!readOnly) refresh(client.setContentReviewChecked("submission", id, checked)); }, onMarkCoachTurn: (id, checked) => { if (!readOnly) refresh(client.setContentReviewChecked("coach", id, checked)); }, onDeleteMicroLesson: id => { if (!readOnly) refresh(client.deleteReviewedMicroLesson(id)); }, onGradeAi: gradeAi, onGradeManual: guardedManualGrade, onDecideAppeal: decide, onViewTest: viewTest
+    onTabChange: setTab, onMarkSubmission: (id, checked) => { if (!readOnly) refresh(client.setContentReviewChecked("submission", id, checked)); }, onMarkCoachTurn: (id, checked) => { if (!readOnly) refresh(client.setContentReviewChecked("coach", id, checked)); }, onGradeAi: gradeAi, onGradeManual: guardedManualGrade, onDecideAppeal: decide, onViewTest: viewTest,
+    ...(canEditWeeklyPractice ? { onSaveWeeklyPractice: async input => {
+      if (readOnly) return;
+      await client.saveContentWeeklyPractice(input.week, input.cefr, { expectedVersion: input.expectedVersion, task: input.task, guidance: input.guidance, requiredVocabulary: input.requiredVocabulary });
+      const next = await client.getContentReview();
+      setData(next);
+    } } : {})
   }} />{dialog && <OperatorReviewAssessmentDetail detail={dialog} onClose={() => setDialog(undefined)} />}</>;
 }
 
@@ -805,6 +845,7 @@ const operatorErrorMessages: Record<string, string> = {
   AI_TIMEOUT: "AI xử lý quá thời gian cho phép.",
   AI_LESSON_SET_INVALID: "AI trả về bộ bài chưa đủ 5 ngày hoặc sai cấu trúc.",
   HTTP_429: "AI đang bị giới hạn số lượt gọi; hãy thử lại sau một chút.",
+  HTTP_504: "Hệ thống vẫn đang hoàn tất bộ bài. Vui lòng chờ một chút rồi tải lại ma trận; không bấm Sinh lại.",
   CONTENT_WEEK_NOT_FOUND: "Không tìm thấy tuần cần sinh bài.",
   CONTENT_LEVEL_NOT_ACTIVE: "Mức này đang không bật trong ma trận bài học."
 };

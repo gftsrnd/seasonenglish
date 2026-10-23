@@ -51,9 +51,14 @@ const vocabularyWord = {
 
 const vocabularyOutput = (firstWord: Record<string, unknown>) => ({
   topic: "Office supplies",
-  words: Array.from({ length: 15 }, (_, index) => index === 0
+  words: Array.from({ length: 12 }, (_, index) => index === 0
     ? { ...vocabularyWord, ...firstWord }
-    : { ...vocabularyWord, id: `word-${index + 1}`, english: `notebook ${index + 1}` })
+    : { ...vocabularyWord, id: `word-${index + 1}`, english: `notebook ${index + 1}` }),
+  distractors: Array.from({ length: 8 }, (_, index) => ({
+    ...vocabularyWord,
+    id: `distractor-${index + 1}`,
+    english: `unrelated ${index + 1}`
+  }))
 });
 
 describe("vocabulary media schema", () => {
@@ -74,5 +79,23 @@ describe("vocabulary media schema", () => {
 
   it("keeps image guidance optional", () => {
     expect(vocabularyOutputSchema.safeParse(vocabularyOutput({})).success).toBe(true);
+  });
+
+  it("requires exactly 12 target words and 8 distractors", () => {
+    const valid = vocabularyOutput({});
+    expect(vocabularyOutputSchema.safeParse(valid).success).toBe(true);
+    expect(vocabularyOutputSchema.safeParse({ ...valid, words: valid.words.slice(0, 11) }).success).toBe(false);
+    expect(vocabularyOutputSchema.safeParse({ ...valid, distractors: valid.distractors.slice(0, 7) }).success).toBe(false);
+    expect(vocabularyOutputJsonSchema.properties.words).toMatchObject({ minItems: 12, maxItems: 12 });
+    expect(vocabularyOutputJsonSchema.properties.distractors).toMatchObject({ minItems: 8, maxItems: 8 });
+  });
+
+  it("rejects duplicate or overlapping target and distractor entries", () => {
+    const valid = vocabularyOutput({});
+    const overlapping = {
+      ...valid,
+      distractors: [{ ...valid.distractors[0]!, id: valid.words[0]!.id, english: valid.words[0]!.english }, ...valid.distractors.slice(1)]
+    };
+    expect(vocabularyOutputSchema.safeParse(overlapping).success).toBe(false);
   });
 });

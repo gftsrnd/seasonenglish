@@ -16,6 +16,15 @@ function deriveKey(secret: string, salt: Buffer, cost: number, blockSize: number
 
 export async function createCredentialHash(secret: string): Promise<string> {
   if (secret.length < 8) throw new Error("Credential must contain at least 8 characters");
+  return createSecretHash(secret);
+}
+
+export async function createPinHash(pin: string): Promise<string> {
+  if (!/^\d{6}$/.test(pin)) throw new Error("PIN must contain exactly 6 digits");
+  return createSecretHash(pin);
+}
+
+async function createSecretHash(secret: string): Promise<string> {
   const salt = randomBytes(16);
   const key = await deriveKey(secret, salt, COST, BLOCK_SIZE, PARALLELISM);
   return ["scrypt", COST, BLOCK_SIZE, PARALLELISM, salt.toString("base64url"), key.toString("base64url")].join("$");

@@ -58,6 +58,12 @@ const granularLessonInput = z.union([
   z.object({ expectedVersion: z.int().min(0).optional(), lesson: lessonDraftInput })
 ]);
 const lessonJsonInput = z.object({ expectedVersion: z.int().min(0).optional(), lessons: z.array(lessonDraftInput).min(1).max(7) });
+const weeklyPracticeDraftInput = z.object({
+  expectedVersion: z.int().min(0),
+  task: z.string().trim().min(1).max(4_000),
+  guidance: z.string().trim().min(1).max(4_000),
+  requiredVocabulary: z.array(z.string().trim().min(1).max(100)).max(12)
+});
 const lessonActionInput = z.object({ expectedVersion: z.int().min(0).optional() });
 const lessonSetParams = z.object({
   week: z.coerce.number().int().min(1).max(52),
@@ -115,6 +121,7 @@ export function registerContentRoutes(
   const readers = createRoleGuard(pool, ["operator", "manager"]);
   const operators = createRoleGuard(pool, ["operator", "manager"]);
   const authors = createRoleGuard(pool, ["operator", "manager"]);
+  const weeklyPracticeAuthors = createRoleGuard(pool, ["operator"]);
   const managers = createRoleGuard(pool, ["manager"]);
 
   app.get("/api/v1/content/weeks", { preHandler: readers }, async (request, reply) => {
@@ -359,6 +366,21 @@ export function registerContentRoutes(
     } catch (error) {
       const code = errorCode(error, "CONTENT_LESSON_JSON_NOT_SAVED");
       return reply.code(code === "CONTENT_VERSION_CONFLICT" ? 409 : 400).send({ code });
+    }
+  });
+
+  app.put("/api/v1/content/lesson-sets/:week/:cefr/draft/weekly-practice", { preHandler: weeklyPracticeAuthors }, async (request, reply) => {
+    const params = lessonSetParams.safeParse(request.params);
+    const input = weeklyPracticeDraftInput.safeParse(request.body);
+    if (!params.success || !input.success) return reply.code(400).send({ code: "INVALID_WEEKLY_PRACTICE_DRAFT" });
+    try {
+      return await repositories.content.saveWeeklyPractice(
+        request.e4sSession!.user.id, params.data.week, params.data.cefr,
+        { task: input.data.task, guidance: input.data.guidance, requiredVocabulary: input.data.requiredVocabulary, expectedVersion: input.data.expectedVersion }
+      );
+    } catch (error) {
+      const code = errorCode(error, "WEEKLY_PRACTICE_NOT_SAVED");
+      return reply.code(code === "CONTENT_VERSION_CONFLICT" ? 409 : code === "CONTENT_WEEK_NOT_FOUND" ? 404 : 400).send({ code });
     }
   });
 

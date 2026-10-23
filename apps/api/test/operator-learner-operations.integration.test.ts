@@ -1,7 +1,7 @@
 import { Pool } from "pg";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { migrateDatabase, resetPublicSchema, seedDemo } from "@e4s/database";
-import { createCredentialHash } from "@e4s/domain/identity";
+import { createCredentialHash, createPinHash } from "@e4s/domain/identity";
 import { DEMO_IDS } from "@e4s/test-support";
 import { buildApi } from "../src/app.js";
 
@@ -32,7 +32,7 @@ describe("Operator learner/test operations", () => {
         [
           DEMO_IDS.operator, await createCredentialHash("operator-pass"),
           DEMO_IDS.manager, await createCredentialHash("manager-pass"),
-          freshLearnerId, await createCredentialHash("fresh-pass")
+          freshLearnerId, await createPinHash("654321")
         ]
       );
     } finally { client.release(); }
@@ -42,9 +42,11 @@ describe("Operator learner/test operations", () => {
       expect(response.statusCode, response.body).toBe(200);
       return String(response.headers["set-cookie"]).split(";")[0] ?? "";
     };
-    operatorCookie = await login("/api/auth/staff/login", "operator@e4s.local", "operator-pass");
-    managerCookie = await login("/api/auth/staff/login", "manager@e4s.local", "manager-pass");
-    learnerCookie = await login("/api/auth/learner/login", "fresh@e4s.local", "fresh-pass");
+    operatorCookie = await login("/api/auth/staff/login", "thu.ha.tran@e4s.local", "operator-pass");
+    managerCookie = await login("/api/auth/staff/login", "quoc.bao.le@e4s.local", "manager-pass");
+    const learnerLogin = await app.inject({ method: "POST", url: "/api/auth/learner/login", payload: { email: "fresh@e4s.local", pin: "654321" } });
+    expect(learnerLogin.statusCode, learnerLogin.body).toBe(200);
+    learnerCookie = String(learnerLogin.headers["set-cookie"]).split(";")[0] ?? "";
   }, 30_000);
 
   afterAll(async () => { await app.close(); await pool.end(); });
@@ -56,7 +58,7 @@ describe("Operator learner/test operations", () => {
     });
     expect(profile.statusCode, profile.body).toBe(200);
     expect(profile.json()).toMatchObject({
-      learner: { id: DEMO_IDS.learner, displayName: "Học viên Demo", currentLevel: "A2" },
+      learner: { id: DEMO_IDS.learner, displayName: "Nguyễn Minh Anh", currentLevel: "A2" },
       profile: { department: "AI" },
       monthlyGoal: null,
       attempts: expect.arrayContaining([expect.objectContaining({ id: DEMO_IDS.placementAttempt, kind: "placement" })])
@@ -74,6 +76,23 @@ describe("Operator learner/test operations", () => {
       scores: expect.any(Array),
       integrityEvents: expect.any(Array)
     });
+  });
+
+  it("repairs missing deterministic Listening and Reading scores for a submitted attempt", async () => {
+    await pool.query(
+      `delete from assessment_scores where attempt_id = $1 and section in ('listening', 'reading')`,
+      [DEMO_IDS.placementAttempt]
+    );
+    const response = await app.inject({
+      method: "GET", url: `/api/v1/assessment-reviews/attempts/${DEMO_IDS.placementAttempt}`,
+      headers: { cookie: operatorCookie }
+    });
+    expect(response.statusCode, response.body).toBe(200);
+    const scores = response.json().scores as Array<{ section: string; source: string }>;
+    expect(scores).toEqual(expect.arrayContaining([
+      expect.objectContaining({ section: "listening", source: "deterministic" }),
+      expect.objectContaining({ section: "reading", source: "deterministic" })
+    ]));
   });
 
   it("lets both staff roles manage learner operations and persists evidence", async () => {

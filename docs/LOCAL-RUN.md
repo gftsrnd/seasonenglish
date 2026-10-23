@@ -44,13 +44,17 @@ Không chạy `docker compose down -v` trong bước trên: named volumes giữ 
 
 ## Tài khoản local
 
-`prepare-local` chỉ tạo ba tài khoản demo chính:
+`docker compose up` chạy `prepare-local` và tự chuẩn bị cả ba tài khoản demo chính lẫn bộ tài khoản scenario cố định. Vì vậy máy khác dùng cùng bản deploy cũng có ngay dữ liệu để kiểm thử tuần học, Mini game, bài cuối tuần, bài test và duyệt mức; chạy lại không tạo tài khoản trùng.
 
-- `manager@e4s.local` / `manager-pass`
-- `operator@e4s.local` / `staff-pass`
-- `learner@e4s.local` / `learner-pass`
+Ba tài khoản demo chính:
 
-Checker và fixture phụ chỉ tồn tại trong database kiểm thử. Để kiểm tra tài khoản test cũ trong PostgreSQL local mà không thay đổi dữ liệu:
+- `quoc.bao.le@e4s.local` / `manager-pass`
+- `thu.ha.tran@e4s.local` / `staff-pass`
+- `minh.anh.nguyen@e4s.local` / `learner-pass`
+
+Danh sách đầy đủ tài khoản scenario, PIN/mật khẩu và trạng thái kiểm thử nằm tại [`docs/local-scenario-accounts.md`](./local-scenario-accounts.md).
+
+Để kiểm tra tài khoản test cũ trong PostgreSQL local mà không thay đổi dữ liệu:
 
 ```bash
 DATABASE_URL=postgres://e4s:e4s_local_password@127.0.0.1:54329/e4s pnpm cleanup:local-users

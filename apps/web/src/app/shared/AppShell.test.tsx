@@ -2,11 +2,12 @@
 import "@testing-library/jest-dom/vitest";
 import { cleanup, render, screen, waitFor, within } from "@testing-library/react";
 import { userEvent } from "@testing-library/user-event";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { BrowserRouter, MemoryRouter } from "react-router";
 import type { SessionView } from "@e4s/contracts";
 import { ExperienceProvider, useExperience } from "../../features/experience/Experience.js";
 import { AudioControls, AppShell } from "./AppShell.js";
+import { registerAssessmentLogoutGuard } from "./assessment-logout-guard.js";
 
 function MusicState() {
   const { musicOn } = useExperience();
@@ -65,6 +66,31 @@ describe("app audio controls", () => {
 });
 
 describe("app shell navigation and logout", () => {
+  it("uses the app dialog instead of the browser confirm while an assessment is active", async () => {
+    const user = userEvent.setup();
+    const guard = vi.fn().mockResolvedValue("logout");
+    const unregister = registerAssessmentLogoutGuard(guard);
+    const onLogout = vi.fn();
+    try {
+      render(<ExperienceProvider><MemoryRouter initialEntries={["/test/placement"]}><AppShell session={session("learner")} onLogout={onLogout}><div /></AppShell></MemoryRouter></ExperienceProvider>);
+
+      await user.click(screen.getByRole("button", { name: "Đăng xuất khỏi tài khoản này" }));
+      const dialog = screen.getByRole("dialog", { name: "Bạn đang làm bài test" });
+      expect(within(dialog).getByText(/được ghi nhận là một lần cảnh báo/i)).toBeInTheDocument();
+      expect(guard).not.toHaveBeenCalled();
+      expect(onLogout).not.toHaveBeenCalled();
+
+      await user.click(within(dialog).getByRole("button", { name: "Ở lại làm bài" }));
+      expect(screen.queryByRole("dialog", { name: "Bạn đang làm bài test" })).not.toBeInTheDocument();
+
+      await user.click(screen.getByRole("button", { name: "Đăng xuất khỏi tài khoản này" }));
+      await user.click(within(screen.getByRole("dialog", { name: "Bạn đang làm bài test" })).getByRole("button", { name: "Vẫn đăng xuất" }));
+      await waitFor(() => expect(guard).toHaveBeenCalledOnce());
+      expect(onLogout).toHaveBeenCalledOnce();
+    } finally {
+      unregister();
+    }
+  });
   it.each(["A1", "A2", "B1", "B2", "C1"] as const)("shows the learner role icon and real %s level badge", (cefr) => {
     const { container } = render(<ExperienceProvider><MemoryRouter initialEntries={["/home"]}><AppShell session={session("learner")} learnerCefr={cefr} onLogout={() => undefined}><div /></AppShell></MemoryRouter></ExperienceProvider>);
 
@@ -157,7 +183,7 @@ describe("app shell navigation and logout", () => {
     expect(window.location.pathname).toBe("/");
   });
 
-  it("clears namespaced shared-device state and modal scroll lock before logout", async () => {
+  it("clears account state but keeps device audio preferences before logout", async () => {
     const user = userEvent.setup();
     window.localStorage.setItem("e4s:effects", "off");
     window.localStorage.setItem("e4s:music", "on");
@@ -168,8 +194,8 @@ describe("app shell navigation and logout", () => {
 
     await user.click(screen.getByRole("button", { name: "Đăng xuất khỏi tài khoản này" }));
 
-    expect(window.localStorage.getItem("e4s:effects")).toBeNull();
-    expect(window.localStorage.getItem("e4s:music")).toBeNull();
+    expect(window.localStorage.getItem("e4s:effects")).toBe("off");
+    expect(window.localStorage.getItem("e4s:music")).toBe("on");
     expect(window.localStorage.getItem("unrelated-preference")).toBe("keep");
     expect(window.sessionStorage.getItem("e4s:temporary")).toBeNull();
     expect(document.body).not.toHaveClass("app-modal-open");

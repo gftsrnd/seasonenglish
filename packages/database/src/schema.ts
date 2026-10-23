@@ -110,7 +110,9 @@ export const sessions = pgTable("sessions", {
 export const learnerProfiles = pgTable("learner_profiles", {
   userId: uuid("user_id").primaryKey().references(() => users.id, { onDelete: "cascade" }),
   profile: jsonb("profile").notNull().default(emptyObject), version: integer("version").notNull().default(1),
+  draftProfile: jsonb("draft_profile"),
   completedAt: timestamp("completed_at", { withTimezone: true }),
+  draftUpdatedAt: timestamp("draft_updated_at", { withTimezone: true }),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow()
 });
 

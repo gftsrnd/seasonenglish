@@ -55,7 +55,6 @@ function makeView(overrides: Partial<LearnerHomeView> = {}) {
         { key: "coachRubric" as const, label: "Rubric khi luyện với Season", current: 4.3, target: 5, display: "4.3/5 · 8 lượt", met: false }
       ]
     },
-    finalAssessment: { available: true, label: "Làm bài cuối kỳ", href: "/test/final" as const },
     aiAvailable: true,
     pilotPhase: "in_pilot" as const,
     ...overrides
@@ -63,6 +62,22 @@ function makeView(overrides: Partial<LearnerHomeView> = {}) {
 }
 
 describe("learner Home parity", () => {
+  it("removes the obsolete programme card and highlights today's learning prompt", () => {
+    render(<LearnerHome view={makeView()} actions={actions} />);
+
+    expect(screen.queryByText("Chủ đề lớn của khoá")).not.toBeInTheDocument();
+    expect(screen.queryByText("E4S Pilot")).not.toBeInTheDocument();
+    expect(screen.queryByText("Chủ đề tuần 1")).not.toBeInTheDocument();
+    expect(document.querySelector('[data-home-block="context"]')).not.toBeInTheDocument();
+    expect(screen.getByText("Hôm nay học gì nào?")).toHaveClass("home-today-heading");
+  });
+  it("does not expose the retired micro-lesson feature", () => {
+    render(<LearnerHome view={makeView({ microLesson: { id: "micro-1", topic: "Legacy", durationMinutes: 3, completed: false } })} actions={actions} />);
+
+    expect(screen.queryByText(/bài (học )?siêu ngắn/i)).not.toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "Học ngay" })).not.toHaveAttribute("href", "/micro/micro-1");
+  });
+
   it("shows a short fireworks celebration after a completed assessment", () => {
     window.sessionStorage.setItem("e4s:assessment-complete-celebration", "1");
     render(<LearnerHome view={makeView()} actions={actions} />);
@@ -103,7 +118,7 @@ describe("learner Home parity", () => {
     expect(screen.getByRole("link", { name: /Đã đạt mục tiêu tuần/ })).toHaveClass("tile", "peach");
 
     expect([...document.querySelectorAll<HTMLElement>("[data-home-block]")].map((element) => element.dataset.homeBlock)).toEqual([
-      "context", "primary", "metrics", "week-path", "attendance", "activities", "readiness"
+      "primary", "metrics", "week-path", "attendance", "activities", "readiness"
     ]);
   });
 
@@ -169,7 +184,7 @@ describe("learner Home parity", () => {
   });
 
   it("does not render a dead week path when the learner has no lessons", () => {
-    render(<LearnerHome view={makeView({ week: null, lessons: [], nextLesson: null, finalAssessment: { available: true, label: "Làm bài cuối kỳ", href: "/test/final" } })} actions={actions} />);
+    render(<LearnerHome view={makeView({ week: null, lessons: [], nextLesson: null })} actions={actions} />);
 
     expect(screen.getByRole("heading", { name: "Tuần này chưa có bài" })).toBeInTheDocument();
     expect(document.querySelector('[data-home-block="week-path"]')).not.toBeInTheDocument();
@@ -185,10 +200,11 @@ describe("learner Home parity", () => {
     expect(within(primary!).queryByRole("link", { name: "Luyện với Season" })).not.toBeInTheDocument();
   });
 
-  it("only exposes the final-assessment CTA in the final program week", () => {
+  it("does not expose a final-assessment CTA in the final program week", () => {
     render(<LearnerHome view={makeView({ week: { ...makeView().week!, weekNumber: 2 } })} actions={actions} />);
 
-    expect(screen.getByRole("link", { name: "Làm bài cuối kỳ" })).toHaveAttribute("href", "/test/final");
+    expect(screen.queryByRole("link", { name: "Làm bài cuối kỳ" })).not.toBeInTheDocument();
+    expect(document.querySelector('[data-home-block="final"]')).not.toBeInTheDocument();
   });
 
   it("uses lucide icons for generic learner activity and timing cues", () => {

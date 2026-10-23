@@ -23,9 +23,11 @@ export interface LevelReadinessMetrics {
   weeklyPractice: number;
   coachRubric: number;
   coachTurns: number;
+  wrongRate: number;
+  attemptedParts: number;
 }
 
-export type LevelReadinessCriterionKey = "lessonCompletion" | "firstTryAccuracy" | "weeklyPractice" | "coachRubric";
+export type LevelReadinessCriterionKey = "lessonCompletion" | "firstTryAccuracy" | "weeklyPractice" | "coachRubric" | "wrongRate";
 
 export function validateWeeklyPractice(input: WeeklyPracticeValidationInput): { valid: boolean; errors: string[] } {
   const text = input.text.trim();
@@ -80,6 +82,12 @@ export function buildLevelReadiness(input: {
     {
       ...criterion("coachRubric", input.metrics.coachRubric, input.thresholds.coach),
       met: input.metrics.coachRubric >= input.thresholds.coach && input.metrics.coachTurns >= input.thresholds.coachTurns
+    },
+    {
+      key: "wrongRate",
+      current: round(input.metrics.wrongRate),
+      target: input.thresholds.wrong,
+      met: input.metrics.attemptedParts >= input.thresholds.minParts && input.metrics.wrongRate <= input.thresholds.wrong
     }
   ];
   return {

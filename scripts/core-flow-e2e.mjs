@@ -29,8 +29,8 @@ const canonicalFixture = Object.freeze({
   organizationId: "00000000-0000-4000-8000-000000000001",
   programId: "00000000-0000-4000-8000-000000000201",
   learnerId: "00000000-0000-4000-8000-000000000101",
-  learnerEmail: "learner@e4s.local",
-  learnerName: "Học viên Demo",
+  learnerEmail: "minh.anh.nguyen@e4s.local",
+  learnerName: "Nguyễn Minh Anh",
   weekId: "00000000-0000-4000-8000-000000000301",
   weekNumber: 1,
   weekTopic: "Introducing yourself & your job",
@@ -75,21 +75,21 @@ async function ensureDeterministicAudioFixture() {
 
 const roles = {
   learner: {
-    email: "learner@e4s.local",
+    email: "minh.anh.nguyen@e4s.local",
     password: "learner-pass",
     expectedPath: "/home",
     loginTab: null,
     loginButton: "Đăng nhập người học"
   },
   operator: {
-    email: "operator@e4s.local",
+    email: "thu.ha.tran@e4s.local",
     password: "staff-pass",
     expectedPath: "/op",
     loginTab: "Nhân sự",
     loginButton: "Đăng nhập nhân sự"
   },
   manager: {
-    email: "manager@e4s.local",
+    email: "quoc.bao.le@e4s.local",
     password: "manager-pass",
     expectedPath: "/mgr",
     loginTab: "Nhân sự",
@@ -303,7 +303,7 @@ const coveragePlan = [
   { key: "speaking-upload", label: "Fresh speaking upload and persistence", roles: ["learner"] },
   { key: "coach-weekend", label: "Coach and weekend practice", roles: ["learner"] },
   { key: "progress-reward-game", label: "Profile/progress/reward/mini-game", roles: ["learner"] },
-  { key: "no-standalone-micro", label: "No standalone Bài học ngắn", roles: ["learner"] }
+  { key: "no-standalone-micro", label: "No standalone Bài siêu ngắn", roles: ["learner"] }
 ];
 
 const coverageStepMap = {
@@ -740,7 +740,7 @@ async function learnerRun(page, run, viewport) {
     assert(home.status === 200, `Learner 2 home API status ${home.status}`);
     const body = await page.locator("body").innerText();
     assert(body.includes(secondaryLearner.expectedName), "Learner 2 shell does not show its own display name");
-    assert(!body.includes("Học viên Demo"), "Learner 1 display name leaked into learner 2 shell");
+    assert(!body.includes("Nguyễn Minh Anh"), "Learner 1 display name leaked into learner 2 shell");
     return { email: profile.body.profile.email, displayName: profile.body.profile.fullName, completed: profile.body.completed, homeStatus: home.status, profileResetStatus: reset.status };
   });
 
@@ -970,7 +970,7 @@ async function learnerRun(page, run, viewport) {
 
   await step(page, role, run, "no-standalone-micro-lesson", async () => {
     const homeBody = await page.locator("body").innerText();
-    assert(!/Bài học ngắn/i.test(homeBody), "Standalone Bài học ngắn is still advertised in learner home");
+    assert(!/Bài siêu ngắn/i.test(homeBody), "Standalone Bài siêu ngắn is still advertised in learner home");
     const validLessonId = home.availableLessonIds?.[0] ?? lessonId;
     const validLesson = await jsonFromPage(page, `/api/v1/lessons/${encodeURIComponent(validLessonId)}`);
     assert(validLesson.status === 200, `Could not resolve valid learner lesson id ${validLessonId}: ${validLesson.status}`);
@@ -979,7 +979,7 @@ async function learnerRun(page, run, viewport) {
     assert(new URL(page.url()).pathname === `/micro/${validLessonId}`, "Standalone micro probe did not stay on the requested route");
     assert(await page.getByRole("heading", { name: "Không tìm thấy trang." }).count() === 1, "Standalone micro route did not resolve to the real not-found surface");
     assert(await page.locator(".micro-page").count() === 0, "A standalone micro lesson surface rendered for a valid lesson id");
-    assert(!/Bài học ngắn|Học nhanh|Luyện ngay/i.test(body), "Standalone micro route rendered learner micro-lesson content");
+    assert(!/Bài siêu ngắn|Học nhanh|Luyện ngay/i.test(body), "Standalone micro route rendered learner micro-lesson content");
     await page.goto(`${webUrl}/home`, { waitUntil: "networkidle" });
     await page.locator('[data-home-block="primary"] h2').first().waitFor();
     return { homeRouteClean: true, validLessonId, legacyRoute: `/micro/${validLessonId}`, legacyRouteState: "not-found" };

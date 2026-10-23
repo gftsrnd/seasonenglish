@@ -31,7 +31,7 @@ export interface LessonJsonEditorProps {
 
 export interface SectionScore {
   label: string;
-  percent: number;
+  percent: number | null;
   heuristic?: boolean;
 }
 
@@ -50,8 +50,10 @@ export interface PendingPlacement {
   suggestedLevel?: Cefr | undefined;
   levels: Cefr[];
   aiScored?: boolean | undefined;
+  humanScored?: boolean | undefined;
   canRescore?: boolean | undefined;
   rescoreBusy?: boolean | undefined;
+  deletionPending?: boolean | undefined;
 }
 
 export interface LevelRequest {
@@ -138,6 +140,7 @@ export interface OperatorDashboardActions {
   onChangeLevel(id: string): void;
   onEditGoal(id: string): void;
   onViewProfile(id: string): void;
+  onAssignWeeklyPractice?(id: string): void;
   onTogglePendingProfile?: (id: string) => void;
   onSetLevelDirect(id: string): void;
   onOpenAppeals(): void;
@@ -146,7 +149,7 @@ export interface OperatorDashboardActions {
   onOpenLevelForms(): void;
 }
 
-export type DashboardActionKey = "resolveTopicReport" | "approvePlacement" | "viewTest" | "rescore" | "deleteLearner" | "decideLevelRequest" | "viewChallenge" | "demote" | "changeLevel" | "editGoal" | "viewProfile" | "setLevelDirect";
+export type DashboardActionKey = "resolveTopicReport" | "approvePlacement" | "viewTest" | "rescore" | "deleteLearner" | "decideLevelRequest" | "viewChallenge" | "demote" | "changeLevel" | "editGoal" | "viewProfile" | "assignWeeklyPractice" | "setLevelDirect";
 
 export interface LevelFormSummary {
   id: string;
@@ -212,7 +215,7 @@ export interface OperatorWeeksView {
   status: string;
   saveState?: AsyncState | undefined;
   saveError?: string | null | undefined;
-  generationDialog?: { weeks: number[]; selectedWeeks: number[]; levelCount: number } | undefined;
+  generationDialog?: { weeks: number[]; selectedWeeks: number[]; replacementWeeks: number[]; levelCount: number } | undefined;
   weeks: WeekFrame[];
 }
 
@@ -295,6 +298,12 @@ export interface OperatorLessonSetView {
     details: number;
     detailIssues?: Array<{ lessonId: string; dayLabel: string; title: string; missing: string[] }> | undefined;
   };
+  weeklyPractice: {
+    task: string;
+    guidance: string;
+    inputModeLabel: string;
+    requiredVocabulary: string[];
+  };
   lessons: LessonSetLesson[];
 }
 
@@ -312,7 +321,28 @@ export interface OperatorLessonSetActions {
 }
 export type LessonSetActionKey = "approve" | "unapprove" | "regenerate" | "deleteSet" | "fillPhrases" | "enrich" | "editLesson" | "deleteLesson" | "composeDay";
 
-export type ReviewTab = "subs" | "coach" | "micro" | "appeals" | "attempts" | "tests";
+export type ReviewTab = "subs" | "coach" | "weekly" | "appeals" | "attempts" | "tests";
+
+export interface ReviewWeeklyPractice {
+  id: string;
+  week: number;
+  cefr: Cefr;
+  topic: string;
+  status: "draft" | "review" | "approved";
+  version: number;
+  task: string;
+  guidance: string;
+  requiredVocabulary: string[];
+}
+
+export interface ReviewWeeklyPracticeInput {
+  week: number;
+  cefr: Cefr;
+  expectedVersion: number;
+  task: string;
+  guidance: string;
+  requiredVocabulary: string[];
+}
 
 export interface RubricScore { meaning: number; vocab: number; grammar: number }
 export interface Suggestion { original: string; corrected: string; explanation: string }
@@ -348,25 +378,6 @@ export interface ReviewCoachTurn {
   suggestions?: Suggestion[];
 }
 
-export interface ReviewMicroLesson {
-  id: string;
-  learnerName: string;
-  cefr: Cefr;
-  date: string;
-  topic: string;
-  completed: boolean;
-  theory: string;
-  vocabulary: string;
-  practiceType?: string | undefined;
-  practiceText: string;
-  practiceAnswer?: string | undefined;
-  learnerAnswer?: string | undefined;
-  score?: number | null;
-  scoreOk?: boolean;
-  job?: string | undefined;
-  learningStyle?: string | undefined;
-}
-
 export interface ReviewAppeal {
   id: string;
   learnerName: string;
@@ -389,6 +400,7 @@ export interface ReviewAppeal {
 
 export interface ReviewAttempt {
   id: string;
+  learnerId: string;
   learnerName: string;
   cefr?: Cefr | undefined;
   lesson: string;
@@ -402,7 +414,7 @@ export interface ReviewAttempt {
 export interface ReviewTest {
   id: string;
   learnerName: string;
-  kind: "placement" | "final" | "level_up";
+  kind: "placement" | "level_up";
   submittedAt?: string | undefined;
   total?: number | undefined;
   rawLevel?: Cefr | undefined;
@@ -414,7 +426,7 @@ export interface OperatorReviewView {
   counts: Record<ReviewTab, number>;
   submissions: ReviewSubmission[];
   coachTurns: ReviewCoachTurn[];
-  microLessons: ReviewMicroLesson[];
+  weeklyPractices: ReviewWeeklyPractice[];
   appeals: ReviewAppeal[];
   attempts: ReviewAttempt[];
   tests: ReviewTest[];
@@ -425,15 +437,15 @@ export interface OperatorReviewActions {
   onTabChange(tab: ReviewTab): void;
   onMarkSubmission(id: string, checked: boolean): void;
   onMarkCoachTurn(id: string, checked: boolean): void;
-  onDeleteMicroLesson(id: string): void;
   onGradeAi(id: string): void;
   onGradeManual(id: string): void;
   onDecideAppeal(id: string, accepted: boolean): void;
   onViewTest(id: string): void;
+  onSaveWeeklyPractice?(input: ReviewWeeklyPracticeInput): void | Promise<void>;
 }
-export type ReviewActionKey = "checkSubmission" | "checkCoach" | "deleteMicro" | "gradeAi" | "gradeManual" | "decideAppeal" | "viewTest";
+export type ReviewActionKey = "checkSubmission" | "checkCoach" | "gradeAi" | "gradeManual" | "decideAppeal" | "viewTest";
 
-export type PromptKey = "base" | "placement" | "lesson" | "weeks" | "mgrade" | "coach" | "grade";
+export type PromptKey = "base" | "placement" | "lesson" | "weeks" | "coach" | "grade";
 export interface OperatorPromptsView { prompts: Array<[PromptKey, string, string]>; saveState?: AsyncState | undefined; saveError?: string | null | undefined }
 export interface OperatorPromptsActions {
   onBack(): void;

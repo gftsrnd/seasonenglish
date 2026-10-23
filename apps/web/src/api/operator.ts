@@ -5,16 +5,18 @@ import type {
   AssessmentReviewAttemptDetailView, AssessmentReviewChallengeView, AssessmentReviewLearnerView,
   AssessmentReviewOverviewView, CefrLevel, ContentLessonDraftInput, ContentLessonMatrixView,
   ContentLessonMutationResult, ContentLessonSetVersionView, ContentPromptKey, ContentPromptSettingsView,
+  ContentWeeklyPracticeDraftInput,
   ContentReviewAiGradeJobView, ContentReviewAssessmentDetailView, ContentReviewView, ContentWeekFrameView,
   ContentImageView,
   ManualAssessmentScoreInput,
-  ContentWeekInput, ContentWeekSuggestionView, SystemCapabilitiesView
+  ContentWeekInput, ContentWeekSuggestionView, SystemCapabilitiesView, WeeklyPracticeAssignmentView
 } from "@e4s/contracts";
 import { request } from "./runtime.js";
 
 export interface OperatorApiClient {
   getAssessmentReviewOverview(): Promise<AssessmentReviewOverviewView>;
   getAssessmentReviewLearner(learnerId: string): Promise<AssessmentReviewLearnerView>;
+  assignAssessmentReviewWeeklyPractice(learnerId: string): Promise<WeeklyPracticeAssignmentView>;
   getAssessmentReviewAttempt(attemptId: string): Promise<AssessmentReviewAttemptDetailView>;
   getAssessmentReviewChallenge(attemptId: string): Promise<AssessmentReviewChallengeView>;
   manualScoreAssessment?(attemptId: string, input: ManualAssessmentScoreInput): Promise<AssessmentReviewAttemptDetailView>;
@@ -39,6 +41,7 @@ export interface OperatorApiClient {
   upsertContentLessonDay(week: number, cefr: CefrLevel, dayNumber: number, lesson: ContentLessonDraftInput, expectedVersion?: number): Promise<ContentLessonMutationResult>;
   deleteContentLessonDay(week: number, cefr: CefrLevel, dayNumber: number, expectedVersion?: number): Promise<ContentLessonMutationResult>;
   saveContentLessonJson(week: number, cefr: CefrLevel, lessons: ContentLessonDraftInput[], expectedVersion?: number): Promise<ContentLessonMutationResult>;
+  saveContentWeeklyPractice(week: number, cefr: CefrLevel, input: ContentWeeklyPracticeDraftInput): Promise<ContentLessonMutationResult>;
   enrichContentLessonDraft(week: number, cefr: CefrLevel, expectedVersion?: number): Promise<ContentLessonMutationResult>;
   fillContentLessonPhrases(week: number, cefr: CefrLevel, expectedVersion?: number): Promise<ContentLessonMutationResult>;
   deleteContentLessonDraftSet(week: number, cefr: CefrLevel): Promise<{ deleted: true }>;
@@ -62,6 +65,7 @@ export interface OperatorApiClient {
 export const operatorApiClient: OperatorApiClient = {
   getAssessmentReviewOverview: () => request("/api/v1/assessment-reviews/overview"),
   getAssessmentReviewLearner: (learnerId) => request(`/api/v1/assessment-reviews/learners/${encodeURIComponent(learnerId)}`),
+  assignAssessmentReviewWeeklyPractice: (learnerId) => request(`/api/v1/assessment-reviews/learners/${encodeURIComponent(learnerId)}/weekly-practice`, { method: "POST", body: "{}" }),
   getAssessmentReviewAttempt: (attemptId) => request(`/api/v1/assessment-reviews/attempts/${encodeURIComponent(attemptId)}`),
   getAssessmentReviewChallenge: (attemptId) => request(`/api/v1/assessment-reviews/challenges/${encodeURIComponent(attemptId)}`),
   manualScoreAssessment: (attemptId, input) => request(`/api/v1/assessment-reviews/${encodeURIComponent(attemptId)}/manual-score`, { method: "POST", body: JSON.stringify(input) }),
@@ -86,6 +90,7 @@ export const operatorApiClient: OperatorApiClient = {
   upsertContentLessonDay: (week, cefr, dayNumber, lesson, expectedVersion) => request(`/api/v1/content/lesson-sets/${week}/${encodeURIComponent(cefr)}/draft/lessons/${dayNumber}`, { method: "PUT", body: JSON.stringify({ ...lesson, ...(expectedVersion === undefined ? {} : { expectedVersion }) }) }),
   deleteContentLessonDay: (week, cefr, dayNumber, expectedVersion) => request(`/api/v1/content/lesson-sets/${week}/${encodeURIComponent(cefr)}/draft/lessons/${dayNumber}`, { method: "DELETE", body: JSON.stringify(expectedVersion === undefined ? {} : { expectedVersion }) }),
   saveContentLessonJson: (week, cefr, lessons, expectedVersion) => request(`/api/v1/content/lesson-sets/${week}/${encodeURIComponent(cefr)}/draft/json`, { method: "PUT", body: JSON.stringify({ lessons, ...(expectedVersion === undefined ? {} : { expectedVersion }) }) }),
+  saveContentWeeklyPractice: (week, cefr, input) => request(`/api/v1/content/lesson-sets/${week}/${encodeURIComponent(cefr)}/draft/weekly-practice`, { method: "PUT", body: JSON.stringify(input) }),
   enrichContentLessonDraft: (week, cefr, expectedVersion) => request(`/api/v1/content/lesson-sets/${week}/${encodeURIComponent(cefr)}/draft/enrich`, { method: "POST", body: JSON.stringify(expectedVersion === undefined ? {} : { expectedVersion }) }),
   fillContentLessonPhrases: (week, cefr, expectedVersion) => request(`/api/v1/content/lesson-sets/${week}/${encodeURIComponent(cefr)}/draft/fill-phrases`, { method: "POST", body: JSON.stringify(expectedVersion === undefined ? {} : { expectedVersion }) }),
   deleteContentLessonDraftSet: (week, cefr) => request(`/api/v1/content/lesson-sets/${week}/${encodeURIComponent(cefr)}/draft`, { method: "DELETE", body: "{}" }),

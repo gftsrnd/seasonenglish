@@ -78,6 +78,33 @@ export function calculatePlacementResult(scores: Record<AssessmentSectionCode, n
   return { status: "scored" as const, totalScore, cefr: mapPlacementCefr(totalScore) };
 }
 
+export type PlacementManualReviewReason =
+  | "missing_productive_score"
+  | "technical_failure"
+  | "typed_proxy"
+  | "material_skill_gap"
+  | "cefr_boundary";
+
+export function placementManualReviewReasons(input: {
+  scores: Record<AssessmentSectionCode, number | null>;
+  speakingEvidence: readonly ("audio" | "transcript" | "typed_proxy" | "technical_failure" | "skipped")[];
+}): PlacementManualReviewReason[] {
+  const reasons = new Set<PlacementManualReviewReason>();
+  if (input.scores.writing === null || input.scores.speaking === null) reasons.add("missing_productive_score");
+  if (input.speakingEvidence.includes("technical_failure")) reasons.add("technical_failure");
+  if (input.speakingEvidence.includes("typed_proxy")) reasons.add("typed_proxy");
+
+  const maxima: Record<AssessmentSectionCode, number> = { listening: 20, reading: 40, writing: 20, speaking: 20 };
+  const normalized = (Object.keys(maxima) as AssessmentSectionCode[])
+    .map((section) => input.scores[section] === null ? null : Number(input.scores[section]) / maxima[section] * 100);
+  if (normalized.every((score): score is number => score !== null)) {
+    if (Math.max(...normalized) - Math.min(...normalized) >= 25) reasons.add("material_skill_gap");
+    const total = Object.values(input.scores).reduce<number>((sum, score) => sum + Number(score), 0);
+    if ([25, 45, 65, 85].some((boundary) => Math.abs(total - boundary) <= 0.5)) reasons.add("cefr_boundary");
+  }
+  return [...reasons];
+}
+
 export function passesLevelUp(scores: Record<AssessmentSectionCode, number>): boolean {
   const total = Object.values(scores).reduce((sum, value) => sum + value, 0);
   return total >= 70 && Object.values(scores).every((value) => value >= 12.5);

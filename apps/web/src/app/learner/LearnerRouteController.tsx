@@ -25,7 +25,7 @@ type StaticRouteName = "home" | "onboard" | "coach" | "challenge" | "practice" |
 export type ResolvedLearnerRoute =
   | { name: StaticRouteName; params: Record<string, never> }
   | { name: "assessment"; params: { kind: AssessmentKind | "levelup" } }
-  | { name: "lesson" | "micro" | "duel"; params: { id: string } }
+  | { name: "lesson" | "duel"; params: { id: string } }
   | { name: "reward"; params: { mode: "preview" | "done" } }
   | { name: "game"; params: { game: GameKey } }
   | { name: "notFound"; params: Record<string, never> };
@@ -41,9 +41,10 @@ type LearnerLoadFailureProps = {
 
 export function LearnerLoadFailure({ route, message, onRetry, navigate }: LearnerLoadFailureProps) {
   const recovery = loadRecovery(route);
+  const waiting = loadWaitState(route);
   return <div className="app-learner-page">
-    <PageTitle title="Chưa thể mở trang" />
-    <Empty description={<Notice tone="danger">{message}</Notice>} action={<div className="row" style={{ flexWrap: "wrap" }}>
+    <PageTitle title={waiting?.title ?? "Chưa thể mở trang"} />
+    <Empty description={<Notice tone={waiting ? "warn" : "danger"}>{waiting?.message ?? message}</Notice>} action={<div className="row" style={{ flexWrap: "wrap" }}>
       <button className="btn" type="button" onClick={onRetry}>Thử lại</button>
       <AppLink className="btn btn-primary" href={recovery.href} navigate={navigate}>{recovery.label}</AppLink>
     </div>} />
@@ -56,7 +57,7 @@ export function LearnerLoadFailure({ route, message, onRetry, navigate }: Learne
  * learner to Home instead of leaving them on a dead-end route.
  */
 export function shouldRedirectApprovedPlacement(kind: AssessmentKind | "levelup", status?: string | null) {
-  return kind === "placement" && status === "approved";
+  return kind === "placement" && (status === "submitted" || status === "pending_review" || status === "approved");
 }
 
 export function shouldRedirectUnavailableChallenge(route: ResolvedLearnerRoute["name"], reason: unknown) {
@@ -84,11 +85,10 @@ export function resolveLearnerRoute(pathname: string): ResolvedLearnerRoute {
   if (segments.length === 1 && ["home", "onboard", "coach", "challenge", "practice", "survey", "profile", "games", "arena"].includes(segments[0]!)) return { name: segments[0] as StaticRouteName, params: {} };
   if (segments[0] === "test" && segments.length === 2) {
     const raw = segments[1];
-    if (raw === "placement" || raw === "final") return { name: "assessment", params: { kind: raw } };
+    if (raw === "placement") return { name: "assessment", params: { kind: raw } };
     if (raw === "levelup" || raw === "level-up") return { name: "assessment", params: { kind: "levelup" } };
   }
   if (segments[0] === "lesson" && segments.length === 2 && segments[1]) return { name: "lesson", params: { id: segments[1] } };
-  if (segments[0] === "micro" && segments.length === 2 && segments[1]) return { name: "micro", params: { id: segments[1] } };
   if (segments[0] === "reward" && segments.length === 2 && (segments[1] === "preview" || segments[1] === "done")) return { name: "reward", params: { mode: segments[1] } };
   if (segments[0] === "games" && segments.length === 2 && gameKeys.includes(segments[1] as GameKey)) return { name: "game", params: { game: segments[1] as GameKey } };
   if (segments[0] === "duel" && segments.length === 2 && segments[1]) return { name: "duel", params: { id: segments[1] } };
@@ -192,9 +192,13 @@ export function LearnerRouteController() {
             try {
               const placement = await apiClient.getAssessment("placement");
               const status = placement.attempt?.status;
+              if (status === "in_progress") {
+                navigate("/test/placement", { replace: true });
+                return;
+              }
               accept({ home }, undefined, {
                 home: {
-                  placementDraft: status === "in_progress",
+                  placementDraft: false,
                   approvalPending: status === "submitted" || status === "pending_review" || status === "approved"
                 }
               });
@@ -224,7 +228,6 @@ export function LearnerRouteController() {
           break;
         }
         case "lesson": accept({ lesson: await apiClient.getLesson(route.params.id) }); break;
-        case "micro": accept({ micro: await apiClient.getMicroLesson(route.params.id) }); break;
         case "coach": accept({ coach: await apiClient.getCoach() }); break;
         case "challenge": accept({ challenge: await apiClient.getLevelChallenge() }); break;
         case "practice": accept({ practice: await apiClient.getWeeklyPractice() }); break;
@@ -241,6 +244,31 @@ export function LearnerRouteController() {
     void load().catch(reject);
     return () => { live = false; };
   }, [route]);
+
+  useEffect(() => {
+    if (route.name !== "assessment" || route.params.kind !== "placement") return;
+    let live = true;
+    let refreshing = false;
+    const syncTerminalPlacement = () => {
+      if (document.hidden || refreshing) return;
+      refreshing = true;
+      void apiClient.getAssessment("placement")
+        .then((assessment) => {
+          if (live && shouldRedirectApprovedPlacement("placement", assessment.attempt?.status)) {
+            navigate("/home", { replace: true });
+          }
+        })
+        .catch(() => undefined)
+        .finally(() => { refreshing = false; });
+    };
+    document.addEventListener("visibilitychange", syncTerminalPlacement);
+    window.addEventListener("focus", syncTerminalPlacement);
+    return () => {
+      live = false;
+      document.removeEventListener("visibilitychange", syncTerminalPlacement);
+      window.removeEventListener("focus", syncTerminalPlacement);
+    };
+  }, [navigate, route]);
 
   const saveProfileRecord = async (profile: LearnerProfileData, leave: boolean) => {
     if (!profileRecord) throw new Error("PROFILE_NOT_LOADED");
@@ -262,9 +290,25 @@ export function LearnerRouteController() {
     }
   };
 
+  const saveProfileDraft = async (profile: LearnerProfileData) => {
+    if (!profileRecord) throw new Error("PROFILE_NOT_LOADED");
+    setUiState((current) => ({ ...current, onboard: { ...current.onboard, saving: true } }));
+    try {
+      const saved = await apiClient.saveProfileDraft(profile, profileRecord.version);
+      setProfileRecord(saved);
+      setContracts((current) => ({ ...current, ...(route.name === "onboard" ? { onboard: saved } : {}) }));
+      setUiState((current) => ({ ...current, onboard: { ...current.onboard, draftAvailable: true } }));
+    } catch (reason) {
+      setUiState((current) => ({ ...current, onboard: { ...current.onboard, error: "Không lưu được bản nháp. Dữ liệu trên màn hình vẫn được giữ để bạn thử lại." } }));
+      throw reason;
+    } finally {
+      setUiState((current) => ({ ...current, onboard: { ...current.onboard, saving: false } }));
+    }
+  };
+
   const callbacks: LearnerCallbacks = {
     navigate: (path) => navigate(path),
-    saveProfileDraft: (profile) => saveProfileRecord(profile, false),
+    saveProfileDraft,
     saveProfile: (profile) => saveProfileRecord(profile, true),
     startAssessment: async () => { if (route.name === "assessment") setContracts({ assessment: await apiClient.startAssessment(route.params.kind) }); },
     saveAssessmentResponse: async (section, taskKey, input) => {
@@ -288,8 +332,8 @@ export function LearnerRouteController() {
         try { window.sessionStorage.setItem(assessmentCelebrationKey, "1"); } catch { /* keep navigation safe in restricted storage */ }
         experience.play("celebrate");
         showLearnerToast("Đã nộp bài thành công. Chúc mừng bạn đã hoàn thành!", "ok");
-        navigate("/home");
       }
+      if (route.name === "assessment" && route.params.kind === "placement" || submitReason === "manual") navigate("/home", { replace: true });
     },
     recordAssessmentViolation: async (attemptId: string, input: AssessmentViolationInput) => {
       const runtime = await apiClient.recordAssessmentViolation(attemptId, input);
@@ -351,30 +395,9 @@ export function LearnerRouteController() {
       if (route.name !== "lesson") throw new Error("LESSON_ROUTE_NOT_ACTIVE");
       return apiClient.resolveLessonVocabularyImage(route.params.id, itemIndex);
     },
-    submitMicroAnswer: async (answer) => {
-      if (route.name !== "micro") throw new Error("MICRO_ROUTE_NOT_ACTIVE");
-      setContracts({ micro: await apiClient.submitMicroAttempt(route.params.id, answer) });
-    },
-    completeMicroLesson: async () => {
-      if (route.name !== "micro") throw new Error("MICRO_ROUTE_NOT_ACTIVE");
-      setContracts({ micro: await apiClient.completeMicroLesson(route.params.id) });
-    },
-    regenerateMicroLesson: async () => {
-      try {
-        const lesson = await apiClient.generateMicroLesson(crypto.randomUUID(), true);
-        navigate(`/micro/${lesson.id}`);
-      } catch (reason) {
-        setUiState((current) => ({
-          ...current,
-          micro: {
-            ...current.micro,
-            regenerateError: reason instanceof Error && reason.message === "AI_UNAVAILABLE"
-              ? "Season chưa kết nối AI nên chưa thể tạo bài khác."
-              : "Chưa tạo được bài mới. Bạn có thể thử lại sau."
-          }
-        }));
-      }
-    },
+    submitMicroAnswer: async () => { throw new Error("MICRO_LESSON_RETIRED"); },
+    completeMicroLesson: async () => { throw new Error("MICRO_LESSON_RETIRED"); },
+    regenerateMicroLesson: async () => { throw new Error("MICRO_LESSON_RETIRED"); },
     acknowledgeRewardAnnouncement: async (announcementId) => {
       if (route.name !== "home") throw new Error("HOME_ROUTE_NOT_ACTIVE");
       await apiClient.acknowledgeRewardAnnouncement(announcementId);
@@ -455,7 +478,7 @@ function mergeResponse(responses: AssessmentResponseView[], response: Assessment
 function loadingLabel(route: ResolvedLearnerRoute["name"]) {
   const labels: Record<ResolvedLearnerRoute["name"], string> = {
     home: "Đang tải trang chủ", onboard: "Đang tải hồ sơ", assessment: "Đang tải bài test", lesson: "Đang tải bài học",
-    micro: "Đang tải bài siêu ngắn", coach: "Đang mở cuộc trò chuyện", challenge: "Đang mở thử thách lên mức",
+    coach: "Đang mở cuộc trò chuyện", challenge: "Đang mở thử thách lên mức",
     practice: "Đang mở bài thực hành", survey: "Đang mở khảo sát", profile: "Đang tải tiến độ", reward: "Đang tạo chứng nhận",
     games: "Đang mở mini game", game: "Đang mở trò chơi", arena: "Đang mở đấu trường", duel: "Đang mở trận đấu", notFound: "Đang mở trang"
   };
@@ -465,7 +488,7 @@ function loadingLabel(route: ResolvedLearnerRoute["name"]) {
 function loadError(route: ResolvedLearnerRoute["name"]) {
   const labels: Record<ResolvedLearnerRoute["name"], string> = {
     home: "Không tải được trang chủ.", onboard: "Không tải được hồ sơ.", assessment: "Không tải được bài test.", lesson: "Không tải được bài học.",
-    micro: "Không tải được bài siêu ngắn.", coach: "Không tải được cuộc trò chuyện với Season.", challenge: "Chưa có thử thách lên mức đang mở.",
+    coach: "Không tải được cuộc trò chuyện với Season.", challenge: "Chưa có thử thách lên mức đang mở.",
     practice: "Không tải được bài thực hành tuần.", survey: "Không tải được khảo sát.", profile: "Không tải được tiến độ.", reward: "Chứng nhận chưa sẵn sàng.",
     games: "Chưa có bộ từ cho mini game.", game: "Chưa có bộ từ cho mini game.", arena: "Không tải được đấu trường.", duel: "Không tải được trận đấu.", notFound: "Không tìm thấy trang."
   };
@@ -473,7 +496,18 @@ function loadError(route: ResolvedLearnerRoute["name"]) {
 }
 
 function loadRecovery(route: ResolvedLearnerRoute["name"]) {
-  if (route === "game" || route === "games") return { href: "/games", label: "Về Mini game" };
   if (route === "arena" || route === "duel") return { href: "/arena", label: "Về đấu trường" };
   return { href: "/home", label: "Về trang chủ" };
+}
+
+function loadWaitState(route: ResolvedLearnerRoute["name"]) {
+  if (route === "practice") return {
+    title: "Bài thực hành tuần đang được chuẩn bị",
+    message: "Bạn cần đợi bài thực hành tuần được chuẩn bị hoặc được giao. Hãy quay lại sau."
+  };
+  if (route === "game" || route === "games") return {
+    title: "Mini game đang được chuẩn bị",
+    message: "Bạn cần đợi bộ từ Mini game được tạo từ bài học tuần. Hãy quay lại sau."
+  };
+  return null;
 }

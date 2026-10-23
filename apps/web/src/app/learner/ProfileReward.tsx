@@ -85,7 +85,7 @@ export function LearnerProfile({ view, actions }: { view: ProfileView; actions: 
     {level ? <ReadinessCard view={view} actions={actions} /> : null}
     <section className="profile-progress-section" aria-label="Tổng quan tiến độ"><div className="profile-section-heading"><div><div className="eyebrow">Tổng quan học tập</div><h2>Nhịp học hiện tại</h2></div><span className="small muted">Tóm tắt từ dữ liệu đã ghi nhận</span></div><div className="grid cols-3 profile-kpi-grid"><div className="card kpi"><span className="val">{view.stats.completedLessons}</span><span className="lbl">bài đã học</span></div><div className="card kpi"><span className="val">{view.stats.coachTurns}</span><span className="lbl">lượt luyện với Season</span></div><div className="card kpi"><span className="val">{view.stats.studyDays}</span><span className="lbl">ngày có học</span></div></div></section>
     <section className="profile-progress-section profile-weeks-section" aria-label="Tiến độ theo tuần"><div className="profile-section-heading"><div><div className="eyebrow">Lộ trình học</div><h2>Tiến độ theo tuần</h2></div><span className="small muted">Theo dõi từng ngày T2–T6</span></div><div className="profile-week-grid">{view.weeks.map((week) => <article className="card profile-week-card" key={week.weekNumber}><div className="row between" style={{ gap: 12, alignItems: "flex-start" }}><h3>Tuần {week.weekNumber} <span className="small muted">{week.topic}</span></h3><span className="small muted" style={{ fontWeight: 800, whiteSpace: "nowrap" }}>{week.completedLessons}/{week.totalLessons || "–"} bài</span></div><WeekDays days={week.days} /></article>)}</div></section>
-    <section className="card profile-progress-section profile-assessment-section" aria-label="Kết quả đánh giá"><div className="profile-section-heading"><div><div className="eyebrow">Đánh giá năng lực</div><h2>Điểm đầu vào → cuối kỳ</h2></div><span className="small muted">So sánh trước và sau pilot</span></div><div className="grid cols-2 profile-assessment-grid"><AssessmentResult label="Điểm đầu vào" result={view.assessments.placement} /><AssessmentResult label="Điểm cuối kỳ" result={view.assessments.final} action={view.finalAssessmentAvailable && !view.assessments.final ? <AppLink className="profile-assessment-cta" href="/test/final" navigate={actions.navigate} ariaLabel="Làm bài cuối kỳ">Làm bài cuối kỳ →</AppLink> : null} /></div>{view.surveyAvailable ? <div className="row profile-assessment-actions"><AppLink className="btn" href="/survey" navigate={actions.navigate}>Trả lời khảo sát cuối pilot</AppLink></div> : null}</section>
+    <section className="card profile-progress-section profile-assessment-section" aria-label="Kết quả đánh giá"><div className="profile-section-heading"><div><div className="eyebrow">Đánh giá năng lực</div><h2>Điểm đầu vào</h2></div><span className="small muted">Kết quả đánh giá ban đầu</span></div><div className="profile-assessment-grid"><AssessmentResult label="Điểm đầu vào" result={view.assessments.placement} /></div>{view.surveyAvailable ? <div className="row profile-assessment-actions"><AppLink className="btn" href="/survey" navigate={actions.navigate}>Trả lời khảo sát cuối pilot</AppLink></div> : null}</section>
     {avatarOpen ? <AvatarDialog initial={view.learner.profile.avatar} name={view.learner.displayName} onClose={closeAvatar} onSave={async (avatar) => { await actions.saveAvatar(avatar); closeAvatar(); }} /> : null}
   </div>;
 }
@@ -168,10 +168,10 @@ function WeekDays({ days }: { days: ProfileView["weeks"][number]["days"] }) {
 }
 
 function AssessmentResult({ label, result, action }: { label: string; result: ProfileView["assessments"]["placement"]; action?: ReactNode }) {
-  const shortLabel = label === "Điểm đầu vào" ? "Đầu vào" : "Cuối kỳ";
+  const shortLabel = label === "Điểm đầu vào" ? "Đầu vào" : label;
   if (!result) return <div className="profile-assessment-result profile-assessment-result--empty" role="region" aria-label={label}>
     <div className="eyebrow">{shortLabel}</div>
-    <span className="muted">{label === "Điểm cuối kỳ" ? "Chưa làm" : "Chưa có"}</span>
+    <span className="muted">Chưa có</span>
     {action}
   </div>;
   return <div className="profile-assessment-result" role="region" aria-label={label}>

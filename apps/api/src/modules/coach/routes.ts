@@ -61,20 +61,32 @@ export function registerCoachRoutes(
     const existing = await repositories.coach.currentForLearner(learnerId, true);
     if (!existing) return reply.code(404).send({ code: "COACH_CONTEXT_NOT_FOUND" });
     if (await repositories.aiRuns.requestExists(learnerId, parsed.data.requestId, "coach_dialogue")) return existing;
+    const currentQuestion = coachCurrentQuestion(existing.messages, existing.topic);
+    if (isAcknowledgementOnly(parsed.data.message)) {
+      await repositories.coach.saveInsufficientTurn({
+        learnerId, sessionId: existing.sessionId, requestId: parsed.data.requestId,
+        message: parsed.data.message, currentQuestion
+      });
+      return await repositories.coach.currentForLearner(learnerId, true);
+    }
     if (existing.daily.used >= existing.daily.limit) return reply.code(429).send({ code: "COACH_DAILY_LIMIT" });
 
     const task = await repositories.aiRuns.activeTaskPrompt(learnerId, "coach_dialogue");
     if (!task) return reply.code(503).send({ code: "AI_PROMPT_NOT_READY" });
     try {
-      const result = await runner.runTask("coach_dialogue", {
+      const aiInput = {
         message: parsed.data.message,
         cefr: existing.cefr,
         persona: existing.persona,
+        mode: "practice",
         scenario: existing.topic,
+        currentQuestion,
         priorTurns: existing.messages.slice(-8).map((message) => ({ speaker: message.speaker, text: message.text }))
-      }, { systemPrompt: coachPersonaPrompt(task.prompt, existing.persona) });
-      const output = coachOutputSchema.safeParse(result.output);
-      if (!output.success) return reply.code(502).send({ code: "AI_OUTPUT_INVALID" });
+      };
+      const { result, output } = await runCoachWithPersonaRepair(
+        runner, aiInput, coachPersonaPrompt(task.prompt, existing.persona), existing.persona
+      );
+      const normalizedOutput = repeatCurrentQuestionForOffTopic(output, currentQuestion);
       await repositories.coach.saveAiTurn({
         learnerId,
         sessionId: existing.sessionId,
@@ -82,7 +94,7 @@ export function registerCoachRoutes(
         message: parsed.data.message,
         taskId: task.taskId,
         promptVersionId: task.promptVersionId,
-        output: output.data as CoachTaskOutput,
+        output: normalizedOutput as CoachTaskOutput,
         metadata: {
           traceId: result.metadata.traceId,
           provider: result.metadata.provider,
@@ -138,20 +150,27 @@ export function registerCoachRoutes(
     const task = await repositories.aiRuns.activeTaskPrompt(learnerId, "coach_dialogue");
     if (!task) return reply.code(503).send({ code: "AI_PROMPT_NOT_READY" });
     try {
-      const result = await runner.runTask("coach_dialogue", {
+      const aiInput = {
         message: parsed.data.message,
         cefr: existing.targetLevel,
         persona: "formal",
+        mode: "challenge",
         scenario: `Level-up challenge for ${existing.targetLevel}. Ask one workplace follow-up question at a time.`,
+        currentQuestion: coachCurrentQuestion(existing.messages, `Tell me about your work at ${existing.targetLevel} level.`),
         priorTurns: existing.messages.slice(-8).map((message) => ({ speaker: message.speaker, text: message.text }))
-      }, { systemPrompt: coachPersonaPrompt(task.prompt, "formal") });
-      const output = coachOutputSchema.safeParse(result.output);
-      if (!output.success) return reply.code(502).send({ code: "AI_OUTPUT_INVALID" });
+      };
+      const { result, output } = await runCoachWithPersonaRepair(
+        runner, aiInput, coachPersonaPrompt(task.prompt, "formal"), "formal"
+      );
+      const normalizedOutput = repeatCurrentQuestionForOffTopic(
+        output,
+        coachCurrentQuestion(existing.messages, `Tell me about your work at ${existing.targetLevel} level.`)
+      );
       await repositories.coach.saveAiTurn({
         learnerId, sessionId: existing.sessionId, requestId: parsed.data.requestId,
         message: parsed.data.message, taskId: task.taskId, promptVersionId: task.promptVersionId,
         challengeAttemptId: existing.assessmentAttemptId,
-        output: output.data as CoachTaskOutput,
+        output: normalizedOutput as CoachTaskOutput,
         metadata: { traceId: result.metadata.traceId, provider: result.metadata.provider, model: result.metadata.model,
           inputHash: result.metadata.inputHash, usage: result.metadata.usage, latencyMs: result.metadata.latencyMs }
       });
@@ -167,8 +186,65 @@ export function coachPersonaPrompt(prompt: string, persona: "informal" | "formal
   const instruction = persona === "formal"
     ? "FORMAL STYLE: Use professional, courteous workplace English. Avoid slang, contractions, emojis, and overly familiar language."
     : "INFORMAL STYLE: Use warm, friendly, natural workplace English. Contractions are welcome, but keep the language respectful and CEFR-appropriate.";
-  const correctionGuard = "TRANSLATIONS: Return a natural Vietnamese translation of Season's complete reply in replyTranslation. For every correction, return a natural Vietnamese translation of the corrected learner sentence in suggestions[].translation. Keep explanation focused only on the short language reason; never place a translation inside explanation. CORRECTIONS ONLY: Only put genuine language errors in suggestions. If the learner's message is grammatical, relevant, and answers the question—even if it is brief or less specific—return suggestions: [] and correctedText: \"\". Do not rewrite a correct answer merely to make it longer, more detailed, or stylistically different. Invite more detail only in the conversational reply or follow-up question, without marking the learner's answer as wrong.";
+  const correctionGuard = "TRANSLATIONS: Return a natural Vietnamese translation of Season's conversational reply in seasonReplyTranslation. For every correction, return a natural Vietnamese translation of the corrected learner sentence in corrections[].translation. Keep correction reason focused only on the short language reason; never place a translation inside reason. CORRECTIONS ONLY: Only put genuine language errors in corrections. If the learner's message is grammatical, relevant, and answers currentQuestion—even if it is brief or less specific—return corrections: [] and correctedText: \"\". Do not rewrite a correct answer merely to make it longer, more detailed, or stylistically different. RUBRIC SCOPE: rubric evidence and improvement must refer only to the learner's latest message and currentQuestion. Never base rubric feedback on nextQuestion or suggestedAnswer. If a criterion needs no improvement, say \"No change needed.\" suggestedAnswer answers nextQuestion only and must never be presented as a correction to the learner's latest message.";
   return `${prompt}\n\n${instruction}\n\n${correctionGuard}`;
+}
+
+export function isAcknowledgementOnly(message: string): boolean {
+  const normalized = message.trim().toLocaleLowerCase().replace(/[^\p{L}\p{N}\s']/gu, "").replace(/\s+/g, " ");
+  return new Set(["ok", "okay", "yes", "no", "yeah", "yep", "nope", "sure", "thanks", "thank you", "hi", "hello"]).has(normalized);
+}
+
+export function coachCurrentQuestion(
+  messages: Array<{ speaker: "learner" | "coach"; text: string; feedback?: { nextQuestion?: string } }>,
+  fallback: string
+): string {
+  const latestCoach = [...messages].reverse().find((message) => message.speaker === "coach" && message.text.trim());
+  return latestCoach?.feedback?.nextQuestion?.trim() || latestCoach?.text.trim() || fallback;
+}
+
+export function repeatCurrentQuestionForOffTopic(output: CoachTaskOutput, currentQuestion: string): CoachTaskOutput {
+  return output.evaluation.status === "off_topic" ? { ...output, nextQuestion: currentQuestion } : output;
+}
+
+export function validateCoachPersonaOutput(output: CoachTaskOutput, persona: "informal" | "formal"): string[] {
+  const text = `${output.seasonReply} ${output.nextQuestion}`.trim();
+  const emojiCount = [...text.matchAll(/\p{Extended_Pictographic}/gu)].length;
+  const contraction = /\b\p{L}+['’](?:s|re|ve|ll|d|m|t)\b/iu.test(text);
+  if (persona === "formal") {
+    return [
+      ...(contraction ? ["Formal reply contains a contraction."] : []),
+      ...(/\b(?:gonna|wanna|gotta|bro|dude|lol)\b/iu.test(text) ? ["Formal reply contains slang."] : []),
+      ...(emojiCount ? ["Formal reply contains emoji."] : []),
+      ...(text.includes("!") ? ["Formal reply contains an exclamation mark."] : [])
+    ];
+  }
+  return [
+    ...(!contraction ? ["Informal reply needs a natural contraction."] : []),
+    ...(emojiCount !== 1 ? ["Informal reply needs exactly one emoji."] : []),
+    ...(text.split(/\s+/u).filter(Boolean).length > 60 ? ["Informal reply is too long."] : [])
+  ];
+}
+
+async function runCoachWithPersonaRepair(
+  runner: AiTaskRunner,
+  input: unknown,
+  systemPrompt: string,
+  persona: "informal" | "formal"
+): Promise<{ result: AiRunResult; output: CoachTaskOutput }> {
+  let result = await runner.runTask("coach_dialogue", input, { systemPrompt });
+  let parsed = coachOutputSchema.safeParse(result.output);
+  if (!parsed.success) throw Object.assign(new Error("Invalid Coach output"), { code: "AI_OUTPUT_INVALID" });
+  const violations = validateCoachPersonaOutput(parsed.data, persona);
+  if (!violations.length) return { result, output: parsed.data };
+  result = await runner.runTask("coach_dialogue", input, {
+    systemPrompt: `${systemPrompt}\n\nREPAIR THE PREVIOUS OUTPUT ONCE. Keep the same pedagogical content and JSON schema, but fix: ${violations.join(" ")}`
+  });
+  parsed = coachOutputSchema.safeParse(result.output);
+  if (!parsed.success || validateCoachPersonaOutput(parsed.data, persona).length) {
+    throw Object.assign(new Error("Coach persona policy failed"), { code: "AI_OUTPUT_INVALID" });
+  }
+  return { result, output: parsed.data };
 }
 
 function safeAiErrorCode(error: unknown): string {

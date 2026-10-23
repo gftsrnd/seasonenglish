@@ -38,6 +38,7 @@ export function WordSortGame({ words: source, onFinish, attemptSeed = 0 }: { wor
     };
   }, []);
 
+  if (words.length < 4) return <p className="muted">Cần ít nhất 4 từ có thông tin từ loại để bắt đầu.</p>;
   if (!word) return <p className="muted">Bộ từ chưa có đủ thông tin từ loại.</p>;
   const right = groupFor(word.partOfSpeech);
   const pick = async (group: string) => {

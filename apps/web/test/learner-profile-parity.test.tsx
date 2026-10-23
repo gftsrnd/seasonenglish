@@ -77,10 +77,8 @@ const view: ProfileView = {
   },
   stats: { completedLessons: 6, coachTurns: 9, studyDays: 6 },
   assessments: {
-    placement: { totalScore: 62, approvedLevel: "B1", sections: { listening: 55, reading: 60, writing: 50, speaking: 50 } },
-    final: null
+    placement: { totalScore: 62, approvedLevel: "B1", sections: { listening: 55, reading: 60, writing: 50, speaking: 50 } }
   },
-  finalAssessmentAvailable: false,
   surveyAvailable: false
 };
 

@@ -61,6 +61,7 @@ services:
     command: ["pnpm", "exec", "tsx", "scripts/prepare-local.ts"]
     environment:
       DATABASE_URL: postgres://e4s:${POSTGRES_PASSWORD:-e4s_local_password}@postgres:5432/e4s
+      E4S_SEED_SCENARIOS: "true"
     depends_on:
       postgres:
         condition: service_healthy
@@ -84,6 +85,12 @@ services:
       S3_SECRET_KEY: ${MINIO_ROOT_PASSWORD:-e4s_local_minio_password}
       S3_EVIDENCE_BUCKET: ${S3_EVIDENCE_BUCKET:-e4s-evidence}
       S3_MEDIA_BUCKET: ${S3_MEDIA_BUCKET:-e4s-media}
+      AI_PROVIDER: ${AI_PROVIDER:-anthropic}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      ANTHROPIC_MODEL: ${ANTHROPIC_MODEL:-claude-sonnet-4-5}
+      RESEND_API_KEY: ${RESEND_API_KEY:-}
+      RESEND_FROM_EMAIL: ${RESEND_FROM_EMAIL:-E4S <onboarding@resend.dev>}
+      AUTH_OTP_SECRET: ${AUTH_OTP_SECRET:-local-only-change-me}
       GROQ_API_KEY: ${GROQ_API_KEY:-}
       GROQ_MODEL: ${GROQ_MODEL:-qwen/qwen3.8-27b}
       VOCAB_IMAGE_SOURCE: ${VOCAB_IMAGE_SOURCE:-wikimedia}

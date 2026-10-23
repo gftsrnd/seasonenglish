@@ -67,6 +67,12 @@ export interface ContentLessonSetVersionView {
   approvedBy: string | null;
   createdAt: string;
   publishedAt: string | null;
+  weeklyPractice?: {
+    task: string;
+    guidance: string;
+    inputMode: "text_or_dictation";
+    requiredVocabulary: string[];
+  };
   lessons: ContentLessonSummaryView[];
 }
 
@@ -78,6 +84,13 @@ export interface ContentLessonMutationInput {
 export interface ContentLessonJsonInput {
   expectedVersion?: number;
   lessons: ContentLessonDraftInput[];
+}
+
+export interface ContentWeeklyPracticeDraftInput {
+  expectedVersion: number;
+  task: string;
+  guidance: string;
+  requiredVocabulary: string[];
 }
 
 export interface ContentLessonMutationResult extends ContentLessonSetVersionView {
@@ -102,7 +115,7 @@ export interface ContentLessonMatrixView {
   }>;
 }
 
-export type ContentReviewTabKey = "submissions" | "coach" | "micro" | "appeals" | "attempts" | "assessments";
+export type ContentReviewTabKey = "submissions" | "coach" | "weekly_practices" | "micro" | "appeals" | "attempts" | "assessments";
 
 export interface ContentReviewView {
   tabs: Array<{
@@ -132,6 +145,17 @@ export interface ContentReviewView {
     type?: "dialogue" | "writing";
     task?: string;
   }>;
+  weeklyPractices?: Array<{
+    versionId: string;
+    weekNumber: number;
+    cefr: CefrLevel;
+    topic: string;
+    status: Exclude<ContentLessonSetStatus, "missing">;
+    version: number;
+    task: string;
+    guidance: string;
+    requiredVocabulary: string[];
+  }>;
   microLessons: Array<{
     id: string; learnerName: string; cefr: CefrLevel; topic: string; generatedAt: string;
     completed: boolean; theory: string; vocabulary: string[]; practice: string; answer: string | null;
@@ -144,11 +168,11 @@ export interface ContentReviewView {
     currentScore: number | null;
   }>;
   lessonAttempts: Array<{
-    id: string; learnerName: string; cefr: CefrLevel | null; weekNumber: number; dayNumber: number;
+    id: string; learnerId: string; learnerName: string; cefr: CefrLevel | null; weekNumber: number; dayNumber: number;
     lessonTitle: string; attempts: Partial<Record<"listening" | "reading" | "writing" | "speaking", number>>;
   }>;
   assessments: Array<{
-    id: string; learnerName: string; kind: "placement" | "final" | "level_up";
+    id: string; learnerName: string; kind: "placement" | "level_up";
     title: string; status: string; submittedAt: string | null; totalScore: number | null;
   }>;
 }
@@ -203,7 +227,7 @@ export interface ContentReviewAssessmentDetailView {
   attemptId: string;
   learnerId: string;
   learnerName: string;
-  kind: "placement" | "final" | "level_up";
+  kind: "placement" | "level_up";
   title: string;
   status: AssessmentAttemptStatus;
   startedAt: string;

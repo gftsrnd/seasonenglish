@@ -11,6 +11,7 @@ import { request, uploadMultipart } from "./runtime.js";
 export interface LearnerApiClient {
   getProfile(): Promise<LearnerProfileView>;
   saveProfile(profile: LearnerProfileData, version: number): Promise<LearnerProfileView>;
+  saveProfileDraft(profile: LearnerProfileData, version: number): Promise<LearnerProfileView>;
   updateLearnerMonthlyGoal(monthlyGoal: string): Promise<AssessmentMonthlyGoalView>;
   getHome(): Promise<LearnerHomeView>;
   acknowledgeRewardAnnouncement(announcementId: string): Promise<{ acknowledged: true; announcementId: string }>;
@@ -64,6 +65,7 @@ export interface LearnerApiClient {
 export const learnerApiClient: LearnerApiClient = {
   getProfile: () => request("/api/v1/learner/profile"),
   saveProfile: (profile, version) => request("/api/v1/learner/profile", { method: "PUT", body: JSON.stringify({ ...profile, version }) }),
+  saveProfileDraft: (profile, version) => request("/api/v1/learner/profile/draft", { method: "PUT", body: JSON.stringify({ ...profile, version }) }),
   updateLearnerMonthlyGoal: (monthlyGoal) => request("/api/v1/learner/monthly-goal", { method: "PATCH", body: JSON.stringify({ monthlyGoal }) }),
   getHome: () => request("/api/v1/learner/home"),
   acknowledgeRewardAnnouncement: (announcementId) => request("/api/v1/learner/reward-announcement/acknowledge", { method: "POST", body: JSON.stringify({ announcementId }) }),

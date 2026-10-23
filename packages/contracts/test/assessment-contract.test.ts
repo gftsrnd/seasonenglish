@@ -55,4 +55,16 @@ describe("assessment runtime contract", () => {
 
     expect(signals.inFlow[0]).toMatchObject({ phase: "challenge", assessmentAttemptId: "attempt-1" });
   });
+
+  it("exposes the server-enforced wrong-rate readiness criterion", () => {
+    const ready: AssessmentReviewOverviewView["levelSignals"]["ready"][number] = {
+      learnerId: "learner-1",
+      learnerName: "Lan",
+      currentLevel: "A2",
+      targetLevel: "B1",
+      metrics: [{ key: "wrongRate", label: "Phần sai nhiều lần", current: 20, target: 30, display: "20%", met: true }]
+    };
+
+    expect(ready.metrics[0]?.key).toBe("wrongRate");
+  });
 });

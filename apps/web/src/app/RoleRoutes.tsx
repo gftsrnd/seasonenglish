@@ -1,4 +1,4 @@
-import { lazy, Suspense, type ReactNode } from "react";
+import { Component, lazy, Suspense, type ErrorInfo, type ReactNode } from "react";
 import { Link, Navigate, useLocation } from "react-router";
 import { CircleHelp, LockKeyhole } from "lucide-react";
 import type { SessionView } from "@e4s/contracts";
@@ -40,7 +40,54 @@ export function RoleRoutes({ session }: { session: SessionView }) {
 }
 
 function RoleRouteLoadingBoundary({ children, label }: { children: ReactNode; label: string }) {
-  return <Suspense fallback={<section className="empty" aria-busy="true"><p role="status">{label}…</p></section>}>{children}</Suspense>;
+  return <RoleRouteErrorBoundary><Suspense fallback={<section className="empty" aria-busy="true"><p role="status">{label}…</p></section>}>{children}</Suspense></RoleRouteErrorBoundary>;
+}
+
+const roleBundleReloadKey = "e4s:role-bundle-reload-at";
+const roleBundleReloadWindowMs = 30_000;
+
+type ReloadStorage = Pick<Storage, "getItem" | "setItem">;
+
+function isStaleRoleBundleError(error: unknown) {
+  const message = error instanceof Error ? error.message : String(error);
+  return /Failed to fetch dynamically imported module|Importing a module script failed|ChunkLoadError|Loading chunk \d+ failed/i.test(message);
+}
+
+export function recoverStaleRoleBundle(
+  error: unknown,
+  storage: ReloadStorage,
+  reload: () => void,
+  now = Date.now(),
+) {
+  if (!isStaleRoleBundleError(error)) return false;
+  const storedReloadAt = storage.getItem(roleBundleReloadKey);
+  const previousReloadAt = storedReloadAt === null ? null : Number(storedReloadAt);
+  if (previousReloadAt !== null && Number.isFinite(previousReloadAt) && now - previousReloadAt < roleBundleReloadWindowMs) return false;
+  storage.setItem(roleBundleReloadKey, String(now));
+  reload();
+  return true;
+}
+
+export class RoleRouteErrorBoundary extends Component<{ children: ReactNode }, { failed: boolean; recoveryFailed: boolean }> {
+  state = { failed: false, recoveryFailed: false };
+
+  static getDerivedStateFromError() { return { failed: true, recoveryFailed: false }; }
+
+  componentDidCatch(error: Error, info: ErrorInfo) {
+    try {
+      if (recoverStaleRoleBundle(error, window.sessionStorage, () => window.location.reload())) return;
+    } catch (recoveryError) {
+      console.error("Role route recovery failed", recoveryError);
+    }
+    console.error("Role route failed to load", error, info.componentStack);
+    this.setState({ recoveryFailed: true });
+  }
+
+  render() {
+    if (!this.state.failed) return this.props.children;
+    if (!this.state.recoveryFailed) return <section className="empty" aria-busy="true"><p role="status">Đang khôi phục giao diện…</p></section>;
+    return <section className="empty" role="alert"><p><b>Không tải được giao diện.</b> Vui lòng đóng và mở lại E4S.</p></section>;
+  }
 }
 
 function OperatorRouteNotFound() {

@@ -1,7 +1,7 @@
 import { Pool } from "pg";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { migrateDatabase, resetPublicSchema, seedDemo } from "@e4s/database";
-import { createCredentialHash } from "@e4s/domain/identity";
+import { createCredentialHash, createPinHash } from "@e4s/domain/identity";
 import { DEMO_IDS } from "@e4s/test-support";
 import { buildApi } from "../src/app.js";
 import type { ContentMediaService } from "../src/modules/media/index.js";
@@ -39,7 +39,7 @@ describe("learner profile, home, lesson and progress API", () => {
       await client.query(
         "insert into user_credentials (user_id, credential_hash) values ($1, $2), ($3, $4), ($5, $6)",
         [
-          DEMO_IDS.learner, await createCredentialHash("learner-pass"),
+          DEMO_IDS.learner, await createPinHash("123456"),
           DEMO_IDS.operator, await createCredentialHash("operator-pass"),
           DEMO_IDS.manager, await createCredentialHash("manager-pass")
         ]
@@ -51,11 +51,11 @@ describe("learner profile, home, lesson and progress API", () => {
     const login = await app.inject({
       method: "POST",
       url: "/api/auth/learner/login",
-      payload: { email: "learner@e4s.local", password: "learner-pass" }
+      payload: { email: "minh.anh.nguyen@e4s.local", pin: "123456" }
     });
     cookie = String(login.headers["set-cookie"]).split(";")[0] ?? "";
-    operatorCookie = await loginStaff("operator@e4s.local", "operator-pass");
-    managerCookie = await loginStaff("manager@e4s.local", "manager-pass");
+    operatorCookie = await loginStaff("thu.ha.tran@e4s.local", "operator-pass");
+    managerCookie = await loginStaff("quoc.bao.le@e4s.local", "manager-pass");
   }, 30_000);
 
   afterAll(async () => {
@@ -71,7 +71,7 @@ describe("learner profile, home, lesson and progress API", () => {
   it("returns and version-updates the existing one-screen profile", async () => {
     const current = await app.inject({ method: "GET", url: "/api/v1/learner/profile", headers: { cookie } });
     expect(current.statusCode).toBe(200);
-    expect(current.json()).toMatchObject({ completed: true, version: 1, profile: { fullName: "Học viên Demo" } });
+    expect(current.json()).toMatchObject({ completed: true, version: 1, profile: { fullName: "Nguyễn Minh Anh" } });
 
     const updated = await app.inject({
       method: "PUT",
@@ -94,6 +94,109 @@ describe("learner profile, home, lesson and progress API", () => {
 
     const reloaded = await app.inject({ method: "GET", url: "/api/v1/learner/profile", headers: { cookie } });
     expect(reloaded.json()).toMatchObject({ version: 3, profile: { avatar } });
+  });
+
+  it("prefills a new learner profile from the authenticated account identity", async () => {
+    const registration = await app.inject({
+      method: "POST",
+      url: "/api/auth/learner/register",
+      payload: {
+        displayName: "Nguyễn Học Viên",
+        email: "PREFILL@E4S.LOCAL",
+        pin: "654321"
+      }
+    });
+    expect(registration.statusCode, registration.body).toBe(201);
+    const newLearnerCookie = String(registration.headers["set-cookie"]).split(";")[0] ?? "";
+
+    const profile = await app.inject({
+      method: "GET",
+      url: "/api/v1/learner/profile",
+      headers: { cookie: newLearnerCookie }
+    });
+
+    expect(profile.statusCode, profile.body).toBe(200);
+    expect(profile.json()).toMatchObject({
+      completed: false,
+      profile: {
+        fullName: "Nguyễn Học Viên",
+        email: "prefill@e4s.local"
+      }
+    });
+  });
+
+  it("restores an incomplete profile draft after logout and a new login", async () => {
+    const email = "draft-profile@e4s.local";
+    const pin = "654321";
+    const registration = await app.inject({
+      method: "POST",
+      url: "/api/auth/learner/register",
+      payload: { displayName: "Học viên lưu nháp", email, pin }
+    });
+    expect(registration.statusCode, registration.body).toBe(201);
+    const registrationCookie = String(registration.headers["set-cookie"]).split(";")[0] ?? "";
+
+    const initial = await app.inject({ method: "GET", url: "/api/v1/learner/profile", headers: { cookie: registrationCookie } });
+    const saved = await app.inject({
+      method: "PUT",
+      url: "/api/v1/learner/profile/draft",
+      headers: { cookie: registrationCookie },
+      payload: {
+        ...initial.json().profile,
+        version: initial.json().version,
+        goals: ["meeting"],
+        environmentUse: "",
+        familyUse: "",
+        habits: [],
+        learningStyles: [],
+        explanationLanguage: "auto",
+        persona: "informal",
+        durationMinutes: 10,
+        device: "both",
+        selfLevel: "unknown",
+        certificates: [],
+        situations: "Họp với khách hàng Singapore"
+      }
+    });
+    expect(saved.statusCode, saved.body).toBe(200);
+    expect(saved.json()).toMatchObject({ completed: false, draftAvailable: true });
+
+    await app.inject({ method: "POST", url: "/api/logout", headers: { cookie: registrationCookie } });
+    const login = await app.inject({ method: "POST", url: "/api/auth/learner/login", payload: { email, pin } });
+    const loginCookie = String(login.headers["set-cookie"]).split(";")[0] ?? "";
+    const restored = await app.inject({ method: "GET", url: "/api/v1/learner/profile", headers: { cookie: loginCookie } });
+
+    expect(restored.statusCode, restored.body).toBe(200);
+    expect(restored.json()).toMatchObject({
+      completed: false,
+      draftAvailable: true,
+      profile: { goals: ["meeting"], situations: "Họp với khách hàng Singapore" }
+    });
+
+    const completed = await app.inject({
+      method: "PUT",
+      url: "/api/v1/learner/profile",
+      headers: { cookie: loginCookie },
+      payload: {
+        ...restored.json().profile,
+        version: restored.json().version,
+        environmentUse: "weekly",
+        familyUse: "never",
+        habits: ["reading"],
+        learningStyles: ["speaking"]
+      }
+    });
+    expect(completed.statusCode, completed.body).toBe(200);
+    expect(completed.json()).toMatchObject({ completed: true, draftAvailable: false });
+
+    const editDraft = await app.inject({
+      method: "PUT",
+      url: "/api/v1/learner/profile/draft",
+      headers: { cookie: loginCookie },
+      payload: { ...completed.json().profile, version: completed.json().version, learningStyles: [] }
+    });
+    expect(editDraft.statusCode, editDraft.body).toBe(200);
+    expect(editDraft.json()).toMatchObject({ completed: true, draftAvailable: true, profile: { learningStyles: [] } });
   });
 
   it("returns the current week, five ordered lessons and the next resumable lesson", async () => {
@@ -142,9 +245,9 @@ describe("learner profile, home, lesson and progress API", () => {
         },
         coach: { turnsThisWeek: 2, targetTurns: 2, href: "/coach" },
         practice: { status: "reviewed", href: "/practice" },
-        levelReadiness: { targetLevel: "B1", windowDays: 14, eligible: false, examAvailable: true },
-        finalAssessment: { available: true, href: "/test/final" }
+        levelReadiness: { targetLevel: "B1", windowDays: 14, eligible: false, examAvailable: true }
       });
+      expect(response.json()).not.toHaveProperty("finalAssessment");
       expect(response.json().levelReadiness.criteria).toHaveLength(4);
     } finally {
       vi.useRealTimers();
@@ -355,8 +458,7 @@ describe("learner profile, home, lesson and progress API", () => {
           totalScore: 55,
           approvedLevel: "A2",
           sections: { listening: 14, reading: 16, writing: 13, speaking: 12 }
-        },
-        final: null
+        }
       }
     });
     expect(response.json().badgeRoadmap).toHaveLength(8);
@@ -396,6 +498,29 @@ describe("learner profile, home, lesson and progress API", () => {
       feedback: { status: "ready" }
     });
     expect(resumed.json().completedAt).toEqual(expect.any(String));
+  });
+
+  it("rejects a one-word self-writing answer before grading or persistence", async () => {
+    const lessonId = "10000000-0000-4000-8000-000000000123";
+    await pool.query(
+      `insert into micro_lessons (id, learner_id, program_week_id, cefr, topic, content, source)
+       values ($1, $2, $3, 'A2', 'Short writing',
+         '{"durationMinutes":5,"theory":"Write one complete workplace sentence.","vocabulary":["confirm","meeting","time"],"practice":{"prompt":"Confirm the meeting.","type":"write","answer":"I confirm the meeting."}}'::jsonb,
+         'seed')`,
+      [lessonId, DEMO_IDS.learner, DEMO_IDS.week]
+    );
+
+    const response = await app.inject({
+      method: "POST",
+      url: `/api/v1/micro-lessons/${lessonId}/attempts`,
+      headers: { cookie },
+      payload: { answer: "Okay" }
+    });
+
+    expect(response.statusCode, response.body).toBe(422);
+    expect(response.json()).toEqual({ code: "MICRO_ANSWER_TOO_SHORT", minimumWords: 2 });
+    const stored = await pool.query<{ progress: Record<string, unknown> }>("select progress from micro_lessons where id = $1", [lessonId]);
+    expect(stored.rows[0]?.progress).toEqual({});
   });
 
   it("exposes server-owned micro regeneration availability and refuses generation without AI", async () => {

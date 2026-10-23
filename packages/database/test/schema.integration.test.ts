@@ -92,8 +92,8 @@ describe("normalized E4S database", () => {
 
     expect(result.rows).toEqual([{
       role: "operator",
-      display_name: "Thư Demo",
-      email: "operator@e4s.local",
+      display_name: "Trần Thu Hà",
+      email: "thu.ha.tran@e4s.local",
       status: "active"
     }]);
   });

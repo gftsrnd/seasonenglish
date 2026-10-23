@@ -12,7 +12,7 @@ export interface VisibleScreen {
 export const SCREEN_CONTRACT = [
   { id: "entry", path: "/", title: "Đăng nhập", roles: ["public"], purpose: "Learner, staff và demo vào đúng cổng; role do tài khoản quyết định" },
   { id: "onboard", path: "/onboard", title: "Hồ sơ ban đầu", roles: ["learner"], purpose: "Hoàn thiện hồ sơ học tập trước bài test" },
-  { id: "test", path: "/test/:kind", title: "Bài test", roles: ["learner"], purpose: "Thực hiện placement, final hoặc level-up trong một screen flow", states: [
+  { id: "test", path: "/test/:kind", title: "Bài test", roles: ["learner"], purpose: "Thực hiện placement hoặc level-up trong một screen flow", states: [
     "preparation", "listening", "reading", "writing", "speaking", "submitting", "pending",
     "test.intro.fresh", "test.intro.resume", "test.review-submit",
     "test.timer.warning-5m", "test.timer.warning-1m", "test.timer.expired-transition", "test.timer.expired-submit",
@@ -21,7 +21,6 @@ export const SCREEN_CONTRACT = [
     "test.submit.confirm", "test.submit.countdown", "test.submit.grading", "test.submit.complete", "test.submit.error"
   ] },
   { id: "learner-home", path: "/home", title: "Trang chủ", roles: ["learner"], purpose: "Onboarding status hoặc chương trình tuần và bài hôm nay" },
-  { id: "micro", path: "/micro/:id", title: "Bài siêu ngắn", roles: ["learner"], purpose: "Học và luyện một nội dung ngắn" },
   { id: "lesson", path: "/lesson/:id", title: "Bài học", roles: ["learner"], purpose: "Học đúng trình tự nội dung đã xác nhận" },
   { id: "coach", path: "/coach", title: "Luyện với Season", roles: ["learner"], purpose: "Hội thoại, nhận phản hồi và làm lại trong cùng màn" },
   { id: "level-challenge", path: "/challenge", title: "Thử thách lên mức", roles: ["learner"], purpose: "Làm tiếp hoặc hoàn thành thử thách đủ điều kiện" },

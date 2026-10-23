@@ -12,6 +12,7 @@ import type {
 } from "@e4s/contracts";
 import { microGradingOutputSchema, microLessonOutputSchema, type MicroLessonTaskOutput } from "@e4s/ai";
 import { createRepositories, type LearnerLessonRecord } from "@e4s/database";
+import { gradeLessonAnswer, validateGeneratedFeedback } from "@e4s/domain/content";
 import { isLearnerProfileComplete, mergeLessonProgress } from "@e4s/domain/learning";
 import type { FastifyInstance } from "fastify";
 import type { Pool } from "pg";
@@ -51,6 +52,15 @@ const profileInput = z.object({
     bg: z.union([z.literal(0), z.literal(1), z.literal(2), z.literal(3), z.literal(4), z.literal(5)])
   }).optional()
 });
+const profileDraftInput = profileInput.extend({
+  fullName: z.string().trim().max(200),
+  email: z.string().trim().max(320),
+  goals: z.array(z.string()),
+  environmentUse: z.string(),
+  familyUse: z.string(),
+  habits: z.array(z.string()),
+  learningStyles: z.array(z.string())
+}).partial().required({ version: true });
 const partEvidence = z.object({
   attempts: z.number().int().nonnegative(),
   answer: z.string().optional(),
@@ -80,7 +90,7 @@ const lessonAttemptInput = z.object({
     context.addIssue({ code: "custom", path: ["evidence"], message: "Exercise evidence is required" });
   }
 });
-const lessonAppealInput = z.object({ reason: z.string().trim().min(3).max(2_000) });
+const lessonAppealInput = z.object({ reason: z.string().trim().min(5).max(2_000) });
 const monthlyGoalInput = z.object({ monthlyGoal: z.string().trim().min(1).max(2_000) });
 const rewardAnnouncementAcknowledgeInput = z.object({ announcementId: z.string().trim().min(1).max(200) });
 
@@ -109,6 +119,19 @@ export function registerLearningRoutes(
       profile: profile as LearnerProfileData,
       expectedVersion: version,
       complete
+    });
+    if (!saved) return reply.code(409).send({ code: "PROFILE_VERSION_CONFLICT" });
+    return profileView(saved);
+  });
+
+  app.put("/api/v1/learner/profile/draft", { preHandler: learnerOnly }, async (request, reply) => {
+    const parsed = profileDraftInput.safeParse(request.body);
+    if (!parsed.success) return reply.code(400).send({ code: "INVALID_PROFILE_DRAFT", issues: parsed.error.issues });
+    const { version, ...profile } = parsed.data;
+    const saved = await repositories.learning.saveProfileDraft({
+      learnerId: request.e4sSession!.user.id,
+      profile: profile as Partial<LearnerProfileData>,
+      expectedVersion: version
     });
     if (!saved) return reply.code(409).send({ code: "PROFILE_VERSION_CONFLICT" });
     return profileView(saved);
@@ -182,7 +205,7 @@ export function registerLearningRoutes(
         Number(progress.learner.profile.durationMinutes ?? 10),
         progress.activity.map((item) => item.occurredAt)
       ),
-      coach: { turnsToday: progress.stats.coachTurnsToday ?? 0, turnsThisWeek: progress.stats.coachTurns, targetTurns: 2, href: "/coach" },
+      coach: { turnsToday: progress.stats.coachTurnsToday ?? 0, turnsThisWeek: progress.stats.coachTurns, targetTurns: 50, href: "/coach" },
       practice: {
         status: weeklyPractice?.state ?? "locked",
         detail: weeklyPractice?.state === "reviewed" ? "Bài đã được phản hồi theo rubric."
@@ -193,11 +216,6 @@ export function registerLearningRoutes(
         href: "/practice"
       },
       levelReadiness: progress.levelReadiness,
-      finalAssessment: {
-        available: progress.finalAssessmentAvailable,
-        label: "Làm bài cuối kỳ",
-        href: "/test/final"
-      },
       ...(context ? { pilotPhase: pilotPhaseFor(context.startDate, context.weekCount) satisfies PilotPhase } : {}),
       ...(lifecycle ? {
         levelUpPhase: lifecycle.levelUpPhase,
@@ -368,11 +386,23 @@ export function registerLearningRoutes(
       repositories.aiRuns.activeTaskPrompt(learnerId, "micro_grading")
     ]);
     if (!micro) return reply.code(404).send({ code: "MICRO_LESSON_NOT_FOUND" });
+    const policyGrade = gradeMicroAttempt({
+      type: micro.practice.type,
+      answer: body.data.answer,
+      expected: micro.practice.answer,
+      aiAvailable: Boolean(aiRunner && task)
+    });
+    if (policyGrade.status === "invalid") {
+      return reply.code(422).send({ code: "MICRO_ANSWER_TOO_SHORT", minimumWords: 2 });
+    }
     const deterministic = () => {
-      const objective = micro.practice.type === "mcq" || micro.practice.type === "fill";
-      const correct = objective
-        ? normalizeAnswer(body.data.answer) === normalizeAnswer(micro.practice.answer)
-        : null;
+      const fallbackGrade = gradeMicroAttempt({
+        type: micro.practice.type,
+        answer: body.data.answer,
+        expected: micro.practice.answer,
+        aiAvailable: false
+      });
+      const correct = fallbackGrade.correct;
       return repositories.learning.saveMicroAttemptGrade({
         learnerId, microLessonId: params.data.microLessonId, answer: body.data.answer,
         correct, score: correct === null ? null : correct ? 10 : 0,
@@ -391,6 +421,14 @@ export function registerLearningRoutes(
       }, { systemPrompt: task.prompt });
       const output = microGradingOutputSchema.safeParse(result.output);
       if (!output.success) return reply.code(502).send({ code: "AI_OUTPUT_INVALID" });
+      if (!validateGeneratedFeedback({
+        answer: body.data.answer,
+        feedback: output.data.feedback,
+        citedError: output.data.citedError
+      })) {
+        request.log.warn("Micro grading feedback cited evidence absent from the learner answer");
+        return await deterministic();
+      }
       await repositories.aiRuns.recordSucceeded({
         userId: learnerId, requestId, taskId: task.taskId, promptVersionId: task.promptVersionId,
         output: output.data, metadata: result.metadata
@@ -418,19 +456,32 @@ function microLessonView(micro: MicroLessonView, regenerateAvailable: boolean): 
   return { ...micro, regenerateAvailable };
 }
 
-function normalizeAnswer(value: string): string {
-  return value.normalize("NFKC").toLocaleLowerCase("en").replace(/[.!?]+$/g, "").replace(/\s+/g, " ").trim();
+export function gradeMicroAttempt(input: {
+  type: "mcq" | "write" | "fill";
+  answer: string;
+  expected: string;
+  aiAvailable: boolean;
+}) {
+  return gradeLessonAnswer({
+    kind: input.type === "write" ? "self_writing" : "objective",
+    answer: input.answer,
+    acceptedAnswers: [input.expected],
+    aiAvailable: input.aiAvailable
+  });
 }
 
 function profileView(record: {
   profile: Partial<LearnerProfileData>;
+  completedProfile?: Partial<LearnerProfileData>;
+  draftAvailable?: boolean;
   version: number;
   completedAt: Date | null;
   updatedAt: Date;
 }): LearnerProfileView {
   return {
     profile: record.profile as LearnerProfileData,
-    completed: Boolean(record.completedAt) && isLearnerProfileComplete(record.profile),
+    completed: Boolean(record.completedAt) && isLearnerProfileComplete(record.completedProfile ?? record.profile),
+    draftAvailable: Boolean(record.draftAvailable),
     version: record.version,
     updatedAt: record.updatedAt.toISOString()
   };

@@ -11,6 +11,7 @@ export const REQUIRED_MEDIA_IDS = [
 ];
 
 const rasterExtensions = new Set([".png", ".webp"]);
+const audioExtensions = new Set([".mp3", ".ogg"]);
 const sha256Pattern = /^[a-f0-9]{64}$/;
 
 export async function verifyMediaAssets(options = {}) {
@@ -43,11 +44,20 @@ export async function verifyMediaAssets(options = {}) {
     }
     if (paths.has(entry.localPath)) errors.push(`${label}: localPath bị trùng.`);
     else paths.add(entry.localPath);
-    if (!rasterExtensions.has(extname(entry.localPath).toLowerCase())) errors.push(`${label}: chỉ chấp nhận PNG hoặc WebP.`);
-    if (entry.licence !== "CC0-1.0") errors.push(`${label}: licence phải là CC0-1.0.`);
-    if (typeof entry.sourcePage !== "string" || !/^https:\/\/kenney\.nl\/assets\/[a-z0-9-]+$/.test(entry.sourcePage)) errors.push(`${label}: sourcePage phải là trang asset chính thức của Kenney.`);
-    if (typeof entry.sourcePack !== "string" || !entry.sourcePack.trim()) errors.push(`${label}: thiếu sourcePack.`);
-    if (typeof entry.originalArchivePath !== "string" || !entry.originalArchivePath.trim()) errors.push(`${label}: thiếu originalArchivePath.`);
+    const extension = extname(entry.localPath).toLowerCase();
+    if (rasterExtensions.has(extension)) {
+      if (entry.licence !== "CC0-1.0") errors.push(`${label}: licence phải là CC0-1.0.`);
+      if (typeof entry.sourcePage !== "string" || !/^https:\/\/kenney\.nl\/assets\/[a-z0-9-]+$/.test(entry.sourcePage)) errors.push(`${label}: sourcePage phải là trang asset chính thức của Kenney.`);
+      if (typeof entry.sourcePack !== "string" || !entry.sourcePack.trim()) errors.push(`${label}: thiếu sourcePack.`);
+      if (typeof entry.originalArchivePath !== "string" || !entry.originalArchivePath.trim()) errors.push(`${label}: thiếu originalArchivePath.`);
+    } else if (audioExtensions.has(extension)) {
+      if (entry.licence !== "CC BY 4.0") errors.push(`${label}: licence audio phải là CC BY 4.0.`);
+      if (typeof entry.licenceUrl !== "string" || entry.licenceUrl !== "https://creativecommons.org/licenses/by/4.0/") errors.push(`${label}: licenceUrl audio không hợp lệ.`);
+      if (typeof entry.creator !== "string" || !entry.creator.trim()) errors.push(`${label}: thiếu creator.`);
+      if (typeof entry.sourcePage !== "string" || !/^https:\/\/audionautix\.com\//.test(entry.sourcePage)) errors.push(`${label}: sourcePage audio phải thuộc Audionautix.`);
+    } else {
+      errors.push(`${label}: chỉ chấp nhận PNG hoặc WebP; audio chỉ chấp nhận MP3 hoặc OGG.`);
+    }
     if (typeof entry.purpose !== "string" || !entry.purpose.trim()) errors.push(`${label}: thiếu purpose.`);
     if (typeof entry.sha256 !== "string" || !sha256Pattern.test(entry.sha256)) errors.push(`${label}: sha256 phải gồm đúng 64 ký tự hex viết thường.`);
 

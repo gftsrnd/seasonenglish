@@ -68,6 +68,11 @@ describe("Operator assessment AI rescore", () => {
         [DEMO_IDS.placementAttempt]
       );
       await client.query(
+        `update assessment_scores set score = 20
+         where attempt_id = $1 and section in ('listening', 'reading')`,
+        [DEMO_IDS.placementAttempt]
+      );
+      await client.query(
         `insert into assessment_responses (id, attempt_id, section, task_key, response)
          values
            ('00000000-0000-4000-8000-000000000941', $1, 'writing', 'W1', '{"value":"I can cover the inbox and prioritize urgent tickets.","evidenceType":"text"}'::jsonb),
@@ -82,9 +87,9 @@ describe("Operator assessment AI rescore", () => {
       expect(response.statusCode, response.body).toBe(200);
       return String(response.headers["set-cookie"]).split(";")[0] ?? "";
     };
-    operatorCookie = await login("/api/auth/staff/login", "operator@e4s.local", "operator-pass");
-    managerCookie = await login("/api/auth/staff/login", "manager@e4s.local", "manager-pass");
-    learnerCookie = await login("/api/auth/learner/login", "learner@e4s.local", "learner-pass");
+    operatorCookie = await login("/api/auth/staff/login", "thu.ha.tran@e4s.local", "operator-pass");
+    managerCookie = await login("/api/auth/staff/login", "quoc.bao.le@e4s.local", "manager-pass");
+    learnerCookie = await login("/api/auth/learner/login", "minh.anh.nguyen@e4s.local", "learner-pass");
   }, 30_000);
 
   afterAll(async () => { await app.close(); await pool.end(); });
@@ -134,5 +139,51 @@ describe("Operator assessment AI rescore", () => {
     expect(manager.statusCode, manager.body).toBe(200);
     const learner = await app.inject({ ...request, headers: { cookie: learnerCookie } });
     expect(learner.statusCode).toBe(403);
+  });
+
+  it("recomputes task-level manual scores and CEFR from the authoritative total", async () => {
+    const payload = {
+      writingTasks: [
+        { taskKey: "W1", criteria: { taskCompletion: 3, organization: 3, vocabulary: 2, grammar: 4, workplaceRegister: 3 } },
+        { taskKey: "W2", criteria: { taskCompletion: 4, organization: 3, vocabulary: 3, grammar: 3, workplaceRegister: 4 } }
+      ],
+      speakingTasks: [
+        { taskKey: "S1", evidenceType: "audio", criteria: { taskCompletionRelevance: 4, grammarVocabulary: 3, coherenceClarity: 3, interactionProfessionalRegister: 2 } },
+        { taskKey: "S2", evidenceType: "audio", criteria: { taskCompletionRelevance: 4, grammarVocabulary: 3, coherenceClarity: 4, interactionProfessionalRegister: 3 } },
+        { taskKey: "S3", evidenceType: "audio", criteria: { taskCompletionRelevance: 4, grammarVocabulary: 3, coherenceClarity: 4, interactionProfessionalRegister: 4 } },
+        { taskKey: "S4", evidenceType: "audio", criteria: { taskCompletionRelevance: 4, grammarVocabulary: 3, coherenceClarity: 5, interactionProfessionalRegister: 3 } }
+      ],
+      comment: "Rubric theo đúng từng task."
+    };
+    const response = await app.inject({
+      method: "POST",
+      url: `/api/v1/assessment-reviews/${DEMO_IDS.placementAttempt}/manual-score`,
+      headers: { cookie: operatorCookie },
+      payload
+    });
+    expect(response.statusCode, response.body).toBe(200);
+    expect(response.json()).toMatchObject({
+      suggestedLevel: "B2",
+      scores: expect.arrayContaining([
+        expect.objectContaining({ section: "writing", score: 16.3, source: "human" }),
+        expect.objectContaining({ section: "speaking", score: 14, source: "human" })
+      ])
+    });
+
+    const decision = await pool.query<{ suggested_level: string; reason: string }>(
+      "select suggested_level, reason from assessment_decisions where attempt_id = $1",
+      [DEMO_IDS.placementAttempt]
+    );
+    expect(decision.rows[0]).toEqual({ suggested_level: "B2", reason: "Tổng điểm chấm tay 70.3/100." });
+
+    const invalid = structuredClone(payload);
+    invalid.writingTasks[0]!.criteria.taskCompletion = 5;
+    const rejected = await app.inject({
+      method: "POST",
+      url: `/api/v1/assessment-reviews/${DEMO_IDS.placementAttempt}/manual-score`,
+      headers: { cookie: operatorCookie },
+      payload: invalid
+    });
+    expect(rejected.statusCode).toBe(400);
   });
 });

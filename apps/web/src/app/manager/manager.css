@@ -62,22 +62,70 @@
 }
 
 .settings-recovery {
-  margin-top: 16px;
-  padding-top: 12px;
-  border-top: 1px solid var(--line);
+  box-sizing: border-box;
+  margin-top: 18px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--surface);
+  overflow: clip;
 }
 
 .settings-recovery > summary {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 14px;
   cursor: pointer;
   font-weight: 700;
+  list-style: none;
+}
+
+.settings-recovery > summary::-webkit-details-marker {
+  display: none;
+}
+
+.settings-recovery > summary:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: -3px;
+}
+
+.settings-recovery__title,
+.settings-recovery__meta {
+  display: inline-flex;
+  min-width: 0;
+  align-items: center;
+  gap: 8px;
+}
+
+.settings-recovery__title svg,
+.settings-recovery__chevron {
+  width: 18px;
+  height: 18px;
+  flex: 0 0 18px;
+}
+
+.settings-recovery__chevron {
+  color: var(--muted);
+  transition: transform .18s ease;
+}
+
+.settings-recovery[open] .settings-recovery__chevron {
+  transform: rotate(180deg);
 }
 
 .settings-recovery[open] > summary {
-  margin-bottom: 12px;
+  border-bottom: 1px solid var(--line);
 }
 
 .settings-recovery__body {
+  box-sizing: border-box;
+  width: 100%;
   min-width: 0;
+  padding: 12px;
+  background: var(--surface-2);
+  overflow: hidden;
 }
 
 .settings-recovery__body > .manager-recovery-inline {
@@ -93,6 +141,73 @@
 
 .manager-recovery-empty p {
   margin: 4px 0 0;
+}
+
+.manager-security-notices {
+  display: grid;
+  gap: 12px;
+}
+
+.manager-security-notices__heading {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 12px;
+}
+
+.manager-security-notices__heading h3,
+.manager-security-notices__heading p,
+.manager-security-notices__empty {
+  margin: 0;
+}
+
+.manager-security-notices__icon {
+  display: inline-grid;
+  width: 38px;
+  height: 38px;
+  flex: 0 0 38px;
+  place-items: center;
+  border-radius: 10px;
+  background: var(--mint);
+  color: var(--success);
+}
+
+.manager-security-notices__icon svg {
+  width: 20px;
+  height: 20px;
+}
+
+.manager-security-notices__list {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.manager-security-notice {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--surface-2);
+}
+
+.manager-security-notice__copy {
+  display: flex;
+  min-width: 0;
+  flex-wrap: wrap;
+  gap: 4px 8px;
+  overflow-wrap: anywhere;
+}
+
+.manager-security-notice time {
+  flex: 0 0 auto;
+  white-space: nowrap;
 }
 
 .manager-page-title__content p {
@@ -160,7 +275,8 @@
 }
 
 .manager-operational-card--delete {
-  background: var(--butter);
+  border-left: 4px solid var(--primary);
+  background: var(--surface);
 }
 
 .manager-kpi-grid {
@@ -596,6 +712,13 @@
   overflow-wrap: anywhere;
 }
 
+.manager-operational-row .title {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
 .manager-operational-actions {
   flex: 0 0 auto;
   max-width: 100%;
@@ -605,8 +728,123 @@
   min-height: 44px;
 }
 
+.manager-accounts-card,
+.manager-account-create,
+.manager-account-create__grid,
+.manager-account-create__grid > .field,
+.manager-password-control,
+.settings-recovery,
+.settings-recovery__body,
+.settings-recovery__body > * {
+  min-width: 0;
+  max-width: 100%;
+}
+
+.manager-account-create {
+  overflow: hidden;
+}
+
+.manager-account-create__grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  align-items: end;
+  gap: 14px;
+}
+
+.manager-account-create__grid > .field {
+  margin: 0;
+}
+
+.manager-account-create__submit {
+  width: max-content;
+  max-width: 100%;
+  margin-top: 18px;
+}
+
+.manager-password-control {
+  position: relative;
+  display: block;
+  height: 44px;
+}
+
+.manager-password-control > input {
+  width: 100%;
+  box-sizing: border-box;
+  padding-right: 48px;
+}
+
+.settings-page[data-settings-role="manager"] .manager-password-toggle {
+  position: absolute;
+  inset-block: 5px;
+  right: 6px;
+  display: inline-grid;
+  width: 34px;
+  min-width: 34px;
+  height: auto;
+  min-height: 0;
+  place-items: center;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--muted);
+  padding: 0;
+  transform: none;
+  box-shadow: none;
+}
+
+.manager-password-toggle:hover {
+  background: var(--surface-2);
+  color: var(--text);
+}
+
+.manager-password-toggle:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 1px;
+}
+
+.manager-password-toggle svg {
+  width: 18px;
+  height: 18px;
+}
+
+.manager-purge-dialog__actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 16px;
+  margin-top: 16px;
+  padding-top: 16px;
+  border-top: 1px solid var(--line);
+}
+
+.manager-account-role {
+  appearance: none;
+  border-color: var(--line);
+  background-color: var(--surface);
+  background-image: linear-gradient(45deg, transparent 50%, var(--muted) 50%), linear-gradient(135deg, var(--muted) 50%, transparent 50%);
+  background-position: calc(100% - 16px) 50%, calc(100% - 11px) 50%;
+  background-size: 5px 5px, 5px 5px;
+  background-repeat: no-repeat;
+  padding-right: 32px;
+}
+
+.manager-account-role:focus-visible {
+  border-color: var(--primary);
+  outline: 0;
+  box-shadow: 0 0 0 3px var(--primary-glow);
+}
+
 .manager-account-actions {
-  min-width: 260px;
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 8px;
+  white-space: nowrap;
+}
+
+.manager-account-actions > .btn-sm {
+  flex: 0 0 auto;
 }
 
 .settings-action-table th,
@@ -652,6 +890,126 @@
   flex-wrap: nowrap;
   min-height: 44px;
   white-space: nowrap;
+}
+
+.manager-accounts-table {
+  width: 100%;
+  max-width: 100%;
+  max-height: 560px;
+  overflow-y: auto;
+  scrollbar-gutter: stable;
+}
+
+.manager-accounts-table__table {
+  width: 100%;
+  min-width: 760px;
+}
+
+.manager-accounts-table__table thead th {
+  position: sticky;
+  top: 0;
+  z-index: 3;
+  background: var(--surface);
+  box-shadow: 0 1px 0 var(--line);
+}
+
+.manager-accounts-table__table th,
+.manager-accounts-table__table td {
+  padding-inline: 10px;
+}
+
+.manager-accounts-table__table td:first-child,
+.manager-accounts-table__table td:nth-child(2) {
+  overflow-wrap: anywhere;
+}
+
+.manager-accounts-heading {
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.manager-accounts-heading > h3 {
+  margin: 0;
+}
+
+.manager-accounts-pagination {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 10px 14px;
+  padding-top: 12px;
+}
+
+.manager-accounts-pagination > .row {
+  gap: 8px;
+}
+
+.settings-recovery {
+  box-sizing: border-box;
+  width: 100%;
+  overflow: clip;
+}
+
+.settings-recovery__body,
+.settings-recovery__body .manager-recovery-inline,
+.settings-recovery__body .manager-operational-card,
+.settings-recovery__body .manager-operational-row {
+  width: 100%;
+  max-width: 100%;
+}
+
+.settings-recovery__body .manager-operational-row {
+  overflow-wrap: anywhere;
+}
+
+.settings-recovery__body .manager-operational-card,
+.settings-recovery__body .manager-operational-row,
+.settings-recovery__body .manager-operational-actions {
+  box-sizing: border-box;
+  min-width: 0;
+}
+
+.settings-recovery__body .manager-operational-actions {
+  flex-wrap: wrap;
+}
+
+@media (max-width: 600px) {
+  .manager-security-notice {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+}
+
+@media (min-width: 1001px) {
+  .manager-accounts-table__table {
+    min-width: 0;
+    table-layout: fixed;
+  }
+
+  .manager-accounts-table__table th:nth-child(1) { width: 17%; }
+  .manager-accounts-table__table th:nth-child(2) { width: 23%; }
+  .manager-accounts-table__table th:nth-child(3) { width: 14%; }
+  .manager-accounts-table__table th:nth-child(4) { width: 15%; }
+  .manager-accounts-table__table th:nth-child(5) { width: 31%; }
+}
+
+@media (max-width: 1000px) {
+  .manager-account-create__grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 600px) {
+  .manager-account-create__grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .manager-account-create__submit {
+    width: 100%;
+  }
 }
 
 .manager-inline-status {
@@ -725,12 +1083,22 @@
 }
 
 .manager-report-page .manager-next-action {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: start;
+  gap: 12px;
   margin: 0;
   border: 1px solid var(--line);
   border-radius: 10px;
   background: var(--surface-2);
-  padding: 10px 12px;
+  padding: 12px 14px;
   line-height: 1.45;
+}
+
+.manager-report-page .manager-next-action-copy {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
 }
 
 .manager-report-page .manager-next-action-names {
@@ -757,7 +1125,19 @@
 
 .manager-reminder-actions {
   min-width: 0;
+  gap: 10px;
+  padding-top: 2px;
   flex-wrap: wrap !important;
+}
+
+.manager-reminder-card {
+  display: grid;
+  gap: 14px;
+}
+
+.manager-reminder-message {
+  margin: 0;
+  white-space: pre-wrap;
 }
 
 .manager-reminder-actions .btn-sm {
@@ -914,6 +1294,11 @@
   overflow-y: auto;
   overscroll-behavior: contain;
   padding: max(16px, env(safe-area-inset-top, 0px)) 16px max(16px, env(safe-area-inset-bottom, 0px));
+}
+
+.manager-modal-backdrop > .dialog:not(.manager-learner-profile-dialog) {
+  width: min(560px, 100%);
+  min-width: 0;
 }
 
 .manager-modal-backdrop > .dialog {

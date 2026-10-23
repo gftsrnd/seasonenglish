@@ -31,7 +31,6 @@ const home: LearnerHomeView = {
   coach: { turnsThisWeek: 0, targetTurns: 2, href: "/coach" },
   practice: { status: "locked", detail: "Chưa mở", href: "/practice" },
   levelReadiness: { targetLevel: "B1", windowDays: 14, eligible: false, examAvailable: false, criteria: [] },
-  finalAssessment: { available: false, label: "Làm bài cuối kỳ", href: "/test/final" }
 };
 
 describe("onboarding and learner router fidelity", () => {

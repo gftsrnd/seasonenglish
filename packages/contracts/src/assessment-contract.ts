@@ -4,7 +4,14 @@ export type AssessmentSectionCode = "listening" | "reading" | "writing" | "speak
 export type AssessmentScreenState = "preparation" | AssessmentSectionCode | "submitting" | "pending";
 export type AssessmentAttemptStatus = "in_progress" | "submitted" | "pending_review" | "approved" | "needs_retry";
 export type AssessmentEvidenceType = "choice" | "text" | "audio" | "transcript" | "typed_proxy" | "technical_failure";
-export type AssessmentViolationReason = "visibility_hidden" | "window_blur";
+export type AssessmentViolationReason =
+  | "visibility_hidden"
+  | "window_blur"
+  | "context_menu"
+  | "copy"
+  | "paste"
+  | "new_window"
+  | "logout";
 export type AssessmentSubmitReason = "manual" | "timeout" | "violations";
 
 export type AssessmentMicrophoneState = "unknown" | "unsupported" | "idle" | "requesting" | "recording" | "playback" | "uploaded" | "error";
@@ -60,6 +67,7 @@ export interface AssessmentOption {
 export interface AssessmentStimulus {
   type: "audio_script" | "passage" | "message" | "table";
   text?: string;
+  audioSrc?: string;
   lines?: Array<{ speaker: string; text: string }>;
   headers?: string[];
   rows?: string[][];
@@ -75,6 +83,14 @@ export interface AssessmentTaskView {
   minWords?: number;
   maxWords?: number;
   hint?: string;
+  interaction?: {
+    mode: "roleplay";
+    openingMessage: string;
+    maxLearnerTurns: number;
+    durationSeconds: number;
+    endConditions: Array<"time_limit" | "turn_limit" | "customer_accepted">;
+    fallback: "one_way_manual_review";
+  };
 }
 
 export interface AssessmentTaskGroupView {
@@ -229,7 +245,7 @@ export interface AssessmentReviewOverviewView {
       currentLevel: CefrLevel;
       targetLevel: CefrLevel;
       metrics: Array<{
-        key: "lessonCompletion" | "firstTryAccuracy" | "weeklyPractice" | "coachRubric";
+        key: "lessonCompletion" | "firstTryAccuracy" | "weeklyPractice" | "coachRubric" | "wrongRate";
         label: string;
         current: number;
         target: number;
@@ -315,7 +331,7 @@ export interface AssessmentLevelFormDeleteView {
 /** The evidence an Operator needs when deciding a learner's level. */
 export interface AssessmentReviewAttemptSummaryView {
   id: string;
-  kind: "placement" | "final" | "level_up";
+  kind: "placement" | "level_up";
   title: string;
   status: AssessmentAttemptStatus;
   startedAt: string;
@@ -386,7 +402,14 @@ export interface AssessmentReviewAttemptDetailView extends AssessmentReviewAttem
     groups?: Array<{
       key: string;
       label: string;
-      tasks: Array<{ taskKey: string; title?: string; prompt: string; answer: string | null }>;
+      tasks: Array<{
+        taskKey: string;
+        title?: string;
+        prompt: string;
+        answer: string | null;
+        maxScore?: number;
+        correctAnswer?: string;
+      }>;
     }>;
   }>;
   integrityEvents: Array<Record<string, unknown>>;
@@ -395,19 +418,26 @@ export interface AssessmentReviewAttemptDetailView extends AssessmentReviewAttem
 }
 
 export interface ManualAssessmentScoreInput {
-  writingCriteria: {
-    taskAchievement: number;
-    organization: number;
-    vocabulary: number;
-    grammar: number;
-    workplaceCommunication: number;
-  };
-  speakingCriteria: {
-    fluency: number;
-    grammar: number;
-    vocabulary: number;
-    professionalCommunication: number;
-  };
+  writingTasks: Array<{
+    taskKey: string;
+    criteria: {
+      taskCompletion: number;
+      organization: number;
+      vocabulary: number;
+      grammar: number;
+      workplaceRegister: number;
+    };
+  }>;
+  speakingTasks: Array<{
+    taskKey: string;
+    evidenceType: "audio" | "transcript" | "typed_proxy" | "technical_failure" | "skipped";
+    criteria: {
+      taskCompletionRelevance: number;
+      grammarVocabulary: number;
+      coherenceClarity: number;
+      interactionProfessionalRegister: number;
+    } | null;
+  }>;
   comment: string;
 }
 

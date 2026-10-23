@@ -723,6 +723,12 @@
 .app-operator .operator-modal-scope .operator-editor-section select { width: 100%; max-width: 100%; }
 .app-operator .operator-lesson-preview .vocabulary-card { display: grid; gap: 12px; padding: 16px; }
 .app-operator .operator-lesson-preview .vocabulary-card-sound { display: inline-flex; align-items: center; gap: 6px; }
+.app-operator .operator-weekly-practice-preview { border-color: #e8bf8d; background: #fffaf4; }
+.app-operator .operator-weekly-practice-preview h2 { margin: 0 0 6px; }
+.app-operator .operator-weekly-practice-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; margin-top: 14px; }
+.app-operator .operator-weekly-practice-grid > div { min-width: 0; padding: 12px; border: 1px solid var(--border); border-radius: 12px; background: var(--surface); }
+.app-operator .operator-weekly-practice-grid p { margin: 5px 0 0; overflow-wrap: anywhere; }
+@media (max-width: 720px) { .app-operator .operator-weekly-practice-grid { grid-template-columns: 1fr; } }
 .app-operator .operator-lesson-detail-issues { display: grid; gap: 8px; margin: 12px 0 0; padding: 0; list-style: none; }
 .app-operator .operator-lesson-detail-issues li { display: flex; align-items: center; justify-content: space-between; gap: 12px; border-top: 1px solid rgb(120 83 35 / .18); padding-top: 8px; }
 .app-operator .operator-lesson-detail-issues li > span { min-width: 0; line-height: 1.45; }
@@ -1776,27 +1782,27 @@
 
 .app-operator .operator-action-table th:first-child,
 .app-operator .operator-action-table td:first-child {
-  width: 19%;
+  width: 18%;
 }
 
 .app-operator .operator-action-table th:nth-child(2),
 .app-operator .operator-action-table td:nth-child(2) {
-  width: 13%;
+  width: 10%;
 }
 
 .app-operator .operator-action-table th:nth-child(3),
 .app-operator .operator-action-table td:nth-child(3) {
-  width: 14%;
+  width: 13%;
 }
 
 .app-operator .operator-action-table th:nth-child(4),
 .app-operator .operator-action-table td:nth-child(4) {
-  width: 21%;
+  width: 18%;
 }
 
 .app-operator .operator-action-table th:last-child,
 .app-operator .operator-action-table td:last-child {
-  width: 33%;
+  width: 41%;
 }
 
 .app-operator .operator-action-table td {
@@ -1829,6 +1835,36 @@
   flex: 1 1 0;
   min-width: 0;
   white-space: nowrap;
+}
+
+.app-operator .operator-approved-actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: nowrap;
+  gap: 6px;
+  width: 100%;
+  overflow-x: auto;
+  scrollbar-width: thin;
+}
+
+.app-operator .operator-approved-actions > .btn,
+.app-operator .operator-approved-actions > button {
+  flex: 0 0 auto;
+  min-width: max-content;
+  padding-inline: 10px;
+  white-space: nowrap;
+  line-height: 1.2;
+}
+
+.app-operator .operator-approved-actions > .operator-approved-weekly-action {
+  border-color: #e7a550;
+  background: #fff8ed;
+}
+
+.app-operator .operator-weekly-available {
+  margin-top: 4px;
+  color: #805018;
+  font-weight: 700;
 }
 
 /* Shared prompt dialogs are rendered outside the Operator page root. Scope
@@ -2684,3 +2720,15 @@ body:has(.app-operator) #modal > .dialog > .row {
 .app-operator .operator-modal-scope .operator-editor-section select { width: 100%; max-width: 100%; }
 .app-operator .operator-lesson-preview .vocabulary-card { display: grid; gap: 12px; padding: 16px; }
 .app-operator .operator-lesson-preview .vocabulary-card-sound { display: inline-flex; align-items: center; gap: 6px; }
+.operator-review-learner-group > summary { display:flex; align-items:center; justify-content:space-between; gap:12px; cursor:pointer; padding:12px; }
+.operator-review-group-items { display:grid; gap:8px; padding:0 12px 12px; }
+.operator-review-appeal { display:grid; gap:10px; padding:12px; border:1px solid var(--line); border-radius:12px; }
+.operator-review-action-footer { flex-wrap:wrap; gap:8px; padding-top:4px; }
+.operator-weekly-practice-editor { display:grid; gap:12px; }
+.operator-weekly-practice-editor label { display:grid; gap:6px; font-weight:600; }
+.operator-weekly-practice-editor textarea { min-height:84px; resize:vertical; }
+.operator-weekly-practice-editor input,
+.operator-weekly-practice-editor textarea { width:100%; font-weight:400; }
+.operator-attempt-learner-list { display:grid; gap:10px; margin-top:12px; }
+.operator-attempt-learner-list .operator-review-learner-group { border:1px solid var(--line); border-radius:12px; overflow:hidden; background:var(--surface); }
+.operator-attempt-learner-list .table-wrap { margin:0 12px 12px; }

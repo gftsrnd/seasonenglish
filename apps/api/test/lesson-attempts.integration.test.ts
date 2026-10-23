@@ -29,7 +29,7 @@ describe("lesson exercise evidence API", () => {
     await app.ready();
     const login = await app.inject({
       method: "POST", url: "/api/auth/learner/login",
-      payload: { email: "learner@e4s.local", password: "learner-pass" }
+      payload: { email: "minh.anh.nguyen@e4s.local", password: "learner-pass" }
     });
     cookie = String(login.headers["set-cookie"]).split(";")[0] ?? "";
   }, 30_000);

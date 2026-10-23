@@ -19,9 +19,9 @@ const freshScreenshotPath = process.env.E4S_E2E_SCREENSHOT_PATH
   ?? join(root, ".tmp", "evidence", "e2e-local", "e2e-post-patch-390.png");
 const demoManagerId = "00000000-0000-4000-8000-000000000103";
 const localRoleFixtures = [
-  { label: "learner", email: "learner@e4s.local", password: "learner-pass", audience: "learner", role: "learner" },
-  { label: "operator", email: "operator@e4s.local", password: "staff-pass", audience: "staff", role: "operator" },
-  { label: "manager", email: "manager@e4s.local", password: "manager-pass", audience: "staff", role: "manager" }
+  { label: "learner", email: "minh.anh.nguyen@e4s.local", password: "learner-pass", audience: "learner", role: "learner" },
+  { label: "operator", email: "thu.ha.tran@e4s.local", password: "staff-pass", audience: "staff", role: "operator" },
+  { label: "manager", email: "quoc.bao.le@e4s.local", password: "manager-pass", audience: "staff", role: "manager" }
 ];
 
 let localProcess;
@@ -125,8 +125,8 @@ async function checkLocalRoleFixtures(apiUrl) {
   }
 
   for (const [label, audience, email, password] of [
-    ["learner-at-staff", "staff", "learner@e4s.local", "learner-pass"],
-    ["operator-at-learner", "learner", "operator@e4s.local", "staff-pass"]
+    ["learner-at-staff", "staff", "minh.anh.nguyen@e4s.local", "learner-pass"],
+    ["operator-at-learner", "learner", "thu.ha.tran@e4s.local", "staff-pass"]
   ]) {
     const response = await fetch(`${apiUrl}/api/auth/${audience}/login`, {
       method: "POST",
@@ -448,7 +448,7 @@ async function checkEntryNotice() {
     assert(entryStyles.switchBackground === "rgba(0, 0, 0, 0)", `Entry audience switch background is ${entryStyles.switchBackground}, expected transparent`);
   }
 
-  await page.fill("input[name=email]", "learner@e4s.local");
+  await page.fill("input[name=email]", "minh.anh.nguyen@e4s.local");
   await page.fill("input[name=password]", "wrong-password");
   await page.evaluate(`(() => {
     const nativeFetch = window.fetch.bind(window);
@@ -494,7 +494,7 @@ async function checkEntryNotice() {
 }
 
 async function checkLearnerSession(webUrl) {
-  await page.fill("input[name=email]", "learner@e4s.local");
+  await page.fill("input[name=email]", "minh.anh.nguyen@e4s.local");
   await page.fill("input[name=password]", "learner-pass");
   await page.clickText("Đăng nhập người học");
   await waitForPath("/home");
@@ -591,7 +591,7 @@ async function checkLearnerSession(webUrl) {
 
 async function checkOperatorRoute(webUrl) {
   await page.clickText("Nhân sự");
-  await page.fill("input[name=email]", "operator@e4s.local");
+  await page.fill("input[name=email]", "thu.ha.tran@e4s.local");
   await page.fill("input[name=password]", "staff-pass");
   await page.clickText("Đăng nhập nhân sự");
   await waitForPath("/op");
@@ -691,7 +691,7 @@ async function checkOperatorRoute(webUrl) {
 
 async function checkManagerGuardAndModal(webUrl) {
   await page.clickText("Nhân sự");
-  await page.fill("input[name=email]", "manager@e4s.local");
+  await page.fill("input[name=email]", "quoc.bao.le@e4s.local");
   await page.fill("input[name=password]", "manager-pass");
   await page.clickText("Đăng nhập nhân sự");
   await waitForPath("/mgr");

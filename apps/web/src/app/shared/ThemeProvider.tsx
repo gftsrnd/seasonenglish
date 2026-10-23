@@ -3,7 +3,6 @@ import { resolveAutomaticTheme, useAutomaticTheme } from "../../features/experie
 
 export const themePreferences = ["auto", "spring", "summer", "autumn", "winter", "tet", "midautumn", "christmas"] as const;
 export type ThemePreference = typeof themePreferences[number];
-const themeStorageKey = "e4s:theme";
 export const themePatternUrls: Record<Exclude<ThemePreference, "auto">, string> = {
   spring: "/patterns/season-spring.png",
   summer: "/patterns/season-summer.png",
@@ -13,40 +12,39 @@ export const themePatternUrls: Record<Exclude<ThemePreference, "auto">, string> 
   midautumn: "/patterns/season-midautumn.png",
   christmas: "/patterns/season-christmas.png"
 };
-type ThemeApi = { theme: ThemePreference; resolvedTheme: Exclude<ThemePreference, "auto">; setTheme: (theme: ThemePreference) => void };
-const fallbackTheme: ThemeApi = { theme: "auto", resolvedTheme: resolveAutomaticTheme(new Date()), setTheme: persistTheme };
+type ThemeApi = {
+  theme: ThemePreference;
+  resolvedTheme: Exclude<ThemePreference, "auto">;
+  setTheme: (theme: ThemePreference) => void;
+  previewTheme: (theme: ThemePreference) => void;
+  clearThemePreview: () => void;
+};
+const fallbackTheme: ThemeApi = {
+  theme: "auto",
+  resolvedTheme: resolveAutomaticTheme(new Date()),
+  setTheme: () => undefined,
+  previewTheme: () => undefined,
+  clearThemePreview: () => undefined
+};
 const ThemeContext = createContext<ThemeApi>(fallbackTheme);
 
 export function useTheme(): ThemeApi { return useContext(ThemeContext); }
 
 export function ThemeProvider({ children }: { children: ReactNode }) {
-  const [theme, setThemeState] = useState<ThemePreference>(() => readStoredTheme());
-  const resolvedTheme = useAutomaticTheme(theme);
-  const setTheme = useCallback((nextTheme: ThemePreference) => {
-    setThemeState(nextTheme);
-    persistTheme(nextTheme);
-  }, []);
+  const [theme, setTheme] = useState<ThemePreference>("auto");
+  const [preview, setPreview] = useState<ThemePreference>();
+  const resolvedTheme = useAutomaticTheme(preview ?? theme);
+  const previewTheme = useCallback((nextTheme: ThemePreference) => setPreview(nextTheme), []);
+  const clearThemePreview = useCallback(() => setPreview(undefined), []);
   useEffect(() => { applyResolvedTheme(resolvedTheme); }, [resolvedTheme]);
-  const value = useMemo(() => ({ theme, resolvedTheme, setTheme }), [resolvedTheme, setTheme, theme]);
+  const value = useMemo(() => ({ theme, resolvedTheme, setTheme, previewTheme, clearThemePreview }), [clearThemePreview, previewTheme, resolvedTheme, theme]);
   return <ThemeContext.Provider value={value}>{children}</ThemeContext.Provider>;
-}
-
-function persistTheme(theme: ThemePreference): void {
-  try { window.localStorage.setItem(themeStorageKey, theme); } catch { /* Storage is optional in privacy mode. */ }
-  applyResolvedTheme(theme === "auto" ? resolveAutomaticTheme(new Date()) : theme);
 }
 
 function applyResolvedTheme(theme: Exclude<ThemePreference, "auto">): void {
   document.documentElement.dataset.theme = theme;
   document.documentElement.dataset.themePattern = theme;
   document.documentElement.style.setProperty("--season-pattern-image", `url("${themePatternUrls[theme]}")`);
-}
-
-function readStoredTheme(): ThemePreference {
-  try {
-    const stored = window.localStorage.getItem(themeStorageKey);
-    return isThemePreference(stored) ? stored : "auto";
-  } catch { return "auto"; }
 }
 
 export function isThemePreference(value: string | null | undefined): value is ThemePreference {

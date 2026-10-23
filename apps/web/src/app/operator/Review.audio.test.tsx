@@ -53,14 +53,14 @@ function assessmentDetail(): ContentReviewAssessmentDetailView {
 function reviewView(overrides: Partial<OperatorReviewView> = {}): OperatorReviewView {
   return {
     activeTab: "subs",
-    counts: { subs: 1, coach: 0, micro: 0, appeals: 0, attempts: 0, tests: 0 },
+    counts: { subs: 1, coach: 0, weekly: 0, appeals: 0, attempts: 0, tests: 0 },
     submissions: [{
       id: "submission-1", learnerName: "Lan", week: 1, type: "writing", submittedAt: "15/10/2026 08:00",
       operatorChecked: false, task: "Write a short email.", text: "Hello", total: null, rubric: null, aiGraded: false,
       feedback: "", suggestions: []
     }],
     coachTurns: [],
-    microLessons: [],
+    weeklyPractices: [],
     appeals: [],
     attempts: [],
     tests: [],
@@ -74,7 +74,6 @@ function reviewActions(overrides: Partial<OperatorReviewActions> = {}): Operator
     onTabChange: vi.fn(),
     onMarkSubmission: vi.fn(),
     onMarkCoachTurn: vi.fn(),
-    onDeleteMicroLesson: vi.fn(),
     onGradeAi: vi.fn(),
     onGradeManual: vi.fn(),
     onDecideAppeal: vi.fn(),
@@ -120,9 +119,9 @@ describe("Operator assessment audio playback", () => {
 
     const { container } = render(<OperatorReviewAssessmentDetail detail={detail} onClose={vi.fn()} />);
 
-    expect(screen.getByText("0/20")).toBeInTheDocument();
-    expect(screen.getAllByText("0/20*")).toHaveLength(2);
-    expect(screen.getByText("0/100")).toBeInTheDocument();
+    expect(screen.getAllByText("Chờ chấm")).toHaveLength(4);
+    expect(screen.getByText("Chờ đủ 4 kỹ năng")).toBeInTheDocument();
+    expect(screen.getByText(/Tổng điểm: Chờ đủ 4 kỹ năng/)).toBeInTheDocument();
   });
 
   it("renders persisted signed audio as a playable control", () => {
@@ -132,6 +131,22 @@ describe("Operator assessment audio playback", () => {
       "src",
       "https://audio.example.test/speaking.wav?signature=short-lived"
     );
+  });
+
+  it("flags typed speaking proxy evidence for mandatory manual review", () => {
+    const detail = assessmentDetail();
+    detail.answers = [{
+      section: "speaking",
+      taskKey: "S1",
+      value: "I work in sales.",
+      evidenceType: "typed_proxy"
+    }];
+
+    render(<OperatorReviewAssessmentDetail detail={detail} onClose={vi.fn()} />);
+
+    expect(screen.getByText("Câu trả lời văn bản thay thế")).toBeInTheDocument();
+    expect(screen.getByRole("alert")).toHaveTextContent(/phải chấm tay/i);
+    expect(screen.getByRole("alert")).toHaveTextContent(/không xác minh phát âm/i);
   });
 
   it("shows playback feedback when persisted audio fails to load", () => {
@@ -198,7 +213,7 @@ describe("Operator assessment audio playback", () => {
     fireEvent.click(screen.getByText("Viết · 0/20"));
 
     expect(container.querySelector('[data-assessment-section="writing"]')).toHaveAttribute("open");
-    expect(screen.getByLabelText("Task achievement")).toBeVisible();
+    expect(screen.getByLabelText("W1 · Task completion")).toBeVisible();
   });
 
   it("uses the prototype document flow instead of separate evidence and grading cards", () => {

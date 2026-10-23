@@ -54,6 +54,17 @@ export interface WeeklyPracticeView {
   history?: WeeklyPracticeHistoryItem[];
 }
 
+export interface WeeklyPracticeAssignmentView {
+  status: "assigned" | "already_assigned";
+  learnerId: string;
+  submissionId: string;
+  weekId: string;
+  weekNumber: number;
+  topic: string;
+  task: string;
+  guidance: string;
+}
+
 export type GameKey = "scramble" | "crossword" | "eggs" | "mario" | "sort" | "typing";
 
 export type GameTopicModeration =
@@ -95,13 +106,15 @@ export interface GameWordSetView {
   cefr: CefrLevel;
   source: "weekly" | "custom";
   words: GameWordView[];
+  /** Custom AI sets contain eight off-topic options for multiple-choice game rounds. */
+  distractors?: GameWordView[];
 }
 
 export interface GameHubView {
   cefr: CefrLevel;
   aiAvailable?: boolean;
   topicModeration?: GameTopicModeration;
-  wordSet: GameWordSetView;
+  wordSet: GameWordSetView | null;
   games: GameDescriptor[];
   arena: { eligible: boolean; requiredLevel: "B1"; points: number; pendingDuels: number };
 }

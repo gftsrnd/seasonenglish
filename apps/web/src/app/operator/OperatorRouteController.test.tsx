@@ -17,10 +17,38 @@ const lessonSet = (status: ContentLessonSetVersionView["status"]): ContentLesson
   lessonSetId: "ls", versionId: "v1", version: 1, status, weekNumber: 2, topic: "Meetings", cefr: "A2",
   explanationLanguage: "Tiếng Việt", createdBy: "op", approvedBy: status === "published" ? "op" : null,
   createdAt: "2026-10-14", publishedAt: status === "published" ? "2026-10-15" : null,
+  weeklyPractice: {
+    task: "Write 3–5 sentences about meetings.",
+    guidance: "Use at least 3 words from this week's lessons.",
+    inputMode: "text_or_dictation",
+    requiredVocabulary: ["agenda", "minutes", "deadline"]
+  },
   lessons: [{ id: "lesson-1", dayNumber: 1, title: "Mở đầu cuộc họp", durationMinutes: 10, practiceLabel: "điền từ", parts: [] }]
 });
 
 describe("OperatorRouteController", () => {
+  it("opens the first Bài cuối tuần tab by default", async () => {
+    const review = {
+      tabs: [
+        { key: "submissions", label: "Bài nộp", count: 0, unreadCount: 0 },
+        { key: "coach", label: "Phản hồi coach", count: 0 },
+        { key: "weekly_practices", label: "Bài cuối tuần", count: 1 },
+        { key: "micro", label: "Bài siêu ngắn", count: 0 },
+        { key: "appeals", label: "Kháng nghị", count: 0 },
+        { key: "attempts", label: "Số lần làm bài", count: 0 },
+        { key: "assessments", label: "Bài test", count: 0 }
+      ],
+      submissions: [], coachSamples: [], microLessons: [], appeals: [], lessonAttempts: [], assessments: [],
+      weeklyPractices: [{ versionId: "v1", weekNumber: 1, cefr: "A2", topic: "Directions", status: "draft", version: 1, task: "Write three sentences.", guidance: "Use weekly words.", requiredVocabulary: ["left"] }]
+    } as ContentReviewView;
+
+    render(<MemoryRouter initialEntries={["/op/review"]}><OperatorRouteController session={operator} client={{ getContentReview: vi.fn().mockResolvedValue(review) } as any} /></MemoryRouter>);
+
+    const weeklyTab = await screen.findByRole("tab", { name: "Bài cuối tuần (1)" });
+    expect(screen.getAllByRole("tab")[0]).toBe(weeklyTab);
+    expect(weeklyTab).toHaveAttribute("aria-selected", "true");
+  });
+
   it("loads the real week contract for /op/weeks and persists edited frames", async () => {
     const user = userEvent.setup();
     const weeks = { pilot: { startDate: "2026-10-05", weekCount: 1 }, weeks: [{ id: "w1", weekNumber: 1, startDate: "2026-10-05", endDate: "2026-10-11", current: true, topic: "Meetings", description: "", objectives: "", keyVocabHint: "" }] };
@@ -106,6 +134,32 @@ describe("OperatorRouteController", () => {
     expect(order).toEqual(["start-A1", "end-A1", "start-A2", "end-A2"]);
   });
 
+  it("warns before replacing a partially filled week and regenerates every active level after confirmation", async () => {
+    const user = userEvent.setup();
+    const weeks = { pilot: { startDate: "2026-10-05", weekCount: 1 }, weeks: [{ id: "w1", weekNumber: 1, startDate: "2026-10-05", endDate: "2026-10-11", current: true, topic: "Meetings", description: "Lịch họp", objectives: "Xác nhận lịch", keyVocabHint: "schedule" }] };
+    const generateContentLessonDraft = vi.fn().mockResolvedValue({});
+    const client = {
+      getContentWeeks: vi.fn().mockResolvedValue(weeks),
+      saveContentWeeks: vi.fn().mockResolvedValue(weeks),
+      getContentLessonMatrix: vi.fn().mockResolvedValue({ levels: [{ cefr: "A1", learnerCount: 0 }, { cefr: "A2", learnerCount: 1 }], weeks: [{ weekNumber: 1, topic: "Meetings", cells: [{ cefr: "A2", status: "draft", updatedAt: "2026-10-23T00:00:00Z", lessons: [{ dayNumber: 1, title: "Meeting time" }] }] }] }),
+      getSystemCapabilities: vi.fn().mockResolvedValue({ ai: true }),
+      generateContentLessonDraft
+    };
+    render(<MemoryRouter initialEntries={["/op/weeks"]}><OperatorRouteController session={operator} client={client as any} /></MemoryRouter>);
+
+    await screen.findByLabelText("Chủ đề *");
+    await waitFor(() => expect(client.getContentLessonMatrix).toHaveBeenCalled());
+    await user.click(screen.getByRole("button", { name: "Lưu khung chủ đề" }));
+
+    const dialog = await screen.findByRole("dialog", { name: "Tạo lại nội dung tuần?" });
+    expect(within(dialog).getByText(/ghi đè toàn bộ nội dung hiện có của tuần 1/i)).toBeInTheDocument();
+    expect(generateContentLessonDraft).not.toHaveBeenCalled();
+    await user.click(within(dialog).getByRole("button", { name: "Tạo lại và ghi đè" }));
+    await waitFor(() => expect(generateContentLessonDraft).toHaveBeenCalledTimes(2));
+    expect(generateContentLessonDraft).toHaveBeenNthCalledWith(1, 1, "A1");
+    expect(generateContentLessonDraft).toHaveBeenNthCalledWith(2, 1, "A2");
+  });
+
   it("does not let an older week save overwrite a newer save", async () => {
     const user = userEvent.setup();
     const weeks = { pilot: { startDate: "2026-10-05", weekCount: 1 }, weeks: [{ id: "w1", weekNumber: 1, startDate: "2026-10-05", endDate: "2026-10-11", current: true, topic: "Old topic", description: "", objectives: "", keyVocabHint: "" }] };
@@ -154,6 +208,20 @@ describe("OperatorRouteController", () => {
     expect(screen.getByRole("heading", { name: "Sinh & duyệt bài học" })).toBeInTheDocument();
   });
 
+  it("explains that generation may still finish after a gateway timeout", async () => {
+    const user = userEvent.setup();
+    const client = {
+      getContentLessonMatrix: vi.fn().mockResolvedValue({ levels: [{ cefr: "B1", learnerCount: 1 }], weeks: [{ weekNumber: 1, topic: "Meetings", cells: [] }] }),
+      getSystemCapabilities: vi.fn().mockResolvedValue({ ai: true }),
+      generateContentLessonDraft: vi.fn().mockRejectedValue(new Error("HTTP_504"))
+    };
+    render(<MemoryRouter initialEntries={["/op/lessons"]}><OperatorRouteController session={operator} client={client as any} /></MemoryRouter>);
+
+    await user.click(await screen.findByRole("button", { name: "Sinh" }));
+
+    expect(await screen.findByText(/Hệ thống vẫn đang hoàn tất bộ bài/)).toHaveClass("operator-toast-danger");
+  });
+
   it("shows preparation as a green bottom toast while one lesson set is generating", async () => {
     const user = userEvent.setup();
     let resolveGeneration!: (value: ContentLessonSetVersionView) => void;
@@ -179,7 +247,27 @@ describe("OperatorRouteController", () => {
     expect(await screen.findByRole("heading", { name: "Prompt & rubric" })).toBeInTheDocument();
     screen.getAllByRole("button", { name: "Về mặc định" }).forEach(button => expect(button).toBeEnabled());
     expect(screen.getByRole("button", { name: "Lưu prompt" })).toBeEnabled();
-    expect(screen.getByRole("textbox", { name: "Quy tắc chung (mọi lời gọi trừ sinh bài siêu ngắn)" })).not.toHaveAttribute("readonly");
+    expect(screen.getByRole("textbox", { name: "Quy tắc chung" })).not.toHaveAttribute("readonly");
+    expect(screen.queryByText(/bài siêu ngắn/i)).not.toBeInTheDocument();
+  });
+
+  it("does not expose the retired super-short lesson in Manager review", async () => {
+    const review = {
+      tabs: [
+        { key: "submissions", label: "Bài nộp", count: 0 },
+        { key: "coach", label: "Phản hồi coach", count: 0 },
+        { key: "micro", label: "Bài siêu ngắn", count: 2 },
+        { key: "appeals", label: "Kháng nghị", count: 0 },
+        { key: "attempts", label: "Số lần làm bài", count: 0 },
+        { key: "assessments", label: "Bài test", count: 0 }
+      ],
+      submissions: [], coachSamples: [], microLessons: [], appeals: [], lessonAttempts: [], assessments: []
+    } as ContentReviewView;
+    render(<MemoryRouter initialEntries={["/mgr/ops/review"]}><OperatorRouteController session={manager} client={{ getContentReview: vi.fn().mockResolvedValue(review) } as any} basePath="/mgr/ops" /></MemoryRouter>);
+
+    expect(await screen.findByRole("heading", { name: "Đọc mẫu & kiểm tra AI" })).toBeInTheDocument();
+    expect(screen.getAllByRole("tab")).toHaveLength(6);
+    expect(screen.queryByText(/bài siêu ngắn/i)).not.toBeInTheDocument();
   });
 
   it("renders Manager-owned routes without an inspection banner", async () => {
@@ -227,6 +315,26 @@ describe("OperatorRouteController", () => {
     await user.click(within(dialog).getByRole("button", { name: "Gửi yêu cầu" }));
 
     await waitFor(() => expect(requestAssessmentReviewLearnerDeletion).toHaveBeenCalledWith("learner-1", "Tài khoản trùng"));
+    const pendingDelete = await screen.findByRole("button", { name: "Chờ Quản lý duyệt xoá" });
+    expect(pendingDelete).toBeDisabled();
+    expect(screen.queryByRole("button", { name: "Xoá học viên" })).not.toBeInTheDocument();
+  });
+
+  it("restores the pending deletion button state from the server after reload", async () => {
+    const overview = {
+      pendingAssessments: [{ attemptId: "attempt-1", learnerId: "learner-1", learnerName: "Lan", kind: "placement", title: "Đầu vào", submittedAt: "2026-10-14", sectionScores: {}, suggestedLevel: "A2" }],
+      pendingLevelUp: [], approvedLearners: [], unassessedLearners: [],
+      levelSignals: { windowDays: 14, ready: [], weak: [] }, topicReports: []
+    };
+    const getAssessmentReviewLearner = vi.fn().mockResolvedValue({
+      learner: { id: "learner-1", displayName: "Lan", email: null, status: "active", createdAt: "2026-10-01", currentLevel: null, cefrApproved: false, pendingLevel: null },
+      profile: {}, monthlyGoal: null, levelHistory: [], attempts: [],
+      deletionRequests: [{ id: "delete-1", learnerId: "learner-1", learnerName: "Lan", reason: "Tài khoản trùng", status: "pending", requestedBy: "operator-1", requestedAt: "2026-10-23T10:00:00.000Z" }]
+    });
+    render(<MemoryRouter initialEntries={["/op"]}><OperatorRouteController session={operator} client={{ getAssessmentReviewOverview: vi.fn().mockResolvedValue(overview), getAssessmentReviewLearner, requestAssessmentReviewLearnerDeletion: vi.fn() } as any} /></MemoryRouter>);
+
+    expect(await screen.findByRole("button", { name: "Chờ Quản lý duyệt xoá" })).toBeDisabled();
+    expect(getAssessmentReviewLearner).toHaveBeenCalledWith("learner-1");
   });
 
   it("does not expose transport placeholders when the optional week context is unavailable", async () => {
@@ -255,6 +363,7 @@ describe("OperatorRouteController", () => {
     expect(screen.queryByText(/tổng API chưa cung cấp/i)).not.toBeInTheDocument();
     expect(screen.queryByText(/mức hiện tại: API chưa cung cấp/i)).not.toBeInTheDocument();
     expect(screen.queryByText(/mức đích: API chưa cung cấp/i)).not.toBeInTheDocument();
+    expect(screen.getAllByText("Chờ chấm")).toHaveLength(3);
   });
 
   it("uses the app prompt modal when rejecting a level request", async () => {
@@ -567,7 +676,7 @@ describe("OperatorRouteController", () => {
       microLessons: [], appeals: [], lessonAttempts: [], assessments: []
     };
     const getContentReview = vi.fn().mockResolvedValue(review);
-    render(<MemoryRouter initialEntries={["/op/review"]}><OperatorRouteController session={operator} client={{ getContentReview } as any} /></MemoryRouter>);
+    render(<MemoryRouter initialEntries={[{ pathname: "/op/review", state: { reviewTab: "subs" } }]}><OperatorRouteController session={operator} client={{ getContentReview } as any} /></MemoryRouter>);
 
     expect(await screen.findByText(/Viết · 14\/10 \d{2}:\d{2}/)).toBeInTheDocument();
     expect(screen.getByText("Đề: Viết email xin dời lịch họp theo chủ đề Meetings.")).toBeInTheDocument();
@@ -593,7 +702,7 @@ describe("OperatorRouteController", () => {
       }],
       microLessons: [], appeals: [], lessonAttempts: [], assessments: []
     };
-    render(<MemoryRouter initialEntries={["/op/review"]}><OperatorRouteController session={operator} client={{ getContentReview: vi.fn().mockResolvedValue(review) } as any} /></MemoryRouter>);
+    render(<MemoryRouter initialEntries={[{ pathname: "/op/review", state: { reviewTab: "subs" } }]}><OperatorRouteController session={operator} client={{ getContentReview: vi.fn().mockResolvedValue(review) } as any} /></MemoryRouter>);
 
     expect(await screen.findByText(/Tuần 2 · — ·/)).toBeInTheDocument();
     expect(screen.getByText("Đề: —")).toBeInTheDocument();
@@ -642,6 +751,18 @@ describe("OperatorRouteController", () => {
     render(<MemoryRouter initialEntries={["/op/lessons/2/A2"]}><OperatorRouteController session={operator} client={client as any} /></MemoryRouter>);
     expect(await screen.findByRole("heading", { name: /Tuần 2 · Mức A2/ })).toBeInTheDocument();
     expect(client.getContentLessonSet).toHaveBeenCalledWith(2, "A2");
+  });
+
+  it("previews the shared weekly practice after the five lesson area", async () => {
+    const client = { getContentLessonSet: vi.fn().mockResolvedValue(lessonSet("published")) };
+    render(<MemoryRouter initialEntries={["/op/lessons/2/A2"]}><OperatorRouteController session={operator} client={client as any} /></MemoryRouter>);
+
+    const heading = await screen.findByRole("heading", { name: "Bài thực hành cuối tuần" });
+    expect(heading).toBeInTheDocument();
+    expect(screen.getByText("Write 3–5 sentences about meetings.")).toBeInTheDocument();
+    expect(screen.getByText("Use at least 3 words from this week's lessons.")).toBeInTheDocument();
+    expect(screen.getByText("agenda · minutes · deadline")).toBeInTheDocument();
+    expect(screen.getByText("Nhập văn bản hoặc nói để chuyển thành chữ")).toBeInTheDocument();
   });
 
   it("requires primary confirmation before publishing a draft lesson set", async () => {

@@ -62,9 +62,9 @@ describe("persisted assessment audio playback", () => {
       expect(response.statusCode, response.body).toBe(200);
       return String(response.headers["set-cookie"]).split(";")[0] ?? "";
     };
-    operatorCookie = await login("/api/auth/staff/login", "operator@e4s.local", "operator-pass");
-    managerCookie = await login("/api/auth/staff/login", "manager@e4s.local", "manager-pass");
-    learnerCookie = await login("/api/auth/learner/login", "learner@e4s.local", "learner-pass");
+    operatorCookie = await login("/api/auth/staff/login", "thu.ha.tran@e4s.local", "operator-pass");
+    managerCookie = await login("/api/auth/staff/login", "quoc.bao.le@e4s.local", "manager-pass");
+    learnerCookie = await login("/api/auth/learner/login", "minh.anh.nguyen@e4s.local", "learner-pass");
   }, 30_000);
 
   afterAll(async () => { await app.close(); await pool.end(); });

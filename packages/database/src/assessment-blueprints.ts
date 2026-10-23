@@ -32,7 +32,7 @@ const listeningGroups: StoredAssessmentDefinition["sections"][number]["groups"] 
   {
     key: "LA", title: "Part A – Thông báo của quản lý",
     instruction: "Nghe thông báo và trả lời câu 1–5.", maxPlays: 2,
-    stimulus: { type: "audio_script", lines: [
+    stimulus: { type: "audio_script", audioSrc: "/media/audio/placement-listening-LA.wav", lines: [
       { speaker: "Manager", text: "Good morning, everyone. Just a quick reminder about tomorrow's team meeting. It will start at 9:30, not 9:00 as originally planned. We'll meet in Room 210. Please bring the latest sales report because we'll discuss our results from last month. If you have any questions, please speak to Sarah before the meeting." },
       { speaker: "Employee", text: "Why has the time changed?" },
       { speaker: "Manager", text: "The client has asked us to move our morning call, so we needed to change the meeting time." }
@@ -48,7 +48,7 @@ const listeningGroups: StoredAssessmentDefinition["sections"][number]["groups"] 
   {
     key: "LB", title: "Part B – Hội thoại với cấp trên",
     instruction: "Nghe cuộc trao đổi và trả lời câu 6–10.", maxPlays: 2,
-    stimulus: { type: "audio_script", lines: [
+    stimulus: { type: "audio_script", audioSrc: "/media/audio/placement-listening-LB.wav", lines: [
       { speaker: "Employee", text: "Hi, James. I'm working on the customer report, but I'm not sure which refund procedure applies." },
       { speaker: "Supervisor", text: "Have you checked the previous customer cases? We had a similar case last month. Check those records first. If you still cannot find the answer, come back to me. We have to send the report today, but there may be some flexibility with the exact time." }
     ] },
@@ -63,7 +63,7 @@ const listeningGroups: StoredAssessmentDefinition["sections"][number]["groups"] 
   {
     key: "LC", title: "Part C – Chính sách hybrid",
     instruction: "Nghe thảo luận và trả lời câu 11–15.", maxPlays: 2,
-    stimulus: { type: "audio_script", lines: [
+    stimulus: { type: "audio_script", audioSrc: "/media/audio/placement-listening-LC.wav", lines: [
       { speaker: "Anna", text: "What do you think about the new hybrid-work policy?" },
       { speaker: "Mark", text: "People can concentrate better on individual work, but I am concerned that remote staff may miss informal decisions." },
       { speaker: "Anna", text: "We need clearer communication procedures. Important decisions could be documented in one shared system." },
@@ -136,20 +136,20 @@ export const placementDefinition: StoredAssessmentDefinition = {
   kind: "placement",
   title: "Workplace English CEFR Placement Test",
   version: 1,
-  totalMinutes: 70,
+  totalMinutes: 75,
   totalScore: 100,
   sections: [
     { code: "listening", title: "Nghe", durationMinutes: 15, maxScore: 20, instructions: ["Mỗi đoạn nghe được phát tối đa 2 lần."], groups: listeningGroups },
-    { code: "reading", title: "Đọc, Ngữ pháp & Từ vựng", durationMinutes: 20, maxScore: 40, instructions: ["40 câu, mỗi câu 1 điểm."], groups: readingGroups },
-    { code: "writing", title: "Viết", durationMinutes: 20, maxScore: 20, instructions: ["Rubric chung: task achievement · organization · vocabulary · grammar · workplace communication (mỗi tiêu chí 1–5)."], groups: [
+    { code: "reading", title: "Đọc, Ngữ pháp & Từ vựng", durationMinutes: 25, maxScore: 40, instructions: ["40 câu, mỗi câu 1 điểm."], groups: readingGroups },
+    { code: "writing", title: "Viết", durationMinutes: 20, maxScore: 20, instructions: ["Mỗi task được chấm riêng theo 5 tiêu chí: task completion, organization, vocabulary, grammar và workplace register (mỗi tiêu chí 0–4)."], groups: [
       { key: "W1", title: "Task 1 – Phản hồi nhanh (7 phút · A2–B1)", instruction: "You receive this message from a colleague:", stimulus: { type: "message", text: "Hi! I need to take tomorrow morning off urgently for a family matter. Could you help me monitor the customer support inbox from 9 AM to 12 PM? I owe you one!" }, tasks: [
         { key: "W1", prompt: "Write a short reply (50–80 words): agree to help and ask whether there are any important tickets you should pay special attention to.", responseType: "long_text", maxScore: 7, minWords: 50, maxWords: 80 }
       ] },
       { key: "W2", title: "Task 2 – Báo cáo / đề xuất (13 phút · B2–C1)", instruction: "You work for a company that is updating its customer-service procedures. Your manager has sent you this message:", stimulus: { type: "message", text: "Hi,\nSeveral employees have said that they are sometimes unsure which customer-service procedure is the most recent one." }, tasks: [
-        { key: "W2", prompt: "Write a formal email (120–150 words) replying to your manager: explain one serious problem this confusion could cause (for example, giving a customer the wrong refund information) and propose a solution that makes it easy for the team to find and use the latest documents.", responseType: "long_text", maxScore: 13, minWords: 120, maxWords: 150 }
+        { key: "W2", prompt: "Write a formal email (120–150 words): explain one risk of outdated procedures and propose how the team can find the latest version.", responseType: "long_text", maxScore: 13, minWords: 120, maxWords: 150 }
       ] }
     ] },
-    { code: "speaking", title: "Nói", durationMinutes: 15, maxScore: 20, instructions: ["Nộp file ghi âm cho từng task (mp3, m4a, wav hoặc webm; tối đa 20 MB). Bạn có thể ghi âm trực tiếp hoặc tải file có sẵn, sau đó gõ lại nội dung đã nói vào ô bên dưới để được chấm."], groups: [
+    { code: "speaking", title: "Nói", durationMinutes: 15, maxScore: 20, instructions: ["Ghi âm trực tiếp hoặc tải file cho từng task (MP3, M4A, WAV, OGG hoặc WebM; tối đa 20 MB). Nếu không thể gửi âm thanh, bạn có thể nộp câu trả lời bằng chữ để được chấm nội dung; phần này không dùng để đánh giá phát âm hoặc tương tác trực tiếp."], groups: [
       { key: "S1", title: "Task 1 – Warm-up (3 phút · A1–A2)", instruction: "The examiner asks:", tasks: [
         { key: "S1", prompt: "1. What do you do?\n2. What are your main responsibilities?\n3. What English do you use at work?\n4. What is one situation in which you find English difficult?", responseType: "speaking_evidence", maxScore: 5, hint: "Trả lời lần lượt 4 câu hỏi, mỗi câu 2–4 câu nói." }
       ] },
@@ -157,21 +157,27 @@ export const placementDefinition: StoredAssessmentDefinition = {
         { key: "S2", prompt: "1. Summarise the main trend in the numbers.\n2. Point out the biggest change in Q3.\n3. Suggest one short-term action the team should take to deal with the Q3 problem.", responseType: "speaking_evidence", maxScore: 5, hint: "Dùng từ vựng mô tả số liệu: increase, decrease, remain stable, the biggest change…" }
       ] },
       { key: "S3", title: "Task 3 – Roleplay (4 phút · B2–C1)", instruction: "You are a Customer Care Specialist. The examiner plays a customer who is very upset because the refund has not arrived, although the customer was told it would arrive within five days.", tasks: [
-        { key: "S3", prompt: "Apologise, explain the accounting system error and clearly commit to a solution.", responseType: "speaking_evidence", maxScore: 5, hint: "Giao tiếp trực tiếp như đang nói với khách hàng." }
+        {
+          key: "S3",
+          prompt: "Acknowledge the customer's frustration, explain that a technical issue delayed the refund, propose a clear next step and state when the customer can expect a follow-up.",
+          responseType: "speaking_evidence",
+          maxScore: 5,
+          hint: "Duy trì giọng điệu lịch sự, chuyên nghiệp trong toàn bộ trao đổi.",
+          interaction: {
+            mode: "roleplay",
+            openingMessage: "Excuse me, I am extremely frustrated. I was promised my refund would be in my account by last Friday, and it is still not here! What is going on?",
+            maxLearnerTurns: 4,
+            durationSeconds: 240,
+            endConditions: ["time_limit", "turn_limit", "customer_accepted"],
+            fallback: "one_way_manual_review"
+          }
+        }
       ] },
       { key: "S4", title: "Task 4 – Monologue (4 phút · B2–C1)", instruction: "You are presenting to your team.", tasks: [
         { key: "S4", prompt: "Present the benefits and challenges of a centralised internal knowledge platform. Include examples and a conclusion.", responseType: "speaking_evidence", maxScore: 5, hint: "Nêu ít nhất hai lợi ích và hai thách thức." }
       ] }
     ] }
   ]
-};
-
-export const finalDefinition: StoredAssessmentDefinition = {
-  ...placementDefinition,
-  key: "final-b",
-  kind: "final",
-  title: "Bài kiểm tra cuối kỳ",
-  sections: placementDefinition.sections.map((section) => ({ ...section, groups: section.groups.map((group) => ({ ...group, tasks: group.tasks.map((task) => ({ ...task })) })) }))
 };
 
 export const levelUpDefinition: StoredAssessmentDefinition = {

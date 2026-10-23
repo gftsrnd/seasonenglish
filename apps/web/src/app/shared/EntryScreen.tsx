@@ -1,101 +1,110 @@
-import { useEffect, useRef, useState, type FormEvent, type KeyboardEvent } from "react";
+import { useRef, useState, type FormEvent, type KeyboardEvent, type ReactNode } from "react";
 import { Award, BriefcaseBusiness, Clock3, Eye, EyeOff, Leaf, MessageSquare } from "lucide-react";
 import type { SessionView } from "@e4s/contracts";
 import type { AuthClient } from "../../features/auth/index.js";
 import { AudioControls, SeasonMark } from "./AppShell.js";
 
+type Mode = "login" | "register" | "forgotEmail" | "forgotOtp" | "forgotPin";
+type FieldErrors = Partial<Record<"displayName" | "email" | "credential" | "confirmation" | "code", string>>;
+
 export function EntryScreen({ client, onAuthenticated }: { client: AuthClient; onAuthenticated: (session: SessionView) => void }) {
-  const loginPanelId = "app-login-panel";
-  const emailId = "app-login-email";
-  const passwordId = "app-login-password";
-  const displayNameId = "app-register-display-name";
-  const confirmPasswordId = "app-register-confirm-password";
-  const errorId = "app-login-error";
   const [audience, setAudience] = useState<"learner" | "staff">("learner");
-  const [mode, setMode] = useState<"login" | "register">(() => window.location.pathname === "/register" ? "register" : "login");
+  const [mode, setMode] = useState<Mode>(() => window.location.pathname === "/register" ? "register" : "login");
   const [displayName, setDisplayName] = useState("");
   const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
-  const [confirmPassword, setConfirmPassword] = useState("");
+  const [credential, setCredential] = useState("");
+  const [confirmation, setConfirmation] = useState("");
+  const [code, setCode] = useState("");
+  const [challengeId, setChallengeId] = useState("");
+  const [resetToken, setResetToken] = useState("");
   const [showPassword, setShowPassword] = useState(false);
-  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [capsLockOn, setCapsLockOn] = useState(false);
-  const [resetNotice, setResetNotice] = useState("");
-  const [pendingAction, setPendingAction] = useState<"login" | "register" | null>(null);
-  const [error, setError] = useState("");
-  const learnerTab = useRef<HTMLButtonElement>(null);
-  const staffTab = useRef<HTMLButtonElement>(null);
+  const [errors, setErrors] = useState<FieldErrors>({});
+  const [notice, setNotice] = useState("");
+  const [busy, setBusy] = useState(false);
   const emailInput = useRef<HTMLInputElement>(null);
-  const errorRef = useRef<HTMLDivElement>(null);
-  const busy = pendingAction !== null;
 
-  useEffect(() => {
-    const onPopState = () => setMode(window.location.pathname === "/register" ? "register" : "login");
-    window.addEventListener("popstate", onPopState);
-    return () => window.removeEventListener("popstate", onPopState);
-  }, []);
-
-  const navigateEntry = (next: "login" | "register") => {
-    const path = next === "register" ? "/register" : "/";
-    window.history.pushState(window.history.state, "", path);
-    setMode(next);
-    setDisplayName("");
-    setEmail("");
-    setPassword("");
-    setConfirmPassword("");
-    setShowPassword(false);
-    setShowConfirmPassword(false);
-    setCapsLockOn(false);
-    setResetNotice("");
-    setError("");
+  const resetForm = (next: Mode) => {
+    setMode(next); setDisplayName(""); setEmail(""); setCredential(""); setConfirmation(""); setCode("");
+    setChallengeId(""); setResetToken(""); setErrors({}); setNotice(""); setShowPassword(false); setCapsLockOn(false);
   };
-
+  const goTo = (next: Mode) => {
+    window.history.pushState(window.history.state, "", next === "register" ? "/register" : "/");
+    resetForm(next);
+  };
   const switchAudience = (next: "learner" | "staff") => {
-    if (next === audience || busy) return;
-    setAudience(next);
-    navigateEntry("login");
-    emailInput.current?.focus();
+    if (busy) return;
+    setAudience(next); goTo("login");
+    queueMicrotask(() => emailInput.current?.focus());
   };
-
-  useEffect(() => {
-    if (error) errorRef.current?.focus();
-  }, [error]);
-
-  const submit = async (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault(); setError("");
-    if (mode === "register" && password !== confirmPassword) {
-      setError("Mật khẩu xác nhận chưa khớp.");
-      return;
-    }
-    setPendingAction(mode);
-    try {
-      const session = mode === "register"
-        ? await client.registerLearner({ displayName, email, password })
-        : await (audience === "learner" ? client.learnerLogin({ email, password }) : client.staffLogin({ email, password }));
-      if (mode === "register") window.history.replaceState(window.history.state, "", "/home");
-      onAuthenticated(session);
-    } catch (caught) {
-      const code = caught instanceof Error ? caught.message : "";
-      setError(mode === "register" ? registrationError(code) : loginError(code, audience));
-    }
-    finally { setPendingAction(null); }
-  };
-  const navigateAudience = (event: KeyboardEvent<HTMLButtonElement>) => {
-    const next = event.key === "Home" ? "learner" : event.key === "End" ? "staff" : event.key === "ArrowLeft" || event.key === "ArrowRight" ? (audience === "learner" ? "staff" : "learner") : null;
-    if (!next) return;
-    event.preventDefault(); setAudience(next); navigateEntry("login");
-    (next === "learner" ? learnerTab : staffTab).current?.focus();
-  };
-
-  const showRegistration = () => navigateEntry("register");
-  const showLogin = () => navigateEntry("login");
-  const showResetRequest = () => setResetNotice("Quên mật khẩu? Hãy liên hệ người vận hành hoặc quản lý để được cấp lại mật khẩu.");
   const updateCapsLock = (event: KeyboardEvent<HTMLInputElement>) => {
-    // Navigation keys can fire after blur while Caps Lock remains toggled;
-    // they must not resurrect a warning the user has already dismissed.
-    if (event.key === "Tab" || event.key === "Shift" || event.key === "Control" || event.key === "Alt" || event.key === "Meta") return;
+    if (["Tab", "Shift", "Control", "Alt", "Meta"].includes(event.key)) return;
     setCapsLockOn(event.getModifierState("CapsLock"));
   };
+  const validationFor = (overrides: Partial<{ displayName: string; email: string; credential: string; confirmation: string; code: string }> = {}) => validate(mode, audience, {
+    displayName, email, credential, confirmation, code, ...overrides
+  });
+  const updateDisplayName = (value: string) => {
+    setDisplayName(value);
+    setErrors((current) => withFieldError(current, "displayName", validationFor({ displayName: value }).displayName));
+  };
+  const updateEmail = (value: string) => {
+    setEmail(value);
+    setErrors((current) => withFieldError(current, "email", validationFor({ email: value }).email));
+  };
+  const updateCredential = (value: string) => {
+    setCredential(value);
+    const validation = validationFor({ credential: value });
+    setErrors((current) => {
+      const next = withFieldError(current, "credential", validation.credential);
+      return (confirmation || current.confirmation)
+        ? withFieldError(next, "confirmation", validation.confirmation)
+        : next;
+    });
+  };
+  const updateConfirmation = (value: string) => {
+    setConfirmation(value);
+    setErrors((current) => withFieldError(current, "confirmation", validationFor({ confirmation: value }).confirmation));
+  };
+  const updateCode = (value: string) => {
+    setCode(value);
+    setErrors((current) => withFieldError(current, "code", validationFor({ code: value }).code));
+  };
+
+  const submit = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault(); setErrors({}); setNotice("");
+    const validation = validate(mode, audience, { displayName, email, credential, confirmation, code });
+    if (Object.keys(validation).length) { setErrors(validation); return; }
+    setBusy(true);
+    try {
+      if (mode === "login") {
+        const session = audience === "learner"
+          ? await client.learnerLogin({ email, pin: credential })
+          : await client.staffLogin({ email, password: credential });
+        onAuthenticated(session);
+      } else if (mode === "register") {
+        const session = await client.registerLearner({ displayName: normalizeHumanName(displayName), email, pin: credential });
+        window.history.replaceState(window.history.state, "", "/home");
+        onAuthenticated(session);
+      } else if (mode === "forgotEmail") {
+        const challenge = await client.startLearnerPinReset({ email });
+        setChallengeId(challenge.challengeId); setMode("forgotOtp"); setCode("");
+        setNotice("Nếu email thuộc tài khoản người học, mã xác minh đã được gửi.");
+      } else if (mode === "forgotOtp") {
+        const verified = await client.verifyLearnerPinReset({ challengeId, code });
+        setResetToken(verified.resetToken); setMode("forgotPin"); setCredential(""); setConfirmation("");
+      } else {
+        await client.completeLearnerPinReset({ resetToken, pin: credential });
+        resetForm("login"); setNotice("Đã cập nhật mã PIN. Bạn có thể đăng nhập bằng mã PIN mới.");
+      }
+    } catch (caught) {
+      const codeValue = caught instanceof Error ? caught.message : "";
+      setErrors(errorFor(mode, audience, codeValue));
+    } finally { setBusy(false); }
+  };
+
+  const learnerPin = (audience === "learner" && mode === "login") || mode === "register" || mode === "forgotPin";
+  const heading = mode === "register" ? "Đăng ký người học" : mode === "forgotEmail" ? "Quên mã PIN" : mode === "forgotOtp" ? "Nhập mã xác minh" : mode === "forgotPin" ? "Tạo mã PIN mới" : "";
 
   return <>
     <header className="topbar app-entry-topbar">
@@ -105,53 +114,28 @@ export function EntryScreen({ client, onAuthenticated }: { client: AuthClient; o
     <main className="app-entry-main">
       <section className="welcome app-entry">
         <div className="body">
-          <div className="entry-hero-art" aria-hidden="true">
-            <Leaf className="entry-hero-leaf entry-hero-leaf-main" size={58} strokeWidth={1.35} />
-            <Leaf className="entry-hero-leaf entry-hero-leaf-small" size={30} strokeWidth={1.5} />
-            <Leaf className="entry-hero-leaf entry-hero-leaf-wide" size={42} strokeWidth={1.35} />
-            <Leaf className="entry-hero-leaf entry-hero-leaf-light" size={25} strokeWidth={1.5} />
-            <Leaf className="entry-hero-leaf entry-hero-leaf-tiny" size={22} strokeWidth={1.55} />
-            <Leaf className="entry-hero-leaf entry-hero-leaf-faint" size={19} strokeWidth={1.55} />
-          </div>
-          <div className="eyebrow">E4S · English for Every Season</div>
-          <h1>Mỗi ngày một chút nắng</h1>
+          <div className="entry-hero-art" aria-hidden="true"><Leaf className="entry-hero-leaf entry-hero-leaf-main" size={58} strokeWidth={1.35} /><Leaf className="entry-hero-leaf entry-hero-leaf-small" size={30} /><Leaf className="entry-hero-leaf entry-hero-leaf-wide" size={42} /><Leaf className="entry-hero-leaf entry-hero-leaf-light" size={25} /><Leaf className="entry-hero-leaf entry-hero-leaf-tiny" size={22} /></div>
+          <div className="eyebrow">E4S · English for Every Season</div><h1>Mỗi ngày một chút nắng</h1>
           <p>Tựa cây non âm thầm lớn lên qua bốn mùa, hãy cho mình mỗi ngày một chút nắng: thực hành tình huống thực tế và nhận góp ý để ngày càng tự tin hơn.</p>
-          <section className="entry-learning-card" aria-label="Điểm nổi bật của E4S">
-            <div className="entry-benefit-row">
-              <span className="entry-benefit-pill"><Clock3 size={17} aria-hidden="true" /><span>10 phút mỗi ngày, T2–T6</span></span>
-              <span className="entry-benefit-pill"><MessageSquare size={17} aria-hidden="true" /><span>Luyện chat với Season</span></span>
-              <span className="entry-benefit-pill"><Award size={17} aria-hidden="true" /><span>Điểm thưởng và huy hiệu</span></span>
-              <span className="entry-benefit-pill"><BriefcaseBusiness size={17} aria-hidden="true" /><span>Bài học sát công việc</span></span>
+          <section className="entry-learning-card" aria-label="Điểm nổi bật của E4S"><div className="entry-benefit-row"><span className="entry-benefit-pill"><Clock3 size={17} /><span>10 phút mỗi ngày, T2–T6</span></span><span className="entry-benefit-pill"><MessageSquare size={17} /><span>Luyện chat với Season</span></span><span className="entry-benefit-pill"><Award size={17} /><span>Điểm thưởng và huy hiệu</span></span><span className="entry-benefit-pill"><BriefcaseBusiness size={17} /><span>Bài học sát công việc</span></span></div></section>
+        </div>
+        <div className="card app-entry-card" aria-busy={busy || undefined}>
+          {mode === "login" ? <div className="tabs" role="tablist" aria-label="Loại tài khoản"><button id="app-login-learner-tab" className={audience === "learner" ? "active" : ""} type="button" role="tab" aria-selected={audience === "learner"} onClick={() => switchAudience("learner")}>Người học</button><button id="app-login-staff-tab" className={audience === "staff" ? "active" : ""} type="button" role="tab" aria-selected={audience === "staff"} onClick={() => switchAudience("staff")}>Nhân sự</button></div> : <div className="app-register-heading"><div className="eyebrow">Tài khoản người học</div><h2>{heading}</h2><p className="small muted">{mode === "forgotOtp" ? "Mã gồm 6 số và có hiệu lực trong 10 phút." : mode === "forgotPin" ? "Mã PIN mới gồm 6 chữ số." : "Thông tin được bảo vệ và chỉ dùng cho tài khoản E4S."}</p></div>}
+          <form className="stack section" role={mode === "login" ? "tabpanel" : undefined} aria-labelledby={mode === "login" ? `app-login-${audience}-tab` : undefined} noValidate onSubmit={submit}>
+            {mode === "register" ? <Field label="Họ và tên" error={errors.displayName}><input aria-label="Họ và tên" autoComplete="name" placeholder="Ví dụ: Nguyễn Minh Anh" value={displayName} disabled={busy} onChange={(e) => updateDisplayName(e.target.value)} /></Field> : null}
+            {["login", "register", "forgotEmail"].includes(mode) ? <Field label="Email" error={errors.email}><input ref={emailInput} aria-label="Email" type="email" autoComplete="username" placeholder="ten@email.com" value={email} disabled={busy} onChange={(e) => updateEmail(e.target.value)} onKeyDown={updateCapsLock} onKeyUp={updateCapsLock} onBlur={() => setCapsLockOn(false)} />{capsLockOn ? <span className="small muted" role="status">Caps Lock đang bật</span> : null}</Field> : null}
+            {mode === "forgotOtp" ? <Field label="Mã xác minh" error={errors.code}><PinInput label="Mã xác minh" value={code} onChange={updateCode} disabled={busy} autoComplete="one-time-code" /></Field> : null}
+            {mode === "login" || mode === "register" || mode === "forgotPin" ? <Field label={learnerPin ? (mode === "forgotPin" ? "Mã PIN mới" : "Mã PIN") : "Mật khẩu"} error={errors.credential}>
+              {learnerPin ? <PinInput label={mode === "forgotPin" ? "Mã PIN mới" : "Mã PIN"} value={credential} onChange={updateCredential} disabled={busy} autoComplete={mode === "login" ? "current-password" : "new-password"} /> : <span className="password-control"><input aria-label="Mật khẩu" type={showPassword ? "text" : "password"} autoComplete="current-password" placeholder="Nhập mật khẩu" value={credential} disabled={busy} onChange={(e) => updateCredential(e.target.value)} onKeyDown={updateCapsLock} onKeyUp={updateCapsLock} /><button className="password-toggle" type="button" aria-label={showPassword ? "Ẩn mật khẩu" : "Hiện mật khẩu"} onClick={() => setShowPassword((v) => !v)}>{showPassword ? <EyeOff size={18} /> : <Eye size={18} />}</button></span>}
+            </Field> : null}
+            {mode === "register" || mode === "forgotPin" ? <Field label="Nhập lại mã PIN" error={errors.confirmation}><PinInput label="Nhập lại mã PIN" value={confirmation} onChange={updateConfirmation} disabled={busy} autoComplete="new-password" /></Field> : null}
+            {notice ? <div className="banner info" role="status"><div className="body small">{notice}</div></div> : null}
+            <button className="btn-primary btn-block" type="submit" disabled={busy}>{busy ? "Đang xử lý…" : submitLabel(mode, audience)}</button>
+            <div className="app-entry-secondary-actions">
+              {mode === "login" && audience === "learner" ? <><button className="app-entry-link" type="button" onClick={() => goTo("register")}>Tạo tài khoản người học</button><span>·</span><button className="app-entry-link" type="button" onClick={() => goTo("forgotEmail")}>Quên mã PIN?</button></> : null}
+              {mode !== "login" ? <button className="app-entry-link" type="button" onClick={() => goTo("login")}>Quay lại đăng nhập</button> : null}
             </div>
-          </section>
-          </div>
-        <div className="card app-entry-card" aria-label={mode === "register" ? "Đăng ký E4S" : "Đăng nhập E4S"} aria-busy={busy || undefined}>
-          {mode === "login" ? <div className="tabs" role="tablist" aria-label="Loại tài khoản" aria-orientation="horizontal">
-            <button ref={learnerTab} id="app-login-learner-tab" className={audience === "learner" ? "active" : ""} type="button" role="tab" aria-controls={loginPanelId} aria-selected={audience === "learner"} tabIndex={audience === "learner" ? 0 : -1} disabled={busy} onKeyDown={navigateAudience} onClick={() => switchAudience("learner")}>Người học</button>
-            <button ref={staffTab} id="app-login-staff-tab" className={audience === "staff" ? "active" : ""} type="button" role="tab" aria-controls={loginPanelId} aria-selected={audience === "staff"} tabIndex={audience === "staff" ? 0 : -1} disabled={busy} onKeyDown={navigateAudience} onClick={() => switchAudience("staff")}>Nhân sự</button>
-          </div> : <div id="app-register-heading" className="app-register-heading"><div className="eyebrow">Tài khoản mới · Không cần mã tổ chức</div><h2>Đăng ký người học</h2><p className="small muted">Tạo tài khoản miễn phí để điền hồ sơ và bắt đầu học.</p></div>}
-          <form id={loginPanelId} className="stack section" role="tabpanel" tabIndex={0} aria-labelledby={mode === "register" ? "app-register-heading" : `app-login-${audience}-tab`} aria-busy={busy || undefined} aria-describedby={error ? errorId : undefined} onSubmit={submit}>
-            {mode === "register" ? <label className="field" htmlFor={displayNameId}><span>Họ và tên</span><input id={displayNameId} name="displayName" autoComplete="name" minLength={2} maxLength={120} required disabled={busy} value={displayName} onChange={(event) => setDisplayName(event.target.value)} /></label> : null}
-            <label className="field" htmlFor={emailId}><span>Email</span><input ref={emailInput} id={emailId} name="email" type="email" autoComplete="username" required disabled={busy} value={email} aria-invalid={Boolean(error)} aria-describedby={error ? errorId : undefined} onChange={(event) => setEmail(event.target.value)} onKeyDown={updateCapsLock} onKeyUp={updateCapsLock} onBlur={() => setCapsLockOn(false)} /></label>
-            <label className="field" htmlFor={passwordId}>
-              <span>Mật khẩu</span>
-              <span className="password-control">
-                <input id={passwordId} name="password" type={showPassword ? "text" : "password"} autoComplete={mode === "register" ? "new-password" : "current-password"} minLength={mode === "register" ? 8 : undefined} required disabled={busy} value={password} aria-invalid={Boolean(error)} aria-describedby={error ? errorId : undefined} onChange={(event) => setPassword(event.target.value)} onKeyDown={updateCapsLock} onKeyUp={updateCapsLock} onBlur={() => setCapsLockOn(false)} onFocus={() => setCapsLockOn(false)} />
-                <button className="password-toggle" type="button" disabled={busy} aria-label={showPassword ? "Ẩn mật khẩu" : "Hiện mật khẩu"} aria-pressed={showPassword} onClick={() => setShowPassword((value) => !value)}>{showPassword ? <EyeOff size={18} aria-hidden="true" /> : <Eye size={18} aria-hidden="true" />}</button>
-              </span>
-              {capsLockOn ? <span className="small muted" role="status" aria-live="polite">Caps Lock đang bật</span> : null}
-            </label>
-            {mode === "register" ? <label className="field" htmlFor={confirmPasswordId}>
-              <span>Xác nhận mật khẩu</span>
-              <span className="password-control">
-                <input id={confirmPasswordId} name="confirmPassword" type={showConfirmPassword ? "text" : "password"} autoComplete="new-password" minLength={8} required disabled={busy} value={confirmPassword} aria-invalid={Boolean(error)} aria-describedby={error ? errorId : undefined} onChange={(event) => setConfirmPassword(event.target.value)} onKeyDown={updateCapsLock} onKeyUp={updateCapsLock} onBlur={() => setCapsLockOn(false)} onFocus={() => setCapsLockOn(false)} />
-                <button className="password-toggle" type="button" disabled={busy} aria-label={showConfirmPassword ? "Ẩn xác nhận mật khẩu" : "Hiện xác nhận mật khẩu"} aria-pressed={showConfirmPassword} onClick={() => setShowConfirmPassword((value) => !value)}>{showConfirmPassword ? <EyeOff size={18} aria-hidden="true" /> : <Eye size={18} aria-hidden="true" />}</button>
-              </span>
-            </label> : null}
-            {error ? <div ref={errorRef} id={errorId} className="banner danger" role="alert" tabIndex={-1}><div className="body small">{error}</div></div> : null}
-            {resetNotice ? <div className="banner info" role="status" aria-live="polite"><div className="body small">{resetNotice}</div></div> : null}
-            <button className="btn-primary btn-block" type="submit" disabled={busy} aria-busy={busy || undefined}>{pendingAction === "register" ? "Đang tạo tài khoản…" : pendingAction === "login" ? "Đang đăng nhập…" : mode === "register" ? "Đăng ký và bắt đầu" : audience === "learner" ? "Đăng nhập người học" : "Đăng nhập nhân sự"}</button>
-            {mode === "register" ? <div className="app-entry-secondary-actions"><button className="app-entry-link" type="button" disabled={busy} onClick={showLogin}>Đã có tài khoản? Đăng nhập</button></div> : audience === "learner" ? <div className="app-entry-secondary-actions"><button className="app-entry-link" type="button" disabled={busy} onClick={showRegistration}>Tạo tài khoản người học</button><span className="app-entry-secondary-separator" aria-hidden="true">·</span><button className="app-entry-link" type="button" disabled={busy} onClick={showResetRequest}>Quên mật khẩu?</button></div> : null}
+            {mode === "login" ? <details className="app-shared-device-note"><summary>Đăng nhập trên thiết bị dùng chung?</summary><p className="small muted" role="note">Không lưu đăng nhập. Hãy đăng xuất sau khi học.</p></details> : null}
           </form>
         </div>
       </section>
@@ -159,20 +143,55 @@ export function EntryScreen({ client, onAuthenticated }: { client: AuthClient; o
   </>;
 }
 
-function registrationError(code: string): string {
-  if (code === "LEARNER_REGISTRATION_EMAIL_DELETED") return "Tài khoản này đã bị xoá và đang nằm trong thùng rác. Hãy khôi phục hoặc xoá vĩnh viễn tài khoản trước khi đăng ký lại.";
-  if (code === "LEARNER_REGISTRATION_EMAIL_EXISTS") return "Email này đã có tài khoản. Hãy đăng nhập hoặc dùng email khác.";
-  if (code === "LEARNER_REGISTRATION_UNAVAILABLE") return "Hiện chưa thể đăng ký. Vui lòng liên hệ quản lý chương trình.";
-  return "Không thể tạo tài khoản. Vui lòng kiểm tra thông tin và thử lại.";
+function Field({ label, error, children }: { label: string; error: string | undefined; children: ReactNode }) {
+  return <label className="field"><span>{label}</span>{children}{error ? <span className="app-field-error" role="alert">{error}</span> : null}</label>;
 }
 
-function loginError(code: string, audience: "learner" | "staff"): string {
-  if (code === "ACCOUNT_DELETED") return "Tài khoản này đã bị xoá và đang nằm trong thùng rác. Hãy liên hệ quản lý để khôi phục hoặc xoá vĩnh viễn tài khoản.";
-  if (code === "WRONG_LOGIN_PATH") {
-    return audience === "learner"
-      ? "Tài khoản này dành cho người vận hành hoặc quản lý. Hãy chọn tab Nhân sự."
-      : "Tài khoản này dành cho người học. Hãy chọn tab Người học.";
-  }
-  if (code === "INVALID_LOGIN_INPUT") return "Email hoặc mật khẩu chưa đúng định dạng.";
-  return "Không thể đăng nhập. Vui lòng kiểm tra email và mật khẩu.";
+function withFieldError(current: FieldErrors, field: keyof FieldErrors, error?: string): FieldErrors {
+  const next = { ...current };
+  if (error) next[field] = error;
+  else delete next[field];
+  return next;
 }
+
+function PinInput({ label, value, onChange, disabled, autoComplete }: { label: string; value: string; onChange: (value: string) => void; disabled: boolean; autoComplete: string }) {
+  const [revealed, setRevealed] = useState(false);
+  const inputRef = useRef<HTMLInputElement>(null);
+  const toggleVisibility = () => {
+    setRevealed((current) => !current);
+    inputRef.current?.focus();
+  };
+  return <span className="app-pin-input"><input ref={inputRef} aria-label={label} type="password" inputMode="numeric" pattern="[0-9]*" maxLength={6} autoComplete={autoComplete} value={value} disabled={disabled} onChange={(event) => onChange(event.target.value.replace(/\D/g, "").slice(0, 6))} /><span className="app-pin-cells" aria-hidden="true">{Array.from({ length: 6 }, (_, index) => <span key={index}>{index < value.length ? (revealed ? value[index] : "•") : ""}</span>)}</span><button className="app-pin-toggle" type="button" disabled={disabled} aria-label={revealed ? `Ẩn ${label}` : `Hiện ${label}`} aria-pressed={revealed} onClick={toggleVisibility}>{revealed ? <EyeOff size={18} /> : <Eye size={18} />}</button></span>;
+}
+
+function validate(mode: Mode, audience: "learner" | "staff", values: { displayName: string; email: string; credential: string; confirmation: string; code: string }): FieldErrors {
+  const errors: FieldErrors = {};
+  if (["login", "register", "forgotEmail"].includes(mode) && !/^\S+@\S+\.\S+$/.test(values.email.trim())) errors.email = "Nhập email hợp lệ.";
+  if (mode === "register" && !isValidHumanName(values.displayName)) errors.displayName = "Nhập đầy đủ họ và tên, không dùng số.";
+  if (mode === "login" && audience === "staff" && values.credential.length < 8) errors.credential = "Mật khẩu cần ít nhất 8 ký tự.";
+  if (((mode === "login" && audience === "learner") || mode === "register" || mode === "forgotPin") && !/^\d{6}$/.test(values.credential)) errors.credential = "Mã PIN phải gồm đúng 6 chữ số.";
+  if ((mode === "register" || mode === "forgotPin") && values.confirmation !== values.credential) errors.confirmation = "Mã PIN nhập lại chưa khớp.";
+  if (mode === "forgotOtp" && !/^\d{6}$/.test(values.code)) errors.code = "Mã xác minh phải gồm 6 chữ số.";
+  return errors;
+}
+
+function errorFor(mode: Mode, audience: "learner" | "staff", code: string): FieldErrors {
+  if (code === "LEARNER_REGISTRATION_EMAIL_EXISTS" || code === "LEARNER_REGISTRATION_EMAIL_DELETED") return { email: "Email này không khả dụng. Hãy dùng email khác." };
+  if (code === "EMAIL_DELIVERY_FAILED" || code === "EMAIL_DELIVERY_UNAVAILABLE") return { email: "Chưa thể gửi mã xác minh. Vui lòng thử lại." };
+  if (code === "INVALID_OR_EXPIRED_CODE") return { code: "Mã không đúng hoặc đã hết hạn." };
+  if (code === "WRONG_LOGIN_PATH") return { email: audience === "learner" ? "Tài khoản này cần đăng nhập ở tab Nhân sự." : "Tài khoản này cần đăng nhập ở tab Người học." };
+  if (code === "ACCOUNT_DELETED") return { email: "Tài khoản này không còn hoạt động." };
+  if (mode === "forgotPin") return { credential: "Không thể đổi PIN. Vui lòng yêu cầu mã mới." };
+  return mode === "login" ? { credential: audience === "learner" ? "Email hoặc PIN chưa đúng." : "Email hoặc mật khẩu chưa đúng." } : { email: "Không thể xử lý yêu cầu. Vui lòng thử lại." };
+}
+
+function submitLabel(mode: Mode, audience: "learner" | "staff"): string {
+  if (mode === "login") return audience === "learner" ? "Đăng nhập người học" : "Đăng nhập nhân sự";
+  if (mode === "register") return "Đăng ký và bắt đầu";
+  if (mode === "forgotEmail") return "Gửi mã qua email";
+  if (mode === "forgotOtp") return "Xác minh mã";
+  return "Lưu mã PIN mới";
+}
+
+function normalizeHumanName(value: string): string { return value.trim().replace(/\s+/g, " ").normalize("NFC"); }
+function isValidHumanName(value: string): boolean { const tokens = normalizeHumanName(value).split(" "); return tokens.length >= 2 && tokens.every((token) => /^[\p{L}\p{M}]+(?:[-'][\p{L}\p{M}]+)*$/u.test(token)); }

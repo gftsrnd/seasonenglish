@@ -4,7 +4,9 @@ export const coachInputSchema = z.object({
   message: z.string().trim().min(1).max(2_000),
   cefr: z.enum(["A1", "A2", "B1", "B2", "C1"]),
   persona: z.enum(["informal", "formal"]),
+  mode: z.enum(["practice", "challenge"]),
   scenario: z.string().trim().min(1).max(500),
+  currentQuestion: z.string().trim().min(1).max(2_000),
   priorTurns: z.array(z.object({
     speaker: z.enum(["learner", "coach"]),
     text: z.string().trim().min(1).max(2_000)
@@ -12,58 +14,102 @@ export const coachInputSchema = z.object({
 });
 
 export const coachOutputSchema = z.object({
-  relevant: z.boolean(),
-  relevanceNote: z.string().trim().max(500),
-  reply: z.string().trim().min(1).max(2_000),
-  replyTranslation: z.string().trim().min(1).max(2_000),
-  rubric: z.object({
-    meaning: z.number().int().min(1).max(5),
-    vocabulary: z.number().int().min(1).max(5),
-    grammar: z.number().int().min(1).max(5)
+  evaluation: z.object({
+    status: z.enum(["valid", "insufficient", "off_topic"]),
+    countsTowardGoal: z.boolean(),
+    noteVi: z.string().trim().min(1).max(500)
   }),
-  suggestions: z.array(z.object({
+  seasonReply: z.string().trim().min(1).max(2_000),
+  seasonReplyTranslation: z.string().trim().min(1).max(2_000),
+  nextQuestion: z.string().trim().min(1).max(2_000),
+  nextQuestionTranslation: z.string().trim().min(1).max(2_000),
+  rubric: z.object({
+    meaning: z.object({ score: z.number().int().min(0).max(5), evidence: z.string().trim().min(1).max(500), improvement: z.string().trim().min(1).max(500) }),
+    vocabulary: z.object({ score: z.number().int().min(0).max(5), evidence: z.string().trim().min(1).max(500), improvement: z.string().trim().min(1).max(500) }),
+    grammar: z.object({ score: z.number().int().min(0).max(5), evidence: z.string().trim().min(1).max(500), improvement: z.string().trim().min(1).max(500) })
+  }),
+  corrections: z.array(z.object({
     original: z.string().trim().min(1).max(500),
     corrected: z.string().trim().min(1).max(500),
     translation: z.string().trim().min(1).max(500),
-    explanation: z.string().trim().min(1).max(500)
+    reason: z.string().trim().min(1).max(500)
   })).max(3),
   correctedText: z.string().trim().max(2_000),
+  suggestedAnswer: z.object({
+    text: z.string().trim().min(1).max(500),
+    translation: z.string().trim().min(1).max(500)
+  }),
   usedWords: z.array(z.string().trim().min(1).max(100)).max(15)
+}).superRefine((output, context) => {
+  const { status, countsTowardGoal } = output.evaluation;
+  if ((status === "valid") !== countsTowardGoal) {
+    context.addIssue({ code: "custom", path: ["evaluation", "countsTowardGoal"], message: "Only valid Coach turns count toward goals." });
+  }
+  if (status === "insufficient" && output.rubric.meaning.score !== 0) {
+    context.addIssue({ code: "custom", path: ["rubric", "meaning", "score"], message: "Insufficient Coach turns require meaning score 0." });
+  }
+  if (status === "off_topic" && output.rubric.meaning.score > 1) {
+    context.addIssue({ code: "custom", path: ["rubric", "meaning", "score"], message: "Off-topic Coach turns require meaning score at most 1." });
+  }
+  if (status !== "valid" && output.usedWords.length > 0) {
+    context.addIssue({ code: "custom", path: ["usedWords"], message: "Invalid Coach turns cannot unlock vocabulary." });
+  }
 });
 
 export type CoachTaskInput = z.infer<typeof coachInputSchema>;
 export type CoachTaskOutput = z.infer<typeof coachOutputSchema>;
 
+const coachRubricCriterionJsonSchema = {
+  type: "object", additionalProperties: false,
+  required: ["score", "evidence", "improvement"],
+  properties: {
+    score: { type: "integer", minimum: 0, maximum: 5 },
+    evidence: { type: "string" }, improvement: { type: "string" }
+  }
+} as const;
+
 export const coachOutputJsonSchema = {
   type: "object",
   additionalProperties: false,
-  required: ["relevant", "relevanceNote", "reply", "replyTranslation", "rubric", "suggestions", "correctedText", "usedWords"],
+  required: ["evaluation", "seasonReply", "seasonReplyTranslation", "nextQuestion", "nextQuestionTranslation", "rubric", "corrections", "correctedText", "suggestedAnswer", "usedWords"],
   properties: {
-    relevant: { type: "boolean" },
-    relevanceNote: { type: "string" },
-    reply: { type: "string" },
-    replyTranslation: { type: "string" },
+    evaluation: {
+      type: "object", additionalProperties: false,
+      required: ["status", "countsTowardGoal", "noteVi"],
+      properties: {
+        status: { type: "string", enum: ["valid", "insufficient", "off_topic"] },
+        countsTowardGoal: { type: "boolean" }, noteVi: { type: "string" }
+      }
+    },
+    seasonReply: { type: "string" },
+    seasonReplyTranslation: { type: "string" },
+    nextQuestion: { type: "string" },
+    nextQuestionTranslation: { type: "string" },
     rubric: {
       type: "object", additionalProperties: false,
       required: ["meaning", "vocabulary", "grammar"],
       properties: {
-        meaning: { type: "integer", minimum: 1, maximum: 5 },
-        vocabulary: { type: "integer", minimum: 1, maximum: 5 },
-        grammar: { type: "integer", minimum: 1, maximum: 5 }
+        meaning: coachRubricCriterionJsonSchema,
+        vocabulary: coachRubricCriterionJsonSchema,
+        grammar: coachRubricCriterionJsonSchema
       }
     },
-    suggestions: {
+    corrections: {
       type: "array", maxItems: 3,
       items: {
         type: "object", additionalProperties: false,
-        required: ["original", "corrected", "translation", "explanation"],
+        required: ["original", "corrected", "translation", "reason"],
         properties: {
           original: { type: "string" }, corrected: { type: "string" },
-          translation: { type: "string" }, explanation: { type: "string" }
+          translation: { type: "string" }, reason: { type: "string" }
         }
       }
     },
     correctedText: { type: "string" },
+    suggestedAnswer: {
+      type: "object", additionalProperties: false, required: ["text", "translation"],
+      properties: { text: { type: "string" }, translation: { type: "string" } }
+    },
     usedWords: { type: "array", maxItems: 15, items: { type: "string" } }
   }
 } satisfies Record<string, unknown>;
@@ -139,32 +185,49 @@ const vocabularyWordSchema = z.object({
 export const vocabularyInputSchema = z.object({
   topic: z.string().trim().min(2).max(200),
   cefr: z.enum(["A1", "A2", "B1", "B2", "C1"]),
-  count: z.literal(15)
+  count: z.literal(20)
 });
 
 export const vocabularyOutputSchema = z.object({
   topic: z.string().trim().min(2).max(200),
-  words: z.array(vocabularyWordSchema).length(15)
+  words: z.array(vocabularyWordSchema).length(12),
+  distractors: z.array(vocabularyWordSchema).length(8)
+}).superRefine((output, context) => {
+  const ids = new Set<string>();
+  const english = new Set<string>();
+  for (const item of [...output.words, ...output.distractors]) {
+    const normalizedEnglish = item.english.toLocaleLowerCase("en");
+    if (ids.has(item.id) || english.has(normalizedEnglish)) {
+      context.addIssue({ code: "custom", message: "Vocabulary targets and distractors must be unique." });
+      return;
+    }
+    ids.add(item.id);
+    english.add(normalizedEnglish);
+  }
 });
 
 export type VocabularyTaskInput = z.infer<typeof vocabularyInputSchema>;
 export type VocabularyTaskOutput = z.infer<typeof vocabularyOutputSchema>;
 
+const vocabularyWordJsonSchema = {
+  type: "object", additionalProperties: false,
+  required: ["id", "english", "vietnamese", "definition", "partOfSpeech"],
+  properties: {
+    id: { type: "string" }, english: { type: "string" }, vietnamese: { type: "string" },
+    definition: { type: "string" }, imageQuery: { type: "string", minLength: 2, maxLength: 200 },
+    partOfSpeech: { type: "string", enum: ["noun", "verb", "adjective", "adverb", "preposition", "phrase"] }
+  }
+} as const;
+
 export const vocabularyOutputJsonSchema = {
-  type: "object", additionalProperties: false, required: ["topic", "words"],
+  type: "object", additionalProperties: false, required: ["topic", "words", "distractors"],
   properties: {
     topic: { type: "string" },
     words: {
-      type: "array", minItems: 15, maxItems: 15,
-      items: {
-        type: "object", additionalProperties: false,
-        required: ["id", "english", "vietnamese", "definition", "partOfSpeech"],
-        properties: {
-          id: { type: "string" }, english: { type: "string" }, vietnamese: { type: "string" },
-          definition: { type: "string" }, imageQuery: { type: "string", minLength: 2, maxLength: 200 },
-          partOfSpeech: { type: "string", enum: ["noun", "verb", "adjective", "adverb", "preposition", "phrase"] }
-        }
-      }
+      type: "array", minItems: 12, maxItems: 12, items: vocabularyWordJsonSchema
+    },
+    distractors: {
+      type: "array", minItems: 8, maxItems: 8, items: vocabularyWordJsonSchema
     }
   }
 } satisfies Record<string, unknown>;
@@ -229,15 +292,17 @@ export const microGradingInputSchema = z.object({
 export const microGradingOutputSchema = z.object({
   correct: z.boolean(),
   score: z.number().int().min(0).max(10),
-  feedback: z.string().trim().min(1).max(1_000)
-});
+  feedback: z.string().trim().min(1).max(1_000),
+  citedError: z.string().trim().min(1).max(300).nullable()
+}).strict();
 
 export type MicroGradingTaskOutput = z.infer<typeof microGradingOutputSchema>;
 
 export const microGradingOutputJsonSchema = {
-  type: "object", additionalProperties: false, required: ["correct", "score", "feedback"],
+  type: "object", additionalProperties: false, required: ["correct", "score", "feedback", "citedError"],
   properties: {
-    correct: { type: "boolean" }, score: { type: "integer", minimum: 0, maximum: 10 }, feedback: { type: "string" }
+    correct: { type: "boolean" }, score: { type: "integer", minimum: 0, maximum: 10 }, feedback: { type: "string" },
+    citedError: { anyOf: [{ type: "string" }, { type: "null" }] }
   }
 } satisfies Record<string, unknown>;
 
@@ -397,6 +462,32 @@ export const weeklyLessonDayInputSchema = weeklyLessonsInputSchema
     allLessonFocuses: z.array(z.string().trim().min(1).max(300)).length(5)
   });
 
+const grammarContentTypeSchema = z.enum([
+  "grammar_rule", "sentence_pattern", "usage_rule", "word_formation", "pronunciation_rule"
+]);
+export const weeklyLessonGrammarClassificationOutputSchema = z.object({
+  status: z.enum(["classified", "no_suitable_content", "insufficient_evidence"]),
+  contentType: grammarContentTypeSchema.nullable(),
+  targetName: z.string().trim().min(1).max(200).nullable(),
+  scope: z.string().trim().min(1).max(500).nullable(),
+  support: z.enum(["explicit", "repeated", "incidental", "none"]),
+  confidence: z.enum(["high", "medium", "low"]),
+  evidence: z.array(z.object({ sourceRef: z.string().trim().min(1), quote: z.string().trim().min(1).max(500) }).strict()).max(8),
+  rejectedCandidates: z.array(z.object({ candidate: z.string().trim().min(1), reason: z.enum(["incidental_language", "unrelated_to_objective", "lower_priority", "vocabulary_only", "out_of_scope"]) }).strict()).max(8)
+}).strict().superRefine((value, context) => {
+  if (value.status === "classified") {
+    if (!value.contentType || !value.targetName || !value.scope || value.evidence.length === 0) context.addIssue({ code: "custom", message: "A classified grammar target requires type, target, scope and evidence" });
+    if (!(["explicit", "repeated"] as const).includes(value.support as "explicit" | "repeated")) context.addIssue({ code: "custom", path: ["support"], message: "Incidental language cannot be the primary target" });
+    if (value.confidence === "low") context.addIssue({ code: "custom", path: ["confidence"], message: "Low-confidence targets require review" });
+  } else if (value.contentType !== null || value.targetName !== null || value.scope !== null) {
+    context.addIssue({ code: "custom", message: "No-suitable and insufficient classifications cannot include a primary target" });
+  }
+});
+export type WeeklyLessonGrammarClassificationOutput = z.infer<typeof weeklyLessonGrammarClassificationOutputSchema>;
+export const weeklyLessonFoundationInputSchema = weeklyLessonDayInputSchema.extend({
+  grammarClassification: weeklyLessonGrammarClassificationOutputSchema
+});
+
 export const weeklyLessonVocabularyInputSchema = weeklyLessonDayInputSchema.extend({
   grammarFormula: z.string().trim().min(1).max(300),
   grammarExamples: z.array(z.string().trim().min(1).max(500)).length(2),
@@ -429,7 +520,14 @@ export const weeklyLessonFoundationOutputSchema = z.object({
   durationMinutes: z.union([z.literal(5), z.literal(10), z.literal(15), z.literal(20)]),
   objective: z.object({
     title: z.string().trim().min(1),
-    text: z.string().trim().min(1).refine((value) => value.split(/\s+/).filter(Boolean).length <= 24, { message: "Objective must contain at most 24 words" })
+    explanationLanguage: z.enum(["vi", "en"]),
+    items: z.array(z.object({
+      type: z.enum(["content", "language"]),
+      text: z.string().trim().min(1).max(240),
+      condition: z.string().trim().min(1).max(160),
+      criterion: z.string().trim().min(1).max(160),
+      assessmentCode: z.enum(["listening", "reading", "writing", "word_class", "word_use", "speaking"])
+    }).strict()).min(2).max(4)
   }),
   instruction: z.object({ title: z.string().trim().min(1), step1: z.string().trim().min(1), step2: z.string().trim().min(1), step3: z.string().trim().min(1) }),
   grammar: z.object({
@@ -443,11 +541,16 @@ export const weeklyLessonFoundationOutputSchema = z.object({
 });
 
 const strictVocabularyRelationSchema = z.object({ word: z.string().trim().min(1), type: z.string().trim().min(1), meaning: z.string().trim().min(1) });
-const strictVocabularyLevelRelationSchema = z.object({ word: z.string().trim().min(1), level: z.string().trim().min(1), note: z.string().trim().min(1) });
+const strictVocabularyLevelRelationSchema = z.object({
+  word: z.string().trim().min(1), level: z.string().trim().min(1), note: z.string().trim().min(1),
+  partOfSpeech: z.string().trim().min(1).max(40), sense: z.string().trim().min(1).max(240), example: z.string().trim().min(1).max(240)
+});
 const strictWordMeaningSchema = z.object({ word: z.string().trim().min(1), meaning: z.string().trim().min(1) });
 const strictVocabularyItemSchema = z.object({
   word: z.string().trim().min(1), partOfSpeech: z.string().trim().min(1).max(40),
-  pronunciation: z.string().trim().min(1), meaning: z.string().trim().min(1), imageQuery: z.string().trim().min(1),
+  pronunciation: z.string().trim().regex(/^\/.+\/$/), stress: z.string().trim().min(1),
+  ttsText: z.string().trim().min(1), ssml: z.string().trim().regex(/^<speak>[\s\S]+<\/speak>$/),
+  meaning: z.string().trim().min(1), imageQuery: z.string().trim().min(1),
   collocation1: z.string().trim().min(1), collocation2: z.string().trim().min(1), collocation3: z.string().trim().min(1),
   family1: strictVocabularyRelationSchema.nullable(), family2: strictVocabularyRelationSchema.nullable(),
   umbrellaWord: z.string().trim().min(1), umbrellaMeaning: z.string().trim().min(1),
@@ -465,6 +568,20 @@ const strictVocabularyItemSchema = z.object({
   if (collocations.some((value) => !value.toLocaleLowerCase("en-US").includes(word))) {
     ctx.addIssue({ code: "custom", path: ["collocation1"], message: "Every example must contain the vocabulary word" });
   }
+  if (!item.ssml.toLocaleLowerCase("en-US").includes(item.ttsText.toLocaleLowerCase("en-US"))) {
+    ctx.addIssue({ code: "custom", path: ["ssml"], message: "SSML must contain the exact TTS text" });
+  }
+  for (const [kind, relations] of [["synonym", [item.synonym1, item.synonym2]], ["antonym", [item.antonym1]]] as const) {
+    for (const relation of relations) {
+      if (!relation) continue;
+      if (relation.partOfSpeech.toLocaleLowerCase("en-US") !== item.partOfSpeech.toLocaleLowerCase("en-US")) {
+        ctx.addIssue({ code: "custom", path: [`${kind}1`, "partOfSpeech"], message: `${kind} must have the same part of speech` });
+      }
+      if (relation.word.toLocaleLowerCase("en-US") === word || !relation.example.toLocaleLowerCase("en-US").includes(relation.word.toLocaleLowerCase("en-US"))) {
+        ctx.addIssue({ code: "custom", path: [`${kind}1`, "example"], message: `${kind} needs distinct contextual substitution evidence` });
+      }
+    }
+  }
 });
 export const weeklyLessonVocabularyOutputSchema = z.object({
   title: z.string().trim().min(1),
@@ -473,12 +590,19 @@ export const weeklyLessonVocabularyOutputSchema = z.object({
   word3: strictVocabularyItemSchema
 });
 
-const strictChoiceOutputSchema = z.object({
+const strictChoiceBaseSchema = z.object({
   title: z.string().trim().min(1), body: z.string().trim().min(1), prompt: z.string().trim().min(1),
   option1: z.string().trim().min(1), option2: z.string().trim().min(1), option3: z.string().trim().min(1), option4: z.string().trim().min(1),
   answer: z.string().trim().min(1)
 });
-const strictQuestionOutputSchema = strictChoiceOutputSchema.omit({ body: true });
+function validateStrictChoice(value: { option1: string; option2: string; option3: string; option4: string; answer: string }, context: z.RefinementCtx) {
+  const options = [value.option1, value.option2, value.option3, value.option4];
+  const normalized = options.map((option) => option.toLocaleLowerCase("en-US").replace(/\s+/g, " ").trim());
+  if (new Set(normalized).size !== 4) context.addIssue({ code: "custom", path: ["option1"], message: "All four options must be distinct" });
+  if (!options.includes(value.answer)) context.addIssue({ code: "custom", path: ["answer"], message: "Answer must exactly match one option" });
+}
+const strictChoiceOutputSchema = strictChoiceBaseSchema.superRefine(validateStrictChoice);
+const strictQuestionOutputSchema = strictChoiceBaseSchema.omit({ body: true }).superRefine(validateStrictChoice);
 export const weeklyLessonSkillsOutputSchema = z.object({
   listening: strictChoiceOutputSchema,
   reading: strictChoiceOutputSchema,
@@ -486,10 +610,19 @@ export const weeklyLessonSkillsOutputSchema = z.object({
     title: z.string().trim().min(1), type: z.enum(["fill", "mcq", "write"]), prompt: z.string().trim().min(1),
     option1: z.string().trim().nullable(), option2: z.string().trim().nullable(), option3: z.string().trim().nullable(), option4: z.string().trim().nullable(),
     answer: z.string().trim().min(1)
+  }).superRefine((value, context) => {
+    const options = [value.option1, value.option2, value.option3, value.option4].filter((option): option is string => option !== null);
+    if (value.type === "fill" && (value.prompt.match(/___+/g)?.length ?? 0) !== 1) context.addIssue({ code: "custom", path: ["prompt"], message: "Fill writing requires exactly one blank" });
+    if (value.type === "mcq" && (options.length !== 4 || new Set(options.map((option) => option.toLocaleLowerCase("en-US"))).size !== 4 || !options.includes(value.answer))) context.addIssue({ code: "custom", path: ["answer"], message: "Writing MCQ requires four distinct options and an exact key" });
+    if (value.type === "write" && value.answer.trim().split(/\s+/).length < 2) context.addIssue({ code: "custom", path: ["answer"], message: "Open writing needs a model answer of at least two words" });
   }),
   wordClass: strictQuestionOutputSchema,
   wordUse: strictQuestionOutputSchema,
   speaking: z.object({ title: z.string().trim().min(1), prompt: z.string().trim().min(1), answer: z.string().trim().min(1) })
+}).superRefine((value, context) => {
+  if (value.listening.body.trim().toLocaleLowerCase("en-US") === value.reading.body.trim().toLocaleLowerCase("en-US")) {
+    context.addIssue({ code: "custom", path: ["reading", "body"], message: "Reading content must differ from listening" });
+  }
 });
 
 /** Make the learner-facing title deterministic; model-generated headings are never authoritative. */
@@ -644,12 +777,39 @@ const foundationWordJsonSchema = strictObject(
   { word: stringSchema, ipa: stringSchema }
 );
 
+export const weeklyLessonGrammarClassificationOutputJsonSchema = strictObject(
+  ["status", "contentType", "targetName", "scope", "support", "confidence", "evidence", "rejectedCandidates"],
+  {
+    status: { type: "string", enum: ["classified", "no_suitable_content", "insufficient_evidence"] },
+    contentType: nullable({ type: "string", enum: ["grammar_rule", "sentence_pattern", "usage_rule", "word_formation", "pronunciation_rule"] }),
+    targetName: nullable(stringSchema), scope: nullable(stringSchema),
+    support: { type: "string", enum: ["explicit", "repeated", "incidental", "none"] },
+    confidence: { type: "string", enum: ["high", "medium", "low"] },
+    evidence: { type: "array", items: strictObject(["sourceRef", "quote"], { sourceRef: stringSchema, quote: stringSchema }) },
+    rejectedCandidates: { type: "array", items: strictObject(["candidate", "reason"], {
+      candidate: stringSchema,
+      reason: { type: "string", enum: ["incidental_language", "unrelated_to_objective", "lower_priority", "vocabulary_only", "out_of_scope"] }
+    }) }
+  }
+) satisfies Record<string, unknown>;
+
 export const weeklyLessonFoundationOutputJsonSchema = strictObject(
   ["title", "durationMinutes", "objective", "instruction", "grammar", "pronunciation"],
   {
     title: stringSchema,
     durationMinutes: { type: "integer", enum: [5, 10, 15, 20] },
-    objective: strictObject(["title", "text"], { title: stringSchema, text: stringSchema }),
+    objective: strictObject(["title", "explanationLanguage", "items"], {
+      title: stringSchema,
+      explanationLanguage: { type: "string", enum: ["vi", "en"] },
+      items: { type: "array", items: strictObject(
+        ["type", "text", "condition", "criterion", "assessmentCode"],
+        {
+          type: { type: "string", enum: ["content", "language"] },
+          text: stringSchema, condition: stringSchema, criterion: stringSchema,
+          assessmentCode: { type: "string", enum: ["listening", "reading", "writing", "word_class", "word_use", "speaking"] }
+        }
+      ) }
+    }),
     instruction: strictObject(
       ["title", "step1", "step2", "step3"],
       { title: stringSchema, step1: stringSchema, step2: stringSchema, step3: stringSchema }
@@ -675,14 +835,15 @@ export const weeklyLessonFoundationOutputJsonSchema = strictObject(
 
 const compactVocabularyItemJsonSchema = strictObject(
   [
-    "word", "partOfSpeech", "pronunciation", "meaning", "imageQuery",
+    "word", "partOfSpeech", "pronunciation", "stress", "ttsText", "ssml", "meaning", "imageQuery",
     "collocation1", "collocation2", "collocation3",
     "family1", "family2", "umbrellaWord", "umbrellaMeaning",
     "sibling1", "sibling2", "sibling3",
     "synonym1", "synonym2", "antonym1"
   ],
   {
-    word: stringSchema, partOfSpeech: stringSchema, pronunciation: stringSchema, meaning: stringSchema, imageQuery: stringSchema,
+    word: stringSchema, partOfSpeech: stringSchema, pronunciation: stringSchema, stress: stringSchema,
+    ttsText: stringSchema, ssml: stringSchema, meaning: stringSchema, imageQuery: stringSchema,
     collocation1: stringSchema, collocation2: stringSchema, collocation3: stringSchema,
     family1: nullable({ $ref: "#/$defs/relation" }), family2: nullable({ $ref: "#/$defs/relation" }),
     umbrellaWord: stringSchema, umbrellaMeaning: stringSchema,
@@ -708,7 +869,9 @@ export const weeklyLessonVocabularyOutputJsonSchema = {
   $defs: {
     item: compactVocabularyItemJsonSchema,
     relation: strictObject(["word", "type", "meaning"], { word: stringSchema, type: stringSchema, meaning: stringSchema }),
-    levelRelation: strictObject(["word", "level", "note"], { word: stringSchema, level: stringSchema, note: stringSchema }),
+    levelRelation: strictObject(["word", "level", "note", "partOfSpeech", "sense", "example"], {
+      word: stringSchema, level: stringSchema, note: stringSchema, partOfSpeech: stringSchema, sense: stringSchema, example: stringSchema
+    }),
     wordMeaning: strictObject(["word", "meaning"], { word: stringSchema, meaning: stringSchema })
   }
 } satisfies Record<string, unknown>;
@@ -925,7 +1088,7 @@ export const weekSuggestionsOutputJsonSchema = {
 } satisfies Record<string, unknown>;
 
 export const assessmentGradingInputSchema = z.object({
-  kind: z.enum(["placement", "final", "level-up"]),
+  kind: z.enum(["placement", "level-up"]),
   writing: z.array(z.object({ prompt: z.string(), answer: z.string() })).min(1),
   speaking: z.array(z.object({ prompt: z.string(), answer: z.string(), evidenceType: z.string() })).min(1),
   writingMaxScore: z.number().int().min(1).max(25), speakingMaxScore: z.number().int().min(1).max(25)

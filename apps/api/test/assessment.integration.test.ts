@@ -41,7 +41,7 @@ describe("assessment API preserves the one-screen flow and server evidence", () 
     await app.ready();
     const login = await app.inject({
       method: "POST", url: "/api/auth/learner/login",
-      payload: { email: "learner@e4s.local", password: "learner-pass" }
+      payload: { email: "minh.anh.nguyen@e4s.local", password: "learner-pass" }
     });
     cookie = String(login.headers["set-cookie"]).split(";")[0] ?? "";
     const freshLogin = await app.inject({
@@ -51,12 +51,12 @@ describe("assessment API preserves the one-screen flow and server evidence", () 
     freshCookie = String(freshLogin.headers["set-cookie"]).split(";")[0] ?? "";
     const operatorLogin = await app.inject({
       method: "POST", url: "/api/auth/staff/login",
-      payload: { email: "operator@e4s.local", password: "operator-pass" }
+      payload: { email: "thu.ha.tran@e4s.local", password: "operator-pass" }
     });
     operatorCookie = String(operatorLogin.headers["set-cookie"]).split(";")[0] ?? "";
     const managerLogin = await app.inject({
       method: "POST", url: "/api/auth/staff/login",
-      payload: { email: "manager@e4s.local", password: "manager-pass" }
+      payload: { email: "quoc.bao.le@e4s.local", password: "manager-pass" }
     });
     managerCookie = String(managerLogin.headers["set-cookie"]).split(";")[0] ?? "";
   }, 30_000);
@@ -68,7 +68,7 @@ describe("assessment API preserves the one-screen flow and server evidence", () 
     expect(response.statusCode, response.body).toBe(200);
     expect(response.json()).toMatchObject({
       screenState: "preparation",
-      definition: { kind: "placement", totalMinutes: 70, totalScore: 100 },
+      definition: { kind: "placement", totalMinutes: 75, totalScore: 100 },
       attempt: null
     });
   });
@@ -106,7 +106,7 @@ describe("assessment API preserves the one-screen flow and server evidence", () 
 
   it("returns the same submitted attempt when two final submissions race", async () => {
     const started = await app.inject({
-      method: "POST", url: "/api/v1/assessments/final/start", headers: { cookie }, payload: {}
+      method: "POST", url: "/api/v1/assessments/placement/start", headers: { cookie: freshCookie }, payload: {}
     });
     expect(started.statusCode, started.body).toBe(201);
     const attemptId = started.json().attempt.id as string;
@@ -115,7 +115,7 @@ describe("assessment API preserves the one-screen flow and server evidence", () 
       const advanced = await app.inject({
         method: "POST",
         url: `/api/v1/assessment-attempts/${attemptId}/sections/${section}/complete`,
-        headers: { cookie },
+        headers: { cookie: freshCookie },
         payload: {}
       });
       expect(advanced.statusCode, advanced.body).toBe(200);
@@ -124,7 +124,7 @@ describe("assessment API preserves the one-screen flow and server evidence", () 
     const submit = () => app.inject({
       method: "POST",
       url: `/api/v1/assessment-attempts/${attemptId}/submit`,
-      headers: { cookie },
+      headers: { cookie: freshCookie },
       payload: {}
     });
     const responses = await Promise.all([submit(), submit()]);
@@ -141,7 +141,7 @@ describe("assessment API preserves the one-screen flow and server evidence", () 
       `select count(*)::text as count
        from assessment_attempts
        where learner_id = $1 and id = $2`,
-      [DEMO_IDS.learner, attemptId]
+      ["00000000-0000-4000-8000-000000000109", attemptId]
     );
     expect(attempts.rows[0]?.count).toBe("1");
   });
@@ -214,7 +214,7 @@ describe("assessment API preserves the one-screen flow and server evidence", () 
     });
     expect(queue.statusCode, queue.body).toBe(200);
     expect(queue.json()).toEqual(expect.arrayContaining([
-      expect.objectContaining({ attemptId: levelUpAttemptId, learnerName: "Học viên Demo", kind: "level-up" })
+      expect.objectContaining({ attemptId: levelUpAttemptId, learnerName: "Nguyễn Minh Anh", kind: "level-up" })
     ]));
     const managerQueue = await app.inject({
       method: "GET", url: "/api/v1/assessment-reviews/pending", headers: { cookie: managerCookie }
@@ -228,7 +228,7 @@ describe("assessment API preserves the one-screen flow and server evidence", () 
     });
     expect(overview.statusCode, overview.body).toBe(200);
     expect(overview.json()).toMatchObject({
-      pendingAssessments: [expect.objectContaining({ kind: "final", learnerId: DEMO_IDS.learner })],
+      pendingAssessments: [expect.objectContaining({ kind: "placement", learnerId: "00000000-0000-4000-8000-000000000109" })],
       pendingLevelUp: [expect.objectContaining({ attemptId: levelUpAttemptId, kind: "level-up" })],
       approvedLearners: [expect.objectContaining({ learnerId: DEMO_IDS.learner, currentLevel: "A2", placementScore: 55 })],
       unassessedLearners: [],

@@ -33,4 +33,8 @@ describe("game surface layout guardrails", () => {
     expect(stylesheet).toMatch(/\.app-learner-page\.games-page \.btn-sm,[\s\n]*\.app-learner-page\.game-page \.btn-sm\s*\{[^}]*min-height:\s*44px\s*!important/s);
     expect(stylesheet).toMatch(/@media\s*\(max-width:\s*720px\)[\s\S]*?\.typing-scene\s*\{[^}]*padding:\s*14px\s+12px/s);
   });
+
+  it("disables failure and loading animation when reduced motion is requested", () => {
+    expect(stylesheet).toMatch(/@media\s*\(prefers-reduced-motion:\s*reduce\)[\s\S]*?\.game-ending span,[\s\S]*?\.game-ending \.dino \.jaw[\s\S]*?animation:\s*none/s);
+  });
 });

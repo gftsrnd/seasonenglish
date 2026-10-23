@@ -31,22 +31,20 @@ import { VocabularyCard as SharedVocabularyCard, type VocabularyRelationChip } f
 import { conciseGrammarExample, conciseLessonObjective, conciseSpeakingInstruction, conciseSpeakingModel } from "../shared/lesson/presentation.js";
 
 const CEFR_LEVELS: Cefr[] = ["A1", "A2", "B1", "B2", "C1"];
-const REVIEW_TAB_MAP = { submissions: "subs", coach: "coach", micro: "micro", appeals: "appeals", attempts: "attempts", assessments: "tests" } as const;
+const REVIEW_TAB_MAP = { submissions: "subs", coach: "coach", weekly_practices: "weekly", appeals: "appeals", attempts: "attempts", assessments: "tests" } as const;
 const PROMPT_KEY_MAP: Record<string, PromptKey> = {
   system_rules: "base",
   assessment_scoring: "placement",
   weekly_lessons: "lesson",
   week_suggestions: "weeks",
-  micro_grading: "mgrade",
   coach_dialogue: "coach",
   weekly_practice_grading: "grade"
 };
 const PROMPT_LABELS: Record<PromptKey, string> = {
-  base: "Quy tắc chung (mọi lời gọi trừ sinh bài siêu ngắn)",
+  base: "Quy tắc chung",
   placement: "Chấm test & xếp trình độ",
   lesson: "Sinh đúng 5 bài T2–T6 theo schema lessons[].dayNumber/title/durationMinutes/parts[] gồm đúng 11 phần; tiêu đề là công thức khung câu; từ vựng phải có cụm từ, họ từ, từ bao trùm, đồng nghĩa và trái nghĩa; phần nghe phải có audio cùng 4 lựa chọn.",
   weeks: "Gợi ý khung chủ đề tuần (giữ các biến {n} {learners} {levels} {used} và key weeks[].week/options[].topic/description/objectives/keyVocabHint/levels[].cefr/days[5])",
-  mgrade: "Chấm bài thực hành siêu ngắn (giữ các biến {cefr_level} {explain_lang} {theory} {vocab} {practice} {answer} và key score/ok/feedback/fix)",
   coach: "AI coach hội thoại",
   grade: "Chấm bài thực hành thứ Sáu"
 };
@@ -142,13 +140,14 @@ export interface DashboardAdapterContext {
   openAppeals: number;
   rescoreBusy?: string | undefined;
   placementDetails?: Record<string, {
-    total: number;
-    rawLevel: Cefr;
-    sectionScores: Array<{ label: string; percent: number; heuristic?: boolean }>;
+    total: number | null;
+    rawLevel: Cefr | undefined;
+    sectionScores: Array<{ label: string; percent: number | null; heuristic?: boolean }>;
     rationale?: string | null;
     monthlyGoal?: string | null;
     profileSummary?: string | null;
     aiScored?: boolean;
+    humanScored?: boolean;
   }>;
   levelRequestDetails?: Record<string, { from: Cefr; to: Cefr }>;
 }
@@ -176,11 +175,11 @@ export function adaptAssessmentOverview(source: AssessmentReviewOverviewView, co
         const score = detailScores.get(label.toLowerCase()) ?? detailScores.get(key);
         return {
           label,
-          percent: Number(score?.percent ?? item.sectionScores[key] ?? 0),
+          percent: score?.percent ?? item.sectionScores[key] ?? null,
           ...(score?.heuristic ? { heuristic: true } : {})
         };
       });
-      return { id: item.attemptId, learnerId: item.learnerId, name: item.learnerName, submittedAt: operatorDateTime(item.submittedAt), total: detail?.total, rawLevel: detail?.rawLevel, aiSuggestedCefr: item.suggestedLevel as Cefr | null, sectionScores, rationale: detail?.rationale, monthlyGoal: detail?.monthlyGoal, profileSummary: detail?.profileSummary ?? (item.profileComplete === undefined ? undefined : item.profileComplete ? "Đã điền hồ sơ" : "Chưa điền hồ sơ"), suggestedLevel: (item.suggestedLevel ?? detail?.rawLevel) as Cefr | undefined, levels: CEFR_LEVELS, aiScored: detail?.aiScored, canRescore: true, rescoreBusy: context.rescoreBusy === item.attemptId };
+      return { id: item.attemptId, learnerId: item.learnerId, name: item.learnerName, submittedAt: operatorDateTime(item.submittedAt), total: detail?.total ?? undefined, rawLevel: detail?.rawLevel, aiSuggestedCefr: item.suggestedLevel as Cefr | null, sectionScores, rationale: detail?.rationale, monthlyGoal: detail?.monthlyGoal, profileSummary: detail?.profileSummary ?? (item.profileComplete === undefined ? undefined : item.profileComplete ? "Đã điền hồ sơ" : "Chưa điền hồ sơ"), suggestedLevel: (item.suggestedLevel ?? detail?.rawLevel) as Cefr | undefined, levels: CEFR_LEVELS, aiScored: detail?.aiScored, humanScored: detail?.humanScored, canRescore: true, rescoreBusy: context.rescoreBusy === item.attemptId };
     }),
     levelRequests: source.pendingLevelUp.map(item => {
       const levels = context.levelRequestDetails?.[item.attemptId];
@@ -232,9 +231,16 @@ export function adaptLessonMatrix(source: ContentLessonMatrixView, options: { ai
 }
 
 export function adaptLessonSet(source: ContentLessonSetVersionView, options: { aiConnected: boolean; warnings?: OperatorLessonSetView["warnings"]; mutationState?: OperatorLessonSetView["mutationState"]; mutationMessage?: string | null; activeMutation?: LessonSetActionKey; resolveVocabularyImage?: (lessonId: string, itemIndex: number) => Promise<ContentImageView> }): OperatorLessonSetView {
+  const weeklyPractice = source.weeklyPractice ?? {
+    task: `Write 3–5 sentences about “${source.topic}”.`,
+    guidance: "Use at least 3 words from this week's lessons.",
+    inputMode: "text_or_dictation" as const,
+    requiredVocabulary: []
+  };
   return {
     week: source.weekNumber, cefr: source.cefr as Cefr, status: source.status === "published" ? "approved" : source.status === "review" ? "review" : "draft", topic: source.topic, explanationLanguage: source.explanationLanguage === "Tiếng Việt" ? "tiếng Việt" : "tiếng Anh", aiConnected: options.aiConnected, mutationState: options.mutationState, mutationMessage: options.mutationMessage, activeMutation: options.activeMutation,
     warnings: options.warnings ?? lessonSetWarnings(source),
+    weeklyPractice: { task: weeklyPractice.task, guidance: weeklyPractice.guidance, inputModeLabel: "Nhập văn bản hoặc nói để chuyển thành chữ", requiredVocabulary: weeklyPractice.requiredVocabulary },
     lessons: source.lessons.map(lesson => ({ id: lesson.id, day: lesson.dayNumber, dayLabel: ["T2", "T3", "T4", "T5", "T6"][lesson.dayNumber - 1] ?? `Bài ${lesson.dayNumber}`, title: lesson.title, durationMin: lesson.durationMinutes, practiceKind: lesson.practiceLabel.includes("điền") ? "điền từ" : lesson.practiceLabel.includes("trắc") ? "trắc nghiệm" : "tự viết", practiceAnswer: persistedPracticeAnswer(lesson.practiceLabel), complete: REQUIRED_LESSON_PARTS.every(code => lesson.parts.some(part => part.code === code)), content: <OperatorLessonPreview lessonId={lesson.id} parts={lesson.parts} resolveVocabularyImage={options.resolveVocabularyImage} /> }))
   };
 }
@@ -373,7 +379,7 @@ function OperatorRecordingPreview() {
 }
 
 function OperatorVocabularyCard({ item, index, media }: { item: Record<string, unknown>; index: number; media?: { lessonId: string; resolveVocabularyImage?: ((lessonId: string, itemIndex: number) => Promise<ContentImageView>) | undefined } | undefined }) {
-  const [detail, setDetail] = useState<{ title: string; description?: string; words: Array<{ word: string; meaning?: string; current?: boolean }> } | null>(null);
+  const [detail, setDetail] = useState<{ kind?: "umbrella"; title: string; currentWord?: string; umbrellaMeaning?: string; description?: string; words: Array<{ word: string; meaning?: string; current?: boolean }> } | null>(null);
   const word = String(item.word ?? "—");
   const phrases = (asArray(item.collocations ?? item.phrases ?? item.examples) ?? (typeof item.collocations === "string" ? [item.collocations] : []))
     .filter((entry): entry is string => typeof entry === "string" && Boolean(entry.trim()))
@@ -394,7 +400,7 @@ function OperatorVocabularyCard({ item, index, media }: { item: Record<string, u
   const siblingEntries = relationEntries(umbrella?.siblings);
   const umbrellaWords = umbrella ? [{ word, ...(typeof item.meaning === "string" && item.meaning.trim() ? { meaning: item.meaning.trim() } : {}), current: true }, ...siblingEntries] : [];
   const relations: VocabularyRelationChip[] = [
-    ...(umbrellaWord ? [{ label: `TỪ BAO TRÙM ${umbrellaWord}`, ariaLabel: `Từ bao trùm: ${umbrellaWord}`, icon: "umbrella" as const, tone: "umb" as const, count: Math.max(0, umbrellaWords.length - 1), onClick: () => setDetail({ title: `${umbrellaWord}${umbrellaMeaning ? ` – ${umbrellaMeaning}` : ""}`, description: `“${umbrellaWord}” là từ bao trùm (nhóm nghĩa rộng hơn) của “${word}”. Các từ dưới đây cùng nằm trong nhóm đó.`, words: umbrellaWords }) }] : []),
+    ...(umbrellaWord ? [{ label: `TỪ BAO TRÙM ${umbrellaWord}`, ariaLabel: `Từ bao trùm: ${umbrellaWord}`, icon: "umbrella" as const, tone: "umb" as const, count: Math.max(0, umbrellaWords.length - 1), onClick: () => setDetail({ kind: "umbrella", title: umbrellaWord, currentWord: word, umbrellaMeaning, words: umbrellaWords }) }] : []),
     ...synonyms.map(value => ({ label: value, ariaLabel: `Nghe từ đồng nghĩa: ${value}`, tone: "synonym" as const, onClick: () => speakOperatorText(value) })),
     ...antonyms.map(value => ({ label: value, ariaLabel: `Nghe từ trái nghĩa: ${value}`, tone: "antonym" as const, onClick: () => speakOperatorText(value) })),
     ...(family.length ? [{ label: `Word family (${family.length})`, ariaLabel: `Word family (${family.length})`, icon: "family" as const, tone: "family" as const, onClick: () => setDetail({ title: "Word family", words: relationEntries(item.family) }) }] : [])
@@ -406,7 +412,7 @@ function OperatorVocabularyCard({ item, index, media }: { item: Record<string, u
     if (imageUrl && attribution) return Promise.resolve({ status: "available", imageUrl, alt: word, attribution } as const);
     return Promise.resolve({ status: "unavailable" } as const);
   };
-  const modal = detail && typeof document !== "undefined" ? createPortal(<div className="modal-backdrop vocabulary-relation-modal" role="presentation"><section className="dialog" role="dialog" aria-modal="true" aria-label={detail.title}><div className="row between vocabulary-relation-modal-header"><strong className="vocabulary-relation-title">{detail.title}</strong><button className="btn-sm" type="button" onClick={() => setDetail(null)}>Đóng</button></div>{detail.description ? <p className="muted vocabulary-relation-description">{detail.description}</p> : null}<div className="vocabulary-relation-audio-list">{detail.words.map(value => <button className="btn-sm btn-ghost operator-audio-button vocabulary-relation-audio-item" type="button" aria-label={`Nghe ${value.word}`} onClick={() => speakOperatorText(value.word)} key={`${value.word}-${value.meaning ?? ""}`}><span><strong>{value.word}</strong>{value.current ? <small className="vocabulary-current-word">từ của bài</small> : null}{value.meaning ? <small>{value.meaning}</small> : null}</span><Volume2 size={16} aria-hidden="true" /></button>)}</div></section></div>, document.body) : null;
+  const modal = detail && typeof document !== "undefined" ? createPortal(<div className="modal-backdrop vocabulary-relation-modal" role="presentation"><section className="dialog wide" role="dialog" aria-modal="true" aria-label={detail.kind === "umbrella" ? "Từ bao quát" : detail.title}><div className="row between vocabulary-relation-modal-header">{detail.kind === "umbrella" ? <div><div className="eyebrow">Từ vựng · {detail.currentWord}</div><h2>Từ bao quát</h2></div> : <strong className="vocabulary-relation-title">{detail.title}</strong>}<button className="btn-sm" type="button" aria-label="Đóng" onClick={() => setDetail(null)}>Đóng</button></div>{detail.kind === "umbrella" ? <div className="stack vocabulary-umbrella-content" style={{ gap: 12 }} aria-label="Từ bao quát"><article className="card flat vocabulary-umbrella-summary" aria-label={`Từ bao quát ${detail.title}`}><div className="row between" style={{ gap: 12, alignItems: "flex-start" }}><div style={{ minWidth: 0 }}><div className="eyebrow">Từ bao quát</div><h3>{detail.title}</h3><p>{detail.umbrellaMeaning}</p></div><button className="btn-sm btn-ghost operator-audio-button" type="button" aria-label={`Nghe ${detail.title}`} onClick={() => speakOperatorText(detail.title)}><Volume2 size={16} aria-hidden="true" />Nghe</button></div></article><div><div className="small muted">Từ hiện tại và các từ cùng nhóm</div><div className="vocabulary-relation-audio-list">{detail.words.map(value => <button className="btn-sm btn-ghost operator-audio-button vocabulary-relation-audio-item" type="button" aria-label={`Nghe ${value.word}`} onClick={() => speakOperatorText(value.word)} key={`${value.word}-${value.meaning ?? ""}`}><span><strong>{value.word}</strong>{value.current ? <small className="vocabulary-current-word">từ của bài</small> : null}{value.meaning ? <small>{value.meaning}</small> : null}</span><Volume2 size={16} aria-hidden="true" /></button>)}</div></div></div> : <>{detail.description ? <p className="muted vocabulary-relation-description">{detail.description}</p> : null}<div className="vocabulary-relation-audio-list">{detail.words.map(value => <button className="btn-sm btn-ghost operator-audio-button vocabulary-relation-audio-item" type="button" aria-label={`Nghe ${value.word}`} onClick={() => speakOperatorText(value.word)} key={`${value.word}-${value.meaning ?? ""}`}><span><strong>{value.word}</strong>{value.current ? <small className="vocabulary-current-word">từ của bài</small> : null}{value.meaning ? <small>{value.meaning}</small> : null}</span><Volume2 size={16} aria-hidden="true" /></button>)}</div></>}</section></div>, document.body) : null;
   return <><SharedVocabularyCard item={vocabularyItem} loadImage={loadImage} speak={speakOperatorText} relations={relations} />{modal}</>;
 }
 
@@ -463,29 +469,29 @@ export interface ReviewAdapterDetails {
   aiConnected?: boolean;
   submissions?: Record<string, Pick<ReviewSubmission, "cefr" | "type" | "task">>;
   coach?: Record<string, { cefr: Cefr; week: number; sessionId: string }>;
-  microLessons?: Record<string, { job: string; learningStyle: string; practiceType: string; practiceAnswer?: string }>;
   appeals?: Record<string, Partial<Omit<ReviewAppeal, "id" | "learnerName" | "reason" | "status" | "at" | "decidedSummary">>>;
   tests?: Record<string, { rawLevel?: Cefr; aiSuggestedCefr?: Cefr | null }>;
 }
 
 export function adaptReview(source: ContentReviewView, activeTab: keyof typeof REVIEW_TAB_MAP, options: ReviewAdapterDetails = {}): OperatorReviewView {
-  const counts = { subs: 0, coach: 0, micro: 0, appeals: 0, attempts: 0, tests: 0 };
-  source.tabs.forEach(tab => { counts[REVIEW_TAB_MAP[tab.key]] = tab.unreadCount ?? tab.count; });
+  const counts = { subs: 0, coach: 0, weekly: 0, appeals: 0, attempts: 0, tests: 0 };
+  source.tabs.forEach(tab => { const key = REVIEW_TAB_MAP[tab.key as keyof typeof REVIEW_TAB_MAP]; if (key) counts[key] = tab.unreadCount ?? tab.count; });
   return {
     activeTab: REVIEW_TAB_MAP[activeTab], counts, aiConnected: options.aiConnected,
     submissions: source.submissions.map(item => { const detail = options.submissions?.[item.id]; return { id: item.id, learnerName: item.learnerName, cefr: (item.cefr ?? detail?.cefr) as Cefr | undefined, week: item.weekNumber, type: item.type ?? detail?.type, submittedAt: operatorDateTime(item.submittedAt), operatorChecked: item.checked, task: item.task ?? detail?.task, text: item.text, total: item.total, rubric: item.rubric.meaning == null || item.rubric.vocabulary == null || item.rubric.grammar == null ? null : { meaning: item.rubric.meaning, vocab: item.rubric.vocabulary, grammar: item.rubric.grammar }, ...(item.aiGraded === undefined ? {} : { aiGraded: item.aiGraded }), feedback: item.feedback, suggestions: item.suggestions.map(text => ({ original: "", corrected: text, explanation: "" })) }; }),
     coachTurns: source.coachSamples.map(item => { const detail = options.coach?.[item.id]; return { id: item.id, sessionId: detail?.sessionId ?? item.id, learnerName: item.learnerName, cefr: (item.cefr ?? detail?.cefr) as Cefr | undefined, week: item.weekNumber ?? detail?.week, at: operatorDateTime(item.createdAt), checked: item.checked, userText: item.learnerText, reply: item.coachText, rubric: item.scores.meaning == null || item.scores.vocabulary == null || item.scores.grammar == null ? null : { meaning: item.scores.meaning, vocab: item.scores.vocabulary, grammar: item.scores.grammar }, suggestions: item.suggestions.map(text => ({ original: "", corrected: text, explanation: "" })) }; }),
-    microLessons: source.microLessons.map(item => { const detail = options.microLessons?.[item.id]; return { id: item.id, learnerName: item.learnerName, cefr: item.cefr as Cefr, date: operatorDateTime(item.generatedAt), topic: item.topic, completed: item.completed, theory: item.theory, vocabulary: item.vocabulary.join(" · "), practiceType: detail?.practiceType, practiceText: item.practice, practiceAnswer: detail?.practiceAnswer, learnerAnswer: item.answer ?? undefined, job: detail?.job, learningStyle: detail?.learningStyle }; }),
+    weeklyPractices: (source.weeklyPractices ?? []).map(item => ({ id: item.versionId, week: item.weekNumber, cefr: item.cefr as Cefr, topic: item.topic, status: item.status === "published" ? "approved" : item.status === "review" ? "review" : "draft", version: item.version, task: item.task, guidance: item.guidance, requiredVocabulary: item.requiredVocabulary })),
     appeals: source.appeals.map(item => ({ id: item.id, learnerName: item.learnerName, at: operatorDateTime(item.createdAt), status: item.status, reason: item.reason, decidedSummary: item.resolution || null, ...options.appeals?.[item.id] })),
-    attempts: source.lessonAttempts.map(item => ({ id: item.id, learnerName: item.learnerName, cefr: item.cefr as Cefr | undefined, lesson: `Tuần ${item.weekNumber} · T${item.dayNumber + 1} · ${item.lessonTitle}`, listening: String(item.attempts.listening ?? "chưa làm"), reading: String(item.attempts.reading ?? "chưa làm"), writing: String(item.attempts.writing ?? "chưa làm"), speaking: String(item.attempts.speaking ?? "chưa làm"), total: Object.values(item.attempts).reduce((sum, value) => sum + (value ?? 0), 0) })),
+    attempts: source.lessonAttempts.map(item => ({ id: item.id, learnerId: item.learnerId, learnerName: item.learnerName, cefr: item.cefr as Cefr | undefined, lesson: `Tuần ${item.weekNumber} · T${item.dayNumber + 1} · ${item.lessonTitle}`, listening: String(item.attempts.listening ?? "chưa làm"), reading: String(item.attempts.reading ?? "chưa làm"), writing: String(item.attempts.writing ?? "chưa làm"), speaking: String(item.attempts.speaking ?? "chưa làm"), total: Object.values(item.attempts).reduce((sum, value) => sum + (value ?? 0), 0) })),
     tests: source.assessments.map(item => ({ id: item.id, learnerName: item.learnerName, kind: item.kind, submittedAt: item.submittedAt ? operatorDateTime(item.submittedAt) : undefined, total: item.totalScore ?? undefined, ...options.tests?.[item.id] }))
   };
 }
 
 export function adaptPrompts(source: ContentPromptSettingsView, options: { saveState?: OperatorPromptsView["saveState"]; saveError?: string | null } = {}): OperatorPromptsView {
-  return { saveState: options.saveState, saveError: options.saveError, prompts: source.groups.map(group => {
+  return { saveState: options.saveState, saveError: options.saveError, prompts: source.groups.flatMap(group => {
+    if (group.key === "micro_grading") return [];
     const key = PROMPT_KEY_MAP[group.key];
     if (!key) throw new Error(`Unknown content prompt key: ${group.key}`);
-    return [key, PROMPT_LABELS[key], group.content];
+    return [[key, PROMPT_LABELS[key], group.content]];
   }) };
 }

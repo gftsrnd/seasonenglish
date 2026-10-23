@@ -57,9 +57,25 @@ describe("learner app UI primitives", () => {
     expect(screen.getByRole("link", { name: "Về trang chủ" })).toHaveAttribute("href", "/home");
   });
 
+  it("treats the retired micro-lesson URL as unavailable", () => {
+    render(<LearnerController path="/micro/legacy" contracts={{}} callbacks={{ navigate: vi.fn() } as never} />);
+
+    expect(screen.getByRole("heading", { name: "Không tìm thấy trang" })).toBeInTheDocument();
+    expect(screen.queryByText(/bài siêu ngắn/i)).not.toBeInTheDocument();
+  });
+
+  it("shows a purposeful Mini game lock screen instead of a generic route error", () => {
+    const navigate = vi.fn();
+    render(<LearnerController path="/games" contracts={{}} callbacks={{ navigate } as never} />);
+
+    expect(screen.getByRole("heading", { name: "Mini game chưa mở" })).toBeInTheDocument();
+    expect(screen.getByText(/có bài học tuần đã được phát hành/i)).toBeInTheDocument();
+    expect(screen.queryByText("Chưa thể mở trang")).not.toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Về trang chủ học" })).toHaveAttribute("href", "/home");
+  });
+
   it.each([
     ["lesson", "Về trang chủ"],
-    ["micro", "Về trang chủ"],
     ["reward", "Về trang chủ"],
     ["survey", "Về trang chủ"]
   ] as const)("keeps the %s load failure recoverable without losing the retry action", (route, recoveryLabel) => {
@@ -72,5 +88,18 @@ describe("learner app UI primitives", () => {
     fireEvent.click(screen.getByRole("button", { name: "Thử lại" }));
     expect(onRetry).toHaveBeenCalledOnce();
     expect(screen.getByRole("link", { name: recoveryLabel })).toHaveAttribute("href", "/home");
+  });
+
+  it.each([
+    ["practice", "Bài thực hành tuần đang được chuẩn bị", /đợi bài thực hành tuần được chuẩn bị hoặc được giao/i],
+    ["games", "Mini game đang được chuẩn bị", /đợi bộ từ Mini game được tạo từ bài học tuần/i]
+  ] as const)("shows the %s wait state as preparation, not a broken page", (route, title, message) => {
+    render(<LearnerLoadFailure route={route} message="Lỗi API thô không nên hiện." onRetry={vi.fn()} navigate={vi.fn()} />);
+
+    expect(screen.getByRole("heading", { name: title })).toBeInTheDocument();
+    expect(screen.getByRole("note")).toHaveTextContent(message);
+    expect(screen.queryByText("Chưa thể mở trang")).not.toBeInTheDocument();
+    expect(screen.queryByText("Lỗi API thô không nên hiện.")).not.toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Về trang chủ" })).toHaveAttribute("href", "/home");
   });
 });

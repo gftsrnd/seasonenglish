@@ -154,7 +154,10 @@ describe("lesson detail warnings", () => {
     expect(screen.queryByRole("status")).not.toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: /Từ bao trùm: work communication/ }));
-    expect(screen.getByRole("dialog", { name: "work communication – giao tiếp công việc" })).toBeInTheDocument();
+    expect(screen.getByRole("dialog", { name: "Từ bao quát" })).toBeInTheDocument();
+    expect(screen.getByText("Từ vựng · job")).toBeInTheDocument();
+    expect(screen.getByRole("article", { name: "Từ bao quát work communication" })).toHaveTextContent("giao tiếp công việc");
+    expect(screen.getByRole("button", { name: "Nghe work communication" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Nghe job" })).toBeInTheDocument();
   });
 

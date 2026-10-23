@@ -5,6 +5,7 @@ import {
   calculateSpeakingScore,
   calculateWritingScore,
   mapPlacementCefr,
+  placementManualReviewReasons,
   passesLevelUp
 } from "../src/assessment/index.js";
 
@@ -50,6 +51,23 @@ describe("assessment scoring follows the approved evidence rules", () => {
   it("does not finalize placement while a productive section is unscored", () => {
     expect(calculatePlacementResult({ listening: 18, reading: 32, writing: 16.3, speaking: null }))
       .toEqual({ status: "pending_review", totalScore: null, cefr: null });
+  });
+
+  it("requires explicit review for missing evidence, proxy evidence, material skill gaps and CEFR boundaries", () => {
+    expect(placementManualReviewReasons({
+      scores: { listening: 18, reading: 36, writing: null, speaking: 14 },
+      speakingEvidence: ["audio", "typed_proxy", "technical_failure", "audio"]
+    })).toEqual(expect.arrayContaining(["missing_productive_score", "typed_proxy", "technical_failure"]));
+
+    expect(placementManualReviewReasons({
+      scores: { listening: 20, reading: 18, writing: 18, speaking: 18 },
+      speakingEvidence: ["audio", "audio", "audio", "audio"]
+    })).toContain("material_skill_gap");
+
+    expect(placementManualReviewReasons({
+      scores: { listening: 15, reading: 30, writing: 10, speaking: 9.6 },
+      speakingEvidence: ["audio", "audio", "audio", "audio"]
+    })).toContain("cefr_boundary");
   });
 
   it("uses the total and every-skill minimum for level-up", () => {

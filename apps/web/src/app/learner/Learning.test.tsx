@@ -3,7 +3,7 @@ import "@testing-library/jest-dom/vitest";
 import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import { userEvent } from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { LearnerLesson } from "./Learning.js";
+import { LearnerLesson, normalizeBlankPrompt } from "./Learning.js";
 
 afterEach(cleanup);
 
@@ -18,9 +18,12 @@ describe("learner lesson study content", () => {
       cefr: "A2",
       content: {
         parts: [
-          { code: "objective", title: "Mục tiêu bài học", content: { text: "Kể ngắn về công việc." } },
+          { code: "objective", title: "Mục tiêu bài học", content: { text: "Mục tiêu có cấu trúc.", items: [
+            { type: "content", text: "SWBAT identify two job details.", condition: "after listening", criterion: "two details", assessmentCode: "listening" },
+            { type: "language", text: "SWBAT say one complete work sentence.", condition: "in a role-play", criterion: "one sentence", assessmentCode: "speaking" }
+          ] } },
           { code: "instruction", title: "Hướng dẫn làm bài", content: { steps: ["Học nội dung", "Làm lần lượt các bài tập", "Xem phản hồi và làm lại"] } },
-          { code: "vocabulary", title: "Từ vựng", content: { items: [{ word: "new", type: "tính từ", pronunciation: "/njuː/", meaning: "mới", examples: ["new here", "a new job", "a new team"], antonyms: [{ word: "old", level: "A1", note: "đối lập về tuổi/thời gian" }] }] } },
+          { code: "vocabulary", title: "Từ vựng", content: { items: [{ word: "new", type: "tính từ", pronunciation: "/njuː/", meaning: "mới", examples: ["new here", "a new job", "a new team"], synonyms: [{ word: "fresh", level: "A2" }], antonyms: [{ word: "old", level: "A1", note: "đối lập về tuổi/thời gian" }] }] } },
           { code: "grammar", title: "Ngữ pháp", content: { formula: "I am from + nơi", usage: "Dùng khi làm quen." } },
           { code: "pronunciation", title: "Phát âm", content: { focus: "/aɪ/", words: [{ word: "I", ipa: "/aɪ/" }, { word: "nice", ipa: "/naɪs/" }, { word: "time", ipa: "/taɪm/" }], instruction: "Luyện âm mẫu." } }
         ]
@@ -43,10 +46,14 @@ describe("learner lesson study content", () => {
     expect(homeLink.querySelector("span")).not.toBeInTheDocument();
 
     expect(screen.queryByRole("heading", { name: "HƯỚNG DẪN LÀM BÀI" })).not.toBeInTheDocument();
+    expect(screen.getByRole("list", { name: "Mục tiêu bài học" })).toHaveTextContent("SWBAT identify two job details");
+    expect(screen.getByRole("list", { name: "Mục tiêu bài học" })).toHaveTextContent("SWBAT say one complete work sentence");
     expect(screen.getByText("tính từ")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Nghe từ new" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Nghe từ new" }).querySelector("svg.lucide-volume-2")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Nghe ví dụ: new here" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Nghe từ đồng nghĩa: fresh" })).toHaveTextContent("= fresh");
+    expect(screen.getByRole("button", { name: "Nghe từ trái nghĩa: old" })).toHaveTextContent("≠ old");
     expect(screen.getByRole("button", { name: "Nghe từ phát âm: I" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Nghe từ phát âm: nice" })).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Nghe mẫu ngữ pháp" })).not.toBeInTheDocument();
@@ -62,7 +69,14 @@ describe("learner lesson study content", () => {
     expect(speak).toHaveBeenCalledWith("new here");
     fireEvent.click(screen.getByRole("button", { name: "Nghe từ phát âm: I" }));
     expect(speak).toHaveBeenCalledWith("I");
+    fireEvent.click(screen.getByRole("button", { name: "Nghe chậm từ phát âm: I" }));
+    expect(speak).toHaveBeenCalledWith("I", "en-US", { rate: 0.65 });
     expect(screen.queryByRole("button", { name: "Nghe âm /aɪ/" })).not.toBeInTheDocument();
+  });
+
+  it("renders every fill-in blank as one continuous line", () => {
+    expect(normalizeBlankPrompt("Please write - - - here and _ _ _ there.")).toBe("Please write ------ here and ------ there.");
+    expect(normalizeBlankPrompt("Please write --- here.")).toBe("Please write ------ here.");
   });
 
   it("loads a real attributed image path for concrete vocabulary", async () => {
@@ -211,6 +225,73 @@ describe("learner lesson study content", () => {
     expect(answerArea).not.toBeNull();
     expect(within(answerArea as HTMLElement).getByRole("button", { name: "Ghi âm" })).toBeInTheDocument();
     expect(within(answerArea as HTMLElement).getByText("Tải file ghi âm")).toBeInTheDocument();
+  });
+
+  it("unlocks the speaking check only after all three pronunciation examples were played", async () => {
+    const user = userEvent.setup();
+    const lesson = {
+      id: "lesson-speaking-gate",
+      title: "Giving feedback",
+      dayNumber: 1,
+      durationMinutes: 10,
+      cefr: "A2",
+      content: { parts: [
+        { code: "objective", title: "Mục tiêu", content: { text: "Nói một câu góp ý." } },
+        { code: "instruction", title: "Hướng dẫn", content: { steps: ["Nghe ba từ mẫu"] } },
+        { code: "pronunciation", title: "Phát âm", content: { focus: "/aɪ/", words: [{ word: "I", ipa: "/aɪ/" }, { word: "nice", ipa: "/naɪs/" }, { word: "time", ipa: "/taɪm/" }] } },
+        { code: "speaking", title: "Nói", content: { instruction: "Nói một câu.", answer: "I have time." } }
+      ] },
+      progress: { status: "in_progress", completedPartCodes: ["objective", "instruction", "pronunciation"], evidence: {} }
+    } as any;
+    render(<LearnerLesson view={{ lesson, lock: null }} actions={{ navigate: vi.fn(), speak: vi.fn(), saveLessonProgress: vi.fn() } as any} />);
+
+    await user.click(screen.getByRole("tab", { name: /2\. bài tập/i }));
+    expect(screen.getByText(/nghe đủ 3 từ mẫu phát âm/i)).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Kiểm tra nói" })).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole("tab", { name: /1\. học/i }));
+    await user.click(screen.getByRole("button", { name: "Nghe từ phát âm: I" }));
+    await user.click(screen.getByRole("button", { name: "Nghe từ phát âm: nice" }));
+    await user.click(screen.getByRole("button", { name: "Nghe từ phát âm: time" }));
+    await user.click(screen.getByRole("tab", { name: /2\. bài tập/i }));
+
+    expect(screen.queryByText(/nghe đủ 3 từ mẫu phát âm/i)).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Kiểm tra nói" })).toBeInTheDocument();
+  });
+
+  it("requires the learner to enter a five-character appeal reason and persists that reason", async () => {
+    const user = userEvent.setup();
+    const appealLessonPart = vi.fn().mockResolvedValue({
+      progress: { status: "in_progress", completedPartCodes: ["objective", "writing"], evidence: { writing: { attempts: 2, status: "appealed" } } }
+    });
+    const lesson = {
+      id: "lesson-appeal",
+      title: "Writing feedback",
+      dayNumber: 1,
+      durationMinutes: 10,
+      cefr: "A2",
+      content: { parts: [
+        { code: "objective", title: "Mục tiêu", content: { text: "Viết câu hoàn chỉnh." } },
+        { code: "writing", title: "Viết", content: { prompt: "Write one sentence.", answer: "I can join Friday." } }
+      ] },
+      progress: {
+        status: "in_progress",
+        completedPartCodes: ["objective", "writing"],
+        evidence: { writing: { attempts: 2, status: "wrong_exhausted", answer: "Friday" } }
+      }
+    } as any;
+    render(<LearnerLesson view={{ lesson, lock: null }} actions={{ navigate: vi.fn(), speak: vi.fn(), saveLessonProgress: vi.fn(), appealLessonPart } as any} />);
+    await user.click(screen.getByRole("tab", { name: /2\. Bài tập/i }));
+    await user.click(screen.getByRole("button", { name: "Gửi kháng nghị" }));
+
+    const reason = screen.getByRole("textbox", { name: "Lý do kháng nghị phần Viết" });
+    const submit = screen.getByRole("button", { name: "Xác nhận gửi kháng nghị" });
+    await user.type(reason, "abcd");
+    expect(submit).toBeDisabled();
+    await user.type(reason, "e");
+    expect(submit).toBeEnabled();
+    await user.click(submit);
+    expect(appealLessonPart).toHaveBeenCalledWith("writing", "abcde");
   });
 
   it("uses an accessible lock icon without an emoji for a locked lesson", () => {

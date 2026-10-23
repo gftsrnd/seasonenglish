@@ -9,7 +9,7 @@ const client = vi.hoisted(() => ({
   getOrganisationExperience: vi.fn(), saveOrganisationExperience: vi.fn(),
   saveProductPreferences: vi.fn(),
   saveSessionAvatar: vi.fn(),
-  getManagerSettings: vi.fn(), getManagerAccounts: vi.fn(), getManagerProviderSettings: vi.fn(),
+  getManagerSettings: vi.fn(), getManagerAccounts: vi.fn(), getManagerPinReports: vi.fn(), getManagerProviderSettings: vi.fn(),
   saveManagerProviderSettings: vi.fn(), testManagerProviderSettings: vi.fn(),
   testManagerImage: vi.fn(), clearManagerImageCache: vi.fn(), testManagerMusic: vi.fn(), resetManagerMusic: vi.fn(),
   testManagerWebhook: vi.fn(), exportManagerData: vi.fn(), importManagerData: vi.fn()
@@ -46,6 +46,7 @@ beforeEach(() => {
     backgroundMusic: { enabled: true, url: "", volume: 22 }, baseWebhookUrl: "", baseWebhookTemplate: "{\"base_content\":\"{message}\"}"
   });
   client.getManagerAccounts.mockResolvedValue({ organizationName: "GFT Demo", accounts: [] });
+  client.getManagerPinReports.mockResolvedValue({ reports: [] });
   client.getManagerProviderSettings.mockResolvedValue({
     provider: "openai", configured: true, baseUrl: "https://api.example.test/v1", model: "example-model",
     speechToTextModel: "example-transcribe", capabilities: { chat: true, structuredOutput: true, speechToText: true },
@@ -118,6 +119,8 @@ describe("Manager AI provider settings", () => {
     await user.selectOptions(screen.getByLabelText("Chủ đề giao diện (áp dụng ngay khi chọn)"), "winter");
 
     expect(document.documentElement.dataset.theme).toBe("winter");
+    expect(document.documentElement.dataset.themePattern).toBe("winter");
+    expect(document.documentElement.style.getPropertyValue("--season-pattern-image")).toContain("season-winter.png");
   });
 
   it("applies the saved seasonal theme to the live app shell", async () => {

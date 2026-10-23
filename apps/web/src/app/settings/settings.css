@@ -116,6 +116,133 @@
   box-shadow: none;
 }
 
+.settings-page input.settings-volume-range[type="range"] {
+  appearance: none;
+  -webkit-appearance: none;
+  height: 6px;
+  min-height: 6px;
+  margin: 13px 0;
+  border-radius: 999px;
+  background: linear-gradient(to right, var(--primary) 0 var(--range-value), var(--surface-3) var(--range-value) 100%);
+}
+
+.settings-page input.settings-volume-range[type="range"]::-webkit-slider-thumb {
+  width: 18px;
+  height: 18px;
+  appearance: none;
+  -webkit-appearance: none;
+  border: 3px solid var(--surface);
+  border-radius: 50%;
+  background: var(--primary);
+  box-shadow: 0 0 0 1px var(--primary-line);
+}
+
+.settings-page input.settings-volume-range[type="range"]::-moz-range-track {
+  height: 6px;
+  border: 0;
+  border-radius: 999px;
+  background: var(--surface-3);
+}
+
+.settings-page input.settings-volume-range[type="range"]::-moz-range-progress {
+  height: 6px;
+  border-radius: 999px;
+  background: var(--primary);
+}
+
+.settings-page input.settings-volume-range[type="range"]::-moz-range-thumb {
+  width: 14px;
+  height: 14px;
+  border: 3px solid var(--surface);
+  border-radius: 50%;
+  background: var(--primary);
+  box-shadow: 0 0 0 1px var(--primary-line);
+}
+
+.settings-page .settings-music-select {
+  position: relative;
+  margin: 0;
+}
+
+.settings-page .settings-music-select-label {
+  display: block;
+  margin-bottom: 8px;
+  color: #5f5a53;
+  font-size: .78rem;
+  font-weight: 600;
+}
+
+.settings-page .settings-music-select-trigger {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  width: 100%;
+  min-height: 44px;
+  padding: 10px 14px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.settings-page .settings-music-select-trigger:hover,
+.settings-page .settings-music-select-trigger[aria-expanded="true"] {
+  border-color: var(--primary-line);
+  background: var(--primary-soft);
+}
+
+.settings-page .settings-music-options {
+  position: absolute;
+  z-index: 20;
+  top: calc(100% + 6px);
+  right: 0;
+  left: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+  max-height: min(360px, 50vh);
+  overscroll-behavior: contain;
+  padding: 0;
+  border: 1px solid var(--primary-line);
+  border-radius: 8px;
+  background: var(--surface);
+  box-shadow: 0 12px 28px rgb(30 30 30 / .16);
+}
+
+.settings-page .settings-music-options button {
+  appearance: none;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  min-height: 36px;
+  padding: 8px 10px;
+  margin: 0 !important;
+  border: 0 !important;
+  border-bottom: 1px solid var(--line) !important;
+  border-radius: 0 !important;
+  background: var(--surface) !important;
+  box-shadow: none !important;
+  color: var(--text);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.settings-page .settings-music-options button:last-child {
+  border-bottom: 0 !important;
+}
+
+.settings-page .settings-music-options button:hover,
+.settings-page .settings-music-options button.active {
+  background: var(--primary-soft) !important;
+  box-shadow: none !important;
+  color: var(--text);
+}
+
 .settings-page input[type="checkbox"] {
   width: 18px;
   height: 18px;
@@ -279,12 +406,67 @@
   border-color: var(--danger-line);
 }
 
-.settings-page .settings-theme-badge {
-  display: inline-flex;
+.settings-page .settings-theme-picker {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+  margin: 14px 0;
+  padding: 0;
+  border: 0;
+}
+
+.settings-page .settings-theme-picker legend {
+  grid-column: 1 / -1;
+  margin-bottom: 4px;
+  color: var(--muted);
+  font-size: .82rem;
+  font-weight: 700;
+}
+
+.settings-page .settings-theme-choice {
+  display: flex;
   align-items: center;
-  gap: 6px;
-  min-height: 36px;
-  white-space: nowrap;
+  gap: 8px;
+  min-height: 42px;
+  padding: 8px 12px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--surface);
+  color: var(--text);
+  cursor: pointer;
+}
+
+.settings-page .settings-theme-choice:hover,
+.settings-page .settings-theme-choice.active {
+  border-color: var(--primary-line);
+  background: var(--primary-soft);
+}
+
+.settings-page .settings-theme-choice input {
+  width: 18px;
+  min-width: 18px;
+  height: 18px;
+  min-height: 18px;
+  flex: 0 0 18px;
+  accent-color: var(--accent);
+  margin: 0;
+}
+
+.settings-page .settings-theme-choice span {
+  line-height: 1.25;
+}
+
+@media (max-width: 700px) {
+  .settings-page .settings-theme-picker {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 460px) {
+  .settings-page .settings-theme-picker {
+    grid-template-columns: 1fr;
+  }
+
 }
 
 .settings-page .settings-theme-mark {

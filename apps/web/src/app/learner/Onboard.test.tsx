@@ -73,6 +73,23 @@ describe("app onboard affordances", () => {
     expect(saveProfile).toHaveBeenCalledWith(expect.objectContaining({ email: "jame@gmail.com" }));
   });
 
+  it("does not apply an onboarding draft saved by another account", () => {
+    window.localStorage.setItem("e4s:learner-onboard-draft", JSON.stringify({
+      fullName: "Tài khoản cũ",
+      email: "old@example.com",
+      concerns: "Nội dung của tài khoản cũ"
+    }));
+
+    render(<LearnerOnboard view={{
+      profile: { fullName: "Tài khoản mới", email: "new@example.com" },
+      mode: "new"
+    }} actions={actions} />);
+
+    expect(screen.getByRole("textbox", { name: "Họ tên *" })).toHaveValue("Tài khoản mới");
+    expect(screen.getByRole("textbox", { name: "Email *" })).toHaveValue("new@example.com");
+    expect(screen.getByRole("textbox", { name: /điều bạn lo ngại/i })).toHaveValue("");
+  });
+
   it("exposes profile choices as named groups and locks navigation while saving", () => {
     render(<LearnerOnboard view={{ profile: {}, mode: "new", saving: true }} actions={actions} />);
 
@@ -121,5 +138,18 @@ describe("app onboard affordances", () => {
 
     await user.click(screen.getByRole("button", { name: /lưu nháp/i }));
     expect(await screen.findByText(/đã lưu nháp/i)).toBeInTheDocument();
+  });
+
+  it("keeps the learner on the form and reports an error when the server cannot save the draft", async () => {
+    const user = userEvent.setup();
+    const navigate = vi.fn();
+    const saveProfileDraft = vi.fn().mockRejectedValue(new Error("PROFILE_DRAFT_NOT_SAVED"));
+    render(<LearnerOnboard view={{ profile: {}, mode: "new" }} actions={{ ...actions, navigate, saveProfileDraft }} />);
+
+    await user.click(screen.getByRole("button", { name: /lưu nháp/i }));
+
+    expect(await screen.findByRole("alert")).toHaveTextContent("Không lưu được bản nháp");
+    expect(screen.queryByText(/đã lưu nháp/i)).not.toBeInTheDocument();
+    expect(navigate).not.toHaveBeenCalled();
   });
 });

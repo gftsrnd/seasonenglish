@@ -5,34 +5,109 @@ import { coachOutputJsonSchema, coachOutputSchema } from "../src/schemas.js";
 import { AiProviderError, type AiProvider } from "../src/types.js";
 
 const validCoachOutput = {
-  relevant: true,
-  relevanceNote: "",
-  reply: "I work in product. What are you working on this week?",
-  replyTranslation: "Tôi làm việc trong bộ phận sản phẩm. Tuần này bạn đang làm gì?",
-  rubric: { meaning: 4, vocabulary: 4, grammar: 3 },
-  suggestions: [{
+  evaluation: { status: "valid", countsTowardGoal: true, noteVi: "Câu trả lời đúng trọng tâm." },
+  seasonReply: "Thanks for sharing that.",
+  seasonReplyTranslation: "Cảm ơn bạn đã chia sẻ.",
+  nextQuestion: "What are you working on this week?",
+  nextQuestionTranslation: "Tuần này bạn đang làm việc gì?",
+  rubric: {
+    meaning: { score: 4, evidence: "The learner states their department.", improvement: "Add one responsibility." },
+    vocabulary: { score: 4, evidence: "Uses 'product' appropriately.", improvement: "Add a job-specific verb." },
+    grammar: { score: 3, evidence: "The department preposition is incorrect.", improvement: "Use 'in' before a department." }
+  },
+  corrections: [{
     original: "at product",
     corrected: "in product",
     translation: "trong bộ phận sản phẩm",
-    explanation: "Use in before a department."
+    reason: "Use in before a department."
   }],
   correctedText: "I work in product.",
+  suggestedAnswer: { text: "I am preparing a new release.", translation: "Tôi đang chuẩn bị một bản phát hành mới." },
   usedWords: ["product"]
 };
 
 describe("AI service", () => {
-  it("requires explicit Vietnamese translations for the coach reply and every suggestion", () => {
-    const withoutReplyTranslation = { ...validCoachOutput, replyTranslation: undefined };
-    const withoutSuggestionTranslation = {
+  it("accepts an unambiguous Coach turn with independent evaluation, question, correction, evidence, and suggestion", () => {
+    const output = {
+      evaluation: { status: "valid", countsTowardGoal: true, noteVi: "Bạn đã trả lời đúng trọng tâm." },
+      seasonReply: "Thanks for explaining that.",
+      seasonReplyTranslation: "Cảm ơn bạn đã giải thích.",
+      nextQuestion: "What will you do next?",
+      nextQuestionTranslation: "Tiếp theo bạn sẽ làm gì?",
+      rubric: {
+        meaning: { score: 4, evidence: "The learner states the next action.", improvement: "Add one reason." },
+        vocabulary: { score: 4, evidence: "Uses 'prepare' accurately.", improvement: "Add a time phrase." },
+        grammar: { score: 3, evidence: "The verb needs a preposition.", improvement: "Use 'prepare for'." }
+      },
+      corrections: [{
+        original: "prepare the meeting", corrected: "prepare for the meeting",
+        translation: "chuẩn bị cho cuộc họp", reason: "Use 'for' after 'prepare' in this meaning."
+      }],
+      correctedText: "I will prepare for the meeting.",
+      suggestedAnswer: { text: "I will send the agenda next.", translation: "Tiếp theo tôi sẽ gửi chương trình họp." },
+      usedWords: ["agenda"]
+    };
+
+    expect(coachOutputSchema.safeParse(output).success).toBe(true);
+    expect(coachOutputJsonSchema.required).toEqual(expect.arrayContaining([
+      "evaluation", "seasonReply", "seasonReplyTranslation", "nextQuestion", "nextQuestionTranslation",
+      "rubric", "corrections", "correctedText", "suggestedAnswer", "usedWords"
+    ]));
+  });
+
+  it("requires explicit Vietnamese translations for the Coach reply, question, correction, and suggested answer", () => {
+    const withoutReplyTranslation = { ...validCoachOutput, seasonReplyTranslation: undefined };
+    const withoutCorrectionTranslation = {
       ...validCoachOutput,
-      suggestions: validCoachOutput.suggestions.map(({ translation: _translation, ...suggestion }) => suggestion)
+      corrections: validCoachOutput.corrections.map(({ translation: _translation, ...correction }) => correction)
     };
 
     expect(coachOutputSchema.safeParse(validCoachOutput).success).toBe(true);
     expect(coachOutputSchema.safeParse(withoutReplyTranslation).success).toBe(false);
-    expect(coachOutputSchema.safeParse(withoutSuggestionTranslation).success).toBe(false);
-    expect(coachOutputJsonSchema.required).toContain("replyTranslation");
-    expect(coachOutputJsonSchema.properties.suggestions.items.required).toContain("translation");
+    expect(coachOutputSchema.safeParse(withoutCorrectionTranslation).success).toBe(false);
+    expect(coachOutputJsonSchema.required).toContain("seasonReplyTranslation");
+    expect(coachOutputJsonSchema.properties.corrections.items.required).toContain("translation");
+  });
+
+  it("rejects Coach evaluation states that would count or unlock an invalid learner turn", () => {
+    const insufficient = {
+      ...validCoachOutput,
+      evaluation: { status: "insufficient", countsTowardGoal: true, noteVi: "Hãy viết một câu đầy đủ." },
+      rubric: { ...validCoachOutput.rubric, meaning: { ...validCoachOutput.rubric.meaning, score: 2 } },
+      usedWords: ["agenda"]
+    };
+    const offTopic = {
+      ...validCoachOutput,
+      evaluation: { status: "off_topic", countsTowardGoal: true, noteVi: "Câu này chưa liên quan." },
+      rubric: { ...validCoachOutput.rubric, meaning: { ...validCoachOutput.rubric.meaning, score: 3 } },
+      usedWords: ["agenda"]
+    };
+    const validButNotCounted = {
+      ...validCoachOutput,
+      evaluation: { status: "valid", countsTowardGoal: false, noteVi: "Câu trả lời hợp lệ." }
+    };
+
+    expect(coachOutputSchema.safeParse(insufficient).success).toBe(false);
+    expect(coachOutputSchema.safeParse(offTopic).success).toBe(false);
+    expect(coachOutputSchema.safeParse(validButNotCounted).success).toBe(false);
+  });
+
+  it("accepts non-counting insufficient and off-topic turns only at their allowed meaning scores", () => {
+    const insufficient = {
+      ...validCoachOutput,
+      evaluation: { status: "insufficient", countsTowardGoal: false, noteVi: "Hãy viết một câu đầy đủ." },
+      rubric: { ...validCoachOutput.rubric, meaning: { ...validCoachOutput.rubric.meaning, score: 0 } },
+      usedWords: []
+    };
+    const offTopic = {
+      ...validCoachOutput,
+      evaluation: { status: "off_topic", countsTowardGoal: false, noteVi: "Câu này chưa liên quan." },
+      rubric: { ...validCoachOutput.rubric, meaning: { ...validCoachOutput.rubric.meaning, score: 1 } },
+      usedWords: []
+    };
+
+    expect(coachOutputSchema.safeParse(insufficient).success).toBe(true);
+    expect(coachOutputSchema.safeParse(offTopic).success).toBe(true);
   });
 
   it("validates input/output and only sends allowlisted learner context", async () => {
@@ -40,14 +115,18 @@ describe("AI service", () => {
     const service = createAiService({ registry: AI_TASKS, provider: fixtureProvider(complete), loadPrompt: async () => "Coach safely." });
 
     const result = await service.runTask("coach_dialogue", {
-      message: "I work at product.", cefr: "A2", persona: "formal", scenario: "Daily meeting", priorTurns: [],
+      message: "I work at product.", cefr: "A2", persona: "formal", mode: "practice",
+      scenario: "Daily meeting", currentQuestion: "Where do you work?", priorTurns: [],
       email: "private@example.com", browserApiKey: "must-not-leave-browser"
     });
 
     expect(result.output).toEqual(validCoachOutput);
     expect(complete).toHaveBeenCalledTimes(1);
     const request = complete.mock.calls[0]?.[0];
-    expect(request.input).toEqual({ message: "I work at product.", cefr: "A2", persona: "formal", scenario: "Daily meeting", priorTurns: [] });
+    expect(request.input).toEqual({
+      message: "I work at product.", cefr: "A2", persona: "formal", mode: "practice",
+      scenario: "Daily meeting", currentQuestion: "Where do you work?", priorTurns: []
+    });
     expect(JSON.stringify(request)).not.toContain("private@example.com");
     expect(JSON.stringify(request)).not.toContain("must-not-leave-browser");
     expect(result.metadata).toMatchObject({ provider: "fixture", model: "fixture-model", attempts: 1, schemaValid: true });
@@ -130,20 +209,26 @@ describe("AI service", () => {
     const vocabulary = createAiService({
       registry: AI_TASKS,
       provider: fixtureProvider(vi.fn().mockResolvedValue({
-        output: { topic: "Sprint planning", words: Array.from({ length: 15 }, (_, index) => ({
+        output: { topic: "Sprint planning", words: Array.from({ length: 12 }, (_, index) => ({
           id: `word-${index + 1}`, english: `word ${index + 1}`, vietnamese: `từ ${index + 1}`,
           definition: `definition ${index + 1}`, partOfSpeech: "noun"
+        })), distractors: Array.from({ length: 8 }, (_, index) => ({
+          id: `distractor-${index + 1}`, english: `unrelated ${index + 1}`, vietnamese: `nhiễu ${index + 1}`,
+          definition: `unrelated definition ${index + 1}`, partOfSpeech: "noun"
         })) }, usage: {}
       })),
       loadPrompt: async () => "Create a safe word set."
     });
-    await expect(vocabulary.runTask("vocabulary_generation", { topic: "Sprint planning", cefr: "A2", count: 15 }))
+    await expect(vocabulary.runTask("vocabulary_generation", { topic: "Sprint planning", cefr: "A2", count: 20 }))
       .resolves.toMatchObject({ output: { topic: "Sprint planning", words: expect.arrayContaining([expect.objectContaining({ english: "word 1" })]) } });
   });
 });
 
 function coachInput() {
-  return { message: "I work at product.", cefr: "A2", persona: "informal", scenario: "Daily meeting", priorTurns: [] };
+  return {
+    message: "I work at product.", cefr: "A2", persona: "informal", mode: "practice",
+    scenario: "Daily meeting", currentQuestion: "Where do you work?", priorTurns: []
+  };
 }
 
 function fixtureProvider(complete: ReturnType<typeof vi.fn>): AiProvider {

@@ -28,7 +28,6 @@ const home = {
   schedule: { daysPerWeek: 5, lessonMinutes: 10, days: [] }, coach: { turnsThisWeek: 1, targetTurns: 2, href: "/coach" },
   practice: { status: "reviewed", detail: "Đã chấm", href: "/practice" },
   levelReadiness: { targetLevel: "B1", windowDays: 14, eligible: true, examAvailable: true, criteria: [] },
-  finalAssessment: { available: false, label: "Làm bài cuối kỳ", href: "/test/final" },
   pilotPhase: "in_pilot", levelUpPhase: "requested", monthlyGoal: "Speak clearly", rewardAnnouncement: { kind: "new-level-announcement", points: 20, nextPoints: 60, seasonName: "Mùa thu" }
 } as any;
 

@@ -58,7 +58,7 @@ describe("assessment evidence upload API", () => {
     await app.ready();
     const login = await app.inject({
       method: "POST", url: "/api/auth/learner/login",
-      payload: { email: "learner@e4s.local", password: "learner-pass" }
+      payload: { email: "minh.anh.nguyen@e4s.local", password: "learner-pass" }
     });
     cookie = String(login.headers["set-cookie"]).split(";")[0] ?? "";
   }, 30_000);
@@ -182,7 +182,7 @@ describe("assessment evidence upload API", () => {
     const staff = await app.inject({
       method: "POST",
       url: "/api/auth/staff/login",
-      payload: { email: "operator@e4s.local", password: "operator-pass" }
+      payload: { email: "thu.ha.tran@e4s.local", password: "operator-pass" }
     });
     expect(staff.statusCode, staff.body).toBe(200);
     const staffCookie = String(staff.headers["set-cookie"]).split(";")[0] ?? "";

@@ -1,7 +1,7 @@
 import { Pool } from "pg";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { migrateDatabase, resetPublicSchema, seedDemo } from "@e4s/database";
-import { createCredentialHash } from "@e4s/domain/identity";
+import { createCredentialHash, createPinHash } from "@e4s/domain/identity";
 import { DEMO_IDS } from "@e4s/test-support";
 import { buildApi } from "../src/app.js";
 
@@ -32,23 +32,24 @@ describe("organisation experience API", () => {
       await client.query(
         "insert into user_credentials (user_id, credential_hash) values ($1, $2), ($3, $4), ($5, $6), ($7, $8)",
         [
-          DEMO_IDS.learner, await createCredentialHash("learner-pass"),
+          DEMO_IDS.learner, await createPinHash("123456"),
           DEMO_IDS.operator, await createCredentialHash("operator-pass"),
           DEMO_IDS.manager, await createCredentialHash("manager-pass"),
-          outsideLearnerId, await createCredentialHash("outside-pass")
+          outsideLearnerId, await createPinHash("654321")
         ]
       );
     } finally { client.release(); }
     await app.ready();
-    const login = async (url: string, email: string, password: string) => {
-      const response = await app.inject({ method: "POST", url, payload: { email, password } });
+    const login = async (url: string, email: string, credential: string) => {
+      const payload = url.includes("/learner/") ? { email, pin: credential } : { email, password: credential };
+      const response = await app.inject({ method: "POST", url, payload });
       expect(response.statusCode, response.body).toBe(200);
       return String(response.headers["set-cookie"]).split(";")[0] ?? "";
     };
-    learnerCookie = await login("/api/auth/learner/login", "learner@e4s.local", "learner-pass");
-    operatorCookie = await login("/api/auth/staff/login", "operator@e4s.local", "operator-pass");
-    managerCookie = await login("/api/auth/staff/login", "manager@e4s.local", "manager-pass");
-    outsideLearnerCookie = await login("/api/auth/learner/login", "outside-experience@e4s.local", "outside-pass");
+    learnerCookie = await login("/api/auth/learner/login", "minh.anh.nguyen@e4s.local", "123456");
+    operatorCookie = await login("/api/auth/staff/login", "thu.ha.tran@e4s.local", "operator-pass");
+    managerCookie = await login("/api/auth/staff/login", "quoc.bao.le@e4s.local", "manager-pass");
+    outsideLearnerCookie = await login("/api/auth/learner/login", "outside-experience@e4s.local", "654321");
   }, 30_000);
 
   afterAll(async () => { await app.close(); await pool.end(); });

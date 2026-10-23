@@ -35,11 +35,11 @@ describe("E4S repositories", () => {
   });
 
   it("finds a seeded identity without exposing credentials", async () => {
-    await expect(repositories.identity.findUserByEmail("learner@e4s.local"))
+    await expect(repositories.identity.findUserByEmail("minh.anh.nguyen@e4s.local"))
       .resolves.toEqual({
         id: DEMO_IDS.learner,
-        displayName: "Học viên Demo",
-        email: "learner@e4s.local",
+        displayName: "Nguyễn Minh Anh",
+        email: "minh.anh.nguyen@e4s.local",
         role: "learner",
         status: "active"
       });
@@ -164,18 +164,27 @@ describe("E4S repositories", () => {
       taskId: prompt.rows[0]!.task_id,
       promptVersionId: prompt.rows[0]!.id,
       output: {
-        relevant: true,
-        relevanceNote: "",
-        reply: "Thanks. What are you working on this week?",
-        replyTranslation: "Cảm ơn. Tuần này bạn đang làm việc gì?",
-        rubric: { meaning: 4, vocabulary: 4, grammar: 3 },
-        suggestions: [{
+        evaluation: { status: "valid", countsTowardGoal: true, noteVi: "Trả lời đúng trọng tâm." },
+        seasonReply: "Thanks for sharing.",
+        seasonReplyTranslation: "Cảm ơn bạn đã chia sẻ.",
+        nextQuestion: "What are you working on this week?",
+        nextQuestionTranslation: "Tuần này bạn đang làm việc gì?",
+        rubric: {
+          meaning: { score: 4, evidence: "The role is clear.", improvement: "Add one detail." },
+          vocabulary: { score: 4, evidence: "Product is relevant.", improvement: "Use department." },
+          grammar: { score: 3, evidence: "The sentence is understandable.", improvement: "Use in before a department." }
+        },
+        corrections: [{
           original: "at product",
           corrected: "in product",
           translation: "trong bộ phận sản phẩm",
-          explanation: "Use in before a department."
+          reason: "Use in before a department."
         }],
         correctedText: "I work in product.",
+        suggestedAnswer: {
+          text: "I work in the product department.",
+          translation: "Tôi làm việc trong bộ phận sản phẩm."
+        },
         usedWords: ["product"]
       },
       metadata: {
@@ -197,17 +206,19 @@ describe("E4S repositories", () => {
     );
 
     const view = await repositories.coach.currentForLearner(DEMO_IDS.learner, true);
-    const translated = view?.messages.find((message) => message.text === "Thanks. What are you working on this week?");
+    const translated = view?.messages.find((message) => message.text === "Thanks for sharing. What are you working on this week?");
     expect(translated?.feedback).toMatchObject({
-      replyTranslation: "Cảm ơn. Tuần này bạn đang làm việc gì?",
-      suggestions: [expect.objectContaining({ translation: "trong bộ phận sản phẩm" })]
+      seasonReplyTranslation: "Cảm ơn bạn đã chia sẻ.",
+      nextQuestionTranslation: "Tuần này bạn đang làm việc gì?",
+      corrections: [expect.objectContaining({ translation: "trong bộ phận sản phẩm" })]
     });
     const legacy = view?.messages.find((message) => message.text === "Legacy reply.");
     expect(legacy?.feedback).toMatchObject({
-      suggestions: [expect.objectContaining({ original: "old", corrected: "older", explanation: "Legacy reason." })]
+      corrections: [expect.objectContaining({ original: "old", corrected: "older", reason: "Legacy reason." })]
     });
-    expect(legacy?.feedback).not.toHaveProperty("replyTranslation");
-    expect(legacy?.feedback?.suggestions[0]).not.toHaveProperty("translation");
+    expect(legacy?.feedback?.seasonReplyTranslation).toBe("");
+    expect(legacy?.feedback?.corrections[0]?.translation).toBe("");
+    expect(legacy?.feedback?.suggestedAnswer).toEqual({ text: "", translation: "" });
   });
 
   it("leases a queued job once so concurrent workers cannot duplicate it", async () => {

@@ -5,6 +5,7 @@ import type { FastifyInstance } from "fastify";
 import type { Pool } from "pg";
 import { z } from "zod";
 import { createRoleGuard } from "../identity/policy.js";
+import { createOrganisationExperienceEvents } from "./organisation-experience-events.js";
 
 const organisationExperienceThemes = ["auto", "spring", "summer", "autumn", "winter", "tet", "midautumn", "christmas"] as const;
 
@@ -21,11 +22,37 @@ export function registerSystemRoutes(
   const authenticated = createRoleGuard(pool, ["learner", "operator", "manager"]);
   const staff = createRoleGuard(pool, ["operator", "manager"]);
   const managerOnly = createRoleGuard(pool, ["manager"]);
+  const experienceEvents = createOrganisationExperienceEvents();
   app.get("/api/health", async () => ({ status: "ok" }));
 
   app.get("/api/v1/organisation-experience", { preHandler: authenticated }, async (request, reply): Promise<OrganisationExperienceView | void> => {
     const view = await repositories.manager.organisationExperience(request.e4sSession!.user.id);
     return view ?? reply.code(404).send({ code: "ORGANISATION_EXPERIENCE_NOT_FOUND" });
+  });
+
+  app.get("/api/v1/organisation-experience/events", { preHandler: authenticated }, async (request, reply) => {
+    const membership = await pool.query<{ organization_id: string }>("select organization_id from users where id = $1", [request.e4sSession!.user.id]);
+    const organisationId = membership.rows[0]?.organization_id;
+    if (!organisationId) return reply.code(404).send({ code: "ORGANISATION_EXPERIENCE_NOT_FOUND" });
+    reply.raw.writeHead(200, {
+      "content-type": "text/event-stream; charset=utf-8",
+      "cache-control": "no-cache, no-transform",
+      connection: "keep-alive",
+      "x-accel-buffering": "no"
+    });
+    reply.hijack();
+    reply.raw.write(": connected\n\n");
+    const send = (experience: OrganisationExperienceView) => {
+      if (!reply.raw.destroyed) reply.raw.write(`event: experience\ndata: ${JSON.stringify(experience)}\n\n`);
+    };
+    const unsubscribe = experienceEvents.subscribe(organisationId, send);
+    const keepAlive = setInterval(() => {
+      if (!reply.raw.destroyed) reply.raw.write(": keepalive\n\n");
+    }, 25_000);
+    request.raw.once("close", () => {
+      clearInterval(keepAlive);
+      unsubscribe();
+    });
   });
 
   const customMusicUrl = z.string().trim().max(1000).refine((value) => !value || isYouTubeUrl(value));
@@ -42,7 +69,11 @@ export function registerSystemRoutes(
   app.put("/api/v1/organisation-experience", { preHandler: staff }, async (request, reply) => {
     const parsed = organisationExperienceInput.safeParse(request.body);
     if (!parsed.success) return reply.code(400).send({ code: "INVALID_ORGANISATION_EXPERIENCE" });
-    return await repositories.manager.saveOrganisationExperience(request.e4sSession!.user.id, parsed.data);
+    const saved = await repositories.manager.saveOrganisationExperience(request.e4sSession!.user.id, parsed.data);
+    const membership = await pool.query<{ organization_id: string }>("select organization_id from users where id = $1", [request.e4sSession!.user.id]);
+    const organisationId = membership.rows[0]?.organization_id;
+    if (organisationId) experienceEvents.publish(organisationId, saved);
+    return saved;
   });
 
   app.get("/api/v1/product-preferences", { preHandler: authenticated }, async (request) => {

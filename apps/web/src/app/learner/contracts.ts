@@ -31,7 +31,7 @@ import type {
 } from "@e4s/contracts";
 
 export const LEARNER_ROUTES = [
-  "/home", "/onboard", "/test/:kind", "/lesson/:id", "/micro/:id",
+  "/home", "/onboard", "/test/:kind", "/lesson/:id",
   "/coach", "/challenge", "/practice", "/survey", "/profile",
   "/reward/:mode", "/games", "/games/:game", "/arena", "/duel/:id"
 ] as const;
@@ -100,7 +100,6 @@ export type LearnerScreen =
   | { kind: "onboard"; view: OnboardView }
   | { kind: "assessment"; view: AssessmentView }
   | { kind: "lesson"; view: LessonView }
-  | { kind: "micro"; view: MicroView }
   | { kind: "coach"; view: CoachView }
   | { kind: "challenge"; view: ChallengeView }
   | { kind: "practice"; view: PracticeView }
@@ -108,7 +107,7 @@ export type LearnerScreen =
   | { kind: "profile"; view: ProfileView }
   | { kind: "reward"; view: RewardView }
   | { kind: "games"; view: GameHubView }
-  | { kind: "game"; descriptor: GameDescriptor; wordSet: GameHubView["wordSet"]; result?: { score: number; maxScore: number } | null }
+  | { kind: "game"; descriptor: GameDescriptor; wordSet: NonNullable<GameHubView["wordSet"]>; result?: { score: number; maxScore: number } | null }
   | { kind: "arena"; view: ArenaView }
   | { kind: "duel"; view: DuelView; descriptor: GameDescriptor };
 

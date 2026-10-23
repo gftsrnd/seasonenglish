@@ -11,6 +11,7 @@ const databaseUrl = process.env.TEST_DATABASE_URL
 
 describe("practice, games, arena, rewards and survey API", () => {
   const pool = new Pool({ connectionString: databaseUrl });
+  let aiTrace = 0;
   const mediaService: ContentMediaService = {
     resolveForUser: vi.fn().mockResolvedValue({ status: "unavailable" }),
     diagnoseForUser: vi.fn().mockResolvedValue({ image: { status: "unavailable" }, provider: null, cached: false }),
@@ -23,11 +24,13 @@ describe("practice, games, arena, rewards and survey API", () => {
         feedback: "Ý rõ và đúng bối cảnh công việc.", suggestions: [], correctedText: "I prepare reports."
       } : {
         topic: "Sprint planning",
-        words: Array.from({ length: 15 }, (_, index) => ({ id: `sprint-${index + 1}`, english: `term ${index + 1}`,
+        words: Array.from({ length: 12 }, (_, index) => ({ id: `sprint-${index + 1}`, english: `term ${index + 1}`,
           vietnamese: `từ ${index + 1}`, definition: `definition ${index + 1}`, partOfSpeech: "noun",
-          ...(index === 0 ? { imageQuery: "sprint planning board" } : {}) }))
+          ...(index === 0 ? { imageQuery: "sprint planning board" } : {}) })),
+        distractors: Array.from({ length: 8 }, (_, index) => ({ id: `distractor-${index + 1}`, english: `unrelated ${index + 1}`,
+          vietnamese: `nhiễu ${index + 1}`, definition: `unrelated definition ${index + 1}`, partOfSpeech: "noun" }))
       },
-      metadata: { traceId: `trace-${taskId}`, taskId, provider: "fixture", model: "fixture-model", attempts: 1,
+      metadata: { traceId: `trace-${taskId}-${++aiTrace}`, taskId, provider: "fixture", model: "fixture-model", attempts: 1,
         latencyMs: 5, inputHash: "a".repeat(64), schemaValid: true as const, usage: {} }
     })
   }, mediaService });
@@ -49,12 +52,31 @@ describe("practice, games, arena, rewards and survey API", () => {
     await app.ready();
     const login = await app.inject({
       method: "POST", url: "/api/auth/learner/login",
-      payload: { email: "learner@e4s.local", pin: "123456" }
+      payload: { email: "minh.anh.nguyen@e4s.local", pin: "123456" }
     });
     cookie = String(login.headers["set-cookie"]).split(";")[0] ?? "";
   }, 30_000);
 
   afterAll(async () => { await app.close(); await pool.end(); });
+
+  async function restoreWeeklyGameSet() {
+    await pool.query(
+      "delete from game_sets where program_week_id = $1 and learner_id = $2",
+      [DEMO_IDS.week, DEMO_IDS.learner]
+    );
+    await pool.query(
+      `insert into game_sets (id, program_week_id, game_key, status, payload)
+       values ($1, $2, 'weekly_vocabulary', 'published', $3::jsonb)
+       on conflict (id) do update set status = 'published', payload = excluded.payload`,
+      [DEMO_IDS.gameSet, DEMO_IDS.week, JSON.stringify({
+        topic: "Tuần 1: Introducing yourself & your job",
+        words: Array.from({ length: 15 }, (_, index) => ({
+          id: `weekly-${index + 1}`, english: `term${index + 1}`, vietnamese: `từ ${index + 1}`,
+          definition: `definition ${index + 1}`, partOfSpeech: "noun"
+        }))
+      })]
+    );
+  }
 
   it("keeps weekly practice in one screen and awards the Friday badge once", async () => {
     await pool.query("delete from practice_submissions where learner_id = $1", [DEMO_IDS.learner]);
@@ -175,6 +197,36 @@ describe("practice, games, arena, rewards and survey API", () => {
         score: { total: 0, rubric: { meaning: 0, vocabulary: 0, grammar: 0 } }
       })
     ]));
+  });
+
+  it("opens Mini game from a published lesson week without a game set", async () => {
+    await pool.query("delete from game_sets where program_week_id = $1", [DEMO_IDS.week]);
+    try {
+      const emptyHub = await app.inject({ method: "GET", url: "/api/v1/engagement/games", headers: { cookie } });
+      expect(emptyHub.statusCode, emptyHub.body).toBe(200);
+      expect(emptyHub.json()).toMatchObject({ cefr: "A2", wordSet: null });
+      expect(emptyHub.json().games).toHaveLength(6);
+    } finally {
+      await restoreWeeklyGameSet();
+    }
+  });
+
+  it("bootstraps a safe natural topic without a pre-created game set", async () => {
+    await pool.query("delete from game_sets where program_week_id = $1", [DEMO_IDS.week]);
+    try {
+      const generated = await app.inject({
+        method: "POST", url: "/api/v1/engagement/games/word-set", headers: { cookie },
+        payload: { requestId: "10000000-0000-4000-8000-000000000090", topic: "Coffee shop conversations" }
+      });
+      expect(generated.statusCode, generated.body).toBe(200);
+      expect(generated.json()).toMatchObject({
+        cefr: "A2",
+        wordSet: { topic: "Sprint planning", source: "custom" },
+        topicModeration: { state: "success" }
+      });
+    } finally {
+      await restoreWeeklyGameSet();
+    }
   });
 
   it("returns the six prototype games and calculates scores from server data", async () => {
@@ -324,12 +376,15 @@ describe("practice, games, arena, rewards and survey API", () => {
   });
 
   it("creates and removes a private AI vocabulary set without changing the weekly set", async () => {
+    await restoreWeeklyGameSet();
     const generated = await app.inject({
       method: "POST", url: "/api/v1/engagement/games/word-set", headers: { cookie },
       payload: { requestId: "10000000-0000-4000-8000-000000000020", topic: "Sprint planning" }
     });
     expect(generated.statusCode, generated.body).toBe(200);
     expect(generated.json()).toMatchObject({ wordSet: { topic: "Sprint planning", words: expect.arrayContaining([expect.objectContaining({ english: "term 1" })]) } });
+    expect(generated.json().wordSet.words).toHaveLength(12);
+    expect(generated.json().wordSet.distractors).toHaveLength(8);
 
     vi.mocked(mediaService.resolveForUser).mockClear().mockResolvedValueOnce({ status: "unavailable" });
     const generatedSet = generated.json().wordSet as { id: string; words: Array<{ id: string }> };
@@ -357,6 +412,17 @@ describe("practice, games, arena, rewards and survey API", () => {
 
     const opponent = "00000000-0000-4000-8000-000000000109";
     await pool.query("update enrollments set cefr = 'B1' where learner_id = $1", [DEMO_IDS.learner]);
+    await pool.query(
+      `insert into lesson_sets (id, program_week_id, cefr)
+       values ('10000000-0000-4000-8000-000000000081', $1, 'B1')`,
+      [DEMO_IDS.week]
+    );
+    await pool.query(
+      `insert into lesson_set_versions (id, lesson_set_id, version, status, payload, created_by, approved_by, published_at)
+       values ('10000000-0000-4000-8000-000000000082', '10000000-0000-4000-8000-000000000081', 1,
+         'published', '{"source":"arena-test"}'::jsonb, $1, $1, now())`,
+      [DEMO_IDS.operator]
+    );
     await pool.query(
       "insert into users (id, organization_id, role, display_name, email) values ($1, $2, 'learner', 'Đồng nghiệp B1', 'opponent@e4s.local')",
       [opponent, DEMO_IDS.organization]

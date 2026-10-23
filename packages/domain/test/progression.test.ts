@@ -48,7 +48,7 @@ describe("P2 progression policy", () => {
 
   it("uses all configured readiness thresholds instead of hard-coded values", () => {
     const readiness = buildLevelReadiness({
-      metrics: { lessonCompletion: 88, firstTryAccuracy: 72, weeklyPractice: 79, coachRubric: 3.8, coachTurns: 7 },
+      metrics: { lessonCompletion: 88, firstTryAccuracy: 72, weeklyPractice: 79, coachRubric: 3.8, coachTurns: 7, wrongRate: 20, attemptedParts: 6 },
       thresholds: { days: 21, lessons: 85, firstTry: 70, submission: 75, coach: 3.5, coachTurns: 6, wrong: 25, minParts: 5 },
       examAvailable: true
     });
@@ -58,8 +58,14 @@ describe("P2 progression policy", () => {
       ["lessonCompletion", 85, true],
       ["firstTryAccuracy", 70, true],
       ["weeklyPractice", 75, true],
-      ["coachRubric", 3.5, true]
+      ["coachRubric", 3.5, true],
+      ["wrongRate", 25, true]
     ]);
+    expect(buildLevelReadiness({
+      metrics: { lessonCompletion: 88, firstTryAccuracy: 72, weeklyPractice: 79, coachRubric: 3.8, coachTurns: 7, wrongRate: 20, attemptedParts: 4 },
+      thresholds: { days: 21, lessons: 85, firstTry: 70, submission: 75, coach: 3.5, coachTurns: 6, wrong: 25, minParts: 5 },
+      examAvailable: true
+    }).eligible).toBe(false);
   });
 
   it("requires total 70 and at least 50 percent in every level-up skill", () => {
@@ -73,11 +79,11 @@ describe("P2 progression policy", () => {
     expect(createLevelRetryPlan({
       failedAt: new Date("2026-10-23T03:00:00.000Z"),
       scores: { listening: 18, reading: 21, writing: 8, speaking: 14 },
-      readinessSnapshot: { lessonCompletion: 92, firstTryAccuracy: 78, weeklyPractice: 84, coachRubric: 4.1, coachTurns: 8 }
+      readinessSnapshot: { lessonCompletion: 92, firstTryAccuracy: 78, weeklyPractice: 84, coachRubric: 4.1, coachTurns: 8, wrongRate: 10, attemptedParts: 8 }
     })).toEqual({
       eligibleAt: "2026-11-06T03:00:00.000Z",
       weakestSkill: "writing",
-      readinessSnapshot: { lessonCompletion: 92, firstTryAccuracy: 78, weeklyPractice: 84, coachRubric: 4.1, coachTurns: 8 }
+      readinessSnapshot: { lessonCompletion: 92, firstTryAccuracy: 78, weeklyPractice: 84, coachRubric: 4.1, coachTurns: 8, wrongRate: 10, attemptedParts: 8 }
     });
   });
 

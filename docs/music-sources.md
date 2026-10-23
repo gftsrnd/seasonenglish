@@ -1,13 +1,12 @@
 # Music sources
 
-The built-in presets stream media from Wikimedia Commons. The application does not bundle or redistribute the audio files. Each URL uses Wikimedia's stable `Special:Redirect/file` endpoint and each source page records the author and licence.
+Only tracks with an independently verifiable source and Creative Commons licence are selectable. The prototype YouTube list is not shipped because its entries do not establish one auditable reuse licence. E4S streams the three Wikimedia files and bundles one Audionautix fallback for offline/error recovery.
 
-The catalog intentionally reuses three moderate-energy instrumentals across themes. This keeps the default selection focused and avoids padding the product with sleepy ambient/lofi tracks.
-
-| Study period | Track | Author | Licence | Source |
+| Track | Author | Licence | Source | Delivery |
 | --- | --- | --- | --- | --- |
-| Morning | Total Happy Up And Sunny | Sascha Ende | CC BY 4.0 | https://commons.wikimedia.org/wiki/File:Sascha_Ende_-_Total_Happy_Up_And_Sunny_(cc-by)_(filmmusic.io).ogg |
-| Afternoon | Soft Corporate | MusicLFiles | CC BY 4.0 | https://commons.wikimedia.org/wiki/File:Soft_Corporate_by_MusicLFiles.ogg |
-| Evening | Azimuth | Jason Shaw / Audionautix | CC BY 3.0 | https://commons.wikimedia.org/wiki/File:Audionautix-com-ccby-azimuth.mp3 |
+| Study And Relax | Kevin MacLeod | [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/) | [Wikimedia Commons](https://commons.wikimedia.org/wiki/File:Study_And_Relax_by_Kevin_MacLeod.ogg) | streamed |
+| Wholesome | Kevin MacLeod | [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/) | [Wikimedia Commons](https://commons.wikimedia.org/wiki/File:Wholesome_by_Kevin_MacLeod.ogg) | streamed |
+| Peaceful | Tamlin Lollis Love | [CC BY-SA 3.0](https://creativecommons.org/licenses/by-sa/3.0/) | [Wikimedia Commons](https://commons.wikimedia.org/wiki/File:Peaceful.ogg) | streamed |
+| Emerald Therapy | Jason Shaw / Audionautix | [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/) | [Audionautix licence](https://audionautix.com/creative-commons-music) | bundled fallback |
 
-Attribution is shown in the preset picker and remains available with the saved preset metadata. If a remote source is unavailable, preview reports the failure and leaves the saved organisation configuration unchanged.
+The bundled file metadata identifies the title as `EMERALD THERAPY` and artist as `AUDIONAUTIX.COM`. Its SHA-256, source, creator and licence are pinned in `apps/web/public/media/manifest.json`.

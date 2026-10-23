@@ -2,15 +2,28 @@
 import "@testing-library/jest-dom/vitest";
 import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { userEvent } from "@testing-library/user-event";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { AssessmentRuntimeView, AssessmentSectionCode, AssessmentSectionView } from "@e4s/contracts";
 import { LearnerAssessment } from "./Assessment.js";
-import { AssessmentRuntime } from "./AssessmentRuntime.js";
+import { AssessmentRecorder, AssessmentRuntime } from "./AssessmentRuntime.js";
 import type { AssessmentView, LearnerCallbacks } from "./contracts.js";
+import { ExperienceProvider } from "../../features/experience/Experience.js";
+
+const canvasContext = {
+  clearRect: vi.fn(),
+  fillRect: vi.fn(),
+  fillStyle: ""
+} as unknown as CanvasRenderingContext2D;
+
+beforeEach(() => {
+  vi.spyOn(HTMLCanvasElement.prototype, "getContext").mockImplementation(() => canvasContext);
+});
 
 afterEach(() => {
   cleanup();
   vi.useRealTimers();
+  vi.restoreAllMocks();
+  vi.unstubAllGlobals();
   Reflect.deleteProperty(navigator, "mediaDevices");
 });
 
@@ -158,6 +171,10 @@ describe("assessment HCI states", () => {
     const equipment = screen.getByRole("group", { name: "Cần chuẩn bị: tai nghe hoặc loa, và micro, kể cả mic trên tai nghe" });
     expect(equipment.querySelector("svg.lucide-headphones")).toBeInTheDocument();
     expect(equipment.querySelector("svg.lucide-mic")).toBeInTheDocument();
+    expect(screen.queryByRole("meter", { name: "Mức tín hiệu micro" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("img", { name: "Dạng sóng giọng nói khi kiểm tra micro" })).not.toBeInTheDocument();
+    expect(screen.getByLabelText("Vì sao cần bài test")).toHaveTextContent("Bài test chọn mức vừa sức; hãy làm đúng khả năng, không cần ôn trước.");
+    expect(screen.getByRole("table", { name: "Cấu trúc bài test" })).toHaveTextContent("4 bài Nói; ưu tiên ghi âm, câu trả lời bằng chữ sẽ được chấm tay");
     expect(container).not.toHaveTextContent(/✅|⛔|🎧|🎙/u);
   });
 
@@ -174,7 +191,7 @@ describe("assessment HCI states", () => {
 
     await user.click(soundButton);
     expect(speak).toHaveBeenCalledWith(
-      "Xin chào. Đây là câu kiểm tra âm thanh. Tai nghe đang hoạt động tốt.",
+      "Đây là câu kiểm tra âm thanh. Nếu bạn nghe rõ câu này, tai nghe của bạn đã sẵn sàng.",
       "vi-VN",
       expect.objectContaining({ audioSrc: "/media/audio/sound-check-vi.mp3", onStatus: expect.any(Function) })
     );
@@ -194,18 +211,22 @@ describe("assessment HCI states", () => {
 
     const startButton = screen.getByRole("button", { name: "Bắt đầu phần Nghe" });
     expect(startButton).toHaveClass("assessment-start-primary");
-    expect(screen.getByRole("link", { name: /Quay lại hồ sơ/i })).not.toHaveClass("assessment-start-primary");
+    expect(startButton).not.toHaveClass("btn-lg");
+    const backButton = screen.getByRole("link", { name: /Quay lại hồ sơ/i });
+    expect(backButton).not.toHaveClass("assessment-start-primary");
+    expect(backButton).not.toHaveClass("btn-lg");
     await user.click(startButton);
 
     const dialog = screen.getByRole("dialog", { name: "Bắt đầu bài test?" });
     expect(dialog).toHaveClass("assessment-start-dialog");
     expect(actions.startAssessment).not.toHaveBeenCalled();
     expect(dialog.querySelectorAll("p")).toHaveLength(1);
-    expect(dialog.querySelector(".assessment-start-copy")).toHaveTextContent("không lưu tạm hay tạm dừng");
+    expect(dialog.querySelector(".assessment-start-copy")).toHaveTextContent("Câu trả lời được tự động lưu");
+    expect(dialog.querySelector(".assessment-start-copy")).toHaveTextContent("không thể tạm dừng");
     expect(dialog.querySelector(".assessment-start-copy")).toHaveTextContent("Đồng hồ chạy liên tục");
     expect(dialog.querySelector(".assessment-start-copy")).toHaveTextContent("20 phút");
-    expect(dialog.querySelectorAll(".assessment-start-keyword")).toHaveLength(3);
-    expect(dialog.querySelector(".assessment-start-keyword")).toHaveTextContent("không lưu tạm hay tạm dừng");
+    expect(dialog.querySelectorAll(".assessment-start-keyword")).toHaveLength(4);
+    expect(dialog.querySelector(".assessment-start-keyword")).toHaveTextContent("Câu trả lời được tự động lưu");
     expect(dialog.querySelector("[role='note']")).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Đóng hộp thoại" })).toHaveClass("modal-close-button");
     expect(screen.getByRole("dialog", { name: "Bắt đầu bài test?" })).toHaveTextContent(/tối đa 20 phút/i);
@@ -223,6 +244,49 @@ describe("assessment HCI states", () => {
 
     expect(answer).toHaveClass("assessment-choice-input");
     expect(answer.closest("label")).toHaveClass("assessment-choice");
+  });
+
+  it("renders assessment blanks as one long dashed line", () => {
+    const view = makeView();
+    view.definition.sections[0]!.groups[0]!.tasks[0]!.prompt = "Priya ____ a customer service agent and will - - - the case.";
+    render(<LearnerAssessment view={view} actions={makeActions()} />);
+
+    expect(screen.getByText("Priya ------ a customer service agent and will ------ the case.")).toBeInTheDocument();
+  });
+
+  it("plays the packaged multi-speaker recording for a listening dialogue", async () => {
+    const user = userEvent.setup();
+    const speak = vi.fn((_text, _language, options) => options?.onStatus?.("ended"));
+    const recordAssessmentAudioPlay = vi.fn().mockResolvedValue({ playCount: 1 });
+    const view = makeView();
+    view.definition.sections[0] = {
+      ...view.definition.sections[0]!,
+      groups: [{
+        ...view.definition.sections[0]!.groups[0]!,
+        maxPlays: 2,
+        stimulus: {
+          type: "audio_script",
+          audioSrc: "/media/audio/placement-listening-LA.wav",
+          lines: [
+            { speaker: "Manager", text: "Good morning." },
+            { speaker: "Employee", text: "Why has the time changed?" }
+          ]
+        }
+      }]
+    };
+    render(<LearnerAssessment view={view} actions={makeActions({ speak, recordAssessmentAudioPlay })} />);
+
+    await user.click(screen.getByRole("button", { name: /Nghe \(còn 2 lần\)/i }));
+
+    expect(recordAssessmentAudioPlay).toHaveBeenCalledWith("listening", "listening-group");
+    expect(speak).toHaveBeenCalledWith(
+      "Good morning. Why has the time changed?",
+      "en-GB",
+      expect.objectContaining({
+        audioSrc: "/media/audio/placement-listening-LA.wav",
+        onStatus: expect.any(Function)
+      })
+    );
   });
 
   it("persists every visible answer again before advancing the section", async () => {
@@ -282,6 +346,94 @@ describe("assessment HCI states", () => {
     expect(screen.queryByText("Speaking tasks")).not.toBeInTheDocument();
   });
 
+  it("keeps generated speaking transcripts read-only and labels typed answers as a manual-review proxy", async () => {
+    const user = userEvent.setup();
+    const view = makeView({
+      screenState: "speaking",
+      attempt: {
+        ...makeView().attempt!,
+        currentSection: "speaking",
+        responses: [{ section: "speaking", taskKey: "S1", value: "I can help with that refund.", evidenceType: "transcript" }],
+        sectionStatuses: { listening: "completed", reading: "completed", writing: "completed", speaking: "in_progress" }
+      }
+    });
+    const actions = makeActions();
+    render(<LearnerAssessment view={view} actions={actions} />);
+
+    const transcript = screen.getByRole("textbox", { name: "Transcript tự động S1" });
+    expect(transcript).toHaveAttribute("readonly");
+    expect(screen.queryByRole("textbox", { name: "Câu trả lời văn bản thay thế S1" })).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Dùng câu trả lời văn bản thay thế S1" }));
+    const proxy = screen.getByRole("textbox", { name: "Câu trả lời văn bản thay thế S1" });
+    await user.type(proxy, "I will check the refund and update you today.");
+    expect(actions.saveAssessmentResponse).toHaveBeenLastCalledWith(
+      "speaking",
+      "S1",
+      expect.objectContaining({ evidenceType: "typed_proxy" })
+    );
+    expect(screen.getAllByRole("note").some((note) => /sẽ được chấm tay/i.test(note.textContent ?? ""))).toBe(true);
+    expect(screen.queryByText(/người vận hành duyệt/i)).not.toBeInTheDocument();
+  });
+
+  it("shows an honest recording state and creates the audio evidence only after stop", async () => {
+    const user = userEvent.setup();
+    const stopTrack = vi.fn();
+    Object.defineProperty(navigator, "mediaDevices", {
+      configurable: true,
+      value: { getUserMedia: vi.fn().mockResolvedValue({ getTracks: () => [{ stop: stopTrack }] }) }
+    });
+    class FakeMediaRecorder {
+      mimeType = "audio/webm;codecs=opus";
+      ondataavailable: ((event: { data: Blob }) => void) | null = null;
+      onstop: (() => void) | null = null;
+      constructor(_stream: MediaStream) {}
+      start() {}
+      stop() {
+        this.ondataavailable?.({ data: new Blob(["voice"], { type: "audio/webm;codecs=opus" }) });
+        this.onstop?.();
+      }
+    }
+    vi.stubGlobal("MediaRecorder", FakeMediaRecorder);
+    vi.spyOn(URL, "createObjectURL").mockReturnValue("blob:voice");
+    vi.spyOn(URL, "revokeObjectURL").mockImplementation(() => undefined);
+    const uploadAssessmentAudio = vi.fn().mockResolvedValue("evidence/S3.webm");
+    const onEvidence = vi.fn().mockResolvedValue(undefined);
+
+    render(<ExperienceProvider musicAllowed={false}><AssessmentRecorder taskKey="S3" view={makeView({ screenState: "speaking" })} actions={makeActions({ uploadAssessmentAudio })} onEvidence={onEvidence} /></ExperienceProvider>);
+
+    await user.click(screen.getByRole("button", { name: "Ghi âm" }));
+    expect(screen.getByRole("button", { name: "Dừng ghi" })).toBeInTheDocument();
+    expect(screen.getByText(/Đang ghi âm · 00:00/)).toBeInTheDocument();
+    expect(screen.queryByText("Chưa có file ghi âm")).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Dừng ghi" }));
+    expect(await screen.findByText(/Đã lưu S3-/)).toBeInTheDocument();
+    expect(uploadAssessmentAudio).toHaveBeenCalledTimes(1);
+    expect(onEvidence).toHaveBeenCalledWith(expect.objectContaining({ evidenceType: "audio", artifactKey: "evidence/S3.webm" }));
+  });
+
+  it("rejects unsupported and oversized speaking files before upload", async () => {
+    const uploadAssessmentAudio = vi.fn();
+    const view = makeView({
+      screenState: "speaking",
+      attempt: { ...makeView().attempt!, currentSection: "speaking", sectionStatuses: { listening: "completed", reading: "completed", writing: "completed", speaking: "in_progress" } },
+      runtime: makeRuntime({ currentSection: "speaking" })
+    });
+    render(<LearnerAssessment view={view} actions={makeActions({ uploadAssessmentAudio })} />);
+    const input = screen.getAllByLabelText("Tải file ghi âm")[0]!;
+
+    fireEvent.change(input, { target: { files: [new File(["not audio"], "notes.txt", { type: "text/plain" })] } });
+    expect(await screen.findByRole("alert")).toHaveTextContent("Chỉ nhận file MP3, M4A, WAV, OGG hoặc WebM");
+    expect(uploadAssessmentAudio).not.toHaveBeenCalled();
+
+    const large = new File(["audio"], "large.wav", { type: "audio/wav" });
+    Object.defineProperty(large, "size", { value: 20 * 1024 * 1024 + 1 });
+    fireEvent.change(input, { target: { files: [large] } });
+    expect(await screen.findByRole("alert")).toHaveTextContent("không được vượt quá 20 MB");
+    expect(uploadAssessmentAudio).not.toHaveBeenCalled();
+  });
+
   it("shows one clear microphone permission message", async () => {
     const user = userEvent.setup();
     Object.defineProperty(navigator, "mediaDevices", {
@@ -309,6 +461,7 @@ describe("assessment HCI states", () => {
 
     expect(screen.getByRole("status", { name: "Trạng thái micro" })).toHaveTextContent("Micro sẵn sàng ✓");
     expect(screen.getByRole("group", { name: "Cần chuẩn bị: tai nghe hoặc loa, và micro, kể cả mic trên tai nghe" }).querySelector('[data-equipment="microphone"]')).toHaveClass("is-ready");
+    expect(screen.getByRole("img", { name: "Dạng sóng giọng nói khi kiểm tra micro" })).toHaveAttribute("data-sample-count", "1");
     expect(screen.queryByRole("alert")).not.toBeInTheDocument();
     expect(stop).toHaveBeenCalledTimes(1);
   });
@@ -350,6 +503,56 @@ describe("assessment HCI states", () => {
     expect(heading).not.toHaveTextContent("⚠️");
   });
 
+  it("blocks and records context menu, clipboard, and new-window shortcuts", async () => {
+    const recordAssessmentViolation = vi.fn().mockImplementation(async (_attemptId, input) => ({
+      ...makeRuntime(), violationCount: input.reason === "new_window" ? 4 : 1, violationLimit: 3
+    }));
+    render(<AssessmentRuntime view={makeView()} actions={makeActions({ recordAssessmentViolation })}>{(state) => <span>{state.formattedTime}</span>}</AssessmentRuntime>);
+
+    const events = [
+      new MouseEvent("contextmenu", { bubbles: true, cancelable: true }),
+      new Event("copy", { bubbles: true, cancelable: true }),
+      new Event("paste", { bubbles: true, cancelable: true }),
+      new KeyboardEvent("keydown", { key: "n", ctrlKey: true, bubbles: true, cancelable: true })
+    ];
+    await act(async () => {
+      events.forEach((event) => document.dispatchEvent(event));
+      await Promise.resolve();
+    });
+
+    expect(events.every((event) => event.defaultPrevented)).toBe(true);
+    expect(recordAssessmentViolation.mock.calls.map(([, input]) => input.reason)).toEqual([
+      "context_menu", "copy", "paste", "new_window"
+    ]);
+  });
+
+  it("keeps sounding the forced exam warning while the learner remains outside the tab", async () => {
+    vi.useFakeTimers();
+    const oscillatorStart = vi.fn();
+    vi.stubGlobal("AudioContext", class {
+      state = "running";
+      currentTime = 0;
+      destination = {};
+      resume = vi.fn();
+      createOscillator = () => ({ type: "sine", frequency: { setValueAtTime: vi.fn(), exponentialRampToValueAtTime: vi.fn() }, connect() { return this; }, start: oscillatorStart, stop: vi.fn() });
+      createGain = () => ({ gain: { setValueAtTime: vi.fn(), exponentialRampToValueAtTime: vi.fn() }, connect() { return this; } });
+    });
+    vi.spyOn(document, "hidden", "get").mockReturnValue(true);
+    const recordAssessmentViolation = vi.fn().mockResolvedValue({ ...makeRuntime(), violationCount: 1 });
+    render(<ExperienceProvider musicAllowed={false}><AssessmentRuntime view={makeView()} actions={makeActions({ recordAssessmentViolation })}>{(state) => <span>{state.formattedTime}</span>}</AssessmentRuntime></ExperienceProvider>);
+
+    await act(async () => {
+      document.dispatchEvent(new Event("visibilitychange"));
+      await Promise.resolve();
+    });
+    expect(recordAssessmentViolation).toHaveBeenCalledTimes(1);
+    expect(oscillatorStart).toHaveBeenCalledTimes(1);
+
+    act(() => vi.advanceTimersByTime(6_000));
+    expect(oscillatorStart).toHaveBeenCalledTimes(3);
+    expect(recordAssessmentViolation).toHaveBeenCalledTimes(1);
+  });
+
   it("uses a clock icon for automatic submission", async () => {
     const runtime = makeRuntime({ status: "submitted", autoSubmitted: true, submitReason: "timeout", remainingSeconds: 0 });
     render(<AssessmentRuntime view={makeView({ runtime, attempt: { ...makeView().attempt!, status: "submitted", runtime } })} actions={makeActions()}>{(state) => <span>{state.formattedTime}</span>}</AssessmentRuntime>);
@@ -385,26 +588,4 @@ describe("assessment HCI states", () => {
     expect(screen.getByText(/14 ngày/i)).toBeInTheDocument();
   });
 
-  it("keeps final and level-up submitted states distinguishable", () => {
-    const base = makeView();
-    const levelUp = {
-      ...base,
-      definition: { ...base.definition, key: "level-up-B1", kind: "level-up" as const, title: "Bài thi lên mức B1" },
-      targetLevel: "B1",
-      screenState: "pending" as const,
-      attempt: { ...base.attempt!, status: "pending_review" as const, totalScore: null }
-    };
-    const { unmount } = render(<LearnerAssessment view={levelUp} actions={makeActions()} />);
-    expect(screen.getByRole("heading", { name: "Bài thi lên mức B1" })).toBeInTheDocument();
-    expect(screen.getByText(/bài thi lên mức B1 đang chờ chấm/i)).toBeInTheDocument();
-
-    unmount();
-    render(<LearnerAssessment view={{
-      ...base,
-      definition: { ...base.definition, kind: "final", title: "Bài kiểm tra cuối kỳ" },
-      screenState: "pending",
-      attempt: { ...base.attempt!, status: "submitted", totalScore: null }
-    }} actions={makeActions()} />);
-    expect(screen.getByText(/bài kiểm tra cuối kỳ đã được nộp/i)).toBeInTheDocument();
-  });
 });

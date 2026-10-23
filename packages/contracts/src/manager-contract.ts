@@ -15,8 +15,6 @@ export interface ManagerProgressView {
     readonly completedLessons: number;
     readonly pendingAssessments: number;
     readonly completedLearners: number;
-    readonly comparableLearners: number;
-    readonly improvedLearners: number;
     readonly surveyCount: number;
     readonly satisfactionAverage: number | null;
   };
@@ -53,7 +51,10 @@ export interface ManagerProgressView {
     /** ISO dates with recorded learner activity in the selected pilot week. */
     readonly activityDatesThisWeek?: readonly string[];
     readonly placementScore: number | null;
-    readonly finalScore: number | null;
+    /** Lifecycle of the latest placement attempt; absent keeps older clients backward compatible. */
+    readonly placementStatus?: "not_started" | "in_progress" | "submitted";
+    /** Source state for the latest submitted placement attempt, shown to Managers. */
+    readonly placementScoring?: "ai" | "human" | "automatic" | "pending" | null;
     readonly missedDays: number | null;
     readonly lastActivityAt: string | null;
   }[];

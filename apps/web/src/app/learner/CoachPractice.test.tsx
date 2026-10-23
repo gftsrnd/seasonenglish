@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import "@testing-library/jest-dom/vitest";
-import { cleanup, render, screen, waitFor, within } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { userEvent } from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { LearnerChallenge, LearnerCoach, LearnerPractice } from "./CoachPractice.js";
@@ -24,7 +24,7 @@ const actions = () => ({
 
 const coach = {
   sessionId: "session-1", topic: "Meetings", cefr: "A2", persona: "informal", aiAvailable: true,
-  daily: { used: 0, limit: 20 }, weekly: { turns: 0, target: 2 }, messages: [], vocabulary: [],
+  daily: { used: 0, limit: 30 }, weekly: { turns: 0, target: 50 }, messages: [], vocabulary: [],
   levelApproved: true
 } as any;
 
@@ -58,6 +58,14 @@ function enableSpeechRecognition() {
 }
 
 describe("app coach and weekly practice speech input", () => {
+  it("shows weekly-practice unlock progress against the fixed five-lesson requirement", () => {
+    render(<LearnerPractice view={{ ...practice, state: "locked", completedLessons: 0, totalLessons: 0 }} actions={actions()} />);
+
+    expect(screen.getByText("0/5 bài đã hoàn thành")).toBeInTheDocument();
+    expect(screen.queryByText("0/0 bài đã hoàn thành")).not.toBeInTheDocument();
+    expect(screen.getByRole("progressbar", { name: "Tiến độ mở bài thực hành" })).toHaveAttribute("aria-valuemax", "5");
+  });
+
   it("keeps clear-chat focus inside the confirmation dialog", async () => {
     const user = userEvent.setup();
     const callback = actions();
@@ -80,12 +88,12 @@ describe("app coach and weekly practice speech input", () => {
   it("matches the canonical Coach header, counters, cap state, and clear-chat confirmation", async () => {
     const callback = actions();
     const user = userEvent.setup();
-    const { rerender } = render(<LearnerCoach view={{ ...coach, weekly: { turns: 1, target: 2 } }} actions={callback} />);
+    const { rerender } = render(<LearnerCoach view={{ ...coach, weekly: { turns: 1, target: 50 } }} actions={callback} />);
 
     expect(screen.getByRole("heading", { name: "Season" })).toBeInTheDocument();
     expect(screen.getByText("Meetings · A2")).toBeInTheDocument();
-    expect(screen.getByText("Hôm nay 0/20 lượt")).toBeInTheDocument();
-    expect(screen.getByText("Tuần này 1 lượt · mục tiêu ≥2")).toBeInTheDocument();
+    expect(screen.getByText("Hôm nay 0/30 lượt")).toBeInTheDocument();
+    expect(screen.getByText("Tuần này 1 lượt · mục tiêu ≥50")).toBeInTheDocument();
     expect(screen.getByText("Giới hạn chat hoạt động thế nào?")).toBeInTheDocument();
     expect(document.querySelector(".coach-brand-icon")).toBeInTheDocument();
     expect(screen.getByTestId("season-mark")).toHaveClass("coach-season-mark");
@@ -103,8 +111,8 @@ describe("app coach and weekly practice speech input", () => {
     await user.click(within(dialog).getByRole("button", { name: "Xoá chat" }));
     expect(callback.startNewCoachChat).toHaveBeenCalledTimes(1);
 
-    rerender(<LearnerCoach view={{ ...coach, daily: { used: 20, limit: 20 } }} actions={callback} />);
-    expect(screen.getByText(/đã dùng hết 20 lượt chat hôm nay/i)).toBeInTheDocument();
+    rerender(<LearnerCoach view={{ ...coach, daily: { used: 30, limit: 30 } }} actions={callback} />);
+    expect(screen.getByText(/đã dùng hết 30 lượt chat hôm nay/i)).toBeInTheDocument();
     expect(screen.getByRole("textbox", { name: "Tin nhắn cho Season" })).toBeDisabled();
   });
 
@@ -122,148 +130,87 @@ describe("app coach and weekly practice speech input", () => {
     expect(details).not.toHaveAttribute("open");
   });
 
-  it("separates coach feedback into a note, three /5 scores, and readable suggestions", () => {
+  it("sends with Enter and lets Shift+Enter grow the composer onto a new line", async () => {
+    const callback = actions();
+    render(<LearnerCoach view={coach} actions={callback} />);
+    const composer = screen.getByRole("textbox", { name: "Tin nhắn cho Season" });
+
+    fireEvent.change(composer, { target: { value: "First line\nSecond line" } });
+    Object.defineProperty(composer, "scrollHeight", { configurable: true, value: 84 });
+    fireEvent.keyDown(composer, { key: "Enter", code: "Enter", shiftKey: true });
+    fireEvent.change(composer, { target: { value: "First line\nSecond line\n" } });
+    expect(callback.sendCoachMessage).not.toHaveBeenCalled();
+    expect(composer).toHaveStyle({ height: "84px" });
+
+    fireEvent.change(composer, { target: { value: "Send this" } });
+    fireEvent.keyDown(composer, { key: "Enter", code: "Enter" });
+    await waitFor(() => expect(callback.sendCoachMessage).toHaveBeenCalledWith("Send this"));
+  });
+
+  it("renders concise Season feedback with a plain next question and readable details", () => {
     render(<LearnerCoach view={{ ...coach, messages: [{
-      id: "coach-feedback", speaker: "coach", text: "Please try again.", createdAt: "2026-10-22T00:00:00.000Z",
+      id: "coach-structured", speaker: "coach", text: "Thanks. Could you shorten the bullet points?", createdAt: "2026-10-22T00:00:00.000Z",
       feedback: {
-        relevant: false,
-        relevanceNote: "Lời chào chưa trả lời câu hỏi của Season. Hãy thử nói về slide.",
-        rubric: { meaning: 1, vocabulary: 1, grammar: 3 },
-        suggestions: [{ original: "hello", corrected: "The slide has too much text.", explanation: "Trả lời đúng chủ đề." }],
-        correctedText: "The slide has too much text."
+        relevant: true, relevanceNote: "", evaluation: { status: "valid", countsTowardGoal: true, noteVi: "Đúng trọng tâm." },
+        seasonReply: "Thanks for the clear answer.", seasonReplyTranslation: "Cảm ơn câu trả lời rõ ràng.",
+        nextQuestion: "Could you shorten the bullet points?", nextQuestionTranslation: "Bạn có thể rút ngắn các gạch đầu dòng không?",
+        rubric: {
+          meaning: { score: 4, evidence: "The slide is clearly identified.", improvement: "Add the reason." },
+          vocabulary: { score: 3, evidence: "Uses slide and text.", improvement: "Try bullet points." },
+          grammar: { score: 3, evidence: "The subject is singular.", improvement: "Use has, not have." }
+        },
+        corrections: [{ original: "The slide have", corrected: "The slide has", translation: "Trang chiếu có", reason: "Use has with a singular subject." }],
+        correctedText: "The slide has too much text.",
+        suggestedAnswer: { text: "I can shorten the bullet points.", translation: "Tôi có thể rút ngắn các gạch đầu dòng." }
       }
     }] }} actions={actions()} />);
-
     const feedback = screen.getByRole("region", { name: "Phản hồi của Season" });
-    expect(feedback).not.toHaveClass("correction");
-    expect(feedback).toHaveClass("coach-feedback-flat");
-    expect(within(feedback).queryByText("Lời chào chưa trả lời câu hỏi của Season.")).not.toBeInTheDocument();
-    expect(within(feedback).queryByText("Hãy thử nói về slide.")).not.toBeInTheDocument();
+    expect(feedback.querySelector(".coach-feedback-summary")).not.toBeNull();
     expect(feedback.querySelectorAll(".coach-feedback-score")).toHaveLength(3);
-    expect(feedback.querySelectorAll(".coach-feedback-score svg")).toHaveLength(3);
-    const summary = feedback.querySelector(".coach-feedback-summary");
-    expect(summary).toContainElement(within(feedback).getByText("Hãy quay lại chủ đề nhé"));
-    expect(summary?.querySelector(".coach-feedback-scores")).not.toBeNull();
-    expect(within(feedback).getByText("Ý nghĩa").closest(".coach-feedback-score")).toHaveTextContent("Ý nghĩa1/5");
-    expect(within(feedback).getByText("Từ vựng").closest(".coach-feedback-score")).toHaveTextContent("Từ vựng1/5");
-    expect(within(feedback).getByText("Ngữ pháp").closest(".coach-feedback-score")).toHaveTextContent("Ngữ pháp3/5");
-    expect(within(feedback).queryByText("Điểm cho biết: đúng câu hỏi · dùng từ phù hợp · cấu trúc chính xác.")).not.toBeInTheDocument();
-    const meaningAndTranslation = within(feedback).getByText("Ý nghĩa & bản dịch").closest("details");
+    expect(within(feedback).queryByText("Câu hỏi tiếp theo của Season")).not.toBeInTheDocument();
+    expect(within(feedback).getByText("Could you shorten the bullet points?")).toBeInTheDocument();
+    const seasonHeading = within(feedback).getByRole("heading", { name: "Câu Season trả lời" });
+    const evaluationHeading = within(feedback).getByRole("heading", { name: "Nhận xét câu trả lời của bạn" });
+    const correctionHeading = within(feedback).getByRole("heading", { name: "Câu sửa" });
+    const nextQuestion = within(feedback).getByText("Could you shorten the bullet points?");
+    expect(seasonHeading.compareDocumentPosition(evaluationHeading) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(evaluationHeading.compareDocumentPosition(correctionHeading) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(within(feedback).getByLabelText("Câu Season trả lời")).toContainElement(nextQuestion);
+    expect(within(feedback).getByLabelText("Nhận xét câu trả lời của bạn")).not.toHaveTextContent("Thanks for the clear answer.");
+    expect(within(feedback).queryByText("Ý nghĩa ba điểm")).not.toBeInTheDocument();
+    expect(within(feedback).getByRole("heading", { name: "Gợi ý trả lời câu tiếp theo" })).toBeInTheDocument();
+    const details = within(feedback).getByText("Xem giải thích và gợi ý").closest("details");
+    expect(details).not.toHaveAttribute("open");
     expect(feedback.querySelectorAll("details")).toHaveLength(1);
-    expect(meaningAndTranslation).not.toHaveAttribute("open");
-    expect(meaningAndTranslation).toContainElement(within(feedback).getByText("Đúng câu hỏi và diễn đạt rõ ý"));
-    expect(meaningAndTranslation).toContainElement(within(feedback).getByText("Dùng từ đúng và phù hợp với trình độ"));
-    expect(meaningAndTranslation).toContainElement(within(feedback).getByText("Cấu trúc câu và độ chính xác"));
-    expect(feedback).toContainElement(within(feedback).getByText("hello"));
-    const correction = within(feedback).getByText("The slide has too much text.");
-    expect(meaningAndTranslation).not.toContainElement(correction);
-    expect(correction).toHaveClass("coach-feedback-correction");
-    expect(within(feedback).queryByText("Trả lời đúng chủ đề.")).not.toBeInTheDocument();
-  });
-
-  it("does not repeat the AI relevance explanation for an on-topic answer", () => {
-    render(<LearnerCoach view={{ ...coach, messages: [{
-      id: "coach-relevant", speaker: "coach", text: "Good suggestion.", createdAt: "2026-10-22T00:00:00.000Z",
-      feedback: {
-        relevant: true,
-        relevanceNote: "The learner is on topic and answers the question clearly.",
-        rubric: { meaning: 4, vocabulary: 3, grammar: 4 }, suggestions: [], correctedText: ""
-      }
-    }] }} actions={actions()} />);
-
-    expect(screen.queryByText("The learner is on topic and answers the question clearly.")).not.toBeInTheDocument();
-  });
-
-  it("presents a high-scoring rewrite as an optional phrasing improvement instead of an error", () => {
-    render(<LearnerCoach view={{ ...coach, messages: [{
-      id: "coach-refinement", speaker: "coach", text: "That is a clear request.", createdAt: "2026-10-22T00:00:00.000Z",
-      feedback: {
-        relevant: true,
-        relevanceNote: "",
-        rubric: { meaning: 4, vocabulary: 3, grammar: 4 },
-        suggestions: [{
-          original: "The slide has too much text. Could we make it shorter?",
-          corrected: "Could we make the text on the slide shorter?",
-          explanation: "A more direct alternative."
-        }, {
-          original: "The slide has too much text. Could we make it shorter?",
-          corrected: "Could we make the text on the slide shorter?",
-          explanation: "Duplicate provider suggestion."
-        }],
-        correctedText: ""
-      }
-    }] }} actions={actions()} />);
-
-    const feedback = screen.getByRole("region", { name: "Phản hồi của Season" });
-    expect(within(feedback).getByText("Câu bạn nên nói tiếp")).toBeInTheDocument();
-    expect(within(feedback).getByText("Ý nghĩa & bản dịch")).toBeInTheDocument();
-    expect(within(feedback).getByText("The slide has too much text. Could we make it shorter?")).toBeInTheDocument();
-    expect(within(feedback).getAllByText("Could we make the text on the slide shorter?")).toHaveLength(1);
-    expect(within(feedback).queryByText("A more direct alternative.")).not.toBeInTheDocument();
-    expect(within(feedback).getByText("Season vừa nói")).toBeInTheDocument();
-    expect(within(feedback).queryByText("Vì sao cần sửa")).not.toBeInTheDocument();
-  });
-
-  it("shows corrections and translations in one compact disclosure", () => {
-    render(<LearnerCoach view={{ ...coach, messages: [{
-      id: "coach-translated", speaker: "coach", text: "Could you shorten the bullet points?", createdAt: "2026-10-22T00:00:00.000Z",
-      feedback: {
-        relevant: true,
-        relevanceNote: "",
-        replyTranslation: "Bạn có thể rút ngắn các gạch đầu dòng không?",
-        rubric: { meaning: 3, vocabulary: 3, grammar: 3 },
-        suggestions: [{
-          original: "The slide have too much text.",
-          corrected: "The slide has too much text.",
-          translation: "Trang chiếu có quá nhiều chữ.",
-          explanation: "Use has with the singular subject slide."
-        }, {
-          original: "The slide have too much text.",
-          corrected: "The slide has too much text.",
-          translation: "Trang chiếu có quá nhiều chữ.",
-          explanation: "Duplicate provider suggestion."
-        }],
-        correctedText: "The slide has too much text."
-      }
-    }] }} actions={actions()} />);
-
-    const feedback = screen.getByRole("region", { name: "Phản hồi của Season" });
-    const message = feedback.closest("article")!;
-    const nextQuestion = within(message).getByText("Could you shorten the bullet points?");
-    const feedbackHeading = within(feedback).getByText("Phản hồi");
-    const nextSentenceHeading = within(feedback).getByText("Câu bạn nên nói tiếp");
-    const meaningHeading = within(feedback).getByText("Ý nghĩa & bản dịch");
-    expect(nextQuestion.compareDocumentPosition(feedbackHeading) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-    expect(feedbackHeading.compareDocumentPosition(nextSentenceHeading) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-    expect(nextSentenceHeading.compareDocumentPosition(meaningHeading) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-    expect(feedback.querySelectorAll("details")).toHaveLength(1);
-    expect(within(feedback).getByText("Câu bạn nên nói tiếp")).toBeInTheDocument();
-    expect(within(feedback).getByText("Ý nghĩa & bản dịch")).toBeInTheDocument();
-    expect(within(feedback).getByText("Season vừa nói")).toBeInTheDocument();
-    expect(within(feedback).queryByText("Bạn có thể nói tiếp")).not.toBeInTheDocument();
-    expect(within(feedback).queryByText("Vì sao cần sửa")).not.toBeInTheDocument();
+    expect(feedback.querySelectorAll(".coach-feedback-section")).toHaveLength(2);
+    expect(feedback.querySelectorAll(".coach-feedback-criterion-card")).toHaveLength(3);
+    expect(within(feedback).getByText("Cảm ơn câu trả lời rõ ràng.")).toBeInTheDocument();
     expect(within(feedback).getByText("Bạn có thể rút ngắn các gạch đầu dòng không?")).toBeInTheDocument();
-    expect(within(feedback).getByText("Season vừa nói")).toBeInTheDocument();
-    expect(within(feedback).getByText("Bản dịch câu bạn nên nói tiếp")).toBeInTheDocument();
-    expect(within(feedback).getAllByText("The slide has too much text.")).toHaveLength(1);
-    expect(within(feedback).getAllByText("Trang chiếu có quá nhiều chữ.")).toHaveLength(1);
-    expect(within(feedback).getAllByText("The slide have too much text.")).toHaveLength(1);
-    expect(within(feedback).queryByText("Use has with the singular subject slide.")).not.toBeInTheDocument();
-    expect(within(feedback).queryByText("Duplicate provider suggestion.")).not.toBeInTheDocument();
+    expect(within(feedback).getByText(/The slide is clearly identified\./)).toBeInTheDocument();
+    expect(within(feedback).getByText(/Use has, not have\./)).toBeInTheDocument();
+    expect(within(feedback).getByText("I can shorten the bullet points.")).toBeInTheDocument();
+    expect(within(feedback).getByText("Tôi có thể rút ngắn các gạch đầu dòng.")).toBeInTheDocument();
   });
 
-  it("labels missing translations explicitly for a legacy Coach turn", () => {
+  it("does not claim there is nothing to fix when rubric improvements exist", () => {
     render(<LearnerCoach view={{ ...coach, messages: [{
-      id: "coach-legacy", speaker: "coach", text: "Legacy reply.", createdAt: "2026-10-22T00:00:00.000Z",
+      id: "coach-no-correction", speaker: "coach", text: "Good start. Where is the meeting room?", createdAt: "2026-10-22T00:00:00.000Z",
       feedback: {
-        relevant: true, relevanceNote: "", rubric: { meaning: 3, vocabulary: 3, grammar: 3 },
-        suggestions: [{ original: "old", corrected: "older", explanation: "Legacy reason." }], correctedText: "older"
+        relevant: true, relevanceNote: "", evaluation: { status: "valid", countsTowardGoal: true, noteVi: "Câu đúng nhưng có thể rõ hơn." },
+        seasonReply: "Good start.", seasonReplyTranslation: "Khởi đầu tốt.",
+        nextQuestion: "Where is the meeting room?", nextQuestionTranslation: "Phòng họp ở đâu?",
+        rubric: {
+          meaning: { score: 4, evidence: "The answer is relevant.", improvement: "Add the location." },
+          vocabulary: { score: 4, evidence: "Uses workplace words.", improvement: "Use meeting room." },
+          grammar: { score: 5, evidence: "The sentence is grammatical.", improvement: "Keep this structure." }
+        },
+        corrections: [], correctedText: "", suggestedAnswer: { text: "The meeting room is on the second floor.", translation: "Phòng họp ở tầng hai." }
       }
     }] }} actions={actions()} />);
 
-    const feedback = screen.getByRole("region", { name: "Phản hồi của Season" });
-    expect(within(feedback).getByText("Bản dịch chưa có cho lượt chat cũ này.")).toBeInTheDocument();
-    expect(within(feedback).getByText("Bản dịch gợi ý chưa có cho lượt chat cũ này.")).toBeInTheDocument();
+    const correction = screen.getByLabelText("Câu sửa");
+    expect(correction).toHaveTextContent("Không có lỗi cần sửa trực tiếp. Xem gợi ý cải thiện trong phần giải thích.");
+    expect(correction).not.toHaveTextContent("Không có lỗi cần sửa.");
   });
 
   it("uses compact vocabulary and rounded icon controls", () => {

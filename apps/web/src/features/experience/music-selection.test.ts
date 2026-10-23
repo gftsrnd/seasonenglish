@@ -13,14 +13,14 @@ describe("automatic study music selection", () => {
     expect(studyPeriodFor(new Date(iso))).toBe(expected);
   });
 
-  it("selects by resolved season and local study period", () => {
+  it("uses the prototype playlist for every season and study period", () => {
     const result = resolveBackgroundMusic({ theme: "autumn", date: new Date("2026-10-22T12:00:00"), config: automatic, personalEnabled: true, suspended: false });
-    expect(result).toMatchObject({ enabled: true, presetId: "steady-afternoon", volume: 0.22, source: "preset" });
-    expect(result.enabled && result.url).toContain("Soft_Corporate");
+    expect(result).toMatchObject({ enabled: true, presetId: "prototype-in-dreamland", volume: 0.22, source: "preset" });
+    expect(result.enabled && result.url).toContain("PLQwRmTwWx0uaoRXVcKbUDW0wm8G_WJzDI");
   });
 
   it("honours a named preset and a custom URL override", () => {
-    expect(resolveBackgroundMusic({ theme: "winter", date: new Date("2026-10-22T08:00:00"), config: { ...automatic, playlistId: "driving-evening" }, personalEnabled: true, suspended: false })).toMatchObject({ presetId: "driving-evening", source: "preset" });
+    expect(resolveBackgroundMusic({ theme: "winter", date: new Date("2026-10-22T08:00:00"), config: { ...automatic, playlistId: "prototype-in-dreamland" }, personalEnabled: true, suspended: false })).toMatchObject({ presetId: "prototype-in-dreamland", source: "preset" });
     expect(resolveBackgroundMusic({ theme: "winter", date: new Date("2026-10-22T08:00:00"), config: { ...automatic, customUrl: "https://example.test/custom.mp3" }, personalEnabled: true, suspended: false })).toMatchObject({ url: "https://example.test/custom.mp3", source: "custom" });
   });
 

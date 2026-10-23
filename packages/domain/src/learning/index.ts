@@ -85,3 +85,52 @@ export function mergeLessonProgress(
       : {})
   };
 }
+
+export interface SpeakingCompletenessResult {
+  passed: boolean;
+  missingWords: number;
+  totalWords: number;
+  missingRatio: number;
+}
+
+export function evaluateSpeakingCompleteness(
+  reference: string,
+  transcript: string,
+  maximumMissingRatio = 0.2
+): SpeakingCompletenessResult {
+  const expected = speakingWords(reference);
+  const actual = speakingWords(transcript);
+  if (expected.length === 0) {
+    return { passed: false, missingWords: 0, totalWords: 0, missingRatio: 1 };
+  }
+
+  const matchedWords = longestCommonWordSubsequence(expected, actual);
+  const missingWords = expected.length - matchedWords;
+  const missingRatio = missingWords / expected.length;
+  return {
+    passed: missingRatio <= maximumMissingRatio,
+    missingWords,
+    totalWords: expected.length,
+    missingRatio
+  };
+}
+
+function speakingWords(value: string): string[] {
+  return (value.toLocaleLowerCase("en-US").match(/[\p{L}\p{N}]+(?:['’][\p{L}\p{N}]+)*/gu) ?? [])
+    .map((word) => word.replaceAll("’", "'"));
+}
+
+function longestCommonWordSubsequence(expected: readonly string[], actual: readonly string[]): number {
+  const row = new Array<number>(actual.length + 1).fill(0);
+  for (const expectedWord of expected) {
+    let diagonal = 0;
+    for (let index = 1; index <= actual.length; index += 1) {
+      const previous = row[index] ?? 0;
+      row[index] = expectedWord === actual[index - 1]
+        ? diagonal + 1
+        : Math.max(row[index] ?? 0, row[index - 1] ?? 0);
+      diagonal = previous;
+    }
+  }
+  return row[actual.length] ?? 0;
+}

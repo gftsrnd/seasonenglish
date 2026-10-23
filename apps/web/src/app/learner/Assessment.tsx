@@ -5,9 +5,10 @@ import type { AssessmentView, LearnerCallbacks } from "./contracts.js";
 import { AssessmentRecorder, AssessmentRuntime, type AssessmentRuntimeState } from "./AssessmentRuntime.js";
 import { Button, ErrorText, Modal, Notice, PageTitle, Progress, AppLink, Toast } from "./ui.js";
 import { useExperience } from "../../features/experience/Experience.js";
+import { normalizeBlankPrompt } from "./text.js";
 
 const sectionOrder: AssessmentSectionCode[] = ["listening", "reading", "writing", "speaking"];
-const soundCheckText = "Xin chào. Đây là câu kiểm tra âm thanh. Tai nghe đang hoạt động tốt.";
+const soundCheckText = "Đây là câu kiểm tra âm thanh. Nếu bạn nghe rõ câu này, tai nghe của bạn đã sẵn sàng.";
 
 export function LearnerAssessment({ view, actions }: { view: AssessmentView; actions: LearnerCallbacks }) {
   const experience = useExperience();
@@ -21,6 +22,7 @@ export function LearnerAssessment({ view, actions }: { view: AssessmentView; act
   const [starting, setStarting] = useState(false);
   const [startConfirmOpen, setStartConfirmOpen] = useState(false);
   const [checkingMicrophone, setCheckingMicrophone] = useState(false);
+  const [microphoneSamples, setMicrophoneSamples] = useState<number[]>([]);
   const [microphoneCheck, setMicrophoneCheck] = useState<"unknown" | "ready" | "denied">("unknown");
   const [microphoneMessage, setMicrophoneMessage] = useState<string>();
   const [localError, setLocalError] = useState<string>();
@@ -58,9 +60,12 @@ export function LearnerAssessment({ view, actions }: { view: AssessmentView; act
     setLocalError(undefined);
     setMicrophoneMessage(undefined);
     setCheckingMicrophone(true);
+    setMicrophoneSamples([]);
     setEquipment((current) => ({ ...current, microphone: "đang kiểm tra…" }));
     try {
-      const result = await checkMicrophone();
+      const result = await checkMicrophone((level) => {
+        setMicrophoneSamples((current) => [...current, level].slice(-72));
+      });
       setMicrophoneCheck(result.ok ? "ready" : "denied");
       setMicrophoneMessage(result.ok ? undefined : result.message);
       setEquipment((current) => ({ ...current, microphone: result.ok ? "Micro sẵn sàng ✓" : "Chưa kiểm tra được" }));
@@ -90,20 +95,20 @@ export function LearnerAssessment({ view, actions }: { view: AssessmentView; act
       <div className="table-wrap"><table className="assessment-structure-table" aria-label="Cấu trúc bài test" style={{ width: "100%", tableLayout: "fixed" }}><colgroup><col style={{ width: "13%" }} /><col style={{ width: "18%" }} /><col style={{ width: "12%" }} /><col style={{ width: "57%" }} /></colgroup><thead><tr><th>Phần</th><th>Thời gian</th><th>Điểm</th><th>Nội dung</th></tr></thead><tbody>{definition.sections.map((section) => <tr key={section.code}><td>{sectionTableTitle(section.code)}</td><td>{view.timed === false ? "—" : `${section.durationMinutes} phút`}</td><td><b>{section.maxScore}</b></td><td>{sectionSummary(section.code)}</td></tr>)}</tbody></table></div>
       {definition.kind === "level-up" && targetLevel ? <Notice>Đề ngắn ở mức <b>{targetLevel}</b>. Đạt khi tổng ≥70/100 và mỗi kỹ năng ≥50%; sau đó hoàn thành <b>6 lượt thử thách với Season</b> để gửi yêu cầu duyệt. Nếu chưa đạt, bạn có thể thử lại sau <b>14 ngày</b>.</Notice> : targetLevel ? <Notice>Đề ngắn ở mức <b>{targetLevel}</b>. Đạt khi tổng ≥70/100 và mỗi kỹ năng ≥50%.</Notice> : null}
       <h3>Quy định làm bài – đọc trước khi bắt đầu</h3>
-      <div className="grid cols-3 assessment-rules"><Rule title="Bắt buộc" icon={<CheckCircle2 size={17} aria-hidden="true" />} tone="var(--mint)" lines={["Làm một mạch theo thứ tự Nghe → Đọc → Viết → Nói.", "Chuẩn bị tai nghe/loa và micro; ở lại trang đến khi nộp.", "Phần Nói: ghi âm trực tiếp hoặc tải file."]} /><Rule title="Không được phép" icon={<Ban size={17} aria-hidden="true" />} tone="var(--peach)" lines={["Không mở tab/cửa sổ khác, không dịch/AI, không quay lại phần đã nộp.", "Mỗi đoạn nghe chỉ được phát tối đa 2 lần."]} /><Rule title="Lưu ý" icon={<Clock3 size={17} aria-hidden="true" />} tone="var(--butter)" lines={[`Không lưu tạm hoặc tạm dừng; đồng hồ ${view.timed === false ? "không giới hạn" : "chạy liên tục, kể cả khi bạn thoát ra"}.`, view.timed === false ? "Không tính giờ, nhưng nộp phần nào là khoá phần đó." : "Hết giờ tự chuyển phần; rời màn hình sẽ hiện cảnh báo để bạn quay lại.", "Trong chế độ kiểm tra hiện tại, cảnh báo không tự nộp bài."]} /></div>
-      {definition.kind === "placement" ? <article className="card flat assessment-why" aria-label="Vì sao cần bài test"><div className="assessment-why-line"><Sprout size={18} aria-hidden="true" /><b>Vì sao cần bước này?</b><span>Kết quả test quyết định mức bài: quá dễ thì chán, quá khó thì nản. Làm đúng sức, không cần ôn trước.</span></div></article> : null}
-      <div className="row prep" role="group" aria-label="Cần chuẩn bị: tai nghe hoặc loa, và micro, kể cả mic trên tai nghe"><span data-equipment="sound" className={`prep-device ${equipment.sound === "Đã phát xong ✓" ? "is-ready" : ""}`} title="Tai nghe hoặc loa"><Headphones size={18} aria-hidden="true" /> Tai nghe</span><span data-equipment="microphone" className={`prep-device ${equipment.microphone === "Micro sẵn sàng ✓" ? "is-ready" : ""}`} title="Micro trên máy hoặc mic tai nghe"><Mic size={18} aria-hidden="true" /> Micro</span><div className="stack prep-checks"><div className="row prep-check"><button className="btn-sm" type="button" onClick={checkSound}>Nghe thử</button><span className="xs muted" role="status" aria-label="Trạng thái âm thanh" aria-live="polite">{equipment.sound}</span></div><div className="row prep-check"><button className="btn-sm" type="button" onClick={() => void checkMicrophoneForTest()}>Kiểm tra micro</button><span className="xs muted" role="status" aria-label="Trạng thái micro" aria-live="polite">{equipment.microphone}</span></div></div></div>
+      <div className="grid cols-3 assessment-rules"><Rule title="Bắt buộc" icon={<CheckCircle2 size={17} aria-hidden="true" />} tone="var(--mint)" lines={["Làm một mạch theo thứ tự Nghe → Đọc → Viết → Nói.", "Chuẩn bị tai nghe/loa và micro; ở lại trang đến khi nộp.", "Phần Nói: ghi âm trực tiếp hoặc tải file."]} /><Rule title="Không được phép" icon={<Ban size={17} aria-hidden="true" />} tone="var(--peach)" lines={["Không mở tab/cửa sổ khác, không dịch/AI, không quay lại phần đã nộp.", "Mỗi đoạn nghe chỉ được phát tối đa 2 lần."]} /><Rule title="Lưu ý" icon={<Clock3 size={17} aria-hidden="true" />} tone="var(--butter)" lines={[`Câu trả lời được tự động lưu; đồng hồ ${view.timed === false ? "không giới hạn" : "chạy liên tục, kể cả khi bạn thoát ra và không thể tạm dừng"}.`, view.timed === false ? "Không tính giờ, nhưng nộp phần nào là khoá phần đó." : "Hết giờ tự chuyển phần; rời màn hình sẽ hiện cảnh báo để bạn quay lại.", "Vượt quá 3 cảnh báo sẽ tự động nộp bài."]} /></div>
+      {definition.kind === "placement" ? <article className="card flat assessment-why" aria-label="Vì sao cần bài test"><div className="assessment-why-line"><Sprout size={18} aria-hidden="true" /><b>Vì sao cần bước này?</b><span>Bài test chọn mức vừa sức; hãy làm đúng khả năng, không cần ôn trước.</span></div></article> : null}
+      <div className="row prep" role="group" aria-label="Cần chuẩn bị: tai nghe hoặc loa, và micro, kể cả mic trên tai nghe"><span data-equipment="sound" className={`prep-device ${equipment.sound === "Đã phát xong ✓" ? "is-ready" : ""}`} title="Tai nghe hoặc loa"><Headphones size={18} aria-hidden="true" /> Tai nghe</span><span data-equipment="microphone" className={`prep-device ${equipment.microphone === "Micro sẵn sàng ✓" ? "is-ready" : ""}`} title="Micro trên máy hoặc mic tai nghe"><Mic size={18} aria-hidden="true" /> Micro</span><div className="stack prep-checks"><div className="row prep-check"><button className="btn-sm" type="button" onClick={checkSound}>Nghe thử</button><span className="xs muted" role="status" aria-label="Trạng thái âm thanh" aria-live="polite">{equipment.sound}</span></div><div className="row prep-check"><button className="btn-sm" type="button" onClick={() => void checkMicrophoneForTest()}>Kiểm tra micro</button><span className="xs muted" role="status" aria-label="Trạng thái micro" aria-live="polite">{equipment.microphone}</span></div>{checkingMicrophone || microphoneSamples.length > 0 ? <MicrophoneWaveform samples={microphoneSamples} active={checkingMicrophone} /> : null}</div></div>
       <ScoreScale />
       {microphoneCheck === "denied" ? <p className="small form-error" role="alert">{microphoneMessage ?? "Chưa truy cập được micro. Hãy cấp quyền rồi thử lại."}</p> : null}
       <ErrorText id="assessment-start-error" message={localError} />
-      <div className="row assessment-start-actions"><AppLink className="btn btn-lg" href={definition.kind === "placement" ? "/onboard" : "/home"} navigate={actions.navigate}>← {definition.kind === "placement" ? "Quay lại hồ sơ" : "Quay lại"}</AppLink><button className="btn-primary btn-lg assessment-start-button assessment-start-primary" type="button" aria-label={view.attempt ? "Tiếp tục bài đang làm" : "Bắt đầu phần Nghe"} aria-describedby={localError ? "assessment-start-error" : undefined} aria-busy={starting || undefined} disabled={starting || checkingMicrophone} onClick={() => setStartConfirmOpen(true)}>{starting ? <><span className="spinner" aria-hidden="true" /> Đang bắt đầu…</> : view.attempt ? "Tiếp tục bài đang làm" : "Bắt đầu phần Nghe"}</button></div>
+      <div className="row assessment-start-actions"><AppLink className="btn" href={definition.kind === "placement" ? "/onboard" : "/home"} navigate={actions.navigate}>← {definition.kind === "placement" ? "Quay lại hồ sơ" : "Quay lại"}</AppLink><button className="btn-primary assessment-start-button assessment-start-primary" type="button" aria-label={view.attempt ? "Tiếp tục bài đang làm" : "Bắt đầu phần Nghe"} aria-describedby={localError ? "assessment-start-error" : undefined} aria-busy={starting || undefined} disabled={starting || checkingMicrophone} onClick={() => setStartConfirmOpen(true)}>{starting ? <><span className="spinner" aria-hidden="true" /> Đang bắt đầu…</> : view.attempt ? "Tiếp tục bài đang làm" : "Bắt đầu phần Nghe"}</button></div>
       {startConfirmOpen ? <Modal
         className="assessment-start-dialog"
         title={view.attempt ? "Tiếp tục bài test?" : "Bắt đầu bài test?"}
         onClose={() => setStartConfirmOpen(false)}
         actions={<><Button onClick={() => setStartConfirmOpen(false)}>Hủy</Button><Button variant="primary" onClick={() => void start()}>Tôi đã sẵn sàng, bắt đầu</Button></>}
       >
-        <p className="assessment-start-copy">Bắt đầu rồi sẽ <b className="assessment-start-keyword">không lưu tạm hay tạm dừng</b>. <b className="assessment-start-keyword">Đồng hồ chạy liên tục</b>, tối đa <b className="assessment-start-keyword">{definition.totalMinutes} phút</b>. Hãy chắc là bạn có đủ thời gian và đã thử tai nghe, micro trước khi bắt đầu.</p>
+        <p className="assessment-start-copy"><b className="assessment-start-keyword">Câu trả lời được tự động lưu</b>, nhưng bài thi <b className="assessment-start-keyword">không thể tạm dừng</b>. <b className="assessment-start-keyword">Đồng hồ chạy liên tục</b>, tối đa <b className="assessment-start-keyword">{definition.totalMinutes} phút</b>. Hãy chắc là bạn có đủ thời gian và đã thử tai nghe, micro trước khi bắt đầu.</p>
       </Modal> : null}
     </section>
   </div>;
@@ -218,7 +223,7 @@ function ActiveAssessment({ view, actions, section, sectionIndex, runtime, local
     <section className="card flat assessment-runtime-header" style={{ position: "sticky", top: 64, zIndex: 5 }}>
       <div className="row between">
         <div className="row"><span className="badge">Phần {sectionIndex + 1}/4 · {section.title}</span><span className="badge primary" role="timer" aria-label="Thời gian còn lại">◷ {runtime.formattedTime}</span></div>
-        <div className="row"><span className="xs muted">Cảnh báo {runtime.violationCount}/{runtime.violationLimit}</span><span className="badge warn" title="Bài test không lưu tạm hay tạm dừng được; đồng hồ chạy liên tục">Không lưu tạm</span><button className="btn-sm btn-primary" type="button" aria-label={section.code === "speaking" ? "Nộp bài" : `Nộp phần ${section.title}`} aria-busy={busy || undefined} disabled={submitDisabled} onClick={() => setSubmitConfirm(true)}>{busy ? "Đang nộp…" : section.code === "speaking" ? "Nộp bài" : "Nộp phần này →"}</button></div>
+        <div className="row"><span className="xs muted">Cảnh báo {runtime.violationCount}/{runtime.violationLimit}</span><span className="badge warn" title="Câu trả lời được tự động lưu; đồng hồ vẫn chạy liên tục">Tự động lưu</span><button className="btn-sm btn-primary" type="button" aria-label={section.code === "speaking" ? "Nộp bài" : `Nộp phần ${section.title}`} aria-busy={busy || undefined} disabled={submitDisabled} onClick={() => setSubmitConfirm(true)}>{busy ? "Đang nộp…" : section.code === "speaking" ? "Nộp bài" : "Nộp phần này →"}</button></div>
       </div>
       <Progress value={sectionIndex + 1} max={sectionOrder.length} label="Tiến độ bài thi" segmented />
       <span className="sr-only" role="status" aria-live="polite">{savingCount > 0 ? "Đang lưu câu trả lời…" : "Các câu trả lời đã lưu"}</span>
@@ -231,11 +236,30 @@ function ActiveAssessment({ view, actions, section, sectionIndex, runtime, local
       <div className="assessment-task-group-heading"><h3 className="assessment-task-group-title">{group.title}</h3>{section.code === "writing" && group.tasks.length === 1 ? <span className="badge">{group.tasks[0]?.maxScore} điểm</span> : null}</div>
       <p className="assessment-task-group-instruction">{group.instruction}</p>
       <div className="assessment-task-content" style={{ display: "grid", gap: 12, marginTop: 12 }}>
-        {group.stimulus ? <Stimulus stimulus={group.stimulus} maxPlays={group.maxPlays ?? 0} played={attempt.audioPlayCounts[`${section.code}:${group.key}`] ?? runtimeAudioCount(view, section.code, group.key)} onPlay={async (text) => {
-          try { const result = await actions.recordAssessmentAudioPlay(section.code, group.key); actions.speak(text); return result.playCount; }
+        {group.stimulus ? <Stimulus stimulus={group.stimulus} maxPlays={group.maxPlays ?? 0} played={attempt.audioPlayCounts[`${section.code}:${group.key}`] ?? runtimeAudioCount(view, section.code, group.key)} onPlay={async (text, audioSrc) => {
+          try {
+            const result = await actions.recordAssessmentAudioPlay(section.code, group.key);
+            if (!audioSrc) {
+              actions.speak(text, "en-GB", { rate: 0.92 });
+              return result.playCount;
+            }
+            await new Promise<void>((resolve, reject) => {
+              actions.speak(text, "en-GB", {
+                audioSrc,
+                onStatus: (status) => {
+                  if (status === "ended") resolve();
+                  if (status === "error" || status === "unsupported" || status === "no_voice") reject(new Error(status));
+                }
+              });
+            });
+            return result.playCount;
+          }
           catch { return null; }
         }} /> : null}
-        {group.tasks.map((task, index) => <Task key={task.key} task={task} number={index + 1} value={local[task.key] ?? findResponse(attempt.responses, section.code, task.key)?.value ?? ""} view={view} actions={actions} section={section.code} showHeading={section.code !== "writing" && section.code !== "speaking"} onSave={(input) => onSave(task, input)} />)}
+        {group.tasks.map((task, index) => {
+          const response = findResponse(attempt.responses, section.code, task.key);
+          return <Task key={task.key} task={task} number={index + 1} value={local[task.key] ?? response?.value ?? ""} response={response} view={view} actions={actions} section={section.code} showHeading={section.code !== "writing" && section.code !== "speaking"} onSave={(input) => onSave(task, input)} />;
+        })}
       </div>
     </section>)}
       </div>
@@ -281,12 +305,47 @@ function SubmitCountdown({ final, count, onStop }: { final: boolean; count: numb
 
 function Rule({ title, icon, tone, lines }: { title: string; icon: ReactNode; tone: string; lines: string[] }) { return <article className="card flat assessment-rule" style={{ background: tone }}><div className="eyebrow" style={{ color: "var(--text)", marginBottom: 6, display: "flex", alignItems: "center", gap: 6 }}>{icon}<span>{title}</span></div><ul className="small assessment-rule-list">{lines.map((line) => <li key={line}>{line}</li>)}</ul></article>; }
 
+function MicrophoneWaveform({ samples, active }: { samples: number[]; active: boolean }) {
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    let context: CanvasRenderingContext2D | null = null;
+    try {
+      context = canvas.getContext("2d");
+    } catch {
+      return;
+    }
+    if (!context) return;
+    const width = canvas.width;
+    const height = canvas.height;
+    const center = height / 2;
+    context.clearRect(0, 0, width, height);
+    context.fillStyle = "#ddd8d0";
+    context.fillRect(0, center - 0.5, width, 1);
+    context.fillStyle = "#b75c22";
+    const barWidth = 3;
+    const gap = 2;
+    const visible = samples.slice(-Math.floor(width / (barWidth + gap)));
+    visible.forEach((sample, index) => {
+      const amplitude = Math.max(2, Math.round((Math.min(100, sample) / 100) * (height - 8)));
+      context!.fillRect(index * (barWidth + gap), center - amplitude / 2, barWidth, amplitude);
+    });
+  }, [samples]);
+
+  return <div className={`microphone-waveform${active ? " is-active" : ""}`}>
+    <canvas ref={canvasRef} width={300} height={46} role="img" aria-label="Dạng sóng giọng nói khi kiểm tra micro" data-sample-count={samples.length} />
+    <span className="xs muted">{active ? "Hãy nói một câu ngắn…" : "Đã nhận giọng nói"}</span>
+  </div>;
+}
+
 function sectionSummary(code: AssessmentSectionCode) {
   return ({
     listening: "3 đoạn audio, 15 câu, mỗi đoạn nghe tối đa 2 lần",
     reading: "Đọc, ngữ pháp & từ vựng · 40 câu",
     writing: "2 task: 50–80 từ + 120–150 từ, chấm theo rubric 5 tiêu chí",
-    speaking: "4 task, nói qua micro (hoặc gõ), chấm nội dung"
+    speaking: "4 bài Nói; ưu tiên ghi âm, câu trả lời bằng chữ sẽ được chấm tay"
   } as const)[code];
 }
 
@@ -314,7 +373,7 @@ function AssessmentResult({ attempt }: { attempt: NonNullable<AssessmentView["at
   </div>;
 }
 
-function Stimulus({ stimulus, maxPlays, played, onPlay }: { stimulus: AssessmentView["definition"]["sections"][number]["groups"][number]["stimulus"]; maxPlays: number; played: number; onPlay: (text: string) => Promise<number | null> }) {
+function Stimulus({ stimulus, maxPlays, played, onPlay }: { stimulus: AssessmentView["definition"]["sections"][number]["groups"][number]["stimulus"]; maxPlays: number; played: number; onPlay: (text: string, audioSrc?: string) => Promise<number | null> }) {
   const [playCount, setPlayCount] = useState(played);
   const [playError, setPlayError] = useState(false);
   const [isPlaying, setIsPlaying] = useState(false);
@@ -323,13 +382,13 @@ function Stimulus({ stimulus, maxPlays, played, onPlay }: { stimulus: Assessment
     setPlayCount((current) => Math.max(current, played));
   }, [played]);
   if (!stimulus) return null;
-  const text = stimulus.text ?? stimulus.lines?.map((line) => `${line.speaker}: ${line.text}`).join("\n") ?? "";
+  const text = stimulus.text ?? stimulus.lines?.map((line) => line.text).join(" ") ?? "";
   const remaining = Math.max(0, maxPlays - playCount);
   const play = async () => {
     setPlayError(false);
     setIsPlaying(true);
     try {
-      const nextCount = await onPlay(text);
+      const nextCount = await onPlay(text, stimulus.audioSrc);
       if (nextCount == null) {
         setPlayError(true);
         return;
@@ -360,22 +419,46 @@ function Stimulus({ stimulus, maxPlays, played, onPlay }: { stimulus: Assessment
   </>;
 }
 
-function Task({ task, number, value, view, actions, section, showHeading = true, onSave }: { task: AssessmentTaskView; number: number; value: string; view: AssessmentView; actions: LearnerCallbacks; section: AssessmentSectionCode; showHeading?: boolean; onSave: (input: SaveAssessmentResponseInput) => void }) {
+function Task({ task, number, value, response, view, actions, section, showHeading = true, onSave }: { task: AssessmentTaskView; number: number; value: string; response: AssessmentResponseView | undefined; view: AssessmentView; actions: LearnerCallbacks; section: AssessmentSectionCode; showHeading?: boolean; onSave: (input: SaveAssessmentResponseInput) => void }) {
   const promptId = `assessment-task-${task.key}-prompt`;
   const hintId = `assessment-task-${task.key}-hint`;
+  const [typedProxyEnabled, setTypedProxyEnabled] = useState(response?.evidenceType === "typed_proxy");
   const answerHint = [task.minWords ? `Tối thiểu ${task.minWords} từ.` : null, task.maxWords ? `Tối đa ${task.maxWords} từ.` : null].filter(Boolean).join(" ");
   const wordTarget = task.minWords && task.maxWords ? `${task.minWords}–${task.maxWords}` : task.minWords ? `≥ ${task.minWords}` : task.maxWords ? `${task.maxWords}` : null;
   return <article className={`card flat assessment-task-card${showHeading ? "" : " assessment-task-response"}`} data-task-key={task.key}>
     {showHeading ? <div className="assessment-task-heading"><h4>{task.title ?? `Task ${number}`}</h4><span className="badge">{task.maxScore} điểm</span></div> : null}
-    <p id={promptId} className="assessment-task-prompt" style={task.responseType === "speaking_evidence" ? { whiteSpace: "pre-line" } : undefined}>{task.prompt}</p>
+    <p id={promptId} className="assessment-task-prompt" style={task.responseType === "speaking_evidence" ? { whiteSpace: "pre-line" } : undefined}>{normalizeBlankPrompt(task.prompt)}</p>
+    {task.interaction ? <div className="card soft assessment-roleplay-brief" role="note">
+      <b>Khách hàng mở đầu:</b>
+      <p>{task.interaction.openingMessage}</p>
+      <span className="small muted">Tối đa {task.interaction.maxLearnerTurns} lượt hoặc {Math.floor(task.interaction.durationSeconds / 60)} phút; kết thúc sớm khi khách hàng chấp nhận giải pháp. Nếu hệ thống không thể tạo lượt phản hồi, bản ghi một chiều vẫn được lưu và chuyển duyệt tay.</span>
+    </div> : null}
     {task.hint ? <p className="small muted assessment-task-hint">{task.hint}</p> : null}
-    {task.responseType === "single_choice" ? <fieldset aria-labelledby={promptId} style={{ border: 0, margin: 0, padding: 0 }}><legend className="sr-only">Chọn một đáp án</legend>{task.options?.map((option) => <label className={`opt assessment-choice ${value === option.value ? "sel" : ""}`} key={option.value}><input className="assessment-choice-input" type="radio" name={task.key} checked={value === option.value} aria-describedby={answerHint ? hintId : undefined} onChange={() => onSave({ value: option.value, evidenceType: "choice" })} /><span>{option.label}</span></label>)}</fieldset> : <>
-      <label><span className="sr-only">Câu trả lời {task.key}</span><textarea aria-label={`Câu trả lời ${task.key}`} aria-labelledby={promptId} aria-describedby={answerHint ? hintId : undefined} value={value} minLength={task.minWords} onChange={(event) => onSave({ value: limitWords(event.target.value, task.maxWords), evidenceType: task.responseType === "speaking_evidence" ? "typed_proxy" : "text" })} placeholder={task.responseType === "speaking_evidence" ? "Lời chép từ file ghi âm hoặc nội dung bạn đã nói…" : "Nhập câu trả lời"} /></label>
+    {task.responseType === "single_choice" ? <fieldset aria-labelledby={promptId} style={{ border: 0, margin: 0, padding: 0 }}><legend className="sr-only">Chọn một đáp án</legend>{task.options?.map((option) => <label className={`opt assessment-choice ${value === option.value ? "sel" : ""}`} key={option.value}><input className="assessment-choice-input" type="radio" name={task.key} checked={value === option.value} aria-describedby={answerHint ? hintId : undefined} onChange={() => onSave({ value: option.value, evidenceType: "choice" })} /><span>{option.label}</span></label>)}</fieldset> : task.responseType === "speaking_evidence" ? <SpeakingTextEvidence taskKey={task.key} value={value} response={response} typedProxyEnabled={typedProxyEnabled} onEnableProxy={() => setTypedProxyEnabled(true)} onSave={onSave} /> : <>
+      <label><span className="sr-only">Câu trả lời {task.key}</span><textarea aria-label={`Câu trả lời ${task.key}`} aria-labelledby={promptId} aria-describedby={answerHint ? hintId : undefined} value={value} minLength={task.minWords} onChange={(event) => onSave({ value: limitWords(event.target.value, task.maxWords), evidenceType: "text" })} placeholder="Nhập câu trả lời" /></label>
       {wordTarget ? <div className="assessment-word-count" aria-live="polite">{wordCount(value)} / {wordTarget} từ</div> : null}
     </>}
     {answerHint ? <span id={hintId} className="sr-only">{answerHint}</span> : null}
     {task.responseType === "speaking_evidence" ? <AssessmentRecorder taskKey={task.key} view={view} actions={actions} onEvidence={onSave} /> : null}
   </article>;
+}
+
+function SpeakingTextEvidence({ taskKey, value, response, typedProxyEnabled, onEnableProxy, onSave }: {
+  taskKey: string;
+  value: string;
+  response: AssessmentResponseView | undefined;
+  typedProxyEnabled: boolean;
+  onEnableProxy: () => void;
+  onSave: (input: SaveAssessmentResponseInput) => void;
+}) {
+  const transcript = response?.evidenceType === "transcript" ? response.value : "";
+  return <div className="stack assessment-speaking-text-evidence">
+    {transcript ? <label><span className="small">Transcript tự động</span><textarea aria-label={`Transcript tự động ${taskKey}`} value={transcript} readOnly /></label> : null}
+    {typedProxyEnabled ? <>
+      <label><span className="small">Câu trả lời văn bản thay thế</span><textarea aria-label={`Câu trả lời văn bản thay thế ${taskKey}`} value={response?.evidenceType === "typed_proxy" ? value : ""} onChange={(event) => onSave({ value: event.target.value, evidenceType: "typed_proxy" })} placeholder="Chỉ dùng khi không thể nộp âm thanh" /></label>
+      <Notice tone="warn">Bản chữ chỉ được dùng để chấm nội dung Nói và sẽ được chấm tay; không dùng để đánh giá phát âm hoặc tương tác trực tiếp.</Notice>
+    </> : <button className="btn-sm btn-ghost" type="button" aria-label={`Dùng câu trả lời văn bản thay thế ${taskKey}`} onClick={onEnableProxy}>Dùng câu trả lời văn bản thay thế</button>}
+  </div>;
 }
 
 function findResponse(responses: AssessmentResponseView[], section: AssessmentSectionCode, taskKey: string) { return responses.find((item) => item.section === section && item.taskKey === taskKey); }
@@ -417,11 +500,12 @@ function runtimeAudioCount(view: AssessmentView, section: AssessmentSectionCode,
   return view.runtime?.audioPlayCounts[`${section}:${groupKey}`] ?? view.attempt?.runtime?.audioPlayCounts[`${section}:${groupKey}`] ?? 0;
 }
 
-async function checkMicrophone(): Promise<{ ok: true } | { ok: false; message: string }> {
+async function checkMicrophone(onLevel: (level: number) => void): Promise<{ ok: true } | { ok: false; message: string }> {
   if (!navigator.mediaDevices?.getUserMedia) return { ok: false, message: "Trình duyệt không hỗ trợ kiểm tra micro." };
   try {
     const stream = await openMicrophoneStream();
     const tracks = typeof stream.getAudioTracks === "function" ? stream.getAudioTracks() : stream.getTracks();
+    if (tracks.length) await sampleMicrophoneLevel(stream, onLevel);
     stream.getTracks().forEach((track) => track.stop());
     return tracks.length ? { ok: true } : { ok: false, message: "Chưa tìm thấy micro. Hãy kết nối hoặc chọn micro rồi thử lại." };
   } catch (error) {
@@ -429,6 +513,35 @@ async function checkMicrophone(): Promise<{ ok: true } | { ok: false; message: s
     if (name === "NotAllowedError" || name === "SecurityError") return { ok: false, message: "Quyền micro đang bị chặn. Hãy cho phép micro cho trang này rồi bấm kiểm tra lại." };
     if (name === "NotFoundError" || name === "OverconstrainedError") return { ok: false, message: "Chưa tìm thấy micro. Hãy kết nối hoặc chọn micro rồi thử lại." };
     return { ok: false, message: "Chưa truy cập được micro. Hãy cấp quyền rồi thử lại." };
+  }
+}
+
+async function sampleMicrophoneLevel(stream: MediaStream, onLevel: (level: number) => void) {
+  if (typeof window.AudioContext === "undefined") {
+    onLevel(100);
+    return;
+  }
+  const context = new window.AudioContext();
+  const analyser = context.createAnalyser();
+  const source = context.createMediaStreamSource(stream);
+  const samples = new Uint8Array(analyser.fftSize);
+  source.connect(analyser);
+  const startedAt = performance.now();
+  try {
+    await new Promise<void>((resolve) => {
+      const read = () => {
+        analyser.getByteTimeDomainData(samples);
+        let energy = 0;
+        for (const sample of samples) energy += ((sample - 128) / 128) ** 2;
+        onLevel(Math.min(100, Math.round(Math.sqrt(energy / samples.length) * 420)));
+        if (performance.now() - startedAt >= 1600) resolve();
+        else window.requestAnimationFrame(read);
+      };
+      read();
+    });
+  } finally {
+    source.disconnect();
+    await context.close();
   }
 }
 
@@ -456,7 +569,6 @@ async function openMicrophoneStream(): Promise<MediaStream> {
 
 function assessmentHeading(view: AssessmentView) {
   if (view.definition.kind === "placement") return "Test đầu vào";
-  if (view.definition.kind === "final") return "Bài kiểm tra cuối kỳ";
   const targetLevel = assessmentTargetLevel(view);
   return targetLevel ? `Bài thi lên mức ${targetLevel}` : "Bài thi lên mức";
 }
@@ -468,10 +580,6 @@ function assessmentPendingCopy(view: AssessmentView): { title: string; detail: s
     const label = target ? `Bài thi lên mức ${target}` : "Bài thi lên mức";
     if (status === "approved") return { title: `${label} đã được duyệt`, detail: "Bằng chứng đã được người vận hành duyệt. Hãy về trang chủ để xem bước tiếp theo." };
     return { title: `${label} đang chờ chấm`, detail: "Đã nộp bài. Sau khi chấm, bạn sẽ thấy trạng thái thử thách hoặc yêu cầu duyệt mức trên trang chủ." };
-  }
-  if (view.definition.kind === "final") {
-    if (status === "approved") return { title: "Bài kiểm tra cuối kỳ đã có kết quả", detail: "Kết quả đã được ghi nhận trong tiến độ của bạn." };
-    return { title: "Bài kiểm tra cuối kỳ đã được nộp", detail: "Kết quả cuối kỳ đang được tổng hợp; bạn có thể về trang chủ trong lúc chờ." };
   }
   if (status === "approved") return { title: "Test đầu vào đã được duyệt", detail: "Mức học sẽ được mở theo hồ sơ của bạn ngay khi hệ thống cập nhật." };
   return { title: "Test đầu vào đã được nộp", detail: "Vận hành sẽ xem lại kết quả trước khi duyệt mức. Bạn không cần làm lại bài trong lúc chờ." };

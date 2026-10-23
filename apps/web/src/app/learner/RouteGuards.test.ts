@@ -5,7 +5,7 @@ describe("learner route guards", () => {
   it("returns an already-approved placement to Home", () => {
     expect(shouldRedirectApprovedPlacement("placement", "approved")).toBe(true);
     expect(shouldRedirectApprovedPlacement("placement", "in_progress")).toBe(false);
-    expect(shouldRedirectApprovedPlacement("final", "approved")).toBe(false);
+    expect(shouldRedirectApprovedPlacement("level-up", "approved")).toBe(false);
   });
 
   it("recognizes only the real no-challenge state as a Home redirect", () => {

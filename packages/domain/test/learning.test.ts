@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   canonicalLessonPartOrder,
+  evaluateSpeakingCompleteness,
   isLearnerProfileComplete,
   mergeLessonProgress,
   validateLessonPartOrder
@@ -64,5 +65,21 @@ describe("learner flow rules", () => {
       markComplete: true
     }, required);
     expect(completed.status).toBe("completed");
+  });
+
+  it("passes a speaking transcript only when omitted words are at most twenty percent", () => {
+    expect(evaluateSpeakingCompleteness("I have time for this", "I have time this")).toMatchObject({
+      passed: true,
+      missingWords: 1,
+      totalWords: 5,
+      missingRatio: 0.2
+    });
+    expect(evaluateSpeakingCompleteness("I have time for this", "I have this")).toMatchObject({
+      passed: false,
+      missingWords: 2,
+      totalWords: 5,
+      missingRatio: 0.4
+    });
+    expect(evaluateSpeakingCompleteness("Please, send the report.", "please send the report").passed).toBe(true);
   });
 });

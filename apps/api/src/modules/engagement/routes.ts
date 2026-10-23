@@ -123,27 +123,34 @@ export function registerEngagementRoutes(
       code: "TOPIC_CREATION_TEMPORARILY_LOCKED",
       moderation: { state: "reported", strike: 3, message: "Tạo bộ từ được mở lại sau 30 phút; người vận hành đã nhận được báo cáo." } satisfies GameTopicModeration
     });
-    const invalidReason = validateVocabularyTopic(parsed.data.topic);
-    if (invalidReason) {
+    const topicValidation = validateVocabularyTopic(parsed.data.topic);
+    if (topicValidation) {
+      if (!topicValidation.strike) {
+        return reply.code(422).send({
+          code: "VOCABULARY_TOPIC_REJECTED",
+          strikes: strikeCount,
+          moderation: { state: "invalid", message: topicValidation.message } satisfies GameTopicModeration
+        });
+      }
       const nextStrike = strikeCount + 1;
       await pool.query(
         "insert into topic_strikes (id, learner_id, topic, reason) values ($1, $2, $3, $4)",
-        [randomUUID(), learnerId, parsed.data.topic, invalidReason]
+        [randomUUID(), learnerId, parsed.data.topic, topicValidation.message]
       );
       let reportId: string | undefined;
       if (nextStrike >= 3) {
         const report = await pool.query<{ id: string }>(
         `insert into topic_reports (id, learner_id, topic, reason, strike_count)
          values ($1, $2, $3, $4, $5) returning id`,
-          [randomUUID(), learnerId, parsed.data.topic, invalidReason, nextStrike]
+          [randomUUID(), learnerId, parsed.data.topic, topicValidation.message, nextStrike]
         );
         reportId = report.rows[0]?.id;
       }
       const moderation: GameTopicModeration = nextStrike >= 3
         ? { state: "reported", strike: 3, ...(reportId ? { reportId } : {}), message: "Đã báo người vận hành sau ba lần vi phạm." }
         : isUnsafeTopic(parsed.data.topic)
-          ? { state: "unsafe", strike: Math.min(3, nextStrike) as 1 | 2 | 3, message: invalidReason }
-          : { state: "invalid", message: invalidReason };
+          ? { state: "unsafe", strike: Math.min(3, nextStrike) as 1 | 2 | 3, message: topicValidation.message }
+          : { state: "invalid", message: topicValidation.message };
       return reply.code(422).send({ code: "VOCABULARY_TOPIC_REJECTED", strikes: nextStrike, moderation });
     }
     if (!aiRunner) return reply.code(503).send({ code: "AI_UNAVAILABLE" });
@@ -155,15 +162,18 @@ export function registerEngagementRoutes(
     if (!current || !task) return reply.code(503).send({ code: "AI_PROMPT_NOT_READY" });
     try {
       const result = await aiRunner.runTask("vocabulary_generation", {
-        topic: parsed.data.topic, cefr: current.cefr, count: 15
+        topic: parsed.data.topic, cefr: current.cefr, count: 20
       }, { systemPrompt: task.prompt });
       const output = vocabularyOutputSchema.safeParse(result.output);
       if (!output.success) return reply.code(502).send({ code: "AI_OUTPUT_INVALID", moderation: { state: "ai_rejected", message: "AI không trả về được bộ từ hợp lệ." } satisfies GameTopicModeration });
       await repositories.engagement.saveGeneratedWordSet({
         learnerId, requestId: parsed.data.requestId, taskId: task.taskId, promptVersionId: task.promptVersionId,
-        output: { topic: output.data.topic, words: output.data.words.map(({ imageQuery, ...word }) => ({
-          ...word, ...(imageQuery ? { imageQuery } : {})
-        })) }, metadata: result.metadata
+        output: {
+          topic: output.data.topic,
+          words: output.data.words.map(({ imageQuery, ...word }) => ({ ...word, ...(imageQuery ? { imageQuery } : {}) })),
+          distractors: output.data.distractors.map(({ imageQuery, ...word }) => ({ ...word, ...(imageQuery ? { imageQuery } : {}) }))
+        },
+        metadata: result.metadata
       });
       return { ...(await gameHubView(repositories, learnerId, true)), topicModeration: { state: "success", topic: output.data.topic } satisfies GameTopicModeration };
     } catch (error) {
@@ -209,7 +219,7 @@ export function registerEngagementRoutes(
     const duplicate = await repositories.engagement.findGameResult(learnerId, body.data.requestId);
     if (duplicate) return duplicate;
     const hub = await repositories.engagement.gameHub(learnerId);
-    if (!hub) return reply.code(404).send({ code: "GAME_SET_NOT_FOUND" });
+    if (!hub?.wordSet) return reply.code(404).send({ code: "GAME_SET_NOT_FOUND" });
     const scored = scoreGameAttempt(params.data.game, hub.wordSet.words, body.data.answers, { hintsUsed: body.data.hintsUsed });
     return repositories.engagement.saveGameResult({
       learnerId, setId: hub.wordSet.id, game: params.data.game, requestId: body.data.requestId,
@@ -229,7 +239,7 @@ export function registerEngagementRoutes(
     const own = arena.leaderboard.find((item) => item.learnerId === learnerId);
     return {
       eligible, requiredLevel: "B1", currentLevel: arena.cefr, learnerId, points: own?.points ?? 0,
-      wordSetTopic: hub?.wordSet.topic ?? null,
+      wordSetTopic: hub?.wordSet?.topic ?? null,
       leaderboard: eligible ? arena.leaderboard.map((item, index) => ({ rank: index + 1, ...item })) : [],
       opponents: eligible ? arena.opponents : [],
       duels: eligible ? arena.duels.map((duel) => duelSummary(duel, learnerId)) : []
@@ -303,16 +313,24 @@ export function registerEngagementRoutes(
   });
 }
 
-function validateVocabularyTopic(topic: string): string | null {
+function validateVocabularyTopic(topic: string): { message: string; strike: boolean } | null {
   const normalized = topic.normalize("NFKC").trim();
   const letters = normalized.match(/\p{L}/gu)?.join("") ?? "";
-  if (letters.length < 2) return "Chủ đề không có đủ từ có nghĩa.";
-  if (/[^\p{L}\p{N}\s&+,'’().\-/]/u.test(normalized)) return "Chủ đề chứa ký tự không phù hợp.";
-  if (/(.)\1{5,}/iu.test(normalized) || !/[aeiouyàáảãạăằắẳẵặâầấẩẫậèéẻẽẹêềếểễệìíỉĩịòóỏõọôồốổỗộơờớởỡợùúủũụưừứửữự]/iu.test(letters)) {
-    return "Chủ đề có dấu hiệu là chuỗi vô nghĩa.";
+  if (normalized.length > 70) return { message: "Chủ đề tối đa 70 ký tự.", strike: false };
+  if (normalized.split(/\s+/u).filter(Boolean).length > 7) return { message: "Chủ đề tối đa 7 từ.", strike: false };
+  if (letters.length < 2) return { message: "Chủ đề không có đủ từ có nghĩa.", strike: false };
+  if (/[^\p{L}\p{N}\s&+,'’().\-/]/u.test(normalized)) return { message: "Chủ đề chứa ký tự không phù hợp.", strike: false };
+  const protectedGroup = /\b(?:người đồng tính|người chuyển giới|người khuyết tật|dân tộc|tôn giáo|gay|lesbian|transgender|disabled people|ethnic group|religious group)\b/iu;
+  if (protectedGroup.test(normalized)) {
+    return { message: "Hãy chọn một chủ đề học tập hoặc công việc cụ thể hơn.", strike: false };
+  }
+  if (/(.)\1{5,}/iu.test(normalized)
+    || /(?:asdf|qwer|zxcv|hjkl)/iu.test(normalized)
+    || !/[aeiouyàáảãạăằắẳẵặâầấẩẫậèéẻẽẹêềếểễệìíỉĩịòóỏõọôồốổỗộơờớởỡợùúủũụưừứửữự]/iu.test(letters)) {
+    return { message: "Chủ đề có dấu hiệu là chuỗi vô nghĩa.", strike: true };
   }
   const blocked = /\b(?:porn|sex|nude|kill|murder|suicide|ma túy|thuốc phiện|khiêu dâm|giết người)\b/iu;
-  if (blocked.test(normalized)) return "Chủ đề không phù hợp với môi trường học tập.";
+  if (blocked.test(normalized)) return { message: "Chủ đề không phù hợp với môi trường học tập.", strike: true };
   return null;
 }
 

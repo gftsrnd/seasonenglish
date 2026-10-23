@@ -1,14 +1,16 @@
 // @vitest-environment jsdom
 import "@testing-library/jest-dom/vitest";
-import { cleanup, render, screen } from "@testing-library/react";
-import { MemoryRouter } from "react-router";
+import { cleanup, render, screen, waitFor } from "@testing-library/react";
+import { MemoryRouter, useLocation } from "react-router";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { LearnerHomeView, RewardView, SessionView } from "@e4s/contracts";
-import { RoleRoutes } from "./RoleRoutes.js";
+import { recoverStaleRoleBundle, RoleRouteErrorBoundary, RoleRoutes } from "./RoleRoutes.js";
 import { learnerApiClient as apiClient } from "../api/learner.js";
+import { shouldRedirectApprovedPlacement } from "./learner/LearnerRouteController.js";
 
 afterEach(() => {
   cleanup();
+  window.sessionStorage.clear();
   vi.restoreAllMocks();
 });
 
@@ -45,10 +47,47 @@ const unlockedHome: LearnerHomeView = {
   coach: { turnsThisWeek: 0, targetTurns: 2, href: "/coach" },
   practice: { status: "locked", detail: "Chưa mở", href: "/practice" },
   levelReadiness: { targetLevel: "B1", windowDays: 14, eligible: false, examAvailable: false, criteria: [] },
-  finalAssessment: { available: false, label: "Làm bài cuối kỳ", href: "/test/final" }
 };
 
 describe("RoleRoutes authorization boundary", () => {
+  it.each(["submitted", "pending_review", "approved"])("removes the placement result screen once status is %s", (status) => {
+    expect(shouldRedirectApprovedPlacement("placement", status)).toBe(true);
+  });
+
+  it.each(["in_progress", "needs_retry"])("keeps an actionable placement route for status %s", (status) => {
+    expect(shouldRedirectApprovedPlacement("placement", status)).toBe(false);
+  });
+
+  it("returns an active placement attempt from Home to the test route", async () => {
+    vi.spyOn(apiClient, "getHome").mockResolvedValue({
+      ...unlockedHome,
+      learner: { ...unlockedHome.learner, cefr: null }
+    });
+    vi.spyOn(apiClient, "getAssessment").mockResolvedValue({ attempt: { status: "in_progress" } } as never);
+    vi.spyOn(apiClient, "getProfile").mockResolvedValue({ completed: true, profile: {}, version: 1 } as never);
+
+    render(<MemoryRouter initialEntries={["/home"]}><RoleRoutes session={learner} /><LocationProbe /></MemoryRouter>);
+
+    await waitFor(() => expect(screen.getByTestId("current-path")).toHaveTextContent("/test/placement"));
+  });
+  it("reloads once automatically when a stale role bundle cannot load", () => {
+    const reload = vi.fn();
+    const setItem = vi.fn();
+    const storage = { getItem: vi.fn(() => null), setItem };
+
+    expect(recoverStaleRoleBundle(new Error("Failed to fetch dynamically imported module"), storage, reload, 1_000)).toBe(true);
+    expect(setItem).toHaveBeenCalledWith("e4s:role-bundle-reload-at", "1000");
+    expect(reload).toHaveBeenCalledTimes(1);
+  });
+
+  it("shows a clear error instead of looping or leaving a blank page after recovery already ran", () => {
+    window.sessionStorage.setItem("e4s:role-bundle-reload-at", String(Date.now()));
+    const BrokenRoute = () => { throw new Error("Failed to fetch dynamically imported module"); };
+    render(<MemoryRouter><RoleRouteErrorBoundary><BrokenRoute /></RoleRouteErrorBoundary></MemoryRouter>);
+
+    expect(screen.getByRole("alert")).toHaveTextContent("Không tải được giao diện");
+    expect(screen.queryByRole("button", { name: "Tải lại trang" })).not.toBeInTheDocument();
+  });
   it.each([
     ["/op/weeks", "Tài khoản này không có quyền mở khu vực vận hành."],
     ["/settings", "Tài khoản này không có quyền mở khu vực quản lý."],
@@ -162,3 +201,7 @@ describe("RoleRoutes authorization boundary", () => {
     expect(screen.queryByText("Đang tải cài đặt")).not.toBeInTheDocument();
   });
 });
+
+function LocationProbe() {
+  return <output data-testid="current-path">{useLocation().pathname}</output>;
+}

@@ -1,10 +1,12 @@
-import { useEffect, useRef, useState, type ButtonHTMLAttributes, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ButtonHTMLAttributes, type CSSProperties, type ReactNode } from "react";
 import type { ManagerProviderSettingsInput, ManagerProviderSettingsView, ManagerSettingsInput, ManagerSettingsView, ManagerWebhookTestView, OperatorSettingsOverviewView, OrganisationExperienceInput, OrganisationExperienceView, ProductPreferencesView, SystemCapabilitiesView } from "@e4s/contracts";
 import { Flower2, Gift, Leaf, MoonStar, Snowflake, Sparkles, Star, Sun } from "lucide-react";
 import { autoSeasonTheme } from "../games/season-visual.js";
-import { MUSIC_PRESETS, musicPresetFor, type StudyPeriod } from "../../features/experience/music-presets.js";
-import { resolveBackgroundMusic, studyPeriodFor } from "../../features/experience/music-selection.js";
+import { MUSIC_PRESETS } from "../../features/experience/music-presets.js";
+import { resolveBackgroundMusic } from "../../features/experience/music-selection.js";
+import { createMusicPlayer, type MusicPlayer } from "../../features/experience/music-player.js";
 import { PersonalPreferences } from "./PersonalPreferences.js";
+import { useTheme } from "../shared/ThemeProvider.js";
 
 export type AiConfigurationView = ManagerProviderSettingsView;
 export type AiConfigurationInput = ManagerProviderSettingsInput;
@@ -78,6 +80,14 @@ export function SettingsPage({ role, manager, product, experience, capabilities,
   useEffect(() => setManagerDraft(manager ?? operatorOverview?.settings), [manager, operatorOverview]);
   useEffect(() => setProductDraft(normalizeProductPreferences(product)), [product]);
   useEffect(() => setExperienceDraft(experience ?? legacyExperience(product, manager ?? operatorOverview?.settings)), [experience, manager, operatorOverview, product]);
+  const saveExperienceDraft = actions.onSaveExperience ? async () => {
+    try {
+      await actions.onSaveExperience!(experienceDraft);
+    } catch (error) {
+      setExperienceDraft(experience ?? legacyExperience(product, manager ?? operatorOverview?.settings));
+      throw error;
+    }
+  } : undefined;
   return <div className="settings-page" data-settings-role={role}>
     <div className="page-title"><h1>Cài đặt</h1></div>
     {role === "manager" ? aiDraft && ai ? <AiSection draft={aiDraft} configured={ai.configured} lastTest={ai.lastTest} capabilities={capabilities} onChange={setAiDraft} {...(actions.onSaveAi ? { onSave: () => actions.onSaveAi!(aiDraft) } : {})} {...(actions.onTestAi ? { onTest: () => actions.onTestAi!(aiDraft) } : {})} /> : <UnavailableAiSection capabilities={capabilities} role={role} /> : null}
@@ -86,15 +96,15 @@ export function SettingsPage({ role, manager, product, experience, capabilities,
       <ImageSection value={productDraft} onChange={setProductDraft} {...(actions.onSaveProduct ? { onSave: () => actions.onSaveProduct!(productDraft) } : {})} {...(actions.onTestImage ? { onTest: () => actions.onTestImage!(productDraft) } : {})} {...(actions.onClearImageCache ? { onClear: actions.onClearImageCache } : {})} />
       <TestSection value={managerDraft} onChange={setManagerDraft} {...(actions.onSaveManager ? { onSave: () => actions.onSaveManager!(toInput(managerDraft)) } : {})} />
       <LevelSection value={managerDraft} onChange={setManagerDraft} {...(actions.onSaveManager ? { onSave: () => actions.onSaveManager!(toInput(managerDraft)) } : {})} />
-      <ThemeSection value={experienceDraft} onChange={setExperienceDraft} {...(actions.onSaveExperience ? { onSave: () => actions.onSaveExperience!(experienceDraft) } : actions.onSaveProduct ? { onSave: () => actions.onSaveProduct!({ ...productDraft, theme: experienceDraft.theme }) } : {})} />
-      <MusicSection value={experienceDraft} onChange={setExperienceDraft} {...(actions.onSaveExperience ? { onSave: () => actions.onSaveExperience!(experienceDraft) } : {})} />
+      <ThemeSection value={experienceDraft} onChange={setExperienceDraft} {...(saveExperienceDraft ? { onSave: saveExperienceDraft } : actions.onSaveProduct ? { onSave: () => actions.onSaveProduct!({ ...productDraft, theme: experienceDraft.theme }) } : {})} />
+      <MusicSection value={experienceDraft} onChange={setExperienceDraft} {...(saveExperienceDraft ? { onSave: saveExperienceDraft } : {})} />
       <WebhookSection value={managerDraft} onChange={setManagerDraft} {...(actions.onSaveManager ? { onSave: () => actions.onSaveManager!(toInput(managerDraft)) } : {})} {...(actions.onTestWebhook ? { onTest: actions.onTestWebhook } : {})} />
       <PolicySection value={managerDraft} onChange={setManagerDraft} {...(actions.onSaveManager ? { onSave: () => actions.onSaveManager!(toInput(managerDraft)) } : {})} />
       <DataSection actions={actions} capabilities={capabilities} />
       {accounts}
     </> : <>
-      <ThemeSection value={experienceDraft} onChange={setExperienceDraft} {...(actions.onSaveExperience ? { onSave: () => actions.onSaveExperience!(experienceDraft) } : {})} />
-      <MusicSection value={experienceDraft} onChange={setExperienceDraft} {...(actions.onSaveExperience ? { onSave: () => actions.onSaveExperience!(experienceDraft) } : {})} />
+      <ThemeSection value={experienceDraft} onChange={setExperienceDraft} {...(saveExperienceDraft ? { onSave: saveExperienceDraft } : {})} />
+      <MusicSection value={experienceDraft} onChange={setExperienceDraft} {...(saveExperienceDraft ? { onSave: saveExperienceDraft } : {})} />
       {operatorOverview && managerDraft ? <>
         <PilotSection value={managerDraft} onChange={setManagerDraft} {...(actions.onSaveManager ? { onSave: () => actions.onSaveManager!(toInput(managerDraft)) } : {})} />
         <TestSection value={managerDraft} onChange={setManagerDraft} {...(actions.onSaveManager ? { onSave: () => actions.onSaveManager!(toInput(managerDraft)) } : {})} />
@@ -127,7 +137,7 @@ function AiSection({ draft, configured, lastTest, capabilities, onChange, onSave
   </section>;
 }
 
-function PilotSection({ value, onChange, onSave }: ManagerSectionProps) { return <section className="card"><h3>Lịch pilot</h3><Field label="Tên chương trình"><input value={value.programName} maxLength={120} placeholder="E4S Pilot" onChange={(event) => onChange({ ...value, programName: event.target.value })} /></Field><div className="grid cols-3"><Field label="Ngày bắt đầu (Thứ Hai tuần 1)"><input type="date" value={value.pilotStartDate} onChange={(event) => onChange({ ...value, pilotStartDate: event.target.value })} /></Field><Field label="Số tuần"><select value={value.pilotWeeks} onChange={(event) => onChange({ ...value, pilotWeeks: Number(event.target.value) })}><option>2</option><option>3</option><option>4</option></select></Field><NumberField label="Ép tuần hiện tại (0 = tự tính)" value={value.weekOverride} min={0} max={4} onChange={(weekOverride) => onChange({ ...value, weekOverride })} /></div><NumberField label="Khuyến nghị học tối thiểu (phút/ngày)" value={value.minMinutesPerDay} min={5} max={60} onChange={(minMinutesPerDay) => onChange({ ...value, minMinutesPerDay })} /><Field label="Chủ đề lớn của khoá (hiện ở Trang chủ học viên, phía trên chủ đề tuần)"><input value={value.courseTheme} placeholder="Tiếng Anh giao tiếp công sở" onChange={(event) => onChange({ ...value, courseTheme: event.target.value })} /></Field><NumberField label="Giới hạn chat với Season (lượt/ngày cho mỗi học viên)" value={value.coachDailyLimit} min={1} max={200} onChange={(coachDailyLimit) => onChange({ ...value, coachDailyLimit })} /><p className="xs muted settings-pilot-status" role="status">{pilotWeekSummary(value)}</p><Save label="Lưu lịch pilot" onSave={onSave} /></section>; }
+function PilotSection({ value, onChange, onSave }: ManagerSectionProps) { return <section className="card"><h3>Lịch pilot</h3><div className="grid cols-3"><Field label="Ngày bắt đầu (Thứ Hai tuần 1)"><input type="date" value={value.pilotStartDate} onChange={(event) => onChange({ ...value, pilotStartDate: event.target.value })} /></Field><Field label="Số tuần"><select value={value.pilotWeeks} onChange={(event) => onChange({ ...value, pilotWeeks: Number(event.target.value) })}><option>2</option><option>3</option><option>4</option></select></Field><NumberField label="Ép tuần hiện tại (0 = tự tính)" value={value.weekOverride} min={0} max={4} onChange={(weekOverride) => onChange({ ...value, weekOverride })} /></div><NumberField label="Khuyến nghị học tối thiểu (phút/ngày)" value={value.minMinutesPerDay} min={5} max={60} onChange={(minMinutesPerDay) => onChange({ ...value, minMinutesPerDay })} /><NumberField label="Giới hạn chat với Season (tối đa 30 lượt/ngày cho mỗi học viên)" value={value.coachDailyLimit} min={1} max={30} onChange={(coachDailyLimit) => onChange({ ...value, coachDailyLimit })} /><p className="xs muted settings-pilot-status" role="status">{pilotWeekSummary(value)}</p><Save label="Lưu lịch pilot" onSave={onSave} /></section>; }
 
 function ImageSection({ value, onChange, onSave, onTest, onClear, readOnly = false }: { value: ProductPreferencesView; onChange: (value: ProductPreferencesView) => void; onSave?: () => void | Promise<void>; onTest?: () => void | Promise<void>; onClear?: () => void | Promise<void>; readOnly?: boolean }) { return <section className="card"><h3>Ảnh minh hoạ từ vựng</h3><p className="small muted">Tự động tìm ảnh có giấy phép mở từ Wikipedia, Wikimedia Commons và Openverse. Ảnh được lưu vào kho E4S kèm thông tin tác giả và giấy phép.</p><Field label="Nguồn ảnh"><select value={normalizeImageSource(value.vocabImageSource)} disabled={readOnly} onChange={(event) => onChange({ ...value, vocabImageSource: event.target.value as ProductPreferencesView["vocabImageSource"] })}><option value="wikimedia">Tự động từ nguồn mở</option><option value="disabled">Tắt ảnh minh hoạ</option></select></Field>{readOnly ? null : <div className="row"><Save label="Lưu nguồn ảnh" onSave={onSave} /><AsyncButton action={onTest} disabled={!onTest || value.vocabImageSource === "disabled"} busyLabel="Đang thử…" title={!onTest ? "Chưa có endpoint kiểm tra ảnh" : undefined}>Thử ảnh cho &quot;notebook&quot;</AsyncButton><AsyncButton className="btn-ghost" action={onClear} disabled={!onClear} busyLabel="Đang xoá…" title={!onClear ? "Chưa có endpoint xoá cache ảnh" : undefined}>Xoá cache ảnh</AsyncButton></div>}</section>; }
 
@@ -151,16 +161,18 @@ function legacyExperience(product: ProductPreferencesView, settings?: ManagerSet
   };
 }
 
-function TestSection({ value, onChange, onSave }: ManagerSectionProps) { const updateTime = (key: keyof ManagerSettingsView["testTimes"], next: number) => onChange({ ...value, testTimes: { ...value.testTimes, [key]: next } }); return <section className="card"><h3>Bài test đầu vào / cuối kỳ</h3><p className="small muted">&quot;Workplace English CEFR Placement Test (Refined)&quot;: Nghe 20 · Đọc, Ngữ pháp &amp; Từ vựng 40 · Viết 20 (2 task) · Nói 20 (4 task), tổng 100 điểm. Mỗi phần tính giờ riêng; hết giờ tự nộp. Rời màn hình bị cảnh báo; quá số lần cho phép cũng tự nộp.</p><label className="check"><input type="checkbox" checked={value.testTimed} onChange={(event) => onChange({ ...value, testTimed: event.target.checked })} /> Bật tính giờ</label><div className="grid cols-4">{(["listening", "reading", "writing", "speaking"] as const).map((key) => <NumberField key={key} label={`${({ listening: "Nghe", reading: "Đọc", writing: "Viết", speaking: "Nói" })[key]} (phút)`} value={value.testTimes[key]} min={1} max={60} onChange={(next) => updateTime(key, next)} />)}</div><NumberField label="Số lần cảnh báo (kèm âm thanh) khi rời màn hình; vi phạm lần kế tiếp thì tự nộp" value={value.testWarnLimit} min={1} max={10} onChange={(testWarnLimit) => onChange({ ...value, testWarnLimit })} /><Save label="Lưu bài test" onSave={onSave} /></section>; }
+function TestSection({ value, onChange, onSave }: ManagerSectionProps) { const updateTime = (key: keyof ManagerSettingsView["testTimes"], next: number) => onChange({ ...value, testTimes: { ...value.testTimes, [key]: next } }); return <section className="card"><h3>Bài test đầu vào</h3><p className="small muted">&quot;Workplace English CEFR Placement Test (Refined)&quot;: Nghe 20 · Đọc, Ngữ pháp &amp; Từ vựng 40 · Viết 20 (2 task) · Nói 20 (4 task), tổng 100 điểm. Mỗi phần tính giờ riêng; hết giờ tự nộp. Rời màn hình bị cảnh báo; quá số lần cho phép cũng tự nộp.</p><label className="check"><input type="checkbox" checked={value.testTimed} onChange={(event) => onChange({ ...value, testTimed: event.target.checked })} /> Bật tính giờ</label><div className="grid cols-4">{(["listening", "reading", "writing", "speaking"] as const).map((key) => <NumberField key={key} label={`${({ listening: "Nghe", reading: "Đọc", writing: "Viết", speaking: "Nói" })[key]} (phút)`} value={value.testTimes[key]} min={1} max={60} onChange={(next) => updateTime(key, next)} />)}</div><NumberField label="Số lần cảnh báo (kèm âm thanh) khi rời màn hình; vi phạm lần kế tiếp thì tự nộp" value={value.testWarnLimit} min={1} max={10} onChange={(testWarnLimit) => onChange({ ...value, testWarnLimit })} /><Save label="Lưu bài test" onSave={onSave} /></section>; }
 
 function LevelSection({ value, onChange, onSave }: ManagerSectionProps) { const labels: Record<keyof ManagerSettingsView["levelUp"], string> = { days: "Số ngày xét", lessons: "Bài học hoàn thành ≥ (%)", firstTry: "Đúng ngay lần đầu ≥ (%)", submission: "Bài thực hành gần nhất ≥ (/100)", coach: "Rubric Season trung bình ≥ (/5)", coachTurns: "Số lượt chat tối thiểu", wrong: "Hạ mức: tỉ lệ sai > (%)", minParts: "Hạ mức: số phần tối thiểu/tuần" }; return <section className="card"><h3>Ngưỡng xét lên / hạ mức</h3><p className="small muted">Xét trong số ngày gần nhất: đủ 4 ngưỡng đầu = &quot;Sẵn sàng thi lên level&quot; (trừ C1). Hai tuần liền sai quá số lượt cho phép = &quot;Nên xem xét hạ mức&quot; (trừ A1).</p><div className="grid cols-4">{(Object.keys(labels) as (keyof ManagerSettingsView["levelUp"])[]).map((key) => <NumberField key={key} label={labels[key]} value={value.levelUp[key]} min={key === "coach" ? 0 : 1} max={key === "coach" ? 5 : key === "days" ? 60 : 100} step={key === "coach" ? 0.5 : 1} onChange={(next) => onChange({ ...value, levelUp: { ...value.levelUp, [key]: next } })} />)}</div><Save label="Lưu ngưỡng" onSave={onSave} /></section>; }
 
 function ThemeSection({ value, onChange, onSave, readOnly = false }: { value: OrganisationExperienceView; onChange: (value: OrganisationExperienceView) => void; onSave?: () => void | Promise<void>; readOnly?: boolean }) {
+  const { previewTheme, clearThemePreview } = useTheme();
   const themes: [OrganisationExperienceView["theme"], string][] = [["auto", "Tự động theo ngày"], ["spring", "Mùa xuân"], ["summer", "Mùa hạ"], ["autumn", "Mùa thu"], ["winter", "Mùa đông"], ["tet", "Tết Nguyên đán"], ["midautumn", "Trung thu"], ["christmas", "Giáng sinh – Năm mới"]];
   useEffect(() => {
-    document.documentElement.dataset.theme = value.theme === "auto" ? autoSeasonTheme() : value.theme;
-  }, [value.theme]);
-  return <section className="card"><h3>Giao diện theo mùa / lễ</h3><p className="small muted">Đổi màu và icon; không đổi bố cục, nội dung, dữ liệu. Thiết lập áp dụng cho toàn tổ chức và chế độ tự động cập nhật theo ngày địa phương.</p><Field label="Chủ đề giao diện (áp dụng ngay khi chọn)"><select value={value.theme} disabled={readOnly} onChange={(event) => onChange({ ...value, theme: event.target.value as OrganisationExperienceView["theme"] })}>{themes.map(([id, label]) => <option value={id} key={id}>{label}</option>)}</select></Field><div className="row">{themes.slice(1).map(([id, label]) => <span className="badge settings-theme-badge" key={id}><ThemeMark theme={id as Exclude<OrganisationExperienceView["theme"], "auto">} />{label}</span>)}</div>{readOnly ? null : <Save label="Lưu giao diện" onSave={onSave} />}</section>;
+    previewTheme(value.theme);
+    return clearThemePreview;
+  }, [clearThemePreview, previewTheme, value.theme]);
+  return <section className="card"><h3>Giao diện theo mùa / lễ</h3><p className="small muted">Đổi màu và icon; không đổi bố cục, nội dung, dữ liệu. Thiết lập áp dụng cho toàn tổ chức và cập nhật ngay trên các thiết bị đang mở E4S.</p><fieldset className="settings-theme-picker" disabled={readOnly}><legend>Chủ đề giao diện (áp dụng ngay khi chọn)</legend>{themes.map(([id, label]) => <label className={`settings-theme-choice${value.theme === id ? " active" : ""}`} key={id}><input type="radio" name="organisation-theme" value={id} checked={value.theme === id} onChange={() => onChange({ ...value, theme: id })} />{id === "auto" ? <Star className="settings-theme-mark" size={16} strokeWidth={2} aria-hidden="true" /> : <ThemeMark theme={id as Exclude<OrganisationExperienceView["theme"], "auto">} />}<span>{label}</span></label>)}</fieldset>{readOnly ? null : <Save label="Lưu giao diện" onSave={onSave} />}</section>;
 }
 
 function ThemeMark({ theme }: { theme: Exclude<ProductPreferencesView["theme"], "auto"> }) {
@@ -177,38 +189,46 @@ function ThemeMark({ theme }: { theme: Exclude<ProductPreferencesView["theme"], 
 
 function MusicSection({ value, onChange, onSave }: { value: OrganisationExperienceView; onChange: (value: OrganisationExperienceView) => void; onSave?: () => void | Promise<void> }) {
   const music = value.backgroundMusic;
-  const preview = useRef<HTMLAudioElement | null>(null);
+  const preview = useRef<MusicPlayer | null>(null);
   const [previewStatus, setPreviewStatus] = useState("");
+  const [playlistOpen, setPlaylistOpen] = useState(false);
   const setMusic = (next: Partial<OrganisationExperienceView["backgroundMusic"]>) => onChange({ ...value, backgroundMusic: { ...music, ...next } });
   const activeTheme = value.theme === "auto" ? autoSeasonTheme() : value.theme;
-  const selectedPreset = music.playlistId === "auto" ? musicPresetFor(activeTheme, studyPeriodFor(new Date())) : MUSIC_PRESETS.find((preset) => preset.id === music.playlistId);
+  const playlistChoices: readonly (readonly [string, string])[] = [["auto", "Tự động chọn theo giờ học"], ...MUSIC_PRESETS.map((preset) => [preset.id, preset.label] as const)];
+  const selectedPlaylistLabel = playlistChoices.find(([id]) => id === music.playlistId)?.[1] ?? "Tự động chọn theo giờ học";
   const stopPreview = () => { preview.current?.pause(); preview.current = null; };
   useEffect(() => () => stopPreview(), []);
-  const playPreview = async () => {
+  useEffect(() => {
+    if (!preview.current) return;
+    preview.current.volume = music.volume / 100;
+    setPreviewStatus(`Đang phát nhạc thử ở âm lượng ${music.volume}/100.`);
+  }, [music.volume]);
+  const playPreview = async (draft = music) => {
     stopPreview();
     setPreviewStatus("");
-    const selection = resolveBackgroundMusic({ theme: activeTheme, date: new Date(), config: { ...music, enabled: true }, personalEnabled: true, suspended: false });
+    const selection = resolveBackgroundMusic({ theme: activeTheme, date: new Date(), config: { ...draft, enabled: true }, personalEnabled: true, suspended: false });
     if (!selection.enabled) return;
     try {
-      const player = new Audio(selection.url);
+      const player = createMusicPlayer(selection.url);
       player.preload = "auto";
       player.volume = selection.volume;
       preview.current = player;
+      player.onerror = () => {
+        stopPreview();
+        setPreviewStatus("Nguồn nhạc không tải được. Hãy chọn danh sách khác hoặc thử lại khi mạng ổn định.");
+      };
       await player.play();
-      setPreviewStatus("Đang nghe thử. Cấu hình chưa được lưu.");
+      setPreviewStatus(`Đang phát nhạc thử ở âm lượng ${draft.volume}/100.`);
     } catch {
       stopPreview();
       setPreviewStatus("Không phát được nguồn nhạc này. Cấu hình đang lưu không bị thay đổi.");
     }
   };
-  const periods: readonly StudyPeriod[] = ["morning", "afternoon", "evening"];
-  const periodLabels: Record<StudyPeriod, string> = { morning: "Buổi sáng", afternoon: "Buổi chiều", evening: "Buổi tối" };
-  return <section className="card"><h3>Nhạc nền của Season</h3><p className="small muted">Nhạc cần mạng, có giấy phép mở và được chọn theo mùa cùng giờ học. Thiết lập áp dụng toàn tổ chức; mỗi người vẫn có thể bật/tắt và nhạc sẽ dừng khi làm phần Nghe hoặc phát giọng đọc.</p>
+  return <section className="card"><h3>Nhạc nền của Season</h3><p className="small muted">Danh sách nhạc mặc định lấy đúng từ prototype và cần mạng để phát qua YouTube. Thiết lập áp dụng toàn tổ chức; mỗi người vẫn có thể bật/tắt và nhạc sẽ dừng khi làm phần Nghe hoặc phát giọng đọc.</p>
     <label className="check"><input type="checkbox" checked={music.enabled} onChange={(event) => setMusic({ enabled: event.target.checked })} /> Cho phép nhạc nền trong app</label>
-    <Field label="Danh sách nhạc"><select value={music.playlistId} onChange={(event) => setMusic({ playlistId: event.target.value })}><option value="auto">Tự động theo mùa và giờ học</option>{periods.map((period) => <optgroup label={periodLabels[period]} key={period}>{MUSIC_PRESETS.filter((preset) => preset.period === period).map((preset) => <option value={preset.id} key={preset.id}>{preset.label}</option>)}</optgroup>)}</select></Field>
+    <div className="settings-music-select"><span className="settings-music-select-label">Danh sách bài nhạc</span><button className="settings-music-select-trigger" type="button" aria-haspopup="listbox" aria-expanded={playlistOpen} onClick={() => setPlaylistOpen((open) => !open)}><span>{selectedPlaylistLabel}</span><span aria-hidden="true">⌄</span></button>{playlistOpen ? <div className="settings-music-options" role="listbox" aria-label="Danh sách bài nhạc">{playlistChoices.map(([id, label]) => <button className={music.playlistId === id ? "active" : ""} type="button" role="option" aria-selected={music.playlistId === id} key={id} onClick={() => { const nextMusic = { ...music, playlistId: id }; const restartPreview = Boolean(preview.current); onChange({ ...value, backgroundMusic: nextMusic }); setPlaylistOpen(false); if (restartPreview) void playPreview(nextMusic); }}><span>{label}</span>{music.playlistId === id ? <span aria-hidden="true">✓</span> : null}</button>)}</div> : null}</div>
     <Field label="Link YouTube tùy chỉnh (không bắt buộc)"><input value={music.customUrl} onChange={(event) => setMusic({ customUrl: event.target.value })} placeholder="https://www.youtube.com/watch?v=…" /></Field>
-    <Field label={`Âm lượng: ${music.volume}/100`}><input type="range" min="0" max="100" value={music.volume} onChange={(event) => setMusic({ volume: Number(event.target.value) })} /></Field>
-    {selectedPreset ? <p className="xs muted">{selectedPreset.attribution} · {selectedPreset.licence} · <a href={selectedPreset.sourceUrl} target="_blank" rel="noreferrer">Xem nguồn</a></p> : null}
+    <Field label={`Âm lượng: ${music.volume}/100`}><input className="settings-volume-range" style={{ "--range-value": `${music.volume}%` } as CSSProperties} type="range" min="0" max="100" value={music.volume} onChange={(event) => setMusic({ volume: Number(event.target.value) })} /></Field>
     <div className="row"><Save label="Lưu nhạc nền" onSave={onSave} /><AsyncButton action={playPreview} busyLabel="Đang mở…">Nghe thử</AsyncButton><button className="btn-ghost" type="button" onClick={() => { stopPreview(); setMusic({ playlistId: "auto", customUrl: "" }); setPreviewStatus("Đã trở về nhạc tự động. Nhấn Lưu để áp dụng cho tổ chức."); }}>Về nhạc tự động</button>{previewStatus ? <span className="small muted" role="status">{previewStatus}</span> : null}</div>
   </section>;
 }

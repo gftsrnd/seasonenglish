@@ -19,8 +19,9 @@ create unique index if not exists practice_submissions_learner_week_canonical_un
   on practice_submissions (learner_id, program_week_id)
   where superseded_at is null;
 
-create unique index if not exists reward_events_learner_source_unique
-  on reward_events (learner_id, source_type, source_id);
+-- Points and badge awards may legitimately share the same source event.
+-- Their separate idempotency keys are installed by 0058; the earlier combined
+-- unique index would reject existing valid pairs before that migration runs.
 
 create table if not exists level_up_retry_plans (
   id uuid primary key,

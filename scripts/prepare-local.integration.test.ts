@@ -14,9 +14,9 @@ describe("local demo fixture preparation", () => {
   const pool = new Pool({ connectionString: databaseUrl });
   const app = buildApi({ pool, allowDemoLogin: true, secureCookies: false });
   const credentials = [
-    ["learner@e4s.local", "learner-pass", "learner"],
-    ["operator@e4s.local", "staff-pass", "operator"],
-    ["manager@e4s.local", "manager-pass", "manager"]
+    ["minh.anh.nguyen@e4s.local", "246810", "learner", "pin"],
+    ["thu.ha.tran@e4s.local", "staff-pass", "operator", "password"],
+    ["quoc.bao.le@e4s.local", "manager-pass", "manager", "password"]
   ] as const;
 
   beforeAll(async () => {
@@ -37,7 +37,7 @@ describe("local demo fixture preparation", () => {
   afterAll(async () => { await app.close(); await pool.end(); });
 
   it("creates active credentials for every seeded role account", async () => {
-    for (const [email, password, role] of credentials) {
+    for (const [email, secret, role, credentialType] of credentials) {
       const account = await pool.query<{ role: string; status: string }>(
         "select role, status from users where email = $1",
         [email]
@@ -54,7 +54,7 @@ describe("local demo fixture preparation", () => {
       const login = await app.inject({
         method: "POST",
         url: `/api/auth/${audience}/login`,
-        payload: { email, password }
+        payload: credentialType === "pin" ? { email, pin: secret } : { email, password: secret }
       });
       expect(login.statusCode, login.body).toBe(200);
       expect(login.json()).toMatchObject({ role });
@@ -74,9 +74,9 @@ describe("local demo fixture preparation", () => {
       "select email from users where email like '%@e4s.local' order by email"
     );
     expect(accounts.rows.map(({ email }) => email)).toEqual([
-      "learner@e4s.local",
-      "manager@e4s.local",
-      "operator@e4s.local"
+      "minh.anh.nguyen@e4s.local",
+      "quoc.bao.le@e4s.local",
+      "thu.ha.tran@e4s.local"
     ]);
   });
 });

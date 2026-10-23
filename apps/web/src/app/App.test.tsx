@@ -9,6 +9,9 @@ const client = vi.hoisted(() => ({
   learnerLogin: vi.fn(),
   staffLogin: vi.fn(),
   registerLearner: vi.fn(),
+  startLearnerPinReset: vi.fn(),
+  verifyLearnerPinReset: vi.fn(),
+  completeLearnerPinReset: vi.fn(),
   getProductPreferences: vi.fn(),
   getOrganisationExperience: vi.fn(),
   getProfile: vi.fn(),
@@ -52,7 +55,10 @@ const operatorSession = {
   permissions: ["content:operate" as const]
 };
 
-afterEach(cleanup);
+afterEach(() => {
+  cleanup();
+  vi.unstubAllGlobals();
+});
 
 beforeEach(() => {
   window.history.replaceState({}, "", "/home");
@@ -109,6 +115,17 @@ describe("App session shell", () => {
     expect(window.location.pathname).toBe("/mgr");
   });
 
+  it("refreshes the visible account when another tab changes the shared browser cookie", async () => {
+    client.currentSession.mockResolvedValueOnce(learnerSession).mockResolvedValueOnce(managerSession);
+    render(<App>{(active) => <h1>{active.role}</h1>}</App>);
+
+    expect(await screen.findByRole("heading", { name: "learner" })).toBeInTheDocument();
+    window.dispatchEvent(new StorageEvent("storage", { key: "e4s:auth:changed", newValue: "changed" }));
+
+    expect(await screen.findByRole("heading", { name: "manager" })).toBeInTheDocument();
+    expect(window.location.pathname).toBe("/mgr");
+  });
+
   it("returns a persisted learner to home from a stale staff route", async () => {
     window.history.replaceState({}, "", "/mgr");
     client.currentSession.mockResolvedValue(learnerSession);
@@ -124,6 +141,23 @@ describe("App session shell", () => {
 
     expect(await screen.findAllByRole("link", { name: "Luyện với Season" })).toHaveLength(2);
     expect(screen.getAllByRole("link", { name: "Bài tuần" })).toHaveLength(2);
+  });
+
+  it("keeps learning destinations hidden until the learner has an approved CEFR level", async () => {
+    learnerClient.getProgress.mockResolvedValueOnce({
+      learner: { id: "learner-1", displayName: "Nguyễn Minh Anh", cefr: null, profile: {} },
+      points: 0,
+      badges: [],
+      weeks: []
+    });
+    render(<App>{() => <h1>Cửa vào người học</h1>}</App>);
+
+    expect(await screen.findByRole("heading", { name: "Cửa vào người học" })).toBeInTheDocument();
+    await waitFor(() => expect(learnerClient.getProgress).toHaveBeenCalled());
+    expect(screen.queryByRole("link", { name: "Luyện với Season" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "Bài tuần" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "Mini game" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "Tiến độ & hồ sơ" })).not.toBeInTheDocument();
   });
 
   it.each([
@@ -155,11 +189,50 @@ describe("App session shell", () => {
     client.currentSession.mockResolvedValue(activeSession);
     render(<App>{() => <ExperienceProbe />}</App>);
 
-    expect(await screen.findByTestId("resolved-theme")).toHaveTextContent("winter");
+    await waitFor(() => expect(screen.getByTestId("resolved-theme")).toHaveTextContent("winter"));
     await waitFor(() => expect(screen.getByTestId("music-allowed")).toHaveTextContent("false"));
     expect(client.getOrganisationExperience).toHaveBeenCalledOnce();
     expect(document.documentElement.dataset.themePattern).toBe("winter");
     expect(document.documentElement.style.getPropertyValue("--season-pattern-image")).toContain("season-winter.png");
+  });
+
+  it("refreshes the organisation experience when an already-open app regains focus", async () => {
+    client.getOrganisationExperience
+      .mockResolvedValueOnce({ theme: "winter", backgroundMusic: { enabled: false, playlistId: "auto", customUrl: "", volume: 18 } })
+      .mockResolvedValueOnce({ theme: "spring", backgroundMusic: { enabled: true, playlistId: "auto", customUrl: "", volume: 26 } });
+    render(<App>{() => <ExperienceProbe />}</App>);
+
+    await waitFor(() => expect(screen.getByTestId("resolved-theme")).toHaveTextContent("winter"));
+    window.dispatchEvent(new Event("focus"));
+
+    await waitFor(() => expect(screen.getByTestId("resolved-theme")).toHaveTextContent("spring"));
+    expect(client.getOrganisationExperience).toHaveBeenCalledTimes(2);
+    expect(document.documentElement.dataset.themePattern).toBe("spring");
+  });
+
+  it("applies an organisation experience push without focus or refresh", async () => {
+    const streams: FakeEventSource[] = [];
+    class FakeEventSource {
+      listeners = new Map<string, Set<(event: MessageEvent<string>) => void>>();
+      constructor(readonly url: string) { streams.push(this); }
+      addEventListener(type: string, listener: (event: MessageEvent<string>) => void) {
+        const listeners = this.listeners.get(type) ?? new Set();
+        listeners.add(listener);
+        this.listeners.set(type, listeners);
+      }
+      close = vi.fn();
+      emit(type: string, data: unknown) {
+        for (const listener of this.listeners.get(type) ?? []) listener(new MessageEvent(type, { data: JSON.stringify(data) }));
+      }
+    }
+    vi.stubGlobal("EventSource", FakeEventSource);
+    render(<App>{() => <ExperienceProbe />}</App>);
+
+    await waitFor(() => expect(streams).toHaveLength(1));
+    streams[0]!.emit("experience", { theme: "spring", backgroundMusic: { enabled: true, playlistId: "auto", customUrl: "", volume: 26 } });
+
+    await waitFor(() => expect(screen.getByTestId("resolved-theme")).toHaveTextContent("spring"));
+    expect(document.documentElement.dataset.themePattern).toBe("spring");
   });
 
   it("passes the learner's approved CEFR into the account badge", async () => {
@@ -175,7 +248,7 @@ describe("App session shell", () => {
     render(<App>{() => <h1>Trang học</h1>}</App>);
 
     await user.type(await screen.findByRole("textbox", { name: "Email" }), "learner@example.test");
-    await user.type(screen.getByLabelText("Mật khẩu"), "learner-pass");
+    await user.type(screen.getByLabelText("Mã PIN"), "123456");
     client.learnerLogin.mockResolvedValueOnce(learnerSession);
     await user.click(screen.getByRole("button", { name: "Đăng nhập người học" }));
 

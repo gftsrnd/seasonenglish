@@ -13,17 +13,20 @@ import {
   ManagerRewards
 } from "./index.js";
 import { OperationalCards, PageTitle } from "./shared.js";
+import { buildManagerReportText } from "./Report.js";
 
 afterEach(cleanup);
 
 const progress: ManagerProgressView = {
   organizationName: "GFT Demo", currentWeek: 1, pilotWeeks: 2,
-  summary: { learnerCount: 2, activeLearnersThisWeek: 1, completedLessons: 1, pendingAssessments: 0, completedLearners: 0, comparableLearners: 0, improvedLearners: 0, surveyCount: 0, satisfactionAverage: null },
+  summary: { learnerCount: 4, activeLearnersThisWeek: 1, completedLessons: 1, pendingAssessments: 2, completedLearners: 0, surveyCount: 0, satisfactionAverage: null },
   regularByWeek: [{ week: 1, regularLearners: 1, totalLearners: 1, percent: 100 }],
   activityByDay: [{ date: "2026-10-14", activeLearners: 1, sessions: 1, minutes: 10 }],
   learners: [
-    { learnerId: "learner-1", learnerName: "Học viên Demo", cefr: "A2", completedLessons: 1, totalLessonsThisWeek: 5, sessionsThisWeek: 3, coachTurnsThisWeek: 2, weeklyPracticeScore: null, weeklyPracticeStatus: "not_submitted", rewardPoints: 20, earnedBadges: ["first"], placementScore: 52, finalScore: null, missedDays: 0, lastActivityAt: "2026-10-14T09:00:00.000Z" },
-    { learnerId: "learner-2", learnerName: "Chờ duyệt", cefr: null, completedLessons: 0, totalLessonsThisWeek: 0, sessionsThisWeek: 0, coachTurnsThisWeek: 0, weeklyPracticeScore: null, weeklyPracticeStatus: "not_submitted", rewardPoints: 0, earnedBadges: [], placementScore: 40, finalScore: null, missedDays: 3, lastActivityAt: null }
+    { learnerId: "learner-1", learnerName: "Học viên Demo", cefr: "A2", completedLessons: 1, totalLessonsThisWeek: 5, sessionsThisWeek: 3, coachTurnsThisWeek: 2, weeklyPracticeScore: null, weeklyPracticeStatus: "not_submitted", rewardPoints: 20, earnedBadges: ["first"], placementScore: 52, missedDays: 0, lastActivityAt: "2026-10-14T09:00:00.000Z" },
+    { learnerId: "learner-2", learnerName: "Đã nộp", cefr: null, completedLessons: 0, totalLessonsThisWeek: 0, sessionsThisWeek: 0, coachTurnsThisWeek: 0, weeklyPracticeScore: null, weeklyPracticeStatus: "not_submitted", rewardPoints: 0, earnedBadges: [], placementScore: 40, placementStatus: "submitted", placementScoring: "ai", missedDays: 3, lastActivityAt: null },
+    { learnerId: "learner-3", learnerName: "Chưa thi", cefr: null, completedLessons: 0, totalLessonsThisWeek: 0, sessionsThisWeek: 0, coachTurnsThisWeek: 0, weeklyPracticeScore: null, weeklyPracticeStatus: "not_submitted", rewardPoints: 0, earnedBadges: [], placementScore: null, placementStatus: "not_started", missedDays: null, lastActivityAt: null },
+    { learnerId: "learner-4", learnerName: "Đang thi", cefr: null, completedLessons: 0, totalLessonsThisWeek: 0, sessionsThisWeek: 0, coachTurnsThisWeek: 0, weeklyPracticeScore: null, weeklyPracticeStatus: "not_submitted", rewardPoints: 0, earnedBadges: [], placementScore: null, placementStatus: "in_progress", missedDays: null, lastActivityAt: "2026-10-23T09:00:00.000Z" }
   ]
 };
 
@@ -39,16 +42,32 @@ function renderRewards() {
 }
 
 describe("new Manager app branch", () => {
-  it("preserves progress block order and wires learner actions", async () => {
-    const openProfile = vi.fn(); const remove = vi.fn();
-    const { container } = render(<ManagerProgress view={progress} onOpenLearnerProfile={openProfile} onDeleteLearner={remove} />);
+  it("groups Manager progress like Operator and exposes profile-only learner actions", async () => {
+    const openProfile = vi.fn(); const remove = vi.fn(); const assignWeeklyPractice = vi.fn();
+    const { container } = render(<ManagerProgress view={progress} onOpenLearnerProfile={openProfile} onAssignWeeklyPractice={assignWeeklyPractice} onDeleteLearner={remove} />);
     const headings = [...container.querySelectorAll("h1,h3")].map((node) => node.textContent);
-    expect(headings).toEqual(["Tiến độ nhóm", "Từng người học", "Chưa vào học"]);
+    expect(headings).toEqual(["Tiến độ nhóm", "Đang học (1)", "Đang làm test (1)", "Đã nộp, chờ duyệt mức (1)", "Chưa làm test (1)"]);
     expect(screen.getByText("Học đều (≥3 buổi/tuần)")).toBeInTheDocument();
     await userEvent.setup().click(screen.getByRole("button", { name: "Hồ sơ Học viên Demo" }));
     expect(openProfile).toHaveBeenCalledWith("learner-1");
-    await userEvent.setup().click(screen.getByRole("button", { name: "Xoá Học viên Demo" }));
-    expect(remove).toHaveBeenCalledWith("learner-1");
+    await userEvent.setup().click(screen.getByRole("button", { name: "Giao bài tuần cho Học viên Demo" }));
+    expect(assignWeeklyPractice).toHaveBeenCalledWith("learner-1");
+    expect(screen.getByRole("button", { name: "Hồ sơ Đang thi" })).toBeInTheDocument();
+    expect(screen.getByText("Bài test đang được thực hiện, chưa thể chấm điểm.")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Hồ sơ Đã nộp" })).toBeInTheDocument();
+    expect(screen.getByText("AI chấm")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Hồ sơ Chưa thi" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /Xoá/ })).not.toBeInTheDocument();
+    expect(remove).not.toHaveBeenCalled();
+  });
+
+  it("shows Managers when a placement was scored manually", () => {
+    const manual = {
+      ...progress,
+      learners: progress.learners.map((learner) => learner.learnerId === "learner-2" ? { ...learner, placementScoring: "human" as const } : learner)
+    };
+    render(<ManagerProgress view={manual} />);
+    expect(screen.getByText("Đã chấm tay")).toBeInTheDocument();
   });
 
   it("renders the real weekly attendance strip without expanding badge prose in the compact table", () => {
@@ -105,7 +124,7 @@ describe("new Manager app branch", () => {
     };
     Object.defineProperty(navigator, "clipboard", { configurable: true, value: { writeText: vi.fn().mockResolvedValue(undefined) } });
     render(<ManagerReminders view={reminders} onSend={send} onDismiss={dismiss} onCopy={copy} />);
-    expect(screen.getByText("Tự phát hiện người bỏ ≥2 ngày liên tiếp. Gửi qua Base Message webhook hoặc ghi nhận để gửi tay.")).toBeInTheDocument();
+    expect(screen.getByText("Tự phát hiện người bỏ ≥2 ngày liên tiếp. Gửi qua Base Message, copy nội dung hoặc xác nhận đã nhắc qua kênh khác.")).toBeInTheDocument();
     expect(screen.getByRole("note")).toHaveTextContent("Chưa có webhook Base.vn");
     expect(screen.getByRole("note")).toHaveTextContent("Hệ thống chỉ ghi nhận vào hàng chờ gửi tay");
     expect(screen.getByRole("button", { name: /Ghi nhận tất cả \(1\)/ })).toBeEnabled();
@@ -115,8 +134,9 @@ describe("new Manager app branch", () => {
     expect(screen.getByRole("heading", { name: "Lịch sử nhắc" })).toBeInTheDocument();
     expect(screen.getByText(/14[-/]10/)).toBeInTheDocument();
     expect(screen.getAllByRole("columnheader").map((header) => header.textContent)).toEqual(["Ngày", "Người học", "Bỏ", "Kết quả"]);
-    await userEvent.setup().click(screen.getByRole("button", { name: "Đã nhắc cách khác" }));
+    await userEvent.setup().click(screen.getByRole("button", { name: "Đã nhắc qua kênh khác" }));
     expect(dismiss).toHaveBeenCalledWith("learner-3");
+    expect(screen.queryByRole("status")).not.toBeInTheDocument();
     await userEvent.setup().click(screen.getByRole("button", { name: "Copy tin nhắn" }));
     await vi.waitFor(() => expect(copy).toHaveBeenCalledWith("learner-3"));
   });
@@ -135,7 +155,8 @@ describe("new Manager app branch", () => {
     render(<ManagerReminders view={reminders} onSend={send} />);
     const firstActions = screen.getByRole("group", { name: "Thao tác nhắc học cho Cần nhắc một" });
     expect(firstActions).toHaveClass("manager-reminder-actions");
-    expect(firstActions).toHaveStyle({ marginTop: "8px" });
+    expect(firstActions.closest("section")).toHaveClass("manager-reminder-card");
+    expect(firstActions.previousElementSibling).toHaveClass("manager-reminder-message");
     await userEvent.setup().click(screen.getByRole("button", { name: "Gửi tất cả (2)" }));
     await vi.waitFor(() => expect(send).toHaveBeenCalledTimes(1));
     releaseFirst();
@@ -151,9 +172,10 @@ describe("new Manager app branch", () => {
       surveyResponses: [{ learnerId: "learner-1", learnerName: "Học viên Demo", rating: 5, comment: "Ổn", studyTime: "work", submittedAt: "2026-10-14T09:00:00.000Z" }],
       operations: { content: operations.content, queues: operations.queues, automation: operations.automation }
     };
-    render(<ManagerReport view={report} webhookConfigured aiProvider="Groq" aiModel="qwen/qwen3.8-27b" courseTheme="Tiếng Anh giao tiếp công sở" pilotStartDate="2026-10-12" managerName="Quản lý Demo" />);
-    expect(screen.getByText("Tổng hợp tự động theo bốn chỉ số của PRD. Bấm In để in hoặc lưu thành PDF.")).toBeInTheDocument();
-    for (const title of ["1. Bốn chỉ số của pilot", "2. Quy mô và hoạt động", "3. Từng học viên", "4. Phản hồi khảo sát", "5. Việc cần làm tiếp"]) expect(screen.getByRole("heading", { name: title })).toBeInTheDocument();
+    render(<ManagerReport view={report} courseTheme="Tiếng Anh giao tiếp công sở" pilotStartDate="2026-10-12" managerName="Quản lý Demo" />);
+    expect(screen.getByText("Tổng hợp tự động theo ba chỉ số của PRD. Bấm In để in hoặc lưu thành PDF.")).toBeInTheDocument();
+    for (const title of ["1. Ba chỉ số của pilot", "2. Quy mô và hoạt động", "3. Từng học viên", "4. Phản hồi khảo sát", "5. Việc cần làm tiếp"]) expect(screen.getByRole("heading", { name: title })).toBeInTheDocument();
+    expect(screen.queryByText(/cuối kỳ/i)).not.toBeInTheDocument();
     expect(screen.getByText("1 đã nộp · 1 đã đọc mẫu")).toBeInTheDocument();
     expect(screen.getAllByText(/Học viên Demo/).length).toBeGreaterThanOrEqual(1);
     expect(screen.getByText("Chủ đề khoá: Tiếng Anh giao tiếp công sở")).toBeInTheDocument();
@@ -167,6 +189,10 @@ describe("new Manager app branch", () => {
     expect(reportKpi).toBeDefined();
     expect(reportKpi!).toHaveAttribute("style", expect.stringContaining("font-family: var(--font-display)"));
     expect(reportKpi!).toHaveAttribute("style", expect.stringContaining("font-size: 1.25rem"));
+    expect(screen.queryByRole("heading", { name: "Câu hỏi mở từ PRD" })).not.toBeInTheDocument();
+    expect(screen.getByRole("list", { name: "Việc cần làm tiếp" })).toBeInTheDocument();
+    expect(screen.getByText("Theo dõi duyệt trình độ")).toBeInTheDocument();
+    expect(screen.getByText("Theo dõi xử lý kháng nghị")).toBeInTheDocument();
   });
 
   it("announces the report copy result after the export action", async () => {
@@ -178,11 +204,19 @@ describe("new Manager app branch", () => {
       levelDistribution: [{ cefr: "A2", learners: 1 }], totals: { approvedLessonSets: 1, approvedLessons: 5, coachTurns: 2, practiceSubmissions: 1, reviewedPracticeSubmissions: 1, reminders: 1, appeals: 1, pendingAppeals: 1 },
       surveyResponses: [], operations: { content: operations.content, queues: operations.queues, automation: operations.automation }
     };
-    render(<ManagerReport view={report} webhookConfigured={false} aiProvider="Groq" aiModel="qwen/qwen3.8-27b" />);
+    render(<ManagerReport view={report} />);
 
     await userEvent.setup().click(screen.getByRole("button", { name: "Copy bản chữ" }));
 
     await vi.waitFor(() => expect(screen.getByRole("status", { name: "Trạng thái xuất báo cáo" })).toHaveTextContent("Đã sao chép báo cáo."));
+    const exported = buildManagerReportText(report);
+    for (const section of ["1. BA CHỈ SỐ CỦA PILOT", "2. QUY MÔ VÀ HOẠT ĐỘNG", "3. TỪNG HỌC VIÊN", "4. PHẢN HỒI KHẢO SÁT", "5. VIỆC CẦN LÀM TIẾP"]) {
+      expect(exported).toContain(section);
+    }
+    expect(exported).not.toMatch(/cuối kỳ|cuối khóa/i);
+    expect(exported).toContain("Bộ bài đã duyệt: 1 bộ · 5 bài");
+    expect(exported).toContain("Chưa có phản hồi.");
+    expect(exported).toContain("1 kháng nghị chấm điểm chờ Vận hành xử lý.");
   });
 
   it("keeps the nine reward cases and changes simulation state", async () => {

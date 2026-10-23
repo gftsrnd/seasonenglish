@@ -10,46 +10,32 @@ export type MusicPreset = {
   readonly embedUrl: string;
   readonly sourceUrl: string;
   readonly licence: string;
+  readonly licenceUrl: string;
   readonly attribution: string;
 };
 
 const allThemes: readonly SeasonTheme[] = ["spring", "summer", "autumn", "winter", "tet", "midautumn", "christmas"];
 
+/** Audionautix/Jason Shaw CC BY 4.0 fallback shipped with the app. */
+export const BUNDLED_CALM_MUSIC_URL = "/media/audio/emerald-therapy.mp3";
+export const PROTOTYPE_MUSIC_PLAYLIST_URL = "https://www.youtube.com/watch?v=DSWYAclv2I8&list=PLQwRmTwWx0uaoRXVcKbUDW0wm8G_WJzDI";
+
 export const MUSIC_PRESETS: readonly MusicPreset[] = [
   {
-    id: "bright-morning",
-    label: "Buổi sáng tươi sáng",
+    id: "prototype-in-dreamland",
+    label: "In Dreamland · playlist từ prototype",
     themes: allThemes,
     period: "morning",
-    embedUrl: "https://commons.wikimedia.org/wiki/Special:Redirect/file/Sascha_Ende_-_Total_Happy_Up_And_Sunny_(cc-by)_(filmmusic.io).ogg",
-    sourceUrl: "https://commons.wikimedia.org/wiki/File:Sascha_Ende_-_Total_Happy_Up_And_Sunny_(cc-by)_(filmmusic.io).ogg",
-    licence: "CC BY 4.0",
-    attribution: "Total Happy Up And Sunny — Sascha Ende"
-  },
-  {
-    id: "steady-afternoon",
-    label: "Buổi chiều tập trung",
-    themes: allThemes,
-    period: "afternoon",
-    embedUrl: "https://commons.wikimedia.org/wiki/Special:Redirect/file/Soft_Corporate_by_MusicLFiles.ogg",
-    sourceUrl: "https://commons.wikimedia.org/wiki/File:Soft_Corporate_by_MusicLFiles.ogg",
-    licence: "CC BY 4.0",
-    attribution: "Soft Corporate — MusicLFiles"
-  },
-  {
-    id: "driving-evening",
-    label: "Buổi tối nhẹ và tỉnh táo",
-    themes: allThemes,
-    period: "evening",
-    embedUrl: "https://commons.wikimedia.org/wiki/Special:Redirect/file/Audionautix-com-ccby-azimuth.mp3",
-    sourceUrl: "https://commons.wikimedia.org/wiki/File:Audionautix-com-ccby-azimuth.mp3",
-    licence: "CC BY 3.0",
-    attribution: "Azimuth — Jason Shaw / Audionautix"
+    embedUrl: PROTOTYPE_MUSIC_PLAYLIST_URL,
+    sourceUrl: PROTOTYPE_MUSIC_PLAYLIST_URL,
+    licence: "Nguồn playlist từ prototype",
+    licenceUrl: PROTOTYPE_MUSIC_PLAYLIST_URL,
+    attribution: "In Dreamland · playlist nhạc nền mặc định của prototype"
   }
 ];
 
 export function musicPresetFor(theme: SeasonTheme, period: StudyPeriod): MusicPreset {
-  const preset = MUSIC_PRESETS.find((candidate) => candidate.period === period && candidate.themes.includes(theme));
+  const preset = MUSIC_PRESETS.find((candidate) => candidate.themes.includes(theme));
   if (!preset) throw new Error(`No music preset for ${theme}/${period}`);
   return preset;
 }

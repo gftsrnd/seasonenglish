@@ -36,7 +36,7 @@ import { z } from "zod";
 import { createRoleGuard } from "../identity/policy.js";
 import type { AiTaskRunner } from "../coach/index.js";
 
-const kindParam = z.object({ kind: z.enum(["placement", "final", "levelup", "level-up"]) });
+const kindParam = z.object({ kind: z.enum(["placement", "levelup", "level-up"]) });
 const attemptParam = z.object({ attemptId: z.uuid() });
 const responseParam = z.object({
   attemptId: z.uuid(),
@@ -80,26 +80,43 @@ const reviewLevelInput = z.object({
 const monthlyGoalInput = z.object({ monthlyGoal: z.string().trim().min(1).max(2_000) });
 const deletionRequestInput = z.object({ reason: z.string().trim().min(1).max(2_000) });
 const rescoreInput = z.object({ requestId: z.string().trim().min(1).max(160) });
-const manualScoreValue = z.number().int().min(0).max(5);
+const writingManualScoreValue = z.number().int().min(0).max(4);
+const speakingManualScoreValue = z.number().int().min(0).max(5);
 const manualScoreInput = z.object({
-  writingCriteria: z.object({
-    taskAchievement: manualScoreValue,
-    organization: manualScoreValue,
-    vocabulary: manualScoreValue,
-    grammar: manualScoreValue,
-    workplaceCommunication: manualScoreValue
-  }).strict(),
-  speakingCriteria: z.object({
-    fluency: manualScoreValue,
-    grammar: manualScoreValue,
-    vocabulary: manualScoreValue,
-    professionalCommunication: manualScoreValue
-  }).strict(),
+  writingTasks: z.array(z.object({
+    taskKey: z.string().trim().min(1).max(80),
+    criteria: z.object({
+      taskCompletion: writingManualScoreValue,
+      organization: writingManualScoreValue,
+      vocabulary: writingManualScoreValue,
+      grammar: writingManualScoreValue,
+      workplaceRegister: writingManualScoreValue
+    }).strict()
+  }).strict()).length(2),
+  speakingTasks: z.array(z.object({
+    taskKey: z.string().trim().min(1).max(80),
+    evidenceType: z.enum(["audio", "transcript", "typed_proxy", "technical_failure", "skipped"]),
+    criteria: z.object({
+      taskCompletionRelevance: speakingManualScoreValue,
+      grammarVocabulary: speakingManualScoreValue,
+      coherenceClarity: speakingManualScoreValue,
+      interactionProfessionalRegister: speakingManualScoreValue
+    }).strict().nullable()
+  }).strict()).length(4),
   comment: z.string().trim().max(5_000)
+}).superRefine((value, context) => {
+  const writingKeys = new Set(value.writingTasks.map((task) => task.taskKey));
+  const speakingKeys = new Set(value.speakingTasks.map((task) => task.taskKey));
+  if (writingKeys.size !== 2 || !writingKeys.has("W1") || !writingKeys.has("W2")) context.addIssue({ code: "custom", path: ["writingTasks"], message: "Writing tasks must be W1 and W2" });
+  if (speakingKeys.size !== 4 || ["S1", "S2", "S3", "S4"].some((key) => !speakingKeys.has(key))) context.addIssue({ code: "custom", path: ["speakingTasks"], message: "Speaking tasks must be S1 through S4" });
+  value.speakingTasks.forEach((task, index) => {
+    if (task.evidenceType === "technical_failure" && task.criteria !== null) context.addIssue({ code: "custom", path: ["speakingTasks", index, "criteria"], message: "Technical failures cannot be scored" });
+    if (task.evidenceType !== "technical_failure" && task.evidenceType !== "skipped" && task.criteria === null) context.addIssue({ code: "custom", path: ["speakingTasks", index, "criteria"], message: "Speaking evidence requires criteria" });
+  });
 }) satisfies z.ZodType<ManualAssessmentScoreInput>;
 const violationInput = z.object({
   requestId: z.string().trim().min(1).max(160),
-  reason: z.enum(["visibility_hidden", "window_blur"]),
+  reason: z.enum(["visibility_hidden", "window_blur", "context_menu", "copy", "paste", "new_window", "logout"]),
   occurredAt: z.string().datetime({ offset: true })
 });
 
@@ -124,7 +141,11 @@ export function registerAssessmentRoutes(app: FastifyInstance, pool: Pool, aiRun
   });
 
   app.get("/api/v1/assessment-reviews/overview", { preHandler: assessmentReaders }, async (request): Promise<AssessmentReviewOverviewView> => {
-    const overview = await repositories.assessments.getReviewOverview(request.e4sSession!.user.id);
+    let overview = await repositories.assessments.getReviewOverview(request.e4sSession!.user.id);
+    const repaired = await Promise.all(overview.pending
+      .filter((item) => item.sectionScores.listening == null || item.sectionScores.reading == null)
+      .map((item) => repairReviewObjectiveScores(repositories.assessments, request.e4sSession!.user.id, item.attemptId)));
+    if (repaired.some(Boolean)) overview = await repositories.assessments.getReviewOverview(request.e4sSession!.user.id);
     const [topicReports, learnerDashboards, weakSignalRows] = await Promise.all([pool.query<{
       id: string; learner_id: string; learner_name: string; topic: string; reason: string;
       strike_count: number; status: "open" | "resolved"; created_at: Date;
@@ -208,6 +229,16 @@ export function registerAssessmentRoutes(app: FastifyInstance, pool: Pool, aiRun
     };
   });
 
+  app.post("/api/v1/assessment-reviews/learners/:learnerId/weekly-practice", { preHandler: assessmentOperators }, async (request, reply) => {
+    const params = learnerReviewParam.safeParse(request.params);
+    if (!params.success) return reply.code(400).send({ code: "INVALID_ASSESSMENT_LEARNER" });
+    const assignment = await repositories.engagement.assignWeeklyPractice({
+      staffId: request.e4sSession!.user.id,
+      learnerId: params.data.learnerId
+    });
+    return assignment ?? reply.code(409).send({ code: "WEEKLY_PRACTICE_NOT_ELIGIBLE" });
+  });
+
   app.get("/api/v1/assessment-reviews/learners/:learnerId", { preHandler: assessmentReaders }, async (request, reply): Promise<AssessmentReviewLearnerView | void> => {
     const params = learnerReviewParam.safeParse(request.params);
     if (!params.success) return reply.code(400).send({ code: "INVALID_ASSESSMENT_LEARNER" });
@@ -218,7 +249,9 @@ export function registerAssessmentRoutes(app: FastifyInstance, pool: Pool, aiRun
   app.get("/api/v1/assessment-reviews/attempts/:attemptId", { preHandler: assessmentReaders }, async (request, reply): Promise<AssessmentReviewAttemptDetailView | void> => {
     const params = attemptParam.safeParse(request.params);
     if (!params.success) return reply.code(400).send({ code: "INVALID_ASSESSMENT_ATTEMPT" });
-    const view = await repositories.assessments.getReviewAttempt(request.e4sSession!.user.id, params.data.attemptId);
+    const reviewerId = request.e4sSession!.user.id;
+    await repairReviewObjectiveScores(repositories.assessments, reviewerId, params.data.attemptId);
+    const view = await repositories.assessments.getReviewAttempt(reviewerId, params.data.attemptId);
     return view ?? reply.code(404).send({ code: "ASSESSMENT_ATTEMPT_NOT_FOUND" });
   });
 
@@ -495,6 +528,10 @@ export function registerAssessmentRoutes(app: FastifyInstance, pool: Pool, aiRun
       reason: body.data.reason,
       occurredAt: body.data.occurredAt
     });
+    if (runtime?.autoSubmitted) {
+      const submittedAttempt = await repositories.assessments.findAttempt(learnerId, params.data.attemptId);
+      if (submittedAttempt) await ensureObjectiveSectionScores(repositories.assessments, learnerId, definition, submittedAttempt);
+    }
     return runtime ?? reply.code(409).send({ code: "ASSESSMENT_ATTEMPT_NOT_EDITABLE" });
   });
 
@@ -502,13 +539,29 @@ export function registerAssessmentRoutes(app: FastifyInstance, pool: Pool, aiRun
     const parsed = kindParam.safeParse(request.params);
     if (!parsed.success) return reply.code(400).send({ code: "INVALID_ASSESSMENT_KIND" });
     const kind = normalizeKind(parsed.data.kind);
-    const definition = await repositories.assessments.findPublished(kind);
+    const learnerId = request.e4sSession!.user.id;
+    let definition: PublishedAssessmentRecord | null;
+    if (kind === "level-up") {
+      const context = await repositories.assessments.levelUpStartContext(learnerId);
+      if (context.currentLevel === "C1") return reply.code(409).send({ code: "LEVEL_UP_TOP_LEVEL" });
+      if (context.active) return reply.code(409).send({ code: "LEVEL_UP_ALREADY_ACTIVE" });
+      if (context.retryEligibleAt && context.retryEligibleAt.getTime() > Date.now()) {
+        return reply.code(409).send({ code: "LEVEL_UP_RETRY_NOT_READY", eligibleAt: context.retryEligibleAt.toISOString() });
+      }
+      const progress = await repositories.learning.getProgressDashboard(learnerId);
+      if (!progress?.levelReadiness.eligible || !progress.levelReadiness.targetLevel) {
+        return reply.code(409).send({ code: "LEVEL_UP_NOT_READY" });
+      }
+      definition = await repositories.assessments.findPublishedLevelUpForLearner(learnerId, progress.levelReadiness.targetLevel);
+    } else {
+      definition = await repositories.assessments.findPublished(kind);
+    }
     if (!definition) return reply.code(404).send({ code: "ASSESSMENT_NOT_PUBLISHED" });
     const first = definition.blueprint.sections[0];
     if (!first) return reply.code(409).send({ code: "ASSESSMENT_BLUEPRINT_EMPTY" });
-    const violationLimit = await repositories.assessments.assessmentViolationLimit(request.e4sSession!.user.id);
+    const violationLimit = await repositories.assessments.assessmentViolationLimit(learnerId);
     const attempt = await repositories.assessments.startAttempt({
-      learnerId: request.e4sSession!.user.id,
+      learnerId,
       assessmentVersionId: definition.versionId,
       firstSection: first.code,
       durationMinutes: first.durationMinutes,
@@ -638,20 +691,7 @@ export function registerAssessmentRoutes(app: FastifyInstance, pool: Pool, aiRun
       return reply.code(409).send({ code: "ASSESSMENT_ATTEMPT_NOT_SUBMITTABLE" });
     }
 
-    for (const sectionCode of ["listening", "reading"] as const) {
-      const section = sectionByCode(definition.blueprint, sectionCode);
-      if (!section) continue;
-      const responseMap = new Map(attempt.responses.filter((response) => response.section === sectionCode)
-        .map((response) => [response.taskKey, response.value]));
-      const items = section.groups.flatMap((group) => group.tasks)
-        .filter((task): task is StoredAssessmentTask & { correctAnswer: string } => Boolean(task.correctAnswer))
-        .map((task) => ({ taskKey: task.key, answer: responseMap.get(task.key), correctAnswer: task.correctAnswer, maxScore: task.maxScore }));
-      const score = calculateAutomaticSectionScore(items);
-      await repositories.assessments.upsertSectionScore({
-        learnerId, attemptId: attempt.id, section: sectionCode, score: score.score,
-        criteria: { answered: score.answered, total: score.total, maxScore: score.maxScore }, source: "deterministic"
-      });
-    }
+    await ensureObjectiveSectionScores(repositories.assessments, learnerId, definition, attempt);
     if (runner && !await repositories.aiRuns.requestExists(learnerId, attempt.id, "assessment_scoring")) {
       const task = await repositories.aiRuns.activeTaskPrompt(learnerId, "assessment_scoring");
       const writing = sectionByCode(definition.blueprint, "writing");
@@ -707,7 +747,7 @@ function levelFormBlueprint(targetLevel: "A2" | "B1" | "B2" | "C1", output: Leve
   };
 }
 
-function normalizeKind(kind: "placement" | "final" | "levelup" | "level-up"): AssessmentKind {
+function normalizeKind(kind: "placement" | "levelup" | "level-up"): AssessmentKind {
   return kind === "levelup" ? "level-up" : kind;
 }
 
@@ -715,7 +755,7 @@ async function definitionForAttempt(
   repository: ReturnType<typeof createRepositories>["assessments"],
   attempt: AssessmentAttemptRecord
 ): Promise<PublishedAssessmentRecord | null> {
-  for (const kind of ["placement", "final", "level-up"] as const) {
+  for (const kind of ["placement", "level-up"] as const) {
     const definition = await repository.findPublished(kind);
     if (definition?.versionId === attempt.assessmentVersionId) return definition;
   }
@@ -817,6 +857,7 @@ async function advanceExpiredSections(
     const index = sectionOrder.indexOf(attempt.currentSection);
     const nextCode = sectionOrder[index + 1];
     if (!nextCode) {
+      await ensureObjectiveSectionScores(repository, learnerId, definition, attempt);
       attempt = await repository.submitAttempt(learnerId, attempt.id, "timeout");
       break;
     }
@@ -828,4 +869,51 @@ async function advanceExpiredSections(
     });
   }
   return attempt;
+}
+
+async function ensureObjectiveSectionScores(
+  repository: ReturnType<typeof createRepositories>["assessments"],
+  learnerId: string,
+  definition: PublishedAssessmentRecord,
+  attempt: AssessmentAttemptRecord
+): Promise<boolean> {
+  let changed = false;
+  for (const sectionCode of ["listening", "reading"] as const) {
+    const section = sectionByCode(definition.blueprint, sectionCode);
+    if (!section) continue;
+    const responseMap = new Map(attempt.responses.filter((response) => response.section === sectionCode)
+      .map((response) => [response.taskKey, response.value]));
+    const items = (section.groups ?? []).flatMap((group) => group.tasks)
+      .filter((task): task is StoredAssessmentTask & { correctAnswer: string } => Boolean(task.correctAnswer))
+      .map((task) => ({ taskKey: task.key, answer: responseMap.get(task.key), correctAnswer: task.correctAnswer, maxScore: task.maxScore }));
+    const score = calculateAutomaticSectionScore(items);
+    changed = await repository.upsertSectionScore({
+      learnerId, attemptId: attempt.id, section: sectionCode, score: score.score,
+      criteria: { answered: score.answered, total: score.total, maxScore: score.maxScore }, source: "deterministic"
+    }) || changed;
+  }
+  return changed;
+}
+
+async function repairReviewObjectiveScores(
+  repository: ReturnType<typeof createRepositories>["assessments"],
+  reviewerId: string,
+  attemptId: string
+): Promise<boolean> {
+  const view = await repository.getReviewAttempt(reviewerId, attemptId);
+  if (!view || view.status === "in_progress") return false;
+  let changed = false;
+  for (const sectionCode of ["listening", "reading"] as const) {
+    const section = view.sections?.find((candidate) => candidate.section === sectionCode);
+    if (!section || section.score != null) continue;
+    const items = (section.groups ?? []).flatMap((group) => group.tasks)
+      .filter((task): task is typeof task & { correctAnswer: string } => Boolean(task.correctAnswer))
+      .map((task) => ({ taskKey: task.taskKey, answer: task.answer ?? undefined, correctAnswer: task.correctAnswer, maxScore: task.maxScore ?? 0 }));
+    const score = calculateAutomaticSectionScore(items);
+    changed = await repository.upsertSectionScore({
+      learnerId: view.learnerId, attemptId, section: sectionCode, score: score.score,
+      criteria: { answered: score.answered, total: score.total, maxScore: score.maxScore, repaired: true }, source: "deterministic"
+    }) || changed;
+  }
+  return changed;
 }

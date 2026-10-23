@@ -70,14 +70,13 @@ describe("new learner app frontend", () => {
         coach: { turnsThisWeek: 0, targetTurns: 2, href: "/coach" },
         practice: { status: "locked", detail: "Mở khi hoàn thành đủ 5 bài.", href: "/practice" },
         levelReadiness: { targetLevel: "B1", windowDays: 14, eligible: false, examAvailable: false, criteria: [] },
-        finalAssessment: { available: true, label: "Làm bài cuối kỳ", href: "/test/final" },
         microLesson: { id: "m1", topic: "Email ngắn", durationMinutes: 5, completed: false },
         reward: { points: 0, nextPoints: 60, seasonName: "Mùa xuân – gieo hạt" }
       }
     };
     const { container } = render(<LearnerRouter screen={screenView} callbacks={callbacks()} />);
     expect(Array.from(container.querySelectorAll("[data-home-block]")).map((node) => node.getAttribute("data-home-block"))).toEqual([
-      "context", "primary", "metrics", "week-path", "attendance", "activities", "readiness", "micro", "reward", "final"
+      "context", "primary", "metrics", "week-path", "attendance", "activities", "readiness", "micro", "reward"
     ]);
     expect(screen.getByRole("heading", { name: "Chào Lan!" })).toBeInTheDocument();
     expect(screen.getByText("Hôm nay học gì nào?")).toBeInTheDocument();
@@ -102,7 +101,6 @@ describe("new learner app frontend", () => {
       coach: { turnsThisWeek: 0, targetTurns: 2, href: "/coach" },
       practice: { status: "locked", detail: "Chưa mở", href: "/practice" },
       levelReadiness: { targetLevel: null, windowDays: 14, eligible: false, examAvailable: false, criteria: [] },
-      finalAssessment: { available: false, label: "Làm bài cuối kỳ", href: "/test/final" }
     } }} callbacks={callbacks()} />);
     expect(screen.getByRole("heading", { name: "3 bước để bắt đầu học" })).toBeInTheDocument();
     expect(container.querySelector("main")).toBeNull();

@@ -47,7 +47,7 @@ describe("learner notifications API", () => {
   it("exposes a manager-queued reminder to its learner with delivery evidence", async () => {
     const managerLogin = await app.inject({
       method: "POST", url: "/api/auth/staff/login",
-      payload: { email: "manager@e4s.local", password: "manager-pass" }
+      payload: { email: "quoc.bao.le@e4s.local", password: "manager-pass" }
     });
     expect(managerLogin.statusCode, managerLogin.body).toBe(200);
     const managerCookie = String(managerLogin.headers["set-cookie"]).split(";")[0] ?? "";
@@ -63,7 +63,7 @@ describe("learner notifications API", () => {
 
     const learnerLogin = await app.inject({
       method: "POST", url: "/api/auth/learner/login",
-      payload: { email: "learner@e4s.local", password: "learner-pass" }
+      payload: { email: "minh.anh.nguyen@e4s.local", password: "learner-pass" }
     });
     expect(learnerLogin.statusCode, learnerLogin.body).toBe(200);
     const learnerCookie = String(learnerLogin.headers["set-cookie"]).split(";")[0] ?? "";
@@ -84,7 +84,7 @@ describe("learner notifications API", () => {
   it("keeps notifications learner-owned", async () => {
     const managerLogin = await app.inject({
       method: "POST", url: "/api/auth/staff/login",
-      payload: { email: "manager@e4s.local", password: "manager-pass" }
+      payload: { email: "quoc.bao.le@e4s.local", password: "manager-pass" }
     });
     const managerCookie = String(managerLogin.headers["set-cookie"]).split(";")[0] ?? "";
     const forbidden = await app.inject({ method: "GET", url: "/api/v1/notifications", headers: { cookie: managerCookie } });
@@ -100,7 +100,7 @@ describe("learner notifications API", () => {
     );
     const managerLogin = await app.inject({
       method: "POST", url: "/api/auth/staff/login",
-      payload: { email: "manager@e4s.local", password: "manager-pass" }
+      payload: { email: "quoc.bao.le@e4s.local", password: "manager-pass" }
     });
     const managerCookie = String(managerLogin.headers["set-cookie"]).split(";")[0] ?? "";
     const queued = await app.inject({

@@ -22,8 +22,7 @@ const view = {
   badgeRoadmap: [],
   levelReadiness: { targetLevel: null, windowDays: 14, eligible: false, examAvailable: false, criteria: [] },
   stats: { completedLessons: 0, coachTurns: 0, studyDays: 0 },
-  assessments: { placement: null, final: null },
-  finalAssessmentAvailable: false,
+  assessments: { placement: null },
   surveyAvailable: false
 } as unknown as ProfileView;
 
@@ -69,14 +68,12 @@ describe("app profile avatar dialog affordances", () => {
   it("presents the real assessment total and every skill on its own percentage row", () => {
     const assessmentView = {
       ...view,
-      finalAssessmentAvailable: true,
       assessments: {
         placement: {
           totalScore: 55,
           approvedLevel: "A1",
           sections: { listening: 55, reading: 60, writing: 50, speaking: 50 }
-        },
-        final: null
+        }
       }
     } as unknown as ProfileView;
 
@@ -91,7 +88,8 @@ describe("app profile avatar dialog affordances", () => {
     expect(within(placement).getByText("Đọc").closest(".profile-assessment-skill")).toHaveTextContent("60%");
     expect(within(placement).getByText("Viết").closest(".profile-assessment-skill")).toHaveTextContent("50%");
     expect(within(placement).getByText("Nói").closest(".profile-assessment-skill")).toHaveTextContent("50%");
-    expect(within(assessment).getByRole("link", { name: "Làm bài cuối kỳ" })).toHaveAttribute("href", "/test/final");
+    expect(within(assessment).queryByText(/cuối kỳ/i)).not.toBeInTheDocument();
+    expect(within(assessment).queryByRole("link", { name: "Làm bài cuối kỳ" })).not.toBeInTheDocument();
   });
 
   it("keeps personal information collapsed until the learner asks to view it", async () => {

@@ -107,7 +107,7 @@ describe("worker job processing", () => {
     const notifications = {
       findWebhookDelivery: vi.fn().mockResolvedValue({
         reminderId: "reminder-1", deliveryId: "delivery-1", message: "Come back to E4S.",
-        learnerName: "Học viên Demo", webhookUrl: "http://127.0.0.1:3999/base", webhookTemplate: "{\"base_content\":\"{message}\",\"name\":\"{name}\"}"
+        learnerName: "Nguyễn Minh Anh", webhookUrl: "http://127.0.0.1:3999/base", webhookTemplate: "{\"base_content\":\"{message}\",\"name\":\"{name}\"}"
       }),
       updateWebhookDelivery: vi.fn().mockResolvedValue(undefined)
     };
@@ -119,7 +119,7 @@ describe("worker job processing", () => {
         state: "running", attempts: 1, maxAttempts: 3, lockedBy: "worker-a"
       });
       expect(fetchMock).toHaveBeenCalledWith("http://127.0.0.1:3999/base", expect.objectContaining({
-        method: "POST", body: JSON.stringify({ base_content: "Come back to E4S.", name: "Học viên Demo" })
+        method: "POST", body: JSON.stringify({ base_content: "Come back to E4S.", name: "Nguyễn Minh Anh" })
       }));
       expect(notifications.updateWebhookDelivery).toHaveBeenCalledWith(expect.objectContaining({
         reminderId: "reminder-1", deliveryId: "delivery-1", status: "sent", externalId: "base-1"

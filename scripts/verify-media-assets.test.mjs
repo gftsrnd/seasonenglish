@@ -39,10 +39,38 @@ function entry(overrides = {}, content = "verified") {
   };
 }
 
+function audioEntry(overrides = {}, content = "audio") {
+  return {
+    id: "music-emerald-therapy",
+    localPath: "apps/web/public/media/audio/emerald-therapy.mp3",
+    sourcePage: "https://audionautix.com/creative-commons-music",
+    creator: "Jason Shaw / Audionautix",
+    licence: "CC BY 4.0",
+    licenceUrl: "https://creativecommons.org/licenses/by/4.0/",
+    sha256: createHash("sha256").update(content).digest("hex"),
+    purpose: "Calm offline background-music fallback",
+    ...overrides
+  };
+}
+
 describe("verified media manifest", () => {
   it("accepts a complete declared raster with a matching digest", async () => {
     const root = await fixture({ entries: [entry()], files: { "apps/web/public/media/mascot.png": "verified" } });
     await expect(verifyMediaAssets({ repoRoot: root, requiredIds: ["mascot"] })).resolves.toEqual({ entries: 1, files: 1 });
+  });
+
+  it("accepts a declared MP3 only with an auditable CC licence and digest", async () => {
+    const root = await fixture({ entries: [audioEntry()], files: { "apps/web/public/media/audio/emerald-therapy.mp3": "audio" } });
+    await expect(verifyMediaAssets({ repoRoot: root, requiredIds: ["music-emerald-therapy"] })).resolves.toEqual({ entries: 1, files: 1 });
+  });
+
+  it.each([
+    ["missing creator", { creator: "" }, "thiếu creator"],
+    ["missing licence URL", { licenceUrl: "" }, "licenceUrl"],
+    ["unsupported audio licence", { licence: "unknown" }, "CC BY 4.0"]
+  ])("rejects audio with %s", async (_label, overrides, message) => {
+    const root = await fixture({ entries: [audioEntry(overrides)], files: { "apps/web/public/media/audio/emerald-therapy.mp3": "audio" } });
+    await expect(verifyMediaAssets({ repoRoot: root, requiredIds: [] })).rejects.toThrow(message);
   });
 
   it.each([

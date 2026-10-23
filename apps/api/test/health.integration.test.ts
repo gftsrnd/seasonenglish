@@ -39,7 +39,7 @@ describe("local service health", () => {
     const login = await app.inject({
       method: "POST",
       url: "/api/auth/staff/login",
-      payload: { email: "manager@e4s.local", password: "manager-pass" }
+      payload: { email: "quoc.bao.le@e4s.local", password: "manager-pass" }
     });
     expect(login.statusCode, login.body).toBe(200);
     managerCookie = String(login.headers["set-cookie"]).split(";")[0] ?? "";

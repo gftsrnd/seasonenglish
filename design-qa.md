@@ -35,3 +35,12 @@
 ## Result
 
 **PASSED** — authenticated browser comparison, responsive interaction review, focused tests, real AI/API generation, attributed image resolution, and production build all completed successfully.
+
+## 2026-10-23 — Seasonal settings and background music
+
+- The eight seasonal themes render as a balanced 4×2 grid on wide screens and 2×4 on narrow screens.
+- The learner home no longer renders the programme or weekly-topic context cards; the highlighted “Hôm nay học gì nào?” heading leads directly into the lesson content.
+- The music picker is a custom theme-coloured dropdown, not the Windows-native blue selection menu, and displays track titles rather than time-of-day labels.
+- The volume track and thumb use the active E4S theme colour; the source/licence line is intentionally hidden from the product UI while attribution remains in `docs/music-sources.md`.
+- `Soft Corporate` is served locally as `audio/ogg` (HTTP 200) to remove Wikimedia availability/rate-limit failures. YouTube video and playlist URLs are converted to an autoplay-capable YouTube embed player instead of being passed to an HTML audio element.
+- Browser preview reached the `playing` state at volume 55/100 with no console errors. Focused web tests passed (127/127), web typecheck passed, and the production Docker web image rebuilt successfully.

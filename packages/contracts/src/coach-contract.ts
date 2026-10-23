@@ -2,7 +2,7 @@ import type { CefrLevel } from "./domain-contract.js";
 
 export type CoachPersona = "informal" | "formal";
 
-export type CoachTurnClassification = "normal" | "corrected" | "off-topic" | "curt" | "error";
+export type CoachTurnClassification = "normal" | "corrected" | "off-topic" | "insufficient" | "curt" | "error";
 
 export interface CoachVocabularyView {
   word: string;
@@ -17,14 +17,37 @@ export interface CoachSuggestionView {
   explanation: string;
 }
 
+export interface CoachRubricCriterionView {
+  score: number;
+  evidence: string;
+  improvement: string;
+}
+
+export interface CoachCorrectionView {
+  original: string;
+  corrected: string;
+  translation: string;
+  reason: string;
+}
+
 export interface CoachFeedbackView {
+  /** Legacy compatibility for challenge/progress readers; prefer evaluation.status. */
   relevant: boolean;
-  classification?: CoachTurnClassification;
   relevanceNote: string;
-  replyTranslation?: string;
-  rubric: { meaning: number; vocabulary: number; grammar: number };
-  suggestions: CoachSuggestionView[];
+  evaluation: {
+    status: "valid" | "insufficient" | "off_topic";
+    countsTowardGoal: boolean;
+    noteVi: string;
+  };
+  classification?: CoachTurnClassification;
+  seasonReply: string;
+  seasonReplyTranslation: string;
+  nextQuestion: string;
+  nextQuestionTranslation: string;
+  rubric: { meaning: CoachRubricCriterionView; vocabulary: CoachRubricCriterionView; grammar: CoachRubricCriterionView };
+  corrections: CoachCorrectionView[];
   correctedText: string;
+  suggestedAnswer: { text: string; translation: string };
 }
 
 export interface CoachMessageView {

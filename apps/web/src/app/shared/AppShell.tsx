@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useEffect, useId, useRef, useState, type ReactNode } from "react";
 import { Link, useLocation } from "react-router";
 import { Bell, BookOpen, CalendarDays, ChartColumn, Check, FileText, Gamepad2, GraduationCap, House, LogOut, MessageSquare, Music2, Pencil, Search, Settings, UserRound, Volume2 } from "lucide-react";
 import type { AccountRole, CefrLevel, SessionView } from "@e4s/contracts";
@@ -6,6 +6,8 @@ import { SeasonMark } from "./SeasonMark.js";
 import { AvatarMark } from "../learner/ProfileReward.js";
 import { useExperience } from "../../features/experience/Experience.js";
 import "./shared.css";
+import { hasAssessmentLogoutGuard, requestAssessmentLogout } from "./assessment-logout-guard.js";
+import { useDialog } from "./ModalProvider.js";
 
 export { SeasonMark } from "./SeasonMark.js";
 
@@ -97,6 +99,8 @@ export function AppShell({ session, children, onLogout, onAvatarClick, organisat
   const role = session.role as ShellRole;
   const items = role === "learner" && (onboardingComplete === false || learnerHomeOnly) ? nav[role].slice(0, 1) : nav[role];
   const [logoutPending, setLogoutPending] = useState(false);
+  const [logoutError, setLogoutError] = useState("");
+  const [logoutConfirmOpen, setLogoutConfirmOpen] = useState(false);
   const logoutTimer = useRef<number | undefined>(undefined);
   useEffect(() => () => {
     if (logoutTimer.current !== undefined) window.clearTimeout(logoutTimer.current);
@@ -116,24 +120,37 @@ export function AppShell({ session, children, onLogout, onAvatarClick, organisat
     return location.pathname.startsWith(to);
   };
   const links = (mobile = false) => items.map((item) => <Link className={active(item.to) ? "active" : ""} key={item.to} to={item.to} aria-current={active(item.to) ? "page" : undefined}>{mobile ? <span className="ico">{item.icon}</span> : null}{item.label}</Link>);
-  const logout = () => {
+  const completeLogout = () => {
+    clearSharedDeviceState();
+    window.history.replaceState(window.history.state, "", "/");
+    const result = onLogout();
+    if (result && typeof result.then === "function") {
+      void result.finally(() => setLogoutPending(false));
+    } else {
+      logoutTimer.current = window.setTimeout(() => setLogoutPending(false), 8000);
+    }
+  };
+  const beginLogout = () => {
     if (logoutPending) return;
     setLogoutPending(true);
-    clearSharedDeviceState();
-    // App removes BrowserRouter when the session becomes null. Keep
-    // the browser URL at the entry route without letting the still-authenticated
-    // role router immediately redirect it back to its home screen.
-    window.history.replaceState(window.history.state, "", "/");
+    setLogoutError("");
     try {
-      const result = onLogout();
-      if (result && typeof result.then === "function") {
-        void result.finally(() => setLogoutPending(false));
-      } else {
-        logoutTimer.current = window.setTimeout(() => setLogoutPending(false), 8000);
-      }
+      void requestAssessmentLogout().then(() => completeLogout()).catch(() => {
+        setLogoutPending(false);
+        setLogoutError("Chưa ghi nhận được cảnh báo nên chưa đăng xuất. Hãy giữ nguyên trang và thử lại.");
+      });
     } catch {
       setLogoutPending(false);
+      setLogoutError("Chưa ghi nhận được cảnh báo nên chưa đăng xuất. Hãy giữ nguyên trang và thử lại.");
     }
+  };
+  const logout = () => {
+    if (logoutPending) return;
+    if (hasAssessmentLogoutGuard()) {
+      setLogoutConfirmOpen(true);
+      return;
+    }
+    beginLogout();
   };
   return <>
     <header className="topbar">
@@ -148,21 +165,44 @@ export function AppShell({ session, children, onLogout, onAvatarClick, organisat
         <span className="small account-identity"><b className="account-name">{session.user.displayName}</b>{role === "learner" ? <span className="muted account-role" aria-label="Vai trò: Người học"><GraduationCap size={15} strokeWidth={2} aria-hidden="true" /> Người học</span> : <span className="muted">· {roleNames[role]}</span>}{role === "learner" && learnerCefr ? <span className={`badge account-level-badge lvl-${learnerCefr}`}>{learnerCefr}</span> : null}</span>
         <button className="btn-sm btn-ghost" type="button" data-action="logout" onClick={logout} disabled={logoutPending} title={logoutPending ? "Đang đăng xuất…" : "Đăng xuất khỏi tài khoản này"} aria-label={logoutPending ? "Đang đăng xuất…" : "Đăng xuất khỏi tài khoản này"}>{logoutPending ? <span className="logout-label">Đang đăng xuất…</span> : <><LogOut size={16} strokeWidth={2} aria-hidden="true" /><span className="logout-label">Đăng xuất</span></>}</button>
         <span role="status" aria-label="Trạng thái đăng xuất" aria-live="polite" style={visuallyHiddenStyle}>{logoutPending ? "Đang đăng xuất…" : ""}</span>
+        {logoutError ? <span role="alert" className="shell-logout-error">{logoutError}</span> : null}
       </div>
     </header>
     <main>{children}</main>
     <nav className="bottomnav" aria-label="Điều hướng trên thiết bị di động">{links(true)}</nav>
     <div id="toast" />
     <div id="saved" aria-live="polite">✓ Đã lưu</div>
+    <AssessmentLogoutDialog open={logoutConfirmOpen} onCancel={() => setLogoutConfirmOpen(false)} onConfirm={() => { setLogoutConfirmOpen(false); beginLogout(); }} />
   </>;
 }
 
+function AssessmentLogoutDialog({ open, onCancel, onConfirm }: { open: boolean; onCancel: () => void; onConfirm: () => void }) {
+  const dialogRef = useRef<HTMLElement>(null);
+  const stayRef = useRef<HTMLButtonElement>(null);
+  const titleId = useId();
+  const descriptionId = useId();
+  useDialog(open, dialogRef, onCancel, stayRef);
+  if (!open) return null;
+  return <div className="modal-backdrop" role="presentation" onClick={(event) => { if (event.target === event.currentTarget) onCancel(); }}>
+    <section ref={dialogRef} className="dialog shell-logout-dialog" role="dialog" aria-modal="true" aria-labelledby={titleId} aria-describedby={descriptionId} tabIndex={-1}>
+      <button className="app-modal-close" type="button" aria-label="Đóng hộp thoại" title="Đóng" onClick={onCancel}>×</button>
+      <h3 id={titleId}>Bạn đang làm bài test</h3>
+      <p id={descriptionId} className="small">Đăng xuất lúc này sẽ được ghi nhận là một lần cảnh báo trong bài test. Bạn có chắc muốn rời bài?</p>
+      <div className="row shell-logout-dialog-actions">
+        <button ref={stayRef} type="button" onClick={onCancel}>Ở lại làm bài</button>
+        <button className="btn-danger" type="button" onClick={onConfirm}>Vẫn đăng xuất</button>
+      </div>
+    </section>
+  </div>;
+}
+
 function clearSharedDeviceState() {
+  const devicePreferences = new Set(["e4s:effects", "e4s:music"]);
   for (const storage of [window.localStorage, window.sessionStorage]) {
     try {
       for (let index = storage.length - 1; index >= 0; index -= 1) {
         const key = storage.key(index);
-        if (key?.startsWith("e4s:")) storage.removeItem(key);
+        if (key?.startsWith("e4s:") && !devicePreferences.has(key)) storage.removeItem(key);
       }
     } catch {
       // Storage can be unavailable in privacy mode; logout still proceeds.

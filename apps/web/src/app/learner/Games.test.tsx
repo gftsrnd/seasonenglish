@@ -69,7 +69,7 @@ describe("app games affordances", () => {
     const weeklyView: GameHubView = {
       ...view,
       wordSet: {
-        ...view.wordSet,
+        ...view.wordSet!,
         words: [{ id: "word-1", english: "colleague", vietnamese: "đồng nghiệp", definition: "a co-worker", partOfSpeech: "noun" }]
       }
     };

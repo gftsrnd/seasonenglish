@@ -1,7 +1,7 @@
 import { Pool } from "pg";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { migrateDatabase, resetPublicSchema, seedDemo } from "@e4s/database";
-import { createCredentialHash } from "@e4s/domain/identity";
+import { createCredentialHash, createPinHash } from "@e4s/domain/identity";
 import { DEMO_IDS } from "@e4s/test-support";
 import { buildApi } from "../src/app.js";
 
@@ -9,17 +9,28 @@ const databaseUrl = process.env.TEST_DATABASE_URL
   ?? "postgres://e4s:e4s_test_password@127.0.0.1:55432/e4s_test";
 
 const aiOutput = {
-  relevant: true,
-  relevanceNote: "",
-  reply: "Good correction. What do you do in the product team?",
-  replyTranslation: "Bạn sửa đúng rồi. Bạn làm công việc gì trong nhóm sản phẩm?",
-  rubric: { meaning: 4, vocabulary: 4, grammar: 3 },
-  suggestions: [{
+  evaluation: { status: "valid" as const, countsTowardGoal: true, noteVi: "Trả lời đúng trọng tâm." },
+  seasonReply: "That's a useful correction 😊",
+  seasonReplyTranslation: "Bạn sửa đúng rồi.",
+  nextQuestion: "What do you do in the product team?",
+  nextQuestionTranslation: "Bạn làm công việc gì trong nhóm sản phẩm?",
+  rubric: {
+    meaning: { score: 4, evidence: "The role is clear.", improvement: "Add one work detail." },
+    vocabulary: { score: 4, evidence: "Product is relevant.", improvement: "Use department for precision." },
+    grammar: { score: 3, evidence: "The sentence is understandable.", improvement: "Use in before a department." }
+  },
+  corrections: [{
     original: "at product", corrected: "in product", translation: "trong bộ phận sản phẩm",
-    explanation: "Use in before a department."
+    reason: "Use in before a department."
   }],
   correctedText: "I work in product.",
+  suggestedAnswer: { text: "I work in the product team.", translation: "Tôi làm việc trong nhóm sản phẩm." },
   usedWords: ["product"]
+};
+const formalAiOutput = {
+  ...aiOutput,
+  seasonReply: "Thank you for the clear correction.",
+  nextQuestion: "Could you describe your role in the product team?"
 };
 
 describe("AI Coach API", () => {
@@ -45,17 +56,17 @@ describe("AI Coach API", () => {
       await seedDemo(client);
       await client.query(
         "insert into user_credentials (user_id, credential_hash) values ($1, $2), ($3, $4)",
-        [DEMO_IDS.learner, await createCredentialHash("learner-pass"), DEMO_IDS.operator, await createCredentialHash("operator-pass")]
+        [DEMO_IDS.learner, await createPinHash("123456"), DEMO_IDS.operator, await createCredentialHash("operator-pass")]
       );
     } finally { client.release(); }
     await app.ready();
-    const login = async (url: string, email: string, password: string) => {
-      const response = await app.inject({ method: "POST", url, payload: { email, password } });
+    const login = async (url: string, email: string, secret: string, field: "pin" | "password") => {
+      const response = await app.inject({ method: "POST", url, payload: { email, [field]: secret } });
       expect(response.statusCode, response.body).toBe(200);
       return String(response.headers["set-cookie"]).split(";")[0] ?? "";
     };
-    learnerCookie = await login("/api/auth/learner/login", "learner@e4s.local", "learner-pass");
-    operatorCookie = await login("/api/auth/staff/login", "operator@e4s.local", "operator-pass");
+    learnerCookie = await login("/api/auth/learner/login", "minh.anh.nguyen@e4s.local", "123456", "pin");
+    operatorCookie = await login("/api/auth/staff/login", "thu.ha.tran@e4s.local", "operator-pass", "password");
   }, 30_000);
 
   afterAll(async () => { await app.close(); await pool.end(); });
@@ -66,7 +77,7 @@ describe("AI Coach API", () => {
     expect(aiRunnerFactory).toHaveBeenCalledWith(DEMO_IDS.learner);
     expect(response.json()).toMatchObject({
       topic: "Introducing yourself & your job", cefr: "A2", persona: "informal", aiAvailable: true,
-      daily: { limit: 20 }, weekly: { target: 2 }
+      daily: { limit: 30 }, weekly: { target: 50 }
     });
     expect(response.json().vocabulary.length).toBeLessThanOrEqual(12);
     expect(new Set(response.json().vocabulary.map((item: { word: string }) => item.word.toLocaleLowerCase())).size).toBe(response.json().vocabulary.length);
@@ -97,7 +108,7 @@ describe("AI Coach API", () => {
     expect(changed.json().persona).toBe("formal");
 
     runTask.mockResolvedValueOnce({
-      output: aiOutput,
+      output: formalAiOutput,
       metadata: {
         traceId: "trace-coach-formal", taskId: "coach_dialogue", provider: "fixture", model: "fixture-model",
         attempts: 1, latencyMs: 12, inputHash: "b".repeat(64), schemaValid: true as const,
@@ -139,7 +150,11 @@ describe("AI Coach API", () => {
     expect(first.statusCode, first.body).toBe(200);
     expect(first.json().messages).toEqual(expect.arrayContaining([
       expect.objectContaining({ speaker: "learner", text: "I work at product." }),
-      expect.objectContaining({ speaker: "coach", text: aiOutput.reply, feedback: expect.objectContaining({ rubric: aiOutput.rubric }) })
+      expect.objectContaining({
+        speaker: "coach",
+        text: `${aiOutput.seasonReply} ${aiOutput.nextQuestion}`,
+        feedback: expect.objectContaining({ rubric: aiOutput.rubric })
+      })
     ]));
     const progress = await app.inject({ method: "GET", url: "/api/v1/learner/progress", headers: { cookie: learnerCookie } });
     expect(progress.statusCode, progress.body).toBe(200);
@@ -153,5 +168,122 @@ describe("AI Coach API", () => {
     expect(runTask).toHaveBeenCalledTimes(1);
     const stored = await pool.query("select count(*)::int as count from ai_runs where trace_id = 'trace-coach-1'");
     expect(stored.rows[0]?.count).toBe(1);
+  });
+
+  it("stores acknowledgement-only input as insufficient without AI, counters, rewards, or vocabulary unlocks", async () => {
+    runTask.mockClear();
+    const before = await app.inject({ method: "GET", url: "/api/v1/coach", headers: { cookie: learnerCookie } });
+    expect(before.statusCode, before.body).toBe(200);
+    const progressBefore = await app.inject({ method: "GET", url: "/api/v1/learner/progress", headers: { cookie: learnerCookie } });
+    expect(progressBefore.statusCode, progressBefore.body).toBe(200);
+
+    const response = await app.inject({
+      method: "POST", url: "/api/v1/coach/messages", headers: { cookie: learnerCookie },
+      payload: { requestId: "10000000-0000-4000-8000-000000000011", message: "ok" }
+    });
+
+    expect(response.statusCode, response.body).toBe(200);
+    expect(runTask).not.toHaveBeenCalled();
+    expect(response.json().daily.used).toBe(before.json().daily.used);
+    expect(response.json().weekly.turns).toBe(before.json().weekly.turns);
+    expect(response.json().vocabulary).toEqual(before.json().vocabulary);
+    const progressAfter = await app.inject({ method: "GET", url: "/api/v1/learner/progress", headers: { cookie: learnerCookie } });
+    expect(progressAfter.statusCode, progressAfter.body).toBe(200);
+    const coachCriterion = (body: any) => body.levelReadiness.criteria
+      .find((criterion: { key: string }) => criterion.key === "coachRubric");
+    expect(coachCriterion(progressAfter.json())).toEqual(coachCriterion(progressBefore.json()));
+    expect(response.json().messages).toEqual(expect.arrayContaining([
+      expect.objectContaining({ speaker: "learner", text: "ok", classification: "insufficient" }),
+      expect.objectContaining({
+        speaker: "coach",
+        text: expect.stringMatching(/câu tiếng Anh đầy đủ/i),
+        feedback: expect.objectContaining({
+          evaluation: expect.objectContaining({ status: "insufficient", countsTowardGoal: false }),
+          rubric: expect.objectContaining({ meaning: expect.objectContaining({ score: 0 }) })
+        })
+      })
+    ]));
+  });
+
+  it("repeats the current question and excludes an off-topic answer from progress", async () => {
+    runTask.mockClear();
+    const before = await app.inject({ method: "GET", url: "/api/v1/coach", headers: { cookie: learnerCookie } });
+    expect(before.statusCode, before.body).toBe(200);
+    const currentQuestion = [...before.json().messages].reverse()
+      .find((message: { speaker: string; feedback?: { nextQuestion?: string }; text: string }) => message.speaker === "coach")
+      ?.["feedback"]?.nextQuestion
+      ?? [...before.json().messages].reverse()
+        .find((message: { speaker: string; text: string }) => message.speaker === "coach")?.text;
+    expect(currentQuestion).toBeTruthy();
+
+    runTask.mockResolvedValueOnce({
+      output: {
+        evaluation: { status: "off_topic", countsTowardGoal: false, noteVi: "Câu trả lời chưa liên quan." },
+        seasonReply: "That's not related to our question 😊",
+        seasonReplyTranslation: "Câu trả lời chưa liên quan đến câu hỏi.",
+        nextQuestion: "A different question that must not be stored.",
+        nextQuestionTranslation: "Một câu hỏi khác không được lưu.",
+        rubric: {
+          meaning: { score: 1, evidence: "It does not answer the question.", improvement: "Answer the current question." },
+          vocabulary: { score: 0, evidence: "No relevant vocabulary.", improvement: "Use words from the question." },
+          grammar: { score: 2, evidence: "A sentence is present.", improvement: "Focus on the requested topic." }
+        },
+        corrections: [], correctedText: "",
+        suggestedAnswer: { text: "I work in the product team.", translation: "Tôi làm việc trong nhóm sản phẩm." },
+        usedWords: []
+      } as any,
+      metadata: {
+        traceId: "trace-coach-off-topic", taskId: "coach_dialogue", provider: "fixture", model: "fixture-model",
+        attempts: 1, latencyMs: 12, inputHash: "d".repeat(64), schemaValid: true as const,
+        usage: { inputTokens: 20, outputTokens: 25, totalTokens: 45 }
+      }
+    });
+    const response = await app.inject({
+      method: "POST", url: "/api/v1/coach/messages", headers: { cookie: learnerCookie },
+      payload: { requestId: "10000000-0000-4000-8000-000000000012", message: "My favorite color is purple." }
+    });
+
+    expect(response.statusCode, response.body).toBe(200);
+    expect(response.json().daily.used).toBe(before.json().daily.used);
+    expect(response.json().weekly.turns).toBe(before.json().weekly.turns);
+    expect(response.json().vocabulary).toEqual(before.json().vocabulary);
+    const feedback = [...response.json().messages].reverse()
+      .find((message: { speaker: string; feedback?: unknown }) => message.speaker === "coach" && message.feedback)?.feedback;
+    expect(feedback).toMatchObject({
+      evaluation: { status: "off_topic", countsTowardGoal: false },
+      nextQuestion: currentQuestion,
+      rubric: { meaning: { score: 1 } }
+    });
+  });
+
+  it("repairs a persona violation once before persisting the turn", async () => {
+    await app.inject({
+      method: "PUT", url: "/api/v1/coach/persona", headers: { cookie: learnerCookie }, payload: { persona: "formal" }
+    });
+    runTask.mockClear();
+    runTask
+      .mockResolvedValueOnce({
+        output: aiOutput,
+        metadata: { traceId: "trace-policy-bad", taskId: "coach_dialogue", provider: "fixture", model: "fixture-model",
+          attempts: 1, latencyMs: 12, inputHash: "e".repeat(64), schemaValid: true as const,
+          usage: { inputTokens: 20, outputTokens: 25, totalTokens: 45 } }
+      })
+      .mockResolvedValueOnce({
+        output: formalAiOutput,
+        metadata: { traceId: "trace-policy-repaired", taskId: "coach_dialogue", provider: "fixture", model: "fixture-model",
+          attempts: 1, latencyMs: 12, inputHash: "f".repeat(64), schemaValid: true as const,
+          usage: { inputTokens: 20, outputTokens: 25, totalTokens: 45 } }
+      });
+    const response = await app.inject({
+      method: "POST", url: "/api/v1/coach/messages", headers: { cookie: learnerCookie },
+      payload: { requestId: "10000000-0000-4000-8000-000000000013", message: "I coordinate the weekly planning meeting." }
+    });
+    expect(response.statusCode, response.body).toBe(200);
+    expect(runTask).toHaveBeenCalledTimes(2);
+    const repairOptions = (runTask.mock.calls as unknown as Array<[string, unknown, { systemPrompt?: string }]>)[1]?.[2];
+    expect(repairOptions?.systemPrompt).toContain("REPAIR THE PREVIOUS OUTPUT ONCE");
+    const latestCoach = [...response.json().messages].reverse()
+      .find((message: { speaker: string; feedback?: { seasonReply?: string } }) => message.speaker === "coach" && message.feedback);
+    expect(latestCoach?.feedback?.seasonReply).toBe(formalAiOutput.seasonReply);
   });
 });

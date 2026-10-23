@@ -4,6 +4,7 @@ import { createS3Storage, type ObjectStorage } from "@e4s/storage";
 import { Pool } from "pg";
 import { loadEnvFile } from "node:process";
 import { buildApi } from "./app.js";
+import { createResendIdentityEmailSender } from "./modules/identity/index.js";
 import { createOrganizationAiRunnerFactory } from "./modules/ai/runtime.js";
 import { createContentMediaService } from "./modules/media/index.js";
 import { createOpenverseProvider } from "./modules/media/providers/openverse.js";
@@ -44,6 +45,12 @@ const aiRunnerFactory = createOrganizationAiRunnerFactory(pool, aiRunner, {
 });
 const storage = createStorageFromEnvironment();
 const mediaService = storage ? createProductionMediaService(storage) : undefined;
+const identityEmailSender = process.env.RESEND_API_KEY
+  ? createResendIdentityEmailSender({
+      apiKey: process.env.RESEND_API_KEY,
+      from: process.env.RESEND_FROM_EMAIL ?? "E4S <onboarding@resend.dev>"
+    })
+  : undefined;
 const app = buildApi({
   pool,
   secureCookies: process.env.COOKIE_SECURE === "true",
@@ -56,6 +63,8 @@ const app = buildApi({
   ...(storage ? { storage } : {}),
   ...(mediaService ? { mediaService } : {}),
   ...(aiRunner ? { aiRunner } : {}),
+  ...(identityEmailSender ? { identityEmailSender } : {}),
+  otpSecret: process.env.AUTH_OTP_SECRET ?? "local-only-change-me",
   aiRunnerFactory
 });
 const port = Number(process.env.PORT ?? 3001);

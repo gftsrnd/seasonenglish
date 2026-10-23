@@ -10,7 +10,7 @@ import { registerCoachRoutes, type AiTaskRunner } from "./modules/coach/index.js
 import { registerContentRoutes } from "./modules/content/index.js";
 import { registerEngagementRoutes } from "./modules/engagement/index.js";
 import { registerFileRoutes } from "./modules/files/index.js";
-import { registerIdentityRoutes } from "./modules/identity/index.js";
+import { registerIdentityRoutes, type IdentityEmailSender } from "./modules/identity/index.js";
 import { registerLearningRoutes } from "./modules/learning/index.js";
 import { registerManagerRoutes } from "./modules/manager/index.js";
 import type { ContentMediaService } from "./modules/media/index.js";
@@ -37,6 +37,8 @@ export interface BuildApiOptions {
     pexels: boolean;
     pixabay: boolean;
   };
+  identityEmailSender?: IdentityEmailSender;
+  otpSecret?: string;
 }
 
 export function buildApi(options: BuildApiOptions): FastifyInstance {
@@ -61,7 +63,9 @@ export function buildApi(options: BuildApiOptions): FastifyInstance {
   void app.register(rateLimit, { global: false });
   registerIdentityRoutes(app, {
     pool: options.pool,
-    secureCookies: options.secureCookies ?? true
+    secureCookies: options.secureCookies ?? true,
+    ...(options.identityEmailSender ? { emailSender: options.identityEmailSender } : {}),
+    otpSecret: options.otpSecret ?? "local-only-change-me"
   });
   registerLearningRoutes(app, options.pool, options.aiRunner, options.mediaService);
   registerAssessmentRoutes(app, options.pool, options.aiRunner, options.aiRunnerFactory);

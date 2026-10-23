@@ -7,6 +7,7 @@ import { CrosswordGame } from "../games/CrosswordGame.js";
 import { SeasonCatchGame } from "../games/SeasonCatchGame.js";
 import { SeasonRioGame } from "../games/SeasonRioGame.js";
 import { TypingRaceGame } from "../games/TypingRaceGame.js";
+import { WordSortGame } from "../games/WordSortGame.js";
 import { LearnerGame, LearnerGames } from "./Games.js";
 import type { LearnerCallbacks } from "./contracts.js";
 
@@ -62,6 +63,13 @@ const hubView: GameHubView = {
 };
 
 describe("learner game visual and interaction regressions", () => {
+  it("does not start Word Sort with fewer than four valid part-of-speech words", () => {
+    render(<WordSortGame words={wordSet.words} onFinish={vi.fn()} />);
+
+    expect(screen.getByText("Cần ít nhất 4 từ có thông tin từ loại để bắt đầu.")).toBeInTheDocument();
+    expect(screen.queryByRole("group", { name: "Nhóm từ loại" })).not.toBeInTheDocument();
+  });
+
   it("keeps the original game artwork and scene objects without changing initial mechanics", () => {
     document.documentElement.dataset.theme = "autumn";
     vi.stubGlobal("requestAnimationFrame", vi.fn(() => 1));
@@ -218,5 +226,16 @@ describe("learner game visual and interaction regressions", () => {
 
     expect(await screen.findByRole("alert")).toHaveTextContent("Không tải được từ vựng tuần này. Vui lòng thử lại.");
     expect(screen.getByRole("button", { name: "Dùng từ vựng tuần này" })).not.toBeDisabled();
+  });
+
+  it("keeps natural-topic generation open before the learner has selected a word set", () => {
+    render(<LearnerGames view={{ ...hubView, aiAvailable: true, wordSet: null }} actions={actions as unknown as LearnerCallbacks} />);
+
+    const topic = screen.getByRole("textbox", { name: "Chủ đề bộ từ" });
+    fireEvent.change(topic, { target: { value: "Coffee shop conversations" } });
+
+    expect(screen.getByRole("button", { name: "Tạo bộ từ" })).toBeEnabled();
+    expect(screen.queryByRole("link", { name: /Chơi / })).not.toBeInTheDocument();
+    expect(screen.getByText("Tạo một bộ từ để bắt đầu chơi.")).toBeInTheDocument();
   });
 });

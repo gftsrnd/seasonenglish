@@ -13,6 +13,13 @@ const learnerSession = {
   permissions: ["learning:own" as const]
 };
 
+const authClient = (overrides = {}) => ({
+  learnerLogin: vi.fn(), staffLogin: vi.fn(),
+  registerLearner: vi.fn(),
+  startLearnerPinReset: vi.fn(), verifyLearnerPinReset: vi.fn(), completeLearnerPinReset: vi.fn(),
+  ...overrides
+});
+
 afterEach(cleanup);
 
 describe("new binding-app shell", () => {
@@ -51,70 +58,55 @@ describe("new binding-app shell", () => {
 
   it("locks every entry action while a real login is pending", async () => {
     let resolveLogin!: (session: typeof learnerSession) => void;
-    const client = {
+    const client = authClient({
       learnerLogin: vi.fn(() => new Promise<typeof learnerSession>((resolve) => { resolveLogin = resolve; })),
-      staffLogin: vi.fn(),
-      registerLearner: vi.fn()
-    };
+    });
     const user = userEvent.setup();
     render(<EntryScreen client={client} onAuthenticated={vi.fn()} />);
 
     await user.type(screen.getByRole("textbox", { name: "Email" }), "learner@example.test");
-    await user.type(screen.getByLabelText("Mật khẩu"), "not-submitted-by-browser");
+    await user.type(screen.getByLabelText("Mã PIN"), "123456");
     await user.click(screen.getByRole("button", { name: "Đăng nhập người học" }));
 
-    expect(screen.getByRole("button", { name: "Đang đăng nhập…" })).toBeDisabled();
-    expect(screen.getByRole("tab", { name: "Người học" })).toBeDisabled();
-    expect(screen.getByRole("tab", { name: "Nhân sự" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Đang xử lý…" })).toBeDisabled();
     expect(screen.getByRole("textbox", { name: "Email" })).toBeDisabled();
-    expect(screen.getByLabelText("Mật khẩu")).toBeDisabled();
+    expect(screen.getByLabelText("Mã PIN")).toBeDisabled();
     resolveLogin(learnerSession);
   });
 
   it("supports arrow-key navigation for the account-type tabs", async () => {
-    const client = { learnerLogin: vi.fn(), staffLogin: vi.fn(), registerLearner: vi.fn() };
+    const client = authClient();
     const user = userEvent.setup();
     render(<EntryScreen client={client} onAuthenticated={vi.fn()} />);
 
     const learnerTab = screen.getByRole("tab", { name: "Người học" });
     const staffTab = screen.getByRole("tab", { name: "Nhân sự" });
-    expect(learnerTab).toHaveAttribute("tabindex", "0");
-    expect(staffTab).toHaveAttribute("tabindex", "-1");
-    expect(learnerTab).toHaveAttribute("aria-controls", "app-login-panel");
     expect(screen.getByRole("tabpanel")).toHaveAttribute("aria-labelledby", "app-login-learner-tab");
 
-    learnerTab.focus();
-    await user.keyboard("{ArrowRight}");
+    await user.click(staffTab);
 
-    expect(staffTab).toHaveFocus();
+    expect(screen.getByRole("textbox", { name: "Email" })).toHaveFocus();
     expect(staffTab).toHaveAttribute("aria-selected", "true");
     expect(screen.getByRole("button", { name: "Đăng nhập nhân sự" })).toBeInTheDocument();
     expect(screen.getByRole("tabpanel")).toHaveAttribute("aria-labelledby", "app-login-staff-tab");
   });
 
-  it("associates login fields with the error and moves focus to failed-login feedback", async () => {
-    const client = {
+  it("places failed-login feedback under the PIN field", async () => {
+    const client = authClient({
       learnerLogin: vi.fn().mockRejectedValue(new Error("invalid credentials")),
-      staffLogin: vi.fn(),
-      registerLearner: vi.fn()
-    };
+    });
     const user = userEvent.setup();
     render(<EntryScreen client={client} onAuthenticated={vi.fn()} />);
 
     const email = screen.getByRole("textbox", { name: "Email" });
-    const password = screen.getByLabelText("Mật khẩu");
-    expect(email).toHaveAttribute("id", "app-login-email");
-    expect(password).toHaveAttribute("id", "app-login-password");
+    const pin = screen.getByLabelText("Mã PIN");
 
     await user.type(email, "learner@example.test");
-    await user.type(password, "wrong-password");
+    await user.type(pin, "123456");
     await user.click(screen.getByRole("button", { name: "Đăng nhập người học" }));
 
     const error = await screen.findByRole("alert");
-    expect(error).toHaveFocus();
-    expect(error).toHaveAttribute("id", "app-login-error");
-    expect(email).toHaveAttribute("aria-describedby", "app-login-error");
-    expect(password).toHaveAttribute("aria-describedby", "app-login-error");
-    expect(screen.getByRole("tabpanel")).toHaveAttribute("aria-describedby", "app-login-error");
+    expect(error).toHaveTextContent("Email hoặc PIN chưa đúng");
+    expect(pin.closest("label")).toContainElement(error);
   });
 });

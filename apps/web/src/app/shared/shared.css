@@ -330,6 +330,77 @@ section.welcome.app-entry .app-entry-card .field {
   gap: 6px;
 }
 
+section.welcome.app-entry .app-field-error {
+  color: var(--danger, #9f2f24);
+  font-size: .8rem;
+  line-height: 1.35;
+}
+
+section.welcome.app-entry .app-shared-device-note {
+  text-align: center;
+}
+
+section.welcome.app-entry .app-shared-device-note summary {
+  width: fit-content;
+  margin-inline: auto;
+  cursor: pointer;
+  color: var(--muted);
+  font-size: .8rem;
+}
+
+section.welcome.app-entry .app-shared-device-note p { margin: 6px 0 0; }
+
+section.welcome.app-entry .app-pin-input {
+  position: relative;
+  display: block;
+}
+
+section.welcome.app-entry .app-pin-input > input {
+  position: absolute;
+  inset: 0 auto 0 0;
+  z-index: 2;
+  width: calc(100% - 50px);
+  height: 100%;
+  opacity: 0;
+  cursor: text;
+}
+
+section.welcome.app-entry .app-pin-cells {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(38px, 1fr));
+  gap: 8px;
+  margin-right: 50px;
+}
+
+section.welcome.app-entry .app-pin-cells > span {
+  display: grid;
+  min-height: 46px;
+  place-items: center;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--surface);
+  color: var(--text);
+  font-size: 1.3rem;
+}
+
+section.welcome.app-entry .app-pin-input:focus-within .app-pin-cells > span {
+  border-color: var(--primary);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--primary) 18%, transparent);
+}
+
+section.welcome.app-entry .app-pin-toggle {
+  position: absolute;
+  z-index: 3;
+  top: 4px;
+  right: 0;
+  width: 42px;
+  min-width: 42px;
+  min-height: 38px;
+  padding: 0;
+  border: 1px solid var(--line);
+  background: var(--surface);
+}
+
 section.welcome.app-entry .app-register-heading {
   display: grid;
   gap: 4px;
@@ -429,6 +500,26 @@ body.app-modal-open {
   right: 10px;
   top: 10px;
   width: 44px;
+}
+
+.shell-logout-dialog {
+  position: relative;
+  width: min(460px, 100%);
+}
+
+.shell-logout-dialog > h3 {
+  margin: 0 48px 10px 0;
+}
+
+.shell-logout-dialog > p {
+  margin: 0;
+  line-height: 1.55;
+}
+
+.shell-logout-dialog-actions {
+  justify-content: flex-end;
+  gap: 10px;
+  margin-top: 20px;
 }
 
 /* Keep the tablet shell aligned with the compact app controls. */

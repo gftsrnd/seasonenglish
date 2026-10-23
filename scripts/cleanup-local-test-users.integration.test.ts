@@ -12,6 +12,12 @@ const databaseUrl = process.env.TEST_DATABASE_URL
 const testOperatorId = "10000000-0000-4000-8000-000000000104";
 const testLearnerId = "10000000-0000-4000-8000-000000000105";
 const legitimateLearnerId = "10000000-0000-4000-8000-000000000107";
+const laneFixtureLearnerId = "10000000-0000-4000-8000-000000000108";
+const laneTwoFixtureLearnerId = "10000000-0000-4000-8000-000000000109";
+const p0FixtureLearnerId = "10000000-0000-4000-8000-000000000110";
+const legacyScenarioLearnerId = "10000000-0000-4000-8000-000000000111";
+const legitimateScenarioDomainLearnerId = "10000000-0000-4000-8000-000000000112";
+const approvedScenarioLearnerId = "20000000-0000-4000-8000-000000000001";
 
 describe("local test-user cleanup", () => {
   const pool = new Pool({ connectionString: databaseUrl });
@@ -31,8 +37,14 @@ describe("local test-user cleanup", () => {
       `insert into users (id, organization_id, role, display_name, email) values
          ($1, $3, 'operator', 'Core check operator', 'core-check-operator@e4s.local'),
          ($2, $3, 'learner', 'Core check learner', 'core-check-learner@e4s.local'),
-         ($4, $3, 'learner', 'Nguyen Van An', 'an.nguyen@e4s.local')`,
-      [testOperatorId, testLearnerId, DEMO_IDS.organization, legitimateLearnerId]
+         ($4, $3, 'learner', 'Nguyen Van An', 'an.nguyen@e4s.local'),
+         ($5, $3, 'learner', 'Lane 4 O-004 fixture', 'lane4-o004-fixture@e4s.local'),
+         ($6, $3, 'learner', 'Lane Two fixture', 'lane2-123@example.com'),
+         ($7, $3, 'learner', 'P0 fixture', 'p0-fixture@e4s.local'),
+         ($8, $3, 'learner', 'Legacy scenario fixture', 'learner-placement-new@scenario.e4s.local'),
+         ($9, $3, 'learner', 'Nguyễn Văn An', 'nguyen.van.an@scenario.e4s.local'),
+         ($10, $3, 'learner', 'Trần Minh Quân', 'minh.quan.tran@scenario.e4s.local')`,
+      [testOperatorId, testLearnerId, DEMO_IDS.organization, legitimateLearnerId, laneFixtureLearnerId, laneTwoFixtureLearnerId, p0FixtureLearnerId, legacyScenarioLearnerId, legitimateScenarioDomainLearnerId, approvedScenarioLearnerId]
     );
     await pool.query(
       "insert into user_credentials (user_id, credential_hash) values ($1, $2), ($3, $4)",
@@ -63,7 +75,12 @@ describe("local test-user cleanup", () => {
     expect(report.mode).toBe("dry-run");
     expect(report.accounts.map(({ email }) => email)).toEqual([
       "core-check-learner@e4s.local",
-      "core-check-operator@e4s.local"
+      "core-check-operator@e4s.local",
+      "lane2-123@example.com",
+      "lane4-o004-fixture@e4s.local",
+      "learner-placement-new@scenario.e4s.local",
+      "minh.quan.tran@scenario.e4s.local",
+      "p0-fixture@e4s.local"
     ]);
     expect(report.affectedReferences).toBeGreaterThan(2);
     expect(await pool.query("select 1 from users where id = $1", [testLearnerId])).toHaveProperty("rowCount", 1);
@@ -81,14 +98,18 @@ describe("local test-user cleanup", () => {
   it("transfers shared authorship and removes private test-user data atomically", async () => {
     const { stdout } = await cleanup("--apply");
     const report = JSON.parse(stdout) as { mode: string; remainingAccounts: number };
-    expect(report).toMatchObject({ mode: "apply", remainingAccounts: 4 });
+    expect(report).toMatchObject({ mode: "apply", remainingAccounts: 5 });
 
     const users = await pool.query<{ email: string }>(
       "select email from users where organization_id = $1 order by email",
       [DEMO_IDS.organization]
     );
     expect(users.rows.map(({ email }) => email)).toEqual([
-      "an.nguyen@e4s.local", "learner@e4s.local", "manager@e4s.local", "operator@e4s.local"
+      "an.nguyen@e4s.local",
+      "minh.anh.nguyen@e4s.local",
+      "nguyen.van.an@scenario.e4s.local",
+      "quoc.bao.le@e4s.local",
+      "thu.ha.tran@e4s.local"
     ]);
     const prompt = await pool.query<{ created_by: string }>(
       "select created_by from prompt_versions where version = 99 and task_key = 'system_rules'"

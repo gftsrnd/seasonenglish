@@ -1,12 +1,12 @@
 import { useEffect, useRef, useState } from "react";
 import { Check, X } from "lucide-react";
 import { Badge, Button, Empty, LevelChip, OperatorPage, PageTitle, Rubric, Suggestions } from "./primitives.js";
-import type { Cefr, OperatorReviewActions, OperatorReviewView, ReviewActionKey, ReviewTab } from "./types.js";
+import type { Cefr, OperatorReviewActions, OperatorReviewView, ReviewActionKey, ReviewTab, ReviewWeeklyPractice } from "./types.js";
 import type { ContentReviewAssessmentDetailView } from "@e4s/contracts";
 import { operatorDateTime } from "./adapters.js";
 import { AssessmentManualScore, type ManualScoreInput } from "./AssessmentManualScore.js";
 
-const TABS: Array<[ReviewTab, string]> = [["subs", "Bài nộp"], ["coach", "Phản hồi coach"], ["micro", "Bài siêu ngắn"], ["appeals", "Kháng nghị"], ["attempts", "Số lần làm bài"], ["tests", "Bài test"]];
+const TABS: Array<[ReviewTab, string]> = [["weekly", "Bài cuối tuần"], ["subs", "Bài nộp"], ["coach", "Phản hồi coach"], ["appeals", "Kháng nghị"], ["attempts", "Số lần làm bài"], ["tests", "Bài test"]];
 const focusableSelector = "button:not(:disabled), input:not(:disabled), select:not(:disabled), textarea:not(:disabled), audio[controls], [href], [tabindex]:not([tabindex='-1'])";
 
 type PendingReviewAction = {
@@ -28,6 +28,70 @@ function isPromiseLike(value: unknown): value is PromiseLike<unknown> {
 
 function actionErrorMessage(reason: unknown): string {
   return reason instanceof Error && reason.message.trim() ? reason.message : "Không hoàn tất thao tác. Hãy thử lại.";
+}
+
+export function generateWeeklyPracticeDraft(topic: string, cefr: Cefr, vocabulary: readonly string[]) {
+  const sentenceRange = cefr === "A1" ? "3–4" : cefr === "A2" ? "3–5" : "5–7";
+  const words = [...new Set(vocabulary.map(value => value.trim()).filter(Boolean))].slice(0, 12);
+  return {
+    task: `Write ${sentenceRange} sentences about “${topic}”.`,
+    guidance: words.length
+      ? `Viết ${sentenceRange} câu tiếng Anh về chủ đề “${topic}”. Dùng ít nhất 3 từ trong bài tuần này: ${words.join(", ")}.`
+      : `Viết ${sentenceRange} câu tiếng Anh về chủ đề “${topic}”. Dùng ít nhất 3 từ trong bài tuần này.`
+  };
+}
+
+function WeeklyPracticeEditor({ item, readOnly, onSave }: { item: ReviewWeeklyPractice; readOnly: boolean; onSave: NonNullable<OperatorReviewActions["onSaveWeeklyPractice"]> }) {
+  const [task, setTask] = useState(item.task);
+  const [guidance, setGuidance] = useState(item.guidance);
+  const [vocabulary, setVocabulary] = useState(item.requiredVocabulary.join(", "));
+  const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState<string>();
+  const savingRef = useRef(false);
+  const lastSaveAttemptRef = useRef(0);
+  const requiredVocabulary = [...new Set(vocabulary.split(/[\n,]+/u).map(value => value.trim()).filter(Boolean))];
+  const context = `Tuần ${item.week} · ${item.cefr}`;
+  const generate = () => {
+    const generated = generateWeeklyPracticeDraft(item.topic, item.cefr, requiredVocabulary);
+    setTask(generated.task);
+    setGuidance(generated.guidance);
+  };
+  const save = async () => {
+    const now = Date.now();
+    if (savingRef.current || now - lastSaveAttemptRef.current < 500 || readOnly || !task.trim() || !guidance.trim()) return;
+    lastSaveAttemptRef.current = now;
+    savingRef.current = true;
+    setSaving(true);
+    setSaveError(undefined);
+    try {
+      await onSave({ week: item.week, cefr: item.cefr, expectedVersion: item.version, task: task.trim(), guidance: guidance.trim(), requiredVocabulary });
+    } catch (reason) {
+      setSaveError(actionErrorMessage(reason));
+    } finally {
+      savingRef.current = false;
+      setSaving(false);
+    }
+  };
+  return <article className="card operator-weekly-practice-editor">
+    <div className="row between operator-card-header"><div><b>Tuần {item.week} · {item.topic}</b><div className="xs muted"><LevelChip level={item.cefr} /> · v{item.version} · {item.status === "approved" ? "Đã duyệt" : item.status === "review" ? "Chờ duyệt" : "Bản nháp"}</div></div><Button small aria-label={`Sinh bài cuối tuần · ${context}`} disabled={readOnly || saving} onClick={generate}>Sinh bài cuối tuần</Button></div>
+    <label className="small">Đề bài<textarea aria-label={`Đề bài · ${context}`} value={task} disabled={readOnly || saving} onChange={event => setTask(event.target.value)} /></label>
+    <label className="small">Hướng dẫn<textarea aria-label={`Hướng dẫn · ${context}`} value={guidance} disabled={readOnly || saving} onChange={event => setGuidance(event.target.value)} /></label>
+    <label className="small">Từ bắt buộc<input aria-label={`Từ bắt buộc · ${context}`} value={vocabulary} disabled={readOnly || saving} onChange={event => setVocabulary(event.target.value)} /></label>
+    {saveError && <div className="small" role="alert">{saveError}</div>}
+    <div className="row operator-review-action-footer"><Button small primary aria-label={`Lưu bản nháp · ${context}`} busy={saving} disabled={readOnly || saving || !task.trim() || !guidance.trim() || requiredVocabulary.length > 12} onClick={() => void save()}>{saving ? "Đang lưu…" : "Lưu bản nháp"}</Button></div>
+  </article>;
+}
+
+export function groupReviewItemsByLearner<T extends { learnerName: string }>(items: readonly T[]) {
+  const groups = new Map<string, T[]>();
+  for (const item of items) groups.set(item.learnerName, [...(groups.get(item.learnerName) ?? []), item]);
+  return [...groups].map(([learnerName, learnerItems]) => ({ learnerName, items: learnerItems }));
+}
+
+function groupAttemptsByLearner(items: OperatorReviewView["attempts"]) {
+  const groups = new Map<string, OperatorReviewView["attempts"]>();
+  for (const item of items) groups.set(item.learnerId, [...(groups.get(item.learnerId) ?? []), item]);
+  return [...groups.entries()].map(([learnerId, learnerItems]) => ({ learnerId, items: learnerItems }));
 }
 
 const integrityReasonLabels: Record<string, string> = {
@@ -60,7 +124,6 @@ export function OperatorReview({ view, actions, readOnly = false, unavailable = 
     let completed = false;
     if (pending.key === "checkSubmission") completed = view.submissions.find(item => item.id === pending.id)?.operatorChecked === pending.expected;
     if (pending.key === "checkCoach") completed = view.coachTurns.find(item => item.id === pending.id)?.checked === pending.expected;
-    if (pending.key === "deleteMicro") completed = !view.microLessons.some(item => item.id === pending.id);
     if (pending.key === "gradeAi") completed = view.submissions.find(item => item.id === pending.id)?.total != null;
     if (pending.key === "decideAppeal") completed = view.appeals.find(item => item.id === pending.id)?.status !== "pending";
     if (completed) setPending(current => current?.key === pending.key && current.id === pending.id ? undefined : current);
@@ -95,15 +158,15 @@ export function OperatorReview({ view, actions, readOnly = false, unavailable = 
       </div>}
     </div>)}</div> : <Empty>Chưa có bài nộp.</Empty>;
 
-    if (view.activeTab === "coach") return view.coachTurns.length ? <div className="card operator-review-panel"><p className="small muted operator-review-intro">Đọc mẫu phản hồi AI coach; kiểm tra lệch mức, lỗi hoặc khen quá tay rồi sửa prompt nếu cần.</p><div className="operator-coach-list">{view.coachTurns.map(item => <div className="item" key={item.id}><div className="body small"><div className="row between operator-review-item-heading"><span><b>{item.learnerName}</b> {item.cefr && <LevelChip level={item.cefr} />} <span className="xs muted">{item.week ? `Tuần ${item.week} · ` : ""}{item.at}</span></span><label className="xs"><input type="checkbox" checked={item.checked} disabled={readOnly || Boolean(blocked("checkCoach")) || isSameItemBusy("checkCoach", item.id)} aria-busy={isBusy("checkCoach", item.id) || undefined} onChange={event => runAction({ key: "checkCoach", id: item.id, expected: event.target.checked }, () => actions.onMarkCoachTurn(item.id, event.target.checked))} style={{ width: "auto" }} /> Đã kiểm</label></div><div className="operator-review-copy"><span className="muted">Học viên:</span> {item.userText}</div><div className="operator-review-copy"><span className="muted">Coach:</span> {item.reply}</div><Rubric value={item.rubric} /><Suggestions items={item.suggestions} /></div></div>)}</div></div> : <Empty>Chưa có lượt luyện nào.</Empty>;
+    if (view.activeTab === "coach") return view.coachTurns.length ? <div className="card operator-review-panel"><p className="small muted operator-review-intro">Đọc mẫu phản hồi AI coach; kiểm tra lệch mức, lỗi hoặc khen quá tay rồi sửa prompt nếu cần.</p><div className="operator-coach-list">{groupReviewItemsByLearner(view.coachTurns).map(group => <details className="operator-review-learner-group" key={group.learnerName}><summary><b>{group.learnerName}</b><span className="xs muted">{group.items.length} phản hồi · {group.items.filter(item => !item.checked).length} chưa kiểm</span></summary><div className="operator-review-group-items">{group.items.map(item => <div className="item" key={item.id}><div className="body small"><div className="row between operator-review-item-heading"><span>{item.cefr && <LevelChip level={item.cefr} />} <span className="xs muted">{item.week ? `Tuần ${item.week} · ` : ""}{item.at}</span></span><label className="xs"><input type="checkbox" checked={item.checked} disabled={readOnly || Boolean(blocked("checkCoach")) || isSameItemBusy("checkCoach", item.id)} aria-busy={isBusy("checkCoach", item.id) || undefined} onChange={event => runAction({ key: "checkCoach", id: item.id, expected: event.target.checked }, () => actions.onMarkCoachTurn(item.id, event.target.checked))} style={{ width: "auto" }} /> Đã kiểm</label></div><div className="operator-review-copy"><span className="muted">Học viên:</span> {item.userText}</div><div className="operator-review-copy"><span className="muted">Coach:</span> {item.reply}</div><Rubric value={item.rubric} /><Suggestions items={item.suggestions} /></div></div>)}</div></details>)}</div></div> : <Empty>Chưa có lượt luyện nào.</Empty>;
 
-    if (view.activeTab === "micro") return view.microLessons.length ? <div className="card"><p className="small muted">Bài siêu ngắn do học viên tự tạo theo nghề và phong cách học. Kiểm tra lệch mức/sai nghĩa rồi xoá bài kém.</p><div className="list">{view.microLessons.map(item => <div className="item" key={item.id}><div className="body small"><div className="row between"><span><b>{item.learnerName || "—"}</b> <LevelChip level={item.cefr} /> <span className="xs muted">{item.date} · {item.topic}{item.completed ? " · đã học" : ""}</span></span><Button small danger busy={isBusy("deleteMicro", item.id)} disabled={readOnly || Boolean(blocked("deleteMicro")) || isSameItemBusy("deleteMicro", item.id)} title={blocked("deleteMicro")} onClick={() => runAction({ key: "deleteMicro", id: item.id }, () => actions.onDeleteMicroLesson(item.id))}>{isBusy("deleteMicro", item.id) ? "Đang xoá…" : "Xoá"}</Button></div><div><b>Lý thuyết:</b> {item.theory}</div><div><b>Từ:</b> {item.vocabulary}</div><div><b>Thực hành{item.practiceType ? ` (${item.practiceType})` : ""}:</b> {item.practiceText}{item.practiceAnswer && <span className="muted"> → {item.practiceAnswer}</span>}</div>{item.learnerAnswer && <div><b>Bài làm:</b> {item.learnerAnswer}{item.score != null && <Badge tone={item.scoreOk ? "ok" : "warn"}>{item.score}/10</Badge>}</div>}{(item.job || item.learningStyle) && <div className="xs muted">{[item.job, item.learningStyle].filter(Boolean).join(" · ")}</div>}</div></div>)}</div></div> : <Empty>Chưa có bài siêu ngắn nào.</Empty>;
+    if (view.activeTab === "weekly") return view.weeklyPractices.length ? <div className="operator-review-card-list">{view.weeklyPractices.map(item => <WeeklyPracticeEditor key={item.id} item={item} readOnly={readOnly || !actions.onSaveWeeklyPractice} onSave={actions.onSaveWeeklyPractice ?? (() => undefined)} />)}</div> : <Empty>Chưa có bộ bài tuần để soạn bài cuối tuần.</Empty>;
 
-    if (view.activeTab === "appeals") return view.appeals.length ? view.appeals.map(item => <div className="card" key={item.id} style={item.status === "pending" ? { background: "var(--butter)" } : undefined}><div className="row between"><div><b>{item.learnerName}</b> {item.cefr && <LevelChip level={item.cefr} />} <span className="xs muted">{[item.title, item.part, item.at].filter(Boolean).join(" · ")}{item.kind === "part" ? ` · đã làm ${item.attempts} lần` : ""}</span></div><Badge tone={item.status === "pending" ? "warn" : item.status === "accepted" ? "ok" : "danger"}>{item.statusLabel || (item.status === "pending" ? "Chờ xử lý" : item.status === "accepted" ? "Đã chấp nhận" : "Giữ nguyên")}</Badge></div>{item.question && <div className="small"><b>Đề:</b> {item.question}{item.options?.length ? <span className="muted"> ({item.options.join(" / ")})</span> : null}</div>}{item.answer && <div className="card soft small" style={{ whiteSpace: "pre-wrap" }}><b>Bài làm của học viên:</b> {item.answer}</div>}{(item.key || item.aiFeedback) && <div className="small">{item.key && <><b>Đáp án tham khảo:</b> {item.key} · </>}<b>AI nhận xét:</b> {item.aiFeedback || "(chấm theo đáp án, không có nhận xét)"}</div>}<div className="small"><b>Lý do học viên báo cáo:</b> {item.reason}</div>{item.status === "pending" ? <div className="row"><Button primary small busy={isBusy("decideAppeal", item.id, true)} disabled={readOnly || Boolean(blocked("decideAppeal")) || isSameItemBusy("decideAppeal", item.id)} title={blocked("decideAppeal")} onClick={() => runAction({ key: "decideAppeal", id: item.id, decision: true }, () => actions.onDecideAppeal(item.id, true))}>{isBusy("decideAppeal", item.id, true) ? "Đang xử lý…" : item.kind === "sub" ? "Chấp nhận – chấm lại điểm" : "Chấp nhận – tính là đúng"}</Button><Button small busy={isBusy("decideAppeal", item.id, false)} disabled={readOnly || Boolean(blocked("decideAppeal")) || isSameItemBusy("decideAppeal", item.id)} title={blocked("decideAppeal")} onClick={() => runAction({ key: "decideAppeal", id: item.id, decision: false }, () => actions.onDecideAppeal(item.id, false))}>{isBusy("decideAppeal", item.id, false) ? "Đang xử lý…" : "Giữ nguyên kết quả"}</Button></div> : item.decidedSummary && <div className="xs muted">{item.decidedSummary}</div>}</div>) : <Empty>Chưa có kháng nghị nào. Học viên bấm “Báo cáo: AI chấm sai” ở bài tập hoặc bài tuần thì yêu cầu hiện ở đây.</Empty>;
+    if (view.activeTab === "appeals") return view.appeals.length ? <div className="operator-review-card-list">{groupReviewItemsByLearner(view.appeals).map(group => <details className="card operator-review-learner-group" key={group.learnerName}><summary><b>{group.learnerName}</b><span className="xs muted">{group.items.length} kháng nghị · {group.items.filter(item => item.status === "pending").length} chờ xử lý</span></summary><div className="operator-review-group-items">{group.items.map(item => <div className="operator-review-appeal" key={item.id} style={item.status === "pending" ? { background: "var(--butter)" } : undefined}><div className="row between"><div>{item.cefr && <LevelChip level={item.cefr} />} <span className="xs muted">{[item.title, item.part, item.at].filter(Boolean).join(" · ")}{item.kind === "part" ? ` · đã làm ${item.attempts} lần` : ""}</span></div><Badge tone={item.status === "pending" ? "warn" : item.status === "accepted" ? "ok" : "danger"}>{item.statusLabel || (item.status === "pending" ? "Chờ xử lý" : item.status === "accepted" ? "Đã chấp nhận" : "Giữ nguyên")}</Badge></div>{item.question && <div className="small"><b>Đề:</b> {item.question}{item.options?.length ? <span className="muted"> ({item.options.join(" / ")})</span> : null}</div>}{item.answer && <div className="card soft small" style={{ whiteSpace: "pre-wrap" }}><b>Bài làm của học viên:</b> {item.answer}</div>}{(item.key || item.aiFeedback) && <div className="small">{item.key && <><b>Đáp án tham khảo:</b> {item.key} · </>}<b>AI nhận xét:</b> {item.aiFeedback || "(chấm theo đáp án, không có nhận xét)"}</div>}<div className="small"><b>Lý do học viên báo cáo:</b> {item.reason}</div>{item.status === "pending" ? <div className="row operator-review-action-footer"><Button primary small busy={isBusy("decideAppeal", item.id, true)} disabled={readOnly || Boolean(blocked("decideAppeal")) || isSameItemBusy("decideAppeal", item.id)} title={blocked("decideAppeal")} onClick={() => runAction({ key: "decideAppeal", id: item.id, decision: true }, () => actions.onDecideAppeal(item.id, true))}>{isBusy("decideAppeal", item.id, true) ? "Đang xử lý…" : item.kind === "sub" ? "Chấp nhận – chấm lại điểm" : "Chấp nhận – tính là đúng"}</Button><Button small busy={isBusy("decideAppeal", item.id, false)} disabled={readOnly || Boolean(blocked("decideAppeal")) || isSameItemBusy("decideAppeal", item.id)} title={blocked("decideAppeal")} onClick={() => runAction({ key: "decideAppeal", id: item.id, decision: false }, () => actions.onDecideAppeal(item.id, false))}>{isBusy("decideAppeal", item.id, false) ? "Đang xử lý…" : "Giữ nguyên kết quả"}</Button></div> : item.decidedSummary && <div className="xs muted">{item.decidedSummary}</div>}</div>)}</div></details>)}</div> : <Empty>Chưa có kháng nghị nào. Học viên bấm “Báo cáo: AI chấm sai” ở bài tập hoặc bài tuần thì yêu cầu hiện ở đây.</Empty>;
 
-    if (view.activeTab === "attempts") return view.attempts.length ? <div className="card"><p className="small muted operator-status-legend">Mỗi phần tối đa 3 lượt: <span><Check className="operator-inline-icon" size={14} strokeWidth={2.5} aria-hidden="true" /> đúng</span>, <span><X className="operator-inline-icon" size={14} strokeWidth={2.5} aria-hidden="true" /> hết lượt vẫn sai/đã hiện đáp án</span>, … đang làm. Sắp theo phần hết lượt rồi tổng lượt.</p><div className="table-wrap" style={{ marginTop: 12 }}><table><thead><tr><th>Người học</th><th>Bài</th><th>Nghe</th><th>Đọc</th><th>Viết</th><th>Nói</th><th>Tổng lần</th></tr></thead><tbody>{view.attempts.map(item => <tr key={item.id}><td><b>{item.learnerName}</b> {item.cefr && <LevelChip level={item.cefr} />}</td><td className="small">{item.lesson}</td><td>{item.listening}</td><td>{item.reading}</td><td>{item.writing}</td><td>{item.speaking}</td><td><b>{item.total}</b></td></tr>)}</tbody></table></div></div> : <Empty>Chưa có học viên nào làm bài thực hành.</Empty>;
+    if (view.activeTab === "attempts") return view.attempts.length ? <div className="card"><p className="small muted operator-status-legend">Mỗi phần tối đa 3 lượt: <span><Check className="operator-inline-icon" size={14} strokeWidth={2.5} aria-hidden="true" /> đúng</span>, <span><X className="operator-inline-icon" size={14} strokeWidth={2.5} aria-hidden="true" /> hết lượt vẫn sai/đã hiện đáp án</span>, … đang làm.</p><div className="operator-attempt-learner-list">{groupAttemptsByLearner(view.attempts).map(group => { const first = group.items[0]!; const total = group.items.reduce((sum, item) => sum + item.total, 0); return <details className="operator-review-learner-group" data-testid="attempt-learner-group" key={group.learnerId}><summary><span><b>{first.learnerName}</b> {first.cefr && <LevelChip level={first.cefr} />}</span><span className="xs muted">{group.items.length} bài · {total} lượt</span></summary><div className="table-wrap"><table><thead><tr><th>Bài</th><th>Nghe</th><th>Đọc</th><th>Viết</th><th>Nói</th><th>Tổng lần</th></tr></thead><tbody>{group.items.map(item => <tr key={item.id}><td className="small">{item.lesson}</td><td>{item.listening}</td><td>{item.reading}</td><td>{item.writing}</td><td>{item.speaking}</td><td><b>{item.total}</b></td></tr>)}</tbody></table></div></details>; })}</div></div> : <Empty>Chưa có học viên nào làm bài thực hành.</Empty>;
 
-    return view.tests.length ? <div className="card"><div className="table-wrap operator-action-table-wrap"><table className="operator-action-table"><thead><tr><th>Người học</th><th>Loại</th><th>Nộp</th><th>Tổng</th><th>Mức thô</th><th>AI</th><th aria-label="Thao tác" /></tr></thead><tbody>{view.tests.map(item => <tr key={item.id}><td data-label="Người học">{item.learnerName}</td><td data-label="Loại">{item.kind === "placement" ? "Đầu vào" : item.kind === "level_up" ? "Lên mức" : "Cuối kỳ"}</td><td data-label="Nộp">{item.submittedAt || "—"}</td><td data-label="Tổng">{item.total ?? "—"}</td><td data-label="Mức thô">{item.rawLevel || "—"}</td><td data-label="AI">{item.aiSuggestedCefr || "—"}</td><td data-label="Thao tác"><Button small disabled={Boolean(blocked("viewTest"))} title={blocked("viewTest")} onClick={() => actions.onViewTest(item.id)}>Xem</Button></td></tr>)}</tbody></table></div></div> : <Empty>Chưa có bài test.</Empty>;
+    return view.tests.length ? <div className="card"><div className="table-wrap operator-action-table-wrap"><table className="operator-action-table"><thead><tr><th>Người học</th><th>Loại</th><th>Nộp</th><th>Tổng</th><th>Mức thô</th><th>AI</th><th aria-label="Thao tác" /></tr></thead><tbody>{view.tests.map(item => <tr key={item.id}><td data-label="Người học">{item.learnerName}</td><td data-label="Loại">{item.kind === "placement" ? "Đầu vào" : "Lên mức"}</td><td data-label="Nộp">{item.submittedAt || "—"}</td><td data-label="Tổng">{item.total ?? "—"}</td><td data-label="Mức thô">{item.rawLevel || "—"}</td><td data-label="AI">{item.aiSuggestedCefr || "—"}</td><td data-label="Thao tác"><Button small disabled={Boolean(blocked("viewTest"))} title={blocked("viewTest")} onClick={() => actions.onViewTest(item.id)}>Xem</Button></td></tr>)}</tbody></table></div></div> : <Empty>Chưa có bài test.</Empty>;
   };
 
   return <OperatorPage title="Đọc mẫu"><PageTitle><h1>Đọc mẫu & kiểm tra AI</h1><p className="muted">Kiểm tra bài nộp thứ Sáu, phản hồi của AI coach và các bài test.</p></PageTitle>{actionError && <div className="banner danger" role="alert" style={{ marginBottom: 12 }}><div className="body small">{actionError.message}</div></div>}<div className="tabs operator-review-tabs" role="tablist" aria-label="Nhóm nội dung cần kiểm tra">{TABS.map(([key, label]) => <button type="button" role="tab" aria-selected={view.activeTab === key} className={view.activeTab === key ? "active" : ""} key={key} onClick={() => actions.onTabChange(key)}>{key === "attempts" ? label : `${label} (${view.counts[key]}${key === "subs" ? " chưa đọc" : ""})`}</button>)}</div>{body()}</OperatorPage>;
@@ -168,9 +231,9 @@ export function OperatorReviewAssessmentDetail({ detail, onClose, onSaveManualSc
     const remainder = String(seconds % 60).padStart(2, "0");
     return hours ? `${hours}:${String(minutes).padStart(2, "0")}:${remainder}` : `${minutes}:${remainder}`;
   };
-  const manualCriteria = (section: string) => {
+  const manualTasks = (section: "writing" | "speaking") => {
     const criteria = scoreFor(section)?.criteria ?? {};
-    return Object.fromEntries(Object.entries(criteria).filter(([key, value]) => key !== "comment" && key !== "note" && typeof value === "number")) as Record<string, number>;
+    return Array.isArray(criteria.tasks) ? criteria.tasks : [];
   };
   type ReviewTask = { taskKey: string; title?: string; prompt?: string; maxScore?: number; minWords?: number; maxWords?: number; options?: Array<{ value: string; label: string }>; correctAnswer?: string | null };
   const renderStimulus = (stimulus: { type: string; text?: string; lines?: Array<{ speaker: string; text: string }>; headers?: string[]; rows?: string[][] } | undefined) => {
@@ -190,11 +253,16 @@ export function OperatorReviewAssessmentDetail({ detail, onClose, onSaveManualSc
     const objective = section === "listening" || section === "reading";
     const answerValue = answer?.value ?? "";
     const isCorrect = Boolean(task.correctAnswer && answerValue === task.correctAnswer);
+    const evidenceLabel = answer?.evidenceType === "typed_proxy" ? "Câu trả lời văn bản thay thế"
+      : answer?.evidenceType === "transcript" ? "Bản chép lời từ hệ thống"
+        : answer?.evidenceType === "audio" ? "Bản ghi âm" : null;
     const points = task.maxScore == null ? "" : ` (${task.maxScore}đ)`;
     return <article className="operator-answer-row" key={audioKey}>
       {objective ? <p className="operator-answer-question"><b>{itemNumber ? `${itemNumber}. ` : ""}{task.prompt}</b><span className="muted">{points}</span></p> : showTitle && task.title ? <p className="operator-answer-task-title"><b>{task.title}</b></p> : null}
       {objective ? <p className="operator-answer-result">{answerValue ? <><span className={isCorrect ? "operator-answer-correct" : task.correctAnswer ? "operator-answer-wrong" : ""}>{answerText(task, answerValue)}</span>{task.correctAnswer && !isCorrect ? <> <span className="operator-answer-arrow">→</span> {answerText(task, task.correctAnswer)}</> : null}</> : <>bỏ qua{task.correctAnswer ? <> <span className="operator-answer-arrow">→</span> {answerText(task, task.correctAnswer)}</> : null}</>}</p> : <div className="operator-answer-response">
+        {evidenceLabel ? <div className="xs muted"><b>{evidenceLabel}</b></div> : null}
         {answerValue ? <p className="operator-answer-value">{answerValue}</p> : <p className="operator-answer-value muted">{section === "writing" ? "(không có bài viết)" : "(không có lời chép)"}</p>}
+        {answer?.evidenceType === "typed_proxy" ? <div className="banner warn" role="alert"><div className="body small">Bằng chứng này phải chấm tay: văn bản thay thế không xác minh phát âm, độ trôi chảy hoặc tương tác theo thời gian thực.</div></div> : null}
         {answer?.audioArtifact && <>
           <div className="xs muted">File ghi âm: {answer.audioArtifact.artifactKey}</div>
           {answer.audioArtifact.signedUrl && <>
@@ -257,9 +325,9 @@ export function OperatorReviewAssessmentDetail({ detail, onClose, onSaveManualSc
   };
 
   return <div className="modal-backdrop operator-modal-scope operator-detail-modal" role="presentation"><section ref={dialogRef} className="dialog wide operator-detail-dialog operator-assessment-dialog" role="dialog" aria-modal="true" aria-label={`Chi tiết bài test của ${detail.learnerName}`} tabIndex={-1}>
-    <div className="row between"><div><h3 id="operator-review-detail-title">Bài test · {detail.learnerName}</h3><p className="small muted">{detail.title} · {statusLabels[detail.status] ?? detail.status} · Nộp {operatorDateTime(detail.submittedAt)} · Bắt đầu {operatorDateTime(detail.startedAt)} · Tổng điểm: {detail.totalScore == null ? "0/100" : `${detail.totalScore}/100`}</p></div><button className="btn-sm" type="button" onClick={onClose}>Đóng</button></div>
+    <div className="row between"><div><h3 id="operator-review-detail-title">Bài test · {detail.learnerName}</h3><p className="small muted">{detail.title} · {statusLabels[detail.status] ?? detail.status} · Nộp {operatorDateTime(detail.submittedAt)} · Bắt đầu {operatorDateTime(detail.startedAt)} · Tổng điểm: {detail.totalScore == null ? "Chờ đủ 4 kỹ năng" : `${detail.totalScore}/100`}</p></div><button className="btn-sm" type="button" onClick={onClose}>Đóng</button></div>
     <h4>Điểm theo 4 kỹ năng</h4>
-    <div className="table-wrap" style={{ marginTop: 12 }}><table><thead><tr><th>Kỹ năng</th><th>Điểm</th><th>CEFR</th><th>Thời gian làm</th></tr></thead><tbody>{sectionOrder.map(section => { const score = scoreFor(section); const displayScore = score?.score ?? (score?.maxScore == null ? null : 0); const pendingMarker = score?.score == null && (section === "writing" || section === "speaking") ? "*" : ""; return <tr key={section}><td>{sectionLabel(section)}</td><td>{displayScore == null ? "—" : `${displayScore}/${score?.maxScore ?? "—"}${pendingMarker}`}</td><td>{score?.cefr ? <LevelChip level={score.cefr as Cefr} /> : "—"}</td><td>{formatDuration(score?.actualSeconds)}{score?.durationMinutes ? <span className="xs muted"> / {score.durationMinutes} phút</span> : null}</td></tr>; })}<tr className="operator-total-row"><th>Tổng</th><th>{detail.totalScore == null ? "0/100" : `${detail.totalScore}/100`}</th><th>{detail.overallCefr ? <LevelChip level={detail.overallCefr as Cefr} /> : "—"}</th><th>{formatDuration(detail.totalTimeSeconds)}{detail.totalTimeLimitMinutes ? ` / ${detail.totalTimeLimitMinutes} phút` : ""}</th></tr></tbody></table></div>
+    <div className="table-wrap" style={{ marginTop: 12 }}><table><thead><tr><th>Kỹ năng</th><th>Điểm</th><th>Nguồn</th><th>CEFR</th><th>Thời gian làm</th></tr></thead><tbody>{sectionOrder.map(section => { const score = scoreFor(section); const sourceLabel = score?.source === "human" ? "Chấm tay" : score?.source === "ai" ? "AI chấm" : score?.source === "deterministic" ? "Tự động" : "—"; return <tr key={section}><td>{sectionLabel(section)}</td><td>{score?.score == null ? "Chờ chấm" : `${score.score}/${score.maxScore ?? "—"}`}</td><td>{score?.source === "human" || score?.source === "ai" ? <Badge tone="primary">{sourceLabel}</Badge> : sourceLabel}</td><td>{score?.cefr ? <LevelChip level={score.cefr as Cefr} /> : "—"}</td><td>{formatDuration(score?.actualSeconds)}{score?.durationMinutes ? <span className="xs muted"> / {score.durationMinutes} phút</span> : null}</td></tr>; })}<tr className="operator-total-row"><th>Tổng</th><th>{detail.totalScore == null ? "Chờ đủ 4 kỹ năng" : `${detail.totalScore}/100`}</th><th>—</th><th>{detail.overallCefr ? <LevelChip level={detail.overallCefr as Cefr} /> : "—"}</th><th>{formatDuration(detail.totalTimeSeconds)}{detail.totalTimeLimitMinutes ? ` / ${detail.totalTimeLimitMinutes} phút` : ""}</th></tr></tbody></table></div>
     <div className="operator-log-group">
       <details className="operator-processing-log"><summary className="small">Nhật ký xử lý ({detail.activity?.length ?? 0})</summary>{detail.activity?.length ? <ul className="small">{detail.activity.map((event, index) => <li key={`${event.at}-${index}`}><b>{event.label}</b> · {operatorDateTime(event.at)}{event.detail ? <span className="muted"> · {event.detail}</span> : null}</li>)}</ul> : <p className="small muted">Chưa có hoạt động xử lý được ghi nhận.</p>}</details>
       <details className="operator-integrity-log"><summary className="small">Nhật ký cảnh báo ({detail.integrityEvents.length})</summary>{detail.integrityEvents.length ? <ul className="small">{detail.integrityEvents.map((event, index) => { const item = integrityEventText(event); return <li key={index}><b>{item.label}</b>{item.count !== undefined ? ` · Lần ghi nhận ${item.count}` : ""}{item.at ? ` · ${item.at}` : ""}</li>; })}</ul> : <p className="small muted">Không có cảnh báo được ghi nhận.</p>}</details>
@@ -268,7 +336,7 @@ export function OperatorReviewAssessmentDetail({ detail, onClose, onSaveManualSc
     <section className="operator-assessment-document" aria-label="Bài làm và bằng chứng"><div className="operator-answer-sections">
       {renderAssessmentSection("listening")}
       {renderAssessmentSection("reading")}
-      {onSaveManualScore ? <AssessmentManualScore writingCriteria={manualCriteria("writing")} speakingCriteria={manualCriteria("speaking")} comment={typeof scoreFor("writing")?.criteria.comment === "string" ? scoreFor("writing")?.criteria.comment as string : ""} onSave={onSaveManualScore} saving={savingManualScore} writingContent={renderSectionContent("writing")} speakingContent={renderSectionContent("speaking")} writingScore={scoreFor("writing")?.score} speakingScore={scoreFor("speaking")?.score} /> : <>{renderAssessmentSection("writing")}{renderAssessmentSection("speaking")}</>}
+      {onSaveManualScore ? <AssessmentManualScore writingTasks={manualTasks("writing") as ManualScoreInput["writingTasks"]} speakingTasks={manualTasks("speaking") as ManualScoreInput["speakingTasks"]} comment={typeof scoreFor("writing")?.criteria.comment === "string" ? scoreFor("writing")?.criteria.comment as string : ""} onSave={onSaveManualScore} saving={savingManualScore} writingContent={renderSectionContent("writing")} speakingContent={renderSectionContent("speaking")} {...(scoreFor("writing")?.score !== undefined ? { writingScore: scoreFor("writing")!.score } : {})} {...(scoreFor("speaking")?.score !== undefined ? { speakingScore: scoreFor("speaking")!.score } : {})} /> : <>{renderAssessmentSection("writing")}{renderAssessmentSection("speaking")}</>}
     </div></section>
     {detail.decision && <div className="banner info"><div className="body small">Quyết định: {detail.decision.status} · {detail.decision.approvedLevel ?? "—"} · {detail.decision.reason}</div></div>}
     {detail.appeal && <div className="banner warn"><div className="body small">Kháng nghị: {detail.appeal.status} · {detail.appeal.reason}{detail.appeal.resolution ? ` · ${detail.appeal.resolution}` : ""}</div></div>}

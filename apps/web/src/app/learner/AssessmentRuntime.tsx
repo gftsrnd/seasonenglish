@@ -9,6 +9,7 @@ import { useExperience } from "../../features/experience/Experience.js";
 import { Clock3, Mic, Play, Square, TriangleAlert, Upload } from "lucide-react";
 import type { AssessmentView, LearnerCallbacks } from "./contracts.js";
 import { Notice, Toast } from "./ui.js";
+import { registerAssessmentLogoutGuard } from "../shared/assessment-logout-guard.js";
 
 export interface AssessmentRuntimeState {
   remainingSeconds: number | null;
@@ -43,6 +44,23 @@ export function AssessmentRuntime({ view, actions, children }: AssessmentRuntime
   const { play } = useExperience();
   const attempt = view.attempt;
   const serverRuntime = view.runtime ?? attempt?.runtime;
+
+  useEffect(() => {
+    if (!attempt || serverRuntime?.status !== "in_progress" || !actions.recordAssessmentViolation) return undefined;
+    return registerAssessmentLogoutGuard(async () => {
+      const next = await actions.recordAssessmentViolation!(attempt.id, {
+        requestId: requestId(), reason: "logout", occurredAt: new Date().toISOString()
+      });
+      if (next.autoSubmitted || next.status !== "in_progress" || next.submitReason === "violations") {
+        setAutoSubmitReason(next.submitReason ?? "violations");
+        setAutoCountdown(5);
+        setViolationDialog(null);
+        return "auto_submitted";
+      }
+      setViolationDialog({ count: next.violationCount, limit: next.violationLimit, reason: "logout" });
+      return "logout";
+    });
+  }, [attempt, serverRuntime?.status, actions.recordAssessmentViolation]);
   const section = attempt?.currentSection ?? (isSection(view.screenState) ? view.screenState : null);
   const fallbackRemaining = useMemo(() => {
     if (!attempt?.sectionEndsAt || !attempt.currentSection) return null;
@@ -169,18 +187,48 @@ export function AssessmentRuntime({ view, actions, children }: AssessmentRuntime
 
   useEffect(() => {
     if (!attempt || !section || serverRuntime?.status !== "in_progress") return;
+    let warningTimer: number | undefined;
+    const stopRepeatedWarning = () => {
+      if (warningTimer !== undefined) window.clearInterval(warningTimer);
+      warningTimer = undefined;
+    };
     const onVisibilityChange = () => {
-      if (document.hidden) void reportViolation("visibility_hidden");
+      stopRepeatedWarning();
+      if (!document.hidden) return;
+      void reportViolation("visibility_hidden");
+      warningTimer = window.setInterval(() => play("warning", { force: true }), 3_000);
     };
     const onBlur = () => {
       if (Date.now() < filePickerGraceUntil) return;
+      if (document.hidden) return;
       void reportViolation("window_blur");
     };
+    const block = (reason: AssessmentViolationReason) => (event: Event) => {
+      event.preventDefault();
+      void reportViolation(reason);
+    };
+    const onContextMenu = block("context_menu");
+    const onCopy = block("copy");
+    const onPaste = block("paste");
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (!(event.ctrlKey || event.metaKey) || event.key.toLowerCase() !== "n") return;
+      event.preventDefault();
+      void reportViolation("new_window");
+    };
     document.addEventListener("visibilitychange", onVisibilityChange);
+    document.addEventListener("contextmenu", onContextMenu);
+    document.addEventListener("copy", onCopy);
+    document.addEventListener("paste", onPaste);
+    document.addEventListener("keydown", onKeyDown);
     window.addEventListener("blur", onBlur);
     return () => {
       document.removeEventListener("visibilitychange", onVisibilityChange);
+      document.removeEventListener("contextmenu", onContextMenu);
+      document.removeEventListener("copy", onCopy);
+      document.removeEventListener("paste", onPaste);
+      document.removeEventListener("keydown", onKeyDown);
       window.removeEventListener("blur", onBlur);
+      stopRepeatedWarning();
     };
   }, [attempt, section, serverRuntime?.status, serverRuntime?.violationCount, serverRuntime?.violationLimit, actions, play]);
 
@@ -218,7 +266,7 @@ export function AssessmentRuntime({ view, actions, children }: AssessmentRuntime
     {runtimeError ? <Toast tone="danger">{runtimeError}{autoSubmitFailed || failedViolationReason ? <button className="btn-sm" type="button" onClick={retryRuntimeError}>Thử lại</button> : null}</Toast> : null}
     {violationDialog ? <div className="modal-backdrop" role="presentation"><div ref={runtimeDialogRef} className="dialog assessment-violation-dialog" role="dialog" aria-modal="true" aria-labelledby="assessment-violation-title" aria-describedby="assessment-violation-description" tabIndex={-1} onKeyDown={trapDialogFocus}>
       <h2 id="assessment-violation-title"><TriangleAlert size={22} aria-hidden="true" /><span>Cảnh báo {violationDialog.count}/{violationDialog.limit}</span></h2>
-      <p id="assessment-violation-description">{violationDialog.reason === "visibility_hidden" ? "Bạn vừa rời khỏi màn hình bài thi." : "Cửa sổ bài thi vừa mất trạng thái tập trung."} Trong lúc thi, <strong>không được mở tab, cửa sổ hay pop-up khác</strong>.</p>
+      <p id="assessment-violation-description">{violationReasonText(violationDialog.reason)} Trong lúc thi, <strong>không được mở tab, cửa sổ khác hoặc sao chép nội dung</strong>.</p>
       <p className="small muted"><strong>Bài test vẫn tiếp tục</strong>; thời gian vẫn đang chạy.</p>
       <div className="row" style={{ justifyContent: "flex-end", marginTop: 16 }}><button className="btn-primary" type="button" onClick={() => setViolationDialog(null)}>Đã hiểu, tiếp tục</button></div>
     </div></div> : null}
@@ -244,6 +292,7 @@ export function AssessmentRecorder({ taskKey, view, actions, onEvidence }: Asses
   const stream = useRef<MediaStream | null>(null);
   const chunks = useRef<Blob[]>([]);
   const [recording, setRecording] = useState(false);
+  const [recordingSeconds, setRecordingSeconds] = useState(0);
   const [busy, setBusy] = useState(false);
   const [fileName, setFileName] = useState("Chưa có file ghi âm");
   const [error, setError] = useState<string>();
@@ -252,6 +301,12 @@ export function AssessmentRecorder({ taskKey, view, actions, onEvidence }: Asses
   const microphoneSupported = view.runtime?.deviceEvidence.microphoneSupported ?? view.attempt?.runtime?.deviceEvidence.microphoneSupported;
   const canRecord = microphoneSupported !== false && typeof navigator !== "undefined" && Boolean(navigator.mediaDevices?.getUserMedia) && typeof MediaRecorder !== "undefined";
 
+  useEffect(() => {
+    if (!recording) return;
+    const timer = window.setInterval(() => setRecordingSeconds((current) => current + 1), 1_000);
+    return () => window.clearInterval(timer);
+  }, [recording]);
+
   useEffect(() => () => {
     stream.current?.getTracks().forEach((track) => track.stop());
     if (audioUrl) URL.revokeObjectURL(audioUrl);
@@ -259,6 +314,12 @@ export function AssessmentRecorder({ taskKey, view, actions, onEvidence }: Asses
   }, [audioUrl, holdMusic]);
 
   const submitAudio = async (file: Blob, name: string, value: string) => {
+    const validationError = validateAssessmentAudio(file, name);
+    if (validationError) {
+      setError(validationError);
+      setFileName("Chưa có file ghi âm");
+      return;
+    }
     setBusy(true); setError(undefined); setFileName(`Đang lưu ${name}…`);
     try {
       const artifactKey = await actions.uploadAssessmentAudio(file, name);
@@ -288,9 +349,15 @@ export function AssessmentRecorder({ taskKey, view, actions, onEvidence }: Asses
         acquiredStream.getTracks().forEach((track) => track.stop());
         stream.current = null; recorder.current = null; holdMusic(false);
         const blob = new Blob(chunks.current, { type: nextRecorder.mimeType || "audio/webm" });
+        if (!blob.size) {
+          setBusy(false);
+          setError("Không thu được âm thanh. Hãy kiểm tra micro rồi ghi lại.");
+          setFileName("Chưa có file ghi âm");
+          return;
+        }
         void submitAudio(blob, `${taskKey}-${Date.now()}.webm`, "Bản ghi âm đã nộp");
       };
-      holdMusic(true); nextRecorder.start(); setRecording(true);
+      holdMusic(true); nextRecorder.start(); setRecordingSeconds(0); setFileName("Đang ghi âm"); setRecording(true);
     } catch {
       nextStream?.getTracks().forEach((track) => track.stop());
       stream.current = null;
@@ -304,6 +371,7 @@ export function AssessmentRecorder({ taskKey, view, actions, onEvidence }: Asses
 
   const stopRecording = () => {
     if (!recorder.current) return;
+    setFileName("Đang tạo file ghi âm…");
     recorder.current.stop(); setRecording(false); setBusy(true);
   };
 
@@ -321,26 +389,35 @@ export function AssessmentRecorder({ taskKey, view, actions, onEvidence }: Asses
   return <div className="speaking-evidence-controls">
     {!canRecord ? <Notice tone="warn">Trình duyệt này không ghi âm được. Bạn vẫn có thể tải file ghi âm.</Notice> : null}
     <div className="speaking-evidence-actions">
-      <button className={`btn-sm ${recording ? "btn-danger" : ""}`} type="button" aria-pressed={recording} disabled={!canRecord || busy} onClick={() => recording ? stopRecording() : void startRecording()}>{recording ? <><Square size={15} fill="currentColor" aria-hidden="true" /> Dừng ghi</> : <><Mic size={16} aria-hidden="true" /> Ghi âm</>}</button>
+      <button className={`btn-sm ${recording ? "btn-danger" : ""}`} type="button" aria-pressed={recording} disabled={!canRecord || (busy && !recording)} onClick={() => recording ? stopRecording() : void startRecording()}>{recording ? <><Square size={15} fill="currentColor" aria-hidden="true" /> Dừng ghi</> : <><Mic size={16} aria-hidden="true" /> Ghi âm</>}</button>
       {audioUrl ? <button className="btn-sm btn-ghost" type="button" disabled={busy} onClick={() => void replayAudio()}><Play size={16} fill="currentColor" aria-hidden="true" /> Nghe lại ghi âm</button> : null}
-      <button className="btn btn-sm" type="button" disabled={busy} onClick={() => {
+      <button className="btn btn-sm" type="button" disabled={busy || recording} onClick={() => {
         filePickerGraceUntil = Date.now() + 2_000;
         fileInput.current?.click();
       }}><Upload size={16} aria-hidden="true" /> Tải file ghi âm</button>
     </div>
-    <input ref={fileInput} id={`assessment-audio-${taskKey}`} className="sr-only" type="file" accept="audio/*" aria-label="Tải file ghi âm" tabIndex={-1} disabled={busy} onChange={(event) => {
+    <input ref={fileInput} id={`assessment-audio-${taskKey}`} className="sr-only" type="file" accept=".mp3,.m4a,.wav,.ogg,.webm,audio/mpeg,audio/mp4,audio/wav,audio/ogg,audio/webm" aria-label="Tải file ghi âm" tabIndex={-1} disabled={busy} onChange={(event) => {
       const file = event.currentTarget.files?.[0];
       event.currentTarget.value = "";
       if (file) void submitAudio(file, file.name, "File ghi âm đã nộp");
     }} />
     <div className="speaking-evidence-status">
-      <span aria-live="polite">{fileName}</span>
+      <span aria-live="polite">{recording ? `Đang ghi âm · ${formatTime(recordingSeconds)} — bấm Dừng ghi để tạo file.` : fileName}</span>
       {error ? <ErrorMessage>{error}</ErrorMessage> : null}
     </div>
   </div>;
 }
 
 function ErrorMessage({ children }: { children: ReactNode }) { return <span className="form-error" role="alert">{children}</span>; }
+
+function validateAssessmentAudio(file: Blob, name: string): string | undefined {
+  if (file.size > 20 * 1024 * 1024) return "File ghi âm không được vượt quá 20 MB.";
+  const extensionAllowed = /\.(mp3|m4a|wav|ogg|webm)$/i.test(name);
+  const mimeAllowed = new Set(["audio/mpeg", "audio/mp3", "audio/mp4", "audio/x-m4a", "audio/wav", "audio/x-wav", "audio/ogg", "audio/webm", "video/webm"]);
+  const baseMimeType = file.type.split(";", 1)[0]?.trim().toLowerCase() ?? "";
+  if (!extensionAllowed || baseMimeType && !mimeAllowed.has(baseMimeType)) return "Chỉ nhận file MP3, M4A, WAV, OGG hoặc WebM.";
+  return undefined;
+}
 
 async function finishAttempt(section: AssessmentSectionCode | null, actions: LearnerCallbacks) {
   if (!section) return;
@@ -361,6 +438,16 @@ function formatTime(seconds: number | null) {
 
 function isSection(value: AssessmentView["screenState"]): value is AssessmentSectionCode {
   return value === "listening" || value === "reading" || value === "writing" || value === "speaking";
+}
+
+function violationReasonText(reason: AssessmentViolationReason) {
+  if (reason === "logout") return "Bạn đã chọn đăng xuất khi bài test đang diễn ra.";
+  if (reason === "visibility_hidden") return "Bạn vừa rời khỏi màn hình bài thi.";
+  if (reason === "window_blur") return "Cửa sổ bài thi vừa mất trạng thái tập trung.";
+  if (reason === "context_menu") return "Menu chuột phải đã bị chặn trong bài thi.";
+  if (reason === "copy") return "Thao tác sao chép đã bị chặn trong bài thi.";
+  if (reason === "paste") return "Thao tác dán nội dung đã bị chặn trong bài thi.";
+  return "Thao tác mở cửa sổ mới đã bị chặn trong bài thi.";
 }
 
 function trapDialogFocus(event: ReactKeyboardEvent<HTMLElement>) {

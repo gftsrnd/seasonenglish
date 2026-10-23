@@ -1,5 +1,5 @@
 import type { Client } from "pg";
-import { finalDefinition, levelUpDefinition, placementDefinition } from "./assessment-blueprints.js";
+import { levelUpDefinition, placementDefinition } from "./assessment-blueprints.js";
 import { prototypePromptDefaults } from "./prototype-prompts.js";
 import { planCanonicalPromptPublication } from "./prompt-sync.js";
 
@@ -46,8 +46,6 @@ export const DEMO_IDS = {
   placementDefinition: "00000000-0000-4000-8000-000000000871",
   placementVersion: "00000000-0000-4000-8000-000000000872",
   placementAttempt: "00000000-0000-4000-8000-000000000873",
-  finalDefinition: "00000000-0000-4000-8000-000000000881",
-  finalVersion: "00000000-0000-4000-8000-000000000882",
   levelUpDefinition: "00000000-0000-4000-8000-000000000891",
   levelUpVersion: "00000000-0000-4000-8000-000000000892"
 } as const;
@@ -83,7 +81,7 @@ Nguyên tắc theo mức CEFR và ngôn ngữ:
 Mỗi lesson phải có đúng một lần 11 part code sau, theo đúng thứ tự này: objective, instruction, vocabulary, grammar, pronunciation, listening, reading, writing, word_class, word_use, speaking. Không đổi tên key, không dùng schema prototype cũ như day/theory/examples/vocab/pron.
 
 Quy tắc nội dung từng part:
-1. objective: content.text là đúng 1 câu cụ thể, đo được, tối đa 16 từ; đi thẳng vào kỹ năng, không mở đầu bằng “Sau bài học, bạn có thể”.
+1. objective: có 2–4 mục tiêu; đúng 1 mục tiêu content và các mục còn lại là language. Mỗi mục bắt đầu bằng SWBAT, dùng động từ quan sát được, có condition, criterion và assessmentCode. Phải bao phủ các bài đánh giá của bài. explanationLanguage là vi cho A1–A2 và en cho B1 trở lên.
 2. instruction: content.steps là danh sách 3–5 bước ngắn: học nội dung, làm lần lượt bài tập, kiểm tra/hoàn thành. Viết rõ ràng theo mức CEFR.
 3. vocabulary: content.items có đúng 3 từ hoặc cụm từ cần cho mẫu câu. Mỗi item có word, pronunciation (IPA), meaning, imageQuery là truy vấn tiếng Anh ngắn mô tả một ảnh chụp công sở có vật/hành động mục tiêu rõ ràng; cấm URL, emoji, icon, logo, sơ đồ, biểu đồ, screenshot hoặc ảnh nhiều chữ. collocations đúng 3 cụm thông dụng dài 2–5 từ có chứa nguyên từ đó, family tối đa 2 mục, umbrella có tối đa 2 siblings, synonyms tối đa 2 mục và antonyms tối đa 2 mục; mỗi quan hệ chỉ cần word + level/note ngắn. Không bịa imageUrl hoặc nguồn ảnh; hệ thống sẽ tự tìm và kiểm duyệt ảnh từ provider có attribution. Mỗi từ phải xuất hiện trong ví dụ của bài; không dùng tên người, công ty, quốc gia, thành phố hay địa danh làm từ vựng hoặc đáp án.
 4. grammar: content.formula là công thức có đủ thành phần; content.usage nói khi nào dùng; content.examples là 2–3 câu tiếng Anh hoàn chỉnh, dùng từ vựng của bài. A1–A2 có nghĩa tiếng Việt ngắn nếu cần. Không ghi kế hoạch thay cho nội dung dạy.
@@ -109,7 +107,7 @@ const promptDefaults = [
   ["00000000-0000-4000-8000-000000001005", "micro_grading", prototypePromptDefaults.mgrade],
   ["00000000-0000-4000-8000-000000001006", "coach_dialogue", prototypePromptDefaults.coach],
   ["00000000-0000-4000-8000-000000001007", "weekly_practice_grading", prototypePromptDefaults.grade],
-  ["00000000-0000-4000-8000-000000001008", "vocabulary_generation", "Return valid JSON only. Create exactly 15 useful workplace-English words or short phrases for the requested topic and CEFR level. Give a stable lowercase id, English form, concise Vietnamese meaning, simple English definition and one partOfSpeech from noun, verb, adjective, adverb, preposition or phrase. Avoid duplicates and unsafe or irrelevant content."],
+  ["00000000-0000-4000-8000-000000001008", "vocabulary_generation", "Return valid JSON only. Create exactly 12 useful workplace-English target words or short phrases for the requested topic and CEFR level in words, plus exactly 8 plausible but off-topic distractors in distractors. Every item needs a unique stable lowercase id, English form, concise Vietnamese meaning, simple English definition and one partOfSpeech from noun, verb, adjective, adverb, preposition or phrase. Avoid duplicates and unsafe content."],
   ["00000000-0000-4000-8000-000000001009", "micro_lesson_generation", "Return valid JSON only. Create one short personalized workplace-English micro lesson for the learner. It must fit the supplied CEFR, weekly topic, goals, work context, preferred learning style and duration. Include a concise explanation, 3-5 useful vocabulary items and one answerable practice task. For mcq include 2-5 options and the correct answer; otherwise include a clear reference answer. Never use placeholder content."]
 ] as const;
 
@@ -427,11 +425,11 @@ export async function seedDemo(client: Client, options: { mode?: SeedDemoMode } 
   );
 
   const users = [
-    [DEMO_IDS.learner, "learner", "Học viên Demo", "learner@e4s.local"],
-    [DEMO_IDS.operator, "operator", "Thư Demo", "operator@e4s.local"],
-    [DEMO_IDS.manager, "manager", "Quản lý Demo", "manager@e4s.local"],
+    [DEMO_IDS.learner, "learner", "Nguyễn Minh Anh", "minh.anh.nguyen@e4s.local"],
+    [DEMO_IDS.operator, "operator", "Trần Thu Hà", "thu.ha.tran@e4s.local"],
+    [DEMO_IDS.manager, "manager", "Lê Quốc Bảo", "quoc.bao.le@e4s.local"],
     ...(mode === "test"
-      ? [[DEMO_IDS.checker, "operator", "Minh Checker", "checker@e4s.local"]] as const
+      ? [[DEMO_IDS.checker, "operator", "Phạm Gia Huy", "gia.huy.pham@e4s.local"]] as const
       : [])
   ] as const;
   for (const user of users) {
@@ -457,8 +455,8 @@ export async function seedDemo(client: Client, options: { mode?: SeedDemoMode } 
        else learner_profiles.profile || jsonb_build_object('avatar', excluded.profile->'avatar')
      end`,
     [DEMO_IDS.learner, JSON.stringify({
-      fullName: "Học viên Demo",
-      email: "learner@e4s.local",
+      fullName: "Nguyễn Minh Anh",
+      email: "minh.anh.nguyen@e4s.local",
       department: "AI",
       position: "AI Intern",
       contact: "",
@@ -625,7 +623,6 @@ export async function seedDemo(client: Client, options: { mode?: SeedDemoMode } 
   );
   const assessments = [
     [DEMO_IDS.placementDefinition, "placement-a", "placement", "Bài test đầu vào", DEMO_IDS.placementVersion, placementDefinition],
-    [DEMO_IDS.finalDefinition, "final-b", "final", "Bài kiểm tra cuối kỳ", DEMO_IDS.finalVersion, finalDefinition],
     [DEMO_IDS.levelUpDefinition, "levelup-b1", "level_up", "Đề thi lên mức B1", DEMO_IDS.levelUpVersion, levelUpDefinition]
   ] as const;
   for (const [definitionId, key, kind, title, versionId, blueprint] of assessments) {
@@ -641,41 +638,6 @@ export async function seedDemo(client: Client, options: { mode?: SeedDemoMode } 
       [versionId, definitionId, JSON.stringify(blueprint)]
     );
   }
-
-  // The canonical demo learner has not taken the final assessment. Clear any
-  // final attempts left by an earlier local run so the seeded profile and the
-  // final-assessment route cannot show a stale result.
-  await client.query(
-    `delete from assessment_decisions
-     where attempt_id in (
-       select aa.id
-       from assessment_attempts aa
-       join assessment_versions av on av.id = aa.assessment_version_id
-       join assessment_definitions ad on ad.id = av.definition_id
-       where aa.learner_id = $1 and ad.kind = 'final'
-     )`,
-    [DEMO_IDS.learner]
-  );
-  await client.query(
-    `delete from appeals
-     where attempt_id in (
-       select aa.id
-       from assessment_attempts aa
-       join assessment_versions av on av.id = aa.assessment_version_id
-       join assessment_definitions ad on ad.id = av.definition_id
-       where aa.learner_id = $1 and ad.kind = 'final'
-     )`,
-    [DEMO_IDS.learner]
-  );
-  await client.query(
-    `delete from assessment_attempts aa
-     using assessment_versions av, assessment_definitions ad
-     where aa.assessment_version_id = av.id
-       and av.definition_id = ad.id
-       and aa.learner_id = $1
-       and ad.kind = 'final'`,
-    [DEMO_IDS.learner]
-  );
 
   await client.query(
     `insert into assessment_attempts (id, assessment_version_id, learner_id, status, current_section, submitted_at)

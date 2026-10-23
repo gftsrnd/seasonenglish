@@ -83,7 +83,7 @@ describe("assessment runtime persistence", () => {
   it("returns the same submitted result for duplicate submission", async () => {
     const attempt = await repositories.assessments.startAttempt({
       learnerId,
-      assessmentVersionId: DEMO_IDS.finalVersion,
+      assessmentVersionId: DEMO_IDS.levelUpVersion,
       firstSection: "speaking",
       durationMinutes: 5
     });

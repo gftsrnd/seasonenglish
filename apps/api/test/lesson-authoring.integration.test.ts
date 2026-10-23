@@ -41,8 +41,8 @@ describe("granular lesson-set authoring", () => {
       expect(response.statusCode, response.body).toBe(200);
       return String(response.headers["set-cookie"]).split(";")[0] ?? "";
     };
-    operatorCookie = await login("operator@e4s.local", "operator-pass");
-    managerCookie = await login("manager@e4s.local", "manager-pass");
+    operatorCookie = await login("thu.ha.tran@e4s.local", "operator-pass");
+    managerCookie = await login("quoc.bao.le@e4s.local", "manager-pass");
   }, 30_000);
 
   afterAll(async () => { await app.close(); await pool.end(); });

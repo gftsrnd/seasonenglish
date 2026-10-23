@@ -59,9 +59,9 @@ describe("manager progress and operations API", () => {
       expect(response.statusCode, response.body).toBe(200);
       return String(response.headers["set-cookie"]).split(";")[0] ?? "";
     };
-    managerCookie = await login("manager@e4s.local", "manager-pass");
-    operatorCookie = await login("operator@e4s.local", "operator-pass");
-    checkerCookie = await login("checker@e4s.local", "checker-pass");
+    managerCookie = await login("quoc.bao.le@e4s.local", "manager-pass");
+    operatorCookie = await login("thu.ha.tran@e4s.local", "operator-pass");
+    checkerCookie = await login("gia.huy.pham@e4s.local", "checker-pass");
     emptyManagerCookie = await login("empty-manager@e4s.local", "empty-manager-pass");
   }, 30_000);
 
@@ -110,7 +110,7 @@ describe("manager progress and operations API", () => {
       organizationName: "GFT Demo",
       summary: expect.objectContaining({ learnerCount: 1, completedLessons: 5 }),
       learners: [expect.objectContaining({
-        learnerName: "Học viên Demo", completedLessons: 5,
+        learnerName: "Nguyễn Minh Anh", completedLessons: 5,
         activityDatesThisWeek: expect.any(Array),
         earnedBadgeDetails: expect.arrayContaining([expect.objectContaining({ key: expect.any(String), label: expect.any(String), description: expect.any(String) })])
       })],
@@ -123,7 +123,7 @@ describe("manager progress and operations API", () => {
       weekStartDate: expect.stringMatching(/^\d{4}-\d{2}-\d{2}$/),
     });
     expect(JSON.stringify(progress.json())).not.toContain("Học viên Ngoài tổ chức");
-    expect(progress.json().learners).toEqual(expect.arrayContaining([expect.objectContaining({ learnerName: "Học viên Demo" })]));
+    expect(progress.json().learners).toEqual(expect.arrayContaining([expect.objectContaining({ learnerName: "Nguyễn Minh Anh" })]));
     expect(progress.json().learners).not.toEqual(expect.arrayContaining([expect.objectContaining({ learnerName: "Thư Demo" })]));
 
     expect(operations.statusCode, operations.body).toBe(200);
@@ -138,7 +138,7 @@ describe("manager progress and operations API", () => {
         missing: expect.any(Array),
         orphanLegacySets: expect.any(Number)
       }),
-      operators: expect.arrayContaining([expect.objectContaining({ operatorName: "Thư Demo" })])
+      operators: expect.arrayContaining([expect.objectContaining({ operatorName: "Trần Thu Hà" })])
     });
   });
 
@@ -152,14 +152,40 @@ describe("manager progress and operations API", () => {
     expect(operations.json()).toMatchObject({ organizationName: "Trống Demo", recentActivity: [] });
   });
 
+  it("lets Manager and Operator assign one canonical weekly practice", async () => {
+    const managerAssignment = await app.inject({
+      method: "POST", url: `/api/v1/manager/learners/${DEMO_IDS.learner}/weekly-practice`,
+      headers: { cookie: managerCookie }, payload: {}
+    });
+    expect(managerAssignment.statusCode, managerAssignment.body).toBe(200);
+    expect(managerAssignment.json()).toMatchObject({
+      status: "assigned", learnerId: DEMO_IDS.learner, weekNumber: 1,
+      topic: expect.any(String), task: expect.any(String), guidance: expect.any(String)
+    });
+
+    const operatorAssignment = await app.inject({
+      method: "POST", url: `/api/v1/assessment-reviews/learners/${DEMO_IDS.learner}/weekly-practice`,
+      headers: { cookie: operatorCookie }, payload: {}
+    });
+    expect(operatorAssignment.statusCode, operatorAssignment.body).toBe(200);
+    expect(operatorAssignment.json()).toMatchObject({
+      status: "already_assigned",
+      submissionId: managerAssignment.json().submissionId
+    });
+    await expect(pool.query(
+      "select count(*)::int as count from practice_submissions where learner_id = $1 and program_week_id = $2 and superseded_at is null",
+      [DEMO_IDS.learner, DEMO_IDS.week]
+    )).resolves.toMatchObject({ rows: [{ count: 1 }] });
+  });
+
   it("lets a Manager list organisation accounts and persist another account's role change", async () => {
     const accounts = await app.inject({ method: "GET", url: "/api/v1/manager/accounts", headers: { cookie: managerCookie } });
     expect(accounts.statusCode, accounts.body).toBe(200);
     expect(accounts.json()).toMatchObject({
       organizationName: "GFT Demo",
       accounts: expect.arrayContaining([
-        expect.objectContaining({ id: DEMO_IDS.learner, displayName: "Học viên Demo", role: "learner" }),
-        expect.objectContaining({ id: DEMO_IDS.operator, displayName: "Thư Demo", role: "operator" })
+        expect.objectContaining({ id: DEMO_IDS.learner, displayName: "Nguyễn Minh Anh", role: "learner" }),
+        expect.objectContaining({ id: DEMO_IDS.operator, displayName: "Trần Thu Hà", role: "operator" })
       ])
     });
     expect(JSON.stringify(accounts.json())).not.toContain("Học viên Ngoài tổ chức");
@@ -297,17 +323,17 @@ describe("manager progress and operations API", () => {
     })).statusCode).toBe(200);
   });
 
-  it("creates a learner account that can sign in with its initial password", async () => {
+  it("creates a learner account that can sign in with its initial PIN", async () => {
     const email = "new-learner-api@e4s.local";
     const created = await app.inject({
       method: "POST", url: "/api/v1/manager/accounts", headers: { cookie: managerCookie },
-      payload: { displayName: "Học viên mới", email, role: "learner", password: "learner-pass-123" }
+      payload: { displayName: "Học viên mới", email, role: "learner", password: "135790" }
     });
     expect(created.statusCode, created.body).toBe(201);
     expect(created.json()).toMatchObject({ displayName: "Học viên mới", email, role: "learner", status: "active" });
 
     const login = await app.inject({
-      method: "POST", url: "/api/auth/learner/login", payload: { email, password: "learner-pass-123" }
+      method: "POST", url: "/api/auth/learner/login", payload: { email, pin: "135790" }
     });
     expect(login.statusCode, login.body).toBe(200);
     expect(login.json()).toMatchObject({ role: "learner", user: { displayName: "Học viên mới", email } });

@@ -17,6 +17,10 @@ services:
         value: "true"
       - key: WEB_ORIGIN
         value: https://e4s-web.onrender.com
+      - key: E4S_SEED_SCENARIOS
+        value: "true"
+      - key: E4S_ALLOW_REMOTE_SCENARIOS
+        value: "true"
       - key: DATABASE_URL
         sync: false
       - key: S3_ENDPOINT
@@ -44,6 +48,10 @@ services:
       - key: PEXELS_API_KEY
         sync: false
       - key: PIXABAY_API_KEY
+        sync: false
+      - key: RESEND_API_KEY
+        sync: false
+      - key: RESEND_FROM_EMAIL
         sync: false
 
   - type: web

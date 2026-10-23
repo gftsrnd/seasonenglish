@@ -45,13 +45,13 @@ describe("P2 weekly-practice appeal lifecycle", () => {
     await app.ready();
     const learner = await app.inject({
       method: "POST", url: "/api/auth/learner/login",
-      payload: { email: "learner@e4s.local", pin: "123456" }
+      payload: { email: "minh.anh.nguyen@e4s.local", pin: "123456" }
     });
     expect(learner.statusCode, learner.body).toBe(200);
     learnerCookie = String(learner.headers["set-cookie"]).split(";")[0] ?? "";
     const operator = await app.inject({
       method: "POST", url: "/api/auth/staff/login",
-      payload: { email: "operator@e4s.local", password: "operator-pass" }
+      payload: { email: "thu.ha.tran@e4s.local", password: "operator-pass" }
     });
     expect(operator.statusCode, operator.body).toBe(200);
     operatorCookie = String(operator.headers["set-cookie"]).split(";")[0] ?? "";

@@ -1,15 +1,25 @@
 import { Client } from "pg";
 import { DEMO_IDS } from "../packages/database/src/index.js";
+import { isKnownLocalScenarioFixtureEmail } from "./local-scenario-accounts.js";
 
-const KEEP_IDS = [DEMO_IDS.manager, DEMO_IDS.operator, DEMO_IDS.learner] as const;
+const REQUIRED_KEEP_IDS = [DEMO_IDS.manager, DEMO_IDS.operator, DEMO_IDS.learner] as const;
+const KEEP_IDS = REQUIRED_KEEP_IDS;
 const LOCAL_HOSTS = new Set(["127.0.0.1", "localhost", "::1", "[::1]"]);
-const TEST_FIXTURE_EMAIL = /^(?:checker|core-check-[^@]+|core-double-check-[^@]+|core-flow-[^@]+)@e4s\.local$/i;
+const TEST_FIXTURE_EMAIL = /^(?:(?:checker|learner2|core-check-[^@]+|core-double-check-[^@]+|core-flow-[^@]+|lane4-o004-[^@]+|p0-[^@]+)@e4s\.local|lane2-[^@]+@example\.com)$/i;
+const EXACT_FIXTURE_EMAILS = new Set([
+  "learner@e4s.local", "operator@e4s.local", "manager@e4s.local", "checker@e4s.local",
+  "minh.anh.nguyen@e4s.local", "thu.ha.tran@e4s.local", "quoc.bao.le@e4s.local", "gia.huy.pham@e4s.local"
+].map((email) => email.toLowerCase()));
 
 type Account = { id: string; email: string | null; displayName: string; role: string; status: string };
 type ReferenceImpact = { table: string; column: string; count: number };
 
 function isTestFixtureAccount(account: Account) {
-  return account.id === DEMO_IDS.checker || TEST_FIXTURE_EMAIL.test(account.email?.trim() ?? "");
+  const email = account.email?.trim().toLowerCase() ?? "";
+  return account.id === DEMO_IDS.checker
+    || EXACT_FIXTURE_EMAILS.has(email)
+    || isKnownLocalScenarioFixtureEmail(email)
+    || TEST_FIXTURE_EMAIL.test(email);
 }
 
 function assertLocalDatabase(connectionString: string) {
@@ -122,9 +132,9 @@ export async function cleanupLocalTestUsers(connectionString: string, apply: boo
     await client.query("begin");
     const canonical = await client.query<{ id: string; organization_id: string }>(
       "select id, organization_id from users where id = any($1::uuid[]) for update",
-      [KEEP_IDS]
+      [REQUIRED_KEEP_IDS]
     );
-    if (canonical.rowCount !== KEEP_IDS.length || new Set(canonical.rows.map(({ organization_id }) => organization_id)).size !== 1) {
+    if (canonical.rowCount !== REQUIRED_KEEP_IDS.length || new Set(canonical.rows.map(({ organization_id }) => organization_id)).size !== 1) {
       throw new Error("CANONICAL_LOCAL_ACCOUNTS_MISSING");
     }
     const organizationId = canonical.rows[0]!.organization_id;
@@ -168,9 +178,9 @@ export async function cleanupLocalTestUsers(connectionString: string, apply: boo
     if ((remainingTargets.rows[0]?.count ?? 0) !== 0) throw new Error("TEST_FIXTURE_ACCOUNTS_REMAIN");
     const remainingCanonical = await client.query<{ count: number }>(
       "select count(*)::int as count from users where id = any($1::uuid[])",
-      [KEEP_IDS]
+      [REQUIRED_KEEP_IDS]
     );
-    if ((remainingCanonical.rows[0]?.count ?? 0) !== KEEP_IDS.length) throw new Error("CANONICAL_LOCAL_ACCOUNTS_MISSING_AFTER_CLEANUP");
+    if ((remainingCanonical.rows[0]?.count ?? 0) !== REQUIRED_KEEP_IDS.length) throw new Error("CANONICAL_LOCAL_ACCOUNTS_MISSING_AFTER_CLEANUP");
     await client.query("commit");
     return { ...baseReport, remainingAccounts };
   } catch (error) {

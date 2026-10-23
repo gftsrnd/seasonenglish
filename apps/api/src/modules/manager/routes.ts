@@ -1,6 +1,6 @@
 import { createRepositories } from "@e4s/database";
 import type { AccountRole } from "@e4s/contracts";
-import { createCredentialHash } from "@e4s/domain/identity";
+import { createCredentialHash, createPinHash } from "@e4s/domain/identity";
 import type { FastifyInstance } from "fastify";
 import type { Pool } from "pg";
 import { z } from "zod";
@@ -12,7 +12,14 @@ const accountCreateInput = z.object({
   displayName: z.string().trim().min(2).max(120),
   email: z.string().trim().email().max(254),
   role: z.enum(["learner", "operator", "manager"]),
-  password: z.string().min(8).max(128)
+  password: z.string().min(6).max(128)
+}).superRefine((input, context) => {
+  if (input.role === "learner" && !/^\d{6}$/.test(input.password)) {
+    context.addIssue({ code: "custom", path: ["password"], message: "Learner PIN must contain exactly 6 digits" });
+  }
+  if (input.role !== "learner" && input.password.length < 8) {
+    context.addIssue({ code: "custom", path: ["password"], message: "Staff password must contain at least 8 characters" });
+  }
 });
 const accountStatusInput = z.object({ status: z.enum(["active", "disabled", "deleted"]) });
 const resetPasswordInput = z.object({ password: z.string().min(8).max(128) });
@@ -21,7 +28,7 @@ const managerSettingsInput = z.object({
   reminderInactiveDays: z.number().int().min(1).max(30), weeklyReportEnabled: z.boolean(),
   pilotStartDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/), pilotWeeks: z.number().int().min(2).max(4),
   weekOverride: z.number().int().min(0).max(4), minMinutesPerDay: z.number().int().min(5).max(60),
-  courseTheme: z.string().max(160), coachDailyLimit: z.number().int().min(1).max(200),
+  courseTheme: z.string().max(160), coachDailyLimit: z.number().int().min(1).max(30),
   testTimed: z.boolean(), testTimes: z.object({ listening: z.number().int().min(1).max(60), reading: z.number().int().min(1).max(60), writing: z.number().int().min(1).max(60), speaking: z.number().int().min(1).max(60) }),
   testWarnLimit: z.number().int().min(1).max(10),
   levelUp: z.object({ days: z.number().int().min(1).max(60), lessons: z.number().min(1).max(100), firstTry: z.number().min(1).max(100), submission: z.number().min(1).max(100), coach: z.number().min(0).max(5), coachTurns: z.number().int().min(0).max(100), wrong: z.number().min(1).max(100), minParts: z.number().int().min(1).max(50) }),
@@ -78,6 +85,16 @@ export function registerManagerRoutes(app: FastifyInstance, pool: Pool, options:
     if (!params.success) return reply.code(400).send({ code: "MANAGER_LEARNER_ID_INVALID" });
     const view = await repositories.manager.learnerProfile(request.e4sSession!.user.id, params.data.learnerId);
     return view ?? reply.code(404).send({ code: "MANAGER_LEARNER_NOT_FOUND" });
+  });
+
+  app.post<{ Params: { learnerId: string } }>("/api/v1/manager/learners/:learnerId/weekly-practice", { preHandler: managerOnly }, async (request, reply) => {
+    const params = learnerIdParams.safeParse(request.params);
+    if (!params.success) return reply.code(400).send({ code: "MANAGER_LEARNER_ID_INVALID" });
+    const assignment = await repositories.engagement.assignWeeklyPractice({
+      staffId: request.e4sSession!.user.id,
+      learnerId: params.data.learnerId
+    });
+    return assignment ?? reply.code(409).send({ code: "WEEKLY_PRACTICE_NOT_ELIGIBLE" });
   });
 
   app.get("/api/v1/manager/delete-requests", { preHandler: managerOnly }, async (request, reply) => {
@@ -383,7 +400,9 @@ export function registerManagerRoutes(app: FastifyInstance, pool: Pool, options:
     try {
       const account = await repositories.manager.createAccount(request.e4sSession!.user.id, {
         ...parsed.data,
-        credentialHash: await createCredentialHash(parsed.data.password)
+        credentialHash: parsed.data.role === "learner"
+          ? await createPinHash(parsed.data.password)
+          : await createCredentialHash(parsed.data.password)
       });
       return reply.code(201).send(account);
     } catch (error) {

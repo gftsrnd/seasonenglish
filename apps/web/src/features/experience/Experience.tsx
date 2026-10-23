@@ -4,6 +4,8 @@ import type { SeasonTheme } from "../../app/games/season-visual.js";
 import type { LessonSpeechOptions, LessonSpeechStatus } from "./contracts.js";
 import { cancelExclusiveAudio, claimExclusiveAudio, isExclusiveAudioActive, releaseExclusiveAudio } from "./audio-precedence.js";
 import { resolveBackgroundMusic } from "./music-selection.js";
+import { createMusicPlayer, type MusicPlayer } from "./music-player.js";
+import { BUNDLED_CALM_MUSIC_URL } from "./music-presets.js";
 
 type FeedbackTone = "click" | "success" | "error" | "warning" | "celebrate";
 type NoticeTone = "success" | "error" | "info";
@@ -56,11 +58,11 @@ const defaultMusicConfig: OrganisationBackgroundMusicView = { enabled: true, pla
 export function ExperienceProvider({ children, musicAllowed = true, musicConfig = defaultMusicConfig, musicTheme = "summer" }: { children: ReactNode; musicAllowed?: boolean; musicConfig?: OrganisationBackgroundMusicView; musicTheme?: SeasonTheme }) {
   const organisationMusicAllowed = musicAllowed && musicConfig.enabled;
   const [effectsOn, setEffectsOn] = useState(() => savedPreference(EFFECTS_KEY, true));
-  const [musicOn, setMusicOn] = useState(() => organisationMusicAllowed && savedPreference(MUSIC_KEY, true));
+  const [musicOn, setMusicOn] = useState(() => savedPreference(MUSIC_KEY, true));
   const [musicHeld, setMusicHeld] = useState(false);
   const [musicRunning, setMusicRunning] = useState(false);
   const [notices, setNotices] = useState<readonly Notice[]>([]);
-  const audio = useRef<{ context?: AudioContext; music?: HTMLAudioElement }>({});
+  const audio = useRef<{ context?: AudioContext; music?: MusicPlayer; musicUrl?: string; warning?: HTMLAudioElement }>({});
   const noticeId = useRef(0);
 
   const context = useCallback(() => {
@@ -76,6 +78,7 @@ export function ExperienceProvider({ children, musicAllowed = true, musicConfig 
       audio.current.music.pause();
       audio.current.music.currentTime = 0;
       delete audio.current.music;
+      delete audio.current.musicUrl;
     }
     setMusicRunning(false);
   }, []);
@@ -90,24 +93,57 @@ export function ExperienceProvider({ children, musicAllowed = true, musicConfig 
     if (isExclusiveAudioActive("speech") || isExclusiveAudioActive("media") || isExclusiveAudioActive("microphone")) return;
     const selection = resolveBackgroundMusic({ theme: musicTheme, date: new Date(), config: musicConfig, personalEnabled: musicOn || force, suspended: musicHeld });
     if (!selection.enabled) return;
-    let music: HTMLAudioElement;
-    try { music = new Audio(selection.url); } catch { return; }
-    music.preload = "auto";
-    music.loop = true;
-    music.volume = selection.volume;
-    audio.current.music = music;
+    let music: MusicPlayer;
+    try { music = createMusicPlayer(selection.url); } catch { return; }
+    const configure = (player: MusicPlayer, url: string) => {
+      player.preload = "auto";
+      player.loop = true;
+      player.volume = selection.volume;
+      audio.current.music = player;
+      audio.current.musicUrl = url;
+      player.onplay = () => setMusicRunning(true);
+    };
+    configure(music, selection.url);
     const release = claimExclusiveAudio("music", stopMusicPlayback, () => startMusic());
     if (!release) {
       stopMusicPlayback();
       return;
     }
-    music.onplay = () => setMusicRunning(true);
-    music.onerror = () => stopMusic();
-    try { void music.play().catch(() => stopMusic()); } catch { stopMusic(); }
+    let fallbackStarted = false;
+    const fail = () => {
+      if (fallbackStarted) return;
+      if (selection.url === BUNDLED_CALM_MUSIC_URL || audio.current.music !== music) {
+        stopMusic();
+        return;
+      }
+      fallbackStarted = true;
+      music.pause();
+      music.currentTime = 0;
+      let fallback: MusicPlayer;
+      try { fallback = createMusicPlayer(BUNDLED_CALM_MUSIC_URL); } catch { stopMusic(); return; }
+      music = fallback;
+      configure(fallback, BUNDLED_CALM_MUSIC_URL);
+      fallback.onerror = () => stopMusic();
+      try { void fallback.play().catch(() => stopMusic()); } catch { stopMusic(); }
+    };
+    music.onerror = fail;
+    try { void music.play().catch(fail); } catch { fail(); }
   }, [musicConfig, musicHeld, musicOn, musicTheme, organisationMusicAllowed, stopMusic, stopMusicPlayback]);
 
   const play = useCallback((tone: FeedbackTone, options?: FeedbackOptions) => {
     if (!effectsOn && !options?.force) return;
+    if (tone === "warning" && options?.force) {
+      try {
+        const warning = audio.current.warning ?? new Audio("/media/audio/exam-warning.wav");
+        audio.current.warning = warning;
+        warning.volume = 0.85;
+        warning.currentTime = 0;
+        void warning.play().catch(() => undefined);
+        return;
+      } catch {
+        // Fall through to the oscillator when HTML audio is unavailable.
+      }
+    }
     const current = context();
     if (!current) return;
     const now = current.currentTime;
@@ -198,7 +234,7 @@ export function ExperienceProvider({ children, musicAllowed = true, musicConfig 
     const speech = new SpeechSynthesisUtterance(text);
     speech.lang = language;
     if (voice) speech.voice = voice;
-    speech.rate = 0.9;
+    speech.rate = Math.max(0.5, Math.min(1.5, options?.rate ?? 0.9));
     speech.onstart = () => onStatus?.("started" satisfies LessonSpeechStatus);
     const restore = (status: LessonSpeechStatus) => {
       releaseExclusiveAudio("speech");
@@ -237,9 +273,21 @@ export function ExperienceProvider({ children, musicAllowed = true, musicConfig 
 
   useEffect(() => {
     if (organisationMusicAllowed) return;
-    setMusicOn(false);
     stopMusic();
   }, [organisationMusicAllowed, stopMusic]);
+
+  useEffect(() => {
+    if (!audio.current.music) return;
+    audio.current.music.volume = Math.max(0, Math.min(100, musicConfig.volume)) / 100;
+  }, [musicConfig.volume]);
+
+  useEffect(() => {
+    if (!audio.current.music) return;
+    const selection = resolveBackgroundMusic({ theme: musicTheme, date: new Date(), config: musicConfig, personalEnabled: musicOn, suspended: musicHeld });
+    if (!selection.enabled || audio.current.musicUrl === selection.url) return;
+    stopMusic();
+    startMusic(true);
+  }, [musicConfig, musicHeld, musicOn, musicTheme, startMusic, stopMusic]);
 
   useEffect(() => {
     const handleVisibility = () => {
@@ -254,23 +302,23 @@ export function ExperienceProvider({ children, musicAllowed = true, musicConfig 
   }, [musicOn, startMusic, stopMusic]);
 
   useEffect(() => {
-    const beginAudio = (event: PointerEvent) => {
-      const target = event.target instanceof Element ? event.target : undefined;
-      if (!target) return;
-      const control = target.closest("button:not(:disabled), a[href], [role='button']");
-      if (!control) return;
+    const beginAudio = () => {
       if (musicOn) startMusic();
       play("click");
     };
     document.addEventListener("pointerdown", beginAudio, true);
-    return () => document.removeEventListener("pointerdown", beginAudio, true);
+    document.addEventListener("keydown", beginAudio, true);
+    return () => {
+      document.removeEventListener("pointerdown", beginAudio, true);
+      document.removeEventListener("keydown", beginAudio, true);
+    };
   }, [musicOn, play, startMusic]);
 
   useEffect(() => () => stopMusic(), [stopMusic]);
 
   const value = useMemo<Experience>(() => ({
     effectsOn,
-    musicOn,
+    musicOn: organisationMusicAllowed && musicOn,
     musicAllowed: organisationMusicAllowed,
     play,
     toggleEffects: () => setEffectsOn((value) => !value),

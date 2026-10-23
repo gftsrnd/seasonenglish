@@ -6,15 +6,16 @@ import type {
   ManagerProgressView, ManagerProviderSettingsInput, ManagerProviderSettingsTestInput,
   ManagerProviderSettingsView, ManagerProviderTestView, ManagerPurgeConfirmationInput,
   ManagerPurgeConfirmationView, ManagerReminderCopyView, ManagerReminderDismissView,
-  ManagerReminderSendView, ManagerRemindersView, ManagerReportView, ManagerSettingsView, ManagerTrashView,
+  ManagerReminderSendView, ManagerRemindersView, ManagerReportView, ManagerSettingsView, ManagerTrashView, ManagerPinReportsView,
   OperatorSettingsOverviewView, OrganisationExperienceInput, OrganisationExperienceView,
-  ManagerWebhookTestView, ProductPreferencesView, SystemCapabilitiesView
+  ManagerWebhookTestView, ProductPreferencesView, SystemCapabilitiesView, WeeklyPracticeAssignmentView
 } from "@e4s/contracts";
 import { request } from "./runtime.js";
 
 export interface ManagerApiClient {
   getManagerProgress(): Promise<ManagerProgressView>;
   getManagerLearnerProfile(learnerId: string): Promise<ManagerLearnerProfileView>;
+  assignManagerWeeklyPractice(learnerId: string): Promise<WeeklyPracticeAssignmentView>;
   getManagerOperations(): Promise<ManagerOperationsView>;
   getManagerDeleteRequests(): Promise<ManagerDeleteRequestsView>;
   decideManagerDeleteRequest(requestId: string, input: { status: "approved" | "rejected"; note: string }): Promise<AssessmentDeletionRequestView>;
@@ -37,6 +38,7 @@ export interface ManagerApiClient {
   saveManagerProviderSettings(input: ManagerProviderSettingsInput): Promise<ManagerProviderSettingsView>;
   testManagerProviderSettings(input?: ManagerProviderSettingsTestInput): Promise<ManagerProviderTestView>;
   getManagerAccounts(): Promise<ManagerAccountsView>;
+  getManagerPinReports(): Promise<ManagerPinReportsView>;
   createManagerAccount(input: { displayName: string; email: string; role: ManagerAccountView["role"]; password: string }): Promise<ManagerAccountView>;
   updateManagerAccountRole(accountId: string, role: ManagerAccountView["role"]): Promise<ManagerAccountView>;
   updateManagerAccountStatus(accountId: string, status: "active" | "disabled" | "deleted"): Promise<ManagerAccountView>;
@@ -60,6 +62,7 @@ export interface ManagerApiClient {
 export const managerApiClient: ManagerApiClient = {
   getManagerProgress: () => request("/api/v1/manager/progress"),
   getManagerLearnerProfile: (learnerId) => request(`/api/v1/manager/learners/${encodeURIComponent(learnerId)}`),
+  assignManagerWeeklyPractice: (learnerId) => request(`/api/v1/manager/learners/${encodeURIComponent(learnerId)}/weekly-practice`, { method: "POST", body: "{}" }),
   getManagerOperations: () => request("/api/v1/manager/operations"),
   getManagerDeleteRequests: () => request("/api/v1/manager/delete-requests"),
   decideManagerDeleteRequest: (requestId, input) => request(`/api/v1/manager/delete-requests/${encodeURIComponent(requestId)}/decision`, { method: "POST", body: JSON.stringify(input) }),
@@ -82,6 +85,7 @@ export const managerApiClient: ManagerApiClient = {
   saveManagerProviderSettings: (input) => request("/api/v1/manager/provider-settings", { method: "PUT", body: JSON.stringify(input) }),
   testManagerProviderSettings: (input) => request("/api/v1/manager/provider-settings/test", { method: "POST", body: JSON.stringify(input ?? {}) }),
   getManagerAccounts: () => request("/api/v1/manager/accounts"),
+  getManagerPinReports: () => request("/api/v1/manager/pin-reports"),
   createManagerAccount: (input) => request("/api/v1/manager/accounts", { method: "POST", body: JSON.stringify(input) }),
   updateManagerAccountRole: (accountId, role) => request(`/api/v1/manager/accounts/${encodeURIComponent(accountId)}/role`, { method: "PATCH", body: JSON.stringify({ role }) }),
   updateManagerAccountStatus: (accountId, status) => request(`/api/v1/manager/accounts/${encodeURIComponent(accountId)}/status`, { method: "PATCH", body: JSON.stringify({ status }) }),

@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import { Pool } from "pg";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { migrateDatabase, resetPublicSchema, seedDemo } from "@e4s/database";
-import { createCredentialHash } from "@e4s/domain/identity";
+import { createCredentialHash, createPinHash } from "@e4s/domain/identity";
 import { DEMO_IDS } from "@e4s/test-support";
 import { buildApi } from "../src/app.js";
 import type { AiTaskRunner } from "../src/modules/coach/index.js";
@@ -51,15 +51,21 @@ const repairRunner: AiTaskRunner = {
       ["feedback", "comment", "idea"]
     ][dayNumber - 1] ?? ["office", "team", "work"];
     const vocabularyItem = (word: string) => ({
-      word, partOfSpeech: "noun", pronunciation: "/word/", meaning: "Từ vựng công việc", imageQuery: `${word} office`,
+      word, partOfSpeech: "noun", pronunciation: "/word/", stress: "first syllable", ttsText: word, ssml: `<speak>${word}</speak>`, meaning: "Từ vựng công việc", imageQuery: `${word} office`,
       collocation1: `a ${word}`, collocation2: `new ${word}`, collocation3: `work ${word}`,
       family1: { word: `${word}s`, type: "noun", meaning: "dạng số nhiều" }, family2: null,
       umbrellaWord: "work", umbrellaMeaning: "công việc", sibling1: null, sibling2: null, sibling3: null,
-      synonym1: { word: `workplace ${word}`, level: "A1", note: "từ gần nghĩa" }, synonym2: null, antonym1: null
+      synonym1: { word: `workplace ${word}`, level: "A1", note: "từ gần nghĩa", partOfSpeech: "noun", sense: "workplace sense", example: `Use workplace ${word} here.` }, synonym2: null, antonym1: null
     });
-    const output = taskKey === "weekly_lesson_foundation" ? {
+    const output = taskKey === "weekly_lesson_grammar_classifier" ? {
+      status: "classified", contentType: "sentence_pattern", targetName: "S + V + O", scope: "Talking about work",
+      support: "explicit", confidence: "high", evidence: [{ sourceRef: "lessonFocus", quote: "talk about work" }], rejectedCandidates: []
+    } : taskKey === "weekly_lesson_foundation" ? {
       title: "S + V + O", durationMinutes: 10,
-      objective: { title: "Mục tiêu bài học", text: "Nói một câu ngắn về công việc." },
+      objective: { title: "Mục tiêu bài học", explanationLanguage: "vi", items: [
+        { type: "content", text: "SWBAT identify two job details after listening.", condition: "after listening", criterion: "two details", assessmentCode: "listening" },
+        { type: "language", text: "SWBAT say one complete sentence about work.", condition: "in a role-play", criterion: "one complete sentence", assessmentCode: "speaking" }
+      ] },
       instruction: { title: "Hướng dẫn làm bài", step1: "Đọc từ vựng.", step2: "Xem công thức.", step3: "Làm bài tập." },
       grammar: { title: "Ngữ pháp", formula: "S + V + O", usage: "Dùng để nói ngắn về công việc.", example1: "I do my work.", example2: "She checks the file." },
       pronunciation: { title: "Phát âm", focus: "/w/", tip: "Mở môi tròn khi phát âm.", word1: { word: "work", ipa: "/wɜːk/" }, word2: { word: "week", ipa: "/wiːk/" }, word3: { word: "well", ipa: "/wel/" } }
@@ -100,14 +106,14 @@ describe("content operations API", () => {
       await seedDemo(client);
       await client.query(
         `insert into users (id, organization_id, role, display_name, email)
-         values ($1, $2, 'operator', 'Minh Checker', 'checker@e4s.local')
+         values ($1, $2, 'operator', 'Phạm Gia Huy', 'gia.huy.pham@e4s.local')
          on conflict (id) do update set role = excluded.role, display_name = excluded.display_name, email = excluded.email`,
         [checkerId, DEMO_IDS.organization]
       );
       await client.query(
         "insert into user_credentials (user_id, credential_hash) values ($1, $2), ($3, $4), ($5, $6), ($7, $8)",
         [
-          DEMO_IDS.learner, await createCredentialHash("learner-pass"),
+          DEMO_IDS.learner, await createPinHash("123456"),
           DEMO_IDS.operator, await createCredentialHash("operator-pass"),
           checkerId, await createCredentialHash("checker-pass"),
           DEMO_IDS.manager, await createCredentialHash("manager-pass")
@@ -116,15 +122,15 @@ describe("content operations API", () => {
     } finally { client.release(); }
     await app.ready();
 
-    const login = async (url: string, email: string, password: string) => {
-      const response = await app.inject({ method: "POST", url, payload: { email, password } });
+    const login = async (url: string, email: string, secret: string) => {
+      const response = await app.inject({ method: "POST", url, payload: url.includes("learner") ? { email, pin: secret } : { email, password: secret } });
       expect(response.statusCode, response.body).toBe(200);
       return String(response.headers["set-cookie"]).split(";")[0] ?? "";
     };
-    learnerCookie = await login("/api/auth/learner/login", "learner@e4s.local", "learner-pass");
-    makerCookie = await login("/api/auth/staff/login", "operator@e4s.local", "operator-pass");
-    checkerCookie = await login("/api/auth/staff/login", "checker@e4s.local", "checker-pass");
-    managerCookie = await login("/api/auth/staff/login", "manager@e4s.local", "manager-pass");
+    learnerCookie = await login("/api/auth/learner/login", "minh.anh.nguyen@e4s.local", "123456");
+    makerCookie = await login("/api/auth/staff/login", "thu.ha.tran@e4s.local", "operator-pass");
+    checkerCookie = await login("/api/auth/staff/login", "gia.huy.pham@e4s.local", "checker-pass");
+    managerCookie = await login("/api/auth/staff/login", "quoc.bao.le@e4s.local", "manager-pass");
   }, 30_000);
 
   afterAll(async () => { await app.close(); await pool.end(); });
@@ -257,7 +263,68 @@ describe("content operations API", () => {
     expect(hiddenAfterRetirement.statusCode).toBe(404);
   });
 
-  it("returns the lesson matrix, six review tabs and seven prompt groups without adding screens", async () => {
+  it("saves a versioned weekly-practice draft without losing the five lessons", async () => {
+    const created = await app.inject({
+      method: "PUT", url: "/api/v1/content/lesson-sets/2/A2/draft", headers: { cookie: makerCookie },
+      payload: { lessons: [1, 2, 3, 4, 5].map(lesson) }
+    });
+    expect(created.statusCode, created.body).toBe(201);
+    const base = created.json() as { version: number; lessons: Array<{ dayNumber: number; title: string }> };
+
+    const saved = await app.inject({
+      method: "PUT", url: "/api/v1/content/lesson-sets/2/A2/draft/weekly-practice", headers: { cookie: makerCookie },
+      payload: {
+        expectedVersion: base.version,
+        task: "  Write four sentences about a meeting.  ", guidance: " Use the weekly vocabulary. ",
+        requiredVocabulary: ["meeting", " agenda ", "meeting", "confirm"]
+      }
+    });
+    expect(saved.statusCode, saved.body).toBe(200);
+    expect(saved.json()).toMatchObject({
+      status: "draft", version: base.version + 1,
+      weeklyPractice: {
+        task: "Write four sentences about a meeting.", guidance: "Use the weekly vocabulary.",
+        requiredVocabulary: ["meeting", "agenda", "confirm"]
+      }
+    });
+    expect(saved.json().lessons.map((item: { dayNumber: number; title: string }) => [item.dayNumber, item.title]))
+      .toEqual(base.lessons.map(item => [item.dayNumber, item.title]));
+
+    const managerWrite = await app.inject({
+      method: "PUT", url: "/api/v1/content/lesson-sets/2/A2/draft/weekly-practice", headers: { cookie: managerCookie },
+      payload: { expectedVersion: base.version + 1, task: "Manager edit", guidance: "Not allowed", requiredVocabulary: [] }
+    });
+    expect(managerWrite.statusCode, managerWrite.body).toBe(403);
+
+    const missingVersion = await app.inject({
+      method: "PUT", url: "/api/v1/content/lesson-sets/2/A2/draft/weekly-practice", headers: { cookie: makerCookie },
+      payload: { task: "Missing version", guidance: "Reject this request", requiredVocabulary: [] }
+    });
+    expect(missingVersion.statusCode, missingVersion.body).toBe(400);
+
+    const excessiveVocabulary = await app.inject({
+      method: "PUT", url: "/api/v1/content/lesson-sets/2/A2/draft/weekly-practice", headers: { cookie: makerCookie },
+      payload: {
+        expectedVersion: base.version + 1, task: "Too many words", guidance: "Reject instead of truncating",
+        requiredVocabulary: Array.from({ length: 13 }, (_, index) => `word-${index + 1}`)
+      }
+    });
+    expect(excessiveVocabulary.statusCode, excessiveVocabulary.body).toBe(400);
+
+    const stale = await app.inject({
+      method: "PUT", url: "/api/v1/content/lesson-sets/2/A2/draft/weekly-practice", headers: { cookie: makerCookie },
+      payload: { expectedVersion: base.version, task: "Stale", guidance: "Stale", requiredVocabulary: [] }
+    });
+    expect(stale.statusCode, stale.body).toBe(409);
+
+    const review = await app.inject({ method: "GET", url: "/api/v1/content/review", headers: { cookie: makerCookie } });
+    expect(review.statusCode, review.body).toBe(200);
+    expect(review.json().weeklyPractices).toEqual(expect.arrayContaining([
+      expect.objectContaining({ weekNumber: 2, cefr: "A2", version: base.version + 1, task: "Write four sentences about a meeting." })
+    ]));
+  });
+
+  it("returns the lesson matrix, seven review tabs and seven prompt groups without adding screens", async () => {
     const matrix = await app.inject({ method: "GET", url: "/api/v1/content/lesson-matrix", headers: { cookie: makerCookie } });
     expect(matrix.statusCode, matrix.body).toBe(200);
     expect(matrix.json().levels.map((level: { cefr: string }) => level.cefr)).toEqual(["A1", "A2", "B1", "B2"]);
@@ -275,7 +342,7 @@ describe("content operations API", () => {
     const review = await app.inject({ method: "GET", url: "/api/v1/content/review", headers: { cookie: managerCookie } });
     expect(review.statusCode, review.body).toBe(200);
     expect(review.json().tabs.map((tab: { key: string }) => tab.key)).toEqual([
-      "submissions", "coach", "micro", "appeals", "attempts", "assessments"
+      "submissions", "coach", "weekly_practices", "micro", "appeals", "attempts", "assessments"
     ]);
 
     const operatorPrompts = await app.inject({ method: "GET", url: "/api/v1/content/prompts", headers: { cookie: makerCookie } });

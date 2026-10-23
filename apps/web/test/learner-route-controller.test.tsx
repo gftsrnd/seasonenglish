@@ -25,6 +25,10 @@ import { LearnerRouteController, printLearnerReward, resolveLearnerRoute } from 
 afterEach(() => { cleanup(); vi.clearAllMocks(); });
 
 describe("learner route integration controller", () => {
+  it("does not resolve the retired final assessment route", () => {
+    expect(resolveLearnerRoute("/test/final")).toEqual({ name: "notFound", params: {} });
+  });
+
   it.each([
     ["/home", { name: "home", params: {} }],
     ["/test/level-up", { name: "assessment", params: { kind: "levelup" } }],
@@ -156,7 +160,6 @@ const homeView: LearnerHomeView = {
   coach: { turnsThisWeek: 0, targetTurns: 2, href: "/coach" },
   practice: { status: "locked", detail: "Chưa mở", href: "/practice" },
   levelReadiness: { targetLevel: "B1", windowDays: 14, eligible: false, examAvailable: false, criteria: [] },
-  finalAssessment: { available: false, label: "Làm bài cuối kỳ", href: "/test/final" }
 };
 
 const incompleteProfile: LearnerProfileView = {
@@ -196,8 +199,7 @@ const incompleteProgress: LearnerProgressView = {
   badgeRoadmap: [],
   levelReadiness: { targetLevel: null, windowDays: 14, eligible: false, examAvailable: false, criteria: [] },
   stats: { completedLessons: 0, coachTurns: 0, studyDays: 0 },
-  assessments: { placement: null, final: null },
-  finalAssessmentAvailable: false
+  assessments: { placement: null }
 };
 
 const gameHubView: GameHubView = {

@@ -1,7 +1,7 @@
 import { Pool } from "pg";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { migrateDatabase, resetPublicSchema, seedDemo } from "@e4s/database";
-import { createCredentialHash } from "@e4s/domain/identity";
+import { createPinHash } from "@e4s/domain/identity";
 import { DEMO_IDS } from "@e4s/test-support";
 import { buildApi } from "../src/app.js";
 
@@ -26,7 +26,7 @@ describe("game topic moderation API", () => {
       await seedDemo(client);
       await client.query(
         "insert into user_credentials (user_id, credential_hash) values ($1, $2)",
-        [DEMO_IDS.learner, await createCredentialHash("learner-pass")]
+        [DEMO_IDS.learner, await createPinHash("123456")]
       );
     } finally {
       client.release();
@@ -34,7 +34,7 @@ describe("game topic moderation API", () => {
     await app.ready();
     const login = await app.inject({
       method: "POST", url: "/api/auth/learner/login",
-      payload: { email: "learner@e4s.local", password: "learner-pass" }
+      payload: { email: "minh.anh.nguyen@e4s.local", pin: "123456" }
     });
     cookie = String(login.headers["set-cookie"]).split(";")[0] ?? "";
   }, 30_000);
@@ -75,5 +75,48 @@ describe("game topic moderation API", () => {
     expect(response.statusCode).toBe(422);
     expect(response.json()).toMatchObject({ code: "VOCABULARY_TOPIC_REJECTED", moderation: { state: "invalid" } });
     expect(response.json().wordSet).toBeUndefined();
+    const strikes = await pool.query(
+      "select count(*)::int as count from topic_strikes where learner_id = $1",
+      [DEMO_IDS.learner]
+    );
+    expect(strikes.rows[0]?.count).toBe(0);
+  });
+
+  it.each([
+    ["a topic that contains more than seven separate words today", "too many words"],
+    ["a".repeat(71), "too many characters"],
+    ["người đồng tính", "a protected group"]
+  ])("soft-rejects %s without adding a strike (%s)", async (topic) => {
+    const response = await app.inject({
+      method: "POST", url: "/api/v1/engagement/games/word-set", headers: { cookie },
+      payload: { requestId: crypto.randomUUID(), topic }
+    });
+
+    expect(response.statusCode, response.body).toBe(422);
+    expect(response.json()).toMatchObject({
+      code: "VOCABULARY_TOPIC_REJECTED",
+      strikes: 0,
+      moderation: { state: "invalid" }
+    });
+    const strikes = await pool.query(
+      "select count(*)::int as count from topic_strikes where learner_id = $1",
+      [DEMO_IDS.learner]
+    );
+    expect(strikes.rows[0]?.count).toBe(0);
+  });
+
+  it("adds a strike for nonsense instead of treating it as a format mistake", async () => {
+    const response = await app.inject({
+      method: "POST", url: "/api/v1/engagement/games/word-set", headers: { cookie },
+      payload: { requestId: "40000000-0000-4000-8000-000000000011", topic: "asdfgh" }
+    });
+
+    expect(response.statusCode, response.body).toBe(422);
+    expect(response.json()).toMatchObject({ code: "VOCABULARY_TOPIC_REJECTED", strikes: 1 });
+    const strikes = await pool.query(
+      "select count(*)::int as count from topic_strikes where learner_id = $1",
+      [DEMO_IDS.learner]
+    );
+    expect(strikes.rows[0]?.count).toBe(1);
   });
 });

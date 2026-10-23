@@ -5,6 +5,8 @@ import {
   weeklyLessonDayInputSchema, weeklyLessonDayOutputJsonSchema, weeklyLessonDayOutputSchema,
   weeklyLessonVocabularyInputSchema, weeklyLessonSkillsInputSchema,
   weeklyLessonFoundationOutputJsonSchema, weeklyLessonFoundationOutputSchema,
+  weeklyLessonGrammarClassificationOutputJsonSchema, weeklyLessonGrammarClassificationOutputSchema,
+  weeklyLessonFoundationInputSchema,
   weeklyLessonVocabularyOutputJsonSchema, weeklyLessonVocabularyOutputSchema,
   weeklyLessonSkillsOutputJsonSchema, weeklyLessonSkillsOutputSchema,
   levelFormInputSchema, levelFormOutputJsonSchema, levelFormOutputSchema,
@@ -71,7 +73,11 @@ export const AI_TASKS = new AiTaskRegistry([
     outputSchema: weeklyLessonDayOutputSchema, outputJsonSchema: weeklyLessonDayOutputJsonSchema
   },
   {
-    id: "weekly_lesson_foundation", promptKey: "weekly_lessons", inputSchema: weeklyLessonDayInputSchema,
+    id: "weekly_lesson_grammar_classifier", promptKey: "weekly_lessons", inputSchema: weeklyLessonDayInputSchema,
+    outputSchema: weeklyLessonGrammarClassificationOutputSchema, outputJsonSchema: weeklyLessonGrammarClassificationOutputJsonSchema
+  },
+  {
+    id: "weekly_lesson_foundation", promptKey: "weekly_lessons", inputSchema: weeklyLessonFoundationInputSchema,
     outputSchema: weeklyLessonFoundationOutputSchema, outputJsonSchema: weeklyLessonFoundationOutputJsonSchema
   },
   {

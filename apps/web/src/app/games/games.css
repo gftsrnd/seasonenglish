@@ -1133,7 +1133,10 @@
   }
 
   .game-loading::before,
-  .scramble-scene.is-shaking .answer-slots {
+  .scramble-scene.is-shaking .answer-slots,
+  .game-ending span,
+  .game-ending .dino,
+  .game-ending .dino .jaw {
     animation: none;
   }
 }

@@ -48,7 +48,7 @@ describe("micro-lesson regeneration API", () => {
     const login = await app.inject({
       method: "POST",
       url: "/api/auth/learner/login",
-      payload: { email: "learner@e4s.local", password: "learner-pass" }
+      payload: { email: "minh.anh.nguyen@e4s.local", password: "learner-pass" }
     });
     expect(login.statusCode, login.body).toBe(200);
     cookie = String(login.headers["set-cookie"]).split(";")[0] ?? "";

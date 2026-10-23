@@ -61,6 +61,7 @@ export interface LearnerProfileData {
 export interface LearnerProfileView {
   profile: LearnerProfileData;
   completed: boolean;
+  draftAvailable?: boolean;
   version: number;
   updatedAt: string;
 }
@@ -251,7 +252,6 @@ export interface LearnerHomeView {
     href: "/practice";
   };
   levelReadiness: LevelReadinessView;
-  finalAssessment: { available: boolean; label: string; href: "/test/final" };
   /** Lifecycle fields are server-derived; older clients may omit them while rolling out. */
   pilotPhase?: PilotPhase;
   levelUpPhase?: LevelUpPhase;
@@ -259,7 +259,7 @@ export interface LearnerHomeView {
   rewardAnnouncement?: RewardAnnouncementView;
 }
 
-export type LevelReadinessKey = "lessonCompletion" | "firstTryAccuracy" | "weeklyPractice" | "coachRubric";
+export type LevelReadinessKey = "lessonCompletion" | "firstTryAccuracy" | "weeklyPractice" | "coachRubric" | "wrongRate";
 
 export interface LevelReadinessMetric {
   key: LevelReadinessKey;
@@ -272,7 +272,7 @@ export interface LevelReadinessMetric {
 
 export interface LevelReadinessView {
   targetLevel: CefrLevel | null;
-  windowDays: 14;
+  windowDays: number;
   eligible: boolean;
   examAvailable: boolean;
   criteria: LevelReadinessMetric[];
@@ -334,8 +334,7 @@ export interface LearnerProgressView {
   badgeRoadmap: BadgeRoadmapItem[];
   levelReadiness: LevelReadinessView;
   stats: { completedLessons: number; coachTurns: number; coachTurnsToday?: number; studyDays: number };
-  assessments: { placement: AssessmentSnapshot | null; final: AssessmentSnapshot | null };
-  finalAssessmentAvailable: boolean;
+  assessments: { placement: AssessmentSnapshot | null };
 }
 
 export interface MicroLessonView {

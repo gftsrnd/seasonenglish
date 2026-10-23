@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   weeklyLessonFoundationOutputJsonSchema,
   weeklyLessonFoundationOutputSchema,
+  weeklyLessonGrammarClassificationOutputSchema,
   weeklyLessonSkillsOutputJsonSchema,
   weeklyLessonSkillsOutputSchema,
   weeklyLessonVocabularyOutputJsonSchema,
@@ -96,7 +97,7 @@ function strictVocabularyItem(partOfSpeech?: string) {
   return {
     word: "report",
     ...(partOfSpeech ? { partOfSpeech } : {}),
-    pronunciation: "/rɪˈpɔːrt/",
+    pronunciation: "/rɪˈpɔːrt/", stress: "second syllable", ttsText: "report", ssml: "<speak>report</speak>",
     meaning: "báo cáo",
     imageQuery: "office report document",
     collocation1: "write a report",
@@ -109,23 +110,46 @@ function strictVocabularyItem(partOfSpeech?: string) {
     sibling1: null,
     sibling2: null,
     sibling3: null,
-    synonym1: { word: "account", level: "B1", note: "nghĩa gần trong ngữ cảnh báo cáo" },
+    synonym1: { word: "account", level: "B1", note: "nghĩa gần trong ngữ cảnh báo cáo", partOfSpeech: "noun", sense: "a written work summary", example: "Read the account." },
     synonym2: null,
     antonym1: null
   };
 }
 
 describe("weekly lesson output contract", () => {
-  it("rejects unusually long foundation objectives while allowing generation repair room", () => {
+  it.each([
+    "grammar_rule", "sentence_pattern", "usage_rule", "word_formation", "pronunciation_rule"
+  ])("accepts the supported grammar classifier category %s", (contentType) => {
+    expect(weeklyLessonGrammarClassificationOutputSchema.safeParse({
+      status: "classified", contentType, targetName: "Target", scope: "Only the explicitly taught target",
+      support: "explicit", confidence: "high", evidence: [{ sourceRef: "objective", quote: "explicit target" }], rejectedCandidates: []
+    }).success).toBe(true);
+  });
+
+  it("accepts no-suitable content but rejects a classified incidental target", () => {
+    expect(weeklyLessonGrammarClassificationOutputSchema.safeParse({
+      status: "no_suitable_content", contentType: null, targetName: null, scope: null,
+      support: "none", confidence: "high", evidence: [], rejectedCandidates: [{ candidate: "Present continuous", reason: "incidental_language" }]
+    }).success).toBe(true);
+    expect(weeklyLessonGrammarClassificationOutputSchema.safeParse({
+      status: "classified", contentType: "grammar_rule", targetName: "Present continuous", scope: "One incidental sentence",
+      support: "incidental", confidence: "low", evidence: [{ sourceRef: "dialogue", quote: "We're meeting." }], rejectedCandidates: []
+    }).success).toBe(false);
+  });
+
+  it("requires 2-4 structured foundation objectives", () => {
     const base = {
       title: "S + V + O", durationMinutes: 10,
-      objective: { title: "Mục tiêu", text: "Nói được một câu góp ý ngắn." },
+      objective: { title: "Mục tiêu", explanationLanguage: "vi", items: [
+        { type: "content", text: "SWBAT identify two feedback details.", condition: "after listening", criterion: "two details", assessmentCode: "listening" },
+        { type: "language", text: "SWBAT give one clear feedback sentence.", condition: "in a role-play", criterion: "one sentence", assessmentCode: "speaking" }
+      ] },
       instruction: { title: "Hướng dẫn", step1: "Đọc mẫu.", step2: "Ôn từ.", step3: "Làm bài." },
       grammar: { title: "Ngữ pháp", formula: "S + V + O", usage: "Dùng để góp ý.", example1: "I give feedback.", example2: "We share feedback." },
       pronunciation: { title: "Phát âm", focus: "/f/", tip: "Thổi hơi nhẹ.", word1: { word: "feedback", ipa: "/ˈfiːdbæk/" }, word2: { word: "fine", ipa: "/faɪn/" }, word3: { word: "helpful", ipa: "/ˈhelpfəl/" } }
     };
     expect(weeklyLessonFoundationOutputSchema.safeParse(base).success).toBe(true);
-    expect(weeklyLessonFoundationOutputSchema.safeParse({ ...base, objective: { ...base.objective, text: "Một hai ba bốn năm sáu bảy tám chín mười mười một mười hai mười ba mười bốn mười lăm mười sáu mười bảy mười tám mười chín hai mươi hai mốt hai hai hai ba hai bốn hai lăm." } }).success).toBe(false);
+    expect(weeklyLessonFoundationOutputSchema.safeParse({ ...base, objective: { ...base.objective, items: base.objective.items.slice(0, 1) } }).success).toBe(false);
   });
 
   it("publishes three small strict schemas instead of compiling the full lesson grammar", () => {
@@ -175,6 +199,32 @@ describe("weekly lesson output contract", () => {
       required: expect.arrayContaining(["partOfSpeech"]),
       properties: { partOfSpeech: { type: "string" } }
     });
+  });
+
+  it("rejects a synonym with another part of speech or unusable contextual evidence", () => {
+    const item = strictVocabularyItem("noun");
+    expect(weeklyLessonVocabularyOutputSchema.safeParse({
+      title: "Từ vựng", word1: { ...item, synonym1: { ...item.synonym1!, partOfSpeech: "verb" } }, word2: item, word3: item
+    }).success).toBe(false);
+    expect(weeklyLessonVocabularyOutputSchema.safeParse({
+      title: "Từ vựng", word1: { ...item, synonym1: { ...item.synonym1!, example: "This sentence omits it." } }, word2: item, word3: item
+    }).success).toBe(false);
+  });
+
+  it("rejects ambiguous skill options and answer keys not present in the options", () => {
+    const choice = { title: "Nghe", body: "The meeting starts at nine.", prompt: "When?", option1: "Nine", option2: "Ten", option3: "Eleven", option4: "Noon", answer: "Nine" };
+    const skills = {
+      listening: choice,
+      reading: { ...choice, title: "Đọc", body: "The report is ready at noon.", prompt: "What is ready?", option1: "Report", answer: "Report" },
+      writing: { title: "Viết", type: "fill", prompt: "It ___ at nine.", option1: null, option2: null, option3: null, option4: null, answer: "starts" },
+      wordClass: { title: "Từ loại", prompt: "What is report?", option1: "noun", option2: "verb", option3: "adjective", option4: "adverb", answer: "noun" },
+      wordUse: { title: "Dùng từ", prompt: "Which is correct?", option1: "Send the report.", option2: "Report the a.", option3: "A report send.", option4: "Report blue.", answer: "Send the report." },
+      speaking: { title: "Nói", prompt: "Nói giờ họp.", answer: "The meeting starts at nine." }
+    };
+    expect(weeklyLessonSkillsOutputSchema.safeParse(skills).success).toBe(true);
+    expect(weeklyLessonSkillsOutputSchema.safeParse({ ...skills, listening: { ...choice, option2: "Nine" } }).success).toBe(false);
+    expect(weeklyLessonSkillsOutputSchema.safeParse({ ...skills, listening: { ...choice, answer: "Eight" } }).success).toBe(false);
+    expect(weeklyLessonSkillsOutputSchema.safeParse({ ...skills, writing: { ...skills.writing, prompt: "It ___ at ___." } }).success).toBe(false);
   });
 
   it("publishes an Anthropic strict-compatible schema with five required day slots", () => {
