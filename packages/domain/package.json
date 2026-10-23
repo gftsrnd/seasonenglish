@@ -9,7 +9,8 @@
     "./content": "./dist/src/content/index.js",
     "./engagement": "./dist/src/engagement/index.js",
     "./identity": "./dist/src/identity/index.js",
-    "./learning": "./dist/src/learning/index.js"
+    "./learning": "./dist/src/learning/index.js",
+    "./progression": "./dist/src/progression/index.js"
   },
   "scripts": {
     "build": "tsc -p tsconfig.json",
