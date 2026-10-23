@@ -139,6 +139,9 @@ export interface ContentReviewView {
   appeals: Array<{
     id: string; learnerName: string; reason: string; status: "pending" | "accepted" | "rejected";
     createdAt: string; resolution: string;
+    kind: "assessment" | "weekly_practice";
+    submissionId: string | null;
+    currentScore: number | null;
   }>;
   lessonAttempts: Array<{
     id: string; learnerName: string; cefr: CefrLevel | null; weekNumber: number; dayNumber: number;

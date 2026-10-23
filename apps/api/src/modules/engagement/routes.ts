@@ -87,12 +87,19 @@ export function registerEngagementRoutes(
     const params = practiceAppealParams.safeParse(request.params);
     const body = practiceAppealInput.safeParse(request.body);
     if (!params.success || !body.success) return reply.code(400).send({ code: "INVALID_PRACTICE_APPEAL" });
-    const view = await repositories.engagement.appealWeeklyPractice({
-      learnerId: request.e4sSession!.user.id,
-      submissionId: params.data.submissionId,
-      reason: body.data.reason
-    });
-    return view ?? reply.code(409).send({ code: "PRACTICE_APPEAL_NOT_AVAILABLE" });
+    try {
+      const view = await repositories.engagement.appealWeeklyPractice({
+        learnerId: request.e4sSession!.user.id,
+        submissionId: params.data.submissionId,
+        reason: body.data.reason
+      });
+      return view ?? reply.code(409).send({ code: "PRACTICE_APPEAL_NOT_AVAILABLE" });
+    } catch (error) {
+      if (error instanceof Error && error.message === "PRACTICE_APPEAL_EXISTS") {
+        return reply.code(409).send({ code: "PRACTICE_APPEAL_EXISTS" });
+      }
+      throw error;
+    }
   });
 
   app.get("/api/v1/engagement/games", { preHandler: learnerOnly }, async (request, reply) => {

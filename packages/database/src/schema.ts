@@ -314,6 +314,7 @@ export const practiceAppeals = pgTable("practice_appeals", {
   reason: text("reason").notNull(),
   status: text("status").notNull().default("pending"),
   resolution: text("resolution"),
+  resolvedBy: uuid("resolved_by").references(() => users.id),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   resolvedAt: timestamp("resolved_at", { withTimezone: true })
 });

@@ -76,7 +76,11 @@ const manualGradeInput = z.object({
   feedback: z.string().trim().min(1).max(2_000)
 });
 const aiGradeInput = z.object({ requestId: z.string().trim().min(1).max(160).optional() });
-const appealDecisionInput = z.object({ status: z.enum(["accepted", "rejected"]), resolution: z.string().trim().min(1).max(2_000) });
+const appealDecisionInput = z.object({
+  status: z.enum(["accepted", "rejected"]),
+  resolution: z.string().trim().min(1).max(2_000),
+  newScore: z.number().int().min(0).max(100).optional()
+});
 const promptKeys = [
   "system_rules", "assessment_scoring", "weekly_lessons", "week_suggestions",
   "micro_grading", "coach_dialogue", "weekly_practice_grading"
@@ -691,8 +695,17 @@ export function registerContentRoutes(
     const params = microParams.safeParse(request.params);
     const body = appealDecisionInput.safeParse(request.body);
     if (!params.success || !body.success) return reply.code(400).send({ code: "INVALID_APPEAL_DECISION" });
-    const saved = await repositories.content.resolveAppeal(request.e4sSession!.user.id, params.data.id, body.data.status, body.data.resolution);
-    return saved ? { saved: true } : reply.code(409).send({ code: "APPEAL_NOT_PENDING" });
+    try {
+      const saved = await repositories.content.resolveAppeal(
+        request.e4sSession!.user.id, params.data.id, body.data.status, body.data.resolution, body.data.newScore
+      );
+      return saved ? { saved: true } : reply.code(409).send({ code: "APPEAL_NOT_PENDING" });
+    } catch (error) {
+      if (error instanceof Error && error.message === "PRACTICE_APPEAL_SCORE_REQUIRED") {
+        return reply.code(400).send({ code: "PRACTICE_APPEAL_SCORE_REQUIRED" });
+      }
+      throw error;
+    }
   });
 
   app.get("/api/v1/content/prompts", { preHandler: managers }, async (request): Promise<ContentPromptSettingsView> => {

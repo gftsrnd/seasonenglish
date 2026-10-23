@@ -53,7 +53,7 @@ export interface OperatorApiClient {
   deleteReviewedMicroLesson(id: string): Promise<void>;
   gradeReviewedSubmission(id: string, input: { meaning: number; vocabulary: number; grammar: number; feedback: string }): Promise<{ saved: boolean }>;
   gradeReviewedSubmissionAi(id: string, requestId?: string): Promise<ContentReviewAiGradeJobView>;
-  decideReviewedAppeal(id: string, input: { status: "accepted" | "rejected"; resolution: string }): Promise<{ saved: boolean }>;
+  decideReviewedAppeal(id: string, input: { status: "accepted" | "rejected"; resolution: string; newScore?: number }): Promise<{ saved: boolean }>;
   getContentPrompts(): Promise<ContentPromptSettingsView>;
   saveContentPrompts(groups: Array<{ key: ContentPromptKey; content: string }>): Promise<ContentPromptSettingsView>;
   getSystemCapabilities(): Promise<SystemCapabilitiesView>;

@@ -2428,7 +2428,8 @@ class ContentRepository {
         (select count(*) from practice_submissions ps join users u on u.id = ps.learner_id and u.role = 'learner' and u.status = 'active' where u.organization_id = $1)::text as submissions,
         (select count(*) from coach_turns ct join coach_sessions cs on cs.id = ct.session_id join users u on u.id = cs.learner_id and u.role = 'learner' and u.status = 'active' where u.organization_id = $1 and ct.speaker = 'learner')::text as coach,
         (select count(*) from micro_lessons ml join users u on u.id = ml.learner_id and u.role = 'learner' and u.status = 'active' where u.organization_id = $1)::text as micro,
-        (select count(*) from appeals a join assessment_attempts aa on aa.id = a.attempt_id join users u on u.id = aa.learner_id and u.role = 'learner' and u.status = 'active' where u.organization_id = $1)::text as appeals,
+        ((select count(*) from appeals a join assessment_attempts aa on aa.id = a.attempt_id join users u on u.id = aa.learner_id and u.role = 'learner' and u.status = 'active' where u.organization_id = $1)
+          + (select count(*) from practice_appeals pa join users u on u.id = pa.learner_id and u.role = 'learner' and u.status = 'active' where u.organization_id = $1))::text as appeals,
         (select count(*) from assessment_attempts aa join users u on u.id = aa.learner_id and u.role = 'learner' and u.status = 'active' where u.organization_id = $1)::text as attempts,
         (select count(*) from assessment_versions av join assessment_definitions ad on ad.id = av.definition_id where ad.organization_id = $1)::text as assessments`,
       [organizationId]
@@ -2471,10 +2472,22 @@ class ContentRepository {
           where u.organization_id = $1 order by ml.generated_at desc limit 60`, [organizationId]),
       this.pool.query<{
         id: string; learner_name: string; reason: string; status: "pending" | "accepted" | "rejected";
-        resolution: string | null; created_at: Date;
-      }>(`select a.id, u.display_name as learner_name, a.reason, a.status, a.resolution, a.created_at
-          from appeals a join users u on u.id = a.learner_id and u.role = 'learner' and u.status = 'active'
-          where u.organization_id = $1 order by (a.status = 'pending') desc, a.created_at desc limit 60`, [organizationId]),
+        resolution: string | null; created_at: Date; kind: "assessment" | "weekly_practice";
+        submission_id: string | null; current_score: string | null;
+      }>(`select combined.* from (
+            select a.id, u.display_name as learner_name, a.reason, a.status, a.resolution, a.created_at,
+                   'assessment'::text as kind, null::uuid as submission_id, null::text as current_score
+            from appeals a join users u on u.id = a.learner_id and u.role = 'learner' and u.status = 'active'
+            where u.organization_id = $1
+            union all
+            select pa.id, u.display_name as learner_name, pa.reason, pa.status, pa.resolution, pa.created_at,
+                   'weekly_practice'::text as kind, pa.submission_id, ps.score->>'total' as current_score
+            from practice_appeals pa
+            join practice_submissions ps on ps.id = pa.submission_id
+            join users u on u.id = pa.learner_id and u.role = 'learner' and u.status = 'active'
+            where u.organization_id = $1
+          ) combined
+          order by (combined.status = 'pending') desc, combined.created_at desc limit 60`, [organizationId]),
       this.pool.query<{
         id: string; learner_name: string; cefr: CefrLevel | null; week_number: number; day_number: number;
         title: string; evidence: Record<string, unknown>;
@@ -2568,7 +2581,8 @@ class ContentRepository {
       }),
       appeals: appeals.rows.map((row) => ({
         id: row.id, learnerName: row.learner_name, reason: row.reason, status: row.status,
-        createdAt: row.created_at.toISOString(), resolution: row.resolution ?? ""
+        createdAt: row.created_at.toISOString(), resolution: row.resolution ?? "", kind: row.kind,
+        submissionId: row.submission_id, currentScore: row.current_score === null ? null : Number(row.current_score)
       })),
       lessonAttempts: progress.rows.map((row) => {
         const source = row.evidence.evidence && typeof row.evidence.evidence === "object"
@@ -2788,14 +2802,69 @@ class ContentRepository {
     return row ? { ...reviewAiGradeJobView(row), errorCode } : null;
   }
 
-  async resolveAppeal(actorId: string, id: string, status: "accepted" | "rejected", resolution: string): Promise<boolean> {
-    const result = await this.pool.query(
-      `update appeals a set status = $3, resolution = $4, resolved_by = $1, resolved_at = now()
-       from users learner, users actor where a.id = $2 and a.status = 'pending'
-         and learner.id = a.learner_id and actor.id = $1 and actor.organization_id = learner.organization_id`,
-      [actorId, id, status, resolution]
-    );
-    return Boolean(result.rowCount);
+  async resolveAppeal(
+    actorId: string, id: string, status: "accepted" | "rejected", resolution: string, newScore?: number
+  ): Promise<boolean> {
+    const client = await this.pool.connect();
+    try {
+      await client.query("begin");
+      const practice = await client.query<{ submission_id: string; organization_id: string; status: string }>(
+        `select pa.submission_id, learner.organization_id, pa.status
+         from practice_appeals pa
+         join users learner on learner.id = pa.learner_id
+         join users actor on actor.id = $1 and actor.organization_id = learner.organization_id
+         where pa.id = $2 for update of pa`,
+        [actorId, id]
+      );
+      const practiceAppeal = practice.rows[0];
+      if (practiceAppeal) {
+        if (practiceAppeal.status !== "pending") {
+          await client.query("rollback");
+          return false;
+        }
+        if (status === "accepted" && newScore === undefined) throw new Error("PRACTICE_APPEAL_SCORE_REQUIRED");
+        await client.query(
+          `update practice_appeals
+           set status = $2, resolution = $3, resolved_by = $4, resolved_at = now()
+           where id = $1`,
+          [id, status, resolution, actorId]
+        );
+        if (status === "accepted") {
+          await client.query(
+            `update practice_submissions
+             set status = 'reviewed',
+                 score = jsonb_set(coalesce(score, '{}'::jsonb), '{total}', to_jsonb($2::numeric), true),
+                 feedback = coalesce(feedback, '{}'::jsonb) || jsonb_build_object(
+                   'source', 'appeal-human', 'message', $3::text, 'appealId', $4::text
+                 ),
+                 operator_checked = true, checked_by = $5, reviewed_at = now(), updated_at = now()
+             where id = $1`,
+            [practiceAppeal.submission_id, newScore, resolution, id, actorId]
+          );
+        }
+        await client.query(
+          `insert into audit_events
+             (id, organization_id, actor_user_id, action, entity_type, entity_id, payload, trace_id)
+           values ($1, $2, $3, 'weekly-practice.appeal.resolved', 'practice_appeal', $4, $5::jsonb, $6)`,
+          [randomUUID(), practiceAppeal.organization_id, actorId, id,
+            JSON.stringify({ status, resolution, newScore: status === "accepted" ? newScore : null,
+              submissionId: practiceAppeal.submission_id }), randomUUID()]
+        );
+        await client.query("commit");
+        return true;
+      }
+      const assessment = await client.query(
+        `update appeals a set status = $3, resolution = $4, resolved_by = $1, resolved_at = now()
+         from users learner, users actor where a.id = $2 and a.status = 'pending'
+           and learner.id = a.learner_id and actor.id = $1 and actor.organization_id = learner.organization_id`,
+        [actorId, id, status, resolution]
+      );
+      await client.query("commit");
+      return Boolean(assessment.rowCount);
+    } catch (error) {
+      await client.query("rollback");
+      throw error;
+    } finally { client.release(); }
   }
 
   async promptSettings(staffId: string): Promise<Omit<ContentPromptSettingsView["groups"][number], "label">[]> {
@@ -5839,11 +5908,12 @@ class EngagementRepository {
         await client.query("rollback");
         return null;
       }
-      await client.query(
+      const inserted = await client.query(
         `insert into practice_appeals (id, submission_id, learner_id, reason)
          values ($1, $2, $3, $4) on conflict (submission_id) do nothing`,
         [randomUUID(), input.submissionId, input.learnerId, input.reason]
       );
+      if (!inserted.rowCount) throw new Error("PRACTICE_APPEAL_EXISTS");
       await client.query("commit");
     } catch (error) {
       await client.query("rollback");

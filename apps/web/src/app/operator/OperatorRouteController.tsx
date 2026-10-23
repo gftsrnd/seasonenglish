@@ -731,7 +731,29 @@ function ReviewRoute({ client, readOnly }: { client: OperatorApiClient; readOnly
     return Number.isFinite(value) && value >= 0 && value <= 5 ? value : null;
   };
   const manualGrade = async (id: string) => { const meaning = await askScore("Đúng ý"); if (meaning == null) return; const vocabulary = await askScore("Từ vựng"); if (vocabulary == null) return; const grammar = await askScore("Ngữ pháp"); if (grammar == null) return; const feedback = await modal.prompt({ title: "Nhận xét bài làm", label: "Nhận xét", confirmLabel: "Lưu điểm" }) ?? ""; refresh(client.gradeReviewedSubmission(id, { meaning, vocabulary, grammar, feedback })); };
-  const decide = async (id: string, accepted: boolean) => { if (readOnly) return; const resolution = await modal.prompt({ title: accepted ? "Chấp nhận kháng nghị" : "Từ chối kháng nghị", label: "Nội dung xử lý / giải thích cho học viên", confirmLabel: accepted ? "Chấp nhận" : "Từ chối", tone: accepted ? "primary" : "danger" }); if (resolution?.trim()) refresh(client.decideReviewedAppeal(id, { status: accepted ? "accepted" : "rejected", resolution: resolution.trim() })); };
+  const decide = async (id: string, accepted: boolean) => {
+    if (readOnly) return;
+    const practiceAppeal = data.appeals.find(appeal => appeal.id === id)?.kind === "weekly_practice";
+    let newScore: number | undefined;
+    if (accepted && practiceAppeal) {
+      const rawScore = await modal.prompt({
+        title: "Chấm lại bài thực hành tuần", label: "Điểm mới (0–100)", inputType: "number", confirmLabel: "Tiếp tục"
+      });
+      if (rawScore == null) return;
+      const parsedScore = Number(rawScore);
+      if (!Number.isInteger(parsedScore) || parsedScore < 0 || parsedScore > 100) return;
+      newScore = parsedScore;
+    }
+    const resolution = await modal.prompt({
+      title: accepted ? "Chấp nhận kháng nghị" : "Từ chối kháng nghị",
+      label: "Nội dung xử lý / giải thích cho học viên",
+      confirmLabel: accepted ? "Chấp nhận" : "Từ chối",
+      tone: accepted ? "primary" : "danger"
+    });
+    if (resolution?.trim()) refresh(client.decideReviewedAppeal(id, {
+      status: accepted ? "accepted" : "rejected", resolution: resolution.trim(), ...(newScore === undefined ? {} : { newScore })
+    }));
+  };
   const missing = {
     ...(typeof client.gradeReviewedSubmissionAi !== "function" ? { gradeAi: unavailable("endpoint chấm bài review bằng AI") } : {}),
     ...(typeof client.getContentReviewAssessment !== "function" ? { viewTest: unavailable("endpoint xem chi tiết bài test") } : {})
