@@ -1,7 +1,7 @@
 import { Pool } from "pg";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { migrateDatabase, resetPublicSchema, seedDemo } from "@e4s/database";
-import { createCredentialHash } from "@e4s/domain/identity";
+import { createPinHash } from "@e4s/domain/identity";
 import { DEMO_IDS } from "@e4s/test-support";
 import { buildApi } from "../src/app.js";
 import type { ContentMediaService } from "../src/modules/media/index.js";
@@ -41,7 +41,7 @@ describe("practice, games, arena, rewards and survey API", () => {
       await seedDemo(client);
       await client.query(
         "insert into user_credentials (user_id, credential_hash) values ($1, $2)",
-        [DEMO_IDS.learner, await createCredentialHash("learner-pass")]
+        [DEMO_IDS.learner, await createPinHash("123456")]
       );
     } finally {
       client.release();
@@ -49,7 +49,7 @@ describe("practice, games, arena, rewards and survey API", () => {
     await app.ready();
     const login = await app.inject({
       method: "POST", url: "/api/auth/learner/login",
-      payload: { email: "learner@e4s.local", password: "learner-pass" }
+      payload: { email: "learner@e4s.local", pin: "123456" }
     });
     cookie = String(login.headers["set-cookie"]).split(";")[0] ?? "";
   }, 30_000);
@@ -58,6 +58,26 @@ describe("practice, games, arena, rewards and survey API", () => {
 
   it("keeps weekly practice in one screen and awards the Friday badge once", async () => {
     await pool.query("delete from practice_submissions where learner_id = $1", [DEMO_IDS.learner]);
+    await pool.query(
+      `update progress_records set status = 'in_progress', completed_at = null
+       where learner_id = $1 and lesson_id <> $2`,
+      [DEMO_IDS.learner, DEMO_IDS.lessons[0]]
+    );
+    await pool.query(
+      `insert into game_sets (id, program_week_id, game_key, status, payload)
+       values ($1, $2, 'weekly_vocabulary', 'published', $3::jsonb)
+       on conflict (id) do update set payload = excluded.payload, status = 'published'`,
+      [DEMO_IDS.gameSet, DEMO_IDS.week, JSON.stringify({
+        topic: "Tuần 1: Introducing yourself & your job",
+        words: Array.from({ length: 15 }, (_, index) => ({
+          id: `weekly-${index + 1}`,
+          english: ["introduce", "colleague", "weekly summary"][index] ?? `term${index + 1}`,
+          vietnamese: `từ ${index + 1}`,
+          definition: `definition ${index + 1}`,
+          partOfSpeech: "noun"
+        }))
+      })]
+    );
     const locked = await app.inject({ method: "GET", url: "/api/v1/engagement/practice", headers: { cookie } });
     expect(locked.statusCode, locked.body).toBe(200);
     expect(locked.json()).toMatchObject({ state: "locked", completedLessons: 1, totalLessons: 5 });
@@ -72,17 +92,57 @@ describe("practice, games, arena, rewards and survey API", () => {
     const opened = await app.inject({ method: "GET", url: "/api/v1/engagement/practice", headers: { cookie } });
     expect(opened.json()).toMatchObject({ state: "open", completedLessons: 5, totalLessons: 5 });
 
+    const invalid = await app.inject({
+      method: "POST", url: "/api/v1/engagement/practice/submit", headers: { cookie },
+      payload: {
+        requestId: "10000000-0000-4000-8000-000000000099",
+        text: "I prepare the weekly agenda. My colleague joins today."
+      }
+    });
+    expect(invalid.statusCode, invalid.body).toBe(422);
+    expect(invalid.json()).toMatchObject({
+      code: "PRACTICE_FORMAT_INVALID",
+      errors: expect.arrayContaining([
+        "Bài A1–A2 cần từ 3 đến 5 câu.",
+        "Hãy dùng ít nhất 3 từ hoặc cụm từ của tuần."
+      ])
+    });
+
+    const weeklySet = await pool.query<{ payload: { words: Array<{ english: string }> } }>(
+      `select payload from game_sets
+       where program_week_id = $1 and game_key = 'weekly_vocabulary' and learner_id is null
+       order by created_at desc limit 1`,
+      [opened.json().weekId]
+    );
+    const weeklyWords = weeklySet.rows[0]!.payload.words.slice(0, 3).map((word) => word.english);
+    const validText = `I use ${weeklyWords[0]} at work. My colleague discusses ${weeklyWords[1]}. We prepare ${weeklyWords[2]} every week.`;
+
     const requestId = "10000000-0000-4000-8000-000000000001";
     const submitted = await app.inject({
       method: "POST", url: "/api/v1/engagement/practice/submit", headers: { cookie },
-      payload: { requestId, text: "I introduce my role and explain the weekly work I prepare for my team." }
+      payload: { requestId, text: validText }
     });
     expect(submitted.statusCode, submitted.body).toBe(200);
-    expect(submitted.json()).toMatchObject({ state: "submitted", submission: { status: "submitted", score: { total: 84 } } });
+    expect(submitted.json()).toMatchObject({ state: "submitted", submission: { status: "submitted", score: { total: 74 } } });
+
+    const snapshot = await pool.query<{
+      prompt_snapshot: { task: string; guidance: string };
+      cefr_snapshot: string;
+      vocabulary_snapshot: string[];
+    }>(
+      `select prompt_snapshot, cefr_snapshot, vocabulary_snapshot
+       from practice_submissions where learner_id = $1 and request_key = $2`,
+      [DEMO_IDS.learner, requestId]
+    );
+    expect(snapshot.rows[0]).toMatchObject({
+      prompt_snapshot: { task: opened.json().task, guidance: opened.json().guidance },
+      cefr_snapshot: "A2",
+      vocabulary_snapshot: expect.arrayContaining(weeklyWords)
+    });
 
     const duplicate = await app.inject({
       method: "POST", url: "/api/v1/engagement/practice/submit", headers: { cookie },
-      payload: { requestId, text: "I introduce my role and explain the weekly work I prepare for my team." }
+      payload: { requestId, text: validText }
     });
     expect(duplicate.statusCode).toBe(200);
     const rewards = await pool.query(
@@ -90,6 +150,31 @@ describe("practice, games, arena, rewards and survey API", () => {
       [DEMO_IDS.learner]
     );
     expect(rewards.rows[0].count).toBe(1);
+
+    const historicalWeekId = "10000000-0000-4000-8000-000000000098";
+    await pool.query(
+      `insert into program_weeks (id, program_id, week_number, topic)
+       values ($1, $2, 99, 'Historical topic')`,
+      [historicalWeekId, DEMO_IDS.program]
+    );
+    await pool.query(
+      `insert into practice_submissions
+         (id, learner_id, program_week_id, status, content, score, prompt_snapshot, cefr_snapshot, vocabulary_snapshot, submitted_at)
+       values ($1, $2, $3, 'reviewed', '{"text":"Historical response"}',
+         '{"total":0,"rubric":{"meaning":0,"vocabulary":0,"grammar":0}}',
+         '{"task":"Historical task","guidance":"Historical guidance"}', 'A1', '[]', now() - interval '7 days')`,
+      ["10000000-0000-4000-8000-000000000097", DEMO_IDS.learner, historicalWeekId]
+    );
+    const resumed = await app.inject({ method: "GET", url: "/api/v1/engagement/practice", headers: { cookie } });
+    expect(resumed.statusCode, resumed.body).toBe(200);
+    expect(resumed.json().history).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        weekNumber: 99,
+        topic: "Historical topic",
+        task: "Historical task",
+        score: { total: 0, rubric: { meaning: 0, vocabulary: 0, grammar: 0 } }
+      })
+    ]));
   });
 
   it("returns the six prototype games and calculates scores from server data", async () => {

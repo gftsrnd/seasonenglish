@@ -2,6 +2,7 @@ import type { GameDescriptor, GameKey, GameTopicModeration } from "@e4s/contract
 import { randomUUID } from "node:crypto";
 import { vocabularyOutputSchema, weeklyPracticeOutputSchema } from "@e4s/ai";
 import { arenaEligible, scoreGameAttempt } from "@e4s/domain/engagement";
+import { validateWeeklyPractice } from "@e4s/domain/progression";
 import { createRepositories } from "@e4s/database";
 import type { FastifyInstance } from "fastify";
 import type { Pool } from "pg";
@@ -52,6 +53,14 @@ export function registerEngagementRoutes(
     const parsed = z.object({ requestId: z.uuid(), text: z.string().trim().min(8).max(10_000) }).safeParse(request.body);
     if (!parsed.success || parsed.data.text.split(/\s+/).length < 8) return reply.code(400).send({ code: "PRACTICE_TOO_SHORT" });
     const learnerId = request.e4sSession!.user.id;
+    const requirements = await repositories.engagement.weeklyPracticeRequirements(learnerId);
+    if (!requirements) return reply.code(409).send({ code: "PRACTICE_LOCKED" });
+    const validation = validateWeeklyPractice({
+      cefr: requirements.cefr,
+      text: parsed.data.text,
+      weeklyVocabulary: requirements.vocabulary
+    });
+    if (!validation.valid) return reply.code(422).send({ code: "PRACTICE_FORMAT_INVALID", errors: validation.errors });
     const view = await repositories.engagement.submitWeeklyPractice({ learnerId, ...parsed.data });
     if (!view) return reply.code(409).send({ code: "PRACTICE_LOCKED" });
     if (!aiRunner || await repositories.aiRuns.requestExists(learnerId, parsed.data.requestId, "weekly_practice_grading")) return view;
@@ -59,7 +68,7 @@ export function registerEngagementRoutes(
     if (!task) return view;
     try {
       const result = await aiRunner.runTask("weekly_practice_grading", {
-        text: parsed.data.text, cefr: (await repositories.engagement.gameHub(learnerId))?.cefr ?? "A2",
+        text: parsed.data.text, cefr: requirements.cefr,
         topic: view.topic, rubric: ["meaning", "vocabulary", "grammar"]
       }, { systemPrompt: task.prompt });
       const output = weeklyPracticeOutputSchema.safeParse(result.output);

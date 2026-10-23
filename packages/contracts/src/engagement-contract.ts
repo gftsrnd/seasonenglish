@@ -16,6 +16,16 @@ export interface WeeklyPracticeAppealView {
   resolvedAt?: string | null;
 }
 
+export interface WeeklyPracticeHistoryItem {
+  id: string;
+  weekId: string;
+  weekNumber: number;
+  topic: string;
+  task: string;
+  submittedAt: string | null;
+  score: null | { total: number; rubric?: { meaning: number; vocabulary: number; grammar: number } };
+}
+
 export interface WeeklyPracticeView {
   state: WeeklyPracticeState;
   weekId: string;
@@ -41,6 +51,7 @@ export interface WeeklyPracticeView {
   appeal?: WeeklyPracticeAppealView | null;
   inputMode?: "write" | "dialogue";
   speechSupported?: boolean;
+  history?: WeeklyPracticeHistoryItem[];
 }
 
 export type GameKey = "scramble" | "crossword" | "eggs" | "mario" | "sort" | "typing";

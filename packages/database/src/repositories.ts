@@ -5610,6 +5610,8 @@ function coachTurnClassification(value: Record<string, unknown>): CoachTurnClass
   return "normal";
 }
 
+import { calculateWeeklyPracticeScore } from "@e4s/domain/progression";
+
 function weeklyPracticeReviewState(
   status: "draft" | "submitted" | "reviewed",
   score: Record<string, unknown> | null,
@@ -5649,6 +5651,25 @@ function weeklyPracticeTask(topic: string, cefr: CefrLevel): {
 class EngagementRepository {
   constructor(private readonly pool: Pool) {}
 
+  async weeklyPracticeRequirements(learnerId: string): Promise<{ cefr: CefrLevel; vocabulary: string[] } | null> {
+    const context = await this.activeEngagementContext(learnerId);
+    if (!context) return null;
+    const set = await this.pool.query<{ payload: Record<string, unknown> }>(
+      `select payload from game_sets
+       where program_week_id = $1 and game_key = 'weekly_vocabulary' and status = 'published'
+         and (learner_id = $2 or learner_id is null)
+       order by (learner_id = $2) desc nulls last, created_at desc limit 1`,
+      [context.weekId, learnerId]
+    );
+    const words = Array.isArray(set.rows[0]?.payload.words) ? set.rows[0]!.payload.words : [];
+    return {
+      cefr: context.cefr,
+      vocabulary: words.flatMap((item) => item && typeof item === "object" && !Array.isArray(item)
+        && typeof (item as Record<string, unknown>).english === "string"
+        ? [String((item as Record<string, unknown>).english)] : [])
+    };
+  }
+
   async weeklyPractice(learnerId: string): Promise<WeeklyPracticeView | null> {
     const context = await this.activeEngagementContext(learnerId);
     if (!context) return null;
@@ -5665,18 +5686,33 @@ class EngagementRepository {
     const submission = await this.pool.query<{
       id: string; status: "draft" | "submitted" | "reviewed"; content: Record<string, unknown>;
       score: Record<string, unknown> | null; feedback: Record<string, unknown> | string | null;
+      prompt_snapshot: Record<string, unknown>;
       submitted_at: Date | null;
       grading_source: "ai" | "manual" | null;
       appeal_id: string | null; appeal_status: "pending" | "accepted" | "rejected" | null;
       appeal_reason: string | null; appeal_resolution: string | null; appeal_created_at: Date | null; appeal_resolved_at: Date | null;
     }>(
-      `select ps.id, ps.status, ps.content, ps.score, ps.feedback, ps.submitted_at,
+      `select ps.id, ps.status, ps.content, ps.score, ps.feedback, ps.prompt_snapshot, ps.submitted_at,
               case when ps.feedback->>'source' = 'human' then 'manual' else case when ps.score is not null then 'ai' end end as grading_source,
               pa.id as appeal_id, pa.status as appeal_status, pa.reason as appeal_reason,
               pa.resolution as appeal_resolution, pa.created_at as appeal_created_at, pa.resolved_at as appeal_resolved_at
        from practice_submissions ps
        left join practice_appeals pa on pa.submission_id = ps.id
-       where ps.learner_id = $1 and ps.program_week_id = $2 limit 1`,
+       where ps.learner_id = $1 and ps.program_week_id = $2 and ps.superseded_at is null limit 1`,
+      [learnerId, context.weekId]
+    );
+    const history = await this.pool.query<{
+      id: string; week_id: string; week_number: number; topic: string; prompt_snapshot: Record<string, unknown>;
+      score: Record<string, unknown> | null; submitted_at: Date | null;
+    }>(
+      `select ps.id, pw.id as week_id, pw.week_number, pw.topic, ps.prompt_snapshot, ps.score, ps.submitted_at
+       from practice_submissions ps
+       join program_weeks pw on pw.id = ps.program_week_id
+       join programs p on p.id = pw.program_id
+       join enrollments e on e.program_id = p.id and e.learner_id = ps.learner_id
+       where ps.learner_id = $1 and ps.program_week_id <> $2 and ps.superseded_at is null
+       order by ps.submitted_at desc nulls last, pw.week_number desc
+       limit 24`,
       [learnerId, context.weekId]
     );
     const count = lessons.rows[0] ?? { total: "0", completed: "0" };
@@ -5688,7 +5724,13 @@ class EngagementRepository {
     const score = row?.score ?? null;
     const feedback = row?.feedback;
     const reviewState = row ? weeklyPracticeReviewState(row.status, row.score, row.grading_source, row.appeal_status) : undefined;
-    const practice = weeklyPracticeTask(context.topic, context.cefr);
+    const generatedPractice = weeklyPracticeTask(context.topic, context.cefr);
+    const storedPrompt = row?.prompt_snapshot ?? {};
+    const practice = {
+      inputMode: storedPrompt.inputMode === "dialogue" ? "dialogue" as const : generatedPractice.inputMode,
+      task: typeof storedPrompt.task === "string" ? storedPrompt.task : generatedPractice.task,
+      guidance: typeof storedPrompt.guidance === "string" ? storedPrompt.guidance : generatedPractice.guidance
+    };
     return {
       state, weekId: context.weekId, weekNumber: context.weekNumber, topic: context.topic,
       completedLessons, totalLessons,
@@ -5710,6 +5752,19 @@ class EngagementRepository {
         correctedText: feedback && typeof feedback === "object" ? String(feedback.correctedText ?? "") : ""
       } : null,
       ...(reviewState ? { reviewState } : {}),
+      history: history.rows.map((item) => ({
+        id: item.id,
+        weekId: item.week_id,
+        weekNumber: item.week_number,
+        topic: item.topic,
+        task: typeof item.prompt_snapshot.task === "string" ? item.prompt_snapshot.task : weeklyPracticeTask(item.topic, context.cefr).task,
+        submittedAt: item.submitted_at?.toISOString() ?? null,
+        score: item.score && typeof item.score.total === "number" ? {
+          total: item.score.total,
+          ...(item.score.rubric && typeof item.score.rubric === "object"
+            ? { rubric: item.score.rubric as { meaning: number; vocabulary: number; grammar: number } } : {})
+        } : null
+      })),
       appeal: row?.appeal_id ? {
         id: row.appeal_id,
         submissionId: row.id,
@@ -5725,6 +5780,8 @@ class EngagementRepository {
   async submitWeeklyPractice(input: { learnerId: string; requestId: string; text: string }): Promise<WeeklyPracticeView | null> {
     const view = await this.weeklyPractice(input.learnerId);
     if (!view || view.state === "locked") return null;
+    const requirements = await this.weeklyPracticeRequirements(input.learnerId);
+    if (!requirements) return null;
     const client = await this.pool.connect();
     try {
       await client.query("begin");
@@ -5734,30 +5791,33 @@ class EngagementRepository {
       );
       if (!existing.rows[0]) {
         const submissionId = randomUUID();
-        await client.query(
+        const inserted = await client.query(
           `insert into practice_submissions
-             (id, learner_id, program_week_id, status, content, request_key, submitted_at, updated_at)
-           values ($1, $2, $3, 'submitted', $4::jsonb, $5, now(), now())`,
+             (id, learner_id, program_week_id, status, content, request_key, prompt_snapshot, cefr_snapshot, vocabulary_snapshot, submitted_at, updated_at)
+           values ($1, $2, $3, 'submitted', $4::jsonb, $5, $6::jsonb, $7, $8::jsonb, now(), now())
+           on conflict (learner_id, program_week_id) where superseded_at is null do nothing
+           returning id`,
           [submissionId, input.learnerId, view.weekId, JSON.stringify({
             text: input.text,
             inputMode: view.inputMode ?? "write",
             type: view.inputMode === "dialogue" ? "dialogue" : "writing"
-          }), input.requestId]
+          }), input.requestId, JSON.stringify({ task: view.task, guidance: view.guidance, inputMode: view.inputMode ?? "write" }),
+          requirements.cefr, JSON.stringify(requirements.vocabulary)]
         );
-        await client.query(
+        if (inserted.rowCount) await client.query(
           `insert into reward_events (id, learner_id, badge_id, points, source_type, source_id)
            select $1, $2, b.id, 0, 'weekly_practice', $3
            from users u join badges b on b.organization_id = u.organization_id and b.badge_key = 'friday'
            where u.id = $2
-           on conflict (learner_id, source_type, source_id, badge_id) do nothing`,
+           on conflict do nothing`,
           [randomUUID(), input.learnerId, submissionId]
         );
-        await client.query(
+        if (inserted.rowCount) await client.query(
           `insert into activities (id, learner_id, activity_type, reference_type, reference_id, minutes, evidence)
            values ($1, $2, 'weekly_practice', 'practice_submission', $3, 10, $4::jsonb)`,
           [randomUUID(), input.learnerId, submissionId, JSON.stringify({ wordCount: input.text.trim().split(/\s+/).length })]
         );
-        await syncLearnerRewards(client, input.learnerId);
+        if (inserted.rowCount) await syncLearnerRewards(client, input.learnerId);
       }
       await client.query("commit");
     } catch (error) {
@@ -5815,10 +5875,14 @@ class EngagementRepository {
         promptVersionId: input.promptVersionId, output: input.output, metadata: input.metadata
       });
       if (inserted) {
+        const canonicalScore = {
+          ...input.output.score,
+          total: calculateWeeklyPracticeScore({ ...input.output.score.rubric, offTopic: false })
+        };
         await client.query(
           `update practice_submissions set score = $2::jsonb, feedback = $3::jsonb, updated_at = now()
            where id = $1`,
-          [submission.rows[0].id, JSON.stringify(input.output.score), JSON.stringify({
+          [submission.rows[0].id, JSON.stringify(canonicalScore), JSON.stringify({
             message: input.output.feedback, source: "ai", suggestions: input.output.suggestions,
             correctedText: input.output.correctedText, aiRunId: runId
           })]
