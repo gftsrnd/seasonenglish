@@ -9183,11 +9183,19 @@ async function syncLearnerRewards(db: Pool | PoolClient, learnerId: string): Pro
     `insert into reward_events (id, learner_id, badge_id, points, source_type, source_id)
      select gen_random_uuid(), a.learner_id, null,
        case a.activity_type when 'lesson' then 10 when 'micro_lesson' then 5
-         when 'coach' then 2 when 'weekly_practice' then 20 when 'game' then 5 when 'assessment' then 10 else 0 end,
+         when 'coach' then 2 when 'weekly_practice' then 15 when 'game' then 5 when 'assessment' then 10 else 0 end,
        'activity_points', a.id
      from activities a
      where a.learner_id = $1
-       and (a.activity_type <> 'coach' or coalesce((a.evidence->>'relevant')::boolean, false))
+       and (a.activity_type <> 'coach' or coalesce(
+         (a.evidence->>'countsTowardGoal')::boolean,
+         (a.evidence->>'relevant')::boolean,
+         false
+       ))
+       and not (a.activity_type = 'coach' and exists (
+         select 1 from coach_turns ct join coach_sessions cs on cs.id = ct.session_id
+         where ct.id = a.reference_id and coalesce(cs.scenario->>'kind', 'practice') = 'level_up'
+       ))
        and not exists (select 1 from reward_events re where re.learner_id = a.learner_id
          and re.source_type = 'activity_points' and re.source_id = a.id and re.badge_id is null)`,
     [learnerId]
@@ -9216,6 +9224,23 @@ async function syncLearnerRewards(db: Pool | PoolClient, learnerId: string): Pro
       "select distinct occurred_at::date::text as day from activities where learner_id = $1 order by day", [learnerId]
     )
   ]);
+  await db.query(
+    `insert into reward_events (id, learner_id, badge_id, points, source_type, source_id)
+     select gen_random_uuid(), $1, null, 20, 'full_week_bonus', completed.program_week_id
+     from (
+       select pw.id as program_week_id
+       from program_weeks pw
+       join enrollments e on e.program_id = pw.program_id and e.learner_id = $1
+       join lesson_sets ls on ls.program_week_id = pw.id and ls.cefr = e.cefr
+       join lesson_set_versions lsv on lsv.lesson_set_id = ls.id and lsv.status = 'published'
+       join lessons l on l.lesson_set_version_id = lsv.id
+       left join progress_records pr on pr.lesson_id = l.id and pr.learner_id = $1 and pr.status = 'completed'
+       group by pw.id
+       having count(l.id) >= 5 and count(pr.id) = count(l.id)
+     ) completed
+     on conflict (learner_id, source_type, source_id) where badge_id is null do nothing`,
+    [learnerId]
+  );
   const earned = new Set<string>();
   if (Number(lessons.rows[0]?.count ?? 0) >= 1) earned.add("starter");
   if (completeWeek.rowCount) earned.add("week_complete");
@@ -9231,7 +9256,8 @@ async function syncLearnerRewards(db: Pool | PoolClient, learnerId: string): Pro
       `insert into reward_events (id, learner_id, badge_id, points, source_type, source_id)
        select gen_random_uuid(), $1, b.id, 0, 'achievement', $1
        from users u join badges b on b.organization_id = u.organization_id and b.badge_key = $2
-       where u.id = $1 and not exists (select 1 from reward_events re where re.learner_id = $1 and re.badge_id = b.id)`,
+       where u.id = $1
+       on conflict (learner_id, badge_id) where badge_id is not null do nothing`,
       [learnerId, badgeKey]
     );
   }

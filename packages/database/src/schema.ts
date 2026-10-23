@@ -405,7 +405,12 @@ export const badges = pgTable("badges", {
 export const rewardEvents = pgTable("reward_events", {
   id: uuid("id").primaryKey(), learnerId: uuid("learner_id").notNull().references(() => users.id), badgeId: uuid("badge_id").references(() => badges.id),
   points: integer("points").notNull().default(0), sourceType: text("source_type").notNull(), sourceId: uuid("source_id").notNull(), createdAt: now()
-}, (table) => ({ learnerSource: uniqueIndex("reward_events_learner_source_unique").on(table.learnerId, table.sourceType, table.sourceId) }));
+}, (table) => ({
+  pointsBusinessKey: uniqueIndex("reward_events_points_business_key_unique")
+    .on(table.learnerId, table.sourceType, table.sourceId).where(sql`${table.badgeId} is null`),
+  badgeBusinessKey: uniqueIndex("reward_events_badge_business_key_unique")
+    .on(table.learnerId, table.badgeId).where(sql`${table.badgeId} is not null`)
+}));
 
 export const gameSets = pgTable("game_sets", {
   id: uuid("id").primaryKey(), programWeekId: uuid("program_week_id").references(() => programWeeks.id), gameKey: text("game_key").notNull(),
