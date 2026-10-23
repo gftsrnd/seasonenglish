@@ -175,4 +175,46 @@ describe("weekly lesson generation orchestration", () => {
     });
     expect(generated.result.metadata.usage).toEqual({ inputTokens: 2_000, outputTokens: 4_000, totalTokens: 6_000 });
   });
+
+  it("continues when the grammar classifier abstains for vocabulary-oriented lesson focuses", async () => {
+    const insufficientEvidence = {
+      status: "insufficient_evidence", contentType: null, targetName: null, scope: null,
+      support: "none", confidence: "low", evidence: [], rejectedCandidates: []
+    };
+    const noSuitableContent = {
+      status: "no_suitable_content", contentType: null, targetName: null, scope: null,
+      support: "none", confidence: "high", evidence: [], rejectedCandidates: []
+    };
+    const runTask = vi.fn(async (
+      taskId: string,
+      input: unknown,
+      _options?: { systemPrompt?: string; maxOutputTokens?: number }
+    ) => {
+      const dayNumber = (input as { dayNumber: number }).dayNumber;
+      if (taskId === "weekly_lesson_grammar_classifier") {
+        return { output: dayNumber === 1 ? insufficientEvidence : dayNumber === 5 ? noSuitableContent : grammarClassification, metadata };
+      }
+      if (taskId === "weekly_lesson_foundation") return { output: foundation, metadata };
+      if (taskId === "weekly_lesson_vocabulary") return { output: vocabularyForDay(dayNumber), metadata };
+      if (taskId === "weekly_lesson_skills") return { output: skills, metadata };
+      throw new Error(`UNEXPECTED_TASK:${taskId}`);
+    });
+    const runner = { runTask } as unknown as AiTaskRunner;
+    const week = {
+      weekNumber: 2,
+      topic: "Scheduling meetings",
+      description: "Arrange and reschedule workplace meetings",
+      objectives: "Use useful meeting phrases",
+      keyVocabHint: "available, calendar, reschedule",
+      plan: { A1: ["meeting vocabulary", "Are you free on Monday?", "Can we meet at 10?", "Let me check my calendar.", "review vocabulary"] }
+    } as ContentWeekInput;
+
+    const generated = await generateWeeklyLessons(week, "A1", { prompt: "Generate lessons." }, runner);
+
+    expect(generated.lessons).toHaveLength(5);
+    const foundationCalls = runTask.mock.calls.filter((call) => call[0] === "weekly_lesson_foundation");
+    expect((foundationCalls[0]?.[1] as { grammarClassification: { status: string } }).grammarClassification.status).toBe("insufficient_evidence");
+    expect((foundationCalls[4]?.[1] as { grammarClassification: { status: string } }).grammarClassification.status).toBe("no_suitable_content");
+    expect(foundationCalls.every((call) => call[2]?.systemPrompt?.includes("derive one narrow CEFR-appropriate sentence frame"))).toBe(true);
+  });
 });

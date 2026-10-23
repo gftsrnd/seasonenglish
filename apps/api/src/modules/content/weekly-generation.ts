@@ -20,6 +20,8 @@ const SKILLS_OUTPUT_TOKEN_LIMIT = 2_000;
 const FOUNDATION_CONTRACT = [
   "Generate only the compact foundation fields required by the strict tool schema for ONE learner-facing lesson.",
   "Use lessonFocus as the exact teaching focus and allLessonFocuses only to avoid repetition.",
+  "If grammarClassification.status is classified, use that narrow target without broadening its scope.",
+  "If grammarClassification.status is no_suitable_content or insufficient_evidence, derive one narrow CEFR-appropriate sentence frame from lessonFocus and topic so the lesson remains teachable; do not invent an unrelated tense, exception, or advanced grammar rule.",
   "title must name the concrete sentence frame taught by lessonFocus (for example 'It is + adjective' or 'Could I + V?'); never use a generic placeholder such as 'S + V', 'S + V + O', or repeat the same title across days.",
   "objective.items must contain 2-4 measurable objectives. Exactly one is type content; the others are language objectives.",
   "Every objective text starts with SWBAT, uses an observable verb, and has an explicit condition, criterion, and assessmentCode. Cover both listening and speaking.",
@@ -93,10 +95,6 @@ export async function generateWeeklyLessons(
       maxOutputTokens: GRAMMAR_CLASSIFIER_OUTPUT_TOKEN_LIMIT
     });
     const output = parseComponent(weeklyLessonGrammarClassificationOutputSchema, result.output, input.dayNumber, "grammarClassification");
-    if (output.status !== "classified") throwInvalid(
-      [{ path: ["grammarClassification"], message: output.status }],
-      `day${input.dayNumber}`
-    );
     return { result, output };
   }));
 
