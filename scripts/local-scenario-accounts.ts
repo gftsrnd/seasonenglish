@@ -1,4 +1,5 @@
 import type { Client } from "pg";
+import type { GameWordView } from "../packages/contracts/src/engagement-contract.js";
 import { createCredentialHash, createPinHash } from "../packages/domain/src/identity/index.js";
 import { DEMO_IDS } from "../packages/database/src/seed.js";
 
@@ -266,18 +267,38 @@ async function seedReminderAndAppealScenarios(client: Client) {
 
 async function seedLearningScenarios(client: Client) {
   const byKey = new Map(LOCAL_SCENARIO_ACCOUNTS.map((account) => [account.key, account]));
-  const activeA2LessonIds = await ensurePublishedScenarioLessons(client, "A2");
+  const referenceA2LessonIds = await ensurePublishedScenarioLessons(client, "A2");
   await ensurePublishedScenarioLessons(client, "B1");
+  const sets = await publishedScenarioLessonSets(client);
+  const currentWeek = await client.query<{ id: string }>(
+    `select pw.id from programs p join program_weeks pw on pw.program_id = p.id
+       and pw.week_number = coalesce(p.current_week_override,
+         least(p.week_count, greatest(1, floor((current_date - p.start_date) / 7.0)::int + 1)))
+     where p.id = $1`, [DEMO_IDS.program]
+  );
+  const activeA2LessonIds = sets.find((set) => set.cefr === "A2" && set.weekId === currentWeek.rows[0]?.id)
+    ?.lessons.map((lesson) => lesson.id) ?? referenceA2LessonIds;
+  await seedScenarioGameSets(client, sets);
   const completeKeys = ["learner-weekly", "learner-level-ready", "learner-history"];
   for (const key of completeKeys) {
     const account = byKey.get(key)!;
-    for (const [index, lessonId] of activeA2LessonIds.entries()) {
+    const lessonIds = key === "learner-level-ready"
+      ? sets.filter((set) => set.cefr === "A2").flatMap((set) => set.lessons.map((lesson) => lesson.id))
+      : activeA2LessonIds;
+    for (const [index, lessonId] of lessonIds.entries()) {
+      const partCodes = ["listening", "reading", "writing", "word_class", "word_use", "speaking"];
+      const evidence = Object.fromEntries(partCodes.map((code) => [code, { attempts: 1, score: 100, status: "correct" }]));
       await client.query(
         `insert into progress_records
            (id, learner_id, lesson_id, status, score, evidence, started_at, completed_at)
          values (gen_random_uuid(), $1, $2, 'completed', $3, $4::jsonb,
            now() - interval '2 days', now() - interval '1 day')`,
-        [account.id, lessonId, key === "learner-level-ready" ? 95 : 88, JSON.stringify({ fixture: key, completedPartCodes: ["listening", "reading", "writing", "speaking"], attempts: index + 1 })]
+        [account.id, lessonId, key === "learner-level-ready" ? 100 : 88, JSON.stringify({ fixture: key, completedPartCodes: partCodes, evidence })]
+      );
+      await client.query(
+        `insert into activities (id, learner_id, activity_type, reference_type, reference_id, minutes, evidence, occurred_at)
+         values (gen_random_uuid(), $1, 'lesson', 'lesson', $2, 10, $3::jsonb, now() - interval '1 day' - make_interval(hours => $4))`,
+        [account.id, lessonId, JSON.stringify({ fixture: key }), index]
       );
     }
   }
@@ -285,8 +306,118 @@ async function seedLearningScenarios(client: Client) {
   await client.query(
     `insert into progress_records (id, learner_id, lesson_id, status, score, evidence, started_at)
      values (gen_random_uuid(), $1, $2, 'in_progress', 40, $3::jsonb, now() - interval '1 hour')`,
-    [attemptsAccount.id, activeA2LessonIds[0] ?? DEMO_IDS.lessons[0], JSON.stringify({ fixture: attemptsAccount.key, attempts: 2, lastIncorrect: true })]
+    [attemptsAccount.id, activeA2LessonIds[0] ?? DEMO_IDS.lessons[0], JSON.stringify({ fixture: attemptsAccount.key, completedPartCodes: [], evidence: {
+      listening: { attempts: 2, status: "wrong_exhausted", score: 0, answer: "Incorrect scenario answer", feedback: "Đã hết lượt thử. Xem đáp án hoặc gửi kháng nghị." }
+    } })]
   );
+  for (const attemptNumber of [1, 2]) {
+    await client.query(
+      `insert into lesson_part_attempts (id, learner_id, lesson_id, part_code, request_key, attempt_number, status, answer, score, feedback)
+       values (gen_random_uuid(), $1, $2, 'listening', gen_random_uuid(), $3, $4, 'Incorrect scenario answer', 0, 'Nghe lại rồi kiểm tra đáp án.')`,
+      [attemptsAccount.id, activeA2LessonIds[0], attemptNumber, attemptNumber === 1 ? "wrong_retry" : "wrong_exhausted"]
+    );
+  }
+  await seedLevelReadyEvidence(client, byKey.get("learner-level-ready")!, sets);
+}
+
+type ScenarioLessonSet = {
+  weekId: string; topic: string; cefr: "A2" | "B1";
+  lessons: Array<{ id: string; content: { parts?: Array<{ code: string; content: { items?: Array<Record<string, unknown>> } }> } }>;
+};
+
+async function publishedScenarioLessonSets(client: Client): Promise<ScenarioLessonSet[]> {
+  const result = await client.query<{
+    week_id: string; topic: string; cefr: "A2" | "B1"; lesson_id: string; content: ScenarioLessonSet["lessons"][number]["content"];
+  }>(
+    `select pw.id as week_id, pw.topic, ls.cefr, l.id as lesson_id, lv.content
+     from program_weeks pw join lesson_sets ls on ls.program_week_id = pw.id and ls.cefr in ('A2', 'B1')
+     join lateral (select id from lesson_set_versions where lesson_set_id = ls.id and status = 'published'
+       order by published_at desc nulls last, version desc limit 1) lsv on true
+     join lessons l on l.lesson_set_version_id = lsv.id
+     join lateral (select content from lesson_versions where lesson_id = l.id and status = 'published'
+       order by version desc limit 1) lv on true
+     where pw.program_id = $1 order by pw.week_number, ls.cefr, l.day_number`,
+    [DEMO_IDS.program]
+  );
+  const sets = new Map<string, ScenarioLessonSet>();
+  for (const row of result.rows) {
+    const key = `${row.week_id}:${row.cefr}`;
+    const set: ScenarioLessonSet = sets.get(key) ?? { weekId: row.week_id, topic: row.topic, cefr: row.cefr, lessons: [] };
+    set.lessons.push({ id: row.lesson_id, content: row.content });
+    sets.set(key, set);
+  }
+  return [...sets.values()];
+}
+
+function scenarioGameWords(set: ScenarioLessonSet): GameWordView[] {
+  const words = new Map<string, GameWordView>();
+  const wordTypes: Record<string, string> = {
+    "danh từ": "noun", "động từ": "verb", "tính từ": "adjective", "trạng từ": "adverb", "giới từ": "preposition", "cụm từ": "phrase"
+  };
+  for (const lesson of set.lessons) {
+    const items = lesson.content.parts?.find((part) => part.code === "vocabulary")?.content.items ?? [];
+    for (const item of items) {
+      if (typeof item.word !== "string" || !item.word.trim() || typeof item.meaning !== "string" || !item.meaning.trim()) continue;
+      const english = item.word.trim();
+      const key = english.toLowerCase();
+      if (words.has(key)) continue;
+      const rawType = String(item.partOfSpeech ?? item.type ?? "phrase").toLowerCase();
+      const partOfSpeech = wordTypes[rawType] ?? (["noun", "verb", "adjective", "adverb", "preposition", "phrase"].includes(rawType) ? rawType : "phrase");
+      words.set(key, {
+        id: `word-${words.size + 1}`, english, vietnamese: item.meaning.trim(),
+        definition: typeof item.definition === "string" && item.definition.trim() ? item.definition.trim() : item.meaning.trim(),
+        partOfSpeech,
+        ...(typeof item.imageQuery === "string" ? { imageQuery: item.imageQuery } : {})
+      });
+    }
+  }
+  return [...words.values()];
+}
+
+async function seedScenarioGameSets(client: Client, sets: ScenarioLessonSet[]) {
+  for (const account of LOCAL_SCENARIO_ACCOUNTS.filter((item) => item.role === "learner" && item.cefrApproved)) {
+    for (const set of sets.filter((item) => item.cefr === account.cefr && item.lessons.length === 5)) {
+      const words = scenarioGameWords(set);
+      if (!words.length) throw new Error(`SCENARIO_GAME_VOCABULARY_MISSING:${account.key}:${set.weekId}`);
+      await client.query(
+        `insert into game_sets (id, program_week_id, learner_id, game_key, status, payload)
+         values (md5($1 || ':' || $2 || ':scenario-games')::uuid, $2::uuid, $1::uuid, 'weekly_vocabulary', 'published', $3::jsonb)`,
+        [account.id, set.weekId, JSON.stringify({ source: "scenario-deploy-seed", topic: set.topic, cefr: set.cefr, words })]
+      );
+    }
+  }
+}
+
+async function seedLevelReadyEvidence(client: Client, account: LocalScenarioAccount, sets: ScenarioLessonSet[]) {
+  for (const set of sets.filter((item) => item.cefr === account.cefr && item.lessons.length === 5)) {
+    const vocabulary = scenarioGameWords(set).map((word) => word.english);
+    const text = vocabulary.slice(0, 3).map((word) => `I practise the expression "${word}" at work.`).join(" ");
+    await client.query(
+      `insert into practice_submissions (id, learner_id, program_week_id, status, content, score, feedback,
+        cefr_snapshot, vocabulary_snapshot, submitted_at, reviewed_at)
+       values (gen_random_uuid(), $1, $2, 'reviewed', $3::jsonb,
+         '{"total":100,"rubric":{"meaning":5,"vocabulary":5,"grammar":5}}'::jsonb,
+         '{"source":"human","message":"Bài mẫu tình huống đã được chấm tay."}'::jsonb, $4, $5::jsonb, now(), now())`,
+      [account.id, set.weekId, JSON.stringify({ text, fixture: account.key }), account.cefr, JSON.stringify(vocabulary)]
+    );
+  }
+  const sessionId = account.id.replace("20000000", "26000000");
+  await client.query(
+    `insert into coach_sessions (id, learner_id, scenario, status, completed_at)
+     values ($1, $2, '{"kind":"practice","title":"Luyện nói tình huống công việc"}'::jsonb, 'completed', now())`,
+    [sessionId, account.id]
+  );
+  for (const [index, text] of [
+    "I work with the product team.", "My role is to help customers.", "We have a meeting every morning.",
+    "Could you repeat the question, please?", "I will check the schedule today.", "The next step is to confirm the plan."
+  ].entries()) {
+    await client.query(
+      `insert into coach_turns (id, session_id, turn_number, speaker, content, feedback)
+       values (gen_random_uuid(), $1, $2, 'learner', $3::jsonb,
+         '{"relevant":true,"evaluation":{"countsTowardGoal":true},"rubric":{"meaning":5,"vocabulary":5,"grammar":5}}'::jsonb)`,
+      [sessionId, index + 1, JSON.stringify({ text, fixture: account.key })]
+    );
+  }
 }
 
 async function ensurePublishedScenarioLessons(client: Client, cefr: "A2" | "B1"): Promise<string[]> {

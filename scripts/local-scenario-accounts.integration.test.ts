@@ -1,6 +1,6 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { Client } from "pg";
-import { DEMO_IDS, migrateDatabase, resetPublicSchema, seedDemo } from "../packages/database/src/index.js";
+import { Client, Pool } from "pg";
+import { createRepositories, DEMO_IDS, migrateDatabase, resetPublicSchema, seedDemo } from "../packages/database/src/index.js";
 import { LOCAL_SCENARIO_ACCOUNTS, seedLocalScenarioAccounts } from "./local-scenario-accounts.js";
 
 const databaseUrl = process.env.TEST_DATABASE_URL
@@ -8,6 +8,8 @@ const databaseUrl = process.env.TEST_DATABASE_URL
 
 describe("local scenario account states", () => {
   const client = new Client({ connectionString: databaseUrl });
+  const pool = new Pool({ connectionString: databaseUrl });
+  const repositories = createRepositories(pool);
 
   beforeAll(async () => {
     await client.connect();
@@ -17,7 +19,7 @@ describe("local scenario account states", () => {
     await seedLocalScenarioAccounts(client);
   }, 30_000);
 
-  afterAll(async () => { await client.end(); });
+  afterAll(async () => { await pool.end(); await client.end(); });
 
   it("seeds exactly the approved human identities", async () => {
     const ids = LOCAL_SCENARIO_ACCOUNTS.map(({ id }) => id);
@@ -80,11 +82,16 @@ describe("local scenario account states", () => {
 
   it("is idempotent and repairs a missing B1 lesson", async () => {
     const ids = LOCAL_SCENARIO_ACCOUNTS.map(({ id }) => id);
-    const counts = async () => (await client.query<{ users: number; enrollments: number; progress: number }>(
+    const counts = async () => (await client.query<Record<string, number>>(
       `select
         (select count(*)::int from users where id = any($1::uuid[])) as users,
         (select count(*)::int from enrollments where learner_id = any($1::uuid[])) as enrollments,
-        (select count(*)::int from progress_records where learner_id = any($1::uuid[])) as progress`,
+        (select count(*)::int from progress_records where learner_id = any($1::uuid[])) as progress,
+        (select count(*)::int from game_sets where learner_id = any($1::uuid[])) as game_sets,
+        (select count(*)::int from lesson_part_attempts where learner_id = any($1::uuid[])) as part_attempts,
+        (select count(*)::int from practice_submissions where learner_id = any($1::uuid[])) as practice,
+        (select count(*)::int from coach_turns where session_id in
+          (select id from coach_sessions where learner_id = any($1::uuid[]))) as coach_turns`,
       [ids]
     )).rows[0];
     const before = await counts();
@@ -117,5 +124,112 @@ describe("local scenario account states", () => {
       { email: "anh.tuan.ho@scenario.e4s.local", source: "ai", sections: 2 },
       { email: "my.linh.duong@scenario.e4s.local", source: "human", sections: 2 }
     ]);
+  });
+
+  it("makes all approved learners playable while preserving placement and onboarding gates", async () => {
+    const expected = [
+      ["learner-onboarding-new", null, null, 0], ["learner-placement-new", null, null, 0],
+      ["learner-placement-listening", null, null, 0], ["learner-placement-reading", null, null, 0],
+      ["learner-placement-writing", null, null, 0], ["learner-placement-speaking", null, null, 0],
+      ["learner-placement-submitted", null, null, 0], ["learner-placement-review", null, null, 0],
+      ["learner-placement-borderline", null, null, 0], ["learner-appeal", null, null, 0],
+      ["learner-lesson-b1", "B1", "locked", 0], ["learner-lesson-attempts", "A2", "locked", 0],
+      ["learner-weekly", "A2", "open", 5], ["learner-level-ready", "A2", "reviewed", 5],
+      ["learner-history", "A2", "open", 5], ["learner-reminder", "A2", "locked", 0]
+    ] as const;
+    for (const [key, cefr, practiceState, completed] of expected) {
+      const account = LOCAL_SCENARIO_ACCOUNTS.find((item) => item.key === key)!;
+      const hub = await repositories.engagement.gameHub(account.id);
+      const practice = await repositories.engagement.weeklyPractice(account.id);
+      if (!cefr) {
+        expect(hub, key).toBeNull();
+        expect(practice, key).toBeNull();
+        continue;
+      }
+      expect(hub, key).toMatchObject({ cefr, wordSet: { topic: expect.any(String) } });
+      expect(hub?.wordSet?.words.length, key).toBeGreaterThanOrEqual(12);
+      expect(new Set(hub?.wordSet?.words.map((word) => word.english.toLowerCase())).size, key)
+        .toBe(hub?.wordSet?.words.length);
+      for (const word of hub!.wordSet!.words) {
+        expect(word, key).toMatchObject({ id: expect.any(String), english: expect.any(String), vietnamese: expect.any(String), definition: expect.any(String), partOfSpeech: expect.any(String) });
+        expect(word.english.length, key).toBeGreaterThan(0);
+        expect(word.vietnamese.length, key).toBeGreaterThan(0);
+      }
+      expect(practice, key).toMatchObject({ state: practiceState, totalLessons: 5, completedLessons: completed });
+    }
+  });
+
+  it("exposes actual failed part attempts and first-try evidence to learner screens", async () => {
+    const account = LOCAL_SCENARIO_ACCOUNTS.find(({ key }) => key === "learner-lesson-attempts")!;
+    const lesson = await repositories.learning.findLesson(account.id, DEMO_IDS.lessons[0]);
+    expect(lesson?.progress.evidence.listening).toMatchObject({ attempts: 2, score: 0 });
+    const attempts = await client.query("select * from lesson_part_attempts where learner_id = $1 and part_code = 'listening' order by attempt_number", [account.id]);
+    expect(attempts.rows).toHaveLength(2);
+    expect(attempts.rows.map((row) => row.attempt_number)).toEqual([1, 2]);
+  });
+
+  it("makes the ready-for-level-up account eligible using real progress, practice and coach evidence", async () => {
+    const account = LOCAL_SCENARIO_ACCOUNTS.find(({ key }) => key === "learner-level-ready")!;
+    const dashboard = await repositories.learning.getProgressDashboard(account.id);
+    expect(dashboard?.levelReadiness).toMatchObject({ eligible: true, examAvailable: true });
+    expect(dashboard?.levelReadiness.criteria.every((criterion) => criterion.met)).toBe(true);
+  });
+
+  it("repairs missing game sets on reseed without changing real-user game data", async () => {
+    const weekly = LOCAL_SCENARIO_ACCOUNTS.find(({ key }) => key === "learner-weekly")!;
+    const first = await repositories.engagement.gameHub(weekly.id);
+    const unrelatedId = "25000000-0000-4000-8000-000000000099";
+    await client.query(`insert into game_sets (id, program_week_id, learner_id, game_key, status, payload)
+      values ($1, $2, $3, 'weekly_vocabulary', 'published', '{"topic":"User topic","words":[]}'::jsonb)`,
+    [unrelatedId, DEMO_IDS.week, DEMO_IDS.learner]);
+    try {
+      await client.query("delete from game_sets where learner_id = $1", [weekly.id]);
+      await seedLocalScenarioAccounts(client);
+      const repaired = await repositories.engagement.gameHub(weekly.id);
+      expect(repaired?.wordSet?.words.length).toBeGreaterThanOrEqual(12);
+      expect(repaired?.wordSet?.id).toBe(first?.wordSet?.id);
+      expect((await client.query("select payload from game_sets where id = $1", [unrelatedId])).rows)
+        .toEqual([{ payload: { topic: "User topic", words: [] } }]);
+    } finally {
+      await client.query("delete from game_sets where id = $1", [unrelatedId]);
+    }
+  });
+
+  it("uses the current published week for scenario progress and game vocabulary", async () => {
+    const setId = "27000000-0000-4000-8000-000000000001";
+    const versionId = "27000000-0000-4000-8000-000000000002";
+    const weekly = LOCAL_SCENARIO_ACCOUNTS.find(({ key }) => key === "learner-weekly")!;
+    const attempts = LOCAL_SCENARIO_ACCOUNTS.find(({ key }) => key === "learner-lesson-attempts")!;
+    await client.query("insert into lesson_sets (id, program_week_id, cefr) values ($1, $2, 'A2')", [setId, DEMO_IDS.week2]);
+    await client.query(`insert into lesson_set_versions (id, lesson_set_id, version, status, payload, published_at)
+      values ($1, $2, 1, 'published', '{}'::jsonb, now())`, [versionId, setId]);
+    const lessons = await client.query<{ id: string }>(
+      `insert into lessons (id, lesson_set_version_id, day_number, title)
+       select gen_random_uuid(), $1, day_number, title from lessons where lesson_set_version_id = $2 returning id`,
+      [versionId, DEMO_IDS.publishedLessonSetVersion]
+    );
+    await client.query(`insert into lesson_versions (id, lesson_id, version, status, content)
+      select gen_random_uuid(), l.id, 1, 'published', lv.content
+      from lessons l join lessons source on source.day_number = l.day_number and source.lesson_set_version_id = $2
+      join lesson_versions lv on lv.lesson_id = source.id and lv.status = 'published'
+      where l.lesson_set_version_id = $1`, [versionId, DEMO_IDS.publishedLessonSetVersion]);
+    await client.query("update programs set current_week_override = 2 where id = $1", [DEMO_IDS.program]);
+    try {
+      await seedLocalScenarioAccounts(client);
+      expect(await repositories.engagement.weeklyPractice(weekly.id))
+        .toMatchObject({ weekId: DEMO_IDS.week2, completedLessons: 5, totalLessons: 5, state: "open" });
+      expect((await repositories.engagement.gameHub(weekly.id))?.wordSet?.topic).toBe("Emails & rescheduling meetings");
+      const progress = await client.query<{ lesson_id: string }>("select lesson_id from progress_records where learner_id = $1", [attempts.id]);
+      expect(lessons.rows.map((lesson) => lesson.id)).toContain(progress.rows[0]?.lesson_id);
+      expect((await repositories.learning.getProgressDashboard(LOCAL_SCENARIO_ACCOUNTS.find(({ key }) => key === "learner-level-ready")!.id))?.levelReadiness.eligible).toBe(true);
+    } finally {
+      await client.query("update programs set current_week_override = null where id = $1", [DEMO_IDS.program]);
+      await client.query("delete from lesson_part_attempts where lesson_id = any($1::uuid[])", [lessons.rows.map((lesson) => lesson.id)]);
+      await client.query("delete from progress_records where lesson_id = any($1::uuid[])", [lessons.rows.map((lesson) => lesson.id)]);
+      await client.query("delete from game_sets where program_week_id = $1", [DEMO_IDS.week2]);
+      await client.query("delete from practice_submissions where program_week_id = $1", [DEMO_IDS.week2]);
+      await client.query("update lesson_set_versions set status = 'retired' where id = $1", [versionId]);
+      await seedLocalScenarioAccounts(client);
+    }
   });
 });
