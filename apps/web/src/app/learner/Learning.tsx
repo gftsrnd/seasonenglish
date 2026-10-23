@@ -174,6 +174,7 @@ export function LearnerLesson({ view, actions }: { view: LessonView; actions: Le
       ]));
       await actions.saveLessonProgress({ ...lesson.progress, status: "completed", completedPartCodes, evidence: localEvidence });
       setCompletedLocally(true);
+      if (lesson.progress.status !== "completed") actions.navigate("/home");
     } catch {
       setError("Chưa ghi nhận được bài học. Nội dung vẫn được giữ để bạn thử lại.");
     } finally {

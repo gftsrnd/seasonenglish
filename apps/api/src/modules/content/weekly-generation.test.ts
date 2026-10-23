@@ -217,4 +217,43 @@ describe("weekly lesson generation orchestration", () => {
     expect((foundationCalls[4]?.[1] as { grammarClassification: { status: string } }).grammarClassification.status).toBe("no_suitable_content");
     expect(foundationCalls.every((call) => call[2]?.systemPrompt?.includes("derive one narrow CEFR-appropriate sentence frame"))).toBe(true);
   });
+
+  it("normalizes otherwise valid AI objectives instead of aborting the whole weekly set", async () => {
+    const foundationWithUnobservableVerbs = {
+      ...foundation,
+      objective: {
+        ...foundation.objective,
+        explanationLanguage: "en",
+        items: [
+          { ...foundation.objective.items[0]!, type: "language", text: "SWBAT understand two feedback details after listening.", assessmentCode: "reading" },
+          { ...foundation.objective.items[1]!, type: "language", text: "SWBAT communicate one feedback sentence in a role-play.", assessmentCode: "writing" }
+        ]
+      }
+    };
+    const runTask = vi.fn(async (taskId: string, input: unknown) => {
+      const dayNumber = (input as { dayNumber: number }).dayNumber;
+      if (taskId === "weekly_lesson_grammar_classifier") return { output: grammarClassification, metadata };
+      if (taskId === "weekly_lesson_foundation") return { output: foundationWithUnobservableVerbs, metadata };
+      if (taskId === "weekly_lesson_vocabulary") return { output: vocabularyForDay(dayNumber), metadata };
+      if (taskId === "weekly_lesson_skills") return { output: skills, metadata };
+      throw new Error(`UNEXPECTED_TASK:${taskId}`);
+    });
+    const week = {
+      weekNumber: 1,
+      topic: "Giving project updates",
+      description: "Report progress in a weekly meeting",
+      objectives: "Report progress and risks",
+      keyVocabHint: "on track, blocker, next steps",
+      plan: { A1: ["day one", "day two", "day three", "day four", "day five"] }
+    } as ContentWeekInput;
+
+    const generated = await generateWeeklyLessons(week, "A1", { prompt: "Generate lessons." }, { runTask } as unknown as AiTaskRunner);
+    const objectives = generated.lessons[0]?.parts.find((part) => part.code === "objective")?.content.items as Array<{ type: string; text: string; assessmentCode: string }>;
+
+    expect(generated.lessons).toHaveLength(5);
+    expect(objectives).toEqual([
+      expect.objectContaining({ type: "content", assessmentCode: "listening", text: expect.stringMatching(/^SWBAT use\b/i) }),
+      expect.objectContaining({ type: "language", assessmentCode: "speaking", text: expect.stringMatching(/^SWBAT use\b/i) })
+    ]);
+  });
 });

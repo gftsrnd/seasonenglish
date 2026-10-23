@@ -283,14 +283,17 @@ export interface AssessmentRecorderProps {
   view: AssessmentView;
   actions: LearnerCallbacks;
   onEvidence: (input: SaveAssessmentResponseInput) => void | Promise<void>;
+  onBusyChange?: (taskKey: string, busy: boolean) => void;
 }
 
 /** Speaking evidence control shared by microphone recording and file upload. */
-export function AssessmentRecorder({ taskKey, view, actions, onEvidence }: AssessmentRecorderProps) {
+export function AssessmentRecorder({ taskKey, view, actions, onEvidence, onBusyChange }: AssessmentRecorderProps) {
   const { holdMusic } = useExperience();
   const recorder = useRef<MediaRecorder | null>(null);
   const stream = useRef<MediaStream | null>(null);
   const chunks = useRef<Blob[]>([]);
+  const playback = useRef<HTMLAudioElement | null>(null);
+  const holdMusicRef = useRef(holdMusic);
   const [recording, setRecording] = useState(false);
   const [recordingSeconds, setRecordingSeconds] = useState(0);
   const [busy, setBusy] = useState(false);
@@ -307,11 +310,23 @@ export function AssessmentRecorder({ taskKey, view, actions, onEvidence }: Asses
     return () => window.clearInterval(timer);
   }, [recording]);
 
+  useEffect(() => { holdMusicRef.current = holdMusic; }, [holdMusic]);
+
+  useEffect(() => {
+    onBusyChange?.(taskKey, busy || recording);
+    return () => onBusyChange?.(taskKey, false);
+  }, [busy, onBusyChange, recording, taskKey]);
+
   useEffect(() => () => {
+    playback.current?.pause();
     stream.current?.getTracks().forEach((track) => track.stop());
-    if (audioUrl) URL.revokeObjectURL(audioUrl);
-    holdMusic(false);
-  }, [audioUrl, holdMusic]);
+    holdMusicRef.current(false);
+  }, []);
+
+  useEffect(() => {
+    if (!audioUrl) return;
+    return () => URL.revokeObjectURL(audioUrl);
+  }, [audioUrl]);
 
   const submitAudio = async (file: Blob, name: string, value: string) => {
     const validationError = validateAssessmentAudio(file, name);
@@ -338,6 +353,8 @@ export function AssessmentRecorder({ taskKey, view, actions, onEvidence }: Asses
   const startRecording = async () => {
     if (!canRecord) return;
     setError(undefined); setBusy(true);
+    playback.current?.pause();
+    playback.current = null;
     let nextStream: MediaStream | undefined;
     try {
       const acquiredStream = await navigator.mediaDevices.getUserMedia({ audio: true });
@@ -345,6 +362,13 @@ export function AssessmentRecorder({ taskKey, view, actions, onEvidence }: Asses
       const nextRecorder = new MediaRecorder(acquiredStream);
       stream.current = acquiredStream; recorder.current = nextRecorder; chunks.current = [];
       nextRecorder.ondataavailable = (event) => { if (event.data.size) chunks.current.push(event.data); };
+      nextRecorder.onerror = () => {
+        acquiredStream.getTracks().forEach((track) => track.stop());
+        stream.current = null; recorder.current = null; holdMusic(false);
+        setRecording(false); setBusy(false);
+        setError("Ghi âm bị gián đoạn. Hãy thử lại hoặc tải file ghi âm.");
+        setFileName("Chưa có file ghi âm");
+      };
       nextRecorder.onstop = () => {
         acquiredStream.getTracks().forEach((track) => track.stop());
         stream.current = null; recorder.current = null; holdMusic(false);
@@ -378,10 +402,26 @@ export function AssessmentRecorder({ taskKey, view, actions, onEvidence }: Asses
   const replayAudio = async () => {
     if (!audioUrl || busy) return;
     setError(undefined);
+    playback.current?.pause();
+    holdMusic(true);
+    const audio = new Audio(audioUrl);
+    playback.current = audio;
+    let finished = false;
+    const finish = () => {
+      if (finished) return;
+      finished = true;
+      if (playback.current === audio) playback.current = null;
+      holdMusic(false);
+    };
+    audio.onended = finish;
+    audio.onerror = () => {
+      finish();
+      setError("Không phát lại được file ghi âm. Hãy thử lại.");
+    };
     try {
-      const audio = new Audio(audioUrl);
       await audio.play();
     } catch {
+      finish();
       setError("Không phát lại được file ghi âm. Hãy thử lại.");
     }
   };

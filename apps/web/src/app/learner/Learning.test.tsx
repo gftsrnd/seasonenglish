@@ -308,6 +308,7 @@ describe("learner lesson study content", () => {
   it("allows a study-only lesson to complete after the study gate", async () => {
     const user = userEvent.setup();
     const saveLessonProgress = vi.fn().mockResolvedValue(undefined);
+    const navigate = vi.fn();
     const studyOnlyLesson = {
       id: "lesson-study-only",
       title: "Bài chỉ học",
@@ -320,7 +321,7 @@ describe("learner lesson study content", () => {
       ] },
       progress: { status: "in_progress", completedPartCodes: [], evidence: {} }
     } as any;
-    render(<LearnerLesson view={{ lesson: studyOnlyLesson, lock: null }} actions={{ navigate: vi.fn(), speak: vi.fn(), saveLessonProgress } as any} />);
+    render(<LearnerLesson view={{ lesson: studyOnlyLesson, lock: null }} actions={{ navigate, speak: vi.fn(), saveLessonProgress } as any} />);
 
     const finishStudy = screen.getByRole("button", { name: /đã học xong.*làm bài tập/i });
     expect(finishStudy.querySelector("svg.lucide-circle-check-big, svg.lucide-check-circle-2")).toBeInTheDocument();
@@ -329,5 +330,6 @@ describe("learner lesson study content", () => {
     expect(complete).toBeEnabled();
     await user.click(complete);
     expect(saveLessonProgress).toHaveBeenLastCalledWith(expect.objectContaining({ status: "completed" }));
+    expect(navigate).toHaveBeenCalledWith("/home");
   });
 });

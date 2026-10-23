@@ -104,7 +104,10 @@ export async function generateWeeklyLessons(
       systemPrompt: `${task.prompt}\n\n${FOUNDATION_CONTRACT}`,
       maxOutputTokens: FOUNDATION_OUTPUT_TOKEN_LIMIT
     });
-    const output = parseComponent(weeklyLessonFoundationOutputSchema, result.output, input.dayNumber, "foundation");
+    const output = normalizeFoundationObjectives(
+      parseComponent(weeklyLessonFoundationOutputSchema, result.output, input.dayNumber, "foundation"),
+      input.cefr
+    );
     const objectiveValidation = validateLessonObjectives({
       cefr: input.cefr as "A1" | "A2" | "B1" | "B2" | "C1",
       explanationLanguage: output.objective.explanationLanguage,
@@ -286,6 +289,35 @@ type Foundation = ReturnType<typeof weeklyLessonFoundationOutputSchema.parse>;
 type Vocabulary = ReturnType<typeof weeklyLessonVocabularyOutputSchema.parse>;
 type Skills = ReturnType<typeof weeklyLessonSkillsOutputSchema.parse>;
 type VocabularyItem = Vocabulary["word1"];
+
+const OBSERVABLE_OBJECTIVE_VERB = /\b(?:identify|select|match|list|describe|ask|answer|write|say|give|use|compare|summarize|complete|respond|present|pronounce|produce|distinguish)\b/i;
+
+function normalizeFoundationObjectives(foundation: Foundation, cefr: string): Foundation {
+  const items = foundation.objective.items.map((objective) => ({
+    ...objective,
+    text: normalizeObjectiveText(objective.text)
+  }));
+  if (items.filter(({ type }) => type === "content").length !== 1) {
+    items.forEach((objective, index) => { objective.type = index === 0 ? "content" : "language"; });
+  }
+  const mapped = new Set(items.map(({ assessmentCode }) => assessmentCode));
+  if (!mapped.has("listening") && items[0]) items[0].assessmentCode = "listening";
+  if (!mapped.has("speaking") && items[1]) items[1].assessmentCode = "speaking";
+  return {
+    ...foundation,
+    objective: {
+      ...foundation.objective,
+      explanationLanguage: cefr === "A1" || cefr === "A2" ? "vi" : "en",
+      items
+    }
+  };
+}
+
+function normalizeObjectiveText(value: string): string {
+  const body = value.trim().replace(/^SWBAT\s+/i, "");
+  const text = `SWBAT ${body}`;
+  return OBSERVABLE_OBJECTIVE_VERB.test(text) ? text : `SWBAT use English to ${body}`;
+}
 
 function buildLesson(dayNumber: number, foundation: Foundation, vocabulary: Vocabulary, skills: Skills) {
   return {

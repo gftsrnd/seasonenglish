@@ -296,7 +296,10 @@ describe("assessment HCI states", () => {
     render(<LearnerAssessment view={makeView()} actions={makeActions({ saveAssessmentResponse, completeAssessmentSection })} />);
 
     fireEvent.click(screen.getByRole("radio", { name: "A" }));
-    fireEvent.click(screen.getByRole("button", { name: /nộp phần nghe/i }));
+    const submitSection = screen.getByRole("button", { name: /nộp phần nghe/i });
+    await act(async () => { await Promise.resolve(); });
+    expect(submitSection).toBeEnabled();
+    fireEvent.click(submitSection);
     fireEvent.click(screen.getByRole("button", { name: "Nộp phần này" }));
     await finishSubmitCountdown();
 
@@ -314,7 +317,10 @@ describe("assessment HCI states", () => {
     render(<LearnerAssessment view={makeView()} actions={makeActions({ saveAssessmentResponse, completeAssessmentSection })} />);
 
     fireEvent.click(screen.getByRole("radio", { name: "A" }));
-    fireEvent.click(screen.getByRole("button", { name: /nộp phần nghe/i }));
+    const submitSection = screen.getByRole("button", { name: /nộp phần nghe/i });
+    await act(async () => { await Promise.resolve(); });
+    expect(submitSection).toBeEnabled();
+    fireEvent.click(submitSection);
     fireEvent.click(screen.getByRole("button", { name: "Nộp phần này" }));
     await finishSubmitCountdown();
 
@@ -397,20 +403,30 @@ describe("assessment HCI states", () => {
     vi.stubGlobal("MediaRecorder", FakeMediaRecorder);
     vi.spyOn(URL, "createObjectURL").mockReturnValue("blob:voice");
     vi.spyOn(URL, "revokeObjectURL").mockImplementation(() => undefined);
+    const playRecording = vi.spyOn(HTMLMediaElement.prototype, "play").mockResolvedValue(undefined);
     const uploadAssessmentAudio = vi.fn().mockResolvedValue("evidence/S3.webm");
     const onEvidence = vi.fn().mockResolvedValue(undefined);
+    const onBusyChange = vi.fn();
 
-    render(<ExperienceProvider musicAllowed={false}><AssessmentRecorder taskKey="S3" view={makeView({ screenState: "speaking" })} actions={makeActions({ uploadAssessmentAudio })} onEvidence={onEvidence} /></ExperienceProvider>);
+    render(<ExperienceProvider musicAllowed={false}><AssessmentRecorder taskKey="S3" view={makeView({ screenState: "speaking" })} actions={makeActions({ uploadAssessmentAudio })} onEvidence={onEvidence} onBusyChange={onBusyChange} /></ExperienceProvider>);
 
     await user.click(screen.getByRole("button", { name: "Ghi âm" }));
     expect(screen.getByRole("button", { name: "Dừng ghi" })).toBeInTheDocument();
     expect(screen.getByText(/Đang ghi âm · 00:00/)).toBeInTheDocument();
     expect(screen.queryByText("Chưa có file ghi âm")).not.toBeInTheDocument();
+    expect(stopTrack).not.toHaveBeenCalled();
+    expect(onBusyChange).toHaveBeenLastCalledWith("S3", true);
 
     await user.click(screen.getByRole("button", { name: "Dừng ghi" }));
     expect(await screen.findByText(/Đã lưu S3-/)).toBeInTheDocument();
     expect(uploadAssessmentAudio).toHaveBeenCalledTimes(1);
     expect(onEvidence).toHaveBeenCalledWith(expect.objectContaining({ evidenceType: "audio", artifactKey: "evidence/S3.webm" }));
+    expect(URL.revokeObjectURL).not.toHaveBeenCalledWith("blob:voice");
+    expect(onBusyChange).toHaveBeenLastCalledWith("S3", false);
+
+    await user.click(screen.getByRole("button", { name: "Nghe lại ghi âm" }));
+    expect(playRecording).toHaveBeenCalledTimes(1);
+    expect(screen.queryByText("Không phát lại được file ghi âm. Hãy thử lại.")).not.toBeInTheDocument();
   });
 
   it("rejects unsupported and oversized speaking files before upload", async () => {

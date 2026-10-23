@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type ReactNode } from "react";
+import { useCallback, useEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type ReactNode } from "react";
 import { Ban, CheckCircle2, Clock3, Headphones, Mic, Sprout, Volume2 } from "lucide-react";
 import type { AssessmentResponseView, AssessmentSectionCode, AssessmentTaskView, SaveAssessmentResponseInput } from "@e4s/contracts";
 import type { AssessmentView, LearnerCallbacks } from "./contracts.js";
@@ -12,10 +12,13 @@ const soundCheckText = "Đây là câu kiểm tra âm thanh. Nếu bạn nghe r�
 
 export function LearnerAssessment({ view, actions }: { view: AssessmentView; actions: LearnerCallbacks }) {
   const experience = useExperience();
+  const holdMusicRef = useRef(experience.holdMusic);
   const [local, setLocal] = useState<Record<string, string>>(() => Object.fromEntries((view.attempt?.responses ?? []).map((item) => [item.taskKey, item.value])));
   const [busy, setBusy] = useState(false);
   const [savingCount, setSavingCount] = useState(0);
   const savingCountRef = useRef(0);
+  const audioBusyTasksRef = useRef(new Set<string>());
+  const [audioBusyCount, setAudioBusyCount] = useState(0);
   const latestInputsRef = useRef<Record<string, SaveAssessmentResponseInput>>(Object.fromEntries(
     (view.attempt?.responses ?? []).map((response) => [responseDraftKey(response.section, response.taskKey), responseInput(response)])
   ));
@@ -30,11 +33,13 @@ export function LearnerAssessment({ view, actions }: { view: AssessmentView; act
   const definition = view.definition;
   const targetLevel = assessmentTargetLevel(view);
 
+  useEffect(() => { holdMusicRef.current = experience.holdMusic; }, [experience.holdMusic]);
+
   useEffect(() => {
     const listening = view.screenState === "listening";
-    experience.holdMusic(listening);
-    return () => experience.holdMusic(false);
-  }, [experience, view.screenState]);
+    holdMusicRef.current(listening);
+    return () => holdMusicRef.current(false);
+  }, [view.screenState]);
 
   useEffect(() => {
     setLocal(Object.fromEntries((view.attempt?.responses ?? []).map((item) => [item.taskKey, item.value])));
@@ -44,7 +49,15 @@ export function LearnerAssessment({ view, actions }: { view: AssessmentView; act
     setLocalError(undefined);
     setSavingCount(0);
     savingCountRef.current = 0;
+    audioBusyTasksRef.current.clear();
+    setAudioBusyCount(0);
   }, [view.attempt?.id]);
+
+  const onAudioBusyChange = useCallback((taskKey: string, pending: boolean) => {
+    if (pending) audioBusyTasksRef.current.add(taskKey);
+    else audioBusyTasksRef.current.delete(taskKey);
+    setAudioBusyCount(audioBusyTasksRef.current.size);
+  }, []);
 
   const checkSound = () => {
     setLocalError(undefined);
@@ -146,9 +159,9 @@ export function LearnerAssessment({ view, actions }: { view: AssessmentView; act
   const complete = async () => {
     if (busy) return;
     const deadline = Date.now() + 6_000;
-    while (savingCountRef.current > 0 && Date.now() < deadline) await new Promise((resolve) => window.setTimeout(resolve, 50));
-    if (savingCountRef.current > 0) {
-      setLocalError("Đang lưu câu trả lời. Hãy chờ một chút rồi nộp lại.");
+    while ((savingCountRef.current > 0 || audioBusyTasksRef.current.size > 0) && Date.now() < deadline) await new Promise((resolve) => window.setTimeout(resolve, 50));
+    if (savingCountRef.current > 0 || audioBusyTasksRef.current.size > 0) {
+      setLocalError("Đang lưu câu trả lời hoặc file ghi âm. Hãy chờ một chút rồi nộp lại.");
       return;
     }
     setBusy(true); setLocalError(undefined);
@@ -172,13 +185,13 @@ export function LearnerAssessment({ view, actions }: { view: AssessmentView; act
   };
   return <AssessmentRuntime view={view} actions={actions}>{(runtime) => <>
     <ActiveAssessment
-    view={view} actions={actions} section={section} sectionIndex={sectionIndex} runtime={runtime} local={local} busy={busy} savingCount={savingCount}
-    error={view.submitError ?? localError} onSave={(task, input) => void save(task, input)} onComplete={() => void complete()}
+    view={view} actions={actions} section={section} sectionIndex={sectionIndex} runtime={runtime} local={local} busy={busy} savingCount={savingCount} audioBusyCount={audioBusyCount}
+    error={view.submitError ?? localError} onSave={(task, input) => void save(task, input)} onComplete={() => void complete()} onAudioBusyChange={onAudioBusyChange}
     />
   </>}</AssessmentRuntime>;
 }
 
-function ActiveAssessment({ view, actions, section, sectionIndex, runtime, local, busy, savingCount, error, onSave, onComplete }: {
+function ActiveAssessment({ view, actions, section, sectionIndex, runtime, local, busy, savingCount, audioBusyCount, error, onSave, onComplete, onAudioBusyChange }: {
   view: AssessmentView;
   actions: LearnerCallbacks;
   section: AssessmentView["definition"]["sections"][number];
@@ -187,9 +200,11 @@ function ActiveAssessment({ view, actions, section, sectionIndex, runtime, local
   local: Record<string, string>;
   busy: boolean;
   savingCount: number;
+  audioBusyCount: number;
   error: string | undefined;
   onSave: (task: AssessmentTaskView, input: SaveAssessmentResponseInput) => void;
   onComplete: () => void;
+  onAudioBusyChange: (taskKey: string, busy: boolean) => void;
 }) {
   const attempt = view.attempt!;
   const [submitConfirm, setSubmitConfirm] = useState(false);
@@ -215,7 +230,7 @@ function ActiveAssessment({ view, actions, section, sectionIndex, runtime, local
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
   }, [submitConfirm, submitCountdown]);
-  const submitDisabled = busy || submitCountdown !== null;
+  const submitDisabled = busy || submitCountdown !== null || savingCount > 0 || audioBusyCount > 0;
   const completionWarning = assessmentCompletionWarning(section, local, attempt.responses);
   return <>
   <div className="app-learner-page test-page">
@@ -258,7 +273,7 @@ function ActiveAssessment({ view, actions, section, sectionIndex, runtime, local
         }} /> : null}
         {group.tasks.map((task, index) => {
           const response = findResponse(attempt.responses, section.code, task.key);
-          return <Task key={task.key} task={task} number={index + 1} value={local[task.key] ?? response?.value ?? ""} response={response} view={view} actions={actions} section={section.code} showHeading={section.code !== "writing" && section.code !== "speaking"} onSave={(input) => onSave(task, input)} />;
+          return <Task key={task.key} task={task} number={index + 1} value={local[task.key] ?? response?.value ?? ""} response={response} view={view} actions={actions} section={section.code} showHeading={section.code !== "writing" && section.code !== "speaking"} onSave={(input) => onSave(task, input)} onAudioBusyChange={onAudioBusyChange} />;
         })}
       </div>
     </section>)}
@@ -419,7 +434,7 @@ function Stimulus({ stimulus, maxPlays, played, onPlay }: { stimulus: Assessment
   </>;
 }
 
-function Task({ task, number, value, response, view, actions, section, showHeading = true, onSave }: { task: AssessmentTaskView; number: number; value: string; response: AssessmentResponseView | undefined; view: AssessmentView; actions: LearnerCallbacks; section: AssessmentSectionCode; showHeading?: boolean; onSave: (input: SaveAssessmentResponseInput) => void }) {
+function Task({ task, number, value, response, view, actions, section, showHeading = true, onSave, onAudioBusyChange }: { task: AssessmentTaskView; number: number; value: string; response: AssessmentResponseView | undefined; view: AssessmentView; actions: LearnerCallbacks; section: AssessmentSectionCode; showHeading?: boolean; onSave: (input: SaveAssessmentResponseInput) => void; onAudioBusyChange: (taskKey: string, busy: boolean) => void }) {
   const promptId = `assessment-task-${task.key}-prompt`;
   const hintId = `assessment-task-${task.key}-hint`;
   const [typedProxyEnabled, setTypedProxyEnabled] = useState(response?.evidenceType === "typed_proxy");
@@ -439,7 +454,7 @@ function Task({ task, number, value, response, view, actions, section, showHeadi
       {wordTarget ? <div className="assessment-word-count" aria-live="polite">{wordCount(value)} / {wordTarget} từ</div> : null}
     </>}
     {answerHint ? <span id={hintId} className="sr-only">{answerHint}</span> : null}
-    {task.responseType === "speaking_evidence" ? <AssessmentRecorder taskKey={task.key} view={view} actions={actions} onEvidence={onSave} /> : null}
+    {task.responseType === "speaking_evidence" ? <AssessmentRecorder taskKey={task.key} view={view} actions={actions} onEvidence={onSave} onBusyChange={onAudioBusyChange} /> : null}
   </article>;
 }
 
