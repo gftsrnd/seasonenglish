@@ -2,6 +2,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { Client, Pool } from "pg";
 import { createRepositories, DEMO_IDS, migrateDatabase, resetPublicSchema, seedDemo } from "../packages/database/src/index.js";
 import { LOCAL_SCENARIO_ACCOUNTS, seedLocalScenarioAccounts } from "./local-scenario-accounts.js";
+import { isLearnerProfileComplete } from "../packages/domain/src/learning/index.js";
 
 const databaseUrl = process.env.TEST_DATABASE_URL
   ?? "postgres://e4s:e4s_test_password@127.0.0.1:55432/e4s_test";
@@ -39,6 +40,8 @@ describe("local scenario account states", () => {
       [onboarding.id]
     );
     expect(profile.rows[0]?.completed_at).toBeNull();
+    const onboardingProfile = await repositories.learning.getProfile(onboarding.id);
+    expect(isLearnerProfileComplete(onboardingProfile!.profile)).toBe(false);
 
     const result = await client.query<{ email: string; status: string; current_section: string }>(
       `select u.email, aa.status, aa.current_section

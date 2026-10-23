@@ -129,6 +129,7 @@ async function resetScenarioRows(client: Client) {
 }
 
 function profileFor(account: LocalScenarioAccount) {
+  if (account.onboarding) return { fullName: account.displayName, email: account.email };
   return {
     fullName: account.displayName,
     email: account.email,
@@ -178,6 +179,7 @@ export async function seedLocalScenarioAccounts(client: Client) {
         `insert into learner_profiles (user_id, profile, completed_at)
          values ($1, $2::jsonb, $3)
          on conflict (user_id) do update set profile = excluded.profile, completed_at = excluded.completed_at,
+           draft_profile = null, draft_updated_at = null,
            version = learner_profiles.version + 1, updated_at = now()`,
         [account.id, JSON.stringify(profileFor(account)), account.onboarding ? null : new Date()]
       );
