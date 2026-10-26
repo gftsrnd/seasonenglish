@@ -204,6 +204,65 @@ describe("assessment HCI states", () => {
     expect(equipment.querySelector('[data-equipment="sound"]')).toHaveClass("is-ready");
   });
 
+  it("lets each device card run the same check as its text button", async () => {
+    const user = userEvent.setup();
+    const speak = vi.fn();
+    const stop = vi.fn();
+    const getUserMedia = vi.fn().mockResolvedValue({
+      getAudioTracks: () => [{ stop }],
+      getTracks: () => [{ stop }]
+    });
+    Object.defineProperty(navigator, "mediaDevices", {
+      configurable: true,
+      value: { getUserMedia }
+    });
+    render(<LearnerAssessment view={makeView({ screenState: "preparation", attempt: null })} actions={makeActions({ speak })} />);
+
+    await user.click(screen.getByRole("button", { name: "Thử tai nghe" }));
+    expect(speak).toHaveBeenCalledWith(
+      "Đây là câu kiểm tra âm thanh. Nếu bạn nghe rõ câu này, tai nghe của bạn đã sẵn sàng.",
+      "vi-VN",
+      expect.objectContaining({ audioSrc: "/media/audio/sound-check-vi.mp3", onStatus: expect.any(Function) })
+    );
+
+    await user.click(screen.getByRole("button", { name: "Thử micro" }));
+    expect(getUserMedia).toHaveBeenCalledWith({ audio: true });
+    expect(screen.getByRole("status", { name: "Trạng thái micro" })).toHaveTextContent("Micro sẵn sàng ✓");
+  });
+
+  it("disables both microphone triggers while the device card check is running", async () => {
+    const user = userEvent.setup();
+    const stop = vi.fn();
+    let resolveStream!: (stream: { getAudioTracks: () => Array<{ stop: () => void }>; getTracks: () => Array<{ stop: () => void }> }) => void;
+    const getUserMedia = vi.fn().mockReturnValue(new Promise((resolve) => {
+      resolveStream = resolve;
+    }));
+    Object.defineProperty(navigator, "mediaDevices", {
+      configurable: true,
+      value: { getUserMedia }
+    });
+    render(<LearnerAssessment view={makeView({ screenState: "preparation", attempt: null })} actions={makeActions()} />);
+
+    const microphoneCard = screen.getByRole("button", { name: "Thử micro" });
+    const microphoneTextButton = screen.getByRole("button", { name: "Kiểm tra micro" });
+    await user.click(microphoneCard);
+
+    expect(microphoneCard).toBeDisabled();
+    expect(microphoneTextButton).toBeDisabled();
+    await user.click(microphoneCard);
+    expect(getUserMedia).toHaveBeenCalledTimes(1);
+
+    await act(async () => {
+      resolveStream({
+        getAudioTracks: () => [{ stop }],
+        getTracks: () => [{ stop }]
+      });
+      await Promise.resolve();
+    });
+    expect(microphoneCard).toBeEnabled();
+    expect(microphoneTextButton).toBeEnabled();
+  });
+
   it("requires confirmation before starting the assessment", async () => {
     const user = userEvent.setup();
     const actions = makeActions();

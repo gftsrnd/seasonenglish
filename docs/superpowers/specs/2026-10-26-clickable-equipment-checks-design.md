@@ -8,6 +8,7 @@ Let learners start either preparation check from the matching device card, not o
 
 - Preserve both existing text buttons and all current preparation/start behavior.
 - Turn each device card into a keyboard-accessible button with a clear accessible name.
+- Preserve the current shape, size, spacing, colours, and icon/text layout of both device cards.
 - Reuse `checkSound` and `checkMicrophoneForTest`; do not introduce duplicate state or a second check path.
 - Keep the microphone card unavailable while its check is already running.
 - Do not add a requirement to complete either or both checks before starting the assessment.

@@ -63,7 +63,7 @@
 main{color:var(--bg-ink)}
 main .muted,main small,main .eyebrow{color:var(--bg-muted)}
 main a{color:inherit;text-decoration-color:currentColor}
-.card,.panel,.dialog,.report,.item,.opt,.tile,.hero,.welcome,.msg,.usercard,.role,.banner,.word-card,.stat,.party,.cert,.cheat,.correction,.bubble,.vocab .w,.rubric .r,.bdg,.setup .st,.arena-row,.prep > span,.tabs,.ltabs,.chat,.xw,.toast,.topbar,.bottomnav{color:var(--text)}
+.card,.panel,.dialog,.report,.item,.opt,.tile,.hero,.welcome,.msg,.usercard,.role,.banner,.word-card,.stat,.party,.cert,.cheat,.correction,.bubble,.vocab .w,.rubric .r,.bdg,.setup .st,.arena-row,.prep > .prep-device,.tabs,.ltabs,.chat,.xw,.toast,.topbar,.bottomnav{color:var(--text)}
 .card .muted,.card small,.card .eyebrow,.panel .muted,.panel small,.panel .eyebrow,.dialog .muted,.dialog small,.dialog .eyebrow,.report .muted,.report small,.report .eyebrow,.item .muted,.item small,.opt .muted,.opt small,.tile .muted,.tile small,.hero .muted,.hero small,.hero .eyebrow,.welcome .muted,.welcome small,.welcome .eyebrow,.msg .muted,.msg small,.usercard .muted,.usercard small,.role .muted,.role small,.banner .muted,.banner small,.stat .muted,.stat small,.party .muted,.party small,.party .eyebrow,.cert .muted,.cert small,.cert .eyebrow,.cheat .muted,.cheat small,.correction .muted,.bubble .muted,.bdg .muted,.bdg small,.setup .st .muted,.setup .st small,.arena-row .muted,.arena-row small,.topbar .muted,.topbar small,.chat .muted,.chat small{color:var(--muted)}
 .card a,.panel a,.dialog a,.item a,.opt a,.hero a,.banner a,.report a,.welcome a,.msg a,.correction a{text-decoration-color:var(--accent)}
 .card .eyebrow,.panel .eyebrow,.dialog .eyebrow,.hero .eyebrow,.welcome .eyebrow,.party .eyebrow,.cert .eyebrow{color:var(--muted)}
@@ -414,7 +414,9 @@ td input,td select{min-height:40px;padding:8px 12px}
 .setup .why{font-size:.88rem;margin:4px 0 8px}
 .setup .why b{font-weight:600}
 .prep{gap:10px}
-.prep > span{display:inline-flex;flex-direction:column;align-items:center;gap:4px;padding:10px 16px;border:0;border-radius:16px;background:var(--surface-2);font-size:.75rem;font-weight:500}
+.prep > .prep-device{display:inline-flex;flex-direction:column;align-items:center;gap:4px;padding:10px 16px;border:0;border-radius:16px;background:var(--surface-2);font:inherit;font-size:.75rem;font-weight:500;cursor:pointer;appearance:none}
+.prep > .prep-device:focus-visible{outline:2px solid var(--primary);outline-offset:2px}
+.prep > .prep-device:disabled{opacity:1;cursor:wait}
 .prep svg{width:30px;height:30px}
 .party{position:relative;overflow:hidden;text-align:center;background:var(--primary);color:var(--primary-ink);border:0;border-radius:28px;padding:30px 18px 24px}
 .party h1{color:inherit;font-size:2rem;margin:6px 0 4px}
@@ -603,7 +605,7 @@ label.field > span{font-size:.8rem;color:var(--muted)}
 .setup .st{border-radius:12px;background:var(--surface);box-shadow:inset 0 0 0 1px var(--line)}
 .setup .st.cur{box-shadow:inset 0 0 0 2px var(--primary)}
 .setup .num{background:var(--surface-3)}
-.prep > span{border-radius:10px}
+.prep > .prep-device{border-radius:10px}
 .party{background:var(--surface);color:var(--text);border:1px solid var(--line);border-radius:var(--radius);padding:26px 18px}
 .party .crown{background:var(--primary-soft);box-shadow:inset 0 0 0 1px var(--primary-line)}
 .cert{border-radius:12px}
@@ -667,7 +669,7 @@ h1,h2,h3,h4,h1 b,h2 b,h3 b,h4 b{font-weight:600 !important}
 @media (min-width:961px){.topbar .userchip .audio-ctl{width:100%;justify-content:flex-start;margin-bottom:4px}}
 /* assessment equipment checks: keep the two checks compact while making their result scannable */
 .test-page .prep{align-items:flex-start;gap:8px;margin-top:12px}
-.test-page .prep > span{min-width:78px;align-self:flex-start;justify-content:center;padding:10px 12px}
+.test-page .prep > .prep-device{min-width:78px;align-self:flex-start;justify-content:center;padding:10px 12px}
 .test-page .prep-device.is-ready{background:var(--ok-soft);color:var(--olive-dark);box-shadow:inset 0 0 0 1px var(--ok-line)}
 .test-page .prep-checks{flex:1;min-width:240px;gap:6px}
 .test-page .prep-check{gap:8px;min-height:32px}
@@ -766,7 +768,7 @@ h1,h2,h3,h4,h1 b,h2 b,h3 b,h4 b{font-weight:600 !important}
 .test-page .assessment-audio-controls .btn-sm{display:inline-flex;align-items:center;gap:6px}
 .app-learner-page .onboarding-test-note{display:flex;width:fit-content;max-width:100%;align-items:center;gap:8px;margin:10px 0 0;padding:8px 10px;border:1px solid var(--line);border-radius:10px;background:var(--surface-2);color:var(--text);font-size:.88rem;line-height:1.35;flex-wrap:wrap}.app-learner-page .onboarding-test-note svg{color:var(--primary);flex:0 0 auto}.app-learner-page .onboarding-test-note span{display:inline-flex;gap:5px;align-items:baseline}.app-learner-page .onboarding-test-note span span{color:var(--muted)}.app-learner-page .onboarding-test-note-separator{color:var(--muted);font-weight:700}
 .speaking-evidence-controls .btn-danger{background:var(--danger-soft);box-shadow:inset 0 0 0 1px var(--danger-line);color:var(--danger)}
-@media(max-width:720px){.test-page .prep > span{flex:1;min-width:0}.test-page .prep-checks{flex-basis:100%;min-width:0}}
+@media(max-width:720px){.test-page .prep > .prep-device{flex:1;min-width:0}.test-page .prep-checks{flex-basis:100%;min-width:0}}
 @media(max-width:720px){.assessment-toast{bottom:16px;width:calc(100vw - 24px);padding:11px 12px;font-size:.86rem}}
 /* certificate of completion: a framed document */
 .cert-doc{position:relative;background:var(--surface);border:1px solid var(--border);padding:34px 40px 28px;max-width:860px;margin:0 auto;color:var(--text)}
