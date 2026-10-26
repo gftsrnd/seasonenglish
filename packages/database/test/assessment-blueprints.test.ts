@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { placementDefinition } from "../src/assessment-blueprints.js";
+import { levelUpDefinition, placementDefinition } from "../src/assessment-blueprints.js";
 
 const section = (code: string) => {
   const value = placementDefinition.sections.find((candidate) => candidate.code === code);
@@ -8,6 +8,10 @@ const section = (code: string) => {
 };
 
 describe("placement assessment blueprint", () => {
+  it("uses definition version 2 for the corrected Listening 2 mapping", () => {
+    expect(placementDefinition.version).toBe(2);
+  });
+
   it("matches the approved 75-minute section schedule", () => {
     expect(placementDefinition.totalMinutes).toBe(75);
     expect(placementDefinition.sections.map(({ code, durationMinutes }) => [code, durationMinutes])).toEqual([
@@ -29,7 +33,7 @@ describe("placement assessment blueprint", () => {
       ...Array(5).fill(2)
     ]);
     expect(listeningTasks.map((task) => task.correctAnswer)).toEqual([
-      "B", "B", "C", "B", "C", "B", "B", "A", "B", "C", "C", "B", "A", "C", "B"
+      "B", "B", "C", "C", "B", "B", "B", "A", "B", "C", "C", "B", "A", "C", "B"
     ]);
 
     const readingTasks = section("reading").groups.flatMap((group) => group.tasks);
@@ -75,6 +79,32 @@ describe("placement assessment blueprint", () => {
       "She cannot understand the language used in the customer's message.",
       "She cannot contact her supervisor."
     ]);
+  });
+
+  it("moves the former Listening 1 question 4 to global question 6 in Listening 2 exactly once", () => {
+    const listening = section("listening");
+    const taskEntries = listening.groups.flatMap((group) => group.tasks.map((task) => ({ groupKey: group.key, task })));
+    const moved = taskEntries.filter(({ task }) => task.prompt === "Who should the listener contact?");
+
+    expect(listening.groups.map((group) => group.tasks.length)).toEqual([4, 6, 5]);
+    expect(moved).toHaveLength(1);
+    expect(moved[0]).toMatchObject({ groupKey: "LB", task: { key: "LB_Q6", maxScore: 1, correctAnswer: "B" } });
+    expect(taskEntries[5]).toMatchObject({ groupKey: "LB", task: { key: "LB_Q6" } });
+    expect(taskEntries).toHaveLength(15);
+    expect(new Set(taskEntries.map(({ task }) => task.key)).size).toBe(15);
+    expect(taskEntries.reduce((sum, { task }) => sum + task.maxScore, 0)).toBe(20);
+
+    const partA = listening.groups.find((group) => group.key === "LA");
+    const partB = listening.groups.find((group) => group.key === "LB");
+    expect(partA?.stimulus?.lines?.map((line) => line.text).join(" ")).not.toContain("speak to Sarah");
+    expect(partB?.stimulus?.lines?.map((line) => line.text).join(" ")).toContain("speak to Sarah");
+  });
+
+  it("keeps the separate level-up listening section at five equally weighted questions", () => {
+    const listening = levelUpDefinition.sections.find((candidate) => candidate.code === "listening")!;
+    const tasks = listening.groups.flatMap((group) => group.tasks);
+    expect(tasks).toHaveLength(5);
+    expect(tasks.reduce((sum, task) => sum + task.maxScore, 0)).toBe(listening.maxScore);
   });
 
   it("keeps the approved reading passages and non-committal refund answer", () => {

@@ -9,6 +9,7 @@ import type { LearnerCallbacks, LessonView } from "../src/app/learner/contracts.
 
 afterEach(() => {
   cleanup();
+  vi.restoreAllMocks();
   vi.unstubAllGlobals();
   Reflect.deleteProperty(window, "speechSynthesis");
 });
@@ -257,8 +258,11 @@ describe("app lesson evidence states", () => {
       .mockRejectedValueOnce(new Error("UPLOAD_FAILED"))
       .mockResolvedValue("lesson-audio/learner-1/speaking.webm");
     const submit = vi.fn().mockResolvedValue({
-      evidence: { attempts: 1, status: "correct", answer: "I present the update.", artifactKey: "lesson-audio/learner-1/speaking.webm" },
-      progress: lesson.progress
+      evidence: { attempts: 1, status: "correct", artifactKey: "lesson-audio/learner-1/speaking.webm", feedback: "Đã nhận và chấm bản ghi âm." },
+      progress: {
+        ...lesson.progress,
+        evidence: { speaking: { attempts: 1, status: "correct", artifactKey: "lesson-audio/learner-1/speaking.webm", feedback: "Đã nhận và chấm bản ghi âm." } }
+      }
     });
     const mediaLesson: LessonView["lesson"] = {
       ...lesson,
@@ -285,16 +289,74 @@ describe("app lesson evidence states", () => {
     expect(upload).toHaveBeenCalledTimes(2);
     expect(await screen.findByText(/đã tải file ghi âm/i)).toBeInTheDocument();
 
-    await user.type(screen.getByLabelText(/câu trả lời speaking/i), "I present the update.");
     const speaking = screen.getAllByTestId("app-lesson-part").find((part) => part.dataset.part === "speaking");
-    await user.click(within(speaking as HTMLElement).getByRole("button", { name: /kiểm tra nói/i }));
+    const checkSpeaking = within(speaking as HTMLElement).getByRole("button", { name: /kiểm tra nói/i });
+    expect(checkSpeaking).toBeEnabled();
+    await user.click(checkSpeaking);
     expect(submit).toHaveBeenCalledWith("speaking", {
-      answer: "I present the update.",
+      answer: "",
       artifactKey: "lesson-audio/learner-1/speaking.webm"
     });
+    expect(await screen.findByText("Đã nhận và chấm bản ghi âm.")).toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: /nghe đoạn audio/i }));
     expect(screen.getByText(/không phát được âm thanh|không hỗ trợ đọc văn bản/i)).toBeInTheDocument();
+  });
+
+  it("enables speaking grading after recording directly and displays returned feedback", async () => {
+    const user = userEvent.setup();
+    const track = { stop: vi.fn() };
+    const getUserMedia = vi.fn().mockResolvedValue({ getTracks: () => [track] });
+    vi.stubGlobal("navigator", { ...navigator, mediaDevices: { getUserMedia } });
+
+    class FakeMediaRecorder {
+      static instance: FakeMediaRecorder | undefined;
+      mimeType = "audio/webm";
+      ondataavailable: ((event: { data: Blob }) => void) | null = null;
+      onerror: (() => void) | null = null;
+      onstop: (() => void) | null = null;
+      constructor() { FakeMediaRecorder.instance = this; }
+      start() {}
+      stop() {
+        this.ondataavailable?.({ data: new Blob(["voice"], { type: "audio/webm" }) });
+        this.onstop?.();
+      }
+    }
+    vi.stubGlobal("MediaRecorder", FakeMediaRecorder);
+    vi.spyOn(URL, "createObjectURL").mockReturnValue("blob:lesson-speaking");
+    vi.spyOn(URL, "revokeObjectURL").mockImplementation(() => undefined);
+
+    const artifactKey = "lesson-audio/learner-1/direct-recording.webm";
+    const upload = vi.fn().mockResolvedValue(artifactKey);
+    const gradedProgress = {
+      ...lesson.progress,
+      evidence: { speaking: { attempts: 1, status: "correct" as const, artifactKey, feedback: "Phần nói đã được chấm." } }
+    };
+    const submit = vi.fn().mockResolvedValue({
+      lessonId: lesson.id,
+      partCode: "speaking",
+      evidence: gradedProgress.evidence.speaking,
+      progress: gradedProgress
+    });
+
+    render(<LearnerLesson view={{ lesson: {
+      ...lesson,
+      content: { parts: [{ code: "speaking", title: "Nói", content: { prompt: "Ghi âm câu trả lời." } }] }
+    } }} actions={callbacks({ uploadAssessmentAudio: upload, submitLessonPartAttempt: submit })} />);
+
+    await openPractice(user);
+    await user.click(screen.getByRole("button", { name: "Ghi âm" }));
+    expect(screen.getByRole("button", { name: "Dừng ghi" })).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Dừng ghi" }));
+    await waitFor(() => expect(upload).toHaveBeenCalledOnce());
+
+    const checkSpeaking = screen.getByRole("button", { name: "Kiểm tra nói" });
+    expect(checkSpeaking).toBeEnabled();
+    await user.click(checkSpeaking);
+
+    expect(submit).toHaveBeenCalledWith("speaking", { answer: "", artifactKey });
+    expect(await screen.findByText("Phần nói đã được chấm.")).toBeInTheDocument();
+    expect(track.stop).toHaveBeenCalled();
   });
 
   it("carries the latest speaking evidence into the final lesson completion payload", async () => {

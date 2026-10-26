@@ -37,6 +37,11 @@ describe("entry shell layout", () => {
     expect(sharedCss).toMatch(/main\.app-entry-main\s*\{[\s\S]*?margin:\s*0\s+auto/);
     expect(sharedCss).toMatch(/main\.app-entry-main\s*\{[\s\S]*?padding-bottom:\s*48px\s*!important/);
   });
+
+  it("keeps transparent login links readable in seasonal themes", () => {
+    expect(sharedCss).toMatch(/\.app-entry-link:hover:not\(:disabled\)\s*\{[\s\S]*?background:\s*transparent[\s\S]*?color:\s*var\(--primary-dark\)/);
+    expect(sharedCss).not.toMatch(/\.app-entry-link:hover:not\(:disabled\)\s*\{[\s\S]*?color:\s*var\(--primary-ink\)/);
+  });
 });
 
 describe("tablet shell navigation", () => {

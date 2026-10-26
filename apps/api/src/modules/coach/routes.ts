@@ -73,7 +73,9 @@ export function registerCoachRoutes(
         mode: "practice",
         scenario: existing.topic,
         currentQuestion,
-        priorTurns: existing.messages.slice(-8).map((message) => ({ speaker: message.speaker, text: message.text }))
+        // currentQuestion carries the only prior context needed for grading. Sending old
+        // learner answers lets model feedback leak from one turn into the next.
+        priorTurns: []
       };
       const { result, output } = await runCoachWithPersonaRepair(
         runner, aiInput, coachPersonaPrompt(task.prompt, existing.persona), existing.persona
@@ -149,7 +151,7 @@ export function registerCoachRoutes(
         mode: "challenge",
         scenario: `Level-up challenge for ${existing.targetLevel}. Ask one workplace follow-up question at a time.`,
         currentQuestion: coachCurrentQuestion(existing.messages, `Tell me about your work at ${existing.targetLevel} level.`),
-        priorTurns: existing.messages.slice(-8).map((message) => ({ speaker: message.speaker, text: message.text }))
+        priorTurns: []
       };
       const { result, output } = await runCoachWithPersonaRepair(
         runner, aiInput, coachPersonaPrompt(task.prompt, "formal"), "formal"
@@ -178,7 +180,7 @@ export function coachPersonaPrompt(prompt: string, persona: "informal" | "formal
   const instruction = persona === "formal"
     ? "FORMAL STYLE: Use professional, courteous workplace English. Avoid slang, contractions, emojis, and overly familiar language."
     : "INFORMAL STYLE: Use warm, friendly, natural workplace English. Contractions are welcome, but keep the language respectful and CEFR-appropriate.";
-  const correctionGuard = "TRANSLATIONS: Return a natural Vietnamese translation of Season's conversational reply in seasonReplyTranslation. For every correction, return a natural Vietnamese translation of the corrected learner sentence in corrections[].translation. Keep correction reason focused only on the short language reason; never place a translation inside reason. CORRECTIONS ONLY: Only put genuine language errors in corrections. If the learner's message is grammatical, relevant, and answers currentQuestion—even if it is brief or less specific—return corrections: [] and correctedText: \"\". Do not rewrite a correct answer merely to make it longer, more detailed, or stylistically different. RUBRIC SCOPE: rubric evidence and improvement must refer only to the learner's latest message and currentQuestion. Never base rubric feedback on nextQuestion or suggestedAnswer. If a criterion needs no improvement, say \"No change needed.\" suggestedAnswer answers nextQuestion only and must never be presented as a correction to the learner's latest message.";
+  const correctionGuard = "LATEST TURN ONLY: Evaluate message against currentQuestion as a fresh pair. Never carry an error, correction, score, or evidence from priorTurns into this result. TRANSLATIONS: Return a natural Vietnamese translation of Season's conversational reply in seasonReplyTranslation. For every correction, return a natural Vietnamese translation of the corrected learner sentence in corrections[].translation. Keep correction reason focused only on the short language reason; never place a translation inside reason. CORRECTIONS ONLY: Only put genuine language errors in corrections. If the learner's message is grammatical, relevant, and answers currentQuestion—even if it is brief or less specific—return corrections: [] and correctedText: \"\". Do not rewrite a correct answer merely to make it longer, more detailed, or stylistically different. RESULT LABEL: evaluation.result must be correct for a complete correct answer, partially_correct for a meaningful answer that needs a small language or content improvement, missing_information for insufficient input, or off_topic for the wrong target. Keep seasonReply and nextQuestion separate; seasonReply must not contain nextQuestion. RUBRIC SCOPE: rubric evidence and improvement must refer only to the learner's latest message and currentQuestion. Never base rubric feedback on nextQuestion or suggestedAnswer. If a criterion needs no improvement, say \"No change needed.\" suggestedAnswer answers nextQuestion only and must never be presented as a correction to the learner's latest message.";
   return `${prompt}\n\n${instruction}\n\n${correctionGuard}`;
 }
 
@@ -207,13 +209,10 @@ export function validateCoachPersonaOutput(output: CoachTaskOutput, persona: "in
     return [
       ...(contraction ? ["Formal reply contains a contraction."] : []),
       ...(/\b(?:gonna|wanna|gotta|bro|dude|lol)\b/iu.test(text) ? ["Formal reply contains slang."] : []),
-      ...(emojiCount ? ["Formal reply contains emoji."] : []),
-      ...(text.includes("!") ? ["Formal reply contains an exclamation mark."] : [])
+      ...(emojiCount ? ["Formal reply contains emoji."] : [])
     ];
   }
   return [
-    ...(!contraction ? ["Informal reply needs a natural contraction."] : []),
-    ...(emojiCount !== 1 ? ["Informal reply needs exactly one emoji."] : []),
     ...(text.split(/\s+/u).filter(Boolean).length > 60 ? ["Informal reply is too long."] : [])
   ];
 }

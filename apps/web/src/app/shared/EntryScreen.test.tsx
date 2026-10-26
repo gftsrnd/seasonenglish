@@ -19,7 +19,8 @@ function stubClient(): AuthClient {
     registerLearner: vi.fn().mockResolvedValue(learnerSession),
     startLearnerPinReset: vi.fn().mockResolvedValue({ challengeId: "challenge-2", expiresAt: new Date().toISOString() }),
     verifyLearnerPinReset: vi.fn().mockResolvedValue({ resetToken: "reset-token" }),
-    completeLearnerPinReset: vi.fn().mockResolvedValue({ saved: true })
+    completeLearnerPinReset: vi.fn().mockResolvedValue({ saved: true }),
+    requestStaffPasswordHelp: vi.fn().mockResolvedValue({ requested: true })
   };
 }
 
@@ -161,5 +162,18 @@ describe("EntryScreen interaction", () => {
     await user.click(screen.getByRole("button", { name: "Lưu mã PIN mới" }));
     expect(client.completeLearnerPinReset).toHaveBeenCalledWith({ resetToken: "reset-token", pin: "789012" });
     expect(screen.getByText(/Đã cập nhật mã PIN/)).toBeInTheDocument();
+  });
+
+  it("lets staff send a generic password-help notification to the Manager", async () => {
+    const user = userEvent.setup(); const client = stubClient();
+    render(<EntryScreen client={client} onAuthenticated={vi.fn()} />);
+    await user.click(screen.getByRole("tab", { name: "Nhân sự" }));
+    await user.click(screen.getByRole("button", { name: "Quên mật khẩu?" }));
+    expect(screen.getByRole("heading", { name: "Quên mật khẩu nhân sự" })).toBeInTheDocument();
+    expect(screen.getByText("Tài khoản nhân sự")).toBeInTheDocument();
+    await user.type(screen.getByLabelText("Email"), "operator@e4s.local");
+    await user.click(screen.getByRole("button", { name: "Thông báo cho Quản lý" }));
+    expect(client.requestStaffPasswordHelp).toHaveBeenCalledWith({ email: "operator@e4s.local" });
+    expect(screen.getByText("Nếu email thuộc tài khoản người vận hành, yêu cầu đã được gửi tới Quản lý.")).toBeInTheDocument();
   });
 });

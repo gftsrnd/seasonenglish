@@ -17,7 +17,7 @@ $dialogues = @(
     File = "placement-listening-LA.wav"
     Rate = "-8%"
     Lines = @(
-      @{ Voice = "en-GB-SoniaNeural"; Text = "Good morning, everyone. Just a quick reminder about tomorrow's team meeting. It will start at 9:30, not 9:00 as originally planned. We'll meet in Room 210. Please bring the latest sales report because we'll discuss our results from last month. If you have any questions, please speak to Sarah before the meeting." },
+      @{ Voice = "en-GB-SoniaNeural"; Text = "Good morning, everyone. Just a quick reminder about tomorrow's team meeting. It will start at 9:30, not 9:00 as originally planned. We'll meet in Room 210. Please bring the latest sales report because we'll discuss our results from last month." },
       @{ Voice = "en-GB-RyanNeural"; Text = "Why has the time changed?" },
       @{ Voice = "en-GB-SoniaNeural"; Text = "The client has asked us to move our morning call, so we needed to change the meeting time." }
     )
@@ -33,7 +33,7 @@ $dialogues = @(
       @{ Voice = "en-GB-SoniaNeural"; Text = "No, not yet." },
       @{ Voice = "en-GB-RyanNeural"; Text = "I'd start there. We had a very similar case last month, and the report might show you which procedure we followed." },
       @{ Voice = "en-GB-SoniaNeural"; Text = "Okay. I'll check those records first." },
-      @{ Voice = "en-GB-RyanNeural"; Text = "Good. If you still can't find the answer, come back to me. We have to send the report today, but there may be some flexibility with the exact time." },
+      @{ Voice = "en-GB-RyanNeural"; Text = "Good. If you still can't find the answer, come back to me. If you have any questions about the report, please speak to Sarah before we send it. We have to send the report today, but there may be some flexibility with the exact time." },
       @{ Voice = "en-GB-SoniaNeural"; Text = "That's helpful. Thanks." }
     )
   },
@@ -56,25 +56,33 @@ $dialogues = @(
 $tempDirectory = Join-Path ([IO.Path]::GetTempPath()) ("e4s-listening-" + [guid]::NewGuid().ToString("N"))
 New-Item -ItemType Directory -Path $tempDirectory | Out-Null
 try {
-  $pausePath = Join-Path $tempDirectory "pause.mp3"
-  & $ffmpeg.Source -hide_banner -loglevel error -y -f lavfi -i "anullsrc=r=48000:cl=mono" -t 0.22 -q:a 9 -acodec libmp3lame $pausePath
+  $pausePath = Join-Path $tempDirectory "pause.wav"
+  & $ffmpeg.Source -hide_banner -loglevel error -y -f lavfi -i "anullsrc=r=48000:cl=mono" -t 0.18 -ac 1 -c:a pcm_s16le $pausePath
   if ($LASTEXITCODE -ne 0) { throw "ffmpeg failed while creating the dialogue pause." }
 
   foreach ($dialogue in $dialogues) {
     $concatEntries = [Collections.Generic.List[string]]::new()
     for ($index = 0; $index -lt $dialogue.Lines.Count; $index += 1) {
       $line = $dialogue.Lines[$index]
-      $segmentPath = Join-Path $tempDirectory ("{0}-{1}.mp3" -f [IO.Path]::GetFileNameWithoutExtension($dialogue.File), $index)
-      $linuxSegmentPath = (& $wsl -d $WslDistribution -- wslpath -a $segmentPath).Trim()
+      $rawSegmentPath = Join-Path $tempDirectory ("{0}-{1}.mp3" -f [IO.Path]::GetFileNameWithoutExtension($dialogue.File), $index)
+      $segmentPath = Join-Path $tempDirectory ("{0}-{1}.wav" -f [IO.Path]::GetFileNameWithoutExtension($dialogue.File), $index)
+      $linuxSegmentPath = (& $wsl -d $WslDistribution -- wslpath -a $rawSegmentPath).Trim()
       & $wsl -d $WslDistribution -- env "PYTHONPATH=/tmp/e4s-edge-tts" python3 -m edge_tts --text $line.Text --write-media $linuxSegmentPath --voice $line.Voice --rate=$($dialogue.Rate) --volume=+0%
-      if ($LASTEXITCODE -ne 0 -or -not (Test-Path -LiteralPath $segmentPath)) { throw "Neural TTS failed for $($dialogue.File), line $($index + 1)." }
+      if ($LASTEXITCODE -ne 0 -or -not (Test-Path -LiteralPath $rawSegmentPath)) { throw "Neural TTS failed for $($dialogue.File), line $($index + 1)." }
+      $trimFilter = "silenceremove=start_periods=1:start_duration=0.04:start_threshold=-45dB:start_silence=0.03,areverse,silenceremove=start_periods=1:start_duration=0.04:start_threshold=-45dB:start_silence=0.03,areverse,aresample=48000"
+      & $ffmpeg.Source -hide_banner -loglevel error -y -i $rawSegmentPath -af $trimFilter -ac 1 -c:a pcm_s16le $segmentPath
+      if ($LASTEXITCODE -ne 0 -or -not (Test-Path -LiteralPath $segmentPath)) { throw "ffmpeg failed while trimming $($dialogue.File), line $($index + 1)." }
       $concatEntries.Add("file '$($segmentPath.Replace("'", "''"))'")
       if ($index -lt $dialogue.Lines.Count - 1) { $concatEntries.Add("file '$($pausePath.Replace("'", "''"))'") }
     }
     $concatPath = Join-Path $tempDirectory ("{0}.txt" -f [IO.Path]::GetFileNameWithoutExtension($dialogue.File))
     [IO.File]::WriteAllLines($concatPath, $concatEntries)
     $path = Join-Path $OutputDirectory $dialogue.File
-    & $ffmpeg.Source -hide_banner -loglevel error -y -f concat -safe 0 -i $concatPath -af "loudnorm=I=-15:TP=-1.0:LRA=11,aresample=48000" -ac 1 -c:a pcm_s16le $path
+    # Edge voices intentionally pause at punctuation; at slower CEFR rates those
+    # pauses can exceed a second and make one dialogue sound like stitched clips.
+    # Preserve a natural 120 ms breath while shortening only clearly silent spans.
+    $dialogueFilter = "silenceremove=stop_periods=-1:stop_duration=0.20:stop_threshold=-45dB:stop_silence=0.12,loudnorm=I=-15:TP=-1.0:LRA=11,aresample=48000"
+    & $ffmpeg.Source -hide_banner -loglevel error -y -f concat -safe 0 -i $concatPath -af $dialogueFilter -ac 1 -c:a pcm_s16le $path
     if ($LASTEXITCODE -ne 0) { throw "ffmpeg failed while assembling $($dialogue.File)" }
   }
 } finally {

@@ -8,6 +8,7 @@ import type { SessionView } from "@e4s/contracts";
 import { ExperienceProvider, useExperience } from "../../features/experience/Experience.js";
 import { AudioControls, AppShell } from "./AppShell.js";
 import { registerAssessmentLogoutGuard } from "./assessment-logout-guard.js";
+import { claimExclusiveAudio } from "../../features/experience/audio-precedence.js";
 
 function MusicState() {
   const { musicOn } = useExperience();
@@ -66,6 +67,29 @@ describe("app audio controls", () => {
 });
 
 describe("app shell navigation and logout", () => {
+  it("stops active assessment audio before starting logout", async () => {
+    const user = userEvent.setup();
+    const stopAudio = vi.fn();
+    const onLogout = vi.fn();
+    claimExclusiveAudio("speech", stopAudio);
+    render(<ExperienceProvider><MemoryRouter initialEntries={["/home"]}><AppShell session={session("learner")} onLogout={onLogout}><div /></AppShell></MemoryRouter></ExperienceProvider>);
+
+    await user.click(screen.getByRole("button", { name: "Đăng xuất khỏi tài khoản này" }));
+
+    expect(stopAudio).toHaveBeenCalledOnce();
+    expect(onLogout).toHaveBeenCalledOnce();
+  });
+
+  it("stops active assessment audio when the authenticated shell exits", () => {
+    const stopAudio = vi.fn();
+    claimExclusiveAudio("speech", stopAudio);
+    const { unmount } = render(<ExperienceProvider><MemoryRouter initialEntries={["/home"]}><AppShell session={session("learner")} onLogout={vi.fn()}><div /></AppShell></MemoryRouter></ExperienceProvider>);
+
+    unmount();
+
+    expect(stopAudio).toHaveBeenCalledOnce();
+  });
+
   it("uses the app dialog instead of the browser confirm while an assessment is active", async () => {
     const user = userEvent.setup();
     const guard = vi.fn().mockResolvedValue("logout");

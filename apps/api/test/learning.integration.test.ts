@@ -96,6 +96,42 @@ describe("learner profile, home, lesson and progress API", () => {
     expect(reloaded.json()).toMatchObject({ version: 3, profile: { avatar } });
   });
 
+  it("persists a changed profile email in the canonical user record and reloads it", async () => {
+    const current = await app.inject({ method: "GET", url: "/api/v1/learner/profile", headers: { cookie } });
+    const email = "minh.anh.profile-updated@e4s.local";
+    const updated = await app.inject({
+      method: "PUT",
+      url: "/api/v1/learner/profile",
+      headers: { cookie },
+      payload: { ...current.json().profile, email: email.toUpperCase(), version: current.json().version }
+    });
+
+    expect(updated.statusCode, updated.body).toBe(200);
+    expect(updated.json()).toMatchObject({ profile: { email } });
+    await expect(pool.query("select email from users where id = $1", [DEMO_IDS.learner]))
+      .resolves.toMatchObject({ rows: [{ email }] });
+
+    const reloaded = await app.inject({ method: "GET", url: "/api/v1/learner/profile", headers: { cookie } });
+    expect(reloaded.statusCode, reloaded.body).toBe(200);
+    expect(reloaded.json()).toMatchObject({ profile: { email }, version: updated.json().version });
+  });
+
+  it("rejects a profile email already used by another account without changing canonical data", async () => {
+    const current = await app.inject({ method: "GET", url: "/api/v1/learner/profile", headers: { cookie } });
+    const originalEmail = current.json().profile.email as string;
+    const duplicate = await app.inject({
+      method: "PUT",
+      url: "/api/v1/learner/profile",
+      headers: { cookie },
+      payload: { ...current.json().profile, email: "THU.HA.TRAN@E4S.LOCAL", version: current.json().version }
+    });
+
+    expect(duplicate.statusCode, duplicate.body).toBe(409);
+    expect(duplicate.json()).toEqual({ code: "LEARNER_PROFILE_EMAIL_EXISTS" });
+    const reloaded = await app.inject({ method: "GET", url: "/api/v1/learner/profile", headers: { cookie } });
+    expect(reloaded.json()).toMatchObject({ profile: { email: originalEmail }, version: current.json().version });
+  });
+
   it("prefills a new learner profile from the authenticated account identity", async () => {
     const registration = await app.inject({
       method: "POST",

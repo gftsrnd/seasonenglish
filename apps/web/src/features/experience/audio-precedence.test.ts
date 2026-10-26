@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { cancelExclusiveAudio, claimExclusiveAudio } from "./audio-precedence.js";
+import { cancelAllExclusiveAudio, cancelExclusiveAudio, claimExclusiveAudio } from "./audio-precedence.js";
 
 afterEach(() => {
   cancelExclusiveAudio("speech");
@@ -29,5 +29,14 @@ describe("exclusive audio precedence", () => {
     expect(stopMusic).toHaveBeenCalledOnce();
     releaseForeground?.();
     expect(resumeMusic).toHaveBeenCalledOnce();
+  });
+
+  it("stops whichever foreground audio owns the channel when the authenticated session exits", () => {
+    const stop = vi.fn();
+    claimExclusiveAudio("speech", stop);
+
+    cancelAllExclusiveAudio();
+
+    expect(stop).toHaveBeenCalledOnce();
   });
 });

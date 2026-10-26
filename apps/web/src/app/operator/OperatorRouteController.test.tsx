@@ -204,7 +204,8 @@ describe("OperatorRouteController", () => {
 
     await user.click(await screen.findByRole("button", { name: "Sinh" }));
 
-    expect(await screen.findByText(/lessons\.0\.parts\.0\.content\.steps: Invalid input: expected array, received string/)).toHaveClass("operator-toast");
+    expect(await screen.findByText("AI trả về nội dung không đúng định dạng.")).toHaveClass("operator-toast");
+    expect(screen.queryByText(/lessons\.0\.parts\.0\.content\.steps/)).not.toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "Sinh & duyệt bài học" })).toBeInTheDocument();
   });
 
@@ -753,16 +754,17 @@ describe("OperatorRouteController", () => {
     expect(client.getContentLessonSet).toHaveBeenCalledWith(2, "A2");
   });
 
-  it("previews the shared weekly practice after the five lesson area", async () => {
+  it("previews the shared weekly practice below manual compose without a duplicate title", async () => {
     const client = { getContentLessonSet: vi.fn().mockResolvedValue(lessonSet("published")) };
     render(<MemoryRouter initialEntries={["/op/lessons/2/A2"]}><OperatorRouteController session={operator} client={client as any} /></MemoryRouter>);
 
-    const heading = await screen.findByRole("heading", { name: "Bài thực hành cuối tuần" });
-    expect(heading).toBeInTheDocument();
-    expect(screen.getByText("Write 3–5 sentences about meetings.")).toBeInTheDocument();
-    expect(screen.getByText("Use at least 3 words from this week's lessons.")).toBeInTheDocument();
-    expect(screen.getByText("agenda · minutes · deadline")).toBeInTheDocument();
-    expect(screen.getByText("Nhập văn bản hoặc nói để chuyển thành chữ")).toBeInTheDocument();
+    const weeklyPractice = await screen.findByTestId("lesson-section-weekly-practice");
+    const manualCompose = screen.getByTestId("lesson-section-manual-compose");
+    expect(manualCompose.compareDocumentPosition(weeklyPractice) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(screen.queryByRole("heading", { name: "Bài thực hành cuối tuần" })).not.toBeInTheDocument();
+    expect(screen.getByRole("textbox", { name: "Đề bài · Tuần 2 · A2" })).toHaveValue("Write 3–5 sentences about meetings.");
+    expect(screen.getByRole("textbox", { name: "Hướng dẫn · Tuần 2 · A2" })).toHaveValue("Use at least 3 words from this week's lessons.");
+    expect(screen.getByRole("textbox", { name: "Từ bắt buộc · Tuần 2 · A2" })).toHaveValue("agenda, minutes, deadline");
   });
 
   it("requires primary confirmation before publishing a draft lesson set", async () => {
@@ -807,6 +809,30 @@ describe("OperatorRouteController", () => {
     expect(await screen.findByRole("alert")).toHaveTextContent("CONTENT_NOT_PUBLISHABLE");
     expect(screen.getByRole("heading", { name: /Tuần 2 · Mức A2/ })).toBeInTheDocument();
     expect(screen.getByText(draft.topic)).toBeInTheDocument();
+  });
+
+  it("shows repairable Vietnamese validation details when a manual draft cannot be reviewed", async () => {
+    const user = userEvent.setup();
+    const draft = lessonSet("draft");
+    const failure = Object.assign(new Error("CONTENT_VALIDATION_FAILED"), {
+      details: { issues: [
+        { dayNumber: 1, code: "listening", message: "Phần Nghe chưa có nguồn âm thanh hoặc kịch bản để máy đọc." },
+        { dayNumber: 1, code: "speaking", message: "Phần Nói chưa có câu mẫu để học và chấm." }
+      ] }
+    });
+    const client = {
+      getContentLessonSet: vi.fn().mockResolvedValue(draft),
+      submitContentLessonSet: vi.fn().mockRejectedValue(failure),
+      publishContentLessonSet: vi.fn()
+    };
+    render(<MemoryRouter initialEntries={["/op/lessons/2/A2"]}><OperatorRouteController session={operator} client={client as any} /></MemoryRouter>);
+
+    await user.click(await screen.findByRole("button", { name: "Duyệt bộ bài" }));
+    await user.click(within(screen.getByRole("dialog", { name: "Duyệt bộ bài?" })).getByRole("button", { name: "Duyệt bộ bài" }));
+
+    expect(await screen.findByRole("alert")).toHaveTextContent("Nội dung thủ công chưa đủ để xuất bản");
+    expect(screen.getByRole("alert")).toHaveTextContent("Phần Nghe chưa có nguồn âm thanh");
+    expect(client.publishContentLessonSet).not.toHaveBeenCalled();
   });
 
   it("requires primary confirmation before regenerating a lesson set", async () => {
@@ -962,6 +988,12 @@ describe("OperatorRouteController", () => {
     await user.click(screen.getByRole("button", { name: /Bổ sung bằng AI/ }));
     await waitFor(() => expect(enrichContentLessonDraft).toHaveBeenCalledWith(2, "A2", 1));
     expect(await screen.findByText("Đã tự động điền các nội dung còn thiếu. Vui lòng kiểm tra lại trước khi duyệt.")).toBeInTheDocument();
+
+    enrichContentLessonDraft.mockRejectedValueOnce(Object.assign(new Error("AI_OUTPUT_INVALID"), { code: "AI_OUTPUT_INVALID" }));
+    await user.click(screen.getByRole("button", { name: /Bổ sung bằng AI/ }));
+    expect(await screen.findByText(/AI trả về nội dung không đúng định dạng/)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Bổ sung bằng AI/ })).toBeEnabled();
+    expect(screen.queryByRole("button", { name: /Đang bổ sung/ })).not.toBeInTheDocument();
   });
 
   it("renders structured lesson content instead of transport JSON", async () => {
@@ -970,13 +1002,20 @@ describe("OperatorRouteController", () => {
       lessonSetId: "ls", versionId: "v1", version: 1, status: "draft", weekNumber: 2, topic: "Meetings", cefr: "A2",
       explanationLanguage: "Tiếng Việt", createdBy: "op", approvedBy: null, createdAt: "2026-10-14", publishedAt: null,
       lessons: [{ id: "lesson-1", dayNumber: 1, title: "Opening a meeting", durationMinutes: 10, practiceLabel: "điền từ · đáp án: start", parts: [
-        { code: "objective", title: "Mục tiêu", content: { text: "Mở đầu cuộc họp rõ ràng." } },
+        { code: "objective", title: "Mục tiêu", content: { text: "SWBAT identify the meeting.\nSWBAT open the meeting.", items: [
+          { type: "content", text: "SWBAT identify the meeting.", condition: "after listening", criterion: "one detail", assessmentCode: "listening" },
+          { type: "language", text: "SWBAT open the meeting.", condition: "in a role-play", criterion: "one sentence", assessmentCode: "speaking" }
+        ] } },
         { code: "vocabulary", title: "Từ vựng", content: { items: [{ word: "agenda", pronunciation: "/əˈdʒendə/", meaning: "chương trình", examples: ["share the agenda", "review the agenda", "meeting agenda"] }] } },
         { code: "listening", title: "Nghe", content: { script: "Let's start.", prompt: "What starts?", options: ["The meeting", "Lunch", "A call", "A break"], answer: "The meeting" } }
       ] }]
     };
     render(<MemoryRouter initialEntries={["/op/lessons/2/A2"]}><OperatorRouteController session={operator} client={{ getContentLessonSet: vi.fn().mockResolvedValue(detail) } as any} /></MemoryRouter>);
-    expect(await screen.findByText("Mở đầu cuộc họp rõ ràng.")).toBeInTheDocument();
+    const objectives = await screen.findByRole("list", { name: "Mục tiêu bài học" });
+    expect(within(objectives).getAllByRole("listitem")).toHaveLength(2);
+    expect(objectives).toHaveTextContent("Sau bài học, bạn có thể identify the meeting");
+    expect(objectives).toHaveTextContent("Sau bài học, bạn có thể open the meeting");
+    expect(objectives).not.toHaveTextContent("SWBAT");
     expect(screen.getByText("agenda")).toBeInTheDocument();
     await user.click(screen.getByRole("tab", { name: "2. Bài tập" }));
     const correctOption = screen.getByText("The meeting", { exact: true }).closest("li");

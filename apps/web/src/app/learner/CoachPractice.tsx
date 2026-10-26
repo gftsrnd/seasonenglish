@@ -162,26 +162,35 @@ function CoachFeedback({ feedback }: { feedback: NonNullable<CoachView["messages
     { label: "Từ vựng", criterion: feedback.rubric.vocabulary, Icon: BookOpen },
     { label: "Ngữ pháp", criterion: feedback.rubric.grammar, Icon: SpellCheck2 }
   ] as const;
+  const resultLabels = {
+    correct: "Đúng",
+    partially_correct: "Đúng một phần",
+    missing_information: "Thiếu ý",
+    off_topic: "Sai mục tiêu"
+  } as const;
   return <section className="coach-feedback coach-feedback-flat" role="region" aria-label="Phản hồi của Season">
     <div className="coach-feedback-section coach-season-reply" aria-label="Câu Season trả lời">
       <h4>Câu Season trả lời</h4>
       <p>{feedback.seasonReply}</p>
-      {feedback.nextQuestion && feedback.nextQuestion !== feedback.seasonReply ? <p className="coach-season-next-question"><strong>{feedback.nextQuestion}</strong></p> : null}
     </div>
     <div className="coach-feedback-summary">
-      <div className="coach-evaluation" aria-label="Nhận xét câu trả lời của bạn"><h4>Nhận xét câu trả lời của bạn</h4><p className="coach-feedback-note">{feedback.evaluation.noteVi}</p></div>
+      <div className="coach-evaluation" aria-label="Nhận xét câu trả lời của bạn"><h4>Nhận xét câu trả lời của bạn</h4><p className="coach-feedback-result">Kết quả: {resultLabels[feedback.evaluation.result]}</p><p className="coach-feedback-note">{feedback.evaluation.noteVi}</p></div>
       <div className="coach-feedback-scores" aria-label="Ba điểm đánh giá">{scores.map(({ label, criterion, Icon }) => <div className="coach-feedback-score" title={`${criterion.evidence} ${criterion.improvement}`} key={label}><Icon className="coach-feedback-score-icon" size={18} aria-hidden="true" /><span><b>{label}</b><strong aria-label={`${label}: ${criterion.score} trên 5 điểm`}>{criterion.score}/5</strong></span></div>)}</div>
     </div>
     <div className="coach-feedback-section coach-correction" aria-label="Câu sửa">
       <h4>Câu sửa</h4>{feedback.corrections.length ? feedback.corrections.map((item, index) => <div key={`${item.corrected}-${index}`}><p><del>{item.original}</del> → <strong>{item.corrected}</strong></p><p>{item.reason}</p><p className="coach-feedback-translation">{item.translation}</p></div>) : <p>Không có lỗi cần sửa trực tiếp. Xem gợi ý cải thiện trong phần giải thích.</p>}
       {feedback.correctedText ? <p><b>Câu hoàn chỉnh:</b> {feedback.correctedText}</p> : null}
     </div>
+    <div className="coach-feedback-section coach-next-question" aria-label="Câu bạn nên nói tiếp">
+      <h4>Câu bạn nên nói tiếp</h4>
+      <p><strong>{feedback.nextQuestion}</strong></p>
+      <p className="coach-feedback-translation">{feedback.nextQuestionTranslation}</p>
+    </div>
     <div className="coach-feedback-disclosures">
       <details className="coach-feedback-disclosure">
         <summary>Xem giải thích và gợi ý</summary>
         <div className="coach-feedback-details">
           <div className="coach-feedback-translation-block"><b>Nghĩa câu Season trả lời</b><p className="coach-feedback-translation">{feedback.seasonReplyTranslation}</p></div>
-          <div className="coach-feedback-translation-block"><b>Nghĩa câu hỏi tiếp theo</b><p className="coach-feedback-translation">{feedback.nextQuestionTranslation}</p></div>
           <div className="coach-feedback-criteria" aria-label="Giải thích điểm">{scores.map(({ label, criterion }) => <article className="coach-feedback-criterion-card" key={label}><div><b>{label}</b><strong>{criterion.score}/5</strong></div><p>{criterion.evidence}</p><p className="coach-feedback-improvement">Gợi ý: {criterion.improvement}</p></article>)}</div>
           <div className="coach-suggested-answer" aria-label="Gợi ý trả lời câu tiếp theo"><h4>Gợi ý trả lời câu tiếp theo</h4>{feedback.suggestedAnswer.text ? <><p><strong>{feedback.suggestedAnswer.text}</strong></p><p className="coach-feedback-translation">{feedback.suggestedAnswer.translation}</p></> : <p>Không có gợi ý cho lượt này.</p>}</div>
         </div>
@@ -333,6 +342,7 @@ export function LearnerPractice({ view, actions }: { view: PracticeView; actions
   const inputMode = view.inputMode === "dialogue" ? "dialogue" : "write";
   const inputLabel = inputMode === "dialogue" ? "Câu trả lời hội thoại" : "Bài làm";
   const inputPlaceholder = inputMode === "dialogue" ? "Nhập câu trả lời hội thoại…" : "Viết bằng tiếng Anh…";
+  const practiceWordCount = text.trim() ? text.trim().split(/\s+/).length : 0;
   const pageStyle: CSSProperties = { display: "grid", gap: 16, minWidth: 0, paddingBottom: "calc(88px + env(safe-area-inset-bottom))" };
   const cardStyle: CSSProperties = { display: "grid", gap: 12, minWidth: 0 };
   const beginAction = (action: "submit" | "appeal") => {
@@ -350,7 +360,7 @@ export function LearnerPractice({ view, actions }: { view: PracticeView; actions
   const submitPractice = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     const answer = text.trim();
-    if (!answer || recording || !beginAction("submit")) return;
+    if (!answer || answer.split(/\s+/).length < 8 || recording || !beginAction("submit")) return;
     let focusOnFailure = false;
     try {
       await actions.submitWeeklyPractice(text);
@@ -383,9 +393,23 @@ export function LearnerPractice({ view, actions }: { view: PracticeView; actions
   if (view.submission && ["submitted", "reviewed"].includes(view.submission.status)) {
     const graded = view.submission.status === "reviewed"
       || ["graded-ai", "graded-manual", "appeal-pending", "appeal-decided"].includes(view.submission.reviewState ?? "");
-    return <div className="app-learner-page" style={pageStyle}><PageTitle eyebrow={`Tuần ${view.weekNumber} · ${view.topic}`} title="Bài thực hành cuối tuần" /><section className="card" style={cardStyle}><span className={`badge ${graded ? "ok" : "warn"}`}>{graded ? "Đã chấm" : "Chờ chấm"}</span><h2>Bài đã nộp</h2><p>{view.submission.text}</p>{view.submission.score ? <div className="grid cols-3"><div className="stat"><strong>{view.submission.score.rubric?.meaning ?? "—"}/5</strong><span>Ý nghĩa</span></div><div className="stat"><strong>{view.submission.score.rubric?.vocabulary ?? "—"}/5</strong><span>Từ vựng</span></div><div className="stat"><strong>{view.submission.score.rubric?.grammar ?? "—"}/5</strong><span>Ngữ pháp</span></div></div> : null}<p>{view.submission.feedback}</p>{view.submission.correctedText ? <div className="correction"><b>Bản gợi ý</b><p>{view.submission.correctedText}</p></div> : null}</section>{view.appeal ? <Notice tone={view.appeal.status === "pending" ? "info" : view.appeal.status === "accepted" ? "ok" : "warn"}>Kháng nghị: {view.appeal.status}{view.appeal.resolution ? ` · ${view.appeal.resolution}` : ""}</Notice> : graded ? <form className="card" aria-busy={busyAction === "appeal" || undefined} onSubmit={(event) => void submitAppeal(event)} style={{ ...cardStyle, marginBottom: 16 }}><h3>Không đồng ý với kết quả?</h3><label>Lý do kháng nghị<textarea ref={appealRef} aria-label="Lý do kháng nghị" value={appealReason} disabled={Boolean(busyAction)} onChange={(event) => setAppealReason(event.target.value)} /></label><ErrorText message={actionError} /><button type="submit" className="btn-primary" aria-busy={busyAction === "appeal" || undefined} disabled={!appealReason.trim() || Boolean(busyAction)} style={{ minHeight: 44, justifySelf: "start" }}>{busyAction === "appeal" ? "Đang gửi…" : "Gửi kháng nghị"}</button></form> : null}</div>;
+    const manuallyGraded = view.submission.gradingSource === "manual";
+    return <div className="app-learner-page" style={pageStyle}><PageTitle eyebrow={`Tuần ${view.weekNumber} · ${view.topic}`} title="Bài thực hành cuối tuần" /><section className="card" style={cardStyle}><span className={`badge ${graded ? "ok" : "warn"}`}>{graded ? "Đã chấm" : "Chờ chấm"}</span><h2>Bài đã nộp</h2><p>{view.submission.text}</p>{view.submission.score ? <div className="grid cols-3"><div className="stat"><strong>{view.submission.score.rubric?.meaning ?? "—"}/5</strong><span>Ý nghĩa</span></div><div className="stat"><strong>{view.submission.score.rubric?.vocabulary ?? "—"}/5</strong><span>Từ vựng</span></div><div className="stat"><strong>{view.submission.score.rubric?.grammar ?? "—"}/5</strong><span>Ngữ pháp</span></div></div> : null}<p>{view.submission.feedback}</p>{view.submission.correctedText ? <div className="correction"><b>Bản gợi ý</b><p>{view.submission.correctedText}</p></div> : null}</section>{view.appeal ? <Notice tone={view.appeal.status === "pending" ? "info" : view.appeal.status === "accepted" ? "ok" : "warn"}>Kháng nghị: {view.appeal.status}{view.appeal.resolution ? ` · ${view.appeal.resolution}` : ""}</Notice> : manuallyGraded ? <Notice tone="info">Bài này đã được chấm tay nên không thể gửi kháng nghị.</Notice> : graded ? <form className="card" aria-busy={busyAction === "appeal" || undefined} onSubmit={(event) => void submitAppeal(event)} style={{ ...cardStyle, marginBottom: 16 }}><h3>Không đồng ý với kết quả?</h3><label>Lý do kháng nghị<textarea ref={appealRef} aria-label="Lý do kháng nghị" value={appealReason} disabled={Boolean(busyAction)} onChange={(event) => setAppealReason(event.target.value)} /></label><ErrorText message={actionError} /><button type="submit" className="btn-primary" aria-busy={busyAction === "appeal" || undefined} disabled={!appealReason.trim() || Boolean(busyAction)} style={{ minHeight: 44, justifySelf: "start" }}>{busyAction === "appeal" ? "Đang gửi…" : "Gửi kháng nghị"}</button></form> : null}<PracticeHistory items={view.history} /></div>;
   }
-  return <div className="app-learner-page" style={pageStyle}><PageTitle eyebrow={`Tuần ${view.weekNumber} · ${view.topic}`} title="Bài thực hành cuối tuần" /><form className="card" aria-busy={busyAction === "submit" || undefined} onSubmit={(event) => void submitPractice(event)} style={cardStyle}><h2>Nhiệm vụ</h2><p>{view.task}</p><p className="small muted">{view.guidance}</p>{view.aiAvailable === false ? <Notice tone="warn">AI chưa kết nối; bài vẫn lưu để vận hành chấm thủ công.</Notice> : null}<label>{inputLabel}<textarea ref={draftRef} aria-label={inputLabel} data-input-mode={inputMode} value={text} disabled={Boolean(busyAction)} onChange={(event) => setText(event.target.value)} placeholder={inputPlaceholder} rows={10} /></label>{speechSupported ? <button className={`coach-mic ${recording ? "is-recording" : ""}`} type="button" aria-label={recording ? "Đang nghe" : "Nói"} title={recording ? "Dừng nghe" : "Nói"} disabled={Boolean(busyAction)} onClick={recording ? stopListening : startListening}><MicIcon /></button> : null}{speechError ? <ErrorText message={speechError} /> : null}<ErrorText message={actionError} /><div className="row between" style={{ flexWrap: "wrap", gap: 12 }}><span className="small muted">{text.trim() ? text.trim().split(/\s+/).length : 0} từ</span><button className="btn-primary btn-lg" type="submit" aria-busy={busyAction === "submit" || undefined} disabled={!text.trim() || recording || Boolean(busyAction)} style={{ minHeight: 44 }}>{busyAction === "submit" ? "Đang nộp…" : "Nộp bài"}</button></div></form></div>;
+  return <div className="app-learner-page" style={pageStyle}><PageTitle eyebrow={`Tuần ${view.weekNumber} · ${view.topic}`} title="Bài thực hành cuối tuần" /><form className="card" aria-busy={busyAction === "submit" || undefined} onSubmit={(event) => void submitPractice(event)} style={cardStyle}><h2>Nhiệm vụ</h2><p>{view.task}</p><p className="small muted">{view.guidance}</p>{view.aiAvailable === false ? <Notice tone="warn">AI chưa kết nối; bài vẫn lưu để vận hành chấm thủ công.</Notice> : null}<label>{inputLabel}<textarea ref={draftRef} aria-label={inputLabel} data-input-mode={inputMode} value={text} disabled={Boolean(busyAction)} onChange={(event) => setText(event.target.value)} placeholder={inputPlaceholder} rows={10} /></label>{speechSupported ? <button className={`coach-mic ${recording ? "is-recording" : ""}`} type="button" aria-label={recording ? "Đang nghe" : "Nói"} title={recording ? "Dừng nghe" : "Nói"} disabled={Boolean(busyAction)} onClick={recording ? stopListening : startListening}><MicIcon /></button> : null}{speechError ? <ErrorText message={speechError} /> : null}<ErrorText message={actionError} /><div className="row between" style={{ flexWrap: "wrap", gap: 12 }}><span className="small muted">{practiceWordCount}/8 từ tối thiểu</span><button className="btn-primary btn-lg" type="submit" aria-busy={busyAction === "submit" || undefined} disabled={practiceWordCount < 8 || recording || Boolean(busyAction)} style={{ minHeight: 44 }}>{busyAction === "submit" ? "Đang nộp…" : "Nộp bài"}</button></div></form><PracticeHistory items={view.history} /></div>;
+}
+
+function PracticeHistory({ items }: { items: PracticeView["history"] }) {
+  if (!items?.length) return null;
+  return <section className="card" aria-label="Lịch sử bài tuần">
+    <h2>Lịch sử bài tuần</h2>
+    <div className="stack">
+      {items.map((item) => <article key={item.id} className="row between" style={{ gap: 12, alignItems: "flex-start" }}>
+        <div><b>Tuần {item.weekNumber} · {item.topic}</b><p className="small muted">{item.task}</p></div>
+        <span className="badge">{item.score ? `${item.score.total}/100` : "Chờ chấm"}</span>
+      </article>)}
+    </div>
+  </section>;
 }
 
 function MicIcon() {

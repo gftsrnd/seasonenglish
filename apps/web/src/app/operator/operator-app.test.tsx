@@ -255,10 +255,14 @@ describe("Operator app rebuild", () => {
     expect(screen.getByText(/Checklist duyệt/)).toBeInTheDocument();
     expect(screen.getByText(/thiếu thành phần bắt buộc/)).toBeInTheDocument();
     expect(screen.getByText(/chưa đủ 3 cụm từ/)).toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: /Soạn bài trực tiếp/ })).toBeInTheDocument();
-    const weeklyHeading = screen.getByRole("heading", { name: "Bài thực hành cuối tuần" });
+    const manualCompose = screen.getByTestId("lesson-section-manual-compose");
+    expect(within(manualCompose).getByRole("heading", { name: /Soạn bài trực tiếp/ })).toBeInTheDocument();
+    const weeklyPractice = screen.getByTestId("lesson-section-weekly-practice");
+    expect(screen.queryByRole("heading", { name: "Bài thực hành cuối tuần" })).not.toBeInTheDocument();
     const lessonHeading = screen.getByRole("heading", { name: /Opening a meeting/ });
-    expect(weeklyHeading.compareDocumentPosition(lessonHeading) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(lessonHeading.compareDocumentPosition(manualCompose) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(manualCompose.compareDocumentPosition(weeklyPractice) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(weeklyPractice).toHaveClass("operator-weekly-practice-section");
     expect(screen.getByRole("button", { name: "Duyệt bộ bài" }).parentElement).toHaveClass("operator-page-title-actions");
     expect(screen.getByRole("heading", { name: /Opening a meeting/ }).closest(".operator-card-header")).not.toBeNull();
     await user.click(screen.getByRole("button", { name: "Duyệt bộ bài" }));
@@ -416,6 +420,38 @@ describe("Operator app rebuild", () => {
     expect((task as HTMLTextAreaElement).value).toContain("Asking for directions");
     expect((screen.getByRole("textbox", { name: "Hướng dẫn · Tuần 1 · A2" }) as HTMLTextAreaElement).value).toContain("left, right, straight");
     expect(screen.queryByText("Nghe")).not.toBeInTheDocument();
+  });
+
+  it("renders weekly practice after manual compose without a duplicate standalone heading", () => {
+    const onSaveWeeklyPractice = vi.fn();
+    render(<OperatorLessonSet view={{
+      week: 1, cefr: "A2", version: 3, status: "draft", topic: "Asking for directions",
+      explanationLanguage: "tiếng Việt", aiConnected: true,
+      warnings: { incomplete: 0, level: [], phrases: 0, details: 0 },
+      lessons: [1, 2, 3, 4, 5].map(day => ({
+        id: `l${day}`, day, dayLabel: `T${day + 1}`, title: `Bài ${day}`, durationMin: 10,
+        practiceKind: "điền từ", practiceAnswer: "answer", complete: true, content: <p>Nội dung</p>
+      })),
+      weeklyPractice: {
+        task: "Write three sentences.", guidance: "Use weekly words.",
+        inputModeLabel: "Nhập văn bản hoặc nói để chuyển thành chữ", requiredVocabulary: ["left", "right"]
+      }
+    } as any} actions={{
+      onBack: vi.fn(), onApprove: vi.fn(), onUnapprove: vi.fn(), onRegenerate: vi.fn(), onDeleteSet: vi.fn(),
+      onFillPhrases: vi.fn(), onEnrich: vi.fn(), onEditLesson: vi.fn(), onDeleteLesson: vi.fn(), onComposeDay: vi.fn(),
+      onSaveWeeklyPractice
+    }} />);
+
+    const weekdaySections = screen.getAllByTestId(/^lesson-section-T/);
+    const manualCompose = screen.getByTestId("lesson-section-manual-compose");
+    const weeklyPractice = screen.getByTestId("lesson-section-weekly-practice");
+    expect(weekdaySections).toHaveLength(5);
+    expect(weekdaySections[4]!.compareDocumentPosition(manualCompose) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(manualCompose.compareDocumentPosition(weeklyPractice) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(weeklyPractice).toHaveClass("operator-weekly-practice-section");
+    expect(screen.queryByRole("heading", { name: "Bài thực hành cuối tuần" })).not.toBeInTheDocument();
+    expect(within(weeklyPractice).getByRole("button", { name: "Sinh bài cuối tuần · Tuần 1 · A2" })).toBeInTheDocument();
+    expect(within(weeklyPractice).getByRole("button", { name: "Lưu bản nháp · Tuần 1 · A2" })).toBeInTheDocument();
   });
 
   it("keeps a weekly-practice edit visible and prevents duplicate saves when saving fails", async () => {

@@ -370,8 +370,7 @@ describe("manager progress and operations API", () => {
     );
 
     const request = { method: "POST" as const, url: `/api/v1/manager/reminders/${reminderLearnerId}`, headers: { cookie: managerCookie }, payload: { requestId: "reminder-retry-1" } };
-    const sent = await app.inject(request);
-    const retried = await app.inject(request);
+    const [sent, retried] = await Promise.all([app.inject(request), app.inject(request)]);
     expect(sent.statusCode, sent.body).toBe(200);
     expect(retried.statusCode, retried.body).toBe(200);
     expect(sent.json()).toMatchObject({ learnerId: reminderLearnerId, status: "queued", deliveryStatus: "queued", provider: "local_queue" });

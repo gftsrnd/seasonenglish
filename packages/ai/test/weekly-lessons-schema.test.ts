@@ -139,7 +139,7 @@ describe("weekly lesson output contract", () => {
 
   it("requires 2-4 structured foundation objectives", () => {
     const base = {
-      title: "S + V + O", durationMinutes: 10,
+      title: "Give clear feedback", durationMinutes: 10,
       objective: { title: "Mục tiêu", explanationLanguage: "vi", items: [
         { type: "content", text: "SWBAT identify two feedback details.", condition: "after listening", criterion: "two details", assessmentCode: "listening" },
         { type: "language", text: "SWBAT give one clear feedback sentence.", condition: "in a role-play", criterion: "one sentence", assessmentCode: "speaking" }
@@ -150,11 +150,20 @@ describe("weekly lesson output contract", () => {
     };
     expect(weeklyLessonFoundationOutputSchema.safeParse(base).success).toBe(true);
     expect(weeklyLessonFoundationOutputSchema.safeParse({ ...base, objective: { ...base.objective, items: base.objective.items.slice(0, 1) } }).success).toBe(false);
+    expect(weeklyLessonFoundationOutputSchema.safeParse({ ...base, title: "S + V + O" }).success).toBe(false);
+    expect(weeklyLessonFoundationOutputSchema.safeParse({
+      ...base,
+      grammar: { ...base.grammar, example1: "Maybe you could add a detailed chart to the important weekly project report." }
+    }).success).toBe(false);
+    expect(weeklyLessonFoundationOutputSchema.safeParse({
+      ...base,
+      grammar: { ...base.grammar, example1: "I give feedback. (Tôi góp ý.)" }
+    }).success).toBe(false);
   });
 
-  it("fills omitted foundation instruction steps before strict validation", () => {
+  it("rejects omitted foundation instruction steps instead of fabricating them", () => {
     const base = {
-      title: "S + V + O", durationMinutes: 10,
+      title: "Give clear feedback", durationMinutes: 10,
       objective: { title: "Mục tiêu", explanationLanguage: "vi", items: [
         { type: "content", text: "Identify two details.", condition: "after listening", criterion: "two details", assessmentCode: "listening" },
         { type: "language", text: "Give one sentence.", condition: "in a role-play", criterion: "one sentence", assessmentCode: "speaking" }
@@ -164,13 +173,7 @@ describe("weekly lesson output contract", () => {
       pronunciation: { title: "Phát âm", focus: "/f/", tip: "Thổi hơi nhẹ.", word1: { word: "feedback", ipa: "/ˈfiːdbæk/" }, word2: { word: "fine", ipa: "/faɪn/" }, word3: { word: "helpful", ipa: "/ˈhelpfəl/" } }
     };
 
-    const parsed = weeklyLessonFoundationOutputSchema.safeParse(base);
-    expect(parsed.success).toBe(true);
-    if (parsed.success) {
-      expect(parsed.data.instruction.step1).toBeTruthy();
-      expect(parsed.data.instruction.step2).toBeTruthy();
-      expect(parsed.data.instruction.step3).toBe("Hoàn thành bài tập.");
-    }
+    expect(weeklyLessonFoundationOutputSchema.safeParse(base).success).toBe(false);
   });
 
   it("publishes three small strict schemas instead of compiling the full lesson grammar", () => {
@@ -222,6 +225,23 @@ describe("weekly lesson output contract", () => {
     });
   });
 
+  it("accepts SSML that wraps each word of a phrase in separate pronunciation tags", () => {
+    const item = {
+      ...strictVocabularyItem("noun"),
+      word: "time zone",
+      pronunciation: "/\u02c8ta\u026am zo\u028an/",
+      ttsText: "time zone",
+      ssml: '<speak><phoneme alphabet="ipa" ph="ta\u026am">time</phoneme> <phoneme alphabet="ipa" ph="zo\u028an">zone</phoneme></speak>',
+      collocation1: "check the time zone",
+      collocation2: "different time zone",
+      collocation3: "confirm the time zone"
+    };
+
+    expect(weeklyLessonVocabularyOutputSchema.safeParse({
+      title: "Vocabulary", word1: item, word2: item, word3: item
+    }).success).toBe(true);
+  });
+
   it("rejects a synonym with another part of speech or unusable contextual evidence", () => {
     const item = strictVocabularyItem("noun");
     expect(weeklyLessonVocabularyOutputSchema.safeParse({
@@ -233,14 +253,14 @@ describe("weekly lesson output contract", () => {
   });
 
   it("rejects ambiguous skill options and answer keys not present in the options", () => {
-    const choice = { title: "Nghe", body: "The meeting starts at nine.", prompt: "When?", option1: "Nine", option2: "Ten", option3: "Eleven", option4: "Noon", answer: "Nine" };
+    const choice = { title: "Nghe", body: "The meeting starts at nine.", prompt: "When?", option1: "Nine", option2: "Ten", option3: "Eleven", option4: "Noon", answer: "Nine", hint: "Think about the stated time.", questionTranslation: "Khi nào?", answerTranslation: "Chín giờ" };
     const skills = {
       listening: choice,
       reading: { ...choice, title: "Đọc", body: "The report is ready at noon.", prompt: "What is ready?", option1: "Report", answer: "Report" },
-      writing: { title: "Viết", type: "fill", prompt: "It ___ at nine.", option1: null, option2: null, option3: null, option4: null, answer: "starts" },
-      wordClass: { title: "Từ loại", prompt: "What is report?", option1: "noun", option2: "verb", option3: "adjective", option4: "adverb", answer: "noun" },
-      wordUse: { title: "Dùng từ", prompt: "Which is correct?", option1: "Send the report.", option2: "Report the a.", option3: "A report send.", option4: "Report blue.", answer: "Send the report." },
-      speaking: { title: "Nói", prompt: "Nói giờ họp.", answer: "The meeting starts at nine." }
+      writing: { title: "Viết", type: "fill", prompt: "It ___ at nine.", option1: null, option2: null, option3: null, option4: null, answer: "starts", hint: "Use a present-tense verb.", questionTranslation: "Nó bắt đầu lúc chín giờ.", answerTranslation: "bắt đầu" },
+      wordClass: { title: "Từ loại", prompt: "What is report?", option1: "noun", option2: "verb", option3: "adjective", option4: "adverb", answer: "noun", hint: "Name a person, place, or thing.", questionTranslation: "Report là từ loại gì?", answerTranslation: "danh từ" },
+      wordUse: { title: "Dùng từ", prompt: "Which is correct?", option1: "Send the report.", option2: "Report the a.", option3: "A report send.", option4: "Report blue.", answer: "Send the report.", hint: "Look for a natural command.", questionTranslation: "Câu nào đúng?", answerTranslation: "Gửi báo cáo." },
+      speaking: { title: "Nói", prompt: "Nói giờ họp.", answer: "The meeting starts at nine.", hint: "Dùng starts at.", questionTranslation: "Nói giờ họp.", answerTranslation: "Cuộc họp bắt đầu lúc chín giờ." }
     };
     expect(weeklyLessonSkillsOutputSchema.safeParse(skills).success).toBe(true);
     expect(weeklyLessonSkillsOutputSchema.safeParse({ ...skills, listening: { ...choice, option2: "Nine" } }).success).toBe(false);

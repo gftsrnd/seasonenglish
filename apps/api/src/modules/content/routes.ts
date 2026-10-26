@@ -10,15 +10,16 @@ import type {
 } from "@e4s/contracts";
 import { weeklyPracticeInputSchema, weeklyPracticeOutputSchema, weekSuggestionsOutputSchema, type AiTaskRunner } from "@e4s/ai";
 import { createRepositories } from "@e4s/database";
-import { approveContentVersion, retirePublishedContent, submitContentForReview, validateLessonDraft } from "@e4s/domain/content";
+import { approveContentVersion, retirePublishedContent, submitContentForReview, validateLessonDraft, validateLessonPublication } from "@e4s/domain/content";
 import type { ObjectStorage } from "@e4s/storage";
 import type { FastifyInstance } from "fastify";
 import type { Pool } from "pg";
 import { z } from "zod";
 import { createRoleGuard } from "../identity/policy.js";
 import type { ContentMediaService } from "../media/index.js";
-import { mergeGeneratedLessons, type LessonRepairMode } from "./enrichment.js";
+import { lessonDaysNeedingRepair, mergeGeneratedLessons, type LessonRepairMode } from "./enrichment.js";
 import { generateWeeklyLessons } from "./weekly-generation.js";
+import { publicLessonGenerationFailure } from "./generation-errors.js";
 
 const weekInput = z.object({
   weekNumber: z.int().min(1).max(52),
@@ -399,18 +400,35 @@ export function registerContentRoutes(
       if (!week || !task) return reply.code(503).send({ code: "AI_PROMPT_NOT_READY" });
       if (!current) return reply.code(404).send({ code: "CONTENT_LESSON_SET_NOT_FOUND" });
       try {
-        const excludedVocabulary = await repositories.content.usedLessonVocabulary(actorId);
-        const generated = await generateWeeklyLessons(week, params.data.cefr, task, runner, { excludedVocabulary });
         const existing = current.lessons.map((lesson) => ({
           dayNumber: lesson.dayNumber,
           title: lesson.title,
           durationMinutes: lesson.durationMinutes,
           parts: lesson.parts
         })) as ContentLessonDraftInput[];
+        const dayNumbers = lessonDaysNeedingRepair(existing, action as LessonRepairMode);
+        if (dayNumbers.length === 0) return reply.send(current);
+        const repairVocabulary = new Set(existing
+          .filter((lesson) => dayNumbers.includes(lesson.dayNumber))
+          .flatMap((lesson) => {
+            const items = lesson.parts.find((part) => part.code === "vocabulary")?.content.items;
+            return Array.isArray(items) ? items.flatMap((item) => {
+              const word = typeof item === "string"
+                ? item
+                : item && typeof item === "object" && "word" in item && typeof item.word === "string"
+                  ? item.word
+                  : "";
+              return word.trim() ? [word.trim().toLocaleLowerCase("en-US")] : [];
+            }) : [];
+          }));
+        const excludedVocabulary = (await repositories.content.usedLessonVocabulary(actorId))
+          .filter((word) => !repairVocabulary.has(word.trim().toLocaleLowerCase("en-US")));
+        const generated = await generateWeeklyLessons(week, params.data.cefr, task, runner, { excludedVocabulary, dayNumbers });
         const lessons = mergeGeneratedLessons(existing, generated.lessons, action as LessonRepairMode);
         const validation = validateLessonDraft(lessons);
         if (!validation.valid) {
-          return reply.code(502).send({ code: "AI_LESSON_SET_INVALID", issues: validation.issues });
+          request.log.warn({ code: "AI_LESSON_SET_INVALID", issues: validation.issues }, "Repaired weekly lesson set failed validation");
+          return reply.code(502).send(publicLessonGenerationFailure(validation.issues));
         }
         try {
           await repositories.aiRuns.recordSucceeded({
@@ -428,8 +446,7 @@ export function registerContentRoutes(
       } catch (error) {
         const code = errorCode(error, "AI_LESSON_REPAIR_FAILED");
         request.log.warn({ code, message: error instanceof Error ? error.message : String(error) }, "Weekly lesson repair failed");
-        const issues = error && typeof error === "object" && "issues" in error ? (error as { issues?: unknown }).issues : undefined;
-        return reply.code(502).send({ code, ...(issues ? { issues } : {}) });
+        return reply.code(502).send(publicLessonGenerationFailure(error));
       }
     });
   }
@@ -500,13 +517,7 @@ export function registerContentRoutes(
         code: errorCode(error, "AI_LESSON_GENERATION_FAILED"),
         issues: error && typeof error === "object" && "details" in error ? (error as { details?: unknown }).details : undefined
       }, "Weekly lesson generation failed");
-      const code = errorCode(error, "AI_LESSON_GENERATION_FAILED");
-      const issues = error && typeof error === "object" && "issues" in error
-        ? (error as { issues?: unknown }).issues
-        : error && typeof error === "object" && "details" in error && (error as { details?: unknown }).details && typeof (error as { details?: unknown }).details === "object" && "issues" in (error as { details: { issues?: unknown } }).details
-          ? (error as { details: { issues?: unknown } }).details.issues
-          : undefined;
-      return reply.code(502).send({ code, ...(issues ? { issues } : {}) });
+      return reply.code(502).send(publicLessonGenerationFailure(error));
     }
   });
 
@@ -516,8 +527,14 @@ export function registerContentRoutes(
     const actorId = request.e4sSession!.user.id;
     const version = await repositories.content.lessonSetVersion(actorId, params.data.versionId);
     if (!version) return reply.code(404).send({ code: "CONTENT_VERSION_NOT_FOUND" });
+    const validation = validateLessonPublication(version.lessons, version.weeklyPractice);
+    if (!validation.valid) return reply.code(409).send({ code: "CONTENT_VALIDATION_FAILED", issues: validation.issues });
     try {
-      submitContentForReview({ status: version.status, lessons: version.lessons });
+      submitContentForReview({
+        status: version.status,
+        lessons: version.lessons,
+        ...(version.weeklyPractice ? { weeklyPractice: version.weeklyPractice } : {})
+      });
       const submitted = await repositories.content.submitVersionForReview(actorId, version.versionId);
       return submitted ?? reply.code(409).send({ code: "CONTENT_NOT_EDITABLE" });
     } catch (error) {
@@ -531,6 +548,8 @@ export function registerContentRoutes(
     const actorId = request.e4sSession!.user.id;
     const version = await repositories.content.lessonSetVersion(actorId, params.data.versionId);
     if (!version) return reply.code(404).send({ code: "CONTENT_VERSION_NOT_FOUND" });
+    const validation = validateLessonPublication(version.lessons, version.weeklyPractice);
+    if (!validation.valid) return reply.code(409).send({ code: "CONTENT_VALIDATION_FAILED", issues: validation.issues });
     try {
       approveContentVersion({ status: version.status, createdBy: version.createdBy ?? "", checkerId: actorId });
       return await repositories.content.publishVersion(actorId, version.versionId);

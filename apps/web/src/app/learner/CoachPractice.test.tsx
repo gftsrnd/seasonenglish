@@ -151,7 +151,7 @@ describe("app coach and weekly practice speech input", () => {
     render(<LearnerCoach view={{ ...coach, messages: [{
       id: "coach-structured", speaker: "coach", text: "Thanks. Could you shorten the bullet points?", createdAt: "2026-10-22T00:00:00.000Z",
       feedback: {
-        relevant: true, relevanceNote: "", evaluation: { status: "valid", countsTowardGoal: true, noteVi: "Đúng trọng tâm." },
+        relevant: true, relevanceNote: "", evaluation: { status: "valid", result: "partially_correct", countsTowardGoal: true, noteVi: "Đúng trọng tâm." },
         seasonReply: "Thanks for the clear answer.", seasonReplyTranslation: "Cảm ơn câu trả lời rõ ràng.",
         nextQuestion: "Could you shorten the bullet points?", nextQuestionTranslation: "Bạn có thể rút ngắn các gạch đầu dòng không?",
         rubric: {
@@ -167,7 +167,7 @@ describe("app coach and weekly practice speech input", () => {
     const feedback = screen.getByRole("region", { name: "Phản hồi của Season" });
     expect(feedback.querySelector(".coach-feedback-summary")).not.toBeNull();
     expect(feedback.querySelectorAll(".coach-feedback-score")).toHaveLength(3);
-    expect(within(feedback).queryByText("Câu hỏi tiếp theo của Season")).not.toBeInTheDocument();
+    expect(within(feedback).getByRole("heading", { name: "Câu bạn nên nói tiếp" })).toBeInTheDocument();
     expect(within(feedback).getByText("Could you shorten the bullet points?")).toBeInTheDocument();
     const seasonHeading = within(feedback).getByRole("heading", { name: "Câu Season trả lời" });
     const evaluationHeading = within(feedback).getByRole("heading", { name: "Nhận xét câu trả lời của bạn" });
@@ -175,14 +175,16 @@ describe("app coach and weekly practice speech input", () => {
     const nextQuestion = within(feedback).getByText("Could you shorten the bullet points?");
     expect(seasonHeading.compareDocumentPosition(evaluationHeading) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(evaluationHeading.compareDocumentPosition(correctionHeading) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-    expect(within(feedback).getByLabelText("Câu Season trả lời")).toContainElement(nextQuestion);
+    expect(within(feedback).getByLabelText("Câu Season trả lời")).not.toContainElement(nextQuestion);
+    expect(within(feedback).getByLabelText("Câu bạn nên nói tiếp")).toContainElement(nextQuestion);
+    expect(within(feedback).getByText("Kết quả: Đúng một phần")).toBeInTheDocument();
     expect(within(feedback).getByLabelText("Nhận xét câu trả lời của bạn")).not.toHaveTextContent("Thanks for the clear answer.");
     expect(within(feedback).queryByText("Ý nghĩa ba điểm")).not.toBeInTheDocument();
     expect(within(feedback).getByRole("heading", { name: "Gợi ý trả lời câu tiếp theo" })).toBeInTheDocument();
     const details = within(feedback).getByText("Xem giải thích và gợi ý").closest("details");
     expect(details).not.toHaveAttribute("open");
     expect(feedback.querySelectorAll("details")).toHaveLength(1);
-    expect(feedback.querySelectorAll(".coach-feedback-section")).toHaveLength(2);
+    expect(feedback.querySelectorAll(".coach-feedback-section")).toHaveLength(3);
     expect(feedback.querySelectorAll(".coach-feedback-criterion-card")).toHaveLength(3);
     expect(within(feedback).getByText("Cảm ơn câu trả lời rõ ràng.")).toBeInTheDocument();
     expect(within(feedback).getByText("Bạn có thể rút ngắn các gạch đầu dòng không?")).toBeInTheDocument();
@@ -196,7 +198,7 @@ describe("app coach and weekly practice speech input", () => {
     render(<LearnerCoach view={{ ...coach, messages: [{
       id: "coach-no-correction", speaker: "coach", text: "Good start. Where is the meeting room?", createdAt: "2026-10-22T00:00:00.000Z",
       feedback: {
-        relevant: true, relevanceNote: "", evaluation: { status: "valid", countsTowardGoal: true, noteVi: "Câu đúng nhưng có thể rõ hơn." },
+        relevant: true, relevanceNote: "", evaluation: { status: "valid", result: "partially_correct", countsTowardGoal: true, noteVi: "Câu đúng nhưng có thể rõ hơn." },
         seasonReply: "Good start.", seasonReplyTranslation: "Khởi đầu tốt.",
         nextQuestion: "Where is the meeting room?", nextQuestionTranslation: "Phòng họp ở đâu?",
         rubric: {
@@ -407,7 +409,7 @@ describe("app coach and weekly practice speech input", () => {
     render(<LearnerPractice view={practice} actions={callback} />);
 
     const draft = screen.getByRole("textbox", { name: "Bài làm" });
-    await user.type(draft, "I coordinate the weekly meeting.");
+    await user.type(draft, "I coordinate the weekly project meeting every Monday morning.");
     await user.click(screen.getByRole("button", { name: "Nộp bài" }));
 
     expect(screen.getByRole("button", { name: "Đang nộp…" })).toBeDisabled();
@@ -417,8 +419,44 @@ describe("app coach and weekly practice speech input", () => {
     rejectSubmit(new Error("SUBMIT_FAILED"));
     expect(await screen.findByRole("alert")).toHaveTextContent("Chưa nộp được bài");
     await waitFor(() => expect(draft).toHaveFocus());
-    expect(draft).toHaveValue("I coordinate the weekly meeting.");
+    expect(draft).toHaveValue("I coordinate the weekly project meeting every Monday morning.");
     expect(screen.getByRole("button", { name: "Nộp bài" })).toBeEnabled();
+  });
+
+  it("requires at least eight words before enabling weekly-practice submission", async () => {
+    const user = userEvent.setup();
+    render(<LearnerPractice view={practice} actions={actions()} />);
+
+    const draft = screen.getByRole("textbox", { name: "Bài làm" });
+    await user.type(draft, "one two three four five six seven");
+    expect(screen.getByText("7/8 từ tối thiểu")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Nộp bài" })).toBeDisabled();
+
+    await user.type(draft, " eight");
+    expect(screen.getByText("8/8 từ tối thiểu")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Nộp bài" })).toBeEnabled();
+  });
+
+  it("shows prior weekly-practice history and hides appeal after manual grading", () => {
+    const reviewed: PracticeView = {
+      ...practice,
+      state: "reviewed",
+      submission: {
+        id: "submission-1", status: "reviewed", text: "My submitted answer has enough words.", submittedAt: "2026-10-15T08:00:00.000Z",
+        score: { total: 82, rubric: { meaning: 4, vocabulary: 4, grammar: 3 } }, reviewState: "graded-manual",
+        gradingSource: "manual", feedback: "Checked by an operator.", suggestions: [], correctedText: "Corrected answer."
+      },
+      history: [{
+        id: "history-1", weekId: "week-0", weekNumber: 0, topic: "Introductions", task: "Introduce yourself.",
+        submittedAt: "2026-10-08T08:00:00.000Z", score: { total: 75, rubric: { meaning: 4, vocabulary: 3, grammar: 3 } }
+      }]
+    };
+
+    render(<LearnerPractice view={reviewed} actions={actions()} />);
+    expect(screen.getByRole("heading", { name: "Lịch sử bài tuần" })).toBeInTheDocument();
+    expect(screen.getByText(/Tuần 0 · Introductions/)).toBeInTheDocument();
+    expect(screen.queryByRole("textbox", { name: "Lý do kháng nghị" })).not.toBeInTheDocument();
+    expect(screen.getByText(/đã được chấm tay/i)).toBeInTheDocument();
   });
 
   it("keeps a weekly-practice appeal pending, recoverable, and clear of the bottom navigation", async () => {

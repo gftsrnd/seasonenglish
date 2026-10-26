@@ -31,9 +31,9 @@ function choice(key: string, prompt: string, labels: readonly string[], correctI
 const listeningGroups: StoredAssessmentDefinition["sections"][number]["groups"] = [
   {
     key: "LA", title: "Part A – Thông báo của quản lý",
-    instruction: "Nghe thông báo và trả lời câu 1–5.", maxPlays: 2,
+    instruction: "Nghe thông báo và trả lời câu 1–4.", maxPlays: 2,
     stimulus: { type: "audio_script", audioSrc: "/media/audio/placement-listening-LA.wav", lines: [
-      { speaker: "Manager", text: "Good morning, everyone. Just a quick reminder about tomorrow's team meeting. It will start at 9:30, not 9:00 as originally planned. We'll meet in Room 210. Please bring the latest sales report because we'll discuss our results from last month. If you have any questions, please speak to Sarah before the meeting." },
+      { speaker: "Manager", text: "Good morning, everyone. Just a quick reminder about tomorrow's team meeting. It will start at 9:30, not 9:00 as originally planned. We'll meet in Room 210. Please bring the latest sales report because we'll discuss our results from last month." },
       { speaker: "Employee", text: "Why has the time changed?" },
       { speaker: "Manager", text: "The client has asked us to move our morning call, so we needed to change the meeting time." }
     ] },
@@ -41,13 +41,12 @@ const listeningGroups: StoredAssessmentDefinition["sections"][number]["groups"] 
       choice("LA_0", "What time is the team meeting?", ["9:00", "9:30", "10:00", "10:30"], 1, 1),
       choice("LA_1", "Where is the meeting?", ["Room 201", "Room 210", "Room 220", "Online"], 1, 1),
       choice("LA_2", "What should employees bring?", ["Their laptops", "Their ID cards", "The sales report", "Their notebooks"], 2, 1),
-      choice("LA_3", "Who should the listener contact?", ["David", "Sarah", "Tom", "James"], 1, 1),
       choice("LA_4", "Why has the meeting changed?", ["The manager is sick.", "The room is unavailable.", "The client has changed the schedule.", "The company is having technical problems."], 2, 1)
     ]
   },
   {
     key: "LB", title: "Part B – Hội thoại với cấp trên",
-    instruction: "Nghe cuộc trao đổi và trả lời câu 6–10.", maxPlays: 2,
+    instruction: "Nghe cuộc trao đổi và trả lời câu 5–10.", maxPlays: 2,
     stimulus: { type: "audio_script", audioSrc: "/media/audio/placement-listening-LB.wav", lines: [
       { speaker: "Employee", text: "Hi, James. Do you have a minute? I'm working on the customer report, but I'm not sure how to handle one part of it." },
       { speaker: "Supervisor", text: "Sure. What's the problem?" },
@@ -56,11 +55,12 @@ const listeningGroups: StoredAssessmentDefinition["sections"][number]["groups"] 
       { speaker: "Employee", text: "No, not yet." },
       { speaker: "Supervisor", text: "I'd start there. We had a very similar case last month, and the report might show you which procedure we followed." },
       { speaker: "Employee", text: "Okay. I'll check those records first." },
-      { speaker: "Supervisor", text: "Good. If you still can't find the answer, come back to me. We have to send the report today, but there may be some flexibility with the exact time." },
+      { speaker: "Supervisor", text: "Good. If you still can't find the answer, come back to me. If you have any questions about the report, please speak to Sarah before we send it. We have to send the report today, but there may be some flexibility with the exact time." },
       { speaker: "Employee", text: "That's helpful. Thanks." }
     ] },
     tasks: [
       choice("LB_0", "What difficulty is the employee experiencing while preparing the customer report?", ["She cannot access the company website.", "She is unsure which procedure to follow for an unusual refund case.", "She cannot understand the language used in the customer's message.", "She cannot contact her supervisor."], 1, 1),
+      choice("LB_Q6", "Who should the listener contact?", ["David", "Sarah", "Tom", "James"], 1, 1),
       choice("LB_1", "What does the supervisor suggest first?", ["Asking another department for help", "Checking previous customer records", "Calling the customer", "Sending the report immediately"], 1, 1),
       choice("LB_2", "Why does the supervisor suggest checking previous records?", ["They may contain a similar case.", "They contain the customer's personal information.", "They are required by company policy.", "They are easier to understand."], 0, 1),
       choice("LB_3", "What will the employee do next?", ["Contact the customer", "Check previous cases", "Rewrite the whole report", "Ask the IT department"], 1, 1),
@@ -146,7 +146,7 @@ export const placementDefinition: StoredAssessmentDefinition = {
   key: "placement-a",
   kind: "placement",
   title: "Workplace English CEFR Placement Test",
-  version: 1,
+  version: 2,
   totalMinutes: 75,
   totalScore: 100,
   sections: [
@@ -194,7 +194,14 @@ export const placementDefinition: StoredAssessmentDefinition = {
 export const levelUpDefinition: StoredAssessmentDefinition = {
   key: "levelup-b1", kind: "level-up", title: "Đề thi lên mức B1", version: 1, totalMinutes: 38, totalScore: 100, targetLevel: "B1",
   sections: [
-    { code: "listening", title: "Nghe", durationMinutes: 8, maxScore: 25, instructions: ["5 câu, mỗi câu 5 điểm."], groups: [{ ...listeningGroups[0]!, tasks: listeningGroups[0]!.tasks.map((task) => ({ ...task, maxScore: 5 })) }] },
+    { code: "listening", title: "Nghe", durationMinutes: 8, maxScore: 25, instructions: ["5 câu, mỗi câu 5 điểm."], groups: [{
+      ...listeningGroups[0]!,
+      instruction: "Nghe thông báo và trả lời 5 câu.",
+      tasks: [
+        ...listeningGroups[0]!.tasks.map((task) => ({ ...task, maxScore: 5 })),
+        choice("LA_LEVEL_5", "What will the team discuss?", ["Next year's budget", "Last month's results", "A new office", "The holiday schedule"], 1, 5)
+      ]
+    }] },
     { code: "reading", title: "Đọc", durationMinutes: 13, maxScore: 25, instructions: ["5 câu, mỗi câu 5 điểm."], groups: [{ ...readingGroups[1]!, tasks: readingGroups[1]!.tasks.slice(0, 5).map((task) => ({ ...task, maxScore: 5 })) }] },
     { code: "writing", title: "Viết", durationMinutes: 10, maxScore: 25, instructions: ["Viết 80–120 từ theo tình huống công việc."], groups: [{ key: "LW", title: "Writing", instruction: "Hoàn thành một task.", tasks: [{ key: "LW1", prompt: "Viết email xác nhận một thay đổi lịch họp và đề xuất bước tiếp theo.", responseType: "long_text", maxScore: 25, minWords: 80, maxWords: 120 }] }] },
     { code: "speaking", title: "Nói", durationMinutes: 7, maxScore: 25, instructions: ["Hoàn thành một tình huống nói ở mức đích."], groups: [{ key: "LS", title: "Speaking", instruction: "Nộp bằng chứng nói.", tasks: [{ key: "LS1", prompt: "Giải thích cho đồng nghiệp một dự án bị trễ và thống nhất hành động tiếp theo.", responseType: "speaking_evidence", maxScore: 25 }] }] }

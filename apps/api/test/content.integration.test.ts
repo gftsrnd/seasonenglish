@@ -28,14 +28,16 @@ function lesson(dayNumber: number) {
     durationMinutes: 10,
     parts: [
       { code: "objective", title: "Mục tiêu", content: { text: "Tự giới thiệu công việc." } },
-      { code: "instruction", title: "Hướng dẫn", content: { text: "Dùng I work in… as…" } },
-      { code: "vocabulary", title: "Từ vựng", content: { items: ["department", "role", "project"] } },
-      { code: "grammar", title: "Ngữ pháp", content: { formula: "I work in [team] as [role]." } },
-      { code: "pronunciation", title: "Phát âm", content: { focus: "/w/" } },
-      { code: "listening", title: "Nghe", content: { prompt: "Where does she work?" } },
-      { code: "reading", title: "Đọc", content: { text: "I work in AI as an intern." } },
-      { code: "writing", title: "Viết", content: { prompt: "Write one sentence." } },
-      { code: "speaking", title: "Nói", content: { prompt: "Introduce your role." } }
+      { code: "instruction", title: "Hướng dẫn", content: { steps: ["Học nội dung", "Làm bài tập"] } },
+      { code: "vocabulary", title: "Từ vựng", content: { items: ["department", "role", "project"].map((word) => ({ word, meaning: "từ công việc", collocations: [`my ${word}`, `new ${word}`, `work ${word}`] })) } },
+      { code: "grammar", title: "Ngữ pháp", content: { formula: "I work in [team] as [role].", examples: ["I work in AI as an intern."] } },
+      { code: "pronunciation", title: "Phát âm", content: { focus: "/w/", words: ["work", "week", "well"], instruction: "Round your lips." } },
+      { code: "listening", title: "Nghe", content: { script: "I work in AI as an intern.", prompt: "Where does she work?", options: ["AI", "HR", "Sales", "Finance"], answer: "AI" } },
+      { code: "reading", title: "Đọc", content: { text: "I work in AI as an intern.", prompt: "Where does she work?", options: ["AI", "HR", "Sales", "Finance"], answer: "AI" } },
+      { code: "writing", title: "Viết", content: { type: "fill", prompt: "I work in ___.", answer: "AI" } },
+      { code: "word_class", title: "Từ loại", content: { prompt: "What is role?", options: ["noun", "verb", "adjective", "adverb"], answer: "noun" } },
+      { code: "word_use", title: "Dùng từ", content: { prompt: "Which sentence is correct?", options: ["I work in AI.", "I works AI.", "I working AI.", "I work AI yesterday."], answer: "I work in AI." } },
+      { code: "speaking", title: "Nói", content: { prompt: "Introduce your role.", sample: "I work in AI as an intern." } }
     ]
   };
 }
@@ -61,7 +63,7 @@ const repairRunner: AiTaskRunner = {
       status: "classified", contentType: "sentence_pattern", targetName: "S + V + O", scope: "Talking about work",
       support: "explicit", confidence: "high", evidence: [{ sourceRef: "lessonFocus", quote: "talk about work" }], rejectedCandidates: []
     } : taskKey === "weekly_lesson_foundation" ? {
-      title: "S + V + O", durationMinutes: 10,
+      title: "I work in + department", durationMinutes: 10,
       objective: { title: "Mục tiêu bài học", explanationLanguage: "vi", items: [
         { type: "content", text: "SWBAT identify two job details after listening.", condition: "after listening", criterion: "two details", assessmentCode: "listening" },
         { type: "language", text: "SWBAT say one complete sentence about work.", condition: "in a role-play", criterion: "one complete sentence", assessmentCode: "speaking" }
@@ -72,12 +74,12 @@ const repairRunner: AiTaskRunner = {
     } : taskKey === "weekly_lesson_vocabulary" ? {
       title: "Từ vựng", word1: vocabularyItem(dayWords[0]!), word2: vocabularyItem(dayWords[1]!), word3: vocabularyItem(dayWords[2]!)
     } : {
-      listening: { title: "Nghe", body: "I work in AI with my small team every weekday.", prompt: "Where does the speaker work?", option1: "AI", option2: "HR", option3: "Sales", option4: "Finance", answer: "AI" },
-      reading: { title: "Đọc", body: "Lan works in AI with a small team. She checks one report every morning and sends it to her manager.", prompt: "What does Lan check?", option1: "A report", option2: "An email", option3: "A meeting", option4: "A customer", answer: "A report" },
-      writing: { title: "Viết", type: "fill", prompt: "I work in ___.", option1: null, option2: null, option3: null, option4: null, answer: "AI" },
-      wordClass: { title: "Từ loại", body: undefined, prompt: "What part of speech is work?", option1: "noun", option2: "verb", option3: "adjective", option4: "adverb", answer: "noun" },
-      wordUse: { title: "Dùng từ", body: undefined, prompt: "Which sentence uses work correctly?", option1: "I have work.", option2: "I work at GFT.", option3: "Work is blue.", option4: "I workly today.", answer: "I work at GFT." },
-      speaking: { title: "Nói", prompt: "Nói nơi bạn làm việc.", answer: "I work in AI." }
+      listening: { title: "Nghe", body: "I work in AI with my small team every weekday.", prompt: "Where does the speaker work?", option1: "AI", option2: "HR", option3: "Sales", option4: "Finance", answer: "AI", hint: "Listen for the department.", questionTranslation: "Người nói làm ở đâu?", answerTranslation: "AI" },
+      reading: { title: "Đọc", body: "Lan works in AI with a small team. She checks one report every morning and sends it to her manager.", prompt: "What does Lan check?", option1: "A report", option2: "An email", option3: "A meeting", option4: "A customer", answer: "A report", hint: "Read what she checks each morning.", questionTranslation: "Lan kiểm tra gì?", answerTranslation: "Một báo cáo" },
+      writing: { title: "Viết", type: "fill", prompt: "I work in ___.", option1: null, option2: null, option3: null, option4: null, answer: "AI", hint: "Use the department name.", questionTranslation: "Tôi làm việc trong bộ phận ___.", answerTranslation: "AI" },
+      wordClass: { title: "Từ loại", body: undefined, prompt: "What part of speech is work?", option1: "noun", option2: "verb", option3: "adjective", option4: "adverb", answer: "noun", hint: "It names an activity here.", questionTranslation: "Work là từ loại gì?", answerTranslation: "danh từ" },
+      wordUse: { title: "Dùng từ", body: undefined, prompt: "Which sentence uses work correctly?", option1: "I have work.", option2: "I work at GFT.", option3: "Work is blue.", option4: "I workly today.", answer: "I work at GFT.", hint: "Choose a natural workplace sentence.", questionTranslation: "Câu nào dùng work đúng?", answerTranslation: "Tôi làm việc tại GFT." },
+      speaking: { title: "Nói", prompt: "Nói nơi bạn làm việc.", answer: "I work in AI.", hint: "Bắt đầu bằng I work.", questionTranslation: "Nói nơi bạn làm việc.", answerTranslation: "Tôi làm việc trong bộ phận AI." }
     };
     return {
       output,
@@ -261,6 +263,35 @@ describe("content operations API", () => {
       method: "GET", url: `/api/v1/lessons/${lessons[0]?.id}`, headers: { cookie: learnerCookie }
     });
     expect(hiddenAfterRetirement.statusCode).toBe(404);
+  });
+
+  it("keeps an incomplete manual lesson as draft but blocks review with repairable Vietnamese issues", async () => {
+    const incomplete = lesson(1);
+    const listening = incomplete.parts.find((part) => part.code === "listening")!;
+    listening.content = { prompt: "Where does she work?", options: ["AI", "HR", "Sales", "Finance"], answer: "AI" };
+    const speaking = incomplete.parts.find((part) => part.code === "speaking")!;
+    speaking.content = { prompt: "Introduce your role." } as typeof speaking.content;
+
+    const created = await app.inject({
+      method: "PUT", url: "/api/v1/content/lesson-sets/2/B1/draft", headers: { cookie: makerCookie },
+      payload: { lessons: [1, 2, 3, 4, 5].map((dayNumber) => dayNumber === 1 ? incomplete : lesson(dayNumber)) }
+    });
+    expect(created.statusCode, created.body).toBe(201);
+    const versionId = (created.json() as { versionId: string }).versionId;
+
+    const submitted = await app.inject({
+      method: "POST", url: `/api/v1/content/lesson-set-versions/${versionId}/review`, headers: { cookie: makerCookie }, payload: {}
+    });
+    expect(submitted.statusCode, submitted.body).toBe(409);
+    expect(submitted.json()).toMatchObject({
+      code: "CONTENT_VALIDATION_FAILED",
+      issues: expect.arrayContaining([
+        expect.objectContaining({ dayNumber: 1, code: "listening", message: expect.stringContaining("nguồn âm thanh") }),
+        expect.objectContaining({ dayNumber: 1, code: "speaking", message: expect.stringContaining("câu mẫu") })
+      ])
+    });
+    const persisted = await pool.query<{ status: string }>("select status from lesson_set_versions where id = $1", [versionId]);
+    expect(persisted.rows[0]?.status).toBe("draft");
   });
 
   it("saves a versioned weekly-practice draft without losing the five lessons", async () => {

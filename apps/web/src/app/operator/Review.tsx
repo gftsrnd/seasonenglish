@@ -41,7 +41,7 @@ export function generateWeeklyPracticeDraft(topic: string, cefr: Cefr, vocabular
   };
 }
 
-function WeeklyPracticeEditor({ item, readOnly, onSave }: { item: ReviewWeeklyPractice; readOnly: boolean; onSave: NonNullable<OperatorReviewActions["onSaveWeeklyPractice"]> }) {
+export function WeeklyPracticeEditor({ item, readOnly, onSave }: { item: ReviewWeeklyPractice; readOnly: boolean; onSave: NonNullable<OperatorReviewActions["onSaveWeeklyPractice"]> }) {
   const [task, setTask] = useState(item.task);
   const [guidance, setGuidance] = useState(item.guidance);
   const [vocabulary, setVocabulary] = useState(item.requiredVocabulary.join(", "));

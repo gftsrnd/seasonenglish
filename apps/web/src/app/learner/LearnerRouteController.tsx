@@ -11,6 +11,7 @@ import type {
   LearnerProfileView
 } from "@e4s/contracts";
 import { learnerApiClient as apiClient } from "../../api/learner.js";
+import { ApiError } from "../../api/runtime.js";
 import { useExperience } from "../../features/experience/Experience.js";
 // This controller is lazy-loaded directly by the role router. Keep the
 // Learner-only visual layer in the same chunk so its lesson/profile spacing
@@ -173,7 +174,7 @@ export function LearnerRouteController() {
         navigate("/home", { replace: true });
         return;
       }
-      setError(loadError(route.name)); setLoading(false);
+      setError(learnerLoadError(route.name, reason)); setLoading(false);
     };
     const needsPlacementUnlock = route.name !== "home" && route.name !== "onboard" && !(route.name === "assessment" && route.params.kind === "placement");
     const load = async () => {
@@ -498,6 +499,17 @@ function loadError(route: ResolvedLearnerRoute["name"]) {
     games: "Chưa có bộ từ cho mini game.", game: "Chưa có bộ từ cho mini game.", arena: "Không tải được đấu trường.", duel: "Không tải được trận đấu.", notFound: "Không tìm thấy trang."
   };
   return labels[route];
+}
+
+export function learnerLoadError(route: ResolvedLearnerRoute["name"], reason: unknown): string {
+  if (route === "assessment" && reason instanceof ApiError && reason.code === "PLACEMENT_ATTEMPT_RESTART_REQUIRED") {
+    const details = reason.details && typeof reason.details === "object" && !Array.isArray(reason.details)
+      ? reason.details as Record<string, unknown>
+      : undefined;
+    if (typeof details?.message === "string" && details.message.trim()) return details.message;
+    return "Bài test cũ không thể chuyển an toàn sang phiên bản mới. Hãy bắt đầu lại để tránh trộn đề và điểm.";
+  }
+  return loadError(route);
 }
 
 function loadRecovery(route: ResolvedLearnerRoute["name"]) {

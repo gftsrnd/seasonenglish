@@ -10,6 +10,15 @@ export function conciseLessonObjective(value: string | undefined): string {
   return concise ? concise.charAt(0).toLocaleUpperCase("vi") + concise.slice(1) : firstSentence;
 }
 
+export function learnerFacingObjective(value: string, cefr: string): string {
+  const body = value.replace(/^SWBAT\s+/i, "").trim();
+  if (!body) return "—";
+  const sentence = body.charAt(0).toLocaleLowerCase("en-US") + body.slice(1);
+  return cefr === "A1" || cefr === "A2"
+    ? `Sau bài học, bạn có thể ${sentence}`
+    : `By the end of this lesson, you will be able to ${sentence}`;
+}
+
 export function conciseSpeakingInstruction(value: string | undefined): string {
   const normalized = value?.replace(/\s+/g, " ").trim() ?? "";
   if (/\b(?:positive|good point|could be better|colleague|feedback|report)\b/i.test(normalized)) {
@@ -29,9 +38,5 @@ export function conciseSpeakingModel(value: string | undefined): string {
 
 export function conciseGrammarExample(value: string | undefined): string {
   const normalized = value?.replace(/\s+/g, " ").trim() ?? "";
-  if (!normalized) return "—";
-  const englishOnly = normalized.replace(/\s*\([^)]*[À-ỹ][^)]*\)\s*$/iu, "").trim();
-  const sentence = englishOnly.match(/^.*?[.!?](?:\s|$)/u)?.[0]?.trim() ?? englishOnly;
-  const words = sentence.split(/\s+/).filter(Boolean);
-  return words.length <= 12 ? sentence : `${words.slice(0, 12).join(" ").replace(/[,:;.!?]+$/, "")}.`;
+  return normalized || "—";
 }

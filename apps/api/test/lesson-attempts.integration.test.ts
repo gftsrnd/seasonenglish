@@ -1,7 +1,7 @@
 import { Pool } from "pg";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { migrateDatabase, resetPublicSchema, seedDemo } from "@e4s/database";
-import { createCredentialHash } from "@e4s/domain/identity";
+import { createPinHash } from "@e4s/domain/identity";
 import { DEMO_IDS } from "@e4s/test-support";
 import { buildApi } from "../src/app.js";
 
@@ -19,9 +19,11 @@ describe("lesson exercise evidence API", () => {
       await resetPublicSchema(client);
       await migrateDatabase(client);
       await seedDemo(client);
+      await client.query("update programs set start_date = current_date - 1 where id = $1", [DEMO_IDS.program]);
+      await client.query("delete from progress_records where learner_id = $1 and lesson_id = $2", [DEMO_IDS.learner, DEMO_IDS.lessons[1]]);
       await client.query(
         "insert into user_credentials (user_id, credential_hash) values ($1, $2)",
-        [DEMO_IDS.learner, await createCredentialHash("learner-pass")]
+        [DEMO_IDS.learner, await createPinHash("123456")]
       );
     } finally {
       client.release();
@@ -29,7 +31,7 @@ describe("lesson exercise evidence API", () => {
     await app.ready();
     const login = await app.inject({
       method: "POST", url: "/api/auth/learner/login",
-      payload: { email: "minh.anh.nguyen@e4s.local", password: "learner-pass" }
+      payload: { email: "minh.anh.nguyen@e4s.local", pin: "123456" }
     });
     cookie = String(login.headers["set-cookie"]).split(";")[0] ?? "";
   }, 30_000);
@@ -66,6 +68,13 @@ describe("lesson exercise evidence API", () => {
     expect(retry.json()).toMatchObject({ evidence: { status: "correct", attempts: 2, score: 100 } });
     expect(retry.json().progress.completedPartCodes).toContain("listening");
 
+    const third = await app.inject({
+      method: "POST", url: `/api/v1/lessons/${lessonId}/parts/listening/attempts`, headers: { cookie },
+      payload: { requestId: "30000000-0000-4000-8000-000000000099", evidence: { answer: "In 2023" } }
+    });
+    expect(third.statusCode, third.body).toBe(409);
+    expect(third.json()).toMatchObject({ code: "LESSON_ATTEMPTS_EXHAUSTED" });
+
     const reward = await pool.query(
       "select count(*)::int as count, coalesce(sum(points), 0)::int as points from reward_events where learner_id = $1 and source_type = 'lesson_part'",
       [DEMO_IDS.learner]
@@ -96,6 +105,12 @@ describe("lesson exercise evidence API", () => {
     });
     expect(translated.statusCode, translated.body).toBe(200);
     expect(translated.json()).toMatchObject({ evidence: { status: "translated" } });
+
+    const tooShort = await app.inject({
+      method: "POST", url: `/api/v1/lessons/${lessonId}/parts/reading/appeals`, headers: { cookie },
+      payload: { reason: "abcd" }
+    });
+    expect(tooShort.statusCode, tooShort.body).toBe(400);
 
     const appeal = await app.inject({
       method: "POST", url: `/api/v1/lessons/${lessonId}/parts/reading/appeals`, headers: { cookie },

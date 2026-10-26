@@ -797,6 +797,7 @@
 .app-operator .operator-lesson-preview .vocabulary-card-relations .chip.umb { flex: 0 1 auto; min-height: 34px; }
 .app-operator .operator-lesson-preview .lesson-part--objective { border: 1px solid #efc99f; background: #fff1df !important; padding: 18px 20px !important; }
 .app-operator .operator-lesson-preview .lesson-objective-text { margin: 7px 0 0; font-size: 1rem; font-weight: 800; line-height: 1.45; }
+.app-operator .operator-lesson-preview .lesson-objective-list { margin: 8px 0 0; padding-left: 1.25rem; display: grid; gap: 8px; font-size: 1rem; font-weight: 700; line-height: 1.45; }
 .app-operator .operator-lesson-preview .lesson-part--objective h2 { color: #241407; }
 .app-operator .operator-lesson-preview .lesson-part--vocabulary .lesson-vocabulary-heading {
   margin: 0 0 12px;
@@ -2737,6 +2738,13 @@ body:has(.app-operator) #modal > .dialog > .row {
 .operator-weekly-practice-editor textarea { min-height:84px; resize:vertical; }
 .operator-weekly-practice-editor input,
 .operator-weekly-practice-editor textarea { width:100%; font-weight:400; }
+.app-operator[aria-label^="Bài tuần"] > .operator-weekly-practice-section {
+  display: block;
+  margin-top: 18px;
+}
+.app-operator[aria-label^="Bài tuần"] > .operator-weekly-practice-section > .operator-weekly-practice-editor {
+  margin: 0;
+}
 .operator-attempt-learner-list { display:grid; gap:10px; margin-top:12px; }
 .operator-attempt-learner-list .operator-review-learner-group { border:1px solid var(--line); border-radius:12px; overflow:hidden; background:var(--surface); }
 .operator-attempt-learner-list .table-wrap { margin:0 12px 12px; }

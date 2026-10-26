@@ -79,7 +79,7 @@ describe("P2 reward ledger", () => {
       taskId: prompt.rows[0]!.task_id,
       promptVersionId: prompt.rows[0]!.id,
       output: {
-        evaluation: { status: "valid", countsTowardGoal: true, noteVi: "Đúng trọng tâm." },
+        evaluation: { status: "valid", result: "correct", countsTowardGoal: true, noteVi: "Đúng trọng tâm." },
         seasonReply: "Good.", seasonReplyTranslation: "Tốt.",
         nextQuestion: "What is the main risk?", nextQuestionTranslation: "Rủi ro chính là gì?",
         rubric: {

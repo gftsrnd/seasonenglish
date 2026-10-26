@@ -5,6 +5,7 @@ import { userEvent } from "@testing-library/user-event";
 import { MemoryRouter } from "react-router";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { GameHubView, LearnerHomeView, LearnerProfileView, LearnerProgressView, MicroLessonView } from "@e4s/contracts";
+import { ApiError } from "../src/api/runtime.js";
 
 const api = vi.hoisted(() => ({
   getHome: vi.fn(),
@@ -20,13 +21,20 @@ const api = vi.hoisted(() => ({
 
 vi.mock("../src/api/learner.js", () => ({ learnerApiClient: api }));
 
-import { LearnerRouteController, printLearnerReward, resolveLearnerRoute } from "../src/app/learner/LearnerRouteController.js";
+import { LearnerRouteController, learnerLoadError, printLearnerReward, resolveLearnerRoute } from "../src/app/learner/LearnerRouteController.js";
 
 afterEach(() => { cleanup(); vi.clearAllMocks(); });
 
 describe("learner route integration controller", () => {
   it("does not resolve the retired final assessment route", () => {
     expect(resolveLearnerRoute("/test/final")).toEqual({ name: "notFound", params: {} });
+  });
+
+  it("shows the server's explicit restart message for an incompatible stale Placement attempt", () => {
+    const message = "Đề cũ không thể chuyển an toàn. Hãy bắt đầu lại.";
+    const error = new ApiError("PLACEMENT_ATTEMPT_RESTART_REQUIRED", "http", 409, { message });
+
+    expect(learnerLoadError("assessment", error)).toBe(message);
   });
 
   it.each([

@@ -85,6 +85,25 @@ describe("operator granular lesson editor", () => {
     }));
   });
 
+  it("stores no-suitable grammar as unavailable instead of forcing invented content", async () => {
+    const user = userEvent.setup();
+    const onSave = vi.fn().mockResolvedValue(undefined);
+    vi.spyOn(window, "confirm").mockReturnValue(true);
+    render(<LessonFormEditor weekNumber={1} cefr="A2" initial={emptyLesson(1)} onSave={onSave} onCancel={() => undefined} />);
+
+    await user.click(screen.getByRole("checkbox", { name: "Bài này không có nội dung ngữ pháp phù hợp" }));
+    expect(screen.getByLabelText("Ngữ pháp")).toBeDisabled();
+    await user.click(screen.getByRole("button", { name: "Kiểm tra & lưu" }));
+    await user.click(screen.getByRole("button", { name: "Lưu dù còn thiếu" }));
+
+    const saved = onSave.mock.calls[0]?.[0];
+    expect(saved.parts.find((part: { code: string }) => part.code === "grammar")?.content).toEqual(expect.objectContaining({
+      status: "unavailable",
+      hidden: true,
+      reason: "no_suitable_content"
+    }));
+  });
+
   it("round-trips manually edited vocabulary relationships", async () => {
     const user = userEvent.setup();
     const onSave = vi.fn().mockResolvedValue(undefined);

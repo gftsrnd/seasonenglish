@@ -1105,6 +1105,7 @@ h1,h2,h3,h4,h1 b,h2 b,h3 b,h4 b{font-weight:600 !important}
 .coach-page .coach-feedback-summary{display:grid;grid-template-columns:auto minmax(0,1fr);align-items:center;gap:14px}
 .coach-page .coach-feedback-heading{font-weight:700;font-size:1rem}
 .coach-page .coach-feedback-note{margin:0;color:var(--muted);font-size:.9rem;line-height:1.5}
+.coach-page .coach-feedback-result{width:max-content;margin:0 0 4px;border-radius:999px;background:var(--primary-soft);padding:3px 8px;color:var(--brown);font-size:.78rem;font-weight:750}
 .coach-page .coach-feedback-scores{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:0;padding:7px 0;border-block:1px solid var(--line)}
 .coach-page .coach-feedback-score{display:flex;align-items:center;justify-content:center;gap:7px;min-width:0;padding:0 10px;background:transparent;text-align:left}
 .coach-page .coach-feedback-score+.coach-feedback-score{border-left:1px solid var(--line)}
@@ -1515,6 +1516,7 @@ h1,h2,h3,h4,h1 b,h2 b,h3 b,h4 b{font-weight:600 !important}
 .lesson-page .vocabulary-card-relations .chip.umb { flex: 0 1 auto; min-height: 34px; }
 .lesson-page .lesson-part--objective { border: 1px solid #efc99f; background: #fff1df !important; padding: 18px 20px !important; }
 .lesson-page .lesson-objective-text { margin: 7px 0 0; font-size: 1rem; font-weight: 800; line-height: 1.45; }
+.lesson-page .lesson-objective-list { margin: 8px 0 0; padding-left: 1.25rem; display: grid; gap: 8px; font-size: 1rem; font-weight: 700; line-height: 1.45; }
 .lesson-page .lesson-part--objective h2 { color: #241407; }
 .lesson-page .lesson-part--vocabulary .lesson-vocabulary-heading {
   margin: 0 0 12px;

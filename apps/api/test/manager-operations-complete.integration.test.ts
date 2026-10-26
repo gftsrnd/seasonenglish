@@ -17,6 +17,7 @@ const purgeFileId = "00000000-0000-4000-8000-000000000909";
 const purgeAttemptId = "00000000-0000-4000-8000-000000000910";
 const purgeScoreId = "00000000-0000-4000-8000-000000000911";
 const purgeDecisionId = "00000000-0000-4000-8000-000000000912";
+const purgeDeleteRequestId = "00000000-0000-4000-8000-000000000913";
 
 describe("complete Manager learner and account operations API", () => {
   const pool = new Pool({ connectionString: databaseUrl });
@@ -45,6 +46,12 @@ describe("complete Manager learner and account operations API", () => {
         `insert into users (id, organization_id, role, display_name, email, avatar, status)
          values ($1, $2, 'learner', 'Tài khoản chờ xoá', 'purge@e4s.local', '{"color":"rose","acc":"star","bg":2}'::jsonb, 'deleted')`,
         [purgeAccountId, DEMO_IDS.organization]
+      );
+      await client.query(
+        `insert into audit_events (id, organization_id, actor_user_id, action, entity_type, entity_id, payload, trace_id)
+         values ($1, $2, $3, 'learner.deletion_requested', 'user', $4, $5::jsonb, $6)`,
+        [purgeDeleteRequestId, DEMO_IDS.organization, DEMO_IDS.operator, purgeAccountId,
+          JSON.stringify({ status: "pending", reason: "Tài khoản đang chờ xoá", requestedBy: DEMO_IDS.operator }), "00000000-0000-4000-8000-000000000914"]
       );
       await client.query("insert into user_credentials (user_id, credential_hash) values ($1, $2)", [purgeAccountId, await createCredentialHash("purge-pass")]);
       await client.query(
@@ -100,8 +107,8 @@ describe("complete Manager learner and account operations API", () => {
       expect(response.statusCode, response.body).toBe(200);
       return String(response.headers["set-cookie"]).split(";")[0] ?? "";
     };
-    managerCookie = await login("manager@e4s.local", "manager-pass");
-    operatorCookie = await login("operator@e4s.local", "operator-pass");
+    managerCookie = await login("quoc.bao.le@e4s.local", "manager-pass");
+    operatorCookie = await login("thu.ha.tran@e4s.local", "operator-pass");
   }, 30_000);
 
   afterAll(async () => { await app.close(); await pool.end(); });
@@ -112,7 +119,7 @@ describe("complete Manager learner and account operations API", () => {
 
     expect(manager.statusCode, manager.body).toBe(200);
     expect(manager.json()).toMatchObject({
-      learner: { id: DEMO_IDS.learner, displayName: "Học viên Demo", status: "active" },
+      learner: { id: DEMO_IDS.learner, displayName: "Nguyễn Minh Anh", status: "active" },
       profile: expect.any(Object),
       metrics: expect.objectContaining({ completedLessons: expect.any(Number), rewardPoints: expect.any(Number) })
     });
@@ -124,7 +131,7 @@ describe("complete Manager learner and account operations API", () => {
   it("lets a Manager restore trash and anonymize a deleted account without breaking history", async () => {
     const requests = await app.inject({ method: "GET", url: "/api/v1/manager/delete-requests", headers: { cookie: managerCookie } });
     expect(requests.statusCode, requests.body).toBe(200);
-    expect(requests.json()).toMatchObject({ requests: [expect.objectContaining({ id: deleteRequestId, status: "pending", learnerId: DEMO_IDS.learner })] });
+    expect(requests.json()).toMatchObject({ requests: expect.arrayContaining([expect.objectContaining({ id: deleteRequestId, status: "pending", learnerId: DEMO_IDS.learner })]) });
 
     const decided = await app.inject({
       method: "POST", url: `/api/v1/manager/delete-requests/${deleteRequestId}/decision`, headers: { cookie: managerCookie },
@@ -176,8 +183,11 @@ describe("complete Manager learner and account operations API", () => {
     await expect(pool.query("select reason from assessment_decisions where id = $1", [purgeDecisionId])).resolves.toMatchObject({ rows: [{ reason: "Nội dung đã được xoá khi ẩn danh tài khoản." }] });
     const accountsAfterPurge = await app.inject({ method: "GET", url: "/api/v1/manager/accounts", headers: { cookie: managerCookie } });
     const trashAfterPurge = await app.inject({ method: "GET", url: "/api/v1/manager/trash", headers: { cookie: managerCookie } });
+    const requestsAfterPurge = await app.inject({ method: "GET", url: "/api/v1/manager/delete-requests", headers: { cookie: managerCookie } });
     expect(accountsAfterPurge.body).not.toContain(purgeAccountId);
     expect(trashAfterPurge.body).not.toContain(purgeAccountId);
+    expect(requestsAfterPurge.body).not.toContain(purgeAccountId);
+    expect(requestsAfterPurge.body).not.toContain("Người học đã xoá");
     const reusedConfirmation = await app.inject({
       method: "DELETE", url: `/api/v1/manager/trash/${purgeAccountId}`, headers: { cookie: managerCookie },
       payload: { confirmationToken: confirmation.json().token, confirmationPhrase: confirmation.json().confirmationPhrase }
@@ -209,5 +219,36 @@ describe("complete Manager learner and account operations API", () => {
 
     const operator = await app.inject({ method: "GET", url: "/api/v1/manager/pin-reports", headers: { cookie: operatorCookie } });
     expect(operator.statusCode).toBe(403);
+  });
+
+  it("lets an Operator request Manager password help without account enumeration or duplicate reminders", async () => {
+    const first = await app.inject({
+      method: "POST", url: "/api/auth/staff/password-help", payload: { email: "thu.ha.tran@e4s.local" }
+    });
+    const duplicate = await app.inject({
+      method: "POST", url: "/api/auth/staff/password-help", payload: { email: "THU.HA.TRAN@e4s.local" }
+    });
+    const unknown = await app.inject({
+      method: "POST", url: "/api/auth/staff/password-help", payload: { email: "missing@e4s.local" }
+    });
+
+    expect(first.statusCode, first.body).toBe(202);
+    expect(duplicate.statusCode, duplicate.body).toBe(202);
+    expect(unknown.statusCode, unknown.body).toBe(202);
+    expect(first.json()).toEqual({ requested: true });
+    expect(duplicate.json()).toEqual(first.json());
+    expect(unknown.json()).toEqual(first.json());
+
+    await expect(pool.query(
+      `select count(*)::int as count from manager_pin_reports
+       where subject_user_id = $1 and status = 'open' and note = $2`,
+      [DEMO_IDS.operator, "Người vận hành báo quên mật khẩu và cần Quản lý đặt lại."]
+    )).resolves.toMatchObject({ rows: [{ count: 1 }] });
+
+    const reports = await app.inject({ method: "GET", url: "/api/v1/manager/pin-reports", headers: { cookie: managerCookie } });
+    expect(reports.statusCode, reports.body).toBe(200);
+    expect(reports.json()).toMatchObject({ reports: expect.arrayContaining([
+      expect.objectContaining({ subjectUserId: DEMO_IDS.operator, subjectName: "Trần Thu Hà", status: "open" })
+    ]) });
   });
 });

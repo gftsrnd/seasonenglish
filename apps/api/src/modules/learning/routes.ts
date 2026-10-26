@@ -113,12 +113,20 @@ export function registerLearningRoutes(
     if (!parsed.success) return reply.code(400).send({ code: "INVALID_PROFILE", issues: parsed.error.issues });
     const { version, ...profile } = parsed.data;
     const complete = isLearnerProfileComplete(profile as LearnerProfileData);
-    const saved = await repositories.learning.saveProfile({
-      learnerId: request.e4sSession!.user.id,
-      profile: profile as LearnerProfileData,
-      expectedVersion: version,
-      complete
-    });
+    let saved: Awaited<ReturnType<typeof repositories.learning.saveProfile>>;
+    try {
+      saved = await repositories.learning.saveProfile({
+        learnerId: request.e4sSession!.user.id,
+        profile: profile as LearnerProfileData,
+        expectedVersion: version,
+        complete
+      });
+    } catch (error) {
+      if (error instanceof Error && error.message === "LEARNER_PROFILE_EMAIL_EXISTS") {
+        return reply.code(409).send({ code: error.message });
+      }
+      throw error;
+    }
     if (!saved) return reply.code(409).send({ code: "PROFILE_VERSION_CONFLICT" });
     return profileView(saved);
   });
@@ -311,6 +319,9 @@ export function registerLearningRoutes(
     const lesson = await repositories.learning.findLesson(learnerId, params.data.lessonId);
     if (!lesson) return reply.code(404).send({ code: "LESSON_PART_NOT_FOUND" });
     if (lesson.lock) return reply.code(409).send({ code: "LESSON_LOCKED", lock: lesson.lock });
+    if (!evidence.translated && (lesson.progress.evidence[params.data.partCode]?.attempts ?? 0) >= 2) {
+      return reply.code(409).send({ code: "LESSON_ATTEMPTS_EXHAUSTED" });
+    }
     const result = await repositories.learning.submitLessonPartAttempt({
       learnerId,
       lessonId: params.data.lessonId,

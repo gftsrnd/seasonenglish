@@ -28,7 +28,7 @@ import type {
 } from "./types.js";
 import { Check, Mic, Square, Volume2 } from "lucide-react";
 import { VocabularyCard as SharedVocabularyCard, type VocabularyRelationChip } from "../shared/lesson/VocabularyCard.js";
-import { conciseGrammarExample, conciseLessonObjective, conciseSpeakingInstruction, conciseSpeakingModel } from "../shared/lesson/presentation.js";
+import { conciseGrammarExample, conciseLessonObjective, conciseSpeakingInstruction, conciseSpeakingModel, learnerFacingObjective } from "../shared/lesson/presentation.js";
 
 const CEFR_LEVELS: Cefr[] = ["A1", "A2", "B1", "B2", "C1"];
 const REVIEW_TAB_MAP = { submissions: "subs", coach: "coach", weekly_practices: "weekly", appeals: "appeals", attempts: "attempts", assessments: "tests" } as const;
@@ -98,8 +98,7 @@ function lessonSetWarnings(source: ContentLessonSetVersionView): OperatorLessonS
     const shortQuestions = !listeningOptions || listeningOptions.length < 4 || !readingOptions || readingOptions.length < 4;
     const missingWordStructure = items.some(item => !hasLegacyOrStructuredValue(item.family) || !hasLegacyOrStructuredValue(item.umbrella));
     const missingSynonymCoverage = items.length > 0 && !items.some(item => hasLegacyOrStructuredValue(item.synonyms));
-    const missingAntonymCoverage = items.length > 0 && !items.some(item => hasLegacyOrStructuredValue(item.antonyms));
-    const missingWordDetails = missingWordStructure || missingSynonymCoverage || missingAntonymCoverage;
+    const missingWordDetails = missingWordStructure || missingSynonymCoverage;
     if (missingNewParts || shortQuestions || missingWordDetails) {
       details += 1;
       const missing: string[] = [];
@@ -113,7 +112,6 @@ function lessonSetWarnings(source: ContentLessonSetVersionView): OperatorLessonS
         if (!hasLegacyOrStructuredValue(item.umbrella)) missing.push(`${word}: từ bao trùm`);
       }
       if (missingSynonymCoverage) missing.push("từ đồng nghĩa");
-      if (missingAntonymCoverage) missing.push("từ trái nghĩa");
       detailIssues.push({
         lessonId: lesson.id,
         dayLabel: ["T2", "T3", "T4", "T5", "T6"][lesson.dayNumber - 1] ?? `Bài ${lesson.dayNumber}`,
@@ -228,8 +226,8 @@ export function adaptWeeks(source: ContentWeekFrameView, options: { aiConnected:
   return { pilotStartDate: operatorCalendarDate(source.pilot.startDate), pilotWeeks: source.pilot.weekCount, aiConnected: options.aiConnected, status: options.status ?? "", saveState: options.saveState, saveError: options.saveError, generationDialog: options.generationDialog, weeks: source.weeks.map(week => ({ number: week.weekNumber, dateRange: `${operatorCalendarDate(week.startDate)} – ${operatorCalendarDate(week.endDate)}`, current: week.current, topic: week.topic, description: week.description, objectives: week.objectives, keyVocabHint: week.keyVocabHint, suggestion: options.suggestions?.[week.weekNumber] })) };
 }
 
-export function adaptLessonMatrix(source: ContentLessonMatrixView, options: { aiConnected: boolean; extraLevels?: Cefr[]; generating?: OperatorLessonsView["generating"]; generateError?: string | null }): OperatorLessonsView {
-  return { aiConnected: options.aiConnected, extraLevels: options.extraLevels ?? CEFR_LEVELS.filter(level => !source.levels.some(item => item.cefr === level)), levels: source.levels.map(level => ({ cefr: level.cefr as Cefr, learnerCount: level.learnerCount })), generating: options.generating, generateError: options.generateError, weeks: source.weeks.map(week => ({ number: week.weekNumber, topic: week.topic, cells: week.cells.map(cell => ({ cefr: cell.cefr as Cefr, status: cell.status === "published" ? "approved" : cell.status === "review" ? "review" : cell.status === "missing" ? "empty" : "draft", generatedAt: operatorDateTime(cell.updatedAt), incomplete: cell.lessons.length > 0 && cell.lessons.length < 5, lessons: cell.lessons.length, days: [1, 2, 3, 4, 5].map((day, index) => { const lesson = cell.lessons.find(candidate => candidate.dayNumber === day); return { day: ["T2", "T3", "T4", "T5", "T6"][index]!, title: lesson?.title ?? (cell.plan?.[index] ? compactPlanTitle(cell.plan[index]!, week.topic) : null), planned: !lesson && Boolean(cell.plan?.[index]) }; }) })) })) };
+export function adaptLessonMatrix(source: ContentLessonMatrixView, options: { aiConnected: boolean; extraLevels?: Cefr[]; generating?: OperatorLessonsView["generating"]; generatingCells?: OperatorLessonsView["generatingCells"]; generateError?: string | null }): OperatorLessonsView {
+  return { aiConnected: options.aiConnected, extraLevels: options.extraLevels ?? CEFR_LEVELS.filter(level => !source.levels.some(item => item.cefr === level)), levels: source.levels.map(level => ({ cefr: level.cefr as Cefr, learnerCount: level.learnerCount })), generating: options.generating, generatingCells: options.generatingCells, generateError: options.generateError, weeks: source.weeks.map(week => ({ number: week.weekNumber, topic: week.topic, cells: week.cells.map(cell => ({ cefr: cell.cefr as Cefr, status: cell.status === "published" ? "approved" : cell.status === "review" ? "review" : cell.status === "missing" ? "empty" : "draft", generatedAt: operatorDateTime(cell.updatedAt), incomplete: cell.lessons.length > 0 && cell.lessons.length < 5, lessons: cell.lessons.length, days: [1, 2, 3, 4, 5].map((day, index) => { const lesson = cell.lessons.find(candidate => candidate.dayNumber === day); return { day: ["T2", "T3", "T4", "T5", "T6"][index]!, title: lesson?.title ?? (cell.plan?.[index] ? compactPlanTitle(cell.plan[index]!, week.topic) : null), planned: !lesson && Boolean(cell.plan?.[index]) }; }) })) })) };
 }
 
 export function adaptLessonSet(source: ContentLessonSetVersionView, options: { aiConnected: boolean; warnings?: OperatorLessonSetView["warnings"]; mutationState?: OperatorLessonSetView["mutationState"]; mutationMessage?: string | null; activeMutation?: LessonSetActionKey; resolveVocabularyImage?: (lessonId: string, itemIndex: number) => Promise<ContentImageView> }): OperatorLessonSetView {
@@ -240,25 +238,25 @@ export function adaptLessonSet(source: ContentLessonSetVersionView, options: { a
     requiredVocabulary: []
   };
   return {
-    week: source.weekNumber, cefr: source.cefr as Cefr, status: source.status === "published" ? "approved" : source.status === "review" ? "review" : "draft", topic: source.topic, explanationLanguage: source.explanationLanguage === "Tiếng Việt" ? "tiếng Việt" : "tiếng Anh", aiConnected: options.aiConnected, mutationState: options.mutationState, mutationMessage: options.mutationMessage, activeMutation: options.activeMutation,
+    week: source.weekNumber, cefr: source.cefr as Cefr, version: source.version, status: source.status === "published" ? "approved" : source.status === "review" ? "review" : "draft", topic: source.topic, explanationLanguage: source.explanationLanguage === "Tiếng Việt" ? "tiếng Việt" : "tiếng Anh", aiConnected: options.aiConnected, mutationState: options.mutationState, mutationMessage: options.mutationMessage, activeMutation: options.activeMutation,
     warnings: options.warnings ?? lessonSetWarnings(source),
     weeklyPractice: { task: weeklyPractice.task, guidance: weeklyPractice.guidance, inputModeLabel: "Nhập văn bản hoặc nói để chuyển thành chữ", requiredVocabulary: weeklyPractice.requiredVocabulary },
-    lessons: source.lessons.map(lesson => ({ id: lesson.id, day: lesson.dayNumber, dayLabel: ["T2", "T3", "T4", "T5", "T6"][lesson.dayNumber - 1] ?? `Bài ${lesson.dayNumber}`, title: lesson.title, durationMin: lesson.durationMinutes, practiceKind: lesson.practiceLabel.includes("điền") ? "điền từ" : lesson.practiceLabel.includes("trắc") ? "trắc nghiệm" : "tự viết", practiceAnswer: persistedPracticeAnswer(lesson.practiceLabel), complete: REQUIRED_LESSON_PARTS.every(code => lesson.parts.some(part => part.code === code)), content: <OperatorLessonPreview lessonId={lesson.id} parts={lesson.parts} resolveVocabularyImage={options.resolveVocabularyImage} /> }))
+    lessons: source.lessons.map(lesson => ({ id: lesson.id, day: lesson.dayNumber, dayLabel: ["T2", "T3", "T4", "T5", "T6"][lesson.dayNumber - 1] ?? `Bài ${lesson.dayNumber}`, title: lesson.title, durationMin: lesson.durationMinutes, practiceKind: lesson.practiceLabel.includes("điền") ? "điền từ" : lesson.practiceLabel.includes("trắc") ? "trắc nghiệm" : "tự viết", practiceAnswer: persistedPracticeAnswer(lesson.practiceLabel), complete: REQUIRED_LESSON_PARTS.every(code => lesson.parts.some(part => part.code === code)), content: <OperatorLessonPreview cefr={source.cefr} lessonId={lesson.id} parts={lesson.parts} resolveVocabularyImage={options.resolveVocabularyImage} /> }))
   };
 }
 
 const learnerStudyCodes = new Set(["objective", "vocabulary", "grammar", "pronunciation"]);
 
-function OperatorLessonPreview({ lessonId, parts, resolveVocabularyImage }: { lessonId: string; parts: ContentLessonSetVersionView["lessons"][number]["parts"]; resolveVocabularyImage?: ((lessonId: string, itemIndex: number) => Promise<ContentImageView>) | undefined }) {
+function OperatorLessonPreview({ cefr, lessonId, parts, resolveVocabularyImage }: { cefr: string; lessonId: string; parts: ContentLessonSetVersionView["lessons"][number]["parts"]; resolveVocabularyImage?: ((lessonId: string, itemIndex: number) => Promise<ContentImageView>) | undefined }) {
   const [tab, setTab] = useState<"study" | "practice">("study");
-  const visible = parts.filter(part => tab === "study" ? learnerStudyCodes.has(part.code) : !learnerStudyCodes.has(part.code));
+  const visible = parts.filter(part => !(part.code === "grammar" && part.content.hidden === true && part.content.status === "unavailable")).filter(part => tab === "study" ? learnerStudyCodes.has(part.code) : !learnerStudyCodes.has(part.code));
   return <div className="operator-lesson-preview lesson-page"><div className="lesson-surface"><div className="ltabs" role="tablist" aria-label="Các bước trong bài học"><button type="button" className={tab === "study" ? "active" : ""} role="tab" aria-selected={tab === "study"} onClick={() => setTab("study")}>1. Học</button><button type="button" className={tab === "practice" ? "active" : ""} role="tab" aria-selected={tab === "practice"} onClick={() => setTab("practice")}>2. Bài tập</button></div><div className="lesson-parts" aria-label={tab === "study" ? "Nội dung học" : "Nội dung bài tập"}>{visible.map((part, index) => {
     const exerciseNumber = visible.slice(0, index).filter(candidate => candidate.code !== "instruction").length + 1;
-    return <section className={`card lesson-part lesson-part--${part.code}`} key={part.code}>{part.code === "grammar" || part.code === "pronunciation" ? null : <div className="row between"><h2 className={part.code === "vocabulary" ? "lesson-vocabulary-heading" : undefined}>{part.code === "objective" ? "MỤC TIÊU BÀI HỌC" : part.code === "instruction" ? "HƯỚNG DẪN LÀM BÀI" : part.code === "vocabulary" ? "TỪ VỰNG" : `${exerciseNumber}. ${operatorPartHeading(part.code, part.title)}`}</h2></div>}{renderLessonPart(part.code, part.content, { lessonId, resolveVocabularyImage })}</section>;
+    return <section className={`card lesson-part lesson-part--${part.code}`} key={part.code}>{part.code === "grammar" || part.code === "pronunciation" ? null : <div className="row between"><h2 className={part.code === "vocabulary" ? "lesson-vocabulary-heading" : undefined}>{part.code === "objective" ? "MỤC TIÊU BÀI HỌC" : part.code === "instruction" ? "HƯỚNG DẪN LÀM BÀI" : part.code === "vocabulary" ? "TỪ VỰNG" : `${exerciseNumber}. ${operatorPartHeading(part.code, part.title)}`}</h2></div>}{renderLessonPart(part.code, part.content, { cefr, lessonId, resolveVocabularyImage })}</section>;
   })}</div></div></div>;
 }
 
-function renderLessonPart(code: string, value: unknown, media?: { lessonId: string; resolveVocabularyImage?: ((lessonId: string, itemIndex: number) => Promise<ContentImageView>) | undefined } | undefined) {
+function renderLessonPart(code: string, value: unknown, media?: { cefr: string; lessonId: string; resolveVocabularyImage?: ((lessonId: string, itemIndex: number) => Promise<ContentImageView>) | undefined } | undefined) {
   const content = asRecord(value) ?? {};
   const text = (...keys: string[]) => keys.map(key => content[key]).find(item => typeof item === "string") as string | undefined;
   const strings = (key: string) => (asArray(content[key]) ?? []).filter((item): item is string => typeof item === "string");
@@ -268,7 +266,12 @@ function renderLessonPart(code: string, value: unknown, media?: { lessonId: stri
     if (!record || typeof record.word !== "string") return [];
     return [{ word: record.word, ipa: typeof record.ipa === "string" ? record.ipa.trim() : "" }];
   });
-  if (code === "objective") return <p className="lesson-objective-text">{conciseLessonObjective(text("text"))}</p>;
+  if (code === "objective") {
+    const objectives = (asArray(content.items) ?? []).map(asRecord).flatMap(item => typeof item?.text === "string" && item.text.trim() ? [item.text.trim()] : []);
+    return objectives.length
+      ? <ul className="lesson-objective-list" aria-label="Mục tiêu bài học">{objectives.map((objective, index) => <li key={`${objective}-${index}`}>{learnerFacingObjective(objective, media?.cefr ?? "A1")}</li>)}</ul>
+      : <p className="lesson-objective-text">{learnerFacingObjective(conciseLessonObjective(text("text")), media?.cefr ?? "A1")}</p>;
+  }
   if (code === "instruction") return <PreviewList values={strings("steps")} />;
   if (code === "vocabulary") {
     const items = (asArray(content.items) ?? []).map(asRecord).filter((item): item is Record<string, unknown> => item !== undefined);

@@ -313,18 +313,8 @@ export function registerAssessmentRoutes(app: FastifyInstance, pool: Pool, aiRun
       await repositories.assessments.failAssessmentAiScoring(actorId, params.data.attemptId, body.data.requestId, "ASSESSMENT_PRODUCTIVE_SECTIONS_MISSING");
       return reply.code(409).send({ code: "ASSESSMENT_PRODUCTIVE_SECTIONS_MISSING" });
     }
-    const answerFor = (section: AssessmentSectionCode, taskKey: string) => context.attempt.responses.find((response) => response.section === section && response.taskKey === taskKey);
     try {
-      const result = await runner.runTask("assessment_scoring", {
-        kind: context.definition.kind,
-        writing: writing.groups.flatMap((group) => group.tasks).map((item) => ({ prompt: item.prompt, answer: answerFor("writing", item.key)?.value ?? "" })),
-        speaking: speaking.groups.flatMap((group) => group.tasks).map((item) => {
-          const answer = answerFor("speaking", item.key);
-          return { prompt: item.prompt, answer: answer?.value ?? "", evidenceType: answer?.evidenceType ?? "technical_failure" };
-        }),
-        writingMaxScore: writing.maxScore,
-        speakingMaxScore: speaking.maxScore
-      }, { systemPrompt: task.prompt });
+      const result = await runner.runTask("assessment_scoring", assessmentGradingInput(context.definition, context.attempt), { systemPrompt: task.prompt });
       const parsed = assessmentGradingOutputSchema.safeParse(result.output);
       if (!parsed.success) return failScoring("AI_OUTPUT_INVALID");
       const output = {
@@ -505,7 +495,16 @@ export function registerAssessmentRoutes(app: FastifyInstance, pool: Pool, aiRun
     const kind = normalizeKind(parsed.data.kind);
     const definition = await repositories.assessments.findPublished(kind);
     if (!definition) return reply.code(404).send({ code: "ASSESSMENT_NOT_PUBLISHED" });
-    let attempt = await repositories.assessments.findActiveAttempt(request.e4sSession!.user.id, definition.versionId);
+    const resumed = kind === "placement"
+      ? await repositories.assessments.resumePlacementAttempt(request.e4sSession!.user.id, definition)
+      : null;
+    if (resumed?.state === "restart_required") {
+      return reply.code(409).send({
+        code: "PLACEMENT_ATTEMPT_RESTART_REQUIRED",
+        message: "Bài test cũ không thể chuyển an toàn sang phiên bản mới. Hãy bắt đầu lại để tránh trộn đề và điểm."
+      });
+    }
+    let attempt = resumed ? resumed.attempt : await repositories.assessments.findActiveAttempt(request.e4sSession!.user.id, definition.versionId);
     attempt = await advanceExpiredSections(repositories.assessments, request.e4sSession!.user.id, definition, attempt);
     const view = assessmentView(definition, attempt);
     if (!attempt) return view;
@@ -574,6 +573,16 @@ export function registerAssessmentRoutes(app: FastifyInstance, pool: Pool, aiRun
       definition = await repositories.assessments.findPublished(kind);
     }
     if (!definition) return reply.code(404).send({ code: "ASSESSMENT_NOT_PUBLISHED" });
+    if (kind === "placement") {
+      const resumed = await repositories.assessments.resumePlacementAttempt(learnerId, definition);
+      if (resumed.state === "restart_required") {
+        return reply.code(409).send({
+          code: "PLACEMENT_ATTEMPT_RESTART_REQUIRED",
+          message: "Bài test cũ không thể chuyển an toàn sang phiên bản mới. Bấm bắt đầu lại để dùng đúng cấu trúc đề mới."
+        });
+      }
+      if (resumed.attempt) return reply.code(201).send(assessmentView(definition, resumed.attempt));
+    }
     const first = definition.blueprint.sections[0];
     if (!first) return reply.code(409).send({ code: "ASSESSMENT_BLUEPRINT_EMPTY" });
     const violationLimit = await repositories.assessments.assessmentViolationLimit(learnerId);
@@ -719,14 +728,8 @@ export function registerAssessmentRoutes(app: FastifyInstance, pool: Pool, aiRun
       const writing = sectionByCode(definition.blueprint, "writing");
       const speaking = sectionByCode(definition.blueprint, "speaking");
       if (task && writing && speaking) {
-        const answerFor = (section: AssessmentSectionCode, taskKey: string) => attempt.responses.find((response) => response.section === section && response.taskKey === taskKey);
         try {
-          const result = await runner.runTask("assessment_scoring", {
-            kind: definition.blueprint.kind,
-            writing: writing.groups.flatMap((group) => group.tasks).map((item) => ({ prompt: item.prompt, answer: answerFor("writing", item.key)?.value ?? "" })),
-            speaking: speaking.groups.flatMap((group) => group.tasks).map((item) => { const answer = answerFor("speaking", item.key); return { prompt: item.prompt, answer: answer?.value ?? "", evidenceType: answer?.evidenceType ?? "technical_failure" }; }),
-            writingMaxScore: writing.maxScore, speakingMaxScore: speaking.maxScore
-          }, { systemPrompt: task.prompt });
+          const result = await runner.runTask("assessment_scoring", assessmentGradingInput(definition.blueprint, attempt), { systemPrompt: task.prompt });
           const output = assessmentGradingOutputSchema.safeParse(result.output);
           if (output.success) {
             await repositories.assessments.upsertSectionScore({ learnerId, attemptId: attempt.id, section: "writing", score: Math.min(writing.maxScore, output.data.writingScore), criteria: { rationale: output.data.rationale, monthlyGoal: output.data.monthlyGoal }, source: "ai" });
@@ -925,6 +928,43 @@ async function ensureObjectiveSectionScores(
     }) || changed;
   }
   return changed;
+}
+
+function assessmentGradingInput(definition: StoredAssessmentDefinition, attempt: AssessmentAttemptRecord) {
+  const answerFor = (section: AssessmentSectionCode, taskKey: string) =>
+    attempt.responses.find((response) => response.section === section && response.taskKey === taskKey);
+  const objectiveScore = (sectionCode: "listening" | "reading") => {
+    const section = sectionByCode(definition, sectionCode);
+    if (!section) throw new Error("ASSESSMENT_OBJECTIVE_SECTION_MISSING");
+    const responseMap = new Map(attempt.responses
+      .filter((response) => response.section === sectionCode)
+      .map((response) => [response.taskKey, response.value]));
+    const items = section.groups.flatMap((group) => group.tasks)
+      .filter((task): task is StoredAssessmentTask & { correctAnswer: string } => Boolean(task.correctAnswer))
+      .map((task) => ({ taskKey: task.key, answer: responseMap.get(task.key), correctAnswer: task.correctAnswer, maxScore: task.maxScore }));
+    const score = calculateAutomaticSectionScore(items);
+    return {
+      ...score,
+      groups: section.groups.map((group) => ({ groupKey: group.key, taskKeys: group.tasks.map((task) => task.key) }))
+    };
+  };
+  const writing = sectionByCode(definition, "writing");
+  const speaking = sectionByCode(definition, "speaking");
+  if (!writing || !speaking) throw new Error("ASSESSMENT_PRODUCTIVE_SECTIONS_MISSING");
+  return {
+    kind: definition.kind,
+    objectiveScores: { listening: objectiveScore("listening"), reading: objectiveScore("reading") },
+    writing: writing.groups.flatMap((group) => group.tasks).map((item) => ({
+      prompt: item.prompt,
+      answer: answerFor("writing", item.key)?.value ?? ""
+    })),
+    speaking: speaking.groups.flatMap((group) => group.tasks).map((item) => {
+      const answer = answerFor("speaking", item.key);
+      return { prompt: item.prompt, answer: answer?.value ?? "", evidenceType: answer?.evidenceType ?? "technical_failure" };
+    }),
+    writingMaxScore: writing.maxScore,
+    speakingMaxScore: speaking.maxScore
+  };
 }
 
 async function repairReviewObjectiveScores(

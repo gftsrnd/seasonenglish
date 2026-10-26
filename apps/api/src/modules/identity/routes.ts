@@ -23,6 +23,7 @@ const learnerRegistrationInput = z.object({
 }).strict();
 const challengeVerificationInput = z.object({ challengeId: z.string().uuid(), code: z.string().regex(/^\d{6}$/) }).strict();
 const pinResetStartInput = z.object({ email: z.string().trim().email().max(320) }).strict();
+const staffPasswordHelpInput = z.object({ email: z.string().trim().email().max(320) }).strict();
 const pinResetCompleteInput = z.object({ resetToken: z.string().min(32).max(256), pin: z.string().regex(/^\d{6}$/) }).strict();
 const avatarInput = z.object({
   acc: z.enum(["none", "leaf", "sun", "flower", "cloud", "star", "drop", "snow"]),
@@ -84,6 +85,12 @@ export function registerIdentityRoutes(app: FastifyInstance, options: IdentityRo
 
   app.post("/api/auth/learner/login", loginRateLimit, (request, reply) => login(request, reply, "learner", request.body));
   app.post("/api/auth/staff/login", loginRateLimit, (request, reply) => login(request, reply, "staff", request.body));
+  app.post("/api/auth/staff/password-help", { config: { rateLimit: { max: 5, timeWindow: "5 minutes" } } }, async (request, reply) => {
+    const parsed = staffPasswordHelpInput.safeParse(request.body);
+    if (!parsed.success) return reply.code(400).send({ code: "INVALID_EMAIL" });
+    await repositories.identity.requestStaffPasswordHelp(parsed.data.email);
+    return reply.code(202).send({ requested: true });
+  });
   app.post("/api/auth/learner/register", { config: { rateLimit: { max: 5, timeWindow: "1 minute" } } }, async (request, reply) => {
     const parsed = learnerRegistrationInput.safeParse(request.body);
     if (!parsed.success) return reply.code(400).send({ code: "INVALID_LEARNER_REGISTRATION" });

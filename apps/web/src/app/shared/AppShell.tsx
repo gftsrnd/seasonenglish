@@ -5,6 +5,7 @@ import type { AccountRole, CefrLevel, SessionView } from "@e4s/contracts";
 import { SeasonMark } from "./SeasonMark.js";
 import { AvatarMark } from "../learner/ProfileReward.js";
 import { useExperience } from "../../features/experience/Experience.js";
+import { cancelAllExclusiveAudio } from "../../features/experience/audio-precedence.js";
 import "./shared.css";
 import { hasAssessmentLogoutGuard, requestAssessmentLogout } from "./assessment-logout-guard.js";
 import { useDialog } from "./ModalProvider.js";
@@ -104,6 +105,7 @@ export function AppShell({ session, children, onLogout, onAvatarClick, organisat
   const logoutTimer = useRef<number | undefined>(undefined);
   useEffect(() => () => {
     if (logoutTimer.current !== undefined) window.clearTimeout(logoutTimer.current);
+    cancelAllExclusiveAudio();
   }, []);
 
   const matchesPath = (path: string, to: string) => path === to || path.startsWith(`${to}/`);
@@ -121,6 +123,7 @@ export function AppShell({ session, children, onLogout, onAvatarClick, organisat
   };
   const links = (mobile = false) => items.map((item) => <Link className={active(item.to) ? "active" : ""} key={item.to} to={item.to} aria-current={active(item.to) ? "page" : undefined}>{mobile ? <span className="ico">{item.icon}</span> : null}{item.label}</Link>);
   const completeLogout = () => {
+    cancelAllExclusiveAudio();
     clearSharedDeviceState();
     window.history.replaceState(window.history.state, "", "/");
     const result = onLogout();

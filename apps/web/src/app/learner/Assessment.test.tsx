@@ -70,7 +70,7 @@ function makeRuntime(overrides: Partial<AssessmentRuntimeView> = {}): Assessment
 
 function makeView(overrides: Partial<AssessmentView> = {}): AssessmentView {
   return {
-    definition: { key: "placement", kind: "placement", title: "Test đầu vào", version: 1, totalMinutes: 20, totalScore: 100, sections },
+    definition: { key: "placement", kind: "placement", title: "Test đầu vào", version: 1, totalMinutes: 20, totalScore: 100, sections: structuredClone(sections) },
     screenState: "listening",
     attempt: {
       id: "attempt-1",
@@ -346,6 +346,35 @@ describe("assessment HCI states", () => {
         onStatus: expect.any(Function)
       })
     );
+  });
+
+  it("numbers listening tasks across groups so the moved task is question 6 under Listening 2", () => {
+    const view = makeView();
+    view.definition.sections[0] = {
+      ...view.definition.sections[0]!,
+      groups: [
+        {
+          key: "LA", title: "Listening 1", instruction: "Questions 1–4", tasks: Array.from({ length: 4 }, (_, index) => ({
+            key: `LA_${index}`, prompt: `Listening 1 prompt ${index + 1}`, responseType: "single_choice" as const,
+            maxScore: 1, options: [{ value: "A", label: "A" }, { value: "B", label: "B" }]
+          }))
+        },
+        {
+          key: "LB", title: "Listening 2", instruction: "Questions 5–10", tasks: [
+            { key: "LB_0", prompt: "Listening 2 prompt 5", responseType: "single_choice", maxScore: 1, options: [{ value: "A", label: "A" }] },
+            { key: "LB_Q6", prompt: "Who should the listener contact?", responseType: "single_choice", maxScore: 1, options: [{ value: "B", label: "Sarah" }] }
+          ]
+        }
+      ]
+    };
+
+    render(<LearnerAssessment view={view} actions={makeActions()} />);
+
+    const listening2 = screen.getByRole("heading", { name: "Listening 2" }).closest("section");
+    expect(listening2).not.toBeNull();
+    expect(listening2).toHaveTextContent("Task 5");
+    expect(listening2).toHaveTextContent("Task 6");
+    expect(listening2).toHaveTextContent("Who should the listener contact?");
   });
 
   it("persists every visible answer again before advancing the section", async () => {

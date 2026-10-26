@@ -10,6 +10,8 @@ const requiredParts = [
   ["listening", "Nghe"],
   ["reading", "Đọc"],
   ["writing", "Viết"],
+  ["word_class", "Từ loại"],
+  ["word_use", "Dùng từ"],
   ["speaking", "Nói"]
 ] as const satisfies readonly (readonly [LessonPartCode, string])[];
 
@@ -22,8 +24,14 @@ export interface ContentLessonDraft {
 
 export interface ContentValidationIssue {
   dayNumber: number;
-  code: LessonPartCode | "title" | "order";
+  code: LessonPartCode | "title" | "order" | "weekly_practice";
   message: string;
+}
+
+export interface WeeklyPracticePublicationInput {
+  readonly task: string;
+  readonly guidance: string;
+  readonly requiredVocabulary: readonly string[];
 }
 
 export function validateLessonDraft(lessons: readonly ContentLessonDraft[]): {
@@ -46,18 +54,152 @@ export function validateLessonDraft(lessons: readonly ContentLessonDraft[]): {
   return { valid: issues.length === 0, issues };
 }
 
+/**
+ * Validates the learner-facing payload. Drafts may remain incomplete while an
+ * operator is editing; review/publication must never expose an unusable lesson.
+ */
+export function validateLessonPublication(
+  lessons: readonly ContentLessonDraft[],
+  weeklyPractice?: WeeklyPracticePublicationInput
+): { valid: boolean; issues: ContentValidationIssue[] } {
+  const issues = [...validateLessonDraft(lessons).issues];
+  const add = (lesson: ContentLessonDraft, code: ContentValidationIssue["code"], message: string) => {
+    if (!issues.some((issue) => issue.dayNumber === lesson.dayNumber && issue.code === code && issue.message === message)) {
+      issues.push({ dayNumber: lesson.dayNumber, code, message });
+    }
+  };
+
+  for (const lesson of lessons) {
+    const parts = new Map(lesson.parts.map((part) => [part.code, asRecord(part.content)]));
+    const objective = parts.get("objective");
+    if (objective && !hasText(objective.text) && !nonEmptyArray(objective.items)) add(lesson, "objective", "Mục tiêu bài học chưa có nội dung.");
+
+    const instruction = parts.get("instruction");
+    if (instruction && !hasText(instruction.text) && !nonEmptyArray(instruction.steps) && !hasNumberedSteps(instruction)) add(lesson, "instruction", "Hướng dẫn học chưa có bước thực hiện.");
+
+    const vocabulary = parts.get("vocabulary");
+    if (vocabulary) {
+      const items = Array.isArray(vocabulary.items) ? vocabulary.items : [];
+      const usable = items.filter((item) => typeof item === "string" ? Boolean(item.trim()) : hasText(asRecord(item).word ?? asRecord(item).e));
+      if (usable.length < 3) add(lesson, "vocabulary", "Từ vựng cần đủ ít nhất 3 từ có nội dung.");
+    }
+
+    const grammar = parts.get("grammar");
+    if (grammar && !grammarIsUnavailable(grammar) && !hasText(grammar.formula) && !hasText(grammar.text)) add(lesson, "grammar", "Ngữ pháp chưa có công thức hoặc mẫu câu; nếu bài không có ngữ pháp phù hợp, hãy chọn “không có nội dung ngữ pháp phù hợp”.");
+
+    const pronunciation = parts.get("pronunciation");
+    if (pronunciation) {
+      if (!hasText(pronunciation.focus)) add(lesson, "pronunciation", "Phát âm chưa có âm mục tiêu.");
+      if (textArray(pronunciation.words).length < 3) add(lesson, "pronunciation", "Phát âm cần đủ 3 từ luyện.");
+    }
+
+    validateChoicePart(lesson, "listening", parts.get("listening"), add, true);
+    validateChoicePart(lesson, "reading", parts.get("reading"), add, false);
+    validateChoicePart(lesson, "word_class", parts.get("word_class"), add, false, true);
+    validateChoicePart(lesson, "word_use", parts.get("word_use"), add, false, true);
+
+    const writing = parts.get("writing");
+    if (writing) {
+      if (!hasText(writing.prompt ?? writing.question)) add(lesson, "writing", "Bài tập Viết chưa có đề bài.");
+      if (!hasText(writing.answer ?? writing.modelAnswer)) add(lesson, "writing", "Bài tập Viết chưa có đáp án hoặc câu mẫu.");
+      const kind = text(writing.type).toLowerCase();
+      if ((kind === "mcq" || kind === "choice") && !validChoice(writing)) add(lesson, "writing", "Bài tập Viết trắc nghiệm cần 4 lựa chọn khác nhau và đáp án trùng nguyên văn một lựa chọn.");
+    }
+
+    const speaking = parts.get("speaking");
+    if (speaking) {
+      if (!hasText(speaking.prompt ?? speaking.instruction)) add(lesson, "speaking", "Phần Nói chưa có yêu cầu cho học viên.");
+      if (!hasText(speaking.sample ?? speaking.modelAnswer ?? speaking.answer)) add(lesson, "speaking", "Phần Nói chưa có câu mẫu để học và chấm.");
+    }
+  }
+
+  if (weeklyPractice) {
+    const dayNumber = 6;
+    if (!weeklyPractice.task.trim()) issues.push({ dayNumber, code: "weekly_practice", message: "Bài cuối tuần chưa có đề bài." });
+    if (!weeklyPractice.guidance.trim()) issues.push({ dayNumber, code: "weekly_practice", message: "Bài cuối tuần chưa có hướng dẫn." });
+    if (!weeklyPractice.requiredVocabulary.some((item) => item.trim())) issues.push({ dayNumber, code: "weekly_practice", message: "Bài cuối tuần chưa có từ bắt buộc." });
+  }
+  return { valid: issues.length === 0, issues };
+}
+
 export function submitContentForReview(input: {
   status: "draft" | "review" | "published" | "retired";
   lessons: readonly ContentLessonDraft[];
+  weeklyPractice?: WeeklyPracticePublicationInput;
 }): { status: "review" } {
   if (input.status !== "draft") throw new Error("CONTENT_NOT_DRAFT");
   const days = [...new Set(input.lessons.map((lesson) => lesson.dayNumber))].sort((a, b) => a - b);
   if (days.length !== 5 || days.some((day, index) => day !== index + 1)) {
     throw new Error("CONTENT_LESSON_SET_INCOMPLETE");
   }
-  const validation = validateLessonDraft(input.lessons);
+  const validation = validateLessonPublication(input.lessons, input.weeklyPractice);
   if (!validation.valid) throw new Error("CONTENT_VALIDATION_FAILED");
   return { status: "review" };
+}
+
+function validateChoicePart(
+  lesson: ContentLessonDraft,
+  code: "listening" | "reading" | "word_class" | "word_use",
+  content: Record<string, unknown> | undefined,
+  add: (lesson: ContentLessonDraft, code: ContentValidationIssue["code"], message: string) => void,
+  requireAudio: boolean,
+  bodyOptional = false
+) {
+  if (!content) return;
+  if (requireAudio && !hasPlayableListeningSource(content)) add(lesson, code, "Phần Nghe chưa có nguồn âm thanh hoặc kịch bản để máy đọc.");
+  if (!requireAudio && !bodyOptional && !hasText(content.text ?? content.passage ?? content.script)) add(lesson, code, "Nội dung đọc đang để trống.");
+  if (!hasText(content.prompt ?? content.question)) add(lesson, code, `${labelFor(code)} chưa có câu hỏi.`);
+  if (!validChoice(content)) add(lesson, code, `${labelFor(code)} cần 4 lựa chọn khác nhau và đáp án trùng nguyên văn một lựa chọn.`);
+}
+
+function validChoice(content: Record<string, unknown>): boolean {
+  const options = textArray(content.options);
+  if (options.length !== 4 || new Set(options.map(normalizeComparable)).size !== 4) return false;
+  const answer = normalizeComparable(text(content.answer));
+  return Boolean(answer) && options.some((option) => normalizeComparable(option) === answer);
+}
+
+function hasPlayableListeningSource(content: Record<string, unknown>): boolean {
+  if (hasText(content.audioUrl) || hasText(content.script) || hasText(content.text)) return true;
+  if (typeof content.audio === "string") return Boolean(content.audio.trim());
+  const audio = asRecord(content.audio);
+  const source = asRecord(content.source);
+  return hasText(audio.src ?? audio.url ?? audio.text ?? audio.script)
+    || hasText(source.src ?? source.url ?? source.text ?? source.script);
+}
+
+function hasNumberedSteps(content: Record<string, unknown>): boolean {
+  return ["step1", "step2", "step3"].some((key) => hasText(content[key]));
+}
+
+function grammarIsUnavailable(content: Record<string, unknown>): boolean {
+  return content.hidden === true
+    && (text(content.status) === "unavailable" || ["no_suitable_content", "insufficient_evidence"].includes(text(content.reason)));
+}
+
+function nonEmptyArray(value: unknown): boolean {
+  return Array.isArray(value) && value.some((item) => typeof item === "string" ? Boolean(item.trim()) : Boolean(item && typeof item === "object"));
+}
+
+function textArray(value: unknown): string[] {
+  if (!Array.isArray(value)) return [];
+  return value.flatMap((item) => {
+    if (typeof item === "string" && item.trim()) return [item.trim()];
+    const record = asRecord(item);
+    const value = text(record.word ?? record.text);
+    return value ? [value] : [];
+  });
+}
+
+function asRecord(value: unknown): Record<string, unknown> {
+  return value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : {};
+}
+
+function text(value: unknown): string { return typeof value === "string" ? value.trim() : ""; }
+function hasText(value: unknown): boolean { return Boolean(text(value)); }
+function normalizeComparable(value: string): string { return value.normalize("NFKC").toLocaleLowerCase("en-US").replace(/\s+/g, " ").trim(); }
+function labelFor(code: "listening" | "reading" | "word_class" | "word_use"): string {
+  return ({ listening: "Phần Nghe", reading: "Phần Đọc", word_class: "Bài tập Từ loại", word_use: "Bài tập Dùng từ" })[code];
 }
 
 export function approveContentVersion(input: {

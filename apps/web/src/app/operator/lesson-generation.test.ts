@@ -1,7 +1,33 @@
 import { describe, expect, it, vi } from "vitest";
-import { generateLessonCellsSettled } from "./lesson-generation.js";
+import {
+  __resetLessonGenerationJobsForTests,
+  generateLessonCellsSettled,
+  lessonGenerationJobsSnapshot,
+  startLessonGenerationJob
+} from "./lesson-generation.js";
 
 describe("operator lesson generation batch", () => {
+  it("keeps a generation job alive and observable after the route that started it leaves", async () => {
+    __resetLessonGenerationJobsForTests();
+    let finish!: () => void;
+    const generate = vi.fn(() => new Promise<void>((resolve) => { finish = resolve; }));
+
+    const first = startLessonGenerationJob(1, "A2", generate);
+    const duplicate = startLessonGenerationJob(1, "A2", generate);
+
+    expect(generate).toHaveBeenCalledTimes(1);
+    expect(duplicate).toBe(first);
+    expect(lessonGenerationJobsSnapshot()).toEqual([
+      expect.objectContaining({ week: 1, level: "A2", status: "running" })
+    ]);
+
+    finish();
+    await first;
+    expect(lessonGenerationJobsSnapshot()).toEqual([
+      expect.objectContaining({ week: 1, level: "A2", status: "succeeded" })
+    ]);
+  });
+
   it("continues with later CEFR cells after one cell fails", async () => {
     const generate = vi.fn(async (week: number, level: string) => {
       if (level === "A2") throw new Error("AI_OUTPUT_INVALID");

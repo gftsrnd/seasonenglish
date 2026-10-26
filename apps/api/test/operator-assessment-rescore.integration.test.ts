@@ -1,5 +1,6 @@
 import { Pool } from "pg";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
+import { assessmentGradingInputSchema } from "@e4s/ai";
 import { migrateDatabase, resetPublicSchema, seedDemo } from "@e4s/database";
 import { createCredentialHash, createPinHash } from "@e4s/domain/identity";
 import { DEMO_IDS } from "@e4s/test-support";
@@ -10,7 +11,10 @@ const databaseUrl = process.env.TEST_DATABASE_URL
 
 describe("Operator assessment AI rescore", () => {
   const pool = new Pool({ connectionString: databaseUrl });
-  const runTask = vi.fn(async () => ({
+  let capturedAssessmentInput: unknown;
+  const runTask = vi.fn(async (_taskName: string, input: unknown) => {
+    capturedAssessmentInput = input;
+    return ({
     output: {
       writingScore: 18,
       speakingScore: 17,
@@ -29,7 +33,8 @@ describe("Operator assessment AI rescore", () => {
       schemaValid: true as const,
       usage: {}
     }
-  }));
+    });
+  });
   const app = buildApi({
     pool,
     allowDemoLogin: true,
@@ -121,6 +126,11 @@ describe("Operator assessment AI rescore", () => {
     expect(repeated.statusCode, repeated.body).toBe(200);
     expect(repeated.json()).toMatchObject({ id: DEMO_IDS.placementAttempt, suggestedLevel: "B1" });
     expect(runTask).toHaveBeenCalledTimes(1);
+    const aiInput = assessmentGradingInputSchema.parse(capturedAssessmentInput);
+    expect(aiInput.objectiveScores.listening.groups).toEqual(expect.arrayContaining([
+      expect.objectContaining({ groupKey: "LB", taskKeys: expect.arrayContaining(["LB_Q6"]) })
+    ]));
+    expect(aiInput.objectiveScores.listening.groups.flatMap((group) => group.taskKeys).filter((key) => key === "LB_Q6")).toHaveLength(1);
 
     const storedScores = await pool.query<{ section: string; score: string; source: string }>(
       "select section, score::text, source from assessment_scores where attempt_id = $1 order by section",

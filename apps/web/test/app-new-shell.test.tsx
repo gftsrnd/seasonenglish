@@ -17,6 +17,7 @@ const authClient = (overrides = {}) => ({
   learnerLogin: vi.fn(), staffLogin: vi.fn(),
   registerLearner: vi.fn(),
   startLearnerPinReset: vi.fn(), verifyLearnerPinReset: vi.fn(), completeLearnerPinReset: vi.fn(),
+  requestStaffPasswordHelp: vi.fn(),
   ...overrides
 });
 

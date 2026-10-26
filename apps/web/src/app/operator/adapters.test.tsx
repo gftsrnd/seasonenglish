@@ -64,7 +64,7 @@ describe("lesson detail warnings", () => {
     expect(adaptLessonSet(source, { aiConnected: true }).warnings.details).toBe(0);
   });
 
-  it("still flags a lesson with no synonym or antonym coverage at all", () => {
+  it("still flags a lesson with no synonym coverage while allowing naturally absent antonyms", () => {
     const source = lessonSet([
       { ...baseWord("job"), synonyms: [], antonyms: [] },
       { ...baseWord("thank"), synonyms: [], antonyms: [] },
@@ -91,8 +91,7 @@ describe("lesson detail warnings", () => {
         "Nghe chưa đủ 4 lựa chọn",
         "job: word family",
         "job: từ bao trùm",
-        "từ đồng nghĩa",
-        "từ trái nghĩa"
+        "từ đồng nghĩa"
       ])
     }]);
   });
@@ -133,7 +132,7 @@ describe("lesson detail warnings", () => {
     expect(await screen.findByRole("img", { name: "job" })).toHaveAttribute("src", "https://images.example.test/job.jpg");
     expect(screen.getByRole("button", { name: "Nghe từ job" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Nghe ví dụ: job one" })).toBeInTheDocument();
-    expect(screen.getByText("Nói được một câu về công việc.")).toBeInTheDocument();
+    expect(screen.getByText("Sau bài học, bạn có thể nói được một câu về công việc.")).toBeInTheDocument();
     expect(screen.queryByText(/Nội dung giải thích dài/)).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: /Từ bao trùm: work communication/ })).toHaveTextContent("TỪ BAO TRÙM work communication");
     expect(screen.getByRole("button", { name: /Từ bao trùm: work communication/ })).toHaveClass("umb");

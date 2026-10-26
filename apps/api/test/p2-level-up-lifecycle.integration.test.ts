@@ -168,7 +168,7 @@ describe("P2 level-up lifecycle", () => {
         requestId: `p2-challenge-${index}`, message: `Challenge answer ${index + 1}`,
         taskId: prompt.rows[0]!.task_id, promptVersionId: prompt.rows[0]!.id,
         output: {
-          evaluation: { status: offTopic ? "off_topic" : "valid", countsTowardGoal: !offTopic, noteVi: offTopic ? "Lạc đề." : "Đúng trọng tâm." },
+          evaluation: { status: offTopic ? "off_topic" : "valid", result: offTopic ? "off_topic" : "correct", countsTowardGoal: !offTopic, noteVi: offTopic ? "Lạc đề." : "Đúng trọng tâm." },
           seasonReply: "Thank you.", seasonReplyTranslation: "Cảm ơn.",
           nextQuestion: "What happened next?", nextQuestionTranslation: "Sau đó chuyện gì xảy ra?",
           rubric: {

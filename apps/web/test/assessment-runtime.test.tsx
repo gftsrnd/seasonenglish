@@ -122,6 +122,37 @@ describe("app assessment runtime", () => {
     expect(recordAudioPlay).toHaveBeenCalledTimes(2);
   });
 
+  it("persists a listening play before audio starts so interrupted playback still consumes it", async () => {
+    const user = userEvent.setup();
+    const events: string[] = [];
+    const recordAudioPlay = vi.fn(async () => {
+      events.push("persisted");
+      return { playCount: 1, remaining: 1 };
+    });
+    const speak = vi.fn((_text, _language, options) => {
+      events.push("started");
+      options?.onStatus?.("ended");
+    });
+    render(<LearnerAssessment view={baseView()} actions={callbacks({ recordAssessmentAudioPlay: recordAudioPlay, speak })} />);
+
+    await user.click(screen.getByRole("button", { name: /nghe \(còn 2 lần\)/i }));
+
+    expect(events).toEqual(["persisted", "started"]);
+    expect(screen.getByRole("button", { name: /nghe \(còn 1 lần\)/i })).toBeInTheDocument();
+  });
+
+  it("does not start listening audio when the server cannot reserve a play", async () => {
+    const user = userEvent.setup();
+    const recordAudioPlay = vi.fn().mockRejectedValue(new Error("offline"));
+    const speak = vi.fn();
+    render(<LearnerAssessment view={baseView()} actions={callbacks({ recordAssessmentAudioPlay: recordAudioPlay, speak })} />);
+
+    await user.click(screen.getByRole("button", { name: /nghe \(còn 2 lần\)/i }));
+
+    expect(recordAudioPlay).toHaveBeenCalledOnce();
+    expect(speak).not.toHaveBeenCalled();
+  });
+
   it("shows the auto-submit countdown when the server reports the violation limit crossed", async () => {
     const recordViolation = vi.fn(async () => runtime({ violationCount: 4, submitReason: "violations", status: "pending_review", currentSection: null, autoSubmitted: true }));
     render(<LearnerAssessment view={baseView()} actions={callbacks({ recordAssessmentViolation: recordViolation })} />);

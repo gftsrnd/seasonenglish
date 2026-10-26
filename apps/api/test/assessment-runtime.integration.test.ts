@@ -140,6 +140,28 @@ describe("assessment runtime API", () => {
     expect(duplicateAutomatic.json()).toMatchObject({ violationCount: 2, autoSubmitted: true });
   });
 
+  it("returns the same usable runtime to concurrent duplicate violation requests", async () => {
+    const started = await app.inject({ method: "POST", url: "/api/v1/assessments/placement/start", headers: { cookie: runtimeCookie }, payload: {} });
+    const attemptId = started.json().attempt.id as string;
+    const request = {
+      method: "POST" as const,
+      url: `/api/v1/assessment-attempts/${attemptId}/violations`,
+      headers: { cookie: runtimeCookie },
+      payload: { requestId: "concurrent-api-event", reason: "visibility_hidden", occurredAt: new Date().toISOString() }
+    };
+
+    const [first, duplicate] = await Promise.all([app.inject(request), app.inject(request)]);
+
+    expect(first.statusCode, first.body).toBe(200);
+    expect(duplicate.statusCode, duplicate.body).toBe(200);
+    expect(first.json()).toMatchObject({ violationCount: 1, status: "in_progress" });
+    expect(duplicate.json()).toEqual(first.json());
+    await expect(pool.query(
+      "select violation_count, jsonb_array_length(integrity_events) as event_count from assessment_attempts where id = $1",
+      [attemptId]
+    )).resolves.toMatchObject({ rows: [{ violation_count: 1, event_count: 1 }] });
+  });
+
   it("lets the server advance an expired section instead of trusting the browser clock", async () => {
     const started = await app.inject({ method: "POST", url: "/api/v1/assessments/placement/start", headers: { cookie: runtimeCookie }, payload: {} });
     const attemptId = started.json().attempt.id as string;

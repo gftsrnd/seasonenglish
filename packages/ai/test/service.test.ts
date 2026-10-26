@@ -6,7 +6,7 @@ import { AiProviderError, type AiProvider } from "../src/types.js";
 import { z } from "zod";
 
 const validCoachOutput = {
-  evaluation: { status: "valid", countsTowardGoal: true, noteVi: "Câu trả lời đúng trọng tâm." },
+  evaluation: { status: "valid", result: "partially_correct", countsTowardGoal: true, noteVi: "Câu trả lời đúng trọng tâm." },
   seasonReply: "Thanks for sharing that.",
   seasonReplyTranslation: "Cảm ơn bạn đã chia sẻ.",
   nextQuestion: "What are you working on this week?",
@@ -28,9 +28,47 @@ const validCoachOutput = {
 };
 
 describe("AI service", () => {
+  it("normalizes omitted grammar transport fields to null when classification abstains", async () => {
+    const provider = fixtureProvider(vi.fn(async () => ({ output: {
+      durationMinutes: 10,
+      objective: {
+        title: "Objectives", explanationLanguage: "en",
+        items: [
+          { type: "content", text: "SWBAT propose one meeting time when asked.", condition: "when asked", criterion: "one clear proposal", assessmentCode: "listening" },
+          { type: "language", text: "SWBAT confirm one next step after discussion.", condition: "after discussion", criterion: "one clear sentence", assessmentCode: "speaking" }
+        ]
+      },
+      instruction: { title: "Instructions", step1: "Review the situation.", step2: "Study the vocabulary.", step3: "Complete the tasks." },
+      pronunciation: {
+        title: "Pronunciation", focus: "word stress", tip: "Stress the key word.",
+        word1: { word: "schedule", ipa: "/\u02c8sked\u0292u\u02d0l/" },
+        word2: { word: "confirm", ipa: "/k\u0259n\u02c8f\u025c\u02d0rm/" },
+        word3: { word: "calendar", ipa: "/\u02c8k\u00e6l\u0259nd\u0259r/" }
+      }
+    } })));
+    const service = createAiService({ registry: AI_TASKS, provider, loadPrompt: async () => "prompt" });
+
+    const result = await service.runTask("weekly_lesson_foundation", {
+      weekNumber: 2,
+      topic: "Scheduling meetings",
+      description: "Arrange a meeting",
+      objectives: "Propose a time",
+      keyVocabHint: "schedule, calendar",
+      cefr: "B2",
+      dayNumber: 1,
+      lessonFocus: "Proposing a meeting time politely",
+      allLessonFocuses: ["one", "two", "three", "four", "five"],
+      grammarClassification: {
+        status: "insufficient_evidence", contentType: null, targetName: null, scope: null,
+        support: "none", confidence: "low", evidence: [], rejectedCandidates: []
+      }
+    });
+
+    expect(result.output).toMatchObject({ title: null, grammar: null });
+  });
   it("accepts an unambiguous Coach turn with independent evaluation, question, correction, evidence, and suggestion", () => {
     const output = {
-      evaluation: { status: "valid", countsTowardGoal: true, noteVi: "Bạn đã trả lời đúng trọng tâm." },
+      evaluation: { status: "valid", result: "partially_correct", countsTowardGoal: true, noteVi: "Bạn đã trả lời đúng trọng tâm." },
       seasonReply: "Thanks for explaining that.",
       seasonReplyTranslation: "Cảm ơn bạn đã giải thích.",
       nextQuestion: "What will you do next?",
@@ -54,6 +92,7 @@ describe("AI service", () => {
       "evaluation", "seasonReply", "seasonReplyTranslation", "nextQuestion", "nextQuestionTranslation",
       "rubric", "corrections", "correctedText", "suggestedAnswer", "usedWords"
     ]));
+    expect(coachOutputJsonSchema.properties.evaluation.required).toContain("result");
   });
 
   it("requires explicit Vietnamese translations for the Coach reply, question, correction, and suggested answer", () => {
@@ -73,19 +112,19 @@ describe("AI service", () => {
   it("rejects Coach evaluation states that would count or unlock an invalid learner turn", () => {
     const insufficient = {
       ...validCoachOutput,
-      evaluation: { status: "insufficient", countsTowardGoal: true, noteVi: "Hãy viết một câu đầy đủ." },
+      evaluation: { status: "insufficient", result: "missing_information", countsTowardGoal: true, noteVi: "Hãy viết một câu đầy đủ." },
       rubric: { ...validCoachOutput.rubric, meaning: { ...validCoachOutput.rubric.meaning, score: 2 } },
       usedWords: ["agenda"]
     };
     const offTopic = {
       ...validCoachOutput,
-      evaluation: { status: "off_topic", countsTowardGoal: true, noteVi: "Câu này chưa liên quan." },
+      evaluation: { status: "off_topic", result: "off_topic", countsTowardGoal: true, noteVi: "Câu này chưa liên quan." },
       rubric: { ...validCoachOutput.rubric, meaning: { ...validCoachOutput.rubric.meaning, score: 3 } },
       usedWords: ["agenda"]
     };
     const validButNotCounted = {
       ...validCoachOutput,
-      evaluation: { status: "valid", countsTowardGoal: false, noteVi: "Câu trả lời hợp lệ." }
+      evaluation: { status: "valid", result: "correct", countsTowardGoal: false, noteVi: "Câu trả lời hợp lệ." }
     };
 
     expect(coachOutputSchema.safeParse(insufficient).success).toBe(false);
@@ -96,19 +135,32 @@ describe("AI service", () => {
   it("accepts non-counting insufficient and off-topic turns only at their allowed meaning scores", () => {
     const insufficient = {
       ...validCoachOutput,
-      evaluation: { status: "insufficient", countsTowardGoal: false, noteVi: "Hãy viết một câu đầy đủ." },
+      evaluation: { status: "insufficient", result: "missing_information", countsTowardGoal: false, noteVi: "Hãy viết một câu đầy đủ." },
       rubric: { ...validCoachOutput.rubric, meaning: { ...validCoachOutput.rubric.meaning, score: 0 } },
       usedWords: []
     };
     const offTopic = {
       ...validCoachOutput,
-      evaluation: { status: "off_topic", countsTowardGoal: false, noteVi: "Câu này chưa liên quan." },
+      evaluation: { status: "off_topic", result: "off_topic", countsTowardGoal: false, noteVi: "Câu này chưa liên quan." },
       rubric: { ...validCoachOutput.rubric, meaning: { ...validCoachOutput.rubric.meaning, score: 1 } },
       usedWords: []
     };
 
     expect(coachOutputSchema.safeParse(insufficient).success).toBe(true);
     expect(coachOutputSchema.safeParse(offTopic).success).toBe(true);
+  });
+
+  it("rejects result labels that conflict with the Coach evaluation status", () => {
+    expect(coachOutputSchema.safeParse({
+      ...validCoachOutput,
+      evaluation: { ...validCoachOutput.evaluation, result: "off_topic" }
+    }).success).toBe(false);
+    expect(coachOutputSchema.safeParse({
+      ...validCoachOutput,
+      evaluation: { status: "insufficient", result: "correct", countsTowardGoal: false, noteVi: "Thiếu ý." },
+      rubric: { ...validCoachOutput.rubric, meaning: { ...validCoachOutput.rubric.meaning, score: 0 } },
+      usedWords: []
+    }).success).toBe(false);
   });
 
   it("validates input/output and only sends allowlisted learner context", async () => {
@@ -198,6 +250,19 @@ describe("AI service", () => {
     await expect(service.runTask("semantic", { requiredDays: 2 }))
       .resolves.toMatchObject({ output: { days: ["T2", "T3"] }, metadata: { attempts: 2 } });
     expect(complete.mock.calls[1]?.[0].systemPrompt).toContain("days: Expected 2 days.");
+  });
+
+  it("uses at most three attempts to repair invalid structured output by default", async () => {
+    const complete = vi.fn()
+      .mockResolvedValueOnce({ output: { message: "" }, usage: {} })
+      .mockResolvedValueOnce({ output: { message: "" }, usage: {} })
+      .mockResolvedValueOnce({ output: validCoachOutput, usage: {} });
+    const service = createAiService({ registry: AI_TASKS, provider: fixtureProvider(complete), loadPrompt: async () => "Coach safely." });
+
+    await expect(service.runTask("coach_dialogue", coachInput()))
+      .resolves.toMatchObject({ metadata: { attempts: 3 }, output: validCoachOutput });
+    expect(complete).toHaveBeenCalledTimes(3);
+    expect(complete.mock.calls[2]?.[0].systemPrompt).toContain("REPAIR REQUIRED");
   });
 
   it("repairs week suggestions that omit an active CEFR level", async () => {

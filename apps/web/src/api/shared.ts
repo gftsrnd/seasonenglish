@@ -18,6 +18,7 @@ export const sharedApiClient: SharedApiClient = {
   startLearnerPinReset: (input) => request("/api/auth/learner/pin-reset/start", { method: "POST", body: JSON.stringify(input) }),
   verifyLearnerPinReset: (input) => request("/api/auth/learner/pin-reset/verify", { method: "POST", body: JSON.stringify(input) }),
   completeLearnerPinReset: (input) => request("/api/auth/learner/pin-reset/complete", { method: "POST", body: JSON.stringify(input) }),
+  requestStaffPasswordHelp: (input) => request("/api/auth/staff/password-help", { method: "POST", body: JSON.stringify(input) }),
   currentSession: () => request("/api/session"),
   saveSessionAvatar: (avatar) => request("/api/v1/me/avatar", { method: "PATCH", body: JSON.stringify(avatar) }),
   logout: () => request("/api/logout", { method: "POST", body: "{}" }),

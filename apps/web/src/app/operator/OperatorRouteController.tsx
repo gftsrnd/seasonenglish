@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { createContext, useContext, useEffect, useMemo, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
 import { useLocation, useNavigate } from "react-router";
 import "./styles.css";
 import type {
@@ -33,7 +33,7 @@ import { Badge } from "./primitives.js";
 import { ModalProvider, useModal } from "../shared/ModalProvider.js";
 import { adaptAssessmentOverview, adaptLevelForms, adaptLessonMatrix, adaptLessonSet, adaptPrompts, adaptReview, adaptWeeks } from "./adapters.js";
 import type { Cefr, LessonSetActionKey, PromptKey, ReviewTab, WeekSuggestion } from "./types.js";
-import { generateLessonCellsSettled } from "./lesson-generation.js";
+import { generateLessonCellsSettled, lessonGenerationJobsSnapshot, startLessonGenerationJob, subscribeLessonGenerationJobs } from "./lesson-generation.js";
 
 export type OperatorApiClient = typeof apiClient;
 
@@ -558,7 +558,7 @@ function WeeksRoute({ client, readOnly }: { client: OperatorApiClient; readOnly:
         const results = await generateLessonCellsSettled(
           weekNumbers,
           orderedLevels,
-          (week, level) => client.generateContentLessonDraft(week, level),
+          (week, level) => startLessonGenerationJob(week, level, () => client.generateContentLessonDraft(week, level)),
           (week, level, completed, total) => {
             setGeneratingWeek(week);
             setGenerationStatus(`Đang sinh tuần ${week} · mức ${level} (${completed + 1}/${total})…`);
@@ -622,7 +622,7 @@ function LessonsRoute({ client, readOnly }: { client: OperatorApiClient; readOnl
   const navigate = useNavigate();
   const paths = useOperatorRoutePaths();
   const [data, setData] = useState<ContentLessonMatrixView>();
-  const [generating, setGenerating] = useState<{ week: number; cefr: Cefr; message?: string } | null>(null);
+  const generationJobs = useSyncExternalStore(subscribeLessonGenerationJobs, lessonGenerationJobsSnapshot, lessonGenerationJobsSnapshot);
   const [error, setError] = useState<string>();
   const [toast, setToast] = useState<{ tone: "success" | "danger"; message: string; sticky?: boolean }>();
   const capabilities = useCapabilities(client);
@@ -636,10 +636,12 @@ function LessonsRoute({ client, readOnly }: { client: OperatorApiClient; readOnl
   if (error) return <Status tone="error">Không tải được ma trận bài học: {error}</Status>;
   if (!data) return <Status>Đang tải ma trận bài học…</Status>;
   const open = (week: number, cefr: Cefr, state?: { manualCreate?: boolean; topic?: string }) => navigate(`${paths.lessons}/${week}/${cefr}`, state ? { state } : undefined);
-  const produce = (week: number, cefr: Cefr, promise: Promise<ContentLessonSetVersionView>) => {
-    setGenerating({ week, cefr, message: "Đang chuẩn bị bộ 5 bài…" });
+  const produce = (week: number, cefr: Cefr) => {
     setToast({ tone: "success", message: "Đang chuẩn bị bộ 5 bài…", sticky: true });
-    void promise.then(() => open(week, cefr)).catch(reason => notify(message(reason), "danger")).finally(() => setGenerating(null));
+    void startLessonGenerationJob(week, cefr, () => client.generateContentLessonDraft(week, cefr))
+      .then(() => client.getContentLessonMatrix())
+      .then(next => { setData(next); notify(`Đã sinh xong tuần ${week} · mức ${cefr}.`, "success"); })
+      .catch(reason => notify(message(reason), "danger"));
   };
   const saveLevels = (levels: Cefr[]) => {
     if (readOnly || typeof client.setContentLessonLevels !== "function") return;
@@ -655,8 +657,8 @@ function LessonsRoute({ client, readOnly }: { client: OperatorApiClient; readOnl
     });
     if (confirmed) saveLevels(data.levels.filter(level => level.cefr !== cefr).map(level => level.cefr));
   };
-  return <><OperatorLessons readOnly={readOnly} view={adaptLessonMatrix(data, { aiConnected: capabilities?.ai ?? false, extraLevels: data.levels.some(item => item.cefr === "C1") ? [] : ["C1"], generating })} actions={{
-    onOpenSettings: () => navigate("/settings"), onAddLevel: cefr => { if (cefr === "C1") saveLevels([...data.levels.map(level => level.cefr), cefr]); }, onRemoveLevel: removeLevel, onGenerate: (week, cefr) => { if (!readOnly) produce(week, cefr, client.generateContentLessonDraft(week, cefr)); }, onCreateManual: (week, cefr) => { if (!readOnly) { const topic = data.weeks.find(candidate => candidate.weekNumber === week)?.topic; open(week, cefr, topic ? { manualCreate: true, topic } : { manualCreate: true }); } }, onOpenSet: open
+  return <><OperatorLessons readOnly={readOnly} view={adaptLessonMatrix(data, { aiConnected: capabilities?.ai ?? false, extraLevels: data.levels.some(item => item.cefr === "C1") ? [] : ["C1"], generatingCells: generationJobs.filter(job => job.status === "running").map(job => ({ week: job.week, cefr: job.level as Cefr, message: "Đang sinh bộ 5 bài…" })) })} actions={{
+    onOpenSettings: () => navigate("/settings"), onAddLevel: cefr => { if (cefr === "C1") saveLevels([...data.levels.map(level => level.cefr), cefr]); }, onRemoveLevel: removeLevel, onGenerate: (week, cefr) => { if (!readOnly) produce(week, cefr); }, onCreateManual: (week, cefr) => { if (!readOnly) { const topic = data.weeks.find(candidate => candidate.weekNumber === week)?.topic; open(week, cefr, topic ? { manualCreate: true, topic } : { manualCreate: true }); } }, onOpenSet: open
   }} />{toast && <div className={`operator-toast operator-toast-${toast.tone}`} role={toast.tone === "danger" ? "alert" : "status"} aria-live={toast.tone === "danger" ? "assertive" : "polite"}>{toast.message}</div>}</>;
 }
 
@@ -751,7 +753,17 @@ function LessonSetRoute({ client, readOnly, week, cefr }: { client: OperatorApiC
     onBack: () => navigate(paths.lessons), onApprove: approveSet, onUnapprove: retireSet, onRegenerate: regenerateSet, onDeleteSet: deleteSet,
     onFillPhrases: () => { if (typeof client.fillContentLessonPhrases === "function") mutate(client.fillContentLessonPhrases(week, cefr, data.version), { action: "fillPhrases", pending: "AI đang bổ sung cụm từ…", success: "Đã bổ sung cụm từ. Các nội dung cũ được giữ nguyên." }); },
     onEnrich: () => { if (typeof client.enrichContentLessonDraft === "function") mutate(client.enrichContentLessonDraft(week, cefr, data.version), { action: "enrich", pending: "AI đang tự động điền các nội dung còn thiếu…", success: "Đã tự động điền các nội dung còn thiếu. Vui lòng kiểm tra lại trước khi duyệt." }); },
-    onEditLesson: id => openEditor(0, id), onDeleteLesson: deleteLesson, onComposeDay: openEditor
+    onEditLesson: id => openEditor(0, id), onDeleteLesson: deleteLesson, onComposeDay: openEditor,
+    onSaveWeeklyPractice: async input => {
+      if (readOnly) return;
+      const saved = await client.saveContentWeeklyPractice(input.week, input.cefr, {
+        expectedVersion: input.expectedVersion,
+        task: input.task,
+        guidance: input.guidance,
+        requiredVocabulary: input.requiredVocabulary
+      });
+      setData(saved);
+    }
   }} />{!readOnly && editor && <LessonFormEditor weekNumber={week} cefr={cefr} initial={editor} onSave={saveLesson} onCancel={() => setEditor(undefined)} busy={busy} />}</>;
 }
 
@@ -856,6 +868,8 @@ const operatorErrorMessages: Record<string, string> = {
   AI_PROVIDER_RATE_LIMIT: "Nhà cung cấp AI đang giới hạn lượt gọi; hãy chờ rồi thử lại.",
   AI_TIMEOUT: "AI xử lý quá thời gian cho phép.",
   AI_LESSON_SET_INVALID: "AI trả về bộ bài chưa đủ 5 ngày hoặc sai cấu trúc.",
+  CONTENT_VALIDATION_FAILED: "Nội dung thủ công chưa đủ để xuất bản. Hãy sửa các mục được nêu bên dưới.",
+  CONTENT_LESSON_SET_INCOMPLETE: "Bộ bài phải có đủ 5 bài T2–T6 trước khi duyệt.",
   HTTP_429: "AI đang bị giới hạn số lượt gọi; hãy thử lại sau một chút.",
   HTTP_504: "Hệ thống vẫn đang hoàn tất bộ bài. Vui lòng chờ một chút rồi tải lại ma trận; không bấm Sinh lại.",
   CONTENT_WEEK_NOT_FOUND: "Không tìm thấy tuần cần sinh bài.",
@@ -867,14 +881,12 @@ function message(reason: unknown) {
   const label = operatorErrorMessages[raw] ?? raw;
   const details = reason && typeof reason === "object" && "details" in reason ? (reason as { details?: unknown }).details : undefined;
   const issues = details && typeof details === "object" && "issues" in details ? (details as { issues?: unknown }).issues : undefined;
-  if (Array.isArray(issues) && issues.length) {
+  if (raw === "CONTENT_VALIDATION_FAILED" && Array.isArray(issues) && issues.length) {
     const summary = issues.slice(0, 2).map(issue => {
       if (typeof issue === "string") return issue;
       if (!issue || typeof issue !== "object") return String(issue);
-      const item = issue as { message?: unknown; path?: unknown };
-      const detail = item.message === undefined ? String(issue) : String(item.message);
-      const path = Array.isArray(item.path) ? item.path.join(".") : typeof item.path === "string" ? item.path : "";
-      return path ? `${path}: ${detail}` : detail;
+      const item = issue as { message?: unknown };
+      return item.message === undefined ? "Nội dung chưa hợp lệ." : String(item.message);
     }).join("; ");
     return `${label} Chi tiết: ${summary}`;
   }

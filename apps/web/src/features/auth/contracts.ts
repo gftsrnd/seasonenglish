@@ -28,4 +28,5 @@ export interface AuthClient {
   startLearnerPinReset(input: { email: string }): Promise<AuthChallengeView>;
   verifyLearnerPinReset(input: { challengeId: string; code: string }): Promise<{ resetToken: string }>;
   completeLearnerPinReset(input: { resetToken: string; pin: string }): Promise<{ saved: true }>;
+  requestStaffPasswordHelp(input: { email: string }): Promise<{ requested: true }>;
 }

@@ -36,6 +36,7 @@ export interface CoachFeedbackView {
   relevanceNote: string;
   evaluation: {
     status: "valid" | "insufficient" | "off_topic";
+    result: "correct" | "partially_correct" | "missing_information" | "off_topic";
     countsTowardGoal: boolean;
     noteVi: string;
   };

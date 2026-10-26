@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { ContentLessonDraftInput } from "@e4s/contracts";
-import { mergeGeneratedLesson, mergeGeneratedLessons } from "./enrichment.js";
+import { lessonDaysNeedingRepair, mergeGeneratedLesson, mergeGeneratedLessons } from "./enrichment.js";
 
 const generatedLesson: ContentLessonDraftInput = {
   dayNumber: 1,
@@ -73,5 +73,31 @@ describe("lesson enrichment merge", () => {
   it("matches lessons by day and preserves the five-day order", () => {
     const reversed = [3, 1, 2, 5, 4].map((dayNumber) => ({ ...generatedLesson, dayNumber }));
     expect(mergeGeneratedLessons([generatedLesson], reversed, "enrich").map((lesson) => lesson.dayNumber)).toEqual([1, 2, 3, 4, 5]);
+  });
+
+  it("preserves complete existing days when AI regenerates only missing days", () => {
+    const existing = [1, 2, 3, 4, 5].map((dayNumber) => ({ ...generatedLesson, dayNumber, title: `Existing ${dayNumber}` }));
+    const repaired = [{ ...generatedLesson, dayNumber: 3, title: "Generated 3" }];
+
+    const merged = mergeGeneratedLessons(existing, repaired, "enrich");
+
+    expect(merged).toHaveLength(5);
+    expect(merged.map((lesson) => lesson.dayNumber)).toEqual([1, 2, 3, 4, 5]);
+    expect(merged.map((lesson) => lesson.title)).toEqual(["Existing 1", "Existing 2", "Existing 3", "Existing 4", "Existing 5"]);
+  });
+
+  it("selects only incomplete and absent days for AI enrichment", () => {
+    const complete = [1, 2, 3, 4].map((dayNumber) => ({
+      ...generatedLesson,
+      dayNumber,
+      parts: generatedLesson.parts.map((part) => part.code === "vocabulary"
+        ? { ...part, content: { ...part.content, items: (part.content.items as Array<Record<string, unknown>>).map((item) => ({ ...item, family: ["reporter"], synonyms: ["summary"], antonyms: ["silence"] })) } }
+        : part)
+    }));
+    const incomplete = complete.map((lesson) => lesson.dayNumber === 2
+      ? { ...lesson, parts: lesson.parts.filter((part) => part.code !== "word_use") }
+      : lesson);
+
+    expect(lessonDaysNeedingRepair(incomplete, "enrich")).toEqual([2, 5]);
   });
 });

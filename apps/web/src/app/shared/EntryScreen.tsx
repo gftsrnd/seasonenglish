@@ -4,7 +4,7 @@ import type { SessionView } from "@e4s/contracts";
 import type { AuthClient } from "../../features/auth/index.js";
 import { AudioControls, SeasonMark } from "./AppShell.js";
 
-type Mode = "login" | "register" | "forgotEmail" | "forgotOtp" | "forgotPin";
+type Mode = "login" | "register" | "forgotEmail" | "forgotOtp" | "forgotPin" | "forgotStaff";
 type FieldErrors = Partial<Record<"displayName" | "email" | "credential" | "confirmation" | "code", string>>;
 
 export function EntryScreen({ client, onAuthenticated }: { client: AuthClient; onAuthenticated: (session: SessionView) => void }) {
@@ -93,6 +93,9 @@ export function EntryScreen({ client, onAuthenticated }: { client: AuthClient; o
       } else if (mode === "forgotOtp") {
         const verified = await client.verifyLearnerPinReset({ challengeId, code });
         setResetToken(verified.resetToken); setMode("forgotPin"); setCredential(""); setConfirmation("");
+      } else if (mode === "forgotStaff") {
+        await client.requestStaffPasswordHelp({ email });
+        setNotice("Nếu email thuộc tài khoản người vận hành, yêu cầu đã được gửi tới Quản lý.");
       } else {
         await client.completeLearnerPinReset({ resetToken, pin: credential });
         resetForm("login"); setNotice("Đã cập nhật mã PIN. Bạn có thể đăng nhập bằng mã PIN mới.");
@@ -104,7 +107,7 @@ export function EntryScreen({ client, onAuthenticated }: { client: AuthClient; o
   };
 
   const learnerPin = (audience === "learner" && mode === "login") || mode === "register" || mode === "forgotPin";
-  const heading = mode === "register" ? "Đăng ký người học" : mode === "forgotEmail" ? "Quên mã PIN" : mode === "forgotOtp" ? "Nhập mã xác minh" : mode === "forgotPin" ? "Tạo mã PIN mới" : "";
+  const heading = mode === "register" ? "Đăng ký người học" : mode === "forgotEmail" ? "Quên mã PIN" : mode === "forgotOtp" ? "Nhập mã xác minh" : mode === "forgotPin" ? "Tạo mã PIN mới" : mode === "forgotStaff" ? "Quên mật khẩu nhân sự" : "";
 
   return <>
     <header className="topbar app-entry-topbar">
@@ -120,10 +123,10 @@ export function EntryScreen({ client, onAuthenticated }: { client: AuthClient; o
           <section className="entry-learning-card" aria-label="Điểm nổi bật của E4S"><div className="entry-benefit-row"><span className="entry-benefit-pill"><Clock3 size={17} /><span>10 phút mỗi ngày, T2–T6</span></span><span className="entry-benefit-pill"><MessageSquare size={17} /><span>Luyện chat với Season</span></span><span className="entry-benefit-pill"><Award size={17} /><span>Điểm thưởng và huy hiệu</span></span><span className="entry-benefit-pill"><BriefcaseBusiness size={17} /><span>Bài học sát công việc</span></span></div></section>
         </div>
         <div className="card app-entry-card" aria-busy={busy || undefined}>
-          {mode === "login" ? <div className="tabs" role="tablist" aria-label="Loại tài khoản"><button id="app-login-learner-tab" className={audience === "learner" ? "active" : ""} type="button" role="tab" aria-selected={audience === "learner"} onClick={() => switchAudience("learner")}>Người học</button><button id="app-login-staff-tab" className={audience === "staff" ? "active" : ""} type="button" role="tab" aria-selected={audience === "staff"} onClick={() => switchAudience("staff")}>Nhân sự</button></div> : <div className="app-register-heading"><div className="eyebrow">Tài khoản người học</div><h2>{heading}</h2><p className="small muted">{mode === "forgotOtp" ? "Mã gồm 6 số và có hiệu lực trong 10 phút." : mode === "forgotPin" ? "Mã PIN mới gồm 6 chữ số." : "Thông tin được bảo vệ và chỉ dùng cho tài khoản E4S."}</p></div>}
+          {mode === "login" ? <div className="tabs" role="tablist" aria-label="Loại tài khoản"><button id="app-login-learner-tab" className={audience === "learner" ? "active" : ""} type="button" role="tab" aria-selected={audience === "learner"} onClick={() => switchAudience("learner")}>Người học</button><button id="app-login-staff-tab" className={audience === "staff" ? "active" : ""} type="button" role="tab" aria-selected={audience === "staff"} onClick={() => switchAudience("staff")}>Nhân sự</button></div> : <div className="app-register-heading"><div className="eyebrow">{mode === "forgotStaff" ? "Tài khoản nhân sự" : "Tài khoản người học"}</div><h2>{heading}</h2><p className="small muted">{mode === "forgotOtp" ? "Mã gồm 6 số và có hiệu lực trong 10 phút." : mode === "forgotPin" ? "Mã PIN mới gồm 6 chữ số." : "Thông tin được bảo vệ và chỉ dùng cho tài khoản E4S."}</p></div>}
           <form className="stack section" role={mode === "login" ? "tabpanel" : undefined} aria-labelledby={mode === "login" ? `app-login-${audience}-tab` : undefined} noValidate onSubmit={submit}>
             {mode === "register" ? <Field label="Họ và tên" error={errors.displayName}><input aria-label="Họ và tên" autoComplete="name" placeholder="Ví dụ: Nguyễn Minh Anh" value={displayName} disabled={busy} onChange={(e) => updateDisplayName(e.target.value)} /></Field> : null}
-            {["login", "register", "forgotEmail"].includes(mode) ? <Field label="Email" error={errors.email}><input ref={emailInput} aria-label="Email" type="email" autoComplete="username" placeholder="ten@email.com" value={email} disabled={busy} onChange={(e) => updateEmail(e.target.value)} onKeyDown={updateCapsLock} onKeyUp={updateCapsLock} onBlur={() => setCapsLockOn(false)} />{capsLockOn ? <span className="small muted" role="status">Caps Lock đang bật</span> : null}</Field> : null}
+            {["login", "register", "forgotEmail", "forgotStaff"].includes(mode) ? <Field label="Email" error={errors.email}><input ref={emailInput} aria-label="Email" type="email" autoComplete="username" placeholder="ten@email.com" value={email} disabled={busy} onChange={(e) => updateEmail(e.target.value)} onKeyDown={updateCapsLock} onKeyUp={updateCapsLock} onBlur={() => setCapsLockOn(false)} />{capsLockOn ? <span className="small muted" role="status">Caps Lock đang bật</span> : null}</Field> : null}
             {mode === "forgotOtp" ? <Field label="Mã xác minh" error={errors.code}><PinInput label="Mã xác minh" value={code} onChange={updateCode} disabled={busy} autoComplete="one-time-code" /></Field> : null}
             {mode === "login" || mode === "register" || mode === "forgotPin" ? <Field label={learnerPin ? (mode === "forgotPin" ? "Mã PIN mới" : "Mã PIN") : "Mật khẩu"} error={errors.credential}>
               {learnerPin ? <PinInput label={mode === "forgotPin" ? "Mã PIN mới" : "Mã PIN"} value={credential} onChange={updateCredential} disabled={busy} autoComplete={mode === "login" ? "current-password" : "new-password"} /> : <span className="password-control"><input aria-label="Mật khẩu" type={showPassword ? "text" : "password"} autoComplete="current-password" placeholder="Nhập mật khẩu" value={credential} disabled={busy} onChange={(e) => updateCredential(e.target.value)} onKeyDown={updateCapsLock} onKeyUp={updateCapsLock} /><button className="password-toggle" type="button" aria-label={showPassword ? "Ẩn mật khẩu" : "Hiện mật khẩu"} onClick={() => setShowPassword((v) => !v)}>{showPassword ? <EyeOff size={18} /> : <Eye size={18} />}</button></span>}
@@ -133,6 +136,7 @@ export function EntryScreen({ client, onAuthenticated }: { client: AuthClient; o
             <button className="btn-primary btn-block" type="submit" disabled={busy}>{busy ? "Đang xử lý…" : submitLabel(mode, audience)}</button>
             <div className="app-entry-secondary-actions">
               {mode === "login" && audience === "learner" ? <><button className="app-entry-link" type="button" onClick={() => goTo("register")}>Tạo tài khoản người học</button><span>·</span><button className="app-entry-link" type="button" onClick={() => goTo("forgotEmail")}>Quên mã PIN?</button></> : null}
+              {mode === "login" && audience === "staff" ? <button className="app-entry-link" type="button" onClick={() => goTo("forgotStaff")}>Quên mật khẩu?</button> : null}
               {mode !== "login" ? <button className="app-entry-link" type="button" onClick={() => goTo("login")}>Quay lại đăng nhập</button> : null}
             </div>
             {mode === "login" ? <details className="app-shared-device-note"><summary>Đăng nhập trên thiết bị dùng chung?</summary><p className="small muted" role="note">Không lưu đăng nhập. Hãy đăng xuất sau khi học.</p></details> : null}
@@ -166,7 +170,7 @@ function PinInput({ label, value, onChange, disabled, autoComplete }: { label: s
 
 function validate(mode: Mode, audience: "learner" | "staff", values: { displayName: string; email: string; credential: string; confirmation: string; code: string }): FieldErrors {
   const errors: FieldErrors = {};
-  if (["login", "register", "forgotEmail"].includes(mode) && !/^\S+@\S+\.\S+$/.test(values.email.trim())) errors.email = "Nhập email hợp lệ.";
+  if (["login", "register", "forgotEmail", "forgotStaff"].includes(mode) && !/^\S+@\S+\.\S+$/.test(values.email.trim())) errors.email = "Nhập email hợp lệ.";
   if (mode === "register" && !isValidHumanName(values.displayName)) errors.displayName = "Nhập đầy đủ họ và tên, không dùng số.";
   if (mode === "login" && audience === "staff" && values.credential.length < 8) errors.credential = "Mật khẩu cần ít nhất 8 ký tự.";
   if (((mode === "login" && audience === "learner") || mode === "register" || mode === "forgotPin") && !/^\d{6}$/.test(values.credential)) errors.credential = "Mã PIN phải gồm đúng 6 chữ số.";
@@ -189,6 +193,7 @@ function submitLabel(mode: Mode, audience: "learner" | "staff"): string {
   if (mode === "login") return audience === "learner" ? "Đăng nhập người học" : "Đăng nhập nhân sự";
   if (mode === "register") return "Đăng ký và bắt đầu";
   if (mode === "forgotEmail") return "Gửi mã qua email";
+  if (mode === "forgotStaff") return "Thông báo cho Quản lý";
   if (mode === "forgotOtp") return "Xác minh mã";
   return "Lưu mã PIN mới";
 }

@@ -2,9 +2,9 @@ import type { ContentLessonDraftInput, ContentWeekInput } from "@e4s/contracts";
 import {
   weeklyLessonFoundationOutputSchema,
   weeklyLessonGrammarClassificationOutputSchema,
+  weeklyLessonDayOutputSchema,
   weeklyLessonSkillsOutputSchema,
   weeklyLessonVocabularyOutputSchema,
-  weeklyLessonsOutputSchema,
   type AiRunResult,
   type AiTaskRunner,
   type AiUsage
@@ -16,15 +16,23 @@ const FOUNDATION_OUTPUT_TOKEN_LIMIT = 1_500;
 const GRAMMAR_CLASSIFIER_OUTPUT_TOKEN_LIMIT = 1_000;
 const VOCABULARY_OUTPUT_TOKEN_LIMIT = 2_500;
 const SKILLS_OUTPUT_TOKEN_LIMIT = 2_000;
+const OBJECTIVE_VERBS_BY_LEVEL = {
+  A1: "identify, select, match, name, point to, repeat, say, ask, answer, give, use",
+  A2: "ask, answer, describe, write, confirm, request, apologize, arrange, complete",
+  B1: "explain, describe, respond, give reasons, summarize, clarify, report, write, suggest, compare",
+  B2: "justify, negotiate, handle, propose, compare, recommend, paraphrase, de-escalate, present, persuade, adapt",
+  C1: "persuade, mediate, critique, synthesize, reframe, decline, lead, tailor"
+} as const;
 
 const FOUNDATION_CONTRACT = [
   "Generate only the compact foundation fields required by the strict tool schema for ONE learner-facing lesson.",
   "Use lessonFocus as the exact teaching focus and allLessonFocuses only to avoid repetition.",
   "If grammarClassification.status is classified, use that narrow target without broadening its scope.",
-  "If grammarClassification.status is no_suitable_content or insufficient_evidence, derive one narrow CEFR-appropriate sentence frame from lessonFocus and topic so the lesson remains teachable; do not invent an unrelated tense, exception, or advanced grammar rule.",
+  "If grammarClassification.status is no_suitable_content or insufficient_evidence, do not invent a grammar target: set title to null and grammar to null. The grammar section will be hidden from learners.",
   "title must name the concrete sentence frame taught by lessonFocus (for example 'It is + adjective' or 'Could I + V?'); never use a generic placeholder such as 'S + V', 'S + V + O', or repeat the same title across days.",
   "objective.items must contain 2-4 measurable objectives. Exactly one is type content; the others are language objectives.",
-  "Every objective text starts with SWBAT, uses an observable verb, and has an explicit condition, criterion, and assessmentCode. Cover both listening and speaking.",
+  "Every objective text uses the prompt-approved learner-facing opener: 'Sau bài học, bạn có thể' for A1-A2 or 'By the end of this lesson, you will be able to' for B1-C1. Use one observable verb and include an explicit condition, criterion, and assessmentCode. Cover both listening and speaking.",
+  "Use the level verb bank exactly: A1 identify/select/match/name/point to/repeat/say/ask/answer/give/use; A2 ask/answer/describe/write/confirm/request/apologize/arrange/complete; B1 explain/describe/respond/give reasons/summarize/clarify/report/write/suggest/compare; For B2 objectives, use only justify/negotiate/handle/propose/compare/recommend/paraphrase/de-escalate/present/persuade/adapt; C1 persuade/mediate/critique/synthesize/reframe/decline/lead/tailor.",
   "Set explanationLanguage to vi for A1-A2 and en for B1-C1.",
   "grammar.formula must be a short usable grammar pattern or sentence frame, never a descriptive topic label.",
   "grammar.usage must be exactly one short Vietnamese sentence explaining when to use the pattern; do not append definitions, polarity notes, or a second sentence.",
@@ -44,7 +52,8 @@ const GRAMMAR_CLASSIFIER_CONTRACT = [
 
 const VOCABULARY_CONTRACT = [
   "Generate only the vocabulary fields required by the strict tool schema for ONE learner-facing lesson.",
-  "Return exactly three useful words matching lessonFocus and grammarFormula.",
+  "Return exactly three useful words matching lessonFocus and, only when non-null, grammarFormula.",
+  "A null grammarFormula and grammarExamples mean the grammar classifier abstained. Do not invent a grammar target; generate vocabulary from lessonFocus.",
   "Never return a word listed in excludedVocabulary. The three words must also be distinct from each other and from vocabulary used by the other lessons in this week.",
   "Before answering, compare every generated word case-insensitively with excludedVocabulary and replace every match; a repeated word makes the entire response invalid.",
   "Each word needs partOfSpeech, slash-delimited IPA, stress, exact ttsText, matching <speak> SSML, Vietnamese meaning, a concrete photographic imageQuery, and exactly three natural collocations.",
@@ -56,11 +65,12 @@ const VOCABULARY_CONTRACT = [
 
 const SKILLS_CONTRACT = [
   "Generate only the skill and exercise fields required by the strict tool schema for ONE learner-facing lesson.",
-  "Use grammarFormula, grammarExamples, and vocabularyWords consistently.",
+  "Use vocabularyWords consistently. Use grammarFormula and grammarExamples only when they are non-null; null means the classifier abstained, so do not invent grammar.",
   "For A1-A2, use only vocabulary and grammar supplied in the input, one task per item, and short common sentences.",
   "Listening body must be a natural 12-18 word audio script; reading body must be a coherent 18-30 word passage.",
   "Listening, reading, wordClass, and wordUse each need exactly four short English options of 1-5 words, and answer must exactly copy one option.",
   "Questions must be direct and no more than 10 English words. For A1-A2, writing must be fill or mcq, not an open writing task.",
+  "Every exercise must include questionTranslation and answerTranslation in clear Vietnamese, plus one short hint that helps without containing or revealing the answer.",
   "Speaking prompt must be one short Vietnamese instruction. Speaking answer must be one easy English model sentence of no more than 10 words.",
   "Keep every item CEFR-appropriate, practical, and unambiguous. Return no prose outside the tool."
 ].join("\n");
@@ -70,14 +80,17 @@ export async function generateWeeklyLessons(
   cefr: string,
   task: { prompt: string },
   runner: AiTaskRunner,
-  options: { excludedVocabulary?: readonly string[] } = {}
+  options: { excludedVocabulary?: readonly string[]; dayNumbers?: readonly number[] } = {}
 ) {
   const savedPlan = week.plan?.[cefr as keyof NonNullable<ContentWeekInput["plan"]>];
   const focuses = savedPlan?.length === 5
     ? savedPlan
     : DAYS.map((dayNumber) => `${week.topic} - day ${dayNumber}`);
   const startedAt = Date.now();
-  const baseInputs = DAYS.map((dayNumber, index) => ({
+  const generationDays = options.dayNumbers
+    ? DAYS.filter((dayNumber) => options.dayNumbers!.includes(dayNumber))
+    : DAYS;
+  const baseInputs = generationDays.map((dayNumber) => ({
     weekNumber: week.weekNumber,
     topic: week.topic,
     description: week.description,
@@ -85,7 +98,7 @@ export async function generateWeeklyLessons(
     keyVocabHint: week.keyVocabHint,
     cefr,
     dayNumber,
-    lessonFocus: focuses[index],
+    lessonFocus: focuses[dayNumber - 1],
     allLessonFocuses: focuses
   }));
 
@@ -100,25 +113,57 @@ export async function generateWeeklyLessons(
 
   const foundationResults = await Promise.all(baseInputs.map(async (input, index) => {
     const resultInput = { ...input, grammarClassification: grammarClassificationResults[index]!.output };
-    const result = await runner.runTask("weekly_lesson_foundation", resultInput, {
-      systemPrompt: `${task.prompt}\n\n${FOUNDATION_CONTRACT}`,
-      maxOutputTokens: FOUNDATION_OUTPUT_TOKEN_LIMIT
-    });
-    const output = normalizeFoundationObjectives(
-      parseComponent(weeklyLessonFoundationOutputSchema, normalizeFoundationInstruction(result.output), input.dayNumber, "foundation"),
-      input.cefr
-    );
-    const objectiveValidation = validateLessonObjectives({
-      cefr: input.cefr as "A1" | "A2" | "B1" | "B2" | "C1",
-      explanationLanguage: output.objective.explanationLanguage,
-      objectives: output.objective.items,
-      assessmentCodes: ["listening", "speaking"]
-    });
-    if (!objectiveValidation.valid) throwInvalid(
-      objectiveValidation.issues.map((message) => ({ path: ["objective"], message })),
-      `day${input.dayNumber}.foundation`
-    );
-    return { result, output };
+    let findings: Array<{ path: PropertyKey[]; message: string }> = [];
+    for (let attempt = 1; attempt <= 3; attempt += 1) {
+      const repair = findings.length
+        ? `\n\nREPAIR REQUIRED: ${findings.map((issue) => `${issue.path.join(".")}: ${issue.message}`).join("; ")} Return a complete corrected foundation without changing the lesson focus.`
+        : "";
+      const result = await runner.runTask("weekly_lesson_foundation", resultInput, {
+        systemPrompt: `${task.prompt}\n\n${FOUNDATION_CONTRACT}${repair}`,
+        maxOutputTokens: FOUNDATION_OUTPUT_TOKEN_LIMIT
+      });
+      const parsed = weeklyLessonFoundationOutputSchema.safeParse(result.output);
+      if (!parsed.success) {
+        findings = parsed.error.issues.slice(0, 8).map((issue) => ({ path: issue.path, message: issue.message }));
+      } else {
+        const normalized = {
+          ...parsed.data,
+          objective: {
+            ...parsed.data.objective,
+            items: parsed.data.objective.items.map((item) => ({
+              ...item,
+              text: normalizeObjectiveText(item.text, input.cefr)
+            }))
+          }
+        };
+        if (resultInput.grammarClassification.status === "classified" && (!normalized.title || !normalized.grammar)) {
+          findings = [
+            ...(!normalized.title ? [{ path: ["title"], message: "A classified target requires a concrete lesson title" }] : []),
+            ...(!normalized.grammar ? [{ path: ["grammar"], message: "A classified target requires grammar content" }] : [])
+          ];
+          if (attempt === 3) throwInvalid(findings, `day${input.dayNumber}.foundation`);
+          continue;
+        }
+        const objectiveValidation = validateLessonObjectives({
+          cefr: input.cefr as "A1" | "A2" | "B1" | "B2" | "C1",
+          explanationLanguage: normalized.objective.explanationLanguage,
+          objectives: normalized.objective.items,
+          assessmentCodes: ["listening", "speaking"]
+        });
+        const objectiveIssues = objectiveValidation.issues.filter((issue) => issue !== "objective_verb_not_observable");
+        if (normalized.objective.items.some((item) => (item.text.match(/\bSWBAT\b/gi) ?? []).length !== 1)) {
+          objectiveIssues.push("objective_must_be_one_clear_statement");
+        }
+        if (normalized.objective.items.some((item) => !hasPromptApprovedObservableVerb(item.text, input.cefr)
+          || /\b(?:understand|know|learn|appreciate|realise|realize|grasp|master|study|practi[cs]e|review)\b/i.test(item.text))) {
+          objectiveIssues.push(`objective_verb_not_observable. Use one ${input.cefr} verb: ${OBJECTIVE_VERBS_BY_LEVEL[input.cefr as keyof typeof OBJECTIVE_VERBS_BY_LEVEL]}`);
+        }
+        if (objectiveIssues.length === 0) return { result, output: normalized };
+        findings = [...new Set(objectiveIssues)].map((message) => ({ path: ["objective"], message }));
+      }
+      if (attempt === 3) throwInvalid(findings, `day${input.dayNumber}.foundation`);
+    }
+    throwInvalid(findings, `day${input.dayNumber}.foundation`);
   }));
 
   const usedVocabulary = new Set((options.excludedVocabulary ?? []).map(normalizeVocabularyKey).filter(Boolean));
@@ -129,28 +174,22 @@ export async function generateWeeklyLessons(
   };
   const firstVocabularyResults = await Promise.all(baseInputs.map(async (input, index): Promise<VocabularyResult> => {
     const foundation = foundationResults[index]!.output;
-    const result = await runner.runTask("weekly_lesson_vocabulary", {
+    return runStrictComponent(runner, "weekly_lesson_vocabulary", {
       ...input,
-      grammarFormula: foundation.grammar.formula,
-      grammarExamples: [foundation.grammar.example1, foundation.grammar.example2],
+      grammarFormula: foundation.grammar?.formula ?? null,
+      grammarExamples: foundation.grammar ? [foundation.grammar.example1, foundation.grammar.example2] : null,
       excludedVocabulary: promptHistory
-    }, {
-      systemPrompt: VOCABULARY_CONTRACT,
-      maxOutputTokens: VOCABULARY_OUTPUT_TOKEN_LIMIT
-    });
-    return {
-      result,
-      output: parseComponent(weeklyLessonVocabularyOutputSchema, result.output, input.dayNumber, "vocabulary")
-    };
+    }, VOCABULARY_CONTRACT, VOCABULARY_OUTPUT_TOKEN_LIMIT, weeklyLessonVocabularyOutputSchema, input.dayNumber, "vocabulary");
   }));
 
-  const vocabularyResults: VocabularyResult[] = [];
-  for (const [index, input] of baseInputs.entries()) {
-    const foundation = foundationResults[index]!.output;
-    const rejectedWords = new Set<string>();
-    let candidate = firstVocabularyResults[index]!;
-    let accepted: VocabularyResult | undefined;
-    for (let attempt = 1; attempt <= 8; attempt += 1) {
+  const candidates = [...firstVocabularyResults];
+  const vocabularyResults: Array<VocabularyResult | undefined> = Array(baseInputs.length).fill(undefined);
+  const rejectedWords = baseInputs.map(() => new Set<string>());
+  for (let attempt = 1; attempt <= 8; attempt += 1) {
+    const retryIndexes: number[] = [];
+    for (const [index, input] of baseInputs.entries()) {
+      if (vocabularyResults[index]) continue;
+      const candidate = candidates[index]!;
       const words = vocabularyWords(candidate.output);
       const local = new Set<string>();
       const duplicates = words.filter((word) => {
@@ -161,70 +200,75 @@ export async function generateWeeklyLessons(
       });
       if (duplicates.length === 0) {
         words.forEach((word) => usedVocabulary.add(normalizeVocabularyKey(word)));
-        accepted = candidate;
-        break;
+        vocabularyResults[index] = candidate;
+      } else {
+        duplicates.forEach((word) => rejectedWords[index]!.add(normalizeVocabularyKey(word)));
+        retryIndexes.push(index);
       }
-      duplicates.forEach((word) => rejectedWords.add(normalizeVocabularyKey(word)));
-      if (attempt === 8) break;
+    }
+    if (retryIndexes.length === 0 || attempt === 8) break;
+    const acceptedWords = vocabularyResults.flatMap((item) => item ? vocabularyWords(item.output) : []);
+    const retried = await Promise.all(retryIndexes.map(async (index): Promise<[number, VocabularyResult]> => {
+      const input = baseInputs[index]!;
+      const foundation = foundationResults[index]!.output;
       const excludedVocabulary = [...new Set([
         ...promptHistory,
-        ...vocabularyResults.flatMap(({ output }) => vocabularyWords(output)),
-        ...rejectedWords
+        ...acceptedWords,
+        ...rejectedWords[index]!
       ])].slice(-100);
-      const result = await runner.runTask("weekly_lesson_vocabulary", {
+      const generated = await runStrictComponent(runner, "weekly_lesson_vocabulary", {
         ...input,
-        grammarFormula: foundation.grammar.formula,
-        grammarExamples: [foundation.grammar.example1, foundation.grammar.example2],
+        grammarFormula: foundation.grammar?.formula ?? null,
+        grammarExamples: foundation.grammar ? [foundation.grammar.example1, foundation.grammar.example2] : null,
         excludedVocabulary
-      }, {
-        systemPrompt: VOCABULARY_CONTRACT,
-        maxOutputTokens: VOCABULARY_OUTPUT_TOKEN_LIMIT
-      });
-      candidate = {
-        result,
-        output: parseComponent(weeklyLessonVocabularyOutputSchema, result.output, input.dayNumber, "vocabulary")
-      };
-    }
-    if (!accepted) {
-      throwInvalid([{
-        path: ["items"],
-        message: "AI repeated vocabulary already used in this week, another week, or another CEFR level"
-      }], `day${input.dayNumber}.vocabulary`);
-    }
-    vocabularyResults.push(accepted);
+      }, VOCABULARY_CONTRACT, VOCABULARY_OUTPUT_TOKEN_LIMIT, weeklyLessonVocabularyOutputSchema, input.dayNumber, "vocabulary");
+      return [index, generated];
+    }));
+    retried.forEach(([index, candidate]) => { candidates[index] = candidate; });
   }
+  const missingVocabularyIndex = vocabularyResults.findIndex((item) => !item);
+  if (missingVocabularyIndex >= 0) {
+    throwInvalid([{
+      path: ["items"],
+      message: "AI repeated vocabulary already used in this week, another week, or another CEFR level"
+    }], `day${baseInputs[missingVocabularyIndex]!.dayNumber}.vocabulary`);
+  }
+  const completeVocabularyResults = vocabularyResults as VocabularyResult[];
 
   const skillsResults = await Promise.all(baseInputs.map(async (input, index) => {
     const foundation = foundationResults[index]!.output;
-    const vocabulary = vocabularyResults[index]!.output;
-    const result = await runner.runTask("weekly_lesson_skills", {
+    const vocabulary = completeVocabularyResults[index]!.output;
+    return runStrictComponent(runner, "weekly_lesson_skills", {
       ...input,
-      grammarFormula: foundation.grammar.formula,
-      grammarExamples: [foundation.grammar.example1, foundation.grammar.example2],
+      grammarFormula: foundation.grammar?.formula ?? null,
+      grammarExamples: foundation.grammar ? [foundation.grammar.example1, foundation.grammar.example2] : null,
       vocabularyWords: [vocabulary.word1.word, vocabulary.word2.word, vocabulary.word3.word]
-    }, {
-      systemPrompt: SKILLS_CONTRACT,
-      maxOutputTokens: SKILLS_OUTPUT_TOKEN_LIMIT
-    });
-    return { result, output: parseComponent(weeklyLessonSkillsOutputSchema, result.output, input.dayNumber, "skills") };
+    }, SKILLS_CONTRACT, SKILLS_OUTPUT_TOKEN_LIMIT, weeklyLessonSkillsOutputSchema, input.dayNumber, "skills");
   }));
 
-  const lessonDrafts = DAYS.map((dayNumber, index) => buildLesson(
+  const lessonDrafts = generationDays.map((dayNumber, index) => buildLesson(
     dayNumber,
     foundationResults[index]!.output,
-    vocabularyResults[index]!.output,
-    skillsResults[index]!.output
+    completeVocabularyResults[index]!.output,
+    skillsResults[index]!.output,
+    grammarClassificationResults[index]!.output.status,
+    baseInputs[index]!.lessonFocus ?? `${week.topic} - day ${dayNumber}`
   ));
-  const combined = weeklyLessonsOutputSchema.safeParse({ lessons: lessonDrafts });
-  if (!combined.success) throwInvalid(combined.error.issues, "lessons");
+  const parsedLessons = lessonDrafts.map((lesson, index) => {
+    if (grammarClassificationResults[index]!.output.status !== "classified") return lesson;
+      const parsed = weeklyLessonDayOutputSchema.safeParse({ lesson });
+      if (!parsed.success) throwInvalid(parsed.error.issues, `day${lesson.dayNumber}`);
+      return {
+        ...parsed.data.lesson,
+        dayNumber: lesson.dayNumber,
+        title: foundationResults[index]!.output.title!
+      };
+  });
 
-  const lessons = combined.data.lessons.map((lesson, index) => ({
-    ...lesson,
-    title: concreteLessonTitle(foundationResults[index]!.output)
-  })) as ContentLessonDraftInput[];
+  const lessons = parsedLessons as ContentLessonDraftInput[];
   const validation = validateLessonDraft(lessons);
   const days = [...new Set(lessons.map((lesson) => lesson.dayNumber))].sort((a, b) => a - b);
-  if (!validation.valid || days.length !== 5 || days.some((day, index) => day !== index + 1)) {
+  if (!validation.valid || days.length !== generationDays.length || days.some((day, index) => day !== generationDays[index])) {
     throw Object.assign(new Error("AI_LESSON_SET_INVALID"), {
       code: "AI_LESSON_SET_INVALID",
       issues: validation.issues
@@ -234,11 +278,12 @@ export async function generateWeeklyLessons(
   const allResults = [
     ...grammarClassificationResults.map(({ result }) => result),
     ...foundationResults.map(({ result }) => result),
-    ...vocabularyResults.map(({ result }) => result),
+    ...completeVocabularyResults.map(({ result }) => result),
     ...skillsResults.map(({ result }) => result)
   ];
   const first = allResults[0]!.metadata;
-  const result: AiRunResult<typeof combined.data> = {
+  const output = { lessons };
+  const result: AiRunResult<typeof output> = {
     output: { lessons },
     metadata: {
       traceId: first.traceId,
@@ -253,7 +298,7 @@ export async function generateWeeklyLessons(
     }
   };
 
-  return { result, output: { lessons }, lessons };
+  return { result, output, lessons };
 }
 
 function vocabularyWords(vocabulary: Vocabulary): string[] {
@@ -275,6 +320,57 @@ function parseComponent<T>(
   return parsed.data;
 }
 
+async function runStrictComponent<T>(
+  runner: AiTaskRunner,
+  taskId: string,
+  input: unknown,
+  basePrompt: string,
+  maxOutputTokens: number,
+  schema: { safeParse(value: unknown): { success: true; data: T } | { success: false; error: { issues: Array<{ path: PropertyKey[]; message: string }> } } },
+  dayNumber: number,
+  component: string
+): Promise<{ result: Awaited<ReturnType<AiTaskRunner["runTask"]>>; output: T }> {
+  let findings: Array<{ path: PropertyKey[]; message: string }> = [];
+  for (let attempt = 1; attempt <= 3; attempt += 1) {
+    const repair = findings.length
+      ? `\n\nREPAIR REQUIRED: ${findings.map((issue) => `${issue.path.join(".")}: ${issue.message}`).join("; ")} Return a complete corrected ${component} result and preserve every valid field.`
+      : "";
+    try {
+      const result = await runner.runTask(taskId, input, {
+        systemPrompt: `${basePrompt}${repair}`,
+        maxOutputTokens
+      });
+      const parsed = schema.safeParse(result.output);
+      if (parsed.success) return { result, output: parsed.data };
+      findings = parsed.error.issues.slice(0, 8).map((issue) => ({ path: issue.path, message: issue.message }));
+    } catch (error) {
+      if (!isInvalidAiOutput(error)) throw error;
+      findings = invalidAiIssues(error);
+    }
+    if (attempt === 3) throwInvalid(findings, `day${dayNumber}.${component}`);
+  }
+  throwInvalid(findings, `day${dayNumber}.${component}`);
+}
+
+function isInvalidAiOutput(error: unknown): boolean {
+  return Boolean(error && typeof error === "object" && "code" in error && (error as { code?: unknown }).code === "AI_OUTPUT_INVALID");
+}
+
+function invalidAiIssues(error: unknown): Array<{ path: PropertyKey[]; message: string }> {
+  const candidate = error && typeof error === "object" && "details" in error
+    ? (error as { details?: { issues?: unknown } }).details?.issues
+    : undefined;
+  if (!Array.isArray(candidate)) return [{ path: [], message: "The structured result was incomplete or invalid" }];
+  return candidate.slice(0, 8).map((issue) => {
+    const value = issue && typeof issue === "object" ? issue as { path?: unknown; message?: unknown } : {};
+    const path = Array.isArray(value.path) ? value.path.map(String) : typeof value.path === "string" ? value.path.split(".") : [];
+    const message = typeof value.message === "string"
+      ? value.message.replace(/[\r\n\t]+/g, " ").trim().slice(0, 240)
+      : "The structured result was incomplete or invalid";
+    return { path, message };
+  });
+}
+
 function throwInvalid(issues: Array<{ path: PropertyKey[]; message: string }>, prefix: string): never {
   throw Object.assign(new Error("AI_OUTPUT_INVALID"), {
     code: "AI_OUTPUT_INVALID",
@@ -290,67 +386,30 @@ type Vocabulary = ReturnType<typeof weeklyLessonVocabularyOutputSchema.parse>;
 type Skills = ReturnType<typeof weeklyLessonSkillsOutputSchema.parse>;
 type VocabularyItem = Vocabulary["word1"];
 
-const OBSERVABLE_OBJECTIVE_VERB = /\b(?:identify|select|match|list|describe|ask|answer|write|say|give|use|compare|summarize|complete|respond|present|pronounce|produce|distinguish)\b/i;
-
-function normalizeFoundationInstruction(value: unknown): unknown {
-  if (!value || typeof value !== "object" || Array.isArray(value)) return value;
-  const foundation = value as Record<string, unknown>;
-  const rawInstruction = foundation.instruction;
-  const instruction = rawInstruction && typeof rawInstruction === "object" && !Array.isArray(rawInstruction)
-    ? rawInstruction as Record<string, unknown>
-    : {};
-  const steps = Array.isArray(instruction.steps) ? instruction.steps : [];
-  return {
-    ...foundation,
-    instruction: {
-      ...instruction,
-      title: nonEmptyString(instruction.title) ?? "Hướng dẫn",
-      step1: nonEmptyString(instruction.step1) ?? nonEmptyString(steps[0]) ?? "Đọc mục tiêu và mẫu câu trọng tâm của bài.",
-      step2: nonEmptyString(instruction.step2) ?? nonEmptyString(steps[1]) ?? "Ôn từ vựng rồi luyện nghe, đọc và nói theo hướng dẫn.",
-      step3: nonEmptyString(instruction.step3) ?? nonEmptyString(steps[2]) ?? "Hoàn thành các bài tập rồi kiểm tra đáp án."
-    }
-  };
-}
-
-function nonEmptyString(value: unknown): string | undefined {
-  return typeof value === "string" && value.trim() ? value.trim() : undefined;
-}
-
-function normalizeFoundationObjectives(foundation: Foundation, cefr: string): Foundation {
-  const items = foundation.objective.items.map((objective) => ({
-    ...objective,
-    text: normalizeObjectiveText(objective.text)
-  }));
-  if (items.filter(({ type }) => type === "content").length !== 1) {
-    items.forEach((objective, index) => { objective.type = index === 0 ? "content" : "language"; });
-  }
-  const mapped = new Set(items.map(({ assessmentCode }) => assessmentCode));
-  if (!mapped.has("listening") && items[0]) items[0].assessmentCode = "listening";
-  if (!mapped.has("speaking") && items[1]) items[1].assessmentCode = "speaking";
-  return {
-    ...foundation,
-    objective: {
-      ...foundation.objective,
-      explanationLanguage: cefr === "A1" || cefr === "A2" ? "vi" : "en",
-      items
-    }
-  };
-}
-
-function normalizeObjectiveText(value: string): string {
-  const body = value.trim().replace(/^SWBAT\s+/i, "");
-  const text = `SWBAT ${body}`;
-  return OBSERVABLE_OBJECTIVE_VERB.test(text) ? text : `SWBAT use English to ${body}`;
-}
-
-function buildLesson(dayNumber: number, foundation: Foundation, vocabulary: Vocabulary, skills: Skills) {
+function buildLesson(
+  dayNumber: number,
+  foundation: Foundation,
+  vocabulary: Vocabulary,
+  skills: Skills,
+  grammarStatus: "classified" | "no_suitable_content" | "insufficient_evidence",
+  lessonFocus: string
+) {
+  const grammar = grammarStatus === "classified" && foundation.grammar
+    ? {
+        formula: foundation.grammar.formula,
+        usage: foundation.grammar.usage,
+        examples: [foundation.grammar.example1, foundation.grammar.example2]
+      }
+    : { status: "unavailable", hidden: true, reason: grammarStatus };
   return {
     dayNumber,
-    title: concreteLessonTitle(foundation),
+    title: grammarStatus === "classified" && foundation.title
+      ? foundation.title
+      : compactWords(lessonFocus, 8).replace(/[.!?]+$/, ""),
     durationMinutes: foundation.durationMinutes,
     parts: [
       { code: "objective", title: foundation.objective.title, content: {
-        text: foundation.objective.items.map(({ text }) => text).join(" "),
+        text: foundation.objective.items.map(({ text }) => text).join("\n"),
         explanationLanguage: foundation.objective.explanationLanguage,
         items: foundation.objective.items
       } },
@@ -363,12 +422,8 @@ function buildLesson(dayNumber: number, foundation: Foundation, vocabulary: Voca
         content: { items: [vocabulary.word1, vocabulary.word2, vocabulary.word3].map(toVocabularyItem) }
       },
       {
-        code: "grammar", title: foundation.grammar.title,
-        content: {
-          formula: foundation.grammar.formula,
-          usage: firstSentence(foundation.grammar.usage),
-          examples: [compactEnglishExample(foundation.grammar.example1), compactEnglishExample(foundation.grammar.example2)]
-        }
+        code: "grammar", title: foundation.grammar?.title ?? "Language focus",
+        content: grammar
       },
       {
         code: "pronunciation", title: foundation.pronunciation.title,
@@ -386,20 +441,20 @@ function buildLesson(dayNumber: number, foundation: Foundation, vocabulary: Voca
           type: skills.writing.type,
           prompt: skills.writing.prompt,
           options: compact([skills.writing.option1, skills.writing.option2, skills.writing.option3, skills.writing.option4]),
-          answer: skills.writing.answer
+          answer: skills.writing.answer,
+          hint: skills.writing.hint,
+          questionTranslation: skills.writing.questionTranslation,
+          answerTranslation: skills.writing.answerTranslation
         }
       },
       { code: "word_class", title: skills.wordClass.title, content: toQuestion(skills.wordClass) },
       { code: "word_use", title: skills.wordUse.title, content: toQuestion(skills.wordUse) },
-      { code: "speaking", title: skills.speaking.title, content: { prompt: skills.speaking.prompt, answer: skills.speaking.answer } }
+      { code: "speaking", title: skills.speaking.title, content: {
+        prompt: skills.speaking.prompt, answer: skills.speaking.answer, hint: skills.speaking.hint,
+        questionTranslation: skills.speaking.questionTranslation, answerTranslation: skills.speaking.answerTranslation
+      } }
     ]
   };
-}
-
-function concreteLessonTitle(foundation: Foundation): string {
-  const title = foundation.title.trim();
-  if (!/^S\s*\+\s*V(?:\s*\+\s*O)?$/i.test(title)) return title;
-  return foundation.grammar.example1.trim().replace(/[.!?]+$/, "").slice(0, 60);
 }
 
 function compactWords(value: string, limit: number): string {
@@ -407,13 +462,19 @@ function compactWords(value: string, limit: number): string {
   return words.length <= limit ? value.trim() : `${words.slice(0, limit).join(" ").replace(/[,:;.!?]+$/, "")}.`;
 }
 
-function firstSentence(value: string): string {
-  return value.trim().match(/^.*?[.!?](?=\s|$)/)?.[0] ?? value.trim();
+function normalizeObjectiveText(value: string, cefr: string): string {
+  const trimmed = value.trim();
+  if (/^SWBAT\b/i.test(trimmed)) return trimmed;
+  const learnerFacingPrefix = cefr === "A1" || cefr === "A2"
+    ? /^Sau bài học,?\s+bạn có thể\s+/i
+    : /^By the end of this lesson,?\s+you will be able to\s+/i;
+  if (learnerFacingPrefix.test(trimmed)) return `SWBAT ${trimmed.replace(learnerFacingPrefix, "")}`;
+  return trimmed;
 }
 
-function compactEnglishExample(value: string): string {
-  const withoutTranslation = value.replace(/\s*\([^)]*[À-ỹ][^)]*\)\s*$/iu, "").trim();
-  return compactWords(firstSentence(withoutTranslation), 10);
+function hasPromptApprovedObservableVerb(value: string, cefr: string): boolean {
+  void cefr;
+  return /\b(?:identify|select|match|name|point\s+to|repeat|say|ask|answer|give|use|describe|write|confirm|request|apologi[sz]e|arrange|complete|explain|respond|give\s+reasons|summari[sz]e|clarify|report|suggest|compare|justify|negotiate|handle|propose|recommend|paraphrase|de-escalate|present|persuade|adapt|mediate|critique|synthesi[sz]e|reframe|decline|lead|tailor|send|state|choose|check)\b/i.test(value);
 }
 
 function toVocabularyItem(item: VocabularyItem) {
@@ -443,7 +504,10 @@ function toChoice(value: Skills["listening"] | Skills["reading"], bodyKey: "audi
     [bodyKey]: value.body,
     prompt: value.prompt,
     options: [value.option1, value.option2, value.option3, value.option4],
-    answer: value.answer
+    answer: value.answer,
+    hint: value.hint,
+    questionTranslation: value.questionTranslation,
+    answerTranslation: value.answerTranslation
   };
 }
 
@@ -451,7 +515,10 @@ function toQuestion(value: Skills["wordClass"] | Skills["wordUse"]) {
   return {
     prompt: value.prompt,
     options: [value.option1, value.option2, value.option3, value.option4],
-    answer: value.answer
+    answer: value.answer,
+    hint: value.hint,
+    questionTranslation: value.questionTranslation,
+    answerTranslation: value.answerTranslation
   };
 }
 

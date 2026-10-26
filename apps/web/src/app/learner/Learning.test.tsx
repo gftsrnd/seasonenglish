@@ -3,7 +3,7 @@ import "@testing-library/jest-dom/vitest";
 import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import { userEvent } from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { LearnerLesson, normalizeBlankPrompt } from "./Learning.js";
+import { LearnerLesson, normalizeLessonBlankPrompt } from "./Learning.js";
 
 afterEach(cleanup);
 
@@ -46,8 +46,9 @@ describe("learner lesson study content", () => {
     expect(homeLink.querySelector("span")).not.toBeInTheDocument();
 
     expect(screen.queryByRole("heading", { name: "HƯỚNG DẪN LÀM BÀI" })).not.toBeInTheDocument();
-    expect(screen.getByRole("list", { name: "Mục tiêu bài học" })).toHaveTextContent("SWBAT identify two job details");
-    expect(screen.getByRole("list", { name: "Mục tiêu bài học" })).toHaveTextContent("SWBAT say one complete work sentence");
+    expect(screen.getByRole("list", { name: "Mục tiêu bài học" })).toHaveTextContent("Sau bài học, bạn có thể identify two job details");
+    expect(screen.getByRole("list", { name: "Mục tiêu bài học" })).toHaveTextContent("Sau bài học, bạn có thể say one complete work sentence");
+    expect(screen.getByRole("list", { name: "Mục tiêu bài học" })).not.toHaveTextContent("SWBAT");
     expect(screen.getByText("tính từ")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Nghe từ new" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Nghe từ new" }).querySelector("svg.lucide-volume-2")).toBeInTheDocument();
@@ -75,8 +76,24 @@ describe("learner lesson study content", () => {
   });
 
   it("renders every fill-in blank as one continuous line", () => {
-    expect(normalizeBlankPrompt("Please write - - - here and _ _ _ there.")).toBe("Please write ------ here and ------ there.");
-    expect(normalizeBlankPrompt("Please write --- here.")).toBe("Please write ------ here.");
+    expect(normalizeLessonBlankPrompt("Please write - - - here and _ _ _ there.")).toBe("Please write _____ here and _____ there.");
+    expect(normalizeLessonBlankPrompt("Please write -------- here.")).toBe("Please write _____ here.");
+  });
+
+  it("hides grammar explicitly marked unavailable instead of showing an empty study card", () => {
+    const lesson = {
+      id: "lesson-no-grammar", title: "Vocabulary focus", dayNumber: 1, durationMinutes: 10, cefr: "A2",
+      content: { parts: [
+        { code: "objective", title: "Mục tiêu", content: { text: "Học từ vựng công việc." } },
+        { code: "grammar", title: "Ngữ pháp", content: { status: "unavailable", hidden: true, reason: "no_suitable_content" } },
+        { code: "vocabulary", title: "Từ vựng", content: { items: [] } }
+      ] },
+      progress: { status: "not_started", completedPartCodes: [], evidence: {} }
+    } as any;
+    render(<LearnerLesson view={{ lesson, lock: null }} actions={{ navigate: vi.fn(), speak: vi.fn(), saveLessonProgress: vi.fn() } as any} />);
+
+    expect(document.querySelector('[data-part="grammar"]')).not.toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "NGỮ PHÁP" })).not.toBeInTheDocument();
   });
 
   it("loads a real attributed image path for concrete vocabulary", async () => {
@@ -292,6 +309,71 @@ describe("learner lesson study content", () => {
     expect(submit).toBeEnabled();
     await user.click(submit);
     expect(appealLessonPart).toHaveBeenCalledWith("writing", "abcde");
+  });
+
+  it("shows safe retry guidance, strikes the wrong choice, and reveals translations only after success", async () => {
+    const lesson = {
+      id: "lesson-feedback", title: "Directions", dayNumber: 1, durationMinutes: 10, cefr: "A2",
+      content: { parts: [
+        { code: "objective", title: "Mục tiêu", content: { text: "Ask for directions." } },
+        { code: "reading", title: "Đọc", content: { prompt: "Where is the room?", options: ["Lobby", "Second floor"], answer: "Second floor", hint: "Look for the floor phrase.", questionTranslation: "Phòng ở đâu?", answerTranslation: "Ở tầng hai." } }
+      ] },
+      progress: { status: "in_progress", completedPartCodes: ["objective"], evidence: { reading: { attempts: 1, status: "wrong_retry", answer: "Lobby", feedback: "Chưa đúng." } } }
+    } as any;
+    const { rerender } = render(<LearnerLesson view={{ lesson, lock: null }} actions={{ navigate: vi.fn(), speak: vi.fn(), saveLessonProgress: vi.fn() } as any} />);
+    fireEvent.click(screen.getByRole("tab", { name: /2\. bài tập/i }));
+    expect(screen.getByText("Gợi ý: Look for the floor phrase.")).toBeInTheDocument();
+    expect(screen.getByRole("radio", { name: /Lobby/ }).closest("label")).toHaveStyle({ textDecoration: "line-through" });
+    expect(screen.queryByText("Phòng ở đâu?")).not.toBeInTheDocument();
+
+    const correct = { ...lesson, progress: { ...lesson.progress, completedPartCodes: ["objective", "reading"], evidence: { reading: { attempts: 2, status: "correct", answer: "Second floor", feedback: "Đúng rồi." } } } };
+    rerender(<LearnerLesson view={{ lesson: correct, lock: null }} actions={{ navigate: vi.fn(), speak: vi.fn(), saveLessonProgress: vi.fn() } as any} />);
+    expect(screen.getByRole("region", { name: "Bản dịch phần Đọc" })).toHaveTextContent("Câu hỏi: Phòng ở đâu?");
+    expect(screen.getByRole("region", { name: "Bản dịch phần Đọc" })).toHaveTextContent("Đáp án: Ở tầng hai.");
+  });
+
+  it("shows the actual question and answer translations after the learner requests them", async () => {
+    const lesson = {
+      id: "lesson-translated", title: "Directions", dayNumber: 1, durationMinutes: 10, cefr: "A2",
+      content: { parts: [
+        { code: "objective", title: "Mục tiêu", content: { text: "Ask for directions." } },
+        { code: "reading", title: "Đọc", content: { prompt: "Where is the room?", options: ["Lobby", "Second floor"], answer: "Second floor", hint: "Look for the floor phrase.", questionTranslation: "Phòng ở đâu?", answerTranslation: "Ở tầng hai." } }
+      ] },
+      progress: { status: "in_progress", completedPartCodes: ["objective", "reading"], evidence: { reading: { attempts: 1, status: "translated", answer: "Lobby", feedback: "Bản dịch đã được mở để bạn đối chiếu." } } }
+    } as any;
+
+    render(<LearnerLesson view={{ lesson, lock: null }} actions={{ navigate: vi.fn(), speak: vi.fn(), saveLessonProgress: vi.fn() } as any} />);
+    fireEvent.click(screen.getByRole("tab", { name: /2\. bài tập/i }));
+
+    const translation = screen.getByRole("region", { name: "Bản dịch phần Đọc" });
+    expect(translation).toHaveTextContent("Câu hỏi: Phòng ở đâu?");
+    expect(translation).toHaveTextContent("Đáp án: Ở tầng hai.");
+  });
+
+  it("presents fill exercises as text input even when malformed choice distractors are present", async () => {
+    const lesson = {
+      id: "lesson-fill", title: "Polite feedback", dayNumber: 1, durationMinutes: 10, cefr: "A2",
+      content: { parts: [
+        { code: "objective", title: "Mục tiêu", content: { text: "Ask permission politely." } },
+        { code: "writing", title: "Viết", content: {
+          type: "fill",
+          prompt: "Complete the sentence: '___ I give you some feedback on your slides?' (Use: Could I ...)",
+          options: ["Could", "Could I", "Can you", "Would"],
+          answer: "Could",
+          questionTranslation: "Hoàn thành câu xin phép góp ý.",
+          answerTranslation: "Tôi có thể góp ý về các trang trình chiếu của bạn không?"
+        } }
+      ] },
+      progress: { status: "in_progress", completedPartCodes: ["objective"], evidence: {} }
+    } as any;
+
+    render(<LearnerLesson view={{ lesson, lock: null }} actions={{ navigate: vi.fn(), speak: vi.fn(), saveLessonProgress: vi.fn() } as any} />);
+    fireEvent.click(screen.getByRole("tab", { name: /2\. bài tập/i }));
+
+    expect(screen.getByRole("textbox", { name: "Câu trả lời writing" })).toBeInTheDocument();
+    expect(screen.queryByRole("radio", { name: /Could I/ })).not.toBeInTheDocument();
+    expect(screen.getByText("Complete the sentence: '_____ I give you some feedback on your slides?'")).toBeInTheDocument();
+    expect(screen.queryByText(/Use: Could I/)).not.toBeInTheDocument();
   });
 
   it("uses an accessible lock icon without an emoji for a locked lesson", () => {

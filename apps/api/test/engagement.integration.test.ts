@@ -159,7 +159,7 @@ describe("practice, games, arena, rewards and survey API", () => {
     expect(snapshot.rows[0]).toMatchObject({
       prompt_snapshot: { task: opened.json().task, guidance: opened.json().guidance },
       cefr_snapshot: "A2",
-      vocabulary_snapshot: expect.arrayContaining(weeklyWords)
+      vocabulary_snapshot: expect.arrayContaining(["colleague", "role", "work with"])
     });
 
     const duplicate = await app.inject({
@@ -197,6 +197,142 @@ describe("practice, games, arena, rewards and survey API", () => {
         score: { total: 0, rubric: { meaning: 0, vocabulary: 0, grammar: 0 } }
       })
     ]));
+  });
+
+  it("derives weekly-practice requirements from published lesson vocabulary", async () => {
+    await pool.query("delete from practice_appeals where learner_id = $1", [DEMO_IDS.learner]);
+    await pool.query("delete from practice_submissions where learner_id = $1", [DEMO_IDS.learner]);
+    await pool.query(
+      `update progress_records set status = 'completed', completed_at = now() where learner_id = $1`,
+      [DEMO_IDS.learner]
+    );
+    await pool.query(
+      `insert into game_sets (id, program_week_id, learner_id, game_key, status, payload)
+       values ($1, $2, $3, 'weekly_vocabulary', 'published', $4::jsonb)`,
+      ["10000000-0000-4000-8000-000000000091", DEMO_IDS.week, DEMO_IDS.learner,
+        JSON.stringify({ source: "ai", topic: "Private unrelated game", words: ["alpha", "beta", "gamma"].map((english) => ({ english })) })]
+    );
+    const contents = await pool.query<{ content: { parts: Array<{ code: string; content: { items?: Array<{ word: string }> } }> } }>(
+      `select lv.content from lessons l
+       join lesson_set_versions lsv on lsv.id = l.lesson_set_version_id and lsv.status = 'published'
+       join lateral (select content from lesson_versions where lesson_id = l.id and status = 'published' order by version desc limit 1) lv on true
+       where lsv.lesson_set_id = $1 order by l.day_number`,
+      [DEMO_IDS.lessonSet]
+    );
+    const words = contents.rows.flatMap(({ content }) => content.parts
+      .filter((part) => part.code === "vocabulary")
+      .flatMap((part) => part.content.items?.map((item) => item.word) ?? [])).slice(0, 3);
+    expect(words).toHaveLength(3);
+    const text = `I study ${words[0]}. I study ${words[1]}. I study ${words[2]}.`;
+    const submitted = await app.inject({
+      method: "POST", url: "/api/v1/engagement/practice/submit", headers: { cookie },
+      payload: { requestId: "10000000-0000-4000-8000-000000000090", text }
+    });
+    expect(submitted.statusCode, submitted.body).toBe(200);
+    expect(submitted.json().submission.text).toBe(text);
+    await pool.query("delete from game_sets where id = $1", ["10000000-0000-4000-8000-000000000091"]);
+  });
+
+  it("validates against the published weekly-practice vocabulary instead of stale game sets", async () => {
+    await pool.query("delete from practice_appeals where learner_id = $1", [DEMO_IDS.learner]);
+    await pool.query("delete from practice_submissions where learner_id = $1", [DEMO_IDS.learner]);
+    await pool.query(
+      `update progress_records set status = 'completed', completed_at = now()
+       where learner_id = $1`,
+      [DEMO_IDS.learner]
+    );
+    await pool.query(
+      `insert into game_sets (id, program_week_id, learner_id, game_key, status, payload)
+       values ($1, $2, $3, 'weekly_vocabulary', 'published', $4::jsonb)`,
+      ["10000000-0000-4000-8000-000000000096", DEMO_IDS.week, DEMO_IDS.learner, JSON.stringify({
+        topic: "Private unrelated game", words: ["alpha", "beta", "gamma"].map((english) => ({ english }))
+      })]
+    );
+    await pool.query(
+      `insert into lesson_set_versions
+         (id, lesson_set_id, version, status, payload, created_by, approved_by, published_at)
+       values ($1, $2, 2, 'published', $3::jsonb, $4, $5, now())`,
+      ["10000000-0000-4000-8000-000000000092", DEMO_IDS.lessonSet, JSON.stringify({
+        weeklyPractice: {
+          inputMode: "write",
+          task: "Write 3–5 sentences about giving feedback.",
+          guidance: "Use the published weekly words.",
+          requiredVocabulary: ["check", "good", "job"]
+        }
+      }), DEMO_IDS.operator, DEMO_IDS.checker]
+    );
+
+    const response = await app.inject({ method: "GET", url: "/api/v1/engagement/practice", headers: { cookie } });
+    const text = "I check the slide. Good job on the report. Thank you for giving feedback today.";
+    expect(text.replace(/[.!?]/g, "").trim().split(/\s+/)).toHaveLength(15);
+    const submitted = await app.inject({
+      method: "POST", url: "/api/v1/engagement/practice/submit", headers: { cookie },
+      payload: { requestId: "10000000-0000-4000-8000-000000000095", text }
+    });
+
+    expect(response.statusCode, response.body).toBe(200);
+    expect(submitted.statusCode, submitted.body).toBe(200);
+    expect(submitted.json()).toMatchObject({
+      state: "submitted",
+      submission: {
+        text,
+        score: { total: 74, rubric: { meaning: 4, vocabulary: 4, grammar: 3 } },
+        feedback: "Ý rõ và đúng bối cảnh công việc.",
+        correctedText: "I prepare reports."
+      }
+    });
+    const duplicate = await app.inject({
+      method: "POST", url: "/api/v1/engagement/practice/submit", headers: { cookie },
+      payload: {
+        requestId: "10000000-0000-4000-8000-000000000093",
+        text: "I check my notes. Good job on the slides. Thank you for sharing useful feedback today."
+      }
+    });
+    expect(duplicate.statusCode, duplicate.body).toBe(200);
+    expect(duplicate.json().submission.text).toBe(text);
+    const stored = await pool.query<{ count: number }>(
+      "select count(*)::int as count from practice_submissions where learner_id = $1 and program_week_id = $2 and superseded_at is null",
+      [DEMO_IDS.learner, DEMO_IDS.week]
+    );
+    expect(stored.rows[0]?.count).toBe(1);
+  });
+
+  it("allows one appeal for AI grading and rejects appeals after manual grading", async () => {
+    await pool.query("delete from practice_appeals where learner_id = $1", [DEMO_IDS.learner]);
+    await pool.query("delete from practice_submissions where learner_id = $1", [DEMO_IDS.learner]);
+    const submissionId = "10000000-0000-4000-8000-000000000094";
+    await pool.query(
+      `insert into practice_submissions
+         (id, learner_id, program_week_id, status, content, score, feedback, prompt_snapshot, cefr_snapshot, vocabulary_snapshot, submitted_at)
+       values ($1, $2, $3, 'submitted', '{"text":"A valid submitted weekly answer."}',
+         '{"total":74,"rubric":{"meaning":4,"vocabulary":4,"grammar":3}}',
+         '{"source":"ai","message":"AI feedback"}', '{}', 'A2', '[]', now())`,
+      [submissionId, DEMO_IDS.learner, DEMO_IDS.week]
+    );
+    const first = await app.inject({
+      method: "POST", url: `/api/v1/engagement/practice/${submissionId}/appeals`, headers: { cookie },
+      payload: { reason: "Please review this score." }
+    });
+    expect(first.statusCode, first.body).toBe(200);
+    const second = await app.inject({
+      method: "POST", url: `/api/v1/engagement/practice/${submissionId}/appeals`, headers: { cookie },
+      payload: { reason: "Please review it again." }
+    });
+    expect(second.statusCode, second.body).toBe(409);
+
+    await pool.query("delete from practice_appeals where submission_id = $1", [submissionId]);
+    await pool.query(
+      `update practice_submissions
+       set status = 'reviewed', feedback = coalesce(feedback, '{}'::jsonb) || '{"source":"human"}'::jsonb
+       where id = $1`,
+      [submissionId]
+    );
+    const manual = await app.inject({
+      method: "POST", url: `/api/v1/engagement/practice/${submissionId}/appeals`, headers: { cookie },
+      payload: { reason: "Please review manual grading." }
+    });
+    expect(manual.statusCode, manual.body).toBe(409);
+    expect(manual.json()).toMatchObject({ code: "PRACTICE_APPEAL_NOT_AVAILABLE" });
   });
 
   it("opens Mini game from a published lesson week without a game set", async () => {

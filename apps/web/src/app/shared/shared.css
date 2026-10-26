@@ -319,7 +319,7 @@ section.welcome.app-entry .app-entry-link {
 
 section.welcome.app-entry .app-entry-link:hover:not(:disabled) {
   background: transparent;
-  color: var(--primary-ink);
+  color: var(--primary-dark);
   text-decoration: underline;
   text-underline-offset: 3px;
 }

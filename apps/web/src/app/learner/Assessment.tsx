@@ -247,12 +247,13 @@ function ActiveAssessment({ view, actions, section, sectionIndex, runtime, local
       <h2>Phần {sectionIndex + 1} – {section.title} <span className="badge">{section.maxScore} điểm</span></h2>
       {section.instructions.length ? <p className="small assessment-section-instructions">{section.instructions.join(" · ")}</p> : null}
       <div className="assessment-section-groups">
-    {section.groups.map((group) => <section className={`card soft assessment-task-group assessment-task-group-${section.code}`} style={{ marginTop: 0 }} key={group.key}>
+    {section.groups.map((group, groupIndex) => <section className={`card soft assessment-task-group assessment-task-group-${section.code}`} style={{ marginTop: 0 }} key={group.key}>
       <div className="assessment-task-group-heading"><h3 className="assessment-task-group-title">{group.title}</h3>{section.code === "writing" && group.tasks.length === 1 ? <span className="badge">{group.tasks[0]?.maxScore} điểm</span> : null}</div>
       <p className="assessment-task-group-instruction">{group.instruction}</p>
       <div className="assessment-task-content" style={{ display: "grid", gap: 12, marginTop: 12 }}>
         {group.stimulus ? <Stimulus stimulus={group.stimulus} maxPlays={group.maxPlays ?? 0} played={attempt.audioPlayCounts[`${section.code}:${group.key}`] ?? runtimeAudioCount(view, section.code, group.key)} onPlay={async (text, audioSrc) => {
           try {
+            const result = await actions.recordAssessmentAudioPlay(section.code, group.key);
             if (!audioSrc) {
               await new Promise<void>((resolve, reject) => actions.speak(text, "en-GB", {
                 rate: 0.86,
@@ -272,14 +273,14 @@ function ActiveAssessment({ view, actions, section, sectionIndex, runtime, local
                 });
               });
             }
-            const result = await actions.recordAssessmentAudioPlay(section.code, group.key);
             return result.playCount;
           }
           catch { return null; }
         }} /> : null}
         {group.tasks.map((task, index) => {
           const response = findResponse(attempt.responses, section.code, task.key);
-          return <Task key={task.key} task={task} number={index + 1} value={local[task.key] ?? response?.value ?? ""} response={response} view={view} actions={actions} section={section.code} showHeading={section.code !== "writing" && section.code !== "speaking"} onSave={(input) => onSave(task, input)} onAudioBusyChange={onAudioBusyChange} />;
+          const number = section.groups.slice(0, groupIndex).reduce((total, candidate) => total + candidate.tasks.length, 0) + index + 1;
+          return <Task key={task.key} task={task} number={number} value={local[task.key] ?? response?.value ?? ""} response={response} view={view} actions={actions} section={section.code} showHeading={section.code !== "writing" && section.code !== "speaking"} onSave={(input) => onSave(task, input)} onAudioBusyChange={onAudioBusyChange} />;
         })}
       </div>
     </section>)}

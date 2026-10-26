@@ -4,12 +4,13 @@ import { migrateDatabase, resetPublicSchema, seedDemo } from "@e4s/database";
 import { createCredentialHash, createPinHash } from "@e4s/domain/identity";
 import { DEMO_IDS } from "@e4s/test-support";
 import { buildApi } from "../src/app.js";
+import type { CoachTaskOutput } from "@e4s/ai";
 
 const databaseUrl = process.env.TEST_DATABASE_URL
   ?? "postgres://e4s:e4s_test_password@127.0.0.1:55432/e4s_test";
 
-const aiOutput = {
-  evaluation: { status: "valid" as const, countsTowardGoal: true, noteVi: "Trả lời đúng trọng tâm." },
+const aiOutput: CoachTaskOutput = {
+  evaluation: { status: "valid" as const, result: "partially_correct" as const, countsTowardGoal: true, noteVi: "Trả lời đúng trọng tâm." },
   seasonReply: "That's a useful correction 😊",
   seasonReplyTranslation: "Bạn sửa đúng rồi.",
   nextQuestion: "What do you do in the product team?",
@@ -170,6 +171,40 @@ describe("AI Coach API", () => {
     expect(stored.rows[0]?.count).toBe(1);
   });
 
+  it("isolates the latest answer from earlier learner answers when requesting feedback", async () => {
+    runTask.mockClear();
+    runTask.mockResolvedValueOnce({
+      output: {
+        ...aiOutput,
+        evaluation: { status: "valid", result: "correct", countsTowardGoal: true, noteVi: "Câu trả lời đúng." },
+        rubric: {
+          meaning: { score: 5, evidence: "The answer directly addresses the question.", improvement: "No change needed." },
+          vocabulary: { score: 5, evidence: "The workplace word is accurate.", improvement: "No change needed." },
+          grammar: { score: 5, evidence: "The latest sentence is grammatical.", improvement: "No change needed." }
+        },
+        corrections: [], correctedText: ""
+      },
+      metadata: {
+        traceId: "trace-coach-isolated", taskId: "coach_dialogue", provider: "fixture", model: "fixture-model",
+        attempts: 1, latencyMs: 12, inputHash: "9".repeat(64), schemaValid: true as const,
+        usage: { inputTokens: 20, outputTokens: 25, totalTokens: 45 }
+      }
+    });
+    const response = await app.inject({
+      method: "POST", url: "/api/v1/coach/messages", headers: { cookie: learnerCookie },
+      payload: { requestId: "10000000-0000-4000-8000-000000000014", message: "I coordinate the weekly meeting." }
+    });
+    expect(response.statusCode, response.body).toBe(200);
+    const input = (runTask.mock.calls as unknown as Array<[string, { message: string; priorTurns: unknown[] }]>)[0]?.[1];
+    expect(input).toMatchObject({ message: "I coordinate the weekly meeting.", priorTurns: [] });
+    const latest = [...response.json().messages].reverse()
+      .find((message: { speaker: string; feedback?: unknown }) => message.speaker === "coach" && message.feedback);
+    expect(latest.feedback).toMatchObject({
+      evaluation: { result: "correct" }, corrections: [], correctedText: "",
+      rubric: { grammar: { score: 5, evidence: "The latest sentence is grammatical." } }
+    });
+  });
+
   it("stores acknowledgement-only input as insufficient without AI, counters, rewards, or vocabulary unlocks", async () => {
     runTask.mockClear();
     const before = await app.inject({ method: "GET", url: "/api/v1/coach", headers: { cookie: learnerCookie } });
@@ -218,7 +253,7 @@ describe("AI Coach API", () => {
 
     runTask.mockResolvedValueOnce({
       output: {
-        evaluation: { status: "off_topic", countsTowardGoal: false, noteVi: "Câu trả lời chưa liên quan." },
+        evaluation: { status: "off_topic", result: "off_topic", countsTowardGoal: false, noteVi: "Câu trả lời chưa liên quan." },
         seasonReply: "That's not related to our question 😊",
         seasonReplyTranslation: "Câu trả lời chưa liên quan đến câu hỏi.",
         nextQuestion: "A different question that must not be stored.",

@@ -79,7 +79,13 @@ export const AI_TASKS = new AiTaskRegistry([
   },
   {
     id: "weekly_lesson_foundation", promptKey: "weekly_lessons", inputSchema: weeklyLessonFoundationInputSchema,
-    outputSchema: weeklyLessonFoundationOutputSchema, outputJsonSchema: weeklyLessonFoundationOutputJsonSchema
+    outputSchema: weeklyLessonFoundationOutputSchema, outputJsonSchema: weeklyLessonFoundationOutputJsonSchema,
+    normalizeOutput: (rawOutput, input) => {
+      const foundationInput = input as { grammarClassification?: { status?: string } };
+      if (foundationInput.grammarClassification?.status === "classified") return rawOutput;
+      if (!rawOutput || typeof rawOutput !== "object" || Array.isArray(rawOutput)) return rawOutput;
+      return { ...rawOutput, title: null, grammar: null };
+    }
   },
   {
     id: "weekly_lesson_vocabulary", promptKey: "weekly_lessons", inputSchema: weeklyLessonVocabularyInputSchema,

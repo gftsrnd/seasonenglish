@@ -60,6 +60,14 @@ export function cancelExclusiveAudio(source: ExclusiveAudioSource) {
   if (source === "music") pausedMusic = undefined;
 }
 
+/** Stops the active long-form channel without resuming any paused background audio. */
+export function cancelAllExclusiveAudio() {
+  const current = active;
+  active = undefined;
+  pausedMusic = undefined;
+  current?.stop();
+}
+
 export function isExclusiveAudioActive(source: ExclusiveAudioSource) {
   return active?.source === source;
 }

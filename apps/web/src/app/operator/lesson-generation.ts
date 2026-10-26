@@ -5,6 +5,61 @@ export type LessonGenerationCellResult<TLevel extends string = string> = {
   error?: string;
 };
 
+export type LessonGenerationJob = {
+  week: number;
+  level: string;
+  status: "running" | "succeeded" | "failed";
+  error?: string;
+};
+
+const lessonGenerationJobs = new Map<string, { state: LessonGenerationJob; promise: Promise<unknown> }>();
+const lessonGenerationListeners = new Set<() => void>();
+let lessonGenerationSnapshot: LessonGenerationJob[] = [];
+
+export function startLessonGenerationJob<T>(week: number, level: string, generate: () => Promise<T>): Promise<T> {
+  const key = `${week}:${level}`;
+  const current = lessonGenerationJobs.get(key);
+  if (current?.state.status === "running") return current.promise as Promise<T>;
+
+  const state: LessonGenerationJob = { week, level, status: "running" };
+  const promise = generate().then(
+    result => {
+      setLessonGenerationJob(key, { ...state, status: "succeeded" }, promise);
+      return result;
+    },
+    error => {
+      setLessonGenerationJob(key, { ...state, status: "failed", error: errorMessage(error) }, promise);
+      throw error;
+    }
+  );
+  setLessonGenerationJob(key, state, promise);
+  return promise;
+}
+
+export function lessonGenerationJobsSnapshot(): LessonGenerationJob[] {
+  return lessonGenerationSnapshot;
+}
+
+export function subscribeLessonGenerationJobs(listener: () => void): () => void {
+  lessonGenerationListeners.add(listener);
+  return () => lessonGenerationListeners.delete(listener);
+}
+
+export function __resetLessonGenerationJobsForTests(): void {
+  lessonGenerationJobs.clear();
+  publishLessonGenerationJobs();
+}
+
+function setLessonGenerationJob(key: string, state: LessonGenerationJob, promise: Promise<unknown>): void {
+  lessonGenerationJobs.set(key, { state, promise });
+  publishLessonGenerationJobs();
+}
+
+function publishLessonGenerationJobs(): void {
+  lessonGenerationSnapshot = [...lessonGenerationJobs.values()].map(job => job.state);
+  lessonGenerationListeners.forEach(listener => listener());
+}
+
 export async function generateLessonCellsSettled<TLevel extends string>(
   weekNumbers: readonly number[],
   levels: readonly TLevel[],

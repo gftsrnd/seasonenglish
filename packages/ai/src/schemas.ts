@@ -16,6 +16,7 @@ export const coachInputSchema = z.object({
 export const coachOutputSchema = z.object({
   evaluation: z.object({
     status: z.enum(["valid", "insufficient", "off_topic"]),
+    result: z.enum(["correct", "partially_correct", "missing_information", "off_topic"]),
     countsTowardGoal: z.boolean(),
     noteVi: z.string().trim().min(1).max(500)
   }),
@@ -44,6 +45,12 @@ export const coachOutputSchema = z.object({
   const { status, countsTowardGoal } = output.evaluation;
   if ((status === "valid") !== countsTowardGoal) {
     context.addIssue({ code: "custom", path: ["evaluation", "countsTowardGoal"], message: "Only valid Coach turns count toward goals." });
+  }
+  const allowedResult = status === "valid"
+    ? new Set(["correct", "partially_correct"])
+    : new Set([status === "insufficient" ? "missing_information" : "off_topic"]);
+  if (!allowedResult.has(output.evaluation.result)) {
+    context.addIssue({ code: "custom", path: ["evaluation", "result"], message: "Coach result must match the evaluation status." });
   }
   if (status === "insufficient" && output.rubric.meaning.score !== 0) {
     context.addIssue({ code: "custom", path: ["rubric", "meaning", "score"], message: "Insufficient Coach turns require meaning score 0." });
@@ -75,9 +82,10 @@ export const coachOutputJsonSchema = {
   properties: {
     evaluation: {
       type: "object", additionalProperties: false,
-      required: ["status", "countsTowardGoal", "noteVi"],
+      required: ["status", "result", "countsTowardGoal", "noteVi"],
       properties: {
         status: { type: "string", enum: ["valid", "insufficient", "off_topic"] },
+        result: { type: "string", enum: ["correct", "partially_correct", "missing_information", "off_topic"] },
         countsTowardGoal: { type: "boolean" }, noteVi: { type: "string" }
       }
     },
@@ -489,8 +497,8 @@ export const weeklyLessonFoundationInputSchema = weeklyLessonDayInputSchema.exte
 });
 
 export const weeklyLessonVocabularyInputSchema = weeklyLessonDayInputSchema.extend({
-  grammarFormula: z.string().trim().min(1).max(300),
-  grammarExamples: z.array(z.string().trim().min(1).max(500)).length(2),
+  grammarFormula: z.string().trim().min(1).max(300).nullable(),
+  grammarExamples: z.array(z.string().trim().min(1).max(500)).length(2).nullable(),
   excludedVocabulary: z.array(z.string().trim().min(1).max(100)).max(100).optional()
 });
 
@@ -516,7 +524,7 @@ export type WeeklyLessonDayTaskOutput = z.infer<typeof weeklyLessonDayOutputSche
 
 const strictWordSlotSchema = z.object({ word: z.string().trim().min(1), ipa: z.string().trim().min(1) });
 const weeklyLessonFoundationBaseOutputSchema = z.object({
-  title: z.string().trim().min(1).max(60),
+  title: z.string().trim().min(1).max(60).nullable(),
   durationMinutes: z.union([z.literal(5), z.literal(10), z.literal(15), z.literal(20)]),
   objective: z.object({
     title: z.string().trim().min(1),
@@ -533,34 +541,30 @@ const weeklyLessonFoundationBaseOutputSchema = z.object({
   grammar: z.object({
     title: z.string().trim().min(1), formula: z.string().trim().min(1), usage: z.string().trim().min(1),
     example1: z.string().trim().min(1), example2: z.string().trim().min(1)
-  }),
+  }).nullable(),
   pronunciation: z.object({
     title: z.string().trim().min(1), focus: z.string().trim().min(1), tip: z.string().trim().min(1),
     word1: strictWordSlotSchema, word2: strictWordSlotSchema, word3: strictWordSlotSchema
   })
-});
-export const weeklyLessonFoundationOutputSchema = z.preprocess(normalizeFoundationInstruction, weeklyLessonFoundationBaseOutputSchema);
-
-function normalizeFoundationInstruction(value: unknown): unknown {
-  const parsed = parseModelJson(value);
-  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return parsed;
-  const foundation = parsed as Record<string, unknown>;
-  const rawInstruction = foundation.instruction;
-  const instruction = rawInstruction && typeof rawInstruction === "object" && !Array.isArray(rawInstruction)
-    ? rawInstruction as Record<string, unknown>
-    : {};
-  const steps = Array.isArray(instruction.steps) ? instruction.steps : [];
-  const text = (candidate: unknown): string | undefined => typeof candidate === "string" && candidate.trim() ? candidate.trim() : undefined;
-  return {
-    ...foundation,
-    instruction: {
-      ...instruction,
-      title: text(instruction.title) ?? "Hướng dẫn",
-      step1: text(instruction.step1) ?? text(steps[0]) ?? "Đọc mục tiêu và mẫu câu trọng tâm của bài.",
-      step2: text(instruction.step2) ?? text(steps[1]) ?? "Ôn từ vựng rồi luyện nghe, đọc và nói theo hướng dẫn.",
-      step3: text(instruction.step3) ?? text(steps[2]) ?? "Hoàn thành các bài tập rồi kiểm tra đáp án."
+}).superRefine((foundation, context) => {
+  if (foundation.title && /^S\s*\+\s*V(?:\s*\+\s*O)?$/i.test(foundation.title)) {
+    context.addIssue({ code: "custom", path: ["title"], message: "Title must name the concrete lesson focus" });
+  }
+  if (!foundation.grammar) return;
+  if (!isSingleSentence(foundation.grammar.usage)) {
+    context.addIssue({ code: "custom", path: ["grammar", "usage"], message: "Grammar usage must be exactly one sentence" });
+  }
+  for (const key of ["example1", "example2"] as const) {
+    const example = foundation.grammar[key];
+    if (!isSingleSentence(example) || /[()]/.test(example) || example.trim().split(/\s+/).length > 10) {
+      context.addIssue({ code: "custom", path: ["grammar", key], message: "Grammar example must be one English sentence of at most 10 words with no parenthetical translation" });
     }
-  };
+  }
+});
+export const weeklyLessonFoundationOutputSchema = weeklyLessonFoundationBaseOutputSchema;
+
+function isSingleSentence(value: string): boolean {
+  return (value.match(/[.!?](?=\s|$)/g)?.length ?? 0) === 1;
 }
 
 const strictVocabularyRelationSchema = z.object({ word: z.string().trim().min(1), type: z.string().trim().min(1), meaning: z.string().trim().min(1) });
@@ -591,7 +595,7 @@ const strictVocabularyItemSchema = z.object({
   if (collocations.some((value) => !value.toLocaleLowerCase("en-US").includes(word))) {
     ctx.addIssue({ code: "custom", path: ["collocation1"], message: "Every example must contain the vocabulary word" });
   }
-  if (!item.ssml.toLocaleLowerCase("en-US").includes(item.ttsText.toLocaleLowerCase("en-US"))) {
+  if (normalizedText(spokenTextFromSsml(item.ssml)) !== normalizedText(item.ttsText)) {
     ctx.addIssue({ code: "custom", path: ["ssml"], message: "SSML must contain the exact TTS text" });
   }
   for (const [kind, relations] of [["synonym", [item.synonym1, item.synonym2]], ["antonym", [item.antonym1]]] as const) {
@@ -616,13 +620,15 @@ export const weeklyLessonVocabularyOutputSchema = z.object({
 const strictChoiceBaseSchema = z.object({
   title: z.string().trim().min(1), body: z.string().trim().min(1), prompt: z.string().trim().min(1),
   option1: z.string().trim().min(1), option2: z.string().trim().min(1), option3: z.string().trim().min(1), option4: z.string().trim().min(1),
-  answer: z.string().trim().min(1)
+  answer: z.string().trim().min(1), hint: z.string().trim().min(1),
+  questionTranslation: z.string().trim().min(1), answerTranslation: z.string().trim().min(1)
 });
-function validateStrictChoice(value: { option1: string; option2: string; option3: string; option4: string; answer: string }, context: z.RefinementCtx) {
+function validateStrictChoice(value: { option1: string; option2: string; option3: string; option4: string; answer: string; hint: string }, context: z.RefinementCtx) {
   const options = [value.option1, value.option2, value.option3, value.option4];
   const normalized = options.map((option) => option.toLocaleLowerCase("en-US").replace(/\s+/g, " ").trim());
   if (new Set(normalized).size !== 4) context.addIssue({ code: "custom", path: ["option1"], message: "All four options must be distinct" });
   if (!options.includes(value.answer)) context.addIssue({ code: "custom", path: ["answer"], message: "Answer must exactly match one option" });
+  if (normalizedText(value.hint).includes(normalizedText(value.answer))) context.addIssue({ code: "custom", path: ["hint"], message: "Hint must not reveal the answer" });
 }
 const strictChoiceOutputSchema = strictChoiceBaseSchema.superRefine(validateStrictChoice);
 const strictQuestionOutputSchema = strictChoiceBaseSchema.omit({ body: true }).superRefine(validateStrictChoice);
@@ -632,7 +638,8 @@ export const weeklyLessonSkillsOutputSchema = z.object({
   writing: z.object({
     title: z.string().trim().min(1), type: z.enum(["fill", "mcq", "write"]), prompt: z.string().trim().min(1),
     option1: z.string().trim().nullable(), option2: z.string().trim().nullable(), option3: z.string().trim().nullable(), option4: z.string().trim().nullable(),
-    answer: z.string().trim().min(1)
+    answer: z.string().trim().min(1), hint: z.string().trim().min(1),
+    questionTranslation: z.string().trim().min(1), answerTranslation: z.string().trim().min(1)
   }).superRefine((value, context) => {
     const options = [value.option1, value.option2, value.option3, value.option4].filter((option): option is string => option !== null);
     if (value.type === "fill" && (value.prompt.match(/___+/g)?.length ?? 0) !== 1) context.addIssue({ code: "custom", path: ["prompt"], message: "Fill writing requires exactly one blank" });
@@ -641,12 +648,31 @@ export const weeklyLessonSkillsOutputSchema = z.object({
   }),
   wordClass: strictQuestionOutputSchema,
   wordUse: strictQuestionOutputSchema,
-  speaking: z.object({ title: z.string().trim().min(1), prompt: z.string().trim().min(1), answer: z.string().trim().min(1) })
+  speaking: z.object({
+    title: z.string().trim().min(1), prompt: z.string().trim().min(1), answer: z.string().trim().min(1),
+    hint: z.string().trim().min(1), questionTranslation: z.string().trim().min(1), answerTranslation: z.string().trim().min(1)
+  })
 }).superRefine((value, context) => {
   if (value.listening.body.trim().toLocaleLowerCase("en-US") === value.reading.body.trim().toLocaleLowerCase("en-US")) {
     context.addIssue({ code: "custom", path: ["reading", "body"], message: "Reading content must differ from listening" });
   }
 });
+
+function normalizedText(value: string): string {
+  return value.toLocaleLowerCase("en-US").replace(/[^a-z0-9\s]/g, " ").replace(/\s+/g, " ").trim();
+}
+
+function spokenTextFromSsml(value: string): string {
+  return value
+    .replace(/<[^>]+>/g, " ")
+    .replace(/&amp;/gi, "&")
+    .replace(/&lt;/gi, "<")
+    .replace(/&gt;/gi, ">")
+    .replace(/&quot;/gi, '"')
+    .replace(/&apos;/gi, "'")
+    .replace(/\s+/g, " ")
+    .trim();
+}
 
 /** Make the learner-facing title deterministic; model-generated headings are never authoritative. */
 function normalizeWeeklyLessonTitles(value: unknown): unknown {
@@ -819,7 +845,7 @@ export const weeklyLessonGrammarClassificationOutputJsonSchema = strictObject(
 export const weeklyLessonFoundationOutputJsonSchema = strictObject(
   ["title", "durationMinutes", "objective", "instruction", "grammar", "pronunciation"],
   {
-    title: stringSchema,
+    title: nullable(stringSchema),
     durationMinutes: { type: "integer", enum: [5, 10, 15, 20] },
     objective: strictObject(["title", "explanationLanguage", "items"], {
       title: stringSchema,
@@ -837,13 +863,13 @@ export const weeklyLessonFoundationOutputJsonSchema = strictObject(
       ["title", "step1", "step2", "step3"],
       { title: stringSchema, step1: stringSchema, step2: stringSchema, step3: stringSchema }
     ),
-    grammar: strictObject(
+    grammar: nullable(strictObject(
       ["title", "formula", "usage", "example1", "example2"],
       {
         title: stringSchema, formula: stringSchema, usage: stringSchema,
         example1: stringSchema, example2: stringSchema
       }
-    ),
+    )),
     pronunciation: strictObject(
       ["title", "focus", "tip", "word1", "word2", "word3"],
       {
@@ -901,14 +927,14 @@ export const weeklyLessonVocabularyOutputJsonSchema = {
 
 const compactChoiceJsonSchema = (includeBody: boolean) => strictObject(
   includeBody
-    ? ["title", "body", "prompt", "option1", "option2", "option3", "option4", "answer"]
-    : ["title", "prompt", "option1", "option2", "option3", "option4", "answer"],
+    ? ["title", "body", "prompt", "option1", "option2", "option3", "option4", "answer", "hint", "questionTranslation", "answerTranslation"]
+    : ["title", "prompt", "option1", "option2", "option3", "option4", "answer", "hint", "questionTranslation", "answerTranslation"],
   {
     title: stringSchema,
     ...(includeBody ? { body: stringSchema } : {}),
     prompt: stringSchema,
     option1: stringSchema, option2: stringSchema, option3: stringSchema, option4: stringSchema,
-    answer: stringSchema
+    answer: stringSchema, hint: stringSchema, questionTranslation: stringSchema, answerTranslation: stringSchema
   }
 );
 
@@ -918,16 +944,20 @@ export const weeklyLessonSkillsOutputJsonSchema = strictObject(
     listening: compactChoiceJsonSchema(true),
     reading: compactChoiceJsonSchema(true),
     writing: strictObject(
-      ["title", "type", "prompt", "option1", "option2", "option3", "option4", "answer"],
+      ["title", "type", "prompt", "option1", "option2", "option3", "option4", "answer", "hint", "questionTranslation", "answerTranslation"],
       {
         title: stringSchema, type: { type: "string", enum: ["fill", "mcq", "write"] }, prompt: stringSchema,
         option1: nullable(stringSchema), option2: nullable(stringSchema),
-        option3: nullable(stringSchema), option4: nullable(stringSchema), answer: stringSchema
+        option3: nullable(stringSchema), option4: nullable(stringSchema), answer: stringSchema,
+        hint: stringSchema, questionTranslation: stringSchema, answerTranslation: stringSchema
       }
     ),
     wordClass: compactChoiceJsonSchema(false),
     wordUse: compactChoiceJsonSchema(false),
-    speaking: strictObject(["title", "prompt", "answer"], { title: stringSchema, prompt: stringSchema, answer: stringSchema })
+    speaking: strictObject(
+      ["title", "prompt", "answer", "hint", "questionTranslation", "answerTranslation"],
+      { title: stringSchema, prompt: stringSchema, answer: stringSchema, hint: stringSchema, questionTranslation: stringSchema, answerTranslation: stringSchema }
+    )
   }
 ) satisfies Record<string, unknown>;
 
@@ -1110,8 +1140,23 @@ export const weekSuggestionsOutputJsonSchema = {
   } }
 } satisfies Record<string, unknown>;
 
+const assessmentObjectiveScoreSchema = z.object({
+  score: z.number().min(0),
+  maxScore: z.number().int().min(1),
+  answered: z.number().int().min(0),
+  total: z.number().int().min(1),
+  groups: z.array(z.object({
+    groupKey: z.string().trim().min(1),
+    taskKeys: z.array(z.string().trim().min(1)).min(1)
+  }))
+});
+
 export const assessmentGradingInputSchema = z.object({
   kind: z.enum(["placement", "level-up"]),
+  objectiveScores: z.object({
+    listening: assessmentObjectiveScoreSchema,
+    reading: assessmentObjectiveScoreSchema
+  }),
   writing: z.array(z.object({ prompt: z.string(), answer: z.string() })).min(1),
   speaking: z.array(z.object({ prompt: z.string(), answer: z.string(), evidenceType: z.string() })).min(1),
   writingMaxScore: z.number().int().min(1).max(25), speakingMaxScore: z.number().int().min(1).max(25)

@@ -164,7 +164,7 @@ describe("E4S repositories", () => {
       taskId: prompt.rows[0]!.task_id,
       promptVersionId: prompt.rows[0]!.id,
       output: {
-        evaluation: { status: "valid", countsTowardGoal: true, noteVi: "Trả lời đúng trọng tâm." },
+        evaluation: { status: "valid", result: "correct", countsTowardGoal: true, noteVi: "Trả lời đúng trọng tâm." },
         seasonReply: "Thanks for sharing.",
         seasonReplyTranslation: "Cảm ơn bạn đã chia sẻ.",
         nextQuestion: "What are you working on this week?",

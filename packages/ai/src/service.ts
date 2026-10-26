@@ -12,7 +12,7 @@ export function createAiService(options: {
   now?: () => number;
 }) {
   const timeoutMs = options.timeoutMs ?? 20_000;
-  const maxAttempts = Math.max(1, options.maxAttempts ?? 2);
+  const maxAttempts = Math.max(1, Math.min(3, options.maxAttempts ?? 3));
   const createTraceId = options.createTraceId ?? randomUUID;
   const now = options.now ?? Date.now;
 

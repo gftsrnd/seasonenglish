@@ -1,6 +1,7 @@
 import { createCipheriv, createDecipheriv, createHash, randomBytes, randomUUID } from "node:crypto";
 import type { Pool, PoolClient } from "pg";
 import { buildLevelReadiness as calculateLevelReadiness, nextEffectiveMonday, passesLevelUpExam, createLevelRetryPlan, type LevelReadinessMetrics, type LevelReadinessThresholds } from "@e4s/domain/progression";
+import { validateLessonPublication } from "@e4s/domain/content";
 import type {
   AccountRole,
   AssessmentDeviceEvidence,
@@ -275,6 +276,11 @@ export interface AssessmentAttemptRecord {
   suggestedLevel: CefrLevel | null;
 }
 
+export type PlacementAttemptResumeResult =
+  | { state: "none"; attempt: null }
+  | { state: "ready" | "migrated"; attempt: AssessmentAttemptRecord }
+  | { state: "restart_required"; attempt: null };
+
 export interface AssessmentRescoreContext {
   attempt: AssessmentAttemptRecord;
   definition: StoredAssessmentDefinition;
@@ -447,6 +453,38 @@ class IdentityRepository {
       : null;
   }
 
+  async requestStaffPasswordHelp(email: string): Promise<void> {
+    const note = "Người vận hành báo quên mật khẩu và cần Quản lý đặt lại.";
+    const client = await this.pool.connect();
+    try {
+      await client.query("begin");
+      const subject = await client.query<{ id: string; organization_id: string }>(
+        `select id, organization_id from users
+         where lower(email) = lower($1) and role = 'operator' and status = 'active'
+         limit 1 for update`,
+        [email]
+      );
+      const account = subject.rows[0];
+      if (account) {
+        await client.query(
+          `insert into manager_pin_reports (id, organization_id, subject_user_id, note, created_by)
+           select $1, $2, $3, $4, $3
+           where not exists (
+             select 1 from manager_pin_reports
+             where organization_id = $2 and subject_user_id = $3 and note = $4 and status = 'open'
+           )`,
+          [randomUUID(), account.organization_id, account.id, note]
+        );
+      }
+      await client.query("commit");
+    } catch (error) {
+      await client.query("rollback");
+      throw error;
+    } finally {
+      client.release();
+    }
+  }
+
   async createSession(input: { id: string; userId: string; tokenHash: string; expiresAt: Date }): Promise<void> {
     await this.pool.query(
       `insert into sessions (id, user_id, token_hash, expires_at) values ($1, $2, $3, $4)`,
@@ -615,37 +653,69 @@ class LearningRepository {
     expectedVersion: number;
     complete: boolean;
   }): Promise<LearnerProfileRecord | null> {
-    const result = await this.pool.query<{
-      profile: LearnerProfileData;
-      version: number;
-      completed_at: Date | null;
-      updated_at: Date;
-    }>(
-      `insert into learner_profiles (user_id, profile, version, completed_at)
-       values ($1, $2::jsonb, 1, case when $4 then now() else null end)
-       on conflict (user_id) do update
-       set profile = jsonb_set(
-         jsonb_set(excluded.profile, '{_operator}', coalesce(learner_profiles.profile->'_operator', '{}'::jsonb), true),
-         '{_lifecycle}', coalesce(learner_profiles.profile->'_lifecycle', '{}'::jsonb), true
-       ),
-           draft_profile = null,
-           draft_updated_at = null,
-           version = learner_profiles.version + 1,
-           completed_at = case when $4 then coalesce(learner_profiles.completed_at, now()) else null end,
-           updated_at = now()
-       where learner_profiles.version = $3
-       returning profile, version, completed_at, updated_at`,
-      [input.learnerId, JSON.stringify(input.profile), input.expectedVersion, input.complete]
-    );
-    const row = result.rows[0];
-    return row ? {
-      profile: row.profile,
-      completedProfile: row.profile,
-      draftAvailable: false,
-      version: row.version,
-      completedAt: row.completed_at,
-      updatedAt: row.updated_at
-    } : null;
+    const client = await this.pool.connect();
+    const email = input.profile.email.trim().toLowerCase();
+    const profile = { ...input.profile, email };
+    try {
+      await client.query("begin");
+      const identity = await client.query<{ organization_id: string }>(
+        "select organization_id from users where id = $1 and role = 'learner' and status = 'active' for update",
+        [input.learnerId]
+      );
+      if (!identity.rowCount) {
+        await client.query("rollback");
+        return null;
+      }
+      const duplicate = await client.query(
+        "select 1 from users where id <> $1 and lower(email) = $2 limit 1",
+        [input.learnerId, email]
+      );
+      if (duplicate.rowCount) throw new Error("LEARNER_PROFILE_EMAIL_EXISTS");
+
+      const result = await client.query<{
+        profile: LearnerProfileData;
+        version: number;
+        completed_at: Date | null;
+        updated_at: Date;
+      }>(
+        `insert into learner_profiles (user_id, profile, version, completed_at)
+         values ($1, $2::jsonb, 1, case when $4 then now() else null end)
+         on conflict (user_id) do update
+         set profile = jsonb_set(
+           jsonb_set(excluded.profile, '{_operator}', coalesce(learner_profiles.profile->'_operator', '{}'::jsonb), true),
+           '{_lifecycle}', coalesce(learner_profiles.profile->'_lifecycle', '{}'::jsonb), true
+         ),
+             draft_profile = null,
+             draft_updated_at = null,
+             version = learner_profiles.version + 1,
+             completed_at = case when $4 then coalesce(learner_profiles.completed_at, now()) else null end,
+             updated_at = now()
+         where learner_profiles.version = $3
+         returning profile, version, completed_at, updated_at`,
+        [input.learnerId, JSON.stringify(profile), input.expectedVersion, input.complete]
+      );
+      const row = result.rows[0];
+      if (!row) {
+        await client.query("rollback");
+        return null;
+      }
+      await client.query("update users set email = $2, updated_at = now() where id = $1", [input.learnerId, email]);
+      await client.query("commit");
+      return {
+        profile: row.profile,
+        completedProfile: row.profile,
+        draftAvailable: false,
+        version: row.version,
+        completedAt: row.completed_at,
+        updatedAt: row.updated_at
+      };
+    } catch (error) {
+      await client.query("rollback");
+      if (isPostgresUniqueViolation(error)) throw new Error("LEARNER_PROFILE_EMAIL_EXISTS");
+      throw error;
+    } finally {
+      client.release();
+    }
   }
 
   async saveProfileDraft(input: {
@@ -2454,6 +2524,9 @@ class ContentRepository {
   }
 
   async submitVersionForReview(actorId: string, versionId: string): Promise<ContentLessonSetVersionView | null> {
+    const candidate = await this.lessonSetVersion(actorId, versionId);
+    if (!candidate) return null;
+    if (!validateLessonPublication(candidate.lessons, candidate.weeklyPractice).valid) throw new Error("CONTENT_VALIDATION_FAILED");
     const updated = await this.pool.query<{ id: string }>(
       `update lesson_set_versions lsv set status = 'review'
        from lesson_sets ls, program_weeks pw, programs p, users actor
@@ -2467,6 +2540,9 @@ class ContentRepository {
   }
 
   async publishVersion(checkerId: string, versionId: string): Promise<ContentLessonSetVersionView> {
+    const candidate = await this.lessonSetVersion(checkerId, versionId);
+    if (!candidate) throw new Error("CONTENT_VERSION_NOT_FOUND");
+    if (!validateLessonPublication(candidate.lessons, candidate.weeklyPractice).valid) throw new Error("CONTENT_VALIDATION_FAILED");
     const client = await this.pool.connect();
     try {
       await client.query("begin");
@@ -3415,6 +3491,31 @@ function sectionTaskCount(blueprint: StoredAssessmentDefinition, code: Assessmen
     ?.groups.reduce((total, group) => total + group.tasks.length, 0) ?? 0;
 }
 
+function assessmentTaskMap(blueprint: StoredAssessmentDefinition): Map<string, unknown> {
+  return new Map(blueprint.sections.flatMap((section) => section.groups.flatMap((group) =>
+    group.tasks.map((task) => [task.key, task] as const)
+  )));
+}
+
+function supportsPlacementV1ToV2Migration(
+  source: StoredAssessmentDefinition,
+  target: StoredAssessmentDefinition
+): boolean {
+  if (source.kind !== "placement" || target.kind !== "placement" || source.version !== 1 || target.version !== 2) return false;
+  const sourceTasks = assessmentTaskMap(source);
+  const targetTasks = assessmentTaskMap(target);
+  if (!sourceTasks.has("LA_3") || sourceTasks.has("LB_Q6") || targetTasks.has("LA_3") || !targetTasks.has("LB_Q6")) return false;
+  if (sourceTasks.size !== targetTasks.size) return false;
+  for (const [sourceKey, sourceTask] of sourceTasks) {
+    const targetKey = sourceKey === "LA_3" ? "LB_Q6" : sourceKey;
+    const targetTask = targetTasks.get(targetKey);
+    if (!targetTask) return false;
+    const migratedTask = { ...(sourceTask as Record<string, unknown>), key: targetKey };
+    if (JSON.stringify(migratedTask) !== JSON.stringify(targetTask)) return false;
+  }
+  return true;
+}
+
 function reviewAiGradeJobView(row: {
   id: string;
   state: string;
@@ -3570,6 +3671,107 @@ class AssessmentRepository {
     );
     const id = result.rows[0]?.id;
     return id ? this.findAttempt(learnerId, id) : null;
+  }
+
+  async resumePlacementAttempt(
+    learnerId: string,
+    published: PublishedAssessmentRecord
+  ): Promise<PlacementAttemptResumeResult> {
+    const current = await this.findActiveAttempt(learnerId, published.versionId);
+    if (current && current.status !== "in_progress") return { state: "ready", attempt: current };
+
+    let candidate = current;
+    if (!candidate) {
+      const stale = await this.pool.query<{ id: string }>(
+        `select aa.id
+         from assessment_attempts aa
+         join assessment_versions av on av.id = aa.assessment_version_id
+         where aa.learner_id = $1 and av.definition_id = $2 and aa.status = 'in_progress'
+         order by aa.started_at desc
+         limit 1`,
+        [learnerId, published.definitionId]
+      );
+      const staleId = stale.rows[0]?.id;
+      candidate = staleId ? await this.findAttempt(learnerId, staleId) : null;
+    }
+    if (!candidate) return { state: "none", attempt: null };
+
+    const hasLegacyResponse = candidate.responses.some((response) => response.section === "listening" && response.taskKey === "LA_3");
+    if (candidate.assessmentVersionId === published.versionId && !hasLegacyResponse) {
+      return { state: "ready", attempt: candidate };
+    }
+
+    const client = await this.pool.connect();
+    try {
+      await client.query("begin");
+      const locked = await client.query<{
+        id: string;
+        status: AssessmentAttemptRecord["status"];
+        assessment_version_id: string;
+        blueprint: StoredAssessmentDefinition;
+      }>(
+        `select aa.id, aa.status, aa.assessment_version_id, av.blueprint
+         from assessment_attempts aa
+         join assessment_versions av on av.id = aa.assessment_version_id
+         where aa.id = $1 and aa.learner_id = $2
+         for update of aa`,
+        [candidate.id, learnerId]
+      );
+      const attempt = locked.rows[0];
+      if (!attempt || attempt.status !== "in_progress") {
+        await client.query("rollback");
+        const latest = await this.findActiveAttempt(learnerId, published.versionId);
+        return latest ? { state: "ready", attempt: latest } : { state: "none", attempt: null };
+      }
+
+      const targetTasks = assessmentTaskMap(published.blueprint);
+      const versionChanged = attempt.assessment_version_id !== published.versionId;
+      const compatibleVersion = !versionChanged || supportsPlacementV1ToV2Migration(attempt.blueprint, published.blueprint);
+      const responses = await client.query<{ task_key: string; response: unknown }>(
+        "select task_key, response from assessment_responses where attempt_id = $1 for update",
+        [attempt.id]
+      );
+      const mappedKeysAreValid = responses.rows.every((response) =>
+        targetTasks.has(response.task_key === "LA_3" ? "LB_Q6" : response.task_key)
+      );
+      const legacy = responses.rows.find((response) => response.task_key === "LA_3");
+      const target = responses.rows.find((response) => response.task_key === "LB_Q6");
+      const conflict = Boolean(legacy && target && JSON.stringify(legacy.response) !== JSON.stringify(target.response));
+
+      if (!compatibleVersion || !mappedKeysAreValid || conflict || !targetTasks.has("LB_Q6")) {
+        await client.query("delete from assessment_attempts where id = $1 and learner_id = $2", [attempt.id, learnerId]);
+        await client.query("commit");
+        return { state: "restart_required", attempt: null };
+      }
+
+      if (legacy && target) {
+        await client.query(
+          "delete from assessment_responses where attempt_id = $1 and section = 'listening' and task_key = 'LA_3'",
+          [attempt.id]
+        );
+      } else if (legacy) {
+        await client.query(
+          `update assessment_responses set task_key = 'LB_Q6', saved_at = now()
+           where attempt_id = $1 and section = 'listening' and task_key = 'LA_3'`,
+          [attempt.id]
+        );
+      }
+      if (versionChanged) {
+        await client.query(
+          "update assessment_attempts set assessment_version_id = $2, updated_at = now() where id = $1",
+          [attempt.id, published.versionId]
+        );
+      }
+      await client.query("commit");
+    } catch (error) {
+      await client.query("rollback");
+      throw error;
+    } finally {
+      client.release();
+    }
+
+    const migrated = await this.findAttempt(learnerId, candidate.id);
+    return migrated ? { state: "migrated", attempt: migrated } : { state: "restart_required", attempt: null };
   }
 
   async findAttempt(learnerId: string, attemptId: string): Promise<AssessmentAttemptRecord | null> {
@@ -5751,7 +5953,7 @@ class CoachRepository {
     taskId: string;
     promptVersionId: string;
     output: {
-      evaluation: { status: "valid" | "insufficient" | "off_topic"; countsTowardGoal: boolean; noteVi: string };
+      evaluation: { status: "valid" | "insufficient" | "off_topic"; result: "correct" | "partially_correct" | "missing_information" | "off_topic"; countsTowardGoal: boolean; noteVi: string };
       seasonReply: string; seasonReplyTranslation: string; nextQuestion: string; nextQuestionTranslation: string;
       rubric: {
         meaning: { score: number; evidence: string; improvement: string };
@@ -5928,7 +6130,7 @@ class CoachRepository {
           JSON.stringify({ text: input.message, requestId: input.requestId }),
           JSON.stringify({
             coachText: seasonReplyTranslation,
-            evaluation: { status: "insufficient", countsTowardGoal: false, noteVi: seasonReplyTranslation },
+            evaluation: { status: "insufficient", result: "missing_information", countsTowardGoal: false, noteVi: seasonReplyTranslation },
             seasonReply, seasonReplyTranslation,
             nextQuestion: input.currentQuestion,
             nextQuestionTranslation: "Hãy trả lời lại câu hỏi trên bằng một câu đầy đủ.",
@@ -6192,6 +6394,10 @@ function coachFeedback(value: Record<string, unknown> | null): CoachFeedbackView
     ? evaluationSource.status : legacyRelevant ? "valid" : "off_topic";
   const countsTowardGoal = typeof evaluationSource?.countsTowardGoal === "boolean"
     ? evaluationSource.countsTowardGoal : status === "valid";
+  const result = evaluationSource?.result === "correct" || evaluationSource?.result === "partially_correct"
+    || evaluationSource?.result === "missing_information" || evaluationSource?.result === "off_topic"
+    ? evaluationSource.result
+    : status === "off_topic" ? "off_topic" : status === "insufficient" ? "missing_information" : "partially_correct";
   const suggestedAnswerSource = value.suggestedAnswer && typeof value.suggestedAnswer === "object" && !Array.isArray(value.suggestedAnswer)
     ? value.suggestedAnswer as Record<string, unknown> : null;
   const coachText = typeof value.coachText === "string" ? value.coachText : "";
@@ -6200,6 +6406,7 @@ function coachFeedback(value: Record<string, unknown> | null): CoachFeedbackView
     relevanceNote: typeof value.relevanceNote === "string" ? value.relevanceNote : "",
     evaluation: {
       status,
+      result,
       countsTowardGoal,
       noteVi: typeof evaluationSource?.noteVi === "string"
         ? evaluationSource.noteVi : typeof value.relevanceNote === "string" ? value.relevanceNote : "Không có nhận xét chi tiết cho lượt chat cũ."
@@ -6295,12 +6502,58 @@ class EngagementRepository {
   async weeklyPracticeRequirements(learnerId: string): Promise<{ cefr: CefrLevel; vocabulary: string[] } | null> {
     const context = await this.activeEngagementContext(learnerId);
     if (!context) return null;
+    const published = await this.pool.query<{ payload: Record<string, unknown> }>(
+      `select lsv.payload
+       from lesson_sets ls
+       join lesson_set_versions lsv on lsv.lesson_set_id = ls.id and lsv.status = 'published'
+       where ls.program_week_id = $1 and ls.cefr = $2
+       order by lsv.version desc limit 1`,
+      [context.weekId, context.cefr]
+    );
+    const weeklyPractice = published.rows[0]?.payload.weeklyPractice;
+    const requiredVocabulary = weeklyPractice && typeof weeklyPractice === "object" && !Array.isArray(weeklyPractice)
+      && Array.isArray((weeklyPractice as Record<string, unknown>).requiredVocabulary)
+      ? (weeklyPractice as Record<string, unknown>).requiredVocabulary as unknown[]
+      : [];
+    const publishedVocabulary = requiredVocabulary
+      .filter((entry): entry is string => typeof entry === "string")
+      .map((entry) => entry.trim())
+      .filter(Boolean);
+    if (publishedVocabulary.length) return { cefr: context.cefr, vocabulary: publishedVocabulary };
+    const lessonContents = await this.pool.query<{ content: Record<string, unknown> }>(
+      `select lv.content
+       from lesson_sets ls
+       join lesson_set_versions lsv on lsv.lesson_set_id = ls.id and lsv.status = 'published'
+       join lessons l on l.lesson_set_version_id = lsv.id
+       join lateral (
+         select content from lesson_versions
+         where lesson_id = l.id and status = 'published'
+         order by version desc limit 1
+       ) lv on true
+       where ls.program_week_id = $1 and ls.cefr = $2
+       order by l.day_number`,
+      [context.weekId, context.cefr]
+    );
+    const lessonVocabulary = lessonContents.rows.flatMap(({ content }) => {
+      const parts = Array.isArray(content.parts) ? content.parts : [];
+      return parts.flatMap((part) => {
+        if (!part || typeof part !== "object" || Array.isArray(part)) return [];
+        const record = part as Record<string, unknown>;
+        if (record.code !== "vocabulary" || !record.content || typeof record.content !== "object" || Array.isArray(record.content)) return [];
+        const items = Array.isArray((record.content as Record<string, unknown>).items)
+          ? (record.content as Record<string, unknown>).items as unknown[] : [];
+        return items.flatMap((item) => item && typeof item === "object" && !Array.isArray(item)
+          && typeof (item as Record<string, unknown>).word === "string"
+          ? [String((item as Record<string, unknown>).word).trim()] : []);
+      });
+    }).filter(Boolean);
+    if (lessonVocabulary.length) return { cefr: context.cefr, vocabulary: [...new Set(lessonVocabulary)] };
     const set = await this.pool.query<{ payload: Record<string, unknown> }>(
       `select payload from game_sets
        where program_week_id = $1 and game_key = 'weekly_vocabulary' and status = 'published'
-         and (learner_id = $2 or learner_id is null)
-       order by (learner_id = $2) desc nulls last, created_at desc limit 1`,
-      [context.weekId, learnerId]
+         and learner_id is null
+       order by created_at desc limit 1`,
+      [context.weekId]
     );
     const words = Array.isArray(set.rows[0]?.payload.words) ? set.rows[0]!.payload.words : [];
     return {
@@ -6334,7 +6587,7 @@ class EngagementRepository {
       appeal_reason: string | null; appeal_resolution: string | null; appeal_created_at: Date | null; appeal_resolved_at: Date | null;
     }>(
       `select ps.id, ps.status, ps.content, ps.score, ps.feedback, ps.prompt_snapshot, ps.submitted_at,
-              case when ps.feedback->>'source' = 'human' then 'manual' else case when ps.score is not null then 'ai' end end as grading_source,
+              case when ps.feedback->>'source' in ('human', 'appeal-human') then 'manual' else case when ps.score is not null then 'ai' end end as grading_source,
               pa.id as appeal_id, pa.status as appeal_status, pa.reason as appeal_reason,
               pa.resolution as appeal_resolution, pa.created_at as appeal_created_at, pa.resolved_at as appeal_resolved_at
        from practice_submissions ps
@@ -6452,6 +6705,9 @@ class EngagementRepository {
       const task = typeof stored.task === "string" && stored.task.trim() ? stored.task : generated.task;
       const guidance = typeof stored.guidance === "string" && stored.guidance.trim() ? stored.guidance : generated.guidance;
       const inputMode = stored.inputMode === "dialogue" ? "dialogue" : generated.inputMode;
+      const requiredVocabulary = Array.isArray(stored.requiredVocabulary)
+        ? stored.requiredVocabulary.filter((entry): entry is string => typeof entry === "string" && Boolean(entry.trim()))
+        : [];
       const submissionId = randomUUID();
       const inserted = await client.query<{ id: string }>(
         `insert into practice_submissions
@@ -6459,7 +6715,7 @@ class EngagementRepository {
          values ($1, $2, $3, 'draft', '{}'::jsonb, $4::jsonb, $5, '[]'::jsonb, now())
          on conflict (learner_id, program_week_id) where superseded_at is null do nothing
          returning id`,
-        [submissionId, input.learnerId, row.week_id, JSON.stringify({ task, guidance, inputMode }), row.cefr]
+        [submissionId, input.learnerId, row.week_id, JSON.stringify({ task, guidance, inputMode, requiredVocabulary }), row.cefr]
       );
       const canonical = inserted.rows[0] ?? (await client.query<{ id: string }>(
         `select id from practice_submissions where learner_id = $1 and program_week_id = $2 and superseded_at is null`,
@@ -6556,12 +6812,17 @@ class EngagementRepository {
     const client = await this.pool.connect();
     try {
       await client.query("begin");
-      const submission = await client.query<{ id: string; status: string; program_week_id: string; score: Record<string, unknown> | null }>(
-        `select id, status, program_week_id, score from practice_submissions
+      const submission = await client.query<{
+        id: string; status: string; program_week_id: string; score: Record<string, unknown> | null;
+        feedback: Record<string, unknown> | null;
+      }>(
+        `select id, status, program_week_id, score, feedback from practice_submissions
           where id = $1 and learner_id = $2 for update`, [input.submissionId, input.learnerId]
       );
       const row = submission.rows[0];
-      if (!row || (row.status !== "reviewed" && !(row.status === "submitted" && row.score))) {
+      const gradingSource = row?.feedback && typeof row.feedback === "object" ? row.feedback.source : null;
+      const manuallyGraded = gradingSource === "human" || gradingSource === "appeal-human";
+      if (!row || manuallyGraded || (row.status !== "reviewed" && !(row.status === "submitted" && row.score))) {
         await client.query("rollback");
         return null;
       }
@@ -8779,6 +9040,7 @@ class ManagerRepository {
        from audit_events ae
        join users learner on learner.id = ae.entity_id and learner.organization_id = $1
        where ae.organization_id = $1 and ae.action = 'learner.deletion_requested'
+         and learner.status <> 'purged'
        order by ae.created_at desc`,
       [organization.id]
     );

@@ -253,6 +253,7 @@ export interface LessonMatrixCell {
 export interface OperatorLessonsView {
   aiConnected: boolean;
   generating?: { week: number; cefr: Cefr; message?: string | undefined } | null | undefined;
+  generatingCells?: Array<{ week: number; cefr: Cefr; message?: string | undefined }> | undefined;
   generateError?: string | null | undefined;
   extraLevels: Cefr[];
   levels: Array<{ cefr: Cefr; learnerCount: number }>;
@@ -286,6 +287,7 @@ export interface LessonSetLesson {
 export interface OperatorLessonSetView {
   week: number;
   cefr: Cefr;
+  version: number;
   status: "draft" | "review" | "approved";
   topic: string;
   explanationLanguage: "tiếng Việt" | "tiếng Anh";
@@ -320,6 +322,7 @@ export interface OperatorLessonSetActions {
   onEditLesson(id: string): void;
   onDeleteLesson(id: string): void;
   onComposeDay(day: number): void;
+  onSaveWeeklyPractice?(input: ReviewWeeklyPracticeInput): void | Promise<void>;
 }
 export type LessonSetActionKey = "approve" | "unapprove" | "regenerate" | "deleteSet" | "fillPhrases" | "enrich" | "editLesson" | "deleteLesson" | "composeDay";
 

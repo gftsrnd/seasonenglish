@@ -9,15 +9,40 @@ const PART_ORDER = [
 
 type JsonRecord = Record<string, unknown>;
 
+export function lessonDaysNeedingRepair(
+  lessons: readonly ContentLessonDraftInput[],
+  mode: LessonRepairMode
+): number[] {
+  const byDay = new Map(lessons.map((lesson) => [lesson.dayNumber, lesson]));
+  return [1, 2, 3, 4, 5].filter((dayNumber) => {
+    const lesson = byDay.get(dayNumber);
+    if (!lesson) return true;
+    const parts = new Map(lesson.parts.map((part) => [part.code, part]));
+    const vocabulary = asRecord(parts.get("vocabulary")?.content);
+    const items = asArray(vocabulary.items).map(asRecord);
+    if (mode === "fill-phrases") {
+      return items.some((item) => stringArray(item.collocations ?? item.phrases ?? item.examples).length < 3);
+    }
+    const optionsAreIncomplete = (code: "listening" | "reading") => asArray(asRecord(parts.get(code)?.content).options).length < 4;
+    const missingExercise = !parts.has("word_class") || !parts.has("word_use") || optionsAreIncomplete("listening") || optionsAreIncomplete("reading");
+    const missingWordStructure = items.some((item) => !meaningful(item.family) || !meaningful(item.umbrella));
+    const missingRelations = items.length > 0 && !items.some((item) => meaningful(item.synonyms));
+    return missingExercise || missingWordStructure || missingRelations;
+  });
+}
+
 export function mergeGeneratedLessons(
   existing: readonly ContentLessonDraftInput[],
   generated: readonly ContentLessonDraftInput[],
   mode: LessonRepairMode
 ): ContentLessonDraftInput[] {
-  const byDay = new Map(existing.map((lesson) => [lesson.dayNumber, lesson]));
-  return [...generated]
-    .sort((left, right) => left.dayNumber - right.dayNumber)
-    .map((lesson) => mergeGeneratedLesson(byDay.get(lesson.dayNumber), lesson, mode));
+  const existingByDay = new Map(existing.map((lesson) => [lesson.dayNumber, lesson]));
+  const generatedByDay = new Map(generated.map((lesson) => [lesson.dayNumber, lesson]));
+  const days = [...new Set([...existingByDay.keys(), ...generatedByDay.keys()])].sort((left, right) => left - right);
+  return days.map((dayNumber) => {
+    const generatedLesson = generatedByDay.get(dayNumber);
+    return generatedLesson ? mergeGeneratedLesson(existingByDay.get(dayNumber), generatedLesson, mode) : existingByDay.get(dayNumber)!;
+  });
 }
 
 export function mergeGeneratedLesson(
