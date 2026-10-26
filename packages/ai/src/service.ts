@@ -46,11 +46,16 @@ export function createAiService(options: {
             timeoutMs,
             controller
           );
-          const outputResult = task.outputSchema.safeParse(response.output);
+          const normalizedOutput = task.normalizeOutput ? task.normalizeOutput(response.output, input) : response.output;
+          const outputResult = task.outputSchema.safeParse(normalizedOutput);
           if (!outputResult.success) {
             throw new AiGatewayError("AI_OUTPUT_INVALID", {
               issues: outputResult.error.issues.slice(0, 8).map(issue => ({ path: issue.path.join("."), message: issue.message }))
             });
+          }
+          const semanticIssues = task.validateOutput?.(outputResult.data, input) ?? [];
+          if (semanticIssues.length) {
+            throw new AiGatewayError("AI_OUTPUT_INVALID", { issues: semanticIssues.slice(0, 8) });
           }
           return {
             output: outputResult.data as TOutput,

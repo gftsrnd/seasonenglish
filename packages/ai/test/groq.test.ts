@@ -51,4 +51,16 @@ describe("Groq provider", () => {
     })).rejects.toMatchObject({ code: "AI_PROVIDER_RATE_LIMIT", retryable: true });
   });
 
+  it("marks malformed JSON as retryable structured output", async () => {
+    const fetch = vi.fn().mockResolvedValue(new Response(JSON.stringify({
+      choices: [{ message: { content: "not-json" } }]
+    }), { status: 200, headers: { "content-type": "application/json" } }));
+    const provider = createGroqProvider({ apiKey: "test-secret-key", fetch });
+
+    await expect(provider.complete({
+      taskId: "weekly_lessons", systemPrompt: "Return lessons.", input: {},
+      outputJsonSchema: { type: "object" }, signal: new AbortController().signal, traceId: "trace-malformed"
+    })).rejects.toMatchObject({ code: "AI_PROVIDER_MALFORMED_RESPONSE", retryable: true });
+  });
+
 });

@@ -1,8 +1,9 @@
 import { describe, expect, it, vi } from "vitest";
 import { createAiService } from "../src/service.js";
-import { AI_TASKS } from "../src/registry.js";
+import { AI_TASKS, AiTaskRegistry } from "../src/registry.js";
 import { coachOutputJsonSchema, coachOutputSchema } from "../src/schemas.js";
 import { AiProviderError, type AiProvider } from "../src/types.js";
+import { z } from "zod";
 
 const validCoachOutput = {
   evaluation: { status: "valid", countsTowardGoal: true, noteVi: "Câu trả lời đúng trọng tâm." },
@@ -152,6 +153,51 @@ describe("AI service", () => {
     await expect(service.runTask("coach_dialogue", coachInput())).resolves.toMatchObject({ output: validCoachOutput, metadata: { attempts: 2 } });
     expect(complete).toHaveBeenCalledTimes(2);
     expect(complete.mock.calls[1]?.[0].systemPrompt).toContain("REPAIR REQUIRED");
+  });
+
+  it("normalizes output before strict schema validation", async () => {
+    const registry = new AiTaskRegistry([{
+      id: "normalized", promptKey: "normalized",
+      inputSchema: z.object({ fallback: z.string() }),
+      outputSchema: z.object({ instruction: z.object({ step1: z.string().min(1), step2: z.string().min(1) }) }),
+      outputJsonSchema: { type: "object" },
+      normalizeOutput: (raw, input) => ({
+        ...(raw as Record<string, unknown>),
+        instruction: {
+          ...((raw as { instruction?: Record<string, unknown> }).instruction ?? {}),
+          step1: (raw as { instruction?: { step1?: string } }).instruction?.step1 ?? (input as { fallback: string }).fallback,
+          step2: (raw as { instruction?: { step2?: string } }).instruction?.step2 ?? (input as { fallback: string }).fallback
+        }
+      })
+    }]);
+    const service = createAiService({
+      registry,
+      provider: fixtureProvider(vi.fn().mockResolvedValue({ output: { instruction: {} }, usage: {} })),
+      loadPrompt: async () => "Return instructions."
+    });
+
+    await expect(service.runTask("normalized", { fallback: "Read the example." }))
+      .resolves.toMatchObject({ output: { instruction: { step1: "Read the example.", step2: "Read the example." } } });
+  });
+
+  it("retries task-specific semantic validation inside the gateway", async () => {
+    const registry = new AiTaskRegistry([{
+      id: "semantic", promptKey: "semantic",
+      inputSchema: z.object({ requiredDays: z.number().int() }),
+      outputSchema: z.object({ days: z.array(z.string()) }),
+      outputJsonSchema: { type: "object" },
+      validateOutput: (output, input) => (output as { days: string[] }).days.length === (input as { requiredDays: number }).requiredDays
+        ? []
+        : [{ path: "days", message: `Expected ${(input as { requiredDays: number }).requiredDays} days.` }]
+    }]);
+    const complete = vi.fn()
+      .mockResolvedValueOnce({ output: { days: ["T2"] }, usage: {} })
+      .mockResolvedValueOnce({ output: { days: ["T2", "T3"] }, usage: {} });
+    const service = createAiService({ registry, provider: fixtureProvider(complete), loadPrompt: async () => "Return days." });
+
+    await expect(service.runTask("semantic", { requiredDays: 2 }))
+      .resolves.toMatchObject({ output: { days: ["T2", "T3"] }, metadata: { attempts: 2 } });
+    expect(complete.mock.calls[1]?.[0].systemPrompt).toContain("days: Expected 2 days.");
   });
 
   it("aborts a provider call at the timeout boundary", async () => {

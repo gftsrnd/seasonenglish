@@ -174,6 +174,6 @@ describe("Anthropic provider", () => {
     await expect(provider.complete({
       taskId: "weekly_lessons", systemPrompt: "Return lessons.", input: {},
       outputJsonSchema: { type: "object" }, signal: new AbortController().signal, traceId: "trace-malformed"
-    })).rejects.toMatchObject({ code: "AI_PROVIDER_MALFORMED_RESPONSE", retryable: false });
+    })).rejects.toMatchObject({ code: "AI_PROVIDER_MALFORMED_RESPONSE", retryable: true });
   });
 });

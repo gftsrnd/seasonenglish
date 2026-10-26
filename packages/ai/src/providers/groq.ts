@@ -59,10 +59,10 @@ export function createGroqProvider(options: {
         throw new AiProviderError("AI_OUTPUT_TRUNCATED", false);
       }
       const content = body?.choices?.[0]?.message?.content;
-      if (typeof content !== "string") throw new AiProviderError("AI_PROVIDER_MALFORMED_RESPONSE", false);
+      if (typeof content !== "string") throw new AiProviderError("AI_PROVIDER_MALFORMED_RESPONSE", true);
       let output: unknown;
       try { output = JSON.parse(content); }
-      catch { throw new AiProviderError("AI_PROVIDER_MALFORMED_RESPONSE", false); }
+      catch { throw new AiProviderError("AI_PROVIDER_MALFORMED_RESPONSE", true); }
       return {
         output,
         usage: {

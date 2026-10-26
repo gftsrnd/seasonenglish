@@ -78,10 +78,10 @@ export function createAnthropicProvider(options: {
       const text = body?.content?.find((block) => block.type === "text")?.text;
       // A transient provider response can be valid HTTP but still have no
       // usable text block. Retry only this failed call; never persist it.
-      if (typeof text !== "string") throw new AiProviderError("AI_PROVIDER_MALFORMED_RESPONSE", false);
+      if (typeof text !== "string") throw new AiProviderError("AI_PROVIDER_MALFORMED_RESPONSE", true);
       let output: unknown;
       try { output = parseJsonResponse(text); }
-      catch { throw new AiProviderError("AI_PROVIDER_MALFORMED_RESPONSE", false); }
+      catch { throw new AiProviderError("AI_PROVIDER_MALFORMED_RESPONSE", true); }
       const inputTokens = body?.usage?.input_tokens;
       const outputTokens = body?.usage?.output_tokens;
       return {

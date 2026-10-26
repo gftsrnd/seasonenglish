@@ -152,6 +152,27 @@ describe("weekly lesson output contract", () => {
     expect(weeklyLessonFoundationOutputSchema.safeParse({ ...base, objective: { ...base.objective, items: base.objective.items.slice(0, 1) } }).success).toBe(false);
   });
 
+  it("fills omitted foundation instruction steps before strict validation", () => {
+    const base = {
+      title: "S + V + O", durationMinutes: 10,
+      objective: { title: "Mục tiêu", explanationLanguage: "vi", items: [
+        { type: "content", text: "Identify two details.", condition: "after listening", criterion: "two details", assessmentCode: "listening" },
+        { type: "language", text: "Give one sentence.", condition: "in a role-play", criterion: "one sentence", assessmentCode: "speaking" }
+      ] },
+      instruction: { title: "Hướng dẫn", step3: "Hoàn thành bài tập." },
+      grammar: { title: "Ngữ pháp", formula: "S + V + O", usage: "Dùng để góp ý.", example1: "I give feedback.", example2: "We share feedback." },
+      pronunciation: { title: "Phát âm", focus: "/f/", tip: "Thổi hơi nhẹ.", word1: { word: "feedback", ipa: "/ˈfiːdbæk/" }, word2: { word: "fine", ipa: "/faɪn/" }, word3: { word: "helpful", ipa: "/ˈhelpfəl/" } }
+    };
+
+    const parsed = weeklyLessonFoundationOutputSchema.safeParse(base);
+    expect(parsed.success).toBe(true);
+    if (parsed.success) {
+      expect(parsed.data.instruction.step1).toBeTruthy();
+      expect(parsed.data.instruction.step2).toBeTruthy();
+      expect(parsed.data.instruction.step3).toBe("Hoàn thành bài tập.");
+    }
+  });
+
   it("publishes three small strict schemas instead of compiling the full lesson grammar", () => {
     const schemas = [
       weeklyLessonFoundationOutputJsonSchema,

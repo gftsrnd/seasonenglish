@@ -515,7 +515,7 @@ export const weeklyLessonDayOutputSchema = z.preprocess((value) => {
 export type WeeklyLessonDayTaskOutput = z.infer<typeof weeklyLessonDayOutputSchema>;
 
 const strictWordSlotSchema = z.object({ word: z.string().trim().min(1), ipa: z.string().trim().min(1) });
-export const weeklyLessonFoundationOutputSchema = z.object({
+const weeklyLessonFoundationBaseOutputSchema = z.object({
   title: z.string().trim().min(1).max(60),
   durationMinutes: z.union([z.literal(5), z.literal(10), z.literal(15), z.literal(20)]),
   objective: z.object({
@@ -539,6 +539,29 @@ export const weeklyLessonFoundationOutputSchema = z.object({
     word1: strictWordSlotSchema, word2: strictWordSlotSchema, word3: strictWordSlotSchema
   })
 });
+export const weeklyLessonFoundationOutputSchema = z.preprocess(normalizeFoundationInstruction, weeklyLessonFoundationBaseOutputSchema);
+
+function normalizeFoundationInstruction(value: unknown): unknown {
+  const parsed = parseModelJson(value);
+  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return parsed;
+  const foundation = parsed as Record<string, unknown>;
+  const rawInstruction = foundation.instruction;
+  const instruction = rawInstruction && typeof rawInstruction === "object" && !Array.isArray(rawInstruction)
+    ? rawInstruction as Record<string, unknown>
+    : {};
+  const steps = Array.isArray(instruction.steps) ? instruction.steps : [];
+  const text = (candidate: unknown): string | undefined => typeof candidate === "string" && candidate.trim() ? candidate.trim() : undefined;
+  return {
+    ...foundation,
+    instruction: {
+      ...instruction,
+      title: text(instruction.title) ?? "Hướng dẫn",
+      step1: text(instruction.step1) ?? text(steps[0]) ?? "Đọc mục tiêu và mẫu câu trọng tâm của bài.",
+      step2: text(instruction.step2) ?? text(steps[1]) ?? "Ôn từ vựng rồi luyện nghe, đọc và nói theo hướng dẫn.",
+      step3: text(instruction.step3) ?? text(steps[2]) ?? "Hoàn thành các bài tập rồi kiểm tra đáp án."
+    }
+  };
+}
 
 const strictVocabularyRelationSchema = z.object({ word: z.string().trim().min(1), type: z.string().trim().min(1), meaning: z.string().trim().min(1) });
 const strictVocabularyLevelRelationSchema = z.object({

@@ -1,11 +1,18 @@
 import type { ZodType } from "zod";
 
+export interface AiValidationIssue {
+  path: string;
+  message: string;
+}
+
 export interface AiTaskDefinition<TInput = unknown, TOutput = unknown> {
   id: string;
   promptKey: string;
   inputSchema: ZodType<TInput>;
   outputSchema: ZodType<TOutput>;
   outputJsonSchema: Record<string, unknown>;
+  normalizeOutput?: (rawOutput: unknown, input: TInput) => unknown;
+  validateOutput?: (output: TOutput, input: TInput) => AiValidationIssue[];
 }
 
 export interface AiProviderRequest {
