@@ -1,18 +1,10 @@
-import { coachOutputSchema, type AiRunResult } from "@e4s/ai";
+import { coachOutputSchema, type AiRunResult, type AiTaskRunner } from "@e4s/ai";
 import type { CoachTaskOutput } from "@e4s/ai";
 import { createRepositories } from "@e4s/database";
 import type { FastifyInstance } from "fastify";
 import type { Pool } from "pg";
 import { z } from "zod";
 import { createRoleGuard } from "../identity/policy.js";
-
-export interface AiTaskRunner {
-  runTask(
-    taskId: string,
-    input: unknown,
-    options?: { systemPrompt?: string; maxOutputTokens?: number }
-  ): Promise<AiRunResult>;
-}
 
 const messageInput = z.object({
   requestId: z.uuid(),

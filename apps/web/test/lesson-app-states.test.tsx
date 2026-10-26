@@ -16,7 +16,7 @@ afterEach(() => {
 const callbacks = (overrides: Partial<LearnerCallbacks> = {}) => ({
   navigate: vi.fn(), saveProfileDraft: vi.fn(), saveProfile: vi.fn(), startAssessment: vi.fn(), saveAssessmentResponse: vi.fn(),
   completeAssessmentSection: vi.fn(), submitAssessment: vi.fn(), uploadAssessmentAudio: vi.fn(), recordAssessmentAudioPlay: vi.fn(),
-  createAssessmentAppeal: vi.fn(), saveLessonProgress: vi.fn(), submitMicroAnswer: vi.fn(), completeMicroLesson: vi.fn(),
+  createAssessmentAppeal: vi.fn(), completeLessonStudy: vi.fn(), saveLessonProgress: vi.fn(), submitMicroAnswer: vi.fn(), completeMicroLesson: vi.fn(),
   regenerateMicroLesson: vi.fn(), sendCoachMessage: vi.fn(), changeCoachPersona: vi.fn(), startNewCoachChat: vi.fn(),
   sendChallengeMessage: vi.fn(), submitWeeklyPractice: vi.fn(), submitSurvey: vi.fn(), saveAvatar: vi.fn(), printReward: vi.fn(),
   speak: vi.fn(), generateGameSet: vi.fn(), useWeeklyGameSet: vi.fn(), deleteGameSet: vi.fn(), finishGame: vi.fn(), resetGameResult: vi.fn(),
@@ -93,7 +93,7 @@ describe("app lesson evidence states", () => {
     let resolveSave!: () => void;
     const save = vi.fn(() => new Promise<void>((resolve) => { resolveSave = resolve; }));
     const user = userEvent.setup();
-    render(<LearnerLesson view={{ lesson }} actions={callbacks({ saveLessonProgress: save })} />);
+    render(<LearnerLesson view={{ lesson }} actions={callbacks({ completeLessonStudy: save })} />);
 
     await user.click(screen.getByRole("button", { name: /đã học xong.*làm bài tập/i }));
 
@@ -241,11 +241,13 @@ describe("app lesson evidence states", () => {
     await openPractice(user);
     const appealButton = screen.getByRole("button", { name: /gửi kháng nghị/i });
     await user.click(appealButton);
+    await user.type(screen.getByLabelText(/lý do kháng nghị phần nghe/i), "Đáp án cần được xem lại.");
+    await user.click(screen.getByRole("button", { name: /xác nhận gửi kháng nghị/i }));
     expect(screen.getByRole("button", { name: "Đang gửi…" })).toBeDisabled();
 
     rejectAppeal(new Error("APPEAL_FAILED"));
     expect(await screen.findByRole("alert")).toHaveTextContent("Chưa gửi được kháng nghị");
-    expect(screen.getByRole("button", { name: /gửi kháng nghị/i })).toBeEnabled();
+    expect(screen.getByRole("button", { name: /^gửi kháng nghị$/i })).toBeEnabled();
   });
 
   it("keeps lesson audio and speaking evidence recoverable when playback, mic or upload is unavailable", async () => {
@@ -285,7 +287,7 @@ describe("app lesson evidence states", () => {
 
     await user.type(screen.getByLabelText(/câu trả lời speaking/i), "I present the update.");
     const speaking = screen.getAllByTestId("app-lesson-part").find((part) => part.dataset.part === "speaking");
-    await user.click(within(speaking as HTMLElement).getByRole("button", { name: /nộp bài/i }));
+    await user.click(within(speaking as HTMLElement).getByRole("button", { name: /kiểm tra nói/i }));
     expect(submit).toHaveBeenCalledWith("speaking", {
       answer: "I present the update.",
       artifactKey: "lesson-audio/learner-1/speaking.webm"
@@ -342,7 +344,7 @@ describe("app lesson evidence states", () => {
     await openPractice(user);
 
     const speaking = screen.getAllByTestId("app-lesson-part").find((part) => part.dataset.part === "speaking");
-    await user.click(within(speaking as HTMLElement).getByRole("button", { name: /nộp bài/i }));
+    await user.click(within(speaking as HTMLElement).getByRole("button", { name: /kiểm tra nói/i }));
     expect(await screen.findByText(/đủ các phần rồi/i)).toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: /hoàn thành bài/i }));

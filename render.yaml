@@ -6,7 +6,7 @@ services:
     region: singapore
     branch: gftsaimedia-cpu
     buildCommand: pnpm install --frozen-lockfile && pnpm build
-    startCommand: sh -c '(pnpm exec tsx apps/worker/src/server.ts &) && exec pnpm --filter @e4s/api start'
+    startCommand: sh -c 'pnpm exec tsx scripts/prepare-deployment.ts && (pnpm exec tsx apps/worker/src/server.ts &) && exec pnpm --filter @e4s/api start'
     healthCheckPath: /api/readiness
     envVars:
       - key: NODE_ENV

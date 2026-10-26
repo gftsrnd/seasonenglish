@@ -10,7 +10,7 @@ import type {
   MicroLessonView,
   PilotPhase
 } from "@e4s/contracts";
-import { microGradingOutputSchema, microLessonOutputSchema, type MicroLessonTaskOutput } from "@e4s/ai";
+import { microGradingOutputSchema, microLessonOutputSchema, type AiTaskRunner, type MicroLessonTaskOutput } from "@e4s/ai";
 import { createRepositories, type LearnerLessonRecord } from "@e4s/database";
 import { gradeLessonAnswer, validateGeneratedFeedback } from "@e4s/domain/content";
 import { isLearnerProfileComplete, mergeLessonProgress } from "@e4s/domain/learning";
@@ -18,7 +18,6 @@ import type { FastifyInstance } from "fastify";
 import type { Pool } from "pg";
 import { z } from "zod";
 import { createRoleGuard } from "../identity/policy.js";
-import type { AiTaskRunner } from "../coach/index.js";
 import type { ContentMediaService } from "../media/index.js";
 
 const partCode = z.enum([
@@ -279,6 +278,23 @@ export function registerLearningRoutes(
       );
     const merged = mergeLessonProgress(lesson.progress, body.data, required);
     return repositories.learning.saveLessonProgress({ learnerId, lessonId: lesson.id, progress: merged });
+  });
+
+  app.post("/api/v1/lessons/:lessonId/study-completion", { preHandler: learnerOnly }, async (request, reply) => {
+    const params = z.object({ lessonId: z.uuid() }).safeParse(request.params);
+    if (!params.success) return reply.code(400).send({ code: "INVALID_LESSON" });
+    const learnerId = request.e4sSession!.user.id;
+    const lesson = await repositories.learning.findLesson(learnerId, params.data.lessonId);
+    if (!lesson) return reply.code(404).send({ code: "LESSON_NOT_FOUND" });
+    if (lesson.lock) return reply.code(409).send({ code: "LESSON_LOCKED", lock: lesson.lock });
+    const completedPartCodes = lesson.content.parts
+      .map((item) => item.code)
+      .filter((code): code is LessonPartCode =>
+        ["objective", "vocabulary", "grammar", "pronunciation"].includes(code)
+      );
+    const merged = mergeLessonProgress(lesson.progress, { completedPartCodes, evidence: {} }, []);
+    const progress = lesson.progress.status === "completed" ? { ...merged, status: "completed" as const } : merged;
+    return repositories.learning.saveLessonProgress({ learnerId, lessonId: lesson.id, progress });
   });
 
   app.post("/api/v1/lessons/:lessonId/parts/:partCode/attempts", { preHandler: learnerOnly }, async (request, reply) => {

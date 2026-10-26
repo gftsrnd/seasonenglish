@@ -50,7 +50,7 @@ function callbacks(overrides: Partial<LearnerCallbacks> = {}): LearnerCallbacks 
   return {
     navigate: vi.fn(), saveProfileDraft: vi.fn(), saveProfile: vi.fn(), startAssessment: vi.fn(), saveAssessmentResponse: vi.fn(),
     completeAssessmentSection: vi.fn(), submitAssessment: vi.fn(), uploadAssessmentAudio: vi.fn(async () => "audio/key"),
-    recordAssessmentAudioPlay: vi.fn(async () => ({ playCount: 1, remaining: 1 })), createAssessmentAppeal: vi.fn(), saveLessonProgress: vi.fn(),
+    recordAssessmentAudioPlay: vi.fn(async () => ({ playCount: 1, remaining: 1 })), createAssessmentAppeal: vi.fn(), completeLessonStudy: vi.fn(), saveLessonProgress: vi.fn(),
     submitMicroAnswer: vi.fn(), completeMicroLesson: vi.fn(), regenerateMicroLesson: vi.fn(), sendCoachMessage: vi.fn(), changeCoachPersona: vi.fn(),
     startNewCoachChat: vi.fn(), sendChallengeMessage: vi.fn(), submitWeeklyPractice: vi.fn(), submitSurvey: vi.fn(), saveAvatar: vi.fn(), printReward: vi.fn(),
     speak: vi.fn((_text, _language, options) => options?.onStatus?.("ended")), generateGameSet: vi.fn(), useWeeklyGameSet: vi.fn(), deleteGameSet: vi.fn(), finishGame: vi.fn(), resetGameResult: vi.fn(), resolveGameWordImage: vi.fn(async () => ({ status: "unavailable" as const })), createDuel: vi.fn(),

@@ -374,6 +374,11 @@ export function LearnerRouteController() {
       const appeal = await apiClient.createAssessmentAppeal(attempt.id, reason);
       setContracts((current) => current.assessment ? { assessment: { ...current.assessment, appeal } } : current);
     },
+    completeLessonStudy: async () => {
+      if (route.name !== "lesson") throw new Error("LESSON_ROUTE_NOT_ACTIVE");
+      const saved = await apiClient.completeLessonStudy(route.params.id);
+      setContracts((current) => current.lesson ? { lesson: { ...current.lesson, progress: saved } } : current);
+    },
     saveLessonProgress: async (progress) => {
       if (route.name !== "lesson") throw new Error("LESSON_ROUTE_NOT_ACTIVE");
       const saved = await apiClient.saveLessonProgress(route.params.id, progress);

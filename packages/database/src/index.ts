@@ -5,3 +5,4 @@ export * from "./media-repository.js";
 export * from "./repositories.js";
 export * from "./schema.js";
 export * from "./seed.js";
+export * from "./sync-canonical-assessments.js";

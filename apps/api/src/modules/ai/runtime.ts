@@ -1,8 +1,7 @@
-import { AI_TASKS, createAiService, createAnthropicProvider, createGroqProvider, type AiProvider } from "@e4s/ai";
+import { AI_TASKS, createAiService, createAnthropicProvider, createGroqProvider, type AiProvider, type AiTaskRunner } from "@e4s/ai";
 import { createRepositories } from "@e4s/database";
 import type { ManagerAiRuntimeSettings } from "@e4s/database";
 import type { Pool } from "pg";
-import type { AiTaskRunner } from "../coach/index.js";
 
 /**
  * Builds an AI runner from the provider credential saved by Manager settings.

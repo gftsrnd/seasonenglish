@@ -305,6 +305,50 @@ describe("learner lesson study content", () => {
     expect(container).not.toHaveTextContent("🔒");
   });
 
+  it("keeps a B1 study step recoverable after a network failure and opens exercises on retry", async () => {
+    const user = userEvent.setup();
+    const completeLessonStudy = vi.fn()
+      .mockRejectedValueOnce(new Error("network unavailable"))
+      .mockResolvedValueOnce(undefined);
+    const saveLessonProgress = vi.fn(() => {
+      throw new Error("the study gate must not send the whole progress snapshot");
+    });
+    const lesson = {
+      id: "lesson-b1-study-gate",
+      title: "Giving a project update",
+      dayNumber: 1,
+      durationMinutes: 10,
+      cefr: "B1",
+      content: { parts: [
+        { code: "objective", title: "Learning objective", content: { text: "Give a concise project update." } },
+        { code: "instruction", title: "Instructions", content: { steps: ["Study the model", "Complete each exercise"] } },
+        { code: "vocabulary", title: "Vocabulary", content: { items: [{ word: "follow up", type: "phrasal verb", meaning: "continue checking" }] } },
+        { code: "grammar", title: "Grammar", content: { formula: "We have + past participle", usage: "Report completed work." } },
+        { code: "pronunciation", title: "Pronunciation", content: { focus: "/ʌ/", words: [{ word: "update", ipa: "/ˈʌpdeɪt/" }] } },
+        { code: "listening", title: "Listening", content: { prompt: "What is complete?", options: ["The report", "The plan", "The call", "The test"], answer: "The report" } }
+      ] },
+      progress: { status: "not_started", completedPartCodes: [], evidence: {} }
+    } as any;
+    render(<LearnerLesson view={{ lesson, lock: null }} actions={{
+      navigate: vi.fn(), speak: vi.fn(), saveLessonProgress, completeLessonStudy
+    } as any} />);
+
+    const finishStudy = screen.getByRole("button", { name: /đã học xong.*làm bài tập/i });
+    await user.click(finishStudy);
+
+    expect(await screen.findByText("Chưa ghi nhận được phần Học. Nội dung vẫn được giữ để bạn thử lại.")).toBeInTheDocument();
+    expect(screen.getByText("follow up")).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: /2\. bài tập/i })).toBeDisabled();
+
+    await user.click(finishStudy);
+
+    expect(completeLessonStudy).toHaveBeenCalledTimes(2);
+    expect(saveLessonProgress).not.toHaveBeenCalled();
+    expect(screen.getByRole("tab", { name: /2\. bài tập/i })).toHaveAttribute("aria-selected", "true");
+    expect(screen.getByText("What is complete?")).toBeInTheDocument();
+    expect(screen.queryByText("follow up")).not.toBeInTheDocument();
+  });
+
   it("allows a study-only lesson to complete after the study gate", async () => {
     const user = userEvent.setup();
     const saveLessonProgress = vi.fn().mockResolvedValue(undefined);
@@ -321,7 +365,7 @@ describe("learner lesson study content", () => {
       ] },
       progress: { status: "in_progress", completedPartCodes: [], evidence: {} }
     } as any;
-    render(<LearnerLesson view={{ lesson: studyOnlyLesson, lock: null }} actions={{ navigate, speak: vi.fn(), saveLessonProgress } as any} />);
+    render(<LearnerLesson view={{ lesson: studyOnlyLesson, lock: null }} actions={{ navigate, speak: vi.fn(), completeLessonStudy: vi.fn(), saveLessonProgress } as any} />);
 
     const finishStudy = screen.getByRole("button", { name: /đã học xong.*làm bài tập/i });
     expect(finishStudy.querySelector("svg.lucide-circle-check-big, svg.lucide-check-circle-2")).toBeInTheDocument();

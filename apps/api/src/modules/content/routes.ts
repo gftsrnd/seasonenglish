@@ -8,7 +8,7 @@ import type {
   ContentReviewAssessmentDetailView,
   ContentReviewAiGradeJobView
 } from "@e4s/contracts";
-import { weeklyPracticeInputSchema, weeklyPracticeOutputSchema, weekSuggestionsOutputSchema } from "@e4s/ai";
+import { weeklyPracticeInputSchema, weeklyPracticeOutputSchema, weekSuggestionsOutputSchema, type AiTaskRunner } from "@e4s/ai";
 import { createRepositories } from "@e4s/database";
 import { approveContentVersion, retirePublishedContent, submitContentForReview, validateLessonDraft } from "@e4s/domain/content";
 import type { ObjectStorage } from "@e4s/storage";
@@ -16,7 +16,6 @@ import type { FastifyInstance } from "fastify";
 import type { Pool } from "pg";
 import { z } from "zod";
 import { createRoleGuard } from "../identity/policy.js";
-import type { AiTaskRunner } from "../coach/index.js";
 import type { ContentMediaService } from "../media/index.js";
 import { mergeGeneratedLessons, type LessonRepairMode } from "./enrichment.js";
 import { generateWeeklyLessons } from "./weekly-generation.js";

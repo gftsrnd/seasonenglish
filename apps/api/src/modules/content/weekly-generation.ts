@@ -6,10 +6,10 @@ import {
   weeklyLessonVocabularyOutputSchema,
   weeklyLessonsOutputSchema,
   type AiRunResult,
+  type AiTaskRunner,
   type AiUsage
 } from "@e4s/ai";
 import { validateLessonDraft, validateLessonObjectives } from "@e4s/domain/content";
-import type { AiTaskRunner } from "../coach/index.js";
 
 const DAYS = [1, 2, 3, 4, 5] as const;
 const FOUNDATION_OUTPUT_TOKEN_LIMIT = 1_500;

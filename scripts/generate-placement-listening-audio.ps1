@@ -15,6 +15,7 @@ if ($LASTEXITCODE -ne 0) { throw "Could not prepare the official edge-tts genera
 $dialogues = @(
   @{
     File = "placement-listening-LA.wav"
+    Rate = "-8%"
     Lines = @(
       @{ Voice = "en-GB-SoniaNeural"; Text = "Good morning, everyone. Just a quick reminder about tomorrow's team meeting. It will start at 9:30, not 9:00 as originally planned. We'll meet in Room 210. Please bring the latest sales report because we'll discuss our results from last month. If you have any questions, please speak to Sarah before the meeting." },
       @{ Voice = "en-GB-RyanNeural"; Text = "Why has the time changed?" },
@@ -23,17 +24,30 @@ $dialogues = @(
   },
   @{
     File = "placement-listening-LB.wav"
+    Rate = "-28%"
     Lines = @(
-      @{ Voice = "en-GB-SoniaNeural"; Text = "Hi, James. I'm working on the customer report, but I'm not sure which refund procedure applies." },
-      @{ Voice = "en-GB-RyanNeural"; Text = "Have you checked the previous customer cases? We had a similar case last month. Check those records first. If you still cannot find the answer, come back to me. We have to send the report today, but there may be some flexibility with the exact time." }
+      @{ Voice = "en-GB-SoniaNeural"; Text = "Hi, James. Do you have a minute? I'm working on the customer report, but I'm not sure how to handle one part of it." },
+      @{ Voice = "en-GB-RyanNeural"; Text = "Sure. What's the problem?" },
+      @{ Voice = "en-GB-SoniaNeural"; Text = "The customer is asking for a refund, but the situation is a little unusual. I'm not sure which procedure applies." },
+      @{ Voice = "en-GB-RyanNeural"; Text = "Have you checked the previous customer cases?" },
+      @{ Voice = "en-GB-SoniaNeural"; Text = "No, not yet." },
+      @{ Voice = "en-GB-RyanNeural"; Text = "I'd start there. We had a very similar case last month, and the report might show you which procedure we followed." },
+      @{ Voice = "en-GB-SoniaNeural"; Text = "Okay. I'll check those records first." },
+      @{ Voice = "en-GB-RyanNeural"; Text = "Good. If you still can't find the answer, come back to me. We have to send the report today, but there may be some flexibility with the exact time." },
+      @{ Voice = "en-GB-SoniaNeural"; Text = "That's helpful. Thanks." }
     )
   },
   @{
     File = "placement-listening-LC.wav"
+    Rate = "-20%"
     Lines = @(
-      @{ Voice = "en-GB-SoniaNeural"; Text = "What do you think about the new hybrid-work policy?" },
-      @{ Voice = "en-GB-RyanNeural"; Text = "People can concentrate better on individual work, but I am concerned that remote staff may miss informal decisions." },
-      @{ Voice = "en-GB-SoniaNeural"; Text = "We need clearer communication procedures. Important decisions could be documented in one shared system." },
+      @{ Voice = "en-GB-SoniaNeural"; Text = "So, what do you think about the new hybrid-work policy?" },
+      @{ Voice = "en-GB-RyanNeural"; Text = "I think there are some advantages. People can probably concentrate better when they're working on tasks that require a lot of individual focus. But I'm concerned about communication." },
+      @{ Voice = "en-GB-SoniaNeural"; Text = "What do you mean?" },
+      @{ Voice = "en-GB-RyanNeural"; Text = "When people aren't in the office, they may not hear about decisions that are made informally. Someone might have an important conversation in a meeting, for example, but another team member working remotely doesn't know about it." },
+      @{ Voice = "en-GB-SoniaNeural"; Text = "That's true. But I don't think that means the policy can't work. We probably need clearer communication procedures." },
+      @{ Voice = "en-GB-RyanNeural"; Text = "Such as?" },
+      @{ Voice = "en-GB-SoniaNeural"; Text = "Important decisions could be documented in one shared system instead of relying on conversations or messages between individual employees." },
       @{ Voice = "en-GB-RyanNeural"; Text = "Yes. That could make the system more reliable." }
     )
   }
@@ -52,7 +66,7 @@ try {
       $line = $dialogue.Lines[$index]
       $segmentPath = Join-Path $tempDirectory ("{0}-{1}.mp3" -f [IO.Path]::GetFileNameWithoutExtension($dialogue.File), $index)
       $linuxSegmentPath = (& $wsl -d $WslDistribution -- wslpath -a $segmentPath).Trim()
-      & $wsl -d $WslDistribution -- env "PYTHONPATH=/tmp/e4s-edge-tts" python3 -m edge_tts --text $line.Text --write-media $linuxSegmentPath --voice $line.Voice --rate=-8% --volume=+0%
+      & $wsl -d $WslDistribution -- env "PYTHONPATH=/tmp/e4s-edge-tts" python3 -m edge_tts --text $line.Text --write-media $linuxSegmentPath --voice $line.Voice --rate=$($dialogue.Rate) --volume=+0%
       if ($LASTEXITCODE -ne 0 -or -not (Test-Path -LiteralPath $segmentPath)) { throw "Neural TTS failed for $($dialogue.File), line $($index + 1)." }
       $concatEntries.Add("file '$($segmentPath.Replace("'", "''"))'")
       if ($index -lt $dialogue.Lines.Count - 1) { $concatEntries.Add("file '$($pausePath.Replace("'", "''"))'") }

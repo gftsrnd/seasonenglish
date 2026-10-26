@@ -125,6 +125,7 @@ export interface LearnerCallbacks {
   getAssessmentAudioReadUrl?: (artifactKey: string) => Promise<{ url: string; expiresAt: string }>;
   recordAssessmentAudioPlay: (section: AssessmentSectionCode, groupKey: string) => Promise<{ playCount: number; remaining: number }>;
   createAssessmentAppeal: (reason: string) => void | Promise<void>;
+  completeLessonStudy: () => void | Promise<void>;
   saveLessonProgress: (progress: LessonProgressView) => void | Promise<void>;
   submitLessonPartAttempt?: (partCode: LessonPartCode, evidence: LessonPartAttemptEvidenceInput) => Promise<LessonPartAttemptView>;
   appealLessonPart?: (partCode: LessonPartCode, reason: string) => Promise<LessonPartAppealView>;

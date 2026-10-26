@@ -5,7 +5,7 @@ import { migrateDatabase, resetPublicSchema, seedDemo } from "@e4s/database";
 import { createCredentialHash, createPinHash } from "@e4s/domain/identity";
 import { DEMO_IDS } from "@e4s/test-support";
 import { buildApi } from "../src/app.js";
-import type { AiTaskRunner } from "../src/modules/coach/index.js";
+import type { AiTaskRunner } from "@e4s/ai";
 import type { ContentMediaService } from "../src/modules/media/index.js";
 
 const databaseUrl = process.env.TEST_DATABASE_URL

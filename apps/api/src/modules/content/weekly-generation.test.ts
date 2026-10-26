@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import type { ContentWeekInput } from "@e4s/contracts";
-import type { AiTaskRunner } from "../coach/index.js";
+import type { AiTaskRunner } from "@e4s/ai";
 import { generateWeeklyLessons } from "./weekly-generation.js";
 
 vi.mock("@e4s/ai", async () => await import("../../../../../packages/ai/src/index.js"));

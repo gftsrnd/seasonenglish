@@ -76,3 +76,11 @@ export interface AiRunResult<TOutput = unknown> {
   output: TOutput;
   metadata: AiRunMetadata;
 }
+
+export interface AiTaskRunner {
+  runTask(
+    taskId: string,
+    input: unknown,
+    options?: { systemPrompt?: string; maxOutputTokens?: number }
+  ): Promise<AiRunResult>;
+}

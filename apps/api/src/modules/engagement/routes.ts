@@ -1,6 +1,6 @@
 import type { GameDescriptor, GameKey, GameTopicModeration } from "@e4s/contracts";
 import { randomUUID } from "node:crypto";
-import { vocabularyOutputSchema, weeklyPracticeOutputSchema } from "@e4s/ai";
+import { vocabularyOutputSchema, weeklyPracticeOutputSchema, type AiTaskRunner } from "@e4s/ai";
 import { arenaEligible, scoreGameAttempt } from "@e4s/domain/engagement";
 import { validateWeeklyPractice } from "@e4s/domain/progression";
 import { createRepositories } from "@e4s/database";
@@ -8,7 +8,6 @@ import type { FastifyInstance } from "fastify";
 import type { Pool } from "pg";
 import { z } from "zod";
 import { createRoleGuard } from "../identity/policy.js";
-import type { AiTaskRunner } from "../coach/index.js";
 import type { ContentMediaService } from "../media/index.js";
 
 const gameKey = z.enum(["scramble", "crossword", "eggs", "mario", "sort", "typing"]);

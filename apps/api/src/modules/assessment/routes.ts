@@ -19,7 +19,7 @@ import type {
   CefrLevel,
   ManualAssessmentScoreInput
 } from "@e4s/contracts";
-import { assessmentGradingOutputSchema, levelFormOutputSchema, type LevelFormTaskOutput } from "@e4s/ai";
+import { assessmentGradingOutputSchema, levelFormOutputSchema, type AiTaskRunner, type LevelFormTaskOutput } from "@e4s/ai";
 import {
   createRepositories,
   publicAssessmentDefinition,
@@ -34,7 +34,6 @@ import type { FastifyInstance } from "fastify";
 import type { Pool } from "pg";
 import { z } from "zod";
 import { createRoleGuard } from "../identity/policy.js";
-import type { AiTaskRunner } from "../coach/index.js";
 
 const kindParam = z.object({ kind: z.enum(["placement", "levelup", "level-up"]) });
 const attemptParam = z.object({ attemptId: z.uuid() });

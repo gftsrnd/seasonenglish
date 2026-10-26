@@ -53,6 +53,50 @@ describe("placement assessment blueprint", () => {
     expect(listening.groups.every((group) => new Set(group.stimulus?.lines?.map((line) => line.speaker)).size >= 2)).toBe(true);
   });
 
+  it("preserves the approved listening transcript and question wording", () => {
+    const listening = section("listening");
+    const partB = listening.groups.find((group) => group.key === "LB");
+    const partC = listening.groups.find((group) => group.key === "LC");
+
+    expect(partB?.stimulus?.lines).toHaveLength(9);
+    expect(partB?.stimulus?.lines?.map((line) => `${line.speaker}: ${line.text}`).join("\n")).toContain(
+      "Employee: The customer is asking for a refund, but the situation is a little unusual. I'm not sure which procedure applies."
+    );
+    expect(partB?.stimulus?.lines?.map((line) => `${line.speaker}: ${line.text}`).join("\n")).toContain(
+      "Employee: Okay. I'll check those records first."
+    );
+    expect(partC?.stimulus?.lines).toHaveLength(8);
+
+    const firstPartBQuestion = partB?.tasks[0];
+    expect(firstPartBQuestion?.prompt).toBe("What difficulty is the employee experiencing while preparing the customer report?");
+    expect(firstPartBQuestion?.options?.map((option) => option.label)).toEqual([
+      "She cannot access the company website.",
+      "She is unsure which procedure to follow for an unusual refund case.",
+      "She cannot understand the language used in the customer's message.",
+      "She cannot contact her supervisor."
+    ]);
+  });
+
+  it("keeps the approved reading passages and non-committal refund answer", () => {
+    const readingTasks = section("reading").groups.flatMap((group) => group.tasks);
+    const task = (number: number) => readingTasks.find((item) => item.key === `R${number}`);
+
+    expect(task(16)?.prompt).toContain("Tomas ordered a laptop online, but it arrived with a cracked screen.");
+    expect(task(20)?.prompt).toContain("Each time, a different agent asked her to repeat the whole story from the beginning.");
+    expect(task(22)?.prompt).toContain("I trust this will finally be resolved");
+    expect(task(26)?.prompt).toContain("the damage to her trust in the company had already been done");
+    expect(task(29)?.prompt).toContain("many customers report receiving faster replies that still fail to solve their actual problem");
+    expect(task(33)?.prompt).toContain("the promise had never been realistic given current staffing levels");
+    expect(task(36)?.prompt).toContain("the customer's subjective sense of having been heard");
+    expect(task(37)?.prompt).toBe("Which reply communicates the next step without promising or denying a refund?");
+    expect(task(37)?.options?.map((option) => option.label)).toEqual([
+      "We will review your case and provide an update by Friday. The outcome has not yet been determined.",
+      "You will receive a full refund by Friday.",
+      "We cannot offer a refund under any circumstances.",
+      "There is no possibility of compensation for your case."
+    ]);
+  });
+
   it("keeps the approved productive task weights and word ranges", () => {
     const writingTasks = section("writing").groups.flatMap((group) => group.tasks);
     expect(writingTasks.map(({ key, maxScore, minWords, maxWords }) => ({ key, maxScore, minWords, maxWords }))).toEqual([
@@ -60,7 +104,7 @@ describe("placement assessment blueprint", () => {
       { key: "W2", maxScore: 13, minWords: 120, maxWords: 150 }
     ]);
     expect(writingTasks.find((task) => task.key === "W2")?.prompt).toBe(
-      "Write a formal email (120–150 words): explain one risk of outdated procedures and propose how the team can find the latest version."
+      "Write a formal email (120–150 words): explain one serious problem this confusion could cause (for example, giving a customer incorrect refund information) and propose one solution that helps the team find and use the latest documentation."
     );
 
     const speakingTasks = section("speaking").groups.flatMap((group) => group.tasks);

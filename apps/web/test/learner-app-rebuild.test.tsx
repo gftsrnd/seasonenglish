@@ -24,6 +24,7 @@ const callbacks = (): LearnerCallbacks => ({
   uploadAssessmentAudio: vi.fn(async () => "artifact/audio"),
   recordAssessmentAudioPlay: vi.fn(async () => ({ playCount: 1, remaining: 1 })),
   createAssessmentAppeal: vi.fn(),
+  completeLessonStudy: vi.fn(),
   saveLessonProgress: vi.fn(),
   submitMicroAnswer: vi.fn(),
   completeMicroLesson: vi.fn(),

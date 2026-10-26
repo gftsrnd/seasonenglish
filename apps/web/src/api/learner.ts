@@ -18,6 +18,7 @@ export interface LearnerApiClient {
   getProgress(): Promise<LearnerProgressView>;
   getLesson(id: string): Promise<LessonView>;
   resolveLessonVocabularyImage(lessonId: string, itemIndex: number): Promise<ContentImageView>;
+  completeLessonStudy(id: string): Promise<LessonProgressView>;
   saveLessonProgress(id: string, progress: LessonProgressView): Promise<LessonProgressView>;
   submitLessonPartAttempt(lessonId: string, partCode: LessonPartCode, requestId: string, evidence: LessonPartAttemptEvidenceInput): Promise<LessonPartAttemptView>;
   appealLessonPart(lessonId: string, partCode: LessonPartCode, reason: string): Promise<LessonPartAppealView>;
@@ -72,6 +73,7 @@ export const learnerApiClient: LearnerApiClient = {
   getProgress: () => request("/api/v1/learner/progress"),
   getLesson: (id) => request(`/api/v1/lessons/${encodeURIComponent(id)}`),
   resolveLessonVocabularyImage: (lessonId, itemIndex) => request(`/api/v1/lessons/${encodeURIComponent(lessonId)}/vocabulary/${itemIndex}/image`),
+  completeLessonStudy: (id) => request(`/api/v1/lessons/${encodeURIComponent(id)}/study-completion`, { method: "POST", body: "{}" }),
   saveLessonProgress: (id, progress) => request(`/api/v1/lessons/${encodeURIComponent(id)}/progress`, {
     method: "PUT",
     body: JSON.stringify({ completedPartCodes: progress.completedPartCodes, evidence: progress.evidence, markComplete: progress.status === "completed", ...(progress.score === undefined ? {} : { score: progress.score }) })

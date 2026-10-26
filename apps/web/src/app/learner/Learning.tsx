@@ -144,16 +144,8 @@ export function LearnerLesson({ view, actions }: { view: LessonView; actions: Le
   const finishStudy = async () => {
     if (!startAction("study")) return;
     setError("");
-    const completedPartCodes = Array.from(new Set([
-      ...lesson.progress.completedPartCodes,
-      ...lesson.content.parts.map((part) => part.code).filter((code) => studyCodes.includes(code))
-    ]));
     try {
-      await actions.saveLessonProgress({
-        ...lesson.progress,
-        status: lesson.progress.status === "completed" ? "completed" : "in_progress",
-        completedPartCodes
-      });
+      await actions.completeLessonStudy();
       setStudyComplete(true);
       setTab("practice");
     } catch {
