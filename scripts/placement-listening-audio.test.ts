@@ -9,6 +9,8 @@ describe("placement listening audio", () => {
     expect(generator).toContain("Neural");
     expect(generator).not.toContain("SpeechSynthesizer");
     expect(generator).not.toContain("dynaudnorm");
+    expect(generator).toContain("--rate=-8%");
+    expect(generator).toContain("-t 0.22");
   });
 
   it.each(files)("keeps %s clear and loud enough for an English listening test", (file) => {

@@ -43,7 +43,7 @@ $tempDirectory = Join-Path ([IO.Path]::GetTempPath()) ("e4s-listening-" + [guid]
 New-Item -ItemType Directory -Path $tempDirectory | Out-Null
 try {
   $pausePath = Join-Path $tempDirectory "pause.mp3"
-  & $ffmpeg.Source -hide_banner -loglevel error -y -f lavfi -i "anullsrc=r=48000:cl=mono" -t 0.38 -q:a 9 -acodec libmp3lame $pausePath
+  & $ffmpeg.Source -hide_banner -loglevel error -y -f lavfi -i "anullsrc=r=48000:cl=mono" -t 0.22 -q:a 9 -acodec libmp3lame $pausePath
   if ($LASTEXITCODE -ne 0) { throw "ffmpeg failed while creating the dialogue pause." }
 
   foreach ($dialogue in $dialogues) {
@@ -52,7 +52,7 @@ try {
       $line = $dialogue.Lines[$index]
       $segmentPath = Join-Path $tempDirectory ("{0}-{1}.mp3" -f [IO.Path]::GetFileNameWithoutExtension($dialogue.File), $index)
       $linuxSegmentPath = (& $wsl -d $WslDistribution -- wslpath -a $segmentPath).Trim()
-      & $wsl -d $WslDistribution -- env "PYTHONPATH=/tmp/e4s-edge-tts" python3 -m edge_tts --text $line.Text --write-media $linuxSegmentPath --voice $line.Voice --rate=+3% --volume=+0%
+      & $wsl -d $WslDistribution -- env "PYTHONPATH=/tmp/e4s-edge-tts" python3 -m edge_tts --text $line.Text --write-media $linuxSegmentPath --voice $line.Voice --rate=-8% --volume=+0%
       if ($LASTEXITCODE -ne 0 -or -not (Test-Path -LiteralPath $segmentPath)) { throw "Neural TTS failed for $($dialogue.File), line $($index + 1)." }
       $concatEntries.Add("file '$($segmentPath.Replace("'", "''"))'")
       if ($index -lt $dialogue.Lines.Count - 1) { $concatEntries.Add("file '$($pausePath.Replace("'", "''"))'") }

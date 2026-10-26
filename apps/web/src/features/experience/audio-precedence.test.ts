@@ -9,6 +9,16 @@ afterEach(() => {
 });
 
 describe("exclusive audio precedence", () => {
+  it("stops the first recording when another recording starts playing", () => {
+    const stopFirst = vi.fn();
+    const stopSecond = vi.fn();
+    claimExclusiveAudio("media", stopFirst);
+    claimExclusiveAudio("media", stopSecond);
+
+    expect(stopFirst).toHaveBeenCalledOnce();
+    expect(stopSecond).not.toHaveBeenCalled();
+  });
+
   it.each(["speech", "media", "microphone"] as const)("pauses music for %s and resumes it after release", (source) => {
     const stopMusic = vi.fn();
     const resumeMusic = vi.fn();

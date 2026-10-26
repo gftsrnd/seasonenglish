@@ -10,6 +10,7 @@ import { Clock3, Mic, Play, Square, TriangleAlert, Upload } from "lucide-react";
 import type { AssessmentView, LearnerCallbacks } from "./contracts.js";
 import { Notice, Toast } from "./ui.js";
 import { registerAssessmentLogoutGuard } from "../shared/assessment-logout-guard.js";
+import { cancelExclusiveAudio, claimExclusiveAudio } from "../../features/experience/audio-precedence.js";
 
 export interface AssessmentRuntimeState {
   remainingSeconds: number | null;
@@ -293,6 +294,7 @@ export function AssessmentRecorder({ taskKey, view, actions, onEvidence, onBusyC
   const stream = useRef<MediaStream | null>(null);
   const chunks = useRef<Blob[]>([]);
   const playback = useRef<HTMLAudioElement | null>(null);
+  const releasePlayback = useRef<(() => void) | undefined>(undefined);
   const holdMusicRef = useRef(holdMusic);
   const [recording, setRecording] = useState(false);
   const [recordingSeconds, setRecordingSeconds] = useState(0);
@@ -300,6 +302,7 @@ export function AssessmentRecorder({ taskKey, view, actions, onEvidence, onBusyC
   const [fileName, setFileName] = useState("Chưa có file ghi âm");
   const [error, setError] = useState<string>();
   const [audioUrl, setAudioUrl] = useState<string>();
+  const [playing, setPlaying] = useState(false);
   const fileInput = useRef<HTMLInputElement | null>(null);
   const microphoneSupported = view.runtime?.deviceEvidence.microphoneSupported ?? view.attempt?.runtime?.deviceEvidence.microphoneSupported;
   const canRecord = microphoneSupported !== false && typeof navigator !== "undefined" && Boolean(navigator.mediaDevices?.getUserMedia) && typeof MediaRecorder !== "undefined";
@@ -318,6 +321,8 @@ export function AssessmentRecorder({ taskKey, view, actions, onEvidence, onBusyC
   }, [busy, onBusyChange, recording, taskKey]);
 
   useEffect(() => () => {
+    cancelExclusiveAudio("media");
+    releasePlayback.current?.();
     playback.current?.pause();
     stream.current?.getTracks().forEach((track) => track.stop());
     holdMusicRef.current(false);
@@ -401,8 +406,11 @@ export function AssessmentRecorder({ taskKey, view, actions, onEvidence, onBusyC
 
   const replayAudio = async () => {
     if (!audioUrl || busy) return;
+    if (playing) {
+      cancelExclusiveAudio("media");
+      return;
+    }
     setError(undefined);
-    playback.current?.pause();
     holdMusic(true);
     const audio = new Audio(audioUrl);
     playback.current = audio;
@@ -411,14 +419,28 @@ export function AssessmentRecorder({ taskKey, view, actions, onEvidence, onBusyC
       if (finished) return;
       finished = true;
       if (playback.current === audio) playback.current = null;
+      releasePlayback.current?.();
+      releasePlayback.current = undefined;
+      setPlaying(false);
       holdMusic(false);
     };
+    const release = claimExclusiveAudio("media", () => {
+      audio.pause();
+      audio.currentTime = 0;
+      finish();
+    });
+    if (!release) {
+      finish();
+      return;
+    }
+    releasePlayback.current = release;
     audio.onended = finish;
     audio.onerror = () => {
       finish();
       setError("Không phát lại được file ghi âm. Hãy thử lại.");
     };
     try {
+      setPlaying(true);
       await audio.play();
     } catch {
       finish();
@@ -430,7 +452,7 @@ export function AssessmentRecorder({ taskKey, view, actions, onEvidence, onBusyC
     {!canRecord ? <Notice tone="warn">Trình duyệt này không ghi âm được. Bạn vẫn có thể tải file ghi âm.</Notice> : null}
     <div className="speaking-evidence-actions">
       <button className={`btn-sm ${recording ? "btn-danger" : ""}`} type="button" aria-pressed={recording} disabled={!canRecord || (busy && !recording)} onClick={() => recording ? stopRecording() : void startRecording()}>{recording ? <><Square size={15} fill="currentColor" aria-hidden="true" /> Dừng ghi</> : <><Mic size={16} aria-hidden="true" /> Ghi âm</>}</button>
-      {audioUrl ? <button className="btn-sm btn-ghost" type="button" disabled={busy} onClick={() => void replayAudio()}><Play size={16} fill="currentColor" aria-hidden="true" /> Nghe lại ghi âm</button> : null}
+      {audioUrl ? <button className="btn-sm btn-ghost" type="button" aria-pressed={playing} disabled={busy} onClick={() => void replayAudio()}>{playing ? <Square size={15} fill="currentColor" aria-hidden="true" /> : <Play size={16} fill="currentColor" aria-hidden="true" />} {playing ? "Dừng nghe ghi âm" : "Nghe lại ghi âm"}</button> : null}
       <button className="btn btn-sm" type="button" disabled={busy || recording} onClick={() => {
         filePickerGraceUntil = Date.now() + 2_000;
         fileInput.current?.click();

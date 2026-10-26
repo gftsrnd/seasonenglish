@@ -463,6 +463,7 @@ describe("assessment HCI states", () => {
     vi.spyOn(URL, "createObjectURL").mockReturnValue("blob:voice");
     vi.spyOn(URL, "revokeObjectURL").mockImplementation(() => undefined);
     const playRecording = vi.spyOn(HTMLMediaElement.prototype, "play").mockResolvedValue(undefined);
+    const pauseRecording = vi.spyOn(HTMLMediaElement.prototype, "pause").mockImplementation(() => undefined);
     const uploadAssessmentAudio = vi.fn().mockResolvedValue("evidence/S3.webm");
     const onEvidence = vi.fn().mockResolvedValue(undefined);
     const onBusyChange = vi.fn();
@@ -485,6 +486,10 @@ describe("assessment HCI states", () => {
 
     await user.click(screen.getByRole("button", { name: "Nghe lại ghi âm" }));
     expect(playRecording).toHaveBeenCalledTimes(1);
+    expect(screen.getByRole("button", { name: "Dừng nghe ghi âm" })).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Dừng nghe ghi âm" }));
+    expect(pauseRecording).toHaveBeenCalled();
+    expect(screen.getByRole("button", { name: "Nghe lại ghi âm" })).toBeInTheDocument();
     expect(screen.queryByText("Không phát lại được file ghi âm. Hãy thử lại.")).not.toBeInTheDocument();
   });
 

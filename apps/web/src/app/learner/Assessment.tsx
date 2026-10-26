@@ -253,20 +253,26 @@ function ActiveAssessment({ view, actions, section, sectionIndex, runtime, local
       <div className="assessment-task-content" style={{ display: "grid", gap: 12, marginTop: 12 }}>
         {group.stimulus ? <Stimulus stimulus={group.stimulus} maxPlays={group.maxPlays ?? 0} played={attempt.audioPlayCounts[`${section.code}:${group.key}`] ?? runtimeAudioCount(view, section.code, group.key)} onPlay={async (text, audioSrc) => {
           try {
-            const result = await actions.recordAssessmentAudioPlay(section.code, group.key);
             if (!audioSrc) {
-              actions.speak(text, "en-GB", { rate: 0.92 });
-              return result.playCount;
-            }
-            await new Promise<void>((resolve, reject) => {
-              actions.speak(text, "en-GB", {
-                audioSrc,
+              await new Promise<void>((resolve, reject) => actions.speak(text, "en-GB", {
+                rate: 0.86,
                 onStatus: (status) => {
                   if (status === "ended") resolve();
-                  if (status === "error" || status === "unsupported" || status === "no_voice") reject(new Error(status));
+                  if (status === "cancelled" || status === "error" || status === "unsupported" || status === "no_voice") reject(new Error(status));
                 }
+              }));
+            } else {
+              await new Promise<void>((resolve, reject) => {
+                actions.speak(text, "en-GB", {
+                  audioSrc,
+                  onStatus: (status) => {
+                    if (status === "ended") resolve();
+                    if (status === "cancelled" || status === "error" || status === "unsupported" || status === "no_voice") reject(new Error(status));
+                  }
+                });
               });
-            });
+            }
+            const result = await actions.recordAssessmentAudioPlay(section.code, group.key);
             return result.playCount;
           }
           catch { return null; }

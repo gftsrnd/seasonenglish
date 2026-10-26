@@ -195,6 +195,7 @@ export function ExperienceProvider({ children, musicAllowed = true, musicConfig 
       const release = claimExclusiveAudio("speech", () => {
         audioElement.pause();
         audioElement.currentTime = 0;
+        onStatus?.("cancelled" satisfies LessonSpeechStatus);
       }, () => startMusic());
       if (!release) return;
       let restored = false;
@@ -228,7 +229,10 @@ export function ExperienceProvider({ children, musicAllowed = true, musicConfig 
       return;
     }
     cancelExclusiveAudio("speech");
-    const release = claimExclusiveAudio("speech", () => window.speechSynthesis.cancel(), () => startMusic());
+    const release = claimExclusiveAudio("speech", () => {
+      window.speechSynthesis.cancel();
+      onStatus?.("cancelled" satisfies LessonSpeechStatus);
+    }, () => startMusic());
     if (!release) return;
     window.speechSynthesis.cancel();
     const speech = new SpeechSynthesisUtterance(text);
