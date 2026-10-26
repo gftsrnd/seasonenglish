@@ -575,7 +575,7 @@ function PartContent({
   const targetSound = pronunciationTarget(content.focus ?? "");
   const grammarExamples = content.examples?.slice(0, 3) ?? [];
   const speakingModel = conciseSpeakingModel(content.sample ?? content.answer ?? content.modelAnswer);
-  const sectionAudioSource = ["objective", "vocabulary", "pronunciation", "listening", "speaking"].includes(part.code)
+  const sectionAudioSource = ["objective", "vocabulary", "pronunciation", "listening", "reading", "writing", "word_class", "word_use", "speaking"].includes(part.code)
     ? undefined
     : lessonAudioSource({ ...content, script: lessonPartNarration(part.code, content, cefr) });
   return <>

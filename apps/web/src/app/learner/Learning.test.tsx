@@ -93,7 +93,7 @@ describe("learner lesson study content", () => {
     expect(speak).toHaveBeenLastCalledWith("I… I", "en-US", { rate: 0.55 });
   });
 
-  it("provides audio or TTS for every practice section", async () => {
+  it("keeps exercise audio only where the exercise requires listening or speaking practice", async () => {
     const user = userEvent.setup();
     const speak = vi.fn();
     const lesson = {
@@ -117,10 +117,10 @@ describe("learner lesson study content", () => {
     render(<LearnerLesson view={{ lesson, lock: null }} actions={{ navigate: vi.fn(), speak, saveLessonProgress: vi.fn() } as any} />);
 
     await user.click(screen.getByRole("tab", { name: /2\. Bài tập/i }));
-    expect(screen.getByLabelText("Nghe audio phần Đọc")).toHaveAttribute("src", "/audio/reading.mp3");
-    expect(screen.getByRole("button", { name: "Nghe phần Viết" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Nghe phần Từ loại" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Nghe phần Dùng từ" })).toBeInTheDocument();
+    expect(screen.queryByLabelText("Nghe audio phần Đọc")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Nghe phần Viết" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Nghe phần Từ loại" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Nghe phần Dùng từ" })).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Nghe câu mẫu" })).toBeInTheDocument();
   });
 

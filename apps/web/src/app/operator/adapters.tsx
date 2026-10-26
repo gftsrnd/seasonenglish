@@ -285,7 +285,7 @@ function renderLessonPart(code: string, value: unknown, media?: { cefr: string; 
     return [{ word: record.word, ipa: typeof record.ipa === "string" ? record.ipa.trim() : "" }];
   });
   const cefr = media?.cefr ?? "A1";
-  const sectionAudio = ["objective", "vocabulary", "pronunciation", "listening", "speaking"].includes(code)
+  const sectionAudio = ["objective", "vocabulary", "pronunciation", "listening", "reading", "writing", "word_class", "word_use", "speaking"].includes(code)
     ? undefined
     : operatorAudioSource({ ...content, script: operatorPartNarration(code, content, cefr) });
   if (code === "objective") {

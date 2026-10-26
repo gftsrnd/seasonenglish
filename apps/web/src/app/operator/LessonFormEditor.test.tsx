@@ -225,12 +225,10 @@ describe("operator granular lesson editor", () => {
     const image = new File(["image"], "colleague.png", { type: "image/png" });
     const pronunciation = new File(["voice"], "pronunciation.mp3", { type: "audio/mpeg" });
     const listening = new File(["voice"], "listening.wav", { type: "audio/wav" });
-    const speaking = new File(["voice"], "speaking.ogg", { type: "audio/ogg" });
     await user.upload(screen.getByLabelText("Tải Ảnh minh họa từ 1"), image);
     await user.upload(screen.getByLabelText("Tải Audio mẫu phát âm"), pronunciation);
     await user.upload(screen.getByLabelText("Tải File audio phần Nghe"), listening);
-    await user.upload(screen.getByLabelText("Tải Audio mẫu phần Nói"), speaking);
-    expect(uploadMedia).toHaveBeenCalledTimes(4);
+    expect(uploadMedia).toHaveBeenCalledTimes(3);
     expect(container.querySelector('input[accept="image/png,image/jpeg,image/webp,image/gif"]')).toBeInTheDocument();
     expect((screen.getByLabelText("Ảnh minh họa từ 1 URL") as HTMLInputElement).value).toContain("image-colleague.png");
 
@@ -240,17 +238,17 @@ describe("operator granular lesson editor", () => {
     expect(saved.parts.find((part: { code: string }) => part.code === "vocabulary")?.content.items[0]).toEqual(expect.objectContaining({ imageUrl: expect.stringContaining("image-colleague.png") }));
     expect(saved.parts.find((part: { code: string }) => part.code === "pronunciation")?.content.audioUrl).toContain("audio-pronunciation.mp3");
     expect(saved.parts.find((part: { code: string }) => part.code === "listening")?.content.audioUrl).toContain("audio-listening.wav");
-    expect(saved.parts.find((part: { code: string }) => part.code === "speaking")?.content.audioUrl).toContain("audio-speaking.ogg");
+    expect(saved.parts.find((part: { code: string }) => part.code === "speaking")?.content.audioUrl).toBe("");
 
     cleanup();
     render(<LessonFormEditor weekNumber={1} cefr="A2" initial={saved} onSave={vi.fn()} onCancel={() => undefined} uploadMedia={uploadMedia} />);
     expect((screen.getByLabelText("Ảnh minh họa từ 1 URL") as HTMLInputElement).value).toContain("image-colleague.png");
     expect((screen.getByLabelText("Audio mẫu phát âm URL") as HTMLInputElement).value).toContain("audio-pronunciation.mp3");
     expect((screen.getByLabelText("File audio phần Nghe URL") as HTMLInputElement).value).toContain("audio-listening.wav");
-    expect((screen.getByLabelText("Audio mẫu phần Nói URL") as HTMLInputElement).value).toContain("audio-speaking.ogg");
+    expect(screen.queryByLabelText("Audio mẫu phần Nói URL")).not.toBeInTheDocument();
   });
 
-  it("offers and persists audio for learning content but not lesson objectives", async () => {
+  it("offers audio only for learning content and the listening exercise", async () => {
     const user = userEvent.setup();
     const onSave = vi.fn().mockResolvedValue(undefined);
     vi.spyOn(window, "confirm").mockReturnValue(true);
@@ -260,14 +258,12 @@ describe("operator granular lesson editor", () => {
       "Audio hướng dẫn làm bài URL",
       "Audio phần Ngữ pháp URL",
       "Audio mẫu phát âm URL",
-      "File audio phần Nghe URL",
-      "Audio phần Đọc URL",
-      "Audio phần Viết URL",
-      "Audio phần Từ loại URL",
-      "Audio phần Dùng từ URL",
-      "Audio mẫu phần Nói URL"
+      "File audio phần Nghe URL"
     ];
     expect(screen.queryByLabelText("Audio mục tiêu bài học URL")).not.toBeInTheDocument();
+    ["Audio phần Đọc URL", "Audio phần Viết URL", "Audio phần Từ loại URL", "Audio phần Dùng từ URL", "Audio mẫu phần Nói URL"].forEach(label => {
+      expect(screen.queryByLabelText(label)).not.toBeInTheDocument();
+    });
     sectionAudioLabels.forEach((label, index) => {
       fireEvent.change(screen.getByLabelText(label), { target: { value: `/audio/section-${index + 1}.mp3` } });
     });
@@ -288,10 +284,11 @@ describe("operator granular lesson editor", () => {
     expect(byCode("objective").audioUrl).toBe("");
     expect(byCode("instruction").audioUrl).toBe("/audio/section-1.mp3");
     expect(byCode("grammar").audioUrl).toBe("/audio/section-2.mp3");
-    expect(byCode("reading").audioUrl).toBe("/audio/section-5.mp3");
-    expect(byCode("writing").audioUrl).toBe("/audio/section-6.mp3");
-    expect(byCode("word_class").audioUrl).toBe("/audio/section-7.mp3");
-    expect(byCode("word_use").audioUrl).toBe("/audio/section-8.mp3");
+    expect(byCode("reading").audioUrl).toBe("");
+    expect(byCode("writing").audioUrl).toBe("");
+    expect(byCode("word_class").audioUrl).toBe("");
+    expect(byCode("word_use").audioUrl).toBe("");
+    expect(byCode("speaking").audioUrl).toBe("");
     expect(byCode("vocabulary").items.map((item: { audioUrl?: string }) => item.audioUrl)).toEqual([
       "/audio/word-1.mp3", "/audio/word-2.mp3", "/audio/word-3.mp3"
     ]);
