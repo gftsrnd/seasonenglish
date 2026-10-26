@@ -1913,7 +1913,7 @@ class ContentRepository {
               pw.id, pw.week_number, pw.topic, pw.description, pw.objectives, pw.key_vocab_hint, pw.ai_plan
        from users staff
        join programs p on p.organization_id = staff.organization_id and p.status = 'active'
-       left join program_weeks pw on pw.program_id = p.id
+       left join program_weeks pw on pw.program_id = p.id and pw.week_number <= p.week_count
        where staff.id = $1
        order by pw.week_number`,
       [staffId]
@@ -2097,7 +2097,10 @@ class ContentRepository {
     );
     const levels = levelsResult.rows.map((row) => ({ cefr: row.cefr, learnerCount: Number(row.learner_count) }));
     const weeksResult = await this.pool.query<{ week_number: number; topic: string; ai_plan: unknown }>(
-      "select week_number, topic, ai_plan from program_weeks where program_id = $1 order by week_number",
+      `select pw.week_number, pw.topic, pw.ai_plan
+       from program_weeks pw join programs p on p.id = pw.program_id
+       where pw.program_id = $1 and pw.week_number <= p.week_count
+       order by pw.week_number`,
       [programId]
     );
     const weeks: ContentLessonMatrixView["weeks"] = [];
@@ -3526,6 +3529,7 @@ function importedSettings(
   ] as const;
   for (const key of numberKeys) if (typeof candidate[key] === "number" && Number.isFinite(candidate[key])) next[key] = candidate[key] as never;
   if (typeof candidate.weeklyReportEnabled === "boolean") next.weeklyReportEnabled = candidate.weeklyReportEnabled;
+  if (typeof candidate.aiTestDisabled === "boolean") next.aiTestDisabled = candidate.aiTestDisabled;
   if (typeof candidate.pilotStartDate === "string") next.pilotStartDate = candidate.pilotStartDate;
   if (typeof candidate.courseTheme === "string") next.courseTheme = candidate.courseTheme;
   if (typeof candidate.testTimed === "boolean") next.testTimed = candidate.testTimed;
@@ -8073,6 +8077,7 @@ class ManagerRepository {
     const currentMonday = monday.toISOString().slice(0, 10);
     const defaults: Omit<ManagerSettingsView, "organizationName"> = {
       programName: activeProgram?.name ?? "Chương trình tiếng Anh",
+      aiTestDisabled: false,
       reminderInactiveDays: 3, weeklyReportEnabled: true,
       pilotStartDate: activeProgram?.start_date ?? currentMonday,
       pilotWeeks: activeProgram?.week_count ?? 2,
@@ -9722,32 +9727,54 @@ class ManagerRepository {
   async saveSettings(managerId: string, input: Omit<ManagerSettingsView, "organizationName">): Promise<ManagerSettingsView> {
     const organization = await this.organizationFor(managerId);
     if (!organization) throw new Error("MANAGER_ORGANIZATION_NOT_FOUND");
-    await this.pool.query(
-      `insert into organization_settings (organization_id, reminder_inactive_days, weekly_report_enabled, configuration, updated_by)
-       values ($1, $2, $3, $4::jsonb, $5)
-       on conflict (organization_id) do update
-       set reminder_inactive_days = excluded.reminder_inactive_days,
-           weekly_report_enabled = excluded.weekly_report_enabled,
-           configuration = excluded.configuration,
-           updated_by = excluded.updated_by,
-           updated_at = now()`,
-      [organization.id, input.reminderInactiveDays, input.weeklyReportEnabled, JSON.stringify(input), managerId]
-    );
-    await this.pool.query(
-      `insert into audit_events
-         (id, organization_id, actor_user_id, action, entity_type, entity_id, payload, trace_id)
-       values ($1, $2, $3, 'organisation.settings.updated', 'organization', $2, $4::jsonb, $5)`,
-      [randomUUID(), organization.id, managerId, JSON.stringify(input), randomUUID()]
-    );
-    await this.pool.query(
-      `update programs
-       set name = $2,
-           start_date = $3::date,
-           week_count = $4,
-           current_week_override = nullif($5, 0)
-       where organization_id = $1 and status = 'active'`,
-      [organization.id, input.programName.trim(), input.pilotStartDate, input.pilotWeeks, input.weekOverride]
-    );
+    const client = await this.pool.connect();
+    try {
+      await client.query("begin");
+      await client.query(
+        `insert into organization_settings (organization_id, reminder_inactive_days, weekly_report_enabled, configuration, updated_by)
+         values ($1, $2, $3, $4::jsonb, $5)
+         on conflict (organization_id) do update
+         set reminder_inactive_days = excluded.reminder_inactive_days,
+             weekly_report_enabled = excluded.weekly_report_enabled,
+             configuration = excluded.configuration,
+             updated_by = excluded.updated_by,
+             updated_at = now()`,
+        [organization.id, input.reminderInactiveDays, input.weeklyReportEnabled, JSON.stringify(input), managerId]
+      );
+      await client.query(
+        `insert into audit_events
+           (id, organization_id, actor_user_id, action, entity_type, entity_id, payload, trace_id)
+         values ($1, $2, $3, 'organisation.settings.updated', 'organization', $2, $4::jsonb, $5)`,
+        [randomUUID(), organization.id, managerId, JSON.stringify(input), randomUUID()]
+      );
+      const program = await client.query<{ id: string }>(
+        `update programs
+         set name = $2,
+             start_date = $3::date,
+             week_count = $4,
+             current_week_override = nullif($5, 0)
+         where organization_id = $1 and status = 'active'
+         returning id`,
+        [organization.id, input.programName.trim(), input.pilotStartDate, input.pilotWeeks, input.weekOverride]
+      );
+      const programId = program.rows[0]?.id;
+      if (programId) {
+        await client.query(
+          `insert into program_weeks
+             (id, program_id, week_number, topic, description, objectives, key_vocab_hint, ai_plan)
+           select gen_random_uuid(), $1, week_number, '', '', '[]'::jsonb, '', '{}'::jsonb
+           from generate_series(1, $2::int) as week_number
+           on conflict (program_id, week_number) do nothing`,
+          [programId, input.pilotWeeks]
+        );
+      }
+      await client.query("commit");
+    } catch (error) {
+      await client.query("rollback");
+      throw error;
+    } finally {
+      client.release();
+    }
     return { organizationName: organization.name, ...input, programName: input.programName.trim() };
   }
 

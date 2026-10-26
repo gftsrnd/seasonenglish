@@ -2751,3 +2751,10 @@ body:has(.app-operator) #modal > .dialog > .row {
 .operator-attempt-learner-list { display:grid; gap:10px; margin-top:12px; }
 .operator-attempt-learner-list .operator-review-learner-group { border:1px solid var(--line); border-radius:12px; overflow:hidden; background:var(--surface); }
 .operator-attempt-learner-list .table-wrap { margin:0 12px 12px; }
+
+/* Keep manually previewed vocabulary readable when image lookup has no result. */
+.app-operator .operator-lesson-preview .vocabulary-card-heading:has(> .content-image--hidden) {
+  grid-template-columns: minmax(0, 1fr);
+}
+.app-operator .operator-lesson-preview .vocabulary-card-phrases,
+.app-operator .operator-lesson-preview .vocabulary-card-label { text-align: left; }

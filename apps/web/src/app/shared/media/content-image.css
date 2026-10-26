@@ -32,6 +32,7 @@
 }
 
 .content-image--fallback img { background: var(--primary-soft); }
+.content-image--hidden { display: none; }
 
 .vocabulary-card-heading {
   display: grid;
@@ -39,6 +40,10 @@
   align-items: flex-start;
   gap: 12px;
   min-width: 0;
+}
+
+.vocabulary-card-heading:has(.content-image--hidden) {
+  grid-template-columns: minmax(0, 1fr);
 }
 
 .vocabulary-card-main {
@@ -305,6 +310,7 @@ body > .vocabulary-relation-modal .vocabulary-relation-audio-item small {
   .content-image,
   .content-image--available img { width: 58px; min-width: 58px; height: 58px; }
   .vocabulary-card-heading { grid-template-columns:58px minmax(0,1fr) 36px; gap: 10px; }
+  .vocabulary-card-heading:has(.content-image--hidden) { grid-template-columns:minmax(0,1fr); }
   .vocabulary-card-main { display:contents; }
   .vocabulary-card-main > .vocabulary-card-word { grid-column:2; grid-row:1; }
   .vocabulary-card-main > .vocabulary-card-sound--icon {

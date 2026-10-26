@@ -84,6 +84,75 @@ const skills = {
 };
 
 describe("weekly lesson generation orchestration", () => {
+  it("retries a foundation whose pronunciation words do not contain the target sound", async () => {
+    const invalidPronunciation = {
+      ...foundation,
+      pronunciation: {
+        title: "Phát âm", focus: "/p/", tip: "Bật nhẹ luồng hơi ở môi.",
+        word1: { word: "cost", ipa: "/kɒst/" },
+        word2: { word: "deadline", ipa: "/ˈdedlaɪn/" },
+        word3: { word: "planned", ipa: "/plænd/" }
+      }
+    };
+    let foundationAttempts = 0;
+    const runTask = vi.fn(async (taskId: string, input: unknown, options?: { systemPrompt?: string }) => {
+      const dayNumber = (input as { dayNumber: number }).dayNumber;
+      if (taskId === "weekly_lesson_grammar_classifier") return { output: grammarClassification, metadata };
+      if (taskId === "weekly_lesson_foundation") {
+        foundationAttempts += 1;
+        return { output: foundationAttempts === 1 ? invalidPronunciation : foundation, metadata };
+      }
+      if (taskId === "weekly_lesson_vocabulary") return { output: vocabularyForDay(dayNumber), metadata };
+      if (taskId === "weekly_lesson_skills") return { output: skills, metadata };
+      throw new Error(`UNEXPECTED_TASK:${taskId}`);
+    });
+
+    await generateWeeklyLessons(
+      { weekNumber: 1, topic: "Giving feedback", description: "Give clear feedback", objectives: "Give clear feedback", keyVocabHint: "feedback", plan: { A1: ["give clear feedback", "two", "three", "four", "five"] } } as ContentWeekInput,
+      "A1", { prompt: "Generate lessons." }, { runTask } as unknown as AiTaskRunner,
+      { dayNumbers: [1], qualityReview: true }
+    );
+
+    expect(foundationAttempts).toBe(2);
+    expect(runTask.mock.calls.find((call) => call[0] === "weekly_lesson_foundation")?.[2]?.systemPrompt)
+      .toContain("word1.ipa, word2.ipa, and word3.ipa");
+    expect(runTask.mock.calls.find((call) => call[0] === "weekly_lesson_foundation")?.[2]?.systemPrompt)
+      .toContain("never alter or invent an IPA spelling");
+    const repairPrompt = runTask.mock.calls.find((call) => call[0] === "weekly_lesson_foundation" && call[2]?.systemPrompt?.includes("REPAIR REQUIRED"))?.[2]?.systemPrompt;
+    expect(repairPrompt).toContain("pronunciation.word1.ipa");
+    expect(repairPrompt).toContain("The fixed target sound is /p/");
+    expect(repairPrompt).toContain("Replace only word1 and word2");
+  });
+
+  it("retries an abstaining grammar classifier when the lesson focus declares a sentence frame", async () => {
+    const abstained = {
+      status: "no_suitable_content", contentType: null, targetName: null, scope: null,
+      support: "none", confidence: "high", evidence: [], rejectedCandidates: []
+    };
+    let classifierAttempts = 0;
+    const runTask = vi.fn(async (taskId: string, input: unknown, options?: { systemPrompt?: string }) => {
+      const dayNumber = (input as { dayNumber: number }).dayNumber;
+      if (taskId === "weekly_lesson_grammar_classifier") {
+        classifierAttempts += 1;
+        return { output: classifierAttempts === 1 ? abstained : { ...grammarClassification, targetName: "The cost is + amount", scope: "The cost is + amount", evidence: [{ sourceRef: "lessonFocus", quote: "The cost is + amount" }] }, metadata };
+      }
+      if (taskId === "weekly_lesson_foundation") return { output: { ...foundation, grammar: { ...foundation.grammar, targetName: "The cost is + amount", scope: "The cost is + amount" } }, metadata };
+      if (taskId === "weekly_lesson_vocabulary") return { output: vocabularyForDay(dayNumber), metadata };
+      if (taskId === "weekly_lesson_skills") return { output: skills, metadata };
+      throw new Error(`UNEXPECTED_TASK:${taskId}`);
+    });
+
+    await generateWeeklyLessons(
+      { weekNumber: 1, topic: "Project costs", description: "Discuss project costs", objectives: "State a project cost", keyVocabHint: "cost", plan: { A1: ["The cost is + amount", "two", "three", "four", "five"] } } as ContentWeekInput,
+      "A1", { prompt: "Generate lessons." }, { runTask } as unknown as AiTaskRunner,
+      { dayNumbers: [1], qualityReview: true }
+    );
+
+    expect(classifierAttempts).toBe(2);
+    expect(runTask.mock.calls.find((call) => call[0] === "weekly_lesson_grammar_classifier" && call[2]?.systemPrompt?.includes("REPAIR REQUIRED"))?.[2]?.systemPrompt)
+      .toContain("declares an explicit sentence frame");
+  });
+
   it("rejects fabricated grammar evidence and retries with a verbatim source quote", async () => {
     const week = {
       weekNumber: 1,

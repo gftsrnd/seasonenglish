@@ -70,6 +70,29 @@ describe("local scenario account states", () => {
       .resolves.toHaveProperty("rowCount", 1);
   });
 
+  it("seeds an inactive learner and a consecutive streak spanning the weekend", async () => {
+    const inactive = LOCAL_SCENARIO_ACCOUNTS.find(({ key }) => key === "learner-reminder")!;
+    const history = LOCAL_SCENARIO_ACCOUNTS.find(({ key }) => key === "learner-history")!;
+    const inactivity = await client.query<{ inactive_days: number }>(
+      `select floor(extract(epoch from (now() - max(occurred_at))) / 86400)::int as inactive_days
+       from activities where learner_id = $1`,
+      [inactive.id]
+    );
+    expect(inactivity.rows[0]?.inactive_days).toBeGreaterThanOrEqual(2);
+
+    const streak = await client.query<{ day: string; weekday: number }>(
+      `select to_char(occurred_at, 'YYYY-MM-DD') as day,
+              extract(isodow from occurred_at)::int as weekday
+       from activities where learner_id = $1
+       group by to_char(occurred_at, 'YYYY-MM-DD'), extract(isodow from occurred_at)
+       order by day`,
+      [history.id]
+    );
+    expect(streak.rows.map(({ weekday }) => weekday)).toEqual([4, 5, 6, 7, 1]);
+    const days = streak.rows.map(({ day }) => Date.parse(`${day}T00:00:00Z`));
+    expect(days.slice(1).every((day, index) => day - days[index]! === 86_400_000)).toBe(true);
+  });
+
   it("publishes five weekly lessons for every approved scenario level", async () => {
     const result = await client.query<{ cefr: string; lessons: number }>(
       `select ls.cefr, count(l.id)::int as lessons

@@ -116,21 +116,27 @@ export function registerSystemRoutes(
       provider: "claude" | "gemini" | "openai" | null;
       model: string | null;
       configured: boolean;
+      ai_test_disabled: boolean;
       last_test_status: "never" | "success" | "error" | "timeout" | null;
     }>(
       `select pc.provider, pc.model, (pc.secret_ciphertext is not null) as configured,
+              coalesce((os.configuration ->> 'aiTestDisabled')::boolean, false) as ai_test_disabled,
               pc.last_test_status
-       from users u left join provider_configurations pc on pc.organization_id = u.organization_id
+       from users u
+       left join provider_configurations pc on pc.organization_id = u.organization_id
+       left join organization_settings os on os.organization_id = u.organization_id
        where u.id = $1`,
       [request.e4sSession!.user.id]
     );
     const providerRow = provider.rows[0];
     const aiConfigured = Boolean(providerRow?.configured);
-    const ai = aiAvailable || (aiRuntimeEnabled && aiConfigured && ["openai", "claude"].includes(providerRow?.provider ?? ""));
+    const aiTestDisabled = providerRow?.ai_test_disabled === true;
+    const ai = !aiTestDisabled && (aiAvailable || (aiRuntimeEnabled && aiConfigured && ["openai", "claude"].includes(providerRow?.provider ?? "")));
     return {
       api: true,
       database: true,
       ai,
+      aiTestDisabled,
       aiConfigured,
       aiProvider: providerRow?.provider ?? null,
       aiModel: providerRow?.model ?? null,

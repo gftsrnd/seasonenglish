@@ -48,6 +48,7 @@ const FOUNDATION_CONTRACT = [
   "grammar.usage must be exactly one short sentence in Vietnamese for A1-A2 or English for B1-C1 explaining when to use only the classified target; do not broaden the scope.",
   "Each grammar example must be one English sentence of at most 10 words. Do not add Vietnamese translations, parentheses, or a second sentence.",
   "Provide exactly three instruction steps, two grammar examples, and three pronunciation words.",
+  "For pronunciation, extract the one slash-delimited target sound from pronunciation.focus, then verify word1.ipa, word2.ipa, and word3.ipa each literally contain that target sound. IPA must be the standard pronunciation of its word: never alter or invent an IPA spelling to force a match; replace the word instead.",
   "Keep the content CEFR-appropriate, practical, concise, and directly teachable. Return no prose outside the tool."
 ].join("\n");
 
@@ -201,9 +202,10 @@ export async function generateWeeklyLessons(
     const resultInput = { ...input, grammarClassification: grammarClassificationResults[index]?.output ?? fallbackGrammarClassification };
     let findings: Array<{ path: PropertyKey[]; message: string }> = [];
     let previousOutput = "";
+    let pronunciationRepair = "";
     for (let attempt = 1; attempt <= MAX_FOUNDATION_ATTEMPTS; attempt += 1) {
       const repair = findings.length
-        ? `\n\nREPAIR REQUIRED: ${findings.map((issue) => `${issue.path.join(".")}: ${issue.message}`).join("; ")}${previousOutput ? `\nPREVIOUS INVALID OUTPUT: ${previousOutput}` : ""}\nReturn a complete corrected foundation without changing the lesson focus; preserve every valid field.`
+        ? `\n\nREPAIR REQUIRED: ${findings.map((issue) => `${issue.path.join(".")}: ${issue.message}`).join("; ")}${pronunciationRepair}${previousOutput ? `\nPREVIOUS INVALID OUTPUT: ${previousOutput}` : ""}\nReturn a complete corrected foundation without changing the lesson focus; preserve every valid field.`
         : "";
       let result: Awaited<ReturnType<AiTaskRunner["runTask"]>>;
       try {
@@ -221,6 +223,7 @@ export async function generateWeeklyLessons(
       const parsed = weeklyLessonFoundationOutputSchema.safeParse(result.output);
       if (!parsed.success) {
         findings = parsed.error.issues.slice(0, 8).map((issue) => ({ path: issue.path, message: issue.message }));
+        pronunciationRepair = pronunciationRepairInstruction(result.output, findings);
       } else {
         const normalized = normalizeFoundationObjectiveActions(parsed.data, input.cefr);
         if (resultInput.grammarClassification.status === "classified" && (!normalized.title || !normalized.grammar)) {
@@ -500,7 +503,15 @@ function grammarEvidenceFindings(
     allLessonFocuses: string[];
   }
 ): Array<{ path: PropertyKey[]; message: string }> {
-  if (classification.status !== "classified") return [];
+  if (classification.status !== "classified") {
+    if (/(?:\+|\[[^\]]+\]|\.{3}|…)/u.test(input.lessonFocus)) {
+      return [{
+        path: ["status"],
+        message: "lessonFocus declares an explicit sentence frame; classify that frame instead of hiding grammar"
+      }];
+    }
+    return [];
+  }
   const sources: Record<string, string[]> = {
     topic: [input.topic],
     description: [input.description],
@@ -567,6 +578,21 @@ function boundedJson(value: unknown): string {
   } catch {
     return "";
   }
+}
+
+function pronunciationRepairInstruction(
+  output: unknown,
+  findings: Array<{ path: PropertyKey[]; message: string }>
+): string {
+  const pronunciation = output && typeof output === "object"
+    ? (output as { pronunciation?: { focus?: unknown } }).pronunciation
+    : undefined;
+  const focus = typeof pronunciation?.focus === "string" ? pronunciation.focus.trim() : "";
+  const invalidWords = [...new Set(findings
+    .filter((issue) => issue.path[0] === "pronunciation" && /^word[123]$/u.test(String(issue.path[1] ?? "")))
+    .map((issue) => String(issue.path[1])))];
+  if (!focus || invalidWords.length === 0) return "";
+  return `\nPRONUNCIATION REPAIR: The fixed target sound is ${focus}. Keep pronunciation.focus unchanged. Replace only ${invalidWords.join(" and ")} with common words whose standard dictionary IPA visibly contains ${focus}. Never alter or invent an IPA spelling to force a match; choose another word instead. Preserve the other pronunciation words and all non-pronunciation fields.`;
 }
 
 function isInvalidAiOutput(error: unknown): boolean {

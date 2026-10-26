@@ -522,7 +522,10 @@ export const weeklyLessonDayOutputSchema = z.preprocess((value) => {
 }, weeklyLessonDayBaseOutputSchema);
 export type WeeklyLessonDayTaskOutput = z.infer<typeof weeklyLessonDayOutputSchema>;
 
-const strictWordSlotSchema = z.object({ word: z.string().trim().min(1), ipa: z.string().trim().min(1) });
+const strictWordSlotSchema = z.object({
+  word: z.string().trim().min(1),
+  ipa: z.string().trim().regex(/^\/.+\/$/u, "IPA must be enclosed in slashes")
+});
 const weeklyLessonFoundationBaseOutputSchema = z.object({
   title: z.string().trim().min(1).max(60).nullable(),
   durationMinutes: z.union([z.literal(5), z.literal(10), z.literal(15), z.literal(20)]),
@@ -566,6 +569,19 @@ const weeklyLessonFoundationBaseOutputSchema = z.object({
   if (foundation.title && /^S\s*\+\s*V(?:\s*\+\s*O)?$/i.test(foundation.title)) {
     context.addIssue({ code: "custom", path: ["title"], message: "Title must name the concrete lesson focus" });
   }
+    const targetSound = foundation.pronunciation.focus.match(/\/([^/]+)\//)?.[1]?.trim();
+    if (targetSound && !/\s/.test(targetSound)) {
+      for (const key of ["word1", "word2", "word3"] as const) {
+        const ipa = foundation.pronunciation[key].ipa.replaceAll("/", "");
+        if (!ipaContainsTargetSound(ipa, targetSound)) {
+          context.addIssue({
+            code: "custom",
+            path: ["pronunciation", key, "ipa"],
+            message: `Pronunciation IPA must contain the target sound /${targetSound}/`
+          });
+        }
+      }
+    }
   if (!foundation.grammar) return;
   if (!isSingleSentence(foundation.grammar.usage)) {
     context.addIssue({ code: "custom", path: ["grammar", "usage"], message: "Grammar usage must be exactly one sentence" });
@@ -577,6 +593,20 @@ const weeklyLessonFoundationBaseOutputSchema = z.object({
     }
   }
 });
+
+const IPA_VOWEL = /[aeiouyæɑɒɔəɜɛɪʊʌɐɵœøɞɘɤɨʉɯ]/u;
+
+function ipaContainsTargetSound(ipa: string, targetSound: string): boolean {
+  if (!IPA_VOWEL.test(targetSound[0] ?? "")) return ipa.includes(targetSound);
+  let index = ipa.indexOf(targetSound);
+  while (index >= 0) {
+    const before = ipa[index - 1] ?? "";
+    const after = ipa[index + targetSound.length] ?? "";
+    if (!IPA_VOWEL.test(before) && !IPA_VOWEL.test(after)) return true;
+    index = ipa.indexOf(targetSound, index + 1);
+  }
+  return false;
+}
 export const weeklyLessonFoundationOutputSchema = weeklyLessonFoundationBaseOutputSchema;
 
 function isSingleSentence(value: string): boolean {

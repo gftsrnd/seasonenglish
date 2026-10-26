@@ -159,7 +159,7 @@ describe("learner lesson study content", () => {
     expect(resolveLessonVocabularyImage).toHaveBeenCalledWith(1);
   });
 
-  it("renders real lesson media and a bundled bitmap fallback when providers are unavailable", async () => {
+  it("renders real lesson media and gives unavailable vocabulary images back to the text layout", async () => {
     const resolveLessonVocabularyImage = vi.fn()
       .mockResolvedValueOnce({
         status: "available",
@@ -189,7 +189,8 @@ describe("learner lesson study content", () => {
     render(<LearnerLesson view={{ lesson, lock: null }} actions={{ navigate: vi.fn(), speak: vi.fn(), saveLessonProgress: vi.fn(), resolveLessonVocabularyImage } as any} />);
 
     expect(await screen.findByRole("img", { name: "new" })).toHaveAttribute("src", "https://storage.example/new.jpg");
-    expect(await screen.findByRole("img", { name: "Minh hoạ from" })).toHaveAttribute("src", "/media/mascot/season-bear.png");
+    expect(await screen.findByTestId("hidden-content-image")).toHaveClass("content-image--hidden");
+    expect(screen.queryByRole("img", { name: "Minh hoạ from" })).not.toBeInTheDocument();
     expect(resolveLessonVocabularyImage).toHaveBeenNthCalledWith(1, 0);
     expect(resolveLessonVocabularyImage).toHaveBeenNthCalledWith(2, 1);
   });

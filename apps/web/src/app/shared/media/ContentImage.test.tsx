@@ -58,6 +58,13 @@ describe("ContentImage", () => {
     expect(await screen.findByRole("img", { name: "Minh hoạ reliable" })).toHaveAttribute("src", "/media/mascot/season-bear.png");
   });
 
+  it("marks an unavailable optional image as hidden so vocabulary content can use the full row", async () => {
+    vi.stubGlobal("IntersectionObserver", undefined);
+    const { container } = render(<ContentImage term="reliable" unavailable="hide" load={() => Promise.resolve({ status: "unavailable" })} />);
+    expect(await screen.findByTestId("hidden-content-image")).toHaveClass("content-image--hidden");
+    expect(container.querySelector('img')).not.toBeInTheDocument();
+  });
+
   it.each([
     ["unavailable", () => Promise.resolve({ status: "unavailable" } as ContentImageView)],
     ["rejected", () => Promise.reject(new Error("offline"))]

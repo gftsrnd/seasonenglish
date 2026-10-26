@@ -361,6 +361,8 @@ export interface ManagerReportView {
 export interface ManagerSettingsView {
   readonly organizationName: string;
   readonly programName: string;
+  /** Manager-only acceptance-test switch. Saved provider credentials remain unchanged. */
+  readonly aiTestDisabled?: boolean;
   readonly reminderInactiveDays: number;
   readonly weeklyReportEnabled: boolean;
   readonly pilotStartDate: string;
@@ -431,6 +433,7 @@ export interface SystemCapabilitiesView {
   readonly api: true;
   readonly database: true;
   readonly ai: boolean;
+  readonly aiTestDisabled?: boolean;
   /** Whether Manager has saved an encrypted provider credential for this organization. */
   readonly aiConfigured?: boolean;
   readonly aiProvider?: ManagerProviderKind | null;

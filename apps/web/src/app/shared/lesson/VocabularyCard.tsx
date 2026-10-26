@@ -21,7 +21,7 @@ export function VocabularyCard({ item, loadImage, speak, relations = [] }: {
   const type = vietnameseWordType(item.type, item.word);
   return <article className="word-card vocabulary-card" aria-label={item.word}>
     <div className="vocabulary-card-heading">
-      <ContentImage term={item.word} required load={loadImage} />
+      <ContentImage term={item.word} unavailable="hide" load={loadImage} />
       <div className="vocabulary-card-main">
         <div className="vocabulary-card-word"><h3>{item.word}</h3><span className="vocabulary-card-type">{type}</span>{item.pronunciation ? <span className="ipa vocabulary-card-pronunciation">{item.pronunciation}</span> : null}</div>
         <VocabularySpeechButton text={item.word} label={`Nghe từ ${item.word}`} iconOnly speak={speak} />

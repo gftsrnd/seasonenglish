@@ -15,4 +15,11 @@ describe("lesson presentation", () => {
     expect(learnerFacingObjective("SWBAT summarize the project status.", "B1"))
       .toBe("By the end of this lesson, you will be able to summarize the project status.");
   });
+
+  it("does not repeat a learner-facing objective prefix already returned by AI", () => {
+    expect(learnerFacingObjective("Sau bài học, bạn có thể nói số tiền của một khoản chi phí dự án.", "A2"))
+      .toBe("Sau bài học, bạn có thể nói số tiền của một khoản chi phí dự án.");
+    expect(learnerFacingObjective("Sau bài học, bạn có thể sau bài học, bạn có thể dùng đúng cấu trúc.", "A1"))
+      .toBe("Sau bài học, bạn có thể dùng đúng cấu trúc.");
+  });
 });

@@ -256,6 +256,12 @@ async function seedReminderAndAppealScenarios(client: Client) {
   const reminder = byKey.get("learner-reminder")!;
   const appeal = byKey.get("learner-appeal")!;
   await client.query(
+    `insert into activities (id, learner_id, activity_type, reference_type, reference_id, minutes, evidence, occurred_at)
+     values ($1, $2, 'lesson', 'lesson', $3, 10, '{"fixture":"inactive-over-two-days"}'::jsonb,
+       current_date - interval '3 days')`,
+    [reminder.id.replace("20000000", "24000000"), reminder.id, DEMO_IDS.lessons[0]]
+  );
+  await client.query(
     `insert into reminders (id, learner_id, reason, message, status, created_by)
      values ($1, $2, 'inactive_learning', 'Bạn chưa có hoạt động học gần đây. Hãy quay lại E4S để tiếp tục mục tiêu tuần.', 'queued', $3)`,
     [reminder.id.replace("20000000", "22000000"), reminder.id, byKey.get("manager-review")!.id]
@@ -299,8 +305,12 @@ async function seedLearningScenarios(client: Client) {
       );
       await client.query(
         `insert into activities (id, learner_id, activity_type, reference_type, reference_id, minutes, evidence, occurred_at)
-         values (gen_random_uuid(), $1, 'lesson', 'lesson', $2, 10, $3::jsonb, now() - interval '1 day' - make_interval(hours => $4))`,
-        [account.id, lessonId, JSON.stringify({ fixture: key }), index]
+         values (gen_random_uuid(), $1, 'lesson', 'lesson', $2, 10, $3::jsonb,
+           case when $5 = 'learner-history'
+             then date_trunc('week', current_date)::date - interval '4 days' + make_interval(days => $4)
+             else now() - interval '1 day' - make_interval(hours => $4)
+           end)`,
+        [account.id, lessonId, JSON.stringify({ fixture: key }), index, key]
       );
     }
   }

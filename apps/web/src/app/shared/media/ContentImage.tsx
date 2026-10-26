@@ -8,10 +8,11 @@ type ContentImageState =
   | { status: "available"; image: Extract<ContentImageView, { status: "available" }> }
   | { status: "unavailable" };
 
-export function ContentImage({ term, load }: {
+export function ContentImage({ term, load, unavailable = "mascot" }: {
   term: string;
   load: () => Promise<ContentImageView>;
   required?: boolean;
+  unavailable?: "mascot" | "hide";
 }) {
   const hostRef = useRef<HTMLDivElement>(null);
   const loadRef = useRef(load);
@@ -48,6 +49,9 @@ export function ContentImage({ term, load }: {
     return () => { live = false; observer.disconnect(); };
   }, [term]);
 
+  if (state.status === "unavailable" && unavailable === "hide") {
+    return <span className="content-image content-image--hidden" data-testid="hidden-content-image" aria-hidden="true" />;
+  }
   if (state.status === "unavailable") {
     return <figure className="content-image content-image--available content-image--fallback">
       <img src="/media/mascot/season-bear.png" alt={`Minh hoạ ${term}`} />

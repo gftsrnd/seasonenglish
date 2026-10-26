@@ -5,7 +5,7 @@ import { Pool } from "pg";
 import { loadEnvFile } from "node:process";
 import { buildApi } from "./app.js";
 import { createResendIdentityEmailSender } from "./modules/identity/index.js";
-import { createOrganizationAiRunnerFactory } from "./modules/ai/runtime.js";
+import { createOrganizationAiRunnerFactory, normalizeAiMaxAttempts } from "./modules/ai/runtime.js";
 import { createContentMediaService } from "./modules/media/index.js";
 import { createOpenverseProvider } from "./modules/media/providers/openverse.js";
 import { createPixabayProvider } from "./modules/media/providers/pixabay.js";
@@ -23,10 +23,7 @@ if (!databaseUrl) throw new Error("DATABASE_URL is required");
 const pool = new Pool({ connectionString: databaseUrl });
 const configuredAiTimeoutMs = Number(process.env.AI_TIMEOUT_MS ?? 60_000);
 const aiTimeoutMs = Number.isFinite(configuredAiTimeoutMs) && configuredAiTimeoutMs > 0 ? configuredAiTimeoutMs : 60_000;
-const configuredAiMaxAttempts = Number(process.env.AI_MAX_ATTEMPTS ?? 2);
-const aiMaxAttempts = Number.isFinite(configuredAiMaxAttempts)
-  ? Math.max(1, Math.min(2, Math.trunc(configuredAiMaxAttempts)))
-  : 2;
+const aiMaxAttempts = normalizeAiMaxAttempts(process.env.AI_MAX_ATTEMPTS);
 const aiRunner = process.env.AI_PROVIDER === "anthropic" && process.env.ANTHROPIC_API_KEY
   ? createAiService({
       registry: AI_TASKS,

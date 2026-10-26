@@ -12,6 +12,7 @@ afterEach(cleanup);
 
 const manager: ManagerSettingsView = {
   organizationName: "GFT Demo", programName: "E4S Pilot", reminderInactiveDays: 3, weeklyReportEnabled: true,
+  aiTestDisabled: false,
   pilotStartDate: "2026-10-12", pilotWeeks: 2, weekOverride: 0, minMinutesPerDay: 15, courseTheme: "Tiếng Anh giao tiếp công sở", coachDailyLimit: 20,
   testTimed: true, testTimes: { listening: 15, reading: 20, writing: 20, speaking: 15 }, testWarnLimit: 3,
   levelUp: { days: 14, lessons: 90, firstTry: 75, submission: 80, coach: 4, coachTurns: 6, wrong: 30, minParts: 4 },
@@ -113,6 +114,17 @@ describe("new Settings app branch", () => {
     expect(callbacks.onSaveManager).toHaveBeenCalled();
     await user.click(screen.getByRole("button", { name: "Xuất JSON" }));
     expect(callbacks.onExportJson).toHaveBeenCalled();
+  });
+
+  it("lets Manager disable AI for acceptance testing without changing the provider key", async () => {
+    const callbacks = actions();
+    render(<SettingsPage role="manager" manager={manager} product={product} capabilities={capabilities} ai={{ provider: "openai", configured: true, baseUrl: "https://api.groq.com/openai/v1", model: "qwen/qwen3.8-27b", speechToTextModel: "whisper-large-v3-turbo" }} actions={callbacks} />);
+
+    await userEvent.setup().click(screen.getByRole("checkbox", { name: "Tắt AI để kiểm thử chế độ dự phòng" }));
+    await userEvent.setup().click(screen.getByRole("button", { name: "Lưu chế độ kiểm thử AI" }));
+
+    expect(callbacks.onSaveManager).toHaveBeenCalledWith(expect.objectContaining({ aiTestDisabled: true }));
+    expect(screen.getByText(/Khoá API vẫn được giữ nguyên/)).toBeInTheDocument();
   });
 
   it("keeps JSON import keyboard-accessible and busy until the file action completes", async () => {

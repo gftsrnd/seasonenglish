@@ -39,8 +39,8 @@ describe("Manager settings operational actions", () => {
       expect(response.statusCode, response.body).toBe(200);
       return String(response.headers["set-cookie"]).split(";")[0] ?? "";
     };
-    managerCookie = await login("manager@e4s.local", "manager-pass");
-    operatorCookie = await login("operator@e4s.local", "operator-pass");
+    managerCookie = await login("quoc.bao.le@e4s.local", "manager-pass");
+    operatorCookie = await login("thu.ha.tran@e4s.local", "operator-pass");
   }, 30_000);
 
   afterEach(() => vi.restoreAllMocks());
@@ -208,6 +208,25 @@ describe("Manager settings operational actions", () => {
     expect(operator.json()).toEqual({ code: "FORBIDDEN" });
   });
 
+  it("expands weekly topics and the lesson matrix when Manager extends the pilot", async () => {
+    const current = await app.inject({ method: "GET", url: "/api/v1/manager/settings", headers: { cookie: managerCookie } });
+    expect(current.statusCode, current.body).toBe(200);
+    const { organizationName: _organizationName, ...settings } = current.json();
+    const saved = await app.inject({
+      method: "PUT", url: "/api/v1/manager/settings", headers: { cookie: managerCookie },
+      payload: { ...settings, pilotWeeks: 4 }
+    });
+    expect(saved.statusCode, saved.body).toBe(200);
+
+    const weeks = await app.inject({ method: "GET", url: "/api/v1/content/weeks", headers: { cookie: operatorCookie } });
+    const matrix = await app.inject({ method: "GET", url: "/api/v1/content/lesson-matrix", headers: { cookie: operatorCookie } });
+    expect(weeks.statusCode, weeks.body).toBe(200);
+    expect(matrix.statusCode, matrix.body).toBe(200);
+    expect(weeks.json().pilot.weekCount).toBe(4);
+    expect(weeks.json().weeks.map((week: { weekNumber: number }) => week.weekNumber)).toEqual([1, 2, 3, 4]);
+    expect(matrix.json().weeks.map((week: { weekNumber: number }) => week.weekNumber)).toEqual([1, 2, 3, 4]);
+  });
+
   it("requires local maintenance confirmation and an export backup before seed or wipe", async () => {
     const capabilities = await app.inject({ method: "GET", url: "/api/v1/system/capabilities", headers: { cookie: managerCookie } });
     expect(capabilities.statusCode, capabilities.body).toBe(200);
@@ -242,9 +261,9 @@ describe("Manager settings operational actions", () => {
     expect(seeded.json()).toMatchObject({ action: "seed_demo", completed: true, backupId: seedConfirmation.json().backupId });
     await expect(pool.query("select email from users where organization_id = $1 order by email", [DEMO_IDS.organization]))
       .resolves.toMatchObject({ rows: [
-        { email: "learner@e4s.local" },
-        { email: "manager@e4s.local" },
-        { email: "operator@e4s.local" }
+        { email: "minh.anh.nguyen@e4s.local" },
+        { email: "quoc.bao.le@e4s.local" },
+        { email: "thu.ha.tran@e4s.local" }
       ] });
 
     const wipeConfirmation = await app.inject({ method: "POST", url: "/api/v1/manager/settings/wipe-confirmation", headers: { cookie: managerCookie }, payload: {} });

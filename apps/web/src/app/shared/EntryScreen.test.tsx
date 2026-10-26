@@ -95,9 +95,22 @@ describe("EntryScreen interaction", () => {
     await user.type(screen.getByLabelText("Email"), "staff");
     expect(screen.getByLabelText("Email").closest("label")).toHaveTextContent("Nhập email hợp lệ");
     await user.type(screen.getByLabelText("Mật khẩu"), "short");
-    expect(screen.getByLabelText("Mật khẩu").closest("label")).toHaveTextContent("Mật khẩu cần ít nhất 8 ký tự");
-    await user.type(screen.getByLabelText("Mật khẩu"), "123");
     expect(screen.getByLabelText("Mật khẩu").closest("label")).not.toHaveTextContent("Mật khẩu cần ít nhất 8 ký tự");
+  });
+
+  it("explains when a learner signs in through the staff tab", async () => {
+    const user = userEvent.setup();
+    const client = stubClient();
+    client.staffLogin = vi.fn().mockRejectedValue(new Error("WRONG_LOGIN_PATH"));
+    render(<EntryScreen client={client} onAuthenticated={vi.fn()} />);
+
+    await user.click(screen.getByRole("tab", { name: "Nhân sự" }));
+    await user.type(screen.getByLabelText("Email"), "learner@e4s.local");
+    await user.type(screen.getByLabelText("Mật khẩu"), "246810");
+    await user.click(screen.getByRole("button", { name: "Đăng nhập nhân sự" }));
+
+    expect(client.staffLogin).toHaveBeenCalledWith({ email: "learner@e4s.local", password: "246810" });
+    expect(await screen.findByRole("alert")).toHaveTextContent("Không thể đăng nhập. Vui lòng kiểm tra email, mật khẩu và vai trò. Tài khoản người học cần đăng nhập ở tab Người học.");
   });
 
   it("validates every PIN recovery step while typing", async () => {

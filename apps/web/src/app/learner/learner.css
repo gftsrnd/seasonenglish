@@ -1176,6 +1176,13 @@ h1,h2,h3,h4,h1 b,h2 b,h3 b,h4 b{font-weight:600 !important}
   .coach-page .coach-feedback-scores{min-width:0}
   .coach-page .coach-feedback-criteria{grid-template-columns:1fr}
 }
+
+/* When no relevant vocabulary image is available, use the whole row for readable content. */
+.lesson-page .vocabulary-card-heading:has(> .content-image--hidden) {
+  grid-template-columns: minmax(0, 1fr);
+}
+.lesson-page .vocabulary-card-phrases,
+.lesson-page .vocabulary-card-label { text-align: left; }
 .app-learner-page .celebration-icon{
   display:block;
   width:44px;
