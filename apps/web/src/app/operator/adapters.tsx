@@ -148,6 +148,8 @@ export interface DashboardAdapterContext {
     profileSummary?: string | null;
     aiScored?: boolean;
     humanScored?: boolean;
+    aiScoringStatus?: "queued" | "running" | "succeeded" | "failed";
+    aiScoringErrorCode?: string | null;
   }>;
   levelRequestDetails?: Record<string, { from: Cefr; to: Cefr }>;
 }
@@ -179,7 +181,7 @@ export function adaptAssessmentOverview(source: AssessmentReviewOverviewView, co
           ...(score?.heuristic ? { heuristic: true } : {})
         };
       });
-      return { id: item.attemptId, learnerId: item.learnerId, name: item.learnerName, submittedAt: operatorDateTime(item.submittedAt), total: detail?.total ?? undefined, rawLevel: detail?.rawLevel, aiSuggestedCefr: item.suggestedLevel as Cefr | null, sectionScores, rationale: detail?.rationale, monthlyGoal: detail?.monthlyGoal, profileSummary: detail?.profileSummary ?? (item.profileComplete === undefined ? undefined : item.profileComplete ? "Đã điền hồ sơ" : "Chưa điền hồ sơ"), suggestedLevel: (item.suggestedLevel ?? detail?.rawLevel) as Cefr | undefined, levels: CEFR_LEVELS, aiScored: detail?.aiScored, humanScored: detail?.humanScored, canRescore: true, rescoreBusy: context.rescoreBusy === item.attemptId };
+      return { id: item.attemptId, learnerId: item.learnerId, name: item.learnerName, submittedAt: operatorDateTime(item.submittedAt), total: detail?.total ?? undefined, rawLevel: detail?.rawLevel, aiSuggestedCefr: item.suggestedLevel as Cefr | null, sectionScores, rationale: detail?.rationale, monthlyGoal: detail?.monthlyGoal, profileSummary: detail?.profileSummary ?? (item.profileComplete === undefined ? undefined : item.profileComplete ? "Đã điền hồ sơ" : "Chưa điền hồ sơ"), suggestedLevel: (item.suggestedLevel ?? detail?.rawLevel) as Cefr | undefined, levels: CEFR_LEVELS, aiScored: detail?.aiScored, humanScored: detail?.humanScored, aiScoringStatus: detail?.aiScoringStatus, aiScoringErrorCode: detail?.aiScoringErrorCode, canRescore: true, rescoreBusy: context.rescoreBusy === item.attemptId };
     }),
     levelRequests: source.pendingLevelUp.map(item => {
       const levels = context.levelRequestDetails?.[item.attemptId];

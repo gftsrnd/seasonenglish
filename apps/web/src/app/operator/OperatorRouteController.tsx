@@ -156,7 +156,11 @@ function placementDetail(detail: ContentReviewAssessmentDetailView, profile?: As
     rationale: criterion("rationale"),
     monthlyGoal: profile?.monthlyGoal ?? criterion("monthlyGoal"),
     aiScored: detail.scores.some(score => score.source === "ai"),
-    humanScored: detail.scores.some(score => score.source === "human")
+    humanScored: detail.scores.some(score => score.source === "human"),
+    ...(detail.aiScoring ? {
+      aiScoringStatus: detail.aiScoring.status,
+      aiScoringErrorCode: detail.aiScoring.errorCode
+    } : {})
   };
 }
 

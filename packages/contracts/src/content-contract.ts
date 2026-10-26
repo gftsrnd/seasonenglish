@@ -250,6 +250,12 @@ export interface ContentReviewAssessmentDetailView {
     source: "deterministic" | "ai" | "human";
     criteria: Record<string, unknown>;
   }>;
+  aiScoring?: {
+    status: "queued" | "running" | "succeeded" | "failed";
+    requestId: string;
+    errorCode: string | null;
+    updatedAt: string;
+  } | null;
   integrityEvents: Array<Record<string, unknown>>;
   activity?: Array<{ at: string; label: string; detail?: string }>;
   decision: AssessmentDecisionView | null;

@@ -628,6 +628,7 @@ export function registerContentRoutes(
         };
       }),
       scores: detail.scores,
+      aiScoring: detail.aiScoring ?? null,
       ...(detail.sections ? { sections: detail.sections } : {}),
       ...(detail.activity ? { activity: detail.activity } : {}),
       integrityEvents: detail.integrityEvents,

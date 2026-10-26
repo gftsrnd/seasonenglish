@@ -387,6 +387,12 @@ export interface AssessmentReviewAttemptDetailView extends AssessmentReviewAttem
     source: "deterministic" | "ai" | "human";
     criteria: Record<string, unknown>;
   }>;
+  aiScoring?: {
+    status: "queued" | "running" | "succeeded" | "failed";
+    requestId: string;
+    errorCode: string | null;
+    updatedAt: string;
+  } | null;
   sections?: Array<{
     section: AssessmentSectionCode;
     label: string;

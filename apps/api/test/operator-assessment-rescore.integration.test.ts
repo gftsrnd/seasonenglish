@@ -1,7 +1,7 @@
 import { Pool } from "pg";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { migrateDatabase, resetPublicSchema, seedDemo } from "@e4s/database";
-import { createCredentialHash } from "@e4s/domain/identity";
+import { createCredentialHash, createPinHash } from "@e4s/domain/identity";
 import { DEMO_IDS } from "@e4s/test-support";
 import { buildApi } from "../src/app.js";
 
@@ -51,7 +51,7 @@ describe("Operator assessment AI rescore", () => {
         [
           DEMO_IDS.operator, await createCredentialHash("operator-pass"),
           DEMO_IDS.manager, await createCredentialHash("manager-pass"),
-          DEMO_IDS.learner, await createCredentialHash("learner-pass")
+          DEMO_IDS.learner, await createPinHash("123456")
         ]
       );
       await client.query(
@@ -82,14 +82,18 @@ describe("Operator assessment AI rescore", () => {
       );
     } finally { client.release(); }
     await app.ready();
-    const login = async (url: string, email: string, password: string) => {
-      const response = await app.inject({ method: "POST", url, payload: { email, password } });
+    const login = async (url: string, email: string, credential: string) => {
+      const response = await app.inject({
+        method: "POST",
+        url,
+        payload: url.includes("/learner/") ? { email, pin: credential } : { email, password: credential }
+      });
       expect(response.statusCode, response.body).toBe(200);
       return String(response.headers["set-cookie"]).split(";")[0] ?? "";
     };
     operatorCookie = await login("/api/auth/staff/login", "thu.ha.tran@e4s.local", "operator-pass");
     managerCookie = await login("/api/auth/staff/login", "quoc.bao.le@e4s.local", "manager-pass");
-    learnerCookie = await login("/api/auth/learner/login", "minh.anh.nguyen@e4s.local", "learner-pass");
+    learnerCookie = await login("/api/auth/learner/login", "minh.anh.nguyen@e4s.local", "123456");
   }, 30_000);
 
   afterAll(async () => { await app.close(); await pool.end(); });
@@ -139,6 +143,37 @@ describe("Operator assessment AI rescore", () => {
     expect(manager.statusCode, manager.body).toBe(200);
     const learner = await app.inject({ ...request, headers: { cookie: learnerCookie } });
     expect(learner.statusCode).toBe(403);
+  });
+
+  it("persists a failed AI rescore without erasing the last valid scores", async () => {
+    runTask.mockRejectedValueOnce(new Error("AI_OUTPUT_INVALID"));
+    const before = await pool.query<{ section: string; score: string; source: string }>(
+      "select section, score::text, source from assessment_scores where attempt_id = $1 order by section",
+      [DEMO_IDS.placementAttempt]
+    );
+    const failed = await app.inject({
+      method: "POST",
+      url: `/api/v1/assessment-reviews/${DEMO_IDS.placementAttempt}/rescore`,
+      headers: { cookie: operatorCookie },
+      payload: { requestId: "operator-rescore-failed" }
+    });
+    expect(failed.statusCode, failed.body).toBe(502);
+    expect(failed.json()).toEqual({ code: "AI_OUTPUT_INVALID" });
+
+    const detail = await app.inject({
+      method: "GET",
+      url: `/api/v1/assessment-reviews/attempts/${DEMO_IDS.placementAttempt}`,
+      headers: { cookie: operatorCookie }
+    });
+    expect(detail.statusCode, detail.body).toBe(200);
+    expect(detail.json()).toMatchObject({
+      aiScoring: { status: "failed", errorCode: "AI_OUTPUT_INVALID", requestId: "operator-rescore-failed" }
+    });
+    const after = await pool.query<{ section: string; score: string; source: string }>(
+      "select section, score::text, source from assessment_scores where attempt_id = $1 order by section",
+      [DEMO_IDS.placementAttempt]
+    );
+    expect(after.rows).toEqual(before.rows);
   });
 
   it("recomputes task-level manual scores and CEFR from the authoritative total", async () => {

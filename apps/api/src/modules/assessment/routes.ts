@@ -286,20 +286,34 @@ export function registerAssessmentRoutes(app: FastifyInstance, pool: Pool, aiRun
     const actorId = request.e4sSession!.user.id;
     const context = await repositories.assessments.getRescoreContext(actorId, params.data.attemptId);
     if (!context) return reply.code(409).send({ code: "ASSESSMENT_RESCORE_NOT_ALLOWED" });
+    const scoring = await repositories.assessments.beginAssessmentAiScoring(actorId, params.data.attemptId, body.data.requestId);
+    if (!scoring) return reply.code(409).send({ code: "ASSESSMENT_RESCORE_NOT_ALLOWED" });
+    if (!scoring.started) {
+      const view = await repositories.assessments.getReviewAttempt(actorId, params.data.attemptId);
+      return view ?? reply.code(404).send({ code: "ASSESSMENT_ATTEMPT_NOT_FOUND" });
+    }
+    const failScoring = async (code: string, statusCode: 502 | 503 = 502) => {
+      await repositories.assessments.failAssessmentAiScoring(actorId, params.data.attemptId, body.data.requestId, code);
+      return reply.code(statusCode).send({ code });
+    };
     const runner = await runnerFor(actorId);
-    if (!runner) return reply.code(503).send({ code: "AI_UNAVAILABLE" });
+    if (!runner) return failScoring("AI_UNAVAILABLE", 503);
 
     const aiRequestKey = `${params.data.attemptId}:${body.data.requestId}`;
     const existing = await repositories.aiRuns.findSucceededOutputForOrganization(actorId, aiRequestKey, "assessment_scoring");
     if (existing) {
+      await repositories.assessments.completeAssessmentAiScoring(actorId, params.data.attemptId, body.data.requestId);
       const view = await repositories.assessments.getReviewAttempt(actorId, params.data.attemptId);
       return view ?? reply.code(404).send({ code: "ASSESSMENT_ATTEMPT_NOT_FOUND" });
     }
     const task = await repositories.aiRuns.activeTaskPrompt(actorId, "assessment_scoring");
-    if (!task) return reply.code(503).send({ code: "AI_PROMPT_NOT_READY" });
+    if (!task) return failScoring("AI_PROMPT_NOT_READY", 503);
     const writing = sectionByCode(context.definition, "writing");
     const speaking = sectionByCode(context.definition, "speaking");
-    if (!writing || !speaking) return reply.code(409).send({ code: "ASSESSMENT_PRODUCTIVE_SECTIONS_MISSING" });
+    if (!writing || !speaking) {
+      await repositories.assessments.failAssessmentAiScoring(actorId, params.data.attemptId, body.data.requestId, "ASSESSMENT_PRODUCTIVE_SECTIONS_MISSING");
+      return reply.code(409).send({ code: "ASSESSMENT_PRODUCTIVE_SECTIONS_MISSING" });
+    }
     const answerFor = (section: AssessmentSectionCode, taskKey: string) => context.attempt.responses.find((response) => response.section === section && response.taskKey === taskKey);
     try {
       const result = await runner.runTask("assessment_scoring", {
@@ -313,7 +327,7 @@ export function registerAssessmentRoutes(app: FastifyInstance, pool: Pool, aiRun
         speakingMaxScore: speaking.maxScore
       }, { systemPrompt: task.prompt });
       const parsed = assessmentGradingOutputSchema.safeParse(result.output);
-      if (!parsed.success) return reply.code(502).send({ code: "AI_OUTPUT_INVALID" });
+      if (!parsed.success) return failScoring("AI_OUTPUT_INVALID");
       const output = {
         ...parsed.data,
         writingScore: Math.min(writing.maxScore, parsed.data.writingScore),
@@ -336,12 +350,16 @@ export function registerAssessmentRoutes(app: FastifyInstance, pool: Pool, aiRun
           latencyMs: result.metadata.latencyMs
         }
       });
-      if (saved === null) return reply.code(409).send({ code: "ASSESSMENT_RESCORE_NOT_ALLOWED" });
+      if (saved === null) {
+        await repositories.assessments.failAssessmentAiScoring(actorId, params.data.attemptId, body.data.requestId, "ASSESSMENT_RESCORE_NOT_ALLOWED");
+        return reply.code(409).send({ code: "ASSESSMENT_RESCORE_NOT_ALLOWED" });
+      }
+      await repositories.assessments.completeAssessmentAiScoring(actorId, params.data.attemptId, body.data.requestId);
       const view = await repositories.assessments.getReviewAttempt(actorId, params.data.attemptId);
       return view ?? reply.code(404).send({ code: "ASSESSMENT_ATTEMPT_NOT_FOUND" });
     } catch (error) {
       request.log.warn({ error }, "Assessment AI rescore failed");
-      return reply.code(502).send({ code: "ASSESSMENT_RESCORE_FAILED" });
+      return failScoring(assessmentErrorCode(error, "ASSESSMENT_RESCORE_FAILED"));
     }
   });
 
@@ -692,7 +710,12 @@ export function registerAssessmentRoutes(app: FastifyInstance, pool: Pool, aiRun
     }
 
     await ensureObjectiveSectionScores(repositories.assessments, learnerId, definition, attempt);
-    if (runner && !await repositories.aiRuns.requestExists(learnerId, attempt.id, "assessment_scoring")) {
+    const initialScoring = await repositories.assessments.beginAssessmentAiScoring(learnerId, attempt.id, attempt.id);
+    if (!runner) {
+      if (initialScoring?.started) await repositories.assessments.failAssessmentAiScoring(learnerId, attempt.id, attempt.id, "AI_UNAVAILABLE");
+    } else if (await repositories.aiRuns.requestExists(learnerId, attempt.id, "assessment_scoring")) {
+      if (initialScoring?.started) await repositories.assessments.completeAssessmentAiScoring(learnerId, attempt.id, attempt.id);
+    } else if (initialScoring?.started) {
       const task = await repositories.aiRuns.activeTaskPrompt(learnerId, "assessment_scoring");
       const writing = sectionByCode(definition.blueprint, "writing");
       const speaking = sectionByCode(definition.blueprint, "speaking");
@@ -711,8 +734,18 @@ export function registerAssessmentRoutes(app: FastifyInstance, pool: Pool, aiRun
             await repositories.assessments.upsertSectionScore({ learnerId, attemptId: attempt.id, section: "speaking", score: Math.min(speaking.maxScore, output.data.speakingScore), criteria: { rationale: output.data.rationale, evidencePolicy: "Pronunciation is scored only when audio evidence exists." }, source: "ai" });
             await repositories.assessments.saveSuggestedDecision({ attemptId: attempt.id, learnerId, suggestedLevel: output.data.suggestedLevel, reason: output.data.rationale });
             await repositories.aiRuns.recordSucceeded({ userId: learnerId, requestId: attempt.id, taskId: task.taskId, promptVersionId: task.promptVersionId, output: output.data, metadata: result.metadata });
+            await repositories.assessments.completeAssessmentAiScoring(learnerId, attempt.id, attempt.id);
+          } else {
+            await repositories.assessments.failAssessmentAiScoring(learnerId, attempt.id, attempt.id, "AI_OUTPUT_INVALID");
           }
-        } catch (error) { request.log.warn({ error }, "Assessment AI grading failed; review remains pending"); }
+        } catch (error) {
+          const code = assessmentErrorCode(error, "ASSESSMENT_SCORING_FAILED");
+          await repositories.assessments.failAssessmentAiScoring(learnerId, attempt.id, attempt.id, code);
+          request.log.warn({ error, code }, "Assessment AI grading failed; review remains pending");
+        }
+      } else {
+        const code = task ? "ASSESSMENT_PRODUCTIVE_SECTIONS_MISSING" : "AI_PROMPT_NOT_READY";
+        await repositories.assessments.failAssessmentAiScoring(learnerId, attempt.id, attempt.id, code);
       }
     }
     const submitted = await repositories.assessments.submitAttempt(learnerId, attempt.id);

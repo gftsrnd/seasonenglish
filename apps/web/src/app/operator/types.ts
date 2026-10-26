@@ -50,6 +50,8 @@ export interface PendingPlacement {
   suggestedLevel?: Cefr | undefined;
   levels: Cefr[];
   aiScored?: boolean | undefined;
+  aiScoringStatus?: "queued" | "running" | "succeeded" | "failed" | undefined;
+  aiScoringErrorCode?: string | null | undefined;
   humanScored?: boolean | undefined;
   canRescore?: boolean | undefined;
   rescoreBusy?: boolean | undefined;

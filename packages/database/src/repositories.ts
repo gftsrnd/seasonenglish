@@ -4438,6 +4438,21 @@ class AssessmentRepository {
       `select section, score::text, source, criteria from assessment_scores where attempt_id = $1 order by section`,
       [attemptId]
     );
+    const aiScoringRows = await this.pool.query<{
+      state: "queued" | "running" | "succeeded" | "failed" | "dead";
+      request_id: string;
+      last_error: string | null;
+      updated_at: Date;
+    }>(
+      `select j.state, j.payload->>'requestId' as request_id, j.last_error, j.updated_at
+       from jobs j
+       join users reviewer on reviewer.id = $1
+       where j.kind = 'assessment.ai-score'
+         and j.payload->>'attemptId' = $2
+         and (j.payload->>'organizationId')::uuid = reviewer.organization_id
+       order by j.updated_at desc limit 1`,
+      [reviewerId, attemptId]
+    );
     const activityRows = await this.pool.query<{
       at: Date;
       source: string;
@@ -4551,6 +4566,12 @@ class AssessmentRepository {
         source: score.source,
         criteria: profileObject(score.criteria)
       })),
+      aiScoring: aiScoringRows.rows[0] ? {
+        status: aiScoringRows.rows[0].state === "dead" ? "failed" : aiScoringRows.rows[0].state,
+        requestId: aiScoringRows.rows[0].request_id,
+        errorCode: aiScoringRows.rows[0].last_error,
+        updatedAt: aiScoringRows.rows[0].updated_at.toISOString()
+      } : null,
       sections: reviewedSections,
       activity: activityRows.rows.map((event) => {
         const label = event.source === "submitted" ? "Đã nộp bài"
@@ -4573,6 +4594,55 @@ class AssessmentRepository {
         decidedAt: row.decided_at?.toISOString() ?? attempt.updatedAt.toISOString()
       } : null
     };
+  }
+
+  async beginAssessmentAiScoring(actorId: string, attemptId: string, requestId: string): Promise<{ started: boolean } | null> {
+    const result = await this.pool.query<{ id: string }>(
+      `insert into jobs (id, kind, payload, state, max_attempts, idempotency_key)
+       select $4, 'assessment.ai-score', jsonb_build_object(
+         'attemptId', aa.id::text,
+         'organizationId', learner.organization_id::text,
+         'requestId', $3::text
+       ), 'running', 1, $5
+       from assessment_attempts aa
+       join users learner on learner.id = aa.learner_id and learner.status = 'active'
+       join users actor on actor.id = $1 and actor.organization_id = learner.organization_id
+       where aa.id = $2 and aa.status in ('in_progress', 'pending_review')
+       on conflict (idempotency_key) do nothing
+       returning id`,
+      [actorId, attemptId, requestId, randomUUID(), `assessment-ai-score:${attemptId}:${requestId}`]
+    );
+    if (result.rowCount) return { started: true };
+    const existing = await this.pool.query<{ id: string }>(
+      `select j.id from jobs j
+       join users actor on actor.id = $1
+       where j.idempotency_key = $2
+         and (j.payload->>'organizationId')::uuid = actor.organization_id`,
+      [actorId, `assessment-ai-score:${attemptId}:${requestId}`]
+    );
+    return existing.rowCount ? { started: false } : null;
+  }
+
+  async completeAssessmentAiScoring(actorId: string, attemptId: string, requestId: string): Promise<boolean> {
+    const result = await this.pool.query(
+      `update jobs j set state = 'succeeded', last_error = null, updated_at = now()
+       from users actor
+       where actor.id = $1 and j.idempotency_key = $2
+         and (j.payload->>'organizationId')::uuid = actor.organization_id`,
+      [actorId, `assessment-ai-score:${attemptId}:${requestId}`]
+    );
+    return Boolean(result.rowCount);
+  }
+
+  async failAssessmentAiScoring(actorId: string, attemptId: string, requestId: string, errorCode: string): Promise<boolean> {
+    const result = await this.pool.query(
+      `update jobs j set state = 'failed', last_error = $3, updated_at = now()
+       from users actor
+       where actor.id = $1 and j.idempotency_key = $2
+         and (j.payload->>'organizationId')::uuid = actor.organization_id`,
+      [actorId, `assessment-ai-score:${attemptId}:${requestId}`, errorCode]
+    );
+    return Boolean(result.rowCount);
   }
 
   async getReviewChallenge(reviewerId: string, attemptId: string): Promise<AssessmentReviewChallengeView | null> {
