@@ -529,17 +529,33 @@ const weeklyLessonFoundationBaseOutputSchema = z.object({
   objective: z.object({
     title: z.string().trim().min(1),
     explanationLanguage: z.enum(["vi", "en"]),
+    lesson_goal: z.string().trim().min(1).max(240),
+    assessment_gap: z.string().trim().min(1).max(500).nullable(),
     items: z.array(z.object({
+      id: z.string().trim().regex(/^[CL]\d+$/),
       type: z.enum(["content", "language"]),
-      text: z.string().trim().min(1).max(240),
+      text: z.string().trim().min(1).max(500),
+      action_verb: z.string().trim().min(1).max(80),
+      target_language: z.array(z.string().trim().min(1).max(160)).min(1).max(5).nullable(),
       condition: z.string().trim().min(1).max(160),
       criterion: z.string().trim().min(1).max(160),
+      assessed_by: z.string().trim().min(1).max(160),
+      success_evidence: z.string().trim().min(1).max(240),
       assessmentCode: z.enum(["listening", "reading", "writing", "word_class", "word_use", "speaking"])
-    }).strict()).min(2).max(4)
+    }).strict().superRefine((item, context) => {
+      if (item.type === "language" && !item.target_language?.length) {
+        context.addIssue({ code: "custom", path: ["target_language"], message: "Language objectives require concrete target language" });
+      }
+      if (item.type === "content" && item.target_language !== null) {
+        context.addIssue({ code: "custom", path: ["target_language"], message: "Content objectives use null target_language" });
+      }
+    })).min(2).max(4)
   }),
   instruction: z.object({ title: z.string().trim().min(1), step1: z.string().trim().min(1), step2: z.string().trim().min(1), step3: z.string().trim().min(1) }),
   grammar: z.object({
-    title: z.string().trim().min(1), formula: z.string().trim().min(1), usage: z.string().trim().min(1),
+    title: z.string().trim().min(1), contentType: grammarContentTypeSchema,
+    targetName: z.string().trim().min(1).max(200), scope: z.string().trim().min(1).max(500),
+    formula: z.string().trim().min(1), usage: z.string().trim().min(1),
     example1: z.string().trim().min(1), example2: z.string().trim().min(1)
   }).nullable(),
   pronunciation: z.object({
@@ -655,6 +671,34 @@ export const weeklyLessonSkillsOutputSchema = z.object({
 }).superRefine((value, context) => {
   if (value.listening.body.trim().toLocaleLowerCase("en-US") === value.reading.body.trim().toLocaleLowerCase("en-US")) {
     context.addIssue({ code: "custom", path: ["reading", "body"], message: "Reading content must differ from listening" });
+  }
+});
+
+const weeklyLessonExerciseCodeSchema = z.enum(["listening", "reading", "writing", "wordClass", "wordUse", "speaking"]);
+const weeklyLessonReviewReasonSchema = z.enum([
+  "multiple_valid_answers", "key_mismatch", "insufficient_context", "outside_taught_scope",
+  "invalid_distractor", "hint_reveals_answer", "level_mismatch", "feedback_mismatch"
+]);
+export const weeklyLessonSkillsReviewInputSchema = weeklyLessonSkillsInputSchema.extend({
+  skills: weeklyLessonSkillsOutputSchema
+});
+export const weeklyLessonSkillsReviewOutputSchema = z.object({
+  status: z.enum(["approved", "needs_revision"]),
+  findings: z.array(z.object({
+    exerciseCode: weeklyLessonExerciseCodeSchema,
+    reasonCode: weeklyLessonReviewReasonSchema,
+    message: z.string().trim().min(1).max(300)
+  }).strict()).max(12),
+  solvedAnswers: z.object({
+    listening: z.string().trim().min(1), reading: z.string().trim().min(1), writing: z.string().trim().min(1),
+    wordClass: z.string().trim().min(1), wordUse: z.string().trim().min(1)
+  }).strict()
+}).strict().superRefine((value, context) => {
+  if (value.status === "approved" && value.findings.length > 0) {
+    context.addIssue({ code: "custom", path: ["findings"], message: "Approved reviews cannot contain findings" });
+  }
+  if (value.status === "needs_revision" && value.findings.length === 0) {
+    context.addIssue({ code: "custom", path: ["findings"], message: "A revision decision requires at least one finding" });
   }
 });
 
@@ -847,14 +891,19 @@ export const weeklyLessonFoundationOutputJsonSchema = strictObject(
   {
     title: nullable(stringSchema),
     durationMinutes: { type: "integer", enum: [5, 10, 15, 20] },
-    objective: strictObject(["title", "explanationLanguage", "items"], {
+    objective: strictObject(["title", "explanationLanguage", "lesson_goal", "assessment_gap", "items"], {
       title: stringSchema,
       explanationLanguage: { type: "string", enum: ["vi", "en"] },
+      lesson_goal: stringSchema,
+      assessment_gap: nullable(stringSchema),
       items: { type: "array", items: strictObject(
-        ["type", "text", "condition", "criterion", "assessmentCode"],
+        ["id", "type", "text", "action_verb", "target_language", "condition", "criterion", "assessed_by", "success_evidence", "assessmentCode"],
         {
+          id: stringSchema,
           type: { type: "string", enum: ["content", "language"] },
-          text: stringSchema, condition: stringSchema, criterion: stringSchema,
+          text: stringSchema, action_verb: stringSchema,
+          target_language: nullable({ type: "array", items: stringSchema }),
+          condition: stringSchema, criterion: stringSchema, assessed_by: stringSchema, success_evidence: stringSchema,
           assessmentCode: { type: "string", enum: ["listening", "reading", "writing", "word_class", "word_use", "speaking"] }
         }
       ) }
@@ -864,9 +913,11 @@ export const weeklyLessonFoundationOutputJsonSchema = strictObject(
       { title: stringSchema, step1: stringSchema, step2: stringSchema, step3: stringSchema }
     ),
     grammar: nullable(strictObject(
-      ["title", "formula", "usage", "example1", "example2"],
+      ["title", "contentType", "targetName", "scope", "formula", "usage", "example1", "example2"],
       {
-        title: stringSchema, formula: stringSchema, usage: stringSchema,
+        title: stringSchema,
+        contentType: { type: "string", enum: ["grammar_rule", "sentence_pattern", "usage_rule", "word_formation", "pronunciation_rule"] },
+        targetName: stringSchema, scope: stringSchema, formula: stringSchema, usage: stringSchema,
         example1: stringSchema, example2: stringSchema
       }
     )),
@@ -958,6 +1009,24 @@ export const weeklyLessonSkillsOutputJsonSchema = strictObject(
       ["title", "prompt", "answer", "hint", "questionTranslation", "answerTranslation"],
       { title: stringSchema, prompt: stringSchema, answer: stringSchema, hint: stringSchema, questionTranslation: stringSchema, answerTranslation: stringSchema }
     )
+  }
+) satisfies Record<string, unknown>;
+
+export const weeklyLessonSkillsReviewOutputJsonSchema = strictObject(
+  ["status", "findings", "solvedAnswers"],
+  {
+    status: { type: "string", enum: ["approved", "needs_revision"] },
+    findings: { type: "array", items: strictObject(["exerciseCode", "reasonCode", "message"], {
+      exerciseCode: { type: "string", enum: ["listening", "reading", "writing", "wordClass", "wordUse", "speaking"] },
+      reasonCode: { type: "string", enum: [
+        "multiple_valid_answers", "key_mismatch", "insufficient_context", "outside_taught_scope",
+        "invalid_distractor", "hint_reveals_answer", "level_mismatch", "feedback_mismatch"
+      ] },
+      message: stringSchema
+    }) },
+    solvedAnswers: strictObject(["listening", "reading", "writing", "wordClass", "wordUse"], {
+      listening: stringSchema, reading: stringSchema, writing: stringSchema, wordClass: stringSchema, wordUse: stringSchema
+    })
   }
 ) satisfies Record<string, unknown>;
 

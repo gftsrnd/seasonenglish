@@ -14,6 +14,8 @@ describe("learner lesson study content", () => {
       id: "lesson-602",
       title: "Past simple: I joined…",
       dayNumber: 2,
+      weekNumber: 3,
+      weekTopic: "Team collaboration",
       durationMinutes: 10,
       cefr: "A2",
       content: {
@@ -44,15 +46,23 @@ describe("learner lesson study content", () => {
     expect(homeLink).toHaveAttribute("href", "/home");
     expect(homeLink.querySelector("svg.lucide-chevron-left")).toBeInTheDocument();
     expect(homeLink.querySelector("span")).not.toBeInTheDocument();
+    expect(within(lessonHeading!).getByText("Tuần 3 · T3 · Team collaboration")).toBeInTheDocument();
+    expect(within(lessonHeading!).getByText("Past simple: I joined…")).toHaveAttribute("data-lesson-structure");
+    expect(within(lessonHeading!).queryByText("Bài 2/5 · A2 · 10 phút")).not.toBeInTheDocument();
 
-    expect(screen.queryByRole("heading", { name: "HƯỚNG DẪN LÀM BÀI" })).not.toBeInTheDocument();
+    const studyParts = screen.getAllByTestId("app-lesson-part");
+    expect(studyParts.map((part) => part.getAttribute("data-part"))).toEqual([
+      "objective", "instruction", "vocabulary", "grammar", "pronunciation"
+    ]);
+    expect(screen.getByRole("heading", { name: "HƯỚNG DẪN LÀM BÀI" })).toBeInTheDocument();
+    expect(screen.getByRole("list", { name: "Hướng dẫn thực hiện" })).toHaveTextContent("Học nội dung");
     expect(screen.getByRole("list", { name: "Mục tiêu bài học" })).toHaveTextContent("Sau bài học, bạn có thể identify two job details");
     expect(screen.getByRole("list", { name: "Mục tiêu bài học" })).toHaveTextContent("Sau bài học, bạn có thể say one complete work sentence");
     expect(screen.getByRole("list", { name: "Mục tiêu bài học" })).not.toHaveTextContent("SWBAT");
     expect(screen.getByText("tính từ")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Nghe từ new" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Nghe từ new" }).querySelector("svg.lucide-volume-2")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Nghe ví dụ: new here" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Nghe cụm từ: new here" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Nghe từ đồng nghĩa: fresh" })).toHaveTextContent("= fresh");
     expect(screen.getByRole("button", { name: "Nghe từ trái nghĩa: old" })).toHaveTextContent("≠ old");
     expect(screen.getByRole("button", { name: "Nghe từ phát âm: I" })).toBeInTheDocument();
@@ -66,18 +76,40 @@ describe("learner lesson study content", () => {
     expect(screen.getByText("Học nội dung")).toBeInTheDocument();
     fireEvent.click(screen.getByRole("tab", { name: /1\. Học/i }));
 
-    fireEvent.click(screen.getByRole("button", { name: "Nghe ví dụ: new here" }));
+    fireEvent.click(screen.getByRole("button", { name: "Nghe cụm từ: new here" }));
     expect(speak).toHaveBeenCalledWith("new here");
     fireEvent.click(screen.getByRole("button", { name: "Nghe từ phát âm: I" }));
     expect(speak).toHaveBeenCalledWith("I");
     fireEvent.click(screen.getByRole("button", { name: "Nghe chậm từ phát âm: I" }));
     expect(speak).toHaveBeenCalledWith("I", "en-US", { rate: 0.65 });
-    expect(screen.queryByRole("button", { name: "Nghe âm /aɪ/" })).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Nghe âm /aɪ/" }));
+    expect(speak).toHaveBeenLastCalledWith("I… I", "en-US", { rate: 0.55 });
   });
 
   it("renders every fill-in blank as one continuous line", () => {
     expect(normalizeLessonBlankPrompt("Please write - - - here and _ _ _ there.")).toBe("Please write _____ here and _____ there.");
     expect(normalizeLessonBlankPrompt("Please write -------- here.")).toBe("Please write _____ here.");
+  });
+
+  it("requires at least two words before enabling a self-writing submission", () => {
+    const lesson = {
+      id: "lesson-writing", title: "I can + verb", dayNumber: 1, weekNumber: 1, weekTopic: "Introductions",
+      durationMinutes: 10, cefr: "A2",
+      content: { parts: [
+        { code: "objective", title: "Mục tiêu", content: { text: "Write a short greeting." } },
+        { code: "writing", title: "Viết", content: { type: "write", prompt: "Write a sentence." } }
+      ] },
+      progress: { status: "in_progress", completedPartCodes: ["objective"], evidence: {} }
+    } as any;
+    render(<LearnerLesson view={{ lesson, lock: null }} actions={{ navigate: vi.fn(), speak: vi.fn(), submitLessonPartAttempt: vi.fn() } as any} />);
+    fireEvent.click(screen.getByRole("tab", { name: /2\. Bài tập/i }));
+
+    fireEvent.change(screen.getByRole("textbox", { name: "Câu trả lời writing" }), { target: { value: "Hello" } });
+    expect(screen.getByRole("button", { name: "Nộp bài" })).toBeDisabled();
+    expect(screen.getByText("Tự viết tối thiểu 2 từ.")).toBeInTheDocument();
+
+    fireEvent.change(screen.getByRole("textbox", { name: "Câu trả lời writing" }), { target: { value: "Hello team" } });
+    expect(screen.getByRole("button", { name: "Nộp bài" })).toBeEnabled();
   });
 
   it("hides grammar explicitly marked unavailable instead of showing an empty study card", () => {

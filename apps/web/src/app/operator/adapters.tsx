@@ -48,7 +48,20 @@ const PROMPT_LABELS: Record<PromptKey, string> = {
   coach: "AI coach hội thoại",
   grade: "Chấm bài thực hành thứ Sáu"
 };
-const REQUIRED_LESSON_PARTS = ["objective", "instruction", "vocabulary", "grammar", "pronunciation", "listening", "reading", "writing", "speaking"] as const;
+const REQUIRED_LESSON_PARTS = ["objective", "instruction", "vocabulary", "grammar", "pronunciation", "listening", "reading", "writing", "word_class", "word_use", "speaking"] as const;
+const LESSON_PART_LABELS: Record<typeof REQUIRED_LESSON_PARTS[number], string> = {
+  objective: "Mục tiêu bài học",
+  instruction: "Hướng dẫn",
+  vocabulary: "Từ vựng",
+  grammar: "Ngữ pháp",
+  pronunciation: "Phát âm",
+  listening: "Bài nghe",
+  reading: "Bài đọc",
+  writing: "Bài viết",
+  word_class: "bài tập Từ loại",
+  word_use: "bài tập Dùng từ",
+  speaking: "Bài nói"
+};
 
 function operatorCalendarDate(value: string): string {
   const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value);
@@ -94,16 +107,14 @@ function lessonSetWarnings(source: ContentLessonSetVersionView): OperatorLessonS
 
     const listeningOptions = asArray(asRecord(parts.get("listening")?.content)?.options);
     const readingOptions = asArray(asRecord(parts.get("reading")?.content)?.options);
-    const missingNewParts = !parts.has("word_class") || !parts.has("word_use");
+    const missingRequiredParts = REQUIRED_LESSON_PARTS.filter((code) => !parts.has(code));
     const shortQuestions = !listeningOptions || listeningOptions.length < 4 || !readingOptions || readingOptions.length < 4;
     const missingWordStructure = items.some(item => !hasLegacyOrStructuredValue(item.family) || !hasLegacyOrStructuredValue(item.umbrella));
     const missingSynonymCoverage = items.length > 0 && !items.some(item => hasLegacyOrStructuredValue(item.synonyms));
     const missingWordDetails = missingWordStructure || missingSynonymCoverage;
-    if (missingNewParts || shortQuestions || missingWordDetails) {
+    if (missingRequiredParts.length > 0 || shortQuestions || missingWordDetails) {
       details += 1;
-      const missing: string[] = [];
-      if (!parts.has("word_class")) missing.push("bài tập Từ loại");
-      if (!parts.has("word_use")) missing.push("bài tập Dùng từ");
+      const missing: string[] = missingRequiredParts.map((code) => LESSON_PART_LABELS[code]);
       if (!listeningOptions || listeningOptions.length < 4) missing.push("Nghe chưa đủ 4 lựa chọn");
       if (!readingOptions || readingOptions.length < 4) missing.push("Đọc chưa đủ 4 lựa chọn");
       for (const item of items) {
@@ -241,6 +252,9 @@ export function adaptLessonSet(source: ContentLessonSetVersionView, options: { a
     week: source.weekNumber, cefr: source.cefr as Cefr, version: source.version, status: source.status === "published" ? "approved" : source.status === "review" ? "review" : "draft", topic: source.topic, explanationLanguage: source.explanationLanguage === "Tiếng Việt" ? "tiếng Việt" : "tiếng Anh", aiConnected: options.aiConnected, mutationState: options.mutationState, mutationMessage: options.mutationMessage, activeMutation: options.activeMutation,
     warnings: options.warnings ?? lessonSetWarnings(source),
     weeklyPractice: { task: weeklyPractice.task, guidance: weeklyPractice.guidance, inputModeLabel: "Nhập văn bản hoặc nói để chuyển thành chữ", requiredVocabulary: weeklyPractice.requiredVocabulary },
+    missingDays: [1, 2, 3, 4, 5]
+      .filter(day => !source.lessons.some(lesson => lesson.dayNumber === day))
+      .map(day => ({ day, dayLabel: ["T2", "T3", "T4", "T5", "T6"][day - 1]! })),
     lessons: source.lessons.map(lesson => ({ id: lesson.id, day: lesson.dayNumber, dayLabel: ["T2", "T3", "T4", "T5", "T6"][lesson.dayNumber - 1] ?? `Bài ${lesson.dayNumber}`, title: lesson.title, durationMin: lesson.durationMinutes, practiceKind: lesson.practiceLabel.includes("điền") ? "điền từ" : lesson.practiceLabel.includes("trắc") ? "trắc nghiệm" : "tự viết", practiceAnswer: persistedPracticeAnswer(lesson.practiceLabel), complete: REQUIRED_LESSON_PARTS.every(code => lesson.parts.some(part => part.code === code)), content: <OperatorLessonPreview cefr={source.cefr} lessonId={lesson.id} parts={lesson.parts} resolveVocabularyImage={options.resolveVocabularyImage} /> }))
   };
 }

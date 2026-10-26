@@ -8,6 +8,7 @@ export interface ProviderCandidate {
   creator: string | null;
   licence: string;
   licenceUrl: string;
+  semanticText?: string;
 }
 
 export interface OpenMediaProviders {
@@ -112,7 +113,10 @@ export function candidateFromWikimediaPage(
     sourcePageUrl,
     creator: cleanMetadataText(metadataValue(metadata, "Artist")),
     licence,
-    licenceUrl
+    licenceUrl,
+    semanticText: [title, metadataValue(metadata, "ImageDescription"), metadataValue(metadata, "Categories")]
+      .filter((value): value is string => Boolean(value))
+      .join(" ")
   };
 }
 

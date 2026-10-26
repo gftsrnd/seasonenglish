@@ -476,16 +476,20 @@ describe("app coach and weekly practice speech input", () => {
     const { container } = render(<LearnerPractice view={reviewed} actions={callback} />);
 
     const reason = screen.getByRole("textbox", { name: "Lý do kháng nghị" });
-    await user.type(reason, "Xin xem lại phần ngữ pháp.");
-    await user.click(screen.getByRole("button", { name: "Gửi kháng nghị" }));
+    const submitAppeal = screen.getByRole("button", { name: "Gửi kháng nghị" });
+    await user.type(reason, "abcd");
+    expect(submitAppeal).toBeDisabled();
+    await user.type(reason, "e");
+    expect(submitAppeal).toBeEnabled();
+    await user.click(submitAppeal);
 
     expect(screen.getByRole("button", { name: "Đang gửi…" })).toBeDisabled();
-    expect(appealWeeklyPractice).toHaveBeenCalledWith("submission-1", "Xin xem lại phần ngữ pháp.");
+    expect(appealWeeklyPractice).toHaveBeenCalledWith("submission-1", "abcde");
     expect((container.firstElementChild as HTMLElement).style.paddingBottom).toBe("calc(88px + env(safe-area-inset-bottom))");
 
     rejectAppeal(new Error("APPEAL_FAILED"));
     expect(await screen.findByRole("alert")).toHaveTextContent("Chưa gửi được kháng nghị");
     await waitFor(() => expect(reason).toHaveFocus());
-    expect(reason).toHaveValue("Xin xem lại phần ngữ pháp.");
+    expect(reason).toHaveValue("abcde");
   });
 });

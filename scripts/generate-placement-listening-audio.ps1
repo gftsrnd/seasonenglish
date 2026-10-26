@@ -24,7 +24,7 @@ $dialogues = @(
   },
   @{
     File = "placement-listening-LB.wav"
-    Rate = "-28%"
+    Rate = "-8%"
     Lines = @(
       @{ Voice = "en-GB-SoniaNeural"; Text = "Hi, James. Do you have a minute? I'm working on the customer report, but I'm not sure how to handle one part of it." },
       @{ Voice = "en-GB-RyanNeural"; Text = "Sure. What's the problem?" },
@@ -57,7 +57,7 @@ $tempDirectory = Join-Path ([IO.Path]::GetTempPath()) ("e4s-listening-" + [guid]
 New-Item -ItemType Directory -Path $tempDirectory | Out-Null
 try {
   $pausePath = Join-Path $tempDirectory "pause.wav"
-  & $ffmpeg.Source -hide_banner -loglevel error -y -f lavfi -i "anullsrc=r=48000:cl=mono" -t 0.18 -ac 1 -c:a pcm_s16le $pausePath
+  & $ffmpeg.Source -hide_banner -loglevel error -y -f lavfi -i "anullsrc=r=48000:cl=mono" -t 0.12 -ac 1 -c:a pcm_s16le $pausePath
   if ($LASTEXITCODE -ne 0) { throw "ffmpeg failed while creating the dialogue pause." }
 
   foreach ($dialogue in $dialogues) {
@@ -80,8 +80,8 @@ try {
     $path = Join-Path $OutputDirectory $dialogue.File
     # Edge voices intentionally pause at punctuation; at slower CEFR rates those
     # pauses can exceed a second and make one dialogue sound like stitched clips.
-    # Preserve a natural 120 ms breath while shortening only clearly silent spans.
-    $dialogueFilter = "silenceremove=stop_periods=-1:stop_duration=0.20:stop_threshold=-45dB:stop_silence=0.12,loudnorm=I=-15:TP=-1.0:LRA=11,aresample=48000"
+    # Preserve a short natural breath while shortening only clearly silent spans.
+    $dialogueFilter = "silenceremove=stop_periods=-1:stop_duration=0.15:stop_threshold=-45dB:stop_silence=0.06,loudnorm=I=-15:TP=-1.0:LRA=11,aresample=48000"
     & $ffmpeg.Source -hide_banner -loglevel error -y -f concat -safe 0 -i $concatPath -af $dialogueFilter -ac 1 -c:a pcm_s16le $path
     if ($LASTEXITCODE -ne 0) { throw "ffmpeg failed while assembling $($dialogue.File)" }
   }

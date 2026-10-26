@@ -41,6 +41,14 @@ describe("lesson exercise evidence API", () => {
     await pool.end();
   });
 
+  it("returns real week metadata with the learner lesson", async () => {
+    const response = await app.inject({
+      method: "GET", url: `/api/v1/lessons/${DEMO_IDS.lessons[1]}`, headers: { cookie }
+    });
+    expect(response.statusCode, response.body).toBe(200);
+    expect(response.json()).toMatchObject({ weekNumber: 1, weekTopic: "Introducing yourself & your job", dayNumber: 2 });
+  });
+
   it("grades retries from persisted lesson content and keeps duplicate request IDs idempotent", async () => {
     const lessonId = DEMO_IDS.lessons[1];
     const first = await app.inject({
@@ -81,6 +89,47 @@ describe("lesson exercise evidence API", () => {
     );
     expect(reward.rows[0]?.count).toBe(1);
     expect(reward.rows[0]?.points).toBe(4);
+  });
+
+  it("rejects one-word self-writing without consuming an attempt and accepts two words when AI is unavailable", async () => {
+    const lessonId = DEMO_IDS.lessons[1];
+    const rejectedRequestId = "30000000-0000-4000-8000-000000000101";
+    const rejected = await app.inject({
+      method: "POST", url: `/api/v1/lessons/${lessonId}/parts/writing/attempts`, headers: { cookie },
+      payload: { requestId: rejectedRequestId, evidence: { answer: "Hello" } }
+    });
+    expect(rejected.statusCode, rejected.body).toBe(422);
+    expect(rejected.json()).toEqual({ code: "LESSON_WRITING_TOO_SHORT", minimumWords: 2 });
+    const rejectedRows = await pool.query(
+      "select count(*)::int as count from lesson_part_attempts where learner_id = $1 and request_key = $2",
+      [DEMO_IDS.learner, rejectedRequestId]
+    );
+    expect(rejectedRows.rows[0]?.count).toBe(0);
+
+    const accepted = await app.inject({
+      method: "POST", url: `/api/v1/lessons/${lessonId}/parts/writing/attempts`, headers: { cookie },
+      payload: { requestId: "30000000-0000-4000-8000-000000000102", evidence: { answer: "Hello team" } }
+    });
+    expect(accepted.statusCode, accepted.body).toBe(200);
+    expect(accepted.json()).toMatchObject({
+      lessonId, partCode: "writing", evidence: { answer: "Hello team", attempts: 1, status: "correct" }
+    });
+  });
+
+  it("allows opening the writing translation without treating it as a short writing submission", async () => {
+    const lessonId = DEMO_IDS.lessons[0];
+    const translated = await app.inject({
+      method: "POST", url: `/api/v1/lessons/${lessonId}/parts/writing/attempts`, headers: { cookie },
+      payload: {
+        requestId: "30000000-0000-4000-8000-000000000103",
+        evidence: { translated: true }
+      }
+    });
+
+    expect(translated.statusCode, translated.body).toBe(200);
+    expect(translated.json()).toMatchObject({
+      lessonId, partCode: "writing", evidence: { status: "translated" }
+    });
   });
 
   it("persists exhausted, translated and appealed outcomes for reload", async () => {

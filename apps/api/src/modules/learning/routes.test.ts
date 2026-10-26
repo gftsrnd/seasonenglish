@@ -7,6 +7,8 @@ function lesson(title: string, example: string): LearnerLessonRecord {
     id: "lesson-1",
     title,
     dayNumber: 1,
+    weekNumber: 1,
+    weekTopic: "Introducing yourself & your job",
     cefr: "A1",
     content: {
       parts: [{ code: "grammar", title: "Ngữ pháp", content: { formula: title, examples: [example] } }]

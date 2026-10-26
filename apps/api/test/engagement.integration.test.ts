@@ -309,6 +309,12 @@ describe("practice, games, arena, rewards and survey API", () => {
          '{"source":"ai","message":"AI feedback"}', '{}', 'A2', '[]', now())`,
       [submissionId, DEMO_IDS.learner, DEMO_IDS.week]
     );
+    const tooShort = await app.inject({
+      method: "POST", url: `/api/v1/engagement/practice/${submissionId}/appeals`, headers: { cookie },
+      payload: { reason: "abcd" }
+    });
+    expect(tooShort.statusCode, tooShort.body).toBe(400);
+    expect(tooShort.json()).toEqual({ code: "INVALID_PRACTICE_APPEAL" });
     const first = await app.inject({
       method: "POST", url: `/api/v1/engagement/practice/${submissionId}/appeals`, headers: { cookie },
       payload: { reason: "Please review this score." }

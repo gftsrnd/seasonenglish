@@ -319,6 +319,10 @@ export function registerLearningRoutes(
     const lesson = await repositories.learning.findLesson(learnerId, params.data.lessonId);
     if (!lesson) return reply.code(404).send({ code: "LESSON_PART_NOT_FOUND" });
     if (lesson.lock) return reply.code(409).send({ code: "LESSON_LOCKED", lock: lesson.lock });
+    const part = lesson.content.parts.find((candidate) => candidate.code === params.data.partCode);
+    if (!evidence.translated && part?.code === "writing" && isSelfWritingContent(part.content) && lessonAnswerWordCount(evidence.answer) < 2) {
+      return reply.code(422).send({ code: "LESSON_WRITING_TOO_SHORT", minimumWords: 2 });
+    }
     if (!evidence.translated && (lesson.progress.evidence[params.data.partCode]?.attempts ?? 0) >= 2) {
       return reply.code(409).send({ code: "LESSON_ATTEMPTS_EXHAUSTED" });
     }
@@ -528,12 +532,22 @@ function lessonView(lesson: LearnerLessonRecord): LessonView {
     id: lesson.id,
     title: learnerLessonDisplayTitle(lesson),
     dayNumber: lesson.dayNumber,
+    weekNumber: lesson.weekNumber,
+    weekTopic: lesson.weekTopic,
     durationMinutes: lesson.content.durationMinutes ?? 10,
     cefr: lesson.cefr,
     content: { parts: lesson.content.parts },
     progress: lesson.progress,
     lock: lesson.lock
   };
+}
+
+function lessonAnswerWordCount(answer: string | undefined): number {
+  return answer?.trim().split(/\s+/u).filter(Boolean).length ?? 0;
+}
+
+function isSelfWritingContent(content: Record<string, unknown>): boolean {
+  return content.type === undefined || content.type === "write";
 }
 
 export function learnerLessonDisplayTitle(lesson: LearnerLessonRecord): string {

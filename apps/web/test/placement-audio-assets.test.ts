@@ -43,4 +43,8 @@ describe("placement listening audio assets", () => {
       expect(stats.longestInteriorQuietSeconds).toBeLessThanOrEqual(0.45);
     }
   );
+
+  it("keeps Listening 2 flowing without long stitched pauses", () => {
+    expect(wavStats("placement-listening-LB.wav").longestInteriorQuietSeconds).toBeLessThanOrEqual(0.28);
+  });
 });

@@ -15,6 +15,8 @@ describe("Coach prompt safeguards", () => {
     expect(prompt).not.toContain("replyTranslation");
     expect(prompt).not.toContain("suggestions[].translation");
     expect(prompt).toContain("natural Vietnamese translation");
+    expect(prompt).toContain("suggestedAnswer must directly answer nextQuestion");
+    expect(prompt).toContain("INSUFFICIENT means no meaningful attempt and requires meaning score 0");
     expect(prompt).not.toContain("explanation must include a natural Vietnamese translation");
   });
 

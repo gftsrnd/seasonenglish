@@ -47,7 +47,7 @@ describe("canonical assessment deployment sync", () => {
 
     expect(rows.rows).toHaveLength(2);
     expect(rows.rows[0]).toMatchObject({ version: 1, status: "retired" });
-    expect(rows.rows[1]).toMatchObject({ version: 2, status: "published" });
+    expect(rows.rows[1]).toMatchObject({ version: 3, status: "published" });
     expect(rows.rows[1]?.blueprint).toEqual(placementDefinition);
 
     const second = await syncCanonicalAssessmentBlueprints(client);

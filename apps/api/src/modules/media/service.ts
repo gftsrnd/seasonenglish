@@ -182,31 +182,23 @@ async function findCandidate(providers: OpenMediaProviders, request: NormalizedR
     const curatedQuery = photoSearchQuery(request.imageQuery);
     for (const query of adjectivePixabayQueries(request.term, request.partOfSpeech)) {
       const semanticPhoto = await safely(() => providers.searchPixabay(query));
-      if (semanticPhoto) return semanticPhoto;
+      if (semanticPhoto && candidateMatchesRequest(semanticPhoto, request, query)) return semanticPhoto;
     }
-    const curated = await firstAvailable([
+    const curated = await firstRelevant([
       () => providers.searchPixabay(curatedQuery),
       () => providers.searchOpenverse(curatedQuery),
       () => providers.searchCommons(curatedQuery)
-    ]);
+    ], request, curatedQuery);
     if (curated) return curated;
     if (request.partOfSpeech === "noun") {
       const exact = await safely(() => providers.exactWikipedia(request.term));
       if (exact) return exact;
-      const termCandidate = await firstAvailable([
+      const termCandidate = await firstRelevant([
         () => providers.searchPixabay(request.term),
         () => providers.searchCommons(request.term),
         () => providers.searchOpenverse(request.term)
-      ]);
+      ], request, request.term);
       if (termCandidate) return termCandidate;
-    }
-    for (const query of workplacePhotoQueries(request.term)) {
-      const fallback = await firstAvailable([
-        () => providers.searchPixabay(query),
-        () => providers.searchOpenverse(query),
-        () => providers.searchCommons(query)
-      ]);
-      if (fallback) return fallback;
     }
     return null;
   }
@@ -220,6 +212,37 @@ async function findCandidate(providers: OpenMediaProviders, request: NormalizedR
     () => providers.searchCommons(request.term),
     () => providers.searchOpenverse(request.term)
   ]);
+}
+
+async function firstRelevant(
+  searches: Array<() => Promise<ProviderCandidate | null>>,
+  request: NormalizedRequest,
+  query: string
+): Promise<ProviderCandidate | null> {
+  for (const search of searches) {
+    const candidate = await safely(search);
+    if (candidate && candidateMatchesRequest(candidate, request, query)) return candidate;
+  }
+  return null;
+}
+
+function candidateMatchesRequest(candidate: ProviderCandidate, request: NormalizedRequest, query: string): boolean {
+  if (!candidate.semanticText?.trim()) return true;
+  const targetTokens = semanticTokens(`${request.term} ${query}`);
+  const candidateTokens = semanticTokens(candidate.semanticText);
+  if (!targetTokens.size || !candidateTokens.size) return false;
+  return [...targetTokens].some((token) => candidateTokens.has(token));
+}
+
+const GENERIC_IMAGE_WORDS = new Set([
+  "photo", "photograph", "image", "office", "workplace", "business", "person", "people", "employee",
+  "colleague", "team", "show", "showing", "real", "world", "clear", "horizontal", "with", "and", "the"
+]);
+
+function semanticTokens(value: string): Set<string> {
+  return new Set((value.toLocaleLowerCase("en-US").match(/[a-z0-9]+/g) ?? [])
+    .map((token) => token.length > 5 && token.endsWith("ing") ? token.slice(0, -3) : token.length > 4 && token.endsWith("ed") ? token.slice(0, -2) : token.length > 4 && token.endsWith("s") ? token.slice(0, -1) : token)
+    .filter((token) => token.length > 2 && !GENERIC_IMAGE_WORDS.has(token)));
 }
 
 function adjectivePixabayQueries(term: string, partOfSpeech?: string): readonly string[] {
@@ -243,17 +266,6 @@ async function firstAvailable(searches: Array<() => Promise<ProviderCandidate | 
     if (candidate) return candidate;
   }
   return null;
-}
-
-function workplacePhotoQueries(term: string): readonly string[] {
-  const queries = [
-    "office colleagues discussion photograph",
-    "office meeting photograph",
-    "business meeting office photograph"
-  ] as const;
-  const hash = [...term].reduce((total, character) => total + character.codePointAt(0)!, 0);
-  const offset = hash % queries.length;
-  return [...queries.slice(offset), ...queries.slice(0, offset)];
 }
 
 function explicitView(request: NormalizedRequest): Extract<ContentImageView, { status: "available" }> | null {

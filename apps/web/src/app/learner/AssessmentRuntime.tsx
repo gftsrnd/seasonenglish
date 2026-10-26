@@ -458,7 +458,8 @@ export function AssessmentRecorder({ taskKey, view, actions, onEvidence, onBusyC
         fileInput.current?.click();
       }}><Upload size={16} aria-hidden="true" /> Tải file ghi âm</button>
     </div>
-    <input ref={fileInput} id={`assessment-audio-${taskKey}`} className="sr-only" type="file" accept=".mp3,.m4a,.wav,.ogg,.webm,audio/mpeg,audio/mp4,audio/wav,audio/ogg,audio/webm" aria-label="Tải file ghi âm" tabIndex={-1} disabled={busy} onChange={(event) => {
+    <span className="xs muted">MP3, M4A, WAV, OGG hoặc WebM · tối đa 20 MB</span>
+    <input ref={fileInput} id={`assessment-audio-${taskKey}`} className="sr-only" type="file" accept="audio/*,.m4a" aria-label="Tải file ghi âm" tabIndex={-1} disabled={busy} onChange={(event) => {
       const file = event.currentTarget.files?.[0];
       event.currentTarget.value = "";
       if (file) void submitAudio(file, file.name, "File ghi âm đã nộp");
@@ -477,7 +478,8 @@ function validateAssessmentAudio(file: Blob, name: string): string | undefined {
   const extensionAllowed = /\.(mp3|m4a|wav|ogg|webm)$/i.test(name);
   const mimeAllowed = new Set(["audio/mpeg", "audio/mp3", "audio/mp4", "audio/x-m4a", "audio/wav", "audio/x-wav", "audio/ogg", "audio/webm", "video/webm"]);
   const baseMimeType = file.type.split(";", 1)[0]?.trim().toLowerCase() ?? "";
-  if (!extensionAllowed || baseMimeType && !mimeAllowed.has(baseMimeType)) return "Chỉ nhận file MP3, M4A, WAV, OGG hoặc WebM.";
+  if (!extensionAllowed) return "Chỉ nhận file MP3, M4A, WAV, OGG hoặc WebM.";
+  if (!baseMimeType || !mimeAllowed.has(baseMimeType)) return "File phải có định dạng audio hợp lệ tương ứng với MP3, M4A, WAV, OGG hoặc WebM.";
   return undefined;
 }
 

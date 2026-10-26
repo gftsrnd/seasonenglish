@@ -4,11 +4,13 @@ import {
   weeklyLessonsInputSchema, weeklyLessonsOutputJsonSchema, weeklyLessonsOutputSchema,
   weeklyLessonDayInputSchema, weeklyLessonDayOutputJsonSchema, weeklyLessonDayOutputSchema,
   weeklyLessonVocabularyInputSchema, weeklyLessonSkillsInputSchema,
+  weeklyLessonSkillsReviewInputSchema,
   weeklyLessonFoundationOutputJsonSchema, weeklyLessonFoundationOutputSchema,
   weeklyLessonGrammarClassificationOutputJsonSchema, weeklyLessonGrammarClassificationOutputSchema,
   weeklyLessonFoundationInputSchema,
   weeklyLessonVocabularyOutputJsonSchema, weeklyLessonVocabularyOutputSchema,
   weeklyLessonSkillsOutputJsonSchema, weeklyLessonSkillsOutputSchema,
+  weeklyLessonSkillsReviewOutputJsonSchema, weeklyLessonSkillsReviewOutputSchema,
   levelFormInputSchema, levelFormOutputJsonSchema, levelFormOutputSchema,
   weekSuggestionsInputSchema, weekSuggestionsOutputJsonSchema, weekSuggestionsOutputSchema,
   assessmentGradingInputSchema, assessmentGradingOutputJsonSchema, assessmentGradingOutputSchema,
@@ -63,7 +65,8 @@ export const AI_TASKS = new AiTaskRegistry([
   },
   {
     id: "coach_dialogue", promptKey: "coach_dialogue", inputSchema: coachInputSchema,
-    outputSchema: coachOutputSchema, outputJsonSchema: coachOutputJsonSchema
+    outputSchema: coachOutputSchema, outputJsonSchema: coachOutputJsonSchema,
+    normalizeOutput: normalizeCoachOutput
   },
   {
     id: "weekly_lessons", promptKey: "weekly_lessons", inputSchema: weeklyLessonsInputSchema,
@@ -96,6 +99,10 @@ export const AI_TASKS = new AiTaskRegistry([
     outputSchema: weeklyLessonSkillsOutputSchema, outputJsonSchema: weeklyLessonSkillsOutputJsonSchema
   },
   {
+    id: "weekly_lesson_skills_reviewer", promptKey: "weekly_lessons", inputSchema: weeklyLessonSkillsReviewInputSchema,
+    outputSchema: weeklyLessonSkillsReviewOutputSchema, outputJsonSchema: weeklyLessonSkillsReviewOutputJsonSchema
+  },
+  {
     id: "weekly_practice_grading", promptKey: "weekly_practice_grading", inputSchema: weeklyPracticeInputSchema,
     outputSchema: weeklyPracticeOutputSchema, outputJsonSchema: weeklyPracticeOutputJsonSchema
   },
@@ -104,6 +111,91 @@ export const AI_TASKS = new AiTaskRegistry([
     outputSchema: vocabularyOutputSchema, outputJsonSchema: vocabularyOutputJsonSchema
   }
 ]);
+
+function normalizeCoachOutput(rawOutput: unknown, rawInput: unknown): unknown {
+  if (!rawOutput || typeof rawOutput !== "object" || Array.isArray(rawOutput)) return rawOutput;
+  const output = rawOutput as Record<string, unknown>;
+  const evaluation = output.evaluation;
+  const rubric = output.rubric;
+  if (!evaluation || typeof evaluation !== "object" || Array.isArray(evaluation)
+    || !rubric || typeof rubric !== "object" || Array.isArray(rubric)) return rawOutput;
+  let normalizedOutput: Record<string, unknown> = output;
+  if (typeof output.nextQuestion !== "string" || !output.nextQuestion.trim()) {
+    normalizedOutput = {
+      ...normalizedOutput,
+      nextQuestion: "What could you say next in this workplace situation?",
+      nextQuestionTranslation: "Bạn có thể nói gì tiếp theo trong tình huống công việc này?"
+    };
+  } else if (typeof output.nextQuestionTranslation !== "string" || !output.nextQuestionTranslation.trim()) {
+    normalizedOutput = {
+      ...normalizedOutput,
+      nextQuestionTranslation: "Bạn có thể trả lời câu hỏi tiếp theo như thế nào?"
+    };
+  }
+  const suggestedAnswer = normalizedOutput.suggestedAnswer;
+  if (!suggestedAnswer || typeof suggestedAnswer !== "object" || Array.isArray(suggestedAnswer)
+    || typeof (suggestedAnswer as Record<string, unknown>).text !== "string"
+    || !(suggestedAnswer as Record<string, unknown>).text
+    || typeof (suggestedAnswer as Record<string, unknown>).translation !== "string"
+    || !(suggestedAnswer as Record<string, unknown>).translation) {
+    normalizedOutput = {
+      ...normalizedOutput,
+      suggestedAnswer: fallbackCoachSuggestedAnswer(String(normalizedOutput.nextQuestion ?? ""))
+    };
+  }
+  const evaluationRecord = evaluation as Record<string, unknown>;
+  const meaning = (rubric as Record<string, unknown>).meaning;
+  if (!meaning || typeof meaning !== "object" || Array.isArray(meaning)) return normalizedOutput;
+  const meaningScore = (meaning as Record<string, unknown>).score;
+  const message = rawInput && typeof rawInput === "object" && !Array.isArray(rawInput)
+    ? String((rawInput as Record<string, unknown>).message ?? "") : "";
+  const meaningfulAttempt = isMeaningfulCoachAttempt(message);
+  const incompleteAttempt = evaluationRecord.status === "insufficient"
+    || (evaluationRecord.status === "off_topic" && typeof meaningScore === "number" && meaningScore > 0);
+  if (!incompleteAttempt || typeof meaningScore !== "number" || !meaningfulAttempt) return normalizedOutput;
+  return {
+    ...normalizedOutput,
+    evaluation: {
+      ...evaluationRecord,
+      status: "valid",
+      result: "partially_correct",
+      countsTowardGoal: true
+    },
+    rubric: {
+      ...rubric,
+      meaning: { ...meaning, score: Math.max(1, meaningScore) }
+    }
+  };
+}
+
+function fallbackCoachSuggestedAnswer(nextQuestion: string) {
+  if (/\bwhen\b/iu.test(nextQuestion)) {
+    return { text: "Tomorrow morning would work well for me.", translation: "Sáng mai sẽ phù hợp với tôi." };
+  }
+  if (/\bwhere\b/iu.test(nextQuestion)) {
+    return { text: "It will take place in the main meeting room.", translation: "Việc đó sẽ diễn ra tại phòng họp chính." };
+  }
+  if (/\bwho\b/iu.test(nextQuestion)) {
+    return { text: "The project manager should handle the next step.", translation: "Quản lý dự án nên phụ trách bước tiếp theo." };
+  }
+  if (/\bwhy\b/iu.test(nextQuestion)) {
+    return { text: "Because it will help the team complete the task on time.", translation: "Vì điều đó sẽ giúp nhóm hoàn thành công việc đúng hạn." };
+  }
+  if (/\bhow\b/iu.test(nextQuestion)) {
+    return { text: "I would explain the issue clearly and propose a practical next step.", translation: "Tôi sẽ giải thích rõ vấn đề và đề xuất một bước tiếp theo phù hợp." };
+  }
+  return {
+    text: "I would give a clear and polite response with the key details.",
+    translation: "Tôi sẽ trả lời rõ ràng, lịch sự và nêu các thông tin chính."
+  };
+}
+
+function isMeaningfulCoachAttempt(message: string): boolean {
+  const normalized = message.trim().toLocaleLowerCase("en-US")
+    .replace(/[^\p{L}\p{N}'’\s]/gu, "").replace(/\s+/gu, " ").replaceAll("’", "'");
+  const words = normalized.split(" ").filter(Boolean);
+  return words.length >= 3 || /^(?:i|you|we|they|he|she|it)\s+\p{L}+(?:'\p{L}+)?$/u.test(normalized);
+}
 
 function validateWeekSuggestions(output: unknown, input: unknown): Array<{ path: string; message: string }> {
   const result = output as { weeks: Array<{ weekNumber: number; levels: string[]; options: Array<{ plan: Record<string, string[]> }> }> };

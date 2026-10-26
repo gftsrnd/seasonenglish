@@ -96,6 +96,21 @@ describe("lesson detail warnings", () => {
     }]);
   });
 
+  it("offers AI supplementation when a core generated component is missing", () => {
+    const source = lessonSet([
+      { ...baseWord("job"), synonyms: [{ word: "task" }], antonyms: [] }
+    ]);
+    source.lessons[0]!.parts = source.lessons[0]!.parts.filter((part) => part.code !== "objective");
+
+    const warnings = adaptLessonSet(source, { aiConnected: true }).warnings;
+
+    expect(warnings.details).toBe(1);
+    expect(warnings.detailIssues).toEqual([expect.objectContaining({
+      lessonId: "lesson-1",
+      missing: expect.arrayContaining(["Mục tiêu bài học"])
+    })]);
+  });
+
   it("does not show an AI repair warning only because legacy vocabulary has no part of speech", () => {
     const source = lessonSet([
       { ...baseWord("job"), type: "", synonyms: [{ word: "task" }], antonyms: [{ word: "unemployment" }] },
@@ -131,7 +146,7 @@ describe("lesson detail warnings", () => {
     expect(screen.getByText("danh từ")).toHaveClass("vocabulary-card-type");
     expect(await screen.findByRole("img", { name: "job" })).toHaveAttribute("src", "https://images.example.test/job.jpg");
     expect(screen.getByRole("button", { name: "Nghe từ job" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Nghe ví dụ: job one" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Nghe cụm từ: job one" })).toBeInTheDocument();
     expect(screen.getByText("Sau bài học, bạn có thể nói được một câu về công việc.")).toBeInTheDocument();
     expect(screen.queryByText(/Nội dung giải thích dài/)).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: /Từ bao trùm: work communication/ })).toHaveTextContent("TỪ BAO TRÙM work communication");

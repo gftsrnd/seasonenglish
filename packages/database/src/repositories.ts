@@ -173,6 +173,8 @@ export interface LearnerLessonRecord {
   id: string;
   title: string;
   dayNumber: number;
+  weekNumber: number;
+  weekTopic: string;
   cefr: CefrLevel;
   content: LessonContent & { durationMinutes?: number };
   progress: LessonProgressView;
@@ -933,6 +935,8 @@ class LearningRepository {
       id: string;
       title: string;
       day_number: number;
+      week_number: number;
+      week_topic: string;
       cefr: CefrLevel;
       content: LessonContent & { durationMinutes?: number };
       lesson_count: string;
@@ -946,7 +950,7 @@ class LearningRepository {
       progress_evidence: Record<string, unknown> | null;
       progress_updated_at: Date | null;
     }>(
-      `select l.id, l.title, l.day_number, ls.cefr, lv.content,
+      `select l.id, l.title, l.day_number, pw.week_number, pw.topic as week_topic, ls.cefr, lv.content,
               (select count(*) from lessons all_lessons where all_lessons.lesson_set_version_id = lsv.id)::text as lesson_count,
               (p.start_date + ((pw.week_number - 1) * 7 + l.day_number - 1))::text as opens_at,
               (p.start_date + ((pw.week_number - 1) * 7 + l.day_number - 1)) > current_date as opens_later,
@@ -991,6 +995,8 @@ class LearningRepository {
       id: string;
       title: string;
       day_number: number;
+      week_number: number;
+      week_topic: string;
       cefr: CefrLevel;
       content: LessonContent & { durationMinutes?: number };
       lesson_count: string;
@@ -1004,7 +1010,7 @@ class LearningRepository {
       progress_evidence: Record<string, unknown> | null;
       progress_updated_at: Date | null;
     }>(
-      `select l.id, l.title, l.day_number, ls.cefr, lv.content,
+      `select l.id, l.title, l.day_number, pw.week_number, pw.topic as week_topic, ls.cefr, lv.content,
               (select count(*) from lessons all_lessons where all_lessons.lesson_set_version_id = lsv.id)::text as lesson_count,
               (p.start_date + ((pw.week_number - 1) * 7 + l.day_number - 1))::text as opens_at,
               (p.start_date + ((pw.week_number - 1) * 7 + l.day_number - 1)) > current_date as opens_later,
@@ -1124,7 +1130,7 @@ class LearningRepository {
           [input.learnerId, input.lessonId, input.partCode]
         );
         const attemptNumber = Number(count.rows[0]?.count ?? 0) + 1;
-        const graded = gradeLessonPart(part.content, input.evidence, attemptNumber);
+        const graded = gradeLessonPart(part.code, part.content, input.evidence, attemptNumber);
         const inserted = await client.query<{
           id: string; attempt_number: number; status: PartEvidence["status"]; answer: string | null;
           score: string | null; feedback: string | null; artifact_key: string | null;
@@ -1727,6 +1733,8 @@ function mapLessonRow(row: {
   id: string;
   title: string;
   day_number: number;
+  week_number: number;
+  week_topic: string;
   cefr: CefrLevel;
   content: LessonContent & { durationMinutes?: number };
   lesson_count?: string;
@@ -1744,6 +1752,8 @@ function mapLessonRow(row: {
     id: row.id,
     title: row.title,
     dayNumber: row.day_number,
+    weekNumber: row.week_number,
+    weekTopic: row.week_topic,
     cefr: row.cefr,
     content: { ...row.content, parts: normalizeLessonParts(row.content.parts ?? [], row.cefr) },
     progress: mapProgress(
@@ -1831,6 +1841,7 @@ function mapPartEvidence(row: {
 }
 
 function gradeLessonPart(
+  partCode: LessonPartCode,
   content: Record<string, unknown>,
   input: LessonPartAttemptEvidenceInput,
   attemptNumber: number
@@ -1839,6 +1850,9 @@ function gradeLessonPart(
     return { status: "translated", score: 0, feedback: "Bản dịch đã được mở để bạn đối chiếu." };
   }
   const answer = input.answer?.trim() ?? "";
+  if (partCode === "writing" && (content.type === undefined || content.type === "write") && answer.split(/\s+/u).filter(Boolean).length >= 2) {
+    return { status: "correct", score: 100, feedback: "Đã nhận câu tự viết của bạn." };
+  }
   const expected = content.answer;
   const expectedAnswers = Array.isArray(expected) ? expected.map(String) : expected === undefined ? [] : [String(expected)];
   const correct = expectedAnswers.length
@@ -1936,6 +1950,66 @@ class ContentRepository {
         }];
       })
     };
+  }
+
+  async usedLessonTopics(staffId: string): Promise<string[]> {
+    const result = await this.pool.query<{ topic: string }>(
+      `select topic from (
+         select distinct on (lower(trim(lsv.payload->>'topic')))
+                trim(lsv.payload->>'topic') as topic, lsv.created_at
+         from users staff
+         join programs p on p.organization_id = staff.organization_id and p.status = 'active'
+         join program_weeks pw on pw.program_id = p.id
+         join lesson_sets ls on ls.program_week_id = pw.id
+         join lesson_set_versions lsv on lsv.lesson_set_id = ls.id
+         where staff.id = $1 and nullif(trim(lsv.payload->>'topic'), '') is not null
+         order by lower(trim(lsv.payload->>'topic')), lsv.created_at desc
+       ) history
+       order by created_at desc
+       limit 52`,
+      [staffId]
+    );
+    return result.rows.map((row) => row.topic);
+  }
+
+  async usedSuggestedTopics(staffId: string): Promise<string[]> {
+    const result = await this.pool.query<{ output: unknown }>(
+      `select ar.output
+       from users staff
+       join users requester on requester.organization_id = staff.organization_id
+       join ai_runs ar on ar.user_id = requester.id and ar.status = 'succeeded' and ar.output is not null
+       join ai_tasks task on task.id = ar.task_id and task.task_key = 'week_suggestions'
+       where staff.id = $1
+       order by ar.completed_at desc nulls last, ar.created_at desc
+       limit 25`,
+      [staffId]
+    );
+    const topics: string[] = [];
+    const seen = new Set<string>();
+    for (const row of result.rows) {
+      const output = row.output && typeof row.output === "object" && !Array.isArray(row.output)
+        ? row.output as { weeks?: unknown }
+        : {};
+      if (!Array.isArray(output.weeks)) continue;
+      for (const week of output.weeks) {
+        const options = week && typeof week === "object" && !Array.isArray(week)
+          ? (week as { options?: unknown }).options
+          : undefined;
+        if (!Array.isArray(options)) continue;
+        for (const option of options) {
+          const topic = option && typeof option === "object" && !Array.isArray(option)
+            ? (option as { topic?: unknown }).topic
+            : undefined;
+          if (typeof topic !== "string" || !topic.trim()) continue;
+          const key = topic.trim().toLocaleLowerCase("en-US").replace(/\s+/g, " ");
+          if (seen.has(key)) continue;
+          seen.add(key);
+          topics.push(topic.trim());
+          if (topics.length === 52) return topics;
+        }
+      }
+    }
+    return topics;
   }
 
   async saveWeeks(actorId: string, weeks: readonly ContentWeekInput[]): Promise<ContentWeekFrameView | null> {
@@ -3497,17 +3571,22 @@ function assessmentTaskMap(blueprint: StoredAssessmentDefinition): Map<string, u
   )));
 }
 
-function supportsPlacementV1ToV2Migration(
+function placementTaskKeyForCurrentVersion(taskKey: string): string {
+  return taskKey === "LA_3" || taskKey === "LB_Q6" ? "LB_Q9" : taskKey;
+}
+
+function supportsPlacementMigration(
   source: StoredAssessmentDefinition,
   target: StoredAssessmentDefinition
 ): boolean {
-  if (source.kind !== "placement" || target.kind !== "placement" || source.version !== 1 || target.version !== 2) return false;
+  if (source.kind !== "placement" || target.kind !== "placement" || ![1, 2].includes(source.version) || target.version !== 3) return false;
   const sourceTasks = assessmentTaskMap(source);
   const targetTasks = assessmentTaskMap(target);
-  if (!sourceTasks.has("LA_3") || sourceTasks.has("LB_Q6") || targetTasks.has("LA_3") || !targetTasks.has("LB_Q6")) return false;
+  const sourceMovedKey = source.version === 1 ? "LA_3" : "LB_Q6";
+  if (!sourceTasks.has(sourceMovedKey) || targetTasks.has("LA_3") || targetTasks.has("LB_Q6") || !targetTasks.has("LB_Q9")) return false;
   if (sourceTasks.size !== targetTasks.size) return false;
   for (const [sourceKey, sourceTask] of sourceTasks) {
-    const targetKey = sourceKey === "LA_3" ? "LB_Q6" : sourceKey;
+    const targetKey = placementTaskKeyForCurrentVersion(sourceKey);
     const targetTask = targetTasks.get(targetKey);
     if (!targetTask) return false;
     const migratedTask = { ...(sourceTask as Record<string, unknown>), key: targetKey };
@@ -3726,19 +3805,19 @@ class AssessmentRepository {
 
       const targetTasks = assessmentTaskMap(published.blueprint);
       const versionChanged = attempt.assessment_version_id !== published.versionId;
-      const compatibleVersion = !versionChanged || supportsPlacementV1ToV2Migration(attempt.blueprint, published.blueprint);
+      const compatibleVersion = !versionChanged || supportsPlacementMigration(attempt.blueprint, published.blueprint);
       const responses = await client.query<{ task_key: string; response: unknown }>(
         "select task_key, response from assessment_responses where attempt_id = $1 for update",
         [attempt.id]
       );
       const mappedKeysAreValid = responses.rows.every((response) =>
-        targetTasks.has(response.task_key === "LA_3" ? "LB_Q6" : response.task_key)
+        targetTasks.has(placementTaskKeyForCurrentVersion(response.task_key))
       );
-      const legacy = responses.rows.find((response) => response.task_key === "LA_3");
-      const target = responses.rows.find((response) => response.task_key === "LB_Q6");
+      const legacy = responses.rows.find((response) => response.task_key === "LA_3" || response.task_key === "LB_Q6");
+      const target = responses.rows.find((response) => response.task_key === "LB_Q9");
       const conflict = Boolean(legacy && target && JSON.stringify(legacy.response) !== JSON.stringify(target.response));
 
-      if (!compatibleVersion || !mappedKeysAreValid || conflict || !targetTasks.has("LB_Q6")) {
+      if (!compatibleVersion || !mappedKeysAreValid || conflict || !targetTasks.has("LB_Q9")) {
         await client.query("delete from assessment_attempts where id = $1 and learner_id = $2", [attempt.id, learnerId]);
         await client.query("commit");
         return { state: "restart_required", attempt: null };
@@ -3746,13 +3825,13 @@ class AssessmentRepository {
 
       if (legacy && target) {
         await client.query(
-          "delete from assessment_responses where attempt_id = $1 and section = 'listening' and task_key = 'LA_3'",
+          "delete from assessment_responses where attempt_id = $1 and section = 'listening' and task_key in ('LA_3', 'LB_Q6')",
           [attempt.id]
         );
       } else if (legacy) {
         await client.query(
-          `update assessment_responses set task_key = 'LB_Q6', saved_at = now()
-           where attempt_id = $1 and section = 'listening' and task_key = 'LA_3'`,
+          `update assessment_responses set task_key = 'LB_Q9', saved_at = now()
+           where attempt_id = $1 and section = 'listening' and task_key in ('LA_3', 'LB_Q6')`,
           [attempt.id]
         );
       }

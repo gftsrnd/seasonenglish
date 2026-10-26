@@ -8,6 +8,7 @@ import { LearnerAssessment } from "./Assessment.js";
 import { AssessmentRecorder, AssessmentRuntime } from "./AssessmentRuntime.js";
 import type { AssessmentView, LearnerCallbacks } from "./contracts.js";
 import { ExperienceProvider } from "../../features/experience/Experience.js";
+import { cancelAllExclusiveAudio, claimExclusiveAudio } from "../../features/experience/audio-precedence.js";
 
 const canvasContext = {
   clearRect: vi.fn(),
@@ -16,11 +17,13 @@ const canvasContext = {
 } as unknown as CanvasRenderingContext2D;
 
 beforeEach(() => {
+  cancelAllExclusiveAudio();
   vi.spyOn(HTMLCanvasElement.prototype, "getContext").mockImplementation(() => canvasContext);
 });
 
 afterEach(() => {
   cleanup();
+  cancelAllExclusiveAudio();
   vi.useRealTimers();
   vi.restoreAllMocks();
   vi.unstubAllGlobals();
@@ -174,7 +177,7 @@ describe("assessment HCI states", () => {
     expect(screen.queryByRole("meter", { name: "Mức tín hiệu micro" })).not.toBeInTheDocument();
     expect(screen.queryByRole("img", { name: "Dạng sóng giọng nói khi kiểm tra micro" })).not.toBeInTheDocument();
     expect(screen.getByLabelText("Vì sao cần bài test")).toHaveTextContent("Bài test chọn mức vừa sức; hãy làm đúng khả năng, không cần ôn trước.");
-    expect(screen.getByRole("table", { name: "Cấu trúc bài test" })).toHaveTextContent("4 bài Nói; ưu tiên ghi âm, câu trả lời bằng chữ sẽ được chấm tay");
+    expect(screen.getByRole("table", { name: "Cấu trúc bài test" })).toHaveTextContent("4 bài Nói; ghi âm trực tiếp hoặc tải file âm thanh");
     expect(container).not.toHaveTextContent(/✅|⛔|🎧|🎙/u);
   });
 
@@ -305,12 +308,79 @@ describe("assessment HCI states", () => {
     expect(answer.closest("label")).toHaveClass("assessment-choice");
   });
 
-  it("renders assessment blanks as one long dashed line", () => {
+  it("renders assessment blanks as a visual underline without dash characters or answer-length clues", () => {
     const view = makeView();
     view.definition.sections[0]!.groups[0]!.tasks[0]!.prompt = "Priya ____ a customer service agent and will - - - the case.";
     render(<LearnerAssessment view={view} actions={makeActions()} />);
 
-    expect(screen.getByText("Priya ------ a customer service agent and will ------ the case.")).toBeInTheDocument();
+    const blanks = screen.getAllByLabelText("Ô trống cần điền");
+    expect(blanks).toHaveLength(2);
+    blanks.forEach((blank) => {
+      expect(blank).toHaveClass("assessment-blank-underline");
+      expect(blank).toBeEmptyDOMElement();
+    });
+    expect(screen.queryByText(/-{3,}|_\s*_\s*_/u)).not.toBeInTheDocument();
+  });
+
+  it("cancels placement speech as soon as the learner accepts section submission", async () => {
+    const user = userEvent.setup();
+    const stopSpeech = vi.fn();
+    render(<LearnerAssessment view={makeView()} actions={makeActions()} />);
+    claimExclusiveAudio("speech", stopSpeech);
+
+    await user.click(screen.getByRole("button", { name: /nộp phần nghe/i }));
+    expect(stopSpeech).not.toHaveBeenCalled();
+    await user.click(screen.getByRole("button", { name: "Nộp phần này" }));
+
+    expect(stopSpeech).toHaveBeenCalledOnce();
+  });
+
+  it("does not report an intentional submit cancellation as an audio playback error", async () => {
+    const user = userEvent.setup();
+    const speak = vi.fn((_text, _language, options) => {
+      claimExclusiveAudio("speech", () => options?.onStatus?.("cancelled"));
+      options?.onStatus?.("started");
+    });
+    const view = makeView();
+    view.definition.sections[0]!.groups[0] = {
+      ...view.definition.sections[0]!.groups[0]!,
+      maxPlays: 2,
+      stimulus: { type: "audio_script", audioSrc: "/media/audio/placement-listening-LB.wav", text: "Dialogue" }
+    };
+    render(<LearnerAssessment view={view} actions={makeActions({
+      speak,
+      recordAssessmentAudioPlay: vi.fn().mockResolvedValue({ playCount: 1 })
+    })} />);
+
+    await user.click(screen.getByRole("button", { name: /Nghe \(còn 2 lần\)/i }));
+    await user.click(screen.getByRole("button", { name: /nộp phần nghe/i }));
+    await user.click(screen.getByRole("button", { name: "Nộp phần này" }));
+
+    expect(await screen.findByRole("button", { name: /Nghe \(còn 1 lần\)/i })).toBeInTheDocument();
+    expect(screen.queryByText("Không phát được audio lúc này. Hãy kiểm tra âm thanh rồi thử lại.")).not.toBeInTheDocument();
+  });
+
+  it("cancels placement speech on section transition and assessment unmount", () => {
+    const firstStop = vi.fn();
+    const secondStop = vi.fn();
+    const actions = makeActions();
+    const { rerender, unmount } = render(<LearnerAssessment view={makeView()} actions={actions} />);
+    claimExclusiveAudio("speech", firstStop);
+
+    const readingView = makeView({
+      screenState: "reading",
+      attempt: {
+        ...makeView().attempt!,
+        currentSection: "reading",
+        sectionStatuses: { listening: "completed", reading: "in_progress", writing: "locked", speaking: "locked" }
+      }
+    });
+    rerender(<LearnerAssessment view={readingView} actions={actions} />);
+    expect(firstStop).toHaveBeenCalledOnce();
+
+    claimExclusiveAudio("speech", secondStop);
+    unmount();
+    expect(secondStop).toHaveBeenCalledOnce();
   });
 
   it("plays the packaged multi-speaker recording for a listening dialogue", async () => {
@@ -348,7 +418,7 @@ describe("assessment HCI states", () => {
     );
   });
 
-  it("numbers listening tasks across groups so the moved task is question 6 under Listening 2", () => {
+  it("numbers listening tasks across groups so the moved task is question 5 under Listening 2", () => {
     const view = makeView();
     view.definition.sections[0] = {
       ...view.definition.sections[0]!,
@@ -361,8 +431,8 @@ describe("assessment HCI states", () => {
         },
         {
           key: "LB", title: "Listening 2", instruction: "Questions 5–10", tasks: [
-            { key: "LB_0", prompt: "Listening 2 prompt 5", responseType: "single_choice", maxScore: 1, options: [{ value: "A", label: "A" }] },
-            { key: "LB_Q6", prompt: "Who should the listener contact?", responseType: "single_choice", maxScore: 1, options: [{ value: "B", label: "Sarah" }] }
+            { key: "LB_Q5", prompt: "Who should the listener contact?", responseType: "single_choice", maxScore: 1, options: [{ value: "B", label: "Sarah" }] },
+            { key: "LB_0", prompt: "Listening 2 prompt 6", responseType: "single_choice", maxScore: 1, options: [{ value: "A", label: "A" }] }
           ]
         }
       ]
@@ -440,8 +510,7 @@ describe("assessment HCI states", () => {
     expect(screen.queryByText("Speaking tasks")).not.toBeInTheDocument();
   });
 
-  it("keeps generated speaking transcripts read-only and labels typed answers as a manual-review proxy", async () => {
-    const user = userEvent.setup();
+  it("offers only audio evidence for Placement speaking", () => {
     const view = makeView({
       screenState: "speaking",
       attempt: {
@@ -451,23 +520,12 @@ describe("assessment HCI states", () => {
         sectionStatuses: { listening: "completed", reading: "completed", writing: "completed", speaking: "in_progress" }
       }
     });
-    const actions = makeActions();
-    render(<LearnerAssessment view={view} actions={actions} />);
+    render(<LearnerAssessment view={view} actions={makeActions()} />);
 
-    const transcript = screen.getByRole("textbox", { name: "Transcript tự động S1" });
-    expect(transcript).toHaveAttribute("readonly");
+    expect(screen.queryByRole("textbox", { name: "Transcript tự động S1" })).not.toBeInTheDocument();
     expect(screen.queryByRole("textbox", { name: "Câu trả lời văn bản thay thế S1" })).not.toBeInTheDocument();
-
-    await user.click(screen.getByRole("button", { name: "Dùng câu trả lời văn bản thay thế S1" }));
-    const proxy = screen.getByRole("textbox", { name: "Câu trả lời văn bản thay thế S1" });
-    await user.type(proxy, "I will check the refund and update you today.");
-    expect(actions.saveAssessmentResponse).toHaveBeenLastCalledWith(
-      "speaking",
-      "S1",
-      expect.objectContaining({ evidenceType: "typed_proxy" })
-    );
-    expect(screen.getAllByRole("note").some((note) => /sẽ được chấm tay/i.test(note.textContent ?? ""))).toBe(true);
-    expect(screen.queryByText(/người vận hành duyệt/i)).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Dùng câu trả lời văn bản thay thế S1" })).not.toBeInTheDocument();
+    expect(screen.getAllByLabelText("Tải file ghi âm").length).toBeGreaterThan(0);
   });
 
   it("shows an honest recording state and creates the audio evidence only after stop", async () => {
@@ -540,6 +598,38 @@ describe("assessment HCI states", () => {
     Object.defineProperty(large, "size", { value: 20 * 1024 * 1024 + 1 });
     fireEvent.change(input, { target: { files: [large] } });
     expect(await screen.findByRole("alert")).toHaveTextContent("không được vượt quá 20 MB");
+    expect(uploadAssessmentAudio).not.toHaveBeenCalled();
+  });
+
+  it("shows a clear audio file picker for the five supported formats", () => {
+    const view = makeView({
+      screenState: "speaking",
+      attempt: { ...makeView().attempt!, currentSection: "speaking", sectionStatuses: { listening: "completed", reading: "completed", writing: "completed", speaking: "in_progress" } },
+      runtime: makeRuntime({ currentSection: "speaking" })
+    });
+    render(<LearnerAssessment view={view} actions={makeActions()} />);
+
+    const input = screen.getAllByLabelText("Tải file ghi âm")[0]!;
+    expect(input).toHaveAttribute("accept", "audio/*,.m4a");
+    expect(screen.getAllByText(/MP3, M4A, WAV, OGG hoặc WebM · tối đa 20 MB/i).length).toBeGreaterThan(0);
+  });
+
+  it("rejects a supported audio extension when its MIME type is missing or mismatched", async () => {
+    const uploadAssessmentAudio = vi.fn();
+    const view = makeView({
+      screenState: "speaking",
+      attempt: { ...makeView().attempt!, currentSection: "speaking", sectionStatuses: { listening: "completed", reading: "completed", writing: "completed", speaking: "in_progress" } },
+      runtime: makeRuntime({ currentSection: "speaking" })
+    });
+    render(<LearnerAssessment view={view} actions={makeActions({ uploadAssessmentAudio })} />);
+    const input = screen.getAllByLabelText("Tải file ghi âm")[0]!;
+
+    fireEvent.change(input, { target: { files: [new File(["fake"], "voice.mp3", { type: "text/plain" })] } });
+    expect(await screen.findByRole("alert")).toHaveTextContent("định dạng audio hợp lệ");
+    expect(uploadAssessmentAudio).not.toHaveBeenCalled();
+
+    fireEvent.change(input, { target: { files: [new File(["fake"], "voice.wav", { type: "" })] } });
+    expect(await screen.findByRole("alert")).toHaveTextContent("định dạng audio hợp lệ");
     expect(uploadAssessmentAudio).not.toHaveBeenCalled();
   });
 

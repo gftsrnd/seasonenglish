@@ -22,6 +22,8 @@ const lesson: LessonView = {
   id: "00000000-0000-4000-8000-000000000602",
   title: "Past simple: I joined…",
   dayNumber: 2,
+  weekNumber: 1,
+  weekTopic: "Introducing yourself & your job",
   durationMinutes: 10,
   cefr: "A2",
   content: { parts: [{ code: "objective", title: "Mục tiêu", content: { text: "Mục tiêu" } }] },

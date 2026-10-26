@@ -3,6 +3,7 @@ import {
   weeklyLessonFoundationOutputJsonSchema,
   weeklyLessonFoundationOutputSchema,
   weeklyLessonGrammarClassificationOutputSchema,
+  weeklyLessonSkillsReviewOutputSchema,
   weeklyLessonSkillsOutputJsonSchema,
   weeklyLessonSkillsOutputSchema,
   weeklyLessonVocabularyOutputJsonSchema,
@@ -140,12 +141,12 @@ describe("weekly lesson output contract", () => {
   it("requires 2-4 structured foundation objectives", () => {
     const base = {
       title: "Give clear feedback", durationMinutes: 10,
-      objective: { title: "Mục tiêu", explanationLanguage: "vi", items: [
-        { type: "content", text: "SWBAT identify two feedback details.", condition: "after listening", criterion: "two details", assessmentCode: "listening" },
-        { type: "language", text: "SWBAT give one clear feedback sentence.", condition: "in a role-play", criterion: "one sentence", assessmentCode: "speaking" }
+      objective: { title: "Mục tiêu", explanationLanguage: "vi", lesson_goal: "Nhận ra và đưa ra phản hồi rõ ràng.", assessment_gap: null, items: [
+        { id: "C1", type: "content", text: "Sau bài học, bạn có thể chọn hai chi tiết phản hồi đúng sau khi nghe.", action_verb: "chọn", target_language: null, condition: "sau khi nghe", criterion: "đúng 2 chi tiết", assessed_by: "listening", success_evidence: "Chọn đúng 2 chi tiết", assessmentCode: "listening" },
+        { id: "L1", type: "language", text: "Sau bài học, bạn có thể dùng \"clear feedback\" trong một câu khi nhập vai.", action_verb: "dùng", target_language: ["clear feedback"], condition: "khi nhập vai", criterion: "1 câu hoàn chỉnh", assessed_by: "speaking", success_evidence: "Transcript có cụm từ mục tiêu", assessmentCode: "speaking" }
       ] },
       instruction: { title: "Hướng dẫn", step1: "Đọc mẫu.", step2: "Ôn từ.", step3: "Làm bài." },
-      grammar: { title: "Ngữ pháp", formula: "S + V + O", usage: "Dùng để góp ý.", example1: "I give feedback.", example2: "We share feedback." },
+      grammar: { title: "Ngữ pháp", contentType: "sentence_pattern", targetName: "S + V + O", scope: "Giving feedback", formula: "S + V + O", usage: "Dùng để góp ý.", example1: "I give feedback.", example2: "We share feedback." },
       pronunciation: { title: "Phát âm", focus: "/f/", tip: "Thổi hơi nhẹ.", word1: { word: "feedback", ipa: "/ˈfiːdbæk/" }, word2: { word: "fine", ipa: "/faɪn/" }, word3: { word: "helpful", ipa: "/ˈhelpfəl/" } }
     };
     expect(weeklyLessonFoundationOutputSchema.safeParse(base).success).toBe(true);
@@ -159,6 +160,50 @@ describe("weekly lesson output contract", () => {
       ...base,
       grammar: { ...base.grammar, example1: "I give feedback. (Tôi góp ý.)" }
     }).success).toBe(false);
+  });
+
+  it("keeps the prompt-required objective evidence and grammar classification metadata", () => {
+    const result = weeklyLessonFoundationOutputSchema.safeParse({
+      title: "Could you please + V?", durationMinutes: 10,
+      objective: {
+        title: "Mục tiêu", explanationLanguage: "vi", lesson_goal: "Đề nghị đồng nghiệp hỗ trợ một việc cụ thể.", assessment_gap: null,
+        items: [
+          {
+            id: "C1", type: "content",
+            text: "Sau bài học, bạn có thể đề nghị đồng nghiệp hỗ trợ một việc cụ thể bằng 2 câu khi trao đổi công việc.",
+            action_verb: "đề nghị", target_language: null, condition: "khi trao đổi công việc", criterion: "2 câu rõ ràng",
+            assessed_by: "speaking", success_evidence: "Câu trả lời có yêu cầu cụ thể và lịch sự", assessmentCode: "speaking"
+          },
+          {
+            id: "L1", type: "language",
+            text: "Sau bài học, bạn có thể dùng mẫu câu \"Could you please + V?\" đúng 1 lần khi nhập vai.",
+            action_verb: "dùng", target_language: ["Could you please + V?"], condition: "khi nhập vai",
+            criterion: "dùng đúng mẫu câu 1 lần", assessed_by: "speaking", success_evidence: "Transcript có đúng mẫu câu",
+            assessmentCode: "speaking"
+          }
+        ]
+      },
+      instruction: { title: "Hướng dẫn", step1: "Đọc mẫu.", step2: "Ôn từ.", step3: "Làm bài." },
+      grammar: {
+        title: "Mẫu câu", contentType: "sentence_pattern", targetName: "Could you please + V?",
+        scope: "Polite requests only", formula: "Could you please + V?", usage: "Dùng để nhờ đồng nghiệp làm một việc cụ thể.",
+        example1: "Could you please send the file?", example2: "Could you please check this report?"
+      },
+      pronunciation: { title: "Phát âm", focus: "/k/", tip: "Bật âm nhẹ.", word1: { word: "could", ipa: "/kʊd/" }, word2: { word: "check", ipa: "/tʃek/" }, word3: { word: "copy", ipa: "/ˈkɒpi/" } }
+    });
+
+    expect(result.success).toBe(true);
+    if (!result.success) return;
+    expect(result.data.objective).toMatchObject({
+      lesson_goal: "Đề nghị đồng nghiệp hỗ trợ một việc cụ thể.", assessment_gap: null,
+      items: [
+        expect.objectContaining({ id: "C1", action_verb: "đề nghị", assessed_by: "speaking", success_evidence: expect.any(String) }),
+        expect.objectContaining({ id: "L1", target_language: ["Could you please + V?"] })
+      ]
+    });
+    expect(result.data.grammar).toMatchObject({
+      contentType: "sentence_pattern", targetName: "Could you please + V?", scope: "Polite requests only"
+    });
   });
 
   it("rejects omitted foundation instruction steps instead of fabricating them", () => {
@@ -225,6 +270,17 @@ describe("weekly lesson output contract", () => {
     });
   });
 
+  it("requires exactly three collocations and complete extended lexical data for every generated word", () => {
+    const item = strictVocabularyItem("noun");
+    const output = (word1: Record<string, unknown>) => ({ title: "Vocabulary", word1, word2: item, word3: item });
+
+    expect(weeklyLessonVocabularyOutputSchema.safeParse(output({ ...item, collocation3: undefined })).success).toBe(false);
+    expect(weeklyLessonVocabularyOutputSchema.safeParse(output({ ...item, family1: null, family2: null })).success).toBe(false);
+    expect(weeklyLessonVocabularyOutputSchema.safeParse(output({ ...item, synonym1: null, synonym2: null })).success).toBe(false);
+    expect(weeklyLessonVocabularyOutputSchema.safeParse(output({ ...item, umbrellaWord: "" })).success).toBe(false);
+    expect(weeklyLessonVocabularyOutputSchema.safeParse(output(item)).success).toBe(true);
+  });
+
   it("accepts SSML that wraps each word of a phrase in separate pronunciation tags", () => {
     const item = {
       ...strictVocabularyItem("noun"),
@@ -266,6 +322,32 @@ describe("weekly lesson output contract", () => {
     expect(weeklyLessonSkillsOutputSchema.safeParse({ ...skills, listening: { ...choice, option2: "Nine" } }).success).toBe(false);
     expect(weeklyLessonSkillsOutputSchema.safeParse({ ...skills, listening: { ...choice, answer: "Eight" } }).success).toBe(false);
     expect(weeklyLessonSkillsOutputSchema.safeParse({ ...skills, writing: { ...skills.writing, prompt: "It ___ at ___." } }).success).toBe(false);
+  });
+
+  it("requires an independent exercise review to name every blocking ambiguity", () => {
+    expect(weeklyLessonSkillsReviewOutputSchema.safeParse({
+      status: "approved",
+      findings: [],
+      solvedAnswers: {
+        listening: "Nine", reading: "Report", writing: "starts",
+        wordClass: "noun", wordUse: "Send the report."
+      }
+    }).success).toBe(true);
+
+    expect(weeklyLessonSkillsReviewOutputSchema.safeParse({
+      status: "needs_revision",
+      findings: [{ exerciseCode: "writing", reasonCode: "multiple_valid_answers", message: "Both go and drive fit without context." }],
+      solvedAnswers: {
+        listening: "Nine", reading: "Report", writing: "go",
+        wordClass: "noun", wordUse: "Send the report."
+      }
+    }).success).toBe(true);
+
+    expect(weeklyLessonSkillsReviewOutputSchema.safeParse({
+      status: "approved",
+      findings: [{ exerciseCode: "writing", reasonCode: "multiple_valid_answers", message: "Ambiguous." }],
+      solvedAnswers: { listening: "Nine", reading: "Report", writing: "go", wordClass: "noun", wordUse: "Send the report." }
+    }).success).toBe(false);
   });
 
   it("publishes an Anthropic strict-compatible schema with five required day slots", () => {

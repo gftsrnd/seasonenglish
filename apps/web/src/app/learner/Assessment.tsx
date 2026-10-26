@@ -5,7 +5,7 @@ import type { AssessmentView, LearnerCallbacks } from "./contracts.js";
 import { AssessmentRecorder, AssessmentRuntime, type AssessmentRuntimeState } from "./AssessmentRuntime.js";
 import { Button, ErrorText, Modal, Notice, PageTitle, Progress, AppLink, Toast } from "./ui.js";
 import { useExperience } from "../../features/experience/Experience.js";
-import { normalizeBlankPrompt } from "./text.js";
+import { cancelExclusiveAudio } from "../../features/experience/audio-precedence.js";
 
 const sectionOrder: AssessmentSectionCode[] = ["listening", "reading", "writing", "speaking"];
 const soundCheckText = "Đây là câu kiểm tra âm thanh. Nếu bạn nghe rõ câu này, tai nghe của bạn đã sẵn sàng.";
@@ -40,6 +40,8 @@ export function LearnerAssessment({ view, actions }: { view: AssessmentView; act
     holdMusicRef.current(listening);
     return () => holdMusicRef.current(false);
   }, [view.screenState]);
+
+  useEffect(() => () => cancelExclusiveAudio("speech"), [view.attempt?.id, view.screenState]);
 
   useEffect(() => {
     setLocal(Object.fromEntries((view.attempt?.responses ?? []).map((item) => [item.taskKey, item.value])));
@@ -252,8 +254,10 @@ function ActiveAssessment({ view, actions, section, sectionIndex, runtime, local
       <p className="assessment-task-group-instruction">{group.instruction}</p>
       <div className="assessment-task-content" style={{ display: "grid", gap: 12, marginTop: 12 }}>
         {group.stimulus ? <Stimulus stimulus={group.stimulus} maxPlays={group.maxPlays ?? 0} played={attempt.audioPlayCounts[`${section.code}:${group.key}`] ?? runtimeAudioCount(view, section.code, group.key)} onPlay={async (text, audioSrc) => {
+          let recordedPlayCount: number | null = null;
           try {
             const result = await actions.recordAssessmentAudioPlay(section.code, group.key);
+            recordedPlayCount = result.playCount;
             if (!audioSrc) {
               await new Promise<void>((resolve, reject) => actions.speak(text, "en-GB", {
                 rate: 0.86,
@@ -275,7 +279,7 @@ function ActiveAssessment({ view, actions, section, sectionIndex, runtime, local
             }
             return result.playCount;
           }
-          catch { return null; }
+          catch (error) { return error instanceof Error && error.message === "cancelled" ? recordedPlayCount : null; }
         }} /> : null}
         {group.tasks.map((task, index) => {
           const response = findResponse(attempt.responses, section.code, task.key);
@@ -290,7 +294,7 @@ function ActiveAssessment({ view, actions, section, sectionIndex, runtime, local
   {runtime.warning === "five_minutes" ? <Toast tone="warn"><Clock3 size={17} aria-hidden="true" /> Còn 5 phút. Hãy kiểm tra lại câu trả lời trước khi nộp.</Toast> : null}
   {runtime.warning === "one_minute" ? <Toast tone="warn"><Clock3 size={17} aria-hidden="true" /> Còn 1 phút! Hết giờ hệ thống sẽ tự chuyển phần.</Toast> : null}
   {error ? <Toast tone="danger">{error}</Toast> : null}
-  {submitConfirm ? <SubmitConfirm final={section.code === "speaking"} section={section.title} warningTitle={section.code === "writing" ? "Chưa đủ số từ." : section.code === "speaking" ? "Chưa có nội dung trả lời." : "Chưa trả lời hết."} {...(completionWarning ? { warning: completionWarning } : {})} onCancel={() => setSubmitConfirm(false)} onAccept={() => { setSubmitConfirm(false); setSubmitCountdown(5); }} /> : null}
+  {submitConfirm ? <SubmitConfirm final={section.code === "speaking"} section={section.title} warningTitle={section.code === "writing" ? "Chưa đủ số từ." : section.code === "speaking" ? "Chưa có nội dung trả lời." : "Chưa trả lời hết."} {...(completionWarning ? { warning: completionWarning } : {})} onCancel={() => setSubmitConfirm(false)} onAccept={() => { cancelExclusiveAudio("speech"); setSubmitConfirm(false); setSubmitCountdown(5); }} /> : null}
   {submitCountdown !== null ? <SubmitCountdown final={section.code === "speaking"} count={submitCountdown} onStop={() => setSubmitCountdown(null)} /> : null}
   </>;
 }
@@ -367,7 +371,7 @@ function sectionSummary(code: AssessmentSectionCode) {
     listening: "3 đoạn audio, 15 câu, mỗi đoạn nghe tối đa 2 lần",
     reading: "Đọc, ngữ pháp & từ vựng · 40 câu",
     writing: "2 task: 50–80 từ + 120–150 từ, chấm theo rubric 5 tiêu chí",
-    speaking: "4 bài Nói; ưu tiên ghi âm, câu trả lời bằng chữ sẽ được chấm tay"
+    speaking: "4 bài Nói; ghi âm trực tiếp hoặc tải file âm thanh"
   } as const)[code];
 }
 
@@ -444,19 +448,18 @@ function Stimulus({ stimulus, maxPlays, played, onPlay }: { stimulus: Assessment
 function Task({ task, number, value, response, view, actions, section, showHeading = true, onSave, onAudioBusyChange }: { task: AssessmentTaskView; number: number; value: string; response: AssessmentResponseView | undefined; view: AssessmentView; actions: LearnerCallbacks; section: AssessmentSectionCode; showHeading?: boolean; onSave: (input: SaveAssessmentResponseInput) => void; onAudioBusyChange: (taskKey: string, busy: boolean) => void }) {
   const promptId = `assessment-task-${task.key}-prompt`;
   const hintId = `assessment-task-${task.key}-hint`;
-  const [typedProxyEnabled, setTypedProxyEnabled] = useState(response?.evidenceType === "typed_proxy");
   const answerHint = [task.minWords ? `Tối thiểu ${task.minWords} từ.` : null, task.maxWords ? `Tối đa ${task.maxWords} từ.` : null].filter(Boolean).join(" ");
   const wordTarget = task.minWords && task.maxWords ? `${task.minWords}–${task.maxWords}` : task.minWords ? `≥ ${task.minWords}` : task.maxWords ? `${task.maxWords}` : null;
   return <article className={`card flat assessment-task-card${showHeading ? "" : " assessment-task-response"}`} data-task-key={task.key}>
     {showHeading ? <div className="assessment-task-heading"><h4>{task.title ?? `Task ${number}`}</h4><span className="badge">{task.maxScore} điểm</span></div> : null}
-    <p id={promptId} className="assessment-task-prompt" style={task.responseType === "speaking_evidence" ? { whiteSpace: "pre-line" } : undefined}>{normalizeBlankPrompt(task.prompt)}</p>
+    <p id={promptId} className="assessment-task-prompt" style={task.responseType === "speaking_evidence" ? { whiteSpace: "pre-line" } : undefined}>{renderAssessmentPrompt(task.prompt)}</p>
     {task.interaction ? <div className="card soft assessment-roleplay-brief" role="note">
       <b>Khách hàng mở đầu:</b>
       <p>{task.interaction.openingMessage}</p>
       <span className="small muted">Tối đa {task.interaction.maxLearnerTurns} lượt hoặc {Math.floor(task.interaction.durationSeconds / 60)} phút; kết thúc sớm khi khách hàng chấp nhận giải pháp. Nếu hệ thống không thể tạo lượt phản hồi, bản ghi một chiều vẫn được lưu và chuyển duyệt tay.</span>
     </div> : null}
     {task.hint ? <p className="small muted assessment-task-hint">{task.hint}</p> : null}
-    {task.responseType === "single_choice" ? <fieldset aria-labelledby={promptId} style={{ border: 0, margin: 0, padding: 0 }}><legend className="sr-only">Chọn một đáp án</legend>{task.options?.map((option) => <label className={`opt assessment-choice ${value === option.value ? "sel" : ""}`} key={option.value}><input className="assessment-choice-input" type="radio" name={task.key} checked={value === option.value} aria-describedby={answerHint ? hintId : undefined} onChange={() => onSave({ value: option.value, evidenceType: "choice" })} /><span>{option.label}</span></label>)}</fieldset> : task.responseType === "speaking_evidence" ? <SpeakingTextEvidence taskKey={task.key} value={value} response={response} typedProxyEnabled={typedProxyEnabled} onEnableProxy={() => setTypedProxyEnabled(true)} onSave={onSave} /> : <>
+    {task.responseType === "single_choice" ? <fieldset aria-labelledby={promptId} style={{ border: 0, margin: 0, padding: 0 }}><legend className="sr-only">Chọn một đáp án</legend>{task.options?.map((option) => <label className={`opt assessment-choice ${value === option.value ? "sel" : ""}`} key={option.value}><input className="assessment-choice-input" type="radio" name={task.key} checked={value === option.value} aria-describedby={answerHint ? hintId : undefined} onChange={() => onSave({ value: option.value, evidenceType: "choice" })} /><span>{option.label}</span></label>)}</fieldset> : task.responseType === "speaking_evidence" ? null : <>
       <label><span className="sr-only">Câu trả lời {task.key}</span><textarea aria-label={`Câu trả lời ${task.key}`} aria-labelledby={promptId} aria-describedby={answerHint ? hintId : undefined} value={value} minLength={task.minWords} onChange={(event) => onSave({ value: limitWords(event.target.value, task.maxWords), evidenceType: "text" })} placeholder="Nhập câu trả lời" /></label>
       {wordTarget ? <div className="assessment-word-count" aria-live="polite">{wordCount(value)} / {wordTarget} từ</div> : null}
     </>}
@@ -465,22 +468,12 @@ function Task({ task, number, value, response, view, actions, section, showHeadi
   </article>;
 }
 
-function SpeakingTextEvidence({ taskKey, value, response, typedProxyEnabled, onEnableProxy, onSave }: {
-  taskKey: string;
-  value: string;
-  response: AssessmentResponseView | undefined;
-  typedProxyEnabled: boolean;
-  onEnableProxy: () => void;
-  onSave: (input: SaveAssessmentResponseInput) => void;
-}) {
-  const transcript = response?.evidenceType === "transcript" ? response.value : "";
-  return <div className="stack assessment-speaking-text-evidence">
-    {transcript ? <label><span className="small">Transcript tự động</span><textarea aria-label={`Transcript tự động ${taskKey}`} value={transcript} readOnly /></label> : null}
-    {typedProxyEnabled ? <>
-      <label><span className="small">Câu trả lời văn bản thay thế</span><textarea aria-label={`Câu trả lời văn bản thay thế ${taskKey}`} value={response?.evidenceType === "typed_proxy" ? value : ""} onChange={(event) => onSave({ value: event.target.value, evidenceType: "typed_proxy" })} placeholder="Chỉ dùng khi không thể nộp âm thanh" /></label>
-      <Notice tone="warn">Bản chữ chỉ được dùng để chấm nội dung Nói và sẽ được chấm tay; không dùng để đánh giá phát âm hoặc tương tác trực tiếp.</Notice>
-    </> : <button className="btn-sm btn-ghost" type="button" aria-label={`Dùng câu trả lời văn bản thay thế ${taskKey}`} onClick={onEnableProxy}>Dùng câu trả lời văn bản thay thế</button>}
-  </div>;
+function renderAssessmentPrompt(prompt: string): ReactNode {
+  const blankPattern = /((?:-\s*){3,}|(?:_\s*){3,})/gu;
+  const blankPartPattern = /^(?:(?:-\s*){3,}|(?:_\s*){3,})$/u;
+  return prompt.split(blankPattern).filter(Boolean).map((part, index) => blankPartPattern.test(part)
+    ? <span className="assessment-blank-underline" role="img" aria-label="Ô trống cần điền" key={`blank-${index}`} />
+    : <span key={`text-${index}`}>{part.replace(/\s{2,}/gu, " ")}</span>);
 }
 
 function findResponse(responses: AssessmentResponseView[], section: AssessmentSectionCode, taskKey: string) { return responses.find((item) => item.section === section && item.taskKey === taskKey); }

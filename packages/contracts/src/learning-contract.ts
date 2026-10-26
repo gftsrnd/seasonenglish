@@ -194,6 +194,8 @@ export interface LessonView {
   id: string;
   title: string;
   dayNumber: number;
+  weekNumber: number;
+  weekTopic: string;
   durationMinutes: number;
   cefr: CefrLevel;
   content: LessonContent;

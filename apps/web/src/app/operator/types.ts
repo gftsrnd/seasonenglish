@@ -309,6 +309,7 @@ export interface OperatorLessonSetView {
     requiredVocabulary: string[];
   };
   lessons: LessonSetLesson[];
+  missingDays: Array<{ day: number; dayLabel: string }>;
 }
 
 export interface OperatorLessonSetActions {
@@ -319,6 +320,7 @@ export interface OperatorLessonSetActions {
   onDeleteSet(): void;
   onFillPhrases(): void;
   onEnrich(): void;
+  onRegenerateDay?(day: number): void;
   onEditLesson(id: string): void;
   onDeleteLesson(id: string): void;
   onComposeDay(day: number): void;

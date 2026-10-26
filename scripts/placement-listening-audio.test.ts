@@ -10,11 +10,12 @@ describe("placement listening audio", () => {
     expect(generator).toContain("Neural");
     expect(generator).not.toContain("SpeechSynthesizer");
     expect(generator).not.toContain("dynaudnorm");
-    expect(generator).toContain('Rate = "-8%"');
-    expect(generator).toContain('Rate = "-28%"');
+    expect(generator.match(/Rate = "-8%"/g)).toHaveLength(2);
     expect(generator).toContain('Rate = "-20%"');
     expect(generator).toContain("--rate=$($dialogue.Rate)");
-    expect(generator).toContain("-t 0.22");
+    expect(generator).toContain("-t 0.12");
+    expect(generator).toContain('Voice = "en-GB-SoniaNeural"');
+    expect(generator).toContain('Voice = "en-GB-RyanNeural"');
   });
 
   it.each(files)("keeps %s clear and loud enough for an English listening test", (file) => {
@@ -48,5 +49,18 @@ describe("placement listening audio", () => {
       expect(grossWordsPerMinute, `${group.key} is too fast`).toBeLessThanOrEqual(190);
       expect(grossWordsPerMinute, `${group.key} is unnaturally slow`).toBeGreaterThanOrEqual(100);
     });
+  });
+
+  it("keeps Listening 2 at a natural conversational pace", () => {
+    const group = placementDefinition.sections.find((section) => section.code === "listening")?.groups.find((candidate) => candidate.key === "LB");
+    const wav = readFileSync(`apps/web/public${group?.stimulus?.audioSrc}`);
+    const bytesPerSecond = wav.readUInt32LE(28);
+    const dataOffset = wav.indexOf(Buffer.from("data"));
+    const durationMinutes = wav.readUInt32LE(dataOffset + 4) / bytesPerSecond / 60;
+    const words = (group?.stimulus?.lines ?? []).reduce((total, line) => total + line.text.trim().split(/\s+/).length, 0);
+    const grossWordsPerMinute = words / durationMinutes;
+
+    expect(grossWordsPerMinute).toBeGreaterThanOrEqual(145);
+    expect(grossWordsPerMinute).toBeLessThanOrEqual(190);
   });
 });

@@ -36,6 +36,7 @@ export function createAiService(options: {
 
       for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
         const controller = new AbortController();
+        let invalidOutput = "";
         try {
           const response = await callWithTimeout(
             () => options.provider.complete({
@@ -47,6 +48,7 @@ export function createAiService(options: {
             controller
           );
           const normalizedOutput = task.normalizeOutput ? task.normalizeOutput(response.output, input) : response.output;
+          invalidOutput = stableJson(normalizedOutput).slice(0, 12_000);
           const outputResult = task.outputSchema.safeParse(normalizedOutput);
           if (!outputResult.success) {
             throw new AiGatewayError("AI_OUTPUT_INVALID", {
@@ -72,7 +74,10 @@ export function createAiService(options: {
             const issues = Array.isArray(details?.issues)
               ? details.issues.slice(0, 8).map((issue) => `${issue.path}: ${issue.message}`).join("; ")
               : "The previous structured output did not satisfy the schema.";
-            attemptPrompt = `${systemPrompt}\n\nREPAIR REQUIRED: ${issues} Return a complete corrected result; never leave required strings empty.`;
+            const previousOutput = invalidOutput
+              ? `\nPREVIOUS INVALID OUTPUT: ${invalidOutput}`
+              : "";
+            attemptPrompt = `${systemPrompt}\n\nREPAIR REQUIRED: ${issues}${previousOutput}\nReturn a complete corrected result; preserve valid fields and change every field identified above; never leave required strings empty.`;
           }
           if (!isRetryable(lastError) || attempt === maxAttempts) throw lastError;
         }

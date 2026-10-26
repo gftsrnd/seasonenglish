@@ -36,6 +36,25 @@ describe("ContentMediaService resolution", () => {
     expect(result.image.status).toBe("available");
   });
 
+  it("rejects a provider result whose metadata is unrelated to the requested vocabulary", async () => {
+    const fixture = createFixture();
+    fixture.providers.searchPixabay.mockResolvedValue({
+      ...candidate("pixabay"),
+      providerAssetId: "brown-bear-cartoon",
+      sourcePageUrl: "https://pixabay.com/photos/brown-bear-cartoon-123/",
+      semanticText: "brown bear animal cartoon"
+    });
+
+    const result = await fixture.service.resolveForUser("user-a", {
+      term: "role",
+      partOfSpeech: "noun",
+      imageQuery: "employee job role name badge workplace photo"
+    });
+
+    expect(result).toEqual({ status: "unavailable" });
+    expect(fixture.download).not.toHaveBeenCalled();
+  });
+
   it("returns a fully attributed explicit HTTPS image without downloading it", async () => {
     const fixture = createFixture();
     const result = await fixture.service.diagnoseForUser("user-a", {
@@ -84,22 +103,16 @@ describe("ContentMediaService resolution", () => {
     expect(fixture.savedAvailable[0]?.objectKey).toMatch(/^e4s-media\/org-a\/[a-f0-9]{64}\.png$/);
   });
 
-  it("uses a deterministic workplace-photo query when specific providers cannot find a safe visual", async () => {
+  it("hides the image when specific providers cannot find a relevant visual", async () => {
     const fixture = createFixture();
-    fixture.providers.searchCommons.mockImplementation(async (query) =>
-      query.includes("photograph") ? candidate("wikimedia") : null
-    );
 
     const result = await fixture.service.diagnoseForUser("user-a", {
       term: "tentative",
       imageQuery: "A colleague giving tentative feedback beside a report"
     });
 
-    expect(fixture.providers.searchCommons.mock.calls.map(([query]) => query)).toEqual([
-      "colleague tentative feedback report",
-      expect.stringMatching(/office|business/)
-    ]);
-    expect(result).toMatchObject({ provider: "wikimedia", image: { status: "available" } });
+    expect(fixture.providers.searchCommons).toHaveBeenCalledTimes(1);
+    expect(result).toEqual({ provider: null, cached: false, image: { status: "unavailable" } });
   });
 
   it("does not search an abstract adjective by itself after its photo query misses", async () => {

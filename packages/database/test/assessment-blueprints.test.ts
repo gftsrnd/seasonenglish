@@ -8,8 +8,8 @@ const section = (code: string) => {
 };
 
 describe("placement assessment blueprint", () => {
-  it("uses definition version 2 for the corrected Listening 2 mapping", () => {
-    expect(placementDefinition.version).toBe(2);
+  it("uses definition version 3 for the corrected Listening 2 question order", () => {
+    expect(placementDefinition.version).toBe(3);
   });
 
   it("matches the approved 75-minute section schedule", () => {
@@ -33,7 +33,7 @@ describe("placement assessment blueprint", () => {
       ...Array(5).fill(2)
     ]);
     expect(listeningTasks.map((task) => task.correctAnswer)).toEqual([
-      "B", "B", "C", "C", "B", "B", "B", "A", "B", "C", "C", "B", "A", "C", "B"
+      "B", "B", "C", "C", "B", "B", "A", "B", "B", "C", "C", "B", "A", "C", "B"
     ]);
 
     const readingTasks = section("reading").groups.flatMap((group) => group.tasks);
@@ -81,15 +81,15 @@ describe("placement assessment blueprint", () => {
     ]);
   });
 
-  it("moves the former Listening 1 question 4 to global question 6 in Listening 2 exactly once", () => {
+  it("places the moved Sarah question at global question 9 to follow the Listening 2 transcript", () => {
     const listening = section("listening");
     const taskEntries = listening.groups.flatMap((group) => group.tasks.map((task) => ({ groupKey: group.key, task })));
     const moved = taskEntries.filter(({ task }) => task.prompt === "Who should the listener contact?");
 
     expect(listening.groups.map((group) => group.tasks.length)).toEqual([4, 6, 5]);
     expect(moved).toHaveLength(1);
-    expect(moved[0]).toMatchObject({ groupKey: "LB", task: { key: "LB_Q6", maxScore: 1, correctAnswer: "B" } });
-    expect(taskEntries[5]).toMatchObject({ groupKey: "LB", task: { key: "LB_Q6" } });
+    expect(moved[0]).toMatchObject({ groupKey: "LB", task: { key: "LB_Q9", maxScore: 1, correctAnswer: "B" } });
+    expect(taskEntries[8]).toMatchObject({ groupKey: "LB", task: { key: "LB_Q9" } });
     expect(taskEntries).toHaveLength(15);
     expect(new Set(taskEntries.map(({ task }) => task.key)).size).toBe(15);
     expect(taskEntries.reduce((sum, { task }) => sum + task.maxScore, 0)).toBe(20);

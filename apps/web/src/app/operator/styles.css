@@ -574,6 +574,9 @@
 .app-operator .operator-lesson-preview .operator-vocabulary-image-placeholder { width: 88px; height: 88px; border-radius: 11px; box-sizing: border-box; }
 .app-operator .operator-lesson-preview .operator-vocabulary-image { display: block; object-fit: cover; }
 .app-operator .operator-lesson-preview .operator-vocabulary-image-placeholder { display: grid; place-items: center; border: 1px dashed var(--line); background: var(--surface-2); padding: 8px; color: var(--muted); font-size: .72rem; text-align: center; }
+.app-operator .operator-lesson-preview .content-image--fallback { display: none; }
+.app-operator .operator-missing-days { display: grid; gap: 10px; width: 100%; }
+.app-operator .operator-missing-day { border-top: 1px solid var(--line); padding-top: 10px; }
 .app-operator .operator-lesson-preview .vocabulary-card-meaning,
 .app-operator .operator-lesson-preview .vocabulary-card-phrases,
 .app-operator .operator-lesson-preview .vocabulary-card-relations { display: grid; gap: 7px; margin: 0; }

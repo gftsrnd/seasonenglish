@@ -28,7 +28,7 @@ export function VocabularyCard({ item, loadImage, speak, relations = [] }: {
         {item.meaning ? <p className="vocabulary-card-meaning">{item.meaning}</p> : null}
       </div>
     </div>
-    {phrases.length ? <div className="vocabulary-card-phrases"><div className="vocabulary-card-phrase-list">{phrases.map((phrase) => <VocabularySpeechButton text={phrase} label={`Nghe ví dụ: ${phrase}`} visibleLabel={phrase} speak={speak} key={phrase} />)}</div></div> : null}
+    {phrases.length ? <div className="vocabulary-card-phrases" aria-label={`${phrases.length} cụm từ thường dùng`}><span className="vocabulary-card-label">Cụm từ thường dùng</span><div className="vocabulary-card-phrase-list">{phrases.map((phrase) => <VocabularySpeechButton text={phrase} label={`Nghe cụm từ: ${phrase}`} visibleLabel={phrase} speak={speak} key={phrase} />)}</div></div> : null}
     {item.examples?.slice(3).map((example) => <p className="vocabulary-card-example" key={example}><span className="vocabulary-card-label">Ví dụ</span>{example}</p>)}
     {relations.length ? <div className="vocabulary-card-relations" aria-label="Các nhóm từ liên quan">{relations.map((relation) => {
       const className = `chip${relation.tone ? ` ${relation.tone}` : ""}`;

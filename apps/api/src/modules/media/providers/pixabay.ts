@@ -32,7 +32,8 @@ export function createPixabayProvider(options: ProviderOptions & { apiKey?: stri
       const response = await fetchProviderJson(url, API_HOST, { ...options, timeoutMs: options.timeoutMs ?? 5_000 });
       for (const value of asArray(response?.hits)) {
         const item = asObject(value);
-        if (!item || looksLikeVisualArtifact(item.tags)) continue;
+        const semanticText = item ? stringValue(item.tags) : null;
+        if (!item || !semanticText || looksLikeVisualArtifact(semanticText)) continue;
         const id = typeof item.id === "number" || typeof item.id === "string" ? String(item.id) : "";
         const downloadUrl = safeHttpsUrl(item.previewURL, new Set([IMAGE_HOST]));
         const sourcePageUrl = safeHttpsUrl(item.pageURL, new Set([API_HOST, `www.${API_HOST}`]));
@@ -44,7 +45,8 @@ export function createPixabayProvider(options: ProviderOptions & { apiKey?: stri
           sourcePageUrl,
           creator: stringValue(item.user),
           licence: "Pixabay Content License",
-          licenceUrl: LICENCE_URL
+          licenceUrl: LICENCE_URL,
+          semanticText
         };
       }
       return null;

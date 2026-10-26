@@ -746,13 +746,16 @@ function LessonSetRoute({ client, readOnly, week, cefr }: { client: OperatorApiC
   const deleteSet = async () => { if (readOnly) return; if (await modal.confirm({ title: "Xoá toàn bộ bộ bài nháp?", message: `Toàn bộ bài tuần ${week} · ${cefr} sẽ bị xoá.`, confirmLabel: "Xoá bộ bài", tone: "danger" })) { if (!data.versionId) { navigate(paths.lessons); return; } setActionError(undefined); setBusy(true); void client.deleteContentLessonDraftSet(week, cefr).then(() => navigate(paths.lessons)).catch(reason => setActionError(message(reason))).finally(() => setBusy(false)); } };
   const unavailableSet = {
     ...(typeof client.fillContentLessonPhrases !== "function" ? { fillPhrases: unavailable("endpoint bổ sung cụm từ cho bộ bài") } : {}),
-    ...(typeof client.enrichContentLessonDraft !== "function" ? { enrich: unavailable("endpoint bổ sung chi tiết cho bộ bài") } : {})
+    ...(typeof client.enrichContentLessonDraft !== "function" && typeof client.enrichContentLessonDay !== "function"
+      ? { enrich: unavailable("endpoint bổ sung chi tiết cho bộ bài") }
+      : {})
   };
   const mutationMessage = actionError ?? actionMessage;
   return <><OperatorLessonSet readOnly={readOnly} unavailable={unavailableSet} view={adaptLessonSet(data, { aiConnected: capabilities?.ai ?? false, mutationState: busy ? "loading" : actionError ? "error" : "idle", ...(activeMutation ? { activeMutation } : {}), ...(mutationMessage ? { mutationMessage } : {}), ...(typeof client.resolveContentLessonVocabularyImage === "function" ? { resolveVocabularyImage: (lessonId: string, itemIndex: number) => client.resolveContentLessonVocabularyImage!(week, cefr, lessonId, itemIndex) } : {}) })} actions={{
     onBack: () => navigate(paths.lessons), onApprove: approveSet, onUnapprove: retireSet, onRegenerate: regenerateSet, onDeleteSet: deleteSet,
     onFillPhrases: () => { if (typeof client.fillContentLessonPhrases === "function") mutate(client.fillContentLessonPhrases(week, cefr, data.version), { action: "fillPhrases", pending: "AI đang bổ sung cụm từ…", success: "Đã bổ sung cụm từ. Các nội dung cũ được giữ nguyên." }); },
     onEnrich: () => { if (typeof client.enrichContentLessonDraft === "function") mutate(client.enrichContentLessonDraft(week, cefr, data.version), { action: "enrich", pending: "AI đang tự động điền các nội dung còn thiếu…", success: "Đã tự động điền các nội dung còn thiếu. Vui lòng kiểm tra lại trước khi duyệt." }); },
+    onRegenerateDay: day => { if (typeof client.enrichContentLessonDay === "function") mutate(client.enrichContentLessonDay(week, cefr, day, data.version), { action: "enrich", pending: `AI đang sinh lại bài T${day + 1}…`, success: `Đã sinh lại bài T${day + 1}; các ngày khác được giữ nguyên.` }); },
     onEditLesson: id => openEditor(0, id), onDeleteLesson: deleteLesson, onComposeDay: openEditor,
     onSaveWeeklyPractice: async input => {
       if (readOnly) return;
@@ -853,10 +856,10 @@ function PromptsRoute({ client, readOnly }: { client: OperatorApiClient; readOnl
 }
 
 const operatorErrorMessages: Record<string, string> = {
-  WEEK_SUGGESTION_FAILED: "Không thể tạo gợi ý tuần lúc này. Vui lòng kiểm tra kết nối AI rồi thử lại.",
+  WEEK_SUGGESTION_FAILED: "Không thể tạo gợi ý tuần lúc này. Hãy bấm Gợi ý để thử lại; nếu vẫn lỗi, bạn có thể nhập chủ đề thủ công rồi lưu.",
   AI_UNAVAILABLE: "AI chưa được cấu hình trên máy chủ.",
   AI_PROMPT_NOT_READY: "Chưa có prompt AI đang hoạt động cho thao tác này.",
-  AI_OUTPUT_INVALID: "AI trả về nội dung không đúng định dạng.",
+  AI_OUTPUT_INVALID: "AI trả về nội dung không đúng định dạng. Hãy bấm lại thao tác vừa rồi; ở ma trận bài học, bấm Sinh để thử lại hoặc chọn Soạn tay nếu lỗi tiếp tục.",
   AI_OUTPUT_TRUNCATED: "AI bị cắt giữa chừng vì vượt giới hạn output; bộ bài chưa được lưu.",
   AI_INPUT_INVALID: "Dữ liệu gửi cho AI không hợp lệ.",
   AI_PROMPT_NOT_FOUND: "Không tìm thấy prompt AI đang dùng.",
@@ -867,6 +870,7 @@ const operatorErrorMessages: Record<string, string> = {
   AI_PROVIDER_UNAVAILABLE: "Nhà cung cấp AI đang tạm thời không khả dụng; bộ bài chưa được lưu.",
   AI_PROVIDER_RATE_LIMIT: "Nhà cung cấp AI đang giới hạn lượt gọi; hãy chờ rồi thử lại.",
   AI_TIMEOUT: "AI xử lý quá thời gian cho phép.",
+  AI_LESSON_GENERATION_FAILED: "AI chưa tạo được bài học. Hãy bấm Sinh để thử lại; nếu vẫn lỗi, chọn Soạn tay để tiếp tục mà không mất nội dung.",
   AI_LESSON_SET_INVALID: "AI trả về bộ bài chưa đủ 5 ngày hoặc sai cấu trúc.",
   CONTENT_VALIDATION_FAILED: "Nội dung thủ công chưa đủ để xuất bản. Hãy sửa các mục được nêu bên dưới.",
   CONTENT_LESSON_SET_INCOMPLETE: "Bộ bài phải có đủ 5 bài T2–T6 trước khi duyệt.",

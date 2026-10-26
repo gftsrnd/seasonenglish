@@ -60,10 +60,10 @@ const listeningGroups: StoredAssessmentDefinition["sections"][number]["groups"] 
     ] },
     tasks: [
       choice("LB_0", "What difficulty is the employee experiencing while preparing the customer report?", ["She cannot access the company website.", "She is unsure which procedure to follow for an unusual refund case.", "She cannot understand the language used in the customer's message.", "She cannot contact her supervisor."], 1, 1),
-      choice("LB_Q6", "Who should the listener contact?", ["David", "Sarah", "Tom", "James"], 1, 1),
       choice("LB_1", "What does the supervisor suggest first?", ["Asking another department for help", "Checking previous customer records", "Calling the customer", "Sending the report immediately"], 1, 1),
       choice("LB_2", "Why does the supervisor suggest checking previous records?", ["They may contain a similar case.", "They contain the customer's personal information.", "They are required by company policy.", "They are easier to understand."], 0, 1),
       choice("LB_3", "What will the employee do next?", ["Contact the customer", "Check previous cases", "Rewrite the whole report", "Ask the IT department"], 1, 1),
+      choice("LB_Q9", "Who should the listener contact?", ["David", "Sarah", "Tom", "James"], 1, 1),
       choice("LB_4", "What does the supervisor say about the deadline?", ["It cannot be changed.", "It has already passed.", "There may be some flexibility.", "The report is no longer necessary."], 2, 1)
     ]
   },
@@ -146,7 +146,7 @@ export const placementDefinition: StoredAssessmentDefinition = {
   key: "placement-a",
   kind: "placement",
   title: "Workplace English CEFR Placement Test",
-  version: 2,
+  version: 3,
   totalMinutes: 75,
   totalScore: 100,
   sections: [
@@ -160,7 +160,7 @@ export const placementDefinition: StoredAssessmentDefinition = {
         { key: "W2", prompt: "Write a formal email (120–150 words): explain one serious problem this confusion could cause (for example, giving a customer incorrect refund information) and propose one solution that helps the team find and use the latest documentation.", responseType: "long_text", maxScore: 13, minWords: 120, maxWords: 150 }
       ] }
     ] },
-    { code: "speaking", title: "Nói", durationMinutes: 15, maxScore: 20, instructions: ["Ghi âm trực tiếp hoặc tải file cho từng task (MP3, M4A, WAV, OGG hoặc WebM; tối đa 20 MB). Nếu không thể gửi âm thanh, bạn có thể nộp câu trả lời bằng chữ để được chấm nội dung; phần này không dùng để đánh giá phát âm hoặc tương tác trực tiếp."], groups: [
+    { code: "speaking", title: "Nói", durationMinutes: 15, maxScore: 20, instructions: ["Ghi âm trực tiếp hoặc tải file âm thanh cho từng task (MP3, M4A, WAV, OGG hoặc WebM; tối đa 20 MB). Phần Nói chỉ nhận âm thanh để đánh giá nội dung và phát âm."], groups: [
       { key: "S1", title: "Task 1 – Warm-up (3 phút · A1–A2)", instruction: "The examiner asks:", tasks: [
         { key: "S1", prompt: "1. What do you do?\n2. What are your main responsibilities?\n3. What English do you use at work?\n4. What is one situation in which you find English difficult?", responseType: "speaking_evidence", maxScore: 5, hint: "Trả lời lần lượt 4 câu hỏi, mỗi câu 2–4 câu nói." }
       ] },

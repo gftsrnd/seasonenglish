@@ -36,6 +36,14 @@ describe("learner profile, home, lesson and progress API", () => {
       await resetPublicSchema(client);
       await migrateDatabase(client);
       await seedDemo(client);
+      // This suite exercises the progressive unlock path from day 2 onward.
+      // Keep that scenario explicit instead of inheriting the local demo seed,
+      // which intentionally completes all five lessons to expose weekly practice.
+      await client.query(
+        "delete from progress_records where learner_id = $1 and lesson_id = any($2::uuid[])",
+        [DEMO_IDS.learner, DEMO_IDS.lessons.slice(1)]
+      );
+      await client.query("update programs set start_date = current_date - 1 where id = $1", [DEMO_IDS.program]);
       await client.query(
         "insert into user_credentials (user_id, credential_hash) values ($1, $2), ($3, $4), ($5, $6)",
         [
@@ -279,12 +287,12 @@ describe("learner profile, home, lesson and progress API", () => {
             { label: "T6", status: "upcoming" }
           ]
         },
-        coach: { turnsThisWeek: 2, targetTurns: 2, href: "/coach" },
-        practice: { status: "reviewed", href: "/practice" },
+        coach: { turnsThisWeek: 2, targetTurns: 50, href: "/coach" },
+        practice: { status: "locked", href: "/practice" },
         levelReadiness: { targetLevel: "B1", windowDays: 14, eligible: false, examAvailable: true }
       });
       expect(response.json()).not.toHaveProperty("finalAssessment");
-      expect(response.json().levelReadiness.criteria).toHaveLength(4);
+      expect(response.json().levelReadiness.criteria).toHaveLength(5);
     } finally {
       vi.useRealTimers();
     }

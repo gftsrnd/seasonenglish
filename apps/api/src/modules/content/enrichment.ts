@@ -1,6 +1,7 @@
 import type { ContentLessonDraftInput } from "@e4s/contracts";
 
 export type LessonRepairMode = "enrich" | "fill-phrases";
+export type LessonGenerationComponent = "foundation" | "vocabulary" | "skills";
 
 const PART_ORDER = [
   "objective", "instruction", "vocabulary", "grammar", "pronunciation",
@@ -16,19 +17,34 @@ export function lessonDaysNeedingRepair(
   const byDay = new Map(lessons.map((lesson) => [lesson.dayNumber, lesson]));
   return [1, 2, 3, 4, 5].filter((dayNumber) => {
     const lesson = byDay.get(dayNumber);
-    if (!lesson) return true;
-    const parts = new Map(lesson.parts.map((part) => [part.code, part]));
-    const vocabulary = asRecord(parts.get("vocabulary")?.content);
-    const items = asArray(vocabulary.items).map(asRecord);
-    if (mode === "fill-phrases") {
-      return items.some((item) => stringArray(item.collocations ?? item.phrases ?? item.examples).length < 3);
-    }
-    const optionsAreIncomplete = (code: "listening" | "reading") => asArray(asRecord(parts.get(code)?.content).options).length < 4;
-    const missingExercise = !parts.has("word_class") || !parts.has("word_use") || optionsAreIncomplete("listening") || optionsAreIncomplete("reading");
-    const missingWordStructure = items.some((item) => !meaningful(item.family) || !meaningful(item.umbrella));
-    const missingRelations = items.length > 0 && !items.some((item) => meaningful(item.synonyms));
-    return missingExercise || missingWordStructure || missingRelations;
+    return lessonComponentsNeedingRepair(lesson, mode).size > 0;
   });
+}
+
+export function lessonComponentsNeedingRepair(
+  lesson: ContentLessonDraftInput | undefined,
+  mode: LessonRepairMode = "enrich"
+): Set<LessonGenerationComponent> {
+  if (!lesson) return new Set(["foundation", "vocabulary", "skills"]);
+  const parts = new Map(lesson.parts.map((part) => [part.code, part]));
+  const vocabulary = asRecord(parts.get("vocabulary")?.content);
+  const items = asArray(vocabulary.items).map(asRecord);
+  const phrasesIncomplete = items.some((item) => stringArray(item.collocations ?? item.phrases ?? item.examples).length < 3);
+  const vocabularyIncomplete = !parts.has("vocabulary")
+    || items.length === 0
+    || phrasesIncomplete
+    || items.some((item) => !meaningful(item.family) || !meaningful(item.umbrella))
+    || (items.length > 0 && !items.some((item) => meaningful(item.synonyms)));
+  if (mode === "fill-phrases") return phrasesIncomplete ? new Set(["vocabulary"]) : new Set();
+
+  const foundationCodes = ["objective", "instruction", "grammar", "pronunciation"] as const;
+  const skillCodes = ["listening", "reading", "writing", "word_class", "word_use", "speaking"] as const;
+  const choicesIncomplete = (code: "listening" | "reading") => asArray(asRecord(parts.get(code)?.content).options).length < 4;
+  const targets = new Set<LessonGenerationComponent>();
+  if (foundationCodes.some((code) => !parts.has(code))) targets.add("foundation");
+  if (vocabularyIncomplete) targets.add("vocabulary");
+  if (skillCodes.some((code) => !parts.has(code)) || choicesIncomplete("listening") || choicesIncomplete("reading")) targets.add("skills");
+  return targets;
 }
 
 export function mergeGeneratedLessons(

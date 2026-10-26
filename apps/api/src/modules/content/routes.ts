@@ -8,7 +8,7 @@ import type {
   ContentReviewAssessmentDetailView,
   ContentReviewAiGradeJobView
 } from "@e4s/contracts";
-import { weeklyPracticeInputSchema, weeklyPracticeOutputSchema, weekSuggestionsOutputSchema, type AiTaskRunner } from "@e4s/ai";
+import { weeklyPracticeInputSchema, weeklyPracticeOutputSchema, type AiTaskRunner } from "@e4s/ai";
 import { createRepositories } from "@e4s/database";
 import { approveContentVersion, retirePublishedContent, submitContentForReview, validateLessonDraft, validateLessonPublication } from "@e4s/domain/content";
 import type { ObjectStorage } from "@e4s/storage";
@@ -19,6 +19,7 @@ import { createRoleGuard } from "../identity/policy.js";
 import type { ContentMediaService } from "../media/index.js";
 import { lessonDaysNeedingRepair, mergeGeneratedLessons, type LessonRepairMode } from "./enrichment.js";
 import { generateWeeklyLessons } from "./weekly-generation.js";
+import { generateWeekSuggestions } from "./week-suggestion-generation.js";
 import { publicLessonGenerationFailure } from "./generation-errors.js";
 
 const weekInput = z.object({
@@ -64,7 +65,10 @@ const weeklyPracticeDraftInput = z.object({
   guidance: z.string().trim().min(1).max(4_000),
   requiredVocabulary: z.array(z.string().trim().min(1).max(100)).max(12)
 });
-const lessonActionInput = z.object({ expectedVersion: z.int().min(0).optional() });
+const lessonActionInput = z.object({
+  expectedVersion: z.int().min(0).optional(),
+  dayNumber: z.int().min(1).max(5).optional()
+});
 const lessonSetParams = z.object({
   week: z.coerce.number().int().min(1).max(52),
   cefr: z.enum(["A1", "A2", "B1", "B2", "C1"])
@@ -152,18 +156,24 @@ export function registerContentRoutes(
     const actorId = request.e4sSession!.user.id;
     const runner = await runnerFor(actorId);
     if (!runner) return reply.code(503).send({ code: "AI_UNAVAILABLE" });
-    const [frame, matrix, task] = await Promise.all([
+    const [frame, matrix, task, historicalTopics, suggestedTopics] = await Promise.all([
       repositories.content.listWeeks(actorId), repositories.content.lessonMatrix(actorId),
-      repositories.aiRuns.activeTaskPrompt(actorId, "week_suggestions")
+      repositories.aiRuns.activeTaskPrompt(actorId, "week_suggestions"),
+      repositories.content.usedLessonTopics(actorId),
+      repositories.content.usedSuggestedTopics(actorId)
     ]);
     if (!frame || !matrix || !task) return reply.code(503).send({ code: "AI_PROMPT_NOT_READY" });
     try {
-      const result = await runner.runTask("week_suggestions", {
+      const generated = await generateWeekSuggestions({
         weekNumbers: input.data.weekNumbers, levels: matrix.levels.map((level) => level.cefr),
-        usedTopics: frame.weeks.map((week) => week.topic).filter(Boolean)
-      }, { systemPrompt: task.prompt });
-      const output = weekSuggestionsOutputSchema.safeParse(result.output);
-      if (!output.success) return reply.code(502).send({ code: "AI_OUTPUT_INVALID", issues: output.error.issues.slice(0, 8).map(issue => ({ path: issue.path.join("."), message: issue.message })) });
+        usedTopics: [...new Set([
+          ...frame.weeks.map((week) => week.topic).filter(Boolean),
+          ...historicalTopics,
+          ...suggestedTopics
+        ])].slice(0, 52)
+      }, task, runner);
+      const result = generated.result;
+      const output = { data: generated.output };
       const activeLevels = matrix.levels.map((level) => level.cefr);
       const activeLevelSet = new Set(activeLevels);
       const requestedWeeks = new Set(input.data.weekNumbers);
@@ -247,7 +257,10 @@ export function registerContentRoutes(
     } catch (error) {
       const code = errorCode(error, "WEEK_SUGGESTION_FAILED");
       request.log.warn({ code }, "Week suggestion generation failed");
-      return reply.code(502).send({ code });
+      return reply.code(502).send({
+        code: "WEEK_SUGGESTION_FAILED",
+        message: "AI chưa tạo được gợi ý chủ đề hợp lệ. Vui lòng thử lại sau ít phút."
+      });
     }
   });
 
@@ -406,7 +419,10 @@ export function registerContentRoutes(
           durationMinutes: lesson.durationMinutes,
           parts: lesson.parts
         })) as ContentLessonDraftInput[];
-        const dayNumbers = lessonDaysNeedingRepair(existing, action as LessonRepairMode);
+        const repairableDays = lessonDaysNeedingRepair(existing, action as LessonRepairMode);
+        const dayNumbers = action === "enrich" && body.data.dayNumber !== undefined
+          ? repairableDays.filter((dayNumber) => dayNumber === body.data.dayNumber)
+          : repairableDays;
         if (dayNumbers.length === 0) return reply.send(current);
         const repairVocabulary = new Set(existing
           .filter((lesson) => dayNumbers.includes(lesson.dayNumber))
@@ -423,12 +439,22 @@ export function registerContentRoutes(
           }));
         const excludedVocabulary = (await repositories.content.usedLessonVocabulary(actorId))
           .filter((word) => !repairVocabulary.has(word.trim().toLocaleLowerCase("en-US")));
-        const generated = await generateWeeklyLessons(week, params.data.cefr, task, runner, { excludedVocabulary, dayNumbers });
+        const generated = await generateWeeklyLessons(week, params.data.cefr, task, runner, {
+          excludedVocabulary,
+          dayNumbers,
+          qualityReview: true,
+          existingLessons: existing,
+          repairMode: action
+        });
         const lessons = mergeGeneratedLessons(existing, generated.lessons, action as LessonRepairMode);
         const validation = validateLessonDraft(lessons);
         if (!validation.valid) {
-          request.log.warn({ code: "AI_LESSON_SET_INVALID", issues: validation.issues }, "Repaired weekly lesson set failed validation");
-          return reply.code(502).send(publicLessonGenerationFailure(validation.issues));
+          request.log.warn({
+            code: "AI_LESSON_SET_PARTIAL",
+            issues: validation.issues,
+            retainedDays: generated.lessons.map((lesson) => lesson.dayNumber),
+            failures: generated.failures
+          }, "Weekly lesson repair retained valid components and left the remaining gaps for supplementation");
         }
         try {
           await repositories.aiRuns.recordSucceeded({
@@ -497,7 +523,10 @@ export function registerContentRoutes(
     if (!week || !task) return reply.code(503).send({ code: "AI_PROMPT_NOT_READY" });
     try {
       const excludedVocabulary = await repositories.content.usedLessonVocabulary(actorId);
-      const generated = await generateWeeklyLessons(week, params.data.cefr, task, runner, { excludedVocabulary });
+      const generated = await generateWeeklyLessons(week, params.data.cefr, task, runner, {
+        excludedVocabulary,
+        qualityReview: true
+      });
       const saved = await repositories.content.saveLessonDraft(actorId, week.weekNumber, params.data.cefr, generated.lessons, "ai");
       try {
         await repositories.aiRuns.recordSucceeded({

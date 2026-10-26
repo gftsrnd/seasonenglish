@@ -12,6 +12,7 @@ const databaseUrl = process.env.TEST_DATABASE_URL
   ?? "postgres://e4s:e4s_test_password@127.0.0.1:55432/e4s_test";
 const checkerId = "00000000-0000-4000-8000-000000000104";
 const mediaRequests: Array<{ userId: string; term: string }> = [];
+const forcedAiFailures = new Set<string>();
 const mediaService: ContentMediaService = {
   async resolveForUser(userId, request) {
     mediaRequests.push({ userId, term: request.term });
@@ -45,12 +46,19 @@ function lesson(dayNumber: number) {
 const repairRunner: AiTaskRunner = {
   async runTask(taskKey, rawInput) {
     const dayNumber = Number((rawInput as { dayNumber?: number }).dayNumber ?? 1);
+    if (forcedAiFailures.has(`${taskKey}:${dayNumber}`)) {
+      throw Object.assign(new Error("AI_OUTPUT_INVALID"), {
+        code: "AI_OUTPUT_INVALID",
+        details: { issues: [{ path: "output", message: "forced component failure" }] }
+      });
+    }
+    const lessonFocus = String((rawInput as { lessonFocus?: string }).lessonFocus ?? "talk about work");
     const dayWords = [
-      ["department", "role", "project"],
-      ["manager", "designer", "tester"],
-      ["meeting", "report", "email"],
-      ["schedule", "deadline", "task"],
-      ["feedback", "comment", "idea"]
+      ["coordinator", "briefing", "workflow"],
+      ["supervisor", "prototype", "checklist"],
+      ["agenda", "summary", "inbox"],
+      ["calendar", "milestone", "assignment"],
+      ["suggestion", "revision", "proposal"]
     ][dayNumber - 1] ?? ["office", "team", "work"];
     const vocabularyItem = (word: string) => ({
       word, partOfSpeech: "noun", pronunciation: "/word/", stress: "first syllable", ttsText: word, ssml: `<speak>${word}</speak>`, meaning: "Từ vựng công việc", imageQuery: `${word} office`,
@@ -60,19 +68,22 @@ const repairRunner: AiTaskRunner = {
       synonym1: { word: `workplace ${word}`, level: "A1", note: "từ gần nghĩa", partOfSpeech: "noun", sense: "workplace sense", example: `Use workplace ${word} here.` }, synonym2: null, antonym1: null
     });
     const output = taskKey === "weekly_lesson_grammar_classifier" ? {
-      status: "classified", contentType: "sentence_pattern", targetName: "S + V + O", scope: "Talking about work",
-      support: "explicit", confidence: "high", evidence: [{ sourceRef: "lessonFocus", quote: "talk about work" }], rejectedCandidates: []
+      status: "classified", contentType: "sentence_pattern", targetName: "S + V + O", scope: lessonFocus,
+      support: "explicit", confidence: "high", evidence: [{ sourceRef: "lessonFocus", quote: lessonFocus }], rejectedCandidates: []
     } : taskKey === "weekly_lesson_foundation" ? {
       title: "I work in + department", durationMinutes: 10,
-      objective: { title: "Mục tiêu bài học", explanationLanguage: "vi", items: [
-        { type: "content", text: "SWBAT identify two job details after listening.", condition: "after listening", criterion: "two details", assessmentCode: "listening" },
-        { type: "language", text: "SWBAT say one complete sentence about work.", condition: "in a role-play", criterion: "one complete sentence", assessmentCode: "speaking" }
+      objective: { title: "Mục tiêu bài học", explanationLanguage: "vi", lesson_goal: "Giới thiệu nơi làm việc bằng mẫu câu mục tiêu.", assessment_gap: null, items: [
+        { id: "C1", type: "content", text: "Sau bài học, bạn có thể chọn hai chi tiết công việc đúng sau khi nghe.", action_verb: "chọn", target_language: null, condition: "sau khi nghe", criterion: "đúng 2 chi tiết", assessed_by: "listening", success_evidence: "Chọn đúng hai chi tiết", assessmentCode: "listening" },
+        { id: "L1", type: "language", text: "Sau bài học, bạn có thể nói một câu có cụm 'I work in' khi giới thiệu công việc.", action_verb: "nói", target_language: ["I work in"], condition: "khi giới thiệu công việc", criterion: "1 câu hoàn chỉnh", assessed_by: "speaking", success_evidence: "Transcript có cụm từ mục tiêu", assessmentCode: "speaking" }
       ] },
       instruction: { title: "Hướng dẫn làm bài", step1: "Đọc từ vựng.", step2: "Xem công thức.", step3: "Làm bài tập." },
-      grammar: { title: "Ngữ pháp", formula: "S + V + O", usage: "Dùng để nói ngắn về công việc.", example1: "I do my work.", example2: "She checks the file." },
+      grammar: { title: "Ngữ pháp", contentType: "sentence_pattern", targetName: "S + V + O", scope: lessonFocus, formula: "S + V + O", usage: "Dùng để nói ngắn về công việc.", example1: "I do my work.", example2: "She checks the file." },
       pronunciation: { title: "Phát âm", focus: "/w/", tip: "Mở môi tròn khi phát âm.", word1: { word: "work", ipa: "/wɜːk/" }, word2: { word: "week", ipa: "/wiːk/" }, word3: { word: "well", ipa: "/wel/" } }
     } : taskKey === "weekly_lesson_vocabulary" ? {
       title: "Từ vựng", word1: vocabularyItem(dayWords[0]!), word2: vocabularyItem(dayWords[1]!), word3: vocabularyItem(dayWords[2]!)
+    } : taskKey === "weekly_lesson_skills_reviewer" ? {
+      status: "approved", findings: [],
+      solvedAnswers: { listening: "AI", reading: "A report", writing: "AI", wordClass: "noun", wordUse: "I work at GFT." }
     } : {
       listening: { title: "Nghe", body: "I work in AI with my small team every weekday.", prompt: "Where does the speaker work?", option1: "AI", option2: "HR", option3: "Sales", option4: "Finance", answer: "AI", hint: "Listen for the department.", questionTranslation: "Người nói làm ở đâu?", answerTranslation: "AI" },
       reading: { title: "Đọc", body: "Lan works in AI with a small team. She checks one report every morning and sends it to her manager.", prompt: "What does Lan check?", option1: "A report", option2: "An email", option3: "A meeting", option4: "A customer", answer: "A report", hint: "Read what she checks each morning.", questionTranslation: "Lan kiểm tra gì?", answerTranslation: "Một báo cáo" },
@@ -479,5 +490,62 @@ describe("content operations API", () => {
     expect(repairedBody.status).toBe("draft");
     expect(repairedBody.lessons).toHaveLength(5);
     expect(repairedBody.lessons.every((item) => item.title.trim() && item.title !== "S + V + O")).toBe(true);
+  });
+
+  it("regenerates exactly one deleted lesson day without changing the other four days", async () => {
+    const created = await app.inject({
+      method: "PUT", url: "/api/v1/content/lesson-sets/1/A1/draft", headers: { cookie: makerCookie },
+      payload: { lessons: [1, 2, 3, 4, 5].map(lesson) }
+    });
+    expect(created.statusCode, created.body).toBe(201);
+    const original = created.json() as { version: number; lessons: Array<{ dayNumber: number; title: string; parts: unknown[] }> };
+
+    const deleted = await app.inject({
+      method: "DELETE", url: "/api/v1/content/lesson-sets/1/A1/draft/lessons/3", headers: { cookie: makerCookie },
+      payload: { expectedVersion: original.version }
+    });
+    expect(deleted.statusCode, deleted.body).toBe(200);
+    const afterDelete = deleted.json() as { version: number; lessons: Array<{ dayNumber: number; title: string; parts: unknown[] }> };
+    expect(afterDelete.lessons.map(item => item.dayNumber)).toEqual([1, 2, 4, 5]);
+
+    const regenerated = await app.inject({
+      method: "POST", url: "/api/v1/content/lesson-sets/1/A1/draft/enrich", headers: { cookie: makerCookie },
+      payload: { expectedVersion: afterDelete.version, dayNumber: 3 }
+    });
+    expect(regenerated.statusCode, regenerated.body).toBe(201);
+    const result = regenerated.json() as { lessons: Array<{ dayNumber: number; title: string; parts: unknown[] }> };
+    expect(result.lessons.map(item => item.dayNumber)).toEqual([1, 2, 3, 4, 5]);
+    for (const dayNumber of [1, 2, 4, 5]) {
+      const before = afterDelete.lessons.find(item => item.dayNumber === dayNumber)!;
+      const after = result.lessons.find(item => item.dayNumber === dayNumber)!;
+      expect({ dayNumber: after.dayNumber, title: after.title, parts: after.parts }).toEqual({
+        dayNumber: before.dayNumber, title: before.title, parts: before.parts
+      });
+    }
+  });
+
+  it("persists useful components from a partial first run and supplements only the missing component", async () => {
+    forcedAiFailures.add("weekly_lesson_vocabulary:1");
+    const generated = await app.inject({
+      method: "POST", url: "/api/v1/content/lesson-sets/1/A1/generate", headers: { cookie: makerCookie }, payload: {}
+    });
+    forcedAiFailures.clear();
+
+    expect(generated.statusCode, generated.body).toBe(201);
+    const partial = generated.json() as { lessons: Array<{ dayNumber: number; parts: Array<{ code: string; content: Record<string, unknown> }> }> };
+    const partialDay = partial.lessons.find((item) => item.dayNumber === 1)!;
+    expect(partialDay.parts.find((part) => part.code === "objective")).toBeDefined();
+    expect(partialDay.parts.find((part) => part.code === "vocabulary")).toBeUndefined();
+
+    const supplemented = await app.inject({
+      method: "POST", url: "/api/v1/content/lesson-sets/1/A1/draft/enrich", headers: { cookie: makerCookie }, payload: { dayNumber: 1 }
+    });
+    expect(supplemented.statusCode, supplemented.body).toBe(201);
+    const completed = supplemented.json() as { lessons: Array<{ dayNumber: number; parts: Array<{ code: string; content: Record<string, unknown> }> }> };
+    const completedDay = completed.lessons.find((item) => item.dayNumber === 1)!;
+    expect(completedDay.parts.find((part) => part.code === "vocabulary")).toBeDefined();
+    expect(completedDay.parts.find((part) => part.code === "objective")?.content).toEqual(
+      partialDay.parts.find((part) => part.code === "objective")?.content
+    );
   });
 });

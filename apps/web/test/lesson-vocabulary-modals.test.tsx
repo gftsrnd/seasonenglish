@@ -30,6 +30,7 @@ const vocabularyPart: LessonPart = {
       pronunciation: "/ˈkɒliːɡ/",
       meaning: "đồng nghiệp",
       examples: ["I work with my colleagues."],
+      collocations: ["close colleague", "former colleague", "trusted colleague"],
       family: [
         { word: "colleague", type: "noun", meaning: "đồng nghiệp" },
         { word: "collegial", type: "adjective", meaning: "thân thiện như đồng nghiệp" }
@@ -56,6 +57,7 @@ const vocabularyPart: LessonPart = {
 
 const lesson: LessonView = {
   id: "00000000-0000-4000-8000-000000000201", title: "I work in…", dayNumber: 1, durationMinutes: 10, cefr: "A2",
+  weekNumber: 1, weekTopic: "Introducing yourself & your job",
   content: { parts: [vocabularyPart] },
   progress: { status: "not_started", completedPartCodes: [], evidence: {} },
   lock: null
@@ -93,6 +95,35 @@ describe("lesson vocabulary relation modals", () => {
     expect(callbacks.speak).toHaveBeenCalled();
   });
 
+  it("shows three playable collocations and B1+ extended vocabulary as explicit detail controls", async () => {
+    const user = userEvent.setup();
+    const callbacks = actions();
+    const b1Lesson = { ...lesson, cefr: "B1" as const };
+    render(<LearnerLesson view={{ lesson: b1Lesson }} actions={callbacks} />);
+
+    const card = screen.getByRole("article", { name: /colleague/i });
+    const collocations = within(card).getAllByRole("button", { name: /Nghe cụm từ:/i });
+    expect(collocations).toHaveLength(3);
+    expect(collocations.map((button) => button.textContent)).toEqual([
+      "close colleague", "former colleague", "trusted colleague"
+    ]);
+
+    await user.click(within(card).getByRole("button", { name: "Xem từ đồng nghĩa: coworker" }));
+    const synonymModal = screen.getByTestId("modal.vocab-lexical-detail");
+    expect(synonymModal).toHaveTextContent("Đồng nghĩa");
+    expect(synonymModal).toHaveTextContent("a person you work with");
+    await user.click(within(synonymModal).getByRole("button", { name: "Đóng" }));
+
+    await user.click(within(card).getByRole("button", { name: "Xem Khẩu ngữ: workmate" }));
+    const slangModal = screen.getByTestId("modal.vocab-lexical-detail");
+    expect(slangModal).toHaveTextContent("Khẩu ngữ");
+    expect(slangModal).toHaveTextContent("a colleague");
+    await user.click(within(slangModal).getByRole("button", { name: "Đóng" }));
+
+    await user.click(within(card).getByRole("button", { name: "Xem Văn phong: fellow worker" }));
+    expect(screen.getByTestId("modal.vocab-lexical-detail")).toHaveTextContent("literary");
+  });
+
   it("does not render a misleading related-word chip when the server has no detail", () => {
     const emptyLesson = {
       ...lesson,
@@ -100,5 +131,11 @@ describe("lesson vocabulary relation modals", () => {
     } as LessonView;
     render(<LearnerLesson view={{ lesson: emptyLesson }} actions={actions()} />);
     expect(screen.queryByRole("button", { name: /chi tiết từ liên quan/i })).not.toBeInTheDocument();
+  });
+
+  it("keeps slang and poetic detail controls exclusive to B1+", () => {
+    render(<LearnerLesson view={{ lesson }} actions={actions()} />);
+    expect(screen.queryByRole("button", { name: "Xem Khẩu ngữ: workmate" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Xem Văn phong: fellow worker" })).not.toBeInTheDocument();
   });
 });

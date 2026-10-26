@@ -23,7 +23,7 @@ const resultInput = z.object({
   answers: z.array(answer).min(1).max(30), events: z.array(gameEvent).max(60).optional()
 });
 const practiceAppealParams = z.object({ submissionId: z.uuid() });
-const practiceAppealInput = z.object({ reason: z.string().trim().min(3).max(2_000) });
+const practiceAppealInput = z.object({ reason: z.string().trim().min(5).max(2_000) });
 
 const GAME_DESCRIPTORS: ReadonlyArray<Omit<GameDescriptor, "best">> = [
   { key: "scramble", icon: "🔤", name: "Word scramble", description: "Các chữ cái bị xáo trộn, xếp lại thành đúng từ", goal: "Xếp đúng càng nhiều từ càng tốt (8 từ).", instructions: ["Đọc gợi ý (nghĩa tiếng Việt / định nghĩa) và các ô chữ cái bị xáo trộn.", "Bấm từng chữ cái theo đúng thứ tự (hoặc gõ phím) để xếp vào ô trống; ⌫ để bỏ chữ cuối.", "Xếp đủ chữ mà sai thì ô rung và xoá để xếp lại; mỗi từ được 2 lần sai.", "Bí quá thì bấm Gợi ý: mở chữ cái tiếp theo (trừ nửa điểm của từ đó)."], scoring: "+2 điểm mỗi từ xếp đúng ngay, +1 nếu dùng gợi ý hoặc sai một lần." },

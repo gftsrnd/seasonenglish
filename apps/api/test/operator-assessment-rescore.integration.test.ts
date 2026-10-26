@@ -128,9 +128,9 @@ describe("Operator assessment AI rescore", () => {
     expect(runTask).toHaveBeenCalledTimes(1);
     const aiInput = assessmentGradingInputSchema.parse(capturedAssessmentInput);
     expect(aiInput.objectiveScores.listening.groups).toEqual(expect.arrayContaining([
-      expect.objectContaining({ groupKey: "LB", taskKeys: expect.arrayContaining(["LB_Q6"]) })
+      expect.objectContaining({ groupKey: "LB", taskKeys: expect.arrayContaining(["LB_Q9"]) })
     ]));
-    expect(aiInput.objectiveScores.listening.groups.flatMap((group) => group.taskKeys).filter((key) => key === "LB_Q6")).toHaveLength(1);
+    expect(aiInput.objectiveScores.listening.groups.flatMap((group) => group.taskKeys).filter((key) => key === "LB_Q9")).toHaveLength(1);
 
     const storedScores = await pool.query<{ section: string; score: string; source: string }>(
       "select section, score::text, source from assessment_scores where attempt_id = $1 order by section",

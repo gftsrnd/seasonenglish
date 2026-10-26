@@ -18,8 +18,8 @@ function legacyPlacementDefinition() {
   const listening = legacy.sections.find((section) => section.code === "listening")!;
   const partA = listening.groups.find((group) => group.key === "LA")!;
   const partB = listening.groups.find((group) => group.key === "LB")!;
-  const moved = partB.tasks.find((task) => task.key === "LB_Q6")!;
-  partB.tasks = partB.tasks.filter((task) => task.key !== "LB_Q6");
+  const moved = partB.tasks.find((task) => task.key === "LB_Q9")!;
+  partB.tasks = partB.tasks.filter((task) => task.key !== "LB_Q9");
   partA.tasks.splice(3, 0, { ...moved, key: "LA_3" });
   partA.title = "Part A – Questions 1–5";
   partA.instruction = "Nghe thông báo và trả lời câu 1–5.";
@@ -28,7 +28,7 @@ function legacyPlacementDefinition() {
   return legacy;
 }
 
-describe("placement Listening 2 question 6 scoring path", () => {
+describe("placement Listening 2 question 9 scoring path", () => {
   const pool = new Pool({ connectionString: databaseUrl });
   let capturedAssessmentInput: unknown;
   const runTask = vi.fn(async (_taskName: string, input: unknown) => {
@@ -42,7 +42,7 @@ describe("placement Listening 2 question 6 scoring path", () => {
       monthlyGoal: "Luyện phản hồi công việc ngắn mỗi ngày."
     },
     metadata: {
-      traceId: "trace-listening-q6",
+      traceId: "trace-listening-q9",
       taskId: "assessment_scoring",
       provider: "fixture",
       model: "fixture-model",
@@ -70,7 +70,7 @@ describe("placement Listening 2 question 6 scoring path", () => {
       );
       await syncCanonicalAssessmentBlueprints(client);
       await client.query(
-        "insert into users (id, organization_id, role, display_name, email) values ($1, $2, 'learner', 'Placement Q6', 'placement-q6@e4s.local')",
+        "insert into users (id, organization_id, role, display_name, email) values ($1, $2, 'learner', 'Placement Q9', 'placement-q9@e4s.local')",
         [learnerId, DEMO_IDS.organization]
       );
       await client.query("insert into user_credentials (user_id, credential_hash) values ($1, $2)", [learnerId, await createPinHash("164164")]);
@@ -86,7 +86,7 @@ describe("placement Listening 2 question 6 scoring path", () => {
     const login = await app.inject({
       method: "POST",
       url: "/api/auth/learner/login",
-      payload: { email: "placement-q6@e4s.local", pin: "164164" }
+      payload: { email: "placement-q9@e4s.local", pin: "164164" }
     });
     expect(login.statusCode, login.body).toBe(200);
     cookie = String(login.headers["set-cookie"]).split(";")[0] ?? "";
@@ -104,13 +104,13 @@ describe("placement Listening 2 question 6 scoring path", () => {
     await pool.end();
   });
 
-  it("persists question 6 once under Listening 2, scores 20/20 once, and carries that objective result into AI grading", async () => {
+  it("persists question 9 once under Listening 2, scores 20/20 once, and carries that objective result into AI grading", async () => {
     const started = await app.inject({ method: "POST", url: "/api/v1/assessments/placement/start", headers: { cookie }, payload: {} });
     expect(started.statusCode, started.body).toBe(201);
     const attemptId = started.json().attempt.id as string;
     const listening = placementDefinition.sections.find((section) => section.code === "listening")!;
     const entries = listening.groups.flatMap((group) => group.tasks.map((task) => ({ groupKey: group.key, task })));
-    expect(entries[5]).toMatchObject({ groupKey: "LB", task: { key: "LB_Q6" } });
+    expect(entries[8]).toMatchObject({ groupKey: "LB", task: { key: "LB_Q9" } });
 
     for (const { task } of entries) {
       const response = await app.inject({
@@ -123,10 +123,10 @@ describe("placement Listening 2 question 6 scoring path", () => {
     }
 
     const persisted = await pool.query<{ section: string; task_key: string }>(
-      "select section, task_key from assessment_responses where attempt_id = $1 and task_key = 'LB_Q6'",
+      "select section, task_key from assessment_responses where attempt_id = $1 and task_key = 'LB_Q9'",
       [attemptId]
     );
-    expect(persisted.rows).toEqual([{ section: "listening", task_key: "LB_Q6" }]);
+    expect(persisted.rows).toEqual([{ section: "listening", task_key: "LB_Q9" }]);
 
     for (const section of ["listening", "reading", "writing"] as const) {
       const advanced = await app.inject({
@@ -155,8 +155,8 @@ describe("placement Listening 2 question 6 scoring path", () => {
     expect(runTask).toHaveBeenCalledOnce();
     const aiInput = assessmentGradingInputSchema.parse(capturedAssessmentInput);
     expect(aiInput.objectiveScores.listening).toMatchObject({ score: 20, maxScore: 20, answered: 15, total: 15 });
-    expect(aiInput.objectiveScores.listening.groups.find((group) => group.groupKey === "LB")?.taskKeys).toContain("LB_Q6");
-    expect(aiInput.objectiveScores.listening.groups.flatMap((group) => group.taskKeys).filter((key) => key === "LB_Q6")).toHaveLength(1);
+    expect(aiInput.objectiveScores.listening.groups.find((group) => group.groupKey === "LB")?.taskKeys).toContain("LB_Q9");
+    expect(aiInput.objectiveScores.listening.groups.flatMap((group) => group.taskKeys).filter((key) => key === "LB_Q9")).toHaveLength(1);
 
     const scoreRows = await pool.query<{ section: string; score: string }>(
       "select section, score::text from assessment_scores where attempt_id = $1 order by section",
@@ -199,7 +199,7 @@ describe("placement Listening 2 question 6 scoring path", () => {
     const resumed = await app.inject({ method: "GET", url: "/api/v1/assessments/placement", headers: { cookie: staleCookie } });
     expect(resumed.statusCode, resumed.body).toBe(200);
     expect(resumed.json()).toMatchObject({
-      definition: { version: 2 },
+      definition: { version: 3 },
       attempt: {
         id: staleAttemptId,
         audioPlayCounts: { "listening:LA": 1, "listening:LB": 1 }
@@ -209,7 +209,7 @@ describe("placement Listening 2 question 6 scoring path", () => {
     expect(view.definition.sections[0].groups[0].instruction).toContain("1–4");
     expect(view.attempt.responses).toEqual(expect.arrayContaining([
       expect.objectContaining({ taskKey: "LA_1", value: "B" }),
-      expect.objectContaining({ taskKey: "LB_Q6", value: "B" })
+      expect.objectContaining({ taskKey: "LB_Q9", value: "B" })
     ]));
     expect(view.attempt.responses.some((response: { taskKey: string }) => response.taskKey === "LA_3")).toBe(false);
 
@@ -221,7 +221,7 @@ describe("placement Listening 2 question 6 scoring path", () => {
     );
     expect(persisted.rows).toEqual([
       { assessment_version_id: latest.rows[0]!.id, task_key: "LA_1" },
-      { assessment_version_id: latest.rows[0]!.id, task_key: "LB_Q6" }
+      { assessment_version_id: latest.rows[0]!.id, task_key: "LB_Q9" }
     ]);
 
     const secondPlay = await app.inject({

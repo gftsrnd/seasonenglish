@@ -33,9 +33,11 @@ describe("AI service", () => {
       durationMinutes: 10,
       objective: {
         title: "Objectives", explanationLanguage: "en",
+        lesson_goal: "Propose and confirm a practical meeting arrangement.",
+        assessment_gap: null,
         items: [
-          { type: "content", text: "SWBAT propose one meeting time when asked.", condition: "when asked", criterion: "one clear proposal", assessmentCode: "listening" },
-          { type: "language", text: "SWBAT confirm one next step after discussion.", condition: "after discussion", criterion: "one clear sentence", assessmentCode: "speaking" }
+          { id: "C1", type: "content", text: "By the end of this lesson, you will be able to propose one meeting time when asked.", action_verb: "propose", target_language: null, condition: "when asked", criterion: "one clear proposal", assessed_by: "listening", success_evidence: "The learner selects one workable time.", assessmentCode: "listening" },
+          { id: "L1", type: "language", text: "By the end of this lesson, you will be able to confirm one next step after discussion.", action_verb: "confirm", target_language: ["confirm", "next step"], condition: "after discussion", criterion: "one clear sentence", assessed_by: "speaking", success_evidence: "The response confirms one next step.", assessmentCode: "speaking" }
         ]
       },
       instruction: { title: "Instructions", step1: "Review the situation.", step2: "Study the vocabulary.", step3: "Complete the tasks." },
@@ -205,6 +207,125 @@ describe("AI service", () => {
     await expect(service.runTask("coach_dialogue", coachInput())).resolves.toMatchObject({ output: validCoachOutput, metadata: { attempts: 2 } });
     expect(complete).toHaveBeenCalledTimes(2);
     expect(complete.mock.calls[1]?.[0].systemPrompt).toContain("REPAIR REQUIRED");
+    expect(complete.mock.calls[1]?.[0].systemPrompt).toContain('PREVIOUS INVALID OUTPUT: {"reply":"Missing scores"}');
+  });
+
+  it("normalizes a meaningful partial Coach answer mislabeled as insufficient before schema validation", async () => {
+    const mislabeled = {
+      ...validCoachOutput,
+      evaluation: {
+        status: "insufficient", result: "missing_information", countsTowardGoal: false,
+        noteVi: "Bạn đã nêu tên nhưng còn thiếu vai trò."
+      },
+      rubric: {
+        ...validCoachOutput.rubric,
+        meaning: { score: 2, evidence: "The learner gives their name.", improvement: "Add the job role." }
+      },
+      corrections: [], correctedText: "", usedWords: []
+    };
+    const complete = vi.fn().mockResolvedValue({ output: mislabeled, usage: {} });
+    const service = createAiService({
+      registry: AI_TASKS, provider: fixtureProvider(complete), loadPrompt: async () => "Coach safely.", maxAttempts: 1
+    });
+
+    await expect(service.runTask("coach_dialogue", {
+      ...coachInput(), message: "Hello, my name is Minh."
+    })).resolves.toMatchObject({
+      output: {
+        evaluation: { status: "valid", result: "partially_correct", countsTowardGoal: true },
+        rubric: { meaning: { score: 2 } }
+      },
+      metadata: { attempts: 1 }
+    });
+  });
+
+  it("treats a complete meaningful sentence as a partial attempt even when the model assigns zero meaning", async () => {
+    const mislabeled = {
+      ...validCoachOutput,
+      evaluation: {
+        status: "insufficient", result: "missing_information", countsTowardGoal: false,
+        noteVi: "Bạn đã nêu tên nhưng còn thiếu vai trò."
+      },
+      rubric: {
+        ...validCoachOutput.rubric,
+        meaning: { score: 0, evidence: "The learner gives their name but omits the role.", improvement: "Add the job role." }
+      },
+      corrections: [], correctedText: "", usedWords: []
+    };
+    const service = createAiService({
+      registry: AI_TASKS,
+      provider: fixtureProvider(vi.fn().mockResolvedValue({ output: mislabeled, usage: {} })),
+      loadPrompt: async () => "Coach safely.", maxAttempts: 1
+    });
+
+    await expect(service.runTask("coach_dialogue", {
+      ...coachInput(), message: "Hello, my name is Minh."
+    })).resolves.toMatchObject({
+      output: {
+        evaluation: { status: "valid", result: "partially_correct", countsTowardGoal: true },
+        rubric: { meaning: { score: 1 } }
+      }
+    });
+  });
+
+  it("normalizes a relevant attempt mislabeled off-topic when its meaning rubric is positive", async () => {
+    const mislabeled = {
+      ...validCoachOutput,
+      evaluation: {
+        status: "off_topic", result: "off_topic", countsTowardGoal: false,
+        noteVi: "Câu trả lời liên quan nhưng còn thiếu thời gian và mục đích."
+      },
+      rubric: {
+        ...validCoachOutput.rubric,
+        meaning: { score: 1, evidence: "The learner asks to schedule a meeting.", improvement: "Add a time and purpose." }
+      }
+    };
+    const service = createAiService({
+      registry: AI_TASKS,
+      provider: fixtureProvider(vi.fn().mockResolvedValue({ output: mislabeled, usage: {} })),
+      loadPrompt: async () => "Coach safely.", maxAttempts: 1
+    });
+
+    await expect(service.runTask("coach_dialogue", {
+      ...coachInput(), message: "Could we schedule a meeting?"
+    })).resolves.toMatchObject({
+      output: { evaluation: { status: "valid", result: "partially_correct", countsTowardGoal: true } }
+    });
+  });
+
+  it("supplies a neutral next question when an otherwise valid Coach output omits it", async () => {
+    const { nextQuestion: _nextQuestion, nextQuestionTranslation: _translation, ...withoutNextQuestion } = validCoachOutput;
+    const service = createAiService({
+      registry: AI_TASKS,
+      provider: fixtureProvider(vi.fn().mockResolvedValue({ output: withoutNextQuestion, usage: {} })),
+      loadPrompt: async () => "Coach safely.", maxAttempts: 1
+    });
+
+    await expect(service.runTask("coach_dialogue", coachInput())).resolves.toMatchObject({
+      output: {
+        nextQuestion: "What could you say next in this workplace situation?",
+        nextQuestionTranslation: "Bạn có thể nói gì tiếp theo trong tình huống công việc này?"
+      }
+    });
+  });
+
+  it("preserves an otherwise valid Coach turn when the model omits suggestedAnswer", async () => {
+    const { suggestedAnswer: _suggestedAnswer, ...withoutSuggestedAnswer } = validCoachOutput;
+    const service = createAiService({
+      registry: AI_TASKS,
+      provider: fixtureProvider(vi.fn().mockResolvedValue({ output: withoutSuggestedAnswer, usage: {} })),
+      loadPrompt: async () => "Coach safely.", maxAttempts: 1
+    });
+
+    await expect(service.runTask("coach_dialogue", coachInput())).resolves.toMatchObject({
+      output: {
+        suggestedAnswer: {
+          text: expect.any(String),
+          translation: expect.any(String)
+        }
+      },
+      metadata: { attempts: 1 }
+    });
   });
 
   it("normalizes output before strict schema validation", async () => {

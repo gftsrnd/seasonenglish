@@ -100,4 +100,36 @@ describe("lesson enrichment merge", () => {
 
     expect(lessonDaysNeedingRepair(incomplete, "enrich")).toEqual([2, 5]);
   });
+
+  it("selects a day when any retained lesson component is missing", () => {
+    const partial = [{
+      ...generatedLesson,
+      parts: generatedLesson.parts.filter((part) => part.code !== "objective")
+    }];
+
+    expect(lessonDaysNeedingRepair(partial, "enrich")).toEqual([1, 2, 3, 4, 5]);
+  });
+
+  it("merges a partial AI result without overwriting valid manual content", () => {
+    const existing: ContentLessonDraftInput = {
+      ...generatedLesson,
+      title: "Tiêu đề đã sửa tay",
+      parts: generatedLesson.parts
+        .filter((part) => part.code !== "vocabulary")
+        .map((part) => part.code === "objective"
+          ? { ...part, content: { text: "Mục tiêu do người dùng sửa." } }
+          : part)
+    };
+    const partialGenerated: ContentLessonDraftInput = {
+      ...generatedLesson,
+      title: "AI title",
+      parts: generatedLesson.parts.filter((part) => part.code === "vocabulary")
+    };
+
+    const merged = mergeGeneratedLesson(existing, partialGenerated, "enrich");
+
+    expect(merged.title).toBe("Tiêu đề đã sửa tay");
+    expect(merged.parts.find((part) => part.code === "objective")?.content).toEqual({ text: "Mục tiêu do người dùng sửa." });
+    expect(merged.parts.find((part) => part.code === "vocabulary")).toBeDefined();
+  });
 });

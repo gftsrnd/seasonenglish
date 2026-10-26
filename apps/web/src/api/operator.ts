@@ -43,6 +43,7 @@ export interface OperatorApiClient {
   saveContentLessonJson(week: number, cefr: CefrLevel, lessons: ContentLessonDraftInput[], expectedVersion?: number): Promise<ContentLessonMutationResult>;
   saveContentWeeklyPractice(week: number, cefr: CefrLevel, input: ContentWeeklyPracticeDraftInput): Promise<ContentLessonMutationResult>;
   enrichContentLessonDraft(week: number, cefr: CefrLevel, expectedVersion?: number): Promise<ContentLessonMutationResult>;
+  enrichContentLessonDay?(week: number, cefr: CefrLevel, dayNumber: number, expectedVersion?: number): Promise<ContentLessonMutationResult>;
   fillContentLessonPhrases(week: number, cefr: CefrLevel, expectedVersion?: number): Promise<ContentLessonMutationResult>;
   deleteContentLessonDraftSet(week: number, cefr: CefrLevel): Promise<{ deleted: true }>;
   saveContentLessonDraft(week: number, cefr: CefrLevel, lessons: ContentLessonDraftInput[]): Promise<ContentLessonSetVersionView>;
@@ -93,6 +94,7 @@ export const operatorApiClient: OperatorApiClient = {
   saveContentLessonJson: (week, cefr, lessons, expectedVersion) => request(`/api/v1/content/lesson-sets/${week}/${encodeURIComponent(cefr)}/draft/json`, { method: "PUT", body: JSON.stringify({ lessons, ...(expectedVersion === undefined ? {} : { expectedVersion }) }) }),
   saveContentWeeklyPractice: (week, cefr, input) => request(`/api/v1/content/lesson-sets/${week}/${encodeURIComponent(cefr)}/draft/weekly-practice`, { method: "PUT", body: JSON.stringify(input) }),
   enrichContentLessonDraft: (week, cefr, expectedVersion) => request(`/api/v1/content/lesson-sets/${week}/${encodeURIComponent(cefr)}/draft/enrich`, { method: "POST", body: JSON.stringify(expectedVersion === undefined ? {} : { expectedVersion }) }),
+  enrichContentLessonDay: (week, cefr, dayNumber, expectedVersion) => request(`/api/v1/content/lesson-sets/${week}/${encodeURIComponent(cefr)}/draft/enrich`, { method: "POST", body: JSON.stringify({ dayNumber, ...(expectedVersion === undefined ? {} : { expectedVersion }) }) }),
   fillContentLessonPhrases: (week, cefr, expectedVersion) => request(`/api/v1/content/lesson-sets/${week}/${encodeURIComponent(cefr)}/draft/fill-phrases`, { method: "POST", body: JSON.stringify(expectedVersion === undefined ? {} : { expectedVersion }) }),
   deleteContentLessonDraftSet: (week, cefr) => request(`/api/v1/content/lesson-sets/${week}/${encodeURIComponent(cefr)}/draft`, { method: "DELETE", body: "{}" }),
   saveContentLessonDraft: (week, cefr, lessons) => request(`/api/v1/content/lesson-sets/${week}/${encodeURIComponent(cefr)}/draft`, { method: "PUT", body: JSON.stringify({ lessons }) }),

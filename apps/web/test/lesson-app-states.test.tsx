@@ -34,6 +34,7 @@ const parts: LessonPart[] = [
 
 const lesson = {
   id: "00000000-0000-4000-8000-000000000201", title: "Bài 2", dayNumber: 2, durationMinutes: 10, cefr: "A2" as const,
+  weekNumber: 1, weekTopic: "Introducing yourself & your job",
   content: { parts }, progress: { status: "in_progress" as const, completedPartCodes: [], evidence: {} }
 };
 
@@ -117,7 +118,8 @@ describe("app lesson evidence states", () => {
     };
     render(<LearnerLesson view={{ lesson: instructionLesson }} actions={callbacks()} />);
 
-    expect(screen.queryByRole("heading", { name: /hướng dẫn làm bài/i })).not.toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: /hướng dẫn làm bài/i })).toBeInTheDocument();
+    expect(screen.getAllByTestId("app-lesson-part").map((part) => part.dataset.part)).toEqual(["objective", "instruction"]);
     await user.click(screen.getByRole("tab", { name: /2\. bài tập/i }));
 
     const instruction = screen.getAllByTestId("app-lesson-part").find((part) => part.dataset.part === "instruction");

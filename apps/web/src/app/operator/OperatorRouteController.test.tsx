@@ -204,7 +204,7 @@ describe("OperatorRouteController", () => {
 
     await user.click(await screen.findByRole("button", { name: "Sinh" }));
 
-    expect(await screen.findByText("AI trả về nội dung không đúng định dạng.")).toHaveClass("operator-toast");
+    expect(await screen.findByText(/AI trả về nội dung không đúng định dạng.*bấm Sinh để thử lại.*Soạn tay/i)).toHaveClass("operator-toast");
     expect(screen.queryByText(/lessons\.0\.parts\.0\.content\.steps/)).not.toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "Sinh & duyệt bài học" })).toBeInTheDocument();
   });
@@ -855,6 +855,42 @@ describe("OperatorRouteController", () => {
     await waitFor(() => expect(generateContentLessonDraft).toHaveBeenCalledWith(2, "A2"));
   });
 
+  it("offers AI regeneration and manual recreation for exactly the deleted lesson day", async () => {
+    const user = userEvent.setup();
+    const draft = lessonSet("draft");
+    draft.lessons = [
+      { ...draft.lessons[0]!, id: "lesson-1", dayNumber: 1, title: "T2 lesson" },
+      { ...draft.lessons[0]!, id: "lesson-2", dayNumber: 2, title: "T3 lesson" },
+      { ...draft.lessons[0]!, id: "lesson-4", dayNumber: 4, title: "T5 lesson" },
+      { ...draft.lessons[0]!, id: "lesson-5", dayNumber: 5, title: "T6 lesson" }
+    ];
+    const repaired = {
+      ...draft,
+      version: 2,
+      lessons: [
+        ...draft.lessons,
+        { ...draft.lessons[0]!, id: "lesson-3", dayNumber: 3, title: "T4 regenerated" }
+      ]
+    };
+    const enrichContentLessonDay = vi.fn().mockResolvedValue(repaired);
+    const client = {
+      getContentLessonSet: vi.fn().mockResolvedValue(draft),
+      getSystemCapabilities: vi.fn().mockResolvedValue({ ai: true }),
+      enrichContentLessonDay
+    };
+    render(<MemoryRouter initialEntries={["/op/lessons/2/A2"]}><OperatorRouteController session={operator} client={client as any} /></MemoryRouter>);
+
+    expect(await screen.findByText("Thiếu bài T4")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Sinh lại T4" }));
+    await waitFor(() => expect(enrichContentLessonDay).toHaveBeenCalledWith(2, "A2", 3, 1));
+    expect(await screen.findByText("T4 regenerated")).toBeInTheDocument();
+
+    cleanup();
+    render(<MemoryRouter initialEntries={["/op/lessons/2/A2"]}><OperatorRouteController session={operator} client={client as any} /></MemoryRouter>);
+    await user.click(await screen.findByRole("button", { name: "Soạn lại T4" }));
+    expect(screen.getByRole("dialog")).toBeInTheDocument();
+  });
+
   it("keeps the lesson visible when deleting the set fails", async () => {
     const draft = lessonSet("draft");
     const client = {
@@ -991,7 +1027,7 @@ describe("OperatorRouteController", () => {
 
     enrichContentLessonDraft.mockRejectedValueOnce(Object.assign(new Error("AI_OUTPUT_INVALID"), { code: "AI_OUTPUT_INVALID" }));
     await user.click(screen.getByRole("button", { name: /Bổ sung bằng AI/ }));
-    expect(await screen.findByText(/AI trả về nội dung không đúng định dạng/)).toBeInTheDocument();
+    expect(await screen.findByText(/AI trả về nội dung không đúng định dạng.*bấm lại thao tác.*Soạn tay/i)).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /Bổ sung bằng AI/ })).toBeEnabled();
     expect(screen.queryByRole("button", { name: /Đang bổ sung/ })).not.toBeInTheDocument();
   });

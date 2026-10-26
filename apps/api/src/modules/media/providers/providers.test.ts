@@ -39,7 +39,8 @@ describe("exact Wikipedia media", () => {
       sourcePageUrl: "https://commons.wikimedia.org/wiki/File:Paper_notebook.jpg",
       creator: "Example Photographer",
       licence: "CC BY-SA",
-      licenceUrl: "https://creativecommons.org/licenses/by-sa/4.0/"
+      licenceUrl: "https://creativecommons.org/licenses/by-sa/4.0/",
+      semanticText: "File:Paper notebook.jpg"
     });
     expect(fetchImpl).toHaveBeenCalledTimes(2);
     const pageQuery = new URL(String(fetchImpl.mock.calls[0]?.[0]));
@@ -111,6 +112,7 @@ describe("Openverse search", () => {
   it("returns a non-mature bitmap with complete open-licence metadata", async () => {
     const fetchImpl = vi.fn().mockResolvedValue(jsonResponse({ results: [{
       id: "openverse-1",
+      title: "Paper notebook on a desk",
       url: "https://live.staticflickr.com/notebook.jpg",
       thumbnail: "https://api.openverse.org/v1/images/openverse-1/thumb/",
       foreign_landing_url: "https://www.flickr.com/photos/example/1",
@@ -126,7 +128,8 @@ describe("Openverse search", () => {
       provider: "openverse",
       providerAssetId: "openverse-1",
       licence: "CC BY",
-      creator: "Example Creator"
+      creator: "Example Creator",
+      semanticText: "Paper notebook on a desk"
     });
   });
 
@@ -171,7 +174,8 @@ describe("Pixabay search", () => {
       sourcePageUrl: "https://pixabay.com/photos/team-meeting-42/",
       creator: "Photo Author",
       licence: "Pixabay Content License",
-      licenceUrl: "https://pixabay.com/service/license-summary/"
+      licenceUrl: "https://pixabay.com/service/license-summary/",
+      semanticText: "team, meeting, office"
     });
     const url = new URL(String(fetchImpl.mock.calls[0]?.[0]));
     expect(url.hostname).toBe("pixabay.com");

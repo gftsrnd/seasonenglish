@@ -240,6 +240,29 @@ describe("AI Coach API", () => {
     ]));
   });
 
+  it("stores a two-word fragment as insufficient without calling AI", async () => {
+    runTask.mockClear();
+    const before = await app.inject({ method: "GET", url: "/api/v1/coach", headers: { cookie: learnerCookie } });
+    const response = await app.inject({
+      method: "POST", url: "/api/v1/coach/messages", headers: { cookie: learnerCookie },
+      payload: { requestId: "10000000-0000-4000-8000-000000000015", message: "Maybe room." }
+    });
+
+    expect(response.statusCode, response.body).toBe(200);
+    expect(runTask).not.toHaveBeenCalled();
+    expect(response.json().daily.used).toBe(before.json().daily.used);
+    expect(response.json().weekly.turns).toBe(before.json().weekly.turns);
+    expect(response.json().messages).toEqual(expect.arrayContaining([
+      expect.objectContaining({ speaker: "learner", text: "Maybe room.", classification: "insufficient" }),
+      expect.objectContaining({
+        speaker: "coach",
+        feedback: expect.objectContaining({
+          evaluation: expect.objectContaining({ status: "insufficient", result: "missing_information", countsTowardGoal: false })
+        })
+      })
+    ]));
+  });
+
   it("repeats the current question and excludes an off-topic answer from progress", async () => {
     runTask.mockClear();
     const before = await app.inject({ method: "GET", url: "/api/v1/coach", headers: { cookie: learnerCookie } });
@@ -320,5 +343,162 @@ describe("AI Coach API", () => {
     const latestCoach = [...response.json().messages].reverse()
       .find((message: { speaker: string; feedback?: { seasonReply?: string } }) => message.speaker === "coach" && message.feedback);
     expect(latestCoach?.feedback?.seasonReply).toBe(formalAiOutput.seasonReply);
+  });
+
+  it("retries schema-invalid Coach output once with the previous output in the repair prompt", async () => {
+    await app.inject({
+      method: "PUT", url: "/api/v1/coach/persona", headers: { cookie: learnerCookie }, payload: { persona: "formal" }
+    });
+    runTask.mockClear();
+    runTask
+      .mockResolvedValueOnce({
+        output: { evaluation: { status: "valid" } } as any,
+        metadata: { traceId: "trace-schema-invalid", taskId: "coach_dialogue", provider: "fixture", model: "fixture-model",
+          attempts: 1, latencyMs: 12, inputHash: "1".repeat(64), schemaValid: true as const,
+          usage: { inputTokens: 20, outputTokens: 5, totalTokens: 25 } }
+      })
+      .mockResolvedValueOnce({
+        output: formalAiOutput,
+        metadata: { traceId: "trace-schema-repaired", taskId: "coach_dialogue", provider: "fixture", model: "fixture-model",
+          attempts: 1, latencyMs: 12, inputHash: "2".repeat(64), schemaValid: true as const,
+          usage: { inputTokens: 20, outputTokens: 25, totalTokens: 45 } }
+      });
+
+    const response = await app.inject({
+      method: "POST", url: "/api/v1/coach/messages", headers: { cookie: learnerCookie },
+      payload: { requestId: "10000000-0000-4000-8000-000000000016", message: "Could you tell me where room 302 is?" }
+    });
+
+    expect(response.statusCode, response.body).toBe(200);
+    expect(runTask).toHaveBeenCalledTimes(2);
+    const repairPrompt = (runTask.mock.calls as unknown as Array<[string, unknown, { systemPrompt?: string }]>)[1]?.[2].systemPrompt;
+    expect(repairPrompt).toContain("PREVIOUS OUTPUT");
+    expect(repairPrompt).toContain('"status":"valid"');
+  });
+
+  it("enforces formal style locally when the second valid output still violates only style policy", async () => {
+    await app.inject({
+      method: "PUT", url: "/api/v1/coach/persona", headers: { cookie: learnerCookie }, payload: { persona: "formal" }
+    });
+    runTask.mockClear();
+    runTask
+      .mockResolvedValueOnce({
+        output: aiOutput,
+        metadata: { traceId: "trace-style-first", taskId: "coach_dialogue", provider: "fixture", model: "fixture-model",
+          attempts: 1, latencyMs: 12, inputHash: "3".repeat(64), schemaValid: true as const,
+          usage: { inputTokens: 20, outputTokens: 25, totalTokens: 45 } }
+      })
+      .mockResolvedValueOnce({
+        output: aiOutput,
+        metadata: { traceId: "trace-style-second", taskId: "coach_dialogue", provider: "fixture", model: "fixture-model",
+          attempts: 1, latencyMs: 12, inputHash: "4".repeat(64), schemaValid: true as const,
+          usage: { inputTokens: 20, outputTokens: 25, totalTokens: 45 } }
+      });
+
+    const response = await app.inject({
+      method: "POST", url: "/api/v1/coach/messages", headers: { cookie: learnerCookie },
+      payload: { requestId: "10000000-0000-4000-8000-000000000017", message: "I work in the product team." }
+    });
+
+    expect(response.statusCode, response.body).toBe(200);
+    expect(runTask).toHaveBeenCalledTimes(2);
+    const feedback = [...response.json().messages].reverse()
+      .find((message: { speaker: string; feedback?: unknown }) => message.speaker === "coach" && message.feedback)?.feedback;
+    expect(feedback.seasonReply).toBe("That is a useful correction");
+    expect(feedback.nextQuestion).toBe("What do you do in the product team?");
+  });
+
+  it("repairs grading when the learner replays the exact suggested answer in the same session", async () => {
+    await app.inject({
+      method: "PUT", url: "/api/v1/coach/persona", headers: { cookie: learnerCookie }, payload: { persona: "informal" }
+    });
+    runTask.mockClear();
+    runTask.mockResolvedValueOnce({
+      output: aiOutput,
+      metadata: { traceId: "trace-suggestion-seed", taskId: "coach_dialogue", provider: "fixture", model: "fixture-model",
+        attempts: 1, latencyMs: 12, inputHash: "5".repeat(64), schemaValid: true as const,
+        usage: { inputTokens: 20, outputTokens: 25, totalTokens: 45 } }
+    });
+    const seed = await app.inject({
+      method: "POST", url: "/api/v1/coach/messages", headers: { cookie: learnerCookie },
+      payload: { requestId: "10000000-0000-4000-8000-000000000018", message: "I work at product." }
+    });
+    expect(seed.statusCode, seed.body).toBe(200);
+
+    const offTopicOutput: CoachTaskOutput = {
+      ...aiOutput,
+      evaluation: { status: "off_topic", result: "off_topic", countsTowardGoal: false, noteVi: "Chưa đúng câu hỏi." },
+      rubric: {
+        ...aiOutput.rubric,
+        meaning: { score: 0, evidence: "The answer is off topic.", improvement: "Answer the current question." }
+      },
+      corrections: [], correctedText: "", usedWords: []
+    };
+    runTask.mockClear();
+    runTask
+      .mockResolvedValueOnce({
+        output: offTopicOutput,
+        metadata: { traceId: "trace-suggestion-rejected", taskId: "coach_dialogue", provider: "fixture", model: "fixture-model",
+          attempts: 1, latencyMs: 12, inputHash: "6".repeat(64), schemaValid: true as const,
+          usage: { inputTokens: 20, outputTokens: 25, totalTokens: 45 } }
+      })
+      .mockResolvedValueOnce({
+        output: offTopicOutput,
+        metadata: { traceId: "trace-suggestion-repaired", taskId: "coach_dialogue", provider: "fixture", model: "fixture-model",
+          attempts: 1, latencyMs: 12, inputHash: "7".repeat(64), schemaValid: true as const,
+          usage: { inputTokens: 20, outputTokens: 25, totalTokens: 45 } }
+      });
+
+    const followup = await app.inject({
+      method: "POST", url: "/api/v1/coach/messages", headers: { cookie: learnerCookie },
+      payload: { requestId: "10000000-0000-4000-8000-000000000019", message: aiOutput.suggestedAnswer.text }
+    });
+    expect(followup.statusCode, followup.body).toBe(200);
+    expect(runTask).toHaveBeenCalledTimes(2);
+    const repairPrompt = (runTask.mock.calls as unknown as Array<[string, unknown, { systemPrompt?: string }]>)[1]?.[2].systemPrompt;
+    expect(repairPrompt).toContain("exact previous suggested answer");
+    const feedback = [...followup.json().messages].reverse()
+      .find((message: { speaker: string; feedback?: unknown }) => message.speaker === "coach" && message.feedback)?.feedback;
+    expect(feedback.evaluation).toMatchObject({ status: "valid", result: "correct", countsTowardGoal: true });
+  });
+
+  it("keeps a valid turn when the second output still repeats nextQuestion as suggestedAnswer", async () => {
+    await app.inject({
+      method: "PUT", url: "/api/v1/coach/persona", headers: { cookie: learnerCookie }, payload: { persona: "formal" }
+    });
+    const repeatedSuggestion: CoachTaskOutput = {
+      ...formalAiOutput,
+      nextQuestion: "Could you tell me where the meeting room is?",
+      nextQuestionTranslation: "Bạn có thể cho tôi biết phòng họp ở đâu không?",
+      suggestedAnswer: {
+        text: "Could you tell me where the meeting room is?",
+        translation: "Bạn có thể cho tôi biết phòng họp ở đâu không?"
+      }
+    };
+    runTask.mockClear();
+    runTask
+      .mockResolvedValueOnce({
+        output: repeatedSuggestion,
+        metadata: { traceId: "trace-repeated-suggestion-first", taskId: "coach_dialogue", provider: "fixture", model: "fixture-model",
+          attempts: 1, latencyMs: 12, inputHash: "8".repeat(64), schemaValid: true as const,
+          usage: { inputTokens: 20, outputTokens: 25, totalTokens: 45 } }
+      })
+      .mockResolvedValueOnce({
+        output: repeatedSuggestion,
+        metadata: { traceId: "trace-repeated-suggestion-second", taskId: "coach_dialogue", provider: "fixture", model: "fixture-model",
+          attempts: 1, latencyMs: 12, inputHash: "9".repeat(64), schemaValid: true as const,
+          usage: { inputTokens: 20, outputTokens: 25, totalTokens: 45 } }
+      });
+
+    const response = await app.inject({
+      method: "POST", url: "/api/v1/coach/messages", headers: { cookie: learnerCookie },
+      payload: { requestId: "10000000-0000-4000-8000-000000000020", message: "I work in the product team." }
+    });
+    expect(response.statusCode, response.body).toBe(200);
+    expect(runTask).toHaveBeenCalledTimes(2);
+    const feedback = [...response.json().messages].reverse()
+      .find((message: { speaker: string; feedback?: unknown }) => message.speaker === "coach" && message.feedback)?.feedback;
+    expect(feedback.nextQuestion).toBe("What could you say next in this workplace situation?");
+    expect(feedback.suggestedAnswer.text).toBe("Could you tell me where the meeting room is?");
   });
 });
