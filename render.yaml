@@ -6,7 +6,7 @@ services:
     region: singapore
     branch: gftsaimedia-cpu
     buildCommand: pnpm install --frozen-lockfile && pnpm build
-    startCommand: sh -c 'pnpm exec tsx scripts/prepare-local.ts && (pnpm exec tsx apps/worker/src/server.ts &) && exec pnpm --filter @e4s/api start'
+    startCommand: sh -c '(pnpm exec tsx apps/worker/src/server.ts &) && exec pnpm --filter @e4s/api start'
     healthCheckPath: /api/readiness
     envVars:
       - key: NODE_ENV
@@ -17,10 +17,6 @@ services:
         value: "true"
       - key: WEB_ORIGIN
         value: https://e4s-web.onrender.com
-      - key: E4S_SEED_SCENARIOS
-        value: "true"
-      - key: E4S_ALLOW_REMOTE_SCENARIOS
-        value: "true"
       - key: DATABASE_URL
         sync: false
       - key: S3_ENDPOINT

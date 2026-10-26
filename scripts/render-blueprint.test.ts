@@ -16,8 +16,8 @@ describe("Render blueprint secrets", () => {
     expect(webService).not.toMatch(/ANTHROPIC_API_KEY|PIXABAY_API_KEY|RESEND_API_KEY|RESEND_FROM_EMAIL/);
   });
 
-  it("opts the Render database into the fixed scenario fixtures", () => {
-    expect(apiService).toMatch(/- key: E4S_SEED_SCENARIOS\s+value: "true"/);
-    expect(apiService).toMatch(/- key: E4S_ALLOW_REMOTE_SCENARIOS\s+value: "true"/);
+  it("does not seed or validate scenario accounts during production startup", () => {
+    expect(apiService).not.toMatch(/prepare-local|E4S_SEED_SCENARIOS|E4S_ALLOW_REMOTE_SCENARIOS/);
+    expect(apiService).toMatch(/startCommand:.*@e4s\/api start/);
   });
 });

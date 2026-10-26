@@ -875,6 +875,14 @@
   box-shadow: 0 2px 7px rgba(30, 30, 30, .12);
 }
 
+.app-operator button[style*="background: var(--primary)"]:hover:not(:disabled),
+.app-operator button[style*="background:var(--primary)"]:hover:not(:disabled),
+.operator-modal-scope button[style*="background: var(--primary)"]:hover:not(:disabled),
+.operator-modal-scope button[style*="background:var(--primary)"]:hover:not(:disabled) {
+  background: var(--primary-hover) !important;
+  color: var(--primary-ink) !important;
+}
+
 /* The topic-frame save action is the primary prototype action, including in read-only preview. */
 .app-operator .weeks-save-button {
   border-color: transparent !important;

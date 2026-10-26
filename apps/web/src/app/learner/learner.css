@@ -547,6 +547,7 @@ button:hover,.btn:hover{background:var(--surface-3)}
 .btn-ghost,.btn-sm.btn-ghost{box-shadow:none;background:transparent}
 .btn-x,button[data-action="modal-close"]:not(.btn-primary),button[data-action="modal-cancel"],button[data-action="logout"]{background:var(--surface);box-shadow:inset 0 0 0 1px var(--line);color:var(--text)}
 .btn-x:hover,button[data-action="modal-close"]:not(.btn-primary):hover,button[data-action="modal-cancel"]:hover,button[data-action="logout"]:hover{background:var(--surface-3)}
+button[style*="background: var(--primary)"]:hover,button[style*="background:var(--primary)"]:hover{background:var(--primary-hover)!important;color:var(--primary-ink)!important}
 .btn-x::before,button[data-action="modal-close"]:not(.btn-primary)::before,button[data-action="modal-cancel"]::before,button[data-action="logout"]::before{content:none}
 .card.soft .btn-sm,.card.soft button:not(.btn-primary):not(.btn-ok):not(.btn-danger):not(.btn-ghost){background:var(--surface)}
 input,select,textarea{background:var(--surface);border:1px solid #D6D1C8;border-radius:10px;min-height:42px;padding:10px 14px;font-size:.92rem}
