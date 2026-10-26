@@ -376,15 +376,15 @@ function SpeechButton({ text, label, speak, iconOnly = false, primary = false }:
   </div>;
 }
 
-function LessonAudioControl({ source, speak }: { source: LessonAudioSource; speak: LearnerCallbacks["speak"] }) {
+function LessonAudioControl({ source, speak, label = "Nghe đoạn audio" }: { source: LessonAudioSource; speak: LearnerCallbacks["speak"]; label?: string }) {
   const [failed, setFailed] = useState(false);
   const [attempt, setAttempt] = useState(0);
   if (!source.src && !source.text) return <Notice tone="warn">Chưa có nội dung âm thanh cho phần Nghe.</Notice>;
-  if (source.src) return <div className="stack" aria-label="Audio bài nghe">
-    <audio key={`${source.src}-${attempt}`} controls preload="metadata" src={source.src} aria-label="Phát đoạn nghe" style={{ maxWidth: "100%", width: "100%" }} onError={() => setFailed(true)} />
+  if (source.src) return <div className="stack" aria-label={label}>
+    <audio key={`${source.src}-${attempt}`} controls preload="metadata" src={source.src} aria-label={`Nghe audio phần ${label.replace(/^Nghe phần\s+/u, "")}`} style={{ maxWidth: "100%", width: "100%" }} onError={() => setFailed(true)} />
     {failed ? <><Notice tone="warn">Không phát được file âm thanh. Bạn có thể thử lại.</Notice><button className="btn-sm btn-ghost" type="button" style={{ alignItems: "center", display: "inline-flex", gap: 6, minHeight: 44 }} onClick={() => { setFailed(false); setAttempt((value) => value + 1); }}><RotateCcw size={16} aria-hidden="true" /> Thử lại audio</button></> : null}
   </div>;
-  return <SpeechButton text={source.text!} label="Nghe đoạn audio" speak={speak} primary />;
+  return <SpeechButton text={source.text!} label={label} speak={speak} primary />;
 }
 
 function SpeakingEvidenceControls({
@@ -575,11 +575,15 @@ function PartContent({
   const targetSound = pronunciationTarget(content.focus ?? "");
   const grammarExamples = content.examples?.slice(0, 3) ?? [];
   const speakingModel = conciseSpeakingModel(content.sample ?? content.answer ?? content.modelAnswer);
+  const sectionAudioSource = ["vocabulary", "pronunciation", "listening", "speaking"].includes(part.code)
+    ? undefined
+    : lessonAudioSource({ ...content, script: lessonPartNarration(part.code, content) });
   return <>
     {part.code === "grammar" || part.code === "pronunciation" ? null : <div className="row between"><h2 className={part.code === "vocabulary" ? "lesson-vocabulary-heading" : undefined}>{part.code === "objective" ? "MỤC TIÊU BÀI HỌC" : part.code === "instruction" ? "HƯỚNG DẪN LÀM BÀI" : part.code === "vocabulary" ? "TỪ VỰNG" : `${sectionNumber}. ${partHeading(part)}`}</h2></div>}
     {part.code === "objective" && objectiveItems.length ? <ul className="lesson-objective-list" aria-label="Mục tiêu bài học">{objectiveItems.map((text, index) => <li key={`${index}-${text}`}>{learnerFacingObjective(text, cefr)}</li>)}</ul> : content.text ? <p className={part.code === "objective" ? "lesson-objective-text" : part.code === "reading" ? "lesson-reading-passage" : undefined}>{part.code === "objective" ? learnerFacingObjective(conciseLessonObjective(content.text), cefr) : content.text}</p> : null}
     {learnerPrompt && part.code !== "speaking" ? <p>{normalizeLessonBlankPrompt(learnerPrompt)}</p> : null}
     {guidanceSteps.length ? <ul className="lesson-instruction-list" aria-label="Hướng dẫn thực hiện">{guidanceSteps.map((step, index) => <li key={`${index}-${step}`}>{step}</li>)}</ul> : null}
+    {sectionAudioSource && (sectionAudioSource.src || sectionAudioSource.text) ? <LessonAudioControl source={sectionAudioSource} speak={speak} label={`Nghe phần ${part.title}`} /> : null}
     {audioSource ? <LessonAudioControl source={audioSource} speak={speak} /> : null}
     {part.code === "grammar" && content.formula ? <div className="lesson-study-block"><div className="lesson-study-panel-header"><h2>NGỮ PHÁP</h2></div><div className="lesson-grammar-copy"><p className="lesson-study-focus"><strong>{content.formula}</strong></p>{content.usage ? <p className="lesson-study-explanation">{grammarUsageCopy(content.usage)}</p> : null}</div>{grammarExamples.length ? <div className="lesson-example-list" aria-label="Câu ví dụ ngữ pháp">{grammarExamples.map((example, index) => { const concise = conciseGrammarExample(example); return <button className="lesson-example-card" type="button" aria-label={`Nghe câu ví dụ ${index + 1}`} onClick={() => speak(concise)} key={example}><Volume2 size={15} aria-hidden="true" /><span>{concise}</span></button>; })}</div> : null}</div> : null}
     {part.code === "pronunciation" && content.focus ? <div className="lesson-study-block lesson-pronunciation-summary"><div className="lesson-study-panel-header"><h2>PHÁT ÂM</h2></div><p className="lesson-study-focus"><strong>Âm {targetSound}{pronunciationWords[0]?.word ? ` như trong “${pronunciationWords[0].word}”` : ""}</strong></p>{content.audioUrl ? <audio controls preload="metadata" src={content.audioUrl} aria-label={`Nghe audio mẫu âm ${targetSound}`} /> : <button className="lesson-study-audio" type="button" aria-label={`Nghe âm ${targetSound}`} title="Phát chậm và ngân âm mục tiêu" onClick={() => speak(pronunciationCue(targetSound, pronunciationWords[0]?.word), "en-US", { rate: 0.55 })}><Volume2 size={16} aria-hidden="true" />Nghe âm {targetSound}</button>}{content.instruction ? <p className="lesson-study-explanation">{content.instruction}</p> : null}</div> : null}
@@ -647,6 +651,19 @@ function lessonAudioSource(content: { audio?: unknown; audioUrl?: string; script
   }
   if (typeof content.script === "string" && content.script.trim()) return { text: content.script };
   return {};
+}
+
+function lessonPartNarration(code: LessonPartCode, content: Record<string, unknown>): string {
+  const values: string[] = [];
+  const add = (value: unknown) => { if (typeof value === "string" && value.trim()) values.push(value.trim()); };
+  if (code === "objective" && Array.isArray(content.items)) {
+    content.items.forEach((item) => add(item && typeof item === "object" ? (item as Record<string, unknown>).text : undefined));
+  }
+  if (code === "instruction" && Array.isArray(content.steps)) content.steps.forEach(add);
+  [content.text, content.passage, content.formula, content.usage, content.instruction, content.prompt, content.question].forEach(add);
+  if (Array.isArray(content.examples)) content.examples.forEach(add);
+  if (Array.isArray(content.options)) content.options.forEach(add);
+  return Array.from(new Set(values)).join(". ");
 }
 
 function isAudioUrl(value: string): boolean {

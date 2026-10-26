@@ -63,10 +63,15 @@ describe("learner lesson study content", () => {
     expect(screen.getByRole("button", { name: "Nghe từ new" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Nghe từ new" }).querySelector("svg.lucide-volume-2")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Nghe cụm từ: new here" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Nghe cụm từ: a new job" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Nghe cụm từ: a new team" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Nghe từ đồng nghĩa: fresh" })).toHaveTextContent("= fresh");
     expect(screen.getByRole("button", { name: "Nghe từ trái nghĩa: old" })).toHaveTextContent("≠ old");
     expect(screen.getByRole("button", { name: "Nghe từ phát âm: I" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Nghe từ phát âm: nice" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Nghe phần Mục tiêu bài học" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Nghe phần Hướng dẫn làm bài" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Nghe phần Ngữ pháp" })).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Nghe mẫu ngữ pháp" })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Chi tiết từ liên quan" })).not.toBeInTheDocument();
 
@@ -84,6 +89,37 @@ describe("learner lesson study content", () => {
     expect(speak).toHaveBeenCalledWith("I", "en-US", { rate: 0.65 });
     fireEvent.click(screen.getByRole("button", { name: "Nghe âm /aɪ/" }));
     expect(speak).toHaveBeenLastCalledWith("I… I", "en-US", { rate: 0.55 });
+  });
+
+  it("provides audio or TTS for every practice section", async () => {
+    const user = userEvent.setup();
+    const speak = vi.fn();
+    const lesson = {
+      id: "lesson-all-audio", title: "Work updates", dayNumber: 1, weekNumber: 1, weekTopic: "Projects",
+      durationMinutes: 10, cefr: "A2",
+      content: { parts: [
+        { code: "objective", title: "Mục tiêu", content: { text: "Give a work update." } },
+        { code: "instruction", title: "Hướng dẫn", content: { steps: ["Listen and answer."] } },
+        { code: "vocabulary", title: "Từ vựng", content: { items: [] } },
+        { code: "grammar", title: "Ngữ pháp", content: { formula: "I have + past participle", examples: ["I have finished."] } },
+        { code: "pronunciation", title: "Phát âm", content: { focus: "/f/", words: ["finish"] } },
+        { code: "listening", title: "Nghe", content: { script: "The report is ready.", prompt: "Is it ready?", options: ["Yes", "No"], answer: "Yes" } },
+        { code: "reading", title: "Đọc", content: { text: "The report is ready.", prompt: "What is ready?", audioUrl: "/audio/reading.mp3" } },
+        { code: "writing", title: "Viết", content: { type: "write", prompt: "Write a short update." } },
+        { code: "word_class", title: "Từ loại", content: { prompt: "Choose the correct noun." } },
+        { code: "word_use", title: "Dùng từ", content: { prompt: "Choose the correct phrase." } },
+        { code: "speaking", title: "Nói", content: { instruction: "Say the sentence.", sample: "The report is ready." } }
+      ] },
+      progress: { status: "in_progress", completedPartCodes: ["objective", "instruction", "vocabulary", "grammar", "pronunciation"], evidence: {} }
+    } as any;
+    render(<LearnerLesson view={{ lesson, lock: null }} actions={{ navigate: vi.fn(), speak, saveLessonProgress: vi.fn() } as any} />);
+
+    await user.click(screen.getByRole("tab", { name: /2\. Bài tập/i }));
+    expect(screen.getByLabelText("Nghe audio phần Đọc")).toHaveAttribute("src", "/audio/reading.mp3");
+    expect(screen.getByRole("button", { name: "Nghe phần Viết" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Nghe phần Từ loại" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Nghe phần Dùng từ" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Nghe câu mẫu" })).toBeInTheDocument();
   });
 
   it("renders every fill-in blank as one continuous line", () => {

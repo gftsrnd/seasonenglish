@@ -183,4 +183,46 @@ describe("operator granular lesson editor", () => {
     expect((screen.getByLabelText("File audio phần Nghe URL") as HTMLInputElement).value).toContain("audio-listening.wav");
     expect((screen.getByLabelText("Audio mẫu phần Nói URL") as HTMLInputElement).value).toContain("audio-speaking.ogg");
   });
+
+  it("offers and persists audio for every lesson section and each vocabulary item", async () => {
+    const user = userEvent.setup();
+    const onSave = vi.fn().mockResolvedValue(undefined);
+    vi.spyOn(window, "confirm").mockReturnValue(true);
+    render(<LessonFormEditor weekNumber={1} cefr="A2" initial={emptyLesson(1)} onSave={onSave} onCancel={() => undefined} />);
+
+    const sectionAudioLabels = [
+      "Audio mục tiêu bài học URL",
+      "Audio hướng dẫn làm bài URL",
+      "Audio phần Ngữ pháp URL",
+      "Audio mẫu phát âm URL",
+      "File audio phần Nghe URL",
+      "Audio phần Đọc URL",
+      "Audio phần Viết URL",
+      "Audio phần Từ loại URL",
+      "Audio phần Dùng từ URL",
+      "Audio mẫu phần Nói URL"
+    ];
+    sectionAudioLabels.forEach((label, index) => {
+      fireEvent.change(screen.getByLabelText(label), { target: { value: `/audio/section-${index + 1}.mp3` } });
+    });
+    [1, 2, 3].forEach((index) => {
+      fireEvent.change(screen.getByLabelText(`Audio từ vựng ${index} URL`), { target: { value: `/audio/word-${index}.mp3` } });
+    });
+
+    await user.click(screen.getByRole("button", { name: "Kiểm tra & lưu" }));
+    await user.click(screen.getByRole("button", { name: "Lưu dù còn thiếu" }));
+
+    const saved = onSave.mock.calls[0]?.[0];
+    const byCode = (code: string) => saved.parts.find((part: { code: string }) => part.code === code)?.content;
+    expect(byCode("objective").audioUrl).toBe("/audio/section-1.mp3");
+    expect(byCode("instruction").audioUrl).toBe("/audio/section-2.mp3");
+    expect(byCode("grammar").audioUrl).toBe("/audio/section-3.mp3");
+    expect(byCode("reading").audioUrl).toBe("/audio/section-6.mp3");
+    expect(byCode("writing").audioUrl).toBe("/audio/section-7.mp3");
+    expect(byCode("word_class").audioUrl).toBe("/audio/section-8.mp3");
+    expect(byCode("word_use").audioUrl).toBe("/audio/section-9.mp3");
+    expect(byCode("vocabulary").items.map((item: { audioUrl?: string }) => item.audioUrl)).toEqual([
+      "/audio/word-1.mp3", "/audio/word-2.mp3", "/audio/word-3.mp3"
+    ]);
+  });
 });

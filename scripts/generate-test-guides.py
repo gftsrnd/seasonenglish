@@ -225,6 +225,19 @@ def build_sample_data():
         "M-010: quản lý nhìn thấy lịch sử phù hợp với người học.",
         "Không có hoạt động tương lai hoặc ngày trùng làm tăng chuỗi giả."
     ])
+    doc.add_heading("Dữ liệu kiểm thử bài học thủ công và âm thanh", level=1)
+    doc.add_paragraph("Dùng tài khoản Operator Phan Minh Châu để soạn hoặc sửa một bài trong bộ B1, sau đó dùng tài khoản Võ Thành Nam để kiểm tra bản đã xuất bản. File audio là dữ liệu tùy chọn; nội dung chữ đã nhập là nguồn dự phòng để trình duyệt đọc bằng Text-to-Speech và không cần dịch vụ AI.")
+    add_table(doc, ["Phần", "Dữ liệu Operator chuẩn bị", "Kết quả người học"], [
+        ["Mục tiêu và Hướng dẫn", "Nhập nội dung chữ; có thể tải audio riêng", "Có nút nghe; ưu tiên file đã tải, nếu trống thì đọc nội dung bằng TTS"],
+        ["Từ vựng", "Nhập từ, nghĩa, phiên âm, 3 cụm; ảnh và audio từng từ là tùy chọn", "Không có ảnh thì thẻ vẫn gọn; không có audio thì đọc từ bằng TTS"],
+        ["Ngữ pháp và Phát âm", "Nhập công thức, cách dùng, ví dụ, âm mục tiêu và 3 từ luyện; có thể tải audio", "Nghe được nội dung hoặc từng ví dụ; không có file thì dùng TTS"],
+        ["Nghe Đọc Viết Từ loại Dùng từ Nói", "Nhập đủ nội dung, câu hỏi và đáp án; có thể tải audio cho từng phần", "Mỗi phần có audio từ file hoặc TTS; Nói vẫn cho ghi âm hoặc tải file để nộp"]
+    ], [3.0, 7.0, 7.7])
+    add_result_checklist(doc, [
+        "Tải lại trang không làm mất URL audio đã lưu.",
+        "Để trống file audio không chặn lưu, duyệt, xuất bản hoặc học bài.",
+        "Tắt AI vẫn nghe được các phần có nội dung chữ bằng Text-to-Speech của trình duyệt."
+    ])
     doc.add_heading("Khôi phục dữ liệu", level=1)
     doc.add_paragraph("Chạy lại pnpm exec tsx scripts/prepare-local.ts để đưa toàn bộ tài khoản kịch bản về trạng thái ban đầu. Seed có tính lặp lại an toàn, vì vậy chạy lại không tạo thêm bản ghi trùng.")
     footer(doc)
@@ -257,7 +270,7 @@ def build_no_ai():
         "Đăng nhập khu Nhân sự bằng tài khoản Operator và mở Sinh & duyệt bài học.",
         "Chọn một tuần và một level chưa có bản nháp. Bấm Soạn tay; không bấm Sinh hoặc Bổ sung bằng AI.",
         "Tạo đủ 5 bài T2–T6. Mỗi bài phải có Mục tiêu, Hướng dẫn, Từ vựng, Ngữ pháp, Phát âm và đủ bài tập Nghe, Đọc, Viết, Từ loại, Dùng từ, Nói.",
-        "Trong Từ vựng, tải ảnh từ máy hoặc dán URL ảnh phù hợp cho từng từ. Trong Phát âm/Nghe/Nói, tải file audio hoặc dán URL audio theo trường trên màn; nếu không có file, Phát âm và Nghe dùng Text-to-Speech từ nội dung đã nhập. Nghe phải có transcript, câu hỏi, 4 lựa chọn và đáp án; Nói phải có câu mẫu.",
+        "Trong Từ vựng, tải ảnh từ máy hoặc dán URL ảnh phù hợp cho từng từ; có thể để trống ảnh khi không có ảnh đúng nghĩa. Mỗi phần Mục tiêu, Hướng dẫn, từng từ vựng, Ngữ pháp, Phát âm, Nghe, Đọc, Viết, Từ loại, Dùng từ và Nói đều có thể tải file audio hoặc dán URL audio. Nếu không có file, hệ thống đọc nội dung chữ bằng Text-to-Speech của trình duyệt, không gọi AI. Nghe phải có transcript, câu hỏi, 4 lựa chọn và đáp án; Nói phải có câu mẫu.",
         "Trong phần bài tập, lưu đáp án rõ ràng cho các câu có đáp án xác định. Với tự viết, viết đề bài yêu cầu ít nhất 2 từ.",
         "Soạn Bài thực hành cuối tuần ngay trong cùng bộ bài, thêm hướng dẫn và tối thiểu 3 từ bắt buộc.",
         "Gửi duyệt rồi xuất bản. Xác nhận bản nháp không lộ cho người học trước khi xuất bản và đủ 5 bài hiển thị sau khi xuất bản."
@@ -265,13 +278,13 @@ def build_no_ai():
     add_result_checklist(doc, [
         "Không có lời gọi AI nào trong lúc soạn, lưu, duyệt hoặc xuất bản.",
         "Ảnh, audio mẫu, transcript, đáp án và bài tập được giữ nguyên sau khi tải lại trang.",
-        "Thiếu transcript/nội dung nghe, câu mẫu hoặc đáp án bắt buộc thì hệ thống chỉ đúng phần cần sửa. File audio là lựa chọn ưu tiên; khi không có file, Text-to-Speech là phương án dự phòng không cần AI.",
+        "Thiếu transcript/nội dung nghe, câu mẫu hoặc đáp án bắt buộc thì hệ thống chỉ đúng phần cần sửa. File audio là lựa chọn ưu tiên cho mọi phần; khi không có file, Text-to-Speech đọc nội dung chữ tương ứng mà không cần AI.",
         "Bài thực hành cuối tuần được lưu cùng bộ bài và không làm mất 5 bài ngày."
     ])
     doc.add_heading("Luồng B — Học và hoàn thành khi AI tắt", level=1)
     add_steps(doc, [
         "Đăng nhập tài khoản người học được gán đúng level của bộ bài vừa xuất bản.",
-        "Mở T2, học đủ phần Mục tiêu, Từ vựng, Ngữ pháp và Phát âm; bấm Đã học xong để mở Bài tập.",
+        "Mở T2 và bấm nghe thử Mục tiêu, Hướng dẫn, từng từ vựng, Ngữ pháp và Phát âm. Với mục có file, trình phát dùng file; với mục không có file, nút nghe dùng Text-to-Speech. Sau đó bấm Đã học xong để mở Bài tập.",
         "Làm lần lượt Nghe, Đọc, Viết, Từ loại và Dùng từ. Câu trả lời xác định phải được chấm theo đáp án, không phụ thuộc AI; câu tự viết từ 2 từ trở lên phải được lưu theo quy tắc dự phòng.",
         "Ở phần Nói, ghi âm hoặc tải file âm thanh hợp lệ rồi bấm Kiểm tra nói. Khi AI tắt, file phải được lưu ở trạng thái Đã gửi để kiểm tra, không bị chấm sai và không chặn hoàn thành.",
         "Bấm Hoàn thành bài; xác nhận tiến độ được lưu và bài tiếp theo mở theo lịch. Lặp lại đến đủ 5 bài.",
@@ -289,7 +302,7 @@ def build_no_ai():
     add_table(doc, ["Tình huống", "Thao tác", "Kết quả đạt"], [
         ["Sinh chủ đề hoặc bài học", "Thực hiện thao tác sinh trong màn vận hành", "Hệ thống báo AI đang tắt hoặc không khả dụng; dữ liệu đã nhập tay và nội dung đã có không bị mất"],
         ["Bổ sung nội dung bài", "Mở bài còn thiếu rồi bấm bổ sung", "Không tạo nội dung giả; bài hiện có được giữ nguyên và người dùng có thể sửa tay"],
-        ["Nội dung thủ công", "Soạn 5 bài có ảnh, audio mẫu và đủ dạng bài tập", "Lưu, duyệt và xuất bản được; nội dung đa phương tiện không mất khi tải lại"],
+        ["Nội dung thủ công", "Soạn 5 bài đủ nội dung và bài tập; trộn trường hợp có file audio với trường hợp chỉ có chữ", "Lưu, duyệt và xuất bản được; file audio không mất khi tải lại, phần không có file vẫn nghe bằng TTS"],
         ["Tự viết trong bài học", "Nhập câu trả lời từ 2 từ trở lên", "Không có AI vẫn chấp nhận theo quy tắc dự phòng và lưu tiến độ"],
         ["Nói trong bài học", "Ghi hoặc tải file âm thanh rồi kiểm tra", "File được lưu để kiểm tra; không bị đánh sai và không chặn hoàn thành"],
         ["Bài cuối tuần", "Hoàn thành 5 bài rồi nộp bài đủ tối thiểu 8 từ", "Bài được lưu để chấm tay; không mất nội dung vì AI tắt"],

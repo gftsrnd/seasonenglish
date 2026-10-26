@@ -114,6 +114,8 @@ export interface LessonVocabularyItem {
   type?: string;
   pronunciation?: string;
   meaning?: string;
+  /** Optional recorded pronunciation; browser TTS is used when absent. */
+  audioUrl?: string;
   /** Optional published image; usable only when imageAttribution is complete. */
   imageUrl?: string;
   imageQuery?: string;
