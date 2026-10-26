@@ -1049,8 +1049,10 @@ describe("OperatorRouteController", () => {
     render(<MemoryRouter initialEntries={["/op/lessons/2/A2"]}><OperatorRouteController session={operator} client={{ getContentLessonSet: vi.fn().mockResolvedValue(detail) } as any} /></MemoryRouter>);
     const objectives = await screen.findByRole("list", { name: "Mục tiêu bài học" });
     expect(within(objectives).getAllByRole("listitem")).toHaveLength(2);
-    expect(objectives).toHaveTextContent("Sau bài học, bạn có thể identify the meeting");
-    expect(objectives).toHaveTextContent("Sau bài học, bạn có thể open the meeting");
+    expect(screen.getByText("Sau bài học, bạn có thể:", { selector: ".lesson-objective-lead" })).toBeInTheDocument();
+    expect(objectives).toHaveTextContent("Identify the meeting");
+    expect(objectives).toHaveTextContent("Open the meeting");
+    expect(objectives).not.toHaveTextContent("Sau bài học, bạn có thể");
     expect(objectives).not.toHaveTextContent("SWBAT");
     expect(screen.getByText("agenda")).toBeInTheDocument();
     await user.click(screen.getByRole("tab", { name: "2. Bài tập" }));

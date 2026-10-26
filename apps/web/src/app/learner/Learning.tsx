@@ -12,7 +12,7 @@ import type {
 import type { LearnerCallbacks, LessonView } from "./contracts.js";
 import { ErrorText, Notice, PageTitle, AppLink } from "./ui.js";
 import { VocabularyCard as SharedVocabularyCard, type VocabularyRelationChip } from "../shared/lesson/VocabularyCard.js";
-import { conciseGrammarExample, conciseLessonObjective, conciseSpeakingInstruction, conciseSpeakingModel, learnerFacingObjective } from "../shared/lesson/presentation.js";
+import { conciseGrammarExample, conciseLessonObjective, conciseSpeakingInstruction, conciseSpeakingModel, learnerFacingObjective, learnerFacingObjectiveBody, learnerObjectiveLead } from "../shared/lesson/presentation.js";
 export { normalizeLessonBlankPrompt } from "./text.js";
 import { normalizeLessonBlankPrompt } from "./text.js";
 
@@ -577,10 +577,10 @@ function PartContent({
   const speakingModel = conciseSpeakingModel(content.sample ?? content.answer ?? content.modelAnswer);
   const sectionAudioSource = ["vocabulary", "pronunciation", "listening", "speaking"].includes(part.code)
     ? undefined
-    : lessonAudioSource({ ...content, script: lessonPartNarration(part.code, content) });
+    : lessonAudioSource({ ...content, script: lessonPartNarration(part.code, content, cefr) });
   return <>
     {part.code === "grammar" || part.code === "pronunciation" ? null : <div className="row between"><h2 className={part.code === "vocabulary" ? "lesson-vocabulary-heading" : undefined}>{part.code === "objective" ? "MỤC TIÊU BÀI HỌC" : part.code === "instruction" ? "HƯỚNG DẪN LÀM BÀI" : part.code === "vocabulary" ? "TỪ VỰNG" : `${sectionNumber}. ${partHeading(part)}`}</h2></div>}
-    {part.code === "objective" && objectiveItems.length ? <ul className="lesson-objective-list" aria-label="Mục tiêu bài học">{objectiveItems.map((text, index) => <li key={`${index}-${text}`}>{learnerFacingObjective(text, cefr)}</li>)}</ul> : content.text ? <p className={part.code === "objective" ? "lesson-objective-text" : part.code === "reading" ? "lesson-reading-passage" : undefined}>{part.code === "objective" ? learnerFacingObjective(conciseLessonObjective(content.text), cefr) : content.text}</p> : null}
+    {part.code === "objective" && objectiveItems.length ? <><p className="lesson-objective-lead">{learnerObjectiveLead(cefr)}</p><ul className="lesson-objective-list" aria-label="Mục tiêu bài học">{objectiveItems.map((text, index) => <li key={`${index}-${text}`}>{learnerFacingObjectiveBody(text)}</li>)}</ul></> : content.text ? <p className={part.code === "objective" ? "lesson-objective-text" : part.code === "reading" ? "lesson-reading-passage" : undefined}>{part.code === "objective" ? learnerFacingObjective(conciseLessonObjective(content.text), cefr) : content.text}</p> : null}
     {learnerPrompt && part.code !== "speaking" ? <p>{normalizeLessonBlankPrompt(learnerPrompt)}</p> : null}
     {guidanceSteps.length ? <ul className="lesson-instruction-list" aria-label="Hướng dẫn thực hiện">{guidanceSteps.map((step, index) => <li key={`${index}-${step}`}>{step}</li>)}</ul> : null}
     {sectionAudioSource && (sectionAudioSource.src || sectionAudioSource.text) ? <LessonAudioControl source={sectionAudioSource} speak={speak} label={`Nghe phần ${part.title}`} /> : null}
@@ -653,14 +653,20 @@ function lessonAudioSource(content: { audio?: unknown; audioUrl?: string; script
   return {};
 }
 
-function lessonPartNarration(code: LessonPartCode, content: Record<string, unknown>): string {
+function lessonPartNarration(code: LessonPartCode, content: Record<string, unknown>, cefr: string): string {
   const values: string[] = [];
   const add = (value: unknown) => { if (typeof value === "string" && value.trim()) values.push(value.trim()); };
   if (code === "objective" && Array.isArray(content.items)) {
-    content.items.forEach((item) => add(item && typeof item === "object" ? (item as Record<string, unknown>).text : undefined));
+    add(learnerObjectiveLead(cefr));
+    content.items.forEach((item) => {
+      const text = item && typeof item === "object" ? (item as Record<string, unknown>).text : undefined;
+      if (typeof text === "string") add(learnerFacingObjectiveBody(text));
+    });
+  } else {
+    add(content.text);
   }
   if (code === "instruction" && Array.isArray(content.steps)) content.steps.forEach(add);
-  [content.text, content.passage, content.formula, content.usage, content.instruction, content.prompt, content.question].forEach(add);
+  [content.passage, content.formula, content.usage, content.instruction, content.prompt, content.question].forEach(add);
   if (Array.isArray(content.examples)) content.examples.forEach(add);
   if (Array.isArray(content.options)) content.options.forEach(add);
   return Array.from(new Set(values)).join(". ");

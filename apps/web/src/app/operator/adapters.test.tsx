@@ -211,6 +211,28 @@ describe("lesson detail warnings", () => {
     expect(screen.getByText("Cắn nhẹ môi dưới rồi thổi hơi.").closest("p")).toHaveClass("operator-pronunciation-tip");
   });
 
+  it("shows one objective lead and exposes saved audio throughout the operator preview", () => {
+    const source = lessonSet([{ ...baseWord("feedback"), meaning: "phản hồi", audioUrl: "/audio/feedback.mp3" }]);
+    source.cefr = "B1";
+    const objective = source.lessons[0]!.parts.find(part => part.code === "objective")!;
+    objective.content = { audioUrl: "/audio/objective.mp3", items: [
+      { text: "By the end of this lesson, you will be able to explain a delivery delay." },
+      { text: "By the end of this lesson, you will be able to confirm a new delivery time." }
+    ] };
+    const grammar = source.lessons[0]!.parts.find(part => part.code === "grammar")!;
+    grammar.content = { ...grammar.content, audioUrl: "/audio/grammar.mp3" };
+
+    const view = adaptLessonSet(source, { aiConnected: true });
+    render(<>{view.lessons[0]!.content}</>);
+
+    expect(screen.getByText("By the end of this lesson, you will be able to:")).toBeInTheDocument();
+    expect(screen.getByRole("list", { name: "Mục tiêu bài học" })).toHaveTextContent("Explain a delivery delay.");
+    expect(screen.getByRole("list", { name: "Mục tiêu bài học" })).not.toHaveTextContent("By the end of this lesson");
+    expect(screen.getByLabelText("Nghe audio phần Mục tiêu bài học")).toHaveAttribute("src", "/audio/objective.mp3");
+    expect(screen.getByLabelText("Nghe audio từ feedback")).toHaveAttribute("src", "/audio/feedback.mp3");
+    expect(screen.getByLabelText("Nghe audio phần Ngữ pháp")).toHaveAttribute("src", "/audio/grammar.mp3");
+  });
+
   it("renders each practice skill as an interactive learner-style lane", () => {
     const view = adaptLessonSet(lessonSet([{ ...baseWord("feedback"), meaning: "phản hồi" }]), { aiConnected: true });
 

@@ -10,13 +10,25 @@ export function conciseLessonObjective(value: string | undefined): string {
   return concise ? concise.charAt(0).toLocaleUpperCase("vi") + concise.slice(1) : firstSentence;
 }
 
-export function learnerFacingObjective(value: string, cefr: string): string {
+export function learnerFacingObjectiveBody(value: string): string {
   const body = value
     .replace(/^SWBAT\s+/i, "")
     .replace(/^(?:Sau bài học,\s*(?:bạn|học viên)\s*có thể\s*)+/iu, "")
     .replace(/^(?:By the end of this lesson,\s*you will be able to\s*)+/i, "")
     .trim();
   if (!body) return "—";
+  return body.charAt(0).toLocaleUpperCase("en-US") + body.slice(1);
+}
+
+export function learnerObjectiveLead(cefr: string): string {
+  return cefr === "A1" || cefr === "A2"
+    ? "Sau bài học, bạn có thể:"
+    : "By the end of this lesson, you will be able to:";
+}
+
+export function learnerFacingObjective(value: string, cefr: string): string {
+  const body = learnerFacingObjectiveBody(value);
+  if (body === "—") return body;
   const sentence = body.charAt(0).toLocaleLowerCase("en-US") + body.slice(1);
   return cefr === "A1" || cefr === "A2"
     ? `Sau bài học, bạn có thể ${sentence}`

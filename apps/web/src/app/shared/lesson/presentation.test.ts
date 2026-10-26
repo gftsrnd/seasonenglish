@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { conciseGrammarExample, learnerFacingObjective } from "./presentation.js";
+import { conciseGrammarExample, learnerFacingObjective, learnerFacingObjectiveBody, learnerObjectiveLead } from "./presentation.js";
 
 describe("lesson presentation", () => {
   it("presents grammar examples without silently truncating or rewriting them", () => {
@@ -21,5 +21,12 @@ describe("lesson presentation", () => {
       .toBe("Sau bài học, bạn có thể nói số tiền của một khoản chi phí dự án.");
     expect(learnerFacingObjective("Sau bài học, bạn có thể sau bài học, bạn có thể dùng đúng cấu trúc.", "A1"))
       .toBe("Sau bài học, bạn có thể dùng đúng cấu trúc.");
+  });
+
+  it("separates the shared objective lead from each bullet body", () => {
+    expect(learnerObjectiveLead("A2")).toBe("Sau bài học, bạn có thể:");
+    expect(learnerFacingObjectiveBody("Sau bài học, bạn có thể xác nhận thời gian giao hàng.")).toBe("Xác nhận thời gian giao hàng.");
+    expect(learnerObjectiveLead("B1")).toBe("By the end of this lesson, you will be able to:");
+    expect(learnerFacingObjectiveBody("By the end of this lesson, you will be able to explain a delivery delay.")).toBe("Explain a delivery delay.");
   });
 });

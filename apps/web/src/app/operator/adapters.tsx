@@ -28,7 +28,7 @@ import type {
 } from "./types.js";
 import { Check, Mic, Square, Volume2 } from "lucide-react";
 import { VocabularyCard as SharedVocabularyCard, type VocabularyRelationChip } from "../shared/lesson/VocabularyCard.js";
-import { conciseGrammarExample, conciseLessonObjective, conciseSpeakingInstruction, conciseSpeakingModel, learnerFacingObjective } from "../shared/lesson/presentation.js";
+import { conciseGrammarExample, conciseLessonObjective, conciseSpeakingInstruction, conciseSpeakingModel, learnerFacingObjective, learnerFacingObjectiveBody, learnerObjectiveLead } from "../shared/lesson/presentation.js";
 
 const CEFR_LEVELS: Cefr[] = ["A1", "A2", "B1", "B2", "C1"];
 const REVIEW_TAB_MAP = { submissions: "subs", coach: "coach", weekly_practices: "weekly", appeals: "appeals", attempts: "attempts", assessments: "tests" } as const;
@@ -284,13 +284,17 @@ function renderLessonPart(code: string, value: unknown, media?: { cefr: string; 
     if (!record || typeof record.word !== "string") return [];
     return [{ word: record.word, ipa: typeof record.ipa === "string" ? record.ipa.trim() : "" }];
   });
+  const cefr = media?.cefr ?? "A1";
+  const sectionAudio = ["vocabulary", "pronunciation", "listening", "speaking"].includes(code)
+    ? undefined
+    : operatorAudioSource({ ...content, script: operatorPartNarration(code, content, cefr) });
   if (code === "objective") {
     const objectives = (asArray(content.items) ?? []).map(asRecord).flatMap(item => typeof item?.text === "string" && item.text.trim() ? [item.text.trim()] : []);
     return objectives.length
-      ? <ul className="lesson-objective-list" aria-label="Mục tiêu bài học">{objectives.map((objective, index) => <li key={`${objective}-${index}`}>{learnerFacingObjective(objective, media?.cefr ?? "A1")}</li>)}</ul>
-      : <p className="lesson-objective-text">{learnerFacingObjective(conciseLessonObjective(text("text")), media?.cefr ?? "A1")}</p>;
+      ? <><p className="lesson-objective-lead">{learnerObjectiveLead(cefr)}</p><ul className="lesson-objective-list" aria-label="Mục tiêu bài học">{objectives.map((objective, index) => <li key={`${objective}-${index}`}>{learnerFacingObjectiveBody(objective)}</li>)}</ul>{sectionAudio ? <OperatorAudioControl source={sectionAudio} label="Nghe phần Mục tiêu bài học" /> : null}</>
+      : <><p className="lesson-objective-text">{learnerFacingObjective(conciseLessonObjective(text("text")), cefr)}</p>{sectionAudio ? <OperatorAudioControl source={sectionAudio} label="Nghe phần Mục tiêu bài học" /> : null}</>;
   }
-  if (code === "instruction") return <PreviewList values={strings("steps")} />;
+  if (code === "instruction") return <><PreviewList values={strings("steps")} />{sectionAudio ? <OperatorAudioControl source={sectionAudio} label="Nghe phần Hướng dẫn làm bài" /> : null}</>;
   if (code === "vocabulary") {
     const items = (asArray(content.items) ?? []).map(asRecord).filter((item): item is Record<string, unknown> => item !== undefined);
     return <div className="vocabulary-list">{items.map((item, index) => <OperatorVocabularyCard item={item} index={index} media={media} key={`${String(item.word)}-${index}`} />)}</div>;
@@ -298,7 +302,7 @@ function renderLessonPart(code: string, value: unknown, media?: { cefr: string; 
   if (code === "grammar") {
     const formula = text("formula", "theory") || "—";
     const examples = strings("examples").slice(0, 3);
-    return <div className="operator-study-block"><div className="lesson-study-panel-header"><h2>NGỮ PHÁP</h2></div><div className="lesson-grammar-copy"><p className="lesson-study-focus"><strong>{formula}</strong></p>{text("usage") ? <p className="lesson-study-explanation">{grammarUsageCopy(text("usage")!)}</p> : null}</div>{examples.length ? <div className="lesson-example-list" aria-label="Câu ví dụ ngữ pháp">{examples.map((example, index) => { const concise = conciseGrammarExample(example); return <button className="lesson-example-card" type="button" aria-label={`Nghe câu ví dụ ${index + 1}`} onClick={() => speakOperatorText(concise)} key={`${example}-${index}`}><Volume2 size={15} aria-hidden="true" /><span>{concise}</span></button>; })}</div> : null}</div>;
+    return <div className="operator-study-block"><div className="lesson-study-panel-header"><h2>NGỮ PHÁP</h2></div><div className="lesson-grammar-copy"><p className="lesson-study-focus"><strong>{formula}</strong></p>{text("usage") ? <p className="lesson-study-explanation">{grammarUsageCopy(text("usage")!)}</p> : null}</div>{examples.length ? <div className="lesson-example-list" aria-label="Câu ví dụ ngữ pháp">{examples.map((example, index) => { const concise = conciseGrammarExample(example); return <button className="lesson-example-card" type="button" aria-label={`Nghe câu ví dụ ${index + 1}`} onClick={() => speakOperatorText(concise)} key={`${example}-${index}`}><Volume2 size={15} aria-hidden="true" /><span>{concise}</span></button>; })}</div> : null}{sectionAudio ? <OperatorAudioControl source={sectionAudio} label="Nghe phần Ngữ pháp" /> : null}</div>;
   }
   if (code === "pronunciation") {
     const focus = text("focus") || "—";
@@ -310,9 +314,9 @@ function renderLessonPart(code: string, value: unknown, media?: { cefr: string; 
     const audio = operatorAudioSource(content);
     return <div className="operator-practice-content"><OperatorAudioControl source={audio} /><p className="operator-practice-transcript">{text("script") || (audio.src ? "" : audio.text) || "—"}</p><p className="operator-question"><strong>Câu hỏi:</strong> {text("prompt", "question") || "—"}</p><AnswerOptions options={strings("options")} answer={text("answer")} /></div>;
   }
-  if (code === "reading") return <div className="operator-practice-content"><div className="operator-reading-passage">{text("text", "passage", "script") || "—"}</div><p className="operator-question"><strong>Câu hỏi:</strong> {text("prompt", "question") || "—"}</p><AnswerOptions options={strings("options")} answer={text("answer")} /></div>;
-  if (code === "writing") return <div className="operator-practice-content"><p className="operator-question"><strong>Đề bài:</strong> {text("prompt") || "—"}</p><AnswerOptions options={strings("options")} answer={text("answer")} /></div>;
-  if (code === "word_class" || code === "word_use") return <div className="operator-practice-content"><p className="operator-question"><strong>{code === "word_class" ? "Nhận diện từ loại:" : "Chọn cách dùng đúng:"}</strong> {text("prompt", "question") || "—"}</p><AnswerOptions options={strings("options")} answer={text("answer")} /></div>;
+  if (code === "reading") return <div className="operator-practice-content"><div className="operator-reading-passage">{text("text", "passage", "script") || "—"}</div>{sectionAudio ? <OperatorAudioControl source={sectionAudio} label="Nghe phần Đọc" /> : null}<p className="operator-question"><strong>Câu hỏi:</strong> {text("prompt", "question") || "—"}</p><AnswerOptions options={strings("options")} answer={text("answer")} /></div>;
+  if (code === "writing") return <div className="operator-practice-content">{sectionAudio ? <OperatorAudioControl source={sectionAudio} label="Nghe phần Viết" /> : null}<p className="operator-question"><strong>Đề bài:</strong> {text("prompt") || "—"}</p><AnswerOptions options={strings("options")} answer={text("answer")} /></div>;
+  if (code === "word_class" || code === "word_use") return <div className="operator-practice-content">{sectionAudio ? <OperatorAudioControl source={sectionAudio} label={code === "word_class" ? "Nghe phần Từ loại" : "Nghe phần Dùng từ"} /> : null}<p className="operator-question"><strong>{code === "word_class" ? "Nhận diện từ loại:" : "Chọn cách dùng đúng:"}</strong> {text("prompt", "question") || "—"}</p><AnswerOptions options={strings("options")} answer={text("answer")} /></div>;
   if (code === "speaking") {
     const model = conciseSpeakingModel(text("answer", "modelAnswer", "sample"));
     const instruction = conciseSpeakingInstruction(text("instruction", "prompt"));
@@ -327,6 +331,25 @@ function operatorPartHeading(code: string, title: string): string {
 }
 
 type OperatorAudioSource = { text?: string; src?: string };
+
+function operatorPartNarration(code: string, content: Record<string, unknown>, cefr: string): string {
+  const values: string[] = [];
+  const add = (value: unknown) => { if (typeof value === "string" && value.trim()) values.push(value.trim()); };
+  if (code === "objective" && Array.isArray(content.items)) {
+    add(learnerObjectiveLead(cefr));
+    content.items.forEach(item => {
+      const objective = asRecord(item);
+      if (typeof objective?.text === "string") add(learnerFacingObjectiveBody(objective.text));
+    });
+  } else {
+    add(content.text);
+  }
+  if (code === "instruction" && Array.isArray(content.steps)) content.steps.forEach(add);
+  [content.passage, content.formula, content.usage, content.instruction, content.prompt, content.question].forEach(add);
+  if (Array.isArray(content.examples)) content.examples.forEach(add);
+  if (Array.isArray(content.options)) content.options.forEach(add);
+  return Array.from(new Set(values)).join(". ");
+}
 
 function operatorAudioSource(content: Record<string, unknown>): OperatorAudioSource {
   const candidate = content.audioUrl ?? content.audio;
@@ -348,9 +371,9 @@ function OperatorSpeechButton({ text, label, iconOnly = false, primary = false }
   return <button className={`btn-sm btn-ghost operator-audio-button${iconOnly ? " operator-audio-button--icon" : ""}${primary ? " operator-audio-button--primary" : ""}`} type="button" aria-label={label} title={label} onClick={() => speakOperatorText(text)}><Volume2 size={16} aria-hidden="true" />{iconOnly ? null : ` ${label}`}</button>;
 }
 
-function OperatorAudioControl({ source }: { source: OperatorAudioSource }) {
-  if (source.src) return <audio controls preload="metadata" src={source.src} aria-label="Nghe đoạn audio" />;
-  if (source.text) return <OperatorSpeechButton text={source.text} label="Nghe đoạn audio" primary />;
+function OperatorAudioControl({ source, label = "Nghe đoạn audio" }: { source: OperatorAudioSource; label?: string }) {
+  if (source.src) return <audio controls preload="metadata" src={source.src} aria-label={label === "Nghe đoạn audio" ? label : `Nghe audio phần ${label.replace(/^Nghe phần\s+/u, "")}`} />;
+  if (source.text) return <OperatorSpeechButton text={source.text} label={label} primary />;
   return <p className="operator-audio-missing">Chưa có nội dung âm thanh.</p>;
 }
 
@@ -416,7 +439,8 @@ function OperatorVocabularyCard({ item, index, media }: { item: Record<string, u
     ...(typeof item.type === "string" && item.type.trim() ? { type: item.type.trim() } : {}),
     ...(typeof item.pronunciation === "string" && item.pronunciation.trim() ? { pronunciation: item.pronunciation.trim() } : {}),
     ...(typeof item.meaning === "string" && item.meaning.trim() ? { meaning: item.meaning.trim() } : {}),
-    ...(phrases.length ? { collocations: phrases } : {})
+    ...(phrases.length ? { collocations: phrases } : {}),
+    ...(typeof item.audioUrl === "string" && item.audioUrl.trim() ? { audioUrl: item.audioUrl.trim() } : {})
   };
   const umbrellaWord = typeof umbrella?.word === "string" ? umbrella.word : "";
   const umbrellaMeaning = typeof umbrella?.meaning === "string" ? umbrella.meaning.trim() : "";

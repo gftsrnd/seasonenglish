@@ -56,8 +56,10 @@ describe("learner lesson study content", () => {
     ]);
     expect(screen.getByRole("heading", { name: "HƯỚNG DẪN LÀM BÀI" })).toBeInTheDocument();
     expect(screen.getByRole("list", { name: "Hướng dẫn thực hiện" })).toHaveTextContent("Học nội dung");
-    expect(screen.getByRole("list", { name: "Mục tiêu bài học" })).toHaveTextContent("Sau bài học, bạn có thể identify two job details");
-    expect(screen.getByRole("list", { name: "Mục tiêu bài học" })).toHaveTextContent("Sau bài học, bạn có thể say one complete work sentence");
+    expect(screen.getByText("Sau bài học, bạn có thể:")).toBeInTheDocument();
+    expect(screen.getByRole("list", { name: "Mục tiêu bài học" })).toHaveTextContent("Identify two job details");
+    expect(screen.getByRole("list", { name: "Mục tiêu bài học" })).toHaveTextContent("Say one complete work sentence");
+    expect(screen.getByRole("list", { name: "Mục tiêu bài học" })).not.toHaveTextContent("Sau bài học, bạn có thể");
     expect(screen.getByRole("list", { name: "Mục tiêu bài học" })).not.toHaveTextContent("SWBAT");
     expect(screen.getByText("tính từ")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Nghe từ new" })).toBeInTheDocument();

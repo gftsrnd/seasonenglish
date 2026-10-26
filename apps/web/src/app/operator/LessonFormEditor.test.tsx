@@ -147,6 +147,49 @@ describe("operator granular lesson editor", () => {
     expect(screen.getByLabelText("Từ cùng nhóm từ 1")).toHaveValue("manager | quản lý; client | khách hàng");
   });
 
+  it("opens AI-generated lessons in the same complete manual editor and preserves structured fields", async () => {
+    const user = userEvent.setup();
+    const onSave = vi.fn().mockResolvedValue(undefined);
+    vi.spyOn(window, "confirm").mockReturnValue(true);
+    const generated = emptyLesson(1);
+    generated.title = "Handling a delayed order";
+    generated.parts = generated.parts.map(part => {
+      if (part.code === "objective") return { ...part, content: { items: [
+        { id: "C1", type: "content", text: "SWBAT explain one delivery delay." },
+        { id: "L1", type: "language", text: "SWBAT use due to in one sentence." }
+      ] } };
+      if (part.code === "grammar") return { ...part, content: { formula: "The order is delayed due to + noun", usage: "Use this to give a reason.", examples: ["The order is delayed due to weather."] } };
+      if (part.code === "word_class") return { ...part, content: { prompt: "What word class is delayed?", options: ["noun", "verb", "adjective", "adverb"], answer: "adjective" } };
+      if (part.code === "word_use") return { ...part, content: { prompt: "Choose the natural sentence.", options: ["The order is delayed.", "The order delayed is.", "Delayed order the is.", "Is order delayed the."], answer: "The order is delayed." } };
+      return part;
+    });
+
+    render(<LessonFormEditor weekNumber={1} cefr="B1" initial={generated} onSave={onSave} onCancel={() => undefined} />);
+
+    expect(screen.getByRole("dialog", { name: "Sửa bài T2 · Tuần 1 · B1" })).toBeInTheDocument();
+    expect(screen.getByLabelText("Mục tiêu bài học")).toHaveValue("SWBAT explain one delivery delay.\nSWBAT use due to in one sentence.");
+    expect(screen.getByLabelText("Ngữ pháp")).toHaveValue("The order is delayed due to + noun");
+    expect(screen.getByLabelText("Cách dùng ngữ pháp")).toHaveValue("Use this to give a reason.");
+    expect(screen.getByLabelText("Từ loại – Câu hỏi")).toHaveValue("What word class is delayed?");
+    expect(screen.getByLabelText("Dùng từ – Câu hỏi")).toHaveValue("Choose the natural sentence.");
+
+    fireEvent.change(screen.getByLabelText("Mục tiêu bài học"), { target: { value: "Explain one delivery delay.\nUse due to correctly." } });
+    fireEvent.change(screen.getByLabelText("Cách dùng ngữ pháp"), { target: { value: "Use it before a noun phrase." } });
+    fireEvent.change(screen.getByLabelText("Từ loại – Câu hỏi"), { target: { value: "Which word is an adjective?" } });
+    await user.click(screen.getByRole("button", { name: "Kiểm tra & lưu" }));
+    await user.click(screen.getByRole("button", { name: "Lưu dù còn thiếu" }));
+
+    const saved = onSave.mock.calls[0]?.[0];
+    const byCode = (code: string) => saved.parts.find((part: { code: string }) => part.code === code)?.content;
+    expect(byCode("objective").items).toEqual([
+      expect.objectContaining({ id: "C1", text: "Explain one delivery delay." }),
+      expect.objectContaining({ id: "L1", text: "Use due to correctly." })
+    ]);
+    expect(byCode("grammar")).toEqual(expect.objectContaining({ formula: "The order is delayed due to + noun", usage: "Use it before a noun phrase." }));
+    expect(byCode("word_class")).toEqual(expect.objectContaining({ prompt: "Which word is an adjective?", answer: "adjective" }));
+    expect(byCode("word_use")).toEqual(expect.objectContaining({ prompt: "Choose the natural sentence.", answer: "The order is delayed." }));
+  });
+
   it("uploads and persists manual vocabulary images and lesson audio without AI", async () => {
     const user = userEvent.setup();
     const onSave = vi.fn().mockResolvedValue(undefined);
