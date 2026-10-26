@@ -71,7 +71,7 @@ describe("learner lesson study content", () => {
     expect(screen.getByRole("button", { name: "Nghe từ trái nghĩa: old" })).toHaveTextContent("≠ old");
     expect(screen.getByRole("button", { name: "Nghe từ phát âm: I" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Nghe từ phát âm: nice" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Nghe phần Mục tiêu bài học" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Nghe phần Mục tiêu bài học" })).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Nghe phần Hướng dẫn làm bài" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Nghe phần Ngữ pháp" })).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Nghe mẫu ngữ pháp" })).not.toBeInTheDocument();

@@ -117,6 +117,13 @@ describe("operator granular lesson editor", () => {
     await user.type(screen.getByLabelText("Từ bao trùm từ 1"), "people at work");
     await user.type(screen.getByLabelText("Nghĩa từ bao trùm từ 1"), "người trong công việc");
     await user.type(screen.getByLabelText("Từ cùng nhóm từ 1"), "manager | quản lý; client | khách hàng");
+    fireEvent.change(screen.getByLabelText("Audio word family: colleague URL"), { target: { value: "/audio/colleague.mp3" } });
+    fireEvent.change(screen.getByLabelText("Audio word family: collegial URL"), { target: { value: "/audio/collegial.mp3" } });
+    fireEvent.change(screen.getByLabelText("Audio từ đồng nghĩa: coworker URL"), { target: { value: "/audio/coworker.mp3" } });
+    fireEvent.change(screen.getByLabelText("Audio từ trái nghĩa: competitor URL"), { target: { value: "/audio/competitor.mp3" } });
+    fireEvent.change(screen.getByLabelText("Audio từ bao trùm: people at work URL"), { target: { value: "/audio/people-at-work.mp3" } });
+    fireEvent.change(screen.getByLabelText("Audio từ cùng nhóm: manager URL"), { target: { value: "/audio/manager.mp3" } });
+    fireEvent.change(screen.getByLabelText("Audio từ cùng nhóm: client URL"), { target: { value: "/audio/client.mp3" } });
     await user.click(screen.getByRole("button", { name: "Kiểm tra & lưu" }));
     await user.click(screen.getByRole("button", { name: "Lưu dù còn thiếu" }));
 
@@ -124,18 +131,22 @@ describe("operator granular lesson editor", () => {
     const vocabulary = saved.parts.find((part: { code: string }) => part.code === "vocabulary")?.content.items[0];
     expect(vocabulary).toEqual(expect.objectContaining({
       family: [
-        { word: "colleague", type: "noun", meaning: "đồng nghiệp" },
-        { word: "collegial", type: "adjective", meaning: "mang tính đồng nghiệp" }
+        { word: "colleague", type: "noun", meaning: "đồng nghiệp", audioUrl: "/audio/colleague.mp3" },
+        { word: "collegial", type: "adjective", meaning: "mang tính đồng nghiệp", audioUrl: "/audio/collegial.mp3" }
       ],
       synonyms: [
-        { word: "coworker", level: "A2", note: "phổ biến" },
+        { word: "coworker", level: "A2", note: "phổ biến", audioUrl: "/audio/coworker.mp3" },
         { word: "associate", level: "B1", note: "trang trọng" }
       ],
-      antonyms: [{ word: "competitor", level: "B1", note: "đối thủ" }],
+      antonyms: [{ word: "competitor", level: "B1", note: "đối thủ", audioUrl: "/audio/competitor.mp3" }],
       umbrella: {
         word: "people at work",
         meaning: "người trong công việc",
-        siblings: [{ word: "manager", meaning: "quản lý" }, { word: "client", meaning: "khách hàng" }]
+        audioUrl: "/audio/people-at-work.mp3",
+        siblings: [
+          { word: "manager", meaning: "quản lý", audioUrl: "/audio/manager.mp3" },
+          { word: "client", meaning: "khách hàng", audioUrl: "/audio/client.mp3" }
+        ]
       }
     }));
 
@@ -145,6 +156,18 @@ describe("operator granular lesson editor", () => {
     expect(screen.getByLabelText("Từ đồng nghĩa từ 1")).toHaveValue("coworker | A2 | phổ biến; associate | B1 | trang trọng");
     expect(screen.getByLabelText("Từ trái nghĩa từ 1")).toHaveValue("competitor | B1 | đối thủ");
     expect(screen.getByLabelText("Từ cùng nhóm từ 1")).toHaveValue("manager | quản lý; client | khách hàng");
+    expect(screen.getByLabelText("Audio word family: colleague URL")).toHaveValue("/audio/colleague.mp3");
+    expect(screen.getByLabelText("Audio từ đồng nghĩa: coworker URL")).toHaveValue("/audio/coworker.mp3");
+    expect(screen.getByLabelText("Audio từ trái nghĩa: competitor URL")).toHaveValue("/audio/competitor.mp3");
+    expect(screen.getByLabelText("Audio từ bao trùm: people at work URL")).toHaveValue("/audio/people-at-work.mp3");
+    expect(screen.getByLabelText("Audio từ cùng nhóm: client URL")).toHaveValue("/audio/client.mp3");
+  });
+
+  it("uses clear styled media actions instead of a raw file chooser", () => {
+    render(<LessonFormEditor weekNumber={1} cefr="A2" initial={emptyLesson(1)} onSave={vi.fn()} onCancel={() => undefined} uploadMedia={vi.fn()} />);
+    expect(screen.getAllByText("Chọn audio").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Chọn ảnh")).toHaveLength(3);
+    expect(screen.queryByText("Tải file")).not.toBeInTheDocument();
   });
 
   it("opens AI-generated lessons in the same complete manual editor and preserves structured fields", async () => {
@@ -227,14 +250,13 @@ describe("operator granular lesson editor", () => {
     expect((screen.getByLabelText("Audio mẫu phần Nói URL") as HTMLInputElement).value).toContain("audio-speaking.ogg");
   });
 
-  it("offers and persists audio for every lesson section and each vocabulary item", async () => {
+  it("offers and persists audio for learning content but not lesson objectives", async () => {
     const user = userEvent.setup();
     const onSave = vi.fn().mockResolvedValue(undefined);
     vi.spyOn(window, "confirm").mockReturnValue(true);
     render(<LessonFormEditor weekNumber={1} cefr="A2" initial={emptyLesson(1)} onSave={onSave} onCancel={() => undefined} />);
 
     const sectionAudioLabels = [
-      "Audio mục tiêu bài học URL",
       "Audio hướng dẫn làm bài URL",
       "Audio phần Ngữ pháp URL",
       "Audio mẫu phát âm URL",
@@ -245,6 +267,7 @@ describe("operator granular lesson editor", () => {
       "Audio phần Dùng từ URL",
       "Audio mẫu phần Nói URL"
     ];
+    expect(screen.queryByLabelText("Audio mục tiêu bài học URL")).not.toBeInTheDocument();
     sectionAudioLabels.forEach((label, index) => {
       fireEvent.change(screen.getByLabelText(label), { target: { value: `/audio/section-${index + 1}.mp3` } });
     });
@@ -262,13 +285,13 @@ describe("operator granular lesson editor", () => {
 
     const saved = onSave.mock.calls[0]?.[0];
     const byCode = (code: string) => saved.parts.find((part: { code: string }) => part.code === code)?.content;
-    expect(byCode("objective").audioUrl).toBe("/audio/section-1.mp3");
-    expect(byCode("instruction").audioUrl).toBe("/audio/section-2.mp3");
-    expect(byCode("grammar").audioUrl).toBe("/audio/section-3.mp3");
-    expect(byCode("reading").audioUrl).toBe("/audio/section-6.mp3");
-    expect(byCode("writing").audioUrl).toBe("/audio/section-7.mp3");
-    expect(byCode("word_class").audioUrl).toBe("/audio/section-8.mp3");
-    expect(byCode("word_use").audioUrl).toBe("/audio/section-9.mp3");
+    expect(byCode("objective").audioUrl).toBe("");
+    expect(byCode("instruction").audioUrl).toBe("/audio/section-1.mp3");
+    expect(byCode("grammar").audioUrl).toBe("/audio/section-2.mp3");
+    expect(byCode("reading").audioUrl).toBe("/audio/section-5.mp3");
+    expect(byCode("writing").audioUrl).toBe("/audio/section-6.mp3");
+    expect(byCode("word_class").audioUrl).toBe("/audio/section-7.mp3");
+    expect(byCode("word_use").audioUrl).toBe("/audio/section-8.mp3");
     expect(byCode("vocabulary").items.map((item: { audioUrl?: string }) => item.audioUrl)).toEqual([
       "/audio/word-1.mp3", "/audio/word-2.mp3", "/audio/word-3.mp3"
     ]);

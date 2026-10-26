@@ -450,9 +450,14 @@
 .operator-modal-scope .operator-media-field { margin-top: 8px; }
 .operator-modal-scope .operator-media-input-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 8px; min-width: 0; max-width: 100%; }
 .operator-modal-scope .operator-media-input-row > input { min-width: 0; width: 100%; max-width: 100%; }
-.operator-modal-scope .operator-media-upload { cursor: pointer; white-space: nowrap; }
+.operator-modal-scope .operator-media-upload { display: inline-flex; align-items: center; justify-content: center; gap: 6px; min-height: 40px; padding-inline: 12px; cursor: pointer; white-space: nowrap; border: 1px solid #d98a2b; background: #fff8ee; color: #8a4d08; font-weight: 700; }
+.operator-modal-scope .operator-media-upload:hover { background: #ffedd2; border-color: #c87413; color: #6f3900; }
+.operator-modal-scope .operator-media-upload:has(input:disabled) { cursor: not-allowed; opacity: .55; }
 .operator-modal-scope .operator-media-preview { display: block; width: 120px; height: 90px; margin-top: 8px; border-radius: 10px; border: 1px solid var(--line); object-fit: cover; }
 .operator-modal-scope .operator-media-field audio { display: block; width: min(100%, 520px); margin-top: 8px; }
+.operator-modal-scope .operator-relation-audio-grid { display: grid; gap: 8px; margin-top: 10px; }
+.operator-modal-scope .operator-media-field--compact { margin-top: 8px; padding: 10px; border: 1px solid var(--line); border-radius: 10px; background: rgb(255 255 255 / 56%); min-width: 0; }
+.operator-modal-scope .operator-media-field--compact > span { font-size: 12px; color: var(--muted); overflow-wrap: anywhere; }
 @media (max-width: 840px) {
   .operator-modal-scope .operator-lesson-editor { padding: 16px; }
   .operator-modal-scope .operator-editor-sticky-header {

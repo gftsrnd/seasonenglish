@@ -214,7 +214,7 @@ describe("lesson detail warnings", () => {
     expect(screen.getByText("Cắn nhẹ môi dưới rồi thổi hơi.").closest("p")).toHaveClass("operator-pronunciation-tip");
   });
 
-  it("shows one objective lead and exposes saved audio throughout the operator preview", () => {
+  it("shows one objective lead without audio and exposes saved audio for learning content", () => {
     const source = lessonSet([{ ...baseWord("feedback"), meaning: "phản hồi", audioUrl: "/audio/feedback.mp3" }]);
     source.cefr = "B1";
     const objective = source.lessons[0]!.parts.find(part => part.code === "objective")!;
@@ -231,7 +231,7 @@ describe("lesson detail warnings", () => {
     expect(screen.getByText("By the end of this lesson, you will be able to:")).toBeInTheDocument();
     expect(screen.getByRole("list", { name: "Mục tiêu bài học" })).toHaveTextContent("Explain a delivery delay.");
     expect(screen.getByRole("list", { name: "Mục tiêu bài học" })).not.toHaveTextContent("By the end of this lesson");
-    expect(screen.getByLabelText("Nghe audio phần Mục tiêu bài học")).toHaveAttribute("src", "/audio/objective.mp3");
+    expect(screen.queryByLabelText("Nghe audio phần Mục tiêu bài học")).not.toBeInTheDocument();
     expect(screen.getByLabelText("Nghe audio từ feedback")).toHaveAttribute("src", "/audio/feedback.mp3");
     expect(screen.getByLabelText("Nghe audio phần Ngữ pháp")).toHaveAttribute("src", "/audio/grammar.mp3");
   });

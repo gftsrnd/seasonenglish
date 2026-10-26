@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type ReactNode } from "react";
 import type { ContentLessonDraftInput, LessonPartCode } from "@e4s/contracts";
-import { TriangleAlert } from "lucide-react";
+import { TriangleAlert, Upload } from "lucide-react";
 import { Banner, Button } from "./primitives.js";
 
 const lessonPartOrder = ["objective", "instruction", "vocabulary", "grammar", "pronunciation", "listening", "reading", "writing", "word_class", "word_use", "speaking"] as const;
@@ -11,16 +11,21 @@ type VocabularyRow = {
   meaning: string;
   examples: string;
   family: string;
+  familyAudioUrls: string[];
   synonyms: string;
+  synonymAudioUrls: string[];
   antonyms: string;
+  antonymAudioUrls: string[];
   umbrellaWord: string;
   umbrellaMeaning: string;
+  umbrellaAudioUrl: string;
   umbrellaSiblings: string;
+  umbrellaSiblingAudioUrls: string[];
   imageUrl: string;
   audioUrl: string;
 };
 type EditorState = {
-  title: string; objective: string; objectiveAudioUrl: string; instructionSteps: string; instructionAudioUrl: string;
+  title: string; objective: string; instructionSteps: string; instructionAudioUrl: string;
   grammar: string; grammarUsage: string; grammarExamples: string; grammarAudioUrl: string; grammarUnavailable: boolean; vocabulary: VocabularyRow[];
   pronunciationFocus: string; pronunciationWords: string; pronunciationTip: string; pronunciationAudioUrl: string;
   listeningScript: string; listeningAudioUrl: string; listeningQuestion: string; listeningOptions: string[]; listeningAnswer: number;
@@ -75,6 +80,12 @@ export function LessonFormEditor({
   const heading = `${editing ? "Sửa" : "Soạn"} bài T${initial.dayNumber + 1} · Tuần ${weekNumber} · ${cefr}`;
   const set = <K extends keyof EditorState>(key: K, value: EditorState[K]) => setState(current => ({ ...current, [key]: value }));
   const setVocabulary = (index: number, key: keyof VocabularyRow, value: string) => setState(current => ({ ...current, vocabulary: current.vocabulary.map((row, rowIndex) => rowIndex === index ? { ...row, [key]: value } : row) }));
+  const setVocabularyAudio = (index: number, key: "familyAudioUrls" | "synonymAudioUrls" | "antonymAudioUrls" | "umbrellaSiblingAudioUrls", audioIndex: number, value: string) => setState(current => ({ ...current, vocabulary: current.vocabulary.map((row, rowIndex) => {
+    if (rowIndex !== index) return row;
+    const next = [...row[key]];
+    next[audioIndex] = value;
+    return { ...row, [key]: next };
+  }) }));
   useEffect(() => {
     const dialog = dialogRef.current;
     if (!dialog) return;
@@ -129,10 +140,25 @@ export function LessonFormEditor({
     <header className="operator-editor-sticky-header"><div className="row between operator-editor-heading"><h3 id="lesson-editor-title">{heading}</h3><Button type="button" small disabled={busy} onClick={onCancel}>Đóng</Button></div></header>
     <p id="lesson-editor-description" className="xs muted operator-editor-description">Mỗi bài cần 3 từ (mỗi từ 3 cụm), ngữ pháp, phát âm (1 âm + 3 từ) và 4 phần Nghe/Đọc/Viết/Nói. {cefr === "A1" || cefr === "A2" ? "A1–A2: giải thích tiếng Việt." : "B1+: dùng tiếng Anh."}</p>
     <div className="operator-lesson-editor-form">
-      <EditorSection title="Chung" disabled={busy}><Field label="Tiêu đề bài" hint="Tên ngắn của mẫu câu, bằng tiếng Anh. VD: I work as…"><input aria-label="Tiêu đề bài" value={state.title} onChange={event => set("title", event.target.value)} /></Field><Field label="Mục tiêu bài học" hint="Mỗi mục tiêu một dòng. Có thể sửa đầy đủ nội dung AI đã sinh hoặc tự bổ sung khi AI còn thiếu."><textarea aria-label="Mục tiêu bài học" value={state.objective} onChange={event => set("objective", event.target.value)} /></Field><MediaField label="Audio mục tiêu bài học" kind="audio" accept="audio/*,.mp3,.m4a,.wav,.ogg,.webm" value={state.objectiveAudioUrl} onChange={value => set("objectiveAudioUrl", value)} uploadMedia={uploadMedia} /></EditorSection>
+      <EditorSection title="Chung" disabled={busy}><Field label="Tiêu đề bài" hint="Tên ngắn của mẫu câu, bằng tiếng Anh. VD: I work as…"><input aria-label="Tiêu đề bài" value={state.title} onChange={event => set("title", event.target.value)} /></Field><Field label="Mục tiêu bài học" hint="Mỗi mục tiêu một dòng. Hệ thống tự bỏ phần mở đầu bị lặp khi hiển thị."><textarea aria-label="Mục tiêu bài học" value={state.objective} onChange={event => set("objective", event.target.value)} /></Field></EditorSection>
       <EditorSection title="Hướng dẫn" disabled={busy}><Field label="Các bước hướng dẫn" hint="Mỗi bước một dòng hoặc cách nhau bằng dấu ;"><textarea aria-label="Các bước hướng dẫn" value={state.instructionSteps} onChange={event => set("instructionSteps", event.target.value)} /></Field><MediaField label="Audio hướng dẫn làm bài" kind="audio" accept="audio/*,.mp3,.m4a,.wav,.ogg,.webm" value={state.instructionAudioUrl} onChange={value => set("instructionAudioUrl", value)} uploadMedia={uploadMedia} /></EditorSection>
       <EditorSection title="Ngữ pháp" disabled={busy}><label className="row small"><input type="checkbox" checked={state.grammarUnavailable} onChange={event => set("grammarUnavailable", event.target.checked)} />Bài này không có nội dung ngữ pháp phù hợp</label>{state.grammarUnavailable ? <p className="xs muted">Phần Ngữ pháp sẽ được đánh dấu không áp dụng và ẩn với học viên. Không cần nhập nội dung giả.</p> : null}<Field label="Ngữ pháp" hint="Công thức hoặc mẫu câu ngắn, có thể dùng ngay."><textarea aria-label="Ngữ pháp" disabled={state.grammarUnavailable} value={state.grammar} onChange={event => set("grammar", event.target.value)} /></Field><Field label="Cách dùng ngữ pháp" hint="Giải thích khi nào và trong ngữ cảnh nào dùng mẫu câu."><textarea aria-label="Cách dùng ngữ pháp" disabled={state.grammarUnavailable} value={state.grammarUsage} onChange={event => set("grammarUsage", event.target.value)} /></Field><Field label="Câu ví dụ để đọc thành tiếng" hint="2–3 câu tiếng Anh, cách nhau bằng dấu ;"><textarea disabled={state.grammarUnavailable} value={state.grammarExamples} placeholder="I work as a tester.; She works in the sales team." onChange={event => set("grammarExamples", event.target.value)} /></Field><MediaField label="Audio phần Ngữ pháp" kind="audio" accept="audio/*,.mp3,.m4a,.wav,.ogg,.webm" value={state.grammarAudioUrl} onChange={value => set("grammarAudioUrl", value)} uploadMedia={uploadMedia} /></EditorSection>
-      <EditorSection title="Từ vựng (3 từ)" disabled={busy}><div className="operator-vocabulary-grid">{state.vocabulary.map((row, index) => <div className="operator-vocabulary-row" aria-label={`Từ vựng ${index + 1}`} key={index}><div className="operator-vocabulary-base"><input aria-label={`Từ ${index + 1}`} value={row.word} onChange={event => setVocabulary(index, "word", event.target.value)} placeholder={`Từ ${index + 1}`} /><input aria-label={`Từ loại từ ${index + 1}`} value={row.type} onChange={event => setVocabulary(index, "type", event.target.value)} placeholder="Từ loại" /><input aria-label={`Phiên âm từ ${index + 1}`} value={row.pronunciation} onChange={event => setVocabulary(index, "pronunciation", event.target.value)} placeholder="Phiên âm /…/" /><input aria-label={`Nghĩa từ ${index + 1}`} value={row.meaning} onChange={event => setVocabulary(index, "meaning", event.target.value)} placeholder="Nghĩa tiếng Việt" /><input aria-label={`Cụm từ ${index + 1}`} value={row.examples} onChange={event => setVocabulary(index, "examples", event.target.value)} placeholder="3 cụm từ, cách nhau bằng ;" /></div><div className="operator-vocabulary-media"><MediaField label={`Ảnh minh họa từ ${index + 1}`} kind="image" accept="image/png,image/jpeg,image/webp,image/gif" value={row.imageUrl} onChange={value => setVocabulary(index, "imageUrl", value)} uploadMedia={uploadMedia} /><MediaField label={`Audio từ vựng ${index + 1}`} kind="audio" accept="audio/*,.mp3,.m4a,.wav,.ogg,.webm" value={row.audioUrl} onChange={value => setVocabulary(index, "audioUrl", value)} uploadMedia={uploadMedia} /></div><small className="xs muted">Nếu không có file audio, hệ thống tự đọc từ, cụm từ và các từ mở rộng bằng TTS.</small><details className="operator-vocabulary-advanced"><summary>Mở rộng từ {index + 1}</summary><div className="operator-vocabulary-advanced-grid"><Field label={`Word family từ ${index + 1}`} hint="Mỗi mục: từ | từ loại | nghĩa; cách nhau bằng dấu ;"><textarea aria-label={`Word family từ ${index + 1}`} value={row.family} onChange={event => setVocabulary(index, "family", event.target.value)} placeholder="colleague | noun | đồng nghiệp" /></Field><Field label={`Từ đồng nghĩa từ ${index + 1}`} hint="Mỗi mục: từ | level | ghi chú"><textarea aria-label={`Từ đồng nghĩa từ ${index + 1}`} value={row.synonyms} onChange={event => setVocabulary(index, "synonyms", event.target.value)} placeholder="coworker | A2 | phổ biến" /></Field><Field label={`Từ trái nghĩa từ ${index + 1}`} hint="Để trống nếu không có từ trái nghĩa tự nhiên"><textarea aria-label={`Từ trái nghĩa từ ${index + 1}`} value={row.antonyms} onChange={event => setVocabulary(index, "antonyms", event.target.value)} placeholder="old | A2 | trái nghĩa của new" /></Field><Field label={`Từ bao trùm từ ${index + 1}`}><input aria-label={`Từ bao trùm từ ${index + 1}`} value={row.umbrellaWord} onChange={event => setVocabulary(index, "umbrellaWord", event.target.value)} placeholder="work communication" /></Field><Field label={`Nghĩa từ bao trùm từ ${index + 1}`}><input aria-label={`Nghĩa từ bao trùm từ ${index + 1}`} value={row.umbrellaMeaning} onChange={event => setVocabulary(index, "umbrellaMeaning", event.target.value)} placeholder="giao tiếp công việc" /></Field><Field label={`Từ cùng nhóm từ ${index + 1}`} hint="Mỗi mục: từ | nghĩa; cách nhau bằng dấu ;"><textarea aria-label={`Từ cùng nhóm từ ${index + 1}`} value={row.umbrellaSiblings} onChange={event => setVocabulary(index, "umbrellaSiblings", event.target.value)} placeholder="manager | quản lý; client | khách hàng" /></Field></div></details></div>)}</div><span className="xs muted">Có thể tải ảnh từ máy hoặc dán URL ảnh. Nếu để trống, bài vẫn hiển thị gọn mà không tạo khung ảnh rỗng.</span></EditorSection>
+      <EditorSection title="Từ vựng (3 từ)" disabled={busy}>
+        <div className="operator-vocabulary-grid">{state.vocabulary.map((row, index) => <div className="operator-vocabulary-row" aria-label={`Từ vựng ${index + 1}`} key={index}>
+          <div className="operator-vocabulary-base"><input aria-label={`Từ ${index + 1}`} value={row.word} onChange={event => setVocabulary(index, "word", event.target.value)} placeholder={`Từ ${index + 1}`} /><input aria-label={`Từ loại từ ${index + 1}`} value={row.type} onChange={event => setVocabulary(index, "type", event.target.value)} placeholder="Từ loại" /><input aria-label={`Phiên âm từ ${index + 1}`} value={row.pronunciation} onChange={event => setVocabulary(index, "pronunciation", event.target.value)} placeholder="Phiên âm /…/" /><input aria-label={`Nghĩa từ ${index + 1}`} value={row.meaning} onChange={event => setVocabulary(index, "meaning", event.target.value)} placeholder="Nghĩa tiếng Việt" /><input aria-label={`Cụm từ ${index + 1}`} value={row.examples} onChange={event => setVocabulary(index, "examples", event.target.value)} placeholder="3 cụm từ, cách nhau bằng ;" /></div>
+          <div className="operator-vocabulary-media"><MediaField label={`Ảnh minh họa từ ${index + 1}`} kind="image" accept="image/png,image/jpeg,image/webp,image/gif" value={row.imageUrl} onChange={value => setVocabulary(index, "imageUrl", value)} uploadMedia={uploadMedia} /><MediaField label={`Audio từ vựng ${index + 1}`} kind="audio" accept="audio/*,.mp3,.m4a,.wav,.ogg,.webm" value={row.audioUrl} onChange={value => setVocabulary(index, "audioUrl", value)} uploadMedia={uploadMedia} /></div>
+          <small className="xs muted">Nếu không có file audio, hệ thống tự đọc từ, cụm từ và các từ mở rộng bằng TTS.</small>
+          <details className="operator-vocabulary-advanced"><summary>Mở rộng từ {index + 1}</summary><div className="operator-vocabulary-advanced-grid">
+            <div><Field label={`Word family từ ${index + 1}`} hint="Mỗi mục: từ | từ loại | nghĩa; cách nhau bằng dấu ;"><textarea aria-label={`Word family từ ${index + 1}`} value={row.family} onChange={event => setVocabulary(index, "family", event.target.value)} placeholder="colleague | noun | đồng nghiệp" /></Field><RelationAudioFields labelPrefix="Audio word family" entries={row.family} values={row.familyAudioUrls} onChange={(audioIndex, value) => setVocabularyAudio(index, "familyAudioUrls", audioIndex, value)} uploadMedia={uploadMedia} /></div>
+            <div><Field label={`Từ đồng nghĩa từ ${index + 1}`} hint="Mỗi mục: từ | level | ghi chú"><textarea aria-label={`Từ đồng nghĩa từ ${index + 1}`} value={row.synonyms} onChange={event => setVocabulary(index, "synonyms", event.target.value)} placeholder="coworker | A2 | phổ biến" /></Field><RelationAudioFields labelPrefix="Audio từ đồng nghĩa" entries={row.synonyms} values={row.synonymAudioUrls} onChange={(audioIndex, value) => setVocabularyAudio(index, "synonymAudioUrls", audioIndex, value)} uploadMedia={uploadMedia} /></div>
+            <div><Field label={`Từ trái nghĩa từ ${index + 1}`} hint="Để trống nếu không có từ trái nghĩa tự nhiên"><textarea aria-label={`Từ trái nghĩa từ ${index + 1}`} value={row.antonyms} onChange={event => setVocabulary(index, "antonyms", event.target.value)} placeholder="old | A2 | trái nghĩa của new" /></Field><RelationAudioFields labelPrefix="Audio từ trái nghĩa" entries={row.antonyms} values={row.antonymAudioUrls} onChange={(audioIndex, value) => setVocabularyAudio(index, "antonymAudioUrls", audioIndex, value)} uploadMedia={uploadMedia} /></div>
+            <div><Field label={`Từ bao trùm từ ${index + 1}`}><input aria-label={`Từ bao trùm từ ${index + 1}`} value={row.umbrellaWord} onChange={event => setVocabulary(index, "umbrellaWord", event.target.value)} placeholder="work communication" /></Field>{row.umbrellaWord.trim() ? <MediaField label={`Audio từ bao trùm: ${row.umbrellaWord.trim()}`} kind="audio" accept="audio/*,.mp3,.m4a,.wav,.ogg,.webm" value={row.umbrellaAudioUrl} onChange={value => setVocabulary(index, "umbrellaAudioUrl", value)} uploadMedia={uploadMedia} compact /> : null}</div>
+            <Field label={`Nghĩa từ bao trùm từ ${index + 1}`}><input aria-label={`Nghĩa từ bao trùm từ ${index + 1}`} value={row.umbrellaMeaning} onChange={event => setVocabulary(index, "umbrellaMeaning", event.target.value)} placeholder="giao tiếp công việc" /></Field>
+            <div><Field label={`Từ cùng nhóm từ ${index + 1}`} hint="Mỗi mục: từ | nghĩa; cách nhau bằng dấu ;"><textarea aria-label={`Từ cùng nhóm từ ${index + 1}`} value={row.umbrellaSiblings} onChange={event => setVocabulary(index, "umbrellaSiblings", event.target.value)} placeholder="manager | quản lý; client | khách hàng" /></Field><RelationAudioFields labelPrefix="Audio từ cùng nhóm" entries={row.umbrellaSiblings} values={row.umbrellaSiblingAudioUrls} onChange={(audioIndex, value) => setVocabularyAudio(index, "umbrellaSiblingAudioUrls", audioIndex, value)} uploadMedia={uploadMedia} /></div>
+          </div></details>
+        </div>)}</div>
+        <span className="xs muted">Có thể tải ảnh từ máy hoặc dán URL ảnh. Nếu để trống, bài vẫn hiển thị gọn mà không tạo khung ảnh rỗng.</span>
+      </EditorSection>
       <EditorSection title="Phát âm" disabled={busy}><div className="grid cols-3"><Field label="Âm mục tiêu"><input aria-label="Âm mục tiêu" value={state.pronunciationFocus} onChange={event => set("pronunciationFocus", event.target.value)} /></Field><Field label="3 từ luyện âm"><input aria-label="3 từ luyện âm" value={state.pronunciationWords} onChange={event => set("pronunciationWords", event.target.value)} /></Field><Field label="Mẹo phát âm"><input aria-label="Mẹo phát âm" value={state.pronunciationTip} onChange={event => set("pronunciationTip", event.target.value)} /></Field></div><MediaField label="Audio mẫu phát âm" kind="audio" accept="audio/*,.mp3,.m4a,.wav,.ogg,.webm" value={state.pronunciationAudioUrl} onChange={value => set("pronunciationAudioUrl", value)} uploadMedia={uploadMedia} /></EditorSection>
       <EditorSection title="Nghe" disabled={busy}><Field label="Nội dung nghe" hint="Nếu không tải audio, trình duyệt sẽ đọc nội dung này; học viên không thấy chữ."><textarea aria-label="Nội dung nghe" value={state.listeningScript} placeholder="1–2 câu tiếng Anh" onChange={event => set("listeningScript", event.target.value)} /></Field><MediaField label="File audio phần Nghe" kind="audio" accept="audio/*,.mp3,.m4a,.wav,.ogg,.webm" value={state.listeningAudioUrl} onChange={value => set("listeningAudioUrl", value)} uploadMedia={uploadMedia} /><QuestionFields prefix="Nghe" question={state.listeningQuestion} options={state.listeningOptions} answer={state.listeningAnswer} onQuestion={value => set("listeningQuestion", value)} onOptions={value => set("listeningOptions", value)} onAnswer={value => set("listeningAnswer", value)} /></EditorSection>
       <EditorSection title="Đọc" disabled={busy}><Field label="Đoạn văn"><textarea value={state.readingPassage} placeholder="2–4 câu tiếng Anh" onChange={event => set("readingPassage", event.target.value)} /></Field><MediaField label="Audio phần Đọc" kind="audio" accept="audio/*,.mp3,.m4a,.wav,.ogg,.webm" value={state.readingAudioUrl} onChange={value => set("readingAudioUrl", value)} uploadMedia={uploadMedia} /><QuestionFields prefix="Đọc" question={state.readingQuestion} options={state.readingOptions} answer={state.readingAnswer} onQuestion={value => set("readingQuestion", value)} onOptions={value => set("readingOptions", value)} onAnswer={value => set("readingAnswer", value)} /></EditorSection>
@@ -150,10 +176,17 @@ export function LessonFormEditor({
 function EditorSection({ title, children, disabled = false }: { title: string; children: ReactNode; disabled?: boolean }) { return <fieldset className="card soft operator-editor-section" disabled={disabled}><legend>{title}</legend>{children}</fieldset>; }
 function Field({ label, hint, children }: { label: string; hint?: string; children: ReactNode }) { return <label className="field"><span>{label}</span>{children}{hint && <small className="xs muted">{hint}</small>}</label>; }
 
-function MediaField({ label, kind, accept, value, onChange, uploadMedia }: { label: string; kind: "audio" | "image"; accept: string; value: string; onChange(value: string): void; uploadMedia: ((kind: "audio" | "image", file: Blob, filename: string) => Promise<{ url: string }>) | undefined }) {
+function RelationAudioFields({ labelPrefix, entries, values, onChange, uploadMedia }: { labelPrefix: string; entries: string; values: string[]; onChange(index: number, value: string): void; uploadMedia: ((kind: "audio" | "image", file: Blob, filename: string) => Promise<{ url: string }>) | undefined }) {
+  const words = splitValues(entries, /[;\n]/).map(entry => entry.split("|")[0]?.trim()).filter((word): word is string => Boolean(word));
+  if (!words.length) return null;
+  return <div className="operator-relation-audio-grid" aria-label={`${labelPrefix} từng mục`}>{words.map((word, index) => <MediaField key={`${word}-${index}`} label={`${labelPrefix}: ${word}`} kind="audio" accept="audio/*,.mp3,.m4a,.wav,.ogg,.webm" value={values[index] ?? ""} onChange={value => onChange(index, value)} uploadMedia={uploadMedia} compact />)}</div>;
+}
+
+function MediaField({ label, kind, accept, value, onChange, uploadMedia, compact = false }: { label: string; kind: "audio" | "image"; accept: string; value: string; onChange(value: string): void; uploadMedia: ((kind: "audio" | "image", file: Blob, filename: string) => Promise<{ url: string }>) | undefined; compact?: boolean }) {
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState<string>();
-  return <div className="field operator-media-field"><span>{label}</span><div className="operator-media-input-row"><input aria-label={`${label} URL`} value={value} placeholder="Dán URL hoặc tải file từ máy" onChange={event => onChange(event.target.value)} /><label className="btn-sm btn-ghost operator-media-upload">{uploading ? "Đang tải…" : "Tải file"}<input hidden type="file" aria-label={`Tải ${label}`} accept={accept} disabled={!uploadMedia || uploading} onChange={event => { const file = event.target.files?.[0]; event.target.value = ""; if (!file || !uploadMedia) return; setError(undefined); setUploading(true); void uploadMedia(kind, file, file.name).then(result => onChange(result.url)).catch(reason => setError(describeSaveError(reason))).finally(() => setUploading(false)); }} /></label></div>{!uploadMedia ? <small className="xs muted">Có thể dán URL. Tải file trực tiếp chưa khả dụng trong môi trường này.</small> : null}{error ? <small role="alert" className="xs danger">{error}</small> : null}{value && kind === "audio" ? <audio controls preload="metadata" src={value} aria-label={`Nghe ${label}`} /> : null}{value && kind === "image" ? <img src={value} alt={`Xem trước ${label}`} className="operator-media-preview" /> : null}</div>;
+  const action = kind === "audio" ? "Chọn audio" : "Chọn ảnh";
+  return <div className={`field operator-media-field${compact ? " operator-media-field--compact" : ""}`}><span>{label}</span><div className="operator-media-input-row"><input aria-label={`${label} URL`} value={value} placeholder={kind === "audio" ? "Dán URL audio hoặc chọn file" : "Dán URL ảnh hoặc chọn file"} onChange={event => onChange(event.target.value)} /><label className="btn-sm operator-media-upload"><Upload size={15} aria-hidden="true" />{uploading ? "Đang tải…" : action}<input hidden type="file" aria-label={`Tải ${label}`} accept={accept} disabled={!uploadMedia || uploading} onChange={event => { const file = event.target.files?.[0]; event.target.value = ""; if (!file || !uploadMedia) return; setError(undefined); setUploading(true); void uploadMedia(kind, file, file.name).then(result => onChange(result.url)).catch(reason => setError(describeSaveError(reason))).finally(() => setUploading(false)); }} /></label></div>{!uploadMedia ? <small className="xs muted">Có thể dán URL. Tải file trực tiếp chưa khả dụng trong môi trường này.</small> : null}{error ? <small role="alert" className="xs danger">{error}</small> : null}{value && kind === "audio" ? <audio controls preload="metadata" src={value} aria-label={`Nghe ${label}`} /> : null}{value && kind === "image" ? <img src={value} alt={`Xem trước ${label}`} className="operator-media-preview" /> : null}</div>;
 }
 
 function QuestionFields({ prefix, question, options, answer, onQuestion, onOptions, onAnswer }: { prefix: string; question: string; options: string[]; answer: number; onQuestion(value: string): void; onOptions(value: string[]): void; onAnswer(value: number): void }) {
@@ -174,7 +207,6 @@ function readLesson(lesson: ContentLessonDraftInput): EditorState {
   return {
     title: lesson.title,
     objective: objectiveItems.length ? objectiveItems.join("\n") : stringValue(objective.text),
-    objectiveAudioUrl: stringValue(objective.audioUrl),
     instructionSteps: listValue(instruction.steps).join("; "),
     instructionAudioUrl: stringValue(instruction.audioUrl),
     grammar: stringValue(grammar.formula || grammar.text),
@@ -192,11 +224,16 @@ function readLesson(lesson: ContentLessonDraftInput): EditorState {
         meaning: stringValue(item.meaning ?? item.v),
         examples: listValue(item.collocations ?? item.phrases ?? item.examples).join("; "),
         family: formatStructuredEntries(item.family, ["type", "meaning"]),
+        familyAudioUrls: structuredAudioUrls(item.family),
         synonyms: formatStructuredEntries(item.synonyms ?? item.syn, ["level", "note"]),
+        synonymAudioUrls: structuredAudioUrls(item.synonyms ?? item.syn),
         antonyms: formatStructuredEntries(item.antonyms ?? item.ant, ["level", "note"]),
+        antonymAudioUrls: structuredAudioUrls(item.antonyms ?? item.ant),
         umbrellaWord: stringValue(umbrella.word ?? umbrella.w),
         umbrellaMeaning: stringValue(umbrella.meaning ?? umbrella.v),
+        umbrellaAudioUrl: stringValue(umbrella.audioUrl),
         umbrellaSiblings: formatStructuredEntries(umbrella.siblings ?? umbrella.words, ["meaning"]),
+        umbrellaSiblingAudioUrls: structuredAudioUrls(umbrella.siblings ?? umbrella.words),
         imageUrl: stringValue(item.imageUrl),
         audioUrl: stringValue(item.audioUrl)
       };
@@ -259,9 +296,9 @@ function buildLesson(initial: ContentLessonDraftInput, state: EditorState): Cont
   const priorVocabulary = prior("vocabulary");
   const priorVocabularyItems = Array.isArray(priorVocabulary.items) ? priorVocabulary.items : [];
   const known: ContentLessonDraftInput["parts"] = [
-    { code: "objective", title: "Mục tiêu bài học", content: buildObjectiveContent(prior("objective"), state.objective, state.objectiveAudioUrl) },
+    { code: "objective", title: "Mục tiêu bài học", content: buildObjectiveContent(prior("objective"), state.objective) },
     { code: "instruction", title: "Hướng dẫn làm bài", content: { ...prior("instruction"), steps: splitValues(state.instructionSteps, /[;\n]/).length ? splitValues(state.instructionSteps, /[;\n]/) : ["Học nội dung", "Làm lần lượt các bài tập", "Xem phản hồi và làm lại"], audioUrl: state.instructionAudioUrl.trim() } },
-    { code: "vocabulary", title: "Từ vựng", content: { ...priorVocabulary, items: state.vocabulary.map((row, index) => ({ ...record(priorVocabularyItems[index]), word: row.word.trim(), type: row.type.trim(), pronunciation: row.pronunciation.trim(), meaning: row.meaning.trim(), collocations: splitValues(row.examples, /[;\n]/), examples: splitValues(row.examples, /[;\n]/), family: parseStructuredEntries(row.family, ["type", "meaning"]), synonyms: parseStructuredEntries(row.synonyms, ["level", "note"]), antonyms: parseStructuredEntries(row.antonyms, ["level", "note"]), umbrella: buildUmbrella(row), imageUrl: row.imageUrl.trim(), audioUrl: row.audioUrl.trim(), ...(row.imageUrl.trim() ? { imageAttribution: { creator: "Người vận hành", licence: "Nội dung nội bộ", licenceUrl: "", sourceUrl: row.imageUrl.trim() } } : {}) })) } },
+    { code: "vocabulary", title: "Từ vựng", content: { ...priorVocabulary, items: state.vocabulary.map((row, index) => ({ ...record(priorVocabularyItems[index]), word: row.word.trim(), type: row.type.trim(), pronunciation: row.pronunciation.trim(), meaning: row.meaning.trim(), collocations: splitValues(row.examples, /[;\n]/), examples: splitValues(row.examples, /[;\n]/), family: parseStructuredEntries(row.family, ["type", "meaning"], row.familyAudioUrls), synonyms: parseStructuredEntries(row.synonyms, ["level", "note"], row.synonymAudioUrls), antonyms: parseStructuredEntries(row.antonyms, ["level", "note"], row.antonymAudioUrls), umbrella: buildUmbrella(row), imageUrl: row.imageUrl.trim(), audioUrl: row.audioUrl.trim(), ...(row.imageUrl.trim() ? { imageAttribution: { creator: "Người vận hành", licence: "Nội dung nội bộ", licenceUrl: "", sourceUrl: row.imageUrl.trim() } } : {}) })) } },
     { code: "grammar", title: "Ngữ pháp", content: state.grammarUnavailable
       ? { status: "unavailable", hidden: true, reason: "no_suitable_content" }
       : { ...prior("grammar"), status: "available", hidden: false, formula: state.grammar.trim(), usage: state.grammarUsage.trim(), examples: splitValues(state.grammarExamples, /[;\n]/), audioUrl: state.grammarAudioUrl.trim() } },
@@ -293,28 +330,33 @@ function formatStructuredEntries(value: unknown, fields: Array<"type" | "meaning
     return [word, ...values].join(" | ");
   }).filter(Boolean).join("; ");
 }
-function parseStructuredEntries(value: string, fields: Array<"type" | "meaning" | "level" | "note">): Array<Record<string, string>> {
-  return splitValues(value, /[;\n]/).flatMap(segment => {
+function structuredAudioUrls(value: unknown): string[] {
+  if (!Array.isArray(value)) return [];
+  return value.map(entry => stringValue(record(entry).audioUrl));
+}
+function parseStructuredEntries(value: string, fields: Array<"type" | "meaning" | "level" | "note">, audioUrls: string[] = []): Array<Record<string, string>> {
+  return splitValues(value, /[;\n]/).flatMap((segment, entryIndex) => {
     const [word = "", ...values] = segment.split("|").map(part => part.trim());
     if (!word) return [];
     const entry: Record<string, string> = { word };
     fields.forEach((field, index) => { if (values[index]) entry[field] = values[index]!; });
+    if (audioUrls[entryIndex]?.trim()) entry.audioUrl = audioUrls[entryIndex]!.trim();
     return [entry];
   });
 }
 function buildUmbrella(row: VocabularyRow): Record<string, unknown> | null {
-  const siblings = parseStructuredEntries(row.umbrellaSiblings, ["meaning"]);
+  const siblings = parseStructuredEntries(row.umbrellaSiblings, ["meaning"], row.umbrellaSiblingAudioUrls);
   if (!row.umbrellaWord.trim() && !row.umbrellaMeaning.trim() && !siblings.length) return null;
-  return { word: row.umbrellaWord.trim(), meaning: row.umbrellaMeaning.trim(), siblings };
+  return { word: row.umbrellaWord.trim(), meaning: row.umbrellaMeaning.trim(), audioUrl: row.umbrellaAudioUrl.trim(), siblings };
 }
-function buildObjectiveContent(prior: Record<string, unknown>, value: string, audioUrl: string): Record<string, unknown> {
+function buildObjectiveContent(prior: Record<string, unknown>, value: string): Record<string, unknown> {
   const texts = splitValues(value, /\n/);
   const priorItems = Array.isArray(prior.items) ? prior.items.map(record) : [];
   return {
     ...prior,
     text: texts.join("\n"),
     items: texts.map((text, index) => ({ ...priorItems[index], text })),
-    audioUrl: audioUrl.trim()
+    audioUrl: ""
   };
 }
 function record(value: unknown): Record<string, unknown> { return value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : {}; }

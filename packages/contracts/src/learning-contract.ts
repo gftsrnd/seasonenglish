@@ -83,6 +83,7 @@ export interface LessonVocabularyFamilyWord {
   type?: string;
   meaning?: string;
   pronunciation?: string;
+  audioUrl?: string;
 }
 
 export interface LessonVocabularySynonym {
@@ -90,11 +91,13 @@ export interface LessonVocabularySynonym {
   level: CefrLevel;
   note?: string;
   pronunciation?: string;
+  audioUrl?: string;
 }
 
 export interface LessonVocabularyUmbrella {
   word: string;
   meaning: string;
+  audioUrl?: string;
   siblings: LessonVocabularyFamilyWord[];
 }
 

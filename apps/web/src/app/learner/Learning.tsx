@@ -575,7 +575,7 @@ function PartContent({
   const targetSound = pronunciationTarget(content.focus ?? "");
   const grammarExamples = content.examples?.slice(0, 3) ?? [];
   const speakingModel = conciseSpeakingModel(content.sample ?? content.answer ?? content.modelAnswer);
-  const sectionAudioSource = ["vocabulary", "pronunciation", "listening", "speaking"].includes(part.code)
+  const sectionAudioSource = ["objective", "vocabulary", "pronunciation", "listening", "speaking"].includes(part.code)
     ? undefined
     : lessonAudioSource({ ...content, script: lessonPartNarration(part.code, content, cefr) });
   return <>
@@ -719,11 +719,11 @@ function VocabularyCard({
     ...(item.umbrella && umbrellaWord ? [{ label: `TỪ BAO TRÙM ${umbrellaWord}`, ariaLabel: `Từ bao trùm: ${umbrellaWord}`, icon: "umbrella" as const, tone: "umb" as const, count: item.umbrella.siblings?.length ?? 0, onClick: () => openModal({ kind: "umbrella", item }) }] : []),
     ...(item.synonyms?.length ? item.synonyms.map(value => {
       const detail = lexicalDetails.find((candidate) => candidate.kind === "synonym" && candidate.word.trim().toLocaleLowerCase() === value.word.trim().toLocaleLowerCase());
-      return { label: `= ${value.word}${value.level ? ` · ${value.level}` : ""}`, ariaLabel: isB1Plus && detail ? `Xem từ đồng nghĩa: ${value.word}` : `Nghe từ đồng nghĩa: ${value.word}`, tone: "synonym" as const, onClick: () => isB1Plus && detail ? openModal({ kind: "lexical", item, detail }) : speak(value.word) };
+      return { label: `= ${value.word}${value.level ? ` · ${value.level}` : ""}`, ariaLabel: isB1Plus && detail ? `Xem từ đồng nghĩa: ${value.word}` : `Nghe từ đồng nghĩa: ${value.word}`, tone: "synonym" as const, onClick: () => isB1Plus && detail ? openModal({ kind: "lexical", item, detail }) : playVocabularyWord(speak, value.word, value.audioUrl) };
     }) : synonymDetail && firstSynonym ? [{ label: `= ${firstSynonym}`, ariaLabel: isB1Plus ? `Xem từ đồng nghĩa: ${firstSynonym}` : `Nghe từ đồng nghĩa: ${firstSynonym}`, tone: "synonym" as const, onClick: () => isB1Plus ? openModal({ kind: "lexical", item, detail: synonymDetail }) : speak(firstSynonym) }] : []),
     ...(item.antonyms?.length ? item.antonyms.map(value => {
       const detail = lexicalDetails.find((candidate) => candidate.kind === "antonym" && candidate.word.trim().toLocaleLowerCase() === value.word.trim().toLocaleLowerCase());
-      return { label: `≠ ${value.word}${value.level ? ` · ${value.level}` : ""}`, ariaLabel: isB1Plus && detail ? `Xem từ trái nghĩa: ${value.word}` : `Nghe từ trái nghĩa: ${value.word}`, tone: "antonym" as const, onClick: () => isB1Plus && detail ? openModal({ kind: "lexical", item, detail }) : speak(value.word) };
+      return { label: `≠ ${value.word}${value.level ? ` · ${value.level}` : ""}`, ariaLabel: isB1Plus && detail ? `Xem từ trái nghĩa: ${value.word}` : `Nghe từ trái nghĩa: ${value.word}`, tone: "antonym" as const, onClick: () => isB1Plus && detail ? openModal({ kind: "lexical", item, detail }) : playVocabularyWord(speak, value.word, value.audioUrl) };
     }) : []),
     ...(item.family?.length ? [{ label: `Word family (${item.family.length})`, ariaLabel: `Word family (${item.family.length})`, icon: "family" as const, tone: "family" as const, onClick: () => openModal({ kind: "family", item }) }] : []),
     ...extendedRelations
@@ -762,17 +762,26 @@ function VocabularyModal({
 }
 
 function FamilyModal({ item, speak }: { item: LessonVocabularyItem; speak: (text: string) => void }) {
-  return <div className="stack" style={{ gap: 10 }} aria-label="Các từ cùng họ">{item.family?.map((word) => <article className="card flat" style={{ minWidth: 0 }} key={`${word.word}-${word.type ?? ""}`}><div className="row between" style={{ gap: 12, alignItems: "flex-start" }}><div style={{ minWidth: 0 }}><b>{word.word}</b>{word.type ? <span className="small muted"> · {word.type}</span> : null}<p className="small">{word.meaning}</p></div><button type="button" aria-label={`Nghe từ cùng họ: ${word.word}`} style={listenButtonStyle} onClick={() => speak(word.word)}><Volume2 size={14} aria-hidden="true" />Nghe</button></div></article>)}</div>;
+  return <div className="stack" style={{ gap: 10 }} aria-label="Các từ cùng họ">{item.family?.map((word) => <article className="card flat" style={{ minWidth: 0 }} key={`${word.word}-${word.type ?? ""}`}><div className="row between" style={{ gap: 12, alignItems: "flex-start" }}><div style={{ minWidth: 0 }}><b>{word.word}</b>{word.type ? <span className="small muted"> · {word.type}</span> : null}<p className="small">{word.meaning}</p></div><button type="button" aria-label={`Nghe từ cùng họ: ${word.word}`} style={listenButtonStyle} onClick={() => playVocabularyWord(speak, word.word, word.audioUrl)}><Volume2 size={14} aria-hidden="true" />Nghe</button></div></article>)}</div>;
 }
 
 function SynonymsModal({ item, list, speak }: { item: LessonVocabularyItem; list?: LessonVocabularyItem["synonyms"] | undefined; speak: (text: string) => void }) {
   const words = list ?? item.synonyms;
-  return <div className="stack" style={{ gap: 10 }} aria-label="Các từ liên quan">{words?.map((word) => <article className="card flat" style={{ minWidth: 0 }} key={word.word}><div className="row between" style={{ gap: 12, alignItems: "flex-start" }}><div style={{ minWidth: 0 }}><b>{word.word}</b><span className="badge">{word.level}</span><p className="small">{word.note}</p></div><button type="button" style={listenButtonStyle} onClick={() => speak(word.word)}><Volume2 size={14} aria-hidden="true" />Nghe</button></div></article>)}</div>;
+  return <div className="stack" style={{ gap: 10 }} aria-label="Các từ liên quan">{words?.map((word) => <article className="card flat" style={{ minWidth: 0 }} key={word.word}><div className="row between" style={{ gap: 12, alignItems: "flex-start" }}><div style={{ minWidth: 0 }}><b>{word.word}</b><span className="badge">{word.level}</span><p className="small">{word.note}</p></div><button type="button" style={listenButtonStyle} onClick={() => playVocabularyWord(speak, word.word, word.audioUrl)}><Volume2 size={14} aria-hidden="true" />Nghe</button></div></article>)}</div>;
 }
 
 function UmbrellaModal({ item, speak }: { item: LessonVocabularyItem; speak: (text: string) => void }) {
   if (!item.umbrella) return null;
-  return <div className="stack vocabulary-umbrella-content" style={{ gap: 12 }} aria-label="Từ bao quát"><article className="card flat vocabulary-umbrella-summary" aria-label={`Từ bao quát ${item.umbrella.word}`}><div className="row between" style={{ gap: 12, alignItems: "flex-start" }}><div style={{ minWidth: 0 }}><div className="eyebrow">Từ bao quát</div><h3>{item.umbrella.word}</h3><p>{item.umbrella.meaning}</p></div><button type="button" aria-label={`Nghe từ bao trùm: ${item.umbrella.word}`} style={listenButtonStyle} onClick={() => speak(item.umbrella!.word)}><Volume2 size={14} aria-hidden="true" />Nghe</button></div></article><div><div className="small muted">Từ hiện tại và các từ cùng nhóm</div><div className="row" style={{ flexWrap: "wrap", gap: 8, marginTop: 8 }}>{[item, ...item.umbrella.siblings].map((word) => <button type="button" aria-label={`Nghe từ cùng nhóm: ${word.word}`} style={listenButtonStyle} key={word.word} onClick={() => speak(word.word)}><Volume2 size={14} aria-hidden="true" />{word.word}{"meaning" in word && word.meaning ? ` · ${word.meaning}` : ""}</button>)}</div></div></div>;
+  return <div className="stack vocabulary-umbrella-content" style={{ gap: 12 }} aria-label="Từ bao quát"><article className="card flat vocabulary-umbrella-summary" aria-label={`Từ bao quát ${item.umbrella.word}`}><div className="row between" style={{ gap: 12, alignItems: "flex-start" }}><div style={{ minWidth: 0 }}><div className="eyebrow">Từ bao quát</div><h3>{item.umbrella.word}</h3><p>{item.umbrella.meaning}</p></div><button type="button" aria-label={`Nghe từ bao trùm: ${item.umbrella.word}`} style={listenButtonStyle} onClick={() => playVocabularyWord(speak, item.umbrella!.word, item.umbrella?.audioUrl)}><Volume2 size={14} aria-hidden="true" />Nghe</button></div></article><div><div className="small muted">Từ hiện tại và các từ cùng nhóm</div><div className="row" style={{ flexWrap: "wrap", gap: 8, marginTop: 8 }}>{[item, ...item.umbrella.siblings].map((word) => <button type="button" aria-label={`Nghe từ cùng nhóm: ${word.word}`} style={listenButtonStyle} key={word.word} onClick={() => playVocabularyWord(speak, word.word, word.audioUrl)}><Volume2 size={14} aria-hidden="true" />{word.word}{"meaning" in word && word.meaning ? ` · ${word.meaning}` : ""}</button>)}</div></div></div>;
+}
+
+function playVocabularyWord(speak: (text: string) => void, word: string, audioUrl?: string) {
+  if (audioUrl?.trim() && typeof Audio !== "undefined") {
+    const audio = new Audio(audioUrl.trim());
+    void audio.play().catch(() => speak(word));
+    return;
+  }
+  speak(word);
 }
 
 function LexicalModal({ item, detail, speak }: { item: LessonVocabularyItem; detail?: LessonVocabularyLexicalDetail; speak: (text: string) => void }) {
