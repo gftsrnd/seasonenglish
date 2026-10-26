@@ -146,4 +146,41 @@ describe("operator granular lesson editor", () => {
     expect(screen.getByLabelText("Từ trái nghĩa từ 1")).toHaveValue("competitor | B1 | đối thủ");
     expect(screen.getByLabelText("Từ cùng nhóm từ 1")).toHaveValue("manager | quản lý; client | khách hàng");
   });
+
+  it("uploads and persists manual vocabulary images and lesson audio without AI", async () => {
+    const user = userEvent.setup();
+    const onSave = vi.fn().mockResolvedValue(undefined);
+    const uploadMedia = vi.fn(async (kind: "audio" | "image", _file: Blob, filename: string) => ({
+      url: `/api/v1/files/content-media/read?artifactKey=${kind}-${filename}`
+    }));
+    vi.spyOn(window, "confirm").mockReturnValue(true);
+    const { container } = render(<LessonFormEditor weekNumber={1} cefr="A2" initial={emptyLesson(1)} onSave={onSave} onCancel={() => undefined} uploadMedia={uploadMedia} />);
+
+    const image = new File(["image"], "colleague.png", { type: "image/png" });
+    const pronunciation = new File(["voice"], "pronunciation.mp3", { type: "audio/mpeg" });
+    const listening = new File(["voice"], "listening.wav", { type: "audio/wav" });
+    const speaking = new File(["voice"], "speaking.ogg", { type: "audio/ogg" });
+    await user.upload(screen.getByLabelText("Tải Ảnh minh họa từ 1"), image);
+    await user.upload(screen.getByLabelText("Tải Audio mẫu phát âm"), pronunciation);
+    await user.upload(screen.getByLabelText("Tải File audio phần Nghe"), listening);
+    await user.upload(screen.getByLabelText("Tải Audio mẫu phần Nói"), speaking);
+    expect(uploadMedia).toHaveBeenCalledTimes(4);
+    expect(container.querySelector('input[accept="image/png,image/jpeg,image/webp,image/gif"]')).toBeInTheDocument();
+    expect((screen.getByLabelText("Ảnh minh họa từ 1 URL") as HTMLInputElement).value).toContain("image-colleague.png");
+
+    await user.click(screen.getByRole("button", { name: "Kiểm tra & lưu" }));
+    await user.click(screen.getByRole("button", { name: "Lưu dù còn thiếu" }));
+    const saved = onSave.mock.calls[0]?.[0];
+    expect(saved.parts.find((part: { code: string }) => part.code === "vocabulary")?.content.items[0]).toEqual(expect.objectContaining({ imageUrl: expect.stringContaining("image-colleague.png") }));
+    expect(saved.parts.find((part: { code: string }) => part.code === "pronunciation")?.content.audioUrl).toContain("audio-pronunciation.mp3");
+    expect(saved.parts.find((part: { code: string }) => part.code === "listening")?.content.audioUrl).toContain("audio-listening.wav");
+    expect(saved.parts.find((part: { code: string }) => part.code === "speaking")?.content.audioUrl).toContain("audio-speaking.ogg");
+
+    cleanup();
+    render(<LessonFormEditor weekNumber={1} cefr="A2" initial={saved} onSave={vi.fn()} onCancel={() => undefined} uploadMedia={uploadMedia} />);
+    expect((screen.getByLabelText("Ảnh minh họa từ 1 URL") as HTMLInputElement).value).toContain("image-colleague.png");
+    expect((screen.getByLabelText("Audio mẫu phát âm URL") as HTMLInputElement).value).toContain("audio-pronunciation.mp3");
+    expect((screen.getByLabelText("File audio phần Nghe URL") as HTMLInputElement).value).toContain("audio-listening.wav");
+    expect((screen.getByLabelText("Audio mẫu phần Nói URL") as HTMLInputElement).value).toContain("audio-speaking.ogg");
+  });
 });

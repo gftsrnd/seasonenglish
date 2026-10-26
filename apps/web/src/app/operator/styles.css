@@ -441,6 +441,12 @@
   gap: 10px 12px;
   margin-top: 10px;
 }
+.operator-modal-scope .operator-media-field { margin-top: 8px; }
+.operator-modal-scope .operator-media-field .row { align-items: center; flex-wrap: wrap; }
+.operator-modal-scope .operator-media-field .row > input:not([type="file"]) { flex: 1 1 360px; min-width: 0; }
+.operator-modal-scope .operator-media-upload { cursor: pointer; white-space: nowrap; }
+.operator-modal-scope .operator-media-preview { display: block; width: 120px; height: 90px; margin-top: 8px; border-radius: 10px; border: 1px solid var(--line); object-fit: cover; }
+.operator-modal-scope .operator-media-field audio { display: block; width: min(100%, 520px); margin-top: 8px; }
 @media (max-width: 840px) {
   .operator-modal-scope .operator-lesson-editor { padding: 16px; }
   .operator-modal-scope .operator-editor-sticky-header {

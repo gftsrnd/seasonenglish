@@ -146,6 +146,7 @@ export type LessonPartOutcome =
   | "wrong_retry"
   | "wrong_exhausted"
   | "correct"
+  | "submitted"
   | "translated"
   | "appealed";
 

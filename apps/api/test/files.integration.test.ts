@@ -1,7 +1,7 @@
 import { Pool } from "pg";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { migrateDatabase, resetPublicSchema, seedDemo } from "@e4s/database";
-import { createCredentialHash } from "@e4s/domain/identity";
+import { createCredentialHash, createPinHash } from "@e4s/domain/identity";
 import { DEMO_IDS } from "@e4s/test-support";
 import { buildApi } from "../src/app.js";
 
@@ -50,7 +50,7 @@ describe("assessment evidence upload API", () => {
       await client.query(
         "insert into user_credentials (user_id, credential_hash) values ($1, $2), ($3, $4)",
         [
-          DEMO_IDS.learner, await createCredentialHash("learner-pass"),
+          DEMO_IDS.learner, await createPinHash("123456"),
           DEMO_IDS.operator, await createCredentialHash("operator-pass")
         ]
       );
@@ -58,7 +58,7 @@ describe("assessment evidence upload API", () => {
     await app.ready();
     const login = await app.inject({
       method: "POST", url: "/api/auth/learner/login",
-      payload: { email: "minh.anh.nguyen@e4s.local", password: "learner-pass" }
+      payload: { email: "minh.anh.nguyen@e4s.local", pin: "123456" }
     });
     cookie = String(login.headers["set-cookie"]).split(";")[0] ?? "";
   }, 30_000);
@@ -128,6 +128,39 @@ describe("assessment evidence upload API", () => {
       object_key: body.artifactKey,
       mime_type: "audio/webm"
     }] });
+  });
+
+  it("lets an operator upload lesson media and learners in the organization read it", async () => {
+    const login = await app.inject({
+      method: "POST", url: "/api/auth/staff/login",
+      payload: { email: "thu.ha.tran@e4s.local", password: "operator-pass" }
+    });
+    expect(login.statusCode, login.body).toBe(200);
+    const operatorCookie = String(login.headers["set-cookie"]).split(";")[0] ?? "";
+    const boundary = "E4S-content-image-boundary";
+    const payload = Buffer.from([
+      `--${boundary}`,
+      'Content-Disposition: form-data; name="file"; filename="colleague.png"',
+      "Content-Type: image/png",
+      "",
+      "image bytes",
+      `--${boundary}--`,
+      ""
+    ].join("\r\n"));
+    const uploadedResponse = await app.inject({
+      method: "POST", url: "/api/v1/files/content-media/image",
+      headers: { cookie: operatorCookie, "content-type": `multipart/form-data; boundary=${boundary}` }, payload
+    });
+    expect(uploadedResponse.statusCode, uploadedResponse.body).toBe(201);
+    const body = uploadedResponse.json() as { artifactKey: string; url: string };
+    expect(body.artifactKey).toMatch(new RegExp(`^content-media/${DEMO_IDS.operator}/[0-9a-f-]+\\.png$`));
+    expect(body.url).toContain("/api/v1/files/content-media/read");
+    await expect(pool.query("select purpose, mime_type from files where object_key = $1", [body.artifactKey]))
+      .resolves.toMatchObject({ rows: [{ purpose: "content_media", mime_type: "image/png" }] });
+
+    const read = await app.inject({ method: "GET", url: body.url, headers: { cookie } });
+    expect(read.statusCode, read.body).toBe(302);
+    expect(read.headers.location).toContain(body.artifactKey);
   });
 
   it("accepts a WebM recording when the browser reports a non-audio MIME", async () => {

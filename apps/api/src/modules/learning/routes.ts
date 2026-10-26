@@ -97,9 +97,11 @@ export function registerLearningRoutes(
   app: FastifyInstance,
   pool: Pool,
   aiRunner?: AiTaskRunner,
-  mediaService?: ContentMediaService
+  mediaService?: ContentMediaService,
+  aiRunnerFactory?: (actorId: string) => Promise<AiTaskRunner | undefined>
 ): void {
   const repositories = createRepositories(pool);
+  const runnerFor = (actorId: string) => aiRunnerFactory ? aiRunnerFactory(actorId) : Promise.resolve(aiRunner);
   const learnerOnly = createRoleGuard(pool, ["learner"]);
 
   app.get("/api/v1/learner/profile", { preHandler: learnerOnly }, async (request, reply) => {
@@ -163,12 +165,13 @@ export function registerLearningRoutes(
 
   app.get("/api/v1/learner/home", { preHandler: learnerOnly }, async (request, reply) => {
     const learnerId = request.e4sSession!.user.id;
-    const [profile, context, progress, weeklyPractice, microLesson] = await Promise.all([
+    const [profile, context, progress, weeklyPractice, microLesson, runner] = await Promise.all([
       repositories.learning.getProfile(learnerId),
       repositories.learning.getActiveContext(learnerId),
       repositories.learning.getProgressDashboard(learnerId),
       repositories.engagement.weeklyPractice(learnerId),
-      repositories.learning.todayMicroLesson(learnerId)
+      repositories.learning.todayMicroLesson(learnerId),
+      runnerFor(learnerId)
     ]);
     if (!progress) return reply.code(404).send({ code: "LEARNER_NOT_FOUND" });
     const lifecycle = await repositories.learning.learnerLifecycle(learnerId, progress.points, progress.levelReadiness.eligible);
@@ -200,7 +203,7 @@ export function registerLearningRoutes(
         id: microLesson.id, topic: microLesson.topic, durationMinutes: microLesson.durationMinutes,
         completed: Boolean(microLesson.completedAt)
       } : null,
-      microGenerationAvailable: Boolean(aiRunner),
+      microGenerationAvailable: Boolean(runner),
       metrics: {
         completedLessons,
         totalLessons: summaries.length,
@@ -359,8 +362,9 @@ export function registerLearningRoutes(
   }, async (request, reply) => {
     const body = z.object({ requestId: z.uuid(), regenerate: z.boolean().optional() }).safeParse(request.body);
     if (!body.success) return reply.code(400).send({ code: "INVALID_MICRO_LESSON_REQUEST" });
-    if (!aiRunner) return reply.code(503).send({ code: "AI_UNAVAILABLE" });
     const learnerId = request.e4sSession!.user.id;
+    const runner = await runnerFor(learnerId);
+    if (!runner) return reply.code(503).send({ code: "AI_UNAVAILABLE" });
     const regenerate = body.data.regenerate === true;
     const existing = regenerate ? null : await repositories.learning.todayMicroLesson(learnerId);
     if (existing) return microLessonView(existing, Boolean(aiRunner));
@@ -372,7 +376,7 @@ export function registerLearningRoutes(
     if (!profile || !context || !context.cefr) return reply.code(409).send({ code: "LEARNER_CONTEXT_NOT_READY" });
     if (!task) return reply.code(503).send({ code: "AI_PROMPT_NOT_READY" });
     try {
-      const result = await aiRunner.runTask("micro_lesson_generation", {
+      const result = await runner.runTask("micro_lesson_generation", {
         cefr: context.cefr,
         weekTopic: context.topic,
         goals: profile.profile.goals ?? [],
@@ -393,7 +397,7 @@ export function registerLearningRoutes(
           ...output.data,
           practice: { ...output.data.practice, ...(output.data.practice.options ? { options: output.data.practice.options } : {}) }
         } as MicroLessonTaskOutput
-      }), Boolean(aiRunner)));
+      }), Boolean(runner)));
     } catch (error) {
       request.log.warn({ error }, "Micro lesson generation failed");
       return reply.code(502).send({ code: "AI_MICRO_LESSON_FAILED" });
@@ -403,8 +407,12 @@ export function registerLearningRoutes(
   app.get("/api/v1/micro-lessons/:microLessonId", { preHandler: learnerOnly }, async (request, reply) => {
     const params = z.object({ microLessonId: z.uuid() }).safeParse(request.params);
     if (!params.success) return reply.code(400).send({ code: "INVALID_MICRO_LESSON_ID" });
-    const micro = await repositories.learning.findMicroLesson(request.e4sSession!.user.id, params.data.microLessonId);
-    return micro ? microLessonView(micro, Boolean(aiRunner)) : reply.code(404).send({ code: "MICRO_LESSON_NOT_FOUND" });
+    const learnerId = request.e4sSession!.user.id;
+    const [micro, runner] = await Promise.all([
+      repositories.learning.findMicroLesson(learnerId, params.data.microLessonId),
+      runnerFor(learnerId)
+    ]);
+    return micro ? microLessonView(micro, Boolean(runner)) : reply.code(404).send({ code: "MICRO_LESSON_NOT_FOUND" });
   });
 
   app.post("/api/v1/micro-lessons/:microLessonId/attempts", { preHandler: learnerOnly }, async (request, reply) => {
@@ -412,16 +420,17 @@ export function registerLearningRoutes(
     const body = z.object({ answer: z.string().trim().min(1).max(2_000) }).safeParse(request.body);
     if (!params.success || !body.success) return reply.code(400).send({ code: "INVALID_MICRO_ATTEMPT" });
     const learnerId = request.e4sSession!.user.id;
-    const [micro, task] = await Promise.all([
+    const [micro, task, runner] = await Promise.all([
       repositories.learning.microLessonForGrading(learnerId, params.data.microLessonId),
-      repositories.aiRuns.activeTaskPrompt(learnerId, "micro_grading")
+      repositories.aiRuns.activeTaskPrompt(learnerId, "micro_grading"),
+      runnerFor(learnerId)
     ]);
     if (!micro) return reply.code(404).send({ code: "MICRO_LESSON_NOT_FOUND" });
     const policyGrade = gradeMicroAttempt({
       type: micro.practice.type,
       answer: body.data.answer,
       expected: micro.practice.answer,
-      aiAvailable: Boolean(aiRunner && task)
+      aiAvailable: Boolean(runner && task)
     });
     if (policyGrade.status === "invalid") {
       return reply.code(422).send({ code: "MICRO_ANSWER_TOO_SHORT", minimumWords: 2 });
@@ -441,12 +450,12 @@ export function registerLearningRoutes(
           ? "Đã lưu câu trả lời. AI hiện chưa sẵn sàng; người vận hành có thể đọc và phản hồi bài này."
           : correct ? "Đúng rồi. Bạn đã áp dụng đúng mẫu câu của bài."
             : "Chưa đúng. Hãy xem lại mẫu câu và các từ gợi ý rồi thử lại."
-      }).then((saved) => saved ? microLessonView(saved, Boolean(aiRunner)) : saved);
+      }).then((saved) => saved ? microLessonView(saved, Boolean(runner)) : saved);
     };
-    if (!aiRunner || !task) return await deterministic();
+    if (!runner || !task) return await deterministic();
     try {
       const requestId = `micro-grade:${params.data.microLessonId}:${Date.now()}`;
-      const result = await aiRunner.runTask("micro_grading", {
+      const result = await runner.runTask("micro_grading", {
         cefr: micro.cefr, theory: micro.theory, vocabulary: micro.vocabulary,
         practice: micro.practice, learnerAnswer: body.data.answer
       }, { systemPrompt: task.prompt });
@@ -468,7 +477,7 @@ export function registerLearningRoutes(
         learnerId, microLessonId: params.data.microLessonId, answer: body.data.answer,
         correct: output.data.correct, score: output.data.score, feedback: output.data.feedback
       });
-      return saved ? microLessonView(saved, Boolean(aiRunner)) : saved;
+      return saved ? microLessonView(saved, Boolean(runner)) : saved;
     } catch (error) {
       request.log.warn({ error }, "Micro lesson grading failed");
       return await deterministic();
@@ -478,8 +487,12 @@ export function registerLearningRoutes(
   app.post("/api/v1/micro-lessons/:microLessonId/complete", { preHandler: learnerOnly }, async (request, reply) => {
     const params = z.object({ microLessonId: z.uuid() }).safeParse(request.params);
     if (!params.success) return reply.code(400).send({ code: "INVALID_MICRO_LESSON_ID" });
-    const micro = await repositories.learning.completeMicroLesson(request.e4sSession!.user.id, params.data.microLessonId);
-    return micro ? microLessonView(micro, Boolean(aiRunner)) : reply.code(409).send({ code: "MICRO_FEEDBACK_REQUIRED" });
+    const learnerId = request.e4sSession!.user.id;
+    const [micro, runner] = await Promise.all([
+      repositories.learning.completeMicroLesson(learnerId, params.data.microLessonId),
+      runnerFor(learnerId)
+    ]);
+    return micro ? microLessonView(micro, Boolean(runner)) : reply.code(409).send({ code: "MICRO_FEEDBACK_REQUIRED" });
   });
 }
 

@@ -68,7 +68,7 @@ export function buildApi(options: BuildApiOptions): FastifyInstance {
     ...(options.identityEmailSender ? { emailSender: options.identityEmailSender } : {}),
     otpSecret: options.otpSecret ?? "local-only-change-me"
   });
-  registerLearningRoutes(app, options.pool, options.aiRunner, options.mediaService);
+  registerLearningRoutes(app, options.pool, options.aiRunner, options.mediaService, options.aiRunnerFactory);
   registerAssessmentRoutes(app, options.pool, options.aiRunner, options.aiRunnerFactory);
   registerContentRoutes(app, options.pool, options.aiRunner, options.storage, options.aiRunnerFactory, options.mediaService);
   registerManagerRoutes(app, options.pool, {
@@ -77,7 +77,7 @@ export function buildApi(options: BuildApiOptions): FastifyInstance {
   });
   registerNotificationRoutes(app, options.pool);
   registerCoachRoutes(app, options.pool, options.aiRunner, options.aiRunnerFactory);
-  registerEngagementRoutes(app, options.pool, options.aiRunner, options.mediaService);
+  registerEngagementRoutes(app, options.pool, options.aiRunner, options.mediaService, options.aiRunnerFactory);
   registerSystemRoutes(app, options.pool, options.storage, Boolean(options.aiRunner), maintenanceEnabled, options.imageProviders, Boolean(options.aiRunnerFactory));
   if (options.storage) {
     void app.register(multipart, { limits: { files: 1, fileSize: 20 * 1024 * 1024 } });

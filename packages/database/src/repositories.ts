@@ -1163,7 +1163,7 @@ class LearningRepository {
           storedEvidence = mapPartEvidence(row);
           const currentEvidence = lesson.progress.evidence;
           const mergedEvidence = { ...currentEvidence, [input.partCode]: storedEvidence };
-          const partFinished = ["correct", "wrong_exhausted", "translated", "appealed"].includes(storedEvidence.status ?? "");
+          const partFinished = ["correct", "submitted", "wrong_exhausted", "translated", "appealed"].includes(storedEvidence.status ?? "");
           const completedPartCodes = Array.from(new Set([
             ...lesson.progress.completedPartCodes,
             ...(partFinished ? [input.partCode] : [])
@@ -1848,6 +1848,9 @@ function gradeLessonPart(
 ): { status: Exclude<NonNullable<PartEvidence["status"]>, "unanswered" | "appealed">; score: number; feedback: string } {
   if (input.translated) {
     return { status: "translated", score: 0, feedback: "Bản dịch đã được mở để bạn đối chiếu." };
+  }
+  if (partCode === "speaking" && input.artifactKey) {
+    return { status: "submitted", score: 0, feedback: "Đã nhận file ghi âm. Bài được lưu để người vận hành kiểm tra khi AI không sẵn sàng." };
   }
   const answer = input.answer?.trim() ?? "";
   if (partCode === "writing" && (content.type === undefined || content.type === "write") && answer.split(/\s+/u).filter(Boolean).length >= 2) {

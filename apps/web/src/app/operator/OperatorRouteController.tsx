@@ -767,7 +767,7 @@ function LessonSetRoute({ client, readOnly, week, cefr }: { client: OperatorApiC
       });
       setData(saved);
     }
-  }} />{!readOnly && editor && <LessonFormEditor weekNumber={week} cefr={cefr} initial={editor} onSave={saveLesson} onCancel={() => setEditor(undefined)} busy={busy} />}</>;
+  }} />{!readOnly && editor && <LessonFormEditor weekNumber={week} cefr={cefr} initial={editor} onSave={saveLesson} onCancel={() => setEditor(undefined)} uploadMedia={client.uploadContentMedia} busy={busy} />}</>;
 }
 
 function ReviewRoute({ client, readOnly, canEditWeeklyPractice }: { client: OperatorApiClient; readOnly: boolean; canEditWeeklyPractice: boolean }) {

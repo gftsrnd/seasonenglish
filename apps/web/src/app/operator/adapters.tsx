@@ -304,7 +304,7 @@ function renderLessonPart(code: string, value: unknown, media?: { cefr: string; 
     const focus = text("focus") || "—";
     const targetSound = pronunciationTarget(focus);
     const referenceWord = pronunciationWords[0]?.word;
-    return <div className="operator-study-block operator-pronunciation"><div className="lesson-study-panel-header"><h2>PHÁT ÂM</h2></div><p className="lesson-study-focus"><strong>Âm {targetSound}{referenceWord ? ` như trong “${referenceWord}”` : ""}</strong></p>{text("instruction", "tip") ? <p className="operator-pronunciation-tip lesson-study-explanation">{text("instruction", "tip")}</p> : null}{pronunciationWords.length ? <div className="operator-pronunciation-words" aria-label="Luyện từ phát âm">{pronunciationWords.slice(0, 3).map(item => <button className="btn-sm btn-ghost operator-audio-button" type="button" key={item.word} aria-label={`Nghe từ phát âm: ${item.word}`} onClick={() => speakOperatorText(item.word)}><Volume2 size={15} aria-hidden="true" /><strong>{item.word}</strong>{item.ipa ? <span>{item.ipa}</span> : null}</button>)}</div> : null}</div>;
+    return <div className="operator-study-block operator-pronunciation"><div className="lesson-study-panel-header"><h2>PHÁT ÂM</h2></div><p className="lesson-study-focus"><strong>Âm {targetSound}{referenceWord ? ` như trong “${referenceWord}”` : ""}</strong></p>{text("audioUrl") ? <audio controls preload="metadata" src={text("audioUrl")} aria-label="Nghe audio mẫu phát âm" /> : null}{text("instruction", "tip") ? <p className="operator-pronunciation-tip lesson-study-explanation">{text("instruction", "tip")}</p> : null}{pronunciationWords.length ? <div className="operator-pronunciation-words" aria-label="Luyện từ phát âm">{pronunciationWords.slice(0, 3).map(item => <button className="btn-sm btn-ghost operator-audio-button" type="button" key={item.word} aria-label={`Nghe từ phát âm: ${item.word}`} onClick={() => speakOperatorText(item.word)}><Volume2 size={15} aria-hidden="true" /><strong>{item.word}</strong>{item.ipa ? <span>{item.ipa}</span> : null}</button>)}</div> : null}</div>;
   }
   if (code === "listening") {
     const audio = operatorAudioSource(content);
@@ -316,7 +316,7 @@ function renderLessonPart(code: string, value: unknown, media?: { cefr: string; 
   if (code === "speaking") {
     const model = conciseSpeakingModel(text("answer", "modelAnswer", "sample"));
     const instruction = conciseSpeakingInstruction(text("instruction", "prompt"));
-    return <div className="operator-practice-content"><p className="operator-speaking-instruction"><strong>Yêu cầu:</strong> {instruction}</p><div className="operator-speaking-model"><strong>{model}</strong><OperatorSpeechButton text={model} label="Nghe câu mẫu" /></div><OperatorRecordingPreview /></div>;
+    return <div className="operator-practice-content"><p className="operator-speaking-instruction"><strong>Yêu cầu:</strong> {instruction}</p><div className="operator-speaking-model"><strong>{model}</strong>{text("audioUrl") ? <audio controls preload="metadata" src={text("audioUrl")} aria-label="Nghe audio mẫu phần Nói" /> : <OperatorSpeechButton text={model} label="Nghe câu mẫu" />}</div><OperatorRecordingPreview /></div>;
   }
   return <div className="small">{humanizeContent(content)}</div>;
 }

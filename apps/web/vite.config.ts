@@ -6,7 +6,7 @@ export default defineConfig({
   server: {
     host: "127.0.0.1",
     port: 4175,
-    proxy: { "/api": "http://127.0.0.1:3001" }
+    proxy: { "/api": process.env.E4S_API_PROXY_URL ?? "http://127.0.0.1:3001" }
   },
   preview: { host: "127.0.0.1", port: 4175 }
 });

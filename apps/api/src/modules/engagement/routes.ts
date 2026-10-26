@@ -38,9 +38,11 @@ export function registerEngagementRoutes(
   app: FastifyInstance,
   pool: Pool,
   aiRunner?: AiTaskRunner,
-  mediaService?: ContentMediaService
+  mediaService?: ContentMediaService,
+  aiRunnerFactory?: (actorId: string) => Promise<AiTaskRunner | undefined>
 ): void {
   const repositories = createRepositories(pool);
+  const runnerFor = (actorId: string) => aiRunnerFactory ? aiRunnerFactory(actorId) : Promise.resolve(aiRunner);
   const learnerOnly = createRoleGuard(pool, ["learner"]);
 
   app.get("/api/v1/engagement/practice", { preHandler: learnerOnly }, async (request, reply) => {
@@ -52,6 +54,7 @@ export function registerEngagementRoutes(
     const parsed = z.object({ requestId: z.uuid(), text: z.string().trim().min(8).max(10_000) }).safeParse(request.body);
     if (!parsed.success || parsed.data.text.split(/\s+/).length < 8) return reply.code(400).send({ code: "PRACTICE_TOO_SHORT" });
     const learnerId = request.e4sSession!.user.id;
+    const runner = await runnerFor(learnerId);
     const requirements = await repositories.engagement.weeklyPracticeRequirements(learnerId);
     if (!requirements) return reply.code(409).send({ code: "PRACTICE_LOCKED" });
     const validation = validateWeeklyPractice({
@@ -62,11 +65,11 @@ export function registerEngagementRoutes(
     if (!validation.valid) return reply.code(422).send({ code: "PRACTICE_FORMAT_INVALID", errors: validation.errors });
     const view = await repositories.engagement.submitWeeklyPractice({ learnerId, ...parsed.data });
     if (!view) return reply.code(409).send({ code: "PRACTICE_LOCKED" });
-    if (!aiRunner || await repositories.aiRuns.requestExists(learnerId, parsed.data.requestId, "weekly_practice_grading")) return view;
+    if (!runner || await repositories.aiRuns.requestExists(learnerId, parsed.data.requestId, "weekly_practice_grading")) return view;
     const task = await repositories.aiRuns.activeTaskPrompt(learnerId, "weekly_practice_grading");
     if (!task) return view;
     try {
-      const result = await aiRunner.runTask("weekly_practice_grading", {
+      const result = await runner.runTask("weekly_practice_grading", {
         text: parsed.data.text, cefr: requirements.cefr,
         topic: view.topic, rubric: ["meaning", "vocabulary", "grammar"]
       }, { systemPrompt: task.prompt });
@@ -102,7 +105,9 @@ export function registerEngagementRoutes(
   });
 
   app.get("/api/v1/engagement/games", { preHandler: learnerOnly }, async (request, reply) => {
-    const view = await gameHubView(repositories, request.e4sSession!.user.id, Boolean(aiRunner));
+    const learnerId = request.e4sSession!.user.id;
+    const runner = await runnerFor(learnerId);
+    const view = await gameHubView(repositories, learnerId, Boolean(runner));
     return view ?? reply.code(404).send({ code: "GAME_SET_NOT_FOUND" });
   });
 
@@ -112,6 +117,7 @@ export function registerEngagementRoutes(
     const parsed = z.object({ requestId: z.uuid(), topic: z.string().trim().min(2).max(200) }).safeParse(request.body);
     if (!parsed.success) return reply.code(400).send({ code: "INVALID_VOCABULARY_TOPIC" });
     const learnerId = request.e4sSession!.user.id;
+    const runner = await runnerFor(learnerId);
     const recentStrikes = await pool.query<{ count: string; blocked_until: Date | null }>(
       `select count(*)::text as count, max(created_at + interval '30 minutes') as blocked_until
        from topic_strikes where learner_id = $1 and created_at > now() - interval '30 minutes'`,
@@ -152,7 +158,7 @@ export function registerEngagementRoutes(
           : { state: "invalid", message: topicValidation.message };
       return reply.code(422).send({ code: "VOCABULARY_TOPIC_REJECTED", strikes: nextStrike, moderation });
     }
-    if (!aiRunner) return reply.code(503).send({ code: "AI_UNAVAILABLE" });
+    if (!runner) return reply.code(503).send({ code: "AI_UNAVAILABLE" });
     if (await repositories.aiRuns.requestExists(learnerId, parsed.data.requestId, "vocabulary_generation")) {
       return await gameHubView(repositories, learnerId, true);
     }
@@ -160,7 +166,7 @@ export function registerEngagementRoutes(
     const task = await repositories.aiRuns.activeTaskPrompt(learnerId, "vocabulary_generation");
     if (!current || !task) return reply.code(503).send({ code: "AI_PROMPT_NOT_READY" });
     try {
-      const result = await aiRunner.runTask("vocabulary_generation", {
+      const result = await runner.runTask("vocabulary_generation", {
         topic: parsed.data.topic, cefr: current.cefr, count: 20
       }, { systemPrompt: task.prompt });
       const output = vocabularyOutputSchema.safeParse(result.output);
@@ -183,8 +189,9 @@ export function registerEngagementRoutes(
 
   app.delete("/api/v1/engagement/games/word-set", { preHandler: learnerOnly }, async (request, reply) => {
     const learnerId = request.e4sSession!.user.id;
+    const runner = await runnerFor(learnerId);
     await repositories.engagement.retireGeneratedWordSet(learnerId);
-    return await gameHubView(repositories, learnerId, Boolean(aiRunner))
+    return await gameHubView(repositories, learnerId, Boolean(runner))
       ?? reply.code(404).send({ code: "GAME_SET_NOT_FOUND" });
   });
 

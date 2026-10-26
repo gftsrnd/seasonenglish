@@ -11,7 +11,7 @@ import type {
   ManualAssessmentScoreInput,
   ContentWeekInput, ContentWeekSuggestionView, SystemCapabilitiesView, WeeklyPracticeAssignmentView
 } from "@e4s/contracts";
-import { request } from "./runtime.js";
+import { request, uploadMultipart } from "./runtime.js";
 
 export interface OperatorApiClient {
   getAssessmentReviewOverview(): Promise<AssessmentReviewOverviewView>;
@@ -62,6 +62,7 @@ export interface OperatorApiClient {
   saveContentPrompts(groups: Array<{ key: ContentPromptKey; content: string }>): Promise<ContentPromptSettingsView>;
   publishContentPrompt(key: ContentPromptKey, version: number): Promise<ContentPromptSettingsView["groups"][number]>;
   getSystemCapabilities(): Promise<SystemCapabilitiesView>;
+  uploadContentMedia(kind: "audio" | "image", file: Blob, filename: string): Promise<{ artifactKey: string; url: string }>;
 }
 
 export const operatorApiClient: OperatorApiClient = {
@@ -112,5 +113,6 @@ export const operatorApiClient: OperatorApiClient = {
   getContentPrompts: () => request("/api/v1/content/prompts"),
   saveContentPrompts: (groups) => request("/api/v1/content/prompts", { method: "PUT", body: JSON.stringify({ groups }) }),
   publishContentPrompt: (key, version) => request(`/api/v1/content/prompts/${encodeURIComponent(key)}/${version}/publication`, { method: "POST", body: "{}" }),
-  getSystemCapabilities: () => request("/api/v1/system/capabilities")
+  getSystemCapabilities: () => request("/api/v1/system/capabilities"),
+  uploadContentMedia: (kind, file, filename) => uploadMultipart(`/api/v1/files/content-media/${kind}`, file, filename)
 };
