@@ -41,7 +41,7 @@ export function lessonComponentsNeedingRepair(
   const skillCodes = ["listening", "reading", "writing", "word_class", "word_use", "speaking"] as const;
   const choicesIncomplete = (code: "listening" | "reading") => asArray(asRecord(parts.get(code)?.content).options).length < 4;
   const targets = new Set<LessonGenerationComponent>();
-  if (foundationCodes.some((code) => !parts.has(code))) targets.add("foundation");
+  if (foundationCodes.some((code) => !parts.has(code)) || grammarUnavailable(parts.get("grammar")?.content)) targets.add("foundation");
   if (vocabularyIncomplete) targets.add("vocabulary");
   if (skillCodes.some((code) => !parts.has(code)) || choicesIncomplete("listening") || choicesIncomplete("reading")) targets.add("skills");
   return targets;
@@ -74,7 +74,9 @@ export function mergeGeneratedLesson(
     return {
       ...part,
       title: meaningful(previous.title) ? previous.title : part.title,
-      content: mode === "fill-phrases"
+      content: part.code === "grammar" && grammarUnavailable(previous.content) && !grammarUnavailable(part.content)
+        ? part.content
+        : mode === "fill-phrases"
         ? mergePhraseContent(previous.content, part.content)
         : mergeLessonContent(previous.content, part.content)
     };
@@ -149,6 +151,11 @@ function mergeVocabularyItems(previousValue: unknown, generatedValue: unknown): 
 }
 
 function asRecord(value: unknown): JsonRecord { return value && typeof value === "object" && !Array.isArray(value) ? value as JsonRecord : {}; }
+function grammarUnavailable(value: unknown): boolean {
+  const content = asRecord(value);
+  return content.status === "unavailable" || content.hidden === true
+    || content.reason === "no_suitable_content" || content.reason === "insufficient_evidence";
+}
 function asArray(value: unknown): unknown[] { return Array.isArray(value) ? value : []; }
 function wordKey(value: unknown): string { const word = asRecord(value).word; return typeof word === "string" ? word.trim().toLocaleLowerCase() : ""; }
 function stringArray(value: unknown): string[] { return Array.isArray(value) ? value.filter((item): item is string => typeof item === "string" && Boolean(item.trim())).map((item) => item.trim()) : typeof value === "string" && value.trim() ? [value.trim()] : []; }

@@ -107,14 +107,18 @@ function lessonSetWarnings(source: ContentLessonSetVersionView): OperatorLessonS
 
     const listeningOptions = asArray(asRecord(parts.get("listening")?.content)?.options);
     const readingOptions = asArray(asRecord(parts.get("reading")?.content)?.options);
+    const grammarContent = asRecord(parts.get("grammar")?.content);
+    const grammarUnavailable = grammarContent?.status === "unavailable" || grammarContent?.hidden === true
+      || grammarContent?.reason === "no_suitable_content" || grammarContent?.reason === "insufficient_evidence";
     const missingRequiredParts = REQUIRED_LESSON_PARTS.filter((code) => !parts.has(code));
     const shortQuestions = !listeningOptions || listeningOptions.length < 4 || !readingOptions || readingOptions.length < 4;
     const missingWordStructure = items.some(item => !hasLegacyOrStructuredValue(item.family) || !hasLegacyOrStructuredValue(item.umbrella));
     const missingSynonymCoverage = items.length > 0 && !items.some(item => hasLegacyOrStructuredValue(item.synonyms));
     const missingWordDetails = missingWordStructure || missingSynonymCoverage;
-    if (missingRequiredParts.length > 0 || shortQuestions || missingWordDetails) {
+    if (missingRequiredParts.length > 0 || grammarUnavailable || shortQuestions || missingWordDetails) {
       details += 1;
       const missing: string[] = missingRequiredParts.map((code) => LESSON_PART_LABELS[code]);
+      if (grammarUnavailable) missing.push("Ngữ pháp chưa đủ dữ liệu — có thể bổ sung bằng AI");
       if (!listeningOptions || listeningOptions.length < 4) missing.push("Nghe chưa đủ 4 lựa chọn");
       if (!readingOptions || readingOptions.length < 4) missing.push("Đọc chưa đủ 4 lựa chọn");
       for (const item of items) {

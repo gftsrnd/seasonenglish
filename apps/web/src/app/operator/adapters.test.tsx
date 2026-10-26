@@ -111,6 +111,22 @@ describe("lesson detail warnings", () => {
     })]);
   });
 
+  it("offers AI supplementation instead of silently hiding unavailable grammar", () => {
+    const source = lessonSet([
+      { ...baseWord("job"), synonyms: [{ word: "task" }], antonyms: [] }
+    ]);
+    const grammar = source.lessons[0]!.parts.find((part) => part.code === "grammar");
+    if (grammar) grammar.content = { status: "unavailable", hidden: true, reason: "insufficient_evidence" };
+
+    const warnings = adaptLessonSet(source, { aiConnected: true }).warnings;
+
+    expect(warnings.details).toBe(1);
+    expect(warnings.detailIssues).toEqual([expect.objectContaining({
+      lessonId: "lesson-1",
+      missing: expect.arrayContaining(["Ngữ pháp chưa đủ dữ liệu — có thể bổ sung bằng AI"])
+    })]);
+  });
+
   it("does not show an AI repair warning only because legacy vocabulary has no part of speech", () => {
     const source = lessonSet([
       { ...baseWord("job"), type: "", synonyms: [{ word: "task" }], antonyms: [{ word: "unemployment" }] },

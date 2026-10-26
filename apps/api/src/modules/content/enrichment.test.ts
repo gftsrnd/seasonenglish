@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { ContentLessonDraftInput } from "@e4s/contracts";
-import { lessonDaysNeedingRepair, mergeGeneratedLesson, mergeGeneratedLessons } from "./enrichment.js";
+import { lessonComponentsNeedingRepair, lessonDaysNeedingRepair, mergeGeneratedLesson, mergeGeneratedLessons } from "./enrichment.js";
 
 const generatedLesson: ContentLessonDraftInput = {
   dayNumber: 1,
@@ -108,6 +108,32 @@ describe("lesson enrichment merge", () => {
     }];
 
     expect(lessonDaysNeedingRepair(partial, "enrich")).toEqual([1, 2, 3, 4, 5]);
+  });
+
+  it("selects a day whose grammar is explicitly unavailable for AI supplementation", () => {
+    const unavailable = [{
+      ...generatedLesson,
+      parts: generatedLesson.parts.map((part) => part.code === "grammar"
+        ? { ...part, content: { status: "unavailable", hidden: true, reason: "insufficient_evidence" } }
+        : part)
+    }];
+
+    expect(lessonComponentsNeedingRepair(unavailable[0], "enrich")).toContain("foundation");
+  });
+
+  it("replaces unavailable grammar when AI supplementation returns usable grammar", () => {
+    const existing: ContentLessonDraftInput = {
+      ...generatedLesson,
+      parts: generatedLesson.parts.map((part) => part.code === "grammar"
+        ? { ...part, content: { status: "unavailable", hidden: true, reason: "insufficient_evidence" } }
+        : part)
+    };
+
+    const merged = mergeGeneratedLesson(existing, generatedLesson, "enrich");
+    const grammar = merged.parts.find((part) => part.code === "grammar")?.content;
+
+    expect(grammar).toEqual(generatedLesson.parts.find((part) => part.code === "grammar")?.content);
+    expect(grammar).not.toHaveProperty("hidden");
   });
 
   it("merges a partial AI result without overwriting valid manual content", () => {
