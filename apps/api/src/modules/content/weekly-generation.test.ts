@@ -295,7 +295,7 @@ describe("weekly lesson generation orchestration", () => {
       { dayNumbers: [1], qualityReview: true }
     );
 
-    expect(foundationAttempts).toBe(2);
+    expect(foundationAttempts).toBe(3);
     expect(generated.failures).toEqual(expect.arrayContaining([
       expect.objectContaining({ dayNumber: 1, component: "foundation", code: "AI_OUTPUT_INVALID" })
     ]));
@@ -587,7 +587,7 @@ describe("weekly lesson generation orchestration", () => {
       .toContain("justify, negotiate, handle, propose");
   });
 
-  it("uses one internal repair for a vocabulary component before preserving the partial lesson", async () => {
+  it("uses two internal repairs for a vocabulary component before preserving the partial lesson", async () => {
     let vocabularyAttempts = 0;
     const runTask = vi.fn(async (
       taskId: string,
@@ -621,7 +621,7 @@ describe("weekly lesson generation orchestration", () => {
     );
 
     expect(generated.lessons).toHaveLength(1);
-    expect(vocabularyAttempts).toBe(2);
+    expect(vocabularyAttempts).toBe(3);
     expect(runTask.mock.calls.find((call) => call[0] === "weekly_lesson_vocabulary" && call[2]?.systemPrompt?.includes("REPAIR REQUIRED"))?.[2]?.systemPrompt)
       .toContain("synonym must have the same part of speech");
   });
