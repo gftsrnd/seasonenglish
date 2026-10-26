@@ -2721,7 +2721,7 @@ class ContentRepository {
       submissions: string; coach: string; micro: string; appeals: string; attempts: string; assessments: string;
     }>(
       `select
-        (select count(*) from practice_submissions ps join users u on u.id = ps.learner_id and u.role = 'learner' and u.status = 'active' where u.organization_id = $1)::text as submissions,
+        (select count(*) from practice_submissions ps join users u on u.id = ps.learner_id and u.role = 'learner' and u.status = 'active' where u.organization_id = $1 and ps.status in ('submitted', 'reviewed'))::text as submissions,
         (select count(*) from coach_turns ct join coach_sessions cs on cs.id = ct.session_id join users u on u.id = cs.learner_id and u.role = 'learner' and u.status = 'active' where u.organization_id = $1 and ct.speaker = 'learner')::text as coach,
         (select count(*) from micro_lessons ml join users u on u.id = ml.learner_id and u.role = 'learner' and u.status = 'active' where u.organization_id = $1)::text as micro,
         ((select count(*) from appeals a join assessment_attempts aa on aa.id = a.attempt_id join users u on u.id = aa.learner_id and u.role = 'learner' and u.status = 'active' where u.organization_id = $1)
@@ -2758,7 +2758,8 @@ class ContentRepository {
           from practice_submissions ps join users u on u.id = ps.learner_id and u.role = 'learner' and u.status = 'active'
           join program_weeks pw on pw.id = ps.program_week_id
           left join enrollments e on e.learner_id = u.id and e.program_id = pw.program_id
-          where u.organization_id = $1 order by ps.submitted_at desc nulls last limit 60`, [organizationId]),
+          where u.organization_id = $1 and ps.status in ('submitted', 'reviewed')
+          order by ps.submitted_at desc limit 60`, [organizationId]),
       this.pool.query<{
         id: string; learner_name: string; cefr: CefrLevel; topic: string; generated_at: Date;
         completed_at: Date | null; content: Record<string, unknown>; progress: Record<string, unknown>;

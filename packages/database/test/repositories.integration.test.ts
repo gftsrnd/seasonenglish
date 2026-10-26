@@ -61,6 +61,27 @@ describe("E4S repositories", () => {
       });
   });
 
+  it("keeps draft weekly practice assignments out of the operator review queue", async () => {
+    const learnerId = randomUUID();
+    const submissionId = randomUUID();
+    await pool.query(
+      "insert into users (id, organization_id, role, display_name, status) values ($1, $2, 'learner', 'Draft Learner', 'active')",
+      [learnerId, DEMO_IDS.organization]
+    );
+    await pool.query(
+      "insert into practice_submissions (id, learner_id, program_week_id, status, content) values ($1, $2, $3, 'draft', '{}'::jsonb)",
+      [submissionId, learnerId, DEMO_IDS.week]
+    );
+    try {
+      const review = await repositories.content.reviewOverview(DEMO_IDS.operator);
+      expect(review).not.toBeNull();
+      expect(review?.submissions.some((item) => item.id === submissionId)).toBe(false);
+    } finally {
+      await pool.query("delete from practice_submissions where id = $1", [submissionId]);
+      await pool.query("delete from users where id = $1", [learnerId]);
+    }
+  });
+
   it("publishes a canonical weekly lesson prompt after local seed refresh", async () => {
     await pool.query(
       `insert into prompt_versions (id, organization_id, task_key, version, content, status, created_by)
