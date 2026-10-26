@@ -33,6 +33,7 @@ import { Badge } from "./primitives.js";
 import { ModalProvider, useModal } from "../shared/ModalProvider.js";
 import { adaptAssessmentOverview, adaptLevelForms, adaptLessonMatrix, adaptLessonSet, adaptPrompts, adaptReview, adaptWeeks } from "./adapters.js";
 import type { Cefr, LessonSetActionKey, PromptKey, ReviewTab, WeekSuggestion } from "./types.js";
+import { generateLessonCellsSettled } from "./lesson-generation.js";
 
 export type OperatorApiClient = typeof apiClient;
 
@@ -548,26 +549,32 @@ function WeeksRoute({ client, readOnly }: { client: OperatorApiClient; readOnly:
     setGeneratingWeek(weekNumbers[0] ?? null);
     setGenerationStatus(savePromise ? "Đang lưu chủ đề trước khi sinh bài…" : "Đang chuẩn bị sinh bài…");
     void (async () => {
-      let currentWeek = weekNumbers[0];
-      let currentLevel = orderedLevels[0];
       try {
         if (savePromise) await savePromise;
-        for (const [weekIndex, weekNumber] of weekNumbers.entries()) {
-          currentWeek = weekNumber;
-          setGeneratingWeek(weekNumber);
-          for (const [levelIndex, level] of orderedLevels.entries()) {
-            currentLevel = level;
-            setGenerationStatus(`Đang sinh tuần ${weekNumber} · mức ${level} (${weekIndex + 1}/${weekNumbers.length} tuần, ${levelIndex + 1}/${orderedLevels.length} mức)…`);
-            await client.generateContentLessonDraft(weekNumber, level);
+        const results = await generateLessonCellsSettled(
+          weekNumbers,
+          orderedLevels,
+          (week, level) => client.generateContentLessonDraft(week, level),
+          (week, level, completed, total) => {
+            setGeneratingWeek(week);
+            setGenerationStatus(`Đang sinh tuần ${week} · mức ${level} (${completed + 1}/${total})…`);
           }
+        );
+        const failed = results.filter((result) => result.status === "failed");
+        const succeeded = results.length - failed.length;
+        if (failed.length) {
+          const cells = failed.map((result) => `tuần ${result.week} · ${result.level}: ${result.error}`).join("; ");
+          setGenerationStatus(`⚠ Đã sinh ${succeeded}/${results.length} bộ. Lỗi ${failed.length} bộ: ${cells}`);
+          notify(`Đã giữ ${succeeded} bộ thành công; ${failed.length} bộ cần thử lại.`, "danger");
+        } else {
+          setGenerationStatus(`✓ Đã sinh đủ ${results.length * 5} bài T2–T6 theo thứ tự, không chạy song song.`);
+          notify(`Đã sinh đủ bài cho ${weekNumbers.length} tuần.`);
+          navigate(paths.lessons);
         }
-        setGenerationStatus(`✓ Đã sinh đủ ${weekNumbers.length * orderedLevels.length * 5} bài T2–T6 theo thứ tự, không chạy song song.`);
-        notify(`Đã sinh đủ bài cho ${weekNumbers.length} tuần.`);
-        navigate(paths.lessons);
       } catch (reason) {
         const detail = message(reason);
-        setGenerationStatus(`✗ Sinh bài dừng ở tuần ${currentWeek} · mức ${currentLevel}: ${detail}. Các bộ đã hoàn tất vẫn được lưu.`);
-        notify(`Sinh bài dừng ở tuần ${currentWeek} · mức ${currentLevel}: ${detail}`, "danger");
+        setGenerationStatus(`✗ Không thể chuẩn bị đợt sinh bài: ${detail}.`);
+        notify(`Không thể chuẩn bị đợt sinh bài: ${detail}`, "danger");
       } finally {
         setGeneratingWeek(null);
       }

@@ -200,6 +200,29 @@ describe("AI service", () => {
     expect(complete.mock.calls[1]?.[0].systemPrompt).toContain("days: Expected 2 days.");
   });
 
+  it("repairs week suggestions that omit an active CEFR level", async () => {
+    const option = (plan: Record<string, string[]>) => ({
+      topic: "Project updates", description: "Give a concise project update.",
+      objectives: "Report progress and blockers.", keyVocabHint: "progress, blocker", plan
+    });
+    const incomplete = {
+      weeks: [{ weekNumber: 1, levels: ["A1"], options: [1, 2, 3].map(() => option({ A1: ["a", "b", "c", "d", "e"] })) }]
+    };
+    const completeOutput = {
+      weeks: [{ weekNumber: 1, levels: ["A1", "A2"], options: [1, 2, 3].map(() => option({
+        A1: ["a", "b", "c", "d", "e"], A2: ["f", "g", "h", "i", "j"]
+      })) }]
+    };
+    const complete = vi.fn()
+      .mockResolvedValueOnce({ output: incomplete, usage: {} })
+      .mockResolvedValueOnce({ output: completeOutput, usage: {} });
+    const service = createAiService({ registry: AI_TASKS, provider: fixtureProvider(complete), loadPrompt: async () => "Suggest weeks." });
+
+    await expect(service.runTask("week_suggestions", { weekNumbers: [1], levels: ["A1", "A2"], usedTopics: [] }))
+      .resolves.toMatchObject({ metadata: { attempts: 2 }, output: completeOutput });
+    expect(complete.mock.calls[1]?.[0].systemPrompt).toContain("CEFR levels must exactly match");
+  });
+
   it("aborts a provider call at the timeout boundary", async () => {
     const provider = fixtureProvider(vi.fn(async ({ signal }: { signal: AbortSignal }) => new Promise((_resolve, reject) => {
       signal.addEventListener("abort", () => reject(new DOMException("aborted", "AbortError")), { once: true });

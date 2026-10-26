@@ -54,7 +54,8 @@ export const AI_TASKS = new AiTaskRegistry([
   },
   {
     id: "week_suggestions", promptKey: "week_suggestions", inputSchema: weekSuggestionsInputSchema,
-    outputSchema: weekSuggestionsOutputSchema, outputJsonSchema: weekSuggestionsOutputJsonSchema
+    outputSchema: weekSuggestionsOutputSchema, outputJsonSchema: weekSuggestionsOutputJsonSchema,
+    validateOutput: validateWeekSuggestions
   },
   {
     id: "level_form_generation", promptKey: "level_form_generation", inputSchema: levelFormInputSchema,
@@ -97,3 +98,28 @@ export const AI_TASKS = new AiTaskRegistry([
     outputSchema: vocabularyOutputSchema, outputJsonSchema: vocabularyOutputJsonSchema
   }
 ]);
+
+function validateWeekSuggestions(output: unknown, input: unknown): Array<{ path: string; message: string }> {
+  const result = output as { weeks: Array<{ weekNumber: number; levels: string[]; options: Array<{ plan: Record<string, string[]> }> }> };
+  const request = input as { weekNumbers: number[]; levels: string[] };
+  const issues: Array<{ path: string; message: string }> = [];
+  const expectedWeeks = new Set(request.weekNumbers);
+  const returnedWeeks = new Set(result.weeks.map((week) => week.weekNumber));
+  if (result.weeks.length !== expectedWeeks.size || returnedWeeks.size !== expectedWeeks.size || request.weekNumbers.some((week) => !returnedWeeks.has(week))) {
+    issues.push({ path: "weeks", message: `Expected exactly one result for each requested week (${request.weekNumbers.join(", ")}).` });
+  }
+  const expectedLevels = new Set(request.levels);
+  for (const week of result.weeks) {
+    const returnedLevels = new Set(week.levels);
+    if (returnedLevels.size !== expectedLevels.size || week.levels.some((level) => !expectedLevels.has(level)) || request.levels.some((level) => !returnedLevels.has(level))) {
+      issues.push({ path: `weeks.${week.weekNumber}.levels`, message: `CEFR levels must exactly match the active matrix: ${request.levels.join(", ")}.` });
+    }
+    for (const [optionIndex, option] of week.options.entries()) {
+      const planLevels = Object.keys(option.plan);
+      if (planLevels.length !== expectedLevels.size || planLevels.some((level) => !expectedLevels.has(level)) || request.levels.some((level) => option.plan[level]?.length !== 5)) {
+        issues.push({ path: `weeks.${week.weekNumber}.options.${optionIndex}.plan`, message: "Each active CEFR level must contain exactly 5 day-plan items." });
+      }
+    }
+  }
+  return issues.slice(0, 8);
+}
