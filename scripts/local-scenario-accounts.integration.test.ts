@@ -112,6 +112,23 @@ describe("local scenario account states", () => {
     expect(await counts()).toEqual(before);
   });
 
+  it("republishes the fixed B1 scenario version after an operator retires it", async () => {
+    const versionId = "24000000-0000-4000-8000-000000000002";
+    await client.query("update lesson_set_versions set status = 'retired' where id = $1", [versionId]);
+
+    await seedLocalScenarioAccounts(client);
+
+    const repaired = await client.query<{ status: string; lessons: number }>(
+      `select lsv.status, count(l.id)::int as lessons
+       from lesson_set_versions lsv
+       left join lessons l on l.lesson_set_version_id = lsv.id
+       where lsv.id = $1
+       group by lsv.status`,
+      [versionId]
+    );
+    expect(repaired.rows).toEqual([{ status: "published", lessons: 5 }]);
+  });
+
   it("seeds visible AI-scored and manually-scored placement examples", async () => {
     const result = await client.query<{ email: string; source: string; sections: number }>(
       `select u.email, s.source, count(*)::int as sections

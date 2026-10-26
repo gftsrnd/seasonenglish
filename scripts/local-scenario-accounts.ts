@@ -468,6 +468,12 @@ async function ensurePublishedScenarioLessons(client: Client, cefr: "A2" | "B1")
         requiredVocabulary: ["direction", "meeting room", "turn left"]
       } }), DEMO_IDS.operator, versionNumber.rows[0]?.version ?? 1]
     );
+    await client.query(
+      `update lesson_set_versions
+       set status = 'published', approved_by = $2, published_at = now()
+       where id = $1 and lesson_set_id = $3 and status <> 'published'`,
+      [versionId, DEMO_IDS.operator, canonicalSetId]
+    );
     for (const [index, sourceLessonId] of DEMO_IDS.lessons.entries()) {
       const lessonId = `24000000-0000-4000-8100-${String(index + 1).padStart(12, "0")}`;
       const lessonVersionId = `24000000-0000-4000-8200-${String(index + 1).padStart(12, "0")}`;
