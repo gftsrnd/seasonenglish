@@ -402,6 +402,26 @@ describe("Operator app rebuild", () => {
     });
   });
 
+  it("orders weekly-practice editors by week and then CEFR level", () => {
+    render(<OperatorReview view={{
+      activeTab: "weekly", counts: { subs: 0, coach: 0, weekly: 4, appeals: 0, attempts: 0, tests: 0 },
+      submissions: [], coachTurns: [], appeals: [], attempts: [], tests: [],
+      weeklyPractices: [
+        { id: "2:B1", week: 2, cefr: "B1", topic: "Week two", status: "draft", version: 1, task: "Task", guidance: "Guide", requiredVocabulary: [] },
+        { id: "1:B2", week: 1, cefr: "B2", topic: "Week one", status: "draft", version: 1, task: "Task", guidance: "Guide", requiredVocabulary: [] },
+        { id: "2:A1", week: 2, cefr: "A1", topic: "Week two", status: "draft", version: 1, task: "Task", guidance: "Guide", requiredVocabulary: [] },
+        { id: "1:A2", week: 1, cefr: "A2", topic: "Week one", status: "draft", version: 1, task: "Task", guidance: "Guide", requiredVocabulary: [] }
+      ]
+    } as any} actions={{ onTabChange: vi.fn(), onMarkSubmission: vi.fn(), onMarkCoachTurn: vi.fn(), onGradeAi: vi.fn(), onGradeManual: vi.fn(), onDecideAppeal: vi.fn(), onViewTest: vi.fn(), onSaveWeeklyPractice: vi.fn() }} />);
+
+    expect(screen.getAllByRole("button", { name: /Sinh bài cuối tuần ·/ }).map(button => button.getAttribute("aria-label"))).toEqual([
+      "Sinh bài cuối tuần · Tuần 1 · A2",
+      "Sinh bài cuối tuần · Tuần 1 · B2",
+      "Sinh bài cuối tuần · Tuần 2 · A1",
+      "Sinh bài cuối tuần · Tuần 2 · B1"
+    ]);
+  });
+
   it("generates an independent weekly-practice draft for each level from the weekly topic and vocabulary", async () => {
     const user = userEvent.setup();
     render(<OperatorReview view={{
