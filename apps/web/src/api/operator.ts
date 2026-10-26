@@ -59,6 +59,7 @@ export interface OperatorApiClient {
   decideReviewedAppeal(id: string, input: { status: "accepted" | "rejected"; resolution: string; newScore?: number }): Promise<{ saved: boolean }>;
   getContentPrompts(): Promise<ContentPromptSettingsView>;
   saveContentPrompts(groups: Array<{ key: ContentPromptKey; content: string }>): Promise<ContentPromptSettingsView>;
+  publishContentPrompt(key: ContentPromptKey, version: number): Promise<ContentPromptSettingsView["groups"][number]>;
   getSystemCapabilities(): Promise<SystemCapabilitiesView>;
 }
 
@@ -108,5 +109,6 @@ export const operatorApiClient: OperatorApiClient = {
   decideReviewedAppeal: (id, input) => request(`/api/v1/content/review/appeals/${encodeURIComponent(id)}/decision`, { method: "POST", body: JSON.stringify(input) }),
   getContentPrompts: () => request("/api/v1/content/prompts"),
   saveContentPrompts: (groups) => request("/api/v1/content/prompts", { method: "PUT", body: JSON.stringify({ groups }) }),
+  publishContentPrompt: (key, version) => request(`/api/v1/content/prompts/${encodeURIComponent(key)}/${version}/publication`, { method: "POST", body: "{}" }),
   getSystemCapabilities: () => request("/api/v1/system/capabilities")
 };

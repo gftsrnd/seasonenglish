@@ -347,20 +347,24 @@ describe("Operator app rebuild", () => {
     cleanup();
     const onReset = vi.fn();
     const onSave = vi.fn();
+    const onPublish = vi.fn();
     render(<OperatorPrompts view={{ prompts: [
-      ["base", "Quy tắc chung", "base"],
-      ["placement", "Chấm test & xếp trình độ", "placement"],
-      ["lesson", "Sinh 5 bài học cho tuần", "lesson"],
-      ["weeks", "Gợi ý khung chủ đề tuần", "weeks"],
-      ["coach", "AI coach hội thoại", "coach"],
-      ["grade", "Chấm bài thực hành thứ Sáu", "grade"]
-    ] } as any} actions={{ onBack: vi.fn(), onReset, onSave }} />);
+      ["base", "Quy tắc chung", "base", "active", 1],
+      ["placement", "Chấm test & xếp trình độ", "placement", "active", 1],
+      ["lesson", "Sinh 5 bài học cho tuần", "lesson", "active", 1],
+      ["weeks", "Gợi ý khung chủ đề tuần", "weeks", "draft", 2],
+      ["coach", "AI coach hội thoại", "coach", "active", 1],
+      ["grade", "Chấm bài thực hành thứ Sáu", "grade", "active", 1]
+    ] } as any} actions={{ onBack: vi.fn(), onReset, onSave, onPublish }} />);
     expect(screen.getAllByRole("textbox")).toHaveLength(6);
     expect(screen.queryByText(/bài siêu ngắn/i)).not.toBeInTheDocument();
     await user.click(screen.getAllByRole("button", { name: "Về mặc định" })[0]!);
     expect(onReset).toHaveBeenCalledWith("base");
     await user.click(screen.getByRole("button", { name: "Lưu prompt" }));
     expect(onSave).toHaveBeenCalledWith(expect.objectContaining({ base: "base", grade: "grade" }));
+    expect(screen.getByText("Bản nháp v2")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Phát hành Gợi ý khung chủ đề tuần" }));
+    expect(onPublish).toHaveBeenCalledWith("weeks", 2);
   });
 
   it("keeps review test actions discoverable in the responsive action table", () => {
@@ -471,7 +475,7 @@ describe("Operator app rebuild", () => {
   it("uses semantic app back links while preserving callback navigation", async () => {
     const user = userEvent.setup();
     const onBack = vi.fn();
-    render(<OperatorPrompts view={{ prompts: [["base", "Quy tắc chung", "base"]] } as any} actions={{ onBack, onReset: vi.fn(), onSave: vi.fn() }} />);
+    render(<OperatorPrompts view={{ prompts: [["base", "Quy tắc chung", "base"]] } as any} actions={{ onBack, onReset: vi.fn(), onSave: vi.fn(), onPublish: vi.fn() }} />);
     const promptBack = screen.getByRole("link", { name: "← Cài đặt" });
     expect(promptBack).toHaveAttribute("href", "/settings");
     await user.click(promptBack);
@@ -499,7 +503,7 @@ describe("Operator app rebuild", () => {
     expect(screen.getByRole("button", { name: "Lưu khung chủ đề" })).toBeDisabled();
     cleanup();
 
-    render(<OperatorPrompts readOnly view={{ prompts: [["base", "Quy tắc chung", "base"]] } as any} actions={{ onBack: vi.fn(), onReset: vi.fn(), onSave: vi.fn() }} />);
+    render(<OperatorPrompts readOnly view={{ prompts: [["base", "Quy tắc chung", "base"]] } as any} actions={{ onBack: vi.fn(), onReset: vi.fn(), onSave: vi.fn(), onPublish: vi.fn() }} />);
     expect(screen.getByRole("button", { name: "Về mặc định" })).toBeDisabled();
     expect(screen.getByRole("button", { name: "Lưu prompt" })).toBeDisabled();
   });

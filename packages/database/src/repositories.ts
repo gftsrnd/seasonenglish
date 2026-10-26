@@ -3104,6 +3104,47 @@ class ContentRepository {
     return saved;
   }
 
+  async publishPromptDraft(
+    actorId: string,
+    key: ContentPromptKey,
+    version: number
+  ): Promise<Omit<ContentPromptSettingsView["groups"][number], "label"> | null> {
+    const client = await this.pool.connect();
+    try {
+      await client.query("begin");
+      const target = await client.query<{
+        id: string; organization_id: string; content: string; default_content: string;
+      }>(
+        `select candidate.id, candidate.organization_id, candidate.content,
+                coalesce((select active.content from prompt_versions active
+                          where active.organization_id = candidate.organization_id
+                            and active.task_key = candidate.task_key and active.status = 'active'
+                          order by active.version desc limit 1), candidate.content) as default_content
+         from prompt_versions candidate
+         join users actor on actor.id = $1 and actor.organization_id = candidate.organization_id
+         where candidate.task_key = $2 and candidate.version = $3 and candidate.status = 'draft'
+         for update of candidate`,
+        [actorId, key, version]
+      );
+      const row = target.rows[0];
+      if (!row) {
+        await client.query("rollback");
+        return null;
+      }
+      await client.query(
+        `update prompt_versions set status = 'retired'
+         where organization_id = $1 and task_key = $2 and status = 'active'`,
+        [row.organization_id, key]
+      );
+      await client.query("update prompt_versions set status = 'active' where id = $1", [row.id]);
+      await client.query("commit");
+      return { key, content: row.content, defaultContent: row.content, version, status: "active" };
+    } catch (error) {
+      await client.query("rollback");
+      throw error;
+    } finally { client.release(); }
+  }
+
   async findPublishedLessonSet(programWeekId: string, cefr: string): Promise<PublishedLessonSet | null> {
     const result = await this.pool.query<{
       id: string;

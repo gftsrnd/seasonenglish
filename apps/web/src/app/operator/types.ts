@@ -446,9 +446,10 @@ export interface OperatorReviewActions {
 export type ReviewActionKey = "checkSubmission" | "checkCoach" | "gradeAi" | "gradeManual" | "decideAppeal" | "viewTest";
 
 export type PromptKey = "base" | "placement" | "lesson" | "weeks" | "coach" | "grade";
-export interface OperatorPromptsView { prompts: Array<[PromptKey, string, string]>; saveState?: AsyncState | undefined; saveError?: string | null | undefined }
+export interface OperatorPromptsView { prompts: Array<[PromptKey, string, string, "draft" | "active" | "retired", number]>; saveState?: AsyncState | undefined; saveError?: string | null | undefined }
 export interface OperatorPromptsActions {
   onBack(): void;
   onReset(key: PromptKey): void;
   onSave(prompts: Record<PromptKey, string>): void;
+  onPublish(key: PromptKey, version: number): void;
 }

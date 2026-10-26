@@ -492,6 +492,6 @@ export function adaptPrompts(source: ContentPromptSettingsView, options: { saveS
     if (group.key === "micro_grading") return [];
     const key = PROMPT_KEY_MAP[group.key];
     if (!key) throw new Error(`Unknown content prompt key: ${group.key}`);
-    return [[key, PROMPT_LABELS[key], group.content]];
+    return [[key, PROMPT_LABELS[key], group.content, group.status, group.version]];
   }) };
 }

@@ -404,6 +404,35 @@ describe("content operations API", () => {
       .rejects.toThrow(/immutable/i);
   });
 
+  it("keeps saved prompts as drafts until Manager explicitly publishes the version", async () => {
+    const saved = await app.inject({
+      method: "PUT", url: "/api/v1/content/prompts", headers: { cookie: managerCookie },
+      payload: { groups: [{ key: "week_suggestions", content: "Published week prompt vNext." }] }
+    });
+    expect(saved.statusCode, saved.body).toBe(200);
+    const draft = saved.json().groups[0] as { key: string; version: number; status: string };
+    expect(draft.status).toBe("draft");
+
+    const before = await pool.query<{ content: string }>(
+      "select content from prompt_versions where task_key = 'week_suggestions' and status = 'active'"
+    );
+    expect(before.rows[0]?.content).not.toBe("Published week prompt vNext.");
+
+    const published = await app.inject({
+      method: "POST",
+      url: `/api/v1/content/prompts/week_suggestions/${draft.version}/publication`,
+      headers: { cookie: managerCookie }, payload: {}
+    });
+    expect(published.statusCode, published.body).toBe(200);
+    expect(published.json()).toMatchObject({ key: "week_suggestions", version: draft.version, status: "active" });
+
+    const active = await pool.query<{ content: string; count: string }>(
+      `select max(content) as content, count(*)::text as count
+       from prompt_versions where task_key = 'week_suggestions' and status = 'active'`
+    );
+    expect(active.rows[0]).toEqual({ content: "Published week prompt vNext.", count: "1" });
+  });
+
   it("repairs an existing lesson set through the validated weekly lesson contract", async () => {
     const created = await app.inject({
       method: "PUT", url: "/api/v1/content/lesson-sets/1/A1/draft", headers: { cookie: makerCookie },

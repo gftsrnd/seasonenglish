@@ -97,6 +97,7 @@ const promptInput = z.object({
     content: z.string().trim().min(1).max(100_000)
   })).min(1).max(promptKeys.length)
 });
+const promptPublicationParams = z.object({ key: z.enum(promptKeys), version: z.coerce.number().int().min(1) });
 
 const promptLabels: Record<ContentPromptKey, string> = {
   system_rules: "Quy tắc chung (mọi lời gọi trừ sinh bài siêu ngắn)",
@@ -746,6 +747,17 @@ export function registerContentRoutes(
     if (!input.success) return reply.code(400).send({ code: "INVALID_CONTENT_PROMPTS" });
     const stored = await repositories.content.savePromptDrafts(request.e4sSession!.user.id, input.data.groups);
     return { groups: stored.map((group) => ({ ...group, label: promptLabels[group.key] })) };
+  });
+
+  app.post("/api/v1/content/prompts/:key/:version/publication", { preHandler: managers }, async (request, reply) => {
+    const params = promptPublicationParams.safeParse(request.params);
+    if (!params.success) return reply.code(400).send({ code: "INVALID_PROMPT_VERSION" });
+    const published = await repositories.content.publishPromptDraft(
+      request.e4sSession!.user.id, params.data.key, params.data.version
+    );
+    return published
+      ? { ...published, label: promptLabels[published.key] }
+      : reply.code(404).send({ code: "PROMPT_DRAFT_NOT_FOUND" });
   });
 }
 

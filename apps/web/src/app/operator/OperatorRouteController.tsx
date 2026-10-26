@@ -831,7 +831,8 @@ function PromptsRoute({ client, readOnly }: { client: OperatorApiClient; readOnl
   return <OperatorPrompts readOnly={readOnly} view={adaptPrompts(data, { saveState: saving ? "loading" : "idle" })} actions={{
     onBack: () => navigate("/settings"),
     onReset: key => { if (!readOnly) setData(current => current ? { ...current, groups: current.groups.map(group => group.key === promptToApi[key] ? { ...group, content: group.defaultContent } : group) } : current); },
-    onSave: values => { if (readOnly) return; setSaving(true); void client.saveContentPrompts(Object.entries(values).map(([key, content]) => ({ key: promptToApi[key as PromptKey], content }))).then(setData).catch(reason => setError(message(reason))).finally(() => setSaving(false)); }
+    onSave: values => { if (readOnly) return; setSaving(true); void client.saveContentPrompts(Object.entries(values).map(([key, content]) => ({ key: promptToApi[key as PromptKey], content }))).then(setData).catch(reason => setError(message(reason))).finally(() => setSaving(false)); },
+    onPublish: (key, version) => { if (readOnly) return; setSaving(true); void client.publishContentPrompt(promptToApi[key], version).then(group => setData(current => current ? { groups: current.groups.map(item => item.key === group.key ? group : item) } : current)).catch(reason => setError(message(reason))).finally(() => setSaving(false)); }
   }} />;
 }
 
