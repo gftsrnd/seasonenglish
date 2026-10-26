@@ -441,9 +441,15 @@
   gap: 10px 12px;
   margin-top: 10px;
 }
+.operator-modal-scope .operator-vocabulary-media {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px 12px;
+  min-width: 0;
+}
 .operator-modal-scope .operator-media-field { margin-top: 8px; }
-.operator-modal-scope .operator-media-field .row { align-items: center; flex-wrap: wrap; }
-.operator-modal-scope .operator-media-field .row > input:not([type="file"]) { flex: 1 1 360px; min-width: 0; }
+.operator-modal-scope .operator-media-input-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 8px; min-width: 0; max-width: 100%; }
+.operator-modal-scope .operator-media-input-row > input { min-width: 0; width: 100%; max-width: 100%; }
 .operator-modal-scope .operator-media-upload { cursor: pointer; white-space: nowrap; }
 .operator-modal-scope .operator-media-preview { display: block; width: 120px; height: 90px; margin-top: 8px; border-radius: 10px; border: 1px solid var(--line); object-fit: cover; }
 .operator-modal-scope .operator-media-field audio { display: block; width: min(100%, 520px); margin-top: 8px; }
@@ -462,7 +468,10 @@
   .operator-modal-scope .operator-editor-heading h3 { text-align: left; }
   .operator-modal-scope .operator-editor-section { padding: 14px; }
   .operator-modal-scope .operator-vocabulary-base,
-  .operator-modal-scope .operator-vocabulary-advanced-grid { grid-template-columns: 1fr; }
+  .operator-modal-scope .operator-vocabulary-advanced-grid,
+  .operator-modal-scope .operator-vocabulary-media { grid-template-columns: 1fr; }
+  .operator-modal-scope .operator-media-input-row { grid-template-columns: 1fr; }
+  .operator-modal-scope .operator-media-upload { justify-self: start; }
 }
 .app-operator .operator-lesson-preview {
   display: block;

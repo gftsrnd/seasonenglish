@@ -29,7 +29,7 @@ export function VocabularyCard({ item, loadImage, speak, relations = [] }: {
       </div>
     </div>
     {phrases.length ? <div className="vocabulary-card-phrases" aria-label={`${phrases.length} cụm từ thường dùng`}><span className="vocabulary-card-label">Cụm từ thường dùng</span><div className="vocabulary-card-phrase-list">{phrases.map((phrase) => <VocabularySpeechButton text={phrase} label={`Nghe cụm từ: ${phrase}`} visibleLabel={phrase} speak={speak} key={phrase} />)}</div></div> : null}
-    {item.examples?.slice(3).map((example) => <p className="vocabulary-card-example" key={example}><span className="vocabulary-card-label">Ví dụ</span>{example}</p>)}
+    {item.examples?.slice(3).map((example, index) => <div className="vocabulary-card-example" key={example}><span className="vocabulary-card-label">Ví dụ</span><VocabularySpeechButton text={example} label={`Nghe ví dụ ${index + 1}: ${example}`} visibleLabel={example} speak={speak} /></div>)}
     {relations.length ? <div className="vocabulary-card-relations" aria-label="Các nhóm từ liên quan">{relations.map((relation) => {
       const className = `chip${relation.tone ? ` ${relation.tone}` : ""}`;
       const content = <>{relation.icon === "umbrella" ? <Umbrella size={14} aria-hidden="true" /> : relation.icon === "family" ? <Users size={14} aria-hidden="true" /> : null}<span className="vocabulary-card-chip-label">{relation.label}</span>{relation.count ? <span className="vocabulary-card-chip-count">+{relation.count}</span> : null}</>;

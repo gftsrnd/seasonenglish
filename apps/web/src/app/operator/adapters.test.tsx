@@ -187,8 +187,11 @@ describe("lesson detail warnings", () => {
     expect(screen.getByRole("dialog", { name: "Từ bao quát" })).toBeInTheDocument();
     expect(screen.getByText("Từ vựng · job")).toBeInTheDocument();
     expect(screen.getByRole("article", { name: "Từ bao quát work communication" })).toHaveTextContent("giao tiếp công việc");
-    expect(screen.getByRole("button", { name: "Nghe work communication" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Nghe job" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Nghe từ bao trùm: work communication" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Nghe từ cùng nhóm: job" })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Đóng" }));
+    fireEvent.click(screen.getByRole("button", { name: "Word family (1)" }));
+    expect(screen.getByRole("button", { name: "Nghe từ cùng họ: jobing" })).toBeInTheDocument();
   });
 
   it("renders study audio affordances instead of plain grammar and pronunciation text", () => {
@@ -206,7 +209,7 @@ describe("lesson detail warnings", () => {
     expect(screen.getByText("PHÁT ÂM")).toBeInTheDocument();
     expect(screen.getByText(/Âm \/f\/ như trong/)).toBeInTheDocument();
     expect(screen.queryByText("3 từ chứa âm mục tiêu (học viên phải luyện đủ rồi mới ghi âm):")).not.toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "Nghe âm /f/" })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Nghe âm /f/" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Nghe từ phát âm: feedback" })).toBeInTheDocument();
     expect(screen.getByText("Cắn nhẹ môi dưới rồi thổi hơi.").closest("p")).toHaveClass("operator-pronunciation-tip");
   });

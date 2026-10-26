@@ -250,7 +250,12 @@ describe("operator granular lesson editor", () => {
     });
     [1, 2, 3].forEach((index) => {
       fireEvent.change(screen.getByLabelText(`Audio từ vựng ${index} URL`), { target: { value: `/audio/word-${index}.mp3` } });
+      const vocabularyRow = screen.getByLabelText(`Từ vựng ${index}`);
+      expect(vocabularyRow).toContainElement(screen.getByLabelText(`Ảnh minh họa từ ${index} URL`));
+      expect(vocabularyRow).toContainElement(screen.getByLabelText(`Audio từ vựng ${index} URL`));
     });
+    expect(screen.queryByText("Audio từng từ vựng", { selector: "legend" })).not.toBeInTheDocument();
+    screen.getAllByLabelText(/^Tải /).forEach((input) => expect(input).toHaveAttribute("hidden"));
 
     await user.click(screen.getByRole("button", { name: "Kiểm tra & lưu" }));
     await user.click(screen.getByRole("button", { name: "Lưu dù còn thiếu" }));
