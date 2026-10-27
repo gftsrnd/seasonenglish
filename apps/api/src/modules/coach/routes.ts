@@ -174,9 +174,9 @@ export function registerCoachRoutes(
 
 export function coachPersonaPrompt(prompt: string, persona: "informal" | "formal"): string {
   const instruction = persona === "formal"
-    ? "FORMAL STYLE: Use professional, courteous workplace English. Avoid slang, contractions, emojis, and overly familiar language."
-    : "INFORMAL STYLE: Use warm, friendly, natural workplace English. Contractions are welcome, but keep the language respectful and CEFR-appropriate.";
-  const correctionGuard = "LATEST TURN ONLY: Evaluate message against currentQuestion as a fresh pair. Never carry an error, correction, score, or evidence from priorTurns into this result. TRANSLATIONS: Return a natural Vietnamese translation of Season's conversational reply in seasonReplyTranslation. For every correction, return a natural Vietnamese translation of the corrected learner sentence in corrections[].translation. Keep correction reason focused only on the short language reason; never place a translation inside reason. CORRECTIONS ONLY: Only put genuine language errors in corrections. If the learner's message is grammatical, relevant, and answers currentQuestion—even if it is brief or less specific—return corrections: [] and correctedText: \"\". Do not rewrite a correct answer merely to make it longer, more detailed, or stylistically different. RESULT LABEL: evaluation.result must be correct for a complete correct answer, partially_correct for a meaningful answer that needs a small language or content improvement, missing_information for insufficient input, or off_topic for the wrong target. INSUFFICIENT means no meaningful attempt and requires meaning score 0. If the learner gives relevant information but omits part of the requested content, use valid/partially_correct/countsTowardGoal true and a positive meaning score. Keep seasonReply and nextQuestion separate; seasonReply must not contain nextQuestion. RUBRIC SCOPE: rubric evidence and improvement must refer only to the learner's latest message and currentQuestion. Every rubric evidence and improvement must be concise, specific, and written in Vietnamese so the learner can act on it. Never base rubric feedback on nextQuestion or suggestedAnswer. If a criterion needs no improvement, say \"Không cần thay đổi.\" suggestedAnswer must directly answer nextQuestion in the exact conversation state. It must not repeat or re-ask nextQuestion or a quoted question unless nextQuestion explicitly asks the learner to formulate a question. suggestedAnswer must never be presented as a correction to the learner's latest message. SECRET WORDS: usedWords may contain only configured secret vocabulary that appears as a whole word in the learner's latest message; never infer or invent a used word.";
+    ? "FORMAL STYLE: Use professional, courteous workplace English. Avoid slang, contractions, emojis, and overly familiar language. Keep seasonReply between two and four CEFR-appropriate sentences."
+    : "INFORMAL STYLE: Use warm, friendly, natural workplace English with a natural contraction and exactly one emoji in each turn. Keep seasonReply between two and four short CEFR-appropriate sentences.";
+  const correctionGuard = "LATEST TURN ONLY: Evaluate message against currentQuestion as a fresh pair. Never carry an error, correction, score, or evidence from priorTurns into this result. TRANSLATIONS: Return a natural Vietnamese translation of Season's conversational reply in seasonReplyTranslation. For every correction, return a natural Vietnamese translation of the corrected learner sentence in corrections[].translation. Keep correction reason focused only on the short language reason; never place a translation inside reason. CORRECTIONS ONLY: Only put genuine language errors in corrections. If the learner's message is grammatical, relevant, and answers currentQuestion—even if it is brief or less specific—return corrections: [] and correctedText: \"\". Do not rewrite a correct answer merely to make it longer, more detailed, or stylistically different. RESULT LABEL: evaluation.result must be correct for a complete correct answer, partially_correct for a meaningful answer that needs a small language or content improvement, missing_information for insufficient input, or off_topic for the wrong target. INSUFFICIENT means no meaningful attempt and requires meaning score 0. If the learner gives relevant information but omits part of the requested content, use valid/partially_correct/countsTowardGoal true and a positive meaning score. Keep seasonReply and nextQuestion separate; seasonReply must not contain nextQuestion. RUBRIC SCOPE: rubric evidence and improvement must refer only to the learner's latest message and currentQuestion. Every rubric evidence and improvement must be concise, specific, and written in Vietnamese so the learner can act on it. Never base rubric feedback on nextQuestion or suggestedAnswer. If a criterion needs no improvement, say \"Không cần thay đổi.\" suggestedAnswer must directly answer nextQuestion in the exact conversation state, use one concise learner-level example, and contain no more than 40 words. It must not repeat or re-ask nextQuestion or a quoted question unless nextQuestion explicitly asks the learner to formulate a question. suggestedAnswer must never be presented as a correction to the learner's latest message. SECRET WORDS: usedWords may contain only configured secret vocabulary that appears as a whole word in the learner's latest message; never infer or invent a used word.";
   return `${prompt}\n\n${instruction}\n\n${correctionGuard}`;
 }
 
@@ -251,6 +251,8 @@ export function validateCoachPersonaOutput(
   const emojiCount = [...text.matchAll(/\p{Extended_Pictographic}/gu)].length;
   const contraction = /\b\p{L}+['’](?:s|re|ve|ll|d|m|t)\b/iu.test(text);
   const conversationViolations = [
+    ...(coachSentenceCount(output.seasonReply) < 2 || coachSentenceCount(output.seasonReply) > 4
+      ? ["Season reply must contain between two and four sentences."] : []),
     ...validateSuggestedAnswer(output),
     ...validateSuggestedAnswerReplay(output, context)
   ];
@@ -265,8 +267,14 @@ export function validateCoachPersonaOutput(
   }
   return [
     ...(text.split(/\s+/u).filter(Boolean).length > 60 ? ["Informal reply is too long."] : []),
+    ...(!contraction ? ["Informal reply must contain a contraction."] : []),
+    ...(emojiCount !== 1 ? ["Informal reply must contain exactly one emoji."] : []),
     ...conversationViolations
   ];
+}
+
+function coachSentenceCount(value: string): number {
+  return value.split(/[.!?]+(?:\s+|$)/u).map((part) => part.trim()).filter(Boolean).length;
 }
 
 function validateSuggestedAnswerReplay(output: CoachTaskOutput, context?: CoachValidationContext): string[] {
@@ -284,6 +292,7 @@ function validateSuggestedAnswer(output: CoachTaskOutput): string[] {
     .replace(/[^a-z0-9\s]/gu, " ").replace(/\s+/g, " ").trim();
   const nextQuestion = normalize(output.nextQuestion);
   const suggestedAnswer = normalize(output.suggestedAnswer.text);
+  if (suggestedAnswer.split(" ").filter(Boolean).length > 40) return ["Suggested answer is too long."];
   if (nextQuestion === suggestedAnswer) return ["Suggested answer repeats nextQuestion instead of answering it."];
 
   const requestsReply = /\b(?:how|what)\s+(?:would|do|should|can)\s+you\s+(?:reply|respond|answer)\b/iu.test(output.nextQuestion);
@@ -320,7 +329,9 @@ async function runCoachWithPersonaRepair(
   const candidateViolations = repaired.output ? repaired.violations : first.violations;
   if (candidate && candidateViolations.every(isLocallyEnforceableCoachViolation)) {
     let enforced = candidate;
+    if (candidateViolations.some(isReplyLengthViolation)) enforced = enforceReplySentenceCount(enforced, persona);
     if (candidateViolations.some(isFormalStyleViolation)) enforced = enforceFormalStyle(enforced);
+    if (candidateViolations.some(isInformalStyleViolation)) enforced = enforceInformalStyle(enforced);
     if (candidateViolations.some(isSuggestedAnswerViolation)) enforced = enforceSuggestedAnswerConsistency(enforced);
     if (candidateViolations.some(isSuggestedAnswerReplayViolation)) {
       enforced = enforceSuggestedAnswerReplay(enforced, persona);
@@ -356,6 +367,14 @@ function isFormalStyleViolation(violation: string): boolean {
   return violation.startsWith("Formal reply contains ");
 }
 
+function isInformalStyleViolation(violation: string): boolean {
+  return violation.startsWith("Informal reply ");
+}
+
+function isReplyLengthViolation(violation: string): boolean {
+  return violation === "Season reply must contain between two and four sentences.";
+}
+
 function isSuggestedAnswerViolation(violation: string): boolean {
   return violation.startsWith("Suggested answer ");
 }
@@ -366,11 +385,40 @@ function isSuggestedAnswerReplayViolation(violation: string): boolean {
 
 function isLocallyEnforceableCoachViolation(violation: string): boolean {
   return isFormalStyleViolation(violation)
+    || isInformalStyleViolation(violation)
+    || isReplyLengthViolation(violation)
     || isSuggestedAnswerViolation(violation)
     || isSuggestedAnswerReplayViolation(violation);
 }
 
+function enforceReplySentenceCount(output: CoachTaskOutput, persona: "informal" | "formal"): CoachTaskOutput {
+  const sentences = output.seasonReply.match(/[^.!?]+[.!?]+|[^.!?]+$/gu)?.map((part) => part.trim()).filter(Boolean) ?? [];
+  const bounded = sentences.slice(0, 4);
+  if (bounded.length < 2) {
+    bounded.push(persona === "formal" ? "That addresses the current question." : "That's helpful.");
+  }
+  return { ...output, seasonReply: bounded.join(" ") };
+}
+
+function enforceInformalStyle(output: CoachTaskOutput): CoachTaskOutput {
+  const stripEmoji = (value: string) => value.replace(/[\p{Extended_Pictographic}\uFE0F]/gu, "").replace(/\s+/gu, " ").trim();
+  let seasonReply = stripEmoji(output.seasonReply);
+  const nextQuestion = stripEmoji(output.nextQuestion);
+  const combined = `${seasonReply} ${nextQuestion}`;
+  if (!/\b\p{L}+['’](?:s|re|ve|ll|d|m|t)\b/iu.test(combined)) seasonReply = `That's clear: ${seasonReply}`;
+  return { ...output, seasonReply: `${seasonReply} 😊`, nextQuestion };
+}
+
 function enforceSuggestedAnswerConsistency(output: CoachTaskOutput): CoachTaskOutput {
+  if (output.suggestedAnswer.text.trim().split(/\s+/u).length > 40) {
+    return {
+      ...output,
+      suggestedAnswer: {
+        text: output.suggestedAnswer.text.trim().split(/\s+/u).slice(0, 40).join(" "),
+        translation: output.suggestedAnswer.translation.trim().split(/\s+/u).slice(0, 60).join(" ")
+      }
+    };
+  }
   return {
     ...output,
     nextQuestion: "What could you say next in this workplace situation?",
@@ -393,7 +441,7 @@ function enforceSuggestedAnswerReplay(
     },
     seasonReply: persona === "formal"
       ? "Thank you. That is an appropriate response to the current question."
-      : "Nice, that answers the current question well!",
+      : "That's right. You've answered the current question well 😊",
     seasonReplyTranslation: "Cảm ơn bạn. Câu trả lời này phù hợp với câu hỏi hiện tại.",
     rubric: {
       ...output.rubric,

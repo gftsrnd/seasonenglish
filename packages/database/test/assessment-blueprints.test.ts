@@ -112,6 +112,12 @@ describe("placement assessment blueprint", () => {
     expect(tasks.reduce((sum, task) => sum + task.maxScore, 0)).toBe(listening.maxScore);
   });
 
+  it("keeps the level-up assessment at exactly half the placement duration and 100 total points", () => {
+    expect(levelUpDefinition.totalMinutes).toBe(35);
+    expect(levelUpDefinition.sections.reduce((sum, item) => sum + item.durationMinutes, 0)).toBe(35);
+    expect(levelUpDefinition.sections.reduce((sum, item) => sum + item.maxScore, 0)).toBe(100);
+  });
+
   it("keeps the approved reading passages and non-committal refund answer", () => {
     const readingTasks = section("reading").groups.flatMap((group) => group.tasks);
     const task = (number: number) => readingTasks.find((item) => item.key === `R${number}`);

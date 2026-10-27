@@ -32,7 +32,7 @@ describe("Season persona output policy", () => {
   });
 
   it("accepts professional Formal language and rejects contractions, slang, emoji, and exclamation marks", () => {
-    expect(validateCoachPersonaOutput(output("Thank you for the clear answer.", "Could you describe your role?"), "formal")).toEqual([]);
+    expect(validateCoachPersonaOutput(output("Thank you for the clear answer. Your response is relevant.", "Could you describe your role?"), "formal")).toEqual([]);
     expect(validateCoachPersonaOutput(output("Great! Thank you for the clear answer.", "Could you describe your role?"), "formal"))
       .toContain("Formal reply contains an exclamation mark.");
     expect(validateCoachPersonaOutput(output("That's great, dude! 😊", "What's next?"), "formal")).toEqual(expect.arrayContaining([
@@ -41,9 +41,28 @@ describe("Season persona output policy", () => {
     ]));
   });
 
-  it("accepts friendly Informal language without requiring decorative punctuation", () => {
-    expect(validateCoachPersonaOutput(output("That's clear 😊", "What do you do next?"), "informal")).toEqual([]);
-    expect(validateCoachPersonaOutput(output("That is clear.", "What do you do next?"), "informal")).toEqual([]);
+  it("accepts friendly Informal language with the configured contraction and emoji", () => {
+    expect(validateCoachPersonaOutput(output("That's clear. You've answered the question 😊", "What do you do next?"), "informal")).toEqual([]);
+  });
+
+  it("QA Đợt 4 L-056 requires Informal to use a contraction and exactly one emoji", () => {
+    expect(validateCoachPersonaOutput(output("That is clear.", "What do you do next?"), "informal"))
+      .toEqual(expect.arrayContaining([
+        "Informal reply must contain a contraction.",
+        "Informal reply must contain exactly one emoji."
+      ]));
+    expect(validateCoachPersonaOutput(output("That's clear 😊😊", "What do you do next?"), "informal"))
+      .toContain("Informal reply must contain exactly one emoji.");
+    expect(validateCoachPersonaOutput(output("That's clear. You've answered the question 😊", "What do you do next?"), "informal")).toEqual([]);
+  });
+
+  it("QA Đợt 4 L-052 requires Season to answer in two to four sentences", () => {
+    expect(validateCoachPersonaOutput(output("Thanks.", "What do you do next?"), "formal"))
+      .toContain("Season reply must contain between two and four sentences.");
+    expect(validateCoachPersonaOutput(output(
+      "Thank you. Your report is clear. The timeline is realistic. The owner is identified. Please proceed.",
+      "What do you do next?"
+    ), "formal")).toContain("Season reply must contain between two and four sentences.");
   });
 
   it("rejects a suggested answer that re-asks the quoted question instead of replying", () => {
@@ -60,6 +79,19 @@ describe("Season persona output policy", () => {
 
     expect(validateCoachPersonaOutput(inconsistent, "formal"))
       .toContain("Suggested answer re-asks the quoted question instead of replying to it.");
+  });
+
+  it("rejects an excessively long example before it reaches the learner card", () => {
+    const verbose = {
+      ...output("Thank you. That is clear.", "What would you say next?"),
+      suggestedAnswer: {
+        text: Array.from({ length: 41 }, () => "word").join(" "),
+        translation: "Ví dụ quá dài."
+      }
+    };
+
+    expect(validateCoachPersonaOutput(verbose, "formal"))
+      .toContain("Suggested answer is too long.");
   });
 
   it("rejects grading the exact previous suggested answer as off-topic", () => {

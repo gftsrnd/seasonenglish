@@ -185,6 +185,7 @@ export function registerLearningRoutes(
     }));
     const completedLessons = summaries.filter((lesson) => lesson.status === "completed").length;
     const points = progress.points;
+    const inactiveDays = calculateInactiveDays(progress.activity.map((item) => item.occurredAt));
     const view: LearnerHomeView = {
       onboardingRequired,
       learner: { displayName: progress.learner.displayName, cefr: (context?.cefr ?? null) as CefrLevel | null },
@@ -210,6 +211,7 @@ export function registerLearningRoutes(
         streakDays: calculateCurrentStreak(progress.activity.map((item) => item.occurredAt)),
         points
       },
+      ...(inactiveDays !== null && inactiveDays >= 2 ? { inactivityReminder: { inactiveDays } } : {}),
       schedule: buildSchedule(
         Number(progress.learner.profile.durationMinutes ?? 10),
         progress.activity.map((item) => item.occurredAt)
@@ -621,13 +623,31 @@ export function learnerLessonDisplayTitle(lesson: LearnerLessonRecord): string {
 
 function calculateCurrentStreak(occurredAt: string[]): number {
   const dates = new Set(occurredAt.map((value) => value.slice(0, 10)));
-  let cursor = new Date();
+  const cursor = startOfUtcDay(new Date());
   let streak = 0;
+  skipWeekendBackwards(cursor);
   while (dates.has(cursor.toISOString().slice(0, 10))) {
     streak += 1;
     cursor.setUTCDate(cursor.getUTCDate() - 1);
+    skipWeekendBackwards(cursor);
   }
   return streak;
+}
+
+function calculateInactiveDays(occurredAt: string[]): number | null {
+  const timestamps = occurredAt.map((value) => Date.parse(value)).filter(Number.isFinite);
+  if (!timestamps.length) return null;
+  const latest = startOfUtcDay(new Date(Math.max(...timestamps)));
+  const today = startOfUtcDay(new Date());
+  return Math.max(0, Math.floor((today.getTime() - latest.getTime()) / 86_400_000));
+}
+
+function startOfUtcDay(value: Date): Date {
+  return new Date(Date.UTC(value.getUTCFullYear(), value.getUTCMonth(), value.getUTCDate()));
+}
+
+function skipWeekendBackwards(value: Date): void {
+  while (value.getUTCDay() === 0 || value.getUTCDay() === 6) value.setUTCDate(value.getUTCDate() - 1);
 }
 
 function pilotPhaseFor(startDate: string, weekCount: number): PilotPhase {

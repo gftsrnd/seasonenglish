@@ -31,6 +31,7 @@ export function LearnerHome({ view, actions }: { view: LearnerHomeView; actions:
   return <div className="app-learner-page home-page" style={{ width: "100%", maxWidth: 960, minWidth: 0, boxSizing: "border-box" }}>
     <PageTitle eyebrow={`${weekdayLabel()} · Tuần ${view.week?.weekNumber ?? "—"}/${view.program?.weekCount ?? "—"}`} title={`Chào ${view.learner.displayName}!`} aside={<span className={`badge lvl lvl-${view.learner.cefr}`}>Trình độ {view.learner.cefr}</span>} />
     <div className="bao-row" style={{ marginBottom: 16 }} aria-label="Lời chào của Season"><div className="bubble home-today-heading" style={{ flex: 1 }}>Hôm nay học gì nào?</div></div>
+    {view.inactivityReminder ? <Notice tone="warn"><b>Bạn đã nghỉ học {view.inactivityReminder.inactiveDays} ngày.</b> Học bù bài gần nhất để nối lại nhịp học nhé.</Notice> : null}
     {!view.aiAvailable && view.aiAvailable !== undefined ? <Notice tone="warn">AI chưa kết nối (chưa có API key). Bạn vẫn làm test và học bài đã duyệt; báo người vận hành để bật AI coach.</Notice> : null}
     {showLifecycle ? <section className="card home-lifecycle home-lifecycle-card" data-home-block="lifecycle" aria-label="Trạng thái pilot"><div className="row between"><div><div className="eyebrow">Trạng thái chương trình</div><h3>{pilotPhaseLabel(view.weekPhase)}</h3></div>{view.levelUpPhase && view.levelUpPhase !== "none" ? <span className="badge warn">Đang theo dõi lên mức</span> : null}</div>{view.monthlyGoal ? <p className="small" style={{ marginBottom: 0 }}><b>Mục tiêu tháng:</b> {view.monthlyGoal}</p> : null}</section> : null}
     <PrimaryLesson view={view} next={next} actions={actions} />
@@ -68,6 +69,14 @@ export function LearnerHome({ view, actions }: { view: LearnerHomeView; actions:
       <AppLink className="tile butter" style={{ height: "100%", minWidth: 0, boxSizing: "border-box" }} href="/practice" navigate={actions.navigate}><ActivityIcon kind="pen" />{view.practice.status === "locked" ? <><LockKeyhole className="status-icon" aria-hidden="true" /><span className="badge warn">Chưa mở</span></> : <span className="badge">{practiceStatusLabel(view.practice.status)}</span>}<span className="t">Bài thực hành cuối tuần</span><span className="s">{view.practice.detail}</span></AppLink>
     </section>
     <Readiness view={view} actions={actions} />
+    <section className="card" style={{ marginTop: 12 }} aria-label="Hồ sơ, phần thưởng và khảo sát">
+      <h3 style={{ marginTop: 0 }}>Thông tin của bạn</h3>
+      <div className="row" style={{ flexWrap: "wrap" }}>
+        <AppLink className="btn" href="/profile" navigate={actions.navigate}>Hồ sơ học tập</AppLink>
+        <AppLink className="btn" href="/profile" navigate={actions.navigate}>Phần thưởng</AppLink>
+        <AppLink className="btn" href="/survey" navigate={actions.navigate}>Khảo sát cuối pilot</AppLink>
+      </div>
+    </section>
     {view.reward ? <section className="card home-reward" style={{ marginTop: 16 }} data-home-block="reward" aria-label="Mùa học hiện tại"><div className="row between"><div><div className="eyebrow">Mùa học</div><h2>{view.reward.seasonName}</h2></div><strong>{view.reward.points} điểm</strong></div>{view.reward.nextPoints !== null ? <p className="small muted" style={{ marginBottom: 0 }}>Còn {Math.max(0, view.reward.nextPoints - view.reward.points)} điểm để mở cấp tiếp theo.</p> : <p className="small muted" style={{ marginBottom: 0 }}>Bạn đã đạt cấp cao nhất của chương trình.</p>}</section> : null}
     {celebration ? <LevelUpCelebration announcement={celebration} displayName={view.learner.displayName} onClose={async () => { if (celebration.announcementId) await actions.acknowledgeRewardAnnouncement?.(celebration.announcementId); setCelebration(null); }} /> : null}
     {assessmentCelebration ? <AssessmentCelebration /> : null}

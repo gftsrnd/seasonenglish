@@ -82,12 +82,6 @@ export function buildLevelReadiness(input: {
     {
       ...criterion("coachRubric", input.metrics.coachRubric, input.thresholds.coach),
       met: input.metrics.coachRubric >= input.thresholds.coach && input.metrics.coachTurns >= input.thresholds.coachTurns
-    },
-    {
-      key: "wrongRate",
-      current: round(input.metrics.wrongRate),
-      target: input.thresholds.wrong,
-      met: input.metrics.attemptedParts >= input.thresholds.minParts && input.metrics.wrongRate <= input.thresholds.wrong
     }
   ];
   return {

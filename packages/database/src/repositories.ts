@@ -6209,8 +6209,8 @@ class CoachRepository {
       return items.flatMap((item) => {
         if (!item || typeof item !== "object" || Array.isArray(item)) return [];
         const value = item as Record<string, unknown>;
-        const word = typeof value.word === "string" ? value.word : "";
-        if (!word) return [];
+        const word = typeof value.word === "string" ? value.word.trim().replace(/\s+/g, " ") : "";
+        if (!isPlausibleCoachVocabularyWord(word)) return [];
         return [{ word, meaning: typeof value.meaning === "string" ? value.meaning : "", opened: openedWords.has(word.toLowerCase()) }];
       });
     });
@@ -6432,7 +6432,7 @@ class CoachRepository {
         [randomUUID(), input.sessionId, Number(next.rows[0]?.number ?? 1),
           JSON.stringify({ text: input.message, requestId: input.requestId }),
           JSON.stringify({
-            coachText: seasonReplyTranslation,
+            coachText: seasonReply,
             evaluation: { status: "insufficient", result: "missing_information", countsTowardGoal: false, noteVi: seasonReplyTranslation },
             seasonReply, seasonReplyTranslation,
             nextQuestion: input.currentQuestion,
@@ -6718,6 +6718,11 @@ function coachFeedback(value: Record<string, unknown> | null): CoachFeedbackView
       translation: typeof suggestedAnswerSource?.translation === "string" ? suggestedAnswerSource.translation : ""
     }
   };
+}
+
+function isPlausibleCoachVocabularyWord(word: string): boolean {
+  if (!word || word.length > 48) return false;
+  return word.split(" ").length <= 5 && !/[.!?;:\n\r]/u.test(word);
 }
 
 function coachRubricCriterion(value: unknown): { score: number; evidence: string; improvement: string } {
@@ -7134,6 +7139,7 @@ class EngagementRepository {
   async saveWeeklyPracticeGrade(input: {
     learnerId: string; requestId: string; taskId: string; promptVersionId: string;
     output: { score: { total: number; rubric: { meaning: number; vocabulary: number; grammar: number } };
+      offTopic: boolean;
       feedback: string; suggestions: Array<{ original: string; corrected: string; explanation: string }>;
       correctedText: string };
     metadata: AiRunMetadataInput;
@@ -7154,7 +7160,7 @@ class EngagementRepository {
       if (inserted) {
         const canonicalScore = {
           ...input.output.score,
-          total: calculateWeeklyPracticeScore({ ...input.output.score.rubric, offTopic: false })
+          total: calculateWeeklyPracticeScore({ ...input.output.score.rubric, offTopic: input.output.offTopic })
         };
         await client.query(
           `update practice_submissions set score = $2::jsonb, feedback = $3::jsonb, updated_at = now()

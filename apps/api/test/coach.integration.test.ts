@@ -11,7 +11,7 @@ const databaseUrl = process.env.TEST_DATABASE_URL
 
 const aiOutput: CoachTaskOutput = {
   evaluation: { status: "valid" as const, result: "partially_correct" as const, countsTowardGoal: true, noteVi: "Trả lời đúng trọng tâm." },
-  seasonReply: "That's a useful correction 😊",
+  seasonReply: "That's useful. You've corrected it well 😊",
   seasonReplyTranslation: "Bạn sửa đúng rồi.",
   nextQuestion: "What do you do in the product team?",
   nextQuestionTranslation: "Bạn làm công việc gì trong nhóm sản phẩm?",
@@ -30,7 +30,7 @@ const aiOutput: CoachTaskOutput = {
 };
 const formalAiOutput = {
   ...aiOutput,
-  seasonReply: "Thank you for the clear correction.",
+  seasonReply: "Thank you for the clear correction. Your answer is now accurate.",
   nextQuestion: "Could you describe your role in the product team?"
 };
 
@@ -304,8 +304,9 @@ describe("AI Coach API", () => {
       expect.objectContaining({ speaker: "learner", text: "ok", classification: "insufficient" }),
       expect.objectContaining({
         speaker: "coach",
-        text: expect.stringMatching(/câu tiếng Anh đầy đủ/i),
+        text: "Please write a complete English sentence so I can understand your answer.",
         feedback: expect.objectContaining({
+          seasonReplyTranslation: "Hãy viết một câu tiếng Anh đầy đủ để Season hiểu câu trả lời của bạn.",
           evaluation: expect.objectContaining({ status: "insufficient", countsTowardGoal: false }),
           rubric: expect.objectContaining({ meaning: expect.objectContaining({ score: 0 }) })
         })
@@ -350,7 +351,7 @@ describe("AI Coach API", () => {
     runTask.mockResolvedValueOnce({
       output: {
         evaluation: { status: "off_topic", result: "off_topic", countsTowardGoal: false, noteVi: "Câu trả lời chưa liên quan." },
-        seasonReply: "That's not related to our question 😊",
+        seasonReply: "That's not related to our question. Let's try that question again 😊",
         seasonReplyTranslation: "Câu trả lời chưa liên quan đến câu hỏi.",
         nextQuestion: "A different question that must not be stored.",
         nextQuestionTranslation: "Một câu hỏi khác không được lưu.",
@@ -477,7 +478,7 @@ describe("AI Coach API", () => {
     expect(runTask).toHaveBeenCalledTimes(2);
     const feedback = [...response.json().messages].reverse()
       .find((message: { speaker: string; feedback?: unknown }) => message.speaker === "coach" && message.feedback)?.feedback;
-    expect(feedback.seasonReply).toBe("That is a useful correction");
+    expect(feedback.seasonReply).toBe("That is useful. You have corrected it well");
     expect(feedback.nextQuestion).toBe("What do you do in the product team?");
   });
 

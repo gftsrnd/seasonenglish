@@ -20,10 +20,10 @@ export const coachOutputSchema = z.object({
     countsTowardGoal: z.boolean(),
     noteVi: z.string().trim().min(1).max(500)
   }),
-  seasonReply: z.string().trim().min(1).max(2_000),
-  seasonReplyTranslation: z.string().trim().min(1).max(2_000),
-  nextQuestion: z.string().trim().min(1).max(2_000),
-  nextQuestionTranslation: z.string().trim().min(1).max(2_000),
+  seasonReply: z.string().trim().min(1).max(800),
+  seasonReplyTranslation: z.string().trim().min(1).max(1_000),
+  nextQuestion: z.string().trim().min(1).max(500),
+  nextQuestionTranslation: z.string().trim().min(1).max(700),
   rubric: z.object({
     meaning: z.object({ score: z.number().int().min(0).max(5), evidence: z.string().trim().min(1).max(500), improvement: z.string().trim().min(1).max(500) }),
     vocabulary: z.object({ score: z.number().int().min(0).max(5), evidence: z.string().trim().min(1).max(500), improvement: z.string().trim().min(1).max(500) }),
@@ -89,10 +89,10 @@ export const coachOutputJsonSchema = {
         countsTowardGoal: { type: "boolean" }, noteVi: { type: "string" }
       }
     },
-    seasonReply: { type: "string" },
-    seasonReplyTranslation: { type: "string" },
-    nextQuestion: { type: "string" },
-    nextQuestionTranslation: { type: "string" },
+    seasonReply: { type: "string", maxLength: 800 },
+    seasonReplyTranslation: { type: "string", maxLength: 1_000 },
+    nextQuestion: { type: "string", maxLength: 500 },
+    nextQuestionTranslation: { type: "string", maxLength: 700 },
     rubric: {
       type: "object", additionalProperties: false,
       required: ["meaning", "vocabulary", "grammar"],
@@ -138,6 +138,7 @@ export const weeklyPracticeOutputSchema = z.object({
       grammar: z.number().int().min(1).max(5)
     })
   }),
+  offTopic: z.boolean(),
   feedback: z.string().trim().min(1).max(2_000),
   suggestions: z.array(z.object({
     original: z.string().trim().min(1).max(500),
@@ -152,7 +153,7 @@ export type WeeklyPracticeTaskOutput = z.infer<typeof weeklyPracticeOutputSchema
 
 export const weeklyPracticeOutputJsonSchema = {
   type: "object", additionalProperties: false,
-  required: ["score", "feedback", "suggestions", "correctedText"],
+  required: ["score", "offTopic", "feedback", "suggestions", "correctedText"],
   properties: {
     score: {
       type: "object", additionalProperties: false, required: ["total", "rubric"],
@@ -168,6 +169,7 @@ export const weeklyPracticeOutputJsonSchema = {
         }
       }
     },
+    offTopic: { type: "boolean" },
     feedback: { type: "string" },
     suggestions: {
       type: "array", maxItems: 3,

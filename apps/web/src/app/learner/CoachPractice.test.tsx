@@ -234,6 +234,91 @@ describe("app coach and weekly practice speech input", () => {
     expect(screen.getByRole("button", { name: "Gửi" }).querySelector("svg")).toBeInTheDocument();
   });
 
+  it("reads only the English Coach reply and question after structured feedback", async () => {
+    const callback = actions();
+    const user = userEvent.setup();
+    render(<LearnerCoach view={{ ...coach, messages: [{
+      id: "coach-insufficient", speaker: "coach", text: "Hãy viết một câu tiếng Anh đầy đủ.", createdAt: "now",
+      feedback: {
+        relevant: false, relevanceNote: "", evaluation: { status: "insufficient", result: "missing_information", countsTowardGoal: false, noteVi: "Câu trả lời chưa đủ ý." },
+        seasonReply: "Please write a complete English sentence.", seasonReplyTranslation: "Hãy viết một câu tiếng Anh đầy đủ.",
+        nextQuestion: "What would you say first?", nextQuestionTranslation: "Bạn sẽ nói gì trước tiên?",
+        rubric: {
+          meaning: { score: 0, evidence: "Chưa đủ ý.", improvement: "Viết một câu đầy đủ." },
+          vocabulary: { score: 0, evidence: "Chưa đủ từ.", improvement: "Dùng từ đúng chủ đề." },
+          grammar: { score: 0, evidence: "Chưa đủ câu.", improvement: "Thêm chủ ngữ và động từ." }
+        },
+        corrections: [], correctedText: "", suggestedAnswer: { text: "", translation: "" }
+      }
+    }] }} actions={callback} />);
+
+    await user.click(screen.getByRole("button", { name: "Nghe câu của Season" }));
+    expect(callback.speak).toHaveBeenCalledWith("Please write a complete English sentence.", "en-US");
+    expect(callback.speak).not.toHaveBeenCalledWith(expect.stringContaining("Hãy"), expect.anything());
+  });
+
+  it("labels a repeated question as a retry instead of a new next sentence", () => {
+    render(<LearnerCoach view={{ ...coach, messages: [{
+      id: "coach-retry", speaker: "coach", text: "Please try again.", createdAt: "now",
+      feedback: {
+        relevant: false, relevanceNote: "", evaluation: { status: "insufficient", result: "missing_information", countsTowardGoal: false, noteVi: "Câu trả lời chưa đủ ý." },
+        seasonReply: "Please write a complete English sentence.", seasonReplyTranslation: "Hãy viết một câu tiếng Anh đầy đủ.",
+        nextQuestion: "What would you say first?", nextQuestionTranslation: "Bạn sẽ nói gì trước tiên?",
+        rubric: {
+          meaning: { score: 0, evidence: "Chưa đủ ý.", improvement: "Viết một câu đầy đủ." },
+          vocabulary: { score: 0, evidence: "Chưa đủ từ.", improvement: "Dùng từ đúng chủ đề." },
+          grammar: { score: 0, evidence: "Chưa đủ câu.", improvement: "Thêm chủ ngữ và động từ." }
+        },
+        corrections: [], correctedText: "", suggestedAnswer: { text: "", translation: "" }
+      }
+    }] }} actions={actions()} />);
+
+    expect(screen.getByRole("heading", { name: "Câu cần trả lời lại" })).toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "Câu bạn nên nói tiếp" })).not.toBeInTheDocument();
+    expect(screen.getByText("Hãy trả lời lại câu hỏi Season vừa hỏi bằng một câu tiếng Anh đầy đủ.")).toBeInTheDocument();
+    expect(screen.queryByText("What would you say first?")).not.toBeInTheDocument();
+  });
+
+  it("drops sentence-like secret-word data before it can overflow the vocabulary row", () => {
+    render(<LearnerCoach view={{ ...coach, vocabulary: [
+      { word: "company", meaning: "công ty", opened: true },
+      { word: "dùng khi chào hỏi đặc biệt khi bắt đầu một cuộc trò chuyện dài", meaning: "mẫu", opened: true },
+      { word: "late delivery", meaning: "sự giao hàng trễ", opened: false }
+    ] }} actions={actions()} />);
+
+    expect(screen.getByRole("button", { name: "Nghe từ company: công ty" })).toBeInTheDocument();
+    expect(screen.getByText("Gợi ý: sự giao hàng trễ")).toBeInTheDocument();
+    expect(screen.queryByText(/dùng khi chào hỏi/i)).not.toBeInTheDocument();
+  });
+
+  it("QA Đợt 4 L-054/A-030 reads the English Season reply instead of Vietnamese fallback text", async () => {
+    const callback = actions();
+    const user = userEvent.setup();
+    render(<LearnerCoach view={{ ...coach, messages: [{
+      id: "coach-insufficient", speaker: "coach",
+      text: "Hãy viết một câu tiếng Anh đầy đủ để Season hiểu câu trả lời của bạn.", createdAt: "now",
+      feedback: {
+        relevant: true, relevanceNote: "",
+        evaluation: { status: "insufficient", result: "missing_information", countsTowardGoal: false, noteVi: "Hãy viết một câu đầy đủ." },
+        seasonReply: "Please write a complete English sentence so I can understand your answer.",
+        seasonReplyTranslation: "Hãy viết một câu tiếng Anh đầy đủ để Season hiểu câu trả lời của bạn.",
+        nextQuestion: "What would you say first?", nextQuestionTranslation: "Bạn sẽ nói gì trước tiên?",
+        rubric: {
+          meaning: { score: 0, evidence: "Chưa đủ thông tin.", improvement: "Viết câu đầy đủ." },
+          vocabulary: { score: 0, evidence: "Chưa đủ nội dung.", improvement: "Dùng từ liên quan." },
+          grammar: { score: 0, evidence: "Chưa đủ câu.", improvement: "Viết câu hoàn chỉnh." }
+        },
+        corrections: [], correctedText: "", suggestedAnswer: { text: "", translation: "" }
+      }
+    }] }} actions={callback} />);
+
+    await user.click(screen.getByRole("button", { name: "Nghe câu của Season" }));
+    expect(callback.speak).toHaveBeenCalledWith(
+      "Please write a complete English sentence so I can understand your answer.",
+      "en-US"
+    );
+  });
+
   it("matches the canonical active challenge header, threshold copy, and daily-cap state", () => {
     render(<LearnerChallenge view={{
       sessionId: "challenge-1", assessmentAttemptId: "attempt-1", targetLevel: "B1", aiAvailable: true,
@@ -387,10 +472,29 @@ describe("app coach and weekly practice speech input", () => {
     expect(screen.getByRole("button", { name: "Đang nghe" })).toBeInTheDocument();
     latestRecognition?.onresult?.({ results: [[{ transcript: "from the meeting" }]] });
     await waitFor(() => expect(draft).toHaveValue("Hello from the meeting"));
+    latestRecognition?.onresult?.({ results: [[{ transcript: "from the meeting today" }]] });
+    await waitFor(() => expect(draft).toHaveValue("Hello from the meeting today"));
+    expect(draft).not.toHaveValue("Hello from the meeting from the meeting today");
 
     await user.click(screen.getByRole("button", { name: "Đang nghe" }));
     expect(latestRecognition?.stop).toHaveBeenCalledTimes(1);
     expect(screen.getByRole("button", { name: "Nói" })).toBeInTheDocument();
+  });
+
+  it("QA Đợt 4 A-032 sends a recognized microphone transcript through the same Coach callback as typed text", async () => {
+    enableSpeechRecognition();
+    const sendCoachMessage = vi.fn().mockResolvedValue(undefined);
+    const user = userEvent.setup();
+    render(<LearnerCoach view={coach} actions={{ ...actions(), sendCoachMessage }} />);
+
+    await user.click(screen.getByRole("button", { name: "Nói" }));
+    latestRecognition?.onresult?.({ results: [[{ transcript: "I reported the safety issue immediately" }]] });
+    await waitFor(() => expect(screen.getByRole("textbox", { name: "Tin nhắn cho Season" }))
+      .toHaveValue("I reported the safety issue immediately"));
+    await user.click(screen.getByRole("button", { name: "Đang nghe" }));
+    await user.click(screen.getByRole("button", { name: "Gửi" }));
+
+    expect(sendCoachMessage).toHaveBeenCalledWith("I reported the safety issue immediately");
   });
 
   it("keeps Practice write/dialogue mode and exposes the microphone only when supported", async () => {

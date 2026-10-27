@@ -1634,6 +1634,7 @@ h1,h2,h3,h4,h1 b,h2 b,h3 b,h4 b{font-weight:600 !important}
 .coach-page .coach-surface .coach-word-chip.is-opened{width:auto;max-width:180px;padding:0 12px;border-color:#bdc991;background:#eef2df;color:#33451f}
 .coach-page .coach-surface .coach-word-chip.is-opened b{max-width:150px;overflow:hidden;text-overflow:ellipsis}
 .coach-page .coach-surface .coach-word-chip.is-locked{width:auto;max-width:240px;padding:0 12px;gap:7px;cursor:default}
+.coach-page .coach-surface .coach-word-chip span,.coach-page .coach-surface .coach-word-chip b{min-width:0;white-space:normal;overflow-wrap:anywhere;line-height:1.25}
 .coach-page .coach-surface .coach-word-chip.is-locked:hover{transform:none}
 .coach-turn-audio{display:inline-flex;align-items:center;gap:5px;margin-top:8px;padding:5px 9px;border:1px solid var(--line);border-radius:999px;background:var(--surface);color:var(--muted);font:inherit;font-size:.78rem;cursor:pointer}
 .coach-turn-audio:hover{color:var(--ink);border-color:var(--primary)}

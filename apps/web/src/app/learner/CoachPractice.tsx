@@ -26,10 +26,13 @@ function speechRecognitionConstructor(): SpeechRecognitionConstructor | null {
   return speechWindow.SpeechRecognition ?? speechWindow.webkitSpeechRecognition ?? null;
 }
 
-function appendTranscript(current: string, event: SpeechRecognitionResultEvent): string {
-  const transcript = event.results[0]?.[0]?.transcript.trim() ?? "";
-  if (!transcript) return current;
-  const draft = current.trim();
+function recognitionDraft(base: string, event: SpeechRecognitionResultEvent): string {
+  const transcript = Array.from(event.results)
+    .map((result) => result[0]?.transcript.trim() ?? "")
+    .filter(Boolean)
+    .join(" ");
+  if (!transcript) return base;
+  const draft = base.trim();
   return `${draft}${draft ? " " : ""}${transcript}`;
 }
 
@@ -46,6 +49,7 @@ export function LearnerCoach({ view, actions }: { view: CoachView; actions: Lear
   const clearDialogDescriptionId = useId();
   const clearChatWasOpen = useRef(false);
   const recognitionRef = useRef<SpeechRecognitionInstance | null>(null);
+  const recognitionBaseRef = useRef("");
   const composerRef = useRef<HTMLTextAreaElement>(null);
   const speechSupported = speechRecognitionConstructor() !== null;
 
@@ -83,10 +87,11 @@ export function LearnerCoach({ view, actions }: { view: CoachView; actions: Lear
       return;
     }
     recognitionRef.current = recognition;
+    recognitionBaseRef.current = message.trim();
     recognition.lang = "en-US";
     recognition.interimResults = false;
     recognition.maxAlternatives = 1;
-    recognition.onresult = (event) => setMessage((current) => appendTranscript(current, event));
+    recognition.onresult = (event) => setMessage(recognitionDraft(recognitionBaseRef.current, event));
     recognition.onerror = () => {
       setRecording(false);
       if (recognitionRef.current === recognition) recognitionRef.current = null;
@@ -140,7 +145,7 @@ export function LearnerCoach({ view, actions }: { view: CoachView; actions: Lear
     {!view.aiAvailable ? <Notice tone="warn">AI chưa kết nối nên Season chưa trả lời. Báo người vận hành nhập API key trong Cài đặt.</Notice> : null}
     <div className="coach-limit-row"><span className="row coach-counters"><span className={`badge ${capped ? "danger" : view.daily.used >= view.daily.limit * .8 ? "warn" : "primary"}`}>Hôm nay {view.daily.used}/{view.daily.limit} lượt</span><span className={`badge ${view.weekly.turns >= view.weekly.target ? "ok" : ""}`}>Tuần này {view.weekly.turns} lượt{view.weekly.turns >= view.weekly.target ? " ✓" : ` · mục tiêu ≥${view.weekly.target}`}</span></span><details className="xs coach-limit-details"><summary>Giới hạn chat hoạt động thế nào?</summary><div className="muted coach-limit-copy coach-limit-copy--full coach-limit-copy--plain">1 lượt = 1 tin nhắn bạn gửi và Season trả lời kèm chấm điểm. Tối đa <b>{view.daily.limit} lượt/ngày</b>; bộ đếm về 0 lúc 0 giờ. Xoá chat không trả lại lượt. Tin nhắn lỗi mạng không tính lượt. Mục tiêu: ít nhất {view.weekly.target} lượt/tuần; không có giới hạn theo tuần.</div></details></div>
     {capped ? <Notice tone="warn"><b>Đã dùng hết {view.daily.limit} lượt chat hôm nay.</b> Ô nhập mở lại ngày mai; bạn có thể ôn bài tuần này.</Notice> : null}
-    <section className="chat" aria-label="Cuộc trò chuyện với Season" aria-busy={view.thinking || sending || undefined} style={chatStyle}>{view.messages.length === 0 ? <div className="msg ai"><p>Chào bạn! Hôm nay mình luyện một tình huống thật nhé.</p></div> : view.messages.map((item) => <article className={`msg ${item.speaker === "coach" ? "ai" : "user"}`} key={item.id}><div className="eyebrow">{item.speaker === "coach" ? "Season" : "Bạn"}</div>{item.feedback ? <CoachFeedback feedback={item.feedback} /> : <p>{item.text}</p>}{item.speaker === "coach" ? <button className="coach-turn-audio" type="button" aria-label="Nghe câu của Season" title="Nghe câu của Season" onClick={() => actions.speak(item.text, "en-US")}><Volume2 size={17} aria-hidden="true" /><span>Nghe</span></button> : null}</article>)}{sending && pendingMessage ? <article className="msg user coach-message-pending" aria-label="Tin nhắn đang gửi"><div className="eyebrow">Bạn</div><p>{pendingMessage}</p><span className="xs muted">Đang gửi…</span></article> : null}{view.thinking ? <div className="msg ai" role="status">Season đang nghĩ…</div> : null}</section>{coachError ? <div className="coach-error-row"><ErrorText id="coach-error" message={coachError} /></div> : null}
+    <section className="chat" aria-label="Cuộc trò chuyện với Season" aria-busy={view.thinking || sending || undefined} style={chatStyle}>{view.messages.length === 0 ? <div className="msg ai"><p>Chào bạn! Hôm nay mình luyện một tình huống thật nhé.</p></div> : view.messages.map((item) => <article className={`msg ${item.speaker === "coach" ? "ai" : "user"}`} key={item.id}><div className="eyebrow">{item.speaker === "coach" ? "Season" : "Bạn"}</div>{item.feedback ? <CoachFeedback feedback={item.feedback} /> : <p>{item.text}</p>}{item.speaker === "coach" ? <button className="coach-turn-audio" type="button" aria-label="Nghe câu của Season" title="Nghe câu của Season" onClick={() => actions.speak(coachSpeechText(item), "en-US")}><Volume2 size={17} aria-hidden="true" /><span>Nghe</span></button> : null}</article>)}{sending && pendingMessage ? <article className="msg user coach-message-pending" aria-label="Tin nhắn đang gửi"><div className="eyebrow">Bạn</div><p>{pendingMessage}</p><span className="xs muted">Đang gửi…</span></article> : null}{view.thinking ? <div className="msg ai" role="status">Season đang nghĩ…</div> : null}</section>{coachError ? <div className="coach-error-row"><ErrorText id="coach-error" message={coachError} /></div> : null}
     <section className="card coach-vocabulary"><h2>Từ bí mật</h2><div className="row coach-word-list">{vocabulary.map((item, index) => item.opened ? <button className="word-card coach-word-chip is-opened" type="button" title={item.meaning} key={item.word.toLocaleLowerCase()} aria-label={`Nghe từ ${item.word}${item.meaning ? `: ${item.meaning}` : ""}`} onClick={() => actions.speak(item.word, "en-US")}><b>{item.word}</b></button> : <div className="word-card coach-word-chip is-locked" key={item.word.toLocaleLowerCase()} aria-label={`Từ bí mật ${index + 1} chưa mở`}><LockKeyhole className="status-icon" aria-hidden="true" /><span>Gợi ý: {item.meaning || `từ số ${index + 1}`}</span></div>)}</div></section>
     <form className="chat-compose" aria-busy={view.thinking || sending || undefined} onSubmit={send} style={composeStyle}><textarea ref={composerRef} rows={1} aria-label="Tin nhắn cho Season" aria-describedby={coachError ? "coach-error" : undefined} value={message} disabled={view.thinking || sending || !view.aiAvailable || capped} onChange={(event) => { setMessage(event.target.value); resizeCoachComposer(event.currentTarget); }} onKeyDown={(event) => { if (event.key === "Enter" && !event.shiftKey && !event.nativeEvent.isComposing) { event.preventDefault(); event.currentTarget.form?.requestSubmit(); } }} placeholder={view.thinking || sending ? "Season đang trả lời…" : view.cefr === "A1" || view.cefr === "A2" ? "Viết câu trả lời bằng tiếng Anh…" : "Type your reply in English…"} style={composeInputStyle} /><div style={composeActionsStyle}>{speechSupported ? <button className={`coach-mic coach-compose-icon ${recording ? "is-recording" : ""}`} type="button" aria-label={recording ? "Đang nghe" : "Nói"} aria-pressed={recording} title={recording ? "Dừng nghe" : "Nói"} disabled={view.thinking || sending || (!recording && (!view.aiAvailable || capped))} onClick={recording ? stopListening : startListening}><MicIcon /></button> : null}<button className="btn-primary coach-compose-icon coach-send" type="submit" aria-label={view.thinking || sending ? "Đang gửi…" : "Gửi"} title={view.thinking || sending ? "Đang gửi…" : "Gửi"} disabled={view.thinking || sending || !view.aiAvailable || capped || !message.trim() || recording}><Send size={20} aria-hidden="true" /></button></div></form></div>
     <p className="xs muted">Mỗi lượt Season trả lời và chấm 3 tiêu chí (đúng ý · từ vựng · ngữ pháp), gợi ý tối đa 3 chỗ sửa. Mục tiêu: ≥{view.weekly.target} lượt/tuần.</p>
@@ -168,6 +173,8 @@ function CoachFeedback({ feedback }: { feedback: NonNullable<CoachView["messages
     missing_information: "Thiếu ý",
     off_topic: "Sai mục tiêu"
   } as const;
+  const retryCurrentQuestion = feedback.evaluation.status !== "valid";
+  const insufficient = feedback.evaluation.status === "insufficient";
   return <section className="coach-feedback coach-feedback-flat" role="region" aria-label="Phản hồi của Season">
     <div className="coach-feedback-section coach-season-reply" aria-label="Câu Season trả lời">
       <h4>Câu Season trả lời</h4>
@@ -181,10 +188,9 @@ function CoachFeedback({ feedback }: { feedback: NonNullable<CoachView["messages
       <h4>Câu sửa</h4>{feedback.corrections.length ? feedback.corrections.map((item, index) => <div key={`${item.corrected}-${index}`}><p><del>{item.original}</del> → <strong>{item.corrected}</strong></p><p>{item.reason}</p><p className="coach-feedback-translation">{item.translation}</p></div>) : <p>Không có lỗi cần sửa trực tiếp. Xem gợi ý cải thiện trong phần giải thích.</p>}
       {feedback.correctedText ? <p><b>Câu hoàn chỉnh:</b> {feedback.correctedText}</p> : null}
     </div>
-    <div className="coach-feedback-section coach-next-question" aria-label="Câu bạn nên nói tiếp">
-      <h4>Câu bạn nên nói tiếp</h4>
-      <p><strong>{feedback.nextQuestion}</strong></p>
-      <p className="coach-feedback-translation">{feedback.nextQuestionTranslation}</p>
+    <div className="coach-feedback-section coach-next-question" aria-label={retryCurrentQuestion ? "Câu cần trả lời lại" : "Câu bạn nên nói tiếp"}>
+      <h4>{retryCurrentQuestion ? "Câu cần trả lời lại" : "Câu bạn nên nói tiếp"}</h4>
+      {insufficient ? <p><strong>Hãy trả lời lại câu hỏi Season vừa hỏi bằng một câu tiếng Anh đầy đủ.</strong></p> : <><p><strong>{feedback.nextQuestion}</strong></p><p className="coach-feedback-translation">{feedback.nextQuestionTranslation}</p></>}
     </div>
     <div className="coach-feedback-disclosures">
       <details className="coach-feedback-disclosure">
@@ -203,11 +209,21 @@ function uniqueCoachVocabulary(items: CoachView["vocabulary"]): CoachView["vocab
   const unique = new Map<string, CoachView["vocabulary"][number]>();
   for (const item of items) {
     const key = item.word.trim().toLocaleLowerCase();
-    if (!key) continue;
+    if (!isPlausibleCoachVocabulary(item.word)) continue;
     const existing = unique.get(key);
     if (!existing || item.opened) unique.set(key, item);
   }
   return [...unique.values()].slice(0, 12);
+}
+
+function isPlausibleCoachVocabulary(word: string): boolean {
+  const normalized = word.trim().replace(/\s+/g, " ");
+  if (!normalized || normalized.length > 48) return false;
+  return normalized.split(" ").length <= 5 && !/[.!?;:\n\r]/u.test(normalized);
+}
+
+function coachSpeechText(item: CoachView["messages"][number]): string {
+  return item.feedback?.seasonReply.trim() || item.text.trim();
 }
 
 function ClearChatDialog({ titleId, descriptionId, onCancel, onConfirm }: { titleId: string; descriptionId: string; onCancel: () => void; onConfirm: () => void }) {
@@ -285,6 +301,7 @@ export function LearnerPractice({ view, actions }: { view: PracticeView; actions
   const [busyAction, setBusyAction] = useState<"submit" | "appeal" | null>(null);
   const busyActionRef = useRef<"submit" | "appeal" | null>(null);
   const recognitionRef = useRef<SpeechRecognitionInstance | null>(null);
+  const recognitionBaseRef = useRef("");
   const draftRef = useRef<HTMLTextAreaElement>(null);
   const appealRef = useRef<HTMLTextAreaElement>(null);
   const speechSupported = view.speechSupported !== false && speechRecognitionConstructor() !== null;
@@ -315,10 +332,11 @@ export function LearnerPractice({ view, actions }: { view: PracticeView; actions
       return;
     }
     recognitionRef.current = recognition;
+    recognitionBaseRef.current = text.trim();
     recognition.lang = "en-US";
     recognition.interimResults = false;
     recognition.maxAlternatives = 1;
-    recognition.onresult = (event) => setText((current) => appendTranscript(current, event));
+    recognition.onresult = (event) => setText(recognitionDraft(recognitionBaseRef.current, event));
     recognition.onerror = () => {
       setRecording(false);
       if (recognitionRef.current === recognition) recognitionRef.current = null;

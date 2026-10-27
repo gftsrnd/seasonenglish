@@ -123,6 +123,24 @@ describe("learner Home parity", () => {
     ]);
   });
 
+  it("shows the inactivity reminder supplied by the server", () => {
+    render(<LearnerHome view={{ ...makeView(), inactivityReminder: { inactiveDays: 2 } }} actions={actions} />);
+
+    expect(screen.getByRole("note")).toHaveTextContent("Bạn đã nghỉ học 2 ngày");
+  });
+
+  it("keeps profile, rewards, C1 status, and the pilot survey reachable from Home", () => {
+    render(<LearnerHome view={makeView({
+      learner: { displayName: "Học viên Demo", cefr: "C1" },
+      levelReadiness: { ...makeView().levelReadiness, targetLevel: null, eligible: false, examAvailable: false }
+    })} actions={actions} />);
+
+    expect(screen.getByRole("link", { name: "Hồ sơ học tập" })).toHaveAttribute("href", "/profile");
+    expect(screen.getByRole("link", { name: "Phần thưởng" })).toHaveAttribute("href", "/profile");
+    expect(screen.getByRole("heading", { name: "Bạn đang ở mức cao nhất" })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Khảo sát cuối pilot" })).toHaveAttribute("href", "/survey");
+  });
+
   it("highlights Season in leaf green after a real turn today", () => {
     render(<LearnerHome view={makeView({ coach: { turnsToday: 1, turnsThisWeek: 2, targetTurns: 2, href: "/coach" } })} actions={actions} />);
     expect(screen.getByRole("link", { name: /Đã luyện hôm nay/ })).toHaveClass("tile", "mint");
@@ -326,6 +344,22 @@ describe("learner Home parity", () => {
     expect(within(setup!).getByText(/bạn không cần làm gì thêm/i)).toBeInTheDocument();
     expect(within(setup!).queryByRole("link", { name: /test đầu vào/i })).not.toBeInTheDocument();
     expect(within(setup!).getAllByText("Đã xong")).toHaveLength(2);
+  });
+
+  it("shows the exact three onboarding steps with status and the current action", () => {
+    render(<LearnerHome view={makeView({
+      onboardingRequired: true,
+      learner: { displayName: "Học viên Demo", cefr: null },
+      approvalPending: false,
+      placementDraft: false
+    })} actions={actions} />);
+
+    const setup = screen.getByRole("heading", { name: "3 bước để bắt đầu học" }).closest("section")!;
+    expect(within(setup).getByRole("heading", { name: "Hồ sơ cá nhân" })).toBeInTheDocument();
+    expect(within(setup).getByRole("heading", { name: "Test đầu vào" })).toBeInTheDocument();
+    expect(within(setup).getByRole("heading", { name: "Vận hành duyệt mức" })).toBeInTheDocument();
+    expect(within(setup).getByText("Đang ở bước này")).toBeInTheDocument();
+    expect(within(setup).getByRole("link", { name: "Điền hồ sơ (~2 phút)" })).toHaveAttribute("href", "/onboard");
   });
 
   it("offers to continue a saved onboarding draft", () => {

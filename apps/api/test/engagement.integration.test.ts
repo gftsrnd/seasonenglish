@@ -12,6 +12,7 @@ const databaseUrl = process.env.TEST_DATABASE_URL
 describe("practice, games, arena, rewards and survey API", () => {
   const pool = new Pool({ connectionString: databaseUrl });
   let aiTrace = 0;
+  let weeklyPracticeOffTopic = false;
   const mediaService: ContentMediaService = {
     resolveForUser: vi.fn().mockResolvedValue({ status: "unavailable" }),
     diagnoseForUser: vi.fn().mockResolvedValue({ image: { status: "unavailable" }, provider: null, cached: false }),
@@ -21,6 +22,7 @@ describe("practice, games, arena, rewards and survey API", () => {
     runTask: async (taskId) => ({
       output: taskId === "weekly_practice_grading" ? {
         score: { total: 84, rubric: { meaning: 4, vocabulary: 4, grammar: 3 } },
+        offTopic: weeklyPracticeOffTopic,
         feedback: "Ý rõ và đúng bối cảnh công việc.", suggestions: [], correctedText: "I prepare reports."
       } : {
         topic: "Sprint planning",
@@ -295,6 +297,37 @@ describe("practice, games, arena, rewards and survey API", () => {
       [DEMO_IDS.learner, DEMO_IDS.week]
     );
     expect(stored.rows[0]?.count).toBe(1);
+  });
+
+  it("caps an off-topic weekly-practice grade at 30 even when the rubric is high", async () => {
+    await pool.query("delete from practice_appeals where learner_id = $1", [DEMO_IDS.learner]);
+    await pool.query("delete from practice_submissions where learner_id = $1", [DEMO_IDS.learner]);
+    await pool.query(
+      "update progress_records set status = 'completed', completed_at = now() where learner_id = $1",
+      [DEMO_IDS.learner]
+    );
+    const requirements = await app.inject({ method: "GET", url: "/api/v1/engagement/practice", headers: { cookie } });
+    const words = (await pool.query<{ payload: { weeklyPractice?: { requiredVocabulary?: string[] } } }>(
+      `select lsv.payload from lesson_sets ls
+       join lesson_set_versions lsv on lsv.lesson_set_id = ls.id and lsv.status = 'published'
+       where ls.program_week_id = $1 and ls.cefr = 'A2' order by lsv.version desc limit 1`,
+      [requirements.json().weekId]
+    )).rows[0]?.payload.weeklyPractice?.requiredVocabulary ?? ["colleague", "role", "work"];
+    const text = `I use ${words[0]} at work. My team discusses ${words[1]}. We practise ${words[2]} every day.`;
+    weeklyPracticeOffTopic = true;
+    try {
+      const submitted = await app.inject({
+        method: "POST", url: "/api/v1/engagement/practice/submit", headers: { cookie },
+        payload: { requestId: "10000000-0000-4000-8000-000000000089", text }
+      });
+      expect(submitted.statusCode, submitted.body).toBe(200);
+      expect(submitted.json().submission.score).toMatchObject({
+        total: 30,
+        rubric: { meaning: 4, vocabulary: 4, grammar: 3 }
+      });
+    } finally {
+      weeklyPracticeOffTopic = false;
+    }
   });
 
   it("allows one appeal for AI grading and rejects appeals after manual grading", async () => {

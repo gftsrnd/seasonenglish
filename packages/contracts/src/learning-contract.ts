@@ -254,6 +254,8 @@ export interface LearnerHomeView {
     streakDays: number;
     points: number;
   };
+  /** Server-derived reminder shown only after at least two full inactive days. */
+  inactivityReminder?: { inactiveDays: number };
   schedule: {
     daysPerWeek: number;
     lessonMinutes: number;

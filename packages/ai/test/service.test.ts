@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import { createAiService } from "../src/service.js";
 import { AI_TASKS, AiTaskRegistry } from "../src/registry.js";
-import { coachOutputJsonSchema, coachOutputSchema } from "../src/schemas.js";
+import { coachOutputJsonSchema, coachOutputSchema, weeklyPracticeOutputJsonSchema, weeklyPracticeOutputSchema } from "../src/schemas.js";
 import { AiProviderError, type AiProvider } from "../src/types.js";
 import { z } from "zod";
 
@@ -28,6 +28,20 @@ const validCoachOutput = {
 };
 
 describe("AI service", () => {
+  it("requires weekly-practice grading to classify whether the response is off topic", () => {
+    const output = {
+      score: { total: 100, rubric: { meaning: 5, vocabulary: 5, grammar: 5 } },
+      offTopic: true,
+      feedback: "Bài viết không trả lời đúng chủ đề.",
+      suggestions: [],
+      correctedText: ""
+    };
+
+    expect(weeklyPracticeOutputSchema.safeParse(output).success).toBe(true);
+    expect(weeklyPracticeOutputSchema.safeParse({ ...output, offTopic: undefined }).success).toBe(false);
+    expect(weeklyPracticeOutputJsonSchema.required).toContain("offTopic");
+  });
+
   it("normalizes omitted grammar transport fields to null when classification abstains", async () => {
     const provider = fixtureProvider(vi.fn(async () => ({ output: {
       durationMinutes: 10,
@@ -109,6 +123,13 @@ describe("AI service", () => {
     expect(coachOutputSchema.safeParse(withoutCorrectionTranslation).success).toBe(false);
     expect(coachOutputJsonSchema.required).toContain("seasonReplyTranslation");
     expect(coachOutputJsonSchema.properties.corrections.items.required).toContain("translation");
+  });
+
+  it("rejects an oversized Coach question before it can overflow the feedback card", () => {
+    const oversized = { ...validCoachOutput, nextQuestion: "x".repeat(501) };
+
+    expect(coachOutputSchema.safeParse(oversized).success).toBe(false);
+    expect(coachOutputJsonSchema.properties.nextQuestion.maxLength).toBe(500);
   });
 
   it("rejects Coach evaluation states that would count or unlock an invalid learner turn", () => {
@@ -461,6 +482,7 @@ describe("AI service", () => {
       provider: fixtureProvider(vi.fn().mockResolvedValue({
         output: {
           score: { total: 84, rubric: { meaning: 4, vocabulary: 4, grammar: 3 } },
+          offTopic: false,
           feedback: "Ý rõ và đúng bối cảnh công việc.",
           suggestions: [{ original: "I prepare report", corrected: "I prepare reports", explanation: "Dùng danh từ số nhiều." }],
           correctedText: "I prepare reports."

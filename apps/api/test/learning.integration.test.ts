@@ -293,8 +293,62 @@ describe("learner profile, home, lesson and progress API", () => {
         levelReadiness: { targetLevel: "B1", windowDays: 14, eligible: false, examAvailable: true }
       });
       expect(response.json()).not.toHaveProperty("finalAssessment");
-      expect(response.json().levelReadiness.criteria).toHaveLength(5);
+      expect(response.json()).not.toHaveProperty("inactivityReminder");
+      expect(response.json().levelReadiness.criteria).toHaveLength(4);
     } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("keeps the weekday streak across a weekend without counting Saturday or Sunday", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-10-19T12:00:00.000Z"));
+    const snapshot = await pool.query<{ id: string; occurred_at: Date }>(
+      "select id, occurred_at from activities where learner_id = $1 order by id",
+      [DEMO_IDS.learner]
+    );
+    const temporaryIds = [randomUUID(), randomUUID(), randomUUID()];
+    try {
+      await pool.query("update activities set occurred_at = '2026-10-16T09:00:00.000Z' where learner_id = $1", [DEMO_IDS.learner]);
+      await pool.query(
+        `insert into activities (id, learner_id, activity_type, reference_type, reference_id, minutes, evidence, occurred_at)
+         values ($1, $4, 'lesson', 'lesson', $5, 10, '{}'::jsonb, '2026-10-17T09:00:00.000Z'),
+                ($2, $4, 'lesson', 'lesson', $5, 10, '{}'::jsonb, '2026-10-18T09:00:00.000Z'),
+                ($3, $4, 'lesson', 'lesson', $5, 10, '{}'::jsonb, '2026-10-19T09:00:00.000Z')`,
+        [...temporaryIds, DEMO_IDS.learner, DEMO_IDS.lessons[0]]
+      );
+
+      const response = await app.inject({ method: "GET", url: "/api/v1/learner/home", headers: { cookie } });
+
+      expect(response.statusCode, response.body).toBe(200);
+      expect(response.json().metrics.streakDays).toBe(2);
+    } finally {
+      await pool.query("delete from activities where id = any($1::uuid[])", [temporaryIds]);
+      for (const row of snapshot.rows) {
+        await pool.query("update activities set occurred_at = $2 where id = $1", [row.id, row.occurred_at]);
+      }
+      vi.useRealTimers();
+    }
+  });
+
+  it("reports a home inactivity reminder after two full days without learning", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-10-14T12:00:00.000Z"));
+    const snapshot = await pool.query<{ id: string; occurred_at: Date }>(
+      "select id, occurred_at from activities where learner_id = $1 order by id",
+      [DEMO_IDS.learner]
+    );
+    try {
+      await pool.query("update activities set occurred_at = '2026-10-12T09:00:00.000Z' where learner_id = $1", [DEMO_IDS.learner]);
+
+      const response = await app.inject({ method: "GET", url: "/api/v1/learner/home", headers: { cookie } });
+
+      expect(response.statusCode, response.body).toBe(200);
+      expect(response.json().inactivityReminder).toEqual({ inactiveDays: 2 });
+    } finally {
+      for (const row of snapshot.rows) {
+        await pool.query("update activities set occurred_at = $2 where id = $1", [row.id, row.occurred_at]);
+      }
       vi.useRealTimers();
     }
   });

@@ -181,9 +181,9 @@ export const placementDefinition: StoredAssessmentDefinition = {
 };
 
 export const levelUpDefinition: StoredAssessmentDefinition = {
-  key: "levelup-b1", kind: "level-up", title: "Đề thi lên mức B1", version: 1, totalMinutes: 38, totalScore: 100, targetLevel: "B1",
+  key: "levelup-b1", kind: "level-up", title: "Đề thi lên mức B1", version: 1, totalMinutes: 35, totalScore: 100, targetLevel: "B1",
   sections: [
-    { code: "listening", title: "Nghe", durationMinutes: 8, maxScore: 25, instructions: ["5 câu, mỗi câu 5 điểm."], groups: [{
+    { code: "listening", title: "Nghe", durationMinutes: 7, maxScore: 25, instructions: ["5 câu, mỗi câu 5 điểm."], groups: [{
       ...listeningGroups[0]!,
       instruction: "Nghe thông báo và trả lời 5 câu.",
       tasks: [
@@ -191,7 +191,7 @@ export const levelUpDefinition: StoredAssessmentDefinition = {
         choice("LA_LEVEL_5", "What will the team discuss?", ["Next year's budget", "Last month's results", "A new office", "The holiday schedule"], 1, 5)
       ]
     }] },
-    { code: "reading", title: "Đọc", durationMinutes: 13, maxScore: 25, instructions: ["5 câu, mỗi câu 5 điểm."], groups: [{ ...readingGroups[1]!, tasks: readingGroups[1]!.tasks.slice(0, 5).map((task) => ({ ...task, maxScore: 5 })) }] },
+    { code: "reading", title: "Đọc", durationMinutes: 11, maxScore: 25, instructions: ["5 câu, mỗi câu 5 điểm."], groups: [{ ...readingGroups[1]!, tasks: readingGroups[1]!.tasks.slice(0, 5).map((task) => ({ ...task, maxScore: 5 })) }] },
     { code: "writing", title: "Viết", durationMinutes: 10, maxScore: 25, instructions: ["Viết 80–120 từ theo tình huống công việc."], groups: [{ key: "LW", title: "Writing", instruction: "Hoàn thành một task.", tasks: [{ key: "LW1", prompt: "Viết email xác nhận một thay đổi lịch họp và đề xuất bước tiếp theo.", responseType: "long_text", maxScore: 25, minWords: 80, maxWords: 120 }] }] },
     { code: "speaking", title: "Nói", durationMinutes: 7, maxScore: 25, instructions: ["Hoàn thành một tình huống nói ở mức đích."], groups: [{ key: "LS", title: "Speaking", instruction: "Nộp bằng chứng nói.", tasks: [{ key: "LS1", prompt: "Giải thích cho đồng nghiệp một dự án bị trễ và thống nhất hành động tiếp theo.", responseType: "speaking_evidence", maxScore: 25 }] }] }
   ]

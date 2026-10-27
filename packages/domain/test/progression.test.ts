@@ -46,7 +46,7 @@ describe("P2 progression policy", () => {
     expect(calculateWeeklyPracticeScore({ meaning: 5, vocabulary: 5, grammar: 5, offTopic: true })).toBe(30);
   });
 
-  it("uses all configured readiness thresholds instead of hard-coded values", () => {
+  it("uses exactly the four level-up signals and keeps the separate wrong-rate threshold from blocking the exam", () => {
     const readiness = buildLevelReadiness({
       metrics: { lessonCompletion: 88, firstTryAccuracy: 72, weeklyPractice: 79, coachRubric: 3.8, coachTurns: 7, wrongRate: 20, attemptedParts: 6 },
       thresholds: { days: 21, lessons: 85, firstTry: 70, submission: 75, coach: 3.5, coachTurns: 6, wrong: 25, minParts: 5 },
@@ -58,14 +58,13 @@ describe("P2 progression policy", () => {
       ["lessonCompletion", 85, true],
       ["firstTryAccuracy", 70, true],
       ["weeklyPractice", 75, true],
-      ["coachRubric", 3.5, true],
-      ["wrongRate", 25, true]
+      ["coachRubric", 3.5, true]
     ]);
     expect(buildLevelReadiness({
       metrics: { lessonCompletion: 88, firstTryAccuracy: 72, weeklyPractice: 79, coachRubric: 3.8, coachTurns: 7, wrongRate: 20, attemptedParts: 4 },
       thresholds: { days: 21, lessons: 85, firstTry: 70, submission: 75, coach: 3.5, coachTurns: 6, wrong: 25, minParts: 5 },
       examAvailable: true
-    }).eligible).toBe(false);
+    }).eligible).toBe(true);
   });
 
   it("requires total 70 and at least 50 percent in every level-up skill", () => {
