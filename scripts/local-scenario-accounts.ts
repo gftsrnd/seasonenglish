@@ -46,6 +46,7 @@ export const LOCAL_SCENARIO_ACCOUNTS: readonly LocalScenarioAccount[] = [
   learner(7, "learner-placement-borderline", "Dương Mỹ Linh", "my.linh.duong@scenario.e4s.local", { placement: "borderline" }),
   learner(8, "learner-lesson-b1", "Võ Thành Nam", "thanh.nam.vo@scenario.e4s.local", { cefr: "B1", cefrApproved: true }),
   learner(9, "learner-lesson-attempts", "Nguyễn Quỳnh Anh", "quynh.anh.nguyen@scenario.e4s.local", { cefr: "A2", cefrApproved: true }),
+  learner(19, "learner-lesson-date-lock", "Nguyễn Minh Khoa", "minh.khoa.nguyen@scenario.e4s.local", { cefr: "A2", cefrApproved: true }),
   learner(10, "learner-weekly", "Trương Hải Yến", "hai.yen.truong@scenario.e4s.local", { cefr: "A2", cefrApproved: true }),
   learner(11, "learner-level-ready", "Đặng Quốc Việt", "quoc.viet.dang@scenario.e4s.local", { cefr: "A2", cefrApproved: true }),
   learner(12, "learner-history", "Ngô Thanh Thảo", "thanh.thao.ngo@scenario.e4s.local", { cefr: "A2", cefrApproved: true }),
@@ -327,6 +328,21 @@ async function seedLearningScenarios(client: Client) {
       `insert into lesson_part_attempts (id, learner_id, lesson_id, part_code, request_key, attempt_number, status, answer, score, feedback)
        values (gen_random_uuid(), $1, $2, 'listening', gen_random_uuid(), $3, $4, 'Incorrect scenario answer', 0, 'Nghe lại rồi kiểm tra đáp án.')`,
       [attemptsAccount.id, activeA2LessonIds[0], attemptNumber, attemptNumber === 1 ? "wrong_retry" : "wrong_exhausted"]
+    );
+  }
+  const dateLockAccount = byKey.get("learner-lesson-date-lock")!;
+  const dateLockCompleted = await client.query<{ count: number }>(
+    `select least($1::int - 1, greatest(1, extract(isodow from current_date)::int)) as count`,
+    [activeA2LessonIds.length]
+  );
+  for (const lessonId of activeA2LessonIds.slice(0, dateLockCompleted.rows[0]?.count ?? 1)) {
+    const partCodes = ["listening", "reading", "writing", "word_class", "word_use", "speaking"];
+    const evidence = Object.fromEntries(partCodes.map((code) => [code, { attempts: 1, score: 100, status: "correct" }]));
+    await client.query(
+      `insert into progress_records
+         (id, learner_id, lesson_id, status, score, evidence, started_at, completed_at)
+       values (gen_random_uuid(), $1, $2, 'completed', 100, $3::jsonb, now() - interval '1 hour', now())`,
+      [dateLockAccount.id, lessonId, JSON.stringify({ fixture: dateLockAccount.key, completedPartCodes: partCodes, evidence })]
     );
   }
   await seedLevelReadyEvidence(client, byKey.get("learner-level-ready")!, sets);

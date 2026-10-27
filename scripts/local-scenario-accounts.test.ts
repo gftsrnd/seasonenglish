@@ -15,6 +15,7 @@ describe("local scenario accounts", () => {
       { key: "learner-placement-borderline", displayName: "Dương Mỹ Linh", email: "my.linh.duong@scenario.e4s.local" },
       { key: "learner-lesson-b1", displayName: "Võ Thành Nam", email: "thanh.nam.vo@scenario.e4s.local" },
       { key: "learner-lesson-attempts", displayName: "Nguyễn Quỳnh Anh", email: "quynh.anh.nguyen@scenario.e4s.local" },
+      { key: "learner-lesson-date-lock", displayName: "Nguyễn Minh Khoa", email: "minh.khoa.nguyen@scenario.e4s.local" },
       { key: "learner-weekly", displayName: "Trương Hải Yến", email: "hai.yen.truong@scenario.e4s.local" },
       { key: "learner-level-ready", displayName: "Đặng Quốc Việt", email: "quoc.viet.dang@scenario.e4s.local" },
       { key: "learner-history", displayName: "Ngô Thanh Thảo", email: "thanh.thao.ngo@scenario.e4s.local" },
