@@ -36,7 +36,7 @@ function lessonSet(words: Array<Record<string, unknown>>): ContentLessonSetVersi
         { code: "instruction", title: "Hướng dẫn", content: { steps: ["Một", "Hai", "Ba"] } },
         { code: "vocabulary", title: "Từ vựng", content: { items: words } },
         { code: "grammar", title: "Ngữ pháp", content: { formula: "I give + feedback", usage: "Dùng để đưa phản hồi.", examples: ["I give clear feedback."] } },
-        { code: "pronunciation", title: "Phát âm", content: { focus: "/f/ trong feedback", instruction: "Cắn nhẹ môi dưới rồi thổi hơi.", words: [{ word: "feedback", ipa: "/ˈfiːdbæk/" }] } },
+        { code: "pronunciation", title: "Phát âm", content: { focus: "/f/ trong feedback", instruction: "Cắn nhẹ môi dưới rồi thổi hơi.", words: [{ word: "feedback", ipa: "/ˈfiːdbæk/" }, { word: "phone", ipa: "/fəʊn/" }, { word: "office", ipa: "/ˈɒfɪs/" }] } },
         { code: "listening", title: "Nghe", content: { audio: "I give clear feedback.", script: "I give clear feedback.", ...choice } },
         { code: "reading", title: "Đọc", content: { text: "Text", ...choice } },
         { code: "writing", title: "Viết", content: { type: "fill", prompt: "Write", answer: "give" } },
@@ -130,6 +130,23 @@ describe("lesson detail warnings", () => {
     })]);
   });
 
+  it("flags an existing pronunciation section when its sound and practice words are empty", () => {
+    const source = lessonSet([
+      { ...baseWord("job"), synonyms: [{ word: "task" }], antonyms: [] }
+    ]);
+    source.lessons[0]!.dayNumber = 3;
+    const pronunciation = source.lessons[0]!.parts.find((part) => part.code === "pronunciation");
+    if (pronunciation) pronunciation.content = { focus: "", tip: "", words: [] };
+
+    const warnings = adaptLessonSet(source, { aiConnected: true }).warnings;
+
+    expect(warnings.details).toBe(1);
+    expect(warnings.detailIssues).toEqual([expect.objectContaining({
+      dayLabel: "T4",
+      missing: expect.arrayContaining(["Phát âm chưa đủ dữ liệu — cần âm mục tiêu và 3 từ luyện"])
+    })]);
+  });
+
   it("does not show an AI repair warning only because legacy vocabulary has no part of speech", () => {
     const source = lessonSet([
       { ...baseWord("job"), type: "", synonyms: [{ word: "task" }], antonyms: [{ word: "unemployment" }] },
@@ -215,7 +232,7 @@ describe("lesson detail warnings", () => {
     const phoneme = screen.getByRole("button", { name: "Nghe âm /f/" });
     expect(phoneme).toBeEnabled();
     expect(screen.getByLabelText("Luyện từ phát âm").firstElementChild).toHaveClass("operator-pronunciation-word-chip");
-    expect(screen.getByLabelText("Luyện từ phát âm").querySelectorAll(":scope > button")).toHaveLength(1);
+    expect(screen.getByLabelText("Luyện từ phát âm").querySelectorAll(":scope > button")).toHaveLength(3);
     expect(screen.getByText("Cắn nhẹ môi dưới rồi thổi hơi.").closest("p")).toHaveClass("operator-pronunciation-tip");
   });
 
