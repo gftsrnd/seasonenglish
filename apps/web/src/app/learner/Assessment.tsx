@@ -313,7 +313,7 @@ function ActiveAssessment({ view, actions, section, sectionIndex, runtime, local
         {group.tasks.map((task, index) => {
           const response = findResponse(attempt.responses, section.code, task.key);
           const number = section.groups.slice(0, groupIndex).reduce((total, candidate) => total + candidate.tasks.length, 0) + index + 1;
-          return <Task key={task.key} task={task} number={number} value={local[task.key] ?? response?.value ?? ""} response={response} view={view} actions={actions} section={section.code} showHeading={section.code !== "writing" && section.code !== "speaking"} onSave={(input) => onSave(task, input)} onAudioBusyChange={onAudioBusyChange} />;
+          return <Task key={task.key} task={task} number={number} {...(section.code === "speaking" && group.tasks.length > 1 ? { questionNumber: index + 1 } : {})} value={local[task.key] ?? response?.value ?? ""} response={response} view={view} actions={actions} section={section.code} showHeading={section.code !== "writing" && section.code !== "speaking"} onSave={(input) => onSave(task, input)} onAudioBusyChange={onAudioBusyChange} />;
         })}
       </div>
     </section>)}
@@ -474,13 +474,13 @@ function Stimulus({ stimulus, maxPlays, played, onPlay }: { stimulus: Assessment
   </>;
 }
 
-function Task({ task, number, value, response, view, actions, section, showHeading = true, onSave, onAudioBusyChange }: { task: AssessmentTaskView; number: number; value: string; response: AssessmentResponseView | undefined; view: AssessmentView; actions: LearnerCallbacks; section: AssessmentSectionCode; showHeading?: boolean; onSave: (input: SaveAssessmentResponseInput) => void; onAudioBusyChange: (taskKey: string, busy: boolean) => void }) {
+function Task({ task, number, questionNumber, value, response, view, actions, section, showHeading = true, onSave, onAudioBusyChange }: { task: AssessmentTaskView; number: number; questionNumber?: number; value: string; response: AssessmentResponseView | undefined; view: AssessmentView; actions: LearnerCallbacks; section: AssessmentSectionCode; showHeading?: boolean; onSave: (input: SaveAssessmentResponseInput) => void; onAudioBusyChange: (taskKey: string, busy: boolean) => void }) {
   const promptId = `assessment-task-${task.key}-prompt`;
   const hintId = `assessment-task-${task.key}-hint`;
   const answerHint = [task.minWords ? `Tối thiểu ${task.minWords} từ.` : null, task.maxWords ? `Tối đa ${task.maxWords} từ.` : null].filter(Boolean).join(" ");
   const wordTarget = task.minWords && task.maxWords ? `${task.minWords}–${task.maxWords}` : task.minWords ? `≥ ${task.minWords}` : task.maxWords ? `${task.maxWords}` : null;
   return <article className={`card flat assessment-task-card${showHeading ? "" : " assessment-task-response"}`} data-task-key={task.key}>
-    {showHeading ? <div className="assessment-task-heading"><h4>{task.title ?? `Task ${number}`}</h4><span className="badge">{task.maxScore} điểm</span></div> : null}
+    {showHeading || questionNumber ? <div className="assessment-task-heading"><h4>{questionNumber ? `Câu ${questionNumber}` : task.title ?? `Task ${number}`}</h4>{showHeading ? <span className="badge">{task.maxScore} điểm</span> : null}</div> : null}
     <p id={promptId} className="assessment-task-prompt" style={task.responseType === "speaking_evidence" ? { whiteSpace: "pre-line" } : undefined}>{renderAssessmentPrompt(task.prompt)}</p>
     {task.interaction ? <div className="card soft assessment-roleplay-brief" role="note">
       <b>Khách hàng mở đầu:</b>
