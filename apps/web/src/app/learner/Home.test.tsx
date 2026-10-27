@@ -196,7 +196,9 @@ describe("learner Home parity", () => {
 
     const primary = document.querySelector<HTMLElement>('[data-home-block="primary"]');
     expect(primary).not.toBeNull();
-    expect(within(primary!).getByRole("heading", { name: "Xong bài hôm nay rồi!" })).toBeInTheDocument();
+    expect(within(primary!).getByRole("heading", { name: /Bài này mở vào/ })).toBeInTheDocument();
+    expect(within(primary!).getByText(/chưa có nút học bài này/)).toBeInTheDocument();
+    expect(within(primary!).queryByRole("link", { name: /Học bài/ })).not.toBeInTheDocument();
     expect(within(primary!).queryByRole("link", { name: "Luyện với Season" })).not.toBeInTheDocument();
   });
 
@@ -243,6 +245,25 @@ describe("learner Home parity", () => {
     expect(within(path!).queryByText("T2 · hôm nay")).not.toBeInTheDocument();
     expect(primary).not.toBeNull();
     expect(within(primary!).getByText(/Bài học bù · T2 · Tuần 1/)).toBeInTheDocument();
+  });
+
+  it("explains a later prior-lesson lock and sends the learner to the missing lesson", () => {
+    const view = makeView();
+    const lockedLesson = {
+      ...view.lessons[2]!,
+      lock: {
+        reason: "prior" as const,
+        message: "Hoàn thành bài T2 trước để mở bài này.",
+        dayNumber: 2,
+        totalLessons: 5,
+        blocker: { id: view.lessons[1]!.id, dayNumber: 1, title: view.lessons[1]!.title }
+      }
+    };
+    render(<LearnerHome view={{ ...view, lessons: [view.lessons[0]!, view.lessons[1]!, lockedLesson, ...view.lessons.slice(3)] }} actions={actions} />);
+
+    const guidance = screen.getByRole("region", { name: "Hướng dẫn mở bài" });
+    expect(within(guidance).getByRole("heading", { name: "Học bù bài trước đã nhé" })).toBeInTheDocument();
+    expect(within(guidance).getByRole("link", { name: "Học bài T2 ngay" })).toHaveAttribute("href", "/lesson/lesson-1");
   });
 
   it("labels an overdue not-started next lesson as make-up", () => {
