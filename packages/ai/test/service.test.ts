@@ -188,6 +188,18 @@ describe("AI service", () => {
     expect(JSON.stringify(result.metadata)).not.toContain("I work at product");
   });
 
+  it("forwards a deterministic temperature override to the provider", async () => {
+    const complete = vi.fn().mockResolvedValue({ output: validCoachOutput, usage: {} });
+    const service = createAiService({ registry: AI_TASKS, provider: fixtureProvider(complete), loadPrompt: async () => "Coach safely." });
+
+    await service.runTask("coach_dialogue", {
+      message: "I sent the agenda.", cefr: "A2", persona: "formal", mode: "practice",
+      scenario: "Meeting", currentQuestion: "What did you send?", priorTurns: []
+    }, { temperature: 0 });
+
+    expect(complete.mock.calls[0]?.[0]).toMatchObject({ temperature: 0 });
+  });
+
   it("rejects malformed structured output instead of persisting it", async () => {
     const service = createAiService({
       registry: AI_TASKS,

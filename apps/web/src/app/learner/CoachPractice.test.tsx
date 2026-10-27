@@ -215,11 +215,20 @@ describe("app coach and weekly practice speech input", () => {
     expect(correction).not.toHaveTextContent("Không có lỗi cần sửa.");
   });
 
-  it("uses compact vocabulary and rounded icon controls", () => {
+  it("keeps secret words locked until used and offers TTS for every Coach turn", async () => {
     enableSpeechRecognition();
-    render(<LearnerCoach view={{ ...coach, vocabulary: [{ word: "agenda", meaning: "chương trình họp", opened: false }] }} actions={actions()} />);
+    const callback = actions();
+    const user = userEvent.setup();
+    render(<LearnerCoach view={{ ...coach, messages: [{ id: "coach-1", speaker: "coach", text: "What is on the agenda?", createdAt: "now" }], vocabulary: [
+      { word: "agenda", meaning: "chương trình họp", opened: false },
+      { word: "deadline", meaning: "hạn chót", opened: true }
+    ] }} actions={callback} />);
 
-    expect(screen.getByRole("button", { name: "Mở từ bí mật 1" })).toHaveClass("coach-word-chip");
+    expect(screen.queryByRole("button", { name: "Mở từ bí mật 1" })).not.toBeInTheDocument();
+    expect(screen.getByText("Gợi ý: chương trình họp")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Nghe từ deadline: hạn chót" })).toHaveClass("coach-word-chip");
+    await user.click(screen.getByRole("button", { name: "Nghe câu của Season" }));
+    expect(callback.speak).toHaveBeenCalledWith("What is on the agenda?", "en-US");
     expect(screen.getByRole("button", { name: "Nói" })).toHaveClass("coach-compose-icon");
     expect(screen.getByRole("button", { name: "Gửi" })).toHaveClass("coach-send");
     expect(screen.getByRole("button", { name: "Gửi" }).querySelector("svg")).toBeInTheDocument();
@@ -354,11 +363,11 @@ describe("app coach and weekly practice speech input", () => {
 
   it("uses a standard lock icon for unopened vocabulary", () => {
     render(<LearnerCoach view={{ ...coach, vocabulary: [{ word: "colleague", meaning: "đồng nghiệp", opened: false }, { word: "colleague", meaning: "đồng nghiệp", opened: false }] }} actions={actions()} />);
-    const button = screen.getByRole("button", { name: "Mở từ bí mật 1" });
-    expect(button.querySelector("svg.lucide-lock-keyhole")).toBeInTheDocument();
-    expect(button).not.toHaveTextContent("🔒");
-    expect(button).not.toHaveTextContent("Mở từ");
-    expect(screen.getAllByRole("button", { name: /Mở từ bí mật/ })).toHaveLength(1);
+    const lockedWord = screen.getByLabelText("Từ bí mật 1 chưa mở");
+    expect(lockedWord.querySelector("svg.lucide-lock-keyhole")).toBeInTheDocument();
+    expect(lockedWord).not.toHaveTextContent("🔒");
+    expect(lockedWord).toHaveTextContent("Gợi ý: đồng nghiệp");
+    expect(screen.getAllByLabelText(/Từ bí mật .* chưa mở/)).toHaveLength(1);
   });
 
   it("keeps the message composer to one compact line", () => {

@@ -113,7 +113,12 @@ describe("new learner app frontend", () => {
       view: {
         cefr: "B1",
         aiAvailable: true,
-        wordSet: { id: "set-1", topic: "Meetings", cefr: "B1", source: "custom", words: [] },
+        wordSet: { id: "set-1", topic: "Meetings", cefr: "B1", source: "custom", words: [
+          { id: "colleague", english: "colleague", vietnamese: "đồng nghiệp", definition: "a co-worker", partOfSpeech: "noun" },
+          { id: "schedule", english: "schedule", vietnamese: "lịch trình", definition: "a plan of times", partOfSpeech: "noun" },
+          { id: "coordinate", english: "coordinate", vietnamese: "phối hợp", definition: "organize together", partOfSpeech: "verb" },
+          { id: "communicate", english: "communicate", vietnamese: "giao tiếp", definition: "share information", partOfSpeech: "verb" }
+        ] },
         games: [],
         arena: { eligible: true, requiredLevel: "B1", points: 50, pendingDuels: 0 }
       }

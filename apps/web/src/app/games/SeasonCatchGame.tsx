@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { GameAnswerInput, GameEvidenceEventInput, GameWordSetView } from "@e4s/contracts";
+import { Heart } from "lucide-react";
 import { choices, prepareGameAttempt, type FinishGame, type GameWord } from "./types.js";
 import { currentSeasonVisual, DinoGameOverArt, SeasonCatchItem, SeasonHero } from "./season-art.js";
 import { useExperience } from "../../features/experience/Experience.js";
@@ -135,7 +136,7 @@ export function SeasonCatchGame({ words: source, cefr, onFinish, attemptSeed = 0
   };
   const noticeTone = notice.startsWith("✅") ? "is-success" : notice.startsWith("💔") ? "is-error" : "";
   return <div className="game-runner" aria-busy={busy || undefined}>
-    <div className="game-hud"><h2>Lượt {Math.min(round + 1, words.length)}/{words.length}</h2><span>Điểm <strong>{score}</strong></span><span aria-label={`${lives} tim`}>{"❤️".repeat(Math.max(0, lives))}{"🖤".repeat(Math.max(0, 3 - lives))}</span></div>
+    <div className="game-hud"><h2>Lượt {Math.min(round + 1, words.length)}/{words.length}</h2><span>Điểm <strong>{score}</strong></span><span className="game-lives" aria-label={`${lives} mạng còn lại`}>{[0, 1, 2].map((life) => <Heart className={life < lives ? "is-active" : "is-lost"} fill={life < lives ? "currentColor" : "none"} size={17} strokeWidth={2} aria-hidden="true" key={life} />)}</span></div>
     <div ref={sceneRef} className="catch-scene catch-arena" role="application" aria-label="Màn chơi Season catch" tabIndex={0} onBlur={() => { eventPending.current = false; pointerDown.current = false; }} onPointerMove={(event) => { if (!pointerDown.current && event.buttons === 0) return; event.preventDefault(); setFromPointer(event.clientX, event.currentTarget); }} onPointerDown={(event) => { event.preventDefault(); pointerDown.current = true; event.currentTarget.focus({ preventScroll: true }); setFromPointer(event.clientX, event.currentTarget); }} onPointerUp={() => { pointerDown.current = false; }} onPointerCancel={() => { pointerDown.current = false; }} onPointerLeave={() => { pointerDown.current = false; }}>
       <p className="catch-prompt"><SeasonCatchItem /><strong>{current.vietnamese}</strong><small>{current.definition}</small></p>
       <div className="catch-sky" aria-hidden="true"><span className="cloud cloud--one" /><span className="cloud cloud--two" /></div>

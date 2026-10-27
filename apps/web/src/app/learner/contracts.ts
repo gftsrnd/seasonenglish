@@ -137,7 +137,6 @@ export interface LearnerCallbacks {
   sendCoachMessage: (message: string) => void | Promise<void>;
   changeCoachPersona: (persona: CoachPersona) => void | Promise<void>;
   startNewCoachChat: () => void | Promise<void>;
-  unlockCoachVocabulary?: (word: string) => void | Promise<void>;
   sendChallengeMessage: (message: string) => void | Promise<void>;
   submitWeeklyPractice: (text: string) => void | Promise<void>;
   appealWeeklyPractice?: (submissionId: string, reason: string) => void | Promise<void>;

@@ -1,7 +1,8 @@
 import { describe, expect, it } from "vitest";
 import type { CoachTaskOutput } from "@e4s/ai";
 import {
-  coachQuestionForPersona, isAcknowledgementOnly, isInsufficientCoachInput, validateCoachPersonaOutput
+  coachQuestionForPersona, isAcknowledgementOnly, isInsufficientCoachInput,
+  normalizeCoachVocabularyUnlocks, validateCoachPersonaOutput
 } from "../src/modules/coach/routes.js";
 
 const output = (seasonReply: string, nextQuestion: string): CoachTaskOutput => ({
@@ -30,8 +31,10 @@ describe("Season persona output policy", () => {
     expect(isInsufficientCoachInput("I agree.")).toBe(false);
   });
 
-  it("accepts professional Formal language with ordinary emphasis and rejects contractions, slang, and emoji", () => {
-    expect(validateCoachPersonaOutput(output("Great! Thank you for the clear answer.", "Could you describe your role?"), "formal")).toEqual([]);
+  it("accepts professional Formal language and rejects contractions, slang, emoji, and exclamation marks", () => {
+    expect(validateCoachPersonaOutput(output("Thank you for the clear answer.", "Could you describe your role?"), "formal")).toEqual([]);
+    expect(validateCoachPersonaOutput(output("Great! Thank you for the clear answer.", "Could you describe your role?"), "formal"))
+      .toContain("Formal reply contains an exclamation mark.");
     expect(validateCoachPersonaOutput(output("That's great, dude! 😊", "What's next?"), "formal")).toEqual(expect.arrayContaining([
       expect.stringContaining("contraction"), expect.stringContaining("slang"),
       expect.stringContaining("emoji")
@@ -78,5 +81,18 @@ describe("Season persona output policy", () => {
   it("expands contractions in the active question for the Formal persona", () => {
     expect(coachQuestionForPersona("Let's practise. What's your answer? 😊", "formal"))
       .toBe("Let us practise. What is your answer?");
+  });
+
+  it("only opens configured secret words that the learner actually used in a valid sentence", () => {
+    const claimed = { ...output("Good answer.", "What happens next?"), usedWords: ["agenda", "deadline", "invented"] };
+    expect(normalizeCoachVocabularyUnlocks(claimed, "I sent the agenda today.", [
+      { word: "agenda", meaning: "chương trình họp", opened: false },
+      { word: "deadline", meaning: "hạn chót", opened: false }
+    ]).usedWords).toEqual(["agenda"]);
+
+    expect(normalizeCoachVocabularyUnlocks({
+      ...claimed,
+      evaluation: { status: "off_topic", result: "off_topic", countsTowardGoal: false, noteVi: "Lạc đề." }
+    }, "Agenda is a word.", [{ word: "agenda", meaning: "chương trình họp", opened: false }]).usedWords).toEqual([]);
   });
 });

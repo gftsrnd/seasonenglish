@@ -21,6 +21,7 @@ export interface AiProviderRequest {
   input: unknown;
   outputJsonSchema: Record<string, unknown>;
   maxOutputTokens?: number;
+  temperature?: number;
   signal: AbortSignal;
   traceId: string;
 }
@@ -81,6 +82,6 @@ export interface AiTaskRunner {
   runTask(
     taskId: string,
     input: unknown,
-    options?: { systemPrompt?: string; maxOutputTokens?: number }
+    options?: { systemPrompt?: string; maxOutputTokens?: number; temperature?: number }
   ): Promise<AiRunResult>;
 }

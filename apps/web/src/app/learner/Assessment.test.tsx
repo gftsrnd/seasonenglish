@@ -544,9 +544,12 @@ describe("assessment HCI states", () => {
     expect(screen.getByRole("heading", { name: /Task 1 – Warm-up \(3 phút · A1–A2\)/ })).toBeInTheDocument();
     expect(screen.getByText("The examiner asks:")).toBeInTheDocument();
     expect(screen.getByRole("table", { name: "Dữ liệu khiếu nại theo quý" })).toBeInTheDocument();
-    expect(screen.getByText("How would you acknowledge the customer's frustration?")).toBeInTheDocument();
-    expect(screen.getByText("When can the customer expect a follow-up?")).toBeInTheDocument();
-    expect(screen.getAllByRole("heading", { name: /^Câu [1-4]$/ })).toHaveLength(4);
+    const firstQuestion = container.querySelector('[data-task-key="S3_Q1"] .assessment-task-prompt');
+    const lastQuestion = container.querySelector('[data-task-key="S3_Q4"] .assessment-task-prompt');
+    expect(firstQuestion).toHaveTextContent("1. How would you acknowledge the customer's frustration?");
+    expect(firstQuestion?.tagName).toBe("P");
+    expect(lastQuestion).toHaveTextContent("4. When can the customer expect a follow-up?");
+    expect(screen.queryByRole("heading", { name: /^Câu [1-4]$/ })).not.toBeInTheDocument();
     expect(screen.queryByText(/Khách hàng mở đầu/)).not.toBeInTheDocument();
     expect(screen.getAllByLabelText("Tải file ghi âm")).toHaveLength(7);
     expect(screen.queryByText("Speaking tasks")).not.toBeInTheDocument();

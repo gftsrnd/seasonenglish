@@ -103,6 +103,34 @@ describe("AI Coach API", () => {
     await pool.query(`update organization_settings set configuration = configuration || '{"coachDailyLimit":20}'::jsonb`);
   });
 
+  it("blocks every new message at the daily cap, including acknowledgement-only text", async () => {
+    await pool.query(`update organization_settings set configuration = configuration || '{"coachDailyLimit":0}'::jsonb`);
+    try {
+      const capped = await app.inject({
+        method: "POST", url: "/api/v1/coach/messages", headers: { cookie: learnerCookie },
+        payload: { requestId: "10000000-0000-4000-8000-000000000030", message: "ok" }
+      });
+      expect(capped.statusCode, capped.body).toBe(429);
+      expect(capped.json()).toEqual({ code: "COACH_DAILY_LIMIT" });
+      const after = await app.inject({ method: "GET", url: "/api/v1/coach", headers: { cookie: learnerCookie } });
+      expect(after.json().messages).not.toEqual(expect.arrayContaining([
+        expect.objectContaining({ speaker: "learner", text: "ok" })
+      ]));
+    } finally {
+      await pool.query(`update organization_settings set configuration = configuration || '{"coachDailyLimit":20}'::jsonb`);
+    }
+  });
+
+  it("does not expose an endpoint for manually opening a secret word", async () => {
+    const before = await app.inject({ method: "GET", url: "/api/v1/coach", headers: { cookie: learnerCookie } });
+    const word = before.json().vocabulary.find((item: { opened: boolean }) => !item.opened)?.word as string;
+    expect(word).toEqual(expect.any(String));
+    const response = await app.inject({
+      method: "POST", url: `/api/v1/coach/vocabulary/${encodeURIComponent(word)}/unlock`, headers: { cookie: learnerCookie }
+    });
+    expect(response.statusCode).toBe(404);
+  });
+
   it("passes both formal and informal personas to the AI request and clears only the conversation", async () => {
     const changed = await app.inject({ method: "PUT", url: "/api/v1/coach/persona", headers: { cookie: learnerCookie }, payload: { persona: "formal" } });
     expect(changed.statusCode, changed.body).toBe(200);
@@ -169,6 +197,51 @@ describe("AI Coach API", () => {
     expect(runTask).toHaveBeenCalledTimes(1);
     const stored = await pool.query("select count(*)::int as count from ai_runs where trace_id = 'trace-coach-1'");
     expect(stored.rows[0]?.count).toBe(1);
+  });
+
+  it("serializes concurrent saves so the daily maximum cannot be exceeded", async () => {
+    const before = await app.inject({ method: "GET", url: "/api/v1/coach", headers: { cookie: learnerCookie } });
+    const limit = before.json().daily.used + 1;
+    await pool.query(
+      `update organization_settings set configuration = configuration || jsonb_build_object('coachDailyLimit', $1::int)`,
+      [limit]
+    );
+    let entered = 0;
+    let release!: () => void;
+    const bothEntered = new Promise<void>((resolve) => { release = resolve; });
+    runTask.mockImplementation(async () => {
+      entered += 1;
+      const call = entered;
+      if (entered === 2) release();
+      await bothEntered;
+      return {
+        output: aiOutput,
+        metadata: {
+          traceId: `trace-coach-concurrent-${call}`, taskId: "coach_dialogue", provider: "fixture", model: "fixture-model",
+          attempts: 1, latencyMs: 12, inputHash: String(call).repeat(64), schemaValid: true as const,
+          usage: { inputTokens: 20, outputTokens: 25, totalTokens: 45 }
+        }
+      };
+    });
+    try {
+      const responses = await Promise.all([
+        app.inject({ method: "POST", url: "/api/v1/coach/messages", headers: { cookie: learnerCookie }, payload: { requestId: "10000000-0000-4000-8000-000000000031", message: "I work in product design." } }),
+        app.inject({ method: "POST", url: "/api/v1/coach/messages", headers: { cookie: learnerCookie }, payload: { requestId: "10000000-0000-4000-8000-000000000032", message: "I work in product research." } })
+      ]);
+      expect(responses.map((response) => response.statusCode).sort()).toEqual([200, 429]);
+      const after = await app.inject({ method: "GET", url: "/api/v1/coach", headers: { cookie: learnerCookie } });
+      expect(after.json().daily).toEqual({ used: limit, limit });
+    } finally {
+      await pool.query(`update organization_settings set configuration = configuration || '{"coachDailyLimit":20}'::jsonb`);
+      runTask.mockImplementation(async () => ({
+        output: aiOutput,
+        metadata: {
+          traceId: "trace-coach-1", taskId: "coach_dialogue", provider: "fixture", model: "fixture-model",
+          attempts: 1, latencyMs: 12, inputHash: "a".repeat(64), schemaValid: true as const,
+          usage: { inputTokens: 20, outputTokens: 25, totalTokens: 45 }
+        }
+      }));
+    }
   });
 
   it("isolates the latest answer from earlier learner answers when requesting feedback", async () => {

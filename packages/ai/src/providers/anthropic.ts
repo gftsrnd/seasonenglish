@@ -29,6 +29,7 @@ export function createAnthropicProvider(options: {
           body: JSON.stringify({
             model,
             max_tokens: request.maxOutputTokens ?? 8192,
+            ...(request.temperature === undefined ? {} : { temperature: request.temperature }),
             ...(model === "claude-haiku-5-5" ? { thinking: { type: "disabled" } } : {}),
             tools: [{
               name: `${request.taskId.replace(/[^a-zA-Z0-9_-]/g, "_")}_output`,

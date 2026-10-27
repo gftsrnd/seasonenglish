@@ -11,7 +11,6 @@ const messageInput = z.object({
   message: z.string().trim().min(1).max(2_000)
 });
 const personaInput = z.object({ persona: z.enum(["informal", "formal"]) });
-const vocabularyUnlockParams = z.object({ word: z.string().trim().min(1).max(160) });
 
 export function registerCoachRoutes(
   app: FastifyInstance,
@@ -29,18 +28,6 @@ export function registerCoachRoutes(
     return view ?? reply.code(404).send({ code: "COACH_CONTEXT_NOT_FOUND" });
   });
 
-  app.post("/api/v1/coach/vocabulary/:word/unlock", { preHandler: learnerOnly }, async (request, reply) => {
-    const params = vocabularyUnlockParams.safeParse(request.params);
-    if (!params.success) return reply.code(400).send({ code: "INVALID_COACH_VOCABULARY" });
-    const learnerId = request.e4sSession!.user.id;
-    const view = await repositories.coach.unlockVocabulary(
-      learnerId,
-      params.data.word,
-      Boolean(await runnerFor(learnerId))
-    );
-    return view ?? reply.code(404).send({ code: "COACH_VOCABULARY_NOT_FOUND" });
-  });
-
   app.post("/api/v1/coach/messages", {
     preHandler: learnerOnly,
     config: { rateLimit: { max: 20, timeWindow: "1 minute" } }
@@ -53,6 +40,7 @@ export function registerCoachRoutes(
     const existing = await repositories.coach.currentForLearner(learnerId, true);
     if (!existing) return reply.code(404).send({ code: "COACH_CONTEXT_NOT_FOUND" });
     if (await repositories.aiRuns.requestExists(learnerId, parsed.data.requestId, "coach_dialogue")) return existing;
+    if (existing.daily.used >= existing.daily.limit) return reply.code(429).send({ code: "COACH_DAILY_LIMIT" });
     const currentQuestion = coachQuestionForPersona(
       coachCurrentQuestion(existing.messages, existing.topic), existing.persona
     );
@@ -67,8 +55,6 @@ export function registerCoachRoutes(
       });
       return await repositories.coach.currentForLearner(learnerId, true);
     }
-    if (existing.daily.used >= existing.daily.limit) return reply.code(429).send({ code: "COACH_DAILY_LIMIT" });
-
     const task = await repositories.aiRuns.activeTaskPrompt(learnerId, "coach_dialogue");
     if (!task) return reply.code(503).send({ code: "AI_PROMPT_NOT_READY" });
     try {
@@ -86,7 +72,9 @@ export function registerCoachRoutes(
       const { result, output } = await runCoachWithPersonaRepair(
         runner, aiInput, coachPersonaPrompt(task.prompt, existing.persona), existing.persona, validationContext
       );
-      const normalizedOutput = repeatCurrentQuestionForOffTopic(output, currentQuestion);
+      const normalizedOutput = normalizeCoachVocabularyUnlocks(
+        repeatCurrentQuestionForOffTopic(output, currentQuestion), parsed.data.message, existing.vocabulary
+      );
       await repositories.coach.saveAiTurn({
         learnerId,
         sessionId: existing.sessionId,
@@ -165,10 +153,9 @@ export function registerCoachRoutes(
           previousSuggestedAnswer: coachPreviousSuggestedAnswer(existing.messages)
         }
       );
-      const normalizedOutput = repeatCurrentQuestionForOffTopic(
-        output,
-        coachCurrentQuestion(existing.messages, `Tell me about your work at ${existing.targetLevel} level.`)
-      );
+      const normalizedOutput = normalizeCoachVocabularyUnlocks(repeatCurrentQuestionForOffTopic(
+        output, coachCurrentQuestion(existing.messages, `Tell me about your work at ${existing.targetLevel} level.`)
+      ), parsed.data.message, []);
       await repositories.coach.saveAiTurn({
         learnerId, sessionId: existing.sessionId, requestId: parsed.data.requestId,
         message: parsed.data.message, taskId: task.taskId, promptVersionId: task.promptVersionId,
@@ -189,7 +176,7 @@ export function coachPersonaPrompt(prompt: string, persona: "informal" | "formal
   const instruction = persona === "formal"
     ? "FORMAL STYLE: Use professional, courteous workplace English. Avoid slang, contractions, emojis, and overly familiar language."
     : "INFORMAL STYLE: Use warm, friendly, natural workplace English. Contractions are welcome, but keep the language respectful and CEFR-appropriate.";
-  const correctionGuard = "LATEST TURN ONLY: Evaluate message against currentQuestion as a fresh pair. Never carry an error, correction, score, or evidence from priorTurns into this result. TRANSLATIONS: Return a natural Vietnamese translation of Season's conversational reply in seasonReplyTranslation. For every correction, return a natural Vietnamese translation of the corrected learner sentence in corrections[].translation. Keep correction reason focused only on the short language reason; never place a translation inside reason. CORRECTIONS ONLY: Only put genuine language errors in corrections. If the learner's message is grammatical, relevant, and answers currentQuestion—even if it is brief or less specific—return corrections: [] and correctedText: \"\". Do not rewrite a correct answer merely to make it longer, more detailed, or stylistically different. RESULT LABEL: evaluation.result must be correct for a complete correct answer, partially_correct for a meaningful answer that needs a small language or content improvement, missing_information for insufficient input, or off_topic for the wrong target. INSUFFICIENT means no meaningful attempt and requires meaning score 0. If the learner gives relevant information but omits part of the requested content, use valid/partially_correct/countsTowardGoal true and a positive meaning score. Keep seasonReply and nextQuestion separate; seasonReply must not contain nextQuestion. RUBRIC SCOPE: rubric evidence and improvement must refer only to the learner's latest message and currentQuestion. Never base rubric feedback on nextQuestion or suggestedAnswer. If a criterion needs no improvement, say \"No change needed.\" suggestedAnswer must directly answer nextQuestion in the exact conversation state. It must not repeat or re-ask nextQuestion or a quoted question unless nextQuestion explicitly asks the learner to formulate a question. suggestedAnswer must never be presented as a correction to the learner's latest message.";
+  const correctionGuard = "LATEST TURN ONLY: Evaluate message against currentQuestion as a fresh pair. Never carry an error, correction, score, or evidence from priorTurns into this result. TRANSLATIONS: Return a natural Vietnamese translation of Season's conversational reply in seasonReplyTranslation. For every correction, return a natural Vietnamese translation of the corrected learner sentence in corrections[].translation. Keep correction reason focused only on the short language reason; never place a translation inside reason. CORRECTIONS ONLY: Only put genuine language errors in corrections. If the learner's message is grammatical, relevant, and answers currentQuestion—even if it is brief or less specific—return corrections: [] and correctedText: \"\". Do not rewrite a correct answer merely to make it longer, more detailed, or stylistically different. RESULT LABEL: evaluation.result must be correct for a complete correct answer, partially_correct for a meaningful answer that needs a small language or content improvement, missing_information for insufficient input, or off_topic for the wrong target. INSUFFICIENT means no meaningful attempt and requires meaning score 0. If the learner gives relevant information but omits part of the requested content, use valid/partially_correct/countsTowardGoal true and a positive meaning score. Keep seasonReply and nextQuestion separate; seasonReply must not contain nextQuestion. RUBRIC SCOPE: rubric evidence and improvement must refer only to the learner's latest message and currentQuestion. Every rubric evidence and improvement must be concise, specific, and written in Vietnamese so the learner can act on it. Never base rubric feedback on nextQuestion or suggestedAnswer. If a criterion needs no improvement, say \"Không cần thay đổi.\" suggestedAnswer must directly answer nextQuestion in the exact conversation state. It must not repeat or re-ask nextQuestion or a quoted question unless nextQuestion explicitly asks the learner to formulate a question. suggestedAnswer must never be presented as a correction to the learner's latest message. SECRET WORDS: usedWords may contain only configured secret vocabulary that appears as a whole word in the learner's latest message; never infer or invent a used word.";
   return `${prompt}\n\n${instruction}\n\n${correctionGuard}`;
 }
 
@@ -230,6 +217,26 @@ export function repeatCurrentQuestionForOffTopic(output: CoachTaskOutput, curren
   return output.evaluation.status === "off_topic" ? { ...output, nextQuestion: currentQuestion } : output;
 }
 
+export function normalizeCoachVocabularyUnlocks(
+  output: CoachTaskOutput,
+  learnerMessage: string,
+  vocabulary: Array<{ word: string; meaning?: string; opened?: boolean }>
+): CoachTaskOutput {
+  if (output.evaluation.status !== "valid" || !output.evaluation.countsTowardGoal) {
+    return { ...output, usedWords: [] };
+  }
+  const message = learnerMessage.normalize("NFKC").toLocaleLowerCase("en-US");
+  const configured = new Map(vocabulary.map((item) => [item.word.normalize("NFKC").trim().toLocaleLowerCase("en-US"), item.word]));
+  const usedWords = [...new Set(output.usedWords.map((word) => word.normalize("NFKC").trim().toLocaleLowerCase("en-US")))]
+    .filter((word) => {
+      if (!word || !configured.has(word)) return false;
+      const escaped = word.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+      return new RegExp(`(?<![\\p{L}\\p{N}_])${escaped}(?![\\p{L}\\p{N}_])`, "iu").test(message);
+    })
+    .map((word) => configured.get(word)!);
+  return { ...output, usedWords };
+}
+
 interface CoachValidationContext {
   learnerMessage: string;
   previousSuggestedAnswer?: string | undefined;
@@ -252,6 +259,7 @@ export function validateCoachPersonaOutput(
       ...(contraction ? ["Formal reply contains a contraction."] : []),
       ...(/\b(?:gonna|wanna|gotta|bro|dude|lol)\b/iu.test(text) ? ["Formal reply contains slang."] : []),
       ...(emojiCount ? ["Formal reply contains emoji."] : []),
+      ...(/!/.test(text) ? ["Formal reply contains an exclamation mark."] : []),
       ...conversationViolations
     ];
   }
@@ -296,12 +304,13 @@ async function runCoachWithPersonaRepair(
   persona: "informal" | "formal",
   validationContext?: CoachValidationContext
 ): Promise<{ result: AiRunResult; output: CoachTaskOutput }> {
-  const firstResult = await runner.runTask("coach_dialogue", input, { systemPrompt });
+  const firstResult = await runner.runTask("coach_dialogue", input, { systemPrompt, temperature: 0 });
   const first = inspectCoachOutput(firstResult.output, persona, validationContext);
   if (first.output && !first.violations.length) return { result: firstResult, output: first.output };
 
   const result = await runner.runTask("coach_dialogue", input, {
-    systemPrompt: `${systemPrompt}\n\nREPAIR THE PREVIOUS OUTPUT ONCE. Return a complete object that matches the JSON schema. Keep valid pedagogical content, but fix every listed issue.\nISSUES: ${first.violations.join(" ")}\nPREVIOUS OUTPUT:\n${safeCoachOutputJson(firstResult.output)}`
+    systemPrompt: `${systemPrompt}\n\nREPAIR THE PREVIOUS OUTPUT ONCE. Return a complete object that matches the JSON schema. Keep valid pedagogical content, but fix every listed issue.\nISSUES: ${first.violations.join(" ")}\nPREVIOUS OUTPUT:\n${safeCoachOutputJson(firstResult.output)}`,
+    temperature: 0
   });
   const repaired = inspectCoachOutput(result.output, persona, validationContext);
   if (repaired.output && !repaired.violations.length) return { result, output: repaired.output };
@@ -427,6 +436,7 @@ function formalizeText(value: string): string {
     .replace(/\b(?:gonna|wanna|gotta)\b/giu, (match) => ({ gonna: "going to", wanna: "want to", gotta: "have to" })[match.toLocaleLowerCase("en-US")] ?? match)
     .replace(/\b(?:bro|dude|lol)\b/giu, "")
     .replace(/[\p{Extended_Pictographic}\uFE0F]/gu, "")
+    .replace(/!/gu, ".")
     .replace(/\s+([,.!?;:])/gu, "$1")
     .replace(/\s+/gu, " ")
     .trim();
@@ -435,14 +445,14 @@ function formalizeText(value: string): string {
 function safeAiErrorCode(error: unknown): string {
   if (error && typeof error === "object" && "code" in error && typeof error.code === "string") {
     const code = error.code;
-    if (code.startsWith("AI_")) return code;
+    if (code.startsWith("AI_") || code === "COACH_DAILY_LIMIT") return code;
   }
   return "AI_PROVIDER_FAILED";
 }
 
 function aiErrorStatus(error: unknown): 429 | 502 | 503 | 504 {
   const code = safeAiErrorCode(error);
-  if (code === "AI_PROVIDER_RATE_LIMIT") return 429;
+  if (code === "AI_PROVIDER_RATE_LIMIT" || code === "COACH_DAILY_LIMIT") return 429;
   if (code === "AI_TIMEOUT") return 504;
   if (code === "AI_PROVIDER_NOT_CONFIGURED" || code === "AI_PROMPT_NOT_FOUND") return 503;
   return 502;

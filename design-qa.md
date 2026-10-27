@@ -65,3 +65,15 @@
 - Fresh verification: domain engagement tests 9/9, API engagement integration 17/17, local scenario integration 14/14, focused web tests 70/70, API and web typechecks passed, and Docker API/Web production builds completed. API readiness and the web route both returned HTTP 200.
 
 final result: passed
+
+## 2026-10-27 — Game availability, controls, and individual visual identity
+
+- The game hub now keeps all six games visible but disables a game with an explicit reason when the active word set cannot produce a valid round; empty sets never render misleading play links.
+- Word Sort requires four words with part-of-speech data, Crossword requires three placeable intersecting words, and the Season-rio tutorial derives its gate/Boss counts from the same round plan as the engine.
+- Typing Race includes touch keys for apostrophes and hyphens and ignores keyboard input after focus leaves the playfield. Season-rio releases held jump input when the pointer leaves and traps keyboard focus inside an open quiz.
+- The six tutorials no longer reuse the same generic three-icon sequence. Scramble, Crossword, Season catch, Season-rio, Word Sort, and Typing Race each use mechanism-specific Lucide SVG icons; Season catch was checked live with basket, movement, target, and heart imagery.
+- Existing seasonal SVG scenes and scoring rules were preserved. Game picker tiles and tutorial hero art are larger, while Scramble, Crossword, Word Sort, and Typing Race use distinct low-saturation play surfaces.
+- Authenticated Docker-local review passed at `/games/eggs`; focused game tests passed 34/34, web typecheck passed, and the production web image rebuilt successfully.
+- The full web suite currently reports 738/750 passing. The remaining failures are pre-existing/non-game parity tests involving removed micro routes/home blocks, correction history, seasonal-settings labels, Operator review metadata, and a manual lesson-editor wait; they are recorded as separate work rather than hidden by this visual pass.
+
+final result: passed

@@ -20,7 +20,7 @@ export function createAiService(options: {
     async runTask<TOutput = unknown>(
       taskId: string,
       rawInput: unknown,
-      runOptions?: { systemPrompt?: string; maxOutputTokens?: number }
+      runOptions?: { systemPrompt?: string; maxOutputTokens?: number; temperature?: number }
     ): Promise<AiRunResult<TOutput>> {
       const task = options.registry.get(taskId);
       const inputResult = task.inputSchema.safeParse(rawInput);
@@ -42,6 +42,7 @@ export function createAiService(options: {
             () => options.provider.complete({
               taskId, systemPrompt: attemptPrompt, input, outputJsonSchema: task.outputJsonSchema,
               ...(runOptions?.maxOutputTokens === undefined ? {} : { maxOutputTokens: runOptions.maxOutputTokens }),
+              ...(runOptions?.temperature === undefined ? {} : { temperature: runOptions.temperature }),
               signal: controller.signal, traceId
             }),
             timeoutMs,

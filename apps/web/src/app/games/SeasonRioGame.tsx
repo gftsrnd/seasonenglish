@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { GameAnswerInput } from "@e4s/contracts";
 import { seasonRioRoundPlan } from "@e4s/domain/engagement";
-import { ArrowLeft, ArrowRight, ArrowUp } from "lucide-react";
+import { ArrowLeft, ArrowRight, ArrowUp, Gift, Heart, Target, Timer, Trophy } from "lucide-react";
 import { choices, prepareGameAttempt, type FinishGame, type GameWord } from "./types.js";
 import { currentSeasonVisual, DinoGameOverArt, GiftArt, SeasonHero } from "./season-art.js";
 import { useExperience } from "../../features/experience/Experience.js";
@@ -169,13 +169,22 @@ export function SeasonRioGame({ words: source, onFinish, attemptSeed = 0 }: { wo
     setHeroX((value) => Math.max(18, Math.min(flagX + 40, value + direction * 8)));
   };
   const jump = () => { if (busy || quiz) return; hold("jump", true); if (velocityY.current === 0) velocityY.current = 11; };
+  const trapQuizFocus = (event: React.KeyboardEvent<HTMLDivElement>) => {
+    if (event.key !== "Tab") return;
+    const buttons = Array.from(event.currentTarget.querySelectorAll<HTMLButtonElement>("button:not(:disabled)"));
+    if (!buttons.length) return;
+    const first = buttons[0]!;
+    const last = buttons.at(-1)!;
+    if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last.focus(); }
+    else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus(); }
+  };
   const cameraLimit = Math.max(0, worldWidth - 900);
   const camera = Math.min(cameraLimit, Math.max(0, heroX * .35, heroX - 760));
   const isMoving = keys.current.ArrowLeft || keys.current.ArrowRight || keys.current.a || keys.current.d;
   const heroPose = heroY > 0 ? "jump" : isMoving ? (Math.floor(heroX / 8) % 2 ? "run1" : "run2") : "idle";
   const noticeTone = notice.startsWith("🍄") || notice.startsWith("🏁") ? "is-success" : notice.startsWith("💔") || notice.startsWith("Hết 3") ? "is-error" : notice.startsWith("⏱") ? "is-warning" : "";
   return <div className="game-runner" aria-busy={busy || undefined}>
-    <div className="game-hud"><h2>Season-rio</h2><span>🍄 <strong>{score}/{roundPlan.total}</strong></span><span>Quà <strong>{gateStates.filter((gate) => gate !== "closed").length}/{roundPlan.gateCount}</strong></span><span>{season.food.emoji} {bossHealth > 0 ? `${"❤".repeat(bossHealth)} · ⏱ ${bossSeconds}s` : "xong"}</span><span aria-label={`${lives} tim`}>{"❤️".repeat(Math.max(0, lives))}{"🖤".repeat(Math.max(0, 3 - lives))}</span></div>
+    <div className="game-hud"><h2>Season-rio</h2><span><Trophy size={16} aria-hidden="true" /><strong>{score}/{roundPlan.total}</strong></span><span><Gift size={16} aria-hidden="true" />Quà <strong>{gateStates.filter((gate) => gate !== "closed").length}/{roundPlan.gateCount}</strong></span><span><Target size={16} aria-hidden="true" />Boss <strong>{bossHealth > 0 ? bossHealth : "xong"}</strong>{bossHealth > 0 ? <><Timer size={14} aria-hidden="true" />{bossSeconds}s</> : null}</span><span className="game-lives" aria-label={`${lives} mạng còn lại`}>{[0, 1, 2].map((life) => <Heart className={life < lives ? "is-active" : "is-lost"} fill={life < lives ? "currentColor" : "none"} size={17} strokeWidth={2} aria-hidden="true" key={life} />)}</span></div>
     <div ref={sceneRef} className="rio-scene" role="application" aria-label="Màn chơi Season-rio" tabIndex={0} onBlur={(event) => { if (!event.currentTarget.contains(event.relatedTarget as Node | null)) keys.current = {}; }}>
       <div className="rio-viewport"><div className="rio-world" style={{ width: worldWidth, transform: `translateX(-${camera}px)` }}>
         <div className="rio-cloud rio-cloud--one" /><div className="rio-cloud rio-cloud--two" />
@@ -186,8 +195,8 @@ export function SeasonRioGame({ words: source, onFinish, attemptSeed = 0 }: { wo
         <div data-testid="season-rio-hero" className={`rio-hero ${heroY > 0 ? "is-jumping" : isMoving ? "is-running" : ""}`} style={{ left: heroX, bottom: 28 + heroY }}><SeasonHero pose={heroPose} /></div>
         <div className="rio-ground" />
       </div></div>
-       <div className="mario-controls" aria-label="Điều khiển Season-rio"><div><button type="button" aria-label="Sang trái" disabled={busy || Boolean(quiz)} onPointerDown={(event) => { event.preventDefault(); nudge(-1); }} onPointerUp={(event) => { event.preventDefault(); hold("ArrowLeft", false); }} onPointerCancel={() => hold("ArrowLeft", false)} onPointerLeave={() => hold("ArrowLeft", false)}><ArrowLeft className="game-control-icon" size={24} strokeWidth={2} aria-hidden="true" /></button><button type="button" aria-label="Sang phải" disabled={busy || Boolean(quiz)} onPointerDown={(event) => { event.preventDefault(); nudge(1); }} onPointerUp={(event) => { event.preventDefault(); hold("ArrowRight", false); }} onPointerCancel={() => hold("ArrowRight", false)} onPointerLeave={() => hold("ArrowRight", false)}><ArrowRight className="game-control-icon" size={24} strokeWidth={2} aria-hidden="true" /></button></div><button className="jump" type="button" aria-label="Lên" disabled={busy || Boolean(quiz)} onPointerDown={(event) => { event.preventDefault(); jump(); }} onPointerUp={(event) => { event.preventDefault(); hold("jump", false); }} onPointerCancel={() => hold("jump", false)}><ArrowUp className="game-control-icon" size={24} strokeWidth={2} aria-hidden="true" /></button></div>
-      {quiz ? <div ref={quizDialogRef} className="rio-quiz" role="dialog" aria-modal="true" aria-label={quiz.phase === "gate" ? "Câu hỏi hộp quà" : "Câu hỏi Boss"} tabIndex={-1}><div><span className="eyebrow">{quiz.phase === "gate" ? `Hộp quà ${quiz.index + 1}/${roundPlan.gateCount} hỏi` : `${season.food.emoji} Boss hỏi · ${bossSeconds}s`}</span><h3>{quiz.word.vietnamese}</h3><p>{quiz.word.definition}</p><div>{choices(words, quiz.word, 4, attemptSeed ^ quiz.index).map((choice) => <button type="button" disabled={busy} key={choice.id} onClick={() => answerQuiz(choice)}>{choice.english}</button>)}</div></div></div> : null}
+       <div className="mario-controls" aria-label="Điều khiển Season-rio"><div><button type="button" aria-label="Sang trái" disabled={busy || Boolean(quiz)} onPointerDown={(event) => { event.preventDefault(); nudge(-1); }} onPointerUp={(event) => { event.preventDefault(); hold("ArrowLeft", false); }} onPointerCancel={() => hold("ArrowLeft", false)} onPointerLeave={() => hold("ArrowLeft", false)}><ArrowLeft className="game-control-icon" size={24} strokeWidth={2} aria-hidden="true" /></button><button type="button" aria-label="Sang phải" disabled={busy || Boolean(quiz)} onPointerDown={(event) => { event.preventDefault(); nudge(1); }} onPointerUp={(event) => { event.preventDefault(); hold("ArrowRight", false); }} onPointerCancel={() => hold("ArrowRight", false)} onPointerLeave={() => hold("ArrowRight", false)}><ArrowRight className="game-control-icon" size={24} strokeWidth={2} aria-hidden="true" /></button></div><button className="jump" type="button" aria-label="Lên" disabled={busy || Boolean(quiz)} onPointerDown={(event) => { event.preventDefault(); jump(); }} onPointerUp={(event) => { event.preventDefault(); hold("jump", false); }} onPointerCancel={() => hold("jump", false)} onPointerLeave={() => hold("jump", false)}><ArrowUp className="game-control-icon" size={24} strokeWidth={2} aria-hidden="true" /></button></div>
+      {quiz ? <div ref={quizDialogRef} className="rio-quiz" role="dialog" aria-modal="true" aria-label={quiz.phase === "gate" ? "Câu hỏi hộp quà" : "Câu hỏi Boss"} tabIndex={-1} onKeyDown={trapQuizFocus}><div><span className="eyebrow">{quiz.phase === "gate" ? `Hộp quà ${quiz.index + 1}/${roundPlan.gateCount} hỏi` : `${season.food.emoji} Boss hỏi · ${bossSeconds}s`}</span><h3>{quiz.word.vietnamese}</h3><p>{quiz.word.definition}</p><div>{choices(words, quiz.word, 4, attemptSeed ^ quiz.index).map((choice) => <button type="button" disabled={busy} key={choice.id} onClick={() => answerQuiz(choice)}>{choice.english}</button>)}</div></div></div> : null}
       {ending ? <div className="game-ending" role="status">{ending === "dinosaur" ? <DinoGameOverArt /> : <span>{season.food.emoji}</span>}<strong>{ending === "dinosaur" ? "Hết mạng!" : "Hết 10 giây!"}</strong><small>{ending === "dinosaur" ? "Khủng long đã bắt kịp bạn." : `${season.food.name} khổng lồ đã hỏng.`}</small></div> : null}
     </div>
     <p className="catch-help">← → di chuyển hoặc dùng nút. Chạm hộp/cột để trả lời; trả lời xong cổng mở, sai mất ❤️. Hộp trên bục cần leo lên trước. Cuối màn, chạm {season.food.emoji} rồi trả lời đúng 3 câu trong 10 giây; sau đó chạm cờ về đích.</p>

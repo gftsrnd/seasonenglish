@@ -27,7 +27,7 @@ export function createGroqProvider(options: {
           },
           body: JSON.stringify({
             model,
-            temperature: 0.2,
+            temperature: request.temperature ?? 0.2,
             // Keep the model-safe default for Groq; Anthropic's weekly lesson
             // request may opt into a larger budget through maxOutputTokens.
             max_tokens: Math.min(request.maxOutputTokens ?? 8192, 8192),

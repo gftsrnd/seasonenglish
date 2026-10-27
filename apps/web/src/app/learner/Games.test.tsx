@@ -27,6 +27,19 @@ const view: GameHubView = {
   arena: { eligible: false, requiredLevel: "B1", points: 0, pendingDuels: 0 }
 };
 
+const playableView: GameHubView = {
+  ...view,
+  wordSet: {
+    ...view.wordSet!,
+    words: [
+      { id: "colleague", english: "colleague", vietnamese: "đồng nghiệp", definition: "a co-worker", partOfSpeech: "noun" },
+      { id: "schedule", english: "schedule", vietnamese: "lịch trình", definition: "a plan of times", partOfSpeech: "noun" },
+      { id: "coordinate", english: "coordinate", vietnamese: "phối hợp", definition: "organize together", partOfSpeech: "verb" },
+      { id: "communicate", english: "communicate", vietnamese: "giao tiếp", definition: "share information", partOfSpeech: "verb" }
+    ]
+  }
+};
+
 describe("app games affordances", () => {
   it("separates the three game setup sections into responsive cards", () => {
     render(<LearnerGames view={view} actions={actions} />);
@@ -112,7 +125,7 @@ describe("app games affordances", () => {
       key, icon: "🎮", name, description: `${name} description`, goal: "goal", instructions: [], scoring: "scoring", best: null
     });
     const gameView: GameHubView = {
-      ...view,
+      ...playableView,
       games: [
         descriptor("scramble", "Xếp chữ"), descriptor("crossword", "Ô chữ"), descriptor("eggs", "Season catch"),
         descriptor("mario", "Season-rio"), descriptor("sort", "Phân loại từ"), descriptor("typing", "Đua gõ từ")
@@ -139,12 +152,12 @@ describe("app games affordances", () => {
   });
 
   it("uses consistent Lucide icons for the six game tiles without rendering raw tile glyphs", () => {
-    render(<LearnerGames view={view} actions={actions} />);
+    render(<LearnerGames view={playableView} actions={actions} />);
 
     const icons = [
       ["Xếp chữ", "lucide-shuffle"],
       ["Ô chữ", "lucide-grid-3x3"],
-      ["Season catch", "lucide-egg"],
+      ["Season catch", "lucide-shopping-basket"],
       ["Season-rio", "lucide-sun"],
       ["Phân loại từ", "lucide-arrow-left-right"],
       ["Đua gõ từ", "lucide-keyboard"]
@@ -157,7 +170,7 @@ describe("app games affordances", () => {
       expect(icon).toHaveAttribute("width", "28");
       expect(icon).toHaveAttribute("height", "28");
       expect(icon).toHaveAttribute("stroke-width", "2");
-      expect(tile.querySelector(".game-icon")).not.toHaveTextContent(/[🔀▦🥚☀↔⌨]/);
+      expect(tile.querySelector(".game-icon")).not.toHaveTextContent(/[🔀▦🧺☀↔⌨]/);
     }
   });
 

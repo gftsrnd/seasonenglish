@@ -284,6 +284,18 @@ describe("Operator app rebuild", () => {
     expect(screen.getByText(/bài tập Từ loại · Nghe chưa đủ 4 lựa chọn/)).toBeInTheDocument();
   });
 
+  it("labels free-response lessons clearly without exposing the answer in the card header", () => {
+    render(<OperatorLessonSet view={{
+      week: 1, cefr: "A2", status: "draft", topic: "Meetings", explanationLanguage: "tiếng Việt", aiConnected: true,
+      warnings: { incomplete: 0, level: [], phrases: 0, details: 0 },
+      lessons: [{ id: "l1", day: 2, dayLabel: "T3", title: "Budget concern", durationMin: 15, practiceKind: "tự viết", practiceAnswer: "I understand your concern about the budget.", complete: true, content: <p>Đáp án mẫu: I understand your concern about the budget.</p> }]
+    } as any} actions={{ onBack: vi.fn(), onApprove: vi.fn(), onUnapprove: vi.fn(), onRegenerate: vi.fn(), onDeleteSet: vi.fn(), onFillPhrases: vi.fn(), onEnrich: vi.fn(), onEditLesson: vi.fn(), onDeleteLesson: vi.fn(), onComposeDay: vi.fn() }} />);
+
+    const card = screen.getByTestId("lesson-section-T3");
+    expect(within(card).getByText("Câu trả lời tự do")).toBeInTheDocument();
+    expect(within(card).queryByText(/tự viết\s*·\s*đáp án:/i)).not.toBeInTheDocument();
+  });
+
   it("routes a missing-detail row to the correct lesson editor", async () => {
     const user = userEvent.setup();
     const onEditLesson = vi.fn();
@@ -387,6 +399,11 @@ describe("Operator app rebuild", () => {
       }], coachTurns: [], weeklyPractices: [], appeals: [], attempts: [], tests: [], aiConnected: true
     } as any} actions={{ onTabChange: vi.fn(), onMarkSubmission: vi.fn(), onMarkCoachTurn: vi.fn(), onGradeAi, onGradeManual, onDecideAppeal: vi.fn(), onViewTest: vi.fn() } as any} />);
 
+    expect(screen.getByText("1 bài · 1 chưa xem · 0 chưa chấm")).toBeInTheDocument();
+    const group = screen.getAllByText("Việt")[0]!.closest("details")!;
+    expect(group).not.toHaveAttribute("open");
+    await user.click(group.querySelector("summary")!);
+    expect(group).toHaveAttribute("open");
     expect(screen.getByRole("checkbox", { name: "Đã xem bài" })).toBeInTheDocument();
     expect(screen.queryByRole("checkbox", { name: "Đã đọc mẫu" })).not.toBeInTheDocument();
     expect(screen.getByText("Đề bài")).toBeInTheDocument();
@@ -409,7 +426,8 @@ describe("Operator app rebuild", () => {
     });
   });
 
-  it("separates the ungraded state from the submission brief", () => {
+  it("separates the ungraded state from the submission brief", async () => {
+    const user = userEvent.setup();
     render(<OperatorReview view={{
       activeTab: "subs", counts: { subs: 1, coach: 0, weekly: 0, appeals: 0, attempts: 0, tests: 0 },
       submissions: [{ id: "submission-new", learnerName: "An", cefr: "A1", week: 1, type: "writing",
@@ -418,6 +436,8 @@ describe("Operator app rebuild", () => {
       coachTurns: [], weeklyPractices: [], appeals: [], attempts: [], tests: [], aiConnected: true
     } as any} actions={{ onTabChange: vi.fn(), onMarkSubmission: vi.fn(), onMarkCoachTurn: vi.fn(), onGradeAi: vi.fn(), onGradeManual: vi.fn(), onDecideAppeal: vi.fn(), onViewTest: vi.fn() } as any} />);
 
+    const group = screen.getAllByText("An")[0]!.closest("details")!;
+    await user.click(group.querySelector("summary")!);
     expect(screen.getByText("Chưa chấm").closest(".operator-submission-status-row")).not.toBeNull();
   });
 

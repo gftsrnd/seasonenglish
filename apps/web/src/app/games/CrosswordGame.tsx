@@ -9,6 +9,10 @@ type Direction = "across" | "down";
 type Placed = Entry & { row: number; column: number; direction: Direction; number?: number };
 type Crossword = { cells: Array<Array<string | null>>; placed: Placed[]; numbers: Record<string, number> };
 
+export function crosswordEntryCount(words: readonly GameWord[]) {
+  return buildCrossword(words.map((word) => ({ value: letters(word.english), word })).filter((entry) => entry.value.length >= 3)).placed.length;
+}
+
 export function CrosswordGame({ words, onFinish, attemptSeed = 0 }: { words: GameWord[]; onFinish: FinishGame; attemptSeed?: number }) {
   const crossword = useMemo(() => buildCrossword(prepareGameAttempt(words, attemptSeed).map((word) => ({ value: letters(word.english), word })).filter((entry) => entry.value.length >= 3)), [attemptSeed, words]);
   const [values, setValues] = useState<Record<string, string>>({});
@@ -170,10 +174,15 @@ export function CrosswordGame({ words, onFinish, attemptSeed = 0 }: { words: Gam
           return <label role="gridcell" aria-label={`Ô chữ hàng ${rowIndex + 1} cột ${columnIndex + 1}`} aria-colindex={columnIndex + 1} aria-current={activeCell === key ? "true" : undefined} className={`crossword-cell ${states[key] ?? ""} ${activeEntryCells.includes(key) ? "is-active-entry" : ""} ${activeCell === key ? "is-active" : ""}`} key={key} onClick={() => {
             if (activeCell === key) toggleDirection(key);
             setActiveCell(key);
-          }}>{crossword.numbers[key] ? <small>{crossword.numbers[key]}</small> : null}<input ref={(element) => { inputRefs.current[key] = element; }} aria-label={`Ô chữ hàng ${rowIndex + 1} cột ${columnIndex + 1}`} aria-describedby={cellClueIds(rowIndex, columnIndex) || undefined} maxLength={1} value={values[key] ?? ""} disabled={busy} onFocus={() => setActiveCell(key)} onKeyDown={(event) => {
+          }}>{crossword.numbers[key] ? <small>{crossword.numbers[key]}</small> : null}<input ref={(element) => { inputRefs.current[key] = element; }} aria-label={`Ô chữ hàng ${rowIndex + 1} cột ${columnIndex + 1}`} aria-describedby={cellClueIds(rowIndex, columnIndex) || undefined} maxLength={1} value={values[key] ?? ""} disabled={busy} onFocus={() => {
+            const entries = entriesAt(key);
+            if (entries.length === 1) setDirection(entries[0]!.direction);
+            setActiveCell(key);
+          }} onKeyDown={(event) => {
             if (["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown"].includes(event.key)) {
               event.preventDefault();
               event.stopPropagation();
+              setDirection(event.key === "ArrowUp" || event.key === "ArrowDown" ? "down" : "across");
               moveFocus(rowIndex, columnIndex, event.key);
               return;
             }
@@ -188,12 +197,6 @@ export function CrosswordGame({ words, onFinish, attemptSeed = 0 }: { words: Gam
               event.stopPropagation();
               clearCell(key);
               return;
-            }
-            if (event.ctrlKey || event.metaKey || event.altKey) return;
-            if (event.key.length === 1 && /^[a-z]$/i.test(event.key)) {
-              event.preventDefault();
-              event.stopPropagation();
-              if (!event.repeat) writeLetter(key, event.key);
             }
           }} onChange={(event) => {
             const value = event.target.value.replace(/[^a-z]/gi, "").slice(-1);

@@ -30,7 +30,6 @@ export interface LearnerApiClient {
   sendCoachMessage(input: CoachMessageInput): Promise<CoachView>;
   setCoachPersona(persona: CoachPersona): Promise<CoachView>;
   clearCoach(): Promise<CoachView>;
-  unlockCoachVocabulary(word: string): Promise<CoachView>;
   getLevelChallenge(): Promise<LevelChallengeView>;
   sendLevelChallengeMessage(input: CoachMessageInput): Promise<LevelChallengeView>;
   getWeeklyPractice(): Promise<WeeklyPracticeView>;
@@ -88,7 +87,6 @@ export const learnerApiClient: LearnerApiClient = {
   sendCoachMessage: (input) => request("/api/v1/coach/messages", { method: "POST", body: JSON.stringify(input) }),
   setCoachPersona: (persona) => request("/api/v1/coach/persona", { method: "PUT", body: JSON.stringify({ persona }) }),
   clearCoach: () => request("/api/v1/coach/session", { method: "DELETE", body: "{}" }),
-  unlockCoachVocabulary: (word) => request(`/api/v1/coach/vocabulary/${encodeURIComponent(word)}/unlock`, { method: "POST", body: "{}" }),
   getLevelChallenge: () => request("/api/v1/challenge"),
   sendLevelChallengeMessage: (input) => request("/api/v1/challenge/messages", { method: "POST", body: JSON.stringify(input) }),
   getWeeklyPractice: () => request("/api/v1/engagement/practice"),

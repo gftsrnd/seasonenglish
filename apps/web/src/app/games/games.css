@@ -4,6 +4,20 @@
   margin-top: 18px;
 }
 
+.game-title,
+.game-running-title {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+}
+
+.game-title-icon {
+  display: inline-grid;
+  place-items: center;
+  flex: 0 0 auto;
+  color: var(--olive-dark);
+}
+
 .app-learner-page.game-page > .btn-danger {
   align-self: flex-start;
   margin-top: 8px;
@@ -81,6 +95,19 @@
   border-color: var(--danger-line);
   background: var(--danger-soft);
   color: var(--danger);
+}
+
+.game-lives {
+  gap: 3px !important;
+}
+
+.game-lives .is-active {
+  color: var(--danger);
+}
+
+.game-lives .is-lost {
+  color: var(--muted);
+  opacity: .42;
 }
 
 .game-runner button,
@@ -165,6 +192,11 @@
   padding: 22px;
   text-align: center;
 }
+
+.scramble-scene { background: linear-gradient(145deg, #fffaf0, color-mix(in srgb, var(--tile-1) 58%, white)); }
+.crossword-scene { background: linear-gradient(145deg, #f8fff5, color-mix(in srgb, var(--primary-soft) 72%, white)); }
+.sort-scene { background: linear-gradient(145deg, #fff, color-mix(in srgb, var(--tile-2) 62%, white)); }
+.typing-scene { background: linear-gradient(145deg, #fff8fb, color-mix(in srgb, var(--tile-3) 56%, white)); }
 
 .scramble-scene p,
 .typing-scene p {
@@ -997,8 +1029,8 @@
   text-transform: uppercase;
 }
 
-.keyboard-row--actions button:first-child { flex: 3; }
 .keyboard-row--actions button { flex: 1; }
+.keyboard-row--actions button[data-key="space"] { flex: 3; }
 .keyboard-row--actions button.is-enter {
   border-color: var(--primary-line);
   background: var(--primary-soft);
@@ -1210,8 +1242,21 @@
 }
 
 .app-learner-page.games-page .game-tile > .game-icon {
+  display: grid;
+  place-items: center;
+  width: 52px;
+  height: 52px;
+  border: 1px solid color-mix(in srgb, var(--text) 9%, transparent);
+  border-radius: 17px;
+  background: color-mix(in srgb, white 72%, transparent);
+  box-shadow: 0 7px 18px rgba(54, 73, 40, .09);
   font-size: 1.8rem;
   line-height: 1;
+}
+
+.app-learner-page.games-page .game-tile > .game-icon svg {
+  width: 31px;
+  height: 31px;
 }
 
 .app-learner-page.games-page .game-tile > h3 {
@@ -1282,6 +1327,37 @@
 .app-learner-page.game-page .game-tutorial-title {
   margin: 4px 0 0;
   font-size: 1.25rem;
+}
+
+.app-learner-page.game-page .game-tutorial-content {
+  display: grid;
+  grid-template-columns: 112px minmax(0, 1fr);
+  align-items: start;
+  gap: 22px;
+}
+
+.app-learner-page.game-page .game-tutorial-hero-icon {
+  display: grid;
+  place-items: center;
+  width: 112px;
+  height: 112px;
+  border: 1px solid var(--primary-line);
+  border-radius: 30px;
+  background: linear-gradient(145deg, white, var(--primary-soft));
+  color: var(--primary-strong, #47791f);
+  box-shadow: 0 16px 34px rgba(54, 73, 40, .14);
+  transform: rotate(-3deg);
+}
+
+.app-learner-page.game-page .game-tutorial-hero-icon svg {
+  width: 58px;
+  height: 58px;
+  stroke-width: 1.8;
+}
+
+.app-learner-page.game-page .game-tutorial-crossword .game-tutorial-hero-icon,
+.app-learner-page.game-page .game-tutorial-sort .game-tutorial-hero-icon {
+  transform: rotate(3deg);
 }
 
 .app-learner-page.game-page .game-tutorial-goal {
@@ -1374,6 +1450,9 @@
 
   .app-learner-page.game-page .game-tutorial-steps { grid-template-columns: 1fr; }
   .app-learner-page.game-page .game-tutorial-steps li { min-height: 0; }
+  .app-learner-page.game-page .game-tutorial-content { grid-template-columns: 1fr; gap: 14px; }
+  .app-learner-page.game-page .game-tutorial-hero-icon { width: 78px; height: 78px; border-radius: 23px; }
+  .app-learner-page.game-page .game-tutorial-hero-icon svg { width: 40px; height: 40px; }
 
   .app-learner-page.games-page .arena-entry {
     align-items: flex-start;

@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { LoaderCircle } from "lucide-react";
+import { ImageOff, LoaderCircle } from "lucide-react";
 import type { ContentImageView } from "@e4s/contracts";
 import "./content-image.css";
 
@@ -12,7 +12,7 @@ export function ContentImage({ term, load, unavailable = "mascot" }: {
   term: string;
   load: () => Promise<ContentImageView>;
   required?: boolean;
-  unavailable?: "mascot" | "hide";
+  unavailable?: "mascot" | "hide" | "placeholder";
 }) {
   const loadRef = useRef(load);
   const [state, setState] = useState<ContentImageState>({ status: "idle" });
@@ -32,6 +32,9 @@ export function ContentImage({ term, load, unavailable = "mascot" }: {
 
   if (state.status === "unavailable" && unavailable === "hide") {
     return <span className="content-image content-image--hidden" data-testid="hidden-content-image" aria-hidden="true" />;
+  }
+  if (state.status === "unavailable" && unavailable === "placeholder") {
+    return <span className="game-image-placeholder" role="img" aria-label={`Chưa có ảnh minh hoạ cho ${term}`}><ImageOff size={22} strokeWidth={1.8} aria-hidden="true" /></span>;
   }
   if (state.status === "unavailable") {
     return <figure className="content-image content-image--available content-image--fallback">

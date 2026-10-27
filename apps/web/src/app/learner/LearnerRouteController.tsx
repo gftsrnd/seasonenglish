@@ -430,7 +430,6 @@ export function LearnerRouteController() {
     },
     changeCoachPersona: async (persona) => setContracts({ coach: await apiClient.setCoachPersona(persona) }),
     startNewCoachChat: async () => { coachPending.current = undefined; setContracts({ coach: await apiClient.clearCoach() }); },
-    unlockCoachVocabulary: async (word) => setContracts({ coach: await apiClient.unlockCoachVocabulary(word) }),
     sendChallengeMessage: async (message) => {
       const pending = challengePending.current?.message === message ? challengePending.current : { message, requestId: crypto.randomUUID() };
       challengePending.current = pending; const challenge = await apiClient.sendLevelChallengeMessage(pending); challengePending.current = undefined; setContracts({ challenge });

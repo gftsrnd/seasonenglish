@@ -480,8 +480,8 @@ function Task({ task, number, questionNumber, value, response, view, actions, se
   const answerHint = [task.minWords ? `Tối thiểu ${task.minWords} từ.` : null, task.maxWords ? `Tối đa ${task.maxWords} từ.` : null].filter(Boolean).join(" ");
   const wordTarget = task.minWords && task.maxWords ? `${task.minWords}–${task.maxWords}` : task.minWords ? `≥ ${task.minWords}` : task.maxWords ? `${task.maxWords}` : null;
   return <article className={`card flat assessment-task-card${showHeading ? "" : " assessment-task-response"}`} data-task-key={task.key}>
-    {showHeading || questionNumber ? <div className="assessment-task-heading"><h4>{questionNumber ? `Câu ${questionNumber}` : task.title ?? `Task ${number}`}</h4>{showHeading ? <span className="badge">{task.maxScore} điểm</span> : null}</div> : null}
-    <p id={promptId} className="assessment-task-prompt" style={task.responseType === "speaking_evidence" ? { whiteSpace: "pre-line" } : undefined}>{renderAssessmentPrompt(task.prompt)}</p>
+    {showHeading ? <div className="assessment-task-heading"><h4>{task.title ?? `Task ${number}`}</h4><span className="badge">{task.maxScore} điểm</span></div> : null}
+    <p id={promptId} className="assessment-task-prompt" style={task.responseType === "speaking_evidence" ? { whiteSpace: "pre-line" } : undefined}>{questionNumber ? `${questionNumber}. ` : null}{renderAssessmentPrompt(task.prompt)}</p>
     {task.interaction ? <div className="card soft assessment-roleplay-brief" role="note">
       <b>Khách hàng mở đầu:</b>
       <p>{task.interaction.openingMessage}</p>

@@ -6257,11 +6257,29 @@ class CoachRepository {
     const client = await this.pool.connect();
     try {
       await client.query("begin");
+      await client.query("select id from users where id = $1 for update", [input.learnerId]);
       const locked = await client.query(
         "select id from coach_sessions where id = $1 and learner_id = $2 and status = 'active' for update",
         [input.sessionId, input.learnerId]
       );
       if (!locked.rowCount) throw new Error("COACH_SESSION_NOT_FOUND");
+      const cap = await client.query<{ daily_used: string; daily_limit: number }>(
+        `select count(*) filter (where ct.speaker = 'learner' and ct.created_at >= current_date
+            and coalesce((ct.feedback->'evaluation'->>'countsTowardGoal')::boolean,
+              coalesce((ct.feedback->>'relevant')::boolean, true)))::text as daily_used,
+                least(coalesce((os.configuration->>'coachDailyLimit')::int, 30), 30) as daily_limit
+         from users u
+         left join organization_settings os on os.organization_id = u.organization_id
+         left join coach_sessions cs on cs.learner_id = u.id
+         left join coach_turns ct on ct.session_id = cs.id
+         where u.id = $1
+         group by os.configuration`,
+        [input.learnerId]
+      );
+      const capRow = cap.rows[0] ?? { daily_used: "0", daily_limit: 30 };
+      if (Number(capRow.daily_used) >= capRow.daily_limit) {
+        throw Object.assign(new Error("COACH_DAILY_LIMIT"), { code: "COACH_DAILY_LIMIT" });
+      }
       const runId = randomUUID();
       const inserted = await client.query<{ id: string }>(
         `insert into ai_runs
@@ -6596,20 +6614,6 @@ class CoachRepository {
         ? { status: "available", message: "Season đã tạo kế hoạch luyện lại cho bạn." } : null,
       messages
     };
-  }
-
-  async unlockVocabulary(learnerId: string, word: string, aiAvailable: boolean): Promise<CoachView | null> {
-    const normalized = word.normalize("NFKC").trim().toLowerCase();
-    if (!normalized) return null;
-    const current = await this.currentForLearner(learnerId, aiAvailable);
-    const item = current?.vocabulary.find((candidate) => candidate.word.normalize("NFKC").trim().toLowerCase() === normalized);
-    if (!current || !item) return null;
-    await this.pool.query(
-      `insert into learner_vocabulary_unlocks (learner_id, word)
-       values ($1, $2) on conflict (learner_id, word) do nothing`,
-      [learnerId, item.word]
-    );
-    return this.currentForLearner(learnerId, aiAvailable);
   }
 
   async finalizeChallenge(learnerId: string, sessionId: string): Promise<void> {
