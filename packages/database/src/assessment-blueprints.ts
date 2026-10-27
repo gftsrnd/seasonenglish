@@ -160,29 +160,18 @@ export const placementDefinition: StoredAssessmentDefinition = {
         { key: "W2", prompt: "Write a formal email (120–150 words): explain one serious problem this confusion could cause (for example, giving a customer incorrect refund information) and propose one solution that helps the team find and use the latest documentation.", responseType: "long_text", maxScore: 13, minWords: 120, maxWords: 150 }
       ] }
     ] },
-    { code: "speaking", title: "Nói", durationMinutes: 15, maxScore: 20, instructions: ["Ghi âm trực tiếp hoặc tải file âm thanh cho từng task (MP3, M4A, WAV, OGG hoặc WebM; tối đa 20 MB). Phần Nói chỉ nhận âm thanh để đánh giá nội dung và phát âm."], groups: [
+    { code: "speaking", title: "Nói", durationMinutes: 15, maxScore: 20, instructions: ["Ghi âm trực tiếp hoặc tải file âm thanh cho từng task (MP3, M4A, WAV, OGG hoặc WebM; tối đa 20 MB). Phần Nói chỉ nhận âm thanh để đánh giá nội dung; MVP không chấm phát âm."], groups: [
       { key: "S1", title: "Task 1 – Warm-up (3 phút · A1–A2)", instruction: "The examiner asks:", tasks: [
         { key: "S1", prompt: "1. What do you do?\n2. What are your main responsibilities?\n3. What English do you use at work?\n4. What is one situation in which you find English difficult?", responseType: "speaking_evidence", maxScore: 5, hint: "Trả lời lần lượt 4 câu hỏi, mỗi câu 2–4 câu nói." }
       ] },
       { key: "S2", title: "Task 2 – Data description (4 phút · B1–B2)", instruction: "You are in a team meeting. The table shows the number of customer complaints in the last three quarters. You have 30 seconds to look at the data. Then speak for 1–2 minutes:", stimulus: { type: "table", headers: ["Quarter", "Total complaints", "Most common issue"], rows: [["Q1", "120", "Delayed shipping"], ["Q2", "115", "Delayed shipping"], ["Q3", "280", "Software bugs"]] }, tasks: [
         { key: "S2", prompt: "1. Summarise the main trend in the numbers.\n2. Point out the biggest change in Q3.\n3. Suggest one short-term action the team should take to deal with the Q3 problem.", responseType: "speaking_evidence", maxScore: 5, hint: "Dùng từ vựng mô tả số liệu: increase, decrease, remain stable, the biggest change…" }
       ] },
-      { key: "S3", title: "Task 3 – Roleplay (4 phút · B2–C1)", instruction: "You are a Customer Care Specialist. The examiner plays a customer who is very upset because the refund has not arrived, although the customer was told it would arrive within five days.", tasks: [
-        {
-          key: "S3",
-          prompt: "Acknowledge the customer's frustration, explain that a technical issue delayed the refund, propose a clear next step and state when the customer can expect a follow-up.",
-          responseType: "speaking_evidence",
-          maxScore: 5,
-          hint: "Duy trì giọng điệu lịch sự, chuyên nghiệp trong toàn bộ trao đổi.",
-          interaction: {
-            mode: "roleplay",
-            openingMessage: "Excuse me, I am extremely frustrated. I was promised my refund would be in my account by last Friday, and it is still not here! What is going on?",
-            maxLearnerTurns: 4,
-            durationSeconds: 240,
-            endConditions: ["time_limit", "turn_limit", "customer_accepted"],
-            fallback: "one_way_manual_review"
-          }
-        }
+      { key: "S3", title: "Task 3 – Customer refund questions (B2–C1)", instruction: "You are a Customer Support Specialist. A customer is frustrated because a promised refund has not arrived after five business days.", tasks: [
+        { key: "S3_Q1", prompt: "How would you acknowledge the customer's frustration?", responseType: "speaking_evidence", maxScore: 0, hint: "Ghi âm câu trả lời ngắn, lịch sự và chuyên nghiệp." },
+        { key: "S3_Q2", prompt: "What technical issue has delayed the refund?", responseType: "speaking_evidence", maxScore: 0, hint: "Ghi âm câu trả lời ngắn, lịch sự và chuyên nghiệp." },
+        { key: "S3_Q3", prompt: "What clear next step would you propose?", responseType: "speaking_evidence", maxScore: 0, hint: "Ghi âm câu trả lời ngắn, lịch sự và chuyên nghiệp." },
+        { key: "S3_Q4", prompt: "When can the customer expect a follow-up?", responseType: "speaking_evidence", maxScore: 0, hint: "Ghi âm câu trả lời ngắn, lịch sự và chuyên nghiệp." }
       ] },
       { key: "S4", title: "Task 4 – Monologue (4 phút · B2–C1)", instruction: "You are presenting to your team.", tasks: [
         { key: "S4", prompt: "Present the benefits and challenges of a centralised internal knowledge platform. Include examples and a conclusion.", responseType: "speaking_evidence", maxScore: 5, hint: "Nêu lợi ích, thách thức, ví dụ và kết luận." }

@@ -36,10 +36,13 @@ export function LearnerAssessment({ view, actions }: { view: AssessmentView; act
   useEffect(() => { holdMusicRef.current = experience.holdMusic; }, [experience.holdMusic]);
 
   useEffect(() => {
-    const listening = view.screenState === "listening";
-    holdMusicRef.current(listening);
+    const assessmentInProgress = Boolean(view.attempt)
+      && view.screenState !== "preparation"
+      && view.screenState !== "pending"
+      && view.screenState !== "submitting";
+    holdMusicRef.current(assessmentInProgress);
     return () => holdMusicRef.current(false);
-  }, [view.screenState]);
+  }, [view.attempt, view.screenState]);
 
   useEffect(() => () => cancelExclusiveAudio("speech"), [view.attempt?.id, view.screenState]);
 

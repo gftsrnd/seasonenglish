@@ -94,7 +94,6 @@ export function SettingsPage({ role, manager, product, experience, capabilities,
     {role === "manager" && managerDraft ? <>
       <PilotSection value={managerDraft} onChange={setManagerDraft} {...(actions.onSaveManager ? { onSave: () => actions.onSaveManager!(toInput(managerDraft)) } : {})} />
       <ImageSection value={productDraft} onChange={setProductDraft} {...(actions.onSaveProduct ? { onSave: () => actions.onSaveProduct!(productDraft) } : {})} {...(actions.onTestImage ? { onTest: () => actions.onTestImage!(productDraft) } : {})} {...(actions.onClearImageCache ? { onClear: actions.onClearImageCache } : {})} />
-      <TestSection value={managerDraft} onChange={setManagerDraft} {...(actions.onSaveManager ? { onSave: () => actions.onSaveManager!(toInput(managerDraft)) } : {})} />
       <LevelSection value={managerDraft} onChange={setManagerDraft} {...(actions.onSaveManager ? { onSave: () => actions.onSaveManager!(toInput(managerDraft)) } : {})} />
       <ThemeSection value={experienceDraft} onChange={setExperienceDraft} {...(saveExperienceDraft ? { onSave: saveExperienceDraft } : actions.onSaveProduct ? { onSave: () => actions.onSaveProduct!({ ...productDraft, theme: experienceDraft.theme }) } : {})} />
       <MusicSection value={experienceDraft} onChange={setExperienceDraft} {...(saveExperienceDraft ? { onSave: saveExperienceDraft } : {})} />
@@ -107,7 +106,6 @@ export function SettingsPage({ role, manager, product, experience, capabilities,
       <MusicSection value={experienceDraft} onChange={setExperienceDraft} {...(saveExperienceDraft ? { onSave: saveExperienceDraft } : {})} />
       {operatorOverview && managerDraft ? <>
         <PilotSection value={managerDraft} onChange={setManagerDraft} {...(actions.onSaveManager ? { onSave: () => actions.onSaveManager!(toInput(managerDraft)) } : {})} />
-        <TestSection value={managerDraft} onChange={setManagerDraft} {...(actions.onSaveManager ? { onSave: () => actions.onSaveManager!(toInput(managerDraft)) } : {})} />
         <LevelSection value={managerDraft} onChange={setManagerDraft} {...(actions.onSaveManager ? { onSave: () => actions.onSaveManager!(toInput(managerDraft)) } : {})} />
         <OperatorAccountsSection overview={operatorOverview} />
       </> : null}
@@ -161,8 +159,6 @@ function legacyExperience(product: ProductPreferencesView, settings?: ManagerSet
     }
   };
 }
-
-function TestSection({ value, onChange, onSave }: ManagerSectionProps) { const updateTime = (key: keyof ManagerSettingsView["testTimes"], next: number) => onChange({ ...value, testTimes: { ...value.testTimes, [key]: next } }); return <section className="card"><h3>Bài test đầu vào</h3><p className="small muted">&quot;Workplace English CEFR Placement Test (Refined)&quot;: Nghe 20 · Đọc, Ngữ pháp &amp; Từ vựng 40 · Viết 20 (2 task) · Nói 20 (4 task), tổng 100 điểm. Mỗi phần tính giờ riêng; hết giờ tự nộp. Rời màn hình bị cảnh báo; quá số lần cho phép cũng tự nộp.</p><label className="check"><input type="checkbox" checked={value.testTimed} onChange={(event) => onChange({ ...value, testTimed: event.target.checked })} /> Bật tính giờ</label><div className="grid cols-4">{(["listening", "reading", "writing", "speaking"] as const).map((key) => <NumberField key={key} label={`${({ listening: "Nghe", reading: "Đọc", writing: "Viết", speaking: "Nói" })[key]} (phút)`} value={value.testTimes[key]} min={1} max={60} onChange={(next) => updateTime(key, next)} />)}</div><NumberField label="Số lần cảnh báo (kèm âm thanh) khi rời màn hình; vi phạm lần kế tiếp thì tự nộp" value={value.testWarnLimit} min={1} max={10} onChange={(testWarnLimit) => onChange({ ...value, testWarnLimit })} /><Save label="Lưu bài test" onSave={onSave} /></section>; }
 
 function LevelSection({ value, onChange, onSave }: ManagerSectionProps) { const labels: Record<keyof ManagerSettingsView["levelUp"], string> = { days: "Số ngày xét", lessons: "Bài học hoàn thành ≥ (%)", firstTry: "Đúng ngay lần đầu ≥ (%)", submission: "Bài thực hành gần nhất ≥ (/100)", coach: "Rubric Season trung bình ≥ (/5)", coachTurns: "Số lượt chat tối thiểu", wrong: "Hạ mức: tỉ lệ sai > (%)", minParts: "Hạ mức: số phần tối thiểu/tuần" }; return <section className="card"><h3>Ngưỡng xét lên / hạ mức</h3><p className="small muted">Xét trong số ngày gần nhất: đủ 4 ngưỡng đầu = &quot;Sẵn sàng thi lên level&quot; (trừ C1). Hai tuần liền sai quá số lượt cho phép = &quot;Nên xem xét hạ mức&quot; (trừ A1).</p><div className="grid cols-4">{(Object.keys(labels) as (keyof ManagerSettingsView["levelUp"])[]).map((key) => <NumberField key={key} label={labels[key]} value={value.levelUp[key]} min={key === "coach" ? 0 : 1} max={key === "coach" ? 5 : key === "days" ? 60 : 100} step={key === "coach" ? 0.5 : 1} onChange={(next) => onChange({ ...value, levelUp: { ...value.levelUp, [key]: next } })} />)}</div><Save label="Lưu ngưỡng" onSave={onSave} /></section>; }
 

@@ -22,4 +22,10 @@ describe("AI prompt and output schema contracts", () => {
     expect(prototypePromptDefaults.mgrade).not.toContain('"ok"');
     expect(prototypePromptDefaults.mgrade).not.toContain('"fix"');
   });
+
+  it("does not ask placement scoring to infer speaking delivery from text evidence", () => {
+    expect(prototypePromptDefaults.placement).toContain("does not score pronunciation, fluency, or real-time interaction from transcripts or typed proxies");
+    expect(prototypePromptDefaults.placement).toContain("requires manual review");
+    expect(prototypePromptDefaults.placement).not.toContain("fluency & interaction judged from how developed and connected the answers are");
+  });
 });

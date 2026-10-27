@@ -81,7 +81,11 @@ describe("Operator assessment AI rescore", () => {
         `insert into assessment_responses (id, attempt_id, section, task_key, response)
          values
            ('00000000-0000-4000-8000-000000000941', $1, 'writing', 'W1', '{"value":"I can cover the inbox and prioritize urgent tickets.","evidenceType":"text"}'::jsonb),
-           ('00000000-0000-4000-8000-000000000942', $1, 'speaking', 'S1', '{"value":"I work in AI and explain my responsibilities.","evidenceType":"transcript"}'::jsonb)
+           ('00000000-0000-4000-8000-000000000942', $1, 'speaking', 'S1', '{"value":"I work in AI and explain my responsibilities.","evidenceType":"transcript"}'::jsonb),
+           ('00000000-0000-4000-8000-000000000943', $1, 'speaking', 'S3_Q1', '{"value":"I understand your frustration.","evidenceType":"typed_proxy"}'::jsonb),
+           ('00000000-0000-4000-8000-000000000944', $1, 'speaking', 'S3_Q2', '{"value":"A technical issue delayed the refund.","evidenceType":"typed_proxy"}'::jsonb),
+           ('00000000-0000-4000-8000-000000000945', $1, 'speaking', 'S3_Q3', '{"value":"I will escalate the case to accounts.","evidenceType":"typed_proxy"}'::jsonb),
+           ('00000000-0000-4000-8000-000000000946', $1, 'speaking', 'S3_Q4', '{"value":"You can expect a follow-up within 24 hours.","evidenceType":"typed_proxy"}'::jsonb)
          on conflict (id) do nothing`,
         [DEMO_IDS.placementAttempt]
       );
@@ -131,6 +135,12 @@ describe("Operator assessment AI rescore", () => {
       expect.objectContaining({ groupKey: "LB", taskKeys: expect.arrayContaining(["LB_Q9"]) })
     ]));
     expect(aiInput.objectiveScores.listening.groups.flatMap((group) => group.taskKeys).filter((key) => key === "LB_Q9")).toHaveLength(1);
+    expect(aiInput.speaking.filter((item) => item.evidenceType === "typed_proxy")).toEqual([
+      expect.objectContaining({ prompt: "How would you acknowledge the customer's frustration?" }),
+      expect.objectContaining({ prompt: "What technical issue has delayed the refund?" }),
+      expect.objectContaining({ prompt: "What clear next step would you propose?" }),
+      expect.objectContaining({ prompt: "When can the customer expect a follow-up?" })
+    ]);
 
     const storedScores = await pool.query<{ section: string; score: string; source: string }>(
       "select section, score::text, source from assessment_scores where attempt_id = $1 order by section",
@@ -213,6 +223,16 @@ describe("Operator assessment AI rescore", () => {
         expect.objectContaining({ section: "writing", score: 16.3, source: "human" }),
         expect.objectContaining({ section: "speaking", score: 14, source: "human" })
       ])
+    });
+    const manualSpeaking = await pool.query<{ criteria: { tasks: Array<{ taskKey: string; taskScore: number; completionStatus: string }>; totalScore: number; completionStatus: string; notes: string } }>(
+      "select criteria from assessment_scores where attempt_id = $1 and section = 'speaking'",
+      [DEMO_IDS.placementAttempt]
+    );
+    expect(manualSpeaking.rows[0]?.criteria).toMatchObject({
+      totalScore: 14,
+      completionStatus: "scored",
+      notes: "Rubric theo đúng từng task.",
+      tasks: expect.arrayContaining([expect.objectContaining({ taskKey: "S3", taskScore: 3.75, completionStatus: "scored" })])
     });
 
     const decision = await pool.query<{ suggested_level: string; reason: string }>(

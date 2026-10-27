@@ -4651,9 +4651,14 @@ class AssessmentRepository {
         return null;
       }
       const speakingScore = roundAssessmentScore(speakingScores.reduce<number>((total, score) => total + Number(score), 0));
+      const scoredSpeakingTasks = input.speakingTasks.map((task, index) => ({
+        ...task,
+        taskScore: Number(speakingScores[index]),
+        completionStatus: task.criteria === null ? "pending_evidence" : "scored"
+      }));
       for (const [section, score, sectionCriteria] of [
         ["writing", writingScore, { tasks: input.writingTasks, comment: input.comment }],
-        ["speaking", speakingScore, { tasks: input.speakingTasks, comment: input.comment }]
+        ["speaking", speakingScore, { tasks: scoredSpeakingTasks, totalScore: speakingScore, completionStatus: "scored", notes: input.comment, comment: input.comment }]
       ] as const) {
         await client.query(
           `insert into assessment_scores (id, attempt_id, section, score, criteria, source)

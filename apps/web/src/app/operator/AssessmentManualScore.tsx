@@ -16,7 +16,7 @@ const WRITING_CRITERIA = [
 const SPEAKING_TASKS = [
   { key: "S1", label: "Task 1 – Warm-up", note: "3 phút · A1–A2" },
   { key: "S2", label: "Task 2 – Data description", note: "4 phút · B1–B2" },
-  { key: "S3", label: "Task 3 – Roleplay", note: "4 phút · B2–C1" },
+  { key: "S3", label: "Task 3 – Customer refund questions", note: "4 phút · B2–C1 · 4 bản ghi" },
   { key: "S4", label: "Task 4 – Monologue", note: "4 phút · B2–C1" }
 ] as const;
 const SPEAKING_CRITERIA = [
@@ -58,7 +58,8 @@ export function AssessmentManualScore({ writingTasks, speakingTasks, comment, on
   const [confirming, setConfirming] = useState(false);
   const roundedWriting = Math.round((WRITING_TASKS.reduce((total, task) => total + (scoreOf(writing[task.key] ?? {}) / 20) * task.weight, 0) + Number.EPSILON) * 100) / 100;
   const roundedSpeaking = Math.round((SPEAKING_TASKS.reduce((total, task) => total + scoreOf(speaking[task.key] ?? {}) / 4, 0) + Number.EPSILON) * 100) / 100;
-  const canSave = complete(writing, WRITING_TASKS.map((task) => task.key), WRITING_CRITERIA.map(([key]) => key), 4) && complete(speaking, SPEAKING_TASKS.map((task) => task.key), SPEAKING_CRITERIA.map(([key]) => key), 5);
+  const canSave = complete(writing, WRITING_TASKS.map((task) => task.key), WRITING_CRITERIA.map(([key]) => key), 4)
+    && complete(speaking, SPEAKING_TASKS.map((task) => task.key), SPEAKING_CRITERIA.map(([key]) => key), 5);
   const writingStarted = Object.values(writing).some((criteria) => Object.values(criteria).some((value) => typeof value === "number"));
   const speakingStarted = Object.values(speaking).some((criteria) => Object.values(criteria).some((value) => typeof value === "number"));
   const summary = useMemo(() => ({ writingScore: roundedWriting, speakingScore: roundedSpeaking }), [roundedSpeaking, roundedWriting]);

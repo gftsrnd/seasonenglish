@@ -144,9 +144,10 @@ function PrimaryLesson({ view, next, actions }: { view: LearnerHomeView; next: L
 }
 
 function lessonTimingLabel(view: LearnerHomeView, lesson: LearnerHomeView["lessons"][number]) {
-  if (lesson.status !== "in_progress" || lesson.lock) return "";
+  if (lesson.status === "completed" || lesson.lock) return "";
   const todayLabel = view.schedule.days.find((day) => day.status === "today")?.label;
-  return todayLabel === `T${lesson.dayNumber + 1}` ? "hôm nay" : "học bù";
+  if (lesson.status === "in_progress") return todayLabel === `T${lesson.dayNumber + 1}` ? "hôm nay" : "học bù";
+  return view.schedule.days.find((day) => day.label === `T${lesson.dayNumber + 1}`)?.status === "missed" ? "học bù" : "";
 }
 
 function isCatchUp(view: LearnerHomeView, next: LearnerHomeView["nextLesson"]) {

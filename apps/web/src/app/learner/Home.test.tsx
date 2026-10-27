@@ -245,6 +245,25 @@ describe("learner Home parity", () => {
     expect(within(primary!).getByText(/Bài học bù · T2 · Tuần 1/)).toBeInTheDocument();
   });
 
+  it("labels an overdue not-started next lesson as make-up", () => {
+    const view = makeView();
+    const overdue = lesson(1, "Bài bị lỡ", "not_started");
+    render(<LearnerHome view={{
+      ...view,
+      lessons: [view.lessons[0]!, overdue, ...view.lessons.slice(2)],
+      nextLesson: overdue,
+      schedule: { ...view.schedule, days: [
+        { label: "T2", date: "2026-10-12", status: "missed" },
+        { label: "T3", date: "2026-10-13", status: "today" },
+        ...view.schedule.days.slice(2)
+      ] }
+    }} actions={actions} />);
+
+    const primary = document.querySelector<HTMLElement>('[data-home-block="primary"]');
+    expect(primary).not.toBeNull();
+    expect(within(primary!).getByText(/Bài học bù · T2 · Tuần 1/)).toBeInTheDocument();
+  });
+
   it("exposes prototype attendance states and separates the fixed-schedule note", () => {
     const view = makeView();
     render(<LearnerHome view={{ ...view, schedule: { ...view.schedule, days: [

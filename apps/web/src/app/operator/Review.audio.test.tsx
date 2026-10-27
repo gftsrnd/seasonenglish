@@ -133,6 +133,31 @@ describe("Operator assessment audio playback", () => {
     );
   });
 
+  it("shows all four S3 recordings as one non-roleplay refund task for manual review", () => {
+    const detail = assessmentDetail();
+    detail.sections = [{
+      section: "speaking", label: "Nói", maxScore: 20, durationMinutes: 15, actualSeconds: null, score: null, cefr: null, source: null, criteria: {}, state: "not_scored",
+      groups: [{ key: "S3", label: "Task 3 – Customer refund questions (B2–C1)", tasks: [
+        { taskKey: "S3_Q1", prompt: "How would you acknowledge the customer's frustration?", answer: "I understand your frustration.", maxScore: 0 },
+        { taskKey: "S3_Q2", prompt: "What technical issue has delayed the refund?", answer: "A technical issue delayed it.", maxScore: 0 },
+        { taskKey: "S3_Q3", prompt: "What clear next step would you propose?", answer: "I will escalate it.", maxScore: 0 },
+        { taskKey: "S3_Q4", prompt: "When can the customer expect a follow-up?", answer: "Within 24 hours.", maxScore: 0 }
+      ] }]
+    }];
+    detail.answers = ["S3_Q1", "S3_Q2", "S3_Q3", "S3_Q4"].map((taskKey) => ({
+      section: "speaking" as const, taskKey, value: "audio evidence", evidenceType: "audio" as const,
+      audioArtifact: { artifactKey: `assessment-audio/${taskKey}.webm`, mimeType: "audio/webm", sizeBytes: 42, signedUrl: `https://audio.example.test/${taskKey}.webm`, expiresAt: "2026-10-15T08:35:00.000Z" }
+    }));
+
+    render(<OperatorReviewAssessmentDetail detail={detail} onClose={vi.fn()} />);
+
+    expect(screen.getByText(/How would you acknowledge the customer's frustration\?/)).toBeInTheDocument();
+    expect(screen.getByText(/When can the customer expect a follow-up\?/)).toBeInTheDocument();
+    expect(screen.getByLabelText("Phát audio S3_Q1")).toBeInTheDocument();
+    expect(screen.getByLabelText("Phát audio S3_Q4")).toBeInTheDocument();
+    expect(screen.queryByText(/Khách hàng mở đầu/)).not.toBeInTheDocument();
+  });
+
   it("flags typed speaking proxy evidence for mandatory manual review", () => {
     const detail = assessmentDetail();
     detail.answers = [{
@@ -147,6 +172,8 @@ describe("Operator assessment audio playback", () => {
     expect(screen.getByText("Câu trả lời văn bản thay thế")).toBeInTheDocument();
     expect(screen.getByRole("alert")).toHaveTextContent(/phải chấm tay/i);
     expect(screen.getByRole("alert")).toHaveTextContent(/không xác minh phát âm/i);
+    expect(screen.getByRole("alert")).toHaveTextContent(/độ trôi chảy/i);
+    expect(screen.getByRole("alert")).toHaveTextContent(/tương tác theo thời gian thực/i);
   });
 
   it("shows playback feedback when persisted audio fails to load", () => {

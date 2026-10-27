@@ -40,6 +40,21 @@ describe("EntryScreen interaction", () => {
     expect(client.learnerLogin).toHaveBeenCalledWith({ email: "learner@e4s.local", pin: "123456" });
   });
 
+  it("changes the learner PIN input between masked and visible text without losing its value", async () => {
+    const user = userEvent.setup();
+    render(<EntryScreen client={stubClient()} onAuthenticated={vi.fn()} />);
+    const pin = screen.getByLabelText("Mã PIN");
+
+    await user.type(pin, "123456");
+    expect(pin).toHaveAttribute("type", "password");
+    await user.click(screen.getByRole("button", { name: "Hiện Mã PIN" }));
+    expect(pin).toHaveAttribute("type", "text");
+    expect(pin).toHaveValue("123456");
+    await user.click(screen.getByRole("button", { name: "Ẩn Mã PIN" }));
+    expect(pin).toHaveAttribute("type", "password");
+    expect(pin).toHaveValue("123456");
+  });
+
   it("returns focus to the PIN field after toggling visibility so Backspace edits the PIN", async () => {
     const user = userEvent.setup();
     render(<EntryScreen client={stubClient()} onAuthenticated={vi.fn()} />);

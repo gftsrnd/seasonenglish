@@ -42,7 +42,10 @@ describe("AssessmentManualScore", () => {
     expect(onSave).toHaveBeenCalledWith(expect.objectContaining({
       comment: "Cần luyện thêm.",
       writingTasks: expect.arrayContaining([expect.objectContaining({ taskKey: "W1" }), expect.objectContaining({ taskKey: "W2" })]),
-      speakingTasks: expect.arrayContaining([expect.objectContaining({ taskKey: "S1" }), expect.objectContaining({ taskKey: "S4" })])
+      speakingTasks: expect.arrayContaining([
+        expect.objectContaining({ taskKey: "S1" }),
+        expect.objectContaining({ taskKey: "S4" })
+      ])
     }));
   });
 });

@@ -87,6 +87,8 @@ describe("placement assessment blueprint", () => {
     const moved = taskEntries.filter(({ task }) => task.prompt === "Who should the listener contact?");
 
     expect(listening.groups.map((group) => group.tasks.length)).toEqual([4, 6, 5]);
+    expect(taskEntries[3]).toMatchObject({ groupKey: "LA", task: { key: "LA_4" } });
+    expect(taskEntries[4]).toMatchObject({ groupKey: "LB", task: { key: "LB_0" } });
     expect(moved).toHaveLength(1);
     expect(moved[0]).toMatchObject({ groupKey: "LB", task: { key: "LB_Q9", maxScore: 1, correctAnswer: "B" } });
     expect(taskEntries[8]).toMatchObject({ groupKey: "LB", task: { key: "LB_Q9" } });
@@ -98,6 +100,9 @@ describe("placement assessment blueprint", () => {
     const partB = listening.groups.find((group) => group.key === "LB");
     expect(partA?.stimulus?.lines?.map((line) => line.text).join(" ")).not.toContain("speak to Sarah");
     expect(partB?.stimulus?.lines?.map((line) => line.text).join(" ")).toContain("speak to Sarah");
+    const partBTranscript = partB?.stimulus?.lines?.map((line) => line.text).join(" ") ?? "";
+    expect(partBTranscript.indexOf("Okay. I'll check those records first.")).toBeLessThan(partBTranscript.indexOf("please speak to Sarah before we send it."));
+    expect(partBTranscript.indexOf("please speak to Sarah before we send it.")).toBeLessThan(partBTranscript.indexOf("there may be some flexibility with the exact time."));
   });
 
   it("keeps the separate level-up listening section at five equally weighted questions", () => {
@@ -141,24 +146,29 @@ describe("placement assessment blueprint", () => {
     expect(speakingTasks.map(({ key, maxScore }) => ({ key, maxScore }))).toEqual([
       { key: "S1", maxScore: 5 },
       { key: "S2", maxScore: 5 },
-      { key: "S3", maxScore: 5 },
+      { key: "S3_Q1", maxScore: 0 },
+      { key: "S3_Q2", maxScore: 0 },
+      { key: "S3_Q3", maxScore: 0 },
+      { key: "S3_Q4", maxScore: 0 },
       { key: "S4", maxScore: 5 }
     ]);
   });
 
-  it("keeps the approved S3 roleplay limits and honest fallback policy", () => {
-    const roleplay = section("speaking").groups.flatMap((group) => group.tasks)
-      .find((task) => task.key === "S3");
+  it("splits S3 into four audio-only refund questions without roleplay state", () => {
+    const speaking = section("speaking");
+    const task3 = speaking.groups.find((group) => group.key === "S3");
 
-    expect(roleplay).toMatchObject({
-      interaction: {
-        mode: "roleplay",
-        maxLearnerTurns: 4,
-        durationSeconds: 240,
-        endConditions: ["time_limit", "turn_limit", "customer_accepted"],
-        fallback: "one_way_manual_review"
-      }
+    expect(task3).toMatchObject({
+      title: "Task 3 – Customer refund questions (B2–C1)",
+      instruction: "You are a Customer Support Specialist. A customer is frustrated because a promised refund has not arrived after five business days."
     });
-    expect(roleplay?.interaction?.openingMessage).toMatch(/extremely frustrated/i);
+    expect(task3?.tasks.map(({ key, prompt, responseType }) => ({ key, prompt, responseType }))).toEqual([
+      { key: "S3_Q1", prompt: "How would you acknowledge the customer's frustration?", responseType: "speaking_evidence" },
+      { key: "S3_Q2", prompt: "What technical issue has delayed the refund?", responseType: "speaking_evidence" },
+      { key: "S3_Q3", prompt: "What clear next step would you propose?", responseType: "speaking_evidence" },
+      { key: "S3_Q4", prompt: "When can the customer expect a follow-up?", responseType: "speaking_evidence" }
+    ]);
+    task3?.tasks.forEach((task) => expect(task).not.toHaveProperty("interaction"));
+    expect(speaking.instructions.join(" ")).toContain("không chấm phát âm");
   });
 });

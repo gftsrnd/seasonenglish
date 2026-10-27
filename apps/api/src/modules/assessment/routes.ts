@@ -733,7 +733,7 @@ export function registerAssessmentRoutes(app: FastifyInstance, pool: Pool, aiRun
           const output = assessmentGradingOutputSchema.safeParse(result.output);
           if (output.success) {
             await repositories.assessments.upsertSectionScore({ learnerId, attemptId: attempt.id, section: "writing", score: Math.min(writing.maxScore, output.data.writingScore), criteria: { rationale: output.data.rationale, monthlyGoal: output.data.monthlyGoal }, source: "ai" });
-            await repositories.assessments.upsertSectionScore({ learnerId, attemptId: attempt.id, section: "speaking", score: Math.min(speaking.maxScore, output.data.speakingScore), criteria: { rationale: output.data.rationale, evidencePolicy: "Pronunciation is scored only when audio evidence exists." }, source: "ai" });
+            await repositories.assessments.upsertSectionScore({ learnerId, attemptId: attempt.id, section: "speaking", score: Math.min(speaking.maxScore, output.data.speakingScore), criteria: { rationale: output.data.rationale, evidencePolicy: "AI scores only supported content; it does not score pronunciation or infer fluency or real-time interaction from text-only evidence." }, source: "ai" });
             await repositories.assessments.saveSuggestedDecision({ attemptId: attempt.id, learnerId, suggestedLevel: output.data.suggestedLevel, reason: output.data.rationale });
             await repositories.aiRuns.recordSucceeded({ userId: learnerId, requestId: attempt.id, taskId: task.taskId, promptVersionId: task.promptVersionId, output: output.data, metadata: result.metadata });
             await repositories.assessments.completeAssessmentAiScoring(learnerId, attempt.id, attempt.id);

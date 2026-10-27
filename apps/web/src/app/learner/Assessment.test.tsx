@@ -134,6 +134,21 @@ async function finishSubmitCountdown() {
 }
 
 describe("assessment HCI states", () => {
+  it("keeps background music suspended when an in-progress assessment advances from Listening to Reading", () => {
+    const listening = makeView();
+    const { rerender } = render(<ExperienceProvider musicAllowed={false}><LearnerAssessment view={listening} actions={makeActions()} /></ExperienceProvider>);
+    expect(document.documentElement.dataset.e4sAudioMusicHeld).toBe("true");
+
+    const reading = makeView({ screenState: "reading" });
+    reading.attempt!.currentSection = "reading";
+    reading.attempt!.sectionStatuses = { listening: "completed", reading: "in_progress", writing: "locked", speaking: "locked" };
+    reading.runtime = makeRuntime({ currentSection: "reading" });
+    reading.attempt!.runtime = reading.runtime;
+    rerender(<ExperienceProvider musicAllowed={false}><LearnerAssessment view={reading} actions={makeActions()} /></ExperienceProvider>);
+
+    expect(document.documentElement.dataset.e4sAudioMusicHeld).toBe("true");
+  });
+
   it("warns about unanswered questions before section submission and restores focus after Escape", async () => {
     const user = userEvent.setup();
     const view = makeView();
@@ -491,7 +506,7 @@ describe("assessment HCI states", () => {
     speaking.groups = [
       { key: "S1", title: "Task 1 – Warm-up (3 phút · A1–A2)", instruction: "The examiner asks:", tasks: [{ key: "S1", prompt: "1. What do you do?\n2. What are your main responsibilities?\n3. What English do you use at work?\n4. What is one situation in which you find English difficult?", responseType: "speaking_evidence", maxScore: 5, hint: "Trả lời lần lượt 4 câu hỏi, mỗi câu 2–4 câu nói." }] },
       { key: "S2", title: "Task 2 – Data description (4 phút · B1–B2)", instruction: "You are in a team meeting. Speak for 1–2 minutes after looking at the data.", stimulus: { type: "table", headers: ["Quarter", "Total complaints", "Most common issue"], rows: [["Q1", "120", "Delayed shipping"], ["Q2", "115", "Delayed shipping"], ["Q3", "280", "Software bugs"]] }, tasks: [{ key: "S2", prompt: "1. Summarise the main trend in the numbers.\n2. Point out the biggest change in Q3.\n3. Suggest one short-term action the team should take to deal with the Q3 problem.", responseType: "speaking_evidence", maxScore: 5, hint: "Dùng từ vựng mô tả số liệu: increase, decrease, remain stable, the biggest change…" }] },
-      { key: "S3", title: "Task 3 – Roleplay (4 phút · B2–C1)", instruction: "You are a Customer Care Specialist. The examiner plays a customer who is very upset.", tasks: [{ key: "S3", prompt: "The refund has not arrived, although the customer was told it would arrive within five days. Apologise, explain the accounting system error and clearly commit to a solution.", responseType: "speaking_evidence", maxScore: 5, hint: "Giao tiếp trực tiếp như đang nói với khách hàng." }] },
+      { key: "S3", title: "Task 3 – Customer refund questions (B2–C1)", instruction: "You are a Customer Support Specialist. A customer is frustrated because a promised refund has not arrived after five business days.", tasks: [{ key: "S3_Q1", prompt: "How would you acknowledge the customer's frustration?", responseType: "speaking_evidence", maxScore: 0 }, { key: "S3_Q2", prompt: "What technical issue has delayed the refund?", responseType: "speaking_evidence", maxScore: 0 }, { key: "S3_Q3", prompt: "What clear next step would you propose?", responseType: "speaking_evidence", maxScore: 0 }, { key: "S3_Q4", prompt: "When can the customer expect a follow-up?", responseType: "speaking_evidence", maxScore: 0 }] },
       { key: "S4", title: "Task 4 – Monologue (4 phút · B2–C1)", instruction: "Give a short presentation to your team.", tasks: [{ key: "S4", prompt: "Present the benefits and challenges of a centralised internal knowledge platform. Include examples and a conclusion.", responseType: "speaking_evidence", maxScore: 5, hint: "Nêu ít nhất hai lợi ích và hai thách thức." }] }
     ];
     const view = makeView({
@@ -506,7 +521,10 @@ describe("assessment HCI states", () => {
     expect(screen.getByRole("heading", { name: /Task 1 – Warm-up \(3 phút · A1–A2\)/ })).toBeInTheDocument();
     expect(screen.getByText("The examiner asks:")).toBeInTheDocument();
     expect(screen.getByRole("table", { name: "Dữ liệu khiếu nại theo quý" })).toBeInTheDocument();
-    expect(screen.getAllByLabelText("Tải file ghi âm")).toHaveLength(4);
+    expect(screen.getByText("How would you acknowledge the customer's frustration?")).toBeInTheDocument();
+    expect(screen.getByText("When can the customer expect a follow-up?")).toBeInTheDocument();
+    expect(screen.queryByText(/Khách hàng mở đầu/)).not.toBeInTheDocument();
+    expect(screen.getAllByLabelText("Tải file ghi âm")).toHaveLength(7);
     expect(screen.queryByText("Speaking tasks")).not.toBeInTheDocument();
   });
 
@@ -759,6 +777,28 @@ describe("assessment HCI states", () => {
     const heading = await screen.findByRole("heading", { name: "Tự động nộp bài" });
     expect(heading.querySelector("svg.lucide-clock-3")).toBeInTheDocument();
     expect(heading).not.toHaveTextContent("⏰");
+  });
+
+  it("auto-submits the recorded Speaking section when its overall timer expires", async () => {
+    vi.useFakeTimers();
+    const runtime = makeRuntime({ currentSection: "speaking", remainingSeconds: 0 });
+    const view = makeView({
+      screenState: "speaking",
+      runtime,
+      attempt: {
+        ...makeView().attempt!,
+        currentSection: "speaking",
+        sectionStatuses: { listening: "completed", reading: "completed", writing: "completed", speaking: "in_progress" },
+        runtime
+      }
+    });
+    const actions = makeActions();
+    render(<AssessmentRuntime view={view} actions={actions}>{(state) => <span>{state.formattedTime}</span>}</AssessmentRuntime>);
+
+    await finishSubmitCountdown();
+
+    expect(actions.submitAssessment).toHaveBeenCalledTimes(1);
+    expect(actions.completeAssessmentSection).not.toHaveBeenCalled();
   });
 
   it("offers a retry when an integrity warning cannot be recorded", async () => {

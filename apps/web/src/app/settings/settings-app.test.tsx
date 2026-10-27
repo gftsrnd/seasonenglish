@@ -54,16 +54,15 @@ describe("new Settings app branch", () => {
   it("keeps Manager sections in app order", () => {
     const { container } = render(<SettingsPage role="manager" manager={manager} product={product} capabilities={capabilities} ai={{ provider: "openai", configured: true, baseUrl: "https://api.groq.com/openai/v1", model: "qwen/qwen3.8-27b", speechToTextModel: "whisper-large-v3-turbo" }} actions={actions()} accounts={<section><h3>Người dùng</h3></section>} />);
     expect([...container.querySelectorAll("h3")].map((node) => node.textContent)).toEqual([
-      "Kết nối AI", "Lịch pilot", "Ảnh minh hoạ từ vựng", "Bài test đầu vào", "Ngưỡng xét lên / hạ mức", "Giao diện theo mùa / lễ", "Nhạc nền của Season", "Nhắc học qua Base.vn (Base Message incoming webhook)", "Chính sách nhắc học và báo cáo", "Dữ liệu", "Người dùng"
+      "Kết nối AI", "Lịch pilot", "Ảnh minh hoạ từ vựng", "Ngưỡng xét lên / hạ mức", "Giao diện theo mùa / lễ", "Nhạc nền của Season", "Nhắc học qua Base.vn (Base Message incoming webhook)", "Chính sách nhắc học và báo cáo", "Dữ liệu", "Người dùng"
     ]);
     expect(screen.getByText(/Khoá nhà cung cấp được lưu an toàn ở server/)).toBeInTheDocument();
     expect(screen.getByText("Xuất JSON")).toBeInTheDocument();
   });
 
-  it("keeps Settings guidance concise without dropping constraints", () => {
+  it("keeps Settings guidance concise", () => {
     render(<SettingsPage role="manager" manager={manager} product={product} capabilities={capabilities} ai={{ provider: "openai", configured: true, baseUrl: "https://api.groq.com/openai/v1", model: "qwen/qwen3.8-27b", speechToTextModel: "whisper-large-v3-turbo" }} actions={actions()} />);
 
-    expect(screen.getByText(/Mỗi phần tính giờ riêng; hết giờ tự nộp/)).toBeInTheDocument();
     expect(screen.getByText(/Đổi màu và icon; không đổi bố cục, nội dung, dữ liệu/)).toBeInTheDocument();
     expect(screen.getByText(/Tự động tìm ảnh có giấy phép mở/)).toBeInTheDocument();
     expect(screen.getByRole("option", { name: "Tự động từ nguồn mở" })).toBeInTheDocument();
@@ -84,6 +83,24 @@ describe("new Settings app branch", () => {
 
     expect(screen.queryByRole("textbox", { name: "Tên chương trình" })).not.toBeInTheDocument();
     expect(screen.queryByRole("textbox", { name: /Chủ đề lớn của khoá/ })).not.toBeInTheDocument();
+  });
+
+  it.each(["manager", "operator"] as const)("does not expose editable placement-test timing controls to %s", (role) => {
+    const overview: OperatorSettingsOverviewView = {
+      organizationName: "GFT Demo",
+      settings: manager,
+      pilot: { startDate: "2026-10-12", weeks: 2, weekOverride: 0, minMinutesPerDay: 15, courseTheme: "Tiếng Anh giao tiếp công sở", coachDailyLimit: 20 },
+      test: { timed: true, times: { listening: 15, reading: 25, writing: 20, speaking: 15 }, warnLimit: 3 },
+      levelUp: manager.levelUp,
+      accounts: []
+    };
+    if (role === "manager") render(<SettingsPage role="manager" manager={manager} product={product} capabilities={capabilities} actions={actions()} />);
+    else render(<SettingsPage role="operator" operatorOverview={overview} product={product} capabilities={capabilities} actions={actions()} />);
+
+    expect(screen.queryByRole("checkbox", { name: "Bật tính giờ" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("spinbutton", { name: "Nghe (phút)" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("spinbutton", { name: "Đọc (phút)" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("spinbutton", { name: /Số lần cảnh báo/ })).not.toBeInTheDocument();
   });
 
   it("uses semantic Lucide marks for seasonal controls", () => {
@@ -163,12 +180,12 @@ describe("new Settings app branch", () => {
     };
     const callbacks = actions();
     const { container } = render(<SettingsPage role="operator" operatorOverview={overview} product={product} experience={experience} capabilities={capabilities} ai={{ provider: "openai", configured: true, baseUrl: "https://api.groq.com/openai/v1", model: "qwen/qwen3.8-27b", speechToTextModel: "whisper-large-v3-turbo" }} actions={callbacks} />);
-    expect([...container.querySelectorAll("h3")].map((node) => node.textContent)).toEqual(["Giao diện theo mùa / lễ", "Nhạc nền của Season", "Lịch pilot", "Bài test đầu vào", "Ngưỡng xét lên / hạ mức", "Người dùng", "Tùy chọn cá nhân"]);
+    expect([...container.querySelectorAll("h3")].map((node) => node.textContent)).toEqual(["Giao diện theo mùa / lễ", "Nhạc nền của Season", "Lịch pilot", "Ngưỡng xét lên / hạ mức", "Người dùng", "Tùy chọn cá nhân"]);
     expect(screen.getByText("Học viên A")).toBeInTheDocument();
     expect(screen.getByLabelText("Ngày bắt đầu (Thứ Hai tuần 1)")).not.toBeDisabled();
-    expect(screen.getByLabelText("Nghe (phút)")).toHaveValue(15);
+    expect(screen.queryByLabelText("Nghe (phút)")).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Lưu lịch pilot" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Lưu bài test" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Lưu bài test" })).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Lưu ngưỡng" })).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /Thêm học viên/i })).not.toBeInTheDocument();
     expect(screen.queryByRole("heading", { name: "Prompt & rubric" })).not.toBeInTheDocument();
