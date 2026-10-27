@@ -151,11 +151,12 @@ describe("Operator assessment audio playback", () => {
 
     render(<OperatorReviewAssessmentDetail detail={detail} onClose={vi.fn()} />);
 
-    expect(screen.getByText(/How would you acknowledge the customer's frustration\?/)).toBeInTheDocument();
+    expect(screen.getByText(/Câu 1\. How would you acknowledge the customer's frustration\?/)).toBeInTheDocument();
     expect(screen.getByText(/When can the customer expect a follow-up\?/)).toBeInTheDocument();
     expect(screen.getByLabelText("Phát audio S3_Q1")).toBeInTheDocument();
     expect(screen.getByLabelText("Phát audio S3_Q4")).toBeInTheDocument();
     expect(screen.queryByText(/Khách hàng mở đầu/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/^3\. How would you acknowledge/)).not.toBeInTheDocument();
   });
 
   it("flags typed speaking proxy evidence for mandatory manual review", () => {

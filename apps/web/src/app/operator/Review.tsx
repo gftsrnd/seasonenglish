@@ -248,7 +248,7 @@ export function OperatorReviewAssessmentDetail({ detail, onClose, onSaveManualSc
     const option = task.options?.find(item => item.value === value);
     return option ? `${option.value}. ${option.label}` : value;
   };
-  const renderAnswer = (section: string, task: ReviewTask, answer: ContentReviewAssessmentDetailView["answers"][number] | undefined, showTitle = true, itemNumber?: number) => {
+  const renderAnswer = (section: string, task: ReviewTask, answer: ContentReviewAssessmentDetailView["answers"][number] | undefined, showTitle = true, itemLabel = "") => {
     const audioKey = `${section}:${task.taskKey}`;
     const audioError = audioErrors[audioKey];
     const objective = section === "listening" || section === "reading";
@@ -259,7 +259,7 @@ export function OperatorReviewAssessmentDetail({ detail, onClose, onSaveManualSc
         : answer?.evidenceType === "audio" ? "Bản ghi âm" : null;
     const points = task.maxScore == null ? "" : ` (${task.maxScore}đ)`;
     return <article className="operator-answer-row" key={audioKey}>
-      {objective ? <p className="operator-answer-question"><b>{itemNumber ? `${itemNumber}. ` : ""}{task.prompt}</b><span className="muted">{points}</span></p> : <>{showTitle && task.title ? <p className="operator-answer-task-title"><b>{task.title}</b></p> : null}{task.prompt ? <p className="operator-answer-question"><b>{itemNumber ? `${itemNumber}. ` : ""}{task.prompt}</b></p> : null}</>}
+      {objective ? <p className="operator-answer-question"><b>{itemLabel}{task.prompt}</b><span className="muted">{points}</span></p> : <>{showTitle && task.title ? <p className="operator-answer-task-title"><b>{task.title}</b></p> : null}{task.prompt ? <p className="operator-answer-question"><b>{itemLabel}{task.prompt}</b></p> : null}</>}
       {objective ? <p className="operator-answer-result">{answerValue ? <><span className={isCorrect ? "operator-answer-correct" : task.correctAnswer ? "operator-answer-wrong" : ""}>{answerText(task, answerValue)}</span>{task.correctAnswer && !isCorrect ? <> <span className="operator-answer-arrow">→</span> {answerText(task, task.correctAnswer)}</> : null}</> : <>bỏ qua{task.correctAnswer ? <> <span className="operator-answer-arrow">→</span> {answerText(task, task.correctAnswer)}</> : null}</>}</p> : <div className="operator-answer-response">
         {evidenceLabel ? <div className="xs muted"><b>{evidenceLabel}</b></div> : null}
         {answerValue ? <p className="operator-answer-value">{answerValue}</p> : <p className="operator-answer-value muted">{section === "writing" ? "(không có bài viết)" : "(không có lời chép)"}</p>}
@@ -303,7 +303,10 @@ export function OperatorReviewAssessmentDetail({ detail, onClose, onSaveManualSc
         const body = <>
           {(section === "listening" || section === "reading") && renderStimulus(group.stimulus)}
           {(section === "listening" || section === "reading") && group.instruction && <p className="small muted operator-answer-instruction">{group.instruction}</p>}
-          <div className="operator-answer-rows">{group.tasks.map((task, index) => renderAnswer(section, task, answers.find(answer => answer.taskKey === task.taskKey), false, start + index + 1))}</div>
+          <div className="operator-answer-rows">{group.tasks.map((task, index) => {
+            const itemLabel = objective ? `${start + index + 1}. ` : section === "speaking" && group.key === "S3" ? `Câu ${index + 1}. ` : "";
+            return renderAnswer(section, task, answers.find(answer => answer.taskKey === task.taskKey), false, itemLabel);
+          })}</div>
         </>;
         return objective ? <details className="operator-answer-group-details" key={group.key}>
           <summary className="operator-answer-group-heading"><b id={`operator-group-${section}-${group.key}`}>{groupLabel}{groupMax ? ` · ${groupEarned}/${groupMax} điểm` : ""}</b></summary>
@@ -313,7 +316,7 @@ export function OperatorReviewAssessmentDetail({ detail, onClose, onSaveManualSc
           {body}
         </section>;
       })}
-      {ungrouped.length ? <div className="operator-answer-rows">{ungrouped.map(({ task, answer }, index) => renderAnswer(section, task, answer, true, numberOffset + index + 1))}</div> : null}
+      {ungrouped.length ? <div className="operator-answer-rows">{ungrouped.map(({ task, answer }, index) => renderAnswer(section, task, answer, true, `${numberOffset + index + 1}. `))}</div> : null}
     </div>;
   };
 

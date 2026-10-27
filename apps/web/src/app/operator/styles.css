@@ -2533,8 +2533,9 @@ body:has(.app-operator) #modal > .dialog > .row {
 .operator-answer-group-heading { cursor: pointer; padding: 0 0 4px; }
 .operator-answer-group-heading b { font-weight: 650; }
 .operator-answer-group-static > .operator-answer-group-heading { cursor: default; }
-.operator-answer-rows { display: block; padding: 1px 0 0; }
-.operator-answer-row { display: block; padding: 2px 0; border: 0; }
+.operator-answer-group-static + .operator-answer-group-static { margin-top: 16px; padding-top: 14px; border-top: 1px solid var(--line); }
+.operator-answer-rows { display: grid; gap: 10px; padding: 6px 0 2px; }
+.operator-answer-row { display: block; padding: 7px 0; border: 0; }
 .operator-answer-question,
 .operator-answer-result,
 .operator-answer-task-title,
@@ -2590,13 +2591,14 @@ body:has(.app-operator) #modal > .dialog > .row {
 .operator-manual-task-list { display: grid; gap: 4px; }
 .operator-manual-task-list > div { display: block; }
 .operator-manual-task-list span { margin-left: 6px; }
-.operator-manual-rubric { margin: 7px 0 3px; }
+.operator-manual-rubric { margin: 12px 0 6px; }
+.operator-manual-rubric fieldset { margin: 0 0 12px; padding: 12px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface-2, #f8f6f2); }
 .operator-manual-rubric > p { margin: 6px 0 0; }
 .operator-rubric-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
 .operator-rubric-field, .operator-manual-comment { display: grid; gap: 4px; color: var(--muted); font-size: 12px; }
 .operator-rubric-field input, .operator-manual-comment textarea { width: 100%; box-sizing: border-box; }
 .operator-rubric-field input { min-height: 38px; }
-.operator-manual-comment { margin-top: 8px; }
+.operator-manual-comment { margin-top: 12px; }
 .operator-manual-comment-title { margin-bottom: 8px; }
 .operator-confirm-dialog { max-width: 420px; }
 
