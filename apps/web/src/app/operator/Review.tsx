@@ -109,14 +109,34 @@ function AppealReviewCard({ item, readOnly, blockedMessage, busy, itemBusy, onDe
   </article>;
 }
 
-export function generateWeeklyPracticeDraft(topic: string, cefr: Cefr, vocabulary: readonly string[]) {
+export function generateWeeklyPracticeDraft(topic: string, cefr: Cefr, vocabulary: readonly string[], variation = 0) {
   const sentenceRange = cefr === "A1" ? "3–4" : cefr === "A2" ? "3–5" : "5–7";
   const words = [...new Set(vocabulary.map(value => value.trim()).filter(Boolean))].slice(0, 12);
+  const options = [
+    {
+      task: `Write ${sentenceRange} sentences about “${topic}”.`,
+      guidance: `Viết ${sentenceRange} câu tiếng Anh về chủ đề “${topic}”.`
+    },
+    {
+      task: `Describe a realistic workplace situation about “${topic}” in ${sentenceRange} sentences.`,
+      guidance: `Mô tả một tình huống công việc thực tế về “${topic}” bằng ${sentenceRange} câu tiếng Anh.`
+    },
+    {
+      task: `Write a short connected paragraph of ${sentenceRange} sentences about “${topic}”.`,
+      guidance: `Viết một đoạn liền mạch ${sentenceRange} câu tiếng Anh về “${topic}”, có mở đầu và kết quả.`
+    },
+    {
+      task: `In ${sentenceRange} sentences, explain what happened and what should happen next in a situation about “${topic}”.`,
+      guidance: `Trong ${sentenceRange} câu tiếng Anh, nêu điều đã xảy ra và bước xử lý tiếp theo trong tình huống “${topic}”.`
+    }
+  ];
+  const option = options[((variation % options.length) + options.length) % options.length]!;
+  const vocabularyInstruction = words.length
+    ? ` Dùng ít nhất 3 từ trong bài tuần này: ${words.join(", ")}.`
+    : " Dùng ít nhất 3 từ trong bài tuần này.";
   return {
-    task: `Write ${sentenceRange} sentences about “${topic}”.`,
-    guidance: words.length
-      ? `Viết ${sentenceRange} câu tiếng Anh về chủ đề “${topic}”. Dùng ít nhất 3 từ trong bài tuần này: ${words.join(", ")}.`
-      : `Viết ${sentenceRange} câu tiếng Anh về chủ đề “${topic}”. Dùng ít nhất 3 từ trong bài tuần này.`
+    task: option.task,
+    guidance: `${option.guidance}${vocabularyInstruction}`
   };
 }
 
@@ -128,10 +148,12 @@ export function WeeklyPracticeEditor({ item, readOnly, onSave }: { item: ReviewW
   const [saveError, setSaveError] = useState<string>();
   const savingRef = useRef(false);
   const lastSaveAttemptRef = useRef(0);
+  const generationRef = useRef(0);
   const requiredVocabulary = [...new Set(vocabulary.split(/[\n,]+/u).map(value => value.trim()).filter(Boolean))];
   const context = `Tuần ${item.week} · ${item.cefr}`;
   const generate = () => {
-    const generated = generateWeeklyPracticeDraft(item.topic, item.cefr, requiredVocabulary);
+    const generated = generateWeeklyPracticeDraft(item.topic, item.cefr, requiredVocabulary, generationRef.current);
+    generationRef.current += 1;
     setTask(generated.task);
     setGuidance(generated.guidance);
   };

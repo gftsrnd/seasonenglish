@@ -532,6 +532,31 @@ describe("Operator app rebuild", () => {
     expect(screen.queryByText("Nghe")).not.toBeInTheDocument();
   });
 
+  it("generates a new weekly-practice option on every click", async () => {
+    const user = userEvent.setup();
+    render(<OperatorReview view={{
+      activeTab: "weekly", counts: { subs: 0, coach: 0, weekly: 1, appeals: 0, attempts: 0, tests: 0 },
+      submissions: [], coachTurns: [], appeals: [], attempts: [], tests: [],
+      weeklyPractices: [
+        { id: "1:A2", week: 1, cefr: "A2", topic: "Reporting a safety incident", status: "draft", version: 3, task: "Old task", guidance: "Old guidance", requiredVocabulary: ["fell", "corridor", "witness"] }
+      ]
+    } as any} actions={{ onTabChange: vi.fn(), onMarkSubmission: vi.fn(), onMarkCoachTurn: vi.fn(), onGradeAi: vi.fn(), onGradeManual: vi.fn(), onDecideAppeal: vi.fn(), onViewTest: vi.fn(), onSaveWeeklyPractice: vi.fn() }} />);
+
+    const generate = screen.getByRole("button", { name: "Sinh bài cuối tuần · Tuần 1 · A2" });
+    const task = screen.getByRole("textbox", { name: "Đề bài · Tuần 1 · A2" });
+    const guidance = screen.getByRole("textbox", { name: "Hướng dẫn · Tuần 1 · A2" });
+
+    await user.click(generate);
+    const first = `${(task as HTMLTextAreaElement).value}\n${(guidance as HTMLTextAreaElement).value}`;
+    await user.click(generate);
+    const second = `${(task as HTMLTextAreaElement).value}\n${(guidance as HTMLTextAreaElement).value}`;
+    await user.click(generate);
+    const third = `${(task as HTMLTextAreaElement).value}\n${(guidance as HTMLTextAreaElement).value}`;
+
+    expect(new Set([first, second, third]).size).toBe(3);
+    expect(generate).toBeEnabled();
+  });
+
   it("renders weekly practice after manual compose without a duplicate standalone heading", () => {
     const onSaveWeeklyPractice = vi.fn();
     render(<OperatorLessonSet view={{
