@@ -254,6 +254,7 @@ describe("Operator app rebuild", () => {
     render(<OperatorLessonSet view={{ week: 1, cefr: "A2", status: "draft", topic: "Meetings", explanationLanguage: "tiếng Việt", aiConnected: true, warnings: { incomplete: 1, level: ["T2: vượt mức"], phrases: 1, details: 1 }, lessons: [{ id: "l1", day: 1, dayLabel: "T2", title: "Opening a meeting", durationMin: 10, practiceKind: "điền từ", practiceAnswer: "start", manual: true, complete: false, intro: "Mở đầu cuộc họp", content: <p>Nội dung thật từ API</p> }] } as any} actions={{ onBack: vi.fn(), onApprove, onUnapprove: vi.fn(), onRegenerate: vi.fn(), onDeleteSet: vi.fn(), onFillPhrases: vi.fn(), onEnrich: vi.fn(), onEditLesson: vi.fn(), onDeleteLesson: vi.fn(), onComposeDay: vi.fn() }} />);
     expect(screen.getByText(/Checklist duyệt/)).toBeInTheDocument();
     expect(screen.getByText(/thiếu thành phần bắt buộc/)).toBeInTheDocument();
+    expect(screen.getAllByTestId("lesson-warning-content")).toHaveLength(1);
     expect(screen.getByText(/chưa đủ 3 cụm từ/)).toBeInTheDocument();
     const manualCompose = screen.getByTestId("lesson-section-manual-compose");
     expect(within(manualCompose).getByRole("heading", { name: /Soạn bài trực tiếp/ })).toBeInTheDocument();
@@ -369,6 +370,75 @@ describe("Operator app rebuild", () => {
     expect(screen.getByText("Bản nháp v2")).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Phát hành Gợi ý khung chủ đề tuần" }));
     expect(onPublish).toHaveBeenCalledWith("weeks", 2);
+  });
+
+  it("keeps AI regrade and an editable manual score with feedback available after a submission was graded", async () => {
+    const user = userEvent.setup();
+    const onGradeAi = vi.fn();
+    const onGradeManual = vi.fn();
+    render(<OperatorReview view={{
+      activeTab: "subs", counts: { subs: 1, coach: 0, weekly: 0, appeals: 0, attempts: 0, tests: 0 },
+      submissions: [{
+        id: "submission-graded", learnerName: "Việt", cefr: "A2", week: 2, type: "writing",
+        submittedAt: "27/10/2026 19:57", operatorChecked: false, task: "Write 3–5 sentences.",
+        guidance: "Dùng ít nhất 3 từ trong bài tuần này.", requiredVocabulary: ["incident", "corridor", "report"],
+        text: "A short answer.",
+        total: 100, rubric: { meaning: 5, vocab: 5, grammar: 5 }, aiGraded: false, feedback: "Nhận xét cũ", suggestions: []
+      }], coachTurns: [], weeklyPractices: [], appeals: [], attempts: [], tests: [], aiConnected: true
+    } as any} actions={{ onTabChange: vi.fn(), onMarkSubmission: vi.fn(), onMarkCoachTurn: vi.fn(), onGradeAi, onGradeManual, onDecideAppeal: vi.fn(), onViewTest: vi.fn() } as any} />);
+
+    expect(screen.getByRole("checkbox", { name: "Đã xem bài" })).toBeInTheDocument();
+    expect(screen.queryByRole("checkbox", { name: "Đã đọc mẫu" })).not.toBeInTheDocument();
+    expect(screen.getByText("Đề bài")).toBeInTheDocument();
+    expect(screen.getByText("Hướng dẫn")).toBeInTheDocument();
+    expect(screen.getByText("Từ bắt buộc")).toBeInTheDocument();
+    expect(screen.getByText("incident, corridor, report")).toBeInTheDocument();
+    expect(screen.getByText("Bài làm của học viên")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Chấm lại bằng AI" }));
+    expect(onGradeAi).toHaveBeenCalledWith("submission-graded");
+    expect(screen.getByRole("spinbutton", { name: "Đúng ý" })).toHaveValue(5);
+    expect(screen.getByRole("spinbutton", { name: "Từ vựng" })).toHaveValue(5);
+    expect(screen.getByRole("spinbutton", { name: "Ngữ pháp" })).toHaveValue(5);
+    const feedback = screen.getByRole("textbox", { name: "Nhận xét" });
+    expect(feedback).toHaveValue("Nhận xét cũ");
+    await user.clear(feedback);
+    await user.type(feedback, "Cần dùng câu tự nhiên hơn.");
+    await user.click(screen.getByRole("button", { name: "Lưu kết quả chấm" }));
+    expect(onGradeManual).toHaveBeenCalledWith("submission-graded", {
+      meaning: 5, vocabulary: 5, grammar: 5, feedback: "Cần dùng câu tự nhiên hơn."
+    });
+  });
+
+  it("separates the ungraded state from the submission brief", () => {
+    render(<OperatorReview view={{
+      activeTab: "subs", counts: { subs: 1, coach: 0, weekly: 0, appeals: 0, attempts: 0, tests: 0 },
+      submissions: [{ id: "submission-new", learnerName: "An", cefr: "A1", week: 1, type: "writing",
+        submittedAt: "27/10/2026 20:00", operatorChecked: false, task: "Write three sentences.",
+        guidance: "Viết ba câu ngắn.", requiredVocabulary: ["fall", "floor", "report"], text: "A man fell down." }],
+      coachTurns: [], weeklyPractices: [], appeals: [], attempts: [], tests: [], aiConnected: true
+    } as any} actions={{ onTabChange: vi.fn(), onMarkSubmission: vi.fn(), onMarkCoachTurn: vi.fn(), onGradeAi: vi.fn(), onGradeManual: vi.fn(), onDecideAppeal: vi.fn(), onViewTest: vi.fn() } as any} />);
+
+    expect(screen.getByText("Chưa chấm").closest(".operator-submission-status-row")).not.toBeNull();
+  });
+
+  it("presents a lesson-part appeal as a readable review card", () => {
+    render(<OperatorReview view={{
+      activeTab: "appeals", counts: { subs: 0, coach: 0, weekly: 0, appeals: 1, attempts: 0, tests: 0 },
+      submissions: [], coachTurns: [], weeklyPractices: [], attempts: [], tests: [],
+      appeals: [{
+        id: "appeal-reading", learnerName: "Media GFT", cefr: "A1", title: "Tuần 1 · T2 · Reporting a safety incident",
+        part: "reading", kind: "part", attempts: 2, at: "27/10 19:14", status: "pending",
+        question: "What happened?", options: ["He fell", "He ran"], answer: "He fell",
+        key: "He fell", aiFeedback: "Câu trả lời đúng ý.", reason: "Tôi muốn kiểm tra lại."
+      }]
+    } as any} actions={{ onTabChange: vi.fn(), onMarkSubmission: vi.fn(), onMarkCoachTurn: vi.fn(), onGradeAi: vi.fn(), onGradeManual: vi.fn(), onDecideAppeal: vi.fn(), onViewTest: vi.fn() } as any} />);
+
+    const appeal = screen.getByRole("article", { name: "Kháng nghị phần Đọc của Media GFT" });
+    expect(within(appeal).getByRole("heading", { name: "Tuần 1 · T2 · Reporting a safety incident" })).toBeInTheDocument();
+    expect(within(appeal).getByText("Phần Đọc")).toBeInTheDocument();
+    expect(within(appeal).getByText("Bài làm của học viên")).toBeInTheDocument();
+    expect(within(appeal).getByText("Lý do kháng nghị")).toBeInTheDocument();
+    expect(within(appeal).getByRole("button", { name: "Chấp nhận kháng nghị" })).toBeInTheDocument();
   });
 
   it("keeps review test actions discoverable in the responsive action table", () => {

@@ -147,6 +147,21 @@ describe("E4S repositories", () => {
     expect(active.rows[0]?.content).not.toContain("Mỗi lesson phải có đúng một lần 9 part code");
   });
 
+  it("does not shrink a configured four-week pilot during a local seed refresh", async () => {
+    const current = await repositories.manager.settings(DEMO_IDS.manager);
+    expect(current).not.toBeNull();
+    const { organizationName: _organizationName, ...settings } = current!;
+    await repositories.manager.saveSettings(DEMO_IDS.manager, { ...settings, pilotWeeks: 4 });
+
+    await seedDemo(client, { mode: "local" });
+
+    await expect(pool.query<{ week_count: number }>(
+      "select week_count from programs where id = $1", [DEMO_IDS.program]
+    )).resolves.toMatchObject({ rows: [{ week_count: 4 }] });
+
+    await repositories.manager.saveSettings(DEMO_IDS.manager, { ...settings, pilotWeeks: 2 });
+  });
+
   it("provides stable seeded read models and empty optional operational domains", async () => {
     await expect(repositories.assessments.listPending(DEMO_IDS.operator)).resolves.toEqual([]);
     await expect(repositories.coach.listForLearner(DEMO_IDS.learner)).resolves.toEqual([

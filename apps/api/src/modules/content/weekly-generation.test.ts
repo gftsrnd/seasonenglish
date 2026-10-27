@@ -84,6 +84,46 @@ const skills = {
 };
 
 describe("weekly lesson generation orchestration", () => {
+  it("keeps the foundation pass valid when a grammar-classifier evidence check exhausts", async () => {
+    const invalidEvidence = {
+      ...grammarClassification,
+      evidence: [{ sourceRef: "lessonFocus", quote: "text that is not in the focus" }]
+    };
+    const runTask = vi.fn(async (taskId: string, input: unknown) => {
+      const dayNumber = (input as { dayNumber: number }).dayNumber;
+      if (taskId === "weekly_lesson_grammar_classifier") return { output: invalidEvidence, metadata };
+      if (taskId === "weekly_lesson_foundation") {
+        const classification = (input as { grammarClassification: typeof grammarClassification }).grammarClassification;
+        expect(classification).toMatchObject({ status: "classified", confidence: "medium" });
+        return {
+          output: {
+            ...foundation,
+            grammar: {
+              ...foundation.grammar,
+              contentType: classification.contentType,
+              targetName: classification.targetName,
+              scope: classification.scope
+            }
+          },
+          metadata
+        };
+      }
+      if (taskId === "weekly_lesson_vocabulary") return { output: vocabularyForDay(dayNumber), metadata };
+      if (taskId === "weekly_lesson_skills") return { output: skills, metadata };
+      throw new Error(`UNEXPECTED_TASK:${taskId}`);
+    });
+
+    const generated = await generateWeeklyLessons(
+      { weekNumber: 1, topic: "Giving feedback", description: "Give clear feedback", objectives: "Give clear feedback", keyVocabHint: "feedback", plan: { A1: ["give clear feedback", "two", "three", "four", "five"] } } as ContentWeekInput,
+      "A1", { prompt: "Generate lessons." }, { runTask } as unknown as AiTaskRunner,
+      { dayNumbers: [1], qualityReview: true }
+    );
+
+    expect(generated.lessons[0]?.parts.find((part) => part.code === "grammar")?.content).toMatchObject({
+      targetName: "give clear feedback"
+    });
+  });
+
   it("retries a foundation whose pronunciation words do not contain the target sound", async () => {
     const invalidPronunciation = {
       ...foundation,
@@ -107,7 +147,7 @@ describe("weekly lesson generation orchestration", () => {
       throw new Error(`UNEXPECTED_TASK:${taskId}`);
     });
 
-    await generateWeeklyLessons(
+    const generated = await generateWeeklyLessons(
       { weekNumber: 1, topic: "Giving feedback", description: "Give clear feedback", objectives: "Give clear feedback", keyVocabHint: "feedback", plan: { A1: ["give clear feedback", "two", "three", "four", "five"] } } as ContentWeekInput,
       "A1", { prompt: "Generate lessons." }, { runTask } as unknown as AiTaskRunner,
       { dayNumbers: [1], qualityReview: true }
@@ -122,6 +162,55 @@ describe("weekly lesson generation orchestration", () => {
     expect(repairPrompt).toContain("pronunciation.word1.ipa");
     expect(repairPrompt).toContain("The fixed target sound is /p/");
     expect(repairPrompt).toContain("Replace only word1 and word2");
+    expect(generated.lessons[0]?.parts.find((part) => part.code === "grammar")?.content).toMatchObject({
+      title: "Ngữ pháp",
+      contentType: "sentence_pattern",
+      targetName: "S + V + O",
+      scope: "Giving clear feedback",
+      formula: "S + V + O",
+      usage: "Dùng để đưa ra góp ý trong công việc.",
+      examples: ["I give clear feedback.", "I give helpful feedback."]
+    });
+    expect(generated.lessons[0]?.parts.find((part) => part.code === "pronunciation")?.content).toMatchObject({ focus: "/f/" });
+    expect(generated.lessons[0]?.parts.find((part) => part.code === "pronunciation")?.content).not.toHaveProperty("phonemeAudioUrl");
+  });
+
+  it("keeps valid foundation sections but hides pronunciation after three failed sound repairs", async () => {
+    let foundationAttempts = 0;
+    const invalidPronunciation = {
+      ...foundation,
+      pronunciation: {
+        ...foundation.pronunciation,
+        focus: "/p/",
+        word1: { word: "cost", ipa: "/kɒst/" },
+        word2: { word: "deadline", ipa: "/ˈdedlaɪn/" },
+        word3: { word: "planned", ipa: "/plænd/" }
+      }
+    };
+    const runTask = vi.fn(async (taskId: string, input: unknown) => {
+      const dayNumber = (input as { dayNumber: number }).dayNumber;
+      if (taskId === "weekly_lesson_grammar_classifier") return { output: grammarClassification, metadata };
+      if (taskId === "weekly_lesson_foundation") {
+        foundationAttempts += 1;
+        return { output: invalidPronunciation, metadata };
+      }
+      if (taskId === "weekly_lesson_vocabulary") return { output: vocabularyForDay(dayNumber), metadata };
+      if (taskId === "weekly_lesson_skills") return { output: skills, metadata };
+      throw new Error(`UNEXPECTED_TASK:${taskId}`);
+    });
+
+    const generated = await generateWeeklyLessons(
+      { weekNumber: 1, topic: "Giving feedback", description: "Give clear feedback", objectives: "Give clear feedback", keyVocabHint: "feedback", plan: { A1: ["give clear feedback", "two", "three", "four", "five"] } } as ContentWeekInput,
+      "A1", { prompt: "Generate lessons." }, { runTask } as unknown as AiTaskRunner,
+      { dayNumbers: [1] }
+    );
+
+    expect(foundationAttempts).toBe(3);
+    expect(generated.lessons[0]?.parts.some((part) => part.code === "objective")).toBe(true);
+    expect(generated.lessons[0]?.parts.some((part) => part.code === "grammar")).toBe(true);
+    expect(generated.lessons[0]?.parts.find((part) => part.code === "pronunciation")?.content).toMatchObject({
+      status: "unavailable", hidden: true, reason: "invalid_pronunciation_target"
+    });
   });
 
   it("retries an abstaining grammar classifier when the lesson focus declares a sentence frame", async () => {
@@ -150,7 +239,84 @@ describe("weekly lesson generation orchestration", () => {
 
     expect(classifierAttempts).toBe(2);
     expect(runTask.mock.calls.find((call) => call[0] === "weekly_lesson_grammar_classifier" && call[2]?.systemPrompt?.includes("REPAIR REQUIRED"))?.[2]?.systemPrompt)
-      .toContain("declares an explicit sentence frame");
+      .toContain("every planned lesson requires one narrow grammar rule or sentence pattern");
+  });
+
+  it("retries an abstaining grammar classifier for every planned lesson focus", async () => {
+    const abstained = {
+      status: "no_suitable_content", contentType: null, targetName: null, scope: null,
+      support: "none", confidence: "high", evidence: [], rejectedCandidates: []
+    };
+    let classifierAttempts = 0;
+    const classifiedGreeting = {
+      ...grammarClassification,
+      targetName: "I am + name",
+      scope: "Greetings and names",
+      evidence: [{ sourceRef: "lessonFocus", quote: "Greetings and names" }]
+    };
+    const runTask = vi.fn(async (taskId: string, input: unknown) => {
+      const dayNumber = (input as { dayNumber: number }).dayNumber;
+      if (taskId === "weekly_lesson_grammar_classifier") {
+        classifierAttempts += 1;
+        return { output: classifierAttempts === 1 ? abstained : classifiedGreeting, metadata };
+      }
+      if (taskId === "weekly_lesson_foundation") return { output: { ...foundation, grammar: { ...foundation.grammar, targetName: "I am + name", scope: "Greetings and names" } }, metadata };
+      if (taskId === "weekly_lesson_vocabulary") return { output: vocabularyForDay(dayNumber), metadata };
+      if (taskId === "weekly_lesson_skills") return { output: skills, metadata };
+      throw new Error(`UNEXPECTED_TASK:${taskId}`);
+    });
+
+    await generateWeeklyLessons(
+      { weekNumber: 1, topic: "Meeting a new colleague", description: "Introduce yourself", objectives: "Greet a colleague", keyVocabHint: "hello, name", plan: { A1: ["Greetings and names", "two", "three", "four", "five"] } } as ContentWeekInput,
+      "A1", { prompt: "Generate lessons." }, { runTask } as unknown as AiTaskRunner,
+      { dayNumbers: [1], qualityReview: true }
+    );
+
+    expect(classifierAttempts).toBe(2);
+  });
+
+  it("uses the declared lesson focus when the grammar classifier abstains twice", async () => {
+    const abstained = {
+      status: "no_suitable_content", contentType: null, targetName: null, scope: null,
+      support: "none", confidence: "high", evidence: [], rejectedCandidates: []
+    };
+    const focus = "Can I have a copy, please?";
+    const fallbackFoundation = {
+      ...foundation,
+      title: focus,
+      grammar: {
+        ...foundation.grammar,
+        contentType: "sentence_pattern",
+        targetName: focus,
+        scope: focus
+      }
+    };
+    const runTask = vi.fn(async (taskId: string, input: unknown) => {
+      const dayNumber = (input as { dayNumber: number }).dayNumber;
+      if (taskId === "weekly_lesson_grammar_classifier") return { output: abstained, metadata };
+      if (taskId === "weekly_lesson_foundation") {
+        expect(input).toMatchObject({
+          grammarClassification: {
+            status: "classified", contentType: "sentence_pattern", targetName: focus, scope: focus,
+            evidence: [{ sourceRef: "lessonFocus", quote: focus }]
+          }
+        });
+        return { output: fallbackFoundation, metadata };
+      }
+      if (taskId === "weekly_lesson_vocabulary") return { output: vocabularyForDay(dayNumber), metadata };
+      if (taskId === "weekly_lesson_skills") return { output: skills, metadata };
+      throw new Error(`UNEXPECTED_TASK:${taskId}`);
+    });
+
+    const generated = await generateWeeklyLessons(
+      { weekNumber: 3, topic: "Requesting a document copy", description: "Ask a colleague for a copy.", objectives: "Request one document politely.", keyVocabHint: "copy, document", plan: { A1: [focus, "two", "three", "four", "five"] } } as ContentWeekInput,
+      "A1", { prompt: "Generate lessons." }, { runTask } as unknown as AiTaskRunner,
+      { dayNumbers: [1], qualityReview: true }
+    );
+
+    expect(generated.lessons[0]?.parts.find((part) => part.code === "grammar")?.content).toMatchObject({
+      targetName: focus, scope: focus, formula: "S + V + O", examples: ["I give clear feedback.", "I give helpful feedback."]
+    });
   });
 
   it("rejects fabricated grammar evidence and retries with a verbatim source quote", async () => {
@@ -208,7 +374,7 @@ describe("weekly lesson generation orchestration", () => {
       .toContain("evidence quote must appear verbatim");
   });
 
-  it("preserves prompt-native A2 objectives and repairs an invalid A2 writing format without a second AI reviewer", async () => {
+  it("preserves prompt-native A2 objectives and uses the semantic reviewer without exceeding three skill attempts", async () => {
     const a2Foundation = {
       ...foundation,
       objective: {
@@ -266,12 +432,51 @@ describe("weekly lesson generation orchestration", () => {
     const objective = generated.lessons[0]!.parts.find((part) => part.code === "objective")!.content as { items: Array<Record<string, unknown>> };
     expect(objective.items[0]?.text).toBe("Sau bài học, bạn có thể đề nghị đồng nghiệp hỗ trợ bằng 2 câu khi nhập vai.");
     expect(objective.items[1]).toMatchObject({ action_verb: "dùng", target_language: ["Could you please + V?"], assessed_by: "speaking" });
-    expect(skillAttempts).toBe(2);
-    expect(reviewAttempts).toBe(0);
+    expect(skillAttempts).toBe(3);
+    expect(reviewAttempts).toBe(2);
+    expect(runTask.mock.calls.find((call) => call[0] === "weekly_lesson_skills_reviewer")?.[2]?.systemPrompt)
+      .toContain("sentence fragment");
+  });
+
+  it("keeps grammar when a B1 target phrase contains an otherwise unobservable word", async () => {
+    const focus = "I'd appreciate it if you could send it.";
+    const b1Foundation = {
+      ...foundation,
+      title: "I'd appreciate it if you could + verb",
+      objective: {
+        ...foundation.objective,
+        explanationLanguage: "en",
+        items: [
+          { ...foundation.objective.items[0]!, text: "By the end of this lesson, you will be able to write a polite email request.", action_verb: "write" },
+          { ...foundation.objective.items[1]!, text: "By the end of this lesson, you will be able to explain a polite request using \"I'd appreciate it if you could...\".", action_verb: "explain", target_language: [focus] },
+          { ...foundation.objective.items[1]!, id: "L2", text: "By the end of this lesson, you will be able to write one clear follow-up request.", action_verb: "write", target_language: ["follow-up request"] }
+        ]
+      },
+      grammar: { ...foundation.grammar, targetName: focus, scope: focus }
+    };
+    const runTask = vi.fn(async (taskId: string, input: unknown) => {
+      const dayNumber = (input as { dayNumber: number }).dayNumber;
+      if (taskId === "weekly_lesson_grammar_classifier") return {
+        output: { ...grammarClassification, targetName: focus, scope: focus, evidence: [{ sourceRef: "lessonFocus", quote: focus }] }, metadata
+      };
+      if (taskId === "weekly_lesson_foundation") return { output: b1Foundation, metadata };
+      if (taskId === "weekly_lesson_vocabulary") return { output: vocabularyForDay(dayNumber), metadata };
+      if (taskId === "weekly_lesson_skills") return { output: skills, metadata };
+      throw new Error(`UNEXPECTED_TASK:${taskId}`);
+    });
+
+    const generated = await generateWeeklyLessons(
+      { weekNumber: 3, topic: "Requesting a document copy", description: "Send a document request.", objectives: "Write a polite request.", keyVocabHint: "request", plan: { B1: [focus, "two", "three", "four", "five"] } } as ContentWeekInput,
+      "B1", { prompt: "Generate lessons." }, { runTask } as unknown as AiTaskRunner,
+      { dayNumbers: [1], qualityReview: true }
+    );
+
+    expect(generated.lessons[0]?.parts.find((part) => part.code === "grammar")?.content).toMatchObject({ targetName: focus, scope: focus });
   });
 
   it("accepts a reviewer response whose findings explicitly say they are non-blocking", async () => {
     let skillAttempts = 0;
+    let reviewAttempts = 0;
     const runTask = vi.fn(async (taskId: string, input: unknown, _options?: { systemPrompt?: string }) => {
       const dayNumber = (input as { dayNumber: number }).dayNumber;
       if (taskId === "weekly_lesson_grammar_classifier") return { output: grammarClassification, metadata };
@@ -281,7 +486,9 @@ describe("weekly lesson generation orchestration", () => {
         skillAttempts += 1;
         return { output: skills, metadata };
       }
-      if (taskId === "weekly_lesson_skills_reviewer") return {
+      if (taskId === "weekly_lesson_skills_reviewer") {
+        reviewAttempts += 1;
+        return {
         output: {
           ...approvedSkillsReview,
           status: "needs_revision",
@@ -293,7 +500,8 @@ describe("weekly lesson generation orchestration", () => {
           ]
         },
         metadata
-      };
+        };
+      }
       throw new Error(`UNEXPECTED_TASK:${taskId}`);
     });
     const week = {
@@ -309,9 +517,191 @@ describe("weekly lesson generation orchestration", () => {
 
     expect(generated.lessons).toHaveLength(1);
     expect(skillAttempts).toBe(1);
+    expect(reviewAttempts).toBe(1);
   });
 
-  it("repairs grammar content whose type does not match the independent classifier", async () => {
+  it("keeps deterministically valid exercises when the semantic reviewer is unavailable", async () => {
+    let skillAttempts = 0;
+    let reviewAttempts = 0;
+    const runTask = vi.fn(async (taskId: string, input: unknown) => {
+      const dayNumber = (input as { dayNumber: number }).dayNumber;
+      if (taskId === "weekly_lesson_grammar_classifier") return { output: grammarClassification, metadata };
+      if (taskId === "weekly_lesson_foundation") return { output: foundation, metadata };
+      if (taskId === "weekly_lesson_vocabulary") return { output: vocabularyForDay(dayNumber), metadata };
+      if (taskId === "weekly_lesson_skills") {
+        skillAttempts += 1;
+        return { output: skills, metadata };
+      }
+      if (taskId === "weekly_lesson_skills_reviewer") {
+        reviewAttempts += 1;
+        throw Object.assign(new Error("AI_UNAVAILABLE"), { code: "AI_UNAVAILABLE" });
+      }
+      throw new Error(`UNEXPECTED_TASK:${taskId}`);
+    });
+
+    const generated = await generateWeeklyLessons(
+      {
+        weekNumber: 1, topic: "Giving feedback", description: "Give clear feedback",
+        objectives: "Give clear feedback", keyVocabHint: "feedback, clear",
+        plan: { A1: ["give clear feedback", "two", "three", "four", "five"] }
+      } as ContentWeekInput,
+      "A1",
+      { prompt: "Generate lessons." },
+      { runTask } as unknown as AiTaskRunner,
+      { dayNumbers: [1], qualityReview: true }
+    );
+
+    expect(generated.lessons).toHaveLength(1);
+    expect(generated.lessons[0]?.parts.some((part) => part.code === "listening")).toBe(true);
+    expect(skillAttempts).toBe(1);
+    expect(reviewAttempts).toBe(1);
+  });
+
+  it("regenerates an overlong listening script instead of cutting it into a sentence fragment", async () => {
+    let skillAttempts = 0;
+    const overlongSkills = {
+      ...skills,
+      listening: {
+        ...skills.listening,
+        body: "The invoice shows one hundred units, but we ordered only eighty units, so could you check the original purchase order today?"
+      }
+    };
+    const runTask = vi.fn(async (taskId: string, input: unknown) => {
+      const dayNumber = (input as { dayNumber: number }).dayNumber;
+      if (taskId === "weekly_lesson_grammar_classifier") return { output: grammarClassification, metadata };
+      if (taskId === "weekly_lesson_foundation") return { output: foundation, metadata };
+      if (taskId === "weekly_lesson_vocabulary") return { output: vocabularyForDay(dayNumber), metadata };
+      if (taskId === "weekly_lesson_skills") {
+        skillAttempts += 1;
+        return { output: skillAttempts === 1 ? overlongSkills : skills, metadata };
+      }
+      if (taskId === "weekly_lesson_skills_reviewer") return { output: approvedSkillsReview, metadata };
+      throw new Error(`UNEXPECTED_TASK:${taskId}`);
+    });
+
+    const generated = await generateWeeklyLessons(
+      {
+        weekNumber: 1, topic: "Giving feedback", description: "Give clear feedback",
+        objectives: "Give clear feedback", keyVocabHint: "feedback, clear",
+        plan: { A1: ["give clear feedback", "two", "three", "four", "five"] }
+      } as ContentWeekInput,
+      "A1",
+      { prompt: "Generate lessons." },
+      { runTask } as unknown as AiTaskRunner,
+      { dayNumbers: [1], qualityReview: true }
+    );
+
+    expect(skillAttempts).toBe(2);
+    expect(generated.lessons[0]?.parts.find((part) => part.code === "listening")?.content).toMatchObject({
+      audio: skills.listening.body
+    });
+  });
+
+  it("keeps the final schema-valid exercise block when only soft quality limits remain after three repairs", async () => {
+    let skillAttempts = 0;
+    const overlongSkills = {
+      ...skills,
+      listening: {
+        ...skills.listening,
+        body: "The invoice shows one hundred units, but we ordered only eighty units, so could you check the original purchase order today?"
+      }
+    };
+    const runTask = vi.fn(async (taskId: string, input: unknown) => {
+      const dayNumber = (input as { dayNumber: number }).dayNumber;
+      if (taskId === "weekly_lesson_grammar_classifier") return { output: grammarClassification, metadata };
+      if (taskId === "weekly_lesson_foundation") return { output: foundation, metadata };
+      if (taskId === "weekly_lesson_vocabulary") return { output: vocabularyForDay(dayNumber), metadata };
+      if (taskId === "weekly_lesson_skills") {
+        skillAttempts += 1;
+        return { output: overlongSkills, metadata };
+      }
+      throw new Error(`UNEXPECTED_TASK:${taskId}`);
+    });
+
+    const generated = await generateWeeklyLessons(
+      {
+        weekNumber: 1, topic: "Giving feedback", description: "Give clear feedback",
+        objectives: "Give clear feedback", keyVocabHint: "feedback, clear",
+        plan: { A2: ["give clear feedback", "two", "three", "four", "five"] }
+      } as ContentWeekInput,
+      "A2",
+      { prompt: "Generate lessons." },
+      { runTask } as unknown as AiTaskRunner,
+      { dayNumbers: [1], qualityReview: true }
+    );
+
+    expect(skillAttempts).toBe(3);
+    expect(generated.failures).toEqual([]);
+    expect(generated.lessons[0]?.parts.filter((part) => ["listening", "reading", "writing", "word_class", "word_use", "speaking"].includes(part.code))).toHaveLength(6);
+  });
+
+  it("keeps complete B1 passages that are longer than the beginner brevity target", async () => {
+    let skillAttempts = 0;
+    const b1Skills = {
+      ...skills,
+      listening: {
+        ...skills.listening,
+        body: "The client called accounts this morning because the invoice showed one hundred units, but their signed purchase order clearly showed only eighty units."
+      },
+      reading: {
+        ...skills.reading,
+        body: "Our records show eighty units on the signed purchase order, while the supplier invoice lists one hundred units. The accounts assistant checked both documents and asked the supplier to confirm the correct quantity before payment."
+      }
+    };
+    const runTask = vi.fn(async (taskId: string, input: unknown) => {
+      const dayNumber = (input as { dayNumber: number }).dayNumber;
+      if (taskId === "weekly_lesson_grammar_classifier") return { output: grammarClassification, metadata };
+      if (taskId === "weekly_lesson_foundation") return { output: foundation, metadata };
+      if (taskId === "weekly_lesson_vocabulary") return { output: vocabularyForDay(dayNumber), metadata };
+      if (taskId === "weekly_lesson_skills") {
+        skillAttempts += 1;
+        return { output: b1Skills, metadata };
+      }
+      if (taskId === "weekly_lesson_skills_reviewer") return { output: approvedSkillsReview, metadata };
+      throw new Error(`UNEXPECTED_TASK:${taskId}`);
+    });
+
+    const generated = await generateWeeklyLessons(
+      {
+        weekNumber: 2, topic: "Invoice discrepancies", description: "Clarify a mismatch",
+        objectives: "Explain a discrepancy", keyVocabHint: "invoice, quantity",
+        plan: { B1: ["describe an invoice mismatch", "two", "three", "four", "five"] }
+      } as ContentWeekInput,
+      "B1",
+      { prompt: "Generate lessons." },
+      { runTask } as unknown as AiTaskRunner,
+      { dayNumbers: [1], qualityReview: true }
+    );
+
+    expect(skillAttempts).toBe(1);
+    expect(generated.lessons[0]?.parts.some((part) => part.code === "reading")).toBe(true);
+  });
+
+  it("keeps a concise B1 speaking model answer longer than the beginner limit", async () => {
+    const b1Skills = {
+      ...skills,
+      speaking: { ...skills.speaking, answer: "The remaining balance will be paid in two instalments next Friday." }
+    };
+    const runTask = vi.fn(async (taskId: string, input: unknown) => {
+      const dayNumber = (input as { dayNumber: number }).dayNumber;
+      if (taskId === "weekly_lesson_grammar_classifier") return { output: grammarClassification, metadata };
+      if (taskId === "weekly_lesson_foundation") return { output: foundation, metadata };
+      if (taskId === "weekly_lesson_vocabulary") return { output: vocabularyForDay(dayNumber), metadata };
+      if (taskId === "weekly_lesson_skills") return { output: b1Skills, metadata };
+      if (taskId === "weekly_lesson_skills_reviewer") return { output: approvedSkillsReview, metadata };
+      throw new Error(`UNEXPECTED_TASK:${taskId}`);
+    });
+
+    const generated = await generateWeeklyLessons(
+      { weekNumber: 2, topic: "Invoice discrepancies", description: "Clarify a mismatch", objectives: "Explain a discrepancy", keyVocabHint: "invoice, quantity", plan: { B1: ["describe an invoice mismatch", "two", "three", "four", "five"] } } as ContentWeekInput,
+      "B1", { prompt: "Generate lessons." }, { runTask } as unknown as AiTaskRunner,
+      { dayNumbers: [1], qualityReview: true }
+    );
+
+    expect(generated.lessons[0]?.parts.some((part) => part.code === "speaking")).toBe(true);
+  });
+
+  it("normalizes grammar metadata to the independent classifier without discarding valid content", async () => {
     let foundationAttempts = 0;
     const mismatched = { ...foundation, grammar: { ...foundation.grammar, contentType: "grammar_rule" } };
     const runTask = vi.fn(async (taskId: string, input: unknown, options?: { systemPrompt?: string }) => {
@@ -319,8 +709,7 @@ describe("weekly lesson generation orchestration", () => {
       if (taskId === "weekly_lesson_grammar_classifier") return { output: grammarClassification, metadata };
       if (taskId === "weekly_lesson_foundation") {
         foundationAttempts += 1;
-        if (foundationAttempts === 2) expect(options?.systemPrompt).toContain("grammar_content_type_mismatch");
-        return { output: foundationAttempts === 1 ? mismatched : foundation, metadata };
+        return { output: mismatched, metadata };
       }
       if (taskId === "weekly_lesson_vocabulary") return { output: vocabularyForDay(dayNumber), metadata };
       if (taskId === "weekly_lesson_skills") return { output: skills, metadata };
@@ -332,8 +721,13 @@ describe("weekly lesson generation orchestration", () => {
       plan: { A1: ["give clear feedback", "two", "three", "four", "five"] }
     } as ContentWeekInput;
 
-    await generateWeeklyLessons(week, "A1", { prompt: "Generate lessons." }, { runTask } as unknown as AiTaskRunner, { dayNumbers: [1] });
-    expect(foundationAttempts).toBe(2);
+    const generated = await generateWeeklyLessons(week, "A1", { prompt: "Generate lessons." }, { runTask } as unknown as AiTaskRunner, { dayNumbers: [1] });
+    expect(foundationAttempts).toBe(1);
+    expect(generated.lessons[0]?.parts.find((part) => part.code === "grammar")?.content).toMatchObject({
+      contentType: grammarClassification.contentType,
+      targetName: grammarClassification.targetName,
+      scope: grammarClassification.scope
+    });
   });
 
   it("stops foundation generation after its repair budget and retains the other valid components", async () => {
@@ -371,6 +765,7 @@ describe("weekly lesson generation orchestration", () => {
     expect(generated.lessons[0]?.parts.some((part) => part.code === "vocabulary")).toBe(true);
     expect(generated.lessons[0]?.parts.some((part) => part.code === "objective")).toBe(false);
   });
+
 
   it("generates the five independent vocabulary drafts concurrently", async () => {
     let activeVocabularyCalls = 0;
@@ -691,6 +1086,8 @@ describe("weekly lesson generation orchestration", () => {
 
     expect(generated.lessons).toHaveLength(1);
     expect(vocabularyAttempts).toBe(3);
+    expect(runTask.mock.calls.find((call) => call[0] === "weekly_lesson_vocabulary")?.[2]?.systemPrompt)
+      .toContain("Do not mechanically attach a suffix");
     expect(runTask.mock.calls.find((call) => call[0] === "weekly_lesson_vocabulary" && call[2]?.systemPrompt?.includes("REPAIR REQUIRED"))?.[2]?.systemPrompt)
       .toContain("synonym must have the same part of speech");
   });
@@ -911,12 +1308,21 @@ describe("weekly lesson generation orchestration", () => {
     ]));
   });
 
-  it("marks grammar as missing when classification fails while retaining other foundation content", async () => {
-    const runTask = vi.fn(async (taskId: string) => {
+  it("keeps grammar visible when classification fails while retaining the classifier failure", async () => {
+    const focus = "day one";
+    const fallbackFoundation = {
+      ...foundation,
+      title: focus,
+      grammar: { ...foundation.grammar, contentType: "sentence_pattern", targetName: focus, scope: focus }
+    };
+    const runTask = vi.fn(async (taskId: string, input: unknown) => {
       if (taskId === "weekly_lesson_grammar_classifier") {
         throw Object.assign(new Error("AI_OUTPUT_INVALID"), { code: "AI_OUTPUT_INVALID", details: { issues: [] } });
       }
-      if (taskId === "weekly_lesson_foundation") return { output: { ...foundation, title: null, grammar: null }, metadata };
+      if (taskId === "weekly_lesson_foundation") {
+        expect(input).toMatchObject({ grammarClassification: { status: "classified", targetName: focus, scope: focus } });
+        return { output: fallbackFoundation, metadata };
+      }
       if (taskId === "weekly_lesson_vocabulary") return { output: vocabulary, metadata };
       if (taskId === "weekly_lesson_skills") return { output: skills, metadata };
       throw new Error(`UNEXPECTED_TASK:${taskId}`);
@@ -932,7 +1338,9 @@ describe("weekly lesson generation orchestration", () => {
     );
 
     expect(generated.lessons[0]?.parts.some((part) => part.code === "objective")).toBe(true);
-    expect(generated.lessons[0]?.parts.some((part) => part.code === "grammar")).toBe(false);
+    expect(generated.lessons[0]?.parts.find((part) => part.code === "grammar")?.content).toMatchObject({
+      targetName: focus, scope: focus, formula: "S + V + O"
+    });
     expect(generated.failures).toEqual(expect.arrayContaining([
       expect.objectContaining({ dayNumber: 1, component: "grammarClassification" })
     ]));

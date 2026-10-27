@@ -28,6 +28,14 @@ export interface SeasonRioRoundPlan<Word> {
   bossWords: Word[];
 }
 
+export function prepareGameAttempt<Word extends { id: string }>(words: readonly Word[], attemptSeed: number): Word[] {
+  const canonical = [...words].sort((left, right) => left.id.localeCompare(right.id));
+  const baseOrder = seededShuffle(canonical, stringSeed(canonical.map((word) => word.id).join("|")));
+  if (baseOrder.length < 2) return baseOrder;
+  const offset = ((attemptSeed % baseOrder.length) + baseOrder.length) % baseOrder.length;
+  return [...baseOrder.slice(offset), ...baseOrder.slice(0, offset)];
+}
+
 export function seasonRioRoundPlan<Word>(words: readonly Word[]): SeasonRioRoundPlan<Word> {
   const gateWords = words.slice(0, 8);
   const dedicatedBossWords = words.slice(gateWords.length, gateWords.length + 3);
@@ -49,7 +57,7 @@ export function scoreGameAttempt(
   game: GameKey,
   words: readonly GameWord[],
   answers: readonly GameAnswer[],
-  options: { hintsUsed?: number | undefined } = {}
+  options: { hintsUsed?: number | undefined; attemptSeed?: number | undefined } = {}
 ): {
   score: number;
   maxScore: number;
@@ -61,7 +69,8 @@ export function scoreGameAttempt(
   let correct = 0;
   const total = gameRoundTotal(game, words, answers);
   const maxScore = game === "scramble" ? total * 2 : game === "typing" ? total * 50 : total;
-  const remainingByWord = scoreableWordOccurrences(game, words);
+  const scoringWords = options.attemptSeed === undefined ? words : prepareGameAttempt(words, options.attemptSeed);
+  const remainingByWord = scoreableWordOccurrences(game, scoringWords);
   let accepted = 0;
   let typingCombo = 1;
 
@@ -151,4 +160,24 @@ function sortGroup(partOfSpeech: string): string {
 
 function clamp(value: number, min: number, max: number): number {
   return Math.max(min, Math.min(max, Math.trunc(value)));
+}
+
+function seededShuffle<T>(items: readonly T[], seed: number): T[] {
+  const result = [...items];
+  let value = (seed + 1) * 2_654_435_761;
+  for (let index = result.length - 1; index > 0; index -= 1) {
+    value = (value * 1_664_525 + 1_013_904_223) >>> 0;
+    const target = value % (index + 1);
+    [result[index], result[target]] = [result[target]!, result[index]!];
+  }
+  return result;
+}
+
+function stringSeed(value: string): number {
+  let seed = 2_166_136_261;
+  for (let index = 0; index < value.length; index += 1) {
+    seed ^= value.charCodeAt(index);
+    seed = Math.imul(seed, 16_777_619);
+  }
+  return seed >>> 0;
 }

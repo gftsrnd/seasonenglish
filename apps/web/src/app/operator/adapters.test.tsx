@@ -3,9 +3,12 @@ import "@testing-library/jest-dom/vitest";
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { ContentLessonSetVersionView } from "@e4s/contracts";
-import { adaptLessonSet } from "./adapters.js";
+import { adaptLessonSet, adaptReview } from "./adapters.js";
 
-afterEach(cleanup);
+afterEach(() => {
+  cleanup();
+  vi.unstubAllGlobals();
+});
 
 function lessonSet(words: Array<Record<string, unknown>>): ContentLessonSetVersionView {
   const choice = { prompt: "What?", options: ["A", "B", "C", "D"], answer: "A" };
@@ -162,24 +165,16 @@ describe("lesson detail warnings", () => {
     expect(screen.getByText("danh từ")).toHaveClass("vocabulary-card-type");
     expect(await screen.findByRole("img", { name: "job" })).toHaveAttribute("src", "https://images.example.test/job.jpg");
     expect(screen.getByRole("button", { name: "Nghe từ job" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Nghe cụm từ: job one" })).toBeInTheDocument();
+    expect(screen.getByText("job one")).toBeInTheDocument();
     expect(screen.getByText("Sau bài học, bạn có thể nói được một câu về công việc.")).toBeInTheDocument();
     expect(screen.queryByText(/Nội dung giải thích dài/)).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: /Từ bao trùm: work communication/ })).toHaveTextContent("TỪ BAO TRÙM work communication");
     expect(screen.getByRole("button", { name: /Từ bao trùm: work communication/ })).toHaveClass("umb");
-    expect(screen.getByRole("button", { name: "Nghe từ đồng nghĩa: task" })).toHaveTextContent(/^task$/);
-    expect(screen.getByRole("button", { name: "Nghe từ đồng nghĩa: task" })).toHaveClass("synonym");
-    expect(screen.getByRole("button", { name: "Nghe từ trái nghĩa: unemployment" })).toHaveTextContent(/^unemployment$/);
-    expect(screen.getByRole("button", { name: "Nghe từ trái nghĩa: unemployment" })).toHaveClass("antonym");
+    expect(screen.getByText(/task/).closest(".chip")).toHaveClass("synonym");
+    expect(screen.getByText(/unemployment/).closest(".chip")).toHaveClass("antonym");
     expect(screen.getByRole("button", { name: "Word family (1)" })).toHaveTextContent("Word family (1)");
 
-    const speak = vi.fn();
-    Object.defineProperty(window, "speechSynthesis", { configurable: true, value: { cancel: vi.fn(), speak } });
-    Object.defineProperty(window, "SpeechSynthesisUtterance", { configurable: true, value: class { lang = ""; constructor(public text: string) {} } });
-    fireEvent.click(screen.getByRole("button", { name: "Nghe từ job" }));
-    expect(speak).toHaveBeenCalledTimes(1);
-    fireEvent.click(screen.getByRole("button", { name: "Nghe từ đồng nghĩa: task" }));
-    expect(speak).toHaveBeenLastCalledWith(expect.objectContaining({ text: "task" }));
+    expect(screen.getByRole("button", { name: "Nghe từ đồng nghĩa: task" })).toBeInTheDocument();
     expect(screen.queryByRole("dialog", { name: "Đồng nghĩa" })).not.toBeInTheDocument();
     expect(screen.queryByRole("status")).not.toBeInTheDocument();
 
@@ -195,22 +190,32 @@ describe("lesson detail warnings", () => {
   });
 
   it("renders study audio affordances instead of plain grammar and pronunciation text", () => {
-    const view = adaptLessonSet(lessonSet([{ ...baseWord("feedback"), meaning: "phản hồi" }]), { aiConnected: true });
+    const source = lessonSet([{ ...baseWord("feedback"), meaning: "phản hồi" }]);
+    const pronunciation = source.lessons[0]!.parts.find(part => part.code === "pronunciation")!;
+    pronunciation.content = { ...pronunciation.content, phonemeAudioUrl: "/media/audio/ipa/f.mp3" };
+    const view = adaptLessonSet(source, { aiConnected: true });
 
     render(<>{view.lessons[0]!.content}</>);
 
-    expect(screen.queryByRole("heading", { name: "HƯỚNG DẪN LÀM BÀI" })).not.toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "HƯỚNG DẪN LÀM BÀI" })).toBeInTheDocument();
+    expect(screen.getByText("Một")).toBeInTheDocument();
+    expect(screen.queryByLabelText("Nghe audio phần Hướng dẫn làm bài")).not.toBeInTheDocument();
     expect(screen.getByText("NGỮ PHÁP")).toBeInTheDocument();
     expect(screen.getByText("I give + feedback")).toBeInTheDocument();
     expect(screen.getByText("Dùng để đưa phản hồi.")).toHaveClass("lesson-study-explanation");
     expect(screen.queryByText(/1\) Công thức:/)).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Nghe câu ví dụ" })).not.toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Nghe câu ví dụ 1" })).toBeInTheDocument();
+    expect(screen.getByText("I give + feedback").closest("button")).toBeNull();
+    expect(screen.queryByRole("button", { name: "Nghe mẫu ngữ pháp" })).not.toBeInTheDocument();
+    expect(screen.queryByText(/Mẫu câu trọng tâm:/)).not.toBeInTheDocument();
+    expect(screen.getByText("I give clear feedback.")).toHaveClass("lesson-example-card");
     expect(screen.getByText("PHÁT ÂM")).toBeInTheDocument();
     expect(screen.getByText(/Âm \/f\/ như trong/)).toBeInTheDocument();
     expect(screen.queryByText("3 từ chứa âm mục tiêu (học viên phải luyện đủ rồi mới ghi âm):")).not.toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Nghe âm /f/" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Nghe từ phát âm: feedback" })).toBeInTheDocument();
+    const phoneme = screen.getByRole("button", { name: "Nghe âm /f/" });
+    expect(phoneme).toBeEnabled();
+    expect(screen.getByLabelText("Luyện từ phát âm").firstElementChild).toHaveClass("operator-pronunciation-word-chip");
+    expect(screen.getByLabelText("Luyện từ phát âm").querySelectorAll(":scope > button")).toHaveLength(1);
     expect(screen.getByText("Cắn nhẹ môi dưới rồi thổi hơi.").closest("p")).toHaveClass("operator-pronunciation-tip");
   });
 
@@ -232,7 +237,7 @@ describe("lesson detail warnings", () => {
     expect(screen.getByRole("list", { name: "Mục tiêu bài học" })).toHaveTextContent("Explain a delivery delay.");
     expect(screen.getByRole("list", { name: "Mục tiêu bài học" })).not.toHaveTextContent("By the end of this lesson");
     expect(screen.queryByLabelText("Nghe audio phần Mục tiêu bài học")).not.toBeInTheDocument();
-    expect(screen.getByLabelText("Nghe audio từ feedback")).toHaveAttribute("src", "/audio/feedback.mp3");
+    expect(screen.getByRole("button", { name: "Nghe từ feedback" })).toBeInTheDocument();
     expect(screen.queryByLabelText("Nghe audio phần Ngữ pháp")).not.toBeInTheDocument();
   });
 
@@ -243,17 +248,37 @@ describe("lesson detail warnings", () => {
     fireEvent.click(screen.getByRole("tab", { name: "2. Bài tập" }));
 
     expect(screen.getByRole("heading", { name: "HƯỚNG DẪN LÀM BÀI" })).toBeInTheDocument();
-    expect(screen.queryByRole("heading", { name: /\d+\. HƯỚNG DẪN LÀM BÀI/ })).not.toBeInTheDocument();
+    expect(screen.getByText("Làm lần lượt 6 phần: Nghe → Đọc → Viết → Từ loại → Dùng từ → Nói.")).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "1. Nghe · Listening" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Nghe đoạn audio" })).toHaveClass("operator-audio-button--primary");
+    expect(screen.getByRole("button", { name: "Nghe nội dung phần Listening" })).toHaveClass("operator-audio-button--primary");
     expect(screen.getByRole("heading", { name: "2. Đọc · Reading" })).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "3. Viết · Writing" })).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "4. Từ loại · Word class" })).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "5. Dùng từ · Word use" })).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "6. Nói · Speaking" })).toBeInTheDocument();
     expect(screen.getByText(/Nói theo câu mẫu bên dưới/)).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Nghe câu mẫu" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Nghe câu mẫu" })).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Ghi âm câu trả lời" })).toBeInTheDocument();
     expect(screen.getAllByText("A").some((node) => node.closest("li")?.classList.contains("operator-answer-choice"))).toBe(true);
+  });
+});
+
+describe("review submissions", () => {
+  it("keeps the saved task guidance and required vocabulary for the grader", () => {
+    const view = adaptReview({
+      tabs: [{ key: "submissions", label: "Bài nộp", count: 1, unreadCount: 1 }],
+      submissions: [{
+        id: "sub-1", learnerName: "An", cefr: "A1", weekNumber: 1,
+        submittedAt: "2026-10-27T12:00:00.000Z", checked: false,
+        type: "writing", task: "Write three sentences.", guidance: "Use the weekly words.",
+        requiredVocabulary: ["fall", "floor", "report"], text: "A man fell down.", total: null,
+        rubric: { meaning: null, vocabulary: null, grammar: null }, feedback: "", suggestions: []
+      }], coachSamples: [], weeklyPractices: [], microLessons: [], appeals: [], lessonAttempts: [], assessments: []
+    }, "submissions");
+
+    expect(view.counts.subs).toBe(1);
+    expect(view.submissions[0]).toEqual(expect.objectContaining({
+      guidance: "Use the weekly words.", requiredVocabulary: ["fall", "floor", "report"]
+    }));
   });
 });

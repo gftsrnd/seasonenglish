@@ -152,14 +152,18 @@ describe("weekly lesson output contract", () => {
     expect(weeklyLessonFoundationOutputSchema.safeParse(base).success).toBe(true);
     expect(weeklyLessonFoundationOutputSchema.safeParse({ ...base, objective: { ...base.objective, items: base.objective.items.slice(0, 1) } }).success).toBe(false);
     expect(weeklyLessonFoundationOutputSchema.safeParse({ ...base, title: "S + V + O" }).success).toBe(false);
-    expect(weeklyLessonFoundationOutputSchema.safeParse({
+    const longExample = weeklyLessonFoundationOutputSchema.safeParse({
       ...base,
       grammar: { ...base.grammar, example1: "Maybe you could add a detailed chart to the important weekly project report." }
-    }).success).toBe(false);
-    expect(weeklyLessonFoundationOutputSchema.safeParse({
+    });
+    expect(longExample.success).toBe(true);
+    if (longExample.success) expect(longExample.data.grammar?.example1).toBe("Maybe you could add a detailed chart to the important weekly project report.");
+    const parentheticalExample = weeklyLessonFoundationOutputSchema.safeParse({
       ...base,
       grammar: { ...base.grammar, example1: "I give feedback. (Tôi góp ý.)" }
-    }).success).toBe(false);
+    });
+    expect(parentheticalExample.success).toBe(true);
+    if (parentheticalExample.success) expect(parentheticalExample.data.grammar?.example1).toBe("I give feedback. (Tôi góp ý.)");
   });
 
   it("keeps the prompt-required objective evidence and grammar classification metadata", () => {
@@ -279,6 +283,24 @@ describe("weekly lesson output contract", () => {
     expect(weeklyLessonVocabularyOutputSchema.safeParse(output({ ...item, synonym1: null, synonym2: null })).success).toBe(false);
     expect(weeklyLessonVocabularyOutputSchema.safeParse(output({ ...item, umbrellaWord: "" })).success).toBe(false);
     expect(weeklyLessonVocabularyOutputSchema.safeParse(output(item)).success).toBe(true);
+  });
+
+  it("does not retain slang or poetic details from AI output without an explicit PO decision", () => {
+    const item = {
+      ...strictVocabularyItem("noun"),
+      slang: { word: "reporting gig", definition: "an informal reporting task" },
+      poetic: { word: "chronicle", definition: "a literary report" }
+    };
+
+    const parsed = weeklyLessonVocabularyOutputSchema.safeParse({
+      title: "Vocabulary", word1: item, word2: strictVocabularyItem("noun"), word3: strictVocabularyItem("noun")
+    });
+
+    expect(parsed.success).toBe(true);
+    if (parsed.success) {
+      expect(parsed.data.word1).not.toHaveProperty("slang");
+      expect(parsed.data.word1).not.toHaveProperty("poetic");
+    }
   });
 
   it("accepts SSML that wraps each word of a phrase in separate pronunciation tags", () => {

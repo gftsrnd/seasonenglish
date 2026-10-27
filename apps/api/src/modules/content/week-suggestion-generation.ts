@@ -49,6 +49,37 @@ export async function generateWeekSuggestions(
   throwSuggestionInvalid(findings);
 }
 
+/**
+ * A full pilot can contain more than two weeks.  Asking the model to return
+ * every option and every five-day CEFR plan in a single response becomes
+ * unreliable as the pilot grows, even though the contract supports it.
+ * Generate one week at a time and carry each accepted topic into the next
+ * request so the result remains complete and non-duplicated for weeks 3+.
+ */
+export async function generateWeekSuggestionBatches(
+  rawInput: SuggestionInput,
+  task: { prompt: string },
+  runner: AiTaskRunner
+) {
+  const input = weekSuggestionsInputSchema.parse(rawInput);
+  const usedTopics = [...input.usedTopics];
+  const weeks: SuggestionOutput["weeks"] = [];
+  const results = [] as Array<Awaited<ReturnType<typeof generateWeekSuggestions>>["result"]>;
+
+  for (const weekNumber of input.weekNumbers) {
+    const generated = await generateWeekSuggestions(
+      { ...input, weekNumbers: [weekNumber], usedTopics },
+      task,
+      runner
+    );
+    weeks.push(...generated.output.weeks);
+    results.push(generated.result);
+    for (const option of generated.output.weeks.flatMap((week) => week.options)) usedTopics.push(option.topic);
+  }
+
+  return { output: { weeks }, results };
+}
+
 function validateSuggestionSemantics(output: SuggestionOutput, input: SuggestionInput) {
   const issues: Array<{ path: string; message: string }> = [];
   const expectedWeeks = new Set(input.weekNumbers);

@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import type {
   ContentLessonDraftInput,
   LessonVocabularyContent,
@@ -20,7 +21,7 @@ import type { ContentMediaService } from "../media/index.js";
 import { lessonDaysNeedingRepair, mergeGeneratedLessons, type LessonRepairMode } from "./enrichment.js";
 import { buildGenerationProvenance } from "./generation-provenance.js";
 import { generateWeeklyLessons } from "./weekly-generation.js";
-import { generateWeekSuggestions } from "./week-suggestion-generation.js";
+import { generateWeekSuggestionBatches } from "./week-suggestion-generation.js";
 import { publicLessonGenerationFailure } from "./generation-errors.js";
 
 const weekInput = z.object({
@@ -165,7 +166,7 @@ export function registerContentRoutes(
     ]);
     if (!frame || !matrix || !task) return reply.code(503).send({ code: "AI_PROMPT_NOT_READY" });
     try {
-      const generated = await generateWeekSuggestions({
+      const generated = await generateWeekSuggestionBatches({
         weekNumbers: input.data.weekNumbers, levels: matrix.levels.map((level) => level.cefr),
         usedTopics: [...new Set([
           ...frame.weeks.map((week) => week.topic).filter(Boolean),
@@ -173,8 +174,9 @@ export function registerContentRoutes(
           ...suggestedTopics
         ])].slice(0, 52)
       }, task, runner);
-      const result = generated.result;
       const output = { data: generated.output };
+      const auditResult = generated.results[generated.results.length - 1];
+      if (!auditResult) throw new Error("WEEK_SUGGESTION_AUDIT_MISSING");
       const activeLevels = matrix.levels.map((level) => level.cefr);
       const activeLevelSet = new Set(activeLevels);
       const requestedWeeks = new Set(input.data.weekNumbers);
@@ -249,7 +251,7 @@ export function registerContentRoutes(
           taskId: task.taskId,
           promptVersionId: task.promptVersionId,
           output: output.data,
-          metadata: result.metadata
+          metadata: auditResult.metadata
         });
       } catch (error) {
         request.log.warn({ code: errorCode(error, "AI_RUN_RECORD_FAILED") }, "Week suggestion audit record failed");
@@ -258,6 +260,15 @@ export function registerContentRoutes(
     } catch (error) {
       const code = errorCode(error, "WEEK_SUGGESTION_FAILED");
       request.log.warn({ code }, "Week suggestion generation failed");
+      if (code === "AI_OUTPUT_INVALID") {
+        const issues = error && typeof error === "object" && "issues" in error
+          ? (error as { issues?: unknown }).issues
+          : undefined;
+        return reply.code(502).send({
+          code,
+          issues: Array.isArray(issues) ? issues : []
+        });
+      }
       return reply.code(502).send({
         code: "WEEK_SUGGESTION_FAILED",
         message: "AI chưa tạo được gợi ý chủ đề hợp lệ. Vui lòng thử lại sau ít phút."
@@ -478,6 +489,7 @@ export function registerContentRoutes(
           buildGenerationProvenance({
             promptVersionId: task.promptVersionId,
             prompt: task.prompt,
+            model: { provider: generated.result.metadata.provider, name: generated.result.metadata.model },
             week,
             cefr: params.data.cefr,
             extraInput: { action, dayNumbers, excludedVocabulary },
@@ -522,7 +534,12 @@ export function registerContentRoutes(
   });
 
   app.post("/api/v1/content/lesson-sets/:week/:cefr/generate", {
-    preHandler: operators, config: { rateLimit: { max: 4, timeWindow: "1 minute" } }
+    // A pilot can run 3–4 weeks across several active CEFR levels.  The
+    // operator deliberately sends these requests sequentially, but the old
+    // four-per-minute ceiling still rejected a valid third week mid-run.
+    // Keep a bounded route limit without making the product block its own
+    // configured pilot size.
+    preHandler: operators, config: { rateLimit: { max: 24, timeWindow: "10 minutes" } }
   }, async (request, reply) => {
     const params = lessonSetParams.safeParse(request.params);
     if (!params.success) return reply.code(400).send({ code: "INVALID_CONTENT_LESSON_SET" });
@@ -531,12 +548,22 @@ export function registerContentRoutes(
     if (!matrix?.levels.some((level) => level.cefr === params.data.cefr)) {
       return reply.code(409).send({ code: "CONTENT_LEVEL_NOT_ACTIVE" });
     }
-    const runner = await runnerFor(actorId);
-    if (!runner) return reply.code(503).send({ code: "AI_UNAVAILABLE" });
     const frame = await repositories.content.listWeeks(actorId);
     const week = frame?.weeks.find((candidate) => candidate.weekNumber === params.data.week);
     const task = await repositories.aiRuns.activeTaskPrompt(actorId, "weekly_lessons");
     if (!week || !task) return reply.code(503).send({ code: "AI_PROMPT_NOT_READY" });
+    const runner = await runnerFor(actorId);
+    if (!runner) {
+      await repositories.aiRuns.recordFailed({
+        userId: actorId,
+        requestId: `weekly-lessons:${week.weekNumber}:${params.data.cefr}:${randomUUID()}`,
+        taskId: task.taskId,
+        promptVersionId: task.promptVersionId,
+        errorCode: "AI_UNAVAILABLE",
+        diagnostic: generationFailureDiagnostic(week, params.data.cefr, task, "AI_UNAVAILABLE")
+      });
+      return reply.code(503).send(publicLessonGenerationFailure(new Error("AI_UNAVAILABLE")));
+    }
     try {
       const excludedVocabulary = await repositories.content.usedLessonVocabulary(actorId);
       const generated = await generateWeeklyLessons(week, params.data.cefr, task, runner, {
@@ -553,6 +580,7 @@ export function registerContentRoutes(
         buildGenerationProvenance({
           promptVersionId: task.promptVersionId,
           prompt: task.prompt,
+          model: { provider: generated.result.metadata.provider, name: generated.result.metadata.model },
           week,
           cefr: params.data.cefr,
           extraInput: { excludedVocabulary },
@@ -563,7 +591,7 @@ export function registerContentRoutes(
       try {
         await repositories.aiRuns.recordSucceeded({
           userId: actorId,
-          requestId: `weekly-lessons:${week.weekNumber}:${params.data.cefr}:${Date.now()}`,
+          requestId: `weekly-lessons:${week.weekNumber}:${params.data.cefr}:${randomUUID()}`,
           taskId: task.taskId,
           promptVersionId: task.promptVersionId,
           output: generated.output,
@@ -574,8 +602,21 @@ export function registerContentRoutes(
       }
       return reply.code(201).send(saved);
     } catch (error) {
+      const code = errorCode(error, "AI_LESSON_GENERATION_FAILED");
+      try {
+        await repositories.aiRuns.recordFailed({
+          userId: actorId,
+          requestId: `weekly-lessons:${week.weekNumber}:${params.data.cefr}:${randomUUID()}`,
+          taskId: task.taskId,
+          promptVersionId: task.promptVersionId,
+          errorCode: code,
+          diagnostic: generationFailureDiagnostic(week, params.data.cefr, task, code)
+        });
+      } catch (recordError) {
+        request.log.warn({ code: errorCode(recordError, "AI_RUN_RECORD_FAILED") }, "Lesson generation failure audit record failed");
+      }
       request.log.warn({
-        code: errorCode(error, "AI_LESSON_GENERATION_FAILED"),
+        code,
         issues: error && typeof error === "object" && "details" in error ? (error as { details?: unknown }).details : undefined
       }, "Weekly lesson generation failed");
       return reply.code(502).send(publicLessonGenerationFailure(error));
@@ -841,7 +882,26 @@ export function registerContentRoutes(
   });
 }
 
+function generationFailureDiagnostic(
+  week: ContentWeekInput,
+  cefr: string,
+  task: { promptVersionId: string; prompt: string },
+  code: string
+) {
+  return {
+    status: "generation_failed",
+    code,
+    generatedAt: new Date().toISOString(),
+    prompt: { versionId: task.promptVersionId, content: task.prompt },
+    input: { ...week, cefr }
+  };
+}
+
 function errorCode(error: unknown, fallback: string): string {
+  if (error && typeof error === "object" && "code" in error) {
+    const code = (error as { code?: unknown }).code;
+    if (typeof code === "string" && /^[A-Z0-9_]+$/.test(code)) return code;
+  }
   return error instanceof Error && /^[A-Z0-9_]+$/.test(error.message) ? error.message : fallback;
 }
 

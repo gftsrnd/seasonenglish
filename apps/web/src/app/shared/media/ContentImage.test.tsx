@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import "@testing-library/jest-dom/vitest";
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { ContentImageView } from "@e4s/contracts";
 import { ContentImage } from "./ContentImage.js";
@@ -23,10 +23,9 @@ const available: ContentImageView = {
 };
 
 describe("ContentImage", () => {
-  it("loads only after entering the viewport", async () => {
-    let enter: ((entries: IntersectionObserverEntry[]) => void) | undefined;
+  it("settles a vocabulary image without waiting for an intersection callback", async () => {
     vi.stubGlobal("IntersectionObserver", class {
-      constructor(callback: (entries: IntersectionObserverEntry[]) => void) { enter = callback; }
+      constructor(_callback: (entries: IntersectionObserverEntry[]) => void) {}
       observe() {}
       disconnect() {}
       unobserve() {}
@@ -37,8 +36,7 @@ describe("ContentImage", () => {
     });
     const load = vi.fn().mockResolvedValue(available);
     render(<ContentImage term="notebook" load={load} />);
-    expect(load).not.toHaveBeenCalled();
-    enter?.([{ isIntersecting: true } as IntersectionObserverEntry]);
+    await waitFor(() => expect(load).toHaveBeenCalledOnce());
     expect(await screen.findByRole("img", { name: "notebook" })).toHaveAttribute("src", available.imageUrl);
   });
 
@@ -63,6 +61,30 @@ describe("ContentImage", () => {
     const { container } = render(<ContentImage term="reliable" unavailable="hide" load={() => Promise.resolve({ status: "unavailable" })} />);
     expect(await screen.findByTestId("hidden-content-image")).toHaveClass("content-image--hidden");
     expect(container.querySelector('img')).not.toBeInTheDocument();
+  });
+
+  it.each([
+    ["unavailable", () => Promise.resolve({ status: "unavailable" } as ContentImageView)],
+    ["rejected", () => Promise.reject(new Error("media unavailable"))],
+    ["an available result without a valid image URL", () => Promise.resolve({ status: "available", imageUrl: "   ", alt: "reliable" } as ContentImageView)]
+  ])("hides the vocabulary image slot when the resolver is %s", async (_label, load) => {
+    vi.stubGlobal("IntersectionObserver", undefined);
+    const { container } = render(<ContentImage term="reliable" unavailable="hide" load={load} />);
+
+    expect(await screen.findByTestId("hidden-content-image")).toBeInTheDocument();
+    expect(screen.queryByRole("status", { name: "Đang tải ảnh minh hoạ cho reliable" })).not.toBeInTheDocument();
+    expect(container.querySelector("img")).not.toBeInTheDocument();
+  });
+
+  it("keeps a valid resolved image visible across a rerender without reloading it", async () => {
+    vi.stubGlobal("IntersectionObserver", undefined);
+    const load = vi.fn().mockResolvedValue(available);
+    const { rerender } = render(<ContentImage term="notebook" unavailable="hide" load={load} />);
+
+    expect(await screen.findByRole("img", { name: "notebook" })).toHaveAttribute("src", available.imageUrl);
+    rerender(<ContentImage term="notebook" unavailable="hide" load={load} />);
+    expect(screen.getByRole("img", { name: "notebook" })).toHaveAttribute("src", available.imageUrl);
+    expect(load).toHaveBeenCalledOnce();
   });
 
   it.each([

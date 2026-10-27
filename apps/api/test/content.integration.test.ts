@@ -13,6 +13,7 @@ const databaseUrl = process.env.TEST_DATABASE_URL
 const checkerId = "00000000-0000-4000-8000-000000000104";
 const mediaRequests: Array<{ userId: string; term: string }> = [];
 const forcedAiFailures = new Set<string>();
+let forceWholeGenerationFailure = false;
 const mediaService: ContentMediaService = {
   async resolveForUser(userId, request) {
     mediaRequests.push({ userId, term: request.term });
@@ -45,6 +46,9 @@ function lesson(dayNumber: number) {
 
 const repairRunner: AiTaskRunner = {
   async runTask(taskKey, rawInput) {
+    if (forceWholeGenerationFailure) {
+      throw Object.assign(new Error("AI unavailable for this deterministic test"), { code: "AI_UNAVAILABLE" });
+    }
     const dayNumber = Number((rawInput as { dayNumber?: number }).dayNumber ?? 1);
     if (forcedAiFailures.has(`${taskKey}:${dayNumber}`)) {
       throw Object.assign(new Error("AI_OUTPUT_INVALID"), {
@@ -604,5 +608,40 @@ describe("content operations API", () => {
        where pw.week_number = 2 and ls.cefr = 'A2' and lsv.status = 'published'`
     );
     expect(after.rows).toEqual(before.rows);
+  });
+
+  it("records a failed AI generation diagnostic and keeps the approved lesson version available", async () => {
+    const created = await app.inject({
+      method: "PUT", url: "/api/v1/content/lesson-sets/2/B1/draft", headers: { cookie: makerCookie },
+      payload: { lessons: [1, 2, 3, 4, 5].map(lesson) }
+    });
+    expect(created.statusCode, created.body).toBe(201);
+    const draft = created.json() as { versionId: string };
+    expect((await app.inject({ method: "POST", url: `/api/v1/content/lesson-set-versions/${draft.versionId}/review`, headers: { cookie: makerCookie }, payload: {} })).statusCode).toBe(200);
+    expect((await app.inject({ method: "POST", url: `/api/v1/content/lesson-set-versions/${draft.versionId}/publication`, headers: { cookie: makerCookie }, payload: {} })).statusCode).toBe(200);
+
+    forceWholeGenerationFailure = true;
+    const failed = await app.inject({
+      method: "POST", url: "/api/v1/content/lesson-sets/2/B1/generate", headers: { cookie: makerCookie }, payload: {}
+    });
+    forceWholeGenerationFailure = false;
+
+    expect(failed.statusCode, failed.body).toBe(502);
+    expect(failed.json()).toMatchObject({ code: "AI_LESSON_GENERATION_FAILED" });
+    await expect(pool.query(
+      `select ar.status, ar.error_code, ar.output
+       from ai_runs ar join ai_tasks at on at.id = ar.task_id
+       where ar.user_id = $1 and at.task_key = 'weekly_lessons'
+       order by ar.created_at desc limit 1`,
+      [DEMO_IDS.operator]
+    )).resolves.toMatchObject({ rows: [expect.objectContaining({
+      status: "failed", error_code: "AI_UNAVAILABLE", output: expect.objectContaining({ diagnostic: expect.any(Object) })
+    })] });
+    await expect(pool.query(
+      `select lsv.id, lsv.status from lesson_sets ls
+       join program_weeks pw on pw.id = ls.program_week_id
+       join lesson_set_versions lsv on lsv.lesson_set_id = ls.id
+       where pw.week_number = 2 and ls.cefr = 'B1' and lsv.status = 'published'`
+    )).resolves.toMatchObject({ rows: [expect.objectContaining({ id: draft.versionId, status: "published" })] });
   });
 });

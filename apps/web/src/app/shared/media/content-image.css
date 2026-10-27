@@ -121,29 +121,21 @@
 
 .vocabulary-card-phrase-list,
 .vocabulary-card-relations {
-  flex-wrap: nowrap !important;
-  overflow-x: auto;
-  overflow-y: hidden;
-  scrollbar-width: thin;
-  padding-bottom: 3px;
+  flex-wrap: wrap !important;
+  overflow: visible;
+  padding-bottom: 0;
 }
 
 .vocabulary-card-phrase-list > *,
 .vocabulary-card-relations > * {
-  flex: 0 0 auto !important;
-  white-space: nowrap;
-}
-
-.vocabulary-card-phrase-list > * {
-  max-width: min(220px, 62vw) !important;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  min-width: 0;
+  max-width: 100%;
+  white-space: normal;
+  overflow-wrap: anywhere;
 }
 
 .vocabulary-card-relations .chip.umb {
-  max-width: min(270px, 66vw) !important;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  max-width: 100%;
 }
 
 .vocabulary-card-sound--icon {

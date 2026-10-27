@@ -191,7 +191,8 @@ export const lessonPartAttempts = pgTable("lesson_part_attempts", {
 export const lessonPartAppeals = pgTable("lesson_part_appeals", {
   id: uuid("id").primaryKey(), learnerId: uuid("learner_id").notNull().references(() => users.id, { onDelete: "cascade" }),
   lessonId: uuid("lesson_id").notNull().references(() => lessons.id, { onDelete: "cascade" }), partCode: text("part_code").notNull(),
-  reason: text("reason").notNull(), status: text("status").notNull().default("pending"), createdAt: now(),
+  reason: text("reason").notNull(), status: text("status").notNull().default("pending"), resolution: text("resolution"),
+  resolvedBy: uuid("resolved_by").references(() => users.id), createdAt: now(),
   resolvedAt: timestamp("resolved_at", { withTimezone: true })
 });
 

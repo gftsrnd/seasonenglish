@@ -34,6 +34,16 @@ function AudioProbe({ onStatus }: { onStatus: (status: string) => void }) {
   return <button type="button" onClick={() => speak("Xin chào", "vi-VN", { audioSrc: "/media/audio/sound-check-vi.mp3", onStatus })}>Nghe</button>;
 }
 
+function EmptyAudioProbe({ onStatus }: { onStatus: (status: string) => void }) {
+  const { speak } = useExperience();
+  return <button type="button" onClick={() => speak("", "en-US", { audioSrc: "/audio/ay.mp3", onStatus })}>Nghe âm IPA</button>;
+}
+
+function EmptyTextProbe({ onStatus }: { onStatus: (status: string) => void }) {
+  const { speak } = useExperience();
+  return <button type="button" onClick={() => speak("", "en-US", { onStatus })}>Nghe trống</button>;
+}
+
 function MusicLifecycleProbe() {
   const { holdMusic, musicOn, toggleMusic } = useExperience();
   return <><span data-testid="music-preference">{String(musicOn)}</span><button type="button">Bắt đầu</button><button type="button" onClick={() => holdMusic(true)}>Giữ nhạc</button><button type="button" onClick={toggleMusic}>Đổi trạng thái nhạc</button></>;
@@ -128,6 +138,39 @@ describe("experience speech voice selection", () => {
 
     expect(play).toHaveBeenCalledTimes(1);
     expect(statuses).toEqual([]);
+  });
+
+  it("plays a dedicated IPA asset even when there is no text fallback", async () => {
+    const user = userEvent.setup();
+    const created: Array<{ src: string }> = [];
+    const play = vi.fn().mockResolvedValue(undefined);
+    vi.stubGlobal("Audio", class {
+      onplay: (() => void) | null = null;
+      onended: (() => void) | null = null;
+      onerror: (() => void) | null = null;
+      preload = "";
+      constructor(readonly src: string) { created.push(this); }
+      play = () => play();
+      pause = vi.fn();
+    });
+    const statuses: string[] = [];
+
+    render(<ExperienceProvider musicAllowed={false}><EmptyAudioProbe onStatus={(status) => statuses.push(status)} /></ExperienceProvider>);
+    await user.click(screen.getByRole("button", { name: "Nghe âm IPA" }));
+
+    expect(created).toEqual([expect.objectContaining({ src: "/audio/ay.mp3" })]);
+    expect(play).toHaveBeenCalledOnce();
+    expect(statuses).toEqual([]);
+  });
+
+  it("reports ended for empty text when no audio asset was supplied", async () => {
+    const user = userEvent.setup();
+    const statuses: string[] = [];
+    render(<ExperienceProvider musicAllowed={false}><EmptyTextProbe onStatus={(status) => statuses.push(status)} /></ExperienceProvider>);
+
+    await user.click(screen.getByRole("button", { name: "Nghe trống" }));
+
+    expect(statuses).toEqual(["ended"]);
   });
 
   it("plays the selected licensed track at organisation volume and suspends it for exclusive audio", async () => {

@@ -144,6 +144,8 @@ export interface ContentReviewView {
     /** Resolved from the persisted weekly-practice submission and its program week. */
     type?: "dialogue" | "writing";
     task?: string;
+    guidance?: string;
+    requiredVocabulary?: string[];
   }>;
   weeklyPractices?: Array<{
     versionId: string;
@@ -163,9 +165,20 @@ export interface ContentReviewView {
   appeals: Array<{
     id: string; learnerName: string; reason: string; status: "pending" | "accepted" | "rejected";
     createdAt: string; resolution: string;
-    kind: "assessment" | "weekly_practice";
+    kind: "assessment" | "weekly_practice" | "lesson_part";
     submissionId: string | null;
     currentScore: number | null;
+    cefr?: CefrLevel | null;
+    weekNumber?: number | null;
+    dayNumber?: number | null;
+    lessonTitle?: string | null;
+    partCode?: string | null;
+    attempts?: number | null;
+    answer?: string | null;
+    aiFeedback?: string | null;
+    question?: string | null;
+    options?: string[];
+    answerKey?: string | null;
   }>;
   lessonAttempts: Array<{
     id: string; learnerId: string; learnerName: string; cefr: CefrLevel | null; weekNumber: number; dayNumber: number;

@@ -8,7 +8,7 @@ export interface VocabularyRelationChip {
   tone?: "good" | "mid" | "low" | "umb" | "synonym" | "antonym" | "family";
   count?: number;
   icon?: "umbrella" | "family";
-  onClick?: () => void;
+  onClick?: (() => void) | undefined;
 }
 
 export function VocabularyCard({ item, loadImage, speak, relations = [] }: {
@@ -18,18 +18,19 @@ export function VocabularyCard({ item, loadImage, speak, relations = [] }: {
   relations?: VocabularyRelationChip[];
 }) {
   const phrases = (item.collocations ?? item.examples)?.slice(0, 3) ?? [];
+  const phraseAudioUrls = item.collocationAudioUrls ?? item.exampleAudioUrls ?? [];
   const type = vietnameseWordType(item.type, item.word);
   return <article className="word-card vocabulary-card" aria-label={item.word}>
     <div className="vocabulary-card-heading">
       <ContentImage term={item.word} unavailable="hide" load={loadImage} />
       <div className="vocabulary-card-main">
         <div className="vocabulary-card-word"><h3>{item.word}</h3><span className="vocabulary-card-type">{type}</span>{item.pronunciation ? <span className="ipa vocabulary-card-pronunciation">{item.pronunciation}</span> : null}</div>
-        {item.audioUrl ? <audio controls preload="metadata" src={item.audioUrl} aria-label={`Nghe audio từ ${item.word}`} /> : <VocabularySpeechButton text={item.word} label={`Nghe từ ${item.word}`} iconOnly speak={speak} />}
+        {item.audioUrl ? <VocabularyAudioButton src={item.audioUrl} label={`Nghe từ ${item.word}`} fallback={() => speak(item.word)} /> : <VocabularySpeechButton text={item.word} label={`Nghe từ ${item.word}`} iconOnly speak={speak} />}
         {item.meaning ? <p className="vocabulary-card-meaning">{item.meaning}</p> : null}
       </div>
     </div>
-    {phrases.length ? <div className="vocabulary-card-phrases" aria-label={`${phrases.length} cụm từ thường dùng`}><span className="vocabulary-card-label">Cụm từ thường dùng</span><div className="vocabulary-card-phrase-list">{phrases.map((phrase) => <VocabularySpeechButton text={phrase} label={`Nghe cụm từ: ${phrase}`} visibleLabel={phrase} speak={speak} key={phrase} />)}</div></div> : null}
-    {item.examples?.slice(3).map((example, index) => <div className="vocabulary-card-example" key={example}><span className="vocabulary-card-label">Ví dụ</span><VocabularySpeechButton text={example} label={`Nghe ví dụ ${index + 1}: ${example}`} visibleLabel={example} speak={speak} /></div>)}
+    {phrases.length ? <div className="vocabulary-card-phrases" aria-label={`${phrases.length} cụm từ thường dùng`}><span className="vocabulary-card-label">Cụm từ thường dùng</span><div className="vocabulary-card-phrase-list">{phrases.map((phrase, index) => phraseAudioUrls[index] ? <VocabularyAudioButton src={phraseAudioUrls[index]!} label={`Nghe cụm từ: ${phrase}`} visibleLabel={phrase} fallback={() => speak(phrase)} key={phrase} /> : <VocabularySpeechButton text={phrase} label={`Nghe cụm từ: ${phrase}`} visibleLabel={phrase} speak={speak} key={phrase} />)}</div></div> : null}
+    {item.examples?.slice(3).map((example, index) => item.exampleAudioUrls?.[index + 3] ? <div className="vocabulary-card-example" key={example}><span className="vocabulary-card-label">Ví dụ</span><VocabularyAudioButton src={item.exampleAudioUrls[index + 3]!} label={`Nghe ví dụ ${index + 1}: ${example}`} visibleLabel={example} fallback={() => speak(example)} /></div> : <div className="vocabulary-card-example" key={example}><span className="vocabulary-card-label">Ví dụ</span><VocabularySpeechButton text={example} label={`Nghe ví dụ ${index + 1}: ${example}`} visibleLabel={example} speak={speak} /></div>)}
     {relations.length ? <div className="vocabulary-card-relations" aria-label="Các nhóm từ liên quan">{relations.map((relation) => {
       const className = `chip${relation.tone ? ` ${relation.tone}` : ""}`;
       const content = <>{relation.icon === "umbrella" ? <Umbrella size={14} aria-hidden="true" /> : relation.icon === "family" ? <Users size={14} aria-hidden="true" /> : null}<span className="vocabulary-card-chip-label">{relation.label}</span>{relation.count ? <span className="vocabulary-card-chip-count">+{relation.count}</span> : null}</>;
@@ -38,6 +39,20 @@ export function VocabularyCard({ item, loadImage, speak, relations = [] }: {
         : <span className={className} key={relation.label}>{content}</span>;
     })}</div> : null}
   </article>;
+}
+
+function VocabularyAudioButton({ src, label, visibleLabel, fallback }: {
+  src: string;
+  label: string;
+  visibleLabel?: string;
+  fallback: () => void;
+}) {
+  const play = () => {
+    if (typeof Audio === "undefined") return;
+    const audio = new Audio(src);
+    void audio.play().catch(fallback);
+  };
+  return <button className={`btn-sm btn-ghost vocabulary-card-sound${visibleLabel ? "" : " vocabulary-card-sound--icon"}`} type="button" aria-label={label} title={label} onClick={play}><Volume2 size={visibleLabel ? 14 : 18} aria-hidden="true" />{visibleLabel}</button>;
 }
 
 function VocabularySpeechButton({ text, label, visibleLabel, iconOnly = false, speak }: {

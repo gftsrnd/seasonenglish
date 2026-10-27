@@ -178,10 +178,6 @@ export function ExperienceProvider({ children, musicAllowed = true, musicConfig 
 
   const speak = useCallback((text: string, language = "en-US", options?: LessonSpeechOptions) => {
     const onStatus = options?.onStatus;
-    if (!text.trim()) {
-      onStatus?.("ended" satisfies LessonSpeechStatus);
-      return;
-    }
     if (options?.audioSrc) {
       cancelExclusiveAudio("speech");
       let audioElement: HTMLAudioElement;
@@ -215,43 +211,49 @@ export function ExperienceProvider({ children, musicAllowed = true, musicConfig 
       }
       return;
     }
+    if (!text.trim()) {
+      onStatus?.("ended" satisfies LessonSpeechStatus);
+      return;
+    }
+    if (language.toLocaleLowerCase().startsWith("vi")) {
+      onStatus?.("no_voice" satisfies LessonSpeechStatus);
+      return;
+    }
     if (!("speechSynthesis" in window) || typeof SpeechSynthesisUtterance === "undefined") {
       onStatus?.("unsupported" satisfies LessonSpeechStatus);
       return;
     }
-    const requestedLanguage = language.toLowerCase();
-    const languagePrefix = requestedLanguage.split("-")[0];
     const voices = window.speechSynthesis.getVoices();
-    const voice = voices.find((candidate) => candidate.lang.toLowerCase() === requestedLanguage)
-      ?? voices.find((candidate) => candidate.lang.toLowerCase().startsWith(`${languagePrefix}-`));
-    if (languagePrefix === "vi" && !voice) {
+    const languagePrefix = language.split("-")[0]?.toLocaleLowerCase();
+    const voice = voices.find((candidate) => candidate.lang.toLocaleLowerCase() === language.toLocaleLowerCase())
+      ?? voices.find((candidate) => candidate.lang.toLocaleLowerCase().startsWith(`${languagePrefix}-`));
+    if (!voice) {
       onStatus?.("no_voice" satisfies LessonSpeechStatus);
       return;
     }
     cancelExclusiveAudio("speech");
+    const utterance = new SpeechSynthesisUtterance(text.trim());
+    utterance.lang = language;
+    utterance.voice = voice;
+    utterance.rate = options?.rate ?? 0.9;
     const release = claimExclusiveAudio("speech", () => {
       window.speechSynthesis.cancel();
       onStatus?.("cancelled" satisfies LessonSpeechStatus);
     }, () => startMusic());
     if (!release) return;
-    window.speechSynthesis.cancel();
-    const speech = new SpeechSynthesisUtterance(text);
-    speech.lang = language;
-    if (voice) speech.voice = voice;
-    speech.rate = Math.max(0.5, Math.min(1.5, options?.rate ?? 0.9));
-    speech.onstart = () => onStatus?.("started" satisfies LessonSpeechStatus);
-    const restore = (status: LessonSpeechStatus) => {
+    let completed = false;
+    const finish = (status: LessonSpeechStatus) => {
+      if (completed) return;
+      completed = true;
       releaseExclusiveAudio("speech");
       onStatus?.(status);
     };
-    speech.onend = () => restore("ended");
-    speech.onerror = () => restore("error");
-    try {
-      window.speechSynthesis.resume();
-      window.speechSynthesis.speak(speech);
-    } catch {
-      restore("error");
-    }
+    utterance.onstart = () => onStatus?.("started" satisfies LessonSpeechStatus);
+    utterance.onend = () => finish("ended");
+    utterance.onerror = () => finish("error");
+    window.speechSynthesis.cancel();
+    window.speechSynthesis.resume();
+    window.speechSynthesis.speak(utterance);
   }, [startMusic]);
 
   const holdMusic = useCallback((held: boolean) => {

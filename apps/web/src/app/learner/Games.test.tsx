@@ -28,6 +28,30 @@ const view: GameHubView = {
 };
 
 describe("app games affordances", () => {
+  it("separates the three game setup sections into responsive cards", () => {
+    render(<LearnerGames view={view} actions={actions} />);
+
+    const page = screen.getByRole("heading", { name: "Game từ vựng" }).closest(".games-page");
+    expect(page).toHaveClass("games-page");
+    const sections = Array.from((page as HTMLElement).querySelectorAll<HTMLElement>(".games-section-card"));
+    expect(sections).toHaveLength(3);
+    for (const section of sections) expect(section).toHaveClass("games-section-card");
+    const topicSection = sections[0]!;
+    const wordSetSection = sections[1]!;
+    expect(topicSection).toHaveClass("games-topic-card");
+    expect(wordSetSection).toHaveClass("games-word-set-card");
+    expect(topicSection.querySelector("form.topic-create")).toBeInTheDocument();
+    expect(within(topicSection).getByText(/Tuần 1/).closest(".topic-source")).toBeInTheDocument();
+    expect(within(wordSetSection).getByRole("heading", { name: /Bộ từ: Tuần 1/i }).closest(".section-heading")).toBeInTheDocument();
+  });
+
+  it("confirms that the active set uses this week's learned vocabulary", () => {
+    render(<LearnerGames view={view} actions={actions} />);
+
+    expect(screen.getByText("Đang dùng bộ từ đã học trong tuần này.")).toBeInTheDocument();
+    expect(screen.queryByText("Nhập một chủ đề để tạo bộ từ.")).not.toBeInTheDocument();
+  });
+
   it("disables topic entry when AI generation is unavailable and explains the fallback", () => {
     render(<LearnerGames view={view} actions={actions} />);
 
@@ -83,7 +107,7 @@ describe("app games affordances", () => {
     expect(actions.speak).toHaveBeenCalledWith("colleague");
   });
 
-  it("keeps the six game destinations and the locked arena destination", () => {
+  it("keeps the six game destinations and renders the locked arena as a non-navigable status", () => {
     const descriptor = (key: GameDescriptor["key"], name: string): GameDescriptor => ({
       key, icon: "🎮", name, description: `${name} description`, goal: "goal", instructions: [], scoring: "scoring", best: null
     });
@@ -99,10 +123,19 @@ describe("app games affordances", () => {
 
     const labels = { scramble: "Xếp chữ", crossword: "Ô chữ", eggs: "Season catch", mario: "Season-rio", sort: "Phân loại từ", typing: "Đua gõ từ" } as const;
     for (const [key, label] of Object.entries(labels)) expect(screen.getByRole("link", { name: `Chơi ${label}` })).toHaveAttribute("href", `/games/${key}`);
-    const arena = screen.getByRole("link", { name: /Đấu trường nội bộ/i });
+    const arena = screen.getByLabelText("Đấu trường nội bộ – Mở khi đạt B1");
     expect(arena).toHaveClass("locked");
-    expect(arena).toHaveAttribute("href", "/arena");
-    expect(arena).toHaveTextContent("B1+");
+    expect(arena.tagName).not.toBe("A");
+    expect(arena).not.toHaveAttribute("href");
+    expect(arena).toHaveTextContent("Mở khi đạt B1");
+    fireEvent.click(arena);
+    expect(actions.navigate).not.toHaveBeenCalled();
+  });
+
+  it("links the arena only for B1 and above", () => {
+    render(<LearnerGames view={{ ...view, cefr: "B1", arena: { ...view.arena, eligible: true, points: 12 } }} actions={actions} />);
+
+    expect(screen.getByRole("link", { name: /Đấu trường nội bộ/i })).toHaveAttribute("href", "/arena");
   });
 
   it("uses consistent Lucide icons for the six game tiles without rendering raw tile glyphs", () => {
@@ -132,10 +165,13 @@ describe("app games affordances", () => {
     vi.useFakeTimers();
     const onFinish = vi.fn();
     const { unmount } = render(<WordSortGame words={[
-      { id: "colleague", english: "colleague", vietnamese: "đồng nghiệp", definition: "a co-worker", partOfSpeech: "noun" }
+      { id: "colleague", english: "colleague", vietnamese: "đồng nghiệp", definition: "a co-worker", partOfSpeech: "noun" },
+      { id: "report", english: "report", vietnamese: "báo cáo", definition: "a written account", partOfSpeech: "noun" },
+      { id: "incident", english: "incident", vietnamese: "sự cố", definition: "an unexpected event", partOfSpeech: "noun" },
+      { id: "corridor", english: "corridor", vietnamese: "hành lang", definition: "a hallway", partOfSpeech: "noun" }
     ]} onFinish={onFinish} />);
 
-    fireEvent.click(screen.getByRole("button", { name: "Noun" }));
+    for (let index = 0; index < 4; index += 1) fireEvent.click(screen.getByRole("button", { name: "Noun" }));
     unmount();
     await act(async () => { await vi.advanceTimersByTimeAsync(800); });
 

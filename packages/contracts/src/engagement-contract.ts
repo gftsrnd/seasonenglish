@@ -135,6 +135,7 @@ export interface GameEvidenceEventInput {
 
 export interface GameFinishInput {
   answers: GameAnswerInput[];
+  attemptSeed?: number;
   hintsUsed?: number;
   events?: GameEvidenceEventInput[];
 }

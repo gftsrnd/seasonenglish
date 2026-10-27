@@ -6,6 +6,7 @@ describe("AI lesson generation provenance", () => {
     const provenance = buildGenerationProvenance({
       promptVersionId: "prompt-version-7",
       prompt: "Generate measurable objectives.",
+      model: { provider: "test", name: "test-model", config: { temperature: 0 } },
       week: {
         weekNumber: 3,
         topic: "Handling customer requests",
@@ -27,6 +28,7 @@ describe("AI lesson generation provenance", () => {
         versionId: "prompt-version-7",
         content: "Generate measurable objectives."
       },
+      model: { provider: "test", name: "test-model", config: { temperature: 0 } },
       input: {
         weekNumber: 3,
         topic: "Handling customer requests",

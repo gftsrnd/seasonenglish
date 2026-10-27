@@ -456,14 +456,14 @@ export function LearnerRouteController() {
     deleteGameSet: async () => setContracts({ games: await apiClient.deleteGameWordSet() }),
     finishGame: async (input) => {
       if (route.name === "duel") {
-        const duel = await apiClient.submitDuelResult(route.params.id, { requestId: crypto.randomUUID(), answers: input.answers });
+        const duel = await apiClient.submitDuelResult(route.params.id, { requestId: crypto.randomUUID(), answers: input.answers, ...(input.attemptSeed === undefined ? {} : { attemptSeed: input.attemptSeed }) });
         setContracts((current) => ({ ...current, duel }));
         return;
       }
       if (route.name !== "game") throw new Error("GAME_ROUTE_NOT_ACTIVE");
       const pending = gamePending.current?.input === input ? gamePending.current : { input, requestId: crypto.randomUUID() };
       gamePending.current = pending;
-      const result = await apiClient.submitGameResult(route.params.game, { requestId: pending.requestId, answers: input.answers, ...(input.hintsUsed === undefined ? {} : { hintsUsed: input.hintsUsed }), ...(input.events?.length ? { events: input.events } : {}) });
+      const result = await apiClient.submitGameResult(route.params.game, { requestId: pending.requestId, answers: input.answers, ...(input.attemptSeed === undefined ? {} : { attemptSeed: input.attemptSeed }), ...(input.hintsUsed === undefined ? {} : { hintsUsed: input.hintsUsed }), ...(input.events?.length ? { events: input.events } : {}) });
       gamePending.current = undefined; setUiState((current) => ({ ...current, gameResult: result }));
     },
     resetGameResult: () => { gamePending.current = undefined; setUiState((current) => ({ ...current, gameResult: null })); },

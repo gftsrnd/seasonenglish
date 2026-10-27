@@ -9,6 +9,8 @@ import type { LearnerCallbacks, LessonView } from "../src/app/learner/contracts.
 
 afterEach(() => {
   cleanup();
+  window.sessionStorage.clear();
+  window.localStorage.clear();
   vi.restoreAllMocks();
   vi.unstubAllGlobals();
   Reflect.deleteProperty(window, "speechSynthesis");
@@ -111,15 +113,19 @@ describe("app lesson evidence states", () => {
       content: {
         parts: [
           { code: "objective", title: "Mục tiêu", content: { text: "Mục tiêu" } },
-          { code: "instruction", title: "Hướng dẫn làm bài", content: { steps: ["Học nội dung", "Làm lần lượt các bài tập", "Xem phản hồi và làm lại"] } }
+          { code: "instruction", title: "Hướng dẫn làm bài", content: { steps: ["Nội dung cũ không được dùng để suy ra phần bài tập."] } },
+          { code: "pronunciation", title: "Phát âm", content: { focus: "/iː/", words: ["team"] } },
+          { code: "listening", title: "Nghe", content: { prompt: "Nghe và chọn đáp án." } },
+          { code: "reading", title: "Đọc", content: { prompt: "Đọc và chọn đáp án." } },
+          { code: "speaking", title: "Nói", content: { prompt: "Ghi âm câu trả lời." } }
         ]
       },
-      progress: { ...lesson.progress, status: "in_progress", completedPartCodes: ["objective"] }
+      progress: { ...lesson.progress, status: "in_progress", completedPartCodes: ["objective", "pronunciation"] }
     };
     render(<LearnerLesson view={{ lesson: instructionLesson }} actions={callbacks()} />);
 
     expect(screen.getByRole("heading", { name: /hướng dẫn làm bài/i })).toBeInTheDocument();
-    expect(screen.getAllByTestId("app-lesson-part").map((part) => part.dataset.part)).toEqual(["objective", "instruction"]);
+    expect(screen.getAllByTestId("app-lesson-part").map((part) => part.dataset.part)).toEqual(["objective", "instruction", "pronunciation"]);
     await user.click(screen.getByRole("tab", { name: /2\. bài tập/i }));
 
     const instruction = screen.getAllByTestId("app-lesson-part").find((part) => part.dataset.part === "instruction");
@@ -127,7 +133,8 @@ describe("app lesson evidence states", () => {
     expect(within(instruction as HTMLElement).getByRole("heading", { name: /hướng dẫn làm bài/i })).toBeInTheDocument();
     expect(within(instruction as HTMLElement).getByRole("list")).toHaveClass("lesson-instruction-list");
     expect(within(instruction as HTMLElement).getAllByRole("listitem")).toHaveLength(3);
-    expect(within(instruction as HTMLElement).getByText("Làm lần lượt các bài tập")).toBeInTheDocument();
+    expect(within(instruction as HTMLElement).getByText("Làm lần lượt 3 phần: Nghe → Đọc → Nói.")).toBeInTheDocument();
+    expect(within(instruction as HTMLElement).queryByText("Nội dung cũ không được dùng để suy ra phần bài tập.")).not.toBeInTheDocument();
   });
 
   it("keeps exercises locked until the learner confirms the study step", async () => {
@@ -156,7 +163,7 @@ describe("app lesson evidence states", () => {
       ...lesson,
       content: { parts: [
         { code: "listening", title: "Nghe", content: {
-          script: "Hello, I am new here.", prompt: "What does the speaker say?",
+          audioUrl: "/audio/listening.mp3", prompt: "What does the speaker say?",
           answer: "Nice to meet you.", options: ["Goodbye.", "Nice to meet you.", "See you yesterday.", "No answer."]
         } },
         { code: "reading", title: "Đọc", content: {
@@ -167,7 +174,7 @@ describe("app lesson evidence states", () => {
     } }} actions={callbacks({ submitLessonPartAttempt: submit })} />);
 
     await openPractice(user);
-    expect(screen.getByRole("button", { name: /nghe đoạn audio/i })).toBeInTheDocument();
+    expect(screen.getByLabelText(/nghe audio phần listening/i)).toHaveAttribute("src", "/audio/listening.mp3");
     expect(screen.getByText("Lan is new to the product team.")).toHaveClass("lesson-reading-passage");
     await user.click(screen.getByRole("radio", { name: /^B\. Nice to meet you\.$/ }));
     const listening = screen.getAllByTestId("app-lesson-part").find((part) => part.dataset.part === "listening");
@@ -175,28 +182,19 @@ describe("app lesson evidence states", () => {
     expect(submit).toHaveBeenCalledWith("listening", { answer: "Nice to meet you." });
   });
 
-  it("keeps the lesson speech button label while playing", async () => {
-    Object.defineProperty(window, "speechSynthesis", { configurable: true, value: {} });
-    vi.stubGlobal("SpeechSynthesisUtterance", class {});
-    let reportStatus!: (status: "started" | "ended" | "error" | "unsupported") => void;
-    const speak = vi.fn((_text: string, _language?: string, options?: { onStatus?: typeof reportStatus }) => {
-      reportStatus = options?.onStatus as typeof reportStatus;
-    });
+  it("restores Listening TTS when only a transcript exists", async () => {
     const user = userEvent.setup();
+    const speak = vi.fn();
     render(<LearnerLesson view={{ lesson: {
       ...lesson,
       content: { parts: [{ code: "listening", title: "Nghe", content: { script: "The meeting starts at nine.", prompt: "Chọn ý chính." } }] }
     } }} actions={callbacks({ speak })} />);
 
     await openPractice(user);
-    await user.click(screen.getByRole("button", { name: "Nghe đoạn audio" }));
-    expect(speak).toHaveBeenCalledTimes(1);
-    expect(screen.getByRole("button", { name: "Nghe đoạn audio" })).toBeEnabled();
-    expect(screen.getByRole("button", { name: "Nghe đoạn audio" })).not.toHaveAttribute("aria-busy");
-
-    reportStatus("ended");
-    await waitFor(() => expect(screen.getByRole("button", { name: "Nghe đoạn audio" })).toBeEnabled());
-    expect(screen.queryByText("Đã phát xong.")).not.toBeInTheDocument();
+    const listeningAudio = screen.getByRole("button", { name: "Nghe nội dung phần Listening" });
+    expect(listeningAudio).toHaveClass("lesson-audio-primary", "lesson-listening-audio-button");
+    await user.click(listeningAudio);
+    expect(speak).toHaveBeenCalledWith("The meeting starts at nine.", "en-US", { rate: 0.85 });
   });
 
   it("submits part evidence and exposes server-returned retry feedback", async () => {
@@ -221,10 +219,54 @@ describe("app lesson evidence states", () => {
         }
       }
     } }} actions={actions} />);
-    expect(screen.getByText(/đã hết lượt thử/i)).toBeInTheDocument();
-    await openPractice(userEvent.setup());
+    const user = userEvent.setup();
+    await openPractice(user);
+    const reading = screen.getAllByTestId("app-lesson-part").find((part) => part.dataset.part === "reading");
+    expect(within(reading as HTMLElement).getByText("Đã hết lượt thử")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /xem bản dịch/i })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /gửi kháng nghị/i })).toBeInTheDocument();
+  });
+
+  it("keeps terminal feedback in its own card, counts an appeal, and excludes pending speaking review", async () => {
+    const user = userEvent.setup();
+    const sixPartLesson: LessonView["lesson"] = {
+      ...lesson,
+      content: { parts: [
+        { code: "objective", title: "Mục tiêu", content: { text: "Mục tiêu" } },
+        { code: "listening", title: "Nghe", content: { prompt: "Nghe", answer: "A", options: ["A", "B"] } },
+        { code: "reading", title: "Đọc", content: { prompt: "Đọc", answer: "A", options: ["A", "B"] } },
+        { code: "writing", title: "Viết", content: { prompt: "Viết" } },
+        { code: "word_class", title: "Từ loại", content: { prompt: "Từ loại", answer: "Noun", options: ["Noun", "Verb"] } },
+        { code: "word_use", title: "Dùng từ", content: { prompt: "Dùng từ", answer: "Use", options: ["Use", "Uses"] } },
+        { code: "speaking", title: "Nói", content: { prompt: "Nói" } }
+      ] },
+      progress: {
+        status: "in_progress",
+        completedPartCodes: ["listening", "reading", "writing", "word_class", "speaking"],
+        evidence: {
+          listening: { attempts: 1, status: "correct", answer: "A" },
+          reading: { attempts: 2, status: "appealed", answer: "B", feedback: "Kháng nghị đã được gửi tới người vận hành." },
+          writing: { attempts: 2, status: "wrong_exhausted", answer: "Sai", feedback: "Đã hết lượt thử." },
+          word_class: { attempts: 1, status: "correct", answer: "Noun" },
+          word_use: { attempts: 1, status: "submitted", answer: "Use", feedback: "Đã gửi để kiểm tra." },
+          speaking: { attempts: 1, status: "correct", artifactKey: "lesson-audio/speaking.webm" }
+        }
+      }
+    };
+
+    render(<LearnerLesson view={{ lesson: sixPartLesson }} actions={callbacks()} />);
+    await openPractice(user);
+
+    expect(screen.getByRole("tab", { name: /2\. bài tập 5\/6/i })).toBeInTheDocument();
+    expect(screen.queryByLabelText("Trạng thái bài tập")).not.toBeInTheDocument();
+    const reading = screen.getAllByTestId("app-lesson-part").find((part) => part.dataset.part === "reading");
+    const writing = screen.getAllByTestId("app-lesson-part").find((part) => part.dataset.part === "writing");
+    const wordUse = screen.getAllByTestId("app-lesson-part").find((part) => part.dataset.part === "word_use");
+    expect(within(reading as HTMLElement).getByText("Đã gửi kháng nghị")).toBeInTheDocument();
+    expect(within(writing as HTMLElement).getByText("Đã hết lượt thử")).toBeInTheDocument();
+    expect(within(wordUse as HTMLElement).getByText("Đã gửi để kiểm tra")).toBeInTheDocument();
+    expect(screen.getByText(/đã xong 5\/6 phần/i)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Hoàn thành bài" })).toBeDisabled();
   });
 
   it("keeps an appeal recoverable while it is pending and after it fails", async () => {
@@ -301,8 +343,7 @@ describe("app lesson evidence states", () => {
     });
     expect(await screen.findByText("Đã nhận và chấm bản ghi âm.")).toBeInTheDocument();
 
-    await user.click(screen.getByRole("button", { name: /nghe đoạn audio/i }));
-    expect(screen.getByText(/không phát được âm thanh|không hỗ trợ đọc văn bản/i)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Nghe nội dung phần Listening" })).toBeInTheDocument();
   });
 
   it("enables speaking grading after recording directly and displays returned feedback", async () => {

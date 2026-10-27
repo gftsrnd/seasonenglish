@@ -353,6 +353,50 @@ describe("practice, games, arena, rewards and survey API", () => {
     }
   });
 
+  it("builds the weekly game set from vocabulary in lessons the learner has started", async () => {
+    await pool.query("delete from game_sets where program_week_id = $1", [DEMO_IDS.week]);
+    await pool.query("delete from progress_records where learner_id = $1", [DEMO_IDS.learner]);
+    await pool.query(
+      `insert into progress_records (id, learner_id, lesson_id, status, score, evidence, started_at)
+       values (gen_random_uuid(), $1, $2, 'in_progress', 0, '{}'::jsonb, now())`,
+      [DEMO_IDS.learner, DEMO_IDS.lessons[0]]
+    );
+    try {
+      const selected = await app.inject({
+        method: "POST", url: "/api/v1/engagement/games/word-set/weekly", headers: { cookie }, payload: {}
+      });
+
+      expect(selected.statusCode, selected.body).toBe(200);
+      expect(selected.json()).toMatchObject({
+        cefr: "A2",
+        wordSet: {
+          source: "weekly",
+          words: expect.arrayContaining([
+            expect.objectContaining({ english: "colleague", vietnamese: "đồng nghiệp", partOfSpeech: "noun" })
+          ])
+        }
+      });
+      expect(selected.json().wordSet.words).toHaveLength(3);
+    } finally {
+      await restoreWeeklyGameSet();
+    }
+  });
+
+  it("returns an explicit empty state when the learner has not started any lesson vocabulary", async () => {
+    await pool.query("delete from game_sets where program_week_id = $1", [DEMO_IDS.week]);
+    await pool.query("delete from progress_records where learner_id = $1", [DEMO_IDS.learner]);
+    try {
+      const selected = await app.inject({
+        method: "POST", url: "/api/v1/engagement/games/word-set/weekly", headers: { cookie }, payload: {}
+      });
+
+      expect(selected.statusCode, selected.body).toBe(409);
+      expect(selected.json()).toEqual({ code: "LEARNED_VOCABULARY_NOT_FOUND" });
+    } finally {
+      await restoreWeeklyGameSet();
+    }
+  });
+
   it("bootstraps a safe natural topic without a pre-created game set", async () => {
     await pool.query("delete from game_sets where program_week_id = $1", [DEMO_IDS.week]);
     try {

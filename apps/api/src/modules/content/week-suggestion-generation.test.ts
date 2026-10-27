@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import type { AiTaskRunner } from "@e4s/ai";
-import { generateWeekSuggestions } from "./week-suggestion-generation.js";
+import { generateWeekSuggestionBatches, generateWeekSuggestions } from "./week-suggestion-generation.js";
 
 vi.mock("@e4s/ai", async () => await import("../../../../../packages/ai/src/index.js"));
 
@@ -33,6 +33,38 @@ const validOutput = {
 };
 
 describe("week suggestion generation", () => {
+  it("generates a four-week pilot one week at a time and carries forward topics", async () => {
+    const outputFor = (weekNumber: number) => {
+      const topics = [
+        ["Project kickoff", "Meeting agenda", "Customer feedback"],
+        ["Supplier delays", "Safety incident", "Invoice queries"],
+        ["Team onboarding", "Stock delivery", "Travel booking"],
+        ["Performance review", "System outage", "Contract renewal"]
+      ][weekNumber - 1]!;
+      return ({
+      weeks: [{
+        ...validOutput.weeks[0],
+        weekNumber,
+        options: topics.map(option)
+      }]
+      });
+    };
+    const runTask = vi.fn(async (_task: string, input: { weekNumbers: number[]; usedTopics: string[] }) => ({
+      output: outputFor(input.weekNumbers[0]!), metadata
+    }));
+
+    const generated = await generateWeekSuggestionBatches(
+      { weekNumbers: [1, 2, 3, 4], levels: ["A1", "A2", "B1", "B2"], usedTopics: ["Existing topic"] },
+      { prompt: "Suggest workplace topics." },
+      { runTask } as unknown as AiTaskRunner
+    );
+
+    expect(generated.output.weeks.map((week) => week.weekNumber)).toEqual([1, 2, 3, 4]);
+    expect(runTask).toHaveBeenCalledTimes(4);
+    expect(runTask.mock.calls[1]?.[1]).toMatchObject({ weekNumbers: [2], usedTopics: expect.arrayContaining(["Project kickoff"]) });
+    expect(runTask.mock.calls[3]?.[1]).toMatchObject({ weekNumbers: [4], usedTopics: expect.arrayContaining(["Travel booking"]) });
+  });
+
   it("repairs a malformed first provider result internally instead of returning a format error", async () => {
     const runTask = vi.fn()
       .mockRejectedValueOnce(Object.assign(new Error("AI_OUTPUT_INVALID"), {

@@ -14,39 +14,20 @@ export function ContentImage({ term, load, unavailable = "mascot" }: {
   required?: boolean;
   unavailable?: "mascot" | "hide";
 }) {
-  const hostRef = useRef<HTMLDivElement>(null);
   const loadRef = useRef(load);
-  const startedRef = useRef(false);
   const [state, setState] = useState<ContentImageState>({ status: "idle" });
   loadRef.current = load;
 
   useEffect(() => {
     let live = true;
-    startedRef.current = false;
-    setState({ status: "idle" });
-    const start = () => {
-      if (startedRef.current) return;
-      startedRef.current = true;
-      setState({ status: "loading" });
-      void loadRef.current()
-        .then((image) => {
-          if (!live) return;
-          setState(image.status === "available" ? { status: "available", image } : { status: "unavailable" });
-        })
-        .catch(() => { if (live) setState({ status: "unavailable" }); });
-    };
-    if (typeof IntersectionObserver === "undefined") {
-      start();
-      return () => { live = false; };
-    }
-    const observer = new IntersectionObserver((entries) => {
-      if (entries.some((entry) => entry.isIntersecting)) {
-        start();
-        observer.disconnect();
-      }
-    }, { rootMargin: "160px" });
-    if (hostRef.current) observer.observe(hostRef.current);
-    return () => { live = false; observer.disconnect(); };
+    setState({ status: "loading" });
+    void loadRef.current()
+      .then((image) => {
+        if (!live) return;
+        setState(toImageState(image));
+      })
+      .catch(() => { if (live) setState({ status: "unavailable" }); });
+    return () => { live = false; };
   }, [term]);
 
   if (state.status === "unavailable" && unavailable === "hide") {
@@ -70,5 +51,23 @@ export function ContentImage({ term, load, unavailable = "mascot" }: {
       />
     </figure>;
   }
-  return <div ref={hostRef} className="content-image content-image--loading" role="status" aria-label={`Đang tải ảnh minh hoạ cho ${term}`}><LoaderCircle size={18} aria-hidden="true" /><span className="sr-only">Đang tải ảnh minh hoạ</span></div>;
+  return <div className="content-image content-image--loading" role="status" aria-label={`Đang tải ảnh minh hoạ cho ${term}`}><LoaderCircle size={18} aria-hidden="true" /><span className="sr-only">Đang tải ảnh minh hoạ</span></div>;
+}
+
+function toImageState(image: ContentImageView): ContentImageState {
+  if (image.status !== "available" || !isValidImageUrl(image.imageUrl)) return { status: "unavailable" };
+  return {
+    status: "available",
+    image: { ...image, imageUrl: image.imageUrl.trim() }
+  };
+}
+
+function isValidImageUrl(value: unknown): value is string {
+  if (typeof value !== "string" || !value.trim()) return false;
+  try {
+    const parsed = new URL(value.trim(), window.location.href);
+    return parsed.protocol === "http:" || parsed.protocol === "https:";
+  } catch {
+    return false;
+  }
 }

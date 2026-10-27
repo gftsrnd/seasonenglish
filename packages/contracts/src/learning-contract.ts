@@ -125,6 +125,10 @@ export interface LessonVocabularyItem {
   imageAttribution?: ContentImageAttribution;
   examples?: string[];
   collocations?: string[];
+  /** Recorded audio aligned by index with collocations; browser TTS is the fallback. */
+  collocationAudioUrls?: string[];
+  /** Recorded audio aligned by index with examples; browser TTS is the fallback. */
+  exampleAudioUrls?: string[];
   family?: LessonVocabularyFamilyWord[];
   synonyms?: LessonVocabularySynonym[];
   antonyms?: LessonVocabularySynonym[];
@@ -159,6 +163,8 @@ export interface PartEvidence {
   attempts: number;
   /** Set by the lesson-attempt endpoint; React must not infer this state. */
   status?: LessonPartOutcome;
+  /** Viewing a translation is informational and must never consume an attempt or complete a part. */
+  translationViewed?: boolean | undefined;
   answer?: string | undefined;
   score?: number | undefined;
   feedback?: string | undefined;

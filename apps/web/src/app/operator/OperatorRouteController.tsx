@@ -32,7 +32,7 @@ import { OperatorWeeks } from "./Weeks.js";
 import { Badge } from "./primitives.js";
 import { ModalProvider, useModal } from "../shared/ModalProvider.js";
 import { adaptAssessmentOverview, adaptLevelForms, adaptLessonMatrix, adaptLessonSet, adaptPrompts, adaptReview, adaptWeeks } from "./adapters.js";
-import type { Cefr, LessonSetActionKey, PromptKey, ReviewTab, WeekSuggestion } from "./types.js";
+import type { Cefr, LessonSetActionKey, OperatorReviewActions, PromptKey, ReviewTab, WeekSuggestion } from "./types.js";
 import { generateLessonCellsSettled, lessonGenerationJobsSnapshot, startLessonGenerationJob, subscribeLessonGenerationJobs } from "./lesson-generation.js";
 
 export type OperatorApiClient = typeof apiClient;
@@ -784,13 +784,6 @@ function ReviewRoute({ client, readOnly, canEditWeeklyPractice }: { client: Oper
   if (error) return <Status tone="error">Không tải được dữ liệu đọc mẫu: {error}</Status>;
   if (!data) return <Status>Đang tải dữ liệu đọc mẫu…</Status>;
   const refresh = (promise: Promise<unknown>) => void promise.then(load).catch(reason => setError(message(reason)));
-  const askScore = async (label: string) => {
-    const raw = await modal.prompt({ title: "Chấm bài thủ công", label: `${label} (0–5)`, inputType: "number", confirmLabel: "Tiếp tục" });
-    if (raw == null) return null;
-    const value = Number(raw);
-    return Number.isFinite(value) && value >= 0 && value <= 5 ? value : null;
-  };
-  const manualGrade = async (id: string) => { const meaning = await askScore("Đúng ý"); if (meaning == null) return; const vocabulary = await askScore("Từ vựng"); if (vocabulary == null) return; const grammar = await askScore("Ngữ pháp"); if (grammar == null) return; const feedback = await modal.prompt({ title: "Nhận xét bài làm", label: "Nhận xét", confirmLabel: "Lưu điểm" }) ?? ""; refresh(client.gradeReviewedSubmission(id, { meaning, vocabulary, grammar, feedback })); };
   const decide = async (id: string, accepted: boolean) => {
     if (readOnly) return;
     const practiceAppeal = data.appeals.find(appeal => appeal.id === id)?.kind === "weekly_practice";
@@ -827,7 +820,9 @@ function ReviewRoute({ client, readOnly, canEditWeeklyPractice }: { client: Oper
     if (typeof client.getContentReviewAssessment !== "function") return;
     void client.getContentReviewAssessment(attemptId).then(setDialog).catch(reason => setError(message(reason)));
   };
-  const guardedManualGrade = (id: string) => { if (!readOnly) void manualGrade(id); };
+  const guardedManualGrade: OperatorReviewActions["onGradeManual"] = (id, input) => {
+    if (!readOnly) refresh(client.gradeReviewedSubmission(id, input));
+  };
   return <><OperatorReview readOnly={readOnly} unavailable={missing} view={adaptReview(data, reviewToApi[tab], { aiConnected: capabilities?.ai ?? false })} actions={{
     onTabChange: setTab, onMarkSubmission: (id, checked) => { if (!readOnly) refresh(client.setContentReviewChecked("submission", id, checked)); }, onMarkCoachTurn: (id, checked) => { if (!readOnly) refresh(client.setContentReviewChecked("coach", id, checked)); }, onGradeAi: gradeAi, onGradeManual: guardedManualGrade, onDecideAppeal: decide, onViewTest: viewTest,
     ...(canEditWeeklyPractice ? { onSaveWeeklyPractice: async input => {

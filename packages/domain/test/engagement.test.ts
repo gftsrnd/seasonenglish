@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   arenaEligible,
   decideDuel,
+  prepareGameAttempt,
   seasonRioRoundPlan,
   scoreGameAttempt,
   weeklyPracticeAvailability
@@ -73,6 +74,22 @@ describe("engagement policy", () => {
     expect(scoreGameAttempt("mario", fullSet, oneCorrect)).toMatchObject({ score: 1, maxScore: 11, correct: 1, total: 11 });
     expect(scoreGameAttempt("sort", fullSet, [{ wordId: "fixed-1", answer: "noun" }])).toMatchObject({ score: 1, maxScore: 12, correct: 1, total: 12 });
     expect(scoreGameAttempt("typing", fullSet, [{ ...oneCorrect[0]!, combo: 1 }])).toMatchObject({ score: 10, maxScore: 500, correct: 1, total: 10 });
+  });
+
+  it("scores the same shuffled round that the learner actually played", () => {
+    const fullSet = Array.from({ length: 15 }, (_, index) => ({
+      id: `shuffle-${index + 1}`,
+      english: `term${String.fromCharCode(97 + index)}`,
+      vietnamese: `từ ${index + 1}`,
+      partOfSpeech: index % 2 ? "verb" : "noun"
+    }));
+    const attemptSeed = 3;
+    const played = prepareGameAttempt(fullSet, attemptSeed).slice(0, 8);
+    const answers = played.map((word) => ({ wordId: word.id, answer: word.english, attempts: 1 }));
+
+    expect(scoreGameAttempt("scramble", fullSet, answers, { attemptSeed })).toMatchObject({
+      score: 16, maxScore: 16, correct: 8, total: 8
+    });
   });
 
   it("plans only answerable Season-rio gates while retaining three repeatable boss questions", () => {

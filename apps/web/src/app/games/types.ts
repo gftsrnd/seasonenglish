@@ -1,4 +1,7 @@
 import type { GameFinishInput, GameWordSetView } from "@e4s/contracts";
+import { prepareGameAttempt } from "@e4s/domain/engagement";
+
+export { prepareGameAttempt };
 
 export type GameWord = GameWordSetView["words"][number];
 export type FinishGame = (input: GameFinishInput) => void | Promise<void>;
@@ -20,12 +23,6 @@ export function seededShuffle<T>(items: readonly T[], seed: number) {
     [result[index], result[target]] = [result[target]!, result[index]!];
   }
   return result;
-}
-
-export function prepareGameAttempt(words: readonly GameWord[], attemptSeed: number) {
-  const canonical = [...words].sort((left, right) => left.id.localeCompare(right.id));
-  const baseOrder = seededShuffle(canonical, stringSeed(canonical.map((word) => word.id).join("|")));
-  return rotateForAttempt(baseOrder, attemptSeed);
 }
 
 export function choices(words: readonly GameWord[], current: GameWord, count = 4, attemptSeed = 0) {

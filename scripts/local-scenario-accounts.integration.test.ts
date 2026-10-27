@@ -106,6 +106,23 @@ describe("local scenario account states", () => {
     expect(result.rows).toEqual([{ cefr: "A2", lessons: 5 }, { cefr: "B1", lessons: 5 }]);
   });
 
+  it("seeds one submitted weekly practice that is still waiting for grading", async () => {
+    const result = await client.query<{ display_name: string; status: string; score: unknown; feedback: unknown }>(
+      `select u.display_name, ps.status, ps.score, ps.feedback
+       from practice_submissions ps
+       join users u on u.id = ps.learner_id
+       where u.email = 'hai.yen.truong@scenario.e4s.local'
+         and ps.status = 'submitted'`
+    );
+
+    expect(result.rows).toEqual([{
+      display_name: "Trương Hải Yến",
+      status: "submitted",
+      score: null,
+      feedback: null
+    }]);
+  });
+
   it("is idempotent and repairs a missing B1 lesson", async () => {
     const ids = LOCAL_SCENARIO_ACCOUNTS.map(({ id }) => id);
     const counts = async () => (await client.query<Record<string, number>>(
@@ -177,7 +194,7 @@ describe("local scenario account states", () => {
       ["learner-placement-submitted", null, null, 0], ["learner-placement-review", null, null, 0],
       ["learner-placement-borderline", null, null, 0], ["learner-appeal", null, null, 0],
       ["learner-lesson-b1", "B1", "locked", 0], ["learner-lesson-attempts", "A2", "locked", 0],
-      ["learner-weekly", "A2", "open", 5], ["learner-level-ready", "A2", "reviewed", 5],
+      ["learner-weekly", "A2", "submitted", 5], ["learner-level-ready", "A2", "reviewed", 5],
       ["learner-history", "A2", "open", 5], ["learner-reminder", "A2", "locked", 0]
     ] as const;
     for (const [key, cefr, practiceState, completed] of expected) {
@@ -260,7 +277,7 @@ describe("local scenario account states", () => {
     try {
       await seedLocalScenarioAccounts(client);
       expect(await repositories.engagement.weeklyPractice(weekly.id))
-        .toMatchObject({ weekId: DEMO_IDS.week2, completedLessons: 5, totalLessons: 5, state: "open" });
+        .toMatchObject({ weekId: DEMO_IDS.week2, completedLessons: 5, totalLessons: 5, state: "submitted" });
       expect((await repositories.engagement.gameHub(weekly.id))?.wordSet?.topic).toBe("Emails & rescheduling meetings");
       const progress = await client.query<{ lesson_id: string }>("select lesson_id from progress_records where learner_id = $1", [attempts.id]);
       expect(lessons.rows.map((lesson) => lesson.id)).toContain(progress.rows[0]?.lesson_id);

@@ -1048,7 +1048,36 @@ class LearningRepository {
        limit 1`,
       [learnerId, lessonId]
     );
-    return result.rows[0] ? mapLessonRow(result.rows[0]) : null;
+    const row = result.rows[0];
+    if (!row) return null;
+    const lesson = mapLessonRow(row);
+    const appeals = await this.pool.query<{ part_code: LessonPartCode }>(
+      `select distinct part_code from lesson_part_appeals
+       where learner_id = $1 and lesson_id = $2 and status in ('pending', 'accepted')`,
+      [learnerId, lessonId]
+    );
+    const submittedSpeaking = lesson.progress.evidence.speaking?.status === "submitted"
+      && Boolean(lesson.progress.evidence.speaking.artifactKey);
+    if (!appeals.rowCount && !submittedSpeaking) return lesson;
+    const completedPartCodes = Array.from(new Set([
+      ...lesson.progress.completedPartCodes,
+      ...(submittedSpeaking ? ["speaking" as const] : []),
+      ...appeals.rows.map((appeal) => appeal.part_code)
+    ])) as LessonPartCode[];
+    const evidence = { ...lesson.progress.evidence };
+    for (const appeal of appeals.rows) {
+      const current = evidence[appeal.part_code];
+      evidence[appeal.part_code] = {
+        attempts: current?.attempts ?? 0,
+        ...(current?.answer === undefined ? {} : { answer: current.answer }),
+        ...(current?.score === undefined ? {} : { score: current.score }),
+        ...(current?.artifactKey === undefined ? {} : { artifactKey: current.artifactKey }),
+        ...(current?.translationViewed === undefined ? {} : { translationViewed: current.translationViewed }),
+        status: "appealed",
+        feedback: "Kháng nghị đã được gửi tới người vận hành."
+      };
+    }
+    return { ...lesson, progress: { ...lesson.progress, completedPartCodes, evidence } };
   }
 
   async saveLessonProgress(input: {
@@ -1132,6 +1161,25 @@ class LearningRepository {
     const part = lesson?.content.parts.find((candidate) => candidate.code === input.partCode);
     if (!lesson || !part) return null;
 
+    if (input.evidence.translated) {
+      const current = lesson.progress.evidence[input.partCode];
+      const evidence: PartEvidence = {
+        attempts: current?.attempts ?? 0,
+        ...(current?.status === undefined ? {} : { status: current.status }),
+        ...(current?.answer === undefined ? {} : { answer: current.answer }),
+        ...(current?.score === undefined ? {} : { score: current.score }),
+        ...(current?.artifactKey === undefined ? {} : { artifactKey: current.artifactKey }),
+        translationViewed: true,
+        feedback: "Bản dịch đã được mở để bạn đối chiếu."
+      };
+      const progress = await this.saveLessonProgress({
+        learnerId: input.learnerId,
+        lessonId: input.lessonId,
+        progress: { ...lesson.progress, evidence: { ...lesson.progress.evidence, [input.partCode]: evidence } }
+      });
+      return { lessonId: input.lessonId, partCode: input.partCode, evidence, progress };
+    }
+
     const client = await this.pool.connect();
     let attemptId: string | null = null;
     let storedEvidence: PartEvidence | null = null;
@@ -1190,7 +1238,10 @@ class LearningRepository {
           storedEvidence = mapPartEvidence(row);
           const currentEvidence = lesson.progress.evidence;
           const mergedEvidence = { ...currentEvidence, [input.partCode]: storedEvidence };
-          const partFinished = ["correct", "submitted", "wrong_exhausted", "translated", "appealed"].includes(storedEvidence.status ?? "");
+          // A persisted Speaking upload is the learner's terminal action even when
+          // automatic scoring is unavailable. Self-writing remains pending review.
+          const partFinished = ["correct", "wrong_exhausted"].includes(storedEvidence.status ?? "")
+            || (input.partCode === "speaking" && storedEvidence.status === "submitted" && Boolean(storedEvidence.artifactKey));
           const completedPartCodes = Array.from(new Set([
             ...lesson.progress.completedPartCodes,
             ...(partFinished ? [input.partCode] : [])
@@ -1239,18 +1290,29 @@ class LearningRepository {
     const client = await this.pool.connect();
     try {
       await client.query("begin");
+      await client.query("select pg_advisory_xact_lock(hashtext($1))", [`${input.learnerId}:${input.lessonId}:${input.partCode}`]);
+      const existing = await client.query<{ id: string; status: "pending" | "accepted" | "rejected"; created_at: Date; reason: string }>(
+        `select id, status, created_at, reason from lesson_part_appeals
+         where learner_id = $1 and lesson_id = $2 and part_code = $3
+         order by created_at asc limit 1`,
+        [input.learnerId, input.lessonId, input.partCode]
+      );
+      const prior = existing.rows[0];
+      if (prior) {
+        await client.query("commit");
+        return {
+          lessonId: input.lessonId, partCode: input.partCode, status: prior.status, reason: prior.reason,
+          evidence: lesson.progress.evidence[input.partCode] ?? { attempts: 0 },
+          createdAt: prior.created_at.toISOString(), progress: lesson.progress
+        };
+      }
       const inserted = await client.query<{ id: string; status: "pending" | "accepted" | "rejected"; created_at: Date; reason: string }>(
         `insert into lesson_part_appeals (id, learner_id, lesson_id, part_code, reason)
          values ($1, $2, $3, $4, $5)
-         on conflict (learner_id, lesson_id, part_code) where status = 'pending' do nothing
          returning id, status, created_at, reason`,
         [randomUUID(), input.learnerId, input.lessonId, input.partCode, input.reason]
       );
-      const row = inserted.rows[0] ?? (await client.query<{ id: string; status: "pending" | "accepted" | "rejected"; created_at: Date; reason: string }>(
-        `select id, status, created_at, reason from lesson_part_appeals
-         where learner_id = $1 and lesson_id = $2 and part_code = $3 and status = 'pending'`,
-        [input.learnerId, input.lessonId, input.partCode]
-      )).rows[0];
+      const row = inserted.rows[0];
       if (!row) throw new Error("LESSON_APPEAL_NOT_PERSISTED");
       const current = lesson.progress.evidence[input.partCode];
       const evidence: PartEvidence = {
@@ -1258,10 +1320,15 @@ class LearningRepository {
         ...(current?.answer === undefined ? {} : { answer: current.answer }),
         ...(current?.score === undefined ? {} : { score: current.score }),
         ...(current?.artifactKey === undefined ? {} : { artifactKey: current.artifactKey }),
+        ...(current?.translationViewed === undefined ? {} : { translationViewed: current.translationViewed }),
         status: "appealed",
         feedback: "Kháng nghị đã được gửi tới người vận hành."
       };
-      const completedPartCodes = Array.from(new Set([...lesson.progress.completedPartCodes, input.partCode])) as LessonPartCode[];
+      // An appeal is pending operator review, but it is a terminal learner action and must not block lesson completion.
+      const completedPartCodes = Array.from(new Set([
+        ...lesson.progress.completedPartCodes,
+        input.partCode
+      ]));
       const status = lesson.progress.status === "completed" ? "completed" : completedPartCodes.length ? "in_progress" : "not_started";
       await client.query(
         `insert into progress_records
@@ -1873,15 +1940,12 @@ function gradeLessonPart(
   input: LessonPartAttemptEvidenceInput,
   attemptNumber: number
 ): { status: Exclude<NonNullable<PartEvidence["status"]>, "unanswered" | "appealed">; score: number; feedback: string } {
-  if (input.translated) {
-    return { status: "translated", score: 0, feedback: "Bản dịch đã được mở để bạn đối chiếu." };
-  }
   if (partCode === "speaking" && input.artifactKey) {
     return { status: "submitted", score: 0, feedback: "Đã nhận file ghi âm. Bài được lưu để người vận hành kiểm tra khi AI không sẵn sàng." };
   }
   const answer = input.answer?.trim() ?? "";
   if (partCode === "writing" && (content.type === undefined || content.type === "write") && answer.split(/\s+/u).filter(Boolean).length >= 2) {
-    return { status: "correct", score: 100, feedback: "Đã nhận câu tự viết của bạn." };
+    return { status: "submitted", score: 0, feedback: "Đã lưu câu tự viết để chấm tay khi AI chưa sẵn sàng." };
   }
   const expected = content.answer;
   const expectedAnswers = Array.isArray(expected) ? expected.map(String) : expected === undefined ? [] : [String(expected)];
@@ -2765,7 +2829,8 @@ class ContentRepository {
         (select count(*) from coach_turns ct join coach_sessions cs on cs.id = ct.session_id join users u on u.id = cs.learner_id and u.role = 'learner' and u.status = 'active' where u.organization_id = $1 and ct.speaker = 'learner')::text as coach,
         (select count(*) from micro_lessons ml join users u on u.id = ml.learner_id and u.role = 'learner' and u.status = 'active' where u.organization_id = $1)::text as micro,
         ((select count(*) from appeals a join assessment_attempts aa on aa.id = a.attempt_id join users u on u.id = aa.learner_id and u.role = 'learner' and u.status = 'active' where u.organization_id = $1)
-          + (select count(*) from practice_appeals pa join users u on u.id = pa.learner_id and u.role = 'learner' and u.status = 'active' where u.organization_id = $1))::text as appeals,
+          + (select count(*) from practice_appeals pa join users u on u.id = pa.learner_id and u.role = 'learner' and u.status = 'active' where u.organization_id = $1)
+          + (select count(*) from lesson_part_appeals lpa join users u on u.id = lpa.learner_id and u.role = 'learner' and u.status = 'active' where u.organization_id = $1))::text as appeals,
         (select count(*) from assessment_attempts aa join users u on u.id = aa.learner_id and u.role = 'learner' and u.status = 'active' join assessment_versions av on av.id = aa.assessment_version_id join assessment_definitions ad on ad.id = av.definition_id where u.organization_id = $1 and ad.kind in ('placement', 'level_up'))::text as attempts,
         (select count(*) from assessment_versions av join assessment_definitions ad on ad.id = av.definition_id where ad.organization_id = $1 and ad.kind in ('placement', 'level_up'))::text as assessments`,
       [organizationId]
@@ -2791,10 +2856,11 @@ class ContentRepository {
     const [submissions, micros, appeals, progress, assessments, weeklySets] = await Promise.all([
       this.pool.query<{
         id: string; learner_name: string; cefr: CefrLevel | null; week_number: number; submitted_at: Date;
-        operator_checked: boolean; content: Record<string, unknown>; score: Record<string, unknown> | null; topic: string;
+        operator_checked: boolean; content: Record<string, unknown>; prompt_snapshot: Record<string, unknown>;
+        vocabulary_snapshot: unknown; score: Record<string, unknown> | null; topic: string;
         feedback: Record<string, unknown> | null;
       }>(`select ps.id, u.display_name as learner_name, e.cefr, pw.week_number, ps.submitted_at,
-                 ps.operator_checked, ps.content, ps.score, ps.feedback, pw.topic
+                 ps.operator_checked, ps.content, ps.prompt_snapshot, ps.vocabulary_snapshot, ps.score, ps.feedback, pw.topic
           from practice_submissions ps join users u on u.id = ps.learner_id and u.role = 'learner' and u.status = 'active'
           join program_weeks pw on pw.id = ps.program_week_id
           left join enrollments e on e.learner_id = u.id and e.program_id = pw.program_id
@@ -2809,19 +2875,56 @@ class ContentRepository {
           where u.organization_id = $1 order by ml.generated_at desc limit 60`, [organizationId]),
       this.pool.query<{
         id: string; learner_name: string; reason: string; status: "pending" | "accepted" | "rejected";
-        resolution: string | null; created_at: Date; kind: "assessment" | "weekly_practice";
+        resolution: string | null; created_at: Date; kind: "assessment" | "weekly_practice" | "lesson_part";
         submission_id: string | null; current_score: string | null;
+        cefr: CefrLevel | null; week_number: number | null; day_number: number | null; lesson_title: string | null;
+        part_code: string | null; attempts: number | null; answer: string | null; ai_feedback: string | null;
+        part_content: Record<string, unknown> | null;
       }>(`select combined.* from (
             select a.id, u.display_name as learner_name, a.reason, a.status, a.resolution, a.created_at,
-                   'assessment'::text as kind, null::uuid as submission_id, null::text as current_score
+                   'assessment'::text as kind, null::uuid as submission_id, null::text as current_score,
+                   null::text as cefr, null::int as week_number, null::int as day_number, null::text as lesson_title,
+                   null::text as part_code, null::int as attempts, null::text as answer, null::text as ai_feedback,
+                   null::jsonb as part_content
             from appeals a join users u on u.id = a.learner_id and u.role = 'learner' and u.status = 'active'
             where u.organization_id = $1
             union all
             select pa.id, u.display_name as learner_name, pa.reason, pa.status, pa.resolution, pa.created_at,
-                   'weekly_practice'::text as kind, pa.submission_id, ps.score->>'total' as current_score
+                   'weekly_practice'::text as kind, pa.submission_id, ps.score->>'total' as current_score,
+                   null::text as cefr, null::int as week_number, null::int as day_number, null::text as lesson_title,
+                   null::text as part_code, null::int as attempts, null::text as answer, null::text as ai_feedback,
+                   null::jsonb as part_content
             from practice_appeals pa
             join practice_submissions ps on ps.id = pa.submission_id
             join users u on u.id = pa.learner_id and u.role = 'learner' and u.status = 'active'
+            where u.organization_id = $1
+            union all
+            select lpa.id, u.display_name as learner_name, lpa.reason, lpa.status, lpa.resolution, lpa.created_at,
+                   'lesson_part'::text as kind, null::uuid as submission_id, null::text as current_score,
+                   e.cefr::text, pw.week_number, l.day_number, l.title as lesson_title, lpa.part_code,
+                   coalesce((pr.evidence->'evidence'->lpa.part_code->>'attempts')::int, latest_attempt.attempt_number, 0) as attempts,
+                   coalesce(pr.evidence->'evidence'->lpa.part_code->>'answer', latest_attempt.answer) as answer,
+                   coalesce(pr.evidence->'evidence'->lpa.part_code->>'feedback', latest_attempt.feedback) as ai_feedback,
+                   lesson_part.part_content
+            from lesson_part_appeals lpa
+            join users u on u.id = lpa.learner_id and u.role = 'learner' and u.status = 'active'
+            join lessons l on l.id = lpa.lesson_id
+            join lesson_set_versions lsv on lsv.id = l.lesson_set_version_id
+            join lesson_sets ls on ls.id = lsv.lesson_set_id
+            join program_weeks pw on pw.id = ls.program_week_id
+            left join enrollments e on e.learner_id = u.id and e.program_id = pw.program_id
+            left join progress_records pr on pr.learner_id = lpa.learner_id and pr.lesson_id = lpa.lesson_id
+            left join lateral (
+              select lpat.attempt_number, lpat.answer, lpat.feedback from lesson_part_attempts lpat
+              where lpat.learner_id = lpa.learner_id and lpat.lesson_id = lpa.lesson_id and lpat.part_code = lpa.part_code
+              order by lpat.attempt_number desc limit 1
+            ) latest_attempt on true
+            left join lateral (
+              select part->'content' as part_content
+              from lesson_versions lv, jsonb_array_elements(lv.content->'parts') part
+              where lv.lesson_id = l.id and lv.status = 'published' and part->>'code' = lpa.part_code
+              order by lv.version desc limit 1
+            ) lesson_part on true
             where u.organization_id = $1
           ) combined
           order by (combined.status = 'pending') desc, combined.created_at desc limit 60`, [organizationId]),
@@ -2863,7 +2966,7 @@ class ContentRepository {
       .filter((item): item is ContentLessonSetVersionView => item !== null);
     return {
       tabs: [
-        { key: "submissions", label: "Bài nộp", count: Number(count.submissions), unreadCount: 0 },
+        { key: "submissions", label: "Bài nộp", count: Number(count.submissions), unreadCount: submissions.rows.filter((row) => !row.operator_checked).length },
         { key: "coach", label: "Phản hồi coach", count: Number(count.coach) },
         { key: "weekly_practices", label: "Bài cuối tuần", count: weeklyPracticeSets.length },
         { key: "micro", label: "Bài siêu ngắn", count: Number(count.micro) },
@@ -2913,12 +3016,20 @@ class ContentRepository {
       submissions: submissions.rows.map((row) => {
         const rubric = row.score?.rubric && typeof row.score.rubric === "object" ? row.score.rubric as Record<string, unknown> : {};
         const suggestions = Array.isArray(row.feedback?.suggestions) ? row.feedback.suggestions : [];
-        const storedTask = row.content.task;
+        const generated = weeklyPracticeTask(row.topic, row.cefr ?? "A1");
+        const prompt = row.prompt_snapshot && typeof row.prompt_snapshot === "object" ? row.prompt_snapshot : {};
+        const requiredVocabulary = Array.isArray(prompt.requiredVocabulary)
+          ? prompt.requiredVocabulary.filter((value): value is string => typeof value === "string" && Boolean(value.trim()))
+          : Array.isArray(row.vocabulary_snapshot)
+            ? row.vocabulary_snapshot.filter((value): value is string => typeof value === "string" && Boolean(value.trim()))
+            : [];
         return {
           id: row.id, learnerName: row.learner_name, cefr: row.cefr, weekNumber: row.week_number,
           submittedAt: row.submitted_at.toISOString(), checked: row.operator_checked,
           type: row.content.inputMode === "dialogue" || row.content.type === "dialogue" ? "dialogue" : "writing",
-          task: typeof storedTask === "string" && storedTask.trim() ? storedTask : weeklyPracticeTask(row.topic, row.cefr ?? "A1").task,
+          task: typeof prompt.task === "string" && prompt.task.trim() ? prompt.task : generated.task,
+          guidance: typeof prompt.guidance === "string" && prompt.guidance.trim() ? prompt.guidance : generated.guidance,
+          requiredVocabulary,
           text: typeof row.content.text === "string" ? row.content.text : "",
           total: numberOrNull(row.score?.total),
           rubric: { meaning: numberOrNull(rubric.meaning), vocabulary: numberOrNull(rubric.vocabulary), grammar: numberOrNull(rubric.grammar) },
@@ -2941,6 +3052,19 @@ class ContentRepository {
         };
       }),
       appeals: appeals.rows.map((row) => ({
+        ...(() => {
+          const content = row.part_content ?? {};
+          const options = Array.isArray(content.options)
+            ? content.options.filter((value): value is string => typeof value === "string")
+            : [content.option1, content.option2, content.option3, content.option4].filter((value): value is string => typeof value === "string");
+          return row.kind === "lesson_part" ? {
+            cefr: row.cefr, weekNumber: row.week_number, dayNumber: row.day_number,
+            lessonTitle: row.lesson_title, partCode: row.part_code, attempts: row.attempts,
+            answer: row.answer, aiFeedback: row.ai_feedback,
+            question: typeof content.prompt === "string" ? content.prompt : null,
+            options, answerKey: typeof content.answer === "string" ? content.answer : null
+          } : {};
+        })(),
         id: row.id, learnerName: row.learner_name, reason: row.reason, status: row.status,
         createdAt: row.created_at.toISOString(), resolution: row.resolution ?? "", kind: row.kind,
         submissionId: row.submission_id, currentScore: row.current_score === null ? null : Number(row.current_score)
@@ -3169,6 +3293,35 @@ class ContentRepository {
     const client = await this.pool.connect();
     try {
       await client.query("begin");
+      const lessonPart = await client.query<{ organization_id: string; status: string }>(
+        `select learner.organization_id, lpa.status
+         from lesson_part_appeals lpa
+         join users learner on learner.id = lpa.learner_id
+         join users actor on actor.id = $1 and actor.organization_id = learner.organization_id
+         where lpa.id = $2 for update of lpa`,
+        [actorId, id]
+      );
+      const lessonPartAppeal = lessonPart.rows[0];
+      if (lessonPartAppeal) {
+        if (lessonPartAppeal.status !== "pending") {
+          await client.query("rollback");
+          return false;
+        }
+        await client.query(
+          `update lesson_part_appeals
+           set status = $2, resolution = $3, resolved_by = $4, resolved_at = now()
+           where id = $1`,
+          [id, status, resolution, actorId]
+        );
+        await client.query(
+          `insert into audit_events
+             (id, organization_id, actor_user_id, action, entity_type, entity_id, payload, trace_id)
+           values ($1, $2, $3, 'lesson-part.appeal.resolved', 'lesson_part_appeal', $4, $5::jsonb, $6)`,
+          [randomUUID(), lessonPartAppeal.organization_id, actorId, id, JSON.stringify({ status, resolution }), randomUUID()]
+        );
+        await client.query("commit");
+        return true;
+      }
       const practice = await client.query<{ submission_id: string; organization_id: string; status: string }>(
         `select pa.submission_id, learner.organization_id, pa.status
          from practice_appeals pa
@@ -7040,9 +7193,86 @@ class EngagementRepository {
     return {
       cefr: context.cefr,
       wordSet: { id: row.id, topic: String(payload.topic ?? context.topic), cefr: context.cefr,
-        source: row.learner_id ? "custom" : "weekly", words, ...(distractors ? { distractors } : {}) },
+        source: row.learner_id && payload.source !== "learned" ? "custom" : "weekly", words, ...(distractors ? { distractors } : {}) },
       best: Object.fromEntries(bestRows.rows.map((item) => [item.game_key, normalizedGameBest(item)]))
     };
+  }
+
+  async useLearnedVocabularyGameSet(learnerId: string): Promise<boolean> {
+    const context = await this.activeEngagementContext(learnerId);
+    if (!context) return false;
+    const learned = await this.pool.query<{ lesson_id: string; day_number: number; content: Record<string, unknown> }>(
+      `select l.id as lesson_id, l.day_number, lv.content
+       from lesson_sets ls
+       join lesson_set_versions lsv on lsv.lesson_set_id = ls.id and lsv.status = 'published'
+       join lessons l on l.lesson_set_version_id = lsv.id
+       join lateral (
+         select content from lesson_versions
+         where lesson_id = l.id and status = 'published'
+         order by version desc limit 1
+       ) lv on true
+       join progress_records pr on pr.lesson_id = l.id and pr.learner_id = $1
+         and pr.status in ('in_progress', 'completed')
+       where ls.program_week_id = $2 and ls.cefr = $3
+       order by l.day_number`,
+      [learnerId, context.weekId, context.cefr]
+    );
+    const seen = new Set<string>();
+    const words: GameWordSetView["words"] = [];
+    for (const lesson of learned.rows) {
+      const parts = Array.isArray(lesson.content.parts) ? lesson.content.parts : [];
+      const vocabulary = parts.find((part) => part && typeof part === "object" && !Array.isArray(part)
+        && (part as Record<string, unknown>).code === "vocabulary") as Record<string, unknown> | undefined;
+      const content = vocabulary?.content && typeof vocabulary.content === "object" && !Array.isArray(vocabulary.content)
+        ? vocabulary.content as Record<string, unknown> : undefined;
+      const items = Array.isArray(content?.items) ? content.items : [];
+      for (const [index, item] of items.entries()) {
+        if (!item || typeof item !== "object" || Array.isArray(item)) continue;
+        const value = item as Record<string, unknown>;
+        const english = typeof value.word === "string" ? value.word.trim() : "";
+        const key = english.toLocaleLowerCase("en");
+        if (!english || seen.has(key)) continue;
+        const vietnamese = typeof value.meaning === "string" && value.meaning.trim() ? value.meaning.trim() : english;
+        const partOfSpeech = normalizeGamePartOfSpeech(value.partOfSpeech ?? value.type);
+        words.push({
+          id: `${lesson.lesson_id}-${index + 1}`,
+          english,
+          vietnamese,
+          definition: typeof value.definition === "string" && value.definition.trim() ? value.definition.trim() : vietnamese,
+          partOfSpeech,
+          ...(typeof value.imageQuery === "string" && value.imageQuery.trim() ? { imageQuery: value.imageQuery.trim() } : {}),
+          ...(typeof value.imageUrl === "string" && value.imageUrl.trim() ? { imageUrl: value.imageUrl.trim() } : {})
+        });
+        seen.add(key);
+      }
+    }
+    if (!words.length) return false;
+    const client = await this.pool.connect();
+    try {
+      await client.query("begin");
+      await client.query(
+        `update game_sets set status = 'retired'
+         where program_week_id = $1 and learner_id = $2 and game_key = 'weekly_vocabulary' and status = 'published'`,
+        [context.weekId, learnerId]
+      );
+      await client.query(
+        `insert into game_sets (id, program_week_id, learner_id, game_key, status, payload)
+         values ($1, $2, $3, 'weekly_vocabulary', 'published', $4::jsonb)`,
+        [randomUUID(), context.weekId, learnerId, JSON.stringify({
+          topic: `Tuần ${context.weekNumber}: ${context.topic}`,
+          cefr: context.cefr,
+          words,
+          source: "learned"
+        })]
+      );
+      await client.query("commit");
+      return true;
+    } catch (error) {
+      await client.query("rollback");
+      throw error;
+    } finally {
+      client.release();
+    }
   }
 
   async gameWord(learnerId: string, setId: string, wordId: string): Promise<Pick<
@@ -7531,6 +7761,16 @@ function normalizedGameBest(item: { game_key: GameKey; score: number; max_score:
   return { score: item.score, maxScore: item.max_score };
 }
 
+function normalizeGamePartOfSpeech(value: unknown): string {
+  const label = typeof value === "string" ? value.trim().toLocaleLowerCase("vi") : "";
+  if (label.includes("danh từ") || label === "noun") return "noun";
+  if (label.includes("động từ") || label === "verb") return "verb";
+  if (label.includes("tính từ") || label === "adjective") return "adjective";
+  if (label.includes("trạng từ") || label === "adverb") return "adverb";
+  if (label.includes("giới từ") || label === "preposition") return "preposition";
+  return "phrase";
+}
+
 function duelOutcome(
   mine: { score: number; maxScore: number } | null,
   theirs: { score: number; maxScore: number } | null
@@ -7795,6 +8035,36 @@ class AiRunRepository {
         id: randomUUID(), learnerId: input.userId, requestId: input.requestId, taskId: input.taskId,
         promptVersionId: input.promptVersionId, output: input.output, metadata: input.metadata
       });
+    } finally { client.release(); }
+  }
+
+  /**
+   * Keep an auditable diagnostic for a failed generation attempt.  This must
+   * never mutate lesson versions: a failed run is evidence only, while the
+   * last published version remains the recovery point for operators.
+   */
+  async recordFailed(input: {
+    userId: string; requestId: string; taskId: string; promptVersionId: string;
+    errorCode: string; diagnostic: unknown;
+    metadata?: Partial<AiRunMetadataInput>;
+  }): Promise<boolean> {
+    const client = await this.pool.connect();
+    try {
+      const metadata = input.metadata;
+      const result = await client.query(
+        `insert into ai_runs
+           (id, task_id, user_id, prompt_version_id, provider, model, status, input_hash,
+            output, usage, latency_ms, trace_id, request_key, error_code, completed_at)
+         values ($1, $2, $3, $4, $5, $6, 'failed', $7, $8::jsonb, $9::jsonb, $10, $11, $12, $13, now())
+         on conflict (user_id, task_id, request_key) where request_key is not null do nothing
+         returning id`,
+        [randomUUID(), input.taskId, input.userId, input.promptVersionId,
+          metadata?.provider ?? "unavailable", metadata?.model ?? "unavailable",
+          metadata?.inputHash ?? "generation-failed-before-output", JSON.stringify({ diagnostic: input.diagnostic }),
+          JSON.stringify(metadata?.usage ?? {}), metadata?.latencyMs ?? null,
+          metadata?.traceId ?? randomUUID(), input.requestId, input.errorCode]
+      );
+      return Boolean(result.rowCount);
     } finally { client.release(); }
   }
 }

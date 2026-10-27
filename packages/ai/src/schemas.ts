@@ -569,49 +569,8 @@ const weeklyLessonFoundationBaseOutputSchema = z.object({
   if (foundation.title && /^S\s*\+\s*V(?:\s*\+\s*O)?$/i.test(foundation.title)) {
     context.addIssue({ code: "custom", path: ["title"], message: "Title must name the concrete lesson focus" });
   }
-    const targetSound = foundation.pronunciation.focus.match(/\/([^/]+)\//)?.[1]?.trim();
-    if (targetSound && !/\s/.test(targetSound)) {
-      for (const key of ["word1", "word2", "word3"] as const) {
-        const ipa = foundation.pronunciation[key].ipa.replaceAll("/", "");
-        if (!ipaContainsTargetSound(ipa, targetSound)) {
-          context.addIssue({
-            code: "custom",
-            path: ["pronunciation", key, "ipa"],
-            message: `Pronunciation IPA must contain the target sound /${targetSound}/`
-          });
-        }
-      }
-    }
-  if (!foundation.grammar) return;
-  if (!isSingleSentence(foundation.grammar.usage)) {
-    context.addIssue({ code: "custom", path: ["grammar", "usage"], message: "Grammar usage must be exactly one sentence" });
-  }
-  for (const key of ["example1", "example2"] as const) {
-    const example = foundation.grammar[key];
-    if (!isSingleSentence(example) || /[()]/.test(example) || example.trim().split(/\s+/).length > 10) {
-      context.addIssue({ code: "custom", path: ["grammar", key], message: "Grammar example must be one English sentence of at most 10 words with no parenthetical translation" });
-    }
-  }
 });
-
-const IPA_VOWEL = /[aeiouyæɑɒɔəɜɛɪʊʌɐɵœøɞɘɤɨʉɯ]/u;
-
-function ipaContainsTargetSound(ipa: string, targetSound: string): boolean {
-  if (!IPA_VOWEL.test(targetSound[0] ?? "")) return ipa.includes(targetSound);
-  let index = ipa.indexOf(targetSound);
-  while (index >= 0) {
-    const before = ipa[index - 1] ?? "";
-    const after = ipa[index + targetSound.length] ?? "";
-    if (!IPA_VOWEL.test(before) && !IPA_VOWEL.test(after)) return true;
-    index = ipa.indexOf(targetSound, index + 1);
-  }
-  return false;
-}
 export const weeklyLessonFoundationOutputSchema = weeklyLessonFoundationBaseOutputSchema;
-
-function isSingleSentence(value: string): boolean {
-  return (value.match(/[.!?](?=\s|$)/g)?.length ?? 0) === 1;
-}
 
 const strictVocabularyRelationSchema = z.object({ word: z.string().trim().min(1), type: z.string().trim().min(1), meaning: z.string().trim().min(1) });
 const strictVocabularyLevelRelationSchema = z.object({

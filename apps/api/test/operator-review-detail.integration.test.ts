@@ -1,7 +1,7 @@
 import { Pool } from "pg";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { migrateDatabase, resetPublicSchema, seedDemo } from "@e4s/database";
-import { createCredentialHash } from "@e4s/domain/identity";
+import { createCredentialHash, createPinHash } from "@e4s/domain/identity";
 import { DEMO_IDS } from "@e4s/test-support";
 import { buildApi } from "../src/app.js";
 
@@ -10,6 +10,7 @@ const databaseUrl = process.env.TEST_DATABASE_URL
 const responseId = "00000000-0000-4000-8000-000000000921";
 const fileId = "00000000-0000-4000-8000-000000000922";
 const appealId = "00000000-0000-4000-8000-000000000923";
+const lessonPartAppealId = "00000000-0000-4000-8000-000000000924";
 const artifactKey = `assessment-audio/${DEMO_IDS.learner}/review.wav`;
 
 describe("Operator review detail and AI grade API", () => {
@@ -39,11 +40,20 @@ describe("Operator review detail and AI grade API", () => {
       await migrateDatabase(client);
       await seedDemo(client);
       await client.query(
+        `update users set email = case id
+           when $1 then 'thu.ha.tran@e4s.test'
+           when $2 then 'quoc.bao.le@e4s.test'
+           when $3 then 'minh.anh.nguyen@e4s.test'
+           else email end
+         where id in ($1, $2, $3)`,
+        [DEMO_IDS.operator, DEMO_IDS.manager, DEMO_IDS.learner]
+      );
+      await client.query(
         `insert into user_credentials (user_id, credential_hash) values ($1, $2), ($3, $4), ($5, $6)`,
         [
           DEMO_IDS.operator, await createCredentialHash("operator-pass"),
           DEMO_IDS.manager, await createCredentialHash("manager-pass"),
-          DEMO_IDS.learner, await createCredentialHash("learner-pass")
+          DEMO_IDS.learner, await createPinHash("123456")
         ]
       );
       await client.query(
@@ -61,16 +71,22 @@ describe("Operator review detail and AI grade API", () => {
          values ($1, $2, $3, 'Audio cần được xem lại', 'pending')`,
         [appealId, DEMO_IDS.placementAttempt, DEMO_IDS.learner]
       );
+      await client.query(
+        `insert into lesson_part_appeals (id, learner_id, lesson_id, part_code, reason, status)
+         values ($1, $2, $3, 'reading', 'Xin xem lại phần Đọc', 'pending')`,
+        [lessonPartAppealId, DEMO_IDS.learner, DEMO_IDS.lessons[0]]
+      );
     } finally { client.release(); }
     await app.ready();
-    const login = async (url: string, email: string, password: string) => {
-      const response = await app.inject({ method: "POST", url, payload: { email, password } });
+    const login = async (url: string, email: string, credential: string) => {
+      const payload = url.includes("learner") ? { email, pin: credential } : { email, password: credential };
+      const response = await app.inject({ method: "POST", url, payload });
       expect(response.statusCode, response.body).toBe(200);
       return String(response.headers["set-cookie"]).split(";")[0] ?? "";
     };
-    operatorCookie = await login("/api/auth/staff/login", "thu.ha.tran@e4s.local", "operator-pass");
-    managerCookie = await login("/api/auth/staff/login", "quoc.bao.le@e4s.local", "manager-pass");
-    learnerCookie = await login("/api/auth/learner/login", "minh.anh.nguyen@e4s.local", "learner-pass");
+    operatorCookie = await login("/api/auth/staff/login", "thu.ha.tran@e4s.test", "operator-pass");
+    managerCookie = await login("/api/auth/staff/login", "quoc.bao.le@e4s.test", "manager-pass");
+    learnerCookie = await login("/api/auth/learner/login", "minh.anh.nguyen@e4s.test", "123456");
   }, 30_000);
 
   afterAll(async () => { await app.close(); await pool.end(); });
@@ -109,6 +125,31 @@ describe("Operator review detail and AI grade API", () => {
       type: "writing",
       task: expect.stringContaining("Introducing yourself & your job")
     });
+  });
+
+  it("includes lesson-part appeals in the operator queue and lets the operator decide them", async () => {
+    const queue = await app.inject({ method: "GET", url: "/api/v1/content/review", headers: { cookie: operatorCookie } });
+    expect(queue.statusCode, queue.body).toBe(200);
+    expect(queue.json().tabs.find((tab: { key: string }) => tab.key === "appeals")?.count).toBe(2);
+    expect(queue.json().appeals).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        id: lessonPartAppealId,
+        kind: "lesson_part",
+        learnerName: "Nguyễn Minh Anh",
+        partCode: "reading",
+        reason: "Xin xem lại phần Đọc",
+        lessonTitle: expect.any(String),
+        status: "pending"
+      })
+    ]));
+
+    const decided = await app.inject({
+      method: "POST", url: `/api/v1/content/review/appeals/${lessonPartAppealId}/decision`,
+      headers: { cookie: operatorCookie }, payload: { status: "accepted", resolution: "Phần Đọc được tính hoàn thành." }
+    });
+    expect(decided.statusCode, decided.body).toBe(200);
+    const stored = await pool.query<{ status: string }>("select status from lesson_part_appeals where id = $1", [lessonPartAppealId]);
+    expect(stored.rows[0]?.status).toBe("accepted");
   });
 
   it("runs an idempotent AI grade and leaves manual grading authoritative", async () => {

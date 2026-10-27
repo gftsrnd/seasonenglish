@@ -7,6 +7,11 @@ export interface GenerationProvenance {
     readonly versionId: string;
     readonly content: string;
   };
+  readonly model: {
+    readonly provider: string;
+    readonly name: string;
+    readonly config: Record<string, unknown>;
+  };
   readonly input: ContentWeekInput & { readonly cefr: string } & Record<string, unknown>;
   readonly output: unknown;
   readonly validation: {
@@ -23,6 +28,7 @@ export interface GenerationProvenance {
 export function buildGenerationProvenance(input: {
   promptVersionId: string;
   prompt: string;
+  model: { provider: string; name: string; config?: Record<string, unknown> };
   week: ContentWeekInput;
   cefr: string;
   extraInput?: Record<string, unknown>;
@@ -36,6 +42,11 @@ export function buildGenerationProvenance(input: {
     prompt: {
       versionId: input.promptVersionId,
       content: input.prompt
+    },
+    model: {
+      provider: input.model.provider,
+      name: input.model.name,
+      config: input.model.config ?? {}
     },
     input: {
       ...input.week,

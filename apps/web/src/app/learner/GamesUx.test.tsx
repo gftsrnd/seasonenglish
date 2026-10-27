@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import "@testing-library/jest-dom/vitest";
-import { cleanup, createEvent, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, createEvent, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { GameDescriptor, GameHubView, GameWordSetView } from "@e4s/contracts";
 import { CrosswordGame } from "../games/CrosswordGame.js";
@@ -97,9 +97,33 @@ describe("learner game visual and interaction regressions", () => {
 
     expect(screen.getByText("Hứng đúng vật phẩm, giữ 3 mạng.")).toBeInTheDocument();
     expect(screen.queryByText(/mang đúng từ: lá \(thu\)/i)).not.toBeInTheDocument();
+    expect(screen.getByText("So điểm với đồng nghiệp qua các game từ vựng. Mở từ B1.")).toBeInTheDocument();
   });
 
-  it("mirrors the canonical Season-rio tutorial content and controls", async () => {
+  it("shows a short game introduction with one goal and no more than three steps", () => {
+    const scramble = descriptor("scramble", [
+      "Đọc gợi ý rồi chọn chữ.",
+      "Bạn có hai lần thử.",
+      "Dùng gợi ý khi cần.",
+      "Dòng giải thích dài không nên hiện."
+    ]);
+    scramble.name = "Xếp chữ";
+    scramble.icon = "abc";
+    scramble.goal = "Xếp đúng càng nhiều từ càng tốt.";
+    const { container } = render(<LearnerGame descriptor={scramble} wordSet={wordSet} result={null} actions={actions} />);
+
+    expect(screen.getByRole("heading", { name: "Cách chơi Xếp chữ" })).toBeInTheDocument();
+    expect(screen.getByText("Xếp đúng càng nhiều từ càng tốt.")).toBeInTheDocument();
+    expect(container.querySelectorAll(".game-tutorial-steps li")).toHaveLength(3);
+    expect(container.querySelectorAll(".game-tutorial-step-icon")).toHaveLength(3);
+    expect(screen.queryByText("Dòng giải thích dài không nên hiện.")).not.toBeInTheDocument();
+    expect(container.querySelectorAll(".game-tutorial-meta svg")).toHaveLength(2);
+    expect(container.querySelectorAll(".game-tutorial-actions svg")).toHaveLength(2);
+    expect(screen.getByRole("button", { name: "Bắt đầu chơi" })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Quay lại" })).toBeInTheDocument();
+  });
+
+  it("keeps the canonical Season-rio goal and controls in a concise tutorial", async () => {
     const scrollTo = vi.spyOn(window, "scrollTo").mockImplementation(() => undefined);
     const mario = descriptor("mario", [
       "Chạy bằng phím ← →, nhảy bằng Space hoặc ↑ (điện thoại: 3 nút dưới màn hình).",
@@ -117,9 +141,13 @@ describe("learner game visual and interaction regressions", () => {
     expect(screen.getByText("Kỷ lục: chưa có")).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Thoát game" })).toHaveClass("btn", "btn-sm");
     expect(screen.getByText("Hướng dẫn chơi", { exact: false })).toBeInTheDocument();
-    expect(screen.getByText(/Mỗi hộp quà \? đứng trên một cột gỗ chắn ngang đường/i)).toBeInTheDocument();
-    expect(screen.getByText(/món ăn khoái khẩu KHỔNG LỒ/i)).toBeInTheDocument();
-    expect(screen.getByText(/Bộ từ: Introducing yourself · 3 từ/i)).toBeInTheDocument();
+    expect(screen.getByText("Di chuyển, nhảy và mở từng hộp câu hỏi.")).toBeInTheDocument();
+    expect(screen.getByText("Trả lời đúng để mở cổng; trả lời sai mất một mạng.")).toBeInTheDocument();
+    expect(screen.getByText("Vượt thử thách cuối rồi chạm cờ để hoàn thành.")).toBeInTheDocument();
+    expect(screen.queryByText(/Mỗi hộp quà \? đứng trên một cột gỗ chắn ngang đường/i)).not.toBeInTheDocument();
+    const tutorialMeta = document.querySelector(".game-tutorial-meta");
+    expect(tutorialMeta).not.toBeNull();
+    expect(within(tutorialMeta as HTMLElement).getByText(/3 từ/i)).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Bắt đầu chơi" })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Quay lại" })).toBeInTheDocument();
 

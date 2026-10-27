@@ -1,4 +1,5 @@
 import { Pool } from "pg";
+import { randomUUID } from "node:crypto";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { migrateDatabase, resetPublicSchema, seedDemo } from "@e4s/database";
 import { createCredentialHash, createPinHash } from "@e4s/domain/identity";
@@ -308,26 +309,218 @@ describe("learner profile, home, lesson and progress API", () => {
       "objective", "instruction", "vocabulary", "grammar", "pronunciation",
       "listening", "reading", "writing", "word_class", "word_use", "speaking"
     ]);
+    const originalProgress = await pool.query<{
+      id: string; status: "not_started" | "in_progress" | "completed"; score: string | null;
+      evidence: Record<string, unknown>; started_at: Date | null; completed_at: Date | null; updated_at: Date;
+    }>("select id, status, score::text, evidence, started_at, completed_at, updated_at from progress_records where learner_id = $1 and lesson_id = $2", [DEMO_IDS.learner, lessonId]);
+    try {
+      const study = await app.inject({ method: "POST", url: `/api/v1/lessons/${lessonId}/study-completion`, headers: { cookie } });
+      expect(study.statusCode, study.body).toBe(200);
+      for (const code of ["listening", "reading"] as const) {
+        for (let attempt = 0; attempt < 2; attempt += 1) {
+          const saved = await app.inject({
+            method: "POST",
+            url: `/api/v1/lessons/${lessonId}/parts/${code}/attempts`,
+            headers: { cookie },
+            payload: { requestId: randomUUID(), evidence: { answer: "not a valid answer" } }
+          });
+          expect(saved.statusCode, saved.body).toBe(200);
+        }
+      }
+      const speaking = await app.inject({
+        method: "POST",
+        url: `/api/v1/lessons/${lessonId}/parts/speaking/attempts`,
+        headers: { cookie },
+        payload: { requestId: randomUUID(), evidence: { artifactKey: "assessment-audio/voice.webm", answer: "client supplied transcript" } }
+      });
+      expect(speaking.statusCode, speaking.body).toBe(200);
+      expect(speaking.json().evidence).toMatchObject({ artifactKey: "assessment-audio/voice.webm", status: "submitted" });
+      expect(speaking.json().evidence).not.toHaveProperty("answer");
 
-    const saved = await app.inject({
+      const resumed = await app.inject({ method: "GET", url: `/api/v1/lessons/${lessonId}`, headers: { cookie } });
+      expect(resumed.json().progress).toMatchObject({
+        status: "in_progress",
+        completedPartCodes: expect.arrayContaining(["listening", "reading"]),
+        evidence: {
+          listening: { answer: "not a valid answer", attempts: 2, status: "wrong_exhausted" },
+          reading: { answer: "not a valid answer", attempts: 2, status: "wrong_exhausted" },
+          speaking: { artifactKey: "assessment-audio/voice.webm", attempts: 1, status: "submitted" }
+        }
+      });
+    } finally {
+      await pool.query("delete from lesson_part_attempts where learner_id = $1 and lesson_id = $2", [DEMO_IDS.learner, lessonId]);
+      await pool.query("delete from progress_records where learner_id = $1 and lesson_id = $2", [DEMO_IDS.learner, lessonId]);
+      const record = originalProgress.rows[0];
+      if (record) {
+        await pool.query(
+          `insert into progress_records (id, learner_id, lesson_id, status, score, evidence, started_at, completed_at, updated_at)
+           values ($1, $2, $3, $4, $5, $6::jsonb, $7, $8, $9)`,
+          [record.id, DEMO_IDS.learner, lessonId, record.status, record.score, JSON.stringify(record.evidence), record.started_at, record.completed_at, record.updated_at]
+        );
+      }
+    }
+  });
+
+  it("does not let a learner complete a lesson by fabricating missing exercise evidence", async () => {
+    const home = await app.inject({ method: "GET", url: "/api/v1/learner/home", headers: { cookie } });
+    const lessonId = home.json().nextLesson.id as string;
+    const lesson = await app.inject({ method: "GET", url: `/api/v1/lessons/${lessonId}`, headers: { cookie } });
+    const required = lesson.json().content.parts
+      .map((part: { code: string }) => part.code)
+      .filter((code: string) => ["listening", "reading", "writing", "word_class", "word_use", "speaking"].includes(code));
+
+    const response = await app.inject({
       method: "PUT",
       url: `/api/v1/lessons/${lessonId}/progress`,
       headers: { cookie },
       payload: {
-        completedPartCodes: ["listening", "reading"],
-        evidence: {
-          listening: { attempts: 1, answer: "A" },
-          reading: { attempts: 1, answer: "B" }
-        }
+        completedPartCodes: required,
+        evidence: Object.fromEntries(required.map((code: string) => [code, { attempts: 1, answer: "fabricated" }])),
+        markComplete: true,
+        score: 100
       }
     });
-    expect(saved.statusCode).toBe(200);
-    expect(saved.json()).toMatchObject({ status: "in_progress", completedPartCodes: ["listening", "reading"] });
 
-    const resumed = await app.inject({ method: "GET", url: `/api/v1/lessons/${lessonId}`, headers: { cookie } });
-    expect(resumed.json().progress).toMatchObject({
-      status: "in_progress",
-      evidence: { listening: { answer: "A" }, reading: { answer: "B" } }
+    expect(response.statusCode, response.body).toBe(409);
+    expect(response.json()).toEqual({ code: "LESSON_INCOMPLETE" });
+  });
+
+  it("does not retain staged client evidence for a later completion request", async () => {
+    const home = await app.inject({ method: "GET", url: "/api/v1/learner/home", headers: { cookie } });
+    const lessonId = home.json().nextLesson.id as string;
+    const original = await pool.query<{
+      id: string; status: "not_started" | "in_progress" | "completed"; score: string | null;
+      evidence: Record<string, unknown>; started_at: Date | null; completed_at: Date | null; updated_at: Date;
+    }>("select id, status, score::text, evidence, started_at, completed_at, updated_at from progress_records where learner_id = $1 and lesson_id = $2", [DEMO_IDS.learner, lessonId]);
+    const lesson = await app.inject({ method: "GET", url: `/api/v1/lessons/${lessonId}`, headers: { cookie } });
+    const required = lesson.json().content.parts
+      .map((part: { code: string }) => part.code)
+      .filter((code: string) => ["listening", "reading", "writing", "word_class", "word_use", "speaking"].includes(code));
+    const fabricatedEvidence = Object.fromEntries(required.map((code: string) => [code, {
+      attempts: 1,
+      answer: "fabricated",
+      ...(code === "speaking" ? { artifactKey: "fabricated-audio" } : {})
+    }]));
+
+    try {
+      const staged = await app.inject({
+        method: "PUT",
+        url: `/api/v1/lessons/${lessonId}/progress`,
+        headers: { cookie },
+        payload: { completedPartCodes: required, evidence: fabricatedEvidence, score: 100 }
+      });
+      expect(staged.statusCode, staged.body).toBe(200);
+
+      const completion = await app.inject({
+        method: "PUT",
+        url: `/api/v1/lessons/${lessonId}/progress`,
+        headers: { cookie },
+        payload: { completedPartCodes: [], evidence: {}, markComplete: true }
+      });
+
+      expect(completion.statusCode, completion.body).toBe(409);
+      expect(completion.json()).toEqual({ code: "LESSON_INCOMPLETE" });
+      const resumed = await app.inject({ method: "GET", url: `/api/v1/lessons/${lessonId}`, headers: { cookie } });
+      expect(resumed.json().progress).toMatchObject({
+        status: "not_started",
+        completedPartCodes: [],
+        evidence: {}
+      });
+    } finally {
+      await pool.query("delete from progress_records where learner_id = $1 and lesson_id = $2", [DEMO_IDS.learner, lessonId]);
+      const record = original.rows[0];
+      if (record) {
+        await pool.query(
+          `insert into progress_records (id, learner_id, lesson_id, status, score, evidence, started_at, completed_at, updated_at)
+           values ($1, $2, $3, $4, $5, $6::jsonb, $7, $8, $9)`,
+          [record.id, DEMO_IDS.learner, lessonId, record.status, record.score, JSON.stringify(record.evidence), record.started_at, record.completed_at, record.updated_at]
+        );
+      }
+    }
+  });
+
+  it("does not expose a route or placeholder lessons when the current set is not published", async () => {
+    const setVersion = await pool.query<{ id: string; status: string }>(
+      `select lsv.id, lsv.status
+       from lessons l join lesson_set_versions lsv on lsv.id = l.lesson_set_version_id
+       where l.id = $1`,
+      [DEMO_IDS.lessons[0]]
+    );
+    expect(setVersion.rows[0]).toMatchObject({ status: "published" });
+
+    await pool.query("alter table lesson_set_versions disable trigger user");
+    try {
+      await pool.query("update lesson_set_versions set status = 'review' where id = $1", [setVersion.rows[0]!.id]);
+      const home = await app.inject({ method: "GET", url: "/api/v1/learner/home", headers: { cookie } });
+      expect(home.statusCode, home.body).toBe(200);
+      expect(home.json()).toMatchObject({ lessons: [], nextLesson: null, metrics: { totalLessons: 0, completedLessons: 0 } });
+    } finally {
+      await pool.query("update lesson_set_versions set status = $2 where id = $1", [setVersion.rows[0]!.id, setVersion.rows[0]!.status]);
+      await pool.query("alter table lesson_set_versions enable trigger user");
+    }
+  });
+
+  it("counts only completed lessons from one through five and unlocks weekly practice at five", async () => {
+    const snapshot = await pool.query<{
+      id: string; learner_id: string; lesson_id: string; status: "not_started" | "in_progress" | "completed";
+      score: string | null; evidence: Record<string, unknown>; started_at: Date | null; completed_at: Date | null; updated_at: Date;
+    }>(
+      `select id, learner_id, lesson_id, status, score::text, evidence, started_at, completed_at, updated_at
+       from progress_records where learner_id = $1 and lesson_id = any($2::uuid[])`,
+      [DEMO_IDS.learner, DEMO_IDS.lessons]
+    );
+    try {
+      for (let index = 1; index < DEMO_IDS.lessons.length; index += 1) {
+        await pool.query(
+          `insert into progress_records (id, learner_id, lesson_id, status, score, evidence, started_at, completed_at, updated_at)
+           values ($1, $2, $3, 'completed', 100, '{"completedPartCodes":[],"evidence":{}}'::jsonb, now(), now(), now())
+           on conflict (learner_id, lesson_id) do update
+           set status = 'completed', score = 100, evidence = excluded.evidence, completed_at = now(), updated_at = now()`,
+          [randomUUID(), DEMO_IDS.learner, DEMO_IDS.lessons[index]]
+        );
+        const home = await app.inject({ method: "GET", url: "/api/v1/learner/home", headers: { cookie } });
+        expect(home.statusCode, home.body).toBe(200);
+        expect(home.json().metrics).toMatchObject({ completedLessons: index + 1, totalLessons: 5 });
+        expect(home.json().practice.status).toBe(index === 4 ? "open" : "locked");
+      }
+    } finally {
+      await pool.query("delete from progress_records where learner_id = $1 and lesson_id = any($2::uuid[])", [DEMO_IDS.learner, DEMO_IDS.lessons]);
+      for (const record of snapshot.rows) {
+        await pool.query(
+          `insert into progress_records (id, learner_id, lesson_id, status, score, evidence, started_at, completed_at, updated_at)
+           values ($1, $2, $3, $4, $5, $6::jsonb, $7, $8, $9)`,
+          [record.id, record.learner_id, record.lesson_id, record.status, record.score, JSON.stringify(record.evidence), record.started_at, record.completed_at, record.updated_at]
+        );
+      }
+    }
+  });
+
+  it("keeps a newly logged-in learner's home progress separate from the prior learner", async () => {
+    const email = `progress-isolation-${randomUUID()}@e4s.local`;
+    const registration = await app.inject({
+      method: "POST",
+      url: "/api/auth/learner/register",
+      payload: { displayName: "Học viên độc lập", email, pin: "654321" }
+    });
+    expect(registration.statusCode, registration.body).toBe(201);
+    const secondCookie = String(registration.headers["set-cookie"]).split(";")[0] ?? "";
+    const secondLearner = await pool.query<{ id: string }>("select id from users where email = $1", [email]);
+    expect(secondLearner.rows).toHaveLength(1);
+    await pool.query(
+      "update enrollments set cefr = 'A2', cefr_approved = true where learner_id = $1 and program_id = $2",
+      [secondLearner.rows[0]!.id, DEMO_IDS.program]
+    );
+
+    const [firstHome, secondHome] = await Promise.all([
+      app.inject({ method: "GET", url: "/api/v1/learner/home", headers: { cookie } }),
+      app.inject({ method: "GET", url: "/api/v1/learner/home", headers: { cookie: secondCookie } })
+    ]);
+    expect(firstHome.statusCode, firstHome.body).toBe(200);
+    expect(secondHome.statusCode, secondHome.body).toBe(200);
+    expect(firstHome.json().metrics.completedLessons).toBeGreaterThan(0);
+    expect(secondHome.json()).toMatchObject({
+      metrics: { completedLessons: 0, totalLessons: 5 },
+      nextLesson: { id: DEMO_IDS.lessons[0], dayNumber: 1, status: "not_started" }
     });
   });
 

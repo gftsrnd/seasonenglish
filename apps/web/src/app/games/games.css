@@ -1149,9 +1149,37 @@
   padding-bottom: 24px;
 }
 
-.app-learner-page.games-page > .card {
+.app-learner-page.games-page {
+  display: grid;
+  gap: 18px;
+}
+
+.app-learner-page.games-page > .page-title,
+.app-learner-page.games-page > .arena-entry {
+  margin-block: 0 !important;
+}
+
+.app-learner-page.games-page > .games-section-card {
+  display: grid;
+  align-content: start;
+  gap: 16px;
   min-width: 0;
+  margin: 0;
   overflow: hidden;
+}
+
+.app-learner-page.games-page > .games-section-card > h2,
+.app-learner-page.games-page .games-word-set-card .section-heading,
+.app-learner-page.games-page .games-word-set-card .section-heading h2,
+.app-learner-page.games-page .games-section-card .topic-create,
+.app-learner-page.games-page .games-section-card .topic-source,
+.app-learner-page.games-page .games-section-card .word-chip-list {
+  margin: 0;
+}
+
+.app-learner-page.games-page .games-topic-card > .banner,
+.app-learner-page.games-page .games-topic-card > .error-text {
+  margin: 0;
 }
 
 .app-learner-page.games-page .topic-create {
@@ -1218,8 +1246,18 @@
 }
 
 .app-learner-page.games-page .arena-entry {
+  display: flex;
+  width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+  padding: 16px;
   min-width: 0;
   overflow: hidden;
+}
+
+.app-learner-page.games-page .arena-entry.locked {
+  background: var(--surface);
+  cursor: not-allowed;
 }
 
 .app-learner-page.games-page .arena-entry > div {
@@ -1241,6 +1279,75 @@
   white-space: nowrap;
 }
 
+.app-learner-page.game-page .game-tutorial-title {
+  margin: 4px 0 0;
+  font-size: 1.25rem;
+}
+
+.app-learner-page.game-page .game-tutorial-goal {
+  margin: 5px 0 12px;
+  font-weight: 650;
+}
+
+.app-learner-page.game-page .game-tutorial-steps {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-size: .9rem;
+  line-height: 1.45;
+}
+
+.app-learner-page.game-page .game-tutorial-steps li {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  min-height: 88px;
+  padding: 13px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: linear-gradient(145deg, #fff 0%, var(--surface-2) 100%);
+}
+
+.app-learner-page.game-page .game-tutorial-step-icon {
+  display: inline-grid;
+  flex: 0 0 42px;
+  width: 42px;
+  height: 42px;
+  place-items: center;
+  border-radius: 13px;
+  color: var(--primary-strong, #47791f);
+  background: var(--primary-soft);
+}
+
+.app-learner-page.game-page .game-tutorial-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 14px;
+}
+
+.app-learner-page.game-page .game-tutorial-meta span {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 6px 9px;
+  border-radius: 10px;
+  background: var(--surface-2);
+  font-size: .76rem;
+}
+
+.app-learner-page.game-page .game-tutorial-meta > span > span { padding: 0; }
+
+.app-learner-page.game-page .game-tutorial-actions {
+  gap: 10px;
+  margin-top: 14px;
+}
+
+.app-learner-page.game-page .game-tutorial-actions > * { display: inline-flex; align-items: center; gap: 8px; }
+
 .app-learner-page.games-page .game-control-icon,
 .app-learner-page.game-page .game-control-icon,
 .game-runner .game-control-icon {
@@ -1257,12 +1364,16 @@
 @media (max-width: 720px) {
   .app-learner-page.game-page,
   .app-learner-page.games-page {
+    gap: 14px;
     padding-bottom: calc(128px + env(safe-area-inset-bottom));
   }
 
   .app-learner-page.games-page .game-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
+
+  .app-learner-page.game-page .game-tutorial-steps { grid-template-columns: 1fr; }
+  .app-learner-page.game-page .game-tutorial-steps li { min-height: 0; }
 
   .app-learner-page.games-page .arena-entry {
     align-items: flex-start;

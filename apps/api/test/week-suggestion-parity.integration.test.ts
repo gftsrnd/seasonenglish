@@ -22,9 +22,16 @@ function option(index: number, requestedLevels: readonly string[] = levels) {
 describe("week suggestion parity API", () => {
   const pool = new Pool({ connectionString: databaseUrl });
   let trace = 0;
-  const runTask = vi.fn(async (taskKey: string, _input?: unknown) => ({
+  let optionIndex = 0;
+  const runTask = vi.fn(async (taskKey: string, input?: { weekNumbers?: number[]; levels?: string[] }) => ({
     output: taskKey === "week_suggestions"
-      ? { weeks: [{ weekNumber: 1, levels: [...levels], options: [option(1), option(2), option(3)] }] }
+      ? {
+          weeks: (input?.weekNumbers ?? [1]).map((weekNumber) => ({
+            weekNumber,
+            levels: input?.levels ?? [...levels],
+            options: [option(++optionIndex, input?.levels), option(++optionIndex, input?.levels), option(++optionIndex, input?.levels)]
+          }))
+        }
       : {},
     metadata: {
       traceId: `trace-week-${++trace}`, taskId: taskKey, provider: "fixture", model: "fixture-model",
@@ -81,6 +88,20 @@ describe("week suggestion parity API", () => {
     }
   });
 
+  it("generates a four-week pilot in sequential week requests without topic collisions", async () => {
+    const callStart = runTask.mock.calls.length;
+    const response = await app.inject({
+      method: "POST", url: "/api/v1/content/weeks/suggestions", headers: { cookie: operatorCookie },
+      payload: { weekNumbers: [1, 2, 3, 4] }
+    });
+
+    expect(response.statusCode, response.body).toBe(200);
+    expect(response.json().weeks.map((week: { weekNumber: number }) => week.weekNumber)).toEqual([1, 2, 3, 4]);
+    expect(response.json().weeks.flatMap((week: { options: Array<{ topic: string }> }) => week.options.map((item) => item.topic))).toHaveLength(12);
+    expect(new Set(response.json().weeks.flatMap((week: { options: Array<{ topic: string }> }) => week.options.map((item) => item.topic))).size).toBe(12);
+    expect(runTask.mock.calls.slice(callStart).map(([, input]) => (input as { weekNumbers: number[] }).weekNumbers)).toEqual([[1], [2], [3], [4]]);
+  });
+
   it("passes an added C1 column to topic AI and requires its five-day plan", async () => {
     const c1Levels = [...levels, "C1"] as const;
     const added = await app.inject({
@@ -108,7 +129,7 @@ describe("week suggestion parity API", () => {
     });
   });
 
-  it("removes a suggestion that repeats an existing week topic", async () => {
+  it("repairs a suggestion that repeats an existing week topic", async () => {
     runTask.mockResolvedValueOnce({
       output: { weeks: [{ weekNumber: 1, levels: [...levels], options: [{ ...option(1), topic: "Introducing yourself & your job" }, option(2), option(3)] }] },
       metadata: {
@@ -122,17 +143,19 @@ describe("week suggestion parity API", () => {
     });
 
     expect(response.statusCode, response.body).toBe(200);
-    expect(response.json().weeks[0].options.map((item: { topic: string }) => item.topic)).toEqual(["Topic 2", "Topic 3"]);
+    expect(response.json().weeks[0].options).toHaveLength(3);
+    expect(response.json().weeks[0].options.map((item: { topic: string }) => item.topic)).not.toContain("Introducing yourself & your job");
   });
 
   it("rejects malformed AI output before persistence instead of rendering empty plans", async () => {
-    runTask.mockResolvedValueOnce({
+    const malformed = {
       output: { weeks: [{ weekNumber: 1, levels: ["A2"], options: [option(1), option(2)] }] },
       metadata: {
         traceId: "trace-week-invalid", taskId: "week_suggestions", provider: "fixture", model: "fixture-model",
         attempts: 1, latencyMs: 1, inputHash: "b".repeat(64), schemaValid: true as const, usage: {}
       }
-    });
+    };
+    runTask.mockResolvedValueOnce(malformed).mockResolvedValueOnce(malformed);
     const response = await app.inject({
       method: "POST", url: "/api/v1/content/weeks/suggestions", headers: { cookie: operatorCookie }, payload: { weekNumbers: [1] }
     });
@@ -141,7 +164,7 @@ describe("week suggestion parity API", () => {
   });
 
   it("explains semantic validation failures instead of returning a generic invalid-output error", async () => {
-    runTask.mockResolvedValueOnce({
+    const semanticInvalid = {
       output: {
         weeks: [{
           weekNumber: 1,
@@ -153,7 +176,8 @@ describe("week suggestion parity API", () => {
         traceId: "trace-week-semantic-invalid", taskId: "week_suggestions", provider: "fixture", model: "fixture-model",
         attempts: 1, latencyMs: 1, inputHash: "e".repeat(64), schemaValid: true as const, usage: {}
       }
-    } as any);
+    } as any;
+    runTask.mockResolvedValueOnce(semanticInvalid).mockResolvedValueOnce(semanticInvalid);
 
     const response = await app.inject({
       method: "POST", url: "/api/v1/content/weeks/suggestions", headers: { cookie: operatorCookie }, payload: { weekNumbers: [1] }
@@ -162,7 +186,7 @@ describe("week suggestion parity API", () => {
     expect(response.statusCode).toBe(502);
     expect(response.json()).toMatchObject({
       code: "AI_OUTPUT_INVALID",
-      issues: [{ path: "weeks.1.levels", message: expect.stringContaining("A1") }]
+      issues: expect.arrayContaining([{ path: "weeks.1.levels", message: expect.stringContaining("A1") }])
     });
   });
 });

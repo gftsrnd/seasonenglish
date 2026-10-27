@@ -363,6 +363,8 @@ export interface ReviewSubmission {
   submittedAt: string;
   operatorChecked: boolean;
   task?: string | undefined;
+  guidance?: string | undefined;
+  requiredVocabulary?: string[] | undefined;
   text: string;
   total?: number | null;
   rubric?: RubricScore | null;
@@ -445,7 +447,7 @@ export interface OperatorReviewActions {
   onMarkSubmission(id: string, checked: boolean): void;
   onMarkCoachTurn(id: string, checked: boolean): void;
   onGradeAi(id: string): void;
-  onGradeManual(id: string): void;
+  onGradeManual(id: string, input: { meaning: number; vocabulary: number; grammar: number; feedback: string }): void;
   onDecideAppeal(id: string, accepted: boolean): void;
   onViewTest(id: string): void;
   onSaveWeeklyPractice?(input: ReviewWeeklyPracticeInput): void | Promise<void>;

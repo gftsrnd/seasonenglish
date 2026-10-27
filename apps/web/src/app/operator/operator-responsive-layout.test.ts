@@ -58,6 +58,11 @@ describe("Operator responsive layout guardrails", () => {
     expect(appCss).toMatch(/\.operator-detail-modal \.table-wrap table\s*\{[\s\S]*?table-layout:\s*fixed/);
   });
 
+  it("applies roomy lesson-editor rules to the body-level portal", () => {
+    expect(appCss).toMatch(/body > \.operator-modal-scope \.operator-lesson-editor-form\s*\{[^}]*gap:\s*18px/);
+    expect(appCss).toMatch(/body > \.operator-modal-scope \.operator-vocabulary-base\s*\{[^}]*grid-template-columns:\s*repeat\(2,\s*minmax\(0,\s*1fr\)\)/);
+  });
+
   it("keeps every app Operator destination reachable in the tablet header", () => {
     expect(appCss).toMatch(/@media \(min-width:\s*761px\) and \(max-width:\s*960px\)[\s\S]*?body:has\(\.app-operator\) \.topbar nav\s*\{[\s\S]*?flex:\s*1 1 auto[\s\S]*?max-width:\s*none[\s\S]*?overflow-x:\s*auto/);
     expect(appCss).toMatch(/body:has\(\.app-operator\) \.topbar nav a\s*\{[\s\S]*?display:\s*inline-flex[\s\S]*?flex:\s*0 0 auto/);

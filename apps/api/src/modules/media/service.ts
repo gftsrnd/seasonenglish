@@ -123,10 +123,16 @@ export function createContentMediaService(options: {
         ? { image: view, provider: candidate.provider, cached: false }
         : { image: candidateView(candidate, input.request.term), provider: candidate.provider, cached: false };
     } catch {
-      // The provider candidate has already passed URL and licence validation.
-      // Keep it as a real browser fallback when MinIO/download is temporarily
-      // unavailable instead of turning a valid illustration into a blank card.
-      return { image: candidateView(candidate, input.request.term), provider: candidate.provider, cached: false };
+      // A provider URL that cannot be persisted would be searched again after
+      // every reload and can point to a different image. Cache the miss and
+      // keep the vocabulary card image-free instead of showing a transient one.
+      await options.repository.saveUnavailable({
+        organizationId: input.organizationId,
+        requestFingerprint: input.fingerprint,
+        normalizedQuery: input.request.imageQuery ?? input.request.term,
+        provider: candidate.provider
+      }, now()).catch(() => undefined);
+      return unavailable(false);
     }
   }
 

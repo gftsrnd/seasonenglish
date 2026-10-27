@@ -346,6 +346,9 @@ async function seedLearningScenarios(client: Client) {
     );
   }
   await seedLevelReadyEvidence(client, byKey.get("learner-level-ready")!, sets);
+  const pendingSet = sets.find((set) => set.cefr === "A2" && set.weekId === currentWeek.rows[0]?.id)
+    ?? sets.find((set) => set.cefr === "A2");
+  if (pendingSet) await seedPendingWeeklySubmission(client, byKey.get("learner-weekly")!, pendingSet);
 }
 
 type ScenarioLessonSet = {
@@ -446,6 +449,29 @@ async function seedLevelReadyEvidence(client: Client, account: LocalScenarioAcco
       [sessionId, index + 1, JSON.stringify({ text, fixture: account.key })]
     );
   }
+}
+
+async function seedPendingWeeklySubmission(client: Client, account: LocalScenarioAccount, set: ScenarioLessonSet) {
+  const vocabulary = scenarioGameWords(set).map((word) => word.english);
+  const used = vocabulary.slice(0, 3);
+  const text = `Last week I reported a small incident at work. I spoke with my colleague and wrote a clear report using ${used.join(", ")}.`;
+  await client.query(
+    `insert into practice_submissions
+       (id, learner_id, program_week_id, status, content, prompt_snapshot,
+        cefr_snapshot, vocabulary_snapshot, submitted_at)
+     values ($1, $2, $3, 'submitted', $4::jsonb, $5::jsonb, $6, $7::jsonb, now())`,
+    [
+      account.id.replace("20000000", "25000000"), account.id, set.weekId,
+      JSON.stringify({ type: "writing", text, fixture: "pending-weekly-review" }),
+      JSON.stringify({
+        task: `Write 3–5 sentences about “${set.topic}”. Use at least 3 words from this week's lessons.`,
+        guidance: `Viết 3–5 câu tiếng Anh về chủ đề “${set.topic}”. Dùng ít nhất 3 từ trong bài tuần này.`,
+        inputMode: "write",
+        requiredVocabulary: vocabulary
+      }),
+      account.cefr ?? "A2", JSON.stringify(vocabulary)
+    ]
+  );
 }
 
 async function ensurePublishedScenarioLessons(client: Client, cefr: "A2" | "B1"): Promise<string[]> {

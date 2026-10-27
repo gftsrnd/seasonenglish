@@ -20,6 +20,7 @@ const gameEvent = z.object({
 });
 const resultInput = z.object({
   requestId: z.uuid(), hintsUsed: z.number().int().min(0).max(100).optional(),
+  attemptSeed: z.number().int().min(0).max(10_000).optional(),
   answers: z.array(answer).min(1).max(30), events: z.array(gameEvent).max(60).optional()
 });
 const practiceAppealParams = z.object({ submissionId: z.uuid() });
@@ -195,6 +196,15 @@ export function registerEngagementRoutes(
       ?? reply.code(404).send({ code: "GAME_SET_NOT_FOUND" });
   });
 
+  app.post("/api/v1/engagement/games/word-set/weekly", { preHandler: learnerOnly }, async (request, reply) => {
+    const learnerId = request.e4sSession!.user.id;
+    const selected = await repositories.engagement.useLearnedVocabularyGameSet(learnerId);
+    if (!selected) return reply.code(409).send({ code: "LEARNED_VOCABULARY_NOT_FOUND" });
+    const runner = await runnerFor(learnerId);
+    return await gameHubView(repositories, learnerId, Boolean(runner))
+      ?? reply.code(404).send({ code: "GAME_SET_NOT_FOUND" });
+  });
+
   app.get("/api/v1/engagement/game-sets/:setId/words/:wordId/image", {
     preHandler: learnerOnly, config: { rateLimit: { max: 30, timeWindow: "1 minute" } }
   }, async (request, reply) => {
@@ -226,7 +236,7 @@ export function registerEngagementRoutes(
     if (duplicate) return duplicate;
     const hub = await repositories.engagement.gameHub(learnerId);
     if (!hub?.wordSet) return reply.code(404).send({ code: "GAME_SET_NOT_FOUND" });
-    const scored = scoreGameAttempt(params.data.game, hub.wordSet.words, body.data.answers, { hintsUsed: body.data.hintsUsed });
+    const scored = scoreGameAttempt(params.data.game, hub.wordSet.words, body.data.answers, { hintsUsed: body.data.hintsUsed, attemptSeed: body.data.attemptSeed });
     return repositories.engagement.saveGameResult({
       learnerId, setId: hub.wordSet.id, game: params.data.game, requestId: body.data.requestId,
       ...scored, details: {
@@ -288,7 +298,7 @@ export function registerEngagementRoutes(
       return result ? { ...duel, result } : reply.code(409).send({ code: "DUEL_RESULT_NOT_AVAILABLE" });
     }
     if (duel.myScore) return reply.code(409).send({ code: "DUEL_ALREADY_PLAYED" });
-    const scored = scoreGameAttempt(duel.game, duel.wordSet.words, body.data.answers, { hintsUsed: body.data.hintsUsed });
+    const scored = scoreGameAttempt(duel.game, duel.wordSet.words, body.data.answers, { hintsUsed: body.data.hintsUsed, attemptSeed: body.data.attemptSeed });
     const result = await repositories.engagement.saveGameResult({
       learnerId, setId: duel.wordSet.id, game: duel.game, requestId: body.data.requestId,
       ...scored, duelId: duel.id, details: { duel: true }

@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
+import { cancelExclusiveAudio, claimExclusiveAudio } from "../../features/experience/audio-precedence.js";
 import type {
   AssessmentLevelFormSlotView,
   AssessmentReviewOverviewView,
@@ -29,6 +30,7 @@ import type {
 import { Check, Mic, Square, Volume2 } from "lucide-react";
 import { VocabularyCard as SharedVocabularyCard, type VocabularyRelationChip } from "../shared/lesson/VocabularyCard.js";
 import { conciseGrammarExample, conciseLessonObjective, conciseSpeakingInstruction, conciseSpeakingModel, learnerFacingObjective, learnerFacingObjectiveBody, learnerObjectiveLead } from "../shared/lesson/presentation.js";
+import { lessonInstructionSteps } from "../shared/lesson/instructions.js";
 
 const CEFR_LEVELS: Cefr[] = ["A1", "A2", "B1", "B2", "C1"];
 const REVIEW_TAB_MAP = { submissions: "subs", coach: "coach", weekly_practices: "weekly", appeals: "appeals", attempts: "attempts", assessments: "tests" } as const;
@@ -263,14 +265,15 @@ export function adaptLessonSet(source: ContentLessonSetVersionView, options: { a
   };
 }
 
-const learnerStudyCodes = new Set(["objective", "vocabulary", "grammar", "pronunciation"]);
+const learnerStudyCodes = new Set(["objective", "instruction", "vocabulary", "grammar", "pronunciation"]);
 
 function OperatorLessonPreview({ cefr, lessonId, parts, resolveVocabularyImage }: { cefr: string; lessonId: string; parts: ContentLessonSetVersionView["lessons"][number]["parts"]; resolveVocabularyImage?: ((lessonId: string, itemIndex: number) => Promise<ContentImageView>) | undefined }) {
   const [tab, setTab] = useState<"study" | "practice">("study");
-  const visible = parts.filter(part => !(part.code === "grammar" && part.content.hidden === true && part.content.status === "unavailable")).filter(part => tab === "study" ? learnerStudyCodes.has(part.code) : !learnerStudyCodes.has(part.code));
+  const visible = parts.filter(part => !(part.code === "grammar" && part.content.hidden === true && part.content.status === "unavailable")).filter(part => tab === "study" ? learnerStudyCodes.has(part.code) : part.code === "instruction" || !learnerStudyCodes.has(part.code));
   return <div className="operator-lesson-preview lesson-page"><div className="lesson-surface"><div className="ltabs" role="tablist" aria-label="Các bước trong bài học"><button type="button" className={tab === "study" ? "active" : ""} role="tab" aria-selected={tab === "study"} onClick={() => setTab("study")}>1. Học</button><button type="button" className={tab === "practice" ? "active" : ""} role="tab" aria-selected={tab === "practice"} onClick={() => setTab("practice")}>2. Bài tập</button></div><div className="lesson-parts" aria-label={tab === "study" ? "Nội dung học" : "Nội dung bài tập"}>{visible.map((part, index) => {
     const exerciseNumber = visible.slice(0, index).filter(candidate => candidate.code !== "instruction").length + 1;
-    return <section className={`card lesson-part lesson-part--${part.code}`} key={part.code}>{part.code === "grammar" || part.code === "pronunciation" ? null : <div className="row between"><h2 className={part.code === "vocabulary" ? "lesson-vocabulary-heading" : undefined}>{part.code === "objective" ? "MỤC TIÊU BÀI HỌC" : part.code === "instruction" ? "HƯỚNG DẪN LÀM BÀI" : part.code === "vocabulary" ? "TỪ VỰNG" : `${exerciseNumber}. ${operatorPartHeading(part.code, part.title)}`}</h2></div>}{renderLessonPart(part.code, part.content, { cefr, lessonId, resolveVocabularyImage })}</section>;
+    const content = part.code === "instruction" ? { ...part.content, steps: lessonInstructionSteps(parts, tab) } : part.content;
+    return <section className={`card lesson-part lesson-part--${part.code}`} key={part.code}>{part.code === "grammar" || part.code === "pronunciation" ? null : <div className="row between"><h2 className={part.code === "vocabulary" ? "lesson-vocabulary-heading" : undefined}>{part.code === "objective" ? "MỤC TIÊU BÀI HỌC" : part.code === "instruction" ? "HƯỚNG DẪN LÀM BÀI" : part.code === "vocabulary" ? "TỪ VỰNG" : `${exerciseNumber}. ${operatorPartHeading(part.code, part.title)}`}</h2></div>}{renderLessonPart(part.code, content, { cefr, lessonId, resolveVocabularyImage })}</section>;
   })}</div></div></div>;
 }
 
@@ -299,13 +302,15 @@ function renderLessonPart(code: string, value: unknown, media?: { cefr: string; 
   if (code === "grammar") {
     const formula = text("formula", "theory") || "—";
     const examples = strings("examples").slice(0, 3);
-    return <div className="operator-study-block"><div className="lesson-study-panel-header"><h2>NGỮ PHÁP</h2></div><div className="lesson-grammar-copy"><p className="lesson-study-focus"><strong>{formula}</strong></p>{text("usage") ? <p className="lesson-study-explanation">{grammarUsageCopy(text("usage")!)}</p> : null}</div>{examples.length ? <div className="lesson-example-list" aria-label="Câu ví dụ ngữ pháp">{examples.map((example, index) => { const concise = conciseGrammarExample(example); return <button className="lesson-example-card" type="button" aria-label={`Nghe câu ví dụ ${index + 1}`} onClick={() => speakOperatorText(sanitizeOperatorGrammarSpeechText(concise))} key={`${example}-${index}`}><Volume2 size={15} aria-hidden="true" /><span>{concise}</span></button>; })}</div> : null}</div>;
+    const exampleAudioUrls = strings("exampleAudioUrls");
+    return <div className="operator-study-block"><div className="lesson-study-panel-header lesson-study-panel-header--with-audio"><h2>NGỮ PHÁP</h2><OperatorAssetAudioButton audioSrc={text("audioUrl")} label="Nghe mẫu ngữ pháp" /></div><div className="lesson-grammar-copy"><p className="lesson-study-focus"><strong>{formula}</strong></p>{text("usage") ? <p className="lesson-study-explanation">{grammarUsageCopy(text("usage")!)}</p> : null}</div>{examples.length ? <div className="lesson-example-list" aria-label="Câu ví dụ ngữ pháp">{examples.map((example, index) => { const spoken = sanitizeOperatorGrammarSpeechText(conciseGrammarExample(example)); return <button className="btn-sm btn-ghost lesson-example-card vocabulary-card-sound operator-audio-button" type="button" aria-label={`Nghe câu ví dụ: ${spoken}`} onClick={() => playOperatorWord(spoken, exampleAudioUrls[index])} key={`${example}-${index}`}><Volume2 size={14} aria-hidden="true" />{conciseGrammarExample(example)}</button>; })}</div> : null}</div>;
   }
   if (code === "pronunciation") {
     const focus = text("focus") || "—";
     const targetSound = pronunciationTarget(focus);
     const referenceWord = pronunciationWords[0]?.word;
-    return <div className="operator-study-block operator-pronunciation"><div className="lesson-study-panel-header"><h2>PHÁT ÂM</h2></div><div className="row between" style={{ gap: 12, alignItems: "center" }}><p className="lesson-study-focus"><strong>Âm {targetSound}{referenceWord ? ` như trong “${referenceWord}”` : ""}</strong></p><OperatorPhonemeButton targetSound={targetSound} audioSrc={text("phonemeAudioUrl", "audioUrl")} /></div>{text("instruction", "tip") ? <p className="operator-pronunciation-tip lesson-study-explanation">{text("instruction", "tip")}</p> : null}{pronunciationWords.length ? <div className="operator-pronunciation-words" aria-label="Luyện từ phát âm">{pronunciationWords.slice(0, 3).map(item => <button className="btn-sm btn-ghost operator-audio-button" type="button" key={item.word} aria-label={`Nghe từ phát âm: ${item.word}`} onClick={() => speakOperatorText(item.word)}><Volume2 size={15} aria-hidden="true" /><strong>{item.word}</strong>{item.ipa ? <span>{item.ipa}</span> : null}</button>)}</div> : null}</div>;
+    const wordAudioUrls = strings("wordAudioUrls");
+    return <div className="operator-study-block operator-pronunciation"><div className="lesson-study-panel-header lesson-study-panel-header--with-audio"><h2>PHÁT ÂM</h2><OperatorPhonemeButton targetSound={targetSound} audioSrc={text("phonemeAudioUrl")} /></div><p className="lesson-study-focus"><strong>Âm {targetSound}{referenceWord ? ` như trong “${referenceWord}”` : ""}</strong></p>{text("instruction", "tip") ? <p className="operator-pronunciation-tip lesson-study-explanation">{text("instruction", "tip")}</p> : null}{pronunciationWords.length ? <div className="operator-pronunciation-words" aria-label="Luyện từ phát âm">{pronunciationWords.slice(0, 3).map((item, index) => <button className="btn-sm btn-ghost lesson-example-card vocabulary-card-sound operator-audio-button operator-pronunciation-word-chip" type="button" aria-label={`Nghe từ phát âm: ${item.word}`} onClick={() => playOperatorWord(item.word, wordAudioUrls[index])} key={item.word}><Volume2 size={14} aria-hidden="true" /><strong>{item.word}</strong>{item.ipa ? ` ${item.ipa}` : ""}</button>)}</div> : null}</div>;
   }
   if (code === "listening") {
     const audio = operatorAudioSource(content);
@@ -317,7 +322,7 @@ function renderLessonPart(code: string, value: unknown, media?: { cefr: string; 
   if (code === "speaking") {
     const model = conciseSpeakingModel(text("answer", "modelAnswer", "sample"));
     const instruction = conciseSpeakingInstruction(text("instruction", "prompt"));
-    return <div className="operator-practice-content"><p className="operator-speaking-instruction"><strong>Yêu cầu:</strong> {instruction}</p><div className="operator-speaking-model"><strong>{model}</strong>{text("audioUrl") ? <audio controls preload="metadata" src={text("audioUrl")} aria-label="Nghe audio mẫu phần Nói" /> : <OperatorSpeechButton text={model} label="Nghe câu mẫu" />}</div><OperatorRecordingPreview /></div>;
+    return <div className="operator-practice-content"><p className="operator-speaking-instruction"><strong>Yêu cầu:</strong> {instruction}</p><div className="operator-speaking-model"><strong>{model}</strong>{text("audioUrl") ? <audio controls preload="metadata" src={text("audioUrl")} aria-label="Nghe audio mẫu phần Nói" /> : null}</div><OperatorRecordingPreview /></div>;
   }
   return <div className="small">{humanizeContent(content)}</div>;
 }
@@ -368,30 +373,53 @@ function sanitizeOperatorGrammarSpeechText(value: string): string {
   return value.replace(/^(?:example|ví dụ)\s*:\s*/iu, "").split("|")[0]!.replace(/[+*=~]/gu, " ").replace(/\s+/gu, " ").trim();
 }
 
-function operatorPhonemeSpeechText(ipa: string): string {
-  return ({ "/eɪ/": "ay", "/aɪ/": "eye", "/iː/": "ee", "/uː/": "oo" } as Record<string, string>)[ipa.trim()] ?? ipa.replaceAll("/", "").trim();
+function OperatorAssetAudioButton({ audioSrc, label }: { audioSrc?: string | undefined; label: string }) {
+  const [failed, setFailed] = useState(false);
+  const src = audioSrc?.trim() ?? "";
+  if (!src || failed || typeof Audio === "undefined") return null;
+  const play = () => {
+    const audio = new Audio(src);
+    void audio.play().catch(() => setFailed(true));
+  };
+  return <button className="btn-sm btn-ghost operator-audio-button operator-audio-button--icon" type="button" aria-label={label} title={label} onClick={play}><Volume2 size={16} aria-hidden="true" /></button>;
 }
 
 function OperatorPhonemeButton({ targetSound, audioSrc }: { targetSound: string; audioSrc?: string | undefined }) {
-  const playFallback = () => speakOperatorText(operatorPhonemeSpeechText(targetSound));
+  const [failed, setFailed] = useState(false);
+  const src = audioSrc?.trim() ?? "";
+  const available = Boolean(src) && !failed && typeof Audio !== "undefined";
   const play = () => {
-    if (!audioSrc?.trim() || typeof Audio === "undefined") {
-      playFallback();
-      return;
-    }
-    const audio = new Audio(audioSrc.trim());
-    void audio.play().catch(playFallback);
+    if (!available) return;
+    cancelExclusiveAudio("speech");
+    const audio = new Audio(src);
+    const release = claimExclusiveAudio("speech", () => {
+      audio.pause();
+      audio.currentTime = 0;
+    });
+    if (!release) return;
+    let completed = false;
+    const finish = () => {
+      if (completed) return;
+      completed = true;
+      release();
+    };
+    audio.onended = finish;
+    audio.onerror = () => {
+      setFailed(true);
+      finish();
+    };
+    void audio.play().catch(() => {
+      setFailed(true);
+      finish();
+    });
   };
+  if (!available) return null;
   return <button className="btn-sm btn-ghost operator-audio-button operator-audio-button--icon" type="button" aria-label={`Nghe âm ${targetSound}`} title={`Nghe âm ${targetSound}`} onClick={play}><Volume2 size={16} aria-hidden="true" /></button>;
 }
 
-function OperatorSpeechButton({ text, label, iconOnly = false, primary = false }: { text: string; label: string; iconOnly?: boolean; primary?: boolean }) {
-  return <button className={`btn-sm btn-ghost operator-audio-button${iconOnly ? " operator-audio-button--icon" : ""}${primary ? " operator-audio-button--primary" : ""}`} type="button" aria-label={label} title={label} onClick={() => speakOperatorText(text)}><Volume2 size={16} aria-hidden="true" />{iconOnly ? null : ` ${label}`}</button>;
-}
-
-function OperatorAudioControl({ source, label = "Nghe đoạn audio" }: { source: OperatorAudioSource; label?: string }) {
+function OperatorAudioControl({ source, label = "Listening" }: { source: OperatorAudioSource; label?: string }) {
   if (source.src) return <audio controls preload="metadata" src={source.src} aria-label={label === "Nghe đoạn audio" ? label : `Nghe audio phần ${label.replace(/^Nghe phần\s+/u, "")}`} />;
-  if (source.text) return <OperatorSpeechButton text={source.text} label={label} primary />;
+  if (source.text) return <button className="btn-sm btn-ghost operator-audio-button operator-audio-button--primary" type="button" aria-label={`Nghe nội dung phần ${label}`} onClick={() => speakOperatorText(source.text!)}><Volume2 size={16} aria-hidden="true" />Nghe nội dung</button>;
   return <p className="operator-audio-missing">Chưa có nội dung âm thanh.</p>;
 }
 
@@ -458,16 +486,18 @@ function OperatorVocabularyCard({ item, index, media }: { item: Record<string, u
     ...(typeof item.pronunciation === "string" && item.pronunciation.trim() ? { pronunciation: item.pronunciation.trim() } : {}),
     ...(typeof item.meaning === "string" && item.meaning.trim() ? { meaning: item.meaning.trim() } : {}),
     ...(phrases.length ? { collocations: phrases } : {}),
+    ...(Array.isArray(item.collocationAudioUrls) ? { collocationAudioUrls: item.collocationAudioUrls.filter((value): value is string => typeof value === "string") } : {}),
+    ...(Array.isArray(item.exampleAudioUrls) ? { exampleAudioUrls: item.exampleAudioUrls.filter((value): value is string => typeof value === "string") } : {}),
     ...(typeof item.audioUrl === "string" && item.audioUrl.trim() ? { audioUrl: item.audioUrl.trim() } : {})
   };
   const umbrellaWord = typeof umbrella?.word === "string" ? umbrella.word : "";
   const umbrellaMeaning = typeof umbrella?.meaning === "string" ? umbrella.meaning.trim() : "";
   const siblingEntries = relationEntries(umbrella?.siblings);
-  const umbrellaWords = umbrella ? [{ word, ...(typeof item.meaning === "string" && item.meaning.trim() ? { meaning: item.meaning.trim() } : {}), ...(typeof item.audioUrl === "string" && item.audioUrl.trim() ? { audioUrl: item.audioUrl.trim() } : {}), current: true }, ...siblingEntries] : [];
+  const umbrellaWords = umbrella ? [{ word, ...(typeof item.meaning === "string" && item.meaning.trim() ? { meaning: item.meaning.trim() } : {}), audioUrl: operatorVocabularyAudioSource(word, item.audioUrl), current: true }, ...siblingEntries] : [];
   const relations: VocabularyRelationChip[] = [
-    ...(umbrellaWord ? [{ label: `TỪ BAO TRÙM ${umbrellaWord}`, ariaLabel: `Từ bao trùm: ${umbrellaWord}`, icon: "umbrella" as const, tone: "umb" as const, count: Math.max(0, umbrellaWords.length - 1), onClick: () => setDetail({ kind: "umbrella", title: umbrellaWord, currentWord: word, umbrellaMeaning, ...(typeof umbrella?.audioUrl === "string" && umbrella.audioUrl.trim() ? { umbrellaAudioUrl: umbrella.audioUrl.trim() } : {}), words: umbrellaWords }) }] : []),
-    ...synonyms.map(value => ({ label: value.word, ariaLabel: `Nghe từ đồng nghĩa: ${value.word}`, tone: "synonym" as const, onClick: () => playOperatorWord(value.word, value.audioUrl) })),
-    ...antonyms.map(value => ({ label: value.word, ariaLabel: `Nghe từ trái nghĩa: ${value.word}`, tone: "antonym" as const, onClick: () => playOperatorWord(value.word, value.audioUrl) })),
+    ...(umbrellaWord ? [{ label: `TỪ BAO TRÙM ${umbrellaWord}`, ariaLabel: `Từ bao trùm: ${umbrellaWord}`, icon: "umbrella" as const, tone: "umb" as const, count: Math.max(0, umbrellaWords.length - 1), onClick: () => setDetail({ kind: "umbrella", title: umbrellaWord, currentWord: word, umbrellaMeaning, umbrellaAudioUrl: operatorVocabularyAudioSource(umbrellaWord, umbrella?.audioUrl), words: umbrellaWords }) }] : []),
+    ...synonyms.map(value => ({ label: value.word, ariaLabel: value.audioUrl ? `Nghe từ đồng nghĩa: ${value.word}` : value.word, tone: "synonym" as const, onClick: value.audioUrl ? () => playOperatorWord(value.word, value.audioUrl) : undefined })),
+    ...antonyms.map(value => ({ label: value.word, ariaLabel: value.audioUrl ? `Nghe từ trái nghĩa: ${value.word}` : value.word, tone: "antonym" as const, onClick: value.audioUrl ? () => playOperatorWord(value.word, value.audioUrl) : undefined })),
     ...(family.length ? [{ label: `Word family (${family.length})`, ariaLabel: `Word family (${family.length})`, icon: "family" as const, tone: "family" as const, onClick: () => setDetail({ kind: "family", title: "Word family", words: family }) }] : [])
   ];
   const loadImage = () => {
@@ -477,14 +507,8 @@ function OperatorVocabularyCard({ item, index, media }: { item: Record<string, u
     if (imageUrl && attribution) return Promise.resolve({ status: "available", imageUrl, alt: word, attribution } as const);
     return Promise.resolve({ status: "unavailable" } as const);
   };
-  const modal = detail && typeof document !== "undefined" ? createPortal(<div className="modal-backdrop vocabulary-relation-modal" role="presentation"><section className="dialog wide" role="dialog" aria-modal="true" aria-label={detail.kind === "umbrella" ? "Từ bao quát" : detail.title}><div className="row between vocabulary-relation-modal-header">{detail.kind === "umbrella" ? <div><div className="eyebrow">Từ vựng · {detail.currentWord}</div><h2>Từ bao quát</h2></div> : <strong className="vocabulary-relation-title">{detail.title}</strong>}<button className="btn-sm" type="button" aria-label="Đóng" onClick={() => setDetail(null)}>Đóng</button></div>{detail.kind === "umbrella" ? <div className="stack vocabulary-umbrella-content" style={{ gap: 12 }} aria-label="Từ bao quát"><article className="card flat vocabulary-umbrella-summary" aria-label={`Từ bao quát ${detail.title}`}><div className="row between" style={{ gap: 12, alignItems: "flex-start" }}><div style={{ minWidth: 0 }}><div className="eyebrow">Từ bao quát</div><h3>{detail.title}</h3><p>{detail.umbrellaMeaning}</p></div><button className="btn-sm btn-ghost operator-audio-button" type="button" aria-label={`Nghe từ bao trùm: ${detail.title}`} onClick={() => playOperatorWord(detail.title, detail.umbrellaAudioUrl)}><Volume2 size={16} aria-hidden="true" />Nghe</button></div></article><div><div className="small muted">Từ hiện tại và các từ cùng nhóm</div><div className="vocabulary-relation-audio-list">{detail.words.map(value => <button className="btn-sm btn-ghost operator-audio-button vocabulary-relation-audio-item" type="button" aria-label={`Nghe từ cùng nhóm: ${value.word}`} onClick={() => playOperatorWord(value.word, value.audioUrl)} key={`${value.word}-${value.meaning ?? ""}`}><span><strong>{value.word}</strong>{value.current ? <small className="vocabulary-current-word">từ của bài</small> : null}{value.meaning ? <small>{value.meaning}</small> : null}</span><Volume2 size={16} aria-hidden="true" /></button>)}</div></div></div> : <>{detail.description ? <p className="muted vocabulary-relation-description">{detail.description}</p> : null}<div className="vocabulary-relation-audio-list">{detail.words.map(value => <button className="btn-sm btn-ghost operator-audio-button vocabulary-relation-audio-item" type="button" aria-label={`Nghe từ cùng họ: ${value.word}`} onClick={() => playOperatorWord(value.word, value.audioUrl)} key={`${value.word}-${value.meaning ?? ""}`}><span><strong>{value.word}</strong>{value.current ? <small className="vocabulary-current-word">từ của bài</small> : null}{value.meaning ? <small>{value.meaning}</small> : null}</span><Volume2 size={16} aria-hidden="true" /></button>)}</div></>}</section></div>, document.body) : null;
+  const modal = detail && typeof document !== "undefined" ? createPortal(<div className="modal-backdrop vocabulary-relation-modal" role="presentation"><section className="dialog wide" role="dialog" aria-modal="true" aria-label={detail.kind === "umbrella" ? "Từ bao quát" : detail.title}><div className="row between vocabulary-relation-modal-header">{detail.kind === "umbrella" ? <div><div className="eyebrow">Từ vựng · {detail.currentWord}</div><h2>Từ bao quát</h2></div> : <strong className="vocabulary-relation-title">{detail.title}</strong>}<button className="btn-sm" type="button" aria-label="Đóng" onClick={() => setDetail(null)}>Đóng</button></div>{detail.kind === "umbrella" ? <div className="stack vocabulary-umbrella-content" style={{ gap: 12 }} aria-label="Từ bao quát"><article className="card flat vocabulary-umbrella-summary" aria-label={`Từ bao quát ${detail.title}`}><div className="row between" style={{ gap: 12, alignItems: "flex-start" }}><div style={{ minWidth: 0 }}><div className="eyebrow">Từ bao quát</div><h3>{detail.title}</h3><p>{detail.umbrellaMeaning}</p></div>{detail.umbrellaAudioUrl ? <button className="btn-sm btn-ghost operator-audio-button" type="button" aria-label={`Nghe từ bao trùm: ${detail.title}`} onClick={() => playOperatorWord(detail.title, detail.umbrellaAudioUrl)}><Volume2 size={16} aria-hidden="true" />Nghe</button> : null}</div></article><div><div className="small muted">Từ hiện tại và các từ cùng nhóm</div><div className="vocabulary-relation-audio-list">{detail.words.map(value => value.audioUrl ? <button className="btn-sm btn-ghost operator-audio-button vocabulary-relation-audio-item" type="button" aria-label={`Nghe từ cùng nhóm: ${value.word}`} onClick={() => playOperatorWord(value.word, value.audioUrl)} key={`${value.word}-${value.meaning ?? ""}`}><span><strong>{value.word}</strong>{value.current ? <small className="vocabulary-current-word">từ của bài</small> : null}{value.meaning ? <small>{value.meaning}</small> : null}</span><Volume2 size={16} aria-hidden="true" /></button> : <div className="vocabulary-relation-audio-item" key={`${value.word}-${value.meaning ?? ""}`}><span><strong>{value.word}</strong>{value.current ? <small className="vocabulary-current-word">từ của bài</small> : null}{value.meaning ? <small>{value.meaning}</small> : null}</span></div>)}</div></div></div> : <>{detail.description ? <p className="muted vocabulary-relation-description">{detail.description}</p> : null}<div className="vocabulary-relation-audio-list">{detail.words.map(value => value.audioUrl ? <button className="btn-sm btn-ghost operator-audio-button vocabulary-relation-audio-item" type="button" aria-label={`Nghe từ cùng họ: ${value.word}`} onClick={() => playOperatorWord(value.word, value.audioUrl)} key={`${value.word}-${value.meaning ?? ""}`}><span><strong>{value.word}</strong>{value.current ? <small className="vocabulary-current-word">từ của bài</small> : null}{value.meaning ? <small>{value.meaning}</small> : null}</span><Volume2 size={16} aria-hidden="true" /></button> : <div className="vocabulary-relation-audio-item" key={`${value.word}-${value.meaning ?? ""}`}><span><strong>{value.word}</strong>{value.current ? <small className="vocabulary-current-word">từ của bài</small> : null}{value.meaning ? <small>{value.meaning}</small> : null}</span></div>)}</div></>}</section></div>, document.body) : null;
   return <><SharedVocabularyCard item={vocabularyItem} loadImage={loadImage} speak={speakOperatorText} relations={relations} />{modal}</>;
-}
-
-function contentImageAttribution(value: unknown): Extract<ContentImageView, { status: "available" }>["attribution"] | undefined {
-  const record = asRecord(value);
-  if (!record || typeof record.licence !== "string" || typeof record.licenceUrl !== "string" || typeof record.sourceUrl !== "string") return undefined;
-  return { creator: typeof record.creator === "string" ? record.creator : null, licence: record.licence, licenceUrl: record.licenceUrl, sourceUrl: record.sourceUrl };
 }
 
 function speakOperatorText(text: string) {
@@ -495,22 +519,37 @@ function speakOperatorText(text: string) {
   window.speechSynthesis.speak(utterance);
 }
 
+function contentImageAttribution(value: unknown): Extract<ContentImageView, { status: "available" }>["attribution"] | undefined {
+  const record = asRecord(value);
+  if (!record || typeof record.licence !== "string" || typeof record.licenceUrl !== "string" || typeof record.sourceUrl !== "string") return undefined;
+  return { creator: typeof record.creator === "string" ? record.creator : null, licence: record.licence, licenceUrl: record.licenceUrl, sourceUrl: record.sourceUrl };
+}
+
 function relationWords(value: unknown): string[] {
   if (Array.isArray(value)) return value.flatMap(entry => typeof entry === "string" ? [entry] : typeof asRecord(entry)?.word === "string" ? [String(asRecord(entry)?.word)] : []);
   return typeof value === "string" && value.trim() && value.trim() !== "—" ? [value.trim()] : [];
 }
 
 function relationEntries(value: unknown): Array<{ word: string; meaning?: string; audioUrl?: string }> {
-  if (!Array.isArray(value)) return relationWords(value).map(word => ({ word }));
+  if (!Array.isArray(value)) return relationWords(value).map(word => ({ word, audioUrl: operatorVocabularyAudioSource(word) }));
   return value.flatMap(entry => {
-    if (typeof entry === "string" && entry.trim()) return [{ word: entry.trim() }];
+    if (typeof entry === "string" && entry.trim()) return [{ word: entry.trim(), audioUrl: operatorVocabularyAudioSource(entry.trim()) }];
     const record = asRecord(entry);
     if (!record || typeof record.word !== "string" || !record.word.trim()) return [];
-    return [{ word: record.word.trim(), ...(typeof record.meaning === "string" && record.meaning.trim() ? { meaning: record.meaning.trim() } : {}), ...(typeof record.audioUrl === "string" && record.audioUrl.trim() ? { audioUrl: record.audioUrl.trim() } : {}) }];
+    const word = record.word.trim();
+    return [{ word, ...(typeof record.meaning === "string" && record.meaning.trim() ? { meaning: record.meaning.trim() } : {}), audioUrl: operatorVocabularyAudioSource(word, record.audioUrl) }];
   });
 }
 
+function operatorVocabularyAudioSource(word: string, value?: unknown): string {
+  return typeof value === "string" && value.trim() ? value.trim() : `tts:${encodeURIComponent(word)}`;
+}
+
 function playOperatorWord(word: string, audioUrl?: string) {
+  if (audioUrl?.startsWith("tts:")) {
+    speakOperatorText(word);
+    return;
+  }
   if (audioUrl?.trim() && typeof Audio !== "undefined") {
     const audio = new Audio(audioUrl.trim());
     void audio.play().catch(() => speakOperatorText(word));
@@ -541,7 +580,7 @@ function humanizeContent(content: Record<string, unknown>): string { return Obje
 
 export interface ReviewAdapterDetails {
   aiConnected?: boolean;
-  submissions?: Record<string, Pick<ReviewSubmission, "cefr" | "type" | "task">>;
+  submissions?: Record<string, Pick<ReviewSubmission, "cefr" | "type" | "task" | "guidance" | "requiredVocabulary">>;
   coach?: Record<string, { cefr: Cefr; week: number; sessionId: string }>;
   appeals?: Record<string, Partial<Omit<ReviewAppeal, "id" | "learnerName" | "reason" | "status" | "at" | "decidedSummary">>>;
   tests?: Record<string, { rawLevel?: Cefr; aiSuggestedCefr?: Cefr | null }>;
@@ -552,10 +591,36 @@ export function adaptReview(source: ContentReviewView, activeTab: keyof typeof R
   source.tabs.forEach(tab => { const key = REVIEW_TAB_MAP[tab.key as keyof typeof REVIEW_TAB_MAP]; if (key) counts[key] = tab.unreadCount ?? tab.count; });
   return {
     activeTab: REVIEW_TAB_MAP[activeTab], counts, aiConnected: options.aiConnected,
-    submissions: source.submissions.map(item => { const detail = options.submissions?.[item.id]; return { id: item.id, learnerName: item.learnerName, cefr: (item.cefr ?? detail?.cefr) as Cefr | undefined, week: item.weekNumber, type: item.type ?? detail?.type, submittedAt: operatorDateTime(item.submittedAt), operatorChecked: item.checked, task: item.task ?? detail?.task, text: item.text, total: item.total, rubric: item.rubric.meaning == null || item.rubric.vocabulary == null || item.rubric.grammar == null ? null : { meaning: item.rubric.meaning, vocab: item.rubric.vocabulary, grammar: item.rubric.grammar }, ...(item.aiGraded === undefined ? {} : { aiGraded: item.aiGraded }), feedback: item.feedback, suggestions: item.suggestions.map(text => ({ original: "", corrected: text, explanation: "" })) }; }),
+    submissions: source.submissions.map(item => { const detail = options.submissions?.[item.id]; return { id: item.id, learnerName: item.learnerName, cefr: (item.cefr ?? detail?.cefr) as Cefr | undefined, week: item.weekNumber, type: item.type ?? detail?.type, submittedAt: operatorDateTime(item.submittedAt), operatorChecked: item.checked, task: item.task ?? detail?.task, guidance: item.guidance ?? detail?.guidance, requiredVocabulary: item.requiredVocabulary ?? detail?.requiredVocabulary, text: item.text, total: item.total, rubric: item.rubric.meaning == null || item.rubric.vocabulary == null || item.rubric.grammar == null ? null : { meaning: item.rubric.meaning, vocab: item.rubric.vocabulary, grammar: item.rubric.grammar }, ...(item.aiGraded === undefined ? {} : { aiGraded: item.aiGraded }), feedback: item.feedback, suggestions: item.suggestions.map(text => ({ original: "", corrected: text, explanation: "" })) }; }),
     coachTurns: source.coachSamples.map(item => { const detail = options.coach?.[item.id]; return { id: item.id, sessionId: detail?.sessionId ?? item.id, learnerName: item.learnerName, cefr: (item.cefr ?? detail?.cefr) as Cefr | undefined, week: item.weekNumber ?? detail?.week, at: operatorDateTime(item.createdAt), checked: item.checked, userText: item.learnerText, reply: item.coachText, rubric: item.scores.meaning == null || item.scores.vocabulary == null || item.scores.grammar == null ? null : { meaning: item.scores.meaning, vocab: item.scores.vocabulary, grammar: item.scores.grammar }, suggestions: item.suggestions.map(text => ({ original: "", corrected: text, explanation: "" })) }; }),
     weeklyPractices: (source.weeklyPractices ?? []).map(item => ({ id: item.versionId, week: item.weekNumber, cefr: item.cefr as Cefr, topic: item.topic, status: item.status === "published" ? "approved" : item.status === "review" ? "review" : "draft", version: item.version, task: item.task, guidance: item.guidance, requiredVocabulary: item.requiredVocabulary })),
-    appeals: source.appeals.map(item => ({ id: item.id, learnerName: item.learnerName, at: operatorDateTime(item.createdAt), status: item.status, reason: item.reason, decidedSummary: item.resolution || null, ...options.appeals?.[item.id] })),
+    appeals: source.appeals.map(item => {
+      const lessonPart = item.kind === "lesson_part";
+      const title = lessonPart
+        ? [`Tuần ${item.weekNumber ?? "—"}`, item.dayNumber == null ? null : `T${item.dayNumber + 1}`, item.lessonTitle].filter(Boolean).join(" · ")
+        : undefined;
+      return {
+        id: item.id,
+        learnerName: item.learnerName,
+        at: operatorDateTime(item.createdAt),
+        status: item.status,
+        reason: item.reason,
+        decidedSummary: item.resolution || null,
+        ...(lessonPart ? {
+          kind: "part" as const,
+          ...(item.cefr ? { cefr: item.cefr as Cefr } : {}),
+          title,
+          part: item.partCode ?? "Phần bài học",
+          attempts: item.attempts ?? 0,
+          ...(item.question ? { question: item.question } : {}),
+          ...(item.options?.length ? { options: item.options } : {}),
+          ...(item.answer ? { answer: item.answer } : {}),
+          key: item.answerKey ?? null,
+          aiFeedback: item.aiFeedback ?? null
+        } : item.kind === "weekly_practice" ? { kind: "sub" as const } : {}),
+        ...options.appeals?.[item.id]
+      };
+    }),
     attempts: source.lessonAttempts.map(item => ({ id: item.id, learnerId: item.learnerId, learnerName: item.learnerName, cefr: item.cefr as Cefr | undefined, lesson: `Tuần ${item.weekNumber} · T${item.dayNumber + 1} · ${item.lessonTitle}`, listening: String(item.attempts.listening ?? "chưa làm"), reading: String(item.attempts.reading ?? "chưa làm"), writing: String(item.attempts.writing ?? "chưa làm"), speaking: String(item.attempts.speaking ?? "chưa làm"), total: Object.values(item.attempts).reduce((sum, value) => sum + (value ?? 0), 0) })),
     tests: source.assessments.map(item => ({ id: item.id, learnerName: item.learnerName, kind: item.kind, submittedAt: item.submittedAt ? operatorDateTime(item.submittedAt) : undefined, total: item.totalScore ?? undefined, ...options.tests?.[item.id] }))
   };

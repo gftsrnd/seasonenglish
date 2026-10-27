@@ -480,8 +480,7 @@ export async function seedDemo(client: Client, options: { mode?: SeedDemoMode } 
   await client.query(
     `insert into programs (id, organization_id, name, start_date, week_count, current_week_override, status)
      values ($1, $2, 'E4S Pilot', (current_date - (extract(isodow from current_date)::int - 1)), 2, null, 'active')
-     on conflict (id) do update set start_date = excluded.start_date, week_count = excluded.week_count,
-       current_week_override = excluded.current_week_override, status = excluded.status`,
+     on conflict (id) do nothing`,
     [DEMO_IDS.program, DEMO_IDS.organization]
   );
   await client.query(

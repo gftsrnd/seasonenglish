@@ -24,6 +24,8 @@ const partCode = z.enum([
   "objective", "instruction", "vocabulary", "grammar", "pronunciation",
   "listening", "reading", "writing", "word_class", "word_use", "speaking"
 ]);
+const studyPartCodes = ["objective", "vocabulary", "grammar", "pronunciation"] as const satisfies readonly LessonPartCode[];
+const practicePartCodes = ["listening", "reading", "writing", "word_class", "word_use", "speaking"] as const satisfies readonly LessonPartCode[];
 const profileInput = z.object({
   version: z.number().int().nonnegative(),
   fullName: z.string().trim().min(1),
@@ -68,10 +70,7 @@ const partEvidence = z.object({
   artifactKey: z.string().optional()
 });
 const progressInput = z.object({
-  completedPartCodes: z.array(partCode),
-  evidence: z.partialRecord(partCode, partEvidence),
-  markComplete: z.boolean().optional(),
-  score: z.number().min(0).max(100).optional()
+  markComplete: z.boolean().optional()
 });
 const lessonAttemptInput = z.object({
   requestId: z.uuid(),
@@ -284,11 +283,22 @@ export function registerLearningRoutes(
     if (lesson.lock) return reply.code(409).send({ code: "LESSON_LOCKED", lock: lesson.lock });
     const required = lesson.content.parts
       .map((item) => item.code)
-      .filter((code): code is LessonPartCode =>
-        ["listening", "reading", "writing", "word_class", "word_use", "speaking"].includes(code)
-      );
-    const merged = mergeLessonProgress(lesson.progress, body.data, required);
-    return repositories.learning.saveLessonProgress({ learnerId, lessonId: lesson.id, progress: merged });
+      .filter((code): code is LessonPartCode => practicePartCodes.includes(code as typeof practicePartCodes[number]));
+    if (body.data.markComplete) {
+      // Completion is a server-owned transition.  The client may ask to finish,
+      // but it cannot manufacture the required exercise evidence in that request.
+      const completion = mergeLessonProgress(lesson.progress, {
+        completedPartCodes: [],
+        evidence: {},
+        markComplete: true,
+        ...(lesson.progress.score === undefined ? {} : { score: lesson.progress.score })
+      }, required);
+      if (completion.status !== "completed") {
+        return reply.code(409).send({ code: "LESSON_INCOMPLETE" });
+      }
+      return repositories.learning.saveLessonProgress({ learnerId, lessonId: lesson.id, progress: completion });
+    }
+    return lesson.progress;
   });
 
   app.post("/api/v1/lessons/:lessonId/study-completion", { preHandler: learnerOnly }, async (request, reply) => {
@@ -300,9 +310,7 @@ export function registerLearningRoutes(
     if (lesson.lock) return reply.code(409).send({ code: "LESSON_LOCKED", lock: lesson.lock });
     const completedPartCodes = lesson.content.parts
       .map((item) => item.code)
-      .filter((code): code is LessonPartCode =>
-        ["objective", "vocabulary", "grammar", "pronunciation"].includes(code)
-      );
+      .filter((code): code is LessonPartCode => studyPartCodes.includes(code as typeof studyPartCodes[number]));
     const merged = mergeLessonProgress(lesson.progress, { completedPartCodes, evidence: {} }, []);
     const progress = lesson.progress.status === "completed" ? { ...merged, status: "completed" as const } : merged;
     return repositories.learning.saveLessonProgress({ learnerId, lessonId: lesson.id, progress });
@@ -315,7 +323,9 @@ export function registerLearningRoutes(
     const direct = body.data;
     const evidence: LessonPartAttemptEvidenceInput = {};
     const source = direct.evidence ?? direct;
-    if (source.answer !== undefined) evidence.answer = source.answer;
+    // Speaking is submitted as audio evidence only. A learner must never be able
+    // to supply or overwrite a transcript through this endpoint.
+    if (source.answer !== undefined && params.data.partCode !== "speaking") evidence.answer = source.answer;
     if (source.artifactKey !== undefined) evidence.artifactKey = source.artifactKey;
     if (source.translated !== undefined) evidence.translated = source.translated;
     const learnerId = request.e4sSession!.user.id;
@@ -323,6 +333,18 @@ export function registerLearningRoutes(
     if (!lesson) return reply.code(404).send({ code: "LESSON_PART_NOT_FOUND" });
     if (lesson.lock) return reply.code(409).send({ code: "LESSON_LOCKED", lock: lesson.lock });
     const part = lesson.content.parts.find((candidate) => candidate.code === params.data.partCode);
+    if (!part || !practicePartCodes.includes(part.code as typeof practicePartCodes[number])) {
+      return reply.code(404).send({ code: "LESSON_PART_NOT_FOUND" });
+    }
+    const requiredStudy = lesson.content.parts
+      .map((candidate) => candidate.code)
+      .filter((code): code is LessonPartCode => studyPartCodes.includes(code as typeof studyPartCodes[number]));
+    if (requiredStudy.some((code) => !lesson.progress.completedPartCodes.includes(code))) {
+      return reply.code(409).send({ code: "LESSON_STUDY_INCOMPLETE" });
+    }
+    if (evidence.translated && !["wrong_retry", "wrong_exhausted"].includes(lesson.progress.evidence[params.data.partCode]?.status ?? "")) {
+      return reply.code(409).send({ code: "LESSON_TRANSLATION_NOT_AVAILABLE" });
+    }
     if (!evidence.translated && part?.code === "writing" && isSelfWritingContent(part.content) && lessonAnswerWordCount(evidence.answer) < 2) {
       return reply.code(422).send({ code: "LESSON_WRITING_TOO_SHORT", minimumWords: 2 });
     }
@@ -347,6 +369,19 @@ export function registerLearningRoutes(
     const lesson = await repositories.learning.findLesson(learnerId, params.data.lessonId);
     if (!lesson) return reply.code(404).send({ code: "LESSON_PART_NOT_FOUND" });
     if (lesson.lock) return reply.code(409).send({ code: "LESSON_LOCKED", lock: lesson.lock });
+    const part = lesson.content.parts.find((candidate) => candidate.code === params.data.partCode);
+    if (!part || !practicePartCodes.includes(part.code as typeof practicePartCodes[number])) {
+      return reply.code(404).send({ code: "LESSON_PART_NOT_FOUND" });
+    }
+    const requiredStudy = lesson.content.parts
+      .map((candidate) => candidate.code)
+      .filter((code): code is LessonPartCode => studyPartCodes.includes(code as typeof studyPartCodes[number]));
+    if (requiredStudy.some((code) => !lesson.progress.completedPartCodes.includes(code))) {
+      return reply.code(409).send({ code: "LESSON_STUDY_INCOMPLETE" });
+    }
+    if (!["wrong_exhausted", "appealed"].includes(lesson.progress.evidence[params.data.partCode]?.status ?? "")) {
+      return reply.code(409).send({ code: "LESSON_APPEAL_NOT_AVAILABLE" });
+    }
     const result = await repositories.learning.appealLessonPart({
       learnerId,
       lessonId: params.data.lessonId,
@@ -564,12 +599,21 @@ function isSelfWritingContent(content: Record<string, unknown>): boolean {
 }
 
 export function learnerLessonDisplayTitle(lesson: LearnerLessonRecord): string {
+  const grammar = lesson.content.parts.find((part) => part.code === "grammar");
+  const grammarContent = grammar?.content && typeof grammar.content === "object"
+    ? grammar.content as Record<string, unknown>
+    : undefined;
+  const grammarAvailable = Boolean(
+    grammarContent
+      && grammarContent.hidden !== true
+      && grammarContent.status !== "unavailable"
+      && typeof grammarContent.formula === "string"
+      && grammarContent.formula.trim()
+  );
+  if (!grammarAvailable) return lesson.weekTopic.trim() || `Bài học T${lesson.dayNumber + 1}`;
   const title = lesson.title.trim();
   if (!/^S\s*\+\s*V(?:\s*\+\s*O)?$/i.test(title)) return title;
-  const grammar = lesson.content.parts.find((part) => part.code === "grammar");
-  const examples = grammar?.content && typeof grammar.content === "object"
-    ? (grammar.content as { examples?: unknown }).examples
-    : undefined;
+  const examples = grammarContent?.examples;
   const example = Array.isArray(examples) && typeof examples[0] === "string" ? examples[0].trim() : "";
   const englishExample = example.split(/\s+\(/, 1)[0]?.trim() ?? "";
   return englishExample ? englishExample.replace(/[.!?]+$/, "").slice(0, 60) : title;

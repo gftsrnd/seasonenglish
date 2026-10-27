@@ -45,7 +45,7 @@ export interface LearnerApiClient {
   getArena(): Promise<ArenaView>;
   createDuel(input: { opponentId: string; game: Exclude<GameKey, "crossword"> }): Promise<DuelView>;
   getDuel(id: string): Promise<DuelView>;
-  submitDuelResult(id: string, input: { requestId: string; answers: GameAnswerInput[] }): Promise<DuelView>;
+  submitDuelResult(id: string, input: { requestId: string; answers: GameAnswerInput[]; attemptSeed?: number }): Promise<DuelView>;
   getReward(mode: "preview" | "done"): Promise<RewardView>;
   getSurvey(): Promise<SurveyView>;
   submitSurvey(input: { rating: number; comment: string; studyTime: "work" | "outside" | "both" }): Promise<SurveyView>;
@@ -96,7 +96,7 @@ export const learnerApiClient: LearnerApiClient = {
   appealWeeklyPractice: (submissionId, reason) => request(`/api/v1/engagement/practice/${encodeURIComponent(submissionId)}/appeals`, { method: "POST", body: JSON.stringify({ reason }) }),
   getGames: () => request("/api/v1/engagement/games"),
   generateGameWordSet: (input) => request("/api/v1/engagement/games/word-set", { method: "POST", body: JSON.stringify(input) }),
-  useWeeklyGameWordSet: () => request("/api/v1/engagement/games/word-set", { method: "DELETE", body: "{}" }),
+  useWeeklyGameWordSet: () => request("/api/v1/engagement/games/word-set/weekly", { method: "POST", body: "{}" }),
   deleteGameWordSet: () => request("/api/v1/engagement/games/word-set", { method: "DELETE", body: "{}" }),
   resolveGameWordImage: (setId, wordId) => request(`/api/v1/engagement/game-sets/${encodeURIComponent(setId)}/words/${encodeURIComponent(wordId)}/image`),
   submitGameResult: (game, input) => request(`/api/v1/engagement/games/${encodeURIComponent(game)}/results`, { method: "POST", body: JSON.stringify(input) }),
