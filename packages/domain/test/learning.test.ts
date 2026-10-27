@@ -3,6 +3,7 @@ import {
   canonicalLessonPartOrder,
   evaluateSpeakingCompleteness,
   isLearnerProfileComplete,
+  lessonCompletionActivity,
   mergeLessonProgress,
   validateLessonPartOrder
 } from "../src/learning/index.js";
@@ -65,6 +66,12 @@ describe("learner flow rules", () => {
       markComplete: true
     }, required);
     expect(completed.status).toBe("completed");
+  });
+
+  it("records the configured lesson duration for a first completion and a distinct review", () => {
+    expect(lessonCompletionActivity(0, 20)).toEqual({ activityType: "lesson", minutes: 20 });
+    expect(lessonCompletionActivity(1, 1)).toEqual({ activityType: "lesson_review", minutes: 3 });
+    expect(lessonCompletionActivity(2, 90)).toEqual({ activityType: "lesson_review", minutes: 30 });
   });
 
   it("passes a speaking transcript only when omitted words are at most twenty percent", () => {

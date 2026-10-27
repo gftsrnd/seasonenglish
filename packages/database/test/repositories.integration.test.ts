@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import { resolve } from "node:path";
+import type { LessonProgressView } from "@e4s/contracts";
 import { Client, Pool } from "pg";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { migrateDatabase, resetPublicSchema } from "../src/migrate.js";
@@ -43,6 +44,48 @@ describe("E4S repositories", () => {
         role: "learner",
         status: "active"
       });
+  });
+
+  it("records the first lesson completion and later review separately with the lesson duration", async () => {
+    const learnerId = randomUUID();
+    const lessonId = DEMO_IDS.lessons[1]!;
+    await pool.query(
+      "insert into users (id, organization_id, role, display_name, status) values ($1, $2, 'learner', 'Review Learner', 'active')",
+      [learnerId, DEMO_IDS.organization]
+    );
+    try {
+      const progress: LessonProgressView = {
+        status: "completed" as const,
+        completedPartCodes: ["listening", "reading", "writing", "word_class", "word_use", "speaking"],
+        evidence: {
+          listening: { attempts: 1, answer: "A", score: 100 },
+          reading: { attempts: 1, answer: "A", score: 100 },
+          writing: { attempts: 1, answer: "A", score: 100 },
+          word_class: { attempts: 1, answer: "A", score: 100 },
+          word_use: { attempts: 1, answer: "A", score: 100 },
+          speaking: { attempts: 1, artifactKey: "recording-key", score: 100 }
+        },
+        score: 100
+      };
+      await repositories.learning.saveLessonProgress({ learnerId, lessonId, progress });
+      await repositories.learning.saveLessonProgress({ learnerId, lessonId, progress });
+
+      const activities = await pool.query<{ activity_type: string; minutes: number; evidence: { review?: boolean } }>(
+        `select activity_type, minutes, evidence from activities
+         where learner_id = $1 and reference_type = 'lesson' and reference_id = $2
+         order by occurred_at, activity_type`,
+        [learnerId, lessonId]
+      );
+      expect(activities.rows).toEqual([
+        { activity_type: "lesson", minutes: 10, evidence: { score: 100, review: false } },
+        { activity_type: "lesson_review", minutes: 10, evidence: { score: 100, review: true } }
+      ]);
+    } finally {
+      await pool.query("delete from reward_events where learner_id = $1", [learnerId]);
+      await pool.query("delete from activities where learner_id = $1", [learnerId]);
+      await pool.query("delete from progress_records where learner_id = $1", [learnerId]);
+      await pool.query("delete from users where id = $1", [learnerId]);
+    }
   });
 
   it("returns the learner's active program and published lesson set", async () => {
@@ -300,6 +343,43 @@ describe("E4S repositories", () => {
     expect(a2?.lessons).toHaveLength(5);
   });
 
+  it("keeps a recoverable AI generation record with the draft version without changing the approved version", async () => {
+    const approvedBefore = await repositories.content.latestLessonSet(DEMO_IDS.operator, 1, "A2");
+    expect(approvedBefore).toMatchObject({ status: "published", versionId: DEMO_IDS.publishedLessonSetVersion });
+
+    const provenance = {
+      schemaVersion: 1,
+      generatedAt: "2026-10-27T09:00:00.000Z",
+      prompt: { versionId: "prompt-version-7", content: "Generate measurable objectives." },
+      input: { weekNumber: 1, cefr: "A2", topic: "Meetings" },
+      output: { lessons: approvedBefore!.lessons, failures: [] },
+      validation: { valid: true, issues: [] }
+    };
+    let savedVersionId = "";
+    try {
+      const saved = await repositories.content.saveLessonDraft(
+        DEMO_IDS.operator, 1, "A2", approvedBefore!.lessons, "ai", provenance
+      );
+      savedVersionId = saved.versionId;
+
+      const persisted = await pool.query<{ payload: { generation?: typeof provenance } }>(
+        "select payload from lesson_set_versions where id = $1", [savedVersionId]
+      );
+      expect(persisted.rows[0]?.payload.generation).toMatchObject({
+        schemaVersion: 1,
+        generatedAt: provenance.generatedAt,
+        prompt: provenance.prompt,
+        input: provenance.input,
+        validation: provenance.validation
+      });
+      await expect(pool.query<{ status: string }>(
+        "select status from lesson_set_versions where id = $1", [DEMO_IDS.publishedLessonSetVersion]
+      )).resolves.toMatchObject({ rows: [{ status: "published" }] });
+    } finally {
+      if (savedVersionId) await pool.query("delete from lesson_set_versions where id = $1", [savedVersionId]);
+    }
+  });
+
   it("uses all saved lesson titles from the latest draft or published matrix version", async () => {
     const draftVersionId = randomUUID();
     const reviewVersionId = randomUUID();
@@ -314,8 +394,8 @@ describe("E4S repositories", () => {
     try {
       await pool.query(
         `insert into lesson_set_versions (id, lesson_set_id, version, status, payload, created_by)
-         values ($1, $2, 2, 'draft', '{}'::jsonb, $3),
-                ($4, $2, 3, 'review', '{}'::jsonb, $3)`,
+         values ($1, $2, 1002, 'draft', '{}'::jsonb, $3),
+                ($4, $2, 1003, 'review', '{}'::jsonb, $3)`,
         [draftVersionId, DEMO_IDS.lessonSet, DEMO_IDS.operator, reviewVersionId]
       );
       for (const [index, title] of draftTitles.entries()) {
@@ -334,7 +414,7 @@ describe("E4S repositories", () => {
       const matrix = await repositories.content.lessonMatrix(DEMO_IDS.operator);
       const a2 = matrix?.weeks.find((week) => week.weekNumber === 1)?.cells.find((cell) => cell.cefr === "A2");
 
-      expect(a2).toMatchObject({ status: "review", versionId: reviewVersionId, version: 3 });
+      expect(a2).toMatchObject({ status: "review", versionId: reviewVersionId, version: 1003 });
       expect(a2?.lessons).toEqual([{ dayNumber: 1, title: "Review Monday" }]);
     } finally {
       await pool.query("delete from lesson_set_versions where id = any($1::uuid[])", [[draftVersionId, reviewVersionId]]);

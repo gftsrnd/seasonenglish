@@ -16,10 +16,56 @@ import { conciseGrammarExample, conciseLessonObjective, conciseSpeakingInstructi
 export { normalizeLessonBlankPrompt } from "./text.js";
 import { normalizeLessonBlankPrompt } from "./text.js";
 
+const phonemeSpeechAliases: Record<string, string> = {
+  "/eɪ/": "ay",
+  "/aɪ/": "eye",
+  "/iː/": "ee",
+  "/uː/": "oo"
+};
+
+/** Keeps browser TTS on spoken English rather than structural lesson notation. */
+export function sanitizeGrammarSpeechText(value: string): string {
+  return value
+    .replace(/^(?:example|ví dụ)\s*:\s*/iu, "")
+    .split("|")[0]!
+    .replace(/[+*=~]/gu, " ")
+    .replace(/\s+/gu, " ")
+    .trim();
+}
+
+/** Browser TTS cannot reliably pronounce raw IPA; use a short spoken cue, never a sample word. */
+export function phonemeSpeechText(ipa: string): string {
+  return phonemeSpeechAliases[ipa.trim()] ?? ipa.replaceAll("/", "").trim();
+}
+
 const studyCodes: LessonPartCode[] = ["objective", "vocabulary", "grammar", "pronunciation"];
 const studyDisplayCodes: LessonPartCode[] = ["objective", "instruction", "vocabulary", "grammar", "pronunciation"];
 const practiceCodes: LessonPartCode[] = ["listening", "reading", "writing", "word_class", "word_use", "speaking"];
 const listenButtonStyle = { display: "inline-flex", alignItems: "center", gap: 6 } as const;
+
+function pronunciationListenStorageKey(lessonId: string): string {
+  return `e4s:lesson:${lessonId}:pronunciation-listened`;
+}
+
+function readPronunciationListened(lessonId: string): Set<string> {
+  if (typeof window === "undefined") return new Set();
+  try {
+    const raw = window.localStorage.getItem(pronunciationListenStorageKey(lessonId));
+    const parsed: unknown = raw ? JSON.parse(raw) : [];
+    return new Set(Array.isArray(parsed) ? parsed.filter((value): value is string => typeof value === "string" && value.trim().length > 0) : []);
+  } catch {
+    return new Set();
+  }
+}
+
+function persistPronunciationListened(lessonId: string, words: Set<string>): void {
+  if (typeof window === "undefined") return;
+  try {
+    window.localStorage.setItem(pronunciationListenStorageKey(lessonId), JSON.stringify(Array.from(words)));
+  } catch {
+    // Progress remains usable when private-mode storage is unavailable.
+  }
+}
 
 type VocabularyModalState =
   | { kind: "family"; item: LessonVocabularyItem }
@@ -46,7 +92,7 @@ export function LearnerLesson({ view, actions }: { view: LessonView; actions: Le
   const busyActionRef = useRef<string | null>(null);
   const lessonIdRef = useRef(lesson.id);
   const [completedLocally, setCompletedLocally] = useState(false);
-  const [pronunciationListened, setPronunciationListened] = useState<Set<string>>(() => new Set());
+  const [pronunciationListened, setPronunciationListened] = useState<Set<string>>(() => readPronunciationListened(lesson.id));
   const [vocabularyModal, setVocabularyModal] = useState<VocabularyModalState | null>(null);
   const [appealPart, setAppealPart] = useState<LessonPartCode | null>(null);
   const [appealReasons, setAppealReasons] = useState<Partial<Record<LessonPartCode, string>>>({});
@@ -65,13 +111,20 @@ export function LearnerLesson({ view, actions }: { view: LessonView; actions: Le
       setTab("study");
       setError("");
       setCompletedLocally(false);
-      setPronunciationListened(new Set());
+      setPronunciationListened(readPronunciationListened(lesson.id));
       setAppealPart(null);
       setAppealReasons({});
       busyActionRef.current = null;
       setBusyAction(null);
     }
   }, [lesson.id, lesson.progress.evidence]);
+  const markPronunciationListened = (word: string) => {
+    setPronunciationListened((current) => {
+      const next = new Set(current).add(word);
+      persistPronunciationListened(lesson.id, next);
+      return next;
+    });
+  };
   useEffect(() => {
     const complete = lessonStudyIsComplete(lesson);
     setStudyComplete(complete);
@@ -210,7 +263,7 @@ export function LearnerLesson({ view, actions }: { view: LessonView; actions: Le
         const done = partIsDone(partEvidence, lesson.progress.completedPartCodes.includes(part.code));
         const translations = lessonTranslations(part.content);
         return <li className={`card lesson-part lesson-part--${part.code}`} data-part={part.code} data-testid="app-lesson-part" key={part.code} style={{ boxSizing: "border-box", minWidth: 0, display: "grid", gap: 12, padding: 18 }}>
-          <PartContent cefr={lesson.cefr} sectionNumber={visible.slice(0, index).filter((candidate) => practiceCodes.includes(candidate.code)).length + 1} part={part} speak={actions.speak} openVocabularyModal={setVocabularyModal} resolveVocabularyImage={actions.resolveLessonVocabularyImage} onPronunciationListened={(word) => setPronunciationListened((current) => new Set(current).add(word))} />
+          <PartContent cefr={lesson.cefr} sectionNumber={visible.slice(0, index).filter((candidate) => practiceCodes.includes(candidate.code)).length + 1} part={part} speak={actions.speak} openVocabularyModal={setVocabularyModal} resolveVocabularyImage={actions.resolveLessonVocabularyImage} onPronunciationListened={markPronunciationListened} />
           {practiceCodes.includes(part.code) ? <div className="stack lesson-answer" aria-busy={busyAction === part.code || undefined} style={{ gap: 12, minWidth: 0 }}>
             {part.code === "speaking" && !speakingUnlocked ? <Notice tone="info">Nghe đủ 3 từ mẫu phát âm ở bước Học để mở phần kiểm tra Nói.</Notice> : part.code === "speaking" ? <section className="stack lesson-speaking-answer" aria-label="Bài làm của bạn"><strong>Bài làm của bạn</strong><SpeakingEvidenceControls artifactKey={mediaArtifacts[part.code]} onUploaded={(artifactKey) => setMediaArtifacts((current) => ({ ...current, [part.code]: artifactKey }))} uploadAudio={actions.uploadAssessmentAudio} getAudioReadUrl={actions.getAssessmentAudioReadUrl} /><LessonAnswerControl hideLabel part={part} value={answers[part.code] ?? ""} evidence={partEvidence} disabled={done || Boolean(busyAction)} onChange={(value) => setAnswers((current) => ({ ...current, [part.code]: value }))} /></section> : <LessonAnswerControl part={part} value={answers[part.code] ?? ""} evidence={partEvidence} disabled={done || Boolean(busyAction)} onChange={(value) => setAnswers((current) => ({ ...current, [part.code]: value }))} />}
             {isSelfWritingPart(part) ? <small>Tự viết tối thiểu 2 từ.</small> : null}
@@ -387,6 +440,19 @@ function LessonAudioControl({ source, speak, label = "Nghe đoạn audio" }: { s
   return <SpeechButton text={source.text!} label={label} speak={speak} primary />;
 }
 
+function PhonemeSpeechButton({ targetSound, audioSrc, speak }: { targetSound: string; audioSrc?: string | undefined; speak: LearnerCallbacks["speak"] }) {
+  const playFallback = () => speak(phonemeSpeechText(targetSound), "en-US", { rate: 0.55 });
+  const play = () => {
+    if (!audioSrc?.trim() || typeof Audio === "undefined") {
+      playFallback();
+      return;
+    }
+    const audio = new Audio(audioSrc.trim());
+    void audio.play().catch(playFallback);
+  };
+  return <button className="btn-sm btn-ghost lesson-audio-icon" type="button" aria-label={`Nghe âm ${targetSound}`} title={`Nghe âm ${targetSound}`} onClick={play}><Volume2 size={16} aria-hidden="true" /></button>;
+}
+
 function SpeakingEvidenceControls({
   artifactKey,
   onUploaded,
@@ -547,6 +613,7 @@ function PartContent({
     script?: string;
     audio?: unknown;
     audioUrl?: string;
+    phonemeAudioUrl?: string;
     type?: string;
     prompt?: string;
     formula?: string;
@@ -575,18 +642,14 @@ function PartContent({
   const targetSound = pronunciationTarget(content.focus ?? "");
   const grammarExamples = content.examples?.slice(0, 3) ?? [];
   const speakingModel = conciseSpeakingModel(content.sample ?? content.answer ?? content.modelAnswer);
-  const sectionAudioSource = ["objective", "vocabulary", "pronunciation", "listening", "reading", "writing", "word_class", "word_use", "speaking"].includes(part.code)
-    ? undefined
-    : lessonAudioSource({ ...content, script: lessonPartNarration(part.code, content, cefr) });
   return <>
     {part.code === "grammar" || part.code === "pronunciation" ? null : <div className="row between"><h2 className={part.code === "vocabulary" ? "lesson-vocabulary-heading" : undefined}>{part.code === "objective" ? "MỤC TIÊU BÀI HỌC" : part.code === "instruction" ? "HƯỚNG DẪN LÀM BÀI" : part.code === "vocabulary" ? "TỪ VỰNG" : `${sectionNumber}. ${partHeading(part)}`}</h2></div>}
     {part.code === "objective" && objectiveItems.length ? <><p className="lesson-objective-lead">{learnerObjectiveLead(cefr)}</p><ul className="lesson-objective-list" aria-label="Mục tiêu bài học">{objectiveItems.map((text, index) => <li key={`${index}-${text}`}>{learnerFacingObjectiveBody(text)}</li>)}</ul></> : content.text ? <p className={part.code === "objective" ? "lesson-objective-text" : part.code === "reading" ? "lesson-reading-passage" : undefined}>{part.code === "objective" ? learnerFacingObjective(conciseLessonObjective(content.text), cefr) : content.text}</p> : null}
     {learnerPrompt && part.code !== "speaking" ? <p>{normalizeLessonBlankPrompt(learnerPrompt)}</p> : null}
     {guidanceSteps.length ? <ul className="lesson-instruction-list" aria-label="Hướng dẫn thực hiện">{guidanceSteps.map((step, index) => <li key={`${index}-${step}`}>{step}</li>)}</ul> : null}
-    {sectionAudioSource && (sectionAudioSource.src || sectionAudioSource.text) ? <LessonAudioControl source={sectionAudioSource} speak={speak} label={`Nghe phần ${part.title}`} /> : null}
     {audioSource ? <LessonAudioControl source={audioSource} speak={speak} /> : null}
-    {part.code === "grammar" && content.formula ? <div className="lesson-study-block"><div className="lesson-study-panel-header"><h2>NGỮ PHÁP</h2></div><div className="lesson-grammar-copy"><p className="lesson-study-focus"><strong>{content.formula}</strong></p>{content.usage ? <p className="lesson-study-explanation">{grammarUsageCopy(content.usage)}</p> : null}</div>{grammarExamples.length ? <div className="lesson-example-list" aria-label="Câu ví dụ ngữ pháp">{grammarExamples.map((example, index) => { const concise = conciseGrammarExample(example); return <button className="lesson-example-card" type="button" aria-label={`Nghe câu ví dụ ${index + 1}`} onClick={() => speak(concise)} key={example}><Volume2 size={15} aria-hidden="true" /><span>{concise}</span></button>; })}</div> : null}</div> : null}
-    {part.code === "pronunciation" && content.focus ? <div className="lesson-study-block lesson-pronunciation-summary"><div className="lesson-study-panel-header"><h2>PHÁT ÂM</h2></div><p className="lesson-study-focus"><strong>Âm {targetSound}{pronunciationWords[0]?.word ? ` như trong “${pronunciationWords[0].word}”` : ""}</strong></p>{content.audioUrl ? <audio controls preload="metadata" src={content.audioUrl} aria-label={`Nghe audio mẫu âm ${targetSound}`} /> : <button className="lesson-study-audio" type="button" aria-label={`Nghe âm ${targetSound}`} title="Phát chậm và ngân âm mục tiêu" onClick={() => speak(pronunciationCue(targetSound, pronunciationWords[0]?.word), "en-US", { rate: 0.55 })}><Volume2 size={16} aria-hidden="true" />Nghe âm {targetSound}</button>}{content.instruction ? <p className="lesson-study-explanation">{content.instruction}</p> : null}</div> : null}
+    {part.code === "grammar" && content.formula ? <div className="lesson-study-block"><div className="lesson-study-panel-header"><h2>NGỮ PHÁP</h2></div><div className="lesson-grammar-copy"><p className="lesson-study-focus"><strong>{content.formula}</strong></p>{content.usage ? <p className="lesson-study-explanation">{grammarUsageCopy(content.usage)}</p> : null}</div>{grammarExamples.length ? <div className="lesson-example-list" aria-label="Câu ví dụ ngữ pháp">{grammarExamples.map((example, index) => { const concise = conciseGrammarExample(example); return <button className="lesson-example-card" type="button" aria-label={`Nghe câu ví dụ ${index + 1}`} onClick={() => speak(sanitizeGrammarSpeechText(concise))} key={example}><Volume2 size={15} aria-hidden="true" /><span>{concise}</span></button>; })}</div> : null}</div> : null}
+    {part.code === "pronunciation" && content.focus ? <div className="lesson-study-block lesson-pronunciation-summary"><div className="lesson-study-panel-header"><h2>PHÁT ÂM</h2></div><div className="row between" style={{ gap: 12, alignItems: "center" }}><p className="lesson-study-focus"><strong>Âm {targetSound}{pronunciationWords[0]?.word ? ` như trong “${pronunciationWords[0].word}”` : ""}</strong></p><PhonemeSpeechButton targetSound={targetSound} audioSrc={content.phonemeAudioUrl ?? content.audioUrl} speak={speak} /></div>{content.instruction ? <p className="lesson-study-explanation">{content.instruction}</p> : null}</div> : null}
     {part.code === "speaking" && speakingModel ? <><p className="lesson-speaking-instruction"><strong>Yêu cầu:</strong> {conciseSpeakingInstruction(content.instruction ?? content.prompt)}</p><div className={`card flat lesson-speaking-model${speakingModel.length <= 80 ? " lesson-speaking-model--inline" : ""}`}><strong>{speakingModel}</strong>{content.audioUrl ? <audio controls preload="metadata" src={content.audioUrl} aria-label="Nghe audio mẫu phần Nói" /> : <SpeechButton text={speakingModel} label="Nghe câu mẫu" speak={speak} />}</div></> : null}
      {part.code === "pronunciation" && pronunciationWords.length ? <div className="row lesson-pronunciation-words" aria-label="Luyện từ phát âm">{pronunciationWords.slice(0, 3).map((item) => <span className="row" key={item.word} style={{ gap: 4 }}><button className="btn-sm btn-ghost" style={listenButtonStyle} type="button" aria-label={`Nghe từ phát âm: ${item.word}`} title="Nghe từ phát âm" onClick={() => { onPronunciationListened?.(item.word); speak(item.word); }}><Volume2 size={14} aria-hidden="true" />{item.word}{item.ipa ? ` ${item.ipa}` : ""}</button><button className="btn-sm btn-ghost" type="button" aria-label={`Nghe chậm từ phát âm: ${item.word}`} title="Giữ nhịp chậm để nghe rõ" onClick={() => { onPronunciationListened?.(item.word); speak(item.word, "en-US", { rate: 0.65 }); }}>0.65×</button></span>)}</div> : null}
     {part.code === "vocabulary" ? words.map((item, itemIndex) => <VocabularyCard key={item.word} cefr={cefr} item={item} itemIndex={itemIndex} speak={speak} openModal={openVocabularyModal} resolveImage={resolveVocabularyImage} />) : null}
@@ -618,11 +681,6 @@ function pronunciationTarget(value: string): string {
   return value.match(/\/[^/]+\//)?.[0] ?? value.trim();
 }
 
-function pronunciationCue(targetSound: string, sampleWord?: string): string {
-  const cue = sampleWord?.trim() || targetSound.replaceAll("/", "").trim();
-  return `${cue}… ${cue}`;
-}
-
 function partHeading(part: LessonPart): string {
   const english: Partial<Record<LessonPartCode, string>> = {
     listening: "Listening", reading: "Reading", writing: "Writing", word_class: "Word class", word_use: "Word use", speaking: "Speaking"
@@ -651,25 +709,6 @@ function lessonAudioSource(content: { audio?: unknown; audioUrl?: string; script
   }
   if (typeof content.script === "string" && content.script.trim()) return { text: content.script };
   return {};
-}
-
-function lessonPartNarration(code: LessonPartCode, content: Record<string, unknown>, cefr: string): string {
-  const values: string[] = [];
-  const add = (value: unknown) => { if (typeof value === "string" && value.trim()) values.push(value.trim()); };
-  if (code === "objective" && Array.isArray(content.items)) {
-    add(learnerObjectiveLead(cefr));
-    content.items.forEach((item) => {
-      const text = item && typeof item === "object" ? (item as Record<string, unknown>).text : undefined;
-      if (typeof text === "string") add(learnerFacingObjectiveBody(text));
-    });
-  } else {
-    add(content.text);
-  }
-  if (code === "instruction" && Array.isArray(content.steps)) content.steps.forEach(add);
-  [content.passage, content.formula, content.usage, content.instruction, content.prompt, content.question].forEach(add);
-  if (Array.isArray(content.examples)) content.examples.forEach(add);
-  if (Array.isArray(content.options)) content.options.forEach(add);
-  return Array.from(new Set(values)).join(". ");
 }
 
 function isAudioUrl(value: string): boolean {

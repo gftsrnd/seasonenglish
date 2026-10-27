@@ -548,4 +548,61 @@ describe("content operations API", () => {
       partialDay.parts.find((part) => part.code === "objective")?.content
     );
   });
+
+  it("keeps an immutable generation record on the recoverable draft without replacing the approved lesson", async () => {
+    const created = await app.inject({
+      method: "PUT", url: "/api/v1/content/lesson-sets/2/A2/draft", headers: { cookie: makerCookie },
+      payload: { lessons: [1, 2, 3, 4, 5].map(lesson) }
+    });
+    expect(created.statusCode, created.body).toBe(201);
+    const base = created.json() as { versionId: string };
+    const review = await app.inject({
+      method: "POST", url: `/api/v1/content/lesson-set-versions/${base.versionId}/review`, headers: { cookie: makerCookie }, payload: {}
+    });
+    expect(review.statusCode, review.body).toBe(200);
+    const publication = await app.inject({
+      method: "POST", url: `/api/v1/content/lesson-set-versions/${base.versionId}/publication`, headers: { cookie: makerCookie }, payload: {}
+    });
+    expect(publication.statusCode, publication.body).toBe(200);
+
+    const before = await pool.query<{ id: string; status: string }>(
+      `select lsv.id, lsv.status
+       from lesson_sets ls
+       join program_weeks pw on pw.id = ls.program_week_id
+       join lesson_set_versions lsv on lsv.lesson_set_id = ls.id
+       where pw.week_number = 2 and ls.cefr = 'A2' and lsv.status = 'published'`
+    );
+    expect(before.rows).toHaveLength(1);
+
+    const generated = await app.inject({
+      method: "POST", url: "/api/v1/content/lesson-sets/2/A2/generate", headers: { cookie: makerCookie }, payload: {}
+    });
+    expect(generated.statusCode, generated.body).toBe(201);
+    const draft = generated.json() as { versionId: string; status: string };
+    expect(draft.status).toBe("draft");
+
+    const stored = await pool.query<{ payload: Record<string, unknown> }>(
+      "select payload from lesson_set_versions where id = $1",
+      [draft.versionId]
+    );
+    expect(stored.rows[0]?.payload).toMatchObject({
+      source: "ai",
+      generation: expect.objectContaining({
+        prompt: expect.objectContaining({ versionId: expect.any(String), content: expect.any(String) }),
+        input: expect.objectContaining({ weekNumber: 2, cefr: "A2" }),
+        output: expect.any(Object),
+        validation: expect.objectContaining({ valid: expect.any(Boolean), issues: expect.any(Array) }),
+        generatedAt: expect.any(String)
+      })
+    });
+
+    const after = await pool.query<{ id: string; status: string }>(
+      `select lsv.id, lsv.status
+       from lesson_sets ls
+       join program_weeks pw on pw.id = ls.program_week_id
+       join lesson_set_versions lsv on lsv.lesson_set_id = ls.id
+       where pw.week_number = 2 and ls.cefr = 'A2' and lsv.status = 'published'`
+    );
+    expect(after.rows).toEqual(before.rows);
+  });
 });

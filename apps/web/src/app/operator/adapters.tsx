@@ -285,16 +285,13 @@ function renderLessonPart(code: string, value: unknown, media?: { cefr: string; 
     return [{ word: record.word, ipa: typeof record.ipa === "string" ? record.ipa.trim() : "" }];
   });
   const cefr = media?.cefr ?? "A1";
-  const sectionAudio = ["objective", "vocabulary", "pronunciation", "listening", "reading", "writing", "word_class", "word_use", "speaking"].includes(code)
-    ? undefined
-    : operatorAudioSource({ ...content, script: operatorPartNarration(code, content, cefr) });
   if (code === "objective") {
     const objectives = (asArray(content.items) ?? []).map(asRecord).flatMap(item => typeof item?.text === "string" && item.text.trim() ? [item.text.trim()] : []);
     return objectives.length
-      ? <><p className="lesson-objective-lead">{learnerObjectiveLead(cefr)}</p><ul className="lesson-objective-list" aria-label="Mục tiêu bài học">{objectives.map((objective, index) => <li key={`${objective}-${index}`}>{learnerFacingObjectiveBody(objective)}</li>)}</ul>{sectionAudio ? <OperatorAudioControl source={sectionAudio} label="Nghe phần Mục tiêu bài học" /> : null}</>
-      : <><p className="lesson-objective-text">{learnerFacingObjective(conciseLessonObjective(text("text")), cefr)}</p>{sectionAudio ? <OperatorAudioControl source={sectionAudio} label="Nghe phần Mục tiêu bài học" /> : null}</>;
+      ? <><p className="lesson-objective-lead">{learnerObjectiveLead(cefr)}</p><ul className="lesson-objective-list" aria-label="Mục tiêu bài học">{objectives.map((objective, index) => <li key={`${objective}-${index}`}>{learnerFacingObjectiveBody(objective)}</li>)}</ul></>
+      : <p className="lesson-objective-text">{learnerFacingObjective(conciseLessonObjective(text("text")), cefr)}</p>;
   }
-  if (code === "instruction") return <><PreviewList values={strings("steps")} />{sectionAudio ? <OperatorAudioControl source={sectionAudio} label="Nghe phần Hướng dẫn làm bài" /> : null}</>;
+  if (code === "instruction") return <PreviewList values={strings("steps")} />;
   if (code === "vocabulary") {
     const items = (asArray(content.items) ?? []).map(asRecord).filter((item): item is Record<string, unknown> => item !== undefined);
     return <div className="vocabulary-list">{items.map((item, index) => <OperatorVocabularyCard item={item} index={index} media={media} key={`${String(item.word)}-${index}`} />)}</div>;
@@ -302,21 +299,21 @@ function renderLessonPart(code: string, value: unknown, media?: { cefr: string; 
   if (code === "grammar") {
     const formula = text("formula", "theory") || "—";
     const examples = strings("examples").slice(0, 3);
-    return <div className="operator-study-block"><div className="lesson-study-panel-header"><h2>NGỮ PHÁP</h2></div><div className="lesson-grammar-copy"><p className="lesson-study-focus"><strong>{formula}</strong></p>{text("usage") ? <p className="lesson-study-explanation">{grammarUsageCopy(text("usage")!)}</p> : null}</div>{examples.length ? <div className="lesson-example-list" aria-label="Câu ví dụ ngữ pháp">{examples.map((example, index) => { const concise = conciseGrammarExample(example); return <button className="lesson-example-card" type="button" aria-label={`Nghe câu ví dụ ${index + 1}`} onClick={() => speakOperatorText(concise)} key={`${example}-${index}`}><Volume2 size={15} aria-hidden="true" /><span>{concise}</span></button>; })}</div> : null}{sectionAudio ? <OperatorAudioControl source={sectionAudio} label="Nghe phần Ngữ pháp" /> : null}</div>;
+    return <div className="operator-study-block"><div className="lesson-study-panel-header"><h2>NGỮ PHÁP</h2></div><div className="lesson-grammar-copy"><p className="lesson-study-focus"><strong>{formula}</strong></p>{text("usage") ? <p className="lesson-study-explanation">{grammarUsageCopy(text("usage")!)}</p> : null}</div>{examples.length ? <div className="lesson-example-list" aria-label="Câu ví dụ ngữ pháp">{examples.map((example, index) => { const concise = conciseGrammarExample(example); return <button className="lesson-example-card" type="button" aria-label={`Nghe câu ví dụ ${index + 1}`} onClick={() => speakOperatorText(sanitizeOperatorGrammarSpeechText(concise))} key={`${example}-${index}`}><Volume2 size={15} aria-hidden="true" /><span>{concise}</span></button>; })}</div> : null}</div>;
   }
   if (code === "pronunciation") {
     const focus = text("focus") || "—";
     const targetSound = pronunciationTarget(focus);
     const referenceWord = pronunciationWords[0]?.word;
-    return <div className="operator-study-block operator-pronunciation"><div className="lesson-study-panel-header"><h2>PHÁT ÂM</h2></div><p className="lesson-study-focus"><strong>Âm {targetSound}{referenceWord ? ` như trong “${referenceWord}”` : ""}</strong></p>{text("audioUrl") ? <audio controls preload="metadata" src={text("audioUrl")} aria-label="Nghe audio mẫu phát âm" /> : <OperatorSpeechButton text={`${referenceWord || targetSound}… ${referenceWord || targetSound}`} label={`Nghe âm ${targetSound}`} />}{text("instruction", "tip") ? <p className="operator-pronunciation-tip lesson-study-explanation">{text("instruction", "tip")}</p> : null}{pronunciationWords.length ? <div className="operator-pronunciation-words" aria-label="Luyện từ phát âm">{pronunciationWords.slice(0, 3).map(item => <button className="btn-sm btn-ghost operator-audio-button" type="button" key={item.word} aria-label={`Nghe từ phát âm: ${item.word}`} onClick={() => speakOperatorText(item.word)}><Volume2 size={15} aria-hidden="true" /><strong>{item.word}</strong>{item.ipa ? <span>{item.ipa}</span> : null}</button>)}</div> : null}</div>;
+    return <div className="operator-study-block operator-pronunciation"><div className="lesson-study-panel-header"><h2>PHÁT ÂM</h2></div><div className="row between" style={{ gap: 12, alignItems: "center" }}><p className="lesson-study-focus"><strong>Âm {targetSound}{referenceWord ? ` như trong “${referenceWord}”` : ""}</strong></p><OperatorPhonemeButton targetSound={targetSound} audioSrc={text("phonemeAudioUrl", "audioUrl")} /></div>{text("instruction", "tip") ? <p className="operator-pronunciation-tip lesson-study-explanation">{text("instruction", "tip")}</p> : null}{pronunciationWords.length ? <div className="operator-pronunciation-words" aria-label="Luyện từ phát âm">{pronunciationWords.slice(0, 3).map(item => <button className="btn-sm btn-ghost operator-audio-button" type="button" key={item.word} aria-label={`Nghe từ phát âm: ${item.word}`} onClick={() => speakOperatorText(item.word)}><Volume2 size={15} aria-hidden="true" /><strong>{item.word}</strong>{item.ipa ? <span>{item.ipa}</span> : null}</button>)}</div> : null}</div>;
   }
   if (code === "listening") {
     const audio = operatorAudioSource(content);
     return <div className="operator-practice-content"><OperatorAudioControl source={audio} /><p className="operator-practice-transcript">{text("script") || (audio.src ? "" : audio.text) || "—"}</p><p className="operator-question"><strong>Câu hỏi:</strong> {text("prompt", "question") || "—"}</p><AnswerOptions options={strings("options")} answer={text("answer")} /></div>;
   }
-  if (code === "reading") return <div className="operator-practice-content"><div className="operator-reading-passage">{text("text", "passage", "script") || "—"}</div>{sectionAudio ? <OperatorAudioControl source={sectionAudio} label="Nghe phần Đọc" /> : null}<p className="operator-question"><strong>Câu hỏi:</strong> {text("prompt", "question") || "—"}</p><AnswerOptions options={strings("options")} answer={text("answer")} /></div>;
-  if (code === "writing") return <div className="operator-practice-content">{sectionAudio ? <OperatorAudioControl source={sectionAudio} label="Nghe phần Viết" /> : null}<p className="operator-question"><strong>Đề bài:</strong> {text("prompt") || "—"}</p><AnswerOptions options={strings("options")} answer={text("answer")} /></div>;
-  if (code === "word_class" || code === "word_use") return <div className="operator-practice-content">{sectionAudio ? <OperatorAudioControl source={sectionAudio} label={code === "word_class" ? "Nghe phần Từ loại" : "Nghe phần Dùng từ"} /> : null}<p className="operator-question"><strong>{code === "word_class" ? "Nhận diện từ loại:" : "Chọn cách dùng đúng:"}</strong> {text("prompt", "question") || "—"}</p><AnswerOptions options={strings("options")} answer={text("answer")} /></div>;
+  if (code === "reading") return <div className="operator-practice-content"><div className="operator-reading-passage">{text("text", "passage", "script") || "—"}</div><p className="operator-question"><strong>Câu hỏi:</strong> {text("prompt", "question") || "—"}</p><AnswerOptions options={strings("options")} answer={text("answer")} /></div>;
+  if (code === "writing") return <div className="operator-practice-content"><p className="operator-question"><strong>Đề bài:</strong> {text("prompt") || "—"}</p><AnswerOptions options={strings("options")} answer={text("answer")} /></div>;
+  if (code === "word_class" || code === "word_use") return <div className="operator-practice-content"><p className="operator-question"><strong>{code === "word_class" ? "Nhận diện từ loại:" : "Chọn cách dùng đúng:"}</strong> {text("prompt", "question") || "—"}</p><AnswerOptions options={strings("options")} answer={text("answer")} /></div>;
   if (code === "speaking") {
     const model = conciseSpeakingModel(text("answer", "modelAnswer", "sample"));
     const instruction = conciseSpeakingInstruction(text("instruction", "prompt"));
@@ -365,6 +362,27 @@ function operatorAudioSource(content: Record<string, unknown>): OperatorAudioSou
 
 function isOperatorAudioUrl(value: string): boolean {
   return /^(?:https?:|blob:|data:audio\/|\/)/i.test(value) || /\.(?:mp3|m4a|wav|ogg|oga|webm|aac|flac|amr|3gp)(?:[?#].*)?$/i.test(value);
+}
+
+function sanitizeOperatorGrammarSpeechText(value: string): string {
+  return value.replace(/^(?:example|ví dụ)\s*:\s*/iu, "").split("|")[0]!.replace(/[+*=~]/gu, " ").replace(/\s+/gu, " ").trim();
+}
+
+function operatorPhonemeSpeechText(ipa: string): string {
+  return ({ "/eɪ/": "ay", "/aɪ/": "eye", "/iː/": "ee", "/uː/": "oo" } as Record<string, string>)[ipa.trim()] ?? ipa.replaceAll("/", "").trim();
+}
+
+function OperatorPhonemeButton({ targetSound, audioSrc }: { targetSound: string; audioSrc?: string | undefined }) {
+  const playFallback = () => speakOperatorText(operatorPhonemeSpeechText(targetSound));
+  const play = () => {
+    if (!audioSrc?.trim() || typeof Audio === "undefined") {
+      playFallback();
+      return;
+    }
+    const audio = new Audio(audioSrc.trim());
+    void audio.play().catch(playFallback);
+  };
+  return <button className="btn-sm btn-ghost operator-audio-button operator-audio-button--icon" type="button" aria-label={`Nghe âm ${targetSound}`} title={`Nghe âm ${targetSound}`} onClick={play}><Volume2 size={16} aria-hidden="true" /></button>;
 }
 
 function OperatorSpeechButton({ text, label, iconOnly = false, primary = false }: { text: string; label: string; iconOnly?: boolean; primary?: boolean }) {

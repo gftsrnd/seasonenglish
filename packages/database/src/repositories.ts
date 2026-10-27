@@ -2,6 +2,7 @@ import { createCipheriv, createDecipheriv, createHash, randomBytes, randomUUID }
 import type { Pool, PoolClient } from "pg";
 import { buildLevelReadiness as calculateLevelReadiness, nextEffectiveMonday, passesLevelUpExam, createLevelRetryPlan, type LevelReadinessMetrics, type LevelReadinessThresholds } from "@e4s/domain/progression";
 import { validateLessonPublication } from "@e4s/domain/content";
+import { lessonCompletionActivity } from "@e4s/domain/learning";
 import type {
   AccountRole,
   AssessmentDeviceEvidence,
@@ -1083,11 +1084,37 @@ class LearningRepository {
     const row = result.rows[0];
     if (!row) throw new Error("Could not persist lesson progress");
     if (input.progress.status === "completed") {
+      const [previousActivities, lessonDuration] = await Promise.all([
+        this.pool.query<{ count: string }>(
+          `select count(*)::text as count from activities
+           where learner_id = $1 and reference_type = 'lesson' and reference_id = $2
+             and activity_type in ('lesson', 'lesson_review')`,
+          [input.learnerId, input.lessonId]
+        ),
+        this.pool.query<{ duration_minutes: string | null }>(
+          `select case
+                    when coalesce(content->>'durationMinutes', '') ~ '^\\d+$'
+                      then content->>'durationMinutes'
+                    else null
+                  end as duration_minutes
+           from lesson_versions
+           where lesson_id = $1 and status = 'published'
+           order by version desc
+           limit 1`,
+          [input.lessonId]
+        )
+      ]);
+      const activity = lessonCompletionActivity(
+        Number(previousActivities.rows[0]?.count ?? 0),
+        Number(lessonDuration.rows[0]?.duration_minutes ?? 10)
+      );
       await this.pool.query(
         `insert into activities (id, learner_id, activity_type, reference_type, reference_id, minutes, evidence)
-         select $1, $2, 'lesson', 'lesson', $3, 10, $4::jsonb
-         where not exists (select 1 from activities where learner_id = $2 and reference_type = 'lesson' and reference_id = $3)`,
-        [randomUUID(), input.learnerId, input.lessonId, JSON.stringify({ score: input.progress.score ?? null })]
+         values ($1, $2, $3, 'lesson', $4, $5, $6::jsonb)`,
+        [
+          randomUUID(), input.learnerId, activity.activityType, input.lessonId, activity.minutes,
+          JSON.stringify({ score: input.progress.score ?? null, review: activity.activityType === "lesson_review" })
+        ]
       );
       await syncLearnerRewards(this.pool, input.learnerId);
     }
@@ -2206,7 +2233,15 @@ class ContentRepository {
     weekNumber: number,
     cefr: CefrLevel,
     lessonDrafts: readonly ContentLessonDraftInput[],
-    source: "manual" | "ai" = "manual"
+    source: "manual" | "ai" = "manual",
+    generation?: {
+      schemaVersion: number;
+      prompt: { versionId: string; content: string };
+      input: Record<string, unknown>;
+      output: unknown;
+      validation: { valid: boolean; issues: readonly unknown[] };
+      generatedAt: string;
+    }
   ): Promise<ContentLessonSetVersionView> {
     const client = await this.pool.connect();
     let versionId = "";
@@ -2242,7 +2277,12 @@ class ContentRepository {
         `insert into lesson_set_versions (id, lesson_set_id, version, status, payload, created_by)
          values ($1, $2, $3, 'draft', $4::jsonb, $5)`,
         [versionId, lessonSetId, next.rows[0]?.version ?? 1,
-          JSON.stringify({ source, lessonCount: lessonDrafts.length, topic: row.topic }), actorId]
+          JSON.stringify({
+            source,
+            lessonCount: lessonDrafts.length,
+            topic: row.topic,
+            ...(generation ? { generation } : {})
+          }), actorId]
       );
       for (const draft of lessonDrafts) {
         const lessonId = randomUUID();

@@ -18,6 +18,7 @@ import { z } from "zod";
 import { createRoleGuard } from "../identity/policy.js";
 import type { ContentMediaService } from "../media/index.js";
 import { lessonDaysNeedingRepair, mergeGeneratedLessons, type LessonRepairMode } from "./enrichment.js";
+import { buildGenerationProvenance } from "./generation-provenance.js";
 import { generateWeeklyLessons } from "./weekly-generation.js";
 import { generateWeekSuggestions } from "./week-suggestion-generation.js";
 import { publicLessonGenerationFailure } from "./generation-errors.js";
@@ -468,7 +469,22 @@ export function registerContentRoutes(
         } catch (error) {
           request.log.warn({ code: errorCode(error, "AI_RUN_RECORD_FAILED") }, "Lesson repair audit record failed");
         }
-        return reply.code(201).send(await repositories.content.saveLessonDraft(actorId, params.data.week, params.data.cefr, lessons, "ai"));
+        return reply.code(201).send(await repositories.content.saveLessonDraft(
+          actorId,
+          params.data.week,
+          params.data.cefr,
+          lessons,
+          "ai",
+          buildGenerationProvenance({
+            promptVersionId: task.promptVersionId,
+            prompt: task.prompt,
+            week,
+            cefr: params.data.cefr,
+            extraInput: { action, dayNumbers, excludedVocabulary },
+            output: generated.output,
+            validation
+          })
+        ));
       } catch (error) {
         const code = errorCode(error, "AI_LESSON_REPAIR_FAILED");
         request.log.warn({ code, message: error instanceof Error ? error.message : String(error) }, "Weekly lesson repair failed");
@@ -527,7 +543,23 @@ export function registerContentRoutes(
         excludedVocabulary,
         qualityReview: true
       });
-      const saved = await repositories.content.saveLessonDraft(actorId, week.weekNumber, params.data.cefr, generated.lessons, "ai");
+      const validation = validateLessonDraft(generated.lessons);
+      const saved = await repositories.content.saveLessonDraft(
+        actorId,
+        week.weekNumber,
+        params.data.cefr,
+        generated.lessons,
+        "ai",
+        buildGenerationProvenance({
+          promptVersionId: task.promptVersionId,
+          prompt: task.prompt,
+          week,
+          cefr: params.data.cefr,
+          extraInput: { excludedVocabulary },
+          output: generated.output,
+          validation
+        })
+      );
       try {
         await repositories.aiRuns.recordSucceeded({
           userId: actorId,

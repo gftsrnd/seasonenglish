@@ -3,7 +3,7 @@ import "@testing-library/jest-dom/vitest";
 import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import { userEvent } from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { LearnerLesson, normalizeLessonBlankPrompt } from "./Learning.js";
+import { LearnerLesson, normalizeLessonBlankPrompt, phonemeSpeechText, sanitizeGrammarSpeechText } from "./Learning.js";
 
 afterEach(cleanup);
 
@@ -72,8 +72,8 @@ describe("learner lesson study content", () => {
     expect(screen.getByRole("button", { name: "Nghe từ phát âm: I" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Nghe từ phát âm: nice" })).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Nghe phần Mục tiêu bài học" })).not.toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Nghe phần Hướng dẫn làm bài" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Nghe phần Ngữ pháp" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Nghe phần Hướng dẫn làm bài" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Nghe phần Ngữ pháp" })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Nghe mẫu ngữ pháp" })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Chi tiết từ liên quan" })).not.toBeInTheDocument();
 
@@ -90,7 +90,7 @@ describe("learner lesson study content", () => {
     fireEvent.click(screen.getByRole("button", { name: "Nghe chậm từ phát âm: I" }));
     expect(speak).toHaveBeenCalledWith("I", "en-US", { rate: 0.65 });
     fireEvent.click(screen.getByRole("button", { name: "Nghe âm /aɪ/" }));
-    expect(speak).toHaveBeenLastCalledWith("I… I", "en-US", { rate: 0.55 });
+    expect(speak).toHaveBeenLastCalledWith("eye", "en-US", { rate: 0.55 });
   });
 
   it("keeps exercise audio only where the exercise requires listening or speaking practice", async () => {
@@ -127,6 +127,25 @@ describe("learner lesson study content", () => {
   it("renders every fill-in blank as one continuous line", () => {
     expect(normalizeLessonBlankPrompt("Please write - - - here and _ _ _ there.")).toBe("Please write _____ here and _____ there.");
     expect(normalizeLessonBlankPrompt("Please write -------- here.")).toBe("Please write _____ here.");
+  });
+
+  it("speaks only a natural grammar example and keeps a phoneme separate from its sample word", () => {
+    expect(sanitizeGrammarSpeechText("Example: She is OK + now. | Do not read this label")).toBe("She is OK now.");
+    expect(phonemeSpeechText("/eɪ/")).toBe("ay");
+    expect(phonemeSpeechText("/eɪ/")).not.toContain("safe");
+  });
+
+  it("keeps a supplied phoneme asset behind its own small speaker instead of a shared audio player", () => {
+    const lesson = {
+      id: "lesson-phoneme-asset", title: "Pronunciation", dayNumber: 1, weekNumber: 1, weekTopic: "Work",
+      durationMinutes: 10, cefr: "A2",
+      content: { parts: [{ code: "pronunciation", title: "Phát âm", content: { focus: "/eɪ/", audioUrl: "/audio/ay.mp3", words: ["safe", "day", "take"] } }] },
+      progress: { status: "in_progress", completedPartCodes: ["pronunciation"], evidence: {} }
+    } as any;
+    render(<LearnerLesson view={{ lesson, lock: null }} actions={{ navigate: vi.fn(), speak: vi.fn(), saveLessonProgress: vi.fn() } as any} />);
+
+    expect(screen.getByRole("button", { name: "Nghe âm /eɪ/" })).toBeInTheDocument();
+    expect(screen.queryByLabelText("Nghe audio mẫu âm /eɪ/")).not.toBeInTheDocument();
   });
 
   it("requires at least two words before enabling a self-writing submission", () => {
@@ -331,7 +350,8 @@ describe("learner lesson study content", () => {
       ] },
       progress: { status: "in_progress", completedPartCodes: ["objective", "instruction", "pronunciation"], evidence: {} }
     } as any;
-    render(<LearnerLesson view={{ lesson, lock: null }} actions={{ navigate: vi.fn(), speak: vi.fn(), saveLessonProgress: vi.fn() } as any} />);
+    const actions = { navigate: vi.fn(), speak: vi.fn(), saveLessonProgress: vi.fn() } as any;
+    const { unmount } = render(<LearnerLesson view={{ lesson, lock: null }} actions={actions} />);
 
     await user.click(screen.getByRole("tab", { name: /2\. bài tập/i }));
     expect(screen.getByText(/nghe đủ 3 từ mẫu phát âm/i)).toBeInTheDocument();
@@ -345,6 +365,39 @@ describe("learner lesson study content", () => {
 
     expect(screen.queryByText(/nghe đủ 3 từ mẫu phát âm/i)).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Kiểm tra nói" })).toBeInTheDocument();
+
+    unmount();
+    render(<LearnerLesson view={{ lesson, lock: null }} actions={actions} />);
+    await user.click(screen.getByRole("tab", { name: /2\. bài tập/i }));
+    expect(screen.queryByText(/nghe đủ 3 từ mẫu phát âm/i)).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Kiểm tra nói" })).toBeInTheDocument();
+  });
+
+  it("enables Kiểm tra nói after either an eligible upload or recording evidence is available", async () => {
+    const user = userEvent.setup();
+    const uploadAssessmentAudio = vi.fn().mockResolvedValue("assessment-audio/lesson-speaking.mp3");
+    const lesson = {
+      id: "lesson-speaking-upload", title: "Speaking", dayNumber: 1, weekNumber: 1, weekTopic: "Work",
+      durationMinutes: 10, cefr: "A2",
+      content: { parts: [
+        { code: "objective", title: "Mục tiêu", content: { text: "Nói một câu." } },
+        { code: "pronunciation", title: "Phát âm", content: { focus: "/eɪ/", words: ["safe", "day", "take"] } },
+        { code: "speaking", title: "Nói", content: { instruction: "Nói câu mẫu.", sample: "It is safe today." } }
+      ] },
+      progress: { status: "in_progress", completedPartCodes: ["objective", "pronunciation"], evidence: {} }
+    } as any;
+    render(<LearnerLesson view={{ lesson, lock: null }} actions={{ navigate: vi.fn(), speak: vi.fn(), saveLessonProgress: vi.fn(), uploadAssessmentAudio } as any} />);
+
+    await user.click(screen.getByRole("button", { name: "Nghe từ phát âm: safe" }));
+    await user.click(screen.getByRole("button", { name: "Nghe từ phát âm: day" }));
+    await user.click(screen.getByRole("button", { name: "Nghe từ phát âm: take" }));
+    await user.click(screen.getByRole("tab", { name: /2\. bài tập/i }));
+    const submit = screen.getByRole("button", { name: "Kiểm tra nói" });
+    expect(submit).toBeDisabled();
+
+    await user.upload(screen.getByLabelText("Tải file ghi âm speaking"), new File(["audio"], "answer.mp3", { type: "audio/mpeg" }));
+    expect(uploadAssessmentAudio).toHaveBeenCalledWith(expect.any(File), "answer.mp3");
+    expect(screen.getByRole("button", { name: "Kiểm tra nói" })).toBeEnabled();
   });
 
   it("requires the learner to enter a five-character appeal reason and persists that reason", async () => {

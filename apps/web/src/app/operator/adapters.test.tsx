@@ -233,7 +233,7 @@ describe("lesson detail warnings", () => {
     expect(screen.getByRole("list", { name: "Mục tiêu bài học" })).not.toHaveTextContent("By the end of this lesson");
     expect(screen.queryByLabelText("Nghe audio phần Mục tiêu bài học")).not.toBeInTheDocument();
     expect(screen.getByLabelText("Nghe audio từ feedback")).toHaveAttribute("src", "/audio/feedback.mp3");
-    expect(screen.getByLabelText("Nghe audio phần Ngữ pháp")).toHaveAttribute("src", "/audio/grammar.mp3");
+    expect(screen.queryByLabelText("Nghe audio phần Ngữ pháp")).not.toBeInTheDocument();
   });
 
   it("renders each practice skill as an interactive learner-style lane", () => {

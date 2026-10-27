@@ -213,7 +213,7 @@ describe("operator granular lesson editor", () => {
     expect(byCode("word_use")).toEqual(expect.objectContaining({ prompt: "Choose the natural sentence.", answer: "The order is delayed." }));
   });
 
-  it("uploads and persists manual vocabulary images and lesson audio without AI", async () => {
+  it("uploads and persists manual vocabulary images and listening audio without AI", async () => {
     const user = userEvent.setup();
     const onSave = vi.fn().mockResolvedValue(undefined);
     const uploadMedia = vi.fn(async (kind: "audio" | "image", _file: Blob, filename: string) => ({
@@ -223,12 +223,10 @@ describe("operator granular lesson editor", () => {
     const { container } = render(<LessonFormEditor weekNumber={1} cefr="A2" initial={emptyLesson(1)} onSave={onSave} onCancel={() => undefined} uploadMedia={uploadMedia} />);
 
     const image = new File(["image"], "colleague.png", { type: "image/png" });
-    const pronunciation = new File(["voice"], "pronunciation.mp3", { type: "audio/mpeg" });
     const listening = new File(["voice"], "listening.wav", { type: "audio/wav" });
     await user.upload(screen.getByLabelText("Tải Ảnh minh họa từ 1"), image);
-    await user.upload(screen.getByLabelText("Tải Audio mẫu phát âm"), pronunciation);
     await user.upload(screen.getByLabelText("Tải File audio phần Nghe"), listening);
-    expect(uploadMedia).toHaveBeenCalledTimes(3);
+    expect(uploadMedia).toHaveBeenCalledTimes(2);
     expect(container.querySelector('input[accept="image/png,image/jpeg,image/webp,image/gif"]')).toBeInTheDocument();
     expect((screen.getByLabelText("Ảnh minh họa từ 1 URL") as HTMLInputElement).value).toContain("image-colleague.png");
 
@@ -236,36 +234,30 @@ describe("operator granular lesson editor", () => {
     await user.click(screen.getByRole("button", { name: "Lưu dù còn thiếu" }));
     const saved = onSave.mock.calls[0]?.[0];
     expect(saved.parts.find((part: { code: string }) => part.code === "vocabulary")?.content.items[0]).toEqual(expect.objectContaining({ imageUrl: expect.stringContaining("image-colleague.png") }));
-    expect(saved.parts.find((part: { code: string }) => part.code === "pronunciation")?.content.audioUrl).toContain("audio-pronunciation.mp3");
+    expect(saved.parts.find((part: { code: string }) => part.code === "pronunciation")?.content.audioUrl).toBe("");
     expect(saved.parts.find((part: { code: string }) => part.code === "listening")?.content.audioUrl).toContain("audio-listening.wav");
     expect(saved.parts.find((part: { code: string }) => part.code === "speaking")?.content.audioUrl).toBe("");
 
     cleanup();
     render(<LessonFormEditor weekNumber={1} cefr="A2" initial={saved} onSave={vi.fn()} onCancel={() => undefined} uploadMedia={uploadMedia} />);
     expect((screen.getByLabelText("Ảnh minh họa từ 1 URL") as HTMLInputElement).value).toContain("image-colleague.png");
-    expect((screen.getByLabelText("Audio mẫu phát âm URL") as HTMLInputElement).value).toContain("audio-pronunciation.mp3");
+    expect(screen.queryByLabelText("Audio mẫu phát âm URL")).not.toBeInTheDocument();
     expect((screen.getByLabelText("File audio phần Nghe URL") as HTMLInputElement).value).toContain("audio-listening.wav");
     expect(screen.queryByLabelText("Audio mẫu phần Nói URL")).not.toBeInTheDocument();
   });
 
-  it("offers audio only for learning content and the listening exercise", async () => {
+  it("offers upload audio only for individual vocabulary and the listening exercise", async () => {
     const user = userEvent.setup();
     const onSave = vi.fn().mockResolvedValue(undefined);
     vi.spyOn(window, "confirm").mockReturnValue(true);
     render(<LessonFormEditor weekNumber={1} cefr="A2" initial={emptyLesson(1)} onSave={onSave} onCancel={() => undefined} />);
 
-    const sectionAudioLabels = [
-      "Audio hướng dẫn làm bài URL",
-      "Audio phần Ngữ pháp URL",
-      "Audio mẫu phát âm URL",
-      "File audio phần Nghe URL"
-    ];
+    const removedSharedAudioLabels = ["Audio hướng dẫn làm bài URL", "Audio phần Ngữ pháp URL", "Audio mẫu phát âm URL"];
     expect(screen.queryByLabelText("Audio mục tiêu bài học URL")).not.toBeInTheDocument();
+    removedSharedAudioLabels.forEach(label => expect(screen.queryByLabelText(label)).not.toBeInTheDocument());
+    expect(screen.getByLabelText("File audio phần Nghe URL")).toBeInTheDocument();
     ["Audio phần Đọc URL", "Audio phần Viết URL", "Audio phần Từ loại URL", "Audio phần Dùng từ URL", "Audio mẫu phần Nói URL"].forEach(label => {
       expect(screen.queryByLabelText(label)).not.toBeInTheDocument();
-    });
-    sectionAudioLabels.forEach((label, index) => {
-      fireEvent.change(screen.getByLabelText(label), { target: { value: `/audio/section-${index + 1}.mp3` } });
     });
     [1, 2, 3].forEach((index) => {
       fireEvent.change(screen.getByLabelText(`Audio từ vựng ${index} URL`), { target: { value: `/audio/word-${index}.mp3` } });
@@ -282,8 +274,8 @@ describe("operator granular lesson editor", () => {
     const saved = onSave.mock.calls[0]?.[0];
     const byCode = (code: string) => saved.parts.find((part: { code: string }) => part.code === code)?.content;
     expect(byCode("objective").audioUrl).toBe("");
-    expect(byCode("instruction").audioUrl).toBe("/audio/section-1.mp3");
-    expect(byCode("grammar").audioUrl).toBe("/audio/section-2.mp3");
+    expect(byCode("instruction").audioUrl).toBe("");
+    expect(byCode("grammar").audioUrl).toBe("");
     expect(byCode("reading").audioUrl).toBe("");
     expect(byCode("writing").audioUrl).toBe("");
     expect(byCode("word_class").audioUrl).toBe("");

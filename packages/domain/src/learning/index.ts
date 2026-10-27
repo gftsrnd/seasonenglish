@@ -60,6 +60,17 @@ export interface ProgressUpdate {
   score?: number | undefined;
 }
 
+export function lessonCompletionActivity(
+  completionCount: number,
+  configuredMinutes: number | null | undefined
+): { activityType: "lesson" | "lesson_review"; minutes: number } {
+  const minutes = Math.max(3, Math.min(30, Math.round(configuredMinutes ?? 10)));
+  return {
+    activityType: completionCount > 0 ? "lesson_review" : "lesson",
+    minutes
+  };
+}
+
 export function mergeLessonProgress(
   current: LessonProgressView | null,
   update: ProgressUpdate,
