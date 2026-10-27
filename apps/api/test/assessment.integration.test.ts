@@ -68,7 +68,7 @@ describe("assessment API preserves the one-screen flow and server evidence", () 
     expect(response.statusCode, response.body).toBe(200);
     expect(response.json()).toMatchObject({
       screenState: "preparation",
-      definition: { kind: "placement", totalMinutes: 75, totalScore: 100 },
+      definition: { kind: "placement", totalMinutes: 70, totalScore: 100 },
       attempt: null
     });
   });

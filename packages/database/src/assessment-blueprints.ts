@@ -147,11 +147,11 @@ export const placementDefinition: StoredAssessmentDefinition = {
   kind: "placement",
   title: "Workplace English CEFR Placement Test",
   version: 3,
-  totalMinutes: 75,
+  totalMinutes: 70,
   totalScore: 100,
   sections: [
     { code: "listening", title: "Nghe", durationMinutes: 15, maxScore: 20, instructions: ["Mỗi đoạn nghe được phát tối đa 2 lần."], groups: listeningGroups },
-    { code: "reading", title: "Đọc, Ngữ pháp & Từ vựng", durationMinutes: 25, maxScore: 40, instructions: ["40 câu, mỗi câu 1 điểm."], groups: readingGroups },
+    { code: "reading", title: "Đọc, Ngữ pháp & Từ vựng", durationMinutes: 20, maxScore: 40, instructions: ["40 câu, mỗi câu 1 điểm."], groups: readingGroups },
     { code: "writing", title: "Viết", durationMinutes: 20, maxScore: 20, instructions: ["Mỗi task được chấm riêng theo 5 tiêu chí: task completion, organization, vocabulary, grammar và workplace register (mỗi tiêu chí 0–4)."], groups: [
       { key: "W1", title: "Task 1 – Phản hồi nhanh (7 phút · A2–B1)", instruction: "You receive this message from a colleague:", stimulus: { type: "message", text: "Hi! I need to take tomorrow morning off urgently for a family matter. Could you help me monitor the customer support inbox from 9 AM to 12 PM? I owe you one!" }, tasks: [
         { key: "W1", prompt: "Write a short reply (50–80 words): agree to help and ask whether there are any important tickets you should pay special attention to.", responseType: "long_text", maxScore: 7, minWords: 50, maxWords: 80 }

@@ -12,11 +12,11 @@ describe("placement assessment blueprint", () => {
     expect(placementDefinition.version).toBe(3);
   });
 
-  it("matches the approved 75-minute section schedule", () => {
-    expect(placementDefinition.totalMinutes).toBe(75);
+  it("matches the approved 70-minute section schedule", () => {
+    expect(placementDefinition.totalMinutes).toBe(70);
     expect(placementDefinition.sections.map(({ code, durationMinutes }) => [code, durationMinutes])).toEqual([
       ["listening", 15],
-      ["reading", 25],
+      ["reading", 20],
       ["writing", 20],
       ["speaking", 15]
     ]);
