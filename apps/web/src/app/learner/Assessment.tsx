@@ -9,6 +9,7 @@ import { cancelExclusiveAudio } from "../../features/experience/audio-precedence
 
 const sectionOrder: AssessmentSectionCode[] = ["listening", "reading", "writing", "speaking"];
 const soundCheckText = "Đây là câu kiểm tra âm thanh. Nếu bạn nghe rõ câu này, tai nghe của bạn đã sẵn sàng.";
+const writingDraftSaveDelayMs = 500;
 
 export function LearnerAssessment({ view, actions }: { view: AssessmentView; actions: LearnerCallbacks }) {
   const experience = useExperience();
@@ -22,6 +23,7 @@ export function LearnerAssessment({ view, actions }: { view: AssessmentView; act
   const latestInputsRef = useRef<Record<string, SaveAssessmentResponseInput>>(Object.fromEntries(
     (view.attempt?.responses ?? []).map((response) => [responseDraftKey(response.section, response.taskKey), responseInput(response)])
   ));
+  const draftSaveTimersRef = useRef(new Map<string, number>());
   const [starting, setStarting] = useState(false);
   const [startConfirmOpen, setStartConfirmOpen] = useState(false);
   const [checkingMicrophone, setCheckingMicrophone] = useState(false);
@@ -47,6 +49,8 @@ export function LearnerAssessment({ view, actions }: { view: AssessmentView; act
   useEffect(() => () => cancelExclusiveAudio("speech"), [view.attempt?.id, view.screenState]);
 
   useEffect(() => {
+    draftSaveTimersRef.current.forEach((timer) => window.clearTimeout(timer));
+    draftSaveTimersRef.current.clear();
     setLocal(Object.fromEntries((view.attempt?.responses ?? []).map((item) => [item.taskKey, item.value])));
     latestInputsRef.current = Object.fromEntries(
       (view.attempt?.responses ?? []).map((response) => [responseDraftKey(response.section, response.taskKey), responseInput(response)])
@@ -57,6 +61,11 @@ export function LearnerAssessment({ view, actions }: { view: AssessmentView; act
     audioBusyTasksRef.current.clear();
     setAudioBusyCount(0);
   }, [view.attempt?.id]);
+
+  useEffect(() => () => {
+    draftSaveTimersRef.current.forEach((timer) => window.clearTimeout(timer));
+    draftSaveTimersRef.current.clear();
+  }, []);
 
   const onAudioBusyChange = useCallback((taskKey: string, pending: boolean) => {
     if (pending) audioBusyTasksRef.current.add(taskKey);
@@ -148,10 +157,7 @@ export function LearnerAssessment({ view, actions }: { view: AssessmentView; act
   const section = definition.sections.find((item) => item.code === view.screenState);
   if (!section || !view.attempt.currentSection) return <div className="app-learner-page"><Notice tone="danger">Không tìm thấy phần thi.</Notice></div>;
   const sectionIndex = sectionOrder.indexOf(section.code);
-  const save = async (task: AssessmentTaskView, input: SaveAssessmentResponseInput) => {
-    setLocal((current) => ({ ...current, [task.key]: input.value }));
-    latestInputsRef.current[responseDraftKey(section.code, task.key)] = input;
-    setLocalError(undefined);
+  const persist = async (task: AssessmentTaskView, input: SaveAssessmentResponseInput) => {
     savingCountRef.current += 1;
     setSavingCount(savingCountRef.current);
     try { await actions.saveAssessmentResponse(section.code, task.key, input); }
@@ -161,8 +167,27 @@ export function LearnerAssessment({ view, actions }: { view: AssessmentView; act
       setSavingCount(savingCountRef.current);
     }
   };
+  const save = (task: AssessmentTaskView, input: SaveAssessmentResponseInput) => {
+    setLocal((current) => ({ ...current, [task.key]: input.value }));
+    const draftKey = responseDraftKey(section.code, task.key);
+    latestInputsRef.current[draftKey] = input;
+    setLocalError(undefined);
+    if (input.evidenceType === "text") {
+      const currentTimer = draftSaveTimersRef.current.get(draftKey);
+      if (currentTimer !== undefined) window.clearTimeout(currentTimer);
+      const timer = window.setTimeout(() => {
+        draftSaveTimersRef.current.delete(draftKey);
+        void persist(task, input);
+      }, writingDraftSaveDelayMs);
+      draftSaveTimersRef.current.set(draftKey, timer);
+      return;
+    }
+    void persist(task, input);
+  };
   const complete = async () => {
     if (busy) return;
+    draftSaveTimersRef.current.forEach((timer) => window.clearTimeout(timer));
+    draftSaveTimersRef.current.clear();
     const deadline = Date.now() + 6_000;
     while ((savingCountRef.current > 0 || audioBusyTasksRef.current.size > 0) && Date.now() < deadline) await new Promise((resolve) => window.setTimeout(resolve, 50));
     if (savingCountRef.current > 0 || audioBusyTasksRef.current.size > 0) {
@@ -251,6 +276,7 @@ function ActiveAssessment({ view, actions, section, sectionIndex, runtime, local
     <section className="card assessment-content-card">
       <h2>Phần {sectionIndex + 1} – {section.title} <span className="badge">{section.maxScore} điểm</span></h2>
       {section.instructions.length ? <p className="small assessment-section-instructions">{section.instructions.join(" · ")}</p> : null}
+      {section.code === "speaking" ? <p className="small muted assessment-speaking-upload-guide">Mỗi câu: ghi âm trực tiếp hoặc tải MP3, M4A, WAV, OGG hoặc WebM · tối đa 20 MB.</p> : null}
       <div className="assessment-section-groups">
     {section.groups.map((group, groupIndex) => <section className={`card soft assessment-task-group assessment-task-group-${section.code}`} style={{ marginTop: 0 }} key={group.key}>
       <div className="assessment-task-group-heading"><h3 className="assessment-task-group-title">{group.title}</h3>{section.code === "writing" && group.tasks.length === 1 ? <span className="badge">{group.tasks[0]?.maxScore} điểm</span> : null}</div>

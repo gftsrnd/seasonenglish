@@ -299,7 +299,7 @@ export function AssessmentRecorder({ taskKey, view, actions, onEvidence, onBusyC
   const [recording, setRecording] = useState(false);
   const [recordingSeconds, setRecordingSeconds] = useState(0);
   const [busy, setBusy] = useState(false);
-  const [fileName, setFileName] = useState("Chưa có file ghi âm");
+  const [fileName, setFileName] = useState<string>();
   const [error, setError] = useState<string>();
   const [audioUrl, setAudioUrl] = useState<string>();
   const [playing, setPlaying] = useState(false);
@@ -337,7 +337,7 @@ export function AssessmentRecorder({ taskKey, view, actions, onEvidence, onBusyC
     const validationError = validateAssessmentAudio(file, name);
     if (validationError) {
       setError(validationError);
-      setFileName("Chưa có file ghi âm");
+      setFileName(undefined);
       return;
     }
     setBusy(true); setError(undefined); setFileName(`Đang lưu ${name}…`);
@@ -349,7 +349,7 @@ export function AssessmentRecorder({ taskKey, view, actions, onEvidence, onBusyC
       setFileName(`Đã lưu ${name}`);
     } catch {
       setError("Chưa lưu được file ghi âm. Hãy thử lại.");
-      setFileName("Chưa có file ghi âm");
+      setFileName(undefined);
     } finally {
       setBusy(false);
     }
@@ -372,7 +372,7 @@ export function AssessmentRecorder({ taskKey, view, actions, onEvidence, onBusyC
         stream.current = null; recorder.current = null; holdMusic(false);
         setRecording(false); setBusy(false);
         setError("Ghi âm bị gián đoạn. Hãy thử lại hoặc tải file ghi âm.");
-        setFileName("Chưa có file ghi âm");
+        setFileName(undefined);
       };
       nextRecorder.onstop = () => {
         acquiredStream.getTracks().forEach((track) => track.stop());
@@ -381,7 +381,7 @@ export function AssessmentRecorder({ taskKey, view, actions, onEvidence, onBusyC
         if (!blob.size) {
           setBusy(false);
           setError("Không thu được âm thanh. Hãy kiểm tra micro rồi ghi lại.");
-          setFileName("Chưa có file ghi âm");
+          setFileName(undefined);
           return;
         }
         void submitAudio(blob, `${taskKey}-${Date.now()}.webm`, "Bản ghi âm đã nộp");
@@ -458,14 +458,13 @@ export function AssessmentRecorder({ taskKey, view, actions, onEvidence, onBusyC
         fileInput.current?.click();
       }}><Upload size={16} aria-hidden="true" /> Tải file ghi âm</button>
     </div>
-    <span className="xs muted">MP3, M4A, WAV, OGG hoặc WebM · tối đa 20 MB</span>
     <input ref={fileInput} id={`assessment-audio-${taskKey}`} className="sr-only" type="file" accept="audio/*,.m4a" aria-label="Tải file ghi âm" tabIndex={-1} disabled={busy} onChange={(event) => {
       const file = event.currentTarget.files?.[0];
       event.currentTarget.value = "";
       if (file) void submitAudio(file, file.name, "File ghi âm đã nộp");
     }} />
     <div className="speaking-evidence-status">
-      <span aria-live="polite">{recording ? `Đang ghi âm · ${formatTime(recordingSeconds)} — bấm Dừng ghi để tạo file.` : fileName}</span>
+      {recording || fileName ? <span aria-live="polite">{recording ? `Đang ghi âm · ${formatTime(recordingSeconds)} — bấm Dừng ghi để tạo file.` : fileName}</span> : null}
       {error ? <ErrorMessage>{error}</ErrorMessage> : null}
     </div>
   </div>;

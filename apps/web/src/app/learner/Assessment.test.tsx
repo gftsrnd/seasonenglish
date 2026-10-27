@@ -462,6 +462,29 @@ describe("assessment HCI states", () => {
     expect(listening2).toHaveTextContent("Who should the listener contact?");
   });
 
+  it("does not start an API save or disable submission for every keystroke in Writing", async () => {
+    vi.useFakeTimers();
+    const saveAssessmentResponse = vi.fn().mockResolvedValue(undefined);
+    const view = makeView({ screenState: "writing", runtime: makeRuntime({ currentSection: "writing" }) });
+    view.attempt!.currentSection = "writing";
+    view.attempt!.sectionStatuses = { listening: "completed", reading: "completed", writing: "in_progress", speaking: "locked" };
+    view.attempt!.runtime = view.runtime!;
+    render(<LearnerAssessment view={view} actions={makeActions({ saveAssessmentResponse })} />);
+
+    const answer = screen.getByLabelText("Câu trả lời writing-task");
+    const submit = screen.getByRole("button", { name: /nộp phần viết/i });
+    fireEvent.change(answer, { target: { value: "First" } });
+    fireEvent.change(answer, { target: { value: "First draft" } });
+
+    expect(saveAssessmentResponse).not.toHaveBeenCalled();
+    expect(submit).toBeEnabled();
+    await act(async () => { await vi.advanceTimersByTimeAsync(499); });
+    expect(saveAssessmentResponse).not.toHaveBeenCalled();
+    await act(async () => { await vi.advanceTimersByTimeAsync(1); });
+    expect(saveAssessmentResponse).toHaveBeenCalledTimes(1);
+    expect(saveAssessmentResponse).toHaveBeenCalledWith("writing", "writing-task", { value: "First draft", evidenceType: "text" });
+  });
+
   it("persists every visible answer again before advancing the section", async () => {
     vi.useFakeTimers();
     const saveAssessmentResponse = vi.fn().mockResolvedValue(undefined);
@@ -619,7 +642,7 @@ describe("assessment HCI states", () => {
     expect(uploadAssessmentAudio).not.toHaveBeenCalled();
   });
 
-  it("shows a clear audio file picker for the five supported formats", () => {
+  it("shows one shared audio format guide and no empty recording status before interaction", () => {
     const view = makeView({
       screenState: "speaking",
       attempt: { ...makeView().attempt!, currentSection: "speaking", sectionStatuses: { listening: "completed", reading: "completed", writing: "completed", speaking: "in_progress" } },
@@ -629,7 +652,8 @@ describe("assessment HCI states", () => {
 
     const input = screen.getAllByLabelText("Tải file ghi âm")[0]!;
     expect(input).toHaveAttribute("accept", "audio/*,.m4a");
-    expect(screen.getAllByText(/MP3, M4A, WAV, OGG hoặc WebM · tối đa 20 MB/i).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/MP3, M4A, WAV, OGG hoặc WebM · tối đa 20 MB/i)).toHaveLength(1);
+    expect(screen.queryByText("Chưa có file ghi âm")).not.toBeInTheDocument();
   });
 
   it("rejects a supported audio extension when its MIME type is missing or mismatched", async () => {
