@@ -34,7 +34,6 @@ export function LearnerHome({ view, actions }: { view: LearnerHomeView; actions:
     {!view.aiAvailable && view.aiAvailable !== undefined ? <Notice tone="warn">AI chưa kết nối (chưa có API key). Bạn vẫn làm test và học bài đã duyệt; báo người vận hành để bật AI coach.</Notice> : null}
     {showLifecycle ? <section className="card home-lifecycle home-lifecycle-card" data-home-block="lifecycle" aria-label="Trạng thái pilot"><div className="row between"><div><div className="eyebrow">Trạng thái chương trình</div><h3>{pilotPhaseLabel(view.weekPhase)}</h3></div>{view.levelUpPhase && view.levelUpPhase !== "none" ? <span className="badge warn">Đang theo dõi lên mức</span> : null}</div>{view.monthlyGoal ? <p className="small" style={{ marginBottom: 0 }}><b>Mục tiêu tháng:</b> {view.monthlyGoal}</p> : null}</section> : null}
     <PrimaryLesson view={view} next={next} actions={actions} />
-    <LessonLockGuidance view={view} next={next} actions={actions} />
     <section className="stats" data-home-block="metrics" aria-label="Tiến độ hiện tại">
       <Metric label="Bài tuần này" value={`${view.metrics.completedLessons}/${view.metrics.totalLessons}`} percent={ratio(view.metrics.completedLessons, view.metrics.totalLessons)} />
       <Metric label="Ngày học (T2–T6)" value={`${Math.min(view.metrics.studyDays, view.schedule.daysPerWeek)}/${view.schedule.daysPerWeek}`} percent={ratio(view.metrics.studyDays, view.schedule.daysPerWeek)} color="var(--butter)" />
@@ -145,21 +144,7 @@ function PrimaryLesson({ view, next, actions }: { view: LearnerHomeView; next: L
     return <section className="hero" style={{ background: "var(--mint)", color: "var(--text)" }} data-home-block="primary"><div className="eyebrow">Tuần {view.week?.weekNumber ?? "—"}</div><h2>{dateLocked ? next.lock.opensAt ? `Bài này mở vào ${formatLessonDate(next.lock.opensAt)}` : "Bài này chưa mở" : "Học bù bài trước đã nhé"}</h2><p>{dateLocked ? "Chưa đến ngày học nên chưa có nút học bài này." : "Hoàn thành bài trước để mở bài này."}</p>{!dateLocked && blocker ? <AppLink className="btn btn-primary" href={`/lesson/${blocker.id}`} navigate={actions.navigate}>Học bài T{blocker.dayNumber + 1} ngay</AppLink> : null}</section>;
   }
   const catchUp = isCatchUp(view, next);
-  return <section className="hero home-primary-lesson" data-home-block="primary"><div><div className="eyebrow">{catchUp ? "Bài học bù" : "Bài hôm nay"} · T{next.dayNumber + 1} · Tuần {view.week?.weekNumber ?? "—"}</div><h2>{next.title}</h2>{view.week?.topic ? <div style={{ fontWeight: 700 }}>{view.week.topic}</div> : null}</div><div className="row" style={{ gap: 14, fontWeight: 800, fontSize: ".9rem" }}><span className="row" style={{ gap: 6 }}><ClockIcon /> {view.schedule.lessonMinutes} phút</span><span>Bài {next.dayNumber}/{view.lessons.length}</span></div><AppLink className="btn btn-primary btn-lg btn-block" href={`/lesson/${next.id}`} navigate={actions.navigate}>Học ngay</AppLink></section>;
-}
-
-function LessonLockGuidance({ view, next, actions }: { view: LearnerHomeView; next: LearnerHomeView["nextLesson"]; actions: LearnerCallbacks }) {
-  const lockedLesson = view.lessons.find((lesson) => lesson.lock && lesson.id !== next?.id);
-  if (!lockedLesson?.lock) return null;
-  const { lock } = lockedLesson;
-  const blocker = lock.blocker;
-  const dateLocked = lock.reason === "date";
-  return <section className="card" style={{ marginTop: 16 }} aria-label="Hướng dẫn mở bài">
-    <div className="eyebrow">Bài chưa mở</div>
-    <h3>{dateLocked ? lock.opensAt ? `Bài này mở vào ${formatLessonDate(lock.opensAt)}` : "Bài này chưa mở" : "Học bù bài trước đã nhé"}</h3>
-    <p className="small" style={{ marginBottom: blocker && !dateLocked ? 12 : 0 }}>{dateLocked ? "Chưa đến ngày học nên chưa có nút học bài này." : "Hoàn thành bài trước để mở bài này."}</p>
-    {!dateLocked && blocker ? <AppLink className="btn btn-primary btn-sm" href={`/lesson/${blocker.id}`} navigate={actions.navigate}>Học bài T{blocker.dayNumber + 1} ngay</AppLink> : null}
-  </section>;
+  return <section className="hero home-primary-lesson" data-home-block="primary"><div><div className="eyebrow">{catchUp ? "Bài học bù" : "Bài hôm nay"} · T{next.dayNumber + 1} · Tuần {view.week?.weekNumber ?? "—"}</div><h2>{catchUp ? "Học bù bài trước đã nhé" : next.title}</h2>{catchUp ? <p style={{ margin: 0 }}>Hoàn thành bài T{next.dayNumber + 1}: {next.title}</p> : view.week?.topic ? <div style={{ fontWeight: 700 }}>{view.week.topic}</div> : null}</div><div className="row" style={{ gap: 14, fontWeight: 800, fontSize: ".9rem" }}><span className="row" style={{ gap: 6 }}><ClockIcon /> {view.schedule.lessonMinutes} phút</span><span>Bài {next.dayNumber}/{view.lessons.length}</span></div><AppLink className="btn btn-primary btn-lg btn-block" href={`/lesson/${next.id}`} navigate={actions.navigate}>{catchUp ? `Học bài T${next.dayNumber + 1} ngay` : "Học ngay"}</AppLink></section>;
 }
 
 function lessonTimingLabel(view: LearnerHomeView, lesson: LearnerHomeView["lessons"][number]) {

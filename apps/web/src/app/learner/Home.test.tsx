@@ -75,7 +75,8 @@ describe("learner Home parity", () => {
     render(<LearnerHome view={makeView({ microLesson: { id: "micro-1", topic: "Legacy", durationMinutes: 3, completed: false } })} actions={actions} />);
 
     expect(screen.queryByText(/bài (học )?siêu ngắn/i)).not.toBeInTheDocument();
-    expect(screen.queryByRole("link", { name: "Học ngay" })).not.toHaveAttribute("href", "/micro/micro-1");
+    expect(screen.queryByRole("link", { name: "Học ngay" })).toBeNull();
+    expect(screen.queryByRole("link", { name: "Học bài T2 ngay" })).toHaveAttribute("href", "/lesson/lesson-1");
   });
 
   it("shows a short fireworks celebration after a completed assessment", () => {
@@ -192,7 +193,10 @@ describe("learner Home parity", () => {
 
   it("keeps a date-locked next lesson as a non-actionable completion state", () => {
     const view = makeView();
-    render(<LearnerHome view={{ ...view, nextLesson: { ...view.nextLesson!, lock: { reason: "date", message: "Chưa đến ngày mở", dayNumber: 2, totalLessons: 5, opensAt: "2026-10-16" } } }} actions={actions} />);
+    const dateLock = { reason: "date" as const, message: "Chưa đến ngày mở", dayNumber: 2, totalLessons: 5, opensAt: "2026-10-16" };
+    const dateLockedNext = { ...view.nextLesson!, lock: dateLock };
+    const laterPriorLock = { reason: "prior" as const, message: "Hoàn thành bài trước", dayNumber: 3, totalLessons: 5, blocker: { id: dateLockedNext.id, dayNumber: 1, title: dateLockedNext.title } };
+    render(<LearnerHome view={{ ...view, lessons: [view.lessons[0]!, dateLockedNext, { ...view.lessons[2]!, lock: laterPriorLock }, ...view.lessons.slice(3)], nextLesson: dateLockedNext }} actions={actions} />);
 
     const primary = document.querySelector<HTMLElement>('[data-home-block="primary"]');
     expect(primary).not.toBeNull();
@@ -200,6 +204,7 @@ describe("learner Home parity", () => {
     expect(within(primary!).getByText(/chưa có nút học bài này/)).toBeInTheDocument();
     expect(within(primary!).queryByRole("link", { name: /Học bài/ })).not.toBeInTheDocument();
     expect(within(primary!).queryByRole("link", { name: "Luyện với Season" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("region", { name: "Hướng dẫn mở bài" })).not.toBeInTheDocument();
   });
 
   it("does not expose a final-assessment CTA in the final program week", () => {
@@ -245,9 +250,11 @@ describe("learner Home parity", () => {
     expect(within(path!).queryByText("T2 · hôm nay")).not.toBeInTheDocument();
     expect(primary).not.toBeNull();
     expect(within(primary!).getByText(/Bài học bù · T2 · Tuần 1/)).toBeInTheDocument();
+    expect(within(primary!).getByRole("heading", { name: "Học bù bài trước đã nhé" })).toBeInTheDocument();
+    expect(within(primary!).getByRole("link", { name: "Học bài T2 ngay" })).toHaveAttribute("href", "/lesson/lesson-1");
   });
 
-  it("explains a later prior-lesson lock and sends the learner to the missing lesson", () => {
+  it("keeps the catch-up guidance inside the single primary banner", () => {
     const view = makeView();
     const lockedLesson = {
       ...view.lessons[2]!,
@@ -261,9 +268,11 @@ describe("learner Home parity", () => {
     };
     render(<LearnerHome view={{ ...view, lessons: [view.lessons[0]!, view.lessons[1]!, lockedLesson, ...view.lessons.slice(3)] }} actions={actions} />);
 
-    const guidance = screen.getByRole("region", { name: "Hướng dẫn mở bài" });
-    expect(within(guidance).getByRole("heading", { name: "Học bù bài trước đã nhé" })).toBeInTheDocument();
-    expect(within(guidance).getByRole("link", { name: "Học bài T2 ngay" })).toHaveAttribute("href", "/lesson/lesson-1");
+    const primary = document.querySelector<HTMLElement>('[data-home-block="primary"]');
+    expect(primary).not.toBeNull();
+    expect(within(primary!).getByRole("heading", { name: "Học bù bài trước đã nhé" })).toBeInTheDocument();
+    expect(within(primary!).getByRole("link", { name: "Học bài T2 ngay" })).toHaveAttribute("href", "/lesson/lesson-1");
+    expect(screen.queryByRole("region", { name: "Hướng dẫn mở bài" })).not.toBeInTheDocument();
   });
 
   it("labels an overdue not-started next lesson as make-up", () => {
