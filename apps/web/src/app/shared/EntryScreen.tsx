@@ -183,9 +183,9 @@ function errorFor(mode: Mode, audience: "learner" | "staff", code: string): Fiel
   if (code === "LEARNER_REGISTRATION_EMAIL_EXISTS" || code === "LEARNER_REGISTRATION_EMAIL_DELETED") return { email: "Email này không khả dụng. Hãy dùng email khác." };
   if (code === "EMAIL_DELIVERY_FAILED" || code === "EMAIL_DELIVERY_UNAVAILABLE") return { email: "Chưa thể gửi mã xác minh. Vui lòng thử lại." };
   if (code === "INVALID_OR_EXPIRED_CODE") return { code: "Mã không đúng hoặc đã hết hạn." };
-  if (code === "WRONG_LOGIN_PATH") return { email: audience === "learner"
-    ? "Không thể đăng nhập. Vui lòng kiểm tra email, mã PIN và vai trò. Tài khoản nhân sự cần đăng nhập ở tab Nhân sự."
-    : "Không thể đăng nhập. Vui lòng kiểm tra email, mật khẩu và vai trò. Tài khoản người học cần đăng nhập ở tab Người học." };
+  if (code === "WRONG_LOGIN_PATH") return audience === "learner"
+    ? { email: "Không thể đăng nhập. Vui lòng kiểm tra email, mã PIN và vai trò. Tài khoản nhân sự cần đăng nhập ở tab Nhân sự." }
+    : { credential: "Không thể đăng nhập. Vui lòng kiểm tra email, mật khẩu và vai trò. Tài khoản người học cần đăng nhập ở tab Người học." };
   if (code === "ACCOUNT_DELETED") return { email: "Tài khoản này không còn hoạt động." };
   if (mode === "forgotPin") return { credential: "Không thể đổi PIN. Vui lòng yêu cầu mã mới." };
   return mode === "login" ? { credential: audience === "learner" ? "Email hoặc PIN chưa đúng." : "Email hoặc mật khẩu chưa đúng." } : { email: "Không thể xử lý yêu cầu. Vui lòng thử lại." };

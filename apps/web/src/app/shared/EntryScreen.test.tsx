@@ -126,6 +126,8 @@ describe("EntryScreen interaction", () => {
 
     expect(client.staffLogin).toHaveBeenCalledWith({ email: "learner@e4s.local", password: "246810" });
     expect(await screen.findByRole("alert")).toHaveTextContent("Không thể đăng nhập. Vui lòng kiểm tra email, mật khẩu và vai trò. Tài khoản người học cần đăng nhập ở tab Người học.");
+    expect(screen.getByLabelText("Mật khẩu").closest("label")).toHaveTextContent("Không thể đăng nhập. Vui lòng kiểm tra email, mật khẩu và vai trò.");
+    expect(screen.getByLabelText("Email").closest("label")).not.toHaveTextContent("Không thể đăng nhập.");
   });
 
   it("validates every PIN recovery step while typing", async () => {
