@@ -451,7 +451,7 @@ function SpeakingEvidenceControls({
 }: {
   artifactKey?: string | undefined;
   onUploaded: (artifactKey: string) => void;
-  uploadAudio: (file: Blob, filename: string) => Promise<string>;
+  uploadAudio: (file: Blob, filename: string) => Promise<string | import("./contracts.js").LearnerAudioUpload>;
   getAudioReadUrl?: ((artifactKey: string) => Promise<{ url: string; expiresAt: string }>) | undefined;
 }) {
   const [recording, setRecording] = useState(false);
@@ -506,7 +506,8 @@ function SpeakingEvidenceControls({
     setBusy(true);
     setError("");
     try {
-      const savedKey = await uploadAudio(file, file.name);
+      const saved = await uploadAudio(file, file.name);
+      const savedKey = typeof saved === "string" ? saved : saved.artifactKey;
       setPendingFile(undefined);
       setAudioUrl((current) => {
         if (current) URL.revokeObjectURL(current);

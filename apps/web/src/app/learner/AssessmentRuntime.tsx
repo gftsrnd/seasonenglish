@@ -342,7 +342,8 @@ export function AssessmentRecorder({ taskKey, view, actions, onEvidence, onBusyC
     }
     setBusy(true); setError(undefined); setFileName(`Đang lưu ${name}…`);
     try {
-      const artifactKey = await actions.uploadAssessmentAudio(file, name);
+      const uploaded = await actions.uploadAssessmentAudio(file, name);
+      const artifactKey = typeof uploaded === "string" ? uploaded : uploaded.artifactKey;
       await onEvidence({ value, evidenceType: "audio", artifactKey });
       if (audioUrl) URL.revokeObjectURL(audioUrl);
       setAudioUrl(URL.createObjectURL(file));

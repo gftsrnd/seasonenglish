@@ -33,6 +33,23 @@ describe("audio evidence adapter", () => {
     }));
   });
 
+  it("keeps Agent 1 lifecycle metadata and honors an explicit cleanup decision", () => {
+    const normalized = normalizeAudioEvidence({
+      fileId: "file-1",
+      artifactKey: "assessment-audio/learner-1/answer.webm",
+      signedUrl: "/signed/answer.webm",
+      createdAt: "2026-08-01T00:00:00.000Z",
+      retentionUntil: "2026-09-30T00:00:00.000Z",
+      cleanupEligible: true,
+      deletedAt: null,
+      deletedBy: null,
+      transcript: "Persisted answer"
+    });
+    expect(normalized).toEqual(expect.objectContaining({ fileId: "file-1", retentionUntil: "2026-09-30T00:00:00.000Z", cleanupEligible: true, deletedAt: null, deletedBy: null }));
+    expect(audioCleanupEligible(normalized!, new Date("2026-10-28T00:00:00.000Z"))).toBe(true);
+    expect(audioCleanupEligible({ ...normalized!, cleanupEligible: false }, new Date("2026-10-28T00:00:00.000Z"))).toBe(false);
+  });
+
   it("marks audio eligible at 60 days and never marks deleted audio eligible", () => {
     const now = new Date("2026-10-28T00:00:00.000Z");
     expect(audioCleanupEligible({ createdAt: "2026-08-29T00:00:00.000Z" }, now)).toBe(true);

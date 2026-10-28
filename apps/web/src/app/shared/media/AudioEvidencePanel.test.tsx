@@ -27,7 +27,7 @@ describe("AudioEvidencePanel", () => {
       label="Bản ghi Season"
       now={new Date("2026-10-28T00:00:00.000Z")}
       onDelete={onDelete}
-      evidence={{ artifactKey: "audio/season.webm", signedUrl: "https://audio.example/season.webm", createdAt: "2026-08-01T00:00:00.000Z", transcript: "Season transcript" }}
+      evidence={{ fileId: "file-season", artifactKey: "audio/season.webm", signedUrl: "https://audio.example/season.webm", createdAt: "2026-08-01T00:00:00.000Z", transcript: "Season transcript" }}
     />);
 
     expect(screen.getByText(/đủ 60 ngày và có thể xoá/i)).toBeInTheDocument();

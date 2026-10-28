@@ -6,6 +6,7 @@ import type { ContentReviewAssessmentDetailView } from "@e4s/contracts";
 import { operatorDateTime } from "./adapters.js";
 import { AssessmentManualScore, type ManualScoreInput } from "./AssessmentManualScore.js";
 import { AudioEvidencePanel } from "../shared/media/AudioEvidencePanel.js";
+import { normalizeAudioEvidence, type AudioEvidence } from "../shared/media/audio-evidence.js";
 
 const TABS: Array<[ReviewTab, string]> = [["weekly", "Bài cuối tuần"], ["subs", "Bài nộp"], ["coach", "Phản hồi coach"], ["appeals", "Kháng nghị"], ["attempts", "Số lần làm bài"], ["tests", "Bài test"]];
 const focusableSelector = "button:not(:disabled), input:not(:disabled), select:not(:disabled), textarea:not(:disabled), audio[controls], [href], [tabindex]:not([tabindex='-1'])";
@@ -33,7 +34,7 @@ function actionErrorMessage(reason: unknown): string {
 }
 
 function SubmissionReviewCard({
-  item, aiConnected, readOnly, manualGradeBlocked, gradeAiBusy, gradeAiBlocked, onGradeAi, onGradeManual, onMarkChecked
+  item, aiConnected, readOnly, manualGradeBlocked, gradeAiBusy, gradeAiBlocked, onGradeAi, onGradeManual, onMarkChecked, onDeleteAudio
 }: {
   item: ReviewSubmission;
   aiConnected: boolean;
@@ -44,6 +45,7 @@ function SubmissionReviewCard({
   onGradeAi(): void;
   onGradeManual(input: { meaning: number; vocabulary: number; grammar: number; feedback: string }): void;
   onMarkChecked(checked: boolean): void;
+  onDeleteAudio?: NonNullable<OperatorReviewActions["onDeleteAudio"]>;
 }) {
   const [meaning, setMeaning] = useState(item.rubric?.meaning ?? 0);
   const [vocabulary, setVocabulary] = useState(item.rubric?.vocab ?? 0);
@@ -63,7 +65,7 @@ function SubmissionReviewCard({
       <section><b className="operator-review-field-label">Đề bài</b><p>{item.task || "—"}</p></section>
       <section><b className="operator-review-field-label">Hướng dẫn</b><p>{item.guidance || "—"}</p></section>
       <section><b className="operator-review-field-label">Từ bắt buộc</b><p>{item.requiredVocabulary?.length ? item.requiredVocabulary.join(", ") : "—"}</p></section>
-      <section className="operator-submission-answer"><b className="operator-review-field-label">Bài làm của học viên</b><p>{item.text}</p></section>
+      <section className="operator-submission-answer"><b className="operator-review-field-label">Bài làm của học viên</b><p>{item.text}</p>{item.audioArtifact ? <AudioEvidencePanel label={`Bản ghi âm bài nộp của ${item.learnerName}`} evidence={{ ...item.audioArtifact, transcript: item.audioArtifact.transcript ?? item.text }} {...(onDeleteAudio ? { onDelete: onDeleteAudio } : {})} /> : null}</section>
     </div>
     {item.total != null ? <div className="operator-submission-result"><div className="row"><b>{item.total}/100</b><Rubric value={item.rubric} />{item.aiGraded ? <Badge>AI chấm</Badge> : <Badge>Người chấm</Badge>}</div>{item.feedback ? <p className="small">{item.feedback}</p> : null}<Suggestions items={item.suggestions} /></div> : <div className="operator-submission-status-row"><Badge tone="warn">Chưa chấm</Badge></div>}
     <div className="operator-submission-grader" aria-label={`Chấm bài của ${item.learnerName}`}>
@@ -251,9 +253,9 @@ export function OperatorReview({ view, actions, readOnly = false, unavailable = 
   };
 
   const body = () => {
-    if (view.activeTab === "subs") return view.submissions.length ? <div className="operator-review-card-list">{groupReviewItemsByLearner(view.submissions).map(group => <details className="card operator-review-learner-group" key={group.learnerName}><summary><b>{group.learnerName}</b><span className="xs muted">{group.items.length} bài · {group.items.filter(item => !item.operatorChecked).length} chưa xem · {group.items.filter(item => item.total == null).length} chưa chấm</span></summary><div className="operator-review-group-items">{group.items.map(item => <SubmissionReviewCard key={item.id} item={item} aiConnected={Boolean(view.aiConnected)} readOnly={readOnly} {...(blocked("gradeManual") ? { manualGradeBlocked: blocked("gradeManual") } : {})} gradeAiBusy={isBusy("gradeAi", item.id)} {...(blocked("gradeAi") ? { gradeAiBlocked: blocked("gradeAi") } : {})} onGradeAi={() => runAction({ key: "gradeAi", id: item.id }, () => actions.onGradeAi(item.id))} onGradeManual={input => actions.onGradeManual(item.id, input)} onMarkChecked={checked => runAction({ key: "checkSubmission", id: item.id, expected: checked }, () => actions.onMarkSubmission(item.id, checked))} />)}</div></details>)}</div> : <Empty>Chưa có bài nộp.</Empty>;
+    if (view.activeTab === "subs") return view.submissions.length ? <div className="operator-review-card-list">{groupReviewItemsByLearner(view.submissions).map(group => <details className="card operator-review-learner-group" key={group.learnerName}><summary><b>{group.learnerName}</b><span className="xs muted">{group.items.length} bài · {group.items.filter(item => !item.operatorChecked).length} chưa xem · {group.items.filter(item => item.total == null).length} chưa chấm</span></summary><div className="operator-review-group-items">{group.items.map(item => <SubmissionReviewCard key={item.id} item={item} aiConnected={Boolean(view.aiConnected)} readOnly={readOnly} {...(blocked("gradeManual") ? { manualGradeBlocked: blocked("gradeManual") } : {})} gradeAiBusy={isBusy("gradeAi", item.id)} {...(blocked("gradeAi") ? { gradeAiBlocked: blocked("gradeAi") } : {})} onGradeAi={() => runAction({ key: "gradeAi", id: item.id }, () => actions.onGradeAi(item.id))} onGradeManual={input => actions.onGradeManual(item.id, input)} onMarkChecked={checked => runAction({ key: "checkSubmission", id: item.id, expected: checked }, () => actions.onMarkSubmission(item.id, checked))} {...(actions.onDeleteAudio ? { onDeleteAudio: actions.onDeleteAudio } : {})} />)}</div></details>)}</div> : <Empty>Chưa có bài nộp.</Empty>;
 
-    if (view.activeTab === "coach") return view.coachTurns.length ? <div className="card operator-review-panel"><p className="small muted operator-review-intro">Đọc mẫu phản hồi AI coach; kiểm tra lệch mức, lỗi hoặc khen quá tay rồi sửa prompt nếu cần.</p><div className="operator-coach-list">{groupReviewItemsByLearner(view.coachTurns).map(group => <details className="operator-review-learner-group" key={group.learnerName}><summary><b>{group.learnerName}</b><span className="xs muted">{group.items.length} phản hồi · {group.items.filter(item => !item.checked).length} chưa kiểm</span></summary><div className="operator-review-group-items">{group.items.map(item => <div className="item" key={item.id}><div className="body small"><div className="row between operator-review-item-heading"><span>{item.cefr && <LevelChip level={item.cefr} />} <span className="xs muted">{item.week ? `Tuần ${item.week} · ` : ""}{item.at}</span></span><label className="xs"><input type="checkbox" checked={item.checked} disabled={readOnly || Boolean(blocked("checkCoach")) || isSameItemBusy("checkCoach", item.id)} aria-busy={isBusy("checkCoach", item.id) || undefined} onChange={event => runAction({ key: "checkCoach", id: item.id, expected: event.target.checked }, () => actions.onMarkCoachTurn(item.id, event.target.checked))} style={{ width: "auto" }} /> Đã kiểm</label></div><div className="operator-review-copy"><span className="muted">Học viên:</span> {item.userText}</div><div className="operator-review-copy"><span className="muted">Coach:</span> {item.reply}</div><Rubric value={item.rubric} /><Suggestions items={item.suggestions} /></div></div>)}</div></details>)}</div></div> : <Empty>Chưa có lượt luyện nào.</Empty>;
+    if (view.activeTab === "coach") return view.coachTurns.length ? <div className="card operator-review-panel"><p className="small muted operator-review-intro">Đọc mẫu phản hồi AI coach; kiểm tra lệch mức, lỗi hoặc khen quá tay rồi sửa prompt nếu cần.</p><div className="operator-coach-list">{groupReviewItemsByLearner(view.coachTurns).map(group => <details className="operator-review-learner-group" key={group.learnerName}><summary><b>{group.learnerName}</b><span className="xs muted">{group.items.length} phản hồi · {group.items.filter(item => !item.checked).length} chưa kiểm</span></summary><div className="operator-review-group-items">{group.items.map(item => <div className="item" key={item.id}><div className="body small"><div className="row between operator-review-item-heading"><span>{item.cefr && <LevelChip level={item.cefr} />} <span className="xs muted">{item.week ? `Tuần ${item.week} · ` : ""}{item.at}</span></span><label className="xs"><input type="checkbox" checked={item.checked} disabled={readOnly || Boolean(blocked("checkCoach")) || isSameItemBusy("checkCoach", item.id)} aria-busy={isBusy("checkCoach", item.id) || undefined} onChange={event => runAction({ key: "checkCoach", id: item.id, expected: event.target.checked }, () => actions.onMarkCoachTurn(item.id, event.target.checked))} style={{ width: "auto" }} /> Đã kiểm</label></div><div className="operator-review-copy"><span className="muted">Học viên:</span> {item.userText}</div><div className="operator-review-copy"><span className="muted">Coach:</span> {item.reply}</div>{item.audioArtifact ? <AudioEvidencePanel label={`Bản ghi âm Season của ${item.learnerName}`} evidence={{ ...item.audioArtifact, transcript: item.audioArtifact.transcript ?? item.userText }} {...(actions.onDeleteAudio ? { onDelete: actions.onDeleteAudio } : {})} /> : null}<Rubric value={item.rubric} /><Suggestions items={item.suggestions} /></div></div>)}</div></details>)}</div></div> : <Empty>Chưa có lượt luyện nào.</Empty>;
 
     if (view.activeTab === "weekly") return view.weeklyPractices.length ? <div className="operator-review-card-list">{[...view.weeklyPractices].sort((left, right) => left.week - right.week || cefrOrder[left.cefr] - cefrOrder[right.cefr] || left.id.localeCompare(right.id)).map(item => <WeeklyPracticeEditor key={item.id} item={item} readOnly={readOnly || !actions.onSaveWeeklyPractice} onSave={actions.onSaveWeeklyPractice ?? (() => undefined)} />)}</div> : <Empty>Chưa có bộ bài tuần để soạn bài cuối tuần.</Empty>;
 
@@ -267,7 +269,7 @@ export function OperatorReview({ view, actions, readOnly = false, unavailable = 
   return <OperatorPage title="Đọc mẫu"><PageTitle><h1>Đọc mẫu & kiểm tra AI</h1><p className="muted">Kiểm tra bài nộp thứ Sáu, phản hồi của AI coach và các bài test.</p></PageTitle>{actionError && <div className="banner danger" role="alert" style={{ marginBottom: 12 }}><div className="body small">{actionError.message}</div></div>}<div className="tabs operator-review-tabs" role="tablist" aria-label="Nhóm nội dung cần kiểm tra">{TABS.map(([key, label]) => <button type="button" role="tab" aria-selected={view.activeTab === key} className={view.activeTab === key ? "active" : ""} key={key} onClick={() => actions.onTabChange(key)}>{key === "attempts" ? label : `${label} (${view.counts[key]}${key === "subs" ? " chưa đọc" : ""})`}</button>)}</div>{body()}</OperatorPage>;
 }
 
-export function OperatorReviewAssessmentDetail({ detail, onClose, onSaveManualScore, savingManualScore = false }: { detail: ContentReviewAssessmentDetailView; onClose(): void; onSaveManualScore?: (input: ManualScoreInput) => void; savingManualScore?: boolean }) {
+export function OperatorReviewAssessmentDetail({ detail, onClose, onSaveManualScore, savingManualScore = false, onDeleteAudio }: { detail: ContentReviewAssessmentDetailView; onClose(): void; onSaveManualScore?: (input: ManualScoreInput) => void; savingManualScore?: boolean; onDeleteAudio?: (evidence: AudioEvidence) => void | Promise<void> }) {
   const dialogRef = useRef<HTMLElement>(null);
   const closeRef = useRef(onClose);
   closeRef.current = onClose;
@@ -358,7 +360,11 @@ export function OperatorReviewAssessmentDetail({ detail, onClose, onSaveManualSc
         {answer?.evidenceType === "typed_proxy" ? <div className="banner warn" role="alert"><div className="body small">Bằng chứng này phải chấm tay: văn bản thay thế không xác minh phát âm, độ trôi chảy hoặc tương tác theo thời gian thực.</div></div> : null}
         {answer?.audioArtifact && <>
           <div className="xs muted">File ghi âm: {answer.audioArtifact.artifactKey}</div>
-          <AudioEvidencePanel label={`audio ${answer.taskKey}`} evidence={{ ...answer.audioArtifact, ...(answerValue ? { transcript: answerValue } : {}) }} />
+          <AudioEvidencePanel
+            label={`audio ${answer.taskKey}`}
+            evidence={{ ...answer.audioArtifact, ...(answerValue ? { transcript: answerValue } : {}) }}
+            {...(onDeleteAudio && normalizeAudioEvidence(answer.audioArtifact)?.fileId ? { onDelete: onDeleteAudio } : {})}
+          />
         </>}
         {!answer?.audioArtifact && section === "speaking" && <p className="operator-answer-audio-missing muted">(không có file ghi âm)</p>}
       </div>}

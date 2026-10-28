@@ -8,7 +8,8 @@ import type {
   GameKey,
   LearnerAvatarData,
   LearnerProfileData,
-  LearnerProfileView
+  LearnerProfileView,
+  AudioArtifactInput
 } from "@e4s/contracts";
 import { learnerApiClient as apiClient } from "../../api/learner.js";
 import { ApiError } from "../../api/runtime.js";
@@ -17,7 +18,8 @@ import { useExperience } from "../../features/experience/Experience.js";
 // Learner-only visual layer in the same chunk so its lesson/profile spacing
 // rules are present when the first Learner screen mounts.
 import "./learner.css";
-import type { LearnerAudioEvidence, LearnerCallbacks } from "./contracts.js";
+import type { LearnerAudioEvidence, LearnerAudioUpload, LearnerCallbacks } from "./contracts.js";
+import { normalizeAudioEvidence } from "../shared/media/audio-evidence.js";
 import type { LearnerContractBundle, LearnerUiState } from "./Router.js";
 import { LearnerController } from "./Router.js";
 import { Empty, Notice, PageTitle, AppLink } from "./ui.js";
@@ -32,6 +34,10 @@ export type ResolvedLearnerRoute =
   | { name: "notFound"; params: Record<string, never> };
 
 const gameKeys: readonly GameKey[] = ["scramble", "crossword", "eggs", "mario", "sort", "typing"];
+
+function audioInput(audio: LearnerAudioEvidence | undefined): AudioArtifactInput | undefined {
+  return audio?.artifactKey ? { ...audio, artifactKey: audio.artifactKey } as AudioArtifactInput : undefined;
+}
 
 type LearnerLoadFailureProps = {
   route: ResolvedLearnerRoute["name"];
@@ -143,9 +149,9 @@ export function LearnerRouteController() {
   const [uiState, setUiState] = useState<LearnerUiState>({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
-  const coachPending = useRef<{ message: string; requestId: string; audio?: LearnerAudioEvidence } | undefined>(undefined);
+  const coachPending = useRef<{ message: string; requestId: string; audio?: AudioArtifactInput } | undefined>(undefined);
   const challengePending = useRef<{ message: string; requestId: string } | undefined>(undefined);
-  const practicePending = useRef<{ text: string; requestId: string; audio?: LearnerAudioEvidence } | undefined>(undefined);
+  const practicePending = useRef<{ text: string; requestId: string; audio?: AudioArtifactInput } | undefined>(undefined);
   const gameSetPending = useRef<{ topic: string; requestId: string } | undefined>(undefined);
   const gamePending = useRef<{ input: GameFinishInput; requestId: string } | undefined>(undefined);
 
@@ -360,8 +366,17 @@ export function LearnerRouteController() {
       });
       return runtime;
     },
-    uploadAssessmentAudio: async (file, filename) => (await apiClient.uploadAssessmentAudio(file, filename)).artifactKey,
-    getAssessmentAudioReadUrl: (artifactKey) => apiClient.getAssessmentAudioReadUrl(artifactKey),
+    uploadAssessmentAudio: async (file, filename) => {
+      const uploaded = await apiClient.uploadAssessmentAudio(file, filename);
+      const normalized = normalizeAudioEvidence({ ...uploaded, signedUrl: uploaded.signedUrl ?? uploaded.url });
+      return { ...(normalized ?? {}), artifactKey: uploaded.artifactKey } as LearnerAudioUpload;
+    },
+    getAssessmentAudioReadUrl: async (artifactKey) => {
+      const playback = await apiClient.getAssessmentAudioReadUrl(artifactKey);
+      const normalized = normalizeAudioEvidence({ ...playback, artifactKey, signedUrl: playback.signedUrl ?? playback.url });
+      const url = normalized?.signedUrl ?? "";
+      return { ...(normalized ?? {}), artifactKey, url, expiresAt: playback.expiresAt ?? "" } as { url: string; expiresAt: string } & LearnerAudioEvidence;
+    },
     recordAssessmentAudioPlay: async (section, groupKey) => {
       const attempt = contracts.assessment?.attempt;
       if (!attempt) throw new Error("ASSESSMENT_ATTEMPT_NOT_ACTIVE");
@@ -415,7 +430,8 @@ export function LearnerRouteController() {
       });
     },
     sendCoachMessage: async (message, audio) => {
-      const pending = coachPending.current?.message === message ? { ...coachPending.current, ...(audio ? { audio } : {}) } : { message, requestId: crypto.randomUUID(), ...(audio ? { audio } : {}) };
+      const inputAudio = audioInput(audio);
+      const pending = coachPending.current?.message === message ? { ...coachPending.current, ...(inputAudio ? { audio: inputAudio } : {}) } : { message, requestId: crypto.randomUUID(), ...(inputAudio ? { audio: inputAudio } : {}) };
       coachPending.current = pending;
       setUiState((current) => {
         const { error: _error, ...coach } = current.coach ?? {};
@@ -435,7 +451,8 @@ export function LearnerRouteController() {
       challengePending.current = pending; const challenge = await apiClient.sendLevelChallengeMessage(pending); challengePending.current = undefined; setContracts({ challenge });
     },
     submitWeeklyPractice: async (text, audio) => {
-      const pending = practicePending.current?.text === text ? { ...practicePending.current, ...(audio ? { audio } : {}) } : { text, requestId: crypto.randomUUID(), ...(audio ? { audio } : {}) };
+      const inputAudio = audioInput(audio);
+      const pending = practicePending.current?.text === text ? { ...practicePending.current, ...(inputAudio ? { audio: inputAudio } : {}) } : { text, requestId: crypto.randomUUID(), ...(inputAudio ? { audio: inputAudio } : {}) };
       practicePending.current = pending; const practice = await apiClient.submitWeeklyPractice(pending); practicePending.current = undefined; setContracts({ practice });
     },
     appealWeeklyPractice: async (submissionId, reason) => setContracts({ practice: await apiClient.appealWeeklyPractice(submissionId, reason) }),

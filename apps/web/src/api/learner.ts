@@ -4,8 +4,9 @@ import type {
   CoachPersona, CoachView, DuelView, GameAnswerInput, GameFinishInput, GameHubView, GameKey, GameResultView,
   LearnerHomeView, LearnerProfileData, LearnerProfileView, LearnerProgressView, LessonPartAppealView,
   LessonPartAttemptEvidenceInput, LessonPartAttemptView, LessonPartCode, LessonProgressView, LessonView,
-  ContentImageView, LevelChallengeView, MicroLessonView, RewardView, SurveyView, WeeklyPracticeView
+  ContentImageView, LevelChallengeView, MicroLessonView, RewardView, SurveyView, WeeklyPracticeView, AudioArtifactInput
 } from "@e4s/contracts";
+import type { AudioArtifactView } from "@e4s/contracts";
 import { request, uploadMultipart } from "./runtime.js";
 import type { LearnerAudioEvidence } from "../app/learner/contracts.js";
 
@@ -28,13 +29,13 @@ export interface LearnerApiClient {
   submitMicroAttempt(id: string, answer: string): Promise<MicroLessonView>;
   completeMicroLesson(id: string): Promise<MicroLessonView>;
   getCoach(): Promise<CoachView>;
-  sendCoachMessage(input: CoachMessageInput & { audio?: LearnerAudioEvidence }): Promise<CoachView>;
+  sendCoachMessage(input: CoachMessageInput & { audio?: AudioArtifactInput }): Promise<CoachView>;
   setCoachPersona(persona: CoachPersona): Promise<CoachView>;
   clearCoach(): Promise<CoachView>;
   getLevelChallenge(): Promise<LevelChallengeView>;
   sendLevelChallengeMessage(input: CoachMessageInput): Promise<LevelChallengeView>;
   getWeeklyPractice(): Promise<WeeklyPracticeView>;
-  submitWeeklyPractice(input: { requestId: string; text: string; audio?: LearnerAudioEvidence }): Promise<WeeklyPracticeView>;
+  submitWeeklyPractice(input: { requestId: string; text: string; audio?: AudioArtifactInput }): Promise<WeeklyPracticeView>;
   appealWeeklyPractice(submissionId: string, reason: string): Promise<WeeklyPracticeView>;
   getGames(): Promise<GameHubView>;
   generateGameWordSet(input: { requestId: string; topic: string }): Promise<GameHubView>;
@@ -51,8 +52,8 @@ export interface LearnerApiClient {
   submitSurvey(input: { rating: number; comment: string; studyTime: "work" | "outside" | "both" }): Promise<SurveyView>;
   getAssessment(kind: AssessmentKind | "levelup"): Promise<AssessmentView>;
   startAssessment(kind: AssessmentKind | "levelup"): Promise<AssessmentView>;
-  uploadAssessmentAudio(file: Blob, filename: string): Promise<{ artifactKey: string }>;
-  getAssessmentAudioReadUrl(artifactKey: string): Promise<{ url: string; expiresAt: string }>;
+  uploadAssessmentAudio(file: Blob, filename: string): Promise<AudioArtifactView & { url?: string | null }>;
+  getAssessmentAudioReadUrl(artifactKey: string): Promise<AudioArtifactView & { url?: string | null }>;
   saveAssessmentResponse(attemptId: string, section: AssessmentSectionCode, taskKey: string, input: {
     value: string; evidenceType: "choice" | "text" | "audio" | "transcript" | "typed_proxy" | "technical_failure"; artifactKey?: string;
   }): Promise<AssessmentResponseView>;

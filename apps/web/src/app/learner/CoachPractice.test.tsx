@@ -73,6 +73,21 @@ function enableSpeechRecognition() {
 }
 
 describe("app coach and weekly practice speech input", () => {
+  it("normalizes Season audioArtifact responses into a playable recording beside the transcript", () => {
+    render(<LearnerCoach view={{ ...coach, messages: [{ id: "turn-1", speaker: "learner", text: "I can help", createdAt: "2026-10-28T00:00:00.000Z", audioArtifact: { fileId: "season-file", artifactKey: "audio/season.webm", signedUrl: "/audio/season.webm" } }] }} actions={actions()} />);
+    expect(screen.getByLabelText("Phát Bản ghi âm câu trả lời")).toHaveAttribute("src", "/audio/season.webm");
+    expect(screen.getAllByText("I can help").length).toBeGreaterThanOrEqual(2);
+  });
+
+  it("normalizes weekly submission audioArtifact responses while retaining feedback", () => {
+    render(<LearnerPractice view={{ ...practice, state: "submitted", submission: {
+      id: "submission-1", status: "submitted", text: "I coordinate the weekly project meeting every Monday morning.", submittedAt: "2026-10-28T00:00:00.000Z", score: null,
+      feedback: "Result kept after playback", suggestions: [], correctedText: "", audioArtifact: { fileId: "weekly-file", artifactKey: "audio/weekly.webm", signedUrl: "/audio/weekly.webm" }
+    } }} actions={actions()} />);
+    expect(screen.getByLabelText("Phát Bản ghi âm bài thực hành")).toHaveAttribute("src", "/audio/weekly.webm");
+    expect(screen.getByText("Result kept after playback")).toBeInTheDocument();
+  });
+
   it("shows weekly-practice unlock progress against the fixed five-lesson requirement", () => {
     render(<LearnerPractice view={{ ...practice, state: "locked", completedLessons: 0, totalLessons: 0 }} actions={actions()} />);
 

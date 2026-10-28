@@ -8,10 +8,19 @@ import type {
   ContentWeeklyPracticeDraftInput,
   ContentReviewAiGradeJobView, ContentReviewAssessmentDetailView, ContentReviewView, ContentWeekFrameView,
   ContentImageView,
+  AudioArtifactView,
   ManualAssessmentScoreInput,
   ContentWeekInput, ContentWeekSuggestionView, SystemCapabilitiesView, WeeklyPracticeAssignmentView
 } from "@e4s/contracts";
 import { request, uploadMultipart } from "./runtime.js";
+
+export type AssessmentAudioReadView = AudioArtifactView & {
+  url?: string | null;
+  sourceFlow?: "placement" | "daily_lesson" | "weekly_practice" | "season" | null;
+  sourceEntityId?: string | null;
+  taskKey?: string | null;
+  questionKey?: string | null;
+};
 
 export interface OperatorApiClient {
   getAssessmentReviewOverview(): Promise<AssessmentReviewOverviewView>;
@@ -19,6 +28,10 @@ export interface OperatorApiClient {
   assignAssessmentReviewWeeklyPractice(learnerId: string): Promise<WeeklyPracticeAssignmentView>;
   getAssessmentReviewAttempt(attemptId: string): Promise<AssessmentReviewAttemptDetailView>;
   getAssessmentReviewChallenge(attemptId: string): Promise<AssessmentReviewChallengeView>;
+  listAssessmentAudio?(filters?: { learnerId?: string; sourceFlow?: "placement" | "daily_lesson" | "weekly_practice" | "season" }): Promise<{ items: AssessmentAudioReadView[] }>;
+  getAssessmentAudioReadUrl?(artifactKey: string): Promise<AssessmentAudioReadView>;
+  confirmAssessmentAudioDeletion?(fileId: string): Promise<{ confirmationToken: string; expiresAt: string }>;
+  deleteAssessmentAudio?(fileId: string, confirmationToken: string): Promise<AssessmentAudioReadView & { deleted?: boolean }>;
   manualScoreAssessment?(attemptId: string, input: ManualAssessmentScoreInput): Promise<AssessmentReviewAttemptDetailView>;
   rescoreAssessment(attemptId: string, requestId: string): Promise<AssessmentReviewAttemptDetailView>;
   changeAssessmentReviewLearnerLevel(learnerId: string, input: AssessmentLevelChangeInput): Promise<AssessmentLevelChangeView>;
@@ -71,6 +84,16 @@ export const operatorApiClient: OperatorApiClient = {
   assignAssessmentReviewWeeklyPractice: (learnerId) => request(`/api/v1/assessment-reviews/learners/${encodeURIComponent(learnerId)}/weekly-practice`, { method: "POST", body: "{}" }),
   getAssessmentReviewAttempt: (attemptId) => request(`/api/v1/assessment-reviews/attempts/${encodeURIComponent(attemptId)}`),
   getAssessmentReviewChallenge: (attemptId) => request(`/api/v1/assessment-reviews/challenges/${encodeURIComponent(attemptId)}`),
+  listAssessmentAudio: (filters) => {
+    const query = new URLSearchParams();
+    if (filters?.learnerId) query.set("learnerId", filters.learnerId);
+    if (filters?.sourceFlow) query.set("sourceFlow", filters.sourceFlow);
+    const suffix = query.toString() ? `?${query.toString()}` : "";
+    return request(`/api/v1/files/assessment-audio${suffix}`);
+  },
+  getAssessmentAudioReadUrl: (artifactKey) => request(`/api/v1/files/assessment-audio/read?artifactKey=${encodeURIComponent(artifactKey)}`),
+  confirmAssessmentAudioDeletion: (fileId) => request(`/api/v1/files/assessment-audio/${encodeURIComponent(fileId)}/delete-confirmation`, { method: "POST", body: "{}" }),
+  deleteAssessmentAudio: (fileId, confirmationToken) => request(`/api/v1/files/assessment-audio/${encodeURIComponent(fileId)}`, { method: "DELETE", body: JSON.stringify({ confirmationToken }) }),
   manualScoreAssessment: (attemptId, input) => request(`/api/v1/assessment-reviews/${encodeURIComponent(attemptId)}/manual-score`, { method: "POST", body: JSON.stringify(input) }),
   rescoreAssessment: (attemptId, requestId) => request(`/api/v1/assessment-reviews/${encodeURIComponent(attemptId)}/rescore`, { method: "POST", body: JSON.stringify({ requestId }) }),
   changeAssessmentReviewLearnerLevel: (learnerId, input) => request(`/api/v1/assessment-reviews/learners/${encodeURIComponent(learnerId)}/level`, { method: "PATCH", body: JSON.stringify(input) }),

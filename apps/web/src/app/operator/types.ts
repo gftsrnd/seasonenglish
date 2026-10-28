@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import type { AssessmentReviewLearnerView, ContentLessonDraftInput, LessonPartCode } from "@e4s/contracts";
+import type { AssessmentReviewLearnerView, AudioArtifactView, ContentLessonDraftInput, LessonPartCode } from "@e4s/contracts";
 
 export type Cefr = "A1" | "A2" | "B1" | "B2" | "C1";
 export type AsyncState = "idle" | "loading" | "success" | "error";
@@ -371,6 +371,7 @@ export interface ReviewSubmission {
   aiGraded?: boolean;
   feedback?: string | null;
   suggestions?: Suggestion[];
+  audioArtifact?: AudioArtifactView;
 }
 
 export interface ReviewCoachTurn {
@@ -385,6 +386,7 @@ export interface ReviewCoachTurn {
   reply: string;
   rubric?: RubricScore | null;
   suggestions?: Suggestion[];
+  audioArtifact?: AudioArtifactView;
 }
 
 export interface ReviewAppeal {
@@ -451,6 +453,7 @@ export interface OperatorReviewActions {
   onDecideAppeal(id: string, accepted: boolean): void;
   onViewTest(id: string): void;
   onSaveWeeklyPractice?(input: ReviewWeeklyPracticeInput): void | Promise<void>;
+  onDeleteAudio?(evidence: import("../shared/media/audio-evidence.js").AudioEvidence): void | Promise<void>;
 }
 export type ReviewActionKey = "checkSubmission" | "checkCoach" | "gradeAi" | "gradeManual" | "decideAppeal" | "viewTest";
 

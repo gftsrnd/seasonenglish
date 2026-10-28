@@ -92,8 +92,9 @@ export interface PracticeView extends WeeklyPracticeView {
 }
 
 /** Web adapter payload; Agent 1 may add signed upload/read metadata without changing the controls. */
-export type LearnerAudioEvidence = Pick<AudioEvidence, "artifactKey" | "signedUrl" | "expiresAt" | "createdAt" | "mimeType" | "sizeBytes" | "transcript" | "deletion">
+export type LearnerAudioEvidence = Pick<AudioEvidence, "fileId" | "artifactKey" | "signedUrl" | "expiresAt" | "createdAt" | "mimeType" | "sizeBytes" | "transcript" | "retentionUntil" | "cleanupEligible" | "deletedAt" | "deletedBy" | "deletion">
   & { playbackUrl?: string; readUrl?: string; deletion?: AudioDeletionMetadata | null | undefined };
+export type LearnerAudioUpload = LearnerAudioEvidence & { artifactKey: string };
 
 export interface ProfileView extends LearnerProgressView {
   profileMissing?: boolean;
@@ -126,8 +127,8 @@ export interface LearnerCallbacks {
   submitAssessment: () => void | Promise<void>;
   /** Records a visibility/focus event; the server remains authoritative for the count and status. */
   recordAssessmentViolation?: (attemptId: string, input: AssessmentViolationInput) => Promise<AssessmentRuntimeView>;
-  uploadAssessmentAudio: (file: Blob, filename: string) => Promise<string>;
-  getAssessmentAudioReadUrl?: (artifactKey: string) => Promise<{ url: string; expiresAt: string }>;
+  uploadAssessmentAudio: (file: Blob, filename: string) => Promise<string | LearnerAudioUpload>;
+  getAssessmentAudioReadUrl?: (artifactKey: string) => Promise<{ url: string; expiresAt: string } & LearnerAudioEvidence>;
   recordAssessmentAudioPlay: (section: AssessmentSectionCode, groupKey: string) => Promise<{ playCount: number; remaining: number }>;
   createAssessmentAppeal: (reason: string) => void | Promise<void>;
   completeLessonStudy: () => void | Promise<void>;

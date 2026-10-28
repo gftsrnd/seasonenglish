@@ -1,6 +1,7 @@
 import type { AssessmentDecisionView, AssessmentOption, AssessmentResponseView, AssessmentSectionCode, AssessmentSectionStatus, AssessmentAttemptStatus, AssessmentStimulus } from "./assessment-contract.js";
 import type { CefrLevel } from "./domain-contract.js";
 import type { LessonPart } from "./learning-contract.js";
+import type { AudioArtifactView } from "./audio-contract.js";
 
 export type ContentLessonSetStatus = "missing" | "draft" | "review" | "published" | "retired";
 
@@ -135,6 +136,7 @@ export interface ContentReviewView {
     coachText: string;
     scores: { meaning: number | null; vocabulary: number | null; grammar: number | null };
     suggestions: string[];
+    audioArtifact?: AudioArtifactView;
   }>;
   submissions: Array<{
     id: string; learnerName: string; cefr: CefrLevel | null; weekNumber: number;
@@ -146,6 +148,7 @@ export interface ContentReviewView {
     task?: string;
     guidance?: string;
     requiredVocabulary?: string[];
+    audioArtifact?: AudioArtifactView;
   }>;
   weeklyPractices?: Array<{
     versionId: string;

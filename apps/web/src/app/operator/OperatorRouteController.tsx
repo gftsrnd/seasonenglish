@@ -31,6 +31,7 @@ import type { ManualScoreInput } from "./AssessmentManualScore.js";
 import { OperatorWeeks } from "./Weeks.js";
 import { Badge } from "./primitives.js";
 import { ModalProvider, useModal } from "../shared/ModalProvider.js";
+import type { AudioEvidence } from "../shared/media/audio-evidence.js";
 import { adaptAssessmentOverview, adaptLevelForms, adaptLessonMatrix, adaptLessonSet, adaptPrompts, adaptReview, adaptWeeks } from "./adapters.js";
 import type { Cefr, LessonSetActionKey, OperatorReviewActions, PromptKey, ReviewTab, WeekSuggestion } from "./types.js";
 import { generateLessonCellsSettled, lessonGenerationJobsSnapshot, startLessonGenerationJob, subscribeLessonGenerationJobs } from "./lesson-generation.js";
@@ -273,6 +274,14 @@ function DashboardRoute({ client, readOnly }: { client: OperatorApiClient; readO
       .catch(reason => notify(message(reason), "danger"))
       .finally(() => setManualScoreBusy(false));
   };
+  const deleteAssessmentAudio = async (evidence: AudioEvidence) => {
+    if (readOnly || !assessmentDialog || !evidence.fileId || typeof client.confirmAssessmentAudioDeletion !== "function" || typeof client.deleteAssessmentAudio !== "function") return;
+    const confirmation = await client.confirmAssessmentAudioDeletion(evidence.fileId);
+    await client.deleteAssessmentAudio(evidence.fileId, confirmation.confirmationToken);
+    const refreshed = await client.getContentReviewAssessment(assessmentDialog.attemptId);
+    setAssessmentDialog(refreshed);
+    notify("Đã xoá bản ghi âm; transcript và kết quả vẫn được giữ.");
+  };
   const showChallenge = (attemptId: string) => void client.getAssessmentReviewChallenge(attemptId).then(detail => { setDialog({ kind: "challenge", detail, learnerName: view.levelRequests.find(item => item.id === attemptId)?.learnerName ?? "" }); }).catch(reason => notify(message(reason), "danger"));
   const showProfile = (learnerId: string) => void client.getAssessmentReviewLearner(learnerId).then(detail => { setDialog({ kind: "profile", detail }); }).catch(reason => notify(message(reason), "danger"));
   const togglePendingProfile = (attemptId: string) => {
@@ -365,7 +374,7 @@ function DashboardRoute({ client, readOnly }: { client: OperatorApiClient; readO
     onDemote: id => changeLevel(id, "recommend_lower"), onChangeLevel: id => changeLevel(id, "direct"), onEditGoal: editGoal, onViewProfile: showProfile, onAssignWeeklyPractice: assignWeeklyPractice, onTogglePendingProfile: togglePendingProfile, onSetLevelDirect: id => changeLevel(id, "direct"),
     onOpenAppeals: () => navigate(paths.review, { state: { reviewTab: "appeals" } }), onOpenSettings: () => navigate("/settings"), onOpenWeeks: () => navigate(paths.weeks), onOpenLevelForms: () => navigate(paths.levelForms)
   }} />
-  {assessmentDialog && <OperatorReviewAssessmentDetail detail={assessmentDialog} onClose={() => setAssessmentDialog(undefined)} {...(typeof client.manualScoreAssessment === "function" && !readOnly && (assessmentDialog.status === "pending_review" || assessmentDialog.status === "submitted") ? { onSaveManualScore: saveManualScore } : {})} savingManualScore={manualScoreBusy} />}
+  {assessmentDialog && <OperatorReviewAssessmentDetail detail={assessmentDialog} onClose={() => setAssessmentDialog(undefined)} {...(typeof client.manualScoreAssessment === "function" && !readOnly && (assessmentDialog.status === "pending_review" || assessmentDialog.status === "submitted") ? { onSaveManualScore: saveManualScore } : {})} {...(typeof client.confirmAssessmentAudioDeletion === "function" && typeof client.deleteAssessmentAudio === "function" && !readOnly ? { onDeleteAudio: deleteAssessmentAudio } : {})} savingManualScore={manualScoreBusy} />}
   {dialog && <OperatorDashboardDialog dialog={dialog} onClose={() => setDialog(undefined)} />}
   {toast && <div className={`operator-toast operator-toast-${toast.tone}`} role={toast.tone === "danger" ? "alert" : "status"} aria-live={toast.tone === "danger" ? "assertive" : "polite"}>{toast.message}</div>}
   </>;
@@ -779,7 +788,32 @@ function ReviewRoute({ client, readOnly, canEditWeeklyPractice }: { client: Oper
   const [error, setError] = useState<string>();
   const [dialog, setDialog] = useState<ContentReviewAssessmentDetailView>();
   const capabilities = useCapabilities(client);
-  const load = () => client.getContentReview().then(setData).catch(reason => setError(message(reason)));
+  const load = async () => {
+    try {
+      const next = await client.getContentReview();
+      if (typeof client.listAssessmentAudio !== "function") {
+        setData(next);
+        return;
+      }
+      try {
+        const audio = await client.listAssessmentAudio();
+        const bySource = new Map(audio.items.flatMap(item => (item.sourceEntityId && (item.sourceFlow === "season" || item.sourceFlow === "weekly_practice")) ? [[item.sourceEntityId, item] as const] : []));
+        const attachAudio = <T extends { id: string }>(item: T) => {
+          const artifact = bySource.get(item.id);
+          return artifact ? { ...item, audioArtifact: artifact } : item;
+        };
+        setData({
+          ...next,
+          coachSamples: next.coachSamples.map(attachAudio),
+          submissions: next.submissions.map(attachAudio)
+        });
+      } catch {
+        setData(next);
+      }
+    } catch (reason) {
+      setError(message(reason));
+    }
+  };
   useEffect(() => { void load(); }, [client]);
   if (error) return <Status tone="error">Không tải được dữ liệu đọc mẫu: {error}</Status>;
   if (!data) return <Status>Đang tải dữ liệu đọc mẫu…</Status>;
@@ -820,18 +854,25 @@ function ReviewRoute({ client, readOnly, canEditWeeklyPractice }: { client: Oper
     if (typeof client.getContentReviewAssessment !== "function") return;
     void client.getContentReviewAssessment(attemptId).then(setDialog).catch(reason => setError(message(reason)));
   };
+  const deleteReviewedAudio = async (evidence: AudioEvidence) => {
+    if (readOnly || !evidence.fileId || typeof client.confirmAssessmentAudioDeletion !== "function" || typeof client.deleteAssessmentAudio !== "function") return;
+    const confirmation = await client.confirmAssessmentAudioDeletion(evidence.fileId);
+    await client.deleteAssessmentAudio(evidence.fileId, confirmation.confirmationToken);
+    if (dialog) setDialog(await client.getContentReviewAssessment(dialog.attemptId));
+    await load();
+  };
   const guardedManualGrade: OperatorReviewActions["onGradeManual"] = (id, input) => {
     if (!readOnly) refresh(client.gradeReviewedSubmission(id, input));
   };
   return <><OperatorReview readOnly={readOnly} unavailable={missing} view={adaptReview(data, reviewToApi[tab], { aiConnected: capabilities?.ai ?? false })} actions={{
-    onTabChange: setTab, onMarkSubmission: (id, checked) => { if (!readOnly) refresh(client.setContentReviewChecked("submission", id, checked)); }, onMarkCoachTurn: (id, checked) => { if (!readOnly) refresh(client.setContentReviewChecked("coach", id, checked)); }, onGradeAi: gradeAi, onGradeManual: guardedManualGrade, onDecideAppeal: decide, onViewTest: viewTest,
+    onTabChange: setTab, onMarkSubmission: (id, checked) => { if (!readOnly) refresh(client.setContentReviewChecked("submission", id, checked)); }, onMarkCoachTurn: (id, checked) => { if (!readOnly) refresh(client.setContentReviewChecked("coach", id, checked)); }, onGradeAi: gradeAi, onGradeManual: guardedManualGrade, onDecideAppeal: decide, onViewTest: viewTest, ...(typeof client.confirmAssessmentAudioDeletion === "function" && typeof client.deleteAssessmentAudio === "function" && !readOnly ? { onDeleteAudio: deleteReviewedAudio } : {}),
     ...(canEditWeeklyPractice ? { onSaveWeeklyPractice: async input => {
       if (readOnly) return;
       await client.saveContentWeeklyPractice(input.week, input.cefr, { expectedVersion: input.expectedVersion, task: input.task, guidance: input.guidance, requiredVocabulary: input.requiredVocabulary });
       const next = await client.getContentReview();
       setData(next);
     } } : {})
-  }} />{dialog && <OperatorReviewAssessmentDetail detail={dialog} onClose={() => setDialog(undefined)} />}</>;
+  }} />{dialog && <OperatorReviewAssessmentDetail detail={dialog} onClose={() => setDialog(undefined)} {...(typeof client.confirmAssessmentAudioDeletion === "function" && typeof client.deleteAssessmentAudio === "function" && !readOnly ? { onDeleteAudio: deleteReviewedAudio } : {})} />}</>;
 }
 
 function PromptsRoute({ client, readOnly }: { client: OperatorApiClient; readOnly: boolean }) {

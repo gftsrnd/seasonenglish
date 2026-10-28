@@ -185,6 +185,56 @@ describe("Operator assessment audio playback", () => {
     expect(screen.getByRole("alert")).toHaveTextContent("Không phát được audio");
   });
 
+  it("offers deletion only for eligible artifacts and keeps the transcript after the confirmed callback", async () => {
+    const detail = assessmentDetail();
+    detail.answers[0]!.audioArtifact = {
+      ...detail.answers[0]!.audioArtifact!,
+      fileId: "file-1",
+      retentionUntil: "2026-09-30T00:00:00.000Z",
+      cleanupEligible: true,
+      transcript: "Persisted transcript"
+    };
+    const onDeleteAudio = vi.fn().mockResolvedValue(undefined);
+    render(<OperatorReviewAssessmentDetail detail={detail} onClose={vi.fn()} onDeleteAudio={onDeleteAudio} />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Xoá bản ghi âm" }));
+    expect(onDeleteAudio).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole("button", { name: "Xác nhận xoá bản ghi âm" }));
+    await waitFor(() => expect(onDeleteAudio).toHaveBeenCalledWith(expect.objectContaining({ fileId: "file-1", cleanupEligible: true })));
+    expect(screen.getByText("audio evidence")).toBeInTheDocument();
+  });
+
+  it("keeps the delete action disabled before the 60-day cleanup window", () => {
+    const detail = assessmentDetail();
+    detail.answers[0]!.audioArtifact = { ...detail.answers[0]!.audioArtifact!, fileId: "file-1", cleanupEligible: false };
+    render(<OperatorReviewAssessmentDetail detail={detail} onClose={vi.fn()} onDeleteAudio={vi.fn()} />);
+    expect(screen.getByRole("button", { name: "Xoá bản ghi âm" })).toBeDisabled();
+  });
+
+  it("plays normalized Season and weekly audio in the operator review cards", () => {
+    const onDeleteAudio = vi.fn();
+    const { rerender } = render(<OperatorReview
+      view={reviewView({
+        counts: { ...reviewView().counts, coach: 1 },
+        submissions: [{ ...reviewView().submissions[0]!, audioArtifact: { fileId: "weekly-file", artifactKey: "audio/weekly.webm", signedUrl: "/audio/weekly.webm", transcript: "Weekly transcript" } }],
+        coachTurns: [{ id: "turn-1", sessionId: "session-1", learnerName: "Lan", at: "28/10/2026 08:00", checked: false, userText: "Season answer", reply: "Season reply", audioArtifact: { fileId: "season-file", artifactKey: "audio/season.webm", signedUrl: "/audio/season.webm", transcript: "Season transcript" } }]
+      })}
+      actions={reviewActions({ onDeleteAudio })}
+    />);
+
+    expect(screen.getByLabelText("Phát Bản ghi âm bài nộp của Lan")).toHaveAttribute("src", "/audio/weekly.webm");
+    rerender(<OperatorReview
+      view={reviewView({
+        activeTab: "coach",
+        counts: { ...reviewView().counts, coach: 1 },
+        coachTurns: [{ id: "turn-1", sessionId: "session-1", learnerName: "Lan", at: "28/10/2026 08:00", checked: false, userText: "Season answer", reply: "Season reply", audioArtifact: { fileId: "season-file", artifactKey: "audio/season.webm", signedUrl: "/audio/season.webm", transcript: "Season transcript" } }]
+      })}
+      actions={reviewActions({ onDeleteAudio })}
+    />);
+    expect(screen.getByLabelText("Phát Bản ghi âm Season của Lan")).toHaveAttribute("src", "/audio/season.webm");
+    expect(onDeleteAudio).toBeDefined();
+  });
+
   it("shows every task and marks missing answers instead of hiding the task", () => {
     const { container } = render(<OperatorReviewAssessmentDetail detail={assessmentDetail()} onClose={vi.fn()} />);
 
