@@ -16,9 +16,10 @@ export interface PronunciationAssets {
   warnings: string[];
 }
 
-const CURATED_PHONEME_ASSETS = new Set([
-  "æ", "aɪ", "d", "eɪ", "f", "iː", "ɪ", "k", "p", "s", "t", "w", "ʃ", "ʌ", "θ", "ð", "ɜː"
-]);
+export const CURATED_PHONEME_TARGETS = [
+  "æ", "aɪ", "d", "eɪ", "f", "iː", "ɪ", "k", "p", "r", "s", "t", "w", "ʃ", "ʌ", "θ", "ð", "ɜː", "juː"
+] as const;
+const CURATED_PHONEME_ASSETS: ReadonlySet<string> = new Set(CURATED_PHONEME_TARGETS);
 
 /**
  * Small, reviewed overrides for words that have caused target-sound mistakes.
@@ -92,8 +93,10 @@ export function buildPronunciationAssets(
   const missingWords = verifiedWords.filter((word, index) => !wordAssets[index]);
   if (missingWords.length > 0) {
     return {
+      phonemeAudioId: phonemeAsset.id,
+      phonemeAudioUrl: phonemeAsset.url,
       wordAudioUrls: [],
-      warnings: missingWords.map((word) => `No registered word audio asset exists for ${word.word}`)
+      warnings: ["Word audio assets unavailable; target phoneme audio remains playable", ...missingWords.map((word) => `No registered word audio asset exists for ${word.word}`)]
     };
   }
   return {

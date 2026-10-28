@@ -20,7 +20,7 @@ export async function verifyPronunciationAssets(options = {}) {
   for (const entry of entries) {
     const label = `${entry.kind}:${entry.key}`;
     const root = audioRoots[entry.kind];
-    const expectedExtension = entry.kind === "phoneme" ? ".wav" : ".mp3";
+    const expectedExtension = entry.kind === "phoneme" ? ".ogg" : ".mp3";
     if (!root || typeof entry.key !== "string" || !entry.key.trim()) errors.push(`${label}: invalid kind or key`);
     if (typeof entry.id !== "string" || !entry.id.trim()) errors.push(`${label}: missing id`);
     if (typeof entry.url !== "string" || !entry.url.startsWith(`/media/audio/${entry.kind === "phoneme" ? "phonemes" : "words"}/`)) errors.push(`${label}: invalid URL`);
@@ -40,7 +40,9 @@ export async function verifyPronunciationAssets(options = {}) {
     declared.add(absolutePath);
     try {
       if (!(await stat(absolutePath)).isFile()) throw new Error("not a file");
-      const actual = createHash("sha256").update(await readFile(absolutePath)).digest("hex");
+      const contents = await readFile(absolutePath);
+      if (!isPlayableAudio(contents, entry.kind)) errors.push(`${label}: packaged file is not a nonempty playable ${entry.kind} asset`);
+      const actual = createHash("sha256").update(contents).digest("hex");
       if (actual !== entry.sha256) errors.push(`${label}: SHA-256 mismatch`);
     } catch {
       errors.push(`${label}: missing file ${entry.localPath}`);
@@ -87,9 +89,15 @@ async function listAudioFiles(directory) {
   for (const entry of await readdir(directory, { withFileTypes: true })) {
     const absolutePath = resolve(directory, entry.name);
     if (entry.isDirectory()) files.push(...await listAudioFiles(absolutePath));
-    else if (entry.isFile() && [".wav", ".mp3"].includes(extname(entry.name).toLowerCase())) files.push(absolutePath);
+    else if (entry.isFile() && [".ogg", ".wav", ".mp3"].includes(extname(entry.name).toLowerCase())) files.push(absolutePath);
   }
   return files;
+}
+
+function isPlayableAudio(contents, kind) {
+  if (!contents.length) return false;
+  if (kind === "phoneme") return contents.subarray(0, 4).toString("ascii") === "OggS";
+  return contents.subarray(0, 4).toString("ascii") === "RIFF" || contents.subarray(0, 3).toString("ascii") === "ID3";
 }
 
 function isInside(parent, child) {
