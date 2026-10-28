@@ -4,5 +4,6 @@ export * from "./service.js";
 export * from "./types.js";
 export * from "./token-ledger.js";
 export * from "./pronunciation.js";
+export * from "./pronunciation-assets.js";
 export * from "./providers/groq.js";
 export * from "./providers/anthropic.js";

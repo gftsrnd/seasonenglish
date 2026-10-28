@@ -9,6 +9,7 @@ import {
   buildPronunciationAssets,
   containsTargetPhoneme,
   curatedPronunciationWord,
+  type PronunciationAssetRegistry,
   type AiRunResult,
   type AiTaskRunner,
   type AiUsage
@@ -148,11 +149,13 @@ export async function generateWeeklyLessons(
     dayNumbers?: readonly number[];
     qualityReview?: boolean;
     qualityProfile?: LessonQualityProfile;
+    pronunciationAssetRegistry?: PronunciationAssetRegistry;
     existingLessons?: readonly ContentLessonDraftInput[];
     repairMode?: LessonRepairMode;
   } = {}
 ) {
   const qualityProfile = options.qualityProfile ?? "baseline";
+  const pronunciationAssetRegistry = options.pronunciationAssetRegistry;
   const qualityChecksEnabled = options.qualityReview || qualityProfile === "strict";
   let componentRetryCount = 0;
   const savedPlan = week.plan?.[cefr as keyof NonNullable<ContentWeekInput["plan"]>];
@@ -450,7 +453,8 @@ export async function generateWeeklyLessons(
     skillsResults[index]?.output,
     grammarClassifications[index]?.status,
     baseInputs[index]!.lessonFocus ?? `${week.topic} - day ${dayNumber}`,
-    foundationResults[index]?.pronunciationValid ?? false
+    foundationResults[index]?.pronunciationValid ?? false,
+    pronunciationAssetRegistry
   )).filter((lesson) => lesson.parts.length > 0);
   const parsedLessons = lessonDrafts.map((lesson, index) => {
     const sourceIndex = generationDays.findIndex((dayNumber) => dayNumber === lesson.dayNumber);
@@ -520,7 +524,7 @@ export async function generateWeeklyLessons(
         item.output.pronunciation.word1,
         item.output.pronunciation.word2,
         item.output.pronunciation.word3
-      ]).warnings.length;
+      ], pronunciationAssetRegistry).warnings.length;
     }, 0)
   };
   const output = { lessons, failures, qualityMetrics };
@@ -751,14 +755,15 @@ function buildLesson(
   skills: Skills | undefined,
   grammarStatus: "classified" | "no_suitable_content" | "insufficient_evidence" | undefined,
   lessonFocus: string,
-  pronunciationValid: boolean
+  pronunciationValid: boolean,
+  pronunciationAssetRegistry?: PronunciationAssetRegistry
 ) {
   const pronunciationAssets = foundation && pronunciationValid
     ? buildPronunciationAssets(foundation.pronunciation.focus, [
       foundation.pronunciation.word1,
       foundation.pronunciation.word2,
       foundation.pronunciation.word3
-    ])
+    ], pronunciationAssetRegistry)
     : { wordAudioUrls: [], warnings: [] };
   const grammar = grammarStatus === "classified" && foundation?.grammar
     ? {

@@ -13,10 +13,11 @@ Keep the accepted lesson-generation path usable when AI is unavailable or return
 - Fatal schema, empty, unsafe, or severely wrong-level results remain publication blockers. Optional fields and minor formatting issues warn; recoverable component failures preserve valid components and are surfaced in generation diagnostics.
 - Pronunciation target selection uses a small curated IPA mapping. A selected word is accepted only when its mapped IPA contains the exact target phoneme. Known cases such as `slipped /slɪpt/` are covered.
 - Pronunciation content keeps the existing `phonemeAudioUrl` and `wordAudioUrls` names. `phonemeAudioUrl` points only to a curated phoneme clip; each `wordAudioUrls[index]` points to the corresponding whole-word clip. No generated audio may be TTS of an IPA string.
+- Audio URLs are registry-backed and optional. The generator emits them only when the corresponding verified asset is present in the packaged pronunciation registry; otherwise it emits no audio URL and records a warning. This prevents 404s and prevents a word clip or browser TTS from being substituted for the target phoneme.
 
 ### Agent 2 contract
 
-The pronunciation part remains a normal lesson part. Its content is:
+When the registry contains the referenced clips, the pronunciation part remains a normal lesson part. Its content is:
 
 ```json
 {
@@ -31,9 +32,15 @@ The pronunciation part remains a normal lesson part. Its content is:
 
 `wordAudioUrls` is aligned by index with the complete `words` array (three entries in generated lessons). The phoneme URL and word URLs are different namespaces and must never be substituted for one another. If the target check fails, the generator omits both audio URL fields and retains the existing pronunciation section/fallback behavior.
 
+### Asset packaging and verification
+
+The supported storage location is `apps/web/public/media/audio/phonemes/` for target-only clips and `apps/web/public/media/audio/words/` for whole-word clips. Each future clip must be registered in `apps/web/public/media/pronunciation-manifest.json` with its URL, local path, SHA-256, licence, source URL, and kind. `pnpm verify:pronunciation` verifies the manifest, file presence, hashes, and absence of unregistered pronunciation files. The AI package consumes the generated/committed registry shape; an empty registry is valid and means no pronunciation audio URLs are advertised until verified clips are added.
+
 ## Rollback
 
 Set `qualityProfile` to `baseline` (the default) at the generation call site, or remove the strict option from a caller. Existing prompts/schemas remain unchanged and generated output remains backward compatible. If an already-generated strict lesson is unsuitable, retire/revert its lesson-set version through the existing content version workflow; no database migration is required.
+
+For an audio-only rollback, remove or empty the pronunciation registry and run `pnpm verify:pronunciation`; generation will retain pronunciation text but omit all audio URL fields.
 
 ## Non-goals
 

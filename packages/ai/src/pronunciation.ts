@@ -1,3 +1,9 @@
+import {
+  DEFAULT_PRONUNCIATION_ASSET_REGISTRY,
+  type PronunciationAssetRegistry
+} from "./pronunciation-assets.js";
+export { createPronunciationAssetRegistry, isRegisteredPronunciationAssetUrl } from "./pronunciation-assets.js";
+
 export interface PronunciationWordInput {
   word: string;
   ipa: string;
@@ -58,7 +64,8 @@ export function containsTargetPhoneme(ipa: string, targetPhoneme: string): boole
 
 export function buildPronunciationAssets(
   targetFocus: string,
-  words: readonly PronunciationWordInput[]
+  words: readonly PronunciationWordInput[],
+  registry: PronunciationAssetRegistry = DEFAULT_PRONUNCIATION_ASSET_REGISTRY
 ): PronunciationAssets {
   const target = targetFocus.match(/\/([^/]+)\//u)?.[1]?.trim() ?? targetFocus.trim();
   if (!target || words.length !== 3) {
@@ -77,11 +84,22 @@ export function buildPronunciationAssets(
     };
   }
 
-  const phonemeAudioId = `phoneme-${target}`;
+  const phonemeAsset = registry.phonemes[target];
+  if (!phonemeAsset) {
+    return { wordAudioUrls: [], warnings: [`No registered phoneme asset exists for /${target}/`] };
+  }
+  const wordAssets = verifiedWords.map((word) => registry.words[audioSlug(word.word)]);
+  const missingWords = verifiedWords.filter((word, index) => !wordAssets[index]);
+  if (missingWords.length > 0) {
+    return {
+      wordAudioUrls: [],
+      warnings: missingWords.map((word) => `No registered word audio asset exists for ${word.word}`)
+    };
+  }
   return {
-    phonemeAudioId,
-    phonemeAudioUrl: `/media/audio/phonemes/${target}.wav`,
-    wordAudioUrls: verifiedWords.map((word) => `/media/audio/words/${audioSlug(word.word)}.mp3`),
+    phonemeAudioId: phonemeAsset.id,
+    phonemeAudioUrl: phonemeAsset.url,
+    wordAudioUrls: wordAssets.map((asset) => asset!.url),
     warnings: []
   };
 }

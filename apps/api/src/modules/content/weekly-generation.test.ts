@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import type { ContentLessonDraftInput, ContentWeekInput } from "@e4s/contracts";
-import type { AiTaskRunner } from "@e4s/ai";
+import { createPronunciationAssetRegistry, type AiTaskRunner } from "@e4s/ai";
 import { generateWeeklyLessons, lessonQualityProfileFromEnv } from "./weekly-generation.js";
 
 vi.mock("@e4s/ai", async () => await import("../../../../../packages/ai/src/index.js"));
@@ -178,15 +178,7 @@ describe("weekly lesson generation orchestration", () => {
       examples: ["I give clear feedback.", "I give helpful feedback."]
     });
     expect(generated.lessons[0]?.parts.find((part) => part.code === "pronunciation")?.content).toMatchObject({ focus: "/f/" });
-    expect(generated.lessons[0]?.parts.find((part) => part.code === "pronunciation")?.content).toMatchObject({
-      phonemeAudioId: "phoneme-f",
-      phonemeAudioUrl: "/media/audio/phonemes/f.wav",
-      wordAudioUrls: [
-        "/media/audio/words/feedback.mp3",
-        "/media/audio/words/fine.mp3",
-        "/media/audio/words/helpful.mp3"
-      ]
-    });
+    expect(generated.lessons[0]?.parts.find((part) => part.code === "pronunciation")?.content).not.toHaveProperty("phonemeAudioUrl");
   });
 
   it("keeps valid foundation sections but hides pronunciation after three failed sound repairs", async () => {
@@ -237,10 +229,16 @@ describe("weekly lesson generation orchestration", () => {
       throw new Error(`UNEXPECTED_TASK:${taskId}`);
     });
 
+    const pronunciationAssetRegistry = createPronunciationAssetRegistry([
+      { kind: "phoneme", key: "f", id: "phoneme-f", url: "/media/audio/phonemes/f.wav" },
+      { kind: "word", key: "feedback", id: "word-feedback", url: "/media/audio/words/feedback.mp3" },
+      { kind: "word", key: "fine", id: "word-fine", url: "/media/audio/words/fine.mp3" },
+      { kind: "word", key: "helpful", id: "word-helpful", url: "/media/audio/words/helpful.mp3" }
+    ]);
     const generated = await generateWeeklyLessons(
       { weekNumber: 1, topic: "Giving feedback", description: "Give clear feedback", objectives: "Give clear feedback", keyVocabHint: "feedback", plan: { A1: ["give clear feedback", "two", "three", "four", "five"] } } as ContentWeekInput,
       "A1", { prompt: "Generate lessons." }, { runTask } as unknown as AiTaskRunner,
-      { dayNumbers: [1], qualityReview: true, qualityProfile: "strict" }
+      { dayNumbers: [1], qualityReview: true, qualityProfile: "strict", pronunciationAssetRegistry }
     );
 
     const pronunciation = generated.lessons[0]?.parts.find((part) => part.code === "pronunciation")?.content;
@@ -293,7 +291,7 @@ describe("weekly lesson generation orchestration", () => {
 
     const strict = await run("strict");
     expect(strict.foundationAttempts).toBe(2);
-    expect(strict.generated.lessons[0]?.parts.find((part) => part.code === "pronunciation")?.content).toHaveProperty("phonemeAudioUrl", "/media/audio/phonemes/f.wav");
+    expect(strict.generated.lessons[0]?.parts.find((part) => part.code === "pronunciation")?.content).not.toHaveProperty("phonemeAudioUrl");
     expect(strict.generated.output).toHaveProperty("qualityMetrics.componentRetryCount", 1);
   });
 
