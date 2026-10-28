@@ -250,6 +250,55 @@ describe("learner lesson study content", () => {
     expect(screen.getByText(/Âm \/eɪ\/ như trong “safe”/).closest(".lesson-grammar-formula-row")).toContainElement(control);
   });
 
+  it("uses the pronunciation audio contract without substituting whole-word speech for the phoneme", async () => {
+    const speak = vi.fn();
+    const audioSources: string[] = [];
+    class FakeAudio {
+      readonly src: string;
+      readonly play = vi.fn().mockResolvedValue(undefined);
+      readonly addEventListener = vi.fn();
+      constructor(src: string) {
+        this.src = src;
+        audioSources.push(src);
+      }
+    }
+    vi.stubGlobal("Audio", FakeAudio);
+    const lesson = {
+      id: "lesson-pronunciation-contract", title: "Pronunciation", dayNumber: 1, weekNumber: 1, weekTopic: "Work",
+      durationMinutes: 10, cefr: "A2",
+      content: { parts: [{ code: "pronunciation", title: "Phát âm", content: {
+        focus: "/d/", tip: "Touch the alveolar ridge.", words: [
+          { word: "called", ipa: "/kɔːld/" }, { word: "did", ipa: "/dɪd/" }, { word: "needed", ipa: "/ˈniːdɪd/" }
+        ], phonemeAudioId: "phoneme-d", phonemeAudioUrl: "/media/audio/phonemes/d.wav",
+        wordAudioUrls: ["/media/audio/words/called.mp3", "/media/audio/words/did.mp3", "/media/audio/words/needed.mp3"]
+      } }] },
+      progress: { status: "in_progress", completedPartCodes: ["pronunciation"], evidence: {} }
+    } as any;
+    const user = userEvent.setup();
+    render(<LearnerLesson view={{ lesson, lock: null }} actions={{ navigate: vi.fn(), speak, saveLessonProgress: vi.fn() } as any} />);
+
+    await user.click(screen.getByRole("button", { name: "Nghe âm /d/" }));
+    expect(audioSources).toEqual(["/media/audio/phonemes/d.wav"]);
+    expect(speak).not.toHaveBeenCalled();
+    await user.click(screen.getByRole("button", { name: "Nghe từ phát âm: called" }));
+    expect(audioSources).toEqual(["/media/audio/phonemes/d.wav", "/media/audio/words/called.mp3"]);
+  });
+
+  it("shows a graceful target-phoneme no-audio state without reading IPA text aloud", () => {
+    const speak = vi.fn();
+    const lesson = {
+      id: "lesson-phoneme-no-asset", title: "Pronunciation", dayNumber: 1, weekNumber: 1, weekTopic: "Work",
+      durationMinutes: 10, cefr: "A2",
+      content: { parts: [{ code: "pronunciation", title: "Phát âm", content: { focus: "/eɪ/", words: ["safe", "day", "take"] } }] },
+      progress: { status: "in_progress", completedPartCodes: ["pronunciation"], evidence: {} }
+    } as any;
+    render(<LearnerLesson view={{ lesson, lock: null }} actions={{ navigate: vi.fn(), speak, saveLessonProgress: vi.fn() } as any} />);
+
+    expect(screen.getByRole("status")).toHaveTextContent("Chưa có audio âm /eɪ/");
+    expect(screen.queryByRole("button", { name: "Nghe âm /eɪ/" })).not.toBeInTheDocument();
+    expect(speak).not.toHaveBeenCalled();
+  });
+
   it("keeps long vocabulary chips wrap-safe instead of clipping their full text", () => {
     const phrase = "call the first aid team after the incident report is complete";
     const lesson = {

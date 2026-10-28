@@ -17,7 +17,7 @@ import { useExperience } from "../../features/experience/Experience.js";
 // Learner-only visual layer in the same chunk so its lesson/profile spacing
 // rules are present when the first Learner screen mounts.
 import "./learner.css";
-import type { LearnerCallbacks } from "./contracts.js";
+import type { LearnerAudioEvidence, LearnerCallbacks } from "./contracts.js";
 import type { LearnerContractBundle, LearnerUiState } from "./Router.js";
 import { LearnerController } from "./Router.js";
 import { Empty, Notice, PageTitle, AppLink } from "./ui.js";
@@ -143,9 +143,9 @@ export function LearnerRouteController() {
   const [uiState, setUiState] = useState<LearnerUiState>({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
-  const coachPending = useRef<{ message: string; requestId: string } | undefined>(undefined);
+  const coachPending = useRef<{ message: string; requestId: string; audio?: LearnerAudioEvidence } | undefined>(undefined);
   const challengePending = useRef<{ message: string; requestId: string } | undefined>(undefined);
-  const practicePending = useRef<{ text: string; requestId: string } | undefined>(undefined);
+  const practicePending = useRef<{ text: string; requestId: string; audio?: LearnerAudioEvidence } | undefined>(undefined);
   const gameSetPending = useRef<{ topic: string; requestId: string } | undefined>(undefined);
   const gamePending = useRef<{ input: GameFinishInput; requestId: string } | undefined>(undefined);
 
@@ -414,8 +414,8 @@ export function LearnerRouteController() {
         return { ...current, home: { ...current.home, rewardAnnouncement: { ...base, kind: "normal" } } };
       });
     },
-    sendCoachMessage: async (message) => {
-      const pending = coachPending.current?.message === message ? coachPending.current : { message, requestId: crypto.randomUUID() };
+    sendCoachMessage: async (message, audio) => {
+      const pending = coachPending.current?.message === message ? { ...coachPending.current, ...(audio ? { audio } : {}) } : { message, requestId: crypto.randomUUID(), ...(audio ? { audio } : {}) };
       coachPending.current = pending;
       setUiState((current) => {
         const { error: _error, ...coach } = current.coach ?? {};
@@ -434,8 +434,8 @@ export function LearnerRouteController() {
       const pending = challengePending.current?.message === message ? challengePending.current : { message, requestId: crypto.randomUUID() };
       challengePending.current = pending; const challenge = await apiClient.sendLevelChallengeMessage(pending); challengePending.current = undefined; setContracts({ challenge });
     },
-    submitWeeklyPractice: async (text) => {
-      const pending = practicePending.current?.text === text ? practicePending.current : { text, requestId: crypto.randomUUID() };
+    submitWeeklyPractice: async (text, audio) => {
+      const pending = practicePending.current?.text === text ? { ...practicePending.current, ...(audio ? { audio } : {}) } : { text, requestId: crypto.randomUUID(), ...(audio ? { audio } : {}) };
       practicePending.current = pending; const practice = await apiClient.submitWeeklyPractice(pending); practicePending.current = undefined; setContracts({ practice });
     },
     appealWeeklyPractice: async (submissionId, reason) => setContracts({ practice: await apiClient.appealWeeklyPractice(submissionId, reason) }),

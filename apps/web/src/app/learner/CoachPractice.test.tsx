@@ -10,6 +10,8 @@ afterEach(() => {
   cleanup();
   Reflect.deleteProperty(window, "SpeechRecognition");
   Reflect.deleteProperty(window, "webkitSpeechRecognition");
+  Reflect.deleteProperty(navigator, "mediaDevices");
+  Reflect.deleteProperty(globalThis, "MediaRecorder");
   vi.restoreAllMocks();
 });
 
@@ -48,6 +50,19 @@ class FakeSpeechRecognition {
   constructor() {
     latestRecognition = this;
   }
+}
+
+class FakeMediaRecorder {
+  mimeType = "audio/webm;codecs=opus";
+  ondataavailable: ((event: { data: Blob }) => void) | null = null;
+  onerror: (() => void) | null = null;
+  onstop: (() => void) | null = null;
+  start = vi.fn();
+  stop = vi.fn(() => {
+    this.ondataavailable?.({ data: new Blob(["recorded voice"], { type: "audio/webm;codecs=opus" }) });
+    this.onstop?.();
+  });
+  constructor(_stream: MediaStream) {}
 }
 
 function enableSpeechRecognition() {
@@ -497,6 +512,46 @@ describe("app coach and weekly practice speech input", () => {
     expect(sendCoachMessage).toHaveBeenCalledWith("I reported the safety issue immediately");
   });
 
+  it("A-032 preserves the Season recording beside its transcript and sends both through the adapter", async () => {
+    enableSpeechRecognition();
+    vi.stubGlobal("MediaRecorder", FakeMediaRecorder);
+    Object.defineProperty(navigator, "mediaDevices", {
+      configurable: true,
+      value: { getUserMedia: vi.fn().mockResolvedValue({ getTracks: () => [{ stop: vi.fn() }] }) }
+    });
+    const sendCoachMessage = vi.fn().mockResolvedValue(undefined);
+    const uploadAssessmentAudio = vi.fn().mockResolvedValue("audio/season-1.webm");
+    const user = userEvent.setup();
+    render(<LearnerCoach view={coach} actions={{ ...actions(), sendCoachMessage, uploadAssessmentAudio } as unknown as LearnerCallbacks} />);
+
+    await user.click(screen.getByRole("button", { name: "Nói" }));
+    latestRecognition?.onresult?.({ results: [[{ transcript: "I reported the issue" }]] });
+    await waitFor(() => expect(screen.getByRole("textbox", { name: "Tin nhắn cho Season" })).toHaveValue("I reported the issue"));
+    await user.click(screen.getByRole("button", { name: "Đang nghe" }));
+    expect(uploadAssessmentAudio).toHaveBeenCalledTimes(1);
+    expect(await screen.findByText(/bản ghi âm đã lưu/i)).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Gửi" }));
+
+    expect(sendCoachMessage).toHaveBeenCalledWith("I reported the issue", expect.objectContaining({ artifactKey: "audio/season-1.webm" }));
+  });
+
+  it("keeps the Season draft when microphone permission fails", async () => {
+    enableSpeechRecognition();
+    vi.stubGlobal("MediaRecorder", FakeMediaRecorder);
+    Object.defineProperty(navigator, "mediaDevices", {
+      configurable: true,
+      value: { getUserMedia: vi.fn().mockRejectedValue(new Error("permission denied")) }
+    });
+    const user = userEvent.setup();
+    render(<LearnerCoach view={coach} actions={actions()} />);
+    const draft = screen.getByRole("textbox", { name: "Tin nhắn cho Season" });
+    await user.type(draft, "Keep this typed draft");
+    await user.click(screen.getByRole("button", { name: "Nói" }));
+
+    expect(draft).toHaveValue("Keep this typed draft");
+    expect(await screen.findByRole("alert")).toHaveTextContent(/micro/i);
+  });
+
   it("keeps Practice write/dialogue mode and exposes the microphone only when supported", async () => {
     const user = userEvent.setup();
     const { rerender } = render(<LearnerPractice view={{ ...practice, inputMode: "write", speechSupported: false }} actions={actions()} />);
@@ -512,6 +567,29 @@ describe("app coach and weekly practice speech input", () => {
     await waitFor(() => expect(dialogueDraft).toHaveValue("Please reschedule"));
     await user.click(screen.getByRole("button", { name: "Đang nghe" }));
     expect(latestRecognition?.stop).toHaveBeenCalledTimes(1);
+  });
+
+  it("L-060 preserves the weekly-practice recording with the submitted transcript", async () => {
+    enableSpeechRecognition();
+    vi.stubGlobal("MediaRecorder", FakeMediaRecorder);
+    Object.defineProperty(navigator, "mediaDevices", {
+      configurable: true,
+      value: { getUserMedia: vi.fn().mockResolvedValue({ getTracks: () => [{ stop: vi.fn() }] }) }
+    });
+    const submitWeeklyPractice = vi.fn().mockResolvedValue(undefined);
+    const uploadAssessmentAudio = vi.fn().mockResolvedValue("audio/practice-1.webm");
+    const user = userEvent.setup();
+    render(<LearnerPractice view={practice} actions={{ ...actions(), submitWeeklyPractice, uploadAssessmentAudio } as unknown as LearnerCallbacks} />);
+
+    await user.click(screen.getByRole("button", { name: "Nói" }));
+    latestRecognition?.onresult?.({ results: [[{ transcript: "I coordinate the weekly project meeting every Monday morning" }]] });
+    await waitFor(() => expect(screen.getByRole("textbox", { name: "Bài làm" })).toHaveValue("I coordinate the weekly project meeting every Monday morning"));
+    await user.click(screen.getByRole("button", { name: "Đang nghe" }));
+    expect(uploadAssessmentAudio).toHaveBeenCalledTimes(1);
+    expect(await screen.findByText(/bản ghi âm đã lưu/i)).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Nộp bài" }));
+    expect(submitWeeklyPractice).toHaveBeenCalledWith("I coordinate the weekly project meeting every Monday morning", expect.objectContaining({ artifactKey: "audio/practice-1.webm" }));
   });
 
   it("keeps a weekly practice submission single-flight and restores the draft after failure", async () => {

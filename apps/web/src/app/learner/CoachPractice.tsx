@@ -1,21 +1,12 @@
 import { useEffect, useId, useRef, useState, type CSSProperties, type FormEvent, type KeyboardEvent } from "react";
-import { BookOpen, LockKeyhole, MessageCircle, Mic, Send, SpellCheck2, Volume2 } from "lucide-react";
+import { BookOpen, LockKeyhole, MessageCircle, Send, SpellCheck2, Volume2 } from "lucide-react";
 import type { ChallengeView, CoachView, LearnerCallbacks, PracticeView } from "./contracts.js";
 import { ErrorText, Notice, PageTitle, Progress, AppLink } from "./ui.js";
 import { SeasonMark } from "../shared/SeasonMark.js";
+import { AudioCaptureControl } from "./AudioCaptureControl.js";
+import type { AudioEvidence } from "../shared/media/audio-evidence.js";
 
-type SpeechRecognitionResultEvent = { readonly results: ArrayLike<ArrayLike<{ readonly transcript: string }>> };
-type SpeechRecognitionInstance = {
-  lang: string;
-  interimResults: boolean;
-  maxAlternatives: number;
-  onresult: ((event: SpeechRecognitionResultEvent) => void) | null;
-  onerror: (() => void) | null;
-  onend: (() => void) | null;
-  start: () => void;
-  stop: () => void;
-};
-type SpeechRecognitionConstructor = new () => SpeechRecognitionInstance;
+type SpeechRecognitionConstructor = new () => { start: () => void };
 
 function speechRecognitionConstructor(): SpeechRecognitionConstructor | null {
   if (typeof window === "undefined") return null;
@@ -26,32 +17,18 @@ function speechRecognitionConstructor(): SpeechRecognitionConstructor | null {
   return speechWindow.SpeechRecognition ?? speechWindow.webkitSpeechRecognition ?? null;
 }
 
-function recognitionDraft(base: string, event: SpeechRecognitionResultEvent): string {
-  const transcript = Array.from(event.results)
-    .map((result) => result[0]?.transcript.trim() ?? "")
-    .filter(Boolean)
-    .join(" ");
-  if (!transcript) return base;
-  const draft = base.trim();
-  return `${draft}${draft ? " " : ""}${transcript}`;
-}
-
 export function LearnerCoach({ view, actions }: { view: CoachView; actions: LearnerCallbacks }) {
   const [message, setMessage] = useState("");
   const [pendingMessage, setPendingMessage] = useState("");
   const [sending, setSending] = useState(false);
-  const [recording, setRecording] = useState(false);
-  const [speechError, setSpeechError] = useState("");
+  const [audioEvidence, setAudioEvidence] = useState<AudioEvidence>();
   const [sendError, setSendError] = useState("");
   const [clearChatOpen, setClearChatOpen] = useState(false);
   const clearChatButtonRef = useRef<HTMLButtonElement>(null);
   const clearDialogTitleId = useId();
   const clearDialogDescriptionId = useId();
   const clearChatWasOpen = useRef(false);
-  const recognitionRef = useRef<SpeechRecognitionInstance | null>(null);
-  const recognitionBaseRef = useRef("");
   const composerRef = useRef<HTMLTextAreaElement>(null);
-  const speechSupported = speechRecognitionConstructor() !== null;
 
   useEffect(() => {
     if (clearChatOpen) {
@@ -60,57 +37,6 @@ export function LearnerCoach({ view, actions }: { view: CoachView; actions: Lear
       clearChatButtonRef.current?.focus();
     }
   }, [clearChatOpen]);
-
-  useEffect(() => () => {
-    const recognition = recognitionRef.current;
-    recognitionRef.current = null;
-    if (recognition) {
-      try { recognition.stop(); } catch { /* Recognition may already be closed by the browser. */ }
-    }
-  }, []);
-
-  const stopListening = () => {
-    const recognition = recognitionRef.current;
-    recognitionRef.current = null;
-    setRecording(false);
-    if (recognition) {
-      try { recognition.stop(); } catch { /* Recognition may already be closed by the browser. */ }
-    }
-  };
-
-  const startListening = () => {
-    const Constructor = speechRecognitionConstructor();
-    if (!Constructor) return;
-    let recognition: SpeechRecognitionInstance;
-    try { recognition = new Constructor(); } catch {
-      setSpeechError("Không mở được micro. Hãy cho phép micro rồi thử lại.");
-      return;
-    }
-    recognitionRef.current = recognition;
-    recognitionBaseRef.current = message.trim();
-    recognition.lang = "en-US";
-    recognition.interimResults = false;
-    recognition.maxAlternatives = 1;
-    recognition.onresult = (event) => setMessage(recognitionDraft(recognitionBaseRef.current, event));
-    recognition.onerror = () => {
-      setRecording(false);
-      if (recognitionRef.current === recognition) recognitionRef.current = null;
-      setSpeechError("Không nghe được giọng nói. Hãy cho phép micro rồi thử lại.");
-    };
-    recognition.onend = () => {
-      setRecording(false);
-      if (recognitionRef.current === recognition) recognitionRef.current = null;
-    };
-    setSpeechError("");
-    setRecording(true);
-    try {
-      recognition.start();
-    } catch {
-      setRecording(false);
-      if (recognitionRef.current === recognition) recognitionRef.current = null;
-      setSpeechError("Không mở được micro. Hãy cho phép micro rồi thử lại.");
-    }
-  };
 
   if (view.levelApproved === false) return <div className="app-learner-page"><PageTitle title="Luyện với Season" /><Notice tone="warn">Bạn cần được duyệt trình độ trước khi luyện với Season.</Notice><AppLink className="btn btn-primary" href="/home" navigate={actions.navigate}>Về trang chủ</AppLink></div>;
   const send = async (event: FormEvent) => {
@@ -121,8 +47,10 @@ export function LearnerCoach({ view, actions }: { view: CoachView; actions: Lear
     setSendError("");
     setPendingMessage(trimmed);
     try {
-      await actions.sendCoachMessage(trimmed);
+      if (audioEvidence) await actions.sendCoachMessage(trimmed, audioEvidence);
+      else await actions.sendCoachMessage(trimmed);
       setMessage("");
+      setAudioEvidence(undefined);
       window.requestAnimationFrame(() => resizeCoachComposer(composerRef.current));
     } catch {
       setSendError("Chưa gửi được tin nhắn. Nội dung vẫn được giữ để bạn thử lại.");
@@ -134,7 +62,7 @@ export function LearnerCoach({ view, actions }: { view: CoachView; actions: Lear
   const persona = view.persona === "formal" ? "formal" : "informal";
   const vocabulary = uniqueCoachVocabulary(view.vocabulary);
   const capped = view.daily.used >= view.daily.limit;
-  const coachError = sendError || speechError || view.error;
+  const coachError = sendError || view.error;
   const pageStyle: CSSProperties = { width: "100%", maxWidth: 960, minWidth: 0, boxSizing: "border-box", paddingBottom: "calc(88px + env(safe-area-inset-bottom))" };
   const composeStyle: CSSProperties = { display: "flex", flexWrap: "nowrap", alignItems: "center", gap: 8, margin: 16, paddingTop: 12, borderTop: "1px solid var(--line)" };
   const composeInputStyle: CSSProperties = { flex: "1 1 10rem", minWidth: 0, height: 42, minHeight: 42, maxHeight: 132, overflowY: "hidden", lineHeight: 1.35, resize: "none", boxSizing: "border-box" };
@@ -147,7 +75,7 @@ export function LearnerCoach({ view, actions }: { view: CoachView; actions: Lear
     {capped ? <Notice tone="warn"><b>Đã dùng hết {view.daily.limit} lượt chat hôm nay.</b> Ô nhập mở lại ngày mai; bạn có thể ôn bài tuần này.</Notice> : null}
     <section className="chat" aria-label="Cuộc trò chuyện với Season" aria-busy={view.thinking || sending || undefined} style={chatStyle}>{view.messages.length === 0 ? <div className="msg ai"><p>Chào bạn! Hôm nay mình luyện một tình huống thật nhé.</p></div> : view.messages.map((item) => <article className={`msg ${item.speaker === "coach" ? "ai" : "user"}`} key={item.id}><div className="eyebrow">{item.speaker === "coach" ? "Season" : "Bạn"}</div>{item.feedback ? <CoachFeedback feedback={item.feedback} /> : <p>{item.text}</p>}{item.speaker === "coach" ? <button className="coach-turn-audio" type="button" aria-label="Nghe câu của Season" title="Nghe câu của Season" onClick={() => actions.speak(coachSpeechText(item), "en-US")}><Volume2 size={17} aria-hidden="true" /><span>Nghe</span></button> : null}</article>)}{sending && pendingMessage ? <article className="msg user coach-message-pending" aria-label="Tin nhắn đang gửi"><div className="eyebrow">Bạn</div><p>{pendingMessage}</p><span className="xs muted">Đang gửi…</span></article> : null}{view.thinking ? <div className="msg ai" role="status">Season đang nghĩ…</div> : null}</section>{coachError ? <div className="coach-error-row"><ErrorText id="coach-error" message={coachError} /></div> : null}
     <section className="card coach-vocabulary"><h2>Từ bí mật</h2><div className="row coach-word-list">{vocabulary.map((item, index) => item.opened ? <button className="word-card coach-word-chip is-opened" type="button" title={item.meaning} key={item.word.toLocaleLowerCase()} aria-label={`Nghe từ ${item.word}${item.meaning ? `: ${item.meaning}` : ""}`} onClick={() => actions.speak(item.word, "en-US")}><b>{item.word}</b></button> : <div className="word-card coach-word-chip is-locked" key={item.word.toLocaleLowerCase()} aria-label={`Từ bí mật ${index + 1} chưa mở`}><LockKeyhole className="status-icon" aria-hidden="true" /><span>Gợi ý: {item.meaning || `từ số ${index + 1}`}</span></div>)}</div></section>
-    <form className="chat-compose" aria-busy={view.thinking || sending || undefined} onSubmit={send} style={composeStyle}><textarea ref={composerRef} rows={1} aria-label="Tin nhắn cho Season" aria-describedby={coachError ? "coach-error" : undefined} value={message} disabled={view.thinking || sending || !view.aiAvailable || capped} onChange={(event) => { setMessage(event.target.value); resizeCoachComposer(event.currentTarget); }} onKeyDown={(event) => { if (event.key === "Enter" && !event.shiftKey && !event.nativeEvent.isComposing) { event.preventDefault(); event.currentTarget.form?.requestSubmit(); } }} placeholder={view.thinking || sending ? "Season đang trả lời…" : view.cefr === "A1" || view.cefr === "A2" ? "Viết câu trả lời bằng tiếng Anh…" : "Type your reply in English…"} style={composeInputStyle} /><div style={composeActionsStyle}>{speechSupported ? <button className={`coach-mic coach-compose-icon ${recording ? "is-recording" : ""}`} type="button" aria-label={recording ? "Đang nghe" : "Nói"} aria-pressed={recording} title={recording ? "Dừng nghe" : "Nói"} disabled={view.thinking || sending || (!recording && (!view.aiAvailable || capped))} onClick={recording ? stopListening : startListening}><MicIcon /></button> : null}<button className="btn-primary coach-compose-icon coach-send" type="submit" aria-label={view.thinking || sending ? "Đang gửi…" : "Gửi"} title={view.thinking || sending ? "Đang gửi…" : "Gửi"} disabled={view.thinking || sending || !view.aiAvailable || capped || !message.trim() || recording}><Send size={20} aria-hidden="true" /></button></div></form></div>
+    <form className="chat-compose" aria-busy={view.thinking || sending || undefined} onSubmit={send} style={composeStyle}><textarea ref={composerRef} rows={1} aria-label="Tin nhắn cho Season" aria-describedby={coachError ? "coach-error" : undefined} value={message} disabled={view.thinking || sending || !view.aiAvailable || capped} onChange={(event) => { setMessage(event.target.value); resizeCoachComposer(event.currentTarget); }} onKeyDown={(event) => { if (event.key === "Enter" && !event.shiftKey && !event.nativeEvent.isComposing) { event.preventDefault(); event.currentTarget.form?.requestSubmit(); } }} placeholder={view.thinking || sending ? "Season đang trả lời…" : view.cefr === "A1" || view.cefr === "A2" ? "Viết câu trả lời bằng tiếng Anh…" : "Type your reply in English…"} style={composeInputStyle} /><div style={composeActionsStyle}><AudioCaptureControl label="Micro Season" value={audioEvidence} showMicrophone={speechRecognitionConstructor() !== null || (typeof navigator !== "undefined" && Boolean(navigator.mediaDevices?.getUserMedia) && typeof MediaRecorder !== "undefined")} transcript={message} disabled={view.thinking || sending || !view.aiAvailable || capped} uploadAudio={actions.uploadAssessmentAudio} getAudioReadUrl={actions.getAssessmentAudioReadUrl} onTranscript={setMessage} onAudioChange={setAudioEvidence} /><button className="btn-primary coach-compose-icon coach-send" type="submit" aria-label={view.thinking || sending ? "Đang gửi…" : "Gửi"} title={view.thinking || sending ? "Đang gửi…" : "Gửi"} disabled={view.thinking || sending || !view.aiAvailable || capped || !message.trim()}><Send size={20} aria-hidden="true" /></button></div></form></div>
     <p className="xs muted">Mỗi lượt Season trả lời và chấm 3 tiêu chí (đúng ý · từ vựng · ngữ pháp), gợi ý tối đa 3 chỗ sửa. Mục tiêu: ≥{view.weekly.target} lượt/tuần.</p>
     {clearChatOpen ? <ClearChatDialog titleId={clearDialogTitleId} descriptionId={clearDialogDescriptionId} onCancel={() => setClearChatOpen(false)} onConfirm={() => { setClearChatOpen(false); void actions.startNewCoachChat(); }} /> : null}
   </div>;
@@ -295,67 +223,15 @@ export function LearnerChallenge({ view, actions }: { view: ChallengeView; actio
 export function LearnerPractice({ view, actions }: { view: PracticeView; actions: LearnerCallbacks }) {
   const [text, setText] = useState(view.submission?.text ?? "");
   const [appealReason, setAppealReason] = useState("");
+  const [audioEvidence, setAudioEvidence] = useState<AudioEvidence>();
   const [recording, setRecording] = useState(false);
-  const [speechError, setSpeechError] = useState("");
   const [actionError, setActionError] = useState("");
   const [busyAction, setBusyAction] = useState<"submit" | "appeal" | null>(null);
   const busyActionRef = useRef<"submit" | "appeal" | null>(null);
-  const recognitionRef = useRef<SpeechRecognitionInstance | null>(null);
-  const recognitionBaseRef = useRef("");
   const draftRef = useRef<HTMLTextAreaElement>(null);
   const appealRef = useRef<HTMLTextAreaElement>(null);
-  const speechSupported = view.speechSupported !== false && speechRecognitionConstructor() !== null;
-
-  useEffect(() => () => {
-    const recognition = recognitionRef.current;
-    recognitionRef.current = null;
-    if (recognition) {
-      try { recognition.stop(); } catch { /* Recognition may already be closed by the browser. */ }
-    }
-  }, []);
-
-  const stopListening = () => {
-    const recognition = recognitionRef.current;
-    recognitionRef.current = null;
-    setRecording(false);
-    if (recognition) {
-      try { recognition.stop(); } catch { /* Recognition may already be closed by the browser. */ }
-    }
-  };
-
-  const startListening = () => {
-    const Constructor = speechRecognitionConstructor();
-    if (!Constructor) return;
-    let recognition: SpeechRecognitionInstance;
-    try { recognition = new Constructor(); } catch {
-      setSpeechError("Không mở được micro. Hãy cho phép micro rồi thử lại.");
-      return;
-    }
-    recognitionRef.current = recognition;
-    recognitionBaseRef.current = text.trim();
-    recognition.lang = "en-US";
-    recognition.interimResults = false;
-    recognition.maxAlternatives = 1;
-    recognition.onresult = (event) => setText(recognitionDraft(recognitionBaseRef.current, event));
-    recognition.onerror = () => {
-      setRecording(false);
-      if (recognitionRef.current === recognition) recognitionRef.current = null;
-      setSpeechError("Không nghe được giọng nói. Hãy cho phép micro rồi thử lại.");
-    };
-    recognition.onend = () => {
-      setRecording(false);
-      if (recognitionRef.current === recognition) recognitionRef.current = null;
-    };
-    setSpeechError("");
-    setRecording(true);
-    try {
-      recognition.start();
-    } catch {
-      setRecording(false);
-      if (recognitionRef.current === recognition) recognitionRef.current = null;
-      setSpeechError("Không mở được micro. Hãy cho phép micro rồi thử lại.");
-    }
-  };
+  const canRecord = typeof navigator !== "undefined" && Boolean(navigator.mediaDevices?.getUserMedia) && typeof MediaRecorder !== "undefined";
+  const showMicrophone = canRecord || (view.speechSupported !== false && speechRecognitionConstructor() !== null);
 
   const inputMode = view.inputMode === "dialogue" ? "dialogue" : "write";
   const inputLabel = inputMode === "dialogue" ? "Câu trả lời hội thoại" : "Bài làm";
@@ -381,7 +257,8 @@ export function LearnerPractice({ view, actions }: { view: PracticeView; actions
     if (!answer || answer.split(/\s+/).length < 8 || recording || !beginAction("submit")) return;
     let focusOnFailure = false;
     try {
-      await actions.submitWeeklyPractice(text);
+      if (audioEvidence) await actions.submitWeeklyPractice(text, audioEvidence);
+      else await actions.submitWeeklyPractice(text);
     } catch {
       focusOnFailure = true;
       setActionError("Chưa nộp được bài. Nội dung vẫn được giữ để bạn thử lại.");
@@ -414,7 +291,7 @@ export function LearnerPractice({ view, actions }: { view: PracticeView; actions
     const manuallyGraded = view.submission.gradingSource === "manual";
     return <div className="app-learner-page" style={pageStyle}><PageTitle eyebrow={`Tuần ${view.weekNumber} · ${view.topic}`} title="Bài thực hành cuối tuần" /><section className="card" style={cardStyle}><span className={`badge ${graded ? "ok" : "warn"}`}>{graded ? "Đã chấm" : "Chờ chấm"}</span><h2>Bài đã nộp</h2><p>{view.submission.text}</p>{view.submission.score ? <div className="grid cols-3"><div className="stat"><strong>{view.submission.score.rubric?.meaning ?? "—"}/5</strong><span>Ý nghĩa</span></div><div className="stat"><strong>{view.submission.score.rubric?.vocabulary ?? "—"}/5</strong><span>Từ vựng</span></div><div className="stat"><strong>{view.submission.score.rubric?.grammar ?? "—"}/5</strong><span>Ngữ pháp</span></div></div> : null}<p>{view.submission.feedback}</p>{view.submission.correctedText ? <div className="correction"><b>Bản gợi ý</b><p>{view.submission.correctedText}</p></div> : null}</section>{view.appeal ? <Notice tone={view.appeal.status === "pending" ? "info" : view.appeal.status === "accepted" ? "ok" : "warn"}>Kháng nghị: {view.appeal.status}{view.appeal.resolution ? ` · ${view.appeal.resolution}` : ""}</Notice> : manuallyGraded ? <Notice tone="info">Bài này đã được chấm tay nên không thể gửi kháng nghị.</Notice> : graded ? <form className="card" aria-busy={busyAction === "appeal" || undefined} onSubmit={(event) => void submitAppeal(event)} style={{ ...cardStyle, marginBottom: 16 }}><h3>Không đồng ý với kết quả?</h3><label>Lý do kháng nghị<textarea ref={appealRef} aria-label="Lý do kháng nghị" value={appealReason} disabled={Boolean(busyAction)} onChange={(event) => setAppealReason(event.target.value)} /></label><p className="small muted">Nhập ít nhất 5 ký tự.</p><ErrorText message={actionError} /><button type="submit" className="btn-primary" aria-busy={busyAction === "appeal" || undefined} disabled={appealReason.trim().length < 5 || Boolean(busyAction)} style={{ minHeight: 44, justifySelf: "start" }}>{busyAction === "appeal" ? "Đang gửi…" : "Gửi kháng nghị"}</button></form> : null}<PracticeHistory items={view.history} /></div>;
   }
-  return <div className="app-learner-page" style={pageStyle}><PageTitle eyebrow={`Tuần ${view.weekNumber} · ${view.topic}`} title="Bài thực hành cuối tuần" /><form className="card" aria-busy={busyAction === "submit" || undefined} onSubmit={(event) => void submitPractice(event)} style={cardStyle}><h2>Nhiệm vụ</h2><p>{view.task}</p><p className="small muted">{view.guidance}</p>{view.aiAvailable === false ? <Notice tone="warn">AI chưa kết nối; bài vẫn lưu để vận hành chấm thủ công.</Notice> : null}<label>{inputLabel}<textarea ref={draftRef} aria-label={inputLabel} data-input-mode={inputMode} value={text} disabled={Boolean(busyAction)} onChange={(event) => setText(event.target.value)} placeholder={inputPlaceholder} rows={10} /></label>{speechSupported ? <button className={`coach-mic ${recording ? "is-recording" : ""}`} type="button" aria-label={recording ? "Đang nghe" : "Nói"} title={recording ? "Dừng nghe" : "Nói"} disabled={Boolean(busyAction)} onClick={recording ? stopListening : startListening}><MicIcon /></button> : null}{speechError ? <ErrorText message={speechError} /> : null}<ErrorText message={actionError} /><div className="row between" style={{ flexWrap: "wrap", gap: 12 }}><span className="small muted">{practiceWordCount}/8 từ tối thiểu</span><button className="btn-primary btn-lg" type="submit" aria-busy={busyAction === "submit" || undefined} disabled={practiceWordCount < 8 || recording || Boolean(busyAction)} style={{ minHeight: 44 }}>{busyAction === "submit" ? "Đang nộp…" : "Nộp bài"}</button></div></form><PracticeHistory items={view.history} /></div>;
+  return <div className="app-learner-page" style={pageStyle}><PageTitle eyebrow={`Tuần ${view.weekNumber} · ${view.topic}`} title="Bài thực hành cuối tuần" /><form className="card" aria-busy={busyAction === "submit" || undefined} onSubmit={(event) => void submitPractice(event)} style={cardStyle}><h2>Nhiệm vụ</h2><p>{view.task}</p><p className="small muted">{view.guidance}</p>{view.aiAvailable === false ? <Notice tone="warn">AI chưa kết nối; bài vẫn lưu để vận hành chấm thủ công.</Notice> : null}<label>{inputLabel}<textarea ref={draftRef} aria-label={inputLabel} data-input-mode={inputMode} value={text} disabled={Boolean(busyAction)} onChange={(event) => setText(event.target.value)} placeholder={inputPlaceholder} rows={10} /></label><AudioCaptureControl label="Micro bài thực hành" value={audioEvidence} showMicrophone={showMicrophone} transcript={text} disabled={Boolean(busyAction)} uploadAudio={actions.uploadAssessmentAudio} getAudioReadUrl={actions.getAssessmentAudioReadUrl} onTranscript={setText} onAudioChange={setAudioEvidence} onRecordingChange={setRecording} /><ErrorText message={actionError} /><div className="row between" style={{ flexWrap: "wrap", gap: 12 }}><span className="small muted">{practiceWordCount}/8 từ tối thiểu</span><button className="btn-primary btn-lg" type="submit" aria-busy={busyAction === "submit" || undefined} disabled={practiceWordCount < 8 || recording || Boolean(busyAction)} style={{ minHeight: 44 }}>{busyAction === "submit" ? "Đang nộp…" : "Nộp bài"}</button></div></form><PracticeHistory items={view.history} /></div>;
 }
 
 function PracticeHistory({ items }: { items: PracticeView["history"] }) {
@@ -428,10 +305,6 @@ function PracticeHistory({ items }: { items: PracticeView["history"] }) {
       </article>)}
     </div>
   </section>;
-}
-
-function MicIcon() {
-  return <Mic size={24} strokeWidth={2.2} aria-hidden="true" focusable="false" />;
 }
 
 

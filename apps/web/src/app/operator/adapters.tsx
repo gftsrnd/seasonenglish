@@ -425,7 +425,7 @@ function OperatorPhonemeButton({ targetSound, audioSrc }: { targetSound: string;
       finish();
     });
   };
-  if (!available) return null;
+  if (!available) return <span className="operator-audio-missing muted" aria-live="polite">Chưa có audio âm {targetSound}.</span>;
   return <button className="btn-sm btn-ghost operator-audio-button operator-audio-button--icon" type="button" aria-label={`Nghe âm ${targetSound}`} title={`Nghe âm ${targetSound}`} onClick={play}><Volume2 size={16} aria-hidden="true" /></button>;
 }
 

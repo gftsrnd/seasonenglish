@@ -29,6 +29,7 @@ import type {
   SurveyView,
   WeeklyPracticeView
 } from "@e4s/contracts";
+import type { AudioDeletionMetadata, AudioEvidence } from "../shared/media/audio-evidence.js";
 
 export const LEARNER_ROUTES = [
   "/home", "/onboard", "/test/:kind", "/lesson/:id",
@@ -90,6 +91,10 @@ export interface PracticeView extends WeeklyPracticeView {
   aiAvailable?: boolean;
 }
 
+/** Web adapter payload; Agent 1 may add signed upload/read metadata without changing the controls. */
+export type LearnerAudioEvidence = Pick<AudioEvidence, "artifactKey" | "signedUrl" | "expiresAt" | "createdAt" | "mimeType" | "sizeBytes" | "transcript" | "deletion">
+  & { playbackUrl?: string; readUrl?: string; deletion?: AudioDeletionMetadata | null | undefined };
+
 export interface ProfileView extends LearnerProgressView {
   profileMissing?: boolean;
   surveyAvailable?: boolean;
@@ -134,11 +139,11 @@ export interface LearnerCallbacks {
   completeMicroLesson: () => void | Promise<void>;
   regenerateMicroLesson: () => void | Promise<void>;
   acknowledgeRewardAnnouncement?: (announcementId: string) => void | Promise<void>;
-  sendCoachMessage: (message: string) => void | Promise<void>;
+  sendCoachMessage: (message: string, audio?: LearnerAudioEvidence) => void | Promise<void>;
   changeCoachPersona: (persona: CoachPersona) => void | Promise<void>;
   startNewCoachChat: () => void | Promise<void>;
   sendChallengeMessage: (message: string) => void | Promise<void>;
-  submitWeeklyPractice: (text: string) => void | Promise<void>;
+  submitWeeklyPractice: (text: string, audio?: LearnerAudioEvidence) => void | Promise<void>;
   appealWeeklyPractice?: (submissionId: string, reason: string) => void | Promise<void>;
   submitSurvey: (answers: { rating: number; comment: string; studyTime: "work" | "outside" | "both" }) => void | Promise<void>;
   saveAvatar: (avatar: LearnerAvatarData) => void | Promise<void>;

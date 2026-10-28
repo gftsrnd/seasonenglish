@@ -668,7 +668,7 @@ function LessonAudioAssetButton({ audioSrc, label, title, className }: { audioSr
   const [failed, setFailed] = useState(false);
   const src = audioSrc?.trim() ?? "";
   const available = Boolean(src) && !failed && typeof Audio !== "undefined";
-  if (!available) return null;
+  if (!available) return <span className="lesson-audio-missing muted" role="status">Chưa có audio {label.replace(/^Nghe\s+/u, "").toLocaleLowerCase()}.</span>;
   const play = () => {
     const audio = new Audio(src);
     audio.addEventListener("error", () => setFailed(true), { once: true });

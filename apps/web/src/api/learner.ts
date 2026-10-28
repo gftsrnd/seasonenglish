@@ -7,6 +7,7 @@ import type {
   ContentImageView, LevelChallengeView, MicroLessonView, RewardView, SurveyView, WeeklyPracticeView
 } from "@e4s/contracts";
 import { request, uploadMultipart } from "./runtime.js";
+import type { LearnerAudioEvidence } from "../app/learner/contracts.js";
 
 export interface LearnerApiClient {
   getProfile(): Promise<LearnerProfileView>;
@@ -27,13 +28,13 @@ export interface LearnerApiClient {
   submitMicroAttempt(id: string, answer: string): Promise<MicroLessonView>;
   completeMicroLesson(id: string): Promise<MicroLessonView>;
   getCoach(): Promise<CoachView>;
-  sendCoachMessage(input: CoachMessageInput): Promise<CoachView>;
+  sendCoachMessage(input: CoachMessageInput & { audio?: LearnerAudioEvidence }): Promise<CoachView>;
   setCoachPersona(persona: CoachPersona): Promise<CoachView>;
   clearCoach(): Promise<CoachView>;
   getLevelChallenge(): Promise<LevelChallengeView>;
   sendLevelChallengeMessage(input: CoachMessageInput): Promise<LevelChallengeView>;
   getWeeklyPractice(): Promise<WeeklyPracticeView>;
-  submitWeeklyPractice(input: { requestId: string; text: string }): Promise<WeeklyPracticeView>;
+  submitWeeklyPractice(input: { requestId: string; text: string; audio?: LearnerAudioEvidence }): Promise<WeeklyPracticeView>;
   appealWeeklyPractice(submissionId: string, reason: string): Promise<WeeklyPracticeView>;
   getGames(): Promise<GameHubView>;
   generateGameWordSet(input: { requestId: string; topic: string }): Promise<GameHubView>;

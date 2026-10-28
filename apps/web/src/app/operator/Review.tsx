@@ -5,6 +5,7 @@ import type { Cefr, OperatorReviewActions, OperatorReviewView, ReviewActionKey, 
 import type { ContentReviewAssessmentDetailView } from "@e4s/contracts";
 import { operatorDateTime } from "./adapters.js";
 import { AssessmentManualScore, type ManualScoreInput } from "./AssessmentManualScore.js";
+import { AudioEvidencePanel } from "../shared/media/AudioEvidencePanel.js";
 
 const TABS: Array<[ReviewTab, string]> = [["weekly", "Bài cuối tuần"], ["subs", "Bài nộp"], ["coach", "Phản hồi coach"], ["appeals", "Kháng nghị"], ["attempts", "Số lần làm bài"], ["tests", "Bài test"]];
 const focusableSelector = "button:not(:disabled), input:not(:disabled), select:not(:disabled), textarea:not(:disabled), audio[controls], [href], [tabindex]:not([tabindex='-1'])";
@@ -269,7 +270,6 @@ export function OperatorReview({ view, actions, readOnly = false, unavailable = 
 export function OperatorReviewAssessmentDetail({ detail, onClose, onSaveManualScore, savingManualScore = false }: { detail: ContentReviewAssessmentDetailView; onClose(): void; onSaveManualScore?: (input: ManualScoreInput) => void; savingManualScore?: boolean }) {
   const dialogRef = useRef<HTMLElement>(null);
   const closeRef = useRef(onClose);
-  const [audioErrors, setAudioErrors] = useState<Record<string, boolean>>({});
   closeRef.current = onClose;
 
   useEffect(() => {
@@ -343,7 +343,6 @@ export function OperatorReviewAssessmentDetail({ detail, onClose, onSaveManualSc
   };
   const renderAnswer = (section: string, task: ReviewTask, answer: ContentReviewAssessmentDetailView["answers"][number] | undefined, showTitle = true, itemLabel = "") => {
     const audioKey = `${section}:${task.taskKey}`;
-    const audioError = audioErrors[audioKey];
     const objective = section === "listening" || section === "reading";
     const answerValue = answer?.value ?? "";
     const isCorrect = Boolean(task.correctAnswer && answerValue === task.correctAnswer);
@@ -355,14 +354,11 @@ export function OperatorReviewAssessmentDetail({ detail, onClose, onSaveManualSc
       {objective ? <p className="operator-answer-question"><b>{itemLabel}{task.prompt}</b><span className="muted">{points}</span></p> : <>{showTitle && task.title ? <p className="operator-answer-task-title"><b>{task.title}</b></p> : null}{task.prompt ? <p className="operator-answer-question"><b>{itemLabel}{task.prompt}</b></p> : null}</>}
       {objective ? <p className="operator-answer-result">{answerValue ? <><span className={isCorrect ? "operator-answer-correct" : task.correctAnswer ? "operator-answer-wrong" : ""}>{answerText(task, answerValue)}</span>{task.correctAnswer && !isCorrect ? <> <span className="operator-answer-arrow">→</span> {answerText(task, task.correctAnswer)}</> : null}</> : <>bỏ qua{task.correctAnswer ? <> <span className="operator-answer-arrow">→</span> {answerText(task, task.correctAnswer)}</> : null}</>}</p> : <div className="operator-answer-response">
         {evidenceLabel ? <div className="xs muted"><b>{evidenceLabel}</b></div> : null}
-        {answerValue ? <p className="operator-answer-value">{answerValue}</p> : <p className="operator-answer-value muted">{section === "writing" ? "(không có bài viết)" : "(không có lời chép)"}</p>}
+        {!answer?.audioArtifact ? answerValue ? <p className="operator-answer-value">{answerValue}</p> : <p className="operator-answer-value muted">{section === "writing" ? "(không có bài viết)" : "(không có lời chép)"}</p> : null}
         {answer?.evidenceType === "typed_proxy" ? <div className="banner warn" role="alert"><div className="body small">Bằng chứng này phải chấm tay: văn bản thay thế không xác minh phát âm, độ trôi chảy hoặc tương tác theo thời gian thực.</div></div> : null}
         {answer?.audioArtifact && <>
           <div className="xs muted">File ghi âm: {answer.audioArtifact.artifactKey}</div>
-          {answer.audioArtifact.signedUrl && <>
-            <audio controls preload="none" src={answer.audioArtifact.signedUrl} aria-label={`Phát audio ${answer.taskKey}`} onError={() => setAudioErrors(current => ({ ...current, [audioKey]: true }))} style={{ width: "100%", maxWidth: 420, marginTop: 8 }} />
-            {audioError && <p className="small" role="alert">Không phát được audio này. Link có thể đã hết hạn hoặc tệp không còn khả dụng.</p>}
-          </>}
+          <AudioEvidencePanel label={`audio ${answer.taskKey}`} evidence={{ ...answer.audioArtifact, ...(answerValue ? { transcript: answerValue } : {}) }} />
         </>}
         {!answer?.audioArtifact && section === "speaking" && <p className="operator-answer-audio-missing muted">(không có file ghi âm)</p>}
       </div>}

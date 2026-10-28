@@ -236,6 +236,44 @@ describe("lesson detail warnings", () => {
     expect(screen.getByText("Cắn nhẹ môi dưới rồi thổi hơi.").closest("p")).toHaveClass("operator-pronunciation-tip");
   });
 
+  it("shows a target-phoneme no-audio state without synthesizing IPA text", () => {
+    const source = lessonSet([{ ...baseWord("feedback"), meaning: "phản hồi" }]);
+    const pronunciation = source.lessons[0]!.parts.find(part => part.code === "pronunciation")!;
+    pronunciation.content = { ...pronunciation.content, phonemeAudioUrl: "" };
+    const view = adaptLessonSet(source, { aiConnected: true });
+
+    render(<>{view.lessons[0]!.content}</>);
+
+    expect(screen.getByText("Chưa có audio âm /f/." )).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Nghe âm /f/" })).not.toBeInTheDocument();
+  });
+
+  it("keeps the Agent 3 phoneme id/url and indexed word audio contract in operator preview", () => {
+    const source = lessonSet([{ ...baseWord("called"), meaning: "đã gọi" }]);
+    const pronunciation = source.lessons[0]!.parts.find(part => part.code === "pronunciation")!;
+    pronunciation.content = {
+      focus: "/d/", tip: "Touch the alveolar ridge.",
+      words: [{ word: "called", ipa: "/kɔːld/" }, { word: "did", ipa: "/dɪd/" }, { word: "needed", ipa: "/ˈniːdɪd/" }],
+      phonemeAudioId: "phoneme-d", phonemeAudioUrl: "/media/audio/phonemes/d.wav",
+      wordAudioUrls: ["/media/audio/words/called.mp3", "/media/audio/words/did.mp3", "/media/audio/words/needed.mp3"]
+    };
+    const audioSources: string[] = [];
+    class FakeAudio {
+      onended: (() => void) | null = null;
+      onerror: (() => void) | null = null;
+      constructor(src: string) { audioSources.push(src); }
+      play = vi.fn().mockResolvedValue(undefined);
+      pause = vi.fn();
+    }
+    vi.stubGlobal("Audio", FakeAudio);
+    const view = adaptLessonSet(source, { aiConnected: true });
+    render(<>{view.lessons[0]!.content}</>);
+
+    fireEvent.click(screen.getByRole("button", { name: "Nghe âm /d/" }));
+    fireEvent.click(screen.getByRole("button", { name: "Nghe từ phát âm: called" }));
+    expect(audioSources).toEqual(["/media/audio/phonemes/d.wav", "/media/audio/words/called.mp3"]);
+  });
+
   it("shows one objective lead without audio and exposes saved audio for learning content", () => {
     const source = lessonSet([{ ...baseWord("feedback"), meaning: "phản hồi", audioUrl: "/audio/feedback.mp3" }]);
     source.cefr = "B1";
