@@ -5,6 +5,8 @@ import { validateLessonPublication } from "@e4s/domain/content";
 import { lessonCompletionActivity } from "@e4s/domain/learning";
 import type {
   AccountRole,
+  AudioArtifactInput,
+  AudioArtifactView,
   AssessmentDeviceEvidence,
   AssessmentEvidenceType,
   AssessmentKind,
@@ -6173,6 +6175,7 @@ class CoachRepository {
     const openedWords = new Set<string>(unlockedRows.rows.map((row) => row.word.toLowerCase()));
     for (const turn of turns.rows) {
       const text = typeof turn.content.text === "string" ? turn.content.text : "";
+      const audioArtifact = audioArtifactFromContent(turn.content);
       const feedback = coachFeedback(turn.feedback);
       const feedbackRecord = turn.feedback ?? {};
       if (Array.isArray(feedbackRecord.usedWords)) {
@@ -6183,7 +6186,7 @@ class CoachRepository {
         if (text) messages.push({ id: turn.id, speaker: "coach", text, createdAt: turn.created_at.toISOString(), ...(classification ? { classification } : {}) });
         continue;
       }
-      if (text) messages.push({ id: turn.id, speaker: "learner", text, createdAt: turn.created_at.toISOString(), ...(classification ? { classification } : {}) });
+      if (text) messages.push({ id: turn.id, speaker: "learner", text, createdAt: turn.created_at.toISOString(), ...(classification ? { classification } : {}), ...(audioArtifact ? { audioArtifact } : {}) });
       const coachText = typeof feedbackRecord.coachText === "string" ? feedbackRecord.coachText : "";
       if (coachText) messages.push({
         id: `${turn.id}:coach`, speaker: "coach", text: coachText,
@@ -6235,6 +6238,7 @@ class CoachRepository {
     sessionId: string;
     requestId: string;
     message: string;
+    audio?: AudioArtifactInput;
     taskId: string;
     promptVersionId: string;
     output: {
@@ -6305,7 +6309,7 @@ class CoachRepository {
         `insert into coach_turns (id, session_id, turn_number, speaker, content, feedback, ai_run_id)
          values ($1, $2, $3, 'learner', $4::jsonb, $5::jsonb, $6)`,
         [turnId, input.sessionId, Number(next.rows[0]?.number ?? 1),
-          JSON.stringify({ text: input.message, requestId: input.requestId }),
+          JSON.stringify({ text: input.message, requestId: input.requestId, ...(input.audio ? { audioArtifact: storedAudioArtifact(input.audio) } : {}) }),
           JSON.stringify({
             coachText: `${input.output.seasonReply} ${input.output.nextQuestion}`.trim(),
             evaluation: input.output.evaluation,
@@ -6316,6 +6320,9 @@ class CoachRepository {
             usedWords: input.output.usedWords, checked: false
           }), runId]
       );
+      if (input.audio) await linkAudioOnClient(client, {
+        ownerUserId: input.learnerId, audio: input.audio, sourceFlow: "season", sourceEntityId: turnId
+      });
       if (input.output.evaluation.countsTowardGoal) await client.query(
         `insert into activities (id, learner_id, activity_type, reference_type, reference_id, minutes, evidence)
          values ($1, $2, 'coach', 'coach_turn', $3, 2, $4::jsonb)`,
@@ -6402,6 +6409,7 @@ class CoachRepository {
     sessionId: string;
     requestId: string;
     message: string;
+    audio?: AudioArtifactInput;
     currentQuestion: string;
   }): Promise<boolean> {
     const client = await this.pool.connect();
@@ -6426,11 +6434,12 @@ class CoachRepository {
       );
       const seasonReply = "Please write a complete English sentence so I can understand your answer.";
       const seasonReplyTranslation = "Hãy viết một câu tiếng Anh đầy đủ để Season hiểu câu trả lời của bạn.";
+      const turnId = randomUUID();
       await client.query(
         `insert into coach_turns (id, session_id, turn_number, speaker, content, feedback)
          values ($1, $2, $3, 'learner', $4::jsonb, $5::jsonb)`,
-        [randomUUID(), input.sessionId, Number(next.rows[0]?.number ?? 1),
-          JSON.stringify({ text: input.message, requestId: input.requestId }),
+        [turnId, input.sessionId, Number(next.rows[0]?.number ?? 1),
+          JSON.stringify({ text: input.message, requestId: input.requestId, ...(input.audio ? { audioArtifact: storedAudioArtifact(input.audio) } : {}) }),
           JSON.stringify({
             coachText: seasonReply,
             evaluation: { status: "insufficient", result: "missing_information", countsTowardGoal: false, noteVi: seasonReplyTranslation },
@@ -6446,6 +6455,9 @@ class CoachRepository {
             usedWords: [], checked: false
           })]
       );
+      if (input.audio) await linkAudioOnClient(client, {
+        ownerUserId: input.learnerId, audio: input.audio, sourceFlow: "season", sourceEntityId: turnId
+      });
       await client.query("commit");
       return true;
     } catch (error) {
@@ -6911,6 +6923,7 @@ class EngagementRepository {
     const content = row?.content ?? {};
     const score = row?.score ?? null;
     const feedback = row?.feedback;
+    const audioArtifact = audioArtifactFromContent(content);
     const reviewState = row ? weeklyPracticeReviewState(row.status, row.score, row.grading_source, row.appeal_status) : undefined;
     const generatedPractice = weeklyPracticeTask(context.topic, context.cefr);
     const storedPrompt = row?.prompt_snapshot ?? {};
@@ -6930,6 +6943,7 @@ class EngagementRepository {
         submittedAt: row.submitted_at?.toISOString() ?? null,
         ...(row.grading_source ? { gradingSource: row.grading_source } : {}),
         ...(reviewState ? { reviewState } : {}),
+        ...(audioArtifact ? { audioArtifact } : {}),
         score: score && typeof score.total === "number" ? {
           total: score.total,
           ...(score.rubric && typeof score.rubric === "object" ? { rubric: score.rubric as { meaning: number; vocabulary: number; grammar: number } } : {})
@@ -7035,7 +7049,7 @@ class EngagementRepository {
     }
   }
 
-  async submitWeeklyPractice(input: { learnerId: string; requestId: string; text: string }): Promise<WeeklyPracticeView | null> {
+  async submitWeeklyPractice(input: { learnerId: string; requestId: string; text: string; audio?: AudioArtifactInput }): Promise<WeeklyPracticeView | null> {
     const view = await this.weeklyPractice(input.learnerId);
     if (!view || view.state === "locked") return null;
     const requirements = await this.weeklyPracticeRequirements(input.learnerId);
@@ -7055,7 +7069,7 @@ class EngagementRepository {
            set status = 'submitted', content = $2::jsonb, request_key = $3,
                submitted_at = now(), updated_at = now()
            where id = $1`,
-          [submissionId, JSON.stringify({ text: input.text, inputMode: view.inputMode ?? "write", type: view.inputMode === "dialogue" ? "dialogue" : "writing" }), input.requestId]
+          [submissionId, JSON.stringify({ text: input.text, inputMode: view.inputMode ?? "write", type: view.inputMode === "dialogue" ? "dialogue" : "writing", ...(input.audio ? { audioArtifact: storedAudioArtifact(input.audio) } : {}) }), input.requestId]
         );
         activated = true;
       } else if (!existing.rows[0]) {
@@ -7068,7 +7082,8 @@ class EngagementRepository {
           [submissionId, input.learnerId, view.weekId, JSON.stringify({
             text: input.text,
             inputMode: view.inputMode ?? "write",
-            type: view.inputMode === "dialogue" ? "dialogue" : "writing"
+            type: view.inputMode === "dialogue" ? "dialogue" : "writing",
+            ...(input.audio ? { audioArtifact: storedAudioArtifact(input.audio) } : {})
           }), input.requestId, JSON.stringify({ task: view.task, guidance: view.guidance, inputMode: view.inputMode ?? "write" }),
           requirements.cefr, JSON.stringify(requirements.vocabulary)]
         );
@@ -7081,6 +7096,18 @@ class EngagementRepository {
           if (raced.rows[0]) submissionId = raced.rows[0].id;
         }
       }
+      if (input.audio && existing.rows[0]?.status !== "draft") {
+        await client.query(
+          `update practice_submissions
+           set content = jsonb_set(content, '{audioArtifact}', $2::jsonb, true), updated_at = now()
+           where id = $1`,
+          [submissionId, JSON.stringify(storedAudioArtifact(input.audio))]
+        );
+      }
+      if (input.audio) await linkAudioOnClient(client, {
+        ownerUserId: input.learnerId, audio: input.audio, sourceFlow: "weekly_practice", sourceEntityId: submissionId,
+        taskKey: "weekly_practice"
+      });
       if (activated) await client.query(
           `insert into reward_events (id, learner_id, badge_id, points, source_type, source_id)
            select $1, $2, b.id, 0, 'weekly_practice', $3
@@ -7915,48 +7942,407 @@ class FileRepository {
     return result.rows;
   }
 
-  async createForOwner(input: {
-    id: string;
-    ownerUserId: string;
-    purpose: string;
-    bucket: string;
-    objectKey: string;
-    mimeType: string;
-    sizeBytes: number;
-    sha256: string;
-  }): Promise<boolean> {
-    const result = await this.pool.query(
+  async createForOwner(input: CreateFileInput): Promise<AudioFileRecord | null> {
+    const result = await this.pool.query<AudioFileRow>(
       `insert into files (
          id, organization_id, owner_user_id, purpose, bucket, object_key,
-         mime_type, size_bytes, sha256
+         mime_type, size_bytes, sha256, source_flow, source_entity_id,
+         task_key, question_key, transcript
        )
-       select $1, u.organization_id, $2, $3, $4, $5, $6, $7, $8
+       select $1, u.organization_id, $2, $3, $4, $5, $6, $7, $8,
+              $9, $10, $11, $12, $13
        from users u
        where u.id = $2
-       returning id`,
+       returning *`,
       [
-        input.id,
-        input.ownerUserId,
-        input.purpose,
-        input.bucket,
-        input.objectKey,
-        input.mimeType,
-        input.sizeBytes,
-        input.sha256
+        input.id, input.ownerUserId, input.purpose, input.bucket, input.objectKey,
+        input.mimeType, input.sizeBytes, input.sha256, input.sourceFlow ?? "placement",
+        input.sourceEntityId ?? null, input.taskKey ?? null, input.questionKey ?? null,
+        input.transcript ?? null
       ]
     );
-    return Boolean(result.rowCount);
+    return result.rows[0] ? fromAudioRow(result.rows[0]) : null;
+  }
+
+  async linkAudioToSource(input: {
+    ownerUserId: string;
+    audio: AudioArtifactInput;
+    sourceFlow: AudioSourceFlow;
+    sourceEntityId: string;
+    taskKey?: string | null;
+    questionKey?: string | null;
+  }): Promise<AudioFileRecord | null> {
+    const result = await this.pool.query<AudioFileRow>(
+      `update files as file
+       set source_flow = $4,
+           source_entity_id = $5,
+           task_key = $6,
+           question_key = $7,
+           transcript = coalesce($8, file.transcript),
+           completed_at = coalesce(file.completed_at, now()),
+           retention_until = coalesce(file.retention_until, now() + interval '60 days')
+       where file.purpose = 'assessment_audio'
+         and file.owner_user_id = $1
+         and (($2::uuid is not null and file.id = $2::uuid)
+           or ($3::text is not null and file.object_key = $3::text))
+       returning file.*`,
+      [input.ownerUserId, input.audio.fileId ?? null, input.audio.artifactKey,
+        input.sourceFlow, input.sourceEntityId, input.taskKey ?? null, input.questionKey ?? null,
+        input.audio.transcript ?? null]
+    );
+    return result.rows[0] ? fromAudioRow(result.rows[0]) : null;
   }
 
   async ownedBy(ownerUserId: string, purpose: string, objectKey: string): Promise<boolean> {
     const result = await this.pool.query(
       `select 1 from files
        where owner_user_id = $1 and purpose = $2 and object_key = $3
+         and deleted_at is null
        limit 1`,
       [ownerUserId, purpose, objectKey]
     );
     return Boolean(result.rowCount);
   }
+
+  async findAssessmentAudioForViewer(viewerId: string, objectKey: string): Promise<AudioFileRecord | null> {
+    const result = await this.pool.query<AudioFileRow>(
+      `select f.*
+       from files f
+       join users owner on owner.id = f.owner_user_id
+       join users viewer on viewer.id = $1
+       where f.purpose = 'assessment_audio' and f.object_key = $2
+         and (
+           (viewer.role = 'learner' and f.owner_user_id = viewer.id)
+           or (viewer.role in ('operator', 'manager') and owner.organization_id = viewer.organization_id)
+         )
+       limit 1`,
+      [viewerId, objectKey]
+    );
+    return result.rows[0] ? fromAudioRow(result.rows[0]) : null;
+  }
+
+  async listAssessmentAudioForStaff(input: {
+    viewerId: string;
+    learnerId?: string;
+    sourceFlow?: AudioSourceFlow;
+  }): Promise<AudioFileRecord[]> {
+    const values: string[] = [input.viewerId];
+    const filters = [
+      "f.purpose = 'assessment_audio'",
+      "viewer.role in ('operator', 'manager')",
+      "owner.organization_id = viewer.organization_id"
+    ];
+    if (input.learnerId) {
+      values.push(input.learnerId);
+      filters.push(`f.owner_user_id = $${values.length}`);
+    }
+    if (input.sourceFlow) {
+      values.push(input.sourceFlow);
+      filters.push(`f.source_flow = $${values.length}`);
+    }
+    const result = await this.pool.query<AudioFileRow>(
+      `select f.*
+       from files f
+       join users owner on owner.id = f.owner_user_id
+       join users viewer on viewer.id = $1
+       where ${filters.join(" and ")}
+       order by f.created_at desc, f.id`,
+      values
+    );
+    return result.rows.map(fromAudioRow);
+  }
+
+  async markAudioCompleted(input: {
+    actorId: string;
+    fileId: string;
+    transcript?: string | null;
+  }): Promise<AudioFileRecord | null> {
+    return this.updateAudioLifecycle(input, "completed");
+  }
+
+  async markAudioGraded(input: {
+    actorId: string;
+    fileId: string;
+    transcript?: string | null;
+  }): Promise<AudioFileRecord | null> {
+    return this.updateAudioLifecycle(input, "graded");
+  }
+
+  async createAudioDeletionConfirmation(input: {
+    actorId: string;
+    fileId: string;
+    tokenHash: string;
+    expiresAt: Date;
+  }): Promise<boolean> {
+    const result = await this.pool.query(
+      `insert into file_deletion_confirmations (
+         id, file_id, organization_id, requester_user_id, token_hash, expires_at
+       )
+       select gen_random_uuid(), f.id, f.organization_id, $1, $3, $4
+       from files f
+       join users actor on actor.id = $1
+       where f.id = $2 and f.purpose = 'assessment_audio'
+         and f.deleted_at is null
+         and actor.role in ('operator', 'manager')
+         and actor.organization_id = f.organization_id
+       returning id`,
+      [input.actorId, input.fileId, input.tokenHash, input.expiresAt]
+    );
+    return Boolean(result.rowCount);
+  }
+
+  async findAudioDeleteTarget(actorId: string, fileId: string, tokenHash: string): Promise<AudioFileRecord | null> {
+    const result = await this.pool.query<AudioFileRow>(
+      `select f.*
+       from files f
+       join users actor on actor.id = $1
+       join file_deletion_confirmations c on c.file_id = f.id
+         and c.requester_user_id = actor.id
+         and c.token_hash = $3
+         and c.used_at is null
+         and c.expires_at > now()
+       where f.id = $2 and f.purpose = 'assessment_audio'
+         and f.deleted_at is null
+         and actor.role in ('operator', 'manager')
+         and actor.organization_id = f.organization_id
+       limit 1`,
+      [actorId, fileId, tokenHash]
+    );
+    return result.rows[0] ? fromAudioRow(result.rows[0]) : null;
+  }
+
+  async deleteAudioWithConfirmation(input: {
+    actorId: string;
+    fileId: string;
+    tokenHash: string;
+    traceId: string;
+    now?: Date;
+  }): Promise<{ status: "deleted" | "not_found" | "invalid_confirmation" | "already_deleted"; file?: AudioFileRecord }> {
+    const now = input.now ?? new Date();
+    const client = await this.pool.connect();
+    try {
+      await client.query("begin");
+      const file = await client.query<AudioFileRow>(
+        `select f.*
+         from files f
+         join users actor on actor.id = $1
+         where f.id = $2 and f.purpose = 'assessment_audio'
+           and actor.role in ('operator', 'manager')
+           and actor.organization_id = f.organization_id
+         for update`,
+        [input.actorId, input.fileId]
+      );
+      if (!file.rows[0]) {
+        await client.query("rollback");
+        return { status: "not_found" };
+      }
+      if (file.rows[0].deleted_at) {
+        await client.query("rollback");
+        return { status: "already_deleted" };
+      }
+      const confirmation = await client.query(
+        `select id from file_deletion_confirmations
+         where file_id = $1 and requester_user_id = $2 and token_hash = $3
+           and used_at is null and expires_at > $4
+         for update`,
+        [input.fileId, input.actorId, input.tokenHash, now]
+      );
+      if (!confirmation.rowCount) {
+        await client.query("rollback");
+        return { status: "invalid_confirmation" };
+      }
+      const updated = await client.query<AudioFileRow>(
+        `update files
+         set deleted_at = $3, deleted_by = $1
+         where id = $2 and deleted_at is null
+         returning *`,
+        [input.actorId, input.fileId, now]
+      );
+      await client.query(
+        `update file_deletion_confirmations set used_at = $2 where id = $1`,
+        [confirmation.rows[0].id, now]
+      );
+      await client.query(
+        `insert into audit_events (id, organization_id, actor_user_id, action, entity_type, entity_id, payload, trace_id)
+         values (gen_random_uuid(), $1, $2, 'audio_object_deleted', 'file', $3, $4::jsonb, $5)`,
+        [
+          updated.rows[0]!.organization_id,
+          input.actorId,
+          input.fileId,
+          JSON.stringify({ objectKey: updated.rows[0]!.object_key, transcriptRetained: true, scoreFeedbackRetained: true, deletedAt: now.toISOString() }),
+          input.traceId
+        ]
+      );
+      await client.query("commit");
+      return { status: "deleted", file: fromAudioRow(updated.rows[0]!) };
+    } catch (error) {
+      await client.query("rollback").catch(() => undefined);
+      throw error;
+    } finally {
+      client.release();
+    }
+  }
+
+  private async updateAudioLifecycle(input: {
+    actorId: string;
+    fileId: string;
+    transcript?: string | null;
+  }, event: "completed" | "graded"): Promise<AudioFileRecord | null> {
+    const column = event === "completed" ? "completed_at" : "graded_at";
+    const result = await this.pool.query<AudioFileRow>(
+      `update files as file
+       set ${column} = coalesce(${column}, now()),
+           retention_until = now() + interval '60 days',
+           transcript = coalesce($3, transcript)
+       from users actor, users owner
+       where file.id = $2 and file.purpose = 'assessment_audio'
+         and actor.id = $1
+         and owner.id = file.owner_user_id
+         and (
+           (actor.role = 'learner' and file.owner_user_id = actor.id)
+           or (actor.role in ('operator', 'manager') and owner.organization_id = actor.organization_id)
+         )
+       returning file.*`,
+      [input.actorId, input.fileId, input.transcript ?? null]
+    );
+    return result.rows[0] ? fromAudioRow(result.rows[0]) : null;
+  }
+}
+
+export type AudioSourceFlow = "placement" | "daily_lesson" | "weekly_practice" | "season";
+
+interface CreateFileInput {
+  id: string;
+  ownerUserId: string;
+  purpose: string;
+  bucket: string;
+  objectKey: string;
+  mimeType: string;
+  sizeBytes: number;
+  sha256: string;
+  sourceFlow?: AudioSourceFlow;
+  sourceEntityId?: string | null;
+  taskKey?: string | null;
+  questionKey?: string | null;
+  transcript?: string | null;
+}
+
+export interface AudioFileRecord {
+  id: string;
+  organizationId: string;
+  ownerUserId: string | null;
+  purpose: string;
+  bucket: string;
+  objectKey: string;
+  mimeType: string;
+  sizeBytes: number;
+  sha256: string;
+  sourceFlow: AudioSourceFlow;
+  sourceEntityId: string | null;
+  taskKey: string | null;
+  questionKey: string | null;
+  transcript: string | null;
+  createdAt: Date;
+  completedAt: Date | null;
+  gradedAt: Date | null;
+  retentionUntil: Date | null;
+  deletedAt: Date | null;
+  deletedBy: string | null;
+}
+
+interface AudioFileRow {
+  id: string;
+  organization_id: string;
+  owner_user_id: string | null;
+  purpose: string;
+  bucket: string;
+  object_key: string;
+  mime_type: string;
+  size_bytes: number | string;
+  sha256: string;
+  source_flow: AudioSourceFlow;
+  source_entity_id: string | null;
+  task_key: string | null;
+  question_key: string | null;
+  transcript: string | null;
+  created_at: Date;
+  completed_at: Date | null;
+  graded_at: Date | null;
+  retention_until: Date | null;
+  deleted_at: Date | null;
+  deleted_by: string | null;
+}
+
+function fromAudioRow(row: AudioFileRow): AudioFileRecord {
+  return {
+    id: row.id,
+    organizationId: row.organization_id,
+    ownerUserId: row.owner_user_id,
+    purpose: row.purpose,
+    bucket: row.bucket,
+    objectKey: row.object_key,
+    mimeType: row.mime_type,
+    sizeBytes: Number(row.size_bytes),
+    sha256: row.sha256,
+    sourceFlow: row.source_flow,
+    sourceEntityId: row.source_entity_id,
+    taskKey: row.task_key,
+    questionKey: row.question_key,
+    transcript: row.transcript,
+    createdAt: row.created_at,
+    completedAt: row.completed_at,
+    gradedAt: row.graded_at,
+    retentionUntil: row.retention_until,
+    deletedAt: row.deleted_at,
+    deletedBy: row.deleted_by
+  };
+}
+
+function storedAudioArtifact(audio: AudioArtifactInput): AudioArtifactView {
+  return {
+    artifactKey: audio.artifactKey,
+    ...(audio.fileId ? { fileId: audio.fileId } : {}),
+    ...(audio.transcript !== undefined ? { transcript: audio.transcript } : {})
+  };
+}
+
+function audioArtifactFromContent(content: Record<string, unknown>): AudioArtifactView | undefined {
+  const value = content.audioArtifact;
+  if (!value || typeof value !== "object" || Array.isArray(value)) return undefined;
+  const audio = value as Record<string, unknown>;
+  if (typeof audio.artifactKey !== "string" || !audio.artifactKey) return undefined;
+  return {
+    artifactKey: audio.artifactKey,
+    ...(typeof audio.fileId === "string" ? { fileId: audio.fileId } : {}),
+    ...(typeof audio.transcript === "string" || audio.transcript === null ? { transcript: audio.transcript } : {})
+  };
+}
+
+async function linkAudioOnClient(client: PoolClient, input: {
+  ownerUserId: string;
+  audio: AudioArtifactInput;
+  sourceFlow: AudioSourceFlow;
+  sourceEntityId: string;
+  taskKey?: string | null;
+  questionKey?: string | null;
+}): Promise<void> {
+  await client.query(
+    `update files as file
+     set source_flow = $4,
+         source_entity_id = $5,
+         task_key = $6,
+         question_key = $7,
+         transcript = coalesce($8, file.transcript),
+         completed_at = coalesce(file.completed_at, now()),
+         retention_until = coalesce(file.retention_until, now() + interval '60 days')
+     where file.purpose = 'assessment_audio'
+       and file.owner_user_id = $1
+       and (($2::uuid is not null and file.id = $2::uuid)
+         or ($3::text is not null and file.object_key = $3::text))`,
+    [input.ownerUserId, input.audio.fileId ?? null, input.audio.artifactKey,
+      input.sourceFlow, input.sourceEntityId, input.taskKey ?? null, input.questionKey ?? null,
+      input.audio.transcript ?? null]
+  );
 }
 
 class AiRunRepository {

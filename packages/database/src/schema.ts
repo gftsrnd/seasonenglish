@@ -352,7 +352,11 @@ export const files = pgTable("files", {
   id: uuid("id").primaryKey(), organizationId: uuid("organization_id").notNull().references(() => organizations.id),
   ownerUserId: uuid("owner_user_id").references(() => users.id), purpose: text("purpose").notNull(), bucket: text("bucket").notNull(),
   objectKey: text("object_key").notNull(), mimeType: text("mime_type").notNull(), sizeBytes: bigint("size_bytes", { mode: "number" }).notNull(),
-  sha256: text("sha256").notNull(), retentionUntil: timestamp("retention_until", { withTimezone: true }), createdAt: now()
+  sha256: text("sha256").notNull(), sourceFlow: text("source_flow").notNull().default("placement"),
+  sourceEntityId: uuid("source_entity_id"), taskKey: text("task_key"), questionKey: text("question_key"), transcript: text("transcript"),
+  completedAt: timestamp("completed_at", { withTimezone: true }), gradedAt: timestamp("graded_at", { withTimezone: true }),
+  retentionUntil: timestamp("retention_until", { withTimezone: true }), deletedAt: timestamp("deleted_at", { withTimezone: true }),
+  deletedBy: uuid("deleted_by").references(() => users.id), createdAt: now()
 });
 
 export const mediaAssets = pgTable("media_assets", {

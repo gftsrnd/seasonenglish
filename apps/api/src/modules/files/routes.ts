@@ -1,6 +1,6 @@
-import { createHash, randomUUID } from "node:crypto";
+import { createHash, randomBytes, randomUUID } from "node:crypto";
 import type { ObjectStorage } from "@e4s/storage";
-import { createRepositories } from "@e4s/database";
+import { createRepositories, type AudioFileRecord, type AudioSourceFlow } from "@e4s/database";
 import type { FastifyInstance, FastifyRequest } from "fastify";
 import type { Pool } from "pg";
 import { createRoleGuard } from "../identity/policy.js";
@@ -11,6 +11,8 @@ export function registerFileRoutes(app: FastifyInstance, pool: Pool, storage: Ob
   const learnerOnly = createRoleGuard(pool, ["learner"]);
   const contentAuthorOnly = createRoleGuard(pool, ["operator", "manager"]);
   const authenticatedContentUser = createRoleGuard(pool, ["learner", "operator", "manager"]);
+  const audioReaders = createRoleGuard(pool, ["learner", "operator", "manager"]);
+  const staffOnly = createRoleGuard(pool, ["operator", "manager"]);
 
   app.get("/api/v1/files/content-media/read", { preHandler: authenticatedContentUser }, async (request, reply) => {
     const artifactKey = (request.query as { artifactKey?: unknown }).artifactKey;
@@ -78,44 +80,37 @@ export function registerFileRoutes(app: FastifyInstance, pool: Pool, storage: Ob
     });
   });
 
-  app.get("/api/v1/files/assessment-audio/read", { preHandler: learnerOnly }, async (request, reply) => {
+  app.get("/api/v1/files/assessment-audio/read", { preHandler: audioReaders }, async (request, reply) => {
     const artifactKey = (request.query as { artifactKey?: unknown }).artifactKey;
     if (typeof artifactKey !== "string" || artifactKey.length > 512 || !artifactKey.startsWith("assessment-audio/")) {
       return reply.code(400).send({ code: "ASSESSMENT_AUDIO_KEY_INVALID" });
     }
-    const ownerUserId = request.e4sSession!.user.id;
-    if (!await repositories.files.ownedBy(ownerUserId, "assessment_audio", artifactKey)) {
+    const file = await repositories.files.findAssessmentAudioForViewer(request.e4sSession!.user.id, artifactKey);
+    if (!file) {
       return reply.code(404).send({ code: "ASSESSMENT_AUDIO_NOT_FOUND" });
     }
-    const presignGetObject = storage.presignGetObject;
-    if (!presignGetObject) {
-      return reply.code(503).send({ code: "ASSESSMENT_AUDIO_READ_UNAVAILABLE" });
+    const playback = await signedPlayback(request, storage, file);
+    if (playback.error) return reply.code(playback.error.status).send({ code: playback.error.code });
+    return reply.send(audioView(file, playback.signed));
+  });
+
+  app.get("/api/v1/files/assessment-audio", { preHandler: staffOnly }, async (request, reply) => {
+    const query = request.query as { learnerId?: unknown; sourceFlow?: unknown };
+    const learnerId = query.learnerId === undefined ? undefined : String(query.learnerId);
+    const sourceFlow = query.sourceFlow === undefined ? undefined : parseSourceFlow(query.sourceFlow);
+    if ((learnerId && !isUuid(learnerId)) || (query.sourceFlow !== undefined && !sourceFlow)) {
+      return reply.code(400).send({ code: "ASSESSMENT_AUDIO_FILTER_INVALID" });
     }
-    if (storage.objectExists) {
-      try {
-        if (!await storage.objectExists(EVIDENCE_BUCKET, artifactKey)) {
-          return reply.code(404).send({ code: "ASSESSMENT_AUDIO_NOT_FOUND" });
-        }
-      } catch (error) {
-        logStorageFailure(request, "objectExists", error);
-        return reply.code(503).send({ code: "ASSESSMENT_AUDIO_READ_UNAVAILABLE" });
-      }
-    }
-    let signed: Awaited<ReturnType<typeof presignGetObject>>;
-    try {
-      signed = await presignGetObject({
-        bucket: EVIDENCE_BUCKET,
-        objectKey: artifactKey,
-        expiresInSeconds: 300
-      });
-    } catch (error) {
-      logStorageFailure(request, "presignGetObject", error);
-      if (isMissingObjectError(error)) {
-        return reply.code(404).send({ code: "ASSESSMENT_AUDIO_NOT_FOUND" });
-      }
-      return reply.code(503).send({ code: "ASSESSMENT_AUDIO_READ_UNAVAILABLE" });
-    }
-    return reply.send({ url: signed.url, expiresAt: signed.expiresAt.toISOString() });
+    const files = await repositories.files.listAssessmentAudioForStaff({
+      viewerId: request.e4sSession!.user.id,
+      ...(learnerId ? { learnerId } : {}),
+      ...(sourceFlow ? { sourceFlow } : {})
+    });
+    const items = await Promise.all(files.map(async (file) => {
+      const playback = await signedPlayback(request, storage, file);
+      return audioView(file, playback.signed);
+    }));
+    return reply.send({ items });
   });
 
   app.post("/api/v1/files/assessment-audio", { preHandler: learnerOnly }, async (request, reply) => {
@@ -138,6 +133,18 @@ export function registerFileRoutes(app: FastifyInstance, pool: Pool, storage: Ob
       return reply.code(400).send({ code: "ASSESSMENT_AUDIO_INVALID" });
     }
 
+    const sourceFlow = parseSourceFlow(multipartField(file.fields, "sourceFlow") ?? "placement");
+    const sourceEntityId = multipartField(file.fields, "sourceEntityId") ?? null;
+    const taskKey = multipartField(file.fields, "taskKey") ?? null;
+    const questionKey = multipartField(file.fields, "questionKey") ?? null;
+    const transcript = multipartField(file.fields, "transcript") ?? null;
+    if (!sourceFlow || (sourceEntityId !== null && !isUuid(sourceEntityId))
+      || (taskKey !== null && (taskKey.length < 1 || taskKey.length > 160))
+      || (questionKey !== null && (questionKey.length < 1 || questionKey.length > 160))
+      || (transcript !== null && transcript.length > 20_000)) {
+      return reply.code(400).send({ code: "ASSESSMENT_AUDIO_METADATA_INVALID" });
+    }
+
     const extension = extensionFor(file.filename);
     const ownerUserId = request.e4sSession!.user.id;
     const objectKey = `assessment-audio/${ownerUserId}/${randomUUID()}${extension}`;
@@ -149,7 +156,7 @@ export function registerFileRoutes(app: FastifyInstance, pool: Pool, storage: Ob
       return reply.code(503).send({ code: "ASSESSMENT_AUDIO_UPLOAD_UNAVAILABLE" });
     }
 
-    let saved: boolean;
+    let saved: Awaited<ReturnType<typeof repositories.files.createForOwner>>;
     try {
       saved = await repositories.files.createForOwner({
         id: randomUUID(),
@@ -159,7 +166,7 @@ export function registerFileRoutes(app: FastifyInstance, pool: Pool, storage: Ob
         objectKey,
         mimeType: file.mimetype,
         sizeBytes: body.length,
-        sha256
+        sha256, sourceFlow, sourceEntityId, taskKey, questionKey, transcript
       });
     } catch (error) {
       logStorageFailure(request, "saveMetadata", error);
@@ -170,8 +177,141 @@ export function registerFileRoutes(app: FastifyInstance, pool: Pool, storage: Ob
       await cleanupUploadedObject(request, storage, objectKey);
       return reply.code(409).send({ code: "ASSESSMENT_AUDIO_NOT_SAVED" });
     }
-    return reply.code(201).send({ artifactKey: objectKey });
+    const playback = await signedPlayback(request, storage, saved);
+    return reply.code(201).send(audioView(saved, playback.signed));
   });
+
+  app.post("/api/v1/files/assessment-audio/:fileId/complete", { preHandler: authenticatedContentUser }, async (request, reply) => {
+    const fileId = (request.params as { fileId?: unknown }).fileId;
+    const body = request.body as { transcript?: unknown } | undefined;
+    if (typeof fileId !== "string" || !isUuid(fileId) || (body?.transcript !== undefined && typeof body.transcript !== "string")) {
+      return reply.code(400).send({ code: "ASSESSMENT_AUDIO_LIFECYCLE_INVALID" });
+    }
+    const transcript = typeof body?.transcript === "string" ? body.transcript.trim() : undefined;
+    if (transcript !== undefined && transcript.length > 20_000) return reply.code(400).send({ code: "ASSESSMENT_AUDIO_TRANSCRIPT_INVALID" });
+    const updated = await repositories.files.markAudioCompleted({ actorId: request.e4sSession!.user.id, fileId, transcript: transcript ?? null });
+    return updated ? reply.send(audioView(updated, undefined)) : reply.code(404).send({ code: "ASSESSMENT_AUDIO_NOT_FOUND" });
+  });
+
+  app.post("/api/v1/files/assessment-audio/:fileId/grade", { preHandler: staffOnly }, async (request, reply) => {
+    const fileId = (request.params as { fileId?: unknown }).fileId;
+    const body = request.body as { transcript?: unknown } | undefined;
+    if (typeof fileId !== "string" || !isUuid(fileId) || (body?.transcript !== undefined && typeof body.transcript !== "string")) {
+      return reply.code(400).send({ code: "ASSESSMENT_AUDIO_LIFECYCLE_INVALID" });
+    }
+    const transcript = typeof body?.transcript === "string" ? body.transcript.trim() : undefined;
+    if (transcript !== undefined && transcript.length > 20_000) return reply.code(400).send({ code: "ASSESSMENT_AUDIO_TRANSCRIPT_INVALID" });
+    const updated = await repositories.files.markAudioGraded({ actorId: request.e4sSession!.user.id, fileId, transcript: transcript ?? null });
+    return updated ? reply.send(audioView(updated, undefined)) : reply.code(404).send({ code: "ASSESSMENT_AUDIO_NOT_FOUND" });
+  });
+
+  app.post("/api/v1/files/assessment-audio/:fileId/delete-confirmation", { preHandler: staffOnly }, async (request, reply) => {
+    const fileId = (request.params as { fileId?: unknown }).fileId;
+    if (typeof fileId !== "string" || !isUuid(fileId)) return reply.code(400).send({ code: "ASSESSMENT_AUDIO_FILE_INVALID" });
+    const token = randomBytes(32).toString("hex");
+    const expiresAt = new Date(Date.now() + 10 * 60 * 1_000);
+    const created = await repositories.files.createAudioDeletionConfirmation({
+      actorId: request.e4sSession!.user.id,
+      fileId,
+      tokenHash: createHash("sha256").update(token).digest("hex"),
+      expiresAt
+    });
+    return created
+      ? reply.send({ confirmationToken: token, expiresAt: expiresAt.toISOString() })
+      : reply.code(404).send({ code: "ASSESSMENT_AUDIO_NOT_FOUND" });
+  });
+
+  app.delete("/api/v1/files/assessment-audio/:fileId", { preHandler: staffOnly }, async (request, reply) => {
+    const fileId = (request.params as { fileId?: unknown }).fileId;
+    const confirmationToken = (request.body as { confirmationToken?: unknown } | undefined)?.confirmationToken;
+    if (typeof fileId !== "string" || !isUuid(fileId) || typeof confirmationToken !== "string" || confirmationToken.length < 32) {
+      return reply.code(400).send({ code: "ASSESSMENT_AUDIO_CONFIRMATION_REQUIRED" });
+    }
+    const tokenHash = createHash("sha256").update(confirmationToken).digest("hex");
+    const target = await repositories.files.findAudioDeleteTarget(request.e4sSession!.user.id, fileId, tokenHash);
+    if (!target) {
+      return reply.code(409).send({ code: "ASSESSMENT_AUDIO_CONFIRMATION_INVALID" });
+    }
+    try {
+      await storage.deleteObject(target.bucket, target.objectKey);
+    } catch (error) {
+      logStorageFailure(request, "deleteAudioObject", error);
+      return reply.code(503).send({ code: "ASSESSMENT_AUDIO_DELETE_UNAVAILABLE" });
+    }
+    const deleted = await repositories.files.deleteAudioWithConfirmation({
+      actorId: request.e4sSession!.user.id,
+      fileId,
+      tokenHash,
+      traceId: request.id
+    });
+    if (deleted.status !== "deleted" || !deleted.file) return reply.code(409).send({ code: "ASSESSMENT_AUDIO_CONFIRMATION_INVALID" });
+    return reply.send({ ...audioView(deleted.file, undefined), deleted: true });
+  });
+}
+
+function audioView(file: AudioFileRecord, signed: { url: string; expiresAt: Date } | undefined): Record<string, unknown> {
+  const signedUrl = file.deletedAt ? null : signed?.url ?? null;
+  const expiresAt = file.deletedAt ? null : signed?.expiresAt.toISOString() ?? null;
+  return {
+    fileId: file.id,
+    artifactKey: file.objectKey,
+    url: signedUrl,
+    signedUrl,
+    expiresAt,
+    mimeType: file.mimeType,
+    sizeBytes: file.sizeBytes,
+    sha256: file.sha256,
+    sourceFlow: file.sourceFlow,
+    sourceEntityId: file.sourceEntityId,
+    taskKey: file.taskKey,
+    questionKey: file.questionKey,
+    transcript: file.transcript,
+    createdAt: file.createdAt.toISOString(),
+    completedAt: file.completedAt?.toISOString() ?? null,
+    gradedAt: file.gradedAt?.toISOString() ?? null,
+    retentionUntil: file.retentionUntil?.toISOString() ?? null,
+    cleanupEligible: Boolean(file.retentionUntil && file.retentionUntil.getTime() <= Date.now()),
+    deletedAt: file.deletedAt?.toISOString() ?? null,
+    deletedBy: file.deletedBy
+  };
+}
+
+async function signedPlayback(
+  request: Pick<FastifyRequest, "log">,
+  storage: ObjectStorage,
+  file: AudioFileRecord
+): Promise<{ signed?: { url: string; expiresAt: Date }; error?: { status: number; code: string } }> {
+  if (file.deletedAt) return {};
+  if (!storage.presignGetObject) return { error: { status: 503, code: "ASSESSMENT_AUDIO_READ_UNAVAILABLE" } };
+  if (storage.objectExists) {
+    try {
+      if (!await storage.objectExists(file.bucket, file.objectKey)) return { error: { status: 404, code: "ASSESSMENT_AUDIO_NOT_FOUND" } };
+    } catch (error) {
+      logStorageFailure(request, "objectExists", error);
+      return { error: { status: 503, code: "ASSESSMENT_AUDIO_READ_UNAVAILABLE" } };
+    }
+  }
+  try {
+    return { signed: await storage.presignGetObject({ bucket: file.bucket, objectKey: file.objectKey, expiresInSeconds: 300 }) };
+  } catch (error) {
+    logStorageFailure(request, "presignGetObject", error);
+    return { error: { status: isMissingObjectError(error) ? 404 : 503, code: isMissingObjectError(error) ? "ASSESSMENT_AUDIO_NOT_FOUND" : "ASSESSMENT_AUDIO_READ_UNAVAILABLE" } };
+  }
+}
+
+function multipartField(fields: Record<string, unknown>, name: string): string | undefined {
+  const value = fields[name];
+  if (!value || typeof value !== "object" || !("value" in value)) return undefined;
+  const fieldValue = (value as { value?: unknown }).value;
+  return typeof fieldValue === "string" ? fieldValue.trim() : undefined;
+}
+
+function parseSourceFlow(value: unknown): AudioSourceFlow | undefined {
+  return value === "placement" || value === "daily_lesson" || value === "weekly_practice" || value === "season" ? value : undefined;
+}
+
+function isUuid(value: string): boolean {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
 }
 
 async function cleanupUploadedObject(

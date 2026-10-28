@@ -194,11 +194,24 @@ export interface ContentReviewAssessmentAnswerView extends AssessmentResponseVie
   title?: string;
   prompt?: string;
   audioArtifact?: {
+    fileId?: string;
     artifactKey: string;
     mimeType: string | null;
     sizeBytes: number | null;
+    sha256?: string | null;
+    sourceFlow?: "placement" | "daily_lesson" | "weekly_practice" | "season";
+    sourceEntityId?: string | null;
+    taskKey?: string | null;
+    questionKey?: string | null;
+    transcript?: string | null;
     signedUrl: string | null;
     expiresAt: string | null;
+    completedAt?: string | null;
+    gradedAt?: string | null;
+    retentionUntil?: string | null;
+    cleanupEligible?: boolean;
+    deletedAt?: string | null;
+    deletedBy?: string | null;
   } | null;
 }
 

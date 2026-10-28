@@ -1,6 +1,7 @@
 import type { CefrLevel } from "./domain-contract.js";
 import type { LearnerAvatarData } from "./learning-contract.js";
 import type { ContentImageAttribution } from "./media-contract.js";
+import type { AudioArtifactView } from "./audio-contract.js";
 
 export type WeeklyPracticeState = "locked" | "open" | "draft" | "submitted" | "reviewed";
 
@@ -46,6 +47,7 @@ export interface WeeklyPracticeView {
     feedback: string;
     suggestions: Array<{ original: string; corrected: string; explanation: string }>;
     correctedText: string;
+    audioArtifact?: AudioArtifactView;
   };
   reviewState?: WeeklyPracticeReviewState;
   appeal?: WeeklyPracticeAppealView | null;

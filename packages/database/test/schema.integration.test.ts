@@ -11,7 +11,7 @@ const expectedTables = [
   "activities", "ai_runs", "ai_tasks", "appeals", "assessment_attempts", "assessment_audio_plays",
   "assessment_decisions", "assessment_definitions", "assessment_responses",
   "assessment_scores", "assessment_versions", "audit_events", "auth_challenges", "badges",
-  "coach_sessions", "coach_turns", "duels", "enrollments", "files", "game_results",
+  "coach_sessions", "coach_turns", "duels", "enrollments", "file_deletion_confirmations", "files", "game_results",
   "content_lesson_level_settings", "game_sets", "idempotency_keys", "jobs", "learner_profiles", "learner_vocabulary_unlocks", "level_up_challenge_results", "lesson_set_versions",
   "lesson_sets", "lesson_versions", "lessons", "lesson_part_appeals", "lesson_part_attempts", "media_assets", "micro_lessons", "notification_deliveries", "organization_settings", "organizations",
   "certificate_issuances", "level_up_retry_plans", "practice_appeals", "practice_submissions", "program_weeks", "programs", "progress_records", "scheduled_level_changes",
@@ -59,6 +59,29 @@ describe("normalized E4S database", () => {
       "media_assets_organization_fingerprint_unique",
       "media_assets_status_expires_index"
     ]));
+  });
+
+  it("keeps sensitive evidence tables behind backend-owned access", async () => {
+    const rls = await client.query<{ relname: string; relrowsecurity: boolean }>(
+      `select relname, relrowsecurity
+       from pg_class
+       where relname in ('files', 'file_deletion_confirmations', 'audit_events', 'assessment_responses', 'practice_submissions', 'coach_turns', 'user_credentials', 'sessions')
+       order by relname`
+    );
+    expect(rls.rows).toEqual([
+      { relname: "assessment_responses", relrowsecurity: true },
+      { relname: "audit_events", relrowsecurity: true },
+      { relname: "coach_turns", relrowsecurity: true },
+      { relname: "file_deletion_confirmations", relrowsecurity: true },
+      { relname: "files", relrowsecurity: true },
+      { relname: "practice_submissions", relrowsecurity: true },
+      { relname: "sessions", relrowsecurity: true },
+      { relname: "user_credentials", relrowsecurity: true }
+    ]);
+    const publicAccess = await client.query<{ can_select: boolean; can_insert: boolean }>(
+      "select has_table_privilege('public', 'public.files', 'select') as can_select, has_table_privilege('public', 'public.files', 'insert') as can_insert"
+    );
+    expect(publicAccess.rows[0]).toEqual({ can_select: false, can_insert: false });
   });
 
   it("seeds deterministic learner, operator and manager accounts", async () => {

@@ -1,14 +1,31 @@
 import { coachOutputSchema, type AiRunResult, type AiTaskRunner } from "@e4s/ai";
 import type { CoachTaskOutput } from "@e4s/ai";
 import { createRepositories } from "@e4s/database";
+import type { ObjectStorage } from "@e4s/storage";
+import type { AudioArtifactInput, AudioArtifactView, CoachView } from "@e4s/contracts";
 import type { FastifyInstance } from "fastify";
 import type { Pool } from "pg";
 import { z } from "zod";
 import { createRoleGuard } from "../identity/policy.js";
 
+const audioArtifactInput = z.object({
+  fileId: z.uuid().optional().nullable(),
+  artifactKey: z.string().trim().min(1).max(512),
+  signedUrl: z.string().max(4_096).optional().nullable(),
+  expiresAt: z.string().max(100).optional().nullable(),
+  createdAt: z.string().max(100).optional().nullable(),
+  mimeType: z.string().max(160).optional().nullable(),
+  sizeBytes: z.number().int().nonnegative().max(20 * 1024 * 1024).optional().nullable(),
+  transcript: z.string().max(20_000).optional().nullable(),
+  retentionUntil: z.string().max(100).optional().nullable(),
+  cleanupEligible: z.boolean().optional(),
+  deletedAt: z.string().max(100).optional().nullable(),
+  deletedBy: z.uuid().optional().nullable()
+});
 const messageInput = z.object({
   requestId: z.uuid(),
-  message: z.string().trim().min(1).max(2_000)
+  message: z.string().trim().min(1).max(2_000),
+  audio: audioArtifactInput.optional()
 });
 const personaInput = z.object({ persona: z.enum(["informal", "formal"]) });
 
@@ -16,7 +33,8 @@ export function registerCoachRoutes(
   app: FastifyInstance,
   pool: Pool,
   aiRunner?: AiTaskRunner,
-  aiRunnerFactory?: (actorId: string) => Promise<AiTaskRunner | undefined>
+  aiRunnerFactory?: (actorId: string) => Promise<AiTaskRunner | undefined>,
+  storage?: ObjectStorage
 ): void {
   const repositories = createRepositories(pool);
   const learnerOnly = createRoleGuard(pool, ["learner"]);
@@ -25,7 +43,7 @@ export function registerCoachRoutes(
   app.get("/api/v1/coach", { preHandler: learnerOnly }, async (request, reply) => {
     const learnerId = request.e4sSession!.user.id;
     const view = await repositories.coach.currentForLearner(learnerId, Boolean(await runnerFor(learnerId)));
-    return view ?? reply.code(404).send({ code: "COACH_CONTEXT_NOT_FOUND" });
+    return view ? withCoachAudio(view, learnerId, repositories, storage) : reply.code(404).send({ code: "COACH_CONTEXT_NOT_FOUND" });
   });
 
   app.post("/api/v1/coach/messages", {
@@ -34,12 +52,13 @@ export function registerCoachRoutes(
   }, async (request, reply) => {
     const parsed = messageInput.safeParse(request.body);
     if (!parsed.success) return reply.code(400).send({ code: "INVALID_COACH_MESSAGE" });
+    const audio = parsed.data.audio as AudioArtifactInput | undefined;
     const learnerId = request.e4sSession!.user.id;
     const runner = await runnerFor(learnerId);
     if (!runner) return reply.code(503).send({ code: "AI_UNAVAILABLE" });
     const existing = await repositories.coach.currentForLearner(learnerId, true);
     if (!existing) return reply.code(404).send({ code: "COACH_CONTEXT_NOT_FOUND" });
-    if (await repositories.aiRuns.requestExists(learnerId, parsed.data.requestId, "coach_dialogue")) return existing;
+    if (await repositories.aiRuns.requestExists(learnerId, parsed.data.requestId, "coach_dialogue")) return withCoachAudio(existing, learnerId, repositories, storage);
     if (existing.daily.used >= existing.daily.limit) return reply.code(429).send({ code: "COACH_DAILY_LIMIT" });
     const currentQuestion = coachQuestionForPersona(
       coachCurrentQuestion(existing.messages, existing.topic), existing.persona
@@ -51,9 +70,9 @@ export function registerCoachRoutes(
     if (isInsufficientCoachInput(parsed.data.message)) {
       await repositories.coach.saveInsufficientTurn({
         learnerId, sessionId: existing.sessionId, requestId: parsed.data.requestId,
-        message: parsed.data.message, currentQuestion
+        message: parsed.data.message, currentQuestion, ...(audio ? { audio } : {})
       });
-      return await repositories.coach.currentForLearner(learnerId, true);
+      return withCoachAudio(await repositories.coach.currentForLearner(learnerId, true), learnerId, repositories, storage);
     }
     const task = await repositories.aiRuns.activeTaskPrompt(learnerId, "coach_dialogue");
     if (!task) return reply.code(503).send({ code: "AI_PROMPT_NOT_READY" });
@@ -80,6 +99,7 @@ export function registerCoachRoutes(
         sessionId: existing.sessionId,
         requestId: parsed.data.requestId,
         message: parsed.data.message,
+        ...(audio ? { audio } : {}),
         taskId: task.taskId,
         promptVersionId: task.promptVersionId,
         output: normalizedOutput as CoachTaskOutput,
@@ -92,7 +112,7 @@ export function registerCoachRoutes(
           latencyMs: result.metadata.latencyMs
         }
       });
-      return await repositories.coach.currentForLearner(learnerId, true);
+      return withCoachAudio(await repositories.coach.currentForLearner(learnerId, true), learnerId, repositories, storage);
     } catch (error) {
       request.log.warn({ code: safeAiErrorCode(error) }, "AI coach request failed");
       return reply.code(aiErrorStatus(error)).send({ code: safeAiErrorCode(error) });
@@ -106,13 +126,13 @@ export function registerCoachRoutes(
     const aiAvailable = Boolean(await runnerFor(learnerId));
     await repositories.coach.currentForLearner(learnerId, aiAvailable);
     await repositories.coach.setPersona(learnerId, parsed.data.persona);
-    return await repositories.coach.currentForLearner(learnerId, aiAvailable);
+    return withCoachAudio(await repositories.coach.currentForLearner(learnerId, aiAvailable), learnerId, repositories, storage);
   });
 
   app.delete("/api/v1/coach/session", { preHandler: learnerOnly }, async (request) => {
     const learnerId = request.e4sSession!.user.id;
     await repositories.coach.archiveCurrent(learnerId);
-    return await repositories.coach.currentForLearner(learnerId, Boolean(await runnerFor(learnerId)));
+    return withCoachAudio(await repositories.coach.currentForLearner(learnerId, Boolean(await runnerFor(learnerId))), learnerId, repositories, storage);
   });
 
   app.get("/api/v1/challenge", { preHandler: learnerOnly }, async (request, reply) => {
@@ -127,6 +147,7 @@ export function registerCoachRoutes(
   }, async (request, reply) => {
     const parsed = messageInput.safeParse(request.body);
     if (!parsed.success) return reply.code(400).send({ code: "INVALID_CHALLENGE_MESSAGE" });
+    const audio = parsed.data.audio as AudioArtifactInput | undefined;
     const learnerId = request.e4sSession!.user.id;
     const runner = await runnerFor(learnerId);
     if (!runner) return reply.code(503).send({ code: "AI_UNAVAILABLE" });
@@ -159,6 +180,7 @@ export function registerCoachRoutes(
       await repositories.coach.saveAiTurn({
         learnerId, sessionId: existing.sessionId, requestId: parsed.data.requestId,
         message: parsed.data.message, taskId: task.taskId, promptVersionId: task.promptVersionId,
+        ...(audio ? { audio } : {}),
         challengeAttemptId: existing.assessmentAttemptId,
         output: normalizedOutput as CoachTaskOutput,
         metadata: { traceId: result.metadata.traceId, provider: result.metadata.provider, model: result.metadata.model,
@@ -170,6 +192,53 @@ export function registerCoachRoutes(
       return reply.code(aiErrorStatus(error)).send({ code: safeAiErrorCode(error) });
     }
   });
+}
+
+async function withCoachAudio(
+  view: CoachView | null,
+  learnerId: string,
+  repositories: ReturnType<typeof createRepositories>,
+  storage?: ObjectStorage
+): Promise<CoachView | null> {
+  if (!view) return null;
+  const messages = await Promise.all(view.messages.map(async (message) => {
+    if (!message.audioArtifact) return message;
+    return { ...message, audioArtifact: await refreshAudioArtifact(message.audioArtifact, learnerId, repositories, storage) };
+  }));
+  return { ...view, messages };
+}
+
+async function refreshAudioArtifact(
+  artifact: AudioArtifactView,
+  learnerId: string,
+  repositories: ReturnType<typeof createRepositories>,
+  storage?: ObjectStorage
+): Promise<AudioArtifactView> {
+  const file = await repositories.files.findAssessmentAudioForViewer(learnerId, artifact.artifactKey);
+  if (!file) return artifact;
+  let signed: { url: string; expiresAt: Date } | undefined;
+  if (!file.deletedAt && storage?.presignGetObject) {
+    try {
+      signed = await storage.presignGetObject({ bucket: file.bucket, objectKey: file.objectKey, expiresInSeconds: 300 });
+    } catch {
+      signed = undefined;
+    }
+  }
+  return {
+    ...artifact,
+    fileId: file.id,
+    artifactKey: file.objectKey,
+    signedUrl: file.deletedAt ? null : signed?.url ?? artifact.signedUrl ?? null,
+    expiresAt: file.deletedAt ? null : signed?.expiresAt.toISOString() ?? artifact.expiresAt ?? null,
+    createdAt: file.createdAt.toISOString(),
+    mimeType: file.mimeType,
+    sizeBytes: file.sizeBytes,
+    transcript: file.transcript,
+    retentionUntil: file.retentionUntil?.toISOString() ?? null,
+    cleanupEligible: Boolean(file.retentionUntil && file.retentionUntil.getTime() <= Date.now()),
+    deletedAt: file.deletedAt?.toISOString() ?? null,
+    deletedBy: file.deletedBy
+  };
 }
 
 export function coachPersonaPrompt(prompt: string, persona: "informal" | "formal"): string {

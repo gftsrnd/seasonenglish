@@ -1,4 +1,5 @@
 import type { CefrLevel } from "./domain-contract.js";
+import type { AudioArtifactInput, AudioArtifactView } from "./audio-contract.js";
 
 export type CoachPersona = "informal" | "formal";
 
@@ -58,6 +59,7 @@ export interface CoachMessageView {
   createdAt: string;
   classification?: CoachTurnClassification;
   feedback?: CoachFeedbackView;
+  audioArtifact?: AudioArtifactView;
 }
 
 export interface CoachView {
@@ -75,6 +77,7 @@ export interface CoachView {
 export interface CoachMessageInput {
   requestId: string;
   message: string;
+  audio?: AudioArtifactInput;
 }
 
 export interface LevelChallengeView {

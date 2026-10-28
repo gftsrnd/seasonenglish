@@ -1,4 +1,4 @@
-import type { GameDescriptor, GameKey, GameTopicModeration } from "@e4s/contracts";
+import type { AudioArtifactInput, AudioArtifactView, GameDescriptor, GameKey, GameTopicModeration, WeeklyPracticeView } from "@e4s/contracts";
 import { randomUUID } from "node:crypto";
 import { vocabularyOutputSchema, weeklyPracticeOutputSchema, type AiTaskRunner } from "@e4s/ai";
 import { arenaEligible, scoreGameAttempt } from "@e4s/domain/engagement";
@@ -9,6 +9,7 @@ import type { Pool } from "pg";
 import { z } from "zod";
 import { createRoleGuard } from "../identity/policy.js";
 import type { ContentMediaService } from "../media/index.js";
+import type { ObjectStorage } from "@e4s/storage";
 
 const gameKey = z.enum(["scramble", "crossword", "eggs", "mario", "sort", "typing"]);
 const answer = z.object({
@@ -25,6 +26,14 @@ const resultInput = z.object({
 });
 const practiceAppealParams = z.object({ submissionId: z.uuid() });
 const practiceAppealInput = z.object({ reason: z.string().trim().min(5).max(2_000) });
+const audioArtifactInput = z.object({
+  fileId: z.uuid().optional().nullable(), artifactKey: z.string().trim().min(1).max(512),
+  signedUrl: z.string().max(4_096).optional().nullable(), expiresAt: z.string().max(100).optional().nullable(),
+  createdAt: z.string().max(100).optional().nullable(), mimeType: z.string().max(160).optional().nullable(),
+  sizeBytes: z.number().int().nonnegative().max(20 * 1024 * 1024).optional().nullable(),
+  transcript: z.string().max(20_000).optional().nullable(), retentionUntil: z.string().max(100).optional().nullable(),
+  cleanupEligible: z.boolean().optional(), deletedAt: z.string().max(100).optional().nullable(), deletedBy: z.uuid().optional().nullable()
+});
 
 const GAME_DESCRIPTORS: ReadonlyArray<Omit<GameDescriptor, "best">> = [
   { key: "scramble", icon: "🔤", name: "Word scramble", description: "Các chữ cái bị xáo trộn, xếp lại thành đúng từ", goal: "Xếp đúng càng nhiều từ càng tốt (8 từ).", instructions: ["Đọc gợi ý (nghĩa tiếng Việt / định nghĩa) và các ô chữ cái bị xáo trộn.", "Bấm từng chữ cái theo đúng thứ tự (hoặc gõ phím) để xếp vào ô trống; ⌫ để bỏ chữ cuối.", "Xếp đủ chữ mà sai thì ô rung và xoá để xếp lại; mỗi từ được 2 lần sai.", "Bí quá thì bấm Gợi ý: mở chữ cái tiếp theo (trừ nửa điểm của từ đó)."], scoring: "+2 điểm mỗi từ xếp đúng ngay, +1 nếu dùng gợi ý hoặc sai một lần." },
@@ -40,7 +49,8 @@ export function registerEngagementRoutes(
   pool: Pool,
   aiRunner?: AiTaskRunner,
   mediaService?: ContentMediaService,
-  aiRunnerFactory?: (actorId: string) => Promise<AiTaskRunner | undefined>
+  aiRunnerFactory?: (actorId: string) => Promise<AiTaskRunner | undefined>,
+  storage?: ObjectStorage
 ): void {
   const repositories = createRepositories(pool);
   const runnerFor = (actorId: string) => aiRunnerFactory ? aiRunnerFactory(actorId) : Promise.resolve(aiRunner);
@@ -48,12 +58,13 @@ export function registerEngagementRoutes(
 
   app.get("/api/v1/engagement/practice", { preHandler: learnerOnly }, async (request, reply) => {
     const view = await repositories.engagement.weeklyPractice(request.e4sSession!.user.id);
-    return view ?? reply.code(404).send({ code: "PRACTICE_CONTEXT_NOT_FOUND" });
+    return view ? withPracticeAudio(view, request.e4sSession!.user.id, repositories, storage) : reply.code(404).send({ code: "PRACTICE_CONTEXT_NOT_FOUND" });
   });
 
   app.post("/api/v1/engagement/practice/submit", { preHandler: learnerOnly }, async (request, reply) => {
-    const parsed = z.object({ requestId: z.uuid(), text: z.string().trim().min(8).max(10_000) }).safeParse(request.body);
+    const parsed = z.object({ requestId: z.uuid(), text: z.string().trim().min(8).max(10_000), audio: audioArtifactInput.optional() }).safeParse(request.body);
     if (!parsed.success || parsed.data.text.split(/\s+/).length < 8) return reply.code(400).send({ code: "PRACTICE_TOO_SHORT" });
+    const audio = parsed.data.audio as AudioArtifactInput | undefined;
     const learnerId = request.e4sSession!.user.id;
     const runner = await runnerFor(learnerId);
     const requirements = await repositories.engagement.weeklyPracticeRequirements(learnerId);
@@ -64,25 +75,25 @@ export function registerEngagementRoutes(
       weeklyVocabulary: requirements.vocabulary
     });
     if (!validation.valid) return reply.code(422).send({ code: "PRACTICE_FORMAT_INVALID", errors: validation.errors });
-    const view = await repositories.engagement.submitWeeklyPractice({ learnerId, ...parsed.data });
+    const view = await repositories.engagement.submitWeeklyPractice({ learnerId, requestId: parsed.data.requestId, text: parsed.data.text, ...(audio ? { audio } : {}) });
     if (!view) return reply.code(409).send({ code: "PRACTICE_LOCKED" });
-    if (!runner || await repositories.aiRuns.requestExists(learnerId, parsed.data.requestId, "weekly_practice_grading")) return view;
+    if (!runner || await repositories.aiRuns.requestExists(learnerId, parsed.data.requestId, "weekly_practice_grading")) return withPracticeAudio(view, learnerId, repositories, storage);
     const task = await repositories.aiRuns.activeTaskPrompt(learnerId, "weekly_practice_grading");
-    if (!task) return view;
+    if (!task) return withPracticeAudio(view, learnerId, repositories, storage);
     try {
       const result = await runner.runTask("weekly_practice_grading", {
         text: parsed.data.text, cefr: requirements.cefr,
         topic: view.topic, rubric: ["meaning", "vocabulary", "grammar"]
       }, { systemPrompt: task.prompt });
       const output = weeklyPracticeOutputSchema.safeParse(result.output);
-      if (!output.success) return view;
-      return await repositories.engagement.saveWeeklyPracticeGrade({
+      if (!output.success) return withPracticeAudio(view, learnerId, repositories, storage);
+      return withPracticeAudio(await repositories.engagement.saveWeeklyPracticeGrade({
         learnerId, requestId: parsed.data.requestId, taskId: task.taskId, promptVersionId: task.promptVersionId,
         output: output.data, metadata: result.metadata
-      }) ?? view;
+      }) ?? view, learnerId, repositories, storage);
     } catch (error) {
       request.log.warn({ code: safeAiErrorCode(error) }, "Weekly practice AI grading failed");
-      return view;
+      return withPracticeAudio(view, learnerId, repositories, storage);
     }
   });
 
@@ -327,6 +338,42 @@ export function registerEngagementRoutes(
     const view = await repositories.engagement.submitSurvey(request.e4sSession!.user.id, parsed.data);
     return view ?? reply.code(409).send({ code: "SURVEY_ALREADY_SUBMITTED" });
   });
+}
+
+async function withPracticeAudio(
+  view: WeeklyPracticeView,
+  learnerId: string,
+  repositories: ReturnType<typeof createRepositories>,
+  storage?: ObjectStorage
+): Promise<WeeklyPracticeView> {
+  const artifact = view.submission?.audioArtifact;
+  if (!artifact) return view;
+  const file = await repositories.files.findAssessmentAudioForViewer(learnerId, artifact.artifactKey);
+  if (!file) return view;
+  let signed: { url: string; expiresAt: Date } | undefined;
+  if (!file.deletedAt && storage?.presignGetObject) {
+    try {
+      signed = await storage.presignGetObject({ bucket: file.bucket, objectKey: file.objectKey, expiresInSeconds: 300 });
+    } catch {
+      signed = undefined;
+    }
+  }
+  const audioArtifact: AudioArtifactView = {
+    ...artifact,
+    fileId: file.id,
+    artifactKey: file.objectKey,
+    signedUrl: file.deletedAt ? null : signed?.url ?? artifact.signedUrl ?? null,
+    expiresAt: file.deletedAt ? null : signed?.expiresAt.toISOString() ?? artifact.expiresAt ?? null,
+    createdAt: file.createdAt.toISOString(),
+    mimeType: file.mimeType,
+    sizeBytes: file.sizeBytes,
+    transcript: file.transcript,
+    retentionUntil: file.retentionUntil?.toISOString() ?? null,
+    cleanupEligible: Boolean(file.retentionUntil && file.retentionUntil.getTime() <= Date.now()),
+    deletedAt: file.deletedAt?.toISOString() ?? null,
+    deletedBy: file.deletedBy
+  };
+  return { ...view, submission: view.submission ? { ...view.submission, audioArtifact } : view.submission };
 }
 
 function validateVocabularyTopic(topic: string): { message: string; strike: boolean } | null {

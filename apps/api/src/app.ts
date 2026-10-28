@@ -76,8 +76,8 @@ export function buildApi(options: BuildApiOptions): FastifyInstance {
     ...(options.mediaService ? { mediaService: options.mediaService } : {})
   });
   registerNotificationRoutes(app, options.pool);
-  registerCoachRoutes(app, options.pool, options.aiRunner, options.aiRunnerFactory);
-  registerEngagementRoutes(app, options.pool, options.aiRunner, options.mediaService, options.aiRunnerFactory);
+  registerCoachRoutes(app, options.pool, options.aiRunner, options.aiRunnerFactory, options.storage);
+  registerEngagementRoutes(app, options.pool, options.aiRunner, options.mediaService, options.aiRunnerFactory, options.storage);
   registerSystemRoutes(app, options.pool, options.storage, Boolean(options.aiRunner), maintenanceEnabled, options.imageProviders, Boolean(options.aiRunnerFactory));
   if (options.storage) {
     void app.register(multipart, { limits: { files: 1, fileSize: 20 * 1024 * 1024 } });

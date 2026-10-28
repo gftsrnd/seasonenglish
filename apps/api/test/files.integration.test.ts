@@ -204,7 +204,7 @@ describe("assessment evidence upload API", () => {
     expect(response.json()).toMatchObject({ code: "ASSESSMENT_ARTIFACT_NOT_OWNED" });
   });
 
-  it("keeps assessment file routes behind learner authentication", async () => {
+  it("keeps assessment uploads behind learner authentication while allowing scoped staff reads", async () => {
     const unauthenticated = await app.inject({
       method: "GET",
       url: "/api/v1/files/assessment-audio/read?artifactKey=assessment-audio%2Fmissing%2Fvoice.wav"
@@ -224,8 +224,8 @@ describe("assessment evidence upload API", () => {
       url: "/api/v1/files/assessment-audio/read?artifactKey=assessment-audio%2Fmissing%2Fvoice.wav",
       headers: { cookie: staffCookie }
     });
-    expect(forbidden.statusCode, forbidden.body).toBe(403);
-    expect(forbidden.json()).toEqual({ code: "FORBIDDEN" });
+    expect(forbidden.statusCode, forbidden.body).toBe(404);
+    expect(forbidden.json()).toEqual({ code: "ASSESSMENT_AUDIO_NOT_FOUND" });
   });
 
   it("returns a short-lived read URL only for an owned persisted object", async () => {
