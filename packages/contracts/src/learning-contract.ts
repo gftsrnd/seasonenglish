@@ -76,6 +76,21 @@ export interface LessonContent {
   parts: LessonPart[];
 }
 
+/**
+ * Stable pronunciation payload used by learner/operator adapters.
+ * `phonemeAudioUrl` is a clip of the target phoneme only; `wordAudioUrls`
+ * aligns by index with `words` and contains whole-word clips.
+ */
+export interface LessonPronunciationContent {
+  focus: string;
+  tip?: string;
+  instruction?: string;
+  words: Array<{ word: string; ipa?: string }>;
+  phonemeAudioId?: string;
+  phonemeAudioUrl?: string;
+  wordAudioUrls?: string[];
+}
+
 export type VocabularyLexicalKind = "synonym" | "antonym" | "slang" | "poetic";
 
 export interface LessonVocabularyFamilyWord {

@@ -20,7 +20,7 @@ import { createRoleGuard } from "../identity/policy.js";
 import type { ContentMediaService } from "../media/index.js";
 import { lessonDaysNeedingRepair, mergeGeneratedLessons, type LessonRepairMode } from "./enrichment.js";
 import { buildGenerationProvenance } from "./generation-provenance.js";
-import { generateWeeklyLessons } from "./weekly-generation.js";
+import { generateWeeklyLessons, lessonQualityProfileFromEnv } from "./weekly-generation.js";
 import { generateWeekSuggestionBatches } from "./week-suggestion-generation.js";
 import { publicLessonGenerationFailure } from "./generation-errors.js";
 
@@ -451,10 +451,12 @@ export function registerContentRoutes(
           }));
         const excludedVocabulary = (await repositories.content.usedLessonVocabulary(actorId))
           .filter((word) => !repairVocabulary.has(word.trim().toLocaleLowerCase("en-US")));
+        const qualityProfile = lessonQualityProfileFromEnv();
         const generated = await generateWeeklyLessons(week, params.data.cefr, task, runner, {
           excludedVocabulary,
           dayNumbers,
           qualityReview: true,
+          qualityProfile,
           existingLessons: existing,
           repairMode: action
         });
@@ -492,7 +494,7 @@ export function registerContentRoutes(
             model: { provider: generated.result.metadata.provider, name: generated.result.metadata.model },
             week,
             cefr: params.data.cefr,
-            extraInput: { action, dayNumbers, excludedVocabulary },
+            extraInput: { action, dayNumbers, excludedVocabulary, qualityProfile },
             output: generated.output,
             validation
           })
@@ -566,9 +568,11 @@ export function registerContentRoutes(
     }
     try {
       const excludedVocabulary = await repositories.content.usedLessonVocabulary(actorId);
+      const qualityProfile = lessonQualityProfileFromEnv();
       const generated = await generateWeeklyLessons(week, params.data.cefr, task, runner, {
         excludedVocabulary,
-        qualityReview: true
+        qualityReview: true,
+        qualityProfile
       });
       const validation = validateLessonDraft(generated.lessons);
       const saved = await repositories.content.saveLessonDraft(
@@ -583,7 +587,7 @@ export function registerContentRoutes(
           model: { provider: generated.result.metadata.provider, name: generated.result.metadata.model },
           week,
           cefr: params.data.cefr,
-          extraInput: { excludedVocabulary },
+          extraInput: { excludedVocabulary, qualityProfile },
           output: generated.output,
           validation
         })
@@ -686,9 +690,14 @@ export function registerContentRoutes(
     if (!detail) return reply.code(404).send({ code: "REVIEW_ASSESSMENT_NOT_FOUND" });
     const artifactKeys = detail.responses.flatMap((response) => response.artifactKey ? [response.artifactKey] : []);
     const files = artifactKeys.length ? await pool.query<{
-      bucket: string; object_key: string; mime_type: string; size_bytes: number;
+      file_id: string; bucket: string; object_key: string; mime_type: string; size_bytes: number; sha256: string;
+      source_flow: "placement" | "daily_lesson" | "weekly_practice" | "season"; source_entity_id: string | null;
+      task_key: string | null; question_key: string | null; transcript: string | null; completed_at: Date | null;
+      graded_at: Date | null; retention_until: Date | null; deleted_at: Date | null; deleted_by: string | null;
     }>(
-      `select f.bucket, f.object_key, f.mime_type, f.size_bytes
+      `select f.id as file_id, f.bucket, f.object_key, f.mime_type, f.size_bytes, f.sha256,
+              f.source_flow, f.source_entity_id, f.task_key, f.question_key, f.transcript,
+              f.completed_at, f.graded_at, f.retention_until, f.deleted_at, f.deleted_by
        from files f join users learner on learner.id = f.owner_user_id
        join users staff on staff.id = $1 and staff.organization_id = learner.organization_id
        where f.purpose = 'assessment_audio' and f.object_key = any($2::text[])`,
@@ -697,7 +706,7 @@ export function registerContentRoutes(
     const byArtifact = new Map(files.rows.map((file) => [file.object_key, file]));
     const signedArtifacts = new Map<string, { url: string; expiresAt: Date }>();
     if (storage?.presignGetObject) {
-      await Promise.all(files.rows.map(async (file) => {
+      await Promise.all(files.rows.filter((file) => !file.deleted_at).map(async (file) => {
         try {
           signedArtifacts.set(file.object_key, await storage.presignGetObject!({
             bucket: file.bucket,
@@ -743,7 +752,22 @@ export function registerContentRoutes(
             mimeType: artifact?.mime_type ?? null,
             sizeBytes: artifact ? Number(artifact.size_bytes) : null,
             signedUrl: signed?.url ?? null,
-            expiresAt: signed?.expiresAt.toISOString() ?? null
+            expiresAt: signed?.expiresAt.toISOString() ?? null,
+            ...(artifact ? {
+              fileId: artifact.file_id,
+              sha256: artifact.sha256,
+              sourceFlow: artifact.source_flow,
+              sourceEntityId: artifact.source_entity_id,
+              taskKey: artifact.task_key,
+              questionKey: artifact.question_key,
+              transcript: artifact.transcript,
+              completedAt: artifact.completed_at?.toISOString() ?? null,
+              gradedAt: artifact.graded_at?.toISOString() ?? null,
+              retentionUntil: artifact.retention_until?.toISOString() ?? null,
+              cleanupEligible: Boolean(artifact.retention_until && artifact.retention_until.getTime() <= Date.now()),
+              deletedAt: artifact.deleted_at?.toISOString() ?? null,
+              deletedBy: artifact.deleted_by
+            } : {})
           } } : {})
         };
       }),

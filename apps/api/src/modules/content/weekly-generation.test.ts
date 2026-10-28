@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import type { ContentLessonDraftInput, ContentWeekInput } from "@e4s/contracts";
 import type { AiTaskRunner } from "@e4s/ai";
-import { generateWeeklyLessons } from "./weekly-generation.js";
+import { generateWeeklyLessons, lessonQualityProfileFromEnv } from "./weekly-generation.js";
 
 vi.mock("@e4s/ai", async () => await import("../../../../../packages/ai/src/index.js"));
 
@@ -84,6 +84,12 @@ const skills = {
 };
 
 describe("weekly lesson generation orchestration", () => {
+  it("keeps baseline as the rollback profile and accepts only strict as the opt-in", () => {
+    expect(lessonQualityProfileFromEnv(undefined)).toBe("baseline");
+    expect(lessonQualityProfileFromEnv("strict")).toBe("strict");
+    expect(lessonQualityProfileFromEnv("unexpected-value")).toBe("baseline");
+  });
+
   it("keeps the foundation pass valid when a grammar-classifier evidence check exhausts", async () => {
     const invalidEvidence = {
       ...grammarClassification,
@@ -172,7 +178,15 @@ describe("weekly lesson generation orchestration", () => {
       examples: ["I give clear feedback.", "I give helpful feedback."]
     });
     expect(generated.lessons[0]?.parts.find((part) => part.code === "pronunciation")?.content).toMatchObject({ focus: "/f/" });
-    expect(generated.lessons[0]?.parts.find((part) => part.code === "pronunciation")?.content).not.toHaveProperty("phonemeAudioUrl");
+    expect(generated.lessons[0]?.parts.find((part) => part.code === "pronunciation")?.content).toMatchObject({
+      phonemeAudioId: "phoneme-f",
+      phonemeAudioUrl: "/media/audio/phonemes/f.wav",
+      wordAudioUrls: [
+        "/media/audio/words/feedback.mp3",
+        "/media/audio/words/fine.mp3",
+        "/media/audio/words/helpful.mp3"
+      ]
+    });
   });
 
   it("keeps valid foundation sections but hides pronunciation after three failed sound repairs", async () => {
@@ -211,6 +225,76 @@ describe("weekly lesson generation orchestration", () => {
     expect(generated.lessons[0]?.parts.find((part) => part.code === "pronunciation")?.content).toMatchObject({
       status: "unavailable", hidden: true, reason: "invalid_pronunciation_target"
     });
+  });
+
+  it("adds a stable phoneme-only audio reference and separate word audio URLs", async () => {
+    const runTask = vi.fn(async (taskId: string, input: unknown) => {
+      const dayNumber = (input as { dayNumber: number }).dayNumber;
+      if (taskId === "weekly_lesson_grammar_classifier") return { output: grammarClassification, metadata };
+      if (taskId === "weekly_lesson_foundation") return { output: foundation, metadata };
+      if (taskId === "weekly_lesson_vocabulary") return { output: vocabularyForDay(dayNumber), metadata };
+      if (taskId === "weekly_lesson_skills") return { output: skills, metadata };
+      throw new Error(`UNEXPECTED_TASK:${taskId}`);
+    });
+
+    const generated = await generateWeeklyLessons(
+      { weekNumber: 1, topic: "Giving feedback", description: "Give clear feedback", objectives: "Give clear feedback", keyVocabHint: "feedback", plan: { A1: ["give clear feedback", "two", "three", "four", "five"] } } as ContentWeekInput,
+      "A1", { prompt: "Generate lessons." }, { runTask } as unknown as AiTaskRunner,
+      { dayNumbers: [1], qualityReview: true, qualityProfile: "strict" }
+    );
+
+    const pronunciation = generated.lessons[0]?.parts.find((part) => part.code === "pronunciation")?.content;
+    expect(pronunciation).toMatchObject({
+      phonemeAudioId: "phoneme-f",
+      phonemeAudioUrl: "/media/audio/phonemes/f.wav",
+      wordAudioUrls: [
+        "/media/audio/words/feedback.mp3",
+        "/media/audio/words/fine.mp3",
+        "/media/audio/words/helpful.mp3"
+      ]
+    });
+    expect(pronunciation).not.toHaveProperty("audioUrl", "/media/audio/phonemes/f.wav");
+    expect(generated.output).toHaveProperty("qualityMetrics.profile", "strict");
+  });
+
+  it("strict mode retries a known wrong IPA spelling while baseline preserves the accepted output", async () => {
+    const wrongFoundation = {
+      ...foundation,
+      pronunciation: {
+        title: "Phát âm", focus: "/d/", tip: "Chạm nhẹ đầu lưỡi.",
+        word1: { word: "called", ipa: "/kɔːld/" },
+        word2: { word: "slipped", ipa: "/slɪpd/" },
+        word3: { word: "needed", ipa: "/ˈniːdɪd/" }
+      }
+    };
+    const run = (qualityProfile: "baseline" | "strict") => {
+      let foundationAttempts = 0;
+      const runTask = vi.fn(async (taskId: string, input: unknown) => {
+        const dayNumber = (input as { dayNumber: number }).dayNumber;
+        if (taskId === "weekly_lesson_grammar_classifier") return { output: grammarClassification, metadata };
+        if (taskId === "weekly_lesson_foundation") {
+          foundationAttempts += 1;
+          return { output: foundationAttempts === 1 ? wrongFoundation : foundation, metadata };
+        }
+        if (taskId === "weekly_lesson_vocabulary") return { output: vocabularyForDay(dayNumber), metadata };
+        if (taskId === "weekly_lesson_skills") return { output: skills, metadata };
+        throw new Error(`UNEXPECTED_TASK:${taskId}`);
+      });
+      return generateWeeklyLessons(
+        { weekNumber: 1, topic: "Giving feedback", description: "Give clear feedback", objectives: "Give clear feedback", keyVocabHint: "feedback", plan: { A1: ["give clear feedback", "two", "three", "four", "five"] } } as ContentWeekInput,
+        "A1", { prompt: "Generate lessons." }, { runTask } as unknown as AiTaskRunner,
+        { dayNumbers: [1], qualityProfile }
+      ).then((generated) => ({ generated, foundationAttempts }));
+    };
+
+    const baseline = await run("baseline");
+    expect(baseline.foundationAttempts).toBe(1);
+    expect(baseline.generated.lessons[0]?.parts.find((part) => part.code === "pronunciation")?.content).not.toHaveProperty("phonemeAudioUrl");
+
+    const strict = await run("strict");
+    expect(strict.foundationAttempts).toBe(2);
+    expect(strict.generated.lessons[0]?.parts.find((part) => part.code === "pronunciation")?.content).toHaveProperty("phonemeAudioUrl", "/media/audio/phonemes/f.wav");
+    expect(strict.generated.output).toHaveProperty("qualityMetrics.componentRetryCount", 1);
   });
 
   it("retries an abstaining grammar classifier when the lesson focus declares a sentence frame", async () => {

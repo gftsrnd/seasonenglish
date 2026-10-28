@@ -6,6 +6,9 @@ import {
   weeklyLessonSkillsReviewOutputSchema,
   weeklyLessonSkillsOutputSchema,
   weeklyLessonVocabularyOutputSchema,
+  buildPronunciationAssets,
+  containsTargetPhoneme,
+  curatedPronunciationWord,
   type AiRunResult,
   type AiTaskRunner,
   type AiUsage
@@ -22,6 +25,11 @@ const SKILLS_REVIEW_OUTPUT_TOKEN_LIMIT = 1_500;
 const MAX_COMPONENT_ATTEMPTS = 3;
 const MAX_FOUNDATION_ATTEMPTS = 3;
 const MAX_SKILLS_REVIEW_ATTEMPTS = 3;
+export type LessonQualityProfile = "baseline" | "strict";
+
+export function lessonQualityProfileFromEnv(value = process.env.E4S_LESSON_QUALITY_PROFILE): LessonQualityProfile {
+  return value?.trim().toLocaleLowerCase("en-US") === "strict" ? "strict" : "baseline";
+}
 const OBJECTIVE_VERBS_BY_LEVEL = {
   A1: "nói, nhắc lại, chỉ ra, nối, chọn, điền, chào hỏi, giới thiệu, trả lời, dùng",
   A2: "hỏi và trả lời, mô tả, viết, xác nhận, đề nghị, xin lỗi, sắp xếp, hoàn thành, dùng",
@@ -139,10 +147,14 @@ export async function generateWeeklyLessons(
     excludedVocabulary?: readonly string[];
     dayNumbers?: readonly number[];
     qualityReview?: boolean;
+    qualityProfile?: LessonQualityProfile;
     existingLessons?: readonly ContentLessonDraftInput[];
     repairMode?: LessonRepairMode;
   } = {}
 ) {
+  const qualityProfile = options.qualityProfile ?? "baseline";
+  const qualityChecksEnabled = options.qualityReview || qualityProfile === "strict";
+  let componentRetryCount = 0;
   const savedPlan = week.plan?.[cefr as keyof NonNullable<ContentWeekInput["plan"]>];
   const focuses = savedPlan?.length === 5
     ? savedPlan
@@ -171,7 +183,8 @@ export async function generateWeeklyLessons(
     if (!componentTargets[index]!.has("foundation")) return undefined;
     let findings: Array<{ path: PropertyKey[]; message: string }> = [];
     let previousOutput = "";
-    for (let attempt = 1; attempt <= (options.qualityReview ? MAX_COMPONENT_ATTEMPTS : 1); attempt += 1) {
+    for (let attempt = 1; attempt <= (qualityChecksEnabled ? MAX_COMPONENT_ATTEMPTS : 1); attempt += 1) {
+      if (attempt > 1) componentRetryCount += 1;
       const repair = findings.length
         ? `\n\nREPAIR REQUIRED: ${findings.map((issue) => `${issue.path.join(".")}: ${issue.message}`).join("; ")}${previousOutput ? `\nPREVIOUS INVALID OUTPUT: ${previousOutput}` : ""}\nReturn a complete corrected classification using only verbatim input evidence and preserve every valid field.`
         : "";
@@ -184,7 +197,7 @@ export async function generateWeeklyLessons(
       } catch (error) {
         if (!isInvalidAiOutput(error)) throw error;
         findings = invalidAiIssues(error);
-        if (attempt === (options.qualityReview ? MAX_COMPONENT_ATTEMPTS : 1)) throwInvalid(findings, `day${input.dayNumber}.grammarClassification`);
+        if (attempt === (qualityChecksEnabled ? MAX_COMPONENT_ATTEMPTS : 1)) throwInvalid(findings, `day${input.dayNumber}.grammarClassification`);
         continue;
       }
       previousOutput = boundedJson(result.output);
@@ -192,10 +205,10 @@ export async function generateWeeklyLessons(
       if (!parsed.success) {
         findings = parsed.error.issues.slice(0, 8).map((issue) => ({ path: issue.path, message: issue.message }));
       } else {
-        findings = options.qualityReview ? grammarEvidenceFindings(parsed.data, input) : [];
+        findings = qualityChecksEnabled ? grammarEvidenceFindings(parsed.data, input) : [];
         if (findings.length === 0) return { result, output: parsed.data };
       }
-      if (attempt === (options.qualityReview ? MAX_COMPONENT_ATTEMPTS : 1)) throwInvalid(findings, `day${input.dayNumber}.grammarClassification`);
+      if (attempt === (qualityChecksEnabled ? MAX_COMPONENT_ATTEMPTS : 1)) throwInvalid(findings, `day${input.dayNumber}.grammarClassification`);
     }
     throwInvalid(findings, `day${input.dayNumber}.grammarClassification`);
   }));
@@ -231,6 +244,7 @@ export async function generateWeeklyLessons(
     let previousOutput = "";
     let pronunciationRepair = "";
     for (let attempt = 1; attempt <= MAX_FOUNDATION_ATTEMPTS; attempt += 1) {
+      if (attempt > 1) componentRetryCount += 1;
       const repair = findings.length
         ? `\n\nREPAIR REQUIRED: ${findings.map((issue) => `${issue.path.join(".")}: ${issue.message}`).join("; ")}${pronunciationRepair}${previousOutput ? `\nPREVIOUS INVALID OUTPUT: ${previousOutput}` : ""}\nReturn a complete corrected foundation without changing the lesson focus; preserve every valid field.`
         : "";
@@ -276,7 +290,10 @@ export async function generateWeeklyLessons(
             scope: resultInput.grammarClassification.scope
           };
         }
-        const pronunciationIssues = pronunciationTargetFindings(normalized);
+        const pronunciationIssues = [
+          ...pronunciationTargetFindings(normalized),
+          ...(qualityProfile === "strict" ? curatedPronunciationFindings(normalized) : [])
+        ];
         if (objectiveIssues.length === 0 && pronunciationIssues.length === 0) {
           return { result, output: normalized, pronunciationValid: true };
         }
@@ -321,6 +338,7 @@ export async function generateWeeklyLessons(
   const vocabularyResults: Array<VocabularyResult | undefined> = Array(baseInputs.length).fill(undefined);
   const rejectedWords = baseInputs.map(() => new Set<string>());
   for (let attempt = 1; attempt <= MAX_COMPONENT_ATTEMPTS; attempt += 1) {
+    if (attempt > 1) componentRetryCount += 1;
     const retryIndexes: number[] = [];
     for (const [index, input] of baseInputs.entries()) {
       if (vocabularyResults[index]) continue;
@@ -389,12 +407,13 @@ export async function generateWeeklyLessons(
       grammarExamples: foundation?.grammar ? [foundation.grammar.example1, foundation.grammar.example2] : null,
       vocabularyWords: vocabularyContext
     };
-    if (!options.qualityReview) {
+    if (!qualityChecksEnabled) {
       return runStrictComponent(runner, "weekly_lesson_skills", skillsInput, SKILLS_CONTRACT, SKILLS_OUTPUT_TOKEN_LIMIT, weeklyLessonSkillsOutputSchema, input.dayNumber, "skills");
     }
     let reviewFindings: Array<{ path: PropertyKey[]; message: string }> = [];
     let previousSkills: Skills | undefined;
     for (let attempt = 1; attempt <= MAX_SKILLS_REVIEW_ATTEMPTS; attempt += 1) {
+      if (attempt > 1) componentRetryCount += 1;
       const repair = reviewFindings.length
         ? `\n\nINDEPENDENT REVIEW REJECTED THE PREVIOUS EXERCISES: ${reviewFindings.map((issue) => `${issue.path.join(".")}: ${issue.message}`).join("; ")} Preserve every valid item and correct the listed defects in this previous skill set: ${JSON.stringify(previousSkills)}. Return the complete corrected skill set.`
         : "";
@@ -484,7 +503,27 @@ export async function generateWeeklyLessons(
     });
   }
   const first = allResults[0]!.metadata;
-  const output = { lessons, failures };
+  const qualityMetrics = {
+    profile: qualityProfile,
+    requestedLessonCount: generationDays.length,
+    generatedLessonCount: lessons.length,
+    retryCount: allResults.reduce((total, item) => total + Math.max(0, item.metadata.attempts - 1), 0),
+    componentRetryCount,
+    fallbackCount: failures.length + grammarClassifications.filter((item, index) => {
+      const entry = grammarClassificationSettled[index];
+      return entry?.status === "rejected";
+    }).length,
+    partialSuccess: lessons.length < generationDays.length || failures.length > 0,
+    pronunciationWarningCount: foundationResults.reduce((total, item) => {
+      if (!item?.output || !item.pronunciationValid) return total;
+      return total + buildPronunciationAssets(item.output.pronunciation.focus, [
+        item.output.pronunciation.word1,
+        item.output.pronunciation.word2,
+        item.output.pronunciation.word3
+      ]).warnings.length;
+    }, 0)
+  };
+  const output = { lessons, failures, qualityMetrics };
   const result: AiRunResult<typeof output> = {
     output,
     metadata: {
@@ -657,6 +696,20 @@ function pronunciationRepairInstruction(
   return `\nPRONUNCIATION REPAIR: The fixed target sound is ${focus}. Keep pronunciation.focus unchanged. Replace only ${invalidWords.join(" and ")} with common words whose standard dictionary IPA visibly contains ${focus}. Never alter or invent an IPA spelling to force a match; choose another word instead. Preserve the other pronunciation words and all non-pronunciation fields.`;
 }
 
+function curatedPronunciationFindings(foundation: Foundation): Array<{ path: PropertyKey[]; message: string }> {
+  const pronunciation = foundation.pronunciation;
+  const target = pronunciation.focus.match(/\/([^/]+)\//u)?.[1]?.trim() ?? pronunciation.focus.trim();
+  return [pronunciation.word1, pronunciation.word2, pronunciation.word3].flatMap((word, index) => {
+    const verified = curatedPronunciationWord(word.word, word.ipa);
+    return containsTargetPhoneme(verified.ipa, target)
+      ? []
+      : [{
+          path: ["pronunciation", `word${index + 1}`, "ipa"] as PropertyKey[],
+          message: `${verified.word} does not contain target phoneme /${target}/`
+        }];
+  });
+}
+
 function isInvalidAiOutput(error: unknown): boolean {
   return Boolean(error && typeof error === "object" && "code" in error && (error as { code?: unknown }).code === "AI_OUTPUT_INVALID");
 }
@@ -700,6 +753,13 @@ function buildLesson(
   lessonFocus: string,
   pronunciationValid: boolean
 ) {
+  const pronunciationAssets = foundation && pronunciationValid
+    ? buildPronunciationAssets(foundation.pronunciation.focus, [
+      foundation.pronunciation.word1,
+      foundation.pronunciation.word2,
+      foundation.pronunciation.word3
+    ])
+    : { wordAudioUrls: [], warnings: [] };
   const grammar = grammarStatus === "classified" && foundation?.grammar
     ? {
         title: foundation.grammar.title,
@@ -742,7 +802,10 @@ function buildLesson(
         content: pronunciationValid ? {
           focus: foundation.pronunciation.focus,
           tip: foundation.pronunciation.tip,
-          words: [foundation.pronunciation.word1, foundation.pronunciation.word2, foundation.pronunciation.word3]
+          words: [foundation.pronunciation.word1, foundation.pronunciation.word2, foundation.pronunciation.word3],
+          ...(pronunciationAssets.phonemeAudioId ? { phonemeAudioId: pronunciationAssets.phonemeAudioId } : {}),
+          ...(pronunciationAssets.phonemeAudioUrl ? { phonemeAudioUrl: pronunciationAssets.phonemeAudioUrl } : {}),
+          ...(pronunciationAssets.wordAudioUrls.length ? { wordAudioUrls: pronunciationAssets.wordAudioUrls } : {})
         } : { status: "unavailable", hidden: true, reason: "invalid_pronunciation_target" }
       } : undefined,
       skills ? { code: "listening", title: skills.listening.title, content: toChoice(skills.listening, "audio") } : undefined,
