@@ -178,7 +178,10 @@ describe("weekly lesson generation orchestration", () => {
       examples: ["I give clear feedback.", "I give helpful feedback."]
     });
     expect(generated.lessons[0]?.parts.find((part) => part.code === "pronunciation")?.content).toMatchObject({ focus: "/f/" });
-    expect(generated.lessons[0]?.parts.find((part) => part.code === "pronunciation")?.content).not.toHaveProperty("phonemeAudioUrl");
+    expect(generated.lessons[0]?.parts.find((part) => part.code === "pronunciation")?.content).toMatchObject({
+      phonemeAudioId: "phoneme-f-v1",
+      phonemeAudioUrl: "/media/audio/phonemes/f.ogg"
+    });
   });
 
   it("keeps valid foundation sections but hides pronunciation after three failed sound repairs", async () => {
@@ -291,7 +294,10 @@ describe("weekly lesson generation orchestration", () => {
 
     const strict = await run("strict");
     expect(strict.foundationAttempts).toBe(2);
-    expect(strict.generated.lessons[0]?.parts.find((part) => part.code === "pronunciation")?.content).not.toHaveProperty("phonemeAudioUrl");
+    expect(strict.generated.lessons[0]?.parts.find((part) => part.code === "pronunciation")?.content).toMatchObject({
+      phonemeAudioId: "phoneme-f-v1",
+      phonemeAudioUrl: "/media/audio/phonemes/f.ogg"
+    });
     expect(strict.generated.output).toHaveProperty("qualityMetrics.componentRetryCount", 1);
   });
 
