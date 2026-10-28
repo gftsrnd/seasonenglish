@@ -13,6 +13,51 @@ import {
 import { DEFAULT_PRONUNCIATION_ASSET_REGISTRY, EMPTY_PRONUNCIATION_ASSET_REGISTRY } from "../src/pronunciation-assets.js";
 
 describe("curated pronunciation assets", () => {
+  it("audits every curated target against an English-suitable source recording", () => {
+    const repoRoot = findRepoRoot(fileURLToPath(new URL(".", import.meta.url)));
+    const manifest = JSON.parse(readFileSync(resolve(repoRoot, "apps/web/public/media/pronunciation-manifest.json"), "utf8"));
+    const expectedSourceByTarget: Record<string, string> = {
+      "æ": "Near-open_front_unrounded_vowel.ogg",
+      "aɪ": "En-us-I.ogg",
+      d: "Voiced_alveolar_plosive.ogg",
+      "eɪ": "En-us-A.ogg",
+      f: "Voiceless_labio-dental_fricative.ogg",
+      "iː": "Close_front_unrounded_vowel.ogg",
+      "ɪ": "Near-close_near-front_unrounded_vowel.ogg",
+      k: "Voiceless_velar_plosive.ogg",
+      p: "Voiceless_bilabial_plosive.ogg",
+      r: "Postalveolar_approximant.ogg",
+      s: "Voiceless_alveolar_sibilant.ogg",
+      t: "Voiceless_alveolar_plosive.ogg",
+      w: "Voiced_labio-velar_approximant.ogg",
+      "ʃ": "Voiceless_palato-alveolar_sibilant.ogg",
+      "ʌ": "PR-open-mid_back_unrounded_vowel2.ogg",
+      "θ": "Voiceless_dental_fricative.ogg",
+      "ð": "Voiced_dental_fricative.ogg",
+      "ɜː": "Open-mid_central_unrounded_vowel.ogg",
+      "juː": "En-us-u.ogg",
+    };
+
+    expect(Object.keys(expectedSourceByTarget).sort()).toEqual([...CURATED_PHONEME_TARGETS].sort());
+    for (const [target, sourceFile] of Object.entries(expectedSourceByTarget)) {
+      const entry = manifest.phonemes.find((candidate: { key: string }) => candidate.key === target);
+      expect(entry?.sourceUrl, `source for ${target}`).toContain(sourceFile);
+    }
+  });
+
+  it("never regresses the three known phonetic mismatches", () => {
+    const repoRoot = findRepoRoot(fileURLToPath(new URL(".", import.meta.url)));
+    const manifest = JSON.parse(readFileSync(resolve(repoRoot, "apps/web/public/media/pronunciation-manifest.json"), "utf8"));
+    const sourceByTarget = new Map(manifest.phonemes.map((entry: { key: string; sourceUrl: string }) => [entry.key, entry.sourceUrl]));
+
+    expect(sourceByTarget.get("r")).toContain("Postalveolar_approximant.ogg");
+    expect(sourceByTarget.get("r")).not.toContain("Alveolar_trill.ogg");
+    expect(sourceByTarget.get("aɪ")).toContain("En-us-I.ogg");
+    expect(sourceByTarget.get("aɪ")).not.toContain("De--ei.ogg");
+    expect(sourceByTarget.get("iː")).toContain("Close_front_unrounded_vowel.ogg");
+    expect(sourceByTarget.get("iː")).not.toContain("De-i.ogg");
+  });
+
   it("resolves every generated fixture target to a real playable packaged asset", () => {
     const repoRoot = findRepoRoot(fileURLToPath(new URL(".", import.meta.url)));
     const manifest = JSON.parse(readFileSync(resolve(repoRoot, "apps/web/public/media/pronunciation-manifest.json"), "utf8"));

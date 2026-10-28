@@ -6,6 +6,8 @@ The verified registry is the default for lesson generation. It contains 19 bundl
 
 The source recordings are Wikimedia Commons phonetic samples and isolated target-sound recordings. The manifest keeps the exact source page and licence for every file; the verifier checks the Ogg signature, non-empty file, SHA-256, URL/local-file mapping, and rejects unregistered media.
 
+The source audit is enforced by `packages/ai/test/pronunciation.test.ts` for all 19 curated targets. In particular, `/r/` uses the English postalveolar approximant recording, `/aɪ/` uses the General American `/aɪ/` recording of “I” (an exact isolated diphthong), and `/iː/` uses the Commons close-front `[i]` recording described as “as in see”; German `De--ei.ogg`, German `De-i.ogg`, and `Alveolar_trill.ogg` are explicitly rejected. Letter-name recordings are admitted only when the source’s documented sound is exactly the curated target, with no added consonant or word framing.
+
 ## Rollback
 
 To restore the pre-asset behavior without deleting files, pass `EMPTY_PRONUNCIATION_ASSET_REGISTRY` as the optional registry argument to `buildPronunciationAssets` (or to the weekly-generation option). This preserves the lesson and fallback paths while omitting all pronunciation URLs. The repository-level rollback is the single commit that introduced the verified registry and bundled media; reverting that commit restores the previous empty default registry.
