@@ -56,6 +56,26 @@ function hasStructuredRelation(value: unknown): boolean {
     : typeof value === "string" ? Boolean(value.trim()) : Boolean(value && typeof value === "object");
 }
 
+// These are labels or identifiers rather than teachable lexical targets.  They
+// may legitimately have no same-level synonym or antonym.  This deliberately
+// uses a positive allow-list: absence from our curated dictionary is never a
+// reason for the model to exempt an ordinary workplace word.
+const CALENDAR_OR_TIME_LABELS = new Set([
+  "monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday",
+  "january", "february", "march", "april", "may", "june", "july", "august", "september", "october", "november", "december",
+  "today", "tomorrow", "yesterday", "date", "day", "week", "month", "year"
+]);
+
+function isNonLexicalLabelOrIdentifier(word: unknown): boolean {
+  const raw = typeof word === "string" ? word.normalize("NFKC").trim() : "";
+  const normalized = normalize(raw);
+  if (!normalized) return false;
+  if (CALENDAR_OR_TIME_LABELS.has(normalized)) return true;
+  // Dates, numbers and system identifiers are not vocabulary targets.
+  return /^\d+(?:[./-]\d+){0,2}$/u.test(raw)
+    || /^[A-Z]{2,}(?:[-_]\d+)*$/u.test(raw);
+}
+
 export function curatedRelationEvidence(item: Pick<LexicalItem, "word" | "type" | "partOfSpeech" | "meaning">, cefr: string): CuratedLexicalRelation | undefined {
   const word = normalize(item.word);
   const partOfSpeech = normalize(item.partOfSpeech ?? item.type);
@@ -70,7 +90,8 @@ export function curatedRelationEvidence(item: Pick<LexicalItem, "word" | "type" 
 }
 
 export function relationExemptionIsCredible(item: Pick<LexicalItem, "word" | "type" | "partOfSpeech" | "meaning">, cefr: string): boolean {
-  return curatedRelationEvidence(item, cefr) === undefined;
+  if (curatedRelationEvidence(item, cefr)) return false;
+  return isNonLexicalLabelOrIdentifier(item.word);
 }
 
 /** True only when the vocabulary data meets the shared lexical-relation contract. */

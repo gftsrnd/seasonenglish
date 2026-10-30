@@ -159,8 +159,9 @@ function lessonSetWarnings(source: ContentLessonSetVersionView): OperatorLessonS
     const missingRequiredParts = REQUIRED_LESSON_PARTS.filter((code) => !parts.has(code));
     const shortQuestions = !listeningOptions || listeningOptions.length < 4 || !readingOptions || readingOptions.length < 4;
     const missingWordStructure = items.some(item => !hasLegacyOrStructuredValue(item.family) || !hasLegacyOrStructuredValue(item.umbrella));
-    const missingLexicalRelationCoverage = items.length > 0
-      && !items.some((item) => lexicalRelationCoverageSatisfied(item, source.cefr));
+    const missingLexicalRelationCoverage = items.some((item) =>
+      !lexicalRelationCoverageSatisfied(item, source.cefr)
+    );
     const missingWordDetails = !permittedLightLexicalGaps && (missingWordStructure || missingLexicalRelationCoverage);
     if (missingRequiredParts.length > 0 || grammarUnavailable || pronunciationIncomplete || pronunciationMismatches.length > 0 || shortQuestions || missingWordDetails) {
       details += 1;

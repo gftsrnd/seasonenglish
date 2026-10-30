@@ -82,7 +82,7 @@ const foundation = {
 };
 const approvedSkillsReview = {
   status: "approved", findings: [],
-  solvedAnswers: { listening: "Clear feedback", reading: "Clear feedback", writing: "give", wordClass: "Clear feedback", wordUse: "Clear feedback" }
+  solvedAnswers: { listening: "Clear feedback", reading: "Clear feedback", writing: "Your report is clear.", wordClass: "Clear feedback", wordUse: "Clear feedback" }
 };
 const grammarClassification = {
   status: "classified", contentType: "sentence_pattern", targetName: "I give + [noun phrase]", scope: "give clear feedback",

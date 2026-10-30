@@ -610,7 +610,7 @@ export function lessonComponentsNeedingRepair(
     || items.length === 0
     || phrasesIncomplete
     || items.some((item) => !meaningful(item.family) || !meaningful(item.umbrella))
-    || (items.length > 0 && !items.some((item) => hasValidRelation(item) || (declaresExemption(item) && exemptionIsCredible(item))))
+    || items.some((item) => !hasValidRelation(item) && !(declaresExemption(item) && exemptionIsCredible(item)))
     // Same rule as generation: an exemption contradicted by curated evidence
     // reopens vocabulary repair even when other words are acceptable.
     || items.some((item) => !hasValidRelation(item) && declaresExemption(item) && !exemptionIsCredible(item))
@@ -648,8 +648,15 @@ export function mergeGenerationFindingsAfterRepair(
   generated: readonly ContentGenerationFindingView[] = [],
   repairedComponentsByDay: Partial<Record<number, readonly LessonGenerationComponent[]>> = {}
 ): ContentGenerationFindingView[] {
+  const repairedVocabulary = Object.values(repairedComponentsByDay)
+    .some((components) => components?.includes("vocabulary"));
   const retained = existing.filter((finding) => {
-    if (finding.dayNumber === null) return true;
+    // A lexical-coverage finding summarizes the whole CEFR level. Once any
+    // vocabulary component changes, its old aggregate is stale and must be
+    // recomputed from the merged five-day draft by the route.
+    if (finding.dayNumber === null) {
+      return !(repairedVocabulary && finding.component === "vocabulary" && finding.code.startsWith("VOCABULARY_LEXICAL_"));
+    }
     const repaired = repairedComponentsByDay[finding.dayNumber] ?? [];
     if (finding.component === "plan") return true;
     const component: LessonGenerationComponent = finding.component === "grammarClassification" || finding.component === "objectives"
@@ -657,7 +664,10 @@ export function mergeGenerationFindingsAfterRepair(
       : finding.component.startsWith("skills.") ? "skills" : finding.component as LessonGenerationComponent;
     return !repaired.includes(component);
   });
-  return [...retained, ...generated];
+  const fresh = repairedVocabulary
+    ? generated.filter((finding) => !(finding.dayNumber === null && finding.component === "vocabulary" && finding.code.startsWith("VOCABULARY_LEXICAL_")))
+    : generated;
+  return [...retained, ...fresh];
 }
 
 export function mergeGeneratedLesson(

@@ -28,6 +28,7 @@ import {
   lessonQualityProfileFromEnv,
   normalizeWeeklyLessonPlanBlueprint,
   prepareWeeklyLessonRetryState,
+  validateWeeklyVocabularyLexicalCoverage,
   WEEKLY_LESSON_PIPELINE_VERSION,
   type WeeklyLessonPipelineCheckpoint,
   type WeeklyLessonPipelineComponent
@@ -213,6 +214,27 @@ export function registerContentRoutes(
       result[finding.dayNumber] = current;
       return result;
     }, {});
+  const qualityRepairFindings = (issues: readonly {
+    dayNumber: number;
+    code: string;
+    message: string;
+  }[]) => issues.flatMap((issue) => {
+    if (issue.dayNumber < 1 || issue.dayNumber > 5 || issue.code === "lesson_set") return [];
+    const component = issue.code === "vocabulary"
+      ? "vocabulary"
+      : issue.code === "grammar"
+        ? "grammarClassification"
+        : ["listening", "reading", "writing", "word_class", "word_use", "speaking"].includes(issue.code)
+          ? "skills"
+          : "foundation";
+    return [{
+      dayNumber: issue.dayNumber,
+      component,
+      code: "CONTENT_GENERATION_QUALITY_FAILED",
+      message: issue.message,
+      attempts: 3
+    }];
+  });
   const repairExhaustedLessonComponents = async (input: {
     generationWeek: ContentWeekInput;
     cefr: string;
@@ -620,10 +642,58 @@ export function registerContentRoutes(
           onProgress: (progress) => request.log.info({ week: params.data.week, cefr: params.data.cefr, ...progress }, "Weekly lesson generation progress")
         });
         const lessons = mergeGeneratedLessons(existing, generated.lessons, action as LessonRepairMode, forcedComponentsByDay);
+        const mergedFindings = mergeGenerationFindingsAfterRepair(current.generationFindings, generated.findings, forcedComponentsByDay);
         const output = {
           ...generated.output,
-          findings: mergeGenerationFindingsAfterRepair(current.generationFindings, generated.findings, forcedComponentsByDay)
+          // Global lexical coverage must be evaluated from all five merged
+          // lessons, never from an old draft or only the repaired subset.
+          findings: [
+            ...mergedFindings,
+            ...validateWeeklyVocabularyLexicalCoverage(lessons, params.data.cefr)
+          ]
         };
+        // A targeted repair may be applied to a legacy manual draft whose
+        // untouched days are incomplete.  Do not reject those preserved days,
+        // but never overwrite the draft with a newly generated blocking error.
+        const unresolvedGeneratedFindings = output.findings.filter((finding) =>
+          finding.severity === "error"
+          || (finding.severity === "warning" && finding.code !== "VOCABULARY_LEXICAL_COVERAGE_LOW")
+        );
+        // AI-created drafts must satisfy the level quality contract after every
+        // repair.  Legacy manual drafts are intentionally exempt here: their
+        // untouched content may be incomplete while an Operator repairs one
+        // isolated day, but a new AI error still cannot overwrite either kind.
+        const combinedQuality = current.generationFindings === undefined
+          ? null
+          : evaluateGeneratedLessonQuality({ cefr: params.data.cefr, lessons, findings: output.findings });
+        if (unresolvedGeneratedFindings.length > 0 || (combinedQuality && !combinedQuality.ready)) {
+          const issues = unresolvedGeneratedFindings.length > 0
+            ? unresolvedGeneratedFindings
+            : [...combinedQuality!.blockingIssues, ...combinedQuality!.lightIssues];
+          // Rejected repairs must leave a diagnostic trail.  The lesson version
+          // remains untouched, while the next repair can use the exact failed
+          // components rather than guessing from a generic 422 response.
+          try {
+            await repositories.aiRuns.recordFailed({
+              userId: actorId,
+              requestId: `weekly-lessons-repair:${params.data.week}:${params.data.cefr}:${action}:${Date.now()}`,
+              taskId: task.taskId,
+              promptVersionId: task.promptVersionId,
+              errorCode: "CONTENT_GENERATION_QUALITY_FAILED",
+              diagnostic: { findings: output.findings, quality: combinedQuality, issues },
+              // ai_runs.trace_id is unique. The provider trace belongs to an
+              // already-recorded component call, so create an audit trace for
+              // this aggregate rejection instead of silently losing it.
+              metadata: { ...generated.result.metadata, traceId: randomUUID() }
+            });
+          } catch (error) {
+            request.log.warn({ code: errorCode(error, "AI_RUN_RECORD_FAILED") }, "Lesson repair quality diagnostic record failed");
+          }
+          return reply.code(422).send({
+            code: "CONTENT_GENERATION_QUALITY_FAILED",
+            issues
+          });
+        }
         const validation = validateLessonDraft(lessons);
         if (!validation.valid) {
           request.log.warn({
@@ -840,9 +910,11 @@ export function registerContentRoutes(
         }
         const quality = evaluateGeneratedLessonQuality({ cefr, lessons: generated.lessons, findings: generated.findings });
         if (!quality.ready) {
+          const issues = qualityRepairFindings([...quality.blockingIssues, ...quality.lightIssues]);
           throw Object.assign(new Error("CONTENT_GENERATION_QUALITY_FAILED"), {
             code: "CONTENT_GENERATION_QUALITY_FAILED",
-            issues: [...quality.blockingIssues, ...quality.lightIssues]
+            issues,
+            partialResult: generated
           });
         }
         const validation = validateLessonDraft(generated.lessons);
@@ -885,16 +957,6 @@ export function registerContentRoutes(
       } catch (error) {
         const code = errorCode(error, "AI_LESSON_GENERATION_FAILED");
         const diagnosticIssues = safeGenerationDiagnosticIssues(error);
-        if (code === "CONTENT_GENERATION_QUALITY_FAILED") {
-          levelResults.push({
-            cefr,
-            status: "failed",
-            completedDays: [],
-            resumedDays,
-            error: publicLessonGenerationFailure(error)
-          });
-          return;
-        }
         const checkpointLessons = [1, 2, 3, 4, 5].flatMap((dayNumber) => {
           const state = resumeStatesByDay[dayNumber];
           if (!state) return [];
@@ -1133,9 +1195,11 @@ export function registerContentRoutes(
       });
       const quality = evaluateGeneratedLessonQuality({ cefr: params.data.cefr, lessons: generated.lessons, findings: generated.findings });
       if (!quality.ready) {
+        const issues = qualityRepairFindings([...quality.blockingIssues, ...quality.lightIssues]);
         throw Object.assign(new Error("CONTENT_GENERATION_QUALITY_FAILED"), {
           code: "CONTENT_GENERATION_QUALITY_FAILED",
-          issues: [...quality.blockingIssues, ...quality.lightIssues]
+          issues,
+          partialResult: generated
         });
       }
       const validation = validateLessonDraft(generated.lessons);
@@ -1172,13 +1236,6 @@ export function registerContentRoutes(
     } catch (error) {
       const code = errorCode(error, "AI_LESSON_GENERATION_FAILED");
       const diagnosticIssues = safeGenerationDiagnosticIssues(error);
-      if (code === "CONTENT_GENERATION_QUALITY_FAILED") {
-        return reply.code(422).send({
-          code,
-          message: "AI chưa đạt chuẩn giao cho Operator: không có lỗi nặng và tối đa 2 lỗi nhẹ thuộc từ vựng mở rộng.",
-          issues: diagnosticIssues
-        });
-      }
       const checkpointLessons = [1, 2, 3, 4, 5].flatMap((dayNumber) => {
         const state = resumeStatesByDay[dayNumber];
         if (!state) return [];
@@ -1297,7 +1354,17 @@ export function registerContentRoutes(
     if (!version) return reply.code(404).send({ code: "CONTENT_VERSION_NOT_FOUND" });
     const validation = validateLessonPublication(version.lessons, version.weeklyPractice, version.cefr);
     const generationValidation = validateGenerationFindingsForPublication(version.generationFindings);
-    if (!validation.valid || !generationValidation.valid) return reply.code(409).send({ code: "CONTENT_VALIDATION_FAILED", issues: [...validation.issues, ...generationValidation.issues] });
+    const quality = evaluateGeneratedLessonQuality({
+      cefr: version.cefr,
+      lessons: version.lessons,
+      ...(version.generationFindings ? { findings: version.generationFindings } : {})
+    });
+    if (!validation.valid || !generationValidation.valid || !quality.ready) {
+      return reply.code(409).send({
+        code: "CONTENT_VALIDATION_FAILED",
+        issues: [...validation.issues, ...generationValidation.issues, ...quality.blockingIssues, ...quality.lightIssues]
+      });
+    }
     try {
       submitContentForReview({
         status: version.status,
@@ -1320,7 +1387,17 @@ export function registerContentRoutes(
     if (!version) return reply.code(404).send({ code: "CONTENT_VERSION_NOT_FOUND" });
     const validation = validateLessonPublication(version.lessons, version.weeklyPractice, version.cefr);
     const generationValidation = validateGenerationFindingsForPublication(version.generationFindings);
-    if (!validation.valid || !generationValidation.valid) return reply.code(409).send({ code: "CONTENT_VALIDATION_FAILED", issues: [...validation.issues, ...generationValidation.issues] });
+    const quality = evaluateGeneratedLessonQuality({
+      cefr: version.cefr,
+      lessons: version.lessons,
+      ...(version.generationFindings ? { findings: version.generationFindings } : {})
+    });
+    if (!validation.valid || !generationValidation.valid || !quality.ready) {
+      return reply.code(409).send({
+        code: "CONTENT_VALIDATION_FAILED",
+        issues: [...validation.issues, ...generationValidation.issues, ...quality.blockingIssues, ...quality.lightIssues]
+      });
+    }
     try {
       approveContentVersion({ status: version.status, createdBy: version.createdBy ?? "", checkerId: actorId });
       return await repositories.content.publishVersion(actorId, version.versionId);

@@ -1591,6 +1591,18 @@ describe("direct weekly-generation component contracts", () => {
     expect(runTask).toHaveBeenCalledTimes(2);
   });
 
+  it("uses the third attempt for an invalid grammar classifier component", async () => {
+    const level = levelCases[4];
+    const invalid = { ...grammarClassification, scope: "Dạy cách ngắt lời lịch sự trong cuộc họp." };
+    const { runner, runTask } = sequencedRunner("weekly_lesson_grammar_classifier", [invalid, invalid, grammarClassification]);
+
+    const result = await generateWeeklyLessonGrammarClassification(inputFor(level), runner, { qualityReview: true });
+
+    expect(result.output).toEqual(grammarClassification);
+    expect(result.attempts).toBe(3);
+    expect(runTask).toHaveBeenCalledTimes(3);
+  });
+
   it("rejects a generic S + V classifier when the lesson focus supplies a concrete frame", async () => {
     const level = levelCases[2];
     const invalid = { ...grammarClassification, targetName: "S + V", scope: inputFor(level).lessonFocus };
@@ -2069,7 +2081,7 @@ describe("direct weekly-generation component contracts", () => {
     expect(runTask).toHaveBeenCalledTimes(1);
   });
 
-  it("accepts unavailable synonym and antonym relations without inventing them", async () => {
+  it("repairs unavailable relations instead of accepting an arbitrary exemption", async () => {
     const level = levelCases[1];
     const valid = vocabularyFor(level);
     const invalid = {
@@ -2078,18 +2090,18 @@ describe("direct weekly-generation component contracts", () => {
       word2: { ...valid.word2, synonym1: null },
       word3: { ...valid.word3, antonym1: null }
     };
-    const { runner, runTask } = sequencedRunner("weekly_lesson_vocabulary", [invalid]);
+    const { runner, runTask } = sequencedRunner("weekly_lesson_vocabulary", [invalid, valid]);
 
     const result = await generateWeeklyLessonVocabulary({
       ...inputFor(level), grammarFormula: "Could you confirm + noun?",
       grammarExamples: ["Could you confirm the deadline?", "Could you confirm the meeting?"], excludedVocabulary: []
     }, runner);
 
-    expect(result.output.word1.synonym1).toBeNull();
-    expect(result.output.word2.synonym1).toBeNull();
+    expect(result.output.word1.synonym1).toEqual(valid.word1.synonym1);
+    expect(result.output.word2.synonym1).toEqual(valid.word2.synonym1);
     expect(result.output.word3.antonym1).toBeNull();
-    expect(result.attempts).toBe(1);
-    expect(runTask).toHaveBeenCalledTimes(1);
+    expect(result.attempts).toBe(2);
+    expect(runTask).toHaveBeenCalledTimes(2);
   });
 
   it("uses the third vocabulary attempt when an internal duplicate survives the first repair", async () => {
@@ -2168,15 +2180,15 @@ describe("direct weekly-generation component contracts", () => {
         }
       }
     };
-    const { runner, runTask } = runnerWith({ weekly_lesson_vocabulary: duplicatedRelation });
+    const { runner, runTask } = sequencedRunner("weekly_lesson_vocabulary", [duplicatedRelation, output]);
 
     const result = await generateWeeklyLessonVocabulary({
       ...inputFor(level), grammarFormula: "Could you confirm + noun?",
       grammarExamples: ["Could you confirm the deadline?", "Could you confirm the meeting?"], excludedVocabulary: []
     }, runner);
 
-    expect(result.output.word2.synonym1).toBeNull();
-    expect(runTask).toHaveBeenCalledTimes(1);
+    expect(result.output.word2.synonym1).toEqual(output.word2.synonym1);
+    expect(runTask).toHaveBeenCalledTimes(2);
   });
 
   it("repairs B1+ lexical relation notes instead of silently replacing them", async () => {
@@ -4125,23 +4137,14 @@ describe("direct component repair budgets", () => {
   });
 
   it.each(componentCases)("rejects $component after its invalid-attempt budget", async ({ taskId, invalid, invoke }) => {
-    const frequentFailureTaskIds = new Set([
-      "weekly_lesson_objectives",
-      "weekly_lesson_foundation",
-      "weekly_lesson_vocabulary",
-      "weekly_lesson_comprehension",
-      "weekly_lesson_language_practice",
-      "weekly_lesson_speaking",
-      "weekly_lesson_skills_reviewer"
-    ]);
-    const expectedAttempts = frequentFailureTaskIds.has(taskId) ? 3 : 2;
+    const expectedAttempts = 3;
     const { runner, runTask } = sequencedRunner(taskId, Array(expectedAttempts).fill(invalid));
 
     await expect(invoke(runner)).rejects.toMatchObject({ code: "AI_OUTPUT_INVALID" });
     expect(runTask).toHaveBeenCalledTimes(expectedAttempts);
   });
 
-  it("retries day vocabulary up to 3 times when 3/3 words miss relations with generation_missed and retains valid words without failing the day", async () => {
+  it("rejects a vocabulary component after 3 attempts when all three words still miss relations", async () => {
     const a1 = levelCases[0];
     const baseVocab = vocabularyFor(a1);
     const noRelationsMissed = {
@@ -4156,25 +4159,22 @@ describe("direct component repair budgets", () => {
       noRelationsMissed
     ]);
 
-    const result = await generateWeeklyLessonVocabulary(
+    await expect(generateWeeklyLessonVocabulary(
       { ...inputFor(a1), grammarFormula: "Could you confirm + noun?", grammarExamples: ["Could you confirm the deadline?", "Could you confirm the meeting?"] },
       runner
-    );
+    )).rejects.toBeDefined();
 
     expect(runTask).toHaveBeenCalledTimes(3);
-    expect(result.output.word1.word).toBe("confirm");
-    expect(result.output.word1.relationStatus).toBe("generation_missed");
-    expect(result.findings).toHaveLength(3);
   });
 
-  it("accepts 3/3 words without relations in 1 attempt when relationStatus is explicitly no_natural_relation or above_cefr_level", async () => {
+  it("accepts calendar labels and identifiers without relations in one attempt", async () => {
     const a1 = levelCases[0];
     const baseVocab = vocabularyFor(a1);
     const justifiedNoRelations = {
       ...baseVocab,
-      word1: { ...baseVocab.word1, synonym1: null, synonym2: null, antonym1: null, relationStatus: "no_natural_relation" as const },
-      word2: { ...baseVocab.word2, synonym1: null, synonym2: null, antonym1: null, relationStatus: "above_cefr_level" as const },
-      word3: { ...baseVocab.word3, synonym1: null, synonym2: null, antonym1: null, relationStatus: "no_natural_relation" as const }
+      word1: { ...baseVocab.word1, word: "Monday", ttsText: "Monday", ssml: "<speak>Monday</speak>", meaning: "thứ Hai", synonym1: null, synonym2: null, antonym1: null, relationStatus: "no_natural_relation" as const },
+      word2: { ...baseVocab.word2, word: "31/10", ttsText: "31/10", ssml: "<speak>31/10</speak>", meaning: "ngày 31 tháng 10", synonym1: null, synonym2: null, antonym1: null, relationStatus: "above_cefr_level" as const },
+      word3: { ...baseVocab.word3, word: "ID-42", ttsText: "ID-42", ssml: "<speak>ID-42</speak>", meaning: "mã số", synonym1: null, synonym2: null, antonym1: null, relationStatus: "no_natural_relation" as const }
     };
     const { runner, runTask } = sequencedRunner("weekly_lesson_vocabulary", [justifiedNoRelations]);
 
@@ -4184,11 +4184,11 @@ describe("direct component repair budgets", () => {
     );
 
     expect(runTask).toHaveBeenCalledTimes(1);
-    expect(result.output.word1.relationStatus).toBe("no_natural_relation");
-    expect(result.output.word2.relationStatus).toBe("above_cefr_level");
+    expect(result.output.word1.word).toBe("Monday");
+    expect(result.output.word2.word).toBe("31/10");
   });
 
-  it("emits a warning finding without failing the week when weekly lexical coverage is below 50%", () => {
+  it("emits a repair finding when a level exceeds the two-light-gap lexical limit", () => {
     const a1 = levelCases[0];
     const partial = buildPartialLessonFromPipelineState(inputFor(a1), {
       vocabulary: {
@@ -4206,7 +4206,7 @@ describe("direct component repair budgets", () => {
     expect(warnings).toHaveLength(1);
     expect(warnings[0]).toMatchObject({
       component: "vocabulary",
-      code: "VOCABULARY_LEXICAL_COVERAGE_LOW",
+      code: "VOCABULARY_LEXICAL_GAPS_EXCEEDED",
       severity: "warning",
       repairAction: "regenerate_component"
     });
@@ -4215,6 +4215,20 @@ describe("direct component repair budgets", () => {
       { dayNumber: 1, word: "clarify", relationStatus: "generation_missed" },
       { dayNumber: 1, word: "approve", relationStatus: "above_cefr_level" }
     ]);
+  });
+
+  it("keeps a missing word family missing instead of synthesizing an inflection", () => {
+    const a1 = levelCases[0];
+    const vocabulary = vocabularyFor(a1);
+    const partial = buildPartialLessonFromPipelineState(inputFor(a1), {
+      vocabulary: {
+        ...vocabulary,
+        word1: { ...vocabulary.word1, family1: null, family2: null }
+      }
+    });
+
+    const items = (partial!.parts.find((part) => part.code === "vocabulary")!.content as { items: Array<{ family?: unknown[] }> }).items;
+    expect(items[0]!.family).toEqual([]);
   });
 
   it("isolates component repair so vocabulary, foundation, and skills repairs only call their respective AI tasks", async () => {
@@ -4656,17 +4670,17 @@ describe("lexical relation self-exemption", () => {
     expect(result.output.word1.antonym1?.word).toBe("receive");
     expect(result.output.word2).toEqual(exempt.word2);
     const repairPrompt = String((runTask.mock.calls[1] as unknown as [string, unknown, { systemPrompt?: string }])[2].systemPrompt);
-    expect(repairPrompt).toContain("send (verb) was marked no_natural_relation");
+    expect(repairPrompt).toContain("send has no credible same-level synonym or antonym");
     expect(repairPrompt).not.toContain("MANDATORY ANTONYM REPLACEMENT");
   });
 
-  it("accepts the exemption when the curated relation is above the lesson level or the sense does not match", async () => {
+  it("does not exempt ordinary vocabulary merely because the curated dictionary lacks a same-level entry", async () => {
     const a1 = levelCases[0];
     // approve/reject is curated from B1, so an A1 above_cefr_level claim is credible.
     const approveAboveLevel = { ...vocabularyFor(a1), word3: relationFree(vocabularyFor(a1).word3, "above_cefr_level") };
     const first = sequencedRunner("weekly_lesson_vocabulary", [approveAboveLevel]);
-    await generateWeeklyLessonVocabulary(vocabularyInput(a1), first.runner);
-    expect(first.runTask).toHaveBeenCalledTimes(1);
+    await expect(generateWeeklyLessonVocabulary(vocabularyInput(a1), first.runner)).rejects.toBeDefined();
+    expect(first.runTask).toHaveBeenCalledTimes(3);
 
     expect(curatedRelationEvidence({ word: "close", partOfSpeech: "verb", meaning: "đóng" }, "A1")?.antonyms).toContain("open");
     expect(curatedRelationEvidence({ word: "close", partOfSpeech: "adjective", meaning: "gần gũi" }, "C1")).toBeUndefined();
@@ -4675,13 +4689,29 @@ describe("lexical relation self-exemption", () => {
     expect(curatedRelationEvidence({ word: "approve", partOfSpeech: "verb", meaning: "phê duyệt" }, "B1")?.antonyms).toContain("reject");
   });
 
-  it("keeps the AI status for words without curated evidence", async () => {
+  it("rejects an arbitrary relation exemption instead of silently accepting it", async () => {
     const b1 = levelCases[2];
     const clarifyExempt = { ...vocabularyFor(b1), word2: relationFree(vocabularyFor(b1).word2, "no_natural_relation") };
-    const { runner, runTask } = sequencedRunner("weekly_lesson_vocabulary", [clarifyExempt]);
-    const result = await generateWeeklyLessonVocabulary(vocabularyInput(b1), runner);
-    expect(runTask).toHaveBeenCalledTimes(1);
-    expect(result.output.word2.relationStatus).toBe("no_natural_relation");
+    const { runner, runTask } = sequencedRunner("weekly_lesson_vocabulary", [clarifyExempt, clarifyExempt, clarifyExempt]);
+
+    await expect(generateWeeklyLessonVocabulary(vocabularyInput(b1), runner)).rejects.toBeDefined();
+
+    expect(runTask).toHaveBeenCalledTimes(3);
+  });
+
+  it("flags a level once more than two individual vocabulary relations are missing", () => {
+    const a1 = levelCases[0];
+    const lessons = [1, 2, 3, 4, 5].map((dayNumber) => buildPartialLessonFromPipelineState({ ...inputFor(a1), dayNumber }, {
+      vocabulary: {
+        ...vocabularyFor(a1),
+        ...(dayNumber <= 3 ? { word2: relationFree(vocabularyFor(a1).word2, "generation_missed") } : {})
+      }
+    })!);
+
+    const warnings = validateWeeklyVocabularyLexicalCoverage(lessons, "A1");
+
+    expect(warnings).toHaveLength(1);
+    expect(warnings[0]!.issues).toHaveLength(3);
   });
 
   it("warns when all 15 weekly words declare no natural relation", () => {
@@ -4696,9 +4726,9 @@ describe("lexical relation self-exemption", () => {
     })!);
     const warnings = validateWeeklyVocabularyLexicalCoverage(lessons, "A1");
     expect(warnings).toHaveLength(1);
-    expect(warnings[0]).toMatchObject({ code: "VOCABULARY_LEXICAL_COVERAGE_LOW", severity: "warning", repairAction: "regenerate_component" });
+    expect(warnings[0]).toMatchObject({ code: "VOCABULARY_LEXICAL_GAPS_EXCEEDED", severity: "warning", repairAction: "regenerate_component" });
     expect(warnings[0]!.issues).toHaveLength(15);
-    expect(warnings[0]!.message).toContain("0/15");
+    expect(warnings[0]!.message).toContain("15 từ thiếu");
   });
 });
 
@@ -4725,8 +4755,8 @@ describe("repair-mode lexical exemption", () => {
     });
     const exempt = (item: Record<string, unknown>) => ({ ...item, synonyms: [], antonyms: [], relationStatus: "no_natural_relation" });
 
-    const credible = withItems((item) => exempt(item));
-    expect(lessonComponentsNeedingRepair(credible, "enrich", "A2").has("vocabulary")).toBe(false);
+    const ungroundedExemptions = withItems((item) => exempt(item));
+    expect(lessonComponentsNeedingRepair(ungroundedExemptions, "enrich", "A2").has("vocabulary")).toBe(true);
 
     const contradicted = withItems((item, index) => index === 0
       ? exempt({ ...item, word: "send", type: "verb", meaning: "gửi", collocations: ["send an email", "send a file", "send a reminder"] })

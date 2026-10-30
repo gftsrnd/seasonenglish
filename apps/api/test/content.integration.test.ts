@@ -15,6 +15,7 @@ const mediaRequests: Array<{ userId: string; term: string }> = [];
 const forcedAiFailures = new Set<string>();
 const transientAiFailures = new Map<string, number>();
 const transientVocabularyMetadataGaps = new Map<string, number>();
+const forcedDuplicateVocabularyDays = new Set<string>();
 const runnerCalls: Array<{ taskKey: string; cefr?: string; dayNumber?: number }> = [];
 let forceWholeGenerationFailure = false;
 const mediaService: ContentMediaService = {
@@ -34,7 +35,20 @@ function lesson(dayNumber: number) {
     parts: [
       { code: "objective", title: "Mục tiêu", content: { text: "Tự giới thiệu công việc." } },
       { code: "instruction", title: "Hướng dẫn", content: { steps: ["Học nội dung", "Làm bài tập"] } },
-      { code: "vocabulary", title: "Từ vựng", content: { items: ["department", "role", "project"].map((word) => ({ word, meaning: "từ công việc", collocations: [`my ${word}`, `new ${word}`, `work ${word}`] })) } },
+      { code: "vocabulary", title: "Từ vựng", content: { items: ["department", "role", "project"].map((word) => ({
+        word,
+        meaning: "từ công việc",
+        collocations: [`my ${word}`, `new ${word}`, `work ${word}`],
+        family: [{
+          word: ({ department: "departmental", role: "role-playing", project: "projected" } as Record<string, string>)[word]!,
+          type: "adjective",
+          meaning: "từ cùng họ dùng trong ngữ cảnh công việc"
+        }],
+        umbrella: { word: "workplace terms", meaning: "từ ngữ nơi làm việc", siblings: [] },
+        synonyms: [{ word: ({ department: "division", role: "position", project: "assignment" } as Record<string, string>)[word]!, level: "A2" }],
+        antonyms: [],
+        relationStatus: "provided"
+      })) } },
       { code: "grammar", title: "Ngữ pháp", content: { formula: "I work in [team] as [role].", examples: ["I work in AI as an intern."] } },
       { code: "pronunciation", title: "Phát âm", content: { focus: "/w/", words: [{ word: "work", ipa: "/wɜːk/" }, { word: "week", ipa: "/wiːk/" }, { word: "well", ipa: "/wel/" }], instruction: "Round your lips." } },
       { code: "listening", title: "Nghe", content: { script: "I work in AI as an intern.", prompt: "Where does she work?", options: ["AI", "HR", "Sales", "Finance"], answer: "AI" } },
@@ -97,13 +111,16 @@ const repairRunner: AiTaskRunner = {
       });
     }
     const lessonFocus = String((rawInput as { lessonFocus?: string }).lessonFocus ?? "talk about work");
-    const dayWords = [
+    let dayWords = [
       ["coordinator", "briefing", "workflow"],
       ["supervisor", "prototype", "checklist"],
       ["agenda", "summary", "inbox"],
       ["calendar", "milestone", "assignment"],
       ["suggestion", "revision", "proposal"]
     ][dayNumber - 1] ?? ["office", "team", "work"];
+    if (taskKey === "weekly_lesson_vocabulary" && forcedDuplicateVocabularyDays.has(`${cefr}:${dayNumber}`)) {
+      dayWords = ["coordinator", "briefing", "workflow"];
+    }
     const vocabularyMetadataKey = `${cefr}:${dayNumber}`;
     const remainingVocabularyMetadataGaps = transientVocabularyMetadataGaps.get(vocabularyMetadataKey) ?? 0;
     if (remainingVocabularyMetadataGaps > 0) transientVocabularyMetadataGaps.set(vocabularyMetadataKey, remainingVocabularyMetadataGaps - 1);
@@ -226,6 +243,7 @@ describe("content operations API", () => {
   beforeEach(async () => {
     transientAiFailures.clear();
     transientVocabularyMetadataGaps.clear();
+    forcedDuplicateVocabularyDays.clear();
     const plans = {
       1: {
         A1: ["introduce your role", "describe a routine", "name a responsibility", "ask about a colleague", "summarise your work"],
@@ -572,9 +590,24 @@ describe("content operations API", () => {
   });
 
   it("repairs an existing lesson set through the validated weekly lesson contract", async () => {
+    const lessons = [1, 2, 3, 4, 5].map(lesson).map((item) => item.dayNumber > 3 ? item : ({
+      ...item,
+      parts: item.parts.map((part) => part.code !== "vocabulary" ? part : ({
+        ...part,
+        content: {
+          ...part.content,
+          items: (part.content.items as Array<Record<string, unknown>>).map((word, index) => index !== 0 ? word : ({
+            ...word,
+            synonyms: [],
+            antonyms: [],
+            relationStatus: "generation_missed"
+          }))
+        }
+      }))
+    }));
     const created = await app.inject({
       method: "PUT", url: "/api/v1/content/lesson-sets/1/A1/draft", headers: { cookie: makerCookie },
-      payload: { lessons: [1, 2, 3, 4, 5].map(lesson) }
+      payload: { lessons }
     });
     expect(created.statusCode, created.body).toBe(201);
 
@@ -588,7 +621,7 @@ describe("content operations API", () => {
     expect(repairedBody.lessons.every((item) => item.title.trim() && item.title !== "S + V + O")).toBe(true);
   });
 
-  it("regenerates exactly one deleted lesson day without changing the other four days", async () => {
+  it("keeps the remaining days when a regenerated deleted day has a blocking AI error", async () => {
     const created = await app.inject({
       method: "PUT", url: "/api/v1/content/lesson-sets/1/A1/draft", headers: { cookie: makerCookie },
       payload: { lessons: [1, 2, 3, 4, 5].map(lesson) }
@@ -608,9 +641,13 @@ describe("content operations API", () => {
       method: "POST", url: "/api/v1/content/lesson-sets/1/A1/draft/enrich", headers: { cookie: makerCookie },
       payload: { expectedVersion: afterDelete.version, dayNumber: 3 }
     });
-    expect(regenerated.statusCode, regenerated.body).toBe(201);
-    const result = regenerated.json() as { lessons: Array<{ dayNumber: number; title: string; parts: unknown[] }> };
-    expect(result.lessons.map(item => item.dayNumber)).toEqual([1, 2, 3, 4, 5]);
+    expect(regenerated.statusCode, regenerated.body).toBe(422);
+    const current = await app.inject({
+      method: "GET", url: "/api/v1/content/lesson-sets/1/A1", headers: { cookie: makerCookie }
+    });
+    expect(current.statusCode, current.body).toBe(200);
+    const result = current.json() as { lessons: Array<{ dayNumber: number; title: string; parts: unknown[] }> };
+    expect(result.lessons.map(item => item.dayNumber)).toEqual([1, 2, 4, 5]);
     for (const dayNumber of [1, 2, 4, 5]) {
       const before = afterDelete.lessons.find(item => item.dayNumber === dayNumber)!;
       const after = result.lessons.find(item => item.dayNumber === dayNumber)!;
@@ -675,6 +712,83 @@ describe("content operations API", () => {
 
     expect(enriched.statusCode, enriched.body).toBe(200);
     expect(runnerCalls).toEqual([]);
+  });
+
+  it("rejects review when a five-day level has more than two genuine light vocabulary gaps", async () => {
+    const generated = await app.inject({
+      method: "POST", url: "/api/v1/content/lesson-sets/2/A2/generate", headers: { cookie: makerCookie }, payload: {}
+    });
+    expect(generated.statusCode, generated.body).toBe(201);
+    const draft = generated.json() as { lessons: Array<{ dayNumber: number; parts: Array<{ code: string; content: Record<string, unknown> }> }> };
+    const withThreeLightGaps = draft.lessons.map((lesson) => lesson.dayNumber > 3 ? lesson : ({
+      ...lesson,
+      parts: lesson.parts.map((part) => part.code !== "vocabulary" ? part : ({
+        ...part,
+        content: {
+          ...part.content,
+          items: (part.content.items as Array<Record<string, unknown>>).map((item, index) => index > 0 ? item : ({
+            ...item, synonym1: null, synonym2: null, antonym1: null, synonyms: [], antonyms: [], relationStatus: "generation_missed"
+          }))
+        }
+      }))
+    }));
+    const saved = await app.inject({
+      method: "PUT", url: "/api/v1/content/lesson-sets/2/A2/draft", headers: { cookie: makerCookie }, payload: { lessons: withThreeLightGaps }
+    });
+    expect(saved.statusCode, saved.body).toBe(201);
+    const review = await app.inject({
+      method: "POST", url: `/api/v1/content/lesson-set-versions/${(saved.json() as { versionId: string }).versionId}/review`, headers: { cookie: makerCookie }
+    });
+
+    expect(review.statusCode, review.body).toBe(409);
+    expect(review.json()).toMatchObject({ code: "CONTENT_VALIDATION_FAILED" });
+  });
+
+  it("does not overwrite a draft when targeted vocabulary repair still duplicates another day", async () => {
+    const generated = await app.inject({
+      method: "POST", url: "/api/v1/content/lesson-sets/1/A2/generate", headers: { cookie: makerCookie }, payload: {}
+    });
+    expect(generated.statusCode, generated.body).toBe(201);
+    const original = generated.json() as {
+      version: number;
+      lessons: Array<{ dayNumber: number; parts: Array<{ code: string; content: Record<string, unknown> }> }>;
+    };
+    const withThreeRelationGaps = original.lessons.map((lesson) => lesson.dayNumber > 3 ? lesson : ({
+      ...lesson,
+      parts: lesson.parts.map((part) => part.code !== "vocabulary" ? part : ({
+        ...part,
+        content: {
+          ...part.content,
+          items: (part.content.items as Array<Record<string, unknown>>).map((item, index) => index > 0 ? item : ({
+            ...item, synonym1: null, antonym1: null, synonyms: [], antonyms: [], relationStatus: "generation_missed"
+          }))
+        }
+      }))
+    }));
+    const saved = await app.inject({
+      method: "PUT", url: "/api/v1/content/lesson-sets/1/A2/draft", headers: { cookie: makerCookie },
+      payload: { lessons: withThreeRelationGaps }
+    });
+    expect(saved.statusCode, saved.body).toBe(201);
+    const beforeRepair = saved.json() as { version: number };
+    forcedDuplicateVocabularyDays.add("A2:3");
+
+    const repaired = await app.inject({
+      method: "POST", url: "/api/v1/content/lesson-sets/1/A2/draft/enrich", headers: { cookie: makerCookie }, payload: {}
+    });
+
+    expect(repaired.statusCode, repaired.body).toBe(422);
+    const rejectedRuns = await pool.query<{ error_code: string; request_key: string }>(
+      "select error_code, request_key from ai_runs where error_code = 'CONTENT_GENERATION_QUALITY_FAILED' and request_key like 'weekly-lessons-repair:1:A2:%' order by created_at desc"
+    );
+    expect(rejectedRuns.rows).toEqual(expect.arrayContaining([
+      expect.objectContaining({ error_code: "CONTENT_GENERATION_QUALITY_FAILED" })
+    ]));
+    const afterRepair = await app.inject({
+      method: "GET", url: "/api/v1/content/lesson-sets/1/A2", headers: { cookie: makerCookie }
+    });
+    expect(afterRepair.statusCode, afterRepair.body).toBe(200);
+    expect(afterRepair.json()).toMatchObject({ version: beforeRepair.version });
   });
 
   it("keeps an immutable generation record on the recoverable draft without replacing the approved lesson", async () => {

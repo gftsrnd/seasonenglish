@@ -33,7 +33,7 @@ import {
 } from "@e4s/ai";
 import { containsVietnameseLearnerText, validateLessonDraft, validateLessonPublication } from "@e4s/domain/content";
 import { lessonComponentsNeedingRepair, type LessonGenerationComponent, type LessonRepairMode } from "./enrichment.js";
-import { curatedRelationEvidence } from "./lexical-relations.js";
+import { curatedRelationEvidence, lexicalRelationCoverageSatisfied } from "./lexical-relations.js";
 import { containsPromptEntities, ungroundedPromptEntities } from "./prompt-entities.js";
 
 export { extractPromptEntities, promptEntities, ungroundedPromptEntities } from "./prompt-entities.js";
@@ -49,7 +49,10 @@ const SPEAKING_OUTPUT_TOKEN_LIMIT = 900;
 const SPEAKING_REPAIR_OUTPUT_TOKEN_LIMIT = 1_500;
 const SKILLS_REVIEW_OUTPUT_TOKEN_LIMIT = 1_500;
 const LENGTH_REPAIR_OUTPUT_TOKEN_LIMIT = 2_000;
-const MAX_COMPONENT_ATTEMPTS = 2;
+// A component gets one initial generation and up to two targeted repairs.
+// Keeping this budget uniform prevents one component type from failing a
+// level earlier than another for the same recoverable schema/semantic error.
+const MAX_COMPONENT_ATTEMPTS = 3;
 const MAX_FREQUENTLY_INVALID_COMPONENT_ATTEMPTS = 3;
 const MAX_REVIEWER_REPAIR_ATTEMPTS = 3;
 // Six atomic exercises may each need their own three targeted repairs. This is
@@ -59,6 +62,7 @@ const REVIEWER_REPAIR_POLICY_VERSION = "reviewer-repair-v29-alternative-target-w
 const ACCEPTED_REVIEWER_REPAIR_POLICY_VERSIONS = new Set([REVIEWER_REPAIR_POLICY_VERSION]);
 const MAX_FOUNDATION_ATTEMPTS = 3;
 const MAX_SKILLS_REVIEW_ATTEMPTS = 3;
+const MAX_LIGHT_LEXICAL_RELATION_GAPS_PER_LEVEL = 2;
 const WEEKLY_BLUEPRINT_LEVELS = ["A1", "A2", "B1", "B2", "C1"] as const;
 const WEEKLY_BLUEPRINT_ATTEMPTS = 2;
 const WEEKLY_BLUEPRINT_OUTPUT_TOKEN_LIMIT = 5_500;
@@ -193,32 +197,20 @@ function vocabularyMissingRelationFindings(
 ): Array<{ path: PropertyKey[]; message: string }> {
   const slots = ["word1", "word2", "word3"] as const;
   const hasRelation = (slot: (typeof slots)[number]) => Boolean(value[slot].synonym1 || value[slot].synonym2 || value[slot].antonym1);
-  const isExempt = (slot: (typeof slots)[number]) =>
-    value[slot].relationStatus === "no_natural_relation" || value[slot].relationStatus === "above_cefr_level";
-  // An AI-declared exemption is rejected when curated evidence shows a
-  // CEFR-appropriate relation for the same word, part of speech and sense.
-  const rejectedExemptions = slots.flatMap((slot) => {
-    if (hasRelation(slot) || !isExempt(slot)) return [];
-    const evidence = curatedRelationEvidence(value[slot], cefr);
-    if (!evidence) return [];
-    const known = [
-      ...(evidence.synonyms?.length ? [`synonym: ${evidence.synonyms.join(" / ")}`] : []),
-      ...(evidence.antonyms?.length ? [`antonym: ${evidence.antonyms.join(" / ")}`] : [])
-    ].join("; ");
-    return [{
-      path: [slot, "relationStatus"] as PropertyKey[],
-      message: `${value[slot].word} (${value[slot].partOfSpeech}) was marked ${value[slot].relationStatus}, but a ${cefr}-appropriate relation exists for this sense (${known}). Keep the word and fill synonym1 or antonym1 with a genuine same-sense relation and example.`
-    }];
-  });
-  const allMissing = slots.every((slot) => !hasRelation(slot));
-  const missedSlots = allMissing ? slots.filter((slot) => !isExempt(slot)) : [];
-  return [
-    ...rejectedExemptions,
-    ...missedSlots.map((slot) => ({
+  const hasCredibleCoverage = (slot: (typeof slots)[number]) => lexicalRelationCoverageSatisfied({
+    word: value[slot].word,
+    partOfSpeech: value[slot].partOfSpeech,
+    meaning: value[slot].meaning,
+    synonyms: [value[slot].synonym1, value[slot].synonym2],
+    antonyms: [value[slot].antonym1],
+    relationStatus: value[slot].relationStatus
+  }, cefr);
+  return slots
+    .filter((slot) => !hasRelation(slot) && !hasCredibleCoverage(slot))
+    .map((slot) => ({
       path: [slot, "synonym1"] as PropertyKey[],
-      message: `${value[slot].word} has no synonym or antonym and relationStatus is generation_missed; provide at least one genuine workplace synonym or antonym, or set relationStatus to 'no_natural_relation' / 'above_cefr_level'.`
-    }))
-  ];
+      message: `${value[slot].word} has no credible same-level synonym or antonym. An exemption is allowed only for a calendar/time label or identifier; otherwise provide a genuine relation or replace this target with an equally relevant CEFR-appropriate word.`
+    }));
 }
 
 export function validateWeeklyVocabularyLexicalCoverage(
@@ -228,7 +220,7 @@ export function validateWeeklyVocabularyLexicalCoverage(
   const wordEntries: Array<{
     dayNumber: number;
     word: string;
-    hasRelation: boolean;
+    relationCovered: boolean;
     relationStatus: "provided" | "no_natural_relation" | "above_cefr_level" | "generation_missed";
   }> = [];
   for (const lesson of lessons) {
@@ -238,6 +230,9 @@ export function validateWeeklyVocabularyLexicalCoverage(
       if (!rawItem || typeof rawItem !== "object") continue;
       const item = rawItem as {
         word?: unknown;
+        type?: unknown;
+        partOfSpeech?: unknown;
+        meaning?: unknown;
         synonyms?: unknown[];
         antonyms?: unknown[];
         relationStatus?: unknown;
@@ -251,19 +246,23 @@ export function validateWeeklyVocabularyLexicalCoverage(
         : item.relationStatus === "no_natural_relation" || item.relationStatus === "above_cefr_level"
           ? item.relationStatus
           : "generation_missed";
-      wordEntries.push({ dayNumber: lesson.dayNumber, word, hasRelation, relationStatus });
+      wordEntries.push({
+        dayNumber: lesson.dayNumber,
+        word,
+        relationCovered: lexicalRelationCoverageSatisfied(item, cefr),
+        relationStatus
+      });
     }
   }
   if (wordEntries.length === 0) return [];
-  const withRelationCount = wordEntries.filter((entry) => entry.hasRelation).length;
-  if (withRelationCount / wordEntries.length >= 0.5) return [];
-  const missingEntries = wordEntries.filter((entry) => !entry.hasRelation);
+  const missingEntries = wordEntries.filter((entry) => !entry.relationCovered);
+  if (missingEntries.length <= MAX_LIGHT_LEXICAL_RELATION_GAPS_PER_LEVEL) return [];
   return [{
     dayNumber: null,
     component: "vocabulary",
-    code: "VOCABULARY_LEXICAL_COVERAGE_LOW",
+    code: "VOCABULARY_LEXICAL_GAPS_EXCEEDED",
     severity: "warning",
-    message: `${cefr ? `Mức ${cefr}: ` : ""}Độ phủ đồng nghĩa/trái nghĩa đạt ${withRelationCount}/${wordEntries.length} từ (< 50%). Giữ nguyên các từ hợp lệ và cho phép bổ sung riêng phần từ vựng khi cần.`,
+    message: `${cefr ? `Mức ${cefr}: ` : ""}Có ${missingEntries.length} từ thiếu đồng nghĩa/trái nghĩa hợp lệ, vượt giới hạn ${MAX_LIGHT_LEXICAL_RELATION_GAPS_PER_LEVEL} lỗi nhẹ cho một mức. Giữ nguyên các từ hợp lệ và chỉ sinh lại phần từ vựng bị thiếu.`,
     issues: missingEntries.map((entry) => ({
       dayNumber: entry.dayNumber,
       word: entry.word,
@@ -367,7 +366,7 @@ const VOCABULARY_CONTRACT = [
   "Every synonym or antonym must use the same part of speech and same sense as the target, include a concise sense label, and include a contextual example containing that relation word. Derivations are not synonyms.",
   "For synonym1, synonym2 and antonym1, copy the target item's partOfSpeech string exactly into relation.partOfSpeech. If the relation is not truly that part of speech in the shown example, replace the relation word instead of changing the label.",
   "A synonym or antonym word must never equal its target word, even with different casing. If no distinct dictionary-valid relation exists, return null instead of repeating the target.",
-  "Synonym and antonym coverage is desirable across the weekly set, but each relation is optional for an individual target word. When providing at least one synonym or antonym, set relationStatus to 'provided'. When both synonym and antonym are null, set relationStatus to 'no_natural_relation' if no natural workplace synonym/antonym exists, or 'above_cefr_level' if candidate replacements exceed the active CEFR level. Never replace a more relevant lessonFocus word solely to manufacture a relation, and never invent a false synonym or antonym.",
+  "Every ordinary vocabulary target must have at least one genuine same-sense synonym or antonym. Set relationStatus to 'provided' when it does. A no_natural_relation or above_cefr_level exemption is allowed only for a calendar/time label (for example Monday or a date) or a system identifier; never use it for an ordinary workplace word. When an ordinary target has no genuine same-level relation, replace that target with an equally relevant CEFR-appropriate word from lessonFocus rather than inventing a false relation.",
   "Final preflight before answering: (1) word1-word3 are distinct, (2) every non-null relation word differs from its own target, and (3) every relation example contains that relation word. Repair every failed check before returning the tool output.",
   "For B1-C1, add a language preflight: scan every string outside keys named meaning or ending in Meaning; replace any Vietnamese in title, note, sense, example, collocation, relation or label with English before returning.",
   "Use null only for additional optional relations or an antonym that would be false or unnatural; never invent a fake relation. Return no prose outside the tool."
@@ -1153,7 +1152,7 @@ export async function generateWeeklyLessonVocabulary(
         ];
       }
     }
-    if (hardVocabularyFindings(current).length === 0) {
+    if (vocabularyFindings(current).length === 0) {
       const lastMeta = attemptLog.findLast((entry) => entry.metadata)?.metadata ?? {
         traceId: randomUUID(),
         taskId: "weekly_lesson_vocabulary",
@@ -6073,55 +6072,6 @@ function normalizeExercisePunctuation(skills: Skills): Skills {
   };
 }
 
-const VOCABULARY_FAMILY_FALLBACK_MAP: Record<string, { word: string; type: string; meaning: string }> = {
-  money: { word: "monetary", type: "adjective", meaning: "thuộc về tiền tệ" },
-  month: { word: "monthly", type: "adjective", meaning: "hàng tháng" },
-  cost: { word: "costly", type: "adjective", meaning: "đắt đỏ, tốn kém" },
-  high: { word: "highly", type: "adverb", meaning: "ở mức cao" },
-  low: { word: "lower", type: "verb", meaning: "hạ thấp, giảm xuống" },
-  budget: { word: "budgetary", type: "adjective", meaning: "thuộc về ngân sách" },
-  number: { word: "numeric", type: "adjective", meaning: "thuộc về con số" },
-  table: { word: "tabular", type: "adjective", meaning: "dạng bảng biểu" },
-  chart: { word: "charting", type: "noun", meaning: "việc lập biểu đồ" },
-  report: { word: "reporter", type: "noun", meaning: "người báo cáo" },
-  plan: { word: "planner", type: "noun", meaning: "người lập kế hoạch" },
-  review: { word: "reviewer", type: "noun", meaning: "người đánh giá" },
-  team: { word: "teammate", type: "noun", meaning: "đồng đội, thành viên nhóm" },
-  work: { word: "worker", type: "noun", meaning: "nhân viên, người làm việc" },
-  time: { word: "timely", type: "adjective", meaning: "kịp thời, đúng lúc" },
-  call: { word: "caller", type: "noun", meaning: "người gọi" },
-  check: { word: "checklist", type: "noun", meaning: "danh sách kiểm tra" },
-  camera: { word: "cameras", type: "noun", meaning: "các máy quay, máy ảnh" },
-  video: { word: "videos", type: "noun", meaning: "các đoạn băng hình" },
-  audio: { word: "audible", type: "adjective", meaning: "có thể nghe rõ" },
-  microphone: { word: "microphones", type: "noun", meaning: "các micrô thu âm" },
-  mic: { word: "microphone", type: "noun", meaning: "micrô thu âm" },
-  screen: { word: "screening", type: "noun", meaning: "việc trình chiếu, kiểm duyệt" },
-  slide: { word: "slides", type: "noun", meaning: "các trang trình chiếu" }
-};
-
-function synthesizeVocabularyFamilyFallback(word: string, partOfSpeech: string, meaning: string): { word: string; type: string; meaning: string } {
-  const cleanWord = word.trim().toLocaleLowerCase("en-US");
-  const known = VOCABULARY_FAMILY_FALLBACK_MAP[cleanWord];
-  if (known) return known;
-  const cleanPos = partOfSpeech.trim().toLocaleLowerCase("en-US");
-  const cleanMeaning = meaning.trim() || "từ cùng gốc trong công việc";
-  if (cleanPos === "verb") {
-    const ingForm = cleanWord.endsWith("e") && cleanWord.length > 2 ? `${cleanWord.slice(0, -1)}ing` : `${cleanWord}ing`;
-    return { word: ingForm, type: "noun", meaning: `việc ${cleanMeaning}` };
-  }
-  if (cleanPos === "adjective") {
-    const lyForm = cleanWord.endsWith("y") && cleanWord.length > 2 ? `${cleanWord.slice(0, -1)}ily` : `${cleanWord}ly`;
-    return { word: lyForm, type: "adverb", meaning: `một cách ${cleanMeaning}` };
-  }
-  const pluralForm = /(?:s|x|z|ch|sh)$/u.test(cleanWord)
-    ? `${cleanWord}es`
-    : cleanWord.endsWith("y") && !/[aeiou]y$/u.test(cleanWord)
-      ? `${cleanWord.slice(0, -1)}ies`
-      : `${cleanWord}s`;
-  return { word: pluralForm, type: "noun", meaning: `các ${cleanMeaning}` };
-}
-
 function toVocabularyItem(item: VocabularyItem) {
   const family = compact([item.family1, item.family2]);
   return {
@@ -6134,7 +6084,10 @@ function toVocabularyItem(item: VocabularyItem) {
     meaning: item.meaning,
     imageQuery: item.imageQuery,
     collocations: [item.collocation1, item.collocation2, item.collocation3],
-    family: family.length > 0 ? family : [synthesizeVocabularyFamilyFallback(item.word, item.partOfSpeech, item.meaning)],
+    // Never fabricate an inflection or a guessed derivation to make an
+    // incomplete vocabulary record look ready. The level policy records this
+    // as one visible light gap and targeted repair can supply a real family.
+    family,
     umbrella: {
       word: item.umbrellaWord,
       meaning: item.umbrellaMeaning,

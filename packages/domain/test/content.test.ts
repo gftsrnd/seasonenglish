@@ -107,6 +107,12 @@ describe("content publishing policy", () => {
     expect(lexicalRelationCoverageSatisfied({
       word: "send", type: "verb", meaning: "gửi", synonyms: [], antonyms: [{ word: "receive" }], relationStatus: "provided"
     }, "A2")).toBe(true);
+    expect(lexicalRelationCoverageSatisfied({
+      word: "report", type: "noun", meaning: "báo cáo", synonyms: [], antonyms: [], relationStatus: "no_natural_relation"
+    }, "A2")).toBe(false);
+    expect(lexicalRelationCoverageSatisfied({
+      word: "31/10", type: "noun", meaning: "ngày", synonyms: [], antonyms: [], relationStatus: "no_natural_relation"
+    }, "A1")).toBe(true);
   });
 
   it("allows an accented Vietnamese proper noun inside otherwise English B1+ guidance", () => {

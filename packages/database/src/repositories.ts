@@ -1,7 +1,7 @@
 import { createCipheriv, createDecipheriv, createHash, randomBytes, randomUUID } from "node:crypto";
 import type { Pool, PoolClient } from "pg";
 import { buildLevelReadiness as calculateLevelReadiness, nextEffectiveMonday, passesLevelUpExam, createLevelRetryPlan, type LevelReadinessMetrics, type LevelReadinessThresholds } from "@e4s/domain/progression";
-import { validateGenerationFindingsForPublication, validateLessonPublication } from "@e4s/domain/content";
+import { evaluateGeneratedLessonQuality, validateGenerationFindingsForPublication, validateLessonPublication } from "@e4s/domain/content";
 import { lessonCompletionActivity } from "@e4s/domain/learning";
 import { generationFindingsFromPayload } from "./generation-findings.js";
 import type {
@@ -2987,7 +2987,12 @@ class ContentRepository {
     const candidate = await this.lessonSetVersion(actorId, versionId);
     if (!candidate) return null;
     if (!validateLessonPublication(candidate.lessons, candidate.weeklyPractice, candidate.cefr).valid
-      || !validateGenerationFindingsForPublication(candidate.generationFindings).valid) throw new Error("CONTENT_VALIDATION_FAILED");
+      || !validateGenerationFindingsForPublication(candidate.generationFindings).valid
+      || !evaluateGeneratedLessonQuality({
+        cefr: candidate.cefr,
+        lessons: candidate.lessons,
+        ...(candidate.generationFindings ? { findings: candidate.generationFindings } : {})
+      }).ready) throw new Error("CONTENT_VALIDATION_FAILED");
     const updated = await this.pool.query<{ id: string }>(
       `update lesson_set_versions lsv set status = 'review'
        from lesson_sets ls, program_weeks pw, programs p, users actor
@@ -3004,7 +3009,12 @@ class ContentRepository {
     const candidate = await this.lessonSetVersion(checkerId, versionId);
     if (!candidate) throw new Error("CONTENT_VERSION_NOT_FOUND");
     if (!validateLessonPublication(candidate.lessons, candidate.weeklyPractice, candidate.cefr).valid
-      || !validateGenerationFindingsForPublication(candidate.generationFindings).valid) throw new Error("CONTENT_VALIDATION_FAILED");
+      || !validateGenerationFindingsForPublication(candidate.generationFindings).valid
+      || !evaluateGeneratedLessonQuality({
+        cefr: candidate.cefr,
+        lessons: candidate.lessons,
+        ...(candidate.generationFindings ? { findings: candidate.generationFindings } : {})
+      }).ready) throw new Error("CONTENT_VALIDATION_FAILED");
     const client = await this.pool.connect();
     try {
       await client.query("begin");

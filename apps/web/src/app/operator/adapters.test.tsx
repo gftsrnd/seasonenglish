@@ -120,6 +120,28 @@ describe("lesson detail warnings", () => {
     expect(adaptLessonSet(source, { aiConnected: true }).warnings.details).toBe(0);
   });
 
+  it("flags each day when more than two individual words lack lexical relations", () => {
+    const source = lessonSet([{ ...baseWord("seed"), synonyms: [{ word: "start" }], antonyms: [] }]);
+    source.lessons = [1, 2, 3, 4, 5].map((dayNumber) => ({
+      ...source.lessons[0]!,
+      id: `lesson-${dayNumber}`,
+      dayNumber,
+      parts: source.lessons[0]!.parts.map((part) => part.code !== "vocabulary" ? part : {
+        ...part,
+        content: {
+          ...part.content,
+          items: [
+            { ...baseWord(`first-${dayNumber}`), synonyms: dayNumber <= 3 ? [] : [{ word: `related-${dayNumber}` }], antonyms: [] },
+            { ...baseWord(`second-${dayNumber}`), synonyms: [{ word: `match-${dayNumber}` }], antonyms: [] },
+            { ...baseWord(`third-${dayNumber}`), synonyms: [{ word: `pair-${dayNumber}` }], antonyms: [] }
+          ]
+        }
+      })
+    }));
+
+    expect(adaptLessonSet(source, { aiConnected: true }).warnings.details).toBe(3);
+  });
+
   it("does not flag a lesson when all missing lexical relations have an approved exemption", () => {
     const source = lessonSet([
       { ...baseWord("Monday"), synonyms: [], antonyms: [], relationStatus: "no_natural_relation" },

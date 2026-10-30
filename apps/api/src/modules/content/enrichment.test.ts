@@ -48,6 +48,20 @@ describe("lesson enrichment merge", () => {
     ]);
   });
 
+  it("clears a stale level-wide lexical finding when vocabulary is repaired", () => {
+    const staleCoverage: ContentGenerationFindingView = {
+      dayNumber: null,
+      component: "vocabulary",
+      code: "VOCABULARY_LEXICAL_COVERAGE_LOW",
+      severity: "warning",
+      message: "old aggregate coverage",
+      issues: [],
+      repairAction: "regenerate_component"
+    };
+
+    expect(mergeGenerationFindingsAfterRepair([staleCoverage], [staleCoverage], { 3: ["vocabulary"] })).toEqual([]);
+  });
+
   it("replaces only the component named by an actionable finding", () => {
     const existing = [generatedLesson];
     const generated = [{
