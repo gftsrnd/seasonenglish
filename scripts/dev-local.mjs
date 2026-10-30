@@ -91,7 +91,9 @@ try {
     S3_ACCESS_KEY: process.env.S3_ACCESS_KEY ?? process.env.MINIO_ROOT_USER ?? "e4s_minio",
     S3_SECRET_KEY: process.env.S3_SECRET_KEY ?? process.env.MINIO_ROOT_PASSWORD ?? "e4s_local_minio_password"
   });
-  run("pnpm", ["--filter", "@e4s/web", "dev", "--", "--host", "127.0.0.1", "--port", String(LOCAL_DEV_PORTS.web)]);
+  // WSL-hosted ngrok reaches the Windows dev server through the host adapter;
+  // a loopback-only Vite listener makes that upstream connection fail.
+  run("pnpm", ["--filter", "@e4s/web", "dev", "--", "--host", "0.0.0.0", "--port", String(LOCAL_DEV_PORTS.web)]);
   await Promise.all([
     waitForHttpReady("API", `${apiUrl}/api/readiness`),
     waitForHttpReady("Web", webUrl)
