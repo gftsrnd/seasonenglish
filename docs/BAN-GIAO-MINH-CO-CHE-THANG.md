@@ -38,18 +38,47 @@ Mặc định: N=60, Y=3, Z=4, thời lượng thi 60 phút (tạm), mục tiêu
 Bảng mới: `program_months`, `month_frameworks` (kèm cột bài thi tháng `exam_*`), `month_lessons` (liên kết `lessons` để giữ editor/kháng nghị/tiến độ), `learner_month_enrollments`, `learner_attendance_days`, `monthly_exam_appeals`, `monthly_unlock_requests`, `account_locks`. Cột mới: `appeals.proposed_level`, `appeals.kind` (mặc định `placement`), `appeals.expires_at`.
 Deprecated (chỉ `comment on`, không drop): `programs.start_date/week_count/current_week_override`, `program_weeks`, `practice_submissions`, `practice_appeals`, `scheduled_level_changes`.
 
-## Giai đoạn 2–6 — CHƯA LÀM
+## Giai đoạn 2 · Vận hành — ĐÃ LÀM (backend + web; đã chạy test tích hợp Postgres nhúng)
+### Domain (`packages/domain/src/calendar/framework.ts`, `exam.ts`; test `framework.test.ts` 16, `exam.test.ts` 6)
+- `buildSampleFramework(cefr, {N,Y,Z})`: khung mẫu cố định 5 level (60 từ, 3 chủ điểm × 3 bước scaffolding, 4 âm × 18 ví dụ) để test trọn luồng khi tắt AI.
+- `validateMonthFramework`: đúng N/Y/Z, từ không lặp, mỗi âm đủ ví dụ khác nhau cho cả tháng.
+- `distributeFramework(framework, lessonCount)`: 3 từ/ngày theo thứ tự, hết từ mới thì ôn từ học lâu nhất (`firstReviewLesson`); ngữ pháp chia Y đoạn liên tiếp, bước tăng dần; Z âm xoay vòng, ví dụ không trùng. Kế hoạch lưu `month_frameworks.distribution_plan`.
+- `buildLessonFromDayPlan`: dựng bài ngày đủ 11 phần, qua `validateLessonDraft` + `validateLessonPublication` cho cả 5 level (B1+ tiếng Anh). Từ trừu tượng có `abstract: true` trong vocabulary item (web ẩn khung ảnh — làm ở giai đoạn 3).
+- `buildMonthlyExamBlueprint`: theo **"E4S Cấu trúc bài thi cuối tháng và quy tắc AI" v1.1 (31/10)**: 4 kỹ năng × 25 điểm = 100; **30 phút** chia 8–8–8–6 (scale theo cài đặt); Listening 20 câu (2 bản nghe × 10, phát 2 lần), Reading 30 câu, Writing 1 email 80–100 từ (6 mục từ, G1/G2/G3), Speaking = Read Aloud (4 âm × 2 vị trí) + voice note 60–75 s (4 mục từ, G1/G2/G3). 3 lựa chọn A/B/C, đáp án đảo vị trí. N chia 20–30–6–4 (`allocateExamItems`). Có `mapping` (mỗi mục từ đúng 1 vị trí), `graderPackage` (script, key, giải thích, rubric W1–W5 / S1–S5, bài mẫu), `checks` GEN02/03/10/11/13/16/17/20, `audioStatus: SCRIPT_ONLY`. `studentPackageOf` lọc key/evidence/script (GEN18).
+- `applyAiMonthlyExamContent`: AI chỉ điền nội dung vào cấu hình đã khoá; sai mapping/số câu thì trả null → giữ bản template.
+
+### DB (`0082_month_lesson_sets.sql`, `0083_lessons_day_number_month.sql`, `monthly-repository.ts`)
+- `lesson_sets.program_week_id` nới NOT NULL + thêm `month_framework_id`; `lessons.day_number` check 1..31 (trước 1..7); `assessment_definitions.kind` thêm `monthly_exam`, `course_pass` (giữ cả giá trị cũ).
+- `MonthlyContentRepository`: `overview` (3 tháng, trạng thái từng level), `framework`, `requestFrameworkGeneration` (job `monthly.framework.generate`, sinh lại nhiều lần tới khi duyệt), `approveFramework` (job `monthly.lessons.distribute`), `distributeLessons` (lesson_set + version nháp + 20/22 lessons, ghi lỗi từng bài), `lessonDetail`/`saveLessonDay` (soạn tay; nếu set đã publish thì tạo version nháp mới copy toàn bộ bài vì version published là bất biến), `approveLessonDay` (đủ bài → publish), `requestExamGeneration` (job `monthly.exam.generate`), `storeGeneratedExam`, `approveExam`. `readyForLearners` = khung duyệt ∧ mọi bài duyệt ∧ đề duyệt.
+- Test: `packages/database/test/monthly-content.integration.test.ts` đi trọn luồng (pass).
+
+### API (`apps/api/src/modules/content/monthly-routes.ts`)
+`GET /api/v1/content/months`, `GET /api/v1/content/months/:month/:cefr`, `POST …/framework/generate` (202), `POST /api/v1/content/month-frameworks/:id/approve` (202), `GET|PUT …/lessons/:n`, `POST …/lessons/:n/approve`, `POST …/exam/generate` (202), `POST …/exam/approve`. Ngày "hôm nay" lấy từ clock tổ chức (giờ giả lập).
+
+### Worker (`apps/worker/src/monthly-handlers.ts`)
+3 job trên. AI (Groq của worker) với task key mới `month_framework` / `monthly_exam` (prompt mặc định trong `packages/ai/src/month-framework.ts`, `monthly-exam.ts`; nếu tổ chức có `prompt_versions` active cùng key thì dùng). AI lỗi/không đạt kiểm tra → khung mẫu / đề template, ghi `source = 'sample'`.
+
+### Web (`apps/web/src/app/operator/Months.tsx`, route `/op/months`, nav "Tháng học")
+Màn chia đôi: trái khung (tab từ vựng/ngữ pháp/phát âm, Sinh lại khung, Duyệt khung với hộp xác nhận đúng câu chữ PO), phải lưới bài ngày (trạng thái, soạn tay bằng `LessonFormEditor`, duyệt từng bài) + khối bài thi tháng (sinh/duyệt). Tự tải lại mỗi 4 s khi worker đang chạy. Tháng trước chỉ xem.
+
+### Môi trường test
+`scripts/run-with-test-postgres.mjs` thêm `initdbFlags: ["--encoding=UTF8", "--locale=C"]`: trên Windows embedded Postgres mặc định WIN1252 nên MỌI migration có tiếng Việt lỗi (baseline 47 lỗi "no equivalent in encoding WIN1252" → các suite DB bị skip). Sau sửa, suite DB chạy được trên Windows.
+
+## Giai đoạn 3–6 — CHƯA LÀM
 (cập nhật khi làm)
 
 ## Chỗ tự quyết
 - Giờ khoá thi = 24:00 − thời lượng − 5 phút (khớp ví dụ 22:55; công thức "23:59 − …" ra 22:54).
 - `monthly` trong `ManagerSettingsView` là optional để fixture test cũ không vỡ; server luôn điền mặc định.
+- Thời lượng bài thi tháng mặc định 30 phút theo tài liệu PO v1.1 (thay 60 của prompt ban đầu); vẫn chỉnh được trong Cài đặt.
+- Bài ngày của tháng dùng `lesson_sets.month_framework_id` (nới NOT NULL của `program_week_id`) thay vì tạo `program_weeks` giả; version published bất biến nên sửa tay sau publish tạo version nháp mới.
+- Đề thi tháng: bản template deterministic trước, AI chỉ điền nội dung (GEN01); audio luôn SCRIPT_ONLY vì chưa có pipeline TTS/nghe soát.
 - Bài ngày của tháng tái dùng bảng `lessons`/`lesson_versions` qua `month_lessons.lesson_id` thay vì tạo bảng nội dung mới, để `LessonFormEditor`, `lesson_part_appeals`, `progress_records` dùng lại nguyên vẹn.
 - Khiếu nại đầu vào / pass course dùng lại bảng `appeals` (thêm cột) thay vì bảng mới.
 
 ## Điểm còn chờ PO
 - Điều kiện lên mức (giữ 4 tín hiệu, đổi đơn vị sang tháng, ghi "tạm").
-- Thời lượng bài thi tháng (tạm 60 phút).
+- Thời lượng bài thi tháng: 30 phút theo tài liệu v1.1 (chưa thử nghiệm thời lượng với học viên thật như tài liệu yêu cầu).
 - KPI và mức rủi ro (giữ cách tính, nhãn theo tháng).
 
 ## Cách Minh chạy local
