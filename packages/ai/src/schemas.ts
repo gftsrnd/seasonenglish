@@ -534,7 +534,8 @@ export const weeklyLessonVocabularyInputSchema = weeklyLessonDayInputSchema.exte
   grammarFormula: z.string().trim().min(1).max(300).nullable(),
   grammarExamples: z.array(z.string().trim().min(1).max(500)).length(2).nullable(),
   excludedVocabulary: z.array(z.string().trim().min(1).max(100)).max(100).optional(),
-  forbiddenVocabulary: z.array(z.string().trim().min(1).max(100)).max(180).optional()
+  forbiddenVocabulary: z.array(z.string().trim().min(1).max(100)).max(180).optional(),
+  reservedVocabulary: z.array(z.string().trim().min(1).max(100)).max(100).optional()
 });
 
 const weeklyLessonSkillsInputBaseSchema = weeklyLessonVocabularyInputSchema.extend({

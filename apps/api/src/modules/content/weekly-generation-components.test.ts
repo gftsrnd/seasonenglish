@@ -4778,6 +4778,19 @@ describe("lexical relation self-exemption", () => {
     expect(runTask).toHaveBeenCalledTimes(3);
   });
 
+  it("reserves other days' primary terms from learner-facing lexical relations", async () => {
+    const a2 = levelCases[1];
+    const output = vocabularyFor(a2);
+    const { runner, runTask } = sequencedRunner("weekly_lesson_vocabulary", [output, output, output]);
+
+    await expect(generateWeeklyLessonVocabulary({
+      ...vocabularyInput(a2),
+      reservedVocabulary: ["confirmation"]
+    } as never, runner)).rejects.toBeDefined();
+
+    expect(runTask).toHaveBeenCalledTimes(3);
+  });
+
   it("invalidates a resumed vocabulary checkpoint when an ordinary word has no credible relation", () => {
     const a2 = levelCases[1];
     const staleVocabulary = withWord1(a2, relationFree(sendItem(a2), "no_natural_relation"));
@@ -4995,6 +5008,25 @@ describe("reviewer finding classification", () => {
     const result = await reviewWeeklyLessonSkills(runner, skillsInput(b2), allSkills() as never);
     expect(result.output.status).toBe("needs_revision");
     expect(result.findings).toEqual([{ path: ["speaking"], message: expect.stringContaining("responsible group") }]);
+  });
+
+  it("discards a writing-review demand that contradicts an MCQ assessment shape", async () => {
+    const a1 = levelCases[0];
+    const skills = {
+      ...skillsFor(a1).comprehension,
+      ...skillsFor(a1).languagePractice,
+      ...skillsFor(a1).speaking
+    };
+    const { runner } = runnerWith({ weekly_lesson_skills_reviewer: reviewWith([{
+      exerciseCode: "writing", reasonCode: "feedback_mismatch", category: "objective_mismatch",
+      message: "Objective C1 accepts choosing a complete memo, but objective L2 requires completing a missing final line. The exercise cannot be both shapes.",
+      evidence: { path: "writing.answer", actual: skills.writing.answer, expected: "a missing final line" }
+    }]) });
+
+    const result = await reviewWeeklyLessonSkills(runner, skillsInput(a1), skills as never);
+
+    expect(result.output.status).toBe("approved");
+    expect(result.findings).toEqual([]);
   });
 
   it("discards a reviewer complaint when a concrete outcome completes a placeholder frame", async () => {

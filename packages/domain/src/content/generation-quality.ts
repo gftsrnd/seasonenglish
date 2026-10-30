@@ -15,7 +15,7 @@ export interface GeneratedLessonQuality {
   readonly lightIssues: readonly GeneratedLessonQualityIssue[];
 }
 
-export type LevelVocabularyTermKind = "primary" | "family" | "synonym" | "antonym" | "umbrella" | "sibling" | "lexical_detail";
+export type LevelVocabularyTermKind = "primary" | "family" | "synonym" | "antonym" | "sibling" | "lexical_detail";
 
 export interface LevelVocabularyRegistryEntry {
   readonly dayNumber: number;
@@ -31,7 +31,8 @@ export interface LevelVocabularyRegistry {
 }
 
 /**
- * Records every learner-facing lexical term, not prose inside an exercise.
+ * Records every learner-facing lexical term, not prose inside an exercise or
+ * an umbrella category label. Umbrellas group cards; they are not cards.
  * A same-day primary/sibling reference inside one umbrella group is a group
  * membership link, not a second lexical introduction.
  */
@@ -71,7 +72,6 @@ export function buildLevelVocabularyRegistry(lessons: readonly ContentLessonDraf
         add(lesson.dayNumber, antonym.word, "antonym", groupKey);
         relationKeys.add(normalizeVocabularyKey(text(antonym.word)));
       }
-      add(lesson.dayNumber, umbrella?.word, "umbrella", groupKey);
       for (const sibling of arrayRecords(umbrella?.siblings)) add(lesson.dayNumber, sibling.word, "sibling", groupKey);
       for (const detail of arrayRecords(item.lexicalDetails)) {
         if (!relationKeys.has(normalizeVocabularyKey(text(detail.word)))) add(lesson.dayNumber, detail.word, "lexical_detail", groupKey);
@@ -174,7 +174,6 @@ function arrayRecords(value: unknown): Record<string, unknown>[] {
 
 function sameUmbrellaMembership(left: LevelVocabularyRegistryEntry, right: LevelVocabularyRegistryEntry): boolean {
   if (left.dayNumber !== right.dayNumber || !left.groupKey || left.groupKey !== right.groupKey) return false;
-  if (left.kind === "umbrella" && right.kind === "umbrella") return true;
   return (left.kind === "primary" || left.kind === "sibling") && (right.kind === "primary" || right.kind === "sibling");
 }
 
@@ -184,7 +183,6 @@ function vocabularyTermLabel(kind: LevelVocabularyTermKind): string {
     family: "word family",
     synonym: "từ đồng nghĩa",
     antonym: "từ trái nghĩa",
-    umbrella: "từ bao trùm",
     sibling: "từ cùng nhóm",
     lexical_detail: "từ mở rộng"
   } as const)[kind];

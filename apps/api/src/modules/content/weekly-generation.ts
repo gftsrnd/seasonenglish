@@ -72,6 +72,7 @@ const WEEKLY_BLUEPRINT_CONTRACT = [
   "Write every internal plan item fully in English, including A1 and A2; learner-facing Vietnamese support is added later.",
   "Use this exact order and labels for every item: Outcome: ... | Vocabulary: ... | Frame: ... | Skill emphasis: ...",
   "Every item must include one observable workplace outcome, concrete vocabulary, one explicit teachable sentence or grammar frame, and one primary skill emphasis.",
+  "Within each CEFR level, every Vocabulary: term may be introduced on only one of the five days. Do not repeat a primary term across days; choose a distinct term for the later day while preserving its communicative intent.",
   "Do not create vocabulary-only, grammar-only, reading-only or role-play-only days: the downstream daily pipeline always builds a complete lesson.",
   "The five levels may share the same communicative progression, but the vocabulary, frame, cognitive demand and expected response complexity must genuinely match each CEFR lane.",
   "Preserve useful source-plan intent. Repair only missing or contradictory fields and return the complete strict object."
@@ -1044,6 +1045,8 @@ export type WeeklyLessonVocabularyInput = WeeklyLessonComponentInput & {
   excludedVocabulary?: string[];
   /** Learner-facing lexical terms already introduced in retained days during a component-only repair. */
   forbiddenVocabulary?: string[];
+  /** Primary plan terms reserved for other days of this same level. */
+  reservedVocabulary?: string[];
 };
 
 export async function generateWeeklyLessonVocabulary(
@@ -1062,11 +1065,21 @@ export async function generateWeeklyLessonVocabulary(
         : [];
     });
   };
+  const reservedVocabularyFindings = (output: ReturnType<typeof weeklyLessonVocabularyOutputSchema.parse>) => {
+    const reserved = new Set((input.reservedVocabulary ?? []).map(normalizeVocabularyKey).filter(Boolean));
+    return vocabularyLexicalTerms(output)
+      .filter((term) => term.kind !== "primary" && reserved.has(normalizeVocabularyKey(term.word)))
+      .map(({ word, path }) => ({
+        path,
+        message: `${word} is reserved as a primary target for another day; it may appear only in practice examples.`
+      }));
+  };
   const hardVocabularyFindings = (output: ReturnType<typeof weeklyLessonVocabularyOutputSchema.parse>) => [
       ...vocabularyLanguageFindings(output, input.cefr),
       ...vocabularyDuplicationFindings(output),
       ...vocabularySelfReferentialFamilyFindings(output),
-      ...forbiddenVocabularyFindings(output)
+      ...forbiddenVocabularyFindings(output),
+      ...reservedVocabularyFindings(output)
     ];
   const vocabularyFindings = (output: ReturnType<typeof weeklyLessonVocabularyOutputSchema.parse>) => [
       ...hardVocabularyFindings(output),
@@ -1074,10 +1087,13 @@ export async function generateWeeklyLessonVocabulary(
     ];
   const maxAttempts = options.maxAttempts ?? MAX_FREQUENTLY_INVALID_COMPONENT_ATTEMPTS;
   const forbiddenTargetPrompt = input.forbiddenVocabulary?.length
-    ? `RETAINED-DAY VOCABULARY — NEVER RETURN THESE AS a target, word family, synonym, antonym, umbrella, sibling, or lexical-detail card: ${boundedJson(input.forbiddenVocabulary)}. They have already been introduced in another day of this same CEFR level. They may appear only in practice examples.`
+    ? `RETAINED-DAY VOCABULARY — NEVER RETURN THESE AS a target, word family, synonym, antonym, sibling, or lexical-detail card: ${boundedJson(input.forbiddenVocabulary)}. They have already been introduced in another day of this same CEFR level. They may appear only in practice examples. An umbrella is only a category label, not a learner word card.`
     : "";
-  const initialPrompt = forbiddenTargetPrompt
-    ? `${VOCABULARY_CONTRACT}\n\n${forbiddenTargetPrompt}`
+  const reservedTargetPrompt = input.reservedVocabulary?.length
+    ? `PRIMARY TARGETS RESERVED FOR OTHER DAYS — NEVER RETURN THESE AS a word family, synonym, antonym, sibling, or lexical-detail card: ${boundedJson(input.reservedVocabulary)}. They may appear only in practice examples; do not spend them as supporting vocabulary before their assigned day. An umbrella is only a category label, not a learner word card.`
+    : "";
+  const initialPrompt = forbiddenTargetPrompt || reservedTargetPrompt
+    ? `${VOCABULARY_CONTRACT}\n\n${[forbiddenTargetPrompt, reservedTargetPrompt].filter(Boolean).join("\n\n")}`
     : VOCABULARY_CONTRACT;
   const generate = (
     attempts: number,
@@ -1143,11 +1159,12 @@ export async function generateWeeklyLessonVocabulary(
         ] : []),
         `UNCHANGED VALID ENTRIES ONLY: ${boundedJson(preservedEntries)}. Preserve these entries. They are the only previous entries you should copy.`,
         forbiddenTargetPrompt,
+        reservedTargetPrompt,
         `FLAGGED CURRENT TARGETS: ${boundedJson(forbiddenUnrepairedTargets)}. Do not copy a flagged target unchanged when its required relation is still null. Returning null for any specifically flagged synonym1 or antonym1 fails this repair task. If the relation is unnatural, replacing that target is mandatory.`,
         ...(mandatoryReplacementTargets.length > 0 ? [
           `MANDATORY ANTONYM REPLACEMENT: ${boundedJson(mandatoryReplacementTargets)} returned antonym1=null, so these target words are forbidden in this repair. Replace each with a lesson-focus word that has a genuine same-part-of-speech antonym, and fill antonym1 before addressing optional relations.`
         ] : []),
-        `FORBIDDEN LEARNER-FACING WORDS (case-insensitive): ${boundedJson([...(input.excludedVocabulary ?? []), ...(input.forbiddenVocabulary ?? []), ...mandatoryReplacementTargets])}.`,
+        `FORBIDDEN LEARNER-FACING WORDS (case-insensitive): ${boundedJson([...(input.excludedVocabulary ?? []), ...(input.forbiddenVocabulary ?? []), ...(input.reservedVocabulary ?? []), ...mandatoryReplacementTargets])}.`,
         "If a defect says meaning must be in Vietnamese, translate that meaning into natural Vietnamese (never copy an English loanword like 'camera', 'video', 'email', or 'microphone' unchanged as the Vietnamese meaning). Before returning, compare every target and lexical-relation word against every forbidden word."
       ].join("\n");
       const mergedFindings = (candidate: ReturnType<typeof weeklyLessonVocabularyOutputSchema.parse>) => {
@@ -2892,6 +2909,7 @@ export function weeklyLessonPlanBlueprintFindings(
       findings.push({ path: `plan.${level}`, message: `${level} must contain exactly five daily blueprints.` });
       continue;
     }
+    const vocabularyOwnerByKey = new Map<string, number>();
     days.forEach((item, dayIndex) => {
       const path = `plan.${level}.${dayIndex}`;
       if (containsVietnameseLearnerText(item)) {
@@ -2906,9 +2924,32 @@ export function weeklyLessonPlanBlueprintFindings(
       labels.forEach((label, index) => {
         if (!segments[index]!.slice(label.length).trim()) findings.push({ path, message: `${label} must contain concrete content.` });
       });
+      for (const term of weeklyPlanVocabularyTerms(segments[1]?.slice("Vocabulary:".length) ?? "")) {
+        const key = normalizeVocabularyKey(term);
+        if (!key) continue;
+        const priorDay = vocabularyOwnerByKey.get(key);
+        if (priorDay === undefined) {
+          vocabularyOwnerByKey.set(key, dayIndex + 1);
+        } else {
+          findings.push({
+            path,
+            message: `Vocabulary term '${term}' already appears on day ${priorDay}; each primary plan term must be introduced once per CEFR level.`
+          });
+        }
+      }
     });
   }
   return findings.slice(0, 12);
+}
+
+function weeklyPlanVocabularyTerms(value: string): string[] {
+  return value.split(",").map((term) => term.trim()).filter(Boolean);
+}
+
+function weeklyPlanVocabularyTermsFromFocus(focus: string): string[] {
+  const vocabularySegment = focus.split("|").map((segment) => segment.trim())
+    .find((segment) => segment.startsWith("Vocabulary:"));
+  return weeklyPlanVocabularyTerms(vocabularySegment?.slice("Vocabulary:".length) ?? "");
 }
 
 export async function normalizeWeeklyLessonPlanBlueprint(
@@ -3192,6 +3233,9 @@ export async function generateWeeklyLessons(
     lessonFocus: focuses[dayNumber - 1]!,
     allLessonFocuses: focuses
   }));
+  const reservedVocabularyForDay = (dayNumber: number) => focuses.flatMap((focus, index) =>
+    index + 1 === dayNumber ? [] : weeklyPlanVocabularyTermsFromFocus(focus)
+  );
   const existingByDay = new Map((options.existingLessons ?? []).map((lesson) => [lesson.dayNumber, lesson]));
   const componentTargets = generationDays.map((dayNumber) => {
     const forced = options.forcedComponentsByDay?.[dayNumber];
@@ -3347,6 +3391,7 @@ export async function generateWeeklyLessons(
       grammarFormula: foundation?.grammar?.formula ?? null,
       grammarExamples: foundation?.grammar ? [foundation.grammar.example1, foundation.grammar.example2] : null,
       excludedVocabulary: promptHistory,
+      reservedVocabulary: reservedVocabularyForDay(input.dayNumber),
       ...(preservedVocabulary.length > 0 ? { forbiddenVocabulary: preservedVocabulary } : {})
     }, runner);
   });
@@ -3392,6 +3437,7 @@ export async function generateWeeklyLessons(
         grammarFormula: foundation?.grammar?.formula ?? null,
         grammarExamples: foundation?.grammar ? [foundation.grammar.example1, foundation.grammar.example2] : null,
         excludedVocabulary,
+        reservedVocabulary: reservedVocabularyForDay(input.dayNumber),
         ...(preservedVocabulary.length > 0 ? { forbiddenVocabulary: preservedVocabulary } : {})
       }, runner, { maxAttempts: 1 });
       return [index, { ...generated, attempts: (candidates[index]?.attempts ?? 1) + generated.attempts }];
@@ -3782,16 +3828,15 @@ function vocabularyWords(vocabulary: Vocabulary): string[] {
   return [vocabulary.word1.word, vocabulary.word2.word, vocabulary.word3.word];
 }
 
-function vocabularyLexicalTerms(vocabulary: Vocabulary): Array<{ word: string; path: PropertyKey[] }> {
-  const terms: Array<{ word: string; path: PropertyKey[] }> = [];
+function vocabularyLexicalTerms(vocabulary: Vocabulary): Array<{ word: string; path: PropertyKey[]; kind: "primary" | "family" | "synonym" | "antonym" | "sibling" }> {
+  const terms: Array<{ word: string; path: PropertyKey[]; kind: "primary" | "family" | "synonym" | "antonym" | "sibling" }> = [];
   for (const slot of ["word1", "word2", "word3"] as const) {
     const item = vocabulary[slot];
-    terms.push({ word: item.word, path: [slot, "word"] });
-    for (const family of [item.family1, item.family2]) if (family) terms.push({ word: family.word, path: [slot, "family"] });
-    for (const relation of [item.synonym1, item.synonym2]) if (relation) terms.push({ word: relation.word, path: [slot, "synonym"] });
-    if (item.antonym1) terms.push({ word: item.antonym1.word, path: [slot, "antonym"] });
-    terms.push({ word: item.umbrellaWord, path: [slot, "umbrellaWord"] });
-    for (const sibling of [item.sibling1, item.sibling2, item.sibling3]) if (sibling) terms.push({ word: sibling.word, path: [slot, "sibling"] });
+    terms.push({ word: item.word, path: [slot, "word"], kind: "primary" });
+    for (const family of [item.family1, item.family2]) if (family) terms.push({ word: family.word, path: [slot, "family"], kind: "family" });
+    for (const relation of [item.synonym1, item.synonym2]) if (relation) terms.push({ word: relation.word, path: [slot, "synonym"], kind: "synonym" });
+    if (item.antonym1) terms.push({ word: item.antonym1.word, path: [slot, "antonym"], kind: "antonym" });
+    for (const sibling of [item.sibling1, item.sibling2, item.sibling3]) if (sibling) terms.push({ word: sibling.word, path: [slot, "sibling"], kind: "sibling" });
   }
   return terms;
 }
@@ -5384,7 +5429,16 @@ function reviewerFindingDisposition(
   if (finding.reasonCode === "feedback_mismatch"
     && finding.exerciseCode === "writing"
     && skills.writing.type === "mcq"
-    && /(?:chỉ là|dạng)\s*(?:trắc nghiệm|mcq)|không đo (?:việc )?(?:viết|điền)|free[- ]?response|free writing/iu.test(finding.message)
+    && (
+      /(?:chỉ là|dạng)\s*(?:trắc nghiệm|mcq)|không đo (?:việc )?(?:viết|điền)|free[- ]?response|free writing/iu.test(finding.message)
+      // A writing MCQ deliberately assesses selection.  A reviewer cannot
+      // require it to also be a cloze/fill-in task; that is an incompatible
+      // exercise shape, not a defect in the generated lesson.
+      || (
+        /\b(?:choose|choos(?:e|ing)|select|selecting|four[- ]?option|mcq|complete (?:the )?(?:whole|full) (?:memo|message|email|response))\b/iu.test(finding.message)
+        && /\b(?:fill(?:[- ]?in)?|cloze|missing (?:last|final) line|complete (?:the )?(?:last|final) line)\b/iu.test(finding.message)
+      )
+    )
     && !/(?:không khớp|sai logic|sai ngữ cảnh|off-target|wrong context)/iu.test(finding.message)) {
     return "discard";
   }

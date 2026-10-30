@@ -22,14 +22,34 @@ const lesson = (dayNumber: number, content: Record<string, unknown>) => ({
   parts: [{ code: "grammar", title: "Grammar", content }]
 });
 
-const blueprintPlan = Object.fromEntries(["A1", "A2", "B1", "B2", "C1"].map((level) => [
+const blueprintVocabularyByDay = [
+  "budget, report, total",
+  "forecast, variance, cost",
+  "invoice, payment, amount",
+  "expense, approval, receipt",
+  "summary, meeting, action"
+];
+const blueprintLevels = ["A1", "A2", "B1", "B2", "C1"] as const;
+const blueprintPlan = Object.fromEntries(blueprintLevels.map((level) => [
   level,
-  Array.from({ length: 5 }, (_, index) => `Outcome: ${level} completes workplace task ${index + 1} | Vocabulary: budget, report, total | Frame: Could you check the total? | Skill emphasis: speaking`)
-])) as never;
+  Array.from({ length: 5 }, (_, index) => `Outcome: ${level} completes workplace task ${index + 1} | Vocabulary: ${blueprintVocabularyByDay[index]} | Frame: Could you check the total? | Skill emphasis: speaking`)
+])) as Record<(typeof blueprintLevels)[number], string[]>;
 
 describe("cross-level weekly lesson validation", () => {
   it("accepts one complete English blueprint contract shared by all pipeline stages", () => {
     expect(weeklyLessonPlanBlueprintFindings(blueprintPlan)).toEqual([]);
+  });
+
+  it("requires the plan to allocate each primary vocabulary term to one day only", () => {
+    const repeated = {
+      ...blueprintPlan,
+      A1: [...blueprintPlan.A1]
+    } as typeof blueprintPlan;
+    repeated.A1[4] = repeated.A1[4]!.replace("summary, meeting, action", "budget, meeting, action");
+
+    expect(weeklyLessonPlanBlueprintFindings(repeated)).toEqual(expect.arrayContaining([
+      expect.objectContaining({ path: "plan.A1.4", message: expect.stringContaining("budget") })
+    ]));
   });
 
   it("normalizes a legacy single-skill Vietnamese plan once before the five-level batch", async () => {
