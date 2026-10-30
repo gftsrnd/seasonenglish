@@ -1066,7 +1066,7 @@ export async function generateWeeklyLessonVocabulary(
   options: { onProgress?: (event: LessonGenerationProgressEvent) => void; maxAttempts?: number } = {}
 ) {
   const vocabularySchema = {
-    safeParse: (value: unknown) => weeklyLessonVocabularyOutputSchema.safeParse(normalizeSelfReferentialLexicalRelations(value))
+    safeParse: (value: unknown) => weeklyLessonVocabularyOutputSchema.safeParse(normalizeSelfReferentialLexicalRelations(value, input.forbiddenVocabulary))
   };
   const forbiddenVocabularyFindings = (output: ReturnType<typeof weeklyLessonVocabularyOutputSchema.parse>) => {
     const forbidden = new Set((input.forbiddenVocabulary ?? []).map(normalizeVocabularyKey).filter(Boolean));
@@ -1263,7 +1263,7 @@ const LOANWORD_VIETNAMESE_MEANING_FALLBACKS: Record<string, string> = {
   budget: "ngân sách"
 };
 
-function normalizeSelfReferentialLexicalRelations(value: unknown): unknown {
+function normalizeSelfReferentialLexicalRelations(value: unknown, forbiddenVocabulary: readonly string[] = []): unknown {
   if (!value || typeof value !== "object" || Array.isArray(value)) return value;
   const normalized = structuredClone(value) as Record<string, unknown>;
   const wordKeys = ["word1", "word2", "word3"] as const;
@@ -1276,6 +1276,7 @@ function normalizeSelfReferentialLexicalRelations(value: unknown): unknown {
     const word = (item as Record<string, unknown>).word;
     return typeof word === "string" ? normalizeVocabularyKey(word) : "";
   }).filter(Boolean));
+  const forbidden = new Set(forbiddenVocabulary.map(normalizeVocabularyKey).filter(Boolean));
   for (const wordKey of wordKeys) {
     const item = normalized[wordKey];
     if (!item || typeof item !== "object" || Array.isArray(item)) continue;
@@ -1300,7 +1301,7 @@ function normalizeSelfReferentialLexicalRelations(value: unknown): unknown {
       if (!relation || typeof relation !== "object" || Array.isArray(relation)) continue;
       const relationWord = (relation as Record<string, unknown>).word;
       const key = normalizeVocabularyKey(typeof relationWord === "string" ? relationWord : "");
-      if (!key || key === target || introduced.has(key)) {
+      if (!key || key === target || introduced.has(key) || forbidden.has(key)) {
         record[relationKey] = null;
         continue;
       }

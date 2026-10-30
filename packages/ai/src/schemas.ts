@@ -714,9 +714,6 @@ const strictVocabularyItemSchema = z.object({
       if (relation.partOfSpeech.toLocaleLowerCase("en-US") !== item.partOfSpeech.toLocaleLowerCase("en-US")) {
         ctx.addIssue({ code: "custom", path: [`${kind}1`, "partOfSpeech"], message: `${kind} must have the same part of speech` });
       }
-      if (relation.word.toLocaleLowerCase("en-US") === word) {
-        ctx.addIssue({ code: "custom", path: [`${kind}1`, "word"], message: `${kind} must be distinct from the target word` });
-      }
     }
   }
 });

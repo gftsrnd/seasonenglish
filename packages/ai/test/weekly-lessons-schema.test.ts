@@ -467,7 +467,7 @@ describe("weekly lesson output contract", () => {
     }).success).toBe(true);
   });
 
-  it("rejects a synonym with another part of speech or the same headword", () => {
+  it("rejects a synonym with another part of speech while leaving self-relations for generation normalization", () => {
     const item = strictVocabularyItem("noun");
     expect(weeklyLessonVocabularyOutputSchema.safeParse({
       title: "Từ vựng", word1: { ...item, synonym1: { ...item.synonym1!, partOfSpeech: "verb" } }, word2: item, word3: item
@@ -477,7 +477,7 @@ describe("weekly lesson output contract", () => {
     }).success).toBe(true);
     expect(weeklyLessonVocabularyOutputSchema.safeParse({
       title: "Từ vựng", word1: { ...item, synonym1: { ...item.synonym1!, word: item.word } }, word2: item, word3: item
-    }).success).toBe(false);
+    }).success).toBe(true);
   });
 
   it("rejects ambiguous skill options and answer keys not present in the options", () => {
