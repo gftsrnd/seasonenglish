@@ -21,7 +21,9 @@ import {
   reviewWeeklyLessonSkills,
   runWeeklyLessonLevelBatch,
   validateWeeklyLessonPipelineState,
+  validateWeeklyVocabularyCrossDayUniqueness,
   validateWeeklyVocabularyLexicalCoverage,
+  preservedWeeklyVocabulary,
   weeklyLessonRunMetadataSeed,
   weeklyLessonSkillsGenerationConstraints,
   type WeeklyLessonComponentInput,
@@ -272,7 +274,7 @@ function skillsInput(level: LevelCase): WeeklyLessonSkillsInput {
 }
 
 function runnerWith(outputs: Record<string, unknown>, calls: string[] = []) {
-  const runTask = vi.fn(async (taskId: string, _input?: unknown) => {
+  const runTask = vi.fn(async (taskId: string, _input?: unknown, _options?: { systemPrompt?: string }) => {
     calls.push(taskId);
     if (!(taskId in outputs)) throw new Error(`UNEXPECTED_TASK:${taskId}`);
     return { output: outputs[taskId], metadata: { ...metadata, taskId } };
@@ -2726,10 +2728,16 @@ describe("direct weekly-generation component contracts", () => {
 
   it.each(levelCases)("enforces the $cefr speaking language and scoped model answer", async (level) => {
     const output = skillsFor(level).speaking;
-    const { runner } = runnerWith({ weekly_lesson_speaking: output });
+    const { runner, runTask } = runnerWith({ weekly_lesson_speaking: output });
     const result = await generateWeeklyLessonSkillGroup("skills.speaking", skillsInput(level), runner);
 
     expect(result.output.speaking?.answer).toBe("Could you confirm the deadline? I will update the client.");
+    expect(runTask.mock.calls[0]?.[2]).toMatchObject({
+      systemPrompt: expect.stringContaining("model answer may use only actors, actions, quantities, dates, deadlines, reasons and outcomes stated in that item's own prompt")
+    });
+    expect(runTask.mock.calls[0]?.[2]).toMatchObject({
+      systemPrompt: expect.stringContaining("Never ask the learner to justify a quantity, timing, or total against a numeric constraint unless the prompt supplies every value needed to demonstrate that claim")
+    });
   });
 
   it("rejects a dual-act speaking answer that combines opposite requests unnaturally", async () => {
@@ -4248,10 +4256,27 @@ describe("direct component repair budgets", () => {
         weekly_lesson_skills_reviewer: approvedReview
       }).runner
     );
-    const validFiveDays = [1, 2, 3, 4, 5].map((dayNumber) => ({
+    const primaryTargetsByDay = [
+      ["confirm", "clarify", "approve"],
+      ["date", "schedule", "calendar"],
+      ["detail", "note", "check"],
+      ["request", "manager", "team"],
+      ["agree", "action", "update"]
+    ];
+    const validFiveDays = [1, 2, 3, 4, 5].map((dayNumber, index) => ({
       ...fullDay.lesson,
       dayNumber,
-      title: `Day ${dayNumber}: ${fullDay.lesson.title}`
+      title: `Day ${dayNumber}: ${fullDay.lesson.title}`,
+      parts: fullDay.lesson.parts.map((part) => part.code !== "vocabulary" ? part : {
+        ...part,
+        content: {
+          ...part.content,
+          items: (part.content.items as Array<Record<string, unknown>>).map((item, itemIndex) => ({
+            ...item,
+            word: primaryTargetsByDay[index]![itemIndex]
+          }))
+        }
+      })
     }));
     const weekInput = {
       weekNumber: 1,
@@ -4506,6 +4531,7 @@ describe("partial lesson vs final lesson grammar contract", () => {
     expect(foundationCallsByDay[2]).toBe(3);
     expect(foundationCallsByDay[1]).toBe(1);
   });
+
 });
 
 describe("deterministic lesson instructions", () => {
@@ -4699,6 +4725,51 @@ describe("lexical relation self-exemption", () => {
     expect(runTask).toHaveBeenCalledTimes(3);
   });
 
+  it("repairs a word family that merely repeats its vocabulary target", async () => {
+    const a2 = levelCases[1];
+    const invalid = withWord1(a2, {
+      ...sendItem(a2),
+      family1: { word: "send", type: "verb", meaning: "gửi" }
+    });
+    const repaired = withWord1(a2, sendItem(a2));
+    const { runner, runTask } = sequencedRunner("weekly_lesson_vocabulary", [invalid, repaired]);
+
+    const result = await generateWeeklyLessonVocabulary(vocabularyInput(a2), runner);
+
+    expect(runTask).toHaveBeenCalledTimes(2);
+    expect(result.output.word1.family1?.word).toBe("sender");
+  });
+
+  it("rejects a primary target forbidden by vocabulary already retained in the same level", async () => {
+    const a2 = levelCases[1];
+    const output = vocabularyFor(a2);
+    const { runner, runTask } = sequencedRunner("weekly_lesson_vocabulary", [output, output, output]);
+
+    await expect(generateWeeklyLessonVocabulary({
+      ...vocabularyInput(a2),
+      forbiddenVocabulary: ["confirm"]
+    } as never, runner)).rejects.toBeDefined();
+
+    expect(runTask).toHaveBeenCalledTimes(3);
+  });
+
+  it("invalidates a resumed vocabulary checkpoint when an ordinary word has no credible relation", () => {
+    const a2 = levelCases[1];
+    const staleVocabulary = withWord1(a2, relationFree(sendItem(a2), "no_natural_relation"));
+
+    const findings = validateWeeklyLessonPipelineState(inputFor(a2), {
+      vocabulary: staleVocabulary
+    });
+
+    expect(findings).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        component: "vocabulary",
+        path: ["word1", "synonym1"],
+        message: expect.stringContaining("send has no credible same-level synonym or antonym")
+      })
+    ]));
+  });
+
   it("flags a level once more than two individual vocabulary relations are missing", () => {
     const a1 = levelCases[0];
     const lessons = [1, 2, 3, 4, 5].map((dayNumber) => buildPartialLessonFromPipelineState({ ...inputFor(a1), dayNumber }, {
@@ -4729,6 +4800,29 @@ describe("lexical relation self-exemption", () => {
     expect(warnings[0]).toMatchObject({ code: "VOCABULARY_LEXICAL_GAPS_EXCEEDED", severity: "warning", repairAction: "regenerate_component" });
     expect(warnings[0]!.issues).toHaveLength(15);
     expect(warnings[0]!.message).toContain("15 từ thiếu");
+  });
+
+  it("flags a repeated vocabulary target across two days", () => {
+    const a1 = levelCases[0];
+    const first = buildPartialLessonFromPipelineState({ ...inputFor(a1), dayNumber: 1 }, { vocabulary: vocabularyFor(a1) })!;
+    const repeated = buildPartialLessonFromPipelineState({ ...inputFor(a1), dayNumber: 2 }, { vocabulary: vocabularyFor(a1) })!;
+
+    const findings = validateWeeklyVocabularyCrossDayUniqueness([first, repeated]);
+
+    expect(findings).toEqual(expect.arrayContaining([
+      expect.objectContaining({ dayNumber: 2, component: "vocabulary", code: "DUPLICATE_WEEKLY_VOCABULARY" })
+    ]));
+    expect(findings).toHaveLength(3);
+  });
+
+  it("keeps primary vocabulary from unchanged days forbidden during a targeted repair", () => {
+    const a1 = levelCases[0];
+    const retained = buildPartialLessonFromPipelineState({ ...inputFor(a1), dayNumber: 1 }, { vocabulary: vocabularyFor(a1) })!;
+    const repaired = buildPartialLessonFromPipelineState({ ...inputFor(a1), dayNumber: 2 }, { vocabulary: vocabularyFor(a1) })!;
+
+    expect(preservedWeeklyVocabulary([retained, repaired], [2])).toEqual(expect.arrayContaining([
+      "confirm", "clarify", "approve"
+    ]));
   });
 });
 

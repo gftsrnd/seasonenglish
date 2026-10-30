@@ -1560,7 +1560,8 @@ h1,h2,h3,h4,h1 b,h2 b,h3 b,h4 b{font-weight:600 !important}
 .lesson-page .lesson-speaking-model--inline .lesson-speech-control { flex: 0 0 auto; margin: 0; }
 .lesson-page .lesson-speaking-answer { gap: 10px; }
 .lesson-page .lesson-speaking-answer > strong { font-size: .92rem; }
-.lesson-page .lesson-reading-passage { margin: 7px 0 4px; border: 1px solid #efb17d; border-radius: 11px; background: #fffaf5; padding: 13px 14px; font-weight: 600; line-height: 1.55; }
+.lesson-page .lesson-reading-passage { max-width: 78ch; margin: 7px 0 4px; border: 1px solid #efb17d; border-radius: 11px; background: #fffaf5; padding: 13px 14px; font-weight: 500; line-height: 1.7; white-space: pre-wrap; }
+.lesson-page .lesson-blank-underline { display: inline-block; width: 9rem; max-width: 34vw; height: 1.15em; margin: 0 .3em; border-bottom: 2px solid currentColor; vertical-align: -.08em; }
 @media(max-width:560px){
   .lesson-page .vocabulary-card-heading { grid-template-columns: 58px minmax(0,1fr) 36px; }
   .lesson-page .lesson-speaking-model--inline { align-items: flex-start; flex-direction: column; }
@@ -1600,7 +1601,7 @@ h1,h2,h3,h4,h1 b,h2 b,h3 b,h4 b{font-weight:600 !important}
 .lesson-page .lesson-example-card:hover{border-color:#c7bba9;background:#fff5e8}.lesson-page .lesson-example-card:focus-visible{outline:2px solid var(--primary);outline-offset:2px}
 .lesson-page .lesson-pronunciation-summary{display:grid;gap:10px;border:0;border-radius:0;background:transparent!important;padding:0}
 .lesson-page .lesson-pronunciation-summary p{margin:0;line-height:1.45}
-.lesson-page .lesson-pronunciation-words{display:flex;flex-wrap:wrap;gap:8px;margin:0}
+.lesson-page .lesson-pronunciation-words{display:flex;flex-wrap:wrap;column-gap:20px;row-gap:14px;margin:0}
 .lesson-page .lesson-pronunciation-word-chip{min-height:38px;border:1px solid #e5e0da!important;border-radius:8px!important;background:#faf9f7!important;padding:7px 11px!important}
 .lesson-page .vocabulary-card-phrase-list{flex-wrap:wrap!important;overflow:visible!important;overflow-y:visible!important}
 .lesson-page .vocabulary-card-phrase-list .vocabulary-card-sound{min-width:0;max-width:100%;white-space:normal;overflow-wrap:anywhere;word-break:break-word}

@@ -40,6 +40,7 @@ export function evaluateGeneratedLessonQuality(input: {
   for (const issue of validateLessonDraft(input.lessons).issues) addBlocking(issue);
   for (const issue of validateLessonPublication(input.lessons, undefined, input.cefr).issues) addBlocking(issue);
 
+  const vocabularyOwnerByWord = new Map<string, number>();
   for (const lesson of input.lessons) {
     const parts = new Map(lesson.parts.map((part) => [part.code, part.content]));
     const grammar = recordOf(parts.get("grammar"));
@@ -50,6 +51,17 @@ export function evaluateGeneratedLessonQuality(input: {
     const items = Array.isArray(vocabulary?.items) ? vocabulary.items.map(recordOf).filter((item): item is Record<string, unknown> => Boolean(item?.word && text(item.word))) : [];
     for (const item of items) {
       const word = text(item.word) || "Từ vựng";
+      const vocabularyKey = normalizeVocabularyKey(word);
+      const priorDay = vocabularyOwnerByWord.get(vocabularyKey);
+      if (priorDay !== undefined && priorDay !== lesson.dayNumber) {
+        addBlocking({
+          dayNumber: lesson.dayNumber,
+          code: "vocabulary",
+          message: `${word} đã được dạy ở T${priorDay}; từ trọng tâm chỉ được dạy mới một lần trong cùng level.`
+        });
+      } else if (vocabularyKey) {
+        vocabularyOwnerByWord.set(vocabularyKey, lesson.dayNumber);
+      }
       if (!present(item.family)) lightIssues.push({ kind: "light", dayNumber: lesson.dayNumber, code: "vocabulary", message: `${word}: thiếu word family.` });
       if (!present(item.umbrella)) lightIssues.push({ kind: "light", dayNumber: lesson.dayNumber, code: "vocabulary", message: `${word}: thiếu từ bao trùm.` });
       if (!lexicalRelationCoverageSatisfied(item, input.cefr)) {
@@ -86,6 +98,10 @@ function recordOf(value: unknown): Record<string, unknown> | undefined {
 
 function text(value: unknown): string {
   return typeof value === "string" ? value.trim() : "";
+}
+
+function normalizeVocabularyKey(value: string): string {
+  return value.toLocaleLowerCase().replace(/[^\p{L}\p{N}]+/gu, " ").trim();
 }
 
 function present(value: unknown): boolean {

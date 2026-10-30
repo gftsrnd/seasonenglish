@@ -67,7 +67,11 @@ describe("content publishing policy", () => {
     items[0].antonyms = [];
     items[0].relationStatus = "generation_missed";
     items[1].umbrella = null;
-    const fiveLessonsWithTwoLightGaps = [vocabularyLightGaps, ...[2, 3, 4, 5].map((dayNumber) => ({ ...structuredClone(cleanVocabularyLesson), dayNumber }))];
+    const fiveLessonsWithTwoLightGaps = [vocabularyLightGaps, ...[2, 3, 4, 5].map((dayNumber) => {
+      const lesson = { ...structuredClone(cleanVocabularyLesson), dayNumber };
+      for (const item of lesson.parts.find((part: any) => part.code === "vocabulary").content.items) item.word = `${item.word} ${dayNumber}`;
+      return lesson;
+    })];
 
     expect(evaluateGeneratedLessonQuality({
       cefr: "A1",
@@ -86,6 +90,13 @@ describe("content publishing policy", () => {
     blankUmbrella.parts.find((part: any) => part.code === "vocabulary").content.items[1].umbrella = { word: " ", meaning: "", siblings: [] };
     expect(evaluateGeneratedLessonQuality({ cefr: "A1", lessons: [blankUmbrella], findings: [] }).lightIssues)
       .toEqual(expect.arrayContaining([expect.objectContaining({ message: expect.stringContaining("thiếu từ bao trùm") })]));
+
+    const duplicatePrimaryVocabulary = structuredClone(fiveLessonsWithTwoLightGaps);
+    duplicatePrimaryVocabulary[1].parts.find((part: any) => part.code === "vocabulary").content.items[0].word = "department";
+    const duplicateVocabularyQuality = evaluateGeneratedLessonQuality({ cefr: "A1", lessons: duplicatePrimaryVocabulary, findings: [] });
+    expect(duplicateVocabularyQuality.ready).toBe(false);
+    expect(duplicateVocabularyQuality.blockingIssues)
+      .toEqual(expect.arrayContaining([expect.objectContaining({ dayNumber: 2, code: "vocabulary", message: expect.stringContaining("đã được dạy ở T1") })]));
 
     const threeGaps = structuredClone(fiveLessonsWithTwoLightGaps);
     threeGaps[0].parts.find((part: any) => part.code === "vocabulary").content.items[2].family = [];

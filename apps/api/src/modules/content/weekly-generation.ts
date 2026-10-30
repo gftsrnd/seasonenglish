@@ -191,6 +191,19 @@ function vocabularyDuplicationFindings(
   });
 }
 
+function vocabularySelfReferentialFamilyFindings(
+  value: ReturnType<typeof weeklyLessonVocabularyOutputSchema.parse>
+): Array<{ path: PropertyKey[]; message: string }> {
+  return (["word1", "word2", "word3"] as const).flatMap((slot) => {
+    const target = value[slot].word.trim().toLocaleLowerCase("en-US");
+    return (["family1", "family2"] as const).flatMap((familyKey) => {
+      const family = value[slot][familyKey];
+      if (!family || family.word.trim().toLocaleLowerCase("en-US") !== target) return [];
+      return [{ path: [slot, familyKey, "word"] as PropertyKey[], message: `${value[slot].word} cannot be its own word-family member; provide a distinct established related word or leave the optional family slot empty.` }];
+    });
+  });
+}
+
 function vocabularyMissingRelationFindings(
   value: ReturnType<typeof weeklyLessonVocabularyOutputSchema.parse>,
   cefr = ""
@@ -382,6 +395,8 @@ const SKILLS_SHARED_CONTRACT = [
   "When an answer labels a value as high/low, expensive/cheap, large/small, good/bad, or another relative judgment, the same exercise must provide an explicit comparison, threshold, or source statement that makes that label objectively true. A bare number alone is never enough evidence.",
   "Every exercise must include questionTranslation and answerTranslation plus one short hint that helps without containing or revealing the answer (never write 'có chữ ...' or name any word from the answer). For A1-A2 those support fields are clear Vietnamese translations. For B1-C1 they are concise English restatements; they may clarify the prompt and answer and do not need to copy them word for word.",
   "For B1-C1, every title, body, prompt, option, answer, hint, explanation, feedback, questionTranslation and answerTranslation must be English.",
+  "For every open writing or speaking item, the model answer may use only actors, actions, quantities, dates, deadlines, reasons and outcomes stated in that item's own prompt. Do not add a date, duration, budget claim, urgency, approval request, delivery promise, consequence, or other plausible workplace detail merely to make the answer sound natural.",
+  "Never ask the learner to justify a quantity, timing, or total against a numeric constraint unless the prompt supplies every value needed to demonstrate that claim. If a price, capacity, duration, comparison baseline, or other required value is absent, narrow the task to choosing or naming the supported option; never require arithmetic, compliance, or a budget conclusion that the learner cannot verify from the prompt.",
   "Keep every item CEFR-appropriate, practical, and unambiguous. Return no prose outside the tool."
   ,"Before returning, perform an evidence preflight: insert each keyed answer into its sentence, verify the resulting English is grammatical and natural, verify each listening/reading answer is directly supported by a specific source span, and verify every mandatory prompt constraint appears in the model answer. Replace the whole faulty item if any check fails."
 ].join("\n");
@@ -1027,6 +1042,8 @@ export type WeeklyLessonVocabularyInput = WeeklyLessonComponentInput & {
   grammarFormula: string | null;
   grammarExamples: [string, string] | null;
   excludedVocabulary?: string[];
+  /** Targets already taught in retained days during a component-only repair. */
+  forbiddenVocabulary?: string[];
 };
 
 export async function generateWeeklyLessonVocabulary(
@@ -1037,18 +1054,35 @@ export async function generateWeeklyLessonVocabulary(
   const vocabularySchema = {
     safeParse: (value: unknown) => weeklyLessonVocabularyOutputSchema.safeParse(normalizeSelfReferentialLexicalRelations(value))
   };
+  const forbiddenVocabularyFindings = (output: ReturnType<typeof weeklyLessonVocabularyOutputSchema.parse>) => {
+    const forbidden = new Set((input.forbiddenVocabulary ?? []).map(normalizeVocabularyKey).filter(Boolean));
+    return (["word1", "word2", "word3"] as const).flatMap((slot) => {
+      const word = output[slot].word;
+      return forbidden.has(normalizeVocabularyKey(word))
+        ? [{ path: [slot, "word"] as PropertyKey[], message: `${word} is already a primary vocabulary target in an unchanged day; replace it.` }]
+        : [];
+    });
+  };
   const hardVocabularyFindings = (output: ReturnType<typeof weeklyLessonVocabularyOutputSchema.parse>) => [
       ...vocabularyLanguageFindings(output, input.cefr),
-      ...vocabularyDuplicationFindings(output)
+      ...vocabularyDuplicationFindings(output),
+      ...vocabularySelfReferentialFamilyFindings(output),
+      ...forbiddenVocabularyFindings(output)
     ];
   const vocabularyFindings = (output: ReturnType<typeof weeklyLessonVocabularyOutputSchema.parse>) => [
       ...hardVocabularyFindings(output),
       ...vocabularyMissingRelationFindings(output, input.cefr)
     ];
   const maxAttempts = options.maxAttempts ?? MAX_FREQUENTLY_INVALID_COMPONENT_ATTEMPTS;
+  const forbiddenTargetPrompt = input.forbiddenVocabulary?.length
+    ? `RETAINED-DAY TARGETS — NEVER RETURN THESE AS word1, word2, OR word3: ${boundedJson(input.forbiddenVocabulary)}. They have already been taught in another day of this same CEFR level. Choose different lesson-focus vocabulary; they may appear only in practice examples, never as new targets.`
+    : "";
+  const initialPrompt = forbiddenTargetPrompt
+    ? `${VOCABULARY_CONTRACT}\n\n${forbiddenTargetPrompt}`
+    : VOCABULARY_CONTRACT;
   const generate = (
     attempts: number,
-    prompt = VOCABULARY_CONTRACT,
+    prompt = initialPrompt,
     semanticFindings = vocabularyFindings
   ) => runStrictComponent(
       runner,
@@ -1064,7 +1098,7 @@ export async function generateWeeklyLessonVocabulary(
       options.onProgress,
       true
     );
-  if (maxAttempts <= 1) return generate(maxAttempts, VOCABULARY_CONTRACT, hardVocabularyFindings);
+  if (maxAttempts <= 1) return generate(maxAttempts, initialPrompt, hardVocabularyFindings);
 
   try {
     return await generate(1);
@@ -1109,11 +1143,12 @@ export async function generateWeeklyLessonVocabulary(
           `LESSON-FOCUS CANDIDATE SOURCE: ${input.lessonFocus}. Screen the useful words in this source first and choose a target that can satisfy the flagged relation naturally at CEFR ${input.cefr}. Do not return another target with the flagged relation still null.`
         ] : []),
         `UNCHANGED VALID ENTRIES ONLY: ${boundedJson(preservedEntries)}. Preserve these entries. They are the only previous entries you should copy.`,
+        forbiddenTargetPrompt,
         `FLAGGED CURRENT TARGETS: ${boundedJson(forbiddenUnrepairedTargets)}. Do not copy a flagged target unchanged when its required relation is still null. Returning null for any specifically flagged synonym1 or antonym1 fails this repair task. If the relation is unnatural, replacing that target is mandatory.`,
         ...(mandatoryReplacementTargets.length > 0 ? [
           `MANDATORY ANTONYM REPLACEMENT: ${boundedJson(mandatoryReplacementTargets)} returned antonym1=null, so these target words are forbidden in this repair. Replace each with a lesson-focus word that has a genuine same-part-of-speech antonym, and fill antonym1 before addressing optional relations.`
         ] : []),
-        `FORBIDDEN TARGET WORDS (case-insensitive): ${boundedJson([...(input.excludedVocabulary ?? []), ...mandatoryReplacementTargets])}.`,
+        `FORBIDDEN TARGET WORDS (case-insensitive): ${boundedJson([...(input.excludedVocabulary ?? []), ...(input.forbiddenVocabulary ?? []), ...mandatoryReplacementTargets])}.`,
         "If a defect says meaning must be in Vietnamese, translate that meaning into natural Vietnamese (never copy an English loanword like 'camera', 'video', 'email', or 'microphone' unchanged as the Vietnamese meaning). Before returning, compare each replacement target word against every forbidden word."
       ].join("\n");
       const mergedFindings = (candidate: ReturnType<typeof weeklyLessonVocabularyOutputSchema.parse>) => {
@@ -1697,6 +1732,11 @@ async function generateAtomicSkillRepairs(
             `COMPLETENESS & LENGTH PREFLIGHT: Include every implication, condition, and secondary contingency stated in speaking.prompt (such as rethinking a timeline or fallback plan) concisely in speaking.answer and answerTranslation within ${input.generationConstraints.speakingAnswerWordMax} words.`
           ]
         : []),
+      ...(exercise === "writing"
+        ? [
+            "GROUNDING PREFLIGHT: Every actor, action, quantity, date, deadline, reason and outcome in the model answer must be explicitly stated in writing.prompt. Do not add a duration, delivery commitment, urgency, consequence or other plausible workplace detail that the prompt does not state."
+          ]
+        : []),
       ...(exercise === "writing" && ["A1", "A2"].includes(input.cefr)
         ? ["Keep writing.type=mcq. A four-option cloze or dialogue completion is valid. Make the speaker roles and audio state unambiguous, and ensure the keyed Yes/No reply is logically true for that exact situation."]
         : []),
@@ -2030,7 +2070,9 @@ export function validateWeeklyLessonPipelineState(
   if (vocabulary && !vocabulary.success) add("vocabulary", schemaIssues(vocabulary.error));
   if (vocabulary?.success) add("vocabulary", [
     ...vocabularyLanguageFindings(vocabulary.data, input.cefr),
-    ...vocabularyDuplicationFindings(vocabulary.data)
+    ...vocabularyDuplicationFindings(vocabulary.data),
+    ...vocabularySelfReferentialFamilyFindings(vocabulary.data),
+    ...vocabularyMissingRelationFindings(vocabulary.data, input.cefr)
   ]);
 
   const skillState = state.skills;
@@ -3085,7 +3127,11 @@ export async function generateWeeklyLessons(
         repairAction: "regenerate_component"
       };
     });
-    findings.push(...generated.warnings, ...validateWeeklyVocabularyLexicalCoverage(generated.lessons, cefr));
+    findings.push(
+      ...generated.warnings,
+      ...validateWeeklyVocabularyLexicalCoverage(generated.lessons, cefr),
+      ...validateWeeklyVocabularyCrossDayUniqueness(generated.lessons)
+    );
     const qualityMetrics = {
       profile: options.qualityProfile ?? "strict",
       requestedLessonCount: options.dayNumbers?.length ?? DAYS.length,
@@ -3277,8 +3323,17 @@ export async function generateWeeklyLessons(
   // report, customer, etc.), and rejecting those words made an otherwise valid
   // five-day set fail repeatedly. Keep hard uniqueness inside this generated
   // batch; use earlier lesson sets only as a best-effort diversity hint.
-  const promptHistory = boundedVocabularyHistory(options.excludedVocabulary ?? []);
-  const usedVocabulary = new Set<string>();
+  const preservedVocabulary = preservedWeeklyVocabulary(options.existingLessons ?? [], generationDays);
+  const promptHistory = boundedVocabularyHistory([
+    ...(options.excludedVocabulary ?? []),
+    ...preservedVocabulary
+  ]);
+  // Vocabulary in days untouched by a component repair is already accepted
+  // teaching content for this level, so it is a hard exclusion, not merely
+  // a suggestion in the model prompt.
+  const usedVocabulary = new Set<string>(
+    preservedVocabulary.map(normalizeVocabularyKey)
+  );
   type VocabularyResult = {
     result: Awaited<ReturnType<AiTaskRunner["runTask"]>>;
     output: Vocabulary;
@@ -3292,7 +3347,8 @@ export async function generateWeeklyLessons(
       ...input,
       grammarFormula: foundation?.grammar?.formula ?? null,
       grammarExamples: foundation?.grammar ? [foundation.grammar.example1, foundation.grammar.example2] : null,
-      excludedVocabulary: promptHistory
+      excludedVocabulary: promptHistory,
+      ...(preservedVocabulary.length > 0 ? { forbiddenVocabulary: preservedVocabulary } : {})
     }, runner);
   });
 
@@ -3336,7 +3392,8 @@ export async function generateWeeklyLessons(
         ...input,
         grammarFormula: foundation?.grammar?.formula ?? null,
         grammarExamples: foundation?.grammar ? [foundation.grammar.example1, foundation.grammar.example2] : null,
-        excludedVocabulary
+        excludedVocabulary,
+        ...(preservedVocabulary.length > 0 ? { forbiddenVocabulary: preservedVocabulary } : {})
       }, runner, { maxAttempts: 1 });
       return [index, { ...generated, attempts: (candidates[index]?.attempts ?? 1) + generated.attempts }];
     });
@@ -3719,9 +3776,58 @@ function normalizeVocabularyKey(value: string): string {
   return value.trim().toLocaleLowerCase("en-US").replace(/\s+/g, " ");
 }
 
+/** Primary targets from days a component repair deliberately leaves untouched. */
+export function preservedWeeklyVocabulary(
+  lessons: readonly ContentLessonDraftInput[],
+  repairedDays: readonly number[]
+): string[] {
+  const repaired = new Set(repairedDays);
+  return lessons.flatMap((lesson) => {
+    if (repaired.has(lesson.dayNumber)) return [];
+    const vocabulary = lesson.parts.find((part) => part.code === "vocabulary")?.content;
+    if (!vocabulary || typeof vocabulary !== "object" || Array.isArray(vocabulary)) return [];
+    const items = (vocabulary as { items?: unknown }).items;
+    if (!Array.isArray(items)) return [];
+    return items.flatMap((item) => item && typeof item === "object" && "word" in item && typeof item.word === "string"
+      ? [item.word]
+      : []);
+  });
+}
+
 export function boundedVocabularyHistory(values: readonly string[], limit = 80): string[] {
   const normalized = values.map(normalizeVocabularyKey).filter(Boolean);
   return normalized.slice(-Math.max(0, limit));
+}
+
+/** Repeating a target in practice is fine; teaching it twice as new vocabulary is not. */
+export function validateWeeklyVocabularyCrossDayUniqueness(
+  lessons: readonly ContentLessonDraftInput[]
+): LessonGenerationFinding[] {
+  const ownerByWord = new Map<string, number>();
+  const findings: LessonGenerationFinding[] = [];
+  for (const lesson of [...lessons].sort((left, right) => left.dayNumber - right.dayNumber)) {
+    const vocabulary = lesson.parts.find((part) => part.code === "vocabulary")?.content as { items?: Array<{ word?: unknown }> } | undefined;
+    for (const item of vocabulary?.items ?? []) {
+      if (typeof item.word !== "string") continue;
+      const key = normalizeVocabularyKey(item.word);
+      if (!key) continue;
+      const priorDay = ownerByWord.get(key);
+      if (priorDay !== undefined && priorDay !== lesson.dayNumber) {
+        findings.push({
+          dayNumber: lesson.dayNumber,
+          component: "vocabulary",
+          code: "DUPLICATE_WEEKLY_VOCABULARY",
+          severity: "error",
+          message: `'${item.word}' is already taught as a vocabulary target on T${priorDay}; replace it in T${lesson.dayNumber}, while practice-sentence reinforcement remains allowed.`,
+          issues: [{ word: item.word, duplicateOfDay: priorDay }],
+          repairAction: "regenerate_component"
+        });
+      } else {
+        ownerByWord.set(key, lesson.dayNumber);
+      }
+    }
+  }
+  return findings;
 }
 
 function parseComponent<T>(

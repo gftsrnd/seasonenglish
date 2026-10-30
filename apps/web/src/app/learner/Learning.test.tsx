@@ -102,7 +102,7 @@ describe("learner lesson study content", () => {
         { code: "grammar", title: "Grammar", content: { formula: "Could you + verb?", usage: "Use this structure to make a polite request." } },
         { code: "pronunciation", title: "Pronunciation", content: { focus: "/ɪ/", instruction: "Keep the target sound short.", words: [{ word: "ship", ipa: "/ʃɪp/" }] } }
       ] },
-      progress: { status: "not_started", completedPartCodes: [], evidence: {} }
+      progress: { status: "not_started", completedPartCodes: ["objective"], evidence: {} }
     } as any;
 
     render(<LearnerLesson view={{ lesson, lock: null }} actions={{ navigate: vi.fn(), speak: vi.fn(), saveLessonProgress: vi.fn() } as any} />);
@@ -356,6 +356,25 @@ describe("learner lesson study content", () => {
     expect(normalizeLessonBlankPrompt("Please write -------- here.")).toBe("Please write _____ here.");
   });
 
+  it("shows the complete speaking requirement and renders lesson blanks as one line", () => {
+    const lesson = {
+      id: "lesson-full-speaking-requirement", title: "Requesting help", dayNumber: 1, weekNumber: 1, weekTopic: "Requests", durationMinutes: 10, cefr: "A2",
+      content: { parts: [
+        { code: "objective", title: "Mục tiêu", content: { text: "Nói một yêu cầu lịch sự." } },
+        { code: "writing", title: "Viết", content: { type: "fill", prompt: "I need a _ _ _ _ _ for the report.", answer: "copy" } },
+        { code: "speaking", title: "Nói", content: { instruction: "Nói theo câu mẫu. Nêu rõ bạn cần giúp với báo cáo hôm nay.", sample: "Could you help me with the report today?" } }
+      ] },
+      progress: { status: "not_started", completedPartCodes: ["objective"], evidence: {} }
+    } as any;
+
+    render(<LearnerLesson view={{ lesson, lock: null }} actions={{ navigate: vi.fn(), speak: vi.fn(), saveLessonProgress: vi.fn() } as any} />);
+    fireEvent.click(screen.getByRole("tab", { name: /2\. bài tập/i }));
+
+    expect(screen.getByText(/Nói theo câu mẫu\. Nêu rõ bạn cần giúp với báo cáo hôm nay\./u)).toBeInTheDocument();
+    expect(screen.getByLabelText("Ô trống cần điền")).toBeInTheDocument();
+    expect(screen.queryByText(/_\s*_\s*_/u)).not.toBeInTheDocument();
+  });
+
   it("speaks only a natural grammar example and keeps a phoneme separate from its sample word", () => {
     expect(sanitizeGrammarSpeechText("Example: She is OK + now. | Do not read this label")).toBe("She is OK now.");
   });
@@ -385,6 +404,14 @@ describe("learner lesson study content", () => {
     expect(screen.getByLabelText("Luyện từ phát âm").firstElementChild).toHaveClass("lesson-pronunciation-word-chip");
     expect(screen.queryByRole("button", { name: /Nghe chậm từ phát âm/i })).not.toBeInTheDocument();
     expect(speak).not.toHaveBeenCalled();
+  });
+
+  it("keeps horizontal and wrapped pronunciation examples visibly separated", async () => {
+    const moduleName = "node:fs/promises";
+    const { readFile } = await import(moduleName);
+    const css = await readFile("apps/web/src/app/learner/learner.css", "utf8");
+
+    expect(css).toMatch(/\.lesson-page \.lesson-pronunciation-words\{[^}]*column-gap:20px;[^}]*row-gap:14px;[^}]*\}/);
   });
 
   it("puts one compact grammar speaker beside the formula and reads the formula without structural symbols", () => {
@@ -1065,7 +1092,8 @@ describe("learner lesson study content", () => {
 
     expect(screen.getByRole("textbox", { name: "Câu trả lời writing" })).toBeInTheDocument();
     expect(screen.queryByRole("radio", { name: /Could I/ })).not.toBeInTheDocument();
-    expect(screen.getByText("Complete the sentence: '_____ I give you some feedback on your slides?'")).toBeInTheDocument();
+    expect(screen.getByText(/Complete the sentence:/u)).toBeInTheDocument();
+    expect(screen.getByLabelText("Ô trống cần điền")).toBeInTheDocument();
     expect(screen.queryByText(/Use: Could I/)).not.toBeInTheDocument();
   });
 

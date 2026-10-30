@@ -30,11 +30,11 @@ import type {
 } from "./types.js";
 import { Check, Mic, Square, Volume2 } from "lucide-react";
 import { VocabularyCard as SharedVocabularyCard, type VocabularyRelationChip } from "../shared/lesson/VocabularyCard.js";
-import { conciseGrammarExample, conciseLessonObjective, conciseSpeakingInstruction, conciseSpeakingModel, learnerFacingObjective, learnerFacingObjectiveBody, learnerObjectiveLead } from "../shared/lesson/presentation.js";
+import { conciseGrammarExample, conciseLessonObjective, conciseSpeakingModel, learnerFacingObjective, learnerFacingObjectiveBody, learnerObjectiveLead } from "../shared/lesson/presentation.js";
 import { lessonInstructionSteps } from "../shared/lesson/instructions.js";
 import { learnerLessonLanguageForCefr, lessonCopyForCefr, type LearnerLessonLanguage } from "../shared/lesson/language.js";
 import { lessonPartsForTab, lessonPracticeCodes, sharedLessonGrammarAvailable } from "../shared/lesson/structure.js";
-import { normalizeLessonBlankPrompt, SharedLessonPartContent, SharedVocabularyModal, type VocabularyModalState } from "../learner/Learning.js";
+import { LessonPromptText, normalizeLessonBlankPrompt, SharedLessonPartContent, SharedVocabularyModal, type VocabularyModalState } from "../learner/Learning.js";
 
 const CEFR_LEVELS: Cefr[] = ["A1", "A2", "B1", "B2", "C1"];
 const REVIEW_TAB_MAP = { submissions: "subs", coach: "coach", weekly_practices: "weekly", appeals: "appeals", attempts: "attempts", assessments: "tests" } as const;
@@ -426,7 +426,7 @@ function OperatorPracticeReview({ sectionNumber, part }: { sectionNumber: number
       {heading}
       <OperatorAudioControl source={operatorAudioSource(content)} />
       {transcript ? <div className="operator-listening-transcript"><strong>Nội dung nghe:</strong><p>{transcript}</p></div> : null}
-      <p className="operator-question">{prompt}</p>
+      <p className="operator-question"><LessonPromptText value={prompt} /></p>
       {choices}
       {answerSummary}
     </>;
@@ -436,18 +436,18 @@ function OperatorPracticeReview({ sectionNumber, part }: { sectionNumber: number
   if (part.code === "reading") return <>
     {heading}
     <div className="operator-reading-passage">{source || "—"}</div>
-    <p className="operator-question">{prompt}</p>
+    <p className="operator-question"><LessonPromptText value={prompt} /></p>
     {choices}
     {answerSummary}
   </>;
 
   if (part.code === "speaking") {
-    const instruction = conciseSpeakingInstruction(text("instruction", "prompt"));
+    const instruction = text("instruction", "prompt") || "Nói theo câu mẫu bên dưới và thay đổi một chi tiết cho phù hợp.";
     const model = conciseSpeakingModel(text("answer", "modelAnswer", "sample"));
     return <>
       {heading}
       {source ? <div className="operator-reading-passage">{source}</div> : null}
-      <p className="operator-speaking-instruction"><strong>Yêu cầu:</strong> {instruction}</p>
+      <p className="operator-speaking-instruction"><strong>Yêu cầu:</strong> <LessonPromptText value={instruction} /></p>
       <div className="operator-speaking-model"><strong>{model}</strong></div>
       {answerSummary}
     </>;
@@ -456,7 +456,7 @@ function OperatorPracticeReview({ sectionNumber, part }: { sectionNumber: number
   return <>
     {heading}
     {source ? <div className="operator-reading-passage">{source}</div> : null}
-    <p className="operator-question">{prompt}</p>
+    <p className="operator-question"><LessonPromptText value={prompt} /></p>
     {choices}
     {answerSummary}
   </>;
@@ -514,15 +514,15 @@ function renderLessonPart(code: string, value: unknown, media?: { cefr: string; 
   }
   if (code === "listening") {
     const audio = operatorAudioSource(content);
-    return <div className="operator-practice-content"><OperatorAudioControl source={audio} /><p className="operator-practice-transcript">{text("script") || (audio.src ? "" : audio.text) || "—"}</p><p className="operator-question"><strong>Câu hỏi:</strong> {text("prompt", "question") || "—"}</p><AnswerOptions options={strings("options")} answer={text("answer")} /></div>;
+    return <div className="operator-practice-content"><OperatorAudioControl source={audio} /><p className="operator-practice-transcript">{text("script") || (audio.src ? "" : audio.text) || "—"}</p><p className="operator-question"><strong>Câu hỏi:</strong> <LessonPromptText value={text("prompt", "question") || "—"} /></p><AnswerOptions options={strings("options")} answer={text("answer")} /></div>;
   }
-  if (code === "reading") return <div className="operator-practice-content"><div className="operator-reading-passage">{text("text", "passage", "script") || "—"}</div><p className="operator-question"><strong>Câu hỏi:</strong> {text("prompt", "question") || "—"}</p><AnswerOptions options={strings("options")} answer={text("answer")} /></div>;
-  if (code === "writing") return <div className="operator-practice-content"><p className="operator-question"><strong>Đề bài:</strong> {text("prompt") || "—"}</p><AnswerOptions options={strings("options")} answer={text("answer")} /></div>;
-  if (code === "word_class" || code === "word_use") return <div className="operator-practice-content"><p className="operator-question"><strong>{code === "word_class" ? "Nhận diện từ loại:" : "Chọn cách dùng đúng:"}</strong> {text("prompt", "question") || "—"}</p><AnswerOptions options={strings("options")} answer={text("answer")} /></div>;
+  if (code === "reading") return <div className="operator-practice-content"><div className="operator-reading-passage">{text("text", "passage", "script") || "—"}</div><p className="operator-question"><strong>Câu hỏi:</strong> <LessonPromptText value={text("prompt", "question") || "—"} /></p><AnswerOptions options={strings("options")} answer={text("answer")} /></div>;
+  if (code === "writing") return <div className="operator-practice-content"><p className="operator-question"><strong>Đề bài:</strong> <LessonPromptText value={text("prompt") || "—"} /></p><AnswerOptions options={strings("options")} answer={text("answer")} /></div>;
+  if (code === "word_class" || code === "word_use") return <div className="operator-practice-content"><p className="operator-question"><strong>{code === "word_class" ? "Nhận diện từ loại:" : "Chọn cách dùng đúng:"}</strong> <LessonPromptText value={text("prompt", "question") || "—"} /></p><AnswerOptions options={strings("options")} answer={text("answer")} /></div>;
   if (code === "speaking") {
     const model = conciseSpeakingModel(text("answer", "modelAnswer", "sample"));
-    const instruction = conciseSpeakingInstruction(text("instruction", "prompt"));
-    return <div className="operator-practice-content"><p className="operator-speaking-instruction"><strong>Yêu cầu:</strong> {instruction}</p><div className="operator-speaking-model"><strong>{model}</strong>{text("audioUrl") ? <audio controls preload="metadata" src={text("audioUrl")} aria-label="Nghe audio mẫu phần Nói" /> : null}</div><OperatorRecordingPreview /></div>;
+    const instruction = text("instruction", "prompt") || "Nói theo câu mẫu bên dưới và thay đổi một chi tiết cho phù hợp.";
+    return <div className="operator-practice-content"><p className="operator-speaking-instruction"><strong>Yêu cầu:</strong> <LessonPromptText value={instruction} /></p><div className="operator-speaking-model"><strong>{model}</strong>{text("audioUrl") ? <audio controls preload="metadata" src={text("audioUrl")} aria-label="Nghe audio mẫu phần Nói" /> : null}</div><OperatorRecordingPreview /></div>;
   }
   return <div className="small">{humanizeContent(content)}</div>;
 }

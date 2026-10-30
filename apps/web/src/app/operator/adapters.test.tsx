@@ -38,11 +38,11 @@ function lessonSet(words: Array<Record<string, unknown>>): ContentLessonSetVersi
         { code: "grammar", title: "Ngữ pháp", content: { formula: "I give + feedback", usage: "Dùng để đưa phản hồi.", examples: ["I give clear feedback."] } },
         { code: "pronunciation", title: "Phát âm", content: { focus: "/f/ trong feedback", instruction: "Cắn nhẹ môi dưới rồi thổi hơi.", words: [{ word: "feedback", ipa: "/ˈfiːdbæk/" }, { word: "phone", ipa: "/fəʊn/" }, { word: "office", ipa: "/ˈɒfɪs/" }] } },
         { code: "listening", title: "Nghe", content: { audio: "I give clear feedback.", script: "I give clear feedback.", ...choice } },
-        { code: "reading", title: "Đọc", content: { text: "Text", ...choice } },
+        { code: "reading", title: "Đọc", content: { text: "First paragraph.\n\nSecond paragraph.", ...choice } },
         { code: "writing", title: "Viết", content: { type: "fill", prompt: "Write", answer: "give" } },
         { code: "word_class", title: "Từ loại", content: choice },
         { code: "word_use", title: "Dùng từ", content: choice },
-        { code: "speaking", title: "Nói", content: { prompt: "Speak", answer: "I give feedback." } }
+        { code: "speaking", title: "Nói", content: { prompt: "Speak about one strength. Add one polite improvement suggestion.", answer: "I give feedback." } }
       ]
     }]
   };
@@ -474,7 +474,7 @@ describe("lesson detail warnings", () => {
     expect(spoken).toEqual(["I give clear feedback."]);
     const readingSection = screen.getByRole("heading", { name: "2. Đọc · Reading" }).closest("section")!;
     expect(readingSection).toHaveClass("operator-practice-review");
-    expect(within(readingSection).getByText("Text")).toBeInTheDocument();
+    expect(readingSection.querySelector(".operator-reading-passage")).toHaveTextContent("First paragraph. Second paragraph.");
     const readingChoices = within(readingSection).getAllByRole("listitem");
     expect(readingChoices).toHaveLength(4);
     expect(readingChoices.map(choice => choice.textContent)).toEqual(["AA", "BB", "CC", "DD"]);
@@ -483,9 +483,10 @@ describe("lesson detail warnings", () => {
     expect(screen.getByRole("heading", { name: "3. Viết · Writing" })).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "4. Từ loại · Word class" })).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "5. Dùng từ · Word use" })).toBeInTheDocument();
-    expect(screen.getByText("Our plan is called the _____.")).toBeInTheDocument();
+    expect(screen.getByText("Our plan is called the", { exact: false })).toBeInTheDocument();
+    expect(screen.getByLabelText("Ô trống cần điền")).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "6. Nói · Speaking" })).toBeInTheDocument();
-    expect(screen.getByText(/Nói theo câu mẫu bên dưới/)).toBeInTheDocument();
+    expect(screen.getByText(/Speak about one strength\. Add one polite improvement suggestion\./u)).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Nghe câu mẫu" })).not.toBeInTheDocument();
     expect(screen.queryByText("trắc nghiệm")).not.toBeInTheDocument();
     expect(screen.queryByRole("radio")).not.toBeInTheDocument();

@@ -699,11 +699,12 @@
 .app-operator .operator-lesson-preview .operator-pronunciation-focus,
 .app-operator .operator-lesson-preview .operator-pronunciation-tip { margin: 0; }
 .app-operator .operator-lesson-preview .operator-pronunciation-tip { border-left: 4px solid var(--primary); border-radius: 6px; background: var(--surface); padding: 10px 12px; }
-.app-operator .operator-lesson-preview .operator-pronunciation-words { display: flex; flex-wrap: wrap; gap: 8px; }
+.app-operator .operator-lesson-preview .operator-pronunciation-words { display: flex; flex-wrap: wrap; column-gap: 20px; row-gap: 14px; }
 .app-operator .operator-lesson-preview .operator-pronunciation-words button span { color: var(--muted); }
 .app-operator .operator-lesson-preview .operator-practice-transcript { margin: 0; color: var(--muted); font-style: italic; }
 .app-operator .operator-lesson-preview .operator-question { margin: 0; font-size: .9rem; }
-.app-operator .operator-lesson-preview .operator-reading-passage { margin: 7px 0 4px; border: 1px solid #efb17d; border-radius: 11px; background: #fffaf5; padding: 13px 14px; font-weight: 600; line-height: 1.55; }
+.app-operator .operator-lesson-preview .operator-reading-passage { max-width: 78ch; margin: 7px 0 4px; border: 1px solid #efb17d; border-radius: 11px; background: #fffaf5; padding: 13px 14px; font-weight: 500; line-height: 1.7; white-space: pre-wrap; }
+.app-operator .operator-lesson-preview .lesson-blank-underline { display: inline-block; width: 9rem; max-width: 34vw; height: 1.15em; margin: 0 .3em; border-bottom: 2px solid currentColor; vertical-align: -.08em; }
 .app-operator .operator-lesson-preview .operator-speaking-model { display: flex; align-items: center; justify-content: space-between; gap: 12px; border: 1px solid var(--primary-line); border-radius: 11px; background: var(--surface); padding: 12px; }
 .app-operator .operator-lesson-preview .operator-speaking-instruction { margin: 0; color: #655e55; line-height: 1.5; }
 .app-operator .operator-lesson-preview .operator-speaking-recorder { display: grid; justify-items: start; gap: 8px; }
@@ -873,7 +874,7 @@ body > .operator-modal-scope .operator-editor-section select { width: 100%; max-
 .app-operator .operator-lesson-preview .operator-grammar-target-audio { width: max-content; max-width: 100%; font-weight: 700; }
 .app-operator .operator-lesson-preview .operator-pronunciation-tip,
 .app-operator .operator-lesson-preview .operator-pronunciation-requirement { margin: 0; border: 0; background: transparent !important; padding: 0; line-height: 1.45; }
-.app-operator .operator-lesson-preview .operator-pronunciation-words { gap: 8px; }
+.app-operator .operator-lesson-preview .operator-pronunciation-words { column-gap: 20px; row-gap: 14px; }
 .app-operator .operator-lesson-preview .operator-pronunciation-words { display: flex; flex-wrap: wrap; }
 .app-operator .operator-lesson-preview .operator-pronunciation-word-chip { min-height: 38px; border: 1px solid #e5e0da; border-radius: 8px; background: #faf9f7; padding: 7px 11px; }
 .app-operator .vocabulary-relation-modal .dialog { width: min(630px,100%); max-width: 630px; border-radius: 18px; padding: 24px; }
