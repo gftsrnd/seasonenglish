@@ -31,7 +31,7 @@ import {
   type AiTaskRunner,
   type AiUsage
 } from "@e4s/ai";
-import { buildLevelVocabularyRegistry, containsVietnameseLearnerText, validateLessonDraft, validateLessonPublication } from "@e4s/domain/content";
+import { buildLevelVocabularyRegistry, containsVietnameseLearnerText, relationExemptionIsCredible, validateLessonDraft, validateLessonPublication } from "@e4s/domain/content";
 import { lessonComponentsNeedingRepair, type LessonGenerationComponent, type LessonRepairMode } from "./enrichment.js";
 import { curatedRelationEvidence, lexicalRelationCoverageSatisfied } from "./lexical-relations.js";
 import { containsPromptEntities, ungroundedPromptEntities } from "./prompt-entities.js";
@@ -1066,7 +1066,7 @@ export async function generateWeeklyLessonVocabulary(
   options: { onProgress?: (event: LessonGenerationProgressEvent) => void; maxAttempts?: number } = {}
 ) {
   const vocabularySchema = {
-    safeParse: (value: unknown) => weeklyLessonVocabularyOutputSchema.safeParse(normalizeSelfReferentialLexicalRelations(value, input.forbiddenVocabulary))
+    safeParse: (value: unknown) => weeklyLessonVocabularyOutputSchema.safeParse(normalizeSelfReferentialLexicalRelations(value, input.cefr, input.forbiddenVocabulary))
   };
   const forbiddenVocabularyFindings = (output: ReturnType<typeof weeklyLessonVocabularyOutputSchema.parse>) => {
     const forbidden = new Set((input.forbiddenVocabulary ?? []).map(normalizeVocabularyKey).filter(Boolean));
@@ -1263,7 +1263,7 @@ const LOANWORD_VIETNAMESE_MEANING_FALLBACKS: Record<string, string> = {
   budget: "ngân sách"
 };
 
-function normalizeSelfReferentialLexicalRelations(value: unknown, forbiddenVocabulary: readonly string[] = []): unknown {
+function normalizeSelfReferentialLexicalRelations(value: unknown, cefr: string, forbiddenVocabulary: readonly string[] = []): unknown {
   if (!value || typeof value !== "object" || Array.isArray(value)) return value;
   const normalized = structuredClone(value) as Record<string, unknown>;
   const wordKeys = ["word1", "word2", "word3"] as const;
@@ -1311,6 +1311,8 @@ function normalizeSelfReferentialLexicalRelations(value: unknown, forbiddenVocab
     const rawStatus = typeof record.relationStatus === "string" ? record.relationStatus : undefined;
     if (hasLexicalRelation) {
       if (rawStatus !== undefined) record.relationStatus = "provided";
+    } else if (relationExemptionIsCredible(record, cefr)) {
+      record.relationStatus = "no_natural_relation";
     } else if (rawStatus === "no_natural_relation" || rawStatus === "above_cefr_level") {
       record.relationStatus = rawStatus;
     } else {

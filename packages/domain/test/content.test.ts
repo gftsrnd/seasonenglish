@@ -158,6 +158,9 @@ describe("content publishing policy", () => {
     expect(lexicalRelationCoverageSatisfied({
       word: "31/10", type: "noun", meaning: "ngày", synonyms: [], antonyms: [], relationStatus: "no_natural_relation"
     }, "A1")).toBe(true);
+    expect(lexicalRelationCoverageSatisfied({
+      word: "hour", type: "noun", meaning: "giờ", synonyms: [], antonyms: [], relationStatus: "no_natural_relation"
+    }, "A1")).toBe(true);
   });
 
   it("allows an accented Vietnamese proper noun inside otherwise English B1+ guidance", () => {

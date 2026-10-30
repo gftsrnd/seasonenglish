@@ -4224,7 +4224,7 @@ describe("direct component repair budgets", () => {
     const justifiedNoRelations = {
       ...baseVocab,
       word1: { ...baseVocab.word1, word: "Monday", ttsText: "Monday", ssml: "<speak>Monday</speak>", meaning: "thứ Hai", synonym1: null, synonym2: null, antonym1: null, relationStatus: "no_natural_relation" as const },
-      word2: { ...baseVocab.word2, word: "morning", ttsText: "morning", ssml: "<speak>morning</speak>", meaning: "buổi sáng", synonym1: null, synonym2: null, antonym1: null, relationStatus: "no_natural_relation" as const },
+      word2: { ...baseVocab.word2, word: "hour", ttsText: "hour", ssml: "<speak>hour</speak>", meaning: "giờ", synonym1: null, synonym2: null, antonym1: null, relationStatus: undefined },
       word3: { ...baseVocab.word3, word: "ID-42", ttsText: "ID-42", ssml: "<speak>ID-42</speak>", meaning: "mã số", synonym1: null, synonym2: null, antonym1: null, relationStatus: "no_natural_relation" as const }
     };
     const { runner, runTask } = sequencedRunner("weekly_lesson_vocabulary", [justifiedNoRelations]);
@@ -4236,7 +4236,7 @@ describe("direct component repair budgets", () => {
 
     expect(runTask).toHaveBeenCalledTimes(1);
     expect(result.output.word1.word).toBe("Monday");
-    expect(result.output.word2.word).toBe("morning");
+    expect(result.output.word2.relationStatus).toBe("no_natural_relation");
   });
 
   it("emits a repair finding when a level exceeds the two-light-gap lexical limit", () => {
