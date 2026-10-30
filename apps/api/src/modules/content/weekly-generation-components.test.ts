@@ -2103,7 +2103,7 @@ describe("direct weekly-generation component contracts", () => {
     expect(runTask).toHaveBeenCalledTimes(1);
   });
 
-  it("repairs unavailable relations instead of accepting an arbitrary exemption", async () => {
+  it("keeps up to two missing relations as light gaps", async () => {
     const level = levelCases[1];
     const valid = vocabularyFor(level);
     const invalid = {
@@ -2112,18 +2112,18 @@ describe("direct weekly-generation component contracts", () => {
       word2: { ...valid.word2, synonym1: null },
       word3: { ...valid.word3, antonym1: null }
     };
-    const { runner, runTask } = sequencedRunner("weekly_lesson_vocabulary", [invalid, valid]);
+    const { runner, runTask } = sequencedRunner("weekly_lesson_vocabulary", [invalid]);
 
     const result = await generateWeeklyLessonVocabulary({
       ...inputFor(level), grammarFormula: "Could you confirm + noun?",
       grammarExamples: ["Could you confirm the deadline?", "Could you confirm the meeting?"], excludedVocabulary: []
     }, runner);
 
-    expect(result.output.word1.synonym1).toEqual(valid.word1.synonym1);
-    expect(result.output.word2.synonym1).toEqual(valid.word2.synonym1);
-    expect(result.output.word3.antonym1).toBeNull();
-    expect(result.attempts).toBe(2);
-    expect(runTask).toHaveBeenCalledTimes(2);
+    expect(result.output.word1.relationStatus).toBe("generation_missed");
+    expect(result.output.word2.relationStatus).toBe("generation_missed");
+    expect(result.output.word3.synonym1).toEqual(valid.word3.synonym1);
+    expect(result.attempts).toBe(1);
+    expect(runTask).toHaveBeenCalledTimes(1);
   });
 
   it("uses the third vocabulary attempt when an internal duplicate survives the first repair", async () => {
@@ -2202,15 +2202,16 @@ describe("direct weekly-generation component contracts", () => {
         }
       }
     };
-    const { runner, runTask } = sequencedRunner("weekly_lesson_vocabulary", [duplicatedRelation, output]);
+    const { runner, runTask } = sequencedRunner("weekly_lesson_vocabulary", [duplicatedRelation]);
 
     const result = await generateWeeklyLessonVocabulary({
       ...inputFor(level), grammarFormula: "Could you confirm + noun?",
       grammarExamples: ["Could you confirm the deadline?", "Could you confirm the meeting?"], excludedVocabulary: []
     }, runner);
 
-    expect(result.output.word2.synonym1).toEqual(output.word2.synonym1);
-    expect(runTask).toHaveBeenCalledTimes(2);
+    expect(result.output.word2.synonym1).toBeNull();
+    expect(result.output.word2.relationStatus).toBe("generation_missed");
+    expect(runTask).toHaveBeenCalledTimes(1);
   });
 
   it("repairs a learner-facing relation that repeats another card in the same day", async () => {
@@ -2223,15 +2224,16 @@ describe("direct weekly-generation component contracts", () => {
         synonym1: { ...output.word2.synonym1!, word: output.word1.word }
       }
     };
-    const { runner, runTask } = sequencedRunner("weekly_lesson_vocabulary", [duplicatedRelation, output]);
+    const { runner, runTask } = sequencedRunner("weekly_lesson_vocabulary", [duplicatedRelation]);
 
     const result = await generateWeeklyLessonVocabulary({
       ...inputFor(level), grammarFormula: "Could you confirm + noun?",
       grammarExamples: ["Could you confirm the deadline?", "Could you confirm the meeting?"], excludedVocabulary: []
     }, runner);
 
-    expect(result.output.word2.synonym1).toEqual(output.word2.synonym1);
-    expect(runTask).toHaveBeenCalledTimes(2);
+    expect(result.output.word2.synonym1).toBeNull();
+    expect(result.output.word2.relationStatus).toBe("generation_missed");
+    expect(runTask).toHaveBeenCalledTimes(1);
   });
 
   it("repairs B1+ lexical relation notes instead of silently replacing them", async () => {
@@ -4222,7 +4224,7 @@ describe("direct component repair budgets", () => {
     const justifiedNoRelations = {
       ...baseVocab,
       word1: { ...baseVocab.word1, word: "Monday", ttsText: "Monday", ssml: "<speak>Monday</speak>", meaning: "thứ Hai", synonym1: null, synonym2: null, antonym1: null, relationStatus: "no_natural_relation" as const },
-      word2: { ...baseVocab.word2, word: "31/10", ttsText: "31/10", ssml: "<speak>31/10</speak>", meaning: "ngày 31 tháng 10", synonym1: null, synonym2: null, antonym1: null, relationStatus: "above_cefr_level" as const },
+      word2: { ...baseVocab.word2, word: "morning", ttsText: "morning", ssml: "<speak>morning</speak>", meaning: "buổi sáng", synonym1: null, synonym2: null, antonym1: null, relationStatus: "no_natural_relation" as const },
       word3: { ...baseVocab.word3, word: "ID-42", ttsText: "ID-42", ssml: "<speak>ID-42</speak>", meaning: "mã số", synonym1: null, synonym2: null, antonym1: null, relationStatus: "no_natural_relation" as const }
     };
     const { runner, runTask } = sequencedRunner("weekly_lesson_vocabulary", [justifiedNoRelations]);
@@ -4234,7 +4236,7 @@ describe("direct component repair budgets", () => {
 
     expect(runTask).toHaveBeenCalledTimes(1);
     expect(result.output.word1.word).toBe("Monday");
-    expect(result.output.word2.word).toBe("31/10");
+    expect(result.output.word2.word).toBe("morning");
   });
 
   it("emits a repair finding when a level exceeds the two-light-gap lexical limit", () => {
@@ -4797,13 +4799,12 @@ describe("lexical relation self-exemption", () => {
       ...sendItem(a2),
       family1: { word: "send", type: "verb", meaning: "gửi" }
     });
-    const repaired = withWord1(a2, sendItem(a2));
-    const { runner, runTask } = sequencedRunner("weekly_lesson_vocabulary", [invalid, repaired]);
+    const { runner, runTask } = sequencedRunner("weekly_lesson_vocabulary", [invalid]);
 
     const result = await generateWeeklyLessonVocabulary(vocabularyInput(a2), runner);
 
-    expect(runTask).toHaveBeenCalledTimes(2);
-    expect(result.output.word1.family1?.word).toBe("sender");
+    expect(runTask).toHaveBeenCalledTimes(1);
+    expect(result.output.word1.family1).toBeNull();
   });
 
   it("rejects a primary target forbidden by vocabulary already retained in the same level", async () => {

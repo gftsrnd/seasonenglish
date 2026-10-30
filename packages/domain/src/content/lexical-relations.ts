@@ -63,7 +63,7 @@ function hasStructuredRelation(value: unknown): boolean {
 const CALENDAR_OR_TIME_LABELS = new Set([
   "monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday",
   "january", "february", "march", "april", "may", "june", "july", "august", "september", "october", "november", "december",
-  "today", "tomorrow", "yesterday", "date", "day", "week", "month", "year"
+  "today", "tomorrow", "yesterday", "morning", "afternoon", "evening", "tonight", "noon", "midnight", "date", "day", "week", "month", "year"
 ]);
 
 function isNonLexicalLabelOrIdentifier(word: unknown): boolean {

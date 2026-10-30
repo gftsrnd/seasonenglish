@@ -226,8 +226,12 @@ function vocabularyMissingRelationFindings(
     antonyms: [value[slot].antonym1],
     relationStatus: value[slot].relationStatus
   }, cefr);
-  return slots
-    .filter((slot) => !hasRelation(slot) && !hasCredibleCoverage(slot))
+  const missingSlots = slots.filter((slot) => !hasRelation(slot) && !hasCredibleCoverage(slot));
+  return missingSlots
+    // A missing relation is the one permitted light lexical gap. The level
+    // quality gate later rejects a level once it accumulates more than two.
+    // Keep retrying only claimed-but-invalid exemptions here.
+    .filter((slot) => value[slot].relationStatus !== "generation_missed" || missingSlots.length > MAX_LIGHT_LEXICAL_RELATION_GAPS_PER_LEVEL)
     .map((slot) => ({
       path: [slot, "synonym1"] as PropertyKey[],
       message: `${value[slot].word} has no credible same-level synonym or antonym. An exemption is allowed only for a calendar/time label or identifier; otherwise provide a genuine relation or replace this target with an equally relevant CEFR-appropriate word.`
@@ -1262,7 +1266,17 @@ const LOANWORD_VIETNAMESE_MEANING_FALLBACKS: Record<string, string> = {
 function normalizeSelfReferentialLexicalRelations(value: unknown): unknown {
   if (!value || typeof value !== "object" || Array.isArray(value)) return value;
   const normalized = structuredClone(value) as Record<string, unknown>;
-  for (const wordKey of ["word1", "word2", "word3"] as const) {
+  const wordKeys = ["word1", "word2", "word3"] as const;
+  // Primary targets always win. Optional cards that repeat a target or an
+  // earlier optional card are safely removed, leaving a visible light gap
+  // rather than saving the same learner-facing word twice.
+  const introduced = new Set(wordKeys.map((wordKey) => {
+    const item = normalized[wordKey];
+    if (!item || typeof item !== "object" || Array.isArray(item)) return "";
+    const word = (item as Record<string, unknown>).word;
+    return typeof word === "string" ? normalizeVocabularyKey(word) : "";
+  }).filter(Boolean));
+  for (const wordKey of wordKeys) {
     const item = normalized[wordKey];
     if (!item || typeof item !== "object" || Array.isArray(item)) continue;
     const record = item as Record<string, unknown>;
@@ -1281,13 +1295,16 @@ function normalizeSelfReferentialLexicalRelations(value: unknown): unknown {
     if (typeof record.meaning === "string" && record.meaning.trim().toLocaleLowerCase("en-US") === target) {
       record.meaning = LOANWORD_VIETNAMESE_MEANING_FALLBACKS[target] ?? `từ "${record.word}" trong công việc`;
     }
-    for (const relationKey of ["synonym1", "synonym2", "antonym1"] as const) {
+    for (const relationKey of ["family1", "family2", "synonym1", "synonym2", "antonym1", "sibling1", "sibling2", "sibling3"] as const) {
       const relation = record[relationKey];
       if (!relation || typeof relation !== "object" || Array.isArray(relation)) continue;
       const relationWord = (relation as Record<string, unknown>).word;
-      if (typeof relationWord === "string" && relationWord.trim().toLocaleLowerCase("en-US") === target) {
+      const key = normalizeVocabularyKey(typeof relationWord === "string" ? relationWord : "");
+      if (!key || key === target || introduced.has(key)) {
         record[relationKey] = null;
+        continue;
       }
+      introduced.add(key);
     }
     const hasLexicalRelation = Boolean(record.synonym1 || record.synonym2 || record.antonym1);
     const rawStatus = typeof record.relationStatus === "string" ? record.relationStatus : undefined;
