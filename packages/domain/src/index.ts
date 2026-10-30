@@ -1,4 +1,5 @@
 export * from "./assessment/index.js";
+export * from "./calendar/index.js";
 export * from "./content/index.js";
 export * from "./engagement/index.js";
 export * from "./identity/index.js";
