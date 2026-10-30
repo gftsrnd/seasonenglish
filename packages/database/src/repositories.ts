@@ -2355,6 +2355,80 @@ class ContentRepository {
     return this.listWeeks(actorId);
   }
 
+  /**
+   * Single entry point for the canonical weekly blueprint. The week row is
+   * locked for the whole read-normalize-write cycle, so concurrent requests from
+   * any operator or API process are serialized: the first request normalizes
+   * and saves; every later request sees the saved canonical plan inside the
+   * lock and `normalizePlan` returns it without calling AI.
+   */
+  async ensureCanonicalWeekPlan(
+    actorId: string,
+    weekNumber: number,
+    normalizePlan: (currentWeek: ContentWeekInput) => Promise<{
+      plan: ContentWeekInput["plan"];
+      normalized: boolean;
+    }>
+  ): Promise<ContentWeekFrameView["weeks"][number] | null> {
+    const client = await this.pool.connect();
+    try {
+      await client.query("begin");
+      const locked = await client.query<{
+        id: string;
+        week_number: number;
+        topic: string;
+        description: string;
+        objectives: string[] | null;
+        key_vocab_hint: string;
+        ai_plan: Record<string, string[]> | null;
+      }>(
+        `select pw.id, pw.week_number, pw.topic, pw.description, pw.objectives, pw.key_vocab_hint, pw.ai_plan
+         from users actor
+         join programs p on p.organization_id = actor.organization_id and p.status = 'active'
+         join program_weeks pw on pw.program_id = p.id and pw.week_number = $2
+         where actor.id = $1
+         for update of pw`,
+        [actorId, weekNumber]
+      );
+      const row = locked.rows[0];
+      if (!row) {
+        await client.query("rollback");
+        return null;
+      }
+      const lockedPlan = normalizeWeekPlan(row.ai_plan ?? undefined);
+      const objectives = Array.isArray(row.objectives)
+        ? row.objectives.filter((value): value is string => typeof value === "string").join("; ")
+        : "";
+      const weekWithLockedPlan: ContentWeekInput = {
+        weekNumber: row.week_number,
+        topic: row.topic,
+        description: row.description,
+        objectives,
+        keyVocabHint: row.key_vocab_hint,
+        plan: lockedPlan
+      };
+      const outcome = await normalizePlan(weekWithLockedPlan);
+      if (outcome.normalized) {
+        // Compare-and-set against the locked value as a second guard.
+        await client.query(
+          `update program_weeks pw
+           set ai_plan = $3::jsonb
+           where pw.id = $1
+             and md5(coalesce(pw.ai_plan, '{}'::jsonb)::text) = md5($2::jsonb::text)`,
+          [row.id, JSON.stringify(row.ai_plan ?? {}), JSON.stringify(normalizeWeekPlan(outcome.plan) ?? {})]
+        );
+      }
+      await client.query("commit");
+    } catch (error) {
+      await client.query("rollback");
+      throw error;
+    } finally {
+      client.release();
+    }
+    const frameAfter = await this.listWeeks(actorId);
+    return frameAfter?.weeks.find((candidate) => candidate.weekNumber === weekNumber) ?? null;
+  }
+
   async lessonMatrix(staffId: string): Promise<ContentLessonMatrixView | null> {
     const program = await this.pool.query<{ id: string }>(
       `select p.id from users staff

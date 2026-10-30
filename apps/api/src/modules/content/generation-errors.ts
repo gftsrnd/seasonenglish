@@ -44,7 +44,7 @@ function safeGenerationDiagnosticIssue(value: unknown, fallbackCode?: string): R
     if (candidate) issue[key] = candidate;
   }
   if (!issue.code && fallbackCode) issue.code = fallbackCode;
-  for (const key of ["dayNumber", "attempt", "maxOutputTokens"] as const) {
+  for (const key of ["dayNumber", "attempt", "attempts", "maxOutputTokens"] as const) {
     const candidate = source[key];
     if (typeof candidate === "number" && Number.isSafeInteger(candidate) && candidate >= 0) issue[key] = candidate;
   }
@@ -84,26 +84,85 @@ function redactSecrets(value: string): string {
 export function publicLessonGenerationFailure(error: unknown): {
   code: "AI_LESSON_GENERATION_FAILED";
   message: string;
-  findings?: Array<{ dayNumber: number | null; component: string; code: string }>;
+  findings?: Array<{
+    dayNumber: number | null;
+    component: string;
+    code: string;
+    field?: string;
+    reason?: string;
+    attempts?: number;
+  }>;
 } {
   const rawIssues = error && typeof error === "object" && "issues" in error
     ? (error as { issues?: unknown }).issues
     : undefined;
+  const details = error && typeof error === "object" && "details" in error && (error as { details?: unknown }).details && typeof (error as { details: unknown }).details === "object"
+    ? (error as { details: Record<string, unknown> }).details
+    : undefined;
+  const defaultAttempts = typeof details?.attempt === "number"
+    ? details.attempt
+    : typeof details?.maxAttempts === "number"
+      ? details.maxAttempts
+      : undefined;
   const errorCode = error && typeof error === "object" && "code" in error
     && typeof (error as { code?: unknown }).code === "string"
     ? (error as { code: string }).code
     : "AI_LESSON_GENERATION_FAILED";
   const findings = Array.isArray(rawIssues) ? rawIssues.flatMap((raw) => {
     if (!raw || typeof raw !== "object") return [];
-    const item = raw as { dayNumber?: unknown; component?: unknown; code?: unknown; path?: unknown };
+    const item = raw as {
+      dayNumber?: unknown;
+      component?: unknown;
+      code?: unknown;
+      path?: unknown;
+      message?: unknown;
+      attempt?: unknown;
+      attempts?: unknown;
+      details?: unknown;
+      issues?: unknown;
+    };
+    const itemDetails = item.details && typeof item.details === "object" ? item.details as Record<string, unknown> : undefined;
+    const nestedFirst = Array.isArray(item.issues) && item.issues[0] && typeof item.issues[0] === "object"
+      ? item.issues[0] as Record<string, unknown>
+      : undefined;
+    const attempts = typeof item.attempts === "number"
+      ? item.attempts
+      : typeof item.attempt === "number"
+        ? item.attempt
+        : typeof itemDetails?.attempt === "number"
+          ? itemDetails.attempt
+          : typeof itemDetails?.maxAttempts === "number"
+            ? itemDetails.maxAttempts
+            : defaultAttempts;
+    const rawPath = typeof item.path === "string"
+      ? item.path
+      : typeof nestedFirst?.path === "string"
+        ? nestedFirst.path
+        : Array.isArray(nestedFirst?.path)
+          ? nestedFirst.path.map(String).join(".")
+          : undefined;
+    const reason = safeText(
+      typeof nestedFirst?.message === "string" ? nestedFirst.message : item.message,
+      300
+    );
     if ((typeof item.dayNumber === "number" || item.dayNumber === null)
       && typeof item.component === "string" && typeof item.code === "string") {
-      return [{ dayNumber: item.dayNumber, component: item.component, code: item.code }];
+      return [{
+        dayNumber: item.dayNumber,
+        component: item.component,
+        code: item.code,
+        ...(attempts !== undefined ? { attempts } : {})
+      }];
     }
     if (typeof item.path !== "string") return [];
-    const match = /^day([1-5])\.(objectives|foundation|vocabulary|grammarClassification|skills\.(?:comprehension|languagePractice|speaking)|lesson)(?:\.|$)/u.exec(item.path);
+    const match = /^day([1-5])\.(objectives|foundation|vocabulary|grammarClassification|skills\.(?:comprehension|languagePractice|speaking|reviewer)|lesson)(?:\.(.+))?$/u.exec(item.path);
     if (!match) return [];
-    return [{ dayNumber: Number(match[1]), component: match[2]!, code: errorCode }];
+    return [{
+      dayNumber: Number(match[1]),
+      component: match[2]!,
+      code: errorCode,
+      ...(attempts !== undefined ? { attempts } : {})
+    }];
   }) : [];
   return {
     code: "AI_LESSON_GENERATION_FAILED",
