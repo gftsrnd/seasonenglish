@@ -92,7 +92,7 @@ describe("approved E4S screen contract", () => {
   it("requires every manager route to declare real data states instead of a pending placeholder", () => {
     const managerScreens: readonly VisibleScreen[] = SCREEN_CONTRACT.filter((screen) => screen.path.startsWith("/mgr"));
 
-    expect(managerScreens).toHaveLength(5);
+    expect(managerScreens).toHaveLength(6);
     for (const screen of managerScreens) {
       expect(screen.states).toEqual(expect.arrayContaining(["loading", "empty", "error", "populated"]));
     }
