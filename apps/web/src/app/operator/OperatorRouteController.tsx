@@ -8,7 +8,7 @@ import type {
   AssessmentReviewLearnerView,
   AssessmentReviewOverviewView,
   CefrLevel,
-  ContentLessonDraftInput, MonthFrameworkView, MonthLessonDetailView, MonthlyOperatorOverviewView,
+  ContentLessonDraftInput, MonthFrameworkView, MonthLessonDetailView, MonthlyExamOperatorView, MonthlyOperatorOverviewView,
   ContentLessonMatrixView,
   ContentLessonSetVersionView,
   ContentPromptKey,
@@ -30,6 +30,7 @@ import { OperatorReview, OperatorReviewAssessmentDetail } from "./Review.js";
 import type { ManualScoreInput } from "./AssessmentManualScore.js";
 import { OperatorWeeks } from "./Weeks.js";
 import { OperatorMonths, type OperatorMonthsView } from "./Months.js";
+import { MonthExamPreview } from "./MonthExamPreview.js";
 import { Badge, OperationsReadOnlyContext, OperatorPage, PageTitle } from "./primitives.js";
 import { ModalProvider, useModal } from "../shared/ModalProvider.js";
 import type { AudioEvidence } from "../shared/media/audio-evidence.js";
@@ -544,6 +545,7 @@ function MonthsRoute({ client, readOnly }: { client: OperatorApiClient; readOnly
   const [editor, setEditor] = useState<MonthLessonDetailView>();
   const [editorBusy, setEditorBusy] = useState(false);
   const [editorError, setEditorError] = useState<string>();
+  const [examView, setExamView] = useState<MonthlyExamOperatorView>();
   const loadOverview = () => client.getContentMonths().then(data => {
     setOverview(data);
     setMonth(current => current ?? data.months[1]?.month ?? data.months[0]?.month);
@@ -613,8 +615,10 @@ function MonthsRoute({ client, readOnly }: { client: OperatorApiClient; readOnly
       onOpenLesson: openLesson,
       onApproveLesson: lessonNumber => void run(() => client.approveContentMonthLesson(framework!.id!, lessonNumber), `Đang duyệt bài ${lessonNumber}…`, `Đã duyệt bài ${lessonNumber}.`),
       onGenerateExam: () => void run(() => client.generateContentMonthExam(framework!.id!), "Đã gửi yêu cầu sinh bài thi tháng…", "Worker đang sinh đề; màn hình tự cập nhật."),
-      onApproveExam: () => void run(() => client.approveContentMonthExam(framework!.id!), "Đang duyệt bài thi tháng…", "Bài thi tháng đã duyệt.")
+      onApproveExam: () => void run(() => client.approveContentMonthExam(framework!.id!), "Đang duyệt bài thi tháng…", "Bài thi tháng đã duyệt."),
+      onViewExam: () => { if (framework?.id) void client.getContentMonthExam(framework.id).then(setExamView).catch(reason => setError(message(reason))); }
     }} />
+    {examView && <MonthExamPreview exam={examView} onClose={() => setExamView(undefined)} />}
     {editor && <LessonFormEditor weekNumber={0} cefr={cefr} initial={{ ...editor.lesson, dayNumber: editor.lessonNumber - 1 }} busy={editorBusy} onCancel={() => setEditor(undefined)} onSave={lesson => saveLesson({ ...lesson, dayNumber: editor.lessonNumber })} {...(client.uploadContentMedia ? { uploadMedia: async (kind: "audio" | "image", file: Blob, filename: string) => ({ url: (await client.uploadContentMedia(kind, file, filename)).url }) } : {})} />}
     {editorError && <div className="banner danger" role="alert"><div className="body small">{editorError}</div></div>}
   </>;

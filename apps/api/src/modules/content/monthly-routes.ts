@@ -88,6 +88,15 @@ export function registerMonthlyContentRoutes(
     return guard(reply, async () => repositories.monthly.approveLessonDay(request.e4sSession!.user.id, params.data.frameworkId, params.data.lessonNumber));
   });
 
+  app.get("/api/v1/content/month-frameworks/:frameworkId/exam", { preHandler: readers }, async (request, reply) => {
+    const params = frameworkParams.safeParse(request.params);
+    if (!params.success) return reply.code(400).send({ code: "INVALID_FRAMEWORK" });
+    return guard(reply, async () => {
+      const view = await repositories.monthly.examView(request.e4sSession!.user.id, params.data.frameworkId);
+      return view ?? reply.code(404).send({ code: "MONTHLY_EXAM_NOT_READY" });
+    });
+  });
+
   app.post("/api/v1/content/month-frameworks/:frameworkId/exam/generate", { preHandler: operators }, async (request, reply) => {
     const params = frameworkParams.safeParse(request.params);
     if (!params.success) return reply.code(400).send({ code: "INVALID_FRAMEWORK" });

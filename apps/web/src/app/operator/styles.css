@@ -3606,3 +3606,12 @@ body > .operator-modal-scope .operator-vocabulary-entry-audio-grid { display: gr
 .app-operator .operator-month-day-title { min-height: 2.6em; overflow: hidden; }
 .app-operator .operator-month-day-actions { gap: 4px; }
 .app-operator .operator-month-exam { margin-top: 12px; }
+.app-operator .operator-exam-preview { max-width: 1100px; width: min(96vw, 1100px); max-height: 92vh; display: grid; grid-template-rows: auto auto auto minmax(0, 1fr); gap: 10px; }
+.app-operator .operator-exam-preview-body { overflow: auto; display: grid; gap: 10px; }
+.app-operator .operator-exam-preview-meta { gap: 8px; flex-wrap: wrap; }
+.app-operator .operator-exam-group { margin-top: 8px; display: grid; gap: 4px; }
+.app-operator .operator-exam-tasks { padding-left: 20px; display: grid; gap: 8px; }
+.app-operator .operator-exam-options { gap: 6px; flex-wrap: wrap; }
+.app-operator .operator-exam-options .chip.ok { background: #e4f6e9; border-color: #a7d7b4; font-weight: 600; }
+.app-operator .operator-exam-preview table { width: 100%; border-collapse: collapse; }
+.app-operator .operator-exam-preview td, .app-operator .operator-exam-preview th { border-bottom: 1px solid var(--line); padding: 4px 6px; text-align: left; vertical-align: top; }

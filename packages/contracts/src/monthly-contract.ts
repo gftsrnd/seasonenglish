@@ -87,3 +87,51 @@ export interface MonthlyJobAcceptedView {
   accepted: true;
   jobId: string;
 }
+
+/** Đề thi tháng cho Vận hành xem: 4 phần, key, ma trận và rubric (gói người chấm). Không gửi cho học viên. */
+export interface MonthlyExamOperatorView {
+  frameworkId: string;
+  month: string;
+  cefr: CefrLevel;
+  status: MonthExamStatus;
+  assessmentVersionId: string;
+  title: string;
+  totalMinutes: number;
+  totalScore: number;
+  audioStatus: "SCRIPT_ONLY" | "READY";
+  blueprintStatus: "DRAFT" | "NEEDS_REVIEW" | "READY";
+  sections: Array<{
+    code: "listening" | "reading" | "writing" | "speaking";
+    title: string;
+    durationMinutes: number;
+    maxScore: number;
+    instructions: string[];
+    groups: Array<{
+      key: string;
+      title: string;
+      instruction: string;
+      maxPlays?: number;
+      stimulus?: { type: string; text?: string; lines?: Array<{ speaker: string; text: string }> };
+      tasks: Array<{
+        key: string;
+        prompt: string;
+        responseType: "single_choice" | "long_text" | "speaking_evidence";
+        maxScore: number;
+        options?: Array<{ value: string; label: string }>;
+        correctAnswer?: string;
+        evidenceCodes?: string[];
+        hint?: string;
+        minWords?: number;
+        maxWords?: number;
+      }>;
+    }>;
+  }>;
+  mapping: Array<{ objective: string; kind: "vocabulary" | "grammar" | "pronunciation"; position: string; evidence: string; maxScore: number }>;
+  graderPackage: {
+    scripts: Array<{ key: string; title: string; lines: Array<{ speaker: string; text: string }> }>;
+    keys: Array<{ taskKey: string; answer: string; evidence: string; explanation: string }>;
+    rubric: { writing: Array<{ code: string; label: string; max: number }>; speaking: Array<{ code: string; label: string; max: number }> };
+    sampleAnswers: { writing: string; speaking: string };
+  };
+  checks: Array<{ code: string; passed: boolean; detail: string }>;
+}

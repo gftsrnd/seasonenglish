@@ -11,7 +11,7 @@ import type {
   AudioArtifactView,
   ManualAssessmentScoreInput,
   ContentWeekInput, ContentWeekSuggestionView, SystemCapabilitiesView, WeeklyPracticeAssignmentView,
-  MonthFrameworkView, MonthLessonDetailView, MonthlyJobAcceptedView, MonthlyOperatorOverviewView
+  MonthFrameworkView, MonthLessonDetailView, MonthlyExamOperatorView, MonthlyJobAcceptedView, MonthlyOperatorOverviewView
 } from "@e4s/contracts";
 import { request, uploadMultipart } from "./runtime.js";
 
@@ -54,6 +54,7 @@ export interface OperatorApiClient {
   getContentMonthLesson(frameworkId: string, lessonNumber: number): Promise<MonthLessonDetailView>;
   saveContentMonthLesson(frameworkId: string, lessonNumber: number, lesson: ContentLessonDraftInput): Promise<MonthLessonDetailView>;
   approveContentMonthLesson(frameworkId: string, lessonNumber: number): Promise<MonthFrameworkView>;
+  getContentMonthExam(frameworkId: string): Promise<MonthlyExamOperatorView>;
   generateContentMonthExam(frameworkId: string): Promise<MonthlyJobAcceptedView>;
   approveContentMonthExam(frameworkId: string): Promise<MonthFrameworkView>;
   getContentWeeks(): Promise<ContentWeekFrameView>;
@@ -139,6 +140,7 @@ export const operatorApiClient: OperatorApiClient = {
   getContentMonthLesson: (frameworkId, lessonNumber) => request(`/api/v1/content/month-frameworks/${frameworkId}/lessons/${lessonNumber}`),
   saveContentMonthLesson: (frameworkId, lessonNumber, lesson) => request(`/api/v1/content/month-frameworks/${frameworkId}/lessons/${lessonNumber}`, { method: "PUT", body: JSON.stringify({ lesson }) }),
   approveContentMonthLesson: (frameworkId, lessonNumber) => request(`/api/v1/content/month-frameworks/${frameworkId}/lessons/${lessonNumber}/approve`, { method: "POST", body: "{}" }),
+  getContentMonthExam: (frameworkId) => request(`/api/v1/content/month-frameworks/${frameworkId}/exam`),
   generateContentMonthExam: (frameworkId) => request(`/api/v1/content/month-frameworks/${frameworkId}/exam/generate`, { method: "POST", body: "{}" }),
   approveContentMonthExam: (frameworkId) => request(`/api/v1/content/month-frameworks/${frameworkId}/exam/approve`, { method: "POST", body: "{}" }),
   getContentWeeks: () => request("/api/v1/content/weeks"),

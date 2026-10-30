@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import type { Pool, PoolClient } from "pg";
 import type {
   CefrLevel, ContentLessonDraftInput, MonthFrameworkView, MonthLessonCellView, MonthLessonDetailView,
-  MonthlyLevelSummaryView, MonthlyOperatorOverviewView
+  MonthlyExamOperatorView, MonthlyLevelSummaryView, MonthlyOperatorOverviewView
 } from "@e4s/contracts";
 import {
   buildMonthlyCalendar, operatorVisibleMonths, DEFAULT_MONTH_FRAMEWORK_SETTINGS, type MonthFrameworkSettings
@@ -542,6 +542,26 @@ export class MonthlyContentRepository {
       await client.query("rollback");
       throw error;
     } finally { client.release(); }
+  }
+
+  /** Đề thi tháng đầy đủ (gói người chấm) cho Vận hành xem. */
+  async examView(staffId: string, frameworkId: string): Promise<MonthlyExamOperatorView | null> {
+    const row = await this.frameworkRow({ id: frameworkId });
+    if (!row) return null;
+    await this.assertSameOrganization(staffId, row.organization_id);
+    if (!row.exam_assessment_version_id) return null;
+    const version = await this.pool.query<{ blueprint: Record<string, unknown> }>("select blueprint from assessment_versions where id = $1", [row.exam_assessment_version_id]);
+    const blueprint = version.rows[0]?.blueprint;
+    if (!blueprint) return null;
+    const pick = <T>(key: string, fallback: T): T => (blueprint[key] as T | undefined) ?? fallback;
+    return {
+      frameworkId, month: row.month, cefr: row.cefr, status: row.exam_status, assessmentVersionId: row.exam_assessment_version_id,
+      title: pick("title", ""), totalMinutes: pick("totalMinutes", 0), totalScore: pick("totalScore", 0),
+      audioStatus: pick("audioStatus", "SCRIPT_ONLY"), blueprintStatus: pick("status", "DRAFT"),
+      sections: pick("sections", []), mapping: pick("mapping", []),
+      graderPackage: pick("graderPackage", { scripts: [], keys: [], rubric: { writing: [], speaking: [] }, sampleAnswers: { writing: "", speaking: "" } }),
+      checks: pick("checks", [])
+    };
   }
 
   async failExamGeneration(frameworkId: string, message: string): Promise<void> {

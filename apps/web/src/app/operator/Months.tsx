@@ -12,6 +12,7 @@ export interface OperatorMonthsActions {
   onApproveLesson(lessonNumber: number): void;
   onGenerateExam(): void;
   onApproveExam(): void;
+  onViewExam(): void;
   onRefresh(): void;
 }
 
@@ -138,6 +139,7 @@ export function OperatorMonths({ view, actions, readOnly = false }: { view: Oper
           <div className="row">
             <Button onClick={actions.onGenerateExam} disabled={!canGenerateExam}>{framework?.exam.status === "none" || framework?.exam.status === "failed" ? "Sinh bài thi tháng" : "Sinh lại bài thi"}</Button>
             <Button primary onClick={actions.onApproveExam} disabled={!canApproveExam}><Check size={14} aria-hidden="true" /> Duyệt bài thi</Button>
+            <Button onClick={actions.onViewExam} disabled={!framework?.exam.assessmentVersionId}>Xem đề</Button>
           </div>
         </div>
       </section>
