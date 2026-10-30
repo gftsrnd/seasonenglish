@@ -273,14 +273,14 @@ function MonthlySection({ value, onChange, onSave, fakeClockAllowed }: ManagerSe
   const lockLabel = examLockLabel(monthly.examDurationMinutes);
   const fakeLocal = monthly.fakeClockAt ? toLocalInputValue(monthly.fakeClockAt) : "";
   return <section className="card"><h3>Cơ chế học theo tháng</h3>
-    <p className="small muted">Khung tháng cho mỗi level có N từ vựng, Y chủ điểm ngữ pháp và Z âm (PO chốt 60 / 3 / 4). N phải nhỏ hơn 90 và không vượt 3 × số bài của tháng.</p>
+    <p className="small muted">Khung tháng cho mỗi level có N từ vựng, Y chủ điểm ngữ pháp và Z âm (PO chốt 60 / 3 / 4). N phải nhỏ hơn 90 và không vượt 3 × số bài của tháng. Bài thi tháng theo cấu trúc PO v1.1: 30 phút chia 8–8–8–6, 4 kỹ năng × 25 điểm; giờ khoá = 24:00 − thời lượng − 5 phút.</p>
     <div className="grid cols-3">
       <NumberField label="N từ vựng mỗi tháng" value={monthly.vocabularyCount} min={1} max={89} onChange={(vocabularyCount) => set({ vocabularyCount })} />
       <NumberField label="Y chủ điểm ngữ pháp" value={monthly.grammarTopicCount} min={1} max={12} onChange={(grammarTopicCount) => set({ grammarTopicCount })} />
       <NumberField label="Z âm luyện phát âm" value={monthly.soundCount} min={1} max={12} onChange={(soundCount) => set({ soundCount })} />
     </div>
     <div className="grid cols-2">
-      <NumberField label={`Thời lượng bài thi tháng (phút; chuẩn PO v1.1 = 30, chia 8–8–8–6) · ${lockLabel}`} value={monthly.examDurationMinutes} min={10} max={600} onChange={(examDurationMinutes) => set({ examDurationMinutes })} />
+      <NumberField label={`Thời lượng bài thi tháng (phút) · ${lockLabel}`} value={monthly.examDurationMinutes} min={10} max={600} onChange={(examDurationMinutes) => set({ examDurationMinutes })} />
       <NumberField label="Mục tiêu lượt luyện Season mỗi tháng (tạm)" value={monthly.coachMonthlyTarget} min={1} max={1000} onChange={(coachMonthlyTarget) => set({ coachMonthlyTarget })} />
     </div>
     <label className="check"><input type="checkbox" checked={monthly.retentionCleanupEnabled} onChange={(event) => set({ retentionCleanupEnabled: event.target.checked })} /> Tự xoá nội dung bài học của tháng ngoài phạm vi 3 tháng (giữ báo cáo, log kháng nghị, kết quả thi)</label>

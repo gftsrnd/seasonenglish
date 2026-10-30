@@ -126,7 +126,7 @@ export function OperatorMonths({ view, actions, readOnly = false }: { view: Oper
               <Badge tone={cell.status === "approved" ? "ok" : cell.status === "failed" ? "danger" : cell.status === "draft" ? "warn" : ""}>{LESSON_LABEL[cell.status]}{cell.review ? " · ôn" : ""}</Badge>
               {cell.lessonId && <span className="row operator-month-day-actions">
                 <Button small onClick={() => actions.onOpenLesson(cell.lessonNumber)} aria-label={`Soạn tay bài ${cell.lessonNumber}`} title={editable ? "Soạn tay" : "Xem"}><PenLine size={13} aria-hidden="true" /></Button>
-                {cell.status !== "approved" && editable && <Button small primary onClick={() => actions.onApproveLesson(cell.lessonNumber)} disabled={view.busy} aria-label={`Duyệt bài ${cell.lessonNumber}`}><Check size={13} aria-hidden="true" /></Button>}
+                {cell.status !== "approved" && editable && <Button small onClick={() => actions.onApproveLesson(cell.lessonNumber)} disabled={view.busy} aria-label={`Duyệt bài ${cell.lessonNumber}`}><Check size={13} aria-hidden="true" /></Button>}
               </span>}
             </div>
             {cell.error && <div className="small" style={{ color: "var(--danger, #b42318)" }}>{cell.error}</div>}

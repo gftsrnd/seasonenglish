@@ -78,7 +78,7 @@ export function LessonFormEditor({
   const [saveError, setSaveError] = useState<string>();
   const dialogRef = useRef<HTMLElement>(null);
   const editing = initial.parts.some(part => Object.keys(record(part.content)).length > 0);
-  const heading = `${editing ? "Sửa" : "Soạn"} bài T${initial.dayNumber + 1} · Tuần ${weekNumber} · ${cefr}`;
+  const heading = weekNumber === 0 ? `${editing ? "Sửa" : "Soạn"} Bài ${initial.dayNumber + 1} · ${cefr}` : `${editing ? "Sửa" : "Soạn"} bài T${initial.dayNumber + 1} · Tuần ${weekNumber} · ${cefr}`;
   const set = <K extends keyof EditorState>(key: K, value: EditorState[K]) => setState(current => ({ ...current, [key]: value }));
   const setVocabulary = (index: number, key: keyof VocabularyRow, value: string) => setState(current => ({ ...current, vocabulary: current.vocabulary.map((row, rowIndex) => rowIndex === index ? { ...row, [key]: value } : row) }));
   const setVocabularyAudio = (index: number, key: "exampleAudioUrls" | "familyAudioUrls" | "synonymAudioUrls" | "antonymAudioUrls" | "umbrellaSiblingAudioUrls", audioIndex: number, value: string) => setState(current => ({ ...current, vocabulary: current.vocabulary.map((row, rowIndex) => rowIndex === index ? { ...row, [key]: replaceAt(row[key], audioIndex, value) } : row) }));
