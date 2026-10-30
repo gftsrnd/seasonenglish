@@ -266,7 +266,7 @@ function WebhookSection({ value, onChange, onSave, onTest }: ManagerSectionProps
 
 function PolicySection({ value, onChange, onSave }: ManagerSectionProps) { return <section className="card"><h3>Chính sách nhắc học và báo cáo</h3><NumberField label="Số ngày không hoạt động trước khi nhắc" value={value.reminderInactiveDays} min={1} max={30} onChange={(reminderInactiveDays) => onChange({ ...value, reminderInactiveDays })} /><label className="check"><input type="checkbox" checked={value.weeklyReportEnabled} onChange={(event) => onChange({ ...value, weeklyReportEnabled: event.target.checked })} /> Bật báo cáo tuần</label><Save label="Lưu chính sách" onSave={onSave} /></section>; }
 
-const DEFAULT_MONTHLY: MonthlyCycleSettings = { vocabularyCount: 60, grammarTopicCount: 3, soundCount: 4, examDurationMinutes: 60, coachMonthlyTarget: 100, retentionCleanupEnabled: true, fakeClockAt: null };
+const DEFAULT_MONTHLY: MonthlyCycleSettings = { vocabularyCount: 60, grammarTopicCount: 3, soundCount: 4, examDurationMinutes: 30, coachMonthlyTarget: 100, retentionCleanupEnabled: true, fakeClockAt: null };
 function MonthlySection({ value, onChange, onSave, fakeClockAllowed }: ManagerSectionProps & { fakeClockAllowed: boolean }) {
   const monthly = value.monthly ?? DEFAULT_MONTHLY;
   const set = (patch: Partial<MonthlyCycleSettings>) => onChange({ ...value, monthly: { ...monthly, ...patch } });
@@ -280,7 +280,7 @@ function MonthlySection({ value, onChange, onSave, fakeClockAllowed }: ManagerSe
       <NumberField label="Z âm luyện phát âm" value={monthly.soundCount} min={1} max={12} onChange={(soundCount) => set({ soundCount })} />
     </div>
     <div className="grid cols-2">
-      <NumberField label={`Thời lượng bài thi tháng (phút, tạm — chờ PO chốt) · ${lockLabel}`} value={monthly.examDurationMinutes} min={10} max={600} onChange={(examDurationMinutes) => set({ examDurationMinutes })} />
+      <NumberField label={`Thời lượng bài thi tháng (phút; chuẩn PO v1.1 = 30, chia 8–8–8–6) · ${lockLabel}`} value={monthly.examDurationMinutes} min={10} max={600} onChange={(examDurationMinutes) => set({ examDurationMinutes })} />
       <NumberField label="Mục tiêu lượt luyện Season mỗi tháng (tạm)" value={monthly.coachMonthlyTarget} min={1} max={1000} onChange={(coachMonthlyTarget) => set({ coachMonthlyTarget })} />
     </div>
     <label className="check"><input type="checkbox" checked={monthly.retentionCleanupEnabled} onChange={(event) => set({ retentionCleanupEnabled: event.target.checked })} /> Tự xoá nội dung bài học của tháng ngoài phạm vi 3 tháng (giữ báo cáo, log kháng nghị, kết quả thi)</label>

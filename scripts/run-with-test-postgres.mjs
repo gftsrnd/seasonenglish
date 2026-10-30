@@ -13,6 +13,8 @@ const pg = new EmbeddedPostgres({
   password: "e4s_test_password",
   port,
   persistent: false,
+  // Windows: initdb mặc định theo locale máy (WIN1252) làm migration có tiếng Việt lỗi; ép UTF8.
+  initdbFlags: ["--encoding=UTF8", "--locale=C"],
   onLog: () => undefined,
   onError: (message) => process.stderr.write(`[postgres] ${String(message)}\n`)
 });

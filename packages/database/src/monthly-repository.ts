@@ -49,7 +49,7 @@ export class MonthlyContentRepository {
         vocabularyCount: monthly.vocabularyCount ?? DEFAULT_MONTH_FRAMEWORK_SETTINGS.vocabularyCount,
         grammarTopicCount: monthly.grammarTopicCount ?? DEFAULT_MONTH_FRAMEWORK_SETTINGS.grammarTopicCount,
         soundCount: monthly.soundCount ?? DEFAULT_MONTH_FRAMEWORK_SETTINGS.soundCount,
-        examDurationMinutes: monthly.examDurationMinutes ?? 60
+        examDurationMinutes: monthly.examDurationMinutes ?? 30
       }
     };
   }
@@ -364,7 +364,10 @@ export class MonthlyContentRepository {
     };
   }
 
-  /** Soạn tay một bài ngày: thêm lesson_version mới; bài đã duyệt quay về nháp để duyệt lại. */
+  /**
+   * Soạn tay một bài ngày. Phiên bản đã publish là bất biến (trigger DB), nên khi lesson set đang publish
+   * thì tạo phiên bản nháp mới (copy mọi bài) rồi sửa trên bản nháp; bài sửa quay về nháp để duyệt lại.
+   */
   async saveLessonDay(staffId: string, frameworkId: string, lessonNumber: number, lesson: ContentLessonDraftInput): Promise<MonthLessonDetailView> {
     const row = await this.frameworkRow({ id: frameworkId });
     if (!row) throw new Error("MONTHLY_FRAMEWORK_NOT_FOUND");
@@ -375,6 +378,7 @@ export class MonthlyContentRepository {
     const client = await this.pool.connect();
     try {
       await client.query("begin");
+      await this.ensureDraftVersion(client, frameworkId, staffId);
       const cell = await client.query<{ lesson_id: string | null }>(
         "select lesson_id from month_lessons where framework_id = $1 and lesson_number = $2 for update",
         [frameworkId, lessonNumber]
@@ -391,7 +395,6 @@ export class MonthlyContentRepository {
         "update month_lessons set status = 'draft', approved_by = null, approved_at = null, updated_at = now() where framework_id = $1 and lesson_number = $2",
         [frameworkId, lessonNumber]
       );
-      await this.unpublishIfNeeded(client, frameworkId);
       await this.audit(client, row.organization_id, staffId, "monthly.lesson.saved", lessonId, { month: row.month, cefr: row.cefr, lessonNumber });
       await client.query("commit");
     } catch (error) {
@@ -401,6 +404,36 @@ export class MonthlyContentRepository {
     const detail = await this.lessonDetail(staffId, frameworkId, lessonNumber);
     if (!detail) throw new Error("MONTHLY_LESSON_NOT_READY");
     return detail;
+  }
+
+  /** Nếu phiên bản mới nhất đã publish thì tạo bản nháp kế tiếp, copy toàn bộ bài và trỏ month_lessons sang bài mới. */
+  private async ensureDraftVersion(client: PoolClient, frameworkId: string, staffId: string): Promise<void> {
+    const latest = await client.query<{ id: string; lesson_set_id: string; version: number; status: string; payload: Record<string, unknown> }>(
+      `select lsv.id, lsv.lesson_set_id, lsv.version, lsv.status, lsv.payload
+       from lesson_sets ls join lesson_set_versions lsv on lsv.lesson_set_id = ls.id
+       where ls.month_framework_id = $1 and lsv.status <> 'retired' order by lsv.version desc limit 1 for update of lsv`,
+      [frameworkId]
+    );
+    const current = latest.rows[0];
+    if (!current || current.status === "draft") return;
+    const nextVersionId = randomUUID();
+    await client.query(
+      `insert into lesson_set_versions (id, lesson_set_id, version, status, payload, created_by) values ($1, $2, $3, 'draft', $4::jsonb, $5)`,
+      [nextVersionId, current.lesson_set_id, current.version + 1, JSON.stringify(current.payload), staffId]
+    );
+    const lessons = await client.query<{ id: string; day_number: number; title: string; content: unknown }>(
+      `select l.id, l.day_number, l.title, lv.content from lessons l
+       join lateral (select content from lesson_versions where lesson_id = l.id order by version desc limit 1) lv on true
+       where l.lesson_set_version_id = $1 order by l.day_number`,
+      [current.id]
+    );
+    for (const lesson of lessons.rows) {
+      const newLessonId = randomUUID();
+      await client.query("insert into lessons (id, lesson_set_version_id, day_number, title) values ($1, $2, $3, $4)", [newLessonId, nextVersionId, lesson.day_number, lesson.title]);
+      await client.query("insert into lesson_versions (id, lesson_id, version, status, content) values ($1, $2, 1, 'draft', $3::jsonb)", [randomUUID(), newLessonId, JSON.stringify(lesson.content)]);
+      await client.query("update month_lessons set lesson_id = $3 where framework_id = $1 and lesson_number = $2", [frameworkId, lesson.day_number, newLessonId]);
+    }
+    // Học viên tiếp tục thấy bản published cũ cho tới khi mọi bài được duyệt lại; readyForLearners dựa vào month_lessons.
   }
 
   /** Duyệt một bài ngày; khi mọi bài đã duyệt thì publish lesson set cho học viên. */
@@ -448,14 +481,6 @@ export class MonthlyContentRepository {
        where l.id = lv.lesson_id and l.lesson_set_version_id = $1
          and lv.version = (select max(version) from lesson_versions where lesson_id = l.id)`,
       [target.id]
-    );
-  }
-
-  private async unpublishIfNeeded(client: PoolClient, frameworkId: string): Promise<void> {
-    await client.query(
-      `update lesson_set_versions lsv set status = 'draft', published_at = null, approved_by = null
-       from lesson_sets ls where ls.id = lsv.lesson_set_id and ls.month_framework_id = $1 and lsv.status = 'published'`,
-      [frameworkId]
     );
   }
 

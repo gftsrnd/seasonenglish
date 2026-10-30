@@ -10,7 +10,8 @@ import type {
   ContentImageView,
   AudioArtifactView,
   ManualAssessmentScoreInput,
-  ContentWeekInput, ContentWeekSuggestionView, SystemCapabilitiesView, WeeklyPracticeAssignmentView
+  ContentWeekInput, ContentWeekSuggestionView, SystemCapabilitiesView, WeeklyPracticeAssignmentView,
+  MonthFrameworkView, MonthLessonDetailView, MonthlyJobAcceptedView, MonthlyOperatorOverviewView
 } from "@e4s/contracts";
 import { request, uploadMultipart } from "./runtime.js";
 
@@ -46,6 +47,15 @@ export interface OperatorApiClient {
   copyAssessmentLevelFormToDraft(versionId: string): Promise<AssessmentLevelFormDetailView>;
   publishAssessmentLevelForm(versionId: string): Promise<AssessmentLevelFormView>;
   deleteAssessmentLevelForm(versionId: string): Promise<AssessmentLevelFormDeleteView>;
+  getContentMonths(): Promise<MonthlyOperatorOverviewView>;
+  getContentMonthFramework(month: string, cefr: CefrLevel): Promise<MonthFrameworkView>;
+  generateContentMonthFramework(month: string, cefr: CefrLevel): Promise<MonthlyJobAcceptedView & { frameworkId: string }>;
+  approveContentMonthFramework(frameworkId: string): Promise<MonthlyJobAcceptedView>;
+  getContentMonthLesson(frameworkId: string, lessonNumber: number): Promise<MonthLessonDetailView>;
+  saveContentMonthLesson(frameworkId: string, lessonNumber: number, lesson: ContentLessonDraftInput): Promise<MonthLessonDetailView>;
+  approveContentMonthLesson(frameworkId: string, lessonNumber: number): Promise<MonthFrameworkView>;
+  generateContentMonthExam(frameworkId: string): Promise<MonthlyJobAcceptedView>;
+  approveContentMonthExam(frameworkId: string): Promise<MonthFrameworkView>;
   getContentWeeks(): Promise<ContentWeekFrameView>;
   saveContentWeeks(weeks: ContentWeekInput[]): Promise<ContentWeekFrameView>;
   suggestContentWeeks(weekNumbers: number[]): Promise<{ weeks: ContentWeekSuggestionView[] }>;
@@ -122,6 +132,15 @@ export const operatorApiClient: OperatorApiClient = {
   copyAssessmentLevelFormToDraft: (versionId) => request(`/api/v1/assessment-level-forms/${encodeURIComponent(versionId)}/draft`, { method: "POST", body: "{}" }),
   publishAssessmentLevelForm: (versionId) => request(`/api/v1/assessment-level-forms/${encodeURIComponent(versionId)}/publication`, { method: "POST", body: "{}" }),
   deleteAssessmentLevelForm: (versionId) => request(`/api/v1/assessment-level-forms/${encodeURIComponent(versionId)}`, { method: "DELETE" }),
+  getContentMonths: () => request("/api/v1/content/months"),
+  getContentMonthFramework: (month, cefr) => request(`/api/v1/content/months/${month}/${encodeURIComponent(cefr)}`),
+  generateContentMonthFramework: (month, cefr) => request(`/api/v1/content/months/${month}/${encodeURIComponent(cefr)}/framework/generate`, { method: "POST", body: "{}" }),
+  approveContentMonthFramework: (frameworkId) => request(`/api/v1/content/month-frameworks/${frameworkId}/approve`, { method: "POST", body: "{}" }),
+  getContentMonthLesson: (frameworkId, lessonNumber) => request(`/api/v1/content/month-frameworks/${frameworkId}/lessons/${lessonNumber}`),
+  saveContentMonthLesson: (frameworkId, lessonNumber, lesson) => request(`/api/v1/content/month-frameworks/${frameworkId}/lessons/${lessonNumber}`, { method: "PUT", body: JSON.stringify({ lesson }) }),
+  approveContentMonthLesson: (frameworkId, lessonNumber) => request(`/api/v1/content/month-frameworks/${frameworkId}/lessons/${lessonNumber}/approve`, { method: "POST", body: "{}" }),
+  generateContentMonthExam: (frameworkId) => request(`/api/v1/content/month-frameworks/${frameworkId}/exam/generate`, { method: "POST", body: "{}" }),
+  approveContentMonthExam: (frameworkId) => request(`/api/v1/content/month-frameworks/${frameworkId}/exam/approve`, { method: "POST", body: "{}" }),
   getContentWeeks: () => request("/api/v1/content/weeks"),
   saveContentWeeks: (weeks) => request("/api/v1/content/weeks", { method: "PUT", body: JSON.stringify({ weeks }) }),
   suggestContentWeeks: (weekNumbers) => request("/api/v1/content/weeks/suggestions", { method: "POST", body: JSON.stringify({ weekNumbers }) }),

@@ -9,7 +9,7 @@ export const MAX_ABSENCE_PERCENT = 30;
 export const NEWCOMER_JOIN_PERCENT = 75;
 export const CONSECUTIVE_ABSENCE_LOCK_DAYS = 5;
 export const EXAM_LOCK_BUFFER_MINUTES = 5;
-export const DEFAULT_MONTHLY_EXAM_MINUTES = 60;
+export const DEFAULT_MONTHLY_EXAM_MINUTES = 30;
 
 // ---------- Clock: nguồn thời gian duy nhất cho luật nghiệp vụ ----------
 

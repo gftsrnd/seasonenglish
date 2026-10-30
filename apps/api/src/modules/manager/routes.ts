@@ -45,7 +45,7 @@ const managerSettingsInput = z.object({
     coachMonthlyTarget: z.number().int().min(1).max(1000),
     retentionCleanupEnabled: z.boolean(),
     fakeClockAt: z.string().datetime({ offset: true }).nullable()
-  }).default({ vocabularyCount: 60, grammarTopicCount: 3, soundCount: 4, examDurationMinutes: 60, coachMonthlyTarget: 100, retentionCleanupEnabled: true, fakeClockAt: null })
+  }).default({ vocabularyCount: 60, grammarTopicCount: 3, soundCount: 4, examDurationMinutes: 30, coachMonthlyTarget: 100, retentionCleanupEnabled: true, fakeClockAt: null })
 }).refine(input => new Date(`${input.pilotStartDate}T00:00:00Z`).getUTCDay() === 1, { path: ["pilotStartDate"], message: "Pilot must start on Monday" });
 const managerProviderSettingsInput = z.object({
   provider: z.enum(["claude", "gemini", "openai"]),

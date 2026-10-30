@@ -37,7 +37,7 @@ describe("monthly content repository", () => {
     expect(overview?.months.map((month) => [month.month, month.editable])).toEqual([["2026-10", false], ["2026-11", true], ["2026-12", true]]);
     expect(overview?.months[1]?.lessonCount).toBe(20);
     expect(overview?.months[1]?.examDate).toBe("2026-11-30");
-    expect(overview?.settings).toMatchObject({ vocabularyCount: 60, grammarTopicCount: 3, soundCount: 4, examDurationMinutes: 60 });
+    expect(overview?.settings).toMatchObject({ vocabularyCount: 60, grammarTopicCount: 3, soundCount: 4, examDurationMinutes: 30 });
   });
 
   it("không sinh khung cho tháng trước", async () => {
@@ -70,7 +70,7 @@ describe("monthly content repository", () => {
     await monthly.distributeLessons(requested.frameworkId, DEMO_IDS.operator);
     view = await monthly.framework(DEMO_IDS.operator, "2026-11", cefr, today);
     expect(view?.lessons).toHaveLength(20);
-    expect(view?.lessons.every((cell) => cell.status === "draft" && cell.lessonId)).toBe(true);
+    expect(view?.lessons.filter((cell) => cell.status !== "draft" || !cell.lessonId).map((cell) => [cell.lessonNumber, cell.status, cell.error])).toEqual([]);
     expect(view?.lessons[0]).toMatchObject({ lessonNumber: 1, date: "2026-11-02" });
     expect(view?.lessons[19]).toMatchObject({ lessonNumber: 20, date: "2026-11-27" });
     expect(view?.firstReviewLesson).toBeNull();

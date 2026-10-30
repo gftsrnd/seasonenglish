@@ -8,7 +8,7 @@ import type {
   AssessmentReviewLearnerView,
   AssessmentReviewOverviewView,
   CefrLevel,
-  ContentLessonDraftInput,
+  ContentLessonDraftInput, MonthFrameworkView, MonthLessonDetailView, MonthlyOperatorOverviewView,
   ContentLessonMatrixView,
   ContentLessonSetVersionView,
   ContentPromptKey,
@@ -29,6 +29,7 @@ import { OperatorPrompts } from "./Prompts.js";
 import { OperatorReview, OperatorReviewAssessmentDetail } from "./Review.js";
 import type { ManualScoreInput } from "./AssessmentManualScore.js";
 import { OperatorWeeks } from "./Weeks.js";
+import { OperatorMonths, type OperatorMonthsView } from "./Months.js";
 import { Badge, OperationsReadOnlyContext, OperatorPage, PageTitle } from "./primitives.js";
 import { ModalProvider, useModal } from "../shared/ModalProvider.js";
 import type { AudioEvidence } from "../shared/media/audio-evidence.js";
@@ -41,6 +42,7 @@ export type OperatorApiClient = typeof apiClient;
 type OperatorRoutePaths = {
   root: string;
   levelForms: string;
+  months: string;
   weeks: string;
   lessons: string;
   review: string;
@@ -104,6 +106,7 @@ function OperatorRouteControllerContent({ session, client, paths }: { session: S
     : location.pathname === paths.root ? <DashboardRoute {...props} />
       : location.pathname === paths.tests ? <TestsRoute {...props} initialTab="placement" />
         : location.pathname === paths.levelForms ? <TestsRoute {...props} initialTab="promotion" />
+        : location.pathname === paths.months ? <MonthsRoute {...props} />
         : location.pathname === paths.weeks ? <WeeksRoute {...props} />
           : location.pathname === paths.lessons ? <LessonsRoute {...props} />
             : location.pathname === paths.review ? <ReviewRoute {...props} canEditWeeklyPractice={session.role === "operator"} />
@@ -116,6 +119,7 @@ function routePathsFor(basePath: "/op" | "/mgr/ops"): OperatorRoutePaths {
   return {
     root: basePath === "/op" ? basePath : `${basePath}/levels`,
     levelForms: basePath === "/op" ? `${basePath}/levelforms` : `${basePath}/level-forms`,
+    months: `${basePath}/months`,
     weeks: `${basePath}/weeks`,
     lessons: `${basePath}/lessons`,
     review: `${basePath}/review`,
@@ -526,6 +530,94 @@ function LevelFormsRoute({ client, readOnly, embedded = false }: { client: Opera
     setDialog({ detail: updated, editing: true });
     await load();
   }} />}</>;
+}
+
+function MonthsRoute({ client, readOnly }: { client: OperatorApiClient; readOnly: boolean }) {
+  const modal = useModal();
+  const [overview, setOverview] = useState<MonthlyOperatorOverviewView>();
+  const [month, setMonth] = useState<string>();
+  const [cefr, setCefr] = useState<Cefr>("A1");
+  const [framework, setFramework] = useState<MonthFrameworkView | null>(null);
+  const [error, setError] = useState<string>();
+  const [status, setStatus] = useState<string>();
+  const [busy, setBusy] = useState(false);
+  const [editor, setEditor] = useState<MonthLessonDetailView>();
+  const [editorBusy, setEditorBusy] = useState(false);
+  const [editorError, setEditorError] = useState<string>();
+  const loadOverview = () => client.getContentMonths().then(data => {
+    setOverview(data);
+    setMonth(current => current ?? data.months[1]?.month ?? data.months[0]?.month);
+    setCefr(current => data.activeLevels.includes(current) ? current : (data.activeLevels[0] ?? "A1"));
+  }).catch(reason => setError(message(reason)));
+  const loadFramework = (targetMonth: string, targetCefr: Cefr) => client.getContentMonthFramework(targetMonth, targetCefr).then(setFramework).catch(reason => setError(message(reason)));
+  useEffect(() => { void loadOverview(); }, [client]);
+  useEffect(() => { if (month) void loadFramework(month, cefr); }, [client, month, cefr]);
+  // Khung/bài đang sinh ở worker: tự tải lại mỗi 4 giây cho tới khi xong.
+  const pending = Boolean(framework && (
+    (framework.status === "draft" && framework.vocabulary.length === 0 && !framework.generationError)
+    || framework.lessons.some(cell => cell.status === "generating")
+    || framework.exam.status === "generating"
+  ));
+  useEffect(() => {
+    if (!pending || !month) return;
+    const timer = setInterval(() => { void loadFramework(month, cefr); void loadOverview(); }, 4_000);
+    return () => clearInterval(timer);
+  }, [pending, month, cefr]);
+  if (error && !overview) return <Status tone="error">Không tải được tháng học: {error}</Status>;
+  if (!overview || !month) return <Status>Đang tải tháng học…</Status>;
+  const run = async (action: () => Promise<unknown>, pendingLabel: string, successLabel: string) => {
+    if (readOnly) return;
+    setError(undefined); setStatus(pendingLabel); setBusy(true);
+    try {
+      await action();
+      setStatus(successLabel);
+      await Promise.all([loadFramework(month, cefr), loadOverview()]);
+    } catch (reason) {
+      setStatus(undefined); setError(message(reason));
+    } finally { setBusy(false); }
+  };
+  const view: OperatorMonthsView = { overview, month, cefr, framework, busy, status, error };
+  const openLesson = (lessonNumber: number) => {
+    if (!framework?.id) return;
+    setEditorError(undefined);
+    void client.getContentMonthLesson(framework.id, lessonNumber).then(setEditor).catch(reason => setError(message(reason)));
+  };
+  const saveLesson = async (lesson: ContentLessonDraftInput) => {
+    if (!framework?.id || !editor) return;
+    setEditorBusy(true); setEditorError(undefined);
+    try {
+      await client.saveContentMonthLesson(framework.id, editor.lessonNumber, { ...lesson, dayNumber: editor.lessonNumber });
+      setEditor(undefined);
+      setStatus(`Đã lưu bài ${editor.lessonNumber}. Bài quay về trạng thái nháp, cần duyệt lại.`);
+      await Promise.all([loadFramework(month, cefr), loadOverview()]);
+    } catch (reason) {
+      setEditorError(message(reason));
+    } finally { setEditorBusy(false); }
+  };
+  return <>
+    <OperatorMonths readOnly={readOnly} view={view} actions={{
+      onSelectMonth: value => { setFramework(null); setMonth(value); },
+      onSelectLevel: value => { setFramework(null); setCefr(value); },
+      onRefresh: () => { void loadFramework(month, cefr); void loadOverview(); },
+      onGenerateFramework: () => void run(() => client.generateContentMonthFramework(month, cefr), "Đã gửi yêu cầu sinh khung. Worker đang xử lý…", "Worker đang sinh khung; màn hình tự cập nhật."),
+      onApproveFramework: () => void (async () => {
+        if (!framework?.id) return;
+        const confirmed = await modal.confirm({
+          title: "Duyệt khung tháng?",
+          message: "Bài thi tháng sẽ sinh từ khung này. Phần bạn soạn tay ở từng ngày sẽ KHÔNG đưa vào bài thi tháng. Sau khi duyệt không sinh lại khung được nữa.",
+          confirmLabel: "Duyệt khung",
+          tone: "primary"
+        });
+        if (confirmed) await run(() => client.approveContentMonthFramework(framework.id!), "Đang khoá khung và chia bài ngày…", "Khung đã duyệt. Worker đang chia bài ngày; màn hình tự cập nhật.");
+      })(),
+      onOpenLesson: openLesson,
+      onApproveLesson: lessonNumber => void run(() => client.approveContentMonthLesson(framework!.id!, lessonNumber), `Đang duyệt bài ${lessonNumber}…`, `Đã duyệt bài ${lessonNumber}.`),
+      onGenerateExam: () => void run(() => client.generateContentMonthExam(framework!.id!), "Đã gửi yêu cầu sinh bài thi tháng…", "Worker đang sinh đề; màn hình tự cập nhật."),
+      onApproveExam: () => void run(() => client.approveContentMonthExam(framework!.id!), "Đang duyệt bài thi tháng…", "Bài thi tháng đã duyệt.")
+    }} />
+    {editor && <LessonFormEditor weekNumber={0} cefr={cefr} initial={{ ...editor.lesson, dayNumber: editor.lessonNumber - 1 }} busy={editorBusy} onCancel={() => setEditor(undefined)} onSave={lesson => saveLesson({ ...lesson, dayNumber: editor.lessonNumber })} {...(client.uploadContentMedia ? { uploadMedia: async (kind: "audio" | "image", file: Blob, filename: string) => ({ url: (await client.uploadContentMedia(kind, file, filename)).url }) } : {})} />}
+    {editorError && <div className="banner danger" role="alert"><div className="body small">{editorError}</div></div>}
+  </>;
 }
 
 function WeeksRoute({ client, readOnly }: { client: OperatorApiClient; readOnly: boolean }) {

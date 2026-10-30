@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
-import { MONTH_FRAMEWORK_PROMPT, MONTH_FRAMEWORK_TASK_KEY, monthFrameworkOutputJsonSchema, monthFrameworkOutputSchema } from "@e4s/ai";
+import { MONTH_FRAMEWORK_PROMPT, MONTH_FRAMEWORK_TASK_KEY, MONTHLY_EXAM_PROMPT, MONTHLY_EXAM_TASK_KEY, monthFrameworkOutputJsonSchema, monthFrameworkOutputSchema, monthlyExamOutputJsonSchema, monthlyExamOutputSchema } from "@e4s/ai";
 import type { MonthlyContentRepository } from "@e4s/database";
-import { buildMonthlyCalendar, buildMonthlyExamBlueprint, buildSampleFramework, validateMonthFramework, type MonthFramework } from "@e4s/domain";
+import { applyAiMonthlyExamContent, buildMonthlyCalendar, buildMonthlyExamBlueprint, buildSampleFramework, validateMonthFramework, type MonthFramework, type MonthlyExamBlueprint } from "@e4s/domain";
 import type { WorkerAiProvider } from "./handlers.js";
 import type { JobHandler } from "./worker.js";
 
@@ -16,7 +16,7 @@ export function createMonthlyHandlers(input: { monthly: MonthlyContentRepository
       const framework = await input.monthly.frameworkById(frameworkId);
       if (!framework) return;
       const organization = await input.monthly.organizationFor(await actorFor(input.monthly, frameworkId, job.payload));
-      const settings = organization?.settings ?? { vocabularyCount: 60, grammarTopicCount: 3, soundCount: 4, examDurationMinutes: 60 };
+      const settings = organization?.settings ?? { vocabularyCount: 60, grammarTopicCount: 3, soundCount: 4, examDurationMinutes: 30 };
       const calendar = buildMonthlyCalendar(framework.month);
       try {
         const generated = input.ai
@@ -46,19 +46,23 @@ export function createMonthlyHandlers(input: { monthly: MonthlyContentRepository
       try {
         const organization = await input.monthly.organizationFor(await actorFor(input.monthly, frameworkId, job.payload));
         const calendar = buildMonthlyCalendar(framework.month);
-        const blueprint = buildMonthlyExamBlueprint({
-          framework: { cefr: framework.cefr, vocabulary: framework.vocabulary, grammarTopics: framework.grammarTopics, sounds: framework.sounds },
+        const monthFramework: MonthFramework = { cefr: framework.cefr, vocabulary: framework.vocabulary, grammarTopics: framework.grammarTopics, sounds: framework.sounds };
+        const template = buildMonthlyExamBlueprint({
+          framework: monthFramework,
           month: framework.month,
           examDate: calendar.examDate,
-          durationMinutes: organization?.settings.examDurationMinutes ?? 60,
+          durationMinutes: organization?.settings.examDurationMinutes ?? 30,
           lessonCount: calendar.lessonCount
         });
-        await input.monthly.storeGeneratedExam(frameworkId, blueprint as unknown as Record<string, unknown> & { title: string });
+        // AI điền nội dung tự nhiên vào cấu hình đã khoá; không đạt kiểm tra GEN thì giữ bản template.
+        const enriched = input.ai ? await generateExamWithAi(input.ai, input.monthly, framework.organizationId, monthFramework, template) : null;
+        await input.monthly.storeGeneratedExam(frameworkId, (enriched ?? template) as unknown as Record<string, unknown> & { title: string });
       } catch (error) {
         await input.monthly.failExamGeneration(frameworkId, error instanceof Error ? error.message : String(error));
         throw error;
       }
     }
+
   };
 }
 
@@ -108,4 +112,47 @@ function payloadOf(payload: unknown): { frameworkId: string; actorId?: string } 
   const frameworkId = typeof record.frameworkId === "string" ? record.frameworkId : "";
   if (!frameworkId) throw new Error("MONTHLY_JOB_PAYLOAD_INVALID");
   return { frameworkId, ...(typeof record.actorId === "string" ? { actorId: record.actorId } : {}) };
+}
+
+async function generateExamWithAi(
+  ai: WorkerAiProvider,
+  monthly: MonthlyContentRepository,
+  organizationId: string,
+  framework: MonthFramework,
+  template: MonthlyExamBlueprint
+): Promise<MonthlyExamBlueprint | null> {
+  const prompt = (await monthly.activePrompt(organizationId, MONTHLY_EXAM_TASK_KEY)) ?? MONTHLY_EXAM_PROMPT;
+  const ids = framework.vocabulary.map((item, index) => ({ id: `V${String(index + 1).padStart(2, "0")}`, ...item }));
+  const { listening, reading, writing, speaking } = template.config.allocation;
+  const assignments = {
+    listening: ids.slice(0, listening),
+    reading: ids.slice(listening, listening + reading),
+    writing: ids.slice(listening + reading, listening + reading + writing),
+    speaking: ids.slice(listening + reading + writing, listening + reading + writing + speaking)
+  };
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 180_000);
+  try {
+    const raw = await ai.complete({
+      taskId: MONTHLY_EXAM_TASK_KEY,
+      systemPrompt: prompt,
+      input: {
+        month: template.month, cefr: framework.cefr, examDate: template.examDate,
+        config: template.config, assignments,
+        grammarTopics: framework.grammarTopics,
+        sounds: framework.sounds.map((sound) => ({ ipa: sound.ipa, label: sound.label, samples: sound.examples.slice(0, template.config.samplesPerSound) })),
+        listeningBlocks: template.config.listeningBlocks
+      },
+      outputJsonSchema: monthlyExamOutputJsonSchema as unknown as Record<string, unknown>,
+      signal: controller.signal,
+      traceId: randomUUID()
+    });
+    const parsed = monthlyExamOutputSchema.safeParse(raw);
+    if (!parsed.success) return null;
+    return applyAiMonthlyExamContent(template, parsed.data, framework);
+  } catch {
+    return null;
+  } finally {
+    clearTimeout(timeout);
+  }
 }

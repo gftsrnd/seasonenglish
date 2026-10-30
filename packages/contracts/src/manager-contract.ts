@@ -422,7 +422,7 @@ export interface MonthlyCycleSettings {
   readonly grammarTopicCount: number;
   /** Z âm luyện phát âm lặp lại suốt tháng. */
   readonly soundCount: number;
-  /** Thời lượng bài thi tháng (phút). Tạm 60, chờ PO chốt. Giờ khoá = 24:00 − thời lượng − 5 phút. */
+  /** Thời lượng bài thi tháng (phút). Chuẩn PO v1.1 = 30 (8–8–8–6). Giờ khoá = 24:00 − thời lượng − 5 phút. */
   readonly examDurationMinutes: number;
   /** Mục tiêu số lượt luyện với Season mỗi tháng (tạm). */
   readonly coachMonthlyTarget: number;

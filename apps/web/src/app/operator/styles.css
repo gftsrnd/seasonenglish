@@ -3589,3 +3589,20 @@ body > .operator-modal-scope .operator-vocabulary-entry-audio-grid { display: gr
   .operator-level-form-dialog-actions { align-self: stretch; justify-content: flex-end; }
   .operator-level-audio { grid-template-columns: 1fr; }
 }
+
+/* Tháng học: màn chia đôi — trái khung tháng, phải lưới bài ngày. */
+.app-operator .operator-month-split { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 16px; align-items: start; }
+@media (max-width: 960px) { .app-operator .operator-month-split { grid-template-columns: minmax(0, 1fr); } }
+.app-operator .operator-month-tabs, .app-operator .operator-month-levels, .app-operator .operator-month-framework-tabs { flex-wrap: wrap; gap: 6px; }
+.app-operator .operator-month-framework-actions { gap: 8px; margin: 8px 0 12px; }
+.app-operator .operator-month-vocabulary { max-height: 60vh; overflow: auto; padding-left: 20px; display: grid; gap: 6px; }
+.app-operator .operator-month-abstract { margin-left: 6px; }
+.app-operator .operator-month-steps { padding-left: 18px; display: grid; gap: 6px; margin-top: 6px; }
+.app-operator .operator-month-days { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 8px; margin: 10px 0; }
+.app-operator .operator-month-day { border: 1px solid var(--line); border-radius: 12px; padding: 8px 10px; display: grid; gap: 6px; background: #fff; }
+.app-operator .operator-month-day--approved { border-color: #a7d7b4; background: #f3fbf5; }
+.app-operator .operator-month-day--failed { border-color: #f0b4b4; background: #fff5f5; }
+.app-operator .operator-month-day--generating { opacity: .75; }
+.app-operator .operator-month-day-title { min-height: 2.6em; overflow: hidden; }
+.app-operator .operator-month-day-actions { gap: 4px; }
+.app-operator .operator-month-exam { margin-top: 12px; }
