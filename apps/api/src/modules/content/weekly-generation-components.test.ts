@@ -150,13 +150,14 @@ function vocabularyItem(
   family: string,
   synonym: string
 ) {
+  const sibling = ({ confirm: "meeting", clarify: "question", approve: "decision" } as const)[word];
   return {
     word, partOfSpeech: "verb", pronunciation, stress: "first syllable", ttsText: word,
     ssml: `<speak>${word}</speak>`, meaning, imageQuery: `${word} workplace conversation photo`,
     collocation1: `${word} details`, collocation2: `${word} a request`, collocation3: `${word} today`,
     family1: { word: family, type: "noun", meaning: `danh từ của ${word}` }, family2: null,
     umbrellaWord: "workplace communication", umbrellaMeaning: "giao tiếp công việc",
-    sibling1: { word: "report", meaning: "báo cáo" }, sibling2: null, sibling3: null,
+    sibling1: { word: sibling, meaning: "từ cùng nhóm" }, sibling2: null, sibling3: null,
     synonym1: {
       word: synonym, level: "A2", note: "same workplace sense", partOfSpeech: "verb",
       sense: `to ${word} information`, example: `We ${synonym} the details today.`
@@ -179,6 +180,25 @@ function vocabularyFor(level: LevelCase) {
       }
     }
   };
+}
+
+/** Gives sequence tests distinct learner-facing cards without changing their focus assertions. */
+function vocabularyForDay(level: LevelCase, dayNumber: number) {
+  const base = vocabularyFor(level);
+  if (dayNumber === 1) return base;
+  const marker = ["alpha", "bravo", "charlie", "delta", "echo"][dayNumber - 1]!;
+  const mark = (word: string) => `${word}-${marker}`;
+  const item = (source: typeof base.word1 | typeof base.word3) => ({
+    ...source,
+    word: mark(source.word),
+    ttsText: mark(source.word),
+    ssml: `<speak>${mark(source.word)}</speak>`,
+    family1: source.family1 ? { ...source.family1, word: mark(source.family1.word) } : null,
+    synonym1: source.synonym1 ? { ...source.synonym1, word: mark(source.synonym1.word), example: `We use ${mark(source.synonym1.word)} today.` } : null,
+    antonym1: source.antonym1 ? { ...source.antonym1, word: mark(source.antonym1.word), example: `We avoid ${mark(source.antonym1.word)} today.` } : null,
+    sibling1: source.sibling1 ? { ...source.sibling1, word: mark(source.sibling1.word) } : null
+  });
+  return { ...base, word1: item(base.word1), word2: item(base.word2), word3: item(base.word3) };
 }
 
 function choice(level: LevelCase, title: string, body: string, prompt: string, answer: string, options: string[]) {
@@ -2180,6 +2200,27 @@ describe("direct weekly-generation component contracts", () => {
           ...output.word2.synonym1!,
           word: output.word2.word
         }
+      }
+    };
+    const { runner, runTask } = sequencedRunner("weekly_lesson_vocabulary", [duplicatedRelation, output]);
+
+    const result = await generateWeeklyLessonVocabulary({
+      ...inputFor(level), grammarFormula: "Could you confirm + noun?",
+      grammarExamples: ["Could you confirm the deadline?", "Could you confirm the meeting?"], excludedVocabulary: []
+    }, runner);
+
+    expect(result.output.word2.synonym1).toEqual(output.word2.synonym1);
+    expect(runTask).toHaveBeenCalledTimes(2);
+  });
+
+  it("repairs a learner-facing relation that repeats another card in the same day", async () => {
+    const level = levelCases[2];
+    const output = vocabularyFor(level);
+    const duplicatedRelation = {
+      ...output,
+      word2: {
+        ...output.word2,
+        synonym1: { ...output.word2.synonym1!, word: output.word1.word }
       }
     };
     const { runner, runTask } = sequencedRunner("weekly_lesson_vocabulary", [duplicatedRelation, output]);
@@ -4536,7 +4577,7 @@ describe("partial lesson vs final lesson grammar contract", () => {
         if (dayNumber === 2) return { output: { ...foundationFor(a1), grammar: null }, metadata: { ...metadata, taskId } };
       }
       if (!(taskId in outputs)) throw new Error(`UNEXPECTED_TASK:${taskId}`);
-      return { output: outputs[taskId], metadata: { ...metadata, taskId } };
+      return { output: taskId === "weekly_lesson_vocabulary" ? vocabularyForDay(a1, dayNumber) : outputs[taskId], metadata: { ...metadata, taskId } };
     });
     const focus = "Could you confirm + noun?";
     const generated = await generateWeeklyLessonLevelPipeline({
@@ -4625,7 +4666,7 @@ describe("AI_UNAVAILABLE classification", () => {
         return { output: { ...foundationFor(a1), grammar: null }, metadata: { ...metadata, taskId } };
       }
       if (!(taskId in outputs)) throw new Error(`UNEXPECTED_TASK:${taskId}`);
-      return { output: outputs[taskId], metadata: { ...metadata, taskId } };
+      return { output: taskId === "weekly_lesson_vocabulary" ? vocabularyForDay(a1, dayNumber) : outputs[taskId], metadata: { ...metadata, taskId } };
     });
     return { runTask } as unknown as AiTaskRunner;
   }

@@ -183,12 +183,19 @@ function vocabularyLanguageFindings(
 function vocabularyDuplicationFindings(
   value: ReturnType<typeof weeklyLessonVocabularyOutputSchema.parse>
 ): Array<{ path: PropertyKey[]; message: string }> {
-  const seen = new Set<string>();
-  return (["word1", "word2", "word3"] as const).flatMap((slot) => {
-    const normalized = value[slot].word.trim().toLocaleLowerCase("en-US");
-    if (seen.has(normalized)) return [{ path: [slot, "word"], message: `${value[slot].word} is duplicated inside this vocabulary component; all three words must be distinct.` }];
-    seen.add(normalized);
-    return [];
+  const owners = new Map<string, { word: string; path: PropertyKey[] }>();
+  return vocabularyLexicalTerms(value).flatMap((term) => {
+    const key = normalizeVocabularyKey(term.word);
+    if (!key) return [];
+    const prior = owners.get(key);
+    if (!prior) {
+      owners.set(key, { word: term.word, path: term.path });
+      return [];
+    }
+    return [{
+      path: term.path,
+      message: `${term.word} is duplicated inside this vocabulary component (already used at ${prior.path.join(".")}); every learner-facing target, family, synonym, antonym and sibling must be introduced once.`
+    }];
   });
 }
 
@@ -368,7 +375,7 @@ const VOCABULARY_CONTRACT = [
   "Generate only the vocabulary fields required by the strict tool schema for ONE learner-facing lesson.",
   "Return exactly three useful words matching lessonFocus and, only when non-null, grammarFormula.",
   "A null grammarFormula and grammarExamples mean the grammar classifier abstained. Do not invent a grammar target; generate vocabulary from lessonFocus.",
-  "Treat excludedVocabulary as a bounded diversity hint, not a prohibition. Prefer fresh words when equally useful, but keep a repeated core lessonFocus word when it is pedagogically necessary. The three words inside this response must be distinct from each other.",
+  "Treat excludedVocabulary as a bounded diversity hint, not a prohibition. Prefer fresh words when equally useful, but keep a repeated core lessonFocus word when it is pedagogically necessary. Any list explicitly labelled RETAINED-DAY VOCABULARY, PRIMARY TARGETS RESERVED FOR OTHER DAYS, or FORBIDDEN LEARNER-FACING WORDS is a hard prohibition: never return those words as a target, family, synonym, antonym or sibling; they may appear only in practice prose.",
   "Each word needs partOfSpeech, slash-delimited IPA, stress, exact ttsText, matching <speak> SSML (ssml must speak ONLY ttsText, e.g. <speak>word</speak> or <speak><phoneme alphabet=\"ipa\" ph=\"...\">word</phoneme></speak>, never a full sentence), Vietnamese meaning, a concrete photographic imageQuery, and exactly three natural collocations.",
   "For heteronyms whose pronunciation changes by part of speech (such as record, present, conduct, project, contract, update, produce, object), ensure partOfSpeech, pronunciation, stress, and ssml all match the exact part of speech used in the lesson.",
   "imageQuery must describe one clear real-world workplace photo with the target visible; no icons, logos, diagrams, screenshots, charts, or text-heavy images.",
@@ -381,7 +388,7 @@ const VOCABULARY_CONTRACT = [
   "For synonym1, synonym2 and antonym1, copy the target item's partOfSpeech string exactly into relation.partOfSpeech. If the relation is not truly that part of speech in the shown example, replace the relation word instead of changing the label.",
   "A synonym or antonym word must never equal its target word, even with different casing. If no distinct dictionary-valid relation exists, return null instead of repeating the target.",
   "Every ordinary vocabulary target must have at least one genuine same-sense synonym or antonym. Set relationStatus to 'provided' when it does. A no_natural_relation or above_cefr_level exemption is allowed only for a calendar/time label (for example Monday or a date) or a system identifier; never use it for an ordinary workplace word. When an ordinary target has no genuine same-level relation, replace that target with an equally relevant CEFR-appropriate word from lessonFocus rather than inventing a false relation.",
-  "Final preflight before answering: (1) word1-word3 are distinct, (2) every non-null relation word differs from its own target, and (3) every relation example contains that relation word. Repair every failed check before returning the tool output.",
+  "Final preflight before answering: (1) no learner-facing word is repeated anywhere among word1-word3, family, synonym, antonym or sibling cards, (2) every non-null relation word differs from its own target, and (3) every relation example contains that relation word. Repair every failed check before returning the tool output.",
   "For B1-C1, add a language preflight: scan every string outside keys named meaning or ending in Meaning; replace any Vietnamese in title, note, sense, example, collocation, relation or label with English before returning.",
   "Use null only for additional optional relations or an antonym that would be false or unnatural; never invent a fake relation. Return no prose outside the tool."
 ].join("\n");
@@ -2133,6 +2140,10 @@ export async function generateWeeklyLessonDayPipeline(
   runner: AiTaskRunner,
   options: {
     excludedVocabulary?: readonly string[];
+    /** Learner-facing terms accepted in earlier days of this same CEFR level. */
+    forbiddenVocabulary?: readonly string[];
+    /** Primary plan terms assigned to other days of this same CEFR level. */
+    reservedVocabulary?: readonly string[];
     qualityProfile?: LessonQualityProfile;
     pronunciationAssetRegistry?: PronunciationAssetRegistry;
     onProgress?: (event: LessonGenerationProgressEvent) => void;
@@ -2270,7 +2281,9 @@ export async function generateWeeklyLessonDayPipeline(
         grammarExamples: foundationOutput.grammar
           ? [foundationOutput.grammar.example1, foundationOutput.grammar.example2]
           : null,
-        excludedVocabulary: [...(options.excludedVocabulary ?? [])]
+        excludedVocabulary: [...(options.excludedVocabulary ?? [])],
+        ...(options.forbiddenVocabulary?.length ? { forbiddenVocabulary: [...options.forbiddenVocabulary] } : {}),
+        ...(options.reservedVocabulary?.length ? { reservedVocabulary: [...options.reservedVocabulary] } : {})
       }, runner, {
         ...(options.onProgress ? { onProgress: options.onProgress } : {})
       });
@@ -2732,7 +2745,14 @@ export async function generateWeeklyLessonLevelPipeline(
   const lessons: ContentLessonDraftInput[] = [];
   const checkpoints: WeeklyLessonPipelineCheckpoint[] = [];
   const results: AiRunResult[] = [];
+  // Keep historical content as a diversity preference only. This per-level
+  // registry grows after each accepted day, so later days see actual cards
+  // already introduced rather than a speculative vocabulary list.
   const excludedVocabulary = new Set(boundedVocabularyHistory(options.excludedVocabulary ?? []));
+  const introducedVocabulary = new Set<string>();
+  const reservedVocabularyForDay = (dayNumber: number) => plan.flatMap((focus, index) =>
+    index + 1 === dayNumber ? [] : weeklyPlanVocabularyTermsFromFocus(focus)
+  );
   const sequence = await runWeeklyLessonDaySequence(selectedDays, async (dayNumber) => {
     const generated = await generateWeeklyLessonDayPipeline({
       weekNumber: week.weekNumber,
@@ -2749,6 +2769,8 @@ export async function generateWeeklyLessonLevelPipeline(
       // the current level's accepted words so later C1 days cannot fail input
       // validation before the provider is called.
       excludedVocabulary: [...excludedVocabulary].slice(-80),
+      ...(introducedVocabulary.size > 0 ? { forbiddenVocabulary: [...introducedVocabulary].slice(-80) } : {}),
+      reservedVocabulary: reservedVocabularyForDay(dayNumber),
       qualityProfile: options.qualityProfile ?? "strict",
       ...(options.pronunciationAssetRegistry ? { pronunciationAssetRegistry: options.pronunciationAssetRegistry } : {}),
       ...(options.onProgress ? { onProgress: options.onProgress } : {}),
@@ -2761,13 +2783,11 @@ export async function generateWeeklyLessonLevelPipeline(
     const vocabulary = (generated.checkpoints.findLast((checkpoint) => checkpoint.component === "vocabulary")?.output
       ?? options.resumeStatesByDay?.[dayNumber]?.vocabulary) as Vocabulary | undefined;
     if (vocabulary) {
-      excludedVocabulary.add(vocabulary.word1.word.trim().toLocaleLowerCase("en-US"));
-      excludedVocabulary.add(vocabulary.word2.word.trim().toLocaleLowerCase("en-US"));
-      excludedVocabulary.add(vocabulary.word3.word.trim().toLocaleLowerCase("en-US"));
-      while (excludedVocabulary.size > 80) {
-        const oldest = excludedVocabulary.values().next().value as string | undefined;
+      for (const term of vocabularyLexicalTerms(vocabulary)) introducedVocabulary.add(normalizeVocabularyKey(term.word));
+      while (introducedVocabulary.size > 80) {
+        const oldest = introducedVocabulary.values().next().value as string | undefined;
         if (!oldest) break;
-        excludedVocabulary.delete(oldest);
+        introducedVocabulary.delete(oldest);
       }
     }
     return generated;
