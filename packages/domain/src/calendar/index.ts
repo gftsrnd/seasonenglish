@@ -32,7 +32,7 @@ export function createOffsetClock(fakeNow: Date | string, base: Clock = systemCl
   return { now: () => new Date(base.now().getTime() + offset) };
 }
 
-export function fakeClockAllowed(env: { NODE_ENV?: string; E4S_ALLOW_FAKE_CLOCK?: string }): boolean {
+export function fakeClockAllowed(env: { NODE_ENV?: string | undefined; E4S_ALLOW_FAKE_CLOCK?: string | undefined }): boolean {
   return env.NODE_ENV !== "production" || env.E4S_ALLOW_FAKE_CLOCK === "1";
 }
 

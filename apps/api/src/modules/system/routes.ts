@@ -5,6 +5,7 @@ import type { FastifyInstance } from "fastify";
 import type { Pool } from "pg";
 import { z } from "zod";
 import { createRoleGuard } from "../identity/policy.js";
+import { buildOrganizationClock, fakeClockEnabled } from "./clock.js";
 import { createOrganisationExperienceEvents } from "./organisation-experience-events.js";
 
 const organisationExperienceThemes = ["auto", "spring", "summer", "autumn", "winter", "tet", "midautumn", "christmas"] as const;
@@ -118,10 +119,12 @@ export function registerSystemRoutes(
       configured: boolean;
       ai_test_disabled: boolean;
       last_test_status: "never" | "success" | "error" | "timeout" | null;
+      fake_clock_at: string | null;
     }>(
       `select pc.provider, pc.model, (pc.secret_ciphertext is not null) as configured,
               coalesce((os.configuration ->> 'aiTestDisabled')::boolean, false) as ai_test_disabled,
-              pc.last_test_status
+              pc.last_test_status,
+              os.configuration #>> '{monthly,fakeClockAt}' as fake_clock_at
        from users u
        left join provider_configurations pc on pc.organization_id = u.organization_id
        left join organization_settings os on os.organization_id = u.organization_id
@@ -141,6 +144,8 @@ export function registerSystemRoutes(
       aiProvider: providerRow?.provider ?? null,
       aiModel: providerRow?.model ?? null,
       aiLastTest: providerRow?.last_test_status ?? null,
+      fakeClockAllowed: fakeClockEnabled(),
+      fakeClockAt: buildOrganizationClock(providerRow?.fake_clock_at ?? null).fakeClockAt,
       objectStorage: await objectStorageAvailable(storage),
       maintenance: maintenanceEnabled,
       imageProviders

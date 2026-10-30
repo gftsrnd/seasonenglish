@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type ButtonHTMLAttributes, type CSSProperties, type ReactNode } from "react";
-import type { ManagerProviderSettingsInput, ManagerProviderSettingsView, ManagerSettingsInput, ManagerSettingsView, ManagerWebhookTestView, OperatorSettingsOverviewView, OrganisationExperienceInput, OrganisationExperienceView, ProductPreferencesView, SystemCapabilitiesView } from "@e4s/contracts";
+import type { ManagerProviderSettingsInput, ManagerProviderSettingsView, ManagerSettingsInput, ManagerSettingsView, ManagerWebhookTestView, MonthlyCycleSettings, OperatorSettingsOverviewView, OrganisationExperienceInput, OrganisationExperienceView, ProductPreferencesView, SystemCapabilitiesView } from "@e4s/contracts";
 import { Flower2, Gift, Leaf, MoonStar, Snowflake, Sparkles, Star, Sun } from "lucide-react";
 import { autoSeasonTheme } from "../games/season-visual.js";
 import { MUSIC_PRESETS } from "../../features/experience/music-presets.js";
@@ -102,6 +102,7 @@ export function SettingsPage({ role, manager, product, experience, capabilities,
       <MusicSection value={experienceDraft} onChange={setExperienceDraft} {...(saveExperienceDraft ? { onSave: saveExperienceDraft } : {})} />
       <WebhookSection value={managerDraft} onChange={setManagerDraft} {...(actions.onSaveManager ? { onSave: () => actions.onSaveManager!(toInput(managerDraft)) } : {})} {...(actions.onTestWebhook ? { onTest: actions.onTestWebhook } : {})} />
       <PolicySection value={managerDraft} onChange={setManagerDraft} {...(actions.onSaveManager ? { onSave: () => actions.onSaveManager!(toInput(managerDraft)) } : {})} />
+      <MonthlySection value={managerDraft} onChange={setManagerDraft} fakeClockAllowed={capabilities.fakeClockAllowed === true} {...(actions.onSaveManager ? { onSave: () => actions.onSaveManager!(toInput(managerDraft)) } : {})} />
       <DataSection actions={actions} capabilities={capabilities} />
       {accounts}
     </> : <>
@@ -264,6 +265,41 @@ function WebhookSection({ value, onChange, onSave, onTest }: ManagerSectionProps
 }
 
 function PolicySection({ value, onChange, onSave }: ManagerSectionProps) { return <section className="card"><h3>Chính sách nhắc học và báo cáo</h3><NumberField label="Số ngày không hoạt động trước khi nhắc" value={value.reminderInactiveDays} min={1} max={30} onChange={(reminderInactiveDays) => onChange({ ...value, reminderInactiveDays })} /><label className="check"><input type="checkbox" checked={value.weeklyReportEnabled} onChange={(event) => onChange({ ...value, weeklyReportEnabled: event.target.checked })} /> Bật báo cáo tuần</label><Save label="Lưu chính sách" onSave={onSave} /></section>; }
+
+const DEFAULT_MONTHLY: MonthlyCycleSettings = { vocabularyCount: 60, grammarTopicCount: 3, soundCount: 4, examDurationMinutes: 60, coachMonthlyTarget: 100, retentionCleanupEnabled: true, fakeClockAt: null };
+function MonthlySection({ value, onChange, onSave, fakeClockAllowed }: ManagerSectionProps & { fakeClockAllowed: boolean }) {
+  const monthly = value.monthly ?? DEFAULT_MONTHLY;
+  const set = (patch: Partial<MonthlyCycleSettings>) => onChange({ ...value, monthly: { ...monthly, ...patch } });
+  const lockLabel = examLockLabel(monthly.examDurationMinutes);
+  const fakeLocal = monthly.fakeClockAt ? toLocalInputValue(monthly.fakeClockAt) : "";
+  return <section className="card"><h3>Cơ chế học theo tháng</h3>
+    <p className="small muted">Khung tháng cho mỗi level có N từ vựng, Y chủ điểm ngữ pháp và Z âm (PO chốt 60 / 3 / 4). N phải nhỏ hơn 90 và không vượt 3 × số bài của tháng.</p>
+    <div className="grid cols-3">
+      <NumberField label="N từ vựng mỗi tháng" value={monthly.vocabularyCount} min={1} max={89} onChange={(vocabularyCount) => set({ vocabularyCount })} />
+      <NumberField label="Y chủ điểm ngữ pháp" value={monthly.grammarTopicCount} min={1} max={12} onChange={(grammarTopicCount) => set({ grammarTopicCount })} />
+      <NumberField label="Z âm luyện phát âm" value={monthly.soundCount} min={1} max={12} onChange={(soundCount) => set({ soundCount })} />
+    </div>
+    <div className="grid cols-2">
+      <NumberField label={`Thời lượng bài thi tháng (phút, tạm — chờ PO chốt) · ${lockLabel}`} value={monthly.examDurationMinutes} min={10} max={600} onChange={(examDurationMinutes) => set({ examDurationMinutes })} />
+      <NumberField label="Mục tiêu lượt luyện Season mỗi tháng (tạm)" value={monthly.coachMonthlyTarget} min={1} max={1000} onChange={(coachMonthlyTarget) => set({ coachMonthlyTarget })} />
+    </div>
+    <label className="check"><input type="checkbox" checked={monthly.retentionCleanupEnabled} onChange={(event) => set({ retentionCleanupEnabled: event.target.checked })} /> Tự xoá nội dung bài học của tháng ngoài phạm vi 3 tháng (giữ báo cáo, log kháng nghị, kết quả thi)</label>
+    {fakeClockAllowed ? <Field label="Ngày giờ giả lập cho kiểm thử (để trống = giờ thật; không bao giờ có hiệu lực trên production)"><input type="datetime-local" value={fakeLocal} onChange={(event) => set({ fakeClockAt: event.target.value ? new Date(event.target.value).toISOString() : null })} /></Field> : null}
+    <Save label="Lưu cơ chế tháng" onSave={onSave} />
+  </section>;
+}
+export function examLockLabel(durationMinutes: number): string {
+  const total = 24 * 60 - durationMinutes - 5;
+  if (!Number.isFinite(total) || total <= 0) return "Thời lượng không hợp lệ";
+  const hours = Math.floor(total / 60); const minutes = total % 60;
+  return `Khoá vào ${String(hours).padStart(2, "0")}:${String(minutes).padStart(2, "0")} ngày thi`;
+}
+function toLocalInputValue(iso: string): string {
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) return "";
+  const pad = (value: number) => String(value).padStart(2, "0");
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
+}
 
 function DataSection({ actions, capabilities }: { actions: Partial<SettingsActions>; capabilities: SystemCapabilitiesView }) { const reason = "Chưa có endpoint hệ thống cho thao tác này"; return <section className="card"><h3>Dữ liệu</h3><p className="small muted">Sao lưu, chuyển dữ liệu hoặc nạp dữ liệu kiểm thử qua API hệ thống. Trạng thái: API ✓ · Database ✓ · AI {capabilities.ai ? "✓" : "—"} · Object storage {capabilities.objectStorage ? "✓" : "—"}.</p><div className="row"><AsyncButton action={actions.onExportJson} disabled={!actions.onExportJson} busyLabel="Đang xuất…" title={!actions.onExportJson ? reason : undefined}>Xuất JSON</AsyncButton><ImportJsonButton action={actions.onImportJson} disabled={!actions.onImportJson} reason={reason} /><AsyncButton action={actions.onExportCsv} disabled={!actions.onExportCsv} busyLabel="Đang xuất…" title={!actions.onExportCsv ? reason : undefined}>Xuất CSV tiến độ</AsyncButton>{actions.onSeedData ? <AsyncButton action={actions.onSeedData} busyLabel="Đang chuẩn bị…">Nạp dữ liệu mẫu</AsyncButton> : null}{actions.onWipeData ? <AsyncButton className="btn-danger" action={actions.onWipeData} busyLabel="Đang chuẩn bị…">Xoá toàn bộ</AsyncButton> : null}</div></section>; }
 

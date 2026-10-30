@@ -411,6 +411,25 @@ export interface ManagerSettingsView {
   readonly backgroundMusic: { readonly enabled: boolean; readonly url: string; readonly volume: number };
   readonly baseWebhookUrl: string;
   readonly baseWebhookTemplate: string;
+  /** Cơ chế học theo tháng (thay lịch pilot theo tuần). Server luôn điền mặc định; optional để fixture cũ không vỡ. */
+  readonly monthly?: MonthlyCycleSettings;
+}
+
+export interface MonthlyCycleSettings {
+  /** N từ vựng của khung tháng; N < 90 và N ≤ 3 × số bài của tháng. */
+  readonly vocabularyCount: number;
+  /** Y chủ điểm ngữ pháp. */
+  readonly grammarTopicCount: number;
+  /** Z âm luyện phát âm lặp lại suốt tháng. */
+  readonly soundCount: number;
+  /** Thời lượng bài thi tháng (phút). Tạm 60, chờ PO chốt. Giờ khoá = 24:00 − thời lượng − 5 phút. */
+  readonly examDurationMinutes: number;
+  /** Mục tiêu số lượt luyện với Season mỗi tháng (tạm). */
+  readonly coachMonthlyTarget: number;
+  /** Job dọn nội dung bài học của tháng ngoài phạm vi 3 tháng. */
+  readonly retentionCleanupEnabled: boolean;
+  /** Ngày giờ giả lập (ISO) cho local/test; API bỏ qua trên production trừ khi E4S_ALLOW_FAKE_CLOCK=1. */
+  readonly fakeClockAt: string | null;
 }
 
 export type ManagerSettingsInput = Omit<ManagerSettingsView, "organizationName" | "pilotCycle"> & {
@@ -472,6 +491,10 @@ export interface SystemCapabilitiesView {
   readonly aiProvider?: ManagerProviderKind | null;
   readonly aiModel?: string | null;
   readonly aiLastTest?: ManagerProviderTestStatus | null;
+  /** Môi trường cho phép đặt ngày giờ giả lập (không phải production, hoặc E4S_ALLOW_FAKE_CLOCK=1). */
+  readonly fakeClockAllowed?: boolean;
+  /** Mốc giả lập đang có hiệu lực (ISO), null khi dùng giờ thật. Web hiện banner đỏ khi khác null. */
+  readonly fakeClockAt?: string | null;
   readonly objectStorage: boolean;
   /** Only configuration readiness is exposed; provider credentials never leave the API. */
   readonly imageProviders: {

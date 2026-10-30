@@ -1,4 +1,4 @@
-import { createOffsetClock, fakeClockAllowed, systemClock, type Clock } from "@e4s/domain";
+import { createOffsetClock, fakeClockAllowed, systemClock, type Clock } from "@e4s/domain/calendar";
 import type { Pool } from "pg";
 
 /**

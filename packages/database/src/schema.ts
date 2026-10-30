@@ -250,7 +250,9 @@ export const appeals = pgTable("appeals", {
   id: uuid("id").primaryKey(), attemptId: uuid("attempt_id").notNull().references(() => assessmentAttempts.id),
   learnerId: uuid("learner_id").notNull().references(() => users.id), reason: text("reason").notNull(),
   status: text("status").notNull().default("pending"), resolvedBy: uuid("resolved_by").references(() => users.id),
-  resolution: text("resolution"), createdAt: now(), resolvedAt: timestamp("resolved_at", { withTimezone: true })
+  resolution: text("resolution"), createdAt: now(), resolvedAt: timestamp("resolved_at", { withTimezone: true }),
+  // Khiếu nại đầu vào / pass course (0081): level đề xuất, loại bài, hạn 3 ngày.
+  proposedLevel: text("proposed_level"), kind: text("kind").notNull().default("placement"), expiresAt: timestamp("expires_at", { withTimezone: true })
 });
 
 export const aiTasks = pgTable("ai_tasks", {
@@ -449,6 +451,69 @@ export const auditEvents = pgTable("audit_events", {
   traceId: text("trace_id").notNull(), createdAt: now()
 });
 
+// ---------- Cơ chế học theo tháng (migration 0081) ----------
+
+export const programMonths = pgTable("program_months", {
+  id: uuid("id").primaryKey(), organizationId: uuid("organization_id").notNull().references(() => organizations.id, { onDelete: "cascade" }),
+  month: text("month").notNull(), examDate: date("exam_date").notNull(), lessonCount: integer("lesson_count").notNull(), createdAt: now()
+}, (table) => [uniqueIndex("program_months_organization_month_unique").on(table.organizationId, table.month)]);
+
+export const monthFrameworks = pgTable("month_frameworks", {
+  id: uuid("id").primaryKey(), programMonthId: uuid("program_month_id").notNull().references(() => programMonths.id, { onDelete: "cascade" }),
+  cefr: text("cefr").notNull(), status: text("status").notNull().default("draft"), version: integer("version").notNull().default(1),
+  vocabulary: jsonb("vocabulary").notNull().default(emptyArray), grammarTopics: jsonb("grammar_topics").notNull().default(emptyArray),
+  sounds: jsonb("sounds").notNull().default(emptyArray), distributionPlan: jsonb("distribution_plan").notNull().default(emptyObject),
+  source: text("source").notNull().default("ai"), generationJobId: uuid("generation_job_id").references(() => jobs.id), generationError: text("generation_error"),
+  examAssessmentVersionId: uuid("exam_assessment_version_id").references(() => assessmentVersions.id), examStatus: text("exam_status").notNull().default("none"),
+  examGenerationError: text("exam_generation_error"), examApprovedBy: uuid("exam_approved_by").references(() => users.id),
+  examApprovedAt: timestamp("exam_approved_at", { withTimezone: true }),
+  createdBy: uuid("created_by").references(() => users.id), approvedBy: uuid("approved_by").references(() => users.id),
+  approvedAt: timestamp("approved_at", { withTimezone: true }), createdAt: now(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow()
+}, (table) => [uniqueIndex("month_frameworks_month_cefr_unique").on(table.programMonthId, table.cefr)]);
+
+export const monthLessons = pgTable("month_lessons", {
+  id: uuid("id").primaryKey(), frameworkId: uuid("framework_id").notNull().references(() => monthFrameworks.id, { onDelete: "cascade" }),
+  lessonNumber: integer("lesson_number").notNull(), lessonDate: date("lesson_date").notNull(),
+  lessonId: uuid("lesson_id").references(() => lessons.id, { onDelete: "set null" }), status: text("status").notNull().default("pending"),
+  generationError: text("generation_error"), approvedBy: uuid("approved_by").references(() => users.id),
+  approvedAt: timestamp("approved_at", { withTimezone: true }), createdAt: now(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow()
+}, (table) => [uniqueIndex("month_lessons_framework_number_unique").on(table.frameworkId, table.lessonNumber)]);
+
+export const learnerMonthEnrollments = pgTable("learner_month_enrollments", {
+  id: uuid("id").primaryKey(), learnerId: uuid("learner_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  programMonthId: uuid("program_month_id").notNull().references(() => programMonths.id, { onDelete: "cascade" }), cefr: text("cefr").notNull(),
+  mode: text("mode").notNull(), effectiveDays: jsonb("effective_days").notNull().default(emptyArray), maxAbsences: integer("max_absences").notNull().default(0),
+  ratioPercent: numeric("ratio_percent", { precision: 5, scale: 2 }), approvedAt: timestamp("approved_at", { withTimezone: true }).notNull(),
+  startsOn: date("starts_on"), reason: text("reason").notNull(), countsForLevelUp: boolean("counts_for_level_up").notNull().default(true), createdAt: now()
+}, (table) => [uniqueIndex("learner_month_enrollments_learner_month_unique").on(table.learnerId, table.programMonthId)]);
+
+export const learnerAttendanceDays = pgTable("learner_attendance_days", {
+  learnerId: uuid("learner_id").notNull().references(() => users.id, { onDelete: "cascade" }), attendanceDate: date("attendance_date").notNull(),
+  lessonId: uuid("lesson_id").references(() => lessons.id, { onDelete: "set null" }), createdAt: now()
+});
+
+export const monthlyExamAppeals = pgTable("monthly_exam_appeals", {
+  id: uuid("id").primaryKey(), learnerId: uuid("learner_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  programMonthId: uuid("program_month_id").notNull().references(() => programMonths.id, { onDelete: "cascade" }), reason: text("reason").notNull(),
+  status: text("status").notNull().default("pending"), deadlineAt: timestamp("deadline_at", { withTimezone: true }).notNull(), resolution: text("resolution"),
+  resolvedBy: uuid("resolved_by").references(() => users.id), resolvedAt: timestamp("resolved_at", { withTimezone: true }), createdAt: now()
+}, (table) => [uniqueIndex("monthly_exam_appeals_learner_month_unique").on(table.learnerId, table.programMonthId)]);
+
+export const monthlyUnlockRequests = pgTable("monthly_unlock_requests", {
+  id: uuid("id").primaryKey(), learnerId: uuid("learner_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  missedProgramMonthId: uuid("missed_program_month_id").notNull().references(() => programMonths.id, { onDelete: "cascade" }), reason: text("reason").notNull(),
+  status: text("status").notNull().default("pending"), resolution: text("resolution"), resolvedBy: uuid("resolved_by").references(() => users.id),
+  resolvedAt: timestamp("resolved_at", { withTimezone: true }), createdAt: now()
+}, (table) => [uniqueIndex("monthly_unlock_requests_learner_month_unique").on(table.learnerId, table.missedProgramMonthId)]);
+
+export const accountLocks = pgTable("account_locks", {
+  id: uuid("id").primaryKey(), learnerId: uuid("learner_id").notNull().references(() => users.id, { onDelete: "cascade" }), reason: text("reason").notNull(),
+  detail: jsonb("detail").notNull().default(emptyObject), lockedAt: timestamp("locked_at", { withTimezone: true }).notNull().defaultNow(),
+  unlockedBy: uuid("unlocked_by").references(() => users.id), unlockedAt: timestamp("unlocked_at", { withTimezone: true }), unlockNote: text("unlock_note")
+});
+
 export const idempotencyKeys = pgTable("idempotency_keys", {
   id: bigserial("id", { mode: "number" }).primaryKey(), scope: text("scope").notNull(), key: text("key").notNull(),
   response: jsonb("response").notNull(), createdAt: now()
@@ -462,5 +527,6 @@ export const databaseSchema = {
   lessonPartAppeals, lessonPartAttempts, lessonSets, lessonVersions, lessons, notificationDeliveries, organizations, organizationSettings, providerConfigurations,
   practiceSubmissions, learnerVocabularyUnlocks, levelUpChallengeResults, practiceAppeals,
   programWeeks, programs, progressRecords, promptVersions,
+  programMonths, monthFrameworks, monthLessons, learnerMonthEnrollments, learnerAttendanceDays, monthlyExamAppeals, monthlyUnlockRequests, accountLocks,
   reminders, rewardEvents, rubricVersions, sessions, surveys, userCredentials, users, managerPinReports, managerDestructiveConfirmations, managerMaintenanceBackups
 };

@@ -54,7 +54,7 @@ describe("new Settings app branch", () => {
   it("keeps Manager sections in app order", () => {
     const { container } = render(<SettingsPage role="manager" manager={manager} product={product} capabilities={capabilities} ai={{ provider: "openai", configured: true, baseUrl: "https://api.groq.com/openai/v1", model: "qwen/qwen3.8-27b", speechToTextModel: "whisper-large-v3-turbo" }} actions={actions()} accounts={<section><h3>Người dùng</h3></section>} />);
     expect([...container.querySelectorAll("h3")].map((node) => node.textContent)).toEqual([
-      "Prompt & rubric", "Kết nối AI", "Lịch pilot", "Ảnh minh hoạ từ vựng", "Ngưỡng xét lên / hạ mức", "Giao diện theo mùa / lễ", "Nhạc nền của Season", "Nhắc học qua Base.vn (Base Message incoming webhook)", "Chính sách nhắc học và báo cáo", "Dữ liệu", "Người dùng"
+      "Prompt & rubric", "Kết nối AI", "Lịch pilot", "Ảnh minh hoạ từ vựng", "Ngưỡng xét lên / hạ mức", "Giao diện theo mùa / lễ", "Nhạc nền của Season", "Nhắc học qua Base.vn (Base Message incoming webhook)", "Chính sách nhắc học và báo cáo", "Cơ chế học theo tháng", "Dữ liệu", "Người dùng"
     ]);
     expect(screen.getByText(/Khoá nhà cung cấp được lưu an toàn ở server/)).toBeInTheDocument();
     expect(screen.getByText("Xuất JSON")).toBeInTheDocument();

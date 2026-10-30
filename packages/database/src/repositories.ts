@@ -9335,7 +9335,9 @@ class ManagerRepository {
       testTimed: true, testTimes: { listening: 15, reading: 20, writing: 20, speaking: 15 }, testWarnLimit: 3,
       levelUp: { days: 14, lessons: 90, firstTry: 75, submission: 80, coach: 4, coachTurns: 6, wrong: 30, minParts: 4 },
       backgroundMusic: { enabled: true, url: "", volume: 22 },
-      baseWebhookUrl: "", baseWebhookTemplate: "{\"base_content\":\"{message}\"}"
+      baseWebhookUrl: "", baseWebhookTemplate: "{\"base_content\":\"{message}\"}",
+      // PO chốt N=60, Y=3, Z=4. Thời lượng bài thi tháng tạm 60 phút, chờ PO chốt.
+      monthly: { vocabularyCount: 60, grammarTopicCount: 3, soundCount: 4, examDurationMinutes: 60, coachMonthlyTarget: 100, retentionCleanupEnabled: true, fakeClockAt: null }
     };
     const result = await this.pool.query<{ reminder_inactive_days: number; weekly_report_enabled: boolean; configuration: Partial<Omit<ManagerSettingsView, "organizationName">> }>(
       "select reminder_inactive_days, weekly_report_enabled, configuration from organization_settings where organization_id = $1",
@@ -9350,7 +9352,8 @@ class ManagerRepository {
           weekOverride: 0,
           testTimes: { ...defaults.testTimes, ...settings.configuration?.testTimes },
           levelUp: { ...defaults.levelUp, ...settings.configuration?.levelUp },
-          backgroundMusic: { ...defaults.backgroundMusic, ...settings.configuration?.backgroundMusic } }
+          backgroundMusic: { ...defaults.backgroundMusic, ...settings.configuration?.backgroundMusic },
+          monthly: { ...defaults.monthly!, ...settings.configuration?.monthly } as NonNullable<ManagerSettingsView["monthly"]> }
       : defaults;
     if (!activeProgram) return base;
     const start = Date.parse(`${activeProgram.start_date}T00:00:00.000Z`);

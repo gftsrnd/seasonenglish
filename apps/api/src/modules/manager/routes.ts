@@ -36,7 +36,16 @@ const managerSettingsInput = z.object({
   testWarnLimit: z.number().int().min(1).max(10),
   levelUp: z.object({ days: z.number().int().min(1).max(60), lessons: z.number().min(1).max(100), firstTry: z.number().min(1).max(100), submission: z.number().min(1).max(100), coach: z.number().min(0).max(5), coachTurns: z.number().int().min(0).max(100), wrong: z.number().min(1).max(100), minParts: z.number().int().min(1).max(50) }),
   backgroundMusic: z.object({ enabled: z.boolean(), url: z.string().max(1000), volume: z.number().int().min(0).max(100) }),
-  baseWebhookUrl: z.string().max(1000), baseWebhookTemplate: z.string().max(4000)
+  baseWebhookUrl: z.string().max(1000), baseWebhookTemplate: z.string().max(4000),
+  monthly: z.object({
+    vocabularyCount: z.number().int().min(1).max(89),
+    grammarTopicCount: z.number().int().min(1).max(12),
+    soundCount: z.number().int().min(1).max(12),
+    examDurationMinutes: z.number().int().min(10).max(600),
+    coachMonthlyTarget: z.number().int().min(1).max(1000),
+    retentionCleanupEnabled: z.boolean(),
+    fakeClockAt: z.string().datetime({ offset: true }).nullable()
+  }).default({ vocabularyCount: 60, grammarTopicCount: 3, soundCount: 4, examDurationMinutes: 60, coachMonthlyTarget: 100, retentionCleanupEnabled: true, fakeClockAt: null })
 }).refine(input => new Date(`${input.pilotStartDate}T00:00:00Z`).getUTCDay() === 1, { path: ["pilotStartDate"], message: "Pilot must start on Monday" });
 const managerProviderSettingsInput = z.object({
   provider: z.enum(["claude", "gemini", "openai"]),
