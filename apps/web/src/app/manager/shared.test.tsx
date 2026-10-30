@@ -3,11 +3,21 @@ import "@testing-library/jest-dom/vitest";
 import { cleanup, render, screen } from "@testing-library/react";
 import { userEvent } from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { OperationalCards } from "./shared.js";
+import { copyText, OperationalCards } from "./shared.js";
 
 afterEach(cleanup);
 
 describe("Manager shared operational cards", () => {
+  it("falls back to document copy when the browser clipboard never resolves", async () => {
+    Object.defineProperty(navigator, "clipboard", { configurable: true, value: { writeText: vi.fn(() => new Promise<void>(() => undefined)) } });
+    Object.defineProperty(document, "execCommand", { configurable: true, value: vi.fn(() => true) });
+    const execCommand = vi.spyOn(document, "execCommand");
+
+    await copyText("Tin nhắc học");
+
+    expect(execCommand).toHaveBeenCalledWith("copy");
+  });
+
   it("keeps the canonical deletion-request and trash card blocks with manager actions", async () => {
     const open = vi.fn();
     const purge = vi.fn();

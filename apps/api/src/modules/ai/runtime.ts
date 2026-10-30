@@ -26,7 +26,7 @@ export function createOrganizationAiRunnerFactory(pool: Pool, fallback?: AiTaskR
     if (testMode.rows[0]?.ai_test_disabled === true) return undefined;
     // When an environment provider is selected it is the only source of
     // truth. Never silently fall through to a stale database provider.
-    if (options.preferFallback) return fallback;
+    if (options.preferFallback ?? Boolean(fallback)) return fallback;
     const runtime = await repositories.manager.providerRuntime(actorId);
     if (!runtime) return fallback;
     return createAiService({

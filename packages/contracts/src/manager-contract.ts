@@ -130,6 +130,15 @@ export interface ManagerAccountsView {
   readonly accounts: readonly ManagerAccountView[];
 }
 
+export interface ManagerAccountPinView {
+  readonly pin: string;
+}
+
+export interface ManagerAccountCredentialView {
+  readonly credential: string;
+  readonly kind: "pin" | "password";
+}
+
 /** Read-only organisation snapshot available to Operators; no account mutation is exposed. */
 export interface OperatorSettingsOverviewView {
   readonly organizationName: string;
@@ -155,6 +164,7 @@ export interface OperatorSettingsOverviewView {
 export interface ManagerReminderCandidateView {
   readonly learnerId: string;
   readonly learnerName: string;
+  readonly learnerEmail?: string | null;
   readonly cefr: CefrLevel | null;
   readonly lastActivityAt: string | null;
   readonly missedDays?: number;
@@ -164,10 +174,11 @@ export interface ManagerReminderHistoryView {
   readonly reminderId: string;
   readonly learnerId: string;
   readonly learnerName: string;
+  readonly recipient?: string | null;
   readonly missedDays: number | null;
   readonly status: string;
   readonly deliveryStatus: string | null;
-  readonly provider: string | null;
+  readonly provider: ManagerReminderProvider | null;
   readonly createdAt: string;
   readonly attemptedAt: string | null;
 }
@@ -176,17 +187,22 @@ export interface ManagerRemindersView {
   readonly organizationName: string;
   readonly inactiveDays: number;
   readonly webhookConfigured?: boolean;
+  readonly emailConfigured?: boolean;
   readonly candidates: readonly ManagerReminderCandidateView[];
   readonly history?: readonly ManagerReminderHistoryView[];
 }
 
+export type ManagerReminderChannel = "email" | "base";
+export type ManagerReminderProvider = "resend" | "base_webhook";
+export type ManagerReminderDeliveryStatus = "queued" | "sent" | "failed";
+
 export interface ManagerReminderSendView {
   readonly reminderId: string;
   readonly learnerId: string;
-  readonly status: "queued";
+  readonly status: ManagerReminderDeliveryStatus;
   /** The request is queued locally; it is not reported as delivered before a provider confirms it. */
-  readonly deliveryStatus?: "queued";
-  readonly provider?: "local_queue" | "base_webhook";
+  readonly deliveryStatus: ManagerReminderDeliveryStatus;
+  readonly provider: ManagerReminderProvider;
 }
 
 export interface ManagerReminderDismissView {
@@ -367,6 +383,20 @@ export interface ManagerSettingsView {
   readonly weeklyReportEnabled: boolean;
   readonly pilotStartDate: string;
   readonly pilotWeeks: number;
+  /** Server-derived lifecycle shared by Manager, Operator and Learner views. */
+  readonly pilotCycle?: {
+    readonly number: number;
+    readonly currentWeek: number;
+    readonly state: "active" | "awaiting_next_cycle";
+    readonly startDate: string;
+    readonly endDate: string;
+    readonly lastExtension?: {
+      readonly actorName: string;
+      readonly fromWeeks: number;
+      readonly toWeeks: number;
+      readonly changedAt: string;
+    };
+  };
   readonly weekOverride: number;
   readonly minMinutesPerDay: number;
   readonly courseTheme: string;
@@ -383,7 +413,10 @@ export interface ManagerSettingsView {
   readonly baseWebhookTemplate: string;
 }
 
-export type ManagerSettingsInput = Omit<ManagerSettingsView, "organizationName">;
+export type ManagerSettingsInput = Omit<ManagerSettingsView, "organizationName" | "pilotCycle"> & {
+  /** Present only when the user explicitly saves the pilot-cycle section. */
+  readonly pilotCycleAction?: "save";
+};
 
 export type ManagerProviderKind = "claude" | "gemini" | "openai";
 

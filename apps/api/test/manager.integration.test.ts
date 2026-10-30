@@ -15,10 +15,11 @@ const reminderLearnerId = "00000000-0000-4000-8000-000000000107";
 const copiedReminderLearnerId = "00000000-0000-4000-8000-000000000108";
 const dismissedReminderLearnerId = "00000000-0000-4000-8000-000000000109";
 const staleReminderLearnerId = "00000000-0000-4000-8000-000000000110";
+process.env.E4S_SETTINGS_ENCRYPTION_KEY = Buffer.alloc(32, 7).toString("base64");
 
 describe("manager progress and operations API", () => {
   const pool = new Pool({ connectionString: databaseUrl });
-  const app = buildApi({ pool, allowDemoLogin: true, secureCookies: false });
+  const app = buildApi({ pool, allowDemoLogin: true, secureCookies: false, reminderEmailSender: { sendReminder: async () => ({ externalId: "test-email" }) } });
   let managerCookie = "";
   let operatorCookie = "";
   let checkerCookie = "";
@@ -217,6 +218,41 @@ describe("manager progress and operations API", () => {
     expect(response.json()).toMatchObject({ code: "MANAGER_SELF_ROLE_CHANGE_FORBIDDEN" });
   });
 
+  it("lets only a Manager reveal a recoverable learner PIN without resetting it", async () => {
+    const created = await app.inject({
+      method: "POST", url: "/api/v1/manager/accounts", headers: { cookie: managerCookie },
+      payload: { displayName: "PIN Reveal API", email: "pin-reveal-api@e4s.local", role: "learner", password: "246802" }
+    });
+    expect(created.statusCode, created.body).toBe(201);
+    const accountId = created.json().id as string;
+
+    const managerReveal = await app.inject({ method: "GET", url: `/api/v1/manager/accounts/${accountId}/pin`, headers: { cookie: managerCookie } });
+    const nonManagerReveal = await app.inject({ method: "GET", url: `/api/v1/manager/accounts/${accountId}/pin`, headers: { cookie: checkerCookie } });
+    const legacyReveal = await app.inject({ method: "GET", url: `/api/v1/manager/accounts/${DEMO_IDS.learner}/pin`, headers: { cookie: managerCookie } });
+
+    expect(managerReveal.statusCode, managerReveal.body).toBe(200);
+    expect(managerReveal.json()).toEqual({ pin: "246802" });
+    expect(nonManagerReveal.statusCode).toBe(403);
+    expect(legacyReveal.statusCode).toBe(409);
+    expect(legacyReveal.json()).toEqual({ code: "MANAGER_ACCOUNT_PIN_UNAVAILABLE" });
+  });
+
+  it("lets only a Manager reveal a recoverable staff password", async () => {
+    const created = await app.inject({
+      method: "POST", url: "/api/v1/manager/accounts", headers: { cookie: managerCookie },
+      payload: { displayName: "Staff Credential Reveal", email: "staff-credential@e4s.local", role: "operator", password: "staff-pass-123" }
+    });
+    expect(created.statusCode, created.body).toBe(201);
+    const accountId = created.json().id as string;
+
+    const managerReveal = await app.inject({ method: "GET", url: `/api/v1/manager/accounts/${accountId}/credential`, headers: { cookie: managerCookie } });
+    const nonManagerReveal = await app.inject({ method: "GET", url: `/api/v1/manager/accounts/${accountId}/credential`, headers: { cookie: checkerCookie } });
+
+    expect(managerReveal.statusCode, managerReveal.body).toBe(200);
+    expect(managerReveal.json()).toEqual({ credential: "staff-pass-123", kind: "password" });
+    expect(nonManagerReveal.statusCode).toBe(403);
+  });
+
   it("returns stable client statuses for invalid and missing account or learner identifiers", async () => {
     const missingAccountId = "00000000-0000-4000-8000-000000009999";
     const missingRole = await app.inject({
@@ -237,11 +273,11 @@ describe("manager progress and operations API", () => {
     });
     const invalidReminderId = await app.inject({
       method: "POST", url: "/api/v1/manager/reminders/not-a-uuid", headers: { cookie: managerCookie },
-      payload: { requestId: "api-audit-invalid" }
+      payload: { requestId: "api-audit-invalid", channel: "email" }
     });
     const missingReminder = await app.inject({
       method: "POST", url: `/api/v1/manager/reminders/${missingAccountId}`, headers: { cookie: managerCookie },
-      payload: { requestId: "api-audit-missing" }
+      payload: { requestId: "api-audit-missing", channel: "email" }
     });
 
     expect(missingRole.statusCode).toBe(404);
@@ -338,6 +374,22 @@ describe("manager progress and operations API", () => {
     expect(login.statusCode, login.body).toBe(200);
     expect(login.json()).toMatchObject({ role: "learner", user: { displayName: "Học viên mới", email } });
 
+    const invalidReset = await app.inject({
+      method: "POST", url: `/api/v1/manager/accounts/${created.json().id}/password-reset`, headers: { cookie: managerCookie },
+      payload: { password: "not-a-pin" }
+    });
+    expect(invalidReset.statusCode).toBe(400);
+    expect(invalidReset.json()).toEqual({ code: "MANAGER_ACCOUNT_PASSWORD_INVALID" });
+
+    const reset = await app.inject({
+      method: "POST", url: `/api/v1/manager/accounts/${created.json().id}/password-reset`, headers: { cookie: managerCookie },
+      payload: { password: "246802" }
+    });
+    expect(reset.statusCode, reset.body).toBe(200);
+    expect(reset.json()).toEqual({ saved: true });
+    expect((await app.inject({ method: "POST", url: "/api/auth/learner/login", payload: { email, pin: "135790" } })).statusCode).toBe(401);
+    expect((await app.inject({ method: "POST", url: "/api/auth/learner/login", payload: { email, pin: "246802" } })).statusCode).toBe(200);
+
     const accounts = await app.inject({
       method: "GET", url: "/api/v1/manager/accounts", headers: { cookie: managerCookie }
     });
@@ -361,6 +413,7 @@ describe("manager progress and operations API", () => {
     expect(candidates.json()).toMatchObject({
       inactiveDays: expect.any(Number),
       webhookConfigured: false,
+      candidates: expect.arrayContaining([expect.objectContaining({ learnerId: reminderLearnerId, learnerEmail: "reminder@e4s.local" })]),
       history: []
     });
     expect(candidates.json().candidates).toEqual(
@@ -369,15 +422,15 @@ describe("manager progress and operations API", () => {
       ])
     );
 
-    const request = { method: "POST" as const, url: `/api/v1/manager/reminders/${reminderLearnerId}`, headers: { cookie: managerCookie }, payload: { requestId: "reminder-retry-1" } };
+    const request = { method: "POST" as const, url: `/api/v1/manager/reminders/${reminderLearnerId}`, headers: { cookie: managerCookie }, payload: { requestId: "reminder-retry-1", channel: "email" } };
     const [sent, retried] = await Promise.all([app.inject(request), app.inject(request)]);
     expect(sent.statusCode, sent.body).toBe(200);
     expect(retried.statusCode, retried.body).toBe(200);
-    expect(sent.json()).toMatchObject({ learnerId: reminderLearnerId, status: "queued", deliveryStatus: "queued", provider: "local_queue" });
+    expect(sent.json()).toMatchObject({ learnerId: reminderLearnerId, status: "sent", deliveryStatus: "sent", provider: "resend" });
     expect(retried.json()).toMatchObject({ reminderId: sent.json().reminderId });
     const reusedForDifferentLearner = await app.inject({
       method: "POST", url: `/api/v1/manager/reminders/${copiedReminderLearnerId}`, headers: { cookie: managerCookie },
-      payload: { requestId: "reminder-retry-1" }
+      payload: { requestId: "reminder-retry-1", channel: "email" }
     });
     expect(reusedForDifferentLearner.statusCode, reusedForDifferentLearner.body).toBe(409);
     expect(reusedForDifferentLearner.json()).toEqual({ code: "MANAGER_REMINDER_REQUEST_REUSED" });
@@ -387,15 +440,17 @@ describe("manager progress and operations API", () => {
       .resolves.toMatchObject({ rows: [{ count: 1 }] });
 
     const afterSend = await app.inject({ method: "GET", url: "/api/v1/manager/reminders", headers: { cookie: managerCookie } });
+    expect(afterSend.json().candidates).not.toEqual(expect.arrayContaining([expect.objectContaining({ learnerId: reminderLearnerId })]));
     expect(afterSend.json()).toMatchObject({
       history: [expect.objectContaining({
         reminderId: sent.json().reminderId,
         learnerId: reminderLearnerId,
         learnerName: "Học viên Cần nhắc",
+        recipient: "reminder@e4s.local",
         missedDays: 5,
-        status: "queued",
-        deliveryStatus: "queued",
-        provider: "local_queue"
+        status: "sent",
+        deliveryStatus: "sent",
+        provider: "resend"
       })]
     });
   });
@@ -408,7 +463,7 @@ describe("manager progress and operations API", () => {
     );
     const sent = await app.inject({
       method: "POST", url: `/api/v1/manager/reminders/${staleReminderLearnerId}`, headers: { cookie: managerCookie },
-      payload: { requestId: "stale-reminder-request" }
+      payload: { requestId: "stale-reminder-request", channel: "email" }
     });
     const copied = await app.inject({ method: "POST", url: `/api/v1/manager/reminders/${staleReminderLearnerId}/copy`, headers: { cookie: managerCookie } });
     const dismissed = await app.inject({ method: "POST", url: `/api/v1/manager/reminders/${staleReminderLearnerId}/dismiss`, headers: { cookie: managerCookie } });
@@ -421,7 +476,7 @@ describe("manager progress and operations API", () => {
       .resolves.toMatchObject({ rows: [{ count: 0 }] });
   });
 
-  it("records a copied reminder in history, removes it from pending and keeps the action Manager-only", async () => {
+  it("records a copied reminder in history, keeps it pending for repeat copy and keeps the action Manager-only", async () => {
     const copied = await app.inject({
       method: "POST",
       url: `/api/v1/manager/reminders/${copiedReminderLearnerId}/copy`,
@@ -437,7 +492,7 @@ describe("manager progress and operations API", () => {
     expect(copied.statusCode, copied.body).toBe(200);
     expect(forbidden.statusCode).toBe(403);
     expect(copied.json()).toMatchObject({ learnerId: copiedReminderLearnerId, status: "copied" });
-    expect(afterCopy.json().candidates).not.toEqual(
+    expect(afterCopy.json().candidates).toEqual(
       expect.arrayContaining([expect.objectContaining({ learnerId: copiedReminderLearnerId })])
     );
     expect(afterCopy.json().history).toEqual(
@@ -507,9 +562,10 @@ describe("manager progress and operations API", () => {
       method: "PUT", url: "/api/v1/manager/settings", headers: { cookie: managerCookie },
       payload: { reminderInactiveDays: 0, weeklyReportEnabled: true }
     });
+    const originalPilotStartDate = (current.json() as { pilotStartDate: string }).pilotStartDate;
     const saved = await app.inject({
       method: "PUT", url: "/api/v1/manager/settings", headers: { cookie: managerCookie },
-      payload: { ...(current.json() as Record<string, unknown>), organizationName: undefined, programName: "E4S Workplace", reminderInactiveDays: 5, weeklyReportEnabled: false }
+      payload: { ...(current.json() as Record<string, unknown>), organizationName: undefined, programName: "E4S Workplace", reminderInactiveDays: 5, weeklyReportEnabled: false, pilotStartDate: "2030-01-07" }
     });
     const reloaded = await app.inject({ method: "GET", url: "/api/v1/manager/settings", headers: { cookie: managerCookie } });
 
@@ -517,7 +573,7 @@ describe("manager progress and operations API", () => {
     expect(invalid.statusCode).toBe(400);
     expect(saved.statusCode, saved.body).toBe(200);
     expect(reloaded.statusCode, reloaded.body).toBe(200);
-    expect(reloaded.json()).toMatchObject({ programName: "E4S Workplace", reminderInactiveDays: 5, weeklyReportEnabled: false });
+    expect(reloaded.json()).toMatchObject({ programName: "E4S Workplace", reminderInactiveDays: 5, weeklyReportEnabled: false, pilotStartDate: originalPilotStartDate });
     const activeProgram = await pool.query("select name from programs where organization_id = $1 and status = 'active'", [DEMO_IDS.organization]);
     expect(activeProgram.rows[0]?.name).toBe("E4S Workplace");
     expect(JSON.stringify(reloaded.json())).not.toMatch(/secret|api.?key|provider.?key/i);

@@ -76,18 +76,13 @@ export interface LessonContent {
   parts: LessonPart[];
 }
 
-/**
- * Stable pronunciation payload used by learner/operator adapters.
- * `phonemeAudioUrl` is a clip of the target phoneme only; `wordAudioUrls`
- * aligns by index with `words` and contains whole-word clips.
- */
+/** Stable pronunciation payload used by learner/operator adapters. */
 export interface LessonPronunciationContent {
   focus: string;
   tip?: string;
   instruction?: string;
   words: Array<{ word: string; ipa?: string }>;
-  phonemeAudioId?: string;
-  phonemeAudioUrl?: string;
+  /** Aligns by index with `words` and contains whole-word clips. */
   wordAudioUrls?: string[];
 }
 
@@ -251,7 +246,7 @@ export interface WeekView {
 export interface LearnerHomeView {
   onboardingRequired: boolean;
   learner: { displayName: string; cefr: CefrLevel | null };
-  program: { name: string; weekCount: number } | null;
+  program: { name: string; weekCount: number; cycleNumber?: number } | null;
   week: WeekView | null;
   lessons: LessonSummary[];
   nextLesson: LessonSummary | null;

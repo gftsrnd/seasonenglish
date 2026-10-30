@@ -73,7 +73,8 @@ const nav: Record<ShellRole, readonly NavItem[]> = {
     { to: "/op", icon: icons.check, label: "Duyệt mức" },
     { to: "/op/weeks", icon: icons.cal, label: "Chủ đề" },
     { to: "/op/lessons", icon: icons.book, label: "Bài học" },
-    { to: "/op/review", icon: icons.search, label: "Đọc mẫu" },
+    { to: "/op/review", icon: icons.search, label: "Bài tuần" },
+    { to: "/op/tests", icon: icons.doc, label: "Bài kiểm tra" },
     { to: "/settings", icon: icons.cog, label: "Cài đặt" }
   ],
   manager: [

@@ -1,7 +1,7 @@
 import type {
   AssessmentDecisionInput, AssessmentDecisionView, AssessmentDeletionRequestView, AssessmentLevelChangeInput,
   AssessmentLevelChangeView, AssessmentLevelFormDeleteView, AssessmentLevelFormDetailView,
-  AssessmentLevelFormSlotView, AssessmentLevelFormView, AssessmentMonthlyGoalView,
+  AssessmentLevelFormSlotView, AssessmentLevelFormUpdateInput, AssessmentLevelFormView, AssessmentMonthlyGoalView,
   AssessmentReviewAttemptDetailView, AssessmentReviewChallengeView, AssessmentReviewLearnerView,
   AssessmentReviewOverviewView, CefrLevel, ContentLessonDraftInput, ContentLessonMatrixView,
   ContentLessonMutationResult, ContentLessonSetVersionView, ContentPromptKey, ContentPromptSettingsView,
@@ -42,6 +42,8 @@ export interface OperatorApiClient {
   getAssessmentLevelForms(): Promise<AssessmentLevelFormSlotView[]>;
   getAssessmentLevelForm(versionId: string): Promise<AssessmentLevelFormDetailView>;
   generateAssessmentLevelForm(targetLevel: Exclude<CefrLevel, "A1">): Promise<AssessmentLevelFormView>;
+  updateAssessmentLevelForm(versionId: string, input: AssessmentLevelFormUpdateInput): Promise<AssessmentLevelFormDetailView>;
+  copyAssessmentLevelFormToDraft(versionId: string): Promise<AssessmentLevelFormDetailView>;
   publishAssessmentLevelForm(versionId: string): Promise<AssessmentLevelFormView>;
   deleteAssessmentLevelForm(versionId: string): Promise<AssessmentLevelFormDeleteView>;
   getContentWeeks(): Promise<ContentWeekFrameView>;
@@ -104,6 +106,8 @@ export const operatorApiClient: OperatorApiClient = {
   getAssessmentLevelForms: () => request("/api/v1/assessment-level-forms"),
   getAssessmentLevelForm: (versionId) => request(`/api/v1/assessment-level-forms/${encodeURIComponent(versionId)}`),
   generateAssessmentLevelForm: (targetLevel) => request(`/api/v1/assessment-level-forms/${encodeURIComponent(targetLevel)}/generate`, { method: "POST", body: "{}" }),
+  updateAssessmentLevelForm: (versionId, input) => request(`/api/v1/assessment-level-forms/${encodeURIComponent(versionId)}`, { method: "PUT", body: JSON.stringify(input) }),
+  copyAssessmentLevelFormToDraft: (versionId) => request(`/api/v1/assessment-level-forms/${encodeURIComponent(versionId)}/draft`, { method: "POST", body: "{}" }),
   publishAssessmentLevelForm: (versionId) => request(`/api/v1/assessment-level-forms/${encodeURIComponent(versionId)}/publication`, { method: "POST", body: "{}" }),
   deleteAssessmentLevelForm: (versionId) => request(`/api/v1/assessment-level-forms/${encodeURIComponent(versionId)}`, { method: "DELETE" }),
   getContentWeeks: () => request("/api/v1/content/weeks"),

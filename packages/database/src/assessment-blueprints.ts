@@ -146,12 +146,12 @@ export const placementDefinition: StoredAssessmentDefinition = {
   key: "placement-a",
   kind: "placement",
   title: "Workplace English CEFR Placement Test",
-  version: 3,
-  totalMinutes: 70,
+  version: 5,
+  totalMinutes: 75,
   totalScore: 100,
   sections: [
     { code: "listening", title: "Nghe", durationMinutes: 15, maxScore: 20, instructions: ["Mỗi đoạn nghe được phát tối đa 2 lần."], groups: listeningGroups },
-    { code: "reading", title: "Đọc, Ngữ pháp & Từ vựng", durationMinutes: 20, maxScore: 40, instructions: ["40 câu, mỗi câu 1 điểm."], groups: readingGroups },
+    { code: "reading", title: "Đọc, Ngữ pháp & Từ vựng", durationMinutes: 25, maxScore: 40, instructions: ["40 câu, mỗi câu 1 điểm."], groups: readingGroups },
     { code: "writing", title: "Viết", durationMinutes: 20, maxScore: 20, instructions: ["Mỗi task được chấm riêng theo 5 tiêu chí: task completion, organization, vocabulary, grammar và workplace register (mỗi tiêu chí 0–4)."], groups: [
       { key: "W1", title: "Task 1 – Phản hồi nhanh (7 phút · A2–B1)", instruction: "You receive this message from a colleague:", stimulus: { type: "message", text: "Hi! I need to take tomorrow morning off urgently for a family matter. Could you help me monitor the customer support inbox from 9 AM to 12 PM? I owe you one!" }, tasks: [
         { key: "W1", prompt: "Write a short reply (50–80 words): agree to help and ask whether there are any important tickets you should pay special attention to.", responseType: "long_text", maxScore: 7, minWords: 50, maxWords: 80 }
@@ -168,10 +168,7 @@ export const placementDefinition: StoredAssessmentDefinition = {
         { key: "S2", prompt: "1. Summarise the main trend in the numbers.\n2. Point out the biggest change in Q3.\n3. Suggest one short-term action the team should take to deal with the Q3 problem.", responseType: "speaking_evidence", maxScore: 5, hint: "Dùng từ vựng mô tả số liệu: increase, decrease, remain stable, the biggest change…" }
       ] },
       { key: "S3", title: "Task 3 – Customer refund questions (B2–C1)", instruction: "You are a Customer Support Specialist. A customer is frustrated because a promised refund has not arrived after five business days.", tasks: [
-        { key: "S3_Q1", prompt: "How would you acknowledge the customer's frustration?", responseType: "speaking_evidence", maxScore: 0, hint: "Ghi âm câu trả lời ngắn, lịch sự và chuyên nghiệp." },
-        { key: "S3_Q2", prompt: "What technical issue has delayed the refund?", responseType: "speaking_evidence", maxScore: 0, hint: "Ghi âm câu trả lời ngắn, lịch sự và chuyên nghiệp." },
-        { key: "S3_Q3", prompt: "What clear next step would you propose?", responseType: "speaking_evidence", maxScore: 0, hint: "Ghi âm câu trả lời ngắn, lịch sự và chuyên nghiệp." },
-        { key: "S3_Q4", prompt: "When can the customer expect a follow-up?", responseType: "speaking_evidence", maxScore: 0, hint: "Ghi âm câu trả lời ngắn, lịch sự và chuyên nghiệp." }
+        { key: "S3", prompt: "1. How would you acknowledge the customer's frustration?\n2. What technical issue has delayed the refund?\n3. What clear next step would you propose?\n4. When can the customer expect a follow-up?", responseType: "speaking_evidence", maxScore: 5, hint: "Trả lời lần lượt cả 4 câu trong một bản ghi âm, lịch sự và chuyên nghiệp." }
       ] },
       { key: "S4", title: "Task 4 – Monologue (4 phút · B2–C1)", instruction: "You are presenting to your team.", tasks: [
         { key: "S4", prompt: "Present the benefits and challenges of a centralised internal knowledge platform. Include examples and a conclusion.", responseType: "speaking_evidence", maxScore: 5, hint: "Nêu lợi ích, thách thức, ví dụ và kết luận." }

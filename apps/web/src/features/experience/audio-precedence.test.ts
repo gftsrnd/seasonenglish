@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { cancelAllExclusiveAudio, cancelExclusiveAudio, claimExclusiveAudio } from "./audio-precedence.js";
+import { cancelAllExclusiveAudio, cancelExclusiveAudio, claimExclusiveAudio, playExclusiveMedia } from "./audio-precedence.js";
 
 afterEach(() => {
   cancelExclusiveAudio("speech");
@@ -38,5 +38,23 @@ describe("exclusive audio precedence", () => {
     cancelAllExclusiveAudio();
 
     expect(stop).toHaveBeenCalledOnce();
+  });
+
+  it("stops a detached vocabulary audio element when the route audio channel is cancelled", () => {
+    const pause = vi.fn();
+    class AudioStub {
+      currentTime = 12;
+      pause = pause;
+      play = vi.fn().mockResolvedValue(undefined);
+      onended: (() => void) | null = null;
+      onerror: (() => void) | null = null;
+    }
+    vi.stubGlobal("Audio", AudioStub);
+
+    playExclusiveMedia("/word.mp3");
+    cancelAllExclusiveAudio();
+
+    expect(pause).toHaveBeenCalledOnce();
+    vi.unstubAllGlobals();
   });
 });

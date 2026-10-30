@@ -77,10 +77,24 @@ describe("AI service", () => {
       grammarClassification: {
         status: "insufficient_evidence", contentType: null, targetName: null, scope: null,
         support: "none", confidence: "low", evidence: [], rejectedCandidates: []
+      },
+      pronunciationPlan: {
+        focus: "/f/",
+        word1: { word: "feedback", ipa: "/ˈfiːdbæk/" },
+        word2: { word: "follow", ipa: "/ˈfɒləʊ/" },
+        word3: { word: "brief", ipa: "/briːf/" }
       }
     });
 
-    expect(result.output).toMatchObject({ title: null, grammar: null });
+    expect(result.output).toMatchObject({
+      title: null,
+      grammar: null,
+      instruction: { title: "Lesson instructions" },
+      pronunciation: {
+        title: "Pronunciation", focus: "/f/",
+        word1: { word: "feedback", ipa: "/ˈfiːdbæk/" }
+      }
+    });
   });
   it("accepts an unambiguous Coach turn with independent evaluation, question, correction, evidence, and suggestion", () => {
     const output = {
@@ -228,10 +242,13 @@ describe("AI service", () => {
       loadPrompt: async () => "Coach safely."
     });
 
-    await expect(service.runTask("coach_dialogue", coachInput())).rejects.toMatchObject({ code: "AI_OUTPUT_INVALID" });
+    await expect(service.runTask("coach_dialogue", coachInput())).rejects.toMatchObject({
+      code: "AI_OUTPUT_INVALID",
+      details: expect.objectContaining({ invalidOutput: '{"reply":"Missing scores"}' })
+    });
   });
 
-  it("repairs a schema-invalid model response once before returning it", async () => {
+  it("repairs a schema-invalid response in messages while keeping the cacheable system prompt stable", async () => {
     const complete = vi.fn()
       .mockResolvedValueOnce({ output: { reply: "Missing scores" }, usage: {} })
       .mockResolvedValueOnce({ output: validCoachOutput, usage: {} });
@@ -239,8 +256,12 @@ describe("AI service", () => {
 
     await expect(service.runTask("coach_dialogue", coachInput())).resolves.toMatchObject({ output: validCoachOutput, metadata: { attempts: 2 } });
     expect(complete).toHaveBeenCalledTimes(2);
-    expect(complete.mock.calls[1]?.[0].systemPrompt).toContain("REPAIR REQUIRED");
-    expect(complete.mock.calls[1]?.[0].systemPrompt).toContain('PREVIOUS INVALID OUTPUT: {"reply":"Missing scores"}');
+    expect(complete.mock.calls[1]?.[0].systemPrompt).toBe("Coach safely.");
+    expect(complete.mock.calls[1]?.[0].messages).toEqual([
+      { role: "user", content: JSON.stringify(coachInput()) },
+      { role: "assistant", content: '{"reply":"Missing scores"}' },
+      { role: "user", content: expect.stringContaining("REPAIR REQUIRED") }
+    ]);
   });
 
   it("normalizes a meaningful partial Coach answer mislabeled as insufficient before schema validation", async () => {
@@ -403,7 +424,8 @@ describe("AI service", () => {
 
     await expect(service.runTask("semantic", { requiredDays: 2 }))
       .resolves.toMatchObject({ output: { days: ["T2", "T3"] }, metadata: { attempts: 2 } });
-    expect(complete.mock.calls[1]?.[0].systemPrompt).toContain("days: Expected 2 days.");
+    expect(complete.mock.calls[1]?.[0].systemPrompt).toBe("Return days.");
+    expect(complete.mock.calls[1]?.[0].messages?.at(-1)?.content).toContain("days: Expected 2 days.");
   });
 
   it("uses at most three attempts to repair invalid structured output by default", async () => {
@@ -416,7 +438,17 @@ describe("AI service", () => {
     await expect(service.runTask("coach_dialogue", coachInput()))
       .resolves.toMatchObject({ metadata: { attempts: 3 }, output: validCoachOutput });
     expect(complete).toHaveBeenCalledTimes(3);
-    expect(complete.mock.calls[2]?.[0].systemPrompt).toContain("REPAIR REQUIRED");
+    expect(complete.mock.calls[2]?.[0].systemPrompt).toBe("Coach safely.");
+    expect(complete.mock.calls[2]?.[0].messages?.at(-1)?.content).toContain("REPAIR REQUIRED");
+  });
+
+  it("allows an orchestrated flow to disable nested retries for one component call", async () => {
+    const complete = vi.fn().mockResolvedValue({ output: { message: "" }, usage: {} });
+    const service = createAiService({ registry: AI_TASKS, provider: fixtureProvider(complete), loadPrompt: async () => "Coach safely.", maxAttempts: 3 });
+
+    await expect(service.runTask("coach_dialogue", coachInput(), { maxAttempts: 1 }))
+      .rejects.toMatchObject({ code: "AI_OUTPUT_INVALID" });
+    expect(complete).toHaveBeenCalledTimes(1);
   });
 
   it("repairs week suggestions that omit an active CEFR level", async () => {
@@ -439,7 +471,8 @@ describe("AI service", () => {
 
     await expect(service.runTask("week_suggestions", { weekNumbers: [1], levels: ["A1", "A2"], usedTopics: [] }))
       .resolves.toMatchObject({ metadata: { attempts: 2 }, output: completeOutput });
-    expect(complete.mock.calls[1]?.[0].systemPrompt).toContain("CEFR levels must exactly match");
+    expect(complete.mock.calls[1]?.[0].systemPrompt).toBe("Suggest weeks.");
+    expect(complete.mock.calls[1]?.[0].messages?.at(-1)?.content).toContain("CEFR levels must exactly match");
   });
 
   it("aborts a provider call at the timeout boundary", async () => {

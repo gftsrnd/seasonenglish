@@ -44,6 +44,42 @@ describe("ManagerRouteController", () => {
     expect(within(notice).getByRole("time")).toHaveAttribute("dateTime", "2026-10-23T08:39:09.000Z");
   });
 
+  it("shows two newest security notices by default and preserves grouped history when expanded", async () => {
+    const user = userEvent.setup();
+    vi.mocked(apiClient.getManagerPinReports).mockResolvedValue({ reports: [
+      { id: "pin-oldest", subjectUserId: "learner-4", subjectName: "Học viên Cũ", note: "Người học đã tự đổi PIN qua xác minh email.", status: "open", createdAt: "2026-10-23T08:00:00.000Z", resolvedAt: null },
+      { id: "pin-third", subjectUserId: "learner-3", subjectName: "Học viên Ba", note: "Người học đã tự đổi PIN qua xác minh email.", status: "open", createdAt: "2026-10-28T08:18:00.000Z", resolvedAt: null },
+      { id: "pin-second", subjectUserId: "learner-2", subjectName: "Học viên Hai", note: "Người học đã tự đổi PIN qua xác minh email.", status: "open", createdAt: "2026-10-28T08:19:00.000Z", resolvedAt: null },
+      { id: "pin-latest-older-copy", subjectUserId: "learner-1", subjectName: "Học viên Một", note: "Người học đã tự đổi PIN qua xác minh email.", status: "open", createdAt: "2026-10-28T08:20:00.000Z", resolvedAt: null },
+      { id: "pin-latest", subjectUserId: "learner-1", subjectName: "Học viên Một", note: "Người học đã tự đổi PIN qua xác minh email.", status: "open", createdAt: "2026-10-28T08:21:00.000Z", resolvedAt: null }
+    ] });
+    vi.spyOn(apiClient, "getProductPreferences").mockResolvedValue(product);
+    vi.spyOn(apiClient, "getSystemCapabilities").mockResolvedValue(capabilities);
+    vi.spyOn(apiClient, "getManagerSettings").mockResolvedValue(managerSettings);
+    vi.spyOn(apiClient, "getManagerProviderSettings").mockResolvedValue(managerProvider);
+    vi.spyOn(apiClient, "getManagerAccounts").mockResolvedValue({ organizationName: "GFT", accounts: [] });
+
+    renderManager(<MemoryRouter initialEntries={["/settings"]}><ManagerRouteController role="manager" currentUserId="manager-1" /></MemoryRouter>);
+
+    const notice = await screen.findByRole("region", { name: "Thông báo bảo mật" });
+    expect(within(notice).getByText("5 thông báo")).toBeInTheDocument();
+    expect(within(notice).getAllByRole("listitem")).toHaveLength(2);
+    expect(within(notice).getByText("Học viên Một")).toBeInTheDocument();
+    expect(within(notice).getByText("2 lần")).toBeInTheDocument();
+    expect(within(notice).getByText("Học viên Hai")).toBeInTheDocument();
+    expect(within(notice).queryByText("Học viên Ba")).not.toBeInTheDocument();
+
+    await user.click(within(notice).getByRole("button", { name: "Xem toàn bộ 5 thông báo" }));
+
+    expect(within(notice).getAllByRole("listitem")).toHaveLength(4);
+    expect(within(notice).getByText("Học viên Ba")).toBeInTheDocument();
+    expect(within(notice).getByText("Học viên Cũ")).toBeInTheDocument();
+    expect(within(notice).getByRole("button", { name: "Thu gọn thông báo bảo mật" })).toHaveAttribute("aria-expanded", "true");
+
+    await user.click(within(notice).getByRole("button", { name: "Thu gọn thông báo bảo mật" }));
+    expect(within(notice).getAllByRole("listitem")).toHaveLength(2);
+  });
+
   it("reports an experience save failure and lets Settings restore the committed draft", async () => {
     const user = userEvent.setup();
     vi.mocked(apiClient.saveOrganisationExperience).mockRejectedValueOnce(new Error("offline"));
@@ -103,10 +139,10 @@ describe("ManagerRouteController", () => {
   it("loads the real operations view for /mgr/ops", async () => {
     vi.spyOn(apiClient, "getManagerOperations").mockResolvedValue(operations);
     renderManager(<MemoryRouter initialEntries={["/mgr/ops"]}><ManagerRouteController role="manager" currentUserId="manager-1" /></MemoryRouter>);
-    await screen.findByText("1/2 bộ đã duyệt");
+    await screen.findByText(/Tuần 1 · B1: chưa sinh/);
     expect(screen.getByRole("heading", { name: "Hiệu suất vận hành" })).toBeInTheDocument();
     expect(apiClient.getManagerOperations).toHaveBeenCalledOnce();
-    expect(screen.getByText("1/2 bộ đã duyệt")).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Bộ bài cần xử lý" })).toBeInTheDocument();
     expect(screen.queryByRole("heading", { name: /^Mã PIN/ })).not.toBeInTheDocument();
   });
 
@@ -116,20 +152,35 @@ describe("ManagerRouteController", () => {
     ] });
     const save = vi.spyOn(operatorApiClient, "saveContentPrompts");
 
-    renderManager(<MemoryRouter initialEntries={["/mgr/ops/prompts"]}><ManagerRouteController role="manager" currentUserId="manager-1" /></MemoryRouter>);
+    renderManager(<MemoryRouter initialEntries={["/settings/prompts"]}><ManagerRouteController role="manager" currentUserId="manager-1" /></MemoryRouter>);
 
     expect(await screen.findByRole("heading", { name: "Prompt & rubric" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Lưu prompt" })).toBeEnabled();
+    expect(screen.queryByText(/chế độ chỉ đọc/i)).not.toBeInTheDocument();
     expect(save).not.toHaveBeenCalled();
   });
 
-  it("opens Manager operations without an Operator preview banner", async () => {
+  it("opens Manager operations in read-only mode with an explicit banner", async () => {
     vi.spyOn(apiClient, "getManagerOperations").mockResolvedValue(operations);
     renderManager(<MemoryRouter initialEntries={["/mgr/ops"]}><ManagerRouteController role="manager" currentUserId="manager-1" /></MemoryRouter>);
 
-    expect(await screen.findByText("1/2 bộ đã duyệt")).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "Bộ bài cần xử lý" })).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "Hiệu suất vận hành" })).toBeInTheDocument();
-    expect(screen.queryByText(/chế độ xem của quản lý|chỉ xem|Operator/i)).not.toBeInTheDocument();
+    expect(within(screen.getByRole("navigation", { name: "Điều hướng màn vận hành" })).getAllByRole("link").map(link => link.textContent)).toEqual(["Duyệt mức", "Chủ đề tuần", "Bài học", "Bài tuần", "Bài kiểm tra"]);
+    expect(screen.getAllByText(/chế độ chỉ đọc/i).length).toBeGreaterThan(0);
+    expect(screen.queryByRole("link", { name: "Prompt & rubric" })).not.toBeInTheDocument();
+  });
+
+  it("keeps the Manager-only operations switcher on nested operations screens", async () => {
+    vi.spyOn(operatorApiClient, "getContentWeeks").mockResolvedValue({ pilot: { startDate: "2026-10-05", weekCount: 1 }, weeks: [] });
+    renderManager(<MemoryRouter initialEntries={["/mgr/ops/weeks"]}><ManagerRouteController role="manager" currentUserId="manager-1" /></MemoryRouter>);
+
+    expect(await screen.findByRole("heading", { name: "Khung chủ đề tuần" })).toBeInTheDocument();
+    const navigation = screen.getByRole("navigation", { name: "Điều hướng màn vận hành" });
+    expect(navigation.parentElement).toHaveClass("manager-operations-context");
+    expect(within(navigation.parentElement!).getByRole("note", { name: "Chế độ chỉ đọc của Quản lý" })).toBeInTheDocument();
+    expect(within(navigation).getAllByRole("link").map(link => link.textContent)).toEqual(["Duyệt mức", "Chủ đề tuần", "Bài học", "Bài tuần", "Bài kiểm tra"]);
+    expect(within(navigation).getByRole("link", { name: "Chủ đề tuần" })).toHaveAttribute("aria-current", "page");
   });
 
   it("opens the real learner quick-view and shows Manager operational queues", async () => {
@@ -152,7 +203,7 @@ describe("ManagerRouteController", () => {
   it("persists a manual reminder dismissal for a learner", async () => {
     vi.spyOn(apiClient, "getManagerReminders").mockResolvedValue({
       organizationName: "GFT", inactiveDays: 3, webhookConfigured: false,
-      candidates: [{ learnerId: "learner-1", learnerName: "Học viên Demo", cefr: "A2", lastActivityAt: null, missedDays: 3 }], history: []
+      candidates: [{ learnerId: "learner-1", learnerName: "Học viên Demo", learnerEmail: "learner@example.com", cefr: "A2", lastActivityAt: null, missedDays: 3 }], history: []
     });
     const dismiss = vi.spyOn(apiClient, "dismissManagerReminder").mockResolvedValue({ reminderId: "reminder-1", learnerId: "learner-1", status: "dismissed" });
     renderManager(<MemoryRouter initialEntries={["/mgr/reminders"]}><ManagerRouteController role="manager" currentUserId="manager-1" /></MemoryRouter>);
@@ -163,28 +214,31 @@ describe("ManagerRouteController", () => {
     expect((await screen.findByText("Đã ghi nhận đã nhắc qua kênh khác.")).closest(".ds-toast")).toHaveClass("ds-toast--ok");
   });
 
-  it("reports a local reminder as recorded for manual sending", async () => {
+  it("sends the email channel independently", async () => {
     vi.spyOn(apiClient, "getManagerReminders").mockResolvedValue({
-      organizationName: "GFT", inactiveDays: 3, webhookConfigured: false,
-      candidates: [{ learnerId: "learner-1", learnerName: "Học viên Demo", cefr: "A2", lastActivityAt: null, missedDays: 3 }], history: []
+      organizationName: "GFT", inactiveDays: 3, webhookConfigured: false, emailConfigured: true,
+      candidates: [{ learnerId: "learner-1", learnerName: "Học viên Demo", learnerEmail: "learner@example.com", cefr: "A2", lastActivityAt: null, missedDays: 3 }], history: []
     });
-    vi.spyOn(apiClient, "sendManagerReminder").mockResolvedValue({ reminderId: "reminder-1", learnerId: "learner-1", status: "queued", deliveryStatus: "queued", provider: "local_queue" });
+    const send = vi.spyOn(apiClient, "sendManagerReminder").mockResolvedValue({ reminderId: "reminder-1", learnerId: "learner-1", status: "sent", deliveryStatus: "sent", provider: "resend" });
     renderManager(<MemoryRouter initialEntries={["/mgr/reminders"]}><ManagerRouteController role="manager" currentUserId="manager-1" /></MemoryRouter>);
-    await userEvent.setup().click(await screen.findByRole("button", { name: "Ghi nhận gửi tay" }));
-    const successToast = await screen.findByText(/Đã ghi nhận để gửi tay và lưu vào lịch sử/);
+    const user = userEvent.setup();
+    await user.click(await screen.findByRole("button", { name: "Gửi email" }));
+    await user.click(within(screen.getByRole("dialog", { name: "Xác nhận gửi email" })).getByRole("button", { name: "Xác nhận gửi email" }));
+    const successToast = await screen.findByText(/Đã gửi email và lưu vào lịch sử/);
     expect(successToast.closest(".ds-toast")).toHaveClass("ds-toast--ok");
-    expect(screen.getByRole("note")).toHaveTextContent("Chưa có webhook Base.vn");
-    expect(screen.queryByText(/đã gửi qua Base/i)).not.toBeInTheDocument();
+    expect(send).toHaveBeenCalledWith("learner-1", expect.any(String), "email");
   });
 
   it("explains when reminder eligibility changed after loading", async () => {
     vi.spyOn(apiClient, "getManagerReminders").mockResolvedValue({
       organizationName: "GFT", inactiveDays: 3, webhookConfigured: true,
-      candidates: [{ learnerId: "learner-1", learnerName: "Học viên Demo", cefr: "A2", lastActivityAt: null, missedDays: 3 }], history: []
+      candidates: [{ learnerId: "learner-1", learnerName: "Học viên Demo", learnerEmail: "learner@example.com", cefr: "A2", lastActivityAt: null, missedDays: 3 }], history: []
     });
     vi.spyOn(apiClient, "sendManagerReminder").mockRejectedValue(new Error("MANAGER_REMINDER_NOT_ELIGIBLE"));
     renderManager(<MemoryRouter initialEntries={["/mgr/reminders"]}><ManagerRouteController role="manager" currentUserId="manager-1" /></MemoryRouter>);
-    await userEvent.setup().click(await screen.findByRole("button", { name: "Gửi qua Base.vn" }));
+    const user = userEvent.setup();
+    await user.click(await screen.findByRole("button", { name: "Gửi email" }));
+    await user.click(within(screen.getByRole("dialog", { name: "Xác nhận gửi email" })).getByRole("button", { name: "Xác nhận gửi email" }));
     expect(await screen.findByRole("alert")).toHaveTextContent("Người học không còn đủ điều kiện nhắc");
   });
 
@@ -289,14 +343,58 @@ describe("ManagerRouteController", () => {
     const reset = vi.spyOn(apiClient, "resetManagerAccountPassword").mockResolvedValue({ saved: true });
     const user = userEvent.setup();
     renderManager(<MemoryRouter initialEntries={["/settings"]}><ManagerRouteController role="manager" currentUserId="manager-1" /></MemoryRouter>);
-    await screen.findByRole("button", { name: "Đặt lại mật khẩu" });
+    await screen.findByRole("button", { name: "Đặt lại PIN" });
     expect(screen.getByRole("heading", { name: "Cài đặt" })).toBeInTheDocument();
 
-    await user.click(screen.getByRole("button", { name: "Đặt lại mật khẩu" }));
-    const prompt = await screen.findByRole("dialog", { name: "Mật khẩu mới cho Học viên Demo" });
-    await user.type(within(prompt).getByLabelText("Mật khẩu mới"), "new-password");
-    await user.click(within(prompt).getByRole("button", { name: "Đặt lại mật khẩu" }));
-    await vi.waitFor(() => expect(reset).toHaveBeenCalledWith("learner-1", "new-password"));
+    await user.click(screen.getByRole("button", { name: "Đặt lại PIN" }));
+    const prompt = await screen.findByRole("dialog", { name: "PIN mới cho Học viên Demo" });
+    await user.type(within(prompt).getByLabelText("PIN mới"), "246802");
+    await user.click(within(prompt).getByRole("button", { name: "Đặt lại PIN" }));
+    await vi.waitFor(() => expect(reset).toHaveBeenCalledWith("learner-1", "246802"));
+    expect(await screen.findByText("••••••")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Hiện PIN của Học viên Demo" }));
+    expect(screen.getByText("246802")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Ẩn PIN của Học viên Demo" }));
+    expect(screen.queryByText("246802")).not.toBeInTheDocument();
+  });
+
+  it("reveals the current learner PIN without opening the reset prompt", async () => {
+    vi.spyOn(apiClient, "getProductPreferences").mockResolvedValue(product);
+    vi.spyOn(apiClient, "getSystemCapabilities").mockResolvedValue(capabilities);
+    vi.spyOn(apiClient, "getManagerSettings").mockResolvedValue(managerSettings);
+    vi.spyOn(apiClient, "getManagerProviderSettings").mockResolvedValue(managerProvider);
+    vi.spyOn(apiClient, "getManagerAccounts").mockResolvedValue({ organizationName: "GFT", accounts: [{ id: "learner-1", displayName: "Học viên Demo", email: "learner@e4s.local", role: "learner", status: "active", createdAt: "2026-10-01T09:00:00.000Z" }] });
+    const reveal = vi.spyOn(apiClient, "getManagerAccountCredential").mockResolvedValue({ credential: "135790", kind: "pin" });
+    const reset = vi.spyOn(apiClient, "resetManagerAccountPassword").mockResolvedValue({ saved: true });
+    const user = userEvent.setup();
+
+    renderManager(<MemoryRouter initialEntries={["/settings"]}><ManagerRouteController role="manager" currentUserId="manager-1" /></MemoryRouter>);
+    await user.click(await screen.findByRole("button", { name: "Hiện PIN của Học viên Demo" }));
+
+    expect(reveal).toHaveBeenCalledWith("learner-1");
+    expect(reset).not.toHaveBeenCalled();
+    expect(screen.queryByRole("dialog", { name: "PIN mới cho Học viên Demo" })).not.toBeInTheDocument();
+    expect(screen.getByText("135790")).toBeInTheDocument();
+  });
+
+  it("shows and reveals a staff password only through the Manager credential endpoint", async () => {
+    vi.spyOn(apiClient, "getProductPreferences").mockResolvedValue(product);
+    vi.spyOn(apiClient, "getSystemCapabilities").mockResolvedValue(capabilities);
+    vi.spyOn(apiClient, "getManagerSettings").mockResolvedValue(managerSettings);
+    vi.spyOn(apiClient, "getManagerProviderSettings").mockResolvedValue(managerProvider);
+    vi.spyOn(apiClient, "getManagerAccounts").mockResolvedValue({ organizationName: "GFT", accounts: [{ id: "operator-1", displayName: "Người vận hành Demo", email: "operator@e4s.local", role: "operator", status: "active", createdAt: "2026-10-01T09:00:00.000Z" }] });
+    const reveal = vi.spyOn(apiClient, "getManagerAccountCredential").mockResolvedValue({ credential: "staff-pass-123", kind: "password" });
+    const user = userEvent.setup();
+
+    renderManager(<MemoryRouter initialEntries={["/settings"]}><ManagerRouteController role="manager" currentUserId="manager-1" /></MemoryRouter>);
+    const revealButton = await screen.findByRole("button", { name: "Hiện mật khẩu của Người vận hành Demo" });
+    expect(screen.getByText("••••••••")).toBeInTheDocument();
+    await user.click(revealButton);
+
+    expect(reveal).toHaveBeenCalledWith("operator-1");
+    expect(screen.getByText("staff-pass-123")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Ẩn mật khẩu của Người vận hành Demo" }));
+    expect(screen.queryByText("staff-pass-123")).not.toBeInTheDocument();
   });
 
   it("requires Manager confirmation before deleting an account", async () => {
@@ -375,10 +473,10 @@ describe("ManagerRouteController", () => {
     expect(await screen.findByRole("heading", { name: "Người dùng" })).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "Tạo tài khoản mới" })).toBeInTheDocument();
     expect(screen.getByLabelText("Vai trò")).toHaveValue("learner");
-    expect(screen.getByText(/Người học có thể đăng nhập ngay bằng email và mật khẩu ban đầu/)).toBeInTheDocument();
+    expect(screen.getByText(/Người học dùng PIN đúng 6 chữ số/)).toBeInTheDocument();
     await user.type(screen.getByLabelText("Tên"), "Người mới");
     await user.type(screen.getByLabelText("Email"), "new@e4s.local");
-    await user.type(screen.getByLabelText("Mật khẩu ban đầu"), "password-123");
+    await user.type(screen.getByLabelText("PIN ban đầu"), "135790");
     await user.click(screen.getByRole("button", { name: "+ Thêm người dùng" }));
     const createError = await screen.findByRole("alert");
     expect(createError).toHaveTextContent("Không tạo được tài khoản.");
@@ -399,15 +497,15 @@ describe("ManagerRouteController", () => {
     const user = userEvent.setup();
     renderManager(<MemoryRouter initialEntries={["/settings"]}><ManagerRouteController role="manager" currentUserId="manager-1" /></MemoryRouter>);
 
-    const password = await screen.findByLabelText("Mật khẩu ban đầu");
-    await user.type(password, "password-123");
+    const password = await screen.findByLabelText("PIN ban đầu");
+    await user.type(password, "135790");
     expect(password).toHaveAttribute("type", "password");
-    await user.click(screen.getByRole("button", { name: "Hiện mật khẩu ban đầu" }));
+    await user.click(screen.getByRole("button", { name: "Hiện PIN ban đầu" }));
     expect(password).toHaveAttribute("type", "text");
-    expect(password).toHaveValue("password-123");
-    await user.click(screen.getByRole("button", { name: "Ẩn mật khẩu ban đầu" }));
+    expect(password).toHaveValue("135790");
+    await user.click(screen.getByRole("button", { name: "Ẩn PIN ban đầu" }));
     expect(password).toHaveAttribute("type", "password");
-    expect(password).toHaveValue("password-123");
+    expect(password).toHaveValue("135790");
   });
 
   it("renders account administration with scoped responsive layout regions", async () => {
@@ -552,12 +650,13 @@ describe("ManagerRouteController", () => {
     renderManager(<MemoryRouter initialEntries={["/settings"]}><ManagerRouteController role="operator" currentUserId="operator-1" /></MemoryRouter>);
     await screen.findByRole("heading", { name: "Cài đặt" });
     expect(screen.getByRole("heading", { name: "Cài đặt" })).toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: "Tùy chọn cá nhân" })).toBeInTheDocument();
-    expect(screen.getByRole("checkbox", { name: "Hiệu ứng âm thanh" })).toBeInTheDocument();
-    expect(screen.getByRole("checkbox", { name: "Nhạc nền" })).toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "Tùy chọn cá nhân" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("checkbox", { name: "Hiệu ứng âm thanh" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("checkbox", { name: "Nhạc nền" })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Kiểm tra kết nối" })).not.toBeInTheDocument();
     expect(screen.queryByRole("heading", { name: "Kết nối AI" })).not.toBeInTheDocument();
     expect(screen.queryByRole("heading", { name: "Prompt & rubric" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "Mở Prompt & rubric" })).not.toBeInTheDocument();
     expect(getProvider).not.toHaveBeenCalled();
     expect(screen.queryByLabelText("Nguồn ảnh")).not.toBeInTheDocument();
     expect(screen.getByRole("group", { name: "Chủ đề giao diện (áp dụng ngay khi chọn)" })).toBeInTheDocument();

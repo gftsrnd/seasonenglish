@@ -9,17 +9,46 @@ export interface PronunciationWordInput {
   ipa: string;
 }
 
+export interface CuratedPronunciationPlan {
+  focus: string;
+  word1: PronunciationWordInput;
+  word2: PronunciationWordInput;
+  word3: PronunciationWordInput;
+}
+
 export interface PronunciationAssets {
-  phonemeAudioId?: string;
-  phonemeAudioUrl?: string;
   wordAudioUrls: string[];
   warnings: string[];
 }
 
 export const CURATED_PHONEME_TARGETS = [
-  "æ", "aɪ", "d", "eɪ", "f", "iː", "ɪ", "k", "p", "r", "s", "t", "w", "ʃ", "ʌ", "θ", "ð", "ɜː", "juː"
+  "p", "b", "t", "d", "k", "g", "f", "v", "θ", "ð", "s", "z", "ʃ", "ʒ", "h", "tʃ", "dʒ", "m", "n", "ŋ", "l", "r", "j", "w",
+  "ɪ", "iː", "ʊ", "uː", "e", "ə", "ɜː", "ɔː", "æ", "ʌ", "ɑː", "ɒ",
+  "eɪ", "aɪ", "ɔɪ", "aʊ", "əʊ", "ɪə", "eə", "ʊə"
 ] as const;
-const CURATED_PHONEME_ASSETS: ReadonlySet<string> = new Set(CURATED_PHONEME_TARGETS);
+const CURATED_PHONEME_TARGET_SET: ReadonlySet<string> = new Set(CURATED_PHONEME_TARGETS);
+
+const CURATED_PRONUNCIATION_PLANS: readonly CuratedPronunciationPlan[] = [
+  { focus: "/aɪ/", word1: { word: "might", ipa: "/maɪt/" }, word2: { word: "time", ipa: "/taɪm/" }, word3: { word: "clarify", ipa: "/ˈklærɪfaɪ/" } },
+  { focus: "/ʊ/", word1: { word: "could", ipa: "/kʊd/" }, word2: { word: "good", ipa: "/ɡʊd/" }, word3: { word: "should", ipa: "/ʃʊd/" } },
+  { focus: "/ɪ/", word1: { word: "still", ipa: "/stɪl/" }, word2: { word: "quick", ipa: "/kwɪk/" }, word3: { word: "limit", ipa: "/ˈlɪmɪt/" } },
+  { focus: "/w/", word1: { word: "work", ipa: "/wɜːk/" }, word2: { word: "would", ipa: "/wʊd/" }, word3: { word: "week", ipa: "/wiːk/" } },
+  { focus: "/ʃ/", word1: { word: "action", ipa: "/ˈækʃn/" }, word2: { word: "share", ipa: "/ʃeə/" }, word3: { word: "finished", ipa: "/ˈfɪnɪʃt/" } },
+  { focus: "/f/", word1: { word: "feedback", ipa: "/ˈfiːdbæk/" }, word2: { word: "follow", ipa: "/ˈfɒləʊ/" }, word3: { word: "brief", ipa: "/briːf/" } },
+  { focus: "/d/", word1: { word: "deadline", ipa: "/ˈdedlaɪn/" }, word2: { word: "decide", ipa: "/dɪˈsaɪd/" }, word3: { word: "agreed", ipa: "/əˈɡriːd/" } },
+  { focus: "/t/", word1: { word: "task", ipa: "/tɑːsk/" }, word2: { word: "update", ipa: "/ˌʌpˈdeɪt/" }, word3: { word: "meeting", ipa: "/ˈmiːtɪŋ/" } }
+];
+
+/**
+ * Pronunciation selection is curriculum data, not a generative guess. AI still
+ * writes the learner guidance, while focus/words/IPA come from this reviewed
+ * registry and are varied deterministically by CEFR and day.
+ */
+export function curatedPronunciationPlan(cefr: string, dayNumber: number): CuratedPronunciationPlan {
+  const levelOffset = Math.max(0, ["A1", "A2", "B1", "B2", "C1"].indexOf(cefr));
+  const plan = CURATED_PRONUNCIATION_PLANS[(levelOffset + Math.max(1, dayNumber) - 1) % CURATED_PRONUNCIATION_PLANS.length]!;
+  return structuredClone(plan);
+}
 
 /**
  * Small, reviewed overrides for words that have caused target-sound mistakes.
@@ -72,8 +101,8 @@ export function buildPronunciationAssets(
   if (!target || words.length !== 3) {
     return { wordAudioUrls: [], warnings: ["Pronunciation requires one target phoneme and exactly three words"] };
   }
-  if (!CURATED_PHONEME_ASSETS.has(target)) {
-    return { wordAudioUrls: [], warnings: [`No curated phoneme asset exists for /${target}/`] };
+  if (!CURATED_PHONEME_TARGET_SET.has(target)) {
+    return { wordAudioUrls: [], warnings: [`Unsupported target phoneme /${target}/`] };
   }
 
   const verifiedWords = words.map((word) => curatedPronunciationWord(word.word, word.ipa));
@@ -85,23 +114,15 @@ export function buildPronunciationAssets(
     };
   }
 
-  const phonemeAsset = registry.phonemes[target];
-  if (!phonemeAsset) {
-    return { wordAudioUrls: [], warnings: [`No registered phoneme asset exists for /${target}/`] };
-  }
   const wordAssets = verifiedWords.map((word) => registry.words[audioSlug(word.word)]);
   const missingWords = verifiedWords.filter((word, index) => !wordAssets[index]);
   if (missingWords.length > 0) {
     return {
-      phonemeAudioId: phonemeAsset.id,
-      phonemeAudioUrl: phonemeAsset.url,
       wordAudioUrls: [],
-      warnings: ["Word audio assets unavailable; target phoneme audio remains playable", ...missingWords.map((word) => `No registered word audio asset exists for ${word.word}`)]
+      warnings: ["Word audio assets unavailable", ...missingWords.map((word) => `No registered word audio asset exists for ${word.word}`)]
     };
   }
   return {
-    phonemeAudioId: phonemeAsset.id,
-    phonemeAudioUrl: phonemeAsset.url,
     wordAudioUrls: wordAssets.map((asset) => asset!.url),
     warnings: []
   };

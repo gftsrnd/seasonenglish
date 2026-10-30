@@ -1,6 +1,16 @@
 import { describe, expect, it } from "vitest";
-import type { ContentLessonDraftInput } from "@e4s/contracts";
-import { lessonComponentsNeedingRepair, lessonDaysNeedingRepair, mergeGeneratedLesson, mergeGeneratedLessons } from "./enrichment.js";
+import type { ContentGenerationFindingView, ContentLessonDraftInput } from "@e4s/contracts";
+import {
+  buildVocabularyEnrichmentPrompt,
+  isDerivationOrInflection,
+  lessonComponentsNeedingRepair,
+  lessonDaysNeedingRepair,
+  mergeGeneratedLesson,
+  mergeGeneratedLessons,
+  mergeGenerationFindingsAfterRepair,
+  normalizeVocabularyEnrichmentItem,
+  validateVocabularyEnrichmentItem
+} from "./enrichment.js";
 
 const generatedLesson: ContentLessonDraftInput = {
   dayNumber: 1,
@@ -22,6 +32,38 @@ const generatedLesson: ContentLessonDraftInput = {
 };
 
 describe("lesson enrichment merge", () => {
+  it("keeps unresolved findings for untouched days when one component is repaired", () => {
+    const existing: ContentGenerationFindingView[] = [
+      { dayNumber: 1, component: "foundation", code: "DUPLICATE", severity: "error", message: "old day 1", issues: [], repairAction: "regenerate_component" },
+      { dayNumber: 2, component: "skills", code: "CEFR", severity: "error", message: "keep day 2", issues: [], repairAction: "regenerate_component" }
+    ];
+    const generated: ContentGenerationFindingView[] = [
+      { dayNumber: 1, component: "foundation", code: "STILL_DUPLICATE", severity: "error", message: "new day 1", issues: [], repairAction: "regenerate_component" }
+    ];
+
+    expect(mergeGenerationFindingsAfterRepair(existing, generated, { 1: ["foundation"] })).toEqual([
+      existing[1],
+      generated[0]
+    ]);
+  });
+
+  it("replaces only the component named by an actionable finding", () => {
+    const existing = [generatedLesson];
+    const generated = [{
+      ...generatedLesson,
+      title: "New foundation title",
+      parts: generatedLesson.parts.filter((part) => ["objective", "instruction", "grammar", "pronunciation"].includes(part.code)).map((part) => ({ ...part, content: { marker: "repaired" } }))
+    }];
+
+    const merged = mergeGeneratedLessons(existing, generated, "enrich", { 1: ["foundation"] });
+
+    expect(merged[0]?.title).toBe("New foundation title");
+    expect(merged[0]?.parts.find((part) => part.code === "grammar")?.content).toEqual({ marker: "repaired" });
+    expect(merged[0]?.parts.find((part) => part.code === "vocabulary")?.content).toEqual(
+      existing[0]?.parts.find((part) => part.code === "vocabulary")?.content
+    );
+  });
+
   it("fills missing legacy fields without replacing existing learner-facing content", () => {
     const existing: ContentLessonDraftInput = {
       ...generatedLesson,
@@ -157,5 +199,122 @@ describe("lesson enrichment merge", () => {
     expect(merged.title).toBe("Tiêu đề đã sửa tay");
     expect(merged.parts.find((part) => part.code === "objective")?.content).toEqual({ text: "Mục tiêu do người dùng sửa." });
     expect(merged.parts.find((part) => part.code === "vocabulary")).toBeDefined();
+  });
+
+  it("enforces TESOL heteronym disambiguation, POS/sense/self-synonym/derivation guards, and B1-C1 language rules", () => {
+    const prompt = buildVocabularyEnrichmentPrompt({
+      headword: "introduce",
+      pos: "verb",
+      sense: "to present something new to people for the first time",
+      example: "Let me introduce our new product.",
+      cefr: "B1",
+      context: "Workplace - Sales"
+    });
+    expect(prompt).toContain("HETERONYM DISAMBIGUATION");
+    expect(prompt).toContain("SELF-SYNONYM & DERIVATION GUARD");
+    expect(prompt).toContain("ACTIVE LEVEL B1");
+
+    expect(isDerivationOrInflection("introduce", "introduction")).toBe(true);
+    expect(isDerivationOrInflection("introduce", "reintroduce")).toBe(true);
+    expect(isDerivationOrInflection("introduce", "introducing")).toBe(true);
+    expect(isDerivationOrInflection("introduce", "present")).toBe(false);
+
+    const invalidHeteronymAndRelations = {
+      word: "present",
+      partOfSpeech: "verb",
+      pronunciation: "/ˈprezənt/",
+      stress: "PRE-sent",
+      ttsText: "present",
+      ssml: '<speak><phoneme alphabet="ipa" ph="ˈprezənt">present</phoneme></speak>',
+      meaning: "trình bày, giới thiệu",
+      collocations: ["present the plan", "trình bày dự án", "present our product"],
+      family: [{ word: "presentation", type: "noun", meaning: "bài thuyết trình" }],
+      umbrella: { word: "record", pos: "noun", ipa: "/rɪˈkɔːrd/", meaning: "hồ sơ" },
+      synonyms: [
+        {
+          word: "present",
+          level: "B1",
+          partOfSpeech: "verb",
+          note: "same word",
+          sense: "to show formally",
+          example: "Let me present the plan."
+        },
+        {
+          word: "presentation",
+          level: "B1",
+          partOfSpeech: "verb",
+          note: "derived noun",
+          sense: "to show formally",
+          example: "Let me presentation the plan."
+        },
+        {
+          word: "gift",
+          level: "B1",
+          partOfSpeech: "noun",
+          note: "wrong POS",
+          sense: "something given",
+          example: "She gave a gift."
+        },
+        {
+          word: "introduce",
+          level: "B1",
+          partOfSpeech: "verb",
+          note: "Trang trọng hơn khi trình bày",
+          sense: "giới thiệu sản phẩm mới",
+          example: "Let me introduce our new product."
+        },
+        {
+          word: "launch",
+          level: "B1",
+          partOfSpeech: "verb",
+          note: "Used for new products or campaigns",
+          sense: "to introduce a new product to the market",
+          example: "We will launch the new product tomorrow."
+        }
+      ],
+      antonyms: [
+        {
+          word: "withdraw",
+          level: "B1",
+          partOfSpeech: "verb",
+          note: "Used when pulling back a product or proposal",
+          sense: "to remove a product or proposal from consideration",
+          example: "The team decided to withdraw the proposal."
+        }
+      ]
+    };
+
+    const validation = validateVocabularyEnrichmentItem(invalidHeteronymAndRelations, { cefr: "B1" });
+    expect(validation.valid).toBe(false);
+    expect(validation.issues.map((issue) => issue.path)).toEqual(expect.arrayContaining([
+      "pronunciation",
+      "stress",
+      "ssml",
+      "collocations[1]",
+      "synonyms[0].word",
+      "synonyms[1].word",
+      "synonyms[2].partOfSpeech",
+      "synonyms[3].note",
+      "synonyms[3].sense"
+    ]));
+
+    const normalized = normalizeVocabularyEnrichmentItem(invalidHeteronymAndRelations, { cefr: "B1" });
+    expect(normalized.pronunciation).toBe("/prɪˈzent/");
+    expect(normalized.stress).toBe("pre-SENT");
+    expect(normalized.ssml).toBe('<speak><phoneme alphabet="ipa" ph="prɪˈzent">present</phoneme></speak>');
+    expect(normalized.collocations).toEqual(["present the plan", "present our product"]);
+    expect((normalized.umbrella as Record<string, unknown>).ipa).toBe("/ˈrekərd/");
+    expect(normalized.synonyms).toEqual([
+      {
+        word: "launch",
+        level: "B1",
+        partOfSpeech: "verb",
+        note: "Used for new products or campaigns",
+        sense: "to introduce a new product to the market",
+        example: "We will launch the new product tomorrow."
+      }
+    ]);
+    expect(normalized.antonyms).toHaveLength(1);
+    expect(validateVocabularyEnrichmentItem(normalized, { cefr: "B1" }).valid).toBe(true);
   });
 });

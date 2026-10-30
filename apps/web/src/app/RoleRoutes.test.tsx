@@ -6,6 +6,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import type { LearnerHomeView, RewardView, SessionView } from "@e4s/contracts";
 import { recoverStaleRoleBundle, RoleRouteErrorBoundary, RoleRoutes } from "./RoleRoutes.js";
 import { learnerApiClient as apiClient } from "../api/learner.js";
+import { operatorApiClient } from "../api/operator.js";
 import { shouldRedirectApprovedPlacement } from "./learner/LearnerRouteController.js";
 
 afterEach(() => {
@@ -172,10 +173,23 @@ describe("RoleRoutes authorization boundary", () => {
     expect(screen.queryByRole("alert")).not.toBeInTheDocument();
   });
 
-  it("does not expose the prompt editor route to Operator", () => {
-    renderRoute("/op/prompts", operator);
+  it("blocks Operator from both legacy and direct Prompt settings routes", () => {
+    const legacy = render(<MemoryRouter initialEntries={["/op/prompts"]}><RoleRoutes session={operator} /></MemoryRouter>);
+    expect(screen.getByRole("alert")).toHaveTextContent("Tài khoản này không có quyền mở cấu hình Prompt & rubric.");
 
-    expect(screen.getByRole("alert")).toHaveTextContent("Đường dẫn vận hành không tồn tại.");
+    legacy.unmount();
+    render(<MemoryRouter initialEntries={["/settings/prompts"]}><RoleRoutes session={operator} /></MemoryRouter>);
+    expect(screen.getByRole("alert")).toHaveTextContent("Tài khoản này không có quyền mở cấu hình Prompt & rubric.");
+  });
+
+  it("recognizes the new Operator Bài kiểm tra route", async () => {
+    vi.spyOn(operatorApiClient, "getContentReview").mockResolvedValue({ tabs: [], submissions: [], coachSamples: [], microLessons: [], weeklyPractices: [], appeals: [], lessonAttempts: [], assessments: [] });
+    vi.spyOn(operatorApiClient, "getSystemCapabilities").mockResolvedValue({ ai: true } as never);
+
+    renderRoute("/op/tests", operator);
+
+    expect(await screen.findByRole("heading", { name: "Bài kiểm tra" })).toBeInTheDocument();
+    expect(screen.queryByText("Đường dẫn vận hành không tồn tại.")).not.toBeInTheDocument();
   });
 
   it("redirects Manager away from direct Operator routes", () => {

@@ -63,6 +63,42 @@ describe("Operator responsive layout guardrails", () => {
     expect(appCss).toMatch(/body > \.operator-modal-scope \.operator-vocabulary-base\s*\{[^}]*grid-template-columns:\s*repeat\(2,\s*minmax\(0,\s*1fr\)\)/);
   });
 
+  it("keeps compact vertical separation between operator exercise content", () => {
+    expect(appCss).toMatch(/\.app-operator \.operator-lesson-preview \.operator-practice-review\s*\{[^}]*display:\s*grid[^}]*row-gap:\s*8px/);
+    expect(appCss).toMatch(/\.operator-practice-review > \.operator-reading-passage,[\s\S]*?\.operator-practice-review > \.operator-question,[\s\S]*?\.operator-practice-review > \.operator-answer-options\s*\{[^}]*margin:\s*0/);
+  });
+
+  it("keeps promotion-test modal actions compact and long operational regions usable", () => {
+    expect(appCss).toMatch(/\.operator-level-form-dialog-header\s+\.btn-sm\s*\{[^}]*min-height:\s*32px[^}]*padding:\s*6px 10px/);
+    expect(appCss).toMatch(/\.operator-action-table-wrap\s*\{[^}]*max-height:\s*min\(68vh,\s*560px\)/);
+  });
+
+  it("does not stretch a lone weekly-practice AI action across the card", () => {
+    expect(appCss).toMatch(/\.app-operator \.operator-card-header > \.btn-sm:first-child\s*\{[^}]*flex:\s*0 0 auto[^}]*width:\s*auto[^}]*margin-left:\s*auto/);
+  });
+
+  it("lets weekly-review and assessment pages use document scrolling only", () => {
+    expect(appCss).toMatch(/\.app-operator\[aria-label="Bài tuần"\][\s\S]*?\.operator-review-card-list,[\s\S]*?\.operator-coach-list,[\s\S]*?\.operator-attempt-learner-list\s*\{[^}]*max-height:\s*none !important[^}]*overflow-y:\s*visible !important/);
+    expect(appCss).toMatch(/\.app-operator\[aria-label="Bài kiểm tra"\][\s\S]*?\.operator-action-table-wrap\s*\{[^}]*max-height:\s*none !important[^}]*overflow-y:\s*visible !important/);
+    expect(appCss).toMatch(/\.app-operator\[aria-label="Đề thi lên mức"\][\s\S]*?\.operator-level-group > \.list\s*\{[^}]*max-height:\s*none !important[^}]*overflow-y:\s*visible !important/);
+  });
+
+  it("uses one quiet review surface with readable prose and separated nested results", () => {
+    expect(appCss).toMatch(/\.app-operator \.operator-review-group-items\s*\{[^}]*background:\s*#f7f6f1[^}]*padding:\s*16px/);
+    expect(appCss).toMatch(/\.app-operator \.operator-review-copy\s*\{[^}]*line-height:\s*1\.65[^}]*padding:\s*12px 0/);
+    expect(appCss).toMatch(/\.app-operator \.operator-submission-result\s*\{[^}]*margin:\s*18px 0 0/);
+    expect(appCss).toMatch(/\.app-operator \.operator-attempt-learner-list details\[open\] > \.table-wrap\s*\{[^}]*margin:\s*16px/);
+    expect(appCss).toMatch(/\.app-operator \.operator-level-group\s*\{[^}]*padding:\s*16px/);
+    expect(appCss).toMatch(/\.app-operator \.operator-level-form-item\s*\{[^}]*padding:\s*14px/);
+  });
+
+  it("gives promotion forms a distinct content column and action rail", () => {
+    expect(appCss).toMatch(/\.app-operator \.operator-level-group\s*\{[^}]*gap:\s*16px/);
+    expect(appCss).toMatch(/\.app-operator \.operator-level-form-item\s*\{[^}]*display:\s*grid[^}]*grid-template-columns:\s*minmax\(0,\s*1fr\) auto/);
+    expect(appCss).toMatch(/\.app-operator \.operator-level-form-actions\s*\{[^}]*justify-content:\s*flex-end[^}]*gap:\s*8px/);
+    expect(appCss).toMatch(/\.app-operator \.operator-level-empty\s*\{[^}]*padding:\s*4px 2px 2px/);
+  });
+
   it("keeps every app Operator destination reachable in the tablet header", () => {
     expect(appCss).toMatch(/@media \(min-width:\s*761px\) and \(max-width:\s*960px\)[\s\S]*?body:has\(\.app-operator\) \.topbar nav\s*\{[\s\S]*?flex:\s*1 1 auto[\s\S]*?max-width:\s*none[\s\S]*?overflow-x:\s*auto/);
     expect(appCss).toMatch(/body:has\(\.app-operator\) \.topbar nav a\s*\{[\s\S]*?display:\s*inline-flex[\s\S]*?flex:\s*0 0 auto/);

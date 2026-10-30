@@ -1,7 +1,19 @@
 import type { Client } from "pg";
+import { createCipheriv, randomBytes } from "node:crypto";
 import type { GameWordView } from "../packages/contracts/src/engagement-contract.js";
 import { createCredentialHash, createPinHash } from "../packages/domain/src/identity/index.js";
 import { DEMO_IDS } from "../packages/database/src/seed.js";
+
+function encryptScenarioPin(pin: string) {
+  const encoded = process.env.E4S_SETTINGS_ENCRYPTION_KEY;
+  if (!encoded) throw new Error("E4S_SETTINGS_ENCRYPTION_KEY is required to seed recoverable learner PINs");
+  const key = Buffer.from(encoded, "base64");
+  if (key.length !== 32) throw new Error("E4S_SETTINGS_ENCRYPTION_KEY must decode to 32 bytes");
+  const nonce = randomBytes(12);
+  const cipher = createCipheriv("aes-256-gcm", key, nonce);
+  const ciphertext = Buffer.concat([cipher.update(pin, "utf8"), cipher.final()]);
+  return { ciphertext: ciphertext.toString("base64"), nonce: nonce.toString("base64"), authTag: cipher.getAuthTag().toString("base64") };
+}
 
 export type LocalScenarioAccount = {
   key: string;
@@ -170,10 +182,16 @@ export async function seedLocalScenarioAccounts(client: Client) {
       const credentialHash = account.role === "learner"
         ? await createPinHash(account.secret)
         : await createCredentialHash(account.secret);
+      const recovery = account.role === "learner" ? encryptScenarioPin(account.secret) : null;
       await client.query(
-        `insert into user_credentials (user_id, credential_hash) values ($1, $2)
-         on conflict (user_id) do update set credential_hash = excluded.credential_hash, updated_at = now()`,
-        [account.id, credentialHash]
+        `insert into user_credentials (user_id, credential_hash, recovery_ciphertext, recovery_nonce, recovery_auth_tag)
+         values ($1, $2, $3, $4, $5)
+         on conflict (user_id) do update set credential_hash = excluded.credential_hash,
+           recovery_ciphertext = excluded.recovery_ciphertext,
+           recovery_nonce = excluded.recovery_nonce,
+           recovery_auth_tag = excluded.recovery_auth_tag,
+           updated_at = now()`,
+        [account.id, credentialHash, recovery?.ciphertext ?? null, recovery?.nonce ?? null, recovery?.authTag ?? null]
       );
       if (account.role !== "learner") continue;
       await client.query(

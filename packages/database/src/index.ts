@@ -1,5 +1,6 @@
 export * from "./assessment-blueprints.js";
 export * from "./client.js";
+export * from "./generation-findings.js";
 export * from "./migrate.js";
 export * from "./media-repository.js";
 export * from "./repositories.js";

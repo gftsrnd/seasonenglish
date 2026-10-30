@@ -1,5 +1,6 @@
-import { useEffect, useState, type ReactNode } from "react";
-import { BrowserRouter } from "react-router";
+import { useEffect, useRef, useState, type ReactNode } from "react";
+import { BrowserRouter, useLocation } from "react-router";
+import { RefreshCw, WifiOff } from "lucide-react";
 import type { CefrLevel, LearnerAvatarData, LearnerProfileView, OrganisationBackgroundMusicView, SessionView } from "@e4s/contracts";
 import { sharedApiClient } from "../api/shared.js";
 import { ApiError } from "../api/runtime.js";
@@ -7,6 +8,7 @@ import { apiUrl } from "../api/runtime.js";
 import { ExperienceProvider } from "../features/experience/Experience.js";
 import { EntryScreen } from "./shared/EntryScreen.js";
 import { AppShell } from "./shared/AppShell.js";
+import { SeasonMark } from "./shared/SeasonMark.js";
 import { ModalProvider } from "./shared/ModalProvider.js";
 import { ToastProvider } from "./shared/design-system.js";
 import { useToast } from "./shared/design-system.js";
@@ -14,6 +16,7 @@ import { ThemeProvider, useTheme } from "./shared/ThemeProvider.js";
 import { RoleRoutes } from "./RoleRoutes.js";
 import { AvatarDialog } from "./learner/ProfileReward.js";
 import "./app-layout.css";
+import { cancelAllExclusiveAudio } from "../features/experience/audio-precedence.js";
 
 const authChangeStorageKey = "e4s:auth:changed";
 
@@ -162,7 +165,24 @@ function AppContent({ children }: { children?: ((session: SessionView) => ReactN
   const avatar = session.role === "learner" ? profileRecord?.profile.avatar : session.user.avatar;
   const avatarReady = session.role !== "learner" || Boolean(profileRecord);
   const learnerProfileComplete = session.role !== "learner" || profileRecord?.completed === true;
-  return <ExperienceProvider musicAllowed={musicAllowed} musicConfig={musicConfig} musicTheme={resolvedTheme}><BrowserRouter><ModalProvider><AppShell session={session} avatar={avatar} onboardingComplete={learnerProfileComplete} learnerHomeOnly={session.role === "learner" && learnerCefr === undefined} {...(learnerCefr ? { learnerCefr } : {})} onAvatarClick={avatarReady ? () => setAvatarOpen(true) : undefined} onLogout={logout}>{sandboxMode ? <div role="status" data-sandbox-mode="true" className="banner info">Chế độ thử (sandbox): dữ liệu hồ sơ chỉ lưu trong trình duyệt này.</div> : null}{children ? children(session) : <RoleRoutes session={session} />}</AppShell>{avatarOpen && avatarReady ? <AvatarDialog initial={avatar} onClose={() => setAvatarOpen(false)} onSave={(nextAvatar) => void saveAvatar(nextAvatar)} /> : null}</ModalProvider></BrowserRouter></ExperienceProvider>;
+  return <ExperienceProvider musicAllowed={musicAllowed} musicConfig={musicConfig} musicTheme={resolvedTheme}><BrowserRouter><RouteAudioStopper /><ModalProvider><AppShell session={session} avatar={avatar} onboardingComplete={learnerProfileComplete} learnerHomeOnly={session.role === "learner" && learnerCefr === undefined} {...(learnerCefr ? { learnerCefr } : {})} onAvatarClick={avatarReady ? () => setAvatarOpen(true) : undefined} onLogout={logout}>{sandboxMode ? <div role="status" data-sandbox-mode="true" className="banner info">Chế độ thử (sandbox): dữ liệu hồ sơ chỉ lưu trong trình duyệt này.</div> : null}{children ? children(session) : <RoleRoutes session={session} />}</AppShell>{avatarOpen && avatarReady ? <AvatarDialog initial={avatar} onClose={() => setAvatarOpen(false)} onSave={(nextAvatar) => void saveAvatar(nextAvatar)} /> : null}</ModalProvider></BrowserRouter></ExperienceProvider>;
+}
+
+export function RouteAudioStopper() {
+  const location = useLocation();
+  const previousRoute = useRef(`${location.pathname}${location.search}`);
+  useEffect(() => {
+    const route = `${location.pathname}${location.search}`;
+    if (previousRoute.current === route) return;
+    previousRoute.current = route;
+    cancelAllExclusiveAudio();
+    window.speechSynthesis?.cancel();
+    document.querySelectorAll("audio").forEach((audio) => {
+      audio.pause();
+      audio.currentTime = 0;
+    });
+  }, [location.pathname, location.search]);
+  return null;
 }
 
 function announceAuthChange() {
@@ -175,7 +195,19 @@ function isUnauthenticatedSessionError(error: unknown): error is ApiError {
 }
 
 export function AppStatus({ children, tone = "loading", onRetry }: { children: ReactNode; tone?: "loading" | "error"; onRetry?: () => void }) {
-  return <section className={`card${tone === "error" ? " danger" : ""}`} role={tone === "error" ? "alert" : "status"}><div className="row">{tone === "loading" ? <span className="spinner" aria-hidden="true" /> : null}<div><p>{children}</p>{onRetry ? <button className="btn-primary" type="button" onClick={onRetry}>Thử lại</button> : null}</div></div></section>;
+  if (tone === "loading") {
+    return <main className="app-status-page app-status-page--loading"><section className="app-status-card" role="status"><span className="spinner" aria-hidden="true" /><p>{children}</p></section></main>;
+  }
+  return <main className="app-status-page app-status-page--error">
+    <section className="app-status-card" role="alert" aria-labelledby="app-status-title">
+      <div className="app-status-mark" aria-hidden="true"><SeasonMark className="app-status-season-mark" /><WifiOff className="app-status-offline-icon" /></div>
+      <p className="app-status-eyebrow">Kết nối bị gián đoạn</p>
+      <h1 id="app-status-title">Chưa thể mở E4S</h1>
+      <p className="app-status-message">{children}</p>
+      <p className="app-status-note">Bạn có thể kiểm tra kết nối mạng rồi thử lại. Dữ liệu đã lưu trên hệ thống không bị ảnh hưởng.</p>
+      {onRetry ? <button className="btn-primary app-status-retry" type="button" onClick={onRetry}><RefreshCw size={18} aria-hidden="true" />Thử kết nối lại</button> : null}
+    </section>
+  </main>;
 }
 
 /**

@@ -5,7 +5,7 @@ import { createPinHash, issueSessionToken, permissionsFor, sessionTokenHash, ver
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import type { Pool } from "pg";
 import { z } from "zod";
-import type { IdentityEmailSender, IdentityOtpPurpose } from "./email.js";
+import { identityEmailDeliveryFailure, type IdentityEmailSender, type IdentityOtpPurpose } from "./email.js";
 
 const COOKIE_NAME = "e4s_session";
 const staffLoginInput = z.object({ email: z.string().trim().email(), password: z.string().min(1) });
@@ -127,10 +127,16 @@ export function registerIdentityRoutes(app: FastifyInstance, options: IdentityRo
     if (eligible) {
       try {
         await options.emailSender.sendOtp({ to: parsed.data.email.toLowerCase(), code, purpose: "pin_reset" });
-      } catch {
+      } catch (error) {
+        console.error("[identity-email] PIN reset delivery failed", identityEmailDeliveryFailure(error));
         await options.pool.query("delete from auth_challenges where id = $1", [challengeId]);
         return reply.code(503).send({ code: "EMAIL_DELIVERY_FAILED" });
       }
+    } else {
+      console.info("[identity-email] PIN reset email not sent", {
+        reason: account === null ? "account_not_found" : account.role !== "learner" ? "not_a_learner" : "account_not_active",
+        challengeId
+      });
     }
     return reply.code(202).send({ challengeId, expiresAt });
   });

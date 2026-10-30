@@ -10,7 +10,7 @@ import type {
   MicroLessonView,
   PilotPhase
 } from "@e4s/contracts";
-import { microGradingOutputSchema, microLessonOutputSchema, type AiTaskRunner, type MicroLessonTaskOutput } from "@e4s/ai";
+import { buildPronunciationAssets, microGradingOutputSchema, microLessonOutputSchema, type AiTaskRunner, type MicroLessonTaskOutput } from "@e4s/ai";
 import { createRepositories, type LearnerLessonRecord } from "@e4s/database";
 import { gradeLessonAnswer, validateGeneratedFeedback } from "@e4s/domain/content";
 import { isLearnerProfileComplete, mergeLessonProgress } from "@e4s/domain/learning";
@@ -185,11 +185,13 @@ export function registerLearningRoutes(
     }));
     const completedLessons = summaries.filter((lesson) => lesson.status === "completed").length;
     const points = progress.points;
-    const inactiveDays = calculateInactiveDays(progress.activity.map((item) => item.occurredAt));
+    const inactiveDays = context
+      ? calculateInactiveDays(progress.activity.map((item) => item.occurredAt), context.startDate)
+      : null;
     const view: LearnerHomeView = {
       onboardingRequired,
       learner: { displayName: progress.learner.displayName, cefr: (context?.cefr ?? null) as CefrLevel | null },
-      program: context ? { name: context.programName, weekCount: context.weekCount } : null,
+      program: context ? { name: context.programName, weekCount: context.weekCount, cycleNumber: context.cycleNumber } : null,
       week: context ? {
         id: context.weekId,
         weekNumber: context.weekNumber,
@@ -247,7 +249,7 @@ export function registerLearningRoutes(
     if (!params.success) return reply.code(400).send({ code: "INVALID_LESSON_ID" });
     const lesson = await repositories.learning.findLesson(request.e4sSession!.user.id, params.data.lessonId);
     if (!lesson) return reply.code(404).send({ code: "LESSON_NOT_FOUND" });
-    return lessonView(lesson);
+    return learnerLessonView(lesson);
   });
 
   app.get("/api/v1/lessons/:lessonId/vocabulary/:itemIndex/image", { preHandler: learnerOnly }, async (request, reply) => {
@@ -375,6 +377,12 @@ export function registerLearningRoutes(
     if (!part || !practicePartCodes.includes(part.code as typeof practicePartCodes[number])) {
       return reply.code(404).send({ code: "LESSON_PART_NOT_FOUND" });
     }
+    const existingAppeal = await repositories.learning.findLessonPartAppeal(
+      learnerId,
+      params.data.lessonId,
+      params.data.partCode
+    );
+    if (existingAppeal) return existingAppeal;
     const requiredStudy = lesson.content.parts
       .map((candidate) => candidate.code)
       .filter((code): code is LessonPartCode => studyPartCodes.includes(code as typeof studyPartCodes[number]));
@@ -413,15 +421,18 @@ export function registerLearningRoutes(
     if (!profile || !context || !context.cefr) return reply.code(409).send({ code: "LEARNER_CONTEXT_NOT_READY" });
     if (!task) return reply.code(503).send({ code: "AI_PROMPT_NOT_READY" });
     try {
+      const explanationLanguage = resolveExplanationLanguage(context.cefr, profile.profile.explanationLanguage);
       const result = await runner.runTask("micro_lesson_generation", {
         cefr: context.cefr,
         weekTopic: context.topic,
         goals: profile.profile.goals ?? [],
         workContext: [profile.profile.position, profile.profile.department, profile.profile.environmentUse].filter(Boolean).join(" · "),
         learningStyles: profile.profile.learningStyles ?? [],
-        explanationLanguage: profile.profile.explanationLanguage ?? "auto",
+        explanationLanguage,
         durationMinutes: profile.profile.durationMinutes ?? 10
-      }, { systemPrompt: task.prompt });
+      }, { systemPrompt: buildMicroLessonSystemPrompt(task.prompt, context.cefr, explanationLanguage) });
+
+
       const output = microLessonOutputSchema.safeParse(result.output);
       if (!output.success) return reply.code(502).send({ code: "AI_OUTPUT_INVALID" });
       await repositories.aiRuns.recordSucceeded({
@@ -457,8 +468,9 @@ export function registerLearningRoutes(
     const body = z.object({ answer: z.string().trim().min(1).max(2_000) }).safeParse(request.body);
     if (!params.success || !body.success) return reply.code(400).send({ code: "INVALID_MICRO_ATTEMPT" });
     const learnerId = request.e4sSession!.user.id;
-    const [micro, task, runner] = await Promise.all([
+    const [micro, profile, task, runner] = await Promise.all([
       repositories.learning.microLessonForGrading(learnerId, params.data.microLessonId),
+      repositories.learning.getProfile(learnerId),
       repositories.aiRuns.activeTaskPrompt(learnerId, "micro_grading"),
       runnerFor(learnerId)
     ]);
@@ -492,10 +504,14 @@ export function registerLearningRoutes(
     if (!runner || !task) return await deterministic();
     try {
       const requestId = `micro-grade:${params.data.microLessonId}:${Date.now()}`;
+      const explanationLanguage = resolveExplanationLanguage(micro.cefr, profile?.profile.explanationLanguage);
       const result = await runner.runTask("micro_grading", {
-        cefr: micro.cefr, theory: micro.theory, vocabulary: micro.vocabulary,
-        practice: micro.practice, learnerAnswer: body.data.answer
-      }, { systemPrompt: task.prompt });
+        cefr: micro.cefr, explanationLanguage, theory: micro.theory, vocabulary: micro.vocabulary, practice: micro.practice, learnerAnswer: body.data.answer,
+
+      }, { systemPrompt: buildMicroGradingSystemPrompt(task.prompt, micro.cefr, explanationLanguage) });
+
+
+
       const output = microGradingOutputSchema.safeParse(result.output);
       if (!output.success) return reply.code(502).send({ code: "AI_OUTPUT_INVALID" });
       if (!validateGeneratedFeedback({
@@ -535,6 +551,45 @@ export function registerLearningRoutes(
 
 function microLessonView(micro: MicroLessonView, regenerateAvailable: boolean): MicroLessonView {
   return { ...micro, regenerateAvailable };
+}
+
+export function resolveExplanationLanguage(
+  cefr: string,
+  explanationLanguage?: "auto" | "vi" | "en" | null
+): "vi" | "en" {
+  if (explanationLanguage === "vi" || explanationLanguage === "en") {
+    return explanationLanguage;
+  }
+  return ["A1", "A2"].includes(cefr) ? "vi" : "en";
+}
+
+export function buildMicroLessonSystemPrompt(
+  basePrompt: string,
+  cefr: string,
+  explanationLanguage: "vi" | "en"
+): string {
+  const activeRule = ["A1", "A2"].includes(cefr)
+    ? `Active CEFR ${cefr} (explanationLanguage=${explanationLanguage}): Write all explanations and instructions in Vietnamese; keep English target phrases, examples, and options in English.`
+    : `Active CEFR ${cefr} (explanationLanguage=${explanationLanguage}): Use English-only explanations and instructions, except Vietnamese vocabulary meanings.`;
+  return `${basePrompt.trim()}\n\nCEFR LANGUAGE POLICY: A1-A2 must use Vietnamese explanations/instructions; B1-C1 must use English-only explanations/instructions except Vietnamese vocabulary meanings. ${activeRule}`;
+}
+
+export function buildMicroGradingSystemPrompt(
+  basePrompt: string,
+  cefr: string,
+  explanationLanguage: "vi" | "en"
+): string {
+  const feedbackRule = explanationLanguage === "vi"
+    ? "Write learner feedback in Vietnamese (explanationLanguage=vi)."
+    : "Write learner feedback in English (explanationLanguage=en).";
+  const tesolInstructions = [
+    `TESOL GRADING POLICY (CEFR ${cefr}, explanationLanguage=${explanationLanguage}):`,
+    `- ${feedbackRule}`,
+    "- Accept alternative grammatical answers that fit the taught pattern and context, even when they differ from the reference answer.",
+    "- Distinguish target-language errors from minor non-target slips; penalize primarily target-language errors or errors that block meaning.",
+    "- Ignore minor capitalization, punctuation, and ASR filler noise (such as 'um' or 'uh') when the target pattern and meaning are accurate."
+  ].join("\n");
+  return `${basePrompt.trim()}\n\n${tesolInstructions}`;
 }
 
 export function gradeMicroAttempt(input: {
@@ -577,7 +632,31 @@ function canonicalPartOfSpeech(value: string | undefined): string | undefined {
   return normalized || undefined;
 }
 
-function lessonView(lesson: LearnerLessonRecord): LessonView {
+export function learnerLessonView(lesson: LearnerLessonRecord): LessonView {
+  const parts = lesson.content.parts.map((part) => {
+    if (part.code !== "pronunciation") return part;
+    const content = part.content as Record<string, unknown>;
+    const { phonemeAudioId: _legacyPhonemeAudioId, phonemeAudioUrl: _legacyPhonemeAudioUrl, ...safeContent } = content;
+    if (Array.isArray(content.wordAudioUrls) && content.wordAudioUrls.some((url) => typeof url === "string" && url.trim())) {
+      return { ...part, content: safeContent };
+    }
+    const focus = typeof content.focus === "string" ? content.focus : "";
+    const words = Array.isArray(content.words) ? content.words.flatMap((item) => {
+      if (!item || typeof item !== "object" || Array.isArray(item)) return [];
+      const word = item as Record<string, unknown>;
+      return typeof word.word === "string" && typeof word.ipa === "string"
+        ? [{ word: word.word, ipa: word.ipa }]
+        : [];
+    }) : [];
+    const assets = buildPronunciationAssets(focus, words);
+    return {
+      ...part,
+      content: {
+        ...safeContent,
+        ...(assets.wordAudioUrls.length ? { wordAudioUrls: assets.wordAudioUrls } : {})
+      }
+    };
+  });
   return {
     id: lesson.id,
     title: learnerLessonDisplayTitle(lesson),
@@ -586,7 +665,7 @@ function lessonView(lesson: LearnerLessonRecord): LessonView {
     weekTopic: lesson.weekTopic,
     durationMinutes: lesson.content.durationMinutes ?? 10,
     cefr: lesson.cefr,
-    content: { parts: lesson.content.parts },
+    content: { parts },
     progress: lesson.progress,
     lock: lesson.lock
   };
@@ -634,10 +713,14 @@ function calculateCurrentStreak(occurredAt: string[]): number {
   return streak;
 }
 
-function calculateInactiveDays(occurredAt: string[]): number | null {
+export function calculateInactiveDays(occurredAt: string[], programStartDate: string): number | null {
   const timestamps = occurredAt.map((value) => Date.parse(value)).filter(Number.isFinite);
   if (!timestamps.length) return null;
-  const latest = startOfUtcDay(new Date(Math.max(...timestamps)));
+  const parsedProgramStart = Date.parse(`${programStartDate.slice(0, 10)}T00:00:00Z`);
+  const latestRelevantTimestamp = Number.isFinite(parsedProgramStart)
+    ? Math.max(...timestamps, parsedProgramStart)
+    : Math.max(...timestamps);
+  const latest = startOfUtcDay(new Date(latestRelevantTimestamp));
   const today = startOfUtcDay(new Date());
   return Math.max(0, Math.floor((today.getTime() - latest.getTime()) / 86_400_000));
 }

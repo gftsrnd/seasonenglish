@@ -10,16 +10,17 @@ const metadata = {
 };
 
 function option(topic: string) {
+  const plan = [1, 2, 3, 4, 5].map((day) => `Outcome: complete workplace task ${day} | Vocabulary: update, deadline, blocker | Frame: Could you + base verb? | Skill emphasis: speaking`);
   return {
     topic,
     description: `${topic} at work`,
     objectives: `Use English for ${topic}`,
     keyVocabHint: "update, deadline, blocker",
     plan: {
-      A1: ["one", "two", "three", "four", "five"],
-      A2: ["one", "two", "three", "four", "five"],
-      B1: ["one", "two", "three", "four", "five"],
-      B2: ["one", "two", "three", "four", "five"]
+      A1: plan,
+      A2: plan,
+      B1: plan,
+      B2: plan
     }
   };
 }
@@ -49,7 +50,11 @@ describe("week suggestion generation", () => {
       }]
       });
     };
-    const runTask = vi.fn(async (_task: string, input: { weekNumbers: number[]; usedTopics: string[] }) => ({
+    const runTask = vi.fn(async (
+      _task: string,
+      input: { weekNumbers: number[]; usedTopics: string[] },
+      _options?: { maxOutputTokens?: number }
+    ) => ({
       output: outputFor(input.weekNumbers[0]!), metadata
     }));
 
@@ -63,6 +68,45 @@ describe("week suggestion generation", () => {
     expect(runTask).toHaveBeenCalledTimes(4);
     expect(runTask.mock.calls[1]?.[1]).toMatchObject({ weekNumbers: [2], usedTopics: expect.arrayContaining(["Project kickoff"]) });
     expect(runTask.mock.calls[3]?.[1]).toMatchObject({ weekNumbers: [4], usedTopics: expect.arrayContaining(["Travel booking"]) });
+  });
+
+  it("keeps carried topics within the 52-item schema limit across sequential weeks", async () => {
+    const topicsByWeek: Record<number, string[]> = {
+      3: ["Negotiating deadlines", "Escalating blockers", "Redesigning approvals"],
+      4: ["Recording meeting minutes", "Planning client visits", "Reviewing safety incidents"]
+    };
+    const runTask = vi.fn(async (
+      _task: string,
+      input: { weekNumbers: number[]; usedTopics: string[] },
+      _options?: { maxOutputTokens?: number }
+    ) => ({
+      output: {
+        weeks: [{
+          ...validOutput.weeks[0],
+          weekNumber: input.weekNumbers[0],
+          options: topicsByWeek[input.weekNumbers[0]!]!.map(option)
+        }]
+      },
+      metadata
+    }));
+
+    const generated = await generateWeekSuggestionBatches(
+      {
+        weekNumbers: [3, 4],
+        levels: ["A1", "A2", "B1", "B2"],
+        usedTopics: Array.from({ length: 52 }, (_, index) => `Historical topic ${index + 1}`)
+      },
+      { prompt: "Suggest workplace topics." },
+      { runTask } as unknown as AiTaskRunner
+    );
+
+    expect(generated.output.weeks.map((week) => week.weekNumber)).toEqual([3, 4]);
+    expect(runTask).toHaveBeenCalledTimes(2);
+    expect(runTask.mock.calls[1]?.[1].usedTopics).toHaveLength(52);
+    expect(runTask.mock.calls[1]?.[1].usedTopics).toEqual(expect.arrayContaining([
+      "Negotiating deadlines", "Escalating blockers", "Redesigning approvals"
+    ]));
+    expect(runTask.mock.calls[0]?.[2]).toMatchObject({ maxOutputTokens: 12_000 });
   });
 
   it("repairs a malformed first provider result internally instead of returning a format error", async () => {
@@ -83,6 +127,31 @@ describe("week suggestion generation", () => {
     expect(runTask).toHaveBeenCalledTimes(2);
     expect(runTask.mock.calls[1]?.[2]?.systemPrompt).toContain("REPAIR REQUIRED");
     expect(runTask.mock.calls[1]?.[2]?.systemPrompt).toContain("weeks.0.options");
+  });
+
+  it("repairs legacy single-skill or Vietnamese day plans into complete English blueprints", async () => {
+    const legacy = structuredClone(validOutput);
+    legacy.weeks[0]!.options[0]!.plan.B1 = [
+      "Từ vựng: variance, forecast",
+      "Ngữ pháp: so sánh hơn",
+      "Đọc báo cáo ngân sách",
+      "Viết giải thích chênh lệch",
+      "Đóng vai trình bày kết quả"
+    ];
+    const runTask = vi.fn()
+      .mockResolvedValueOnce({ output: legacy, metadata })
+      .mockResolvedValueOnce({ output: validOutput, metadata });
+
+    const generated = await generateWeekSuggestions(
+      { weekNumbers: [1], levels: ["A1", "A2", "B1", "B2"], usedTopics: [] },
+      { prompt: "Suggest workplace topics." },
+      { runTask } as unknown as AiTaskRunner
+    );
+
+    expect(generated.output).toEqual(validOutput);
+    expect(runTask).toHaveBeenCalledTimes(2);
+    expect(runTask.mock.calls[1]?.[2]?.systemPrompt).toContain("Day-plan blueprints must be fully in English");
+    expect(runTask.mock.calls[1]?.[2]?.systemPrompt).toContain("Day-plan blueprint is missing Outcome:");
   });
 
   it("stops after one repair instead of hiding an unstable provider behind repeated retries", async () => {

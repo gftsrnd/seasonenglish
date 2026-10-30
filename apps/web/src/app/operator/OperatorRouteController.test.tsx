@@ -27,7 +27,67 @@ const lessonSet = (status: ContentLessonSetVersionView["status"]): ContentLesson
 });
 
 describe("OperatorRouteController", () => {
-  it("opens the first Bài cuối tuần tab by default", async () => {
+  it("uses the sidebar without repeating an operational navigation bar on Operator screens", async () => {
+    const client = { getContentWeeks: vi.fn().mockResolvedValue({ pilot: { startDate: "2026-10-05", weekCount: 1 }, weeks: [] }) };
+    render(<MemoryRouter initialEntries={["/op/weeks"]}><OperatorRouteController session={operator} client={client as any} /></MemoryRouter>);
+
+    expect(await screen.findByRole("heading", { name: "Khung chủ đề tuần" })).toBeInTheDocument();
+    expect(screen.queryByRole("navigation", { name: "Điều hướng màn vận hành" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "← Vận hành" })).not.toBeInTheDocument();
+  });
+
+  it("does not render the manual Duyệt trình độ back link in Operator level forms", async () => {
+    const client = { getAssessmentLevelForms: vi.fn().mockResolvedValue([]), getSystemCapabilities: vi.fn().mockResolvedValue({ ai: true }) };
+    render(<MemoryRouter initialEntries={["/op/levelforms"]}><OperatorRouteController session={operator} client={client as any} /></MemoryRouter>);
+
+    expect(await screen.findByRole("heading", { name: "Bài kiểm tra" })).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: "Đề lên mức" })).toHaveAttribute("aria-selected", "true");
+    expect(screen.queryByRole("heading", { name: "Đề thi lên mức" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "← Duyệt trình độ" })).not.toBeInTheDocument();
+  });
+
+  it("does not render Prompt & rubric for an Operator even when the controller receives its direct URL", async () => {
+    const client = { getContentPrompts: vi.fn().mockResolvedValue({ groups: [
+      { key: "system_rules", label: "Quy tắc chung", content: "current", defaultContent: "default", version: 1, status: "active" }
+    ] }) };
+    render(<MemoryRouter initialEntries={["/settings/prompts"]}><OperatorRouteController session={operator} client={client as any} /></MemoryRouter>);
+
+    expect(await screen.findByText("Đường dẫn vận hành không tồn tại.")).toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "Prompt & rubric" })).not.toBeInTheDocument();
+    expect(client.getContentPrompts).not.toHaveBeenCalled();
+  });
+
+  it("persists an Operator draft edit from the level-form workspace", async () => {
+    const user = userEvent.setup();
+    const detail = {
+      definitionId: "definition-1", versionId: "version-1", title: "Đề B1", version: 1, publishedAt: null,
+      listeningTaskCount: 1, readingTaskCount: 0, attemptCount: 0, status: "draft", targetLevel: "B1",
+      sections: [
+        { code: "listening", title: "Nghe", durationMinutes: 8, maxScore: 25, instructions: ["Nghe"], groups: [{ key: "L", title: "Nghe", instruction: "Nghe", tasks: [{ key: "L1", prompt: "Old prompt", responseType: "single_choice", maxScore: 5, options: [{ value: "A", label: "Yes" }], correctAnswer: "A" }] }] },
+        { code: "reading", title: "Đọc", durationMinutes: 13, maxScore: 25, instructions: ["Đọc"], groups: [{ key: "R", title: "Đọc", instruction: "Đọc", tasks: [{ key: "R1", prompt: "Read", responseType: "single_choice", maxScore: 5, options: [{ value: "A", label: "Yes" }], correctAnswer: "A" }] }] },
+        { code: "writing", title: "Viết", durationMinutes: 10, maxScore: 25, instructions: ["Viết"], groups: [{ key: "W", title: "Viết", instruction: "Viết", tasks: [{ key: "W1", prompt: "Write", responseType: "long_text", maxScore: 25 }] }] },
+        { code: "speaking", title: "Nói", durationMinutes: 7, maxScore: 25, instructions: ["Nói"], groups: [{ key: "S", title: "Nói", instruction: "Nói", tasks: [{ key: "S1", prompt: "Speak", responseType: "speaking_evidence", maxScore: 25 }] }] }
+      ], warnings: [], versions: [], deletable: true, deleteReason: null
+    } as any;
+    const updateAssessmentLevelForm = vi.fn().mockImplementation(async (_id, input) => ({ ...detail, title: input.title, sections: input.sections }));
+    const client = {
+      getAssessmentLevelForms: vi.fn().mockResolvedValue([{ targetLevel: "B1", publishedForm: null, draftForm: { definitionId: "definition-1", versionId: "version-1", title: "Đề B1", version: 1, publishedAt: null, listeningTaskCount: 1, readingTaskCount: 0, attemptCount: 0, status: "draft" } }]),
+      getAssessmentLevelForm: vi.fn().mockResolvedValue(detail), updateAssessmentLevelForm,
+      getSystemCapabilities: vi.fn().mockResolvedValue({ ai: true })
+    };
+    render(<MemoryRouter initialEntries={["/op/levelforms"]}><OperatorRouteController session={operator} client={client as any} /></MemoryRouter>);
+
+    await user.click(await screen.findByRole("button", { name: "Sửa" }));
+    const prompt = await screen.findByRole("textbox", { name: "Nội dung L1" });
+    await user.clear(prompt);
+    await user.type(prompt, "Updated prompt");
+    await user.click(screen.getByRole("button", { name: "Lưu bản nháp" }));
+
+    await waitFor(() => expect(updateAssessmentLevelForm).toHaveBeenCalledWith("version-1", expect.objectContaining({ sections: expect.any(Array) })));
+    expect(updateAssessmentLevelForm.mock.calls[0]?.[1].sections[0].groups[0].tasks[0].prompt).toBe("Updated prompt");
+  });
+
+  it("opens Bài tuần with exactly the five standardized tabs", async () => {
     const review = {
       tabs: [
         { key: "submissions", label: "Bài nộp", count: 0, unreadCount: 0 },
@@ -44,9 +104,31 @@ describe("OperatorRouteController", () => {
 
     render(<MemoryRouter initialEntries={["/op/review"]}><OperatorRouteController session={operator} client={{ getContentReview: vi.fn().mockResolvedValue(review) } as any} /></MemoryRouter>);
 
-    const weeklyTab = await screen.findByRole("tab", { name: "Bài cuối tuần (1)" });
+    const weeklyTab = await screen.findByRole("tab", { name: "Đề bài tuần (1)" });
     expect(screen.getAllByRole("tab")[0]).toBe(weeklyTab);
     expect(weeklyTab).toHaveAttribute("aria-selected", "true");
+    expect(screen.getAllByRole("tab").map(tab => tab.textContent)).toEqual(["Đề bài tuần (1)", "Bài đã nộp (0 chưa đọc)", "Phản hồi AI Coach (0)", "Kháng nghị (0)", "Lịch sử làm bài"]);
+    expect(screen.queryByRole("tab", { name: /Bài test/ })).not.toBeInTheDocument();
+  });
+
+  it("switches Bài kiểm tra between placement reviews and level-form management", async () => {
+    const user = userEvent.setup();
+    const review = {
+      tabs: [{ key: "assessments", label: "Bài test", count: 1 }], submissions: [], coachSamples: [], microLessons: [], weeklyPractices: [], appeals: [], lessonAttempts: [],
+      assessments: [{ id: "a1", learnerId: "u1", learnerName: "Lan", kind: "placement", title: "Bài đầu vào", submittedAt: "2026-10-21T08:00:00.000Z", totalScore: 72, status: "submitted" }]
+    } as any;
+    const client = { getContentReview: vi.fn().mockResolvedValue(review), getAssessmentLevelForms: vi.fn().mockResolvedValue([]), getSystemCapabilities: vi.fn().mockResolvedValue({ ai: true }) };
+    render(<MemoryRouter initialEntries={["/op/tests"]}><OperatorRouteController session={operator} client={client as any} /></MemoryRouter>);
+
+    expect(await screen.findByRole("heading", { name: "Bài kiểm tra" })).toBeInTheDocument();
+    const navigation = screen.getByRole("tablist", { name: "Loại bài kiểm tra" });
+    expect(within(navigation).getAllByRole("tab").map(tab => tab.textContent)).toEqual(["Đề đầu vào", "Đề lên mức"]);
+    expect(await screen.findByText("Lan")).toBeInTheDocument();
+
+    await user.click(within(navigation).getByRole("tab", { name: "Đề lên mức" }));
+    expect(within(navigation).getByRole("tab", { name: "Đề lên mức" })).toHaveAttribute("aria-selected", "true");
+    expect(screen.queryByRole("heading", { name: "Đề thi lên mức" })).not.toBeInTheDocument();
+    expect(client.getAssessmentLevelForms).toHaveBeenCalled();
   });
 
   it("loads the real week contract for /op/weeks and persists edited frames", async () => {
@@ -61,6 +143,23 @@ describe("OperatorRouteController", () => {
     await user.type(screen.getByLabelText("Chủ đề *"), "Customer calls");
     await user.click(screen.getByRole("button", { name: "Lưu khung chủ đề" }));
     await waitFor(() => expect(client.saveContentWeeks).toHaveBeenCalledWith([{ weekNumber: 1, topic: "Customer calls", description: "", objectives: "", keyVocabHint: "" }]));
+  });
+
+  it("omits still-empty pilot weeks when saving a completed week", async () => {
+    const user = userEvent.setup();
+    const populated = { id: "w1", weekNumber: 1, startDate: "2026-10-05", endDate: "2026-10-11", current: true, topic: "Meetings", description: "", objectives: "", keyVocabHint: "" };
+    const empty = { id: "w2", weekNumber: 2, startDate: "2026-10-12", endDate: "2026-10-18", current: false, topic: "", description: "", objectives: "", keyVocabHint: "" };
+    const weeks = { pilot: { startDate: "2026-10-05", weekCount: 2 }, weeks: [populated, empty] };
+    const saveContentWeeks = vi.fn().mockResolvedValue(weeks);
+    const client = { getContentWeeks: vi.fn().mockResolvedValue(weeks), saveContentWeeks, suggestContentWeeks: vi.fn() };
+    render(<MemoryRouter initialEntries={["/op/weeks"]}><OperatorRouteController session={operator} client={client as any} /></MemoryRouter>);
+
+    await screen.findByDisplayValue("Meetings");
+    await user.click(screen.getByRole("button", { name: "Lưu khung chủ đề" }));
+
+    await waitFor(() => expect(saveContentWeeks).toHaveBeenCalledWith([
+      expect.objectContaining({ weekNumber: 1, topic: "Meetings" })
+    ]));
   });
 
   it("shows week save feedback as a toast instead of below the topic instructions", async () => {
@@ -96,10 +195,16 @@ describe("OperatorRouteController", () => {
     expect(screen.getByLabelText("Chủ đề *")).toHaveValue("Meetings");
   });
 
-  it("generates every level sequentially only after saving the confirmed week", async () => {
+  it("starts all five active level jobs together after saving the confirmed week", async () => {
     const user = userEvent.setup();
     const weeks = { pilot: { startDate: "2026-10-05", weekCount: 1 }, weeks: [{ id: "w1", weekNumber: 1, startDate: "2026-10-05", endDate: "2026-10-11", current: true, topic: "", description: "", objectives: "", keyVocabHint: "" }] };
-    const plan = { A1: ["Hello", "Name", "Job", "Ask", "Goodbye"], A2: ["Meet", "Role", "Team", "Ask", "Close"] };
+    const plan = {
+      A1: ["Hello", "Name", "Job", "Ask", "Goodbye"],
+      A2: ["Meet", "Role", "Team", "Ask", "Close"],
+      B1: ["Brief", "Clarify", "Compare", "Respond", "Summarise"],
+      B2: ["Analyse", "Negotiate", "Justify", "Revise", "Report"],
+      C1: ["Evaluate", "Challenge", "Synthesize", "Advise", "Conclude"]
+    };
     let running = 0;
     let maxRunning = 0;
     const order: string[] = [];
@@ -115,9 +220,9 @@ describe("OperatorRouteController", () => {
     const client = {
       getContentWeeks: vi.fn().mockResolvedValue(weeks),
       saveContentWeeks: vi.fn().mockResolvedValue({ ...weeks, weeks: [{ ...weeks.weeks[0]!, topic: "Meetings", description: "Lịch họp", objectives: "Xác nhận lịch", keyVocabHint: "schedule", plan }] }),
-      suggestContentWeeks: vi.fn().mockResolvedValue({ weeks: [{ weekNumber: 1, levels: ["A1", "A2"], options: [{ topic: "Meetings", description: "Lịch họp", objectives: "Xác nhận lịch", keyVocabHint: "schedule", plan }] }] }),
+      suggestContentWeeks: vi.fn().mockResolvedValue({ weeks: [{ weekNumber: 1, levels: ["A1", "A2", "B1", "B2", "C1"], options: [{ topic: "Meetings", description: "Lịch họp", objectives: "Xác nhận lịch", keyVocabHint: "schedule", plan }] }] }),
       generateContentLessonDraft,
-      getContentLessonMatrix: vi.fn().mockResolvedValue({ levels: [{ cefr: "A1", learnerCount: 0 }, { cefr: "A2", learnerCount: 0 }], weeks: [{ weekNumber: 1, topic: "Meetings", cells: [] }] }),
+      getContentLessonMatrix: vi.fn().mockResolvedValue({ levels: ["A1", "A2", "B1", "B2", "C1"].map(cefr => ({ cefr, learnerCount: 0 })), weeks: [{ weekNumber: 1, topic: "Meetings", cells: [] }] }),
       getSystemCapabilities: vi.fn().mockResolvedValue({ ai: true })
     };
     render(<MemoryRouter initialEntries={["/op/weeks"]}><OperatorRouteController session={operator} client={client as any} /></MemoryRouter>);
@@ -129,9 +234,38 @@ describe("OperatorRouteController", () => {
     await user.click(screen.getByRole("button", { name: "Lưu khung chủ đề" }));
     await user.click(await screen.findByRole("button", { name: /^Xác nhận sinh bài$/ }));
 
-    await waitFor(() => expect(generateContentLessonDraft).toHaveBeenCalledTimes(2));
-    expect(maxRunning).toBe(1);
-    expect(order).toEqual(["start-A1", "end-A1", "start-A2", "end-A2"]);
+    await waitFor(() => expect(generateContentLessonDraft).toHaveBeenCalledTimes(5));
+    expect(maxRunning).toBe(5);
+    expect(order.slice(0, 5).sort()).toEqual(["start-A1", "start-A2", "start-B1", "start-B2", "start-C1"]);
+    expect(order.slice(5).sort()).toEqual(["end-A1", "end-A2", "end-B1", "end-B2", "end-C1"]);
+  });
+
+  it("stops the topic-page batch before the next selected week when one level fails", async () => {
+    const user = userEvent.setup();
+    const week = (weekNumber: number) => ({ id: `w${weekNumber}`, weekNumber, startDate: "2026-10-05", endDate: "2026-10-11", current: weekNumber === 1, topic: `Topic ${weekNumber}`, description: "Workplace task", objectives: "Complete the task", keyVocabHint: "work" });
+    const weeks = { pilot: { startDate: "2026-10-05", weekCount: 2 }, weeks: [week(1), week(2)] };
+    const levels = ["A1", "A2", "B1", "B2", "C1"];
+    const generateContentLessonDraft = vi.fn(async (weekNumber: number, cefr: string) => {
+      if (weekNumber === 1 && cefr === "B2") throw new Error("AI_OUTPUT_INVALID");
+      return {};
+    });
+    const client = {
+      getContentWeeks: vi.fn().mockResolvedValue(weeks),
+      saveContentWeeks: vi.fn().mockResolvedValue(weeks),
+      getContentLessonMatrix: vi.fn().mockResolvedValue({ levels: levels.map(cefr => ({ cefr, learnerCount: 0 })), weeks: weeks.weeks.map(item => ({ weekNumber: item.weekNumber, topic: item.topic, cells: [] })) }),
+      getSystemCapabilities: vi.fn().mockResolvedValue({ ai: true }),
+      generateContentLessonDraft
+    };
+    render(<MemoryRouter initialEntries={["/op/weeks"]}><OperatorRouteController session={operator} client={client as any} /></MemoryRouter>);
+
+    await user.click(await screen.findByRole("button", { name: "Lưu khung chủ đề" }));
+    const dialog = await screen.findByRole("dialog", { name: "Sinh bài học" });
+    await user.click(within(dialog).getByText("Tuần 2"));
+    await user.click(within(dialog).getByRole("button", { name: "Xác nhận sinh bài" }));
+
+    await waitFor(() => expect(generateContentLessonDraft).toHaveBeenCalledTimes(5));
+    expect(generateContentLessonDraft.mock.calls.every(([weekNumber]) => weekNumber === 1)).toBe(true);
+    expect(await screen.findByText(/Tuần sau chưa được khởi động/)).toBeInTheDocument();
   });
 
   it("warns before replacing a partially filled week and regenerates every active level after confirmation", async () => {
@@ -239,12 +373,12 @@ describe("OperatorRouteController", () => {
     resolveGeneration({} as ContentLessonSetVersionView);
   });
 
-  it("renders prompt controls that Manager can mutate in the owned operations area", async () => {
+  it("lets Manager edit Prompt & rubric from its Settings area", async () => {
     const client = { getContentPrompts: vi.fn().mockResolvedValue({ groups: [
       { key: "system_rules", label: "Quy tắc chung", content: "current", defaultContent: "default", version: 1, status: "active" },
       { key: "assessment_scoring", label: "Chấm test", content: "score", defaultContent: "score default", version: 1, status: "active" }
     ] }) };
-    render(<MemoryRouter initialEntries={["/mgr/ops/prompts"]}><OperatorRouteController session={manager} client={client as any} basePath="/mgr/ops" /></MemoryRouter>);
+    render(<MemoryRouter initialEntries={["/settings/prompts"]}><OperatorRouteController session={manager} client={client as any} basePath="/mgr/ops" /></MemoryRouter>);
     expect(await screen.findByRole("heading", { name: "Prompt & rubric" })).toBeInTheDocument();
     screen.getAllByRole("button", { name: "Về mặc định" }).forEach(button => expect(button).toBeEnabled());
     expect(screen.getByRole("button", { name: "Lưu prompt" })).toBeEnabled();
@@ -266,16 +400,16 @@ describe("OperatorRouteController", () => {
     } as ContentReviewView;
     render(<MemoryRouter initialEntries={["/mgr/ops/review"]}><OperatorRouteController session={manager} client={{ getContentReview: vi.fn().mockResolvedValue(review) } as any} basePath="/mgr/ops" /></MemoryRouter>);
 
-    expect(await screen.findByRole("heading", { name: "Đọc mẫu & kiểm tra AI" })).toBeInTheDocument();
-    expect(screen.getAllByRole("tab")).toHaveLength(6);
+    expect(await screen.findByRole("heading", { name: "Bài tuần" })).toBeInTheDocument();
+    expect(screen.getAllByRole("tab")).toHaveLength(5);
     expect(screen.queryByText(/bài siêu ngắn/i)).not.toBeInTheDocument();
   });
 
-  it("renders Manager-owned routes without an inspection banner", async () => {
+  it("keeps the Manager Prompt settings editable without an operations inspection banner", async () => {
     const client = { getContentPrompts: vi.fn().mockResolvedValue({ groups: [
       { key: "system_rules", label: "Quy tắc chung", content: "current", defaultContent: "default", version: 1, status: "active" }
     ] }), saveContentPrompts: vi.fn() };
-    render(<MemoryRouter initialEntries={["/mgr/ops/prompts"]}><OperatorRouteController session={manager} client={client as any} basePath="/mgr/ops" /></MemoryRouter>);
+    render(<MemoryRouter initialEntries={["/settings/prompts"]}><OperatorRouteController session={manager} client={client as any} basePath="/mgr/ops" /></MemoryRouter>);
 
     expect(await screen.findByRole("heading", { name: "Prompt & rubric" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Lưu prompt" })).toBeEnabled();
@@ -462,9 +596,9 @@ describe("OperatorRouteController", () => {
     render(<MemoryRouter initialEntries={["/op"]}><OperatorRouteController session={manager} client={client as any} /></MemoryRouter>);
     expect(await screen.findByRole("heading", { name: "Duyệt trình độ" })).toBeInTheDocument();
     const managerButton = screen.getByRole("button", { name: "Chấm lại bằng AI" });
-    expect(managerButton).toBeEnabled();
+    expect(managerButton).toBeDisabled();
     await user.click(managerButton);
-    await waitFor(() => expect(rescoreAssessment).toHaveBeenCalledWith("a1", expect.any(String)));
+    expect(rescoreAssessment).toHaveBeenCalledTimes(1);
   });
 
   it("keeps the dashboard visible when a rescore request fails", async () => {
@@ -680,9 +814,49 @@ describe("OperatorRouteController", () => {
     render(<MemoryRouter initialEntries={[{ pathname: "/op/review", state: { reviewTab: "subs" } }]}><OperatorRouteController session={operator} client={{ getContentReview } as any} /></MemoryRouter>);
 
     expect(await screen.findByText(/Viết · 14\/10 \d{2}:\d{2}/)).toBeInTheDocument();
-    expect(screen.getByText("Đề: Viết email xin dời lịch họp theo chủ đề Meetings.")).toBeInTheDocument();
+    const taskSection = screen.getByText("Đề bài").closest("section");
+    expect(taskSection).not.toBeNull();
+    expect(within(taskSection!).getByText("Viết email xin dời lịch họp theo chủ đề Meetings.")).toBeInTheDocument();
     expect(screen.queryByText(/loại bài chưa có trong API/i)).not.toBeInTheDocument();
     expect(screen.queryByText(/API chưa cung cấp nội dung đề/i)).not.toBeInTheDocument();
+  });
+
+  it("resolves Season and weekly audio by the artifact key persisted on each review item", async () => {
+    const user = userEvent.setup();
+    const review: ContentReviewView = {
+      tabs: [
+        { key: "submissions", label: "Bài nộp", count: 1, unreadCount: 1 },
+        { key: "coach", label: "Phản hồi coach", count: 1 },
+        { key: "micro", label: "Bài siêu ngắn", count: 0 },
+        { key: "appeals", label: "Kháng nghị", count: 0 },
+        { key: "attempts", label: "Số lần làm bài", count: 0 },
+        { key: "assessments", label: "Bài test", count: 0 }
+      ],
+      submissions: [{
+        id: "submission-1", learnerName: "Lan", cefr: "A2", weekNumber: 2,
+        submittedAt: "2026-10-14T08:00:00.000Z", checked: false, text: "Weekly transcript",
+        total: null, rubric: { meaning: null, vocabulary: null, grammar: null }, feedback: "", suggestions: [],
+        audioArtifact: { artifactKey: "audio/weekly-current.webm" }
+      }],
+      coachSamples: [{
+        id: "turn-1", learnerName: "Lan", cefr: "A2", weekNumber: 2,
+        createdAt: "2026-10-14T09:00:00.000Z", checked: false, learnerText: "Season transcript", coachText: "Good.",
+        scores: { meaning: null, vocabulary: null, grammar: null }, suggestions: [],
+        audioArtifact: { artifactKey: "audio/season-current.webm" }
+      }],
+      microLessons: [], appeals: [], lessonAttempts: [], assessments: []
+    };
+    const listAssessmentAudio = vi.fn().mockResolvedValue({ items: [
+      { fileId: "current-weekly", artifactKey: "audio/weekly-current.webm", sourceFlow: "weekly_practice", sourceEntityId: "submission-1", signedUrl: "/audio/weekly-current.webm" },
+      { fileId: "old-weekly", artifactKey: "audio/weekly-old.webm", sourceFlow: "weekly_practice", sourceEntityId: "submission-1", signedUrl: "/audio/weekly-old.webm" },
+      { fileId: "current-season", artifactKey: "audio/season-current.webm", sourceFlow: "season", sourceEntityId: "turn-1", signedUrl: "/audio/season-current.webm" },
+      { fileId: "old-season", artifactKey: "audio/season-old.webm", sourceFlow: "season", sourceEntityId: "turn-1", signedUrl: "/audio/season-old.webm" }
+    ] });
+    render(<MemoryRouter initialEntries={[{ pathname: "/op/review", state: { reviewTab: "subs" } }]}><OperatorRouteController session={operator} client={{ getContentReview: vi.fn().mockResolvedValue(review), listAssessmentAudio } as any} /></MemoryRouter>);
+
+    expect(await screen.findByLabelText("Phát Bản ghi âm bài nộp của Lan")).toHaveAttribute("src", "/audio/weekly-current.webm");
+    await user.click(screen.getByRole("tab", { name: "Phản hồi AI Coach (1)" }));
+    expect(await screen.findByLabelText("Phát Bản ghi âm Season của Lan")).toHaveAttribute("src", "/audio/season-current.webm");
   });
 
   it("keeps review metadata honest when an older submission has no type or task", async () => {
@@ -706,7 +880,9 @@ describe("OperatorRouteController", () => {
     render(<MemoryRouter initialEntries={[{ pathname: "/op/review", state: { reviewTab: "subs" } }]}><OperatorRouteController session={operator} client={{ getContentReview: vi.fn().mockResolvedValue(review) } as any} /></MemoryRouter>);
 
     expect(await screen.findByText(/Tuần 2 · — ·/)).toBeInTheDocument();
-    expect(screen.getByText("Đề: —")).toBeInTheDocument();
+    const taskSection = screen.getByText("Đề bài").closest("section");
+    expect(taskSection).not.toBeNull();
+    expect(within(taskSection!).getByText("—")).toBeInTheDocument();
     expect(screen.queryByText(/loại bài chưa có trong API/i)).not.toBeInTheDocument();
     expect(screen.queryByText(/API chưa cung cấp nội dung đề/i)).not.toBeInTheDocument();
   });
@@ -739,10 +915,10 @@ describe("OperatorRouteController", () => {
       coachSamples: [], submissions: [], microLessons: [], appeals: [], lessonAttempts: [],
       assessments: [{ id: "attempt-1", learnerName: "Lan", kind: "placement", title: "Đầu vào", status: "pending_review", submittedAt: "2026-10-14T08:00:00.000Z", totalScore: null }]
     };
-    render(<MemoryRouter initialEntries={[{ pathname: "/op/review", state: { reviewTab: "tests" } }]}><OperatorRouteController session={operator} client={{ getContentReview: vi.fn().mockResolvedValue(review) } as any} /></MemoryRouter>);
+    render(<MemoryRouter initialEntries={["/op/tests"]}><OperatorRouteController session={operator} client={{ getContentReview: vi.fn().mockResolvedValue(review) } as any} /></MemoryRouter>);
 
     expect(await screen.findByText("Lan")).toBeInTheDocument();
-    expect(screen.getByRole("tab", { name: "Bài test (1)" })).toHaveAttribute("aria-selected", "true");
+    expect(screen.getByRole("tab", { name: "Đề đầu vào" })).toHaveAttribute("aria-selected", "true");
     expect(screen.getAllByText("—").length).toBeGreaterThan(0);
     expect(screen.queryByText("API chưa cung cấp")).not.toBeInTheDocument();
   });
@@ -835,7 +1011,7 @@ describe("OperatorRouteController", () => {
     expect(client.publishContentLessonSet).not.toHaveBeenCalled();
   });
 
-  it("requires primary confirmation before regenerating a lesson set", async () => {
+  it("requires a five-second confirmation before regenerating a lesson set", async () => {
     const user = userEvent.setup();
     const draft = lessonSet("draft");
     const generateContentLessonDraft = vi.fn().mockResolvedValue(draft);
@@ -850,9 +1026,9 @@ describe("OperatorRouteController", () => {
 
     expect(generateContentLessonDraft).not.toHaveBeenCalled();
     const dialog = screen.getByRole("dialog", { name: "Sinh lại bộ bài?" });
-    expect(within(dialog).getByRole("button", { name: "Sinh lại" })).toHaveClass("btn-primary");
     await user.click(within(dialog).getByRole("button", { name: "Sinh lại" }));
-    await waitFor(() => expect(generateContentLessonDraft).toHaveBeenCalledWith(2, "A2"));
+    expect(screen.getByRole("dialog", { name: /Sinh lại sau 5 giây/ })).toHaveAttribute("aria-busy", "true");
+    expect(generateContentLessonDraft).not.toHaveBeenCalled();
   });
 
   it("offers AI regeneration and manual recreation for exactly the deleted lesson day", async () => {
@@ -966,14 +1142,16 @@ describe("OperatorRouteController", () => {
     expect(screen.getByText("Chưa có")).toBeInTheDocument();
   });
 
-  it("renders the persisted lesson practice answer instead of a transport placeholder", async () => {
+  it("does not append a duplicate raw practice-answer block below the structured lesson content", async () => {
     const client = { getContentLessonSet: vi.fn().mockResolvedValue({
       lessonSetId: "ls", versionId: "v1", version: 1, status: "draft", weekNumber: 2, topic: "Meetings", cefr: "A2", explanationLanguage: "Tiếng Việt", createdBy: "op", approvedBy: null, createdAt: "2026-10-14", publishedAt: null,
       lessons: [{ id: "lesson-1", dayNumber: 1, title: "Mở đầu cuộc họp", durationMinutes: 10, practiceLabel: "điền từ · đáp án: start", parts: [] }]
     }) };
     render(<MemoryRouter initialEntries={["/op/lessons/2/A2"]}><OperatorRouteController session={operator} client={client as any} /></MemoryRouter>);
 
-    expect(await screen.findByText("điền từ · đáp án: start")).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: /Mở đầu cuộc họp/ })).toBeInTheDocument();
+    expect(screen.queryByText("Đáp án bài tập")).not.toBeInTheDocument();
+    expect(screen.queryByText("start")).not.toBeInTheDocument();
     expect(screen.queryByText(/API chưa cung cấp/i)).not.toBeInTheDocument();
   });
 
@@ -1017,19 +1195,14 @@ describe("OperatorRouteController", () => {
     cleanup();
     render(<MemoryRouter initialEntries={["/op/lessons/2/A2"]}><OperatorRouteController session={manager} client={client as any} /></MemoryRouter>);
     expect(await screen.findByRole("heading", { name: /Tuần 2 · Mức A2/ })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /Bổ sung cụm từ bằng AI/ })).toBeEnabled();
-    expect(screen.getByRole("button", { name: /Bổ sung bằng AI/ })).toBeEnabled();
+    expect(screen.getByRole("button", { name: /Bổ sung cụm từ bằng AI/ })).toBeDisabled();
+    expect(screen.getByRole("button", { name: /Bổ sung bằng AI/ })).toBeDisabled();
     await user.click(screen.getByRole("button", { name: /Bổ sung cụm từ bằng AI/ }));
-    await waitFor(() => expect(fillContentLessonPhrases).toHaveBeenCalledWith(2, "A2", 1));
+    expect(fillContentLessonPhrases).toHaveBeenCalledTimes(1);
     await user.click(screen.getByRole("button", { name: /Bổ sung bằng AI/ }));
-    await waitFor(() => expect(enrichContentLessonDraft).toHaveBeenCalledWith(2, "A2", 1));
-    expect(await screen.findByText("Đã tự động điền các nội dung còn thiếu. Vui lòng kiểm tra lại trước khi duyệt.")).toBeInTheDocument();
+    expect(enrichContentLessonDraft).toHaveBeenCalledTimes(1);
 
-    enrichContentLessonDraft.mockRejectedValueOnce(Object.assign(new Error("AI_OUTPUT_INVALID"), { code: "AI_OUTPUT_INVALID" }));
-    await user.click(screen.getByRole("button", { name: /Bổ sung bằng AI/ }));
-    expect(await screen.findByText(/AI trả về nội dung không đúng định dạng.*bấm lại thao tác.*Soạn tay/i)).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /Bổ sung bằng AI/ })).toBeEnabled();
-    expect(screen.queryByRole("button", { name: /Đang bổ sung/ })).not.toBeInTheDocument();
+    expect(screen.getAllByText(/chế độ chỉ đọc/i).length).toBeGreaterThan(0);
   });
 
   it("renders structured lesson content instead of transport JSON", async () => {

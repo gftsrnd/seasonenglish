@@ -181,8 +181,8 @@ describe("assessment audio lifecycle contract", () => {
     expect(staffRead.json()).toMatchObject({
       fileId,
       artifactKey,
-      signedUrl: `https://audio.example.test/${artifactKey}`,
-      url: `https://audio.example.test/${artifactKey}`,
+      signedUrl: `/api/v1/files/assessment-audio/playback?artifactKey=${encodeURIComponent(artifactKey)}`,
+      url: `/api/v1/files/assessment-audio/playback?artifactKey=${encodeURIComponent(artifactKey)}`,
       expiresAt: expect.any(String),
       transcript: "I coordinate the weekly handoff.",
       sourceFlow: "weekly_practice",

@@ -12,6 +12,7 @@ import {
   ManagerReport,
   ManagerRewards
 } from "./index.js";
+import { buildManagerProgressCsv, managerLearnerStatus } from "./Progress.js";
 import { OperationalCards, PageTitle } from "./shared.js";
 import { buildManagerReportText } from "./Report.js";
 
@@ -42,11 +43,50 @@ function renderRewards() {
 }
 
 describe("new Manager app branch", () => {
+  it("exports every visible progress column, including Friday practice and status", () => {
+    const csv = buildManagerProgressCsv({
+      ...progress,
+      learners: [{ ...progress.learners[0]!, weeklyPracticeStatus: "scored", weeklyPracticeScore: 88 }]
+    });
+
+    expect(csv.split("\r\n")[0]).toBe('"Tên học viên","Mức hiện tại","Tình trạng học","Mức rủi ro","Số ngày không học","Hoạt động gần nhất","Số buổi tuần này","Bài hoàn thành","Tổng bài trong tuần","Lượt AI Coach","Trạng thái bài cuối tuần","Điểm bài cuối tuần","Trạng thái bài đầu vào","Cách chấm đầu vào","Điểm đầu vào","Điểm thưởng","Huy hiệu"');
+    expect(csv).toContain('"Học viên Demo","A2","Đang học","Bình thường","0","14/10/2026 09:00","3","1","5","2","Đã chấm","88","Không rõ","Không rõ","52","20","first"');
+  });
+
+  it("uses the M-004 risk thresholds and exports never-started learners clearly", () => {
+    const idle = { ...progress.learners[0]!, sessionsThisWeek: 0, missedDays: 0, lastActivityAt: null };
+    expect(managerLearnerStatus(idle, "2026-10-26", new Date("2026-10-27T12:00:00Z"))).toBe("Đang học");
+    expect(managerLearnerStatus(idle, "2026-10-26", new Date("2026-10-28T12:00:00Z"))).toBe("Chưa học tuần này");
+    expect(managerLearnerStatus({ ...idle, missedDays: 2 }, "2026-10-26", new Date("2026-10-28T12:00:00Z"))).toBe("Bỏ 2 ngày");
+    const csv = buildManagerProgressCsv({ ...progress, weekStartDate: "2026-10-26", learners: [idle] }, new Date("2026-10-28T12:00:00Z"));
+    expect(csv).toContain('"Chưa vào học"');
+    expect(csv).toContain('"Chưa học tuần này"');
+    expect(csv).toContain('"Trung bình"');
+  });
+
+  it("includes each learner's dropout state in both the printable report and text export", () => {
+    const report: ManagerReportView = {
+      organizationName: "GFT Demo", generatedAt: "2026-10-28T09:00:00.000Z", currentWeek: 1, pilotWeeks: 2,
+      progress: progress.summary,
+      learners: [{ ...progress.learners[0]!, learnerName: "Người cần nhắc", missedDays: 4, sessionsThisWeek: 0 }],
+      activityByDay: [], regularByWeek: [], levelDistribution: [{ cefr: "A2", learners: 1 }],
+      totals: { approvedLessonSets: 1, approvedLessons: 5, coachTurns: 2, practiceSubmissions: 0, reviewedPracticeSubmissions: 0, reminders: 0, appeals: 0, pendingAppeals: 0 },
+      surveyResponses: [], operations: { content: operations.content, queues: operations.queues, automation: operations.automation }
+    };
+
+    render(<ManagerReport view={report} />);
+
+    expect(buildManagerReportText(report)).toContain("Tình trạng: Bỏ 4 ngày");
+    const learnerTable = screen.getByRole("table", { name: "Tình trạng từng học viên" });
+    expect(within(learnerTable).getByText("Bỏ 4 ngày")).toBeInTheDocument();
+    expect(learnerTable).toHaveClass("manager-report-learner-table");
+  });
+
   it("groups Manager progress like Operator and exposes profile-only learner actions", async () => {
     const openProfile = vi.fn(); const remove = vi.fn(); const assignWeeklyPractice = vi.fn();
     const { container } = render(<ManagerProgress view={progress} onOpenLearnerProfile={openProfile} onAssignWeeklyPractice={assignWeeklyPractice} onDeleteLearner={remove} />);
     const headings = [...container.querySelectorAll("h1,h3")].map((node) => node.textContent);
-    expect(headings).toEqual(["Tiến độ nhóm", "Đang học (1)", "Đang làm test (1)", "Đã nộp, chờ duyệt mức (1)", "Chưa làm test (1)"]);
+    expect(headings).toEqual(["Tiến độ nhóm", "Đang học (1)", "Đã nộp, chờ duyệt mức (1)", "Đang làm test (1)", "Chưa làm test (1)"]);
     expect(screen.getByText("Học đều (≥3 buổi/tuần)")).toBeInTheDocument();
     await userEvent.setup().click(screen.getByRole("button", { name: "Hồ sơ Học viên Demo" }));
     expect(openProfile).toHaveBeenCalledWith("learner-1");
@@ -103,9 +143,10 @@ describe("new Manager app branch", () => {
     expect(screen.getByText("Thư Demo").closest("summary")).toHaveTextContent("1 bộ · 5 bài");
     expect(screen.getByText("Thư Demo").closest("summary")).toHaveTextContent("1 duyệt · 1 bài đọc · 1 hoàn thành");
     expect(screen.queryByRole("navigation", { name: "Màn hình vận hành" })).not.toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: "Bộ bài đã sẵn sàng đến tuần 1" })).toBeInTheDocument();
-    expect(screen.getByText("1/2 bộ đã duyệt")).toBeInTheDocument();
-    expect(screen.getByText(/Tuần 1 · B1 \(chưa sinh\)/)).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Bộ bài cần xử lý" })).toBeInTheDocument();
+    expect(screen.getByText("1 bộ")).toBeInTheDocument();
+    expect(screen.getByText(/Tuần 1 · B1: chưa sinh/)).toBeInTheDocument();
+    expect(screen.queryByRole("region", { name: "Thao tác vận hành của Quản lý" })).not.toBeInTheDocument();
     expect(screen.getByText(/1 bộ bài cũ chưa có thông tin người soạn/)).toBeInTheDocument();
     expect(screen.getByText("Yêu cầu xoá tài khoản đã gửi").parentElement).toHaveTextContent("2");
   });
@@ -118,22 +159,20 @@ describe("new Manager app branch", () => {
   it("shows webhook state, exact missed days and audited reminder history", async () => {
     const send = vi.fn(); const dismiss = vi.fn(); const copy = vi.fn();
     const reminders: ManagerRemindersView = {
-      organizationName: "GFT Demo", inactiveDays: 2, webhookConfigured: false,
-      candidates: [{ learnerId: "learner-3", learnerName: "Cần nhắc", cefr: "A2", lastActivityAt: null, missedDays: 5 }],
-      history: [{ reminderId: "r-1", learnerId: "learner-1", learnerName: "Học viên Demo", missedDays: 3, status: "queued", deliveryStatus: "queued", provider: "local_queue", createdAt: "2026-10-14T09:00:00.000Z", attemptedAt: "2026-10-14T09:00:01.000Z" }]
+      organizationName: "GFT Demo", inactiveDays: 2, webhookConfigured: false, emailConfigured: true,
+      candidates: [{ learnerId: "learner-3", learnerName: "Cần nhắc", learnerEmail: "can.nhac@example.com", cefr: "A2", lastActivityAt: null, missedDays: 5 }],
+      history: [{ reminderId: "r-1", learnerId: "learner-1", learnerName: "Học viên Demo", missedDays: 3, status: "queued", deliveryStatus: "queued", provider: "resend", createdAt: "2026-10-14T09:00:00.000Z", attemptedAt: "2026-10-14T09:00:01.000Z" }]
     };
     Object.defineProperty(navigator, "clipboard", { configurable: true, value: { writeText: vi.fn().mockResolvedValue(undefined) } });
     render(<ManagerReminders view={reminders} onSend={send} onDismiss={dismiss} onCopy={copy} />);
-    expect(screen.getByText("Tự phát hiện người bỏ ≥2 ngày liên tiếp. Gửi qua Base Message, copy nội dung hoặc xác nhận đã nhắc qua kênh khác.")).toBeInTheDocument();
-    expect(screen.getByRole("note")).toHaveTextContent("Chưa có webhook Base.vn");
-    expect(screen.getByRole("note")).toHaveTextContent("Hệ thống chỉ ghi nhận vào hàng chờ gửi tay");
-    expect(screen.getByRole("button", { name: /Ghi nhận tất cả \(1\)/ })).toBeEnabled();
-    expect(screen.getByRole("button", { name: "Ghi nhận gửi tay" })).toBeEnabled();
-    expect(screen.getByText("Chờ gửi tay")).toBeInTheDocument();
+    expect(screen.getByText(/Email được gửi riêng/)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Gửi email" })).toBeEnabled();
+    expect(screen.queryByRole("button", { name: "Gửi Base.vn" })).not.toBeInTheDocument();
+    expect(screen.getByText("Email")).toBeInTheDocument();
     expect(screen.getByText("bỏ 5 ngày")).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "Lịch sử nhắc" })).toBeInTheDocument();
     expect(screen.getByText(/14[-/]10/)).toBeInTheDocument();
-    expect(screen.getAllByRole("columnheader").map((header) => header.textContent)).toEqual(["Ngày", "Người học", "Bỏ", "Kết quả"]);
+    expect(screen.getAllByRole("columnheader").map((header) => header.textContent)).toEqual(["Ngày", "Người học", "Email nhận", "Kênh", "Bỏ", "Kết quả"]);
     await userEvent.setup().click(screen.getByRole("button", { name: "Đã nhắc qua kênh khác" }));
     expect(dismiss).toHaveBeenCalledWith("learner-3");
     expect(screen.queryByRole("status")).not.toBeInTheDocument();
@@ -141,15 +180,13 @@ describe("new Manager app branch", () => {
     await vi.waitFor(() => expect(copy).toHaveBeenCalledWith("learner-3"));
   });
 
-  it("sends all reminders sequentially and exposes a responsive action group", async () => {
-    let releaseFirst!: () => void;
-    const firstRequest = new Promise<void>((resolve) => { releaseFirst = resolve; });
-    const send = vi.fn((learnerId: string) => learnerId === "learner-1" ? firstRequest : Promise.resolve());
+  it("only offers direct delivery when the learner recipient is known", async () => {
+    const send = vi.fn().mockResolvedValue(undefined);
     const reminders: ManagerRemindersView = {
       organizationName: "GFT Demo", inactiveDays: 2, webhookConfigured: true,
       candidates: [
-        { learnerId: "learner-1", learnerName: "Cần nhắc một", cefr: "A2", lastActivityAt: null, missedDays: 3 },
-        { learnerId: "learner-2", learnerName: "Cần nhắc hai", cefr: "B1", lastActivityAt: null, missedDays: 4 }
+        { learnerId: "learner-1", learnerName: "Cần nhắc một", learnerEmail: "mot@example.com", cefr: "A2", lastActivityAt: null, missedDays: 3 },
+        { learnerId: "learner-2", learnerName: "Cần nhắc hai", learnerEmail: "hai@example.com", cefr: "B1", lastActivityAt: null, missedDays: 4 }
       ], history: []
     };
     render(<ManagerReminders view={reminders} onSend={send} />);
@@ -157,11 +194,11 @@ describe("new Manager app branch", () => {
     expect(firstActions).toHaveClass("manager-reminder-actions");
     expect(firstActions.closest("section")).toHaveClass("manager-reminder-card");
     expect(firstActions.previousElementSibling).toHaveClass("manager-reminder-message");
-    await userEvent.setup().click(screen.getByRole("button", { name: "Gửi tất cả (2)" }));
-    await vi.waitFor(() => expect(send).toHaveBeenCalledTimes(1));
-    releaseFirst();
-    await vi.waitFor(() => expect(send).toHaveBeenCalledTimes(2));
-    expect(send.mock.calls.map(([learnerId]) => learnerId)).toEqual(["learner-1", "learner-2"]);
+    const user = userEvent.setup();
+    await user.click(within(firstActions).getByRole("button", { name: "Gửi email" }));
+    await user.click(within(screen.getByRole("dialog", { name: "Xác nhận gửi email" })).getByRole("button", { name: "Xác nhận gửi email" }));
+    expect(send).toHaveBeenNthCalledWith(1, "learner-1", "email");
+    expect(within(firstActions).queryByRole("button", { name: "Gửi Base.vn" })).not.toBeInTheDocument();
   });
 
   it("renders all five report sections from real report fields", () => {

@@ -83,6 +83,22 @@ function reviewActions(overrides: Partial<OperatorReviewActions> = {}): Operator
 }
 
 describe("Operator assessment audio playback", () => {
+  it("lets an operator replay a learner daily-lesson speaking submission", () => {
+    const view = reviewView({
+      activeTab: "attempts",
+      attempts: [{
+        id: "progress-1", learnerId: "learner-1", learnerName: "Lan", cefr: "A2",
+        lesson: "Tuần 1 · T2 · Daily stand-up", listening: "1", reading: "1", writing: "1", speaking: "1", total: 4,
+        audioArtifact: { artifactKey: "assessment-audio/daily.webm", mimeType: "audio/webm", sizeBytes: 42, signedUrl: "/api/v1/files/assessment-audio/playback?artifactKey=daily", expiresAt: null }
+      }]
+    });
+
+    render(<OperatorReview view={view} actions={reviewActions()} />);
+    fireEvent.click(screen.getByText("Lan"));
+
+    expect(screen.getByLabelText("Phát Bản ghi âm bài học của Lan")).toBeInTheDocument();
+  });
+
   it("shows CEFR and actual duration columns with a total row", () => {
     const detail = assessmentDetail();
     detail.totalScore = 75;
@@ -133,28 +149,22 @@ describe("Operator assessment audio playback", () => {
     );
   });
 
-  it("shows all four S3 recordings as one non-roleplay refund task for manual review", () => {
+  it("shows one S3 recording for the four-question refund task", () => {
     const detail = assessmentDetail();
     detail.sections = [{
       section: "speaking", label: "Nói", maxScore: 20, durationMinutes: 15, actualSeconds: null, score: null, cefr: null, source: null, criteria: {}, state: "not_scored",
       groups: [{ key: "S3", label: "Task 3 – Customer refund questions (B2–C1)", tasks: [
-        { taskKey: "S3_Q1", prompt: "How would you acknowledge the customer's frustration?", answer: "I understand your frustration.", maxScore: 0 },
-        { taskKey: "S3_Q2", prompt: "What technical issue has delayed the refund?", answer: "A technical issue delayed it.", maxScore: 0 },
-        { taskKey: "S3_Q3", prompt: "What clear next step would you propose?", answer: "I will escalate it.", maxScore: 0 },
-        { taskKey: "S3_Q4", prompt: "When can the customer expect a follow-up?", answer: "Within 24 hours.", maxScore: 0 }
+        { taskKey: "S3", prompt: "1. How would you acknowledge the customer's frustration?\n2. What technical issue has delayed the refund?\n3. What clear next step would you propose?\n4. When can the customer expect a follow-up?", answer: "I understand your frustration. A technical issue delayed it. I will escalate it and follow up within 24 hours.", maxScore: 5 }
       ] }]
     }];
-    detail.answers = ["S3_Q1", "S3_Q2", "S3_Q3", "S3_Q4"].map((taskKey) => ({
-      section: "speaking" as const, taskKey, value: "audio evidence", evidenceType: "audio" as const,
-      audioArtifact: { artifactKey: `assessment-audio/${taskKey}.webm`, mimeType: "audio/webm", sizeBytes: 42, signedUrl: `https://audio.example.test/${taskKey}.webm`, expiresAt: "2026-10-15T08:35:00.000Z" }
-    }));
+    detail.answers = [{ section: "speaking", taskKey: "S3", value: "audio evidence", evidenceType: "audio",
+      audioArtifact: { artifactKey: "assessment-audio/S3.webm", mimeType: "audio/webm", sizeBytes: 42, signedUrl: "https://audio.example.test/S3.webm", expiresAt: "2026-10-15T08:35:00.000Z" } }];
 
     render(<OperatorReviewAssessmentDetail detail={detail} onClose={vi.fn()} />);
 
-    expect(screen.getByText(/Câu 1\. How would you acknowledge the customer's frustration\?/)).toBeInTheDocument();
-    expect(screen.getByText(/When can the customer expect a follow-up\?/)).toBeInTheDocument();
-    expect(screen.getByLabelText("Phát audio S3_Q1")).toBeInTheDocument();
-    expect(screen.getByLabelText("Phát audio S3_Q4")).toBeInTheDocument();
+    expect(screen.getByText((content) => content.includes("How would you acknowledge the customer's frustration?") && content.includes("When can the customer expect a follow-up?"))).toBeInTheDocument();
+    expect(screen.getByLabelText("Phát audio S3")).toBeInTheDocument();
+    expect(document.querySelectorAll("audio")).toHaveLength(1);
     expect(screen.queryByText(/Khách hàng mở đầu/)).not.toBeInTheDocument();
     expect(screen.queryByText(/^3\. How would you acknowledge/)).not.toBeInTheDocument();
   });
@@ -233,6 +243,26 @@ describe("Operator assessment audio playback", () => {
     />);
     expect(screen.getByLabelText("Phát Bản ghi âm Season của Lan")).toHaveAttribute("src", "/audio/season.webm");
     expect(onDeleteAudio).toBeDefined();
+  });
+
+  it("plays learner audio in a level-up assessment detail", () => {
+    const detail = assessmentDetail();
+    detail.kind = "level_up";
+    detail.title = "Thi lên mức B1";
+    detail.answers[0]!.audioArtifact = {
+      artifactKey: "assessment-audio/level-up.webm",
+      mimeType: "audio/webm",
+      sizeBytes: 42,
+      signedUrl: "/api/v1/files/assessment-audio/playback?artifactKey=level-up",
+      expiresAt: null
+    };
+
+    render(<OperatorReviewAssessmentDetail detail={detail} onClose={vi.fn()} />);
+
+    expect(screen.getByLabelText(`Phát audio ${detail.answers[0]!.taskKey}`)).toHaveAttribute(
+      "src",
+      "/api/v1/files/assessment-audio/playback?artifactKey=level-up"
+    );
   });
 
   it("shows every task and marks missing answers instead of hiding the task", () => {

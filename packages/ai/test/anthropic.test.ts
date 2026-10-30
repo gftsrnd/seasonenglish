@@ -5,6 +5,7 @@ import { weeklyLessonsOutputJsonSchema } from "../src/schemas.js";
 describe("Anthropic provider", () => {
   it("uses the Messages API and parses JSON content", async () => {
     const fetch = vi.fn().mockResolvedValue(new Response(JSON.stringify({
+      stop_reason: "end_turn",
       content: [{ type: "text", text: JSON.stringify({ reply: "Hello" }) }],
       usage: { input_tokens: 12, output_tokens: 18 }
     }), { status: 200, headers: { "content-type": "application/json" } }));
@@ -16,6 +17,7 @@ describe("Anthropic provider", () => {
     });
 
     expect(result.output).toEqual({ reply: "Hello" });
+    expect(result.stopReason).toBe("end_turn");
     expect(result.usage).toEqual({ inputTokens: 12, outputTokens: 18, totalTokens: 30 });
     expect(fetch).toHaveBeenCalledWith("https://api.anthropic.com/v1/messages", expect.objectContaining({ method: "POST" }));
     const init = fetch.mock.calls[0]?.[1] as RequestInit;
@@ -102,6 +104,146 @@ describe("Anthropic provider", () => {
     });
   });
 
+  it("caches the stable tool schema without caching dynamic lesson input", async () => {
+    const fetch = vi.fn().mockResolvedValue(new Response(JSON.stringify({
+      content: [{ type: "tool_use", input: { reply: "Hello" } }]
+    }), { status: 200 }));
+    const provider = createAnthropicProvider({ apiKey: "test-secret-key", fetch });
+
+    await provider.complete({
+      taskId: "weekly_lesson_foundation", systemPrompt: "Return one foundation.",
+      input: { week: 4, topic: "Dynamic topic" },
+      outputJsonSchema: { type: "object", properties: { reply: { type: "string" } } },
+      signal: new AbortController().signal, traceId: "trace-cache"
+    });
+
+    const init = fetch.mock.calls[0]?.[1] as RequestInit;
+    const body = JSON.parse(String(init.body));
+    expect(body.tools[0]).toMatchObject({ cache_control: { type: "ephemeral" } });
+    expect(body.messages[0]).not.toHaveProperty("cache_control");
+  });
+
+  it("reports Anthropic prompt-cache creation and hit tokens", async () => {
+    const fetch = vi.fn().mockResolvedValue(new Response(JSON.stringify({
+      content: [{ type: "tool_use", input: { reply: "Hello" } }],
+      usage: {
+        input_tokens: 12,
+        output_tokens: 18,
+        cache_creation_input_tokens: 700,
+        cache_read_input_tokens: 1400
+      }
+    }), { status: 200 }));
+    const provider = createAnthropicProvider({ apiKey: "test-secret-key", fetch });
+
+    const result = await provider.complete({
+      taskId: "weekly_lesson_foundation", systemPrompt: "Return one foundation.", input: {},
+      outputJsonSchema: { type: "object" }, signal: new AbortController().signal, traceId: "trace-cache-usage"
+    });
+
+    expect(result.usage).toEqual({
+      inputTokens: 12,
+      outputTokens: 18,
+      totalTokens: 30,
+      cacheCreationInputTokens: 700,
+      cacheReadInputTokens: 1400
+    });
+  });
+
+  it("keeps the oversized skills tool forced but non-strict so Anthropic can compile it", async () => {
+    const fetch = vi.fn().mockResolvedValue(new Response(JSON.stringify({
+      content: [{ type: "tool_use", input: { listening: {} } }]
+    }), { status: 200 }));
+    const provider = createAnthropicProvider({ apiKey: "test-secret-key", fetch });
+
+    await provider.complete({
+      taskId: "weekly_lesson_skills", systemPrompt: "Return one skill set.", input: {},
+      outputJsonSchema: { type: "object", properties: { listening: { type: "object" } } },
+      signal: new AbortController().signal, traceId: "trace-weekly-component"
+    });
+
+    const init = fetch.mock.calls[0]?.[1] as RequestInit;
+    expect(JSON.parse(String(init.body))).toMatchObject({
+      tools: [expect.objectContaining({ name: "weekly_lesson_skills_output", strict: false })],
+      tool_choice: { type: "tool", name: "weekly_lesson_skills_output" }
+    });
+  });
+
+  it("enables strict compilation for compact foundation components", async () => {
+    const fetch = vi.fn().mockResolvedValue(new Response(JSON.stringify({
+      content: [{ type: "tool_use", input: { durationMinutes: 10 } }]
+    }), { status: 200 }));
+    const provider = createAnthropicProvider({ apiKey: "test-secret-key", fetch });
+
+    await provider.complete({
+      taskId: "weekly_lesson_foundation", systemPrompt: "Return one foundation.", input: {},
+      outputJsonSchema: { type: "object", properties: { durationMinutes: { type: "integer" } } },
+      signal: new AbortController().signal, traceId: "trace-foundation-component"
+    });
+
+    const init = fetch.mock.calls[0]?.[1] as RequestInit;
+    expect(JSON.parse(String(init.body))).toMatchObject({
+      tools: [expect.objectContaining({ name: "weekly_lesson_foundation_output", strict: true })]
+    });
+  });
+
+  it.each([
+    "weekly_lesson_grammar_classifier",
+    "weekly_lesson_objectives",
+    "weekly_lesson_foundation",
+    "weekly_lesson_comprehension",
+    "weekly_lesson_language_practice",
+    "weekly_lesson_speaking",
+    "weekly_lesson_skills_reviewer"
+  ])("enables strict compilation for compact weekly component %s", async (taskId) => {
+    const fetch = vi.fn().mockResolvedValue(new Response(JSON.stringify({
+      content: [{ type: "tool_use", input: {} }]
+    }), { status: 200 }));
+    const provider = createAnthropicProvider({ apiKey: "test-secret-key", fetch });
+
+    await provider.complete({
+      taskId, systemPrompt: "Return one compact component.", input: {},
+      outputJsonSchema: { type: "object", properties: {} },
+      signal: new AbortController().signal, traceId: `trace-${taskId}`
+    });
+
+    const init = fetch.mock.calls[0]?.[1] as RequestInit;
+    expect(JSON.parse(String(init.body))).toMatchObject({
+      tools: [expect.objectContaining({ name: `${taskId}_output`, strict: true })]
+    });
+  });
+
+  it("omits the deprecated temperature override for claude-haiku-5-5", async () => {
+    const fetch = vi.fn().mockResolvedValue(new Response(JSON.stringify({
+      content: [{ type: "tool_use", input: { reply: "Hello" } }]
+    }), { status: 200 }));
+    const provider = createAnthropicProvider({ apiKey: "test-secret-key", model: "claude-haiku-5-5", fetch });
+
+    await provider.complete({
+      taskId: "coach_dialogue", systemPrompt: "Coach safely.", input: { message: "Hello" },
+      outputJsonSchema: { type: "object" }, temperature: 0,
+      signal: new AbortController().signal, traceId: "trace-no-deprecated-temperature"
+    });
+
+    const init = fetch.mock.calls[0]?.[1] as RequestInit;
+    expect(JSON.parse(String(init.body))).not.toHaveProperty("temperature");
+  });
+
+  it("keeps the temperature override for Anthropic models that support it", async () => {
+    const fetch = vi.fn().mockResolvedValue(new Response(JSON.stringify({
+      content: [{ type: "tool_use", input: { reply: "Hello" } }]
+    }), { status: 200 }));
+    const provider = createAnthropicProvider({ apiKey: "test-secret-key", model: "claude-3-5-haiku-latest", fetch });
+
+    await provider.complete({
+      taskId: "coach_dialogue", systemPrompt: "Coach safely.", input: { message: "Hello" },
+      outputJsonSchema: { type: "object" }, temperature: 0,
+      signal: new AbortController().signal, traceId: "trace-supported-temperature"
+    });
+
+    const init = fetch.mock.calls[0]?.[1] as RequestInit;
+    expect(JSON.parse(String(init.body))).toMatchObject({ temperature: 0 });
+  });
+
   it("avoids Anthropic grammar compilation for the dynamic CEFR week plan while keeping tool output", async () => {
     const fetch = vi.fn().mockResolvedValue(new Response(JSON.stringify({
       content: [{ type: "tool_use", input: { weeks: [] } }]
@@ -155,14 +297,33 @@ describe("Anthropic provider", () => {
   it("fails clearly when Claude stops because max_tokens was reached", async () => {
     const fetch = vi.fn().mockResolvedValue(new Response(JSON.stringify({
       stop_reason: "max_tokens",
-      content: [{ type: "text", text: '{"lessons":[' }]
+      content: [{ type: "text", text: '{"lessons":[' }],
+      usage: { input_tokens: 640, output_tokens: 2200, cache_read_input_tokens: 900 }
     }), { status: 200 }));
     const provider = createAnthropicProvider({ apiKey: "test-secret-key", fetch });
 
     await expect(provider.complete({
       taskId: "weekly_lessons", systemPrompt: "Return lessons.", input: {},
-      outputJsonSchema: { type: "object" }, signal: new AbortController().signal, traceId: "trace-truncated"
-    })).rejects.toMatchObject({ code: "AI_OUTPUT_TRUNCATED", retryable: false });
+      outputJsonSchema: { type: "object" }, maxOutputTokens: 2200,
+      signal: new AbortController().signal, traceId: "trace-truncated"
+    })).rejects.toMatchObject({
+      code: "AI_OUTPUT_TRUNCATED",
+      retryable: false,
+      details: {
+        stopReason: "max_tokens",
+        maxOutputTokens: 2200,
+        usage: { inputTokens: 640, outputTokens: 2200, totalTokens: 2840, cacheReadInputTokens: 900 }
+      }
+    });
+    try {
+      await provider.complete({
+        taskId: "weekly_lessons", systemPrompt: "Return lessons.", input: {},
+        outputJsonSchema: { type: "object" }, maxOutputTokens: 2200,
+        signal: new AbortController().signal, traceId: "trace-truncated-again"
+      });
+    } catch (error) {
+      expect(JSON.stringify(error)).not.toContain('{"lessons":[');
+    }
   });
 
   it("marks a malformed JSON response as retryable without exposing provider data", async () => {
@@ -175,5 +336,57 @@ describe("Anthropic provider", () => {
       taskId: "weekly_lessons", systemPrompt: "Return lessons.", input: {},
       outputJsonSchema: { type: "object" }, signal: new AbortController().signal, traceId: "trace-malformed"
     })).rejects.toMatchObject({ code: "AI_PROVIDER_MALFORMED_RESPONSE", retryable: true });
+  });
+
+  it("extracts Retry-After on 429 and sends multi-turn repair messages while keeping the cached system block clean", async () => {
+    const rateLimitedFetch = vi.fn().mockResolvedValue(new Response("rate-limited", {
+      status: 429,
+      headers: { "retry-after": "2" }
+    }));
+    const rateLimitedProvider = createAnthropicProvider({ apiKey: "test-secret-key", fetch: rateLimitedFetch });
+    await expect(rateLimitedProvider.complete({
+      taskId: "weekly_lesson_foundation",
+      systemPrompt: "Stable foundation prompt.",
+      input: { dayNumber: 1 },
+      outputJsonSchema: { type: "object" },
+      signal: new AbortController().signal,
+      traceId: "trace-retry-after"
+    })).rejects.toMatchObject({
+      code: "AI_PROVIDER_RATE_LIMIT",
+      retryable: true,
+      retryAfterMs: 2000
+    });
+
+    const repairFetch = vi.fn().mockResolvedValue(new Response(JSON.stringify({
+      content: [{ type: "tool_use", input: { durationMinutes: 10 } }]
+    }), { status: 200 }));
+    const repairProvider = createAnthropicProvider({ apiKey: "test-secret-key", fetch: repairFetch });
+    await repairProvider.complete({
+      taskId: "weekly_lesson_foundation",
+      systemPrompt: "Stable foundation prompt.\n\nREPAIR REQUIRED: durationMinutes: Required\nPREVIOUS INVALID OUTPUT: {}",
+      input: { dayNumber: 1 },
+      messages: [
+        { role: "user", content: JSON.stringify({ dayNumber: 1 }) },
+        { role: "assistant", content: "{}" },
+        { role: "user", content: "REPAIR REQUIRED: durationMinutes: Required" }
+      ],
+      outputJsonSchema: { type: "object" },
+      signal: new AbortController().signal,
+      traceId: "trace-multiturn-repair"
+    });
+
+    const init = repairFetch.mock.calls[0]?.[1] as RequestInit;
+    const body = JSON.parse(String(init.body));
+    expect(body.system).toEqual([{
+      type: "text",
+      text: expect.stringContaining("Stable foundation prompt."),
+      cache_control: { type: "ephemeral" }
+    }]);
+    expect(body.system[0].text).not.toContain("PREVIOUS INVALID OUTPUT");
+    expect(body.messages).toEqual([
+      { role: "user", content: JSON.stringify({ dayNumber: 1 }) },
+      { role: "assistant", content: "{}" },
+      { role: "user", content: "REPAIR REQUIRED: durationMinutes: Required" }
+    ]);
   });
 });

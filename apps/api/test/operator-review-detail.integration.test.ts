@@ -19,6 +19,7 @@ describe("Operator review detail and AI grade API", () => {
   const runTask = vi.fn(async () => ({
     output: {
       score: { total: 90, rubric: { meaning: 5, vocabulary: 4, grammar: 4 } },
+      offTopic: false,
       feedback: "Bài viết rõ ý và có thể dùng trong công việc.",
       suggestions: [],
       correctedText: "Weekly sample for the team."
@@ -76,6 +77,13 @@ describe("Operator review detail and AI grade API", () => {
          values ($1, $2, $3, 'reading', 'Xin xem lại phần Đọc', 'pending')`,
         [lessonPartAppealId, DEMO_IDS.learner, DEMO_IDS.lessons[0]]
       );
+      await client.query(
+        `insert into practice_submissions
+           (id, learner_id, program_week_id, status, content, prompt_snapshot, cefr_snapshot, vocabulary_snapshot, submitted_at)
+         values ($1, $2, $3, 'submitted', '{"text":"Weekly sample for the team."}'::jsonb,
+           '{"task":"Write about Introducing yourself & your job"}'::jsonb, 'A2', '[]'::jsonb, now())`,
+        [DEMO_IDS.practiceSubmission, DEMO_IDS.learner, DEMO_IDS.week]
+      );
     } finally { client.release(); }
     await app.ready();
     const login = async (url: string, email: string, credential: string) => {
@@ -100,10 +108,10 @@ describe("Operator review detail and AI grade API", () => {
     expect(response.json()).toMatchObject({
       attemptId: DEMO_IDS.placementAttempt,
       learnerId: DEMO_IDS.learner,
-      answers: [expect.objectContaining({
+      answers: expect.arrayContaining([expect.objectContaining({
         taskKey: "S1",
-        audioArtifact: { artifactKey, mimeType: "audio/wav", sizeBytes: 42, signedUrl: null, expiresAt: null }
-      })],
+        audioArtifact: expect.objectContaining({ artifactKey, mimeType: "audio/wav", sizeBytes: 42, signedUrl: null, expiresAt: null })
+      })]),
       scores: expect.arrayContaining([expect.objectContaining({ section: "listening", source: "human" })]),
       integrityEvents: expect.any(Array),
       appeal: expect.objectContaining({ id: appealId, status: "pending" })

@@ -1,9 +1,11 @@
 import { describe, expect, it } from "vitest";
 import {
   approveContentVersion,
+  containsVietnameseLearnerText,
   retirePublishedContent,
   submitContentForReview,
   validateLessonDraft,
+  validateGenerationFindingsForPublication,
   validateLessonPublication
 } from "../src/content/index.js";
 
@@ -16,7 +18,7 @@ const completeLesson = {
     { code: "instruction", title: "Hướng dẫn", content: { steps: ["Học nội dung", "Làm bài tập"] } },
     { code: "vocabulary", title: "Từ vựng", content: { items: ["department", "role", "project"].map((word) => ({ word, meaning: "từ công việc", collocations: [`my ${word}`, `new ${word}`, `work ${word}`] })) } },
     { code: "grammar", title: "Ngữ pháp", content: { formula: "I work in [team] as [role].", examples: ["I work in AI as an intern."] } },
-    { code: "pronunciation", title: "Phát âm", content: { focus: "/w/", words: ["work", "week", "well"], instruction: "Round your lips." } },
+    { code: "pronunciation", title: "Phát âm", content: { focus: "/w/", words: [{ word: "work", ipa: "/wɜːk/" }, { word: "week", ipa: "/wiːk/" }, { word: "well", ipa: "/wel/" }], instruction: "Round your lips." } },
     { code: "listening", title: "Nghe", content: { script: "I work in AI as an intern.", prompt: "Where does she work?", options: ["AI", "HR", "Sales", "Finance"], answer: "AI" } },
     { code: "reading", title: "Đọc", content: { text: "I work in AI as an intern.", prompt: "Where does she work?", options: ["AI", "HR", "Sales", "Finance"], answer: "AI" } },
     { code: "writing", title: "Viết", content: { type: "fill", prompt: "I work in ___.", answer: "AI" } },
@@ -26,7 +28,64 @@ const completeLesson = {
   ]
 } as const;
 
+function englishLesson(dayNumber = 1) {
+  const lesson = structuredClone(completeLesson) as any;
+  lesson.dayNumber = dayNumber;
+  const titles: Record<string, string> = {
+    objective: "Lesson objectives", instruction: "Instructions", vocabulary: "Vocabulary",
+    grammar: "Grammar", pronunciation: "Pronunciation", listening: "Listening",
+    reading: "Reading", writing: "Writing", word_class: "Word class",
+    word_use: "Word use", speaking: "Speaking"
+  };
+  for (const part of lesson.parts) part.title = titles[part.code];
+  lesson.parts.find((part: any) => part.code === "objective").content = {
+    text: "By the end of this lesson, you will be able to introduce your role."
+  };
+  lesson.parts.find((part: any) => part.code === "instruction").content = {
+    steps: ["Study the lesson content.", "Complete each practice task.", "Review the feedback and try again."]
+  };
+  lesson.parts.find((part: any) => part.code === "grammar").content.usage = "Use this pattern to introduce your role at work.";
+  lesson.parts.find((part: any) => part.code === "pronunciation").content.instruction = "Round your lips and release the sound clearly.";
+  return lesson;
+}
+
 describe("content publishing policy", () => {
+  it("allows an accented Vietnamese proper noun inside otherwise English B1+ guidance", () => {
+    expect(containsVietnameseLearnerText("Report the Đà Nẵng travel expense in one sentence.")).toBe(false);
+    expect(containsVietnameseLearnerText("Hãy báo cáo chi phí đi Đà Nẵng trong một câu.")).toBe(true);
+  });
+
+  it("blocks publication when pronunciation focus or any of the three word IPAs is invalid", () => {
+    const invalid = {
+      ...structuredClone(completeLesson),
+      parts: completeLesson.parts.map((part) => part.code === "pronunciation"
+        ? { ...part, content: { focus: "/p/", words: [{ word: "cost", ipa: "/kɒst/" }, { word: "deadline", ipa: "/ˈdedlaɪn/" }, { word: "planned", ipa: "/plænd/" }] } }
+        : structuredClone(part))
+    };
+    const result = validateLessonPublication([invalid]);
+    expect(result.valid).toBe(false);
+    expect(result.issues).toEqual(expect.arrayContaining([
+      expect.objectContaining({ code: "pronunciation", message: expect.stringContaining("không chứa âm mục tiêu /p/") })
+    ]));
+
+    const tooManyWords = structuredClone(completeLesson) as any;
+    tooManyWords.parts.find((part: any) => part.code === "pronunciation").content.words.push({ word: "window", ipa: "/ˈwɪndəʊ/" });
+    expect(validateLessonPublication([tooManyWords]).issues).toEqual(expect.arrayContaining([
+      expect.objectContaining({ code: "pronunciation", message: "Phát âm cần đúng 3 từ luyện." })
+    ]));
+  });
+  it("blocks serious unresolved generation findings but allows warnings to stay draft metadata", () => {
+    const result = validateGenerationFindingsForPublication([
+      { dayNumber: 2, component: "skills", code: "CEFR_OR_SKILL_CONSTRAINT", severity: "error", message: "B2 speaking needs two constraints.", issues: [], repairAction: "regenerate_component" },
+      { dayNumber: 3, component: "vocabulary", code: "DIVERSITY_NOTE", severity: "warning", message: "Core word repeated.", issues: [], repairAction: "regenerate_component" }
+    ]);
+
+    expect(result).toEqual({
+      valid: false,
+      issues: [{ dayNumber: 2, code: "generation", message: "B2 speaking needs two constraints." }]
+    });
+  });
+
   it("rejects a lesson draft that is missing a required learning part", () => {
     const incomplete = {
       ...completeLesson,
@@ -85,6 +144,51 @@ describe("content publishing policy", () => {
       [1, 2, 3, 4, 5].map((dayNumber) => ({ ...manual, dayNumber })),
       { task: "Write about work.", guidance: "Use the lesson.", requiredVocabulary: ["work"] }
     );
+    expect(result).toEqual({ valid: true, issues: [] });
+  });
+
+  it("rejects Vietnamese learner-facing content for B1+ across lessons and weekly practice", () => {
+    const mixed = englishLesson();
+    mixed.parts.find((part: any) => part.code === "objective").content.text = "By the end of this lesson, you will be able to hỏi lại lịch sự.";
+    mixed.parts.find((part: any) => part.code === "instruction").content.steps[1] = "Làm lần lượt các bài tập.";
+    mixed.parts.find((part: any) => part.code === "grammar").content.usage = "Dùng cấu trúc này để giới thiệu vai trò.";
+    mixed.parts.find((part: any) => part.code === "listening").content.prompt = "Người nói làm việc ở đâu?";
+
+    const result = validateLessonPublication(
+      [1, 2, 3, 4, 5].map((dayNumber) => ({ ...mixed, dayNumber })),
+      { task: "Write about your role.", guidance: "Viết bằng tiếng Anh về công việc.", requiredVocabulary: ["role"] },
+      "B1"
+    );
+
+    expect(result.valid).toBe(false);
+    expect(result.issues).toEqual(expect.arrayContaining([
+      expect.objectContaining({ code: "objective", message: expect.stringContaining("English") }),
+      expect.objectContaining({ code: "instruction", message: expect.stringContaining("English") }),
+      expect.objectContaining({ code: "grammar", message: expect.stringContaining("English") }),
+      expect.objectContaining({ code: "listening", message: expect.stringContaining("English") }),
+      expect.objectContaining({ code: "weekly_practice", message: expect.stringContaining("English") })
+    ]));
+  });
+
+  it("allows Vietnamese guidance for A1-A2", () => {
+    const result = validateLessonPublication(
+      [1, 2, 3, 4, 5].map((dayNumber) => ({ ...completeLesson, dayNumber })),
+      { task: "Write three sentences about your role.", guidance: "Viết ba câu tiếng Anh về công việc.", requiredVocabulary: ["role"] },
+      "A2"
+    );
+
+    expect(result.valid).toBe(true);
+  });
+
+  it("allows Vietnamese vocabulary meanings while all other B1+ learner-facing content is English", () => {
+    const lessons = [1, 2, 3, 4, 5].map(englishLesson);
+
+    const result = validateLessonPublication(
+      lessons,
+      { task: "Write a short workplace update.", guidance: "Use three words from this week's lessons.", requiredVocabulary: ["role"] },
+      "C1"
+    );
+
     expect(result).toEqual({ valid: true, issues: [] });
   });
 

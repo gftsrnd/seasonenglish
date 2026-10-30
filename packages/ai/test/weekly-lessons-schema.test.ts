@@ -1,7 +1,28 @@
 import { describe, expect, it } from "vitest";
+import { AI_TASKS } from "../src/registry.js";
 import {
   weeklyLessonFoundationOutputJsonSchema,
   weeklyLessonFoundationOutputSchema,
+  weeklyLessonFoundationBodyOutputJsonSchema,
+  weeklyLessonObjectivesOutputJsonSchema,
+  weeklyLessonObjectivesOutputSchema,
+  weeklyLessonComprehensionOutputJsonSchema,
+  weeklyLessonLanguagePracticeOutputJsonSchema,
+  weeklyLessonSpeakingOutputJsonSchema,
+  weeklyLessonListeningRepairOutputSchema,
+  weeklyLessonListeningRepairOutputJsonSchema,
+  weeklyLessonReadingRepairOutputSchema,
+  weeklyLessonReadingRepairOutputJsonSchema,
+  weeklyLessonWritingRepairOutputSchema,
+  weeklyLessonWritingRepairOutputJsonSchema,
+  weeklyLessonWordClassRepairOutputSchema,
+  weeklyLessonWordClassRepairOutputJsonSchema,
+  weeklyLessonWordUseRepairOutputSchema,
+  weeklyLessonWordUseRepairOutputJsonSchema,
+  weeklyLessonSpeakingRepairOutputSchema,
+  weeklyLessonSpeakingRepairOutputJsonSchema,
+  weeklyLessonLengthRepairOutputSchema,
+  weeklyLessonLengthRepairOutputJsonSchema,
   weeklyLessonGrammarClassificationOutputSchema,
   weeklyLessonSkillsReviewOutputSchema,
   weeklyLessonSkillsOutputJsonSchema,
@@ -118,6 +139,43 @@ function strictVocabularyItem(partOfSpeech?: string) {
 }
 
 describe("weekly lesson output contract", () => {
+  it("does not treat the answer Hi as revealed by the Vietnamese word khi", () => {
+    const choice = {
+      title: "Chào hỏi",
+      body: "Lan joins the call and greets everyone before the team starts the meeting.",
+      prompt: "What does Lan say?",
+      option1: "Hi",
+      option2: "Goodbye",
+      option3: "Later",
+      option4: "Thanks",
+      answer: "Hi",
+      hint: "Đây là cách chào thân mật khi bắt đầu nói với cả nhóm.",
+      questionTranslation: "Lan nói gì?",
+      answerTranslation: "Chào"
+    };
+
+    expect(weeklyLessonSkillsOutputSchema.safeParse({
+      listening: choice,
+      reading: { ...choice, body: `${choice.body} The manager replies and opens the agenda.` },
+      writing: { title: "Viết", type: "mcq", prompt: "Choose a greeting.", option1: "Hi", option2: "Bye", option3: "Later", option4: "Thanks", answer: "Hi", hint: "Chọn lời chào.", questionTranslation: "Chọn lời chào.", answerTranslation: "Chào" },
+      wordClass: choice,
+      wordUse: choice,
+      speaking: { title: "Nói", prompt: "Greet the team.", answer: "Hi, everyone.", hint: "Use a greeting.", questionTranslation: "Chào nhóm.", answerTranslation: "Chào mọi người." }
+    }).success).toBe(true);
+  });
+  it.each([
+    ["weekly_lesson_listening_repair", "listening", weeklyLessonListeningRepairOutputSchema, weeklyLessonListeningRepairOutputJsonSchema],
+    ["weekly_lesson_reading_repair", "reading", weeklyLessonReadingRepairOutputSchema, weeklyLessonReadingRepairOutputJsonSchema],
+    ["weekly_lesson_writing_repair", "writing", weeklyLessonWritingRepairOutputSchema, weeklyLessonWritingRepairOutputJsonSchema],
+    ["weekly_lesson_word_class_repair", "wordClass", weeklyLessonWordClassRepairOutputSchema, weeklyLessonWordClassRepairOutputJsonSchema],
+    ["weekly_lesson_word_use_repair", "wordUse", weeklyLessonWordUseRepairOutputSchema, weeklyLessonWordUseRepairOutputJsonSchema],
+    ["weekly_lesson_speaking_repair", "speaking", weeklyLessonSpeakingRepairOutputSchema, weeklyLessonSpeakingRepairOutputJsonSchema]
+  ] as const)("keeps %s atomic at both provider JSON schema and Zod gateway schema", (taskId, exercise, schema, jsonSchema) => {
+    expect(jsonSchema).toMatchObject({ type: "object", additionalProperties: false, required: [exercise] });
+    expect(Object.keys(jsonSchema.properties as Record<string, unknown>)).toEqual([exercise]);
+    expect(AI_TASKS.get(taskId).outputSchema).toBe(schema);
+    expect(AI_TASKS.get(taskId).outputJsonSchema).toBe(jsonSchema);
+  });
   it.each([
     "grammar_rule", "sentence_pattern", "usage_rule", "word_formation", "pronunciation_rule"
   ])("accepts the supported grammar classifier category %s", (contentType) => {
@@ -164,6 +222,23 @@ describe("weekly lesson output contract", () => {
     });
     expect(parentheticalExample.success).toBe(true);
     if (parentheticalExample.success) expect(parentheticalExample.data.grammar?.example1).toBe("I give feedback. (Tôi góp ý.)");
+  });
+
+  it("accepts a detailed lesson goal without imposing a hidden 240-character display cap", () => {
+    const result = weeklyLessonObjectivesOutputSchema.safeParse({
+      objective: {
+        title: "Meeting problem solving",
+        explanationLanguage: "en",
+        lesson_goal: "By the end of this lesson, learners will be able to identify the cause of a disrupted video meeting, compare practical solutions, confirm responsibilities, and communicate a concise recovery plan with appropriate B2 workplace language and clear follow-up details.",
+        assessment_gap: null,
+        items: [
+          { id: "C1", type: "content", text: "Identify and resolve a video meeting problem.", action_verb: "resolve", target_language: null, condition: "after reviewing a workplace scenario", criterion: "with two justified actions", assessed_by: "speaking", success_evidence: "The response states two justified actions.", assessmentCode: "speaking" },
+          { id: "L1", type: "language", text: "Use appropriate recovery and follow-up language.", action_verb: "use", target_language: ["reconnect", "follow up"], condition: "during the response", criterion: "using both target expressions accurately", assessed_by: "speaking", success_evidence: "Both target expressions appear accurately.", assessmentCode: "speaking" }
+        ]
+      }
+    });
+
+    expect(result.success).toBe(true);
   });
 
   it("keeps the prompt-required objective evidence and grammar classification metadata", () => {
@@ -245,6 +320,78 @@ describe("weekly lesson output contract", () => {
     expect(weeklyLessonSkillsOutputSchema.safeParse({}).success).toBe(false);
   });
 
+  it("splits foundation objectives and the six exercises into strict provider-sized schemas", () => {
+    const schemas = [
+      weeklyLessonObjectivesOutputJsonSchema,
+      weeklyLessonFoundationBodyOutputJsonSchema,
+      weeklyLessonComprehensionOutputJsonSchema,
+      weeklyLessonLanguagePracticeOutputJsonSchema,
+      weeklyLessonSpeakingOutputJsonSchema
+    ];
+    for (const schema of schemas) {
+      expect(schema).toMatchObject({ type: "object", additionalProperties: false });
+      expect(JSON.stringify(schema).length).toBeLessThan(JSON.stringify(weeklyLessonSkillsOutputJsonSchema).length);
+    }
+    expect(weeklyLessonFoundationBodyOutputJsonSchema.properties).not.toHaveProperty("objective");
+    expect(weeklyLessonObjectivesOutputJsonSchema.properties).toHaveProperty("objective");
+    expect(weeklyLessonComprehensionOutputJsonSchema.required).toEqual(["listening", "reading"]);
+    expect(weeklyLessonLanguagePracticeOutputJsonSchema.required).toEqual(["writing", "wordClass", "wordUse"]);
+    expect(weeklyLessonSpeakingOutputJsonSchema.required).toEqual(["speaking"]);
+  });
+
+  it("keeps the token-repair provider schema inside Anthropic's supported strict subset", () => {
+    const serialized = JSON.stringify(weeklyLessonLengthRepairOutputJsonSchema);
+    for (const unsupported of ["minItems", "maxItems", "pattern"]) {
+      expect(serialized).not.toContain(`"${unsupported}"`);
+    }
+  });
+
+  it("normalizes phrase chunks from the length formatter into individual tokens", () => {
+    const parsed = weeklyLessonLengthRepairOutputSchema.parse({
+      listeningBody: ["Hi everyone,", "I am Minh", "from sales."],
+      readingBody: null,
+      speakingAnswer: null
+    });
+
+    expect(parsed.listeningBody).toEqual(["Hi", "everyone,", "I", "am", "Minh", "from", "sales."]);
+  });
+
+  it("keeps canonical section labels and pronunciation selection out of provider output", () => {
+    const properties = weeklyLessonFoundationOutputJsonSchema.properties as Record<string, { properties?: Record<string, unknown> }>;
+    expect(properties.objective?.properties).not.toHaveProperty("title");
+    expect(properties.instruction?.properties).not.toHaveProperty("title");
+    expect(properties.pronunciation?.properties).toEqual({ tip: expect.any(Object) });
+  });
+
+  it("keeps objective ids out of provider output and assigns stable ids in the application", () => {
+    const objectiveProperties = weeklyLessonObjectivesOutputJsonSchema.properties.objective as {
+      properties: { items: { items: { required: string[]; properties: Record<string, unknown> } } };
+    };
+    expect(objectiveProperties.properties.items.items.required).not.toContain("id");
+    expect(objectiveProperties.properties.items.items.properties).not.toHaveProperty("id");
+
+    const task = AI_TASKS.get("weekly_lesson_objectives");
+    const normalized = task.normalizeOutput?.({ objective: {
+      explanationLanguage: "en",
+      lesson_goal: "Confirm a deadline and next action.",
+      assessment_gap: null,
+      items: [
+        { type: "content", text: "By the end of this lesson, you will be able to identify one deadline.", action_verb: "identify", target_language: null, condition: "after listening", criterion: "one correct deadline", assessed_by: "listening", success_evidence: "The deadline is correct.", assessmentCode: "listening" },
+        { type: "language", text: "By the end of this lesson, you will be able to confirm one deadline using by Friday.", action_verb: "confirm", target_language: ["by Friday"], condition: "during a call", criterion: "one complete response", assessed_by: "speaking", success_evidence: "The response confirms a deadline.", assessmentCode: "speaking" },
+        { type: "language", text: "By the end of this lesson, you will be able to propose one next action.", action_verb: "propose", target_language: ["I will"], condition: "after the call", criterion: "one next action", assessed_by: "writing", success_evidence: "The response proposes an action.", assessmentCode: "writing" }
+      ]
+    } }, { cefr: "B2" });
+
+    expect(weeklyLessonObjectivesOutputSchema.parse(normalized).objective.items.map((item) => item.id))
+      .toEqual(["C1", "L1", "L2"]);
+  });
+
+  it("allows unavailable word-family and synonym relations in the provider schema", () => {
+    const definitions = weeklyLessonVocabularyOutputJsonSchema.$defs as Record<string, { properties?: Record<string, unknown> }>;
+    expect(definitions.item?.properties?.family1).toEqual({ anyOf: [{ $ref: "#/$defs/relation" }, { type: "null" }] });
+    expect(definitions.item?.properties?.synonym1).toEqual({ anyOf: [{ $ref: "#/$defs/levelRelation" }, { type: "null" }] });
+  });
+
   it("requires and preserves a concise part of speech in each strict vocabulary item", () => {
     const item = strictVocabularyItem("noun");
     const parsed = weeklyLessonVocabularyOutputSchema.safeParse({
@@ -274,13 +421,13 @@ describe("weekly lesson output contract", () => {
     });
   });
 
-  it("requires exactly three collocations and complete extended lexical data for every generated word", () => {
+  it("requires three collocations while allowing genuinely unavailable family and synonym data", () => {
     const item = strictVocabularyItem("noun");
     const output = (word1: Record<string, unknown>) => ({ title: "Vocabulary", word1, word2: item, word3: item });
 
     expect(weeklyLessonVocabularyOutputSchema.safeParse(output({ ...item, collocation3: undefined })).success).toBe(false);
-    expect(weeklyLessonVocabularyOutputSchema.safeParse(output({ ...item, family1: null, family2: null })).success).toBe(false);
-    expect(weeklyLessonVocabularyOutputSchema.safeParse(output({ ...item, synonym1: null, synonym2: null })).success).toBe(false);
+    expect(weeklyLessonVocabularyOutputSchema.safeParse(output({ ...item, family1: null, family2: null })).success).toBe(true);
+    expect(weeklyLessonVocabularyOutputSchema.safeParse(output({ ...item, synonym1: null, synonym2: null })).success).toBe(true);
     expect(weeklyLessonVocabularyOutputSchema.safeParse(output({ ...item, umbrellaWord: "" })).success).toBe(false);
     expect(weeklyLessonVocabularyOutputSchema.safeParse(output(item)).success).toBe(true);
   });
@@ -320,13 +467,16 @@ describe("weekly lesson output contract", () => {
     }).success).toBe(true);
   });
 
-  it("rejects a synonym with another part of speech or unusable contextual evidence", () => {
+  it("rejects a synonym with another part of speech or the same headword", () => {
     const item = strictVocabularyItem("noun");
     expect(weeklyLessonVocabularyOutputSchema.safeParse({
       title: "Từ vựng", word1: { ...item, synonym1: { ...item.synonym1!, partOfSpeech: "verb" } }, word2: item, word3: item
     }).success).toBe(false);
     expect(weeklyLessonVocabularyOutputSchema.safeParse({
       title: "Từ vựng", word1: { ...item, synonym1: { ...item.synonym1!, example: "This sentence omits it." } }, word2: item, word3: item
+    }).success).toBe(true);
+    expect(weeklyLessonVocabularyOutputSchema.safeParse({
+      title: "Từ vựng", word1: { ...item, synonym1: { ...item.synonym1!, word: item.word } }, word2: item, word3: item
     }).success).toBe(false);
   });
 
@@ -368,6 +518,18 @@ describe("weekly lesson output contract", () => {
     expect(weeklyLessonSkillsReviewOutputSchema.safeParse({
       status: "approved",
       findings: [{ exerciseCode: "writing", reasonCode: "multiple_valid_answers", message: "Ambiguous." }],
+      solvedAnswers: { listening: "Nine", reading: "Report", writing: "go", wordClass: "noun", wordUse: "Send the report." }
+    }).success).toBe(false);
+
+    const detailedMessage = "A".repeat(500);
+    expect(weeklyLessonSkillsReviewOutputSchema.safeParse({
+      status: "needs_revision",
+      findings: [{ exerciseCode: "writing", reasonCode: "multiple_valid_answers", message: detailedMessage }],
+      solvedAnswers: { listening: "Nine", reading: "Report", writing: "go", wordClass: "noun", wordUse: "Send the report." }
+    }).success).toBe(true);
+    expect(weeklyLessonSkillsReviewOutputSchema.safeParse({
+      status: "needs_revision",
+      findings: [{ exerciseCode: "writing", reasonCode: "multiple_valid_answers", message: "A".repeat(801) }],
       solvedAnswers: { listening: "Nine", reading: "Report", writing: "go", wordClass: "noun", wordUse: "Send the report." }
     }).success).toBe(false);
   });

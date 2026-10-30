@@ -77,7 +77,11 @@ describe("assessment evidence upload API", () => {
     });
     expect(started.statusCode, started.body).toBe(201);
     const attemptId = started.json().attempt.id as string;
-    for (const section of ["listening", "reading", "writing"] as const) {
+    const currentSection = started.json().attempt.currentSection as "listening" | "reading" | "writing" | "speaking";
+    if (currentSection === "speaking") return attemptId;
+    const sections = ["listening", "reading", "writing"] as const;
+    const firstSection = sections.indexOf(currentSection);
+    for (const section of sections.slice(Math.max(0, firstSection))) {
       const advanced = await app.inject({
         method: "POST",
         url: `/api/v1/assessment-attempts/${attemptId}/sections/${section}/complete`,
@@ -204,6 +208,39 @@ describe("assessment evidence upload API", () => {
     expect(response.json()).toMatchObject({ code: "ASSESSMENT_ARTIFACT_NOT_OWNED" });
   });
 
+  it("links a saved assessment response back to its attempt and speaking task", async () => {
+    const boundary = "E4S-linked-assessment-boundary";
+    const payload = Buffer.from([
+      `--${boundary}`,
+      'Content-Disposition: form-data; name="file"; filename="linked-speaking.webm"',
+      "Content-Type: audio/webm",
+      "",
+      "linked voice evidence",
+      `--${boundary}--`,
+      ""
+    ].join("\r\n"));
+    const uploadedResponse = await app.inject({
+      method: "POST", url: "/api/v1/files/assessment-audio",
+      headers: { cookie, "content-type": `multipart/form-data; boundary=${boundary}` }, payload
+    });
+    expect(uploadedResponse.statusCode, uploadedResponse.body).toBe(201);
+    const artifactKey = uploadedResponse.json().artifactKey as string;
+    const attemptId = await startSpeaking();
+
+    const saved = await app.inject({
+      method: "PUT", url: `/api/v1/assessment-attempts/${attemptId}/responses/speaking/S1`, headers: { cookie },
+      payload: { value: "Bản ghi âm đã nộp", evidenceType: "audio", artifactKey }
+    });
+    expect(saved.statusCode, saved.body).toBe(200);
+
+    const linked = await pool.query(
+      "select source_flow, source_entity_id, task_key, completed_at from files where object_key = $1",
+      [artifactKey]
+    );
+    expect(linked.rows[0]).toMatchObject({ source_flow: "placement", source_entity_id: attemptId, task_key: "S1" });
+    expect(linked.rows[0].completed_at).toEqual(expect.any(Date));
+  });
+
   it("keeps assessment uploads behind learner authentication while allowing scoped staff reads", async () => {
     const unauthenticated = await app.inject({
       method: "GET",
@@ -244,7 +281,7 @@ describe("assessment evidence upload API", () => {
 
     expect(response.statusCode, response.body).toBe(200);
     expect(response.json()).toMatchObject({
-      url: `https://audio.example.test/${artifactKey}`,
+      url: `/api/v1/files/assessment-audio/playback?artifactKey=${encodeURIComponent(artifactKey)}`,
       expiresAt: expect.any(String)
     });
   });

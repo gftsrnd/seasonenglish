@@ -44,6 +44,7 @@ describe("level-form preview/version/delete API", () => {
   beforeEach(async () => {
     await pool.query("delete from assessment_attempts where id = $1", [inUseAttemptId]);
     await pool.query("delete from assessment_versions where id in ($1, $2)", [draftVersionId, inUseVersionId]);
+    await pool.query("update assessment_versions set status = 'published' where id = $1", [DEMO_IDS.levelUpVersion]);
   });
 
   afterAll(async () => { await app.close(); await pool.end(); });
@@ -115,7 +116,75 @@ describe("level-form preview/version/delete API", () => {
     const managerDelete = await app.inject({
       method: "DELETE", url: `/api/v1/assessment-level-forms/${inUseVersionId}`, headers: { cookie: managerCookie }
     });
-    expect(managerDelete.statusCode).toBe(409);
-    expect(managerDelete.json()).toEqual({ code: "LEVEL_FORM_IN_USE" });
+    expect(managerDelete.statusCode).toBe(403);
+  });
+
+  it("allows Operator to edit an unused draft and keeps Manager read-only", async () => {
+    await pool.query(
+      `insert into assessment_versions (id, definition_id, version, status, blueprint)
+       values ($1, $2, 2, 'draft', $3::jsonb)`,
+      [draftVersionId, DEMO_IDS.levelUpDefinition, JSON.stringify(levelUpDefinition)]
+    );
+    const payload = {
+      title: "Đề B1 đã chỉnh",
+      sections: levelUpDefinition.sections.map((section) => ({
+        ...section,
+        groups: section.groups.map((group) => ({ ...group, tasks: group.tasks.map((task) => ({ ...task, prompt: `${task.prompt} (đã sửa)` })) }))
+      }))
+    };
+
+    const managerUpdate = await app.inject({ method: "PUT", url: `/api/v1/assessment-level-forms/${draftVersionId}`, headers: { cookie: managerCookie }, payload });
+    expect(managerUpdate.statusCode).toBe(403);
+
+    const operatorUpdate = await app.inject({ method: "PUT", url: `/api/v1/assessment-level-forms/${draftVersionId}`, headers: { cookie: operatorCookie }, payload });
+    expect(operatorUpdate.statusCode, operatorUpdate.body).toBe(200);
+    expect(operatorUpdate.json()).toMatchObject({ title: "Đề B1 đã chỉnh", status: "draft" });
+    expect(operatorUpdate.json().sections[0].groups[0].tasks[0].prompt).toMatch(/đã sửa/);
+  });
+
+  it("keeps a listening draft unpublished until every listening group has a real audio source", async () => {
+    const withoutAudio = structuredClone(levelUpDefinition);
+    for (const group of withoutAudio.sections.find((section) => section.code === "listening")?.groups ?? []) {
+      if (group.stimulus?.type === "audio_script") {
+        const { audioSrc: _audioSrc, ...stimulus } = group.stimulus;
+        group.stimulus = stimulus;
+      }
+    }
+    await pool.query(
+      `insert into assessment_versions (id, definition_id, version, status, blueprint)
+       values ($1, $2, 2, 'draft', $3::jsonb)`,
+      [draftVersionId, DEMO_IDS.levelUpDefinition, JSON.stringify(withoutAudio)]
+    );
+
+    const detail = await app.inject({ method: "GET", url: `/api/v1/assessment-level-forms/${draftVersionId}`, headers: { cookie: operatorCookie } });
+    expect(detail.json().warnings).toEqual(expect.arrayContaining([expect.objectContaining({ code: "missing_audio", severity: "error" })]));
+
+    const blocked = await app.inject({ method: "POST", url: `/api/v1/assessment-level-forms/${draftVersionId}/publication`, headers: { cookie: operatorCookie } });
+    expect(blocked.statusCode, blocked.body).toBe(409);
+    expect(blocked.json()).toEqual({ code: "LEVEL_FORM_AUDIO_REQUIRED" });
+
+    const withAudio = structuredClone(levelUpDefinition);
+    for (const group of withAudio.sections.find((section) => section.code === "listening")?.groups ?? []) {
+      group.stimulus = group.stimulus?.type === "audio_script"
+        ? { ...group.stimulus, audioSrc: "/media/audio/level-up-b1.ogg" }
+        : { type: "audio_script", audioSrc: "/media/audio/level-up-b1.ogg", lines: [{ speaker: "Narrator", text: group.instruction }] };
+    }
+    await pool.query("update assessment_versions set blueprint = $2::jsonb where id = $1", [draftVersionId, JSON.stringify(withAudio)]);
+    const published = await app.inject({ method: "POST", url: `/api/v1/assessment-level-forms/${draftVersionId}/publication`, headers: { cookie: operatorCookie } });
+    expect(published.statusCode, published.body).toBe(200);
+    expect(published.json()).toMatchObject({ versionId: draftVersionId, status: "published" });
+  });
+
+  it("creates a new editable draft from a published form without changing published history", async () => {
+    const copied = await app.inject({
+      method: "POST", url: `/api/v1/assessment-level-forms/${DEMO_IDS.levelUpVersion}/draft`, headers: { cookie: operatorCookie }
+    });
+    expect(copied.statusCode, copied.body).toBe(201);
+    expect(copied.json()).toMatchObject({ status: "draft", targetLevel: "B1", title: expect.any(String) });
+    expect(copied.json().versionId).not.toBe(DEMO_IDS.levelUpVersion);
+    expect(copied.json().sections).toHaveLength(4);
+
+    const published = await app.inject({ method: "GET", url: `/api/v1/assessment-level-forms/${DEMO_IDS.levelUpVersion}`, headers: { cookie: operatorCookie } });
+    expect(published.json()).toMatchObject({ status: "published" });
   });
 });

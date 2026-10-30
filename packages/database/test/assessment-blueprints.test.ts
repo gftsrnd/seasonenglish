@@ -8,15 +8,15 @@ const section = (code: string) => {
 };
 
 describe("placement assessment blueprint", () => {
-  it("uses definition version 3 for the corrected Listening 2 question order", () => {
-    expect(placementDefinition.version).toBe(3);
+  it("uses definition version 5 for the approved placement duration", () => {
+    expect(placementDefinition.version).toBe(5);
   });
 
-  it("matches the approved 70-minute section schedule", () => {
-    expect(placementDefinition.totalMinutes).toBe(70);
+  it("matches the approved 75-minute section schedule", () => {
+    expect(placementDefinition.totalMinutes).toBe(75);
     expect(placementDefinition.sections.map(({ code, durationMinutes }) => [code, durationMinutes])).toEqual([
       ["listening", 15],
-      ["reading", 20],
+      ["reading", 25],
       ["writing", 20],
       ["speaking", 15]
     ]);
@@ -152,15 +152,12 @@ describe("placement assessment blueprint", () => {
     expect(speakingTasks.map(({ key, maxScore }) => ({ key, maxScore }))).toEqual([
       { key: "S1", maxScore: 5 },
       { key: "S2", maxScore: 5 },
-      { key: "S3_Q1", maxScore: 0 },
-      { key: "S3_Q2", maxScore: 0 },
-      { key: "S3_Q3", maxScore: 0 },
-      { key: "S3_Q4", maxScore: 0 },
+      { key: "S3", maxScore: 5 },
       { key: "S4", maxScore: 5 }
     ]);
   });
 
-  it("splits S3 into four audio-only refund questions without roleplay state", () => {
+  it("keeps S3 as one audio task containing four refund questions", () => {
     const speaking = section("speaking");
     const task3 = speaking.groups.find((group) => group.key === "S3");
 
@@ -168,12 +165,9 @@ describe("placement assessment blueprint", () => {
       title: "Task 3 – Customer refund questions (B2–C1)",
       instruction: "You are a Customer Support Specialist. A customer is frustrated because a promised refund has not arrived after five business days."
     });
-    expect(task3?.tasks.map(({ key, prompt, responseType }) => ({ key, prompt, responseType }))).toEqual([
-      { key: "S3_Q1", prompt: "How would you acknowledge the customer's frustration?", responseType: "speaking_evidence" },
-      { key: "S3_Q2", prompt: "What technical issue has delayed the refund?", responseType: "speaking_evidence" },
-      { key: "S3_Q3", prompt: "What clear next step would you propose?", responseType: "speaking_evidence" },
-      { key: "S3_Q4", prompt: "When can the customer expect a follow-up?", responseType: "speaking_evidence" }
-    ]);
+    expect(task3?.tasks).toHaveLength(1);
+    expect(task3?.tasks[0]).toMatchObject({ key: "S3", responseType: "speaking_evidence", maxScore: 5 });
+    expect(task3?.tasks[0]?.prompt.split("\n")).toHaveLength(4);
     task3?.tasks.forEach((task) => expect(task).not.toHaveProperty("interaction"));
     expect(speaking.instructions.join(" ")).toContain("không chấm phát âm");
   });

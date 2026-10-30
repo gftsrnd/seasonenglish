@@ -6,6 +6,7 @@ import type { Pool } from "pg";
 import { z } from "zod";
 import { createRoleGuard } from "../identity/policy.js";
 import type { ContentMediaService } from "../media/index.js";
+import { createResendReminderEmailSender, type ReminderEmailSender } from "./email.js";
 
 const accountRoles = new Set<AccountRole>(["learner", "operator", "manager"]);
 const accountCreateInput = z.object({
@@ -22,20 +23,21 @@ const accountCreateInput = z.object({
   }
 });
 const accountStatusInput = z.object({ status: z.enum(["active", "disabled", "deleted"]) });
-const resetPasswordInput = z.object({ password: z.string().min(8).max(128) });
+const resetPasswordInput = z.object({ password: z.string().min(6).max(128) });
 const managerSettingsInput = z.object({
   programName: z.string().trim().min(1).max(120),
+  pilotCycleAction: z.literal("save").optional(),
   aiTestDisabled: z.boolean().default(false),
   reminderInactiveDays: z.number().int().min(1).max(30), weeklyReportEnabled: z.boolean(),
   pilotStartDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/), pilotWeeks: z.number().int().min(2).max(4),
   weekOverride: z.number().int().min(0).max(4), minMinutesPerDay: z.number().int().min(5).max(60),
-  courseTheme: z.string().max(160), coachDailyLimit: z.number().int().min(1).max(30),
+  courseTheme: z.string().max(160), coachDailyLimit: z.number().int().min(1).max(200),
   testTimed: z.boolean(), testTimes: z.object({ listening: z.number().int().min(1).max(60), reading: z.number().int().min(1).max(60), writing: z.number().int().min(1).max(60), speaking: z.number().int().min(1).max(60) }),
   testWarnLimit: z.number().int().min(1).max(10),
   levelUp: z.object({ days: z.number().int().min(1).max(60), lessons: z.number().min(1).max(100), firstTry: z.number().min(1).max(100), submission: z.number().min(1).max(100), coach: z.number().min(0).max(5), coachTurns: z.number().int().min(0).max(100), wrong: z.number().min(1).max(100), minParts: z.number().int().min(1).max(50) }),
   backgroundMusic: z.object({ enabled: z.boolean(), url: z.string().max(1000), volume: z.number().int().min(0).max(100) }),
   baseWebhookUrl: z.string().max(1000), baseWebhookTemplate: z.string().max(4000)
-});
+}).refine(input => new Date(`${input.pilotStartDate}T00:00:00Z`).getUTCDay() === 1, { path: ["pilotStartDate"], message: "Pilot must start on Monday" });
 const managerProviderSettingsInput = z.object({
   provider: z.enum(["claude", "gemini", "openai"]),
   baseUrl: z.string().trim().url().max(1000),
@@ -51,8 +53,13 @@ const managerPurgeInput = z.object({ confirmationToken: z.string().trim().min(20
 const managerMaintenanceConfirmationInput = z.object({});
 const managerMaintenanceInput = z.object({ confirmationToken: z.string().trim().min(20).max(200), confirmationPhrase: z.string().trim().min(1).max(80) });
 const managerImageTestInput = z.object({ source: z.enum(["pexels", "pixabay", "openverse", "wikimedia", "disabled"]), word: z.string().trim().min(1).max(120).default("notebook") });
+const placementTestChangeRequestInput = z.object({ developerEmail: z.string().trim().email().max(254), note: z.string().trim().min(1).max(4000) });
 const accountIdParams = z.object({ accountId: z.uuid() });
 const learnerIdParams = z.object({ learnerId: z.uuid() });
+const reminderSendInput = z.object({
+  requestId: z.string().min(1).max(128),
+  channel: z.enum(["email", "base"])
+});
 const requestIdParams = z.object({ requestId: z.uuid() });
 const reportIdParams = z.object({ reportId: z.uuid() });
 const managerMusicTestInput = z.object({ enabled: z.boolean(), url: z.string().max(1000), volume: z.number().int().min(0).max(100) });
@@ -65,11 +72,17 @@ function isAccountRole(value: unknown): value is AccountRole {
   return typeof value === "string" && accountRoles.has(value as AccountRole);
 }
 
-export function registerManagerRoutes(app: FastifyInstance, pool: Pool, options: { maintenanceEnabled?: boolean; mediaService?: ContentMediaService } = {}): void {
+export function registerManagerRoutes(app: FastifyInstance, pool: Pool, options: { maintenanceEnabled?: boolean; mediaService?: ContentMediaService; reminderEmailSender?: ReminderEmailSender } = {}): void {
   const repositories = createRepositories(pool);
   const managerOnly = createRoleGuard(pool, ["manager"]);
   const staffReadOnly = createRoleGuard(pool, ["manager", "operator"]);
   const maintenanceEnabled = options.maintenanceEnabled === true;
+  const reminderEmailSender = options.reminderEmailSender ?? (process.env.RESEND_API_KEY
+    ? createResendReminderEmailSender({
+        apiKey: process.env.RESEND_API_KEY,
+        from: process.env.RESEND_FROM_EMAIL ?? "E4S <onboarding@resend.dev>"
+      })
+    : undefined);
 
   app.get("/api/v1/manager/progress", { preHandler: managerOnly }, async (request, reply) => {
     const view = await repositories.manager.progress(request.e4sSession!.user.id);
@@ -391,8 +404,14 @@ export function registerManagerRoutes(app: FastifyInstance, pool: Pool, options:
   app.put("/api/v1/operator/settings", { preHandler: staffReadOnly }, async (request, reply) => {
     const parsed = managerSettingsInput.safeParse(request.body);
     if (!parsed.success) return reply.code(400).send({ code: "OPERATOR_SETTINGS_INVALID" });
-    const saved = await repositories.manager.saveSettings(request.e4sSession!.user.id, parsed.data);
-    return saved ?? reply.code(404).send({ code: "MANAGER_ORGANIZATION_NOT_FOUND" });
+    try {
+      const { pilotCycleAction, ...settings } = parsed.data;
+      const saved = await repositories.manager.saveSettings(request.e4sSession!.user.id, { ...settings, ...(pilotCycleAction ? { pilotCycleAction } : {}) });
+      return saved ?? reply.code(404).send({ code: "MANAGER_ORGANIZATION_NOT_FOUND" });
+    } catch (error) {
+      if (error instanceof Error && error.message === "PILOT_WEEKS_CANNOT_DECREASE") return reply.code(409).send({ code: error.message });
+      throw error;
+    }
   });
 
   app.post("/api/v1/manager/accounts", { preHandler: managerOnly }, async (request, reply) => {
@@ -401,6 +420,7 @@ export function registerManagerRoutes(app: FastifyInstance, pool: Pool, options:
     try {
       const account = await repositories.manager.createAccount(request.e4sSession!.user.id, {
         ...parsed.data,
+        recoverableCredential: parsed.data.password,
         credentialHash: parsed.data.role === "learner"
           ? await createPinHash(parsed.data.password)
           : await createCredentialHash(parsed.data.password)
@@ -450,38 +470,108 @@ export function registerManagerRoutes(app: FastifyInstance, pool: Pool, options:
     }
   });
 
+  app.get("/api/v1/manager/accounts/:accountId/pin", { preHandler: managerOnly }, async (request, reply) => {
+    const params = accountIdParams.safeParse(request.params);
+    if (!params.success) return reply.code(400).send({ code: "MANAGER_ACCOUNT_ID_INVALID" });
+    try {
+      return { pin: await repositories.manager.revealAccountPin(request.e4sSession!.user.id, params.data.accountId) };
+    } catch (error) {
+      if (error instanceof Error && error.message === "MANAGER_ACCOUNT_NOT_FOUND") return reply.code(404).send({ code: error.message });
+      if (error instanceof Error && error.message === "MANAGER_ACCOUNT_PIN_UNAVAILABLE") return reply.code(409).send({ code: error.message });
+      if (error instanceof Error && error.message === "MANAGER_ACCOUNT_PIN_DECRYPT_FAILED") return reply.code(500).send({ code: error.message });
+      throw error;
+    }
+  });
+
+  app.get("/api/v1/manager/accounts/:accountId/credential", { preHandler: managerOnly }, async (request, reply) => {
+    const params = accountIdParams.safeParse(request.params);
+    if (!params.success) return reply.code(400).send({ code: "MANAGER_ACCOUNT_ID_INVALID" });
+    try {
+      return await repositories.manager.revealAccountCredential(request.e4sSession!.user.id, params.data.accountId);
+    } catch (error) {
+      if (error instanceof Error && error.message === "MANAGER_ACCOUNT_NOT_FOUND") return reply.code(404).send({ code: error.message });
+      if (error instanceof Error && error.message === "MANAGER_ACCOUNT_CREDENTIAL_UNAVAILABLE") return reply.code(409).send({ code: error.message });
+      if (error instanceof Error && error.message === "MANAGER_ACCOUNT_CREDENTIAL_DECRYPT_FAILED") return reply.code(500).send({ code: error.message });
+      throw error;
+    }
+  });
+
   app.post("/api/v1/manager/accounts/:accountId/password-reset", { preHandler: managerOnly }, async (request, reply) => {
     const body = resetPasswordInput.safeParse(request.body);
     const params = accountIdParams.safeParse(request.params);
     if (!body.success) return reply.code(400).send({ code: "MANAGER_ACCOUNT_PASSWORD_INVALID" });
     if (!params.success) return reply.code(400).send({ code: "MANAGER_ACCOUNT_ID_INVALID" });
+    const directory = await repositories.manager.accounts(request.e4sSession!.user.id);
+    const target = directory?.accounts.find(account => account.id === params.data.accountId);
+    if (!target) return reply.code(404).send({ code: "MANAGER_ACCOUNT_NOT_FOUND" });
+    if (target.role === "learner" && !/^\d{6}$/.test(body.data.password)) {
+      return reply.code(400).send({ code: "MANAGER_ACCOUNT_PASSWORD_INVALID" });
+    }
+    if (target.role !== "learner" && body.data.password.length < 8) {
+      return reply.code(400).send({ code: "MANAGER_ACCOUNT_PASSWORD_INVALID" });
+    }
     const saved = await repositories.manager.resetAccountCredential(
-      request.e4sSession!.user.id, params.data.accountId, await createCredentialHash(body.data.password)
+      request.e4sSession!.user.id,
+      params.data.accountId,
+      target.role === "learner" ? await createPinHash(body.data.password) : await createCredentialHash(body.data.password),
+      body.data.password
     );
     return saved ? { saved: true } : reply.code(404).send({ code: "MANAGER_ACCOUNT_NOT_FOUND" });
   });
 
   app.get("/api/v1/manager/reminders", { preHandler: managerOnly }, async (request, reply) => {
     const view = await repositories.manager.reminders(request.e4sSession!.user.id);
-    return view ?? reply.code(404).send({ code: "MANAGER_ORGANIZATION_NOT_FOUND" });
+    return view ? { ...view, emailConfigured: Boolean(reminderEmailSender) } : reply.code(404).send({ code: "MANAGER_ORGANIZATION_NOT_FOUND" });
   });
 
-  app.post<{ Params: { learnerId: string }; Body: { requestId?: unknown } }>(
+  app.post<{ Params: { learnerId: string }; Body: { requestId?: unknown; channel?: unknown } }>(
     "/api/v1/manager/reminders/:learnerId",
     { preHandler: managerOnly },
     async (request, reply) => {
       const params = learnerIdParams.safeParse(request.params);
       if (!params.success) return reply.code(400).send({ code: "MANAGER_REMINDER_LEARNER_ID_INVALID" });
-      const requestId = request.body?.requestId;
-      if (typeof requestId !== "string" || requestId.length < 1 || requestId.length > 128) {
-        return reply.code(400).send({ code: "MANAGER_REMINDER_REQUEST_ID_INVALID" });
+      const body = reminderSendInput.safeParse(request.body);
+      if (!body.success) return reply.code(400).send({ code: "MANAGER_REMINDER_REQUEST_INVALID" });
+      if (body.data.channel === "email" && !reminderEmailSender) {
+        return reply.code(503).send({ code: "MANAGER_REMINDER_EMAIL_NOT_CONFIGURED" });
       }
       try {
-        const queued = await repositories.manager.queueReminder(request.e4sSession!.user.id, params.data.learnerId, requestId);
-        return { ...queued, deliveryStatus: "queued" as const, provider: queued.provider ?? "local_queue" as const };
+        const queued = await repositories.manager.queueReminder(
+          request.e4sSession!.user.id,
+          params.data.learnerId,
+          body.data.requestId,
+          body.data.channel
+        );
+        if (body.data.channel === "base" || queued.deliveryStatus !== "queued") return queued;
+        const delivery = await repositories.notifications.claimEmailDelivery(queued.reminderId);
+        if (!delivery) return queued;
+        try {
+          const sent = await reminderEmailSender!.sendReminder({
+            to: delivery.recipient,
+            learnerName: delivery.learnerName,
+            message: delivery.message
+          });
+          await repositories.notifications.updateReminderDelivery({
+            reminderId: delivery.reminderId,
+            deliveryId: delivery.deliveryId,
+            status: "sent",
+            externalId: sent.externalId,
+            response: { provider: "resend", accepted: true }
+          });
+          return { ...queued, status: "sent" as const, deliveryStatus: "sent" as const };
+        } catch {
+          await repositories.notifications.updateReminderDelivery({
+            reminderId: delivery.reminderId,
+            deliveryId: delivery.deliveryId,
+            status: "failed",
+            response: { provider: "resend", accepted: false, code: "PROVIDER_REQUEST_FAILED" }
+          });
+          return reply.code(502).send({ code: "MANAGER_REMINDER_EMAIL_DELIVERY_FAILED" });
+        }
       } catch (error) {
         if (error instanceof Error && error.message === "MANAGER_REMINDER_LEARNER_NOT_FOUND") return reply.code(404).send({ code: error.message });
         if (error instanceof Error && ["MANAGER_REMINDER_RETRY_UNAVAILABLE", "MANAGER_REMINDER_REQUEST_REUSED", "MANAGER_REMINDER_NOT_ELIGIBLE"].includes(error.message)) return reply.code(409).send({ code: error.message });
+        if (error instanceof Error && ["MANAGER_REMINDER_EMAIL_MISSING", "MANAGER_REMINDER_BASE_WEBHOOK_MISSING"].includes(error.message)) return reply.code(422).send({ code: error.message });
         throw error;
       }
     }
@@ -543,6 +633,20 @@ export function registerManagerRoutes(app: FastifyInstance, pool: Pool, options:
     return view ?? reply.code(404).send({ code: "MANAGER_ORGANIZATION_NOT_FOUND" });
   });
 
+  app.post("/api/v1/operator/placement-test-change-request", { preHandler: staffReadOnly }, async (request, reply) => {
+    const parsed = placementTestChangeRequestInput.safeParse(request.body);
+    if (!parsed.success) return reply.code(400).send({ code: "PLACEMENT_TEST_CHANGE_REQUEST_INVALID" });
+    const apiKey = process.env.RESEND_API_KEY;
+    if (!apiKey) return reply.code(503).send({ code: "EMAIL_UNAVAILABLE" });
+    const actor = await pool.query<{ display_name: string; email: string; organization_id: string }>("select display_name, email, organization_id from users where id = $1", [request.e4sSession!.user.id]);
+    const user = actor.rows[0];
+    if (!user) return reply.code(404).send({ code: "OPERATOR_NOT_FOUND" });
+    const response = await fetch("https://api.resend.com/emails", { method: "POST", headers: { authorization: `Bearer ${apiKey}`, "content-type": "application/json" }, body: JSON.stringify({ from: process.env.RESEND_FROM_EMAIL ?? "E4S <onboarding@resend.dev>", to: [parsed.data.developerEmail], subject: "E4S · Yêu cầu đổi đề đầu vào", text: `Người gửi: ${user.display_name} <${user.email}>\n\n${parsed.data.note}` }) });
+    if (!response.ok) return reply.code(502).send({ code: "PLACEMENT_TEST_CHANGE_REQUEST_FAILED" });
+    await pool.query(`insert into audit_events (id, organization_id, actor_user_id, action, entity_type, entity_id, payload, trace_id) values (gen_random_uuid(), $1, $2, 'assessment.placement_change_requested', 'assessment_definition', $1, $3::jsonb, gen_random_uuid())`, [user.organization_id, request.e4sSession!.user.id, JSON.stringify({ developerEmail: parsed.data.developerEmail, note: parsed.data.note })]);
+    return { sent: true };
+  });
+
   app.put(
     "/api/v1/manager/settings",
     { preHandler: managerOnly },
@@ -551,8 +655,14 @@ export function registerManagerRoutes(app: FastifyInstance, pool: Pool, options:
       if (!parsed.success) {
         return reply.code(400).send({ code: "MANAGER_SETTINGS_INVALID" });
       }
-      const saved = await repositories.manager.saveSettings(request.e4sSession!.user.id, parsed.data);
-      return saved ?? reply.code(404).send({ code: "MANAGER_ORGANIZATION_NOT_FOUND" });
+      try {
+        const { pilotCycleAction, ...settings } = parsed.data;
+        const saved = await repositories.manager.saveSettings(request.e4sSession!.user.id, { ...settings, ...(pilotCycleAction ? { pilotCycleAction } : {}) });
+        return saved ?? reply.code(404).send({ code: "MANAGER_ORGANIZATION_NOT_FOUND" });
+      } catch (error) {
+        if (error instanceof Error && error.message === "PILOT_WEEKS_CANNOT_DECREASE") return reply.code(409).send({ code: error.message });
+        throw error;
+      }
     }
   );
 }

@@ -268,7 +268,7 @@ function ModalRoot({ children }: { children: ReactNode }) {
           <h3 id={dialogTitleId}>{modal.title}</h3>
           {modal.message ? <div id={dialogDescriptionId} className="small">{modal.message}</div> : null}
           {modal.kind === "prompt" ? <label className="field"><span>{modal.label}</span><input data-modal-initial-focus aria-label={modal.label} type={modal.inputType ?? "text"} placeholder={modal.placeholder ?? ""} value={promptValue} onChange={(event) => setPromptValue(event.target.value)} /></label> : null}
-          <div className="row" style={{ justifyContent: "flex-end" }}>
+          <div className="row app-modal-actions" style={{ justifyContent: "flex-end" }}>
             <button data-action="modal-cancel" type="button" onClick={cancel}>{modal.cancelLabel ?? "Huỷ"}</button>
             <button className={modal.tone === "danger" ? "btn-danger" : "btn-primary"} type="submit">{modal.kind === "confirm" ? confirmLabel : modal.confirmLabel ?? "Xác nhận"}</button>
           </div>

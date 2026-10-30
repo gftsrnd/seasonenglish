@@ -5,14 +5,26 @@ import {
   weeklyLessonDayInputSchema, weeklyLessonDayOutputJsonSchema, weeklyLessonDayOutputSchema,
   weeklyLessonVocabularyInputSchema, weeklyLessonSkillsInputSchema,
   weeklyLessonSkillsReviewInputSchema,
-  weeklyLessonFoundationOutputJsonSchema, weeklyLessonFoundationOutputSchema,
+  weeklyLessonFoundationBodyOutputJsonSchema, weeklyLessonFoundationBodyOutputSchema,
+  weeklyLessonObjectivesOutputJsonSchema, weeklyLessonObjectivesOutputSchema,
   weeklyLessonGrammarClassificationOutputJsonSchema, weeklyLessonGrammarClassificationOutputSchema,
   weeklyLessonFoundationInputSchema,
   weeklyLessonVocabularyOutputJsonSchema, weeklyLessonVocabularyOutputSchema,
   weeklyLessonSkillsOutputJsonSchema, weeklyLessonSkillsOutputSchema,
+  weeklyLessonComprehensionOutputJsonSchema, weeklyLessonComprehensionOutputSchema,
+  weeklyLessonLanguagePracticeOutputJsonSchema, weeklyLessonLanguagePracticeOutputSchema,
+  weeklyLessonSpeakingOutputJsonSchema, weeklyLessonSpeakingOutputSchema,
+  weeklyLessonListeningRepairOutputJsonSchema, weeklyLessonListeningRepairOutputSchema,
+  weeklyLessonReadingRepairOutputJsonSchema, weeklyLessonReadingRepairOutputSchema,
+  weeklyLessonWritingRepairOutputJsonSchema, weeklyLessonWritingRepairOutputSchema,
+  weeklyLessonWordClassRepairOutputJsonSchema, weeklyLessonWordClassRepairOutputSchema,
+  weeklyLessonWordUseRepairOutputJsonSchema, weeklyLessonWordUseRepairOutputSchema,
+  weeklyLessonSpeakingRepairOutputJsonSchema, weeklyLessonSpeakingRepairOutputSchema,
+  weeklyLessonLengthRepairInputSchema, weeklyLessonLengthRepairOutputJsonSchema, weeklyLessonLengthRepairOutputSchema,
   weeklyLessonSkillsReviewOutputJsonSchema, weeklyLessonSkillsReviewOutputSchema,
   levelFormInputSchema, levelFormOutputJsonSchema, levelFormOutputSchema,
   weekSuggestionsInputSchema, weekSuggestionsOutputJsonSchema, weekSuggestionsOutputSchema,
+  weeklyLessonPlanBlueprintInputSchema, weeklyLessonPlanBlueprintOutputJsonSchema, weeklyLessonPlanBlueprintOutputSchema,
   assessmentGradingInputSchema, assessmentGradingOutputJsonSchema, assessmentGradingOutputSchema,
   microLessonInputSchema, microLessonOutputJsonSchema, microLessonOutputSchema,
   microGradingInputSchema, microGradingOutputJsonSchema, microGradingOutputSchema,
@@ -60,6 +72,10 @@ export const AI_TASKS = new AiTaskRegistry([
     validateOutput: validateWeekSuggestions
   },
   {
+    id: "weekly_lesson_plan_blueprint", promptKey: "weekly_lessons", inputSchema: weeklyLessonPlanBlueprintInputSchema,
+    outputSchema: weeklyLessonPlanBlueprintOutputSchema, outputJsonSchema: weeklyLessonPlanBlueprintOutputJsonSchema
+  },
+  {
     id: "level_form_generation", promptKey: "level_form_generation", inputSchema: levelFormInputSchema,
     outputSchema: levelFormOutputSchema, outputJsonSchema: levelFormOutputJsonSchema
   },
@@ -81,13 +97,59 @@ export const AI_TASKS = new AiTaskRegistry([
     outputSchema: weeklyLessonGrammarClassificationOutputSchema, outputJsonSchema: weeklyLessonGrammarClassificationOutputJsonSchema
   },
   {
-    id: "weekly_lesson_foundation", promptKey: "weekly_lessons", inputSchema: weeklyLessonFoundationInputSchema,
-    outputSchema: weeklyLessonFoundationOutputSchema, outputJsonSchema: weeklyLessonFoundationOutputJsonSchema,
+    id: "weekly_lesson_objectives", promptKey: "weekly_lessons", inputSchema: weeklyLessonFoundationInputSchema,
+    outputSchema: weeklyLessonObjectivesOutputSchema, outputJsonSchema: weeklyLessonObjectivesOutputJsonSchema,
     normalizeOutput: (rawOutput, input) => {
-      const foundationInput = input as { grammarClassification?: { status?: string } };
-      if (foundationInput.grammarClassification?.status === "classified") return rawOutput;
       if (!rawOutput || typeof rawOutput !== "object" || Array.isArray(rawOutput)) return rawOutput;
-      return { ...rawOutput, title: null, grammar: null };
+      const output = rawOutput as Record<string, unknown>;
+      const rawObjective = output.objective && typeof output.objective === "object" && !Array.isArray(output.objective)
+        ? output.objective as Record<string, unknown> : {};
+      const advanced = ["B1", "B2", "C1"].includes((input as { cefr?: string }).cefr ?? "");
+      let contentIndex = 0;
+      let languageIndex = 0;
+      const items = Array.isArray(rawObjective.items)
+        ? rawObjective.items.map((item) => {
+            if (!item || typeof item !== "object" || Array.isArray(item)) return item;
+            const value = item as Record<string, unknown>;
+            const id = value.type === "content" ? `C${++contentIndex}` : `L${++languageIndex}`;
+            return { ...value, id };
+          })
+        : rawObjective.items;
+      return { ...output, objective: { ...rawObjective, items, title: advanced ? "Learning objectives" : "Mục tiêu bài học" } };
+    }
+  },
+  {
+    id: "weekly_lesson_foundation", promptKey: "weekly_lessons", inputSchema: weeklyLessonFoundationInputSchema,
+    outputSchema: weeklyLessonFoundationBodyOutputSchema, outputJsonSchema: weeklyLessonFoundationBodyOutputJsonSchema,
+    normalizeOutput: (rawOutput, input) => {
+      if (!rawOutput || typeof rawOutput !== "object" || Array.isArray(rawOutput)) return rawOutput;
+      const foundationInput = input as {
+        cefr?: string;
+        grammarClassification?: { status?: string };
+        pronunciationPlan?: { focus: string; word1: unknown; word2: unknown; word3: unknown };
+      };
+      const output = rawOutput as Record<string, unknown>;
+      const advanced = ["B1", "B2", "C1"].includes(foundationInput.cefr ?? "");
+      const labels = advanced
+        ? { instruction: "Lesson instructions", pronunciation: "Pronunciation" }
+        : { instruction: "Hướng dẫn làm bài", pronunciation: "Phát âm" };
+      const rawInstruction = output.instruction && typeof output.instruction === "object" && !Array.isArray(output.instruction)
+        ? output.instruction as Record<string, unknown>
+        : {};
+      const rawPronunciation = output.pronunciation && typeof output.pronunciation === "object" && !Array.isArray(output.pronunciation)
+        ? output.pronunciation as Record<string, unknown>
+        : {};
+      const withPronunciationPlan = {
+        ...output,
+        instruction: { ...rawInstruction, title: labels.instruction },
+        pronunciation: {
+          ...rawPronunciation,
+          title: labels.pronunciation,
+          ...(foundationInput.pronunciationPlan ?? {})
+        }
+      };
+      if (foundationInput.grammarClassification?.status === "classified") return withPronunciationPlan;
+      return { ...withPronunciationPlan, title: null, grammar: null };
     }
   },
   {
@@ -99,8 +161,80 @@ export const AI_TASKS = new AiTaskRegistry([
     outputSchema: weeklyLessonSkillsOutputSchema, outputJsonSchema: weeklyLessonSkillsOutputJsonSchema
   },
   {
+    id: "weekly_lesson_comprehension", promptKey: "weekly_lessons", inputSchema: weeklyLessonSkillsInputSchema,
+    outputSchema: weeklyLessonComprehensionOutputSchema, outputJsonSchema: weeklyLessonComprehensionOutputJsonSchema
+  },
+  {
+    id: "weekly_lesson_language_practice", promptKey: "weekly_lessons", inputSchema: weeklyLessonSkillsInputSchema,
+    outputSchema: weeklyLessonLanguagePracticeOutputSchema, outputJsonSchema: weeklyLessonLanguagePracticeOutputJsonSchema
+  },
+  {
+    id: "weekly_lesson_speaking", promptKey: "weekly_lessons", inputSchema: weeklyLessonSkillsInputSchema,
+    outputSchema: weeklyLessonSpeakingOutputSchema, outputJsonSchema: weeklyLessonSpeakingOutputJsonSchema
+  },
+  {
+    id: "weekly_lesson_listening_repair", promptKey: "weekly_lessons", inputSchema: weeklyLessonSkillsInputSchema,
+    outputSchema: weeklyLessonListeningRepairOutputSchema, outputJsonSchema: weeklyLessonListeningRepairOutputJsonSchema
+  },
+  {
+    id: "weekly_lesson_reading_repair", promptKey: "weekly_lessons", inputSchema: weeklyLessonSkillsInputSchema,
+    outputSchema: weeklyLessonReadingRepairOutputSchema, outputJsonSchema: weeklyLessonReadingRepairOutputJsonSchema
+  },
+  {
+    id: "weekly_lesson_writing_repair", promptKey: "weekly_lessons", inputSchema: weeklyLessonSkillsInputSchema,
+    outputSchema: weeklyLessonWritingRepairOutputSchema, outputJsonSchema: weeklyLessonWritingRepairOutputJsonSchema
+  },
+  {
+    id: "weekly_lesson_word_class_repair", promptKey: "weekly_lessons", inputSchema: weeklyLessonSkillsInputSchema,
+    outputSchema: weeklyLessonWordClassRepairOutputSchema, outputJsonSchema: weeklyLessonWordClassRepairOutputJsonSchema
+  },
+  {
+    id: "weekly_lesson_word_use_repair", promptKey: "weekly_lessons", inputSchema: weeklyLessonSkillsInputSchema,
+    outputSchema: weeklyLessonWordUseRepairOutputSchema, outputJsonSchema: weeklyLessonWordUseRepairOutputJsonSchema
+  },
+  {
+    id: "weekly_lesson_speaking_repair", promptKey: "weekly_lessons", inputSchema: weeklyLessonSkillsInputSchema,
+    outputSchema: weeklyLessonSpeakingRepairOutputSchema, outputJsonSchema: weeklyLessonSpeakingRepairOutputJsonSchema
+  },
+  {
+    id: "weekly_lesson_length_repair", promptKey: "weekly_lessons", inputSchema: weeklyLessonLengthRepairInputSchema,
+    outputSchema: weeklyLessonLengthRepairOutputSchema, outputJsonSchema: weeklyLessonLengthRepairOutputJsonSchema,
+    validateOutput: (output, input) => {
+      const parsedInput = weeklyLessonLengthRepairInputSchema.parse(input);
+      const parsedOutput = weeklyLessonLengthRepairOutputSchema.parse(output);
+      const requested = new Map(parsedInput.repairs.map((repair) => [repair.path, repair]));
+      const issues: Array<{ path: string; message: string }> = [];
+      const slots = [
+        ["listening.body", "listeningBody"],
+        ["reading.body", "readingBody"],
+        ["speaking.answer", "speakingAnswer"]
+      ] as const;
+      for (const [path, slot] of slots) {
+        const request = requested.get(path);
+        const tokens = parsedOutput[slot];
+        if (request === undefined && tokens !== null) issues.push({ path: slot, message: "Unrequested repair slot must be null." });
+      }
+      return issues;
+    }
+  },
+  {
     id: "weekly_lesson_skills_reviewer", promptKey: "weekly_lessons", inputSchema: weeklyLessonSkillsReviewInputSchema,
-    outputSchema: weeklyLessonSkillsReviewOutputSchema, outputJsonSchema: weeklyLessonSkillsReviewOutputJsonSchema
+    outputSchema: weeklyLessonSkillsReviewOutputSchema, outputJsonSchema: weeklyLessonSkillsReviewOutputJsonSchema,
+    normalizeOutput: (rawOutput) => {
+      if (!rawOutput || typeof rawOutput !== "object" || Array.isArray(rawOutput)) return rawOutput;
+      const record = rawOutput as Record<string, unknown>;
+      if (
+        record.status === "approved"
+        && Array.isArray(record.findings)
+        && record.findings.length > 0
+        && (record.findings as Array<{ message?: unknown }>).every((f) =>
+          typeof f?.message === "string" && /\bno change (?:is )?(?:strictly )?(?:needed|required)\b|\bno revision (?:is )?(?:strictly )?(?:needed|required)\b|\bno (?:real |serious )?defect(?: found| requiring revision)?\b|\bnot a defect\b|\bis supported,\s*so\b|\bborderline and acceptable\b|\bno finding required\b|\boverall acceptable\b|\b(?:finding is )?withdrawn\b|\bkey is consistent\b|\bcomplete and usable\b|\bacceptable as (?:is|an example|a model answer)\b|không (?:cần|phải) (?:sửa|thay đổi)|không có (?:vấn đề|lỗi)(?:\s+(?:về|với))?/iu.test(f.message)
+        )
+      ) {
+        return { ...record, findings: [] };
+      }
+      return rawOutput;
+    }
   },
   {
     id: "weekly_practice_grading", promptKey: "weekly_practice_grading", inputSchema: weeklyPracticeInputSchema,

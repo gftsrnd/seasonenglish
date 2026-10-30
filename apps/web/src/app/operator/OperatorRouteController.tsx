@@ -29,7 +29,7 @@ import { OperatorPrompts } from "./Prompts.js";
 import { OperatorReview, OperatorReviewAssessmentDetail } from "./Review.js";
 import type { ManualScoreInput } from "./AssessmentManualScore.js";
 import { OperatorWeeks } from "./Weeks.js";
-import { Badge } from "./primitives.js";
+import { Badge, OperationsReadOnlyContext, OperatorPage, PageTitle } from "./primitives.js";
 import { ModalProvider, useModal } from "../shared/ModalProvider.js";
 import type { AudioEvidence } from "../shared/media/audio-evidence.js";
 import { adaptAssessmentOverview, adaptLevelForms, adaptLessonMatrix, adaptLessonSet, adaptPrompts, adaptReview, adaptWeeks } from "./adapters.js";
@@ -44,6 +44,7 @@ type OperatorRoutePaths = {
   weeks: string;
   lessons: string;
   review: string;
+  tests: string;
   prompts: string;
 };
 
@@ -93,20 +94,22 @@ export const OperatorRouteController = OperationsRouteController;
 function OperatorRouteControllerContent({ session, client, paths }: { session: SessionView; client: OperatorApiClient; paths: OperatorRoutePaths }) {
   const location = useLocation();
   if (session.role !== "operator" && session.role !== "manager") return <Status tone="error">Tài khoản này không có quyền mở khu vực vận hành.</Status>;
-  // Manager's /mgr/ops area is Manager-owned, not an inspection-only preview.
-  // It reuses these screens while retaining the same operational mutations.
-  const readOnly = false;
+  // Manager can inspect the operational screens, but must not mutate content
+  // from this area. Keep the shared screens and let their readOnly guards
+  // disable every create/edit/approve action consistently.
+  const readOnly = session.role === "manager";
   const props = { client, readOnly };
   const detail = location.pathname.match(new RegExp(`^${escapeRegExp(paths.lessons)}/(\\d+)/(A1|A2|B1|B2|C1)$`));
   const content = detail ? <LessonSetRoute {...props} week={Number(detail[1])} cefr={detail[2] as Cefr} />
     : location.pathname === paths.root ? <DashboardRoute {...props} />
-      : location.pathname === paths.levelForms ? <LevelFormsRoute {...props} />
+      : location.pathname === paths.tests ? <TestsRoute {...props} initialTab="placement" />
+        : location.pathname === paths.levelForms ? <TestsRoute {...props} initialTab="promotion" />
         : location.pathname === paths.weeks ? <WeeksRoute {...props} />
           : location.pathname === paths.lessons ? <LessonsRoute {...props} />
             : location.pathname === paths.review ? <ReviewRoute {...props} canEditWeeklyPractice={session.role === "operator"} />
-              : session.role === "manager" && location.pathname === paths.prompts ? <PromptsRoute {...props} />
+              : session.role === "manager" && location.pathname === paths.prompts ? <PromptsRoute client={client} readOnly={false} />
                 : <Status tone="error">Đường dẫn vận hành không tồn tại.</Status>;
-  return content;
+  return <OperationsReadOnlyContext.Provider value={readOnly && location.pathname !== paths.prompts}>{content}</OperationsReadOnlyContext.Provider>;
 }
 
 function routePathsFor(basePath: "/op" | "/mgr/ops"): OperatorRoutePaths {
@@ -116,7 +119,8 @@ function routePathsFor(basePath: "/op" | "/mgr/ops"): OperatorRoutePaths {
     weeks: `${basePath}/weeks`,
     lessons: `${basePath}/lessons`,
     review: `${basePath}/review`,
-    prompts: `${basePath}/prompts`
+    tests: `${basePath}/tests`,
+    prompts: "/settings/prompts"
   };
 }
 
@@ -229,7 +233,7 @@ function DashboardRoute({ client, readOnly }: { client: OperatorApiClient; readO
     aiConnected: capabilities?.ai ?? false,
     ...(capabilities?.aiConfigured === undefined ? {} : { aiConfigured: capabilities.aiConfigured }),
     ...(capabilities?.aiProvider === undefined ? {} : { aiProvider: capabilities.aiProvider }),
-    openAppeals: 0,
+    openAppeals: data.openAppeals ?? 0,
     rescoreBusy,
     placementDetails: Object.fromEntries(Object.entries(pendingAssessmentDetails).map(([attemptId, detail]) => [attemptId, placementDetail(detail, pendingProfiles[attemptId] ?? undefined)])),
     ...(currentWeek ? { currentWeek: currentWeek.weekNumber, topic: currentWeek.topic } : {}),
@@ -471,14 +475,28 @@ function OperatorChallengeEvidence({ detail }: { detail: AssessmentReviewChallen
   </>;
 }
 
-function LevelFormsRoute({ client, readOnly }: { client: OperatorApiClient; readOnly: boolean }) {
+function TestsRoute({ client, readOnly, initialTab }: { client: OperatorApiClient; readOnly: boolean; initialTab: "placement" | "promotion" }) {
+  const [activeTab, setActiveTab] = useState(initialTab);
+  return <OperatorPage title="Bài kiểm tra">
+    <PageTitle><h1>Bài kiểm tra</h1><p className="muted">Xem bài đầu vào và quản lý đề thi lên mức trong cùng một khu vực.</p></PageTitle>
+    <div className="tabs operator-review-tabs" role="tablist" aria-label="Loại bài kiểm tra">
+      <button type="button" role="tab" aria-selected={activeTab === "placement"} className={activeTab === "placement" ? "active" : ""} onClick={() => setActiveTab("placement")}>Đề đầu vào</button>
+      <button type="button" role="tab" aria-selected={activeTab === "promotion"} className={activeTab === "promotion" ? "active" : ""} onClick={() => setActiveTab("promotion")}>Đề lên mức</button>
+    </div>
+    {activeTab === "placement"
+      ? <ReviewRoute client={client} readOnly={readOnly} canEditWeeklyPractice={false} assessmentOnly embedded />
+      : <LevelFormsRoute client={client} readOnly={readOnly} embedded />}
+  </OperatorPage>;
+}
+
+function LevelFormsRoute({ client, readOnly, embedded = false }: { client: OperatorApiClient; readOnly: boolean; embedded?: boolean }) {
   const modal = useModal();
   const navigate = useNavigate();
   const paths = useOperatorRoutePaths();
   const [data, setData] = useState<AssessmentLevelFormSlotView[]>();
   const [generating, setGenerating] = useState<Cefr | null>(null);
   const [error, setError] = useState<string>();
-  const [dialog, setDialog] = useState<AssessmentLevelFormDetailView>();
+  const [dialog, setDialog] = useState<{ detail: AssessmentLevelFormDetailView; editing: boolean }>();
   const capabilities = useCapabilities(client);
   const load = () => client.getAssessmentLevelForms().then(setData).catch(reason => setError(message(reason)));
   useEffect(() => { void load(); }, [client]);
@@ -489,16 +507,25 @@ function LevelFormsRoute({ client, readOnly }: { client: OperatorApiClient; read
     ...(typeof client.getAssessmentLevelForm !== "function" ? { view: unavailable("endpoint đọc nội dung đầy đủ của phiên bản đề") } : {}),
     ...(typeof client.deleteAssessmentLevelForm !== "function" ? { delete: unavailable("endpoint xoá đề thi lên mức") } : {})
   };
-  const show = (versionId: string) => {
+  const show = (versionId: string, editing = false) => {
     if (typeof client.getAssessmentLevelForm !== "function") return;
-    void client.getAssessmentLevelForm(versionId).then(setDialog).catch(reason => setError(message(reason)));
+    void client.getAssessmentLevelForm(versionId).then(detail => setDialog({ detail, editing })).catch(reason => setError(message(reason)));
   };
-  return <><OperatorLevelForms readOnly={readOnly} unavailable={missing} view={adaptLevelForms(data, { aiConnected: capabilities?.ai ?? false, generatingTarget: generating })} actions={{
+  return <><OperatorLevelForms readOnly={readOnly} embedded={embedded} unavailable={missing} view={adaptLevelForms(data, { aiConnected: capabilities?.ai ?? false, generatingTarget: generating })} actions={{
     onBack: () => navigate(paths.root), onOpenSettings: () => navigate("/settings"),
     onGenerate: target => { if (readOnly) return; setGenerating(target); refresh(client.generateAssessmentLevelForm(target as Exclude<CefrLevel, "A1">)); },
-    onApprove: id => { if (!readOnly) refresh(client.publishAssessmentLevelForm(id)); }, onView: show,
+    onApprove: id => { if (!readOnly) refresh(client.publishAssessmentLevelForm(id)); }, onView: id => show(id), onEdit: (id, fromPublished) => {
+      if (readOnly) return;
+      if (fromPublished) void client.copyAssessmentLevelFormToDraft(id).then(detail => { setDialog({ detail, editing: true }); void load(); }).catch(reason => setError(message(reason)));
+      else show(id, true);
+    },
     onDelete: id => { if (readOnly || typeof client.deleteAssessmentLevelForm !== "function") return; void modal.confirm({ title: "Xoá bản nháp đề thi?", message: "Bản nháp này sẽ bị xoá khỏi danh sách đề lên mức.", confirmLabel: "Xoá bản nháp", tone: "danger" }).then(confirmed => { if (confirmed) refresh(client.deleteAssessmentLevelForm(id)); }); }
-  }} />{dialog && <OperatorLevelFormDetail detail={dialog} onClose={() => setDialog(undefined)} />}</>;
+  }} />{dialog && <OperatorLevelFormDetail detail={dialog.detail} editing={dialog.editing} readOnly={readOnly} uploadAudio={async (file, filename) => client.uploadContentMedia("audio", file, filename)} onClose={() => setDialog(undefined)} onSave={async input => {
+    if (readOnly) return;
+    const updated = await client.updateAssessmentLevelForm(dialog.detail.versionId, input);
+    setDialog({ detail: updated, editing: true });
+    await load();
+  }} />}</>;
 }
 
 function WeeksRoute({ client, readOnly }: { client: OperatorApiClient; readOnly: boolean }) {
@@ -533,7 +560,9 @@ function WeeksRoute({ client, readOnly }: { client: OperatorApiClient; readOnly:
   }, [client]);
   if (error) return <Status tone="error">Không tải được khung chủ đề: {error}</Status>;
   if (!data) return <Status>Đang tải khung chủ đề…</Status>;
-  const inputs = (source = data) => source.weeks.map(week => ({ weekNumber: week.weekNumber, topic: week.topic, description: week.description, objectives: week.objectives, keyVocabHint: week.keyVocabHint, ...(week.plan ? { plan: week.plan } : {}) }));
+  const inputs = (source = data) => source.weeks
+    .filter(week => week.topic.trim())
+    .map(week => ({ weekNumber: week.weekNumber, topic: week.topic, description: week.description, objectives: week.objectives, keyVocabHint: week.keyVocabHint, ...(week.plan ? { plan: week.plan } : {}) }));
   const suggest = (numbers: number[]) => { if (readOnly) return; numbers.forEach(number => setSuggestions(current => ({ ...current, [number]: { state: "loading" } }))); void client.suggestContentWeeks(numbers).then(result => { const next: Record<number, WeekSuggestion> = {}; result.weeks.forEach(week => { next[week.weekNumber] = { state: "options", levels: week.levels ?? [], options: week.options.map(option => ({ ...option, plan: option.plan ?? {} })) }; }); setSuggestions(current => ({ ...current, ...next })); notify("Đã tải 3 phương án chủ đề kèm kế hoạch CEFR × 5 ngày."); }).catch(reason => { setSuggestions(current => { const next = { ...current }; numbers.forEach(number => delete next[number]); return next; }); notify(message(reason), "danger"); }); };
   const save = (source = data, options: { promptForGeneration?: boolean } = {}) => {
     if (readOnly) return Promise.resolve(undefined);
@@ -570,17 +599,17 @@ function WeeksRoute({ client, readOnly }: { client: OperatorApiClient; readOnly:
           (week, level) => startLessonGenerationJob(week, level, () => client.generateContentLessonDraft(week, level)),
           (week, level, completed, total) => {
             setGeneratingWeek(week);
-            setGenerationStatus(`Đang sinh tuần ${week} · mức ${level} (${completed + 1}/${total})…`);
+            setGenerationStatus(`Đang sinh tuần ${week} · batch ${orderedLevels.length} mức (${completed + 1}/${total} bộ đã khởi động)…`);
           }
         );
         const failed = results.filter((result) => result.status === "failed");
         const succeeded = results.length - failed.length;
         if (failed.length) {
           const cells = failed.map((result) => `tuần ${result.week} · ${result.level}: ${result.error}`).join("; ");
-          setGenerationStatus(`⚠ Đã sinh ${succeeded}/${results.length} bộ. Lỗi ${failed.length} bộ: ${cells}`);
+          setGenerationStatus(`⚠ Đã sinh ${succeeded}/${results.length} bộ. Lỗi ${failed.length} bộ: ${cells}. Tuần sau chưa được khởi động.`);
           notify(`Đã giữ ${succeeded} bộ thành công; ${failed.length} bộ cần thử lại.`, "danger");
         } else {
-          setGenerationStatus(`✓ Đã sinh đủ ${results.length * 5} bài T2–T6 theo thứ tự, không chạy song song.`);
+          setGenerationStatus(`✓ Đã sinh đủ ${results.length * 5} bài T2–T6 theo batch ${orderedLevels.length} mức; các tuần chạy tuần tự.`);
           notify(`Đã sinh đủ bài cho ${weekNumbers.length} tuần.`);
           navigate(paths.lessons);
         }
@@ -617,7 +646,12 @@ function WeeksRoute({ client, readOnly }: { client: OperatorApiClient; readOnly:
       setPreferredGenerationWeek(weekNumber);
       setSuggestions(current => ({ ...current, [weekNumber]: { state: "confirmed", topic: option.topic, levels: suggestion.levels ?? [], options: suggestion.options } }));
     },
-    onChangeWeek: (weekNumber, patch) => { if (!readOnly) { setPreferredGenerationWeek(weekNumber); setData(current => current ? { ...current, weeks: current.weeks.map(week => week.weekNumber === weekNumber ? { ...week, ...patch } : week) } : current); } },
+    onChangeWeek: (weekNumber, patch) => { if (!readOnly) { setPreferredGenerationWeek(weekNumber); setData(current => current ? { ...current, weeks: current.weeks.map(week => {
+      if (week.weekNumber !== weekNumber) return week;
+      const changed = { ...week, ...patch };
+      if ("topic" in patch && patch.topic !== week.topic) { const { plan: _discardedPlan, ...withoutPlan } = changed; return withoutPlan; }
+      return changed;
+    }) } : current); } },
     onSave: () => { if (!generatingWeek) void save(undefined, { promptForGeneration: true }).catch(() => undefined); },
     onToggleGenerationWeek: week => setGenerationDialog(current => current ? { ...current, selectedWeeks: current.selectedWeeks.includes(week) ? current.selectedWeeks.filter(item => item !== week) : [...current.selectedWeeks, week].sort((a, b) => a - b) } : current),
     onCancelGeneration: () => setGenerationDialog(undefined),
@@ -734,7 +768,8 @@ function LessonSetRoute({ client, readOnly, week, cefr }: { client: OperatorApiC
     title: "Sinh lại bộ bài?",
     message: `AI sẽ tạo lại bộ bài tuần ${week} · ${cefr}. Nội dung hiện tại có thể bị thay thế.`,
     confirmLabel: "Sinh lại",
-    tone: "primary"
+    tone: "primary",
+    countdownSeconds: 5
   }, () => mutate(client.generateContentLessonDraft(week, cefr)));
   const retireSet = () => void confirmAction({
     title: "Thu hồi duyệt bộ bài?",
@@ -779,10 +814,10 @@ function LessonSetRoute({ client, readOnly, week, cefr }: { client: OperatorApiC
   }} />{!readOnly && editor && <LessonFormEditor weekNumber={week} cefr={cefr} initial={editor} onSave={saveLesson} onCancel={() => setEditor(undefined)} uploadMedia={client.uploadContentMedia} busy={busy} />}</>;
 }
 
-function ReviewRoute({ client, readOnly, canEditWeeklyPractice }: { client: OperatorApiClient; readOnly: boolean; canEditWeeklyPractice: boolean }) {
+function ReviewRoute({ client, readOnly, canEditWeeklyPractice, assessmentOnly = false, embedded = false }: { client: OperatorApiClient; readOnly: boolean; canEditWeeklyPractice: boolean; assessmentOnly?: boolean; embedded?: boolean }) {
   const modal = useModal();
   const location = useLocation();
-  const initialTab = (location.state as { reviewTab?: ReviewTab } | null)?.reviewTab ?? "weekly";
+  const initialTab = assessmentOnly ? "tests" : (location.state as { reviewTab?: ReviewTab } | null)?.reviewTab ?? "weekly";
   const [tab, setTab] = useState<ReviewTab>(initialTab);
   const [data, setData] = useState<ContentReviewView>();
   const [error, setError] = useState<string>();
@@ -798,14 +833,21 @@ function ReviewRoute({ client, readOnly, canEditWeeklyPractice }: { client: Oper
       try {
         const audio = await client.listAssessmentAudio();
         const bySource = new Map(audio.items.flatMap(item => (item.sourceEntityId && (item.sourceFlow === "season" || item.sourceFlow === "weekly_practice")) ? [[item.sourceEntityId, item] as const] : []));
-        const attachAudio = <T extends { id: string }>(item: T) => {
-          const artifact = bySource.get(item.id);
+        const byArtifact = new Map(audio.items.map(item => [item.artifactKey, item] as const));
+        const attachAudio = <T extends { id: string; audioArtifact?: { artifactKey: string } }>(item: T) => {
+          const artifact = item.audioArtifact?.artifactKey
+            ? byArtifact.get(item.audioArtifact.artifactKey) ?? bySource.get(item.id)
+            : bySource.get(item.id);
           return artifact ? { ...item, audioArtifact: artifact } : item;
         };
         setData({
           ...next,
           coachSamples: next.coachSamples.map(attachAudio),
-          submissions: next.submissions.map(attachAudio)
+          submissions: next.submissions.map(attachAudio),
+          lessonAttempts: next.lessonAttempts.map(item => {
+            const artifact = item.speakingArtifactKey ? byArtifact.get(item.speakingArtifactKey) : undefined;
+            return artifact ? { ...item, audioArtifact: artifact } : item;
+          })
         });
       } catch {
         setData(next);
@@ -864,7 +906,7 @@ function ReviewRoute({ client, readOnly, canEditWeeklyPractice }: { client: Oper
   const guardedManualGrade: OperatorReviewActions["onGradeManual"] = (id, input) => {
     if (!readOnly) refresh(client.gradeReviewedSubmission(id, input));
   };
-  return <><OperatorReview readOnly={readOnly} unavailable={missing} view={adaptReview(data, reviewToApi[tab], { aiConnected: capabilities?.ai ?? false })} actions={{
+  return <><OperatorReview readOnly={readOnly} embedded={embedded} mode={assessmentOnly ? "assessment" : "weekly"} unavailable={missing} view={adaptReview(data, reviewToApi[tab], { aiConnected: capabilities?.ai ?? false })} actions={{
     onTabChange: setTab, onMarkSubmission: (id, checked) => { if (!readOnly) refresh(client.setContentReviewChecked("submission", id, checked)); }, onMarkCoachTurn: (id, checked) => { if (!readOnly) refresh(client.setContentReviewChecked("coach", id, checked)); }, onGradeAi: gradeAi, onGradeManual: guardedManualGrade, onDecideAppeal: decide, onViewTest: viewTest, ...(typeof client.confirmAssessmentAudioDeletion === "function" && typeof client.deleteAssessmentAudio === "function" && !readOnly ? { onDeleteAudio: deleteReviewedAudio } : {}),
     ...(canEditWeeklyPractice ? { onSaveWeeklyPractice: async input => {
       if (readOnly) return;

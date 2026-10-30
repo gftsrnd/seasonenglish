@@ -82,10 +82,7 @@ describe("Operator assessment AI rescore", () => {
          values
            ('00000000-0000-4000-8000-000000000941', $1, 'writing', 'W1', '{"value":"I can cover the inbox and prioritize urgent tickets.","evidenceType":"text"}'::jsonb),
            ('00000000-0000-4000-8000-000000000942', $1, 'speaking', 'S1', '{"value":"I work in AI and explain my responsibilities.","evidenceType":"transcript"}'::jsonb),
-           ('00000000-0000-4000-8000-000000000943', $1, 'speaking', 'S3_Q1', '{"value":"I understand your frustration.","evidenceType":"typed_proxy"}'::jsonb),
-           ('00000000-0000-4000-8000-000000000944', $1, 'speaking', 'S3_Q2', '{"value":"A technical issue delayed the refund.","evidenceType":"typed_proxy"}'::jsonb),
-           ('00000000-0000-4000-8000-000000000945', $1, 'speaking', 'S3_Q3', '{"value":"I will escalate the case to accounts.","evidenceType":"typed_proxy"}'::jsonb),
-           ('00000000-0000-4000-8000-000000000946', $1, 'speaking', 'S3_Q4', '{"value":"You can expect a follow-up within 24 hours.","evidenceType":"typed_proxy"}'::jsonb)
+           ('00000000-0000-4000-8000-000000000943', $1, 'speaking', 'S3', '{"value":"I understand your frustration. A technical issue delayed the refund, so I will escalate the case to accounts and follow up within 24 hours.","evidenceType":"typed_proxy"}'::jsonb)
          on conflict (id) do nothing`,
         [DEMO_IDS.placementAttempt]
       );

@@ -338,7 +338,12 @@ describe("learner profile, home, lesson and progress API", () => {
       "select id, occurred_at from activities where learner_id = $1 order by id",
       [DEMO_IDS.learner]
     );
+    const programSnapshot = await pool.query<{ start_date: string }>(
+      "select start_date::text from programs where id = $1",
+      [DEMO_IDS.program]
+    );
     try {
+      await pool.query("update programs set start_date = '2026-10-12' where id = $1", [DEMO_IDS.program]);
       await pool.query("update activities set occurred_at = '2026-10-12T09:00:00.000Z' where learner_id = $1", [DEMO_IDS.learner]);
 
       const response = await app.inject({ method: "GET", url: "/api/v1/learner/home", headers: { cookie } });
@@ -346,7 +351,36 @@ describe("learner profile, home, lesson and progress API", () => {
       expect(response.statusCode, response.body).toBe(200);
       expect(response.json().inactivityReminder).toEqual({ inactiveDays: 2 });
     } finally {
+      await pool.query("update programs set start_date = $2::date where id = $1", [DEMO_IDS.program, programSnapshot.rows[0]!.start_date]);
       for (const row of snapshot.rows) {
+        await pool.query("update activities set occurred_at = $2 where id = $1", [row.id, row.occurred_at]);
+      }
+      vi.useRealTimers();
+    }
+  });
+
+  it("does not count inactivity from before the learner program started", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-10-14T12:00:00.000Z"));
+    const activitySnapshot = await pool.query<{ id: string; occurred_at: Date }>(
+      "select id, occurred_at from activities where learner_id = $1 order by id",
+      [DEMO_IDS.learner]
+    );
+    const programSnapshot = await pool.query<{ start_date: string }>(
+      "select start_date::text from programs where id = $1",
+      [DEMO_IDS.program]
+    );
+    try {
+      await pool.query("update programs set start_date = '2026-10-13' where id = $1", [DEMO_IDS.program]);
+      await pool.query("update activities set occurred_at = '2026-10-07T09:00:00.000Z' where learner_id = $1", [DEMO_IDS.learner]);
+
+      const response = await app.inject({ method: "GET", url: "/api/v1/learner/home", headers: { cookie } });
+
+      expect(response.statusCode, response.body).toBe(200);
+      expect(response.json()).not.toHaveProperty("inactivityReminder");
+    } finally {
+      await pool.query("update programs set start_date = $2::date where id = $1", [DEMO_IDS.program, programSnapshot.rows[0]!.start_date]);
+      for (const row of activitySnapshot.rows) {
         await pool.query("update activities set occurred_at = $2 where id = $1", [row.id, row.occurred_at]);
       }
       vi.useRealTimers();

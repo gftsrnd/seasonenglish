@@ -1,6 +1,9 @@
-import type { ButtonHTMLAttributes, ReactNode } from "react";
-import { Link, useInRouterContext, useLocation } from "react-router";
+import { createContext, useContext, type ButtonHTMLAttributes, type ReactNode } from "react";
+import { useInRouterContext, useLocation } from "react-router";
 import type { Cefr, RubricScore, Suggestion } from "./types.js";
+import { ManagerOperationsNavigation } from "../manager/Operations.js";
+
+export const OperationsReadOnlyContext = createContext(false);
 
 export function OperatorPage({ children, title, hideRouteBack = false }: { children: ReactNode; title: string; hideRouteBack?: boolean }) {
   const inRouter = useInRouterContext();
@@ -10,18 +13,25 @@ export function OperatorPage({ children, title, hideRouteBack = false }: { child
   return <OperatorPageWithNavigation title={title} hideRouteBack={hideRouteBack}>{children}</OperatorPageWithNavigation>;
 }
 
-function OperatorPageWithNavigation({ children, title, hideRouteBack }: { children: ReactNode; title: string; hideRouteBack: boolean }) {
+function OperatorPageWithNavigation({ children, title }: { children: ReactNode; title: string; hideRouteBack: boolean }) {
   const location = useLocation();
+  const readOnly = useContext(OperationsReadOnlyContext);
   const managerOperations = location.pathname.startsWith("/mgr/ops/");
-  const rootPath = managerOperations ? "/mgr/ops" : "/op";
-  const rootLabel = managerOperations ? "Hiệu suất vận hành" : "Vận hành";
-  const isRoot = location.pathname === rootPath;
   return <div className="app-operator" aria-label={title}>
-    {!isRoot && !hideRouteBack && <nav className="operator-route-back" aria-label="Điều hướng vận hành">
-      <Link className="operator-route-back__link" to={rootPath}>← {rootLabel}</Link>
-    </nav>}
+    {managerOperations ? <div className="manager-operations-context">
+      {readOnly ? <OperationsReadOnlyBanner /> : null}
+      <ManagerOperationsNavigation />
+    </div> : readOnly ? <OperationsReadOnlyBanner /> : null}
     {children}
   </div>;
+}
+
+export function OperationsReadOnlyBanner() {
+  return <div className="banner info operator-read-only-banner" role="note" aria-label="Chế độ chỉ đọc của Quản lý"><div className="body small"><b>Màn hình đang ở chế độ chỉ đọc của Quản lý.</b> Các màn vận hành bên dưới chỉ để theo dõi; thao tác tạo, sửa, duyệt và lưu dữ liệu bị khóa.</div></div>;
+}
+
+export function StandaloneReadOnlyBanner({ readOnly }: { readOnly: boolean }) {
+  return readOnly && !useInRouterContext() ? <OperationsReadOnlyBanner /> : null;
 }
 
 export function PageTitle({ children, actions }: { children: ReactNode; actions?: ReactNode }) {

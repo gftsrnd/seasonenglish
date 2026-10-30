@@ -94,6 +94,44 @@ export function registerFileRoutes(app: FastifyInstance, pool: Pool, storage: Ob
     return reply.send(audioView(file, playback.signed));
   });
 
+  app.get("/api/v1/files/assessment-audio/playback", { preHandler: audioReaders }, async (request, reply) => {
+    const artifactKey = (request.query as { artifactKey?: unknown }).artifactKey;
+    if (typeof artifactKey !== "string" || artifactKey.length > 512 || !artifactKey.startsWith("assessment-audio/")) {
+      return reply.code(400).send({ code: "ASSESSMENT_AUDIO_KEY_INVALID" });
+    }
+    const file = await repositories.files.findAssessmentAudioForViewer(request.e4sSession!.user.id, artifactKey);
+    if (!file || file.deletedAt) return reply.code(404).send({ code: "ASSESSMENT_AUDIO_NOT_FOUND" });
+    if (!storage.getObject) return reply.code(503).send({ code: "ASSESSMENT_AUDIO_READ_UNAVAILABLE" });
+    const range = parseByteRange(request.headers.range, file.sizeBytes);
+    if (range === "unsatisfiable") {
+      return reply
+        .code(416)
+        .header("Accept-Ranges", "bytes")
+        .header("Content-Range", `bytes */${file.sizeBytes}`)
+        .send();
+    }
+    try {
+      const object = await storage.getObject({
+        bucket: file.bucket,
+        objectKey: file.objectKey,
+        ...(range ? { range: range.header } : {})
+      });
+      const response = reply
+        .code(range ? 206 : 200)
+        .header("Cache-Control", "private, no-store")
+        .header("Accept-Ranges", object.acceptRanges || "bytes")
+        .header("Content-Length", String(object.contentLength ?? range?.length ?? file.sizeBytes))
+        .type(file.mimeType || object.mimeType || "application/octet-stream");
+      if (range) response.header("Content-Range", object.contentRange || range.contentRange);
+      return response.send(object.body);
+    } catch (error) {
+      logStorageFailure(request, "getObject", error);
+      return reply.code(isMissingObjectError(error) ? 404 : 503).send({
+        code: isMissingObjectError(error) ? "ASSESSMENT_AUDIO_NOT_FOUND" : "ASSESSMENT_AUDIO_READ_UNAVAILABLE"
+      });
+    }
+  });
+
   app.get("/api/v1/files/assessment-audio", { preHandler: staffOnly }, async (request, reply) => {
     const query = request.query as { learnerId?: unknown; sourceFlow?: unknown };
     const learnerId = query.learnerId === undefined ? undefined : String(query.learnerId);
@@ -249,8 +287,42 @@ export function registerFileRoutes(app: FastifyInstance, pool: Pool, storage: Ob
   });
 }
 
+interface ByteRange {
+  header: string;
+  contentRange: string;
+  length: number;
+}
+
+function parseByteRange(value: string | undefined, size: number): ByteRange | undefined | "unsatisfiable" {
+  if (!value) return undefined;
+  if (!Number.isSafeInteger(size) || size <= 0 || value.includes(",")) return "unsatisfiable";
+  const match = /^bytes=(\d*)-(\d*)$/.exec(value.trim());
+  if (!match || (!match[1] && !match[2])) return "unsatisfiable";
+
+  let start: number;
+  let end: number;
+  if (!match[1]) {
+    const suffixLength = Number(match[2]);
+    if (!Number.isSafeInteger(suffixLength) || suffixLength <= 0) return "unsatisfiable";
+    start = Math.max(0, size - suffixLength);
+    end = size - 1;
+  } else {
+    start = Number(match[1]);
+    if (!Number.isSafeInteger(start) || start < 0 || start >= size) return "unsatisfiable";
+    end = match[2] ? Number(match[2]) : size - 1;
+    if (!Number.isSafeInteger(end) || end < start) return "unsatisfiable";
+    end = Math.min(end, size - 1);
+  }
+
+  return {
+    header: `bytes=${start}-${end}`,
+    contentRange: `bytes ${start}-${end}/${size}`,
+    length: end - start + 1
+  };
+}
+
 function audioView(file: AudioFileRecord, signed: { url: string; expiresAt: Date } | undefined): Record<string, unknown> {
-  const signedUrl = file.deletedAt ? null : signed?.url ?? null;
+  const signedUrl = file.deletedAt || !signed ? null : assessmentAudioPlaybackUrl(file.objectKey);
   const expiresAt = file.deletedAt ? null : signed?.expiresAt.toISOString() ?? null;
   return {
     fileId: file.id,
@@ -274,6 +346,10 @@ function audioView(file: AudioFileRecord, signed: { url: string; expiresAt: Date
     deletedAt: file.deletedAt?.toISOString() ?? null,
     deletedBy: file.deletedBy
   };
+}
+
+function assessmentAudioPlaybackUrl(artifactKey: string): string {
+  return `/api/v1/files/assessment-audio/playback?artifactKey=${encodeURIComponent(artifactKey)}`;
 }
 
 async function signedPlayback(

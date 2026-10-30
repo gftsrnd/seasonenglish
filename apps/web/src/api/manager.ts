@@ -1,12 +1,12 @@
 import type {
-  AssessmentDeletionRequestView, ManagerAccountView, ManagerAccountsView, ManagerDataExportView,
+  AssessmentDeletionRequestView, ManagerAccountCredentialView, ManagerAccountPinView, ManagerAccountView, ManagerAccountsView, ManagerDataExportView,
   ManagerDataImportView, ManagerDeleteRequestsView, ManagerImageTestView, ManagerLearnerProfileView,
   ManagerMaintenanceConfirmationInput, ManagerMaintenanceConfirmationView, ManagerMaintenanceResultView,
   ManagerMusicTestView, ManagerOperationsView,
   ManagerProgressView, ManagerProviderSettingsInput, ManagerProviderSettingsTestInput,
   ManagerProviderSettingsView, ManagerProviderTestView, ManagerPurgeConfirmationInput,
   ManagerPurgeConfirmationView, ManagerReminderCopyView, ManagerReminderDismissView,
-  ManagerReminderSendView, ManagerRemindersView, ManagerReportView, ManagerSettingsView, ManagerTrashView, ManagerPinReportsView,
+  ManagerReminderChannel, ManagerReminderSendView, ManagerRemindersView, ManagerReportView, ManagerSettingsView, ManagerTrashView, ManagerPinReportsView,
   OperatorSettingsOverviewView, OrganisationExperienceInput, OrganisationExperienceView,
   ManagerWebhookTestView, ProductPreferencesView, SystemCapabilitiesView, WeeklyPracticeAssignmentView
 } from "@e4s/contracts";
@@ -43,8 +43,10 @@ export interface ManagerApiClient {
   updateManagerAccountRole(accountId: string, role: ManagerAccountView["role"]): Promise<ManagerAccountView>;
   updateManagerAccountStatus(accountId: string, status: "active" | "disabled" | "deleted"): Promise<ManagerAccountView>;
   resetManagerAccountPassword(accountId: string, password: string): Promise<{ saved: boolean }>;
+  getManagerAccountPin(accountId: string): Promise<ManagerAccountPinView>;
+  getManagerAccountCredential(accountId: string): Promise<ManagerAccountCredentialView>;
   getManagerReminders(): Promise<ManagerRemindersView>;
-  sendManagerReminder(learnerId: string, requestId: string): Promise<ManagerReminderSendView>;
+  sendManagerReminder(learnerId: string, requestId: string, channel: ManagerReminderChannel): Promise<ManagerReminderSendView>;
   dismissManagerReminder(learnerId: string): Promise<ManagerReminderDismissView>;
   copyManagerReminder(learnerId: string): Promise<ManagerReminderCopyView>;
   getManagerReport(): Promise<ManagerReportView>;
@@ -52,6 +54,7 @@ export interface ManagerApiClient {
   getOperatorSettingsOverview(): Promise<OperatorSettingsOverviewView>;
   saveManagerSettings(input: Omit<ManagerSettingsView, "organizationName">): Promise<ManagerSettingsView>;
   saveOperatorSettings(input: Omit<ManagerSettingsView, "organizationName">): Promise<ManagerSettingsView>;
+  requestPlacementTestChange(input: { developerEmail: string; note: string }): Promise<{ sent: boolean }>;
   getProductPreferences(): Promise<ProductPreferencesView>;
   saveProductPreferences(input: ProductPreferencesView): Promise<ProductPreferencesView>;
   getSystemCapabilities(): Promise<SystemCapabilitiesView>;
@@ -90,8 +93,10 @@ export const managerApiClient: ManagerApiClient = {
   updateManagerAccountRole: (accountId, role) => request(`/api/v1/manager/accounts/${encodeURIComponent(accountId)}/role`, { method: "PATCH", body: JSON.stringify({ role }) }),
   updateManagerAccountStatus: (accountId, status) => request(`/api/v1/manager/accounts/${encodeURIComponent(accountId)}/status`, { method: "PATCH", body: JSON.stringify({ status }) }),
   resetManagerAccountPassword: (accountId, password) => request(`/api/v1/manager/accounts/${encodeURIComponent(accountId)}/password-reset`, { method: "POST", body: JSON.stringify({ password }) }),
+  getManagerAccountPin: (accountId) => request(`/api/v1/manager/accounts/${encodeURIComponent(accountId)}/pin`),
+  getManagerAccountCredential: (accountId) => request(`/api/v1/manager/accounts/${encodeURIComponent(accountId)}/credential`),
   getManagerReminders: () => request("/api/v1/manager/reminders"),
-  sendManagerReminder: (learnerId, requestId) => request(`/api/v1/manager/reminders/${encodeURIComponent(learnerId)}`, { method: "POST", body: JSON.stringify({ requestId }) }),
+  sendManagerReminder: (learnerId, requestId, channel) => request(`/api/v1/manager/reminders/${encodeURIComponent(learnerId)}`, { method: "POST", body: JSON.stringify({ requestId, channel }) }),
   dismissManagerReminder: (learnerId) => request(`/api/v1/manager/reminders/${encodeURIComponent(learnerId)}/dismiss`, { method: "POST", body: "{}" }),
   copyManagerReminder: (learnerId) => request(`/api/v1/manager/reminders/${encodeURIComponent(learnerId)}/copy`, { method: "POST", body: "{}" }),
   getManagerReport: () => request("/api/v1/manager/report"),
@@ -99,6 +104,7 @@ export const managerApiClient: ManagerApiClient = {
   getOperatorSettingsOverview: () => request("/api/v1/operator/settings-overview"),
   saveManagerSettings: (input) => request("/api/v1/manager/settings", { method: "PUT", body: JSON.stringify(input) }),
   saveOperatorSettings: (input) => request("/api/v1/operator/settings", { method: "PUT", body: JSON.stringify(input) }),
+  requestPlacementTestChange: (input) => request("/api/v1/operator/placement-test-change-request", { method: "POST", body: JSON.stringify(input) }),
   getProductPreferences: () => request("/api/v1/product-preferences"),
   saveProductPreferences: (input) => request("/api/v1/product-preferences", { method: "PUT", body: JSON.stringify(input) }),
   getSystemCapabilities: () => request("/api/v1/system/capabilities"),

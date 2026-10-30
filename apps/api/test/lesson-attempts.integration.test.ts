@@ -316,7 +316,11 @@ describe("lesson exercise evidence API", () => {
     );
 
     const reloaded = await app.inject({ method: "GET", url: `/api/v1/lessons/${lessonId}`, headers: { cookie } });
-    expect(reloaded.json().progress.evidence.reading).toMatchObject({ status: "appealed", translationViewed: true });
+    expect(reloaded.json().progress.evidence.reading).toMatchObject({
+      status: "correct",
+      translationViewed: true,
+      feedback: "Kháng nghị đã được chấp nhận."
+    });
     expect(reloaded.json().progress.completedPartCodes).toContain("reading");
   });
 });

@@ -1,8 +1,8 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import type { CoachTaskOutput } from "@e4s/ai";
 import {
   coachQuestionForPersona, isAcknowledgementOnly, isInsufficientCoachInput,
-  normalizeCoachVocabularyUnlocks, validateCoachPersonaOutput
+  normalizeCoachVocabularyUnlocks, runCoachWithPersonaRepair, validateCoachPersonaOutput
 } from "../src/modules/coach/routes.js";
 
 const output = (seasonReply: string, nextQuestion: string): CoachTaskOutput => ({
@@ -126,5 +126,40 @@ describe("Season persona output policy", () => {
       ...claimed,
       evaluation: { status: "off_topic", result: "off_topic", countsTowardGoal: false, noteVi: "Lạc đề." }
     }, "Agenda is a word.", [{ word: "agenda", meaning: "chương trình họp", opened: false }]).usedWords).toEqual([]);
+  });
+
+  it("passes multi-turn messages and systemPrompt when repairing a persona violation", async () => {
+    const firstInvalid = output("That's great! 😊", "What's next?");
+    const secondValid = output("Thank you for the clear answer. Your response is relevant.", "Could you describe your role?");
+    const metadata = {
+      traceId: "trace-repair-unit", taskId: "coach_dialogue", provider: "fixture", model: "fixture-model",
+      attempts: 1, latencyMs: 10, inputHash: "a".repeat(64), schemaValid: true as const,
+      usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 }
+    };
+    const runTask = vi.fn()
+      .mockResolvedValueOnce({ output: firstInvalid, metadata })
+      .mockResolvedValueOnce({ output: secondValid, metadata });
+    const input = {
+      message: "I manage a small team.", cefr: "B1", persona: "formal",
+      mode: "practice", scenario: "Team management", currentQuestion: "What do you do?", priorTurns: []
+    };
+
+    const repaired = await runCoachWithPersonaRepair({ runTask }, input, "System prompt", "formal", {
+      learnerMessage: input.message
+    });
+
+    expect(repaired.output).toEqual(secondValid);
+    expect(runTask).toHaveBeenCalledTimes(2);
+    const secondCallOptions = runTask.mock.calls[1]?.[2];
+    expect(secondCallOptions?.systemPrompt).toContain("REPAIR THE PREVIOUS OUTPUT ONCE");
+    expect(secondCallOptions?.systemPrompt).toContain("PREVIOUS OUTPUT:");
+    expect(secondCallOptions?.messages).toEqual([
+      { role: "user", content: JSON.stringify(input) },
+      { role: "assistant", content: JSON.stringify(firstInvalid) },
+      {
+        role: "user",
+        content: expect.stringContaining("REPAIR THE PREVIOUS OUTPUT ONCE. Return a complete object that matches the JSON schema. Keep valid pedagogical content, but fix every listed issue.\nISSUES: ")
+      }
+    ]);
   });
 });

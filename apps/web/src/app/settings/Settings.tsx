@@ -5,7 +5,6 @@ import { autoSeasonTheme } from "../games/season-visual.js";
 import { MUSIC_PRESETS } from "../../features/experience/music-presets.js";
 import { resolveBackgroundMusic } from "../../features/experience/music-selection.js";
 import { createMusicPlayer, type MusicPlayer } from "../../features/experience/music-player.js";
-import { PersonalPreferences } from "./PersonalPreferences.js";
 import { useTheme } from "../shared/ThemeProvider.js";
 
 export type AiConfigurationView = ManagerProviderSettingsView;
@@ -58,6 +57,7 @@ export type SettingsActions = {
   onExportCsv: () => void | Promise<void>;
   onSeedData: () => void | Promise<void>;
   onWipeData: () => void | Promise<void>;
+  onRequestPlacementTestChange: (developerEmail: string, note: string) => void | Promise<void>;
 };
 export type SettingsProps = {
   role: "manager" | "operator";
@@ -69,9 +69,10 @@ export type SettingsProps = {
   operatorOverview?: OperatorSettingsOverviewView;
   actions: Partial<SettingsActions>;
   accounts?: ReactNode;
+  securityNotices?: ReactNode;
 };
 
-export function SettingsPage({ role, manager, product, experience, capabilities, ai, operatorOverview, actions, accounts }: SettingsProps) {
+export function SettingsPage({ role, manager, product, experience, capabilities, ai, operatorOverview, actions, accounts, securityNotices }: SettingsProps) {
   const [aiDraft, setAiDraft] = useState<AiConfigurationInput | null>(ai ? { provider: ai.provider, baseUrl: ai.baseUrl, model: ai.model, speechToTextModel: ai.speechToTextModel } : null);
   const [managerDraft, setManagerDraft] = useState(manager ?? operatorOverview?.settings);
   const [productDraft, setProductDraft] = useState(() => normalizeProductPreferences(product));
@@ -90,9 +91,11 @@ export function SettingsPage({ role, manager, product, experience, capabilities,
   } : undefined;
   return <div className="settings-page" data-settings-role={role}>
     <div className="page-title"><h1>Cài đặt</h1></div>
+    {securityNotices}
+    {role === "manager" ? <section className="card" aria-label="Cấu hình Prompt & rubric"><h3>Prompt & rubric</h3><p className="small muted">Quản lý hướng dẫn AI và rubric chấm trong khu vực Cài đặt, tách khỏi các thao tác vận hành hằng ngày.</p><a className="btn" href="/settings/prompts">Mở Prompt & rubric</a></section> : null}
     {role === "manager" ? aiDraft && ai ? <AiSection draft={aiDraft} configured={ai.configured} lastTest={ai.lastTest} capabilities={capabilities} onChange={setAiDraft} aiTestDisabled={managerDraft?.aiTestDisabled ?? false} onAiTestDisabledChange={(aiTestDisabled) => setManagerDraft((current) => current ? { ...current, aiTestDisabled } : current)} {...(actions.onSaveAi ? { onSave: () => actions.onSaveAi!(aiDraft) } : {})} {...(actions.onTestAi ? { onTest: () => actions.onTestAi!(aiDraft) } : {})} {...(actions.onSaveManager && managerDraft ? { onSaveAiTestMode: () => actions.onSaveManager!(toInput(managerDraft)) } : {})} /> : <UnavailableAiSection capabilities={capabilities} role={role} /> : null}
     {role === "manager" && managerDraft ? <>
-      <PilotSection value={managerDraft} onChange={setManagerDraft} {...(actions.onSaveManager ? { onSave: () => actions.onSaveManager!(toInput(managerDraft)) } : {})} />
+      <PilotSection role={role} value={managerDraft} persisted={manager ?? managerDraft} onChange={setManagerDraft} {...(actions.onSaveManager ? { onSave: () => actions.onSaveManager!({ ...toInput(managerDraft), pilotCycleAction: "save" }) } : {})} />
       <ImageSection value={productDraft} onChange={setProductDraft} {...(actions.onSaveProduct ? { onSave: () => actions.onSaveProduct!(productDraft) } : {})} {...(actions.onTestImage ? { onTest: () => actions.onTestImage!(productDraft) } : {})} {...(actions.onClearImageCache ? { onClear: actions.onClearImageCache } : {})} />
       <LevelSection value={managerDraft} onChange={setManagerDraft} {...(actions.onSaveManager ? { onSave: () => actions.onSaveManager!(toInput(managerDraft)) } : {})} />
       <ThemeSection value={experienceDraft} onChange={setExperienceDraft} {...(saveExperienceDraft ? { onSave: saveExperienceDraft } : actions.onSaveProduct ? { onSave: () => actions.onSaveProduct!({ ...productDraft, theme: experienceDraft.theme }) } : {})} />
@@ -105,18 +108,32 @@ export function SettingsPage({ role, manager, product, experience, capabilities,
       <ThemeSection value={experienceDraft} onChange={setExperienceDraft} {...(saveExperienceDraft ? { onSave: saveExperienceDraft } : {})} />
       <MusicSection value={experienceDraft} onChange={setExperienceDraft} {...(saveExperienceDraft ? { onSave: saveExperienceDraft } : {})} />
       {operatorOverview && managerDraft ? <>
-        <PilotSection value={managerDraft} onChange={setManagerDraft} {...(actions.onSaveManager ? { onSave: () => actions.onSaveManager!(toInput(managerDraft)) } : {})} />
+        <PilotSection role={role} value={managerDraft} persisted={operatorOverview.settings} onChange={setManagerDraft} {...(actions.onSaveManager ? { onSave: () => actions.onSaveManager!({ ...toInput(managerDraft), pilotCycleAction: "save" }) } : {})} />
         <LevelSection value={managerDraft} onChange={setManagerDraft} {...(actions.onSaveManager ? { onSave: () => actions.onSaveManager!(toInput(managerDraft)) } : {})} />
+        <PlacementTestChangeRequest {...(actions.onRequestPlacementTestChange ? { onSend: actions.onRequestPlacementTestChange } : {})} />
         <OperatorAccountsSection overview={operatorOverview} />
       </> : null}
-      <PersonalPreferences />
     </>}
   </div>;
 }
 
+function PlacementTestChangeRequest({ onSend }: { onSend?: (developerEmail: string, note: string) => void | Promise<void> }) {
+  const [developerEmail, setDeveloperEmail] = useState("");
+  const [note, setNote] = useState("");
+  const [error, setError] = useState("");
+  const send = async () => {
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(developerEmail)) { setError("Nhập email đội phát triển hợp lệ."); return; }
+    if (!note.trim()) { setError("Mô tả nội dung cần đổi trong đề đầu vào."); return; }
+    setError("");
+    await onSend?.(developerEmail.trim(), note.trim());
+    setNote("");
+  };
+  return <section className="card"><h3>Yêu cầu đổi đề đầu vào</h3><p className="small muted">Operator không sửa trực tiếp thời lượng hoặc cấu trúc đề. Gửi yêu cầu có ghi nhận tới đội phát triển.</p><Field label="Email đội phát triển"><input type="email" value={developerEmail} onChange={event => setDeveloperEmail(event.target.value)} placeholder="dev@example.com" /></Field><Field label="Nội dung cần đổi"><textarea rows={3} value={note} onChange={event => setNote(event.target.value)} placeholder="Mô tả rõ phần đề cần cập nhật…" /></Field>{error ? <p className="small danger" role="alert">{error}</p> : null}<Save label="Gửi yêu cầu" onSave={onSend ? send : undefined} /></section>;
+}
+
 function OperatorAccountsSection({ overview }: { overview: OperatorSettingsOverviewView }) {
   const roleLabel = (role: string) => role === "learner" ? "Người học" : role === "operator" ? "Người vận hành" : "Quản lý";
-  return <section className="card"><h3>Người dùng</h3><p className="small muted">Danh sách tài khoản trong tổ chức. Operator được chỉnh cấu hình vận hành nhưng không được thêm, xoá hoặc đổi thông tin học viên.</p><div className="table-wrap"><table><thead><tr><th>Tên</th><th>Email</th><th>Vai trò</th><th>Mức</th><th>Điểm đầu vào</th><th>Trạng thái</th></tr></thead><tbody>{overview.accounts.map(account => <tr key={account.id}><td>{account.displayName}</td><td>{account.email || "—"}</td><td>{roleLabel(account.role)}</td><td>{account.role === "learner" ? account.cefr ?? "—" : "—"}</td><td>{account.role !== "learner" ? "—" : account.placementScore == null ? "Chưa có bài test" : `${account.placementScore}/100`}</td><td>{account.status === "active" ? "Đang hoạt động" : account.status}</td></tr>)}</tbody></table></div></section>;
+  return <section className="card settings-operator-accounts"><h3>Người dùng</h3><p className="small muted">Danh sách tài khoản trong tổ chức. Operator được chỉnh cấu hình vận hành nhưng không được thêm, xoá hoặc đổi thông tin học viên.</p><div className="table-wrap settings-operator-accounts__table"><table><thead><tr><th>Tên</th><th>Email</th><th>Vai trò</th><th>Mức</th><th>Điểm đầu vào</th><th>Trạng thái</th></tr></thead><tbody>{overview.accounts.map(account => <tr key={account.id}><td>{account.displayName}</td><td>{account.email || "—"}</td><td>{roleLabel(account.role)}</td><td>{account.role === "learner" ? account.cefr ?? "—" : "—"}</td><td>{account.role !== "learner" ? "—" : account.placementScore == null ? "Chưa có bài test" : `${account.placementScore}/100`}</td><td>{account.status === "active" ? "Đang hoạt động" : account.status}</td></tr>)}</tbody></table></div></section>;
 }
 
 function UnavailableAiSection({ capabilities, role }: { capabilities: SystemCapabilitiesView; role: "manager" | "operator" }) { return <section className="card"><h3>Kết nối AI</h3><div className="banner info"><div className="body small">{role === "operator" ? <>Chỉ xem trạng thái kết nối AI ({capabilities.ai ? "đang hoạt động" : "chưa hoạt động"}). Nhà cung cấp, model và khoá do Quản lý quản trị; khoá không hiển thị trên trình duyệt.</> : <>API chỉ trả trạng thái AI {capabilities.ai ? "đang hoạt động" : "chưa hoạt động"}; chưa có endpoint lưu hoặc kiểm tra cấu hình. Điều khiển được tắt để tránh tạo cấu hình giả.</>}</div></div>{role === "operator" ? <span className={`badge ${capabilities.ai ? "ok" : "warn"}`}>{capabilities.ai ? "đang hoạt động" : "chưa sẵn sàng"}</span> : <div className="row"><button className="btn-primary" type="button" disabled>Lưu kết nối AI</button><button type="button" disabled>Kiểm tra kết nối</button></div>}</section>; }
@@ -132,11 +149,21 @@ function AiSection({ draft, configured, lastTest, capabilities, aiTestDisabled, 
     <div className="grid cols-2"><label className="field"><span>API key mới (để trống = giữ key đang lưu)</span><input type="password" autoComplete="new-password" value={draft.credential ?? ""} onChange={(event) => onChange(withCredential(draft, event.target.value))} /></label><label className="field"><span>Tên model</span><input value={draft.model} onChange={(event) => onChange({ ...draft, model: event.target.value })} /></label></div>
     {draft.provider === "openai" ? <label className="field"><span>Model chép lời file ghi âm</span><input value={draft.speechToTextModel} onChange={(event) => onChange({ ...draft, speechToTextModel: event.target.value })} /></label> : null}
     <div className="row"><AsyncButton className="btn-primary" action={onSave} disabled={!onSave} busyLabel="Đang lưu…">Lưu kết nối AI</AsyncButton><AsyncButton action={onTest} disabled={!onTest} busyLabel="Đang kiểm tra…" aria-label="Kiểm tra kết nối AI">Kiểm tra kết nối</AsyncButton><span className={`badge ${configured && capabilities.ai ? "ok" : "warn"}`}>{connectionLabel}</span><span className="small muted" role="status" aria-live="polite">{lastTestLabel(lastTest)}</span></div>
-    <div className="banner info"><label className="row"><input type="checkbox" checked={aiTestDisabled} onChange={(event) => onAiTestDisabledChange(event.target.checked)} /> <span>Tắt AI để kiểm thử chế độ dự phòng</span></label><p className="small">Khoá API vẫn được giữ nguyên. Khi bật, mọi tính năng AI của tổ chức sẽ dùng đúng luồng dự phòng để tester kiểm tra.</p><AsyncButton action={onSaveAiTestMode} disabled={!onSaveAiTestMode} busyLabel="Đang lưu…">Lưu chế độ kiểm thử AI</AsyncButton></div>
+    <div className="settings-ai-fallback-control"><div className="settings-ai-fallback-copy"><strong>Chế độ dự phòng không AI</strong><span className="small muted">Khoá API vẫn được giữ nguyên. Bật công tắc để kiểm tra toàn bộ luồng dự phòng của tổ chức.</span></div><label className="settings-switch"><input role="switch" type="checkbox" checked={aiTestDisabled} onChange={(event) => onAiTestDisabledChange(event.target.checked)} aria-label="Tắt AI để kiểm thử chế độ dự phòng" /><span className="settings-switch__track" aria-hidden="true"><span /></span><span className="settings-switch__state">{aiTestDisabled ? "Đang tắt AI" : "AI đang bật"}</span></label><AsyncButton className="btn" action={onSaveAiTestMode} disabled={!onSaveAiTestMode} aria-label="Lưu chế độ kiểm thử AI" busyLabel="Đang lưu…">Lưu chế độ</AsyncButton></div>
   </section>;
 }
 
-function PilotSection({ value, onChange, onSave }: ManagerSectionProps) { return <section className="card"><h3>Lịch pilot</h3><div className="grid cols-3"><Field label="Ngày bắt đầu (Thứ Hai tuần 1)"><input type="date" value={value.pilotStartDate} onChange={(event) => onChange({ ...value, pilotStartDate: event.target.value })} /></Field><Field label="Số tuần"><select value={value.pilotWeeks} onChange={(event) => onChange({ ...value, pilotWeeks: Number(event.target.value) })}><option>2</option><option>3</option><option>4</option></select></Field><NumberField label="Ép tuần hiện tại (0 = tự tính)" value={value.weekOverride} min={0} max={4} onChange={(weekOverride) => onChange({ ...value, weekOverride })} /></div><NumberField label="Khuyến nghị học tối thiểu (phút/ngày)" value={value.minMinutesPerDay} min={5} max={60} onChange={(minMinutesPerDay) => onChange({ ...value, minMinutesPerDay })} /><NumberField label="Giới hạn chat với Season (tối đa 30 lượt/ngày cho mỗi học viên)" value={value.coachDailyLimit} min={1} max={30} onChange={(coachDailyLimit) => onChange({ ...value, coachDailyLimit })} /><p className="xs muted settings-pilot-status" role="status">{pilotWeekSummary(value)}</p><Save label="Lưu lịch pilot" onSave={onSave} /></section>; }
+function PilotSection({ role, value, persisted, onChange, onSave }: ManagerSectionProps & { role: "manager" | "operator"; persisted: ManagerSettingsView }) {
+  const ended = persisted.pilotCycle?.state === "awaiting_next_cycle";
+  const canSaveCycle = ended || value.pilotWeeks > persisted.pilotWeeks;
+  const cycle = persisted.pilotCycle;
+  return <section className="card"><h3>Lịch pilot</h3>
+    {role === "manager" && cycle?.lastExtension ? <div className="banner info" role="status"><div className="body small"><b>{cycle.lastExtension.actorName}</b> đã tăng chu kỳ từ {cycle.lastExtension.fromWeeks} lên {cycle.lastExtension.toWeeks} tuần.</div></div> : null}
+    <div className="grid cols-2"><div className="field"><span>Thứ Hai bắt đầu chu kỳ</span><div className="settings-fixed-pilot-date"><strong>{formatPilotDate(cycle?.startDate ?? persisted.pilotStartDate)}</strong><span className="xs muted">Do hệ thống xác định · không thể chỉnh sửa</span></div></div><Field label={ended ? "Số tuần cho chu kỳ mới" : "Số tuần của chu kỳ"}><select value={value.pilotWeeks} onChange={(event) => onChange({ ...value, pilotWeeks: Number(event.target.value), weekOverride: 0 })}>{[2, 3, 4].map(weeks => <option key={weeks} value={weeks} disabled={!ended && weeks < persisted.pilotWeeks}>{weeks}</option>)}</select></Field></div>
+    <p className="xs muted settings-pilot-status" role="status">{pilotWeekSummary(persisted)}</p>
+    {!ended ? <p className="xs muted">Trong chu kỳ đang chạy chỉ có thể tăng số tuần. Việc tăng không thay đổi tuần hoặc bài đang học.</p> : <p className="xs muted">Chu kỳ đã kết thúc. Chọn thời lượng rồi lưu để bắt đầu chu kỳ mới.</p>}
+    <NumberField label="Khuyến nghị học tối thiểu (phút/ngày)" value={value.minMinutesPerDay} min={5} max={60} onChange={(minMinutesPerDay) => onChange({ ...value, minMinutesPerDay })} /><NumberField label="Giới hạn chat với Season (1–200 lượt/ngày cho mỗi học viên)" value={value.coachDailyLimit} min={1} max={200} onChange={(coachDailyLimit) => onChange({ ...value, coachDailyLimit })} /><Save label="Lưu lịch pilot" onSave={canSaveCycle ? onSave : undefined} disabled={!canSaveCycle} {...(!ended ? { disabledTitle: `Chu kỳ đang chạy đến hết tuần ${persisted.pilotWeeks}.` } : {})} /></section>;
+}
 
 function ImageSection({ value, onChange, onSave, onTest, onClear, readOnly = false }: { value: ProductPreferencesView; onChange: (value: ProductPreferencesView) => void; onSave?: () => void | Promise<void>; onTest?: () => void | Promise<void>; onClear?: () => void | Promise<void>; readOnly?: boolean }) { return <section className="card"><h3>Ảnh minh hoạ từ vựng</h3><p className="small muted">Tự động tìm ảnh có giấy phép mở từ Wikipedia, Wikimedia Commons và Openverse. Ảnh được lưu vào kho E4S kèm thông tin tác giả và giấy phép.</p><Field label="Nguồn ảnh"><select value={normalizeImageSource(value.vocabImageSource)} disabled={readOnly} onChange={(event) => onChange({ ...value, vocabImageSource: event.target.value as ProductPreferencesView["vocabImageSource"] })}><option value="wikimedia">Tự động từ nguồn mở</option><option value="disabled">Tắt ảnh minh hoạ</option></select></Field>{readOnly ? null : <div className="row"><Save label="Lưu nguồn ảnh" onSave={onSave} /><AsyncButton action={onTest} disabled={!onTest || value.vocabImageSource === "disabled"} busyLabel="Đang thử…" title={!onTest ? "Chưa có endpoint kiểm tra ảnh" : undefined}>Thử ảnh cho &quot;notebook&quot;</AsyncButton><AsyncButton className="btn-ghost" action={onClear} disabled={!onClear} busyLabel="Đang xoá…" title={!onClear ? "Chưa có endpoint xoá cache ảnh" : undefined}>Xoá cache ảnh</AsyncButton></div>}</section>; }
 
@@ -257,7 +284,7 @@ function ImportJsonButton({ action, disabled, reason }: { action: SettingsAction
 type ManagerSectionProps = { value: ManagerSettingsView; onChange: (value: ManagerSettingsView) => void; onSave?: () => void | Promise<void> };
 function Field({ label, children }: { label: string; children: ReactNode }) { return <label className="field"><span>{label}</span>{children}</label>; }
 function NumberField({ label, value, min, max, step = 1, onChange }: { label: string; value: number; min: number; max: number; step?: number; onChange: (value: number) => void }) { return <Field label={label}><input type="number" value={value} min={min} max={max} step={step} onChange={(event) => onChange(Number(event.target.value))} /></Field>; }
-function Save({ label, onSave }: { label: string; onSave: (() => void | Promise<void>) | undefined }) { return <AsyncButton className="btn-primary" action={onSave} disabled={!onSave} aria-label={label} title={!onSave ? "Chưa có endpoint lưu cấu hình" : undefined} busyLabel="Đang lưu…">Lưu</AsyncButton>; }
+function Save({ label, onSave, disabled = false, disabledTitle }: { label: string; onSave: (() => void | Promise<void>) | undefined; disabled?: boolean; disabledTitle?: string }) { return <AsyncButton className="btn-primary" action={onSave} disabled={disabled || !onSave} aria-label={label} title={disabledTitle ?? (!onSave ? "Chưa có endpoint lưu cấu hình" : undefined)} busyLabel="Đang lưu…">Lưu</AsyncButton>; }
 type AsyncButtonProps = Omit<ButtonHTMLAttributes<HTMLButtonElement>, "children" | "onClick"> & { action: (() => void | Promise<void>) | undefined; busyLabel?: ReactNode; children: ReactNode };
 function AsyncButton({ action, busyLabel = "Đang xử lý…", children, disabled, type = "button", ...props }: AsyncButtonProps) {
   const [busy, setBusy] = useState(false);
@@ -268,16 +295,25 @@ function AsyncButton({ action, busyLabel = "Đang xử lý…", children, disabl
   };
   return <button {...props} type={type} disabled={Boolean(disabled || !action || busy)} aria-busy={busy ? "true" : undefined} onClick={() => void run()}>{busy ? <><span className="spinner" aria-hidden="true" /> {busyLabel}</> : children}</button>;
 }
-function toInput(value: ManagerSettingsView): ManagerSettingsInput { const { organizationName: _organizationName, ...input } = value; return input; }
+function toInput(value: ManagerSettingsView): ManagerSettingsInput { const { organizationName: _organizationName, pilotCycle: _pilotCycle, ...input } = value; return input; }
 function withCredential(value: AiConfigurationInput, credential: string): AiConfigurationInput { const { credential: _oldCredential, ...rest } = value; return credential ? { ...rest, credential } : rest; }
+function formatPilotDate(value: string): string {
+  const [year, month, day] = value.split("-").map(Number);
+  if (![year, month, day].every(Number.isFinite) || !year || !month || !day) return "Chưa xác định";
+  return new Intl.DateTimeFormat("vi-VN", { day: "2-digit", month: "2-digit", year: "numeric", timeZone: "UTC" }).format(new Date(Date.UTC(year, month - 1, day)));
+}
 function pilotWeekSummary(value: ManagerSettingsView): string {
+  if (value.pilotCycle) {
+    if (value.pilotCycle.state === "awaiting_next_cycle") return `Chu kỳ ${value.pilotCycle.number} đã kết thúc sau Tuần ${value.pilotWeeks}/${value.pilotWeeks}.`;
+    return `Chu kỳ ${value.pilotCycle.number} · Tuần ${value.pilotCycle.currentWeek}/${value.pilotWeeks} (${formatPilotDate(value.pilotCycle.startDate)} → ${formatPilotDate(value.pilotCycle.endDate)}).`;
+  }
   const [year, month, day] = value.pilotStartDate.split("-").map(Number);
   if (![year, month, day].every(Number.isFinite) || !year || !month || !day) return "Tuần hiện tại theo cấu hình: chưa đủ ngày bắt đầu.";
   const dayMs = 24 * 60 * 60 * 1000;
   const start = Date.UTC(year, month - 1, day);
   const now = new Date();
   const today = Date.UTC(now.getFullYear(), now.getMonth(), now.getDate());
-  const week = value.weekOverride > 0 ? clampNumber(value.weekOverride, 1, value.pilotWeeks) : clampNumber(Math.floor((today - start) / dayMs) + 1, 1, value.pilotWeeks);
+  const week = clampNumber(Math.floor((today - start) / (7 * dayMs)) + 1, 1, value.pilotWeeks);
   const weekStart = new Date(start + (week - 1) * 7 * dayMs);
   const weekEnd = new Date(start + (week * 7 - 1) * dayMs);
   const format = new Intl.DateTimeFormat("vi-VN", { day: "2-digit", month: "2-digit", year: "numeric", timeZone: "UTC" });

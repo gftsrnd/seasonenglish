@@ -272,6 +272,12 @@ describe("learner Home parity", () => {
     expect(within(primary!).getByRole("link", { name: "Học bài T2 ngay" })).toHaveAttribute("href", "/lesson/lesson-1");
   });
 
+  it("separates the catch-up banner from the progress cards below it", () => {
+    render(<LearnerHome view={makeView()} actions={actions} />);
+
+    expect(document.querySelector('[data-home-block="primary"]')).toHaveClass("home-primary-lesson--catch-up");
+  });
+
   it("keeps the catch-up guidance inside the single primary banner", () => {
     const view = makeView();
     const lockedLesson = {
@@ -360,6 +366,17 @@ describe("learner Home parity", () => {
     expect(within(setup).getByRole("heading", { name: "Vận hành duyệt mức" })).toBeInTheDocument();
     expect(within(setup).getByText("Đang ở bước này")).toBeInTheDocument();
     expect(within(setup).getByRole("link", { name: "Điền hồ sơ (~2 phút)" })).toHaveAttribute("href", "/onboard");
+  });
+
+  it("shows the approved 75-minute placement duration after onboarding", () => {
+    render(<LearnerHome view={makeView({
+      onboardingRequired: false,
+      learner: { displayName: "Học viên Demo", cefr: null },
+      approvalPending: false,
+      placementDraft: false
+    })} actions={actions} />);
+
+    expect(screen.getByRole("link", { name: "Bắt đầu test (tối đa 75 phút)" })).toHaveAttribute("href", "/test/placement");
   });
 
   it("offers to continue a saved onboarding draft", () => {

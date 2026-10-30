@@ -24,9 +24,9 @@ const audioArtifactInput = z.object({
 });
 const messageInput = z.object({
   requestId: z.uuid(),
-  message: z.string().trim().min(1).max(2_000),
+  message: z.string().trim().max(2_000),
   audio: audioArtifactInput.optional()
-});
+}).refine((input) => Boolean(input.message || input.audio), { path: ["message"] });
 const personaInput = z.object({ persona: z.enum(["informal", "formal"]) });
 
 export function registerCoachRoutes(
@@ -89,7 +89,7 @@ export function registerCoachRoutes(
         priorTurns: []
       };
       const { result, output } = await runCoachWithPersonaRepair(
-        runner, aiInput, coachPersonaPrompt(task.prompt, existing.persona), existing.persona, validationContext
+        runner, aiInput, coachPersonaPrompt(task.prompt, existing.persona, existing.cefr, audio), existing.persona, validationContext
       );
       const normalizedOutput = normalizeCoachVocabularyUnlocks(
         repeatCurrentQuestionForOffTopic(output, currentQuestion), parsed.data.message, existing.vocabulary
@@ -169,7 +169,7 @@ export function registerCoachRoutes(
         priorTurns: []
       };
       const { result, output } = await runCoachWithPersonaRepair(
-        runner, aiInput, coachPersonaPrompt(task.prompt, "formal"), "formal", {
+        runner, aiInput, coachPersonaPrompt(task.prompt, "formal", existing.targetLevel, audio), "formal", {
           learnerMessage: parsed.data.message,
           previousSuggestedAnswer: coachPreviousSuggestedAnswer(existing.messages)
         }
@@ -241,12 +241,34 @@ async function refreshAudioArtifact(
   };
 }
 
-export function coachPersonaPrompt(prompt: string, persona: "informal" | "formal"): string {
+export function coachPersonaPrompt(
+  prompt: string,
+  persona: "informal" | "formal",
+  cefr?: string,
+  audio?: AudioArtifactInput | { hasAudio?: boolean; audio?: unknown } | boolean | null
+): string {
+  const normalizedCefr = cefr?.trim().toUpperCase();
+  const isHigherCefr = normalizedCefr === "B1" || normalizedCefr === "B2" || normalizedCefr === "C1";
+  const hasAudio = typeof audio === "boolean"
+    ? audio
+    : audio && typeof audio === "object" && "hasAudio" in audio
+      ? Boolean(audio.hasAudio)
+      : audio && typeof audio === "object" && "audio" in audio
+        ? Boolean(audio.audio)
+        : Boolean(audio);
   const instruction = persona === "formal"
     ? "FORMAL STYLE: Use professional, courteous workplace English. Avoid slang, contractions, emojis, and overly familiar language. Keep seasonReply between two and four CEFR-appropriate sentences."
     : "INFORMAL STYLE: Use warm, friendly, natural workplace English with a natural contraction and exactly one emoji in each turn. Keep seasonReply between two and four short CEFR-appropriate sentences.";
   const correctionGuard = "LATEST TURN ONLY: Evaluate message against currentQuestion as a fresh pair. Never carry an error, correction, score, or evidence from priorTurns into this result. TRANSLATIONS: Return a natural Vietnamese translation of Season's conversational reply in seasonReplyTranslation. For every correction, return a natural Vietnamese translation of the corrected learner sentence in corrections[].translation. Keep correction reason focused only on the short language reason; never place a translation inside reason. CORRECTIONS ONLY: Only put genuine language errors in corrections. If the learner's message is grammatical, relevant, and answers currentQuestion—even if it is brief or less specific—return corrections: [] and correctedText: \"\". Do not rewrite a correct answer merely to make it longer, more detailed, or stylistically different. RESULT LABEL: evaluation.result must be correct for a complete correct answer, partially_correct for a meaningful answer that needs a small language or content improvement, missing_information for insufficient input, or off_topic for the wrong target. INSUFFICIENT means no meaningful attempt and requires meaning score 0. If the learner gives relevant information but omits part of the requested content, use valid/partially_correct/countsTowardGoal true and a positive meaning score. Keep seasonReply and nextQuestion separate; seasonReply must not contain nextQuestion. RUBRIC SCOPE: rubric evidence and improvement must refer only to the learner's latest message and currentQuestion. Every rubric evidence and improvement must be concise, specific, and written in Vietnamese so the learner can act on it. Never base rubric feedback on nextQuestion or suggestedAnswer. If a criterion needs no improvement, say \"Không cần thay đổi.\" suggestedAnswer must directly answer nextQuestion in the exact conversation state, use one concise learner-level example, and contain no more than 40 words. It must not repeat or re-ask nextQuestion or a quoted question unless nextQuestion explicitly asks the learner to formulate a question. suggestedAnswer must never be presented as a correction to the learner's latest message. SECRET WORDS: usedWords may contain only configured secret vocabulary that appears as a whole word in the learner's latest message; never infer or invent a used word.";
-  return `${prompt}\n\n${instruction}\n\n${correctionGuard}`;
+  const cefrGuidance = normalizedCefr
+    ? isHigherCefr
+      ? `CEFR LEVEL (${normalizedCefr}): Calibrate seasonReply, nextQuestion, and suggestedAnswer.text strictly to ${normalizedCefr} workplace English with connected clauses, accurate workplace collocations, and professional register appropriate for ${normalizedCefr}. For B1 and above, explanations in rubric evidence, rubric improvement, and corrections[].reason may use concise English ("No change needed." when no improvement is needed) while keeping Vietnamese translations in dedicated translation fields.`
+      : `CEFR LEVEL (${normalizedCefr}): Calibrate seasonReply, nextQuestion, and suggestedAnswer.text strictly to ${normalizedCefr} workplace English using high-frequency vocabulary, short direct sentences, and foundational workplace grammar. Keep explanations in Vietnamese.`
+    : "";
+  const asrGuidance = hasAudio
+    ? "ASR / SPOKEN TRANSCRIPT TOLERANCE: The learner message comes from a spoken audio transcript (ASR). Ignore speech-recognition punctuation, capitalization, and minor filler words (such as um or uh) when evaluating grammar and workplace meaning; do not create corrections for ASR formatting noise."
+    : "";
+  return [prompt, instruction, correctionGuard, cefrGuidance, asrGuidance].filter(Boolean).join("\n\n");
 }
 
 export function isAcknowledgementOnly(message: string): boolean {
@@ -375,7 +397,7 @@ function validateSuggestedAnswer(output: CoachTaskOutput): string[] {
   return reasksQuotedQuestion ? ["Suggested answer re-asks the quoted question instead of replying to it."] : [];
 }
 
-async function runCoachWithPersonaRepair(
+export async function runCoachWithPersonaRepair(
   runner: AiTaskRunner,
   input: unknown,
   systemPrompt: string,
@@ -388,6 +410,14 @@ async function runCoachWithPersonaRepair(
 
   const result = await runner.runTask("coach_dialogue", input, {
     systemPrompt: `${systemPrompt}\n\nREPAIR THE PREVIOUS OUTPUT ONCE. Return a complete object that matches the JSON schema. Keep valid pedagogical content, but fix every listed issue.\nISSUES: ${first.violations.join(" ")}\nPREVIOUS OUTPUT:\n${safeCoachOutputJson(firstResult.output)}`,
+    messages: [
+      { role: "user", content: JSON.stringify(input) },
+      { role: "assistant", content: safeCoachOutputJson(firstResult.output) },
+      {
+        role: "user",
+        content: `REPAIR THE PREVIOUS OUTPUT ONCE. Return a complete object that matches the JSON schema. Keep valid pedagogical content, but fix every listed issue.\nISSUES: ${first.violations.join(" ")}`
+      }
+    ],
     temperature: 0
   });
   const repaired = inspectCoachOutput(result.output, persona, validationContext);

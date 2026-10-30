@@ -286,6 +286,18 @@
   cursor: default;
 }
 
+.settings-fixed-pilot-date {
+  min-height: 42px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 2px;
+  padding: 8px 11px;
+  border: 1px solid var(--border, #d8d1c5);
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--surface, #fff) 68%, var(--accent-soft, #edf4df));
+}
+
 .settings-page input:disabled::placeholder,
 .settings-page textarea:disabled::placeholder {
   color: var(--muted);
@@ -513,6 +525,32 @@
   }
 }
 
+.settings-ai-fallback-control {
+  display: grid;
+  grid-template-columns: minmax(240px, 1fr) auto auto;
+  align-items: center;
+  gap: 16px;
+  padding: 16px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: linear-gradient(135deg, var(--surface-3), var(--surface));
+}
+
+.settings-ai-fallback-copy { display: grid; gap: 4px; }
+.settings-switch { display: inline-flex; align-items: center; gap: 10px; cursor: pointer; }
+.settings-switch input { position: absolute; opacity: 0; pointer-events: none; }
+.settings-switch__track { width: 46px; height: 26px; padding: 3px; border-radius: 999px; background: #b9b4aa; transition: background .2s ease; }
+.settings-switch__track > span { display: block; width: 20px; height: 20px; border-radius: 50%; background: #fff; box-shadow: 0 1px 4px rgb(0 0 0 / .22); transition: transform .2s ease; }
+.settings-switch input:checked + .settings-switch__track { background: var(--accent); }
+.settings-switch input:checked + .settings-switch__track > span { transform: translateX(20px); }
+.settings-switch input:focus-visible + .settings-switch__track { outline: 3px solid color-mix(in srgb, var(--accent) 28%, transparent); outline-offset: 2px; }
+.settings-switch__state { min-width: 88px; font-size: .82rem; font-weight: 650; }
+
+@media (max-width: 760px) {
+  .settings-ai-fallback-control { grid-template-columns: 1fr; align-items: start; }
+  .settings-ai-fallback-control > button { justify-self: start; }
+}
+
 /* Settings uses the same visual hierarchy for Manager and Operator while
    leaving each role's available controls untouched. */
 .settings-page > .card {
@@ -552,6 +590,20 @@
 
 .settings-page .table-wrap table {
   margin: 0;
+}
+
+.settings-page[data-settings-role="operator"] .settings-operator-accounts__table {
+  max-height: min(62vh, 560px);
+  overflow: auto;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
+}
+
+.settings-page[data-settings-role="operator"] .settings-operator-accounts__table thead th {
+  position: sticky;
+  z-index: 2;
+  top: 0;
+  background: var(--surface-2);
 }
 
 @media (max-width: 520px) {

@@ -1,4 +1,4 @@
-import type { LessonPart, LessonPartCode } from "@e4s/contracts";
+import type { ContentGenerationFindingView, LessonPart, LessonPartCode } from "@e4s/contracts";
 import { validateLessonPartOrder } from "../learning/index.js";
 
 const requiredParts = [
@@ -24,8 +24,21 @@ export interface ContentLessonDraft {
 
 export interface ContentValidationIssue {
   dayNumber: number;
-  code: LessonPartCode | "title" | "order" | "weekly_practice";
+  code: LessonPartCode | "title" | "order" | "weekly_practice" | "generation";
   message: string;
+}
+
+export function validateGenerationFindingsForPublication(
+  findings: readonly ContentGenerationFindingView[] = []
+): { valid: boolean; issues: ContentValidationIssue[] } {
+  const issues = findings
+    .filter((finding) => finding.severity === "error")
+    .map((finding) => ({
+      dayNumber: finding.dayNumber ?? 0,
+      code: "generation" as const,
+      message: finding.message
+    }));
+  return { valid: issues.length === 0, issues };
 }
 
 export interface WeeklyPracticePublicationInput {
@@ -60,7 +73,8 @@ export function validateLessonDraft(lessons: readonly ContentLessonDraft[]): {
  */
 export function validateLessonPublication(
   lessons: readonly ContentLessonDraft[],
-  weeklyPractice?: WeeklyPracticePublicationInput
+  weeklyPractice?: WeeklyPracticePublicationInput,
+  cefr?: string
 ): { valid: boolean; issues: ContentValidationIssue[] } {
   const issues = [...validateLessonDraft(lessons).issues];
   const add = (lesson: ContentLessonDraft, code: ContentValidationIssue["code"], message: string) => {
@@ -90,7 +104,18 @@ export function validateLessonPublication(
     const pronunciation = parts.get("pronunciation");
     if (pronunciation) {
       if (!hasText(pronunciation.focus)) add(lesson, "pronunciation", "Phát âm chưa có âm mục tiêu.");
-      if (textArray(pronunciation.words).length < 3) add(lesson, "pronunciation", "Phát âm cần đủ 3 từ luyện.");
+      const focus = text(pronunciation.focus).match(/\/([^/]+)\//u)?.[1]?.trim() ?? text(pronunciation.focus);
+      if (focus && !supportedPronunciationFocus.has(focus)) add(lesson, "pronunciation", `Âm mục tiêu /${focus}/ không thuộc inventory phát âm được hỗ trợ.`);
+      const words = Array.isArray(pronunciation.words) ? pronunciation.words : [];
+      if (words.length !== 3) add(lesson, "pronunciation", "Phát âm cần đúng 3 từ luyện.");
+      else {
+        for (const [index, item] of words.slice(0, 3).entries()) {
+          const word = asRecord(item);
+          const ipa = text(word.ipa);
+          if (!hasText(word.word) || !ipa) add(lesson, "pronunciation", `Từ phát âm ${index + 1} cần có từ và IPA chuẩn.`);
+          else if (focus && !ipaContainsPronunciationFocus(ipa, focus)) add(lesson, "pronunciation", `${text(word.word)} không chứa âm mục tiêu /${focus}/ trong IPA.`);
+        }
+      }
     }
 
     validateChoicePart(lesson, "listening", parts.get("listening"), add, true);
@@ -103,6 +128,7 @@ export function validateLessonPublication(
       if (!hasText(writing.prompt ?? writing.question)) add(lesson, "writing", "Bài tập Viết chưa có đề bài.");
       if (!hasText(writing.answer ?? writing.modelAnswer)) add(lesson, "writing", "Bài tập Viết chưa có đáp án hoặc câu mẫu.");
       const kind = text(writing.type).toLowerCase();
+      if (kind === "fill" && (text(writing.prompt ?? writing.question).match(/___/g)?.length ?? 0) !== 1) add(lesson, "writing", "Bài điền cần có đúng một chỗ trống ___.");
       if ((kind === "mcq" || kind === "choice") && !validChoice(writing)) add(lesson, "writing", "Bài tập Viết trắc nghiệm cần 4 lựa chọn khác nhau và đáp án trùng nguyên văn một lựa chọn.");
     }
 
@@ -111,6 +137,15 @@ export function validateLessonPublication(
       if (!hasText(speaking.prompt ?? speaking.instruction)) add(lesson, "speaking", "Phần Nói chưa có yêu cầu cho học viên.");
       if (!hasText(speaking.sample ?? speaking.modelAnswer ?? speaking.answer)) add(lesson, "speaking", "Phần Nói chưa có câu mẫu để học và chấm.");
     }
+
+    if (isEnglishOnlyLevel(cefr)) {
+      if (containsVietnameseLearnerText(lesson.title)) add(lesson, "title", "B1+ requires the learner-facing lesson title to be in English.");
+      for (const part of lesson.parts) {
+        if (containsVietnameseLearnerText(part.title) || learnerFacingPartContainsVietnamese(part)) {
+          add(lesson, part.code, "B1+ requires all learner-facing content in this section to be in English; only vocabulary meanings may be Vietnamese.");
+        }
+      }
+    }
   }
 
   if (weeklyPractice) {
@@ -118,6 +153,9 @@ export function validateLessonPublication(
     if (!weeklyPractice.task.trim()) issues.push({ dayNumber, code: "weekly_practice", message: "Bài cuối tuần chưa có đề bài." });
     if (!weeklyPractice.guidance.trim()) issues.push({ dayNumber, code: "weekly_practice", message: "Bài cuối tuần chưa có hướng dẫn." });
     if (!weeklyPractice.requiredVocabulary.some((item) => item.trim())) issues.push({ dayNumber, code: "weekly_practice", message: "Bài cuối tuần chưa có từ bắt buộc." });
+    if (isEnglishOnlyLevel(cefr) && (containsVietnameseLearnerText(weeklyPractice.task) || containsVietnameseLearnerText(weeklyPractice.guidance))) {
+      issues.push({ dayNumber, code: "weekly_practice", message: "B1+ requires the weekly-practice task and guidance to be in English." });
+    }
   }
   return { valid: issues.length === 0, issues };
 }
@@ -126,13 +164,14 @@ export function submitContentForReview(input: {
   status: "draft" | "review" | "published" | "retired";
   lessons: readonly ContentLessonDraft[];
   weeklyPractice?: WeeklyPracticePublicationInput;
+  cefr?: string;
 }): { status: "review" } {
   if (input.status !== "draft") throw new Error("CONTENT_NOT_DRAFT");
   const days = [...new Set(input.lessons.map((lesson) => lesson.dayNumber))].sort((a, b) => a - b);
   if (days.length !== 5 || days.some((day, index) => day !== index + 1)) {
     throw new Error("CONTENT_LESSON_SET_INCOMPLETE");
   }
-  const validation = validateLessonPublication(input.lessons, input.weeklyPractice);
+  const validation = validateLessonPublication(input.lessons, input.weeklyPractice, input.cefr);
   if (!validation.valid) throw new Error("CONTENT_VALIDATION_FAILED");
   return { status: "review" };
 }
@@ -175,6 +214,46 @@ function hasNumberedSteps(content: Record<string, unknown>): boolean {
 function grammarIsUnavailable(content: Record<string, unknown>): boolean {
   return content.hidden === true
     && (text(content.status) === "unavailable" || ["no_suitable_content", "insufficient_evidence"].includes(text(content.reason)));
+}
+
+const vietnameseLearnerWords = new Set([
+  "bạn", "hãy", "học", "đọc", "nghe", "nói", "viết", "chọn", "điền", "làm", "luyện", "dùng", "giữ", "xem", "thử", "bấm",
+  "câu", "âm", "từ", "bài", "cấu", "trúc", "ngữ", "pháp", "phát", "mục", "tiêu", "sau", "nếu", "các", "khi", "để", "và", "với",
+  "của", "trong", "theo", "lại", "lịch", "sự", "một", "những", "này", "được", "cho", "về", "trên", "dưới", "giải", "thích",
+  "trình", "bày", "hoàn", "thành", "đáp", "án", "gợi", "ý", "thực", "hành", "người", "nội", "dung"
+]);
+
+const supportedPronunciationFocus = new Set([
+  "p", "b", "t", "d", "k", "g", "f", "v", "θ", "ð", "s", "z", "ʃ", "ʒ", "h", "tʃ", "dʒ", "m", "n", "ŋ", "l", "r", "j", "w",
+  "ɪ", "iː", "ʊ", "uː", "e", "ə", "ɜː", "ɔː", "æ", "ʌ", "ɑː", "ɒ", "eɪ", "aɪ", "ɔɪ", "aʊ", "əʊ", "ɪə", "eə", "ʊə"
+]);
+
+function ipaContainsPronunciationFocus(ipa: string, focus: string): boolean {
+  const normalizedIpa = ipa.replaceAll("/", "").replace(/[ˈˌ\s]/gu, "");
+  const normalizedFocus = focus.replaceAll("/", "").replace(/[ˈˌ\s]/gu, "");
+  return Boolean(normalizedIpa && normalizedFocus && normalizedIpa.includes(normalizedFocus));
+}
+
+function isEnglishOnlyLevel(cefr: string | undefined): boolean {
+  return cefr === "B1" || cefr === "B2" || cefr === "C1";
+}
+
+/** Detect Vietnamese instructional prose by words, not merely accents. */
+export function containsVietnameseLearnerText(value: unknown): boolean {
+  if (typeof value !== "string") return false;
+  const words = value.toLocaleLowerCase("vi").match(/[\p{L}]+/gu) ?? [];
+  return words.some((word) => vietnameseLearnerWords.has(word));
+}
+
+function learnerFacingPartContainsVietnamese(part: LessonPart): boolean {
+  const visit = (value: unknown, parentKey = ""): boolean => {
+    if (/meaning$/i.test(parentKey) && part.code === "vocabulary") return false;
+    if (containsVietnameseLearnerText(value)) return true;
+    if (Array.isArray(value)) return value.some((item) => visit(item, parentKey));
+    if (!value || typeof value !== "object") return false;
+    return Object.entries(value as Record<string, unknown>).some(([key, item]) => visit(item, key));
+  };
+  return visit(part.content);
 }
 
 function nonEmptyArray(value: unknown): boolean {

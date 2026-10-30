@@ -89,7 +89,7 @@ services:
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
       ANTHROPIC_MODEL: ${ANTHROPIC_MODEL:-claude-sonnet-4-5}
       RESEND_API_KEY: ${RESEND_API_KEY:-}
-      RESEND_FROM_EMAIL: ${RESEND_FROM_EMAIL:-E4S <onboarding@resend.dev>}
+      RESEND_FROM_EMAIL: ${RESEND_FROM_EMAIL:-E4S <no-reply@e4s.gfts.vn>}
       AUTH_OTP_SECRET: ${AUTH_OTP_SECRET:-local-only-change-me}
       GROQ_API_KEY: ${GROQ_API_KEY:-}
       GROQ_MODEL: ${GROQ_MODEL:-qwen/qwen3.8-27b}

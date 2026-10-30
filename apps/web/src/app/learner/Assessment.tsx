@@ -260,7 +260,9 @@ function ActiveAssessment({ view, actions, section, sectionIndex, runtime, local
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
   }, [submitConfirm, submitCountdown]);
-  const submitDisabled = busy || submitCountdown !== null || savingCount > 0 || audioBusyCount > 0;
+  // Ordinary autosave must not make the submit button flash. `complete()` waits
+  // for any in-flight save and persists the latest local values before submit.
+  const submitDisabled = busy || submitCountdown !== null || audioBusyCount > 0;
   const completionWarning = assessmentCompletionWarning(section, local, attempt.responses);
   return <>
   <div className="app-learner-page test-page">
@@ -276,7 +278,7 @@ function ActiveAssessment({ view, actions, section, sectionIndex, runtime, local
     <section className="card assessment-content-card">
       <h2>Phần {sectionIndex + 1} – {section.title} <span className="badge">{section.maxScore} điểm</span></h2>
       {section.instructions.length ? <p className="small assessment-section-instructions">{section.instructions.join(" · ")}</p> : null}
-      {section.code === "speaking" ? <p className="small muted assessment-speaking-upload-guide">Mỗi câu: ghi âm trực tiếp hoặc tải MP3, M4A, WAV, OGG hoặc WebM · tối đa 20 MB.</p> : null}
+      {section.code === "speaking" ? <p className="small muted assessment-speaking-upload-guide">Mỗi task: ghi âm trực tiếp hoặc tải MP3, M4A, WAV, OGG hoặc WebM · tối đa 20 MB.</p> : null}
       <div className="assessment-section-groups">
     {section.groups.map((group, groupIndex) => <section className={`card soft assessment-task-group assessment-task-group-${section.code}`} style={{ marginTop: 0 }} key={group.key}>
       <div className="assessment-task-group-heading"><h3 className="assessment-task-group-title">{group.title}</h3>{section.code === "writing" && group.tasks.length === 1 ? <span className="badge">{group.tasks[0]?.maxScore} điểm</span> : null}</div>

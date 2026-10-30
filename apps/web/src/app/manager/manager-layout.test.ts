@@ -24,6 +24,17 @@ describe("Manager layout rhythm contract", () => {
     expect(css).toMatch(/\.manager-operator-list\s*\{[\s\S]*?overflow-x:\s*auto/);
   });
 
+  it("keeps a real gap between the Manager read-only banner and operations navigation", () => {
+    expect(css).toMatch(/\.manager-operations-context\s*\{[^}]*display:\s*grid[^}]*gap:\s*14px[^}]*margin-bottom:\s*16px/s);
+    expect(css).toMatch(/\.manager-operations-context\s*>\s*\.manager-operations-switcher\s*\{[^}]*margin:\s*0/s);
+  });
+
+  it("keeps the Manager operations navigation roomy, themed, and horizontally scrollable", () => {
+    expect(css).toMatch(/\.manager-operations-context\s*>\s*\.manager-operations-switcher\s*\{[^}]*display:\s*flex[^}]*flex-wrap:\s*nowrap[^}]*gap:\s*8px[^}]*padding:\s*12px[^}]*overflow-x:\s*auto[^}]*background:\s*var\(--primary-soft\)[^}]*border:\s*1px solid var\(--primary-line\)/s);
+    expect(css).toMatch(/\.manager-operations-context\s*>\s*\.manager-operations-switcher a\s*\{[^}]*min-height:\s*40px[^}]*padding:\s*10px 14px[^}]*background:\s*var\(--surface-2\)/s);
+    expect(css).toMatch(/\.manager-operations-context\s*>\s*\.manager-operations-switcher a\.active\s*\{[^}]*background:\s*var\(--primary\)[^}]*color:\s*var\(--primary-ink\)/s);
+  });
+
   it("keeps Manager modals fixed to the viewport instead of the long page document", () => {
     expect(css).toMatch(/\.manager-modal-backdrop\s*\{[\s\S]*?position:\s*fixed[\s\S]*?inset:\s*0[\s\S]*?display:\s*grid/);
   });
@@ -38,9 +49,23 @@ describe("Manager layout rhythm contract", () => {
     expect(css).toMatch(/\.manager-accounts-pagination\s*\{[\s\S]*?display:\s*flex[\s\S]*?flex-wrap:\s*wrap/);
   });
 
+  it("keeps all six Manager account columns readable without collapsing the action buttons", () => {
+    expect(css).toMatch(/\.settings-action-table\s+\.manager-accounts-table__table\s*\{[^}]*min-width:\s*960px[^}]*table-layout:\s*fixed/s);
+    for (let column = 1; column <= 6; column += 1) {
+      expect(css).toMatch(new RegExp(`\\.manager-accounts-table__table th:nth-child\\(${column}\\)\\s*\\{\\s*width:`));
+    }
+    expect(css).toMatch(/\.manager-account-actions\s*\{[^}]*flex-wrap:\s*wrap/s);
+  });
+
   it("keeps the password reveal control fixed inside the input", () => {
     expect(css).toMatch(/\.settings-page\[data-settings-role="manager"\]\s+\.manager-password-toggle\s*\{[^}]*position:\s*absolute[^}]*inset-block:\s*5px[^}]*right:\s*6px[^}]*height:\s*auto[^}]*min-height:\s*0[^}]*padding:\s*0/s);
     expect(css).toMatch(/\.manager-password-control\s*>\s*input\s*\{[^}]*width:\s*100%[^}]*box-sizing:\s*border-box/s);
+  });
+
+  it("merges the masked PIN and eye icon into one compact control", () => {
+    expect(css).toMatch(/\.manager-account-pin\s*\{[^}]*display:\s*inline-flex[^}]*gap:\s*0[^}]*overflow:\s*hidden[^}]*border:\s*1px solid var\(--line\)/s);
+    expect(css).toMatch(/\.manager-account-pin \.manager-password-toggle\s*\{[^}]*width:\s*34px[^}]*min-width:\s*34px[^}]*border-left:\s*1px solid var\(--line\)[^}]*background:\s*transparent/s);
+    expect(css).not.toMatch(/\.manager-account-pin \.manager-password-toggle::after/);
   });
 
   it("separates the permanent-delete actions from the confirmation content", () => {
@@ -56,6 +81,17 @@ describe("Manager layout rhythm contract", () => {
   it("uses orange as an accent instead of flooding the deletion review card", () => {
     expect(css).toMatch(/\.manager-operational-card--delete\s*\{[^}]*border-left:\s*4px\s+solid\s+var\(--primary\)[^}]*background:\s*var\(--surface\)/s);
     expect(css).not.toMatch(/\.manager-operational-card--delete\s*\{[^}]*background:\s*var\(--butter\)/s);
+  });
+
+  it("prints the report inside a portrait A4 page without app background spill", () => {
+    expect(css).toMatch(/@media print\s*\{[\s\S]*?@page\s*\{\s*size:\s*A4 portrait;\s*margin:\s*12mm 10mm 14mm/);
+    expect(css).toMatch(/@media print[\s\S]*?\.manager-report-page \.report\s*\{[^}]*width:\s*186mm[^}]*max-width:\s*186mm/);
+    expect(css).toMatch(/@media print[\s\S]*?html,[\s\S]*?body,[\s\S]*?#root\s*\{[^}]*min-height:\s*0 !important[^}]*background:\s*#fff !important/);
+    expect(css).toMatch(/@media print[\s\S]*?\.manager-report-page \.rhead\s*\{[^}]*break-inside:\s*avoid[^}]*break-after:\s*avoid/);
+    expect(css).toMatch(/@media print[\s\S]*?\.manager-report-page \.foot\s*\{[^}]*break-inside:\s*avoid/);
+    expect(css).toMatch(/@media print[\s\S]*?\.manager-report-page \.manager-next-actions\s*\{[^}]*grid-template-columns:\s*repeat\(2, minmax\(0, 1fr\)\)/);
+    expect(css).toMatch(/@media print[\s\S]*?\.manager-report-page \.manager-report-learner-table th,[\s\S]*?padding:\s*1\.1mm \.9mm/);
+    expect(css).not.toMatch(/\.manager-report-page \.report > h3:nth-of-type\(3\)\s*\{[^}]*break-before:\s*page/);
   });
 
   it("keeps the pending-review badge vertically aligned with the account name", () => {

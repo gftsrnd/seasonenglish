@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type CSSProperties } from "react";
 import { createPortal } from "react-dom";
 import { CheckCircle2, ChevronLeft, LockKeyhole, Mic, RotateCcw, Square, Upload, Volume2 } from "lucide-react";
 import type {
@@ -14,6 +14,9 @@ import { ErrorText, Notice, PageTitle, AppLink } from "./ui.js";
 import { VocabularyCard as SharedVocabularyCard, type VocabularyRelationChip } from "../shared/lesson/VocabularyCard.js";
 import { conciseGrammarExample, conciseLessonObjective, conciseSpeakingInstruction, conciseSpeakingModel, learnerFacingObjective, learnerFacingObjectiveBody, learnerObjectiveLead } from "../shared/lesson/presentation.js";
 import { lessonInstructionSteps } from "../shared/lesson/instructions.js";
+import { learnerLessonCopy, learnerLessonLanguageForCefr, lessonGuidanceOrFallback, type LearnerLessonLanguage, type LearnerLessonCopy } from "../shared/lesson/language.js";
+import { lessonPartsForTab, lessonPracticeCodes, sharedLessonGrammarAvailable } from "../shared/lesson/structure.js";
+import { claimExclusiveAudio, playExclusiveMedia } from "../../features/experience/audio-precedence.js";
 export { normalizeLessonBlankPrompt } from "./text.js";
 import { normalizeLessonBlankPrompt } from "./text.js";
 
@@ -28,8 +31,7 @@ export function sanitizeGrammarSpeechText(value: string): string {
 }
 
 const studyCodes: LessonPartCode[] = ["objective", "vocabulary", "grammar", "pronunciation"];
-const studyDisplayCodes: LessonPartCode[] = ["objective", "instruction", "vocabulary", "grammar", "pronunciation"];
-const practiceCodes: LessonPartCode[] = ["listening", "reading", "writing", "word_class", "word_use", "speaking"];
+const practiceCodes: LessonPartCode[] = [...lessonPracticeCodes];
 const listenButtonStyle = { display: "inline-flex", alignItems: "center", gap: 6 } as const;
 type LessonTab = "study" | "practice";
 
@@ -79,7 +81,7 @@ function persistPronunciationListened(lessonId: string, words: Set<string>): voi
   }
 }
 
-type VocabularyModalState =
+export type VocabularyModalState =
   | { kind: "family"; item: LessonVocabularyItem }
   | { kind: "synonyms"; item: LessonVocabularyItem }
   | { kind: "antonyms"; item: LessonVocabularyItem }
@@ -88,6 +90,8 @@ type VocabularyModalState =
 
 export function LearnerLesson({ view, actions }: { view: LessonView; actions: LearnerCallbacks }) {
   const lesson = view.lesson;
+  const language = learnerLessonLanguageForCefr(lesson.cefr);
+  const copy = learnerLessonCopy[language];
   const [tab, setTab] = useState<LessonTab>(() => readLessonTab(lesson));
   const [studyComplete, setStudyComplete] = useState(() => lessonStudyIsComplete(lesson));
   const [answers, setAnswers] = useState<Record<string, string>>(() => Object.fromEntries(
@@ -166,7 +170,7 @@ export function LearnerLesson({ view, actions }: { view: LessonView; actions: Le
     setError("");
     const artifactKey = evidenceInput.artifactKey ?? mediaArtifacts[part.code];
     if (part.code === "speaking" && !artifactKey) {
-      setError("Hãy ghi âm hoặc tải file ghi âm lên trước khi kiểm tra phần Nói.");
+      setError(copy.errors.missingSpeakingEvidence);
       return;
     }
     const submittedEvidence: LessonPartAttemptEvidenceInput = {
@@ -180,7 +184,7 @@ export function LearnerLesson({ view, actions }: { view: LessonView; actions: Le
         setLocalProgress(result.progress);
         if (result.evidence.artifactKey) setMediaArtifacts((current) => ({ ...current, [part.code]: result.evidence.artifactKey! }));
       } catch {
-        setError("Chưa lưu được câu trả lời. Dữ liệu trên màn hình vẫn được giữ để bạn thử lại.");
+        setError(copy.errors.saveAnswer);
       } finally {
         stopAction();
       }
@@ -193,7 +197,7 @@ export function LearnerLesson({ view, actions }: { view: LessonView; actions: Le
       await actions.saveLessonProgress(nextProgress);
       setLocalProgress(nextProgress);
     } catch {
-      setError("Chưa lưu được câu trả lời. Dữ liệu trên màn hình vẫn được giữ để bạn thử lại.");
+      setError(copy.errors.saveAnswer);
     } finally {
       stopAction();
     }
@@ -206,7 +210,7 @@ export function LearnerLesson({ view, actions }: { view: LessonView; actions: Le
       setLocalProgress(result.progress);
       setAppealPart(null);
     } catch {
-      setError("Chưa gửi được kháng nghị. Bạn có thể thử lại.");
+      setError(copy.errors.appeal);
     } finally {
       stopAction();
     }
@@ -219,7 +223,7 @@ export function LearnerLesson({ view, actions }: { view: LessonView; actions: Le
       setStudyComplete(true);
       selectTab("practice");
     } catch {
-      setError("Chưa ghi nhận được phần Học. Nội dung vẫn được giữ để bạn thử lại.");
+      setError(copy.errors.study);
     } finally {
       stopAction();
     }
@@ -237,16 +241,12 @@ export function LearnerLesson({ view, actions }: { view: LessonView; actions: Le
       setCompletedLocally(true);
       if (lesson.progress.status !== "completed") actions.navigate("/home");
     } catch {
-      setError("Chưa ghi nhận được bài học. Nội dung vẫn được giữ để bạn thử lại.");
+      setError(copy.errors.completeLesson);
     } finally {
       stopAction();
     }
   };
-  const visible = lesson.content.parts
-    .filter((part) => isLearnerVisiblePart(part) && (tab === "study" ? studyDisplayCodes.includes(part.code) : part.code === "instruction" || practiceCodes.includes(part.code)))
-    .sort((left, right) => tab === "study"
-      ? studyDisplayCodes.indexOf(left.code) - studyDisplayCodes.indexOf(right.code)
-      : 0);
+  const visible = lessonPartsForTab(lesson.content.parts, tab);
   const evidence = localProgress.evidence;
   const requiredPronunciationWords = readPronunciationWords(
     lesson.content.parts.find((part) => part.code === "pronunciation")?.content.words
@@ -261,82 +261,73 @@ export function LearnerLesson({ view, actions }: { view: LessonView; actions: Le
   const completedPracticeCount = requiredPracticeCodes.filter((code) => partCountsTowardCompletion(localProgress, code)).length;
   const allPracticeComplete = requiredPracticeCodes.length === 0 || completedPracticeCount === requiredPracticeCodes.length;
   const completed = localProgress.status === "completed" || completedLocally;
-  const grammarAvailable = lesson.content.parts.some((part) => {
-    if (part.code !== "grammar") return false;
-    const content = part.content as Record<string, unknown>;
-    return content.hidden !== true && content.status !== "unavailable" && typeof content.formula === "string" && Boolean(content.formula.trim());
-  });
+  const grammarAvailable = sharedLessonGrammarAvailable(lesson.content.parts);
   return <div className="app-learner-page lesson-page" style={{ display: "grid", gap: 16, width: "100%", maxWidth: 960, minWidth: 0, boxSizing: "border-box", paddingBottom: "calc(88px + env(safe-area-inset-bottom))" }}>
     <div className="lesson-heading">
       <AppLink className="lesson-back" href="/home" navigate={actions.navigate} ariaLabel="Về trang chủ" title="Về trang chủ" style={{ minWidth: 32, minHeight: 32 }}><ChevronLeft size={22} aria-hidden="true" /></AppLink>
       <PageTitle
         title={`Tuần ${lesson.weekNumber} · ${lessonDayLabel(lesson.dayNumber)} · ${lesson.weekTopic}`}
-        detail={grammarAvailable ? <span className="badge lesson-structure-chip"><span>Cấu trúc</span><span data-lesson-structure>{lesson.title}</span></span> : undefined}
-        aside={<span className={`badge${completed ? " ok" : ""}`}>{completed ? "Đã hoàn thành" : lesson.progress.status === "in_progress" ? "Đang học" : "Chưa học"}</span>}
+        detail={grammarAvailable ? <span className="badge lesson-structure-chip"><span>{language === "en" ? "Structure" : "Cấu trúc"}</span><span data-lesson-structure>{lesson.title}</span></span> : undefined}
+        aside={<span className={`badge${completed ? " ok" : ""}`}>{completed ? (language === "en" ? "Completed" : "Đã hoàn thành") : lesson.progress.status === "in_progress" ? (language === "en" ? "In progress" : "Đang học") : (language === "en" ? "Not started" : "Chưa học")}</span>}
       />
     </div>
-    <section className="lesson-surface" aria-label="Bài học" style={{ display: "grid", gap: 16, minWidth: 0 }}>
-      <div className="ltabs" role="tablist" aria-label="Các bước trong bài học">
-        <button className={tab === "study" ? "active" : ""} role="tab" aria-selected={tab === "study"} type="button" onClick={() => selectTab("study")}>1. Học {studyComplete ? <CheckCircle2 className="status-icon" aria-label="Đã học" /> : null}</button>
-        <button className={tab === "practice" ? "active" : ""} role="tab" aria-selected={tab === "practice"} type="button" disabled={!studyComplete} title={studyComplete ? undefined : "Bấm Đã học xong ở bước Học trước"} onClick={() => selectTab("practice")}>2. Bài tập {studyComplete ? `${completedPracticeCount}/${requiredPracticeCodes.length}` : <><LockKeyhole className="status-icon" aria-hidden="true" /><span className="sr-only">Chưa mở</span></>}</button>
+      <section className="lesson-surface" aria-label={copy.lessonAria} style={{ display: "grid", gap: 16, minWidth: 0 }}>
+      <div className="ltabs" role="tablist" aria-label={copy.tabsAria}>
+        <button className={tab === "study" ? "active" : ""} role="tab" aria-selected={tab === "study"} type="button" onClick={() => selectTab("study")}>1. {copy.studyTab} {studyComplete ? <CheckCircle2 className="status-icon" aria-label={copy.studyDoneAria} /> : null}</button>
+        <button className={tab === "practice" ? "active" : ""} role="tab" aria-selected={tab === "practice"} type="button" disabled={!studyComplete} title={studyComplete ? undefined : copy.practiceLockedTitle} onClick={() => selectTab("practice")}>2. {copy.practiceTab} {studyComplete ? `${completedPracticeCount}/${requiredPracticeCodes.length}` : <><LockKeyhole className="status-icon" aria-hidden="true" /><span className="sr-only">{copy.practiceTab}</span></>}</button>
       </div>
       <ErrorText message={error} />
-      <ol className="stack lesson-parts" aria-label="Nội dung bài học" style={{ gap: 16, listStyle: "none", margin: 0, padding: 0 }}>{visible.map((part, index) => {
+      <ol className="stack lesson-parts" aria-label={language === "en" ? "Lesson content" : "Nội dung bài học"} style={{ gap: 16, listStyle: "none", margin: 0, padding: 0 }}>{visible.map((part, index) => {
         const partEvidence = evidence[part.code];
         const done = partIsDone(partEvidence, localProgress.completedPartCodes.includes(part.code));
         const translations = lessonTranslations(part.content);
         const displayPart = part.code === "instruction"
-          ? { ...part, content: { ...part.content, steps: lessonInstructionSteps(lesson.content.parts, tab) } }
+          ? { ...part, content: { ...part.content, steps: lessonInstructionSteps(lesson.content.parts, tab, language) } }
           : part;
         return <li className={`card lesson-part lesson-part--${part.code}`} data-part={part.code} data-testid="app-lesson-part" key={part.code} style={{ boxSizing: "border-box", minWidth: 0, display: "grid", gap: 12, padding: 18 }}>
-          <PartContent cefr={lesson.cefr} grammarAvailable={grammarAvailable} sectionNumber={visible.slice(0, index).filter((candidate) => practiceCodes.includes(candidate.code)).length + 1} part={displayPart} speak={actions.speak} openVocabularyModal={setVocabularyModal} resolveVocabularyImage={actions.resolveLessonVocabularyImage} onPronunciationListened={markPronunciationListened} />
+          <SharedLessonPartContent cefr={lesson.cefr} language={language} copy={copy} grammarAvailable={grammarAvailable} sectionNumber={visible.slice(0, index).filter((candidate) => practiceCodes.includes(candidate.code)).length + 1} part={displayPart} speak={actions.speak} openVocabularyModal={setVocabularyModal} resolveVocabularyImage={actions.resolveLessonVocabularyImage} onPronunciationListened={markPronunciationListened} />
           {practiceCodes.includes(part.code) ? <div className="stack lesson-answer" aria-busy={busyAction === part.code || undefined} style={{ gap: 12, minWidth: 0 }}>
-            {partHasVisibleOutcome(partEvidence) ? <Notice tone={partEvidence?.status === "appealed" || partEvidence?.status === "submitted" ? "info" : "warn"}>{partOutcomeLabel(partEvidence?.status)}</Notice> : null}
-            {part.code === "speaking" && !speakingUnlocked ? <Notice tone="info">Nghe đủ 3 từ mẫu phát âm ở bước Học để mở phần kiểm tra Nói.</Notice> : part.code === "speaking" ? <section className="stack lesson-speaking-answer" aria-label="Bài làm của bạn"><strong>Bài làm của bạn</strong><SpeakingEvidenceControls artifactKey={mediaArtifacts[part.code]} onUploaded={(artifactKey) => setMediaArtifacts((current) => ({ ...current, [part.code]: artifactKey }))} uploadAudio={actions.uploadAssessmentAudio} getAudioReadUrl={actions.getAssessmentAudioReadUrl} />{partEvidence?.answer?.trim() ? <section className="stack lesson-speaking-transcript" aria-label="Bản chép tự động phần Nói"><strong>Bản chép tự động</strong><output>{partEvidence.answer.trim()}</output></section> : null}</section> : <LessonAnswerControl part={part} value={answers[part.code] ?? ""} evidence={partEvidence} disabled={done || Boolean(busyAction)} onChange={(value) => setAnswers((current) => ({ ...current, [part.code]: value }))} />}
-            {isSelfWritingPart(part) ? <small>Tự viết tối thiểu 2 từ.</small> : null}
-            {part.code !== "speaking" || speakingUnlocked ? <button className="btn-primary" type="button" aria-busy={busyAction === part.code || undefined} disabled={done || Boolean(busyAction) || !hasLessonAnswer(part, answers[part.code], mediaArtifacts[part.code])} style={{ alignSelf: "flex-start", minHeight: 44 }} onClick={() => void save(part)}>{busyAction === part.code ? "Đang lưu…" : done ? "Đã xong" : part.code === "speaking" ? "Kiểm tra nói" : "Nộp bài"}</button> : null}
-            {partEvidence?.status === "wrong_exhausted" || partEvidence?.status === "wrong_retry" ? <div className="row" style={{ flexWrap: "wrap", gap: 8 }}><button className="btn-sm btn-ghost" type="button" disabled={Boolean(busyAction) || partEvidence.translationViewed} onClick={() => void save(part, { answer: answers[part.code] ?? "", translated: true })}>{partEvidence.translationViewed ? "Đã xem bản dịch" : "Xem bản dịch"}</button>{partEvidence.status === "wrong_exhausted" && actions.appealLessonPart ? <button className="btn-sm btn-ghost" type="button" aria-busy={busyAction === `appeal:${part.code}` || undefined} disabled={Boolean(busyAction)} onClick={() => setAppealPart(part.code)}>{busyAction === `appeal:${part.code}` ? "Đang gửi…" : "Gửi kháng nghị"}</button> : null}</div> : null}
-            {appealPart === part.code ? <section className="stack lesson-appeal-form" aria-label={`Kháng nghị phần ${part.title}`}>
-              <label>Lý do kháng nghị phần {part.title}<textarea aria-label={`Lý do kháng nghị phần ${part.title}`} value={appealReasons[part.code] ?? ""} onChange={(event) => setAppealReasons((current) => ({ ...current, [part.code]: event.target.value }))} /></label>
-              <small>Nhập ít nhất 5 ký tự để người duyệt hiểu điều cần xem lại.</small>
-              <div className="row"><button className="btn-sm btn-primary" type="button" disabled={Boolean(busyAction) || (appealReasons[part.code]?.trim().length ?? 0) < 5} onClick={() => void appeal(part.code, appealReasons[part.code] ?? "")}>Xác nhận gửi kháng nghị</button><button className="btn-sm btn-ghost" type="button" disabled={Boolean(busyAction)} onClick={() => setAppealPart(null)}>Huỷ</button></div>
+            {partHasVisibleOutcome(partEvidence) ? <Notice tone={partEvidence?.status === "appealed" || partEvidence?.status === "submitted" ? "info" : "warn"}>{partOutcomeLabel(partEvidence?.status, copy)}</Notice> : null}
+            {part.code === "speaking" && !speakingUnlocked ? <Notice tone="info">{copy.notices.speakingGate}</Notice> : part.code === "speaking" ? <section className="stack lesson-speaking-answer" aria-label={copy.answerLabel}><strong>{copy.answerLabel}</strong><SpeakingEvidenceControls language={language} copy={copy} artifactKey={mediaArtifacts[part.code]} onUploaded={(artifactKey) => setMediaArtifacts((current) => ({ ...current, [part.code]: artifactKey }))} uploadAudio={actions.uploadAssessmentAudio} getAudioReadUrl={actions.getAssessmentAudioReadUrl} />{partEvidence?.answer?.trim() ? <section className="stack lesson-speaking-transcript" aria-label={language === "en" ? "Automatic Speaking transcript" : "Bản chép tự động phần Nói"}><strong>{language === "en" ? "Automatic transcript" : "Bản chép tự động"}</strong><output>{partEvidence.answer.trim()}</output></section> : null}</section> : <LessonAnswerControl language={language} copy={copy} part={part} value={answers[part.code] ?? ""} evidence={partEvidence} disabled={done || Boolean(busyAction)} onChange={(value) => setAnswers((current) => ({ ...current, [part.code]: value }))} />}
+            {isSelfWritingPart(part) ? <small>{language === "en" ? "Write at least two words." : "Tự viết tối thiểu 2 từ."}</small> : null}
+            {part.code !== "speaking" || speakingUnlocked ? <button className="btn-primary" type="button" aria-busy={busyAction === part.code || undefined} disabled={done || Boolean(busyAction) || !hasLessonAnswer(part, answers[part.code], mediaArtifacts[part.code])} style={{ alignSelf: "flex-start", minHeight: 44 }} onClick={() => void save(part)}>{busyAction === part.code ? copy.buttons.checking : done ? copy.buttons.completed : part.code === "speaking" ? (language === "en" ? "Check speaking" : "Kiểm tra nói") : copy.buttons.submit}</button> : null}
+            {partEvidence?.status === "wrong_exhausted" || partEvidence?.status === "wrong_retry" ? <div className="row" style={{ flexWrap: "wrap", gap: 8 }}><button className="btn-sm btn-ghost" type="button" disabled={Boolean(busyAction) || partEvidence.translationViewed} onClick={() => void save(part, { answer: answers[part.code] ?? "", translated: true })}>{partEvidence.translationViewed ? copy.status.translated : (language === "en" ? "View translation" : "Xem bản dịch")}</button>{partEvidence.status === "wrong_exhausted" && actions.appealLessonPart ? <button className="btn-sm btn-ghost" type="button" aria-busy={busyAction === `appeal:${part.code}` || undefined} disabled={Boolean(busyAction)} onClick={() => setAppealPart(part.code)}>{busyAction === `appeal:${part.code}` ? copy.buttons.checking : (language === "en" ? "Appeal" : "Gửi kháng nghị")}</button> : null}</div> : null}
+            {appealPart === part.code ? <section className="stack lesson-appeal-form" aria-label={`${language === "en" ? "Appeal" : "Kháng nghị"} ${part.title}`}>
+              <label>{language === "en" ? `Appeal reason for ${part.title}` : `Lý do kháng nghị phần ${part.title}`}<textarea aria-label={language === "en" ? `Appeal reason for ${part.title}` : `Lý do kháng nghị phần ${part.title}`} value={appealReasons[part.code] ?? ""} onChange={(event) => setAppealReasons((current) => ({ ...current, [part.code]: event.target.value }))} /></label>
+              <small>{language === "en" ? "Write at least five characters so the reviewer can understand what to check." : "Nhập ít nhất 5 ký tự để người duyệt hiểu điều cần xem lại."}</small>
+              <div className="row"><button className="btn-sm btn-primary" type="button" disabled={Boolean(busyAction) || (appealReasons[part.code]?.trim().length ?? 0) < 5} onClick={() => void appeal(part.code, appealReasons[part.code] ?? "")}>{copy.buttons.sendAppeal}</button><button className="btn-sm btn-ghost" type="button" disabled={Boolean(busyAction)} onClick={() => setAppealPart(null)}>{copy.buttons.cancel}</button></div>
             </section> : null}
             {partEvidence?.feedback ? <Notice tone={partEvidence.status === "correct" ? "ok" : partEvidence.status === "appealed" || partEvidence.status === "submitted" ? "info" : "warn"}>{partEvidence.feedback}</Notice> : null}
-            {partEvidence?.status === "wrong_retry" && safeLessonHint(part.content) ? <Notice tone="info">Gợi ý: {safeLessonHint(part.content)}</Notice> : null}
-            {partEvidence?.status === "wrong_exhausted" && lessonCorrectAnswer(part.content) ? <Notice tone="info">Đáp án: {lessonCorrectAnswer(part.content)}</Notice> : null}
-            {translations && (partEvidence?.status === "correct" || partEvidence?.status === "translated" || partEvidence?.translationViewed) ? <section className="card flat stack" aria-label={`Bản dịch phần ${part.title}`}><strong>Bản dịch tiếng Việt</strong><span>Câu hỏi: {translations.question}</span><span>Đáp án: {translations.answer}</span></section> : null}
+            {partEvidence?.status === "wrong_retry" && safeLessonHint(part.content) ? <Notice tone="info">{copy.hintLabel}: {safeLessonHint(part.content)}</Notice> : null}
+            {partEvidence?.status === "wrong_exhausted" && lessonCorrectAnswer(part.content) ? <Notice tone="info">{copy.answerRevealLabel}: {lessonCorrectAnswer(part.content)}</Notice> : null}
+            {translations && (partEvidence?.status === "correct" || partEvidence?.status === "translated" || partEvidence?.translationViewed) ? <section className="card flat stack" aria-label={`${language === "en" ? copy.translationHeading : "Bản dịch phần"} ${part.title}`}><strong>{copy.translationHeading}</strong><span>{copy.translationQuestionLabel}: {translations.question}</span><span>{copy.translationAnswerLabel}: {translations.answer}</span></section> : null}
           </div> : null}
         </li>;
       })}</ol>
-      {tab === "study" ? <section className="card lesson-study-cta"><div><strong>{studyComplete ? "Bạn đã học xong phần này" : "Học xong 3 mục trên chưa?"}</strong><p className="small">Bước 2 có {requiredPracticeCodes.length} phần bài tập: {requiredPracticeCodes.map(partLabel).join(" → ")}.</p></div><button className="btn-primary btn-lg" type="button" disabled={Boolean(busyAction)} onClick={() => studyComplete ? selectTab("practice") : void finishStudy()}>{busyAction === "study" ? "Đang lưu…" : studyComplete ? "Sang bài tập →" : <><CheckCircle2 size={18} aria-hidden="true" /> Đã học xong → Làm bài tập</>}</button></section> : null}
+      {tab === "study" ? <section className="card lesson-study-cta"><div><strong>{studyComplete ? (language === "en" ? "You have completed this step" : "Bạn đã học xong phần này") : (language === "en" ? "Have you completed the three Study sections?" : "Học xong 3 mục trên chưa?")}</strong><p className="small">{language === "en" ? `Practice has ${requiredPracticeCodes.length} sections: ${requiredPracticeCodes.map((code) => partLabel(code, language)).join(" → ")}.` : `Bước 2 có ${requiredPracticeCodes.length} phần bài tập: ${requiredPracticeCodes.map((code) => partLabel(code, language)).join(" → ")}.`}</p></div><button className="btn-primary btn-lg" type="button" disabled={Boolean(busyAction)} onClick={() => studyComplete ? selectTab("practice") : void finishStudy()}>{busyAction === "study" ? copy.buttons.checking : studyComplete ? copy.buttons.moveToPractice : <><CheckCircle2 size={18} aria-hidden="true" /> {copy.buttons.studyDone}</>}</button></section> : null}
     </section>
-    <section className="card lesson-completion" aria-label="Hoàn thành bài học"><div><strong>{completed ? "Bạn đã học bài này rồi, ôn lại thoải mái!" : allPracticeComplete ? "Đủ các phần rồi! Bấm Hoàn thành để mở bài tiếp theo." : `Đã xong ${completedPracticeCount}/${requiredPracticeCodes.length} phần. Làm nốt rồi bấm Hoàn thành nhé.`}</strong></div><div className="row"><button className="btn-primary btn-lg" type="button" disabled={Boolean(busyAction) || (!completed && !allPracticeComplete)} title={!completed && !allPracticeComplete ? `Làm xong ${requiredPracticeCodes.length} phần bài tập trước` : undefined} onClick={() => void completeLesson()}>{busyAction === "complete" ? "Đang lưu…" : completed ? "Lưu lần ôn này" : "Hoàn thành bài"}</button><AppLink className="btn btn-ghost" href="/coach" navigate={actions.navigate}>Luyện với Season</AppLink></div></section>
-    {vocabularyModal ? <VocabularyModal state={vocabularyModal} speak={actions.speak} close={() => setVocabularyModal(null)} /> : null}
+    <section className="card lesson-completion" aria-label={language === "en" ? "Complete lesson" : "Hoàn thành bài học"}><div><strong>{completed ? (language === "en" ? "You have completed this lesson. Review it whenever you like." : "Bạn đã học bài này rồi, ôn lại thoải mái!") : allPracticeComplete ? (language === "en" ? "All sections are complete. Select Complete lesson to unlock the next lesson." : "Đủ các phần rồi! Bấm Hoàn thành để mở bài tiếp theo.") : (language === "en" ? `Completed ${completedPracticeCount}/${requiredPracticeCodes.length} sections. Finish the remaining sections, then complete the lesson.` : `Đã xong ${completedPracticeCount}/${requiredPracticeCodes.length} phần. Làm nốt rồi bấm Hoàn thành nhé.`)}</strong></div><div className="row"><button className="btn-primary btn-lg" type="button" disabled={Boolean(busyAction) || (!completed && !allPracticeComplete)} title={!completed && !allPracticeComplete ? (language === "en" ? `Complete ${requiredPracticeCodes.length} practice sections first` : `Làm xong ${requiredPracticeCodes.length} phần bài tập trước`) : undefined} onClick={() => void completeLesson()}>{busyAction === "complete" ? copy.buttons.checking : completed ? copy.buttons.saveReview : copy.buttons.finishLesson}</button><AppLink className="btn btn-ghost" href="/coach" navigate={actions.navigate}>{language === "en" ? "Practise with Season" : "Luyện với Season"}</AppLink></div></section>
+    {vocabularyModal ? <SharedVocabularyModal state={vocabularyModal} speak={actions.speak} language={language} close={() => setVocabularyModal(null)} /> : null}
   </div>;
 }
 
 function lessonStudyIsComplete(lesson: LessonView["lesson"]): boolean {
   if (lesson.progress.status === "completed") return true;
   const studyPartCodes = lesson.content.parts.map((part) => part.code).filter((code) => studyCodes.includes(code));
-  const hasTerminalPractice = lesson.content.parts.some((part) => practiceCodes.includes(part.code) && partIsDone(
-    lesson.progress.evidence[part.code], lesson.progress.completedPartCodes.includes(part.code)
-  ));
-  return hasTerminalPractice || (studyPartCodes.length > 0 && studyPartCodes.every((code) => lesson.progress.completedPartCodes.includes(code)));
+  return studyPartCodes.length > 0 && studyPartCodes.every((code) => lesson.progress.completedPartCodes.includes(code));
 }
 
-function isLearnerVisiblePart(part: LessonPart): boolean {
-  const content = part.content as Record<string, unknown>;
-  return !(part.code === "grammar" && content.hidden === true && content.status === "unavailable");
-}
-
-function partLabel(code: LessonPartCode): string {
-  const labels: Partial<Record<LessonPartCode, string>> = {
-    listening: "Nghe", reading: "Đọc", writing: "Viết", word_class: "Từ loại", word_use: "Dùng từ", speaking: "Nói"
+function partLabel(code: LessonPartCode, language: LearnerLessonLanguage = "vi"): string {
+  const labels: Record<LearnerLessonLanguage, Partial<Record<LessonPartCode, string>>> = {
+    vi: { listening: "Nghe", reading: "Đọc", writing: "Viết", word_class: "Từ loại", word_use: "Dùng từ", speaking: "Nói" },
+    en: { listening: "Listening", reading: "Reading", writing: "Writing", word_class: "Word class", word_use: "Word use", speaking: "Speaking" }
   };
-  return labels[code] ?? code;
+  return labels[language][code] ?? code;
 }
 
-function LessonAnswerControl({ part, value, disabled, hideLabel = false, evidence, onChange }: {
+export function LessonAnswerControl({ language, copy, part, value, disabled, hideLabel = false, evidence, onChange }: {
+  language: LearnerLessonLanguage;
+  copy: LearnerLessonCopy;
   part: LessonPart;
   value: string;
   disabled: boolean;
@@ -349,16 +340,16 @@ function LessonAnswerControl({ part, value, disabled, hideLabel = false, evidenc
     ? content.options.filter((option): option is string => typeof option === "string" && Boolean(option.trim()))
     : [];
   if (content.type !== "fill" && options.length) {
-    return <fieldset className="stack" aria-label={`Câu trả lời ${part.code}`} disabled={disabled}>
-      <legend>Bài làm của bạn <span className="badge">trắc nghiệm</span></legend>
+    return <fieldset className="stack" aria-label={copy.answerAria(part.code)} disabled={disabled}>
+      <legend>{copy.answerLabel} <span className="badge">{copy.multipleChoiceLabel}</span></legend>
       {options.map((option, index) => <label className={`opt${value === option ? " sel" : ""}`} key={option} style={evidence?.answer === option && ["wrong_retry", "wrong_exhausted"].includes(evidence.status ?? "") ? { textDecoration: "line-through", opacity: .65 } : undefined}>
         <input type="radio" name={`lesson-${part.code}`} value={option} checked={value === option} onChange={() => onChange(option)} />
         <span><b>{String.fromCharCode(65 + index)}.</b> {option}</span>
       </label>)}
     </fieldset>;
   }
-  const textarea = <textarea aria-label={`Câu trả lời ${part.code}`} value={value} disabled={disabled} onChange={(event) => onChange(event.target.value)} />;
-  return hideLabel ? textarea : <label>Bài làm của bạn{textarea}</label>;
+  const textarea = <textarea aria-label={copy.answerAria(part.code)} value={value} disabled={disabled} onChange={(event) => onChange(event.target.value)} />;
+  return hideLabel ? textarea : <label>{copy.answerLabel}{textarea}</label>;
 }
 
 function lessonCorrectAnswer(content: Record<string, unknown>): string | null {
@@ -406,15 +397,15 @@ function isSelfWritingPart(part: LessonPart): boolean {
   return part.code === "writing" && (part.content.type === undefined || part.content.type === "write");
 }
 
-function partOutcomeLabel(status: PartEvidence["status"]): string {
+function partOutcomeLabel(status: PartEvidence["status"], copy: LearnerLessonCopy): string {
   switch (status) {
-    case "wrong_retry": return "Chưa đúng · còn lượt thử";
-    case "submitted": return "Đã gửi để kiểm tra";
-    case "wrong_exhausted": return "Đã hết lượt thử";
-    case "translated": return "Đã xem bản dịch";
-    case "appealed": return "Đã gửi kháng nghị";
-    case "correct": return "Đúng";
-    default: return "Chưa trả lời";
+    case "wrong_retry": return copy.status.wrongRetry;
+    case "submitted": return copy.status.submitted;
+    case "wrong_exhausted": return copy.status.wrongExhausted;
+    case "translated": return copy.status.translated;
+    case "appealed": return copy.status.appealed;
+    case "correct": return copy.status.correct;
+    default: return copy.status.unanswered;
   }
 }
 
@@ -432,23 +423,75 @@ function formatLessonDate(value: string): string {
 
 type LessonAudioSource = { text?: string; src?: string };
 
-function LessonAudioControl({ source, speak, label = "Listening" }: { source: LessonAudioSource; speak: LearnerCallbacks["speak"]; label?: string }) {
+function ExclusiveLessonAudio({
+  src,
+  label,
+  onError,
+  style
+}: {
+  src: string;
+  label: string;
+  onError?: () => void;
+  style?: CSSProperties;
+}) {
+  const audioRef = useRef<HTMLAudioElement>(null);
+  const releaseRef = useRef<(() => void) | undefined>(undefined);
+  const release = () => {
+    const current = releaseRef.current;
+    releaseRef.current = undefined;
+    current?.();
+  };
+  useEffect(() => () => release(), []);
+  const claim = () => {
+    if (releaseRef.current) return;
+    const audio = audioRef.current;
+    if (!audio) return;
+    const claimed = claimExclusiveAudio("media", () => {
+      audio.pause();
+      audio.currentTime = 0;
+    });
+    if (!claimed) {
+      audio.pause();
+      audio.currentTime = 0;
+      return;
+    }
+    releaseRef.current = claimed;
+  };
+  return <audio
+    ref={audioRef}
+    controls
+    preload="metadata"
+    src={src}
+    aria-label={label}
+    style={style}
+    onPlay={claim}
+    onPause={release}
+    onEnded={release}
+    onError={() => { release(); onError?.(); }}
+  />;
+}
+
+function LessonAudioControl({ source, speak, copy, language, label = "Listening" }: { source: LessonAudioSource; speak: LearnerCallbacks["speak"]; copy: LearnerLessonCopy; language: LearnerLessonLanguage; label?: string }) {
   const [failed, setFailed] = useState(false);
   const [attempt, setAttempt] = useState(0);
-  if (!source.src && !source.text) return <Notice tone="warn">Chưa có nội dung âm thanh cho phần Nghe.</Notice>;
+  if (!source.src && !source.text) return <Notice tone="warn">{copy.errors.noAudio}</Notice>;
   if (source.src) return <div className="stack" aria-label={label}>
-    <audio key={`${source.src}-${attempt}`} controls preload="metadata" src={source.src} aria-label={`Nghe audio phần ${label.replace(/^Nghe phần\s+/u, "")}`} style={{ maxWidth: "100%", width: "100%" }} onError={() => setFailed(true)} />
-    {failed ? <><Notice tone="warn">Không phát được file âm thanh. Bạn có thể thử lại.</Notice><button className="btn-sm btn-ghost" type="button" style={{ alignItems: "center", display: "inline-flex", gap: 6, minHeight: 44 }} onClick={() => { setFailed(false); setAttempt((value) => value + 1); }}><RotateCcw size={16} aria-hidden="true" /> Thử lại audio</button></> : null}
+    <ExclusiveLessonAudio key={`${source.src}-${attempt}`} src={source.src} label={`Nghe audio phần ${label.replace(/^Nghe phần\s+/u, "")}`} style={{ maxWidth: "100%", width: "100%" }} onError={() => setFailed(true)} />
+    {failed ? <><Notice tone="warn">{copy.errors.audioFailed}</Notice><button className="btn-sm btn-ghost" type="button" style={{ alignItems: "center", display: "inline-flex", gap: 6, minHeight: 44 }} onClick={() => { setFailed(false); setAttempt((value) => value + 1); }}><RotateCcw size={16} aria-hidden="true" /> {copy.notices.retryAudio}</button></> : null}
   </div>;
-  return <button className="btn-sm btn-ghost vocabulary-card-sound lesson-audio-primary lesson-listening-audio-button" type="button" aria-label={`Nghe nội dung phần ${label}`} onClick={() => speak(source.text!, "en-US", { rate: 0.85 })}><Volume2 size={16} aria-hidden="true" /> Nghe nội dung</button>;
+  return <button className="btn-sm btn-ghost vocabulary-card-sound lesson-audio-primary lesson-listening-audio-button" type="button" aria-label={`${language === "en" ? "Listen to" : "Nghe nội dung phần"} ${label}`} onClick={() => speak(source.text!, "en-US", { rate: 0.85 })}><Volume2 size={16} aria-hidden="true" /> {language === "en" ? "Listen" : "Nghe nội dung"}</button>;
 }
 
 function SpeakingEvidenceControls({
+  language,
+  copy,
   artifactKey,
   onUploaded,
   uploadAudio,
   getAudioReadUrl
 }: {
+  language: LearnerLessonLanguage;
+  copy: LearnerLessonCopy;
   artifactKey?: string | undefined;
   onUploaded: (artifactKey: string) => void;
   uploadAudio: (file: Blob, filename: string) => Promise<string | import("./contracts.js").LearnerAudioUpload>;
@@ -480,7 +523,7 @@ function SpeakingEvidenceControls({
       const signed = await getAudioReadUrl(artifactKey);
       setAudioUrl(signed.url);
     } catch {
-      setReadError("Không tải được bản ghi âm đã lưu. Bạn có thể thử lại.");
+      setReadError(copy.errors.savedAudioFailed);
     } finally {
       setReadBusy(false);
     }
@@ -494,12 +537,12 @@ function SpeakingEvidenceControls({
   const send = async (file: File) => {
     if (!file.type.startsWith("audio/") && !/\.(mp3|m4a|wav|ogg|oga|webm|aac|flac|amr|3gp)$/i.test(file.name)) {
       setPendingFile(file);
-      setError("Hãy chọn file âm thanh (mp3, m4a, wav, webm…).");
+      setError(copy.errors.invalidAudio);
       return;
     }
     if (file.size > 20 * 1024 * 1024) {
       setPendingFile(file);
-      setError("File quá lớn (tối đa 20 MB). Bạn có thể chọn file khác rồi thử lại.");
+      setError(copy.errors.audioTooLarge);
       return;
     }
     setPendingFile(file);
@@ -515,7 +558,7 @@ function SpeakingEvidenceControls({
       });
       onUploaded(savedKey);
     } catch {
-      setError("Không tải được file ghi âm. Bạn có thể thử lại.");
+      setError(copy.errors.uploadFailed);
     } finally {
       setBusy(false);
     }
@@ -523,7 +566,7 @@ function SpeakingEvidenceControls({
 
   const startRecording = async () => {
     if (!canRecord) {
-      setError("Trình duyệt này không ghi âm được: bạn sẽ nộp phần Nói bằng cách tải file lên.");
+      setError(copy.errors.recorderUnavailable);
       return;
     }
     setError("");
@@ -539,7 +582,7 @@ function SpeakingEvidenceControls({
         recorder.current = null;
         stream.current = null;
         setRecording(false);
-        setError("Ghi âm bị gián đoạn. Bạn có thể thử lại hoặc tải file lên.");
+        setError(copy.errors.recordingInterrupted);
       };
       next.onstop = () => {
         acquired.getTracks().forEach((track) => track.stop());
@@ -553,7 +596,7 @@ function SpeakingEvidenceControls({
       next.start();
       setRecording(true);
     } catch {
-      setError("Không dùng được micro – hãy tải file ghi âm lên.");
+      setError(copy.errors.microphoneUnavailable);
     }
   };
 
@@ -563,27 +606,29 @@ function SpeakingEvidenceControls({
     setRecording(false);
   };
 
-  return <section className="stack" aria-label="Bằng chứng nói">
-    {!canRecord ? <Notice tone="warn">Trình duyệt này không ghi âm được: bạn sẽ nộp phần Nói bằng cách tải file lên.</Notice> : null}
+  return <section className="stack" aria-label={language === "en" ? "Speaking evidence" : "Bằng chứng nói"}>
+    {!canRecord ? <Notice tone="warn">{copy.errors.recorderUnavailable}</Notice> : null}
     <div className="row" style={{ flexWrap: "wrap", gap: 8 }}>
-      <button className="btn-sm btn-ghost" type="button" aria-busy={busy || undefined} disabled={!canRecord || busy} style={{ alignItems: "center", display: "inline-flex", gap: 6, minHeight: 44 }} onClick={() => recording ? stopRecording() : void startRecording()}>{recording ? <><Square size={15} aria-hidden="true" /> Dừng ghi</> : <><Mic size={16} aria-hidden="true" /> Ghi âm</>}</button>
-      <label className="btn" htmlFor="lesson-speaking-audio" style={{ alignItems: "center", display: "inline-flex", gap: 6, minHeight: 44 }}><Upload size={16} aria-hidden="true" /> {busy ? "Đang tải…" : "Tải file ghi âm"}</label>
-      <input id="lesson-speaking-audio" className="sr-only" type="file" accept="audio/*" aria-label="Tải file ghi âm speaking" disabled={busy} onChange={(event) => {
+      <button className="btn-sm btn-ghost" type="button" aria-busy={busy || undefined} disabled={!canRecord || busy} style={{ alignItems: "center", display: "inline-flex", gap: 6, minHeight: 44 }} onClick={() => recording ? stopRecording() : void startRecording()}>{recording ? <><Square size={15} aria-hidden="true" /> {copy.buttons.stopRecording}</> : <><Mic size={16} aria-hidden="true" /> {copy.buttons.record}</>}</button>
+      <label className="btn" htmlFor="lesson-speaking-audio" style={{ alignItems: "center", display: "inline-flex", gap: 6, minHeight: 44 }}><Upload size={16} aria-hidden="true" /> {busy ? copy.buttons.checking : copy.buttons.upload}</label>
+      <input id="lesson-speaking-audio" className="sr-only" type="file" accept="audio/*" aria-label={language === "en" ? "Upload speaking recording" : "Tải file ghi âm speaking"} disabled={busy} onChange={(event) => {
         const file = event.currentTarget.files?.[0];
         event.currentTarget.value = "";
         if (file) void send(file);
       }} />
     </div>
-    {busy ? <Notice>Đang tải file ghi âm…</Notice> : null}
-    {readBusy ? <Notice>Đang tải bản ghi âm đã lưu…</Notice> : null}
-    {readError ? <div className="stack"><Notice tone="warn">{readError}</Notice><button className="btn-sm btn-ghost" type="button" style={{ alignItems: "center", display: "inline-flex", gap: 6, minHeight: 44 }} onClick={() => void loadPersistedAudio()}><RotateCcw size={16} aria-hidden="true" /> Thử lại nghe bản ghi</button></div> : null}
-    {error ? <div className="stack"><Notice tone="warn">{error}</Notice>{pendingFile ? <button className="btn-sm btn-ghost" type="button" style={{ alignItems: "center", display: "inline-flex", gap: 6, minHeight: 44 }} onClick={() => void send(pendingFile)}><RotateCcw size={16} aria-hidden="true" /> Thử lại tải file</button> : null}</div> : null}
-    {audioUrl ? <><Notice tone="ok">Đã tải file ghi âm lên. Bấm Kiểm tra Nói để nộp.</Notice><audio controls preload="metadata" src={audioUrl} aria-label="Nghe lại file ghi âm" style={{ maxWidth: "100%", width: "100%" }} /></> : artifactKey ? <Notice tone="ok">Đã tải file ghi âm lên. Bấm Kiểm tra Nói để nộp.</Notice> : null}
+    {busy ? <Notice>{copy.notices.uploadBusy}</Notice> : null}
+    {readBusy ? <Notice>{copy.notices.savedAudioBusy}</Notice> : null}
+    {readError ? <div className="stack"><Notice tone="warn">{readError}</Notice><button className="btn-sm btn-ghost" type="button" style={{ alignItems: "center", display: "inline-flex", gap: 6, minHeight: 44 }} onClick={() => void loadPersistedAudio()}><RotateCcw size={16} aria-hidden="true" /> {copy.notices.retrySavedAudio}</button></div> : null}
+    {error ? <div className="stack"><Notice tone="warn">{error}</Notice>{pendingFile ? <button className="btn-sm btn-ghost" type="button" style={{ alignItems: "center", display: "inline-flex", gap: 6, minHeight: 44 }} onClick={() => void send(pendingFile)}><RotateCcw size={16} aria-hidden="true" /> {copy.notices.retryUpload}</button> : null}</div> : null}
+    {audioUrl ? <><Notice tone="ok">{copy.notices.uploadReady}</Notice><ExclusiveLessonAudio src={audioUrl} label={language === "en" ? "Listen to recording" : "Nghe lại file ghi âm"} style={{ maxWidth: "100%", width: "100%" }} /></> : artifactKey ? <Notice tone="ok">{copy.notices.uploadReady}</Notice> : null}
   </section>;
 }
 
-function PartContent({
+export function SharedLessonPartContent({
   cefr,
+  language,
+  copy,
   grammarAvailable,
   sectionNumber,
   part,
@@ -593,6 +638,8 @@ function PartContent({
   onPronunciationListened
 }: {
   cefr: LessonView["lesson"]["cefr"];
+  language: LearnerLessonLanguage;
+  copy: LearnerLessonCopy;
   grammarAvailable: boolean;
   sectionNumber: number;
   part: LessonPart;
@@ -606,7 +653,6 @@ function PartContent({
     script?: string;
     audio?: unknown;
     audioUrl?: string;
-    phonemeAudioUrl?: string;
     type?: string;
     prompt?: string;
     formula?: string;
@@ -639,16 +685,16 @@ function PartContent({
   const grammarExamples = content.examples?.slice(0, 3) ?? [];
   const speakingModel = conciseSpeakingModel(content.sample ?? content.answer ?? content.modelAnswer);
   return <>
-    {part.code === "grammar" || part.code === "pronunciation" ? null : <div className="row between"><h2 className={part.code === "vocabulary" ? "lesson-vocabulary-heading" : undefined}>{part.code === "objective" ? "MỤC TIÊU BÀI HỌC" : part.code === "instruction" ? "HƯỚNG DẪN LÀM BÀI" : part.code === "vocabulary" ? "TỪ VỰNG" : `${sectionNumber}. ${partHeading(part)}`}</h2></div>}
-    {part.code === "objective" && objectiveItems.length ? <><p className="lesson-objective-lead">{learnerObjectiveLead(cefr)}</p><ul className="lesson-objective-list" aria-label="Mục tiêu bài học">{objectiveItems.map((text, index) => <li key={`${index}-${text}`}>{learnerFacingObjectiveBody(text)}</li>)}</ul></> : content.text ? <p className={part.code === "objective" ? "lesson-objective-text" : part.code === "reading" ? "lesson-reading-passage" : undefined}>{part.code === "objective" ? learnerFacingObjective(conciseLessonObjective(content.text), cefr) : content.text}</p> : null}
+    {part.code === "grammar" || part.code === "pronunciation" ? null : <div className="row between"><h2 className={part.code === "vocabulary" ? "lesson-vocabulary-heading" : undefined}>{part.code === "objective" ? copy.objectiveHeading : part.code === "instruction" ? copy.instructionHeading : part.code === "vocabulary" ? copy.vocabularyHeading : `${sectionNumber}. ${partHeading(part, language)}`}</h2></div>}
+    {part.code === "objective" && objectiveItems.length ? <><p className="lesson-objective-lead">{learnerObjectiveLead(cefr)}</p><ul className="lesson-objective-list" aria-label={copy.objectiveAria}>{objectiveItems.map((text, index) => <li key={`${index}-${text}`}>{learnerFacingObjectiveBody(text)}</li>)}</ul></> : content.text ? <p className={part.code === "objective" ? "lesson-objective-text" : part.code === "reading" ? "lesson-reading-passage" : undefined}>{part.code === "objective" ? learnerFacingObjective(conciseLessonObjective(content.text), cefr) : content.text}</p> : null}
     {learnerPrompt && part.code !== "speaking" ? <p>{normalizeLessonBlankPrompt(learnerPrompt)}</p> : null}
-    {guidanceSteps.length ? <ul className="lesson-instruction-list" aria-label="Hướng dẫn thực hiện">{guidanceSteps.map((step, index) => <li key={`${index}-${step}`}>{step}</li>)}</ul> : null}
-    {audioSource ? <LessonAudioControl source={audioSource} speak={speak} /> : null}
-    {part.code === "grammar" && content.formula ? <div className="lesson-study-block"><div className="lesson-study-panel-header"><h2>NGỮ PHÁP</h2></div><div className="lesson-grammar-copy"><div className="lesson-grammar-formula-row"><p className="lesson-study-focus"><strong>{content.formula}</strong></p><LessonAudioAssetButton audioSrc={content.audioUrl} label="Nghe mẫu ngữ pháp" title="Nghe cấu trúc ngữ pháp" className="lesson-grammar-audio-icon" /></div>{content.usage ? <p className="lesson-study-explanation">{grammarUsageCopy(content.usage)}</p> : null}</div>{grammarExamples.length ? <div className="lesson-example-list" aria-label="Câu ví dụ ngữ pháp">{grammarExamples.map((example, index) => { const spoken = sanitizeGrammarSpeechText(conciseGrammarExample(example)); return <button className="btn-sm btn-ghost lesson-example-card vocabulary-card-sound" type="button" aria-label={`Nghe câu ví dụ: ${spoken}`} onClick={() => playLessonText(spoken, content.exampleAudioUrls?.[index], speak)} key={example}><Volume2 size={14} aria-hidden="true" />{conciseGrammarExample(example)}</button>; })}</div> : null}</div> : null}
-    {part.code === "pronunciation" && content.focus ? <div className="lesson-study-block lesson-pronunciation-summary"><div className="lesson-study-panel-header"><h2>PHÁT ÂM</h2></div><div className="lesson-grammar-formula-row"><p className="lesson-study-focus"><strong>Âm {targetSound}{pronunciationWords[0]?.word ? ` như trong “${pronunciationWords[0].word}”` : ""}</strong></p><LessonAudioAssetButton audioSrc={content.phonemeAudioUrl} label={`Nghe âm ${targetSound}`} title={`Nghe âm ${targetSound}`} className="lesson-pronunciation-audio-icon" /></div>{content.instruction ? <p className="lesson-study-explanation">{content.instruction}</p> : null}</div> : null}
-    {part.code === "speaking" && speakingModel ? <><p className="lesson-speaking-instruction"><strong>Yêu cầu:</strong> {conciseSpeakingInstruction(content.instruction ?? content.prompt)}</p><div className={`card flat lesson-speaking-model${speakingModel.length <= 80 ? " lesson-speaking-model--inline" : ""}`}><strong>{speakingModel}</strong>{content.audioUrl ? <audio controls preload="metadata" src={content.audioUrl} aria-label="Nghe audio mẫu phần Nói" /> : null}</div></> : null}
-     {part.code === "pronunciation" && pronunciationWords.length ? <div className="lesson-pronunciation-words" aria-label="Luyện từ phát âm">{pronunciationWords.slice(0, 3).map((item, index) => <button className="btn-sm btn-ghost lesson-example-card vocabulary-card-sound lesson-pronunciation-word-chip" type="button" aria-label={`Nghe từ phát âm: ${item.word}`} onClick={() => playLessonText(item.word, pronunciationWordAudioUrls[index], speak, () => onPronunciationListened?.(item.word), 0.65)} key={item.word}><Volume2 size={14} aria-hidden="true" /><strong>{item.word}</strong>{item.ipa ? ` ${item.ipa}` : ""}</button>)}</div> : null}
-    {part.code === "vocabulary" ? words.map((item, itemIndex) => <VocabularyCard key={item.word} cefr={cefr} item={item} itemIndex={itemIndex} speak={speak} openModal={openVocabularyModal} resolveImage={resolveVocabularyImage} />) : null}
+    {guidanceSteps.length ? <ul className="lesson-instruction-list" aria-label={copy.instructionAria}>{guidanceSteps.map((step, index) => <li key={`${index}-${step}`}>{step}</li>)}</ul> : null}
+    {audioSource ? <LessonAudioControl source={audioSource} speak={speak} copy={copy} language={language} /> : null}
+    {part.code === "grammar" && content.formula ? <div className="lesson-study-block"><div className="lesson-study-panel-header"><h2>{copy.grammarHeading}</h2></div><div className="lesson-grammar-copy"><div className="lesson-grammar-formula-row"><p className="lesson-study-focus"><strong>{content.formula}</strong></p><LessonAudioAssetButton audioSrc={content.audioUrl} label={language === "en" ? "Listen to grammar example" : "Nghe mẫu ngữ pháp"} title={language === "en" ? "Listen to grammar structure" : "Nghe cấu trúc ngữ pháp"} className="lesson-grammar-audio-icon" speak={speak} /></div>{content.usage ? <p className="lesson-study-explanation">{grammarUsageCopy(content.usage, language)}</p> : null}</div>{grammarExamples.length ? <div className="lesson-example-list" aria-label={language === "en" ? "Grammar examples" : "Câu ví dụ ngữ pháp"}>{grammarExamples.map((example, index) => { const spoken = sanitizeGrammarSpeechText(conciseGrammarExample(example)); return <button className="btn-sm btn-ghost lesson-example-card vocabulary-card-sound" type="button" aria-label={`${language === "en" ? "Listen to example" : "Nghe câu ví dụ"}: ${spoken}`} onClick={() => playLessonText(spoken, content.exampleAudioUrls?.[index], speak)} key={example}><Volume2 size={14} aria-hidden="true" />{conciseGrammarExample(example)}</button>; })}</div> : null}</div> : null}
+    {part.code === "pronunciation" && content.focus ? <div className="lesson-study-block lesson-pronunciation-summary"><div className="lesson-study-panel-header"><h2>{copy.pronunciationHeading}</h2></div><div className="lesson-grammar-formula-row"><p className="lesson-study-focus"><strong>{language === "en" ? `Sound ${targetSound}${pronunciationWords[0]?.word ? ` as in “${pronunciationWords[0].word}”` : ""}` : `Âm ${targetSound}${pronunciationWords[0]?.word ? ` như trong “${pronunciationWords[0].word}”` : ""}`}</strong></p></div>{content.instruction ? <p className="lesson-study-explanation">{pronunciationInstructionCopy(content.instruction, language)}</p> : null}</div> : null}
+    {part.code === "speaking" && speakingModel ? <><p className="lesson-speaking-instruction"><strong>{copy.speakingInstructionLabel}</strong> {conciseSpeakingInstruction(content.instruction ?? content.prompt, language)}</p><div className={`card flat lesson-speaking-model${speakingModel.length <= 80 ? " lesson-speaking-model--inline" : ""}`}><strong>{speakingModel}</strong>{content.audioUrl ? <ExclusiveLessonAudio src={content.audioUrl} label={language === "en" ? "Listen to speaking model" : "Nghe audio mẫu phần Nói"} /> : null}</div></> : null}
+     {part.code === "pronunciation" && pronunciationWords.length ? <div className="lesson-pronunciation-words" aria-label={language === "en" ? "Pronunciation practice words" : "Luyện từ phát âm"}>{pronunciationWords.slice(0, 3).map((item, index) => <button className="btn-sm btn-ghost lesson-example-card vocabulary-card-sound lesson-pronunciation-word-chip" type="button" aria-label={language === "en" ? `Listen to pronunciation word: ${item.word}` : `Nghe từ phát âm: ${item.word}`} onClick={() => playLessonText(item.word, pronunciationWordAudioUrls[index], speak, () => onPronunciationListened?.(item.word), 0.65)} key={item.word}><Volume2 size={14} aria-hidden="true" /><strong>{item.word}</strong>{item.ipa ? ` ${item.ipa}` : ""}</button>)}</div> : null}
+    {part.code === "vocabulary" ? words.map((item, itemIndex) => <VocabularyCard key={item.word} cefr={cefr} language={language} item={item} itemIndex={itemIndex} speak={speak} openModal={openVocabularyModal} resolveImage={resolveVocabularyImage} />) : null}
     {part.code !== "vocabulary" && part.code !== "objective" ? (content.items as LessonVocabularyItem[] | undefined)?.map((item) => <article className="word-card" key={item.word}><h3>{item.word}</h3><span className="ipa">{item.pronunciation}</span><p>{item.meaning}</p>{item.examples?.map((example) => <small key={example}>{example}</small>)}</article>) : null}
     {content.examples?.length && part.code !== "grammar" ? <ul>{content.examples.map((example) => <li key={example}>{example}</li>)}</ul> : null}
   </>;
@@ -656,25 +702,21 @@ function PartContent({
 
 function playLessonText(text: string, audioUrl: string | undefined, speak: LearnerCallbacks["speak"], onEnded?: () => void, rate = 1) {
   const src = audioUrl?.trim();
-  if (src && typeof Audio !== "undefined") {
-    const audio = new Audio(src);
-    if (onEnded) audio.addEventListener("ended", onEnded, { once: true });
-    void audio.play().catch(() => speak(text, "en-US", { rate, ...(onEnded ? { onStatus: (status) => { if (status === "ended") onEnded(); } } : {}) }));
+  const speakFallback = () => speak(text, "en-US", { rate, ...(onEnded ? { onStatus: (status) => { if (status === "ended") onEnded(); } } : {}) });
+  if (src) {
+    speak(text, "en-US", { audioSrc: src, rate, onStatus: (status) => {
+      if (status === "ended") onEnded?.();
+      if (status === "error") speakFallback();
+    } });
     return;
   }
-  speak(text, "en-US", { rate, ...(onEnded ? { onStatus: (status) => { if (status === "ended") onEnded(); } } : {}) });
+  speakFallback();
 }
 
-function LessonAudioAssetButton({ audioSrc, label, title, className }: { audioSrc?: string | undefined; label: string; title: string; className: string }) {
-  const [failed, setFailed] = useState(false);
+function LessonAudioAssetButton({ audioSrc, label, title, className, speak }: { audioSrc?: string | undefined; label: string; title: string; className: string; speak: LearnerCallbacks["speak"] }) {
   const src = audioSrc?.trim() ?? "";
-  const available = Boolean(src) && !failed && typeof Audio !== "undefined";
-  if (!available) return <span className="lesson-audio-missing muted" role="status">Chưa có audio {label.replace(/^Nghe\s+/u, "").toLocaleLowerCase()}.</span>;
-  const play = () => {
-    const audio = new Audio(src);
-    audio.addEventListener("error", () => setFailed(true), { once: true });
-    void audio.play().catch(() => setFailed(true));
-  };
+  if (!src) return null;
+  const play = () => speak("", "en-US", { audioSrc: src });
   return <button className={`btn-sm btn-ghost vocabulary-card-sound vocabulary-card-sound--icon ${className}`} type="button" aria-label={label} title={title} onClick={play}><Volume2 size={16} aria-hidden="true" /></button>;
 }
 
@@ -690,22 +732,39 @@ function readPronunciationWords(value: unknown): Array<{ word: string; ipa?: str
   });
 }
 
-function grammarUsageCopy(value: string): string {
-  const cleaned = value.trim().replace(/^Dùng\s+(?:khi|để)\s+/i, "");
+function grammarUsageCopy(value: string, language: LearnerLessonLanguage = "vi"): string {
+  const fallback = language === "en"
+    ? "Use this structure to express the lesson's target meaning."
+    : "Dùng cấu trúc này để diễn đạt ý chính của bài.";
+  const localized = lessonGuidanceOrFallback(
+    value,
+    language,
+    fallback
+  );
+  if (language === "en" || localized === fallback) return localized;
+  const cleaned = localized.replace(/^Dùng\s+(?:khi|để)\s+/i, "");
   const firstSentence = cleaned.split(/(?<=[.!?])\s+|;\s*/u)[0]?.trim() || cleaned;
   const explanation = firstSentence.replace(/[.!?]+$/u, "");
   return explanation ? `Dùng để ${explanation.charAt(0).toLocaleLowerCase()}${explanation.slice(1)}.` : value.trim();
+}
+
+function pronunciationInstructionCopy(value: string, language: LearnerLessonLanguage): string {
+  return lessonGuidanceOrFallback(
+    value,
+    language,
+    language === "en" ? "Practise the target sound with the model words below." : "Luyện âm mục tiêu theo các từ mẫu bên dưới."
+  );
 }
 
 function pronunciationTarget(value: string): string {
   return value.match(/\/[^/]+\//)?.[0] ?? value.trim();
 }
 
-function partHeading(part: LessonPart): string {
+function partHeading(part: LessonPart, language: LearnerLessonLanguage = "vi"): string {
   const english: Partial<Record<LessonPartCode, string>> = {
     listening: "Listening", reading: "Reading", writing: "Writing", word_class: "Word class", word_use: "Word use", speaking: "Speaking"
   };
-  return english[part.code] ? `${part.title} · ${english[part.code]}` : part.title;
+  return language === "en" && english[part.code] ? english[part.code]! : language === "vi" && english[part.code] ? `${part.title} · ${english[part.code]}` : part.title;
 }
 
 function completeInstructionSteps(steps: string[]): string[] {
@@ -737,6 +796,7 @@ function isAudioUrl(value: string): boolean {
 
 function VocabularyCard({
   cefr,
+  language,
   item,
   itemIndex,
   speak,
@@ -744,6 +804,7 @@ function VocabularyCard({
   resolveImage
 }: {
   cefr: LessonView["lesson"]["cefr"];
+  language: LearnerLessonLanguage;
   item: LessonVocabularyItem;
   itemIndex: number;
   speak: (text: string) => void;
@@ -760,6 +821,7 @@ function VocabularyCard({
   const umbrellaWord = item.umbrella?.word?.trim() ?? "";
   const firstSynonym = item.synonyms?.[0]?.word?.trim() || synonymDetail?.word?.trim() || "";
   const isB1Plus = ["B1", "B2", "C1"].includes(cefr);
+  const copy = learnerLessonCopy[language];
   const detailedRelationWords = new Set([
     ...(item.synonyms ?? []).map((value) => `synonym:${value.word.trim().toLocaleLowerCase()}`),
     ...(item.antonyms ?? []).map((value) => `antonym:${value.word.trim().toLocaleLowerCase()}`)
@@ -768,91 +830,98 @@ function VocabularyCard({
     ? lexicalDetails
       .filter((detail) => !detailedRelationWords.has(`${detail.kind}:${detail.word.trim().toLocaleLowerCase()}`))
       .map((detail) => ({
-        label: `${lexicalKindLabel(detail.kind)} · ${detail.word}`,
-        ariaLabel: `Xem ${lexicalKindLabel(detail.kind)}: ${detail.word}`,
+        label: `${lexicalKindLabel(detail.kind, language)} · ${detail.word}`,
+        ariaLabel: `${language === "en" ? "View" : "Xem"} ${lexicalKindLabel(detail.kind, language)}: ${detail.word}`,
         tone: detail.kind === "synonym" ? "synonym" as const : detail.kind === "antonym" ? "antonym" as const : detail.kind === "slang" ? "mid" as const : "low" as const,
         onClick: () => openModal({ kind: "lexical", item, detail })
       }))
     : [];
   const relations: VocabularyRelationChip[] = [
-    ...(item.umbrella && umbrellaWord ? [{ label: `TỪ BAO TRÙM ${umbrellaWord}`, ariaLabel: `Từ bao trùm: ${umbrellaWord}`, icon: "umbrella" as const, tone: "umb" as const, count: item.umbrella.siblings?.length ?? 0, onClick: () => openModal({ kind: "umbrella", item }) }] : []),
+    ...(item.umbrella && umbrellaWord ? [{ label: `${language === "en" ? copy.vocabulary.umbrellaWord.toUpperCase() : "TỪ BAO TRÙM"} ${umbrellaWord}`, ariaLabel: `${copy.vocabulary.umbrellaWord}: ${umbrellaWord}`, icon: "umbrella" as const, tone: "umb" as const, count: item.umbrella.siblings?.length ?? 0, onClick: () => openModal({ kind: "umbrella", item }) }] : []),
     ...(item.synonyms?.length ? item.synonyms.map(value => {
       const detail = lexicalDetails.find((candidate) => candidate.kind === "synonym" && candidate.word.trim().toLocaleLowerCase() === value.word.trim().toLocaleLowerCase());
-      return { label: `= ${value.word}${value.level ? ` · ${value.level}` : ""}`, ariaLabel: isB1Plus && detail ? `Xem từ đồng nghĩa: ${value.word}` : `Nghe từ đồng nghĩa: ${value.word}`, tone: "synonym" as const, onClick: isB1Plus && detail ? () => openModal({ kind: "lexical", item, detail }) : () => playVocabularyWord(speak, value.word, value.audioUrl) };
-    }) : synonymDetail && firstSynonym ? [{ label: `= ${firstSynonym}`, ariaLabel: isB1Plus ? `Xem từ đồng nghĩa: ${firstSynonym}` : firstSynonym, tone: "synonym" as const, onClick: isB1Plus ? () => openModal({ kind: "lexical", item, detail: synonymDetail }) : undefined }] : []),
+      return { label: `= ${value.word}`, ariaLabel: isB1Plus && detail ? `${language === "en" ? "View synonym" : "Xem từ đồng nghĩa"}: ${value.word}` : `${language === "en" ? "Listen to synonym" : "Nghe từ đồng nghĩa"}: ${value.word}`, tone: "synonym" as const, onClick: isB1Plus && detail ? () => openModal({ kind: "lexical", item, detail }) : () => playVocabularyWord(speak, value.word, value.audioUrl) };
+    }) : synonymDetail && firstSynonym ? [{ label: `= ${firstSynonym}`, ariaLabel: isB1Plus ? `${language === "en" ? "View synonym" : "Xem từ đồng nghĩa"}: ${firstSynonym}` : firstSynonym, tone: "synonym" as const, onClick: isB1Plus ? () => openModal({ kind: "lexical", item, detail: synonymDetail }) : undefined }] : []),
     ...(item.antonyms?.length ? item.antonyms.map(value => {
       const detail = lexicalDetails.find((candidate) => candidate.kind === "antonym" && candidate.word.trim().toLocaleLowerCase() === value.word.trim().toLocaleLowerCase());
-      return { label: `≠ ${value.word}${value.level ? ` · ${value.level}` : ""}`, ariaLabel: isB1Plus && detail ? `Xem từ trái nghĩa: ${value.word}` : `Nghe từ trái nghĩa: ${value.word}`, tone: "antonym" as const, onClick: isB1Plus && detail ? () => openModal({ kind: "lexical", item, detail }) : () => playVocabularyWord(speak, value.word, value.audioUrl) };
+      return { label: `≠ ${value.word}`, ariaLabel: isB1Plus && detail ? `${language === "en" ? "View antonym" : "Xem từ trái nghĩa"}: ${value.word}` : `${language === "en" ? "Listen to antonym" : "Nghe từ trái nghĩa"}: ${value.word}`, tone: "antonym" as const, onClick: isB1Plus && detail ? () => openModal({ kind: "lexical", item, detail }) : () => playVocabularyWord(speak, value.word, value.audioUrl) };
     }) : []),
-    ...(item.family?.length ? [{ label: `Word family (${item.family.length})`, ariaLabel: `Word family (${item.family.length})`, icon: "family" as const, tone: "family" as const, onClick: () => openModal({ kind: "family", item }) }] : []),
+    ...(item.family?.length ? [{ label: `${language === "en" ? copy.vocabulary.wordFamily : "Họ từ"} (${item.family.length})`, ariaLabel: `${language === "en" ? copy.vocabulary.wordFamily : "Word family"} (${item.family.length})`, icon: "family" as const, tone: "family" as const, onClick: () => openModal({ kind: "family", item }) }] : []),
     ...extendedRelations
   ];
-  return <SharedVocabularyCard item={item} loadImage={loadImage} speak={speak} relations={relations} />;
+  return <SharedVocabularyCard item={item} loadImage={loadImage} speak={speak} relations={relations} language={language} />;
 }
 
-function VocabularyModal({
+export function SharedVocabularyModal({
   state,
   speak,
+  language,
   close
 }: {
   state: VocabularyModalState;
   speak: (text: string) => void;
+  language: LearnerLessonLanguage;
   close: () => void;
 }) {
   const { item } = state;
+  const copy = learnerLessonCopy[language];
   const labels = {
-    family: "Họ từ",
-    synonyms: "Đồng nghĩa",
-    antonyms: "Trái nghĩa",
-    umbrella: "Từ bao quát",
-    lexical: "Từ liên quan"
+    family: copy.modal.family,
+    synonyms: copy.modal.synonyms,
+    antonyms: copy.modal.antonyms,
+    umbrella: copy.modal.umbrella,
+    lexical: copy.modal.lexical
   } as const;
   if (typeof document === "undefined") return null;
   return createPortal(<div className="modal-backdrop vocabulary-relation-modal" role="presentation">
     <section className="dialog wide" role="dialog" aria-modal="true" aria-label={labels[state.kind]} data-testid={`modal.vocab-${state.kind === "synonyms" ? "all-synonyms" : state.kind === "lexical" ? "lexical-detail" : state.kind}`} data-modal={`vocab-${state.kind === "synonyms" ? "all-synonyms" : state.kind === "lexical" ? "lexical-detail" : state.kind}`}>
-      <div className="row between vocabulary-relation-modal-header"><div><div className="eyebrow">Từ vựng · {item.word}</div><h2>{labels[state.kind]}</h2></div><button type="button" aria-label="Đóng" onClick={close}>Đóng</button></div>
-      {state.kind === "family" ? <FamilyModal item={item} speak={speak} /> : null}
-       {state.kind === "synonyms" ? <SynonymsModal item={item} speak={speak} /> : null}
-       {state.kind === "antonyms" ? <SynonymsModal item={item} list={item.antonyms} speak={speak} /> : null}
-      {state.kind === "umbrella" ? <UmbrellaModal item={item} speak={speak} /> : null}
-      {state.kind === "lexical" ? <LexicalModal item={item} speak={speak} {...(state.detail ? { detail: state.detail } : {})} /> : null}
+      <div className="row between vocabulary-relation-modal-header"><div><div className="eyebrow">{language === "en" ? "Vocabulary" : "Từ vựng"} · {item.word}</div><h2>{labels[state.kind]}</h2></div><button type="button" aria-label={copy.modal.close} onClick={close}>{copy.modal.close}</button></div>
+      {state.kind === "family" ? <FamilyModal item={item} speak={speak} language={language} /> : null}
+       {state.kind === "synonyms" ? <SynonymsModal item={item} speak={speak} language={language} /> : null}
+       {state.kind === "antonyms" ? <SynonymsModal item={item} list={item.antonyms} speak={speak} language={language} /> : null}
+      {state.kind === "umbrella" ? <UmbrellaModal item={item} speak={speak} language={language} /> : null}
+      {state.kind === "lexical" ? <LexicalModal item={item} speak={speak} language={language} {...(state.detail ? { detail: state.detail } : {})} /> : null}
     </section>
   </div>, document.body);
 }
 
-function FamilyModal({ item, speak }: { item: LessonVocabularyItem; speak: (text: string) => void }) {
-  return <div className="stack" style={{ gap: 10 }} aria-label="Các từ cùng họ">{item.family?.map((word) => <article className="card flat" style={{ minWidth: 0 }} key={`${word.word}-${word.type ?? ""}`}><div className="row between" style={{ gap: 12, alignItems: "flex-start" }}><div style={{ minWidth: 0 }}><b>{word.word}</b>{word.type ? <span className="small muted"> · {word.type}</span> : null}<p className="small">{word.meaning}</p></div><button type="button" aria-label={`Nghe từ cùng họ: ${word.word}`} style={listenButtonStyle} onClick={() => playVocabularyWord(speak, word.word, word.audioUrl)}><Volume2 size={14} aria-hidden="true" />Nghe</button></div></article>)}</div>;
+function FamilyModal({ item, speak, language }: { item: LessonVocabularyItem; speak: (text: string) => void; language: LearnerLessonLanguage }) {
+  const copy = learnerLessonCopy[language];
+  return <div className="stack" style={{ gap: 10 }} aria-label={language === "en" ? "Word family" : "Các từ cùng họ"}>{item.family?.map((word) => <article className="card flat" style={{ minWidth: 0 }} key={`${word.word}-${word.type ?? ""}`}><div className="row between" style={{ gap: 12, alignItems: "flex-start" }}><div style={{ minWidth: 0 }}><b>{word.word}</b>{word.type ? <span className="small muted"> · {word.type}</span> : null}<p className="small">{word.meaning}</p></div><button type="button" aria-label={`${copy.modal.listen} ${language === "en" ? "word family" : "từ cùng họ"}: ${word.word}`} style={listenButtonStyle} onClick={() => playVocabularyWord(speak, word.word, word.audioUrl)}><Volume2 size={14} aria-hidden="true" />{copy.modal.listen}</button></div></article>)}</div>;
 }
 
-function SynonymsModal({ item, list, speak }: { item: LessonVocabularyItem; list?: LessonVocabularyItem["synonyms"] | undefined; speak: (text: string) => void }) {
+function SynonymsModal({ item, list, speak, language }: { item: LessonVocabularyItem; list?: LessonVocabularyItem["synonyms"] | undefined; speak: (text: string) => void; language: LearnerLessonLanguage }) {
+  const copy = learnerLessonCopy[language];
   const words = list ?? item.synonyms;
-  return <div className="stack" style={{ gap: 10 }} aria-label="Các từ liên quan">{words?.map((word) => <article className="card flat" style={{ minWidth: 0 }} key={word.word}><div className="row between" style={{ gap: 12, alignItems: "flex-start" }}><div style={{ minWidth: 0 }}><b>{word.word}</b><span className="badge">{word.level}</span><p className="small">{word.note}</p></div><button type="button" style={listenButtonStyle} onClick={() => playVocabularyWord(speak, word.word, word.audioUrl)}><Volume2 size={14} aria-hidden="true" />Nghe</button></div></article>)}</div>;
+  return <div className="stack" style={{ gap: 10 }} aria-label={language === "en" ? "Related words" : "Các từ liên quan"}>{words?.map((word) => <article className="card flat" style={{ minWidth: 0 }} key={word.word}><div className="row between" style={{ gap: 12, alignItems: "flex-start" }}><div style={{ minWidth: 0 }}><b>{word.word}</b><p className="small">{word.note}</p></div><button type="button" style={listenButtonStyle} onClick={() => playVocabularyWord(speak, word.word, word.audioUrl)}><Volume2 size={14} aria-hidden="true" />{copy.modal.listen}</button></div></article>)}</div>;
 }
 
-function UmbrellaModal({ item, speak }: { item: LessonVocabularyItem; speak: (text: string) => void }) {
+function UmbrellaModal({ item, speak, language }: { item: LessonVocabularyItem; speak: (text: string) => void; language: LearnerLessonLanguage }) {
+  const copy = learnerLessonCopy[language];
   if (!item.umbrella) return null;
   const words = [{ ...item, current: true }, ...item.umbrella.siblings.map((word) => ({ ...word, current: false }))];
-  return <div className="stack vocabulary-umbrella-content" style={{ gap: 12 }} aria-label="Từ bao quát"><article className="card flat vocabulary-umbrella-summary" aria-label={`Từ bao quát ${item.umbrella.word}`}><div className="row between" style={{ gap: 12, alignItems: "flex-start" }}><div style={{ minWidth: 0 }}><div className="eyebrow">Từ bao quát</div><h3>{item.umbrella.word}</h3><p>{item.umbrella.meaning}</p></div><button type="button" aria-label={`Nghe từ bao trùm: ${item.umbrella.word}`} style={listenButtonStyle} onClick={() => playVocabularyWord(speak, item.umbrella!.word, item.umbrella?.audioUrl)}><Volume2 size={14} aria-hidden="true" />Nghe</button></div></article><div><div className="small muted">Từ hiện tại và các từ cùng nhóm</div><div className="vocabulary-relation-audio-list">{words.map((word) => <button className="vocabulary-relation-audio-item" type="button" aria-label={`Nghe từ cùng nhóm: ${word.word}`} key={word.word} onClick={() => playVocabularyWord(speak, word.word, word.audioUrl)}><span><strong>{word.word}</strong>{word.current ? <small className="vocabulary-current-word">từ của bài</small> : null}{word.meaning ? <small>{word.meaning}</small> : null}</span><Volume2 size={16} aria-hidden="true" /></button>)}</div></div></div>;
+  return <div className="stack vocabulary-umbrella-content" style={{ gap: 12 }} aria-label={copy.vocabulary.umbrellaWord}><article className="card flat vocabulary-umbrella-summary" aria-label={`${copy.vocabulary.umbrellaWord}: ${item.umbrella.word}`}><div className="row between" style={{ gap: 12, alignItems: "flex-start" }}><div style={{ minWidth: 0 }}><div className="eyebrow">{copy.vocabulary.umbrellaWord}</div><h3>{item.umbrella.word}</h3><p>{item.umbrella.meaning}</p></div><button type="button" aria-label={`${copy.modal.listen} ${copy.vocabulary.umbrellaWord.toLocaleLowerCase()}: ${item.umbrella.word}`} style={listenButtonStyle} onClick={() => playVocabularyWord(speak, item.umbrella!.word, item.umbrella?.audioUrl)}><Volume2 size={14} aria-hidden="true" />{copy.modal.listen}</button></div></article><div><div className="small muted">{copy.vocabulary.currentAndRelated}</div><div className="vocabulary-relation-audio-list">{words.map((word) => <button className="vocabulary-relation-audio-item" type="button" aria-label={`${copy.modal.listen} ${language === "en" ? "related word" : "từ cùng nhóm"}: ${word.word}`} key={word.word} onClick={() => playVocabularyWord(speak, word.word, word.audioUrl)}><span><strong>{word.word}</strong>{word.current ? <small className="vocabulary-current-word">{language === "en" ? "lesson word" : "từ của bài"}</small> : null}{word.meaning ? <small>{word.meaning}</small> : null}</span><Volume2 size={16} aria-hidden="true" /></button>)}</div></div></div>;
 }
 
 function playVocabularyWord(speak: (text: string) => void, word: string, audioUrl?: string) {
-  if (audioUrl?.trim() && typeof Audio !== "undefined") {
-    const audio = new Audio(audioUrl.trim());
-    void audio.play().catch(() => speak(word));
+  if (audioUrl?.trim()) {
+    playExclusiveMedia(audioUrl.trim(), () => speak(word));
     return;
   }
   speak(word);
 }
 
-function LexicalModal({ item, detail, speak }: { item: LessonVocabularyItem; detail?: LessonVocabularyLexicalDetail; speak: (text: string) => void }) {
+function LexicalModal({ item, detail, speak, language }: { item: LessonVocabularyItem; detail?: LessonVocabularyLexicalDetail; speak: (text: string) => void; language: LearnerLessonLanguage }) {
+  const copy = learnerLessonCopy[language];
   const details = item.lexicalDetails ?? [];
   const [selected, setSelected] = useState<LessonVocabularyLexicalDetail | null>(detail ?? null);
-  if (!details.length) return <Notice tone="info">Chưa có dữ liệu từ liên quan cho từ này.</Notice>;
+  if (!details.length) return <Notice tone="info">{copy.vocabulary.meaningUnavailable}</Notice>;
   const active = selected ?? details[0]!;
-  return <div className="stack" style={{ gap: 12 }}><div className="row" style={{ flexWrap: "wrap", gap: 8 }}>{details.map((candidate) => <button className={candidate === active ? "btn-primary" : ""} type="button" key={`${candidate.kind}-${candidate.word}`} onClick={() => setSelected(candidate)}>{lexicalKindLabel(candidate.kind)} · {candidate.word}</button>)}</div><article className="card flat"><div className="row between" style={{ gap: 12, alignItems: "flex-start" }}><div style={{ minWidth: 0 }}><div className="eyebrow">{lexicalKindLabel(active.kind)}</div><h3>{active.word}</h3></div></div>{active.definition ? <p><b>Định nghĩa:</b> {active.definition}</p> : null}{active.example ? <p><b>Ví dụ:</b> {active.example}</p> : null}{active.context ? <p><b>Ngữ cảnh:</b> {active.context}</p> : null}{active.note ? <p><b>Ghi chú:</b> {active.note}</p> : null}{active.source ? <p className="small muted">Nguồn: {active.source}</p> : null}</article></div>;
+  return <div className="stack" style={{ gap: 12 }}><div className="row" style={{ flexWrap: "wrap", gap: 8 }}>{details.map((candidate) => <button className={candidate === active ? "btn-primary" : ""} type="button" key={`${candidate.kind}-${candidate.word}`} onClick={() => setSelected(candidate)}>{lexicalKindLabel(candidate.kind, language)} · {candidate.word}</button>)}</div><article className="card flat"><div className="row between" style={{ gap: 12, alignItems: "flex-start" }}><div style={{ minWidth: 0 }}><div className="eyebrow">{lexicalKindLabel(active.kind, language)}</div><h3>{active.word}</h3></div></div>{active.definition ? <p><b>{copy.modal.definition}:</b> {active.definition}</p> : null}{active.example ? <p><b>{copy.modal.example}:</b> {active.example}</p> : null}{active.context ? <p><b>{copy.modal.context}:</b> {active.context}</p> : null}{active.note ? <p><b>{copy.modal.note}:</b> {active.note}</p> : null}{active.source ? <p className="small muted">{copy.modal.source}: {active.source}</p> : null}</article></div>;
 }
 
-function lexicalKindLabel(kind: LessonVocabularyLexicalDetail["kind"]): string {
+function lexicalKindLabel(kind: LessonVocabularyLexicalDetail["kind"], language: LearnerLessonLanguage = "vi"): string {
+  if (language === "en") return kind === "synonym" ? "Synonym" : kind === "antonym" ? "Antonym" : kind === "slang" ? "Slang" : "Register";
   return kind === "synonym" ? "Đồng nghĩa" : kind === "antonym" ? "Trái nghĩa" : kind === "slang" ? "Khẩu ngữ" : "Văn phong";
 }
 

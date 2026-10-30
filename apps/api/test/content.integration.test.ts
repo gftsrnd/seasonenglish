@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { Pool } from "pg";
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { migrateDatabase, resetPublicSchema, seedDemo } from "@e4s/database";
 import { createCredentialHash, createPinHash } from "@e4s/domain/identity";
 import { DEMO_IDS } from "@e4s/test-support";
@@ -33,7 +33,7 @@ function lesson(dayNumber: number) {
       { code: "instruction", title: "Hướng dẫn", content: { steps: ["Học nội dung", "Làm bài tập"] } },
       { code: "vocabulary", title: "Từ vựng", content: { items: ["department", "role", "project"].map((word) => ({ word, meaning: "từ công việc", collocations: [`my ${word}`, `new ${word}`, `work ${word}`] })) } },
       { code: "grammar", title: "Ngữ pháp", content: { formula: "I work in [team] as [role].", examples: ["I work in AI as an intern."] } },
-      { code: "pronunciation", title: "Phát âm", content: { focus: "/w/", words: ["work", "week", "well"], instruction: "Round your lips." } },
+      { code: "pronunciation", title: "Phát âm", content: { focus: "/w/", words: [{ word: "work", ipa: "/wɜːk/" }, { word: "week", ipa: "/wiːk/" }, { word: "well", ipa: "/wel/" }], instruction: "Round your lips." } },
       { code: "listening", title: "Nghe", content: { script: "I work in AI as an intern.", prompt: "Where does she work?", options: ["AI", "HR", "Sales", "Finance"], answer: "AI" } },
       { code: "reading", title: "Đọc", content: { text: "I work in AI as an intern.", prompt: "Where does she work?", options: ["AI", "HR", "Sales", "Finance"], answer: "AI" } },
       { code: "writing", title: "Viết", content: { type: "fill", prompt: "I work in ___.", answer: "AI" } },
@@ -41,6 +41,29 @@ function lesson(dayNumber: number) {
       { code: "word_use", title: "Dùng từ", content: { prompt: "Which sentence is correct?", options: ["I work in AI.", "I works AI.", "I working AI.", "I work AI yesterday."], answer: "I work in AI." } },
       { code: "speaking", title: "Nói", content: { prompt: "Introduce your role.", sample: "I work in AI as an intern." } }
     ]
+  };
+}
+
+function b1Lesson(dayNumber: number) {
+  const base = lesson(dayNumber);
+  const englishTitles: Record<string, string> = {
+    objective: "Objectives", instruction: "Instructions", vocabulary: "Vocabulary", grammar: "Grammar",
+    pronunciation: "Pronunciation", listening: "Listening", reading: "Reading", writing: "Writing",
+    word_class: "Word class", word_use: "Word use", speaking: "Speaking"
+  };
+  return {
+    ...base,
+    title: `Workplace introduction ${dayNumber}`,
+    parts: base.parts.map((part) => ({
+      ...part,
+      title: englishTitles[part.code]!,
+      content: part.code === "objective" ? { text: "Introduce your workplace role clearly." }
+        : part.code === "instruction" ? { steps: ["Study the model.", "Complete the exercises."] }
+        : part.code === "grammar" ? { formula: "I work in [team] as [role].", examples: ["I work in AI as an intern."], usage: "Use this pattern to introduce your role." }
+        : part.code === "pronunciation" ? { focus: "/w/", words: [{ word: "work", ipa: "/wɜːk/" }, { word: "week", ipa: "/wiːk/" }, { word: "well", ipa: "/wel/" }], instruction: "Round your lips." }
+        : part.code === "speaking" ? { prompt: "Introduce your role.", sample: "I work in AI as an intern." }
+        : part.content
+    }))
   };
 }
 
@@ -74,6 +97,11 @@ const repairRunner: AiTaskRunner = {
     const output = taskKey === "weekly_lesson_grammar_classifier" ? {
       status: "classified", contentType: "sentence_pattern", targetName: "S + V + O", scope: lessonFocus,
       support: "explicit", confidence: "high", evidence: [{ sourceRef: "lessonFocus", quote: lessonFocus }], rejectedCandidates: []
+    } : taskKey === "weekly_lesson_objectives" ? {
+      objective: { title: "Mục tiêu bài học", explanationLanguage: "vi", lesson_goal: "Giới thiệu nơi làm việc bằng mẫu câu mục tiêu.", assessment_gap: null, items: [
+        { id: "C1", type: "content", text: "Sau bài học, bạn có thể chọn hai chi tiết công việc đúng sau khi nghe.", action_verb: "chọn", target_language: null, condition: "sau khi nghe", criterion: "đúng 2 chi tiết", assessed_by: "listening", success_evidence: "Chọn đúng hai chi tiết", assessmentCode: "listening" },
+        { id: "L1", type: "language", text: "Sau bài học, bạn có thể nói một câu có cụm 'I work in' khi giới thiệu công việc.", action_verb: "nói", target_language: ["I work in"], condition: "khi giới thiệu công việc", criterion: "1 câu hoàn chỉnh", assessed_by: "speaking", success_evidence: "Transcript có cụm từ mục tiêu", assessmentCode: "speaking" }
+      ] }
     } : taskKey === "weekly_lesson_foundation" ? {
       title: "I work in + department", durationMinutes: 10,
       objective: { title: "Mục tiêu bài học", explanationLanguage: "vi", lesson_goal: "Giới thiệu nơi làm việc bằng mẫu câu mục tiêu.", assessment_gap: null, items: [
@@ -85,15 +113,21 @@ const repairRunner: AiTaskRunner = {
       pronunciation: { title: "Phát âm", focus: "/w/", tip: "Mở môi tròn khi phát âm.", word1: { word: "work", ipa: "/wɜːk/" }, word2: { word: "week", ipa: "/wiːk/" }, word3: { word: "well", ipa: "/wel/" } }
     } : taskKey === "weekly_lesson_vocabulary" ? {
       title: "Từ vựng", word1: vocabularyItem(dayWords[0]!), word2: vocabularyItem(dayWords[1]!), word3: vocabularyItem(dayWords[2]!)
+    } : taskKey === "weekly_lesson_length_repair" ? {
+      listeningBody: "I work in AI with my small project team every weekday and meet my manager on Friday.".split(" "),
+      readingBody: null,
+      speakingAnswer: null
     } : taskKey === "weekly_lesson_skills_reviewer" ? {
       status: "approved", findings: [],
-      solvedAnswers: { listening: "AI", reading: "A report", writing: "AI", wordClass: "noun", wordUse: "I work at GFT." }
-    } : {
+      solvedAnswers: { listening: "AI", reading: "A report", writing: "I work in AI.", wordClass: "noun", wordUse: "I work at GFT." }
+    } : taskKey === "weekly_lesson_comprehension" ? {
       listening: { title: "Nghe", body: "I work in AI with my small team every weekday.", prompt: "Where does the speaker work?", option1: "AI", option2: "HR", option3: "Sales", option4: "Finance", answer: "AI", hint: "Listen for the department.", questionTranslation: "Người nói làm ở đâu?", answerTranslation: "AI" },
-      reading: { title: "Đọc", body: "Lan works in AI with a small team. She checks one report every morning and sends it to her manager.", prompt: "What does Lan check?", option1: "A report", option2: "An email", option3: "A meeting", option4: "A customer", answer: "A report", hint: "Read what she checks each morning.", questionTranslation: "Lan kiểm tra gì?", answerTranslation: "Một báo cáo" },
-      writing: { title: "Viết", type: "fill", prompt: "I work in ___.", option1: null, option2: null, option3: null, option4: null, answer: "AI", hint: "Use the department name.", questionTranslation: "Tôi làm việc trong bộ phận ___.", answerTranslation: "AI" },
+      reading: { title: "Đọc", body: "Lan works in AI with a small team. She checks one report every morning and sends it to her manager.", prompt: "What does Lan check?", option1: "A report", option2: "An email", option3: "A meeting", option4: "A customer", answer: "A report", hint: "Read what she checks each morning.", questionTranslation: "Lan kiểm tra gì?", answerTranslation: "Một báo cáo" }
+    } : taskKey === "weekly_lesson_language_practice" ? {
+      writing: { title: "Viết", type: "mcq", prompt: "Which sentence names the department?", option1: "I work in AI.", option2: "I works AI.", option3: "I am work AI.", option4: "I working in AI.", answer: "I work in AI.", hint: "Use I work in + department.", questionTranslation: "Câu nào nêu tên bộ phận?", answerTranslation: "Tôi làm việc trong bộ phận AI." },
       wordClass: { title: "Từ loại", body: undefined, prompt: "What part of speech is work?", option1: "noun", option2: "verb", option3: "adjective", option4: "adverb", answer: "noun", hint: "It names an activity here.", questionTranslation: "Work là từ loại gì?", answerTranslation: "danh từ" },
-      wordUse: { title: "Dùng từ", body: undefined, prompt: "Which sentence uses work correctly?", option1: "I have work.", option2: "I work at GFT.", option3: "Work is blue.", option4: "I workly today.", answer: "I work at GFT.", hint: "Choose a natural workplace sentence.", questionTranslation: "Câu nào dùng work đúng?", answerTranslation: "Tôi làm việc tại GFT." },
+      wordUse: { title: "Dùng từ", body: undefined, prompt: "Which sentence uses work correctly?", option1: "I have work.", option2: "I work at GFT.", option3: "Work is blue.", option4: "I workly today.", answer: "I work at GFT.", hint: "Choose a natural workplace sentence.", questionTranslation: "Câu nào dùng work đúng?", answerTranslation: "Tôi làm việc tại GFT." }
+    } : {
       speaking: { title: "Nói", prompt: "Nói nơi bạn làm việc.", answer: "I work in AI.", hint: "Bắt đầu bằng I work.", questionTranslation: "Nói nơi bạn làm việc.", answerTranslation: "Tôi làm việc trong bộ phận AI." }
     };
     return {
@@ -151,6 +185,25 @@ describe("content operations API", () => {
   }, 30_000);
 
   afterAll(async () => { await app.close(); await pool.end(); });
+
+  beforeEach(async () => {
+    const plans = {
+      1: {
+        A1: ["introduce your role", "describe a routine", "name a responsibility", "ask about a colleague", "summarise your work"],
+        A2: ["introduce your role", "describe responsibilities", "explain a routine", "ask a follow-up", "summarise your week"]
+      },
+      2: {
+        A2: ["request a new time", "give a reason", "offer alternatives", "confirm availability", "write the final email"],
+        B1: ["request a reschedule", "explain constraints", "compare alternatives", "negotiate a time", "confirm the agreement"]
+      }
+    };
+    for (const [weekNumber, plan] of Object.entries(plans)) {
+      await pool.query(
+        "update program_weeks set ai_plan = $3::jsonb where program_id = $1 and week_number = $2",
+        [DEMO_IDS.program, Number(weekNumber), JSON.stringify(plan)]
+      );
+    }
+  });
 
   it("resolves a real vocabulary image for the operator preview without asking AI for an image", async () => {
     mediaRequests.length = 0;
@@ -528,29 +581,15 @@ describe("content operations API", () => {
     }
   });
 
-  it("persists useful components from a partial first run and supplements only the missing component", async () => {
+  it("reports a partial generation as failed instead of recording false success", async () => {
     forcedAiFailures.add("weekly_lesson_vocabulary:1");
     const generated = await app.inject({
       method: "POST", url: "/api/v1/content/lesson-sets/1/A1/generate", headers: { cookie: makerCookie }, payload: {}
     });
     forcedAiFailures.clear();
 
-    expect(generated.statusCode, generated.body).toBe(201);
-    const partial = generated.json() as { lessons: Array<{ dayNumber: number; parts: Array<{ code: string; content: Record<string, unknown> }> }> };
-    const partialDay = partial.lessons.find((item) => item.dayNumber === 1)!;
-    expect(partialDay.parts.find((part) => part.code === "objective")).toBeDefined();
-    expect(partialDay.parts.find((part) => part.code === "vocabulary")).toBeUndefined();
-
-    const supplemented = await app.inject({
-      method: "POST", url: "/api/v1/content/lesson-sets/1/A1/draft/enrich", headers: { cookie: makerCookie }, payload: { dayNumber: 1 }
-    });
-    expect(supplemented.statusCode, supplemented.body).toBe(201);
-    const completed = supplemented.json() as { lessons: Array<{ dayNumber: number; parts: Array<{ code: string; content: Record<string, unknown> }> }> };
-    const completedDay = completed.lessons.find((item) => item.dayNumber === 1)!;
-    expect(completedDay.parts.find((part) => part.code === "vocabulary")).toBeDefined();
-    expect(completedDay.parts.find((part) => part.code === "objective")?.content).toEqual(
-      partialDay.parts.find((part) => part.code === "objective")?.content
-    );
+    expect(generated.statusCode, generated.body).toBe(502);
+    expect(generated.json()).toMatchObject({ code: "AI_LESSON_GENERATION_FAILED" });
   });
 
   it("keeps an immutable generation record on the recoverable draft without replacing the approved lesson", async () => {
@@ -613,12 +652,24 @@ describe("content operations API", () => {
   it("records a failed AI generation diagnostic and keeps the approved lesson version available", async () => {
     const created = await app.inject({
       method: "PUT", url: "/api/v1/content/lesson-sets/2/B1/draft", headers: { cookie: makerCookie },
-      payload: { lessons: [1, 2, 3, 4, 5].map(lesson) }
+      payload: { lessons: [1, 2, 3, 4, 5].map(b1Lesson) }
     });
     expect(created.statusCode, created.body).toBe(201);
-    const draft = created.json() as { versionId: string };
-    expect((await app.inject({ method: "POST", url: `/api/v1/content/lesson-set-versions/${draft.versionId}/review`, headers: { cookie: makerCookie }, payload: {} })).statusCode).toBe(200);
-    expect((await app.inject({ method: "POST", url: `/api/v1/content/lesson-set-versions/${draft.versionId}/publication`, headers: { cookie: makerCookie }, payload: {} })).statusCode).toBe(200);
+    const draft = created.json() as { versionId: string; version: number };
+    const weeklyPractice = await app.inject({
+      method: "PUT", url: "/api/v1/content/lesson-sets/2/B1/draft/weekly-practice", headers: { cookie: makerCookie },
+      payload: {
+        expectedVersion: draft.version,
+        task: "Write a short workplace introduction.",
+        guidance: "Write in English and include three words from this week's lessons.",
+        requiredVocabulary: ["department", "role", "project"]
+      }
+    });
+    expect(weeklyPractice.statusCode, weeklyPractice.body).toBe(200);
+    const updatedDraft = weeklyPractice.json() as { versionId: string };
+    const reviewResponse = await app.inject({ method: "POST", url: `/api/v1/content/lesson-set-versions/${updatedDraft.versionId}/review`, headers: { cookie: makerCookie }, payload: {} });
+    expect(reviewResponse.statusCode, reviewResponse.body).toBe(200);
+    expect((await app.inject({ method: "POST", url: `/api/v1/content/lesson-set-versions/${updatedDraft.versionId}/publication`, headers: { cookie: makerCookie }, payload: {} })).statusCode).toBe(200);
 
     forceWholeGenerationFailure = true;
     const failed = await app.inject({
@@ -628,20 +679,35 @@ describe("content operations API", () => {
 
     expect(failed.statusCode, failed.body).toBe(502);
     expect(failed.json()).toMatchObject({ code: "AI_LESSON_GENERATION_FAILED" });
-    await expect(pool.query(
+    const failedRun = await pool.query(
       `select ar.status, ar.error_code, ar.output
        from ai_runs ar join ai_tasks at on at.id = ar.task_id
        where ar.user_id = $1 and at.task_key = 'weekly_lessons'
        order by ar.created_at desc limit 1`,
       [DEMO_IDS.operator]
-    )).resolves.toMatchObject({ rows: [expect.objectContaining({
-      status: "failed", error_code: "AI_UNAVAILABLE", output: expect.objectContaining({ diagnostic: expect.any(Object) })
+    );
+    expect(failedRun).toMatchObject({ rows: [expect.objectContaining({
+      status: "failed", error_code: "AI_UNAVAILABLE", output: expect.objectContaining({ diagnostic: expect.objectContaining({
+        issues: expect.arrayContaining([expect.objectContaining({
+          code: "AI_UNAVAILABLE", component: "grammarClassification", dayNumber: 1
+        })])
+      }) })
     })] });
+    const diagnostic = failedRun.rows[0]?.output?.diagnostic as Record<string, unknown>;
+    expect(diagnostic).toMatchObject({
+      status: "generation_failed",
+      code: "AI_UNAVAILABLE",
+      prompt: { versionId: expect.any(String), content: expect.any(String) },
+      input: expect.objectContaining({ cefr: "B1", weekNumber: 2 }),
+      issues: expect.arrayContaining([expect.objectContaining({
+        code: "AI_UNAVAILABLE", component: "grammarClassification", dayNumber: 1
+      })])
+    });
     await expect(pool.query(
       `select lsv.id, lsv.status from lesson_sets ls
        join program_weeks pw on pw.id = ls.program_week_id
        join lesson_set_versions lsv on lsv.lesson_set_id = ls.id
        where pw.week_number = 2 and ls.cefr = 'B1' and lsv.status = 'published'`
-    )).resolves.toMatchObject({ rows: [expect.objectContaining({ id: draft.versionId, status: "published" })] });
+    )).resolves.toMatchObject({ rows: [expect.objectContaining({ id: updatedDraft.versionId, status: "published" })] });
   });
 });

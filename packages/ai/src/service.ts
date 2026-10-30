@@ -1,6 +1,6 @@
 import { createHash, randomUUID } from "node:crypto";
 import type { AiTaskRegistry } from "./registry.js";
-import { AiGatewayError, AiProviderError, type AiProvider, type AiRunResult } from "./types.js";
+import { AiGatewayError, AiProviderError, type AiMessage, type AiProvider, type AiRunResult } from "./types.js";
 
 export function createAiService(options: {
   registry: AiTaskRegistry;
@@ -8,11 +8,15 @@ export function createAiService(options: {
   loadPrompt: (promptKey: string) => Promise<string>;
   timeoutMs?: number;
   maxAttempts?: number;
+  retryBaseDelayMs?: number;
+  sleep?: (ms: number) => Promise<void>;
   createTraceId?: () => string;
   now?: () => number;
 }) {
   const timeoutMs = options.timeoutMs ?? 20_000;
   const maxAttempts = Math.max(1, Math.min(3, options.maxAttempts ?? 3));
+  const retryBaseDelayMs = Math.max(0, options.retryBaseDelayMs ?? 250);
+  const sleep = options.sleep ?? ((ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms)));
   const createTraceId = options.createTraceId ?? randomUUID;
   const now = options.now ?? Date.now;
 
@@ -20,7 +24,13 @@ export function createAiService(options: {
     async runTask<TOutput = unknown>(
       taskId: string,
       rawInput: unknown,
-      runOptions?: { systemPrompt?: string; maxOutputTokens?: number; temperature?: number }
+      runOptions?: {
+        systemPrompt?: string;
+        messages?: AiMessage[];
+        maxOutputTokens?: number;
+        temperature?: number;
+        maxAttempts?: number;
+      }
     ): Promise<AiRunResult<TOutput>> {
       const task = options.registry.get(taskId);
       const inputResult = task.inputSchema.safeParse(rawInput);
@@ -32,18 +42,25 @@ export function createAiService(options: {
       const inputHash = createHash("sha256").update(stableJson(input)).digest("hex");
       const startedAt = now();
       let lastError: unknown;
-      let attemptPrompt = systemPrompt;
+      let attemptMessages: AiMessage[] | undefined = runOptions?.messages;
+      const outputMaxAttempts = Math.max(1, Math.min(maxAttempts, runOptions?.maxAttempts ?? maxAttempts));
+      const transientMaxAttempts = maxAttempts;
 
-      for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+      for (let attempt = 1; attempt <= transientMaxAttempts; attempt += 1) {
         const controller = new AbortController();
         let invalidOutput = "";
         try {
           const response = await callWithTimeout(
             () => options.provider.complete({
-              taskId, systemPrompt: attemptPrompt, input, outputJsonSchema: task.outputJsonSchema,
+              taskId,
+              systemPrompt,
+              input,
+              ...(attemptMessages ? { messages: attemptMessages } : {}),
+              outputJsonSchema: task.outputJsonSchema,
               ...(runOptions?.maxOutputTokens === undefined ? {} : { maxOutputTokens: runOptions.maxOutputTokens }),
               ...(runOptions?.temperature === undefined ? {} : { temperature: runOptions.temperature }),
-              signal: controller.signal, traceId
+              signal: controller.signal,
+              traceId
             }),
             timeoutMs,
             controller
@@ -65,27 +82,60 @@ export function createAiService(options: {
             metadata: {
               traceId, taskId, provider: options.provider.name, model: options.provider.model,
               attempts: attempt, latencyMs: Math.max(0, now() - startedAt), inputHash,
-              schemaValid: true, usage: response.usage
+              schemaValid: true, usage: response.usage,
+              ...(response.stopReason ? { stopReason: response.stopReason } : {})
             }
           };
         } catch (error) {
           lastError = normalizeError(error);
           if (lastError instanceof AiGatewayError && lastError.code === "AI_OUTPUT_INVALID") {
             const details = lastError.details as { issues?: Array<{ path: string; message: string }> } | undefined;
+            if (invalidOutput) {
+              lastError = new AiGatewayError("AI_OUTPUT_INVALID", {
+                ...(details ?? {}),
+                invalidOutput
+              });
+            }
             const issues = Array.isArray(details?.issues)
               ? details.issues.slice(0, 8).map((issue) => `${issue.path}: ${issue.message}`).join("; ")
               : "The previous structured output did not satisfy the schema.";
-            const previousOutput = invalidOutput
-              ? `\nPREVIOUS INVALID OUTPUT: ${invalidOutput}`
-              : "";
-            attemptPrompt = `${systemPrompt}\n\nREPAIR REQUIRED: ${issues}${previousOutput}\nReturn a complete corrected result; preserve valid fields and change every field identified above; never leave required strings empty.`;
+            const repairInstruction = `REPAIR REQUIRED: ${issues}\nReturn a complete corrected result; preserve valid fields and change every field identified above; never leave required strings empty.`;
+            attemptMessages = invalidOutput
+              ? [
+                  { role: "user", content: JSON.stringify(input) },
+                  { role: "assistant", content: invalidOutput },
+                  { role: "user", content: repairInstruction }
+                ]
+              : [{ role: "user", content: `${JSON.stringify(input)}\n\n${repairInstruction}` }];
           }
-          if (!isRetryable(lastError) || attempt === maxAttempts) throw lastError;
+          const maxAllowedAttempts = lastError instanceof AiGatewayError && lastError.code === "AI_OUTPUT_INVALID"
+            ? outputMaxAttempts
+            : transientMaxAttempts;
+          if (!isRetryable(lastError) || attempt >= maxAllowedAttempts) throw lastError;
+          if (shouldBackoffBeforeRetry(lastError)) {
+            const delayMs = computeBackoffDelayMs(attempt, retryBaseDelayMs, lastError);
+            if (delayMs > 0) await sleep(delayMs);
+          }
         }
       }
       throw normalizeError(lastError);
     }
   };
+}
+
+function shouldBackoffBeforeRetry(error: unknown): boolean {
+  return (error instanceof AiProviderError && error.retryable)
+    || (error instanceof AiGatewayError && error.code === "AI_TIMEOUT");
+}
+
+function computeBackoffDelayMs(attempt: number, baseDelayMs: number, error: unknown): number {
+  const retryAfterMs = error instanceof AiProviderError && typeof error.retryAfterMs === "number"
+    ? error.retryAfterMs
+    : 0;
+  if (baseDelayMs <= 0) return Math.min(60_000, Math.max(0, retryAfterMs));
+  const exponential = baseDelayMs * Math.pow(2, Math.max(0, attempt - 1));
+  const jitter = Math.floor(Math.random() * Math.max(1, Math.floor(exponential * 0.25)));
+  return Math.min(60_000, Math.max(exponential + jitter, retryAfterMs));
 }
 
 async function callWithTimeout<T>(operation: () => Promise<T>, timeoutMs: number, controller: AbortController): Promise<T> {

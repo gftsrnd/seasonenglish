@@ -98,6 +98,7 @@ export const users = pgTable("users", {
 export const userCredentials = pgTable("user_credentials", {
   userId: uuid("user_id").primaryKey().references(() => users.id, { onDelete: "cascade" }),
   credentialHash: text("credential_hash").notNull(), algorithm: text("algorithm").notNull().default("scrypt"),
+  recoveryCiphertext: text("recovery_ciphertext"), recoveryNonce: text("recovery_nonce"), recoveryAuthTag: text("recovery_auth_tag"),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow()
 });
 

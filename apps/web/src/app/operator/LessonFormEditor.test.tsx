@@ -265,7 +265,7 @@ describe("operator granular lesson editor", () => {
     expect(item.umbrella.siblings[0].audioUrl).toBe("/audio/hour.mp3");
   });
 
-  it("offers main and per-entry vocabulary audio plus optional grammar and pronunciation audio", async () => {
+  it("offers word and sentence audio without any target-phoneme audio control", async () => {
     const user = userEvent.setup();
     const onSave = vi.fn().mockResolvedValue(undefined);
     vi.spyOn(window, "confirm").mockReturnValue(true);
@@ -277,11 +277,10 @@ describe("operator granular lesson editor", () => {
     expect(screen.queryByLabelText("Audio Ngữ pháp URL")).not.toBeInTheDocument();
     expect(screen.queryByLabelText("Audio âm mục tiêu URL")).not.toBeInTheDocument();
     await user.click(screen.getByRole("checkbox", { name: "Bật audio cho Ngữ pháp" }));
-    await user.click(screen.getByRole("checkbox", { name: "Bật audio cho âm mục tiêu" }));
+    expect(screen.queryByRole("checkbox", { name: "Bật audio cho âm mục tiêu" })).not.toBeInTheDocument();
     fireEvent.change(screen.getByText("Câu ví dụ để đọc thành tiếng").closest("label")!.querySelector("textarea")!, { target: { value: "I fell down.; She slipped." } });
     fireEvent.change(screen.getByLabelText("3 từ luyện âm"), { target: { value: "down, road, hold" } });
     fireEvent.change(screen.getByLabelText("Audio Ngữ pháp URL"), { target: { value: "/audio/grammar.mp3" } });
-    fireEvent.change(screen.getByLabelText("Audio âm mục tiêu URL"), { target: { value: "/audio/ipa.mp3" } });
     fireEvent.change(screen.getByLabelText("Audio ví dụ ngữ pháp: I fell down. URL"), { target: { value: "/audio/grammar-example-1.mp3" } });
     fireEvent.change(screen.getByLabelText("Audio ví dụ ngữ pháp: She slipped. URL"), { target: { value: "/audio/grammar-example-2.mp3" } });
     fireEvent.change(screen.getByLabelText("Audio từ luyện âm: down URL"), { target: { value: "/audio/down.mp3" } });
@@ -308,7 +307,8 @@ describe("operator granular lesson editor", () => {
     expect(byCode("instruction").audioUrl).toBe("");
     expect(byCode("grammar").audioUrl).toBe("/audio/grammar.mp3");
     expect(byCode("grammar").exampleAudioUrls).toEqual(["/audio/grammar-example-1.mp3", "/audio/grammar-example-2.mp3"]);
-    expect(byCode("pronunciation").phonemeAudioUrl).toBe("/audio/ipa.mp3");
+    expect(byCode("pronunciation")).not.toHaveProperty("phonemeAudioUrl");
+    expect(byCode("pronunciation")).not.toHaveProperty("phonemeAudioId");
     expect(byCode("pronunciation").wordAudioUrls).toEqual(["/audio/down.mp3", "/audio/road.mp3", "/audio/hold.mp3"]);
     expect(byCode("reading").audioUrl).toBe("");
     expect(byCode("writing").audioUrl).toBe("");
@@ -320,7 +320,7 @@ describe("operator granular lesson editor", () => {
     ]);
   });
 
-  it("keeps an uploaded phoneme asset separate from the three pronunciation words", async () => {
+  it("drops legacy target-phoneme audio when saving while keeping IPA words", async () => {
     const user = userEvent.setup();
     const onSave = vi.fn().mockResolvedValue(undefined);
     vi.spyOn(window, "confirm").mockReturnValue(true);
@@ -331,15 +331,14 @@ describe("operator granular lesson editor", () => {
     );
 
     render(<LessonFormEditor weekNumber={1} cefr="A2" initial={initial} onSave={onSave} onCancel={() => undefined} uploadMedia={vi.fn()} />);
-    expect(screen.getByLabelText("Audio âm mục tiêu URL")).toHaveValue("/audio/ay.mp3");
-    fireEvent.change(screen.getByLabelText("Audio âm mục tiêu URL"), { target: { value: "/audio/ay-revised.mp3" } });
+    expect(screen.queryByLabelText("Audio âm mục tiêu URL")).not.toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: "Kiểm tra & lưu" }));
     await user.click(screen.getByRole("button", { name: "Lưu dù còn thiếu" }));
 
     const pronunciation = onSave.mock.calls[0]?.[0].parts.find((part: { code: string }) => part.code === "pronunciation")?.content;
-    expect(pronunciation).toEqual(expect.objectContaining({
-      focus: "/eɪ/", words: ["safe", "day", "take"], phonemeAudioUrl: "/audio/ay-revised.mp3", audioUrl: ""
-    }));
+    expect(pronunciation).toEqual(expect.objectContaining({ focus: "/eɪ/", words: ["safe", "day", "take"], audioUrl: "" }));
+    expect(pronunciation).not.toHaveProperty("phonemeAudioId");
+    expect(pronunciation).not.toHaveProperty("phonemeAudioUrl");
   });
 });

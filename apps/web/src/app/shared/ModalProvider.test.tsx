@@ -65,6 +65,7 @@ describe("ModalRoot", () => {
     const close = within(dialog).getByRole("button", { name: "Đóng hộp thoại" });
     const confirm = within(dialog).getByRole("button", { name: "Áp dụng" });
 
+    expect(cancel.parentElement).toHaveClass("app-modal-actions");
     expect(dialog).toHaveAttribute("aria-modal", "true");
     expect(dialog).toHaveAccessibleDescription("Thay đổi này sẽ được áp dụng ngay.");
     expect(document.body).toHaveClass("app-modal-open");

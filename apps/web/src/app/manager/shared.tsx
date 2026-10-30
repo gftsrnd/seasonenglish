@@ -73,8 +73,27 @@ export function formatDateTime(value: string) {
 export function percent(value: number, total: number) { return total ? Math.round(value / total * 100) : 0; }
 
 export function copyText(text: string) {
-  if (navigator.clipboard?.writeText) return navigator.clipboard.writeText(text);
-  return Promise.reject(new Error("CLIPBOARD_UNAVAILABLE"));
+  const writeText = navigator.clipboard?.writeText;
+  if (writeText) {
+    return Promise.race([
+      writeText.call(navigator.clipboard, text),
+      new Promise<never>((_, reject) => window.setTimeout(() => reject(new Error("CLIPBOARD_TIMEOUT")), 750))
+    ]).catch(() => copyTextFallback(text));
+  }
+  return copyTextFallback(text);
+}
+
+function copyTextFallback(text: string): Promise<void> {
+  const textarea = document.createElement("textarea");
+  textarea.value = text;
+  textarea.setAttribute("readonly", "");
+  textarea.style.position = "fixed";
+  textarea.style.opacity = "0";
+  document.body.appendChild(textarea);
+  textarea.select();
+  const copied = typeof document.execCommand === "function" && document.execCommand("copy");
+  textarea.remove();
+  return copied ? Promise.resolve() : Promise.reject(new Error("CLIPBOARD_UNAVAILABLE"));
 }
 
 export function downloadText(filename: string, value: string, type: string) {

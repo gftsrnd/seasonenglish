@@ -193,6 +193,49 @@
   flex: 0 0 auto;
 }
 
+.app-operator .operator-card-header > .btn-sm:first-child {
+  flex: 0 0 auto;
+  width: auto;
+  margin-left: auto;
+}
+
+.app-operator .operator-pending-review-summary {
+  cursor: pointer;
+  list-style-position: outside;
+}
+
+.app-operator .operator-pending-review-body {
+  margin-top: 12px;
+}
+
+.app-operator .operator-pending-list {
+  display: grid;
+  gap: 10px;
+}
+
+.manager-operations-switcher {
+  display: flex;
+  gap: 8px;
+  margin: 0 0 16px;
+  overflow-x: auto;
+  padding: 4px 0;
+  white-space: nowrap;
+}
+
+.manager-operations-switcher a {
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  color: var(--text);
+  padding: 7px 12px;
+  text-decoration: none;
+}
+
+.manager-operations-switcher a.active {
+  background: var(--primary);
+  border-color: var(--primary);
+  color: white;
+}
+
 .app-operator .operator-week-suggestion-option {
   margin-top: 12px;
   padding: 14px 16px;
@@ -634,13 +677,24 @@
 
 .app-operator .operator-lesson-preview .operator-study-block,
 .app-operator .operator-lesson-preview .operator-practice-content { display: grid; gap: 12px; min-width: 0; }
+.app-operator .operator-lesson-preview .operator-practice-review { display: grid; row-gap: 8px; }
+.app-operator .operator-lesson-preview .operator-practice-review > .operator-reading-passage,
+.app-operator .operator-lesson-preview .operator-practice-review > .operator-question,
+.app-operator .operator-lesson-preview .operator-practice-review > .operator-answer-options { margin: 0; }
+.app-operator .operator-lesson-preview .operator-practice-review > .operator-correct-answer { margin-top: 2px; }
+.app-operator .operator-lesson-preview .operator-listening-transcript { display: grid; gap: 2px; border-left: 3px solid #df8422; border-radius: 7px; background: var(--surface-2); padding: 7px 10px; line-height: 1.4; }
+.app-operator .operator-lesson-preview .operator-listening-transcript strong { color: var(--muted); font-size: .72rem; letter-spacing: .03em; text-transform: uppercase; }
+.app-operator .operator-lesson-preview .operator-listening-transcript p { margin: 0; white-space: pre-wrap; }
 .app-operator .operator-lesson-preview .lesson-grammar-card { border: 1px solid var(--primary-line); background: var(--primary-soft) !important; }
 .app-operator .operator-lesson-preview .lesson-grammar-card > .row,
 .app-operator .operator-lesson-preview .lesson-example-card { align-items: flex-start; gap: 12px; }
 .app-operator .operator-lesson-preview .lesson-example-list { display: grid; gap: 8px; }
 .app-operator .operator-lesson-preview .lesson-example-card { display: flex; justify-content: space-between; border: 1px solid var(--line); border-radius: 11px; background: var(--surface); padding: 10px 12px; }
 .app-operator .operator-lesson-preview .operator-audio-button { display: inline-flex; align-items: center; gap: 6px; width: max-content; max-width: 100%; min-height: 40px; }
-.app-operator .operator-lesson-preview .operator-audio-button--primary { border-color: #df8422 !important; background: #ef9634 !important; color: #211205 !important; font-weight: 700; }
+.app-operator .operator-lesson-preview .operator-audio-button--primary,
+.app-operator .operator-lesson-preview .operator-audio-button--primary:hover,
+.app-operator .operator-lesson-preview .operator-audio-button--primary:focus-visible,
+.app-operator .operator-lesson-preview .operator-audio-button--primary:active { border-color: #df8422 !important; background: #ef9634 !important; color: #211205 !important; font-weight: 700; }
 .app-operator .operator-lesson-preview .lesson-part--listening .operator-practice-content { margin-top: 7px; gap: 16px; }
 .app-operator .operator-lesson-preview .operator-pronunciation-focus,
 .app-operator .operator-lesson-preview .operator-pronunciation-tip { margin: 0; }
@@ -663,6 +717,12 @@
 .app-operator .operator-answer-choice.is-answer { border-color: var(--ok); background: var(--ok-tint); }
 .app-operator .operator-answer-letter { display: grid; width: 25px; height: 25px; place-items: center; border-radius: 7px; background: var(--surface-2); font-weight: 700; }
 .app-operator .operator-answer-key { border-radius: 9px; background: var(--surface); padding: 10px 12px; }
+.app-operator .operator-lesson-preview .operator-correct-answer { display: flex; align-items: baseline; flex-wrap: wrap; gap: 6px; margin-top: 12px; border: 1px solid var(--ok); border-radius: 10px; background: var(--ok-tint); padding: 10px 12px; color: var(--text); }
+.app-operator .operator-lesson-preview .operator-correct-answer strong { color: var(--ok); }
+.app-operator .operator-lesson-preview .lesson-part--listening .lesson-listening-audio-button,
+.app-operator .operator-lesson-preview .lesson-part--listening .lesson-listening-audio-button:hover,
+.app-operator .operator-lesson-preview .lesson-part--listening .lesson-listening-audio-button:focus-visible,
+.app-operator .operator-lesson-preview .lesson-part--listening .lesson-listening-audio-button:active { border-color: #df8422 !important; background: #ef9634 !important; color: #211205 !important; font-weight: 700; }
 
 @media (max-width: 560px) {
   .app-operator .operator-lesson-preview .lesson-example-card,
@@ -2817,11 +2877,78 @@ body > .operator-modal-scope .operator-editor-section select { width: 100%; max-
 .app-operator .operator-lesson-preview .vocabulary-card-sound { display: inline-flex; align-items: center; gap: 6px; }
 .operator-review-learner-group > summary { display:flex; align-items:center; justify-content:space-between; gap:12px; cursor:pointer; padding:12px; }
 .operator-review-group-items { display:grid; gap:8px; padding:0 12px 12px; }
-.operator-submission-brief { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:10px; margin-top:12px; }
-.operator-submission-brief section { padding:12px; border:1px solid var(--line); border-radius:10px; background:#fff; }
-.operator-submission-brief p { margin:5px 0 0; white-space:pre-wrap; }
-.operator-submission-brief .operator-submission-answer { grid-column:1 / -1; background:var(--surface-2); }
+.operator-submission-content { margin-top:16px; }
+.operator-submission-brief { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:10px; }
+.operator-submission-brief section { padding:14px 16px; border:1px solid var(--line); border-radius:10px; background:#fff; }
+.operator-submission-brief p { margin:7px 0 0; white-space:pre-wrap; line-height:1.6; overflow-wrap:anywhere; }
+.operator-submission-brief .operator-submission-vocabulary,
+.operator-submission-brief .operator-submission-answer { grid-column:1 / -1; }
+.operator-submission-brief .operator-submission-vocabulary { padding-top:10px; padding-bottom:10px; }
+.operator-submission-brief .operator-submission-answer { border-color:#cfd9c5; background:var(--surface-2); }
 .operator-submission-status-row { display:flex; align-items:center; min-height:38px; margin:12px 0 4px; }
+.app-operator .operator-submission-result {
+  display: grid;
+  gap: 12px;
+  margin-top: 14px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: #fff;
+  padding: 14px 16px;
+}
+.app-operator .operator-submission-feedback-copy {
+  border-radius: 10px;
+  background: var(--surface-2);
+  padding: 12px 14px;
+}
+.app-operator .operator-submission-feedback-copy p { margin: 6px 0 0; line-height: 1.6; white-space: pre-wrap; overflow-wrap: anywhere; }
+.app-operator .operator-submission-result .sugg { display: grid; gap: 8px; margin: 0; padding-left: 22px; }
+.app-operator .operator-submission-result .sugg li { line-height: 1.55; }
+.app-operator .operator-submission-ai-detail,
+.app-operator .operator-submission-grader { margin-top: 2px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); overflow: hidden; }
+.app-operator .operator-submission-ai-detail > summary,
+.app-operator .operator-submission-grader > summary { display: flex; align-items: center; justify-content: space-between; gap: 12px; cursor: pointer; padding: 11px 13px; }
+.app-operator .operator-submission-ai-detail > summary > b,
+.app-operator .operator-submission-grader > summary > b { flex: 0 0 auto; white-space: nowrap; }
+.app-operator .operator-submission-ai-detail > summary > span,
+.app-operator .operator-submission-grader > summary > span { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.app-operator .operator-submission-ai-detail-body,
+.app-operator .operator-submission-grader-body { display: grid; gap: 12px; border-top: 1px solid var(--line); padding: 12px 13px 14px; }
+.app-operator .operator-submission-grader { margin-top: 14px; }
+.app-operator .operator-submission-feedback { display: grid; gap: 6px; font-weight: 600; }
+.app-operator .operator-submission-feedback textarea { min-height: 88px; line-height: 1.5; }
+.app-operator .operator-submission-result-summary {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px 10px;
+}
+.app-operator .operator-submission-result-summary > b {
+  flex: 0 0 auto;
+  margin-right: 2px;
+  white-space: nowrap;
+  font-size: 1rem;
+}
+.app-operator .operator-submission-result-summary .chips {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.app-operator .operator-submission-score-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(72px, 1fr));
+  gap: 10px;
+}
+.app-operator .operator-submission-score-field {
+  display: grid;
+  min-width: 0;
+  gap: 6px;
+  font-size: 13px;
+  font-weight: 600;
+}
+.app-operator .operator-submission-score-field input {
+  width: 100%;
+  min-width: 0;
+}
 .operator-review-appeal {
   display: grid;
   gap: 14px;
@@ -2854,6 +2981,35 @@ body > .operator-modal-scope .operator-editor-section select { width: 100%; max-
   .operator-review-appeal-comparison { grid-template-columns:1fr; }
 }
 .operator-review-action-footer { flex-wrap:wrap; gap:8px; padding-top:4px; }
+
+.app-operator .operator-weekly-practice-editor {
+  display: grid;
+  gap: 18px;
+  padding: 20px;
+  border-radius: 16px;
+}
+
+.app-operator .operator-weekly-practice-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 18px;
+}
+
+.app-operator .operator-weekly-practice-header.compact { justify-content: flex-end; }
+.app-operator .operator-weekly-practice-heading { display: grid; gap: 7px; min-width: 0; }
+.app-operator .operator-weekly-practice-heading > b { font-size: 1rem; line-height: 1.4; }
+.app-operator .operator-weekly-practice-meta { display: flex; align-items: center; flex-wrap: wrap; gap: 7px; color: var(--muted); font-size: .8rem; }
+.app-operator .operator-weekly-practice-fields { display: grid; gap: 14px; }
+.app-operator .operator-weekly-practice-fields > label { display: grid; gap: 7px; font-size: .84rem; font-weight: 700; }
+.app-operator .operator-weekly-practice-fields textarea { min-height: 94px; line-height: 1.55; padding: 12px 14px; }
+.app-operator .operator-weekly-practice-fields input { min-height: 44px; padding: 10px 14px; }
+.app-operator .operator-weekly-practice-editor .operator-review-action-footer { padding-top: 0; }
+
+@media (max-width: 680px) {
+  .app-operator .operator-weekly-practice-header { align-items: stretch; flex-direction: column; }
+  .app-operator .operator-weekly-practice-header > button { align-self: flex-start; }
+}
 .operator-weekly-practice-editor { display:grid; gap:12px; }
 .operator-weekly-practice-editor label { display:grid; gap:6px; font-weight:600; }
 .operator-weekly-practice-editor textarea { min-height:84px; resize:vertical; }
@@ -2869,6 +3025,187 @@ body > .operator-modal-scope .operator-editor-section select { width: 100%; max-
 .operator-attempt-learner-list { display:grid; gap:10px; margin-top:12px; }
 .operator-attempt-learner-list .operator-review-learner-group { border:1px solid var(--line); border-radius:12px; overflow:hidden; background:var(--surface); }
 .operator-attempt-learner-list .table-wrap { margin:0 12px 12px; }
+
+/* Long operational datasets scroll inside their own card instead of stretching the page. */
+.app-operator .operator-pending-list,
+.app-operator .operator-bounded-list,
+.app-operator .operator-action-table-wrap {
+  max-height: min(52vh, 360px) !important;
+  overflow-y: auto !important;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
+  scrollbar-width: thin;
+  scrollbar-color: #9b958b #eeeae3;
+}
+.app-operator .operator-pending-list::-webkit-scrollbar,
+.app-operator .operator-bounded-list::-webkit-scrollbar,
+.app-operator .operator-action-table-wrap::-webkit-scrollbar { width: 10px; height: 10px; }
+.app-operator .operator-pending-list::-webkit-scrollbar-track,
+.app-operator .operator-bounded-list::-webkit-scrollbar-track,
+.app-operator .operator-action-table-wrap::-webkit-scrollbar-track { background: #eeeae3; border-radius: 999px; }
+.app-operator .operator-pending-list::-webkit-scrollbar-thumb,
+.app-operator .operator-bounded-list::-webkit-scrollbar-thumb,
+.app-operator .operator-action-table-wrap::-webkit-scrollbar-thumb { border: 2px solid #eeeae3; border-radius: 999px; background: #9b958b; }
+.app-operator .operator-action-table-wrap thead th { position: sticky; z-index: 3; top: 0; background: var(--surface); }
+
+/* Operational navigation stays visible and consistent on every Operator page. */
+.app-operator > .operator-operations-switcher {
+  position: sticky;
+  z-index: 12;
+  top: 0;
+  margin: 0 0 14px;
+  padding: 4px 0;
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+  backdrop-filter: none;
+}
+
+/* Standalone selectors are intentional: these lists also render inside the
+   shared Manager read-only operations shell. */
+.operator-bounded-list,
+.operator-action-table-wrap {
+  max-height: min(68vh, 560px) !important;
+  overflow-y: auto !important;
+  overflow-x: hidden !important;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable both-edges;
+}
+
+/* A fully opened pending review is taller than a compact queue row. Keep two
+   learners visible before the local scrollbar starts. */
+.app-operator .operator-pending-list,
+.operator-pending-list {
+  max-height: min(72vh, 640px) !important;
+  gap: 8px;
+  padding-right: 4px;
+}
+.operator-pending-list > .operator-pending-review { margin: 0; }
+
+/* Weekly review queues and both assessment queues share one compact history
+   pattern. Details stay intact and open in place when a row is selected. */
+.app-operator .operator-review-card-list,
+.app-operator .operator-coach-list,
+.app-operator .operator-attempt-learner-list {
+  display: grid;
+  gap: 8px;
+  max-height: min(62vh, 560px);
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding: 2px 4px 2px 0;
+  scrollbar-gutter: stable;
+}
+.app-operator .operator-review-learner-group {
+  margin: 0;
+  padding: 0;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--surface);
+  box-shadow: none;
+}
+.app-operator .operator-review-learner-group > summary {
+  min-height: 52px;
+  padding: 12px 14px;
+  background: var(--surface);
+  list-style-position: inside;
+}
+.app-operator .operator-review-learner-group[open] > summary {
+  border-bottom: 1px solid var(--line);
+  background: var(--surface-2);
+}
+.app-operator .operator-review-group-items { padding: 10px 12px 12px; }
+.app-operator .operator-review-group-items > .operator-weekly-practice-editor {
+  margin: 0;
+  border: 0;
+  box-shadow: none;
+}
+.app-operator .operator-review-panel { padding: 14px; }
+.app-operator .operator-review-panel .operator-review-intro { margin: 0 0 10px; }
+.app-operator .operator-review-panel .operator-coach-list { margin-top: 0; }
+.app-operator .operator-action-table-wrap table { min-width: 0; width: 100%; }
+.app-operator .operator-level-group > .list {
+  display: grid;
+  gap: 8px;
+  max-height: 420px;
+  overflow-y: auto;
+  overflow-x: hidden;
+}
+.app-operator .operator-level-form-item {
+  margin: 0;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+}
+.app-operator .operator-read-only-banner { margin: 0 0 12px; }
+
+/* Bài tuần and Bài kiểm tra are review documents, not dashboard widgets.
+   Their rows expand with the page so there is only one browser scrollbar. */
+.app-operator[aria-label="Bài tuần"] .operator-review-card-list,
+.app-operator[aria-label="Bài tuần"] .operator-coach-list,
+.app-operator[aria-label="Bài tuần"] .operator-attempt-learner-list {
+  max-height: none !important;
+  overflow-y: visible !important;
+  overflow-x: visible !important;
+  scrollbar-gutter: auto;
+}
+
+.app-operator[aria-label="Bài kiểm tra"] .operator-action-table-wrap {
+  max-height: none !important;
+  overflow-y: visible !important;
+  overflow-x: visible !important;
+  scrollbar-gutter: auto;
+}
+
+.app-operator[aria-label="Bài kiểm tra"] .operator-level-group > .list,
+.app-operator[aria-label="Đề thi lên mức"] .operator-level-group > .list {
+  max-height: none !important;
+  overflow-y: visible !important;
+  overflow-x: visible !important;
+  scrollbar-gutter: auto;
+}
+
+.app-operator[aria-label="Bài tuần"] .table-wrap,
+.app-operator[aria-label="Bài kiểm tra"] .table-wrap,
+.app-operator[aria-label="Đề thi lên mức"] .table-wrap {
+  max-height: none !important;
+  overflow: visible !important;
+  scrollbar-gutter: auto;
+}
+
+.app-operator[aria-label="Bài kiểm tra"] .operator-action-table-wrap thead th {
+  position: static;
+}
+
+.operator-level-section > summary { cursor: pointer; }
+.operator-level-section > summary > span { display: grid; gap: 3px; }
+.operator-level-section > summary small { color: var(--muted); font-weight: 500; }
+.operator-level-instructions { margin: 12px 0; padding: 10px 12px; border-radius: 10px; background: var(--surface-2); }
+.operator-level-question-group { padding: 0 !important; overflow: hidden; }
+.operator-level-question-group > header { padding: 14px 16px 10px; border-bottom: 1px solid var(--line); }
+.operator-level-question-group > header p { margin: 4px 0 0 !important; }
+.operator-level-question-list { display: grid; }
+.operator-level-question { display: grid; grid-template-columns: 72px minmax(0, 1fr) auto; gap: 14px; align-items: start; padding: 14px 16px; }
+.operator-level-question + .operator-level-question { border-top: 1px solid var(--line); }
+.operator-level-question-number { display: grid; gap: 2px; font-weight: 800; }
+.operator-level-question-number span { color: var(--muted); font-size: .72rem; font-weight: 500; }
+.operator-level-question-content { min-width: 0; }
+.operator-level-question-content > p { margin: 0; line-height: 1.55; white-space: pre-wrap; }
+.operator-level-question-content textarea { width: 100%; min-height: 92px; }
+.operator-level-options { display: grid; gap: 5px; margin: 10px 0 0; padding-left: 24px; }
+.operator-level-form-dialog-header { align-items: flex-start; gap: 16px; }
+.operator-level-form-dialog-header > .row { flex: 0 0 auto; align-items: center; flex-wrap: nowrap; }
+.operator-level-form-dialog-header .btn-sm { min-height: 32px; padding: 6px 10px; line-height: 1.15; }
+.operator-level-option-editor { display: grid; gap: 8px; margin-top: 10px; }
+.operator-level-option-editor > label { display: grid; grid-template-columns: 32px minmax(0, 1fr); align-items: center; gap: 8px; }
+.operator-level-option-editor > label > span { color: var(--muted); font-size: .78rem; font-weight: 700; }
+.operator-level-option-editor input,
+.operator-level-option-editor select { width: 100%; min-width: 0; }
+.operator-level-option-editor > .operator-level-answer-editor { grid-template-columns: 100px minmax(0, 180px); margin-top: 4px; }
+
+@media (max-width: 640px) {
+  .operator-level-question { grid-template-columns: 58px minmax(0, 1fr); }
+  .operator-level-question > .badge { grid-column: 2; justify-self: start; }
+}
 
 /* Keep manually previewed vocabulary readable when image lookup has no result. */
 .app-operator .operator-lesson-preview .vocabulary-card-heading:has(> .content-image--hidden) {
@@ -2894,4 +3231,357 @@ body > .operator-modal-scope .operator-vocabulary-advanced-grid { gap: 22px 24px
 body > .operator-modal-scope .operator-vocabulary-entry-audio-grid { display: grid; grid-column: 1 / -1; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px 16px; min-width: 0; }
 @media (max-width: 720px) {
   body > .operator-modal-scope .operator-vocabulary-entry-audio-grid { grid-template-columns: 1fr; }
+}
+
+/* Operator surfaces need visible hierarchy without returning to saturated
+   dashboard colours. Warm paper, sage insets, and tinted row headers reduce
+   glare while keeping text contrast and existing status colours intact. */
+.app-operator {
+  --surface: #fbfaf6;
+  --surface-2: #eef3e8;
+  --surface-3: #f3f0e8;
+  --surface-soft: #eef3e8;
+  --line: #d8ddd0;
+}
+
+.app-operator > .card,
+.app-operator > .section,
+.app-operator .operator-review-panel,
+.app-operator .operator-level-group {
+  background: #fbfaf6;
+}
+
+.app-operator .operator-level-group > .row:first-child,
+.app-operator .operator-coach-list > .item > .body > .row:first-child {
+  background: #e8efe0;
+}
+
+.app-operator .operator-review-learner-group[open] > summary,
+.app-operator .operator-level-section[open] > summary {
+  background: #e8efe0;
+}
+
+.app-operator .operator-review-group-items,
+.app-operator .operator-submission-content,
+.app-operator .operator-level-group > .list {
+  background: #eeeae0;
+}
+
+.app-operator .operator-review-group-items {
+  border-top: 1px solid #d3d9ca;
+}
+
+.app-operator .operator-submission-brief section {
+  background: #fbfaf6;
+}
+
+.app-operator .operator-submission-brief .operator-submission-task {
+  background: #f7f1e5;
+}
+
+.app-operator .operator-submission-brief .operator-submission-guidance {
+  background: #edf2e8;
+}
+
+.app-operator .operator-submission-brief .operator-submission-vocabulary {
+  background: #f2efe7;
+}
+
+.app-operator .operator-submission-brief .operator-submission-answer,
+.app-operator .operator-submission-ai-detail-body {
+  background: #eaf1e5;
+}
+
+.app-operator .operator-submission-ai-detail > summary {
+  background: #f4efe3;
+}
+
+.app-operator .operator-submission-grader > summary,
+.app-operator .operator-submission-grader-body {
+  background: #f1f3eb;
+}
+
+.app-operator .operator-review-group-items > .operator-weekly-practice-editor,
+.app-operator .operator-review-group-items > .operator-review-appeal,
+.app-operator .operator-review-group-items > .item,
+.app-operator .operator-attempt-learner-list details[open] > .table-wrap {
+  background: #f7f3e9;
+}
+
+.app-operator .operator-review-group-items input,
+.app-operator .operator-review-group-items textarea,
+.app-operator .operator-review-group-items select,
+.app-operator .operator-level-group input,
+.app-operator .operator-level-group textarea,
+.app-operator .operator-level-group select {
+  background: #f8f5ed;
+}
+
+.app-operator .operator-attempt-learner-list details[open] tbody tr:nth-child(odd) td {
+  background: #fbfaf6;
+}
+
+.app-operator .operator-attempt-learner-list details[open] tbody tr:nth-child(even) td {
+  background: #eef3e8;
+}
+
+.app-operator .operator-action-table-wrap thead th {
+  background: #e8efe0;
+}
+
+.app-operator .operator-action-table-wrap tbody tr:nth-child(even) td {
+  background: #f5f2ea;
+}
+
+.app-operator .operator-action-table-wrap tbody tr:nth-child(odd) td {
+  background: #fbfaf6;
+}
+
+.app-operator .operator-level-form-item:nth-child(even),
+.app-operator .operator-review-card:nth-child(even),
+.app-operator .operator-coach-list > .item:nth-child(even) {
+  background: #f4f1e9;
+}
+
+/* Approved review direction: one quiet paper surface carries long content.
+   Colour is reserved for group headers, learner answers and status badges. */
+.app-operator .operator-review-group-items {
+  background: #f7f6f1;
+  padding: 16px;
+  gap: 16px;
+}
+
+.app-operator .operator-review-group-items > .operator-weekly-practice-editor,
+.app-operator .operator-review-group-items > .operator-review-card,
+.app-operator .operator-review-group-items > .operator-review-appeal,
+.app-operator .operator-review-group-items > .item {
+  background: #fffdfa;
+}
+
+.app-operator .operator-submission-content,
+.app-operator .operator-level-group > .list {
+  background: transparent;
+}
+
+.app-operator .operator-submission-brief {
+  gap: 14px;
+}
+
+.app-operator .operator-submission-brief section,
+.app-operator .operator-submission-brief .operator-submission-task,
+.app-operator .operator-submission-brief .operator-submission-guidance,
+.app-operator .operator-submission-brief .operator-submission-vocabulary {
+  background: #fffdfa;
+}
+
+.app-operator .operator-submission-brief .operator-submission-answer {
+  background: #eef3e8;
+}
+
+.app-operator .operator-review-copy {
+  line-height: 1.65;
+  padding: 12px 0;
+  border-top: 1px solid var(--line);
+  white-space: pre-wrap;
+}
+
+.app-operator .operator-coach-list > .item {
+  padding: 18px;
+  background: #fffdfa;
+}
+
+.app-operator .operator-coach-list > .item:nth-child(even) {
+  background: #fffdfa;
+}
+
+.app-operator .operator-coach-list .body {
+  gap: 12px;
+}
+
+.app-operator .operator-submission-result {
+  margin: 18px 0 0;
+  background: #fffdfa;
+}
+
+.app-operator .operator-submission-ai-detail > summary,
+.app-operator .operator-submission-grader > summary,
+.app-operator .operator-submission-grader-body {
+  background: #fffdfa;
+}
+
+.app-operator .operator-submission-ai-detail-body {
+  background: #f7f6f1;
+}
+
+.app-operator .operator-submission-grader {
+  margin-top: 18px;
+}
+
+.app-operator .operator-attempt-learner-list details[open] > .table-wrap {
+  margin: 16px;
+  background: #fffdfa;
+}
+
+.app-operator .operator-attempt-learner-list details[open] tbody tr:nth-child(odd) td,
+.app-operator .operator-attempt-learner-list details[open] tbody tr:nth-child(even) td {
+  background: #fffdfa;
+}
+
+.app-operator .operator-attempt-learner-list details[open] tbody tr + tr td {
+  border-top: 1px solid var(--line);
+}
+
+.app-operator .operator-level-group {
+  padding: 16px;
+  background: #fffdfa;
+  display: grid;
+  gap: 16px;
+}
+
+.app-operator .operator-level-group > .row:first-child {
+  margin: -4px -4px 12px;
+  border-radius: 10px;
+  padding: 10px 12px;
+  background: #e8efe0;
+}
+
+/* Promotion groups use a neutral header with a strong level marker. The
+   previous full-width green strip made every group look like a status alert. */
+.app-operator .operator-level-group > .operator-level-group-header {
+  margin: 0;
+  padding: 2px 2px 14px;
+  border-bottom: 1px solid var(--line);
+  border-radius: 0;
+  background: transparent;
+  align-items: center;
+}
+
+.app-operator .operator-level-group-header > div {
+  display: flex;
+  align-items: baseline;
+  gap: 9px;
+}
+
+.app-operator .operator-level-group-header h3,
+.operator-level-form-dialog-title h3 {
+  margin: 0;
+}
+
+.operator-level-kicker {
+  color: var(--muted);
+  font-size: .72rem;
+  font-weight: 800;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+}
+
+.app-operator .operator-level-group-header h3 {
+  color: var(--text);
+  font-size: 1.3rem;
+}
+
+.app-operator .operator-level-group > .list {
+  gap: 12px;
+  margin-top: 0 !important;
+}
+
+.app-operator .operator-level-form-item {
+  padding: 14px;
+  background: #fffdfa;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px 18px;
+}
+
+.app-operator .operator-level-form-item > .body {
+  display: grid;
+  gap: 7px;
+  min-width: 0;
+}
+
+.app-operator .operator-level-form-actions {
+  justify-content: flex-end;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.app-operator .operator-level-empty {
+  margin: 0;
+  padding: 4px 2px 2px;
+}
+
+.operator-level-form-dialog-header {
+  position: sticky;
+  top: 0;
+  z-index: 4;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+  margin: -2px 0 14px;
+  padding: 12px 0 14px;
+  border-bottom: 1px solid var(--line);
+  background: var(--surface);
+}
+
+.operator-level-form-dialog-title {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.operator-level-form-dialog-title p {
+  margin: 0;
+}
+
+.operator-level-form-dialog-actions {
+  flex: 0 0 auto;
+  align-items: center;
+  align-self: center;
+  gap: 8px;
+  flex-wrap: nowrap;
+}
+
+.operator-level-audio {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(220px, 360px) auto;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--line);
+  background: #f7f6f1;
+}
+
+.operator-level-audio > div {
+  display: grid;
+  gap: 3px;
+}
+
+.operator-level-audio audio {
+  width: 100%;
+  min-width: 0;
+  height: 36px;
+}
+
+.operator-level-audio.missing-audio {
+  border-left: 4px solid var(--warn);
+}
+
+.operator-level-audio label.btn-sm {
+  cursor: pointer;
+}
+
+.app-operator .operator-level-form-item:nth-child(even) {
+  background: #f7f6f1;
+}
+
+@media (max-width: 720px) {
+  .app-operator .operator-review-group-items { padding: 12px; }
+  .app-operator .operator-level-group { padding: 12px; }
+  .app-operator .operator-level-form-item { grid-template-columns: 1fr; align-items: flex-start; gap: 12px; }
+  .app-operator .operator-level-form-actions { justify-content: flex-start; }
+  .operator-level-form-dialog-header { align-items: stretch; flex-direction: column; }
+  .operator-level-form-dialog-actions { align-self: stretch; justify-content: flex-end; }
+  .operator-level-audio { grid-template-columns: 1fr; }
 }

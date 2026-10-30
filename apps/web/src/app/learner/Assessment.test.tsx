@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import "@testing-library/jest-dom/vitest";
-import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { userEvent } from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { AssessmentRuntimeView, AssessmentSectionCode, AssessmentSectionView } from "@e4s/contracts";
@@ -524,12 +524,12 @@ describe("assessment HCI states", () => {
     expect(screen.getByRole("alert")).toHaveTextContent("Không lưu đủ câu trả lời");
   });
 
-  it("renders speaking as four prototype task sections with a data table", () => {
+  it("renders S3 as four questions with one recording task", () => {
     const speaking = sections.find((section) => section.code === "speaking")!;
     speaking.groups = [
       { key: "S1", title: "Task 1 – Warm-up (3 phút · A1–A2)", instruction: "The examiner asks:", tasks: [{ key: "S1", prompt: "1. What do you do?\n2. What are your main responsibilities?\n3. What English do you use at work?\n4. What is one situation in which you find English difficult?", responseType: "speaking_evidence", maxScore: 5, hint: "Trả lời lần lượt 4 câu hỏi, mỗi câu 2–4 câu nói." }] },
       { key: "S2", title: "Task 2 – Data description (4 phút · B1–B2)", instruction: "You are in a team meeting. Speak for 1–2 minutes after looking at the data.", stimulus: { type: "table", headers: ["Quarter", "Total complaints", "Most common issue"], rows: [["Q1", "120", "Delayed shipping"], ["Q2", "115", "Delayed shipping"], ["Q3", "280", "Software bugs"]] }, tasks: [{ key: "S2", prompt: "1. Summarise the main trend in the numbers.\n2. Point out the biggest change in Q3.\n3. Suggest one short-term action the team should take to deal with the Q3 problem.", responseType: "speaking_evidence", maxScore: 5, hint: "Dùng từ vựng mô tả số liệu: increase, decrease, remain stable, the biggest change…" }] },
-      { key: "S3", title: "Task 3 – Customer refund questions (B2–C1)", instruction: "You are a Customer Support Specialist. A customer is frustrated because a promised refund has not arrived after five business days.", tasks: [{ key: "S3_Q1", prompt: "How would you acknowledge the customer's frustration?", responseType: "speaking_evidence", maxScore: 0 }, { key: "S3_Q2", prompt: "What technical issue has delayed the refund?", responseType: "speaking_evidence", maxScore: 0 }, { key: "S3_Q3", prompt: "What clear next step would you propose?", responseType: "speaking_evidence", maxScore: 0 }, { key: "S3_Q4", prompt: "When can the customer expect a follow-up?", responseType: "speaking_evidence", maxScore: 0 }] },
+      { key: "S3", title: "Task 3 – Customer refund questions (B2–C1)", instruction: "You are a Customer Support Specialist. A customer is frustrated because a promised refund has not arrived after five business days.", tasks: [{ key: "S3", prompt: "1. How would you acknowledge the customer's frustration?\n2. What technical issue has delayed the refund?\n3. What clear next step would you propose?\n4. When can the customer expect a follow-up?", responseType: "speaking_evidence", maxScore: 5 }] },
       { key: "S4", title: "Task 4 – Monologue (4 phút · B2–C1)", instruction: "Give a short presentation to your team.", tasks: [{ key: "S4", prompt: "Present the benefits and challenges of a centralised internal knowledge platform. Include examples and a conclusion.", responseType: "speaking_evidence", maxScore: 5, hint: "Nêu ít nhất hai lợi ích và hai thách thức." }] }
     ];
     const view = makeView({
@@ -544,15 +544,29 @@ describe("assessment HCI states", () => {
     expect(screen.getByRole("heading", { name: /Task 1 – Warm-up \(3 phút · A1–A2\)/ })).toBeInTheDocument();
     expect(screen.getByText("The examiner asks:")).toBeInTheDocument();
     expect(screen.getByRole("table", { name: "Dữ liệu khiếu nại theo quý" })).toBeInTheDocument();
-    const firstQuestion = container.querySelector('[data-task-key="S3_Q1"] .assessment-task-prompt');
-    const lastQuestion = container.querySelector('[data-task-key="S3_Q4"] .assessment-task-prompt');
-    expect(firstQuestion).toHaveTextContent("1. How would you acknowledge the customer's frustration?");
-    expect(firstQuestion?.tagName).toBe("P");
-    expect(lastQuestion).toHaveTextContent("4. When can the customer expect a follow-up?");
+    const task = container.querySelector('[data-task-key="S3"]');
+    expect(task?.querySelector(".assessment-task-prompt")).toHaveTextContent("1. How would you acknowledge the customer's frustration? 2. What technical issue has delayed the refund? 3. What clear next step would you propose? 4. When can the customer expect a follow-up?");
+    expect(task?.querySelectorAll("input[type='file']")).toHaveLength(1);
     expect(screen.queryByRole("heading", { name: /^Câu [1-4]$/ })).not.toBeInTheDocument();
     expect(screen.queryByText(/Khách hàng mở đầu/)).not.toBeInTheDocument();
-    expect(screen.getAllByLabelText("Tải file ghi âm")).toHaveLength(7);
+    expect(screen.getAllByLabelText("Tải file ghi âm")).toHaveLength(4);
     expect(screen.queryByText("Speaking tasks")).not.toBeInTheDocument();
+  });
+
+  it("keeps the submit button stable while an answer autosave is pending", async () => {
+    const user = userEvent.setup();
+    let finishSave!: () => void;
+    const saveAssessmentResponse = vi.fn(() => new Promise<void>((resolve) => { finishSave = resolve; }));
+    render(<LearnerAssessment view={makeView()} actions={makeActions({ saveAssessmentResponse })} />);
+
+    const submit = screen.getByRole("button", { name: /nộp phần nghe/i });
+    await user.click(screen.getByRole("radio", { name: "A" }));
+    expect(saveAssessmentResponse).toHaveBeenCalledOnce();
+    expect(submit).toBeEnabled();
+
+    finishSave();
+    await waitFor(() => expect(screen.getByText("Các câu trả lời đã lưu")).toBeInTheDocument());
+    expect(submit).toBeEnabled();
   });
 
   it("offers only audio evidence for Placement speaking", () => {

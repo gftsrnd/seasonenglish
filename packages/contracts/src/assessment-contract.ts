@@ -181,6 +181,7 @@ export interface AssessmentReviewQueueItem {
   submittedAt: string;
   sectionScores: Partial<Record<AssessmentSectionCode, number>>;
   suggestedLevel: CefrLevel | null;
+  reviewFlags?: Array<"pending_score" | "incomplete" | "typed_speaking" | "borderline" | "skill_gap">;
   challenge?: { completedTurns: number; requiredTurns: 6; average: number; offTopic: number; complete: boolean; passed: boolean };
 }
 
@@ -231,6 +232,7 @@ export interface AssessmentReviewFlowView {
 }
 
 export interface AssessmentReviewOverviewView {
+  openAppeals?: number;
   pendingAssessments: AssessmentReviewQueueItem[];
   pendingLevelUp: AssessmentReviewQueueItem[];
   approvedLearners: AssessmentApprovedLearnerView[];
@@ -314,7 +316,7 @@ export interface AssessmentLevelFormDetailView extends AssessmentLevelFormView {
     }>;
   }>;
   warnings: Array<{
-    code: "missing_section" | "short_section" | "missing_answer_key" | "in_use";
+    code: "missing_section" | "short_section" | "missing_answer_key" | "missing_audio" | "in_use";
     message: string;
     severity: "warning" | "error";
   }>;
@@ -326,6 +328,11 @@ export interface AssessmentLevelFormDetailView extends AssessmentLevelFormView {
 export interface AssessmentLevelFormDeleteView {
   deleted: true;
   versionId: string;
+}
+
+export interface AssessmentLevelFormUpdateInput {
+  title: string;
+  sections: AssessmentLevelFormDetailView["sections"];
 }
 
 /** The evidence an Operator needs when deciding a learner's level. */

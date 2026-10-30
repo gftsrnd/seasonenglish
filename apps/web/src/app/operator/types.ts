@@ -56,6 +56,7 @@ export interface PendingPlacement {
   canRescore?: boolean | undefined;
   rescoreBusy?: boolean | undefined;
   deletionPending?: boolean | undefined;
+  reviewFlags?: Array<"pending_score" | "incomplete" | "typed_speaking" | "borderline" | "skill_gap">;
 }
 
 export interface LevelRequest {
@@ -179,10 +180,11 @@ export interface OperatorLevelFormsActions {
   onOpenSettings(): void;
   onGenerate(target: Cefr): void;
   onView(id: string): void;
+  onEdit?(id: string, fromPublished?: boolean): void;
   onApprove(id: string): void;
   onDelete(id: string): void;
 }
-export type LevelFormActionKey = "generate" | "view" | "approve" | "delete";
+export type LevelFormActionKey = "generate" | "view" | "edit" | "approve" | "delete";
 
 export interface WeekSuggestionOption {
   topic: string;
@@ -213,6 +215,7 @@ export interface WeekFrame {
 export interface OperatorWeeksView {
   pilotStartDate: string;
   pilotWeeks: number;
+  pilotCycleNumber?: number;
   aiConnected: boolean;
   status: string;
   saveState?: AsyncState | undefined;
@@ -300,7 +303,7 @@ export interface OperatorLessonSetView {
     level: string[];
     phrases: number;
     details: number;
-    detailIssues?: Array<{ lessonId: string; dayLabel: string; title: string; missing: string[] }> | undefined;
+    detailIssues?: Array<{ lessonId: string; dayLabel: string; title: string; missing: string[]; repairable?: boolean }> | undefined;
   };
   weeklyPractice: {
     task: string;
@@ -420,6 +423,7 @@ export interface ReviewAttempt {
   writing: string;
   speaking: string;
   total: number;
+  audioArtifact?: AudioArtifactView;
 }
 
 export interface ReviewTest {

@@ -54,7 +54,7 @@ describe("new Settings app branch", () => {
   it("keeps Manager sections in app order", () => {
     const { container } = render(<SettingsPage role="manager" manager={manager} product={product} capabilities={capabilities} ai={{ provider: "openai", configured: true, baseUrl: "https://api.groq.com/openai/v1", model: "qwen/qwen3.8-27b", speechToTextModel: "whisper-large-v3-turbo" }} actions={actions()} accounts={<section><h3>Người dùng</h3></section>} />);
     expect([...container.querySelectorAll("h3")].map((node) => node.textContent)).toEqual([
-      "Kết nối AI", "Lịch pilot", "Ảnh minh hoạ từ vựng", "Ngưỡng xét lên / hạ mức", "Giao diện theo mùa / lễ", "Nhạc nền của Season", "Nhắc học qua Base.vn (Base Message incoming webhook)", "Chính sách nhắc học và báo cáo", "Dữ liệu", "Người dùng"
+      "Prompt & rubric", "Kết nối AI", "Lịch pilot", "Ảnh minh hoạ từ vựng", "Ngưỡng xét lên / hạ mức", "Giao diện theo mùa / lễ", "Nhạc nền của Season", "Nhắc học qua Base.vn (Base Message incoming webhook)", "Chính sách nhắc học và báo cáo", "Dữ liệu", "Người dùng"
     ]);
     expect(screen.getByText(/Khoá nhà cung cấp được lưu an toàn ở server/)).toBeInTheDocument();
     expect(screen.getByText("Xuất JSON")).toBeInTheDocument();
@@ -103,6 +103,58 @@ describe("new Settings app branch", () => {
     expect(screen.queryByRole("spinbutton", { name: /Số lần cảnh báo/ })).not.toBeInTheDocument();
   });
 
+  it.each(["manager", "operator"] as const)("shows the fixed cycle Monday without allowing %s to edit it", (role) => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-10-28T12:00:00+07:00"));
+    const overview: OperatorSettingsOverviewView = {
+      organizationName: "GFT Demo",
+      settings: manager,
+      pilot: { startDate: manager.pilotStartDate, weeks: 2, weekOverride: 0, minMinutesPerDay: 15, courseTheme: manager.courseTheme, coachDailyLimit: 20 },
+      test: { timed: true, times: manager.testTimes, warnLimit: 3 },
+      levelUp: manager.levelUp,
+      accounts: []
+    };
+    if (role === "manager") render(<SettingsPage role="manager" manager={manager} product={product} capabilities={capabilities} actions={actions()} />);
+    else render(<SettingsPage role="operator" operatorOverview={overview} product={product} capabilities={capabilities} actions={actions()} />);
+
+    expect(screen.queryByLabelText("Ngày bắt đầu (Thứ Hai tuần 1)")).not.toBeInTheDocument();
+    expect(screen.getByText("12/10/2026")).toBeInTheDocument();
+    expect(screen.getByText(/không thể chỉnh sửa/)).toBeInTheDocument();
+    vi.useRealTimers();
+  });
+
+  it("locks the pilot save during an active cycle and only enables an extension", async () => {
+    const user = userEvent.setup();
+    const callbacks = actions();
+    const active = { ...manager, pilotStartDate: "2026-10-19", pilotWeeks: 2, pilotCycle: { number: 1, currentWeek: 2, state: "active" as const, startDate: "2026-10-19", endDate: "2026-11-01" } };
+    render(<SettingsPage role="manager" manager={active} product={product} capabilities={capabilities} actions={callbacks} />);
+
+    expect(screen.getByText(/Chu kỳ 1 · Tuần 2\/2/)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Lưu lịch pilot" })).toBeDisabled();
+    await user.selectOptions(screen.getByRole("combobox", { name: "Số tuần của chu kỳ" }), "3");
+    expect(screen.getByRole("button", { name: "Lưu lịch pilot" })).toBeEnabled();
+    await user.click(screen.getByRole("button", { name: "Lưu lịch pilot" }));
+    expect(callbacks.onSaveManager).toHaveBeenCalledWith(expect.objectContaining({ pilotWeeks: 3, weekOverride: 0, pilotCycleAction: "save" }));
+  });
+
+  it("does not offer a shorter duration while a cycle is active", () => {
+    const active = { ...manager, pilotWeeks: 3, pilotCycle: { number: 2, currentWeek: 2, state: "active" as const, startDate: "2026-10-19", endDate: "2026-11-08" } };
+    render(<SettingsPage role="operator" operatorOverview={{ organizationName: "GFT Demo", settings: active, pilot: { startDate: active.pilotStartDate, weeks: 3, weekOverride: 0, minMinutesPerDay: 15, courseTheme: active.courseTheme, coachDailyLimit: 20 }, test: { timed: true, times: active.testTimes, warnLimit: 3 }, levelUp: active.levelUp, accounts: [] }} product={product} capabilities={capabilities} actions={actions()} />);
+    expect(screen.getByRole("option", { name: "2" })).toBeDisabled();
+  });
+
+  it("opens the save action after the cycle ends and shows extension notices to Manager", async () => {
+    const user = userEvent.setup();
+    const callbacks = actions();
+    const ended = { ...manager, pilotCycle: { number: 1, currentWeek: 2, state: "awaiting_next_cycle" as const, startDate: "2026-10-12", endDate: "2026-10-25", lastExtension: { actorName: "Trần Thu Hà", fromWeeks: 2, toWeeks: 3, changedAt: "2026-10-20T09:00:00.000Z" } } };
+    render(<SettingsPage role="manager" manager={ended} product={product} capabilities={capabilities} actions={callbacks} />);
+    expect(screen.getAllByRole("status")[0]).toHaveTextContent("Trần Thu Hà đã tăng chu kỳ từ 2 lên 3 tuần.");
+    expect(screen.getByText(/Chu kỳ 1 đã kết thúc/)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Lưu lịch pilot" })).toBeEnabled();
+    await user.click(screen.getByRole("button", { name: "Lưu lịch pilot" }));
+    expect(callbacks.onSaveManager).toHaveBeenCalledWith(expect.objectContaining({ pilotCycleAction: "save" }));
+  });
+
   it("uses semantic Lucide marks for seasonal controls", () => {
     const { container } = render(<SettingsPage role="manager" manager={manager} product={product} capabilities={capabilities} ai={{ provider: "openai", configured: true, baseUrl: "https://api.groq.com/openai/v1", model: "qwen/qwen3.8-27b", speechToTextModel: "whisper-large-v3-turbo" }} actions={actions()} />);
 
@@ -127,6 +179,7 @@ describe("new Settings app branch", () => {
     render(<SettingsPage role="manager" manager={manager} product={product} capabilities={capabilities} ai={{ provider: "openai", configured: true, baseUrl: "https://api.groq.com/openai/v1", model: "qwen/qwen3.8-27b", speechToTextModel: "whisper-large-v3-turbo" }} actions={callbacks} />);
     await user.click(screen.getByRole("button", { name: "Kiểm tra kết nối AI" }));
     expect(callbacks.onTestAi).toHaveBeenCalled();
+    await user.selectOptions(screen.getByRole("combobox", { name: "Số tuần của chu kỳ" }), "3");
     await user.click(screen.getByRole("button", { name: "Lưu lịch pilot" }));
     expect(callbacks.onSaveManager).toHaveBeenCalled();
     await user.click(screen.getByRole("button", { name: "Xuất JSON" }));
@@ -137,7 +190,9 @@ describe("new Settings app branch", () => {
     const callbacks = actions();
     render(<SettingsPage role="manager" manager={manager} product={product} capabilities={capabilities} ai={{ provider: "openai", configured: true, baseUrl: "https://api.groq.com/openai/v1", model: "qwen/qwen3.8-27b", speechToTextModel: "whisper-large-v3-turbo" }} actions={callbacks} />);
 
-    await userEvent.setup().click(screen.getByRole("checkbox", { name: "Tắt AI để kiểm thử chế độ dự phòng" }));
+    const fallbackSwitch = screen.getByRole("switch", { name: "Tắt AI để kiểm thử chế độ dự phòng" });
+    expect(fallbackSwitch.closest("div")).toHaveClass("settings-ai-fallback-control");
+    await userEvent.setup().click(fallbackSwitch);
     await userEvent.setup().click(screen.getByRole("button", { name: "Lưu chế độ kiểm thử AI" }));
 
     expect(callbacks.onSaveManager).toHaveBeenCalledWith(expect.objectContaining({ aiTestDisabled: true }));
@@ -180,15 +235,16 @@ describe("new Settings app branch", () => {
     };
     const callbacks = actions();
     const { container } = render(<SettingsPage role="operator" operatorOverview={overview} product={product} experience={experience} capabilities={capabilities} ai={{ provider: "openai", configured: true, baseUrl: "https://api.groq.com/openai/v1", model: "qwen/qwen3.8-27b", speechToTextModel: "whisper-large-v3-turbo" }} actions={callbacks} />);
-    expect([...container.querySelectorAll("h3")].map((node) => node.textContent)).toEqual(["Giao diện theo mùa / lễ", "Nhạc nền của Season", "Lịch pilot", "Ngưỡng xét lên / hạ mức", "Người dùng", "Tùy chọn cá nhân"]);
+    expect([...container.querySelectorAll("h3")].map((node) => node.textContent)).toEqual(["Giao diện theo mùa / lễ", "Nhạc nền của Season", "Lịch pilot", "Ngưỡng xét lên / hạ mức", "Yêu cầu đổi đề đầu vào", "Người dùng"]);
     expect(screen.getByText("Học viên A")).toBeInTheDocument();
-    expect(screen.getByLabelText("Ngày bắt đầu (Thứ Hai tuần 1)")).not.toBeDisabled();
+    expect(screen.queryByLabelText("Ngày bắt đầu (Thứ Hai tuần 1)")).not.toBeInTheDocument();
     expect(screen.queryByLabelText("Nghe (phút)")).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Lưu lịch pilot" })).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Lưu bài test" })).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Lưu ngưỡng" })).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /Thêm học viên/i })).not.toBeInTheDocument();
     expect(screen.queryByRole("heading", { name: "Prompt & rubric" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "Mở Prompt & rubric" })).not.toBeInTheDocument();
     expect(screen.queryByRole("link", { name: "Mở trình sửa prompt" })).not.toBeInTheDocument();
     expect(screen.queryByRole("heading", { name: "Kết nối AI" })).not.toBeInTheDocument();
     expect(screen.queryByLabelText("API key mới (để trống = giữ key đang lưu)")).not.toBeInTheDocument();
@@ -206,8 +262,9 @@ describe("new Settings app branch", () => {
     fireEvent.change(screen.getByRole("slider", { name: "Âm lượng: 22/100" }), { target: { value: "37" } });
     await userEvent.setup().click(screen.getByRole("button", { name: "Lưu nhạc nền" }));
     expect(callbacks.onSaveExperience).toHaveBeenLastCalledWith(expect.objectContaining({ backgroundMusic: expect.objectContaining({ enabled: false, playlistId: "prototype-in-dreamland", customUrl: "https://www.youtube.com/watch?v=study", volume: 37 }) }));
-    expect(screen.getByRole("checkbox", { name: "Hiệu ứng âm thanh" })).toBeInTheDocument();
-    expect(screen.getByRole("checkbox", { name: "Nhạc nền" })).toBeInTheDocument();
+    expect(screen.queryByRole("checkbox", { name: "Hiệu ứng âm thanh" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("checkbox", { name: "Nhạc nền" })).not.toBeInTheDocument();
+    expect(container.querySelector(".settings-operator-accounts__table")).toBeInTheDocument();
   });
 
   it("lists licensed songs by title, previews the draft volume and does not save a failed preview", async () => {
@@ -274,13 +331,13 @@ describe("new Settings app branch", () => {
     expect(screen.queryByRole("option", { name: "Emerald Therapy" })).not.toBeInTheDocument();
   });
 
-  it("keeps personal sound preferences out of Manager organisation settings", () => {
+  it("keeps personal sound preferences out of organisation settings for both roles", () => {
     const { rerender } = render(<SettingsPage role="manager" manager={manager} product={product} capabilities={capabilities} ai={{ provider: "openai", configured: true, baseUrl: "https://api.groq.com/openai/v1", model: "demo", speechToTextModel: "whisper" }} actions={actions()} />);
     expect(screen.queryByRole("heading", { name: "Tùy chọn cá nhân" })).not.toBeInTheDocument();
     expect(screen.queryByRole("checkbox", { name: "Hiệu ứng âm thanh" })).not.toBeInTheDocument();
     expect(screen.queryByRole("checkbox", { name: "Nhạc nền" })).not.toBeInTheDocument();
     rerender(<SettingsPage role="operator" product={product} capabilities={capabilities} actions={actions()} />);
-    expect(screen.getByRole("heading", { name: "Tùy chọn cá nhân" })).toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "Tùy chọn cá nhân" })).not.toBeInTheDocument();
   });
 
   it.each([

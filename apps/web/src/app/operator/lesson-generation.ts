@@ -69,15 +69,21 @@ export async function generateLessonCellsSettled<TLevel extends string>(
   const results: Array<LessonGenerationCellResult<TLevel>> = [];
   const total = weekNumbers.length * levels.length;
   for (const week of weekNumbers) {
-    for (const level of levels) {
-      onStart?.(week, level, results.length, total);
+    const completed = results.length;
+    const settled = await Promise.all(levels.map(async (level, index) => {
+      onStart?.(week, level, completed + index, total);
       try {
+        // One API job owns the complete T2-T6 set for this level. Component
+        // retries happen inside that job so a transport retry cannot replace
+        // valid AI work that was already persisted as a partial draft.
         await generate(week, level);
-        results.push({ week, level, status: "succeeded" });
+        return { week, level, status: "succeeded" as const };
       } catch (error) {
-        results.push({ week, level, status: "failed", error: errorMessage(error) });
+        return { week, level, status: "failed" as const, error: errorMessage(error) };
       }
-    }
+    }));
+    results.push(...settled);
+    if (settled.some(result => result.status === "failed")) break;
   }
   return results;
 }

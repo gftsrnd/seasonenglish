@@ -26,6 +26,19 @@ describe("organization AI runtime", () => {
     await expect(factory("operator-id")).resolves.toBeUndefined();
   });
 
+  it("treats a supplied environment runner as authoritative by default", async () => {
+    const fallback = { runTask: vi.fn() } as any;
+    const pool = {
+      query: vi.fn()
+        .mockResolvedValueOnce({ rows: [{ ai_test_disabled: false }] })
+        .mockRejectedValueOnce(new Error("stale database provider must not be read"))
+    } as unknown as Pool;
+    const factory = createOrganizationAiRunnerFactory(pool, fallback);
+
+    await expect(factory("operator-id")).resolves.toBe(fallback);
+    expect(pool.query).toHaveBeenCalledTimes(1);
+  });
+
   it("returns no runner while Manager AI test mode is disabled even with an environment runner", async () => {
     const fallback = { runTask: vi.fn() } as any;
     const pool = {

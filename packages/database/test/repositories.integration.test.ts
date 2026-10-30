@@ -125,6 +125,50 @@ describe("E4S repositories", () => {
     }
   });
 
+  it("keeps persisted Coach rubric scores and corrections in the operator review after reload", async () => {
+    const turnId = randomUUID();
+    await pool.query(
+      `insert into coach_turns (id, session_id, turn_number, speaker, content, feedback)
+       values ($1, $2, 998, 'learner', $3::jsonb, $4::jsonb)`,
+      [turnId, DEMO_IDS.coachSession, JSON.stringify({ text: "I goed to work." }), JSON.stringify({
+        coachText: "Try the past form went.",
+        rubric: { meaning: { score: 4 }, vocabulary: { score: 3 }, grammar: { score: 2 } },
+        corrections: [{ original: "goed", corrected: "went", reason: "Irregular past form." }]
+      })]
+    );
+    try {
+      const review = await repositories.content.reviewOverview(DEMO_IDS.operator);
+      const sample = review?.coachSamples.find((item) => item.id === turnId);
+      expect(sample?.scores).toEqual({ meaning: 4, vocabulary: 3, grammar: 2 });
+      expect(sample?.suggestions).toEqual(["goed → went — Irregular past form."]);
+    } finally {
+      await pool.query("delete from coach_turns where id = $1", [turnId]);
+    }
+  });
+
+  it("keeps persisted Season and weekly-practice artifact keys in the operator review contract", async () => {
+    const turnId = randomUUID();
+    const submissionId = randomUUID();
+    await pool.query(
+      `insert into coach_turns (id, session_id, turn_number, speaker, content)
+       values ($1, $2, 997, 'learner', $3::jsonb)`,
+      [turnId, DEMO_IDS.coachSession, JSON.stringify({ text: "Season answer", audioArtifact: { artifactKey: "audio/season-exact.webm", fileId: randomUUID() } })]
+    );
+    await pool.query(
+      `insert into practice_submissions (id, learner_id, program_week_id, status, content, submitted_at)
+       values ($1, $2, $3, 'submitted', $4::jsonb, now())`,
+      [submissionId, DEMO_IDS.learner, DEMO_IDS.week, JSON.stringify({ text: "Weekly answer", audioArtifact: { artifactKey: "audio/weekly-exact.webm", fileId: randomUUID() } })]
+    );
+    try {
+      const review = await repositories.content.reviewOverview(DEMO_IDS.operator);
+      expect(review?.coachSamples.find((item) => item.id === turnId)?.audioArtifact?.artifactKey).toBe("audio/season-exact.webm");
+      expect(review?.submissions.find((item) => item.id === submissionId)?.audioArtifact?.artifactKey).toBe("audio/weekly-exact.webm");
+    } finally {
+      await pool.query("delete from practice_submissions where id = $1", [submissionId]);
+      await pool.query("delete from coach_turns where id = $1", [turnId]);
+    }
+  });
+
   it("publishes a canonical weekly lesson prompt after local seed refresh", async () => {
     await pool.query(
       `insert into prompt_versions (id, organization_id, task_key, version, content, status, created_by)
@@ -151,7 +195,7 @@ describe("E4S repositories", () => {
     const current = await repositories.manager.settings(DEMO_IDS.manager);
     expect(current).not.toBeNull();
     const { organizationName: _organizationName, ...settings } = current!;
-    await repositories.manager.saveSettings(DEMO_IDS.manager, { ...settings, pilotWeeks: 4 });
+    await repositories.manager.saveSettings(DEMO_IDS.manager, { ...settings, pilotWeeks: 4, pilotCycleAction: "save" });
 
     await seedDemo(client, { mode: "local" });
 
@@ -159,7 +203,7 @@ describe("E4S repositories", () => {
       "select week_count from programs where id = $1", [DEMO_IDS.program]
     )).resolves.toMatchObject({ rows: [{ week_count: 4 }] });
 
-    await repositories.manager.saveSettings(DEMO_IDS.manager, { ...settings, pilotWeeks: 2 });
+    await pool.query("update programs set week_count = 2 where id = $1", [DEMO_IDS.program]);
   });
 
   it("provides stable seeded read models and empty optional operational domains", async () => {
@@ -174,6 +218,32 @@ describe("E4S repositories", () => {
     await expect(repositories.notifications.listForLearner(DEMO_IDS.learner)).resolves.toEqual([]);
     await expect(repositories.files.listForOwner(DEMO_IDS.learner)).resolves.toEqual([]);
     await expect(repositories.aiRuns.listForUser(DEMO_IDS.learner)).resolves.toEqual([]);
+  });
+
+  it("upserts the latest component checkpoint under one resumable request key", async () => {
+    const task = await repositories.aiRuns.activeTaskPrompt(DEMO_IDS.operator, "weekly_lessons");
+    expect(task).not.toBeNull();
+    const requestId = `checkpoint-test:${randomUUID()}`;
+    const metadata = {
+      traceId: randomUUID(), provider: "anthropic", model: "test-model",
+      latencyMs: 10, inputHash: "checkpoint-input",
+      usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 }
+    };
+
+    await repositories.aiRuns.recordCheckpoint({
+      userId: DEMO_IDS.operator, requestId, taskId: task!.taskId, promptVersionId: task!.promptVersionId,
+      output: { checkpoint: { component: "vocabulary", attempts: 1 } }, metadata
+    });
+    await repositories.aiRuns.recordCheckpoint({
+      userId: DEMO_IDS.operator, requestId, taskId: task!.taskId, promptVersionId: task!.promptVersionId,
+      output: { checkpoint: { component: "vocabulary", attempts: 2 } },
+      metadata: { ...metadata, traceId: randomUUID() }
+    });
+
+    await expect(repositories.aiRuns.findSucceededOutput(DEMO_IDS.operator, requestId, "weekly_lessons"))
+      .resolves.toEqual({ output: { checkpoint: { component: "vocabulary", attempts: 2 } } });
+    await expect(pool.query<{ count: string }>("select count(*)::text as count from ai_runs where request_key = $1", [requestId]))
+      .resolves.toMatchObject({ rows: [{ count: "1" }] });
   });
 
   it("starts the demo learner without a fake weekly submission or active game set", async () => {
@@ -348,14 +418,91 @@ describe("E4S repositories", () => {
       .resolves.toMatchObject({ rows: [{ state: "succeeded", locked_by: null }] });
   });
 
-  it("keeps existing lesson content visible after the week topic changes", async () => {
-    await pool.query("update program_weeks set topic = $1 where id = $2", ["Scheduling Internal Meetings", DEMO_IDS.week]);
+  it("hides a legacy lesson version whose saved topic no longer matches its week", async () => {
+    const before = await pool.query<{ topic: string }>("select topic from program_weeks where id = $1", [DEMO_IDS.week]);
+    const staleVersionId = randomUUID();
+    try {
+      await pool.query("update lesson_set_versions set status = 'retired' where id = $1", [DEMO_IDS.publishedLessonSetVersion]);
+      await pool.query(
+        `insert into lesson_set_versions (id, lesson_set_id, version, status, payload, created_by)
+         values ($1, $2, 9999, 'draft', $3::jsonb, $4)`,
+        [staleVersionId, DEMO_IDS.lessonSet, JSON.stringify({ topic: before.rows[0]!.topic }), DEMO_IDS.operator]
+      );
+      await pool.query("update program_weeks set topic = $1 where id = $2", ["Scheduling Internal Meetings", DEMO_IDS.week]);
 
-    const matrix = await repositories.content.lessonMatrix(DEMO_IDS.operator);
-    const a2 = matrix?.weeks.find((week) => week.weekNumber === 1)?.cells.find((cell) => cell.cefr === "A2");
+      const matrix = await repositories.content.lessonMatrix(DEMO_IDS.operator);
+      const a2 = matrix?.weeks.find((week) => week.weekNumber === 1)?.cells.find((cell) => cell.cefr === "A2");
 
-    expect(a2).toMatchObject({ status: "published", versionId: DEMO_IDS.publishedLessonSetVersion });
-    expect(a2?.lessons).toHaveLength(5);
+      expect(a2).toMatchObject({ status: "missing", versionId: null, lessons: [] });
+      await expect(repositories.content.latestLessonSet(DEMO_IDS.operator, 1, "A2")).resolves.toBeNull();
+    } finally {
+      await pool.query("update lesson_set_versions set status = 'retired' where id = $1", [staleVersionId]);
+      await pool.query("update program_weeks set topic = $1 where id = $2", [before.rows[0]!.topic, DEMO_IDS.week]);
+      await pool.query("update lesson_set_versions set status = 'published' where id = $1", [DEMO_IDS.publishedLessonSetVersion]);
+    }
+  });
+
+  it("keeps the published lessons live for learners while a changed topic is saved as a new draft", async () => {
+    const before = await repositories.content.listWeeks(DEMO_IDS.operator);
+    const original = before?.weeks.find((week) => week.weekNumber === 1);
+    const learnerLessonsBefore = await repositories.learning.listLessons(DEMO_IDS.learner, DEMO_IDS.week);
+    const publishedBefore = await repositories.content.findPublishedLessonSet(DEMO_IDS.week, "A2");
+    const publishedDraftSource = await repositories.content.latestLessonSet(DEMO_IDS.operator, 1, "A2");
+    const originalVersions = await pool.query<{ id: string; status: string }>(
+      `select lsv.id, lsv.status
+       from lesson_set_versions lsv
+       join lesson_sets ls on ls.id = lsv.lesson_set_id
+       where ls.program_week_id = $1`,
+      [DEMO_IDS.week]
+    );
+    expect(original).toBeDefined();
+    expect(learnerLessonsBefore).not.toHaveLength(0);
+    expect(publishedBefore).toMatchObject({ versionId: DEMO_IDS.publishedLessonSetVersion, status: "published" });
+    expect(publishedDraftSource).toMatchObject({ versionId: DEMO_IDS.publishedLessonSetVersion, status: "published" });
+    const replacementPlan = { A2: ["New Monday", "New Tuesday", "New Wednesday", "New Thursday", "New Friday"] };
+    let draftVersionId = "";
+
+    try {
+      await repositories.content.saveWeeks(DEMO_IDS.operator, before!.weeks.map((week) => ({
+        weekNumber: week.weekNumber,
+        topic: week.weekNumber === 1 ? "A completely new weekly topic" : week.topic,
+        description: week.description,
+        objectives: week.objectives,
+        keyVocabHint: week.keyVocabHint,
+        ...(week.weekNumber === 1 ? { plan: replacementPlan } : week.plan ? { plan: week.plan } : {})
+      })));
+
+      const draft = await repositories.content.saveLessonDraft(
+        DEMO_IDS.operator,
+        1,
+        "A2",
+        publishedDraftSource!.lessons,
+        "ai"
+      );
+      draftVersionId = draft.versionId;
+
+      const matrix = await repositories.content.lessonMatrix(DEMO_IDS.operator);
+      const changedWeek = matrix?.weeks.find((week) => week.weekNumber === 1);
+      const learnerLessonsAfter = await repositories.learning.listLessons(DEMO_IDS.learner, DEMO_IDS.week);
+      expect(changedWeek?.topic).toBe("A completely new weekly topic");
+      expect(changedWeek?.cells.find((cell) => cell.cefr === "A2")).toMatchObject({
+        status: "draft",
+        versionId: draft.versionId,
+        plan: replacementPlan.A2
+      });
+      expect(learnerLessonsAfter.map((lesson) => lesson.id)).toEqual(learnerLessonsBefore.map((lesson) => lesson.id));
+      await expect(repositories.content.findPublishedLessonSet(DEMO_IDS.week, "A2"))
+        .resolves.toMatchObject({ versionId: DEMO_IDS.publishedLessonSetVersion, status: "published" });
+    } finally {
+      if (draftVersionId) await pool.query("update lesson_set_versions set status = 'retired' where id = $1", [draftVersionId]);
+      await pool.query("update program_weeks set topic = $1 where id = $2", [original!.topic, DEMO_IDS.week]);
+      for (const version of originalVersions.rows) {
+        await pool.query(
+          "update lesson_set_versions set status = $2 where id = $1 and status <> $2",
+          [version.id, version.status]
+        );
+      }
+    }
   });
 
   it("keeps a recoverable AI generation record with the draft version without changing the approved version", async () => {
@@ -391,7 +538,7 @@ describe("E4S repositories", () => {
         "select status from lesson_set_versions where id = $1", [DEMO_IDS.publishedLessonSetVersion]
       )).resolves.toMatchObject({ rows: [{ status: "published" }] });
     } finally {
-      if (savedVersionId) await pool.query("delete from lesson_set_versions where id = $1", [savedVersionId]);
+      if (savedVersionId) await pool.query("update lesson_set_versions set status = 'retired' where id = $1", [savedVersionId]);
     }
   });
 
@@ -432,7 +579,10 @@ describe("E4S repositories", () => {
       expect(a2).toMatchObject({ status: "review", versionId: reviewVersionId, version: 1003 });
       expect(a2?.lessons).toEqual([{ dayNumber: 1, title: "Review Monday" }]);
     } finally {
-      await pool.query("delete from lesson_set_versions where id = any($1::uuid[])", [[draftVersionId, reviewVersionId]]);
+      await pool.query(
+        "update lesson_set_versions set status = 'retired' where id = any($1::uuid[])",
+        [[draftVersionId, reviewVersionId]]
+      );
     }
   });
 
@@ -457,5 +607,97 @@ describe("E4S repositories", () => {
     expect(state).toBe("dead");
     await expect(pool.query("select state, locked_by, last_error from jobs where id = $1", [id]))
       .resolves.toMatchObject({ rows: [{ state: "dead", locked_by: null, last_error: "provider unavailable" }] });
+  });
+
+  it("queues email and Base.vn as independent same-day reminder deliveries", async () => {
+    const learnerId = randomUUID();
+    const settings = await pool.query<{ configuration: Record<string, unknown> }>(
+      "select configuration from organization_settings where organization_id = $1",
+      [DEMO_IDS.organization]
+    );
+    try {
+      await pool.query(
+        `insert into users (id, organization_id, role, display_name, email, status, created_at)
+         values ($1, $2, 'learner', 'Dual Channel Learner', 'dual-channel@example.com', 'active', now() - interval '5 days')`,
+        [learnerId, DEMO_IDS.organization]
+      );
+      await pool.query(
+        "update organization_settings set configuration = configuration || $2::jsonb where organization_id = $1",
+        [DEMO_IDS.organization, JSON.stringify({ baseWebhookUrl: "https://base.example.test/reminders" })]
+      );
+
+      const email = await repositories.manager.queueReminder(DEMO_IDS.manager, learnerId, "email-request-1", "email");
+      const base = await repositories.manager.queueReminder(DEMO_IDS.manager, learnerId, "base-request-1", "base");
+
+      expect(email).toMatchObject({ learnerId, provider: "resend", deliveryStatus: "queued" });
+      expect(base).toMatchObject({ learnerId, provider: "base_webhook", deliveryStatus: "queued" });
+      expect(base.reminderId).not.toBe(email.reminderId);
+      await expect(pool.query<{ provider: string }>(
+        `select nd.provider from notification_deliveries nd
+         join reminders r on r.id = nd.reminder_id
+         where r.learner_id = $1 order by nd.provider`,
+        [learnerId]
+      )).resolves.toMatchObject({ rows: [{ provider: "base_webhook" }, { provider: "resend" }] });
+    } finally {
+      await pool.query("delete from jobs where payload->>'reminderId' in (select id::text from reminders where learner_id = $1)", [learnerId]);
+      await pool.query("delete from audit_events where entity_id = $1", [learnerId]);
+      await pool.query("delete from notification_deliveries where reminder_id in (select id from reminders where learner_id = $1)", [learnerId]);
+      await pool.query("delete from reminders where learner_id = $1", [learnerId]);
+      await pool.query("delete from users where id = $1", [learnerId]);
+      await pool.query("update organization_settings set configuration = $2::jsonb where organization_id = $1", [DEMO_IDS.organization, JSON.stringify(settings.rows[0]?.configuration ?? {})]);
+    }
+  });
+
+  it("rejects email reminders without a learner email and records no delivery", async () => {
+    const learnerId = randomUUID();
+    try {
+      await pool.query(
+        `insert into users (id, organization_id, role, display_name, status, created_at)
+         values ($1, $2, 'learner', 'No Email Learner', 'active', now() - interval '5 days')`,
+        [learnerId, DEMO_IDS.organization]
+      );
+
+      await expect(repositories.manager.queueReminder(DEMO_IDS.manager, learnerId, "missing-email-request", "email"))
+        .rejects.toThrow("MANAGER_REMINDER_EMAIL_MISSING");
+      await expect(pool.query("select count(*)::int as count from reminders where learner_id = $1", [learnerId]))
+        .resolves.toMatchObject({ rows: [{ count: 0 }] });
+    } finally {
+      await pool.query("delete from jobs where payload->>'reminderId' in (select id::text from reminders where learner_id = $1)", [learnerId]);
+      await pool.query("delete from audit_events where entity_id = $1", [learnerId]);
+      await pool.query("delete from notification_deliveries where reminder_id in (select id from reminders where learner_id = $1)", [learnerId]);
+      await pool.query("delete from reminders where learner_id = $1", [learnerId]);
+      await pool.query("delete from users where id = $1", [learnerId]);
+    }
+  });
+
+  it("rejects Base.vn reminders without a configured webhook and records no delivery", async () => {
+    const learnerId = randomUUID();
+    const settings = await pool.query<{ configuration: Record<string, unknown> }>(
+      "select configuration from organization_settings where organization_id = $1",
+      [DEMO_IDS.organization]
+    );
+    try {
+      await pool.query(
+        `insert into users (id, organization_id, role, display_name, email, status, created_at)
+         values ($1, $2, 'learner', 'No Webhook Learner', 'no-webhook@example.com', 'active', now() - interval '5 days')`,
+        [learnerId, DEMO_IDS.organization]
+      );
+      await pool.query(
+        "update organization_settings set configuration = configuration || $2::jsonb where organization_id = $1",
+        [DEMO_IDS.organization, JSON.stringify({ baseWebhookUrl: "" })]
+      );
+
+      await expect(repositories.manager.queueReminder(DEMO_IDS.manager, learnerId, "missing-webhook-request", "base"))
+        .rejects.toThrow("MANAGER_REMINDER_BASE_WEBHOOK_MISSING");
+      await expect(pool.query("select count(*)::int as count from reminders where learner_id = $1", [learnerId]))
+        .resolves.toMatchObject({ rows: [{ count: 0 }] });
+    } finally {
+      await pool.query("delete from jobs where payload->>'reminderId' in (select id::text from reminders where learner_id = $1)", [learnerId]);
+      await pool.query("delete from audit_events where entity_id = $1", [learnerId]);
+      await pool.query("delete from notification_deliveries where reminder_id in (select id from reminders where learner_id = $1)", [learnerId]);
+      await pool.query("delete from reminders where learner_id = $1", [learnerId]);
+      await pool.query("delete from users where id = $1", [learnerId]);
+      await pool.query("update organization_settings set configuration = $2::jsonb where organization_id = $1", [DEMO_IDS.organization, JSON.stringify(settings.rows[0]?.configuration ?? {})]);
+    }
   });
 });

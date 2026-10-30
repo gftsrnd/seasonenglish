@@ -214,7 +214,7 @@ describe("Manager settings operational actions", () => {
     const { organizationName: _organizationName, ...settings } = current.json();
     const saved = await app.inject({
       method: "PUT", url: "/api/v1/manager/settings", headers: { cookie: managerCookie },
-      payload: { ...settings, pilotWeeks: 4 }
+      payload: { ...settings, pilotWeeks: 4, pilotCycleAction: "save" }
     });
     expect(saved.statusCode, saved.body).toBe(200);
 
@@ -225,6 +225,66 @@ describe("Manager settings operational actions", () => {
     expect(weeks.json().pilot.weekCount).toBe(4);
     expect(weeks.json().weeks.map((week: { weekNumber: number }) => week.weekNumber)).toEqual([1, 2, 3, 4]);
     expect(matrix.json().weeks.map((week: { weekNumber: number }) => week.weekNumber)).toEqual([1, 2, 3, 4]);
+  });
+
+  it("keeps the cycle Monday fixed, allows only an extension, and notifies Manager", async () => {
+    await pool.query("update programs set start_date = date_trunc('week', current_date)::date, week_count = 2, current_week_override = null, status = 'active' where id = $1", [DEMO_IDS.program]);
+    const current = await app.inject({ method: "GET", url: "/api/v1/manager/settings", headers: { cookie: managerCookie } });
+    const { organizationName: _organizationName, pilotCycle: _pilotCycle, ...settings } = current.json();
+    const originalStart = settings.pilotStartDate;
+
+    const extended = await app.inject({
+      method: "PUT", url: "/api/v1/operator/settings", headers: { cookie: operatorCookie },
+      payload: { ...settings, pilotWeeks: 3, pilotStartDate: "2030-01-07", weekOverride: 4, pilotCycleAction: "save" }
+    });
+    expect(extended.statusCode, extended.body).toBe(200);
+    expect(extended.json()).toMatchObject({ pilotStartDate: originalStart, pilotWeeks: 3, weekOverride: 0, pilotCycle: { currentWeek: 1, state: "active" } });
+
+    const managerView = await app.inject({ method: "GET", url: "/api/v1/manager/settings", headers: { cookie: managerCookie } });
+    expect(managerView.json()).toMatchObject({ pilotCycle: { lastExtension: { actorName: "Trần Thu Hà", fromWeeks: 2, toWeeks: 3 } } });
+    const audit = await pool.query<{ actor_user_id: string; payload: { fromWeeks: number; toWeeks: number } }>(
+      "select actor_user_id, payload from audit_events where action = 'pilot.duration_extended' and entity_id = $1 order by created_at desc limit 1",
+      [DEMO_IDS.program]
+    );
+    expect(audit.rows[0]).toMatchObject({ actor_user_id: DEMO_IDS.operator, payload: { fromWeeks: 2, toWeeks: 3 } });
+
+    const rejected = await app.inject({
+      method: "PUT", url: "/api/v1/operator/settings", headers: { cookie: operatorCookie },
+      payload: { ...settings, pilotWeeks: 2, pilotCycleAction: "save" }
+    });
+    expect(rejected.statusCode, rejected.body).toBe(409);
+    expect(rejected.json()).toEqual({ code: "PILOT_WEEKS_CANNOT_DECREASE" });
+  });
+
+  it("starts a new shared cycle only after the previous cycle ended and the Operator saves", async () => {
+    await pool.query("update programs set start_date = (date_trunc('week', current_date) - interval '21 days')::date, week_count = 2, current_week_override = null, status = 'active' where id = $1", [DEMO_IDS.program]);
+    const before = await app.inject({ method: "GET", url: "/api/v1/operator/settings-overview", headers: { cookie: operatorCookie } });
+    expect(before.json()).toMatchObject({ settings: { pilotCycle: { state: "awaiting_next_cycle" } } });
+    const oldWeek = await pool.query<{ topic: string }>("select topic from program_weeks where program_id = $1 and week_number = 1", [DEMO_IDS.program]);
+    const { organizationName: _organizationName, pilotCycle: _pilotCycle, ...settings } = before.json().settings;
+
+    const started = await app.inject({
+      method: "PUT", url: "/api/v1/operator/settings", headers: { cookie: operatorCookie },
+      payload: { ...settings, pilotWeeks: 4, pilotCycleAction: "save" }
+    });
+    expect(started.statusCode, started.body).toBe(200);
+    expect(started.json()).toMatchObject({ pilotWeeks: 4, pilotCycle: { state: "active", currentWeek: 1 } });
+    expect(started.json().pilotStartDate).not.toBe(settings.pilotStartDate);
+
+    const programs = await pool.query<{ id: string; status: string; week_count: number }>(
+      "select id, status, week_count from programs where organization_id = $1 order by created_at desc",
+      [DEMO_IDS.organization]
+    );
+    const active = programs.rows.find(row => row.status === "active");
+    expect(active).toMatchObject({ status: "active", week_count: 4 });
+    expect(active?.id).not.toBe(DEMO_IDS.program);
+    await expect(pool.query("select 1 from enrollments where program_id = $1 and learner_id = $2", [active!.id, DEMO_IDS.learner])).resolves.toMatchObject({ rowCount: 1 });
+    await expect(pool.query("select count(*)::int as count from program_weeks where program_id = $1", [active!.id])).resolves.toMatchObject({ rows: [{ count: 4 }] });
+    await expect(pool.query("select topic from program_weeks where program_id = $1 and week_number = 1", [DEMO_IDS.program])).resolves.toMatchObject({ rows: oldWeek.rows });
+
+    await pool.query("delete from enrollments where program_id = $1", [active!.id]);
+    await pool.query("delete from programs where id = $1", [active!.id]);
+    await pool.query("update programs set status = 'active', start_date = date_trunc('week', current_date)::date, week_count = 2 where id = $1", [DEMO_IDS.program]);
   });
 
   it("requires local maintenance confirmation and an export backup before seed or wipe", async () => {

@@ -15,10 +15,16 @@ export interface AiTaskDefinition<TInput = unknown, TOutput = unknown> {
   validateOutput?: (output: TOutput, input: TInput) => AiValidationIssue[];
 }
 
+export interface AiMessage {
+  role: "user" | "assistant";
+  content: string;
+}
+
 export interface AiProviderRequest {
   taskId: string;
   systemPrompt: string;
   input: unknown;
+  messages?: AiMessage[];
   outputJsonSchema: Record<string, unknown>;
   maxOutputTokens?: number;
   temperature?: number;
@@ -30,11 +36,14 @@ export interface AiUsage {
   inputTokens?: number;
   outputTokens?: number;
   totalTokens?: number;
+  cacheCreationInputTokens?: number;
+  cacheReadInputTokens?: number;
 }
 
 export interface AiProviderResponse {
   output: unknown;
   usage: AiUsage;
+  stopReason?: string;
 }
 
 export interface AiProvider {
@@ -47,7 +56,8 @@ export class AiProviderError extends Error {
   constructor(
     public readonly code: string,
     public readonly retryable: boolean,
-    public readonly details?: unknown
+    public readonly details?: unknown,
+    public readonly retryAfterMs?: number
   ) {
     super(code);
     this.name = "AiProviderError";
@@ -71,6 +81,7 @@ export interface AiRunMetadata {
   inputHash: string;
   schemaValid: true;
   usage: AiUsage;
+  stopReason?: string;
 }
 
 export interface AiRunResult<TOutput = unknown> {
@@ -82,6 +93,12 @@ export interface AiTaskRunner {
   runTask(
     taskId: string,
     input: unknown,
-    options?: { systemPrompt?: string; maxOutputTokens?: number; temperature?: number }
+    options?: {
+      systemPrompt?: string;
+      messages?: AiMessage[];
+      maxOutputTokens?: number;
+      temperature?: number;
+      maxAttempts?: number;
+    }
   ): Promise<AiRunResult>;
 }

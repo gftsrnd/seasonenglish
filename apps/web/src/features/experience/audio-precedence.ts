@@ -71,3 +71,23 @@ export function cancelAllExclusiveAudio() {
 export function isExclusiveAudioActive(source: ExclusiveAudioSource) {
   return active?.source === source;
 }
+
+/** Plays a detached media element through the same one-at-a-time channel. */
+export function playExclusiveMedia(src: string, onError?: () => void): void {
+  if (typeof Audio === "undefined") return;
+  const audio = new Audio(src);
+  let release: (() => void) | undefined;
+  const stop = () => {
+    if (typeof audio.pause === "function") audio.pause();
+    audio.currentTime = 0;
+  };
+  release = claimExclusiveAudio("media", stop);
+  if (!release) return;
+  const finish = () => {
+    release?.();
+    release = undefined;
+  };
+  audio.onended = finish;
+  audio.onerror = () => { finish(); onError?.(); };
+  void audio.play().catch(() => { finish(); onError?.(); });
+}

@@ -155,6 +155,16 @@
   gap: 12px;
 }
 
+.manager-security-notices__title {
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+.manager-security-notices__total {
+  flex: 0 0 auto;
+  white-space: nowrap;
+}
+
 .manager-security-notices__heading h3,
 .manager-security-notices__heading p,
 .manager-security-notices__empty {
@@ -205,6 +215,38 @@
   overflow-wrap: anywhere;
 }
 
+.manager-security-notice__count {
+  flex: 0 0 auto;
+}
+
+.manager-security-notices__toggle {
+  display: inline-flex;
+  width: fit-content;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  justify-self: end;
+  padding: 7px 10px;
+  border: 0;
+  background: transparent;
+  color: var(--primary);
+  font-weight: 700;
+}
+
+.manager-security-notices__toggle:hover {
+  background: var(--surface-2);
+}
+
+.manager-security-notices__toggle svg {
+  width: 16px;
+  height: 16px;
+  transition: transform 160ms ease;
+}
+
+.manager-security-notices__toggle[aria-expanded="true"] svg {
+  transform: rotate(180deg);
+}
+
 .manager-security-notice time {
   flex: 0 0 auto;
   white-space: nowrap;
@@ -218,6 +260,53 @@
 
 .manager-operations-page .manager-page-title__content p {
   max-width: none;
+}
+
+/* Keep the read-only notice and destinations visibly separate even when the
+   shared Operator stylesheet loads after Manager. */
+.manager-operations-context {
+  display: grid;
+  gap: 14px;
+  margin-bottom: 16px;
+}
+
+.manager-operations-context > .manager-operations-switcher {
+  display: flex;
+  box-sizing: border-box;
+  width: 100%;
+  min-width: 0;
+  flex-wrap: nowrap;
+  gap: 8px;
+  margin: 0;
+  padding: 12px;
+  overflow-x: auto;
+  overscroll-behavior-inline: contain;
+  background: var(--primary-soft);
+  border: 1px solid var(--primary-line);
+  border-radius: 14px;
+  scrollbar-width: thin;
+  white-space: nowrap;
+}
+
+.manager-operations-context > .manager-operations-switcher a {
+  display: inline-flex;
+  min-height: 40px;
+  align-items: center;
+  flex: 0 0 auto;
+  padding: 10px 14px;
+  background: var(--surface-2);
+  font-weight: 650;
+}
+
+.manager-operations-context > .manager-operations-switcher a:hover {
+  border-color: var(--primary);
+}
+
+.manager-operations-context > .manager-operations-switcher a.active {
+  background: var(--primary);
+  border-color: var(--primary);
+  color: var(--primary-ink);
+  box-shadow: 0 2px 8px color-mix(in srgb, var(--primary) 24%, transparent);
 }
 
 .manager-operations-actions .manager-section-heading {
@@ -839,8 +928,9 @@
   display: flex;
   min-width: 0;
   align-items: center;
+  flex-wrap: wrap;
   gap: 8px;
-  white-space: nowrap;
+  white-space: normal;
 }
 
 .manager-account-actions > .btn-sm {
@@ -900,10 +990,18 @@
   scrollbar-gutter: stable;
 }
 
-.manager-accounts-table__table {
+.settings-action-table .manager-accounts-table__table {
   width: 100%;
-  min-width: 760px;
+  min-width: 960px;
+  table-layout: fixed;
 }
+
+.manager-accounts-table__table th:nth-child(1) { width: 15%; }
+.manager-accounts-table__table th:nth-child(2) { width: 19%; }
+.manager-accounts-table__table th:nth-child(3) { width: 13%; }
+.manager-accounts-table__table th:nth-child(4) { width: 14%; }
+.manager-accounts-table__table th:nth-child(5) { width: 14%; }
+.manager-accounts-table__table th:nth-child(6) { width: 25%; }
 
 .manager-accounts-table__table thead th {
   position: sticky;
@@ -977,23 +1075,19 @@
 }
 
 @media (max-width: 600px) {
+  .manager-security-notices__heading {
+    align-items: flex-start;
+    flex-wrap: wrap;
+  }
+
+  .manager-security-notices__total {
+    margin-left: 50px;
+  }
+
   .manager-security-notice {
     align-items: flex-start;
     flex-direction: column;
   }
-}
-
-@media (min-width: 1001px) {
-  .manager-accounts-table__table {
-    min-width: 0;
-    table-layout: fixed;
-  }
-
-  .manager-accounts-table__table th:nth-child(1) { width: 17%; }
-  .manager-accounts-table__table th:nth-child(2) { width: 23%; }
-  .manager-accounts-table__table th:nth-child(3) { width: 14%; }
-  .manager-accounts-table__table th:nth-child(4) { width: 15%; }
-  .manager-accounts-table__table th:nth-child(5) { width: 31%; }
 }
 
 @media (max-width: 1000px) {
@@ -1123,6 +1217,62 @@
   overflow-wrap: anywhere;
 }
 
+.manager-report-page .manager-report-learner-status .badge {
+  white-space: normal;
+  line-height: 1.35;
+}
+
+@media print {
+  .manager-report-page .manager-page-title,
+  .manager-report-page .manager-page-title__actions {
+    display: none !important;
+  }
+
+  .manager-report-page .report {
+    width: 100%;
+    max-width: none;
+    overflow: visible !important;
+    border: 0;
+    box-shadow: none;
+    padding: 0;
+  }
+
+  .manager-report-page .table-wrap,
+  .manager-report-page .manager-report-learner-table-wrap {
+    max-width: none;
+    overflow: visible !important;
+    padding-bottom: 0;
+  }
+
+  .manager-report-page .manager-report-learner-table {
+    width: 100%;
+    table-layout: fixed;
+    font-size: 8.5pt;
+  }
+
+  .manager-report-page .manager-report-learner-table th,
+  .manager-report-page .manager-report-learner-table td {
+    padding: 6px 5px;
+    white-space: normal;
+    word-break: normal;
+    overflow-wrap: anywhere;
+  }
+
+  .manager-report-page .manager-report-learner-table th:first-child { width: 14%; }
+  .manager-report-page .manager-report-learner-table th:nth-child(2) { width: 6%; }
+  .manager-report-page .manager-report-learner-table th:nth-child(3) { width: 9%; }
+  .manager-report-page .manager-report-learner-table th:nth-child(4) { width: 7%; }
+  .manager-report-page .manager-report-learner-table th:nth-child(5) { width: 8%; }
+  .manager-report-page .manager-report-learner-table th:nth-child(6) { width: 11%; }
+  .manager-report-page .manager-report-learner-table th:nth-child(7) { width: 9%; }
+  .manager-report-page .manager-report-learner-table th:nth-child(8) { width: 13%; }
+  .manager-report-page .manager-report-learner-table th:nth-child(9) { width: 18%; }
+
+  .manager-report-page .manager-report-learner-table tr {
+    break-inside: avoid;
+  }
+}
+
 .manager-reminder-actions {
   min-width: 0;
   gap: 10px;
@@ -1133,6 +1283,37 @@
 .manager-reminder-card {
   display: grid;
   gap: 14px;
+}
+
+.manager-reminder-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin: 16px 0;
+  padding: 14px 16px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: var(--surface);
+}
+
+.manager-reminder-toolbar > div {
+  display: grid;
+  gap: 3px;
+}
+
+.manager-reminder-confirm-dialog {
+  display: grid;
+  gap: 14px;
+}
+
+.manager-reminder-confirm-dialog > h2,
+.manager-reminder-confirm-dialog > p {
+  margin: 0;
+}
+
+.manager-reminder-confirm-actions {
+  justify-content: flex-end;
 }
 
 .manager-reminder-message {
@@ -1315,6 +1496,8 @@
 }
 
 @media (max-width: 480px) {
+  .manager-reminder-toolbar { align-items: stretch; flex-direction: column; }
+  .manager-reminder-toolbar .btn-primary { width: 100%; }
   .manager-operations-page .card.section > .grid.cols-2,
   .manager-report-page .report > .grid.cols-2 {
     grid-template-columns: minmax(0, 1fr);
@@ -1336,6 +1519,204 @@
     justify-content: flex-start;
   }
 }
+
+/* The masked value and reveal action read as one compact PIN control. */
+.settings-page[data-settings-role="manager"] .manager-account-pin .manager-password-toggle {
+  position: static;
+  display: inline-flex;
+  width: 34px;
+  min-width: 34px;
+  height: 32px;
+  align-items: center;
+  justify-content: center;
+  border: 0;
+  border-left: 1px solid var(--line);
+  border-radius: 0;
+  background: transparent;
+  color: var(--text);
+  padding: 0;
+}
+
+.settings-page[data-settings-role="manager"] .manager-account-pin .manager-password-toggle:hover {
+  border-color: var(--primary);
+  background: var(--primary-soft);
+}
+
+/* Compact print rhythm keeps the report on two balanced A4 pages for the
+   normal pilot cohort while preserving readable tables and action cards. */
+@media print {
+  .manager-report-page .report {
+    color: #1e1e1e;
+    font-size: 8.2pt;
+    line-height: 1.28;
+  }
+
+  .manager-report-page .rhead {
+    margin-bottom: 3mm;
+    padding-bottom: 2.5mm;
+  }
+
+  .manager-report-page .summary {
+    padding: 2.5mm 3mm;
+    border-radius: 2mm;
+  }
+
+
+  .manager-report-page h3,
+  .manager-report-page .report > h3,
+  .manager-report-page .report > .summary + h3 {
+    margin: 3.2mm 0 1.6mm;
+    font-size: 10pt;
+  }
+
+  .manager-report-page .report th,
+  .manager-report-page .report td {
+    padding: 1.3mm 1.2mm;
+    font-size: 7.4pt;
+    line-height: 1.22;
+  }
+
+  .manager-report-page .manager-report-learner-table {
+    font-size: 7.2pt;
+  }
+
+  .manager-report-page .manager-report-learner-table th,
+  .manager-report-page .manager-report-learner-table td {
+    padding: 1.1mm .9mm;
+  }
+
+  .manager-report-page .barrow,
+  .manager-report-page .manager-report-level-distribution > .barrow {
+    min-height: 6mm;
+    gap: 2mm;
+  }
+
+  .manager-report-page .manager-next-actions {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 2mm;
+  }
+
+  .manager-report-page .manager-next-action {
+    min-height: 0;
+    padding: 2mm 2.5mm;
+    border-radius: 2mm;
+    line-height: 1.25;
+  }
+
+  .manager-report-page .manager-next-action-names {
+    gap: 1mm;
+    margin-top: 1mm;
+  }
+
+  .manager-report-page .manager-next-action-names > span {
+    padding: .6mm 1.3mm;
+    font-size: 6.8pt;
+  }
+
+  .manager-report-page .foot {
+    margin-top: 2.5mm;
+    padding-top: 1.5mm;
+    font-size: 6.8pt;
+  }
+}
+
+/* Report printing owns a portrait A4 sheet. Reset the screen shell so its
+   decorative background and viewport heights cannot create a trailing page. */
+@media print {
+  @page { size: A4 portrait; margin: 12mm 10mm 14mm; }
+
+  html,
+  body,
+  #root {
+    width: auto !important;
+    height: auto !important;
+    min-height: 0 !important;
+    overflow: visible !important;
+    background: #fff !important;
+  }
+
+  body::before,
+  body::after,
+  #root::before,
+  #root::after {
+    display: none !important;
+    content: none !important;
+  }
+
+  #root > main,
+  .manager-page,
+  .manager-report-page {
+    width: auto !important;
+    height: auto !important;
+    min-height: 0 !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    overflow: visible !important;
+    background: #fff !important;
+  }
+
+  .manager-report-page .report {
+    box-sizing: border-box;
+    width: 186mm;
+    max-width: 186mm;
+    margin: 0 auto;
+    padding: 0;
+    overflow: visible !important;
+    background: #fff !important;
+  }
+
+  .manager-report-page .rhead {
+    break-inside: avoid;
+    break-after: avoid;
+  }
+
+  .manager-report-page .foot {
+    break-inside: avoid;
+  }
+
+  .manager-report-page h3 {
+    break-after: avoid;
+  }
+
+  .manager-report-page .summary,
+  .manager-report-page .manager-next-action,
+  .manager-report-page tr {
+    break-inside: avoid;
+  }
+}
+
+.manager-reminder-recipient {
+  margin-top: 5px;
+  color: var(--muted);
+  font-size: .82rem;
+}
+
+.manager-reminder-recipient b { color: var(--text); font-weight: 600; }
+
+.manager-account-pin {
+  display: inline-flex;
+  align-items: center;
+  gap: 0;
+  min-width: 88px;
+  height: 34px;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  background: var(--surface-3);
+}
+
+.manager-account-pin code {
+  flex: 1 1 auto;
+  min-width: 52px;
+  padding: 0 7px;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  text-align: center;
+  letter-spacing: .12em;
+}
+
+.manager-account-pin .manager-password-toggle { position: static; flex: 0 0 auto; }
 
 /* Settings is rendered by the shared settings component, but this selector
    is Manager-only and restores the app's single title inset and card

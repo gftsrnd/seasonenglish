@@ -7,6 +7,7 @@ import type {
   AssessmentLevelFormSlotView,
   AssessmentLevelFormDetailView,
   AssessmentLevelFormDeleteView,
+  AssessmentLevelFormUpdateInput,
   AssessmentReviewOverviewView,
   AssessmentReviewAttemptDetailView,
   AssessmentReviewChallengeView,
@@ -122,6 +123,38 @@ const violationInput = z.object({
 const sectionOrder: AssessmentSectionCode[] = ["listening", "reading", "writing", "speaking"];
 const levelFormParam = z.object({ targetLevel: z.enum(["A2", "B1", "B2", "C1"]) });
 const levelFormVersionParam = z.object({ versionId: z.uuid() });
+const levelFormTaskInput = z.object({
+  key: z.string().trim().min(1).max(80), prompt: z.string().trim().min(1).max(20_000),
+  responseType: z.enum(["single_choice", "long_text", "speaking_evidence"]), maxScore: z.number().positive().max(100),
+  options: z.array(z.object({ value: z.string().trim().min(1).max(80), label: z.string().trim().min(1).max(2_000) })).max(10).optional(),
+  correctAnswer: z.string().trim().min(1).max(2_000).nullable().optional(), minWords: z.number().int().min(0).max(5_000).optional(), maxWords: z.number().int().min(1).max(5_000).optional()
+}).passthrough();
+const levelFormStimulusInput = z.discriminatedUnion("type", [
+  z.object({ type: z.literal("passage"), text: z.string().trim().min(1).max(30_000) }).passthrough(),
+  z.object({ type: z.literal("audio_script"), audioSrc: z.string().max(2_000).optional(), lines: z.array(z.object({ speaker: z.string().trim().min(1).max(200), text: z.string().trim().min(1).max(10_000) })).min(1).max(50) }).passthrough()
+]);
+const levelFormUpdateInput = z.object({
+  title: z.string().trim().min(3).max(300),
+  sections: z.array(z.object({
+    code: z.enum(["listening", "reading", "writing", "speaking"]), title: z.string().trim().min(1).max(200),
+    durationMinutes: z.number().int().positive().max(120), maxScore: z.number().positive().max(100),
+    instructions: z.array(z.string().trim().min(1).max(2_000)).min(1).max(20),
+    groups: z.array(z.object({
+      key: z.string().trim().min(1).max(80), title: z.string().trim().min(1).max(200), instruction: z.string().trim().min(1).max(2_000),
+      stimulus: levelFormStimulusInput.optional(), maxPlays: z.number().int().min(1).max(10).optional(), tasks: z.array(levelFormTaskInput).min(1).max(50)
+    }).passthrough()).min(1).max(20)
+  }).passthrough()).length(4)
+}).superRefine((value, context) => {
+  const codes = new Set(value.sections.map((section) => section.code));
+  if (codes.size !== 4) context.addIssue({ code: "custom", path: ["sections"], message: "Each level form must contain four distinct sections" });
+  value.sections.forEach((section, sectionIndex) => section.groups.forEach((group, groupIndex) => group.tasks.forEach((task, taskIndex) => {
+    if (task.responseType === "single_choice" && (!task.options?.length || !task.correctAnswer || !task.options.some((option) => option.value === task.correctAnswer))) {
+      context.addIssue({ code: "custom", path: ["sections", sectionIndex, "groups", groupIndex, "tasks", taskIndex], message: "Choice tasks require options and a matching answer" });
+    }
+  })));
+});
+
+const DEFAULT_LEVEL_FORM_PROMPT = `Create a complete Workplace English CEFR promotion test for the requested target level. Return exactly four sections: listening with 5 multiple-choice questions, reading with 5 multiple-choice questions, writing with 1 task, and speaking with 1 task. Use realistic workplace situations, unambiguous answer keys, level-appropriate language, and follow the required JSON schema exactly.`;
 
 export function registerAssessmentRoutes(app: FastifyInstance, pool: Pool, aiRunner?: AiTaskRunner, aiRunnerFactory?: (actorId: string) => Promise<AiTaskRunner | undefined>): void {
   const repositories = createRepositories(pool);
@@ -130,6 +163,7 @@ export function registerAssessmentRoutes(app: FastifyInstance, pool: Pool, aiRun
   const assessmentReaders = createRoleGuard(pool, ["operator", "manager"]);
   const assessmentReviewers = createRoleGuard(pool, ["operator", "manager"]);
   const assessmentOperators = createRoleGuard(pool, ["operator", "manager"]);
+  const levelFormOperators = createRoleGuard(pool, ["operator"]);
 
   app.get("/api/v1/assessment-reviews/pending", { preHandler: assessmentReaders }, async (request) => {
     const pending = await repositories.assessments.listPending(request.e4sSession!.user.id);
@@ -214,6 +248,7 @@ export function registerAssessmentRoutes(app: FastifyInstance, pool: Pool, aiRun
         : [];
     });
     return {
+      openAppeals: overview.openAppeals,
       pendingAssessments: overview.pending.filter((item) => item.kind !== "level-up").map(queueView),
       pendingLevelUp: overview.pending.filter((item) => item.kind === "level-up").map(queueView),
       approvedLearners: overview.approvedLearners,
@@ -422,8 +457,23 @@ export function registerAssessmentRoutes(app: FastifyInstance, pool: Pool, aiRun
     return versions.map((version) => ({ ...version, publishedAt: version.publishedAt?.toISOString() ?? null }));
   });
 
+  app.put("/api/v1/assessment-level-forms/:versionId", { preHandler: levelFormOperators }, async (request, reply): Promise<AssessmentLevelFormDetailView | void> => {
+    const params = levelFormVersionParam.safeParse(request.params);
+    const body = levelFormUpdateInput.safeParse(request.body);
+    if (!params.success || !body.success) return reply.code(400).send({ code: "INVALID_LEVEL_FORM_UPDATE" });
+    const updated = await repositories.assessments.updateLevelFormDraft(request.e4sSession!.user.id, params.data.versionId, body.data as AssessmentLevelFormUpdateInput);
+    return updated ?? reply.code(409).send({ code: "LEVEL_FORM_NOT_EDITABLE" });
+  });
+
+  app.post("/api/v1/assessment-level-forms/:versionId/draft", { preHandler: levelFormOperators }, async (request, reply): Promise<AssessmentLevelFormDetailView | void> => {
+    const params = levelFormVersionParam.safeParse(request.params);
+    if (!params.success) return reply.code(400).send({ code: "INVALID_LEVEL_FORM_VERSION" });
+    const draft = await repositories.assessments.copyLevelFormToDraft(request.e4sSession!.user.id, params.data.versionId);
+    return draft ? reply.code(201).send(draft) : reply.code(409).send({ code: "LEVEL_FORM_NOT_COPYABLE" });
+  });
+
   app.post("/api/v1/assessment-level-forms/:targetLevel/generate", {
-    preHandler: assessmentOperators, config: { rateLimit: { max: 4, timeWindow: "1 minute" } }
+    preHandler: levelFormOperators, config: { rateLimit: { max: 4, timeWindow: "1 minute" } }
   }, async (request, reply) => {
     const params = levelFormParam.safeParse(request.params);
     if (!params.success) return reply.code(400).send({ code: "INVALID_TARGET_LEVEL" });
@@ -431,14 +481,13 @@ export function registerAssessmentRoutes(app: FastifyInstance, pool: Pool, aiRun
     const runner = await runnerFor(actorId);
     if (!runner) return reply.code(503).send({ code: "AI_UNAVAILABLE" });
     const task = await repositories.aiRuns.activeTaskPrompt(actorId, "level_form_generation");
-    if (!task) return reply.code(503).send({ code: "AI_PROMPT_NOT_READY" });
     try {
       const result = await runner.runTask("level_form_generation", {
         targetLevel: params.data.targetLevel, context: "workplace_english", listeningQuestions: 5, readingQuestions: 5
-      }, { systemPrompt: task.prompt });
+      }, { systemPrompt: task?.prompt ?? DEFAULT_LEVEL_FORM_PROMPT });
       const output = levelFormOutputSchema.safeParse(result.output);
       if (!output.success) return reply.code(502).send({ code: "AI_OUTPUT_INVALID" });
-      await repositories.aiRuns.recordSucceeded({
+      if (task) await repositories.aiRuns.recordSucceeded({
         userId: actorId,
         requestId: `level-form:${params.data.targetLevel}:${Date.now()}`,
         taskId: task.taskId,
@@ -454,14 +503,19 @@ export function registerAssessmentRoutes(app: FastifyInstance, pool: Pool, aiRun
     }
   });
 
-  app.post("/api/v1/assessment-level-forms/:versionId/publication", { preHandler: assessmentOperators }, async (request, reply) => {
+  app.post("/api/v1/assessment-level-forms/:versionId/publication", { preHandler: levelFormOperators }, async (request, reply) => {
     const params = levelFormVersionParam.safeParse(request.params);
     if (!params.success) return reply.code(400).send({ code: "INVALID_LEVEL_FORM_VERSION" });
-    const form = await repositories.assessments.publishLevelForm(request.e4sSession!.user.id, params.data.versionId);
-    return form ? { ...form, publishedAt: form.publishedAt?.toISOString() ?? null } : reply.code(409).send({ code: "LEVEL_FORM_NOT_PUBLISHABLE" });
+    try {
+      const form = await repositories.assessments.publishLevelForm(request.e4sSession!.user.id, params.data.versionId);
+      return form ? { ...form, publishedAt: form.publishedAt?.toISOString() ?? null } : reply.code(409).send({ code: "LEVEL_FORM_NOT_PUBLISHABLE" });
+    } catch (error) {
+      const code = assessmentErrorCode(error, "LEVEL_FORM_NOT_PUBLISHABLE");
+      return reply.code(409).send({ code });
+    }
   });
 
-  app.delete("/api/v1/assessment-level-forms/:versionId", { preHandler: assessmentOperators }, async (request, reply): Promise<AssessmentLevelFormDeleteView | void> => {
+  app.delete("/api/v1/assessment-level-forms/:versionId", { preHandler: levelFormOperators }, async (request, reply): Promise<AssessmentLevelFormDeleteView | void> => {
     const params = levelFormVersionParam.safeParse(request.params);
     if (!params.success) return reply.code(400).send({ code: "INVALID_LEVEL_FORM_VERSION" });
     try {
@@ -631,6 +685,15 @@ export function registerAssessmentRoutes(app: FastifyInstance, pool: Pool, aiRun
       evidenceType: body.data.evidenceType,
       ...(body.data.artifactKey ? { artifactKey: body.data.artifactKey } : {})
     });
+    if (saved && body.data.evidenceType === "audio" && body.data.artifactKey) {
+      await repositories.files.linkAudioToSource({
+        ownerUserId: learnerId,
+        audio: { artifactKey: body.data.artifactKey },
+        sourceFlow: "placement",
+        sourceEntityId: attempt.id,
+        taskKey: params.data.taskKey
+      });
+    }
     return saved ? responseView(saved) : reply.code(409).send({ code: "ASSESSMENT_ATTEMPT_NOT_EDITABLE" });
   });
 

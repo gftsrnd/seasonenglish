@@ -30,6 +30,24 @@ const coach = {
   levelApproved: true
 } as any;
 
+const feedbackWithSample = {
+  relevant: true,
+  relevanceNote: "",
+  evaluation: { status: "valid", result: "partially_correct", countsTowardGoal: true, noteVi: "Đúng trọng tâm." },
+  seasonReply: "Nice to hear you are happy with your job.",
+  seasonReplyTranslation: "Rất vui khi nghe bạn hài lòng với công việc.",
+  nextQuestion: "What could you say next in this workplace situation?",
+  nextQuestionTranslation: "Bạn có thể nói gì tiếp theo trong tình huống công việc này?",
+  rubric: {
+    meaning: { score: 4, evidence: "The answer is relevant.", improvement: "Add one detail." },
+    vocabulary: { score: 3, evidence: "Uses workplace words.", improvement: "Use budget report." },
+    grammar: { score: 4, evidence: "The sentence is clear.", improvement: "Keep this structure." }
+  },
+  corrections: [],
+  correctedText: "",
+  suggestedAnswer: { text: "First, I will check the budget report.", translation: "Đầu tiên, tôi sẽ kiểm tra báo cáo ngân sách." }
+} as const;
+
 const practice = {
   state: "open", weekId: "week-1", weekNumber: 1, topic: "Meetings", completedLessons: 5, totalLessons: 5,
   task: "Introduce your role.", guidance: "Use at least eight words.", submission: null
@@ -73,10 +91,74 @@ function enableSpeechRecognition() {
 }
 
 describe("app coach and weekly practice speech input", () => {
-  it("normalizes Season audioArtifact responses into a playable recording beside the transcript", () => {
+  it("plays only the Season reply from the Listen button in the reply heading", async () => {
+    const callback = actions();
+    const user = userEvent.setup();
+    render(<LearnerCoach view={{ ...coach, messages: [{
+      id: "coach-sample-audio", speaker: "coach", text: feedbackWithSample.seasonReply, createdAt: "now", feedback: feedbackWithSample
+    }] }} actions={callback} />);
+
+    const reply = screen.getByLabelText("Câu Season trả lời");
+    const heading = within(reply).getByRole("heading", { name: "Câu Season trả lời" });
+    const listen = within(reply).getByRole("button", { name: "Nghe câu Season trả lời" });
+    expect(heading.parentElement).toContainElement(listen);
+    await user.click(listen);
+
+    expect(callback.speak).toHaveBeenCalledWith("Nice to hear you are happy with your job.", "en-US");
+    expect(callback.speak).not.toHaveBeenCalledWith("First, I will check the budget report.", expect.anything());
+  });
+
+  it("hides the entire correction section when feedback has no correction content", () => {
+    render(<LearnerCoach view={{ ...coach, messages: [{
+      id: "coach-no-correction-content", speaker: "coach", text: feedbackWithSample.seasonReply, createdAt: "now", feedback: feedbackWithSample
+    }] }} actions={actions()} />);
+
+    expect(screen.queryByRole("heading", { name: "Câu sửa" })).not.toBeInTheDocument();
+    expect(screen.queryByText(/Không có lỗi cần sửa trực tiếp/)).not.toBeInTheDocument();
+  });
+
+  it("keeps the next question with the Season reply and places only the yellow sample before evaluation", () => {
+    render(<LearnerCoach view={{ ...coach, messages: [{
+      id: "coach-sample-only", speaker: "coach", text: feedbackWithSample.seasonReply, createdAt: "now", feedback: feedbackWithSample
+    }] }} actions={actions()} />);
+
+    const reply = screen.getByLabelText("Câu Season trả lời");
+    const nextQuestion = within(reply).getByText("What could you say next in this workplace situation?");
+    expect(nextQuestion.tagName).toBe("STRONG");
+    expect(nextQuestion.closest(".coach-next-question")).toBeNull();
+    expect(screen.queryByLabelText("Câu Season hỏi tiếp")).not.toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "Câu bạn nên nói tiếp" })).not.toBeInTheDocument();
+    const suggestion = within(reply).getByLabelText("Gợi ý trả lời");
+    expect(suggestion).toHaveClass("coach-next-question");
+    expect(suggestion).toHaveTextContent("First, I will check the budget report.");
+    expect(suggestion).not.toHaveTextContent("What could you say next in this workplace situation?");
+    expect(suggestion).not.toHaveTextContent("Đầu tiên, tôi sẽ kiểm tra báo cáo ngân sách.");
+    const evaluation = screen.getByLabelText("Nhận xét câu trả lời của bạn");
+    expect(suggestion.compareDocumentPosition(evaluation) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Nghe câu mẫu" })).not.toBeInTheDocument();
+    const details = screen.getByText("Xem giải thích và gợi ý").closest("details");
+    expect(within(details!).getByLabelText("Bản dịch gợi ý trả lời")).toHaveTextContent("Đầu tiên, tôi sẽ kiểm tra báo cáo ngân sách.");
+    expect(within(details!).queryByText("First, I will check the budget report.")).not.toBeInTheDocument();
+  });
+
+  it("normalizes Season audioArtifact responses without duplicating the visible transcript", () => {
     render(<LearnerCoach view={{ ...coach, messages: [{ id: "turn-1", speaker: "learner", text: "I can help", createdAt: "2026-10-28T00:00:00.000Z", audioArtifact: { fileId: "season-file", artifactKey: "audio/season.webm", signedUrl: "/audio/season.webm" } }] }} actions={actions()} />);
     expect(screen.getByLabelText("Phát Bản ghi âm câu trả lời")).toHaveAttribute("src", "/audio/season.webm");
-    expect(screen.getAllByText("I can help").length).toBeGreaterThanOrEqual(2);
+    expect(screen.getAllByText("I can help")).toHaveLength(1);
+    expect(screen.queryByText("Bản chép lời")).not.toBeInTheDocument();
+  });
+
+  it("keeps a recorded learner transcript visible only once inside the chat bubble", () => {
+    render(<LearnerCoach view={{ ...coach, messages: [{
+      id: "turn-audio", speaker: "learner", text: "I can help with the meeting.", createdAt: "2026-10-28T00:00:00.000Z",
+      audioArtifact: { fileId: "season-file", artifactKey: "audio/season.webm", signedUrl: "/audio/season.webm", transcript: "I can help with the meeting." }
+    }] }} actions={actions()} />);
+
+    const bubble = screen.getAllByText("I can help with the meeting.")[0]!.closest("article");
+    expect(bubble).not.toBeNull();
+    expect(within(bubble!).getAllByText("I can help with the meeting.")).toHaveLength(1);
+    expect(within(bubble!).queryByText("Bản chép lời")).not.toBeInTheDocument();
+    expect(within(bubble!).getByLabelText("Phát Bản ghi âm câu trả lời")).toBeInTheDocument();
   });
 
   it("normalizes weekly submission audioArtifact responses while retaining feedback", () => {
@@ -197,34 +279,76 @@ describe("app coach and weekly practice speech input", () => {
     const feedback = screen.getByRole("region", { name: "Phản hồi của Season" });
     expect(feedback.querySelector(".coach-feedback-summary")).not.toBeNull();
     expect(feedback.querySelectorAll(".coach-feedback-score")).toHaveLength(3);
-    expect(within(feedback).getByRole("heading", { name: "Câu bạn nên nói tiếp" })).toBeInTheDocument();
-    expect(within(feedback).getByText("Could you shorten the bullet points?")).toBeInTheDocument();
+    expect(within(feedback).queryByRole("heading", { name: "Câu bạn nên nói tiếp" })).not.toBeInTheDocument();
+    expect(within(feedback).queryByLabelText("Câu Season hỏi tiếp")).not.toBeInTheDocument();
     const seasonHeading = within(feedback).getByRole("heading", { name: "Câu Season trả lời" });
     const evaluationHeading = within(feedback).getByRole("heading", { name: "Nhận xét câu trả lời của bạn" });
     const correctionHeading = within(feedback).getByRole("heading", { name: "Câu sửa" });
     const nextQuestion = within(feedback).getByText("Could you shorten the bullet points?");
     expect(seasonHeading.compareDocumentPosition(evaluationHeading) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    const suggestionBox = within(feedback).getByLabelText("Gợi ý trả lời");
+    expect(suggestionBox).toHaveClass("coach-next-question");
+    expect(suggestionBox.compareDocumentPosition(evaluationHeading) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(evaluationHeading.compareDocumentPosition(correctionHeading) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-    expect(within(feedback).getByLabelText("Câu Season trả lời")).not.toContainElement(nextQuestion);
-    expect(within(feedback).getByLabelText("Câu bạn nên nói tiếp")).toContainElement(nextQuestion);
+    expect(nextQuestion.tagName).toBe("STRONG");
+    expect(within(feedback).getByLabelText("Câu Season trả lời")).toContainElement(nextQuestion);
     expect(within(feedback).getByText("Kết quả: Đúng một phần")).toBeInTheDocument();
     expect(within(feedback).getByLabelText("Nhận xét câu trả lời của bạn")).not.toHaveTextContent("Thanks for the clear answer.");
     expect(within(feedback).queryByText("Ý nghĩa ba điểm")).not.toBeInTheDocument();
-    expect(within(feedback).getByRole("heading", { name: "Gợi ý trả lời câu tiếp theo" })).toBeInTheDocument();
     const details = within(feedback).getByText("Xem giải thích và gợi ý").closest("details");
     expect(details).not.toHaveAttribute("open");
     expect(feedback.querySelectorAll("details")).toHaveLength(1);
-    expect(feedback.querySelectorAll(".coach-feedback-section")).toHaveLength(3);
+    expect(feedback.querySelectorAll(".coach-feedback-section")).toHaveLength(2);
     expect(feedback.querySelectorAll(".coach-feedback-criterion-card")).toHaveLength(3);
     expect(within(feedback).getByText("Cảm ơn câu trả lời rõ ràng.")).toBeInTheDocument();
     expect(within(feedback).getByText("Bạn có thể rút ngắn các gạch đầu dòng không?")).toBeInTheDocument();
     expect(within(feedback).getByText(/The slide is clearly identified\./)).toBeInTheDocument();
     expect(within(feedback).getByText(/Use has, not have\./)).toBeInTheDocument();
-    expect(within(feedback).getByText("I can shorten the bullet points.")).toBeInTheDocument();
-    expect(within(feedback).getByText("Tôi có thể rút ngắn các gạch đầu dòng.")).toBeInTheDocument();
+    const reply = within(feedback).getByLabelText("Câu Season trả lời");
+    expect(within(reply).getByLabelText("Gợi ý trả lời")).toHaveTextContent("I can shorten the bullet points.");
+    expect(within(details!).getByLabelText("Bản dịch gợi ý trả lời")).toHaveTextContent("Tôi có thể rút ngắn các gạch đầu dòng.");
   });
 
-  it("does not claim there is nothing to fix when rubric improvements exist", () => {
+  it("keeps the usable model answer visible in the Season reply", () => {
+    render(<LearnerCoach view={{ ...coach, messages: [{
+      id: "coach-model-answer", speaker: "coach", text: "What could you say next?", createdAt: "2026-10-22T00:00:00.000Z",
+      feedback: {
+        relevant: true, relevanceNote: "", evaluation: { status: "valid", result: "correct", countsTowardGoal: true, noteVi: "Đúng trọng tâm." },
+        seasonReply: "That sounds good.", seasonReplyTranslation: "Nghe ổn đấy.",
+        nextQuestion: "What could you say next?", nextQuestionTranslation: "Bạn có thể nói gì tiếp theo?",
+        rubric: {
+          meaning: { score: 5, evidence: "Clear.", improvement: "Add detail." },
+          vocabulary: { score: 4, evidence: "Relevant words.", improvement: "Use confirm." },
+          grammar: { score: 5, evidence: "Correct.", improvement: "Keep this structure." }
+        },
+        corrections: [], correctedText: "", suggestedAnswer: { text: "I can confirm the agenda before lunch.", translation: "Tôi có thể xác nhận chương trình trước bữa trưa." }
+      }
+    }] }} actions={actions()} />);
+
+    const reply = screen.getByLabelText("Câu Season trả lời");
+    const suggestion = within(reply).getByLabelText("Gợi ý trả lời");
+    expect(suggestion).toHaveClass("coach-next-question");
+    expect(suggestion).toHaveTextContent("I can confirm the agenda before lunch.");
+    expect(suggestion).not.toHaveTextContent("What could you say next?");
+    expect(screen.queryByLabelText("Câu Season hỏi tiếp")).not.toBeInTheDocument();
+    expect(reply).toHaveTextContent("What could you say next?");
+    const details = screen.getByText("Xem giải thích và gợi ý").closest("details");
+    expect(within(details!).getByLabelText("Bản dịch gợi ý trả lời")).toHaveTextContent("Tôi có thể xác nhận chương trình trước bữa trưa.");
+  });
+
+  it("keeps Season's opening line at the start after conversation messages arrive", () => {
+    render(<LearnerCoach view={{ ...coach, messages: [
+      { id: "learner-1", speaker: "learner", text: "I am ready.", createdAt: "now" },
+      { id: "coach-1", speaker: "coach", text: "Great. Let's begin.", createdAt: "now" }
+    ] }} actions={actions()} />);
+
+    const conversation = screen.getByRole("region", { name: "Cuộc trò chuyện với Season" });
+    const opening = within(conversation).getByText("Chào bạn! Hôm nay mình luyện một tình huống thật nhé.");
+    const learnerMessage = within(conversation).getByText("I am ready.");
+    expect(opening.compareDocumentPosition(learnerMessage) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
+  it("does not render a correction section for rubric-only improvements", () => {
     render(<LearnerCoach view={{ ...coach, messages: [{
       id: "coach-no-correction", speaker: "coach", text: "Good start. Where is the meeting room?", createdAt: "2026-10-22T00:00:00.000Z",
       feedback: {
@@ -240,9 +364,8 @@ describe("app coach and weekly practice speech input", () => {
       }
     }] }} actions={actions()} />);
 
-    const correction = screen.getByLabelText("Câu sửa");
-    expect(correction).toHaveTextContent("Không có lỗi cần sửa trực tiếp. Xem gợi ý cải thiện trong phần giải thích.");
-    expect(correction).not.toHaveTextContent("Không có lỗi cần sửa.");
+    expect(screen.queryByLabelText("Câu sửa")).not.toBeInTheDocument();
+    expect(screen.queryByText(/Không có lỗi cần sửa/)).not.toBeInTheDocument();
   });
 
   it("keeps secret words locked until used and offers TTS for every Coach turn", async () => {
@@ -255,16 +378,22 @@ describe("app coach and weekly practice speech input", () => {
     ] }} actions={callback} />);
 
     expect(screen.queryByRole("button", { name: "Mở từ bí mật 1" })).not.toBeInTheDocument();
-    expect(screen.getByText("Gợi ý: chương trình họp")).toBeInTheDocument();
+    expect(screen.getByText("chương trình họp")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Nghe từ deadline: hạn chót" })).toHaveClass("coach-word-chip");
     await user.click(screen.getByRole("button", { name: "Nghe câu của Season" }));
     expect(callback.speak).toHaveBeenCalledWith("What is on the agenda?", "en-US");
     expect(screen.getByRole("button", { name: "Nói" })).toHaveClass("coach-compose-icon");
+    expect(screen.getByRole("button", { name: "Nói" })).toHaveAttribute("title", "Nói");
+    expect(screen.getByRole("button", { name: "Nói" }).querySelector("span")).toHaveClass("sr-only");
+    const uploadInput = screen.getByLabelText("Tải file ghi âm");
+    const uploadControl = document.querySelector(`label[for="${uploadInput.id}"]`);
+    expect(uploadControl).toHaveClass("coach-compose-icon");
+    expect(uploadControl?.querySelector("span")).toHaveClass("sr-only");
     expect(screen.getByRole("button", { name: "Gửi" })).toHaveClass("coach-send");
     expect(screen.getByRole("button", { name: "Gửi" }).querySelector("svg")).toBeInTheDocument();
   });
 
-  it("reads only the English Coach reply and question after structured feedback", async () => {
+  it("reads only the English Season reply after structured feedback", async () => {
     const callback = actions();
     const user = userEvent.setup();
     render(<LearnerCoach view={{ ...coach, messages: [{
@@ -282,7 +411,7 @@ describe("app coach and weekly practice speech input", () => {
       }
     }] }} actions={callback} />);
 
-    await user.click(screen.getByRole("button", { name: "Nghe câu của Season" }));
+    await user.click(screen.getByRole("button", { name: "Nghe câu Season trả lời" }));
     expect(callback.speak).toHaveBeenCalledWith("Please write a complete English sentence.", "en-US");
     expect(callback.speak).not.toHaveBeenCalledWith(expect.stringContaining("Hãy"), expect.anything());
   });
@@ -299,13 +428,19 @@ describe("app coach and weekly practice speech input", () => {
           vocabulary: { score: 0, evidence: "Chưa đủ từ.", improvement: "Dùng từ đúng chủ đề." },
           grammar: { score: 0, evidence: "Chưa đủ câu.", improvement: "Thêm chủ ngữ và động từ." }
         },
-        corrections: [], correctedText: "", suggestedAnswer: { text: "", translation: "" }
+        corrections: [], correctedText: "", suggestedAnswer: { text: "I will answer with a complete sentence.", translation: "Tôi sẽ trả lời bằng một câu đầy đủ." }
       }
     }] }} actions={actions()} />);
 
     expect(screen.getByRole("heading", { name: "Câu cần trả lời lại" })).toBeInTheDocument();
     expect(screen.queryByRole("heading", { name: "Câu bạn nên nói tiếp" })).not.toBeInTheDocument();
-    expect(screen.getByText("Hãy trả lời lại câu hỏi Season vừa hỏi bằng một câu tiếng Anh đầy đủ.")).toBeInTheDocument();
+    expect(screen.queryByLabelText("Gợi ý trả lời")).not.toBeInTheDocument();
+    expect(screen.queryByText("I will answer with a complete sentence.")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Nghe câu mẫu" })).not.toBeInTheDocument();
+    const retry = screen.getByLabelText("Câu cần trả lời lại");
+    expect(retry).toHaveTextContent("Hãy trả lời lại câu hỏi Season vừa hỏi bằng một câu tiếng Anh đầy đủ.");
+    const evaluation = screen.getByLabelText("Nhận xét câu trả lời của bạn");
+    expect(retry.compareDocumentPosition(evaluation) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(screen.queryByText("What would you say first?")).not.toBeInTheDocument();
   });
 
@@ -317,7 +452,7 @@ describe("app coach and weekly practice speech input", () => {
     ] }} actions={actions()} />);
 
     expect(screen.getByRole("button", { name: "Nghe từ company: công ty" })).toBeInTheDocument();
-    expect(screen.getByText("Gợi ý: sự giao hàng trễ")).toBeInTheDocument();
+    expect(screen.getByText("sự giao hàng trễ")).toBeInTheDocument();
     expect(screen.queryByText(/dùng khi chào hỏi/i)).not.toBeInTheDocument();
   });
 
@@ -342,7 +477,7 @@ describe("app coach and weekly practice speech input", () => {
       }
     }] }} actions={callback} />);
 
-    await user.click(screen.getByRole("button", { name: "Nghe câu của Season" }));
+    await user.click(screen.getByRole("button", { name: "Nghe câu Season trả lời" }));
     expect(callback.speak).toHaveBeenCalledWith(
       "Please write a complete English sentence so I can understand your answer.",
       "en-US"
@@ -481,7 +616,8 @@ describe("app coach and weekly practice speech input", () => {
     const lockedWord = screen.getByLabelText("Từ bí mật 1 chưa mở");
     expect(lockedWord.querySelector("svg.lucide-lock-keyhole")).toBeInTheDocument();
     expect(lockedWord).not.toHaveTextContent("🔒");
-    expect(lockedWord).toHaveTextContent("Gợi ý: đồng nghiệp");
+    expect(lockedWord).toHaveTextContent("đồng nghiệp");
+    expect(lockedWord).not.toHaveTextContent("Gợi ý:");
     expect(screen.getAllByLabelText(/Từ bí mật .* chưa mở/)).toHaveLength(1);
   });
 
@@ -499,16 +635,29 @@ describe("app coach and weekly practice speech input", () => {
 
     await user.click(screen.getByRole("button", { name: "Nói" }));
     expect(latestRecognition?.start).toHaveBeenCalledTimes(1);
-    expect(screen.getByRole("button", { name: "Đang nghe" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Dừng ghi âm" })).toBeInTheDocument();
     latestRecognition?.onresult?.({ results: [[{ transcript: "from the meeting" }]] });
     await waitFor(() => expect(draft).toHaveValue("Hello from the meeting"));
     latestRecognition?.onresult?.({ results: [[{ transcript: "from the meeting today" }]] });
     await waitFor(() => expect(draft).toHaveValue("Hello from the meeting today"));
     expect(draft).not.toHaveValue("Hello from the meeting from the meeting today");
 
-    await user.click(screen.getByRole("button", { name: "Đang nghe" }));
+    await user.click(screen.getByRole("button", { name: "Dừng ghi âm" }));
     expect(latestRecognition?.stop).toHaveBeenCalledTimes(1);
     expect(screen.getByRole("button", { name: "Nói" })).toBeInTheDocument();
+  });
+
+  it("A-032 merges overlapping rapid Web Speech results without repeating words", async () => {
+    enableSpeechRecognition();
+    const user = userEvent.setup();
+    render(<LearnerCoach view={coach} actions={actions()} />);
+
+    await user.click(screen.getByRole("button", { name: "Nói" }));
+    latestRecognition?.onresult?.({ results: [[{ transcript: "Okay" }]] });
+    latestRecognition?.onresult?.({ results: [[{ transcript: "Okay" }], [{ transcript: "Okay my manager" }]] });
+
+    await waitFor(() => expect(screen.getByRole("textbox", { name: "Tin nhắn cho Season" }))
+      .toHaveValue("Okay my manager"));
   });
 
   it("QA Đợt 4 A-032 sends a recognized microphone transcript through the same Coach callback as typed text", async () => {
@@ -521,7 +670,7 @@ describe("app coach and weekly practice speech input", () => {
     latestRecognition?.onresult?.({ results: [[{ transcript: "I reported the safety issue immediately" }]] });
     await waitFor(() => expect(screen.getByRole("textbox", { name: "Tin nhắn cho Season" }))
       .toHaveValue("I reported the safety issue immediately"));
-    await user.click(screen.getByRole("button", { name: "Đang nghe" }));
+    await user.click(screen.getByRole("button", { name: "Dừng ghi âm" }));
     await user.click(screen.getByRole("button", { name: "Gửi" }));
 
     expect(sendCoachMessage).toHaveBeenCalledWith("I reported the safety issue immediately");
@@ -536,18 +685,68 @@ describe("app coach and weekly practice speech input", () => {
     });
     const sendCoachMessage = vi.fn().mockResolvedValue(undefined);
     const uploadAssessmentAudio = vi.fn().mockResolvedValue("audio/season-1.webm");
+    const play = vi.spyOn(HTMLMediaElement.prototype, "play").mockResolvedValue(undefined);
     const user = userEvent.setup();
     render(<LearnerCoach view={coach} actions={{ ...actions(), sendCoachMessage, uploadAssessmentAudio } as unknown as LearnerCallbacks} />);
 
     await user.click(screen.getByRole("button", { name: "Nói" }));
     latestRecognition?.onresult?.({ results: [[{ transcript: "I reported the issue" }]] });
     await waitFor(() => expect(screen.getByRole("textbox", { name: "Tin nhắn cho Season" })).toHaveValue("I reported the issue"));
-    await user.click(screen.getByRole("button", { name: "Đang nghe" }));
+    await user.click(screen.getByRole("button", { name: "Dừng ghi âm" }));
     expect(uploadAssessmentAudio).toHaveBeenCalledTimes(1);
-    expect(await screen.findByText(/bản ghi âm đã lưu/i)).toBeInTheDocument();
+    expect(await screen.findByRole("button", { name: "Nghe lại bản ghi âm" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Xóa bản ghi âm" })).toBeInTheDocument();
+    expect(screen.queryByText(/bản ghi âm đã lưu/i)).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Nghe lại bản ghi âm" }).closest(".chat-compose")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Nghe lại bản ghi âm" }));
+    expect(play).toHaveBeenCalledTimes(1);
     await user.click(screen.getByRole("button", { name: "Gửi" }));
 
     expect(sendCoachMessage).toHaveBeenCalledWith("I reported the issue", expect.objectContaining({ artifactKey: "audio/season-1.webm" }));
+  });
+
+  it("uploads and sends an audio-only Season message with its file and artifact keys", async () => {
+    const sendCoachMessage = vi.fn().mockResolvedValue(undefined);
+    const uploadAssessmentAudio = vi.fn().mockResolvedValue({
+      fileId: "10000000-0000-4000-8000-000000000801",
+      artifactKey: "assessment-audio/season-upload.webm",
+      signedUrl: "/audio/season-upload.webm"
+    });
+    const user = userEvent.setup();
+    const { rerender } = render(<LearnerCoach view={coach} actions={{ ...actions(), sendCoachMessage, uploadAssessmentAudio } as unknown as LearnerCallbacks} />);
+
+    const upload = screen.getByLabelText("Tải file ghi âm");
+    await user.upload(upload, new File(["voice"], "season.webm", { type: "audio/webm" }));
+    expect(uploadAssessmentAudio).toHaveBeenCalledWith(expect.any(File), "season.webm");
+    expect(await screen.findByRole("button", { name: "Nghe lại bản ghi âm" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Gửi" })).toBeEnabled();
+
+    await user.click(screen.getByRole("button", { name: "Gửi" }));
+    expect(sendCoachMessage).toHaveBeenCalledWith("", expect.objectContaining({
+      fileId: "10000000-0000-4000-8000-000000000801",
+      artifactKey: "assessment-audio/season-upload.webm"
+    }));
+
+    rerender(<LearnerCoach view={{ ...coach, messages: [{
+      id: "audio-turn", speaker: "learner", text: "", createdAt: "2026-10-29T00:00:00.000Z",
+      audioArtifact: { fileId: "10000000-0000-4000-8000-000000000801", artifactKey: "assessment-audio/season-upload.webm", signedUrl: "/audio/season-upload.webm" }
+    }] }} actions={{ ...actions(), sendCoachMessage, uploadAssessmentAudio } as unknown as LearnerCallbacks} />);
+    expect(screen.getByLabelText("Phát Bản ghi âm câu trả lời")).toHaveAttribute("src", "/audio/season-upload.webm");
+  });
+
+  it("removes the pending Season recording without expanding or sending the composer", async () => {
+    const uploadAssessmentAudio = vi.fn().mockResolvedValue({
+      artifactKey: "assessment-audio/season-delete.webm",
+      signedUrl: "/audio/season-delete.webm"
+    });
+    const user = userEvent.setup();
+    render(<LearnerCoach view={coach} actions={{ ...actions(), uploadAssessmentAudio } as unknown as LearnerCallbacks} />);
+
+    await user.upload(screen.getByLabelText("Tải file ghi âm"), new File(["voice"], "season.webm", { type: "audio/webm" }));
+    await user.click(await screen.findByRole("button", { name: "Xóa bản ghi âm" }));
+
+    expect(screen.queryByRole("button", { name: "Nghe lại bản ghi âm" })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Gửi" })).toBeDisabled();
   });
 
   it("keeps the Season draft when microphone permission fails", async () => {
@@ -650,7 +849,9 @@ describe("app coach and weekly practice speech input", () => {
       submission: {
         id: "submission-1", status: "reviewed", text: "My submitted answer has enough words.", submittedAt: "2026-10-15T08:00:00.000Z",
         score: { total: 82, rubric: { meaning: 4, vocabulary: 4, grammar: 3 } }, reviewState: "graded-manual",
-        gradingSource: "manual", feedback: "Checked by an operator.", suggestions: [], correctedText: "Corrected answer."
+        gradingSource: "manual", feedback: "Checked by an operator.", suggestions: [{
+          original: "I coordinate meeting.", corrected: "I coordinate the meeting.", explanation: "Add the article."
+        }], correctedText: "Corrected answer."
       },
       history: [{
         id: "history-1", weekId: "week-0", weekNumber: 0, topic: "Introductions", task: "Introduce yourself.",
@@ -659,6 +860,9 @@ describe("app coach and weekly practice speech input", () => {
     };
 
     render(<LearnerPractice view={reviewed} actions={actions()} />);
+    expect(screen.getByText("82/100")).toBeInTheDocument();
+    expect(screen.getByText("I coordinate meeting. → I coordinate the meeting.")).toBeInTheDocument();
+    expect(screen.getByText("Add the article.")).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "Lịch sử bài tuần" })).toBeInTheDocument();
     expect(screen.getByText(/Tuần 0 · Introductions/)).toBeInTheDocument();
     expect(screen.queryByRole("textbox", { name: "Lý do kháng nghị" })).not.toBeInTheDocument();

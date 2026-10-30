@@ -102,6 +102,25 @@ describe("audio flow integration contract", () => {
     expect(linked.rows[0].retention_until).toEqual(expect.any(Date));
   });
 
+  it("accepts an audio-only Season message and preserves its canonical file key", async () => {
+    const objectKey = `assessment-audio/${DEMO_IDS.learner}/season-audio-only.webm`;
+    const fileId = "10000000-0000-4000-8000-000000000705";
+    await insertAudio(objectKey, fileId);
+
+    const response = await app.inject({
+      method: "POST", url: "/api/v1/coach/messages", headers: { cookie: learnerCookie },
+      payload: {
+        requestId: "10000000-0000-4000-8000-000000000706",
+        message: "",
+        audio: { fileId, artifactKey: objectKey, mimeType: "audio/webm", sizeBytes: 42 }
+      }
+    });
+
+    expect(response.statusCode, response.body).toBe(200);
+    const message = response.json().messages.find((item: { speaker: string; audioArtifact?: { artifactKey?: string } }) => item.speaker === "learner" && item.audioArtifact?.artifactKey === objectKey);
+    expect(message).toMatchObject({ text: "", audioArtifact: { fileId, artifactKey: objectKey, signedUrl: `https://audio.example.test/${objectKey}` } });
+  });
+
   it("persists weekly-practice audio payloads on the canonical submission", async () => {
     await pool.query("update progress_records set status = 'completed', completed_at = now() where learner_id = $1", [DEMO_IDS.learner]);
     const view = await createRepositories(pool).engagement.weeklyPractice(DEMO_IDS.learner);

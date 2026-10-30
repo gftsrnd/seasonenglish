@@ -7,6 +7,7 @@ import {
   S3Client
 } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
+import type { Readable } from "node:stream";
 
 export interface PutObjectInput {
   bucket: string;
@@ -26,8 +27,23 @@ export interface PresignedObject {
   expiresAt: Date;
 }
 
+export interface GetObjectInput {
+  bucket: string;
+  objectKey: string;
+  range?: string;
+}
+
+export interface StoredObject {
+  body: Readable;
+  mimeType?: string;
+  contentLength?: number;
+  contentRange?: string;
+  acceptRanges?: string;
+}
+
 export interface ObjectStorage {
   putObject(input: PutObjectInput): Promise<void>;
+  getObject?(input: GetObjectInput): Promise<StoredObject>;
   deleteObject(bucket: string, objectKey: string): Promise<void>;
   objectExists?(bucket: string, objectKey: string): Promise<boolean>;
   ready(bucket: string): Promise<void>;
@@ -63,6 +79,24 @@ export function createS3Storage(options: S3StorageOptions): ObjectStorage {
         Body: input.body,
         ContentType: input.mimeType
       }));
+    },
+    async getObject(input) {
+      const response = await client.send(new GetObjectCommand({
+        Bucket: input.bucket,
+        Key: input.objectKey,
+        ...(input.range ? { Range: input.range } : {})
+      }));
+      if (!response.Body) throw new Error("S3 object body is unavailable");
+      if (!("pipe" in response.Body) || typeof response.Body.pipe !== "function") {
+        throw new Error("S3 object body is not a Node.js readable stream");
+      }
+      return {
+        body: response.Body as Readable,
+        ...(response.ContentType ? { mimeType: response.ContentType } : {}),
+        ...(response.ContentLength !== undefined ? { contentLength: response.ContentLength } : {}),
+        ...(response.ContentRange ? { contentRange: response.ContentRange } : {}),
+        ...(response.AcceptRanges ? { acceptRanges: response.AcceptRanges } : {})
+      };
     },
     async deleteObject(bucket, objectKey) {
       await client.send(new DeleteObjectCommand({ Bucket: bucket, Key: objectKey }));

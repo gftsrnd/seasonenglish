@@ -27,4 +27,17 @@ describe("Coach prompt safeguards", () => {
     expect(prototypePromptDefaults.coach).not.toContain("suggestions[].translation");
     expect(prototypePromptDefaults.coach).not.toContain("explanation must include a natural Vietnamese translation");
   });
+
+  it("adds CEFR-aware guidance when cefr is provided and ASR transcript tolerance when audio is attached", () => {
+    const a2Prompt = coachPersonaPrompt("Base coach prompt", "informal", "A2");
+    expect(a2Prompt).toContain("CEFR LEVEL (A2):");
+    expect(a2Prompt).toContain("high-frequency vocabulary");
+    expect(a2Prompt).not.toContain("ASR / SPOKEN TRANSCRIPT TOLERANCE:");
+
+    const b2AudioPrompt = coachPersonaPrompt("Base coach prompt", "formal", "B2", { artifactKey: "coach/turn-audio.webm" });
+    expect(b2AudioPrompt).toContain("CEFR LEVEL (B2):");
+    expect(b2AudioPrompt).toContain("connected clauses");
+    expect(b2AudioPrompt).toContain("ASR / SPOKEN TRANSCRIPT TOLERANCE:");
+    expect(b2AudioPrompt).toContain("Ignore speech-recognition punctuation, capitalization, and minor filler words");
+  });
 });

@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import "@testing-library/jest-dom/vitest";
-import { cleanup, render, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, render, screen, waitFor } from "@testing-library/react";
 import { userEvent } from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -36,6 +36,7 @@ vi.mock("../api/manager.js", () => ({ managerApiClient: managerClient }));
 import { App, resolveSessionEntryPath } from "./App.js";
 import { themePatternUrls, useTheme } from "./shared/ThemeProvider.js";
 import { useExperience } from "../features/experience/Experience.js";
+import { resolveAutomaticTheme } from "../features/experience/useAutomaticTheme.js";
 
 const learnerSession = {
   user: { id: "learner-1", displayName: "Nguyễn Minh Anh", email: "learner@example.test" },
@@ -196,6 +197,63 @@ describe("App session shell", () => {
     expect(document.documentElement.style.getPropertyValue("--season-pattern-image")).toContain("season-winter.png");
   });
 
+  it("keeps the last known organisation theme on the login screen after logout", async () => {
+    const user = userEvent.setup();
+    client.logout.mockResolvedValueOnce(undefined);
+    render(<App>{() => <h1>Trang học</h1>}</App>);
+
+    await waitFor(() => {
+      expect(document.documentElement.dataset.theme).toBe("winter");
+      expect(document.documentElement.style.getPropertyValue("--season-pattern-image")).toContain("season-winter.png");
+    });
+    await user.click(screen.getByRole("button", { name: "Đăng xuất khỏi tài khoản này" }));
+
+    expect(await screen.findByRole("textbox", { name: "Email" })).toBeInTheDocument();
+    await flushThemeEffects();
+    expect(document.documentElement.dataset.theme).toBe("winter");
+    expect(document.documentElement.style.getPropertyValue("--season-pattern-image")).toContain("season-winter.png");
+  });
+
+  it("keeps the last known organisation theme on a connection error and presents a complete recovery panel", async () => {
+    const user = userEvent.setup();
+    client.currentSession.mockResolvedValueOnce(learnerSession).mockRejectedValueOnce(new Error("offline")).mockResolvedValueOnce(null);
+    render(<App>{() => <h1>Trang học</h1>}</App>);
+
+    await waitFor(() => {
+      expect(document.documentElement.dataset.theme).toBe("winter");
+      expect(document.documentElement.style.getPropertyValue("--season-pattern-image")).toContain("season-winter.png");
+    });
+    window.dispatchEvent(new StorageEvent("storage", { key: "e4s:auth:changed", newValue: "changed" }));
+
+    expect(await screen.findByRole("heading", { name: "Chưa thể mở E4S" })).toBeInTheDocument();
+    expect(screen.getByRole("alert")).toHaveTextContent("Kết nối bị gián đoạn");
+    expect(screen.getByRole("button", { name: "Thử kết nối lại" })).toBeEnabled();
+    await flushThemeEffects();
+    expect(document.documentElement.dataset.theme).toBe("winter");
+    expect(document.documentElement.style.getPropertyValue("--season-pattern-image")).toContain("season-winter.png");
+    await user.click(screen.getByRole("button", { name: "Thử kết nối lại" }));
+    expect(await screen.findByRole("textbox", { name: "Email" })).toBeInTheDocument();
+  });
+
+  it("uses the current seasonal theme on login when no organisation theme has been loaded", async () => {
+    client.currentSession.mockResolvedValueOnce(null);
+    render(<App />);
+
+    expect(await screen.findByRole("textbox", { name: "Email" })).toBeInTheDocument();
+    await waitFor(() => expect(document.documentElement.dataset.theme).toBe(resolveAutomaticTheme(new Date())));
+    expect(client.getOrganisationExperience).not.toHaveBeenCalled();
+  });
+
+  it("uses the current seasonal theme when the organisation explicitly selects auto", async () => {
+    client.currentSession.mockResolvedValueOnce(learnerSession);
+    client.getOrganisationExperience.mockResolvedValueOnce({ theme: "auto", backgroundMusic: { enabled: false, playlistId: "auto", customUrl: "", volume: 18 } });
+    render(<App>{() => <ExperienceProbe />}</App>);
+
+    await waitFor(() => expect(client.getOrganisationExperience).toHaveBeenCalled());
+    await waitFor(() => expect(document.documentElement.dataset.theme).toBe(resolveAutomaticTheme(new Date())));
+    expect(screen.getByTestId("resolved-theme")).toHaveTextContent(resolveAutomaticTheme(new Date()));
+  });
+
   it("refreshes the organisation experience when an already-open app regains focus", async () => {
     client.getOrganisationExperience
       .mockResolvedValueOnce({ theme: "winter", backgroundMusic: { enabled: false, playlistId: "auto", customUrl: "", volume: 18 } })
@@ -271,4 +329,8 @@ function ExperienceProbe() {
   const { resolvedTheme } = useTheme();
   const { musicAllowed } = useExperience();
   return <><span data-testid="resolved-theme">{resolvedTheme}</span><span data-testid="music-allowed">{String(musicAllowed)}</span></>;
+}
+
+async function flushThemeEffects(): Promise<void> {
+  await act(async () => { await new Promise((resolve) => window.setTimeout(resolve, 0)); });
 }

@@ -9,7 +9,8 @@
     { "path": "../../packages/ai" },
     { "path": "../../packages/contracts" },
     { "path": "../../packages/database" },
-    { "path": "../../packages/domain" }
+    { "path": "../../packages/domain" },
+    { "path": "../../packages/storage" }
   ],
   "include": ["src/**/*.ts", "test/**/*.ts"]
 }

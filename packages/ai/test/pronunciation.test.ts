@@ -13,35 +13,25 @@ import {
 import { DEFAULT_PRONUNCIATION_ASSET_REGISTRY, EMPTY_PRONUNCIATION_ASSET_REGISTRY } from "../src/pronunciation-assets.js";
 
 describe("curated pronunciation assets", () => {
+  it("packages the complete 44-sound British English phonemic inventory", () => {
+    const expected = [
+      "p", "b", "t", "d", "k", "g", "f", "v", "θ", "ð", "s", "z", "ʃ", "ʒ", "h", "tʃ", "dʒ", "m", "n", "ŋ", "l", "r", "j", "w",
+      "ɪ", "iː", "ʊ", "uː", "e", "ə", "ɜː", "ɔː", "æ", "ʌ", "ɑː", "ɒ",
+      "eɪ", "aɪ", "ɔɪ", "aʊ", "əʊ", "ɪə", "eə", "ʊə"
+    ];
+
+    expect(CURATED_PHONEME_TARGETS).toHaveLength(44);
+    expect([...CURATED_PHONEME_TARGETS].sort()).toEqual(expected.sort());
+    expect(DEFAULT_PRONUNCIATION_ASSET_REGISTRY.phonemes).not.toHaveProperty("juː");
+  });
+
   it("audits every curated target against an English-suitable source recording", () => {
     const repoRoot = findRepoRoot(fileURLToPath(new URL(".", import.meta.url)));
     const manifest = JSON.parse(readFileSync(resolve(repoRoot, "apps/web/public/media/pronunciation-manifest.json"), "utf8"));
-    const expectedSourceByTarget: Record<string, string> = {
-      "æ": "Near-open_front_unrounded_vowel.ogg",
-      "aɪ": "En-us-I.ogg",
-      d: "Voiced_alveolar_plosive.ogg",
-      "eɪ": "En-us-A.ogg",
-      f: "Voiceless_labio-dental_fricative.ogg",
-      "iː": "Close_front_unrounded_vowel.ogg",
-      "ɪ": "Near-close_near-front_unrounded_vowel.ogg",
-      k: "Voiceless_velar_plosive.ogg",
-      p: "Voiceless_bilabial_plosive.ogg",
-      r: "Postalveolar_approximant.ogg",
-      s: "Voiceless_alveolar_sibilant.ogg",
-      t: "Voiceless_alveolar_plosive.ogg",
-      w: "Voiced_labio-velar_approximant.ogg",
-      "ʃ": "Voiceless_palato-alveolar_sibilant.ogg",
-      "ʌ": "PR-open-mid_back_unrounded_vowel2.ogg",
-      "θ": "Voiceless_dental_fricative.ogg",
-      "ð": "Voiced_dental_fricative.ogg",
-      "ɜː": "Open-mid_central_unrounded_vowel.ogg",
-      "juː": "En-us-u.ogg",
-    };
-
-    expect(Object.keys(expectedSourceByTarget).sort()).toEqual([...CURATED_PHONEME_TARGETS].sort());
-    for (const [target, sourceFile] of Object.entries(expectedSourceByTarget)) {
-      const entry = manifest.phonemes.find((candidate: { key: string }) => candidate.key === target);
-      expect(entry?.sourceUrl, `source for ${target}`).toContain(sourceFile);
+    expect(manifest.phonemes.map((entry: { key: string }) => entry.key).sort()).toEqual([...CURATED_PHONEME_TARGETS].sort());
+    for (const entry of manifest.phonemes as Array<{ key: string; sourceUrl: string; licence: string }>) {
+      expect(entry.sourceUrl, `source for ${entry.key}`).toMatch(/^https:\/\/commons\.wikimedia\.org\/wiki\/File:/u);
+      expect(entry.licence, `licence for ${entry.key}`).not.toHaveLength(0);
     }
   });
 
@@ -91,13 +81,13 @@ describe("curated pronunciation assets", () => {
       { word: "needed", ipa: "/ˈniːdɪd/" }
     ], EMPTY_PRONUNCIATION_ASSET_REGISTRY);
 
-    expect(assets.phonemeAudioId).toBeUndefined();
-    expect(assets.phonemeAudioUrl).toBeUndefined();
+    expect(assets).not.toHaveProperty("phonemeAudioId");
+    expect(assets).not.toHaveProperty("phonemeAudioUrl");
     expect(assets.wordAudioUrls).toEqual([]);
-    expect(assets.warnings).toContain("No registered phoneme asset exists for /d/");
+    expect(assets.warnings).toContain("Word audio assets unavailable");
   });
 
-  it("returns only registered phoneme-only and aligned word assets", () => {
+  it("returns aligned word assets without resolving the target phoneme asset", () => {
     const registry = createPronunciationAssetRegistry([
       { kind: "phoneme", key: "d", id: "phoneme-d", url: "/media/audio/phonemes/d.wav" },
       { kind: "word", key: "called", id: "word-called", url: "/media/audio/words/called.mp3" },
@@ -111,8 +101,6 @@ describe("curated pronunciation assets", () => {
     ], registry);
 
     expect(assets).toEqual({
-      phonemeAudioId: "phoneme-d",
-      phonemeAudioUrl: "/media/audio/phonemes/d.wav",
       wordAudioUrls: [
         "/media/audio/words/called.mp3",
         "/media/audio/words/planned.mp3",
@@ -120,12 +108,12 @@ describe("curated pronunciation assets", () => {
       ],
       warnings: []
     });
-    expect(assets.phonemeAudioUrl).not.toBe(assets.wordAudioUrls[0]);
-    expect(isRegisteredPronunciationAssetUrl(assets.phonemeAudioUrl!, registry)).toBe(true);
+    expect(assets).not.toHaveProperty("phonemeAudioId");
+    expect(assets).not.toHaveProperty("phonemeAudioUrl");
     expect(assets.wordAudioUrls.every((url) => isRegisteredPronunciationAssetUrl(url, registry))).toBe(true);
   });
 
-  it("keeps a verified target phoneme playable when word clips are unavailable", () => {
+  it("does not fall back to target phoneme audio when word clips are unavailable", () => {
     const registry = createPronunciationAssetRegistry([
       { kind: "phoneme", key: "d", id: "phoneme-d", url: "/media/audio/phonemes/d.ogg" }
     ]);
@@ -135,10 +123,10 @@ describe("curated pronunciation assets", () => {
       { word: "needed", ipa: "/ˈniːdɪd/" }
     ], registry);
 
-    expect(assets.phonemeAudioId).toBe("phoneme-d");
-    expect(assets.phonemeAudioUrl).toBe("/media/audio/phonemes/d.ogg");
+    expect(assets).not.toHaveProperty("phonemeAudioId");
+    expect(assets).not.toHaveProperty("phonemeAudioUrl");
     expect(assets.wordAudioUrls).toEqual([]);
-    expect(assets.warnings).toContain("Word audio assets unavailable; target phoneme audio remains playable");
+    expect(assets.warnings).toContain("Word audio assets unavailable");
   });
 
   it("withholds audio when any selected word fails the target check", () => {
@@ -148,7 +136,7 @@ describe("curated pronunciation assets", () => {
       { word: "needed", ipa: "/ˈniːdɪd/" }
     ]);
 
-    expect(assets.phonemeAudioUrl).toBeUndefined();
+    expect(assets).not.toHaveProperty("phonemeAudioUrl");
     expect(assets.wordAudioUrls).toEqual([]);
     expect(assets.warnings).toContain("slipped does not contain target phoneme /d/");
   });
@@ -160,9 +148,9 @@ describe("curated pronunciation assets", () => {
       { word: "working", ipa: "/ˈwɜːkɪŋ/" }
     ]);
 
-    expect(assets.phonemeAudioUrl).toBeUndefined();
+    expect(assets).not.toHaveProperty("phonemeAudioUrl");
     expect(assets.wordAudioUrls).toEqual([]);
-    expect(assets.warnings).toContain("No curated phoneme asset exists for /wɜː/");
+    expect(assets.warnings).toContain("Unsupported target phoneme /wɜː/");
   });
 });
 

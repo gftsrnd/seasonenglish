@@ -1,10 +1,45 @@
 import { S3Client } from "@aws-sdk/client-s3";
+import { Readable } from "node:stream";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { createS3Storage } from "../src/index.js";
 
 afterEach(() => vi.restoreAllMocks());
 
 describe("S3 object playback URLs", () => {
+  it("returns the S3 response stream and forwards a normalized byte range", async () => {
+    const source = Object.assign(Readable.from(["streamed audio"]), {
+      transformToByteArray: async () => new TextEncoder().encode("streamed audio")
+    });
+    const send = vi.spyOn(S3Client.prototype, "send").mockResolvedValue({
+      Body: source,
+      ContentType: "audio/webm",
+      ContentLength: 6,
+      ContentRange: "bytes 10-15/42",
+      AcceptRanges: "bytes"
+    } as never);
+    const storage = createS3Storage({
+      endpoint: "http://127.0.0.1:9000",
+      region: "us-east-1",
+      accessKeyId: "test-access",
+      secretAccessKey: "test-secret"
+    });
+
+    const object = await storage.getObject!({
+      bucket: "e4s-evidence",
+      objectKey: "assessment-audio/learner-1/speaking.webm",
+      range: "bytes=10-15"
+    } as never);
+
+    expect(object.body).toBe(source);
+    expect(object).toMatchObject({
+      mimeType: "audio/webm",
+      contentLength: 6,
+      contentRange: "bytes 10-15/42",
+      acceptRanges: "bytes"
+    });
+    expect(send.mock.calls[0]?.[0].input).toMatchObject({ Range: "bytes=10-15" });
+  });
+
   it("creates a bounded read URL and reports its expiry", async () => {
     const storage = createS3Storage({
       endpoint: "http://127.0.0.1:9000",

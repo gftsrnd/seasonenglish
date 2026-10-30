@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { Mic, RotateCcw, Square, Upload } from "lucide-react";
+import { Mic, Play, RotateCcw, Square, Trash2, Upload } from "lucide-react";
 import type { LearnerAudioEvidence } from "./contracts.js";
 import { AudioEvidencePanel } from "../shared/media/AudioEvidencePanel.js";
 import { normalizeAudioEvidence, type AudioEvidence } from "../shared/media/audio-evidence.js";
@@ -25,10 +25,29 @@ function speechRecognitionConstructor(): SpeechRecognitionConstructor | null {
 }
 
 function recognitionDraft(base: string, event: SpeechRecognitionResultEvent): string {
-  const transcript = Array.from(event.results).map((result) => result[0]?.transcript.trim() ?? "").filter(Boolean).join(" ");
+  const segments = Array.from(event.results).map((result) => result[0]?.transcript.trim() ?? "").filter(Boolean);
+  const transcript = segments.reduce((merged, segment) => mergeRecognitionSegment(merged, segment), "");
   if (!transcript) return base;
   const draft = base.trim();
   return `${draft}${draft ? " " : ""}${transcript}`;
+}
+
+function mergeRecognitionSegment(current: string, next: string): string {
+  if (!current) return next;
+  const currentWords = current.split(/\s+/u);
+  const nextWords = next.split(/\s+/u);
+  const comparable = (word: string) => word.toLocaleLowerCase().replace(/[^\p{L}\p{N}']/gu, "");
+  const maximumOverlap = Math.min(currentWords.length, nextWords.length);
+  let overlap = 0;
+  for (let size = maximumOverlap; size > 0; size -= 1) {
+    const suffix = currentWords.slice(-size).map(comparable);
+    const prefix = nextWords.slice(0, size).map(comparable);
+    if (suffix.every((word, index) => word === prefix[index])) {
+      overlap = size;
+      break;
+    }
+  }
+  return [...currentWords, ...nextWords.slice(overlap)].join(" ");
 }
 
 function localAudioEvidence(file: Blob, url: string | undefined): AudioEvidence {
@@ -50,7 +69,8 @@ export function AudioCaptureControl({
   getAudioReadUrl,
   onTranscript,
   onAudioChange,
-  onRecordingChange
+  onRecordingChange,
+  compactActions = false
 }: {
   value?: LearnerAudioEvidence | null | undefined;
   transcript: string;
@@ -60,8 +80,9 @@ export function AudioCaptureControl({
   uploadAudio?: (file: Blob, filename: string) => Promise<string | LearnerAudioEvidence>;
   getAudioReadUrl?: ((artifactKey: string) => Promise<{ url: string; expiresAt: string }>) | undefined;
   onTranscript: (value: string) => void;
-  onAudioChange: (value: AudioEvidence) => void;
+  onAudioChange: (value: AudioEvidence | undefined) => void;
   onRecordingChange?: (recording: boolean) => void;
+  compactActions?: boolean;
 }) {
   const [recording, setRecording] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -75,6 +96,7 @@ export function AudioCaptureControl({
   const uploadAudioRef = useRef(uploadAudio);
   const getAudioReadUrlRef = useRef(getAudioReadUrl);
   const audioUrlRef = useRef<string | undefined>(undefined);
+  const previewRef = useRef<HTMLAudioElement>(null);
   transcriptRef.current = transcript;
   uploadAudioRef.current = uploadAudio;
   getAudioReadUrlRef.current = getAudioReadUrl;
@@ -231,12 +253,44 @@ export function AudioCaptureControl({
     void saveAudio(file);
   };
 
+  const clearAudio = () => {
+    if (audioUrlRef.current?.startsWith("blob:") && typeof URL.revokeObjectURL === "function") URL.revokeObjectURL(audioUrlRef.current);
+    audioUrlRef.current = undefined;
+    setAudio(null);
+    onAudioChange(undefined);
+  };
+
+  const replayAudio = () => {
+    const preview = previewRef.current;
+    if (!preview) return;
+    preview.currentTime = 0;
+    void preview.play().catch(() => setError("Không phát lại được bản ghi âm."));
+  };
+
+  const uploadId = `${label.replace(/\W+/gu, "-").toLocaleLowerCase()}-audio-upload`;
+  const captureActions = <>
+    {showMicrophone ? <button className={`btn-sm coach-compose-icon ${recording ? "btn-danger" : "btn-ghost"}`} type="button" aria-label={compactActions ? recording ? "Dừng ghi âm" : "Nói" : undefined} title={compactActions ? recording ? "Dừng ghi âm" : "Nói" : undefined} aria-pressed={recording} disabled={disabled || busy} onClick={recording ? stop : () => void start()}>{recording ? <><Square size={15} fill="currentColor" aria-hidden="true" /><span className={compactActions ? "sr-only" : undefined}>Đang nghe</span></> : <><Mic size={16} aria-hidden="true" /><span className={compactActions ? "sr-only" : undefined}>Nói</span></>}</button> : null}
+    <label className={`btn btn-sm${compactActions ? " coach-compose-icon" : ""}`} htmlFor={uploadId} aria-hidden={compactActions || undefined} title={busy ? "Đang tải file ghi âm" : "Tải file ghi âm"}><Upload size={16} aria-hidden="true" /><span className={compactActions ? "sr-only" : undefined}>{busy ? "Đang tải…" : "Tải file ghi âm"}</span></label>
+    <input id={uploadId} className="sr-only" type="file" accept="audio/*,.m4a" disabled={disabled || busy} aria-label="Tải file ghi âm" onChange={(event) => { const file = event.currentTarget.files?.[0]; event.currentTarget.value = ""; chooseFile(file); }} />
+  </>;
+
+  if (compactActions) return <section className="audio-capture-control audio-capture-control--compact" aria-label={label}>
+    <div className="audio-capture-toolbar">
+      {captureActions}
+      {busy ? <span className="audio-capture-status" role="status">Đang tải…</span> : null}
+      {audio && !busy ? <span className="audio-capture-preview">
+        {audio.signedUrl ? <audio ref={previewRef} preload="metadata" src={audio.signedUrl} aria-label="Bản ghi âm đang chờ gửi" /> : null}
+        <button className="btn-sm btn-ghost audio-capture-replay" type="button" aria-label="Nghe lại bản ghi âm" title="Nghe lại" disabled={!audio.signedUrl} onClick={replayAudio}><Play size={15} fill="currentColor" aria-hidden="true" /><span>Nghe lại</span></button>
+        <button className="btn-sm btn-ghost audio-capture-remove" type="button" aria-label="Xóa bản ghi âm" title="Xóa bản ghi âm" onClick={clearAudio}><Trash2 size={15} aria-hidden="true" /></button>
+      </span> : null}
+      {error ? <button className="audio-capture-status audio-capture-status--error" type="button" role="alert" title={error} onClick={() => setError("")}>{error}</button> : null}
+    </div>
+  </section>;
+
   return <section className="stack audio-capture-control" aria-label={label}>
     {!canRecord && !speechSupported ? <Notice tone="warn">Trình duyệt này không ghi âm được. Bạn vẫn có thể tải file ghi âm hoặc giữ nội dung đã nhập.</Notice> : null}
     <div className="row" style={{ flexWrap: "wrap", gap: 8 }}>
-      {showMicrophone ? <button className={`btn-sm coach-compose-icon ${recording ? "btn-danger" : "btn-ghost"}`} type="button" aria-pressed={recording} disabled={disabled || busy} onClick={recording ? stop : () => void start()}>{recording ? <><Square size={15} fill="currentColor" aria-hidden="true" /> Đang nghe</> : <><Mic size={16} aria-hidden="true" /> Nói</>}</button> : null}
-      <label className="btn btn-sm" htmlFor={`${label.replace(/\W+/gu, "-").toLocaleLowerCase()}-audio-upload`}><Upload size={16} aria-hidden="true" /> {busy ? "Đang tải…" : "Tải file ghi âm"}</label>
-      <input id={`${label.replace(/\W+/gu, "-").toLocaleLowerCase()}-audio-upload`} className="sr-only" type="file" accept="audio/*,.m4a" disabled={disabled || busy} aria-label="Tải file ghi âm" onChange={(event) => { const file = event.currentTarget.files?.[0]; event.currentTarget.value = ""; chooseFile(file); }} />
+      {captureActions}
     </div>
     {busy ? <Notice>Đang lưu bản ghi âm…</Notice> : null}
     {audio && !busy ? <Notice tone="ok">Bản ghi âm đã lưu. Bạn có thể nghe lại trước khi gửi.</Notice> : null}

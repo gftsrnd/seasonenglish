@@ -44,7 +44,7 @@ describe("operator lesson generation batch", () => {
     ]);
   });
 
-  it("completes a four-week pilot sequentially instead of stopping after week two", async () => {
+  it("supports four selected weeks but stops at the first failed week", async () => {
     __resetLessonGenerationJobsForTests();
     const generate = vi.fn(async (week: number, level: string) => {
       if (week === 3 && level === "B1") throw new Error("AI_OUTPUT_INVALID");
@@ -55,11 +55,67 @@ describe("operator lesson generation batch", () => {
 
     expect(generate.mock.calls).toEqual([
       [1, "A2"], [1, "B1"], [2, "A2"], [2, "B1"],
-      [3, "A2"], [3, "B1"], [4, "A2"], [4, "B1"]
+      [3, "A2"], [3, "B1"]
     ]);
-    expect(result).toHaveLength(8);
-    expect(result.filter((cell) => cell.status === "succeeded")).toHaveLength(7);
+    expect(result).toHaveLength(6);
+    expect(result.filter((cell) => cell.status === "succeeded")).toHaveLength(5);
     expect(result).toContainEqual({ week: 3, level: "B1", status: "failed", error: "AI_OUTPUT_INVALID" });
-    expect(result.at(-1)).toEqual({ week: 4, level: "B1", status: "succeeded" });
+    expect(result.every((cell) => cell.week !== 4)).toBe(true);
+  });
+
+  it("runs every active level in one week together", async () => {
+    const releases: Array<() => void> = [];
+    let active = 0;
+    let peak = 0;
+    const generate = vi.fn(async () => {
+      active += 1;
+      peak = Math.max(peak, active);
+      await new Promise<void>((resolve) => releases.push(resolve));
+      active -= 1;
+    });
+
+    const pending = generateLessonCellsSettled([2], ["A1", "A2", "B1", "B2", "C1"], generate);
+    await vi.waitFor(() => expect(generate).toHaveBeenCalledTimes(5));
+
+    expect(peak).toBe(5);
+    releases.forEach(release => release());
+    await expect(pending).resolves.toHaveLength(5);
+  });
+
+  it("does not start the next week until every level in the current week succeeds", async () => {
+    const releases = new Map<number, Array<() => void>>();
+    const generate = vi.fn(async (week: number) => {
+      await new Promise<void>((resolve) => {
+        const weekReleases = releases.get(week) ?? [];
+        weekReleases.push(resolve);
+        releases.set(week, weekReleases);
+      });
+    });
+    const levels = ["A1", "A2", "B1", "B2", "C1"];
+
+    const pending = generateLessonCellsSettled([2, 3], levels, generate);
+    await vi.waitFor(() => expect(generate).toHaveBeenCalledTimes(5));
+    expect(generate.mock.calls.every(([week]) => week === 2)).toBe(true);
+
+    releases.get(2)?.forEach(release => release());
+    await vi.waitFor(() => expect(generate).toHaveBeenCalledTimes(10));
+    expect(generate.mock.calls.slice(5).every(([week]) => week === 3)).toBe(true);
+
+    releases.get(3)?.forEach(release => release());
+    await expect(pending).resolves.toHaveLength(10);
+  });
+
+  it("keeps successful level results but stops before the next week when one level fails", async () => {
+    const levels = ["A1", "A2", "B1", "B2", "C1"];
+    const generate = vi.fn(async (week: number, level: string) => {
+      if (week === 2 && level === "B2") throw new Error("AI_OUTPUT_INVALID");
+    });
+
+    const result = await generateLessonCellsSettled([2, 3], levels, generate);
+
+    expect(generate.mock.calls).toEqual(levels.map(level => [2, level]));
+    expect(result).toHaveLength(5);
+    expect(result.filter(cell => cell.status === "succeeded")).toHaveLength(4);
+    expect(result).toContainEqual({ week: 2, level: "B2", status: "failed", error: "AI_OUTPUT_INVALID" });
   });
 });

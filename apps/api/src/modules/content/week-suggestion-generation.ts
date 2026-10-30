@@ -5,12 +5,16 @@ import {
 } from "@e4s/ai";
 
 const WEEK_SUGGESTION_ATTEMPTS = 2;
-const WEEK_SUGGESTION_OUTPUT_TOKENS = 8_000;
+const WEEK_SUGGESTION_OUTPUT_TOKENS = 12_000;
 const WEEK_SUGGESTION_CONTRACT = [
   "Return one result for every requested weekNumber and no other weeks.",
   "For each week return exactly the requested CEFR levels and exactly three distinct, new workplace topic options.",
   "Never repeat a topic from usedTopics or another option in this response, comparing case-insensitively.",
   "Every option.plan must contain every requested CEFR level and exactly five non-empty day items for each level.",
+  "Every day-plan item is an internal curriculum blueprint written fully in English for every CEFR level, including A1-A2.",
+  "Use this exact compact structure in every item: Outcome: ... | Vocabulary: ... | Frame: ... | Skill emphasis: ...",
+  "Each daily blueprint must contain one observable workplace outcome, concrete vocabulary, one explicit teachable sentence/grammar frame, and one skill emphasis. Do not create vocabulary-only, grammar-only, reading-only, or role-play-only days.",
+  "Levels may share the same five-day communicative progression; differentiate the vocabulary, sentence frame, cognitive demand, passage length and response complexity inside each CEFR plan.",
   "Return the complete strict tool object; never omit a level, option, plan, or required text field."
 ].join("\n");
 
@@ -67,8 +71,13 @@ export async function generateWeekSuggestionBatches(
   const results = [] as Array<Awaited<ReturnType<typeof generateWeekSuggestions>>["result"]>;
 
   for (const weekNumber of input.weekNumbers) {
+    // Keep the newest accepted options in the duplicate guard without exceeding
+    // the input schema's bounded context. A full 52-topic history plus the
+    // previous week's three options otherwise makes week two fail before the
+    // provider is called.
+    const boundedUsedTopics = usedTopics.slice(-52);
     const generated = await generateWeekSuggestions(
-      { ...input, weekNumbers: [weekNumber], usedTopics },
+      { ...input, weekNumbers: [weekNumber], usedTopics: boundedUsedTopics },
       task,
       runner
     );
@@ -108,6 +117,18 @@ function validateSuggestionSemantics(output: SuggestionOutput, input: Suggestion
       const planLevels = Object.keys(option.plan);
       if (planLevels.length !== expectedLevels.size || planLevels.some((level) => !expectedLevels.has(level)) || input.levels.some((level) => option.plan[level]?.length !== 5)) {
         issues.push({ path: `weeks.${week.weekNumber}.options.${optionIndex}.plan`, message: "Each requested CEFR level must contain exactly 5 day-plan items." });
+      }
+      for (const level of input.levels) {
+        for (const [dayIndex, item] of (option.plan[level] ?? []).entries()) {
+          const path = `weeks.${week.weekNumber}.options.${optionIndex}.plan.${level}.${dayIndex}`;
+          if (/[ăâđêôơưáàảãạấầẩẫậắằẳẵặéèẻẽẹếềểễệíìỉĩịóòỏõọốồổỗộớờởỡợúùủũụứừửữựýỳỷỹỵ]/iu.test(item)
+            || /\b(?:từ vựng|ngữ pháp|mẫu câu|đọc|nghe|viết|luyện nói|đóng vai|ôn tập|mô tả|phân tích|soạn|trình bày)\b/iu.test(item)) {
+            issues.push({ path, message: "Day-plan blueprints must be fully in English; learner-facing Vietnamese is added later only for A1-A2." });
+          }
+          for (const label of ["Outcome:", "Vocabulary:", "Frame:", "Skill emphasis:"]) {
+            if (!item.includes(label)) issues.push({ path, message: `Day-plan blueprint is missing ${label}` });
+          }
+        }
       }
     }
   }

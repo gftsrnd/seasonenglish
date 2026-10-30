@@ -20,7 +20,7 @@ export interface ContentWeekTopicView {
 }
 
 export interface ContentWeekFrameView {
-  pilot: { startDate: string; weekCount: number };
+  pilot: { startDate: string; weekCount: number; cycleNumber?: number };
   weeks: ContentWeekTopicView[];
 }
 
@@ -55,6 +55,16 @@ export interface ContentLessonSummaryView extends ContentLessonDraftInput {
   practiceLabel: string;
 }
 
+export interface ContentGenerationFindingView {
+  dayNumber: number | null;
+  component: "plan" | "grammarClassification" | "objectives" | "foundation" | "vocabulary" | "skills" | "skills.comprehension" | "skills.languagePractice" | "skills.speaking" | "skills.reviewer";
+  code: string;
+  severity: "warning" | "error";
+  message: string;
+  issues: unknown[];
+  repairAction: "regenerate_plan" | "regenerate_component";
+}
+
 export interface ContentLessonSetVersionView {
   lessonSetId: string;
   versionId: string;
@@ -74,6 +84,7 @@ export interface ContentLessonSetVersionView {
     inputMode: "text_or_dictation";
     requiredVocabulary: string[];
   };
+  generationFindings?: ContentGenerationFindingView[];
   lessons: ContentLessonSummaryView[];
 }
 
@@ -186,6 +197,8 @@ export interface ContentReviewView {
   lessonAttempts: Array<{
     id: string; learnerId: string; learnerName: string; cefr: CefrLevel | null; weekNumber: number; dayNumber: number;
     lessonTitle: string; attempts: Partial<Record<"listening" | "reading" | "writing" | "speaking", number>>;
+    speakingArtifactKey?: string;
+    audioArtifact?: AudioArtifactView;
   }>;
   assessments: Array<{
     id: string; learnerName: string; kind: "placement" | "level_up";
