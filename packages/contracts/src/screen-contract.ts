@@ -34,6 +34,7 @@ export const SCREEN_CONTRACT = [
   { id: "survey", path: "/survey", title: "Khảo sát cuối pilot", roles: ["learner"], purpose: "Gửi khảo sát cuối pilot" },
   { id: "level-approval", path: "/op", title: "Duyệt trình độ", roles: ["operator", "manager"], purpose: "Xem evidence và duyệt mức" },
   { id: "level-forms", path: "/op/levelforms", title: "Đề thi lên mức", roles: ["operator", "manager"], purpose: "Tạo, xem và duyệt đề lên mức" },
+  { id: "month-frameworks", path: "/op/months", title: "Tháng học", roles: ["operator", "manager"], purpose: "Sinh, duyệt khung tháng, chia bài ngày và bài thi tháng cho từng level" },
   { id: "week-topics", path: "/op/weeks", title: "Chủ đề tuần", roles: ["operator", "manager"], purpose: "Thiết lập chủ đề, mô tả và mục tiêu tuần" },
   { id: "lesson-sets", path: "/op/lessons", title: "Bài học", roles: ["operator", "manager"], purpose: "Theo dõi ma trận tuần và CEFR" },
   { id: "lesson-set-detail", path: "/op/lessons/:week/:cefr", title: "Chi tiết bộ bài", roles: ["operator", "manager"], purpose: "Soạn, sửa, xem và duyệt bộ bài" },
@@ -49,7 +50,7 @@ export const SCREEN_CONTRACT = [
 
 export const ROLE_NAVIGATION = {
   learner: ["/home", "/coach", "/practice", "/games", "/profile"],
-  operator: ["/op", "/op/weeks", "/op/lessons", "/op/review", "/settings"],
+  operator: ["/op", "/op/months", "/op/lessons", "/op/review", "/settings"],
   manager: ["/mgr", "/mgr/ops", "/mgr/reminders", "/mgr/report", "/settings"]
 } as const;
 

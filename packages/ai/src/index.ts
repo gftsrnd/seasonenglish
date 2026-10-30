@@ -8,3 +8,4 @@ export * from "./pronunciation-assets.js";
 export * from "./lesson-instruction.js";
 export * from "./providers/groq.js";
 export * from "./providers/anthropic.js";
+export * from "./month-framework.js";

@@ -240,6 +240,9 @@ importers:
       '@e4s/database':
         specifier: workspace:*
         version: link:../../packages/database
+      '@e4s/domain':
+        specifier: workspace:*
+        version: link:../../packages/domain
       '@e4s/storage':
         specifier: workspace:*
         version: link:../../packages/storage

@@ -7,6 +7,8 @@
     ".": "./dist/src/index.js",
     "./assessment": "./dist/src/assessment/index.js",
     "./calendar": "./dist/src/calendar/index.js",
+    "./calendar/framework": "./dist/src/calendar/framework.js",
+    "./calendar/exam": "./dist/src/calendar/exam.js",
     "./content": "./dist/src/content/index.js",
     "./engagement": "./dist/src/engagement/index.js",
     "./identity": "./dist/src/identity/index.js",

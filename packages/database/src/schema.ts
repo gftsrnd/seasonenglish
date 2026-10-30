@@ -150,7 +150,7 @@ export const rubricVersions = pgTable("rubric_versions", {
 });
 
 export const lessonSets = pgTable("lesson_sets", {
-  id: uuid("id").primaryKey(), programWeekId: uuid("program_week_id").notNull().references(() => programWeeks.id),
+  id: uuid("id").primaryKey(), programWeekId: uuid("program_week_id").references(() => programWeeks.id), monthFrameworkId: uuid("month_framework_id").references(() => monthFrameworks.id, { onDelete: "cascade" }),
   cefr: text("cefr").notNull(), createdAt: now()
 });
 

@@ -7,3 +7,4 @@ export * from "./repositories.js";
 export * from "./schema.js";
 export * from "./seed.js";
 export * from "./sync-canonical-assessments.js";
+export * from "./monthly-repository.js";

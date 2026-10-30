@@ -4,6 +4,7 @@ import { buildLevelReadiness as calculateLevelReadiness, nextEffectiveMonday, pa
 import { evaluateGeneratedLessonQuality, validateGenerationFindingsForPublication, validateLessonPublication } from "@e4s/domain/content";
 import { lessonCompletionActivity } from "@e4s/domain/learning";
 import { generationFindingsFromPayload } from "./generation-findings.js";
+import { MonthlyContentRepository } from "./monthly-repository.js";
 import type {
   AccountRole,
   AudioArtifactInput,
@@ -11885,7 +11886,8 @@ export function createRepositories(pool: Pool) {
     files: new FileRepository(pool),
     aiRuns: new AiRunRepository(pool),
     jobs: new JobRepository(pool),
-    manager: new ManagerRepository(pool)
+    manager: new ManagerRepository(pool),
+    monthly: new MonthlyContentRepository(pool)
   };
 }
 

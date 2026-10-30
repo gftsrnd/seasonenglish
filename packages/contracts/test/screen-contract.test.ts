@@ -21,6 +21,7 @@ const expectedRoutes = [
   "/survey",
   "/op",
   "/op/levelforms",
+  "/op/months",
   "/op/weeks",
   "/op/lessons",
   "/op/lessons/:week/:cefr",
@@ -62,7 +63,7 @@ describe("approved E4S screen contract", () => {
     ]);
     expect(ROLE_NAVIGATION.operator).toEqual([
       "/op",
-      "/op/weeks",
+      "/op/months",
       "/op/lessons",
       "/op/review",
       "/settings"

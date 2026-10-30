@@ -3,6 +3,7 @@ import { createRepositories } from "@e4s/database";
 import { createS3Storage } from "@e4s/storage";
 import { Pool } from "pg";
 import { createWorkerHandlers } from "./handlers.js";
+import { createMonthlyHandlers } from "./monthly-handlers.js";
 import { loadWorkerConfig } from "./config.js";
 import { createPoller } from "./poller.js";
 import { processNextJob, type JobHandler } from "./worker.js";
@@ -12,12 +13,15 @@ const pool = new Pool({ connectionString: config.databaseUrl });
 const repositories = createRepositories(pool);
 const storage = createS3Storage(config.minio);
 const ai = config.groq ? createGroqProvider(config.groq) : undefined;
-const handlers: Record<string, JobHandler> = createWorkerHandlers({
-  storage,
-  bucket: config.minio.bucket,
-  notifications: repositories.notifications,
-  ...(ai ? { ai } : {})
-});
+const handlers: Record<string, JobHandler> = {
+  ...createWorkerHandlers({
+    storage,
+    bucket: config.minio.bucket,
+    notifications: repositories.notifications,
+    ...(ai ? { ai } : {})
+  }),
+  ...createMonthlyHandlers({ monthly: repositories.monthly, ...(ai ? { ai } : {}) })
+};
 
 let stopping = false;
 const tick = async () => {

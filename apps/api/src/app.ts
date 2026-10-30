@@ -8,7 +8,7 @@ import Fastify, { type FastifyInstance } from "fastify";
 import type { Pool } from "pg";
 import { registerAssessmentRoutes } from "./modules/assessment/index.js";
 import { registerCoachRoutes } from "./modules/coach/index.js";
-import { registerContentRoutes } from "./modules/content/index.js";
+import { registerContentRoutes, registerMonthlyContentRoutes } from "./modules/content/index.js";
 import { registerEngagementRoutes } from "./modules/engagement/index.js";
 import { registerFileRoutes } from "./modules/files/index.js";
 import { registerIdentityRoutes, type IdentityEmailSender } from "./modules/identity/index.js";
@@ -72,6 +72,7 @@ export function buildApi(options: BuildApiOptions): FastifyInstance {
   registerLearningRoutes(app, options.pool, options.aiRunner, options.mediaService, options.aiRunnerFactory);
   registerAssessmentRoutes(app, options.pool, options.aiRunner, options.aiRunnerFactory);
   registerContentRoutes(app, options.pool, options.aiRunner, options.storage, options.aiRunnerFactory, options.mediaService);
+  registerMonthlyContentRoutes(app, options.pool, options.aiRunner, options.aiRunnerFactory);
   registerManagerRoutes(app, options.pool, {
     maintenanceEnabled,
     ...(options.mediaService ? { mediaService: options.mediaService } : {}),

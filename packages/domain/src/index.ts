@@ -5,3 +5,5 @@ export * from "./engagement/index.js";
 export * from "./identity/index.js";
 export * from "./learning/index.js";
 export * from "./progression/index.js";
+export * from "./calendar/framework.js";
+export * from "./calendar/exam.js";
