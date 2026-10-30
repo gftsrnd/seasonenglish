@@ -520,11 +520,69 @@ export function lessonDaysNeedingRepair(
   mode: LessonRepairMode,
   cefr?: string
 ): number[] {
+  return [...lessonRepairComponentsByDay(lessons, mode, cefr).keys()].sort((left, right) => left - right);
+}
+
+/**
+ * Repair targets for one whole CEFR level.
+ *
+ * Two absent lexical metadata fields are deliberately non-blocking.  This is
+ * a level-level policy, so it cannot be decided by looking at one lesson in
+ * isolation.  A missing vocabulary part, invalid lexical data, or any other
+ * component stays a repair target.
+ */
+export function lessonRepairComponentsByDay(
+  lessons: readonly ContentLessonDraftInput[],
+  mode: LessonRepairMode,
+  cefr?: string
+): Map<number, Set<LessonGenerationComponent>> {
   const byDay = new Map(lessons.map((lesson) => [lesson.dayNumber, lesson]));
-  return [1, 2, 3, 4, 5].filter((dayNumber) => {
+  const targetsByDay = new Map<number, Set<LessonGenerationComponent>>();
+  for (const dayNumber of [1, 2, 3, 4, 5]) {
+    const targets = lessonComponentsNeedingRepair(byDay.get(dayNumber), mode, cefr);
+    if (targets.size > 0) targetsByDay.set(dayNumber, targets);
+  }
+  if (mode !== "enrich") return targetsByDay;
+
+  const lightGaps = lessons.reduce((count, lesson) => count + vocabularyLightGapCount(lesson, cefr), 0);
+  if (lightGaps > 2) return targetsByDay;
+
+  for (const [dayNumber, targets] of targetsByDay) {
     const lesson = byDay.get(dayNumber);
-    return lessonComponentsNeedingRepair(lesson, mode, cefr).size > 0;
-  });
+    if (!targets.has("vocabulary") || vocabularyHasHeavyGap(lesson, cefr)) continue;
+    targets.delete("vocabulary");
+    if (targets.size === 0) targetsByDay.delete(dayNumber);
+  }
+  return targetsByDay;
+}
+
+function vocabularyLightGapCount(lesson: ContentLessonDraftInput, cefr?: string): number {
+  const vocabulary = asRecord(lesson.parts.find((part) => part.code === "vocabulary")?.content);
+  const items = asArray(vocabulary.items).map(asRecord);
+  return items.reduce((count, item) => {
+    const hasValidRelation = validLexicalRelations(item, "synonyms", cefr).length > 0
+      || validLexicalRelations(item, "antonyms", cefr).length > 0;
+    const declaresExemption = item.relationStatus === "no_natural_relation" || item.relationStatus === "above_cefr_level";
+    const exemptionIsCredible = relationExemptionIsCredible({
+      word: typeof item.word === "string" ? item.word : "",
+      partOfSpeech: typeof item.type === "string" ? item.type : null,
+      meaning: typeof item.meaning === "string" ? item.meaning : null
+    }, cefr ?? "");
+    return count
+      + (meaningful(item.family) ? 0 : 1)
+      + (meaningful(item.umbrella) ? 0 : 1)
+      + (hasValidRelation || (declaresExemption && exemptionIsCredible) ? 0 : 1);
+  }, 0);
+}
+
+function vocabularyHasHeavyGap(lesson: ContentLessonDraftInput | undefined, cefr?: string): boolean {
+  if (!lesson) return true;
+  const parts = new Map(lesson.parts.map((part) => [part.code, part]));
+  const vocabulary = asRecord(parts.get("vocabulary")?.content);
+  const items = asArray(vocabulary.items).map(asRecord);
+  if (!parts.has("vocabulary") || items.length === 0) return true;
+  if (items.some((item) => validCollocations(item, cefr).length < 3)) return true;
+  return items.some((item) => !validateVocabularyEnrichmentItem(item, { cefr }).valid);
 }
 
 export function lessonComponentsNeedingRepair(

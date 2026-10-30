@@ -12,7 +12,10 @@ const databaseUrl = process.env.TEST_DATABASE_URL
   ?? "postgres://e4s:e4s_test_password@127.0.0.1:55432/e4s_test";
 const checkerId = "00000000-0000-4000-8000-000000000104";
 const mediaRequests: Array<{ userId: string; term: string }> = [];
-const forcedAiFailures = new Set<string>(); const runnerCalls: Array<{ taskKey: string; cefr?: string; dayNumber?: number }> = [];
+const forcedAiFailures = new Set<string>();
+const transientAiFailures = new Map<string, number>();
+const transientVocabularyMetadataGaps = new Map<string, number>();
+const runnerCalls: Array<{ taskKey: string; cefr?: string; dayNumber?: number }> = [];
 let forceWholeGenerationFailure = false;
 const mediaService: ContentMediaService = {
   async resolveForUser(userId, request) {
@@ -78,7 +81,16 @@ const repairRunner: AiTaskRunner = {
       throw Object.assign(new Error("AI unavailable for this deterministic test"), { code: "AI_UNAVAILABLE" });
     }
     var dayFrame = ["I work in + department", "Every morning I + verb", "I am responsible for + noun", "Could you update + noun", "This week we completed + noun"][dayNumber - 1] ?? "I work in + department";
-    if (forcedAiFailures.has(`${taskKey}:${dayNumber}`) || forcedAiFailures.has(`${taskKey}:${cefr}:${dayNumber}`)) {
+    const transientFailureKey = `${taskKey}:${cefr}:${dayNumber}`;
+    const remainingTransientFailures = transientAiFailures.get(transientFailureKey) ?? 0;
+    if (remainingTransientFailures > 0) {
+      transientAiFailures.set(transientFailureKey, remainingTransientFailures - 1);
+      throw Object.assign(new Error("AI_OUTPUT_INVALID"), {
+        code: "AI_OUTPUT_INVALID",
+        details: { issues: [{ path: "output", message: "transient forced component failure" }] }
+      });
+    }
+    if (forcedAiFailures.has(`${taskKey}:${dayNumber}`) || forcedAiFailures.has(transientFailureKey)) {
       throw Object.assign(new Error("AI_OUTPUT_INVALID"), {
         code: "AI_OUTPUT_INVALID",
         details: { issues: [{ path: "output", message: "forced component failure" }] }
@@ -92,10 +104,13 @@ const repairRunner: AiTaskRunner = {
       ["calendar", "milestone", "assignment"],
       ["suggestion", "revision", "proposal"]
     ][dayNumber - 1] ?? ["office", "team", "work"];
+    const vocabularyMetadataKey = `${cefr}:${dayNumber}`;
+    const remainingVocabularyMetadataGaps = transientVocabularyMetadataGaps.get(vocabularyMetadataKey) ?? 0;
+    if (remainingVocabularyMetadataGaps > 0) transientVocabularyMetadataGaps.set(vocabularyMetadataKey, remainingVocabularyMetadataGaps - 1);
     const vocabularyItem = (word: string) => ({
       word, partOfSpeech: "noun", pronunciation: "/word/", stress: "first syllable", ttsText: word, ssml: `<speak>${word}</speak>`, meaning: "Từ vựng công việc", imageQuery: `${word} office`,
       collocation1: `a ${word}`, collocation2: `new ${word}`, collocation3: `work ${word}`,
-      family1: { word: `${word}s`, type: "noun", meaning: "dạng số nhiều" }, family2: null,
+      family1: remainingVocabularyMetadataGaps > 0 ? null : { word: `${word}s`, type: "noun", meaning: "dạng số nhiều" }, family2: null,
       umbrellaWord: "work", umbrellaMeaning: "công việc", sibling1: null, sibling2: null, sibling3: null,
       synonym1: { word: `workplace ${word}`, level: cefr, note: isVi ? "từ gần nghĩa" : "close workplace synonym", partOfSpeech: "noun", sense: "workplace sense", example: `Use workplace ${word} here.` }, synonym2: null, antonym1: null, relationStatus: "provided"
     });
@@ -209,6 +224,8 @@ describe("content operations API", () => {
   afterAll(async () => { await app.close(); await pool.end(); });
 
   beforeEach(async () => {
+    transientAiFailures.clear();
+    transientVocabularyMetadataGaps.clear();
     const plans = {
       1: {
         A1: ["introduce your role", "describe a routine", "name a responsibility", "ask about a colleague", "summarise your work"],
@@ -614,6 +631,52 @@ describe("content operations API", () => {
     expect(generated.json()).toMatchObject({ code: "AI_LESSON_GENERATION_FAILED" });
   });
 
+  it("repairs only the exhausted component and returns a complete single-level draft", async () => {
+    runnerCalls.length = 0;
+    transientAiFailures.set("weekly_lesson_vocabulary:A2:2", 3);
+
+    const generated = await app.inject({
+      method: "POST", url: "/api/v1/content/lesson-sets/1/A2/generate", headers: { cookie: makerCookie }, payload: {}
+    });
+
+    expect(generated.statusCode, generated.body).toBe(201);
+    expect(generated.json()).toMatchObject({ status: "draft" });
+    expect(generated.json().lessons).toHaveLength(5);
+    const repairCalls = runnerCalls.filter((call) => call.taskKey !== "weekly_lesson_plan_blueprint");
+    expect(repairCalls.some((call) => call.cefr === "A2" && call.dayNumber === 2 && call.taskKey === "weekly_lesson_vocabulary")).toBe(true);
+    expect(repairCalls.filter((call) => call.cefr === "A2" && call.dayNumber === 2 && call.taskKey === "weekly_lesson_foundation")).toHaveLength(1);
+  });
+
+  it("does not call AI again when a level has only two permitted light lexical gaps", async () => {
+    const generated = await app.inject({
+      method: "POST", url: "/api/v1/content/lesson-sets/2/A2/generate", headers: { cookie: makerCookie }, payload: {}
+    });
+    expect(generated.statusCode, generated.body).toBe(201);
+    const draft = generated.json() as { lessons: Array<{ dayNumber: number; parts: Array<{ code: string; content: Record<string, unknown> }> }> };
+    const withTwoLightGaps = draft.lessons.map((lesson) => lesson.dayNumber > 2 ? lesson : ({
+      ...lesson,
+      parts: lesson.parts.map((part) => part.code !== "vocabulary" ? part : ({
+        ...part,
+        content: {
+          ...part.content,
+          items: (part.content.items as Array<Record<string, unknown>>).map((item, index) => index > 0 ? item : ({ ...item, synonyms: [], antonyms: [] }))
+        }
+      }))
+    }));
+    const saved = await app.inject({
+      method: "PUT", url: "/api/v1/content/lesson-sets/2/A2/draft", headers: { cookie: makerCookie }, payload: { lessons: withTwoLightGaps }
+    });
+    expect(saved.statusCode, saved.body).toBe(201);
+
+    runnerCalls.length = 0;
+    const enriched = await app.inject({
+      method: "POST", url: "/api/v1/content/lesson-sets/2/A2/draft/enrich", headers: { cookie: makerCookie }, payload: {}
+    });
+
+    expect(enriched.statusCode, enriched.body).toBe(200);
+    expect(runnerCalls).toEqual([]);
+  });
+
   it("keeps an immutable generation record on the recoverable draft without replacing the approved lesson", async () => {
     const created = await app.inject({
       method: "PUT", url: "/api/v1/content/lesson-sets/2/A2/draft", headers: { cookie: makerCookie },
@@ -858,6 +921,52 @@ describe("content operations API", () => {
     await app.inject({ method: "PUT", url: "/api/v1/content/lesson-levels", headers: { cookie: makerCookie }, payload: { levels: ["A1", "A2", "B1", "B2"] } });
   });
 
+  it("repairs an exhausted component within the same batch instead of returning a partial level", async () => {
+    await app.inject({
+      method: "PUT", url: "/api/v1/content/lesson-levels", headers: { cookie: makerCookie },
+      payload: { levels: ["A1", "A2", "B1", "B2", "C1"] }
+    });
+    await pool.query("delete from ai_runs");
+    await pool.query(
+      `delete from lesson_sets
+       where program_week_id = (select id from program_weeks where program_id = $1 and week_number = 1)
+         and cefr = 'A2'`,
+      [DEMO_IDS.program]
+    );
+    runnerCalls.length = 0;
+    transientAiFailures.set("weekly_lesson_vocabulary:A2:2", 3);
+
+    const generated = await app.inject({
+      method: "POST", url: "/api/v1/content/lesson-sets/1/generate", headers: { cookie: makerCookie }, payload: { levels: ["A2"] }
+    });
+
+    expect(generated.statusCode, generated.body).toBe(201);
+    const level = (generated.json() as { levels: Array<{ cefr: string; status: string; version?: { lessons: unknown[] } }> }).levels[0];
+    expect(level).toMatchObject({ cefr: "A2", status: "completed" });
+    expect(level?.version?.lessons).toHaveLength(5);
+    expect(runnerCalls.filter((call) => call.cefr === "A2" && call.dayNumber === 2 && call.taskKey === "weekly_lesson_foundation")).toHaveLength(1);
+  });
+
+  it("repairs excessive light vocabulary metadata gaps before saving a batch level", async () => {
+    await pool.query("delete from ai_runs");
+    await pool.query(
+      `delete from lesson_sets
+       where program_week_id = (select id from program_weeks where program_id = $1 and week_number = 1)
+         and cefr = 'A2'`,
+      [DEMO_IDS.program]
+    );
+    for (const dayNumber of [1, 2, 3, 4, 5]) transientVocabularyMetadataGaps.set(`A2:${dayNumber}`, 1);
+
+    const generated = await app.inject({
+      method: "POST", url: "/api/v1/content/lesson-sets/1/generate", headers: { cookie: makerCookie }, payload: { levels: ["A2"] }
+    });
+
+    expect(generated.statusCode, generated.body).toBe(201);
+    const level = (generated.json() as { levels: Array<{ cefr: string; status: string; version?: { lessons: unknown[] } }> }).levels[0];
+    expect(level).toMatchObject({ cefr: "A2", status: "completed" });
+    expect(level?.version?.lessons).toHaveLength(5);
+  });
+
   it("generates one level independently without starting the other levels", async () => {
     await pool.query("delete from ai_runs");
     runnerCalls.length = 0;
@@ -866,6 +975,30 @@ describe("content operations API", () => {
     const levelCalls = runnerCalls.filter((call) => call.taskKey !== "weekly_lesson_plan_blueprint");
     expect(levelCalls.length).toBeGreaterThan(0);
     expect(levelCalls.every((call) => call.cefr === "B1")).toBe(true);
+  });
+
+  it("creates and persists the canonical five-level plan before generating a newly added level", async () => {
+    await app.inject({
+      method: "PUT", url: "/api/v1/content/lesson-levels", headers: { cookie: makerCookie },
+      payload: { levels: ["A1", "A2", "B1", "B2", "C1"] }
+    });
+    await pool.query("update program_weeks set ai_plan = '{}'::jsonb where program_id = $1 and week_number = 2", [DEMO_IDS.program]);
+    runnerCalls.length = 0;
+
+    const response = await app.inject({
+      method: "POST", url: "/api/v1/content/lesson-sets/2/C1/generate", headers: { cookie: makerCookie }, payload: {}
+    });
+
+    expect(response.statusCode, response.body).toBe(201);
+    expect(runnerCalls.filter((call) => call.taskKey === "weekly_lesson_plan_blueprint")).toHaveLength(1);
+    const persisted = await pool.query<{ ai_plan: Record<string, string[]> }>(
+      "select ai_plan from program_weeks where program_id = $1 and week_number = 2", [DEMO_IDS.program]
+    );
+    expect(persisted.rows[0]?.ai_plan.C1).toHaveLength(5);
+    await app.inject({
+      method: "PUT", url: "/api/v1/content/lesson-levels", headers: { cookie: makerCookie },
+      payload: { levels: ["A1", "A2", "B1", "B2"] }
+    });
   });
 
   it("normalizes the canonical plan once when two operators of the same organization generate concurrently", async () => {

@@ -11,14 +11,14 @@ import type {
 } from "@e4s/contracts";
 import { weeklyPracticeInputSchema, weeklyPracticeOutputSchema, type AiTaskRunner } from "@e4s/ai";
 import { createRepositories } from "@e4s/database";
-import { approveContentVersion, retirePublishedContent, submitContentForReview, validateGenerationFindingsForPublication, validateLessonDraft, validateLessonPublication } from "@e4s/domain/content";
+import { approveContentVersion, evaluateGeneratedLessonQuality, retirePublishedContent, submitContentForReview, validateGenerationFindingsForPublication, validateLessonDraft, validateLessonPublication } from "@e4s/domain/content";
 import type { ObjectStorage } from "@e4s/storage";
 import type { FastifyInstance } from "fastify";
 import type { Pool } from "pg";
 import { z } from "zod";
 import { createRoleGuard } from "../identity/policy.js";
 import type { ContentMediaService } from "../media/index.js";
-import { lessonDaysNeedingRepair, mergeGeneratedLessons, mergeGenerationFindingsAfterRepair, type LessonRepairMode } from "./enrichment.js";
+import { lessonRepairComponentsByDay, mergeGeneratedLessons, mergeGenerationFindingsAfterRepair, type LessonGenerationComponent, type LessonRepairMode } from "./enrichment.js";
 import { buildGenerationProvenance } from "./generation-provenance.js";
 import {
   buildPartialLessonFromPipelineState,
@@ -201,6 +201,45 @@ export function registerContentRoutes(
     })();
     canonicalPlanLocks.set(lockKey, promise);
     return promise;
+  };
+  const componentsForGenerationFailures = (findings: ReadonlyArray<{ dayNumber: number | null; component: string }>) =>
+    findings.reduce<Partial<Record<number, LessonGenerationComponent[]>>>((result, finding) => {
+      if (finding.dayNumber === null || finding.component === "plan") return result;
+      const component: LessonGenerationComponent = finding.component === "grammarClassification" || finding.component === "objectives" || finding.component === "foundation"
+        ? "foundation"
+        : finding.component.startsWith("skills.") ? "skills" : "vocabulary";
+      const current = result[finding.dayNumber] ?? [];
+      if (!current.includes(component)) current.push(component);
+      result[finding.dayNumber] = current;
+      return result;
+    }, {});
+  const repairExhaustedLessonComponents = async (input: {
+    generationWeek: ContentWeekInput;
+    cefr: string;
+    task: Parameters<typeof generateWeeklyLessons>[2];
+    runner: AiTaskRunner;
+    excludedVocabulary: string[];
+    excludedGrammarFrames: string[];
+    qualityProfile: ReturnType<typeof lessonQualityProfileFromEnv>;
+    partialLessons: Awaited<ReturnType<typeof generateWeeklyLessons>>["lessons"];
+    findings: ReadonlyArray<{ dayNumber: number | null; component: string }>;
+  }) => {
+    const forcedComponentsByDay = componentsForGenerationFailures(input.findings);
+    const repairDays = Object.keys(forcedComponentsByDay).map(Number).sort((left, right) => left - right);
+    if (input.partialLessons.length === 0 || repairDays.length === 0) return null;
+    const repaired = await generateWeeklyLessons(input.generationWeek, input.cefr, input.task, input.runner, {
+      excludedVocabulary: input.excludedVocabulary,
+      excludedGrammarFrames: input.excludedGrammarFrames,
+      qualityReview: true,
+      qualityProfile: input.qualityProfile,
+      existingLessons: input.partialLessons,
+      repairMode: "enrich",
+      dayNumbers: repairDays,
+      forcedComponentsByDay
+    });
+    const lessons = mergeGeneratedLessons(input.partialLessons, repaired.lessons, "enrich", forcedComponentsByDay, input.cefr);
+    const quality = evaluateGeneratedLessonQuality({ cefr: input.cefr, lessons, findings: repaired.findings });
+    return quality.ready ? { repaired, lessons } : null;
   };
   const readers = createRoleGuard(pool, ["operator", "manager"]);
   const operators = createRoleGuard(pool, ["operator", "manager"]);
@@ -508,21 +547,23 @@ export function registerContentRoutes(
           durationMinutes: lesson.durationMinutes,
           parts: lesson.parts
         })) as ContentLessonDraftInput[];
-        const repairableDays = lessonDaysNeedingRepair(existing, action as LessonRepairMode);
+        const forcedComponentsByDay: Partial<Record<number, Array<"foundation" | "vocabulary" | "skills">>> = Object.fromEntries(
+          [...lessonRepairComponentsByDay(existing, action as LessonRepairMode, params.data.cefr)].map(([dayNumber, components]) => [dayNumber, [...components]])
+        );
+        const repairableDays = Object.keys(forcedComponentsByDay).map(Number);
         const requestedFindings = current.generationFindings?.filter((finding) =>
           finding.repairAction === "regenerate_component"
           && (body.data.dayNumber === undefined || finding.dayNumber === body.data.dayNumber)
         ) ?? [];
-        const forcedComponentsByDay = requestedFindings.reduce<Partial<Record<number, Array<"foundation" | "vocabulary" | "skills">>>>((result, finding) => {
-          if (finding.dayNumber === null || finding.component === "plan") return result;
+        requestedFindings.forEach((finding) => {
+          if (finding.dayNumber === null || finding.component === "plan") return;
           const component: "foundation" | "vocabulary" | "skills" = finding.component === "grammarClassification" || finding.component === "objectives"
             ? "foundation"
             : finding.component.startsWith("skills.") ? "skills" : finding.component as "foundation" | "vocabulary" | "skills";
-          const components = result[finding.dayNumber] ?? [];
+          const components = forcedComponentsByDay[finding.dayNumber] ?? [];
           if (!components.includes(component)) components.push(component);
-          result[finding.dayNumber] = components;
-          return result;
-        }, {});
+          forcedComponentsByDay[finding.dayNumber] = components;
+        });
         const dayNumbers = action === "enrich" && body.data.dayNumber !== undefined
           ? (repairableDays.includes(body.data.dayNumber) || forcedComponentsByDay[body.data.dayNumber]?.length ? [body.data.dayNumber] : [])
           : [...new Set([...repairableDays, ...Object.keys(forcedComponentsByDay).map(Number)])].sort((left, right) => left - right);
@@ -574,6 +615,7 @@ export function registerContentRoutes(
           existingLessons: existing,
           repairMode: action,
           forcedComponentsByDay,
+          targetOnlyComponentsByDay: true,
           sequentialPipeline: true,
           onProgress: (progress) => request.log.info({ week: params.data.week, cefr: params.data.cefr, ...progress }, "Weekly lesson generation progress")
         });
@@ -675,16 +717,6 @@ export function registerContentRoutes(
     if (!week?.topic.trim()) return reply.code(409).send({ code: "CONTENT_WEEK_TOPIC_REQUIRED" });
     const task = await repositories.aiRuns.activeTaskPrompt(actorId, "weekly_lessons");
     if (!week || !task) return reply.code(503).send({ code: "AI_PROMPT_NOT_READY" });
-    const hasAnySeededPlan = Object.values(week.plan ?? {}).some(
-      (days) => Array.isArray(days) && days.length === 5 && days.every((focus) => typeof focus === "string" && focus.trim().length > 0)
-    );
-    if (!hasAnySeededPlan) {
-      const missingCefr = requestedLevels[0] ?? "A1";
-      return reply.code(409).send({
-        code: "CONTENT_WEEK_PLAN_REQUIRED",
-        findings: [{ dayNumber: null, component: "plan", code: "CONTENT_WEEK_PLAN_REQUIRED", severity: "error", message: `Mức ${missingCefr} cần kế hoạch 5 ngày trước khi sinh bài.`, issues: [], repairAction: "regenerate_plan" }]
-      });
-    }
     const runner = await runnerFor(actorId);
     if (!runner) {
       return reply.code(503).send(publicLessonGenerationFailure(new Error("AI_UNAVAILABLE")));
@@ -806,6 +838,13 @@ export function registerContentRoutes(
         for (const lesson of generated.lessons) {
           if (lesson.title.trim()) acceptedGrammarFrames.add(lesson.title.trim());
         }
+        const quality = evaluateGeneratedLessonQuality({ cefr, lessons: generated.lessons, findings: generated.findings });
+        if (!quality.ready) {
+          throw Object.assign(new Error("CONTENT_GENERATION_QUALITY_FAILED"), {
+            code: "CONTENT_GENERATION_QUALITY_FAILED",
+            issues: [...quality.blockingIssues, ...quality.lightIssues]
+          });
+        }
         const validation = validateLessonDraft(generated.lessons);
         const saved = await repositories.content.saveLessonDraft(
           actorId,
@@ -846,6 +885,16 @@ export function registerContentRoutes(
       } catch (error) {
         const code = errorCode(error, "AI_LESSON_GENERATION_FAILED");
         const diagnosticIssues = safeGenerationDiagnosticIssues(error);
+        if (code === "CONTENT_GENERATION_QUALITY_FAILED") {
+          levelResults.push({
+            cefr,
+            status: "failed",
+            completedDays: [],
+            resumedDays,
+            error: publicLessonGenerationFailure(error)
+          });
+          return;
+        }
         const checkpointLessons = [1, 2, 3, 4, 5].flatMap((dayNumber) => {
           const state = resumeStatesByDay[dayNumber];
           if (!state) return [];
@@ -893,6 +942,49 @@ export function registerContentRoutes(
           });
         } catch (recordError) {
           request.log.warn({ code: errorCode(recordError, "AI_RUN_RECORD_FAILED") }, "Lesson batch failure audit record failed");
+        }
+        try {
+          const automaticRepair = await repairExhaustedLessonComponents({
+            generationWeek,
+            cefr,
+            task: levelTask,
+            runner,
+            excludedVocabulary,
+            excludedGrammarFrames,
+            qualityProfile,
+            partialLessons,
+            findings: publicFailure.findings ?? []
+          });
+          if (automaticRepair) {
+            const validation = validateLessonDraft(automaticRepair.lessons);
+            const saved = await repositories.content.saveLessonDraft(
+              actorId,
+              week.weekNumber,
+              cefr,
+              automaticRepair.lessons,
+              "ai",
+              buildGenerationProvenance({
+                promptVersionId: task.promptVersionId,
+                prompt: levelTask.prompt,
+                model: { provider: automaticRepair.repaired.result.metadata.provider, name: automaticRepair.repaired.result.metadata.model },
+                week: generationWeek,
+                cefr,
+                extraInput: { excludedVocabulary, excludedGrammarFrames, qualityProfile, batch: true, automaticComponentRepair: true },
+                output: { ...automaticRepair.repaired.output, findings: automaticRepair.repaired.findings },
+                validation
+              })
+            );
+            levelResults.push({
+              cefr,
+              status: "completed",
+              completedDays: automaticRepair.lessons.map((lesson) => lesson.dayNumber).sort((left, right) => left - right),
+              resumedDays,
+              version: saved
+            });
+            return;
+          }
+        } catch (repairError) {
+          request.log.warn({ code: errorCode(repairError, "AI_COMPONENT_REPAIR_FAILED") }, "Automatic batch component repair failed");
         }
         let partialDraft: Awaited<ReturnType<typeof repositories.content.saveLessonDraft>> | undefined;
         if (partialLessons.length > 0) {
@@ -958,12 +1050,6 @@ export function registerContentRoutes(
       code: "CONTENT_WEEK_PLAN_REQUIRED",
       findings: [{ dayNumber: null, component: "plan", code: "CONTENT_WEEK_PLAN_REQUIRED", severity: "error", message: `Mức ${params.data.cefr} cần kế hoạch 5 ngày trước khi sinh bài.`, issues: [], repairAction: "regenerate_plan" }]
     });
-    // Same rule as the batch route: any approved level plan is enough to build
-    // the shared canonical blueprint, which then supplies this level's five days.
-    const hasAnySeededPlan = Object.values(week.plan ?? {}).some(
-      (days) => Array.isArray(days) && days.length === 5 && days.every((focus) => typeof focus === "string" && focus.trim().length > 0)
-    );
-    if (!hasAnySeededPlan) return planRequired();
     const runner = await runnerFor(actorId);
     if (!runner) {
       await repositories.aiRuns.recordFailed({
@@ -1045,6 +1131,13 @@ export function registerContentRoutes(
         },
         onProgress: (progress) => request.log.info({ week: week.weekNumber, cefr: params.data.cefr, ...progress }, "Weekly lesson generation progress")
       });
+      const quality = evaluateGeneratedLessonQuality({ cefr: params.data.cefr, lessons: generated.lessons, findings: generated.findings });
+      if (!quality.ready) {
+        throw Object.assign(new Error("CONTENT_GENERATION_QUALITY_FAILED"), {
+          code: "CONTENT_GENERATION_QUALITY_FAILED",
+          issues: [...quality.blockingIssues, ...quality.lightIssues]
+        });
+      }
       const validation = validateLessonDraft(generated.lessons);
       const saved = await repositories.content.saveLessonDraft(
         actorId,
@@ -1079,6 +1172,13 @@ export function registerContentRoutes(
     } catch (error) {
       const code = errorCode(error, "AI_LESSON_GENERATION_FAILED");
       const diagnosticIssues = safeGenerationDiagnosticIssues(error);
+      if (code === "CONTENT_GENERATION_QUALITY_FAILED") {
+        return reply.code(422).send({
+          code,
+          message: "AI chưa đạt chuẩn giao cho Operator: không có lỗi nặng và tối đa 2 lỗi nhẹ thuộc từ vựng mở rộng.",
+          issues: diagnosticIssues
+        });
+      }
       const checkpointLessons = [1, 2, 3, 4, 5].flatMap((dayNumber) => {
         const state = resumeStatesByDay[dayNumber];
         if (!state) return [];
@@ -1132,6 +1232,35 @@ export function registerContentRoutes(
         issues: diagnosticIssues,
         retainedDays: partialLessons.map((lesson) => lesson.dayNumber)
       }, "Weekly lesson generation failed");
+      try {
+        const automaticRepair = await repairExhaustedLessonComponents({
+          generationWeek,
+          cefr: params.data.cefr,
+          task,
+          runner,
+          excludedVocabulary,
+          excludedGrammarFrames,
+          qualityProfile,
+          partialLessons,
+          findings: publicFailure.findings ?? []
+        });
+        if (automaticRepair) {
+          const validation = validateLessonDraft(automaticRepair.lessons);
+          const saved = await repositories.content.saveLessonDraft(
+            actorId, week.weekNumber, params.data.cefr, automaticRepair.lessons, "ai",
+            buildGenerationProvenance({
+              promptVersionId: task.promptVersionId, prompt: task.prompt,
+              model: { provider: automaticRepair.repaired.result.metadata.provider, name: automaticRepair.repaired.result.metadata.model },
+              week: generationWeek, cefr: params.data.cefr,
+              extraInput: { excludedVocabulary, excludedGrammarFrames, qualityProfile, automaticComponentRepair: true },
+              output: { ...automaticRepair.repaired.output, findings: automaticRepair.repaired.findings }, validation
+            })
+          );
+          return reply.code(201).send(saved);
+        }
+      } catch (repairError) {
+        request.log.warn({ code: errorCode(repairError, "AI_COMPONENT_REPAIR_FAILED") }, "Automatic targeted lesson repair failed");
+      }
       if (partialLessons.length > 0) {
         const validation = validateLessonDraft(partialLessons);
         const saved = await repositories.content.saveLessonDraft(

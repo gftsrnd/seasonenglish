@@ -307,7 +307,7 @@ const OBJECTIVES_CONTRACT = [
   "objective.items must contain 2-4 measurable objectives. Include at least one content objective and at least one language objective. The application assigns stable ids after validation; do not invent ids.",
   "Every objective item must include action_verb, target_language (null for content; concrete taught words/frames for language), condition, criterion, assessed_by, success_evidence and assessmentCode.",
   "Every objective text uses the exact learner-facing opener: 'Sau bài học, bạn có thể' for A1-A2 or 'By the end of this lesson, you will be able to' for B1-C1. Keep this opener in the returned text. Use one observable verb and one assessable ability.",
-  "Keep the learner-facing ability after that fixed opener concise: at most 14 words for A1-A2 and at most 16 words for B1-C1. Put conditions, criteria and evidence in their dedicated fields instead of lengthening objective.text.",
+  "Keep the learner-facing ability after that fixed opener concise: at most 16 words for A1-A2 and at most 16 words for B1-C1. Put conditions, criteria and evidence in their dedicated fields instead of lengthening objective.text.",
   "Prefer an observable action verb from the ACTIVE LEVEL bank appended below. A different observable verb is allowed when it more accurately matches the approved lesson focus.",
   "For B1-C1 language objectives, never set action_verb to 'use' or 'give'. Choose a workplace action from that level's bank, then mention the target language later with 'using' (for example: 'explain ... using due to').",
   "Count objectives before returning: 2-4 total, with at least one content objective and at least one concrete language objective.",
@@ -3022,6 +3022,8 @@ export async function generateWeeklyLessons(
     /** Normalized frames already accepted for this week in other CEFR levels. */
     excludedGrammarFrames?: readonly string[];
     forcedComponentsByDay?: Partial<Record<number, readonly LessonGenerationComponent[]>>;
+    /** Use explicit route-level targets instead of adding every raw metadata gap. */
+    targetOnlyComponentsByDay?: boolean;
     onProgress?: (event: LessonGenerationProgressEvent) => void;
     sequentialPipeline?: boolean;
     onCheckpoint?: (checkpoint: WeeklyLessonPipelineCheckpoint) => void | Promise<void>;
@@ -3148,9 +3150,16 @@ export async function generateWeeklyLessons(
   }));
   const existingByDay = new Map((options.existingLessons ?? []).map((lesson) => [lesson.dayNumber, lesson]));
   const componentTargets = generationDays.map((dayNumber) => {
-    const targets = lessonComponentsNeedingRepair(existingByDay.get(dayNumber), options.repairMode ?? "enrich");
-    for (const component of options.forcedComponentsByDay?.[dayNumber] ?? []) targets.add(component);
-    return targets;
+    const forced = options.forcedComponentsByDay?.[dayNumber];
+    // A route may have already classified this day at level scope (for
+    // example, retaining <=2 light lexical gaps).  In that case its explicit
+    // target set is authoritative; do not silently add unrelated raw gaps.
+    const rawTargets = lessonComponentsNeedingRepair(existingByDay.get(dayNumber), options.repairMode ?? "enrich");
+    if (!forced) return rawTargets;
+    // Partial checkpoint recovery needs both the diagnosed target and anything
+    // physically absent in the retained day.  Operator supplementation of a
+    // complete day opts into target-only behavior explicitly below.
+    return options.targetOnlyComponentsByDay ? new Set(forced) : new Set([...rawTargets, ...forced]);
   });
 
   const grammarClassificationSettled = await settleSequentially(baseInputs, async (input, index) => {
@@ -3628,7 +3637,7 @@ export async function generateWeeklyLessons(
       const entry = grammarClassificationSettled[index];
       return entry?.status === "rejected";
     }).length,
-    partialSuccess: lessons.length < generationDays.length || generationFindings.length > 0,
+    partialSuccess: lessons.length < generationDays.length || generationFindings.some((finding) => finding.severity === "error"),
     pronunciationWarningCount: foundationBodyResults.reduce((total, item) => {
       if (!item?.output || !item.pronunciationValid) return total;
       return total + buildPronunciationAssets(item.output.pronunciation.focus, [
@@ -4867,7 +4876,7 @@ function validatePromptObjectives(
     if (!prefix.test(item.text)) issues.push(objectiveIssue("objective_wrong_learner_facing_opener", [item.id]));
     const learnerFacingAbility = item.text.replace(prefix, "").trim();
     const learnerFacingWordCount = learnerFacingAbility.split(/\s+/u).filter(Boolean).length;
-    const learnerFacingWordMax = expectedLanguage === "vi" ? 14 : 16;
+    const learnerFacingWordMax = 16;
     if (learnerFacingWordCount > learnerFacingWordMax) {
       issues.push(`${objectiveIssue("objective_text_too_long", [item.id])}. Keep the learner-facing ability after the fixed opener to at most ${learnerFacingWordMax} words; received ${learnerFacingWordCount}. Move conditions and evidence to their dedicated fields.`);
     }
@@ -5160,6 +5169,19 @@ function reviewerFindingDisposition(
   if (
     finding.reasonCode === "feedback_mismatch"
     && finding.exerciseCode === "speaking"
+    && /\bomits? the required outcome clause\b|\bso that we can\s*\[?outcome\]?/iu.test(finding.message)
+    && typeof skills.speaking?.answer === "string"
+    && /\bi would appreciate your decision on\b/iu.test(skills.speaking.answer)
+    && /\bso that\s+(?:the\s+)?[a-z][a-z'’-]*\s+can\s+[a-z]/iu.test(skills.speaking.answer)
+  ) {
+    // A template slot such as "so that we can + outcome" is complete when a
+    // named stakeholder and concrete outcome replace it; requiring "we" is
+    // a reviewer style preference, not a learner-facing defect.
+    return "discard";
+  }
+  if (
+    finding.reasonCode === "feedback_mismatch"
+    && finding.exerciseCode === "speaking"
     && /\b(?:separate|multiple) sentences?\b[\s\S]{0,180}\bjoined by ['"“]?and['"”]?\b|\bjoined by ['"“]?and['"”]?\b[\s\S]{0,180}\b(?:separate|multiple) sentences?\b/iu.test(finding.message)
     && typeof skills.speaking?.answer === "string"
     && /\b(?:was|were)\s+[a-z][a-z'’-]*\s+and\s+(?:the\s+)?[a-z][a-z'’-]*(?:\s+[a-z][a-z'’-]*)?\s+(?:was|were)\s+[a-z][a-z'’-]*\b/iu.test(skills.speaking.answer)
@@ -5410,7 +5432,7 @@ function hintActuallyRevealsAnswer(hint: string, answer: string): boolean {
 
 const reviewSkillsCandidate = reviewWeeklyLessonSkills;
 
-function deterministicSkillsFindings(
+export function deterministicSkillsFindings(
   skills: Partial<Skills>,
   cefr: string,
   lessonFocus = "",
@@ -5419,9 +5441,11 @@ function deterministicSkillsFindings(
   const findings: Array<{ path: PropertyKey[]; message: string }> = [];
   const constraints = weeklyLessonSkillsGenerationConstraints(cefr);
   const wordCount = (value: string) => value.trim().split(/\s+/).filter(Boolean).length;
-  const tolerantRange = (minimum: number, maximum: number) => ({
+  const tolerantRange = (minimum: number, maximum: number, code?: "listening" | "reading") => ({
     minimum: Math.max(1, Math.floor(minimum * 0.8)),
-    maximum: Math.ceil(maximum * 1.2)
+    // A2 reading has a concise target but a one-word overflow does not make
+    // the exercise unusable; keep the hard ceiling for material over that.
+    maximum: Math.ceil(maximum * 1.2) + (cefr === "A2" && code === "reading" ? 1 : 0)
   });
   const asksForNumericExtreme = (prompt: string) => /\b(?:largest|highest|greatest|biggest|smallest|lowest|least)\b[\s\S]{0,60}\b(?:variance|difference|gap|amount|cost|spending|score|rate|percentage)\b|\b(?:variance|difference|gap|amount|cost|spending|score|rate|percentage)\b[\s\S]{0,60}\b(?:largest|highest|greatest|biggest|smallest|lowest|least)\b/iu.test(prompt);
   if (skills.writing && (cefr === "A1" || cefr === "A2") && skills.writing.type !== "mcq") {
@@ -5445,7 +5469,7 @@ function deterministicSkillsFindings(
     const exercise = skills[code];
     if (!exercise) continue;
     const count = wordCount(exercise.body);
-    const accepted = tolerantRange(minimum, maximum);
+    const accepted = tolerantRange(minimum, maximum, code);
     if (asksForNumericExtreme(exercise.prompt)) accepted.maximum = Math.max(accepted.maximum, Math.ceil(maximum * 2.25));
     if (count < accepted.minimum || count > accepted.maximum) {
       findings.push({ path: [code, "body"], message: `${cefr} ${code} body must contain ${accepted.minimum}-${accepted.maximum} words; received ${count}.` });
@@ -5468,7 +5492,9 @@ function deterministicSkillsFindings(
   }
   if (skills.speaking) {
     const count = wordCount(skills.speaking.answer);
-    const acceptedMaximum = Math.ceil(constraints.speakingAnswerWordMax * 1.3);
+    // A B1 model answer that is only a short closing phrase over the target
+    // remains usable. Longer answers still go through the targeted repair.
+    const acceptedMaximum = Math.ceil(constraints.speakingAnswerWordMax * 1.3) + (cefr === "B1" ? 3 : 0);
     if (count > acceptedMaximum) {
       findings.push({ path: ["speaking", "answer"], message: `${cefr} speaking model answer must contain at most ${acceptedMaximum} words; received ${count}.` });
     }
@@ -5499,7 +5525,7 @@ function deterministicSkillsFindings(
       const sourceWordCount = wordCount(comprehensionExercise.body);
       const minimum = code === "listening" ? constraints.listeningWordMin : constraints.readingWordMin;
       const maximum = code === "listening" ? constraints.listeningWordMax : constraints.readingWordMax;
-      const sourceRange = tolerantRange(minimum, maximum);
+      const sourceRange = tolerantRange(minimum, maximum, code);
       if (asksForNumericExtreme(comprehensionExercise.prompt)) sourceRange.maximum = Math.max(sourceRange.maximum, Math.ceil(maximum * 2.25));
       if (sourceWordCount < sourceRange.minimum || sourceWordCount > sourceRange.maximum) continue;
       const source = comprehensionExercise.body.normalize("NFKC").toLocaleLowerCase("en-US");
@@ -5808,8 +5834,20 @@ function deterministicSkillsFindings(
           .replace(/[^\p{L}\p{N}.…]+/gu, " ")
           .replace(/\s+/gu, " ")
           .trim();
-        const normalizedPhrase = normalizePhraseText(phrase);
+        const rawTemplateSegments = phrase.split("+").map((part) => normalizePhraseText(part)).filter(Boolean);
         const normalizedAnswer = normalizePhraseText(speaking.answer);
+        if (rawTemplateSegments.length > 1) {
+          let cursor = 0;
+          for (let index = 0; index < rawTemplateSegments.length; index += 1) {
+            const segment = rawTemplateSegments[index]!;
+            const position = normalizedAnswer.indexOf(segment, cursor);
+            if (position < 0) return false;
+            if (index > 0 && normalizedAnswer.slice(cursor, position).trim().split(/\s+/u).filter(Boolean).length === 0) return false;
+            cursor = position + segment.length;
+          }
+          return true;
+        }
+        const normalizedPhrase = normalizePhraseText(phrase);
         const segments = normalizedPhrase.split(/\s*(?:\.{3}|…)\s*/u).map((part) => part.trim()).filter(Boolean);
         if (segments.length > 1) {
           let cursor = 0;

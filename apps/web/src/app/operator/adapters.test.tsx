@@ -102,6 +102,42 @@ describe("lesson detail warnings", () => {
     expect(adaptLessonSet(source, { aiConnected: true }).warnings.details).toBe(1);
   });
 
+  it("does not show a warning when a whole level has only two permitted light lexical gaps", () => {
+    const source = lessonSet([{ ...baseWord("job"), synonyms: [], antonyms: [] }]);
+    source.lessons = [1, 2, 3, 4, 5].map((dayNumber) => ({
+      ...source.lessons[0]!,
+      id: `lesson-${dayNumber}`,
+      dayNumber,
+      parts: source.lessons[0]!.parts.map((part) => part.code !== "vocabulary" ? part : {
+        ...part,
+        content: {
+          ...part.content,
+          items: [{ ...baseWord(`word-${dayNumber}`), synonyms: dayNumber <= 2 ? [] : [{ word: `related-${dayNumber}` }], antonyms: [] }]
+        }
+      })
+    }));
+
+    expect(adaptLessonSet(source, { aiConnected: true }).warnings.details).toBe(0);
+  });
+
+  it("does not flag a lesson when all missing lexical relations have an approved exemption", () => {
+    const source = lessonSet([
+      { ...baseWord("Monday"), synonyms: [], antonyms: [], relationStatus: "no_natural_relation" },
+      { ...baseWord("date"), synonyms: [], antonyms: [], relationStatus: "above_cefr_level" },
+      { ...baseWord("today"), synonyms: [], antonyms: [], relationStatus: "no_natural_relation" }
+    ]);
+
+    expect(adaptLessonSet(source, { aiConnected: true }).warnings.details).toBe(0);
+  });
+
+  it("flags an exemption contradicted by the shared CEFR relation policy", () => {
+    const source = lessonSet([
+      { ...baseWord("send"), type: "verb", meaning: "gửi", synonyms: [], antonyms: [], relationStatus: "no_natural_relation" }
+    ]);
+
+    expect(adaptLessonSet(source, { aiConnected: true }).warnings.details).toBe(1);
+  });
+
   it("identifies the exact lesson fields that AI or manual editing must repair", () => {
     const source = lessonSet([
       { word: "job", collocations: ["new job"], family: [], synonyms: [], antonyms: [] }
@@ -119,7 +155,7 @@ describe("lesson detail warnings", () => {
         "Nghe chưa đủ 4 lựa chọn",
         "job: word family",
         "job: từ bao trùm",
-        "từ đồng nghĩa"
+        "quan hệ nghĩa (đồng nghĩa hoặc trái nghĩa)"
       ])
     }]);
   });

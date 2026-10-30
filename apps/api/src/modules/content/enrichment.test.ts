@@ -5,6 +5,7 @@ import {
   isDerivationOrInflection,
   lessonComponentsNeedingRepair,
   lessonDaysNeedingRepair,
+  lessonRepairComponentsByDay,
   mergeGeneratedLesson,
   mergeGeneratedLessons,
   mergeGenerationFindingsAfterRepair,
@@ -150,6 +151,28 @@ describe("lesson enrichment merge", () => {
     }];
 
     expect(lessonDaysNeedingRepair(partial, "enrich")).toEqual([1, 2, 3, 4, 5]);
+  });
+
+  it("does not spend an AI repair on at most two light lexical gaps in a level", () => {
+    const level = [1, 2, 3, 4, 5].map((dayNumber) => ({
+      ...generatedLesson,
+      dayNumber,
+      parts: generatedLesson.parts.map((part) => part.code !== "vocabulary" ? part : {
+        ...part,
+        content: {
+          ...part.content,
+          items: [{
+            ...(part.content.items as Array<Record<string, unknown>>)[0]!,
+            family: ["reporter"],
+            synonyms: dayNumber <= 2 ? [] : ["summary"],
+            antonyms: []
+          }]
+        }
+      })
+    }));
+
+    expect(lessonDaysNeedingRepair(level, "enrich", "A2")).toEqual([]);
+    expect([...lessonRepairComponentsByDay(level, "enrich", "A2").entries()]).toEqual([]);
   });
 
   it("selects a day whose grammar is explicitly unavailable for AI supplementation", () => {

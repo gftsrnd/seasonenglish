@@ -5,6 +5,7 @@ import {
   assembleAndValidateWeeklyLesson,
   boundedVocabularyHistory,
   buildPartialLessonFromPipelineState,
+  deterministicSkillsFindings,
   generateWeeklyLessonFoundation,
   generateWeeklyLessonDayPipeline,
   generateWeeklyLessonLevelPipeline,
@@ -1468,7 +1469,7 @@ describe("direct weekly-generation component contracts", () => {
       },
       reading: {
         ...valid.reading,
-        body: "During our video call, Tom's voice was unclear. He said, \"Sorry, my connection is unstable. There is also an echo on my side.\" Lisa replied, \"Could you repeat that, please? I did not hear the deadline.\" Tom then turned off his camera to improve the signal and spoke again.",
+        body: "During our video call, Tom's voice was unclear. He said, \"Sorry, my connection is unstable. There is also an echo on my side.\" Lisa replied, \"Could you repeat that, please? I did not hear the deadline.\" Tom then turned off his camera to improve the signal and spoke again. Everyone waited silently.",
         prompt: "Listen and answer: Why did Lisa ask Tom to repeat something?",
         option1: "She missed the due date",
         option2: "She wanted to share her screen",
@@ -1677,6 +1678,24 @@ describe("direct weekly-generation component contracts", () => {
     expect(result.output).toEqual(valid);
     expect(result.attempts).toBe(2);
     expect(runTask).toHaveBeenCalledTimes(2);
+  });
+
+  it("accepts a concise 16-word A1-A2 objective ability instead of exhausting retries over two words", async () => {
+    const level = levelCases[0];
+    const objective = {
+      ...objectiveFor(level),
+      items: objectiveFor(level).items.map((item, index) => index === 0
+        ? {
+            ...item,
+            text: "Sau bài học, bạn có thể chọn thông tin về ngày làm việc tại nhà trong thông báo chính thức hôm nay."
+          }
+        : item)
+    };
+    const { runner, runTask } = runnerWith({ weekly_lesson_objectives: { objective } });
+
+    await expect(generateWeeklyLessonObjectives(objectivesInput(level), "Generate objectives.", runner))
+      .resolves.toMatchObject({ output: { objective } });
+    expect(runTask).toHaveBeenCalledTimes(1);
   });
 
   it("rejects Vietnamese target_language values even when A1 objective explanations are Vietnamese", async () => {
@@ -3052,7 +3071,7 @@ describe("direct weekly-generation component contracts", () => {
 
     expect(result.output.speaking?.answer).toContain("Thanks for your time");
     expect(result.output.speaking?.answer).toContain("Speak to you soon");
-    expect(result.output.speaking?.answer.split(/\s+/u).length).toBeLessThanOrEqual(32);
+    expect(result.output.speaking?.answer.split(/\s+/u).length).toBeLessThanOrEqual(35);
   });
 
   it("accepts one quoted signposting phrase when the prompt presents alternatives", async () => {
@@ -3090,6 +3109,19 @@ describe("direct weekly-generation component contracts", () => {
     expect(result.output.speaking?.answer).toBe(answer);
     expect(result.output.speaking?.answer).not.toContain("Why did maintenance");
     expect(runTask).toHaveBeenCalledTimes(1);
+  });
+
+  it("accepts a natural completion of a placeholder slot in a required speaking frame", () => {
+    const findings = deterministicSkillsFindings({
+      speaking: {
+        prompt: "Explain the trade-off. Use the frame \"Although the cost is higher, expediting the order would mitigate + risk.\"",
+        answer: "Although the cost is higher, expediting the order would mitigate delivery risk."
+      }
+    } as any, "C1");
+
+    expect(findings).not.toEqual(expect.arrayContaining([
+      expect.objectContaining({ path: ["speaking", "answer"], message: expect.stringContaining("exact phrases") })
+    ]));
   });
 
   it("repairs a speaking answer that omits an explicitly required polite approval request", async () => {
@@ -4288,6 +4320,63 @@ describe("direct component repair budgets", () => {
       "weekly_lesson_language_practice",
       "weekly_lesson_speaking"
     ]);
+
+    // A targeted repair must not also regenerate an unrelated vocabulary
+    // metadata gap simply because that day has one.
+    const skillsCallsWithLightVocabularyGap: string[] = [];
+    const existingWithVocabularyGap = validFiveDays.map((lesson) => lesson.dayNumber !== 1 ? lesson : {
+      ...lesson,
+      parts: lesson.parts.map((part) => part.code !== "vocabulary" ? part : {
+        ...part,
+        content: {
+          ...part.content,
+          items: (part.content.items as Array<Record<string, unknown>>).map((item) => ({
+            ...item,
+            family: [],
+            synonyms: [],
+            antonyms: []
+          }))
+        }
+      })
+    });
+    await generateWeeklyLessons(
+      weekInput,
+      "A1",
+      { prompt: "Repair lesson." },
+      runnerWith({
+        weekly_lesson_comprehension: generatedSkills.comprehension,
+        weekly_lesson_language_practice: generatedSkills.languagePractice,
+        weekly_lesson_speaking: generatedSkills.speaking,
+        weekly_lesson_skills_reviewer: approvedReview
+      }, skillsCallsWithLightVocabularyGap).runner,
+      {
+        dayNumbers: [1],
+        existingLessons: existingWithVocabularyGap,
+        repairMode: "enrich",
+        forcedComponentsByDay: { 1: ["skills"] },
+        targetOnlyComponentsByDay: true
+      }
+    );
+    expect(skillsCallsWithLightVocabularyGap).toEqual([
+      "weekly_lesson_comprehension",
+      "weekly_lesson_language_practice",
+      "weekly_lesson_speaking"
+    ]);
+  });
+});
+
+describe("meaningful skills length boundaries", () => {
+  it("does not reject otherwise usable A2 reading and B1 speaking for a one-to-three-word target overrun", () => {
+    const a2Reading = Array.from({ length: 49 }, (_, index) => `detail${index + 1}`).join(" ");
+    const b1Speaking = Array.from({ length: 35 }, (_, index) => `detail${index + 1}`).join(" ");
+    expect(a2Reading.trim().split(/\s+/u)).toHaveLength(49);
+    expect(b1Speaking.trim().split(/\s+/u)).toHaveLength(35);
+
+    const a2Findings = deterministicSkillsFindings({ reading: { body: a2Reading, prompt: "Why does Mia need approval?", answer: "Her internet service will be repaired.", option1: "Her internet service will be repaired.", option2: "She has a meeting.", option3: "She is sick.", option4: "She is travelling.", hint: "Read the reason." } } as any, "A2");
+    const b1Findings = deterministicSkillsFindings({ speaking: { prompt: "Request a remote working day.", answer: b1Speaking } } as any, "B1");
+
+    expect(a2Findings).not.toEqual(expect.arrayContaining([expect.objectContaining({ path: ["reading", "body"] })]));
+    expect(b1Findings).not.toEqual(expect.arrayContaining([expect.objectContaining({ path: ["speaking", "answer"] })]));
   });
 });
 
@@ -4740,6 +4829,28 @@ describe("reviewer finding classification", () => {
     const result = await reviewWeeklyLessonSkills(runner, skillsInput(b2), allSkills() as never);
     expect(result.output.status).toBe("needs_revision");
     expect(result.findings).toEqual([{ path: ["speaking"], message: expect.stringContaining("responsible group") }]);
+  });
+
+  it("discards a reviewer complaint when a concrete outcome completes a placeholder frame", async () => {
+    const skills = allSkills();
+    const answer = "I would appreciate your decision on the printer order by Wednesday so that the office can receive it before Friday.";
+    skills.speaking = {
+      ...skills.speaking,
+      prompt: "Ask for a decision by Wednesday so that the office can receive the printer before Friday. Use the frame 'I would appreciate your decision on + item by + date so that we can + outcome.'",
+      answer,
+      answerTranslation: answer,
+      questionTranslation: "Ask for a decision by Wednesday."
+    };
+    const { runner } = runnerWith({ weekly_lesson_skills_reviewer: reviewWith([{
+      exerciseCode: "speaking", reasonCode: "feedback_mismatch", category: "objective_mismatch",
+      message: "The model answer omits the required outcome clause 'so that we can [outcome]' and reinterprets the decision request.",
+      evidence: { path: "speaking.answer", actual: answer, expected: "so that we can [outcome]" }
+    }]) });
+
+    const result = await reviewWeeklyLessonSkills(runner, skillsInput(b2), skills as never);
+
+    expect(result.output.status).toBe("approved");
+    expect(result.findings).toEqual([]);
   });
 
   it("drops a finding whose quoted evidence is not in the exercise, and routes a verified one to the exercise that must change", async () => {

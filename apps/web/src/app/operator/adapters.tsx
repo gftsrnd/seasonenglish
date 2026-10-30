@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
+import { lexicalRelationCoverageSatisfied, relationExemptionIsCredible } from "@e4s/domain/content";
 import { cancelExclusiveAudio, claimExclusiveAudio } from "../../features/experience/audio-precedence.js";
 import type {
   AssessmentLevelFormSlotView,
@@ -118,6 +119,10 @@ function lessonSetWarnings(source: ContentLessonSetVersionView): OperatorLessonS
   let phrases = 0;
   let details = 0;
   const detailIssues: NonNullable<OperatorLessonSetView["warnings"]["detailIssues"]> = [];
+  // The generation contract permits at most two absent extended-vocabulary
+  // fields for the entire CEFR level.  Do not turn those permitted light gaps
+  // into an Operator repair banner.
+  const permittedLightLexicalGaps = operatorVocabularyLightGapCount(source) <= 2 && !operatorHasInvalidLexicalExemption(source);
   for (const lesson of source.lessons) {
     const parts = new Map(lesson.parts.map(part => [part.code, part]));
     if (REQUIRED_LESSON_PARTS.some(code => !parts.has(code))) incomplete += 1;
@@ -154,8 +159,9 @@ function lessonSetWarnings(source: ContentLessonSetVersionView): OperatorLessonS
     const missingRequiredParts = REQUIRED_LESSON_PARTS.filter((code) => !parts.has(code));
     const shortQuestions = !listeningOptions || listeningOptions.length < 4 || !readingOptions || readingOptions.length < 4;
     const missingWordStructure = items.some(item => !hasLegacyOrStructuredValue(item.family) || !hasLegacyOrStructuredValue(item.umbrella));
-    const missingSynonymCoverage = items.length > 0 && !items.some(item => hasLegacyOrStructuredValue(item.synonyms));
-    const missingWordDetails = missingWordStructure || missingSynonymCoverage;
+    const missingLexicalRelationCoverage = items.length > 0
+      && !items.some((item) => lexicalRelationCoverageSatisfied(item, source.cefr));
+    const missingWordDetails = !permittedLightLexicalGaps && (missingWordStructure || missingLexicalRelationCoverage);
     if (missingRequiredParts.length > 0 || grammarUnavailable || pronunciationIncomplete || pronunciationMismatches.length > 0 || shortQuestions || missingWordDetails) {
       details += 1;
       const missing: string[] = missingRequiredParts.map((code) => LESSON_PART_LABELS[code]);
@@ -169,7 +175,7 @@ function lessonSetWarnings(source: ContentLessonSetVersionView): OperatorLessonS
         if (!hasLegacyOrStructuredValue(item.family)) missing.push(`${word}: word family`);
         if (!hasLegacyOrStructuredValue(item.umbrella)) missing.push(`${word}: từ bao trùm`);
       }
-      if (missingSynonymCoverage) missing.push("từ đồng nghĩa");
+      if (missingLexicalRelationCoverage) missing.push("quan hệ nghĩa (đồng nghĩa hoặc trái nghĩa)");
       detailIssues.push({
         lessonId: lesson.id,
         dayLabel: ["T2", "T3", "T4", "T5", "T6"][lesson.dayNumber - 1] ?? `Bài ${lesson.dayNumber}`,
@@ -210,7 +216,32 @@ function lessonSetWarnings(source: ContentLessonSetVersionView): OperatorLessonS
 
 function hasLegacyOrStructuredValue(value: unknown): boolean {
   if (Array.isArray(value)) return value.length > 0;
-  return typeof value === "string" ? value.trim().length > 0 && value.trim() !== "—" : Boolean(value && typeof value === "object");
+  if (typeof value === "string") return value.trim().length > 0 && value.trim() !== "—";
+  if (!value || typeof value !== "object") return false;
+  return Object.values(value as Record<string, unknown>).some((entry) => hasLegacyOrStructuredValue(entry));
+}
+
+function operatorVocabularyLightGapCount(source: ContentLessonSetVersionView): number {
+  return source.lessons.reduce((count, lesson) => {
+    const vocabulary = asRecord(lesson.parts.find((part) => part.code === "vocabulary")?.content);
+    const items = asArray(vocabulary?.items)?.map(asRecord).filter((item): item is Record<string, unknown> => item !== undefined) ?? [];
+    return count + items.reduce((itemCount, item) => itemCount
+      + (hasLegacyOrStructuredValue(item.family) ? 0 : 1)
+      + (hasLegacyOrStructuredValue(item.umbrella) ? 0 : 1)
+      + (lexicalRelationCoverageSatisfied(item, source.cefr) ? 0 : 1), 0);
+  }, 0);
+}
+
+function operatorHasInvalidLexicalExemption(source: ContentLessonSetVersionView): boolean {
+  return source.lessons.some((lesson) => {
+    const vocabulary = asRecord(lesson.parts.find((part) => part.code === "vocabulary")?.content);
+    const items = asArray(vocabulary?.items)?.map(asRecord).filter((item): item is Record<string, unknown> => item !== undefined) ?? [];
+    return items.some((item) => {
+      const status = item.relationStatus;
+      return (status === "no_natural_relation" || status === "above_cefr_level")
+        && !relationExemptionIsCredible(item, source.cefr);
+    });
+  });
 }
 
 export interface DashboardAdapterContext {

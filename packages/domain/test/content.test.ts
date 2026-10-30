@@ -3,7 +3,9 @@ import {
   approveContentVersion,
   containsVietnameseLearnerText,
   retirePublishedContent,
+  lexicalRelationCoverageSatisfied,
   submitContentForReview,
+  evaluateGeneratedLessonQuality,
   validateLessonDraft,
   validateGenerationFindingsForPublication,
   validateLessonPublication
@@ -50,6 +52,63 @@ function englishLesson(dayNumber = 1) {
 }
 
 describe("content publishing policy", () => {
+  it("permits at most two isolated lexical metadata gaps but blocks every missing learning component", () => {
+    const vocabularyLightGaps = structuredClone(completeLesson) as any;
+    const items = vocabularyLightGaps.parts.find((part: any) => part.code === "vocabulary").content.items;
+    for (const item of items) {
+      item.family = [{ word: `${item.word}s`, type: "noun" }];
+      item.umbrella = { word: "work word" };
+      item.synonyms = [{ word: `related ${item.word}` }];
+      item.antonyms = [];
+      item.relationStatus = "provided";
+    }
+    const cleanVocabularyLesson = structuredClone(vocabularyLightGaps);
+    items[0].synonyms = [];
+    items[0].antonyms = [];
+    items[0].relationStatus = "generation_missed";
+    items[1].umbrella = null;
+    const fiveLessonsWithTwoLightGaps = [vocabularyLightGaps, ...[2, 3, 4, 5].map((dayNumber) => ({ ...structuredClone(cleanVocabularyLesson), dayNumber }))];
+
+    expect(evaluateGeneratedLessonQuality({
+      cefr: "A1",
+      lessons: fiveLessonsWithTwoLightGaps,
+      findings: []
+    })).toMatchObject({ ready: true, blockingIssues: [], lightIssues: expect.any(Array) });
+
+    const oneDayWithTwoLightGaps = evaluateGeneratedLessonQuality({
+      cefr: "A1",
+      lessons: [vocabularyLightGaps],
+      findings: []
+    });
+    expect(oneDayWithTwoLightGaps.lightIssues).toHaveLength(2);
+
+    const blankUmbrella = structuredClone(vocabularyLightGaps);
+    blankUmbrella.parts.find((part: any) => part.code === "vocabulary").content.items[1].umbrella = { word: " ", meaning: "", siblings: [] };
+    expect(evaluateGeneratedLessonQuality({ cefr: "A1", lessons: [blankUmbrella], findings: [] }).lightIssues)
+      .toEqual(expect.arrayContaining([expect.objectContaining({ message: expect.stringContaining("thiếu từ bao trùm") })]));
+
+    const threeGaps = structuredClone(fiveLessonsWithTwoLightGaps);
+    threeGaps[0].parts.find((part: any) => part.code === "vocabulary").content.items[2].family = [];
+    expect(evaluateGeneratedLessonQuality({ cefr: "A1", lessons: threeGaps, findings: [] }).ready).toBe(false);
+
+    const missingSpeaking = structuredClone(vocabularyLightGaps) as any;
+    missingSpeaking.parts = missingSpeaking.parts.filter((part: any) => part.code !== "speaking");
+    expect(evaluateGeneratedLessonQuality({ cefr: "A1", lessons: [missingSpeaking], findings: [] }).blockingIssues)
+      .toEqual(expect.arrayContaining([expect.objectContaining({ code: "speaking" })]));
+  });
+
+  it("treats a usable relation or a credible CEFR exemption as complete lexical coverage", () => {
+    expect(lexicalRelationCoverageSatisfied({
+      word: "Monday", type: "noun", meaning: "thứ Hai", synonyms: [], antonyms: [], relationStatus: "no_natural_relation"
+    }, "A1")).toBe(true);
+    expect(lexicalRelationCoverageSatisfied({
+      word: "send", type: "verb", meaning: "gửi", synonyms: [], antonyms: [], relationStatus: "no_natural_relation"
+    }, "A2")).toBe(false);
+    expect(lexicalRelationCoverageSatisfied({
+      word: "send", type: "verb", meaning: "gửi", synonyms: [], antonyms: [{ word: "receive" }], relationStatus: "provided"
+    }, "A2")).toBe(true);
+  });
+
   it("allows an accented Vietnamese proper noun inside otherwise English B1+ guidance", () => {
     expect(containsVietnameseLearnerText("Report the Đà Nẵng travel expense in one sentence.")).toBe(false);
     expect(containsVietnameseLearnerText("Hãy báo cáo chi phí đi Đà Nẵng trong một câu.")).toBe(true);
