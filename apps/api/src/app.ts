@@ -12,7 +12,7 @@ import { registerContentRoutes, registerMonthlyContentRoutes } from "./modules/c
 import { registerEngagementRoutes } from "./modules/engagement/index.js";
 import { registerFileRoutes } from "./modules/files/index.js";
 import { registerIdentityRoutes, type IdentityEmailSender } from "./modules/identity/index.js";
-import { registerLearningRoutes } from "./modules/learning/index.js";
+import { registerLearnerMonthlyRoutes, registerLearningRoutes } from "./modules/learning/index.js";
 import { registerManagerRoutes, type ReminderEmailSender } from "./modules/manager/index.js";
 import type { ContentMediaService } from "./modules/media/index.js";
 import { registerNotificationRoutes } from "./modules/notifications/index.js";
@@ -70,6 +70,7 @@ export function buildApi(options: BuildApiOptions): FastifyInstance {
     otpSecret: options.otpSecret ?? "local-only-change-me"
   });
   registerLearningRoutes(app, options.pool, options.aiRunner, options.mediaService, options.aiRunnerFactory);
+  registerLearnerMonthlyRoutes(app, options.pool);
   registerAssessmentRoutes(app, options.pool, options.aiRunner, options.aiRunnerFactory);
   registerContentRoutes(app, options.pool, options.aiRunner, options.storage, options.aiRunnerFactory, options.mediaService);
   registerMonthlyContentRoutes(app, options.pool, options.aiRunner, options.aiRunnerFactory);

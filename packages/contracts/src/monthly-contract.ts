@@ -1,5 +1,6 @@
 import type { CefrLevel } from "./domain-contract.js";
 import type { ContentLessonDraftInput } from "./content-contract.js";
+import type { LessonLockView } from "./learning-contract.js";
 
 /** Cơ chế học theo tháng — màn Vận hành. */
 
@@ -135,3 +136,65 @@ export interface MonthlyExamOperatorView {
   };
   checks: Array<{ code: string; passed: boolean; detail: string }>;
 }
+
+/** Trạng thái tháng của học viên (trang chủ + màn bài thi tháng). */
+export type LearnerMonthMode = "join_current_month" | "wait_next_month" | "locked_missed_exam" | "unlocked_by_manager";
+export type MonthlyExamAccess = "not_open_yet" | "open" | "locked";
+export type MonthlyExamAppealStatus = "pending" | "approved" | "rejected" | "auto_approved";
+
+export interface LearnerMonthLessonView {
+  id: string;
+  lessonNumber: number;
+  date: string;
+  title: string;
+  status: "not_started" | "in_progress" | "completed";
+  lock: LessonLockView | null;
+  review: boolean;
+}
+
+export interface LearnerMonthView {
+  month: string;
+  label: string;
+  today: string;
+  examDate: string;
+  lessonCount: number;
+  studyDayCount: number;
+  cefr: CefrLevel | null;
+  /** Null khi chưa có ghi danh tháng (chưa duyệt mức). */
+  enrollment: {
+    mode: LearnerMonthMode;
+    reason: string;
+    ratioPercent: number | null;
+    startsOn: string | null;
+    effectiveDayCount: number;
+    maxAbsences: number;
+    countsForLevelUp: boolean;
+  } | null;
+  /** Khung + mọi bài ngày + đề thi của level đã duyệt đủ. */
+  contentReady: boolean;
+  /** Chỉ luyện Season (chủ đề ngẫu nhiên, không ô từ bí mật) và mini game keyword. */
+  seasonOnly: boolean;
+  seasonOnlyReason: "no_content" | "waiting_next_month" | "locked_missed_exam" | null;
+  lessons: LearnerMonthLessonView[];
+  nextLesson: LearnerMonthLessonView | null;
+  completedLessons: number;
+  attendance: { effectiveDays: number; attendedDays: number; absentDays: number; maxAbsences: number; eligible: boolean };
+  exam: {
+    date: string;
+    durationMinutes: number;
+    opensAt: string;
+    locksAt: string;
+    access: MonthlyExamAccess;
+    /** Đề đã duyệt cho level của học viên. */
+    available: boolean;
+    eligible: boolean;
+    attemptStatus: "none" | "in_progress" | "submitted" | "pending_review" | "approved" | "needs_retry";
+    appeal: { status: MonthlyExamAppealStatus; deadlineAt: string; createdAt: string; resolution: string | null } | null;
+    /** Vào thi được ngay bây giờ. */
+    canStart: boolean;
+    blockedReason: "not_open_yet" | "locked" | "not_eligible" | "no_exam" | "already_submitted" | "waiting" | null;
+  };
+  coach: { turnsThisMonth: number; monthlyTarget: number; dailyLimit: number };
+}
+
+export interface MonthlyExamAppealInput { reason: string }

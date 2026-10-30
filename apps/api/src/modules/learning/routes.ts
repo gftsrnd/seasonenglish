@@ -18,6 +18,7 @@ import type { FastifyInstance } from "fastify";
 import type { Pool } from "pg";
 import { z } from "zod";
 import { createRoleGuard } from "../identity/policy.js";
+import { clockForUser } from "../system/clock.js";
 import type { ContentMediaService } from "../media/index.js";
 
 const partCode = z.enum([
@@ -103,6 +104,34 @@ export function registerLearningRoutes(
   const runnerFor = (actorId: string) => aiRunnerFactory ? aiRunnerFactory(actorId) : Promise.resolve(aiRunner);
   const learnerOnly = createRoleGuard(pool, ["learner"]);
 
+  /** Bài tuần (cũ) hoặc bài tháng: cùng hợp đồng LearnerLessonRecord để các route bên dưới dùng chung. */
+  const findAnyLesson = async (learnerId: string, lessonId: string): Promise<LearnerLessonRecord | null> => {
+    const weekly = await repositories.learning.findLesson(learnerId, lessonId);
+    if (weekly) return weekly;
+    const now = (await clockForUser(pool, learnerId)).now();
+    const monthly = await repositories.learnerMonthly.findMonthLesson(learnerId, lessonId, now);
+    if (!monthly) return null;
+    const stored = monthly.record.progressEvidence;
+    return {
+      id: monthly.record.id,
+      title: monthly.record.title,
+      dayNumber: monthly.record.lessonNumber,
+      weekNumber: 0,
+      weekTopic: `Tháng ${Number(monthly.record.month.slice(5))}/${monthly.record.month.slice(0, 4)}`,
+      cefr: monthly.record.cefr,
+      content: monthly.record.content,
+      progress: {
+        status: monthly.record.progressStatus,
+        completedPartCodes: Array.isArray(stored.completedPartCodes) ? stored.completedPartCodes as LessonPartCode[] : [],
+        evidence: stored.evidence && typeof stored.evidence === "object" ? stored.evidence as Record<string, never> : {},
+        ...(monthly.record.progressScore !== null ? { score: Number(monthly.record.progressScore) } : {}),
+        ...(monthly.record.progressUpdatedAt ? { updatedAt: monthly.record.progressUpdatedAt.toISOString() } : {})
+      },
+      lock: monthly.lock
+    };
+  };
+
+
   app.get("/api/v1/learner/profile", { preHandler: learnerOnly }, async (request, reply) => {
     const record = await repositories.learning.getProfile(request.e4sSession!.user.id);
     if (!record) return reply.code(404).send({ code: "PROFILE_NOT_FOUND" });
@@ -175,8 +204,13 @@ export function registerLearningRoutes(
     if (!progress) return reply.code(404).send({ code: "LEARNER_NOT_FOUND" });
     const lifecycle = await repositories.learning.learnerLifecycle(learnerId, progress.points, progress.levelReadiness.eligible);
     const onboardingRequired = !profile || !isLearnerProfileComplete(profile.profile);
-    const lessons = context ? await repositories.learning.listLessons(learnerId, context.weekId) : [];
-    const summaries = lessons.map((lesson) => ({
+    // Cơ chế tháng: khi học viên đã có ghi danh tháng thì trang chủ dùng bài của tháng; chưa có thì giữ luồng tuần cũ.
+    const monthView = await repositories.learnerMonthly.monthView(learnerId, (await clockForUser(pool, learnerId)).now());
+    const monthActive = Boolean(monthView?.enrollment);
+    const lessons = !monthActive && context ? await repositories.learning.listLessons(learnerId, context.weekId) : [];
+    const summaries = monthActive
+      ? (monthView?.lessons ?? []).map((lesson) => ({ id: lesson.id, dayNumber: lesson.lessonNumber, title: lesson.title, status: lesson.status, lock: lesson.lock }))
+      : lessons.map((lesson) => ({
       id: lesson.id,
       dayNumber: lesson.dayNumber,
       title: learnerLessonDisplayTitle(lesson),
@@ -189,6 +223,7 @@ export function registerLearningRoutes(
       ? calculateInactiveDays(progress.activity.map((item) => item.occurredAt), context.startDate)
       : null;
     const view: LearnerHomeView = {
+      ...(monthView ? { month: monthView } : {}),
       onboardingRequired,
       learner: { displayName: progress.learner.displayName, cefr: (context?.cefr ?? null) as CefrLevel | null },
       program: context ? { name: context.programName, weekCount: context.weekCount, cycleNumber: context.cycleNumber } : null,
@@ -247,7 +282,7 @@ export function registerLearningRoutes(
   app.get("/api/v1/lessons/:lessonId", { preHandler: learnerOnly }, async (request, reply) => {
     const params = z.object({ lessonId: z.uuid() }).safeParse(request.params);
     if (!params.success) return reply.code(400).send({ code: "INVALID_LESSON_ID" });
-    const lesson = await repositories.learning.findLesson(request.e4sSession!.user.id, params.data.lessonId);
+    const lesson = await findAnyLesson(request.e4sSession!.user.id, params.data.lessonId);
     if (!lesson) return reply.code(404).send({ code: "LESSON_NOT_FOUND" });
     return learnerLessonView(lesson);
   });
@@ -256,7 +291,7 @@ export function registerLearningRoutes(
     const params = z.object({ lessonId: z.uuid(), itemIndex: z.coerce.number().int().nonnegative() }).safeParse(request.params);
     if (!params.success) return reply.code(404).send({ code: "VOCABULARY_IMAGE_NOT_FOUND" });
     const learnerId = request.e4sSession!.user.id;
-    const lesson = await repositories.learning.findLesson(learnerId, params.data.lessonId);
+    const lesson = await findAnyLesson(learnerId, params.data.lessonId);
     if (!lesson) return reply.code(404).send({ code: "LESSON_NOT_FOUND" });
     const vocabulary = lesson.content.parts.find((part) => part.code === "vocabulary")?.content as LessonVocabularyContent | undefined;
     const item = vocabulary?.items[params.data.itemIndex];
@@ -282,7 +317,7 @@ export function registerLearningRoutes(
     const body = progressInput.safeParse(request.body);
     if (!params.success || !body.success) return reply.code(400).send({ code: "INVALID_PROGRESS" });
     const learnerId = request.e4sSession!.user.id;
-    const lesson = await repositories.learning.findLesson(learnerId, params.data.lessonId);
+    const lesson = await findAnyLesson(learnerId, params.data.lessonId);
     if (!lesson) return reply.code(404).send({ code: "LESSON_NOT_FOUND" });
     if (lesson.lock) return reply.code(409).send({ code: "LESSON_LOCKED", lock: lesson.lock });
     const required = lesson.content.parts
@@ -309,7 +344,7 @@ export function registerLearningRoutes(
     const params = z.object({ lessonId: z.uuid() }).safeParse(request.params);
     if (!params.success) return reply.code(400).send({ code: "INVALID_LESSON" });
     const learnerId = request.e4sSession!.user.id;
-    const lesson = await repositories.learning.findLesson(learnerId, params.data.lessonId);
+    const lesson = await findAnyLesson(learnerId, params.data.lessonId);
     if (!lesson) return reply.code(404).send({ code: "LESSON_NOT_FOUND" });
     if (lesson.lock) return reply.code(409).send({ code: "LESSON_LOCKED", lock: lesson.lock });
     const completedPartCodes = lesson.content.parts
@@ -333,7 +368,7 @@ export function registerLearningRoutes(
     if (source.artifactKey !== undefined) evidence.artifactKey = source.artifactKey;
     if (source.translated !== undefined) evidence.translated = source.translated;
     const learnerId = request.e4sSession!.user.id;
-    const lesson = await repositories.learning.findLesson(learnerId, params.data.lessonId);
+    const lesson = await findAnyLesson(learnerId, params.data.lessonId);
     if (!lesson) return reply.code(404).send({ code: "LESSON_PART_NOT_FOUND" });
     if (lesson.lock) return reply.code(409).send({ code: "LESSON_LOCKED", lock: lesson.lock });
     const part = lesson.content.parts.find((candidate) => candidate.code === params.data.partCode);
@@ -370,7 +405,7 @@ export function registerLearningRoutes(
     const body = lessonAppealInput.safeParse(request.body);
     if (!params.success || !body.success) return reply.code(400).send({ code: "INVALID_LESSON_APPEAL" });
     const learnerId = request.e4sSession!.user.id;
-    const lesson = await repositories.learning.findLesson(learnerId, params.data.lessonId);
+    const lesson = await findAnyLesson(learnerId, params.data.lessonId);
     if (!lesson) return reply.code(404).send({ code: "LESSON_PART_NOT_FOUND" });
     if (lesson.lock) return reply.code(409).send({ code: "LESSON_LOCKED", lock: lesson.lock });
     const part = lesson.content.parts.find((candidate) => candidate.code === params.data.partCode);

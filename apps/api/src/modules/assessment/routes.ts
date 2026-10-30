@@ -35,8 +35,9 @@ import type { FastifyInstance } from "fastify";
 import type { Pool } from "pg";
 import { z } from "zod";
 import { createRoleGuard } from "../identity/policy.js";
+import { clockForUser } from "../system/clock.js";
 
-const kindParam = z.object({ kind: z.enum(["placement", "levelup", "level-up"]) });
+const kindParam = z.object({ kind: z.enum(["placement", "levelup", "level-up", "monthly_exam", "monthly-exam"]) });
 const attemptParam = z.object({ attemptId: z.uuid() });
 const responseParam = z.object({
   attemptId: z.uuid(),
@@ -539,15 +540,40 @@ export function registerAssessmentRoutes(app: FastifyInstance, pool: Pool, aiRun
       reason: body.data.reason
     });
     if (!decision) return reply.code(409).send({ code: "ASSESSMENT_NOT_REVIEWABLE" });
+    if (decision.status === "approved" && decision.approvedLevel) {
+      // Cơ chế người mới: tỉ lệ ngày hiệu lực còn lại ≥ 75% → học tháng này từ bài 1; < 75% → chờ tháng sau.
+      const owner = await pool.query<{ learner_id: string; kind: string }>(
+        `select aa.learner_id, ad.kind from assessment_attempts aa join assessment_versions av on av.id = aa.assessment_version_id join assessment_definitions ad on ad.id = av.definition_id where aa.id = $1`,
+        [params.data.attemptId]
+      );
+      const row = owner.rows[0];
+      if (row) {
+        const now = (await clockForUser(pool, row.learner_id)).now();
+        await repositories.learnerMonthly.placeLearner(row.learner_id, decision.approvedLevel, now, row.kind === "level_up" ? "level_up" : "placement");
+      }
+    }
     const view: AssessmentDecisionView = { ...decision, decidedAt: decision.decidedAt.toISOString() };
     return view;
   });
+
+  /** Đề thi tháng đã duyệt cho level & tháng hiện hành của học viên, đưa về cùng hợp đồng PublishedAssessmentRecord. */
+  const monthlyExamDefinition = async (learnerId: string): Promise<PublishedAssessmentRecord | null> => {
+    const now = (await clockForUser(pool, learnerId)).now();
+    const published = await repositories.learnerMonthly.publishedExamForLearner(learnerId, now);
+    return published ? {
+      definitionId: published.definitionId, versionId: published.versionId, assessmentKey: published.assessmentKey,
+      kind: "monthly_exam", title: published.title, version: published.version,
+      blueprint: published.blueprint as unknown as PublishedAssessmentRecord["blueprint"]
+    } : null;
+  };
 
   app.get("/api/v1/assessments/:kind", { preHandler: learnerOnly }, async (request, reply) => {
     const parsed = kindParam.safeParse(request.params);
     if (!parsed.success) return reply.code(400).send({ code: "INVALID_ASSESSMENT_KIND" });
     const kind = normalizeKind(parsed.data.kind);
-    const definition = await repositories.assessments.findPublished(kind);
+    const definition = kind === "monthly_exam"
+      ? await monthlyExamDefinition(request.e4sSession!.user.id)
+      : await repositories.assessments.findPublished(kind);
     if (!definition) return reply.code(404).send({ code: "ASSESSMENT_NOT_PUBLISHED" });
     const resumed = kind === "placement"
       ? await repositories.assessments.resumePlacementAttempt(request.e4sSession!.user.id, definition)
@@ -623,6 +649,16 @@ export function registerAssessmentRoutes(app: FastifyInstance, pool: Pool, aiRun
         return reply.code(409).send({ code: "LEVEL_UP_NOT_READY" });
       }
       definition = await repositories.assessments.findPublishedLevelUpForLearner(learnerId, progress.levelReadiness.targetLevel);
+    } else if (kind === "monthly_exam") {
+      // Bài thi tháng: mở 00:00 ngày thi, khoá 24:00 − thời lượng − 5 phút; cần đủ điều kiện điểm danh (hoặc khiếu nại được duyệt).
+      const now = (await clockForUser(pool, learnerId)).now();
+      const month = await repositories.learnerMonthly.monthView(learnerId, now);
+      if (!month?.exam.available) return reply.code(404).send({ code: "ASSESSMENT_NOT_PUBLISHED" });
+      if (month.exam.attemptStatus !== "none" && month.exam.attemptStatus !== "in_progress") return reply.code(409).send({ code: "MONTHLY_EXAM_ALREADY_SUBMITTED" });
+      if (month.exam.access === "not_open_yet") return reply.code(409).send({ code: "MONTHLY_EXAM_NOT_OPEN", opensAt: month.exam.opensAt });
+      if (month.exam.access === "locked") return reply.code(409).send({ code: "MONTHLY_EXAM_LOCKED", locksAt: month.exam.locksAt });
+      if (!month.exam.eligible) return reply.code(409).send({ code: "MONTHLY_EXAM_NOT_ELIGIBLE" });
+      definition = await monthlyExamDefinition(learnerId);
     } else {
       definition = await repositories.assessments.findPublished(kind);
     }
@@ -845,8 +881,10 @@ function levelFormBlueprint(targetLevel: "A2" | "B1" | "B2" | "C1", output: Leve
   };
 }
 
-function normalizeKind(kind: "placement" | "levelup" | "level-up"): AssessmentKind {
-  return kind === "levelup" ? "level-up" : kind;
+function normalizeKind(kind: "placement" | "levelup" | "level-up" | "monthly_exam" | "monthly-exam"): AssessmentKind {
+  if (kind === "levelup") return "level-up";
+  if (kind === "monthly-exam") return "monthly_exam";
+  return kind;
 }
 
 async function definitionForAttempt(
@@ -857,7 +895,8 @@ async function definitionForAttempt(
     const definition = await repository.findPublished(kind);
     if (definition?.versionId === attempt.assessmentVersionId) return definition;
   }
-  return null;
+  // Bài thi tháng: đọc đúng phiên bản của lượt làm (không phụ thuộc tháng hiện hành).
+  return repository.findPublishedByVersion(attempt.assessmentVersionId);
 }
 
 function taskFor(definition: PublishedAssessmentRecord, sectionCode: AssessmentSectionCode, taskKey: string): StoredAssessmentTask | null {

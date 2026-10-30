@@ -8,3 +8,4 @@ export * from "./schema.js";
 export * from "./seed.js";
 export * from "./sync-canonical-assessments.js";
 export * from "./monthly-repository.js";
+export * from "./learner-monthly-repository.js";

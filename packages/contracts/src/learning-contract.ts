@@ -1,4 +1,5 @@
 import type { CefrLevel } from "./domain-contract.js";
+import type { LearnerMonthView } from "./monthly-contract.js";
 import type { ContentImageAttribution } from "./media-contract.js";
 
 export type LessonPartCode =
@@ -244,6 +245,8 @@ export interface WeekView {
 }
 
 export interface LearnerHomeView {
+  /** Cơ chế tháng: có khi học viên đã được duyệt mức. Khi có, trang chủ dùng bài của tháng thay tuần. */
+  month?: LearnerMonthView;
   onboardingRequired: boolean;
   learner: { displayName: string; cefr: CefrLevel | null };
   program: { name: string; weekCount: number; cycleNumber?: number } | null;

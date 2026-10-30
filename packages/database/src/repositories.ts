@@ -3,8 +3,10 @@ import type { Pool, PoolClient } from "pg";
 import { buildLevelReadiness as calculateLevelReadiness, nextEffectiveMonday, passesLevelUpExam, createLevelRetryPlan, type LevelReadinessMetrics, type LevelReadinessThresholds } from "@e4s/domain/progression";
 import { evaluateGeneratedLessonQuality, validateGenerationFindingsForPublication, validateLessonPublication } from "@e4s/domain/content";
 import { lessonCompletionActivity } from "@e4s/domain/learning";
+import { buildMonthlyCalendar, localDateString, monthOf } from "@e4s/domain/calendar";
 import { generationFindingsFromPayload } from "./generation-findings.js";
 import { MonthlyContentRepository } from "./monthly-repository.js";
+import { LearnerMonthlyRepository } from "./learner-monthly-repository.js";
 import type {
   AccountRole,
   AudioArtifactInput,
@@ -373,7 +375,7 @@ export interface PublishedAssessmentRecord {
   definitionId: string;
   versionId: string;
   assessmentKey: string;
-  kind: "placement" | "level_up";
+  kind: "placement" | "level_up" | "monthly_exam" | "course_pass";
   title: string;
   version: number;
   blueprint: StoredAssessmentDefinition;
@@ -1295,6 +1297,8 @@ class LearningRepository {
         ]
       );
       await syncLearnerRewards(this.pool, input.learnerId);
+      // Cơ chế tháng: 1 ngày điểm danh = ngày học (T2–T6, không phải ngày thi) có hoàn thành ≥ 1 bài.
+      await recordMonthlyAttendance(this.pool, input.learnerId, input.lessonId);
     }
     return mapProgress(row.status, row.score, row.evidence, row.updated_at);
   }
@@ -4216,6 +4220,20 @@ class AssessmentRepository {
     } : null;
   }
 
+  /** Đề theo đúng phiên bản của lượt làm (bài thi tháng, pass course…), bất kể kind. */
+  async findPublishedByVersion(versionId: string): Promise<PublishedAssessmentRecord | null> {
+    const result = await this.pool.query<{
+      definition_id: string; version_id: string; assessment_key: string; kind: PublishedAssessmentRecord["kind"]; title: string; version: number; blueprint: StoredAssessmentDefinition;
+    }>(
+      `select ad.id as definition_id, av.id as version_id, ad.assessment_key, ad.kind, ad.title, av.version, av.blueprint
+       from assessment_versions av join assessment_definitions ad on ad.id = av.definition_id
+       where av.id = $1 and av.status in ('published', 'retired')`,
+      [versionId]
+    );
+    const row = result.rows[0];
+    return row ? { definitionId: row.definition_id, versionId: row.version_id, assessmentKey: row.assessment_key, kind: row.kind, title: row.title, version: row.version, blueprint: row.blueprint } : null;
+  }
+
   async findPublished(kind: AssessmentKind): Promise<PublishedAssessmentRecord | null> {
     const databaseKind = kind === "level-up" ? "level_up" : kind;
     const result = await this.pool.query<{
@@ -6394,30 +6412,9 @@ class AssessmentRepository {
         `update assessment_attempts set status = $2, updated_at = $3 where id = $1`,
         [input.attemptId, input.status, decidedAt]
       );
-      if (input.status === "approved" && input.approvedLevel && attempt.kind === "level_up") {
-        const effectiveAt = nextEffectiveMonday(decidedAt, "Asia/Ho_Chi_Minh");
-        const scoreRows = await client.query<{ section: AssessmentSectionCode; score: string }>(
-          "select section, score::text from assessment_scores where attempt_id = $1 order by section", [input.attemptId]
-        );
-        const examScores = Object.fromEntries(scoreRows.rows.map((row) => [row.section, Number(row.score)]));
-        await client.query(
-          `insert into scheduled_level_changes
-             (id, learner_id, assessment_attempt_id, from_cefr, to_cefr, effective_at, status,
-              approved_by, reason, evidence)
-           values ($1, $2, $3, $4, $5, $6, 'scheduled', $7, $8, $9::jsonb)
-           on conflict (assessment_attempt_id) do nothing`,
-          [randomUUID(), attempt.learner_id, input.attemptId, attempt.current_level, input.approvedLevel,
-            effectiveAt, input.reviewerId, input.reason, JSON.stringify({
-              examScores,
-              challenge: {
-                completedTurns: Number(attempt.challenge_turns ?? 0),
-                average: Number(attempt.challenge_average ?? 0),
-                offTopic: Number(attempt.challenge_off_topic ?? 0),
-                passed: true
-              }
-            })]
-        );
-      } else if (input.status === "approved" && input.approvedLevel) {
+      // Cơ chế tháng (31/10/2026): mức mới có hiệu lực ngay theo cơ chế người mới (route gọi placeLearner);
+      // không còn "hiệu lực từ Thứ Hai tuần sau" (scheduled_level_changes deprecated).
+      if (input.status === "approved" && input.approvedLevel) {
         await client.query(
           `update enrollments set cefr = $2, cefr_approved = true where learner_id = $1`,
           [attempt.learner_id, input.approvedLevel]
@@ -6429,8 +6426,7 @@ class AssessmentRepository {
          values ($1, $2, $3, 'assessment.decision', 'assessment_attempt', $4, $5::jsonb, $6)`,
         [randomUUID(), attempt.organization_id, input.reviewerId, input.attemptId,
           JSON.stringify({ status: input.status, approvedLevel: input.approvedLevel, reason: input.reason,
-            ...(attempt.kind === "level_up" && input.status === "approved"
-              ? { effectiveAt: nextEffectiveMonday(decidedAt, "Asia/Ho_Chi_Minh") } : {}) }), randomUUID()]
+            effectiveImmediately: input.status === "approved" }), randomUUID()]
       );
       await client.query("commit");
       return {
@@ -11887,8 +11883,21 @@ export function createRepositories(pool: Pool) {
     aiRuns: new AiRunRepository(pool),
     jobs: new JobRepository(pool),
     manager: new ManagerRepository(pool),
-    monthly: new MonthlyContentRepository(pool)
+    monthly: new MonthlyContentRepository(pool),
+    learnerMonthly: new LearnerMonthlyRepository(pool)
   };
 }
 
 export type DatabaseRepositories = ReturnType<typeof createRepositories>;
+
+/** Ghi ngày điểm danh theo giờ Việt Nam; ngày thi và T7/CN không tính. Idempotent theo (learner, ngày). */
+async function recordMonthlyAttendance(pool: Pool, learnerId: string, lessonId: string, now: Date = new Date()): Promise<void> {
+  const date = localDateString(now);
+  const calendar = buildMonthlyCalendar(monthOf(date));
+  if (!calendar.effectiveDays.includes(date)) return;
+  await pool.query(
+    `insert into learner_attendance_days (learner_id, attendance_date, lesson_id) values ($1, $2, $3)
+     on conflict (learner_id, attendance_date) do nothing`,
+    [learnerId, date, lessonId]
+  );
+}
