@@ -69,7 +69,12 @@ describe("content publishing policy", () => {
     items[1].umbrella = null;
     const fiveLessonsWithTwoLightGaps = [vocabularyLightGaps, ...[2, 3, 4, 5].map((dayNumber) => {
       const lesson = { ...structuredClone(cleanVocabularyLesson), dayNumber };
-      for (const item of lesson.parts.find((part: any) => part.code === "vocabulary").content.items) item.word = `${item.word} ${dayNumber}`;
+      for (const item of lesson.parts.find((part: any) => part.code === "vocabulary").content.items) {
+        item.word = `${item.word} ${dayNumber}`;
+        item.family = item.family.map((entry: any) => ({ ...entry, word: `${entry.word} ${dayNumber}` }));
+        item.umbrella = { ...item.umbrella, word: `${item.umbrella.word} ${dayNumber}` };
+        item.synonyms = item.synonyms.map((entry: any) => ({ ...entry, word: `${entry.word} ${dayNumber}` }));
+      }
       return lesson;
     })];
 
@@ -106,6 +111,35 @@ describe("content publishing policy", () => {
     missingSpeaking.parts = missingSpeaking.parts.filter((part: any) => part.code !== "speaking");
     expect(evaluateGeneratedLessonQuality({ cefr: "A1", lessons: [missingSpeaking], findings: [] }).blockingIssues)
       .toEqual(expect.arrayContaining([expect.objectContaining({ code: "speaking" })]));
+  });
+
+  it("blocks a learner-facing lexical relation repeated in another day but ignores example text", () => {
+    const lessons = [1, 2, 3, 4, 5].map((dayNumber) => {
+      const lesson = structuredClone(completeLesson) as any;
+      lesson.dayNumber = dayNumber;
+      const items = lesson.parts.find((part: any) => part.code === "vocabulary").content.items;
+      for (const [index, item] of items.entries()) {
+        item.word = `target ${dayNumber}-${index + 1}`;
+        item.family = [{ word: `family ${dayNumber}-${index + 1}` }];
+        item.umbrella = { word: `group ${dayNumber}`, siblings: [] };
+        item.synonyms = [{ word: `relation ${dayNumber}-${index + 1}` }];
+        item.antonyms = [];
+        item.relationStatus = "provided";
+        item.examples = ["The team can reuse target 1-1 in an example."];
+      }
+      return lesson;
+    });
+
+    lessons[1].parts.find((part: any) => part.code === "vocabulary").content.items[0].synonyms = [{ word: "relation 1-1" }];
+    const quality = evaluateGeneratedLessonQuality({ cefr: "A1", lessons, findings: [] });
+
+    expect(quality.ready).toBe(false);
+    expect(quality.blockingIssues).toEqual(expect.arrayContaining([
+      expect.objectContaining({ dayNumber: 2, code: "vocabulary", message: expect.stringContaining("relation 1-1") })
+    ]));
+    expect(quality.blockingIssues).not.toEqual(expect.arrayContaining([
+      expect.objectContaining({ message: expect.stringContaining("example") })
+    ]));
   });
 
   it("treats a usable relation or a credible CEFR exemption as complete lexical coverage", () => {

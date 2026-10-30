@@ -31,7 +31,7 @@ import {
   type AiTaskRunner,
   type AiUsage
 } from "@e4s/ai";
-import { containsVietnameseLearnerText, validateLessonDraft, validateLessonPublication } from "@e4s/domain/content";
+import { buildLevelVocabularyRegistry, containsVietnameseLearnerText, validateLessonDraft, validateLessonPublication } from "@e4s/domain/content";
 import { lessonComponentsNeedingRepair, type LessonGenerationComponent, type LessonRepairMode } from "./enrichment.js";
 import { curatedRelationEvidence, lexicalRelationCoverageSatisfied } from "./lexical-relations.js";
 import { containsPromptEntities, ungroundedPromptEntities } from "./prompt-entities.js";
@@ -1042,7 +1042,7 @@ export type WeeklyLessonVocabularyInput = WeeklyLessonComponentInput & {
   grammarFormula: string | null;
   grammarExamples: [string, string] | null;
   excludedVocabulary?: string[];
-  /** Targets already taught in retained days during a component-only repair. */
+  /** Learner-facing lexical terms already introduced in retained days during a component-only repair. */
   forbiddenVocabulary?: string[];
 };
 
@@ -1056,10 +1056,9 @@ export async function generateWeeklyLessonVocabulary(
   };
   const forbiddenVocabularyFindings = (output: ReturnType<typeof weeklyLessonVocabularyOutputSchema.parse>) => {
     const forbidden = new Set((input.forbiddenVocabulary ?? []).map(normalizeVocabularyKey).filter(Boolean));
-    return (["word1", "word2", "word3"] as const).flatMap((slot) => {
-      const word = output[slot].word;
+    return vocabularyLexicalTerms(output).flatMap(({ word, path }) => {
       return forbidden.has(normalizeVocabularyKey(word))
-        ? [{ path: [slot, "word"] as PropertyKey[], message: `${word} is already a primary vocabulary target in an unchanged day; replace it.` }]
+        ? [{ path, message: `${word} is already introduced in an unchanged day; it may appear in practice examples only.` }]
         : [];
     });
   };
@@ -1075,7 +1074,7 @@ export async function generateWeeklyLessonVocabulary(
     ];
   const maxAttempts = options.maxAttempts ?? MAX_FREQUENTLY_INVALID_COMPONENT_ATTEMPTS;
   const forbiddenTargetPrompt = input.forbiddenVocabulary?.length
-    ? `RETAINED-DAY TARGETS — NEVER RETURN THESE AS word1, word2, OR word3: ${boundedJson(input.forbiddenVocabulary)}. They have already been taught in another day of this same CEFR level. Choose different lesson-focus vocabulary; they may appear only in practice examples, never as new targets.`
+    ? `RETAINED-DAY VOCABULARY — NEVER RETURN THESE AS a target, word family, synonym, antonym, umbrella, sibling, or lexical-detail card: ${boundedJson(input.forbiddenVocabulary)}. They have already been introduced in another day of this same CEFR level. They may appear only in practice examples.`
     : "";
   const initialPrompt = forbiddenTargetPrompt
     ? `${VOCABULARY_CONTRACT}\n\n${forbiddenTargetPrompt}`
@@ -1148,8 +1147,8 @@ export async function generateWeeklyLessonVocabulary(
         ...(mandatoryReplacementTargets.length > 0 ? [
           `MANDATORY ANTONYM REPLACEMENT: ${boundedJson(mandatoryReplacementTargets)} returned antonym1=null, so these target words are forbidden in this repair. Replace each with a lesson-focus word that has a genuine same-part-of-speech antonym, and fill antonym1 before addressing optional relations.`
         ] : []),
-        `FORBIDDEN TARGET WORDS (case-insensitive): ${boundedJson([...(input.excludedVocabulary ?? []), ...(input.forbiddenVocabulary ?? []), ...mandatoryReplacementTargets])}.`,
-        "If a defect says meaning must be in Vietnamese, translate that meaning into natural Vietnamese (never copy an English loanword like 'camera', 'video', 'email', or 'microphone' unchanged as the Vietnamese meaning). Before returning, compare each replacement target word against every forbidden word."
+        `FORBIDDEN LEARNER-FACING WORDS (case-insensitive): ${boundedJson([...(input.excludedVocabulary ?? []), ...(input.forbiddenVocabulary ?? []), ...mandatoryReplacementTargets])}.`,
+        "If a defect says meaning must be in Vietnamese, translate that meaning into natural Vietnamese (never copy an English loanword like 'camera', 'video', 'email', or 'microphone' unchanged as the Vietnamese meaning). Before returning, compare every target and lexical-relation word against every forbidden word."
       ].join("\n");
       const mergedFindings = (candidate: ReturnType<typeof weeklyLessonVocabularyOutputSchema.parse>) => {
         const merged = { ...current };
@@ -3362,7 +3361,7 @@ export async function generateWeeklyLessons(
       if (vocabularyResults[index]) continue;
       const candidate = candidates[index];
       if (!candidate) continue;
-      const words = vocabularyWords(candidate.output);
+      const words = uniqueVocabularyTerms(vocabularyLexicalTerms(candidate.output));
       const local = new Set<string>();
       const duplicates = words.filter((word) => {
         const key = normalizeVocabularyKey(word);
@@ -3379,7 +3378,7 @@ export async function generateWeeklyLessons(
       }
     }
     if (retryIndexes.length === 0 || attempt === MAX_COMPONENT_ATTEMPTS) break;
-    const acceptedWords = vocabularyResults.flatMap((item) => item ? vocabularyWords(item.output) : []);
+    const acceptedWords = vocabularyResults.flatMap((item) => item ? uniqueVocabularyTerms(vocabularyLexicalTerms(item.output)) : []);
     const retried = await settleSequentially(retryIndexes, async (index): Promise<[number, VocabularyResult]> => {
       const input = baseInputs[index]!;
       const foundation = foundationBodyResults[index]?.output;
@@ -3404,11 +3403,10 @@ export async function generateWeeklyLessons(
       }
     });
   }
-  // A thematic week may legitimately recycle one core word for spaced practice.
-  // We ask once for a more diverse replacement, but a repeated cross-day word
-  // must not discard five otherwise valid lessons. Per-day distinctness remains
-  // enforced by the strict vocabulary schema.
-  const completeVocabularyResults = vocabularyResults.map((item, index) => item ?? candidates[index]);
+  // A repeated learner-facing term is never accepted as a new vocabulary card.
+  // Keep other days running, but leave only this day's vocabulary component for
+  // targeted repair. Reuse remains allowed inside practice prose.
+  const completeVocabularyResults = vocabularyResults;
   completeVocabularyResults.forEach((item, index) => {
     if (item && !vocabularyResults[index] && rejectedWords[index]!.size > 0) {
       generationFindings.push({
@@ -3599,6 +3597,18 @@ export async function generateWeeklyLessons(
     ...settledFailures(foundationSettled, generationDays, "foundation"),
     ...settledFailures(firstVocabularySettled, generationDays, "vocabulary")
       .filter((failure) => !completeVocabularyResults[generationDays.findIndex((dayNumber) => dayNumber === failure.dayNumber)]),
+    ...generationDays.flatMap((dayNumber, index) => {
+      const candidate = candidates[index];
+      return !completeVocabularyResults[index] && candidate && rejectedWords[index]!.size > 0
+        ? [{
+          dayNumber,
+          component: "vocabulary",
+          code: "DUPLICATE_VOCABULARY",
+          message: `Từ vựng trùng sau ${candidate.attempts} lần thử.`,
+          issues: [...rejectedWords[index]!].map((word) => ({ word }))
+        }]
+        : [];
+    }),
     ...settledFailures(comprehensionSettled, generationDays, "skills.comprehension"),
     ...settledFailures(languagePracticeSettled, generationDays, "skills.languagePractice"),
     ...settledFailures(speakingSettled, generationDays, "skills.speaking")
@@ -3772,26 +3782,40 @@ function vocabularyWords(vocabulary: Vocabulary): string[] {
   return [vocabulary.word1.word, vocabulary.word2.word, vocabulary.word3.word];
 }
 
+function vocabularyLexicalTerms(vocabulary: Vocabulary): Array<{ word: string; path: PropertyKey[] }> {
+  const terms: Array<{ word: string; path: PropertyKey[] }> = [];
+  for (const slot of ["word1", "word2", "word3"] as const) {
+    const item = vocabulary[slot];
+    terms.push({ word: item.word, path: [slot, "word"] });
+    for (const family of [item.family1, item.family2]) if (family) terms.push({ word: family.word, path: [slot, "family"] });
+    for (const relation of [item.synonym1, item.synonym2]) if (relation) terms.push({ word: relation.word, path: [slot, "synonym"] });
+    if (item.antonym1) terms.push({ word: item.antonym1.word, path: [slot, "antonym"] });
+    terms.push({ word: item.umbrellaWord, path: [slot, "umbrellaWord"] });
+    for (const sibling of [item.sibling1, item.sibling2, item.sibling3]) if (sibling) terms.push({ word: sibling.word, path: [slot, "sibling"] });
+  }
+  return terms;
+}
+
+function uniqueVocabularyTerms(terms: ReadonlyArray<{ word: string }>): string[] {
+  const byKey = new Map<string, string>();
+  for (const term of terms) {
+    const key = normalizeVocabularyKey(term.word);
+    if (key && !byKey.has(key)) byKey.set(key, term.word);
+  }
+  return [...byKey.values()];
+}
+
 function normalizeVocabularyKey(value: string): string {
   return value.trim().toLocaleLowerCase("en-US").replace(/\s+/g, " ");
 }
 
-/** Primary targets from days a component repair deliberately leaves untouched. */
+/** Learner-facing lexical terms from days a component repair deliberately leaves untouched. */
 export function preservedWeeklyVocabulary(
   lessons: readonly ContentLessonDraftInput[],
   repairedDays: readonly number[]
 ): string[] {
   const repaired = new Set(repairedDays);
-  return lessons.flatMap((lesson) => {
-    if (repaired.has(lesson.dayNumber)) return [];
-    const vocabulary = lesson.parts.find((part) => part.code === "vocabulary")?.content;
-    if (!vocabulary || typeof vocabulary !== "object" || Array.isArray(vocabulary)) return [];
-    const items = (vocabulary as { items?: unknown }).items;
-    if (!Array.isArray(items)) return [];
-    return items.flatMap((item) => item && typeof item === "object" && "word" in item && typeof item.word === "string"
-      ? [item.word]
-      : []);
-  });
+  return buildLevelVocabularyRegistry(lessons.filter((lesson) => !repaired.has(lesson.dayNumber))).entries.map((entry) => entry.word);
 }
 
 export function boundedVocabularyHistory(values: readonly string[], limit = 80): string[] {
@@ -3803,31 +3827,15 @@ export function boundedVocabularyHistory(values: readonly string[], limit = 80):
 export function validateWeeklyVocabularyCrossDayUniqueness(
   lessons: readonly ContentLessonDraftInput[]
 ): LessonGenerationFinding[] {
-  const ownerByWord = new Map<string, number>();
-  const findings: LessonGenerationFinding[] = [];
-  for (const lesson of [...lessons].sort((left, right) => left.dayNumber - right.dayNumber)) {
-    const vocabulary = lesson.parts.find((part) => part.code === "vocabulary")?.content as { items?: Array<{ word?: unknown }> } | undefined;
-    for (const item of vocabulary?.items ?? []) {
-      if (typeof item.word !== "string") continue;
-      const key = normalizeVocabularyKey(item.word);
-      if (!key) continue;
-      const priorDay = ownerByWord.get(key);
-      if (priorDay !== undefined && priorDay !== lesson.dayNumber) {
-        findings.push({
-          dayNumber: lesson.dayNumber,
-          component: "vocabulary",
-          code: "DUPLICATE_WEEKLY_VOCABULARY",
-          severity: "error",
-          message: `'${item.word}' is already taught as a vocabulary target on T${priorDay}; replace it in T${lesson.dayNumber}, while practice-sentence reinforcement remains allowed.`,
-          issues: [{ word: item.word, duplicateOfDay: priorDay }],
-          repairAction: "regenerate_component"
-        });
-      } else {
-        ownerByWord.set(key, lesson.dayNumber);
-      }
-    }
-  }
-  return findings;
+  return buildLevelVocabularyRegistry(lessons).duplicateEntries.map(({ entry, prior }) => ({
+    dayNumber: entry.dayNumber,
+    component: "vocabulary",
+    code: "DUPLICATE_WEEKLY_VOCABULARY",
+    severity: "error",
+    message: `'${entry.word}' is already introduced as ${prior.kind} on T${prior.dayNumber}; replace the learner-facing card in T${entry.dayNumber}, while practice-sentence reinforcement remains allowed.`,
+    issues: [{ word: entry.word, duplicateOfDay: prior.dayNumber, kind: entry.kind, priorKind: prior.kind }],
+    repairAction: "regenerate_component"
+  }));
 }
 
 function parseComponent<T>(
@@ -4696,7 +4704,7 @@ function buildLesson(
       } : undefined,
       vocabulary ? {
         code: "vocabulary", title: partTitle(vocabulary.title),
-        content: { items: [vocabulary.word1, vocabulary.word2, vocabulary.word3].map(toVocabularyItem) }
+        content: toVocabularyPart([vocabulary.word1, vocabulary.word2, vocabulary.word3].map(toVocabularyItem))
       } : undefined,
       grammar ? {
         code: "grammar", title: partTitle(foundation?.grammar?.title ?? "Language focus"),
@@ -6206,6 +6214,25 @@ function toVocabularyItem(item: VocabularyItem) {
       : (item.relationStatus === "no_natural_relation" || item.relationStatus === "above_cefr_level")
         ? item.relationStatus
         : "generation_missed" as const
+  };
+}
+
+function toVocabularyPart(items: Array<ReturnType<typeof toVocabularyItem>>) {
+  const byUmbrella = new Map<string, { umbrella: { word: string; meaning: string }; itemWords: string[] }>();
+  for (const item of items) {
+    const word = item.umbrella.word.trim();
+    if (!word) continue;
+    const key = normalizeVocabularyKey(word);
+    const group = byUmbrella.get(key) ?? {
+      umbrella: { word, meaning: item.umbrella.meaning },
+      itemWords: []
+    };
+    if (!group.itemWords.includes(item.word)) group.itemWords.push(item.word);
+    byUmbrella.set(key, group);
+  }
+  return {
+    items,
+    groups: [...byUmbrella.values()].filter((group) => group.itemWords.length > 1)
   };
 }
 

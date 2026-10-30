@@ -1542,6 +1542,9 @@ h1,h2,h3,h4,h1 b,h2 b,h3 b,h4 b{font-weight:600 !important}
   letter-spacing: .09em;
   line-height: 1.35;
 }
+.lesson-page .lesson-vocabulary-group { display: grid; gap: 10px; margin-top: 12px; }
+.lesson-page .lesson-vocabulary-group-heading { margin: 0; color: #70685e; font-size: .78rem; font-weight: 800; letter-spacing: .05em; }
+.lesson-page .lesson-vocabulary-group-items { display: grid; gap: 8px; }
 .lesson-page .lesson-part--grammar,
 .lesson-page .lesson-part--pronunciation,
 .lesson-page .lesson-grammar-card,

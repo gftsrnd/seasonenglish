@@ -4271,10 +4271,35 @@ describe("direct component repair budgets", () => {
         ...part,
         content: {
           ...part.content,
-          items: (part.content.items as Array<Record<string, unknown>>).map((item, itemIndex) => ({
-            ...item,
-            word: primaryTargetsByDay[index]![itemIndex]
-          }))
+          items: (part.content.items as Array<Record<string, unknown>>).map((item, itemIndex) => {
+            // A valid retained lesson must have distinct learner-facing
+            // relations too, not merely a different primary target. This
+            // mirrors the level registry used by production generation.
+            if (dayNumber === 1) {
+              return { ...item, word: primaryTargetsByDay[index]![itemIndex] };
+            }
+            const suffix = `${dayNumber}-${itemIndex + 1}`;
+            const renameRelations = (value: unknown, prefix: string) => Array.isArray(value)
+              ? value.map((relation, relationIndex) => ({
+                ...(relation as Record<string, unknown>),
+                word: `${prefix}-${suffix}-${relationIndex + 1}`
+              }))
+              : value;
+            const umbrella = item.umbrella as Record<string, unknown>;
+            return {
+              ...item,
+              word: primaryTargetsByDay[index]![itemIndex],
+              family: renameRelations(item.family, "family"),
+              synonyms: renameRelations(item.synonyms, "synonym"),
+              antonyms: renameRelations(item.antonyms, "antonym"),
+              lexicalDetails: renameRelations(item.lexicalDetails, "detail"),
+              umbrella: {
+                ...umbrella,
+                word: `umbrella-${dayNumber}`,
+                siblings: renameRelations(umbrella.siblings, "sibling")
+              }
+            };
+          })
         }
       })
     }));
@@ -4810,9 +4835,11 @@ describe("lexical relation self-exemption", () => {
     const findings = validateWeeklyVocabularyCrossDayUniqueness([first, repeated]);
 
     expect(findings).toEqual(expect.arrayContaining([
-      expect.objectContaining({ dayNumber: 2, component: "vocabulary", code: "DUPLICATE_WEEKLY_VOCABULARY" })
+      expect.objectContaining({ dayNumber: 2, component: "vocabulary", code: "DUPLICATE_WEEKLY_VOCABULARY" }),
+      expect.objectContaining({
+        issues: expect.arrayContaining([expect.objectContaining({ word: "confirmation", kind: "family" })])
+      })
     ]));
-    expect(findings).toHaveLength(3);
   });
 
   it("keeps primary vocabulary from unchanged days forbidden during a targeted repair", () => {
@@ -4823,6 +4850,21 @@ describe("lexical relation self-exemption", () => {
     expect(preservedWeeklyVocabulary([retained, repaired], [2])).toEqual(expect.arrayContaining([
       "confirm", "clarify", "approve"
     ]));
+  });
+
+  it("persists one umbrella group for vocabulary targets that share a category", () => {
+    const a1 = levelCases[0];
+    const lesson = buildPartialLessonFromPipelineState(inputFor(a1), { vocabulary: vocabularyFor(a1) })!;
+    const content = lesson.parts.find((part) => part.code === "vocabulary")!.content as {
+      groups?: Array<{ umbrella: { word: string; meaning: string }; itemWords: string[] }>;
+    };
+
+    expect(content.groups).toEqual([
+      {
+        umbrella: { word: "workplace communication", meaning: "giao tiếp công việc" },
+        itemWords: ["confirm", "clarify", "approve"]
+      }
+    ]);
   });
 });
 

@@ -314,6 +314,15 @@ describe("lesson detail warnings", () => {
     expect(screen.getByRole("button", { name: "Nghe từ cùng họ: jobing" })).toBeInTheDocument();
   });
 
+  it("groups a legacy shared umbrella once in the operator preview", () => {
+    const view = adaptLessonSet(lessonSet([baseWord("paper"), baseWord("box"), baseWord("pen")]), { aiConnected: true });
+
+    render(<>{view.lessons[0]!.content}</>);
+
+    expect(screen.getAllByText("TỪ BAO TRÙM work communication")).toHaveLength(1);
+    expect(screen.getByRole("article", { name: "paper" }).closest(".lesson-vocabulary-group")).toContainElement(screen.getByRole("article", { name: "pen" }));
+  });
+
   it("renders study audio affordances instead of plain grammar and pronunciation text", () => {
     const source = lessonSet([{ ...baseWord("feedback"), meaning: "phản hồi" }]);
     const pronunciation = source.lessons[0]!.parts.find(part => part.code === "pronunciation")!;

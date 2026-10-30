@@ -2,7 +2,15 @@ import type { ContentGenerationFindingView, LessonPart, LessonPartCode } from "@
 import { validateLessonPartOrder } from "../learning/index.js";
 
 export { CURATED_LEXICAL_RELATIONS, curatedRelationEvidence, lexicalRelationCoverageSatisfied, relationExemptionIsCredible } from "./lexical-relations.js";
-export { evaluateGeneratedLessonQuality, type GeneratedLessonQuality, type GeneratedLessonQualityIssue } from "./generation-quality.js";
+export {
+  buildLevelVocabularyRegistry,
+  evaluateGeneratedLessonQuality,
+  type GeneratedLessonQuality,
+  type GeneratedLessonQualityIssue,
+  type LevelVocabularyRegistry,
+  type LevelVocabularyRegistryEntry,
+  type LevelVocabularyTermKind
+} from "./generation-quality.js";
 
 const requiredParts = [
   ["objective", "Mục tiêu"],

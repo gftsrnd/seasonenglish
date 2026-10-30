@@ -12,6 +12,7 @@ import type {
 import type { LearnerCallbacks, LessonView } from "./contracts.js";
 import { ErrorText, Notice, PageTitle, AppLink } from "./ui.js";
 import { VocabularyCard as SharedVocabularyCard, type VocabularyRelationChip } from "../shared/lesson/VocabularyCard.js";
+import { vocabularyPresentationBlocks } from "../shared/lesson/vocabulary-groups.js";
 import { conciseGrammarExample, conciseLessonObjective, conciseSpeakingModel, learnerFacingObjective, learnerFacingObjectiveBody, learnerObjectiveLead } from "../shared/lesson/presentation.js";
 import { lessonInstructionSteps } from "../shared/lesson/instructions.js";
 import { learnerLessonCopy, learnerLessonLanguageForCefr, lessonGuidanceOrFallback, type LearnerLessonLanguage, type LearnerLessonCopy } from "../shared/lesson/language.js";
@@ -675,8 +676,10 @@ export function SharedLessonPartContent({
      words?: unknown[];
     wordAudioUrls?: string[];
     items?: Array<LessonVocabularyItem | { type: "content" | "language"; text: string; condition: string; criterion: string; assessmentCode: string }>;
+    groups?: unknown;
   };
   const words = part.code === "vocabulary" ? (content.items ?? []) as LessonVocabularyItem[] : [];
+  const vocabularyBlocks = part.code === "vocabulary" ? vocabularyPresentationBlocks(words, content.groups) : [];
   const objectiveItems = part.code === "objective"
     ? (content.items ?? []).flatMap((item) => "text" in item && typeof item.text === "string" && (grammarAvailable || !("type" in item) || item.type !== "language") ? [item.text] : [])
     : [];
@@ -701,7 +704,10 @@ export function SharedLessonPartContent({
     {part.code === "pronunciation" && content.focus ? <div className="lesson-study-block lesson-pronunciation-summary"><div className="lesson-study-panel-header"><h2>{copy.pronunciationHeading}</h2></div><div className="lesson-grammar-formula-row"><p className="lesson-study-focus"><strong>{language === "en" ? `Sound ${targetSound}${pronunciationWords[0]?.word ? ` as in “${pronunciationWords[0].word}”` : ""}` : `Âm ${targetSound}${pronunciationWords[0]?.word ? ` như trong “${pronunciationWords[0].word}”` : ""}`}</strong></p></div>{content.instruction ? <p className="lesson-study-explanation">{pronunciationInstructionCopy(content.instruction, language)}</p> : null}</div> : null}
     {part.code === "speaking" && speakingModel ? <><p className="lesson-speaking-instruction"><strong>{copy.speakingInstructionLabel}</strong> <LessonPromptText value={content.instruction?.trim() || content.prompt?.trim() || (language === "en" ? "Follow the model sentence below and change one detail to fit your situation." : "Nói theo câu mẫu bên dưới và thay đổi một chi tiết cho phù hợp.")} /></p><div className={`card flat lesson-speaking-model${speakingModel.length <= 80 ? " lesson-speaking-model--inline" : ""}`}><strong>{speakingModel}</strong>{content.audioUrl ? <ExclusiveLessonAudio src={content.audioUrl} label={language === "en" ? "Listen to speaking model" : "Nghe audio mẫu phần Nói"} /> : null}</div></> : null}
      {part.code === "pronunciation" && pronunciationWords.length ? <div className="lesson-pronunciation-words" aria-label={language === "en" ? "Pronunciation practice words" : "Luyện từ phát âm"}>{pronunciationWords.slice(0, 3).map((item, index) => <button className="btn-sm btn-ghost lesson-example-card vocabulary-card-sound lesson-pronunciation-word-chip" type="button" aria-label={language === "en" ? `Listen to pronunciation word: ${item.word}` : `Nghe từ phát âm: ${item.word}`} onClick={() => playLessonText(item.word, pronunciationWordAudioUrls[index], speak, () => onPronunciationListened?.(item.word), 0.65)} key={item.word}><Volume2 size={14} aria-hidden="true" /><strong>{item.word}</strong>{item.ipa ? ` ${item.ipa}` : ""}</button>)}</div> : null}
-    {part.code === "vocabulary" ? words.map((item, itemIndex) => <VocabularyCard key={item.word} cefr={cefr} language={language} item={item} itemIndex={itemIndex} speak={speak} openModal={openVocabularyModal} resolveImage={resolveVocabularyImage} />) : null}
+    {part.code === "vocabulary" ? <div className="vocabulary-list">{vocabularyBlocks.map((block) => block.kind === "group"
+      ? <section className="lesson-vocabulary-group" key={`group-${block.umbrella.word}`}><h3 className="lesson-vocabulary-group-heading">{language === "en" ? "UMBRELLA WORD" : "TỪ BAO TRÙM"} {block.umbrella.word}</h3><div className="lesson-vocabulary-group-items">{block.items.map((item) => <VocabularyCard key={item.word} cefr={cefr} language={language} item={item} itemIndex={words.indexOf(item)} speak={speak} openModal={openVocabularyModal} resolveImage={resolveVocabularyImage} hideUmbrella />)}</div></section>
+      : <VocabularyCard key={block.item.word} cefr={cefr} language={language} item={block.item} itemIndex={words.indexOf(block.item)} speak={speak} openModal={openVocabularyModal} resolveImage={resolveVocabularyImage} />
+    )}</div> : null}
     {part.code !== "vocabulary" && part.code !== "objective" ? (content.items as LessonVocabularyItem[] | undefined)?.map((item) => <article className="word-card" key={item.word}><h3>{item.word}</h3><span className="ipa">{item.pronunciation}</span><p>{item.meaning}</p>{item.examples?.map((example) => <small key={example}>{example}</small>)}</article>) : null}
     {content.examples?.length && part.code !== "grammar" ? <ul>{content.examples.map((example) => <li key={example}>{example}</li>)}</ul> : null}
   </>;
@@ -808,7 +814,8 @@ function VocabularyCard({
   itemIndex,
   speak,
   openModal,
-  resolveImage
+  resolveImage,
+  hideUmbrella = false
 }: {
   cefr: LessonView["lesson"]["cefr"];
   language: LearnerLessonLanguage;
@@ -817,6 +824,7 @@ function VocabularyCard({
   speak: (text: string) => void;
   openModal: (state: VocabularyModalState) => void;
   resolveImage?: LearnerCallbacks["resolveLessonVocabularyImage"];
+  hideUmbrella?: boolean;
 }) {
   const lexicalDetails = item.lexicalDetails ?? [];
   const synonymDetail = lexicalDetails.find((detail) => detail.kind === "synonym");
@@ -844,7 +852,7 @@ function VocabularyCard({
       }))
     : [];
   const relations: VocabularyRelationChip[] = [
-    ...(item.umbrella && umbrellaWord ? [{ label: `${language === "en" ? copy.vocabulary.umbrellaWord.toUpperCase() : "TỪ BAO TRÙM"} ${umbrellaWord}`, ariaLabel: `${copy.vocabulary.umbrellaWord}: ${umbrellaWord}`, icon: "umbrella" as const, tone: "umb" as const, count: item.umbrella.siblings?.length ?? 0, onClick: () => openModal({ kind: "umbrella", item }) }] : []),
+    ...(!hideUmbrella && item.umbrella && umbrellaWord ? [{ label: `${language === "en" ? copy.vocabulary.umbrellaWord.toUpperCase() : "TỪ BAO TRÙM"} ${umbrellaWord}`, ariaLabel: `${copy.vocabulary.umbrellaWord}: ${umbrellaWord}`, icon: "umbrella" as const, tone: "umb" as const, count: item.umbrella.siblings?.length ?? 0, onClick: () => openModal({ kind: "umbrella", item }) }] : []),
     ...(item.synonyms?.length ? item.synonyms.map(value => {
       const detail = lexicalDetails.find((candidate) => candidate.kind === "synonym" && candidate.word.trim().toLocaleLowerCase() === value.word.trim().toLocaleLowerCase());
       return { label: `= ${value.word}`, ariaLabel: isB1Plus && detail ? `${language === "en" ? "View synonym" : "Xem từ đồng nghĩa"}: ${value.word}` : `${language === "en" ? "Listen to synonym" : "Nghe từ đồng nghĩa"}: ${value.word}`, tone: "synonym" as const, onClick: isB1Plus && detail ? () => openModal({ kind: "lexical", item, detail }) : () => playVocabularyWord(speak, value.word, value.audioUrl) };

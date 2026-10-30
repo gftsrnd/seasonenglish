@@ -911,6 +911,9 @@ body > .operator-modal-scope .operator-editor-section select { width: 100%; max-
   letter-spacing: .09em;
   line-height: 1.35;
 }
+.app-operator .operator-lesson-preview .lesson-vocabulary-group { display: grid; gap: 10px; margin-top: 12px; }
+.app-operator .operator-lesson-preview .lesson-vocabulary-group-heading { margin: 0; color: #70685e; font-size: .78rem; font-weight: 800; letter-spacing: .05em; }
+.app-operator .operator-lesson-preview .lesson-vocabulary-group-items { display: grid; gap: 8px; }
 .app-operator .operator-lesson-preview .lesson-part--grammar,
 .app-operator .operator-lesson-preview .lesson-part--pronunciation,
 .app-operator .operator-lesson-preview .lesson-grammar-card,

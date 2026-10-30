@@ -30,6 +30,7 @@ import type {
 } from "./types.js";
 import { Check, Mic, Square, Volume2 } from "lucide-react";
 import { VocabularyCard as SharedVocabularyCard, type VocabularyRelationChip } from "../shared/lesson/VocabularyCard.js";
+import { vocabularyPresentationBlocks } from "../shared/lesson/vocabulary-groups.js";
 import { conciseGrammarExample, conciseLessonObjective, conciseSpeakingModel, learnerFacingObjective, learnerFacingObjectiveBody, learnerObjectiveLead } from "../shared/lesson/presentation.js";
 import { lessonInstructionSteps } from "../shared/lesson/instructions.js";
 import { learnerLessonLanguageForCefr, lessonCopyForCefr, type LearnerLessonLanguage } from "../shared/lesson/language.js";
@@ -496,8 +497,12 @@ function renderLessonPart(code: string, value: unknown, media?: { cefr: string; 
   }
   if (code === "instruction") return <PreviewList values={strings("steps")} />;
   if (code === "vocabulary") {
-    const items = (asArray(content.items) ?? []).map(asRecord).filter((item): item is Record<string, unknown> => item !== undefined);
-    return <div className="vocabulary-list">{items.map((item, index) => <OperatorVocabularyCard item={item} index={index} media={media} key={`${String(item.word)}-${index}`} />)}</div>;
+    const items = (asArray(content.items) ?? []).map(asRecord).filter((item): item is Record<string, unknown> & { word: string } => typeof item?.word === "string");
+    const blocks = vocabularyPresentationBlocks(items, content.groups);
+    return <div className="vocabulary-list">{blocks.map((block) => block.kind === "group"
+      ? <section className="lesson-vocabulary-group" key={`group-${block.umbrella.word}`}><h3 className="lesson-vocabulary-group-heading">TỪ BAO TRÙM {block.umbrella.word}</h3><div className="lesson-vocabulary-group-items">{block.items.map((item) => <OperatorVocabularyCard item={item} index={items.indexOf(item)} media={media} key={item.word} hideUmbrella />)}</div></section>
+      : <OperatorVocabularyCard item={block.item} index={items.indexOf(block.item)} media={media} key={block.item.word} />
+    )}</div>;
   }
   if (code === "grammar") {
     const formula = text("formula", "theory") || "—";
@@ -640,7 +645,7 @@ function OperatorRecordingPreview() {
   return <div className="operator-speaking-recorder"><button className="btn-sm btn-ghost" type="button" aria-label="Ghi âm câu trả lời" onClick={() => void toggle()}>{recording ? <><Square size={15} aria-hidden="true" /> Dừng ghi</> : <><Mic size={16} aria-hidden="true" /> Ghi âm câu trả lời</>}</button>{error ? <p className="operator-recording-error">{error}</p> : null}{audioUrl ? <audio controls preload="metadata" src={audioUrl} aria-label="Nghe lại câu trả lời" /> : null}</div>;
 }
 
-function OperatorVocabularyCard({ item, index, media }: { item: Record<string, unknown>; index: number; media?: { lessonId: string; resolveVocabularyImage?: ((lessonId: string, itemIndex: number) => Promise<ContentImageView>) | undefined } | undefined }) {
+function OperatorVocabularyCard({ item, index, media, hideUmbrella = false }: { item: Record<string, unknown>; index: number; media?: { lessonId: string; resolveVocabularyImage?: ((lessonId: string, itemIndex: number) => Promise<ContentImageView>) | undefined } | undefined; hideUmbrella?: boolean }) {
   const [detail, setDetail] = useState<{ kind?: "umbrella" | "family"; title: string; currentWord?: string; umbrellaMeaning?: string; umbrellaAudioUrl?: string; description?: string; words: Array<{ word: string; meaning?: string; audioUrl?: string; current?: boolean }> } | null>(null);
   const word = String(item.word ?? "—");
   const phrases = (asArray(item.collocations ?? item.phrases ?? item.examples) ?? (typeof item.collocations === "string" ? [item.collocations] : []))
@@ -665,7 +670,7 @@ function OperatorVocabularyCard({ item, index, media }: { item: Record<string, u
   const siblingEntries = relationEntries(umbrella?.siblings);
   const umbrellaWords = umbrella ? [{ word, ...(typeof item.meaning === "string" && item.meaning.trim() ? { meaning: item.meaning.trim() } : {}), audioUrl: operatorVocabularyAudioSource(word, item.audioUrl), current: true }, ...siblingEntries] : [];
   const relations: VocabularyRelationChip[] = [
-    ...(umbrellaWord ? [{ label: `TỪ BAO TRÙM ${umbrellaWord}`, ariaLabel: `Từ bao trùm: ${umbrellaWord}`, icon: "umbrella" as const, tone: "umb" as const, count: Math.max(0, umbrellaWords.length - 1), onClick: () => setDetail({ kind: "umbrella", title: umbrellaWord, currentWord: word, umbrellaMeaning, umbrellaAudioUrl: operatorVocabularyAudioSource(umbrellaWord, umbrella?.audioUrl), words: umbrellaWords }) }] : []),
+    ...(!hideUmbrella && umbrellaWord ? [{ label: `TỪ BAO TRÙM ${umbrellaWord}`, ariaLabel: `Từ bao trùm: ${umbrellaWord}`, icon: "umbrella" as const, tone: "umb" as const, count: Math.max(0, umbrellaWords.length - 1), onClick: () => setDetail({ kind: "umbrella", title: umbrellaWord, currentWord: word, umbrellaMeaning, umbrellaAudioUrl: operatorVocabularyAudioSource(umbrellaWord, umbrella?.audioUrl), words: umbrellaWords }) }] : []),
     ...synonyms.map(value => ({ label: value.word, ariaLabel: value.audioUrl ? `Nghe từ đồng nghĩa: ${value.word}` : value.word, tone: "synonym" as const, onClick: value.audioUrl ? () => playOperatorWord(value.word, value.audioUrl) : undefined })),
     ...antonyms.map(value => ({ label: value.word, ariaLabel: value.audioUrl ? `Nghe từ trái nghĩa: ${value.word}` : value.word, tone: "antonym" as const, onClick: value.audioUrl ? () => playOperatorWord(value.word, value.audioUrl) : undefined })),
     ...(family.length ? [{ label: `Word family (${family.length})`, ariaLabel: `Word family (${family.length})`, icon: "family" as const, tone: "family" as const, onClick: () => setDetail({ kind: "family", title: "Word family", words: family }) }] : [])

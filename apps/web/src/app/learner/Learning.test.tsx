@@ -559,6 +559,22 @@ describe("learner lesson study content", () => {
     expect(chip.closest("button")).toHaveClass("vocabulary-card-sound");
   });
 
+  it("renders a shared umbrella once for grouped vocabulary cards", () => {
+    const lesson = {
+      id: "lesson-vocabulary-group", title: "Office supplies", dayNumber: 1, weekNumber: 1, weekTopic: "Office", durationMinutes: 10, cefr: "A2",
+      content: { parts: [{ code: "vocabulary", title: "Từ vựng", content: {
+        items: ["paper", "box", "pen"].map((word) => ({ word, meaning: word, umbrella: { word: "office supplies", meaning: "đồ dùng văn phòng" } })),
+        groups: [{ umbrella: { word: "office supplies", meaning: "đồ dùng văn phòng" }, itemWords: ["paper", "box", "pen"] }]
+      } }] },
+      progress: { status: "not_started", completedPartCodes: [], evidence: {} }
+    } as any;
+
+    render(<LearnerLesson view={{ lesson, lock: null }} actions={{ navigate: vi.fn(), speak: vi.fn(), saveLessonProgress: vi.fn() } as any} />);
+
+    expect(screen.getAllByText("TỪ BAO TRÙM office supplies")).toHaveLength(1);
+    expect(screen.getByRole("article", { name: "paper" }).closest(".lesson-vocabulary-group")).toContainElement(screen.getByRole("article", { name: "pen" }));
+  });
+
   it("requires at least two words before enabling a self-writing submission", () => {
     const lesson = {
       id: "lesson-writing", title: "I can + verb", dayNumber: 1, weekNumber: 1, weekTopic: "Introductions",
