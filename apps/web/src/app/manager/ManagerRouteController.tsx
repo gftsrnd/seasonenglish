@@ -1,13 +1,14 @@
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import "./manager.css";
 import { Navigate, Route, Routes, useLocation } from "react-router";
-import type { ManagerAccountView, ManagerAccountsView, ManagerDeleteRequestsView, ManagerLearnerProfileView, ManagerMaintenanceAction, ManagerMaintenanceConfirmationInput, ManagerMaintenanceConfirmationView, ManagerOperationsView, ManagerPinReportsView, ManagerProgressView, ManagerProviderSettingsInput, ManagerProviderSettingsView, ManagerPurgeConfirmationView, ManagerRemindersView, ManagerReportView, ManagerSettingsInput, ManagerSettingsView, ManagerTrashView, OperatorSettingsOverviewView, OrganisationExperienceInput, OrganisationExperienceView, ProductPreferencesView, SystemCapabilitiesView } from "@e4s/contracts";
+import type { ManagerMonthlyView, ManagerAccountView, ManagerAccountsView, ManagerDeleteRequestsView, ManagerLearnerProfileView, ManagerMaintenanceAction, ManagerMaintenanceConfirmationInput, ManagerMaintenanceConfirmationView, ManagerOperationsView, ManagerPinReportsView, ManagerProgressView, ManagerProviderSettingsInput, ManagerProviderSettingsView, ManagerPurgeConfirmationView, ManagerRemindersView, ManagerReportView, ManagerSettingsInput, ManagerSettingsView, ManagerTrashView, OperatorSettingsOverviewView, OrganisationExperienceInput, OrganisationExperienceView, ProductPreferencesView, SystemCapabilitiesView } from "@e4s/contracts";
 import { managerApiClient as apiClient } from "../../api/manager.js";
 import { providerTestLabel, SettingsPage, webhookTestLabel } from "../settings/index.js";
 import { ManagerOperations } from "./Operations.js";
 import { buildManagerProgressCsv, ManagerProgress } from "./Progress.js";
 import { ManagerRecovery } from "./Recovery.js";
 import { ManagerReminders } from "./Reminders.js";
+import { ManagerMonth } from "./Month.js";
 import { ManagerReport } from "./Report.js";
 import { ManagerRewards } from "./Rewards.js";
 import { ManagerRewardCertificate } from "./RewardCertificate.js";
@@ -48,6 +49,7 @@ export function ManagerRouteController({ role, currentUserId }: ManagerRouteCont
     <Route path="/mgr/ops/prompts" element={<Navigate replace to={role === "manager" ? "/settings/prompts" : "/op"} />} />
     <Route path="/mgr/ops/*" element={role === "manager" ? <OperationsRouteController basePath="/mgr/ops" session={{ role: "manager", user: { id: currentUserId, displayName: "Quản lý", email: null }, permissions: [] }} /> : <Navigate replace to="/op" />} />
     <Route path="/mgr/recovery" element={<Navigate replace to={role === "manager" ? "/settings" : "/op"} />} />
+    <Route path="/mgr/month" element={role === "manager" ? <MonthRoute /> : <Navigate replace to="/op" />} />
     <Route path="/mgr/reminders" element={role === "manager" ? <RemindersRoute /> : <Navigate replace to="/op" />} />
     <Route path="/mgr/report" element={role === "manager" ? <ReportRoute currentUserId={currentUserId} /> : <Navigate replace to="/op" />} />
     <Route path="/mgr/rewards" element={role === "manager" ? <ManagerRewards /> : <Navigate replace to="/op" />} />
@@ -212,6 +214,24 @@ function OperationsRoute() {
   if (!view) return <RouteState error={error} title="Hiệu suất vận hành" label="Đang tải hiệu suất vận hành" />;
   const deleteRequestCounts = deleteRequests?.requests.reduce<Record<string, number>>((counts, request) => { counts[request.requestedBy] = (counts[request.requestedBy] ?? 0) + 1; return counts; }, {});
   return <>{error ? <div className="banner danger" role="alert"><div className="body small">{error}</div></div> : null}<ManagerOperations view={view} {...(deleteRequestCounts ? { deleteRequestCounts } : {})} /></>;
+}
+
+function MonthRoute() {
+  const toast = useToast();
+  const [view, setView] = useState<ManagerMonthlyView>(); const [loadError, setLoadError] = useState(""); const [busyId, setBusyId] = useState<string | null>(null); const [notice, setNotice] = useState("");
+  const load = () => apiClient.getManagerMonth().then(setView);
+  useEffect(() => { void load().catch(() => setLoadError("Không tải được màn Tháng học.")); }, []);
+  if (!view) return <RouteState error={loadError} title="Tháng học" label="Đang tải khiếu nại, báo cáo xin mở và tài khoản khoá" />;
+  const run = async (id: string, action: () => Promise<ManagerMonthlyView>, success: string) => {
+    setBusyId(id); setNotice("");
+    try { setView(await action()); setNotice(success); }
+    catch (cause) { toast.show({ message: cause instanceof Error && cause.message ? `Không thực hiện được (${cause.message}).` : "Không thực hiện được.", tone: "danger" }); }
+    finally { setBusyId(null); }
+  };
+  return <ManagerMonth view={view} busyId={busyId} notice={notice} onRefresh={async () => { try { await load(); } catch { toast.show({ message: "Không tải lại được.", tone: "danger" }); } }}
+    onDecideAppeal={(id, input) => run(id, () => apiClient.decideMonthlyExamAppeal(id, input), input.decision === "approved" ? "Đã cho thi và ghi log." : "Đã từ chối và ghi log.")}
+    onDecideUnlock={(id, input) => run(id, () => apiClient.decideMonthlyUnlockRequest(id, input), input.decision === "approved" ? "Đã mở tháng mới cho học viên (không tính vào số tháng xét lên mức)." : "Đã từ chối báo cáo xin mở.")}
+    onUnlockAccount={(id, note) => run(id, () => apiClient.unlockMonthlyAccount(id, note), "Đã mở lại tài khoản và ghi log.")} />;
 }
 
 function RemindersRoute() {

@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { MONTH_FRAMEWORK_PROMPT, MONTH_FRAMEWORK_TASK_KEY, MONTHLY_EXAM_PROMPT, MONTHLY_EXAM_TASK_KEY, monthFrameworkOutputJsonSchema, monthFrameworkOutputSchema, monthlyExamOutputJsonSchema, monthlyExamOutputSchema } from "@e4s/ai";
-import type { MonthlyContentRepository } from "@e4s/database";
+import type { MonthlyContentRepository, MonthlyManagerRepository } from "@e4s/database";
 import { applyAiMonthlyExamContent, buildMonthlyCalendar, buildMonthlyExamBlueprint, buildSampleFramework, validateMonthFramework, type MonthFramework, type MonthlyExamBlueprint } from "@e4s/domain";
 import type { WorkerAiProvider } from "./handlers.js";
 import type { JobHandler } from "./worker.js";
@@ -9,7 +9,7 @@ import type { JobHandler } from "./worker.js";
  * Job nền cho cơ chế tháng. Giữ graceful degradation: không có AI (hoặc AI lỗi) thì dùng khung mẫu
  * cố định theo level, ghi rõ source = 'sample' để Vận hành biết.
  */
-export function createMonthlyHandlers(input: { monthly: MonthlyContentRepository; ai?: WorkerAiProvider }): Record<string, JobHandler> {
+export function createMonthlyHandlers(input: { monthly: MonthlyContentRepository; monthlyManager: MonthlyManagerRepository; ai?: WorkerAiProvider }): Record<string, JobHandler> {
   return {
     "monthly.framework.generate": async (job) => {
       const { frameworkId } = payloadOf(job.payload);
@@ -38,6 +38,11 @@ export function createMonthlyHandlers(input: { monthly: MonthlyContentRepository
     "monthly.lessons.distribute": async (job) => {
       const { frameworkId, actorId } = payloadOf(job.payload);
       await input.monthly.distributeLessons(frameworkId, actorId ?? null);
+    },
+    "monthly.daily-maintenance": async (job) => {
+      const record = job.payload && typeof job.payload === "object" ? job.payload as { now?: unknown } : {};
+      const now = typeof record.now === "string" && !Number.isNaN(Date.parse(record.now)) ? new Date(record.now) : new Date();
+      await input.monthlyManager.runDailyMaintenance(now);
     },
     "monthly.exam.generate": async (job) => {
       const { frameworkId } = payloadOf(job.payload);

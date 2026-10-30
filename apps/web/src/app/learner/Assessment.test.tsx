@@ -121,7 +121,7 @@ function makeActions(overrides: Partial<LearnerCallbacks> = {}) {
     deleteGameSet: vi.fn(),
     finishGame: vi.fn(),
     resetGameResult: vi.fn(),
-    appealMonthlyExam: vi.fn(), resolveGameWordImage: vi.fn(),
+    appealMonthlyExam: vi.fn(), requestMonthlyUnlock: vi.fn(), resolveGameWordImage: vi.fn(),
     ...overrides
   } as unknown as LearnerCallbacks;
 }

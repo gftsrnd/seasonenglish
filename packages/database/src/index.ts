@@ -9,3 +9,4 @@ export * from "./seed.js";
 export * from "./sync-canonical-assessments.js";
 export * from "./monthly-repository.js";
 export * from "./learner-monthly-repository.js";
+export * from "./monthly-manager-repository.js";

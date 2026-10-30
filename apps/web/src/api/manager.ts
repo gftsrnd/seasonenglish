@@ -1,4 +1,5 @@
 import type {
+  ManagerMonthlyView, MonthlyDecisionInput,
   AssessmentDeletionRequestView, ManagerAccountCredentialView, ManagerAccountPinView, ManagerAccountView, ManagerAccountsView, ManagerDataExportView,
   ManagerDataImportView, ManagerDeleteRequestsView, ManagerImageTestView, ManagerLearnerProfileView,
   ManagerMaintenanceConfirmationInput, ManagerMaintenanceConfirmationView, ManagerMaintenanceResultView,
@@ -46,6 +47,10 @@ export interface ManagerApiClient {
   getManagerAccountPin(accountId: string): Promise<ManagerAccountPinView>;
   getManagerAccountCredential(accountId: string): Promise<ManagerAccountCredentialView>;
   getManagerReminders(): Promise<ManagerRemindersView>;
+  getManagerMonth(): Promise<ManagerMonthlyView>;
+  decideMonthlyExamAppeal(id: string, input: MonthlyDecisionInput): Promise<ManagerMonthlyView>;
+  decideMonthlyUnlockRequest(id: string, input: MonthlyDecisionInput): Promise<ManagerMonthlyView>;
+  unlockMonthlyAccount(id: string, note: string): Promise<ManagerMonthlyView>;
   sendManagerReminder(learnerId: string, requestId: string, channel: ManagerReminderChannel): Promise<ManagerReminderSendView>;
   dismissManagerReminder(learnerId: string): Promise<ManagerReminderDismissView>;
   copyManagerReminder(learnerId: string): Promise<ManagerReminderCopyView>;
@@ -96,6 +101,10 @@ export const managerApiClient: ManagerApiClient = {
   getManagerAccountPin: (accountId) => request(`/api/v1/manager/accounts/${encodeURIComponent(accountId)}/pin`),
   getManagerAccountCredential: (accountId) => request(`/api/v1/manager/accounts/${encodeURIComponent(accountId)}/credential`),
   getManagerReminders: () => request("/api/v1/manager/reminders"),
+  getManagerMonth: () => request("/api/v1/manager/month"),
+  decideMonthlyExamAppeal: (id, input) => request(`/api/v1/manager/month/exam-appeals/${encodeURIComponent(id)}/decision`, { method: "POST", body: JSON.stringify(input) }),
+  decideMonthlyUnlockRequest: (id, input) => request(`/api/v1/manager/month/unlock-requests/${encodeURIComponent(id)}/decision`, { method: "POST", body: JSON.stringify(input) }),
+  unlockMonthlyAccount: (id, note) => request(`/api/v1/manager/month/account-locks/${encodeURIComponent(id)}/unlock`, { method: "POST", body: JSON.stringify({ note }) }),
   sendManagerReminder: (learnerId, requestId, channel) => request(`/api/v1/manager/reminders/${encodeURIComponent(learnerId)}`, { method: "POST", body: JSON.stringify({ requestId, channel }) }),
   dismissManagerReminder: (learnerId) => request(`/api/v1/manager/reminders/${encodeURIComponent(learnerId)}/dismiss`, { method: "POST", body: "{}" }),
   copyManagerReminder: (learnerId) => request(`/api/v1/manager/reminders/${encodeURIComponent(learnerId)}/copy`, { method: "POST", body: "{}" }),

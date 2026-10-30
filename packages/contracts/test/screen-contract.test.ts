@@ -25,6 +25,7 @@ const expectedRoutes = [
   "/settings",
   "/mgr",
   "/mgr/ops",
+  "/mgr/month",
   "/mgr/reminders",
   "/mgr/report",
   "/mgr/rewards"
@@ -65,6 +66,7 @@ describe("approved E4S screen contract", () => {
     expect(ROLE_NAVIGATION.manager).toEqual([
       "/mgr",
       "/mgr/ops",
+      "/mgr/month",
       "/mgr/reminders",
       "/mgr/report",
       "/settings"

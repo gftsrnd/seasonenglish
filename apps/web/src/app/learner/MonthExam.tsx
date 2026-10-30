@@ -21,6 +21,13 @@ export function LearnerMonthExam({ view, actions }: { view: LearnerMonthView; ac
   const remainingPercent = attendance.effectiveDays ? Math.round((attendance.attendedDays / attendance.effectiveDays) * 100) : 0;
   const appeal = exam.appeal;
   const canAppeal = view.enrollment && !attendance.eligible && !appeal && exam.attemptStatus === "none";
+  const lockedMissedExam = view.seasonOnlyReason === "locked_missed_exam";
+  const [unlockReason, setUnlockReason] = useState("");
+  const submitUnlock = async () => {
+    if (unlockReason.trim().length < 5) { setError("Hãy nêu lý do ít nhất 5 ký tự."); return; }
+    setSending(true); setError("");
+    try { await actions.requestMonthlyUnlock(unlockReason.trim()); setUnlockReason(""); } catch { setError("Chưa gửi được báo cáo. Hãy thử lại."); } finally { setSending(false); }
+  };
   const submitAppeal = async () => {
     if (reason.trim().length < 5) { setError("Hãy nêu lý do ít nhất 5 ký tự."); return; }
     setSending(true); setError("");
@@ -65,6 +72,16 @@ export function LearnerMonthExam({ view, actions }: { view: LearnerMonthView; ac
       </form> : null}
     </section>
 
+    {lockedMissedExam ? <section className="card" style={{ marginTop: 16 }} data-exam-block="unlock" aria-labelledby="exam-unlock-title">
+      <h3 id="exam-unlock-title" style={{ marginTop: 0 }}>Bài học {view.label} đang khoá</h3>
+      <p className="small muted">Bạn chưa làm bài thi tháng trước nên bài học tháng này khoá. Gửi báo cáo xin mở cho Quản lý; nếu được mở bạn vào thẳng tháng mới từ bài 1 (không thi bù) và tháng này không tính vào số tháng xét lên mức.</p>
+      {view.unlockRequest ? <Notice tone={view.unlockRequest.status === "approved" ? "ok" : view.unlockRequest.status === "rejected" ? "warn" : "info"}>{view.unlockRequest.status === "pending" ? "Báo cáo đã gửi, đang chờ Quản lý." : view.unlockRequest.status === "approved" ? "Quản lý đã mở: tải lại trang chủ để học." : "Quản lý từ chối mở."}{view.unlockRequest.resolution ? ` ${view.unlockRequest.resolution}` : ""}</Notice>
+        : <form onSubmit={(event) => { event.preventDefault(); void submitUnlock(); }}>
+          <label className="field"><span>Lý do xin mở</span><textarea value={unlockReason} onChange={(event) => setUnlockReason(event.target.value)} rows={3} placeholder="Vì sao bạn không làm bài thi tháng trước?" /></label>
+          {error ? <div className="small" role="alert" style={{ color: "var(--danger, #b42318)" }}>{error}</div> : null}
+          <button className="btn-primary" type="submit" disabled={sending}>{sending ? "Đang gửi…" : "Gửi báo cáo xin mở"}</button>
+        </form>}
+    </section> : null}
     <div className="row" style={{ marginTop: 12 }}><AppLink className="btn" href="/home" navigate={actions.navigate}>← Về trang chủ</AppLink></div>
   </div>;
 }

@@ -141,7 +141,7 @@ describe("App session shell", () => {
     render(<App>{() => <h1>Trang học</h1>}</App>);
 
     expect(await screen.findAllByRole("link", { name: "Luyện với Season" })).toHaveLength(2);
-    expect(screen.getAllByRole("link", { name: "Bài tuần" })).toHaveLength(2);
+    expect(screen.getAllByRole("link", { name: "Bài thi" })).toHaveLength(2);
   });
 
   it("keeps learning destinations hidden until the learner has an approved CEFR level", async () => {

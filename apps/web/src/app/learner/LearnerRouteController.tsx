@@ -478,7 +478,8 @@ export function LearnerRouteController() {
     },
     resetGameResult: () => { gamePending.current = undefined; setUiState((current) => ({ ...current, gameResult: null })); },
     resolveGameWordImage: (setId, wordId) => apiClient.resolveGameWordImage(setId, wordId),
-    appealMonthlyExam: async (reason) => { await apiClient.appealMonthlyExam(reason); setContracts({ exam: await apiClient.getMonth() }); }
+    appealMonthlyExam: async (reason) => { await apiClient.appealMonthlyExam(reason); setContracts({ exam: await apiClient.getMonth() }); },
+    requestMonthlyUnlock: async (reason) => { await apiClient.requestMonthlyUnlock(reason); setContracts({ exam: await apiClient.getMonth() }); }
   };
 
   if (loading) return <div className="app-learner-page"><section className="card" aria-live="polite">{loadingLabel(route.name)}…</section></div>;

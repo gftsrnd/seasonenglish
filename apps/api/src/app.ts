@@ -13,7 +13,7 @@ import { registerEngagementRoutes } from "./modules/engagement/index.js";
 import { registerFileRoutes } from "./modules/files/index.js";
 import { registerIdentityRoutes, type IdentityEmailSender } from "./modules/identity/index.js";
 import { registerLearnerMonthlyRoutes, registerLearningRoutes } from "./modules/learning/index.js";
-import { registerManagerRoutes, type ReminderEmailSender } from "./modules/manager/index.js";
+import { registerManagerMonthlyRoutes, registerManagerRoutes, type ReminderEmailSender } from "./modules/manager/index.js";
 import type { ContentMediaService } from "./modules/media/index.js";
 import { registerNotificationRoutes } from "./modules/notifications/index.js";
 import { registerSystemRoutes } from "./modules/system/index.js";
@@ -79,6 +79,7 @@ export function buildApi(options: BuildApiOptions): FastifyInstance {
     ...(options.mediaService ? { mediaService: options.mediaService } : {}),
     ...(options.reminderEmailSender ? { reminderEmailSender: options.reminderEmailSender } : {})
   });
+  registerManagerMonthlyRoutes(app, options.pool);
   registerNotificationRoutes(app, options.pool);
   registerCoachRoutes(app, options.pool, options.aiRunner, options.aiRunnerFactory, options.storage);
   registerEngagementRoutes(app, options.pool, options.aiRunner, options.mediaService, options.aiRunnerFactory, options.storage);

@@ -34,7 +34,7 @@ const actions = {
   navigate: vi.fn(),
   finishGame: vi.fn().mockResolvedValue(undefined),
   resetGameResult: vi.fn(),
-  appealMonthlyExam: vi.fn(), resolveGameWordImage: vi.fn().mockResolvedValue({ status: "unavailable" }),
+  appealMonthlyExam: vi.fn(), requestMonthlyUnlock: vi.fn(), resolveGameWordImage: vi.fn().mockResolvedValue({ status: "unavailable" }),
   useWeeklyGameSet: vi.fn().mockResolvedValue(undefined),
   deleteGameSet: vi.fn().mockResolvedValue(undefined),
   speak: vi.fn()

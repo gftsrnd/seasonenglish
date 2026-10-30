@@ -38,6 +38,7 @@ export const SCREEN_CONTRACT = [
   { id: "settings", path: "/settings", title: "Cài đặt", roles: ["operator", "manager"], purpose: "Cấu hình nghiệp vụ, AI, người dùng và quyền theo vai trò" },
   { id: "manager-progress", path: "/mgr", title: "Tiến độ", roles: ["manager"], purpose: "Theo dõi tiến độ nhóm và KPI", states: ["loading", "empty", "error", "populated"] },
   { id: "manager-operations", path: "/mgr/ops", title: "Vận hành", roles: ["manager"], purpose: "Theo dõi hiệu suất vận hành", states: ["loading", "empty", "error", "populated"] },
+  { id: "manager-month", path: "/mgr/month", title: "Tháng học", roles: ["manager"], purpose: "Khiếu nại thi tháng (24 giờ), báo cáo xin mở tháng sau, tài khoản khoá vì vắng", states: ["loading", "empty", "error", "populated"] },
   { id: "manager-reminders", path: "/mgr/reminders", title: "Nhắc học", roles: ["manager"], purpose: "Xác định và gửi nhắc học", states: ["loading", "empty", "error", "populated"] },
   { id: "manager-report", path: "/mgr/report", title: "Báo cáo", roles: ["manager"], purpose: "Xem và xuất báo cáo pilot", states: ["loading", "empty", "error", "populated"] },
   { id: "manager-rewards", path: "/mgr/rewards", title: "Giả lập phần thưởng", roles: ["manager"], purpose: "Xem trước các trường hợp phần thưởng", states: ["loading", "empty", "error", "populated"] }
@@ -46,7 +47,7 @@ export const SCREEN_CONTRACT = [
 export const ROLE_NAVIGATION = {
   learner: ["/home", "/coach", "/exam", "/games", "/profile"],
   operator: ["/op", "/op/months", "/op/review", "/settings"],
-  manager: ["/mgr", "/mgr/ops", "/mgr/reminders", "/mgr/report", "/settings"]
+  manager: ["/mgr", "/mgr/ops", "/mgr/month", "/mgr/reminders", "/mgr/report", "/settings"]
 } as const;
 
 export type ScreenId = (typeof SCREEN_CONTRACT)[number]["id"];

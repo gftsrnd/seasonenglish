@@ -45,6 +45,7 @@ export interface LearnerApiClient {
   submitGameResult(game: GameKey, input: { requestId: string } & GameFinishInput): Promise<GameResultView>;
   getMonth(): Promise<LearnerMonthView>;
   appealMonthlyExam(reason: string): Promise<{ status: string; deadlineAt: string }>;
+  requestMonthlyUnlock(reason: string): Promise<{ status: string }>;
   getReward(mode: "preview" | "done"): Promise<RewardView>;
   getSurvey(): Promise<SurveyView>;
   submitSurvey(input: { rating: number; comment: string; studyTime: "work" | "outside" | "both" }): Promise<SurveyView>;
@@ -100,6 +101,7 @@ export const learnerApiClient: LearnerApiClient = {
   submitGameResult: (game, input) => request(`/api/v1/engagement/games/${encodeURIComponent(game)}/results`, { method: "POST", body: JSON.stringify(input) }),
   getMonth: () => request("/api/v1/learner/month"),
   appealMonthlyExam: (reason) => request("/api/v1/learner/month/exam-appeal", { method: "POST", body: JSON.stringify({ reason }) }),
+  requestMonthlyUnlock: (reason) => request("/api/v1/learner/month/unlock-request", { method: "POST", body: JSON.stringify({ reason }) }),
   getReward: (mode) => request(`/api/v1/engagement/rewards/${mode}`),
   getSurvey: () => request("/api/v1/engagement/survey"),
   submitSurvey: (input) => request("/api/v1/engagement/survey", { method: "POST", body: JSON.stringify(input) }),

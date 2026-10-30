@@ -179,6 +179,8 @@ export interface LearnerMonthView {
   nextLesson: LearnerMonthLessonView | null;
   completedLessons: number;
   attendance: { effectiveDays: number; attendedDays: number; absentDays: number; maxAbsences: number; eligible: boolean };
+  /** Báo cáo xin mở khi bị khoá vì bỏ thi tháng trước. */
+  unlockRequest?: { status: "pending" | "approved" | "rejected"; createdAt: string; resolution: string | null } | null;
   exam: {
     date: string;
     durationMinutes: number;
@@ -198,3 +200,27 @@ export interface LearnerMonthView {
 }
 
 export interface MonthlyExamAppealInput { reason: string }
+
+/** Màn Quản lý "Tháng học": khiếu nại thi tháng (đếm ngược 24 giờ), báo cáo xin mở tháng sau, tài khoản bị khoá. */
+export interface ManagerMonthlyView {
+  today: string;
+  month: string;
+  label: string;
+  examAppeals: Array<{
+    id: string; learnerId: string; learnerName: string; email: string | null; cefr: CefrLevel; month: string; reason: string;
+    status: MonthlyExamAppealStatus; deadlineAt: string; createdAt: string; resolution: string | null;
+    attendedDays: number; effectiveDays: number; maxAbsences: number;
+  }>;
+  unlockRequests: Array<{
+    id: string; learnerId: string; learnerName: string; email: string | null; missedMonth: string; reason: string;
+    status: "pending" | "approved" | "rejected"; createdAt: string; resolution: string | null;
+  }>;
+  lockedAccounts: Array<{
+    id: string; learnerId: string; learnerName: string; email: string | null; reason: "consecutive_absence" | "manual";
+    detail: Record<string, unknown>; lockedAt: string; unlockedAt: string | null; unlockNote: string | null;
+  }>;
+  /** Học viên đang bị khoá bài học tháng này vì bỏ thi tháng trước. */
+  lockedMonthLearners: Array<{ learnerId: string; learnerName: string; email: string | null; cefr: CefrLevel }>;
+}
+
+export interface MonthlyDecisionInput { decision: "approved" | "rejected"; resolution?: string }

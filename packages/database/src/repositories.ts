@@ -7,6 +7,7 @@ import { buildMonthlyCalendar, localDateString, monthOf } from "@e4s/domain/cale
 import { generationFindingsFromPayload } from "./generation-findings.js";
 import { MonthlyContentRepository } from "./monthly-repository.js";
 import { LearnerMonthlyRepository } from "./learner-monthly-repository.js";
+import { MonthlyManagerRepository } from "./monthly-manager-repository.js";
 import type {
   AccountRole,
   AudioArtifactInput,
@@ -11884,7 +11885,8 @@ export function createRepositories(pool: Pool) {
     jobs: new JobRepository(pool),
     manager: new ManagerRepository(pool),
     monthly: new MonthlyContentRepository(pool),
-    learnerMonthly: new LearnerMonthlyRepository(pool)
+    learnerMonthly: new LearnerMonthlyRepository(pool),
+    monthlyManager: new MonthlyManagerRepository(pool)
   };
 }
 

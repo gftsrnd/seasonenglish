@@ -118,6 +118,7 @@ export type LearnerScreen =
 export interface LearnerCallbacks {
   navigate: (path: string) => void;
   saveProfileDraft: (profile: LearnerProfileData) => void | Promise<void>;
+  requestMonthlyUnlock: (reason: string) => void | Promise<void>;
   saveProfile: (profile: LearnerProfileData) => void | Promise<void>;
   startAssessment: () => void | Promise<void>;
   saveAssessmentResponse: (section: AssessmentSectionCode, taskKey: string, input: SaveAssessmentResponseInput) => void | Promise<void>;

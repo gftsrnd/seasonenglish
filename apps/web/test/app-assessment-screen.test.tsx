@@ -50,7 +50,7 @@ const actions = (overrides: Partial<LearnerCallbacks> = {}) => ({
   deleteGameSet: vi.fn(),
   finishGame: vi.fn(),
   resetGameResult: vi.fn(),
-  appealMonthlyExam: vi.fn(), resolveGameWordImage: vi.fn(async () => ({ status: "unavailable" as const })),
+  appealMonthlyExam: vi.fn(), requestMonthlyUnlock: vi.fn(), resolveGameWordImage: vi.fn(async () => ({ status: "unavailable" as const })),
   ...overrides
 }) as unknown as LearnerCallbacks;
 

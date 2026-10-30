@@ -20,7 +20,7 @@ const handlers: Record<string, JobHandler> = {
     notifications: repositories.notifications,
     ...(ai ? { ai } : {})
   }),
-  ...createMonthlyHandlers({ monthly: repositories.monthly, ...(ai ? { ai } : {}) })
+  ...createMonthlyHandlers({ monthly: repositories.monthly, monthlyManager: repositories.monthlyManager, ...(ai ? { ai } : {}) })
 };
 
 let stopping = false;
