@@ -22,6 +22,8 @@ import { lessonDaysNeedingRepair, mergeGeneratedLessons, mergeGenerationFindings
 import { buildGenerationProvenance } from "./generation-provenance.js";
 import {
   buildPartialLessonFromPipelineState,
+  buildWeeklyLessonLevelAllocation,
+  weeklyLessonPlanBlueprintFindings,
   generateWeeklyLessons,
   lessonQualityProfileFromEnv,
   normalizeWeeklyLessonPlanBlueprint,
@@ -51,7 +53,7 @@ const resumablePipelineComponents: readonly WeeklyLessonPipelineComponent[] = [
   "skills.comprehension", "skills.languagePractice", "skills.speaking", "skills.reviewer"
 ] as const;
 
-function weeklyLessonCheckpointFingerprint(input: {
+export function weeklyLessonCheckpointFingerprint(input: {
   week: ContentWeekInput;
   cefr: string;
   promptVersionId: string;
@@ -111,6 +113,8 @@ const lessonLevelsInput = z.object({
   levels: z.array(z.enum(["A1", "A2", "B1", "B2", "C1"])).min(1).max(5)
     .refine((levels) => new Set(levels).size === levels.length, "Mỗi mức chỉ được chọn một lần")
 });
+const lessonWeekBatchParams = z.object({ week: z.coerce.number().int().min(1).max(52) });
+const lessonWeekBatchInput = z.object({ levels: z.array(z.enum(["A1", "A2", "B1", "B2", "C1"])).min(1).max(5).optional() });
 const versionParams = z.object({ versionId: z.uuid() });
 const reviewItemParams = z.object({ kind: z.enum(["submission", "coach"]), id: z.uuid() });
 const reviewCheckedInput = z.object({ checked: z.boolean() });
@@ -157,6 +161,47 @@ export function registerContentRoutes(
 ): void {
   const repositories = createRepositories(pool);
   const runnerFor = (actorId: string) => aiRunnerFactory ? aiRunnerFactory(actorId) : Promise.resolve(aiRunner);
+  const canonicalPlanLocks = new Map<string, Promise<ContentWeekInput>>();
+  /**
+   * Batch and single-level generation share this path. The database row lock in
+   * ensureCanonicalWeekPlan is the source of truth across operators and API
+   * processes; the in-process map only coalesces duplicate requests from the
+   * same actor so they do not queue on the same row lock.
+   */
+  const resolveCanonicalWeekForGeneration = async (
+    actorId: string,
+    week: ContentWeekInput,
+    task: { prompt: string },
+    runner: AiTaskRunner
+  ): Promise<ContentWeekInput> => {
+    if (weeklyLessonPlanBlueprintFindings(week.plan).length === 0) {
+      return week;
+    }
+    const lockKey = `${actorId}:${week.weekNumber}`;
+    const inflight = canonicalPlanLocks.get(lockKey);
+    if (inflight) return inflight;
+    const promise = (async () => {
+      try {
+        const ensured = await repositories.content.ensureCanonicalWeekPlan(
+          actorId,
+          week.weekNumber,
+          async (currentWeek) => {
+            if (weeklyLessonPlanBlueprintFindings(currentWeek.plan).length === 0) {
+              return { plan: currentWeek.plan, normalized: false };
+            }
+            const normalized = await normalizeWeeklyLessonPlanBlueprint(currentWeek, task, runner);
+            return { plan: normalized.week.plan, normalized: true };
+          }
+        );
+        if (!ensured) throw Object.assign(new Error("CONTENT_WEEK_NOT_FOUND"), { code: "CONTENT_WEEK_NOT_FOUND" });
+        return ensured;
+      } finally {
+        canonicalPlanLocks.delete(lockKey);
+      }
+    })();
+    canonicalPlanLocks.set(lockKey, promise);
+    return promise;
+  };
   const readers = createRoleGuard(pool, ["operator", "manager"]);
   const operators = createRoleGuard(pool, ["operator", "manager"]);
   const authors = createRoleGuard(pool, ["operator", "manager"]);
@@ -611,6 +656,283 @@ export function registerContentRoutes(
     }
   });
 
+  app.post("/api/v1/content/lesson-sets/:week/generate", {
+    preHandler: operators, config: { rateLimit: { max: 24, timeWindow: "10 minutes" } }
+  }, async (request, reply) => {
+    const params = lessonWeekBatchParams.safeParse(request.params);
+    const body = lessonWeekBatchInput.safeParse(request.body ?? {});
+    if (!params.success || !body.success) return reply.code(400).send({ code: "INVALID_CONTENT_LESSON_SET" });
+    const actorId = request.e4sSession!.user.id;
+    const matrix = await repositories.content.lessonMatrix(actorId);
+    if (!matrix) return reply.code(404).send({ code: "CONTENT_PROGRAM_NOT_FOUND" });
+    const activeLevels = matrix.levels.map((level) => level.cefr);
+    const requestedLevels = body.data.levels ?? (activeLevels.length > 0 ? activeLevels : (["A1", "A2", "B1", "B2", "C1"] as const));
+    if (requestedLevels.some((cefr) => !activeLevels.includes(cefr))) {
+      return reply.code(409).send({ code: "CONTENT_LEVEL_NOT_ACTIVE" });
+    }
+    const frame = await repositories.content.listWeeks(actorId);
+    const week = frame?.weeks.find((candidate) => candidate.weekNumber === params.data.week);
+    if (!week?.topic.trim()) return reply.code(409).send({ code: "CONTENT_WEEK_TOPIC_REQUIRED" });
+    const task = await repositories.aiRuns.activeTaskPrompt(actorId, "weekly_lessons");
+    if (!week || !task) return reply.code(503).send({ code: "AI_PROMPT_NOT_READY" });
+    const hasAnySeededPlan = Object.values(week.plan ?? {}).some(
+      (days) => Array.isArray(days) && days.length === 5 && days.every((focus) => typeof focus === "string" && focus.trim().length > 0)
+    );
+    if (!hasAnySeededPlan) {
+      const missingCefr = requestedLevels[0] ?? "A1";
+      return reply.code(409).send({
+        code: "CONTENT_WEEK_PLAN_REQUIRED",
+        findings: [{ dayNumber: null, component: "plan", code: "CONTENT_WEEK_PLAN_REQUIRED", severity: "error", message: `Mức ${missingCefr} cần kế hoạch 5 ngày trước khi sinh bài.`, issues: [], repairAction: "regenerate_plan" }]
+      });
+    }
+    const runner = await runnerFor(actorId);
+    if (!runner) {
+      return reply.code(503).send(publicLessonGenerationFailure(new Error("AI_UNAVAILABLE")));
+    }
+    const qualityProfile = lessonQualityProfileFromEnv();
+    let generationWeek: ContentWeekInput = week;
+    try {
+      generationWeek = await resolveCanonicalWeekForGeneration(actorId, week, task, runner);
+    } catch (error) {
+      return reply.code(502).send(publicLessonGenerationFailure(error));
+    }
+    for (const cefr of requestedLevels) {
+      const plan = generationWeek.plan?.[cefr];
+      if (!plan || plan.length !== 5 || plan.some((focus) => !focus.trim())) {
+        return reply.code(409).send({
+          code: "CONTENT_WEEK_PLAN_REQUIRED",
+          findings: [{ dayNumber: null, component: "plan", code: "CONTENT_WEEK_PLAN_REQUIRED", severity: "error", message: `Mức ${cefr} cần kế hoạch 5 ngày trước khi sinh bài.`, issues: [], repairAction: "regenerate_plan" }]
+        });
+      }
+    }
+    const allocation = buildWeeklyLessonLevelAllocation(requestedLevels);
+    const sharedAllocation = requestedLevels
+      .map((level) => `${level}: ${allocation[level]!.difficultyLane}`)
+      .join("\n");
+    const excludedVocabulary = await repositories.content.usedLessonVocabulary(actorId);
+    const acceptedGrammarFrames = new Set<string>(
+      matrix.weeks
+        .find((item) => item.weekNumber === week.weekNumber)?.cells
+        .filter((cell) => !requestedLevels.includes(cell.cefr))
+        .flatMap((cell) => cell.lessons.map((lesson) => lesson.title)) ?? []
+    );
+    const levelResults: Array<{
+      cefr: (typeof requestedLevels)[number];
+      /**
+       * completed: all five days generated in this run; resumed: all five days
+       * done and at least one day reused checkpoints; partial: failed but the
+       * validated days were saved as a draft; failed: nothing could be saved.
+       */
+      status: "completed" | "resumed" | "partial" | "failed";
+      completedDays: number[];
+      resumedDays: number[];
+      version?: Awaited<ReturnType<typeof repositories.content.saveLessonDraft>>;
+      partialDraft?: Awaited<ReturnType<typeof repositories.content.saveLessonDraft>>;
+      error?: ReturnType<typeof publicLessonGenerationFailure>;
+    }> = [];
+    // Levels run concurrently; each level saves its own draft as soon as it
+    // finishes and a failure in one level never touches another level.
+    await Promise.all(requestedLevels.map(async (cefr) => {
+      const generationPlan = generationWeek.plan?.[cefr] ?? week.plan?.[cefr] ?? [];
+      const checkpointFingerprint = weeklyLessonCheckpointFingerprint({
+        week: generationWeek,
+        cefr,
+        promptVersionId: task.promptVersionId,
+        qualityProfile
+      });
+      const resumeStatesByDay: Partial<Record<number, WeeklyLessonPipelineCheckpoint["state"]>> = {};
+      const excludedGrammarFrames = [...acceptedGrammarFrames];
+      const levelAllocation = allocation[cefr]!;
+      const levelTask = {
+        ...task,
+        prompt: [
+          task.prompt,
+          "SHARED FIVE-LEVEL WEEK ALLOCATION:",
+          sharedAllocation,
+          `YOUR LEVEL: ${cefr}. ${levelAllocation.difficultyLane}`,
+          `LEARNER-FACING LANGUAGE: ${levelAllocation.learnerLanguage}.`,
+          "The weekly topic, five-day shape, and grammar frame may match other levels. Differentiate the internal language complexity, reasoning demand, examples, questions, and answers for this CEFR lane."
+        ].join("\n")
+      };
+      let resumedDays: number[] = [];
+      try {
+        for (let dayNumber = 1; dayNumber <= 5; dayNumber += 1) {
+          for (const component of [...resumablePipelineComponents].reverse()) {
+            const stored = await repositories.aiRuns.findSucceededOutputForOrganization(
+              actorId,
+              weeklyLessonCheckpointKey(checkpointFingerprint, dayNumber, component),
+              "weekly_lessons"
+            );
+            const payload = stored?.output && typeof stored.output === "object"
+              ? stored.output as { pipelineVersion?: unknown; fingerprint?: unknown; checkpoint?: WeeklyLessonPipelineCheckpoint }
+              : undefined;
+            if (payload?.pipelineVersion === WEEKLY_LESSON_PIPELINE_VERSION
+              && payload.fingerprint === checkpointFingerprint
+              && payload.checkpoint?.dayNumber === dayNumber
+              && payload.checkpoint.component === component) {
+              resumeStatesByDay[dayNumber] = prepareWeeklyLessonRetryState(payload.checkpoint.state);
+              break;
+            }
+          }
+        }
+        resumedDays = Object.keys(resumeStatesByDay).map(Number).sort((left, right) => left - right);
+        const generated = await generateWeeklyLessons(generationWeek, cefr, levelTask, runner, {
+          excludedVocabulary,
+          excludedGrammarFrames,
+          qualityReview: true,
+          qualityProfile,
+          sequentialPipeline: true,
+          resumeStatesByDay,
+          onCheckpoint: async (checkpoint) => {
+            resumeStatesByDay[checkpoint.dayNumber] = checkpoint.state;
+            if (checkpoint.component === "assemble") return;
+            const metadata = checkpoint.attemptLog.findLast((entry) => entry.metadata)?.metadata;
+            if (!metadata) return;
+            await repositories.aiRuns.recordCheckpoint({
+              userId: actorId,
+              requestId: weeklyLessonCheckpointKey(checkpointFingerprint, checkpoint.dayNumber, checkpoint.component),
+              taskId: task.taskId,
+              promptVersionId: task.promptVersionId,
+              output: {
+                pipelineVersion: WEEKLY_LESSON_PIPELINE_VERSION,
+                fingerprint: checkpointFingerprint,
+                checkpoint
+              },
+              metadata
+            });
+          },
+          onProgress: (progress) => request.log.info({ week: week.weekNumber, cefr, ...progress }, "Weekly lesson batch generation progress")
+        });
+        for (const lesson of generated.lessons) {
+          if (lesson.title.trim()) acceptedGrammarFrames.add(lesson.title.trim());
+        }
+        const validation = validateLessonDraft(generated.lessons);
+        const saved = await repositories.content.saveLessonDraft(
+          actorId,
+          week.weekNumber,
+          cefr,
+          generated.lessons,
+          "ai",
+          buildGenerationProvenance({
+            promptVersionId: task.promptVersionId,
+            prompt: task.prompt,
+            model: { provider: generated.result.metadata.provider, name: generated.result.metadata.model },
+            week: generationWeek,
+            cefr,
+            extraInput: { excludedVocabulary, excludedGrammarFrames, qualityProfile, batch: true },
+            output: generated.output,
+            validation
+          })
+        );
+        try {
+          await repositories.aiRuns.recordSucceeded({
+            userId: actorId,
+            requestId: `weekly-lessons:${week.weekNumber}:${cefr}:${randomUUID()}`,
+            taskId: task.taskId,
+            promptVersionId: task.promptVersionId,
+            output: generated.output,
+            metadata: generated.result.metadata
+          });
+        } catch (recordErr) {
+          request.log.warn({ code: errorCode(recordErr, "AI_RUN_RECORD_FAILED") }, "Lesson batch generation audit record failed");
+        }
+        levelResults.push({
+          cefr,
+          status: resumedDays.length > 0 ? "resumed" : "completed",
+          completedDays: generated.lessons.map((lesson) => lesson.dayNumber).sort((left, right) => left - right),
+          resumedDays,
+          version: saved
+        });
+      } catch (error) {
+        const code = errorCode(error, "AI_LESSON_GENERATION_FAILED");
+        const diagnosticIssues = safeGenerationDiagnosticIssues(error);
+        const checkpointLessons = [1, 2, 3, 4, 5].flatMap((dayNumber) => {
+          const state = resumeStatesByDay[dayNumber];
+          if (!state) return [];
+          const lesson = buildPartialLessonFromPipelineState({
+            weekNumber: week.weekNumber,
+            topic: generationWeek.topic,
+            description: generationWeek.description,
+            objectives: generationWeek.objectives,
+            keyVocabHint: generationWeek.keyVocabHint,
+            cefr,
+            dayNumber,
+            lessonFocus: generationPlan[dayNumber - 1]!,
+            allLessonFocuses: generationPlan
+          }, state);
+          return lesson ? [lesson] : [];
+        });
+        const returnedPartialLessons = error && typeof error === "object" && "partialResult" in error
+          && (error as { partialResult?: unknown }).partialResult
+          && typeof (error as { partialResult: unknown }).partialResult === "object"
+          && "lessons" in ((error as { partialResult: object }).partialResult)
+          && Array.isArray(((error as { partialResult: { lessons?: unknown } }).partialResult).lessons)
+          ? (error as { partialResult: { lessons: typeof checkpointLessons } }).partialResult.lessons
+          : [];
+        const partialLessons = [...new Map(
+          [...returnedPartialLessons, ...checkpointLessons].map((lesson) => [lesson.dayNumber, lesson] as const)
+        ).values()].sort((left, right) => left.dayNumber - right.dayNumber);
+        const publicFailure = publicLessonGenerationFailure(error);
+        const findings = (publicFailure.findings ?? []).map((finding) => ({
+          dayNumber: finding.dayNumber,
+          component: finding.component,
+          code: finding.code,
+          severity: "error" as const,
+          message: `Mức ${cefr} · Ngày ${finding.dayNumber ?? "?"}: component ${finding.component}${finding.field ? ` (${finding.field})` : ""} chưa vượt qua kiểm tra sau tối đa ${finding.attempts ?? 3} lần${finding.reason ? ` — ${finding.reason}` : ""}.`,
+          issues: diagnosticIssues,
+          repairAction: "regenerate_component" as const
+        }));
+        try {
+          await repositories.aiRuns.recordFailed({
+            userId: actorId,
+            requestId: `weekly-lessons:${week.weekNumber}:${cefr}:${randomUUID()}`,
+            taskId: task.taskId,
+            promptVersionId: task.promptVersionId,
+            errorCode: code,
+            diagnostic: generationFailureDiagnostic(week, cefr, task, code, error)
+          });
+        } catch (recordError) {
+          request.log.warn({ code: errorCode(recordError, "AI_RUN_RECORD_FAILED") }, "Lesson batch failure audit record failed");
+        }
+        let partialDraft: Awaited<ReturnType<typeof repositories.content.saveLessonDraft>> | undefined;
+        if (partialLessons.length > 0) {
+          const validation = validateLessonDraft(partialLessons);
+          partialDraft = await repositories.content.saveLessonDraft(
+            actorId,
+            week.weekNumber,
+            cefr,
+            partialLessons,
+            "ai",
+            buildGenerationProvenance({
+              promptVersionId: task.promptVersionId,
+              prompt: task.prompt,
+              model: { provider: "partial-pipeline", name: WEEKLY_LESSON_PIPELINE_VERSION },
+              week: generationWeek,
+              cefr,
+              extraInput: { excludedVocabulary, excludedGrammarFrames, qualityProfile, partial: true, batch: true },
+              output: { lessons: partialLessons, findings, failure: { code, issues: diagnosticIssues } },
+              validation
+            })
+          );
+        }
+        levelResults.push({
+          cefr,
+          status: partialDraft ? "partial" : "failed",
+          completedDays: returnedPartialLessons.map((lesson) => lesson.dayNumber).sort((left, right) => left - right),
+          resumedDays,
+          error: publicFailure,
+          ...(partialDraft ? { partialDraft } : {})
+        });
+      }
+    }));
+    const levelOrder = new Map(requestedLevels.map((cefr, index) => [cefr, index] as const));
+    levelResults.sort((left, right) => levelOrder.get(left.cefr)! - levelOrder.get(right.cefr)!);
+    return reply.code(201).send({
+      weekNumber: week.weekNumber,
+      levels: levelResults
+    });
+  });
+
   app.post("/api/v1/content/lesson-sets/:week/:cefr/generate", {
     // A pilot can run 3–4 weeks across several active CEFR levels.  The
     // operator deliberately sends these requests sequentially, but the old
@@ -631,13 +953,17 @@ export function registerContentRoutes(
     if (!week?.topic.trim()) return reply.code(409).send({ code: "CONTENT_WEEK_TOPIC_REQUIRED" });
     const task = await repositories.aiRuns.activeTaskPrompt(actorId, "weekly_lessons");
     if (!week || !task) return reply.code(503).send({ code: "AI_PROMPT_NOT_READY" });
-    const plan = week.plan?.[params.data.cefr];
-    if (!plan || plan.length !== 5 || plan.some((focus) => !focus.trim())) {
-      return reply.code(409).send({
-        code: "CONTENT_WEEK_PLAN_REQUIRED",
-        findings: [{ dayNumber: null, component: "plan", code: "CONTENT_WEEK_PLAN_REQUIRED", severity: "error", message: `Mức ${params.data.cefr} cần kế hoạch 5 ngày trước khi sinh bài.`, issues: [], repairAction: "regenerate_plan" }]
-      });
-    }
+    const plan = week.plan?.[params.data.cefr] ?? [];
+    const planRequired = () => reply.code(409).send({
+      code: "CONTENT_WEEK_PLAN_REQUIRED",
+      findings: [{ dayNumber: null, component: "plan", code: "CONTENT_WEEK_PLAN_REQUIRED", severity: "error", message: `Mức ${params.data.cefr} cần kế hoạch 5 ngày trước khi sinh bài.`, issues: [], repairAction: "regenerate_plan" }]
+    });
+    // Same rule as the batch route: any approved level plan is enough to build
+    // the shared canonical blueprint, which then supplies this level's five days.
+    const hasAnySeededPlan = Object.values(week.plan ?? {}).some(
+      (days) => Array.isArray(days) && days.length === 5 && days.every((focus) => typeof focus === "string" && focus.trim().length > 0)
+    );
+    if (!hasAnySeededPlan) return planRequired();
     const runner = await runnerFor(actorId);
     if (!runner) {
       await repositories.aiRuns.recordFailed({
@@ -658,9 +984,10 @@ export function registerContentRoutes(
     let excludedVocabulary: string[] = [];
     let excludedGrammarFrames: string[] = [];
     try {
-      const normalizedBlueprint = await normalizeWeeklyLessonPlanBlueprint(week, task, runner);
+      const normalizedBlueprint = { week: await resolveCanonicalWeekForGeneration(actorId, week, task, runner) };
       generationWeek = normalizedBlueprint.week;
-      generationPlan = normalizedBlueprint.week.plan[params.data.cefr];
+      generationPlan = normalizedBlueprint.week.plan?.[params.data.cefr] ?? plan;
+      if (generationPlan.length !== 5 || generationPlan.some((focus) => !focus.trim())) return planRequired();
       checkpointFingerprint = weeklyLessonCheckpointFingerprint({
         week: generationWeek,
         cefr: params.data.cefr,
@@ -674,7 +1001,7 @@ export function registerContentRoutes(
         .flatMap((cell) => cell.lessons.map((lesson) => lesson.title)) ?? [];
       for (let dayNumber = 1; dayNumber <= 5; dayNumber += 1) {
         for (const component of [...resumablePipelineComponents].reverse()) {
-          const stored = await repositories.aiRuns.findSucceededOutput(
+          const stored = await repositories.aiRuns.findSucceededOutputForOrganization(
             actorId,
             weeklyLessonCheckpointKey(checkpointFingerprint, dayNumber, component),
             "weekly_lessons"
@@ -784,7 +1111,7 @@ export function registerContentRoutes(
         component: finding.component,
         code: finding.code,
         severity: "error" as const,
-        message: `Ngày ${finding.dayNumber ?? "?"}: component ${finding.component} chưa vượt qua kiểm tra sau tối đa 2 lần.`,
+        message: `Mức ${params.data.cefr} · Ngày ${finding.dayNumber ?? "?"}: component ${finding.component}${finding.field ? ` (${finding.field})` : ""} chưa vượt qua kiểm tra sau tối đa ${finding.attempts ?? 3} lần${finding.reason ? ` — ${finding.reason}` : ""}.`,
         issues: diagnosticIssues,
         repairAction: "regenerate_component" as const
       }));

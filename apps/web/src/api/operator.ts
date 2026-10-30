@@ -63,6 +63,18 @@ export interface OperatorApiClient {
   deleteContentLessonDraftSet(week: number, cefr: CefrLevel): Promise<{ deleted: true }>;
   saveContentLessonDraft(week: number, cefr: CefrLevel, lessons: ContentLessonDraftInput[]): Promise<ContentLessonSetVersionView>;
   generateContentLessonDraft(week: number, cefr: CefrLevel): Promise<ContentLessonSetVersionView>;
+  generateContentLessonWeekBatch?(week: number, levels?: CefrLevel[]): Promise<{
+    weekNumber: number;
+    levels: Array<{
+      cefr: CefrLevel;
+      status: "completed" | "resumed" | "partial" | "failed";
+      completedDays?: number[];
+      resumedDays?: number[];
+      version?: ContentLessonSetVersionView;
+      partialDraft?: ContentLessonSetVersionView;
+      error?: { code: string; message?: string };
+    }>;
+  }>;
   submitContentLessonSet(versionId: string): Promise<ContentLessonSetVersionView>;
   publishContentLessonSet(versionId: string): Promise<ContentLessonSetVersionView>;
   retireContentLessonSet(versionId: string): Promise<ContentLessonSetVersionView>;
@@ -127,6 +139,7 @@ export const operatorApiClient: OperatorApiClient = {
   deleteContentLessonDraftSet: (week, cefr) => request(`/api/v1/content/lesson-sets/${week}/${encodeURIComponent(cefr)}/draft`, { method: "DELETE", body: "{}" }),
   saveContentLessonDraft: (week, cefr, lessons) => request(`/api/v1/content/lesson-sets/${week}/${encodeURIComponent(cefr)}/draft`, { method: "PUT", body: JSON.stringify({ lessons }) }),
   generateContentLessonDraft: (week, cefr) => request(`/api/v1/content/lesson-sets/${week}/${encodeURIComponent(cefr)}/generate`, { method: "POST", body: "{}" }),
+  generateContentLessonWeekBatch: (week, levels) => request(`/api/v1/content/lesson-sets/${week}/generate`, { method: "POST", body: JSON.stringify(levels?.length ? { levels } : {}) }),
   submitContentLessonSet: (versionId) => request(`/api/v1/content/lesson-set-versions/${encodeURIComponent(versionId)}/review`, { method: "POST", body: "{}" }),
   publishContentLessonSet: (versionId) => request(`/api/v1/content/lesson-set-versions/${encodeURIComponent(versionId)}/publication`, { method: "POST", body: "{}" }),
   retireContentLessonSet: (versionId) => request(`/api/v1/content/lesson-set-versions/${encodeURIComponent(versionId)}/retirement`, { method: "POST", body: "{}" }),

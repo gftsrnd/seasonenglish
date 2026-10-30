@@ -2,8 +2,30 @@ export type LessonGenerationCellResult<TLevel extends string = string> = {
   week: number;
   level: TLevel;
   status: "succeeded" | "failed";
+  /** Server-side level outcome from the weekly batch route. */
+  outcome?: WeeklyBatchLevelOutcome;
+  completedDays?: number[];
   error?: string;
 };
+
+export type WeeklyBatchLevelOutcome = "completed" | "resumed" | "partial" | "failed";
+
+const OUTCOME_LABELS: Record<WeeklyBatchLevelOutcome, string> = {
+  completed: "hoàn thành",
+  resumed: "hoàn thành (tiếp tục từ checkpoint)",
+  partial: "lưu một phần",
+  failed: "lỗi"
+};
+
+/** One readable line per level, e.g. "A1: hoàn thành · A2: lưu một phần (ngày 1, 3)". */
+export function describeBatchLevelResults(results: readonly LessonGenerationCellResult[]): string {
+  return results.map((result) => {
+    const outcome = result.outcome ?? (result.status === "succeeded" ? "completed" : "failed");
+    const days = outcome === "partial" && result.completedDays?.length ? ` (ngày ${result.completedDays.join(", ")})` : "";
+    const error = outcome === "partial" || outcome === "failed" ? (result.error ? ` — ${result.error}` : "") : "";
+    return `${result.level}: ${OUTCOME_LABELS[outcome]}${days}${error}`;
+  }).join(" · ");
+}
 
 export type LessonGenerationJob = {
   week: number;
@@ -91,4 +113,59 @@ export async function generateLessonCellsSettled<TLevel extends string>(
 function errorMessage(error: unknown): string {
   if (error instanceof Error && error.message.trim()) return error.message;
   return "UNKNOWN_GENERATION_ERROR";
+}
+
+export async function generateLessonWeeksBatchSettled<TLevel extends string>(
+  weekNumbers: readonly number[],
+  levels: readonly TLevel[],
+  generateWeekBatch: (week: number, levels: readonly TLevel[]) => Promise<{
+    weekNumber: number;
+    levels: Array<{
+      cefr: TLevel;
+      status: WeeklyBatchLevelOutcome;
+      completedDays?: number[];
+      error?: { code: string; message?: string };
+    }>;
+  }>,
+  onStart?: (week: number, level: TLevel, completed: number, total: number) => void
+): Promise<Array<LessonGenerationCellResult<TLevel>>> {
+  const results: Array<LessonGenerationCellResult<TLevel>> = [];
+  const total = weekNumbers.length * levels.length;
+  for (const week of weekNumbers) {
+    const completed = results.length;
+    levels.forEach((level, index) => {
+      onStart?.(week, level, completed + index, total);
+    });
+    const batchPromise = generateWeekBatch(week, levels);
+    for (const level of levels) {
+      setLessonGenerationJob(`${week}:${level}`, { week, level, status: "running" }, batchPromise);
+    }
+    try {
+      const response = await batchPromise;
+      const byLevel = new Map(response.levels.map((entry) => [entry.cefr, entry]));
+      const settled = levels.map((level): LessonGenerationCellResult<TLevel> => {
+        const entry = byLevel.get(level);
+        const outcome: WeeklyBatchLevelOutcome = entry?.status ?? "failed";
+        const completedDays = entry?.completedDays ?? [];
+        if (outcome === "partial" || outcome === "failed") {
+          const errText = entry?.error?.message || entry?.error?.code || "AI_LESSON_GENERATION_FAILED";
+          setLessonGenerationJob(`${week}:${level}`, { week, level, status: "failed", error: errText }, batchPromise);
+          return { week, level, status: "failed", outcome, completedDays, error: errText };
+        }
+        setLessonGenerationJob(`${week}:${level}`, { week, level, status: "succeeded" }, batchPromise);
+        return { week, level, status: "succeeded", outcome, completedDays };
+      });
+      results.push(...settled);
+      if (settled.some((result) => result.status === "failed")) break;
+    } catch (error) {
+      const errText = errorMessage(error);
+      const settled = levels.map((level): LessonGenerationCellResult<TLevel> => {
+        setLessonGenerationJob(`${week}:${level}`, { week, level, status: "failed", error: errText }, batchPromise);
+        return { week, level, status: "failed", error: errText };
+      });
+      results.push(...settled);
+      break;
+    }
+  }
+  return results;
 }

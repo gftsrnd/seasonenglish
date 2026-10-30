@@ -34,7 +34,7 @@ import { ModalProvider, useModal } from "../shared/ModalProvider.js";
 import type { AudioEvidence } from "../shared/media/audio-evidence.js";
 import { adaptAssessmentOverview, adaptLevelForms, adaptLessonMatrix, adaptLessonSet, adaptPrompts, adaptReview, adaptWeeks } from "./adapters.js";
 import type { Cefr, LessonSetActionKey, OperatorReviewActions, PromptKey, ReviewTab, WeekSuggestion } from "./types.js";
-import { generateLessonCellsSettled, lessonGenerationJobsSnapshot, startLessonGenerationJob, subscribeLessonGenerationJobs } from "./lesson-generation.js";
+import { describeBatchLevelResults, generateLessonWeeksBatchSettled, lessonGenerationJobsSnapshot, startLessonGenerationJob, subscribeLessonGenerationJobs } from "./lesson-generation.js";
 
 export type OperatorApiClient = typeof apiClient;
 
@@ -536,7 +536,7 @@ function WeeksRoute({ client, readOnly }: { client: OperatorApiClient; readOnly:
   const [toast, setToast] = useState<{ tone: "success" | "danger"; message: string }>();
   const [generatingWeek, setGeneratingWeek] = useState<number | null>(null);
   const [generationStatus, setGenerationStatus] = useState("");
-  const [generationLevels, setGenerationLevels] = useState<Cefr[]>(["A1", "A2", "B1", "B2"]);
+  const [generationLevels, setGenerationLevels] = useState<Cefr[]>(["A1", "A2", "B1", "B2", "C1"]);
   const [occupiedWeeks, setOccupiedWeeks] = useState<number[]>([]);
   const [generationDialog, setGenerationDialog] = useState<{ weeks: number[]; selectedWeeks: number[]; replacementWeeks: number[]; levelCount: number }>();
   const [preferredGenerationWeek, setPreferredGenerationWeek] = useState<number>();
@@ -586,30 +586,35 @@ function WeeksRoute({ client, readOnly }: { client: OperatorApiClient; readOnly:
     return completed;
   };
   const startGeneration = (weekNumbers: number[], levels = generationLevels, savePromise?: Promise<ContentWeekFrameView | undefined>) => {
-    const orderedLevels = levels.length ? levels : ["A1", "A2", "B1", "B2"] as Cefr[];
+    const orderedLevels = levels.length ? levels : ["A1", "A2", "B1", "B2", "C1"] as Cefr[];
     setGenerationDialog(undefined);
     setGeneratingWeek(weekNumbers[0] ?? null);
     setGenerationStatus(savePromise ? "Đang lưu chủ đề trước khi sinh bài…" : "Đang chuẩn bị sinh bài…");
     void (async () => {
       try {
         if (savePromise) await savePromise;
-        const results = await generateLessonCellsSettled(
+        if (typeof client.generateContentLessonWeekBatch !== "function") {
+          throw new Error("Máy chủ chưa hỗ trợ sinh tuần theo batch");
+        }
+        // One server-side batch per week: the API normalizes the canonical plan once,
+        // runs every level with its own checkpoints and saves each level as it finishes.
+        const results = await generateLessonWeeksBatchSettled(
           weekNumbers,
           orderedLevels,
-          (week, level) => startLessonGenerationJob(week, level, () => client.generateContentLessonDraft(week, level)),
-          (week, level, completed, total) => {
+          (week, batchLevels) => client.generateContentLessonWeekBatch!(week, [...batchLevels]),
+          (week, _level, completed, total) => {
             setGeneratingWeek(week);
             setGenerationStatus(`Đang sinh tuần ${week} · batch ${orderedLevels.length} mức (${completed + 1}/${total} bộ đã khởi động)…`);
           }
         );
         const failed = results.filter((result) => result.status === "failed");
         const succeeded = results.length - failed.length;
+        const levelSummary = describeBatchLevelResults(results);
         if (failed.length) {
-          const cells = failed.map((result) => `tuần ${result.week} · ${result.level}: ${result.error}`).join("; ");
-          setGenerationStatus(`⚠ Đã sinh ${succeeded}/${results.length} bộ. Lỗi ${failed.length} bộ: ${cells}. Tuần sau chưa được khởi động.`);
+          setGenerationStatus(`⚠ Đã sinh ${succeeded}/${results.length} bộ. ${levelSummary}. Bấm sinh lại để tiếp tục từ checkpoint.`);
           notify(`Đã giữ ${succeeded} bộ thành công; ${failed.length} bộ cần thử lại.`, "danger");
         } else {
-          setGenerationStatus(`✓ Đã sinh đủ ${results.length * 5} bài T2–T6 theo batch ${orderedLevels.length} mức; các tuần chạy tuần tự.`);
+          setGenerationStatus(`✓ Đã sinh đủ ${results.length * 5} bài T2–T6. ${levelSummary}.`);
           notify(`Đã sinh đủ bài cho ${weekNumbers.length} tuần.`);
           navigate(paths.lessons);
         }
