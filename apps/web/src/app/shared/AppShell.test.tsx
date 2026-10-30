@@ -135,11 +135,13 @@ describe("app shell navigation and logout", () => {
     expect(screen.getByText(/Người vận hành/)).toBeInTheDocument();
   });
 
-  it("shows the standardized Bài tuần and Bài kiểm tra Operator navigation", () => {
+  it("shows the standardized Kháng nghị and Bài kiểm tra Operator navigation", () => {
     render(<ExperienceProvider><MemoryRouter initialEntries={["/op/tests"]}><AppShell session={session("operator")} onLogout={() => undefined}><div /></AppShell></MemoryRouter></ExperienceProvider>);
 
     const navigation = screen.getByRole("navigation", { name: "Điều hướng người vận hành" });
-    expect(within(navigation).getByRole("link", { name: "Bài tuần" })).toHaveAttribute("href", "/op/review");
+    expect(within(navigation).getByRole("link", { name: "Kháng nghị" })).toHaveAttribute("href", "/op/review");
+    expect(within(navigation).getByRole("link", { name: "Bài học" })).toHaveAttribute("href", "/op/months");
+    expect(within(navigation).queryByRole("link", { name: "Bài tuần" })).not.toBeInTheDocument();
     expect(within(navigation).getByRole("link", { name: "Bài kiểm tra" })).toHaveAttribute("href", "/op/tests");
     expect(within(navigation).getByRole("link", { name: "Bài kiểm tra" })).toHaveAttribute("aria-current", "page");
     expect(within(navigation).queryByRole("link", { name: "Đọc mẫu" })).not.toBeInTheDocument();

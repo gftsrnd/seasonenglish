@@ -24,9 +24,8 @@ export function ManagerOperations({ view, deleteRequestCounts, ...operational }:
 
 const managerOperationLinks = [
   ["/mgr/ops/levels", "Duyệt mức"],
-  ["/mgr/ops/weeks", "Chủ đề tuần"],
-  ["/mgr/ops/lessons", "Bài học"],
-  ["/mgr/ops/review", "Bài tuần"],
+  ["/mgr/ops/months", "Bài học"],
+  ["/mgr/ops/review", "Kháng nghị"],
   ["/mgr/ops/tests", "Bài kiểm tra"]
 ] as const;
 
@@ -39,7 +38,7 @@ function ManagerOperationsNavigationInRouter() {
   const { pathname } = useLocation();
   return <nav className="manager-operations-switcher" aria-label="Điều hướng màn vận hành">
     {managerOperationLinks.map(([to, label]) => {
-      const active = pathname === to || (to === "/mgr/ops/lessons" && pathname.startsWith(`${to}/`));
+      const active = pathname === to || (to === "/mgr/ops/months" && pathname.startsWith(`${to}/`));
       return <Link className={active ? "active" : undefined} aria-current={active ? "page" : undefined} to={to} key={to}>{label}</Link>;
     })}
   </nav>;

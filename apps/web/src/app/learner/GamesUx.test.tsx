@@ -98,7 +98,6 @@ describe("learner game visual and interaction regressions", () => {
 
     expect(screen.getByText("Hứng đúng vật phẩm, giữ 3 mạng.")).toBeInTheDocument();
     expect(screen.queryByText(/mang đúng từ: lá \(thu\)/i)).not.toBeInTheDocument();
-    expect(screen.getByText("So điểm với đồng nghiệp qua các game từ vựng. Mở từ B1.")).toBeInTheDocument();
   });
 
   it("keeps games visible but disables rounds the active word set cannot build", () => {

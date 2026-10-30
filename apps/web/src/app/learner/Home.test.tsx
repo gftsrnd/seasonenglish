@@ -236,7 +236,7 @@ describe("learner Home parity", () => {
     render(<LearnerHome view={makeView()} actions={actions} />);
 
     expect(screen.getByRole("link", { name: /Luyện với Season/ }).querySelector("svg.lucide-message-circle")).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: /Bài thực hành cuối tuần/ }).querySelector("svg.lucide-pen-line")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /Bài thi tháng/ }).querySelector("svg.lucide-pen-line")).toBeInTheDocument();
     expect(document.querySelector('[data-home-block="primary"] svg.lucide-clock-3')).toBeInTheDocument();
   });
 
@@ -406,11 +406,4 @@ describe("learner Home parity", () => {
     expect(within(readiness!).getByRole("link", { name: "Mở thử thách" })).toHaveAttribute("href", "/challenge");
   });
 
-  it("labels a locked weekend practice entry while preserving its route", () => {
-    render(<LearnerHome view={makeView({ practice: { status: "locked", detail: "Mở sau khi hoàn thành đủ bài.", href: "/practice" } })} actions={actions} />);
-
-    const practice = screen.getByRole("link", { name: /Bài thực hành cuối tuần/ });
-    expect(practice).toHaveAttribute("href", "/practice");
-    expect(practice).toHaveTextContent("Chưa mở");
-  });
 });

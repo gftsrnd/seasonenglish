@@ -52,6 +52,7 @@ describe("approved E4S screen contract", () => {
     expect(ROLE_NAVIGATION.learner).toEqual([
       "/home",
       "/coach",
+      "/exam",
       "/games",
       "/profile"
     ]);

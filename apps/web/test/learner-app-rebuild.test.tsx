@@ -49,9 +49,9 @@ const callbacks = (): LearnerCallbacks => ({
 describe("new learner app frontend", () => {
   it("owns every learner route from the binding route matrix", () => {
     expect(LEARNER_ROUTES).toEqual([
-      "/home", "/onboard", "/test/:kind", "/lesson/:id", "/micro/:id",
+      "/home", "/onboard", "/test/:kind", "/lesson/:id",
       "/coach", "/challenge", "/practice", "/survey", "/profile",
-      "/reward/:mode", "/games", "/games/:game", "/arena", "/duel/:id"
+      "/reward/:mode", "/games", "/games/:game", "/exam"
     ]);
   });
 

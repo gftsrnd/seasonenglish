@@ -25,6 +25,23 @@ function renderManager(element: ReactElement) {
   return render(<ToastProvider><ModalProvider>{element}</ModalProvider></ToastProvider>);
 }
 
+const monthsOverview = {
+  today: "2026-11-10",
+  months: [
+    { month: "2026-10", label: "Tháng 10/2026", examDate: "2026-10-30", lessonCount: 21, studyDayCount: 22, editable: false, levels: [{ cefr: "A2", frameworkStatus: "missing", approvedLessons: 0, totalLessons: 21, examStatus: "none", readyForLearners: false }] },
+    { month: "2026-11", label: "Tháng 11/2026", examDate: "2026-11-30", lessonCount: 20, studyDayCount: 21, editable: true, levels: [{ cefr: "A2", frameworkStatus: "missing", approvedLessons: 0, totalLessons: 20, examStatus: "none", readyForLearners: false }] },
+    { month: "2026-12", label: "Tháng 12/2026", examDate: "2026-12-31", lessonCount: 22, studyDayCount: 23, editable: true, levels: [{ cefr: "A2", frameworkStatus: "missing", approvedLessons: 0, totalLessons: 22, examStatus: "none", readyForLearners: false }] }
+  ],
+  activeLevels: ["A2"],
+  settings: { vocabularyCount: 60, grammarTopicCount: 3, soundCount: 4, examDurationMinutes: 30 },
+  aiConnected: false
+};
+const monthFramework = {
+  id: null, month: "2026-11", cefr: "A2", status: "missing", version: 0, source: null, generationError: null, approvedAt: null, approvedBy: null,
+  vocabulary: [], grammarTopics: [], sounds: [], firstReviewLesson: null, lessons: [], lessonSetVersionId: null,
+  exam: { status: "none", error: null, assessmentVersionId: null, approvedAt: null }, readyForLearners: false, editable: true
+};
+
 describe("ManagerRouteController", () => {
   it("renders security activity as a compact notice instead of a raw bullet list", async () => {
     vi.mocked(apiClient.getManagerPinReports).mockResolvedValue({ reports: [{ id: "pin-1", subjectUserId: "learner-1", subjectName: "Media GFT", note: "Người học đã tự đổi PIN qua xác minh email.", status: "open", createdAt: "2026-10-23T08:39:09.000Z", resolvedAt: null }] });
@@ -166,21 +183,22 @@ describe("ManagerRouteController", () => {
 
     expect(await screen.findByRole("heading", { name: "Bộ bài cần xử lý" })).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "Hiệu suất vận hành" })).toBeInTheDocument();
-    expect(within(screen.getByRole("navigation", { name: "Điều hướng màn vận hành" })).getAllByRole("link").map(link => link.textContent)).toEqual(["Duyệt mức", "Chủ đề tuần", "Bài học", "Bài tuần", "Bài kiểm tra"]);
+    expect(within(screen.getByRole("navigation", { name: "Điều hướng màn vận hành" })).getAllByRole("link").map(link => link.textContent)).toEqual(["Duyệt mức", "Bài học", "Kháng nghị", "Bài kiểm tra"]);
     expect(screen.getAllByText(/chế độ chỉ đọc/i).length).toBeGreaterThan(0);
     expect(screen.queryByRole("link", { name: "Prompt & rubric" })).not.toBeInTheDocument();
   });
 
   it("keeps the Manager-only operations switcher on nested operations screens", async () => {
-    vi.spyOn(operatorApiClient, "getContentWeeks").mockResolvedValue({ pilot: { startDate: "2026-10-05", weekCount: 1 }, weeks: [] });
-    renderManager(<MemoryRouter initialEntries={["/mgr/ops/weeks"]}><ManagerRouteController role="manager" currentUserId="manager-1" /></MemoryRouter>);
+    vi.spyOn(operatorApiClient, "getContentMonths").mockResolvedValue(monthsOverview as any);
+    vi.spyOn(operatorApiClient, "getContentMonthFramework").mockResolvedValue(monthFramework as any);
+    renderManager(<MemoryRouter initialEntries={["/mgr/ops/months"]}><ManagerRouteController role="manager" currentUserId="manager-1" /></MemoryRouter>);
 
-    expect(await screen.findByRole("heading", { name: "Khung chủ đề tuần" })).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "Khung tháng & bài ngày" })).toBeInTheDocument();
     const navigation = screen.getByRole("navigation", { name: "Điều hướng màn vận hành" });
     expect(navigation.parentElement).toHaveClass("manager-operations-context");
     expect(within(navigation.parentElement!).getByRole("note", { name: "Chế độ chỉ đọc của Quản lý" })).toBeInTheDocument();
-    expect(within(navigation).getAllByRole("link").map(link => link.textContent)).toEqual(["Duyệt mức", "Chủ đề tuần", "Bài học", "Bài tuần", "Bài kiểm tra"]);
-    expect(within(navigation).getByRole("link", { name: "Chủ đề tuần" })).toHaveAttribute("aria-current", "page");
+    expect(within(navigation).getAllByRole("link").map(link => link.textContent)).toEqual(["Duyệt mức", "Bài học", "Kháng nghị", "Bài kiểm tra"]);
+    expect(within(navigation).getByRole("link", { name: "Bài học" })).toHaveAttribute("aria-current", "page");
   });
 
   it("opens the real learner quick-view and shows Manager operational queues", async () => {

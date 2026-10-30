@@ -419,8 +419,8 @@ describe("Operator app rebuild", () => {
     const user = userEvent.setup();
     const onTabChange = vi.fn();
     render(<OperatorReview view={{ activeTab: "subs", counts: { subs: 1, coach: 2, appeals: 1, attempts: 0, tests: 4 }, submissions: [], coachTurns: [], appeals: [], attempts: [], tests: [] } as any} actions={{ onTabChange, onMarkSubmission: vi.fn(), onMarkCoachTurn: vi.fn(), onGradeAi: vi.fn(), onGradeManual: vi.fn(), onDecideAppeal: vi.fn(), onViewTest: vi.fn() }} />);
-    expect(screen.getByText("Theo dõi đề bài tuần, bài đã nộp, phản hồi AI Coach, kháng nghị và lịch sử làm bài.")).toBeInTheDocument();
-    expect(screen.getAllByRole("tab")).toHaveLength(5);
+    expect(screen.getByText(/Phản hồi AI Coach, kháng nghị bài học \/ bài thi và lịch sử làm bài/)).toBeInTheDocument();
+    expect(screen.getAllByRole("tab")).toHaveLength(3);
     expect(screen.queryByText(/bài siêu ngắn/i)).not.toBeInTheDocument();
     expect(screen.getByRole("tab", { name: "Lịch sử làm bài" })).toBeInTheDocument();
     expect(screen.queryByRole("tab", { name: /Bài test/ })).not.toBeInTheDocument();
@@ -562,30 +562,6 @@ describe("Operator app rebuild", () => {
 
     expect(screen.getByRole("table")).toHaveClass("operator-action-table");
     expect(screen.getByRole("button", { name: "Xem" }).closest("td")).toHaveAttribute("data-label", "Thao tác");
-  });
-
-  it("edits weekly practice in its own review tab", async () => {
-    const user = userEvent.setup();
-    const onSaveWeeklyPractice = vi.fn();
-    render(<OperatorReview view={{
-      activeTab: "weekly", counts: { subs: 0, coach: 0, weekly: 1, appeals: 0, attempts: 0, tests: 0 },
-      submissions: [], coachTurns: [], appeals: [], attempts: [], tests: [],
-      weeklyPractices: [{ id: "1:A2", week: 1, cefr: "A2", topic: "Asking for directions", status: "approved", version: 3, task: "Old task", guidance: "Old guidance", requiredVocabulary: ["left", "right"] }]
-    } as any} actions={{ onTabChange: vi.fn(), onMarkSubmission: vi.fn(), onMarkCoachTurn: vi.fn(), onGradeAi: vi.fn(), onGradeManual: vi.fn(), onDecideAppeal: vi.fn(), onViewTest: vi.fn(), onSaveWeeklyPractice }} />);
-
-    expect(screen.getAllByRole("tab")[0]).toHaveAccessibleName("Đề bài tuần (1)");
-    expect(screen.getByRole("tab", { name: "Đề bài tuần (1)" })).toHaveAttribute("aria-selected", "true");
-    expect(screen.getByText("Tuần 1 · Asking for directions")).toBeInTheDocument();
-    await user.clear(screen.getByRole("textbox", { name: "Đề bài · Tuần 1 · A2" }));
-    await user.type(screen.getByRole("textbox", { name: "Đề bài · Tuần 1 · A2" }), "Write four sentences.");
-    await user.clear(screen.getByRole("textbox", { name: "Từ bắt buộc · Tuần 1 · A2" }));
-    await user.type(screen.getByRole("textbox", { name: "Từ bắt buộc · Tuần 1 · A2" }), "left, right, left, straight");
-    await user.click(screen.getByRole("button", { name: "Lưu bản nháp · Tuần 1 · A2" }));
-
-    expect(onSaveWeeklyPractice).toHaveBeenCalledWith({
-      week: 1, cefr: "A2", expectedVersion: 3,
-      task: "Write four sentences.", guidance: "Old guidance", requiredVocabulary: ["left", "right", "straight"]
-    });
   });
 
   it("orders weekly-practice editors by week and then CEFR level", () => {

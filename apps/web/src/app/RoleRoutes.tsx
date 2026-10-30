@@ -106,7 +106,7 @@ function isKnownOperatorRoute(pathname: string): boolean {
 }
 
 function isKnownManagerOperationsRoute(pathname: string): boolean {
-  return ["/mgr/ops/levels", "/mgr/ops/weeks", "/mgr/ops/lessons", "/mgr/ops/review", "/mgr/ops/tests", "/mgr/ops/prompts", "/mgr/ops/level-forms"].includes(pathname)
+  return ["/mgr/ops/levels", "/mgr/ops/months", "/mgr/ops/weeks", "/mgr/ops/lessons", "/mgr/ops/review", "/mgr/ops/tests", "/mgr/ops/prompts", "/mgr/ops/level-forms"].includes(pathname)
     || /^\/mgr\/ops\/lessons\/\d+\/(A1|A2|B1|B2|C1)$/.test(pathname);
 }
 
