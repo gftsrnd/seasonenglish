@@ -89,3 +89,8 @@ pnpm test:unit
 pnpm test
 ```
 Trên Windows với đường dẫn dài: `pnpm install --config.node-linker=hoisted`.
+
+## Đã chạy thử local (31/10, máy Windows, không MinIO)
+Launcher riêng (không commit): Postgres nhúng + `prepare-local.ts` + API + worker + Vite. Đi trọn luồng trên `/op/months` với tài khoản Vận hành mẫu: Tháng 11/2026 · A2 → **Sinh khung** (worker trả khung mẫu vì không có AI) → **Duyệt khung** (hộp xác nhận đúng câu chữ PO) → worker chia 20 bài (02/11 → 27/11, đúng lịch T2–T6) → duyệt 20 bài → lesson set publish → **Sinh bài thi tháng** → **Duyệt bài thi** → banner "Đủ điều kiện: học viên A2 đã thấy bài của Tháng 11/2026". Mở soạn tay bài 1 bằng `LessonFormEditor` thành công.
+Lưu ý nhỏ: tiêu đề editor còn ghi "Sửa bài T1 · Tuần 0" vì `LessonFormEditor` nhận `weekNumber`; cần đổi nhãn sang "Bài n · Tháng" (giai đoạn 3).
+`/api/readiness` trả `not_ready` khi không có object storage — không ảnh hưởng luồng tháng.
