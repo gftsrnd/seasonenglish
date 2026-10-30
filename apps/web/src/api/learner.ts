@@ -1,7 +1,7 @@
 import type {
-  ArenaView, AssessmentAppealView, AssessmentKind, AssessmentMonthlyGoalView, AssessmentResponseView,
+  AssessmentAppealView, LearnerMonthView, AssessmentKind, AssessmentMonthlyGoalView, AssessmentResponseView,
   AssessmentRuntimeView, AssessmentSectionCode, AssessmentView, AssessmentViolationInput, CoachMessageInput,
-  CoachPersona, CoachView, DuelView, GameAnswerInput, GameFinishInput, GameHubView, GameKey, GameResultView,
+  CoachPersona, CoachView, GameAnswerInput, GameFinishInput, GameHubView, GameKey, GameResultView,
   LearnerHomeView, LearnerProfileData, LearnerProfileView, LearnerProgressView, LessonPartAppealView,
   LessonPartAttemptEvidenceInput, LessonPartAttemptView, LessonPartCode, LessonProgressView, LessonView,
   ContentImageView, LevelChallengeView, MicroLessonView, RewardView, SurveyView, WeeklyPracticeView, AudioArtifactInput
@@ -43,10 +43,8 @@ export interface LearnerApiClient {
   deleteGameWordSet(): Promise<GameHubView>;
   resolveGameWordImage(setId: string, wordId: string): Promise<ContentImageView>;
   submitGameResult(game: GameKey, input: { requestId: string } & GameFinishInput): Promise<GameResultView>;
-  getArena(): Promise<ArenaView>;
-  createDuel(input: { opponentId: string; game: Exclude<GameKey, "crossword"> }): Promise<DuelView>;
-  getDuel(id: string): Promise<DuelView>;
-  submitDuelResult(id: string, input: { requestId: string; answers: GameAnswerInput[]; attemptSeed?: number }): Promise<DuelView>;
+  getMonth(): Promise<LearnerMonthView>;
+  appealMonthlyExam(reason: string): Promise<{ status: string; deadlineAt: string }>;
   getReward(mode: "preview" | "done"): Promise<RewardView>;
   getSurvey(): Promise<SurveyView>;
   submitSurvey(input: { rating: number; comment: string; studyTime: "work" | "outside" | "both" }): Promise<SurveyView>;
@@ -100,10 +98,8 @@ export const learnerApiClient: LearnerApiClient = {
   deleteGameWordSet: () => request("/api/v1/engagement/games/word-set", { method: "DELETE", body: "{}" }),
   resolveGameWordImage: (setId, wordId) => request(`/api/v1/engagement/game-sets/${encodeURIComponent(setId)}/words/${encodeURIComponent(wordId)}/image`),
   submitGameResult: (game, input) => request(`/api/v1/engagement/games/${encodeURIComponent(game)}/results`, { method: "POST", body: JSON.stringify(input) }),
-  getArena: () => request("/api/v1/engagement/arena"),
-  createDuel: (input) => request("/api/v1/engagement/duels", { method: "POST", body: JSON.stringify(input) }),
-  getDuel: (id) => request(`/api/v1/engagement/duels/${encodeURIComponent(id)}`),
-  submitDuelResult: (id, input) => request(`/api/v1/engagement/duels/${encodeURIComponent(id)}/result`, { method: "POST", body: JSON.stringify(input) }),
+  getMonth: () => request("/api/v1/learner/month"),
+  appealMonthlyExam: (reason) => request("/api/v1/learner/month/exam-appeal", { method: "POST", body: JSON.stringify({ reason }) }),
   getReward: (mode) => request(`/api/v1/engagement/rewards/${mode}`),
   getSurvey: () => request("/api/v1/engagement/survey"),
   submitSurvey: (input) => request("/api/v1/engagement/survey", { method: "POST", body: JSON.stringify(input) }),

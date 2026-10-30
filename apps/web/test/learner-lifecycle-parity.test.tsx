@@ -17,7 +17,7 @@ const actions = (): LearnerCallbacks => ({
   sendChallengeMessage: vi.fn(), submitWeeklyPractice: vi.fn(), submitSurvey: vi.fn(), saveAvatar: vi.fn(), printReward: vi.fn(),
   acknowledgeRewardAnnouncement: vi.fn(),
   speak: vi.fn(), generateGameSet: vi.fn(), useWeeklyGameSet: vi.fn(), deleteGameSet: vi.fn(), finishGame: vi.fn(),
-  resetGameResult: vi.fn(), resolveGameWordImage: vi.fn(async () => ({ status: "unavailable" as const })), createDuel: vi.fn()
+  resetGameResult: vi.fn(), appealMonthlyExam: vi.fn(), resolveGameWordImage: vi.fn(async () => ({ status: "unavailable" as const }))
 });
 
 const home = {

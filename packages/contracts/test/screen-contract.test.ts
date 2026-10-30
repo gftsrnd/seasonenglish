@@ -11,20 +11,15 @@ const expectedRoutes = [
   "/lesson/:id",
   "/coach",
   "/challenge",
-  "/practice",
   "/games",
   "/games/:game",
-  "/arena",
-  "/duel/:id",
+  "/exam",
   "/profile",
   "/reward/:mode",
   "/survey",
   "/op",
   "/op/levelforms",
   "/op/months",
-  "/op/weeks",
-  "/op/lessons",
-  "/op/lessons/:week/:cefr",
   "/op/review",
   "/op/prompts",
   "/settings",
@@ -57,14 +52,12 @@ describe("approved E4S screen contract", () => {
     expect(ROLE_NAVIGATION.learner).toEqual([
       "/home",
       "/coach",
-      "/practice",
       "/games",
       "/profile"
     ]);
     expect(ROLE_NAVIGATION.operator).toEqual([
       "/op",
       "/op/months",
-      "/op/lessons",
       "/op/review",
       "/settings"
     ]);

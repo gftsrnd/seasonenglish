@@ -43,8 +43,7 @@ const callbacks = (): LearnerCallbacks => ({
   deleteGameSet: vi.fn(),
   finishGame: vi.fn(),
   resetGameResult: vi.fn(),
-  resolveGameWordImage: vi.fn(async () => ({ status: "unavailable" as const })),
-  createDuel: vi.fn()
+  appealMonthlyExam: vi.fn(), resolveGameWordImage: vi.fn(async () => ({ status: "unavailable" as const }))
 });
 
 describe("new learner app frontend", () => {
@@ -119,8 +118,7 @@ describe("new learner app frontend", () => {
           { id: "coordinate", english: "coordinate", vietnamese: "phối hợp", definition: "organize together", partOfSpeech: "verb" },
           { id: "communicate", english: "communicate", vietnamese: "giao tiếp", definition: "share information", partOfSpeech: "verb" }
         ] },
-        games: [],
-        arena: { eligible: true, requiredLevel: "B1", points: 50, pendingDuels: 0 }
+        games: []
       }
     }} callbacks={callbacks()} />);
     expect(screen.getAllByRole("link", { name: /chơi/i }).map((link) => link.getAttribute("href"))).toEqual([
@@ -138,7 +136,7 @@ describe("new learner app frontend", () => {
       view: {
         cefr: "B1", aiAvailable: true,
         wordSet: { id: "set-1", topic: "Meetings", cefr: "B1", source: "custom", words: [] },
-        games: [], arena: { eligible: true, requiredLevel: "B1", points: 0, pendingDuels: 0 }
+        games: []
       }
     }} callbacks={actions} />);
     await user.type(screen.getByLabelText("Chủ đề bộ từ"), "coffee shop");

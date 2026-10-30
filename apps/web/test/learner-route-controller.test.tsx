@@ -214,6 +214,5 @@ const gameHubView: GameHubView = {
   cefr: "A2",
   aiAvailable: false,
   wordSet: { id: "custom-set", topic: "Meetings", cefr: "A2", source: "custom", words: [{ id: "word-1", english: "agenda", vietnamese: "chương trình", definition: "a list of items", partOfSpeech: "noun" }] },
-  games: [],
-  arena: { eligible: false, requiredLevel: "B1", points: 0, pendingDuels: 0 }
+  games: []
 };

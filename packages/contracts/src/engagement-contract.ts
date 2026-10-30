@@ -118,7 +118,6 @@ export interface GameHubView {
   topicModeration?: GameTopicModeration;
   wordSet: GameWordSetView | null;
   games: GameDescriptor[];
-  arena: { eligible: boolean; requiredLevel: "B1"; points: number; pendingDuels: number };
 }
 
 export interface GameAnswerInput {

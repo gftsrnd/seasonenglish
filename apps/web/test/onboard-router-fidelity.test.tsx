@@ -94,8 +94,7 @@ describe("onboarding and learner router fidelity", () => {
     cleanup();
 
     render(<LearnerController path="/games/not-a-game" contracts={{ games: {
-      cefr: "A2", wordSet: { id: "set-1", topic: "Meetings", cefr: "A2", source: "weekly", words: [] }, games: [],
-      arena: { eligible: false, requiredLevel: "B1", points: 0, pendingDuels: 0 }
+      cefr: "A2", wordSet: { id: "set-1", topic: "Meetings", cefr: "A2", source: "weekly", words: [] }, games: []
     } }} callbacks={actions()} />);
     expect(screen.getByRole("note")).toHaveTextContent(/không tìm thấy trò chơi/i);
     expect(screen.getByRole("link", { name: /mini game/i })).toHaveAttribute("href", "/games");

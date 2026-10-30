@@ -247,7 +247,7 @@ function isManagerPath(pathname: string): boolean {
 }
 
 function isLearnerPath(pathname: string): boolean {
-  return ["/home", "/onboard", "/coach", "/challenge", "/practice", "/survey", "/profile", "/games", "/arena", "/lesson", "/test", "/duel"].some((route) => isRouteOrChild(pathname, route)) || isRouteOrChild(pathname, "/reward/done");
+  return ["/home", "/onboard", "/coach", "/challenge", "/practice", "/survey", "/profile", "/games", "/exam", "/lesson", "/test"].some((route) => isRouteOrChild(pathname, route)) || isRouteOrChild(pathname, "/reward/done");
 }
 
 function isRouteOrChild(pathname: string, route: string): boolean {

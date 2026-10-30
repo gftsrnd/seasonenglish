@@ -15,7 +15,7 @@ const callbacks = {
   regenerateMicroLesson: vi.fn(), sendCoachMessage: vi.fn(), changeCoachPersona: vi.fn(), startNewCoachChat: vi.fn(),
   sendChallengeMessage: vi.fn(), submitWeeklyPractice: vi.fn(), submitSurvey: vi.fn(), saveAvatar: vi.fn(), printReward: vi.fn(),
   speak: vi.fn(), generateGameSet: vi.fn(), useWeeklyGameSet: vi.fn(), deleteGameSet: vi.fn(), finishGame: vi.fn(), resetGameResult: vi.fn(),
-  resolveGameWordImage: vi.fn(), createDuel: vi.fn()
+  appealMonthlyExam: vi.fn(), resolveGameWordImage: vi.fn()
 } as unknown as LearnerCallbacks;
 
 const lesson: LessonView = {

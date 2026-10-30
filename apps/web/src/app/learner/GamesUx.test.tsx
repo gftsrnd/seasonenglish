@@ -34,7 +34,7 @@ const actions = {
   navigate: vi.fn(),
   finishGame: vi.fn().mockResolvedValue(undefined),
   resetGameResult: vi.fn(),
-  resolveGameWordImage: vi.fn().mockResolvedValue({ status: "unavailable" }),
+  appealMonthlyExam: vi.fn(), resolveGameWordImage: vi.fn().mockResolvedValue({ status: "unavailable" }),
   useWeeklyGameSet: vi.fn().mockResolvedValue(undefined),
   deleteGameSet: vi.fn().mockResolvedValue(undefined),
   speak: vi.fn()
@@ -58,8 +58,7 @@ const hubView: GameHubView = {
   games: [
     descriptor("scramble", []), descriptor("crossword", []), { ...descriptor("eggs", []), description: "Đưa rổ hứng vật phẩm theo mùa mang đúng từ: lá (thu), hoa (xuân), kem (hè), tuyết (đông)." },
     descriptor("mario", []), descriptor("sort", []), descriptor("typing", [])
-  ],
-  arena: { eligible: false, requiredLevel: "B1", points: 0, pendingDuels: 0 }
+  ]
 };
 
 describe("learner game visual and interaction regressions", () => {

@@ -1,5 +1,4 @@
 import type {
-  ArenaView,
   AssessmentSectionCode,
   AssessmentRuntimeView,
   AssessmentViolationInput,
@@ -7,8 +6,8 @@ import type {
   CoachPersona,
   ContentImageView,
   CoachView as CoachContractView,
-  DuelView,
   GameDescriptor,
+  LearnerMonthView,
   GameFinishInput,
   GameHubView,
   LearnerAvatarData,
@@ -34,7 +33,7 @@ import type { AudioDeletionMetadata, AudioEvidence } from "../shared/media/audio
 export const LEARNER_ROUTES = [
   "/home", "/onboard", "/test/:kind", "/lesson/:id",
   "/coach", "/challenge", "/practice", "/survey", "/profile",
-  "/reward/:mode", "/games", "/games/:game", "/arena", "/duel/:id"
+  "/reward/:mode", "/games", "/games/:game", "/exam"
 ] as const;
 
 export type LearnerRoute = (typeof LEARNER_ROUTES)[number];
@@ -114,8 +113,7 @@ export type LearnerScreen =
   | { kind: "reward"; view: RewardView }
   | { kind: "games"; view: GameHubView }
   | { kind: "game"; descriptor: GameDescriptor; wordSet: NonNullable<GameHubView["wordSet"]>; result?: { score: number; maxScore: number } | null }
-  | { kind: "arena"; view: ArenaView }
-  | { kind: "duel"; view: DuelView; descriptor: GameDescriptor };
+  | { kind: "exam"; view: LearnerMonthView };
 
 export interface LearnerCallbacks {
   navigate: (path: string) => void;
@@ -155,6 +153,6 @@ export interface LearnerCallbacks {
   deleteGameSet: () => void | Promise<void>;
   finishGame: (input: GameFinishInput) => void | Promise<void>;
   resetGameResult: () => void;
+  appealMonthlyExam: (reason: string) => void | Promise<void>;
   resolveGameWordImage: (setId: string, wordId: string) => Promise<ContentImageView>;
-  createDuel: (opponentId: string, game: Exclude<GameDescriptor["key"], "crossword">) => void | Promise<void>;
 }

@@ -1,7 +1,7 @@
 import type { AudioArtifactInput, AudioArtifactView, GameDescriptor, GameKey, GameTopicModeration, WeeklyPracticeView } from "@e4s/contracts";
 import { randomUUID } from "node:crypto";
 import { vocabularyOutputSchema, weeklyPracticeOutputSchema, type AiTaskRunner } from "@e4s/ai";
-import { arenaEligible, scoreGameAttempt } from "@e4s/domain/engagement";
+import { scoreGameAttempt } from "@e4s/domain/engagement";
 import { validateWeeklyPractice } from "@e4s/domain/progression";
 import { createRepositories } from "@e4s/database";
 import type { FastifyInstance } from "fastify";
@@ -258,66 +258,13 @@ export function registerEngagementRoutes(
     });
   });
 
-  app.get("/api/v1/engagement/arena", { preHandler: learnerOnly }, async (request, reply) => {
-    const learnerId = request.e4sSession!.user.id;
-    const [arena, hub] = await Promise.all([repositories.engagement.arena(learnerId), repositories.engagement.gameHub(learnerId)]);
-    if (!arena) return reply.code(404).send({ code: "ARENA_CONTEXT_NOT_FOUND" });
-    const eligible = arenaEligible(arena.cefr);
-    const own = arena.leaderboard.find((item) => item.learnerId === learnerId);
-    return {
-      eligible, requiredLevel: "B1", currentLevel: arena.cefr, learnerId, points: own?.points ?? 0,
-      wordSetTopic: hub?.wordSet?.topic ?? null,
-      leaderboard: eligible ? arena.leaderboard.map((item, index) => ({ rank: index + 1, ...item })) : [],
-      opponents: eligible ? arena.opponents : [],
-      duels: eligible ? arena.duels.map((duel) => duelSummary(duel, learnerId)) : []
-    };
-  });
-
-  app.post("/api/v1/engagement/duels", { preHandler: learnerOnly }, async (request, reply) => {
-    const parsed = z.object({ opponentId: z.uuid(), game: gameKey.exclude(["crossword"]) }).safeParse(request.body);
-    if (!parsed.success) return reply.code(400).send({ code: "INVALID_DUEL" });
-    const learnerId = request.e4sSession!.user.id;
-    const arena = await repositories.engagement.arena(learnerId);
-    if (!arena || !arenaEligible(arena.cefr)) return reply.code(403).send({ code: "ARENA_LEVEL_REQUIRED" });
-    const id = await repositories.engagement.createDuel(learnerId, parsed.data.opponentId, parsed.data.game);
-    if (!id) return reply.code(400).send({ code: "DUEL_OPPONENT_NOT_ELIGIBLE" });
-    const view = await repositories.engagement.duel(learnerId, id);
-    return reply.code(201).send(view);
-  });
-
-  app.get("/api/v1/engagement/duels/:duelId", { preHandler: learnerOnly }, async (request, reply) => {
-    const parsed = z.object({ duelId: z.uuid() }).safeParse(request.params);
-    if (!parsed.success) return reply.code(400).send({ code: "INVALID_DUEL_ID" });
-    const view = await repositories.engagement.duel(request.e4sSession!.user.id, parsed.data.duelId);
-    return view ?? reply.code(404).send({ code: "DUEL_NOT_FOUND" });
-  });
-
-  app.post("/api/v1/engagement/duels/:duelId/result", { preHandler: learnerOnly }, async (request, reply) => {
-    const params = z.object({ duelId: z.uuid() }).safeParse(request.params);
-    const body = resultInput.safeParse(request.body);
-    if (!params.success || !body.success) return reply.code(400).send({ code: "INVALID_DUEL_RESULT" });
-    const learnerId = request.e4sSession!.user.id;
-    const duel = await repositories.engagement.duel(learnerId, params.data.duelId);
-    if (!duel) return reply.code(404).send({ code: "DUEL_NOT_FOUND" });
-    const duplicate = await pool.query<{ duel_id: string | null }>(
-      "select duel_id from game_results where learner_id = $1 and request_key = $2 limit 1",
-      [learnerId, body.data.requestId]
-    );
-    if (duplicate.rows[0]) {
-      if (duplicate.rows[0].duel_id !== params.data.duelId) return reply.code(409).send({ code: "DUEL_REQUEST_ID_REUSED" });
-      const result = await repositories.engagement.findGameResult(learnerId, body.data.requestId);
-      return result ? { ...duel, result } : reply.code(409).send({ code: "DUEL_RESULT_NOT_AVAILABLE" });
-    }
-    if (duel.myScore) return reply.code(409).send({ code: "DUEL_ALREADY_PLAYED" });
-    const scored = scoreGameAttempt(duel.game, duel.wordSet.words, body.data.answers, { hintsUsed: body.data.hintsUsed, attemptSeed: body.data.attemptSeed });
-    const result = await repositories.engagement.saveGameResult({
-      learnerId, setId: duel.wordSet.id, game: duel.game, requestId: body.data.requestId,
-      ...scored, duelId: duel.id, details: { duel: true }
-    });
-    const saved = await repositories.engagement.saveDuelScore({ learnerId, duelId: duel.id, result, requestId: body.data.requestId });
-    if (saved === "already_played") return reply.code(409).send({ code: "DUEL_ALREADY_PLAYED" });
-    return saved === null ? reply.code(404).send({ code: "DUEL_NOT_FOUND" }) : { ...saved, result };
-  });
+  // Đấu trường nội bộ đã bỏ (quyết định PO 31/10/2026). Giữ bảng duels; route trả 410 để client cũ hiểu rõ.
+  const arenaRemoved = async (_request: unknown, reply: { code(status: number): { send(body: unknown): unknown } }) =>
+    reply.code(410).send({ code: "ARENA_REMOVED", message: "Đấu trường nội bộ đã ngừng hoạt động." });
+  app.get("/api/v1/engagement/arena", { preHandler: learnerOnly }, arenaRemoved);
+  app.post("/api/v1/engagement/duels", { preHandler: learnerOnly }, arenaRemoved);
+  app.get("/api/v1/engagement/duels/:duelId", { preHandler: learnerOnly }, arenaRemoved);
+  app.post("/api/v1/engagement/duels/:duelId/result", { preHandler: learnerOnly }, arenaRemoved);
 
   app.get("/api/v1/engagement/rewards/:mode", { preHandler: learnerOnly }, async (request, reply) => {
     const parsed = z.object({ mode: z.enum(["preview", "done"]) }).safeParse(request.params);
@@ -420,9 +367,7 @@ async function gameHubView(repositories: ReturnType<typeof createRepositories>, 
   const own = arena?.leaderboard.find((item) => item.learnerId === learnerId);
   return {
     cefr: hub.cefr, aiAvailable, topicModeration: { state: "empty" } satisfies GameTopicModeration, wordSet: hub.wordSet,
-    games: GAME_DESCRIPTORS.map((game) => ({ ...game, best: hub.best[game.key] ?? null })),
-    arena: { eligible: arenaEligible(hub.cefr), requiredLevel: "B1" as const, points: own?.points ?? 0,
-      pendingDuels: arena?.duels.filter((duel) => duel.state === "open" && !duel.scores[learnerId]).length ?? 0 }
+    games: GAME_DESCRIPTORS.map((game) => ({ ...game, best: hub.best[game.key] ?? null }))
   };
 }
 
@@ -437,20 +382,4 @@ function aiErrorStatus(error: unknown): 429 | 502 | 503 | 504 {
   if (code === "AI_TIMEOUT") return 504;
   if (code === "AI_PROVIDER_NOT_CONFIGURED" || code === "AI_PROMPT_NOT_FOUND") return 503;
   return 502;
-}
-
-function duelSummary(duel: {
-  id: string; game: GameKey; challengerId: string; opponentId: string; challengerName: string; opponentName: string;
-  state: string; wordSetTopic: string; scores: Record<string, { score: number; maxScore: number }>; createdAt: Date;
-}, learnerId: string) {
-  const opponentId = duel.challengerId === learnerId ? duel.opponentId : duel.challengerId;
-  const opponentName = duel.challengerId === learnerId ? duel.opponentName : duel.challengerName;
-  const myScore = duel.scores[learnerId] ?? null;
-  const opponentScore = duel.scores[opponentId] ?? null;
-  const outcome = !myScore ? "play" : !opponentScore ? "waiting"
-    : myScore.score / Math.max(1, myScore.maxScore) === opponentScore.score / Math.max(1, opponentScore.maxScore) ? "draw"
-      : myScore.score / Math.max(1, myScore.maxScore) > opponentScore.score / Math.max(1, opponentScore.maxScore) ? "win" : "lose";
-  return { id: duel.id, game: duel.game, opponent: { id: opponentId, displayName: opponentName }, state: duel.state,
-    myScore, opponentScore, outcome, challengedByMe: duel.challengerId === learnerId,
-    wordSetTopic: duel.wordSetTopic, createdAt: duel.createdAt.toISOString() };
 }

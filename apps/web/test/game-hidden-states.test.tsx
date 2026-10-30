@@ -16,7 +16,7 @@ const view = (topicModeration: GameHubView["topicModeration"]): GameHubView => (
   cefr: "A2", aiAvailable: true,
   ...(topicModeration === undefined ? {} : { topicModeration }),
   wordSet: { id: "00000000-0000-4000-8000-000000000301", topic: "Tuần 1", cefr: "A2", source: "weekly", words: [] },
-  games: [], arena: { eligible: false, requiredLevel: "B1", points: 0, pendingDuels: 0 }
+  games: []
 });
 
 describe("app game moderation states", () => {

@@ -23,7 +23,7 @@ const callbacks = (overrides: Partial<LearnerCallbacks> = {}) => ({
   regenerateMicroLesson: vi.fn(), sendCoachMessage: vi.fn(), changeCoachPersona: vi.fn(), startNewCoachChat: vi.fn(),
   sendChallengeMessage: vi.fn(), submitWeeklyPractice: vi.fn(), submitSurvey: vi.fn(), saveAvatar: vi.fn(), printReward: vi.fn(),
   speak: vi.fn(), generateGameSet: vi.fn(), useWeeklyGameSet: vi.fn(), deleteGameSet: vi.fn(), finishGame: vi.fn(), resetGameResult: vi.fn(),
-  resolveGameWordImage: vi.fn(), createDuel: vi.fn(), ...overrides
+  appealMonthlyExam: vi.fn(), resolveGameWordImage: vi.fn(), ...overrides
 } as unknown as LearnerCallbacks);
 
 const parts: LessonPart[] = [

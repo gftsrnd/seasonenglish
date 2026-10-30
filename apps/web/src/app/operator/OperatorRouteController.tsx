@@ -1,5 +1,5 @@
 import { createContext, useContext, useEffect, useMemo, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
-import { useLocation, useNavigate } from "react-router";
+import { Navigate, useLocation, useNavigate } from "react-router";
 import "./styles.css";
 import type {
   AssessmentLevelFormSlotView,
@@ -103,13 +103,14 @@ function OperatorRouteControllerContent({ session, client, paths }: { session: S
   const readOnly = session.role === "manager";
   const props = { client, readOnly };
   const detail = location.pathname.match(new RegExp(`^${escapeRegExp(paths.lessons)}/(\\d+)/(A1|A2|B1|B2|C1)$`));
-  const content = detail ? <LessonSetRoute {...props} week={Number(detail[1])} cefr={detail[2] as Cefr} />
+  // Bài học theo tuần đã gộp vào trang tháng: các đường dẫn cũ chuyển về /months.
+  const content = detail ? <Navigate replace to={paths.months} />
     : location.pathname === paths.root ? <DashboardRoute {...props} />
       : location.pathname === paths.tests ? <TestsRoute {...props} initialTab="placement" />
         : location.pathname === paths.levelForms ? <TestsRoute {...props} initialTab="promotion" />
         : location.pathname === paths.months ? <MonthsRoute {...props} />
-        : location.pathname === paths.weeks ? <WeeksRoute {...props} />
-          : location.pathname === paths.lessons ? <LessonsRoute {...props} />
+        : location.pathname === paths.weeks ? <Navigate replace to={paths.months} />
+          : location.pathname === paths.lessons ? <Navigate replace to={paths.months} />
             : location.pathname === paths.review ? <ReviewRoute {...props} canEditWeeklyPractice={session.role === "operator"} />
               : session.role === "manager" && location.pathname === paths.prompts ? <PromptsRoute client={client} readOnly={false} />
                 : <Status tone="error">Đường dẫn vận hành không tồn tại.</Status>;
@@ -918,7 +919,7 @@ function LessonSetRoute({ client, readOnly, week, cefr }: { client: OperatorApiC
 function ReviewRoute({ client, readOnly, canEditWeeklyPractice, assessmentOnly = false, embedded = false }: { client: OperatorApiClient; readOnly: boolean; canEditWeeklyPractice: boolean; assessmentOnly?: boolean; embedded?: boolean }) {
   const modal = useModal();
   const location = useLocation();
-  const initialTab = assessmentOnly ? "tests" : (location.state as { reviewTab?: ReviewTab } | null)?.reviewTab ?? "weekly";
+  const initialTab = assessmentOnly ? "tests" : (location.state as { reviewTab?: ReviewTab } | null)?.reviewTab ?? "coach";
   const [tab, setTab] = useState<ReviewTab>(initialTab);
   const [data, setData] = useState<ContentReviewView>();
   const [error, setError] = useState<string>();

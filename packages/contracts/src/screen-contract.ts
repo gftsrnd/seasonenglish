@@ -24,21 +24,16 @@ export const SCREEN_CONTRACT = [
   { id: "lesson", path: "/lesson/:id", title: "Bài học", roles: ["learner"], purpose: "Học đúng trình tự nội dung đã xác nhận" },
   { id: "coach", path: "/coach", title: "Luyện với Season", roles: ["learner"], purpose: "Hội thoại, nhận phản hồi và làm lại trong cùng màn" },
   { id: "level-challenge", path: "/challenge", title: "Thử thách lên mức", roles: ["learner"], purpose: "Làm tiếp hoặc hoàn thành thử thách đủ điều kiện" },
-  { id: "weekly-practice", path: "/practice", title: "Bài thực hành cuối tuần", roles: ["learner"], purpose: "Soạn, nộp và xem trạng thái bài cuối tuần" },
   { id: "games", path: "/games", title: "Mini game", roles: ["learner"], purpose: "Chọn mini game" },
   { id: "game-detail", path: "/games/:game", title: "Mini game", roles: ["learner"], purpose: "Chơi một mini game" },
-  { id: "arena", path: "/arena", title: "Arena", roles: ["learner"], purpose: "Xem điều kiện, đối thủ và trận đấu" },
-  { id: "duel", path: "/duel/:id", title: "Duel", roles: ["learner"], purpose: "Thực hiện một lượt đấu cụ thể" },
+  { id: "monthly-exam", path: "/exam", title: "Bài thi tháng", roles: ["learner"], purpose: "Xem báo cáo điểm danh, điều kiện và vào bài thi tháng" },
   { id: "learner-profile", path: "/profile", title: "Tiến độ & hồ sơ", roles: ["learner"], purpose: "Xem tiến bộ và cập nhật hồ sơ" },
   { id: "reward", path: "/reward/:mode", title: "Chứng nhận & phần thưởng", roles: ["learner", "manager"], purpose: "Xem trước hoặc nhận chứng nhận" },
   { id: "survey", path: "/survey", title: "Khảo sát cuối pilot", roles: ["learner"], purpose: "Gửi khảo sát cuối pilot" },
   { id: "level-approval", path: "/op", title: "Duyệt trình độ", roles: ["operator", "manager"], purpose: "Xem evidence và duyệt mức" },
   { id: "level-forms", path: "/op/levelforms", title: "Đề thi lên mức", roles: ["operator", "manager"], purpose: "Tạo, xem và duyệt đề lên mức" },
-  { id: "month-frameworks", path: "/op/months", title: "Tháng học", roles: ["operator", "manager"], purpose: "Sinh, duyệt khung tháng, chia bài ngày và bài thi tháng cho từng level" },
-  { id: "week-topics", path: "/op/weeks", title: "Chủ đề tuần", roles: ["operator", "manager"], purpose: "Thiết lập chủ đề, mô tả và mục tiêu tuần" },
-  { id: "lesson-sets", path: "/op/lessons", title: "Bài học", roles: ["operator", "manager"], purpose: "Theo dõi ma trận tuần và CEFR" },
-  { id: "lesson-set-detail", path: "/op/lessons/:week/:cefr", title: "Chi tiết bộ bài", roles: ["operator", "manager"], purpose: "Soạn, sửa, xem và duyệt bộ bài" },
-  { id: "sample-review", path: "/op/review", title: "Đọc mẫu & kiểm tra AI", roles: ["operator", "manager"], purpose: "Xem bài nộp, coach, micro, kháng nghị, lượt làm và bài test" },
+  { id: "month-frameworks", path: "/op/months", title: "Bài học", roles: ["operator", "manager"], purpose: "Sinh, duyệt khung tháng, chia bài ngày và bài thi tháng cho từng level" },
+  { id: "sample-review", path: "/op/review", title: "Kháng nghị & phản hồi", roles: ["operator", "manager"], purpose: "Xem phản hồi AI Coach, kháng nghị và lịch sử làm bài" },
   { id: "prompt-rubric", path: "/op/prompts", title: "Prompt & rubric", roles: ["operator", "manager"], purpose: "Điều chỉnh hướng dẫn AI theo quyền chuyên môn" },
   { id: "settings", path: "/settings", title: "Cài đặt", roles: ["operator", "manager"], purpose: "Cấu hình nghiệp vụ, AI, người dùng và quyền theo vai trò" },
   { id: "manager-progress", path: "/mgr", title: "Tiến độ", roles: ["manager"], purpose: "Theo dõi tiến độ nhóm và KPI", states: ["loading", "empty", "error", "populated"] },
@@ -49,8 +44,8 @@ export const SCREEN_CONTRACT = [
 ] as const satisfies readonly VisibleScreen[];
 
 export const ROLE_NAVIGATION = {
-  learner: ["/home", "/coach", "/practice", "/games", "/profile"],
-  operator: ["/op", "/op/months", "/op/lessons", "/op/review", "/settings"],
+  learner: ["/home", "/coach", "/exam", "/games", "/profile"],
+  operator: ["/op", "/op/months", "/op/review", "/settings"],
   manager: ["/mgr", "/mgr/ops", "/mgr/reminders", "/mgr/report", "/settings"]
 } as const;
 
