@@ -195,7 +195,7 @@ describe("OperatorRouteController", () => {
     expect(screen.getByLabelText("Chủ đề *")).toHaveValue("Meetings");
   });
 
-  it("starts all five active level jobs together after saving the confirmed week", async () => {
+  it("starts one server batch for all five active levels after saving the confirmed week", async () => {
     const user = userEvent.setup();
     const weeks = { pilot: { startDate: "2026-10-05", weekCount: 1 }, weeks: [{ id: "w1", weekNumber: 1, startDate: "2026-10-05", endDate: "2026-10-11", current: true, topic: "", description: "", objectives: "", keyVocabHint: "" }] };
     const plan = {
@@ -205,23 +205,17 @@ describe("OperatorRouteController", () => {
       B2: ["Analyse", "Negotiate", "Justify", "Revise", "Report"],
       C1: ["Evaluate", "Challenge", "Synthesize", "Advise", "Conclude"]
     };
-    let running = 0;
-    let maxRunning = 0;
-    const order: string[] = [];
-    const generateContentLessonDraft = vi.fn(async (_week: number, cefr: string) => {
-      running += 1;
-      maxRunning = Math.max(maxRunning, running);
-      order.push(`start-${cefr}`);
-      await Promise.resolve();
-      order.push(`end-${cefr}`);
-      running -= 1;
-      return {};
-    });
+    const generateContentLessonDraft = vi.fn().mockResolvedValue({});
+    const generateContentLessonWeekBatch = vi.fn(async (weekNumber: number, levels: string[]) => ({
+      weekNumber,
+      levels: levels.map((cefr) => ({ cefr, status: cefr === "A1" ? "resumed" : "completed", completedDays: [1, 2, 3, 4, 5] }))
+    }));
     const client = {
       getContentWeeks: vi.fn().mockResolvedValue(weeks),
       saveContentWeeks: vi.fn().mockResolvedValue({ ...weeks, weeks: [{ ...weeks.weeks[0]!, topic: "Meetings", description: "Lịch họp", objectives: "Xác nhận lịch", keyVocabHint: "schedule", plan }] }),
       suggestContentWeeks: vi.fn().mockResolvedValue({ weeks: [{ weekNumber: 1, levels: ["A1", "A2", "B1", "B2", "C1"], options: [{ topic: "Meetings", description: "Lịch họp", objectives: "Xác nhận lịch", keyVocabHint: "schedule", plan }] }] }),
       generateContentLessonDraft,
+      generateContentLessonWeekBatch,
       getContentLessonMatrix: vi.fn().mockResolvedValue({ levels: ["A1", "A2", "B1", "B2", "C1"].map(cefr => ({ cefr, learnerCount: 0 })), weeks: [{ weekNumber: 1, topic: "Meetings", cells: [] }] }),
       getSystemCapabilities: vi.fn().mockResolvedValue({ ai: true })
     };
@@ -230,31 +224,34 @@ describe("OperatorRouteController", () => {
     await user.click(await screen.findByRole("button", { name: "Gợi ý" }));
     await user.click(await screen.findByRole("button", { name: "Xác nhận phương án này" }));
 
-    expect(generateContentLessonDraft).not.toHaveBeenCalled();
+    expect(generateContentLessonWeekBatch).not.toHaveBeenCalled();
     await user.click(screen.getByRole("button", { name: "Lưu khung chủ đề" }));
     await user.click(await screen.findByRole("button", { name: /^Xác nhận sinh bài$/ }));
 
-    await waitFor(() => expect(generateContentLessonDraft).toHaveBeenCalledTimes(5));
-    expect(maxRunning).toBe(5);
-    expect(order.slice(0, 5).sort()).toEqual(["start-A1", "start-A2", "start-B1", "start-B2", "start-C1"]);
-    expect(order.slice(5).sort()).toEqual(["end-A1", "end-A2", "end-B1", "end-B2", "end-C1"]);
+    await waitFor(() => expect(generateContentLessonWeekBatch).toHaveBeenCalledTimes(1));
+    expect(generateContentLessonWeekBatch).toHaveBeenCalledWith(1, ["A1", "A2", "B1", "B2", "C1"]);
+    expect(generateContentLessonDraft).not.toHaveBeenCalled();
   });
 
-  it("stops the topic-page batch before the next selected week when one level fails", async () => {
+  it("shows each level's batch outcome and stops before the next selected week when one level fails", async () => {
     const user = userEvent.setup();
     const week = (weekNumber: number) => ({ id: `w${weekNumber}`, weekNumber, startDate: "2026-10-05", endDate: "2026-10-11", current: weekNumber === 1, topic: `Topic ${weekNumber}`, description: "Workplace task", objectives: "Complete the task", keyVocabHint: "work" });
     const weeks = { pilot: { startDate: "2026-10-05", weekCount: 2 }, weeks: [week(1), week(2)] };
     const levels = ["A1", "A2", "B1", "B2", "C1"];
-    const generateContentLessonDraft = vi.fn(async (weekNumber: number, cefr: string) => {
-      if (weekNumber === 1 && cefr === "B2") throw new Error("AI_OUTPUT_INVALID");
-      return {};
-    });
+    const generateContentLessonDraft = vi.fn().mockResolvedValue({});
+    const generateContentLessonWeekBatch = vi.fn(async (weekNumber: number, requested: string[]) => ({
+      weekNumber,
+      levels: requested.map((cefr) => cefr === "A2"
+        ? { cefr, status: "partial", completedDays: [1, 3, 4, 5], error: { code: "AI_LEVEL_GENERATION_INCOMPLETE", message: "vocabulary day 2" } }
+        : { cefr, status: "completed", completedDays: [1, 2, 3, 4, 5] })
+    }));
     const client = {
       getContentWeeks: vi.fn().mockResolvedValue(weeks),
       saveContentWeeks: vi.fn().mockResolvedValue(weeks),
       getContentLessonMatrix: vi.fn().mockResolvedValue({ levels: levels.map(cefr => ({ cefr, learnerCount: 0 })), weeks: weeks.weeks.map(item => ({ weekNumber: item.weekNumber, topic: item.topic, cells: [] })) }),
       getSystemCapabilities: vi.fn().mockResolvedValue({ ai: true }),
-      generateContentLessonDraft
+      generateContentLessonDraft,
+      generateContentLessonWeekBatch
     };
     render(<MemoryRouter initialEntries={["/op/weeks"]}><OperatorRouteController session={operator} client={client as any} /></MemoryRouter>);
 
@@ -263,21 +260,26 @@ describe("OperatorRouteController", () => {
     await user.click(within(dialog).getByText("Tuần 2"));
     await user.click(within(dialog).getByRole("button", { name: "Xác nhận sinh bài" }));
 
-    await waitFor(() => expect(generateContentLessonDraft).toHaveBeenCalledTimes(5));
-    expect(generateContentLessonDraft.mock.calls.every(([weekNumber]) => weekNumber === 1)).toBe(true);
-    expect(await screen.findByText(/Tuần sau chưa được khởi động/)).toBeInTheDocument();
+    await waitFor(() => expect(generateContentLessonWeekBatch).toHaveBeenCalledTimes(1));
+    expect(generateContentLessonWeekBatch).toHaveBeenCalledWith(1, levels);
+    expect(generateContentLessonDraft).not.toHaveBeenCalled();
+    expect(await screen.findByText(/A1: hoàn thành · A2: lưu một phần \(ngày 1, 3, 4, 5\) — vocabulary day 2 · B1: hoàn thành/)).toBeInTheDocument();
+    expect(screen.getByText(/Bấm sinh lại để tiếp tục từ checkpoint/)).toBeInTheDocument();
   });
 
-  it("warns before replacing a partially filled week and regenerates every active level after confirmation", async () => {
+  it("warns before replacing a partially filled week and regenerates every active level in one batch after confirmation", async () => {
     const user = userEvent.setup();
     const weeks = { pilot: { startDate: "2026-10-05", weekCount: 1 }, weeks: [{ id: "w1", weekNumber: 1, startDate: "2026-10-05", endDate: "2026-10-11", current: true, topic: "Meetings", description: "Lịch họp", objectives: "Xác nhận lịch", keyVocabHint: "schedule" }] };
-    const generateContentLessonDraft = vi.fn().mockResolvedValue({});
+    const generateContentLessonWeekBatch = vi.fn(async (weekNumber: number, requested: string[]) => ({
+      weekNumber,
+      levels: requested.map((cefr) => ({ cefr, status: "completed", completedDays: [1, 2, 3, 4, 5] }))
+    }));
     const client = {
       getContentWeeks: vi.fn().mockResolvedValue(weeks),
       saveContentWeeks: vi.fn().mockResolvedValue(weeks),
       getContentLessonMatrix: vi.fn().mockResolvedValue({ levels: [{ cefr: "A1", learnerCount: 0 }, { cefr: "A2", learnerCount: 1 }], weeks: [{ weekNumber: 1, topic: "Meetings", cells: [{ cefr: "A2", status: "draft", updatedAt: "2026-10-23T00:00:00Z", lessons: [{ dayNumber: 1, title: "Meeting time" }] }] }] }),
       getSystemCapabilities: vi.fn().mockResolvedValue({ ai: true }),
-      generateContentLessonDraft
+      generateContentLessonWeekBatch
     };
     render(<MemoryRouter initialEntries={["/op/weeks"]}><OperatorRouteController session={operator} client={client as any} /></MemoryRouter>);
 
@@ -287,11 +289,10 @@ describe("OperatorRouteController", () => {
 
     const dialog = await screen.findByRole("dialog", { name: "Tạo lại nội dung tuần?" });
     expect(within(dialog).getByText(/ghi đè toàn bộ nội dung hiện có của tuần 1/i)).toBeInTheDocument();
-    expect(generateContentLessonDraft).not.toHaveBeenCalled();
+    expect(generateContentLessonWeekBatch).not.toHaveBeenCalled();
     await user.click(within(dialog).getByRole("button", { name: "Tạo lại và ghi đè" }));
-    await waitFor(() => expect(generateContentLessonDraft).toHaveBeenCalledTimes(2));
-    expect(generateContentLessonDraft).toHaveBeenNthCalledWith(1, 1, "A1");
-    expect(generateContentLessonDraft).toHaveBeenNthCalledWith(2, 1, "A2");
+    await waitFor(() => expect(generateContentLessonWeekBatch).toHaveBeenCalledTimes(1));
+    expect(generateContentLessonWeekBatch).toHaveBeenCalledWith(1, ["A1", "A2"]);
   });
 
   it("does not let an older week save overwrite a newer save", async () => {

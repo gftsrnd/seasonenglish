@@ -1,7 +1,9 @@
 import { describe, expect, it, vi } from "vitest";
 import {
   __resetLessonGenerationJobsForTests,
+  describeBatchLevelResults,
   generateLessonCellsSettled,
+  generateLessonWeeksBatchSettled,
   lessonGenerationJobsSnapshot,
   startLessonGenerationJob
 } from "./lesson-generation.js";
@@ -117,5 +119,33 @@ describe("operator lesson generation batch", () => {
     expect(result).toHaveLength(5);
     expect(result.filter(cell => cell.status === "succeeded")).toHaveLength(4);
     expect(result).toContainEqual({ week: 2, level: "B2", status: "failed", error: "AI_OUTPUT_INVALID" });
+  });
+
+  it("dispatches one server-side 5-level batch request per week and preserves succeeded levels when one level fails", async () => {
+    __resetLessonGenerationJobsForTests();
+    const levels = ["A1", "A2", "B1", "B2", "C1"] as const;
+    const generateBatch = vi.fn(async (week: number, requestedLevels: readonly (typeof levels)[number][]) => ({
+      weekNumber: week,
+      levels: requestedLevels.map((cefr) => cefr === "B2"
+        ? { cefr, status: "failed" as const, completedDays: [], error: { code: "AI_OUTPUT_INVALID", message: "B2 speaking repair failed" } }
+        : cefr === "A2"
+          ? { cefr, status: "partial" as const, completedDays: [1, 3], error: { code: "AI_LEVEL_GENERATION_INCOMPLETE" } }
+          : { cefr, status: cefr === "A1" ? "resumed" as const : "completed" as const, completedDays: [1, 2, 3, 4, 5] })
+    }));
+
+    const result = await generateLessonWeeksBatchSettled([3, 4], levels, generateBatch);
+
+    expect(generateBatch).toHaveBeenCalledTimes(1);
+    expect(generateBatch).toHaveBeenCalledWith(3, levels);
+    expect(result).toEqual([
+      { week: 3, level: "A1", status: "succeeded", outcome: "resumed", completedDays: [1, 2, 3, 4, 5] },
+      { week: 3, level: "A2", status: "failed", outcome: "partial", completedDays: [1, 3], error: "AI_LEVEL_GENERATION_INCOMPLETE" },
+      { week: 3, level: "B1", status: "succeeded", outcome: "completed", completedDays: [1, 2, 3, 4, 5] },
+      { week: 3, level: "B2", status: "failed", outcome: "failed", completedDays: [], error: "B2 speaking repair failed" },
+      { week: 3, level: "C1", status: "succeeded", outcome: "completed", completedDays: [1, 2, 3, 4, 5] }
+    ]);
+    expect(describeBatchLevelResults(result)).toBe(
+      "A1: hoàn thành (tiếp tục từ checkpoint) · A2: lưu một phần (ngày 1, 3) — AI_LEVEL_GENERATION_INCOMPLETE · B1: hoàn thành · B2: lỗi — B2 speaking repair failed · C1: hoàn thành"
+    );
   });
 });

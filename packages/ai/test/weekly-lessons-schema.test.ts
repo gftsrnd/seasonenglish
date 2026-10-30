@@ -359,7 +359,7 @@ describe("weekly lesson output contract", () => {
   it("keeps canonical section labels and pronunciation selection out of provider output", () => {
     const properties = weeklyLessonFoundationOutputJsonSchema.properties as Record<string, { properties?: Record<string, unknown> }>;
     expect(properties.objective?.properties).not.toHaveProperty("title");
-    expect(properties.instruction?.properties).not.toHaveProperty("title");
+    expect(properties).not.toHaveProperty("instruction");
     expect(properties.pronunciation?.properties).toEqual({ tip: expect.any(Object) });
   });
 

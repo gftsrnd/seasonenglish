@@ -66,6 +66,7 @@ describe("Anthropic provider", () => {
       code: "AI_PROVIDER_REJECTED",
       retryable: false,
       details: {
+        status: 400,
         issues: [{
           path: "provider",
           message: "Anthropic HTTP 400 (invalid_request_error): tools.0.custom.input_schema: Schema is too complex for compilation"

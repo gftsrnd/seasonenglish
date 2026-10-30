@@ -12,7 +12,7 @@ const databaseUrl = process.env.TEST_DATABASE_URL
   ?? "postgres://e4s:e4s_test_password@127.0.0.1:55432/e4s_test";
 const checkerId = "00000000-0000-4000-8000-000000000104";
 const mediaRequests: Array<{ userId: string; term: string }> = [];
-const forcedAiFailures = new Set<string>();
+const forcedAiFailures = new Set<string>(); const runnerCalls: Array<{ taskKey: string; cefr?: string; dayNumber?: number }> = [];
 let forceWholeGenerationFailure = false;
 const mediaService: ContentMediaService = {
   async resolveForUser(userId, request) {
@@ -69,11 +69,16 @@ function b1Lesson(dayNumber: number) {
 
 const repairRunner: AiTaskRunner = {
   async runTask(taskKey, rawInput) {
-    if (forceWholeGenerationFailure) {
+    const cefr = String((rawInput as { cefr?: string }).cefr ?? "A1");
+    const isVi = cefr === "A1" || cefr === "A2";
+    const dayNumber = Number((rawInput as { dayNumber?: number }).dayNumber ?? 1);
+    var dayFrame = ["I work in + department", "Every morning I + verb", "I am responsible for + noun", "Could you update + noun", "This week we completed + noun"][dayNumber - 1] ?? "I work in + department";
+    runnerCalls.push({ taskKey, cefr, dayNumber });
+    if (forceWholeGenerationFailure && taskKey !== "weekly_lesson_plan_blueprint") {
       throw Object.assign(new Error("AI unavailable for this deterministic test"), { code: "AI_UNAVAILABLE" });
     }
-    const dayNumber = Number((rawInput as { dayNumber?: number }).dayNumber ?? 1);
-    if (forcedAiFailures.has(`${taskKey}:${dayNumber}`)) {
+    var dayFrame = ["I work in + department", "Every morning I + verb", "I am responsible for + noun", "Could you update + noun", "This week we completed + noun"][dayNumber - 1] ?? "I work in + department";
+    if (forcedAiFailures.has(`${taskKey}:${dayNumber}`) || forcedAiFailures.has(`${taskKey}:${cefr}:${dayNumber}`)) {
       throw Object.assign(new Error("AI_OUTPUT_INVALID"), {
         code: "AI_OUTPUT_INVALID",
         details: { issues: [{ path: "output", message: "forced component failure" }] }
@@ -92,27 +97,44 @@ const repairRunner: AiTaskRunner = {
       collocation1: `a ${word}`, collocation2: `new ${word}`, collocation3: `work ${word}`,
       family1: { word: `${word}s`, type: "noun", meaning: "dạng số nhiều" }, family2: null,
       umbrellaWord: "work", umbrellaMeaning: "công việc", sibling1: null, sibling2: null, sibling3: null,
-      synonym1: { word: `workplace ${word}`, level: "A1", note: "từ gần nghĩa", partOfSpeech: "noun", sense: "workplace sense", example: `Use workplace ${word} here.` }, synonym2: null, antonym1: null
+      synonym1: { word: `workplace ${word}`, level: cefr, note: isVi ? "từ gần nghĩa" : "close workplace synonym", partOfSpeech: "noun", sense: "workplace sense", example: `Use workplace ${word} here.` }, synonym2: null, antonym1: null, relationStatus: "provided"
     });
-    const output = taskKey === "weekly_lesson_grammar_classifier" ? {
-      status: "classified", contentType: "sentence_pattern", targetName: "S + V + O", scope: lessonFocus,
+    const output = taskKey === "weekly_lesson_plan_blueprint" ? {
+      plan: Object.fromEntries((["A1", "A2", "B1", "B2", "C1"] as const).map((level) => [
+        level,
+        [
+          "Outcome: Introduce your workplace role and department | Vocabulary: coordinator, briefing, workflow | Frame: I work in + department | Skill emphasis: speaking",
+          "Outcome: Describe your daily routine at work | Vocabulary: supervisor, prototype, checklist | Frame: Every morning I + verb | Skill emphasis: listening",
+          "Outcome: Name a key responsibility in your team | Vocabulary: agenda, summary, inbox | Frame: I am responsible for + noun | Skill emphasis: reading",
+          "Outcome: Ask a colleague about a task update | Vocabulary: calendar, milestone, assignment | Frame: Could you update + noun | Skill emphasis: writing",
+          "Outcome: Summarise your weekly work progress | Vocabulary: suggestion, revision, proposal | Frame: This week we completed + noun | Skill emphasis: speaking"
+        ]
+      ]))
+    } : taskKey === "weekly_lesson_grammar_classifier" ? {
+      status: "classified", contentType: "sentence_pattern", targetName: dayFrame, scope: lessonFocus,
       support: "explicit", confidence: "high", evidence: [{ sourceRef: "lessonFocus", quote: lessonFocus }], rejectedCandidates: []
     } : taskKey === "weekly_lesson_objectives" ? {
-      objective: { title: "Mục tiêu bài học", explanationLanguage: "vi", lesson_goal: "Giới thiệu nơi làm việc bằng mẫu câu mục tiêu.", assessment_gap: null, items: [
+      objective: isVi ? { title: "Mục tiêu bài học", explanationLanguage: "vi", lesson_goal: "Giới thiệu nơi làm việc bằng mẫu câu mục tiêu.", assessment_gap: null, items: [
         { id: "C1", type: "content", text: "Sau bài học, bạn có thể chọn hai chi tiết công việc đúng sau khi nghe.", action_verb: "chọn", target_language: null, condition: "sau khi nghe", criterion: "đúng 2 chi tiết", assessed_by: "listening", success_evidence: "Chọn đúng hai chi tiết", assessmentCode: "listening" },
         { id: "L1", type: "language", text: "Sau bài học, bạn có thể nói một câu có cụm 'I work in' khi giới thiệu công việc.", action_verb: "nói", target_language: ["I work in"], condition: "khi giới thiệu công việc", criterion: "1 câu hoàn chỉnh", assessed_by: "speaking", success_evidence: "Transcript có cụm từ mục tiêu", assessmentCode: "speaking" }
+      ] } : { title: "Learning objectives", explanationLanguage: "en", lesson_goal: "Introduce your workplace role using the target frame.", assessment_gap: null, items: [
+        { id: "C1", type: "content", text: "By the end of this lesson, you will be able to identify two workplace details after listening.", action_verb: "explain", target_language: null, condition: "after listening", criterion: "two details", assessed_by: "listening", success_evidence: "Selects the correct option", assessmentCode: "listening" },
+        { id: "L1", type: "language", text: "By the end of this lesson, you will be able to explain your workplace role using I work in.", action_verb: "explain", target_language: ["I work in"], condition: "when introducing work", criterion: "one sentence", assessed_by: "speaking", success_evidence: "Uses the target phrase", assessmentCode: "speaking" }
       ] }
     } : taskKey === "weekly_lesson_foundation" ? {
-      title: "I work in + department", durationMinutes: 10,
-      objective: { title: "Mục tiêu bài học", explanationLanguage: "vi", lesson_goal: "Giới thiệu nơi làm việc bằng mẫu câu mục tiêu.", assessment_gap: null, items: [
+      title: dayFrame, durationMinutes: 10,
+      objective: isVi ? { title: "Mục tiêu bài học", explanationLanguage: "vi", lesson_goal: "Giới thiệu nơi làm việc bằng mẫu câu mục tiêu.", assessment_gap: null, items: [
         { id: "C1", type: "content", text: "Sau bài học, bạn có thể chọn hai chi tiết công việc đúng sau khi nghe.", action_verb: "chọn", target_language: null, condition: "sau khi nghe", criterion: "đúng 2 chi tiết", assessed_by: "listening", success_evidence: "Chọn đúng hai chi tiết", assessmentCode: "listening" },
         { id: "L1", type: "language", text: "Sau bài học, bạn có thể nói một câu có cụm 'I work in' khi giới thiệu công việc.", action_verb: "nói", target_language: ["I work in"], condition: "khi giới thiệu công việc", criterion: "1 câu hoàn chỉnh", assessed_by: "speaking", success_evidence: "Transcript có cụm từ mục tiêu", assessmentCode: "speaking" }
+      ] } : { title: "Learning objectives", explanationLanguage: "en", lesson_goal: "Introduce your workplace role using the target frame.", assessment_gap: null, items: [
+        { id: "C1", type: "content", text: "By the end of this lesson, you will be able to identify two workplace details after listening.", action_verb: "explain", target_language: null, condition: "after listening", criterion: "two details", assessed_by: "listening", success_evidence: "Selects the correct option", assessmentCode: "listening" },
+        { id: "L1", type: "language", text: "By the end of this lesson, you will be able to explain your workplace role using I work in.", action_verb: "explain", target_language: ["I work in"], condition: "when introducing work", criterion: "one sentence", assessed_by: "speaking", success_evidence: "Uses the target phrase", assessmentCode: "speaking" }
       ] },
       instruction: { title: "Hướng dẫn làm bài", step1: "Đọc từ vựng.", step2: "Xem công thức.", step3: "Làm bài tập." },
-      grammar: { title: "Ngữ pháp", contentType: "sentence_pattern", targetName: "S + V + O", scope: lessonFocus, formula: "S + V + O", usage: "Dùng để nói ngắn về công việc.", example1: "I do my work.", example2: "She checks the file." },
-      pronunciation: { title: "Phát âm", focus: "/w/", tip: "Mở môi tròn khi phát âm.", word1: { word: "work", ipa: "/wɜːk/" }, word2: { word: "week", ipa: "/wiːk/" }, word3: { word: "well", ipa: "/wel/" } }
+      grammar: { title: isVi ? "Ngữ pháp" : "Grammar", contentType: "sentence_pattern", targetName: dayFrame, scope: lessonFocus, formula: dayFrame, usage: isVi ? "Dùng để nói ngắn về công việc." : "Use this pattern to talk about your workplace.", example1: "I work in the AI department.", example2: "She checks the file today." },
+      pronunciation: { title: isVi ? "Phát âm" : "Pronunciation", focus: "/w/", tip: isVi ? "Mở môi tròn khi phát âm." : "Round your lips when saying this sound.", word1: { word: "work", ipa: "/wɜːk/" }, word2: { word: "week", ipa: "/wiːk/" }, word3: { word: "well", ipa: "/wel/" } }
     } : taskKey === "weekly_lesson_vocabulary" ? {
-      title: "Từ vựng", word1: vocabularyItem(dayWords[0]!), word2: vocabularyItem(dayWords[1]!), word3: vocabularyItem(dayWords[2]!)
+      title: isVi ? "Từ vựng" : "Vocabulary", word1: vocabularyItem(dayWords[0]!), word2: vocabularyItem(dayWords[1]!), word3: vocabularyItem(dayWords[2]!)
     } : taskKey === "weekly_lesson_length_repair" ? {
       listeningBody: "I work in AI with my small project team every weekday and meet my manager on Friday.".split(" "),
       readingBody: null,
@@ -121,14 +143,14 @@ const repairRunner: AiTaskRunner = {
       status: "approved", findings: [],
       solvedAnswers: { listening: "AI", reading: "A report", writing: "I work in AI.", wordClass: "noun", wordUse: "I work at GFT." }
     } : taskKey === "weekly_lesson_comprehension" ? {
-      listening: { title: "Nghe", body: "I work in AI with my small team every weekday.", prompt: "Where does the speaker work?", option1: "AI", option2: "HR", option3: "Sales", option4: "Finance", answer: "AI", hint: "Listen for the department.", questionTranslation: "Người nói làm ở đâu?", answerTranslation: "AI" },
-      reading: { title: "Đọc", body: "Lan works in AI with a small team. She checks one report every morning and sends it to her manager.", prompt: "What does Lan check?", option1: "A report", option2: "An email", option3: "A meeting", option4: "A customer", answer: "A report", hint: "Read what she checks each morning.", questionTranslation: "Lan kiểm tra gì?", answerTranslation: "Một báo cáo" }
+      listening: { title: isVi ? "Nghe" : "Listening", body: cefr === "C1" ? "I work in AI with my small team every weekday and we coordinate cross-functional deliverables across four regional offices while reviewing technical milestones, risk logs, and stakeholder updates before our Friday executive briefing with the department director and project leads." : cefr === "B2" ? "I work in AI with my small team every weekday and we coordinate project deliverables across regional offices while reviewing weekly milestones and stakeholder updates before our Friday briefing." : cefr === "B1" ? "I work in AI with my small team every weekday and we check our project schedule together before meeting our manager on Friday afternoon." : "I work in AI with my small project team every weekday and meet my manager on Friday.", prompt: "Where does the speaker work?", option1: "AI", option2: "HR", option3: "Sales", option4: "Finance", answer: "AI", hint: "Listen for the department.", questionTranslation: isVi ? "Người nói làm ở đâu?" : "Where does the speaker work?", answerTranslation: "AI" },
+      reading: { title: isVi ? "Đọc" : "Reading", body: cefr === "C1" ? "Lan works in AI with a small specialist team that manages enterprise automation systems across three regional offices. Every morning she checks one detailed technical report, compares the performance metrics against quarterly targets, documents potential delivery risks for the steering committee, and sends a concise summary to her manager so the department can align priorities before the client review meeting on Friday afternoon. Her systematic workflow ensures that cross-functional dependencies are resolved early and every stakeholder receives accurate status updates throughout the project lifecycle." : cefr === "B2" ? "Lan works in AI with a small specialist team that manages automation projects across regional offices. Every morning she checks one detailed report, compares the team metrics against weekly targets, documents delivery risks, and sends a clear summary to her manager so the department can align priorities before the Friday review meeting with stakeholders." : cefr === "B1" ? "Lan works in AI with a small project team in the main office. Every morning she checks one report, updates the shared task board for her colleagues, and sends the summary to her manager before the daily team briefing starts at nine." : "Lan works in AI with a small project team in the main office. She checks one report every morning and sends it to her manager before the meeting.", prompt: "What does Lan check?", option1: "A report", option2: "An email", option3: "A meeting", option4: "A customer", answer: "A report", hint: "Read what she checks each morning.", questionTranslation: isVi ? "Lan kiểm tra gì?" : "What does Lan check?", answerTranslation: isVi ? "Một báo cáo" : "A report" }
     } : taskKey === "weekly_lesson_language_practice" ? {
-      writing: { title: "Viết", type: "mcq", prompt: "Which sentence names the department?", option1: "I work in AI.", option2: "I works AI.", option3: "I am work AI.", option4: "I working in AI.", answer: "I work in AI.", hint: "Use I work in + department.", questionTranslation: "Câu nào nêu tên bộ phận?", answerTranslation: "Tôi làm việc trong bộ phận AI." },
-      wordClass: { title: "Từ loại", body: undefined, prompt: "What part of speech is work?", option1: "noun", option2: "verb", option3: "adjective", option4: "adverb", answer: "noun", hint: "It names an activity here.", questionTranslation: "Work là từ loại gì?", answerTranslation: "danh từ" },
-      wordUse: { title: "Dùng từ", body: undefined, prompt: "Which sentence uses work correctly?", option1: "I have work.", option2: "I work at GFT.", option3: "Work is blue.", option4: "I workly today.", answer: "I work at GFT.", hint: "Choose a natural workplace sentence.", questionTranslation: "Câu nào dùng work đúng?", answerTranslation: "Tôi làm việc tại GFT." }
+      writing: isVi ? { title: "Viết", type: "mcq", prompt: "Which sentence names the department?", option1: "I work in AI.", option2: "I works AI.", option3: "I am work AI.", option4: "I working in AI.", answer: "I work in AI.", hint: "Use I work in + department.", questionTranslation: "Câu nào nêu tên bộ phận?", answerTranslation: "Tôi làm việc trong bộ phận AI." } : { title: "Writing", type: "write", prompt: "Write one sentence about your department using I work in.", option1: null, option2: null, option3: null, option4: null, answer: "I work in AI.", hint: "Use I work in + department.", questionTranslation: "Write one sentence about your department using I work in.", answerTranslation: "I work in AI." },
+      wordClass: { title: isVi ? "Từ loại" : "Word class", body: undefined, prompt: "What part of speech is work?", option1: "noun", option2: "verb", option3: "adjective", option4: "adverb", answer: "noun", hint: "It names an activity here.", questionTranslation: isVi ? "Work là từ loại gì?" : "What part of speech is work?", answerTranslation: isVi ? "danh từ" : "noun" },
+      wordUse: { title: isVi ? "Dùng từ" : "Word use", body: undefined, prompt: "Which sentence uses work correctly?", option1: "I have work.", option2: "I work at GFT.", option3: "Work is blue.", option4: "I workly today.", answer: "I work at GFT.", hint: "Choose a natural workplace sentence.", questionTranslation: isVi ? "Câu nào dùng work đúng?" : "Which sentence uses work correctly?", answerTranslation: isVi ? "Tôi làm việc tại GFT." : "I work at GFT." }
     } : {
-      speaking: { title: "Nói", prompt: "Nói nơi bạn làm việc.", answer: "I work in AI.", hint: "Bắt đầu bằng I work.", questionTranslation: "Nói nơi bạn làm việc.", answerTranslation: "Tôi làm việc trong bộ phận AI." }
+      speaking: { title: isVi ? "Nói" : "Speaking", prompt: isVi ? "Nói nơi bạn làm việc." : "Explain where you work using I work in.", answer: "I work in AI.", hint: isVi ? "Bắt đầu bằng I work." : "Start with I work.", questionTranslation: isVi ? "Nói nơi bạn làm việc." : "Explain where you work using I work in.", answerTranslation: isVi ? "Tôi làm việc trong bộ phận AI." : "I work in AI." }
     };
     return {
       output,
@@ -709,5 +731,202 @@ describe("content operations API", () => {
        join lesson_set_versions lsv on lsv.lesson_set_id = ls.id
        where pw.week_number = 2 and ls.cefr = 'B1' and lsv.status = 'published'`
     )).resolves.toMatchObject({ rows: [expect.objectContaining({ id: updatedDraft.versionId, status: "published" })] });
+  });
+
+  it("persists canonical week blueprint once with lock + CAS and resumes from checkpoints without re-running completed components", async () => {
+    await pool.query("delete from ai_runs");
+    runnerCalls.length = 0;
+    forcedAiFailures.add("weekly_lesson_vocabulary:A1:2");
+
+    const [firstAttempt, concurrentAttempt] = await Promise.all([
+      app.inject({
+        method: "POST",
+        url: "/api/v1/content/lesson-sets/1/A1/generate",
+        headers: { cookie: makerCookie },
+        payload: {}
+      }),
+      app.inject({
+        method: "POST",
+        url: "/api/v1/content/lesson-sets/1/A2/generate",
+        headers: { cookie: makerCookie },
+        payload: {}
+      })
+    ]);
+    forcedAiFailures.clear();
+
+    expect(firstAttempt.statusCode, firstAttempt.body).toBe(502);
+    expect(concurrentAttempt.statusCode, concurrentAttempt.body).toBe(201);
+    const blueprintCallsFirstWave = runnerCalls.filter((call) => call.taskKey === "weekly_lesson_plan_blueprint");
+    expect(blueprintCallsFirstWave).toHaveLength(1);
+
+    const savedPlan = await pool.query<{ ai_plan: Record<string, string[]> }>(
+      "select ai_plan from program_weeks where program_id = $1 and week_number = 1",
+      [DEMO_IDS.program]
+    );
+    expect(savedPlan.rows[0]?.ai_plan?.A1?.[0]).toContain("Outcome:");
+
+    runnerCalls.length = 0;
+    const resumed = await app.inject({
+      method: "POST",
+      url: "/api/v1/content/lesson-sets/1/A1/generate",
+      headers: { cookie: makerCookie },
+      payload: {}
+    });
+    expect(resumed.statusCode, resumed.body).toBe(201);
+    expect(runnerCalls.filter((call) => call.taskKey === "weekly_lesson_plan_blueprint")).toHaveLength(0);
+    expect(runnerCalls.filter((call) => call.cefr === "A1" && call.dayNumber === 1)).toHaveLength(0);
+    expect(runnerCalls.filter((call) => call.cefr === "A1" && call.dayNumber === 2 && call.taskKey === "weekly_lesson_vocabulary").length).toBeGreaterThanOrEqual(1);
+  });
+
+  it("runs the 5-level batch endpoint once per week and isolates level failures without erasing completed levels", async () => {
+    await app.inject({
+      method: "PUT",
+      url: "/api/v1/content/lesson-levels",
+      headers: { cookie: makerCookie },
+      payload: { levels: ["A1", "A2", "B1", "B2", "C1"] }
+    });
+    await pool.query("delete from ai_runs");
+    runnerCalls.length = 0;
+    for (const dayNumber of [1, 2, 3, 4, 5]) {
+      forcedAiFailures.add(`weekly_lesson_objectives:B2:${dayNumber}`);
+    }
+
+    const batchResponse = await app.inject({
+      method: "POST",
+      url: "/api/v1/content/lesson-sets/1/generate",
+      headers: { cookie: makerCookie },
+      payload: { levels: ["A1", "A2", "B1", "B2", "C1"] }
+    });
+    forcedAiFailures.clear();
+
+    expect(batchResponse.statusCode, batchResponse.body).toBe(201);
+    const body = batchResponse.json() as {
+      weekNumber: number;
+      levels: Array<{ cefr: string; status: string; version?: { lessons: unknown[] }; error?: { code: string } }>;
+    };
+    expect(body.weekNumber).toBe(1);
+    expect(body.levels.map((item) => [item.cefr, item.status])).toEqual([
+      ["A1", "completed"],
+      ["A2", "completed"],
+      ["B1", "completed"],
+      ["B2", "failed"],
+      ["C1", "completed"]
+    ]);
+    expect(runnerCalls.filter((call) => call.taskKey === "weekly_lesson_plan_blueprint")).toHaveLength(1);
+    for (const level of ["A1", "A2", "B1", "C1"]) {
+      const entry = body.levels.find((item) => item.cefr === level);
+      expect(entry?.version?.lessons).toHaveLength(5);
+    }
+    await app.inject({
+      method: "PUT",
+      url: "/api/v1/content/lesson-levels",
+      headers: { cookie: makerCookie },
+      payload: { levels: ["A1", "A2", "B1", "B2"] }
+    });
+  });
+
+  it("saves the healthy levels, reports a partial level, and resumes only the failed component on the next batch", async () => {
+    await app.inject({ method: "PUT", url: "/api/v1/content/lesson-levels", headers: { cookie: makerCookie }, payload: { levels: ["A1", "A2", "B1", "B2", "C1"] } });
+    await pool.query("delete from ai_runs");
+    runnerCalls.length = 0;
+    forcedAiFailures.add("weekly_lesson_vocabulary:A2:2");
+    const first = await app.inject({ method: "POST", url: "/api/v1/content/lesson-sets/1/generate", headers: { cookie: makerCookie }, payload: {} });
+    forcedAiFailures.clear();
+    expect(first.statusCode, first.body).toBe(201);
+    const firstBody = first.json() as { levels: Array<{ cefr: string; status: string; completedDays: number[]; version?: { lessons: unknown[] }; partialDraft?: { lessons: unknown[] } }> };
+    expect(firstBody.levels.map((item) => [item.cefr, item.status])).toEqual([
+      ["A1", "completed"], ["A2", "partial"], ["B1", "completed"], ["B2", "completed"], ["C1", "completed"]
+    ]);
+    const a2 = firstBody.levels.find((item) => item.cefr === "A2")!;
+    expect(a2.completedDays).toEqual([1, 3, 4, 5]);
+    expect(a2.partialDraft?.lessons.length).toBeGreaterThanOrEqual(4);
+    for (const level of ["A1", "B1", "B2", "C1"]) {
+      expect(firstBody.levels.find((item) => item.cefr === level)?.version?.lessons).toHaveLength(5);
+    }
+
+    runnerCalls.length = 0;
+    const second = await app.inject({ method: "POST", url: "/api/v1/content/lesson-sets/1/generate", headers: { cookie: makerCookie }, payload: {} });
+    expect(second.statusCode, second.body).toBe(201);
+    const secondBody = second.json() as { levels: Array<{ cefr: string; status: string; resumedDays: number[] }> };
+    expect(secondBody.levels.map((item) => [item.cefr, item.status])).toEqual([
+      ["A1", "resumed"], ["A2", "resumed"], ["B1", "resumed"], ["B2", "resumed"], ["C1", "resumed"]
+    ]);
+    const providerCalls = runnerCalls.filter((call) => call.taskKey !== "weekly_lesson_plan_blueprint");
+    expect(providerCalls.length).toBeGreaterThan(0);
+    expect(providerCalls.every((call) => call.cefr === "A2" && call.dayNumber === 2)).toBe(true);
+    expect(providerCalls.some((call) => call.taskKey === "weekly_lesson_grammar_classifier" || call.taskKey === "weekly_lesson_objectives" || call.taskKey === "weekly_lesson_foundation")).toBe(false);
+    await app.inject({ method: "PUT", url: "/api/v1/content/lesson-levels", headers: { cookie: makerCookie }, payload: { levels: ["A1", "A2", "B1", "B2"] } });
+  });
+
+  it("generates one level independently without starting the other levels", async () => {
+    await pool.query("delete from ai_runs");
+    runnerCalls.length = 0;
+    const response = await app.inject({ method: "POST", url: "/api/v1/content/lesson-sets/1/B1/generate", headers: { cookie: makerCookie }, payload: {} });
+    expect(response.statusCode, response.body).toBe(201);
+    const levelCalls = runnerCalls.filter((call) => call.taskKey !== "weekly_lesson_plan_blueprint");
+    expect(levelCalls.length).toBeGreaterThan(0);
+    expect(levelCalls.every((call) => call.cefr === "B1")).toBe(true);
+  });
+
+  it("normalizes the canonical plan once when two operators of the same organization generate concurrently", async () => {
+    await pool.query("delete from ai_runs");
+    runnerCalls.length = 0;
+    const [makerRun, checkerRun] = await Promise.all([
+      app.inject({ method: "POST", url: "/api/v1/content/lesson-sets/1/A1/generate", headers: { cookie: makerCookie }, payload: {} }),
+      app.inject({ method: "POST", url: "/api/v1/content/lesson-sets/1/A2/generate", headers: { cookie: checkerCookie }, payload: {} })
+    ]);
+    expect(makerRun.statusCode, makerRun.body).toBe(201);
+    expect(checkerRun.statusCode, checkerRun.body).toBe(201);
+    expect(runnerCalls.filter((call) => call.taskKey === "weekly_lesson_plan_blueprint")).toHaveLength(1);
+  });
+
+  it("lets another operator in the same organization resume the checkpoint and skip completed components", async () => {
+    await pool.query("delete from ai_runs");
+    runnerCalls.length = 0;
+    forcedAiFailures.add("weekly_lesson_vocabulary:A1:2");
+    const makerRun = await app.inject({ method: "POST", url: "/api/v1/content/lesson-sets/1/A1/generate", headers: { cookie: makerCookie }, payload: {} });
+    forcedAiFailures.clear();
+    expect(makerRun.statusCode, makerRun.body).toBe(502);
+
+    runnerCalls.length = 0;
+    const checkerRun = await app.inject({ method: "POST", url: "/api/v1/content/lesson-sets/1/A1/generate", headers: { cookie: checkerCookie }, payload: {} });
+    expect(checkerRun.statusCode, checkerRun.body).toBe(201);
+    expect(runnerCalls.filter((call) => call.cefr === "A1" && call.dayNumber === 1)).toHaveLength(0);
+    expect(runnerCalls.filter((call) => call.cefr === "A1" && call.dayNumber === 2 && call.taskKey === "weekly_lesson_grammar_classifier")).toHaveLength(0);
+    expect(runnerCalls.filter((call) => call.cefr === "A1" && call.dayNumber === 2 && call.taskKey === "weekly_lesson_vocabulary").length).toBeGreaterThanOrEqual(1);
+  });
+
+  it("never exposes a checkpoint to an operator from another organization", async () => {
+    await pool.query("delete from ai_runs");
+    const run = await app.inject({ method: "POST", url: "/api/v1/content/lesson-sets/1/A1/generate", headers: { cookie: makerCookie }, payload: {} });
+    expect(run.statusCode, run.body).toBe(201);
+    const checkpoint = await pool.query<{ request_key: string }>(
+      "select request_key from ai_runs where request_key like 'weekly-lessons-checkpoint:%' limit 1"
+    );
+    const requestKey = checkpoint.rows[0]?.request_key;
+    expect(requestKey).toBeTruthy();
+
+    const otherOrganizationId = randomUUID();
+    const otherOperatorId = randomUUID();
+    await pool.query("insert into organizations (id, name, slug) values ($1, 'Other org', $2)", [otherOrganizationId, `other-${otherOrganizationId}`]);
+    await pool.query(
+      "insert into users (id, organization_id, role, display_name, email) values ($1, $2, 'operator', 'Other operator', $3)",
+      [otherOperatorId, otherOrganizationId, `other-${otherOperatorId}@example.test`]
+    );
+    const { createRepositories } = await import("@e4s/database");
+    const repositories = createRepositories(pool);
+    await expect(repositories.aiRuns.findSucceededOutputForOrganization(checkerId, requestKey!, "weekly_lessons")).resolves.not.toBeNull();
+    await expect(repositories.aiRuns.findSucceededOutputForOrganization(otherOperatorId, requestKey!, "weekly_lessons")).resolves.toBeNull();
+  });
+
+  it("creates a new checkpoint fingerprint when topic, plan or prompt version changes", async () => {
+    const { weeklyLessonCheckpointFingerprint } = await import("../src/modules/content/routes.js");
+    const week = { weekNumber: 1, topic: "Topic", description: "", objectives: "", keyVocabHint: "", plan: { A1: ["a", "b", "c", "d", "e"] } };
+    const base = weeklyLessonCheckpointFingerprint({ week, cefr: "A1", promptVersionId: "p1", qualityProfile: "strict" });
+    expect(weeklyLessonCheckpointFingerprint({ week, cefr: "A1", promptVersionId: "p1", qualityProfile: "strict" })).toBe(base);
+    expect(weeklyLessonCheckpointFingerprint({ week: { ...week, topic: "Other" }, cefr: "A1", promptVersionId: "p1", qualityProfile: "strict" })).not.toBe(base);
+    expect(weeklyLessonCheckpointFingerprint({ week: { ...week, plan: { A1: ["x", "b", "c", "d", "e"] } }, cefr: "A1", promptVersionId: "p1", qualityProfile: "strict" })).not.toBe(base);
+    expect(weeklyLessonCheckpointFingerprint({ week, cefr: "A1", promptVersionId: "p2", qualityProfile: "strict" })).not.toBe(base);
+    expect(weeklyLessonCheckpointFingerprint({ week, cefr: "A2", promptVersionId: "p1", qualityProfile: "strict" })).not.toBe(base);
   });
 });

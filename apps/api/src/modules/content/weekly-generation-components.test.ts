@@ -1,16 +1,26 @@
 import { describe, expect, it, vi } from "vitest";
 import type { AiTaskRunner } from "@e4s/ai";
+import { LESSON_INSTRUCTION_STEP_MAX_WORDS, standardLessonInstruction, weeklyLessonFoundationBodyOutputJsonSchema } from "@e4s/ai";
 import {
+  assembleAndValidateWeeklyLesson,
   boundedVocabularyHistory,
+  buildPartialLessonFromPipelineState,
   generateWeeklyLessonFoundation,
   generateWeeklyLessonDayPipeline,
+  generateWeeklyLessonLevelPipeline,
+  generateWeeklyLessons,
   generateWeeklyLessonGrammarClassification,
   generateWeeklyLessonObjectives,
   generateWeeklyLessonSkillGroup,
   generateWeeklyLessonVocabulary,
   isVietnameseVocabularyMeaning,
+  isProviderUnavailableFailure,
+  objectiveAssessmentShapeMismatch,
+  objectiveIdsFromIssues,
   reviewWeeklyLessonSkills,
+  runWeeklyLessonLevelBatch,
   validateWeeklyLessonPipelineState,
+  validateWeeklyVocabularyLexicalCoverage,
   weeklyLessonRunMetadataSeed,
   weeklyLessonSkillsGenerationConstraints,
   type WeeklyLessonComponentInput,
@@ -18,6 +28,8 @@ import {
   type WeeklyLessonPipelineCheckpoint,
   type WeeklyLessonSkillsInput
 } from "./weekly-generation.js";
+import { lessonComponentsNeedingRepair } from "./enrichment.js";
+import { curatedRelationEvidence } from "./lexical-relations.js";
 
 vi.mock("@e4s/ai", async () => await import("../../../../../packages/ai/src/index.js"));
 
@@ -4083,6 +4095,7 @@ describe("direct component repair budgets", () => {
   it.each(componentCases)("rejects $component after its invalid-attempt budget", async ({ taskId, invalid, invoke }) => {
     const frequentFailureTaskIds = new Set([
       "weekly_lesson_objectives",
+      "weekly_lesson_foundation",
       "weekly_lesson_vocabulary",
       "weekly_lesson_comprehension",
       "weekly_lesson_language_practice",
@@ -4094,5 +4107,674 @@ describe("direct component repair budgets", () => {
 
     await expect(invoke(runner)).rejects.toMatchObject({ code: "AI_OUTPUT_INVALID" });
     expect(runTask).toHaveBeenCalledTimes(expectedAttempts);
+  });
+
+  it("retries day vocabulary up to 3 times when 3/3 words miss relations with generation_missed and retains valid words without failing the day", async () => {
+    const a1 = levelCases[0];
+    const baseVocab = vocabularyFor(a1);
+    const noRelationsMissed = {
+      ...baseVocab,
+      word1: { ...baseVocab.word1, synonym1: null, synonym2: null, antonym1: null },
+      word2: { ...baseVocab.word2, synonym1: null, synonym2: null, antonym1: null },
+      word3: { ...baseVocab.word3, synonym1: null, synonym2: null, antonym1: null }
+    };
+    const { runner, runTask } = sequencedRunner("weekly_lesson_vocabulary", [
+      noRelationsMissed,
+      noRelationsMissed,
+      noRelationsMissed
+    ]);
+
+    const result = await generateWeeklyLessonVocabulary(
+      { ...inputFor(a1), grammarFormula: "Could you confirm + noun?", grammarExamples: ["Could you confirm the deadline?", "Could you confirm the meeting?"] },
+      runner
+    );
+
+    expect(runTask).toHaveBeenCalledTimes(3);
+    expect(result.output.word1.word).toBe("confirm");
+    expect(result.output.word1.relationStatus).toBe("generation_missed");
+    expect(result.findings).toHaveLength(3);
+  });
+
+  it("accepts 3/3 words without relations in 1 attempt when relationStatus is explicitly no_natural_relation or above_cefr_level", async () => {
+    const a1 = levelCases[0];
+    const baseVocab = vocabularyFor(a1);
+    const justifiedNoRelations = {
+      ...baseVocab,
+      word1: { ...baseVocab.word1, synonym1: null, synonym2: null, antonym1: null, relationStatus: "no_natural_relation" as const },
+      word2: { ...baseVocab.word2, synonym1: null, synonym2: null, antonym1: null, relationStatus: "above_cefr_level" as const },
+      word3: { ...baseVocab.word3, synonym1: null, synonym2: null, antonym1: null, relationStatus: "no_natural_relation" as const }
+    };
+    const { runner, runTask } = sequencedRunner("weekly_lesson_vocabulary", [justifiedNoRelations]);
+
+    const result = await generateWeeklyLessonVocabulary(
+      { ...inputFor(a1), grammarFormula: "Could you confirm + noun?", grammarExamples: ["Could you confirm the deadline?", "Could you confirm the meeting?"] },
+      runner
+    );
+
+    expect(runTask).toHaveBeenCalledTimes(1);
+    expect(result.output.word1.relationStatus).toBe("no_natural_relation");
+    expect(result.output.word2.relationStatus).toBe("above_cefr_level");
+  });
+
+  it("emits a warning finding without failing the week when weekly lexical coverage is below 50%", () => {
+    const a1 = levelCases[0];
+    const partial = buildPartialLessonFromPipelineState(inputFor(a1), {
+      vocabulary: {
+        ...vocabularyFor(a1),
+        word1: { ...vocabularyFor(a1).word1, synonym1: null, synonym2: null, antonym1: null, relationStatus: "no_natural_relation" },
+        word2: { ...vocabularyFor(a1).word2, synonym1: null, synonym2: null, antonym1: null, relationStatus: "generation_missed" },
+        word3: { ...vocabularyFor(a1).word3, synonym1: null, synonym2: null, antonym1: null, relationStatus: "above_cefr_level" }
+      }
+    });
+    expect(partial).not.toBeNull();
+    // Partial draft without foundation must NOT include a fake or unavailable grammar section
+    expect(partial!.parts.find((part) => part.code === "grammar")).toBeUndefined();
+
+    const warnings = validateWeeklyVocabularyLexicalCoverage([partial!], "A1");
+    expect(warnings).toHaveLength(1);
+    expect(warnings[0]).toMatchObject({
+      component: "vocabulary",
+      code: "VOCABULARY_LEXICAL_COVERAGE_LOW",
+      severity: "warning",
+      repairAction: "regenerate_component"
+    });
+    expect(warnings[0]!.issues).toEqual([
+      { dayNumber: 1, word: "confirm", relationStatus: "no_natural_relation" },
+      { dayNumber: 1, word: "clarify", relationStatus: "generation_missed" },
+      { dayNumber: 1, word: "approve", relationStatus: "above_cefr_level" }
+    ]);
+  });
+
+  it("isolates component repair so vocabulary, foundation, and skills repairs only call their respective AI tasks", async () => {
+    const a1 = levelCases[0];
+    const generatedSkills = skillsFor(a1);
+    const fullDay = await generateWeeklyLessonDayPipeline(
+      inputFor(a1),
+      "Generate one complete lesson.",
+      runnerWith({
+        weekly_lesson_grammar_classifier: grammarClassification,
+        weekly_lesson_objectives: { objective: objectiveFor(a1) },
+        weekly_lesson_foundation: foundationFor(a1),
+        weekly_lesson_vocabulary: vocabularyFor(a1),
+        weekly_lesson_comprehension: generatedSkills.comprehension,
+        weekly_lesson_language_practice: generatedSkills.languagePractice,
+        weekly_lesson_speaking: generatedSkills.speaking,
+        weekly_lesson_skills_reviewer: approvedReview
+      }).runner
+    );
+    const validFiveDays = [1, 2, 3, 4, 5].map((dayNumber) => ({
+      ...fullDay.lesson,
+      dayNumber,
+      title: `Day ${dayNumber}: ${fullDay.lesson.title}`
+    }));
+    const weekInput = {
+      weekNumber: 1,
+      topic: "Confirming a deadline",
+      description: "Confirm a workplace deadline.",
+      objectives: "Confirm deadlines.",
+      keyVocabHint: "confirm, clarify, approve",
+      plan: {
+        A1: [
+          "Outcome: Confirm a deadline | Vocabulary: confirm, clarify, approve | Frame: Could you confirm + noun? | Skill emphasis: speaking",
+          "Outcome: State a date | Vocabulary: date, schedule, calendar | Frame: The deadline is + date | Skill emphasis: listening",
+          "Outcome: Clarify a detail | Vocabulary: detail, note, check | Frame: I need to clarify + noun | Skill emphasis: reading",
+          "Outcome: Request approval | Vocabulary: request, manager, team | Frame: Could you approve + noun? | Skill emphasis: writing",
+          "Outcome: Agree on next action | Vocabulary: agree, action, update | Frame: We agreed to + verb | Skill emphasis: speaking"
+        ]
+      }
+    };
+
+    // 1. Vocabulary-only repair
+    const vocabCalls: string[] = [];
+    await generateWeeklyLessons(
+      weekInput,
+      "A1",
+      { prompt: "Repair lesson." },
+      runnerWith({ weekly_lesson_vocabulary: vocabularyFor(a1) }, vocabCalls).runner,
+      {
+        dayNumbers: [1],
+        existingLessons: validFiveDays,
+        repairMode: "enrich",
+        forcedComponentsByDay: { 1: ["vocabulary"] }
+      }
+    );
+    expect(vocabCalls).toEqual(["weekly_lesson_vocabulary"]);
+
+    // 2. Foundation-only repair
+    const foundationCalls: string[] = [];
+    await generateWeeklyLessons(
+      weekInput,
+      "A1",
+      { prompt: "Repair lesson." },
+      runnerWith({
+        weekly_lesson_grammar_classifier: grammarClassification,
+        weekly_lesson_objectives: { objective: objectiveFor(a1) },
+        weekly_lesson_foundation: foundationFor(a1)
+      }, foundationCalls).runner,
+      {
+        dayNumbers: [1],
+        existingLessons: validFiveDays,
+        repairMode: "enrich",
+        forcedComponentsByDay: { 1: ["foundation"] }
+      }
+    );
+    expect(foundationCalls).toEqual([
+      "weekly_lesson_grammar_classifier",
+      "weekly_lesson_objectives",
+      "weekly_lesson_foundation"
+    ]);
+
+    // 3. Skills-only repair
+    const skillsCalls: string[] = [];
+    await generateWeeklyLessons(
+      weekInput,
+      "A1",
+      { prompt: "Repair lesson." },
+      runnerWith({
+        weekly_lesson_comprehension: generatedSkills.comprehension,
+        weekly_lesson_language_practice: generatedSkills.languagePractice,
+        weekly_lesson_speaking: generatedSkills.speaking,
+        weekly_lesson_skills_reviewer: approvedReview
+      }, skillsCalls).runner,
+      {
+        dayNumbers: [1],
+        existingLessons: validFiveDays,
+        repairMode: "enrich",
+        forcedComponentsByDay: { 1: ["skills"] }
+      }
+    );
+    expect(skillsCalls).toEqual([
+      "weekly_lesson_comprehension",
+      "weekly_lesson_language_practice",
+      "weekly_lesson_speaking"
+    ]);
+  });
+});
+
+describe("partial lesson vs final lesson grammar contract", () => {
+  const a1 = levelCases[0];
+  const allSkills = () => {
+    const generated = skillsFor(a1);
+    return { ...generated.comprehension, ...generated.languagePractice, ...generated.speaking };
+  };
+  const dayOutputs = (foundation: unknown = foundationFor(a1)) => {
+    const generatedSkills = skillsFor(a1);
+    return {
+      weekly_lesson_grammar_classifier: grammarClassification,
+      weekly_lesson_objectives: { objective: objectiveFor(a1) },
+      weekly_lesson_foundation: foundation,
+      weekly_lesson_vocabulary: vocabularyFor(a1),
+      weekly_lesson_comprehension: generatedSkills.comprehension,
+      weekly_lesson_language_practice: generatedSkills.languagePractice,
+      weekly_lesson_speaking: generatedSkills.speaking,
+      weekly_lesson_skills_reviewer: approvedReview
+    } as Record<string, unknown>;
+  };
+
+  it("restores a partial checkpoint without grammar, never treats it as complete, and resumes only from foundation", async () => {
+    const state: WeeklyLessonPipelineCheckpoint["state"] = {
+      grammarClassification,
+      objectives: { objective: objectiveFor(a1) }
+    };
+    const partial = buildPartialLessonFromPipelineState(inputFor(a1), state);
+    expect(partial).not.toBeNull();
+    expect(partial!.parts.find((part) => part.code === "grammar")).toBeUndefined();
+    expect(JSON.stringify(partial)).not.toContain("unavailable");
+    expect(lessonComponentsNeedingRepair(partial!, "enrich", "A1").has("foundation")).toBe(true);
+
+    const calls: string[] = [];
+    const resumed = await generateWeeklyLessonDayPipeline(
+      inputFor(a1), "Generate one complete lesson.", runnerWith(dayOutputs(), calls).runner, { resumeState: state }
+    );
+    expect(calls).not.toContain("weekly_lesson_grammar_classifier");
+    expect(calls).not.toContain("weekly_lesson_objectives");
+    expect(calls[0]).toBe("weekly_lesson_foundation");
+    expect(resumed.lesson.parts.find((part) => part.code === "grammar")).toBeDefined();
+  });
+
+  it("fails final assembly at foundation.grammar when the grammar body is missing", () => {
+    let thrown: unknown;
+    try {
+      assembleAndValidateWeeklyLesson({
+        componentInput: inputFor(a1),
+        grammarClassification,
+        objectives: { objective: objectiveFor(a1) },
+        foundation: { ...foundationFor(a1), grammar: null } as never,
+        vocabulary: vocabularyFor(a1) as never,
+        skills: allSkills() as never,
+        reviewer: approvedReview as never
+      });
+    } catch (error) {
+      thrown = error;
+    }
+    expect(thrown).toMatchObject({
+      code: "AI_OUTPUT_INVALID",
+      details: { component: "foundation", dayNumber: 1 },
+      issues: [{ path: "day1.foundation.grammar" }]
+    });
+  });
+
+  it("uses the fallback classification when the classifier fails and still assembles a validated grammar body", async () => {
+    const outputs = dayOutputs();
+    const calls: string[] = [];
+    const runTask = vi.fn(async (taskId: string) => {
+      calls.push(taskId);
+      if (taskId === "weekly_lesson_grammar_classifier") {
+        throw Object.assign(new Error("AI_OUTPUT_INVALID"), { code: "AI_OUTPUT_INVALID", issues: [{ path: ["status"], message: "invalid" }] });
+      }
+      if (!(taskId in outputs)) throw new Error(`UNEXPECTED_TASK:${taskId}`);
+      return { output: outputs[taskId], metadata: { ...metadata, taskId } };
+    });
+    const day = await generateWeeklyLessonDayPipeline(
+      inputFor(a1), "Generate one complete lesson.", { runTask } as unknown as AiTaskRunner
+    );
+    const grammarPart = day.lesson.parts.find((part) => part.code === "grammar");
+    expect(grammarPart?.content).toMatchObject({ formula: "Could you confirm + noun?", targetName: "Could you confirm + noun?" });
+    expect(calls.filter((taskId) => taskId === "weekly_lesson_foundation")).toHaveLength(1);
+  });
+
+  it("continues the other days when one day cannot produce grammar and attributes the failure to foundation", async () => {
+    const outputs = dayOutputs();
+    const foundationCallsByDay: Record<number, number> = {};
+    const runTask = vi.fn(async (taskId: string, input?: unknown) => {
+      const dayNumber = Number((input as { dayNumber?: unknown } | undefined)?.dayNumber ?? 0);
+      if (taskId === "weekly_lesson_foundation") {
+        foundationCallsByDay[dayNumber] = (foundationCallsByDay[dayNumber] ?? 0) + 1;
+        if (dayNumber === 2) return { output: { ...foundationFor(a1), grammar: null }, metadata: { ...metadata, taskId } };
+      }
+      if (!(taskId in outputs)) throw new Error(`UNEXPECTED_TASK:${taskId}`);
+      return { output: outputs[taskId], metadata: { ...metadata, taskId } };
+    });
+    const focus = "Could you confirm + noun?";
+    const generated = await generateWeeklyLessonLevelPipeline({
+      weekNumber: 1,
+      topic: "Confirming a deadline",
+      description: "Confirm a workplace deadline with a colleague.",
+      objectives: "Confirm the deadline and next action.",
+      keyVocabHint: "confirm, clarify, approve",
+      plan: { A1: [focus, focus, focus, focus, focus] }
+    } as never, "A1", { prompt: "Generate one complete lesson." }, { runTask } as unknown as AiTaskRunner);
+
+    expect(generated.lessons.map((lesson) => lesson.dayNumber)).toEqual([1, 3, 4, 5]);
+    expect(generated.lessons.every((lesson) => lesson.parts.some((part) => part.code === "grammar"))).toBe(true);
+    expect(generated.failures).toHaveLength(1);
+    expect(generated.failures[0]).toMatchObject({ dayNumber: 2, component: "foundation", code: "AI_OUTPUT_INVALID" });
+    expect(generated.failures[0]!.issues).toEqual(expect.arrayContaining([expect.objectContaining({ path: "day2.foundation.grammar" })]));
+    expect(foundationCallsByDay[2]).toBe(3);
+    expect(foundationCallsByDay[1]).toBe(1);
+  });
+});
+
+describe("deterministic lesson instructions", () => {
+  const stepsOf = (instruction: { step1: string; step2: string; step3: string }) => [instruction.step1, instruction.step2, instruction.step3];
+
+  it.each(levelCases)("gives $cefr exactly three short one-sentence steps in the learner-facing language", (level) => {
+    const instruction = standardLessonInstruction(level.cefr);
+    const steps = stepsOf(instruction);
+    expect(steps).toHaveLength(3);
+    for (const step of steps) {
+      expect(step.trim().split(/\s+/u).length).toBeLessThanOrEqual(LESSON_INSTRUCTION_STEP_MAX_WORDS);
+      expect(step.split(/[.!?]/u).filter((part) => part.trim()).length).toBe(1);
+      expect(/[ăâđêôơưàáảãạèéẻẽẹìíỉĩịòóỏõọùúủũụỳýỷỹỵ]/iu.test(step)).toBe(level.language === "vi");
+    }
+  });
+
+  it.each(levelCases)("replaces a long AI instruction for $cefr without spending an extra AI call", async (level) => {
+    const longInstruction = {
+      title: "A very long custom title",
+      step1: "First, carefully read every single part of the lesson, then listen to all of the examples twice, and then write notes.",
+      step2: "Second, complete all tasks.",
+      step3: "Third, review."
+    };
+    const { runner, runTask } = sequencedRunner("weekly_lesson_foundation", [{ ...foundationFor(level), instruction: longInstruction }]);
+    const result = await generateWeeklyLessonFoundation(objectivesInput(level), "Generate the foundation.", runner);
+    expect(runTask).toHaveBeenCalledTimes(1);
+    expect(result.output.instruction).toEqual(standardLessonInstruction(level.cefr));
+  });
+
+  it("does not ask the provider to generate instructions", () => {
+    expect(weeklyLessonFoundationBodyOutputJsonSchema.properties).not.toHaveProperty("instruction");
+    expect(weeklyLessonFoundationBodyOutputJsonSchema.required).not.toContain("instruction");
+  });
+});
+
+describe("AI_UNAVAILABLE classification", () => {
+  const a1 = levelCases[0];
+  const focus = "Could you confirm + noun?";
+  const week = {
+    weekNumber: 1,
+    topic: "Confirming a deadline",
+    description: "Confirm a workplace deadline with a colleague.",
+    objectives: "Confirm the deadline and next action.",
+    keyVocabHint: "confirm, clarify, approve",
+    plan: { A1: [focus, focus, focus, focus, focus] }
+  } as never;
+  const providerError = (code: string, details?: unknown) => Object.assign(new Error(code), { code, retryable: true, ...(details ? { details } : {}) });
+
+  function runnerFailing(failDay: (dayNumber: number) => Error | "semantic" | undefined) {
+    const generatedSkills = skillsFor(a1);
+    const outputs: Record<string, unknown> = {
+      weekly_lesson_grammar_classifier: grammarClassification,
+      weekly_lesson_objectives: { objective: objectiveFor(a1) },
+      weekly_lesson_foundation: foundationFor(a1),
+      weekly_lesson_vocabulary: vocabularyFor(a1),
+      weekly_lesson_comprehension: generatedSkills.comprehension,
+      weekly_lesson_language_practice: generatedSkills.languagePractice,
+      weekly_lesson_speaking: generatedSkills.speaking,
+      weekly_lesson_skills_reviewer: approvedReview
+    };
+    const runTask = vi.fn(async (taskId: string, input?: unknown) => {
+      const dayNumber = Number((input as { dayNumber?: unknown } | undefined)?.dayNumber ?? 0);
+      const failure = failDay(dayNumber);
+      if (failure instanceof Error && taskId === "weekly_lesson_grammar_classifier") throw failure;
+      if (failure === "semantic" && taskId === "weekly_lesson_foundation") {
+        return { output: { ...foundationFor(a1), grammar: null }, metadata: { ...metadata, taskId } };
+      }
+      if (!(taskId in outputs)) throw new Error(`UNEXPECTED_TASK:${taskId}`);
+      return { output: outputs[taskId], metadata: { ...metadata, taskId } };
+    });
+    return { runTask } as unknown as AiTaskRunner;
+  }
+
+  async function failureOf(runner: AiTaskRunner) {
+    try {
+      await generateWeeklyLessons(week, "A1", { prompt: "Generate one complete lesson." }, runner, { sequentialPipeline: true });
+    } catch (error) {
+      return error as { code: string; partialResult?: { lessons: Array<{ dayNumber: number }>; failures: Array<{ dayNumber: number; code: string }> } };
+    }
+    throw new Error("expected generation to fail");
+  }
+
+  it("returns AI_UNAVAILABLE only when every day fails for provider reasons", async () => {
+    const error = await failureOf(runnerFailing(() => providerError("AI_PROVIDER_RATE_LIMIT")));
+    expect(error.code).toBe("AI_UNAVAILABLE");
+    expect(error.partialResult?.failures.map((failure) => failure.code)).toEqual(Array(5).fill("AI_PROVIDER_RATE_LIMIT"));
+  });
+
+  it("treats authentication rejections as unavailable but other provider rejections as real failures", () => {
+    expect(isProviderUnavailableFailure({ code: "AI_PROVIDER_REJECTED", details: { status: 401 } })).toBe(true);
+    expect(isProviderUnavailableFailure({ code: "AI_PROVIDER_REJECTED", details: { status: 403 } })).toBe(true);
+    expect(isProviderUnavailableFailure({ code: "AI_PROVIDER_REJECTED", details: { status: 400 } })).toBe(false);
+    for (const code of ["AI_OUTPUT_INVALID", "AI_OUTPUT_TRUNCATED", "AI_INPUT_INVALID", "AI_LESSON_SET_INVALID"]) {
+      expect(isProviderUnavailableFailure({ code })).toBe(false);
+    }
+  });
+
+  it("reports a semantic day failure as a semantic diagnostic, not unavailable, and keeps the other days", async () => {
+    const error = await failureOf(runnerFailing((dayNumber) => dayNumber === 2 ? "semantic" : undefined));
+    expect(error.code).toBe("AI_LEVEL_GENERATION_INCOMPLETE");
+    expect(error.partialResult?.failures).toEqual([expect.objectContaining({ dayNumber: 2, code: "AI_OUTPUT_INVALID" })]);
+    expect(error.partialResult?.lessons.map((lesson) => lesson.dayNumber)).toEqual([1, 3, 4, 5]);
+  });
+
+  it("keeps successful days when only some days hit provider errors", async () => {
+    const error = await failureOf(runnerFailing((dayNumber) => dayNumber === 3 ? providerError("AI_PROVIDER_UNAVAILABLE") : undefined));
+    expect(error.code).toBe("AI_LEVEL_GENERATION_INCOMPLETE");
+    expect(error.partialResult?.lessons.map((lesson) => lesson.dayNumber)).toEqual([1, 2, 4, 5]);
+  });
+
+  it("does not call a mix of provider and semantic failures unavailable", async () => {
+    const error = await failureOf(runnerFailing((dayNumber) => dayNumber === 1 ? "semantic" : providerError("AI_PROVIDER_NETWORK")));
+    expect(error.code).toBe("AI_LEVEL_GENERATION_INCOMPLETE");
+  });
+
+  it("isolates a provider failure in one level from the other levels", async () => {
+    let caught: unknown;
+    try {
+      await runWeeklyLessonLevelBatch(["A1", "A2", "B1", "B2", "C1"], async (level) => {
+        if (level === "B1") throw providerError("AI_PROVIDER_RATE_LIMIT");
+        return `${level}-saved`;
+      });
+    } catch (error) {
+      caught = error;
+    }
+    expect(caught).toMatchObject({
+      code: "AI_LEVEL_BATCH_FAILED",
+      failures: [expect.objectContaining({ level: "B1", code: "AI_PROVIDER_RATE_LIMIT" })],
+      partialResults: { A1: "A1-saved", A2: "A2-saved", B2: "B2-saved", C1: "C1-saved" }
+    });
+  });
+});
+
+describe("lexical relation self-exemption", () => {
+  const relationFree = (item: Record<string, unknown>, status: "no_natural_relation" | "above_cefr_level" | "generation_missed") => ({
+    ...item, synonym1: null, synonym2: null, antonym1: null, relationStatus: status
+  });
+  const withWord1 = (level: LevelCase, word1: Record<string, unknown>) => ({ ...vocabularyFor(level), word1 });
+  const sendItem = (level: LevelCase) => ({
+    ...vocabularyFor(level).word1,
+    word: "send", partOfSpeech: "verb", pronunciation: "/send/", ttsText: "send", ssml: "<speak>send</speak>",
+    meaning: "gửi", imageQuery: "person sending an email at an office desk photo",
+    collocation1: "send an email", collocation2: "send a file", collocation3: "send a reminder",
+    family1: { word: "sender", type: "noun", meaning: "người gửi" }
+  });
+  const vocabularyInput = (level: LevelCase) => ({
+    ...inputFor(level), grammarFormula: "Could you confirm + noun?", grammarExamples: ["Could you confirm the deadline?", "Could you confirm the meeting?"] as [string, string]
+  });
+
+  it("rejects an exemption when curated evidence shows a level-appropriate relation and repairs only that word", async () => {
+    const a2 = levelCases[1];
+    const exempt = withWord1(a2, relationFree(sendItem(a2), "no_natural_relation"));
+    const repaired = withWord1(a2, {
+      ...sendItem(a2),
+      antonym1: { word: "receive", level: "A2", note: "opposite direction", partOfSpeech: "verb", sense: "get something sent", example: "I receive the file today." },
+      relationStatus: "provided"
+    });
+    const { runner, runTask } = sequencedRunner("weekly_lesson_vocabulary", [exempt, repaired]);
+    const result = await generateWeeklyLessonVocabulary(vocabularyInput(a2), runner);
+    expect(runTask).toHaveBeenCalledTimes(2);
+    expect(result.output.word1.word).toBe("send");
+    expect(result.output.word1.antonym1?.word).toBe("receive");
+    expect(result.output.word2).toEqual(exempt.word2);
+    const repairPrompt = String((runTask.mock.calls[1] as unknown as [string, unknown, { systemPrompt?: string }])[2].systemPrompt);
+    expect(repairPrompt).toContain("send (verb) was marked no_natural_relation");
+    expect(repairPrompt).not.toContain("MANDATORY ANTONYM REPLACEMENT");
+  });
+
+  it("accepts the exemption when the curated relation is above the lesson level or the sense does not match", async () => {
+    const a1 = levelCases[0];
+    // approve/reject is curated from B1, so an A1 above_cefr_level claim is credible.
+    const approveAboveLevel = { ...vocabularyFor(a1), word3: relationFree(vocabularyFor(a1).word3, "above_cefr_level") };
+    const first = sequencedRunner("weekly_lesson_vocabulary", [approveAboveLevel]);
+    await generateWeeklyLessonVocabulary(vocabularyInput(a1), first.runner);
+    expect(first.runTask).toHaveBeenCalledTimes(1);
+
+    expect(curatedRelationEvidence({ word: "close", partOfSpeech: "verb", meaning: "đóng" }, "A1")?.antonyms).toContain("open");
+    expect(curatedRelationEvidence({ word: "close", partOfSpeech: "adjective", meaning: "gần gũi" }, "C1")).toBeUndefined();
+    expect(curatedRelationEvidence({ word: "close", partOfSpeech: "verb", meaning: "kết thân" }, "C1")).toBeUndefined();
+    expect(curatedRelationEvidence({ word: "approve", partOfSpeech: "verb", meaning: "phê duyệt" }, "A2")).toBeUndefined();
+    expect(curatedRelationEvidence({ word: "approve", partOfSpeech: "verb", meaning: "phê duyệt" }, "B1")?.antonyms).toContain("reject");
+  });
+
+  it("keeps the AI status for words without curated evidence", async () => {
+    const b1 = levelCases[2];
+    const clarifyExempt = { ...vocabularyFor(b1), word2: relationFree(vocabularyFor(b1).word2, "no_natural_relation") };
+    const { runner, runTask } = sequencedRunner("weekly_lesson_vocabulary", [clarifyExempt]);
+    const result = await generateWeeklyLessonVocabulary(vocabularyInput(b1), runner);
+    expect(runTask).toHaveBeenCalledTimes(1);
+    expect(result.output.word2.relationStatus).toBe("no_natural_relation");
+  });
+
+  it("warns when all 15 weekly words declare no natural relation", () => {
+    const a1 = levelCases[0];
+    const lessons = [1, 2, 3, 4, 5].map((dayNumber) => buildPartialLessonFromPipelineState({ ...inputFor(a1), dayNumber }, {
+      vocabulary: {
+        ...vocabularyFor(a1),
+        word1: relationFree(vocabularyFor(a1).word1, "no_natural_relation"),
+        word2: relationFree(vocabularyFor(a1).word2, "no_natural_relation"),
+        word3: relationFree(vocabularyFor(a1).word3, "no_natural_relation")
+      }
+    })!);
+    const warnings = validateWeeklyVocabularyLexicalCoverage(lessons, "A1");
+    expect(warnings).toHaveLength(1);
+    expect(warnings[0]).toMatchObject({ code: "VOCABULARY_LEXICAL_COVERAGE_LOW", severity: "warning", repairAction: "regenerate_component" });
+    expect(warnings[0]!.issues).toHaveLength(15);
+    expect(warnings[0]!.message).toContain("0/15");
+  });
+});
+
+describe("repair-mode lexical exemption", () => {
+  it("reopens vocabulary repair when the only relation evidence is an exemption contradicted by curated data", async () => {
+    const a2 = levelCases[1];
+    const generatedSkills = skillsFor(a2);
+    const day = await generateWeeklyLessonDayPipeline(inputFor(a2), "Generate one complete lesson.", runnerWith({
+      weekly_lesson_grammar_classifier: grammarClassification,
+      weekly_lesson_objectives: { objective: objectiveFor(a2) },
+      weekly_lesson_foundation: foundationFor(a2),
+      weekly_lesson_vocabulary: vocabularyFor(a2),
+      weekly_lesson_comprehension: generatedSkills.comprehension,
+      weekly_lesson_language_practice: generatedSkills.languagePractice,
+      weekly_lesson_speaking: generatedSkills.speaking,
+      weekly_lesson_skills_reviewer: approvedReview
+    }).runner);
+    const withItems = (mapItem: (item: Record<string, unknown>, index: number) => Record<string, unknown>) => ({
+      ...day.lesson,
+      parts: day.lesson.parts.map((part) => part.code !== "vocabulary" ? part : {
+        ...part,
+        content: { ...(part.content as Record<string, unknown>), items: ((part.content as { items: Array<Record<string, unknown>> }).items).map(mapItem) }
+      })
+    });
+    const exempt = (item: Record<string, unknown>) => ({ ...item, synonyms: [], antonyms: [], relationStatus: "no_natural_relation" });
+
+    const credible = withItems((item) => exempt(item));
+    expect(lessonComponentsNeedingRepair(credible, "enrich", "A2").has("vocabulary")).toBe(false);
+
+    const contradicted = withItems((item, index) => index === 0
+      ? exempt({ ...item, word: "send", type: "verb", meaning: "gửi", collocations: ["send an email", "send a file", "send a reminder"] })
+      : exempt(item));
+    expect(lessonComponentsNeedingRepair(contradicted, "enrich", "A2").has("vocabulary")).toBe(true);
+  });
+});
+
+describe("comprehension entity grounding in the skills validator", () => {
+  it("accepts a Vietnamese question opener and rejects a name missing from the passage", async () => {
+    const a1 = levelCases[0];
+    const base = skillsFor(a1).comprehension;
+    const grounded = { ...base, listening: { ...base.listening, prompt: "Khi nào Mina có cuộc họp với khách hàng?" } };
+    const ungrounded = { ...base, listening: { ...base.listening, prompt: "Khi nào Lan có cuộc họp với khách hàng?" } };
+
+    const accepted = sequencedRunner("weekly_lesson_comprehension", [grounded]);
+    await generateWeeklyLessonSkillGroup("skills.comprehension", skillsInput(a1), accepted.runner, { maxAttempts: 1 });
+    expect(accepted.runTask).toHaveBeenCalledTimes(1);
+
+    const rejected = sequencedRunner("weekly_lesson_comprehension", [ungrounded]);
+    await expect(generateWeeklyLessonSkillGroup("skills.comprehension", skillsInput(a1), rejected.runner, { maxAttempts: 1 }))
+      .rejects.toMatchObject({ issues: expect.arrayContaining([expect.objectContaining({ message: expect.stringContaining("names Lan") })]) });
+  });
+});
+
+describe("objective assessment shape and item-level repair", () => {
+  const a2 = levelCases[1];
+  const objectiveItem = (overrides: Record<string, unknown>) => ({ ...objectiveFor(a2).items[0]!, ...overrides });
+
+  it("distinguishes reading a passage from writing one", () => {
+    const reading = objectiveItem({ assessmentCode: "reading", assessed_by: "reading", action_verb: "chọn", criterion: "chọn ý chính trong đoạn văn", success_evidence: "Đọc đoạn văn và chọn đáp án đúng." });
+    expect(objectiveAssessmentShapeMismatch(reading, "A2")).toBeUndefined();
+    const readingNoChoiceWord = objectiveItem({ assessmentCode: "reading", assessed_by: "reading", action_verb: "xác định", criterion: "xác định mục đích của đoạn văn", success_evidence: "Nhận ra mục đích được nêu trong đoạn văn." });
+    expect(objectiveAssessmentShapeMismatch(readingNoChoiceWord, "A2")).toBeUndefined();
+    const writesParagraph = objectiveItem({ assessmentCode: "reading", assessed_by: "reading", action_verb: "viết", criterion: "viết một đoạn văn ngắn", success_evidence: "Viết câu trả lời tự do." });
+    expect(objectiveAssessmentShapeMismatch(writesParagraph, "A2")).toContain("four-option comprehension check");
+    const b1WritingChoice = objectiveItem({ assessmentCode: "writing", assessed_by: "writing", action_verb: "choose", criterion: "choose the correct closing", success_evidence: "Selects one of four options." });
+    expect(objectiveAssessmentShapeMismatch(b1WritingChoice, "B1")).toContain("scoped written response");
+  });
+
+  it("puts the assessment shape of every code into the objectives prompt", async () => {
+    const { runner, runTask } = sequencedRunner("weekly_lesson_objectives", [{ objective: objectiveFor(a2) }]);
+    await generateWeeklyLessonObjectives(objectivesInput(a2), "", runner);
+    const prompt = (runTask.mock.calls[0] as unknown as [string, unknown, { systemPrompt: string }])[2].systemPrompt;
+    for (const code of ["listening", "reading", "writing", "word_class", "word_use", "speaking"]) expect(prompt).toContain(`- ${code}:`);
+    expect(prompt).toContain("writing at A1-A2 is a four-option MCQ or cloze selection");
+  });
+
+  it("repairs only the mismatched objective ID, keeps valid items and revalidates the merged set", async () => {
+    const valid = objectiveFor(a2);
+    const brokenC1 = { ...valid.items[0]!, action_verb: "viết", criterion: "viết một đoạn văn trả lời", success_evidence: "Viết câu trả lời tự do." };
+    const first = { objective: { ...valid, items: [brokenC1, ...valid.items.slice(1)] } };
+    const changedL1 = { ...valid.items[1]!, text: "Sau bài học, bạn có thể dùng một câu khác hẳn." };
+    const repair = { objective: { ...valid, items: [valid.items[0]!, changedL1] } };
+    const { runner, runTask } = sequencedRunner("weekly_lesson_objectives", [first, repair]);
+    const result = await generateWeeklyLessonObjectives(objectivesInput(a2), "", runner);
+    expect(runTask).toHaveBeenCalledTimes(2);
+    expect(result.output.objective.items[0]).toEqual(valid.items[0]);
+    // L1 was valid, so its original wording is kept even though the repair output changed it.
+    expect(result.output.objective.items[1]).toEqual(valid.items[1]);
+    const repairPrompt = (runTask.mock.calls[1] as unknown as [string, unknown, { systemPrompt: string }])[2].systemPrompt;
+    expect(repairPrompt).toContain("rewrite only objective ID(s) C1");
+    expect(repairPrompt).toContain("objective_assessment_shape_mismatch (objective ID C1)");
+  });
+
+  it("labels objective IDs unambiguously in diagnostics", () => {
+    expect(objectiveIdsFromIssues([
+      "objective_assessment_shape_mismatch (objective ID C1). reading is a four-option comprehension check",
+      "objective_conflicting_assessment_targets (objective ID L1, L2). One speaking exercise",
+      "missing_language_objective (CEFR C1)"
+    ])).toEqual(["C1", "L1", "L2"]);
+  });
+});
+
+describe("reviewer finding classification", () => {
+  const b2 = levelCases[3];
+  const allSkills = () => {
+    const generated = skillsFor(b2);
+    return { ...generated.comprehension, ...generated.languagePractice, ...generated.speaking };
+  };
+  const reviewWith = (findings: unknown[]) => ({ ...approvedReview, status: "needs_revision" as const, findings });
+  const speakingAnswer = () => allSkills().speaking.answer;
+
+  it("discards self-withdrawn findings and records style or cross-exercise notes as warnings", async () => {
+    const { runner } = runnerWith({ weekly_lesson_skills_reviewer: reviewWith([
+      { exerciseCode: "reading", reasonCode: "feedback_mismatch", category: "self_withdrawn", message: "On reflection the item is fine.", evidence: { path: "reading.prompt", actual: "What does Mina send?", expected: "unchanged" } },
+      { exerciseCode: "speaking", reasonCode: "feedback_mismatch", category: "style_preference", message: "Could sound more formal.", evidence: { path: "speaking.answer", actual: speakingAnswer(), expected: "more formal" } },
+      { exerciseCode: "speaking", reasonCode: "feedback_mismatch", category: "cross_exercise_mismatch", message: "Proposes a different plan from the reading.", evidence: { path: "speaking.answer", actual: speakingAnswer(), expected: "same plan as reading" } }
+    ]) });
+    const result = await reviewWeeklyLessonSkills(runner, skillsInput(b2), allSkills() as never);
+    expect(result.output.status).toBe("approved");
+    expect(result.findings).toEqual([]);
+    expect(result.warnings.map((warning) => warning.category)).toEqual(["style_preference", "cross_exercise_mismatch"]);
+  });
+
+  it("keeps a verified objective mismatch even when deterministic validation passes", async () => {
+    const { runner } = runnerWith({ weekly_lesson_skills_reviewer: reviewWith([
+      { exerciseCode: "speaking", reasonCode: "feedback_mismatch", category: "objective_mismatch", message: "The mapped objective requires naming the team as the responsible group.", evidence: { path: "speaking.answer", actual: speakingAnswer(), expected: "names the team as the responsible group" } }
+    ]) });
+    const result = await reviewWeeklyLessonSkills(runner, skillsInput(b2), allSkills() as never);
+    expect(result.output.status).toBe("needs_revision");
+    expect(result.findings).toEqual([{ path: ["speaking"], message: expect.stringContaining("responsible group") }]);
+  });
+
+  it("drops a finding whose quoted evidence is not in the exercise, and routes a verified one to the exercise that must change", async () => {
+    const { runner } = runnerWith({ weekly_lesson_skills_reviewer: reviewWith([
+      { exerciseCode: "reading", reasonCode: "insufficient_context", category: "source_contradiction", message: "The passage says the meeting is on Monday.", evidence: { path: "reading.body", actual: "the meeting is on Monday", expected: "consistent day" } },
+      { exerciseCode: "reading", reasonCode: "feedback_mismatch", category: "translation_mismatch", message: "The speaking answer translation does not match the answer.", evidence: { path: "speaking.answerTranslation", actual: allSkills().speaking.answerTranslation, expected: "a faithful restatement of the answer" } }
+    ]) });
+    const result = await reviewWeeklyLessonSkills(runner, skillsInput(b2), allSkills() as never);
+    expect(result.findings).toEqual([{ path: ["speaking"], message: expect.stringContaining("translation does not match") }]);
+  });
+
+  it("asks the reviewer again when a blocking finding gives no evidence", async () => {
+    const withoutEvidence = reviewWith([{ exerciseCode: "speaking", reasonCode: "feedback_mismatch", category: "objective_mismatch", message: "Missing the required frame." }]);
+    const { runner, runTask } = sequencedRunner("weekly_lesson_skills_reviewer", [withoutEvidence, approvedReview]);
+    const result = await reviewWeeklyLessonSkills(runner, skillsInput(b2), allSkills() as never);
+    expect(runTask).toHaveBeenCalledTimes(2);
+    expect(result.output.status).toBe("approved");
+  });
+
+  it("keeps the day and reports reviewer style notes as warnings", async () => {
+    const a1 = levelCases[0];
+    const generatedSkills = skillsFor(a1);
+    const day = await generateWeeklyLessonDayPipeline(inputFor(a1), "Generate one complete lesson.", runnerWith({
+      weekly_lesson_grammar_classifier: grammarClassification,
+      weekly_lesson_objectives: { objective: objectiveFor(a1) },
+      weekly_lesson_foundation: foundationFor(a1),
+      weekly_lesson_vocabulary: vocabularyFor(a1),
+      weekly_lesson_comprehension: generatedSkills.comprehension,
+      weekly_lesson_language_practice: generatedSkills.languagePractice,
+      weekly_lesson_speaking: generatedSkills.speaking,
+      weekly_lesson_skills_reviewer: reviewWith([
+        { exerciseCode: "speaking", reasonCode: "feedback_mismatch", category: "style_preference", message: "A warmer greeting would be nicer.", evidence: { path: "speaking.answer", actual: generatedSkills.speaking.speaking.answer, expected: "warmer greeting" } }
+      ])
+    }).runner);
+    expect(day.lesson.parts.some((part) => part.code === "speaking")).toBe(true);
+    expect(day.warnings).toEqual([expect.objectContaining({ component: "skills.reviewer", code: "REVIEWER_STYLE_PREFERENCE", severity: "warning" })]);
   });
 });

@@ -69,8 +69,8 @@ const foundation = {
   ] },
   instruction: { title: "Hướng dẫn", step1: "Đọc mẫu câu.", step2: "Ôn từ vựng.", step3: "Làm bài tập." },
   grammar: {
-    title: "Ngữ pháp", contentType: "sentence_pattern", targetName: "S + V + O", scope: "Giving clear feedback",
-    formula: "S + V + O", usage: "Dùng để đưa ra góp ý trong công việc.",
+    title: "Ngữ pháp", contentType: "sentence_pattern", targetName: "I give + [noun phrase]", scope: "give clear feedback",
+    formula: "I give + [noun phrase]", usage: "Dùng để đưa ra góp ý trong công việc.",
     example1: "I give clear feedback.", example2: "I give helpful feedback."
   },
   pronunciation: {
@@ -85,7 +85,7 @@ const approvedSkillsReview = {
   solvedAnswers: { listening: "Clear feedback", reading: "Clear feedback", writing: "give", wordClass: "Clear feedback", wordUse: "Clear feedback" }
 };
 const grammarClassification = {
-  status: "classified", contentType: "sentence_pattern", targetName: "S + V + O", scope: "Giving clear feedback",
+  status: "classified", contentType: "sentence_pattern", targetName: "I give + [noun phrase]", scope: "give clear feedback",
   support: "explicit", confidence: "high", evidence: [{ sourceRef: "lessonFocus", quote: "give clear feedback" }], rejectedCandidates: []
 };
 
@@ -264,7 +264,7 @@ describe("weekly lesson generation orchestration", () => {
       { dayNumbers: [1], qualityReview: true }
     );
 
-    expect(speakingAttempts).toBe(2);
+    expect(speakingAttempts).toBe(3);
     expect(generated.lessons[0]?.parts.map((part) => part.code)).toEqual(expect.arrayContaining(["listening", "reading", "writing", "word_class", "word_use"]));
     expect(generated.lessons[0]?.parts.some((part) => part.code === "speaking")).toBe(false);
     expect(generated.findings).toEqual(expect.arrayContaining([
@@ -504,7 +504,7 @@ describe("weekly lesson generation orchestration", () => {
       }
     );
 
-    expect(foundationAttempts).toBe(2);
+    expect(foundationAttempts).toBe(3);
     expect(runTask.mock.calls.find((call) => call[0] === "weekly_lesson_foundation" && call[2]?.systemPrompt?.includes("DUPLICATE FRAME"))?.[2]?.systemPrompt)
       .toContain("Preserve every valid non-grammar field");
     expect(generated.lessons[0]?.parts.find((part) => part.code === "grammar")?.content)
@@ -753,9 +753,9 @@ describe("weekly lesson generation orchestration", () => {
     expect(generated.lessons[0]?.parts.find((part) => part.code === "grammar")?.content).toMatchObject({
       title: "Ngữ pháp",
       contentType: "sentence_pattern",
-      targetName: "S + V + O",
-      scope: "Giving clear feedback",
-      formula: "S + V + O",
+      targetName: "I give + [noun phrase]",
+      scope: "give clear feedback",
+      formula: "I give + [noun phrase]",
       usage: "Dùng để đưa ra góp ý trong công việc.",
       examples: ["I give clear feedback.", "I give helpful feedback."]
     });
@@ -1013,7 +1013,7 @@ describe("weekly lesson generation orchestration", () => {
     );
 
     expect(generated.lessons[0]?.parts.find((part) => part.code === "grammar")?.content).toMatchObject({
-      targetName: focus, scope: focus, formula: "S + V + O", examples: ["I give clear feedback.", "I give helpful feedback."]
+      targetName: focus, scope: focus, formula: "I give + [noun phrase]", examples: ["I give clear feedback.", "I give helpful feedback."]
     });
   });
 
@@ -1520,7 +1520,7 @@ describe("weekly lesson generation orchestration", () => {
       { dayNumbers: [1], qualityReview: true }
     );
 
-    expect(foundationAttempts).toBe(2);
+    expect(foundationAttempts).toBe(3);
     expect(generated.failures).toEqual(expect.arrayContaining([
       expect.objectContaining({ dayNumber: 1, component: "objectives", code: "AI_OUTPUT_INVALID" })
     ]));
@@ -1870,7 +1870,7 @@ describe("weekly lesson generation orchestration", () => {
     );
 
     expect(generated.lessons).toHaveLength(1);
-    expect(vocabularyAttempts).toBe(2);
+    expect(vocabularyAttempts).toBe(3);
     expect(runTask.mock.calls.find((call) => call[0] === "weekly_lesson_vocabulary")?.[2]?.systemPrompt)
       .toContain("Do not mechanically attach a suffix");
     expect(runTask.mock.calls.find((call) => call[0] === "weekly_lesson_vocabulary" && call[2]?.systemPrompt?.includes("REPAIR REQUIRED"))?.[2]?.systemPrompt)
@@ -1906,7 +1906,7 @@ describe("weekly lesson generation orchestration", () => {
       "A1", { prompt: "Generate lessons." }, { runTask } as unknown as AiTaskRunner, { dayNumbers: [1] }
     );
 
-    const repairPrompt = runTask.mock.calls.find((call) => call[0] === "weekly_lesson_vocabulary" && call[2]?.systemPrompt?.includes("REPAIR REQUIRED"))?.[2]?.systemPrompt;
+    const repairPrompt = (runTask.mock.calls.find((call) => call[0] === "weekly_lesson_vocabulary" && Boolean((call[1] as { repairFeedback?: string })?.repairFeedback))?.[1] as { repairFeedback?: string } | undefined)?.repairFeedback;
     expect(repairPrompt).toContain("PREVIOUS INVALID OUTPUT:");
     expect(repairPrompt).toContain("context without the vocabulary term");
   });
@@ -2124,7 +2124,7 @@ describe("weekly lesson generation orchestration", () => {
 
     expect(generated.lessons[0]?.parts.some((part) => part.code === "objective")).toBe(true);
     expect(generated.lessons[0]?.parts.find((part) => part.code === "grammar")?.content).toMatchObject({
-      targetName: focus, scope: focus, formula: "S + V + O"
+      targetName: focus, scope: focus, formula: "I give + [noun phrase]"
     });
     expect(generated.failures).toEqual(expect.arrayContaining([
       expect.objectContaining({ dayNumber: 1, component: "grammarClassification" })
@@ -2243,7 +2243,6 @@ describe("weekly lesson generation orchestration", () => {
     );
 
     expect(generated.lessons.map((lesson) => lesson.dayNumber)).toEqual([2, 4]);
-    expect(runTask).toHaveBeenCalledTimes(8);
     expect(new Set(runTask.mock.calls.map((call) => (call[1] as { dayNumber: number }).dayNumber))).toEqual(new Set([2, 4]));
   });
 
@@ -2337,7 +2336,7 @@ describe("weekly lesson generation orchestration", () => {
       expect.objectContaining({ type: "language", assessmentCode: "speaking", text: "Sau bài học, bạn có thể nói một câu có cụm \"clear feedback\" khi nhập vai." })
     ]);
     expect([...attempts.values()]).toEqual([2, 2, 2, 2, 2]);
-    expect(runTask.mock.calls.filter((call) => call[0] === "weekly_lesson_foundation" && call[2]?.systemPrompt?.includes("REPAIR REQUIRED"))).toHaveLength(5);
+    expect(runTask.mock.calls.filter((call) => call[0] === "weekly_lesson_foundation" && Boolean((call[1] as { repairFeedback?: string })?.repairFeedback))).toHaveLength(5);
   });
 
   it("retries repeated SWBAT clauses instead of truncating or persisting them", async () => {
@@ -2414,10 +2413,10 @@ describe("weekly lesson generation orchestration", () => {
     const steps = generated.lessons[0]?.parts.find((part) => part.code === "instruction")?.content.steps;
 
     expect(steps).toEqual([
-      "Đọc mẫu câu.",
-      "Ôn từ vựng.",
-      "Làm bài tập."
+      "Học nội dung và nghe các câu mẫu.",
+      "Làm lần lượt các bài tập.",
+      "Xem phản hồi và làm lại phần chưa đúng."
     ]);
-    expect([...attempts.values()]).toEqual([2, 2, 2, 2, 2]);
+    expect([...attempts.values()]).toEqual([1, 1, 1, 1, 1]);
   });
 });

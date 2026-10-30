@@ -5,6 +5,8 @@ import {
   buildWeeklyLessonDayContract,
   prepareWeeklyLessonRetryState,
   promptEntities,
+  extractPromptEntities,
+  ungroundedPromptEntities,
   normalizeWeeklyLessonPlanBlueprint,
   runWeeklyLessonDaySequence,
   runWeeklyLessonLevelBatch,
@@ -236,10 +238,49 @@ describe("cross-level weekly lesson validation", () => {
     ]);
     expect(result.failures).toEqual([{
       dayNumber: 2,
+      component: "skills.comprehension",
       code: "AI_OUTPUT_INVALID",
       message: "day component failed",
       issues: [{ path: ["listening", "body"], message: "Body is too short." }],
       details: { component: "skills.comprehension" }
     }]);
+  });
+});
+
+describe("language-aware prompt entity extraction", () => {
+  it("does not treat Vietnamese sentence-initial capitalization as a name", () => {
+    for (const prompt of [
+      "Việc gì cần làm trước thứ Sáu?",
+      "Trong cuộc họp, nhóm quyết định gì?",
+      "Khi nào báo cáo được gửi?",
+      "Mục đích của email là gì?",
+      "Báo cáo được gửi cho ai? Điều gì xảy ra sau đó?"
+    ]) {
+      expect(promptEntities(prompt), prompt).toEqual([]);
+    }
+  });
+
+  it("detects Vietnamese names from honorifics, mid-sentence capitals and later words of a sentence-initial run", () => {
+    expect(promptEntities("Chị Mai gửi gì cho anh Nam?")).toEqual(["mai", "nam"]);
+    expect(promptEntities("Ai nhận báo cáo của Lan?")).toEqual(["lan"]);
+    expect(promptEntities("Theo Mai, nhóm nên giảm khoản nào?")).toEqual(["mai"]);
+    expect(promptEntities("Cuộc họp vào thứ Hai hay thứ Ba? Email viết bằng tiếng Anh?")).toEqual([]);
+  });
+
+  it("keeps English name checks, including a sentence-initial name", () => {
+    expect(promptEntities("Who sends the report?")).toEqual([]);
+    expect(promptEntities("What did Mina send?")).toEqual(["mina"]);
+    expect(promptEntities("Mina needs what before Friday?")).toEqual(["mina", "friday"]);
+    expect(promptEntities("According to Mr. Tan, when is the deadline?")).toEqual(["tan"]);
+    expect(extractPromptEntities("When does the Finance Team meet?")).toEqual([
+      { text: "Finance Team", tokens: ["finance", "team"], evidence: "multi_word" }
+    ]);
+    expect(promptEntities("What does the HR team need?")).toEqual([]);
+  });
+
+  it("reports only entities that are absent from the source passage", () => {
+    expect(ungroundedPromptEntities("Việc gì cần làm?", "Please finish the report today.")).toEqual([]);
+    expect(ungroundedPromptEntities("What did Mina send?", "Lan sent the file.").map((entity) => entity.text)).toEqual(["Mina"]);
+    expect(ungroundedPromptEntities("What did Mina's team send?", "Mina's team sent the file.")).toEqual([]);
   });
 });
