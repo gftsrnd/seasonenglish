@@ -31,6 +31,7 @@ import {
   weeklyPracticeInputSchema, weeklyPracticeOutputJsonSchema, weeklyPracticeOutputSchema
 } from "./schemas.js";
 import type { AiTaskDefinition } from "./types.js";
+import { standardLessonInstruction } from "./lesson-instruction.js";
 
 export class AiTaskRegistry {
   private readonly tasks = new Map<string, AiTaskDefinition>();
@@ -131,17 +132,15 @@ export const AI_TASKS = new AiTaskRegistry([
       const output = rawOutput as Record<string, unknown>;
       const advanced = ["B1", "B2", "C1"].includes(foundationInput.cefr ?? "");
       const labels = advanced
-        ? { instruction: "Lesson instructions", pronunciation: "Pronunciation" }
-        : { instruction: "Hướng dẫn làm bài", pronunciation: "Phát âm" };
-      const rawInstruction = output.instruction && typeof output.instruction === "object" && !Array.isArray(output.instruction)
-        ? output.instruction as Record<string, unknown>
-        : {};
+        ? { pronunciation: "Pronunciation" }
+        : { pronunciation: "Phát âm" };
       const rawPronunciation = output.pronunciation && typeof output.pronunciation === "object" && !Array.isArray(output.pronunciation)
         ? output.pronunciation as Record<string, unknown>
         : {};
       const withPronunciationPlan = {
         ...output,
-        instruction: { ...rawInstruction, title: labels.instruction },
+        // Instructions are fixed product copy; any provider instruction is discarded.
+        instruction: standardLessonInstruction(foundationInput.cefr ?? ""),
         pronunciation: {
           ...rawPronunciation,
           title: labels.pronunciation,

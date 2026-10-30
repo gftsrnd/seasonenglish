@@ -5,5 +5,6 @@ export * from "./types.js";
 export * from "./token-ledger.js";
 export * from "./pronunciation.js";
 export * from "./pronunciation-assets.js";
+export * from "./lesson-instruction.js";
 export * from "./providers/groq.js";
 export * from "./providers/anthropic.js";

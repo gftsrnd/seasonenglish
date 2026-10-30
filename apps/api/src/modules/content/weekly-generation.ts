@@ -25,6 +25,7 @@ import {
   CURATED_PHONEME_TARGETS,
   curatedPronunciationPlan,
   curatedPronunciationWord,
+  standardLessonInstruction,
   type PronunciationAssetRegistry,
   type AiRunResult,
   type AiTaskRunner,
@@ -32,6 +33,10 @@ import {
 } from "@e4s/ai";
 import { containsVietnameseLearnerText, validateLessonDraft, validateLessonPublication } from "@e4s/domain/content";
 import { lessonComponentsNeedingRepair, type LessonGenerationComponent, type LessonRepairMode } from "./enrichment.js";
+import { curatedRelationEvidence } from "./lexical-relations.js";
+import { containsPromptEntities, ungroundedPromptEntities } from "./prompt-entities.js";
+
+export { extractPromptEntities, promptEntities, ungroundedPromptEntities } from "./prompt-entities.js";
 
 const DAYS = [1, 2, 3, 4, 5] as const;
 const OBJECTIVES_OUTPUT_TOKEN_LIMIT = 1_800;
@@ -52,7 +57,7 @@ const MAX_REVIEWER_REPAIR_ATTEMPTS = 3;
 const MAX_REVIEWER_REPAIR_ROUNDS = 3;
 const REVIEWER_REPAIR_POLICY_VERSION = "reviewer-repair-v29-alternative-target-wording";
 const ACCEPTED_REVIEWER_REPAIR_POLICY_VERSIONS = new Set([REVIEWER_REPAIR_POLICY_VERSION]);
-const MAX_FOUNDATION_ATTEMPTS = 2;
+const MAX_FOUNDATION_ATTEMPTS = 3;
 const MAX_SKILLS_REVIEW_ATTEMPTS = 3;
 const WEEKLY_BLUEPRINT_LEVELS = ["A1", "A2", "B1", "B2", "C1"] as const;
 const WEEKLY_BLUEPRINT_ATTEMPTS = 2;
@@ -156,22 +161,6 @@ function foundationLanguageFindings(
     : []);
 }
 
-function standardLessonInstruction(cefr: string): FoundationBody["instruction"] {
-  return ["A1", "A2"].includes(cefr)
-    ? {
-        title: "Hướng dẫn làm bài",
-        step1: "Học nội dung và nghe các câu mẫu.",
-        step2: "Làm lần lượt các bài tập.",
-        step3: "Xem phản hồi và làm lại phần chưa đúng."
-      }
-    : {
-        title: "Lesson instructions",
-        step1: "Study the lesson content and listen to the model sentences.",
-        step2: "Complete each practice task in order.",
-        step3: "Review the feedback and retry any incorrect task."
-      };
-}
-
 function vocabularyLanguageFindings(
   value: ReturnType<typeof weeklyLessonVocabularyOutputSchema.parse>,
   cefr: string
@@ -196,6 +185,92 @@ function vocabularyDuplicationFindings(
     seen.add(normalized);
     return [];
   });
+}
+
+function vocabularyMissingRelationFindings(
+  value: ReturnType<typeof weeklyLessonVocabularyOutputSchema.parse>,
+  cefr = ""
+): Array<{ path: PropertyKey[]; message: string }> {
+  const slots = ["word1", "word2", "word3"] as const;
+  const hasRelation = (slot: (typeof slots)[number]) => Boolean(value[slot].synonym1 || value[slot].synonym2 || value[slot].antonym1);
+  const isExempt = (slot: (typeof slots)[number]) =>
+    value[slot].relationStatus === "no_natural_relation" || value[slot].relationStatus === "above_cefr_level";
+  // An AI-declared exemption is rejected when curated evidence shows a
+  // CEFR-appropriate relation for the same word, part of speech and sense.
+  const rejectedExemptions = slots.flatMap((slot) => {
+    if (hasRelation(slot) || !isExempt(slot)) return [];
+    const evidence = curatedRelationEvidence(value[slot], cefr);
+    if (!evidence) return [];
+    const known = [
+      ...(evidence.synonyms?.length ? [`synonym: ${evidence.synonyms.join(" / ")}`] : []),
+      ...(evidence.antonyms?.length ? [`antonym: ${evidence.antonyms.join(" / ")}`] : [])
+    ].join("; ");
+    return [{
+      path: [slot, "relationStatus"] as PropertyKey[],
+      message: `${value[slot].word} (${value[slot].partOfSpeech}) was marked ${value[slot].relationStatus}, but a ${cefr}-appropriate relation exists for this sense (${known}). Keep the word and fill synonym1 or antonym1 with a genuine same-sense relation and example.`
+    }];
+  });
+  const allMissing = slots.every((slot) => !hasRelation(slot));
+  const missedSlots = allMissing ? slots.filter((slot) => !isExempt(slot)) : [];
+  return [
+    ...rejectedExemptions,
+    ...missedSlots.map((slot) => ({
+      path: [slot, "synonym1"] as PropertyKey[],
+      message: `${value[slot].word} has no synonym or antonym and relationStatus is generation_missed; provide at least one genuine workplace synonym or antonym, or set relationStatus to 'no_natural_relation' / 'above_cefr_level'.`
+    }))
+  ];
+}
+
+export function validateWeeklyVocabularyLexicalCoverage(
+  lessons: readonly ContentLessonDraftInput[],
+  cefr = ""
+): LessonGenerationFinding[] {
+  const wordEntries: Array<{
+    dayNumber: number;
+    word: string;
+    hasRelation: boolean;
+    relationStatus: "provided" | "no_natural_relation" | "above_cefr_level" | "generation_missed";
+  }> = [];
+  for (const lesson of lessons) {
+    const vocabPart = lesson.parts.find((part) => part.code === "vocabulary")?.content as { items?: unknown[] } | undefined;
+    if (!Array.isArray(vocabPart?.items)) continue;
+    for (const rawItem of vocabPart.items) {
+      if (!rawItem || typeof rawItem !== "object") continue;
+      const item = rawItem as {
+        word?: unknown;
+        synonyms?: unknown[];
+        antonyms?: unknown[];
+        relationStatus?: unknown;
+      };
+      const word = typeof item.word === "string" ? item.word : "";
+      if (!word) continue;
+      const hasRelation = (Array.isArray(item.synonyms) && item.synonyms.length > 0)
+        || (Array.isArray(item.antonyms) && item.antonyms.length > 0);
+      const relationStatus = hasRelation
+        ? "provided"
+        : item.relationStatus === "no_natural_relation" || item.relationStatus === "above_cefr_level"
+          ? item.relationStatus
+          : "generation_missed";
+      wordEntries.push({ dayNumber: lesson.dayNumber, word, hasRelation, relationStatus });
+    }
+  }
+  if (wordEntries.length === 0) return [];
+  const withRelationCount = wordEntries.filter((entry) => entry.hasRelation).length;
+  if (withRelationCount / wordEntries.length >= 0.5) return [];
+  const missingEntries = wordEntries.filter((entry) => !entry.hasRelation);
+  return [{
+    dayNumber: null,
+    component: "vocabulary",
+    code: "VOCABULARY_LEXICAL_COVERAGE_LOW",
+    severity: "warning",
+    message: `${cefr ? `Mức ${cefr}: ` : ""}Độ phủ đồng nghĩa/trái nghĩa đạt ${withRelationCount}/${wordEntries.length} từ (< 50%). Giữ nguyên các từ hợp lệ và cho phép bổ sung riêng phần từ vựng khi cần.`,
+    issues: missingEntries.map((entry) => ({
+      dayNumber: entry.dayNumber,
+      word: entry.word,
+      relationStatus: entry.relationStatus
+    })),
+    repairAction: "regenerate_component"
+  }];
 }
 
 /** Short dictionary meanings need a different detector from instructional prose. */
@@ -253,13 +328,13 @@ const FOUNDATION_CONTRACT = [
   "title must name the concrete sentence frame taught by lessonFocus (for example 'It is + adjective' or 'Could I + V?'); never use a generic placeholder such as 'S + V', 'S + V + O', or repeat the same title across days.",
   "Reject factual shortcuts: a passive state such as 'Your mic is muted' is not present continuous; never generate 'Your mic is muting'. 'Would you mind if I...' takes a past-tense clause, while 'Would you mind...' without if takes V-ing. Verify every formula and example before returning.",
   "A title must be a complete frame and may not end with and, or, to, of, for, with, if, that, or another dangling connector.",
-  "For A1-A2, write all three instruction steps, grammar.usage and pronunciation.tip in natural Vietnamese. Section titles and the authoritative pronunciation plan are added by the application after validation; do not return them. Keep grammar formula/examples in English.",
-  "For B1-C1, every learner-facing string returned in title, instruction steps, grammar and pronunciation.tip must be English. Section titles and the pronunciation plan are added by the application after validation.",
+  "For A1-A2, write grammar.usage and pronunciation.tip in natural Vietnamese. Lesson instructions, section titles and the authoritative pronunciation plan are added by the application after validation; do not return them. Keep grammar formula/examples in English.",
+  "For B1-C1, every learner-facing string returned in title, grammar and pronunciation.tip must be English. Lesson instructions, section titles and the pronunciation plan are added by the application after validation.",
   "When grammar is present, grammar.contentType, targetName and scope must exactly match grammarClassification.contentType, targetName and scope.",
   "grammar.formula must be a short usable grammar pattern or sentence frame, never a descriptive topic label.",
   "grammar.usage must be exactly one short sentence in Vietnamese for A1-A2 or English for B1-C1 explaining when to use only the classified target; do not broaden the scope.",
   "Each grammar example must be one English sentence of at most 10 words. Do not add Vietnamese translations, parentheses, or a second sentence.",
-  "Provide exactly three instruction steps and two grammar examples.",
+  "Provide exactly two grammar examples.",
   "Pronunciation focus, sample words and IPA are authoritative curriculum input in pronunciationPlan. Do not select or rewrite them. Return only an English pronunciation title and an English guidance tip for B1-C1 (Vietnamese is allowed for A1-A2).",
   "Keep the content CEFR-appropriate, practical, concise, and directly teachable. Return no prose outside the tool."
 ].join("\n");
@@ -292,7 +367,7 @@ const VOCABULARY_CONTRACT = [
   "Every synonym or antonym must use the same part of speech and same sense as the target, include a concise sense label, and include a contextual example containing that relation word. Derivations are not synonyms.",
   "For synonym1, synonym2 and antonym1, copy the target item's partOfSpeech string exactly into relation.partOfSpeech. If the relation is not truly that part of speech in the shown example, replace the relation word instead of changing the label.",
   "A synonym or antonym word must never equal its target word, even with different casing. If no distinct dictionary-valid relation exists, return null instead of repeating the target.",
-  "Synonym and antonym coverage is desirable across the weekly set, but each relation is optional for an individual target word. Never replace a more relevant lessonFocus word solely to manufacture a relation, and never invent a false synonym or antonym.",
+  "Synonym and antonym coverage is desirable across the weekly set, but each relation is optional for an individual target word. When providing at least one synonym or antonym, set relationStatus to 'provided'. When both synonym and antonym are null, set relationStatus to 'no_natural_relation' if no natural workplace synonym/antonym exists, or 'above_cefr_level' if candidate replacements exceed the active CEFR level. Never replace a more relevant lessonFocus word solely to manufacture a relation, and never invent a false synonym or antonym.",
   "Final preflight before answering: (1) word1-word3 are distinct, (2) every non-null relation word differs from its own target, and (3) every relation example contains that relation word. Repair every failed check before returning the tool output.",
   "For B1-C1, add a language preflight: scan every string outside keys named meaning or ending in Meaning; replace any Vietnamese in title, note, sense, example, collocation, relation or label with English before returning.",
   "Use null only for additional optional relations or an antonym that would be false or unnatural; never invent a fake relation. Return no prose outside the tool."
@@ -369,6 +444,8 @@ const SKILLS_REVIEW_CONTRACT = [
   "Request revision only when an exercise has multiple defensible answers, a wrong answer key, insufficient context, content outside the taught scope, an answer-revealing hint, a clear CEFR mismatch, or mismatched feedback.",
   "Treat a cut-off passage, sentence fragment, dangling auxiliary or preposition, or an unfinished final sentence as serious insufficient context.",
   "Do not reject stylistic preferences, harmless wording differences, or an answer that is already correct.",
+  "Give every finding a category: source_contradiction (the key, question or model answer contradicts or is not supported by this exercise's own source or prompt), answer_key_mismatch (the stored key is wrong or another option is also correct), objective_mismatch (the exercise does not measure a mandatory act or target of an objective mapped to this same exercise), translation_mismatch (questionTranslation, answerTranslation or hint does not match the prompt or answer), cross_exercise_mismatch (the exercise only differs from another exercise; every exercise is self-contained, so this is a note), style_preference (wording, register or structure preference), self_withdrawn (you concluded there is no defect).",
+  "Every finding needs evidence: evidence.path is exerciseCode.field of the field that must change (for example speaking.answer or reading.body), evidence.actual quotes the exact current text of that field, and evidence.expected states what it must say or contain. Name the exercise that causes the defect, not merely the one where you noticed it.",
   "For open writing and speaking tasks, the stored answer is a model example, not the only accepted response. Never request revision merely because other valid open responses exist.",
   "For B1-C1, questionTranslation and answerTranslation are legacy English support fields that mirror prompt and answer; they are not grammar-rationale fields. Do not request an explanation of why an answer is correct there.",
   "For each real defect, write one concise finding message under 80 words. Do not combine several exercises into one finding.",
@@ -664,33 +741,135 @@ function normalizeBeginnerObjectiveAssessmentShape(value: unknown, cefr: string)
   return normalized;
 }
 
+function objectiveShapeContract(cefr: string): string {
+  return [
+    `ASSESSMENT SHAPES FOR ${cefr}. Each objective must ask for exactly the response its assessmentCode collects:`,
+    ...["listening", "reading", "writing", "word_class", "word_use", "speaking"]
+      .map((code) => `- ${code}: ${objectiveAssessmentShape(code, cefr).description}.`),
+    "Reading or listening to a passage ('đọc đoạn văn', 'nghe đoạn hội thoại') is the source, not a written response."
+  ].join("\n");
+}
+
+type ObjectivesOutput = ReturnType<typeof weeklyLessonObjectivesOutputSchema.parse>;
+
+/**
+ * Objective IDs that own every finding, or [] when a finding concerns the
+ * objective set as a whole (then the whole objective must be repaired).
+ */
+function objectiveIdsOwningFindings(output: ObjectivesOutput, findings: Array<{ path: PropertyKey[]; message: string }>): string[] {
+  const ids = new Set<string>();
+  for (const finding of findings) {
+    const itemIndex = finding.path[0] === "objective" && finding.path[1] === "items" ? Number(finding.path[2]) : Number.NaN;
+    const fromPath = Number.isInteger(itemIndex) ? output.objective.items[itemIndex]?.id : undefined;
+    const fromMessage = objectiveIdsFromIssues([finding.message]);
+    if (!fromPath && fromMessage.length === 0) return [];
+    if (fromPath) ids.add(fromPath);
+    fromMessage.forEach((id) => ids.add(id));
+  }
+  return [...ids];
+}
+
+/** Replaces only the flagged items, by objective ID; returns undefined when the candidate omits one. */
+function mergeObjectiveItems(current: ObjectivesOutput, candidate: ObjectivesOutput, flaggedIds: readonly string[]): ObjectivesOutput | undefined {
+  const replacements = new Map(candidate.objective.items.map((item) => [item.id, item] as const));
+  if (flaggedIds.some((id) => !replacements.has(id))) return undefined;
+  return {
+    ...current,
+    objective: {
+      ...current.objective,
+      items: current.objective.items.map((item) => flaggedIds.includes(item.id) ? replacements.get(item.id)! : item)
+    }
+  };
+}
+
 export async function generateWeeklyLessonObjectives(
   input: WeeklyLessonObjectivesInput,
   _taskPrompt: string,
   runner: AiTaskRunner,
   options: { onProgress?: (event: LessonGenerationProgressEvent) => void } = {}
 ) {
-  return runStrictComponent(
-    runner,
-    "weekly_lesson_objectives",
-    scopeObjectiveGenerationInput(input),
-    `${OBJECTIVES_CONTRACT}\n\n${activeFoundationProfile(input.cefr)}`,
-    OBJECTIVES_OUTPUT_TOKEN_LIMIT,
-    {
-      safeParse: (value: unknown) => weeklyLessonObjectivesOutputSchema.safeParse(
-        normalizeBeginnerObjectiveAssessmentShape(value, input.cefr)
-      )
-    },
-    input.dayNumber,
-    "objectives",
-    (output) => [
-      ...validatePromptObjectives(output.objective, input.cefr, input.lessonFocus, input.allLessonFocuses).map((message) => ({ path: ["objective"] as PropertyKey[], message })),
-      ...learnerFacingLanguageFindings("foundation", output, input.cefr)
-    ],
-    MAX_FREQUENTLY_INVALID_COMPONENT_ATTEMPTS,
-    options.onProgress,
-    true
+  const scopedInput = scopeObjectiveGenerationInput(input);
+  const basePrompt = `${OBJECTIVES_CONTRACT}\n\n${objectiveShapeContract(input.cefr)}\n\n${activeFoundationProfile(input.cefr)}`;
+  const schema = {
+    safeParse: (value: unknown) => weeklyLessonObjectivesOutputSchema.safeParse(
+      normalizeBeginnerObjectiveAssessmentShape(value, input.cefr)
+    )
+  };
+  const objectiveFindings = (output: ObjectivesOutput) => [
+    ...validatePromptObjectives(output.objective, input.cefr, input.lessonFocus, input.allLessonFocuses).map((message) => ({ path: ["objective"] as PropertyKey[], message })),
+    ...learnerFacingLanguageFindings("foundation", output, input.cefr)
+  ];
+  const maxAttempts = MAX_FREQUENTLY_INVALID_COMPONENT_ATTEMPTS;
+  const generate = (
+    attempts: number,
+    prompt = basePrompt,
+    semanticFindings: (output: ObjectivesOutput) => Array<{ path: PropertyKey[]; message: string }> = objectiveFindings,
+    initialRepairState?: { findings: Array<{ path: PropertyKey[]; message: string }>; previousOutput: string }
+  ) => runStrictComponent(
+    runner, "weekly_lesson_objectives", scopedInput, prompt, OBJECTIVES_OUTPUT_TOKEN_LIMIT, schema,
+    input.dayNumber, "objectives", semanticFindings, attempts, options.onProgress, true, initialRepairState
   );
+
+  try {
+    return await generate(1);
+  } catch (error) {
+    if (!isInvalidAiOutput(error)) throw error;
+    const previous = schema.safeParse(previousComponentOutput(error));
+    if (!previous.success) return await generate(maxAttempts - 1);
+    let current = previous.data;
+    let attemptLog = previousComponentAttemptLog(error);
+    for (let repairAttempt = 2; repairAttempt <= maxAttempts; repairAttempt += 1) {
+      const findings = objectiveFindings(current);
+      const flaggedIds = objectiveIdsOwningFindings(current, findings);
+      if (flaggedIds.length === 0) {
+        // A set-level defect (e.g. a missing content objective) needs the whole objective.
+        const whole = await generate(maxAttempts - repairAttempt + 1, basePrompt, objectiveFindings, {
+          findings, previousOutput: boundedJson(current)
+        });
+        return { ...whole, attempts: repairAttempt - 1 + whole.attempts, semanticAttempts: repairAttempt - 1 + whole.semanticAttempts, attemptLog: [...attemptLog, ...whole.attemptLog] };
+      }
+      const preserved = current.objective.items.filter((item) => !flaggedIds.includes(item.id));
+      const flagged = current.objective.items.filter((item) => flaggedIds.includes(item.id));
+      const targetedPrompt = [
+        basePrompt,
+        `TARGETED OBJECTIVE REPAIR: rewrite only objective ID(s) ${flaggedIds.join(", ")}. Keep each one's type and assessmentCode unless the defect requires another assessmentCode.`,
+        `Defects: ${findings.map((finding) => finding.message).join("; ")}`,
+        `VALID OBJECTIVES TO COPY UNCHANGED (same order, type and wording): ${boundedJson(preserved)}`,
+        `OBJECTIVES TO REWRITE: ${boundedJson(flagged)}`,
+        "Return the complete objective object with every item in the original order."
+      ].join("\n");
+      const mergedFindings = (candidate: ObjectivesOutput) => {
+        const merged = mergeObjectiveItems(current, candidate, flaggedIds);
+        return merged
+          ? objectiveFindings(merged)
+          : [{ path: ["objective", "items"] as PropertyKey[], message: `The repair must return objective ID(s) ${flaggedIds.join(", ")} with the same type.` }];
+      };
+      try {
+        const repaired = await generate(1, targetedPrompt, mergedFindings);
+        const merged = mergeObjectiveItems(current, repaired.output, flaggedIds)!;
+        return {
+          ...repaired,
+          output: merged,
+          attempts: repairAttempt,
+          semanticAttempts: repairAttempt,
+          attemptLog: [...attemptLog, ...repaired.attemptLog.map((entry) => ({ ...entry, attempt: repairAttempt }))]
+        };
+      } catch (repairError) {
+        if (!isInvalidAiOutput(repairError)) throw repairError;
+        const candidate = schema.safeParse(previousComponentOutput(repairError));
+        const merged = candidate.success ? mergeObjectiveItems(current, candidate.data, flaggedIds) : undefined;
+        if (merged) current = merged;
+        attemptLog = [...attemptLog, ...previousComponentAttemptLog(repairError).map((entry) => ({ ...entry, attempt: repairAttempt }))];
+      }
+    }
+    throwInvalid(objectiveFindings(current), `day${input.dayNumber}.objectives`, {
+      reason: "targeted_objective_repair_failed",
+      attempt: maxAttempts,
+      maxAttempts,
+      previousOutput: boundedJson(current),
+      attemptLog
+    });
+  }
 }
 
 export async function generateWeeklyLessonFoundation(
@@ -741,7 +920,7 @@ export async function generateWeeklyLessonFoundation(
       if (attempt === MAX_FOUNDATION_ATTEMPTS) throwInvalid(findings, `day${input.dayNumber}.foundation`, { attempt, attemptLog, previousOutput, invalidOutput });
       continue;
     }
-    const normalizedProviderOutput = normalizeFoundationProviderOutput(result.output);
+    const normalizedProviderOutput = normalizeFoundationProviderOutput(result.output, input.cefr);
     previousOutput = boundedJson(normalizedProviderOutput);
     const parsed = weeklyLessonFoundationBodyOutputSchema.safeParse(normalizedProviderOutput);
     if (!parsed.success) {
@@ -811,10 +990,13 @@ function stripParentheticalVietnameseFromEnglishExample(value: string): string {
     .trim();
 }
 
-function normalizeFoundationProviderOutput(value: unknown): unknown {
+function normalizeFoundationProviderOutput(value: unknown, cefr: string): unknown {
   if (!value || typeof value !== "object" || Array.isArray(value)) return value;
   const normalized = structuredClone(value) as Record<string, unknown>;
   delete normalized.objective;
+  // Instructions are deterministic product copy. Inject them before parsing so
+  // the provider never has to generate them and cannot override them.
+  normalized.instruction = standardLessonInstruction(cefr);
   const grammar = normalized.grammar && typeof normalized.grammar === "object" && !Array.isArray(normalized.grammar)
     ? normalized.grammar as Record<string, unknown>
     : undefined;
@@ -856,9 +1038,13 @@ export async function generateWeeklyLessonVocabulary(
   const vocabularySchema = {
     safeParse: (value: unknown) => weeklyLessonVocabularyOutputSchema.safeParse(normalizeSelfReferentialLexicalRelations(value))
   };
-  const vocabularyFindings = (output: ReturnType<typeof weeklyLessonVocabularyOutputSchema.parse>) => [
+  const hardVocabularyFindings = (output: ReturnType<typeof weeklyLessonVocabularyOutputSchema.parse>) => [
       ...vocabularyLanguageFindings(output, input.cefr),
       ...vocabularyDuplicationFindings(output)
+    ];
+  const vocabularyFindings = (output: ReturnType<typeof weeklyLessonVocabularyOutputSchema.parse>) => [
+      ...hardVocabularyFindings(output),
+      ...vocabularyMissingRelationFindings(output, input.cefr)
     ];
   const maxAttempts = options.maxAttempts ?? MAX_FREQUENTLY_INVALID_COMPONENT_ATTEMPTS;
   const generate = (
@@ -879,7 +1065,7 @@ export async function generateWeeklyLessonVocabulary(
       options.onProgress,
       true
     );
-  if (maxAttempts <= 1) return generate(maxAttempts);
+  if (maxAttempts <= 1) return generate(maxAttempts, VOCABULARY_CONTRACT, hardVocabularyFindings);
 
   try {
     return await generate(1);
@@ -967,6 +1153,27 @@ export async function generateWeeklyLessonVocabulary(
         ];
       }
     }
+    if (hardVocabularyFindings(current).length === 0) {
+      const lastMeta = attemptLog.findLast((entry) => entry.metadata)?.metadata ?? {
+        traceId: randomUUID(),
+        taskId: "weekly_lesson_vocabulary",
+        provider: "salvaged",
+        model: WEEKLY_LESSON_PIPELINE_VERSION,
+        attempts: maxAttempts,
+        latencyMs: 0,
+        inputHash: "",
+        schemaValid: true,
+        usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0 }
+      };
+      return {
+        result: { output: current, metadata: lastMeta },
+        output: current,
+        findings: vocabularyMissingRelationFindings(current, input.cefr),
+        attempts: maxAttempts,
+        semanticAttempts: maxAttempts,
+        attemptLog
+      };
+    }
     throwInvalid(vocabularyFindings(current), `day${input.dayNumber}.vocabulary`, {
       reason: "targeted_vocabulary_repair_failed",
       attempt: maxAttempts,
@@ -1024,6 +1231,15 @@ function normalizeSelfReferentialLexicalRelations(value: unknown): unknown {
       if (typeof relationWord === "string" && relationWord.trim().toLocaleLowerCase("en-US") === target) {
         record[relationKey] = null;
       }
+    }
+    const hasLexicalRelation = Boolean(record.synonym1 || record.synonym2 || record.antonym1);
+    const rawStatus = typeof record.relationStatus === "string" ? record.relationStatus : undefined;
+    if (hasLexicalRelation) {
+      if (rawStatus !== undefined) record.relationStatus = "provided";
+    } else if (rawStatus === "no_natural_relation" || rawStatus === "above_cefr_level") {
+      record.relationStatus = rawStatus;
+    } else {
+      record.relationStatus = "generation_missed";
     }
   }
   return normalized;
@@ -1870,6 +2086,8 @@ export async function generateWeeklyLessonDayPipeline(
   lesson: ContentLessonDraftInput;
   checkpoints: WeeklyLessonPipelineCheckpoint[];
   results: AiRunResult[];
+  /** Non-blocking reviewer notes (style or cross-exercise) on the accepted lesson. */
+  warnings: LessonGenerationFinding[];
 }> {
   input = scopeComponentInputToCurrentDay(input);
   const checkpoints: WeeklyLessonPipelineCheckpoint[] = [];
@@ -2113,7 +2331,7 @@ export async function generateWeeklyLessonDayPipeline(
       ...(options.pronunciationAssetRegistry ? { pronunciationAssetRegistry: options.pronunciationAssetRegistry } : {})
     });
     state.lesson = lesson;
-    return { lesson, checkpoints, results };
+    return { lesson, checkpoints, results, warnings: [] };
   }
   let review = await reviewWeeklyLessonSkills(runner, skillsInput, skills);
   let reviewerAttemptLog = [...review.attemptLog];
@@ -2279,7 +2497,16 @@ export async function generateWeeklyLessonDayPipeline(
   });
   state.lesson = lesson;
   await save("assemble", 0, lesson);
-  return { lesson, checkpoints, results };
+  const warnings = review.warnings.map((warning): LessonGenerationFinding => ({
+    dayNumber: input.dayNumber,
+    component: "skills.reviewer",
+    code: `REVIEWER_${warning.category.toUpperCase()}`,
+    severity: "warning",
+    message: `${warning.finding.exerciseCode}: ${warning.finding.message}`,
+    issues: [{ exerciseCode: warning.finding.exerciseCode, category: warning.category, ...(warning.finding.evidence ? { evidence: warning.finding.evidence } : {}) }],
+    repairAction: "regenerate_component"
+  }));
+  return { lesson, checkpoints, results, warnings };
 }
 
 export function assembleAndValidateWeeklyLesson(input: {
@@ -2294,6 +2521,18 @@ export function assembleAndValidateWeeklyLesson(input: {
 }): ContentLessonDraftInput {
   if (input.reviewer.status !== "approved" || input.reviewer.findings.length > 0) {
     throwInvalid([{ path: ["reviewer"], message: "Final assembly requires an approved skills review with no findings." }], `day${input.componentInput.dayNumber}.assemble`);
+  }
+  // A final lesson must teach one validated grammar target. Partial drafts may
+  // omit grammar (see buildPartialLessonFromPipelineState), but a complete day
+  // without it is attributed to the foundation component so only that
+  // component is regenerated on resume.
+  if (input.grammarClassification.status !== "classified" || !input.foundation.grammar) {
+    throwInvalid([{
+      path: ["grammar"],
+      message: input.grammarClassification.status !== "classified"
+        ? "Final assembly requires a classified grammar target."
+        : "Final assembly requires a validated foundation grammar body."
+    }], `day${input.componentInput.dayNumber}.foundation`, { component: "foundation", dayNumber: input.componentInput.dayNumber });
   }
   const draft = buildLesson(
     input.componentInput.dayNumber,
@@ -2354,8 +2593,12 @@ export async function runWeeklyLessonDaySequence<T>(
         issues?: unknown;
         details?: unknown;
       } : undefined;
+      const detailComponent = candidate?.details && typeof candidate.details === "object" && "component" in candidate.details && typeof (candidate.details as { component?: unknown }).component === "string"
+        ? (candidate.details as { component: string }).component
+        : componentFromIssuePath(candidate?.issues);
       failures.push({
         dayNumber,
+        ...(detailComponent ? { component: detailComponent } : {}),
         code: typeof candidate?.code === "string" ? candidate.code : "AI_LESSON_GENERATION_FAILED",
         message: typeof candidate?.message === "string" ? candidate.message : String(error),
         issues: Array.isArray(candidate?.issues) ? candidate.issues : [],
@@ -2364,6 +2607,44 @@ export async function runWeeklyLessonDaySequence<T>(
     }
   }
   return { completed, failures };
+}
+
+const DAY_FAILURE_COMPONENT_PATH = /^day[1-5]\.(grammarClassification|objectives|foundation|vocabulary|skills\.(?:comprehension|languagePractice|speaking|reviewer)|assemble)(?:\.|$)/u;
+
+/** Reads the owning pipeline component from a thrown issue path such as `day2.foundation.grammar`. */
+function componentFromIssuePath(issues: unknown): string | undefined {
+  if (!Array.isArray(issues)) return undefined;
+  for (const issue of issues) {
+    const path = issue && typeof issue === "object" ? (issue as { path?: unknown }).path : undefined;
+    const match = typeof path === "string" ? DAY_FAILURE_COMPONENT_PATH.exec(path) : null;
+    if (match) return match[1];
+  }
+  return undefined;
+}
+
+/**
+ * Provider-side failures: network, rate limit, timeout, provider outage, a
+ * missing provider configuration, or an authentication/permission rejection.
+ * Schema, semantic, objective or reviewer failures are never "unavailable".
+ */
+const PROVIDER_UNAVAILABLE_CODES = new Set([
+  "AI_UNAVAILABLE",
+  "AI_PROVIDER_NETWORK",
+  "AI_PROVIDER_RATE_LIMIT",
+  "AI_PROVIDER_UNAVAILABLE",
+  "AI_PROVIDER_NOT_CONFIGURED",
+  "AI_PROVIDER_FAILED",
+  "AI_TIMEOUT"
+]);
+const PROVIDER_AUTH_REJECTION_STATUSES = new Set([401, 403]);
+
+export function isProviderUnavailableFailure(failure: { code: string; details?: unknown }): boolean {
+  if (PROVIDER_UNAVAILABLE_CODES.has(failure.code)) return true;
+  if (failure.code !== "AI_PROVIDER_REJECTED") return false;
+  const status = failure.details && typeof failure.details === "object"
+    ? (failure.details as { status?: unknown }).status
+    : undefined;
+  return typeof status === "number" && PROVIDER_AUTH_REJECTION_STATUSES.has(status);
 }
 
 export async function generateWeeklyLessonLevelPipeline(
@@ -2434,9 +2715,11 @@ export async function generateWeeklyLessonLevelPipeline(
     }
     return generated;
   });
+  const warnings: LessonGenerationFinding[] = [];
   for (const completed of sequence.completed) {
     lessons.push(completed.value.lesson);
     results.push(...completed.value.results);
+    warnings.push(...completed.value.warnings);
   }
   if (sequence.failures.length === 0 && selectedDays.length === DAYS.length) {
     const validation = validateLessonDraft(lessons);
@@ -2444,7 +2727,7 @@ export async function generateWeeklyLessonLevelPipeline(
       throw Object.assign(new Error("AI_LESSON_SET_INVALID"), { code: "AI_LESSON_SET_INVALID", issues: validation.issues });
     }
   }
-  return { lessons, checkpoints, results, failures: sequence.failures };
+  return { lessons, checkpoints, results, failures: sequence.failures, warnings };
 }
 
 export function validateWeeklyLessonCrossLevelSet(
@@ -2758,8 +3041,13 @@ export async function generateWeeklyLessons(
     });
     const requestedLessonCount = options.dayNumbers?.length ?? DAYS.length;
     if (generated.failures.length > 0 || generated.lessons.length !== requestedLessonCount) {
-      throw Object.assign(new Error("AI_LEVEL_GENERATION_INCOMPLETE"), {
-        code: "AI_LEVEL_GENERATION_INCOMPLETE",
+      const failureCode = generated.lessons.length === 0
+        && generated.failures.length > 0
+        && generated.failures.every(isProviderUnavailableFailure)
+        ? "AI_UNAVAILABLE"
+        : "AI_LEVEL_GENERATION_INCOMPLETE";
+      throw Object.assign(new Error(failureCode), {
+        code: failureCode,
         issues: generated.failures,
         details: {
           cefr,
@@ -2796,6 +3084,7 @@ export async function generateWeeklyLessons(
         repairAction: "regenerate_component"
       };
     });
+    findings.push(...generated.warnings, ...validateWeeklyVocabularyLexicalCoverage(generated.lessons, cefr));
     const qualityMetrics = {
       profile: options.qualityProfile ?? "strict",
       requestedLessonCount: options.dayNumbers?.length ?? DAYS.length,
@@ -2948,7 +3237,7 @@ export async function generateWeeklyLessons(
         maxOutputTokens: FOUNDATION_OUTPUT_TOKEN_LIMIT,
         maxAttempts: 1
       });
-      const parsed = weeklyLessonFoundationBodyOutputSchema.safeParse(normalizeFoundationProviderOutput(generated.output));
+      const parsed = weeklyLessonFoundationBodyOutputSchema.safeParse(normalizeFoundationProviderOutput(generated.output, input.cefr));
       if (!parsed.success) continue;
       const body = withAuthoritativePronunciationBody(parsed.data, pronunciationPlan, input.cefr);
       const normalized = { ...body, objective: current.output.objective };
@@ -3320,7 +3609,7 @@ export async function generateWeeklyLessons(
     , ...skillsReviewResults
   ];
   if (lessons.length === 0 || allResults.length === 0) {
-    const failureCode = failures.length > 0 && failures.every((failure) => failure.code === "AI_UNAVAILABLE")
+    const failureCode = failures.length > 0 && failures.every(isProviderUnavailableFailure)
       ? "AI_UNAVAILABLE"
       : "AI_LESSON_GENERATION_FAILED";
     throw Object.assign(new Error(failureCode), {
@@ -4070,25 +4359,6 @@ function splitCompleteSentences(value: string): string[] {
   return sentences.filter(Boolean);
 }
 
-const PROMPT_NON_ENTITY_WORDS = new Set([
-  "who", "what", "when", "where", "why", "how", "which", "is", "are", "am", "do", "does", "did", "can", "could", "would", "will", "should", "has", "have", "had", "the", "in", "according",
-  "i", "we", "you", "your", "our", "then",
-  "listen", "read", "write", "choose", "select", "look", "answer", "explain", "describe", "summarize", "summarise", "imagine", "complete",
-  "ai", "gì", "khi", "đâu", "vì", "sao", "thế", "nào", "người", "điều", "nghe", "đọc", "viết", "chọn", "trả", "lời", "mô", "tả",
-  "theo", "dựa", "đoạn", "câu", "bài"
-]);
-
-export function promptEntities(prompt: string): string[] {
-  return [...new Set([...prompt.normalize("NFKC").matchAll(/\b\p{Lu}[\p{L}'’-]*\b/gu)]
-    .map((match) => match[0]!.toLocaleLowerCase("en-US").replace(/[’']s$/u, ""))
-    .filter((token) => token.length > 1 && token !== token.toLocaleUpperCase("en-US") && !PROMPT_NON_ENTITY_WORDS.has(token)))];
-}
-
-function containsPromptEntities(text: string, prompt: string): boolean {
-  const normalizedText = text.normalize("NFKC").toLocaleLowerCase("en-US");
-  return promptEntities(prompt).every((entity) => new RegExp(`(?:^|[^\\p{L}\\p{N}])${escapeRegExp(entity)}(?:$|[^\\p{L}\\p{N}])`, "u").test(normalizedText));
-}
-
 function resolveLeadingPronoun(value: string, precedingText: string): string {
   if (!/^(?:he|she)\b/iu.test(value)) return value;
   const names = precedingText.match(/\b[A-Z][a-z]{2,}\b/gu) ?? [];
@@ -4291,7 +4561,7 @@ function buildLesson(
         usage: foundation.grammar.usage,
         examples: [foundation.grammar.example1, foundation.grammar.example2]
       }
-    : { status: "unavailable", hidden: true, reason: grammarStatus };
+    : undefined;
   return {
     dayNumber,
     title: grammarStatus === "classified" && foundation?.title
@@ -4314,8 +4584,8 @@ function buildLesson(
         code: "vocabulary", title: partTitle(vocabulary.title),
         content: { items: [vocabulary.word1, vocabulary.word2, vocabulary.word3].map(toVocabularyItem) }
       } : undefined,
-      foundation && grammarStatus !== undefined ? {
-        code: "grammar", title: partTitle(foundation.grammar?.title ?? "Language focus"),
+      grammar ? {
+        code: "grammar", title: partTitle(foundation?.grammar?.title ?? "Language focus"),
         content: grammar
       } : undefined,
       pronunciationContent ? {
@@ -4442,6 +4712,83 @@ function compactWords(value: string, limit: number): string {
   return words.length <= limit ? value.trim() : `${words.slice(0, limit).join(" ").replace(/[,:;.!?]+$/, "")}.`;
 }
 
+/** Formats an objective issue so C1/L1 are unambiguously objective IDs, never CEFR levels. */
+function objectiveIssue(code: string, ids: readonly string[]): string {
+  return `${code} (objective ID ${ids.join(", ")})`;
+}
+
+/** Objective IDs named by objectiveIssue() messages. */
+export function objectiveIdsFromIssues(messages: readonly string[]): string[] {
+  const ids = new Set<string>();
+  for (const message of messages) {
+    const match = /\(objective IDs? ([CL]\d+(?:, [CL]\d+)*)\)/u.exec(message);
+    for (const id of match?.[1]?.split(", ") ?? []) ids.add(id);
+  }
+  return [...ids];
+}
+
+export type ObjectiveResponseMode = "selection" | "written" | "spoken";
+
+/** The response each assessment code actually collects from the learner at a CEFR level. */
+export function objectiveAssessmentShape(assessmentCode: string, cefr: string): { mode: ObjectiveResponseMode; description: string } {
+  const beginner = cefr === "A1" || cefr === "A2";
+  switch (assessmentCode) {
+    case "listening":
+    case "reading":
+      return { mode: "selection", description: `${assessmentCode} is a four-option comprehension check: the learner selects one option about the source; never a written answer` };
+    case "word_class":
+    case "word_use":
+      return { mode: "selection", description: `${assessmentCode} is a four-option choice` };
+    case "writing":
+      return beginner
+        ? { mode: "selection", description: "writing at A1-A2 is a four-option MCQ or cloze selection; never free writing" }
+        : { mode: "written", description: "writing at B1-C1 is a scoped written response; never a four-option choice" };
+    default:
+      return { mode: "spoken", description: "speaking is an open spoken response; never a four-option choice" };
+  }
+}
+
+const WRITTEN_ACTION_VERB = /^(?:write|compose|draft|viết|soạn|soạn thảo)\b/iu;
+const SPOKEN_ACTION_VERB = /^(?:say|speak|tell|nói|phát biểu)\b/iu;
+const SELECTION_ACTION_VERB = /^(?:choose|select|chọn|điền)\b/iu;
+const CLOSED_CHOICE_EVIDENCE = /\b(?:mcq|multiple[- ]choice|four[- ]option|4[- ]option|choose|chooses|select|selects|selection|cloze)\b|trắc nghiệm|bốn lựa chọn|4 lựa chọn|chọn đáp án/iu;
+// Written production: a writing verb with the learner as producer, or an
+// explicit written/free response. Nouns for the source ("đoạn văn", "bài viết",
+// "the writing task") are not production evidence.
+const WRITTEN_PRODUCTION_EVIDENCE = /\b(?:write|writes|wrote|compose|composes|draft|drafts)\b|\bwriting\b(?!\s+(?:task|exercise|section|item))|\bwritten\s+(?:free[- ]response|response|answer|summary|sentences?|paragraph)\b|\bfree[- ]response\b|(?<!bài\s)viết\b|câu trả lời tự do|trả lời tự do|trả lời bằng văn bản/iu;
+const ASSESSMENT_CODE_NAMES = new Set(["listening", "reading", "writing", "speaking", "word_class", "word_use", "wordclass", "worduse"]);
+
+/** What the objective asks the learner to produce, judged from its action and evidence fields. */
+export function objectiveResponseModes(item: {
+  action_verb: string; assessed_by: string; criterion: string; success_evidence: string;
+}): Set<ObjectiveResponseMode> {
+  const modes = new Set<ObjectiveResponseMode>();
+  const verb = item.action_verb.normalize("NFKC").trim().toLocaleLowerCase("en-US");
+  if (WRITTEN_ACTION_VERB.test(verb)) modes.add("written");
+  if (SPOKEN_ACTION_VERB.test(verb)) modes.add("spoken");
+  if (SELECTION_ACTION_VERB.test(verb)) modes.add("selection");
+  const assessedBy = item.assessed_by.normalize("NFKC").trim().toLocaleLowerCase("en-US");
+  const evidence = [ASSESSMENT_CODE_NAMES.has(assessedBy) ? "" : assessedBy, item.criterion, item.success_evidence]
+    .join(" ")
+    .normalize("NFKC")
+    .toLocaleLowerCase("en-US");
+  if (CLOSED_CHOICE_EVIDENCE.test(evidence)) modes.add("selection");
+  if (WRITTEN_PRODUCTION_EVIDENCE.test(evidence)) modes.add("written");
+  return modes;
+}
+
+/** Returns a repair instruction when the objective's response mode contradicts its assessment shape. */
+export function objectiveAssessmentShapeMismatch(
+  item: { assessmentCode: string; action_verb: string; assessed_by: string; criterion: string; success_evidence: string },
+  cefr: string
+): string | undefined {
+  const shape = objectiveAssessmentShape(item.assessmentCode, cefr);
+  const modes = objectiveResponseModes(item);
+  if (shape.mode === "selection" && modes.has("written") && !modes.has("selection")) return `${shape.description}.`;
+  if (shape.mode !== "selection" && modes.has("selection")) return `${shape.description}.`;
+  return undefined;
+}
+
 function validatePromptObjectives(
   objective: Foundation["objective"],
   cefr: string,
@@ -4486,7 +4833,7 @@ function validatePromptObjectives(
   if (objective.explanationLanguage !== expectedLanguage) issues.push("wrong_explanation_language");
   if (objective.assessment_gap !== null) issues.push("assessment_gap_must_be_resolved_before_generation");
   if (items.filter((item) => item.type === "content").length < 1) issues.push("missing_content_objective");
-  if (languageCount < 1) issues.push(`missing_language_objective:${cefr}`);
+  if (languageCount < 1) issues.push(`missing_language_objective (CEFR ${cefr})`);
   const targetStopWords = new Set(["a", "an", "the", "to", "of", "for", "from", "with", "and", "or", "is", "are", "be", "will", "you", "your", "i", "we", "our", "that", "this", "may", "just", "let", "lets", "until", "after", "before", "back"]);
   const targetTokens = (values: readonly string[]) => new Set(values
     .join(" ")
@@ -4506,7 +4853,7 @@ function validatePromptObjectives(
       const targetsAreCompatible = sharedTargetCount >= 2
         || (smallerTargetSize > 0 && sharedTargetCount / smallerTargetSize >= 0.67);
       if (leftTargets.size > 0 && rightTargets.size > 0 && !targetsAreCompatible) {
-        issues.push(`objective_conflicting_assessment_targets:${left.id},${right.id}. One ${left.assessmentCode} exercise cannot assess two disjoint target-language contracts; map one objective to another exercise or combine them into compatible alternatives.`);
+        issues.push(`${objectiveIssue("objective_conflicting_assessment_targets", [left.id, right.id])}. One ${left.assessmentCode} exercise cannot assess two disjoint target-language contracts; map one objective to another exercise or combine them into compatible alternatives.`);
       }
     }
   }
@@ -4517,50 +4864,34 @@ function validatePromptObjectives(
     )
   );
   for (const item of items) {
-    if (!prefix.test(item.text)) issues.push(`objective_wrong_learner_facing_opener:${item.id}`);
+    if (!prefix.test(item.text)) issues.push(objectiveIssue("objective_wrong_learner_facing_opener", [item.id]));
     const learnerFacingAbility = item.text.replace(prefix, "").trim();
     const learnerFacingWordCount = learnerFacingAbility.split(/\s+/u).filter(Boolean).length;
     const learnerFacingWordMax = expectedLanguage === "vi" ? 14 : 16;
     if (learnerFacingWordCount > learnerFacingWordMax) {
-      issues.push(`objective_text_too_long:${item.id}. Keep the learner-facing ability after the fixed opener to at most ${learnerFacingWordMax} words; received ${learnerFacingWordCount}. Move conditions and evidence to their dedicated fields.`);
+      issues.push(`${objectiveIssue("objective_text_too_long", [item.id])}. Keep the learner-facing ability after the fixed opener to at most ${learnerFacingWordMax} words; received ${learnerFacingWordCount}. Move conditions and evidence to their dedicated fields.`);
     }
     if (item.type === "language" && (item.target_language ?? []).some((target) =>
       containsVietnameseLearnerText(target)
       || /[ăâđêôơưáàảãạấầẩẫậắằẳẵặéèẻẽẹếềểễệíìỉĩịóòỏõọốồổỗộớờởỡợúùủũụứừửữựýỳỷỹỵ]/iu.test(target))) {
-      issues.push(`objective_target_language_must_be_English:${item.id}. A1-A2 explanations may be Vietnamese, but target_language must contain the exact English words or sentence frames assessed by the exercise.`);
+      issues.push(`${objectiveIssue("objective_target_language_must_be_English", [item.id])}. A1-A2 explanations may be Vietnamese, but target_language must contain the exact English words or sentence frames assessed by the exercise.`);
     }
     if (!isObservableObjectiveVerb(item.action_verb)) {
-      issues.push(`objective_verb_not_observable:${item.id}. Received '${item.action_verb}'. Use an observable ${cefr} action, preferably: ${allowedObjectiveVerbs(cefr).join(", ")}`);
+      issues.push(`${objectiveIssue("objective_verb_not_observable", [item.id])}. Received '${item.action_verb}'. Use an observable ${cefr} action, preferably: ${allowedObjectiveVerbs(cefr).join(", ")}`);
     }
     if (expectedLanguage === "vi") {
       const assessedText = `${item.text} ${item.criterion} ${item.success_evidence}`;
       if (/\b[2-9]\s+(?:câu|lần|phản hồi|nhiệm vụ|ví dụ|sentences?|responses?|performances?|tasks?|examples?)\b/iu.test(assessedText)) {
-        issues.push(`objective_requires_aggregate_performances:${item.id}`);
+        issues.push(objectiveIssue("objective_requires_aggregate_performances", [item.id]));
       }
       const focusIsPronunciation = /pronunciation|phát âm/iu.test(lessonFocus) || ipaLiteral.test(lessonFocus);
       if (!focusIsPronunciation && (/pronunciation|phát âm/iu.test(assessedText) || ipaLiteral.test(assessedText))) {
-        issues.push(`objective_adds_unrelated_pronunciation_assessment:${item.id}`);
+        issues.push(objectiveIssue("objective_adds_unrelated_pronunciation_assessment", [item.id]));
       }
     }
-    const assessmentDescription = [item.action_verb, item.assessed_by, item.criterion, item.success_evidence]
-      .join(" ")
-      .normalize("NFKC")
-      .toLocaleLowerCase("en-US");
-    const describesClosedChoice = /\b(?:mcq|multiple[- ]choice|four[- ]option|4[- ]option|choose|select|selection|cloze)\b|(?:trắc nghiệm|bốn lựa chọn|4 lựa chọn|chọn đáp án)/iu.test(assessmentDescription);
-    const describesWrittenResponse = /\b(?:write|writes|writing|compose|draft)\b|\bwritten\s+(?:free[- ]response|response|answer|summary|sentence|sentences|paragraph)\b|\bfree[- ]response\b|\bcomplete\s+paragraph\b|(?:viết|câu trả lời tự do|đoạn văn)/iu.test(assessmentDescription);
-    if ((item.assessmentCode === "listening" || item.assessmentCode === "reading") && describesWrittenResponse && !describesClosedChoice) {
-      issues.push(`objective_assessment_shape_mismatch:${item.id}. ${item.assessmentCode} is a four-option comprehension check; do not require a written free response.`);
-    }
-    if (item.assessmentCode === "writing") {
-      if (expectedLanguage === "vi" && describesWrittenResponse && !describesClosedChoice) {
-        issues.push(`objective_assessment_shape_mismatch:${item.id}. A1-A2 writing is a four-option MCQ or cloze selection, not free writing.`);
-      }
-      if (expectedLanguage === "en" && describesClosedChoice) {
-        issues.push(`objective_assessment_shape_mismatch:${item.id}. B1-C1 writing is an open scoped response, not a four-option choice task.`);
-      }
-    }
-    if (item.assessmentCode === "speaking" && describesClosedChoice) {
-      issues.push(`objective_assessment_shape_mismatch:${item.id}. Speaking is an open spoken response, not a four-option choice task.`);
+    const shapeMismatch = objectiveAssessmentShapeMismatch(item, cefr);
+    if (shapeMismatch) {
+      issues.push(`${objectiveIssue("objective_assessment_shape_mismatch", [item.id])}. ${shapeMismatch}`);
     }
     if (focusTokens.size > 0 && (item.type === "language" || expectedLanguage === "en")) {
       const strippedText = item.text.replace(prefix, "");
@@ -4571,7 +4902,7 @@ function validatePromptObjectives(
         && anyItemOverlapsFocus
         && targetTokens(item.target_language ?? []).size >= 2;
       if (!overlapsCurrentFocus && (overlapsSiblingFocus || hasOffFocusTargetPhrase)) {
-        issues.push(`objective_outside_lesson_focus:${item.id}. Rewrite only this objective so its action, context and evidence directly assess lessonFocus; do not borrow another day or the broader weekly topic.`);
+        issues.push(`${objectiveIssue("objective_outside_lesson_focus", [item.id])}. Rewrite only this objective so its action, context and evidence directly assess lessonFocus; do not borrow another day or the broader weekly topic.`);
       }
     }
   }
@@ -4630,6 +4961,7 @@ export async function reviewWeeklyLessonSkills(
   result: AiRunResult;
   output: ReturnType<typeof weeklyLessonSkillsReviewOutputSchema.parse>;
   findings: Array<{ path: PropertyKey[]; message: string }>;
+  warnings: ReviewerFindingClassification[];
   attemptLog: WeeklyLessonPipelineCheckpoint["attemptLog"];
 }> {
   const normalizedAnswer = (value: string) => value
@@ -4643,14 +4975,14 @@ export async function reviewWeeklyLessonSkills(
         if (
           finding.reasonCode === "multiple_valid_answers"
           && (finding.exerciseCode === "speaking" || (finding.exerciseCode === "writing" && skills.writing.type === "write"))
-          && !reviewerFindingIsSubstantive(
+          && reviewerFindingDisposition(
             finding,
             skills,
             typeof skillsInput.cefr === "string" ? skillsInput.cefr : "",
             typeof skillsInput.lessonFocus === "string" ? skillsInput.lessonFocus : "",
             Boolean((skillsInput.generationConstraints as { inferenceRequired?: unknown } | undefined)?.inferenceRequired),
             skillsInput.lessonObjectives as Foundation["objective"] | undefined
-          )
+          ) !== "keep"
         ) {
           return false;
         }
@@ -4698,7 +5030,9 @@ export async function reviewWeeklyLessonSkills(
         findings.push({
           exerciseCode: code,
           reasonCode: "key_mismatch",
-          message: `The independent solved answer is '${output.solvedAnswers[code]}', but the stored key is '${skills[code].answer}'. Repair only this exercise and verify the key against its source evidence.`
+          category: "answer_key_mismatch",
+          message: `The independent solved answer is '${output.solvedAnswers[code]}', but the stored key is '${skills[code].answer}'. Repair only this exercise and verify the key against its source evidence.`,
+          evidence: { path: `${code}.answer`, actual: skills[code].answer, expected: output.solvedAnswers[code] }
         });
       }
     }
@@ -4736,6 +5070,11 @@ export async function reviewWeeklyLessonSkills(
       if (!differs && reportsMismatch) issues.push({ path: ["findings", code], message: `Reviewer reported key_mismatch for ${code} although its solved answer matches the current key.` });
     }
     for (const finding of output.findings) {
+      // Blocking findings must point at the exact field to change and quote it.
+      if (finding.category && BLOCKING_REVIEW_CATEGORIES.has(finding.category)
+        && (!finding.evidence || !reviewEvidenceTarget(skills, finding.evidence.path))) {
+        issues.push({ path: ["findings", finding.exerciseCode, "evidence"], message: `A ${finding.category} finding for ${finding.exerciseCode} must give evidence.path as exerciseCode.field (for example ${finding.exerciseCode}.answer), quote the current text in evidence.actual and state evidence.expected.` });
+      }
       if (finding.reasonCode === "multiple_valid_answers" && finding.exerciseCode === "speaking") {
         issues.push({ path: ["findings", finding.exerciseCode], message: "Open speaking tasks cannot be rejected merely for allowing multiple valid responses." });
       }
@@ -4759,14 +5098,14 @@ export async function reviewWeeklyLessonSkills(
     undefined,
     true
   );
-  const structuredFindings = generated.output.findings.filter((finding) => reviewerFindingIsSubstantive(
-    finding,
-    skills,
-    typeof skillsInput.cefr === "string" ? skillsInput.cefr : "",
-    typeof skillsInput.lessonFocus === "string" ? skillsInput.lessonFocus : "",
-    Boolean((skillsInput.generationConstraints as { inferenceRequired?: unknown } | undefined)?.inferenceRequired),
-    skillsInput.lessonObjectives as Foundation["objective"] | undefined
-  ));
+  const classifications = generated.output.findings.map((finding) => classifyReviewerFinding(finding, skills, {
+    cefr: typeof skillsInput.cefr === "string" ? skillsInput.cefr : "",
+    lessonFocus: typeof skillsInput.lessonFocus === "string" ? skillsInput.lessonFocus : "",
+    inferenceRequired: Boolean((skillsInput.generationConstraints as { inferenceRequired?: unknown } | undefined)?.inferenceRequired),
+    ...(skillsInput.lessonObjectives ? { lessonObjectives: skillsInput.lessonObjectives as Foundation["objective"] } : {})
+  }));
+  const structuredFindings = classifications.filter((item) => item.disposition === "repair").map((item) => item.finding);
+  const warnings = classifications.filter((item) => item.disposition === "warning");
   const output: ReturnType<typeof weeklyLessonSkillsReviewOutputSchema.parse> = structuredFindings.length > 0
     ? { ...generated.output, status: "needs_revision", findings: structuredFindings }
     : { ...generated.output, status: "approved", findings: [] };
@@ -4775,34 +5114,48 @@ export async function reviewWeeklyLessonSkills(
   if (options.rejectFindings && findings.length > 0) throwInvalid(findings, `day${String(skillsInput.dayNumber ?? "unknown")}.skills.reviewer`, {
     reviewerOutput: output
   });
-  return { result: generated.result, output, findings, attemptLog: generated.attemptLog };
+  return { result: generated.result, output, findings, warnings, attemptLog: generated.attemptLog };
 }
 
-function reviewerFindingIsSubstantive(
+type ReviewFinding = ReturnType<typeof weeklyLessonSkillsReviewOutputSchema.parse>["findings"][number];
+type ReviewCategory = NonNullable<ReviewFinding["category"]>;
+type ReviewerFindingDisposition = "keep" | "warning" | "discard";
+
+function exerciseHasMappedObjective(exerciseCode: string, lessonObjectives?: Foundation["objective"]): boolean {
+  const mappedCode = exerciseCode === "wordClass" ? "word_class" : exerciseCode === "wordUse" ? "word_use" : exerciseCode;
+  return Boolean(lessonObjectives?.items.some((item) => item.assessmentCode === mappedCode));
+}
+
+/**
+ * Content-level checks on one reviewer finding. A finding is discarded only
+ * when it is self-withdrawn or contradicts the exercise's source, key,
+ * objective map or the review contract; style-only complaints become warnings.
+ * Passing deterministic validation alone never discards a finding.
+ */
+function reviewerFindingDisposition(
   finding: ReturnType<typeof weeklyLessonSkillsReviewOutputSchema.parse>["findings"][number],
   skills: Skills,
   cefr: string,
   lessonFocus: string,
   inferenceRequired: boolean,
   lessonObjectives?: Foundation["objective"]
-): boolean {
+): ReviewerFindingDisposition {
   const exercise = skills[finding.exerciseCode as keyof Skills] as { hint?: unknown; answer?: unknown } | undefined;
   if (/\bthis is acceptable\b[\s\S]{0,180}\b(?:which is|is) present\b/iu.test(finding.message)) {
-    return false;
+    return "discard";
   }
-  if (/\bno key defect found\b/iu.test(finding.message)) return false;
-  if (/\bno further defect(?: here)?\b/iu.test(finding.message)) return false;
-  if (/\b(?:this )?finding is only a note\b|\bonly a note\b|\botherwise usable\b/iu.test(finding.message)) return false;
+  if (/\bno key defect found\b/iu.test(finding.message)) return "discard";
+  if (/\bno further defect(?: here)?\b/iu.test(finding.message)) return "discard";
+  if (/\b(?:this )?finding is only a note\b|\bonly a note\b|\botherwise usable\b/iu.test(finding.message)) return "discard";
   if (/\bno change (?:is )?(?:strictly )?(?:needed|required)\b|\bno revision (?:is )?(?:strictly )?(?:needed|required)\b|\bno (?:real |serious )?defect(?: found| requiring revision)?\b|\bno blocking defect\b|\bnot a defect\b|\bis supported,\s*so\b|\b(?:question|answer|key)\b[^.!?]{0,100}\bis supported\b|\bborderline and acceptable\b|\bminor and not blocking\b|\bnot blocking\b|\bno finding required\b|\boverall acceptable\b|\b(?:finding is )?withdrawn\b|\bkey is (?:consistent|correct)\b|\bis a defensible distractor\b|\bpassage is usable\b|\bcomplete and usable\b|\bacceptable as (?:is|an example|a model answer)\b|\bthe key\b[^.!?]*\bis defensible,\s*but the\b[^.!?]*\bdistractor is not excluded:|không (?:cần|phải) (?:sửa|thay đổi)|không có (?:vấn đề|lỗi)(?:\s+(?:về|với))?|đáp án[^.!?]{0,100}duy nhất đúng|đáp án(?: hiện)? đúng(?:\s*[.!?]|\s*$)/iu.test(finding.message) || /(?:^|[.!?;—-]\s*)acceptable[.!]?\s*$/iu.test(finding.message)) {
-    return false;
+    return "discard";
   }
   if (
     finding.reasonCode === "feedback_mismatch"
     && (finding.exerciseCode === "speaking" || finding.exerciseCode === "writing")
     && /\btelegraphic\b|\bomits the deadline wording\b|\binvents? ['"“]?by email['"”]?\b|\bfollow up by email\b[^.!?]*\b(?:adds a method|not a required condition)\b|\bomits the owner for the budget decision\b|\bdeadline for the steering group approval is not required\b/iu.test(finding.message)
-    && deterministicSkillsFindings({ [finding.exerciseCode]: skills[finding.exerciseCode] }, cefr, lessonFocus, lessonObjectives).length === 0
   ) {
-    return false;
+    return "warning";
   }
   if (
     finding.reasonCode === "feedback_mismatch"
@@ -4810,41 +5163,20 @@ function reviewerFindingIsSubstantive(
     && /\b(?:separate|multiple) sentences?\b[\s\S]{0,180}\bjoined by ['"“]?and['"”]?\b|\bjoined by ['"“]?and['"”]?\b[\s\S]{0,180}\b(?:separate|multiple) sentences?\b/iu.test(finding.message)
     && typeof skills.speaking?.answer === "string"
     && /\b(?:was|were)\s+[a-z][a-z'’-]*\s+and\s+(?:the\s+)?[a-z][a-z'’-]*(?:\s+[a-z][a-z'’-]*)?\s+(?:was|were)\s+[a-z][a-z'’-]*\b/iu.test(skills.speaking.answer)
-    && deterministicSkillsFindings({ speaking: skills.speaking }, cefr, lessonFocus, lessonObjectives).length === 0
   ) {
-    return false;
-  }
-  if (
-    finding.exerciseCode === "speaking"
-    && typeof skills.speaking?.answer === "string"
-    && deterministicSkillsFindings({ speaking: skills.speaking }, cefr, lessonFocus, lessonObjectives).length === 0
-  ) {
-    const ans = skills.speaking.answer.toLocaleLowerCase("en-US");
-    if (
-      ans.includes("what i think you're saying is")
-      && ans.includes("mobile")
-      && ans.includes("tuesday")
-      && ans.includes("payment")
-      && ans.includes("timeout")
-      && ans.includes("script")
-      && ans.includes("rethink")
-      && ans.includes("roll back")
-      && ans.includes("?")
-    ) {
-      return false;
-    }
+    return "discard";
   }
   if (/\b(?:the )?(?:answer|model answer) (?:is|remains) acceptable\b/iu.test(finding.message)) {
-    return false;
+    return "discard";
   }
   if (
     /\bno\s+(?:writing|speaking|listening|reading|word[- ]?class|word[- ]?use)?\s*lessonobjective\s+exists\b|\boutside the approved assessed scope\b/iu.test(finding.message)
-    && deterministicSkillsFindings({ [finding.exerciseCode]: skills[finding.exerciseCode] }, cefr, lessonFocus, lessonObjectives).length === 0
+    && !exerciseHasMappedObjective(finding.exerciseCode, lessonObjectives)
   ) {
     // Every lesson deliberately includes all six skill/support exercises. An
     // exercise without a mapped primary objective is support content, not an
     // invalid extra exercise.
-    return false;
+    return "discard";
   }
   if (finding.reasonCode === "feedback_mismatch" && lessonObjectives) {
     const mappedCode = finding.exerciseCode === "wordClass" ? "word_class"
@@ -4852,12 +5184,11 @@ function reviewerFindingIsSubstantive(
         : finding.exerciseCode;
     const hasMappedObjective = lessonObjectives.items.some((item) => item.assessmentCode === mappedCode);
     if (!hasMappedObjective
-      && /\blesson (?:goal|objective|focus) requires\b|\bdoes not (?:measure|assess|cover)\b|\bmeasures? neither\b|\btests? a different (?:skill|objective)\b/iu.test(finding.message)
-      && deterministicSkillsFindings({ [finding.exerciseCode]: skills[finding.exerciseCode] }, cefr, lessonFocus, lessonObjectives).length === 0) {
+      && /\blesson (?:goal|objective|focus) requires\b|\bdoes not (?:measure|assess|cover)\b|\bmeasures? neither\b|\btests? a different (?:skill|objective)\b/iu.test(finding.message)) {
       // The fixed six-exercise lesson shape intentionally includes support
       // practice. A support exercise must be internally valid, but it does not
       // have to assess an objective mapped to another modality.
-      return false;
+      return "discard";
     }
   }
   if (finding.reasonCode === "insufficient_context" && exercise && "body" in exercise && "prompt" in exercise) {
@@ -4867,23 +5198,21 @@ function reviewerFindingIsSubstantive(
       const directAddress = new RegExp(`(?:^|[.!?]\\s*)${escapeRegExp(answer)}\\s*,`, "iu").test(choice.body);
       const asksWho = /\bwho\b|\bai\b/iu.test(choice.prompt);
       const refersToYou = /\b(?:cannot|can't|couldn't|do not|don't)\s+hear\s+you\b/iu.test(choice.body);
-      if (answer && directAddress && asksWho && refersToYou) return false;
+      if (answer && directAddress && asksWho && refersToYou) return "discard";
     }
   }
   if (
     (finding.exerciseCode === "listening" || finding.exerciseCode === "reading")
     && /\b(?:distractor|option)\b[^.!?]{0,180}\b(?:absent|not (?:mentioned|stated|included)|never (?:mentioned|stated|appears?))\b|\b(?:body|passage|transcript|source)\b[^.!?]{0,180}\bdoes not (?:mention|give|include)\b[^.!?]{0,100}\b(?:distractor|option|figure)s?\b/iu.test(finding.message)
-    && deterministicSkillsFindings({ [finding.exerciseCode]: skills[finding.exerciseCode] }, cefr, lessonFocus, lessonObjectives).length === 0
   ) {
-    return false;
+    return "discard";
   }
   if (
     (finding.exerciseCode === "listening" || finding.exerciseCode === "reading")
     && /\b(?:answer|key)\b[^.!?]{0,100}\b(?:is stated|is supported|directly supports?|can be answered)\b/iu.test(finding.message)
     && /\b(?:does not|doesn't|not)\b[^.!?]{0,100}\b(?:table|table reading|taught scope|lesson focus)\b|\bno table is presented\b/iu.test(finding.message)
-    && deterministicSkillsFindings({ [finding.exerciseCode]: skills[finding.exerciseCode] }, cefr, lessonFocus, lessonObjectives).length === 0
   ) {
-    return false;
+    return "warning";
   }
   const referencedObjectiveIds = [...finding.message.matchAll(/\b[CL]\d+\b/gu)].map((match) => match[0]!);
   if (referencedObjectiveIds.length > 0 && lessonObjectives) {
@@ -4896,31 +5225,33 @@ function reviewerFindingIsSubstantive(
       .filter((item): item is Foundation["objective"]["items"][number] => Boolean(item))
       .map((item) => codeToExercise[item.assessmentCode]);
     if (referencedMappings.length > 0 && referencedMappings.every((exerciseCode) => exerciseCode !== finding.exerciseCode)) {
-      return false;
+      return "discard";
     }
   }
   const claimedWordCount = /(?:answer|model answer) (?:is|contains?) (\d+) words?/iu.exec(finding.message)?.[1];
   if (claimedWordCount && typeof exercise?.answer === "string") {
     const actualWordCount = exercise.answer.trim().split(/\s+/u).filter(Boolean).length;
-    if (actualWordCount !== Number(claimedWordCount)) return false;
+    if (actualWordCount !== Number(claimedWordCount)) return "discard";
   }
   if (finding.reasonCode === "hint_reveals_answer") {
     return typeof exercise?.hint === "string"
       && typeof exercise.answer === "string"
-      && hintActuallyRevealsAnswer(exercise.hint, exercise.answer);
+      && hintActuallyRevealsAnswer(exercise.hint, exercise.answer)
+      ? "keep"
+      : "discard";
   }
   if (finding.reasonCode === "feedback_mismatch"
     && (/\b(?:answer|model answer) (?:is|remains) (?:correct|acceptable)\b|\bloosely matched\b|\bacceptable as an example\b/iu.test(finding.message)
       || /answer_?translation.*(?:does not|doesn't) explain why/iu.test(finding.message))
     && !/\b(?:off-target|does not test|doesn't test|title|stated target|practises? rather than)\b/iu.test(finding.message)) {
-    return false;
+    return "discard";
   }
   if (finding.reasonCode === "feedback_mismatch"
     && finding.exerciseCode === "writing"
     && skills.writing.type === "mcq"
     && /(?:chỉ là|dạng)\s*(?:trắc nghiệm|mcq)|không đo (?:việc )?(?:viết|điền)|free[- ]?response|free writing/iu.test(finding.message)
     && !/(?:không khớp|sai logic|sai ngữ cảnh|off-target|wrong context)/iu.test(finding.message)) {
-    return false;
+    return "discard";
   }
   if (
     finding.reasonCode === "feedback_mismatch"
@@ -4937,8 +5268,9 @@ function reviewerFindingIsSubstantive(
       ? [mappedObjective.text, mappedObjective.criterion, mappedObjective.success_evidence].join(" ")
       : "";
     if (mappedObjective && (/\b(?:or|hoặc)\b/iu.test(objectiveText) || (mappedObjective.target_language?.length ?? 0) > 1)
-      && deterministicSkillsFindings({ [finding.exerciseCode]: skills[finding.exerciseCode] }, cefr, lessonFocus, lessonObjectives).length === 0) {
-      return false;
+      && !deterministicSkillsFindings({ [finding.exerciseCode]: skills[finding.exerciseCode] }, cefr, lessonFocus, lessonObjectives)
+        .some((issue) => issue.message.includes("target-language alternative") || issue.message.includes("omits required target language"))) {
+      return "discard";
     }
   }
   if (
@@ -4946,15 +5278,14 @@ function reviewerFindingIsSubstantive(
     && finding.exerciseCode === "writing"
     && skills.writing.type === "write"
     && /\b(?:closing|final) paragraph\b|\bfive-part structure\b|\bseparate paragraph\b/iu.test(finding.message)
-    && deterministicSkillsFindings({ writing: skills.writing }, cefr, lessonFocus, lessonObjectives).length === 0
   ) {
-    return false;
+    return "warning";
   }
   if (finding.reasonCode === "outside_taught_scope" && exercise && lessonFocus.trim()) {
     // These are vocabulary support checks, not extra grammar-focus assessments.
     // Their scope is the day's vocabulary/foundation contract, which the skills
     // reviewer does not receive as `lessonFocus`.
-    if (finding.exerciseCode === "wordClass" || finding.exerciseCode === "wordUse") return false;
+    if (finding.exerciseCode === "wordClass" || finding.exerciseCode === "wordUse") return "discard";
     const contentWords = (value: string) => new Set(value
       .normalize("NFKC")
       .toLocaleLowerCase("en-US")
@@ -4962,15 +5293,15 @@ function reviewerFindingIsSubstantive(
       ?.filter((word) => word.length > 4 && !["about", "after", "before", "could", "would", "should", "someone", "information"].includes(word)) ?? []);
     const focusWords = contentWords(lessonFocus);
     const exerciseWords = contentWords(JSON.stringify(exercise));
-    if ([...focusWords].some((word) => exerciseWords.has(word))) return false;
+    if ([...focusWords].some((word) => exerciseWords.has(word))) return "discard";
   }
   if (finding.reasonCode === "multiple_valid_answers"
     && /(?:các|những) đáp án khác[^.]{0,160}(?:không đúng|đều sai|không phù hợp)/iu.test(finding.message)) {
-    return false;
+    return "discard";
   }
   if (finding.reasonCode === "multiple_valid_answers"
     && !/\b(?:two|both|another|second) (?:options?|answers?|choices?)\b|(?:hai|cả hai) (?:đáp án|lựa chọn)|(?:also|cũng) (?:is |là )?(?:correct|đúng)|đáp án (?:thứ hai|khác) (?:cũng )?đúng/iu.test(finding.message)) {
-    return false;
+    return "discard";
   }
   if ((finding.reasonCode === "insufficient_context" || finding.reasonCode === "feedback_mismatch")
     && (finding.exerciseCode === "listening" || finding.exerciseCode === "reading")
@@ -4980,15 +5311,80 @@ function reviewerFindingIsSubstantive(
     const actual = body.trim().split(/\s+/u).filter(Boolean).length;
     const minimum = finding.exerciseCode === "listening" ? constraints.listeningWordMin : constraints.readingWordMin;
     const maximum = finding.exerciseCode === "listening" ? constraints.listeningWordMax : constraints.readingWordMax;
-    if (actual >= Math.max(1, Math.floor(minimum * 0.8)) && actual <= Math.ceil(maximum * 1.2)) return false;
+    if (actual >= Math.max(1, Math.floor(minimum * 0.8)) && actual <= Math.ceil(maximum * 1.2)) return "discard";
   }
   if (finding.reasonCode === "multiple_valid_answers"
     && inferenceRequired
     && /\b(?:only by inference|supported only by inference|requires? inference|infer(?:red|ence|ences)?)\b/iu.test(finding.message)
     && !/\b(?:two|both|another|second) (?:options?|answers?|choices?)\b/iu.test(finding.message)) {
-    return false;
+    return "discard";
   }
-  return true;
+  return "keep";
+}
+
+const BLOCKING_REVIEW_CATEGORIES = new Set<ReviewCategory>([
+  "source_contradiction", "answer_key_mismatch", "objective_mismatch", "translation_mismatch"
+]);
+const REVIEW_EXERCISES = new Set<string>(["listening", "reading", "writing", "wordClass", "wordUse", "speaking"]);
+
+function legacyReviewCategory(reasonCode: ReviewFinding["reasonCode"]): ReviewCategory {
+  switch (reasonCode) {
+    case "insufficient_context":
+      return "source_contradiction";
+    case "outside_taught_scope":
+    case "level_mismatch":
+    case "feedback_mismatch":
+      return "objective_mismatch";
+    default:
+      return "answer_key_mismatch";
+  }
+}
+
+/** Resolves evidence.path ("speaking.answer") to the exercise and current field text. */
+function reviewEvidenceTarget(skills: Skills, path: string): { exercise: AtomicSkillExercise; value: string } | undefined {
+  const [exercise, field] = path.trim().split(".");
+  if (!exercise || !field || !REVIEW_EXERCISES.has(exercise)) return undefined;
+  const value = (skills[exercise as keyof Skills] as Record<string, unknown> | undefined)?.[field];
+  return typeof value === "string" ? { exercise: exercise as AtomicSkillExercise, value } : undefined;
+}
+
+function normalizedEvidenceText(value: string): string {
+  return value.normalize("NFKC").toLocaleLowerCase("en-US").replace(/[^\p{L}\p{N}]+/gu, " ").trim();
+}
+
+export type ReviewerFindingClassification = {
+  disposition: "repair" | "warning" | "discard";
+  category: ReviewCategory;
+  finding: ReviewFinding;
+  reason: string;
+};
+
+/**
+ * Classifies a reviewer finding. Source, key, objective and translation
+ * mismatches are repaired on the exercise named by evidence.path (the field that
+ * must change); cross-exercise and style notes become warnings; self-withdrawn
+ * findings and findings whose quoted evidence is not in the exercise are dropped.
+ */
+export function classifyReviewerFinding(
+  finding: ReviewFinding,
+  skills: Skills,
+  context: { cefr: string; lessonFocus: string; inferenceRequired: boolean; lessonObjectives?: Foundation["objective"] }
+): ReviewerFindingClassification {
+  const category = finding.category ?? legacyReviewCategory(finding.reasonCode);
+  if (category === "self_withdrawn") return { disposition: "discard", category, finding, reason: "reviewer withdrew the finding" };
+  if (!BLOCKING_REVIEW_CATEGORIES.has(category)) return { disposition: "warning", category, finding, reason: "non-blocking reviewer note" };
+  const disposition = reviewerFindingDisposition(finding, skills, context.cefr, context.lessonFocus, context.inferenceRequired, context.lessonObjectives);
+  if (disposition === "discard") return { disposition, category, finding, reason: "finding contradicts the source, key, objective map or review contract" };
+  if (disposition === "warning") return { disposition, category: "style_preference", finding, reason: "style-only complaint under the review contract" };
+  if (finding.evidence) {
+    const target = reviewEvidenceTarget(skills, finding.evidence.path);
+    if (target && finding.evidence.actual.trim()
+      && !normalizedEvidenceText(target.value).includes(normalizedEvidenceText(finding.evidence.actual))) {
+      return { disposition: "discard", category, finding, reason: `quoted evidence is not present in ${finding.evidence.path}` };
+    }
+    if (target) return { disposition: "repair", category, finding: { ...finding, exerciseCode: target.exercise }, reason: "verified evidence" };
+  }
+  return { disposition: "repair", category, finding, reason: "blocking reviewer finding" };
 }
 
 function hintActuallyRevealsAnswer(hint: string, answer: string): boolean {
@@ -5219,20 +5615,9 @@ function deterministicSkillsFindings(
           });
         }
       }
-      const questionWords = new Set([
-        ...PROMPT_NON_ENTITY_WORDS,
-        "tại", "lúc", "nếu", "sau", "trước", "đội", "nhóm",
-        "tháng", "quý", "năm", "ngày", "tuần", "chi", "phí", "ý", "câu", "đoạn", "điều", "người", "việc"
-      ]);
-      const ungroundedName = [...prompt.normalize("NFKC").matchAll(/\b\p{Lu}[\p{L}'’-]*\b/gu)]
-        .map((match) => match[0]!)
-        .find((token) => {
-          if (token.length > 1 && token === token.toLocaleUpperCase("en-US")) return false;
-          const normalizedToken = token.toLocaleLowerCase("en-US").replace(/[’']s$/u, "");
-          return !questionWords.has(normalizedToken) && !source.includes(normalizedToken);
-        });
-      if (ungroundedName) {
-        findings.push({ path: [code, "prompt"], message: `Comprehension question names ${ungroundedName}, but that person or entity is absent from the source passage.` });
+      const ungroundedEntity = ungroundedPromptEntities(prompt, comprehensionExercise.body)[0];
+      if (ungroundedEntity) {
+        findings.push({ path: [code, "prompt"], message: `Comprehension question names ${ungroundedEntity.text}, but that person or entity is absent from the source passage.` });
       }
     }
   }
@@ -5718,7 +6103,12 @@ function toVocabularyItem(item: VocabularyItem) {
       siblings: compact([item.sibling1, item.sibling2, item.sibling3])
     },
     synonyms: compact([item.synonym1, item.synonym2]),
-    antonyms: compact([item.antonym1])
+    antonyms: compact([item.antonym1]),
+    relationStatus: (item.synonym1 || item.synonym2 || item.antonym1)
+      ? "provided" as const
+      : (item.relationStatus === "no_natural_relation" || item.relationStatus === "above_cefr_level")
+        ? item.relationStatus
+        : "generation_missed" as const
   };
 }
 

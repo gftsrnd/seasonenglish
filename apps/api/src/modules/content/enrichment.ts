@@ -1,5 +1,6 @@
 import type { ContentGenerationFindingView, ContentLessonDraftInput } from "@e4s/contracts";
 import { containsVietnameseLearnerText } from "@e4s/domain/content";
+import { relationExemptionIsCredible } from "./lexical-relations.js";
 
 export type LessonRepairMode = "enrich" | "fill-phrases";
 export type LessonGenerationComponent = "foundation" | "vocabulary" | "skills";
@@ -537,11 +538,24 @@ export function lessonComponentsNeedingRepair(
   const vocabulary = asRecord(parts.get("vocabulary")?.content);
   const items = asArray(vocabulary.items).map(asRecord);
   const phrasesIncomplete = items.some((item) => validCollocations(item, effectiveCefr).length < 3);
+  const hasValidRelation = (item: JsonRecord) =>
+    validLexicalRelations(item, "synonyms", effectiveCefr).length > 0
+    || validLexicalRelations(item, "antonyms", effectiveCefr).length > 0;
+  const declaresExemption = (item: JsonRecord) =>
+    item.relationStatus === "no_natural_relation" || item.relationStatus === "above_cefr_level";
+  const exemptionIsCredible = (item: JsonRecord) => relationExemptionIsCredible({
+    word: typeof item.word === "string" ? item.word : "",
+    partOfSpeech: typeof item.type === "string" ? item.type : null,
+    meaning: typeof item.meaning === "string" ? item.meaning : null
+  }, effectiveCefr ?? "");
   const vocabularyIncomplete = !parts.has("vocabulary")
     || items.length === 0
     || phrasesIncomplete
     || items.some((item) => !meaningful(item.family) || !meaningful(item.umbrella))
-    || (items.length > 0 && !items.some((item) => validLexicalRelations(item, "synonyms", effectiveCefr).length > 0))
+    || (items.length > 0 && !items.some((item) => hasValidRelation(item) || (declaresExemption(item) && exemptionIsCredible(item))))
+    // Same rule as generation: an exemption contradicted by curated evidence
+    // reopens vocabulary repair even when other words are acceptable.
+    || items.some((item) => !hasValidRelation(item) && declaresExemption(item) && !exemptionIsCredible(item))
     || items.some((item) => !validateVocabularyEnrichmentItem(item, { cefr: effectiveCefr }).valid);
   if (mode === "fill-phrases") return phrasesIncomplete ? new Set(["vocabulary"]) : new Set();
 
@@ -996,6 +1010,11 @@ function mergeVocabularyItems(previousValue: unknown, generatedValue: unknown, c
       const validOld = validLexicalRelations(current, key, cefr);
       const validNew = validLexicalRelations(normalizedGenerated, key, cefr);
       merged[key] = validOld.length ? validOld : validNew;
+    }
+    if ((Array.isArray(merged.synonyms) && merged.synonyms.length > 0) || (Array.isArray(merged.antonyms) && merged.antonyms.length > 0)) {
+      merged.relationStatus = "provided";
+    } else if (typeof normalizedGenerated.relationStatus === "string") {
+      merged.relationStatus = normalizedGenerated.relationStatus;
     }
     const oldPhrases = validCollocations(current, cefr);
     const newPhrases = validCollocations(normalizedGenerated, cefr);

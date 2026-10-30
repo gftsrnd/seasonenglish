@@ -147,10 +147,11 @@ function parseRetryAfterMs(headerValue: string | null): number | undefined {
   return undefined;
 }
 
-function safeProviderErrorDetails(status: number, body: AnthropicErrorResponse | null): { issues: Array<{ path: string; message: string }> } {
+function safeProviderErrorDetails(status: number, body: AnthropicErrorResponse | null): { status: number; issues: Array<{ path: string; message: string }> } {
   const providerType = safeText(body?.error?.type, 80);
   const providerMessage = safeText(body?.error?.message, 300) || "Request rejected by provider.";
   return {
+    status,
     issues: [{
       path: "provider",
       message: `Anthropic HTTP ${status}${providerType ? ` (${providerType})` : ""}: ${providerMessage}`

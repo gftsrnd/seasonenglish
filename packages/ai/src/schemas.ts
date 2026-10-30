@@ -670,6 +670,13 @@ export const weeklyLessonFoundationOutputSchema = z.object({
   }
 });
 
+export const lexicalRelationStatusSchema = z.enum([
+  "provided",
+  "no_natural_relation",
+  "above_cefr_level",
+  "generation_missed"
+]);
+export type LexicalRelationStatus = z.infer<typeof lexicalRelationStatusSchema>;
 const strictVocabularyRelationSchema = z.object({ word: z.string().trim().min(1), type: z.string().trim().min(1), meaning: z.string().trim().min(1) });
 const strictVocabularyLevelRelationSchema = z.object({
   word: z.string().trim().min(1), level: z.string().trim().min(1), note: z.string().trim().min(1),
@@ -686,7 +693,10 @@ const strictVocabularyItemSchema = z.object({
   umbrellaWord: z.string().trim().min(1), umbrellaMeaning: z.string().trim().min(1),
   sibling1: strictWordMeaningSchema.nullable(), sibling2: strictWordMeaningSchema.nullable(), sibling3: strictWordMeaningSchema.nullable(),
   synonym1: strictVocabularyLevelRelationSchema.nullable(), synonym2: strictVocabularyLevelRelationSchema.nullable(),
-  antonym1: strictVocabularyLevelRelationSchema.nullable()
+  antonym1: strictVocabularyLevelRelationSchema.nullable(),
+  relationStatus: lexicalRelationStatusSchema.nullable().optional(),
+  synonymStatus: lexicalRelationStatusSchema.nullable().optional(),
+  antonymStatus: lexicalRelationStatusSchema.nullable().optional()
 }).superRefine((item, ctx) => {
   const word = item.word.toLocaleLowerCase("en-US");
   const collocations = [item.collocation1, item.collocation2, item.collocation3];
@@ -780,6 +790,20 @@ const weeklyLessonReviewReasonSchema = z.enum([
   "multiple_valid_answers", "key_mismatch", "insufficient_context", "outside_taught_scope",
   "invalid_distractor", "hint_reveals_answer", "level_mismatch", "feedback_mismatch"
 ]);
+/**
+ * Reviewer finding category. The first four are defects that must be repaired;
+ * cross_exercise_mismatch and style_preference are recorded as warnings;
+ * self_withdrawn findings are discarded.
+ */
+export const weeklyLessonReviewCategorySchema = z.enum([
+  "source_contradiction", "answer_key_mismatch", "objective_mismatch", "translation_mismatch",
+  "cross_exercise_mismatch", "style_preference", "self_withdrawn"
+]);
+export const weeklyLessonReviewEvidenceSchema = z.object({
+  path: z.string().trim().min(1).max(80),
+  actual: z.string().trim().max(800),
+  expected: z.string().trim().max(800)
+}).strict();
 export const weeklyLessonSkillsReviewInputSchema = weeklyLessonSkillsInputSchema.extend({
   skills: weeklyLessonSkillsOutputSchema
 });
@@ -788,7 +812,9 @@ export const weeklyLessonSkillsReviewOutputSchema = z.object({
   findings: z.array(z.object({
     exerciseCode: weeklyLessonExerciseCodeSchema,
     reasonCode: weeklyLessonReviewReasonSchema,
-    message: z.string().trim().min(1).max(800)
+    message: z.string().trim().min(1).max(800),
+    category: weeklyLessonReviewCategorySchema.optional(),
+    evidence: weeklyLessonReviewEvidenceSchema.optional()
   }).strict()).max(12),
   solvedAnswers: z.object({
     listening: z.string().trim().min(1), reading: z.string().trim().min(1), writing: z.string().trim().min(1),
@@ -1009,14 +1035,10 @@ export const weeklyLessonObjectivesOutputJsonSchema = strictObject(
 ) satisfies Record<string, unknown>;
 
 export const weeklyLessonFoundationBodyOutputJsonSchema = strictObject(
-  ["title", "durationMinutes", "instruction", "grammar", "pronunciation"],
+  ["title", "durationMinutes", "grammar", "pronunciation"],
   {
     title: nullable(stringSchema),
     durationMinutes: { type: "integer", enum: [5, 10, 15, 20] },
-    instruction: strictObject(
-      ["step1", "step2", "step3"],
-      { step1: stringSchema, step2: stringSchema, step3: stringSchema }
-    ),
     grammar: nullable(strictObject(
       ["title", "contentType", "targetName", "scope", "formula", "usage", "example1", "example2"],
       {
@@ -1031,7 +1053,7 @@ export const weeklyLessonFoundationBodyOutputJsonSchema = strictObject(
 ) satisfies Record<string, unknown>;
 
 export const weeklyLessonFoundationOutputJsonSchema = strictObject(
-  ["title", "durationMinutes", "objective", "instruction", "grammar", "pronunciation"],
+  ["title", "durationMinutes", "objective", "grammar", "pronunciation"],
   {
     ...(weeklyLessonFoundationBodyOutputJsonSchema.properties as Record<string, unknown>),
     objective: weeklyLessonObjectiveJsonSchema
@@ -1057,7 +1079,8 @@ const compactVocabularyItemJsonSchema = strictObject(
     sibling3: nullable({ $ref: "#/$defs/wordMeaning" }),
     synonym1: nullable({ $ref: "#/$defs/levelRelation" }),
     synonym2: nullable({ $ref: "#/$defs/levelRelation" }),
-    antonym1: nullable({ $ref: "#/$defs/levelRelation" })
+    antonym1: nullable({ $ref: "#/$defs/levelRelation" }),
+    relationStatus: nullable({ type: "string", enum: ["provided", "no_natural_relation", "above_cefr_level", "generation_missed"] })
   }
 );
 
@@ -1171,13 +1194,18 @@ export const weeklyLessonSkillsReviewOutputJsonSchema = strictObject(
   ["status", "findings", "solvedAnswers"],
   {
     status: { type: "string", enum: ["approved", "needs_revision"] },
-    findings: { type: "array", items: strictObject(["exerciseCode", "reasonCode", "message"], {
+    findings: { type: "array", items: strictObject(["exerciseCode", "reasonCode", "category", "message", "evidence"], {
       exerciseCode: { type: "string", enum: ["listening", "reading", "writing", "wordClass", "wordUse", "speaking"] },
       reasonCode: { type: "string", enum: [
         "multiple_valid_answers", "key_mismatch", "insufficient_context", "outside_taught_scope",
         "invalid_distractor", "hint_reveals_answer", "level_mismatch", "feedback_mismatch"
       ] },
-      message: stringSchema
+      category: { type: "string", enum: [
+        "source_contradiction", "answer_key_mismatch", "objective_mismatch", "translation_mismatch",
+        "cross_exercise_mismatch", "style_preference", "self_withdrawn"
+      ] },
+      message: stringSchema,
+      evidence: strictObject(["path", "actual", "expected"], { path: stringSchema, actual: stringSchema, expected: stringSchema })
     }) },
     solvedAnswers: strictObject(["listening", "reading", "writing", "wordClass", "wordUse"], {
       listening: stringSchema, reading: stringSchema, writing: stringSchema, wordClass: stringSchema, wordUse: stringSchema
