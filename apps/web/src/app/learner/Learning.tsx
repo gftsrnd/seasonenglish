@@ -274,7 +274,7 @@ export function LearnerLesson({ view, actions }: { view: LessonView; actions: Le
     <div className="lesson-heading">
       <AppLink className="lesson-back" href="/home" navigate={actions.navigate} ariaLabel="Về trang chủ" title="Về trang chủ" style={{ minWidth: 32, minHeight: 32 }}><ChevronLeft size={22} aria-hidden="true" /></AppLink>
       <PageTitle
-        title={`Tuần ${lesson.weekNumber} · ${lessonDayLabel(lesson.dayNumber)} · ${lesson.weekTopic}`}
+        title={lesson.weekNumber === 0 ? `${lesson.weekTopic} · Bài ${lesson.dayNumber}` : `Tuần ${lesson.weekNumber} · ${lessonDayLabel(lesson.dayNumber)} · ${lesson.weekTopic}`}
         detail={grammarAvailable ? <span className="badge lesson-structure-chip"><span>{language === "en" ? "Structure" : "Cấu trúc"}</span><span data-lesson-structure>{lesson.title}</span></span> : undefined}
         aside={<span className={`badge${completed ? " ok" : ""}`}>{completed ? (language === "en" ? "Completed" : "Đã hoàn thành") : lesson.progress.status === "in_progress" ? (language === "en" ? "In progress" : "Đang học") : (language === "en" ? "Not started" : "Chưa học")}</span>}
       />

@@ -64,7 +64,25 @@ Màn chia đôi: trái khung (tab từ vựng/ngữ pháp/phát âm, Sinh lại 
 ### Môi trường test
 `scripts/run-with-test-postgres.mjs` thêm `initdbFlags: ["--encoding=UTF8", "--locale=C"]`: trên Windows embedded Postgres mặc định WIN1252 nên MỌI migration có tiếng Việt lỗi (baseline 47 lỗi "no equivalent in encoding WIN1252" → các suite DB bị skip). Sau sửa, suite DB chạy được trên Windows.
 
-## Giai đoạn 3–6 — CHƯA LÀM
+## Giai đoạn 3 · Học viên — ĐÃ LÀM (backend + web; chưa chạy test tích hợp riêng cho phần này)
+### Backend
+- `packages/database/src/learner-monthly-repository.ts` (`repositories.learnerMonthly`): `placeLearner` (cơ chế người mới → `learner_month_enrollments`), tự ghi danh trọn tháng khi sang tháng mới, `monthView` (lịch, ghi danh, nội dung đủ chưa, bài tháng + khoá theo ngày/tuần tự, điểm danh, cửa sổ thi, khiếu nại, lượt Season tháng), `findMonthLesson` (để `/api/v1/lessons/:id` dùng bài tháng), `publishedExamForLearner`, `createExamAppeal` (24 giờ, quá hạn tự `auto_approved`).
+- Điểm danh: `LearningRepository.saveLessonProgress` ghi `learner_attendance_days` khi bài hoàn thành (ngày T2–T6, không phải ngày thi; 1 ngày 1 dòng).
+- Duyệt mức (`POST /api/v1/assessment-reviews/:attemptId/decision`): mức mới có hiệu lực ngay, gọi `placeLearner` theo cơ chế người mới; `decide()` không còn ghi `scheduled_level_changes` (deprecated).
+- API mới: `GET /api/v1/learner/month`, `POST /api/v1/learner/month/exam-appeal`. `GET /api/v1/learner/home` trả thêm `month` và dùng bài tháng khi có ghi danh.
+- Bài thi tháng dùng runtime bài đầu vào: `GET/POST /api/v1/assessments/monthly-exam(/start)` với kiểm tra giờ mở/khoá (`MONTHLY_EXAM_NOT_OPEN`, `MONTHLY_EXAM_LOCKED`), điều kiện (`MONTHLY_EXAM_NOT_ELIGIBLE`), đã nộp (`MONTHLY_EXAM_ALREADY_SUBMITTED`); `definitionForAttempt` tìm theo đúng phiên bản (`findPublishedByVersion`).
+### Web học viên
+- Trang chủ: khi có `month` → tiêu đề "Tháng x/yyyy · Bài k/N", lộ trình "Bài n · dd/mm" (khoá theo ngày + tuần tự, nhãn "học bù"), thẻ "Điểm danh tháng" (ngày điểm danh/ngày hiệu lực, vắng/tối đa, lượt Season/100), ô "Bài thi tháng" (thay bài thực hành cuối tuần), thông báo chế độ chỉ Season (chờ tháng sau "Bạn sẽ bắt đầu học từ dd/mm", nội dung chưa duyệt đủ, khoá vì bỏ thi).
+- Màn `/exam` (`MonthExam.tsx`): (1) báo cáo điểm danh, (2) khu bài thi: giờ mở/khoá, nút "Vào bài thi" → `/test/monthly-exam` (UI bài đầu vào: tắt nhạc, đếm ngược, chống thoát, nộp), khiếu nại lên Quản lý (đếm ngược 24 giờ, trạng thái). `/practice` chuyển về `/exam`.
+### Đã bỏ theo yêu cầu PO (31/10)
+- Đấu trường nội bộ: gỡ `/arena`, `/duel/:id`, màn LearnerArena/LearnerDuel, API `engagement/arena|duels` trả **410 ARENA_REMOVED**; `duels` chỉ đánh dấu deprecated (0084), repository giữ nguyên.
+- Bài tuần ở Vận hành: menu còn Duyệt mức · **Bài học** (= trang tháng, đổi tên từ "Tháng học") · **Kháng nghị** (review chỉ còn Phản hồi AI Coach / Kháng nghị / Lịch sử làm bài) · Bài kiểm tra · Cài đặt. `/op/weeks`, `/op/lessons`, `/op/lessons/:week/:cefr` chuyển hướng về `/op/months`. Code `Weeks.tsx`, `Lessons.tsx`, `WeeksRoute`, `LessonsRoute`, `LessonSetRoute` vẫn còn trong repo (chưa xoá) để Minh quyết định.
+### Còn thiếu trong giai đoạn 3
+- Ẩn khung ảnh cho từ trừu tượng ở màn Học (vocabulary item đã có `abstract: true`).
+- Nhãn editor "Sửa bài T1 · Tuần 0".
+- Tiêu đề bài tháng trong màn Học vẫn dùng `lessonDayLabel` theo T2–T6 cho `dayNumber` > 7 (hiển thị "Bài n", chấp nhận được).
+
+## Giai đoạn 4–6 — CHƯA LÀM
 (cập nhật khi làm)
 
 ## Chỗ tự quyết
