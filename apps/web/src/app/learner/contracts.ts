@@ -1,5 +1,4 @@
 import type {
-  ArenaView,
   AssessmentSectionCode,
   AssessmentRuntimeView,
   AssessmentViolationInput,
@@ -7,7 +6,6 @@ import type {
   CoachPersona,
   ContentImageView,
   CoachView as CoachContractView,
-  DuelView,
   GameDescriptor,
   GameFinishInput,
   GameHubView,
@@ -114,8 +112,7 @@ export type LearnerScreen =
   | { kind: "reward"; view: RewardView }
   | { kind: "games"; view: GameHubView }
   | { kind: "game"; descriptor: GameDescriptor; wordSet: NonNullable<GameHubView["wordSet"]>; result?: { score: number; maxScore: number } | null }
-  | { kind: "arena"; view: ArenaView }
-  | { kind: "duel"; view: DuelView; descriptor: GameDescriptor };
+  ;
 
 export interface LearnerCallbacks {
   navigate: (path: string) => void;
@@ -156,5 +153,6 @@ export interface LearnerCallbacks {
   finishGame: (input: GameFinishInput) => void | Promise<void>;
   resetGameResult: () => void;
   resolveGameWordImage: (setId: string, wordId: string) => Promise<ContentImageView>;
+  /** Retained only for old test fixtures; live Arena routes are retired. */
   createDuel: (opponentId: string, game: Exclude<GameDescriptor["key"], "crossword">) => void | Promise<void>;
 }

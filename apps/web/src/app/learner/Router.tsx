@@ -1,8 +1,8 @@
-import type { ArenaView, AssessmentView, CoachView, DuelView, GameHubView, LearnerHomeView, LearnerProfileView, LearnerProgressView, LessonLockView, LessonView, LevelChallengeView, RewardView, SurveyView, WeeklyPracticeView } from "@e4s/contracts";
+import type { AssessmentView, CoachView, GameHubView, LearnerHomeView, LearnerProfileView, LearnerProgressView, LessonLockView, LessonView, LevelChallengeView, RewardView, SurveyView, WeeklyPracticeView } from "@e4s/contracts";
 import type { LearnerCallbacks, LearnerScreen } from "./contracts.js";
 import { LearnerAssessment } from "./Assessment.js";
 import { LearnerChallenge, LearnerCoach, LearnerPractice } from "./CoachPractice.js";
-import { LearnerArena, LearnerDuel, LearnerGame, LearnerGames } from "./Games.js";
+import { LearnerGame, LearnerGames } from "./Games.js";
 import { LearnerHome } from "./Home.js";
 import { LearnerLesson } from "./Learning.js";
 import { LearnerOnboard } from "./Onboard.js";
@@ -23,12 +23,10 @@ export function LearnerRouter({ screen, callbacks }: { screen: LearnerScreen; ca
     case "reward": return <LearnerReward view={screen.view} actions={callbacks} />;
     case "games": return <LearnerGames view={screen.view} actions={callbacks} />;
     case "game": return <LearnerGame descriptor={screen.descriptor} wordSet={screen.wordSet} result={screen.result} actions={callbacks} />;
-    case "arena": return <LearnerArena view={screen.view} actions={callbacks} />;
-    case "duel": return <LearnerDuel view={screen.view} descriptor={screen.descriptor} actions={callbacks} />;
   }
 }
 
-export interface LearnerContractBundle { home?: LearnerHomeView; onboard?: LearnerProfileView | null; assessment?: AssessmentView; lesson?: LessonView; coach?: CoachView; challenge?: LevelChallengeView; practice?: WeeklyPracticeView; survey?: SurveyView; profile?: LearnerProgressView; reward?: RewardView; games?: GameHubView; arena?: ArenaView; duel?: DuelView; }
+export interface LearnerContractBundle { home?: LearnerHomeView; onboard?: LearnerProfileView | null; assessment?: AssessmentView; lesson?: LessonView; coach?: CoachView; challenge?: LevelChallengeView; practice?: WeeklyPracticeView; survey?: SurveyView; profile?: LearnerProgressView; reward?: RewardView; games?: GameHubView; }
 export interface LearnerUiState { aiAvailable?: boolean; onboard?: { mode?: "new" | "edit"; draftAvailable?: boolean; saving?: boolean; error?: string }; home?: { weekPhase?: "before_pilot" | "in_pilot" | "after_pilot"; approvalPending?: boolean; placementDraft?: boolean; reward?: { points: number; nextPoints: number | null; seasonName: string } }; assessment?: { timed?: boolean; warningLimit?: number; targetLevel?: string | null; microphoneSupported?: boolean; submitError?: string }; lessonLock?: LessonLockView | null; coach?: { levelApproved?: boolean; thinking?: boolean; error?: string }; challenge?: { resume?: boolean; error?: string }; practice?: { appeal?: { status: "pending" | "accepted" | "rejected"; resolution?: string } | null }; profile?: { profileMissing?: boolean; surveyAvailable?: boolean }; gameResult?: { score: number; maxScore: number } | null; }
 export interface LearnerControllerProps { path: string; contracts: LearnerContractBundle; callbacks: LearnerCallbacks; uiState?: LearnerUiState; }
 
@@ -56,12 +54,6 @@ export function LearnerController({ path, contracts, callbacks, uiState = {} }: 
     if (!contracts.games?.wordSet) return missing("Hãy tạo hoặc chọn một bộ từ trước khi chơi.", "/games", "Về Mini game");
     const descriptor = contracts.games.games.find((item) => item.key === parts[1]);
     return descriptor ? <LearnerGame descriptor={descriptor} wordSet={contracts.games.wordSet} result={uiState.gameResult} actions={callbacks} /> : missing("Không tìm thấy trò chơi trong dữ liệu máy chủ.", "/games", "Về Mini game");
-  }
-  if (parts[0] === "arena" && parts.length === 1) return contracts.arena ? <LearnerArena view={contracts.arena} actions={callbacks} /> : missing("Đấu trường chưa sẵn sàng.", "/games", "Về Mini game");
-  if (parts[0] === "duel" && parts.length === 2) {
-    if (!contracts.duel || !contracts.games) return missing("Không tìm thấy trận đấu.", "/arena", "Về đấu trường");
-    const descriptor = contracts.games.games.find((item) => item.key === contracts.duel?.game);
-    return descriptor ? <LearnerDuel view={contracts.duel} descriptor={descriptor} actions={callbacks} /> : missing("Không tìm thấy luật trò chơi cho ván thách đấu.", "/arena", "Về đấu trường");
   }
   return missing("Không tìm thấy trang.");
 }

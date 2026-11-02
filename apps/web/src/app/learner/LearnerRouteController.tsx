@@ -24,11 +24,11 @@ import type { LearnerContractBundle, LearnerUiState } from "./Router.js";
 import { LearnerController } from "./Router.js";
 import { Empty, Notice, PageTitle, AppLink } from "./ui.js";
 
-type StaticRouteName = "home" | "onboard" | "coach" | "challenge" | "practice" | "survey" | "profile" | "games" | "arena";
+type StaticRouteName = "home" | "onboard" | "coach" | "challenge" | "practice" | "survey" | "profile" | "games";
 export type ResolvedLearnerRoute =
   | { name: StaticRouteName; params: Record<string, never> }
   | { name: "assessment"; params: { kind: AssessmentKind | "levelup" } }
-  | { name: "lesson" | "duel"; params: { id: string } }
+  | { name: "lesson"; params: { id: string } }
   | { name: "reward"; params: { mode: "preview" | "done" } }
   | { name: "game"; params: { game: GameKey } }
   | { name: "notFound"; params: Record<string, never> };
@@ -90,7 +90,7 @@ export function resolveLearnerRoute(pathname: string): ResolvedLearnerRoute {
   const clean = (pathname.startsWith("#") ? pathname.slice(1) : pathname).split(/[?#]/, 1)[0] || "/";
   const segments = clean.split("/").filter(Boolean).map(safeDecode);
   if (segments[0] === "arena" || segments[0] === "duel") return { name: "games", params: {} };
-  if (segments.length === 1 && ["home", "onboard", "coach", "challenge", "practice", "survey", "profile", "games", "arena"].includes(segments[0]!)) return { name: segments[0] as StaticRouteName, params: {} };
+  if (segments.length === 1 && ["home", "onboard", "coach", "challenge", "practice", "survey", "profile", "games"].includes(segments[0]!)) return { name: segments[0] as StaticRouteName, params: {} };
   if (segments[0] === "test" && segments.length === 2) {
     const raw = segments[1];
     if (raw === "placement") return { name: "assessment", params: { kind: raw } };
@@ -100,7 +100,6 @@ export function resolveLearnerRoute(pathname: string): ResolvedLearnerRoute {
   if (segments[0] === "lesson" && segments.length === 2 && segments[1]) return { name: "lesson", params: { id: segments[1] } };
   if (segments[0] === "reward" && segments.length === 2 && (segments[1] === "preview" || segments[1] === "done")) return { name: "reward", params: { mode: segments[1] } };
   if (segments[0] === "games" && segments.length === 2 && gameKeys.includes(segments[1] as GameKey)) return { name: "game", params: { game: segments[1] as GameKey } };
-  if (segments[0] === "duel" && segments.length === 2 && segments[1]) return { name: "duel", params: { id: segments[1] } };
   return { name: "notFound", params: {} };
 }
 
@@ -245,8 +244,6 @@ export function LearnerRouteController() {
         case "reward": accept({ reward: await apiClient.getReward(route.params.mode) }); break;
         case "games":
         case "game": accept({ games: await apiClient.getGames() }); break;
-        case "arena": accept({ arena: await apiClient.getArena() }); break;
-        case "duel": { const [duel, games] = await Promise.all([apiClient.getDuel(route.params.id), apiClient.getGames()]); accept({ duel, games }); break; }
         case "notFound": setLoading(false); break;
       }
     };
@@ -473,11 +470,6 @@ export function LearnerRouteController() {
     useWeeklyGameSet: async () => setContracts({ games: await apiClient.useWeeklyGameWordSet() }),
     deleteGameSet: async () => setContracts({ games: await apiClient.deleteGameWordSet() }),
     finishGame: async (input) => {
-      if (route.name === "duel") {
-        const duel = await apiClient.submitDuelResult(route.params.id, { requestId: crypto.randomUUID(), answers: input.answers, ...(input.attemptSeed === undefined ? {} : { attemptSeed: input.attemptSeed }) });
-        setContracts((current) => ({ ...current, duel }));
-        return;
-      }
       if (route.name !== "game") throw new Error("GAME_ROUTE_NOT_ACTIVE");
       const pending = gamePending.current?.input === input ? gamePending.current : { input, requestId: crypto.randomUUID() };
       gamePending.current = pending;
@@ -486,7 +478,7 @@ export function LearnerRouteController() {
     },
     resetGameResult: () => { gamePending.current = undefined; setUiState((current) => ({ ...current, gameResult: null })); },
     resolveGameWordImage: (setId, wordId) => apiClient.resolveGameWordImage(setId, wordId),
-    createDuel: async (opponentId, game) => navigate(`/duel/${(await apiClient.createDuel({ opponentId, game })).id}`)
+    createDuel: async () => { throw new Error("ARENA_RETIRED"); }
   };
 
   if (loading) return <div className="app-learner-page"><section className="card" aria-live="polite">{loadingLabel(route.name)}…</section></div>;
@@ -504,7 +496,7 @@ function loadingLabel(route: ResolvedLearnerRoute["name"]) {
     home: "Đang tải trang chủ", onboard: "Đang tải hồ sơ", assessment: "Đang tải bài test", lesson: "Đang tải bài học",
     coach: "Đang mở cuộc trò chuyện", challenge: "Đang mở thử thách lên mức",
     practice: "Đang mở bài thực hành", survey: "Đang mở khảo sát", profile: "Đang tải tiến độ", reward: "Đang tạo chứng nhận",
-    games: "Đang mở mini game", game: "Đang mở trò chơi", arena: "Đang mở đấu trường", duel: "Đang mở trận đấu", notFound: "Đang mở trang"
+    games: "Đang mở mini game", game: "Đang mở trò chơi", notFound: "Đang mở trang"
   };
   return labels[route];
 }
@@ -514,7 +506,7 @@ function loadError(route: ResolvedLearnerRoute["name"]) {
     home: "Không tải được trang chủ.", onboard: "Không tải được hồ sơ.", assessment: "Không tải được bài test.", lesson: "Không tải được bài học.",
     coach: "Không tải được cuộc trò chuyện với Season.", challenge: "Chưa có thử thách lên mức đang mở.",
     practice: "Không tải được bài thực hành tuần.", survey: "Không tải được khảo sát.", profile: "Không tải được tiến độ.", reward: "Chứng nhận chưa sẵn sàng.",
-    games: "Chưa có bộ từ cho mini game.", game: "Chưa có bộ từ cho mini game.", arena: "Không tải được đấu trường.", duel: "Không tải được trận đấu.", notFound: "Không tìm thấy trang."
+    games: "Chưa có bộ từ cho mini game.", game: "Chưa có bộ từ cho mini game.", notFound: "Không tìm thấy trang."
   };
   return labels[route];
 }
@@ -531,7 +523,6 @@ export function learnerLoadError(route: ResolvedLearnerRoute["name"], reason: un
 }
 
 function loadRecovery(route: ResolvedLearnerRoute["name"]) {
-  if (route === "arena" || route === "duel") return { href: "/arena", label: "Về đấu trường" };
   return { href: "/home", label: "Về trang chủ" };
 }
 
