@@ -43,24 +43,24 @@ function renderRewards() {
 }
 
 describe("new Manager app branch", () => {
-  it("exports every visible progress column, including Friday practice and status", () => {
+  it("exports every visible monthly progress column and status", () => {
     const csv = buildManagerProgressCsv({
       ...progress,
       learners: [{ ...progress.learners[0]!, weeklyPracticeStatus: "scored", weeklyPracticeScore: 88 }]
     });
 
-    expect(csv.split("\r\n")[0]).toBe('"Tên học viên","Mức hiện tại","Tình trạng học","Mức rủi ro","Số ngày không học","Hoạt động gần nhất","Số buổi tuần này","Bài hoàn thành","Tổng bài trong tuần","Lượt AI Coach","Trạng thái bài cuối tuần","Điểm bài cuối tuần","Trạng thái bài đầu vào","Cách chấm đầu vào","Điểm đầu vào","Điểm thưởng","Huy hiệu"');
+    expect(csv.split("\r\n")[0]).toBe('"Tên học viên","Mức hiện tại","Tình trạng học","Mức rủi ro","Số ngày không học","Hoạt động gần nhất","Số buổi gần đây","Bài hoàn thành tháng","Tổng bài tháng","Lượt AI Coach","Trạng thái đánh giá","Điểm đánh giá","Trạng thái bài đầu vào","Cách chấm đầu vào","Điểm đầu vào","Điểm thưởng","Huy hiệu"');
     expect(csv).toContain('"Học viên Demo","A2","Đang học","Bình thường","0","14/10/2026 09:00","3","1","5","2","Đã chấm","88","Không rõ","Không rõ","52","20","first"');
   });
 
   it("uses the M-004 risk thresholds and exports never-started learners clearly", () => {
     const idle = { ...progress.learners[0]!, sessionsThisWeek: 0, missedDays: 0, lastActivityAt: null };
     expect(managerLearnerStatus(idle, "2026-10-26", new Date("2026-10-27T12:00:00Z"))).toBe("Đang học");
-    expect(managerLearnerStatus(idle, "2026-10-26", new Date("2026-10-28T12:00:00Z"))).toBe("Chưa học tuần này");
+    expect(managerLearnerStatus(idle, "2026-10-26", new Date("2026-10-28T12:00:00Z"))).toBe("Chưa có hoạt động gần đây");
     expect(managerLearnerStatus({ ...idle, missedDays: 2 }, "2026-10-26", new Date("2026-10-28T12:00:00Z"))).toBe("Bỏ 2 ngày");
     const csv = buildManagerProgressCsv({ ...progress, weekStartDate: "2026-10-26", learners: [idle] }, new Date("2026-10-28T12:00:00Z"));
     expect(csv).toContain('"Chưa vào học"');
-    expect(csv).toContain('"Chưa học tuần này"');
+    expect(csv).toContain('"Chưa có hoạt động gần đây"');
     expect(csv).toContain('"Trung bình"');
   });
 
@@ -87,7 +87,7 @@ describe("new Manager app branch", () => {
     const { container } = render(<ManagerProgress view={progress} onOpenLearnerProfile={openProfile} onDeleteLearner={remove} />);
     const headings = [...container.querySelectorAll("h1,h3")].map((node) => node.textContent);
     expect(headings).toEqual(["Tiến độ nhóm", "Đang học (1)", "Đã nộp, chờ duyệt mức (1)", "Đang làm test (1)", "Chưa làm test (1)"]);
-    expect(screen.getByText("Học đều (≥3 buổi/tuần)")).toBeInTheDocument();
+    expect(screen.getByText("Duy trì nhịp học")).toBeInTheDocument();
     await userEvent.setup().click(screen.getByRole("button", { name: "Hồ sơ Học viên Demo" }));
     expect(openProfile).toHaveBeenCalledWith("learner-1");
     expect(screen.queryByRole("button", { name: "Giao bài tuần cho Học viên Demo" })).not.toBeInTheDocument();
