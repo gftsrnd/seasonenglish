@@ -625,99 +625,18 @@ describe("practice, games, arena, rewards and survey API", () => {
     expect(removed.json()).toMatchObject({ wordSet: { topic: "Tuần 1: Introducing yourself & your job" } });
   });
 
-  it("enforces B1 eligibility and one score per learner in a Duel", async () => {
-    const locked = await app.inject({ method: "GET", url: "/api/v1/engagement/arena", headers: { cookie } });
-    expect(locked.json()).toMatchObject({ eligible: false, requiredLevel: "B1" });
+  it("retires the Arena and Duel endpoints", async () => {
+    const responses = await Promise.all([
+      app.inject({ method: "GET", url: "/api/v1/engagement/arena", headers: { cookie } }),
+      app.inject({ method: "POST", url: "/api/v1/engagement/duels", headers: { cookie }, payload: {} }),
+      app.inject({ method: "GET", url: "/api/v1/engagement/duels/10000000-0000-4000-8000-000000000001", headers: { cookie } }),
+      app.inject({ method: "POST", url: "/api/v1/engagement/duels/10000000-0000-4000-8000-000000000001/result", headers: { cookie }, payload: {} })
+    ]);
 
-    const opponent = "00000000-0000-4000-8000-000000000109";
-    await pool.query("update enrollments set cefr = 'B1' where learner_id = $1", [DEMO_IDS.learner]);
-    await pool.query(
-      `insert into lesson_sets (id, program_week_id, cefr)
-       values ('10000000-0000-4000-8000-000000000081', $1, 'B1')`,
-      [DEMO_IDS.week]
-    );
-    await pool.query(
-      `insert into lesson_set_versions (id, lesson_set_id, version, status, payload, created_by, approved_by, published_at)
-       values ('10000000-0000-4000-8000-000000000082', '10000000-0000-4000-8000-000000000081', 1,
-         'published', '{"source":"arena-test"}'::jsonb, $1, $1, now())`,
-      [DEMO_IDS.operator]
-    );
-    await pool.query(
-      "insert into users (id, organization_id, role, display_name, email) values ($1, $2, 'learner', 'Đồng nghiệp B1', 'opponent@e4s.local')",
-      [opponent, DEMO_IDS.organization]
-    );
-    await pool.query(
-      "insert into enrollments (id, program_id, learner_id, cefr, cefr_approved) values (gen_random_uuid(), $1, $2, 'B1', true)",
-      [DEMO_IDS.program, opponent]
-    );
-    const arena = await app.inject({ method: "GET", url: "/api/v1/engagement/arena", headers: { cookie } });
-    expect(arena.json()).toMatchObject({ eligible: true, learnerId: DEMO_IDS.learner, wordSetTopic: expect.any(String), opponents: [{ id: opponent }] });
-
-    const duel = await app.inject({
-      method: "POST", url: "/api/v1/engagement/duels", headers: { cookie },
-      payload: { opponentId: opponent, game: "scramble" }
-    });
-    expect(duel.statusCode, duel.body).toBe(201);
-    const duelId = duel.json().id as string;
-    const duelView = await app.inject({ method: "GET", url: `/api/v1/engagement/duels/${duelId}`, headers: { cookie } });
-    const duelSet = await pool.query("select game_set_id from duels where id = $1", [duelId]);
-    expect(duelSet.rows[0].game_set_id).not.toBe(DEMO_IDS.gameSet);
-    expect(duelView.json().wordSet.id).toBe(duelSet.rows[0].game_set_id);
-    expect(duelView.json().wordSet.source).toBe("custom");
-    const word = duelView.json().wordSet.words[0] as { id: string; english: string };
-    const first = await app.inject({
-      method: "POST", url: `/api/v1/engagement/duels/${duelId}/result`, headers: { cookie },
-      payload: { requestId: "10000000-0000-4000-8000-000000000003", answers: [{ wordId: word.id, answer: word.english }] }
-    });
-    expect(first.statusCode, first.body).toBe(200);
-    expect(first.json()).toMatchObject({
-      outcome: "waiting",
-      myScore: { score: 2, maxScore: expect.any(Number) },
-      opponentScore: null
-    });
-    const retry = await app.inject({
-      method: "POST", url: `/api/v1/engagement/duels/${duelId}/result`, headers: { cookie },
-      payload: { requestId: "10000000-0000-4000-8000-000000000003", answers: [{ wordId: word.id, answer: "wrong" }] }
-    });
-    expect(retry.statusCode, retry.body).toBe(200);
-    expect(retry.json()).toMatchObject({
-      id: first.json().id,
-      result: { id: first.json().result.id, score: 2, maxScore: first.json().result.maxScore },
-      myScore: { score: 2, maxScore: first.json().myScore.maxScore }
-    });
-    const second = await app.inject({
-      method: "POST", url: `/api/v1/engagement/duels/${duelId}/result`, headers: { cookie },
-      payload: { requestId: "10000000-0000-4000-8000-000000000004", answers: [{ wordId: word.id, answer: word.english }] }
-    });
-    expect(second.statusCode).toBe(409);
-    expect(second.json()).toEqual({ code: "DUEL_ALREADY_PLAYED" });
-
-    await pool.query(
-      "update duels set state = 'completed', scores = $2::jsonb, completed_at = now() where id = $1",
-      [duelId, JSON.stringify({
-        [DEMO_IDS.learner]: { score: 2, maxScore: 2 },
-        [opponent]: { score: 1, maxScore: 2 }
-      })]
-    );
-    const ranked = await app.inject({ method: "GET", url: "/api/v1/engagement/arena", headers: { cookie } });
-    const own = ranked.json().leaderboard.find((item: { learnerId: string }) => item.learnerId === DEMO_IDS.learner);
-    expect(own).toMatchObject({ won: 1, lost: 0 });
-    expect(own.points).toBeGreaterThanOrEqual(50);
-    expect(ranked.json().duels[0]).toMatchObject({ challengedByMe: true, wordSetTopic: expect.any(String) });
-
-    const concurrent = await Promise.all([1, 2].map(() => app.inject({
-      method: "POST", url: "/api/v1/engagement/duels", headers: { cookie },
-      payload: { opponentId: opponent, game: "typing" }
-    })));
-    expect(concurrent.map((response) => response.statusCode)).toEqual([201, 201]);
-    expect(concurrent[0]!.json().id).toBe(concurrent[1]!.json().id);
-    const openPair = await pool.query(
-      "select count(*)::int as count from duels where state = 'open' and game_key = 'typing' and challenger_id = $1 and opponent_id = $2",
-      [DEMO_IDS.learner, opponent]
-    );
-    expect(openPair.rows[0].count).toBe(1);
-    const guard = await pool.query("select indexname from pg_indexes where schemaname = 'public' and indexname = 'duels_open_pair_game_unique'");
-    expect(guard.rows).toHaveLength(1);
+    for (const response of responses) {
+      expect(response.statusCode, response.body).toBe(410);
+      expect(response.json()).toEqual({ code: "ARENA_RETIRED" });
+    }
   });
 
   it("keeps reward and game data separate", async () => {

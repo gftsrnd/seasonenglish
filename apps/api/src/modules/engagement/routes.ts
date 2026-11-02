@@ -56,6 +56,13 @@ export function registerEngagementRoutes(
   const runnerFor = (actorId: string) => aiRunnerFactory ? aiRunnerFactory(actorId) : Promise.resolve(aiRunner);
   const learnerOnly = createRoleGuard(pool, ["learner"]);
 
+  app.addHook("onRequest", async (request, reply) => {
+    const pathname = request.url.split("?", 1)[0] ?? "";
+    if (/^\/api\/v1\/engagement\/(?:arena|duels)(?:\/|$)/u.test(pathname)) {
+      return reply.code(410).send({ code: "ARENA_RETIRED" });
+    }
+  });
+
   app.get("/api/v1/engagement/practice", { preHandler: learnerOnly }, async (request, reply) => {
     const view = await repositories.engagement.weeklyPractice(request.e4sSession!.user.id);
     return view ? withPracticeAudio(view, request.e4sSession!.user.id, repositories, storage) : reply.code(404).send({ code: "PRACTICE_CONTEXT_NOT_FOUND" });
