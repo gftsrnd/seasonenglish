@@ -9227,6 +9227,37 @@ async function probeProvider(input: {
 class ManagerRepository {
   constructor(private readonly pool: Pool) {}
 
+  /** Called by the manager dashboard and the API process sweep; a manager can later reopen the account. */
+  async lockInactiveLearners(): Promise<number> {
+    const client = await this.pool.connect();
+    try {
+      await client.query("begin");
+      const inactive = await client.query<{ id: string; organization_id: string; missed_days: number }>(
+        `select u.id, u.organization_id,
+                greatest(0, current_date - coalesce(activity.last_activity_at::date, u.created_at::date))::int as missed_days
+         from users u
+         left join lateral (select max(a.occurred_at) as last_activity_at from activities a where a.learner_id = u.id) activity on true
+         where u.role = 'learner' and u.status = 'active'
+           and greatest(0, current_date - coalesce(activity.last_activity_at::date, u.created_at::date)) >= 5
+         for update of u`
+      );
+      for (const learner of inactive.rows) {
+        await client.query("update users set status = 'disabled', updated_at = now() where id = $1", [learner.id]);
+        await client.query("update sessions set revoked_at = now() where user_id = $1 and revoked_at is null", [learner.id]);
+        await client.query(
+          `insert into audit_events (id, organization_id, action, entity_type, entity_id, payload, trace_id)
+           values ($1, $2, 'learner.inactivity_locked', 'user', $3, $4::jsonb, $5)`,
+          [randomUUID(), learner.organization_id, learner.id, JSON.stringify({ missedDays: learner.missed_days, thresholdDays: 5 }), randomUUID()]
+        );
+      }
+      await client.query("commit");
+      return inactive.rowCount ?? 0;
+    } catch (error) {
+      await client.query("rollback");
+      throw error;
+    } finally { client.release(); }
+  }
+
   private async eligibleReminderLearners(db: Pool | PoolClient, organizationId: string, learnerId?: string): Promise<Array<{
     learner_id: string;
     learner_name: string;
@@ -10057,6 +10088,7 @@ class ManagerRepository {
   }
 
   async reminders(staffId: string): Promise<ManagerRemindersView | null> {
+    await this.lockInactiveLearners();
     const organization = await this.organizationFor(staffId);
     if (!organization) return null;
     const settings = await this.settingsForOrganization(organization.id);

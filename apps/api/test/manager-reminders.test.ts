@@ -94,6 +94,17 @@ describe("manager reminder channel API", () => {
       .resolves.toMatchObject({ rows: [{ count: 0 }] });
   });
 
+  it("automatically disables a learner after five missed study days and audits the action", async () => {
+    const learnerId = await createLearner("inactive-lock@example.com");
+    const response = await app.inject({ method: "GET", url: "/api/v1/manager/reminders", headers: { cookie: managerCookie } });
+
+    expect(response.statusCode, response.body).toBe(200);
+    await expect(pool.query("select status from users where id = $1", [learnerId]))
+      .resolves.toMatchObject({ rows: [{ status: "disabled" }] });
+    await expect(pool.query("select action from audit_events where entity_id = $1 order by created_at desc limit 1", [learnerId]))
+      .resolves.toMatchObject({ rows: [{ action: "learner.inactivity_locked" }] });
+  });
+
   it("queues Base.vn only without invoking Resend", async () => {
     const learnerId = await createLearner("base-learner@example.com");
     await pool.query(
