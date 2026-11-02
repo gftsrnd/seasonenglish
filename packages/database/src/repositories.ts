@@ -9738,14 +9738,36 @@ class ManagerRepository {
             where e.learner_id = u.id and p.organization_id = $1
             order by e.enrolled_at desc
             limit 1) as cefr,
-           (select count(*) from progress_records pr where pr.learner_id = u.id and pr.status = 'completed')::text as completed_lessons,
-           (select count(*)
-            from lessons l
-            join lesson_set_versions lsv on lsv.id = l.lesson_set_version_id and lsv.status = 'published'
-            join lesson_sets ls on ls.id = lsv.lesson_set_id
-            join program_weeks pw on pw.id = ls.program_week_id
-            where pw.program_id = $2 and pw.week_number = $3
-              and ls.cefr = (select e.cefr from enrollments e where e.learner_id = u.id and e.program_id = $2 limit 1))::text as total_lessons_this_week,
+           (case when exists (
+              select 1 from month_frameworks mf
+              join program_months pm on pm.id = mf.program_month_id and pm.organization_id = $1
+              where pm.month = to_char(current_date, 'YYYY-MM') and mf.status = 'approved'
+                and mf.cefr = (select e.cefr from enrollments e where e.learner_id = u.id order by e.enrolled_at desc limit 1)
+            ) then (select count(*)
+              from progress_records pr
+              join month_lessons ml on ml.lesson_id = pr.lesson_id and ml.status = 'approved'
+              join month_frameworks mf on mf.id = ml.framework_id and mf.status = 'approved'
+              join program_months pm on pm.id = mf.program_month_id and pm.organization_id = $1
+              where pr.learner_id = u.id and pr.status = 'completed'
+                and pm.month = to_char(current_date, 'YYYY-MM'))
+            else (select count(*) from progress_records pr where pr.learner_id = u.id and pr.status = 'completed')
+            end)::text as completed_lessons,
+           coalesce(
+             nullif((select count(*)
+               from month_lessons ml
+               join month_frameworks mf on mf.id = ml.framework_id and mf.status = 'approved'
+               join program_months pm on pm.id = mf.program_month_id and pm.organization_id = $1
+               where pm.month = to_char(current_date, 'YYYY-MM')
+                 and mf.cefr = (select e.cefr from enrollments e where e.learner_id = u.id order by e.enrolled_at desc limit 1)
+                 and ml.status = 'approved' and ml.lesson_id is not null), 0),
+             (select count(*)
+              from lessons l
+              join lesson_set_versions lsv on lsv.id = l.lesson_set_version_id and lsv.status = 'published'
+              join lesson_sets ls on ls.id = lsv.lesson_set_id
+              join program_weeks pw on pw.id = ls.program_week_id
+              where pw.program_id = $2 and pw.week_number = $3
+                and ls.cefr = (select e.cefr from enrollments e where e.learner_id = u.id and e.program_id = $2 limit 1))
+           )::text as total_lessons_this_week,
            (select count(distinct a.occurred_at::date) from activities a
             where a.learner_id = u.id
               and (($2::uuid is not null
