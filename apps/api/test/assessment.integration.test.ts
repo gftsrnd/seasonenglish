@@ -230,10 +230,7 @@ describe("assessment API preserves the one-screen flow and server evidence", () 
     const managerQueue = await app.inject({
       method: "GET", url: "/api/v1/assessment-reviews/pending", headers: { cookie: managerCookie }
     });
-    expect(managerQueue.statusCode, managerQueue.body).toBe(200);
-    expect(managerQueue.json()).toEqual(expect.arrayContaining([
-      expect.objectContaining({ attemptId: levelUpAttemptId })
-    ]));
+    expect(managerQueue.statusCode, managerQueue.body).toBe(403);
     const overview = await app.inject({
       method: "GET", url: "/api/v1/assessment-reviews/overview", headers: { cookie: operatorCookie }
     });
@@ -272,17 +269,24 @@ describe("assessment API preserves the one-screen flow and server evidence", () 
       headers: { cookie: managerCookie },
       payload: { status: "approved", approvedLevel: "B1", reason: "Đủ bằng chứng theo rubric." }
     });
-    expect(managerDecision.statusCode, managerDecision.body).toBe(200);
-    expect(managerDecision.json()).toMatchObject({
+    expect(managerDecision.statusCode, managerDecision.body).toBe(403);
+    const operatorDecision = await app.inject({
+      method: "POST",
+      url: `/api/v1/assessment-reviews/${levelUpAttemptId}/decision`,
+      headers: { cookie: operatorCookie },
+      payload: { status: "approved", approvedLevel: "B1", reason: "Đủ bằng chứng theo rubric." }
+    });
+    expect(operatorDecision.statusCode, operatorDecision.body).toBe(200);
+    expect(operatorDecision.json()).toMatchObject({
       attemptId: levelUpAttemptId,
       status: "approved",
       approvedLevel: "B1",
-      decidedBy: DEMO_IDS.manager
+      decidedBy: DEMO_IDS.operator
     });
     const repeatedDecision = await app.inject({
       method: "POST",
       url: `/api/v1/assessment-reviews/${levelUpAttemptId}/decision`,
-      headers: { cookie: managerCookie },
+      headers: { cookie: operatorCookie },
       payload: { status: "approved", approvedLevel: "B1", reason: "Đủ bằng chứng theo rubric." }
     });
     expect(repeatedDecision.statusCode, repeatedDecision.body).toBe(200);

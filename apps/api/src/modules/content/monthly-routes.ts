@@ -1,5 +1,5 @@
-import { buildMonthlyExamScope, type MonthlyCurriculumContract } from "@e4s/domain";
-import type { AiTaskRunner } from "@e4s/ai";
+import { buildMonthlyCalendar, buildMonthlyExamScope, type MonthlyCurriculumContract } from "@e4s/domain";
+import { monthlyResourcePlanOutputSchema, monthlyTopicSuggestionOutputSchema, type AiTaskRunner } from "@e4s/ai";
 import { createRepositories } from "@e4s/database";
 import type { FastifyInstance } from "fastify";
 import type { Pool } from "pg";
@@ -7,6 +7,7 @@ import { z } from "zod";
 import { createRoleGuard } from "../identity/policy.js";
 import { evaluateMonthlyLessonQuality } from "./monthly-quality.js";
 import { generateMonthlyDayWithAi, MONTHLY_DAY_COMPONENTS } from "./monthly-day-generation.js";
+import { buildMonthlyResourcesFromAiPlan, MonthlyResourceCriteriaError, MonthlyResourcePlanError } from "./monthly-resource-generation.js";
 
 const params = z.object({ month: z.string().regex(/^\d{4}-(0[1-9]|1[0-2])$/u) });
 const frameworkParams = z.object({ id: z.uuid() });
@@ -30,6 +31,15 @@ const frameworkInput = z.object({
     daySpecs: z.array(z.object({ lessonNumber: z.int().positive(), date: z.string().date(), kind: z.enum(["new", "review"]), coreTermIds: z.array(z.string()), reviewTermIds: z.array(z.string()), grammarStepId: z.string().min(1), soundId: z.string().min(1), pronunciationExampleIds: z.array(z.string()) }))
   })
 });
+const resourceCriteriaInput = z.object({
+  cefr: z.enum(["A1", "A2", "B1", "B2", "C1"]),
+  vocabularyCount: z.coerce.number().int().min(0).max(89),
+  // Expanded vocabulary can carry several relationships for each core term.
+  // A full weekday month at C1 stays below this upper bound.
+  expandedVocabularyCount: z.coerce.number().int().min(0).max(500),
+  grammarTopicCount: z.coerce.number().int().min(1).max(12),
+  pronunciationSoundCount: z.coerce.number().int().min(1).max(12)
+});
 const lessonInput = z.object({
   title: z.string().trim().min(1).max(200),
   parts: z.array(z.object({ code: z.enum(MONTHLY_DAY_COMPONENTS), title: z.string().optional(), content: z.record(z.string(), z.unknown()) }))
@@ -40,8 +50,8 @@ const correctionInput = z.object({ reason: z.string().trim().min(5).max(1000) })
 /** Monthly routes deliberately live outside routes.ts: monthly contracts are not weeks. */
 export function registerMonthlyContentRoutes(app: FastifyInstance, pool: Pool, aiRunner?: AiTaskRunner, aiRunnerFactory?: (actorId: string) => Promise<AiTaskRunner | undefined>): void {
   const repositories = createRepositories(pool);
-  const operator = createRoleGuard(pool, ["operator", "manager"]);
-  const contentOperator = createRoleGuard(pool, ["operator", "manager"]);
+  const operator = createRoleGuard(pool, ["operator"]);
+  const contentOperator = createRoleGuard(pool, ["operator"]);
 
   app.get("/api/v1/content/months/:month", { preHandler: operator }, async (request) => {
     const input = params.parse(request.params);
@@ -52,6 +62,29 @@ export function registerMonthlyContentRoutes(app: FastifyInstance, pool: Pool, a
     const month = params.parse(request.params);
     const input = briefInput.parse(request.body);
     return repositories.monthlyContent.saveBrief(request.e4sSession!.user.id, { month: month.month, ...input });
+  });
+
+  app.post("/api/v1/content/months/:month/brief/suggest", { preHandler: contentOperator }, async (request, reply) => {
+    const month = params.parse(request.params);
+    const actorId = request.e4sSession!.user.id;
+    const runner = await aiRunnerFactory?.(actorId) ?? aiRunner;
+    if (!runner) return reply.code(503).send({ code: "AI_UNAVAILABLE" });
+    const [overview, task] = await Promise.all([
+      repositories.monthlyContent.getOverview(actorId, month.month),
+      repositories.aiRuns.activeTaskPrompt(actorId, "monthly_topic_suggestion")
+    ]);
+    if (!task) return reply.code(503).send({ code: "AI_PROMPT_NOT_READY" });
+    try {
+      const generated = await runner.runTask("monthly_topic_suggestion", {
+        month: month.month,
+        ...(overview.brief?.title ? { previousTitle: overview.brief.title } : {})
+      }, { systemPrompt: task.prompt, maxOutputTokens: 1_200 });
+      const suggestion = monthlyTopicSuggestionOutputSchema.parse(generated.output);
+      return await repositories.monthlyContent.saveBrief(actorId, { month: month.month, ...suggestion });
+    } catch (error) {
+      if (error instanceof Error && error.message.includes("read-only")) return reply.code(409).send({ code: "MONTHLY_CONTENT_READ_ONLY" });
+      throw error;
+    }
   });
 
   app.post("/api/v1/content/months/:month/brief/approve", { preHandler: contentOperator }, async (request, reply) => {
@@ -67,6 +100,66 @@ export function registerMonthlyContentRoutes(app: FastifyInstance, pool: Pool, a
     const input = frameworkInput.parse(request.body);
     if (input.contract.month !== month.month) return reply.code(409).send({ code: "MONTH_CONTRACT_MISMATCH" });
     return repositories.monthlyContent.saveFramework(request.e4sSession!.user.id, input.contract as MonthlyCurriculumContract);
+  });
+
+  app.post("/api/v1/content/months/:month/resources/generate", { preHandler: contentOperator }, async (request, reply) => {
+    const month = params.parse(request.params);
+    const actorId = request.e4sSession!.user.id;
+    const criteria = resourceCriteriaInput.parse(request.body);
+    const runner = await aiRunnerFactory?.(actorId) ?? aiRunner;
+    if (!runner) return reply.code(503).send({ code: "AI_UNAVAILABLE" });
+    const [overview, task] = await Promise.all([
+      repositories.monthlyContent.getOverview(actorId, month.month),
+      repositories.aiRuns.activeTaskPrompt(actorId, "monthly_resource_generation")
+    ]);
+    const brief = overview.brief;
+    if (!brief || brief.status !== "approved") return reply.code(409).send({ code: "MONTHLY_TOPIC_NOT_APPROVED" });
+    if (!task) return reply.code(503).send({ code: "AI_PROMPT_NOT_READY" });
+    try {
+      const theme = {
+        version: brief.version,
+        title: brief.title,
+        brief: brief.brief,
+        context: brief.context,
+        communicationGoal: brief.communicationGoal
+      };
+      const calendar = buildMonthlyCalendar(month.month);
+      const newLessonDays = calendar.effectiveDays.flatMap((date, index) => new Date(`${date}T00:00:00.000Z`).getUTCDay() === 5 ? [] : [index + 1]);
+      // One operator action produces one atomic plan for the entire month.
+      // Daily assignments are fields inside that plan; they are not separate
+      // generation requests or partial monthly resources.
+      const generated = await runner.runTask("monthly_resource_generation", {
+        month: month.month,
+        cefr: criteria.cefr,
+        theme: { title: theme.title, brief: theme.brief, context: theme.context, communicationGoal: theme.communicationGoal },
+        newLessonDays,
+        lessonDayNumbers: calendar.effectiveDays.map((_date, index) => index + 1),
+        targets: {
+          vocabularyCount: criteria.vocabularyCount,
+          expandedVocabularyCount: criteria.expandedVocabularyCount,
+          grammarTopicCount: criteria.grammarTopicCount,
+          pronunciationSoundCount: criteria.pronunciationSoundCount
+        }
+      }, { systemPrompt: task.prompt, maxOutputTokens: 12_000, temperature: 0.15, maxAttempts: 2 });
+      const plan = monthlyResourcePlanOutputSchema.parse(generated.output);
+      const contract = buildMonthlyResourcesFromAiPlan(month.month, criteria.cefr, theme, criteria, plan);
+      const framework = await repositories.monthlyContent.saveFramework(actorId, contract);
+      await repositories.monthlyContent.approveFramework(actorId, framework.id);
+      return { ...framework, status: "approved" as const };
+    } catch (error) {
+      if (error instanceof MonthlyResourceCriteriaError) {
+        return reply.code(422).send({ code: error.code, requiredVocabularyCount: error.requiredVocabularyCount });
+      }
+      if (error instanceof MonthlyResourcePlanError) {
+        console.error("Monthly resource plan rejected", { issues: error.errors, month: month.month, cefr: criteria.cefr });
+        request.log.warn({ issues: error.errors, month: month.month, cefr: criteria.cefr }, "Monthly resource plan rejected");
+        return reply.code(422).send({ code: "MONTHLY_RESOURCE_PLAN_INVALID", issues: error.errors });
+      }
+      if (error && typeof error === "object" && "code" in error && (error as { code?: unknown }).code === "AI_OUTPUT_INVALID") {
+        return reply.code(422).send({ code: "AI_OUTPUT_INVALID", details: (error as { details?: unknown }).details });
+      }
+      throw error;
+    }
   });
 
   app.post("/api/v1/content/month-frameworks/:id/approve", { preHandler: contentOperator }, async (request, reply) => {
@@ -95,8 +188,12 @@ export function registerMonthlyContentRoutes(app: FastifyInstance, pool: Pool, a
     const actorId = request.e4sSession!.user.id;
     const runner = await aiRunnerFactory?.(actorId) ?? aiRunner;
     if (!runner) return reply.code(503).send({ code: "AI_UNAVAILABLE" });
-    const contract = await repositories.monthlyContent.getFrameworkContract(actorId, id);
-    const result = await generateMonthlyDayWithAi(contract, dayNumber, runner);
+    const [contract, task] = await Promise.all([
+      repositories.monthlyContent.getFrameworkContract(actorId, id),
+      repositories.aiRuns.activeTaskPrompt(actorId, "monthly_lessons")
+    ]);
+    if (!task) return reply.code(503).send({ code: "AI_PROMPT_NOT_READY" });
+    const result = await generateMonthlyDayWithAi(contract, dayNumber, runner, task.prompt);
     if (result.status !== "ready" || !result.lesson) {
       return reply.code(422).send({ code: "MONTHLY_GENERATION_QUALITY_FAILED", report: result.report, attempts: result.attempts });
     }

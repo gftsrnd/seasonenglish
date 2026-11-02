@@ -55,6 +55,7 @@ export interface ManagerApiClient {
   saveManagerSettings(input: Omit<ManagerSettingsView, "organizationName">): Promise<ManagerSettingsView>;
   saveOperatorSettings(input: Omit<ManagerSettingsView, "organizationName">): Promise<ManagerSettingsView>;
   requestPlacementTestChange(input: { developerEmail: string; note: string }): Promise<{ sent: boolean }>;
+  requestFinalTestChange(input: { developerEmail: string; note: string }): Promise<{ sent: boolean }>;
   getProductPreferences(): Promise<ProductPreferencesView>;
   saveProductPreferences(input: ProductPreferencesView): Promise<ProductPreferencesView>;
   getSystemCapabilities(): Promise<SystemCapabilitiesView>;
@@ -105,6 +106,7 @@ export const managerApiClient: ManagerApiClient = {
   saveManagerSettings: (input) => request("/api/v1/manager/settings", { method: "PUT", body: JSON.stringify(input) }),
   saveOperatorSettings: (input) => request("/api/v1/operator/settings", { method: "PUT", body: JSON.stringify(input) }),
   requestPlacementTestChange: (input) => request("/api/v1/operator/placement-test-change-request", { method: "POST", body: JSON.stringify(input) }),
+  requestFinalTestChange: (input) => request("/api/v1/operator/final-test-change-request", { method: "POST", body: JSON.stringify(input) }),
   getProductPreferences: () => request("/api/v1/product-preferences"),
   saveProductPreferences: (input) => request("/api/v1/product-preferences", { method: "PUT", body: JSON.stringify(input) }),
   getSystemCapabilities: () => request("/api/v1/system/capabilities"),

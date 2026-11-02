@@ -641,6 +641,20 @@ export function registerManagerRoutes(app: FastifyInstance, pool: Pool, options:
     return { sent: true };
   });
 
+  app.post("/api/v1/operator/final-test-change-request", { preHandler: staffReadOnly }, async (request, reply) => {
+    const parsed = placementTestChangeRequestInput.safeParse(request.body);
+    if (!parsed.success) return reply.code(400).send({ code: "FINAL_TEST_CHANGE_REQUEST_INVALID" });
+    const apiKey = process.env.RESEND_API_KEY;
+    if (!apiKey) return reply.code(503).send({ code: "EMAIL_UNAVAILABLE" });
+    const actor = await pool.query<{ display_name: string; email: string; organization_id: string }>("select display_name, email, organization_id from users where id = $1", [request.e4sSession!.user.id]);
+    const user = actor.rows[0];
+    if (!user) return reply.code(404).send({ code: "OPERATOR_NOT_FOUND" });
+    const response = await fetch("https://api.resend.com/emails", { method: "POST", headers: { authorization: `Bearer ${apiKey}`, "content-type": "application/json" }, body: JSON.stringify({ from: process.env.RESEND_FROM_EMAIL ?? "E4S <onboarding@resend.dev>", to: [parsed.data.developerEmail], subject: "E4S · Yêu cầu đổi đề đầu ra", text: `Người gửi: ${user.display_name} <${user.email}>\n\n${parsed.data.note}` }) });
+    if (!response.ok) return reply.code(502).send({ code: "FINAL_TEST_CHANGE_REQUEST_FAILED" });
+    await pool.query(`insert into audit_events (id, organization_id, actor_user_id, action, entity_type, entity_id, payload, trace_id) values (gen_random_uuid(), $1, $2, 'assessment.final_change_requested', 'assessment_definition', $1, $3::jsonb, gen_random_uuid())`, [user.organization_id, request.e4sSession!.user.id, JSON.stringify({ developerEmail: parsed.data.developerEmail, note: parsed.data.note })]);
+    return { sent: true };
+  });
+
   app.put(
     "/api/v1/manager/settings",
     { preHandler: managerOnly },

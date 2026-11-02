@@ -36,14 +36,16 @@ describe("monthly content API", () => {
 
   afterAll(async () => { await app.close(); await pool.end(); });
 
-  it("allows a manager to create and lock the monthly brief", async () => {
+  it("keeps monthly authoring with the operator", async () => {
     const saved = await app.inject({
-      method: "PUT", url: "/api/v1/content/months/2026-10/brief", headers: { cookie: managerCookie },
+      method: "PUT", url: "/api/v1/content/months/2026-12/brief", headers: { cookie },
       payload: { title: "Customer handover", brief: "Prepare a customer handover.", context: "Customer success", communicationGoal: "Explain handover risks." }
     });
     expect(saved.statusCode, saved.body).toBe(200);
-    const approved = await app.inject({ method: "POST", url: "/api/v1/content/months/2026-10/brief/approve", headers: { cookie: managerCookie } });
+    const approved = await app.inject({ method: "POST", url: "/api/v1/content/months/2026-12/brief/approve", headers: { cookie } });
     expect(approved.statusCode, approved.body).toBe(204);
+    const managerWrite = await app.inject({ method: "PUT", url: "/api/v1/content/months/2026-12/brief", headers: { cookie: managerCookie }, payload: { title: "Blocked", brief: "Managers review, they do not author monthly content.", context: "Review", communicationGoal: "Review results." } });
+    expect(managerWrite.statusCode, managerWrite.body).toBe(403);
   });
 
   it("keeps one shared brief and locks a submitted framework through the Operator API", async () => {
@@ -141,8 +143,13 @@ describe("monthly content API", () => {
       method: "POST", url: `/api/v1/assessment-reviews/${finalAttemptId}/decision`, headers: { cookie: managerCookie },
       payload: { status: "approved", reason: "Đã đối chiếu bài làm và chấp nhận kết quả bài thi tháng." }
     });
-    expect(managerDecision.statusCode, managerDecision.body).toBe(200);
-    expect(managerDecision.json()).toMatchObject({ attemptId: finalAttemptId, status: "approved", approvedLevel: null, decidedBy: DEMO_IDS.manager });
+    expect(managerDecision.statusCode, managerDecision.body).toBe(403);
+    const operatorDecision = await app.inject({
+      method: "POST", url: `/api/v1/assessment-reviews/${finalAttemptId}/decision`, headers: { cookie },
+      payload: { status: "approved", reason: "Đã đối chiếu bài làm và chấp nhận kết quả bài thi tháng." }
+    });
+    expect(operatorDecision.statusCode, operatorDecision.body).toBe(200);
+    expect(operatorDecision.json()).toMatchObject({ attemptId: finalAttemptId, status: "approved", approvedLevel: null, decidedBy: DEMO_IDS.operator });
     const approvedFinal = await app.inject({ method: "GET", url: "/api/v1/assessments/monthly", headers: { cookie: learnerCookie } });
     expect(approvedFinal.statusCode, approvedFinal.body).toBe(200);
     expect(approvedFinal.json()).toMatchObject({
@@ -152,15 +159,15 @@ describe("monthly content API", () => {
 
     const c1Curriculum = contract("C1");
     const c1Framework = await app.inject({
-      method: "POST", url: "/api/v1/content/months/2026-11/frameworks/generate", headers: { cookie: managerCookie }, payload: { contract: c1Curriculum }
+      method: "POST", url: "/api/v1/content/months/2026-11/frameworks/generate", headers: { cookie }, payload: { contract: c1Curriculum }
     });
     expect(c1Framework.statusCode, c1Framework.body).toBe(200);
     const c1FrameworkId = c1Framework.json<{ id: string }>().id;
-    const c1FrameworkApproval = await app.inject({ method: "POST", url: `/api/v1/content/month-frameworks/${c1FrameworkId}/approve`, headers: { cookie: managerCookie } });
+    const c1FrameworkApproval = await app.inject({ method: "POST", url: `/api/v1/content/month-frameworks/${c1FrameworkId}/approve`, headers: { cookie } });
     expect(c1FrameworkApproval.statusCode, c1FrameworkApproval.body).toBe(204);
-    const c1Day = await app.inject({ method: "PUT", url: `/api/v1/content/month-frameworks/${c1FrameworkId}/days/1`, headers: { cookie: managerCookie }, payload: lessonFor(c1Curriculum, 1) });
+    const c1Day = await app.inject({ method: "PUT", url: `/api/v1/content/month-frameworks/${c1FrameworkId}/days/1`, headers: { cookie }, payload: lessonFor(c1Curriculum, 1) });
     expect(c1Day.statusCode, c1Day.body).toBe(200);
-    const c1DayApproval = await app.inject({ method: "POST", url: `/api/v1/content/month-frameworks/${c1FrameworkId}/days/1/approve`, headers: { cookie: managerCookie } });
+    const c1DayApproval = await app.inject({ method: "POST", url: `/api/v1/content/month-frameworks/${c1FrameworkId}/days/1/approve`, headers: { cookie } });
     expect(c1DayApproval.statusCode, c1DayApproval.body).toBe(204);
     await pool.query("update enrollments set cefr = 'C1' where learner_id = $1", [DEMO_IDS.learner]);
     const c1Month = await app.inject({ method: "GET", url: "/api/v1/learner/months/2026-11", headers: { cookie: learnerCookie } });
@@ -185,7 +192,7 @@ describe("monthly content API", () => {
     }
     const c1Submitted = await app.inject({ method: "POST", url: `/api/v1/assessment-attempts/${c1FinalAttemptId}/submit`, headers: { cookie: learnerCookie }, payload: {} });
     expect(c1Submitted.statusCode, c1Submitted.body).toBe(200);
-    const c1Decision = await app.inject({ method: "POST", url: `/api/v1/assessment-reviews/${c1FinalAttemptId}/decision`, headers: { cookie: managerCookie }, payload: { status: "approved", reason: "Đã đạt yêu cầu C1 của bài thi tháng." } });
+    const c1Decision = await app.inject({ method: "POST", url: `/api/v1/assessment-reviews/${c1FinalAttemptId}/decision`, headers: { cookie }, payload: { status: "approved", reason: "Đã đạt yêu cầu C1 của bài thi tháng." } });
     expect(c1Decision.statusCode, c1Decision.body).toBe(200);
     const certificate = await app.inject({ method: "GET", url: "/api/v1/engagement/rewards/done", headers: { cookie: learnerCookie } });
     expect(certificate.statusCode, certificate.body).toBe(200);

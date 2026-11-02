@@ -14,7 +14,6 @@ import { ManagerRewardCertificate } from "./RewardCertificate.js";
 import { downloadText, PageTitle } from "./shared.js";
 import { useDialog, useModal } from "../shared/ModalProvider.js";
 import { autoSeasonTheme } from "../games/season-visual.js";
-import { OperationsRouteController } from "../operator/OperatorRouteController.js";
 import { useTheme } from "../shared/ThemeProvider.js";
 import { useToast } from "../shared/design-system.js";
 import { ArchiveRestore, ChevronDown, Eye, EyeOff, ShieldCheck } from "lucide-react";
@@ -45,15 +44,14 @@ export function ManagerRouteController({ role, currentUserId }: ManagerRouteCont
   return <Routes>
     <Route path="/mgr" element={role === "manager" ? <ProgressRoute /> : <Navigate replace to="/op" />} />
     <Route path="/mgr/ops" element={role === "manager" ? <OperationsRoute /> : <Navigate replace to="/op" />} />
-    <Route path="/mgr/ops/prompts" element={<Navigate replace to={role === "manager" ? "/settings/prompts" : "/op"} />} />
-    <Route path="/mgr/ops/*" element={role === "manager" ? <OperationsRouteController basePath="/mgr/ops" session={{ role: "manager", user: { id: currentUserId, displayName: "Quản lý", email: null }, permissions: [] }} /> : <Navigate replace to="/op" />} />
+    <Route path="/mgr/ops/*" element={<Navigate replace to={role === "manager" ? "/mgr/ops" : "/op"} />} />
     <Route path="/mgr/recovery" element={<Navigate replace to={role === "manager" ? "/settings" : "/op"} />} />
     <Route path="/mgr/reminders" element={role === "manager" ? <RemindersRoute /> : <Navigate replace to="/op" />} />
     <Route path="/mgr/report" element={role === "manager" ? <ReportRoute currentUserId={currentUserId} /> : <Navigate replace to="/op" />} />
     <Route path="/mgr/rewards" element={role === "manager" ? <ManagerRewards /> : <Navigate replace to="/op" />} />
     <Route path="/reward/preview" element={role === "manager" ? <ManagerRewardCertificate /> : <Navigate replace to="/op" />} />
     <Route path="/settings" element={<SettingsRoute role={role} currentUserId={currentUserId} />} />
-    <Route path="/settings/prompts" element={role === "manager" ? <OperationsRouteController basePath="/mgr/ops" session={{ role: "manager", user: { id: currentUserId, displayName: "Quản lý", email: null }, permissions: [] }} /> : <Navigate replace to="/op" />} />
+    <Route path="/settings/prompts" element={<Navigate replace to={role === "manager" ? "/settings" : "/op"} />} />
   </Routes>;
 }
 
@@ -282,7 +280,7 @@ function SettingsRoute({ role, currentUserId }: ManagerRouteControllerProps) {
   const securityNotices = role === "manager" && pinReports ? <SecurityNotices reports={pinReports.reports} /> : null;
   return <>
     {loadError ? <div className="banner danger" role="alert"><div className="body small">{loadError}</div></div> : null}
-    <SettingsPage role={role} {...(manager ? { manager } : {})} {...(operatorOverview ? { operatorOverview } : {})} {...(provider ? { ai: provider } : {})} product={product} experience={experience} capabilities={capabilities} actions={{ onSaveManager: saveManager, onSaveProduct: saveProduct, onSaveExperience: saveExperience, ...(role === "operator" ? { onRequestPlacementTestChange: async (developerEmail: string, note: string) => { try { await apiClient.requestPlacementTestChange({ developerEmail, note }); notify("Đã gửi yêu cầu đổi đề đầu vào tới đội phát triển."); } catch { notify("Không gửi được yêu cầu đổi đề đầu vào.", "danger"); throw new Error("PLACEMENT_CHANGE_REQUEST_FAILED"); } } } : {}), ...(saveAi ? { onSaveAi: saveAi } : {}), ...(testAi ? { onTestAi: testAi } : {}), ...managerActions, ...maintenanceActions }} {...(securityNotices ? { securityNotices } : {})} {...(accounts ? { accounts: <AccountsPanel view={accounts} currentUserId={currentUserId} reload={loadAccounts} notify={notify} /> } : {})} />
+    <SettingsPage role={role} {...(manager ? { manager } : {})} {...(operatorOverview ? { operatorOverview } : {})} {...(provider ? { ai: provider } : {})} product={product} experience={experience} capabilities={capabilities} actions={{ onSaveManager: saveManager, onSaveProduct: saveProduct, onSaveExperience: saveExperience, ...(role === "operator" ? { onRequestPlacementTestChange: async (developerEmail: string, note: string) => { try { await apiClient.requestPlacementTestChange({ developerEmail, note }); notify("Đã gửi yêu cầu đổi đề đầu vào tới đội phát triển."); } catch { notify("Không gửi được yêu cầu đổi đề đầu vào.", "danger"); throw new Error("PLACEMENT_CHANGE_REQUEST_FAILED"); } }, onRequestFinalTestChange: async (developerEmail: string, note: string) => { try { await apiClient.requestFinalTestChange({ developerEmail, note }); notify("Đã gửi yêu cầu đổi đề đầu ra tới đội phát triển."); } catch { notify("Không gửi được yêu cầu đổi đề đầu ra.", "danger"); throw new Error("FINAL_CHANGE_REQUEST_FAILED"); } } } : {}), ...(saveAi ? { onSaveAi: saveAi } : {}), ...(testAi ? { onTestAi: testAi } : {}), ...managerActions, ...maintenanceActions }} {...(securityNotices ? { securityNotices } : {})} {...(accounts ? { accounts: <AccountsPanel view={accounts} currentUserId={currentUserId} reload={loadAccounts} notify={notify} /> } : {})} />
     {maintenanceDialog ? <MaintenanceConfirmationDialog confirmation={maintenanceDialog.confirmation} busy={maintenanceBusy} onCancel={() => setMaintenanceDialog(undefined)} onConfirm={(phrase) => confirmMaintenance({ confirmationToken: maintenanceDialog.confirmation.token, confirmationPhrase: phrase })} /> : null}
   </>;
 }

@@ -8,7 +8,7 @@ const ManagerRouteController = lazy(() => import("./manager/ManagerRouteControll
 const OperatorRouteController = lazy(() => import("./operator/OperatorRouteController.js").then(({ OperatorRouteController }) => ({ default: OperatorRouteController })));
 
 const managerRoutes = ["/mgr", "/mgr/ops", "/mgr/recovery", "/mgr/reminders", "/mgr/report", "/mgr/rewards"] as const;
-const operatorRoutes = ["/op", "/op/levelforms", "/op/months", "/op/lessons", "/op/review", "/op/tests"] as const;
+const operatorRoutes = ["/op", "/op/levelforms", "/op/months", "/op/review", "/op/tests"] as const;
 
 export function RoleRoutes({ session }: { session: SessionView }) {
   const location = useLocation();
@@ -18,7 +18,7 @@ export function RoleRoutes({ session }: { session: SessionView }) {
   const managerArea = isRouteOrChild(pathname, "/mgr");
   const settingsArea = isRouteOrChild(pathname, "/settings");
   const rewardPreviewRoute = isRouteOrChild(pathname, "/reward/preview");
-  const managerRoute = managerRoutes.some((route) => route === pathname) || (role === "manager" && isKnownManagerOperationsRoute(pathname));
+  const managerRoute = managerRoutes.some((route) => route === pathname);
   if (!isSupportedRole(role)) return <AccessFallback home="/" message="Vai trò tài khoản này không được hỗ trợ. Vui lòng quay lại trang bắt đầu." />;
   if (role === "learner") {
     if (pathname === "/practice") return <Navigate replace to="/home" />;
@@ -28,15 +28,11 @@ export function RoleRoutes({ session }: { session: SessionView }) {
     return <RoleRouteLoadingBoundary label={loadingLabel(pathname)}><LearnerRouteController /></RoleRouteLoadingBoundary>;
   }
   if (pathname === "/op/prompts") return <AccessFallback home="/op" message="Tài khoản này không có quyền mở cấu hình Prompt & rubric." />;
-  if (pathname === "/mgr/ops/prompts") return role === "manager" ? <Navigate replace to="/settings/prompts" /> : <AccessFallback home="/op" message="Tài khoản này không có quyền mở cấu hình Prompt & rubric." />;
-  if (pathname === "/settings/prompts") {
-    return role === "manager"
-      ? <RoleRouteLoadingBoundary label="Đang tải Prompt & rubric"><OperatorRouteController session={session} basePath="/mgr/ops" /></RoleRouteLoadingBoundary>
-      : <AccessFallback home="/op" message="Tài khoản này không có quyền mở cấu hình Prompt & rubric." />;
-  }
+  if (pathname === "/mgr/ops/prompts" || pathname === "/settings/prompts") return <AccessFallback home={role === "operator" ? "/op" : "/mgr/ops"} message="Tài khoản này không có quyền mở cấu hình Prompt & rubric." />;
   if (pathname === "/" || pathname === "/home") return <Navigate replace to={role === "operator" ? "/op" : "/mgr"} />;
+  if (role === "operator" && isRouteOrChild(pathname, "/op/lessons")) return <Navigate replace to="/op/months" />;
   if (role === "operator" && (managerArea || rewardPreviewRoute || (settingsArea && pathname !== "/settings"))) return <AccessFallback home="/op" message="Tài khoản này không có quyền mở khu vực quản lý." />;
-  if (role === "manager" && operatorRoute) return <Navigate replace to="/mgr/ops" />;
+  if (role === "manager" && (operatorRoute || isRouteOrChild(pathname, "/mgr/ops/"))) return <Navigate replace to="/mgr/ops" />;
   if (pathname === "/settings" || managerRoute || (role === "manager" && pathname === "/reward/preview")) {
     return <RoleRouteLoadingBoundary label={loadingLabel(pathname)}><ManagerRouteController role={role} currentUserId={session.user.id} /></RoleRouteLoadingBoundary>;
   }
@@ -103,12 +99,7 @@ function OperatorRouteNotFound() {
 }
 
 function isKnownOperatorRoute(pathname: string): boolean {
-  return operatorRoutes.some((route) => route === pathname) || /^\/op\/lessons\/\d+\/(A1|A2|B1|B2|C1)$/.test(pathname);
-}
-
-function isKnownManagerOperationsRoute(pathname: string): boolean {
-  return ["/mgr/ops/levels", "/mgr/ops/months", "/mgr/ops/weeks", "/mgr/ops/lessons", "/mgr/ops/review", "/mgr/ops/tests", "/mgr/ops/prompts", "/mgr/ops/level-forms"].includes(pathname)
-    || /^\/mgr\/ops\/lessons\/\d+\/(A1|A2|B1|B2|C1)$/.test(pathname);
+  return operatorRoutes.some((route) => route === pathname);
 }
 
 function loadingLabel(pathname: string): string {

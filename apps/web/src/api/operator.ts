@@ -64,9 +64,11 @@ export interface OperatorApiClient {
   fillContentLessonPhrases(week: number, cefr: CefrLevel, expectedVersion?: number): Promise<ContentLessonMutationResult>;
   deleteContentLessonDraftSet(week: number, cefr: CefrLevel): Promise<{ deleted: true }>;
   getContentMonth(month: string): Promise<MonthlyOperatorOverviewView>;
+  suggestContentMonthBrief(month: string): Promise<SharedMonthBriefView>;
   saveContentMonthBrief(month: string, input: { title: string; brief: string; context: string; communicationGoal: string }): Promise<SharedMonthBriefView>;
   approveContentMonthBrief(month: string): Promise<void>;
   saveContentMonthFramework(month: string, contract: MonthlyCurriculumContract): Promise<{ id: string; cefr: CefrLevel; version: number; status: "draft"; scopeHash: string }>;
+  generateContentMonthResources(month: string, criteria: { cefr: CefrLevel; vocabularyCount: number; expandedVocabularyCount: number; grammarTopicCount: number; pronunciationSoundCount: number }): Promise<{ id: string; cefr: CefrLevel; version: number; status: "draft"; scopeHash: string }>;
   approveContentMonthFramework(id: string): Promise<void>;
   saveContentMonthDay(id: string, dayNumber: number, lesson: { title: string; parts: Array<{ code: string; title?: string; content: Record<string, unknown> }> }): Promise<{ severe: Array<{ severity: "severe" | "light"; code: string; message: string; dayNumber?: number; component?: string }>; light: Array<{ severity: "severe" | "light"; code: string; message: string; dayNumber?: number; component?: string }>; contractVersion: number }>;
   generateContentMonthDay(id: string, dayNumber: number): Promise<{ lesson: { title: string; parts: Array<{ code: string; title?: string; content: Record<string, unknown> }> }; report: { severe: Array<{ severity: "severe" | "light"; code: string; message: string; dayNumber?: number; component?: string }>; light: Array<{ severity: "severe" | "light"; code: string; message: string; dayNumber?: number; component?: string }>; contractVersion: number } }>;
@@ -153,9 +155,11 @@ export const operatorApiClient: OperatorApiClient = {
   fillContentLessonPhrases: (week, cefr, expectedVersion) => request(`/api/v1/content/lesson-sets/${week}/${encodeURIComponent(cefr)}/draft/fill-phrases`, { method: "POST", body: JSON.stringify(expectedVersion === undefined ? {} : { expectedVersion }) }),
   deleteContentLessonDraftSet: (week, cefr) => request(`/api/v1/content/lesson-sets/${week}/${encodeURIComponent(cefr)}/draft`, { method: "DELETE", body: "{}" }),
   getContentMonth: (month) => request(`/api/v1/content/months/${encodeURIComponent(month)}`),
+  suggestContentMonthBrief: (month) => request(`/api/v1/content/months/${encodeURIComponent(month)}/brief/suggest`, { method: "POST", body: "{}" }),
   saveContentMonthBrief: (month, input) => request(`/api/v1/content/months/${encodeURIComponent(month)}/brief`, { method: "PUT", body: JSON.stringify(input) }),
   approveContentMonthBrief: async (month) => { await request(`/api/v1/content/months/${encodeURIComponent(month)}/brief/approve`, { method: "POST", body: "{}" }); },
   saveContentMonthFramework: (month, contract) => request(`/api/v1/content/months/${encodeURIComponent(month)}/frameworks/generate`, { method: "POST", body: JSON.stringify({ contract }) }),
+  generateContentMonthResources: (month, criteria) => request(`/api/v1/content/months/${encodeURIComponent(month)}/resources/generate`, { method: "POST", body: JSON.stringify(criteria) }),
   approveContentMonthFramework: async (id) => { await request(`/api/v1/content/month-frameworks/${encodeURIComponent(id)}/approve`, { method: "POST", body: "{}" }); },
   saveContentMonthDay: (id, dayNumber, lesson) => request(`/api/v1/content/month-frameworks/${encodeURIComponent(id)}/days/${dayNumber}`, { method: "PUT", body: JSON.stringify(lesson) }),
   generateContentMonthDay: (id, dayNumber) => request(`/api/v1/content/month-frameworks/${encodeURIComponent(id)}/days/${dayNumber}/generate`, { method: "POST", body: "{}" }),

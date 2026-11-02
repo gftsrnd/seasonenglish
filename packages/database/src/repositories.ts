@@ -128,6 +128,9 @@ const prototypeTaskPromptDefaults: Readonly<Record<string, string>> = {
   system_rules: prototypePromptDefaults.base,
   assessment_scoring: prototypePromptDefaults.placement,
   week_suggestions: prototypePromptDefaults.weeks,
+  monthly_topic_suggestion: prototypePromptDefaults.monthlyTopic,
+  monthly_resource_generation: prototypePromptDefaults.monthlyResources,
+  monthly_lessons: prototypePromptDefaults.monthlyLessons,
   micro_grading: prototypePromptDefaults.mgrade,
   coach_dialogue: prototypePromptDefaults.coach,
   weekly_practice_grading: prototypePromptDefaults.grade
@@ -2063,7 +2066,7 @@ function buildLevelReadiness(input: {
   });
   const labels: Record<LevelReadinessMetric["key"], string> = {
     lessonCompletion: "Bài học hoàn thành", firstTryAccuracy: "Phần bài đúng ngay lần đầu",
-    weeklyPractice: "Bài thực hành tuần gần nhất", coachRubric: "Rubric khi luyện với Season",
+    weeklyPractice: "Bài đánh giá gần nhất", coachRubric: "Rubric khi luyện với Season",
     wrongRate: "Phần sai nhiều lần"
   };
   const displays: Record<LevelReadinessMetric["key"], string> = {
@@ -6432,7 +6435,7 @@ class AssessmentRepository {
          join users learner on learner.id = aa.learner_id
          join users reviewer on reviewer.id = $2
            and reviewer.organization_id = learner.organization_id
-           and reviewer.role in ('operator', 'manager')
+           and reviewer.role = 'operator'
          left join enrollments enrollment on enrollment.learner_id = aa.learner_id and enrollment.cefr_approved = true
          left join level_up_challenge_results challenge on challenge.assessment_attempt_id = aa.id
          where aa.id = $1 and definition.kind in ('placement', 'level_up', 'final')

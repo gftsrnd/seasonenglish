@@ -104,6 +104,31 @@ export interface MonthlyExamScope {
   soundIds: string[];
 }
 
+export interface MonthlyResourceCriteriaDefaults {
+  vocabularyCount: number;
+  expandedVocabularyCount: number;
+  grammarTopicCount: number;
+  pronunciationSoundCount: number;
+}
+
+/** Starting values for monthly resources. Three core terms are needed for each new daily lesson. */
+export function recommendedMonthlyResourceCriteria(month: string, cefr: CefrLevel): MonthlyResourceCriteriaDefaults {
+  const calendar = buildMonthlyCalendar(month);
+  const newLessonCount = calendar.effectiveDays.filter((date) => !isFriday(date)).length;
+  const levelIndex = ["A1", "A2", "B1", "B2", "C1"].indexOf(cefr);
+  const advancedOffset = Math.max(0, levelIndex - 1);
+  const weeklyBlocks = Math.max(1, Math.ceil(calendar.lessonCount / 5));
+  return {
+    vocabularyCount: newLessonCount * 3,
+    // Every new lesson needs a usable relation set: three umbrella terms,
+    // four synonyms/antonyms, and two word-family terms. These belong to the
+    // lesson day, rather than being a thin add-on to an individual core word.
+    expandedVocabularyCount: newLessonCount * 9,
+    grammarTopicCount: weeklyBlocks + advancedOffset,
+    pronunciationSoundCount: weeklyBlocks + Math.floor(advancedOffset / 2)
+  };
+}
+
 /** A monthly exam can guide reinforcement but never demotes a learner automatically. */
 export function resolveMonthlyExamOutcome(input: { currentLevel: CefrLevel; passed: boolean }): {
   levelChange: null;
@@ -139,7 +164,11 @@ export function buildMonthlyCalendar(month: string): MonthlyCalendar {
   }
   const examDate = studyDays.at(-1);
   if (!examDate) throw new RangeError("Month has no study day");
-  const effectiveDays = studyDays;
+  // The final weekday is reserved for the monthly final.  It deliberately
+  // never becomes a daily lesson: there is no DaySpec, lesson row, or daily
+  // resource assignment for the exam date.
+  const effectiveDays = studyDays.slice(0, -1);
+  if (effectiveDays.length === 0) throw new RangeError("Month needs at least one daily lesson before its final exam");
   return { month, studyDays, effectiveDays, examDate, lessonCount: effectiveDays.length };
 }
 
@@ -153,8 +182,8 @@ export function buildMonthlyCurriculum(input: MonthlyCurriculumInput): MonthlyCu
   const duplicateSupport = duplicateOf(input.supportTerms.map((term) => normalize(term.word)));
   if (duplicateSupport) throw new RangeError(`Duplicate support term: ${duplicateSupport}`);
   if (input.supportTerms.some((term) => input.coreTerms.some((core) => normalize(core.word) === normalize(term.word)))) throw new RangeError("Support term duplicates a core term");
-  if (input.grammarTopics.length !== 4) throw new RangeError("Monthly curriculum needs exactly four grammar topics");
-  if (input.sounds.length !== 4) throw new RangeError("Monthly curriculum needs exactly four sounds");
+  if (input.grammarTopics.length === 0) throw new RangeError("Monthly curriculum needs at least one grammar topic");
+  if (input.sounds.length === 0) throw new RangeError("Monthly curriculum needs at least one sound");
   if (input.supportTerms.some((term) => !Number.isInteger(term.dayNumber) || term.dayNumber < 1 || term.dayNumber > calendar.lessonCount)) throw new RangeError("Every expanded term must belong to a valid monthly day");
   if (input.grammarTopics.some((topic) => topic.steps.length === 0)) throw new RangeError("Every grammar topic needs a concrete step");
 
@@ -195,8 +224,16 @@ export function buildMonthlyCurriculum(input: MonthlyCurriculumInput): MonthlyCu
 export function validateMonthlyCurriculum(contract: MonthlyCurriculumContract): string[] {
   const calendar = buildMonthlyCalendar(contract.month);
   const errors: string[] = [];
-  if (contract.grammarTopics.length !== 4) errors.push("Monthly curriculum needs exactly four grammar topics");
-  if (contract.sounds.length !== 4) errors.push("Monthly curriculum needs exactly four sounds");
+  const duplicateCore = duplicateOf(contract.coreTerms.map((term) => normalize(term.word)));
+  if (duplicateCore) errors.push(`Duplicate core term: ${duplicateCore}`);
+  const duplicateSupport = duplicateOf(contract.supportTerms.map((term) => normalize(term.word)));
+  if (duplicateSupport) errors.push(`Duplicate expanded term: ${duplicateSupport}`);
+  const coreWords = new Set(contract.coreTerms.map((term) => normalize(term.word)));
+  for (const term of contract.supportTerms) {
+    if (coreWords.has(normalize(term.word))) errors.push(`Expanded term ${term.id} duplicates a core term`);
+  }
+  if (contract.grammarTopics.length === 0) errors.push("Monthly curriculum needs at least one grammar topic");
+  if (contract.sounds.length === 0) errors.push("Monthly curriculum needs at least one sound");
   for (const topic of contract.grammarTopics) {
     if (!topic.title.trim() || topic.steps.length === 0 || topic.steps.some((step) => !step.focus.trim() || !step.formula.trim() || !step.usage.trim() || step.examples.length === 0 || step.examples.some((example) => !example.trim()))) {
       errors.push(`Grammar topic ${topic.id} needs a concrete form, use, step, and example`);
@@ -205,6 +242,7 @@ export function validateMonthlyCurriculum(contract: MonthlyCurriculumContract): 
   const coreById = new Set(contract.coreTerms.map((term) => term.id));
   const grammarStepIds = new Set(contract.grammarTopics.flatMap((topic) => topic.steps.map((step) => step.id)));
   const soundsById = new Map(contract.sounds.map((sound) => [sound.id, sound]));
+  const dayByNumber = new Map(contract.daySpecs.map((day) => [day.lessonNumber, day]));
   const seenNew = new Set<string>();
   const coreByDay = new Map<number, string[]>();
   for (const term of contract.coreTerms) {
@@ -214,6 +252,7 @@ export function validateMonthlyCurriculum(contract: MonthlyCurriculumContract): 
   }
   for (const term of contract.supportTerms) {
     if (term.component !== "expanded" || !Number.isInteger(term.dayNumber) || term.dayNumber < 1 || term.dayNumber > calendar.lessonCount) errors.push(`Expanded term ${term.id} has an invalid component or day assignment`);
+    if (!dayByNumber.has(term.dayNumber)) errors.push(`Expanded term ${term.id} is not assigned to a lesson`);
   }
   if (contract.daySpecs.length !== calendar.lessonCount) errors.push("Day specification count does not match monthly calendar");
   for (const [index, day] of contract.daySpecs.entries()) {
@@ -237,6 +276,10 @@ export function validateMonthlyCurriculum(contract: MonthlyCurriculumContract): 
     if (day.pronunciationExampleIds.length !== 3) errors.push(`Lesson ${day.lessonNumber} needs three pronunciation examples`);
   }
   if (seenNew.size !== contract.coreTerms.length) errors.push("Every core term must be introduced exactly once");
+  const assignedGrammarSteps = new Set(contract.daySpecs.map((day) => day.grammarStepId));
+  for (const id of grammarStepIds) if (!assignedGrammarSteps.has(id)) errors.push(`Grammar step ${id} is not assigned to a lesson`);
+  const assignedSounds = new Set(contract.daySpecs.map((day) => day.soundId));
+  for (const id of soundsById.keys()) if (!assignedSounds.has(id)) errors.push(`Sound ${id} is not assigned to a lesson`);
   return errors;
 }
 

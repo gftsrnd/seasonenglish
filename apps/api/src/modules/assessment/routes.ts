@@ -157,9 +157,9 @@ export function registerAssessmentRoutes(app: FastifyInstance, pool: Pool, aiRun
   const repositories = createRepositories(pool);
   const runnerFor = (actorId: string) => aiRunnerFactory ? aiRunnerFactory(actorId) : Promise.resolve(aiRunner);
   const learnerOnly = createRoleGuard(pool, ["learner"]);
-  const assessmentReaders = createRoleGuard(pool, ["operator", "manager"]);
-  const assessmentReviewers = createRoleGuard(pool, ["operator", "manager"]);
-  const assessmentOperators = createRoleGuard(pool, ["operator", "manager"]);
+  const assessmentReaders = createRoleGuard(pool, ["operator"]);
+  const assessmentReviewers = createRoleGuard(pool, ["operator"]);
+  const assessmentOperators = createRoleGuard(pool, ["operator"]);
   const levelFormOperators = createRoleGuard(pool, ["operator"]);
 
   app.get("/api/v1/assessment-reviews/pending", { preHandler: assessmentReaders }, async (request) => {

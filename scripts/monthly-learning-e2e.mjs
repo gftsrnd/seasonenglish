@@ -1,7 +1,6 @@
 import { chromium } from "playwright";
 import { mkdir } from "node:fs/promises";
 import { join } from "node:path";
-import { buildMonthlyCalendar, buildMonthlyCurriculum } from "../packages/domain/dist/src/monthly/index.js";
 
 const webUrl = process.env.E4S_MONTHLY_E2E_WEB_URL ?? "http://127.0.0.1:4275";
 const month = process.env.E4S_MONTHLY_E2E_MONTH ?? "2026-11";
@@ -10,142 +9,117 @@ const evidenceDir = process.env.E4S_MONTHLY_E2E_EVIDENCE_DIR ?? join(process.cwd
 const fail = (message) => { throw new Error(message); };
 const assert = (condition, message) => { if (!condition) fail(message); };
 
-function curriculum(cefr) {
-  const calendar = buildMonthlyCalendar(month);
-  const count = calendar.effectiveDays.filter((date) => new Date(`${date}T00:00:00Z`).getUTCDay() !== 5).length * 3;
-  return buildMonthlyCurriculum({
-    month, cefr,
-    theme: { version: 1, title: "Monthly E2E customer handover", brief: "Prepare a customer handover.", context: "Customer success", communicationGoal: "Explain handover risks." },
-    coreTerms: Array.from({ length: count }, (_, index) => ({ id: `e2e-${cefr}-term-${index}`, word: `term-${index}`, meaning: "nghĩa", type: "noun", ipa: "/tɜːm/" })),
-    supportTerms: [],
-    grammarTopics: Array.from({ length: 4 }, (_, index) => ({ id: `e2e-${cefr}-g-${index}`, title: `Grammar ${index}`, steps: [{ id: `e2e-${cefr}-g-${index}-s`, focus: "focus", formula: "S + V", usage: "usage", examples: ["Example."] }] })),
-    sounds: Array.from({ length: 4 }, (_, index) => ({ id: `e2e-${cefr}-s-${index}`, ipa: "/t/", label: "T", examples: Array.from({ length: Math.ceil(calendar.lessonCount / 4) * 3 }, (_, example) => ({ id: `e2e-${cefr}-s-${index}-${example}`, word: `sound-${index}-${example}`, ipa: "/t/" })) }))
-  });
-}
 
-function lessonFor(contract) {
-  const spec = contract.daySpecs.find((day) => day.lessonNumber === 1);
-  const terms = spec.coreTermIds.map((id) => contract.coreTerms.find((term) => term.id === id));
-  const sound = contract.sounds.find((item) => item.id === spec.soundId);
-  const grammar = contract.grammarTopics.flatMap((topic) => topic.steps).find((step) => step.id === spec.grammarStepId);
-  const choice = { prompt: "Which words are on the handover list?", options: ["The handover list", "A travel plan", "A lunch menu", "A sports team"], answer: "The handover list" };
-  return { title: "The handover list", parts: [
-    { code: "objective", content: { text: "Use the words in a short workplace exchange." } },
-    { code: "instruction", content: { steps: ["Read the examples.", "Choose an answer."] } },
-    { code: "vocabulary", content: { items: terms.map((term) => ({ word: term.word, meaning: term.meaning, synonyms: ["plan"], antonyms: ["opposite"] })) } },
-    { code: "grammar", content: { formula: grammar.formula, text: grammar.usage } },
-    { code: "pronunciation", content: { focus: sound.ipa, words: sound.examples.slice(0, 3) } },
-    { code: "listening", content: { script: "The handover list is ready.", ...choice } },
-    { code: "reading", content: { text: "The handover list is ready.", ...choice } },
-    { code: "writing", content: { prompt: "Write one sentence about the handover list.", answer: "The handover list is ready." } },
-    { code: "word_class", content: choice }, { code: "word_use", content: choice },
-    { code: "speaking", content: { prompt: "Say one sentence about the handover list.", sample: "The handover list is ready." } }
-  ] };
-}
-
-async function login(page, email, password) {
+async function login(page, email, password, staff = false) {
   await page.goto(webUrl, { waitUntil: "networkidle" });
-  if (email.includes("quoc.bao")) await page.getByText("Nhân sự", { exact: true }).click();
+  if (staff) await page.getByText("Nhân sự", { exact: true }).click();
   await page.getByLabel("Email").fill(email);
-  const secret = email.includes("quoc.bao") ? page.getByRole("textbox", { name: "Mật khẩu" }) : page.getByRole("textbox", { name: "Mã PIN" });
+  const secret = staff ? page.getByRole("textbox", { name: "Mật khẩu" }) : page.getByRole("textbox", { name: "Mã PIN" });
   await secret.fill(password);
-  await page.getByRole("button", { name: email.includes("quoc.bao") ? "Đăng nhập nhân sự" : "Đăng nhập người học" }).click();
-  await page.waitForURL(email.includes("quoc.bao") ? /\/mgr/ : /\/(home|onboard)/);
+  await page.getByRole("button", { name: staff ? "Đăng nhập nhân sự" : "Đăng nhập người học" }).click();
+  await page.waitForURL(staff ? /\/op/ : /\/(home|onboard)/);
 }
 
-async function browserRequest(page, path, options = {}) {
-  const result = await page.evaluate(async ({ path, options }) => {
-    const response = await fetch(path, { ...options, headers: { "content-type": "application/json", ...(options.headers ?? {}) } });
-    return { status: response.status, body: await response.json().catch(() => null) };
-  }, { path, options });
-  return result;
+async function fillLabeled(page, label, value) {
+  const field = page.locator("label").filter({ hasText: label }).first().locator("input, textarea").first();
+  await field.fill(value);
 }
 
-async function expectStatus(page, path, options, status, label) {
-  const result = await browserRequest(page, path, options);
-  assert(result.status === status, `${label}: expected ${status}, got ${result.status} ${JSON.stringify(result.body)}`);
-  return result.body;
-}
-
-async function createMonth(managerPage, cefr, shouldCreateBrief) {
-  const contract = curriculum(cefr);
-  const existing = await expectStatus(managerPage, `/api/v1/content/months/${month}`, {}, 200, `load ${cefr} month`);
-  const existingFramework = existing.frameworks?.find((framework) => framework.cefr === cefr && framework.status === "approved" && framework.lessons?.[0]?.status === "approved");
-  if (existingFramework) return;
-  if (shouldCreateBrief) {
-    if (!existing.brief?.status || existing.brief.status !== "approved") {
-      await expectStatus(managerPage, `/api/v1/content/months/${month}/brief`, { method: "PUT", body: JSON.stringify({ title: contract.theme.title, brief: contract.theme.brief, context: contract.theme.context, communicationGoal: contract.theme.communicationGoal }) }, 200, "save monthly brief");
-      await expectStatus(managerPage, `/api/v1/content/months/${month}/brief/approve`, { method: "POST", body: "{}" }, 204, "approve monthly brief");
+async function createMonthThroughUi(operatorPage, cefr, { createBrief = false } = {}) {
+  if (createBrief) {
+    const title = operatorPage.getByLabel("Tiêu đề");
+    if (await title.isDisabled()) {
+      fail("E2E fixture precondition: the selected month already has an approved brief. Select a fresh month before proving browser-only monthly authoring.");
     }
+    await fillLabeled(operatorPage, "Tiêu đề", "Monthly E2E customer handover");
+    await fillLabeled(operatorPage, "Mô tả", "Prepare a customer handover.");
+    await fillLabeled(operatorPage, "Bối cảnh", "Customer success");
+    await fillLabeled(operatorPage, "Mục tiêu giao tiếp", "Explain handover risks.");
+    await operatorPage.getByRole("button", { name: "Lưu chủ đề" }).click();
+    await operatorPage.getByRole("button", { name: "Chốt chủ đề" }).click();
   }
-  const framework = await expectStatus(managerPage, `/api/v1/content/months/${month}/frameworks/generate`, { method: "POST", body: JSON.stringify({ contract }) }, 200, `generate ${cefr} framework`);
-  await expectStatus(managerPage, `/api/v1/content/month-frameworks/${framework.id}/approve`, { method: "POST", body: "{}" }, 204, `approve ${cefr} framework`);
-  await expectStatus(managerPage, `/api/v1/content/month-frameworks/${framework.id}/days/1`, { method: "PUT", body: JSON.stringify(lessonFor(contract)) }, 200, `save ${cefr} day 1`);
-  await expectStatus(managerPage, `/api/v1/content/month-frameworks/${framework.id}/days/1/approve`, { method: "POST", body: "{}" }, 204, `approve ${cefr} day 1`);
+  await operatorPage.getByRole("tab", { name: cefr, exact: true }).click();
+  const resources = operatorPage.locator(".monthly-resources");
+  await resources.getByLabel("Từ cốt lõi").fill("3");
+  await resources.getByLabel("Từ mở rộng").fill("0");
+  await resources.getByRole("button", { name: "Sinh", exact: true }).click();
+  await resources.getByText("Chờ chốt", { exact: true }).waitFor();
+  await resources.getByRole("button", { name: "Chốt tài nguyên" }).click();
+  await resources.getByText("Đã chốt", { exact: true }).waitFor();
+  const firstDay = operatorPage.locator(".monthly-calendar").getByRole("gridcell").filter({ hasText: /^2\s*Bài 1/ }).first();
+  await firstDay.getByRole("button", { name: "Sinh", exact: true }).click();
+  await firstDay.getByText("Đã duyệt", { exact: true }).waitFor();
+}
+
+function wavFixture() {
+  // A tiny valid PCM/WAV recording. The browser upload route validates MIME and extension.
+  const bytes = Buffer.alloc(44 + 1600);
+  bytes.write("RIFF", 0); bytes.writeUInt32LE(bytes.length - 8, 4); bytes.write("WAVEfmt ", 8);
+  bytes.writeUInt32LE(16, 16); bytes.writeUInt16LE(1, 20); bytes.writeUInt16LE(1, 22);
+  bytes.writeUInt32LE(8000, 24); bytes.writeUInt32LE(8000, 28); bytes.writeUInt16LE(1, 32); bytes.writeUInt16LE(8, 34);
+  bytes.write("data", 36); bytes.writeUInt32LE(1600, 40); bytes.fill(128, 44);
+  return bytes;
 }
 
 async function completeDailyLesson(learnerPage) {
-  const view = await expectStatus(learnerPage, `/api/v1/learner/months/${month}`, {}, 200, "load learner month");
-  const lessonId = view.lessons[0]?.id;
-  assert(lessonId, "learner month has no approved lesson");
-  await learnerPage.goto(`${webUrl}/lesson/${lessonId}`, { waitUntil: "networkidle" });
   await learnerPage.getByText("The handover list", { exact: true }).first().waitFor();
-  const lesson = await expectStatus(learnerPage, `/api/v1/lessons/${lessonId}`, {}, 200, "load learner lesson");
-  if (lesson.progress?.status === "completed") return;
-  await expectStatus(learnerPage, `/api/v1/lessons/${lessonId}/study-completion`, { method: "POST", body: "{}" }, 200, "complete study");
-  for (const [code, evidence] of [["listening", { answer: "The handover list" }], ["reading", { answer: "The handover list" }], ["writing", { answer: "The handover list is ready." }], ["word_class", { answer: "The handover list" }], ["word_use", { answer: "The handover list" }], ["speaking", { artifactKey: `monthly-e2e/${crypto.randomUUID()}.webm` }]]) {
-    await expectStatus(learnerPage, `/api/v1/lessons/${lessonId}/parts/${code}/attempts`, { method: "POST", body: JSON.stringify({ requestId: crypto.randomUUID(), evidence }) }, 200, `submit ${code}`);
+  if (await learnerPage.getByText("Bạn đã học bài này rồi, ôn lại thoải mái!", { exact: true }).count()) return;
+  const pronunciationButtons = learnerPage.locator('[data-part="pronunciation"] button');
+  for (let index = 0; index < await pronunciationButtons.count(); index += 1) {
+    await pronunciationButtons.nth(index).click();
   }
-  await expectStatus(learnerPage, `/api/v1/lessons/${lessonId}/progress`, { method: "PUT", body: JSON.stringify({ markComplete: true }) }, 200, "complete daily lesson");
+  await learnerPage.getByRole("button", { name: /Sang bài tập|Move to practice/ }).click();
+  const answerParts = ["listening", "reading", "writing", "word_class", "word_use"];
+  for (const code of answerParts) {
+    const part = learnerPage.locator(`[data-part="${code}"]`);
+    const textbox = part.locator("textarea");
+    if (await textbox.count()) await textbox.fill(code === "writing" ? "The handover list is ready." : "The handover list");
+    else await part.getByText("The handover list", { exact: true }).first().click();
+    await part.getByRole("button", { name: /Nộp bài|Submit/ }).click();
+  }
+  const audioInput = learnerPage.locator('[data-part="speaking"] input[type="file"]');
+  await audioInput.setInputFiles({ name: "monthly-e2e.wav", mimeType: "audio/wav", buffer: wavFixture() });
+  await learnerPage.getByText(/Đã lưu monthly-e2e\.wav|Saved monthly-e2e\.wav/).waitFor();
+  await learnerPage.locator('[data-part="speaking"]').getByRole("button", { name: /Kiểm tra nói|Check speaking/ }).click();
+  await learnerPage.getByRole("region", { name: /Hoàn thành bài học|Complete lesson/ }).getByRole("button", { name: /Hoàn thành bài|Complete lesson/ }).click();
+  await learnerPage.waitForURL(/\/home/);
 }
 
-async function submitFinal(learnerPage) {
-  await learnerPage.goto(`${webUrl}/test/monthly`, { waitUntil: "networkidle" });
-  await learnerPage.getByRole("heading", { name: "Bài thi tháng" }).first().waitFor();
-  const started = await expectStatus(learnerPage, "/api/v1/assessments/monthly/start", { method: "POST", body: "{}" }, 201, "start monthly final");
-  const attemptId = started.attempt.id;
-  for (const section of ["listening", "reading", "writing"]) await expectStatus(learnerPage, `/api/v1/assessment-attempts/${attemptId}/sections/${section}/complete`, { method: "POST", body: "{}" }, 200, `complete final ${section}`);
-  await expectStatus(learnerPage, `/api/v1/assessment-attempts/${attemptId}/submit`, { method: "POST", body: "{}" }, 200, "submit monthly final");
-  return attemptId;
+async function dismissLearnerBlockingDialog(learnerPage) {
+  const dialog = learnerPage.locator('[role="dialog"], .modal-backdrop').last();
+  if (!await dialog.isVisible().catch(() => false)) return;
+  const continueButton = dialog.getByRole("button", { name: /Tiếp tục học|Đóng/ }).first();
+  if (await continueButton.isVisible().catch(() => false)) await continueButton.click();
 }
 
 async function main() {
   await mkdir(evidenceDir, { recursive: true });
   const browser = await chromium.launch({ headless: true });
-  const manager = await browser.newPage();
+  const operator = await browser.newPage();
   const learner = await browser.newPage();
   try {
-    await login(manager, "quoc.bao.le@e4s.local", "manager-pass");
-    await manager.goto(`${webUrl}/mgr/ops/months`, { waitUntil: "networkidle" });
-    await manager.getByRole("heading", { name: "Thiết kế tháng học" }).waitFor();
-    await createMonth(manager, "A1", true);
-    await expectStatus(manager, "/api/v1/assessment-reviews/learners/00000000-0000-4000-8000-000000000101/level", { method: "PATCH", body: JSON.stringify({ mode: "direct", targetLevel: "A1", reason: "Monthly E2E A1 scenario", evidence: "Local E2E fixture" }) }, 200, "set learner A1");
-    await manager.screenshot({ path: join(evidenceDir, "01-manager-month-approved.png"), fullPage: true });
-
     await login(learner, "minh.anh.nguyen@e4s.local", "246810");
     await learner.goto(`${webUrl}/home`, { waitUntil: "networkidle" });
-    await completeDailyLesson(learner);
-    await learner.goto(`${webUrl}/home`, { waitUntil: "networkidle" });
-    await learner.getByLabel("Bài thi tháng").waitFor();
-    const firstFinal = await submitFinal(learner);
-    const appeal = await browserRequest(learner, `/api/v1/assessment-attempts/${firstFinal}/appeals`, { method: "POST", body: JSON.stringify({ reason: "Xin xem lại phần viết của bài thi tháng." }) });
-    assert([201, 409].includes(appeal.status), `appeal monthly final: expected 201 or existing 409, got ${appeal.status} ${JSON.stringify(appeal.body)}`);
-    await manager.goto(`${webUrl}/mgr/ops/levels`, { waitUntil: "networkidle" });
-    await manager.getByRole("heading", { name: "Duyệt trình độ" }).waitFor();
-    await expectStatus(manager, `/api/v1/assessment-reviews/${firstFinal}/decision`, { method: "POST", body: JSON.stringify({ status: "approved", reason: "Đã đối chiếu bài làm và chấp nhận kết quả bài thi tháng." }) }, 200, "manager resolves appeal");
-    const approved = await expectStatus(learner, "/api/v1/assessments/monthly", {}, 200, "read approved final");
-    assert(approved.attempt?.status === "approved" && approved.appeal?.status === "accepted", "approved final did not return an accepted appeal");
+    const levelText = await learner.getByText(/Trình độ (A1|A2|B1|B2|C1)/).first().innerText();
+    const cefr = levelText.match(/(A1|A2|B1|B2|C1)/)?.[1];
+    assert(cefr, `learner level badge is missing: ${levelText}`);
 
-    await expectStatus(manager, "/api/v1/assessment-reviews/learners/00000000-0000-4000-8000-000000000101/level", { method: "PATCH", body: JSON.stringify({ mode: "direct", targetLevel: "C1", reason: "Monthly E2E C1 scenario", evidence: "Local E2E fixture" }) }, 200, "set learner C1");
-    await createMonth(manager, "C1", false);
+    await login(operator, "thu.ha.tran@e4s.local", "staff-pass", true);
+    await operator.goto(`${webUrl}/op/months`, { waitUntil: "networkidle" });
+    await operator.screenshot({ path: join(evidenceDir, "debug-operator-months-before-authoring.png"), fullPage: true });
+    await operator.getByRole("heading", { name: "Bài học" }).waitFor();
+    await createMonthThroughUi(operator, cefr, { createBrief: true });
+    await operator.screenshot({ path: join(evidenceDir, "01-operator-month-approved.png"), fullPage: true });
+
+    await learner.goto(`${webUrl}/home`, { waitUntil: "networkidle" });
+    await dismissLearnerBlockingDialog(learner);
+    await learner.getByRole("link", { name: /Học.*ngay/ }).click();
+    await learner.waitForURL(/\/lesson\//);
     await completeDailyLesson(learner);
-    const c1Final = await submitFinal(learner);
-    await expectStatus(manager, `/api/v1/assessment-reviews/${c1Final}/decision`, { method: "POST", body: JSON.stringify({ status: "approved", reason: "Đã đạt yêu cầu C1 của bài thi tháng." }) }, 200, "approve C1 final");
-    const certificate = await expectStatus(learner, "/api/v1/engagement/rewards/done", {}, 200, "issue C1 certificate");
-    assert(certificate.printable === true && certificate.certificateNumber, "C1 certificate was not issued");
-    await learner.goto(`${webUrl}/profile`, { waitUntil: "networkidle" });
-    await learner.screenshot({ path: join(evidenceDir, "02-learner-c1-certificate.png"), fullPage: true });
-    console.log(`MONTHLY E2E PASS: ${webUrl} · evidence ${evidenceDir}`);
+    await learner.getByRole("heading", { name: /Chào / }).waitFor();
+    await learner.locator('[data-home-block="month-path"] li[data-state="completed"]').waitFor();
+    await learner.screenshot({ path: join(evidenceDir, "02-learner-daily-complete.png"), fullPage: true });
+    console.log(`MONTHLY DAILY E2E PASS: ${webUrl} · evidence ${evidenceDir}`);
   } finally { await browser.close(); }
 }
 

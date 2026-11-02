@@ -58,6 +58,7 @@ export type SettingsActions = {
   onSeedData: () => void | Promise<void>;
   onWipeData: () => void | Promise<void>;
   onRequestPlacementTestChange: (developerEmail: string, note: string) => void | Promise<void>;
+  onRequestFinalTestChange: (developerEmail: string, note: string) => void | Promise<void>;
 };
 export type SettingsProps = {
   role: "manager" | "operator";
@@ -95,7 +96,7 @@ export function SettingsPage({ role, manager, product, experience, capabilities,
     {role === "manager" ? <section className="card" aria-label="Cấu hình Prompt & rubric"><h3>Prompt & rubric</h3><p className="small muted">Quản lý hướng dẫn AI và rubric chấm trong khu vực Cài đặt, tách khỏi các thao tác vận hành hằng ngày.</p><a className="btn" href="/settings/prompts">Mở Prompt & rubric</a></section> : null}
     {role === "manager" ? aiDraft && ai ? <AiSection draft={aiDraft} configured={ai.configured} lastTest={ai.lastTest} capabilities={capabilities} onChange={setAiDraft} aiTestDisabled={managerDraft?.aiTestDisabled ?? false} onAiTestDisabledChange={(aiTestDisabled) => setManagerDraft((current) => current ? { ...current, aiTestDisabled } : current)} {...(actions.onSaveAi ? { onSave: () => actions.onSaveAi!(aiDraft) } : {})} {...(actions.onTestAi ? { onTest: () => actions.onTestAi!(aiDraft) } : {})} {...(actions.onSaveManager && managerDraft ? { onSaveAiTestMode: () => actions.onSaveManager!(toInput(managerDraft)) } : {})} /> : <UnavailableAiSection capabilities={capabilities} role={role} /> : null}
     {role === "manager" && managerDraft ? <>
-      <PilotSection role={role} value={managerDraft} persisted={manager ?? managerDraft} onChange={setManagerDraft} {...(actions.onSaveManager ? { onSave: () => actions.onSaveManager!({ ...toInput(managerDraft), pilotCycleAction: "save" }) } : {})} />
+      <MonthlyLearningSection value={managerDraft} onChange={setManagerDraft} {...(actions.onSaveManager ? { onSave: () => actions.onSaveManager!(toInput(managerDraft)) } : {})} />
       <ImageSection value={productDraft} onChange={setProductDraft} {...(actions.onSaveProduct ? { onSave: () => actions.onSaveProduct!(productDraft) } : {})} {...(actions.onTestImage ? { onTest: () => actions.onTestImage!(productDraft) } : {})} {...(actions.onClearImageCache ? { onClear: actions.onClearImageCache } : {})} />
       <LevelSection value={managerDraft} onChange={setManagerDraft} {...(actions.onSaveManager ? { onSave: () => actions.onSaveManager!(toInput(managerDraft)) } : {})} />
       <ThemeSection value={experienceDraft} onChange={setExperienceDraft} {...(saveExperienceDraft ? { onSave: saveExperienceDraft } : actions.onSaveProduct ? { onSave: () => actions.onSaveProduct!({ ...productDraft, theme: experienceDraft.theme }) } : {})} />
@@ -108,27 +109,34 @@ export function SettingsPage({ role, manager, product, experience, capabilities,
       <ThemeSection value={experienceDraft} onChange={setExperienceDraft} {...(saveExperienceDraft ? { onSave: saveExperienceDraft } : {})} />
       <MusicSection value={experienceDraft} onChange={setExperienceDraft} {...(saveExperienceDraft ? { onSave: saveExperienceDraft } : {})} />
       {operatorOverview && managerDraft ? <>
-        <PilotSection role={role} value={managerDraft} persisted={operatorOverview.settings} onChange={setManagerDraft} {...(actions.onSaveManager ? { onSave: () => actions.onSaveManager!({ ...toInput(managerDraft), pilotCycleAction: "save" }) } : {})} />
+        <MonthlyLearningSection value={managerDraft} onChange={setManagerDraft} {...(actions.onSaveManager ? { onSave: () => actions.onSaveManager!(toInput(managerDraft)) } : {})} />
         <LevelSection value={managerDraft} onChange={setManagerDraft} {...(actions.onSaveManager ? { onSave: () => actions.onSaveManager!(toInput(managerDraft)) } : {})} />
-        <PlacementTestChangeRequest {...(actions.onRequestPlacementTestChange ? { onSend: actions.onRequestPlacementTestChange } : {})} />
+        <AssessmentTestChangeRequests
+          {...(actions.onRequestPlacementTestChange ? { onPlacementSend: actions.onRequestPlacementTestChange } : {})}
+          {...(actions.onRequestFinalTestChange ? { onFinalSend: actions.onRequestFinalTestChange } : {})}
+        />
         <OperatorAccountsSection overview={operatorOverview} />
       </> : null}
     </>}
   </div>;
 }
 
-function PlacementTestChangeRequest({ onSend }: { onSend?: (developerEmail: string, note: string) => void | Promise<void> }) {
+function AssessmentTestChangeRequests({ onPlacementSend, onFinalSend }: { onPlacementSend?: (developerEmail: string, note: string) => void | Promise<void>; onFinalSend?: (developerEmail: string, note: string) => void | Promise<void> }) {
+  return <section className="card"><h3>Yêu cầu đổi đề</h3><p className="small muted">Operator không sửa trực tiếp thời lượng hoặc cấu trúc đề. Gửi yêu cầu có ghi nhận tới đội phát triển.</p><div className="grid cols-2"><TestChangeRequestForm title="Yêu cầu đổi đề đầu vào" description="Mô tả nội dung cần đổi trong đề đầu vào." buttonLabel="Gửi yêu cầu đổi đề đầu vào" {...(onPlacementSend ? { onSend: onPlacementSend } : {})} /><TestChangeRequestForm title="Yêu cầu đổi đề đầu ra" description="Mô tả nội dung cần đổi trong bài thi tháng hoặc đề C1." buttonLabel="Gửi yêu cầu đổi đề đầu ra" {...(onFinalSend ? { onSend: onFinalSend } : {})} /></div></section>;
+}
+
+function TestChangeRequestForm({ title, description, buttonLabel, onSend }: { title: string; description: string; buttonLabel: string; onSend?: (developerEmail: string, note: string) => void | Promise<void> }) {
   const [developerEmail, setDeveloperEmail] = useState("");
   const [note, setNote] = useState("");
   const [error, setError] = useState("");
   const send = async () => {
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(developerEmail)) { setError("Nhập email đội phát triển hợp lệ."); return; }
-    if (!note.trim()) { setError("Mô tả nội dung cần đổi trong đề đầu vào."); return; }
+    if (!note.trim()) { setError(description); return; }
     setError("");
     await onSend?.(developerEmail.trim(), note.trim());
     setNote("");
   };
-  return <section className="card"><h3>Yêu cầu đổi đề đầu vào</h3><p className="small muted">Operator không sửa trực tiếp thời lượng hoặc cấu trúc đề. Gửi yêu cầu có ghi nhận tới đội phát triển.</p><Field label="Email đội phát triển"><input type="email" value={developerEmail} onChange={event => setDeveloperEmail(event.target.value)} placeholder="dev@example.com" /></Field><Field label="Nội dung cần đổi"><textarea rows={3} value={note} onChange={event => setNote(event.target.value)} placeholder="Mô tả rõ phần đề cần cập nhật…" /></Field>{error ? <p className="small danger" role="alert">{error}</p> : null}<Save label="Gửi yêu cầu" onSave={onSend ? send : undefined} /></section>;
+  return <div className="settings-test-change-request"><h4>{title}</h4><Field label={`Email đội phát triển cho ${title.toLowerCase().replace("yêu cầu đổi ", "")}`}><input type="email" value={developerEmail} onChange={event => setDeveloperEmail(event.target.value)} placeholder="dev@example.com" /></Field><Field label={`Nội dung cần đổi cho ${title.toLowerCase().replace("yêu cầu đổi ", "")}`}><textarea rows={3} value={note} onChange={event => setNote(event.target.value)} placeholder="Mô tả rõ phần đề cần cập nhật…" /></Field>{error ? <p className="small danger" role="alert">{error}</p> : null}<Save label={buttonLabel} onSave={onSend ? send : undefined} /></div>;
 }
 
 function OperatorAccountsSection({ overview }: { overview: OperatorSettingsOverviewView }) {
@@ -153,16 +161,12 @@ function AiSection({ draft, configured, lastTest, capabilities, aiTestDisabled, 
   </section>;
 }
 
-function PilotSection({ role, value, persisted, onChange, onSave }: ManagerSectionProps & { role: "manager" | "operator"; persisted: ManagerSettingsView }) {
-  const ended = persisted.pilotCycle?.state === "awaiting_next_cycle";
-  const canSaveCycle = ended || value.pilotWeeks > persisted.pilotWeeks;
-  const cycle = persisted.pilotCycle;
-  return <section className="card"><h3>Lịch pilot</h3>
-    {role === "manager" && cycle?.lastExtension ? <div className="banner info" role="status"><div className="body small"><b>{cycle.lastExtension.actorName}</b> đã tăng chu kỳ từ {cycle.lastExtension.fromWeeks} lên {cycle.lastExtension.toWeeks} tuần.</div></div> : null}
-    <div className="grid cols-2"><div className="field"><span>Thứ Hai bắt đầu chu kỳ</span><div className="settings-fixed-pilot-date"><strong>{formatPilotDate(cycle?.startDate ?? persisted.pilotStartDate)}</strong><span className="xs muted">Do hệ thống xác định · không thể chỉnh sửa</span></div></div><Field label={ended ? "Số tuần cho chu kỳ mới" : "Số tuần của chu kỳ"}><select value={value.pilotWeeks} onChange={(event) => onChange({ ...value, pilotWeeks: Number(event.target.value), weekOverride: 0 })}>{[2, 3, 4].map(weeks => <option key={weeks} value={weeks} disabled={!ended && weeks < persisted.pilotWeeks}>{weeks}</option>)}</select></Field></div>
-    <p className="xs muted settings-pilot-status" role="status">{pilotWeekSummary(persisted)}</p>
-    {!ended ? <p className="xs muted">Trong chu kỳ đang chạy chỉ có thể tăng số tuần. Việc tăng không thay đổi tuần hoặc bài đang học.</p> : <p className="xs muted">Chu kỳ đã kết thúc. Chọn thời lượng rồi lưu để bắt đầu chu kỳ mới.</p>}
-    <NumberField label="Khuyến nghị học tối thiểu (phút/ngày)" value={value.minMinutesPerDay} min={5} max={60} onChange={(minMinutesPerDay) => onChange({ ...value, minMinutesPerDay })} /><NumberField label="Giới hạn chat với Season (1–200 lượt/ngày cho mỗi học viên)" value={value.coachDailyLimit} min={1} max={200} onChange={(coachDailyLimit) => onChange({ ...value, coachDailyLimit })} /><Save label="Lưu lịch pilot" onSave={canSaveCycle ? onSave : undefined} disabled={!canSaveCycle} {...(!ended ? { disabledTitle: `Chu kỳ đang chạy đến hết tuần ${persisted.pilotWeeks}.` } : {})} /></section>;
+function MonthlyLearningSection({ value, onChange, onSave }: ManagerSectionProps) {
+  return <section className="card"><h3>Học theo tháng</h3>
+    <p className="small muted">Bài học được mở theo lịch tháng từ Thứ Hai đến Thứ Sáu. Ngày học cuối cùng là Bài thi tháng; thời lượng và cấu trúc đề được quản lý trong mục Bài kiểm tra.</p>
+    <div className="grid cols-2"><NumberField label="Khuyến nghị học tối thiểu (phút/ngày)" value={value.minMinutesPerDay} min={5} max={60} onChange={(minMinutesPerDay) => onChange({ ...value, minMinutesPerDay })} /><NumberField label="Giới hạn chat với Season (1–200 lượt/ngày cho mỗi học viên)" value={value.coachDailyLimit} min={1} max={200} onChange={(coachDailyLimit) => onChange({ ...value, coachDailyLimit })} /></div>
+    <Save label="Lưu thiết lập học theo tháng" onSave={onSave} />
+  </section>;
 }
 
 function ImageSection({ value, onChange, onSave, onTest, onClear, readOnly = false }: { value: ProductPreferencesView; onChange: (value: ProductPreferencesView) => void; onSave?: () => void | Promise<void>; onTest?: () => void | Promise<void>; onClear?: () => void | Promise<void>; readOnly?: boolean }) { return <section className="card"><h3>Ảnh minh hoạ từ vựng</h3><p className="small muted">Tự động tìm ảnh có giấy phép mở từ Wikipedia, Wikimedia Commons và Openverse. Ảnh được lưu vào kho E4S kèm thông tin tác giả và giấy phép.</p><Field label="Nguồn ảnh"><select value={normalizeImageSource(value.vocabImageSource)} disabled={readOnly} onChange={(event) => onChange({ ...value, vocabImageSource: event.target.value as ProductPreferencesView["vocabImageSource"] })}><option value="wikimedia">Tự động từ nguồn mở</option><option value="disabled">Tắt ảnh minh hoạ</option></select></Field>{readOnly ? null : <div className="row"><Save label="Lưu nguồn ảnh" onSave={onSave} /><AsyncButton action={onTest} disabled={!onTest || value.vocabImageSource === "disabled"} busyLabel="Đang thử…" title={!onTest ? "Chưa có endpoint kiểm tra ảnh" : undefined}>Thử ảnh cho &quot;notebook&quot;</AsyncButton><AsyncButton className="btn-ghost" action={onClear} disabled={!onClear} busyLabel="Đang xoá…" title={!onClear ? "Chưa có endpoint xoá cache ảnh" : undefined}>Xoá cache ảnh</AsyncButton></div>}</section>; }
@@ -187,7 +191,7 @@ function legacyExperience(product: ProductPreferencesView, settings?: ManagerSet
   };
 }
 
-function LevelSection({ value, onChange, onSave }: ManagerSectionProps) { const labels: Record<keyof ManagerSettingsView["levelUp"], string> = { days: "Số ngày xét", lessons: "Bài học hoàn thành ≥ (%)", firstTry: "Đúng ngay lần đầu ≥ (%)", submission: "Bài thực hành gần nhất ≥ (/100)", coach: "Rubric Season trung bình ≥ (/5)", coachTurns: "Số lượt chat tối thiểu", wrong: "Hạ mức: tỉ lệ sai > (%)", minParts: "Hạ mức: số phần tối thiểu/tuần" }; return <section className="card"><h3>Ngưỡng xét lên / hạ mức</h3><p className="small muted">Xét trong số ngày gần nhất: đủ 4 ngưỡng đầu = &quot;Sẵn sàng thi lên level&quot; (trừ C1). Hai tuần liền sai quá số lượt cho phép = &quot;Nên xem xét hạ mức&quot; (trừ A1).</p><div className="grid cols-4">{(Object.keys(labels) as (keyof ManagerSettingsView["levelUp"])[]).map((key) => <NumberField key={key} label={labels[key]} value={value.levelUp[key]} min={key === "coach" ? 0 : 1} max={key === "coach" ? 5 : key === "days" ? 60 : 100} step={key === "coach" ? 0.5 : 1} onChange={(next) => onChange({ ...value, levelUp: { ...value.levelUp, [key]: next } })} />)}</div><Save label="Lưu ngưỡng" onSave={onSave} /></section>; }
+function LevelSection({ value, onChange, onSave }: ManagerSectionProps) { const labels: Record<keyof ManagerSettingsView["levelUp"], string> = { days: "Số ngày xét", lessons: "Bài học hoàn thành ≥ (%)", firstTry: "Đúng ngay lần đầu ≥ (%)", submission: "Bài thực hành gần nhất ≥ (/100)", coach: "Rubric Season trung bình ≥ (/5)", coachTurns: "Số lượt chat tối thiểu", wrong: "Hạ mức: tỉ lệ sai > (%)", minParts: "Hạ mức: số phần tối thiểu/tháng" }; return <section className="card"><h3>Ngưỡng xét lên / hạ mức</h3><p className="small muted">Xét trong số ngày gần nhất: đủ 4 ngưỡng đầu = &quot;Sẵn sàng thi lên level&quot; (trừ C1). Khi kết quả chưa đạt ngưỡng trong nhiều lần xét liên tiếp, hệ thống gợi ý xem xét hạ mức (trừ A1).</p><div className="grid cols-4">{(Object.keys(labels) as (keyof ManagerSettingsView["levelUp"])[]).map((key) => <NumberField key={key} label={labels[key]} value={value.levelUp[key]} min={key === "coach" ? 0 : 1} max={key === "coach" ? 5 : key === "days" ? 60 : 100} step={key === "coach" ? 0.5 : 1} onChange={(next) => onChange({ ...value, levelUp: { ...value.levelUp, [key]: next } })} />)}</div><Save label="Lưu ngưỡng" onSave={onSave} /></section>; }
 
 function ThemeSection({ value, onChange, onSave, readOnly = false }: { value: OrganisationExperienceView; onChange: (value: OrganisationExperienceView) => void; onSave?: () => void | Promise<void>; readOnly?: boolean }) {
   const { previewTheme, clearThemePreview } = useTheme();
@@ -263,7 +267,7 @@ function WebhookSection({ value, onChange, onSave, onTest }: ManagerSectionProps
   return <section className="card"><h3>Nhắc học qua Base.vn (Base Message incoming webhook)</h3><p className="small muted">Dán URL incoming webhook của Base Message. Payload dùng <code>base_content</code>; hỗ trợ <code>{"{message}"}</code> và <code>{"{name}"}</code>. Việc kiểm tra được thực hiện ở server và không hiển thị URL, payload hoặc phản hồi thô.</p><Field label="Webhook URL"><input value={value.baseWebhookUrl} onChange={(event) => onChange({ ...value, baseWebhookUrl: event.target.value })} /></Field><Field label="Mẫu payload (JSON)"><textarea value={value.baseWebhookTemplate} onChange={(event) => onChange({ ...value, baseWebhookTemplate: event.target.value })} /></Field><div className="row"><Save label="Lưu webhook" onSave={onSave} /><AsyncButton action={test} disabled={!test} busyLabel="Đang gửi…" title={!test ? "Chưa có endpoint gửi webhook thử" : undefined}>Gửi tin thử</AsyncButton>{lastTest ? <span className="small muted" role="status" aria-live="polite">{webhookTestLabel(lastTest)}</span> : null}</div></section>;
 }
 
-function PolicySection({ value, onChange, onSave }: ManagerSectionProps) { return <section className="card"><h3>Chính sách nhắc học và báo cáo</h3><NumberField label="Số ngày không hoạt động trước khi nhắc" value={value.reminderInactiveDays} min={1} max={30} onChange={(reminderInactiveDays) => onChange({ ...value, reminderInactiveDays })} /><label className="check"><input type="checkbox" checked={value.weeklyReportEnabled} onChange={(event) => onChange({ ...value, weeklyReportEnabled: event.target.checked })} /> Bật báo cáo tuần</label><Save label="Lưu chính sách" onSave={onSave} /></section>; }
+function PolicySection({ value, onChange, onSave }: ManagerSectionProps) { return <section className="card"><h3>Chính sách nhắc học và báo cáo</h3><NumberField label="Số ngày không hoạt động trước khi nhắc" value={value.reminderInactiveDays} min={1} max={30} onChange={(reminderInactiveDays) => onChange({ ...value, reminderInactiveDays })} /><label className="check"><input type="checkbox" checked={value.weeklyReportEnabled} onChange={(event) => onChange({ ...value, weeklyReportEnabled: event.target.checked })} /> Bật báo cáo tháng</label><Save label="Lưu chính sách" onSave={onSave} /></section>; }
 
 function DataSection({ actions, capabilities }: { actions: Partial<SettingsActions>; capabilities: SystemCapabilitiesView }) { const reason = "Chưa có endpoint hệ thống cho thao tác này"; return <section className="card"><h3>Dữ liệu</h3><p className="small muted">Sao lưu, chuyển dữ liệu hoặc nạp dữ liệu kiểm thử qua API hệ thống. Trạng thái: API ✓ · Database ✓ · AI {capabilities.ai ? "✓" : "—"} · Object storage {capabilities.objectStorage ? "✓" : "—"}.</p><div className="row"><AsyncButton action={actions.onExportJson} disabled={!actions.onExportJson} busyLabel="Đang xuất…" title={!actions.onExportJson ? reason : undefined}>Xuất JSON</AsyncButton><ImportJsonButton action={actions.onImportJson} disabled={!actions.onImportJson} reason={reason} /><AsyncButton action={actions.onExportCsv} disabled={!actions.onExportCsv} busyLabel="Đang xuất…" title={!actions.onExportCsv ? reason : undefined}>Xuất CSV tiến độ</AsyncButton>{actions.onSeedData ? <AsyncButton action={actions.onSeedData} busyLabel="Đang chuẩn bị…">Nạp dữ liệu mẫu</AsyncButton> : null}{actions.onWipeData ? <AsyncButton className="btn-danger" action={actions.onWipeData} busyLabel="Đang chuẩn bị…">Xoá toàn bộ</AsyncButton> : null}</div></section>; }
 
@@ -297,29 +301,6 @@ function AsyncButton({ action, busyLabel = "Đang xử lý…", children, disabl
 }
 function toInput(value: ManagerSettingsView): ManagerSettingsInput { const { organizationName: _organizationName, pilotCycle: _pilotCycle, ...input } = value; return input; }
 function withCredential(value: AiConfigurationInput, credential: string): AiConfigurationInput { const { credential: _oldCredential, ...rest } = value; return credential ? { ...rest, credential } : rest; }
-function formatPilotDate(value: string): string {
-  const [year, month, day] = value.split("-").map(Number);
-  if (![year, month, day].every(Number.isFinite) || !year || !month || !day) return "Chưa xác định";
-  return new Intl.DateTimeFormat("vi-VN", { day: "2-digit", month: "2-digit", year: "numeric", timeZone: "UTC" }).format(new Date(Date.UTC(year, month - 1, day)));
-}
-function pilotWeekSummary(value: ManagerSettingsView): string {
-  if (value.pilotCycle) {
-    if (value.pilotCycle.state === "awaiting_next_cycle") return `Chu kỳ ${value.pilotCycle.number} đã kết thúc sau Tuần ${value.pilotWeeks}/${value.pilotWeeks}.`;
-    return `Chu kỳ ${value.pilotCycle.number} · Tuần ${value.pilotCycle.currentWeek}/${value.pilotWeeks} (${formatPilotDate(value.pilotCycle.startDate)} → ${formatPilotDate(value.pilotCycle.endDate)}).`;
-  }
-  const [year, month, day] = value.pilotStartDate.split("-").map(Number);
-  if (![year, month, day].every(Number.isFinite) || !year || !month || !day) return "Tuần hiện tại theo cấu hình: chưa đủ ngày bắt đầu.";
-  const dayMs = 24 * 60 * 60 * 1000;
-  const start = Date.UTC(year, month - 1, day);
-  const now = new Date();
-  const today = Date.UTC(now.getFullYear(), now.getMonth(), now.getDate());
-  const week = clampNumber(Math.floor((today - start) / (7 * dayMs)) + 1, 1, value.pilotWeeks);
-  const weekStart = new Date(start + (week - 1) * 7 * dayMs);
-  const weekEnd = new Date(start + (week * 7 - 1) * dayMs);
-  const format = new Intl.DateTimeFormat("vi-VN", { day: "2-digit", month: "2-digit", year: "numeric", timeZone: "UTC" });
-  return `Tuần hiện tại theo cấu hình: Tuần ${week} (${format.format(weekStart)} → ${format.format(weekEnd)}).`;
-}
-function clampNumber(value: number, min: number, max: number): number { return Math.min(Math.max(value, min), Math.max(min, max)); }
 function lastTestLabel(test: ManagerProviderSettingsView["lastTest"]): string {
   if (!test || test.status === "never") return "Chưa kiểm tra kết nối";
   if (test.status === "success") return "Kiểm tra gần nhất: thành công.";

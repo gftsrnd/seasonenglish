@@ -8,36 +8,37 @@ export const MONTHLY_DAY_COMPONENTS = [
 ] as const;
 export type MonthlyDayComponent = (typeof MONTHLY_DAY_COMPONENTS)[number];
 
-export async function generateMonthlyDayWithAi(contract: MonthlyCurriculumContract, dayNumber: number, runner: AiTaskRunner): Promise<MonthlyDayGenerationResult> {
-  return generateMonthlyDay({
+export async function generateMonthlyDayWithAi(contract: MonthlyCurriculumContract, dayNumber: number, runner: AiTaskRunner, systemPrompt: string): Promise<MonthlyDayGenerationResult> {
+  const generated = await generateMonthlyDay({
     contract,
     dayNumber,
     maxAttempts: 3,
     generate: async ({ daySpec, coreTerms, grammarStep, sound, components, priorParts }) => {
       const result = await runner.runTask("monthly_lesson_day", {
-        month: contract.month,
-        cefr: contract.cefr,
-        daySpec,
-        components,
-        lockedScope: {
-          coreTerms,
-          grammarStep,
-          sound,
-          theme: contract.theme,
-          supportTerms: contract.supportTerms.filter((term) => term.dayNumber === dayNumber)
-        },
-        priorParts
-      }, {
-        systemPrompt: "Create one complete CEFR lesson day from the supplied locked monthly curriculum. Treat daySpec and lockedScope as immutable. Do not add or replace core vocabulary, grammar, or pronunciation scope. Return one lesson with title and all 11 required parts in order: objective, instruction, vocabulary, grammar, pronunciation, listening, reading, writing, word_class, word_use, speaking. Use only vocabulary in lockedScope. Return JSON only.",
-        maxOutputTokens: 8_000,
-        temperature: 0.2,
-        maxAttempts: 1
+          month: contract.month,
+          cefr: contract.cefr,
+          daySpec,
+          components,
+          lockedScope: {
+            coreTerms,
+            grammarStep,
+            sound,
+            theme: contract.theme,
+            supportTerms: contract.supportTerms.filter((term) => term.dayNumber === dayNumber)
+          },
+          priorParts
+        }, {
+          systemPrompt,
+          maxOutputTokens: 8_000,
+          temperature: 0.2,
+          maxAttempts: 1
       });
       const lesson = (result.output as { lesson?: { title?: string; parts?: Array<{ code: string; title?: string; content: Record<string, unknown> }> } }).lesson;
       if (!lesson || !Array.isArray(lesson.parts)) throw new Error("Monthly lesson AI returned no lesson parts");
       return { title: lesson.title ?? "", parts: lesson.parts.map((part) => ({ code: part.code, ...(part.title ? { title: part.title } : {}), content: part.content })) };
     }
   });
+  return generated;
 }
 
 export interface MonthlyDayGenerationInput {

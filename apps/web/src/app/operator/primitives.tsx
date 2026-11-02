@@ -1,7 +1,6 @@
 import { createContext, useContext, type ButtonHTMLAttributes, type ReactNode } from "react";
-import { useInRouterContext, useLocation } from "react-router";
+import { useInRouterContext } from "react-router";
 import type { Cefr, RubricScore, Suggestion } from "./types.js";
-import { ManagerOperationsNavigation } from "../manager/Operations.js";
 
 export const OperationsReadOnlyContext = createContext(false);
 
@@ -14,14 +13,9 @@ export function OperatorPage({ children, title, hideRouteBack = false }: { child
 }
 
 function OperatorPageWithNavigation({ children, title }: { children: ReactNode; title: string; hideRouteBack: boolean }) {
-  const location = useLocation();
   const readOnly = useContext(OperationsReadOnlyContext);
-  const managerOperations = location.pathname.startsWith("/mgr/ops/");
   return <div className="app-operator" aria-label={title}>
-    {managerOperations ? <div className="manager-operations-context">
-      {readOnly ? <OperationsReadOnlyBanner /> : null}
-      <ManagerOperationsNavigation />
-    </div> : readOnly ? <OperationsReadOnlyBanner /> : null}
+    {readOnly ? <OperationsReadOnlyBanner /> : null}
     {children}
   </div>;
 }

@@ -1,0 +1,107 @@
+import { chromium } from "playwright";
+
+const WEB_URL = "http://127.0.0.1:4175";
+
+async function run() {
+  const browser = await chromium.launch({ headless: true });
+  const context = await browser.newContext({ viewport: { width: 1440, height: 900 } });
+  const page = await context.newPage();
+
+  console.log("1. Opening Web UI and logging in as Operator (thu.ha.tran@e4s.local)...");
+  await page.goto(WEB_URL, { waitUntil: "networkidle" });
+
+  // Click staff login tab/button if needed or login via API inside page context so cookies are set on browser
+  const loginStatus = await page.evaluate(async () => {
+    const res = await fetch("/api/v1/auth/staff/login", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ email: "thu.ha.tran@e4s.local", password: "staff-pass" })
+    });
+    return { status: res.status, body: await res.json().catch(() => ({})) };
+  });
+  console.log("Operator login status:", loginStatus.status, loginStatus.body?.role);
+
+  await page.goto(`${WEB_URL}/content`, { waitUntil: "networkidle" });
+  await page.waitForTimeout(1500);
+  console.log("Opened /content:", page.url());
+
+  // Click on Tuần 1 · A1 cell in the matrix or open it directly
+  const a1Button = page.locator("button, a, [role='button']").filter({ hasText: /A1/ }).first();
+  if (await a1Button.count()) {
+    await a1Button.click();
+    await page.waitForTimeout(1000);
+  }
+
+  // Click "Sinh lại" button on Tuần 1 · Mức A1
+  const regenBtn = page.getByRole("button", { name: /^Sinh lại$/i }).first();
+  if (await regenBtn.count()) {
+    console.log("2. Clicking 'Sinh lại' button on Tuần 1 · Mức A1...");
+    await regenBtn.click();
+  } else {
+    console.log("2. Triggering generate from browser session...");
+    await page.evaluate(async () => {
+      await fetch("/api/v1/content/lesson-sets/1/A1/generate", { method: "POST", headers: { "content-type": "application/json" }, body: "{}" });
+    });
+  }
+
+  // Wait for generation to finish (poll lesson-set status via browser fetch or UI)
+  for (let i = 0; i < 60; i++) {
+    await page.waitForTimeout(3000);
+    const check = await page.evaluate(async () => {
+      const r = await fetch("/api/v1/content/weeks");
+      const data = await r.json();
+      const w1 = (data.weeks || data || []).find((w) => w.weekNumber === 1);
+      const a1 = w1?.lessonSets?.find((s) => s.cefr === "A1") || w1?.sets?.A1;
+      return {
+        lessonCount: a1?.lessons?.length ?? a1?.lessonCount ?? 0,
+        status: a1?.status,
+        findings: a1?.generationFindings ?? []
+      };
+    });
+    console.log(`Poll ${i + 1}: lessons=${check.lessonCount}, status=${check.status}, findings=${check.findings.length}`);
+    if (check.lessonCount === 5) break;
+  }
+
+  await page.reload({ waitUntil: "networkidle" });
+  await page.waitForTimeout(1500);
+  await page.screenshot({ path: ".artifacts/e2e-week1-a1-after-regen.png", fullPage: true });
+  console.log("Saved screenshot: .artifacts/e2e-week1-a1-after-regen.png");
+
+  // Now click "Duyệt bộ bài" if available or approve checklist + click Duyệt bộ bài
+  const checkboxes = page.locator("input[type='checkbox']");
+  const cbCount = await checkboxes.count();
+  for (let i = 0; i < cbCount; i++) {
+    const cb = checkboxes.nth(i);
+    if (!(await cb.isChecked())) await cb.check().catch(() => {});
+  }
+  const publishBtn = page.getByRole("button", { name: /Duyệt bộ bài/i }).first();
+  if (await publishBtn.count()) {
+    console.log("3. Clicking 'Duyệt bộ bài'...");
+    await publishBtn.click();
+    await page.waitForTimeout(2000);
+  } else {
+    console.log("3. Publishing via browser session...");
+    const pub = await page.evaluate(async () => {
+      const r = await fetch("/api/v1/content/lesson-sets/1/A1/publish", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          cefrMatch: true,
+          vietnameseClarity: true,
+          correctAnswers: true,
+          workplaceRelevance: true,
+          safeTone: true
+        })
+      });
+      return { status: r.status, body: await r.text() };
+    });
+    console.log("Publish result:", pub.status, pub.body.slice(0, 200));
+  }
+
+  await browser.close();
+}
+
+run().catch((err) => {
+  console.error(err);
+  process.exit(1);
+});

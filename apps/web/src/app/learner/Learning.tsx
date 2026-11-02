@@ -838,8 +838,8 @@ function VocabularyCard({
   const isB1Plus = ["B1", "B2", "C1"].includes(cefr);
   const copy = learnerLessonCopy[language];
   const detailedRelationWords = new Set([
-    ...(item.synonyms ?? []).map((value) => `synonym:${value.word.trim().toLocaleLowerCase()}`),
-    ...(item.antonyms ?? []).map((value) => `antonym:${value.word.trim().toLocaleLowerCase()}`)
+    ...(item.synonyms ?? []).flatMap((value) => typeof value?.word === "string" ? [`synonym:${value.word.trim().toLocaleLowerCase()}`] : []),
+    ...(item.antonyms ?? []).flatMap((value) => typeof value?.word === "string" ? [`antonym:${value.word.trim().toLocaleLowerCase()}`] : [])
   ]);
   const extendedRelations: VocabularyRelationChip[] = isB1Plus
     ? lexicalDetails
@@ -853,11 +853,11 @@ function VocabularyCard({
     : [];
   const relations: VocabularyRelationChip[] = [
     ...(!hideUmbrella && item.umbrella && umbrellaWord ? [{ label: `${language === "en" ? copy.vocabulary.umbrellaWord.toUpperCase() : "TỪ BAO TRÙM"} ${umbrellaWord}`, ariaLabel: `${copy.vocabulary.umbrellaWord}: ${umbrellaWord}`, icon: "umbrella" as const, tone: "umb" as const, count: item.umbrella.siblings?.length ?? 0, onClick: () => openModal({ kind: "umbrella", item }) }] : []),
-    ...(item.synonyms?.length ? item.synonyms.map(value => {
+    ...(item.synonyms?.length ? item.synonyms.filter((value): value is NonNullable<typeof value> & { word: string } => typeof value?.word === "string").map(value => {
       const detail = lexicalDetails.find((candidate) => candidate.kind === "synonym" && candidate.word.trim().toLocaleLowerCase() === value.word.trim().toLocaleLowerCase());
       return { label: `= ${value.word}`, ariaLabel: isB1Plus && detail ? `${language === "en" ? "View synonym" : "Xem từ đồng nghĩa"}: ${value.word}` : `${language === "en" ? "Listen to synonym" : "Nghe từ đồng nghĩa"}: ${value.word}`, tone: "synonym" as const, onClick: isB1Plus && detail ? () => openModal({ kind: "lexical", item, detail }) : () => playVocabularyWord(speak, value.word, value.audioUrl) };
     }) : synonymDetail && firstSynonym ? [{ label: `= ${firstSynonym}`, ariaLabel: isB1Plus ? `${language === "en" ? "View synonym" : "Xem từ đồng nghĩa"}: ${firstSynonym}` : firstSynonym, tone: "synonym" as const, onClick: isB1Plus ? () => openModal({ kind: "lexical", item, detail: synonymDetail }) : undefined }] : []),
-    ...(item.antonyms?.length ? item.antonyms.map(value => {
+    ...(item.antonyms?.length ? item.antonyms.filter((value): value is NonNullable<typeof value> & { word: string } => typeof value?.word === "string").map(value => {
       const detail = lexicalDetails.find((candidate) => candidate.kind === "antonym" && candidate.word.trim().toLocaleLowerCase() === value.word.trim().toLocaleLowerCase());
       return { label: `≠ ${value.word}`, ariaLabel: isB1Plus && detail ? `${language === "en" ? "View antonym" : "Xem từ trái nghĩa"}: ${value.word}` : `${language === "en" ? "Listen to antonym" : "Nghe từ trái nghĩa"}: ${value.word}`, tone: "antonym" as const, onClick: isB1Plus && detail ? () => openModal({ kind: "lexical", item, detail }) : () => playVocabularyWord(speak, value.word, value.audioUrl) };
     }) : []),

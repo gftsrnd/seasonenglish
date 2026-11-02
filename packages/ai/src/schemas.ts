@@ -596,6 +596,77 @@ export const weeklyLessonDayOutputSchema = z.preprocess((value) => {
 }, weeklyLessonDayBaseOutputSchema);
 export type WeeklyLessonDayTaskOutput = z.infer<typeof weeklyLessonDayOutputSchema>;
 
+const monthlyLessonPartCodeSchema = z.enum([
+  "objective", "instruction", "vocabulary", "grammar", "pronunciation",
+  "listening", "reading", "writing", "word_class", "word_use", "speaking"
+]);
+
+/**
+ * Monthly days have their own locked curriculum and may span more than five
+ * days. Reusing the weekly schema silently forced a weekly day number and
+ * weekly title rules before the monthly quality gate could run.
+ */
+export const monthlyLessonDayOutputSchema = z.object({
+  lesson: z.object({
+    title: z.string().trim().min(1).max(200),
+    parts: z.array(z.object({
+      code: monthlyLessonPartCodeSchema,
+      title: z.string().trim().min(1).max(200).optional(),
+      content: z.record(z.string(), z.unknown())
+    })).min(1).max(11)
+  })
+});
+export type MonthlyLessonDayTaskOutput = z.infer<typeof monthlyLessonDayOutputSchema>;
+
+const monthlyResourceCoreTermSchema = z.object({
+  dayNumber: z.number().int().positive(),
+  word: z.string().trim().min(1).max(120), meaning: z.string().trim().min(1).max(300),
+  type: z.string().trim().min(1).max(80), ipa: z.string().trim().min(1).max(120)
+}).strict();
+const monthlyResourceExpandedTermSchema = z.object({
+  dayNumber: z.number().int().positive(),
+  word: z.string().trim().min(1).max(160), meaning: z.string().trim().min(1).max(300),
+  type: z.string().trim().min(1).max(80),
+  relation: z.enum(["umbrella", "synonym", "antonym", "word_family", "collocation"])
+}).strict();
+const monthlyResourceGrammarSchema = z.object({
+  id: z.string().trim().min(1).max(100), title: z.string().trim().min(1).max(200),
+  formula: z.string().trim().min(1).max(400), usage: z.string().trim().min(1).max(800),
+  examples: z.array(z.string().trim().min(1).max(500)).min(3).max(8),
+  dayNumbers: z.array(z.number().int().positive()).min(1).max(31)
+}).strict();
+const monthlyResourcePronunciationSchema = z.object({
+  id: z.string().trim().min(1).max(100), ipa: z.string().trim().min(1).max(120),
+  label: z.string().trim().min(1).max(200), explanation: z.string().trim().min(1).max(800),
+  dayNumbers: z.array(z.number().int().positive()).min(1).max(31),
+  words: z.array(z.object({ word: z.string().trim().min(1).max(120), ipa: z.string().trim().min(1).max(120) }).strict()).min(4).max(40)
+}).strict();
+
+/** Fixed resources are generated after a topic is locked, before any daily lesson. */
+export const monthlyResourcePlanInputSchema = z.object({
+  month: z.string().regex(/^\d{4}-(0[1-9]|1[0-2])$/), cefr: z.enum(["A1", "A2", "B1", "B2", "C1"]),
+  theme: z.object({ title: z.string().trim().min(1), brief: z.string().trim().min(1), context: z.string().trim().min(1), communicationGoal: z.string().trim().min(1) }).strict(),
+  newLessonDays: z.array(z.number().int().positive()).min(1).max(31),
+  lessonDayNumbers: z.array(z.number().int().positive()).min(1).max(31),
+  targets: z.object({ vocabularyCount: z.number().int().positive(), expandedVocabularyCount: z.number().int().positive(), grammarTopicCount: z.number().int().positive(), pronunciationSoundCount: z.number().int().positive() }).strict()
+}).strict();
+export const monthlyResourcePlanOutputSchema = z.object({
+  coreTerms: z.array(monthlyResourceCoreTermSchema).min(1).max(120),
+  expandedTerms: z.array(monthlyResourceExpandedTermSchema).min(1).max(600),
+  grammarTopics: z.array(monthlyResourceGrammarSchema).min(1).max(12),
+  pronunciationTargets: z.array(monthlyResourcePronunciationSchema).min(1).max(12)
+}).strict();
+export type MonthlyResourcePlanTaskOutput = z.infer<typeof monthlyResourcePlanOutputSchema>;
+export const monthlyResourcePlanOutputJsonSchema = {
+  type: "object", additionalProperties: false, required: ["coreTerms", "expandedTerms", "grammarTopics", "pronunciationTargets"],
+  properties: {
+    coreTerms: { type: "array", items: { type: "object", additionalProperties: false, required: ["dayNumber", "word", "meaning", "type", "ipa"], properties: { dayNumber: { type: "integer" }, word: { type: "string" }, meaning: { type: "string" }, type: { type: "string" }, ipa: { type: "string" } } } },
+    expandedTerms: { type: "array", items: { type: "object", additionalProperties: false, required: ["dayNumber", "word", "meaning", "type", "relation"], properties: { dayNumber: { type: "integer" }, word: { type: "string" }, meaning: { type: "string" }, type: { type: "string" }, relation: { type: "string", enum: ["umbrella", "synonym", "antonym", "word_family", "collocation"] } } } },
+    grammarTopics: { type: "array", items: { type: "object", additionalProperties: false, required: ["id", "title", "formula", "usage", "examples", "dayNumbers"], properties: { id: { type: "string" }, title: { type: "string" }, formula: { type: "string" }, usage: { type: "string" }, examples: { type: "array", items: { type: "string" } }, dayNumbers: { type: "array", items: { type: "integer" } } } } },
+    pronunciationTargets: { type: "array", items: { type: "object", additionalProperties: false, required: ["id", "ipa", "label", "explanation", "dayNumbers", "words"], properties: { id: { type: "string" }, ipa: { type: "string" }, label: { type: "string" }, explanation: { type: "string" }, dayNumbers: { type: "array", items: { type: "integer" } }, words: { type: "array", items: { type: "object", additionalProperties: false, required: ["word", "ipa"], properties: { word: { type: "string" }, ipa: { type: "string" } } } } } } }
+  }
+} satisfies Record<string, unknown>;
+
 const strictWordSlotSchema = z.object({
   word: z.string().trim().min(1),
   ipa: z.string().trim().regex(/^\/.+\/$/u, "IPA must be enclosed in slashes")
@@ -1316,6 +1387,29 @@ export const weeklyLessonDayOutputJsonSchema = {
   $defs: weeklyLessonJsonDefinitions
 } satisfies Record<string, unknown>;
 
+export const monthlyLessonDayOutputJsonSchema = {
+  type: "object", additionalProperties: false, required: ["lesson"],
+  properties: {
+    lesson: {
+      type: "object", additionalProperties: false, required: ["title", "parts"],
+      properties: {
+        title: { type: "string" },
+        parts: {
+          type: "array", minItems: 1, maxItems: 11,
+          items: {
+            type: "object", additionalProperties: false, required: ["code", "content"],
+            properties: {
+              code: { type: "string", enum: ["objective", "instruction", "vocabulary", "grammar", "pronunciation", "listening", "reading", "writing", "word_class", "word_use", "speaking"] },
+              title: { type: "string" },
+              content: { type: "object", additionalProperties: true }
+            }
+          }
+        }
+      }
+    }
+  }
+} satisfies Record<string, unknown>;
+
 const assessmentChoiceSchema = z.object({
   prompt: z.string().trim().min(1).max(1_000),
   options: z.array(z.string().trim().min(1).max(300)).length(4),
@@ -1424,6 +1518,23 @@ export const weekSuggestionsOutputJsonSchema = {
     } }
   } }
 } satisfies Record<string, unknown>;
+
+export const monthlyTopicSuggestionInputSchema = z.object({
+  month: z.string().regex(/^\d{4}-(0[1-9]|1[0-2])$/),
+  previousTitle: z.string().trim().max(200).optional()
+}).strict();
+export const monthlyTopicSuggestionOutputSchema = z.object({
+  title: z.string().trim().min(1).max(200),
+  brief: z.string().trim().min(1).max(4_000),
+  context: z.string().trim().min(1).max(2_000),
+  communicationGoal: z.string().trim().min(1).max(2_000)
+}).strict();
+export const monthlyTopicSuggestionOutputJsonSchema = {
+  type: "object", additionalProperties: false,
+  required: ["title", "brief", "context", "communicationGoal"],
+  properties: { title: { type: "string" }, brief: { type: "string" }, context: { type: "string" }, communicationGoal: { type: "string" } }
+} satisfies Record<string, unknown>;
+export type MonthlyTopicSuggestionOutput = z.infer<typeof monthlyTopicSuggestionOutputSchema>;
 
 const assessmentObjectiveScoreSchema = z.object({
   score: z.number().min(0),

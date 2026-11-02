@@ -60,7 +60,7 @@ describe("monthly day generation", () => {
       expect(input.lockedScope.sound.id).toBe("sound");
       return { output: { lesson: { ...lessonCandidate(), title: "Budget lesson" } }, metadata: {} };
     } } as unknown as import("@e4s/ai").AiTaskRunner;
-    const result = await generateMonthlyDayWithAi(contract(), 1, runner);
+    const result = await generateMonthlyDayWithAi(contract(), 1, runner, "Test monthly lesson prompt");
     expect(result.status).toBe("ready");
     expect(result.lesson?.title).toBe("Budget lesson");
   });

@@ -263,9 +263,9 @@ export function registerContentRoutes(
     const quality = evaluateGeneratedLessonQuality({ cefr: input.cefr, lessons, findings: repaired.findings });
     return quality.ready ? { repaired, lessons } : null;
   };
-  const readers = createRoleGuard(pool, ["operator", "manager"]);
-  const operators = createRoleGuard(pool, ["operator", "manager"]);
-  const authors = createRoleGuard(pool, ["operator", "manager"]);
+  const readers = createRoleGuard(pool, ["operator"]);
+  const operators = createRoleGuard(pool, ["operator"]);
+  const authors = createRoleGuard(pool, ["operator"]);
   const weeklyPracticeAuthors = createRoleGuard(pool, ["operator"]);
   const managers = createRoleGuard(pool, ["manager"]);
 

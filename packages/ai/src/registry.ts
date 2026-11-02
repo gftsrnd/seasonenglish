@@ -3,6 +3,7 @@ import {
   vocabularyInputSchema, vocabularyOutputJsonSchema, vocabularyOutputSchema,
   weeklyLessonsInputSchema, weeklyLessonsOutputJsonSchema, weeklyLessonsOutputSchema,
   weeklyLessonDayInputSchema, weeklyLessonDayOutputJsonSchema, weeklyLessonDayOutputSchema,
+  monthlyLessonDayOutputJsonSchema, monthlyLessonDayOutputSchema,
   weeklyLessonVocabularyInputSchema, weeklyLessonSkillsInputSchema,
   weeklyLessonSkillsReviewInputSchema,
   weeklyLessonFoundationBodyOutputJsonSchema, weeklyLessonFoundationBodyOutputSchema,
@@ -24,6 +25,8 @@ import {
   weeklyLessonSkillsReviewOutputJsonSchema, weeklyLessonSkillsReviewOutputSchema,
   levelFormInputSchema, levelFormOutputJsonSchema, levelFormOutputSchema,
   weekSuggestionsInputSchema, weekSuggestionsOutputJsonSchema, weekSuggestionsOutputSchema,
+  monthlyTopicSuggestionInputSchema, monthlyTopicSuggestionOutputJsonSchema, monthlyTopicSuggestionOutputSchema,
+  monthlyResourcePlanInputSchema, monthlyResourcePlanOutputJsonSchema, monthlyResourcePlanOutputSchema,
   weeklyLessonPlanBlueprintInputSchema, weeklyLessonPlanBlueprintOutputJsonSchema, weeklyLessonPlanBlueprintOutputSchema,
   assessmentGradingInputSchema, assessmentGradingOutputJsonSchema, assessmentGradingOutputSchema,
   microLessonInputSchema, microLessonOutputJsonSchema, microLessonOutputSchema,
@@ -74,6 +77,14 @@ export const AI_TASKS = new AiTaskRegistry([
     validateOutput: validateWeekSuggestions
   },
   {
+    id: "monthly_topic_suggestion", promptKey: "monthly_topic_suggestion", inputSchema: monthlyTopicSuggestionInputSchema,
+    outputSchema: monthlyTopicSuggestionOutputSchema, outputJsonSchema: monthlyTopicSuggestionOutputJsonSchema
+  },
+  {
+    id: "monthly_resource_generation", promptKey: "monthly_resource_generation", inputSchema: monthlyResourcePlanInputSchema,
+    outputSchema: monthlyResourcePlanOutputSchema, outputJsonSchema: monthlyResourcePlanOutputJsonSchema
+  },
+  {
     id: "weekly_lesson_plan_blueprint", promptKey: "weekly_lessons", inputSchema: weeklyLessonPlanBlueprintInputSchema,
     outputSchema: weeklyLessonPlanBlueprintOutputSchema, outputJsonSchema: weeklyLessonPlanBlueprintOutputJsonSchema
   },
@@ -96,7 +107,7 @@ export const AI_TASKS = new AiTaskRegistry([
   },
   {
     id: "monthly_lesson_day", promptKey: "monthly_lessons", inputSchema: z.record(z.string(), z.unknown()),
-    outputSchema: weeklyLessonDayOutputSchema, outputJsonSchema: weeklyLessonDayOutputJsonSchema
+    outputSchema: monthlyLessonDayOutputSchema, outputJsonSchema: monthlyLessonDayOutputJsonSchema
   },
   {
     id: "weekly_lesson_grammar_classifier", promptKey: "weekly_lessons", inputSchema: weeklyLessonDayInputSchema,

@@ -369,7 +369,7 @@ export function adaptLessonSet(source: ContentLessonSetVersionView, options: { a
   };
 }
 
-function OperatorLessonPreview({ cefr, lessonId, parts, resolveVocabularyImage }: { cefr: string; lessonId: string; parts: ContentLessonSetVersionView["lessons"][number]["parts"]; resolveVocabularyImage?: ((lessonId: string, itemIndex: number) => Promise<ContentImageView>) | undefined }) {
+export function OperatorLessonPreview({ cefr, lessonId, parts, resolveVocabularyImage }: { cefr: string; lessonId: string; parts: ContentLessonSetVersionView["lessons"][number]["parts"]; resolveVocabularyImage?: ((lessonId: string, itemIndex: number) => Promise<ContentImageView>) | undefined }) {
   const [tab, setTab] = useState<"study" | "practice">("study");
   const [vocabularyModal, setVocabularyModal] = useState<VocabularyModalState | null>(null);
   const language = learnerLessonLanguageForCefr(cefr);
@@ -764,15 +764,18 @@ export interface ReviewAdapterDetails {
 export function adaptReview(source: ContentReviewView, activeTab: keyof typeof REVIEW_TAB_MAP, options: ReviewAdapterDetails = {}): OperatorReviewView {
   const counts = { subs: 0, coach: 0, weekly: 0, appeals: 0, attempts: 0, tests: 0 };
   source.tabs.forEach(tab => { const key = REVIEW_TAB_MAP[tab.key as keyof typeof REVIEW_TAB_MAP]; if (key) counts[key] = tab.unreadCount ?? tab.count; });
+  counts.weekly = 0;
+  counts.subs = 0;
+  counts.appeals = source.appeals.filter(item => item.kind === "lesson_part").length;
   return {
     activeTab: REVIEW_TAB_MAP[activeTab], counts, aiConnected: options.aiConnected,
     submissions: source.submissions.map(item => { const detail = options.submissions?.[item.id]; return { id: item.id, learnerName: item.learnerName, cefr: (item.cefr ?? detail?.cefr) as Cefr | undefined, week: item.weekNumber, type: item.type ?? detail?.type, submittedAt: operatorDateTime(item.submittedAt), operatorChecked: item.checked, task: item.task ?? detail?.task, guidance: item.guidance ?? detail?.guidance, requiredVocabulary: item.requiredVocabulary ?? detail?.requiredVocabulary, text: item.text, total: item.total, rubric: item.rubric.meaning == null || item.rubric.vocabulary == null || item.rubric.grammar == null ? null : { meaning: item.rubric.meaning, vocab: item.rubric.vocabulary, grammar: item.rubric.grammar }, ...(item.aiGraded === undefined ? {} : { aiGraded: item.aiGraded }), feedback: item.feedback, suggestions: item.suggestions.map(text => ({ original: "", corrected: text, explanation: "" })), ...(item.audioArtifact ? { audioArtifact: item.audioArtifact } : {}) }; }),
     coachTurns: source.coachSamples.map(item => { const detail = options.coach?.[item.id]; return { id: item.id, sessionId: detail?.sessionId ?? item.id, learnerName: item.learnerName, cefr: (item.cefr ?? detail?.cefr) as Cefr | undefined, week: item.weekNumber ?? detail?.week, at: operatorDateTime(item.createdAt), checked: item.checked, userText: item.learnerText, reply: item.coachText, rubric: item.scores.meaning == null || item.scores.vocabulary == null || item.scores.grammar == null ? null : { meaning: item.scores.meaning, vocab: item.scores.vocabulary, grammar: item.scores.grammar }, suggestions: item.suggestions.map(text => ({ original: "", corrected: text, explanation: "" })), ...(item.audioArtifact ? { audioArtifact: item.audioArtifact } : {}) }; }),
     weeklyPractices: (source.weeklyPractices ?? []).map(item => ({ id: item.versionId, week: item.weekNumber, cefr: item.cefr as Cefr, topic: item.topic, status: item.status === "published" ? "approved" : item.status === "review" ? "review" : "draft", version: item.version, task: item.task, guidance: item.guidance, requiredVocabulary: item.requiredVocabulary })),
-    appeals: source.appeals.map(item => {
+    appeals: source.appeals.filter(item => item.kind === "lesson_part").map(item => {
       const lessonPart = item.kind === "lesson_part";
       const title = lessonPart
-        ? [`Tuần ${item.weekNumber ?? "—"}`, item.dayNumber == null ? null : `T${item.dayNumber + 1}`, item.lessonTitle].filter(Boolean).join(" · ")
+        ? ["Bài học tháng", item.dayNumber == null ? null : `Bài ${item.dayNumber + 1}`, item.lessonTitle].filter(Boolean).join(" · ")
         : undefined;
       return {
         id: item.id,
@@ -796,7 +799,7 @@ export function adaptReview(source: ContentReviewView, activeTab: keyof typeof R
         ...options.appeals?.[item.id]
       };
     }),
-    attempts: source.lessonAttempts.map(item => ({ id: item.id, learnerId: item.learnerId, learnerName: item.learnerName, cefr: item.cefr as Cefr | undefined, lesson: `Tuần ${item.weekNumber} · T${item.dayNumber + 1} · ${item.lessonTitle}`, listening: String(item.attempts.listening ?? "chưa làm"), reading: String(item.attempts.reading ?? "chưa làm"), writing: String(item.attempts.writing ?? "chưa làm"), speaking: String(item.attempts.speaking ?? "chưa làm"), total: Object.values(item.attempts).reduce((sum, value) => sum + (value ?? 0), 0), ...(item.audioArtifact ? { audioArtifact: item.audioArtifact } : {}) })),
+    attempts: source.lessonAttempts.map(item => ({ id: item.id, learnerId: item.learnerId, learnerName: item.learnerName, cefr: item.cefr as Cefr | undefined, lesson: `Bài học tháng · Bài ${item.dayNumber + 1} · ${item.lessonTitle}`, listening: String(item.attempts.listening ?? "chưa làm"), reading: String(item.attempts.reading ?? "chưa làm"), writing: String(item.attempts.writing ?? "chưa làm"), speaking: String(item.attempts.speaking ?? "chưa làm"), total: Object.values(item.attempts).reduce((sum, value) => sum + (value ?? 0), 0), ...(item.audioArtifact ? { audioArtifact: item.audioArtifact } : {}) })),
     tests: source.assessments.map(item => ({ id: item.id, learnerName: item.learnerName, kind: item.kind, submittedAt: item.submittedAt ? operatorDateTime(item.submittedAt) : undefined, total: item.totalScore ?? undefined, ...options.tests?.[item.id] }))
   };
 }

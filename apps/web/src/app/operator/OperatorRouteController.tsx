@@ -29,9 +29,10 @@ import { OperatorPrompts } from "./Prompts.js";
 import { OperatorReview, OperatorReviewAssessmentDetail } from "./Review.js";
 import type { ManualScoreInput } from "./AssessmentManualScore.js";
 import { OperatorWeeks } from "./Weeks.js";
-import { OperatorMonths } from "./Months.js";
+import { MonthlyLessonPreview, OperatorMonths } from "./Months.js";
 import { Badge, OperationsReadOnlyContext, OperatorPage, PageTitle } from "./primitives.js";
 import { ModalProvider, useModal } from "../shared/ModalProvider.js";
+import { useToast } from "../shared/design-system.js";
 import type { AudioEvidence } from "../shared/media/audio-evidence.js";
 import { adaptAssessmentOverview, adaptLevelForms, adaptLessonMatrix, adaptLessonSet, adaptPrompts, adaptReview, adaptWeeks } from "./adapters.js";
 import type { Cefr, LessonSetActionKey, OperatorReviewActions, PromptKey, ReviewTab, WeekSuggestion } from "./types.js";
@@ -94,20 +95,20 @@ export const OperatorRouteController = OperationsRouteController;
 
 function OperatorRouteControllerContent({ session, client, paths }: { session: SessionView; client: OperatorApiClient; paths: OperatorRoutePaths }) {
   const location = useLocation();
-  if (session.role !== "operator" && session.role !== "manager") return <Status tone="error">Tài khoản này không có quyền mở khu vực vận hành.</Status>;
-  // Managers own the monthly learning cycle. Other shared operations remain
-  // read-only in their shell so this does not reopen retired weekly flows.
-  const readOnly = session.role === "manager" && location.pathname !== paths.months && location.pathname !== paths.root;
+  if (session.role !== "operator") return <Status tone="error">Tài khoản này không có quyền mở khu vực học thuật.</Status>;
+  const readOnly = false;
   const props = { client, readOnly };
   const detail = location.pathname.match(new RegExp(`^${escapeRegExp(paths.lessons)}/(\\d+)/(A1|A2|B1|B2|C1)$`));
+  const monthlyLesson = location.pathname.match(new RegExp(`^${escapeRegExp(paths.months)}/lesson/([^/]+)/(\\d+)$`));
   const content = detail ? <LessonSetRoute {...props} week={Number(detail[1])} cefr={detail[2] as Cefr} />
     : location.pathname === paths.root ? <DashboardRoute {...props} />
       : location.pathname === paths.tests ? <TestsRoute {...props} initialTab="placement" />
         : location.pathname === paths.levelForms ? <TestsRoute {...props} initialTab="promotion" />
+        : monthlyLesson ? <MonthsRoute {...props} preview={{ frameworkId: monthlyLesson[1]!, dayNumber: Number(monthlyLesson[2]) }} />
         : location.pathname === paths.months ? <MonthsRoute {...props} />
           : location.pathname === paths.lessons ? <LessonsRoute {...props} />
-            : location.pathname === paths.review ? <ReviewRoute {...props} canEditWeeklyPractice={session.role === "operator"} />
-              : session.role === "manager" && location.pathname === paths.prompts ? <PromptsRoute client={client} readOnly={false} />
+            : location.pathname === paths.review ? <ReviewRoute {...props} canEditWeeklyPractice />
+              : location.pathname === paths.prompts ? <PromptsRoute client={client} readOnly={false} />
                 : <Status tone="error">Đường dẫn vận hành không tồn tại.</Status>;
   return <OperationsReadOnlyContext.Provider value={readOnly && location.pathname !== paths.prompts}>{content}</OperationsReadOnlyContext.Provider>;
 }
@@ -175,7 +176,10 @@ function useCapabilities(client: OperatorApiClient) {
   return capabilities;
 }
 
-function MonthsRoute({ client, readOnly }: { client: OperatorApiClient; readOnly: boolean }) {
+function MonthsRoute({ client, readOnly, preview }: { client: OperatorApiClient; readOnly: boolean; preview?: { frameworkId: string; dayNumber: number } }) {
+  const toast = useToast();
+  const navigate = useNavigate();
+  const paths = useOperatorRoutePaths();
   const currentDate = new Date();
   const todayMonth = `${currentDate.getFullYear()}-${String(currentDate.getMonth() + 1).padStart(2, "0")}`;
   const [month, setMonth] = useState(todayMonth);
@@ -183,20 +187,27 @@ function MonthsRoute({ client, readOnly }: { client: OperatorApiClient; readOnly
   const [overview, setOverview] = useState<import("@e4s/contracts").MonthlyOperatorOverviewView>();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string>();
+  const [editor, setEditor] = useState<{ frameworkId: string; dayNumber: number }>();
   const load = async () => {
     setError(undefined);
     try { setOverview(await client.getContentMonth(month)); }
     catch (reason) { setError(message(reason)); }
   };
   useEffect(() => { setOverview(undefined); void client.getContentMonth(month).then(setOverview).catch((reason) => setError(message(reason))); }, [client, month]);
-  const run = async <T,>(action: () => Promise<T>): Promise<T | undefined> => {
+  const run = async <T,>(action: () => Promise<T>, success?: string): Promise<T | undefined> => {
     setBusy(true); setError(undefined);
-    try { const result = await action(); await load(); return result; }
-    catch (reason) { setError(message(reason)); return undefined; }
+    try { const result = await action(); await load(); if (success) toast.show({ message: success, tone: "ok" }); return result; }
+    catch (reason) { const detail = message(reason); setError(detail); toast.show({ message: detail, tone: "danger" }); return undefined; }
     finally { setBusy(false); }
   };
   if (!overview && !error) return <Status>Đang tải khung tháng…</Status>;
-  return <OperatorMonths
+  if (preview && overview) {
+    const framework = overview.frameworks.find((item) => item.id === preview.frameworkId);
+    const lesson = framework?.lessons.find((item) => item.lessonNumber === preview.dayNumber);
+    if (!framework || !lesson) return <Status tone="error">Không tìm thấy bài học tháng.</Status>;
+    return <MonthlyLessonPreview date={lesson.lessonDate} cefr={framework.cefr} lesson={lesson} onClose={() => navigate(paths.months)} />;
+  }
+  return <><OperatorMonths
     month={month}
     todayMonth={todayMonth}
     overview={overview ?? { brief: null, frameworks: [] }}
@@ -207,22 +218,34 @@ function MonthsRoute({ client, readOnly }: { client: OperatorApiClient; readOnly
     actions={{
       onSelectMonth: setMonth,
       onSelectLevel: setCefr,
-      onSaveBrief: async (selectedMonth, input) => { await run(() => client.saveContentMonthBrief(selectedMonth, input)); },
-      onApproveBrief: async (selectedMonth) => { await run(() => client.approveContentMonthBrief(selectedMonth)); },
-      onSaveFramework: async (selectedMonth, contract) => { await run(() => client.saveContentMonthFramework(selectedMonth, contract)); },
-      onApproveFramework: async (id) => { await run(() => client.approveContentMonthFramework(id)); },
+      onSuggestBrief: async (selectedMonth) => {
+        const result = await run(() => client.suggestContentMonthBrief(selectedMonth), "Đã tạo gợi ý AI cho chủ đề tháng.");
+        if (!result) throw new Error("Không tạo được gợi ý AI cho chủ đề tháng.");
+        return { title: result.title, brief: result.brief, context: result.context, communicationGoal: result.communicationGoal };
+      },
+      onSaveBrief: async (selectedMonth, input) => { await run(() => client.saveContentMonthBrief(selectedMonth, input), "Đã lưu chủ đề tháng."); },
+      onApproveBrief: async (selectedMonth) => { await run(() => client.approveContentMonthBrief(selectedMonth), "Đã chốt chủ đề tháng."); },
+      onSaveFramework: async (selectedMonth, contract) => { await run(() => client.saveContentMonthFramework(selectedMonth, contract), "Đã lưu tài nguyên tháng."); },
+      onGenerateFramework: async (selectedMonth, criteria) => {
+        const result = await run(() => client.generateContentMonthResources(selectedMonth, criteria), "Đã sinh tài nguyên tháng.");
+        if (!result) throw new Error("Không sinh được tài nguyên tháng.");
+        return result;
+      },
+      onApproveFramework: async (id) => { await run(() => client.approveContentMonthFramework(id), "Đã chốt tài nguyên tháng."); },
+      onComposeDay: (frameworkId, dayNumber) => setEditor({ frameworkId, dayNumber }),
+      onViewDay: (frameworkId, dayNumber) => navigate(`${paths.months}/lesson/${frameworkId}/${dayNumber}`),
       onSaveDay: async (id, dayNumber, lesson) => {
-        const result = await run(() => client.saveContentMonthDay(id, dayNumber, lesson));
+        const result = await run(() => client.saveContentMonthDay(id, dayNumber, lesson), `Đã lưu bản nháp bài ${dayNumber}.`);
         if (!result) throw new Error("Không lưu được bản nháp tháng.");
         return result;
       },
       onGenerateDay: async (id, dayNumber) => {
-        const result = await run(() => client.generateContentMonthDay(id, dayNumber));
+        const result = await run(() => client.generateContentMonthDay(id, dayNumber), `Đã sinh bản nháp bài ${dayNumber}. Hãy duyệt trước khi học viên học.`);
         if (!result) throw new Error("AI không sinh được bài ngày đạt chuẩn.");
         return result;
       },
       onAcknowledge: async (id, dayNumber, findingKeys) => { await run(() => client.acknowledgeContentMonthQuality(id, dayNumber, findingKeys)); },
-      onApproveDay: async (id, dayNumber) => { await run(() => client.approveContentMonthDay(id, dayNumber)); },
+      onApproveDay: async (id, dayNumber) => { await run(() => client.approveContentMonthDay(id, dayNumber), `Đã duyệt bài ${dayNumber}.`); },
       onCreateCorrection: async (id, dayNumber, reason) => {
         const result = await run(() => client.createContentMonthCorrection(id, dayNumber, reason));
         if (!result) throw new Error("Không tạo được revision hiệu chỉnh.");
@@ -236,7 +259,10 @@ function MonthsRoute({ client, readOnly }: { client: OperatorApiClient; readOnly
       onAcknowledgeCorrection: async (correctionId, findingKeys) => { await run(() => client.acknowledgeContentMonthCorrection(correctionId, findingKeys)); },
       onApproveCorrection: async (correctionId) => { await run(() => client.approveContentMonthCorrection(correctionId)); }
     }}
-  />;
+  />{!readOnly && editor && <LessonFormEditor weekNumber={0} cefr={cefr} initial={emptyLesson(editor.dayNumber - 1)} onSave={async (lesson) => {
+    const result = await run(() => client.saveContentMonthDay(editor.frameworkId, editor.dayNumber, { title: lesson.title, parts: lesson.parts }), `Đã lưu bản nháp bài ${editor.dayNumber}.`);
+    if (result) setEditor(undefined);
+  }} headingOverride={`Soạn bài ngày ${String(editor.dayNumber).padStart(2, "0")}/${month.slice(5, 7)} · ${cefr}`} onCancel={() => setEditor(undefined)} uploadMedia={client.uploadContentMedia} busy={busy} />}</>;
 }
 
 function DashboardRoute({ client, readOnly }: { client: OperatorApiClient; readOnly: boolean }) {
@@ -244,7 +270,6 @@ function DashboardRoute({ client, readOnly }: { client: OperatorApiClient; readO
   const navigate = useNavigate();
   const paths = useOperatorRoutePaths();
   const [data, setData] = useState<AssessmentReviewOverviewView>();
-  const [weekFrame, setWeekFrame] = useState<ContentWeekFrameView>();
   const [error, setError] = useState<string>();
   const [assessmentDialog, setAssessmentDialog] = useState<ContentReviewAssessmentDetailView>();
   const [manualScoreBusy, setManualScoreBusy] = useState(false);
@@ -286,22 +311,15 @@ function DashboardRoute({ client, readOnly }: { client: OperatorApiClient; readO
     }
     return () => { live = false; };
   }, [client, data]);
-  useEffect(() => {
-    if (typeof client.getContentWeeks !== "function") return;
-    void client.getContentWeeks().then(setWeekFrame).catch(() => setWeekFrame(undefined));
-  }, [client]);
   if (error) return <Status tone="error">Không tải được duyệt trình độ: {error}</Status>;
   if (!data) return <Status>Đang tải duyệt trình độ…</Status>;
-  const currentWeek = weekFrame?.weeks.find(week => week.current);
   const adaptedView = adaptAssessmentOverview(data, {
     aiConnected: capabilities?.ai ?? false,
     ...(capabilities?.aiConfigured === undefined ? {} : { aiConfigured: capabilities.aiConfigured }),
     ...(capabilities?.aiProvider === undefined ? {} : { aiProvider: capabilities.aiProvider }),
     openAppeals: data.openAppeals ?? 0,
     rescoreBusy,
-    placementDetails: Object.fromEntries(Object.entries(pendingAssessmentDetails).map(([attemptId, detail]) => [attemptId, placementDetail(detail, pendingProfiles[attemptId] ?? undefined)])),
-    ...(currentWeek ? { currentWeek: currentWeek.weekNumber, topic: currentWeek.topic } : {}),
-    ...(weekFrame ? { pilotWeeks: weekFrame.pilot.weekCount } : {})
+    placementDetails: Object.fromEntries(Object.entries(pendingAssessmentDetails).map(([attemptId, detail]) => [attemptId, placementDetail(detail, pendingProfiles[attemptId] ?? undefined)]))
   });
   const view = {
     ...adaptedView,
@@ -321,7 +339,6 @@ function DashboardRoute({ client, readOnly }: { client: OperatorApiClient; readO
     ...(typeof client.changeAssessmentReviewLearnerLevel !== "function" ? { changeLevel: unavailable("endpoint đổi level trực tiếp"), demote: unavailable("endpoint hạ mức"), setLevelDirect: unavailable("endpoint xếp mức trực tiếp") } : {}),
     ...(typeof client.updateAssessmentReviewMonthlyGoal !== "function" ? { editGoal: unavailable("endpoint sửa mục tiêu tháng") } : {}),
     ...(typeof client.getAssessmentReviewLearner !== "function" ? { viewProfile: unavailable("endpoint đọc hồ sơ theo học viên") } : {}),
-    ...(typeof client.assignAssessmentReviewWeeklyPractice !== "function" ? { assignWeeklyPractice: unavailable("endpoint giao bài thực hành tuần") } : {}),
     ...(typeof client.requestAssessmentReviewLearnerDeletion !== "function" ? { deleteLearner: unavailable("endpoint xoá học viên") } : {}),
     ...(typeof client.rescoreAssessment !== "function"
       ? { rescore: unavailable("endpoint chấm lại bài test bằng AI") }
@@ -385,18 +402,6 @@ function DashboardRoute({ client, readOnly }: { client: OperatorApiClient; readO
     const goal = (await modal.prompt({ title: "Cập nhật mục tiêu tháng", label: "Mục tiêu tháng mới", confirmLabel: "Lưu" }))?.trim();
     if (goal) refresh(client.updateAssessmentReviewMonthlyGoal(learnerId, goal));
   };
-  const assignWeeklyPractice = async (learnerId: string) => {
-    if (readOnly || typeof client.assignAssessmentReviewWeeklyPractice !== "function") return;
-    const learner = view.approved.find((item) => item.id === learnerId);
-    if (!learner) return;
-    const confirmed = await modal.confirm({ title: "Giao bài thực hành tuần", message: <>Giao bài thực hành của tuần hiện tại cho <b>{learner.name}</b>? Nếu đã giao, hệ thống sẽ giữ nguyên bài cũ.</>, confirmLabel: "Giao bài tuần", cancelLabel: "Huỷ" });
-    if (!confirmed) return;
-    try {
-      const assignment = await client.assignAssessmentReviewWeeklyPractice(learnerId);
-      notify(assignment.status === "assigned" ? `Đã giao bài tuần ${assignment.weekNumber}: ${assignment.topic}.` : `Bài tuần ${assignment.weekNumber} đã được giao trước đó.`);
-      await load();
-    } catch (reason) { notify(message(reason), "danger"); }
-  };
   const requestDeletion = async (learnerId: string) => {
     if (readOnly) return;
     const reason = (await modal.prompt({ title: "Yêu cầu xoá học viên", message: "Yêu cầu sẽ được chuyển cho Quản lý duyệt.", label: "Lý do", confirmLabel: "Gửi yêu cầu", tone: "danger" }))?.trim();
@@ -446,7 +451,7 @@ function DashboardRoute({ client, readOnly }: { client: OperatorApiClient; readO
     onApproveLevelRequest: id => { const target = targetFor(id); if (!readOnly && target && typeof client.decideAssessment === "function") refresh(client.decideAssessment(id, { status: "approved", approvedLevel: target, reason: "Duyệt yêu cầu lên mức" })); },
     onRejectLevelRequest: id => { if (readOnly || typeof client.decideAssessment !== "function") return; void modal.prompt({ title: "Từ chối yêu cầu lên mức", message: "Học viên sẽ nhìn thấy nội dung này.", label: "Lý do từ chối", confirmLabel: "Từ chối", tone: "danger" }).then(reason => { if (reason?.trim()) refresh(client.decideAssessment(id, { status: "needs_retry", reason: reason.trim() })); }); },
     onViewTest: showAttempt, onRescore: rescore, onDeleteLearner: id => requestDeletion(learnerIdFor(id)), onViewChallenge: showChallenge,
-    onDemote: id => changeLevel(id, "recommend_lower"), onChangeLevel: id => changeLevel(id, "direct"), onEditGoal: editGoal, onViewProfile: showProfile, onAssignWeeklyPractice: assignWeeklyPractice, onTogglePendingProfile: togglePendingProfile, onSetLevelDirect: id => changeLevel(id, "direct"),
+    onDemote: id => changeLevel(id, "recommend_lower"), onChangeLevel: id => changeLevel(id, "direct"), onEditGoal: editGoal, onViewProfile: showProfile, onTogglePendingProfile: togglePendingProfile, onSetLevelDirect: id => changeLevel(id, "direct"),
     onOpenAppeals: () => navigate(paths.review, { state: { reviewTab: "appeals" } }), onOpenSettings: () => navigate("/settings"), onOpenWeeks: () => navigate(paths.months), onOpenLevelForms: () => navigate(paths.levelForms)
   }} />
   {assessmentDialog && <OperatorReviewAssessmentDetail detail={assessmentDialog} onClose={() => setAssessmentDialog(undefined)} {...(typeof client.manualScoreAssessment === "function" && !readOnly && (assessmentDialog.status === "pending_review" || assessmentDialog.status === "submitted") ? { onSaveManualScore: saveManualScore } : {})} {...(typeof client.confirmAssessmentAudioDeletion === "function" && typeof client.deleteAssessmentAudio === "function" && !readOnly ? { onDeleteAudio: deleteAssessmentAudio } : {})} savingManualScore={manualScoreBusy} />}

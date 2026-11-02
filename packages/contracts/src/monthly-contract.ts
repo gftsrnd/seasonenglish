@@ -41,6 +41,8 @@ export interface MonthLessonCellView {
   scopeHash: string;
   locked: boolean;
   correctionCount: number;
+  /** Published/draft lesson data is exposed only in the operator monthly overview for preview. */
+  content?: { title?: string; parts?: Array<{ code?: string; title?: string; content?: Record<string, unknown> }> };
   quality: {
     severe: MonthlyQualityFindingView[];
     light: MonthlyQualityFindingView[];
