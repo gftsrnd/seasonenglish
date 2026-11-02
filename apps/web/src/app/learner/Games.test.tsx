@@ -58,20 +58,20 @@ describe("app games affordances", () => {
     expect(within(wordSetSection).getByRole("heading", { name: /Bộ từ: Tuần 1/i }).closest(".section-heading")).toBeInTheDocument();
   });
 
-  it("confirms that the active set uses this week's learned vocabulary", () => {
+  it("confirms that the active set uses learned vocabulary from the current learning path", () => {
     render(<LearnerGames view={view} actions={actions} />);
 
-    expect(screen.getByText("Đang dùng bộ từ đã học trong tuần này.")).toBeInTheDocument();
+    expect(screen.getByText("Đang dùng bộ từ đã học trong lộ trình hiện tại.")).toBeInTheDocument();
     expect(screen.queryByText("Nhập một chủ đề để tạo bộ từ.")).not.toBeInTheDocument();
   });
 
-  it("disables topic entry when AI generation is unavailable and explains the fallback", () => {
+  it("disables topic entry when AI generation is unavailable", () => {
     render(<LearnerGames view={view} actions={actions} />);
 
     const topic = screen.getByRole("textbox", { name: "Chủ đề bộ từ" });
     expect(topic).toBeDisabled();
     expect(topic).toHaveAttribute("aria-describedby", "game-topic-help");
-    expect(screen.getByText(/chỉ dùng được từ vựng tuần này/i)).toHaveAttribute("id", "game-topic-help");
+    expect(screen.getByText(/Chưa có API key để tạo bộ từ mới/i)).toHaveAttribute("id", "game-topic-help");
     expect(screen.getByRole("button", { name: "Tạo bộ từ" })).toBeDisabled();
   });
 
