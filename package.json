@@ -18,6 +18,7 @@
     "verify:app-media": "node scripts/verify-app-media.mjs",
     "build": "pnpm verify:media && pnpm verify:pronunciation && pnpm verify:app-media && pnpm -r build",
     "dev:local": "node scripts/dev-local.mjs",
+    "test:e2e:monthly": "node scripts/monthly-learning-e2e.mjs",
     "prepare:local-scenarios": "tsx scripts/prepare-local-scenarios.ts",
     "cleanup:local-users": "tsx scripts/cleanup-local-test-users.ts",
     "clean:generated": "node scripts/clean-generated.mjs"
