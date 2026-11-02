@@ -97,7 +97,7 @@ function OperatorRouteControllerContent({ session, client, paths }: { session: S
   if (session.role !== "operator" && session.role !== "manager") return <Status tone="error">Tài khoản này không có quyền mở khu vực vận hành.</Status>;
   // Managers own the monthly learning cycle. Other shared operations remain
   // read-only in their shell so this does not reopen retired weekly flows.
-  const readOnly = session.role === "manager" && location.pathname !== paths.months;
+  const readOnly = session.role === "manager" && location.pathname !== paths.months && location.pathname !== paths.root;
   const props = { client, readOnly };
   const detail = location.pathname.match(new RegExp(`^${escapeRegExp(paths.lessons)}/(\\d+)/(A1|A2|B1|B2|C1)$`));
   const content = detail ? <LessonSetRoute {...props} week={Number(detail[1])} cefr={detail[2] as Cefr} />
@@ -426,6 +426,13 @@ function DashboardRoute({ client, readOnly }: { client: OperatorApiClient; readO
     onResolveTopicReport: id => { if (!readOnly) refresh(client.resolveTopicReport(id)); },
     onApprovePlacement: (id, cefr) => {
       if (readOnly || typeof client.decideAssessment !== "function") return;
+      const pendingAssessment = data.pendingAssessments.find(item => item.attemptId === id);
+      if (pendingAssessment?.kind === "final") {
+        void modal.prompt({ title: "Duyệt bài thi tháng", message: "Quyết định này sẽ đồng thời xử lý kháng nghị đang chờ của học viên.", label: "Lý do", confirmLabel: "Duyệt bài thi" })
+          .then(reason => { if (reason?.trim()) refresh(client.decideAssessment(id, { status: "approved", reason: reason.trim() })); });
+        return;
+      }
+      if (!cefr) return;
       void modal.prompt({ title: "Duyệt mức đầu vào", message: `Mức được duyệt: ${cefr}. Hãy ghi rõ lý do để lưu quyết định.`, label: "Lý do", confirmLabel: "Duyệt mức" })
         .then(reason => {
           const trimmed = reason?.trim();

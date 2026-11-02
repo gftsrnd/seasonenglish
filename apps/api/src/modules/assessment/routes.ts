@@ -62,9 +62,6 @@ const decisionInput = z.object({
   approvedLevel: z.enum(["A1", "A2", "B1", "B2", "C1"]).optional(),
   reason: z.string().trim().min(1).max(2_000)
 }).superRefine((value, context) => {
-  if (value.status === "approved" && !value.approvedLevel) {
-    context.addIssue({ code: "custom", path: ["approvedLevel"], message: "approvedLevel is required" });
-  }
   if (value.status === "needs_retry" && value.approvedLevel) {
     context.addIssue({ code: "custom", path: ["approvedLevel"], message: "approvedLevel is not allowed" });
   }

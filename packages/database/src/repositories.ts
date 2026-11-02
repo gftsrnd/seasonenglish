@@ -402,7 +402,7 @@ export interface PublishedAssessmentRecord {
   definitionId: string;
   versionId: string;
   assessmentKey: string;
-  kind: "placement" | "level_up";
+        kind: "placement" | "level_up" | "final";
   title: string;
   version: number;
   blueprint: StoredAssessmentDefinition;
@@ -5815,7 +5815,7 @@ class AssessmentRepository {
            and cs.scenario->>'assessmentAttemptId' = aa.id::text group by cs.id
          order by cs.started_at desc limit 1
        ) challenge on true
-       where aa.status = 'pending_review' and ad.kind in ('placement', 'level_up')
+       where aa.status = 'pending_review' and ad.kind in ('placement', 'level_up', 'final')
        group by aa.id, learner.display_name, lp.completed_at, ad.kind, ad.title, av.blueprint,
                 decision.suggested_level, responses.response_count, responses.typed_speaking,
                 challenge.turns, challenge.average, challenge.off_topic, challenge.status
@@ -6444,6 +6444,10 @@ class AssessmentRepository {
         await client.query("rollback");
         return null;
       }
+      if (attempt.kind !== "final" && input.status === "approved" && !input.approvedLevel) {
+        await client.query("rollback");
+        return null;
+      }
       if (attempt.kind === "level_up" && input.status === "approved" && attempt.challenge_passed !== true) {
         await client.query("rollback");
         return null;
@@ -6487,6 +6491,12 @@ class AssessmentRepository {
       await client.query(
         `update assessment_attempts set status = $2, updated_at = $3 where id = $1`,
         [input.attemptId, input.status, decidedAt]
+      );
+      await client.query(
+        `update appeals
+         set status = $2, resolution = $3, resolved_by = $4, resolved_at = $5
+         where attempt_id = $1 and status = 'pending'`,
+        [input.attemptId, input.status === "approved" ? "accepted" : "rejected", input.reason, input.reviewerId, decidedAt]
       );
       if (input.status === "approved" && input.approvedLevel && attempt.kind === "level_up") {
         const effectiveAt = nextEffectiveMonday(decidedAt, "Asia/Ho_Chi_Minh");

@@ -37,6 +37,7 @@ export interface SectionScore {
 
 export interface PendingPlacement {
   id: string;
+  kind?: "placement" | "final";
   learnerId?: string;
   name: string;
   submittedAt: string;
@@ -132,7 +133,7 @@ export interface OperatorDashboardView {
 
 export interface OperatorDashboardActions {
   onResolveTopicReport(id: string): void;
-  onApprovePlacement(id: string, cefr: Cefr): void;
+  onApprovePlacement(id: string, cefr?: Cefr): void;
   onViewTest(id: string): void;
   onRescore(id: string): void;
   onDeleteLearner(id: string): void;
