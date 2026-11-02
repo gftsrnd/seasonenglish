@@ -83,15 +83,14 @@ describe("new Manager app branch", () => {
   });
 
   it("groups Manager progress like Operator and exposes profile-only learner actions", async () => {
-    const openProfile = vi.fn(); const remove = vi.fn(); const assignWeeklyPractice = vi.fn();
-    const { container } = render(<ManagerProgress view={progress} onOpenLearnerProfile={openProfile} onAssignWeeklyPractice={assignWeeklyPractice} onDeleteLearner={remove} />);
+    const openProfile = vi.fn(); const remove = vi.fn();
+    const { container } = render(<ManagerProgress view={progress} onOpenLearnerProfile={openProfile} onDeleteLearner={remove} />);
     const headings = [...container.querySelectorAll("h1,h3")].map((node) => node.textContent);
     expect(headings).toEqual(["Tiến độ nhóm", "Đang học (1)", "Đã nộp, chờ duyệt mức (1)", "Đang làm test (1)", "Chưa làm test (1)"]);
     expect(screen.getByText("Học đều (≥3 buổi/tuần)")).toBeInTheDocument();
     await userEvent.setup().click(screen.getByRole("button", { name: "Hồ sơ Học viên Demo" }));
     expect(openProfile).toHaveBeenCalledWith("learner-1");
-    await userEvent.setup().click(screen.getByRole("button", { name: "Giao bài tuần cho Học viên Demo" }));
-    expect(assignWeeklyPractice).toHaveBeenCalledWith("learner-1");
+    expect(screen.queryByRole("button", { name: "Giao bài tuần cho Học viên Demo" })).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Hồ sơ Đang thi" })).toBeInTheDocument();
     expect(screen.getByText("Bài test đang được thực hiện, chưa thể chấm điểm.")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Hồ sơ Đã nộp" })).toBeInTheDocument();

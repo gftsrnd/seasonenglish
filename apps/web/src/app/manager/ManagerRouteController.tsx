@@ -81,23 +81,6 @@ function ProgressRoute() {
     } catch { setError("Không cập nhật được tác vụ vận hành."); }
   };
   const openProfile = async (learnerId: string) => { setError(""); try { setProfile(await apiClient.getManagerLearnerProfile(learnerId)); } catch { setError("Không tải được hồ sơ học viên."); } };
-  const assignWeeklyPractice = async (learnerId: string) => {
-    const learner = view.learners.find((item) => item.learnerId === learnerId);
-    if (!learner) return;
-    const confirmed = await modal.confirm({
-      title: "Giao bài thực hành tuần",
-      message: <>Giao bài thực hành của tuần hiện tại cho <b>{learner.learnerName}</b>? Nếu bài đã được giao, hệ thống sẽ giữ nguyên bài cũ.</>,
-      confirmLabel: "Giao bài tuần",
-      cancelLabel: "Huỷ"
-    });
-    if (!confirmed) return;
-    setError("");
-    try {
-      const assignment = await apiClient.assignManagerWeeklyPractice(learnerId);
-      setNotice(assignment.status === "assigned" ? `Đã giao bài tuần ${assignment.weekNumber}: ${assignment.topic}.` : `Bài tuần ${assignment.weekNumber} đã được giao trước đó.`);
-      await load();
-    } catch { setError("Không giao được bài tuần. Hãy kiểm tra tuần và bộ bài đã publish cho mức của học viên."); }
-  };
   const operationalProps = {
     ...(deleteRequests ? { deleteRequests: deleteRequests.requests.filter((item) => item.status === "pending").map((item) => ({ id: item.id, title: item.learnerName, detail: `${item.reason} · ${item.status}` })) } : {}),
     onOpenOperationalItem: openOperationalItem
@@ -116,7 +99,7 @@ function ProgressRoute() {
     setError("");
     try { await apiClient.updateManagerAccountStatus(learnerId, "deleted"); await load(); setNotice("Đã xoá quyền truy cập của học viên."); } catch { setError("Không xoá được tài khoản học viên."); }
   };
-  return <>{notice ? <div className="banner ok"><div className="body small">{notice}</div></div> : null}<ManagerProgress view={view} {...(reminders ? { pendingReminderCount: reminders.candidates.length } : {})} onOpenLearnerProfile={openProfile} onAssignWeeklyPractice={assignWeeklyPractice} {...operationalProps} onDeleteLearner={deleteLearner} />{profile ? <LearnerProfileDialog view={profile} onClose={() => setProfile(undefined)} /> : null}{error ? <div className="banner danger" role="alert"><div className="body small">{error}</div></div> : null}</>;
+  return <>{notice ? <div className="banner ok"><div className="body small">{notice}</div></div> : null}<ManagerProgress view={view} {...(reminders ? { pendingReminderCount: reminders.candidates.length } : {})} onOpenLearnerProfile={openProfile} {...operationalProps} onDeleteLearner={deleteLearner} />{profile ? <LearnerProfileDialog view={profile} onClose={() => setProfile(undefined)} /> : null}{error ? <div className="banner danger" role="alert"><div className="body small">{error}</div></div> : null}</>;
 }
 
 function LearnerProfileDialog({ view, onClose }: { view: ManagerLearnerProfileView; onClose: () => void }) {
