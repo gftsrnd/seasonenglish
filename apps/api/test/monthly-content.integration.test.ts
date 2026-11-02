@@ -43,6 +43,9 @@ describe("monthly content API", () => {
     const frameworkId = saved.json<{ id: string }>().id;
     const approved = await app.inject({ method: "POST", url: `/api/v1/content/month-frameworks/${frameworkId}/approve`, headers: { cookie } });
     expect(approved.statusCode, approved.body).toBe(204);
+    const examScope = await app.inject({ method: "GET", url: `/api/v1/content/month-frameworks/${frameworkId}/exam-scope`, headers: { cookie } });
+    expect(examScope.statusCode, examScope.body).toBe(200);
+    expect(examScope.json()).toMatchObject({ month: "2026-11", cefr: "A1", coreTermIds: curriculum.coreTerms.map((term) => term.id) });
     const draft = await app.inject({
       method: "PUT", url: `/api/v1/content/month-frameworks/${frameworkId}/days/1`, headers: { cookie }, payload: lessonFor(curriculum, 1)
     });

@@ -1,4 +1,4 @@
-import type { MonthlyCurriculumContract } from "@e4s/domain";
+import { buildMonthlyExamScope, type MonthlyCurriculumContract } from "@e4s/domain";
 import type { AiTaskRunner } from "@e4s/ai";
 import { createRepositories } from "@e4s/database";
 import type { FastifyInstance } from "fastify";
@@ -73,6 +73,12 @@ export function registerMonthlyContentRoutes(app: FastifyInstance, pool: Pool, a
     const input = frameworkParams.parse(request.params);
     await repositories.monthlyContent.approveFramework(request.e4sSession!.user.id, input.id);
     return reply.code(204).send();
+  });
+
+  app.get("/api/v1/content/month-frameworks/:id/exam-scope", { preHandler: operator }, async (request) => {
+    const input = frameworkParams.parse(request.params);
+    const contract = await repositories.monthlyContent.getFrameworkContract(request.e4sSession!.user.id, input.id);
+    return buildMonthlyExamScope(contract);
   });
 
   app.put("/api/v1/content/month-frameworks/:id/days/:dayNumber", { preHandler: contentOperator }, async (request) => {
