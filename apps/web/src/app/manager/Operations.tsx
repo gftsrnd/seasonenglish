@@ -24,6 +24,7 @@ export function ManagerOperations({ view, deleteRequestCounts, ...operational }:
 
 const managerOperationLinks = [
   ["/mgr/ops/levels", "Duyệt mức"],
+  ["/mgr/ops/months", "Bài học tháng"],
   ["/mgr/ops/weeks", "Chủ đề tuần"],
   ["/mgr/ops/lessons", "Bài học"],
   ["/mgr/ops/review", "Bài tuần"],

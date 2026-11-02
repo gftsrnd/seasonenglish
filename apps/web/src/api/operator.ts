@@ -13,7 +13,7 @@ import type {
   ContentWeekInput, ContentWeekSuggestionView, SystemCapabilitiesView, WeeklyPracticeAssignmentView
 } from "@e4s/contracts";
 import type { MonthlyOperatorOverviewView, SharedMonthBriefView } from "@e4s/contracts";
-import type { MonthlyCurriculumContract } from "@e4s/domain";
+import type { MonthlyCurriculumContract } from "@e4s/domain/monthly";
 import { request, uploadMultipart } from "./runtime.js";
 
 export type AssessmentAudioReadView = AudioArtifactView & {

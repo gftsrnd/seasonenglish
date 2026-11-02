@@ -93,7 +93,9 @@ try {
   });
   // WSL-hosted ngrok reaches the Windows dev server through the host adapter;
   // a loopback-only Vite listener makes that upstream connection fail.
-  run("pnpm", ["--filter", "@e4s/web", "dev", "--", "--host", "0.0.0.0", "--port", String(LOCAL_DEV_PORTS.web)]);
+  run("pnpm", ["--filter", "@e4s/web", "dev", "--host", "0.0.0.0", "--port", String(LOCAL_DEV_PORTS.web)], {
+    E4S_API_PROXY_URL: apiUrl
+  });
   await Promise.all([
     waitForHttpReady("API", `${apiUrl}/api/readiness`),
     waitForHttpReady("Web", webUrl)

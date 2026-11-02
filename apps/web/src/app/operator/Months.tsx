@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import type { MonthlyOperatorOverviewView, MonthlyQualityFindingView, CefrLevel } from "@e4s/contracts";
-import { buildMonthlyCurriculum, buildMonthlyCalendar, type MonthlyCurriculumContract } from "@e4s/domain";
+import { buildMonthlyCurriculum, buildMonthlyCalendar, type MonthlyCurriculumContract } from "@e4s/domain/monthly";
 import "./months.css";
 
 type MonthlyBriefInput = { title: string; brief: string; context: string; communicationGoal: string };

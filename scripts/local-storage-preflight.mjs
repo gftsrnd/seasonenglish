@@ -7,12 +7,16 @@ const { HeadBucketCommand, S3Client } = requireFromStoragePackage("@aws-sdk/clie
 export const LOCAL_STORAGE_RECOVERY_COMMAND = "docker compose up -d minio minio-init";
 export const LOCAL_EVIDENCE_BUCKET = "e4s-evidence";
 export const LOCAL_MEDIA_BUCKET = "e4s-media";
+const configuredPort = (name, fallback) => {
+  const value = Number(process.env[name] ?? fallback);
+  return Number.isInteger(value) && value > 0 && value < 65_536 ? value : fallback;
+};
 export const LOCAL_DEV_PORTS = Object.freeze({
-  web: 4175,
-  api: 3001,
-  postgres: 54329,
-  minio: 9002,
-  minioConsole: 9003
+  web: configuredPort("E4S_LOCAL_WEB_PORT", 4175),
+  api: configuredPort("E4S_LOCAL_API_PORT", 3001),
+  postgres: configuredPort("E4S_LOCAL_POSTGRES_PORT", 54329),
+  minio: configuredPort("E4S_LOCAL_MINIO_PORT", 9002),
+  minioConsole: configuredPort("E4S_LOCAL_MINIO_CONSOLE_PORT", 9003)
 });
 
 export async function verifyLocalObjectStorage(options = {}) {
