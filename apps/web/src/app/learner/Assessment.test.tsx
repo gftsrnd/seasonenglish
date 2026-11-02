@@ -869,4 +869,16 @@ describe("assessment HCI states", () => {
     expect(screen.getByText(/14 ngày/i)).toBeInTheDocument();
   });
 
+  it("uses monthly wording while a submitted final assessment awaits review", () => {
+    const base = makeView();
+    render(<LearnerAssessment view={makeView({
+      definition: { ...base.definition, key: "monthly-final", kind: "final", title: "Bài thi tháng" },
+      screenState: "pending",
+      attempt: { ...base.attempt!, status: "pending_review", currentSection: null }
+    })} actions={makeActions()} />);
+
+    expect(screen.getByRole("heading", { name: "Bài thi tháng đang chờ chấm" })).toBeInTheDocument();
+    expect(screen.getByText(/Bạn có thể gửi kháng nghị khi kết quả được trả về/i)).toBeInTheDocument();
+  });
+
 });

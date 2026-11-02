@@ -628,6 +628,10 @@ function assessmentPendingCopy(view: AssessmentView): { title: string; detail: s
     if (status === "approved") return { title: `${label} đã được duyệt`, detail: "Bằng chứng đã được người vận hành duyệt. Hãy về trang chủ để xem bước tiếp theo." };
     return { title: `${label} đang chờ chấm`, detail: "Đã nộp bài. Sau khi chấm, bạn sẽ thấy trạng thái thử thách hoặc yêu cầu duyệt mức trên trang chủ." };
   }
+  if (view.definition.kind === "final") {
+    if (status === "approved") return { title: "Bài thi tháng đã được duyệt", detail: "Kết quả đã được xác nhận. Nếu bạn học ở mức C1, chứng chỉ sẽ được xét theo kết quả bài thi tháng." };
+    return { title: "Bài thi tháng đang chờ chấm", detail: "Đã nộp bài. Bạn có thể gửi kháng nghị khi kết quả được trả về." };
+  }
   if (status === "approved") return { title: "Test đầu vào đã được duyệt", detail: "Mức học sẽ được mở theo hồ sơ của bạn ngay khi hệ thống cập nhật." };
   return { title: "Test đầu vào đã được nộp", detail: "Vận hành sẽ xem lại kết quả trước khi duyệt mức. Bạn không cần làm lại bài trong lúc chờ." };
 }
