@@ -1,5 +1,5 @@
 import { AI_TASKS, createAiService, createAnthropicProvider } from "@e4s/ai";
-import { createMediaRepository } from "@e4s/database";
+import { createMediaRepository, createRepositories } from "@e4s/database";
 import { createS3Storage, type ObjectStorage } from "@e4s/storage";
 import { Pool } from "pg";
 import { loadEnvFile } from "node:process";
@@ -65,9 +65,15 @@ const app = buildApi({
   otpSecret: process.env.AUTH_OTP_SECRET ?? "local-only-change-me",
   aiRunnerFactory
 });
+const runInactivitySweep = () => createRepositories(pool).manager.lockInactiveLearners().catch((error) => {
+  process.stderr.write(`[inactivity-sweep] ${error instanceof Error ? error.message : String(error)}\n`);
+});
+void runInactivitySweep();
+const inactivitySweep = setInterval(runInactivitySweep, 6 * 60 * 60 * 1_000);
+inactivitySweep.unref();
 const port = Number(process.env.PORT ?? 3001);
 await app.listen({ host: process.env.HOST ?? "127.0.0.1", port });
-const stop = async () => { await app.close(); await pool.end(); process.exit(0); };
+const stop = async () => { clearInterval(inactivitySweep); await app.close(); await pool.end(); process.exit(0); };
 process.on("SIGINT", () => void stop());
 process.on("SIGTERM", () => void stop());
 
