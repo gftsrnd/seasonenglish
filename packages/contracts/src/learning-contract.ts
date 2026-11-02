@@ -251,6 +251,15 @@ export interface MonthView {
   examDate: string;
 }
 
+export interface MonthlyExamView {
+  status: "locked" | "ready";
+  completedLessons: number;
+  totalLessons: number;
+  remainingLessons: number;
+  requirement: string;
+  certificateEligible: boolean;
+}
+
 export interface LearnerHomeView {
   onboardingRequired: boolean;
   learner: { displayName: string; cefr: CefrLevel | null };
@@ -258,6 +267,7 @@ export interface LearnerHomeView {
   week: WeekView | null;
   /** The approved monthly learning contract takes precedence over legacy weekly content. */
   month?: MonthView | null;
+  monthlyExam?: MonthlyExamView | null;
   lessons: LessonSummary[];
   nextLesson: LessonSummary | null;
   microLesson?: {

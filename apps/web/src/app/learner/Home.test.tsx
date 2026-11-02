@@ -75,12 +75,15 @@ describe("learner Home parity", () => {
     render(<LearnerHome view={makeView({
       program: null,
       week: null,
-      month: { month: "2026-11", themeTitle: "Quarterly budget review", themeBrief: "Prepare a quarterly budget review.", communicationGoal: "Explain a cost.", examDate: "2026-11-30" }
+      month: { month: "2026-11", themeTitle: "Quarterly budget review", themeBrief: "Prepare a quarterly budget review.", communicationGoal: "Explain a cost.", examDate: "2026-11-30" },
+      monthlyExam: { status: "locked", completedLessons: 1, totalLessons: 5, remainingLessons: 4, requirement: "Hoàn thành 4 bài còn lại để mở bài thi tháng.", certificateEligible: false }
     })} actions={actions} />);
 
     expect(screen.getByText("Lộ trình tháng 11/2026")).toBeInTheDocument();
     expect(screen.getByText("Quarterly budget review")).toBeInTheDocument();
     expect(screen.queryByText("Bài thực hành cuối tuần")).not.toBeInTheDocument();
+    expect(screen.getByText("Bài thi tháng")).toBeInTheDocument();
+    expect(screen.getByText("Hoàn thành 4 bài còn lại để mở bài thi tháng.")).toBeInTheDocument();
   });
   it("does not expose the retired micro-lesson feature", () => {
     render(<LearnerHome view={makeView({ microLesson: { id: "micro-1", topic: "Legacy", durationMinutes: 3, completed: false } })} actions={actions} />);

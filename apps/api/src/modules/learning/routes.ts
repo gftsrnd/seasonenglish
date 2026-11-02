@@ -209,6 +209,16 @@ export function registerLearningRoutes(
         communicationGoal: monthlyContext.communicationGoal,
         examDate: monthlyContext.examDate
       } : null,
+      monthlyExam: monthlyContext ? {
+        status: completedLessons < summaries.length ? "locked" as const : "ready" as const,
+        completedLessons,
+        totalLessons: summaries.length,
+        remainingLessons: Math.max(0, summaries.length - completedLessons),
+        requirement: completedLessons < summaries.length
+          ? `Hoàn thành ${summaries.length - completedLessons} bài còn lại để mở bài thi tháng.`
+          : "Bạn đã hoàn thành điều kiện. Bài thi tháng đã sẵn sàng.",
+        certificateEligible: monthlyContext.cefr === "C1"
+      } : null,
       lessons: summaries,
       nextLesson: summaries.find((lesson) => lesson.status !== "completed") ?? null,
       microLesson: microLesson ? {

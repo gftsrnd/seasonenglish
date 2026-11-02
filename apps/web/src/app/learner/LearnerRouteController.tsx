@@ -89,6 +89,7 @@ function showLearnerToast(message: string, tone: "info" | "ok" | "danger" = "inf
 export function resolveLearnerRoute(pathname: string): ResolvedLearnerRoute {
   const clean = (pathname.startsWith("#") ? pathname.slice(1) : pathname).split(/[?#]/, 1)[0] || "/";
   const segments = clean.split("/").filter(Boolean).map(safeDecode);
+  if (segments[0] === "arena" || segments[0] === "duel") return { name: "games", params: {} };
   if (segments.length === 1 && ["home", "onboard", "coach", "challenge", "practice", "survey", "profile", "games", "arena"].includes(segments[0]!)) return { name: segments[0] as StaticRouteName, params: {} };
   if (segments[0] === "test" && segments.length === 2) {
     const raw = segments[1];

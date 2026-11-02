@@ -120,7 +120,7 @@ describe("app games affordances", () => {
     expect(actions.speak).toHaveBeenCalledWith("colleague");
   });
 
-  it("keeps the six game destinations and renders the locked arena as a non-navigable status", () => {
+  it("keeps the six game destinations without exposing the retired B1 arena", () => {
     const descriptor = (key: GameDescriptor["key"], name: string): GameDescriptor => ({
       key, icon: "🎮", name, description: `${name} description`, goal: "goal", instructions: [], scoring: "scoring", best: null
     });
@@ -136,19 +136,13 @@ describe("app games affordances", () => {
 
     const labels = { scramble: "Xếp chữ", crossword: "Ô chữ", eggs: "Season catch", mario: "Season-rio", sort: "Phân loại từ", typing: "Đua gõ từ" } as const;
     for (const [key, label] of Object.entries(labels)) expect(screen.getByRole("link", { name: `Chơi ${label}` })).toHaveAttribute("href", `/games/${key}`);
-    const arena = screen.getByLabelText("Đấu trường nội bộ – Mở khi đạt B1");
-    expect(arena).toHaveClass("locked");
-    expect(arena.tagName).not.toBe("A");
-    expect(arena).not.toHaveAttribute("href");
-    expect(arena).toHaveTextContent("Mở khi đạt B1");
-    fireEvent.click(arena);
-    expect(actions.navigate).not.toHaveBeenCalled();
+    expect(screen.queryByText("Đấu trường nội bộ")).not.toBeInTheDocument();
   });
 
-  it("links the arena only for B1 and above", () => {
+  it("does not restore the arena for B1 learners", () => {
     render(<LearnerGames view={{ ...view, cefr: "B1", arena: { ...view.arena, eligible: true, points: 12 } }} actions={actions} />);
 
-    expect(screen.getByRole("link", { name: /Đấu trường nội bộ/i })).toHaveAttribute("href", "/arena");
+    expect(screen.queryByText("Đấu trường nội bộ")).not.toBeInTheDocument();
   });
 
   it("uses consistent Lucide icons for the six game tiles without rendering raw tile glyphs", () => {
