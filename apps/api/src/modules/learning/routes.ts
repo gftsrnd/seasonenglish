@@ -164,18 +164,20 @@ export function registerLearningRoutes(
 
   app.get("/api/v1/learner/home", { preHandler: learnerOnly }, async (request, reply) => {
     const learnerId = request.e4sSession!.user.id;
-    const [profile, context, progress, weeklyPractice, microLesson, runner] = await Promise.all([
+    const [profile, context, monthlyContext, progress, microLesson, runner] = await Promise.all([
       repositories.learning.getProfile(learnerId),
       repositories.learning.getActiveContext(learnerId),
+      repositories.learning.getActiveMonthlyContext(learnerId),
       repositories.learning.getProgressDashboard(learnerId),
-      repositories.engagement.weeklyPractice(learnerId),
       repositories.learning.todayMicroLesson(learnerId),
       runnerFor(learnerId)
     ]);
     if (!progress) return reply.code(404).send({ code: "LEARNER_NOT_FOUND" });
     const lifecycle = await repositories.learning.learnerLifecycle(learnerId, progress.points, progress.levelReadiness.eligible);
     const onboardingRequired = !profile || !isLearnerProfileComplete(profile.profile);
-    const lessons = context ? await repositories.learning.listLessons(learnerId, context.weekId) : [];
+    const lessons = monthlyContext
+      ? await repositories.learning.listMonthlyLessons(learnerId, monthlyContext.month)
+      : context ? await repositories.learning.listLessons(learnerId, context.weekId) : [];
     const summaries = lessons.map((lesson) => ({
       id: lesson.id,
       dayNumber: lesson.dayNumber,
@@ -185,19 +187,27 @@ export function registerLearningRoutes(
     }));
     const completedLessons = summaries.filter((lesson) => lesson.status === "completed").length;
     const points = progress.points;
-    const inactiveDays = context
-      ? calculateInactiveDays(progress.activity.map((item) => item.occurredAt), context.startDate)
+    const weeklyPractice = monthlyContext ? null : await repositories.engagement.weeklyPractice(learnerId);
+    const inactiveDays = monthlyContext || context
+      ? calculateInactiveDays(progress.activity.map((item) => item.occurredAt), monthlyContext ? `${monthlyContext.month}-01` : context!.startDate)
       : null;
     const view: LearnerHomeView = {
       onboardingRequired,
-      learner: { displayName: progress.learner.displayName, cefr: (context?.cefr ?? null) as CefrLevel | null },
-      program: context ? { name: context.programName, weekCount: context.weekCount, cycleNumber: context.cycleNumber } : null,
-      week: context ? {
+      learner: { displayName: progress.learner.displayName, cefr: (monthlyContext?.cefr ?? context?.cefr ?? null) as CefrLevel | null },
+      program: !monthlyContext && context ? { name: context.programName, weekCount: context.weekCount, cycleNumber: context.cycleNumber } : null,
+      week: !monthlyContext && context ? {
         id: context.weekId,
         weekNumber: context.weekNumber,
         topic: context.topic,
         description: context.description,
         objectives: context.objectives
+      } : null,
+      month: monthlyContext ? {
+        month: monthlyContext.month,
+        themeTitle: monthlyContext.themeTitle,
+        themeBrief: monthlyContext.themeBrief,
+        communicationGoal: monthlyContext.communicationGoal,
+        examDate: monthlyContext.examDate
       } : null,
       lessons: summaries,
       nextLesson: summaries.find((lesson) => lesson.status !== "completed") ?? null,
@@ -229,7 +239,7 @@ export function registerLearningRoutes(
         href: "/practice"
       },
       levelReadiness: progress.levelReadiness,
-      ...(context ? { pilotPhase: pilotPhaseFor(context.startDate, context.weekCount) satisfies PilotPhase } : {}),
+      ...(!monthlyContext && context ? { pilotPhase: pilotPhaseFor(context.startDate, context.weekCount) satisfies PilotPhase } : {}),
       ...(lifecycle ? {
         levelUpPhase: lifecycle.levelUpPhase,
         monthlyGoal: lifecycle.monthlyGoal,
@@ -242,6 +252,22 @@ export function registerLearningRoutes(
   app.get("/api/v1/learner/progress", { preHandler: learnerOnly }, async (request, reply) => {
     const view = await repositories.learning.getProgressDashboard(request.e4sSession!.user.id);
     return view ?? reply.code(404).send({ code: "LEARNER_NOT_FOUND" });
+  });
+
+  app.get("/api/v1/learner/months/:month", { preHandler: learnerOnly }, async (request, reply) => {
+    const params = z.object({ month: z.string().regex(/^\d{4}-(0[1-9]|1[0-2])$/u) }).safeParse(request.params);
+    if (!params.success) return reply.code(400).send({ code: "INVALID_MONTH" });
+    const lessons = await repositories.learning.listMonthlyLessons(request.e4sSession!.user.id, params.data.month);
+    return {
+      month: params.data.month,
+      lessons: lessons.map((lesson) => ({
+        id: lesson.id,
+        dayNumber: lesson.dayNumber,
+        title: learnerLessonDisplayTitle(lesson),
+        status: lesson.progress.status,
+        lock: lesson.lock
+      }))
+    };
   });
 
   app.get("/api/v1/lessons/:lessonId", { preHandler: learnerOnly }, async (request, reply) => {

@@ -243,11 +243,21 @@ export interface WeekView {
   objectives: string[];
 }
 
+export interface MonthView {
+  month: string;
+  themeTitle: string;
+  themeBrief: string;
+  communicationGoal: string;
+  examDate: string;
+}
+
 export interface LearnerHomeView {
   onboardingRequired: boolean;
   learner: { displayName: string; cefr: CefrLevel | null };
   program: { name: string; weekCount: number; cycleNumber?: number } | null;
   week: WeekView | null;
+  /** The approved monthly learning contract takes precedence over legacy weekly content. */
+  month?: MonthView | null;
   lessons: LessonSummary[];
   nextLesson: LessonSummary | null;
   microLesson?: {

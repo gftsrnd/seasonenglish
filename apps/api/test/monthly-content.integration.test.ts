@@ -1,6 +1,6 @@
 import { Pool } from "pg";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { buildMonthlyCalendar, buildMonthlyCurriculum, createCredentialHash } from "@e4s/domain";
+import { buildMonthlyCalendar, buildMonthlyCurriculum, createCredentialHash, createPinHash } from "@e4s/domain";
 import { DEMO_IDS, migrateDatabase, resetPublicSchema, seedDemo } from "@e4s/database";
 import { buildApi } from "../src/app.js";
 
@@ -18,6 +18,7 @@ describe("monthly content API", () => {
       await migrateDatabase(client);
       await seedDemo(client);
       await client.query("insert into user_credentials (user_id, credential_hash) values ($1, $2)", [DEMO_IDS.operator, await createCredentialHash("operator-pass")]);
+      await client.query("insert into user_credentials (user_id, credential_hash) values ($1, $2)", [DEMO_IDS.learner, await createPinHash("123456")]);
     } finally { client.release(); }
     await app.ready();
     const login = await app.inject({ method: "POST", url: "/api/auth/staff/login", payload: { email: "thu.ha.tran@e4s.local", password: "operator-pass" } });
@@ -65,6 +66,19 @@ describe("monthly content API", () => {
     expect(overview.statusCode, overview.body).toBe(200);
     expect(overview.json()).toMatchObject({ brief: { title: "Quarterly budget review", status: "approved" }, frameworks: [{ id: frameworkId, status: "approved" }] });
     expect(overview.json<{ frameworks: Array<{ lessons: Array<{ status: string; correctionCount: number }> }> }>().frameworks[0]?.lessons[0]).toMatchObject({ status: "approved", correctionCount: 1 });
+    await pool.query("update enrollments set cefr = 'A1' where learner_id = $1", [DEMO_IDS.learner]);
+    const learnerLogin = await app.inject({ method: "POST", url: "/api/auth/learner/login", payload: { email: "minh.anh.nguyen@e4s.local", pin: "123456" } });
+    const learnerCookie = String(learnerLogin.headers["set-cookie"]).split(";")[0] ?? "";
+    const learnerMonth = await app.inject({ method: "GET", url: "/api/v1/learner/months/2026-11", headers: { cookie: learnerCookie } });
+    expect(learnerMonth.statusCode, learnerMonth.body).toBe(200);
+    expect(learnerMonth.json()).toMatchObject({ month: "2026-11", lessons: [{ dayNumber: 1, title: "The budget list" }] });
+    const lessonId = learnerMonth.json<{ lessons: Array<{ id: string }> }>().lessons[0]!.id;
+    const learnerLesson = await app.inject({ method: "GET", url: `/api/v1/lessons/${lessonId}`, headers: { cookie: learnerCookie } });
+    expect(learnerLesson.statusCode, learnerLesson.body).toBe(200);
+    expect(learnerLesson.json()).toMatchObject({ id: lessonId, title: "The budget list" });
+    const learnerHome = await app.inject({ method: "GET", url: "/api/v1/learner/home", headers: { cookie: learnerCookie } });
+    expect(learnerHome.statusCode, learnerHome.body).toBe(200);
+    expect(learnerHome.json()).toMatchObject({ month: { month: "2026-11", themeTitle: "Quarterly budget review" } });
   });
 });
 

@@ -71,6 +71,17 @@ describe("learner Home parity", () => {
     expect(document.querySelector('[data-home-block="context"]')).not.toBeInTheDocument();
     expect(screen.getByText("Hôm nay học gì nào?")).toHaveClass("home-today-heading");
   });
+  it("uses the approved monthly contract and hides the retired weekly practice", () => {
+    render(<LearnerHome view={makeView({
+      program: null,
+      week: null,
+      month: { month: "2026-11", themeTitle: "Quarterly budget review", themeBrief: "Prepare a quarterly budget review.", communicationGoal: "Explain a cost.", examDate: "2026-11-30" }
+    })} actions={actions} />);
+
+    expect(screen.getByText("Lộ trình tháng 11/2026")).toBeInTheDocument();
+    expect(screen.getByText("Quarterly budget review")).toBeInTheDocument();
+    expect(screen.queryByText("Bài thực hành cuối tuần")).not.toBeInTheDocument();
+  });
   it("does not expose the retired micro-lesson feature", () => {
     render(<LearnerHome view={makeView({ microLesson: { id: "micro-1", topic: "Legacy", durationMinutes: 3, completed: false } })} actions={actions} />);
 

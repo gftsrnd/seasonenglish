@@ -297,6 +297,15 @@ export interface ActiveLearningContext {
   startDate: string;
 }
 
+export interface ActiveMonthlyLearningContext {
+  month: string;
+  themeTitle: string;
+  themeBrief: string;
+  communicationGoal: string;
+  cefr: CefrLevel;
+  examDate: string;
+}
+
 export interface LearnerProfileRecord {
   profile: Partial<LearnerProfileData>;
   completedProfile?: Partial<LearnerProfileData>;
@@ -317,6 +326,26 @@ export interface LearnerLessonRecord {
   progress: LessonProgressView;
   lock: LessonLockView | null;
 }
+
+type LearnerLessonQueryRow = {
+  id: string;
+  title: string;
+  day_number: number;
+  week_number: number;
+  week_topic: string;
+  cefr: CefrLevel;
+  content: LessonContent & { durationMinutes?: number };
+  lesson_count: string;
+  opens_at: string;
+  opens_later: boolean;
+  blocker_id: string | null;
+  blocker_day_number: number | null;
+  blocker_title: string | null;
+  progress_status: LessonProgressView["status"] | null;
+  progress_score: string | null;
+  progress_evidence: Record<string, unknown> | null;
+  progress_updated_at: Date | null;
+};
 
 export interface PublishedLessonSet {
   id: string;
@@ -762,6 +791,30 @@ class LearningRepository {
       : null;
   }
 
+  async getActiveMonthlyContext(learnerId: string): Promise<ActiveMonthlyLearningContext | null> {
+    const result = await this.pool.query<{
+      month: string; theme_title: string; theme_brief: string; communication_goal: string; cefr: CefrLevel; exam_date: string;
+    }>(
+      `select pm.month, pm.theme_title, pm.theme_brief, pm.communication_goal, mf.cefr, pm.exam_date::text
+       from enrollments e
+       join users u on u.id = e.learner_id and u.status = 'active'
+       join program_months pm on pm.organization_id = u.organization_id and pm.month = to_char(current_date, 'YYYY-MM')
+       join month_frameworks mf on mf.program_month_id = pm.id and mf.cefr = e.cefr and mf.status = 'approved'
+       where e.learner_id = $1
+       limit 1`,
+      [learnerId]
+    );
+    const row = result.rows[0];
+    return row ? {
+      month: row.month,
+      themeTitle: row.theme_title,
+      themeBrief: row.theme_brief,
+      communicationGoal: row.communication_goal,
+      cefr: row.cefr,
+      examDate: row.exam_date
+    } : null;
+  }
+
   async getProfile(learnerId: string): Promise<LearnerProfileRecord | null> {
     const result = await this.pool.query<{
       profile: Partial<LearnerProfileData>;
@@ -1140,13 +1193,7 @@ class LearningRepository {
   }
 
   async listMonthlyLessons(learnerId: string, month: string): Promise<LearnerLessonRecord[]> {
-    const result = await this.pool.query<{
-      id: string; title: string; day_number: number; week_number: number; week_topic: string; cefr: CefrLevel;
-      content: LessonContent & { durationMinutes?: number }; lesson_count: string; opens_at: string; opens_later: boolean;
-      blocker_id: string | null; blocker_day_number: number | null; blocker_title: string | null;
-      progress_status: LessonProgressView["status"] | null; progress_score: string | null;
-      progress_evidence: Record<string, unknown> | null; progress_updated_at: Date | null;
-    }>(
+    const result = await this.pool.query<LearnerLessonQueryRow>(
       `select l.id, l.title, ml.lesson_number as day_number, 0 as week_number, pm.theme_title as week_topic, mf.cefr, lv.content,
               (select count(*) from month_lessons count_ml where count_ml.framework_id = mf.id and count_ml.status = 'approved')::text as lesson_count,
               ml.lesson_date::text as opens_at, ml.lesson_date > current_date as opens_later,
@@ -1175,25 +1222,7 @@ class LearningRepository {
   }
 
   async findLesson(learnerId: string, lessonId: string): Promise<LearnerLessonRecord | null> {
-    const result = await this.pool.query<{
-      id: string;
-      title: string;
-      day_number: number;
-      week_number: number;
-      week_topic: string;
-      cefr: CefrLevel;
-      content: LessonContent & { durationMinutes?: number };
-      lesson_count: string;
-      opens_at: string;
-      opens_later: boolean;
-      blocker_id: string | null;
-      blocker_day_number: number | null;
-      blocker_title: string | null;
-      progress_status: LessonProgressView["status"] | null;
-      progress_score: string | null;
-      progress_evidence: Record<string, unknown> | null;
-      progress_updated_at: Date | null;
-    }>(
+    const result = await this.pool.query<LearnerLessonQueryRow>(
       `select l.id, l.title, l.day_number, pw.week_number, coalesce(nullif(lsv.payload->>'topic', ''), pw.topic) as week_topic, ls.cefr, lv.content,
               (select count(*) from lessons all_lessons where all_lessons.lesson_set_version_id = lsv.id)::text as lesson_count,
               (p.start_date + ((pw.week_number - 1) * 7 + l.day_number - 1))::text as opens_at,
@@ -1231,7 +1260,35 @@ class LearningRepository {
        limit 1`,
       [learnerId, lessonId]
     );
-    const row = result.rows[0];
+    let row = result.rows[0];
+    if (!row) {
+      const monthly = await this.pool.query<LearnerLessonQueryRow>(
+        `select l.id, l.title, ml.lesson_number as day_number, 0 as week_number, pm.theme_title as week_topic, mf.cefr, lv.content,
+                (select count(*) from month_lessons count_ml where count_ml.framework_id = mf.id and count_ml.status = 'approved')::text as lesson_count,
+                ml.lesson_date::text as opens_at, ml.lesson_date > current_date as opens_later,
+                blocker.id as blocker_id, blocker.day_number as blocker_day_number, blocker.title as blocker_title,
+                pr.status as progress_status, pr.score::text as progress_score, pr.evidence as progress_evidence, pr.updated_at as progress_updated_at
+         from enrollments e
+         join program_months pm on pm.organization_id = (select organization_id from users where id = e.learner_id)
+         join month_frameworks mf on mf.program_month_id = pm.id and mf.cefr = e.cefr and mf.status = 'approved'
+         join month_lessons ml on ml.framework_id = mf.id and ml.status = 'approved' and ml.lesson_id is not null
+         join lessons l on l.id = ml.lesson_id
+         join lesson_set_versions lsv on lsv.id = l.lesson_set_version_id and lsv.status = 'published'
+         join lateral (select content from lesson_versions where lesson_id = l.id and status = 'published' order by version desc limit 1) lv on true
+         left join lateral (
+           select previous_l.id, previous_ml.lesson_number as day_number, previous_l.title
+           from month_lessons previous_ml join lessons previous_l on previous_l.id = previous_ml.lesson_id
+           where previous_ml.framework_id = mf.id and previous_ml.status = 'approved' and previous_ml.lesson_number < ml.lesson_number
+             and not exists (select 1 from progress_records previous_progress where previous_progress.learner_id = e.learner_id and previous_progress.lesson_id = previous_l.id and previous_progress.status = 'completed')
+           order by previous_ml.lesson_number limit 1
+         ) blocker on true
+         left join progress_records pr on pr.lesson_id = l.id and pr.learner_id = e.learner_id
+         where e.learner_id = $1 and l.id = $2
+         limit 1`,
+        [learnerId, lessonId]
+      );
+      row = monthly.rows[0];
+    }
     if (!row) return null;
     const lesson = mapLessonRow(row);
     const appeals = await this.pool.query<{ part_code: LessonPartCode; status: "pending" | "accepted" | "rejected"; resolution: string | null }>(
