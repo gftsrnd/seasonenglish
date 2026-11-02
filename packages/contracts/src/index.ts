@@ -8,6 +8,7 @@ export * from "./domain-contract.js";
 export * from "./learning-contract.js";
 export * from "./manager-contract.js";
 export * from "./media-contract.js";
+export * from "./monthly-contract.js";
 export * from "./notification-contract.js";
 export * from "./screen-contract.js";
 export * from "./session-contract.js";

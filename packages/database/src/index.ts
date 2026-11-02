@@ -3,6 +3,7 @@ export * from "./client.js";
 export * from "./generation-findings.js";
 export * from "./migrate.js";
 export * from "./media-repository.js";
+export * from "./monthly-content-repository.js";
 export * from "./repositories.js";
 export * from "./schema.js";
 export * from "./seed.js";

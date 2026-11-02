@@ -137,6 +137,26 @@ export const programWeeks = pgTable("program_weeks", {
   keyVocabHint: text("key_vocab_hint").notNull().default(""), aiPlan: jsonb("ai_plan").notNull().default(emptyObject)
 }, (table) => [uniqueIndex("program_weeks_program_number_unique").on(table.programId, table.weekNumber)]);
 
+/** Additive monthly owner; historic weekly plans remain attached to program_weeks. */
+export const programMonths = pgTable("program_months", {
+  id: uuid("id").primaryKey(), organizationId: uuid("organization_id").notNull().references(() => organizations.id, { onDelete: "cascade" }),
+  month: text("month").notNull(), examDate: date("exam_date").notNull(), lessonCount: integer("lesson_count").notNull(),
+  themeTitle: text("theme_title").notNull().default(""), themeBrief: text("theme_brief").notNull().default(""),
+  themeContext: text("theme_context").notNull().default(""), communicationGoal: text("communication_goal").notNull().default(""),
+  briefVersion: integer("brief_version").notNull().default(1), briefStatus: text("brief_status").notNull().default("draft"),
+  createdAt: now(), updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow()
+}, (table) => [uniqueIndex("program_months_organization_month_unique").on(table.organizationId, table.month)]);
+
+export const monthFrameworks = pgTable("month_frameworks", {
+  id: uuid("id").primaryKey(), programMonthId: uuid("program_month_id").notNull().references(() => programMonths.id, { onDelete: "cascade" }),
+  cefr: text("cefr").notNull(), status: text("status").notNull().default("draft"), version: integer("version").notNull().default(1),
+  curriculumContract: jsonb("curriculum_contract").notNull().default(emptyObject), scopeHash: text("scope_hash").notNull().default(""),
+  qualityAcknowledgement: jsonb("quality_acknowledgement"), source: text("source").notNull().default("manual"),
+  generationJobId: uuid("generation_job_id").references(() => jobs.id), generationError: text("generation_error"),
+  approvedBy: uuid("approved_by").references(() => users.id), approvedAt: timestamp("approved_at", { withTimezone: true }),
+  createdBy: uuid("created_by").references(() => users.id), createdAt: now(), updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow()
+}, (table) => [uniqueIndex("month_frameworks_program_month_cefr_unique").on(table.programMonthId, table.cefr)]);
+
 export const promptVersions = pgTable("prompt_versions", {
   id: uuid("id").primaryKey(), organizationId: uuid("organization_id").notNull().references(() => organizations.id),
   taskKey: text("task_key").notNull(), version: integer("version").notNull(), content: text("content").notNull(),
@@ -150,7 +170,8 @@ export const rubricVersions = pgTable("rubric_versions", {
 });
 
 export const lessonSets = pgTable("lesson_sets", {
-  id: uuid("id").primaryKey(), programWeekId: uuid("program_week_id").notNull().references(() => programWeeks.id),
+  id: uuid("id").primaryKey(), programWeekId: uuid("program_week_id").references(() => programWeeks.id),
+  monthFrameworkId: uuid("month_framework_id").references(() => monthFrameworks.id, { onDelete: "cascade" }),
   cefr: text("cefr").notNull(), createdAt: now()
 });
 
@@ -167,10 +188,25 @@ export const lessons = pgTable("lessons", {
   dayNumber: integer("day_number").notNull(), title: text("title").notNull()
 });
 
+export const monthLessons = pgTable("month_lessons", {
+  id: uuid("id").primaryKey(), frameworkId: uuid("framework_id").notNull().references(() => monthFrameworks.id, { onDelete: "cascade" }),
+  lessonNumber: integer("lesson_number").notNull(), lessonDate: date("lesson_date").notNull(), lessonId: uuid("lesson_id").references(() => lessons.id, { onDelete: "set null" }),
+  scopeHash: text("scope_hash").notNull(), status: text("status").notNull().default("pending"), generationError: jsonb("generation_error"),
+  approvedBy: uuid("approved_by").references(() => users.id), approvedAt: timestamp("approved_at", { withTimezone: true }), createdAt: now(), updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow()
+}, (table) => [uniqueIndex("month_lessons_framework_lesson_unique").on(table.frameworkId, table.lessonNumber)]);
+
 export const lessonVersions = pgTable("lesson_versions", {
   id: uuid("id").primaryKey(), lessonId: uuid("lesson_id").notNull().references(() => lessons.id, { onDelete: "cascade" }),
   version: integer("version").notNull(), status: text("status").notNull().default("draft"), content: jsonb("content").notNull(),
   promptVersionId: uuid("prompt_version_id").references(() => promptVersions.id), createdAt: now()
+});
+
+export const monthLessonCorrections = pgTable("month_lesson_corrections", {
+  id: uuid("id").primaryKey(), monthLessonId: uuid("month_lesson_id").notNull().references(() => monthLessons.id, { onDelete: "cascade" }),
+  originalLessonVersionId: uuid("original_lesson_version_id").references(() => lessonVersions.id), correctionLessonVersionId: uuid("correction_lesson_version_id").references(() => lessonVersions.id),
+  requestedBy: uuid("requested_by").notNull().references(() => users.id), authorizedBy: uuid("authorized_by").references(() => users.id),
+  reason: text("reason").notNull(), status: text("status").notNull().default("requested"), createdAt: now(),
+  authorizedAt: timestamp("authorized_at", { withTimezone: true }), publishedAt: timestamp("published_at", { withTimezone: true })
 });
 
 export const progressRecords = pgTable("progress_records", {
@@ -461,6 +497,6 @@ export const databaseSchema = {
   gameResults, gameSets, idempotencyKeys, jobs, learnerProfiles, lessonSetVersions,
   lessonPartAppeals, lessonPartAttempts, lessonSets, lessonVersions, lessons, notificationDeliveries, organizations, organizationSettings, providerConfigurations,
   practiceSubmissions, learnerVocabularyUnlocks, levelUpChallengeResults, practiceAppeals,
-  programWeeks, programs, progressRecords, promptVersions,
+  monthFrameworks, monthLessonCorrections, monthLessons, programMonths, programWeeks, programs, progressRecords, promptVersions,
   reminders, rewardEvents, rubricVersions, sessions, surveys, userCredentials, users, managerPinReports, managerDestructiveConfirmations, managerMaintenanceBackups
 };
