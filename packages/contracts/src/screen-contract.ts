@@ -27,8 +27,6 @@ export const SCREEN_CONTRACT = [
   { id: "weekly-practice", path: "/practice", title: "Bài thực hành cuối tuần", roles: ["learner"], purpose: "Soạn, nộp và xem trạng thái bài cuối tuần" },
   { id: "games", path: "/games", title: "Mini game", roles: ["learner"], purpose: "Chọn mini game" },
   { id: "game-detail", path: "/games/:game", title: "Mini game", roles: ["learner"], purpose: "Chơi một mini game" },
-  { id: "arena", path: "/arena", title: "Arena", roles: ["learner"], purpose: "Xem điều kiện, đối thủ và trận đấu" },
-  { id: "duel", path: "/duel/:id", title: "Duel", roles: ["learner"], purpose: "Thực hiện một lượt đấu cụ thể" },
   { id: "learner-profile", path: "/profile", title: "Tiến độ & hồ sơ", roles: ["learner"], purpose: "Xem tiến bộ và cập nhật hồ sơ" },
   { id: "reward", path: "/reward/:mode", title: "Chứng nhận & phần thưởng", roles: ["learner", "manager"], purpose: "Xem trước hoặc nhận chứng nhận" },
   { id: "survey", path: "/survey", title: "Khảo sát cuối pilot", roles: ["learner"], purpose: "Gửi khảo sát cuối pilot" },

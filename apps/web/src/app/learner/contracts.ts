@@ -34,7 +34,7 @@ import type { AudioDeletionMetadata, AudioEvidence } from "../shared/media/audio
 export const LEARNER_ROUTES = [
   "/home", "/onboard", "/test/:kind", "/lesson/:id",
   "/coach", "/challenge", "/practice", "/survey", "/profile",
-  "/reward/:mode", "/games", "/games/:game", "/arena", "/duel/:id"
+  "/reward/:mode", "/games", "/games/:game"
 ] as const;
 
 export type LearnerRoute = (typeof LEARNER_ROUTES)[number];
