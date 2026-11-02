@@ -615,6 +615,7 @@ async function openMicrophoneStream(): Promise<MediaStream> {
 
 function assessmentHeading(view: AssessmentView) {
   if (view.definition.kind === "placement") return "Test đầu vào";
+  if (view.definition.kind === "final") return "Bài thi tháng";
   const targetLevel = assessmentTargetLevel(view);
   return targetLevel ? `Bài thi lên mức ${targetLevel}` : "Bài thi lên mức";
 }

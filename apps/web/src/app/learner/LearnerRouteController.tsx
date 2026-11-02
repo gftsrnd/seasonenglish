@@ -95,6 +95,7 @@ export function resolveLearnerRoute(pathname: string): ResolvedLearnerRoute {
     const raw = segments[1];
     if (raw === "placement") return { name: "assessment", params: { kind: raw } };
     if (raw === "levelup" || raw === "level-up") return { name: "assessment", params: { kind: "levelup" } };
+    if (raw === "monthly" || raw === "final") return { name: "assessment", params: { kind: "final" } };
   }
   if (segments[0] === "lesson" && segments.length === 2 && segments[1]) return { name: "lesson", params: { id: segments[1] } };
   if (segments[0] === "reward" && segments.length === 2 && (segments[1] === "preview" || segments[1] === "done")) return { name: "reward", params: { mode: segments[1] } };

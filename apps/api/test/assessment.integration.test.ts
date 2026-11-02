@@ -1,7 +1,7 @@
 import { Pool } from "pg";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { migrateDatabase, resetPublicSchema, seedDemo } from "@e4s/database";
-import { createCredentialHash } from "@e4s/domain/identity";
+import { createCredentialHash, createPinHash } from "@e4s/domain/identity";
 import { DEMO_IDS } from "@e4s/test-support";
 import { buildApi } from "../src/app.js";
 
@@ -31,8 +31,8 @@ describe("assessment API preserves the one-screen flow and server evidence", () 
       await client.query(
         "insert into user_credentials (user_id, credential_hash) values ($1, $2), ($3, $4), ($5, $6), ($7, $8)",
         [
-          DEMO_IDS.learner, await createCredentialHash("learner-pass"),
-          "00000000-0000-4000-8000-000000000109", await createCredentialHash("fresh-pass"),
+          DEMO_IDS.learner, await createPinHash("123456"),
+          "00000000-0000-4000-8000-000000000109", await createPinHash("654321"),
           DEMO_IDS.operator, await createCredentialHash("operator-pass"),
           DEMO_IDS.manager, await createCredentialHash("manager-pass")
         ]
@@ -41,12 +41,13 @@ describe("assessment API preserves the one-screen flow and server evidence", () 
     await app.ready();
     const login = await app.inject({
       method: "POST", url: "/api/auth/learner/login",
-      payload: { email: "minh.anh.nguyen@e4s.local", password: "learner-pass" }
+      payload: { email: "minh.anh.nguyen@e4s.local", pin: "123456" }
     });
+    expect(login.statusCode, login.body).toBe(200);
     cookie = String(login.headers["set-cookie"]).split(";")[0] ?? "";
     const freshLogin = await app.inject({
       method: "POST", url: "/api/auth/learner/login",
-      payload: { email: "fresh@e4s.local", password: "fresh-pass" }
+      payload: { email: "fresh@e4s.local", pin: "654321" }
     });
     freshCookie = String(freshLogin.headers["set-cookie"]).split(";")[0] ?? "";
     const operatorLogin = await app.inject({
@@ -71,6 +72,16 @@ describe("assessment API preserves the one-screen flow and server evidence", () 
       definition: { kind: "placement", totalMinutes: 70, totalScore: 100 },
       attempt: null
     });
+  });
+
+  it("keeps the monthly final locked until every monthly lesson is complete", async () => {
+    const view = await app.inject({ method: "GET", url: "/api/v1/assessments/monthly", headers: { cookie } });
+    expect(view.statusCode, view.body).toBe(409);
+    expect(view.json()).toEqual({ code: "MONTHLY_EXAM_LOCKED" });
+
+    const start = await app.inject({ method: "POST", url: "/api/v1/assessments/monthly/start", headers: { cookie }, payload: {} });
+    expect(start.statusCode, start.body).toBe(409);
+    expect(start.json()).toEqual({ code: "MONTHLY_EXAM_LOCKED" });
   });
 
   it("starts, saves and resumes Listening on the same assessment attempt", async () => {

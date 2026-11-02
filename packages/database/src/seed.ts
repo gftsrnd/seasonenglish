@@ -1,5 +1,5 @@
 import type { Client } from "pg";
-import { levelUpDefinition, placementDefinition } from "./assessment-blueprints.js";
+import { levelUpDefinition, monthlyFinalDefinition, placementDefinition } from "./assessment-blueprints.js";
 import { prototypePromptDefaults } from "./prototype-prompts.js";
 import { planCanonicalPromptPublication } from "./prompt-sync.js";
 
@@ -47,7 +47,9 @@ export const DEMO_IDS = {
   placementVersion: "00000000-0000-4000-8000-000000000872",
   placementAttempt: "00000000-0000-4000-8000-000000000873",
   levelUpDefinition: "00000000-0000-4000-8000-000000000891",
-  levelUpVersion: "00000000-0000-4000-8000-000000000892"
+  levelUpVersion: "00000000-0000-4000-8000-000000000892",
+  monthlyFinalDefinition: "00000000-0000-4000-8000-000000000893",
+  monthlyFinalVersion: "00000000-0000-4000-8000-000000000894"
 } as const;
 
 const badgeCatalog = [
@@ -622,7 +624,8 @@ export async function seedDemo(client: Client, options: { mode?: SeedDemoMode } 
   );
   const assessments = [
     [DEMO_IDS.placementDefinition, "placement-a", "placement", "Bài test đầu vào", DEMO_IDS.placementVersion, placementDefinition],
-    [DEMO_IDS.levelUpDefinition, "levelup-b1", "level_up", "Đề thi lên mức B1", DEMO_IDS.levelUpVersion, levelUpDefinition]
+    [DEMO_IDS.levelUpDefinition, "levelup-b1", "level_up", "Đề thi lên mức B1", DEMO_IDS.levelUpVersion, levelUpDefinition],
+    [DEMO_IDS.monthlyFinalDefinition, "monthly-final", "final", "Bài thi tháng", DEMO_IDS.monthlyFinalVersion, monthlyFinalDefinition]
   ] as const;
   for (const [definitionId, key, kind, title, versionId, blueprint] of assessments) {
     await client.query(

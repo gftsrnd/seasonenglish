@@ -177,6 +177,13 @@ export const placementDefinition: StoredAssessmentDefinition = {
   ]
 };
 
+export const monthlyFinalDefinition: StoredAssessmentDefinition = {
+  ...placementDefinition,
+  key: "monthly-final",
+  kind: "final",
+  title: "Bài thi tháng"
+};
+
 export const levelUpDefinition: StoredAssessmentDefinition = {
   key: "levelup-b1", kind: "level-up", title: "Đề thi lên mức B1", version: 1, totalMinutes: 35, totalScore: 100, targetLevel: "B1",
   sections: [

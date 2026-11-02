@@ -36,7 +36,7 @@ import type { Pool } from "pg";
 import { z } from "zod";
 import { createRoleGuard } from "../identity/policy.js";
 
-const kindParam = z.object({ kind: z.enum(["placement", "levelup", "level-up"]) });
+const kindParam = z.object({ kind: z.enum(["placement", "levelup", "level-up", "monthly", "final"]) });
 const attemptParam = z.object({ attemptId: z.uuid() });
 const responseParam = z.object({
   attemptId: z.uuid(),
@@ -547,6 +547,9 @@ export function registerAssessmentRoutes(app: FastifyInstance, pool: Pool, aiRun
     const parsed = kindParam.safeParse(request.params);
     if (!parsed.success) return reply.code(400).send({ code: "INVALID_ASSESSMENT_KIND" });
     const kind = normalizeKind(parsed.data.kind);
+    if (kind === "final" && !await monthlyExamIsReady(repositories.learning, request.e4sSession!.user.id)) {
+      return reply.code(409).send({ code: "MONTHLY_EXAM_LOCKED" });
+    }
     const definition = await repositories.assessments.findPublished(kind);
     if (!definition) return reply.code(404).send({ code: "ASSESSMENT_NOT_PUBLISHED" });
     const resumed = kind === "placement"
@@ -623,6 +626,11 @@ export function registerAssessmentRoutes(app: FastifyInstance, pool: Pool, aiRun
         return reply.code(409).send({ code: "LEVEL_UP_NOT_READY" });
       }
       definition = await repositories.assessments.findPublishedLevelUpForLearner(learnerId, progress.levelReadiness.targetLevel);
+    } else if (kind === "final") {
+      if (!await monthlyExamIsReady(repositories.learning, learnerId)) {
+        return reply.code(409).send({ code: "MONTHLY_EXAM_LOCKED" });
+      }
+      definition = await repositories.assessments.findPublished(kind);
     } else {
       definition = await repositories.assessments.findPublished(kind);
     }
@@ -845,19 +853,30 @@ function levelFormBlueprint(targetLevel: "A2" | "B1" | "B2" | "C1", output: Leve
   };
 }
 
-function normalizeKind(kind: "placement" | "levelup" | "level-up"): AssessmentKind {
-  return kind === "levelup" ? "level-up" : kind;
+function normalizeKind(kind: "placement" | "levelup" | "level-up" | "monthly" | "final"): AssessmentKind {
+  if (kind === "levelup") return "level-up";
+  return kind === "monthly" ? "final" : kind;
 }
 
 async function definitionForAttempt(
   repository: ReturnType<typeof createRepositories>["assessments"],
   attempt: AssessmentAttemptRecord
 ): Promise<PublishedAssessmentRecord | null> {
-  for (const kind of ["placement", "level-up"] as const) {
+  for (const kind of ["placement", "level-up", "final"] as const) {
     const definition = await repository.findPublished(kind);
     if (definition?.versionId === attempt.assessmentVersionId) return definition;
   }
   return null;
+}
+
+async function monthlyExamIsReady(
+  learning: ReturnType<typeof createRepositories>["learning"],
+  learnerId: string
+): Promise<boolean> {
+  const context = await learning.getActiveMonthlyContext(learnerId);
+  if (!context) return false;
+  const lessons = await learning.listMonthlyLessons(learnerId, context.month);
+  return lessons.length > 0 && lessons.every((lesson) => lesson.progress.status === "completed");
 }
 
 function taskFor(definition: PublishedAssessmentRecord, sectionCode: AssessmentSectionCode, taskKey: string): StoredAssessmentTask | null {
