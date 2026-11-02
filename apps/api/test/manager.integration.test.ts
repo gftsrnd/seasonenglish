@@ -153,30 +153,13 @@ describe("manager progress and operations API", () => {
     expect(operations.json()).toMatchObject({ organizationName: "Trống Demo", recentActivity: [] });
   });
 
-  it("lets Manager and Operator assign one canonical weekly practice", async () => {
+  it("retires the Manager weekly-practice assignment endpoint", async () => {
     const managerAssignment = await app.inject({
       method: "POST", url: `/api/v1/manager/learners/${DEMO_IDS.learner}/weekly-practice`,
       headers: { cookie: managerCookie }, payload: {}
     });
-    expect(managerAssignment.statusCode, managerAssignment.body).toBe(200);
-    expect(managerAssignment.json()).toMatchObject({
-      status: "assigned", learnerId: DEMO_IDS.learner, weekNumber: 1,
-      topic: expect.any(String), task: expect.any(String), guidance: expect.any(String)
-    });
-
-    const operatorAssignment = await app.inject({
-      method: "POST", url: `/api/v1/assessment-reviews/learners/${DEMO_IDS.learner}/weekly-practice`,
-      headers: { cookie: operatorCookie }, payload: {}
-    });
-    expect(operatorAssignment.statusCode, operatorAssignment.body).toBe(200);
-    expect(operatorAssignment.json()).toMatchObject({
-      status: "already_assigned",
-      submissionId: managerAssignment.json().submissionId
-    });
-    await expect(pool.query(
-      "select count(*)::int as count from practice_submissions where learner_id = $1 and program_week_id = $2 and superseded_at is null",
-      [DEMO_IDS.learner, DEMO_IDS.week]
-    )).resolves.toMatchObject({ rows: [{ count: 1 }] });
+    expect(managerAssignment.statusCode, managerAssignment.body).toBe(410);
+    expect(managerAssignment.json()).toEqual({ code: "WEEKLY_PRACTICE_RETIRED" });
   });
 
   it("lets a Manager list organisation accounts and persist another account's role change", async () => {

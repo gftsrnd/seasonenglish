@@ -102,13 +102,7 @@ export function registerManagerRoutes(app: FastifyInstance, pool: Pool, options:
   });
 
   app.post<{ Params: { learnerId: string } }>("/api/v1/manager/learners/:learnerId/weekly-practice", { preHandler: managerOnly }, async (request, reply) => {
-    const params = learnerIdParams.safeParse(request.params);
-    if (!params.success) return reply.code(400).send({ code: "MANAGER_LEARNER_ID_INVALID" });
-    const assignment = await repositories.engagement.assignWeeklyPractice({
-      staffId: request.e4sSession!.user.id,
-      learnerId: params.data.learnerId
-    });
-    return assignment ?? reply.code(409).send({ code: "WEEKLY_PRACTICE_NOT_ELIGIBLE" });
+    return reply.code(410).send({ code: "WEEKLY_PRACTICE_RETIRED" });
   });
 
   app.get("/api/v1/manager/delete-requests", { preHandler: managerOnly }, async (request, reply) => {
