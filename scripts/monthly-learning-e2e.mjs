@@ -88,6 +88,10 @@ async function completeDailyLesson(learnerPage) {
   const view = await expectStatus(learnerPage, `/api/v1/learner/months/${month}`, {}, 200, "load learner month");
   const lessonId = view.lessons[0]?.id;
   assert(lessonId, "learner month has no approved lesson");
+  await learnerPage.goto(`${webUrl}/lesson/${lessonId}`, { waitUntil: "networkidle" });
+  await learnerPage.getByText("The handover list", { exact: true }).first().waitFor();
+  const lesson = await expectStatus(learnerPage, `/api/v1/lessons/${lessonId}`, {}, 200, "load learner lesson");
+  if (lesson.progress?.status === "completed") return;
   await expectStatus(learnerPage, `/api/v1/lessons/${lessonId}/study-completion`, { method: "POST", body: "{}" }, 200, "complete study");
   for (const [code, evidence] of [["listening", { answer: "The handover list" }], ["reading", { answer: "The handover list" }], ["writing", { answer: "The handover list is ready." }], ["word_class", { answer: "The handover list" }], ["word_use", { answer: "The handover list" }], ["speaking", { artifactKey: `monthly-e2e/${crypto.randomUUID()}.webm` }]]) {
     await expectStatus(learnerPage, `/api/v1/lessons/${lessonId}/parts/${code}/attempts`, { method: "POST", body: JSON.stringify({ requestId: crypto.randomUUID(), evidence }) }, 200, `submit ${code}`);
@@ -96,6 +100,8 @@ async function completeDailyLesson(learnerPage) {
 }
 
 async function submitFinal(learnerPage) {
+  await learnerPage.goto(`${webUrl}/test/monthly`, { waitUntil: "networkidle" });
+  await learnerPage.getByRole("heading", { name: "Bài thi tháng" }).first().waitFor();
   const started = await expectStatus(learnerPage, "/api/v1/assessments/monthly/start", { method: "POST", body: "{}" }, 201, "start monthly final");
   const attemptId = started.attempt.id;
   for (const section of ["listening", "reading", "writing"]) await expectStatus(learnerPage, `/api/v1/assessment-attempts/${attemptId}/sections/${section}/complete`, { method: "POST", body: "{}" }, 200, `complete final ${section}`);
@@ -119,10 +125,13 @@ async function main() {
     await login(learner, "minh.anh.nguyen@e4s.local", "246810");
     await learner.goto(`${webUrl}/home`, { waitUntil: "networkidle" });
     await completeDailyLesson(learner);
-    await learner.reload({ waitUntil: "networkidle" });
+    await learner.goto(`${webUrl}/home`, { waitUntil: "networkidle" });
     await learner.getByLabel("Bài thi tháng").waitFor();
     const firstFinal = await submitFinal(learner);
-    await expectStatus(learner, `/api/v1/assessment-attempts/${firstFinal}/appeals`, { method: "POST", body: JSON.stringify({ reason: "Xin xem lại phần viết của bài thi tháng." }) }, 201, "appeal monthly final");
+    const appeal = await browserRequest(learner, `/api/v1/assessment-attempts/${firstFinal}/appeals`, { method: "POST", body: JSON.stringify({ reason: "Xin xem lại phần viết của bài thi tháng." }) });
+    assert([201, 409].includes(appeal.status), `appeal monthly final: expected 201 or existing 409, got ${appeal.status} ${JSON.stringify(appeal.body)}`);
+    await manager.goto(`${webUrl}/mgr/ops/levels`, { waitUntil: "networkidle" });
+    await manager.getByRole("heading", { name: "Duyệt trình độ" }).waitFor();
     await expectStatus(manager, `/api/v1/assessment-reviews/${firstFinal}/decision`, { method: "POST", body: JSON.stringify({ status: "approved", reason: "Đã đối chiếu bài làm và chấp nhận kết quả bài thi tháng." }) }, 200, "manager resolves appeal");
     const approved = await expectStatus(learner, "/api/v1/assessments/monthly", {}, 200, "read approved final");
     assert(approved.attempt?.status === "approved" && approved.appeal?.status === "accepted", "approved final did not return an accepted appeal");
