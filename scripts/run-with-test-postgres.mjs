@@ -1,9 +1,10 @@
 import { spawn } from "node:child_process";
+import { randomUUID } from "node:crypto";
 import { mkdir } from "node:fs/promises";
 import { resolve } from "node:path";
 import EmbeddedPostgres from "embedded-postgres";
 
-const databaseDir = resolve(`.tmp/postgres-test-${process.pid}`);
+const databaseDir = resolve(`.tmp/postgres-test-${process.pid}-${randomUUID()}`);
 await mkdir(databaseDir, { recursive: true });
 const port = 55_000 + (process.pid % 5_000);
 
