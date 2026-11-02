@@ -104,6 +104,17 @@ export interface MonthlyExamScope {
   soundIds: string[];
 }
 
+/** A monthly exam can guide reinforcement but never demotes a learner automatically. */
+export function resolveMonthlyExamOutcome(input: { currentLevel: CefrLevel; passed: boolean }): {
+  levelChange: null;
+  recommendation: "continue_current_level" | "reinforce_lower_level";
+  certificateEligible: boolean;
+} {
+  return input.passed
+    ? { levelChange: null, recommendation: "continue_current_level", certificateEligible: input.currentLevel === "C1" }
+    : { levelChange: null, recommendation: "reinforce_lower_level", certificateEligible: false };
+}
+
 /** The exam scope intentionally excludes all supplemental terms and activities. */
 export function buildMonthlyExamScope(contract: MonthlyCurriculumContract): MonthlyExamScope {
   return {

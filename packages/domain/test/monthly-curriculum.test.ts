@@ -4,6 +4,7 @@ import {
   buildMonthlyCurriculum,
   buildMonthlyExamScope,
   monthlyScopeHash,
+  resolveMonthlyExamOutcome,
   recommendedPendingBatch,
   validateMonthlyCurriculum,
   type MonthlyCurriculumInput
@@ -119,6 +120,15 @@ describe("monthly curriculum contract", () => {
       soundIds: curriculum.sounds.map((sound) => sound.id)
     });
     expect(scope.coreTermIds).not.toContain("support-1");
+  });
+
+  it("recommends reinforcement after a failed monthly exam without automatically lowering the learner", () => {
+    expect(resolveMonthlyExamOutcome({ currentLevel: "B2", passed: false })).toEqual({
+      levelChange: null, recommendation: "reinforce_lower_level", certificateEligible: false
+    });
+    expect(resolveMonthlyExamOutcome({ currentLevel: "C1", passed: true })).toEqual({
+      levelChange: null, recommendation: "continue_current_level", certificateEligible: true
+    });
   });
 });
 
