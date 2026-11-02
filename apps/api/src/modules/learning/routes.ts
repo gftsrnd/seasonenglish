@@ -254,6 +254,30 @@ export function registerLearningRoutes(
     return view ?? reply.code(404).send({ code: "LEARNER_NOT_FOUND" });
   });
 
+  app.get("/api/v1/learner/months/:month/exam", { preHandler: learnerOnly }, async (request, reply) => {
+    const params = z.object({ month: z.string().regex(/^\d{4}-(0[1-9]|1[0-2])$/u) }).safeParse(request.params);
+    if (!params.success) return reply.code(400).send({ code: "INVALID_MONTH" });
+    const context = await repositories.learning.getActiveMonthlyContext(request.e4sSession!.user.id);
+    if (!context || context.month !== params.data.month) return reply.code(404).send({ code: "MONTHLY_EXAM_NOT_AVAILABLE" });
+    const lessons = await repositories.learning.listMonthlyLessons(request.e4sSession!.user.id, context.month);
+    const completedLessons = lessons.filter((lesson) => lesson.progress.status === "completed").length;
+    const totalLessons = lessons.length;
+    const remainingLessons = Math.max(0, totalLessons - completedLessons);
+    return {
+      month: context.month,
+      title: `Bài thi tháng · ${context.themeTitle}`,
+      examDate: context.examDate,
+      status: remainingLessons ? "locked" as const : "ready" as const,
+      completedLessons,
+      totalLessons,
+      remainingLessons,
+      requirement: remainingLessons
+        ? `Hoàn thành ${remainingLessons} bài còn lại để mở bài thi tháng.`
+        : "Bạn đã hoàn thành điều kiện. Bài thi tháng đã sẵn sàng.",
+      certificateEligible: context.cefr === "C1"
+    };
+  });
+
   app.get("/api/v1/learner/months/:month", { preHandler: learnerOnly }, async (request, reply) => {
     const params = z.object({ month: z.string().regex(/^\d{4}-(0[1-9]|1[0-2])$/u) }).safeParse(request.params);
     if (!params.success) return reply.code(400).send({ code: "INVALID_MONTH" });

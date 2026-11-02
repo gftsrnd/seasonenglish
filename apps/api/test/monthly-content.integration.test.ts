@@ -76,6 +76,9 @@ describe("monthly content API", () => {
     const learnerLesson = await app.inject({ method: "GET", url: `/api/v1/lessons/${lessonId}`, headers: { cookie: learnerCookie } });
     expect(learnerLesson.statusCode, learnerLesson.body).toBe(200);
     expect(learnerLesson.json()).toMatchObject({ id: lessonId, title: "The budget list" });
+    const monthlyExam = await app.inject({ method: "GET", url: "/api/v1/learner/months/2026-11/exam", headers: { cookie: learnerCookie } });
+    expect(monthlyExam.statusCode, monthlyExam.body).toBe(200);
+    expect(monthlyExam.json()).toMatchObject({ month: "2026-11", status: "locked", completedLessons: 0, totalLessons: 1, remainingLessons: 1 });
     const learnerHome = await app.inject({ method: "GET", url: "/api/v1/learner/home", headers: { cookie: learnerCookie } });
     expect(learnerHome.statusCode, learnerHome.body).toBe(200);
     expect(learnerHome.json()).toMatchObject({ month: { month: "2026-11", themeTitle: "Quarterly budget review" } });
