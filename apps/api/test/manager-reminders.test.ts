@@ -105,6 +105,23 @@ describe("manager reminder channel API", () => {
       .resolves.toMatchObject({ rows: [{ action: "learner.inactivity_locked" }] });
   });
 
+  it("automatically accepts an assessment appeal that has waited 24 hours", async () => {
+    const appealId = randomUUID();
+    await pool.query(
+      `insert into appeals (id, attempt_id, learner_id, reason, created_at)
+       values ($1, $2, $3, 'Please review this monthly exam result.', now() - interval '25 hours')`,
+      [appealId, DEMO_IDS.placementAttempt, DEMO_IDS.learner]
+    );
+
+    const response = await app.inject({ method: "GET", url: "/api/v1/manager/reminders", headers: { cookie: managerCookie } });
+
+    expect(response.statusCode, response.body).toBe(200);
+    await expect(pool.query("select status, resolution, resolved_at from appeals where id = $1", [appealId]))
+      .resolves.toMatchObject({ rows: [{ status: "accepted", resolution: "Tự duyệt sau 24 giờ chờ xử lý.", resolved_at: expect.any(Date) }] });
+    await expect(pool.query("select action from audit_events where entity_id = $1 order by created_at desc limit 1", [appealId]))
+      .resolves.toMatchObject({ rows: [{ action: "assessment.appeal.auto_accepted" }] });
+  });
+
   it("queues Base.vn only without invoking Resend", async () => {
     const learnerId = await createLearner("base-learner@example.com");
     await pool.query(

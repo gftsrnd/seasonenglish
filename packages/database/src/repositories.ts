@@ -9350,6 +9350,36 @@ class ManagerRepository {
     } finally { client.release(); }
   }
 
+  /** Assessment appeals become accepted after 24 hours when no staff decision is recorded. */
+  async autoApproveExpiredAssessmentAppeals(): Promise<number> {
+    const client = await this.pool.connect();
+    try {
+      await client.query("begin");
+      const expired = await client.query<{ id: string; organization_id: string }>(
+        `update appeals appeal
+         set status = 'accepted', resolution = 'Tự duyệt sau 24 giờ chờ xử lý.', resolved_at = now()
+         from assessment_attempts attempt
+         join assessment_versions version on version.id = attempt.assessment_version_id
+         join assessment_definitions definition on definition.id = version.definition_id
+         where appeal.attempt_id = attempt.id and appeal.status = 'pending'
+           and appeal.created_at <= now() - interval '24 hours'
+         returning appeal.id, definition.organization_id`
+      );
+      for (const appeal of expired.rows) {
+        await client.query(
+          `insert into audit_events (id, organization_id, action, entity_type, entity_id, payload, trace_id)
+           values ($1, $2, 'assessment.appeal.auto_accepted', 'appeal', $3, $4::jsonb, $5)`,
+          [randomUUID(), appeal.organization_id, appeal.id, JSON.stringify({ thresholdHours: 24 }), randomUUID()]
+        );
+      }
+      await client.query("commit");
+      return expired.rowCount ?? 0;
+    } catch (error) {
+      await client.query("rollback");
+      throw error;
+    } finally { client.release(); }
+  }
+
   private async eligibleReminderLearners(db: Pool | PoolClient, organizationId: string, learnerId?: string): Promise<Array<{
     learner_id: string;
     learner_name: string;
@@ -10181,6 +10211,7 @@ class ManagerRepository {
 
   async reminders(staffId: string): Promise<ManagerRemindersView | null> {
     await this.lockInactiveLearners();
+    await this.autoApproveExpiredAssessmentAppeals();
     const organization = await this.organizationFor(staffId);
     if (!organization) return null;
     const settings = await this.settingsForOrganization(organization.id);
