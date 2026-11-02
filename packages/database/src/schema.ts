@@ -458,6 +458,7 @@ export const rewardEvents = pgTable("reward_events", {
 
 export const gameSets = pgTable("game_sets", {
   id: uuid("id").primaryKey(), programWeekId: uuid("program_week_id").references(() => programWeeks.id), gameKey: text("game_key").notNull(),
+  programMonthId: uuid("program_month_id").references(() => programMonths.id),
   learnerId: uuid("learner_id").references(() => users.id), status: text("status").notNull().default("draft"),
   payload: jsonb("payload").notNull(), createdAt: now()
 });

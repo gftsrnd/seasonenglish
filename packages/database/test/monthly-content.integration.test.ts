@@ -45,6 +45,13 @@ describe("monthly content persistence", () => {
     expect(await repository.recommendedBatch(DEMO_IDS.operator, framework.id)).toEqual([1, 2, 3, 4, 5, 6, 7, 8, 9, 10]);
   });
 
+  it("allows game sets to belong to a monthly learning cycle", async () => {
+    const column = await client.query(
+      "select column_name from information_schema.columns where table_schema = 'public' and table_name = 'game_sets' and column_name = 'program_month_id'"
+    );
+    expect(column.rows).toHaveLength(1);
+  });
+
   it("rejects framework replacement after approval and records the approval", async () => {
     const framework = (await repository.getOverview(DEMO_IDS.operator, month)).frameworks[0]!;
     await repository.approveFramework(DEMO_IDS.operator, framework.id);
