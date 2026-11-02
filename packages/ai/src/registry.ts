@@ -30,6 +30,7 @@ import {
   microGradingInputSchema, microGradingOutputJsonSchema, microGradingOutputSchema,
   weeklyPracticeInputSchema, weeklyPracticeOutputJsonSchema, weeklyPracticeOutputSchema
 } from "./schemas.js";
+import { z } from "zod";
 import type { AiTaskDefinition } from "./types.js";
 import { standardLessonInstruction } from "./lesson-instruction.js";
 
@@ -91,6 +92,10 @@ export const AI_TASKS = new AiTaskRegistry([
   },
   {
     id: "weekly_lesson_day", promptKey: "weekly_lessons", inputSchema: weeklyLessonDayInputSchema,
+    outputSchema: weeklyLessonDayOutputSchema, outputJsonSchema: weeklyLessonDayOutputJsonSchema
+  },
+  {
+    id: "monthly_lesson_day", promptKey: "monthly_lessons", inputSchema: z.record(z.string(), z.unknown()),
     outputSchema: weeklyLessonDayOutputSchema, outputJsonSchema: weeklyLessonDayOutputJsonSchema
   },
   {

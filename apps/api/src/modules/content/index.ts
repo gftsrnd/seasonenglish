@@ -15,5 +15,5 @@ export function registerContentRoutes(
   mediaService?: ContentMediaService
 ): void {
   registerWeeklyContentRoutes(app, pool, aiRunner, storage, aiRunnerFactory, mediaService);
-  registerMonthlyContentRoutes(app, pool);
+  registerMonthlyContentRoutes(app, pool, aiRunner, aiRunnerFactory);
 }

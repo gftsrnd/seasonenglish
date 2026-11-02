@@ -1,4 +1,6 @@
 import type { MonthlyCurriculumContract } from "@e4s/domain";
+import { validateLessonPublication } from "@e4s/domain";
+import type { LessonPart } from "@e4s/contracts";
 
 const REQUIRED_COMPONENTS = [
   "objective", "instruction", "vocabulary", "grammar", "pronunciation",
@@ -41,6 +43,16 @@ export function evaluateMonthlyLessonQuality(
   const parts = new Map(lesson.parts.map((part) => [part.code, part]));
   for (const code of REQUIRED_COMPONENTS) {
     if (!parts.has(code)) severe.push(finding("MONTHLY_COMPONENT_MISSING", `Missing required ${code} component`, dayNumber, code));
+  }
+
+  const contentValidation = validateLessonPublication([{
+    dayNumber,
+    title: lesson.title,
+    durationMinutes: 15,
+    parts: lesson.parts as unknown as LessonPart[]
+  }], undefined, contract.cefr);
+  for (const issue of contentValidation.issues) {
+    severe.push(finding("MONTHLY_CONTENT_INVALID", issue.message, dayNumber, issue.code));
   }
 
   const coreById = new Map(contract.coreTerms.map((term) => [term.id, term]));

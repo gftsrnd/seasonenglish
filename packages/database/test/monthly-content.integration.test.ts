@@ -31,6 +31,8 @@ describe("monthly content persistence", () => {
       communicationGoal: "Explain costs and request approval"
     });
     expect(brief).toMatchObject({ month, version: 1, status: "draft" });
+    await repository.approveBrief(DEMO_IDS.operator, month);
+    await expect(repository.saveBrief(DEMO_IDS.operator, { month, title: "Changed", brief: "Changed", context: "Changed", communicationGoal: "Changed" })).rejects.toThrow(/approved/i);
 
     const framework = await repository.saveFramework(DEMO_IDS.operator, buildContract());
     expect(framework).toMatchObject({ cefr: "A1", version: 1, status: "draft" });
@@ -55,6 +57,32 @@ describe("monthly content persistence", () => {
       { action: "monthly.framework_approved", entity_id: framework.id }
     ]));
   });
+
+  it("requires acknowledgement for each light finding and keeps approved day versions immutable", async () => {
+    const framework = (await repository.getOverview(DEMO_IDS.operator, month)).frameworks[0]!;
+    const report = {
+      contractVersion: framework.version,
+      severe: [],
+      light: [{ severity: "light" as const, code: "MONTHLY_SYNONYM_OR_ANTONYM_MISSING", message: "Missing a lexical relation", dayNumber: 1, component: "vocabulary" }]
+    };
+    await repository.saveMonthlyDayDraft(DEMO_IDS.operator, framework.id, 1, { title: "Budget words", parts: [] }, report);
+    await expect(repository.approveMonthlyDay(DEMO_IDS.operator, framework.id, 1)).rejects.toThrow(/acknowledge/i);
+    await repository.acknowledgeMonthlyDayQuality(DEMO_IDS.operator, framework.id, 1, ["MONTHLY_SYNONYM_OR_ANTONYM_MISSING:1:vocabulary"]);
+    await repository.approveMonthlyDay(DEMO_IDS.operator, framework.id, 1);
+
+    await expect(repository.saveMonthlyDayDraft(DEMO_IDS.operator, framework.id, 1, { title: "Replacement", parts: [] }, report)).rejects.toThrow(/immutable/i);
+    const correctionId = await repository.createMonthlyCorrection(DEMO_IDS.operator, framework.id, 1, "Fix an approved example");
+    await repository.saveMonthlyCorrection(DEMO_IDS.operator, correctionId, { title: "Corrected budget words", parts: [] }, { severe: [], light: [], contractVersion: framework.version });
+    await repository.approveMonthlyCorrection(DEMO_IDS.operator, correctionId);
+    const correction = await client.query<{ status: string; original_lesson_version_id: string; correction_lesson_version_id: string }>(
+      "select status, original_lesson_version_id, correction_lesson_version_id from month_lesson_corrections where id = $1",
+      [correctionId]
+    );
+    expect(correction.rows[0]).toMatchObject({ status: "published" });
+    expect(correction.rows[0]?.correction_lesson_version_id).not.toBe(correction.rows[0]?.original_lesson_version_id);
+    const overview = await repository.getOverview(DEMO_IDS.operator, month);
+    expect(overview.frameworks[0]?.lessons[0]).toMatchObject({ status: "approved", locked: true, correctionCount: 1 });
+  });
 });
 
 function buildContract() {
@@ -65,9 +93,10 @@ function buildContract() {
     cefr: "A1",
     theme: { version: 1, title: "Preparing a quarterly budget review", brief: "Teams prepare and explain a quarterly budget review.", context: "Finance team planning meeting", communicationGoal: "Explain costs and request approval" },
     coreTerms: Array.from({ length: newDays * 3 }, (_, index) => ({ id: `core-${index + 1}`, word: `term-${index + 1}`, meaning: `meaning ${index + 1}`, type: "noun", ipa: "/tɜːm/" })),
-    supportTerms: [{ id: "support-1", word: "quarterly", meaning: "hàng quý", source: "example" }],
+    supportTerms: [{ id: "support-1", word: "quarterly", meaning: "hàng quý", type: "adjective", source: "example", dayNumber: 1 }],
     grammarTopics: Array.from({ length: 4 }, (_, index) => ({ id: `grammar-${index + 1}`, title: `Grammar ${index + 1}`, steps: [{ id: `grammar-${index + 1}-step-1`, focus: "focus", formula: "S + V", usage: "usage", examples: ["Example sentence."] }] })),
-    sounds: Array.from({ length: 4 }, (_, index) => ({ id: `sound-${index + 1}`, ipa: "/t/", label: "T sound", examples: Array.from({ length: 15 }, (_, exampleIndex) => ({ id: `sound-${index + 1}-example-${exampleIndex + 1}`, word: `soundword-${index + 1}-${exampleIndex + 1}`, ipa: "/t/" })) }))
+    sounds: Array.from({ length: 4 }, (_, index) => ({ id: `sound-${index + 1}`, ipa: "/t/", label: "T sound", examples: Array.from({ length: Math.ceil(calendar.lessonCount / 4) * 3 }, (_, exampleIndex) => ({ id: `sound-${index + 1}-example-${exampleIndex + 1}`, word: `soundword-${index + 1}-${exampleIndex + 1}`, ipa: "/t/" })) }))
   };
   return buildMonthlyCurriculum(input);
 }
+

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { MonthlyCurriculumContract } from "@e4s/domain";
-import { generateMonthlyDay, monthlyCheckpointKey } from "./monthly-day-generation.js";
+import { generateMonthlyDay, generateMonthlyDayWithAi, monthlyCheckpointKey } from "./monthly-day-generation.js";
 
 const components = ["objective", "instruction", "vocabulary", "grammar", "pronunciation", "listening", "reading", "writing", "word_class", "word_use", "speaking"];
 
@@ -48,21 +48,49 @@ describe("monthly day generation", () => {
     expect(result).toMatchObject({ status: "failed", lesson: null, attempts: 2 });
     expect(result.report.severe).not.toEqual([]);
   });
+
+  it("calls the monthly AI task with the locked theme, scope and DaySpec", async () => {
+    const runner = { runTask: async (taskId: string, input: Record<string, any>) => {
+      expect(taskId).toBe("monthly_lesson_day");
+      expect(input.month).toBe("2026-11");
+      expect(input.cefr).toBe("A1");
+      expect(input.daySpec).toMatchObject({ lessonNumber: 1, coreTermIds: ["budget", "cost", "forecast"] });
+      expect(input.lockedScope.coreTerms.map((term: { id: string }) => term.id)).toEqual(["budget", "cost", "forecast"]);
+      expect(input.lockedScope.grammarStep.id).toBe("step");
+      expect(input.lockedScope.sound.id).toBe("sound");
+      return { output: { lesson: { ...lessonCandidate(), title: "Budget lesson" } }, metadata: {} };
+    } } as unknown as import("@e4s/ai").AiTaskRunner;
+    const result = await generateMonthlyDayWithAi(contract(), 1, runner);
+    expect(result.status).toBe("ready");
+    expect(result.lesson?.title).toBe("Budget lesson");
+  });
 });
 
+function lessonCandidate() {
+  return { parts: components.map((code) => part(code)) };
+}
+
 function part(code: string) {
+  if (code === "objective") return { code, content: { text: "Identify three budget words." } };
+  if (code === "instruction") return { code, content: { steps: ["Read the example.", "Answer the question."] } };
   if (code === "vocabulary") return { code, content: { items: [
     { word: "budget", synonyms: ["plan"], antonyms: [] }, { word: "cost", synonyms: ["expense"], antonyms: [] }, { word: "forecast", synonyms: ["estimate"], antonyms: [] }
   ] } };
   if (code === "grammar") return { code, content: { formula: "The cost is + adjective" } };
   if (code === "pronunciation") return { code, content: { focus: "/k/", words: [{ word: "cost", ipa: "/kɒst/" }, { word: "can", ipa: "/kæn/" }, { word: "key", ipa: "/kiː/" }] } };
+  if (["listening", "reading", "word_class", "word_use"].includes(code)) return { code, content: {
+    ...(code === "listening" ? { script: "The cost is high." } : code === "reading" ? { text: "The cost is high." } : {}),
+    prompt: "What is high?", options: ["The cost", "The room", "The plan", "The date"], answer: "The cost"
+  } };
+  if (code === "writing") return { code, content: { prompt: "Write one sentence about cost.", answer: "The cost is high." } };
+  if (code === "speaking") return { code, content: { prompt: "Say a sentence about cost.", sample: "The cost is high." } };
   return { code, content: {} };
 }
 
 function contract(): MonthlyCurriculumContract {
   return {
     month: "2026-11", cefr: "A1", version: 1, theme: { version: 1, title: "Budget", brief: "Brief", context: "Context", communicationGoal: "Goal" },
-    coreTerms: [{ id: "budget", word: "budget", meaning: "ngân sách", type: "noun", ipa: "/ˈbʌdʒɪt/" }, { id: "cost", word: "cost", meaning: "chi phí", type: "noun", ipa: "/kɒst/" }, { id: "forecast", word: "forecast", meaning: "dự báo", type: "noun", ipa: "/ˈfɔːkɑːst/" }], supportTerms: [],
+    coreTerms: [{ id: "budget", word: "budget", meaning: "ngân sách", type: "noun", ipa: "/ˈbʌdʒɪt/", source: "core_registry", component: "core", dayNumber: 1 }, { id: "cost", word: "cost", meaning: "chi phí", type: "noun", ipa: "/kɒst/", source: "core_registry", component: "core", dayNumber: 1 }, { id: "forecast", word: "forecast", meaning: "dự báo", type: "noun", ipa: "/ˈfɔːkɑːst/", source: "core_registry", component: "core", dayNumber: 1 }], supportTerms: [],
     grammarTopics: [{ id: "grammar", title: "Cost", steps: [{ id: "step", focus: "cost", formula: "The cost is + adjective", usage: "Describe cost", examples: ["The cost is high."] }] }],
     sounds: [{ id: "sound", ipa: "/k/", label: "K", examples: [{ id: "cost", word: "cost", ipa: "/kɒst/" }, { id: "can", word: "can", ipa: "/kæn/" }, { id: "key", word: "key", ipa: "/kiː/" }] }],
     daySpecs: [{ lessonNumber: 1, date: "2026-11-02", kind: "new", coreTermIds: ["budget", "cost", "forecast"], reviewTermIds: [], grammarStepId: "step", soundId: "sound", pronunciationExampleIds: ["cost", "can", "key"] }]

@@ -39,6 +39,22 @@ describe("monthly lesson quality", () => {
       "MONTHLY_SUPPORT_TERM_AS_CORE_CARD"
     ]));
   });
+
+  it("marks malformed assessment shapes and missing listening content as severe", () => {
+    const result = evaluateMonthlyLessonQuality(contract(), 1, lesson({
+      parts: requiredCodes.map((code) => code === "listening"
+        ? part(code, { prompt: "What is the amount?", options: ["A", "B", "C", "D"], answer: "E" })
+        : code === "reading" ? part(code, { text: "A short passage.", prompt: "What is it?", options: ["A", "B", "C", "D"], answer: "A" })
+          : code === "vocabulary" ? part(code, { items: [
+            { word: "core-one", synonyms: ["first"], antonyms: ["last"] },
+            { word: "core-two", synonyms: ["second"], antonyms: ["last"] },
+            { word: "core-three", synonyms: ["third"], antonyms: ["last"] }
+          ] })
+            : part(code))
+    }));
+
+    expect(result.severe.map((finding) => finding.code)).toContain("MONTHLY_CONTENT_INVALID");
+  });
 });
 
 function contract(): MonthlyCurriculumContract {
@@ -46,12 +62,12 @@ function contract(): MonthlyCurriculumContract {
     month: "2026-11", cefr: "A1", version: 1,
     theme: { version: 1, title: "Budget", brief: "Brief", context: "Context", communicationGoal: "Goal" },
     coreTerms: [
-      { id: "core-1", word: "core-one", meaning: "một", type: "noun", ipa: "/kɔːr/" },
-      { id: "core-2", word: "core-two", meaning: "hai", type: "noun", ipa: "/tuː/" },
-      { id: "core-3", word: "core-three", meaning: "ba", type: "noun", ipa: "/θriː/" }
-      , { id: "core-4", word: "core-four", meaning: "bốn", type: "noun", ipa: "/fɔːr/" }
+      { id: "core-1", word: "core-one", meaning: "một", type: "noun", ipa: "/kɔːr/", source: "core_registry", component: "core", dayNumber: 1 },
+      { id: "core-2", word: "core-two", meaning: "hai", type: "noun", ipa: "/tuː/", source: "core_registry", component: "core", dayNumber: 1 },
+      { id: "core-3", word: "core-three", meaning: "ba", type: "noun", ipa: "/θriː/", source: "core_registry", component: "core", dayNumber: 1 },
+      { id: "core-4", word: "core-four", meaning: "bốn", type: "noun", ipa: "/fɔːr/", source: "core_registry", component: "core", dayNumber: 3 }
     ],
-    supportTerms: [{ id: "support-1", word: "support-one", meaning: "hỗ trợ", source: "example" }],
+    supportTerms: [{ id: "support-1", word: "support-one", meaning: "hỗ trợ", type: "noun", source: "example", component: "expanded", dayNumber: 1 }],
     grammarTopics: [{ id: "grammar-1", title: "Grammar", steps: [{ id: "grammar-step", focus: "focus", formula: "Core formula", usage: "usage", examples: ["Example."] }] }],
     sounds: [{ id: "sound-1", ipa: "/k/", label: "K", examples: [{ id: "sound-example-1", word: "cost", ipa: "/kɒst/" }, { id: "sound-example-2", word: "can", ipa: "/kæn/" }, { id: "sound-example-3", word: "key", ipa: "/kiː/" }] }],
     daySpecs: [
@@ -63,6 +79,8 @@ function contract(): MonthlyCurriculumContract {
 
 function lesson(overrides: { parts?: Array<{ code: string; content: Record<string, unknown> }> } = {}) {
   return { title: "A usable title", parts: overrides.parts ?? requiredCodes.map((code) => {
+    if (code === "objective") return part(code, { text: "Identify three budget words." });
+    if (code === "instruction") return part(code, { steps: ["Read the example.", "Answer the question."] });
     if (code === "vocabulary") return part(code, { items: [
       { word: "core-one", synonyms: [], antonyms: [] },
       { word: "core-two", synonyms: ["second"], antonyms: [] },
@@ -70,6 +88,12 @@ function lesson(overrides: { parts?: Array<{ code: string; content: Record<strin
     ] });
     if (code === "grammar") return part(code, { formula: "Core formula" });
     if (code === "pronunciation") return part(code, { focus: "/k/", words: [{ word: "cost", ipa: "/kɒst/" }, { word: "can", ipa: "/kæn/" }, { word: "key", ipa: "/kiː/" }] });
+    if (["listening", "reading", "word_class", "word_use"].includes(code)) return part(code, {
+      ...(code === "listening" ? { script: "The cost is high." } : code === "reading" ? { text: "The cost is high." } : {}),
+      prompt: "What is high?", options: ["The cost", "The room", "The plan", "The date"], answer: "The cost"
+    });
+    if (code === "writing") return part(code, { prompt: "Write one sentence about cost.", answer: "The cost is high." });
+    if (code === "speaking") return part(code, { prompt: "Say a sentence about cost.", sample: "The cost is high." });
     return part(code);
   }) };
 }

@@ -10,7 +10,9 @@ import {
 import type {
   MonthlyOperatorOverviewView,
   MonthFrameworkView,
-  SharedMonthBriefView
+  SharedMonthBriefView,
+  MonthlyQualityFindingView,
+  OperatorAcknowledgementView
 } from "@e4s/contracts";
 import type { Client, Pool } from "pg";
 
@@ -50,6 +52,19 @@ interface MonthLessonRow {
   status: "pending" | "generating" | "draft" | "approved" | "failed";
   scope_hash: string;
   correction_count: string;
+  quality_report: { severe: MonthlyQualityFindingView[]; light: MonthlyQualityFindingView[]; contractVersion: number };
+  quality_acknowledgement: OperatorAcknowledgementView | null;
+}
+
+export interface MonthlyLessonDraftInput {
+  title: string;
+  parts: Array<{ code: string; title?: string | undefined; content: Record<string, unknown> }>;
+}
+
+export interface MonthlyQualityReportInput {
+  severe: MonthlyQualityFindingView[];
+  light: MonthlyQualityFindingView[];
+  contractVersion: number;
 }
 
 /**
@@ -61,7 +76,7 @@ export class MonthlyContentRepository {
   constructor(private readonly database: Queryable) {}
 
   async saveBrief(actorId: string, input: SaveMonthlyBriefInput): Promise<SharedMonthBriefView> {
-    const actor = await this.requireOperator(actorId);
+    const actor = await this.requireContentOperator(actorId);
     const calendar = buildMonthlyCalendar(input.month);
     const current = await this.database.query<BriefRow>(
       `select id, month, theme_title, theme_brief, theme_context, communication_goal, brief_version, brief_status
@@ -70,6 +85,7 @@ export class MonthlyContentRepository {
     );
     const existing = current.rows[0];
     if (existing) {
+      if (existing.brief_status === "approved") throw new Error("Approved monthly brief is immutable");
       const approved = await this.database.query<{ id: string }>(
         `select mf.id
          from month_frameworks mf
@@ -103,8 +119,21 @@ export class MonthlyContentRepository {
     return toBriefView(result.rows[0]!);
   }
 
+  async approveBrief(actorId: string, month: string): Promise<void> {
+    const actor = await this.requireContentOperator(actorId);
+    const result = await this.database.query<{ id: string }>(
+      `update program_months set brief_status = 'approved', updated_at = now()
+       where organization_id = $1 and month = $2 and brief_status = 'draft' and theme_title <> ''
+       returning id`,
+      [actor.organization_id, month]
+    );
+    const row = result.rows[0];
+    if (!row) throw new Error("A complete monthly brief draft is required before it can be locked");
+    await this.audit(actor, "monthly.brief_approved", row.id, { month });
+  }
+
   async saveFramework(actorId: string, contract: MonthlyCurriculumContract): Promise<Pick<MonthFrameworkView, "id" | "cefr" | "version" | "status" | "scopeHash">> {
-    const actor = await this.requireOperator(actorId);
+    const actor = await this.requireContentOperator(actorId);
     const validationErrors = validateMonthlyCurriculum(contract);
     if (validationErrors.length) throw new Error(`Invalid monthly curriculum: ${validationErrors.join("; ")}`);
     const brief = await this.database.query<BriefRow>(
@@ -114,6 +143,7 @@ export class MonthlyContentRepository {
     );
     const month = brief.rows[0];
     if (!month) throw new Error("Monthly brief must exist before a framework is saved");
+    if (month.brief_status !== "approved") throw new Error("Monthly brief must be locked before resources are authored");
     if (!sameBrief(month, contract)) throw new Error("Monthly curriculum must use the current shared brief version");
 
     const existingResult = await this.database.query<FrameworkRow>(
@@ -157,7 +187,7 @@ export class MonthlyContentRepository {
   }
 
   async approveFramework(actorId: string, frameworkId: string): Promise<void> {
-    const actor = await this.requireOperator(actorId);
+    const actor = await this.requireContentOperator(actorId);
     const result = await this.database.query<{ id: string }>(
       `update month_frameworks mf
        set status = 'approved', approved_by = $2, approved_at = now(), updated_at = now()
@@ -168,6 +198,239 @@ export class MonthlyContentRepository {
     );
     if (!result.rowCount) throw new Error("Only a draft framework in this organization can be approved");
     await this.audit(actor, "monthly.framework_approved", frameworkId, {});
+  }
+
+  async saveMonthlyDayDraft(
+    actorId: string,
+    frameworkId: string,
+    dayNumber: number,
+    lesson: MonthlyLessonDraftInput,
+    report: MonthlyQualityReportInput
+  ): Promise<void> {
+    const actor = await this.requireContentOperator(actorId);
+    const framework = await this.database.query<FrameworkRow>(
+      `select mf.id, mf.cefr, mf.version, mf.status, mf.scope_hash, mf.curriculum_contract, mf.quality_acknowledgement
+       from month_frameworks mf join program_months pm on pm.id = mf.program_month_id
+       where mf.id = $1 and pm.organization_id = $2`,
+      [frameworkId, actor.organization_id]
+    );
+    const row = framework.rows[0];
+    if (!row) throw new Error("Monthly framework was not found");
+    if (row.status !== "approved") throw new Error("Monthly resources must be locked before authoring a day");
+    const spec = row.curriculum_contract.daySpecs.find((day) => day.lessonNumber === dayNumber);
+    if (!spec) throw new Error("Monthly day is not in the locked DaySpec");
+    if (report.contractVersion !== row.version) throw new Error("Monthly quality report uses a stale contract version");
+    const cell = await this.database.query<{ id: string; status: string }>(
+      "select id, status from month_lessons where framework_id = $1 and lesson_number = $2",
+      [frameworkId, dayNumber]
+    );
+    const monthLesson = cell.rows[0];
+    if (!monthLesson) throw new Error("Monthly DaySpec was not materialized");
+    if (monthLesson.status === "approved") throw new Error("Approved monthly day is immutable; create a correction revision");
+
+    const set = await this.database.query<{ id: string }>(
+      `insert into lesson_sets (id, program_week_id, month_framework_id, cefr)
+       values ($1, null, $2, $3)
+       on conflict (month_framework_id) where month_framework_id is not null do update set month_framework_id = excluded.month_framework_id
+       returning id`,
+      [randomUUID(), frameworkId, row.cefr]
+    );
+    const lessonSetId = set.rows[0]!.id;
+    const nextVersion = await this.database.query<{ version: number }>(
+      "select coalesce(max(version), 0) + 1 as version from lesson_set_versions where lesson_set_id = $1",
+      [lessonSetId]
+    );
+    const lessonSetVersionId = randomUUID();
+    await this.database.query(
+      `insert into lesson_set_versions (id, lesson_set_id, version, status, payload, created_by)
+       values ($1, $2, $3, 'draft', $4::jsonb, $5)`,
+      [lessonSetVersionId, lessonSetId, nextVersion.rows[0]?.version ?? 1, JSON.stringify({ source: "monthly", month: row.curriculum_contract.month, dayNumber }), actorId]
+    );
+    const lessonId = randomUUID();
+    await this.database.query(
+      "insert into lessons (id, lesson_set_version_id, day_number, title) values ($1, $2, $3, $4)",
+      [lessonId, lessonSetVersionId, dayNumber, lesson.title.trim()]
+    );
+    const contentVersionId = randomUUID();
+    await this.database.query(
+      `insert into lesson_versions (id, lesson_id, version, status, content)
+       values ($1, $2, 1, 'draft', $3::jsonb)`,
+      [contentVersionId, lessonId, JSON.stringify({ durationMinutes: 15, parts: lesson.parts })]
+    );
+    await this.database.query(
+      `update month_lessons
+       set lesson_id = $2, status = $3, quality_report = $4::jsonb, quality_acknowledgement = null,
+           generation_error = case when $3 = 'failed' then $4::jsonb else null end, updated_at = now()
+       where id = $1`,
+      [monthLesson.id, lessonId, report.severe.length ? "failed" : "draft", JSON.stringify(report)]
+    );
+    await this.audit(actor, "monthly.day_draft_saved", monthLesson.id, { frameworkId, dayNumber, contentVersionId, scopeHash: row.scope_hash, severe: report.severe.length, light: report.light.length });
+  }
+
+  async acknowledgeMonthlyDayQuality(actorId: string, frameworkId: string, dayNumber: number, findingKeys: string[]): Promise<void> {
+    const actor = await this.requireContentOperator(actorId);
+    const result = await this.database.query<MonthLessonRow & { id: string }>(
+      `select ml.id, ml.lesson_number, ml.lesson_date::text, ml.status, ml.scope_hash, ml.quality_report, ml.quality_acknowledgement,
+              (select count(*) from month_lesson_corrections mlc where mlc.month_lesson_id = ml.id)::text as correction_count
+       from month_lessons ml join month_frameworks mf on mf.id = ml.framework_id join program_months pm on pm.id = mf.program_month_id
+       where mf.id = $1 and ml.lesson_number = $2 and pm.organization_id = $3 and mf.status = 'approved'`,
+      [frameworkId, dayNumber, actor.organization_id]
+    );
+    const day = result.rows[0];
+    if (!day) throw new Error("Locked monthly day was not found");
+    if (day.status === "approved") throw new Error("Approved monthly day is immutable");
+    if (day.quality_report.severe.length) throw new Error("Severe monthly quality findings block acknowledgement");
+    const expected = day.quality_report.light.map(qualityFindingKey);
+    if (expected.length > 0 && (expected.length !== findingKeys.length || expected.some((key) => !findingKeys.includes(key)))) {
+      throw new Error("Operator must acknowledge every light finding individually");
+    }
+    const count = await this.database.query<{ light_count: string }>(
+      `select coalesce(sum(jsonb_array_length(ml.quality_report->'light')), 0)::text as light_count
+       from month_lessons ml where ml.framework_id = $1`,
+      [frameworkId]
+    );
+    const currentDayLightCount = day.quality_report.light.length;
+    const totalLightCount = Number(count.rows[0]?.light_count ?? 0);
+    if (totalLightCount > 2) throw new Error("Monthly framework exceeds the two-light-finding limit");
+    const acknowledgement: OperatorAcknowledgementView = { actorId, acknowledgedAt: new Date().toISOString(), findingCodes: findingKeys };
+    await this.database.query("update month_lessons set quality_acknowledgement = $2::jsonb where id = $1", [day.id, JSON.stringify(acknowledgement)]);
+    await this.audit(actor, "monthly.day_quality_acknowledged", day.id, { frameworkId, dayNumber, findingKeys, currentDayLightCount });
+  }
+
+  async approveMonthlyDay(actorId: string, frameworkId: string, dayNumber: number): Promise<void> {
+    const actor = await this.requireContentOperator(actorId);
+    const result = await this.database.query<MonthLessonRow & { id: string; lesson_id: string | null }>(
+      `select ml.id, ml.lesson_id, ml.lesson_number, ml.lesson_date::text, ml.status, ml.scope_hash, ml.quality_report, ml.quality_acknowledgement,
+              (select count(*) from month_lesson_corrections mlc where mlc.month_lesson_id = ml.id)::text as correction_count
+       from month_lessons ml join month_frameworks mf on mf.id = ml.framework_id join program_months pm on pm.id = mf.program_month_id
+       where mf.id = $1 and ml.lesson_number = $2 and pm.organization_id = $3 and mf.status = 'approved'`,
+      [frameworkId, dayNumber, actor.organization_id]
+    );
+    const day = result.rows[0];
+    if (!day || !day.lesson_id) throw new Error("Monthly day draft was not found");
+    if (day.status === "approved") throw new Error("Approved monthly day is immutable");
+    if (day.status !== "draft" || day.quality_report.severe.length) throw new Error("Severe findings or failed quality block monthly day approval");
+    const count = await this.database.query<{ light_count: string }>(
+      `select coalesce(sum(jsonb_array_length(ml.quality_report->'light')), 0)::text as light_count
+       from month_lessons ml where ml.framework_id = $1`,
+      [frameworkId]
+    );
+    if (Number(count.rows[0]?.light_count ?? 0) > 2) throw new Error("Monthly framework exceeds the two-light-finding limit");
+    const expectedKeys = day.quality_report.light.map(qualityFindingKey);
+    const acknowledged = new Set(day.quality_acknowledgement?.findingCodes ?? []);
+    if (expectedKeys.some((key) => !acknowledged.has(key))) throw new Error("Operator must acknowledge every light finding before approval");
+    await this.database.query("update lesson_versions set status = 'published' where lesson_id in (select id from lessons where id = $1) and status = 'draft'", [day.lesson_id]);
+    await this.database.query(
+      "update month_lessons set status = 'approved', approved_by = $2, approved_at = now(), updated_at = now() where id = $1",
+      [day.id, actorId]
+    );
+    await this.audit(actor, "monthly.day_approved", day.id, { frameworkId, dayNumber, scopeHash: day.scope_hash });
+  }
+
+  async createMonthlyCorrection(actorId: string, frameworkId: string, dayNumber: number, reason: string): Promise<string> {
+    const actor = await this.requireContentOperator(actorId);
+    const current = await this.database.query<{ id: string; lesson_id: string; version_id: string; status: string }>(
+      `select ml.id, ml.lesson_id, lv.id as version_id, ml.status
+       from month_lessons ml join month_frameworks mf on mf.id = ml.framework_id
+       join program_months pm on pm.id = mf.program_month_id
+       join lessons l on l.id = ml.lesson_id
+       join lesson_versions lv on lv.lesson_id = l.id and lv.status = 'published'
+       where mf.id = $1 and ml.lesson_number = $2 and pm.organization_id = $3
+       order by lv.version desc limit 1`,
+      [frameworkId, dayNumber, actor.organization_id]
+    );
+    const day = current.rows[0];
+    if (!day || day.status !== "approved") throw new Error("Only an approved monthly day can receive a correction revision");
+    const correctionId = randomUUID();
+    await this.database.query(
+      `insert into month_lesson_corrections
+         (id, month_lesson_id, original_lesson_version_id, requested_by, authorized_by, reason, status, authorized_at)
+       values ($1, $2, $3, $4, $4, $5, 'authorized', now())`,
+      [correctionId, day.id, day.version_id, actorId, reason.trim()]
+    );
+    await this.audit(actor, "monthly.correction_authorized", correctionId, { frameworkId, dayNumber, reason: reason.trim(), originalLessonId: day.lesson_id });
+    return correctionId;
+  }
+
+  async saveMonthlyCorrection(actorId: string, correctionId: string, lesson: MonthlyLessonDraftInput, report: MonthlyQualityReportInput): Promise<void> {
+    const actor = await this.requireContentOperator(actorId);
+    const result = await this.database.query<{ correction_id: string; month_lesson_id: string; day_number: number; framework_id: string; cefr: MonthFrameworkView["cefr"]; month: string; status: string; version: number }>(
+      `select mlc.id as correction_id, ml.id as month_lesson_id, ml.lesson_number as day_number, mf.id as framework_id,
+              mf.cefr, pm.month, mlc.status, mf.version
+       from month_lesson_corrections mlc join month_lessons ml on ml.id = mlc.month_lesson_id
+       join month_frameworks mf on mf.id = ml.framework_id join program_months pm on pm.id = mf.program_month_id
+       where mlc.id = $1 and pm.organization_id = $2`,
+      [correctionId, actor.organization_id]
+    );
+    const row = result.rows[0];
+    if (!row || row.status !== "authorized") throw new Error("Authorized monthly correction was not found");
+    if (report.contractVersion !== row.version) throw new Error("Monthly correction quality report uses a stale contract version");
+    const set = await this.database.query<{ id: string }>("select id from lesson_sets where month_framework_id = $1", [row.framework_id]);
+    const lessonSetId = set.rows[0]?.id;
+    if (!lessonSetId) throw new Error("Monthly lesson set was not found");
+    const nextVersion = await this.database.query<{ version: number }>("select coalesce(max(version), 0) + 1 as version from lesson_set_versions where lesson_set_id = $1", [lessonSetId]);
+    const lessonSetVersionId = randomUUID();
+    await this.database.query(
+      `insert into lesson_set_versions (id, lesson_set_id, version, status, payload, created_by)
+       values ($1, $2, $3, 'draft', $4::jsonb, $5)`,
+      [lessonSetVersionId, lessonSetId, nextVersion.rows[0]?.version ?? 1, JSON.stringify({ source: "monthly_correction", month: row.month, dayNumber: row.day_number, correctionId }), actorId]
+    );
+    const lessonId = randomUUID();
+    await this.database.query("insert into lessons (id, lesson_set_version_id, day_number, title) values ($1, $2, $3, $4)", [lessonId, lessonSetVersionId, row.day_number, lesson.title.trim()]);
+    const lessonVersionId = randomUUID();
+    await this.database.query(
+      "insert into lesson_versions (id, lesson_id, version, status, content) values ($1, $2, 1, 'draft', $3::jsonb)",
+      [lessonVersionId, lessonId, JSON.stringify({ durationMinutes: 15, parts: lesson.parts })]
+    );
+    await this.database.query(
+      "update month_lesson_corrections set correction_lesson_version_id = $2, quality_report = $3::jsonb, quality_acknowledgement = null where id = $1",
+      [correctionId, lessonVersionId, JSON.stringify(report)]
+    );
+    await this.audit(actor, "monthly.correction_draft_saved", correctionId, { dayNumber: row.day_number, lessonVersionId, severe: report.severe.length, light: report.light.length });
+  }
+
+  async acknowledgeMonthlyCorrectionQuality(actorId: string, correctionId: string, findingKeys: string[]): Promise<void> {
+    const actor = await this.requireContentOperator(actorId);
+    const result = await this.database.query<{ id: string; status: string; quality_report: MonthlyQualityReportInput }>(
+      `select mlc.id, mlc.status, mlc.quality_report from month_lesson_corrections mlc
+       join month_lessons ml on ml.id = mlc.month_lesson_id join month_frameworks mf on mf.id = ml.framework_id
+       join program_months pm on pm.id = mf.program_month_id where mlc.id = $1 and pm.organization_id = $2`,
+      [correctionId, actor.organization_id]
+    );
+    const correction = result.rows[0];
+    if (!correction || correction.status !== "authorized") throw new Error("Authorized monthly correction was not found");
+    if (correction.quality_report.severe.length) throw new Error("Severe monthly correction findings block acknowledgement");
+    const expected = correction.quality_report.light.map(qualityFindingKey);
+    if (expected.length !== findingKeys.length || expected.some((key) => !findingKeys.includes(key))) throw new Error("Operator must acknowledge every correction finding individually");
+    const acknowledgement: OperatorAcknowledgementView = { actorId, acknowledgedAt: new Date().toISOString(), findingCodes: findingKeys };
+    await this.database.query("update month_lesson_corrections set quality_acknowledgement = $2::jsonb where id = $1", [correctionId, JSON.stringify(acknowledgement)]);
+    await this.audit(actor, "monthly.correction_quality_acknowledged", correctionId, { findingKeys });
+  }
+
+  async approveMonthlyCorrection(actorId: string, correctionId: string): Promise<void> {
+    const actor = await this.requireContentOperator(actorId);
+    const result = await this.database.query<{
+      id: string; month_lesson_id: string; correction_lesson_version_id: string | null; status: string;
+      quality_report: MonthlyQualityReportInput; quality_acknowledgement: OperatorAcknowledgementView | null;
+    }>(
+      `select mlc.id, mlc.month_lesson_id, mlc.correction_lesson_version_id, mlc.status, mlc.quality_report, mlc.quality_acknowledgement
+       from month_lesson_corrections mlc join month_lessons ml on ml.id = mlc.month_lesson_id
+       join month_frameworks mf on mf.id = ml.framework_id join program_months pm on pm.id = mf.program_month_id
+       where mlc.id = $1 and pm.organization_id = $2`,
+      [correctionId, actor.organization_id]
+    );
+    const correction = result.rows[0];
+    if (!correction || correction.status !== "authorized" || !correction.correction_lesson_version_id) throw new Error("Monthly correction draft was not found");
+    if (correction.quality_report.severe.length) throw new Error("Severe monthly correction findings block approval");
+    const acknowledged = new Set(correction.quality_acknowledgement?.findingCodes ?? []);
+    if (correction.quality_report.light.map(qualityFindingKey).some((key) => !acknowledged.has(key))) throw new Error("Operator must acknowledge every correction finding before approval");
+    const lesson = await this.database.query<{ lesson_id: string }>("select lesson_id from lesson_versions where id = $1", [correction.correction_lesson_version_id]);
+    const lessonId = lesson.rows[0]?.lesson_id;
+    if (!lessonId) throw new Error("Monthly correction content version was not found");
+    await this.database.query("update lesson_versions set status = 'published' where id = $1 and status = 'draft'", [correction.correction_lesson_version_id]);
+    await this.database.query("update month_lesson_corrections set status = 'published', published_at = now() where id = $1", [correctionId]);
+    await this.database.query("update month_lessons set lesson_id = $2, updated_at = now() where id = $1", [correction.month_lesson_id, lessonId]);
+    await this.audit(actor, "monthly.correction_published", correctionId, { monthLessonId: correction.month_lesson_id, lessonId });
   }
 
   async getOverview(actorId: string, month: string): Promise<MonthlyOperatorOverviewView> {
@@ -205,9 +468,22 @@ export class MonthlyContentRepository {
     return recommendedPendingBatch(framework.curriculum_contract.daySpecs, new Map(lessons.map((lesson) => [lesson.lessonNumber, lesson.status])));
   }
 
+  async getFrameworkContract(actorId: string, frameworkId: string): Promise<MonthlyCurriculumContract> {
+    const actor = await this.requireOperator(actorId);
+    const result = await this.database.query<FrameworkRow>(
+      `select mf.id, mf.cefr, mf.version, mf.status, mf.scope_hash, mf.curriculum_contract, mf.quality_acknowledgement
+       from month_frameworks mf join program_months pm on pm.id = mf.program_month_id
+       where mf.id = $1 and pm.organization_id = $2`,
+      [frameworkId, actor.organization_id]
+    );
+    const framework = result.rows[0];
+    if (!framework) throw new Error("Monthly framework was not found");
+    return framework.curriculum_contract;
+  }
+
   private async lessonsForFramework(framework: FrameworkRow, _programMonthId?: string): Promise<MonthFrameworkView["lessons"]> {
     const result = await this.database.query<MonthLessonRow>(
-      `select ml.lesson_number, ml.lesson_date::text, ml.status, ml.scope_hash,
+      `select ml.lesson_number, ml.lesson_date::text, ml.status, ml.scope_hash, ml.quality_report, ml.quality_acknowledgement,
               (select count(*) from month_lesson_corrections mlc where mlc.month_lesson_id = ml.id)::text as correction_count
        from month_lessons ml where ml.framework_id = $1 order by ml.lesson_number`,
       [framework.id]
@@ -220,7 +496,8 @@ export class MonthlyContentRepository {
       status: lesson.status,
       scopeHash: lesson.scope_hash,
       locked: lesson.status === "approved",
-      correctionCount: Number(lesson.correction_count)
+      correctionCount: Number(lesson.correction_count),
+      quality: { ...lesson.quality_report, ...(lesson.quality_acknowledgement ? { acknowledged: lesson.quality_acknowledgement } : {}) }
     }));
   }
 
@@ -232,6 +509,12 @@ export class MonthlyContentRepository {
     const row = actor.rows[0];
     if (!row || (row.role !== "operator" && row.role !== "manager")) throw new Error("Monthly content requires an active Operator or Manager");
     return row;
+  }
+
+  private async requireContentOperator(actorId: string): Promise<ActorRow> {
+    const actor = await this.requireOperator(actorId);
+    if (actor.role !== "operator") throw new Error("Monthly content approval requires an Operator");
+    return actor;
   }
 
   private async audit(actor: ActorRow, action: string, entityId: string, payload: Record<string, unknown>): Promise<void> {
@@ -265,6 +548,12 @@ function toFrameworkHeader(row: FrameworkRow): Omit<MonthFrameworkView, "lessons
     version: row.version,
     status: row.status,
     scopeHash: row.scope_hash,
+    resources: {
+      coreTerms: row.curriculum_contract.coreTerms,
+      supportTerms: row.curriculum_contract.supportTerms,
+      grammarTopics: row.curriculum_contract.grammarTopics,
+      sounds: row.curriculum_contract.sounds
+    },
     quality
   };
 }
@@ -272,4 +561,8 @@ function toFrameworkHeader(row: FrameworkRow): Omit<MonthFrameworkView, "lessons
 function dayKind(spec: MonthlyDaySpec | undefined): "new" | "review" {
   if (!spec) throw new Error("Stored monthly lesson has no curriculum day specification");
   return spec.kind;
+}
+
+function qualityFindingKey(finding: MonthlyQualityFindingView): string {
+  return `${finding.code}:${finding.dayNumber ?? 0}:${finding.component ?? ""}`;
 }
