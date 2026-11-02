@@ -6413,7 +6413,7 @@ class AssessmentRepository {
         learner_id: string;
         organization_id: string;
         status: AssessmentAttemptRecord["status"];
-        kind: "placement" | "level_up";
+        kind: "placement" | "level_up" | "final";
         current_level: CefrLevel | null;
         challenge_passed: boolean | null;
         challenge_turns: number | null;
@@ -6433,7 +6433,7 @@ class AssessmentRepository {
            and reviewer.role in ('operator', 'manager')
          left join enrollments enrollment on enrollment.learner_id = aa.learner_id and enrollment.cefr_approved = true
          left join level_up_challenge_results challenge on challenge.assessment_attempt_id = aa.id
-         where aa.id = $1 and definition.kind in ('placement', 'level_up')
+         where aa.id = $1 and definition.kind in ('placement', 'level_up', 'final')
          for update of aa`,
         [input.attemptId, input.reviewerId]
       );
@@ -6509,7 +6509,7 @@ class AssessmentRepository {
               }
             })]
         );
-      } else if (input.status === "approved" && input.approvedLevel) {
+      } else if (input.status === "approved" && input.approvedLevel && attempt.kind === "placement") {
         await client.query(
           `update enrollments set cefr = $2, cefr_approved = true where learner_id = $1`,
           [attempt.learner_id, input.approvedLevel]
@@ -8168,12 +8168,16 @@ class EngagementRepository {
 
   async reward(learnerId: string, mode: "preview" | "done"): Promise<RewardView | null> {
     const result = await this.pool.query<{
-      display_name: string; cefr: CefrLevel; program_id: string; points: string; organization_name: string; operator_name: string; manager_name: string; completed_at: Date | null;
+      display_name: string; cefr: CefrLevel; program_id: string; points: string; organization_name: string; operator_name: string; manager_name: string; completed_at: Date | null; monthly_final_approved: boolean;
       badges: Array<{ key: string; label: string; description: string; earned: boolean }>;
     }>(
       `select u.display_name, e.cefr, e.program_id, o.name as organization_name, coalesce(sum(re.points), 0)::text as points, max(re.created_at) as completed_at,
               coalesce((select x.display_name from users x where x.organization_id = u.organization_id and x.role = 'operator' and x.status = 'active' order by x.created_at limit 1), '') as operator_name,
               coalesce((select x.display_name from users x where x.organization_id = u.organization_id and x.role = 'manager' and x.status = 'active' order by x.created_at limit 1), '') as manager_name,
+              exists(select 1 from assessment_attempts aa
+                join assessment_versions av on av.id = aa.assessment_version_id
+                join assessment_definitions ad on ad.id = av.definition_id
+                where aa.learner_id = u.id and ad.kind = 'final' and aa.status = 'approved') as monthly_final_approved,
               (select coalesce(jsonb_agg(jsonb_build_object('key', b.badge_key, 'label', b.label,
                 'description', b.rule->>'description', 'earned', exists(select 1 from reward_events x where x.learner_id = u.id and x.badge_id = b.id)) order by b.badge_key), '[]'::jsonb)
                from badges b where b.organization_id = u.organization_id) as badges
@@ -8184,7 +8188,7 @@ class EngagementRepository {
     const row = result.rows[0];
     if (!row) return null;
     const earnedBadgeCount = row.badges.filter((badge) => badge.earned).length;
-    const printable = earnedBadgeCount === row.badges.length && row.badges.length > 0;
+    const printable = row.cefr === "C1" && row.monthly_final_approved;
     if (mode === "done" && !printable) return null;
     const year = new Date().getUTCFullYear();
     const generatedCode = `SE-${year}-${learnerId.replace(/\W/g, "").slice(-6).toUpperCase()}`;
