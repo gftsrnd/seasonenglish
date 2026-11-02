@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   buildMonthlyCalendar,
   buildMonthlyCurriculum,
+  buildMonthlyExamScope,
   monthlyScopeHash,
   recommendedPendingBatch,
   validateMonthlyCurriculum,
@@ -105,6 +106,19 @@ describe("monthly curriculum contract", () => {
     changed.theme.version = 2;
 
     expect(monthlyScopeHash(first)).not.toBe(monthlyScopeHash(buildMonthlyCurriculum(changed)));
+  });
+
+  it("builds an exam scope solely from approved core terms, grammar steps, and sounds", () => {
+    const curriculum = buildMonthlyCurriculum(inputFor());
+    const scope = buildMonthlyExamScope(curriculum);
+
+    expect(scope).toEqual({
+      month: "2026-11", cefr: "A1", contractVersion: 1,
+      coreTermIds: curriculum.coreTerms.map((term) => term.id),
+      grammarStepIds: curriculum.grammarTopics.flatMap((topic) => topic.steps.map((step) => step.id)),
+      soundIds: curriculum.sounds.map((sound) => sound.id)
+    });
+    expect(scope.coreTermIds).not.toContain("support-1");
   });
 });
 

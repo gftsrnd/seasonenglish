@@ -95,6 +95,27 @@ export type MonthlyCurriculumContract = Omit<MonthlyCurriculumInput, "coreTerms"
   daySpecs: MonthlyDaySpec[];
 };
 
+export interface MonthlyExamScope {
+  month: string;
+  cefr: CefrLevel;
+  contractVersion: number;
+  coreTermIds: string[];
+  grammarStepIds: string[];
+  soundIds: string[];
+}
+
+/** The exam scope intentionally excludes all supplemental terms and activities. */
+export function buildMonthlyExamScope(contract: MonthlyCurriculumContract): MonthlyExamScope {
+  return {
+    month: contract.month,
+    cefr: contract.cefr,
+    contractVersion: contract.version,
+    coreTermIds: contract.coreTerms.map((term) => term.id),
+    grammarStepIds: contract.grammarTopics.flatMap((topic) => topic.steps.map((step) => step.id)),
+    soundIds: contract.sounds.map((sound) => sound.id)
+  };
+}
+
 export function buildMonthlyCalendar(month: string): MonthlyCalendar {
   if (!/^\d{4}-(0[1-9]|1[0-2])$/u.test(month)) throw new RangeError("Month must be YYYY-MM");
   const [year, monthNumber] = month.split("-").map(Number) as [number, number];
