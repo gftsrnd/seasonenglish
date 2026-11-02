@@ -95,10 +95,9 @@ export const OperatorRouteController = OperationsRouteController;
 function OperatorRouteControllerContent({ session, client, paths }: { session: SessionView; client: OperatorApiClient; paths: OperatorRoutePaths }) {
   const location = useLocation();
   if (session.role !== "operator" && session.role !== "manager") return <Status tone="error">Tài khoản này không có quyền mở khu vực vận hành.</Status>;
-  // Manager can inspect the operational screens, but must not mutate content
-  // from this area. Keep the shared screens and let their readOnly guards
-  // disable every create/edit/approve action consistently.
-  const readOnly = session.role === "manager";
+  // Managers own the monthly learning cycle. Other shared operations remain
+  // read-only in their shell so this does not reopen retired weekly flows.
+  const readOnly = session.role === "manager" && location.pathname !== paths.months;
   const props = { client, readOnly };
   const detail = location.pathname.match(new RegExp(`^${escapeRegExp(paths.lessons)}/(\\d+)/(A1|A2|B1|B2|C1)$`));
   const content = detail ? <LessonSetRoute {...props} week={Number(detail[1])} cefr={detail[2] as Cefr} />

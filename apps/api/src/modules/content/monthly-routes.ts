@@ -41,7 +41,7 @@ const correctionInput = z.object({ reason: z.string().trim().min(5).max(1000) })
 export function registerMonthlyContentRoutes(app: FastifyInstance, pool: Pool, aiRunner?: AiTaskRunner, aiRunnerFactory?: (actorId: string) => Promise<AiTaskRunner | undefined>): void {
   const repositories = createRepositories(pool);
   const operator = createRoleGuard(pool, ["operator", "manager"]);
-  const contentOperator = createRoleGuard(pool, ["operator"]);
+  const contentOperator = createRoleGuard(pool, ["operator", "manager"]);
 
   app.get("/api/v1/content/months/:month", { preHandler: operator }, async (request) => {
     const input = params.parse(request.params);
