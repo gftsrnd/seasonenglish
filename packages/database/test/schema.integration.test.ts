@@ -15,7 +15,7 @@ const expectedTables = [
   "content_lesson_level_settings", "game_sets", "idempotency_keys", "jobs", "learner_profiles", "learner_vocabulary_unlocks", "level_up_challenge_results", "lesson_set_versions",
   "lesson_sets", "lesson_versions", "lessons", "lesson_part_appeals", "lesson_part_attempts", "media_assets", "micro_lessons", "notification_deliveries", "organization_settings", "organizations",
   "certificate_issuances", "level_up_retry_plans", "practice_appeals", "practice_submissions", "program_weeks", "programs", "progress_records", "scheduled_level_changes",
-  "manager_destructive_confirmations", "manager_maintenance_backups", "manager_pin_reports", "prompt_versions", "provider_configurations", "reminders", "reward_events", "rubric_versions", "sessions",
+  "manager_destructive_confirmations", "manager_maintenance_backups", "manager_pin_reports", "month_frameworks", "month_lesson_corrections", "month_lessons", "program_months", "prompt_versions", "provider_configurations", "reminders", "reward_events", "rubric_versions", "sessions",
   "surveys", "topic_reports", "topic_strikes", "user_credentials", "users"
 ].sort();
 
@@ -59,6 +59,26 @@ describe("normalized E4S database", () => {
       "media_assets_organization_fingerprint_unique",
       "media_assets_status_expires_index"
     ]));
+  });
+
+  it("adds monthly content tables without deleting weekly lesson ownership", async () => {
+    const monthColumns = await client.query<{ column_name: string }>(
+      "select column_name from information_schema.columns where table_name = 'program_months' order by ordinal_position"
+    );
+    const frameworkColumns = await client.query<{ column_name: string }>(
+      "select column_name from information_schema.columns where table_name = 'month_frameworks' order by ordinal_position"
+    );
+    const lessonSetColumns = await client.query<{ is_nullable: string }>(
+      "select is_nullable from information_schema.columns where table_name = 'lesson_sets' and column_name = 'program_week_id'"
+    );
+
+    expect(monthColumns.rows.map((row) => row.column_name)).toEqual(expect.arrayContaining([
+      "theme_title", "theme_brief", "theme_context", "communication_goal", "brief_version", "brief_status"
+    ]));
+    expect(frameworkColumns.rows.map((row) => row.column_name)).toEqual(expect.arrayContaining([
+      "curriculum_contract", "scope_hash", "quality_acknowledgement"
+    ]));
+    expect(lessonSetColumns.rows[0]).toEqual({ is_nullable: "YES" });
   });
 
   it("keeps sensitive evidence tables behind backend-owned access", async () => {
