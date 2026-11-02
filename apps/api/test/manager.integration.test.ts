@@ -384,10 +384,10 @@ describe("manager progress and operations API", () => {
     await pool.query(
       `insert into users (id, organization_id, role, display_name, email, created_at)
        values
-         ($1, $2, 'learner', 'Học viên Cần nhắc', 'reminder@e4s.local', now() - interval '5 days'),
-         ($3, $2, 'learner', 'Học viên Copy', 'reminder-copy@e4s.local', now() - interval '5 days'),
-         ($4, $2, 'learner', 'Học viên Nhắc tay', 'reminder-dismiss@e4s.local', now() - interval '5 days'),
-         ($5, $2, 'learner', 'Học viên Vừa học lại', 'reminder-stale@e4s.local', now() - interval '5 days')
+         ($1, $2, 'learner', 'Học viên Cần nhắc', 'reminder@e4s.local', now() - interval '4 days'),
+         ($3, $2, 'learner', 'Học viên Copy', 'reminder-copy@e4s.local', now() - interval '4 days'),
+         ($4, $2, 'learner', 'Học viên Nhắc tay', 'reminder-dismiss@e4s.local', now() - interval '4 days'),
+         ($5, $2, 'learner', 'Học viên Vừa học lại', 'reminder-stale@e4s.local', now() - interval '4 days')
        on conflict (id) do nothing`,
       [reminderLearnerId, DEMO_IDS.organization, copiedReminderLearnerId, dismissedReminderLearnerId, staleReminderLearnerId]
     );
@@ -401,7 +401,7 @@ describe("manager progress and operations API", () => {
     });
     expect(candidates.json().candidates).toEqual(
       expect.arrayContaining([
-        expect.objectContaining({ learnerId: reminderLearnerId, learnerName: "Học viên Cần nhắc", missedDays: 5 })
+        expect.objectContaining({ learnerId: reminderLearnerId, learnerName: "Học viên Cần nhắc", missedDays: 4 })
       ])
     );
 
@@ -430,7 +430,7 @@ describe("manager progress and operations API", () => {
         learnerId: reminderLearnerId,
         learnerName: "Học viên Cần nhắc",
         recipient: "reminder@e4s.local",
-        missedDays: 5,
+        missedDays: 4,
         status: "sent",
         deliveryStatus: "sent",
         provider: "resend"
