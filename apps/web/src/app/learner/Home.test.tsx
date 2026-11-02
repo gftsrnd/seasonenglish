@@ -420,11 +420,10 @@ describe("learner Home parity", () => {
     expect(within(readiness!).getByRole("link", { name: "Mở thử thách" })).toHaveAttribute("href", "/challenge");
   });
 
-  it("labels a locked weekend practice entry while preserving its route", () => {
+  it("does not expose a weekly practice entry when a legacy home payload is received", () => {
     render(<LearnerHome view={makeView({ practice: { status: "locked", detail: "Mở sau khi hoàn thành đủ bài.", href: "/practice" } })} actions={actions} />);
 
-    const practice = screen.getByRole("link", { name: /Bài thực hành cuối tuần/ });
-    expect(practice).toHaveAttribute("href", "/practice");
-    expect(practice).toHaveTextContent("Chưa mở");
+    expect(screen.queryByRole("link", { name: /Bài thực hành cuối tuần/ })).not.toBeInTheDocument();
+    expect(screen.getByText("Lộ trình tháng đang được chuẩn bị")).toBeInTheDocument();
   });
 });

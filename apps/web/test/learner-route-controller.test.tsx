@@ -26,8 +26,8 @@ import { LearnerRouteController, learnerLoadError, printLearnerReward, resolveLe
 afterEach(() => { cleanup(); vi.clearAllMocks(); });
 
 describe("learner route integration controller", () => {
-  it("does not resolve the retired final assessment route", () => {
-    expect(resolveLearnerRoute("/test/final")).toEqual({ name: "notFound", params: {} });
+  it("resolves the monthly final assessment route", () => {
+    expect(resolveLearnerRoute("/test/final")).toEqual({ name: "assessment", params: { kind: "final" } });
   });
 
   it("shows the server's explicit restart message for an incompatible stale Placement attempt", () => {
@@ -41,10 +41,10 @@ describe("learner route integration controller", () => {
     ["/home", { name: "home", params: {} }],
     ["/test/level-up", { name: "assessment", params: { kind: "levelup" } }],
     ["/lesson/lesson%201", { name: "lesson", params: { id: "lesson 1" } }],
-    ["/micro/m-1", { name: "micro", params: { id: "m-1" } }],
     ["/games/scramble", { name: "game", params: { game: "scramble" } }],
     ["/reward/done", { name: "reward", params: { mode: "done" } }],
-    ["/duel/d-1", { name: "duel", params: { id: "d-1" } }]
+    ["/duel/d-1", { name: "games", params: {} }],
+    ["/practice", { name: "home", params: {} }]
   ] as const)("resolves %s without asking App to map params", (path, expected) => {
     expect(resolveLearnerRoute(path)).toEqual(expected);
   });
