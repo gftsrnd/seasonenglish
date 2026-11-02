@@ -93,9 +93,28 @@ describe("monthly content API", () => {
     const learnerLesson = await app.inject({ method: "GET", url: `/api/v1/lessons/${lessonId}`, headers: { cookie: learnerCookie } });
     expect(learnerLesson.statusCode, learnerLesson.body).toBe(200);
     expect(learnerLesson.json()).toMatchObject({ id: lessonId, title: "The budget list" });
+    const study = await app.inject({ method: "POST", url: `/api/v1/lessons/${lessonId}/study-completion`, headers: { cookie: learnerCookie } });
+    expect(study.statusCode, study.body).toBe(200);
+    for (const [code, evidence] of [
+      ["listening", { answer: "The budget list" }],
+      ["reading", { answer: "The budget list" }],
+      ["writing", { answer: "The budget list is ready." }],
+      ["word_class", { answer: "The budget list" }],
+      ["word_use", { answer: "The budget list" }],
+      ["speaking", { artifactKey: "monthly-e2e/speaking.webm" }]
+    ] as const) {
+      const attempt = await app.inject({
+        method: "POST", url: `/api/v1/lessons/${lessonId}/parts/${code}/attempts`, headers: { cookie: learnerCookie },
+        payload: { requestId: crypto.randomUUID(), evidence }
+      });
+      expect(attempt.statusCode, attempt.body).toBe(200);
+    }
+    const completed = await app.inject({ method: "PUT", url: `/api/v1/lessons/${lessonId}/progress`, headers: { cookie: learnerCookie }, payload: { markComplete: true } });
+    expect(completed.statusCode, completed.body).toBe(200);
+    expect(completed.json()).toMatchObject({ status: "completed" });
     const monthlyExam = await app.inject({ method: "GET", url: "/api/v1/learner/months/2026-11/exam", headers: { cookie: learnerCookie } });
     expect(monthlyExam.statusCode, monthlyExam.body).toBe(200);
-    expect(monthlyExam.json()).toMatchObject({ month: "2026-11", status: "locked", completedLessons: 0, totalLessons: 1, remainingLessons: 1 });
+    expect(monthlyExam.json()).toMatchObject({ month: "2026-11", status: "ready", completedLessons: 1, totalLessons: 1, remainingLessons: 0 });
     const learnerHome = await app.inject({ method: "GET", url: "/api/v1/learner/home", headers: { cookie: learnerCookie } });
     expect(learnerHome.statusCode, learnerHome.body).toBe(200);
     expect(learnerHome.json()).toMatchObject({ month: { month: "2026-11", themeTitle: "Quarterly budget review" } });

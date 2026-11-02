@@ -1488,9 +1488,11 @@ class LearningRepository {
           }
           const currentEvidence = lesson.progress.evidence;
           const mergedEvidence = { ...currentEvidence, [input.partCode]: storedEvidence };
-          // A persisted Speaking upload is the learner's terminal action even when
-          // automatic scoring is unavailable. Self-writing remains pending review.
+          // A persisted writing response or Speaking upload is the learner's
+          // terminal action even when automatic scoring is unavailable. Review
+          // can enrich its feedback later without blocking the monthly path.
           const partFinished = ["correct", "wrong_exhausted"].includes(storedEvidence.status ?? "")
+            || (input.partCode === "writing" && storedEvidence.status === "submitted" && Boolean(storedEvidence.answer))
             || (input.partCode === "speaking" && storedEvidence.status === "submitted" && Boolean(storedEvidence.artifactKey));
           const completedPartCodes = Array.from(new Set([
             ...lesson.progress.completedPartCodes,
