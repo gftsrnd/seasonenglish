@@ -515,7 +515,6 @@ export class MonthlyContentRepository {
 
   private async requireContentOperator(actorId: string): Promise<ActorRow> {
     const actor = await this.requireOperator(actorId);
-    if (actor.role !== "operator") throw new Error("Monthly content approval requires an Operator");
     return actor;
   }
 

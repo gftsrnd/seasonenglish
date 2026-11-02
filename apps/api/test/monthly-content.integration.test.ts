@@ -10,6 +10,7 @@ describe("monthly content API", () => {
   const pool = new Pool({ connectionString: databaseUrl });
   const app = buildApi({ pool, secureCookies: false });
   let cookie = "";
+  let managerCookie = "";
 
   beforeAll(async () => {
     const client = await pool.connect();
@@ -17,16 +18,32 @@ describe("monthly content API", () => {
       await resetPublicSchema(client);
       await migrateDatabase(client);
       await seedDemo(client);
-      await client.query("insert into user_credentials (user_id, credential_hash) values ($1, $2)", [DEMO_IDS.operator, await createCredentialHash("operator-pass")]);
+      await client.query("insert into user_credentials (user_id, credential_hash) values ($1, $2), ($3, $4)", [
+        DEMO_IDS.operator, await createCredentialHash("operator-pass"),
+        DEMO_IDS.manager, await createCredentialHash("manager-pass")
+      ]);
       await client.query("insert into user_credentials (user_id, credential_hash) values ($1, $2)", [DEMO_IDS.learner, await createPinHash("123456")]);
     } finally { client.release(); }
     await app.ready();
     const login = await app.inject({ method: "POST", url: "/api/auth/staff/login", payload: { email: "thu.ha.tran@e4s.local", password: "operator-pass" } });
     expect(login.statusCode, login.body).toBe(200);
     cookie = String(login.headers["set-cookie"]).split(";")[0] ?? "";
+    const managerLogin = await app.inject({ method: "POST", url: "/api/auth/staff/login", payload: { email: "quoc.bao.le@e4s.local", password: "manager-pass" } });
+    expect(managerLogin.statusCode, managerLogin.body).toBe(200);
+    managerCookie = String(managerLogin.headers["set-cookie"]).split(";")[0] ?? "";
   }, 30_000);
 
   afterAll(async () => { await app.close(); await pool.end(); });
+
+  it("allows a manager to create and lock the monthly brief", async () => {
+    const saved = await app.inject({
+      method: "PUT", url: "/api/v1/content/months/2026-10/brief", headers: { cookie: managerCookie },
+      payload: { title: "Customer handover", brief: "Prepare a customer handover.", context: "Customer success", communicationGoal: "Explain handover risks." }
+    });
+    expect(saved.statusCode, saved.body).toBe(200);
+    const approved = await app.inject({ method: "POST", url: "/api/v1/content/months/2026-10/brief/approve", headers: { cookie: managerCookie } });
+    expect(approved.statusCode, approved.body).toBe(204);
+  });
 
   it("keeps one shared brief and locks a submitted framework through the Operator API", async () => {
     const curriculum = contract();
