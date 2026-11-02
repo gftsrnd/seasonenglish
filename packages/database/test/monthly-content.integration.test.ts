@@ -1,8 +1,9 @@
 import { buildMonthlyCalendar, buildMonthlyCurriculum, type MonthlyCurriculumInput } from "@e4s/domain";
-import { Client } from "pg";
+import { Client, type Pool } from "pg";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { migrateDatabase, resetPublicSchema } from "../src/migrate.js";
 import { MonthlyContentRepository } from "../src/monthly-content-repository.js";
+import { createRepositories } from "../src/repositories.js";
 import { DEMO_IDS, seedDemo } from "../src/seed.js";
 
 const databaseUrl = process.env.TEST_DATABASE_URL
@@ -82,6 +83,14 @@ describe("monthly content persistence", () => {
     expect(correction.rows[0]?.correction_lesson_version_id).not.toBe(correction.rows[0]?.original_lesson_version_id);
     const overview = await repository.getOverview(DEMO_IDS.operator, month);
     expect(overview.frameworks[0]?.lessons[0]).toMatchObject({ status: "approved", locked: true, correctionCount: 1 });
+  });
+
+  it("makes only approved monthly lessons at the learner's CEFR available to the learner", async () => {
+    await client.query("update enrollments set cefr = 'A1' where learner_id = $1", [DEMO_IDS.learner]);
+    const lessons = await createRepositories(client as unknown as Pool).learning.listMonthlyLessons(DEMO_IDS.learner, month);
+
+    expect(lessons).toHaveLength(1);
+    expect(lessons[0]).toMatchObject({ dayNumber: 1, weekNumber: 0, cefr: "A1", weekTopic: "Preparing a quarterly budget review" });
   });
 });
 

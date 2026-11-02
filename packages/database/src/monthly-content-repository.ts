@@ -320,6 +320,7 @@ export class MonthlyContentRepository {
     const acknowledged = new Set(day.quality_acknowledgement?.findingCodes ?? []);
     if (expectedKeys.some((key) => !acknowledged.has(key))) throw new Error("Operator must acknowledge every light finding before approval");
     await this.database.query("update lesson_versions set status = 'published' where lesson_id in (select id from lessons where id = $1) and status = 'draft'", [day.lesson_id]);
+    await this.database.query("update lesson_set_versions set status = 'published', published_at = now() where id = (select lesson_set_version_id from lessons where id = $1)", [day.lesson_id]);
     await this.database.query(
       "update month_lessons set status = 'approved', approved_by = $2, approved_at = now(), updated_at = now() where id = $1",
       [day.id, actorId]
@@ -428,6 +429,7 @@ export class MonthlyContentRepository {
     const lessonId = lesson.rows[0]?.lesson_id;
     if (!lessonId) throw new Error("Monthly correction content version was not found");
     await this.database.query("update lesson_versions set status = 'published' where id = $1 and status = 'draft'", [correction.correction_lesson_version_id]);
+    await this.database.query("update lesson_set_versions set status = 'published', published_at = now() where id = (select l.lesson_set_version_id from lesson_versions lv join lessons l on l.id = lv.lesson_id where lv.id = $1)", [correction.correction_lesson_version_id]);
     await this.database.query("update month_lesson_corrections set status = 'published', published_at = now() where id = $1", [correctionId]);
     await this.database.query("update month_lessons set lesson_id = $2, updated_at = now() where id = $1", [correction.month_lesson_id, lessonId]);
     await this.audit(actor, "monthly.correction_published", correctionId, { monthLessonId: correction.month_lesson_id, lessonId });
