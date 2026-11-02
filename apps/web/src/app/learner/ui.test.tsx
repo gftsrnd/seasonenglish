@@ -64,12 +64,22 @@ describe("learner app UI primitives", () => {
     expect(screen.queryByText(/bài siêu ngắn/i)).not.toBeInTheDocument();
   });
 
+  it("renders the monthly assessment through the shared assessment screen", () => {
+    render(<LearnerController path="/test/monthly" contracts={{ assessment: {
+      definition: { key: "monthly-final", kind: "final", title: "Bài thi tháng", version: 1, totalMinutes: 75, totalScore: 100, sections: [] },
+      screenState: "preparation", attempt: null
+    } }} callbacks={{ navigate: vi.fn() } as never} />);
+
+    expect(screen.getAllByRole("heading", { name: "Bài thi tháng" })).toHaveLength(2);
+    expect(screen.queryByText("Không tìm thấy trang")).not.toBeInTheDocument();
+  });
+
   it("shows a purposeful Mini game lock screen instead of a generic route error", () => {
     const navigate = vi.fn();
     render(<LearnerController path="/games" contracts={{}} callbacks={{ navigate } as never} />);
 
     expect(screen.getByRole("heading", { name: "Mini game chưa mở" })).toBeInTheDocument();
-    expect(screen.getByText(/có bài học tuần đã được phát hành/i)).toBeInTheDocument();
+    expect(screen.getByText(/có bài học trong lộ trình tháng đã được phát hành/i)).toBeInTheDocument();
     expect(screen.queryByText("Chưa thể mở trang")).not.toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Về trang chủ học" })).toHaveAttribute("href", "/home");
   });
