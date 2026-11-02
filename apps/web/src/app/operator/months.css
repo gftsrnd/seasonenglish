@@ -1,0 +1,46 @@
+.operator-months-page { display: grid; gap: 18px; padding: 20px; color: var(--text, #18212f); }
+.operator-months-header, .monthly-section-title, .monthly-actions { display: flex; align-items: center; justify-content: space-between; gap: 14px; }
+.operator-months-header h1, .monthly-section-title h2, .monthly-section-title h3 { margin: 3px 0; }
+.operator-months-header p { margin: 5px 0 0; color: var(--muted, #64748b); }
+.eyebrow { color: var(--muted, #64748b); font-size: 11px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; }
+.operator-month-picker, .monthly-level-tabs { display: flex; flex-wrap: wrap; gap: 8px; }
+.operator-month-picker button, .monthly-level-tabs button { border: 1px solid var(--border, #dbe2ea); border-radius: 999px; background: var(--surface, white); padding: 8px 12px; cursor: pointer; }
+.operator-month-picker button[aria-pressed="true"], .monthly-level-tabs button.selected { border-color: var(--primary, #2563eb); background: #eff6ff; color: var(--primary, #1d4ed8); font-weight: 700; }
+.monthly-brief, .monthly-resources, .monthly-calendar-section { padding: 18px; }
+.monthly-section-title { margin-bottom: 14px; }
+.monthly-version, .monthly-status { border-radius: 999px; padding: 5px 9px; background: #f1f5f9; font-size: 12px; white-space: nowrap; }
+.monthly-status.approved { background: #dcfce7; color: #166534; }
+.monthly-status.draft { background: #fef3c7; color: #92400e; }
+.monthly-status.failed { background: #fee2e2; color: #991b1b; }
+.monthly-brief-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 14px; }
+.monthly-brief-grid label, .monthly-json-field, .monthly-day-editor > label { display: grid; gap: 6px; font-size: 13px; font-weight: 600; }
+.monthly-brief-grid input, .monthly-brief-grid textarea, .monthly-json-field textarea, .monthly-json-editor { width: 100%; border: 1px solid var(--border, #dbe2ea); border-radius: 8px; padding: 10px; font: inherit; }
+.monthly-brief-grid textarea { resize: vertical; }
+.monthly-resource-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.monthly-json-field textarea, .monthly-json-editor { font: 12px/1.5 ui-monospace, SFMono-Regular, Consolas, monospace; tab-size: 2; resize: vertical; }
+.monthly-json-field small, .small.muted { color: var(--muted, #64748b); }
+.monthly-actions { justify-content: flex-start; flex-wrap: wrap; margin-top: 12px; }
+.monthly-calendar-legend { display: flex; flex-wrap: wrap; gap: 10px; color: var(--muted, #64748b); font-size: 12px; }
+.monthly-calendar { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 6px; }
+.monthly-weekday { padding: 6px 2px; text-align: center; color: var(--muted, #64748b); font-size: 12px; font-weight: 700; }
+.monthly-calendar-blank { min-height: 76px; }
+.monthly-day-cell { display: grid; align-content: start; justify-items: start; gap: 4px; min-height: 82px; border: 1px solid var(--border, #dbe2ea); border-radius: 9px; background: white; padding: 8px; text-align: left; cursor: pointer; }
+.monthly-day-cell[aria-pressed="true"] { outline: 2px solid var(--primary, #2563eb); outline-offset: 1px; }
+.monthly-day-cell.new { border-top: 3px solid #3b82f6; }
+.monthly-day-cell.review { border-top: 3px solid #f59e0b; }
+.monthly-day-cell.weekend { background: #f8fafc; color: #94a3b8; cursor: default; }
+.monthly-day-cell.approved { background: #f0fdf4; }
+.monthly-day-cell span, .monthly-day-cell small { font-size: 11px; }
+.monthly-day-editor { border-top: 1px solid var(--border, #dbe2ea); margin-top: 18px; padding-top: 18px; }
+.monthly-finding { display: block; width: 100%; padding: 9px 11px; border-radius: 8px; font-size: 13px; }
+.monthly-finding.severe { background: #fef2f2; color: #991b1b; }
+.monthly-finding.light { background: #fffbeb; color: #92400e; }
+.monthly-error { border: 1px solid #fecaca; border-radius: 8px; background: #fef2f2; color: #991b1b; padding: 10px 12px; }
+@media (max-width: 760px) {
+  .operator-months-page { padding: 12px; }
+  .operator-months-header { align-items: flex-start; flex-direction: column; }
+  .monthly-brief-grid, .monthly-resource-grid { grid-template-columns: 1fr; }
+  .monthly-day-cell { min-height: 68px; padding: 5px; font-size: 12px; }
+  .monthly-calendar-blank { min-height: 68px; }
+  .monthly-section-title { align-items: flex-start; flex-direction: column; }
+}

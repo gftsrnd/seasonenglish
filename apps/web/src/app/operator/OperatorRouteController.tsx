@@ -29,6 +29,7 @@ import { OperatorPrompts } from "./Prompts.js";
 import { OperatorReview, OperatorReviewAssessmentDetail } from "./Review.js";
 import type { ManualScoreInput } from "./AssessmentManualScore.js";
 import { OperatorWeeks } from "./Weeks.js";
+import { OperatorMonths } from "./Months.js";
 import { Badge, OperationsReadOnlyContext, OperatorPage, PageTitle } from "./primitives.js";
 import { ModalProvider, useModal } from "../shared/ModalProvider.js";
 import type { AudioEvidence } from "../shared/media/audio-evidence.js";
@@ -41,7 +42,7 @@ export type OperatorApiClient = typeof apiClient;
 type OperatorRoutePaths = {
   root: string;
   levelForms: string;
-  weeks: string;
+  months: string;
   lessons: string;
   review: string;
   tests: string;
@@ -104,7 +105,7 @@ function OperatorRouteControllerContent({ session, client, paths }: { session: S
     : location.pathname === paths.root ? <DashboardRoute {...props} />
       : location.pathname === paths.tests ? <TestsRoute {...props} initialTab="placement" />
         : location.pathname === paths.levelForms ? <TestsRoute {...props} initialTab="promotion" />
-        : location.pathname === paths.weeks ? <WeeksRoute {...props} />
+        : location.pathname === paths.months ? <MonthsRoute {...props} />
           : location.pathname === paths.lessons ? <LessonsRoute {...props} />
             : location.pathname === paths.review ? <ReviewRoute {...props} canEditWeeklyPractice={session.role === "operator"} />
               : session.role === "manager" && location.pathname === paths.prompts ? <PromptsRoute client={client} readOnly={false} />
@@ -116,7 +117,7 @@ function routePathsFor(basePath: "/op" | "/mgr/ops"): OperatorRoutePaths {
   return {
     root: basePath === "/op" ? basePath : `${basePath}/levels`,
     levelForms: basePath === "/op" ? `${basePath}/levelforms` : `${basePath}/level-forms`,
-    weeks: `${basePath}/weeks`,
+    months: `${basePath}/months`,
     lessons: `${basePath}/lessons`,
     review: `${basePath}/review`,
     tests: `${basePath}/tests`,
@@ -173,6 +174,70 @@ function useCapabilities(client: OperatorApiClient) {
   const [capabilities, setCapabilities] = useState<SystemCapabilitiesView | null>(null);
   useEffect(() => { if (typeof client.getSystemCapabilities !== "function") return; void client.getSystemCapabilities().then(setCapabilities).catch(() => setCapabilities(null)); }, [client]);
   return capabilities;
+}
+
+function MonthsRoute({ client, readOnly }: { client: OperatorApiClient; readOnly: boolean }) {
+  const currentDate = new Date();
+  const todayMonth = `${currentDate.getFullYear()}-${String(currentDate.getMonth() + 1).padStart(2, "0")}`;
+  const [month, setMonth] = useState(todayMonth);
+  const [cefr, setCefr] = useState<CefrLevel>("A1");
+  const [overview, setOverview] = useState<import("@e4s/contracts").MonthlyOperatorOverviewView>();
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string>();
+  const load = async () => {
+    setError(undefined);
+    try { setOverview(await client.getContentMonth(month)); }
+    catch (reason) { setError(message(reason)); }
+  };
+  useEffect(() => { setOverview(undefined); void client.getContentMonth(month).then(setOverview).catch((reason) => setError(message(reason))); }, [client, month]);
+  const run = async <T,>(action: () => Promise<T>): Promise<T | undefined> => {
+    setBusy(true); setError(undefined);
+    try { const result = await action(); await load(); return result; }
+    catch (reason) { setError(message(reason)); return undefined; }
+    finally { setBusy(false); }
+  };
+  if (!overview && !error) return <Status>Đang tải khung tháng…</Status>;
+  return <OperatorMonths
+    month={month}
+    todayMonth={todayMonth}
+    overview={overview ?? { brief: null, frameworks: [] }}
+    cefr={cefr}
+    busy={busy}
+    readOnly={readOnly}
+    {...(error ? { error } : {})}
+    actions={{
+      onSelectMonth: setMonth,
+      onSelectLevel: setCefr,
+      onSaveBrief: async (selectedMonth, input) => { await run(() => client.saveContentMonthBrief(selectedMonth, input)); },
+      onApproveBrief: async (selectedMonth) => { await run(() => client.approveContentMonthBrief(selectedMonth)); },
+      onSaveFramework: async (selectedMonth, contract) => { await run(() => client.saveContentMonthFramework(selectedMonth, contract)); },
+      onApproveFramework: async (id) => { await run(() => client.approveContentMonthFramework(id)); },
+      onSaveDay: async (id, dayNumber, lesson) => {
+        const result = await run(() => client.saveContentMonthDay(id, dayNumber, lesson));
+        if (!result) throw new Error("Không lưu được bản nháp tháng.");
+        return result;
+      },
+      onGenerateDay: async (id, dayNumber) => {
+        const result = await run(() => client.generateContentMonthDay(id, dayNumber));
+        if (!result) throw new Error("AI không sinh được bài ngày đạt chuẩn.");
+        return result;
+      },
+      onAcknowledge: async (id, dayNumber, findingKeys) => { await run(() => client.acknowledgeContentMonthQuality(id, dayNumber, findingKeys)); },
+      onApproveDay: async (id, dayNumber) => { await run(() => client.approveContentMonthDay(id, dayNumber)); },
+      onCreateCorrection: async (id, dayNumber, reason) => {
+        const result = await run(() => client.createContentMonthCorrection(id, dayNumber, reason));
+        if (!result) throw new Error("Không tạo được revision hiệu chỉnh.");
+        return result.id;
+      },
+      onSaveCorrection: async (id, dayNumber, correctionId, lesson) => {
+        const result = await run(() => client.saveContentMonthCorrection(id, dayNumber, correctionId, lesson));
+        if (!result) throw new Error("Không lưu được revision hiệu chỉnh.");
+        return result;
+      },
+      onAcknowledgeCorrection: async (correctionId, findingKeys) => { await run(() => client.acknowledgeContentMonthCorrection(correctionId, findingKeys)); },
+      onApproveCorrection: async (correctionId) => { await run(() => client.approveContentMonthCorrection(correctionId)); }
+    }}
+  />;
 }
 
 function DashboardRoute({ client, readOnly }: { client: OperatorApiClient; readOnly: boolean }) {
@@ -376,7 +441,7 @@ function DashboardRoute({ client, readOnly }: { client: OperatorApiClient; readO
     onRejectLevelRequest: id => { if (readOnly || typeof client.decideAssessment !== "function") return; void modal.prompt({ title: "Từ chối yêu cầu lên mức", message: "Học viên sẽ nhìn thấy nội dung này.", label: "Lý do từ chối", confirmLabel: "Từ chối", tone: "danger" }).then(reason => { if (reason?.trim()) refresh(client.decideAssessment(id, { status: "needs_retry", reason: reason.trim() })); }); },
     onViewTest: showAttempt, onRescore: rescore, onDeleteLearner: id => requestDeletion(learnerIdFor(id)), onViewChallenge: showChallenge,
     onDemote: id => changeLevel(id, "recommend_lower"), onChangeLevel: id => changeLevel(id, "direct"), onEditGoal: editGoal, onViewProfile: showProfile, onAssignWeeklyPractice: assignWeeklyPractice, onTogglePendingProfile: togglePendingProfile, onSetLevelDirect: id => changeLevel(id, "direct"),
-    onOpenAppeals: () => navigate(paths.review, { state: { reviewTab: "appeals" } }), onOpenSettings: () => navigate("/settings"), onOpenWeeks: () => navigate(paths.weeks), onOpenLevelForms: () => navigate(paths.levelForms)
+    onOpenAppeals: () => navigate(paths.review, { state: { reviewTab: "appeals" } }), onOpenSettings: () => navigate("/settings"), onOpenWeeks: () => navigate(paths.months), onOpenLevelForms: () => navigate(paths.levelForms)
   }} />
   {assessmentDialog && <OperatorReviewAssessmentDetail detail={assessmentDialog} onClose={() => setAssessmentDialog(undefined)} {...(typeof client.manualScoreAssessment === "function" && !readOnly && (assessmentDialog.status === "pending_review" || assessmentDialog.status === "submitted") ? { onSaveManualScore: saveManualScore } : {})} {...(typeof client.confirmAssessmentAudioDeletion === "function" && typeof client.deleteAssessmentAudio === "function" && !readOnly ? { onDeleteAudio: deleteAssessmentAudio } : {})} savingManualScore={manualScoreBusy} />}
   {dialog && <OperatorDashboardDialog dialog={dialog} onClose={() => setDialog(undefined)} />}

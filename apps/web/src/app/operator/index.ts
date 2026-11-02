@@ -4,6 +4,7 @@ import "./styles.css";
 export { OperatorDashboard } from "./Dashboard.js";
 export { OperatorLevelForms } from "./LevelForms.js";
 export { OperatorWeeks } from "./Weeks.js";
+export { OperatorMonths } from "./Months.js";
 export { OperatorLessons, OperatorLessonSet } from "./Lessons.js";
 export { OperatorReview } from "./Review.js";
 export { OperatorPrompts } from "./Prompts.js";

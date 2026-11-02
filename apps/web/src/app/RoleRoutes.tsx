@@ -8,7 +8,7 @@ const ManagerRouteController = lazy(() => import("./manager/ManagerRouteControll
 const OperatorRouteController = lazy(() => import("./operator/OperatorRouteController.js").then(({ OperatorRouteController }) => ({ default: OperatorRouteController })));
 
 const managerRoutes = ["/mgr", "/mgr/ops", "/mgr/recovery", "/mgr/reminders", "/mgr/report", "/mgr/rewards"] as const;
-const operatorRoutes = ["/op", "/op/levelforms", "/op/weeks", "/op/lessons", "/op/review", "/op/tests"] as const;
+const operatorRoutes = ["/op", "/op/levelforms", "/op/months", "/op/lessons", "/op/review", "/op/tests"] as const;
 
 export function RoleRoutes({ session }: { session: SessionView }) {
   const location = useLocation();
@@ -21,6 +21,7 @@ export function RoleRoutes({ session }: { session: SessionView }) {
   const managerRoute = managerRoutes.some((route) => route === pathname) || (role === "manager" && isKnownManagerOperationsRoute(pathname));
   if (!isSupportedRole(role)) return <AccessFallback home="/" message="Vai trò tài khoản này không được hỗ trợ. Vui lòng quay lại trang bắt đầu." />;
   if (role === "learner") {
+    if (pathname === "/practice") return <Navigate replace to="/home" />;
     if (operatorRoute) return <AccessFallback home="/home" message="Tài khoản này không có quyền mở khu vực vận hành." />;
     if (managerArea || settingsArea || (rewardPreviewRoute && pathname !== "/reward/preview")) return <AccessFallback home="/home" message="Tài khoản này không có quyền mở khu vực quản lý." />;
     if (pathname === "/") return <Navigate replace to="/home" />;

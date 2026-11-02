@@ -65,15 +65,14 @@ const nav: Record<ShellRole, readonly NavItem[]> = {
   learner: [
     { to: "/home", icon: icons.home, label: "Trang chủ" },
     { to: "/coach", icon: icons.chat, label: "Luyện với Season" },
-    { to: "/practice", icon: icons.pen, label: "Bài tuần" },
     { to: "/games", icon: icons.game, label: "Mini game" },
     { to: "/profile", icon: icons.user, label: "Tiến độ & hồ sơ" }
   ],
   operator: [
     { to: "/op", icon: icons.check, label: "Duyệt mức" },
-    { to: "/op/weeks", icon: icons.cal, label: "Chủ đề" },
+    { to: "/op/months", icon: icons.cal, label: "Tháng học" },
     { to: "/op/lessons", icon: icons.book, label: "Bài học" },
-    { to: "/op/review", icon: icons.search, label: "Bài tuần" },
+    { to: "/op/review", icon: icons.search, label: "Chấm & khiếu nại" },
     { to: "/op/tests", icon: icons.doc, label: "Bài kiểm tra" },
     { to: "/settings", icon: icons.cog, label: "Cài đặt" }
   ],
