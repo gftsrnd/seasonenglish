@@ -48,8 +48,8 @@ export interface LearnerApiClient {
   getReward(mode: "preview" | "done"): Promise<RewardView>;
   getSurvey(): Promise<SurveyView>;
   submitSurvey(input: { rating: number; comment: string; studyTime: "work" | "outside" | "both" }): Promise<SurveyView>;
-  getAssessment(kind: AssessmentKind | "levelup"): Promise<AssessmentView>;
-  startAssessment(kind: AssessmentKind | "levelup"): Promise<AssessmentView>;
+  getAssessment(kind: AssessmentKind | "levelup" | "passcourse"): Promise<AssessmentView>;
+  startAssessment(kind: AssessmentKind | "levelup" | "passcourse"): Promise<AssessmentView>;
   uploadAssessmentAudio(file: Blob, filename: string): Promise<AudioArtifactView & { url?: string | null }>;
   getAssessmentAudioReadUrl(artifactKey: string): Promise<AudioArtifactView & { url?: string | null }>;
   saveAssessmentResponse(attemptId: string, section: AssessmentSectionCode, taskKey: string, input: {

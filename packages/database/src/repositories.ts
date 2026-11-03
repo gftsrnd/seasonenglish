@@ -405,7 +405,7 @@ export interface PublishedAssessmentRecord {
   definitionId: string;
   versionId: string;
   assessmentKey: string;
-        kind: "placement" | "level_up" | "final";
+  kind: "placement" | "level_up" | "final" | "pass_course";
   title: string;
   version: number;
   blueprint: StoredAssessmentDefinition;
@@ -4315,12 +4315,12 @@ class AssessmentRepository {
   }
 
   async findPublished(kind: AssessmentKind): Promise<PublishedAssessmentRecord | null> {
-    const databaseKind = kind === "level-up" ? "level_up" : kind;
+    const databaseKind = kind === "level-up" ? "level_up" : kind === "pass-course" ? "pass_course" : kind;
     const result = await this.pool.query<{
       definition_id: string;
       version_id: string;
       assessment_key: string;
-      kind: "placement" | "level_up";
+      kind: "placement" | "level_up" | "final" | "pass_course";
       title: string;
       version: number;
       blueprint: StoredAssessmentDefinition;
@@ -4344,6 +4344,23 @@ class AssessmentRepository {
       version: row.version,
       blueprint: row.blueprint
     } : null;
+  }
+
+  /** Pass Course may start only for an explicitly C1-ready learner. */
+  async passCourseEligibility(learnerId: string): Promise<boolean> {
+    const result = await this.pool.query<{ eligible: boolean }>(
+      `select exists(
+         select 1
+         from users learner
+         join enrollments enrollment on enrollment.learner_id = learner.id
+           and enrollment.cefr = 'C1' and enrollment.cefr_approved = true
+         join pass_course_readiness readiness on readiness.learner_id = learner.id
+           and readiness.organization_id = learner.organization_id and readiness.cefr_ready = true
+         where learner.id = $1 and learner.role = 'learner' and learner.status = 'active'
+       ) as eligible`,
+      [learnerId]
+    );
+    return Boolean(result.rows[0]?.eligible);
   }
 
   async findActiveAttempt(learnerId: string, assessmentVersionId: string): Promise<AssessmentAttemptRecord | null> {
@@ -4704,15 +4721,43 @@ class AssessmentRepository {
     id: string; reason: string; status: "pending"; resolution: null; createdAt: Date; resolvedAt: null;
   } | null> {
     const result = await this.pool.query<{ id: string; created_at: Date }>(
-      `insert into appeals (id, attempt_id, learner_id, reason)
-       select $1, aa.id, aa.learner_id, $4 from assessment_attempts aa
+      `insert into appeals (id, attempt_id, learner_id, reason, expires_at)
+       select $1, aa.id, aa.learner_id, $4,
+              case when definition.kind = 'pass_course' then aa.submitted_at + interval '72 hours' else null end
+       from assessment_attempts aa
+       join assessment_versions version on version.id = aa.assessment_version_id
+       join assessment_definitions definition on definition.id = version.definition_id
        where aa.id = $2 and aa.learner_id = $3 and aa.status in ('pending_review', 'approved', 'needs_retry')
+         and (definition.kind <> 'pass_course' or aa.submitted_at >= now() - interval '72 hours')
          and not exists (select 1 from appeals a where a.attempt_id = aa.id and a.status = 'pending')
        returning id, created_at`,
       [randomUUID(), attemptId, learnerId, reason]
     );
     const row = result.rows[0];
     return row ? { id: row.id, reason, status: "pending", resolution: null, createdAt: row.created_at, resolvedAt: null } : null;
+  }
+
+  async resolveAssessmentAppeal(input: {
+    appealId: string;
+    reviewerId: string;
+    status: "accepted" | "rejected";
+    resolution: string;
+  }): Promise<{ id: string; status: "accepted" | "rejected"; resolution: string; resolvedAt: Date } | null> {
+    const result = await this.pool.query<{ id: string; status: "accepted" | "rejected"; resolution: string; resolved_at: Date }>(
+      `update appeals appeal
+       set status = $3, resolution = $4, resolved_by = $2, resolved_at = now()
+       from assessment_attempts attempt
+       join assessment_versions version on version.id = attempt.assessment_version_id
+       join assessment_definitions definition on definition.id = version.definition_id
+       join users learner on learner.id = attempt.learner_id
+       join users reviewer on reviewer.id = $2 and reviewer.organization_id = learner.organization_id and reviewer.role = 'operator'
+       where appeal.id = $1 and appeal.attempt_id = attempt.id and appeal.status = 'pending'
+         and (definition.kind <> 'pass_course' or appeal.expires_at is null or appeal.expires_at >= now())
+       returning appeal.id, appeal.status, appeal.resolution, appeal.resolved_at`,
+      [input.appealId, input.reviewerId, input.status, input.resolution]
+    );
+    const row = result.rows[0];
+    return row ? { id: row.id, status: row.status, resolution: row.resolution, resolvedAt: row.resolved_at } : null;
   }
 
   async recordAudioPlay(input: {
@@ -5775,7 +5820,7 @@ class AssessmentRepository {
       learner_id: string;
       learner_name: string;
       profile_complete: boolean;
-      kind: "placement" | "level_up";
+      kind: "placement" | "level_up" | "final" | "pass_course";
       title: string;
       submitted_at: Date;
       section_scores: Partial<Record<AssessmentSectionCode, number>> | null;
@@ -5819,7 +5864,7 @@ class AssessmentRepository {
            and cs.scenario->>'assessmentAttemptId' = aa.id::text group by cs.id
          order by cs.started_at desc limit 1
        ) challenge on true
-       where aa.status = 'pending_review' and ad.kind in ('placement', 'level_up', 'final')
+       where aa.status = 'pending_review' and ad.kind in ('placement', 'level_up', 'final', 'pass_course')
        group by aa.id, learner.display_name, lp.completed_at, ad.kind, ad.title, av.blueprint,
                 decision.suggested_level, responses.response_count, responses.typed_speaking,
                 challenge.turns, challenge.average, challenge.off_topic, challenge.status
@@ -5847,7 +5892,7 @@ class AssessmentRepository {
       learnerId: row.learner_id,
       learnerName: row.learner_name,
       profileComplete: row.profile_complete,
-      kind: row.kind === "level_up" ? "level-up" : row.kind,
+      kind: row.kind === "level_up" ? "level-up" : row.kind === "pass_course" ? "pass-course" : row.kind,
       title: row.title,
       submittedAt: row.submitted_at,
       sectionScores: scores,
@@ -6419,15 +6464,16 @@ class AssessmentRepository {
         learner_id: string;
         organization_id: string;
         status: AssessmentAttemptRecord["status"];
-        kind: "placement" | "level_up" | "final";
+        kind: "placement" | "level_up" | "final" | "pass_course";
         current_level: CefrLevel | null;
+        pass_course_ready: boolean | null;
         challenge_passed: boolean | null;
         challenge_turns: number | null;
         challenge_average: string | null;
         challenge_off_topic: number | null;
       }>(
         `select aa.learner_id, learner.organization_id, aa.status, definition.kind,
-                enrollment.cefr as current_level, challenge.passed as challenge_passed,
+                enrollment.cefr as current_level, readiness.cefr_ready as pass_course_ready, challenge.passed as challenge_passed,
                 challenge.completed_turns as challenge_turns, challenge.average::text as challenge_average,
                 challenge.off_topic as challenge_off_topic
          from assessment_attempts aa
@@ -6438,8 +6484,10 @@ class AssessmentRepository {
            and reviewer.organization_id = learner.organization_id
            and reviewer.role = 'operator'
          left join enrollments enrollment on enrollment.learner_id = aa.learner_id and enrollment.cefr_approved = true
+         left join pass_course_readiness readiness on readiness.learner_id = aa.learner_id
+           and readiness.organization_id = learner.organization_id
          left join level_up_challenge_results challenge on challenge.assessment_attempt_id = aa.id
-         where aa.id = $1 and definition.kind in ('placement', 'level_up', 'final')
+         where aa.id = $1 and definition.kind in ('placement', 'level_up', 'final', 'pass_course')
          for update of aa`,
         [input.attemptId, input.reviewerId]
       );
@@ -6449,12 +6497,33 @@ class AssessmentRepository {
         return null;
       }
       if (attempt.kind !== "final" && input.status === "approved" && !input.approvedLevel) {
+        if (attempt.kind === "pass_course") {
+          // Form A is pass/fail: it never changes CEFR. Its gate is a
+          // persisted C1 readiness flag plus the operator's final decision.
+        } else {
+          await client.query("rollback");
+          return null;
+        }
+      }
+      if (attempt.kind === "pass_course" && input.approvedLevel) {
         await client.query("rollback");
         return null;
       }
       if (attempt.kind === "level_up" && input.status === "approved" && attempt.challenge_passed !== true) {
         await client.query("rollback");
         return null;
+      }
+
+      if (attempt.kind === "pass_course" && input.status === "approved") {
+        const score = await client.query<{ total: string }>(
+          "select coalesce(sum(score), 0)::text as total from assessment_scores where attempt_id = $1",
+          [input.attemptId]
+        );
+        const total = Number(score.rows[0]?.total ?? 0);
+        if (attempt.current_level !== "C1" || attempt.pass_course_ready !== true || total < 85) {
+          await client.query("rollback");
+          return null;
+        }
       }
 
       const existing = await client.query<{
@@ -6530,6 +6599,33 @@ class AssessmentRepository {
           `update enrollments set cefr = $2, cefr_approved = true where learner_id = $1`,
           [attempt.learner_id, input.approvedLevel]
         );
+      }
+      if (attempt.kind === "pass_course") {
+        if (input.status === "approved") {
+          const certificateNumber = `E4S-C1-${input.attemptId.replace(/-/g, "").slice(0, 12).toUpperCase()}`;
+          await client.query(
+            `insert into pass_course_certificates
+               (id, attempt_id, learner_id, organization_id, certificate_number, issued_by, metadata)
+             values ($1, $2, $3, $4, $5, $6, $7::jsonb)
+             on conflict (attempt_id) do nothing`,
+            [randomUUID(), input.attemptId, attempt.learner_id, attempt.organization_id, certificateNumber, input.reviewerId,
+              JSON.stringify({ form: "A", totalMinutes: 90, totalScore: 100, passingScore: 85 })]
+          );
+          await client.query("update users set status = 'disabled', updated_at = now() where id = $1", [attempt.learner_id]);
+          await client.query(
+            `update pass_course_readiness
+             set cefr_ready = false, reset_at = now(), reset_reason = 'pass_course_certified', updated_at = now()
+             where learner_id = $1`, [attempt.learner_id]
+          );
+        } else {
+          await client.query(
+            `insert into pass_course_readiness (learner_id, organization_id, cefr_ready, reset_at, reset_reason, updated_at)
+             values ($1, $2, false, now(), $3, now())
+             on conflict (learner_id) do update
+             set cefr_ready = false, reset_at = excluded.reset_at, reset_reason = excluded.reset_reason, updated_at = now()`,
+            [attempt.learner_id, attempt.organization_id, input.reason]
+          );
+        }
       }
       await client.query(
         `insert into audit_events

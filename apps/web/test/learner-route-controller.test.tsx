@@ -30,6 +30,10 @@ describe("learner route integration controller", () => {
     expect(resolveLearnerRoute("/test/final")).toEqual({ name: "assessment", params: { kind: "final" } });
   });
 
+  it("resolves the persisted Pass Course Form A route without routing it through weekly lessons", () => {
+    expect(resolveLearnerRoute("/test/pass-course")).toEqual({ name: "assessment", params: { kind: "pass-course" } });
+  });
+
   it("shows the server's explicit restart message for an incompatible stale Placement attempt", () => {
     const message = "Đề cũ không thể chuyển an toàn. Hãy bắt đầu lại.";
     const error = new ApiError("PLACEMENT_ATTEMPT_RESTART_REQUIRED", "http", 409, { message });

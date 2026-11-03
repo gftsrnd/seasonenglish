@@ -203,6 +203,26 @@ export const levelUpDefinition: StoredAssessmentDefinition = {
   ]
 };
 
+/**
+ * The exit assessment is a fixed Form A.  Unlike a monthly final it is not
+ * regenerated from a topic, so its blueprint is seeded and published once.
+ */
+export const passCourseFormADefinition: StoredAssessmentDefinition = {
+  ...levelUpDefinition,
+  key: "pass-course-form-a",
+  kind: "pass-course",
+  title: "Pass Course – Form A",
+  version: 1,
+  totalMinutes: 90,
+  totalScore: 100,
+  targetLevel: "C1",
+  sections: levelUpDefinition.sections.map((section) => ({
+    ...section,
+    durationMinutes: ({ listening: 20, reading: 25, writing: 25, speaking: 20 } as const)[section.code],
+    maxScore: 25
+  }))
+};
+
 export function publicAssessmentDefinition(stored: StoredAssessmentDefinition): AssessmentDefinitionView {
   return {
     ...stored,

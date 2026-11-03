@@ -37,7 +37,7 @@ export interface SectionScore {
 
 export interface PendingPlacement {
   id: string;
-  kind?: "placement" | "final";
+  kind?: "placement" | "final" | "pass-course";
   learnerId?: string;
   name: string;
   submittedAt: string;

@@ -27,7 +27,7 @@ import { Empty, Notice, PageTitle, AppLink } from "./ui.js";
 type StaticRouteName = "home" | "onboard" | "coach" | "challenge" | "practice" | "survey" | "profile" | "games";
 export type ResolvedLearnerRoute =
   | { name: StaticRouteName; params: Record<string, never> }
-  | { name: "assessment"; params: { kind: AssessmentKind | "levelup" } }
+  | { name: "assessment"; params: { kind: AssessmentKind | "levelup" | "passcourse" } }
   | { name: "lesson"; params: { id: string } }
   | { name: "reward"; params: { mode: "preview" | "done" } }
   | { name: "game"; params: { game: GameKey } }
@@ -63,7 +63,7 @@ export function LearnerLoadFailure({ route, message, onRetry, navigate }: Learne
  * an approved placement and an unavailable level-up challenge both return the
  * learner to Home instead of leaving them on a dead-end route.
  */
-export function shouldRedirectApprovedPlacement(kind: AssessmentKind | "levelup", status?: string | null) {
+export function shouldRedirectApprovedPlacement(kind: AssessmentKind | "levelup" | "passcourse", status?: string | null) {
   return kind === "placement" && (status === "submitted" || status === "pending_review" || status === "approved");
 }
 
@@ -97,6 +97,7 @@ export function resolveLearnerRoute(pathname: string): ResolvedLearnerRoute {
     if (raw === "placement") return { name: "assessment", params: { kind: raw } };
     if (raw === "levelup" || raw === "level-up") return { name: "assessment", params: { kind: "levelup" } };
     if (raw === "monthly" || raw === "final") return { name: "assessment", params: { kind: "final" } };
+    if (raw === "pass-course" || raw === "passcourse") return { name: "assessment", params: { kind: "pass-course" } };
   }
   if (segments[0] === "lesson" && segments.length === 2 && segments[1]) return { name: "lesson", params: { id: segments[1] } };
   if (segments[0] === "reward" && segments.length === 2 && (segments[1] === "preview" || segments[1] === "done")) return { name: "reward", params: { mode: segments[1] } };

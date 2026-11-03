@@ -385,6 +385,21 @@ export const certificateIssuances = pgTable("certificate_issuances", {
   issuedAt: timestamp("issued_at", { withTimezone: true }).notNull().defaultNow()
 }, (table) => ({ learnerProgram: uniqueIndex("certificate_issuances_learner_program_unique").on(table.learnerId, table.programId) }));
 
+/** Immutable certificate issued only after an operator approves Pass Course Form A. */
+export const passCourseCertificates = pgTable("pass_course_certificates", {
+  id: uuid("id").primaryKey(), attemptId: uuid("attempt_id").notNull().unique().references(() => assessmentAttempts.id),
+  learnerId: uuid("learner_id").notNull().references(() => users.id), organizationId: uuid("organization_id").notNull().references(() => organizations.id),
+  certificateNumber: text("certificate_number").notNull().unique(), issuedBy: uuid("issued_by").notNull().references(() => users.id),
+  issuedAt: timestamp("issued_at", { withTimezone: true }).notNull().defaultNow(), metadata: jsonb("metadata").notNull().default(emptyObject)
+}, (table) => ({ learner: index("pass_course_certificates_learner_idx").on(table.learnerId, table.issuedAt) }));
+
+/** Explicit C1 readiness; a C1 enrollment alone cannot unlock the fixed exit exam. */
+export const passCourseReadiness = pgTable("pass_course_readiness", {
+  learnerId: uuid("learner_id").primaryKey().references(() => users.id), organizationId: uuid("organization_id").notNull().references(() => organizations.id),
+  cefrReady: boolean("cefr_ready").notNull().default(false), resetAt: timestamp("reset_at", { withTimezone: true }),
+  resetReason: text("reset_reason"), updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow()
+});
+
 export const files = pgTable("files", {
   id: uuid("id").primaryKey(), organizationId: uuid("organization_id").notNull().references(() => organizations.id),
   ownerUserId: uuid("owner_user_id").references(() => users.id), purpose: text("purpose").notNull(), bucket: text("bucket").notNull(),
@@ -497,7 +512,7 @@ export const databaseSchema = {
   auditEvents, badges, coachSessions, coachTurns, duels, enrollments, files, mediaAssets,
   gameResults, gameSets, idempotencyKeys, jobs, learnerProfiles, lessonSetVersions,
   lessonPartAppeals, lessonPartAttempts, lessonSets, lessonVersions, lessons, notificationDeliveries, organizations, organizationSettings, providerConfigurations,
-  practiceSubmissions, learnerVocabularyUnlocks, levelUpChallengeResults, practiceAppeals,
+  practiceSubmissions, learnerVocabularyUnlocks, levelUpChallengeResults, practiceAppeals, passCourseCertificates, passCourseReadiness,
   monthFrameworks, monthLessonCorrections, monthLessons, programMonths, programWeeks, programs, progressRecords, promptVersions,
   reminders, rewardEvents, rubricVersions, sessions, surveys, userCredentials, users, managerPinReports, managerDestructiveConfirmations, managerMaintenanceBackups
 };

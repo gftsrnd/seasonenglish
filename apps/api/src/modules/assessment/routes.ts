@@ -39,7 +39,7 @@ import type { EdgeTtsRunner } from "./edge-tts.js";
 import { buildMonthlyFinalDraft } from "./monthly-final-builder.js";
 import { createRoleGuard } from "../identity/policy.js";
 
-const kindParam = z.object({ kind: z.enum(["placement", "levelup", "level-up", "monthly", "final"]) });
+const kindParam = z.object({ kind: z.enum(["placement", "levelup", "level-up", "monthly", "final", "pass-course", "passcourse"]) });
 const attemptParam = z.object({ attemptId: z.uuid() });
 const responseParam = z.object({
   attemptId: z.uuid(),
@@ -70,6 +70,7 @@ const decisionInput = z.object({
   }
 });
 const appealInput = z.object({ reason: z.string().trim().min(10).max(2_000) });
+const appealResolutionInput = z.object({ status: z.enum(["accepted", "rejected"]), resolution: z.string().trim().min(1).max(2_000) });
 const learnerReviewParam = z.object({ learnerId: z.uuid() });
 const reviewLevelInput = z.object({
   mode: z.enum(["direct", "scheduled", "recommend_lower"]),
@@ -600,6 +601,9 @@ export function registerAssessmentRoutes(app: FastifyInstance, pool: Pool, aiRun
     if (kind === "final" && !await monthlyExamIsReady(repositories.learning, request.e4sSession!.user.id)) {
       return reply.code(409).send({ code: "MONTHLY_EXAM_LOCKED" });
     }
+    if (kind === "pass-course" && !await repositories.assessments.passCourseEligibility(request.e4sSession!.user.id)) {
+      return reply.code(409).send({ code: "PASS_COURSE_C1_NOT_READY" });
+    }
     const definition = kind === "final"
       ? await findPublishedMonthlyFinal(pool, request.e4sSession!.user.id)
       : await repositories.assessments.findPublished(kind);
@@ -633,6 +637,20 @@ export function registerAssessmentRoutes(app: FastifyInstance, pool: Pool, aiRun
     return appeal ? reply.code(201).send({
       ...appeal, createdAt: appeal.createdAt.toISOString(), resolvedAt: null
     }) : reply.code(409).send({ code: "ASSESSMENT_APPEAL_NOT_AVAILABLE" });
+  });
+
+  app.post("/api/v1/assessment-appeals/:appealId/decision", { preHandler: assessmentReviewers }, async (request, reply) => {
+    const appealId = z.uuid().safeParse((request.params as { appealId?: string }).appealId);
+    const body = appealResolutionInput.safeParse(request.body);
+    if (!appealId.success || !body.success) return reply.code(400).send({ code: "ASSESSMENT_APPEAL_DECISION_INVALID" });
+    const resolved = await repositories.assessments.resolveAssessmentAppeal({
+      appealId: appealId.data,
+      reviewerId: request.e4sSession!.user.id,
+      ...body.data
+    });
+    return resolved
+      ? { ...resolved, resolvedAt: resolved.resolvedAt.toISOString() }
+      : reply.code(409).send({ code: "ASSESSMENT_APPEAL_NOT_RESOLVABLE" });
   });
 
   app.post("/api/v1/assessment-attempts/:attemptId/violations", { preHandler: learnerOnly }, async (request, reply): Promise<AssessmentRuntimeView> => {
@@ -683,6 +701,11 @@ export function registerAssessmentRoutes(app: FastifyInstance, pool: Pool, aiRun
         return reply.code(409).send({ code: "MONTHLY_EXAM_LOCKED" });
       }
       definition = await findPublishedMonthlyFinal(pool, learnerId);
+    } else if (kind === "pass-course") {
+      if (!await repositories.assessments.passCourseEligibility(learnerId)) {
+        return reply.code(409).send({ code: "PASS_COURSE_C1_NOT_READY" });
+      }
+      definition = await repositories.assessments.findPublished(kind);
     } else {
       definition = await repositories.assessments.findPublished(kind);
     }
@@ -982,8 +1005,9 @@ function levelFormBlueprint(targetLevel: "A2" | "B1" | "B2" | "C1", output: Leve
   };
 }
 
-function normalizeKind(kind: "placement" | "levelup" | "level-up" | "monthly" | "final"): AssessmentKind {
+function normalizeKind(kind: "placement" | "levelup" | "level-up" | "monthly" | "final" | "pass-course" | "passcourse"): AssessmentKind {
   if (kind === "levelup") return "level-up";
+  if (kind === "passcourse") return "pass-course";
   return kind === "monthly" ? "final" : kind;
 }
 
@@ -991,7 +1015,7 @@ async function definitionForAttempt(
   repository: ReturnType<typeof createRepositories>["assessments"],
   attempt: AssessmentAttemptRecord
 ): Promise<PublishedAssessmentRecord | null> {
-  for (const kind of ["placement", "level-up", "final"] as const) {
+  for (const kind of ["placement", "level-up", "final", "pass-course"] as const) {
     const definition = await repository.findPublished(kind);
     if (definition?.versionId === attempt.assessmentVersionId) return definition;
   }
