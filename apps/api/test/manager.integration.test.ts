@@ -560,5 +560,24 @@ describe("manager progress and operations API", () => {
     const activeProgram = await pool.query("select name from programs where organization_id = $1 and status = 'active'", [DEMO_IDS.organization]);
     expect(activeProgram.rows[0]?.name).toBe("E4S Workplace");
     expect(JSON.stringify(reloaded.json())).not.toMatch(/secret|api.?key|provider.?key/i);
+  });  it("persists the Manager-selected system date and keeps it out of Operator writes", async () => {
+    const before = await app.inject({ method: "GET", url: "/api/v1/manager/settings", headers: { cookie: managerCookie } });
+    expect(before.statusCode, before.body).toBe(200);
+    const settings = before.json() as Record<string, unknown>;
+    const managerWrite = await app.inject({
+      method: "PUT", url: "/api/v1/manager/settings", headers: { cookie: managerCookie },
+      payload: { ...settings, simulatedSystemDate: "2026-11-14" }
+    });
+    expect(managerWrite.statusCode, managerWrite.body).toBe(200);
+    expect(managerWrite.json()).toMatchObject({ simulatedSystemDate: "2026-11-14" });
+
+    const operatorWrite = await app.inject({
+      method: "PUT", url: "/api/v1/operator/settings", headers: { cookie: operatorCookie },
+      payload: { ...(managerWrite.json() as Record<string, unknown>), simulatedSystemDate: "2026-11-15" }
+    });
+    expect(operatorWrite.statusCode, operatorWrite.body).toBe(200);
+    const after = await app.inject({ method: "GET", url: "/api/v1/manager/settings", headers: { cookie: managerCookie } });
+    expect(after.json()).toMatchObject({ simulatedSystemDate: "2026-11-14" });
   });
+
 });

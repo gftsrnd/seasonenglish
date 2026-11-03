@@ -1,3 +1,28 @@
+export const CONTENT_LIFECYCLE_STATUSES = ["draft", "approved", "locked", "reopen_requested", "reopened", "rejected"] as const;
+export type ContentLifecycleStatus = (typeof CONTENT_LIFECYCLE_STATUSES)[number];
+
+export type ReopenRequestTarget = "account" | "daily_lesson" | "weekly_review" | "monthly_exam";
+export type ReopenRequestStatus = "pending" | "approved" | "rejected";
+
+export interface ReopenRequestView {
+  readonly id: string;
+  readonly target: ReopenRequestTarget;
+  readonly targetId: string;
+  readonly requestedBy: string;
+  readonly reason: string;
+  readonly status: ReopenRequestStatus;
+  readonly decisionReason: string | null;
+  readonly createdAt: string;
+  readonly decidedAt: string | null;
+}
+
+export interface NotificationEventView {
+  readonly id: string;
+  readonly type: "content_reopened" | "content_changed" | "reopen_request_decided";
+  readonly recipientId: string;
+  readonly occurredAt: string;
+  readonly readAt: string | null;
+}
 import type { AssessmentDecisionView, AssessmentOption, AssessmentResponseView, AssessmentSectionCode, AssessmentSectionStatus, AssessmentAttemptStatus, AssessmentStimulus } from "./assessment-contract.js";
 import type { CefrLevel } from "./domain-contract.js";
 import type { LessonPart } from "./learning-contract.js";

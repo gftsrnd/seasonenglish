@@ -382,6 +382,8 @@ export interface ManagerSettingsView {
   readonly reminderInactiveDays: number;
   readonly weeklyReportEnabled: boolean;
   readonly pilotStartDate: string;
+  /** Manager-selected organization day used by learning access and calendar logic. */
+  readonly simulatedSystemDate: string;
   readonly pilotWeeks: number;
   /** Server-derived lifecycle shared by Manager, Operator and Learner views. */
   readonly pilotCycle?: {
@@ -413,7 +415,8 @@ export interface ManagerSettingsView {
   readonly baseWebhookTemplate: string;
 }
 
-export type ManagerSettingsInput = Omit<ManagerSettingsView, "organizationName" | "pilotCycle"> & {
+export type ManagerSettingsInput = Omit<ManagerSettingsView, "organizationName" | "pilotCycle" | "simulatedSystemDate"> & {
+  readonly simulatedSystemDate?: string | undefined;
   /** Present only when the user explicitly saves the pilot-cycle section. */
   readonly pilotCycleAction?: "save";
 };

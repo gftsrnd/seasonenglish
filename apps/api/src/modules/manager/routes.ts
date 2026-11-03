@@ -29,7 +29,9 @@ const managerSettingsInput = z.object({
   pilotCycleAction: z.literal("save").optional(),
   aiTestDisabled: z.boolean().default(false),
   reminderInactiveDays: z.number().int().min(1).max(30), weeklyReportEnabled: z.boolean(),
-  pilotStartDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/), pilotWeeks: z.number().int().min(2).max(4),
+  pilotStartDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+  simulatedSystemDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+  pilotWeeks: z.number().int().min(2).max(4),
   weekOverride: z.number().int().min(0).max(4), minMinutesPerDay: z.number().int().min(5).max(60),
   courseTheme: z.string().max(160), coachDailyLimit: z.number().int().min(1).max(200),
   testTimed: z.boolean(), testTimes: z.object({ listening: z.number().int().min(1).max(60), reading: z.number().int().min(1).max(60), writing: z.number().int().min(1).max(60), speaking: z.number().int().min(1).max(60) }),
@@ -399,7 +401,7 @@ export function registerManagerRoutes(app: FastifyInstance, pool: Pool, options:
     const parsed = managerSettingsInput.safeParse(request.body);
     if (!parsed.success) return reply.code(400).send({ code: "OPERATOR_SETTINGS_INVALID" });
     try {
-      const { pilotCycleAction, ...settings } = parsed.data;
+      const { simulatedSystemDate: _simulatedSystemDate, pilotCycleAction, ...settings } = parsed.data;
       const saved = await repositories.manager.saveSettings(request.e4sSession!.user.id, { ...settings, ...(pilotCycleAction ? { pilotCycleAction } : {}) });
       return saved ?? reply.code(404).send({ code: "MANAGER_ORGANIZATION_NOT_FOUND" });
     } catch (error) {

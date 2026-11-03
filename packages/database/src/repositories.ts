@@ -770,7 +770,7 @@ class LearningRepository {
        join program_weeks pw on pw.program_id = p.id
          and pw.week_number = coalesce(
            p.current_week_override,
-           greatest(1, least(p.week_count, ((current_date - p.start_date) / 7) + 1))
+           greatest(1, least(p.week_count, ((organization_system_date(p.organization_id) - p.start_date) / 7) + 1))
          )
        where e.learner_id = $1
        limit 1`,
@@ -801,7 +801,7 @@ class LearningRepository {
       `select pm.month, pm.theme_title, pm.theme_brief, pm.communication_goal, mf.cefr, pm.exam_date::text
        from enrollments e
        join users u on u.id = e.learner_id and u.status = 'active'
-       join program_months pm on pm.organization_id = u.organization_id and pm.month = to_char(current_date, 'YYYY-MM')
+       join program_months pm on pm.organization_id = u.organization_id and pm.month = to_char(organization_system_date(u.organization_id), 'YYYY-MM')
        join month_frameworks mf on mf.program_month_id = pm.id and mf.cefr = e.cefr and mf.status = 'approved'
        where e.learner_id = $1
        limit 1`,
@@ -1199,7 +1199,7 @@ class LearningRepository {
     const result = await this.pool.query<LearnerLessonQueryRow>(
       `select l.id, l.title, ml.lesson_number as day_number, 0 as week_number, pm.theme_title as week_topic, mf.cefr, lv.content,
               (select count(*) from month_lessons count_ml where count_ml.framework_id = mf.id and count_ml.status = 'approved')::text as lesson_count,
-              ml.lesson_date::text as opens_at, ml.lesson_date > current_date as opens_later,
+              ml.lesson_date::text as opens_at, ml.lesson_date > organization_system_date((select organization_id from users where id = e.learner_id)) as opens_later,
               blocker.id as blocker_id, blocker.day_number as blocker_day_number, blocker.title as blocker_title,
               pr.status as progress_status, pr.score::text as progress_score, pr.evidence as progress_evidence, pr.updated_at as progress_updated_at
        from enrollments e
@@ -1268,7 +1268,7 @@ class LearningRepository {
       const monthly = await this.pool.query<LearnerLessonQueryRow>(
         `select l.id, l.title, ml.lesson_number as day_number, 0 as week_number, pm.theme_title as week_topic, mf.cefr, lv.content,
                 (select count(*) from month_lessons count_ml where count_ml.framework_id = mf.id and count_ml.status = 'approved')::text as lesson_count,
-                ml.lesson_date::text as opens_at, ml.lesson_date > current_date as opens_later,
+                ml.lesson_date::text as opens_at, ml.lesson_date > organization_system_date((select organization_id from users where id = e.learner_id)) as opens_later,
                 blocker.id as blocker_id, blocker.day_number as blocker_day_number, blocker.title as blocker_title,
                 pr.status as progress_status, pr.score::text as progress_score, pr.evidence as progress_evidence, pr.updated_at as progress_updated_at
          from enrollments e
@@ -1686,7 +1686,7 @@ class LearningRepository {
         start_date: string; today: string;
         lesson_days: Array<{ dayNumber: number; status: string | null; completedAt: string | null }>;
       }>(
-        `select pw.week_number, pw.topic, p.start_date::text as start_date, current_date::text as today,
+        `select pw.week_number, pw.topic, p.start_date::text as start_date, organization_system_date(p.organization_id)::text as today,
                 count(pr.id) filter (where pr.status = 'completed')::text as completed_lessons,
                 count(l.id)::text as total_lessons,
                 coalesce(jsonb_agg(jsonb_build_object(
@@ -1703,7 +1703,7 @@ class LearningRepository {
          left join progress_records pr on pr.lesson_id = l.id and pr.learner_id = e.learner_id
            and pr.updated_at >= now() - make_interval(days => $2)
          where e.learner_id = $1
-         group by pw.id, p.start_date order by pw.week_number`, [learnerId, thresholds.days]
+         group by pw.id, p.start_date, p.organization_id order by pw.week_number`, [learnerId, thresholds.days]
       ),
       this.pool.query<{ count: string }>(
         `select count(distinct occurred_at::date)::text as count from activities where learner_id = $1`, [learnerId]
@@ -2290,7 +2290,7 @@ class ContentRepository {
     }>(
       `select p.id as program_id, p.start_date::text, p.week_count, p.current_week_override,
               (select count(*)::text from programs cycle where cycle.organization_id = p.organization_id and cycle.created_at <= p.created_at) as cycle_number,
-              current_date::text as today,
+              organization_system_date(p.organization_id)::text as today,
               pw.id, pw.week_number, pw.topic, pw.description, pw.objectives, pw.key_vocab_hint, pw.ai_plan
        from users staff
        join programs p on p.organization_id = staff.organization_id and p.status = 'active'
@@ -4132,6 +4132,7 @@ function importedSettings(
   if (typeof candidate.weeklyReportEnabled === "boolean") next.weeklyReportEnabled = candidate.weeklyReportEnabled;
   if (typeof candidate.aiTestDisabled === "boolean") next.aiTestDisabled = candidate.aiTestDisabled;
   if (typeof candidate.pilotStartDate === "string") next.pilotStartDate = candidate.pilotStartDate;
+  if (typeof candidate.simulatedSystemDate === "string") next.simulatedSystemDate = candidate.simulatedSystemDate;
   if (typeof candidate.courseTheme === "string") next.courseTheme = candidate.courseTheme;
   if (typeof candidate.testTimed === "boolean") next.testTimed = candidate.testTimed;
   if (typeof candidate.baseWebhookUrl === "string") next.baseWebhookUrl = candidate.baseWebhookUrl;
@@ -6648,7 +6649,7 @@ class CoachRepository {
        join programs p on p.id = e.program_id and p.status = 'active'
        join program_weeks pw on pw.program_id = p.id
          and pw.week_number = coalesce(p.current_week_override,
-           greatest(1, least(p.week_count, ((current_date - p.start_date) / 7) + 1)))
+           greatest(1, least(p.week_count, ((organization_system_date(p.organization_id) - p.start_date) / 7) + 1)))
        left join lateral (
          select id, scenario from coach_sessions
          where learner_id = u.id and status = 'active'
@@ -6698,7 +6699,7 @@ class CoachRepository {
          join programs p on p.id = e.program_id and p.status = 'active'
          join program_weeks pw on pw.program_id = p.id
            and pw.week_number = coalesce(p.current_week_override,
-             greatest(1, least(p.week_count, ((current_date - p.start_date) / 7) + 1)))
+             greatest(1, least(p.week_count, ((organization_system_date(p.organization_id) - p.start_date) / 7) + 1)))
          join lesson_sets ls on ls.program_week_id = pw.id and ls.cefr = e.cefr
          join lesson_set_versions lsv on lsv.lesson_set_id = ls.id and lsv.status = 'published'
          join lessons l on l.lesson_set_version_id = lsv.id
@@ -7536,7 +7537,7 @@ class EngagementRepository {
          join programs p on p.id = e.program_id and p.status = 'active'
          join program_weeks pw on pw.program_id = p.id
            and pw.week_number = coalesce(p.current_week_override,
-             least(p.week_count, greatest(1, floor((current_date - p.start_date) / 7.0)::int + 1)))
+             least(p.week_count, greatest(1, floor((organization_system_date(p.organization_id) - p.start_date) / 7.0)::int + 1)))
          join lesson_sets ls on ls.program_week_id = pw.id and ls.cefr = e.cefr
          join lesson_set_versions lsv on lsv.lesson_set_id = ls.id and lsv.status = 'published'
          where staff.id = $1 and staff.status = 'active' and staff.role in ('manager', 'operator')
@@ -8275,7 +8276,7 @@ class EngagementRepository {
        join programs p on p.id = e.program_id and p.status = 'active'
        join program_weeks pw on pw.program_id = p.id
         and pw.week_number = coalesce(p.current_week_override,
-          least(p.week_count, greatest(1, floor((current_date - p.start_date) / 7.0)::int + 1)))
+          least(p.week_count, greatest(1, floor((organization_system_date(p.organization_id) - p.start_date) / 7.0)::int + 1)))
        where u.id = $1
          and exists (
            select 1 from lesson_sets ls
@@ -9480,7 +9481,7 @@ class ManagerRepository {
       today: string; cycle_number: string;
     }>(
       `select p.id, p.name, p.start_date::text, p.week_count, p.current_week_override,
-              current_date::text as today,
+              organization_system_date(p.organization_id)::text as today,
               (select count(*)::text from programs cycle
                where cycle.organization_id = p.organization_id
                  and cycle.created_at <= p.created_at) as cycle_number
@@ -9501,6 +9502,7 @@ class ManagerRepository {
       aiTestDisabled: false,
       reminderInactiveDays: 3, weeklyReportEnabled: true,
       pilotStartDate: activeProgram?.start_date ?? currentMonday,
+      simulatedSystemDate: currentMonday,
       pilotWeeks: activeProgram?.week_count ?? 2,
       weekOverride: activeProgram?.current_week_override ?? 0,
       minMinutesPerDay: 15,
@@ -9519,6 +9521,7 @@ class ManagerRepository {
       ? { ...defaults, ...settings.configuration, reminderInactiveDays: settings.reminder_inactive_days, weeklyReportEnabled: settings.weekly_report_enabled,
           programName: activeProgram?.name ?? defaults.programName,
           pilotStartDate: activeProgram?.start_date ?? defaults.pilotStartDate,
+          simulatedSystemDate: settings.configuration?.simulatedSystemDate ?? defaults.simulatedSystemDate,
           pilotWeeks: activeProgram?.week_count ?? defaults.pilotWeeks,
           weekOverride: 0,
           testTimes: { ...defaults.testTimes, ...settings.configuration?.testTimes },
@@ -9760,7 +9763,7 @@ class ManagerRepository {
            (case when exists (
               select 1 from month_frameworks mf
               join program_months pm on pm.id = mf.program_month_id and pm.organization_id = $1
-              where pm.month = to_char(current_date, 'YYYY-MM') and mf.status = 'approved'
+              where pm.month = to_char(organization_system_date(u.organization_id), 'YYYY-MM') and mf.status = 'approved'
                 and mf.cefr = (select e.cefr from enrollments e where e.learner_id = u.id order by e.enrolled_at desc limit 1)
             ) then (select count(*)
               from progress_records pr
@@ -9768,7 +9771,7 @@ class ManagerRepository {
               join month_frameworks mf on mf.id = ml.framework_id and mf.status = 'approved'
               join program_months pm on pm.id = mf.program_month_id and pm.organization_id = $1
               where pr.learner_id = u.id and pr.status = 'completed'
-                and pm.month = to_char(current_date, 'YYYY-MM'))
+                and pm.month = to_char(organization_system_date(u.organization_id), 'YYYY-MM'))
             else (select count(*) from progress_records pr where pr.learner_id = u.id and pr.status = 'completed')
             end)::text as completed_lessons,
            coalesce(
@@ -9776,7 +9779,7 @@ class ManagerRepository {
                from month_lessons ml
                join month_frameworks mf on mf.id = ml.framework_id and mf.status = 'approved'
                join program_months pm on pm.id = mf.program_month_id and pm.organization_id = $1
-               where pm.month = to_char(current_date, 'YYYY-MM')
+               where pm.month = to_char(organization_system_date(u.organization_id), 'YYYY-MM')
                  and mf.cefr = (select e.cefr from enrollments e where e.learner_id = u.id order by e.enrolled_at desc limit 1)
                  and ml.status = 'approved' and ml.lesson_id is not null), 0),
              (select count(*)
@@ -11250,7 +11253,7 @@ class ManagerRepository {
     try {
       await client.query("begin");
       const activeProgram = await client.query<{ id: string; start_date: string; week_count: number; name: string; today: string }>(
-        `select id, start_date::text, week_count, name, current_date::text as today
+        `select id, start_date::text, week_count, name, organization_system_date(organization_id)::text as today
          from programs
          where organization_id = $1 and status = 'active'
          order by start_date desc
@@ -11261,6 +11264,9 @@ class ManagerRepository {
       const currentProgram = activeProgram.rows[0];
       const pilotAction = input.pilotCycleAction === "save";
       const { pilotCycleAction: _pilotCycleAction, ...cleanInput } = input;
+      const existingSettings = await client.query<{ configuration: Partial<Omit<ManagerSettingsView, "organizationName">> }>(
+        "select configuration from organization_settings where organization_id = $1 for update", [organization.id]
+      );
       let effectiveProgramId = currentProgram?.id;
       let effectiveStartDate = currentProgram?.start_date ?? input.pilotStartDate;
       let effectiveWeeks = currentProgram?.week_count ?? input.pilotWeeks;
@@ -11313,7 +11319,11 @@ class ManagerRepository {
           );
         }
       }
-      const savedInput = { ...cleanInput, pilotStartDate: effectiveStartDate, pilotWeeks: effectiveWeeks, weekOverride: 0 };
+      const savedInput = {
+        ...cleanInput,
+        simulatedSystemDate: cleanInput.simulatedSystemDate ?? existingSettings.rows[0]?.configuration?.simulatedSystemDate ?? currentProgram?.today,
+        pilotStartDate: effectiveStartDate, pilotWeeks: effectiveWeeks, weekOverride: 0
+      };
       await client.query(
         `insert into organization_settings (organization_id, reminder_inactive_days, weekly_report_enabled, configuration, updated_by)
          values ($1, $2, $3, $4::jsonb, $5)
