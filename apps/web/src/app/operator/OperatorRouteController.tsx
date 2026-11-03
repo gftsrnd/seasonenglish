@@ -235,6 +235,7 @@ function MonthsRoute({ client, readOnly, preview }: { client: OperatorApiClient;
         return result;
       },
       onApproveFramework: async (id) => { await run(() => client.approveContentMonthFramework(id), "Đã chốt tài nguyên tháng."); },
+      onGenerateMonthlyFinal: async (id) => { await run(() => client.generateMonthlyFinal(id), "Đã sinh bản nháp đề tháng."); },
       onComposeDay: (frameworkId, dayNumber) => setEditor({ frameworkId, dayNumber }),
       onViewDay: (frameworkId, dayNumber) => navigate(`${paths.months}/lesson/${frameworkId}/${dayNumber}`),
       onSaveDay: async (id, dayNumber, lesson) => {

@@ -7,6 +7,7 @@ import type { ObjectStorage } from "@e4s/storage";
 import Fastify, { type FastifyInstance } from "fastify";
 import type { Pool } from "pg";
 import { registerAssessmentRoutes } from "./modules/assessment/index.js";
+import type { EdgeTtsRunner } from "./modules/assessment/edge-tts.js";
 import { registerCoachRoutes } from "./modules/coach/index.js";
 import { registerContentRoutes } from "./modules/content/index.js";
 import { registerEngagementRoutes } from "./modules/engagement/index.js";
@@ -27,6 +28,8 @@ export interface BuildApiOptions {
   secureCookies?: boolean;
   aiRunner?: AiTaskRunner;
   aiRunnerFactory?: (actorId: string) => Promise<AiTaskRunner | undefined>;
+  /** Local server-side Edge TTS; never a browser speech synthesis fallback. */
+  edgeTtsRunner?: EdgeTtsRunner;
   storage?: ObjectStorage;
   mediaService?: ContentMediaService;
   /** Enables destructive demo maintenance only for an explicitly local/test process. */
@@ -70,7 +73,7 @@ export function buildApi(options: BuildApiOptions): FastifyInstance {
     otpSecret: options.otpSecret ?? "local-only-change-me"
   });
   registerLearningRoutes(app, options.pool, options.aiRunner, options.mediaService, options.aiRunnerFactory);
-  registerAssessmentRoutes(app, options.pool, options.aiRunner, options.aiRunnerFactory);
+  registerAssessmentRoutes(app, options.pool, options.aiRunner, options.aiRunnerFactory, options.edgeTtsRunner);
   registerContentRoutes(app, options.pool, options.aiRunner, options.storage, options.aiRunnerFactory, options.mediaService);
   registerManagerRoutes(app, options.pool, {
     maintenanceEnabled,

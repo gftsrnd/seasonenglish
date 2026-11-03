@@ -12,6 +12,8 @@ export interface StoredAssessmentTask extends AssessmentTaskView {
 
 export interface StoredAssessmentDefinition extends Omit<AssessmentDefinitionView, "sections"> {
   targetLevel?: CefrLevel;
+  /** Immutable monthly resource snapshot for a generated monthly final. */
+  monthlyScope?: { month: string; cefr: CefrLevel; contractVersion: number; coreTermIds: string[]; grammarStepIds: string[]; soundIds: string[] };
   sections: Array<Omit<AssessmentDefinitionView["sections"][number], "groups"> & {
     groups: Array<Omit<AssessmentDefinitionView["sections"][number]["groups"][number], "tasks"> & {
       tasks: StoredAssessmentTask[];
@@ -217,3 +219,4 @@ export function publicAssessmentDefinition(stored: StoredAssessmentDefinition): 
 export function sectionByCode(definition: StoredAssessmentDefinition, code: AssessmentSectionCode) {
   return definition.sections.find((section) => section.code === code) ?? null;
 }
+

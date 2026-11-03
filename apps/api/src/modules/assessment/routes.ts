@@ -30,10 +30,13 @@ import {
   type StoredAssessmentDefinition,
   type StoredAssessmentTask
 } from "@e4s/database";
-import { calculateAutomaticSectionScore } from "@e4s/domain/assessment";
+import { calculateAutomaticSectionScore, monthlyFinalReleaseReadiness } from "@e4s/domain/assessment";
+import { randomUUID } from "node:crypto";
 import type { FastifyInstance } from "fastify";
 import type { Pool } from "pg";
 import { z } from "zod";
+import type { EdgeTtsRunner } from "./edge-tts.js";
+import { buildMonthlyFinalDraft } from "./monthly-final-builder.js";
 import { createRoleGuard } from "../identity/policy.js";
 
 const kindParam = z.object({ kind: z.enum(["placement", "levelup", "level-up", "monthly", "final"]) });
@@ -153,7 +156,7 @@ const levelFormUpdateInput = z.object({
 
 const DEFAULT_LEVEL_FORM_PROMPT = `Create a complete Workplace English CEFR promotion test for the requested target level. Return exactly four sections: listening with 5 multiple-choice questions, reading with 5 multiple-choice questions, writing with 1 task, and speaking with 1 task. Use realistic workplace situations, unambiguous answer keys, level-appropriate language, and follow the required JSON schema exactly.`;
 
-export function registerAssessmentRoutes(app: FastifyInstance, pool: Pool, aiRunner?: AiTaskRunner, aiRunnerFactory?: (actorId: string) => Promise<AiTaskRunner | undefined>): void {
+export function registerAssessmentRoutes(app: FastifyInstance, pool: Pool, aiRunner?: AiTaskRunner, aiRunnerFactory?: (actorId: string) => Promise<AiTaskRunner | undefined>, edgeTtsRunner?: EdgeTtsRunner): void {
   const repositories = createRepositories(pool);
   const runnerFor = (actorId: string) => aiRunnerFactory ? aiRunnerFactory(actorId) : Promise.resolve(aiRunner);
   const learnerOnly = createRoleGuard(pool, ["learner"]);
@@ -161,6 +164,56 @@ export function registerAssessmentRoutes(app: FastifyInstance, pool: Pool, aiRun
   const assessmentReviewers = createRoleGuard(pool, ["operator"]);
   const assessmentOperators = createRoleGuard(pool, ["operator"]);
   const levelFormOperators = createRoleGuard(pool, ["operator"]);
+  const monthlyFinalOperators = createRoleGuard(pool, ["operator"]);
+
+  app.post("/api/v1/assessment-audio/edge-tts", { preHandler: monthlyFinalOperators }, async (request, reply) => {
+    const body = z.object({ text: z.string().trim().min(1).max(20_000), voice: z.string().trim().min(1).max(200) }).safeParse(request.body);
+    if (!body.success) return reply.code(400).send({ code: "EDGE_TTS_INPUT_INVALID" });
+    if (!edgeTtsRunner) return reply.code(503).send({ code: "EDGE_TTS_UNAVAILABLE" });
+    try {
+      const audio = await edgeTtsRunner.synthesize(body.data);
+      return { filename: audio.filename, mimeType: audio.mimeType, base64: Buffer.from(audio.bytes).toString("base64") };
+    } catch (error) {
+      return reply.code(503).send({ code: assessmentErrorCode(error, "EDGE_TTS_FAILED") });
+    }
+  });
+
+  app.post("/api/v1/month-frameworks/:frameworkId/monthly-final", { preHandler: monthlyFinalOperators }, async (request, reply) => {
+    const frameworkId = z.uuid().safeParse((request.params as { frameworkId?: string }).frameworkId);
+    if (!frameworkId.success) return reply.code(400).send({ code: "MONTHLY_FINAL_FRAMEWORK_INVALID" });
+    const actorId = request.e4sSession!.user.id;
+    const context = await pool.query<{ organization_id: string; month: string; exam_date: string; today: string; curriculum_contract: unknown }>(
+      `select operator.organization_id, pm.month, pm.exam_date::text, organization_system_date(operator.organization_id)::text as today, mf.curriculum_contract
+       from users operator join month_frameworks mf on mf.id = $2
+       join program_months pm on pm.id = mf.program_month_id and pm.organization_id = operator.organization_id
+       where operator.id = $1 and operator.role = 'operator' and mf.status = 'approved'`, [actorId, frameworkId.data]);
+    const row = context.rows[0];
+    if (!row) return reply.code(404).send({ code: "MONTHLY_FINAL_FRAMEWORK_NOT_APPROVED" });
+    if (row.today !== row.exam_date) return reply.code(409).send({ code: "MONTHLY_FINAL_NOT_ON_EXAM_DATE", examDate: row.exam_date, today: row.today });
+    try {
+      const blueprint = buildMonthlyFinalDraft(row.curriculum_contract as Parameters<typeof buildMonthlyFinalDraft>[0]);
+      return reply.code(201).send(await createMonthlyFinalDraft(pool, actorId, row.organization_id, blueprint));
+    } catch (error) {
+      return reply.code(409).send({ code: assessmentErrorCode(error, "MONTHLY_FINAL_CREATE_FAILED") });
+    }
+  });
+
+  app.put("/api/v1/monthly-final-forms/:versionId", { preHandler: monthlyFinalOperators }, async (request, reply) => {
+    const versionId = z.uuid().safeParse((request.params as { versionId?: string }).versionId);
+    const body = levelFormUpdateInput.safeParse(request.body);
+    if (!versionId.success || !body.success) return reply.code(400).send({ code: "MONTHLY_FINAL_FORM_INVALID" });
+    const updated = await updateMonthlyFinalDraft(pool, request.e4sSession!.user.id, versionId.data, body.data);
+    return updated ?? reply.code(409).send({ code: "MONTHLY_FINAL_NOT_EDITABLE" });
+  });
+
+  app.post("/api/v1/monthly-final-forms/:versionId/publication", { preHandler: monthlyFinalOperators }, async (request, reply) => {
+    const versionId = z.uuid().safeParse((request.params as { versionId?: string }).versionId);
+    if (!versionId.success) return reply.code(400).send({ code: "MONTHLY_FINAL_VERSION_INVALID" });
+    const published = await publishMonthlyFinal(pool, request.e4sSession!.user.id, versionId.data);
+    if (published.state === "missing") return reply.code(404).send({ code: "MONTHLY_FINAL_NOT_FOUND" });
+    if (published.state === "invalid") return reply.code(409).send({ code: "MONTHLY_FINAL_NOT_PUBLISHABLE", issues: published.issues });
+    return published.value;
+  });
 
   app.get("/api/v1/assessment-reviews/pending", { preHandler: assessmentReaders }, async (request) => {
     const pending = await repositories.assessments.listPending(request.e4sSession!.user.id);
@@ -547,7 +600,9 @@ export function registerAssessmentRoutes(app: FastifyInstance, pool: Pool, aiRun
     if (kind === "final" && !await monthlyExamIsReady(repositories.learning, request.e4sSession!.user.id)) {
       return reply.code(409).send({ code: "MONTHLY_EXAM_LOCKED" });
     }
-    const definition = await repositories.assessments.findPublished(kind);
+    const definition = kind === "final"
+      ? await findPublishedMonthlyFinal(pool, request.e4sSession!.user.id)
+      : await repositories.assessments.findPublished(kind);
     if (!definition) return reply.code(404).send({ code: "ASSESSMENT_NOT_PUBLISHED" });
     const resumed = kind === "placement"
       ? await repositories.assessments.resumePlacementAttempt(request.e4sSession!.user.id, definition)
@@ -627,7 +682,7 @@ export function registerAssessmentRoutes(app: FastifyInstance, pool: Pool, aiRun
       if (!await monthlyExamIsReady(repositories.learning, learnerId)) {
         return reply.code(409).send({ code: "MONTHLY_EXAM_LOCKED" });
       }
-      definition = await repositories.assessments.findPublished(kind);
+      definition = await findPublishedMonthlyFinal(pool, learnerId);
     } else {
       definition = await repositories.assessments.findPublished(kind);
     }
@@ -827,6 +882,83 @@ export function registerAssessmentRoutes(app: FastifyInstance, pool: Pool, aiRun
   });
 }
 
+async function createMonthlyFinalDraft(
+  pool: Pool, actorId: string, organizationId: string, blueprint: StoredAssessmentDefinition
+) {
+  const client = await pool.connect();
+  try {
+    await client.query("begin");
+    const existing = await client.query<{ id: string }>(
+      "select id from assessment_definitions where organization_id = $1 and assessment_key = $2 for update",
+      [organizationId, blueprint.key]
+    );
+    const definitionId = existing.rows[0]?.id ?? randomUUID();
+    if (!existing.rowCount) {
+      await client.query(
+        "insert into assessment_definitions (id, organization_id, assessment_key, kind, title) values ($1, $2, $3, 'final', $4)",
+        [definitionId, organizationId, blueprint.key, blueprint.title]
+      );
+    } else {
+      await client.query("update assessment_definitions set title = $1 where id = $2", [blueprint.title, definitionId]);
+    }
+    await client.query("update assessment_versions set status = 'retired' where definition_id = $1 and status = 'draft'", [definitionId]);
+    const next = await client.query<{ version: number }>("select coalesce(max(version), 0) + 1 as version from assessment_versions where definition_id = $1", [definitionId]);
+    const versionId = randomUUID();
+    const version = next.rows[0]?.version ?? 1;
+    await client.query(
+      "insert into assessment_versions (id, definition_id, version, status, blueprint) values ($1, $2, $3, 'draft', $4::jsonb)",
+      [versionId, definitionId, version, JSON.stringify({ ...blueprint, version })]
+    );
+    await client.query("commit");
+    return { definitionId, versionId, version, status: "draft" as const, blueprint: { ...blueprint, version } };
+  } catch (error) {
+    await client.query("rollback");
+    throw error;
+  } finally { client.release(); }
+}
+
+async function updateMonthlyFinalDraft(
+  pool: Pool, actorId: string, versionId: string, input: z.infer<typeof levelFormUpdateInput>
+) {
+  const result = await pool.query<{ definition_id: string; blueprint: StoredAssessmentDefinition }>(
+    `select av.definition_id, av.blueprint from assessment_versions av
+     join assessment_definitions ad on ad.id = av.definition_id and ad.kind = 'final'
+     join users operator on operator.id = $1 and operator.organization_id = ad.organization_id and operator.role = 'operator'
+     where av.id = $2 and av.status = 'draft'`, [actorId, versionId]);
+  const row = result.rows[0];
+  if (!row) return null;
+  // The immutable monthly scope is retained server-side regardless of posted form data.
+  const blueprint: StoredAssessmentDefinition = { ...row.blueprint, title: input.title, sections: input.sections as StoredAssessmentDefinition["sections"] };
+  await pool.query("update assessment_definitions set title = $1 where id = $2", [input.title, row.definition_id]);
+  await pool.query("update assessment_versions set blueprint = $1::jsonb where id = $2", [JSON.stringify(blueprint), versionId]);
+  return { versionId, status: "draft" as const, blueprint };
+}
+
+async function publishMonthlyFinal(pool: Pool, actorId: string, versionId: string): Promise<
+  { state: "missing" } | { state: "invalid"; issues: string[] } | { state: "published"; value: { versionId: string; publishedAt: string } }
+> {
+  const client = await pool.connect();
+  try {
+    await client.query("begin");
+    const found = await client.query<{ definition_id: string; blueprint: StoredAssessmentDefinition }>(
+      `select av.definition_id, av.blueprint from assessment_versions av
+       join assessment_definitions ad on ad.id = av.definition_id and ad.kind = 'final'
+       join users operator on operator.id = $1 and operator.organization_id = ad.organization_id and operator.role = 'operator'
+       where av.id = $2 and av.status = 'draft' for update`, [actorId, versionId]);
+    const row = found.rows[0];
+    if (!row) { await client.query("rollback"); return { state: "missing" }; }
+    const issues = monthlyFinalReleaseReadiness(row.blueprint);
+    if (issues.length) { await client.query("rollback"); return { state: "invalid", issues }; }
+    await client.query("update assessment_versions set status = 'retired' where definition_id = $1 and status = 'published'", [row.definition_id]);
+    const published = await client.query<{ published_at: Date }>("update assessment_versions set status = 'published', published_at = now() where id = $1 returning published_at", [versionId]);
+    await client.query("commit");
+    return { state: "published", value: { versionId, publishedAt: published.rows[0]!.published_at.toISOString() } };
+  } catch (error) {
+    await client.query("rollback");
+    throw error;
+  } finally { client.release(); }
+}
+
 function assessmentErrorCode(error: unknown, fallback: string): string {
   return error instanceof Error && /^[A-Z0-9_]+$/.test(error.message) ? error.message : fallback;
 }
@@ -874,6 +1006,26 @@ async function monthlyExamIsReady(
   if (!context) return false;
   const lessons = await learning.listMonthlyLessons(learnerId, context.month);
   return lessons.length > 0 && lessons.every((lesson) => lesson.progress.status === "completed");
+}
+
+async function findPublishedMonthlyFinal(pool: Pool, learnerId: string): Promise<PublishedAssessmentRecord | null> {
+  const result = await pool.query<{
+    definition_id: string; version_id: string; assessment_key: string; kind: "final"; title: string; version: number; blueprint: StoredAssessmentDefinition;
+  }>(
+    `select ad.id as definition_id, av.id as version_id, ad.assessment_key, ad.kind, ad.title, av.version, av.blueprint
+     from users learner
+     join enrollments enrollment on enrollment.learner_id = learner.id
+     join program_months pm on pm.organization_id = learner.organization_id
+       and pm.month = to_char(organization_system_date(learner.organization_id), 'YYYY-MM')
+       and pm.exam_date = organization_system_date(learner.organization_id)
+     join assessment_definitions ad on ad.organization_id = learner.organization_id and ad.kind = 'final'
+       and ad.assessment_key = ('monthly-final-' || pm.month || '-' || lower(enrollment.cefr))
+     join assessment_versions av on av.definition_id = ad.id and av.status = 'published'
+     where learner.id = $1 and enrollment.cefr_approved = true
+     order by enrollment.enrolled_at desc, av.published_at desc nulls last limit 1`, [learnerId]
+  );
+  const row = result.rows[0];
+  return row ? { definitionId: row.definition_id, versionId: row.version_id, assessmentKey: row.assessment_key, kind: row.kind, title: row.title, version: row.version, blueprint: row.blueprint } : null;
 }
 
 function taskFor(definition: PublishedAssessmentRecord, sectionCode: AssessmentSectionCode, taskKey: string): StoredAssessmentTask | null {

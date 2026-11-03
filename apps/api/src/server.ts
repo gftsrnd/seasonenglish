@@ -7,6 +7,7 @@ import { buildApi } from "./app.js";
 import { createResendIdentityEmailSender, readIdentityEmailConfiguration } from "./modules/identity/index.js";
 import { createOrganizationAiRunnerFactory, normalizeAiMaxAttempts } from "./modules/ai/runtime.js";
 import { createContentMediaService } from "./modules/media/index.js";
+import { createLocalEdgeTtsRunner } from "./modules/assessment/edge-tts.js";
 import { createOpenverseProvider } from "./modules/media/providers/openverse.js";
 import { createPixabayProvider } from "./modules/media/providers/pixabay.js";
 import { createWikimediaProvider } from "./modules/media/providers/wikimedia.js";
@@ -61,6 +62,9 @@ const app = buildApi({
   ...(storage ? { storage } : {}),
   ...(mediaService ? { mediaService } : {}),
   ...(aiRunner ? { aiRunner } : {}),
+  ...(process.env.E4S_ENABLE_EDGE_TTS === "true" ? { edgeTtsRunner: createLocalEdgeTtsRunner({
+    ...(process.env.EDGE_TTS_COMMAND ? { command: process.env.EDGE_TTS_COMMAND } : {})
+  }) } : {}),
   ...(identityEmailSender ? { identityEmailSender } : {}),
   otpSecret: process.env.AUTH_OTP_SECRET ?? "local-only-change-me",
   aiRunnerFactory

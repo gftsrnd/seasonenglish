@@ -81,4 +81,18 @@ describe("Operator monthly planner", () => {
     expect(screen.getByRole("button", { name: "Sinh bài ôn" })).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Soạn tay bài ôn" })).not.toBeInTheDocument();
   });
+
+  it("calls the real monthly-final action from the final-day cell", async () => {
+    const user = userEvent.setup();
+    const onGenerateMonthlyFinal = vi.fn().mockResolvedValue({ versionId: "final-v1", status: "draft" });
+    render(<ToastProvider><OperatorMonths month="2026-11" todayMonth="2026-11" cefr="A1" busy={false}
+      overview={{ brief: { month: "2026-11", title: "Handover", brief: "Prepare handover", context: "CS", communicationGoal: "Explain", version: 1, status: "approved" }, frameworks: [{
+        id: "framework-a1", cefr: "A1", version: 1, status: "approved", scopeHash: "scope", lessons: [], quality: { severe: [], light: [] }, resources: { coreTerms: [], supportTerms: [], grammarTopics: [], sounds: [] }
+      }] }}
+      actions={{ onSelectMonth: vi.fn(), onSelectLevel: vi.fn(), onSuggestBrief: vi.fn(), onSaveBrief: vi.fn(), onApproveBrief: vi.fn(), onGenerateFramework: vi.fn(), onSaveFramework: vi.fn(), onApproveFramework: vi.fn(), onGenerateMonthlyFinal, onSaveDay: vi.fn(), onGenerateDay: vi.fn(), onAcknowledge: vi.fn(), onApproveDay: vi.fn(), onCreateCorrection: vi.fn(), onSaveCorrection: vi.fn(), onAcknowledgeCorrection: vi.fn(), onApproveCorrection: vi.fn() }}
+    /></ToastProvider>);
+    const finalButtons = screen.getAllByRole("button", { name: "Sinh đề thi" });
+    await user.click(finalButtons[finalButtons.length - 1]!);
+    expect(onGenerateMonthlyFinal).toHaveBeenCalledWith("framework-a1");
+  });
 });

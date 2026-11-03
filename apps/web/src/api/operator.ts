@@ -70,6 +70,7 @@ export interface OperatorApiClient {
   saveContentMonthFramework(month: string, contract: MonthlyCurriculumContract): Promise<{ id: string; cefr: CefrLevel; version: number; status: "draft"; scopeHash: string }>;
   generateContentMonthResources(month: string, criteria: { cefr: CefrLevel; vocabularyCount: number; expandedVocabularyCount: number; grammarTopicCount: number; pronunciationSoundCount: number }): Promise<{ id: string; cefr: CefrLevel; version: number; status: "draft"; scopeHash: string }>;
   approveContentMonthFramework(id: string): Promise<void>;
+  generateMonthlyFinal(id: string): Promise<{ versionId: string; status: "draft" }>;
   saveContentMonthDay(id: string, dayNumber: number, lesson: { title: string; parts: Array<{ code: string; title?: string; content: Record<string, unknown> }> }): Promise<{ severe: Array<{ severity: "severe" | "light"; code: string; message: string; dayNumber?: number; component?: string }>; light: Array<{ severity: "severe" | "light"; code: string; message: string; dayNumber?: number; component?: string }>; contractVersion: number }>;
   generateContentMonthDay(id: string, dayNumber: number): Promise<{ lesson: { title: string; parts: Array<{ code: string; title?: string; content: Record<string, unknown> }> }; report: { severe: Array<{ severity: "severe" | "light"; code: string; message: string; dayNumber?: number; component?: string }>; light: Array<{ severity: "severe" | "light"; code: string; message: string; dayNumber?: number; component?: string }>; contractVersion: number } }>;
   acknowledgeContentMonthQuality(id: string, dayNumber: number, findingKeys: string[]): Promise<void>;
@@ -161,6 +162,7 @@ export const operatorApiClient: OperatorApiClient = {
   saveContentMonthFramework: (month, contract) => request(`/api/v1/content/months/${encodeURIComponent(month)}/frameworks/generate`, { method: "POST", body: JSON.stringify({ contract }) }),
   generateContentMonthResources: (month, criteria) => request(`/api/v1/content/months/${encodeURIComponent(month)}/resources/generate`, { method: "POST", body: JSON.stringify(criteria) }),
   approveContentMonthFramework: async (id) => { await request(`/api/v1/content/month-frameworks/${encodeURIComponent(id)}/approve`, { method: "POST", body: "{}" }); },
+  generateMonthlyFinal: (id) => request(`/api/v1/month-frameworks/${encodeURIComponent(id)}/monthly-final`, { method: "POST", body: "{}" }),
   saveContentMonthDay: (id, dayNumber, lesson) => request(`/api/v1/content/month-frameworks/${encodeURIComponent(id)}/days/${dayNumber}`, { method: "PUT", body: JSON.stringify(lesson) }),
   generateContentMonthDay: (id, dayNumber) => request(`/api/v1/content/month-frameworks/${encodeURIComponent(id)}/days/${dayNumber}/generate`, { method: "POST", body: "{}" }),
   acknowledgeContentMonthQuality: async (id, dayNumber, findingKeys) => { await request(`/api/v1/content/month-frameworks/${encodeURIComponent(id)}/days/${dayNumber}/quality-acknowledgement`, { method: "POST", body: JSON.stringify({ findingKeys }) }); },

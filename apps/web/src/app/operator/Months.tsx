@@ -20,6 +20,7 @@ export interface OperatorMonthsActions {
   onGenerateFramework(month: string, criteria: MonthlyResourceCriteria): Promise<unknown> | void;
   onSaveFramework(month: string, contract: MonthlyCurriculumContract): Promise<void> | void;
   onApproveFramework(id: string): Promise<void> | void;
+  onGenerateMonthlyFinal?(id: string): Promise<unknown> | void;
   onComposeDay?(id: string, dayNumber: number): void;
   onViewDay?(id: string, dayNumber: number): void;
   onSaveDay(id: string, dayNumber: number, lesson: MonthlyDayInput): Promise<MonthlyQualityReport>;
@@ -144,6 +145,13 @@ export function OperatorMonths({ month, todayMonth, overview, cefr, busy, readOn
       showUnavailable("Không duyệt được tài nguyên tháng. Hãy thử lại.");
     }
   };
+  const generateMonthlyFinal = async () => {
+    if (!canEdit) return showUnavailable("Tháng trước chỉ dùng để xem.");
+    if (!framework || framework.status !== "approved") return showUnavailable("Hãy chốt tài nguyên tháng trước khi sinh đề thi.");
+    if (!actions.onGenerateMonthlyFinal) return showUnavailable("Luồng đề thi tháng chưa sẵn sàng.");
+    try { await actions.onGenerateMonthlyFinal(framework.id); toast.show({ message: "Đã sinh bản nháp đề tháng. Thêm audio, xem lại và phát hành trước khi học viên vào thi.", tone: "ok" }); }
+    catch { showUnavailable("Chỉ sinh đề thi vào đúng ngày thi hệ thống và khi tài nguyên đã duyệt."); }
+  };
   return <main className="operator-months-page">
     <header className="operator-months-header"><p className="eyebrow">Operator</p><h1>Bài học</h1><p>Thiết kế chủ đề, tài nguyên và lịch học theo tháng.</p></header>
     {error && <div className="monthly-error" role="alert">{error}</div>}
@@ -196,7 +204,7 @@ export function OperatorMonths({ month, todayMonth, overview, cefr, busy, readOn
             if (cell.outside) return <article key={cell.key} role="gridcell" aria-disabled="true" className="monthly-day-cell outside-month"><b>{cell.dateLabel}</b></article>;
             const isExam = cell.date === calendar.examDate;
             const lesson = framework?.lessons.find((item) => item.lessonDate === cell.date);
-            if (isExam) return <article key={cell.date} role="gridcell" className="monthly-day-cell monthly-final"><b>{cell.dateLabel}</b><strong>Bài thi</strong><button type="button" className="btn-sm" onClick={() => showUnavailable("Sinh đề thi tháng đang chờ kết nối.")}>Sinh đề thi</button></article>;
+            if (isExam) return <article key={cell.date} role="gridcell" className="monthly-day-cell monthly-final"><b>{cell.dateLabel}</b><strong>Bài thi</strong><button type="button" className="btn-sm" disabled={busy} onClick={() => void generateMonthlyFinal()}>Sinh đề thi</button></article>;
             if (!cell.lessonNumber) return <article key={cell.date} role="gridcell" className="monthly-day-cell weekend"><b>{cell.dateLabel}</b><strong>Nghỉ</strong></article>;
             const kind = lesson?.kind === "review" ? "review" : "lesson";
             const draft = lesson?.status === "draft";

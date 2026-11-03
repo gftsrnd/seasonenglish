@@ -113,3 +113,4 @@ export function passesLevelUp(scores: Record<AssessmentSectionCode, number>): bo
 function roundScore(value: number): number {
   return Math.round((value + Number.EPSILON) * 100) / 100;
 }
+export * from "./exam-spec.js";
