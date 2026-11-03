@@ -78,6 +78,7 @@ const nav: Record<ShellRole, readonly NavItem[]> = {
   manager: [
     { to: "/mgr", icon: icons.bars, label: "Tiến độ" },
     { to: "/mgr/ops", icon: icons.check, label: "Vận hành" },
+    { to: "/mgr/reopen-requests", icon: icons.book, label: "Yêu cầu mở khóa" },
     { to: "/mgr/reminders", icon: icons.bell, label: "Nhắc học" },
     { to: "/mgr/report", icon: icons.doc, label: "Báo cáo" },
     { to: "/settings", icon: icons.cog, label: "Cài đặt" }

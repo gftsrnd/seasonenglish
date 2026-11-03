@@ -1693,6 +1693,35 @@
 
 .manager-reminder-recipient b { color: var(--text); font-weight: 600; }
 
+.manager-reopen-requests-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 16px;
+}
+
+.manager-reopen-requests-card {
+  min-width: 0;
+}
+
+.manager-reopen-requests-card h2 {
+  margin: 0 0 8px;
+  font-size: 1.1rem;
+}
+
+.manager-reopen-requests-card p {
+  margin: 0;
+}
+
+.manager-reopen-requests-empty {
+  margin-top: 18px !important;
+  border-top: 1px solid var(--line);
+  padding-top: 12px;
+}
+
+@media (max-width: 840px) {
+  .manager-reopen-requests-grid { grid-template-columns: 1fr; }
+}
+
 .manager-account-pin {
   display: inline-flex;
   align-items: center;

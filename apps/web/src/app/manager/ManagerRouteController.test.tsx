@@ -106,6 +106,36 @@ describe("ManagerRouteController", () => {
     await waitFor(() => expect(screen.getByRole("radio", { name: "Tự động theo ngày" })).toBeChecked());
   });
 
+  it("lets a Manager persist the system test date from Settings", async () => {
+    vi.spyOn(apiClient, "getProductPreferences").mockResolvedValue(product);
+    vi.spyOn(apiClient, "getSystemCapabilities").mockResolvedValue(capabilities);
+    vi.spyOn(apiClient, "getManagerSettings").mockResolvedValue(managerSettings);
+    vi.spyOn(apiClient, "getManagerProviderSettings").mockResolvedValue(managerProvider);
+    vi.spyOn(apiClient, "getManagerAccounts").mockResolvedValue({ organizationName: "GFT", accounts: [] });
+    const save = vi.spyOn(apiClient, "saveManagerSettings").mockResolvedValue({ ...managerSettings, simulatedSystemDate: "2026-11-14" });
+    const user = userEvent.setup();
+
+    renderManager(<MemoryRouter initialEntries={["/settings"]}><ManagerRouteController role="manager" currentUserId="manager-1" /></MemoryRouter>);
+
+    await screen.findByRole("heading", { name: "Ngày hệ thống thử" });
+    const field = within(screen.getByLabelText("Thiết lập ngày hệ thống thử")).getByLabelText("Ngày hệ thống thử");
+    expect(screen.getByText(/lịch học, quyền vào bài, điểm danh, Season AI Coach và thông báo/i)).toBeInTheDocument();
+    fireEvent.change(field, { target: { value: "2026-11-14" } });
+    await user.click(screen.getByRole("button", { name: "Lưu ngày hệ thống thử" }));
+
+    await waitFor(() => expect(save).toHaveBeenCalledWith(expect.objectContaining({ simulatedSystemDate: "2026-11-14" })));
+  });
+
+  it("shows the three reopen request queues without pretending requests exist", async () => {
+    renderManager(<MemoryRouter initialEntries={["/mgr/reopen-requests"]}><ManagerRouteController role="manager" currentUserId="manager-1" /></MemoryRouter>);
+
+    expect(await screen.findByRole("heading", { name: "Yêu cầu mở khóa" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Tài khoản học viên" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Bài ngày và bài ôn" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Đề thi" })).toBeInTheDocument();
+    expect(screen.getAllByText("Chưa có yêu cầu cần xử lý.")).toHaveLength(3);
+  });
+
   it("scrolls the active Manager header destination into view on tablet widths", async () => {
     const nav = document.createElement("nav");
     nav.setAttribute("aria-label", "Điều hướng quản lý");
@@ -694,7 +724,7 @@ describe("ManagerRouteController", () => {
 
 const managerSettings = {
   organizationName: "GFT", programName: "E4S Pilot", reminderInactiveDays: 3, weeklyReportEnabled: true,
-  pilotStartDate: "2026-10-12", pilotWeeks: 2, weekOverride: 0, minMinutesPerDay: 15,
+  pilotStartDate: "2026-10-12", simulatedSystemDate: "2026-10-12", pilotWeeks: 2, weekOverride: 0, minMinutesPerDay: 15,
   courseTheme: "Tiếng Anh giao tiếp công sở", coachDailyLimit: 20,
   testTimed: true, testTimes: { listening: 15, reading: 20, writing: 20, speaking: 15 }, testWarnLimit: 3,
   levelUp: { days: 14, lessons: 90, firstTry: 75, submission: 80, coach: 4, coachTurns: 6, wrong: 30, minParts: 4 },

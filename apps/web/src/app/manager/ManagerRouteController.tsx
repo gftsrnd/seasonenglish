@@ -45,6 +45,7 @@ export function ManagerRouteController({ role, currentUserId }: ManagerRouteCont
     <Route path="/mgr" element={role === "manager" ? <ProgressRoute /> : <Navigate replace to="/op" />} />
     <Route path="/mgr/ops" element={role === "manager" ? <OperationsRoute /> : <Navigate replace to="/op" />} />
     <Route path="/mgr/ops/*" element={<Navigate replace to={role === "manager" ? "/mgr/ops" : "/op"} />} />
+    <Route path="/mgr/reopen-requests" element={role === "manager" ? <ReopenRequestsRoute /> : <Navigate replace to="/op" />} />
     <Route path="/mgr/recovery" element={<Navigate replace to={role === "manager" ? "/settings" : "/op"} />} />
     <Route path="/mgr/reminders" element={role === "manager" ? <RemindersRoute /> : <Navigate replace to="/op" />} />
     <Route path="/mgr/report" element={role === "manager" ? <ReportRoute currentUserId={currentUserId} /> : <Navigate replace to="/op" />} />
@@ -53,6 +54,20 @@ export function ManagerRouteController({ role, currentUserId }: ManagerRouteCont
     <Route path="/settings" element={<SettingsRoute role={role} currentUserId={currentUserId} />} />
     <Route path="/settings/prompts" element={<Navigate replace to={role === "manager" ? "/settings" : "/op"} />} />
   </Routes>;
+}
+
+function ReopenRequestsRoute() {
+  const queues = [
+    ["Tài khoản học viên", "Các yêu cầu mở lại quyền truy cập tài khoản học viên sẽ xuất hiện tại đây."],
+    ["Bài ngày và bài ôn", "Các yêu cầu mở lại bài ngày hoặc bài ôn đã khóa sẽ xuất hiện tại đây."],
+    ["Đề thi", "Các yêu cầu mở lại đề thi đã phát hành sẽ xuất hiện tại đây. Đề đã có người bắt đầu làm không được mở lại."]
+  ] as const;
+  return <div className="manager-page manager-reopen-requests-page">
+    <PageTitle><h1>Yêu cầu mở khóa</h1><p className="muted">Duyệt yêu cầu mở lại nội dung đã khóa và ghi nhận quyết định cho các bên liên quan.</p></PageTitle>
+    <div className="manager-reopen-requests-grid">
+      {queues.map(([title, detail]) => <section className="card manager-reopen-requests-card" key={title}><h2>{title}</h2><p className="small muted">{detail}</p><p className="small muted manager-reopen-requests-empty">Chưa có yêu cầu cần xử lý.</p></section>)}
+    </div>
+  </div>;
 }
 
 function ProgressRoute() {

@@ -6,7 +6,7 @@ import type {
   ManagerProgressView, ManagerProviderSettingsInput, ManagerProviderSettingsTestInput,
   ManagerProviderSettingsView, ManagerProviderTestView, ManagerPurgeConfirmationInput,
   ManagerPurgeConfirmationView, ManagerReminderCopyView, ManagerReminderDismissView,
-  ManagerReminderChannel, ManagerReminderSendView, ManagerRemindersView, ManagerReportView, ManagerSettingsView, ManagerTrashView, ManagerPinReportsView,
+  ManagerReminderChannel, ManagerReminderSendView, ManagerRemindersView, ManagerReportView, ManagerSettingsInput, ManagerSettingsView, ManagerTrashView, ManagerPinReportsView,
   OperatorSettingsOverviewView, OrganisationExperienceInput, OrganisationExperienceView,
   ManagerWebhookTestView, ProductPreferencesView, SystemCapabilitiesView, WeeklyPracticeAssignmentView
 } from "@e4s/contracts";
@@ -52,8 +52,8 @@ export interface ManagerApiClient {
   getManagerReport(): Promise<ManagerReportView>;
   getManagerSettings(): Promise<ManagerSettingsView>;
   getOperatorSettingsOverview(): Promise<OperatorSettingsOverviewView>;
-  saveManagerSettings(input: Omit<ManagerSettingsView, "organizationName">): Promise<ManagerSettingsView>;
-  saveOperatorSettings(input: Omit<ManagerSettingsView, "organizationName">): Promise<ManagerSettingsView>;
+  saveManagerSettings(input: ManagerSettingsInput): Promise<ManagerSettingsView>;
+  saveOperatorSettings(input: ManagerSettingsInput): Promise<ManagerSettingsView>;
   requestPlacementTestChange(input: { developerEmail: string; note: string }): Promise<{ sent: boolean }>;
   requestFinalTestChange(input: { developerEmail: string; note: string }): Promise<{ sent: boolean }>;
   getProductPreferences(): Promise<ProductPreferencesView>;

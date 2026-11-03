@@ -96,6 +96,7 @@ export function SettingsPage({ role, manager, product, experience, capabilities,
     {role === "manager" ? <section className="card" aria-label="Cấu hình Prompt & rubric"><h3>Prompt & rubric</h3><p className="small muted">Quản lý hướng dẫn AI và rubric chấm trong khu vực Cài đặt, tách khỏi các thao tác vận hành hằng ngày.</p><a className="btn" href="/settings/prompts">Mở Prompt & rubric</a></section> : null}
     {role === "manager" ? aiDraft && ai ? <AiSection draft={aiDraft} configured={ai.configured} lastTest={ai.lastTest} capabilities={capabilities} onChange={setAiDraft} aiTestDisabled={managerDraft?.aiTestDisabled ?? false} onAiTestDisabledChange={(aiTestDisabled) => setManagerDraft((current) => current ? { ...current, aiTestDisabled } : current)} {...(actions.onSaveAi ? { onSave: () => actions.onSaveAi!(aiDraft) } : {})} {...(actions.onTestAi ? { onTest: () => actions.onTestAi!(aiDraft) } : {})} {...(actions.onSaveManager && managerDraft ? { onSaveAiTestMode: () => actions.onSaveManager!(toInput(managerDraft)) } : {})} /> : <UnavailableAiSection capabilities={capabilities} role={role} /> : null}
     {role === "manager" && managerDraft ? <>
+      <SystemTestDateSection value={managerDraft} onChange={setManagerDraft} {...(actions.onSaveManager ? { onSave: () => actions.onSaveManager!(toInput(managerDraft)) } : {})} />
       <MonthlyLearningSection value={managerDraft} onChange={setManagerDraft} {...(actions.onSaveManager ? { onSave: () => actions.onSaveManager!(toInput(managerDraft)) } : {})} />
       <ImageSection value={productDraft} onChange={setProductDraft} {...(actions.onSaveProduct ? { onSave: () => actions.onSaveProduct!(productDraft) } : {})} {...(actions.onTestImage ? { onTest: () => actions.onTestImage!(productDraft) } : {})} {...(actions.onClearImageCache ? { onClear: actions.onClearImageCache } : {})} />
       <LevelSection value={managerDraft} onChange={setManagerDraft} {...(actions.onSaveManager ? { onSave: () => actions.onSaveManager!(toInput(managerDraft)) } : {})} />
@@ -119,6 +120,15 @@ export function SettingsPage({ role, manager, product, experience, capabilities,
       </> : null}
     </>}
   </div>;
+}
+
+function SystemTestDateSection({ value, onChange, onSave }: ManagerSectionProps) {
+  return <section className="card" aria-label="Thiết lập ngày hệ thống thử">
+    <h3>Ngày hệ thống thử</h3>
+    <p className="small muted">Ngày này điều khiển lịch học, quyền vào bài, điểm danh, Season AI Coach và thông báo của toàn tổ chức. Chỉ Quản lý được thay đổi.</p>
+    <Field label="Ngày hệ thống thử"><input type="date" value={value.simulatedSystemDate} onChange={(event) => onChange({ ...value, simulatedSystemDate: event.target.value })} /></Field>
+    <Save label="Lưu ngày hệ thống thử" onSave={onSave} />
+  </section>;
 }
 
 function AssessmentTestChangeRequests({ onPlacementSend, onFinalSend }: { onPlacementSend?: (developerEmail: string, note: string) => void | Promise<void>; onFinalSend?: (developerEmail: string, note: string) => void | Promise<void> }) {
