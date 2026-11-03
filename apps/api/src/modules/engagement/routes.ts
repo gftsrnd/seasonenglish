@@ -44,6 +44,19 @@ const GAME_DESCRIPTORS: ReadonlyArray<Omit<GameDescriptor, "best">> = [
   { key: "typing", icon: "⌨️", name: "Typing race", description: "Type đúng từ trước khi thanh thời gian cạn!", goal: "Gõ đúng 10 từ thật nhanh, giữ chuỗi combo càng dài càng nhiều điểm.", instructions: ["Mỗi từ có gợi ý: nghĩa tiếng Việt, định nghĩa tiếng Anh và hình minh hoạ (nếu có).", "Thanh thời gian chạy rất nhanh – gõ từ bằng bàn phím ảo (hoặc bàn phím thật) rồi bấm ↵; phím vừa gõ sáng lên.", "Đúng: +10 điểm × combo (combo tăng mỗi từ đúng liên tiếp, tối đa ×5). Sai hoặc hết giờ: combo về 1.", "Chữ đã gõ đúng hiện xanh, sai hiện đỏ – sửa ngay bằng ⌫."], scoring: "10 điểm × combo cho mỗi từ đúng; tối đa 10 từ." }
 ];
 
+/**
+ * A game must never run alongside an assessment attempt.  This is intentionally
+ * independent of the calendar: games remain available on study, holiday and
+ * exam days until an attempt is actually started.
+ */
+async function assessmentInProgress(pool: Pool, learnerId: string): Promise<boolean> {
+  const result = await pool.query<{ active: boolean }>(
+    "select exists(select 1 from assessment_attempts where learner_id = $1 and status = 'in_progress') as active",
+    [learnerId]
+  );
+  return Boolean(result.rows[0]?.active);
+}
+
 export function registerEngagementRoutes(
   app: FastifyInstance,
   pool: Pool,
@@ -125,6 +138,7 @@ export function registerEngagementRoutes(
 
   app.get("/api/v1/engagement/games", { preHandler: learnerOnly }, async (request, reply) => {
     const learnerId = request.e4sSession!.user.id;
+    if (await assessmentInProgress(pool, learnerId)) return reply.code(409).send({ code: "MINIGAME_LOCKED_DURING_ASSESSMENT" });
     const runner = await runnerFor(learnerId);
     const view = await gameHubView(repositories, learnerId, Boolean(runner));
     return view ?? reply.code(404).send({ code: "GAME_SET_NOT_FOUND" });
@@ -136,6 +150,7 @@ export function registerEngagementRoutes(
     const parsed = z.object({ requestId: z.uuid(), topic: z.string().trim().min(2).max(200) }).safeParse(request.body);
     if (!parsed.success) return reply.code(400).send({ code: "INVALID_VOCABULARY_TOPIC" });
     const learnerId = request.e4sSession!.user.id;
+    if (await assessmentInProgress(pool, learnerId)) return reply.code(409).send({ code: "MINIGAME_LOCKED_DURING_ASSESSMENT" });
     const runner = await runnerFor(learnerId);
     const recentStrikes = await pool.query<{ count: string; blocked_until: Date | null }>(
       `select count(*)::text as count, max(created_at + interval '30 minutes') as blocked_until
@@ -208,6 +223,7 @@ export function registerEngagementRoutes(
 
   app.delete("/api/v1/engagement/games/word-set", { preHandler: learnerOnly }, async (request, reply) => {
     const learnerId = request.e4sSession!.user.id;
+    if (await assessmentInProgress(pool, learnerId)) return reply.code(409).send({ code: "MINIGAME_LOCKED_DURING_ASSESSMENT" });
     const runner = await runnerFor(learnerId);
     await repositories.engagement.retireGeneratedWordSet(learnerId);
     return await gameHubView(repositories, learnerId, Boolean(runner))
@@ -216,6 +232,7 @@ export function registerEngagementRoutes(
 
   app.post("/api/v1/engagement/games/word-set/weekly", { preHandler: learnerOnly }, async (request, reply) => {
     const learnerId = request.e4sSession!.user.id;
+    if (await assessmentInProgress(pool, learnerId)) return reply.code(409).send({ code: "MINIGAME_LOCKED_DURING_ASSESSMENT" });
     const selected = await repositories.engagement.useLearnedVocabularyGameSet(learnerId);
     if (!selected) return reply.code(409).send({ code: "LEARNED_VOCABULARY_NOT_FOUND" });
     const runner = await runnerFor(learnerId);
@@ -250,6 +267,7 @@ export function registerEngagementRoutes(
     const body = resultInput.safeParse(request.body);
     if (!params.success || !body.success) return reply.code(400).send({ code: "INVALID_GAME_RESULT" });
     const learnerId = request.e4sSession!.user.id;
+    if (await assessmentInProgress(pool, learnerId)) return reply.code(409).send({ code: "MINIGAME_LOCKED_DURING_ASSESSMENT" });
     const duplicate = await repositories.engagement.findGameResult(learnerId, body.data.requestId);
     if (duplicate) return duplicate;
     const hub = await repositories.engagement.gameHub(learnerId);

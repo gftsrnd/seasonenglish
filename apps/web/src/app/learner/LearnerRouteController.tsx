@@ -196,7 +196,8 @@ export function LearnerRouteController() {
       }
       switch (route.name) {
         case "home": {
-          const home = await apiClient.getHome();
+          const [homeData, notifications] = await Promise.all([apiClient.getHome(), apiClient.getNotifications().catch(() => ({ notifications: [] }))]);
+          const home = { ...homeData, notifications: notifications.notifications };
           if (!home.onboardingRequired && home.learner.cefr === null) {
             try {
               const placement = await apiClient.getAssessment("placement");
@@ -393,6 +394,11 @@ export function LearnerRouteController() {
     completeLessonStudy: async () => {
       if (route.name !== "lesson") throw new Error("LESSON_ROUTE_NOT_ACTIVE");
       const saved = await apiClient.completeLessonStudy(route.params.id);
+      setContracts((current) => current.lesson ? { lesson: { ...current.lesson, progress: saved } } : current);
+    },
+    recordPronunciationListen: async (word) => {
+      if (route.name !== "lesson") throw new Error("LESSON_ROUTE_NOT_ACTIVE");
+      const saved = await apiClient.recordPronunciationListen(route.params.id, word);
       setContracts((current) => current.lesson ? { lesson: { ...current.lesson, progress: saved } } : current);
     },
     saveLessonProgress: async (progress) => {

@@ -380,6 +380,32 @@ export function registerLearningRoutes(
     return repositories.learning.saveLessonProgress({ learnerId, lessonId: lesson.id, progress });
   });
 
+  app.post("/api/v1/lessons/:lessonId/pronunciation/listens", { preHandler: learnerOnly }, async (request, reply) => {
+    const params = z.object({ lessonId: z.uuid() }).safeParse(request.params);
+    const body = z.object({ word: z.string().trim().min(1).max(120) }).safeParse(request.body);
+    if (!params.success || !body.success) return reply.code(400).send({ code: "INVALID_PRONUNCIATION_LISTEN" });
+    const learnerId = request.e4sSession!.user.id;
+    const lesson = await repositories.learning.findLesson(learnerId, params.data.lessonId);
+    if (!lesson) return reply.code(404).send({ code: "LESSON_NOT_FOUND" });
+    if (lesson.lock) return reply.code(409).send({ code: "LESSON_LOCKED", lock: lesson.lock });
+    const targetWords = pronunciationWordsForLesson(lesson).slice(0, 3);
+    const match = targetWords.find((word) => word.toLocaleLowerCase() === body.data.word.toLocaleLowerCase());
+    if (!match) return reply.code(422).send({ code: "PRONUNCIATION_WORD_NOT_ASSIGNED" });
+    const listened = new Set(recordedPronunciationWords(lesson.progress.evidence.pronunciation?.answer));
+    listened.add(match);
+    return repositories.learning.saveLessonProgress({
+      learnerId,
+      lessonId: lesson.id,
+      progress: {
+        ...lesson.progress,
+        evidence: {
+          ...lesson.progress.evidence,
+          pronunciation: { ...(lesson.progress.evidence.pronunciation ?? { attempts: 0 }), answer: JSON.stringify([...listened]) }
+        }
+      }
+    });
+  });
+
   app.post("/api/v1/lessons/:lessonId/parts/:partCode/attempts", { preHandler: learnerOnly }, async (request, reply) => {
     const params = z.object({ lessonId: z.uuid(), partCode }).safeParse(request.params);
     const body = lessonAttemptInput.safeParse(request.body);
@@ -405,6 +431,13 @@ export function registerLearningRoutes(
       .filter((code): code is LessonPartCode => studyPartCodes.includes(code as typeof studyPartCodes[number]));
     if (requiredStudy.some((code) => !lesson.progress.completedPartCodes.includes(code))) {
       return reply.code(409).send({ code: "LESSON_STUDY_INCOMPLETE" });
+    }
+    if (params.data.partCode === "speaking") {
+      const requiredWords = pronunciationWordsForLesson(lesson).slice(0, 3);
+      const listened = new Set(recordedPronunciationWords(lesson.progress.evidence.pronunciation?.answer).map((word) => word.toLocaleLowerCase()));
+      if (requiredWords.some((word) => !listened.has(word.toLocaleLowerCase()))) {
+        return reply.code(409).send({ code: "PRONUNCIATION_LISTENING_REQUIRED" });
+      }
     }
     if (evidence.translated && !["wrong_retry", "wrong_exhausted"].includes(lesson.progress.evidence[params.data.partCode]?.status ?? "")) {
       return reply.code(409).send({ code: "LESSON_TRANSLATION_NOT_AVAILABLE" });
@@ -681,6 +714,29 @@ function profileView(record: {
     version: record.version,
     updatedAt: record.updatedAt.toISOString()
   };
+}
+
+function pronunciationWordsForLesson(lesson: { content: { parts: Array<{ code: string; content: Record<string, unknown> }> } }): string[] {
+  const words = lesson.content.parts.find((part) => part.code === "pronunciation")?.content.words;
+  if (!Array.isArray(words)) return [];
+  return words.flatMap((entry) => {
+    if (typeof entry === "string" && entry.trim()) return [entry.trim()];
+    if (entry && typeof entry === "object" && !Array.isArray(entry)) {
+      const word = (entry as Record<string, unknown>).word;
+      return typeof word === "string" && word.trim() ? [word.trim()] : [];
+    }
+    return [];
+  });
+}
+
+function recordedPronunciationWords(value: string | undefined): string[] {
+  if (!value) return [];
+  try {
+    const parsed: unknown = JSON.parse(value);
+    return Array.isArray(parsed) ? parsed.filter((word): word is string => typeof word === "string" && word.trim().length > 0) : [];
+  } catch {
+    return [];
+  }
 }
 
 function canonicalPartOfSpeech(value: string | undefined): string | undefined {

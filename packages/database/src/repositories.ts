@@ -1158,7 +1158,7 @@ class LearningRepository {
       `select l.id, l.title, l.day_number, pw.week_number, coalesce(nullif(lsv.payload->>'topic', ''), pw.topic) as week_topic, ls.cefr, lv.content,
               (select count(*) from lessons all_lessons where all_lessons.lesson_set_version_id = lsv.id)::text as lesson_count,
               (p.start_date + ((pw.week_number - 1) * 7 + l.day_number - 1))::text as opens_at,
-              (p.start_date + ((pw.week_number - 1) * 7 + l.day_number - 1)) > current_date as opens_later,
+              (p.start_date + ((pw.week_number - 1) * 7 + l.day_number - 1)) > organization_system_date(p.organization_id) as opens_later,
               blocker.id as blocker_id, blocker.day_number as blocker_day_number, blocker.title as blocker_title,
               pr.status as progress_status, pr.score::text as progress_score,
               pr.evidence as progress_evidence, pr.updated_at as progress_updated_at
@@ -1229,7 +1229,7 @@ class LearningRepository {
       `select l.id, l.title, l.day_number, pw.week_number, coalesce(nullif(lsv.payload->>'topic', ''), pw.topic) as week_topic, ls.cefr, lv.content,
               (select count(*) from lessons all_lessons where all_lessons.lesson_set_version_id = lsv.id)::text as lesson_count,
               (p.start_date + ((pw.week_number - 1) * 7 + l.day_number - 1))::text as opens_at,
-              (p.start_date + ((pw.week_number - 1) * 7 + l.day_number - 1)) > current_date as opens_later,
+              (p.start_date + ((pw.week_number - 1) * 7 + l.day_number - 1)) > organization_system_date(p.organization_id) as opens_later,
               blocker.id as blocker_id, blocker.day_number as blocker_day_number, blocker.title as blocker_title,
               pr.status as progress_status, pr.score::text as progress_score,
               pr.evidence as progress_evidence, pr.updated_at as progress_updated_at
@@ -1721,9 +1721,9 @@ class LearningRepository {
       ),
       this.pool.query<{ turns_today: string; turns_this_week: string; turns_14_days: string; rubric_average: string | null }>(
         `select
-           count(*) filter (where ct.speaker = 'learner' and ct.created_at >= current_date
+           count(*) filter (where ct.speaker = 'learner' and ct.created_at >= organization_system_date((select organization_id from users where id = $1))
              and coalesce((ct.feedback->'evaluation'->>'countsTowardGoal')::boolean, coalesce((ct.feedback->>'relevant')::boolean, true)))::text as turns_today,
-           count(*) filter (where ct.speaker = 'learner' and ct.created_at >= date_trunc('week', now())
+           count(*) filter (where ct.speaker = 'learner' and ct.created_at >= date_trunc('week', organization_system_date((select organization_id from users where id = $1)))
              and coalesce((ct.feedback->'evaluation'->>'countsTowardGoal')::boolean, coalesce((ct.feedback->>'relevant')::boolean, true)))::text as turns_this_week,
            count(*) filter (where ct.speaker = 'learner' and ct.created_at >= now() - make_interval(days => $2)
              and coalesce((ct.feedback->'evaluation'->>'countsTowardGoal')::boolean, coalesce((ct.feedback->>'relevant')::boolean, true)))::text as turns_14_days,
@@ -6684,10 +6684,10 @@ class CoachRepository {
       ),
       this.pool.query<{ daily_used: string; weekly_turns: string }>(
         `select
-           count(*) filter (where ct.speaker = 'learner' and ct.created_at >= current_date
+           count(*) filter (where ct.speaker = 'learner' and ct.created_at >= organization_system_date((select organization_id from users where id = $1))
              and coalesce((ct.feedback->'evaluation'->>'countsTowardGoal')::boolean,
                coalesce((ct.feedback->>'relevant')::boolean, true)))::text as daily_used,
-           count(*) filter (where ct.speaker = 'learner' and ct.created_at >= date_trunc('week', now())
+           count(*) filter (where ct.speaker = 'learner' and ct.created_at >= date_trunc('week', organization_system_date((select organization_id from users where id = $1)))
              and coalesce((ct.feedback->'evaluation'->>'countsTowardGoal')::boolean,
                coalesce((ct.feedback->>'relevant')::boolean, true)))::text as weekly_turns
          from coach_turns ct join coach_sessions cs on cs.id = ct.session_id
@@ -6708,7 +6708,9 @@ class CoachRepository {
            where lesson_id = l.id and status = 'published'
            order by version desc limit 1
          ) lv on true
-         where e.learner_id = $1 order by l.day_number`, [learnerId]
+         where e.learner_id = $1
+           and p.start_date + ((pw.week_number - 1) * 7 + l.day_number - 1) <= organization_system_date(p.organization_id)
+         order by l.day_number`, [learnerId]
       ),
       this.pool.query<{ word: string }>(
         "select word from learner_vocabulary_unlocks where learner_id = $1", [learnerId]
@@ -6811,7 +6813,7 @@ class CoachRepository {
       );
       if (!locked.rowCount) throw new Error("COACH_SESSION_NOT_FOUND");
       const cap = await client.query<{ daily_used: string; daily_limit: number }>(
-        `select count(*) filter (where ct.speaker = 'learner' and ct.created_at >= current_date
+        `select count(*) filter (where ct.speaker = 'learner' and ct.created_at >= organization_system_date(u.organization_id)
             and coalesce((ct.feedback->'evaluation'->>'countsTowardGoal')::boolean,
               coalesce((ct.feedback->>'relevant')::boolean, true)))::text as daily_used,
                 least(greatest(coalesce((os.configuration->>'coachDailyLimit')::int, 30), 1), 200) as daily_limit

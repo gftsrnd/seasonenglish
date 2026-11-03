@@ -11,6 +11,7 @@ import type {
   GameHubView,
   LearnerAvatarData,
   LearnerHomeView as LearnerHomeContractView,
+  LearnerNotificationView,
   LearnerProfileData,
   LearnerProgressView,
   LessonProgressView,
@@ -43,6 +44,7 @@ export interface LearnerHomeView extends LearnerHomeContractView {
   approvalPending?: boolean;
   placementDraft?: boolean;
   reward?: { points: number; nextPoints: number | null; seasonName: string };
+  notifications?: readonly LearnerNotificationView[];
 }
 
 export interface OnboardView {
@@ -129,6 +131,8 @@ export interface LearnerCallbacks {
   recordAssessmentAudioPlay: (section: AssessmentSectionCode, groupKey: string) => Promise<{ playCount: number; remaining: number }>;
   createAssessmentAppeal: (reason: string) => void | Promise<void>;
   completeLessonStudy: () => void | Promise<void>;
+  /** Server-persisted playback acknowledgement for a required pronunciation model. */
+  recordPronunciationListen?: (word: string) => void | Promise<void>;
   saveLessonProgress: (progress: LessonProgressView) => void | Promise<void>;
   submitLessonPartAttempt?: (partCode: LessonPartCode, evidence: LessonPartAttemptEvidenceInput) => Promise<LessonPartAttemptView>;
   appealLessonPart?: (partCode: LessonPartCode, reason: string) => Promise<LessonPartAppealView>;

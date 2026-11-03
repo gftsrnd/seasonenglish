@@ -1196,3 +1196,22 @@ describe("learner lesson study content", () => {
     expect(navigate).toHaveBeenCalledWith("/home");
   });
 });
+
+  it("persists a completed pronunciation listen before allowing speaking", async () => {
+    const user = userEvent.setup();
+    const recorded = vi.fn().mockResolvedValue(undefined);
+    const callbacks: Array<((status: "started" | "ended" | "cancelled" | "error" | "unsupported" | "no_voice") => void) | undefined> = [];
+    const lesson = {
+      id: "lesson-pronunciation-server-persist", title: "Update", dayNumber: 1, weekNumber: 1, weekTopic: "Work", durationMinutes: 10, cefr: "A2",
+      content: { parts: [
+        { code: "pronunciation", title: "Phát âm", content: { focus: "/aɪ/", words: ["I", "nice", "time"] } },
+        { code: "speaking", title: "Nói", content: { instruction: "Nói một câu.", answer: "I have time." } }
+      ] },
+      progress: { status: "in_progress", completedPartCodes: ["pronunciation"], evidence: {} }
+    } as any;
+    render(<LearnerLesson view={{ lesson, lock: null }} actions={{ navigate: vi.fn(), saveLessonProgress: vi.fn(), recordPronunciationListen: recorded, speak: vi.fn((_text: string, _language?: string, options?: { onStatus?: (status: "started" | "ended" | "cancelled" | "error" | "unsupported" | "no_voice") => void }) => callbacks.push(options?.onStatus)) } as any} />);
+    for (const word of ["I", "nice", "time"]) await user.click(screen.getByRole("button", { name: `Nghe từ phát âm: ${word}` }));
+    callbacks.forEach((callback) => callback?.("ended"));
+    await waitFor(() => expect(recorded).toHaveBeenCalledTimes(3));
+    expect(recorded.mock.calls.map(([word]) => word)).toEqual(["I", "nice", "time"]);
+  });
