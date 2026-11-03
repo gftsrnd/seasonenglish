@@ -597,17 +597,24 @@ type AssessmentResultKind = "placement" | "level_up" | "final" | "pass_course";
 
 function TestsRoute({ client, readOnly, initialTab }: { client: OperatorApiClient; readOnly: boolean; initialTab: "placement" | "promotion" }) {
   const [activeTab, setActiveTab] = useState<TestResultsTab>(initialTab);
+  const navigate = useNavigate();
+  const paths = useOperatorRoutePaths();
   const kinds: Record<TestResultsTab, AssessmentResultKind[]> = {
     placement: ["placement"], monthly: ["final"], promotion: ["level_up"], exit: ["pass_course"]
   };
-  return <OperatorPage title="Bài kiểm tra">
-    <PageTitle><h1>Bài kiểm tra</h1><p className="muted">Xem kết quả đầu vào, bài thi tháng, đề lên mức và đề đầu ra.</p></PageTitle>
+  const control = activeTab === "placement" ? <section className="card" aria-label="Điều khiển đề đầu vào"><h2>Đề đầu vào</h2><p className="small muted">Đề đầu vào là đề cố định. Chỉ xem kết quả từng học viên ở danh sách bên dưới.</p></section>
+    : activeTab === "monthly" ? <section className="card" aria-label="Điều khiển bài thi tháng"><h2>Bài thi tháng</h2><p className="small muted">Sinh từ tài nguyên tháng đã duyệt trong Bài học. Bản nháp được xem và sửa ở đó trước khi phát hành; sau phát hành, đề bị khóa.</p><button type="button" className="btn-sm" onClick={() => navigate(paths.months)}>Mở Bài học</button></section>
+      : activeTab === "promotion" ? <section aria-label="Điều khiển đề lên mức"><LevelFormsRoute client={client} readOnly={readOnly} embedded /></section>
+        : <section className="card" aria-label="Điều khiển đề đầu ra"><h2>Đề đầu ra</h2><p className="small muted">Pass Course – Form A là đề C1 cố định. Chỉ xem kết quả từng học viên ở danh sách bên dưới.</p></section>;
+  return <OperatorPage title="Kết quả bài thi">
+    <PageTitle><h1>Kết quả bài thi</h1><p className="muted">Xem kết quả đầu vào, bài thi tháng, đề lên mức và đề đầu ra.</p></PageTitle>
     <div className="tabs operator-review-tabs" role="tablist" aria-label="Loại bài kiểm tra">
       <button type="button" role="tab" aria-selected={activeTab === "placement"} className={activeTab === "placement" ? "active" : ""} onClick={() => setActiveTab("placement")}>Đề đầu vào</button>
       <button type="button" role="tab" aria-selected={activeTab === "monthly"} className={activeTab === "monthly" ? "active" : ""} onClick={() => setActiveTab("monthly")}>Bài thi tháng</button>
       <button type="button" role="tab" aria-selected={activeTab === "promotion"} className={activeTab === "promotion" ? "active" : ""} onClick={() => setActiveTab("promotion")}>Đề lên mức</button>
       <button type="button" role="tab" aria-selected={activeTab === "exit"} className={activeTab === "exit" ? "active" : ""} onClick={() => setActiveTab("exit")}>Đề đầu ra</button>
     </div>
+    {control}
     <ReviewRoute client={client} readOnly={readOnly} canEditWeeklyPractice={false} assessmentOnly embedded assessmentKinds={kinds[activeTab]} />
   </OperatorPage>;
 }
@@ -1105,3 +1112,4 @@ function message(reason: unknown) {
   }
   return label;
 }
+

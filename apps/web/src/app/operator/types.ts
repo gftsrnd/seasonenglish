@@ -432,7 +432,7 @@ export interface ReviewAttempt {
 export interface ReviewTest {
   id: string;
   learnerName: string;
-  kind: "placement" | "level_up";
+  kind: "placement" | "level_up" | "final" | "pass_course";
   submittedAt?: string | undefined;
   total?: number | undefined;
   rawLevel?: Cefr | undefined;

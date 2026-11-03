@@ -40,7 +40,7 @@ describe("OperatorRouteController", () => {
     const client = { getAssessmentLevelForms: vi.fn().mockResolvedValue([]), getSystemCapabilities: vi.fn().mockResolvedValue({ ai: true }) };
     render(<MemoryRouter initialEntries={["/op/levelforms"]}><OperatorRouteController session={operator} client={client as any} /></MemoryRouter>);
 
-    expect(await screen.findByRole("heading", { name: "Bài kiểm tra" })).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "Kết quả bài thi" })).toBeInTheDocument();
     expect(screen.getByRole("tab", { name: "Đề lên mức" })).toHaveAttribute("aria-selected", "true");
     expect(screen.queryByRole("heading", { name: "Đề thi lên mức" })).not.toBeInTheDocument();
     expect(screen.queryByRole("link", { name: "← Duyệt trình độ" })).not.toBeInTheDocument();
@@ -120,17 +120,20 @@ describe("OperatorRouteController", () => {
     const client = { getContentReview: vi.fn().mockResolvedValue(review), getAssessmentLevelForms: vi.fn().mockResolvedValue([]), getSystemCapabilities: vi.fn().mockResolvedValue({ ai: true }) };
     render(<MemoryRouter initialEntries={["/op/tests"]}><OperatorRouteController session={operator} client={client as any} /></MemoryRouter>);
 
-    expect(await screen.findByRole("heading", { name: "Bài kiểm tra" })).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "Kết quả bài thi" })).toBeInTheDocument();
     const navigation = screen.getByRole("tablist", { name: "Loại bài kiểm tra" });
     expect(within(navigation).getAllByRole("tab").map(tab => tab.textContent)).toEqual(["Đề đầu vào", "Bài thi tháng", "Đề lên mức", "Đề đầu ra"]);
     expect(await screen.findByText("Lan")).toBeInTheDocument();
+    expect(screen.getByText("Đề đầu vào là đề cố định. Chỉ xem kết quả từng học viên ở danh sách bên dưới.")).toBeInTheDocument();
 
     await user.click(within(navigation).getByRole("tab", { name: "Bài thi tháng" }));
     expect(within(navigation).getByRole("tab", { name: "Bài thi tháng" })).toHaveAttribute("aria-selected", "true");
+    expect(screen.getByRole("button", { name: "Mở Bài học" })).toBeInTheDocument();
     expect(screen.getByText("Chưa có bài test.")).toBeInTheDocument();
 
     await user.click(within(navigation).getByRole("tab", { name: "Đề lên mức" }));
     expect(within(navigation).getByRole("tab", { name: "Đề lên mức" })).toHaveAttribute("aria-selected", "true");
+    expect(await screen.findByText("Chưa có mức đích để hiển thị.")).toBeInTheDocument();
     expect(screen.getByText("Chưa có bài test.")).toBeInTheDocument();
     expect(screen.queryByRole("heading", { name: "Đề thi lên mức" })).not.toBeInTheDocument();
   });
