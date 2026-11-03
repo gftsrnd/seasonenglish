@@ -2475,7 +2475,9 @@ body:has(.app-operator) #modal > .dialog > .row {
 /* Result pages stay compact. The full standard assessment introduction belongs
    in the explicit Xem dialog, where its long persisted sections can scroll. */
 .app-operator .operator-assessment-form-list {
-  max-width: 920px;
+  width: 100%;
+  background: #f7f6f1;
+  border-color: #ded9d0;
 }
 
 .app-operator .operator-assessment-form-row {
@@ -2483,6 +2485,9 @@ body:has(.app-operator) #modal > .dialog > .row {
   align-items: center;
   justify-content: space-between;
   gap: 16px;
+  padding: 16px;
+  background: #fffdfa;
+  border-color: #e2ddd5;
 }
 
 .app-operator .operator-assessment-form-row p {
@@ -2496,12 +2501,138 @@ body:has(.app-operator) #modal > .dialog > .row {
 }
 
 .operator-assessment-preview-dialog .assessment-definition-preview {
-  margin: 12px 0 0;
+  margin: 18px 0 0;
   box-shadow: none;
+  background: #f7f6f1;
+  border-color: #ded9d0;
 }
 
 .operator-assessment-preview-dialog .assessment-definition-preview-header h2 {
   font-size: 1.1rem;
+}
+
+.operator-assessment-preview-dialog .assessment-definition-preview-summary {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+  margin: 18px 0;
+}
+
+.operator-assessment-preview-dialog .assessment-definition-preview-summary > span {
+  display: grid;
+  justify-items: center;
+  gap: 3px;
+  padding: 10px 8px;
+  border: 1px solid #ded9d0;
+  border-radius: 10px;
+  background: #fffdfa;
+}
+
+.operator-assessment-preview-dialog .assessment-definition-preview-summary b {
+  font-size: 1.15rem;
+  line-height: 1;
+}
+
+.operator-assessment-preview-dialog .assessment-definition-preview-summary small {
+  color: var(--muted);
+}
+
+.operator-assessment-preview-dialog .assessment-definition-preview-rules {
+  display: grid;
+  gap: 10px;
+  margin: 18px 0;
+  padding: 14px 16px;
+  border: 1px solid #ded9d0;
+  border-radius: 10px;
+  background: #fffdfa;
+}
+
+.operator-assessment-preview-dialog .assessment-definition-preview-rules p {
+  margin: 0;
+}
+
+.operator-assessment-preview-dialog .assessment-definition-preview-sections {
+  display: grid;
+  gap: 14px;
+  margin-top: 20px;
+}
+
+.operator-assessment-preview-dialog .assessment-definition-preview-section {
+  overflow: visible;
+  padding: 0;
+  border: 1px solid #ded9d0;
+  border-radius: 10px;
+  background: #fffdfa;
+}
+
+.operator-assessment-preview-dialog .assessment-definition-preview-section > summary {
+  position: sticky;
+  top: 66px;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 13px 15px;
+  list-style: none;
+  cursor: pointer;
+  border-radius: 10px;
+  background: #f7f6f1;
+}
+
+.operator-assessment-preview-dialog .assessment-definition-preview-section > summary::-webkit-details-marker {
+  display: none;
+}
+
+.operator-assessment-preview-dialog .assessment-definition-preview-section-heading {
+  display: grid;
+  gap: 4px;
+}
+
+.operator-assessment-preview-dialog .assessment-definition-preview-section-heading small {
+  color: var(--muted);
+}
+
+.operator-assessment-preview-dialog .assessment-definition-preview-chevron {
+  flex: 0 0 auto;
+  font-size: 1.2rem;
+  transition: transform 120ms ease;
+}
+
+.operator-assessment-preview-dialog .assessment-definition-preview-section[open] > summary {
+  border-bottom: 1px solid #ded9d0;
+  border-bottom-left-radius: 0;
+  border-bottom-right-radius: 0;
+}
+
+.operator-assessment-preview-dialog .assessment-definition-preview-section[open] > summary .assessment-definition-preview-chevron {
+  transform: rotate(180deg);
+}
+
+.operator-assessment-preview-dialog .assessment-definition-preview-section-body {
+  display: grid;
+  gap: 14px;
+  padding: 14px 15px 16px;
+}
+
+.operator-assessment-preview-dialog .assessment-definition-preview-section-body > p {
+  margin: 0;
+}
+
+.operator-assessment-preview-dialog .assessment-definition-preview-group {
+  margin: 0;
+  padding: 14px;
+  background: #f7f6f1;
+  border-color: #e2ddd5;
+}
+
+.operator-assessment-preview-dialog .assessment-definition-preview-group h3,
+.operator-assessment-preview-dialog .assessment-definition-preview-group p {
+  margin-top: 0;
+}
+
+.operator-assessment-preview-dialog .assessment-definition-preview-group p {
+  margin-bottom: 12px;
 }
 
 @media (max-width: 620px) {
