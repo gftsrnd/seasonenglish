@@ -153,20 +153,49 @@ export function registerMonthlyContentRoutes(app: FastifyInstance, pool: Pool, a
       // One operator action produces one atomic plan for the entire month.
       // Daily assignments are fields inside that plan; they are not separate
       // generation requests or partial monthly resources.
-      const generated = await runner.runTask("monthly_resource_generation", {
-        month: month.month,
-        cefr: criteria.cefr,
-        theme: { title: theme.title, brief: theme.brief, context: theme.context, communicationGoal: theme.communicationGoal },
-        newLessonDays,
-        lessonDayNumbers: calendar.effectiveDays.map((_date, index) => index + 1),
-        targets: {
-          vocabularyCount: criteria.vocabularyCount,
-          expandedVocabularyCount: criteria.expandedVocabularyCount,
-          grammarTopicCount: criteria.grammarTopicCount,
-          pronunciationSoundCount: criteria.pronunciationSoundCount
+      const lessonDayNumbers = calendar.effectiveDays.map((_date, index) => index + 1);
+      const grammarAssignments = [
+        [...newLessonDays.slice(0, 6), ...newLessonDays.slice(12).filter((_day, index) => index % 2 === 0)],
+        [...newLessonDays.slice(6, 12), ...newLessonDays.slice(12).filter((_day, index) => index % 2 === 1)]
+      ];
+      const resourceBatches: Array<Awaited<ReturnType<AiTaskRunner["runTask"]>>["output"]> = [];
+      // Large months exceed provider output limits as one response. Generate
+      // small chronological vocabulary slices, while asking each call for the
+      // same two month-wide grammar topics and four pronunciation targets.
+      // Nothing is persisted until the merged full plan passes the usual
+      // whole-month validation.
+      for (let offset = 0; offset < newLessonDays.length; offset += 3) {
+        const batchDays = newLessonDays.slice(offset, offset + 3);
+        const pronunciationAssignments = Array.from({ length: 4 }, (_unused, index) => newLessonDays.slice(index * 3, index * 3 + 3));
+        const batchPrompt = `${task.prompt}\n\nThis is one slice of a single complete monthly resource plan. Return vocabulary only for the new lesson days in this request (exactly three core and nine expanded terms per requested day). The lessonDayNumbers field lists the complete calendar; do not create vocabulary for days absent from newLessonDays. Still return the complete two-topic monthly grammar plan and four-target monthly pronunciation plan. Use these exact month-wide grammar day assignments: topic A ${(grammarAssignments[0] ?? []).join(", ")}; topic B ${(grammarAssignments[1] ?? []).join(", ")}. Use these exact pronunciation day assignments: ${pronunciationAssignments.map((days, index) => `P${index + 1} ${days.join(", ")}`).join("; ")}. Keep grammar and pronunciation concise and consistent across slices.`;
+        const generated = await runner.runTask("monthly_resource_generation", {
+          month: month.month,
+          cefr: criteria.cefr,
+          theme: { title: theme.title, brief: theme.brief, context: theme.context, communicationGoal: theme.communicationGoal },
+          newLessonDays: batchDays,
+          lessonDayNumbers,
+          targets: {
+            vocabularyCount: batchDays.length * 3,
+            expandedVocabularyCount: batchDays.length * 9,
+            grammarTopicCount: criteria.grammarTopicCount,
+            pronunciationSoundCount: criteria.pronunciationSoundCount
+          }
+        }, { systemPrompt: batchPrompt, maxOutputTokens: 8_000, temperature: 0.15, maxAttempts: 2 });
+        const batch = monthlyResourcePlanOutputSchema.parse(generated.output);
+        if (batch.coreTerms.length !== batchDays.length * 3 || batch.expandedTerms.length !== batchDays.length * 9
+          || batch.coreTerms.some((term) => !batchDays.includes(term.dayNumber))
+          || batch.expandedTerms.some((term) => !batchDays.includes(term.dayNumber))) {
+          throw new MonthlyResourcePlanError([`Vocabulary slice for days ${batchDays.join(", ")} has missing, extra, or misassigned terms.`]);
         }
-      }, { systemPrompt: task.prompt, maxOutputTokens: 12_000, temperature: 0.15, maxAttempts: 2 });
-      const plan = monthlyResourcePlanOutputSchema.parse(generated.output);
+        resourceBatches.push(batch);
+      }
+      const firstBatch = monthlyResourcePlanOutputSchema.parse(resourceBatches[0]);
+      const plan = monthlyResourcePlanOutputSchema.parse({
+        coreTerms: resourceBatches.flatMap((batch) => monthlyResourcePlanOutputSchema.parse(batch).coreTerms),
+        expandedTerms: resourceBatches.flatMap((batch) => monthlyResourcePlanOutputSchema.parse(batch).expandedTerms),
+        grammarTopics: firstBatch.grammarTopics,
+        pronunciationTargets: firstBatch.pronunciationTargets
+      });
       const contract = buildMonthlyResourcesFromAiPlan(month.month, criteria.cefr, theme, criteria, plan);
       const framework = await repositories.monthlyContent.saveFramework(actorId, contract);
       await repositories.monthlyContent.approveFramework(actorId, framework.id);
@@ -182,6 +211,9 @@ export function registerMonthlyContentRoutes(app: FastifyInstance, pool: Pool, a
       }
       if (error && typeof error === "object" && "code" in error && (error as { code?: unknown }).code === "AI_OUTPUT_INVALID") {
         return reply.code(422).send({ code: "AI_OUTPUT_INVALID", issues: safeGenerationDiagnosticIssues(error) });
+      }
+      if (error && typeof error === "object" && "code" in error && (error as { code?: unknown }).code === "AI_OUTPUT_TRUNCATED") {
+        return reply.code(422).send({ code: "AI_OUTPUT_TRUNCATED", message: "A resource slice exceeded the AI output limit; no monthly resources were saved. Retry generation." });
       }
       throw error;
     }
