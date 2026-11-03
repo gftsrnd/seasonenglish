@@ -65,8 +65,8 @@ describe("Operator monthly planner", () => {
     expect(onApproveFramework).toHaveBeenCalledWith("framework-a1");
   });
 
-  it("uses the review action on Fridays and keeps approved daily lessons view-only", () => {
-    render(<ToastProvider><OperatorMonths
+  it("uses the compact Sinh action for a review and keeps approved daily lessons view-only", () => {
+    const { container } = render(<ToastProvider><OperatorMonths
       month="2026-11"
       todayMonth="2026-11"
       overview={{ systemDate: "2026-11-03", monthWindow: { previous: "2026-10", current: "2026-11", next: "2026-12", writable: true }, brief: { month: "2026-11", title: "Customer handover", brief: "Prepare a handover.", context: "Customer success", communicationGoal: "Explain risks", version: 1, status: "approved" }, frameworks: [{
@@ -87,11 +87,12 @@ describe("Operator monthly planner", () => {
     /></ToastProvider>);
 
     expect(screen.getByRole("button", { name: "Xem bài 1" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Sinh bài ôn" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Soạn tay bài ôn" })).toBeInTheDocument();
+    const reviewCell = Array.from(container.querySelectorAll<HTMLElement>("[role='gridcell']")).find((cell) => cell.getAttribute("aria-label") === "06, Ôn tập")!;
+    expect(within(reviewCell).getByRole("button", { name: "Sinh" }).textContent).toBe("Sinh");
+    expect(within(reviewCell).getByRole("button", { name: "Soạn tay bài ôn" })).toBeInTheDocument();
   });
 
-  it("uses the dedicated Friday review endpoint after the operator confirms generation", async () => {
+  it("uses the dedicated scheduled review endpoint after the operator confirms generation", async () => {
     const user = userEvent.setup();
     const onGenerateReview = vi.fn().mockResolvedValue({ lesson: { title: "Ôn tập", parts: [] }, report: { severe: [], light: [], contractVersion: 1 } });
     const onGenerateDay = vi.fn();
@@ -109,10 +110,10 @@ describe("Operator monthly planner", () => {
     /></ToastProvider>);
 
     const reviewCell = Array.from(container.querySelectorAll<HTMLElement>("[role='gridcell']")).find((cell) => cell.getAttribute("aria-label") === "06, Ôn tập")!;
-    await user.click(within(reviewCell).getByRole("button", { name: "Sinh bài ôn" }));
+    await user.click(within(reviewCell).getByRole("button", { name: "Sinh" }));
     const dialog = screen.getByRole("dialog", { name: "Tài nguyên cho bài ôn" });
     expect(dialog).toBeInTheDocument();
-    await user.click(within(dialog).getByRole("button", { name: "Sinh bài ôn" }));
+    await user.click(within(dialog).getByRole("button", { name: "Sinh" }));
 
     expect(onGenerateReview).toHaveBeenCalledWith("framework-a1", 5);
     expect(onGenerateDay).not.toHaveBeenCalled();
@@ -139,6 +140,13 @@ describe("Operator monthly planner", () => {
     expect(within(approvedCell).queryByRole("button", { name: "Yêu cầu mở lại bài 1" })).not.toBeInTheDocument();
   });
 
+  it("keeps the monthly-final action closed until the Manager system date reaches the exam date", () => {
+    render(<ToastProvider><OperatorMonths month="2026-11" todayMonth="2026-11" cefr="A1" busy={false}
+      overview={{ systemDate: "2026-11-03", monthWindow: { previous: "2026-10", current: "2026-11", next: "2026-12", writable: true }, brief: null, frameworks: [] }}
+      actions={{ onSelectMonth: vi.fn(), onSelectLevel: vi.fn(), onSuggestBrief: vi.fn(), onSaveBrief: vi.fn(), onApproveBrief: vi.fn(), onGenerateFramework: vi.fn(), onSaveFramework: vi.fn(), onApproveFramework: vi.fn(), onSaveDay: vi.fn(), onGenerateDay: vi.fn(), onAcknowledge: vi.fn(), onApproveDay: vi.fn(), onCreateCorrection: vi.fn(), onSaveCorrection: vi.fn(), onAcknowledgeCorrection: vi.fn(), onApproveCorrection: vi.fn() }}
+    /></ToastProvider>);
+    expect(screen.getAllByRole("button", { name: "Chờ ngày thi" }).at(-1)).toBeDisabled();
+  });
   it("calls the real monthly-final action from the final-day cell", async () => {
     const user = userEvent.setup();
     const blueprint = {
@@ -152,7 +160,7 @@ describe("Operator monthly planner", () => {
     } as never;
     const onGenerateMonthlyFinal = vi.fn().mockResolvedValue({ versionId: "final-v1", status: "draft", blueprint });
     render(<ToastProvider><OperatorMonths month="2026-11" todayMonth="2026-11" cefr="A1" busy={false}
-      overview={{ systemDate: "2026-11-03", monthWindow: { previous: "2026-10", current: "2026-11", next: "2026-12", writable: true }, brief: { month: "2026-11", title: "Handover", brief: "Prepare handover", context: "CS", communicationGoal: "Explain", version: 1, status: "approved" }, frameworks: [{
+      overview={{ systemDate: "2026-11-30", monthWindow: { previous: "2026-10", current: "2026-11", next: "2026-12", writable: true }, brief: { month: "2026-11", title: "Handover", brief: "Prepare handover", context: "CS", communicationGoal: "Explain", version: 1, status: "approved" }, frameworks: [{
         id: "framework-a1", cefr: "A1", version: 1, status: "approved", scopeHash: "scope", lessons: [], quality: { severe: [], light: [] }, resources: { coreTerms: [], supportTerms: [], grammarTopics: [], sounds: [] }
       }] }}
       actions={{ onSelectMonth: vi.fn(), onSelectLevel: vi.fn(), onSuggestBrief: vi.fn(), onSaveBrief: vi.fn(), onApproveBrief: vi.fn(), onGenerateFramework: vi.fn(), onSaveFramework: vi.fn(), onApproveFramework: vi.fn(), onGenerateMonthlyFinal, onSaveDay: vi.fn(), onGenerateDay: vi.fn(), onAcknowledge: vi.fn(), onApproveDay: vi.fn(), onCreateCorrection: vi.fn(), onSaveCorrection: vi.fn(), onAcknowledgeCorrection: vi.fn(), onApproveCorrection: vi.fn() }}
@@ -164,4 +172,5 @@ describe("Operator monthly planner", () => {
     expect(screen.getByText("Monthly listening script.")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Duyệt & phát hành" })).toBeDisabled();
   });
+
 });
