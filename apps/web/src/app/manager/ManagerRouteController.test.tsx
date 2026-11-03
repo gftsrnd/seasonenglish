@@ -7,7 +7,6 @@ import type { ReactElement } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { ManagerLearnerProfileView, ManagerOperationsView, ManagerProgressView, ManagerProviderSettingsView, ManagerReportView, ManagerSettingsView, OperatorSettingsOverviewView, OrganisationExperienceView, ProductPreferencesView, SystemCapabilitiesView } from "@e4s/contracts";
 import { managerApiClient as apiClient } from "../../api/manager.js";
-import { operatorApiClient } from "../../api/operator.js";
 import { MaintenanceConfirmationDialog, ManagerRouteController, PurgeConfirmationDialog } from "./ManagerRouteController.js";
 import { RoleRoutes } from "../RoleRoutes.js";
 import { ModalProvider } from "../shared/ModalProvider.js";
@@ -175,18 +174,11 @@ describe("ManagerRouteController", () => {
     expect(screen.queryByRole("heading", { name: /^Mã PIN/ })).not.toBeInTheDocument();
   });
 
-  it("mounts the full Manager-owned operations area inside Manager routes", async () => {
-    vi.spyOn(operatorApiClient, "getContentPrompts").mockResolvedValue({ groups: [
-      { key: "system_rules", label: "Quy tắc chung", content: "current", defaultContent: "default", version: 1, status: "active" }
-    ] });
-    const save = vi.spyOn(operatorApiClient, "saveContentPrompts");
-
+  it("does not expose Operator prompts to Manager", async () => {
     renderManager(<MemoryRouter initialEntries={["/settings/prompts"]}><ManagerRouteController role="manager" currentUserId="manager-1" /></MemoryRouter>);
 
-    expect(await screen.findByRole("heading", { name: "Prompt & rubric" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Lưu prompt" })).toBeEnabled();
-    expect(screen.queryByText(/chế độ chỉ đọc/i)).not.toBeInTheDocument();
-    expect(save).not.toHaveBeenCalled();
+    expect(await screen.findByRole("heading", { name: "Cài đặt" })).toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "Prompt & rubric" })).not.toBeInTheDocument();
   });
 
   it("keeps the Manager operations summary scoped to account operations", async () => {
@@ -198,13 +190,12 @@ describe("ManagerRouteController", () => {
     expect(screen.queryByRole("navigation", { name: "Điều hướng màn vận hành" })).not.toBeInTheDocument();
   });
 
-  it("keeps Manager nested operations routes available in explicit read-only mode", async () => {
-    vi.spyOn(operatorApiClient, "getContentWeeks").mockResolvedValue({ pilot: { startDate: "2026-10-05", weekCount: 1 }, weeks: [] });
+  it("does not expose retired weekly operations to Manager", async () => {
+    vi.spyOn(apiClient, "getManagerOperations").mockResolvedValue(operations);
     renderManager(<MemoryRouter initialEntries={["/mgr/ops/weeks"]}><ManagerRouteController role="manager" currentUserId="manager-1" /></MemoryRouter>);
 
-    expect(await screen.findByRole("heading", { name: "Khung chủ đề tuần" })).toBeInTheDocument();
-    expect(screen.getByRole("note", { name: "Chế độ chỉ đọc của Quản lý" })).toBeInTheDocument();
-    expect(screen.queryByRole("navigation", { name: "Điều hướng màn vận hành" })).not.toBeInTheDocument();
+    await vi.waitFor(() => expect(apiClient.getManagerOperations).toHaveBeenCalledOnce());
+    expect(screen.queryByRole("heading", { name: "Khung chủ đề tuần" })).not.toBeInTheDocument();
   });
 
   it("opens the real learner quick-view and shows Manager operational queues", async () => {
