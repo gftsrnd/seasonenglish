@@ -7,8 +7,7 @@ import type {
   LessonPartAttemptEvidenceInput,
   LessonVocabularyContent,
   LessonView,
-  MicroLessonView,
-  PilotPhase
+  MicroLessonView
 } from "@e4s/contracts";
 import { buildPronunciationAssets, microGradingOutputSchema, microLessonOutputSchema, type AiTaskRunner, type MicroLessonTaskOutput } from "@e4s/ai";
 import { createRepositories, type LearnerLessonRecord } from "@e4s/database";
@@ -164,20 +163,21 @@ export function registerLearningRoutes(
 
   app.get("/api/v1/learner/home", { preHandler: learnerOnly }, async (request, reply) => {
     const learnerId = request.e4sSession!.user.id;
-    const [profile, context, monthlyContext, progress, microLesson, runner] = await Promise.all([
+    const [profile, monthlyContext, progress, microLesson, runner] = await Promise.all([
       repositories.learning.getProfile(learnerId),
-      repositories.learning.getActiveContext(learnerId),
       repositories.learning.getActiveMonthlyContext(learnerId),
       repositories.learning.getProgressDashboard(learnerId),
       repositories.learning.todayMicroLesson(learnerId),
       runnerFor(learnerId)
     ]);
     if (!progress) return reply.code(404).send({ code: "LEARNER_NOT_FOUND" });
-    const lifecycle = await repositories.learning.learnerLifecycle(learnerId, progress.points, progress.levelReadiness.eligible);
+    const lifecycle = monthlyContext
+      ? await repositories.learning.learnerLifecycle(learnerId, progress.points, progress.levelReadiness.eligible)
+      : null;
     const onboardingRequired = !profile || !isLearnerProfileComplete(profile.profile);
     const lessons = monthlyContext
       ? await repositories.learning.listMonthlyLessons(learnerId, monthlyContext.month)
-      : context ? await repositories.learning.listLessons(learnerId, context.weekId) : [];
+      : [];
     const summaries = lessons.map((lesson) => ({
       id: lesson.id,
       dayNumber: lesson.dayNumber,
@@ -186,22 +186,15 @@ export function registerLearningRoutes(
       lock: lesson.lock
     }));
     const completedLessons = summaries.filter((lesson) => lesson.status === "completed").length;
-    const points = progress.points;
-    const weeklyPractice = monthlyContext ? null : await repositories.engagement.weeklyPractice(learnerId);
-    const inactiveDays = monthlyContext || context
-      ? calculateInactiveDays(progress.activity.map((item) => item.occurredAt), monthlyContext ? `${monthlyContext.month}-01` : context!.startDate)
+    const points = monthlyContext ? progress.points : 0;
+    const inactiveDays = monthlyContext
+      ? calculateInactiveDays(progress.activity.map((item) => item.occurredAt), `${monthlyContext.month}-01`)
       : null;
     const view: LearnerHomeView = {
       onboardingRequired,
-      learner: { displayName: progress.learner.displayName, cefr: (monthlyContext?.cefr ?? context?.cefr ?? null) as CefrLevel | null },
-      program: !monthlyContext && context ? { name: context.programName, weekCount: context.weekCount, cycleNumber: context.cycleNumber } : null,
-      week: !monthlyContext && context ? {
-        id: context.weekId,
-        weekNumber: context.weekNumber,
-        topic: context.topic,
-        description: context.description,
-        objectives: context.objectives
-      } : null,
+      learner: { displayName: progress.learner.displayName, cefr: (monthlyContext?.cefr ?? progress.learner.cefr ?? null) as CefrLevel | null },
+      program: null,
+      week: null,
       month: monthlyContext ? {
         month: monthlyContext.month,
         themeTitle: monthlyContext.themeTitle,
@@ -209,6 +202,7 @@ export function registerLearningRoutes(
         communicationGoal: monthlyContext.communicationGoal,
         examDate: monthlyContext.examDate
       } : null,
+      monthlyPreparation: !monthlyContext,
       monthlyExam: monthlyContext ? {
         status: completedLessons < summaries.length ? "locked" as const : "ready" as const,
         completedLessons,
@@ -229,8 +223,8 @@ export function registerLearningRoutes(
       metrics: {
         completedLessons,
         totalLessons: summaries.length,
-        studyDays: progress.studyDays,
-        streakDays: calculateCurrentStreak(progress.activity.map((item) => item.occurredAt)),
+        studyDays: monthlyContext ? progress.studyDays : 0,
+        streakDays: monthlyContext ? calculateCurrentStreak(progress.activity.map((item) => item.occurredAt)) : 0,
         points
       },
       ...(inactiveDays !== null && inactiveDays >= 2 ? { inactivityReminder: { inactiveDays } } : {}),
@@ -238,18 +232,15 @@ export function registerLearningRoutes(
         Number(progress.learner.profile.durationMinutes ?? 10),
         progress.activity.map((item) => item.occurredAt)
       ),
-      coach: { turnsToday: progress.stats.coachTurnsToday ?? 0, turnsThisWeek: progress.stats.coachTurns, targetTurns: 50, href: "/coach" },
+      coach: { turnsToday: monthlyContext ? progress.stats.coachTurnsToday ?? 0 : 0, turnsThisWeek: monthlyContext ? progress.stats.coachTurns : 0, targetTurns: 50, href: "/coach" },
       practice: {
-        status: weeklyPractice?.state ?? "locked",
-        detail: weeklyPractice?.state === "reviewed" ? "Bài đã được phản hồi theo rubric."
-          : weeklyPractice?.state === "submitted" ? "Bài đã nộp và đang chờ phản hồi."
-            : weeklyPractice?.state === "draft" ? "Bản nháp đang được lưu."
-              : weeklyPractice?.state === "open" ? "Bạn đã mở khoá bài thực hành tuần này."
-                : `Mở khi hoàn thành đủ ${summaries.length} bài · hiện có ${completedLessons}/${summaries.length}.`,
+        status: "locked",
+        detail: monthlyContext
+          ? `Mở khi hoàn thành đủ ${summaries.length} bài · hiện có ${completedLessons}/${summaries.length}.`
+          : "Mở khi bộ bài tháng đã được phát hành.",
         href: "/practice"
       },
       levelReadiness: progress.levelReadiness,
-      ...(!monthlyContext && context ? { pilotPhase: pilotPhaseFor(context.startDate, context.weekCount) satisfies PilotPhase } : {}),
       ...(lifecycle ? {
         levelUpPhase: lifecycle.levelUpPhase,
         monthlyGoal: lifecycle.monthlyGoal,
@@ -847,14 +838,6 @@ function startOfUtcDay(value: Date): Date {
 
 function skipWeekendBackwards(value: Date): void {
   while (value.getUTCDay() === 0 || value.getUTCDay() === 6) value.setUTCDate(value.getUTCDate() - 1);
-}
-
-function pilotPhaseFor(startDate: string, weekCount: number): PilotPhase {
-  const start = Date.parse(`${startDate.slice(0, 10)}T00:00:00Z`);
-  if (!Number.isFinite(start)) return "in_pilot";
-  const end = start + Math.max(1, weekCount) * 7 * 24 * 60 * 60 * 1000;
-  const now = Date.now();
-  return now < start ? "before_pilot" : now < end ? "in_pilot" : "after_pilot";
 }
 
 function buildSchedule(lessonMinutes: number, occurredAt: string[]): LearnerHomeView["schedule"] {

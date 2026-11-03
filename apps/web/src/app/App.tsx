@@ -219,7 +219,7 @@ export function AppStatus({ children, tone = "loading", onRetry }: { children: R
 export function resolveSessionEntryPath(role: SessionView["role"], pathname: string): string {
   const current = normalizePathname(pathname);
   if (role === "learner") {
-    return isStaffOnlyPath(current) || current === "/register" ? "/home" : current === "/" ? "/home" : current;
+    return isLearnerPath(current) || current === "/reward/preview" ? current : "/home";
   }
   if (role === "operator") {
     return current === "/" || current === "/register" || current === "/home" || isLearnerPath(current) || isManagerPath(current) ? "/op" : current;

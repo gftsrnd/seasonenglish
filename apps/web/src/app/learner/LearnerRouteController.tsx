@@ -244,7 +244,7 @@ export function LearnerRouteController() {
         case "practice": accept({ practice: await apiClient.getWeeklyPractice() }); break;
         case "survey": {
           const home = await apiClient.getHome();
-          if (home.month) {
+          if (home.month || home.monthlyPreparation) {
             showLearnerToast("Khảo sát cuối pilot không thuộc lộ trình tháng.");
             navigate("/home", { replace: true });
             return;

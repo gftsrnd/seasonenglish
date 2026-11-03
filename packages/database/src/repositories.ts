@@ -1814,10 +1814,10 @@ class LearningRepository {
     }));
     const coachSummary = coach.rows[0] ?? { turns_today: "0", turns_this_week: "0", turns_14_days: "0", rubric_average: null };
     const latestPractice = practice.rows[0];
-    const totalLessons = monthlyContext ? monthlyLessons.length : weeks.rows.reduce((sum, week) => sum + Number(week.total_lessons), 0);
+    const totalLessons = monthlyContext ? monthlyLessons.length : 0;
     const completedLessons = monthlyContext
       ? monthlyLessons.filter((lesson) => lesson.progress.status === 'completed').length
-      : weeks.rows.reduce((sum, week) => sum + Number(week.completed_lessons), 0);
+      : 0;
     const lessonCompletion = totalLessons ? completedLessons / totalLessons * 100 : 0;
     const firstTryParts = firstTry.rows.flatMap((item) => Object.values(item.evidence.evidence ?? {}));
     const firstTryCorrect = firstTryParts.filter((item) => item.attempts === 1 && (item.score === undefined || item.score >= 80)).length;
@@ -1846,13 +1846,7 @@ class LearningRepository {
       learner: { id: row.id, displayName: row.display_name, cefr: row.cefr, profile: row.profile ?? {} },
       points,
       badges: rewards.badges,
-      weeks: monthlyContext ? [] : weeks.rows.map((week) => ({
-        weekNumber: week.week_number,
-        topic: week.topic,
-        completedLessons: Number(week.completed_lessons),
-        totalLessons: Number(week.total_lessons),
-        days: buildWeekDayStatuses(week)
-      })),
+      weeks: [],
       ...(monthlyContext ? {
         monthlyProgress: {
           month: monthlyContext.month,
@@ -1877,7 +1871,8 @@ class LearningRepository {
           })()
         }
       } : {}),
-      studyDays: Number(study.rows[0]?.count ?? 0),
+      monthlyPreparation: !monthlyContext,
+      studyDays: monthlyContext ? Number(study.rows[0]?.count ?? 0) : 0,
       activity: activity.rows.map((item) => ({
         type: item.activity_type,
         minutes: item.minutes,
@@ -1894,9 +1889,9 @@ class LearningRepository {
       levelReadiness: readiness,
       stats: {
         completedLessons,
-        coachTurns: Number(coachSummary.turns_this_week),
-        coachTurnsToday: Number(coachSummary.turns_today),
-        studyDays: Number(study.rows[0]?.count ?? 0)
+        coachTurns: monthlyContext ? Number(coachSummary.turns_this_week) : 0,
+        coachTurnsToday: monthlyContext ? Number(coachSummary.turns_today) : 0,
+        studyDays: monthlyContext ? Number(study.rows[0]?.count ?? 0) : 0
       },
       assessments: assessmentViews
     };

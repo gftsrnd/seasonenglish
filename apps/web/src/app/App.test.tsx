@@ -95,6 +95,7 @@ describe("App session shell", () => {
 
   it.each([
     ["learner", "/mgr", "/home"],
+    ["learner", "/login", "/home"],
     ["operator", "/home", "/op"],
     ["operator", "/mgr/ops", "/op"],
     ["manager", "/home", "/mgr"],

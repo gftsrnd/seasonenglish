@@ -267,6 +267,8 @@ export interface LearnerHomeView {
   week: WeekView | null;
   /** The approved monthly learning contract takes precedence over legacy weekly content. */
   month?: MonthView | null;
+  /** No approved monthly framework exists for this learner's level yet. */
+  monthlyPreparation?: boolean;
   monthlyExam?: MonthlyExamView | null;
   lessons: LessonSummary[];
   nextLesson: LessonSummary | null;
@@ -378,6 +380,8 @@ export interface LearnerProgressView {
     }>;
     exam: { status: "unpublished" | "locked" | "ready" | "completed"; totalScore: number | null };
   };
+  /** Suppress retired pilot/weekly progress while the next monthly framework is prepared. */
+  monthlyPreparation?: boolean;
   studyDays: number;
   activity: Array<{
     type: string;

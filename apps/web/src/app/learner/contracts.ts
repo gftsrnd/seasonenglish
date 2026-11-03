@@ -39,6 +39,8 @@ export const LEARNER_ROUTES = [
 export type LearnerRoute = (typeof LEARNER_ROUTES)[number];
 
 export interface LearnerHomeView extends LearnerHomeContractView {
+  /** The learner has a CEFR level, but no approved monthly framework is available yet. */
+  monthlyPreparation?: boolean;
   aiAvailable?: boolean;
   weekPhase?: "before_pilot" | "in_pilot" | "after_pilot";
   approvalPending?: boolean;

@@ -426,4 +426,26 @@ describe("learner Home parity", () => {
     expect(screen.queryByRole("link", { name: /Bài thực hành cuối tuần/ })).not.toBeInTheDocument();
     expect(screen.getByText("Lộ trình tháng đang được chuẩn bị")).toBeInTheDocument();
   });
+
+  it("renders only the truthful preparation state when no approved monthly framework exists", () => {
+    render(<LearnerHome view={makeView({
+      month: null,
+      monthlyPreparation: true,
+      program: null,
+      week: null,
+      lessons: [],
+      nextLesson: null,
+      metrics: { completedLessons: 5, totalLessons: 5, studyDays: 1, streakDays: 4, points: 20 },
+      coach: { turnsToday: 2, turnsThisWeek: 9, targetTurns: 50, href: "/coach" },
+      levelReadiness: { ...makeView().levelReadiness, targetLevel: "B1" }
+    })} actions={actions} />);
+
+    expect(screen.getByRole("heading", { name: "Lộ trình tháng đang được chuẩn bị" })).toBeInTheDocument();
+    expect(screen.getByText("Luyện theo trình độ đã được duyệt trong khi chờ bộ bài tháng.")).toBeInTheDocument();
+    expect(document.querySelector('[data-home-block="metrics"]')).not.toBeInTheDocument();
+    expect(document.querySelector('[data-home-block="readiness"]')).not.toBeInTheDocument();
+    expect(screen.queryByText("20 điểm")).not.toBeInTheDocument();
+    expect(screen.queryByText("Đường lên mức B1")).not.toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "Khảo sát cuối pilot" })).not.toBeInTheDocument();
+  });
 });

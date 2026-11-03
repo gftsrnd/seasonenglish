@@ -50,6 +50,23 @@ describe("app profile avatar dialog affordances", () => {
     expect(screen.queryByText(/Chặng 1/)).not.toBeInTheDocument();
   });
 
+  it("does not render retired pilot metrics or level-up readiness while a monthly framework is being prepared", () => {
+    const preparing = {
+      ...view,
+      monthlyPreparation: true,
+      weeks: [{ weekNumber: 1, topic: "Legacy", completedLessons: 5, totalLessons: 5 }],
+      stats: { completedLessons: 5, coachTurns: 9, studyDays: 2 },
+      levelReadiness: { ...view.levelReadiness, targetLevel: "B2" }
+    } as unknown as ProfileView;
+
+    render(<LearnerProfile view={preparing} actions={actions} />);
+
+    expect(screen.getByRole("region", { name: "Lộ trình tháng đang chuẩn bị" })).toHaveTextContent("Tiến độ, Season và điều kiện thi sẽ bắt đầu");
+    expect(screen.queryByText(/Chặng 1/)).not.toBeInTheDocument();
+    expect(screen.queryByRole("region", { name: "Đường lên mức B2" })).not.toBeInTheDocument();
+    expect(screen.queryByText("Mùa học")).not.toBeInTheDocument();
+  });
+
   it("uses the same compact readiness format as the home page", () => {
     const readinessView = {
       ...view,

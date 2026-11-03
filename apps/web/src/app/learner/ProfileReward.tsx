@@ -81,16 +81,17 @@ export function LearnerProfile({ view, actions }: { view: ProfileView; actions: 
       </div>
     </section>
     <ProfileCard view={view} actions={actions} />
-    {level ? <SeasonCard view={view} actions={actions} /> : null}
-    {level ? <ReadinessCard view={view} actions={actions} /> : null}
+    {level && !view.monthlyPreparation ? <SeasonCard view={view} actions={actions} /> : null}
+    {level && !view.monthlyPreparation ? <ReadinessCard view={view} actions={actions} /> : null}
     <ProgressOverview view={view} />
-    <section className="card profile-progress-section profile-assessment-section" aria-label="Kết quả đánh giá"><div className="profile-section-heading"><div><div className="eyebrow">Đánh giá năng lực</div><h2>Điểm đầu vào</h2></div><span className="small muted">Kết quả đánh giá ban đầu</span></div><div className="profile-assessment-grid"><AssessmentResult label="Điểm đầu vào" result={view.assessments.placement} /></div>{view.surveyAvailable && !view.monthlyProgress ? <div className="row profile-assessment-actions"><AppLink className="btn" href="/survey" navigate={actions.navigate}>Trả lời khảo sát cuối pilot</AppLink></div> : null}</section>
+    <section className="card profile-progress-section profile-assessment-section" aria-label="Kết quả đánh giá"><div className="profile-section-heading"><div><div className="eyebrow">Đánh giá năng lực</div><h2>Điểm đầu vào</h2></div><span className="small muted">Kết quả đánh giá ban đầu</span></div><div className="profile-assessment-grid"><AssessmentResult label="Điểm đầu vào" result={view.assessments.placement} /></div>{view.surveyAvailable && !view.monthlyProgress && !view.monthlyPreparation ? <div className="row profile-assessment-actions"><AppLink className="btn" href="/survey" navigate={actions.navigate}>Trả lời khảo sát cuối pilot</AppLink></div> : null}</section>
     {avatarOpen ? <AvatarDialog initial={view.learner.profile.avatar} name={view.learner.displayName} onClose={closeAvatar} onSave={async (avatar) => { await actions.saveAvatar(avatar); closeAvatar(); }} /> : null}
   </div>;
 }
 
 function ProgressOverview({ view }: { view: ProfileView }) {
   const month = view.monthlyProgress;
+  if (view.monthlyPreparation) return <section className="profile-progress-section" aria-label="Lộ trình tháng đang chuẩn bị"><div className="profile-section-heading"><div><div className="eyebrow">Tổng quan học tập</div><h2>Lộ trình tháng đang được chuẩn bị</h2></div></div><div className="card"><p style={{ margin: 0 }}>Người vận hành đang chuẩn bị và duyệt bộ bài tháng theo trình độ của bạn. Tiến độ, Season và điều kiện thi sẽ bắt đầu từ dữ liệu tháng đã được phát hành.</p></div></section>;
   if (month) {
     const monthLabel = new Intl.DateTimeFormat("vi-VN", { month: "long", year: "numeric" }).format(new Date(`${month.month}-01T00:00:00Z`));
     const examCopy = month.exam.status === "completed"
