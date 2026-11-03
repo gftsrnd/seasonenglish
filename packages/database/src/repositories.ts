@@ -1673,7 +1673,9 @@ class LearningRepository {
       wrong: Number(configured.wrong ?? 30), minParts: Number(configured.minParts ?? 4)
     };
 
-    const [reward, weeks, study, activity, badgeRoadmap, coach, practice, assessments, availability, firstTry] = await Promise.all([
+    const monthlyContext = await this.getActiveMonthlyContext(learnerId);
+    const monthlyLessons = monthlyContext ? await this.listMonthlyLessons(learnerId, monthlyContext.month) : [];
+    const [reward, weeks, study, activity, badgeRoadmap, coach, practice, assessments, availability, firstTry, monthlyFinal, monthlyFinalPublished] = await Promise.all([
       this.pool.query<{ points: string; badges: Array<{ key: string; label: string }> }>(
         `select coalesce(sum(re.points), 0)::text as points,
                 coalesce(jsonb_agg(distinct jsonb_build_object('key', b.badge_key, 'label', b.label))
@@ -1706,11 +1708,19 @@ class LearningRepository {
          group by pw.id, p.start_date, p.organization_id order by pw.week_number`, [learnerId, thresholds.days]
       ),
       this.pool.query<{ count: string }>(
-        `select count(distinct occurred_at::date)::text as count from activities where learner_id = $1`, [learnerId]
+        `select count(distinct occurred_at::date)::text as count
+         from activities
+         where learner_id = $1
+           and ($2::date is null or occurred_at::date >= $2::date)`,
+        [learnerId, monthlyContext ? `${monthlyContext.month}-01` : null]
       ),
       this.pool.query<{ activity_type: string; minutes: number; evidence: Record<string, unknown>; occurred_at: Date }>(
         `select activity_type, minutes, evidence, occurred_at
-         from activities where learner_id = $1 order by occurred_at desc limit 30`, [learnerId]
+         from activities
+         where learner_id = $1
+           and ($2::date is null or occurred_at::date >= $2::date)
+         order by occurred_at desc limit 30`,
+        [learnerId, monthlyContext ? `${monthlyContext.month}-01` : null]
       ),
       this.pool.query<{ badge_key: string; label: string; rule: { description?: string; seasonLevel?: number }; earned: boolean }>(
         `select b.badge_key, b.label, b.rule,
@@ -1723,7 +1733,9 @@ class LearningRepository {
         `select
            count(*) filter (where ct.speaker = 'learner' and ct.created_at >= organization_system_date((select organization_id from users where id = $1))
              and coalesce((ct.feedback->'evaluation'->>'countsTowardGoal')::boolean, coalesce((ct.feedback->>'relevant')::boolean, true)))::text as turns_today,
-           count(*) filter (where ct.speaker = 'learner' and ct.created_at >= date_trunc('week', organization_system_date((select organization_id from users where id = $1)))
+           count(*) filter (where ct.speaker = 'learner' and ct.created_at >= case when $3::boolean
+             then date_trunc('month', organization_system_date((select organization_id from users where id = $1)))
+             else date_trunc('week', organization_system_date((select organization_id from users where id = $1))) end
              and coalesce((ct.feedback->'evaluation'->>'countsTowardGoal')::boolean, coalesce((ct.feedback->>'relevant')::boolean, true)))::text as turns_this_week,
            count(*) filter (where ct.speaker = 'learner' and ct.created_at >= now() - make_interval(days => $2)
              and coalesce((ct.feedback->'evaluation'->>'countsTowardGoal')::boolean, coalesce((ct.feedback->>'relevant')::boolean, true)))::text as turns_14_days,
@@ -1735,7 +1747,7 @@ class LearningRepository {
                 and coalesce((ct.feedback->'evaluation'->>'countsTowardGoal')::boolean, coalesce((ct.feedback->>'relevant')::boolean, true))
            )::text as rubric_average
          from coach_sessions cs left join coach_turns ct on ct.session_id = cs.id
-         where cs.learner_id = $1`, [learnerId, thresholds.days]
+         where cs.learner_id = $1`, [learnerId, thresholds.days, Boolean(monthlyContext)]
       ),
       this.pool.query<{ status: string; total: string | null }>(
         `select ps.status, ps.score->>'total' as total
@@ -1767,7 +1779,28 @@ class LearningRepository {
       this.pool.query<{ evidence: { evidence?: Record<string, { attempts?: number; score?: number }> } }>(
         `select evidence from progress_records
          where learner_id = $1 and updated_at >= now() - make_interval(days => $2)`, [learnerId, thresholds.days]
-      )
+      ),
+      monthlyContext ? this.pool.query<{ status: string; total_score: string | null }>(
+        `select aa.status, sum(s.score)::text as total_score
+         from assessment_attempts aa
+         join assessment_versions av on av.id = aa.assessment_version_id
+         join assessment_definitions ad on ad.id = av.definition_id and ad.kind = 'final'
+         left join assessment_scores s on s.attempt_id = aa.id
+         where aa.learner_id = $1 and ad.assessment_key = ('monthly-final-' || $2 || '-' || lower($3))
+         group by aa.id
+         order by aa.submitted_at desc nulls last, aa.started_at desc nulls last
+         limit 1`, [learnerId, monthlyContext.month, monthlyContext.cefr]
+      ) : Promise.resolve({ rows: [] as Array<{ status: string; total_score: string | null }> }),
+      monthlyContext ? this.pool.query<{ published: boolean }>(
+        `select exists(
+           select 1
+           from assessment_definitions ad
+           join assessment_versions av on av.definition_id = ad.id and av.status = 'published'
+           where ad.kind = 'final'
+             and ad.assessment_key = ('monthly-final-' || $1 || '-' || lower($2))
+         ) as published`,
+        [monthlyContext.month, monthlyContext.cefr]
+      ) : Promise.resolve({ rows: [{ published: false }] as Array<{ published: boolean }> })
     ]);
     const rewards = reward.rows[0] ?? { points: "0", badges: [] };
     const points = Number(rewards.points);
@@ -1781,8 +1814,10 @@ class LearningRepository {
     }));
     const coachSummary = coach.rows[0] ?? { turns_today: "0", turns_this_week: "0", turns_14_days: "0", rubric_average: null };
     const latestPractice = practice.rows[0];
-    const totalLessons = weeks.rows.reduce((sum, week) => sum + Number(week.total_lessons), 0);
-    const completedLessons = weeks.rows.reduce((sum, week) => sum + Number(week.completed_lessons), 0);
+    const totalLessons = monthlyContext ? monthlyLessons.length : weeks.rows.reduce((sum, week) => sum + Number(week.total_lessons), 0);
+    const completedLessons = monthlyContext
+      ? monthlyLessons.filter((lesson) => lesson.progress.status === 'completed').length
+      : weeks.rows.reduce((sum, week) => sum + Number(week.completed_lessons), 0);
     const lessonCompletion = totalLessons ? completedLessons / totalLessons * 100 : 0;
     const firstTryParts = firstTry.rows.flatMap((item) => Object.values(item.evidence.evidence ?? {}));
     const firstTryCorrect = firstTryParts.filter((item) => item.attempts === 1 && (item.score === undefined || item.score >= 80)).length;
@@ -1797,7 +1832,7 @@ class LearningRepository {
       firstTryAccuracy,
       firstTryCorrect,
       firstTryTotal: firstTryParts.length,
-      weeklyPractice: Number(latestPractice?.total ?? 0),
+      weeklyPractice: Number(monthlyFinal.rows[0]?.total_score ?? latestPractice?.total ?? 0),
       coachRubric: Number(coachSummary.rubric_average ?? 0),
       coachTurns: Number(coachSummary.turns_14_days),
       wrongRate,
@@ -1811,13 +1846,37 @@ class LearningRepository {
       learner: { id: row.id, displayName: row.display_name, cefr: row.cefr, profile: row.profile ?? {} },
       points,
       badges: rewards.badges,
-      weeks: weeks.rows.map((week) => ({
+      weeks: monthlyContext ? [] : weeks.rows.map((week) => ({
         weekNumber: week.week_number,
         topic: week.topic,
         completedLessons: Number(week.completed_lessons),
         totalLessons: Number(week.total_lessons),
         days: buildWeekDayStatuses(week)
       })),
+      ...(monthlyContext ? {
+        monthlyProgress: {
+          month: monthlyContext.month,
+          themeTitle: monthlyContext.themeTitle,
+          examDate: monthlyContext.examDate,
+          completedLessons,
+          totalLessons,
+          days: monthlyLessons.map((lesson) => ({
+            lessonNumber: lesson.dayNumber,
+            status: lesson.progress.status,
+            opensAt: lesson.lock?.opensAt ?? null
+          })),
+          exam: (() => {
+            const attempt = monthlyFinal.rows[0];
+            if (attempt && (attempt.status === 'submitted' || attempt.status === 'approved')) {
+              return { status: 'completed' as const, totalScore: attempt.total_score === null ? null : Number(attempt.total_score) };
+            }
+            if (attempt) return { status: 'locked' as const, totalScore: null };
+            if (totalLessons === 0 || completedLessons < totalLessons) return { status: 'locked' as const, totalScore: null };
+            if (!monthlyFinalPublished.rows[0]?.published) return { status: 'unpublished' as const, totalScore: null };
+            return { status: 'ready' as const, totalScore: null };
+          })()
+        }
+      } : {}),
       studyDays: Number(study.rows[0]?.count ?? 0),
       activity: activity.rows.map((item) => ({
         type: item.activity_type,
@@ -6739,6 +6798,7 @@ class CoachRepository {
   }
 
   async currentForLearner(learnerId: string, aiAvailable: boolean): Promise<CoachView | null> {
+    const monthlyContext = await new LearningRepository(this.pool).getActiveMonthlyContext(learnerId);
     const context = await this.pool.query<{
       display_name: string; cefr: CefrLevel; topic: string; scenario: Record<string, unknown> | null;
       session_id: string | null; coach_daily_limit: number;
@@ -6764,18 +6824,19 @@ class CoachRepository {
     );
     const row = context.rows[0];
     if (!row) return null;
+    const activeTopic = monthlyContext?.themeTitle ?? row.topic;
     let sessionId = row.session_id;
     let scenario = row.scenario ?? {};
     if (!sessionId) {
       sessionId = randomUUID();
-      scenario = { title: row.topic, persona: "informal" };
+      scenario = { title: activeTopic, persona: "informal" };
       await this.pool.query(
         `insert into coach_sessions (id, learner_id, scenario, status)
          values ($1, $2, $3::jsonb, 'active')`,
         [sessionId, learnerId, JSON.stringify(scenario)]
       );
     }
-    const [turns, counters, vocabularyRows, unlockedRows] = await Promise.all([
+    let [turns, counters, vocabularyRows, unlockedRows] = await Promise.all([
       this.pool.query<{
         id: string; speaker: string; content: Record<string, unknown>;
         feedback: Record<string, unknown> | null; created_at: Date;
@@ -6788,11 +6849,11 @@ class CoachRepository {
            count(*) filter (where ct.speaker = 'learner' and ct.created_at >= organization_system_date((select organization_id from users where id = $1))
              and coalesce((ct.feedback->'evaluation'->>'countsTowardGoal')::boolean,
                coalesce((ct.feedback->>'relevant')::boolean, true)))::text as daily_used,
-           count(*) filter (where ct.speaker = 'learner' and ct.created_at >= date_trunc('week', organization_system_date((select organization_id from users where id = $1)))
+           count(*) filter (where ct.speaker = 'learner' and ct.created_at >= case when $2::boolean then date_trunc('month', organization_system_date((select organization_id from users where id = $1))) else date_trunc('week', organization_system_date((select organization_id from users where id = $1))) end
              and coalesce((ct.feedback->'evaluation'->>'countsTowardGoal')::boolean,
                coalesce((ct.feedback->>'relevant')::boolean, true)))::text as weekly_turns
          from coach_turns ct join coach_sessions cs on cs.id = ct.session_id
-         where cs.learner_id = $1`, [learnerId]
+         where cs.learner_id = $1`, [learnerId, Boolean(monthlyContext)]
       ),
       this.pool.query<{ content: Record<string, unknown> }>(
         `select lv.content
@@ -6817,6 +6878,24 @@ class CoachRepository {
         "select word from learner_vocabulary_unlocks where learner_id = $1", [learnerId]
       )
     ]);
+    if (monthlyContext) {
+      vocabularyRows = await this.pool.query<{ content: Record<string, unknown> }>(
+        `select lv.content
+         from enrollments e
+         join users u on u.id = e.learner_id
+         join program_months pm on pm.organization_id = u.organization_id and pm.month = $2
+         join month_frameworks mf on mf.program_month_id = pm.id and mf.cefr = e.cefr and mf.status = 'approved'
+         join month_lessons ml on ml.framework_id = mf.id and ml.status = 'approved' and ml.lesson_id is not null
+         join lessons l on l.id = ml.lesson_id
+         join lateral (
+           select content from lesson_versions where lesson_id = l.id and status = 'published'
+           order by version desc limit 1
+         ) lv on true
+         where e.learner_id = $1 and ml.lesson_date <= organization_system_date(u.organization_id)
+         order by ml.lesson_number`,
+        [learnerId, monthlyContext.month]
+      );
+    }
     const messages: CoachView["messages"] = [];
     const openedWords = new Set<string>(unlockedRows.rows.map((row) => row.word.toLowerCase()));
     for (const turn of turns.rows) {
@@ -6842,7 +6921,7 @@ class CoachRepository {
     if (!messages.some((message) => message.speaker === "coach")) {
       const firstName = row.display_name.trim().split(/\s+/).at(-1) ?? row.display_name;
       messages.unshift({
-        id: "welcome", speaker: "coach", text: coachOpeningQuestion(firstName, row.topic),
+        id: "welcome", speaker: "coach", text: coachOpeningQuestion(firstName, activeTopic),
         createdAt: new Date(0).toISOString()
       });
     }
@@ -6872,10 +6951,12 @@ class CoachRepository {
     const vocabulary = [...vocabularyByWord.values()].slice(0, 12);
     const count = counters.rows[0] ?? { daily_used: "0", weekly_turns: "0" };
     return {
-      sessionId, topic: row.topic, cefr: row.cefr,
+      sessionId, topic: activeTopic, cefr: row.cefr,
       persona: scenario.persona === "formal" ? "formal" : "informal",
       aiAvailable, daily: { used: Number(count.daily_used), limit: row.coach_daily_limit },
-      weekly: { turns: Number(count.weekly_turns), target: 50 }, messages, vocabulary
+      weekly: { turns: Number(count.weekly_turns), target: 50 },
+      ...(monthlyContext ? { period: { kind: "month" as const, label: `Tháng ${monthlyContext.month}`, turns: Number(count.weekly_turns), target: 50 } } : {}),
+      messages, vocabulary
     };
   }
 

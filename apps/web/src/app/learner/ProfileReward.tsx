@@ -83,11 +83,36 @@ export function LearnerProfile({ view, actions }: { view: ProfileView; actions: 
     <ProfileCard view={view} actions={actions} />
     {level ? <SeasonCard view={view} actions={actions} /> : null}
     {level ? <ReadinessCard view={view} actions={actions} /> : null}
-    <section className="profile-progress-section" aria-label="Tổng quan tiến độ"><div className="profile-section-heading"><div><div className="eyebrow">Tổng quan học tập</div><h2>Nhịp học hiện tại</h2></div><span className="small muted">Tóm tắt từ dữ liệu đã ghi nhận</span></div><div className="grid cols-3 profile-kpi-grid"><div className="card kpi"><span className="val">{view.stats.completedLessons}</span><span className="lbl">bài đã học</span></div><div className="card kpi"><span className="val">{view.stats.coachTurns}</span><span className="lbl">lượt luyện với Season</span></div><div className="card kpi"><span className="val">{view.stats.studyDays}</span><span className="lbl">ngày có học</span></div></div></section>
-    <section className="profile-progress-section profile-weeks-section" aria-label="Tiến độ lộ trình"><div className="profile-section-heading"><div><div className="eyebrow">Lộ trình học</div><h2>Tiến độ lộ trình</h2></div><span className="small muted">Theo dõi từng bài đã hoàn thành</span></div><div className="profile-week-grid">{view.weeks.map((week) => <article className="card profile-week-card" key={week.weekNumber}><div className="row between" style={{ gap: 12, alignItems: "flex-start" }}><h3>Chặng {week.weekNumber} <span className="small muted">{week.topic}</span></h3><span className="small muted" style={{ fontWeight: 800, whiteSpace: "nowrap" }}>{week.completedLessons}/{week.totalLessons || "–"} bài</span></div><WeekDays days={week.days} /></article>)}</div></section>
-    <section className="card profile-progress-section profile-assessment-section" aria-label="Kết quả đánh giá"><div className="profile-section-heading"><div><div className="eyebrow">Đánh giá năng lực</div><h2>Điểm đầu vào</h2></div><span className="small muted">Kết quả đánh giá ban đầu</span></div><div className="profile-assessment-grid"><AssessmentResult label="Điểm đầu vào" result={view.assessments.placement} /></div>{view.surveyAvailable ? <div className="row profile-assessment-actions"><AppLink className="btn" href="/survey" navigate={actions.navigate}>Trả lời khảo sát cuối pilot</AppLink></div> : null}</section>
+    <ProgressOverview view={view} />
+    <section className="card profile-progress-section profile-assessment-section" aria-label="Kết quả đánh giá"><div className="profile-section-heading"><div><div className="eyebrow">Đánh giá năng lực</div><h2>Điểm đầu vào</h2></div><span className="small muted">Kết quả đánh giá ban đầu</span></div><div className="profile-assessment-grid"><AssessmentResult label="Điểm đầu vào" result={view.assessments.placement} /></div>{view.surveyAvailable && !view.monthlyProgress ? <div className="row profile-assessment-actions"><AppLink className="btn" href="/survey" navigate={actions.navigate}>Trả lời khảo sát cuối pilot</AppLink></div> : null}</section>
     {avatarOpen ? <AvatarDialog initial={view.learner.profile.avatar} name={view.learner.displayName} onClose={closeAvatar} onSave={async (avatar) => { await actions.saveAvatar(avatar); closeAvatar(); }} /> : null}
   </div>;
+}
+
+function ProgressOverview({ view }: { view: ProfileView }) {
+  const month = view.monthlyProgress;
+  if (month) {
+    const monthLabel = new Intl.DateTimeFormat("vi-VN", { month: "long", year: "numeric" }).format(new Date(`${month.month}-01T00:00:00Z`));
+    const examCopy = month.exam.status === "completed"
+      ? `Đã hoàn thành${month.exam.totalScore === null ? "" : ` · ${month.exam.totalScore}/100`}`
+      : month.exam.status === "ready" ? "Đã đủ điều kiện"
+        : month.exam.status === "locked" ? "Đang làm bài" : "Chưa phát hành";
+    return <>
+      <section className="profile-progress-section" aria-label="Tổng quan tiến độ tháng">
+        <div className="profile-section-heading"><div><div className="eyebrow">Tổng quan học tập</div><h2>Nhịp học tháng {monthLabel}</h2></div><span className="small muted">Dữ liệu tháng hiện tại</span></div>
+        <div className="grid cols-3 profile-kpi-grid"><div className="card kpi"><span className="val">{month.completedLessons}/{month.totalLessons}</span><span className="lbl">bài tháng đã học</span></div><div className="card kpi"><span className="val">{view.stats.coachTurns}</span><span className="lbl">lượt Season trong tháng</span></div><div className="card kpi"><span className="val">{view.stats.studyDays}</span><span className="lbl">ngày có học trong tháng</span></div></div>
+      </section>
+      <section className="profile-progress-section profile-weeks-section" aria-label="Tiến độ tháng">
+        <div className="profile-section-heading"><div><div className="eyebrow">Lộ trình tháng</div><h2>{month.themeTitle}</h2></div><span className="small muted">{month.completedLessons}/{month.totalLessons} bài hoàn thành</span></div>
+        <article className="card profile-week-card"><div className="profile-month-days" role="list" aria-label="Các bài học trong tháng">{month.days.map((day) => <div role="listitem" className={`profile-month-day ${day.status}`} key={day.lessonNumber}><b>{String(day.lessonNumber).padStart(2, "0")}</b><span>Bài {day.lessonNumber}</span><i aria-label={day.status === "completed" ? "Đã hoàn thành" : day.status === "in_progress" ? "Đang học" : "Chưa học"}>{day.status === "completed" ? "✓" : day.status === "in_progress" ? "•" : "○"}</i></div>)}</div></article>
+        <article className="card profile-month-exam" aria-label="Bài thi tháng"><div><div className="eyebrow">Bài tháng</div><h3>Bài thi tháng</h3><p className="small muted">Ngày thi {new Intl.DateTimeFormat("vi-VN", { day: "2-digit", month: "2-digit", year: "numeric" }).format(new Date(`${month.examDate}T00:00:00Z`))}</p></div><span className={`badge ${month.exam.status === "completed" || month.exam.status === "ready" ? "ok" : "warn"}`}>{examCopy}</span></article>
+      </section>
+    </>;
+  }
+  return <>
+    <section className="profile-progress-section" aria-label="Tổng quan tiến độ"><div className="profile-section-heading"><div><div className="eyebrow">Tổng quan học tập</div><h2>Nhịp học hiện tại</h2></div><span className="small muted">Tóm tắt từ dữ liệu đã ghi nhận</span></div><div className="grid cols-3 profile-kpi-grid"><div className="card kpi"><span className="val">{view.stats.completedLessons}</span><span className="lbl">bài đã học</span></div><div className="card kpi"><span className="val">{view.stats.coachTurns}</span><span className="lbl">lượt luyện với Season</span></div><div className="card kpi"><span className="val">{view.stats.studyDays}</span><span className="lbl">ngày có học</span></div></div></section>
+    <section className="profile-progress-section profile-weeks-section" aria-label="Tiến độ lộ trình"><div className="profile-section-heading"><div><div className="eyebrow">Lộ trình học</div><h2>Tiến độ lộ trình</h2></div><span className="small muted">Theo dõi từng bài đã hoàn thành</span></div><div className="profile-week-grid">{view.weeks.map((week) => <article className="card profile-week-card" key={week.weekNumber}><div className="row between" style={{ gap: 12, alignItems: "flex-start" }}><h3>Chặng {week.weekNumber} <span className="small muted">{week.topic}</span></h3><span className="small muted" style={{ fontWeight: 800, whiteSpace: "nowrap" }}>{week.completedLessons}/{week.totalLessons || "–"} bài</span></div><WeekDays days={week.days} /></article>)}</div></section>
+  </>;
 }
 
 function ProfileCard({ view, actions }: { view: ProfileView; actions: LearnerCallbacks }) {

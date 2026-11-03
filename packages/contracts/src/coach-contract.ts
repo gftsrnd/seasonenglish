@@ -70,6 +70,8 @@ export interface CoachView {
   aiAvailable: boolean;
   daily: { used: number; limit: number };
   weekly: { turns: number; target: number };
+  /** Monthly learning uses the same coach quota, scoped to the active month. */
+  period?: { kind: "week" | "month"; label: string; turns: number; target: number };
   messages: CoachMessageView[];
   vocabulary: CoachVocabularyView[];
 }

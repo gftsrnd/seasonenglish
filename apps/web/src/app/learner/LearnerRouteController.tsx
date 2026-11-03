@@ -242,7 +242,16 @@ export function LearnerRouteController() {
         case "coach": accept({ coach: await apiClient.getCoach() }); break;
         case "challenge": accept({ challenge: await apiClient.getLevelChallenge() }); break;
         case "practice": accept({ practice: await apiClient.getWeeklyPractice() }); break;
-        case "survey": accept({ survey: await apiClient.getSurvey() }); break;
+        case "survey": {
+          const home = await apiClient.getHome();
+          if (home.month) {
+            showLearnerToast("Khảo sát cuối pilot không thuộc lộ trình tháng.");
+            navigate("/home", { replace: true });
+            return;
+          }
+          accept({ survey: await apiClient.getSurvey() });
+          break;
+        }
         case "profile": { const [progress, profile] = await Promise.all([apiClient.getProgress(), apiClient.getProfile()]); accept({ profile: progress }, profile, { profile: { profileMissing: !profile.completed } }); break; }
         case "reward": accept({ reward: await apiClient.getReward(route.params.mode) }); break;
         case "games":

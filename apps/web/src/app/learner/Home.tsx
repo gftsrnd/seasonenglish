@@ -76,7 +76,7 @@ export function LearnerHome({ view, actions }: { view: LearnerHomeView; actions:
       <div className="row" style={{ flexWrap: "wrap" }}>
         <AppLink className="btn" href="/profile" navigate={actions.navigate}>Hồ sơ học tập</AppLink>
         <AppLink className="btn" href="/profile" navigate={actions.navigate}>Phần thưởng</AppLink>
-        <AppLink className="btn" href="/survey" navigate={actions.navigate}>Khảo sát cuối pilot</AppLink>
+        {!monthly ? <AppLink className="btn" href="/survey" navigate={actions.navigate}>Khảo sát cuối pilot</AppLink> : null}
       </div>
     </section>
     {view.reward ? <section className="card home-reward" style={{ marginTop: 16 }} data-home-block="reward" aria-label="Mùa học hiện tại"><div className="row between"><div><div className="eyebrow">Mùa học</div><h2>{view.reward.seasonName}</h2></div><strong>{view.reward.points} điểm</strong></div>{view.reward.nextPoints !== null ? <p className="small muted" style={{ marginBottom: 0 }}>Còn {Math.max(0, view.reward.nextPoints - view.reward.points)} điểm để mở cấp tiếp theo.</p> : <p className="small muted" style={{ marginBottom: 0 }}>Bạn đã đạt cấp cao nhất của chương trình.</p>}</section> : null}

@@ -364,6 +364,20 @@ export interface LearnerProgressView {
       status: "on_time" | "late" | "upcoming";
     }>;
   }>;
+  /** Present only while the learner is enrolled in an approved monthly learning cycle. */
+  monthlyProgress?: {
+    month: string;
+    themeTitle: string;
+    examDate: string;
+    completedLessons: number;
+    totalLessons: number;
+    days: Array<{
+      lessonNumber: number;
+      status: LessonProgressView["status"];
+      opensAt: string | null;
+    }>;
+    exam: { status: "unpublished" | "locked" | "ready" | "completed"; totalScore: number | null };
+  };
   studyDays: number;
   activity: Array<{
     type: string;

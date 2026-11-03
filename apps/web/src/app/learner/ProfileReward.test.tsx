@@ -27,6 +27,29 @@ const view = {
 } as unknown as ProfileView;
 
 describe("app profile avatar dialog affordances", () => {
+  it("uses the persisted monthly cycle instead of legacy weekly stages", () => {
+    const monthlyView = {
+      ...view,
+      weeks: [{ weekNumber: 1, topic: "Legacy", completedLessons: 5, totalLessons: 5 }],
+      monthlyProgress: {
+        month: "2026-11", themeTitle: "Customer handover", examDate: "2026-11-30",
+        completedLessons: 1, totalLessons: 4,
+        days: [
+          { lessonNumber: 1, status: "completed", opensAt: null },
+          { lessonNumber: 2, status: "not_started", opensAt: "2026-11-03" }
+        ],
+        exam: { status: "unpublished", totalScore: null }
+      }
+    } as unknown as ProfileView;
+
+    render(<LearnerProfile view={monthlyView} actions={actions} />);
+
+    expect(screen.getByRole("region", { name: "Tiến độ tháng" })).toHaveTextContent("Customer handover");
+    expect(screen.getByRole("list", { name: "Các bài học trong tháng" })).toHaveTextContent("Bài 1");
+    expect(screen.getByRole("article", { name: "Bài thi tháng" })).toHaveTextContent("Chưa phát hành");
+    expect(screen.queryByText(/Chặng 1/)).not.toBeInTheDocument();
+  });
+
   it("uses the same compact readiness format as the home page", () => {
     const readinessView = {
       ...view,
