@@ -244,6 +244,23 @@ describe("monthly content API", () => {
     const submittedFinal = await app.inject({ method: "POST", url: `/api/v1/assessment-attempts/${finalAttemptId}/submit`, headers: { cookie: learnerCookie }, payload: {} });
     expect(submittedFinal.statusCode, submittedFinal.body).toBe(200);
     expect(submittedFinal.json()).toMatchObject({ screenState: "pending", attempt: { id: finalAttemptId, status: "pending_review" } });
+    const operatorFinalDetail = await app.inject({
+      method: "GET", url: `/api/v1/content/review/assessments/${finalAttemptId}`, headers: { cookie }
+    });
+    expect(operatorFinalDetail.statusCode, operatorFinalDetail.body).toBe(200);
+    expect(operatorFinalDetail.json()).toMatchObject({
+      attemptId: finalAttemptId,
+      kind: "final",
+      sections: expect.arrayContaining([
+        expect.objectContaining({ section: "listening" }),
+        expect.objectContaining({ section: "reading" }),
+        expect.objectContaining({ section: "writing" }),
+        expect.objectContaining({ section: "speaking" })
+      ])
+    });
+    const reviewOverview = await app.inject({ method: "GET", url: "/api/v1/content/review", headers: { cookie } });
+    expect(reviewOverview.statusCode, reviewOverview.body).toBe(200);
+    expect(reviewOverview.json<{ assessments: Array<{ id: string; kind: string }> }>().assessments).toContainEqual(expect.objectContaining({ id: finalAttemptId, kind: "final" }));
     const appeal = await app.inject({
       method: "POST", url: `/api/v1/assessment-attempts/${finalAttemptId}/appeals`, headers: { cookie: learnerCookie },
       payload: { reason: "Xin xem lại phần viết của bài thi tháng." }

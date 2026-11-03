@@ -3292,8 +3292,8 @@ class ContentRepository {
         ((select count(*) from appeals a join assessment_attempts aa on aa.id = a.attempt_id join users u on u.id = aa.learner_id and u.role = 'learner' and u.status = 'active' where u.organization_id = $1)
           + (select count(*) from practice_appeals pa join users u on u.id = pa.learner_id and u.role = 'learner' and u.status = 'active' where u.organization_id = $1)
           + (select count(*) from lesson_part_appeals lpa join users u on u.id = lpa.learner_id and u.role = 'learner' and u.status = 'active' where u.organization_id = $1))::text as appeals,
-        (select count(*) from assessment_attempts aa join users u on u.id = aa.learner_id and u.role = 'learner' and u.status = 'active' join assessment_versions av on av.id = aa.assessment_version_id join assessment_definitions ad on ad.id = av.definition_id where u.organization_id = $1 and ad.kind in ('placement', 'level_up'))::text as attempts,
-        (select count(*) from assessment_versions av join assessment_definitions ad on ad.id = av.definition_id where ad.organization_id = $1 and ad.kind in ('placement', 'level_up'))::text as assessments`,
+        (select count(*) from assessment_attempts aa join users u on u.id = aa.learner_id and u.role = 'learner' and u.status = 'active' join assessment_versions av on av.id = aa.assessment_version_id join assessment_definitions ad on ad.id = av.definition_id where u.organization_id = $1 and ad.kind in ('placement', 'level_up', 'final', 'pass_course'))::text as attempts,
+        (select count(*) from assessment_versions av join assessment_definitions ad on ad.id = av.definition_id where ad.organization_id = $1 and ad.kind in ('placement', 'level_up', 'final', 'pass_course'))::text as assessments`,
       [organizationId]
     );
     const count = counts.rows[0] ?? { submissions: "0", coach: "0", micro: "0", appeals: "0", attempts: "0", assessments: "0" };
@@ -3402,7 +3402,7 @@ class ContentRepository {
           left join enrollments e on e.learner_id = u.id and e.program_id = pw.program_id
           where u.organization_id = $1 and pr.evidence <> '{}'::jsonb order by pr.updated_at desc limit 100`, [organizationId]),
       this.pool.query<{
-        id: string; learner_name: string; kind: "placement" | "level_up"; title: string;
+        id: string; learner_name: string; kind: "placement" | "level_up" | "final" | "pass_course"; title: string;
         status: string; submitted_at: Date | null; total_score: string | null;
       }>(`select aa.id, u.display_name as learner_name, ad.kind, ad.title, aa.status, aa.submitted_at,
                  sum(sc.score)::text as total_score
@@ -3410,7 +3410,7 @@ class ContentRepository {
           join assessment_versions av on av.id = aa.assessment_version_id
           join assessment_definitions ad on ad.id = av.definition_id
           left join assessment_scores sc on sc.attempt_id = aa.id
-          where u.organization_id = $1 and ad.kind in ('placement', 'level_up')
+          where u.organization_id = $1 and ad.kind in ('placement', 'level_up', 'final', 'pass_course')
           group by aa.id, u.display_name, ad.kind, ad.title order by aa.started_at desc limit 100`, [organizationId]),
       this.pool.query<{ id: string }>(
         `select distinct on (ls.id) lsv.id
@@ -5458,7 +5458,7 @@ class AssessmentRepository {
 
   async getReviewAttempt(reviewerId: string, attemptId: string): Promise<AssessmentReviewAttemptDetailView | null> {
     const scope = await this.pool.query<{
-      learner_id: string; learner_name: string; kind: "placement" | "level_up"; title: string;
+      learner_id: string; learner_name: string; kind: "placement" | "level_up" | "final" | "pass_course"; title: string;
       approved_level: CefrLevel | null; suggested_level: CefrLevel | null;
       decision_status: string | null; decision_reason: string | null; decided_by: string | null; decided_at: Date | null;
       blueprint: StoredAssessmentDefinition;
@@ -5472,7 +5472,7 @@ class AssessmentRepository {
        join assessment_versions av on av.id = aa.assessment_version_id
        join assessment_definitions ad on ad.id = av.definition_id
        left join assessment_decisions decision on decision.attempt_id = aa.id
-       where aa.id = $2 and ad.kind in ('placement', 'level_up')`,
+       where aa.id = $2 and ad.kind in ('placement', 'level_up', 'final', 'pass_course')`,
       [reviewerId, attemptId]
     );
     const row = scope.rows[0];

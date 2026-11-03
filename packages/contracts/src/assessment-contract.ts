@@ -338,7 +338,8 @@ export interface AssessmentLevelFormUpdateInput {
 /** The evidence an Operator needs when deciding a learner's level. */
 export interface AssessmentReviewAttemptSummaryView {
   id: string;
-  kind: "placement" | "level_up";
+  /** Database kinds use underscores; final and pass_course use this same detail shell. */
+  kind: "placement" | "level_up" | "final" | "pass_course";
   title: string;
   status: AssessmentAttemptStatus;
   startedAt: string;

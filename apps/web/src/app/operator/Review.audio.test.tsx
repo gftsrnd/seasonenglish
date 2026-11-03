@@ -383,6 +383,34 @@ describe("Operator assessment audio playback", () => {
   });
 });
 
+describe("Operator assessment result detail shell", () => {
+  it.each([
+    ["placement", "Bài test đầu vào"],
+    ["level_up", "Đề lên mức B1"],
+    ["final", "Bài thi tháng 11"],
+    ["pass_course", "Pass Course – Form A"]
+  ] as const)("renders %s in the same full result shell", (kind, title) => {
+    const detail = assessmentDetail();
+    detail.kind = kind;
+    detail.title = title;
+    detail.sections = [
+      { section: "listening", label: "Nghe", maxScore: 20, durationMinutes: 15, actualSeconds: 600, score: 15, cefr: "B1", source: "deterministic", criteria: {}, state: "scored", groups: [] },
+      { section: "reading", label: "Đọc", maxScore: 40, durationMinutes: 20, actualSeconds: 900, score: 28, cefr: "B1", source: "deterministic", criteria: {}, state: "scored", groups: [] },
+      { section: "writing", label: "Viết", maxScore: 20, durationMinutes: 20, actualSeconds: 900, score: 14, cefr: "B1", source: "human", criteria: {}, state: "scored", groups: [] },
+      { section: "speaking", label: "Nói", maxScore: 20, durationMinutes: 15, actualSeconds: 600, score: 15, cefr: "B1", source: "human", criteria: {}, state: "scored", groups: [] }
+    ];
+    detail.totalScore = 72;
+
+    render(<OperatorReviewAssessmentDetail detail={detail} onClose={vi.fn()} />);
+
+    expect(screen.getByText((_, element) => element?.tagName === "P" && element.textContent?.includes(title) === true)).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Điểm theo 4 kỹ năng" })).toBeInTheDocument();
+    expect(screen.getByText("Nhật ký xử lý (0)")).toBeInTheDocument();
+    expect(screen.getByText("Nhật ký cảnh báo (0)")).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Bài làm và bằng chứng" })).toBeInTheDocument();
+    expect(document.querySelectorAll("[data-assessment-section]")).toHaveLength(4);
+  });
+});
 describe("Operator review action states", () => {
   it("keeps AI grading disabled while pending and reports a rejected action", async () => {
     const user = userEvent.setup();

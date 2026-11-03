@@ -226,7 +226,7 @@ export interface ContentReviewView {
     audioArtifact?: AudioArtifactView;
   }>;
   assessments: Array<{
-    id: string; learnerName: string; kind: "placement" | "level_up";
+    id: string; learnerName: string; kind: "placement" | "level_up" | "final" | "pass_course";
     title: string; status: string; submittedAt: string | null; totalScore: number | null;
   }>;
 }
@@ -294,7 +294,7 @@ export interface ContentReviewAssessmentDetailView {
   attemptId: string;
   learnerId: string;
   learnerName: string;
-  kind: "placement" | "level_up";
+  kind: "placement" | "level_up" | "final" | "pass_course";
   title: string;
   status: AssessmentAttemptStatus;
   startedAt: string;

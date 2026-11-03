@@ -65,6 +65,18 @@ describe("Pass Course Form A lifecycle", () => {
       );
     }
 
+    const operatorDetail = await app.inject({ method: "GET", url: `/api/v1/content/review/assessments/${attemptId}`, headers: { cookie: operatorCookie } });
+    expect(operatorDetail.statusCode, operatorDetail.body).toBe(200);
+    expect(operatorDetail.json()).toMatchObject({
+      attemptId,
+      kind: "pass_course",
+      sections: expect.arrayContaining([
+        expect.objectContaining({ section: "listening" }),
+        expect.objectContaining({ section: "reading" }),
+        expect.objectContaining({ section: "writing" }),
+        expect.objectContaining({ section: "speaking" })
+      ])
+    });
     const approved = await app.inject({ method: "POST", url: `/api/v1/assessment-reviews/${attemptId}/decision`, headers: { cookie: operatorCookie }, payload: { status: "approved", reason: "Đủ điều kiện cấp chứng nhận Form A." } });
     expect(approved.statusCode, approved.body).toBe(200);
     expect(approved.json()).toMatchObject({ status: "approved", approvedLevel: null });
