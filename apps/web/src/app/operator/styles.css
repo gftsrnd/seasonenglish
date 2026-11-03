@@ -2472,6 +2472,45 @@ body:has(.app-operator) #modal > .dialog > .row {
   box-shadow: 0 1px 0 rgb(30 30 30 / .03);
 }
 
+/* Result pages stay compact. The full standard assessment introduction belongs
+   in the explicit Xem dialog, where its long persisted sections can scroll. */
+.app-operator .operator-assessment-form-list {
+  max-width: 920px;
+}
+
+.app-operator .operator-assessment-form-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.app-operator .operator-assessment-form-row p {
+  margin: 4px 0 0;
+}
+
+.operator-assessment-preview-dialog {
+  width: min(980px, calc(100vw - 32px));
+  max-height: min(860px, calc(100vh - 32px));
+  overflow: auto;
+}
+
+.operator-assessment-preview-dialog .assessment-definition-preview {
+  margin: 12px 0 0;
+  box-shadow: none;
+}
+
+.operator-assessment-preview-dialog .assessment-definition-preview-header h2 {
+  font-size: 1.1rem;
+}
+
+@media (max-width: 620px) {
+  .app-operator .operator-assessment-form-row {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+}
+
 .app-operator[aria-label="Đọc mẫu"] .operator-submission-task {
   margin: 10px 0 6px;
 }

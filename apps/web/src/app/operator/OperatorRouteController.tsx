@@ -33,7 +33,7 @@ import type { ManualScoreInput } from "./AssessmentManualScore.js";
 import { OperatorWeeks } from "./Weeks.js";
 import { MonthlyLessonPreview, OperatorMonths } from "./Months.js";
 import { Badge, OperationsReadOnlyContext, OperatorPage, PageTitle } from "./primitives.js";
-import { ModalProvider, useModal } from "../shared/ModalProvider.js";
+import { ModalProvider, useDialog, useModal } from "../shared/ModalProvider.js";
 import { AssessmentDefinitionPreview } from "../shared/AssessmentDefinitionPreview.js";
 import { useToast } from "../shared/design-system.js";
 import type { AudioEvidence } from "../shared/media/audio-evidence.js";
@@ -636,6 +636,7 @@ function AssessmentPreviewControl({
 }) {
   const [forms, setForms] = useState<AssessmentFormPreviewView[]>();
   const [error, setError] = useState<string>();
+  const [selected, setSelected] = useState<AssessmentFormPreviewView>();
   useEffect(() => {
     let alive = true;
     setForms(undefined);
@@ -654,14 +655,36 @@ function AssessmentPreviewControl({
       : "Chưa có phiên bản đề đã lưu để xem.";
     return <section className="card" aria-label="Chưa có nội dung đề thi"><h2>{kind === "final" ? "Bài thi tháng" : "Chưa có đề"}</h2><p className="small muted">{emptyMessage}</p></section>;
   }
-  return <div className="stack" aria-live="polite">{forms.map(form => <AssessmentDefinitionPreview
-    key={form.versionId}
-    definition={assessmentPreviewDefinition(form)}
-    status={form.status}
-    audioConfigured={form.audioConfigured}
-    readOnly={readOnly || !form.editable}
-    {...(!readOnly && form.editable && kind === "final" ? { onEdit: onEditMonthly } : {})}
-  />)}</div>;
+  return <>
+    <section className="card operator-assessment-form-list" aria-label="Phiên bản đề thi đã lưu">
+      <div className="row between"><div><p className="xs muted">PHIÊN BẢN ĐỀ ĐÃ LƯU</p><h2>{kind === "placement" ? "Đề đầu vào" : kind === "final" ? "Bài thi tháng" : kind === "level_up" ? "Đề lên mức" : "Đề đầu ra"}</h2></div><span className="badge">{forms.length} phiên bản</span></div>
+      <div className="stack">{forms.map(form => <article className="item operator-assessment-form-row" key={form.versionId}>
+        <div><b>{form.title}</b><p className="small muted">Phiên bản {form.version} · {form.status === "published" ? "Đã phát hành" : form.status === "draft" ? "Bản nháp" : "Đã lưu lịch sử"} · {form.sections.length} kỹ năng · {form.totalMinutes} phút · {form.totalScore} điểm</p><p className="xs muted">Âm thanh: {form.audioConfigured ? "đã cấu hình nguồn audio" : "chưa đủ nguồn audio"}</p></div>
+        <div className="row"><button className="btn-sm" type="button" aria-label={`Xem ${form.title}`} onClick={() => setSelected(form)}>Xem</button>{!readOnly && form.editable && kind === "final" ? <button className="btn-sm btn-primary" type="button" onClick={onEditMonthly}>Sửa đề</button> : null}</div>
+      </article>)}</div>
+    </section>
+    {selected ? <AssessmentPreviewDialog form={selected} readOnly={readOnly || !selected.editable} onClose={() => setSelected(undefined)} {...(!readOnly && selected.editable && kind === "final" ? { onEdit: onEditMonthly } : {})} /> : null}
+  </>;
+}
+
+function AssessmentPreviewDialog({
+  form,
+  readOnly,
+  onClose,
+  onEdit
+}: {
+  form: AssessmentFormPreviewView;
+  readOnly: boolean;
+  onClose: () => void;
+  onEdit?: () => void;
+}) {
+  const dialogRef = useRef<HTMLElement>(null);
+  const closeRef = useRef<HTMLButtonElement>(null);
+  useDialog(true, dialogRef, onClose, closeRef);
+  return <div className="modal-backdrop operator-modal-scope operator-detail-modal" role="presentation" onClick={event => { if (event.target === event.currentTarget) onClose(); }}><section ref={dialogRef} className="dialog wide operator-detail-dialog operator-assessment-preview-dialog" role="dialog" aria-modal="true" aria-label={`Xem đề ${form.title}`} tabIndex={-1}>
+    <div className="operator-level-form-dialog-header"><div className="operator-level-form-dialog-title"><span className="operator-level-kicker">Xem đề thi</span><h3>{form.title}</h3><p className="small muted">Phiên bản {form.version} · {form.status === "published" ? "Đã phát hành" : form.status === "draft" ? "Bản nháp" : "Đã lưu lịch sử"}</p></div><div className="row operator-level-form-dialog-actions">{!readOnly && form.editable && onEdit ? <button className="btn-sm btn-primary" type="button" onClick={onEdit}>Sửa đề</button> : null}<button ref={closeRef} className="btn-sm" type="button" onClick={onClose}>Đóng</button></div></div>
+    <AssessmentDefinitionPreview definition={assessmentPreviewDefinition(form)} status={form.status} audioConfigured={form.audioConfigured} readOnly={readOnly} />
+  </section></div>;
 }
 
 function TestsRoute({ client, readOnly, initialTab }: { client: OperatorApiClient; readOnly: boolean; initialTab: "placement" | "promotion" }) {
