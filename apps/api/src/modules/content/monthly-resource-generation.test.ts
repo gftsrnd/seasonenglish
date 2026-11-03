@@ -4,7 +4,8 @@ import { describe, expect, it } from "vitest";
 import {
   buildMonthlyResourcesFromAiPlan,
   MonthlyResourceCriteriaError,
-  MonthlyResourcePlanError
+  MonthlyResourcePlanError,
+  selectMonthlySupportCandidates
 } from "./monthly-resource-generation.js";
 
 const month = "2026-11";
@@ -54,6 +55,29 @@ function planFor(): MonthlyResourcePlanTaskOutput {
 }
 
 describe("monthly AI resource generation", () => {
+  it("selects the first three valid linked support terms from an ordered AI candidate set", () => {
+    const candidates = [
+      { id: "x1", word: "core phrase", meaning: "", type: "noun", relation: "synonym" as const, relatesToCoreId: "core-a" },
+      { id: "x2", word: "annual-report", meaning: "", type: "noun", relation: "collocation" as const, relatesToCoreId: "core-a" },
+      { id: "x3", word: "schedule", meaning: "", type: "noun", relation: "synonym" as const, relatesToCoreId: "core-a" },
+      { id: "x4", word: "schedule", meaning: "", type: "noun", relation: "synonym" as const, relatesToCoreId: "core-a" },
+      { id: "x5", word: "update", meaning: "", type: "noun", relation: "collocation" as const, relatesToCoreId: "core-a" },
+      { id: "x6", word: "coordinate", meaning: "", type: "verb", relation: "word_family" as const, relatesToCoreId: "core-a" }
+    ];
+    const result = selectMonthlySupportCandidates({
+      candidates,
+      coreId: "core-a",
+      coreWords: new Set(["core phrase"]),
+      sameCoreWords: new Set(),
+      existingSupportWords: ["annual report"],
+      maxRepeatedPlacements: 28,
+      needed: 3
+    });
+
+    expect(result.selected.map((term) => term.word)).toEqual(["annual-report", "schedule", "update"]);
+    expect(result.rejected).toHaveLength(2);
+  });
+
   it("builds a two-grammar, four-pronunciation monthly contract from a valid AI plan", () => {
     const pool = buildMonthlyResourcesFromAiPlan(month, "A1", theme, criteria, planFor());
     const contract = planMonthlyResourcePool(pool);

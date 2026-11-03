@@ -58,6 +58,9 @@ POOL RULES
 - The caller supplies newLessonCount and may provide a coreTermBatch. Never
   output dayNumber or dayNumbers fields. Allocation happens only after explicit
   Operator approval.
+- For a support phase with one core in coreTermBatch, return six ordered
+  candidate expanded terms. The API selects the first three valid, linked
+  candidates after checking core overlap and the monthly repeat budget.
 - Expanded resources must reference an exact core ID from the supplied batch.
 - Daily lessons expose their approved resource assignments before exercises.
 `;

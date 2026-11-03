@@ -10,6 +10,52 @@ export interface MonthlyResourceCriteria {
   pronunciationSoundCount: number;
 }
 
+export function selectMonthlySupportCandidates(input: {
+  candidates: MonthlyResourcePlanTaskOutput["expandedTerms"];
+  coreId: string;
+  coreWords: ReadonlySet<string>;
+  sameCoreWords: ReadonlySet<string>;
+  existingSupportWords: readonly string[];
+  maxRepeatedPlacements: number;
+  needed: number;
+}): { selected: MonthlyResourcePlanTaskOutput["expandedTerms"]; rejected: string[] } {
+  const selected: MonthlyResourcePlanTaskOutput["expandedTerms"] = [];
+  const rejected: string[] = [];
+  const chosen = new Set<string>();
+  const existingCounts = new Map<string, number>();
+  for (const raw of input.existingSupportWords) {
+    const word = normalizeMonthlyResourceWord(raw);
+    existingCounts.set(word, (existingCounts.get(word) ?? 0) + 1);
+  }
+  let repeatedPlacements = input.existingSupportWords.length - existingCounts.size;
+
+  for (const candidate of input.candidates) {
+    const word = normalizeMonthlyResourceWord(candidate.word);
+    let reason = "";
+    if (candidate.relatesToCoreId !== input.coreId) reason = "incorrect core relation";
+    else if (input.coreWords.has(word)) reason = "matches a core term";
+    else if (input.sameCoreWords.has(word)) reason = "duplicates a selected support term for this core";
+    else if (chosen.has(word)) reason = "duplicates another candidate in this core batch";
+    else {
+      const nextRepeatCount = repeatedPlacements + (existingCounts.has(word) ? 1 : 0);
+      if (nextRepeatCount > input.maxRepeatedPlacements) reason = "exceeds the 20% monthly support-repeat limit";
+      else repeatedPlacements = nextRepeatCount;
+    }
+    if (reason) {
+      rejected.push(`${candidate.word} -> ${word} (${reason})`);
+      continue;
+    }
+    chosen.add(word);
+    selected.push(candidate);
+    if (selected.length === input.needed) break;
+  }
+  return { selected, rejected };
+}
+
+function normalizeMonthlyResourceWord(value: string): string {
+  return value.trim().toLocaleLowerCase("en").replace(/[\s\p{P}]+/gu, " ").trim();
+}
+
 /**
  * Converts one validated AI plan into the fixed monthly source used by every
  * later daily lesson. No emergency corpus is used: an unavailable AI provider

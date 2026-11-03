@@ -7,7 +7,7 @@ import { z } from "zod";
 import { createRoleGuard } from "../identity/policy.js";
 import { evaluateMonthlyLessonQuality } from "./monthly-quality.js";
 import { generateMonthlyDayWithAi, MONTHLY_DAY_COMPONENTS } from "./monthly-day-generation.js";
-import { buildMonthlyResourcesFromAiPlan, MonthlyResourceCriteriaError, MonthlyResourcePlanError } from "./monthly-resource-generation.js";
+import { buildMonthlyResourcesFromAiPlan, MonthlyResourceCriteriaError, MonthlyResourcePlanError, selectMonthlySupportCandidates } from "./monthly-resource-generation.js";
 import { safeGenerationDiagnosticIssues } from "./generation-errors.js";
 
 const params = z.object({ month: z.string().regex(/^\d{4}-(0[1-9]|1[0-2])$/u) });
@@ -193,45 +193,39 @@ export function registerMonthlyContentRoutes(app: FastifyInstance, pool: Pool, a
       }
 
       const expandedTerms: z.infer<typeof monthlyResourcePlanOutputSchema>["expandedTerms"] = [];
-      const expandedWords = new Set<string>();
       const coreWordsList = coreTerms.map((term) => `${term.id}: ${term.word} (${term.meaning})`);
       const maxExpandedRepeats = Math.floor(criteria.expandedVocabularyCount * 0.2);
       for (let coreIndex = 0; coreIndex < coreTerms.length; coreIndex += 1) {
         const coreTerm = coreTerms[coreIndex]!;
         const coreBatch = [coreTerm];
-        const dayCoreIds = new Set([coreTerm.id]);
-        let accepted: z.infer<typeof monthlyResourcePlanOutputSchema>["expandedTerms"] | undefined;
+        const acceptedForCore: z.infer<typeof monthlyResourcePlanOutputSchema>["expandedTerms"] = [];
         let issue = "";
         for (let attempt = 0; attempt < 3; attempt += 1) {
-          const previousTerms = expandedTerms.map((term) => term.word);
-          const prompt = `PHASE 2 — SUPPORT TERMS FOR ONE CORE ONLY. Return exactly three distinct expandedTerms and no other category: coreTerms, grammarTopics and pronunciationTargets must be empty arrays. This is an unordered month resource pool; do not assign calendar days. Every support term must be a different lexical item from the core and must be a genuine umbrella term, synonym, antonym, word-family form or natural collocation related to this exact core: ${coreTerm.id}: ${coreTerm.word} (${coreTerm.meaning}). Every relatesToCoreId must equal ${coreTerm.id}. Never repeat any word from the complete finalized core vocabulary (forbidden): ${coreWordsList.join("; ")}. Support words may repeat across different cores only up to 20% of all support placements; the month-wide support ledger is: ${previousTerms.join("; ") || "none"}. Prefer distinct new terms while staying under that limit. Keep all terms authentic for ${criteria.cefr} and the approved theme. If a candidate collides with the normalized core/support ledger, return a DIFFERENT semantically related term, never the core word itself. ${issue ? `The previous response was rejected: ${issue}. Do not return the named words, their hyphenated/spaced variants, or inflections; replace only these collisions with distinct authentic terms that are semantically related to the current core.` : ""}`;
-          const result = await runPhase(prompt, coreBatch, { vocabularyCount: 0, expandedVocabularyCount: 3, grammarTopicCount: 0, pronunciationSoundCount: 0 });
+          const previousTerms = [...expandedTerms.map((term) => term.word), ...acceptedForCore.map((term) => term.word)];
+          const needed = 3 - acceptedForCore.length;
+          const prompt = `PHASE 2 — ORDERED SUPPORT CANDIDATES FOR ONE CORE. Return exactly six candidate expandedTerms and no other category: coreTerms, grammarTopics and pronunciationTargets must be empty arrays. This is an unordered month resource pool; do not assign calendar days. Every candidate must be a genuine umbrella term, synonym, antonym, word-family form or natural collocation for this exact core: ${coreTerm.id}: ${coreTerm.word} (${coreTerm.meaning}). Every relatesToCoreId must equal ${coreTerm.id}. Never return any word from the complete finalized core vocabulary (forbidden): ${coreWordsList.join("; ")}. Support words may repeat across different cores up to 20% of total placements. Month-wide support ledger (including already accepted candidates for this core): ${previousTerms.join("; ") || "none"}. Prefer candidates that are distinct from the ledger. Return a diverse ordered candidate list so the first three valid items satisfy the target, while remaining authentic for ${criteria.cefr} and the approved theme. ${issue ? `The prior candidate set had fewer than ${needed} valid items. These were the rejected candidates (raw -> normalized, with reason): ${issue}. Return a new set of six alternatives; do not repeat the listed invalid lexical forms or normalized variants.` : ""}`;
+          const result = await runPhase(prompt, coreBatch, { vocabularyCount: 0, expandedVocabularyCount: 6, grammarTopicCount: 0, pronunciationSoundCount: 0 });
           const candidate = result.expandedTerms;
-          const words = candidate.map((term) => normalizeMonthlyResourceWord(term.word));
-          const duplicates = words.filter((word, index) => coreWords.has(word) || words.indexOf(word) !== index);
-          const invalidRelations = candidate.filter((term) => !dayCoreIds.has(term.relatesToCoreId)).length;
-          const repeatCount = expandedTerms.length + candidate.length - new Set([...expandedWords, ...words]).size;
-          if (candidate.length === 3 && result.coreTerms.length === 0 && result.grammarTopics.length === 0 && result.pronunciationTargets.length === 0 && invalidRelations === 0 && duplicates.length === 0 && repeatCount <= maxExpandedRepeats) {
-            accepted = candidate.map((term, index) => ({ ...term, id: `${criteria.cefr.toLowerCase()}-expanded-${expandedTerms.length + index + 1}` }));
-            break;
+          if (result.coreTerms.length || result.grammarTopics.length || result.pronunciationTargets.length) {
+            issue = "response included non-support categories";
+            continue;
           }
-          const repeatedBeyondBudget = repeatCount > maxExpandedRepeats ? words.filter((word) => expandedWords.has(word)) : [];
-          const rawCollisions = candidate.flatMap((term, index) => {
-            const normalized = words[index]!;
-            if (coreWords.has(normalized) || words.indexOf(normalized) !== index || repeatedBeyondBudget.includes(normalized)) {
-              return [`${term.word} -> ${normalized}`];
-            }
-            return [];
+          const selection = selectMonthlySupportCandidates({
+            candidates: candidate,
+            coreId: coreTerm.id,
+            coreWords,
+            sameCoreWords: new Set(acceptedForCore.map((term) => normalizeMonthlyResourceWord(term.word))),
+            existingSupportWords: previousTerms,
+            maxRepeatedPlacements: maxExpandedRepeats,
+            needed
           });
-          issue = duplicates.length
-            ? `core or within-response collisions (raw -> normalized): ${rawCollisions.join("; ")}`
-            : repeatedBeyondBudget.length
-              ? `support repeats over the 20% limit (raw -> normalized): ${rawCollisions.join("; ")}`
-            : `invalid relation or count (received ${candidate.length}, invalid relations ${invalidRelations}, repeat count ${repeatCount}/${maxExpandedRepeats})`;
+          acceptedForCore.push(...selection.selected);
+          if (acceptedForCore.length === 3) break;
+          issue = selection.rejected.join("; ") || `only ${candidate.length} candidates were returned; need six ordered candidates`;
         }
-        if (!accepted) throw new MonthlyResourcePlanError([`Expanded vocabulary generation failed for core ${coreTerm.id}: ${issue}.`]);
+        if (acceptedForCore.length !== 3) throw new MonthlyResourcePlanError([`Expanded vocabulary generation failed for core ${coreTerm.id}: ${issue}.`]);
+        const accepted = acceptedForCore.map((term, index) => ({ ...term, id: `${criteria.cefr.toLowerCase()}-expanded-${expandedTerms.length + index + 1}` }));
         expandedTerms.push(...accepted);
-        accepted.forEach((term) => expandedWords.add(normalizeMonthlyResourceWord(term.word)));
       }
 
       const monthlyVocabularyForPronunciation = [...coreTerms, ...expandedTerms].map((term) => `${term.word} (${term.meaning})`).join("; ");
