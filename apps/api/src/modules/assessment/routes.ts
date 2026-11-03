@@ -916,15 +916,32 @@ async function createMonthlyFinalDraft(
       [organizationId, blueprint.key]
     );
     const definitionId = existing.rows[0]?.id ?? randomUUID();
-    if (!existing.rowCount) {
+    if (existing.rowCount) {
+      const published = await client.query<{ id: string }>(
+        "select id from assessment_versions where definition_id = $1 and status = 'published' limit 1 for update",
+        [definitionId]
+      );
+      // A published monthly final is immutable. Its correction must go through
+      // the Manager reopen workflow instead of silently replacing learner-facing
+      // exam content from the calendar.
+      if (published.rowCount) throw new Error("MONTHLY_FINAL_ALREADY_PUBLISHED");
+      const draft = await client.query<{ id: string; version: number; blueprint: StoredAssessmentDefinition }>(
+        "select id, version, blueprint from assessment_versions where definition_id = $1 and status = 'draft' order by version desc limit 1 for update",
+        [definitionId]
+      );
+      // Re-open the same draft on a repeated click. Do not retire a reviewable
+      // operator draft just because the page was refreshed.
+      if (draft.rows[0]) {
+        await client.query("commit");
+        return { definitionId, versionId: draft.rows[0].id, version: draft.rows[0].version, status: "draft" as const, blueprint: draft.rows[0].blueprint };
+      }
+      await client.query("update assessment_definitions set title = $1 where id = $2", [blueprint.title, definitionId]);
+    } else {
       await client.query(
         "insert into assessment_definitions (id, organization_id, assessment_key, kind, title) values ($1, $2, $3, 'final', $4)",
         [definitionId, organizationId, blueprint.key, blueprint.title]
       );
-    } else {
-      await client.query("update assessment_definitions set title = $1 where id = $2", [blueprint.title, definitionId]);
     }
-    await client.query("update assessment_versions set status = 'retired' where definition_id = $1 and status = 'draft'", [definitionId]);
     const next = await client.query<{ version: number }>("select coalesce(max(version), 0) + 1 as version from assessment_versions where definition_id = $1", [definitionId]);
     const versionId = randomUUID();
     const version = next.rows[0]?.version ?? 1;

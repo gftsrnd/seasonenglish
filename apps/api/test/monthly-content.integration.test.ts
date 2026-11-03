@@ -153,6 +153,9 @@ describe("monthly content API", () => {
     expect(savedFinal.statusCode, savedFinal.body).toBe(200);
     const publishedFinal = await app.inject({ method: "POST", url: `/api/v1/monthly-final-forms/${final.versionId}/publication`, headers: { cookie } });
     expect(publishedFinal.statusCode, publishedFinal.body).toBe(200);
+    const regeneratedAfterPublication = await app.inject({ method: "POST", url: `/api/v1/month-frameworks/${frameworkId}/monthly-final`, headers: { cookie } });
+    expect(regeneratedAfterPublication.statusCode, regeneratedAfterPublication.body).toBe(409);
+    expect(regeneratedAfterPublication.json()).toMatchObject({ code: "MONTHLY_FINAL_ALREADY_PUBLISHED" });
     const examScope = await app.inject({ method: "GET", url: `/api/v1/content/month-frameworks/${frameworkId}/exam-scope`, headers: { cookie } });
     expect(examScope.statusCode, examScope.body).toBe(200);
     expect(examScope.json()).toMatchObject({ month: "2026-11", cefr: "A1", coreTermIds: curriculum.coreTerms.map((term) => term.id) });
