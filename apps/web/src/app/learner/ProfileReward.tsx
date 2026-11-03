@@ -91,7 +91,7 @@ export function LearnerProfile({ view, actions }: { view: ProfileView; actions: 
 
 function ProgressOverview({ view }: { view: ProfileView }) {
   const month = view.monthlyProgress;
-  if (view.monthlyPreparation) return <section className="profile-progress-section" aria-label="Lộ trình tháng đang chuẩn bị"><div className="profile-section-heading"><div><div className="eyebrow">Tổng quan học tập</div><h2>Lộ trình tháng đang được chuẩn bị</h2></div></div><div className="card"><p style={{ margin: 0 }}>Người vận hành đang chuẩn bị và duyệt bộ bài tháng theo trình độ của bạn. Tiến độ, Season và điều kiện thi sẽ bắt đầu từ dữ liệu tháng đã được phát hành.</p></div></section>;
+  if (view.monthlyPreparation) return <section className="profile-progress-section" aria-label="Lộ trình tháng đang chuẩn bị"><div className="profile-section-heading"><div><div className="eyebrow">Tổng quan học tập</div><h2>Lộ trình tháng đang được chuẩn bị</h2></div></div><div className="card"><p style={{ margin: 0 }}>Người vận hành đang chuẩn bị và duyệt bộ bài tháng theo trình độ của bạn. Các chỉ số bài học, Season và điều kiện thi sẽ bắt đầu từ dữ liệu tháng đã được phát hành; hồ sơ và kết quả đầu vào của bạn vẫn giữ nguyên bên dưới.</p></div></section>;
   if (month) {
     const monthLabel = new Intl.DateTimeFormat("vi-VN", { month: "long", year: "numeric" }).format(new Date(`${month.month}-01T00:00:00Z`));
     const examCopy = month.exam.status === "completed"
@@ -338,4 +338,5 @@ export function LearnerReward({ view, actions }: { view: RewardView; actions: Le
     <div className="row no-print reward-actions" style={{ marginTop: 12, justifyContent: "center" }}>{preview ? <span className="xs muted">Nút in / lưu chỉ mở khi đạt cấp cao nhất thật.</span> : <button className="btn" type="button" disabled={!view.printable} onClick={actions.printReward}>In / lưu chứng nhận (PDF, 1 trang A4 ngang)</button>}<AppLink className="btn btn-primary" href={backHref} navigate={actions.navigate}>{preview ? "← Quay lại" : "Tiếp tục học"}</AppLink></div>
   </div>;
 }
+
 

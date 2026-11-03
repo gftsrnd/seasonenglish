@@ -46,12 +46,15 @@ export function LearnerHome({ view, actions }: { view: LearnerHomeView; actions:
       <AppLink className="tile mint" style={{ height: "100%", minWidth: 0, boxSizing: "border-box" }} href="/monthly" navigate={actions.navigate}><BookOpen aria-hidden="true" /><span className="t">Bài tháng</span><span className="s">{monthlyPreparation ? "Xem trạng thái chuẩn bị lộ trình tháng." : "Xem lịch bài học, bài ôn và bài thi tháng."}</span></AppLink>
     </section>
     {!monthlyPreparation ? <Readiness view={view} actions={actions} /> : null}
-    <section className="card" style={{ marginTop: 12 }} aria-label="Hồ sơ, phần thưởng và khảo sát">
-      <h3 style={{ marginTop: 0 }}>Thông tin của bạn</h3>
-      <div className="row" style={{ flexWrap: "wrap" }}>
-        <AppLink className="btn" href="/profile" navigate={actions.navigate}>Hồ sơ học tập</AppLink>
-        <AppLink className="btn" href="/profile" navigate={actions.navigate}>Phần thưởng</AppLink>
-        {!monthly && !monthlyPreparation ? <AppLink className="btn" href="/survey" navigate={actions.navigate}>Khảo sát cuối pilot</AppLink> : null}
+    <section className="card" style={{ marginTop: 12 }} aria-label="Hồ sơ và đánh giá đầu vào">
+      <div className="row between" style={{ gap: 12, alignItems: "flex-start", flexWrap: "wrap" }}>
+        <div><div className="eyebrow">Thông tin của bạn</div><h3 style={{ margin: "2px 0 4px" }}>Hồ sơ và đánh giá đầu vào</h3><p className="small muted" style={{ margin: 0 }}>Trình độ đã duyệt: <b>{view.learner.cefr}</b>. Kết quả đầu vào và hồ sơ vẫn xem được khi lộ trình tháng đang chuẩn bị.</p></div>
+        <div className="row" style={{ flexWrap: "wrap" }}>
+          <AppLink className="btn" href="/profile" navigate={actions.navigate}>Hồ sơ học tập</AppLink>
+          <AppLink className="btn" href="/profile" navigate={actions.navigate}>Kết quả đầu vào</AppLink>
+          {!monthlyPreparation ? <AppLink className="btn" href="/profile" navigate={actions.navigate}>Phần thưởng</AppLink> : null}
+          {!monthly && !monthlyPreparation ? <AppLink className="btn" href="/survey" navigate={actions.navigate}>Khảo sát cuối pilot</AppLink> : null}
+        </div>
       </div>
     </section>
     {!monthlyPreparation && view.reward ? <section className="card home-reward" style={{ marginTop: 16 }} data-home-block="reward" aria-label="Mùa học hiện tại"><div className="row between"><div><div className="eyebrow">Mùa học</div><h2>{view.reward.seasonName}</h2></div><strong>{view.reward.points} điểm</strong></div>{view.reward.nextPoints !== null ? <p className="small muted" style={{ marginBottom: 0 }}>Còn {Math.max(0, view.reward.nextPoints - view.reward.points)} điểm để mở cấp tiếp theo.</p> : <p className="small muted" style={{ marginBottom: 0 }}>Bạn đã đạt cấp cao nhất của chương trình.</p>}</section> : null}
@@ -312,5 +315,6 @@ function ReadinessBar({ metric }: { metric: LearnerHomeView["levelReadiness"]["c
     <i className="readiness-target" data-testid="readiness-target" aria-hidden="true" style={{ left: `${targetPercent}%` }} />
   </div>;
 }
+
 
 

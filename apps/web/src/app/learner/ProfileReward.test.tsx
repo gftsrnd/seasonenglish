@@ -61,10 +61,12 @@ describe("app profile avatar dialog affordances", () => {
 
     render(<LearnerProfile view={preparing} actions={actions} />);
 
-    expect(screen.getByRole("region", { name: "Lộ trình tháng đang chuẩn bị" })).toHaveTextContent("Tiến độ, Season và điều kiện thi sẽ bắt đầu");
+    expect(screen.getByRole("region", { name: "Lộ trình tháng đang chuẩn bị" })).toHaveTextContent("hồ sơ và kết quả đầu vào của bạn vẫn giữ nguyên bên dưới");
     expect(screen.queryByText(/Chặng 1/)).not.toBeInTheDocument();
     expect(screen.queryByRole("region", { name: "Đường lên mức B2" })).not.toBeInTheDocument();
     expect(screen.queryByText("Mùa học")).not.toBeInTheDocument();
+    expect(screen.getByRole("region", { name: "Kết quả đánh giá" })).toBeInTheDocument();
+    expect(screen.getByRole("region", { name: "Điểm đầu vào" })).toHaveTextContent("Chưa có");
   });
 
   it("uses the same compact readiness format as the home page", () => {
@@ -293,3 +295,4 @@ describe("app reward CTA hierarchy", () => {
     expect(screen.getByRole("link", { name: "Tiếp tục học" })).toHaveClass("btn-primary");
   });
 });
+

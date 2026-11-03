@@ -50,6 +50,10 @@ describe("monthly learner home", () => {
     expect(screen.getByRole("heading", { name: "Lộ trình tháng đang được chuẩn bị" })).toBeInTheDocument();
     expect(document.querySelector('[data-home-block="metrics"]')).not.toBeInTheDocument();
     expect(document.querySelector('[data-home-block="readiness"]')).not.toBeInTheDocument();
+    const learnerRecord = screen.getByRole("region", { name: "Hồ sơ và đánh giá đầu vào" });
+    expect(learnerRecord).toHaveTextContent("Trình độ đã duyệt: A2");
+    expect(within(learnerRecord).getByRole("link", { name: "Hồ sơ học tập" })).toHaveAttribute("href", "/profile");
+    expect(within(learnerRecord).getByRole("link", { name: "Kết quả đầu vào" })).toHaveAttribute("href", "/profile");
   });
 
   it("opens a dedicated monthly screen from the same approved month contract", () => {
@@ -58,3 +62,4 @@ describe("monthly learner home", () => {
     expect(screen.getByRole("grid", { name: "Lịch học tháng 11/2026" })).toBeInTheDocument();
   });
 });
+
