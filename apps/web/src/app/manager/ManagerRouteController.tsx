@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import "./manager.css";
 import { Navigate, Route, Routes, useLocation } from "react-router";
-import type { ManagerAccountView, ManagerAccountsView, ManagerDeleteRequestsView, ManagerLearnerProfileView, ManagerMaintenanceAction, ManagerMaintenanceConfirmationInput, ManagerMaintenanceConfirmationView, ManagerOperationsView, ManagerPinReportsView, ManagerProgressView, ManagerProviderSettingsInput, ManagerProviderSettingsView, ManagerPurgeConfirmationView, ManagerRemindersView, ManagerReportView, ManagerSettingsInput, ManagerSettingsView, ManagerTrashView, OperatorSettingsOverviewView, OrganisationExperienceInput, OrganisationExperienceView, ProductPreferencesView, SystemCapabilitiesView } from "@e4s/contracts";
+import type { ManagerAccountView, ManagerAccountsView, ManagerDeleteRequestsView, ManagerLearnerProfileView, ManagerMaintenanceAction, ManagerMaintenanceConfirmationInput, ManagerMaintenanceConfirmationView, ManagerOperationsView, ManagerPinReportsView, ManagerProgressView, ManagerProviderSettingsInput, ManagerProviderSettingsView, ManagerPurgeConfirmationView, ManagerRemindersView, ManagerReportView, ManagerSettingsInput, ManagerSettingsView, ManagerTrashView, OperatorSettingsOverviewView, OrganisationExperienceInput, OrganisationExperienceView, ProductPreferencesView, ReopenRequestView, SystemCapabilitiesView } from "@e4s/contracts";
 import { managerApiClient as apiClient } from "../../api/manager.js";
 import { providerTestLabel, SettingsPage, webhookTestLabel } from "../settings/index.js";
 import { ManagerOperations } from "./Operations.js";
@@ -57,15 +57,44 @@ export function ManagerRouteController({ role, currentUserId }: ManagerRouteCont
 }
 
 function ReopenRequestsRoute() {
-  const queues = [
-    ["Tài khoản học viên", "Các yêu cầu mở lại quyền truy cập tài khoản học viên sẽ xuất hiện tại đây."],
-    ["Bài ngày và bài ôn", "Các yêu cầu mở lại bài ngày hoặc bài ôn đã khóa sẽ xuất hiện tại đây."],
-    ["Đề thi", "Các yêu cầu mở lại đề thi đã phát hành sẽ xuất hiện tại đây. Đề đã có người bắt đầu làm không được mở lại."]
-  ] as const;
+  const modal = useModal();
+  const [requests, setRequests] = useState<ReopenRequestView[]>();
+  const [error, setError] = useState("");
+  const [busy, setBusy] = useState<string>();
+  const load = async () => {
+    try {
+      const view = await apiClient.getManagerReopenRequests();
+      setRequests(view.requests);
+      setError("");
+    } catch {
+      setError("Không tải được yêu cầu mở khóa.");
+    }
+  };
+  useEffect(() => { void load(); }, []);
+  const decide = async (request: ReopenRequestView, decision: "approved" | "rejected") => {
+    const reason = await modal.prompt({ title: decision === "approved" ? "Duyệt mở khóa" : "Từ chối mở khóa", label: "Lý do gửi cho vận hành và học viên", confirmLabel: decision === "approved" ? "Duyệt mở khóa" : "Từ chối", tone: decision === "approved" ? "primary" : "danger" });
+    if (!reason?.trim()) return;
+    setBusy(request.id);
+    try { await apiClient.decideManagerReopenRequest(request.id, decision, reason.trim()); await load(); }
+    catch { setError("Không cập nhật được yêu cầu mở khóa."); }
+    finally { setBusy(undefined); }
+  };
+  const queues: Array<{ title: string; detail: string; targets: ReopenRequestView["target"][] }> = [
+    { title: "Tài khoản học viên", detail: "Các yêu cầu mở lại quyền truy cập tài khoản học viên.", targets: ["account"] },
+    { title: "Bài ngày và bài ôn", detail: "Các yêu cầu mở lại bài ngày hoặc bài ôn đã khóa.", targets: ["daily_lesson", "weekly_review"] },
+    { title: "Đề thi", detail: "Các yêu cầu mở lại đề thi đã phát hành. Đề đã có người bắt đầu làm không được mở lại.", targets: ["monthly_exam"] }
+  ];
+  if (!requests && !error) return <RouteState error="" title="Yêu cầu mở khóa" label="Đang tải yêu cầu mở khóa" />;
   return <div className="manager-page manager-reopen-requests-page">
     <PageTitle><h1>Yêu cầu mở khóa</h1><p className="muted">Duyệt yêu cầu mở lại nội dung đã khóa và ghi nhận quyết định cho các bên liên quan.</p></PageTitle>
+    {error ? <div className="banner danger" role="alert"><div className="body small">{error}</div></div> : null}
     <div className="manager-reopen-requests-grid">
-      {queues.map(([title, detail]) => <section className="card manager-reopen-requests-card" key={title}><h2>{title}</h2><p className="small muted">{detail}</p><p className="small muted manager-reopen-requests-empty">Chưa có yêu cầu cần xử lý.</p></section>)}
+      {queues.map(queue => {
+        const items = (requests ?? []).filter(request => queue.targets.includes(request.target));
+        return <section className="card manager-reopen-requests-card" key={queue.title}><h2>{queue.title}</h2><p className="small muted">{queue.detail}</p>{items.length === 0
+          ? <p className="small muted manager-reopen-requests-empty">Chưa có yêu cầu cần xử lý.</p>
+          : <div className="list">{items.map(request => <article className="item small" key={request.id}><b>{request.target === "weekly_review" ? "Bài ôn" : request.target === "daily_lesson" ? "Bài ngày" : request.target === "monthly_exam" ? "Đề thi" : "Tài khoản"}</b><p>{request.reason}</p><p className="xs muted">Trạng thái: {request.status === "pending" ? "Chờ xử lý" : request.status === "approved" ? "Đã duyệt" : "Đã từ chối"}</p>{request.status === "pending" ? <div className="row"><button type="button" className="btn-sm btn-primary" disabled={busy === request.id} onClick={() => void decide(request, "approved")}>Duyệt mở khóa</button><button type="button" className="btn-sm" disabled={busy === request.id} onClick={() => void decide(request, "rejected")}>Từ chối</button></div> : request.decisionReason ? <p className="xs muted">Lý do xử lý: {request.decisionReason}</p> : null}</article>)}</div>}</section>;
+      })}
     </div>
   </div>;
 }

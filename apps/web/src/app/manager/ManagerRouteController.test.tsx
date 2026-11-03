@@ -126,8 +126,10 @@ describe("ManagerRouteController", () => {
   });
 
   it("shows the three reopen request queues without pretending requests exist", async () => {
+    vi.spyOn(apiClient, "getManagerReopenRequests").mockResolvedValue({ requests: [] });
     renderManager(<MemoryRouter initialEntries={["/mgr/reopen-requests"]}><ManagerRouteController role="manager" currentUserId="manager-1" /></MemoryRouter>);
 
+    await waitFor(() => expect(apiClient.getManagerReopenRequests).toHaveBeenCalled());
     expect(await screen.findByRole("heading", { name: "Yêu cầu mở khóa" })).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "Tài khoản học viên" })).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "Bài ngày và bài ôn" })).toBeInTheDocument();

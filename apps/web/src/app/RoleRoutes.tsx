@@ -7,7 +7,7 @@ const LearnerRouteController = lazy(() => import("./learner/LearnerRouteControll
 const ManagerRouteController = lazy(() => import("./manager/ManagerRouteController.js").then(({ ManagerRouteController }) => ({ default: ManagerRouteController })));
 const OperatorRouteController = lazy(() => import("./operator/OperatorRouteController.js").then(({ OperatorRouteController }) => ({ default: OperatorRouteController })));
 
-const managerRoutes = ["/mgr", "/mgr/ops", "/mgr/recovery", "/mgr/reminders", "/mgr/report", "/mgr/rewards"] as const;
+const managerRoutes = ["/mgr", "/mgr/ops", "/mgr/reopen-requests", "/mgr/recovery", "/mgr/reminders", "/mgr/report", "/mgr/rewards"] as const;
 const operatorRoutes = ["/op", "/op/levelforms", "/op/months", "/op/review", "/op/tests"] as const;
 
 export function RoleRoutes({ session }: { session: SessionView }) {
@@ -99,7 +99,7 @@ function OperatorRouteNotFound() {
 }
 
 function isKnownOperatorRoute(pathname: string): boolean {
-  return operatorRoutes.some((route) => route === pathname);
+  return operatorRoutes.some((route) => isRouteOrChild(pathname, route));
 }
 
 function loadingLabel(pathname: string): string {

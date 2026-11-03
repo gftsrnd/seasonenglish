@@ -8,11 +8,13 @@ import type {
   ManagerPurgeConfirmationView, ManagerReminderCopyView, ManagerReminderDismissView,
   ManagerReminderChannel, ManagerReminderSendView, ManagerRemindersView, ManagerReportView, ManagerSettingsInput, ManagerSettingsView, ManagerTrashView, ManagerPinReportsView,
   OperatorSettingsOverviewView, OrganisationExperienceInput, OrganisationExperienceView,
-  ManagerWebhookTestView, ProductPreferencesView, SystemCapabilitiesView, WeeklyPracticeAssignmentView
+  ManagerWebhookTestView, ProductPreferencesView, ReopenRequestView, SystemCapabilitiesView, WeeklyPracticeAssignmentView
 } from "@e4s/contracts";
 import { request } from "./runtime.js";
 
 export interface ManagerApiClient {
+  getManagerReopenRequests(): Promise<{ requests: ReopenRequestView[] }>;
+  decideManagerReopenRequest(requestId: string, decision: "approved" | "rejected", reason: string): Promise<ReopenRequestView>;
   getManagerProgress(): Promise<ManagerProgressView>;
   getManagerLearnerProfile(learnerId: string): Promise<ManagerLearnerProfileView>;
   assignManagerWeeklyPractice(learnerId: string): Promise<WeeklyPracticeAssignmentView>;
@@ -64,6 +66,8 @@ export interface ManagerApiClient {
 }
 
 export const managerApiClient: ManagerApiClient = {
+  getManagerReopenRequests: () => request("/api/v1/manager/reopen-requests"),
+  decideManagerReopenRequest: (requestId, decision, reason) => request(`/api/v1/manager/reopen-requests/${encodeURIComponent(requestId)}/${decision === "approved" ? "approve" : "reject"}`, { method: "POST", body: JSON.stringify({ reason }) }),
   getManagerProgress: () => request("/api/v1/manager/progress"),
   getManagerLearnerProfile: (learnerId) => request(`/api/v1/manager/learners/${encodeURIComponent(learnerId)}`),
   assignManagerWeeklyPractice: (learnerId) => request(`/api/v1/manager/learners/${encodeURIComponent(learnerId)}/weekly-practice`, { method: "POST", body: "{}" }),
