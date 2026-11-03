@@ -5,6 +5,7 @@ import {
   buildMonthlyResourcesFromAiPlan,
   MonthlyResourceCriteriaError,
   MonthlyResourcePlanError,
+  selectMonthlyPronunciationCandidates,
   selectMonthlySupportCandidates
 } from "./monthly-resource-generation.js";
 
@@ -76,6 +77,25 @@ describe("monthly AI resource generation", () => {
 
     expect(result.selected.map((term) => term.word)).toEqual(["annual-report", "schedule", "update"]);
     expect(result.rejected).toHaveLength(2);
+  });
+
+  it("selects pronunciation examples without prior collisions or more than three syllables", () => {
+    const result = selectMonthlyPronunciationCandidates({
+      candidates: [
+        { word: "agenda", ipa: "/əˈdʒendə/" },
+        { word: "team", ipa: "/tiːm/" },
+        { word: "professional", ipa: "/prəˈfeʃənəl/" },
+        { word: "lease", ipa: "/liːs/" }
+      ],
+      forbiddenWords: new Set(["agenda"]),
+      needed: 2
+    });
+
+    expect(result.selected.map((candidate) => candidate.word)).toEqual(["team", "lease"]);
+    expect(result.rejected).toEqual([
+      "agenda -> agenda (duplicates a pronunciation example already used)",
+      "professional -> professional (has 4 syllables)"
+    ]);
   });
 
   it("builds a two-grammar, four-pronunciation monthly contract from a valid AI plan", () => {

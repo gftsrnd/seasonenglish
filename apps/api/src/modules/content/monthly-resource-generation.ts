@@ -52,8 +52,39 @@ export function selectMonthlySupportCandidates(input: {
   return { selected, rejected };
 }
 
+export function selectMonthlyPronunciationCandidates(input: {
+  candidates: MonthlyResourcePlanTaskOutput["pronunciationTargets"][number]["words"];
+  forbiddenWords: ReadonlySet<string>;
+  needed: number;
+}): { selected: MonthlyResourcePlanTaskOutput["pronunciationTargets"][number]["words"]; rejected: string[] } {
+  const selected: MonthlyResourcePlanTaskOutput["pronunciationTargets"][number]["words"] = [];
+  const rejected: string[] = [];
+  const chosen = new Set<string>();
+  for (const candidate of input.candidates) {
+    const word = normalizeMonthlyResourceWord(candidate.word);
+    const syllables = countApproximateSyllables(candidate.word);
+    const reason = syllables > 3
+      ? `has ${syllables} syllables`
+      : input.forbiddenWords.has(word) || chosen.has(word)
+        ? "duplicates a pronunciation example already used"
+        : "";
+    if (reason) {
+      rejected.push(`${candidate.word} -> ${word} (${reason})`);
+      continue;
+    }
+    chosen.add(word);
+    selected.push(candidate);
+    if (selected.length === input.needed) break;
+  }
+  return { selected, rejected };
+}
+
 function normalizeMonthlyResourceWord(value: string): string {
   return value.trim().toLocaleLowerCase("en").replace(/[\s\p{P}]+/gu, " ").trim();
+}
+
+function countApproximateSyllables(word: string): number {
+  return Math.max(1, (word.toLocaleLowerCase("en").match(/[aeiouy]+/gu) ?? []).length);
 }
 
 /**

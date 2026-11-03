@@ -7,7 +7,7 @@ import { z } from "zod";
 import { createRoleGuard } from "../identity/policy.js";
 import { evaluateMonthlyLessonQuality } from "./monthly-quality.js";
 import { generateMonthlyDayWithAi, MONTHLY_DAY_COMPONENTS } from "./monthly-day-generation.js";
-import { buildMonthlyResourcesFromAiPlan, MonthlyResourceCriteriaError, MonthlyResourcePlanError, selectMonthlySupportCandidates } from "./monthly-resource-generation.js";
+import { buildMonthlyResourcesFromAiPlan, MonthlyResourceCriteriaError, MonthlyResourcePlanError, selectMonthlyPronunciationCandidates, selectMonthlySupportCandidates } from "./monthly-resource-generation.js";
 import { safeGenerationDiagnosticIssues } from "./generation-errors.js";
 
 const params = z.object({ month: z.string().regex(/^\d{4}-(0[1-9]|1[0-2])$/u) });
@@ -237,19 +237,36 @@ export function registerMonthlyContentRoutes(app: FastifyInstance, pool: Pool, a
       if (grammarResult.coreTerms.length || grammarResult.expandedTerms.length || grammarResult.grammarTopics.length !== 2 || grammarResult.pronunciationTargets.length) {
         throw new MonthlyResourcePlanError(["Grammar phase must return exactly two grammar topics and no vocabulary or pronunciation resources."]);
       }
-      const pronunciationResult = await runPhase(
-        `PHASE 4 — PRONUNCIATION ONLY. Return exactly four pronunciationTargets and leave coreTerms, expandedTerms and grammarTopics empty. This is the reusable month pool; do not assign calendar days. Use P1–P4 as the first twelve new-lesson steps, then the approval planner reuses the sound set in K1–K3 (N13–N15) and M1–M3 (N16–N18) where those lessons exist. Every example must be unique and no more than three syllables. Prefer words from the finalized monthly vocabulary; it is: ${monthlyVocabularyForPronunciation}`,
-        [],
-        { vocabularyCount: 0, expandedVocabularyCount: 0, grammarTopicCount: 0, pronunciationSoundCount: 4 }
-      );
-      if (pronunciationResult.coreTerms.length || pronunciationResult.expandedTerms.length || pronunciationResult.grammarTopics.length || pronunciationResult.pronunciationTargets.length !== 4) {
-        throw new MonthlyResourcePlanError(["Pronunciation phase must return exactly four pronunciation targets and no vocabulary or grammar resources."]);
+      const pronunciationTargets: z.infer<typeof monthlyResourcePlanOutputSchema>["pronunciationTargets"] = [];
+      const usedPronunciationWords = new Set<string>();
+      const pronunciationSlots = ["P1 (N1–N3)", "P2 (N4–N6)", "P3 (N7–N9)", "P4 (N10–N12)"];
+      for (let soundIndex = 0; soundIndex < 4; soundIndex += 1) {
+        let acceptedTarget: z.infer<typeof monthlyResourcePlanOutputSchema>["pronunciationTargets"][number] | undefined;
+        let issue = "";
+        for (let attempt = 0; attempt < 3; attempt += 1) {
+          const prompt = `PHASE 4 — ONE PRONUNCIATION TARGET ONLY. Return exactly one pronunciationTargets object and leave coreTerms, expandedTerms and grammarTopics empty. Generate the target for ${pronunciationSlots[soundIndex]}. This is an unassigned month pool; do not output calendar day fields. Include at least nine candidate example words, each no more than three syllables and relevant to the target sound or stress pattern. Avoid all words already accepted for earlier targets: ${[...usedPronunciationWords].join("; ") || "none"}. Prefer authentic terms from this monthly vocabulary pool: ${monthlyVocabularyForPronunciation}. ${issue ? `The previous response repeated or violated these examples: ${issue}. Return replacements only for those colliding or invalid examples; they must be distinct from the accepted earlier targets, relevant to the current sound, and no more than three syllables.` : ""}`;
+          const result = await runPhase(prompt, coreTerms, { vocabularyCount: 0, expandedVocabularyCount: 0, grammarTopicCount: 0, pronunciationSoundCount: 1 });
+          if (result.coreTerms.length || result.expandedTerms.length || result.grammarTopics.length || result.pronunciationTargets.length !== 1) {
+            issue = "response must contain one pronunciation target only";
+            continue;
+          }
+          const candidate = result.pronunciationTargets[0]!;
+          const selection = selectMonthlyPronunciationCandidates({ candidates: candidate.words, forbiddenWords: usedPronunciationWords, needed: 9 });
+          if (selection.selected.length === 9) {
+            acceptedTarget = { ...candidate, words: selection.selected };
+            break;
+          }
+          issue = selection.rejected.join("; ") || `only ${candidate.words.length} usable examples were returned`;
+        }
+        if (!acceptedTarget) throw new MonthlyResourcePlanError([`Pronunciation generation failed for ${pronunciationSlots[soundIndex]}: ${issue}.`]);
+        pronunciationTargets.push(acceptedTarget);
+        for (const word of acceptedTarget.words) usedPronunciationWords.add(normalizeMonthlyResourceWord(word.word));
       }
       const plan = monthlyResourcePlanOutputSchema.parse({
         coreTerms,
         expandedTerms,
         grammarTopics: grammarResult.grammarTopics,
-        pronunciationTargets: pronunciationResult.pronunciationTargets
+        pronunciationTargets
       });
       const pool = buildMonthlyResourcesFromAiPlan(month.month, criteria.cefr, theme, criteria, plan);
       const framework = await repositories.monthlyContent.saveResourceDraft(actorId, pool);
