@@ -422,6 +422,8 @@ export interface ReviewAttempt {
   listening: string;
   reading: string;
   writing: string;
+  wordClass: string;
+  wordUse: string;
   speaking: string;
   total: number;
   audioArtifact?: AudioArtifactView;

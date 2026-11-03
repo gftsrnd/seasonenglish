@@ -710,17 +710,20 @@ describe("Operator app rebuild", () => {
       activeTab: "attempts", counts: { subs: 0, coach: 0, weekly: 0, appeals: 0, attempts: 3, tests: 0 },
       submissions: [], coachTurns: [], weeklyPractices: [], appeals: [], tests: [],
       attempts: [
-        { id: "a1", learnerId: "learner-1", learnerName: "Lan", cefr: "A2", lesson: "Tuần 1 · T2 · Directions", listening: "1", reading: "1", writing: "1", speaking: "1", total: 4 },
-        { id: "a2", learnerId: "learner-1", learnerName: "Lan", cefr: "A2", lesson: "Tuần 1 · T3 · Places", listening: "2", reading: "chưa làm", writing: "chưa làm", speaking: "chưa làm", total: 2 },
-        { id: "a3", learnerId: "learner-2", learnerName: "Minh", cefr: "B1", lesson: "Tuần 1 · T2 · Work", listening: "1", reading: "1", writing: "1", speaking: "1", total: 4 }
+        { id: "a1", learnerId: "learner-1", learnerName: "Lan", cefr: "A2", lesson: "Bài học tháng · Bài 1 · Directions", listening: "1", reading: "1", writing: "1", wordClass: "1", wordUse: "1", speaking: "1", total: 6 },
+        { id: "a2", learnerId: "learner-1", learnerName: "Lan", cefr: "A2", lesson: "Bài học tháng · Bài 2 · Places", listening: "2", reading: "chưa làm", writing: "chưa làm", wordClass: "chưa làm", wordUse: "chưa làm", speaking: "chưa làm", total: 2 },
+        { id: "a3", learnerId: "learner-2", learnerName: "Minh", cefr: "B1", lesson: "Bài học tháng · Bài 1 · Work", listening: "1", reading: "1", writing: "1", wordClass: "1", wordUse: "1", speaking: "1", total: 6 }
       ]
     } as any} actions={{ onTabChange: vi.fn(), onMarkSubmission: vi.fn(), onMarkCoachTurn: vi.fn(), onGradeAi: vi.fn(), onGradeManual: vi.fn(), onDecideAppeal: vi.fn(), onViewTest: vi.fn() }} />);
 
     const groups = screen.getAllByTestId("attempt-learner-group");
     expect(groups).toHaveLength(2);
-    expect(within(groups[0]!).getByText("2 bài · 6 lượt")).toBeInTheDocument();
+    expect(within(groups[0]!).getByText("2 bài · 8 lượt")).toBeInTheDocument();
     await user.click(within(groups[0]!).getByText("Lan"));
     expect(within(groups[0]!).getAllByRole("row")).toHaveLength(3);
+    expect(within(groups[0]!).getByRole("columnheader", { name: "Từ loại" })).toBeInTheDocument();
+    expect(within(groups[0]!).getByRole("columnheader", { name: "Dùng từ" })).toBeInTheDocument();
+    expect(screen.getByText(/Mỗi kỹ năng tối đa 2 lượt/u)).toBeInTheDocument();
     expect(within(groups[0]!).queryByRole("columnheader", { name: "Người học" })).not.toBeInTheDocument();
   });
 

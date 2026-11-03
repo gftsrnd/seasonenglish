@@ -3538,8 +3538,8 @@ class ContentRepository {
       lessonAttempts: progress.rows.map((row) => {
         const source = row.evidence.evidence && typeof row.evidence.evidence === "object"
           ? row.evidence.evidence as Record<string, unknown> : row.evidence;
-        const attempts: Partial<Record<"listening" | "reading" | "writing" | "speaking", number>> = {};
-        for (const code of ["listening", "reading", "writing", "speaking"] as const) {
+        const attempts: Partial<Record<"listening" | "reading" | "writing" | "word_class" | "word_use" | "speaking", number>> = {};
+        for (const code of ["listening", "reading", "writing", "word_class", "word_use", "speaking"] as const) {
           const value = source[code];
           if (value && typeof value === "object" && !Array.isArray(value)) {
             const count = Number((value as Record<string, unknown>).attempts);

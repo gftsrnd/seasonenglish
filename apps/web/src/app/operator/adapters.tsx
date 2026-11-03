@@ -799,7 +799,7 @@ export function adaptReview(source: ContentReviewView, activeTab: keyof typeof R
         ...options.appeals?.[item.id]
       };
     }),
-    attempts: source.lessonAttempts.map(item => ({ id: item.id, learnerId: item.learnerId, learnerName: item.learnerName, cefr: item.cefr as Cefr | undefined, lesson: `Bài học tháng · Bài ${item.dayNumber + 1} · ${item.lessonTitle}`, listening: String(item.attempts.listening ?? "chưa làm"), reading: String(item.attempts.reading ?? "chưa làm"), writing: String(item.attempts.writing ?? "chưa làm"), speaking: String(item.attempts.speaking ?? "chưa làm"), total: Object.values(item.attempts).reduce((sum, value) => sum + (value ?? 0), 0), ...(item.audioArtifact ? { audioArtifact: item.audioArtifact } : {}) })),
+    attempts: source.lessonAttempts.map(item => ({ id: item.id, learnerId: item.learnerId, learnerName: item.learnerName, cefr: item.cefr as Cefr | undefined, lesson: `Bài học tháng · Bài ${item.dayNumber + 1} · ${item.lessonTitle}`, listening: String(item.attempts.listening ?? "chưa làm"), reading: String(item.attempts.reading ?? "chưa làm"), writing: String(item.attempts.writing ?? "chưa làm"), wordClass: String(item.attempts.word_class ?? "chưa làm"), wordUse: String(item.attempts.word_use ?? "chưa làm"), speaking: String(item.attempts.speaking ?? "chưa làm"), total: Object.values(item.attempts).reduce((sum, value) => sum + (value ?? 0), 0), ...(item.audioArtifact ? { audioArtifact: item.audioArtifact } : {}) })),
     tests: source.assessments.map(item => ({ id: item.id, learnerName: item.learnerName, kind: item.kind, submittedAt: item.submittedAt ? operatorDateTime(item.submittedAt) : undefined, total: item.totalScore ?? undefined, ...options.tests?.[item.id] }))
   };
 }

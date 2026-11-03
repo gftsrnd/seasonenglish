@@ -88,7 +88,7 @@ describe("Operator assessment audio playback", () => {
       activeTab: "attempts",
       attempts: [{
         id: "progress-1", learnerId: "learner-1", learnerName: "Lan", cefr: "A2",
-        lesson: "Tuần 1 · T2 · Daily stand-up", listening: "1", reading: "1", writing: "1", speaking: "1", total: 4,
+        lesson: "Bài học tháng · Bài 1 · Daily stand-up", listening: "1", reading: "1", writing: "1", wordClass: "1", wordUse: "1", speaking: "1", total: 6,
         audioArtifact: { artifactKey: "assessment-audio/daily.webm", mimeType: "audio/webm", sizeBytes: 42, signedUrl: "/api/v1/files/assessment-audio/playback?artifactKey=daily", expiresAt: null }
       }]
     });

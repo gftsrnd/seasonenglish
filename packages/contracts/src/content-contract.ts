@@ -221,7 +221,8 @@ export interface ContentReviewView {
   }>;
   lessonAttempts: Array<{
     id: string; learnerId: string; learnerName: string; cefr: CefrLevel | null; weekNumber: number; dayNumber: number;
-    lessonTitle: string; attempts: Partial<Record<"listening" | "reading" | "writing" | "speaking", number>>;
+    /** The six learner practice parts, recorded from persisted lesson evidence. */
+    lessonTitle: string; attempts: Partial<Record<"listening" | "reading" | "writing" | "word_class" | "word_use" | "speaking", number>>;
     speakingArtifactKey?: string;
     audioArtifact?: AudioArtifactView;
   }>;
