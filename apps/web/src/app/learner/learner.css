@@ -1742,3 +1742,12 @@ h1,h2,h3,h4,h1 b,h2 b,h3 b,h4 b{font-weight:600 !important}
 .monthly-assessment-page .monthly-eligibility-metrics .ring b{max-width:78px;line-height:1.18;text-align:center}
 .monthly-assessment-page .monthly-eligibility-metrics .lbl{font-size:.95rem;margin-top:4px}
 @media(max-width:640px){.monthly-assessment-page .monthly-eligibility-metrics .stat{min-height:unset;padding:14px}.monthly-assessment-page .monthly-eligibility-metrics .ring{width:76px;height:76px;min-width:76px;min-height:76px;font-size:.82rem}.monthly-assessment-page .monthly-eligibility-metrics .ring b{max-width:56px}.monthly-assessment-page .monthly-eligibility-metrics .lbl{font-size:.8rem;margin-top:0}}
+
+/* Final compact metric proportion: central group, readable core number. */
+.monthly-assessment-page .monthly-assessment-landing{min-height:0;padding:26px 28px;gap:18px}
+.monthly-assessment-page .monthly-eligibility-metrics{gap:12px}
+.monthly-assessment-page .monthly-eligibility-metrics .stat{min-height:158px;padding:16px 12px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;text-align:center}
+.monthly-assessment-page .monthly-eligibility-metrics .ring{width:88px;height:88px;min-width:88px;min-height:88px;font-size:1.16rem;line-height:1.22}
+.monthly-assessment-page .monthly-eligibility-metrics .ring>b{width:68px;height:68px;max-width:68px;font-size:1.16rem;line-height:1.22}
+.monthly-assessment-page .monthly-eligibility-metrics .lbl{font-size:.9rem;margin:0;line-height:1.35}
+@media(max-width:640px){.monthly-assessment-page .monthly-assessment-landing{padding:20px}.monthly-assessment-page .monthly-eligibility-metrics .stat{min-height:unset}.monthly-assessment-page .monthly-eligibility-metrics .ring{width:76px;height:76px;min-width:76px;min-height:76px;font-size:1rem}.monthly-assessment-page .monthly-eligibility-metrics .ring>b{width:58px;height:58px;max-width:58px;font-size:1rem}}
