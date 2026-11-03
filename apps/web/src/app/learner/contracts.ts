@@ -32,7 +32,7 @@ import type { AudioDeletionMetadata, AudioEvidence } from "../shared/media/audio
 
 export const LEARNER_ROUTES = [
   "/home", "/onboard", "/test/:kind", "/lesson/:id",
-  "/coach", "/challenge", "/practice", "/survey", "/profile",
+  "/coach", "/monthly", "/challenge", "/practice", "/survey", "/profile",
   "/reward/:mode", "/games", "/games/:game"
 ] as const;
 
@@ -105,6 +105,7 @@ export interface ProfileView extends LearnerProgressView {
 
 export type LearnerScreen =
   | { kind: "home"; view: LearnerHomeView }
+  | { kind: "monthly"; view: LearnerHomeView }
   | { kind: "onboard"; view: OnboardView }
   | { kind: "assessment"; view: AssessmentView }
   | { kind: "lesson"; view: LessonView }

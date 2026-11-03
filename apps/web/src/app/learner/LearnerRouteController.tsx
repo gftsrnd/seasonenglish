@@ -24,7 +24,7 @@ import type { LearnerContractBundle, LearnerUiState } from "./Router.js";
 import { LearnerController } from "./Router.js";
 import { Empty, Notice, PageTitle, AppLink } from "./ui.js";
 
-type StaticRouteName = "home" | "onboard" | "coach" | "challenge" | "practice" | "survey" | "profile" | "games";
+type StaticRouteName = "home" | "monthly" | "onboard" | "coach" | "challenge" | "practice" | "survey" | "profile" | "games";
 export type ResolvedLearnerRoute =
   | { name: StaticRouteName; params: Record<string, never> }
   | { name: "assessment"; params: { kind: AssessmentKind | "levelup" | "passcourse" } }
@@ -91,7 +91,7 @@ export function resolveLearnerRoute(pathname: string): ResolvedLearnerRoute {
   const segments = clean.split("/").filter(Boolean).map(safeDecode);
   if (segments[0] === "arena" || segments[0] === "duel") return { name: "games", params: {} };
   if (segments[0] === "practice") return { name: "home", params: {} };
-  if (segments.length === 1 && ["home", "onboard", "coach", "challenge", "practice", "survey", "profile", "games"].includes(segments[0]!)) return { name: segments[0] as StaticRouteName, params: {} };
+  if (segments.length === 1 && ["home", "monthly", "onboard", "coach", "challenge", "practice", "survey", "profile", "games"].includes(segments[0]!)) return { name: segments[0] as StaticRouteName, params: {} };
   if (segments[0] === "test" && segments.length === 2) {
     const raw = segments[1];
     if (raw === "placement") return { name: "assessment", params: { kind: raw } };
@@ -196,7 +196,8 @@ export function LearnerRouteController() {
         }
       }
       switch (route.name) {
-        case "home": {
+        case "home":
+        case "monthly": {
           const [homeData, notifications] = await Promise.all([apiClient.getHome(), apiClient.getNotifications().catch(() => ({ notifications: [] }))]);
           const home = { ...homeData, notifications: notifications.notifications };
           if (!home.onboardingRequired && home.learner.cefr === null) {
@@ -510,7 +511,7 @@ function mergeResponse(responses: AssessmentResponseView[], response: Assessment
 
 function loadingLabel(route: ResolvedLearnerRoute["name"]) {
   const labels: Record<ResolvedLearnerRoute["name"], string> = {
-    home: "Đang tải trang chủ", onboard: "Đang tải hồ sơ", assessment: "Đang tải bài test", lesson: "Đang tải bài học",
+    home: "Đang tải trang chủ", monthly: "Đang tải bài tháng", onboard: "Đang tải hồ sơ", assessment: "Đang tải bài test", lesson: "Đang tải bài học",
     coach: "Đang mở cuộc trò chuyện", challenge: "Đang mở thử thách lên mức",
     practice: "Đang mở bài thực hành", survey: "Đang mở khảo sát", profile: "Đang tải tiến độ", reward: "Đang tạo chứng nhận",
     games: "Đang mở mini game", game: "Đang mở trò chơi", notFound: "Đang mở trang"
@@ -520,7 +521,7 @@ function loadingLabel(route: ResolvedLearnerRoute["name"]) {
 
 function loadError(route: ResolvedLearnerRoute["name"]) {
   const labels: Record<ResolvedLearnerRoute["name"], string> = {
-    home: "Không tải được trang chủ.", onboard: "Không tải được hồ sơ.", assessment: "Không tải được bài test.", lesson: "Không tải được bài học.",
+    home: "Không tải được trang chủ.", monthly: "Không tải được bài tháng.", onboard: "Không tải được hồ sơ.", assessment: "Không tải được bài test.", lesson: "Không tải được bài học.",
     coach: "Không tải được cuộc trò chuyện với Season.", challenge: "Chưa có thử thách lên mức đang mở.",
     practice: "Không tải được bài thực hành tuần.", survey: "Không tải được khảo sát.", profile: "Không tải được tiến độ.", reward: "Chứng nhận chưa sẵn sàng.",
     games: "Chưa có bộ từ cho mini game.", game: "Chưa có bộ từ cho mini game.", notFound: "Không tìm thấy trang."

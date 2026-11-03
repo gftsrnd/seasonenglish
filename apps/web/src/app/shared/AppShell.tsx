@@ -65,6 +65,7 @@ const nav: Record<ShellRole, readonly NavItem[]> = {
   learner: [
     { to: "/home", icon: icons.home, label: "Trang chủ" },
     { to: "/coach", icon: icons.chat, label: "Luyện với Season" },
+    { to: "/monthly", icon: icons.cal, label: "Bài tháng" },
     { to: "/games", icon: icons.game, label: "Mini game" },
     { to: "/profile", icon: icons.user, label: "Tiến độ & hồ sơ" }
   ],

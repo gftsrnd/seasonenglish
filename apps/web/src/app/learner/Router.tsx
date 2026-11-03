@@ -3,7 +3,7 @@ import type { LearnerCallbacks, LearnerScreen } from "./contracts.js";
 import { LearnerAssessment } from "./Assessment.js";
 import { LearnerChallenge, LearnerCoach, LearnerPractice } from "./CoachPractice.js";
 import { LearnerGame, LearnerGames } from "./Games.js";
-import { LearnerHome } from "./Home.js";
+import { LearnerHome, LearnerMonthly } from "./Home.js";
 import { LearnerLesson } from "./Learning.js";
 import { LearnerOnboard } from "./Onboard.js";
 import { LearnerProfile, LearnerReward, LearnerSurvey } from "./ProfileReward.js";
@@ -12,6 +12,7 @@ import { Empty, Notice, PageTitle, AppLink } from "./ui.js";
 export function LearnerRouter({ screen, callbacks }: { screen: LearnerScreen; callbacks: LearnerCallbacks }) {
   switch (screen.kind) {
     case "home": return <LearnerHome view={screen.view} actions={callbacks} />;
+    case "monthly": return <LearnerMonthly view={screen.view} actions={callbacks} />;
     case "onboard": return <LearnerOnboard view={screen.view} actions={callbacks} />;
     case "assessment": return <LearnerAssessment view={screen.view} actions={callbacks} />;
     case "lesson": return <LearnerLesson view={screen.view} actions={callbacks} />;
@@ -35,6 +36,7 @@ export function LearnerController({ path, contracts, callbacks, uiState = {} }: 
   const parts = cleanPath === "/" ? [] : cleanPath.slice(1).split("/").map(decodeSegment);
   const missing = (message: string, href = "/home", label = "Về trang chủ") => <Missing route={cleanPath} message={message} href={href} label={label} actions={callbacks} />;
   if (cleanPath === "/" || (parts[0] === "home" && parts.length === 1)) return contracts.home ? <LearnerHome view={{ ...contracts.home, ...(uiState.home ?? {}), ...(uiState.aiAvailable === undefined ? {} : { aiAvailable: uiState.aiAvailable }) }} actions={callbacks} /> : missing("Trang chủ chưa có dữ liệu.");
+  if (parts[0] === "monthly" && parts.length === 1) return contracts.home ? <LearnerMonthly view={{ ...contracts.home, ...(uiState.home ?? {}), ...(uiState.aiAvailable === undefined ? {} : { aiAvailable: uiState.aiAvailable }) }} actions={callbacks} /> : missing("Bài tháng chưa có dữ liệu.");
   if (parts[0] === "onboard" && parts.length === 1) {
     if (contracts.onboard === undefined) return missing("Hồ sơ chưa sẵn sàng.");
     const state = uiState.onboard ?? {};
