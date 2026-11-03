@@ -1,4 +1,4 @@
-import { buildMonthlyCalendar, buildMonthlyCurriculum, type MonthlyCurriculumContract, type SharedMonthBrief } from "@e4s/domain";
+import { buildMonthlyCalendar, buildMonthlyCurriculum, monthlyDayKind, type MonthlyCurriculumContract, type SharedMonthBrief } from "@e4s/domain";
 import type { CefrLevel } from "@e4s/contracts";
 import type { MonthlyResourcePlanTaskOutput } from "@e4s/ai";
 import { validateMonthlyResourcePlanShape } from "./monthly-resource-plan-spec.js";
@@ -23,7 +23,7 @@ export function buildMonthlyResourcesFromAiPlan(
   plan: MonthlyResourcePlanTaskOutput
 ): MonthlyCurriculumContract {
   const calendar = buildMonthlyCalendar(month);
-  const newLessonDays = calendar.effectiveDays.flatMap((date, index) => weekday(date) === 5 ? [] : [index + 1]);
+  const newLessonDays = calendar.effectiveDays.flatMap((_date, index) => monthlyDayKind(index + 1, calendar.lessonCount) === "new" ? [index + 1] : []);
   const requiredVocabularyCount = newLessonDays.length * 3;
   const requiredExpandedVocabularyCount = newLessonDays.length * 9;
   if (criteria.vocabularyCount !== requiredVocabularyCount) throw new MonthlyResourceCriteriaError("VOCABULARY_COUNT_MISMATCH", requiredVocabularyCount);
@@ -83,6 +83,4 @@ function relationSource(relation: MonthlyResourcePlanTaskOutput["expandedTerms"]
   return relation;
 }
 
-function weekday(date: string): number {
-  return new Date(`${date}T00:00:00.000Z`).getUTCDay();
-}
+

@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import {
   buildMonthlyCalendar,
+  monthlyDayKind,
+  monthlyNewLessonOrdinal,
   buildMonthlyCurriculum,
   buildMonthlyExamScope,
   monthlyScopeHash,
@@ -13,7 +15,7 @@ import {
 
 function inputFor(month = "2026-11"): MonthlyCurriculumInput {
   const calendar = buildMonthlyCalendar(month);
-  const newDays = calendar.effectiveDays.filter((date) => new Date(`${date}T00:00:00.000Z`).getUTCDay() !== 5);
+  const newDays = calendar.effectiveDays.filter((_date, index) => monthlyDayKind(index + 1, calendar.lessonCount) === "new");
   const coreTerms = Array.from({ length: newDays.length * 3 }, (_, index) => ({
     id: `core-${index + 1}`,
     word: `term-${index + 1}`,
@@ -42,7 +44,7 @@ function inputFor(month = "2026-11"): MonthlyCurriculumInput {
 }
 
 describe("monthly curriculum contract", () => {
-  it("reserves the final weekday in November 2026 for the monthly exam, with 48 core terms and Friday review only", () => {
+  it("reserves the final weekday in November 2026 for the monthly exam, with 48 core terms and scheduled reviews", () => {
     const curriculum = buildMonthlyCurriculum(inputFor());
 
     expect(curriculum.daySpecs).toHaveLength(20);
@@ -65,6 +67,18 @@ describe("monthly curriculum contract", () => {
       expect(day.reviewTermIds.every((id) => earlierNewTerms.includes(id))).toBe(true);
     }
     expect(validateMonthlyCurriculum(curriculum)).toEqual([]);
+  });
+
+  it("uses the fixed slot schedule for 20, 21, and 22 instructional slots", () => {
+    const reviewSlots = (count: number) => Array.from({ length: count }, (_, index) => index + 1).filter((slot) => monthlyDayKind(slot, count) === "review");
+    expect(reviewSlots(20)).toEqual([5, 10, 15, 20]);
+    expect(reviewSlots(21)).toEqual([5, 10, 15, 21]);
+    expect(reviewSlots(22)).toEqual([5, 10, 15, 22]);
+    expect(Array.from({ length: 20 }, (_, index) => index + 1).filter((slot) => monthlyDayKind(slot, 20) === "new")).toHaveLength(16);
+    expect(Array.from({ length: 21 }, (_, index) => index + 1).filter((slot) => monthlyDayKind(slot, 21) === "new")).toHaveLength(17);
+    expect(Array.from({ length: 22 }, (_, index) => index + 1).filter((slot) => monthlyDayKind(slot, 22) === "new")).toHaveLength(18);
+    expect(monthlyNewLessonOrdinal(6, 20)).toBe(5);
+    expect(monthlyNewLessonOrdinal(20, 20)).toBeNull();
   });
 
   it("uses the final weekday as the exam date and excludes it from daily lessons", () => {

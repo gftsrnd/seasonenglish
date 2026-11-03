@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import type { AssessmentLevelFormUpdateInput, CefrLevel, MonthlyOperatorOverviewView, MonthlyQualityFindingView } from "@e4s/contracts";
-import { buildMonthlyCalendar, recommendedMonthlyResourceCriteria, type MonthlyCurriculumContract } from "@e4s/domain/monthly";
+import { buildMonthlyCalendar, monthlyDayKind, monthlyNewLessonOrdinal, recommendedMonthlyResourceCriteria, type MonthlyCurriculumContract } from "@e4s/domain/monthly";
 import { useToast } from "../shared/design-system.js";
 import { OperatorLessonPreview } from "./adapters.js";
 import { WeeklyPracticeEditor } from "./Review.js";
@@ -229,11 +229,13 @@ export function OperatorMonths({ month, todayMonth, overview, cefr, busy, readOn
             const scheduledLessonNumber = lesson?.lessonNumber ?? cell.lessonNumber;
             if (isExam) return <article key={cell.date} role="gridcell" className="monthly-day-cell monthly-final"><b>{cell.dateLabel}</b><strong>Bài thi</strong><button type="button" className="btn-sm" disabled={busy} onClick={() => void generateMonthlyFinal()}>Sinh đề thi</button></article>;
             if (!scheduledLessonNumber) return <article key={cell.date} role="gridcell" className="monthly-day-cell weekend"><b>{cell.dateLabel}</b><strong>Nghỉ</strong></article>;
-            const kind = lesson?.kind === "review" ? "review" : "lesson";
+            const scheduledKind = lesson?.kind ?? monthlyDayKind(scheduledLessonNumber, calendar.lessonCount);
+            const kind = scheduledKind === "review" ? "review" : "lesson";
             const draft = lesson?.status === "draft";
-            const isReview = lesson?.kind === "review";
-            const dayLabel = isReview ? "bài ôn" : `bài ${scheduledLessonNumber}`;
-            return <article key={cell.date} role="gridcell" aria-label={`${cell.dateLabel}, ${isReview ? "Ôn tập" : `Bài ${scheduledLessonNumber}`}`} className={`monthly-day-cell ${kind} ${lesson?.status === "approved" ? "approved" : ""}`}><b>{cell.dateLabel}</b><strong>{isReview ? "Ôn tập" : `Bài ${scheduledLessonNumber}`}</strong><div>{lesson?.status === "approved" ? <><button type="button" aria-label={`Xem ${dayLabel}`} className="btn-sm monthly-view-day" disabled={busy} onClick={() => framework && actions.onViewDay?.(framework.id, lesson.lessonNumber)}>Xem</button></> : draft ? <><button type="button" aria-label={`Soạn tay ${dayLabel}`} className="btn-sm" disabled={busy} onClick={() => openManualEditor(scheduledLessonNumber)}>Soạn tay</button><button type="button" aria-label={`Duyệt ${dayLabel}`} className="btn-sm" disabled={busy} onClick={() => framework && void actions.onApproveDay(framework.id, scheduledLessonNumber)}>Duyệt</button></> : <><button type="button" aria-label={isReview ? "Sinh" : `Sinh ${dayLabel}`} className="btn-sm btn-primary" disabled={busy} onClick={() => setGenerationConfirmation({ dayNumber: scheduledLessonNumber, kind: isReview ? "review" : "new" })}>{"Sinh"}</button><button type="button" aria-label={`Soạn tay ${dayLabel}`} className="btn-sm" disabled={busy} onClick={() => openManualEditor(scheduledLessonNumber)}>Soạn tay</button></>}</div></article>;
+            const isReview = scheduledKind === "review";
+            const newLessonOrdinal = isReview ? null : monthlyNewLessonOrdinal(scheduledLessonNumber, calendar.lessonCount);
+            const dayLabel = isReview ? "bài ôn" : `bài ${newLessonOrdinal}`;
+            return <article key={cell.date} role="gridcell" aria-label={`${cell.dateLabel}, ${isReview ? "Ôn tập" : `Bài ${newLessonOrdinal}`}`} className={`monthly-day-cell ${kind} ${lesson?.status === "approved" ? "approved" : ""}`}><b>{cell.dateLabel}</b><strong>{isReview ? "Ôn tập" : `Bài ${newLessonOrdinal}`}</strong><div>{lesson?.status === "approved" ? <><button type="button" aria-label={`Xem ${dayLabel}`} className="btn-sm monthly-view-day" disabled={busy} onClick={() => framework && actions.onViewDay?.(framework.id, lesson.lessonNumber)}>Xem</button></> : draft ? <><button type="button" aria-label={`Soạn tay ${dayLabel}`} className="btn-sm" disabled={busy} onClick={() => openManualEditor(scheduledLessonNumber)}>Soạn tay</button><button type="button" aria-label={`Duyệt ${dayLabel}`} className="btn-sm" disabled={busy} onClick={() => framework && void actions.onApproveDay(framework.id, scheduledLessonNumber)}>Duyệt</button></> : <><button type="button" aria-label={isReview ? "Sinh" : `Sinh ${dayLabel}`} className="btn-sm btn-primary" disabled={busy} onClick={() => setGenerationConfirmation({ dayNumber: scheduledLessonNumber, kind: isReview ? "review" : "new" })}>{"Sinh"}</button><button type="button" aria-label={`Soạn tay ${dayLabel}`} className="btn-sm" disabled={busy} onClick={() => openManualEditor(scheduledLessonNumber)}>Soạn tay</button></>}</div></article>;
           })}
         </div>
       </section>
@@ -360,3 +362,5 @@ function formatCalendarDay(date: Date) {
 function toResourceCounts(criteria: Pick<MonthlyResourceCriteria, "vocabularyCount" | "expandedVocabularyCount" | "grammarTopicCount" | "pronunciationSoundCount">) {
   return { core: criteria.vocabularyCount, expanded: criteria.expandedVocabularyCount, grammar: criteria.grammarTopicCount, sounds: criteria.pronunciationSoundCount };
 }
+
+

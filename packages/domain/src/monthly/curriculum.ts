@@ -114,7 +114,7 @@ export interface MonthlyResourceCriteriaDefaults {
 /** Starting values for monthly resources. Three core terms are needed for each new daily lesson. */
 export function recommendedMonthlyResourceCriteria(month: string, cefr: CefrLevel): MonthlyResourceCriteriaDefaults {
   const calendar = buildMonthlyCalendar(month);
-  const newLessonCount = calendar.effectiveDays.filter((date) => !isFriday(date)).length;
+  const newLessonCount = calendar.effectiveDays.filter((_date, index) => monthlyDayKind(index + 1, calendar.lessonCount) === "new").length;
   void cefr;
   return {
     vocabularyCount: newLessonCount * 3,
@@ -172,7 +172,7 @@ export function buildMonthlyCalendar(month: string): MonthlyCalendar {
 
 export function buildMonthlyCurriculum(input: MonthlyCurriculumInput): MonthlyCurriculumContract {
   const calendar = buildMonthlyCalendar(input.month);
-  const newDays = calendar.effectiveDays.filter((date) => !isFriday(date));
+  const newDays = calendar.effectiveDays.filter((_date, index) => monthlyDayKind(index + 1, calendar.lessonCount) === "new");
   const expectedCoreCount = newDays.length * 3;
   if (input.coreTerms.length !== expectedCoreCount) throw new RangeError(`Expected ${expectedCoreCount} core terms for ${input.month}`);
   const duplicateCore = duplicateOf(input.coreTerms.map((term) => normalize(term.word)));
@@ -192,7 +192,7 @@ export function buildMonthlyCurriculum(input: MonthlyCurriculumInput): MonthlyCu
   const introduced: string[] = [];
   const daySpecs = calendar.effectiveDays.map((date, index) => {
     const lessonNumber = index + 1;
-    const kind = isFriday(date) ? "review" as const : "new" as const;
+    const kind = monthlyDayKind(lessonNumber, calendar.lessonCount);
     if (kind === "new") newLessonOrdinal += 1;
     const coreTermIds = kind === "new" ? input.coreTerms.slice(coreCursor, coreCursor + 3).map((term) => term.id) : [];
     coreCursor += coreTermIds.length;
@@ -210,7 +210,7 @@ export function buildMonthlyCurriculum(input: MonthlyCurriculumInput): MonthlyCu
     return { lessonNumber, date, kind, coreTermIds, reviewTermIds, grammarStepId: step.id, soundId: sound.id, pronunciationExampleIds: exampleIds };
   });
 
-  const newLessonNumbers = calendar.effectiveDays.flatMap((date, index) => isFriday(date) ? [] : [index + 1]);
+  const newLessonNumbers = calendar.effectiveDays.flatMap((_date, index) => monthlyDayKind(index + 1, calendar.lessonCount) === "new" ? [index + 1] : []);
   const coreTerms: CoreTerm[] = input.coreTerms.map((term, index) => ({
     ...term,
     source: "core_registry",
@@ -258,8 +258,8 @@ export function validateMonthlyCurriculum(contract: MonthlyCurriculumContract): 
   if (contract.daySpecs.length !== calendar.lessonCount) errors.push("Day specification count does not match monthly calendar");
   for (const [index, day] of contract.daySpecs.entries()) {
     if (day.lessonNumber !== index + 1 || day.date !== calendar.effectiveDays[index]) errors.push(`Lesson ${day.lessonNumber} does not match its calendar date`);
-    if (isFriday(day.date) && day.kind !== "review") errors.push(`Friday lesson ${day.lessonNumber} must be review`);
-    if (!isFriday(day.date) && day.kind !== "new") errors.push(`Non-Friday lesson ${day.lessonNumber} must introduce new terms`);
+    const expectedKind = monthlyDayKind(day.lessonNumber, calendar.lessonCount);
+    if (day.kind !== expectedKind) errors.push(`Lesson ${day.lessonNumber} must be ${expectedKind}`);
     if (!grammarStepIds.has(day.grammarStepId)) errors.push(`Lesson ${day.lessonNumber} references an unlocked grammar step`);
     const sound = soundsById.get(day.soundId);
     if (!sound) errors.push(`Lesson ${day.lessonNumber} references an unlocked sound`);
@@ -298,13 +298,32 @@ export function monthlyScopeHash(contract: MonthlyCurriculumContract): string {
   return `monthly-${(hash >>> 0).toString(16)}`;
 }
 
+/** Human-facing ordinal for a new lesson; review slots deliberately have none. */
+export function monthlyNewLessonOrdinal(lessonNumber: number, lessonCount: number): number | null {
+  if (monthlyDayKind(lessonNumber, lessonCount) !== "new") return null;
+  let count = 0;
+  for (let slot = 1; slot <= lessonNumber; slot += 1) if (monthlyDayKind(slot, lessonCount) === "new") count += 1;
+  return count;
+}
+
 function chooseReviewTerms(introduced: readonly string[], cursor: number): string[] {
   if (introduced.length < 3) throw new RangeError("Review day requires three previously introduced core terms");
   return Array.from({ length: 3 }, (_, index) => introduced[(cursor + index) % introduced.length]!);
 }
 
-function isFriday(date: string): boolean {
-  return new Date(`${date}T00:00:00.000Z`).getUTCDay() === 5;
+/**
+ * The month sequence is deliberately positional. It never infers a review
+ * from a weekday, so persisted DaySpecs and the pre-generation calendar agree.
+ */
+export function monthlyDayKind(lessonNumber: number, lessonCount: number): "new" | "review" {
+  if (!Number.isInteger(lessonNumber) || lessonNumber < 1 || lessonNumber > lessonCount) {
+    throw new RangeError("Lesson number must be inside the monthly schedule");
+  }
+  if (lessonNumber <= 15) return lessonNumber % 5 === 0 ? "review" : "new";
+  // After the first three five-slot cycles, the final available slot is the
+  // fourth review. That gives 16/17/18 new lessons for 20/21/22 slots.
+  if (lessonCount >= 20) return lessonNumber === lessonCount ? "review" : "new";
+  return "new";
 }
 
 function duplicateOf(values: readonly string[]): string | null {

@@ -1,4 +1,4 @@
-import { buildMonthlyCalendar, buildMonthlyExamScope, type MonthlyCurriculumContract } from "@e4s/domain";
+import { buildMonthlyCalendar, buildMonthlyExamScope, monthlyDayKind, type MonthlyCurriculumContract } from "@e4s/domain";
 import { monthlyResourcePlanOutputSchema, monthlyTopicSuggestionOutputSchema, type AiTaskRunner } from "@e4s/ai";
 import { createRepositories } from "@e4s/database";
 import type { FastifyInstance } from "fastify";
@@ -149,7 +149,7 @@ export function registerMonthlyContentRoutes(app: FastifyInstance, pool: Pool, a
         communicationGoal: brief.communicationGoal
       };
       const calendar = buildMonthlyCalendar(month.month);
-      const newLessonDays = calendar.effectiveDays.flatMap((date, index) => new Date(`${date}T00:00:00.000Z`).getUTCDay() === 5 ? [] : [index + 1]);
+      const newLessonDays = calendar.effectiveDays.flatMap((_date, index) => monthlyDayKind(index + 1, calendar.lessonCount) === "new" ? [index + 1] : []);
       // One operator action produces one atomic plan for the entire month.
       // Daily assignments are fields inside that plan; they are not separate
       // generation requests or partial monthly resources.
@@ -304,3 +304,4 @@ export function registerMonthlyContentRoutes(app: FastifyInstance, pool: Pool, a
     return reply.code(204).send();
   });
 }
+

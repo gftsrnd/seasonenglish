@@ -39,6 +39,22 @@ describe("Operator monthly planner", () => {
     expect(screen.getByRole("gridcell", { name: /30.*Bài thi/ })).toBeInTheDocument();
   });
 
+  it("projects positional review slots before resources exist and numbers only new lessons", () => {
+    const { container, unmount } = render(<ToastProvider><OperatorMonths
+      month="2026-10" todayMonth="2026-10" cefr="A1" busy={false}
+      overview={{ systemDate: "2026-10-01", monthWindow: { previous: "2026-09", current: "2026-10", next: "2026-11", writable: true }, brief: null, frameworks: [] }}
+      actions={{ onSelectMonth: vi.fn(), onSelectLevel: vi.fn(), onSuggestBrief: vi.fn(), onSaveBrief: vi.fn(), onApproveBrief: vi.fn(), onGenerateFramework: vi.fn(), onSaveFramework: vi.fn(), onApproveFramework: vi.fn(), onSaveDay: vi.fn(), onGenerateDay: vi.fn(), onAcknowledge: vi.fn(), onApproveDay: vi.fn(), onCreateCorrection: vi.fn(), onSaveCorrection: vi.fn(), onAcknowledgeCorrection: vi.fn(), onApproveCorrection: vi.fn() }}
+    /></ToastProvider>);
+
+    const cells = Array.from(container.querySelectorAll<HTMLElement>("[role='gridcell']"));
+    const firstReview = cells.find((cell) => cell.getAttribute("aria-label") === "07, Ôn tập");
+    const nextNew = cells.find((cell) => cell.getAttribute("aria-label") === "08, Bài 5");
+    expect(firstReview).toHaveClass("review");
+    expect(within(firstReview!).getByRole("button", { name: "Sinh" })).toBeInTheDocument();
+    expect(nextNew).toHaveClass("lesson");
+    unmount();
+  });
+
   it("shows proposed resource counts as read-only and lets the operator approve a generated resource set", async () => {
     const user = userEvent.setup();
     const onApproveFramework = vi.fn();
@@ -60,7 +76,7 @@ describe("Operator monthly planner", () => {
     /></ToastProvider>);
 
     expect(screen.queryByRole("spinbutton")).not.toBeInTheDocument();
-    expect(screen.getByText("Số lượng đề xuất theo lịch học")).toBeInTheDocument();
+    expect(screen.getAllByText("Số lượng đề xuất theo lịch học").at(-1)).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Duyệt tài nguyên" }));
     expect(onApproveFramework).toHaveBeenCalledWith("framework-a1");
   });
@@ -190,3 +206,6 @@ describe("Operator monthly planner", () => {
   });
 
 });
+
+
+
