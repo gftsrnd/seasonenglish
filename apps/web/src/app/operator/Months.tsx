@@ -81,8 +81,8 @@ export function OperatorMonths({ month, todayMonth, overview, cefr, busy, readOn
     sounds: framework.resources.sounds.length
   } : proposedResourceCounts;
   const resources = [
-    { key: "core" as const, label: "Từ cốt lõi", count: framework?.resources?.coreTerms.length ?? 0, description: "Từ và cụm từ trọng tâm" },
-    { key: "expanded" as const, label: "Từ mở rộng", count: framework?.resources?.supportTerms.length ?? 0, description: "Từ bổ trợ theo từng bài" },
+    { key: "core" as const, label: "Từ cốt lõi", count: framework?.resources?.coreTerms.length ?? 0, description: "Headword trọng tâm" },
+    { key: "expanded" as const, label: "Từ mở rộng", count: framework?.resources?.supportTerms.length ?? 0, description: "Ba liên kết đa dạng mỗi headword" },
     { key: "grammar" as const, label: "Ngữ pháp", count: framework?.resources?.grammarTopics.length ?? 0, description: "Điểm ngữ pháp cần dùng" },
     { key: "sounds" as const, label: "Phát âm", count: framework?.resources?.sounds.length ?? 0, description: "Âm và ví dụ thực hành" }
   ];
@@ -339,7 +339,7 @@ function GrammarResourcePanel({ topics, roadmap }: {
 }) {
   const daysFor = (stepId: string) => roadmap?.grammarSteps.find((item) => item.stepId === stepId)?.lessonNumbers ?? [];
   return <div className="monthly-resource-roadmap" aria-label="Lộ trình ngữ pháp">
-    {topics.map((topic, topicIndex) => <article key={topic.id} className="monthly-roadmap-card"><header><span className="monthly-roadmap-code">G{String.fromCharCode(65 + topicIndex)}</span><div><h3>{topic.title}</h3><p>{roadmap?.allocated ? "Phân bổ ngày đã chốt" : "Lộ trình nội dung đang soạn — chưa phân bổ ngày"}</p></div></header><div className="monthly-roadmap-steps">{topic.steps.map((step, index) => <section key={step.id}><b>Bước {index + 1}: {step.focus}</b>{step.usage && <p>{step.usage}</p>}{step.formula && <code>{step.formula}</code>}{step.examples.length > 0 && <div className="monthly-resource-chips">{step.examples.map((example) => <span key={example}>{example}</span>)}</div>}{roadmap?.allocated && <p className="monthly-roadmap-days">Áp dụng: {formatLessonBlocks(daysFor(step.id))}</p>}</section>)}</div></article>)}
+    {topics.map((topic, topicIndex) => <article key={topic.id} className="monthly-roadmap-card"><header><span className="monthly-roadmap-code">G{String.fromCharCode(65 + topicIndex)}</span><div><h3>{topic.title}</h3><p>{roadmap?.allocated ? "Phân bổ ngày đã chốt" : "Lộ trình nội dung đang soạn — chưa phân bổ ngày"}</p></div></header><div className="monthly-roadmap-steps">{topic.steps.map((step, index) => <section key={step.id}><b>Bước {index + 1} · {grammarPhaseLabel(topicIndex, index)}: {step.focus}</b>{step.usage && <p>{step.usage}</p>}{step.formula && <code>{step.formula}</code>}{step.examples.length > 0 && <div className="monthly-resource-chips">{step.examples.map((example) => <span key={example}>{example}</span>)}</div>}{roadmap?.allocated && <p className="monthly-roadmap-days">Áp dụng: {formatLessonBlocks(daysFor(step.id))}</p>}</section>)}</div></article>)}
   </div>;
 }
 
@@ -351,6 +351,11 @@ function PronunciationResourcePanel({ sounds, roadmap }: {
   return <div className="monthly-resource-roadmap" aria-label="Lộ trình phát âm">
     {sounds.map((sound, index) => { const allocated = assignment(sound.id); return <article key={sound.id} className="monthly-roadmap-card"><header><span className="monthly-roadmap-code">P{index + 1}</span><div><h3>{sound.label} <span>{sound.ipa}</span></h3><p>{roadmap?.allocated ? `Phân bổ đã chốt: ${formatLessonBlocks(allocated?.lessonNumbers ?? [])}` : "Mục tiêu phát âm đang soạn — chưa phân bổ ngày"}</p></div></header><div className="monthly-pronunciation-plan"><p><b>Âm mục tiêu:</b> {sound.ipa}</p>{roadmap?.allocated && <p><b>Nhịp luyện:</b> {(allocated?.slots ?? []).join(" · ") || "Theo lịch đã chốt"}</p>}<div className="monthly-resource-chips" aria-label={`Ví dụ âm ${sound.label}`}>{sound.examples.map((example) => <span key={example.id}>{example.word} <em>{example.ipa}</em></span>)}</div></div></article>; })}
   </div>;
+}
+
+function grammarPhaseLabel(topicIndex: number, stepIndex: number): string {
+  const phases = topicIndex === 0 ? ["N1–N2", "N3–N4", "N5–N6"] : ["N7–N8", "N9–N10", "N11–N12"];
+  return phases[stepIndex] ?? "Củng cố";
 }
 
 function formatLessonBlocks(lessonNumbers: number[]): string {
@@ -398,4 +403,3 @@ function formatCalendarDay(date: Date) {
 function toResourceCounts(criteria: Pick<MonthlyResourceCriteria, "vocabularyCount" | "expandedVocabularyCount" | "grammarTopicCount" | "pronunciationSoundCount">) {
   return { core: criteria.vocabularyCount, expanded: criteria.expandedVocabularyCount, grammar: criteria.grammarTopicCount, sounds: criteria.pronunciationSoundCount };
 }
-

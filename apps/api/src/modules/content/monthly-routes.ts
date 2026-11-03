@@ -7,7 +7,7 @@ import { z } from "zod";
 import { createRoleGuard } from "../identity/policy.js";
 import { evaluateMonthlyLessonQuality } from "./monthly-quality.js";
 import { generateMonthlyDayWithAi, MONTHLY_DAY_COMPONENTS } from "./monthly-day-generation.js";
-import { buildMonthlyResourcesFromAiPlan, MonthlyResourceCriteriaError, MonthlyResourcePlanError, selectMonthlyPronunciationCandidates, selectMonthlySupportCandidates } from "./monthly-resource-generation.js";
+import { buildMonthlyResourcesFromAiPlan, isSingleHeadword, MonthlyResourceCriteriaError, MonthlyResourcePlanError, selectMonthlyPronunciationCandidates, selectMonthlySupportCandidates } from "./monthly-resource-generation.js";
 import { safeGenerationDiagnosticIssues } from "./generation-errors.js";
 
 const params = z.object({ month: z.string().regex(/^\d{4}-(0[1-9]|1[0-2])$/u) });
@@ -176,16 +176,17 @@ export function registerMonthlyContentRoutes(app: FastifyInstance, pool: Pool, a
         let accepted: z.infer<typeof monthlyResourcePlanOutputSchema>["coreTerms"] | undefined;
         let issue = "";
         for (let attempt = 0; attempt < 3; attempt += 1) {
-          const prompt = `PHASE 1 — CORE VOCABULARY ONLY. Return exactly three unique coreTerms and no other category: expandedTerms, grammarTopics and pronunciationTargets must be empty arrays. Match the level, month theme and practical communication goal. Use these already generated core terms as forbidden words: ${[...coreWords].join("; ") || "none"}. This is an unordered month pool; do not assign calendar days. ${issue ? `The previous response was rejected: ${issue}. Replace the named terms with different, authentic ${criteria.cefr} workplace English.` : ""}`;
+          const prompt = `PHASE 1 — CORE VOCABULARY ONLY. Return exactly three unique coreTerms and no other category: expandedTerms, grammarTopics and pronunciationTargets must be empty arrays. Every core term must be one standalone English lexical headword: no spaces, slash alternatives, phrases, or inflected variants of another selected core. Match the level, month theme and practical communication goal. Use these already generated core terms as forbidden words: ${[...coreWords].join("; ") || "none"}. This is an unordered month pool; do not assign calendar days. ${issue ? `The previous response was rejected: ${issue}. Replace the named terms with different, authentic ${criteria.cefr} workplace English.` : ""}`;
           const result = await runPhase(prompt, [], { vocabularyCount: 3, expandedVocabularyCount: 0, grammarTopicCount: 0, pronunciationSoundCount: 0 });
           const candidate = result.coreTerms;
           const words = candidate.map((term) => normalizeMonthlyResourceWord(term.word));
           const duplicates = words.filter((word, index) => coreWords.has(word) || words.indexOf(word) !== index);
-          if (candidate.length === 3 && result.expandedTerms.length === 0 && result.grammarTopics.length === 0 && result.pronunciationTargets.length === 0 && duplicates.length === 0) {
+          const nonHeadwords = candidate.filter((term) => !isSingleHeadword(term.word)).map((term) => term.word);
+          if (candidate.length === 3 && result.expandedTerms.length === 0 && result.grammarTopics.length === 0 && result.pronunciationTargets.length === 0 && duplicates.length === 0 && nonHeadwords.length === 0) {
             accepted = candidate.map((term, index) => ({ ...term, id: `${criteria.cefr.toLowerCase()}-core-${batchIndex * 3 + index + 1}` }));
             break;
           }
-          issue = `batch ${batchIndex + 1} needs exactly 3 core terms only; received ${candidate.length}, with conflicts ${duplicates.join(", ") || "none"}`;
+          issue = `batch ${batchIndex + 1} needs exactly 3 core terms only; received ${candidate.length}, with conflicts ${duplicates.join(", ") || "none"}; non-headwords ${nonHeadwords.join(", ") || "none"}`;
         }
         if (!accepted) throw new MonthlyResourcePlanError([`Core vocabulary generation failed: ${issue}.`]);
         coreTerms.push(...accepted);
@@ -203,7 +204,7 @@ export function registerMonthlyContentRoutes(app: FastifyInstance, pool: Pool, a
         for (let attempt = 0; attempt < 3; attempt += 1) {
           const previousTerms = [...expandedTerms.map((term) => term.word), ...acceptedForCore.map((term) => term.word)];
           const needed = 3 - acceptedForCore.length;
-          const prompt = `PHASE 2 — ORDERED SUPPORT CANDIDATES FOR ONE CORE. Return exactly six candidate expandedTerms and no other category: coreTerms, grammarTopics and pronunciationTargets must be empty arrays. This is an unordered month resource pool; do not assign calendar days. Every candidate must be a genuine umbrella term, synonym, antonym, word-family form or natural collocation for this exact core: ${coreTerm.id}: ${coreTerm.word} (${coreTerm.meaning}). Every relatesToCoreId must equal ${coreTerm.id}. Never return any word from the complete finalized core vocabulary (forbidden): ${coreWordsList.join("; ")}. Support words may repeat across different cores up to 20% of total placements. Month-wide support ledger (including already accepted candidates for this core): ${previousTerms.join("; ") || "none"}. Prefer candidates that are distinct from the ledger. Return a diverse ordered candidate list so the first three valid items satisfy the target, while remaining authentic for ${criteria.cefr} and the approved theme. ${issue ? `The prior candidate set had fewer than ${needed} valid items. These were the rejected candidates (raw -> normalized, with reason): ${issue}. Return a new set of six alternatives; do not repeat the listed invalid lexical forms or normalized variants.` : ""}`;
+          const prompt = `PHASE 2 — ORDERED SUPPORT CANDIDATES FOR ONE CORE. Return exactly six candidate expandedTerms and no other category: coreTerms, grammarTopics and pronunciationTargets must be empty arrays. This is an unordered month resource pool; do not assign calendar days. For this exact core, return semantically distinct supports: umbrella, synonym, antonym and word-family relations must each be one standalone English lexical headword; only collocation may be a natural two-to-four-word workplace phrase. Never make a family of shallow variants around the core (for example workflow management, streamline the workflow, workflow tool). Use each relation at most once for this core, with at most one collocation. Every relatesToCoreId must equal ${coreTerm.id}. Never return any word from the complete finalized core vocabulary (forbidden): ${coreWordsList.join("; ")}. Support words may repeat across different cores up to 20% of total placements. Month-wide support ledger (including already accepted candidates for this core): ${previousTerms.join("; ") || "none"}. Prefer candidates that are distinct from the ledger. Return a diverse ordered candidate list so the first three valid items satisfy the target, while remaining authentic for ${criteria.cefr} and the approved theme. ${issue ? `The prior candidate set had fewer than ${needed} valid items. These were the rejected candidates (raw -> normalized, with reason): ${issue}. Return a new set of six alternatives; do not repeat the listed invalid lexical forms or normalized variants.` : ""}`;
           const result = await runPhase(prompt, coreBatch, { vocabularyCount: 0, expandedVocabularyCount: 6, grammarTopicCount: 0, pronunciationSoundCount: 0 });
           const candidate = result.expandedTerms;
           if (result.coreTerms.length || result.grammarTopics.length || result.pronunciationTargets.length) {
@@ -215,6 +216,7 @@ export function registerMonthlyContentRoutes(app: FastifyInstance, pool: Pool, a
             coreId: coreTerm.id,
             coreWords,
             sameCoreWords: new Set(acceptedForCore.map((term) => normalizeMonthlyResourceWord(term.word))),
+            sameCoreRelations: new Set(acceptedForCore.map((term) => term.relation)),
             existingSupportWords: previousTerms,
             maxRepeatedPlacements: maxExpandedRepeats,
             needed
@@ -230,7 +232,7 @@ export function registerMonthlyContentRoutes(app: FastifyInstance, pool: Pool, a
 
       const monthlyVocabularyForPronunciation = [...coreTerms, ...expandedTerms].map((term) => `${term.word} (${term.meaning})`).join("; ");
       const grammarResult = await runPhase(
-        `PHASE 3 — GRAMMAR ONLY. Return exactly two genuine grammarTopics and leave coreTerms, expandedTerms and pronunciationTargets empty. This is the reusable month pool; do not assign calendar days. Topic A will progress across new lessons N1–N6, topic B across N7–N12, and both topics are combined in N13–N15. Include precise formula, concise Vietnamese usage, and at least three authentic workplace examples per topic.`,
+        `PHASE 3 — GRAMMAR ONLY. Return exactly two genuine grammarTopics and leave coreTerms, expandedTerms and pronunciationTargets empty. This is the reusable month pool; do not assign calendar days. Each grammar topic must have exactly three ordered steps; every step needs focus, precise formula, concise Vietnamese usage, and three to six authentic workplace examples. Topic A steps are the progression for N1–N2, N3–N4, N5–N6. Topic B steps are the progression for N7–N8, N9–N10, N11–N12. N13–N15 combine the third step of both topics.`,
         [],
         { vocabularyCount: 0, expandedVocabularyCount: 0, grammarTopicCount: 2, pronunciationSoundCount: 0 }
       );
@@ -421,4 +423,3 @@ export function registerMonthlyContentRoutes(app: FastifyInstance, pool: Pool, a
 function normalizeMonthlyResourceWord(value: string): string {
   return value.trim().toLocaleLowerCase("en").replace(/[\s\p{P}]+/gu, " ").trim();
 }
-

@@ -630,14 +630,18 @@ const monthlyResourceExpandedTermSchema = z.object({
   relation: z.enum(["umbrella", "synonym", "antonym", "word_family", "collocation"]),
   relatesToCoreId: z.string().trim().min(1).max(100)
 }).strict();
+const monthlyResourceGrammarStepSchema = z.object({
+  id: z.string().trim().min(1).max(100), focus: z.string().trim().min(1).max(200),
+  formula: z.string().trim().min(1).max(400), usage: z.string().trim().min(1).max(800),
+  examples: z.array(z.string().trim().min(1).max(500)).min(3).max(6)
+}).strict();
 const monthlyResourceGrammarSchema = z.object({
   id: z.string().trim().min(1).max(100), title: z.string().trim().min(1).max(200),
-  formula: z.string().trim().min(1).max(400), usage: z.string().trim().min(1).max(800),
-  examples: z.array(z.string().trim().min(1).max(500)).min(3).max(8)
+  steps: z.array(monthlyResourceGrammarStepSchema).length(3)
 }).strict();
 const monthlyResourcePronunciationSchema = z.object({
   id: z.string().trim().min(1).max(100), ipa: z.string().trim().min(1).max(120),
-  label: z.string().trim().min(1).max(200), explanation: z.string().trim().min(1).max(800),
+  label: z.string().trim().min(1).max(120), explanation: z.string().trim().min(1).max(360),
   words: z.array(z.object({ word: z.string().trim().min(1).max(120), ipa: z.string().trim().min(1).max(120) }).strict()).min(9).max(40)
 }).strict();
 
@@ -663,7 +667,7 @@ export const monthlyResourcePlanOutputJsonSchema = {
   properties: {
     coreTerms: { type: "array", items: { type: "object", additionalProperties: false, required: ["id", "word", "meaning", "type", "ipa"], properties: { id: { type: "string" }, word: { type: "string" }, meaning: { type: "string" }, type: { type: "string" }, ipa: { type: "string" } } } },
     expandedTerms: { type: "array", items: { type: "object", additionalProperties: false, required: ["id", "word", "meaning", "type", "relation", "relatesToCoreId"], properties: { id: { type: "string" }, word: { type: "string" }, meaning: { type: "string" }, type: { type: "string" }, relation: { type: "string", enum: ["umbrella", "synonym", "antonym", "word_family", "collocation"] }, relatesToCoreId: { type: "string" } } } },
-    grammarTopics: { type: "array", maxItems: 2, items: { type: "object", additionalProperties: false, required: ["id", "title", "formula", "usage", "examples"], properties: { id: { type: "string" }, title: { type: "string" }, formula: { type: "string" }, usage: { type: "string" }, examples: { type: "array", minItems: 3, items: { type: "string" } } } } },
+    grammarTopics: { type: "array", maxItems: 2, items: { type: "object", additionalProperties: false, required: ["id", "title", "steps"], properties: { id: { type: "string" }, title: { type: "string" }, steps: { type: "array", minItems: 3, maxItems: 3, items: { type: "object", additionalProperties: false, required: ["id", "focus", "formula", "usage", "examples"], properties: { id: { type: "string" }, focus: { type: "string" }, formula: { type: "string" }, usage: { type: "string" }, examples: { type: "array", minItems: 3, items: { type: "string" } } } } } } } },
     pronunciationTargets: { type: "array", maxItems: 4, items: { type: "object", additionalProperties: false, required: ["id", "ipa", "label", "explanation", "words"], properties: { id: { type: "string" }, ipa: { type: "string" }, label: { type: "string" }, explanation: { type: "string" }, words: { type: "array", minItems: 9, items: { type: "object", additionalProperties: false, required: ["word", "ipa"], properties: { word: { type: "string" }, ipa: { type: "string" } } } } } } }
   }
 } satisfies Record<string, unknown>;

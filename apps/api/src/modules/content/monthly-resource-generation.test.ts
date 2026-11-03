@@ -28,29 +28,29 @@ function planFor(): MonthlyResourcePlanTaskOutput {
   return {
     coreTerms: newLessonDays.flatMap((dayNumber, dayIndex) => Array.from({ length: 3 }, (_, itemIndex) => ({
       id: `core-${dayIndex + 1}-${itemIndex + 1}`,
-      word: `core ${dayIndex + 1} ${itemIndex + 1}`,
+      word: `core${String.fromCharCode(97 + dayIndex)}${String.fromCharCode(97 + itemIndex)}`,
       meaning: `Từ cốt lõi ${dayIndex + 1}-${itemIndex + 1}`,
       type: "noun",
       ipa: "/kɔːr/"
     }))),
     expandedTerms: newLessonDays.flatMap((dayNumber, dayIndex) => Array.from({ length: 9 }, (_, itemIndex) => ({
       id: `expanded-${dayIndex + 1}-${itemIndex + 1}`,
-      word: `expanded ${dayIndex + 1} ${itemIndex + 1}`,
+      word: `support${String.fromCharCode(97 + dayIndex)}${String.fromCharCode(97 + itemIndex)}`,
       meaning: `Từ mở rộng ${dayIndex + 1}-${itemIndex + 1}`,
       type: "noun",
-      relation: itemIndex < 3 ? "umbrella" as const : itemIndex < 7 ? "synonym" as const : "word_family" as const,
-      relatesToCoreId: `core-${dayIndex + 1}-${(itemIndex % 3) + 1}`
+      relation: (["umbrella", "synonym", "word_family"] as const)[itemIndex % 3]!,
+      relatesToCoreId: `core-${dayIndex + 1}-${Math.floor(itemIndex / 3) + 1}`
     }))),
     grammarTopics: [
-      { id: "grammar-a", title: "Ngữ pháp A", formula: "S + V", usage: "Dùng trong giao tiếp cơ bản.", examples: ["I confirm the plan.", "We check the file.", "They send the note."] },
-      { id: "grammar-b", title: "Ngữ pháp B", formula: "S + will + V", usage: "Dùng để nói về kế hoạch.", examples: ["I will call the client.", "We will review the file.", "They will share an update."] }
+      { id: "grammar-a", title: "Ngữ pháp A", steps: [1, 2, 3].map((step) => ({ id: `a-${step}`, focus: `Nền tảng ${step}`, formula: "S + V", usage: "Dùng trong giao tiếp cơ bản.", examples: ["I confirm the plan.", "We check the file.", "They send the note."] })) },
+      { id: "grammar-b", title: "Ngữ pháp B", steps: [1, 2, 3].map((step) => ({ id: `b-${step}`, focus: `Mở rộng ${step}`, formula: "S + will + V", usage: "Dùng để nói về kế hoạch.", examples: ["I will call the client.", "We will review the file.", "They will share an update."] })) }
     ],
     pronunciationTargets: Array.from({ length: 4 }, (_, targetIndex) => ({
       id: `sound-${targetIndex + 1}`,
       ipa: ["/iː/", "/ɪ/", "/e/", "/æ/"][targetIndex]!,
       label: `Âm mục tiêu ${targetIndex + 1}`,
       explanation: "Luyện nhận biết và sử dụng âm trong câu.",
-      words: Array.from({ length: 9 }, (_, wordIndex) => ({ word: `sound${targetIndex + 1}word${wordIndex + 1}`, ipa: "/s/" }))
+      words: Array.from({ length: 9 }, (_, wordIndex) => ({ word: `term${targetIndex + 1}x${wordIndex + 1}`, ipa: "/s/" }))
     }))
   };
 }
@@ -59,10 +59,10 @@ describe("monthly AI resource generation", () => {
   it("selects the first three valid linked support terms from an ordered AI candidate set", () => {
     const candidates = [
       { id: "x1", word: "core phrase", meaning: "", type: "noun", relation: "synonym" as const, relatesToCoreId: "core-a" },
-      { id: "x2", word: "annual-report", meaning: "", type: "noun", relation: "collocation" as const, relatesToCoreId: "core-a" },
+      { id: "x2", word: "annual report", meaning: "", type: "noun", relation: "collocation" as const, relatesToCoreId: "core-a" },
       { id: "x3", word: "schedule", meaning: "", type: "noun", relation: "synonym" as const, relatesToCoreId: "core-a" },
       { id: "x4", word: "schedule", meaning: "", type: "noun", relation: "synonym" as const, relatesToCoreId: "core-a" },
-      { id: "x5", word: "update", meaning: "", type: "noun", relation: "collocation" as const, relatesToCoreId: "core-a" },
+      { id: "x5", word: "update", meaning: "", type: "noun", relation: "word_family" as const, relatesToCoreId: "core-a" },
       { id: "x6", word: "coordinate", meaning: "", type: "verb", relation: "word_family" as const, relatesToCoreId: "core-a" }
     ];
     const result = selectMonthlySupportCandidates({
@@ -70,12 +70,13 @@ describe("monthly AI resource generation", () => {
       coreId: "core-a",
       coreWords: new Set(["core phrase"]),
       sameCoreWords: new Set(),
-      existingSupportWords: ["annual report"],
+      sameCoreRelations: new Set(),
+      existingSupportWords: [],
       maxRepeatedPlacements: 28,
       needed: 3
     });
 
-    expect(result.selected.map((term) => term.word)).toEqual(["annual-report", "schedule", "update"]);
+    expect(result.selected.map((term) => term.word)).toEqual(["annual report", "schedule", "update"]);
     expect(result.rejected).toHaveLength(2);
   });
 

@@ -15,6 +15,7 @@ export function selectMonthlySupportCandidates(input: {
   coreId: string;
   coreWords: ReadonlySet<string>;
   sameCoreWords: ReadonlySet<string>;
+  sameCoreRelations: ReadonlySet<MonthlyResourcePlanTaskOutput["expandedTerms"][number]["relation"]>;
   existingSupportWords: readonly string[];
   maxRepeatedPlacements: number;
   needed: number;
@@ -34,7 +35,10 @@ export function selectMonthlySupportCandidates(input: {
     let reason = "";
     if (candidate.relatesToCoreId !== input.coreId) reason = "incorrect core relation";
     else if (input.coreWords.has(word)) reason = "matches a core term";
+    else if (candidate.relation !== "collocation" && !isSingleHeadword(candidate.word)) reason = "must be one lexical headword for this relation";
+    else if (candidate.relation === "collocation" && !isWorkplacePhrase(candidate.word)) reason = "collocation must be one natural two-to-four-word workplace phrase";
     else if (input.sameCoreWords.has(word)) reason = "duplicates a selected support term for this core";
+    else if (input.sameCoreRelations.has(candidate.relation)) reason = `duplicates the ${candidate.relation} relation for this core`;
     else if (chosen.has(word)) reason = "duplicates another candidate in this core batch";
     else {
       const nextRepeatCount = repeatedPlacements + (existingCounts.has(word) ? 1 : 0);
@@ -83,6 +87,15 @@ function normalizeMonthlyResourceWord(value: string): string {
   return value.trim().toLocaleLowerCase("en").replace(/[\s\p{P}]+/gu, " ").trim();
 }
 
+export function isSingleHeadword(value: string): boolean {
+  return /^\p{L}+(?:[-'’]\p{L}+)*$/u.test(value.trim());
+}
+
+function isWorkplacePhrase(value: string): boolean {
+  const words = value.trim().split(/\s+/u);
+  return words.length >= 2 && words.length <= 4 && words.every((word) => /^\p{L}+(?:[-'’]\p{L}+)*$/u.test(word));
+}
+
 function countApproximateSyllables(word: string): number {
   return Math.max(1, (word.toLocaleLowerCase("en").match(/[aeiouy]+/gu) ?? []).length);
 }
@@ -127,12 +140,18 @@ export function buildMonthlyResourcesFromAiPlan(
   const grammarTopics = plan.grammarTopics.map((topic, index) => ({
     id: `${cefr.toLowerCase()}-grammar-${index + 1}`,
     title: topic.title,
-    steps: [{ id: `${cefr.toLowerCase()}-grammar-${index + 1}-step`, focus: topic.title, formula: topic.formula, usage: topic.usage, examples: topic.examples }]
+    steps: topic.steps.map((step, stepIndex) => ({
+      id: `${cefr.toLowerCase()}-grammar-${index + 1}-step-${stepIndex + 1}`,
+      focus: step.focus,
+      formula: step.formula,
+      usage: step.usage,
+      examples: step.examples
+    }))
   }));
   const sounds = plan.pronunciationTargets.map((target, targetIndex) => ({
     id: `${cefr.toLowerCase()}-sound-${targetIndex + 1}`,
     ipa: target.ipa,
-    label: `${target.label}: ${target.explanation}`,
+    label: target.label,
     examples: target.words.map((word, index) => ({ id: `${cefr.toLowerCase()}-sound-${targetIndex + 1}-word-${index + 1}`, word: word.word, ipa: word.ipa }))
   }));
   return { month, cefr, theme, coreTerms, supportTerms, grammarTopics, sounds, version: theme.version };
@@ -159,5 +178,4 @@ function relationSource(relation: MonthlyResourcePlanTaskOutput["expandedTerms"]
   if (relation === "umbrella") return "group";
   return relation;
 }
-
 

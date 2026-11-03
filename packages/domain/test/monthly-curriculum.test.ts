@@ -32,7 +32,7 @@ function inputFor(month = "2026-11"): MonthlyCurriculumInput {
     grammarTopics: Array.from({ length: 2 }, (_, index) => ({
       id: `grammar-${index + 1}`,
       title: `Grammar ${index + 1}`,
-      steps: [{ id: `grammar-${index + 1}-step-1`, focus: `Focus ${index + 1}`, formula: "subject + verb", usage: "Use in a work sentence.", examples: ["I check the cost."] }]
+      steps: [1, 2, 3].map((step) => ({ id: `grammar-${index + 1}-step-${step}`, focus: `Focus ${index + 1}.${step}`, formula: "subject + verb", usage: "Use in a work sentence.", examples: ["I check the cost."] }))
     })),
     sounds: Array.from({ length: 4 }, (_, index) => ({
       id: `sound-${index + 1}`,
@@ -140,9 +140,9 @@ describe("monthly curriculum contract", () => {
     expect(newDays.slice(3, 6).map((day) => day.soundId)).toEqual(["sound-2", "sound-2", "sound-2"]);
     expect(newDays.slice(6, 9).map((day) => day.soundId)).toEqual(["sound-3", "sound-3", "sound-3"]);
     expect(newDays.slice(9, 12).map((day) => day.soundId)).toEqual(["sound-4", "sound-4", "sound-4"]);
-    expect(newDays.slice(0, 6).every((day) => day.grammarStepId === "grammar-1-step-1")).toBe(true);
-    expect(newDays.slice(6, 12).every((day) => day.grammarStepId === "grammar-2-step-1")).toBe(true);
-    expect(newDays.slice(12).map((day) => day.grammarStepId)).toEqual(["grammar-1-step-1", "grammar-2-step-1", "grammar-1-step-1", "grammar-2-step-1"]);
+    expect(newDays.slice(0, 6).every((day) => ["grammar-1-step-1", "grammar-1-step-2", "grammar-1-step-3"].includes(day.grammarStepId))).toBe(true);
+    expect(newDays.slice(6, 12).every((day) => ["grammar-2-step-1", "grammar-2-step-2", "grammar-2-step-3"].includes(day.grammarStepId))).toBe(true);
+    expect(newDays.slice(12).map((day) => day.grammarStepId)).toEqual(["grammar-1-step-3", "grammar-1-step-3", "grammar-1-step-3", "grammar-1-step-3"]);
   });
 
   it("allows no more than twenty percent repeated expanded entries while keeping all core terms distinct", () => {
@@ -205,6 +205,3 @@ describe("monthly curriculum contract", () => {
     });
   });
 });
-
-
-

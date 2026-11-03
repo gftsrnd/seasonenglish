@@ -256,8 +256,8 @@ export const MONTHLY_RESOURCE_PLAN_QUALITY_EXAMPLE = {
 export function validateMonthlyResourcePlanShape(
   plan: {
     coreTerms: Array<{ id: string; word: string }>;
-    expandedTerms: Array<{ id: string; word: string; relatesToCoreId: string }>;
-    grammarTopics: Array<{ id: string }>;
+    expandedTerms: Array<{ id: string; word: string; relation: "umbrella" | "synonym" | "antonym" | "word_family" | "collocation"; relatesToCoreId: string }>;
+    grammarTopics: Array<{ id: string; steps: Array<{ id: string }> }>;
     pronunciationTargets: Array<{ id: string; words: Array<{ word: string }> }>;
   },
   newLessonCount: number,
@@ -270,14 +270,28 @@ export function validateMonthlyResourcePlanShape(
   const expectedExpanded = newLessonCount * 9;
   if (core.length !== expectedCore) errors.push(`Expected ${expectedCore} core terms, got ${core.length}.`);
   if (expanded.length !== expectedExpanded) errors.push(`Expected ${expectedExpanded} expanded terms, got ${expanded.length}.`);
+  const singleHeadword = (value: string) => /^\p{L}+(?:[-'’]\p{L}+)*$/u.test(value.trim());
+  const workplacePhrase = (value: string) => {
+    const words = value.trim().split(/\s+/u);
+    return words.length >= 2 && words.length <= 4 && words.every(singleHeadword);
+  };
   if (new Set(core).size !== core.length) errors.push("Core resources contain duplicate terms.");
+  if (plan.coreTerms.some((item) => !singleHeadword(item.word))) errors.push("Every core resource must be one standalone lexical headword.");
+  if (plan.expandedTerms.some((item) => item.relation !== "collocation" && !singleHeadword(item.word))) errors.push("Expanded umbrella, synonym, antonym and word-family resources must be standalone lexical headwords.");
+  if (plan.expandedTerms.some((item) => item.relation === "collocation" && !workplacePhrase(item.word))) errors.push("Expanded collocations must be natural two-to-four-word workplace phrases.");
   if (expanded.some((word) => core.includes(word))) errors.push("A core term is repeated in expanded resources.");
   if (expanded.length - new Set(expanded).size > Math.floor(expanded.length * 0.2)) errors.push("Expanded resources repeat more than 20% of the monthly total.");
   const coreIds = new Set(plan.coreTerms.map((item) => item.id));
   if (coreIds.size !== plan.coreTerms.length) errors.push("Core resource IDs must be unique.");
   if (new Set(plan.expandedTerms.map((item) => item.id)).size !== plan.expandedTerms.length) errors.push("Expanded resource IDs must be unique.");
   if (plan.expandedTerms.some((item) => !coreIds.has(item.relatesToCoreId))) errors.push("Expanded resources must reference a core term in this month.");
+  for (const coreId of coreIds) {
+    const supports = plan.expandedTerms.filter((item) => item.relatesToCoreId === coreId);
+    if (supports.length !== 3) errors.push(`Core ${coreId} needs exactly three support resources.`);
+    if (new Set(supports.map((item) => item.relation)).size !== supports.length) errors.push(`Core ${coreId} repeats a support relation.`);
+  }
   if (plan.grammarTopics.length !== 2) errors.push("Expected two grammar topics.");
+  if (plan.grammarTopics.some((topic) => topic.steps.length !== 3)) errors.push("Every grammar topic needs exactly three ordered steps.");
   if (plan.pronunciationTargets.length !== 4) errors.push("Expected four pronunciation targets.");
   for (const [index, target] of plan.pronunciationTargets.entries()) {
     if (target.words.length < 9) errors.push(`Pronunciation target ${index + 1} needs at least nine real words.`);

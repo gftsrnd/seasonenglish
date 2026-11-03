@@ -200,7 +200,7 @@ export function buildMonthlyCurriculum(input: MonthlyCurriculumInput): MonthlyCu
   if (input.grammarTopics.length !== 2) throw new RangeError("Monthly curriculum needs exactly two grammar topics");
   if (input.sounds.length !== 4) throw new RangeError("Monthly curriculum needs exactly four pronunciation targets");
   if (input.supportTerms.some((term) => !Number.isInteger(term.dayNumber) || term.dayNumber < 1 || term.dayNumber > calendar.lessonCount)) throw new RangeError("Every expanded term must belong to a valid monthly day");
-  if (input.grammarTopics.some((topic) => topic.steps.length === 0)) throw new RangeError("Every grammar topic needs a concrete step");
+  if (input.grammarTopics.some((topic) => topic.steps.length !== 3)) throw new RangeError("Every grammar topic needs exactly three ordered steps");
 
   let coreCursor = 0;
   let reviewCursor = 0;
@@ -217,8 +217,13 @@ export function buildMonthlyCurriculum(input: MonthlyCurriculumInput): MonthlyCu
     const reviewTermIds = kind === "review" ? chooseReviewTerms(introduced, reviewCursor) : [];
     if (kind === "review") reviewCursor += reviewTermIds.length;
     const assignmentOrdinal = Math.max(1, newLessonOrdinal);
-    const grammarIndexes = assignmentOrdinal <= 6 ? [0] : assignmentOrdinal <= 12 ? [1] : assignmentOrdinal <= 15 ? [0, 1] : [(assignmentOrdinal - 16) % 2];
-    const grammarSteps = grammarIndexes.map((grammarIndex) => input.grammarTopics[grammarIndex]!.steps[0]!);
+    const grammarSteps = assignmentOrdinal <= 6
+      ? [input.grammarTopics[0]!.steps[Math.min(2, Math.floor((assignmentOrdinal - 1) / 2))]!]
+      : assignmentOrdinal <= 12
+        ? [input.grammarTopics[1]!.steps[Math.min(2, Math.floor((assignmentOrdinal - 7) / 2))]!]
+        : assignmentOrdinal <= 15
+          ? [input.grammarTopics[0]!.steps[2]!, input.grammarTopics[1]!.steps[2]!]
+          : [input.grammarTopics[(assignmentOrdinal - 16) % 2]!.steps[2]!];
     const step = grammarSteps[0]!;
     const soundIndex = assignmentOrdinal <= 12 ? Math.floor((assignmentOrdinal - 1) / 3) : (assignmentOrdinal - 13) % 4;
     const sound = input.sounds[soundIndex]!;
