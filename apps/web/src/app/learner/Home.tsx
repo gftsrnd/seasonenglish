@@ -261,10 +261,18 @@ function monthlyExamLabel(status: NonNullable<LearnerHomeView["monthlyExam"]>["s
 
 export function LearnerMonthly({ view, actions }: { view: LearnerHomeView; actions: LearnerCallbacks }) {
   const month = view.month;
-  if (!month) return <div className="app-learner-page"><PageTitle eyebrow="Bài tháng" title="Lộ trình tháng đang được chuẩn bị" detail="Người vận hành sẽ phát hành lịch học, bài ôn và bài thi theo tháng." /><AppLink className="btn btn-primary" href="/home" navigate={actions.navigate}>Về trang chủ</AppLink></div>;
-  return <div className="app-learner-page home-page" style={{ width: "100%", maxWidth: 960, minWidth: 0, boxSizing: "border-box" }}><PageTitle eyebrow={`Tháng ${formatMonth(month.month)}`} title="Bài tháng" detail={month.themeTitle} /><MonthlyCalendar month={month} lessons={view.lessons} actions={actions} />{view.monthlyExam ? <MonthlyExamCard month={month} exam={view.monthlyExam} actions={actions} /> : null}</div>;
+  if (!month) return <div className="app-learner-page" style={{ width: "100%", maxWidth: 960, minWidth: 0, boxSizing: "border-box" }}>
+    <PageTitle eyebrow="Bài tháng" title="Lộ trình tháng đang được chuẩn bị" detail="Người vận hành sẽ phát hành lịch học, bài ôn và bài thi theo tháng." />
+    <section className="card" aria-label="Trạng thái bài tháng"><h2>Chưa có bài tháng để vào</h2><p>Chưa có bộ tài nguyên và lịch học tháng đã duyệt cho trình độ <b>{view.learner.cefr ?? "hiện tại"}</b>, nên chưa thể hiển thị lịch, điều kiện vào bài hay đề thi.</p><p className="small muted">Hồ sơ và kết quả đầu vào của bạn vẫn được lưu độc lập với lộ trình tháng.</p><div className="row" style={{ flexWrap: "wrap" }}><AppLink className="btn btn-primary" href="/home" navigate={actions.navigate}>Về trang chủ</AppLink><AppLink className="btn" href="/profile" navigate={actions.navigate}>Xem hồ sơ và kết quả đầu vào</AppLink></div></section>
+  </div>;
+  const exam = view.monthlyExam;
+  return <div className="app-learner-page home-page" style={{ width: "100%", maxWidth: 960, minWidth: 0, boxSizing: "border-box" }}>
+    <PageTitle eyebrow={`Tháng ${formatMonth(month.month)}`} title="Bài tháng" detail={month.themeTitle} />
+    <section className="card" aria-label="Tổng quan bài tháng"><div className="eyebrow">Chủ đề tháng</div><h2 style={{ margin: "2px 0 6px" }}>{month.themeTitle}</h2><p style={{ margin: "0 0 6px" }}>{month.communicationGoal}</p><p className="small muted" style={{ margin: 0 }}>Ngày hệ thống: {formatLessonDate(month.systemDate ?? `${month.month}-01`)} · Ngày thi: {formatLessonDate(month.examDate)}</p></section>
+    <MonthlyCalendar month={month} lessons={view.lessons} actions={actions} />
+    {exam ? <MonthlyExamCard month={month} exam={exam} actions={actions} /> : <section className="card" style={{ marginTop: 16 }} aria-label="Bài thi tháng"><h3>Bài thi tháng</h3><p className="small muted">Đang đồng bộ trạng thái đề thi từ máy chủ.</p></section>}
+  </div>;
 }
-
 function Metric({ label, value, percent, color = "var(--olive)" }: { label: string; value: string; percent: number; color?: string }) {
   return <article className="stat"><div className="ring" style={{ "--p": percent, "--c": color } as CSSProperties}><b>{value}</b></div><span className="lbl">{label}</span></article>;
 }
@@ -315,6 +323,7 @@ function ReadinessBar({ metric }: { metric: LearnerHomeView["levelReadiness"]["c
     <i className="readiness-target" data-testid="readiness-target" aria-hidden="true" style={{ left: `${targetPercent}%` }} />
   </div>;
 }
+
 
 
 

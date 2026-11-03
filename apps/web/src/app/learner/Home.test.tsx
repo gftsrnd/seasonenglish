@@ -59,7 +59,17 @@ describe("monthly learner home", () => {
   it("opens a dedicated monthly screen from the same approved month contract", () => {
     render(<LearnerMonthly view={view()} actions={actions} />);
     expect(screen.getByRole("heading", { name: "Bài tháng" })).toBeInTheDocument();
+    expect(screen.getByRole("region", { name: "Tổng quan bài tháng" })).toHaveTextContent("Ngày hệ thống");
     expect(screen.getByRole("grid", { name: "Lịch học tháng 11/2026" })).toBeInTheDocument();
+    expect(screen.getByRole("region", { name: "Bài thi tháng" })).toHaveTextContent("Hoàn thành 2 bài còn lại");
   });
-});
+
+  it("keeps the monthly entry truthful before a framework exists", () => {
+    render(<LearnerMonthly view={view({ month: null, monthlyPreparation: true, lessons: [], nextLesson: null, monthlyExam: null })} actions={actions} />);
+    const pending = screen.getByRole("region", { name: "Trạng thái bài tháng" });
+    expect(pending).toHaveTextContent("Chưa có bài tháng để vào");
+    expect(within(pending).getByRole("link", { name: "Xem hồ sơ và kết quả đầu vào" })).toHaveAttribute("href", "/profile");
+    expect(screen.queryByText("Chặng 1")).not.toBeInTheDocument();
+  });});
+
 
