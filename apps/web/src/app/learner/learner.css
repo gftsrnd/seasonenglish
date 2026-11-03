@@ -1726,3 +1726,12 @@ h1,h2,h3,h4,h1 b,h2 b,h3 b,h4 b{font-weight:600 !important}
 .monthly-assessment-form-state{display:flex;justify-content:space-between;align-items:center;gap:16px;padding:14px 16px;border-radius:12px;background:var(--primary-soft);border:1px solid var(--primary-line)}
 .monthly-assessment-form-state>div{display:grid;gap:3px}.monthly-assessment-form-state span{font-size:.84rem;line-height:1.45;color:var(--muted)}.monthly-assessment-inline-note{margin:0;color:var(--muted);font-size:.9rem}
 @media(max-width:640px){.monthly-assessment-landing{padding:18px}.monthly-eligibility-metrics{grid-template-columns:1fr}.monthly-eligibility-metrics .stat{min-height:unset;display:grid;grid-template-columns:66px 1fr;justify-items:start;align-items:center;gap:12px;text-align:left}.monthly-assessment-form-state{align-items:flex-start;flex-direction:column}.monthly-assessment-header{flex-direction:column;gap:8px}}
+
+/* Refine monthly assessment landing alignment and reading space. */
+.monthly-assessment-page{max-width:960px!important;margin-left:0!important;margin-right:auto!important}
+.monthly-assessment-page>.page-title{padding-left:0!important}
+.monthly-assessment-landing{gap:22px;padding:30px 32px;min-height:420px}
+.monthly-assessment-header{padding-bottom:20px}.monthly-assessment-header h2{font-size:1.55rem}
+.monthly-eligibility-summary{gap:18px}.monthly-eligibility-metrics{gap:16px}.monthly-eligibility-metrics .stat{min-height:170px;padding:20px 14px;gap:12px}.monthly-eligibility-metrics .ring{width:82px;height:82px;font-size:.9rem}.monthly-eligibility-metrics .lbl{font-size:.9rem}
+.monthly-eligibility-rules{padding-top:16px;font-size:.9rem}.monthly-assessment-form-state{padding:18px 20px}
+@media(max-width:640px){.monthly-assessment-page{margin-left:auto!important;margin-right:auto!important}.monthly-assessment-landing{padding:20px;min-height:0}.monthly-eligibility-metrics{gap:10px}.monthly-eligibility-metrics .stat{min-height:unset;padding:14px}.monthly-eligibility-metrics .ring{width:66px;height:66px;font-size:.78rem}.monthly-eligibility-metrics .lbl{font-size:.78rem}}
