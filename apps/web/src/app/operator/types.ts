@@ -180,6 +180,7 @@ export interface OperatorLevelFormsActions {
   onBack(): void;
   onOpenSettings(): void;
   onGenerate(target: Cefr): void;
+  onCreateManual?(target: Cefr): void;
   onView(id: string): void;
   onEdit?(id: string, fromPublished?: boolean): void;
   onApprove(id: string): void;

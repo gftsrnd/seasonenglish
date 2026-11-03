@@ -730,6 +730,15 @@ function LevelFormsRoute({ client, readOnly, embedded = false }: { client: Opera
   return <><OperatorLevelForms readOnly={readOnly} embedded={embedded} unavailable={missing} view={adaptLevelForms(data, { aiConnected: capabilities?.ai ?? false, generatingTarget: generating })} actions={{
     onBack: () => navigate(paths.root), onOpenSettings: () => navigate("/settings"),
     onGenerate: target => { if (readOnly) return; setGenerating(target); refresh(client.generateAssessmentLevelForm(target as Exclude<CefrLevel, "A1">)); },
+    onCreateManual: target => {
+      if (readOnly) return;
+      setGenerating(target);
+      void client.createManualAssessmentLevelForm(target as Exclude<CefrLevel, "A1">)
+        .then(form => client.getAssessmentLevelForm(form.versionId))
+        .then(detail => { setDialog({ detail, editing: true }); return load(); })
+        .catch(reason => setError(message(reason)))
+        .finally(() => setGenerating(null));
+    },
     onApprove: id => { if (!readOnly) refresh(client.publishAssessmentLevelForm(id)); }, onView: id => show(id), onEdit: (id, fromPublished) => {
       if (readOnly) return;
       if (fromPublished) void client.copyAssessmentLevelFormToDraft(id).then(detail => { setDialog({ detail, editing: true }); void load(); }).catch(reason => setError(message(reason)));

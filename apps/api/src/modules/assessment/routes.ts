@@ -129,23 +129,23 @@ const sectionOrder: AssessmentSectionCode[] = ["listening", "reading", "writing"
 const levelFormParam = z.object({ targetLevel: z.enum(["A2", "B1", "B2", "C1"]) });
 const levelFormVersionParam = z.object({ versionId: z.uuid() });
 const levelFormTaskInput = z.object({
-  key: z.string().trim().min(1).max(80), prompt: z.string().trim().min(1).max(20_000),
+  key: z.string().trim().min(1).max(80), prompt: z.string().trim().max(20_000),
   responseType: z.enum(["single_choice", "long_text", "speaking_evidence"]), maxScore: z.number().positive().max(100),
-  options: z.array(z.object({ value: z.string().trim().min(1).max(80), label: z.string().trim().min(1).max(2_000) })).max(10).optional(),
+  options: z.array(z.object({ value: z.string().trim().min(1).max(80), label: z.string().trim().max(2_000) })).max(10).optional(),
   correctAnswer: z.string().trim().min(1).max(2_000).nullable().optional(), minWords: z.number().int().min(0).max(5_000).optional(), maxWords: z.number().int().min(1).max(5_000).optional()
 }).passthrough();
 const levelFormStimulusInput = z.discriminatedUnion("type", [
-  z.object({ type: z.literal("passage"), text: z.string().trim().min(1).max(30_000) }).passthrough(),
-  z.object({ type: z.literal("audio_script"), audioSrc: z.string().max(2_000).optional(), lines: z.array(z.object({ speaker: z.string().trim().min(1).max(200), text: z.string().trim().min(1).max(10_000) })).min(1).max(50) }).passthrough()
+  z.object({ type: z.literal("passage"), text: z.string().trim().max(30_000) }).passthrough(),
+  z.object({ type: z.literal("audio_script"), audioSrc: z.string().max(2_000).optional(), lines: z.array(z.object({ speaker: z.string().trim().min(1).max(200), text: z.string().trim().max(10_000) })).min(1).max(50) }).passthrough()
 ]);
 const levelFormUpdateInput = z.object({
   title: z.string().trim().min(3).max(300),
   sections: z.array(z.object({
     code: z.enum(["listening", "reading", "writing", "speaking"]), title: z.string().trim().min(1).max(200),
     durationMinutes: z.number().int().positive().max(120), maxScore: z.number().positive().max(100),
-    instructions: z.array(z.string().trim().min(1).max(2_000)).min(1).max(20),
+    instructions: z.array(z.string().trim().max(2_000)).min(1).max(20),
     groups: z.array(z.object({
-      key: z.string().trim().min(1).max(80), title: z.string().trim().min(1).max(200), instruction: z.string().trim().min(1).max(2_000),
+      key: z.string().trim().min(1).max(80), title: z.string().trim().min(1).max(200), instruction: z.string().trim().max(2_000),
       stimulus: levelFormStimulusInput.optional(), maxPlays: z.number().int().min(1).max(10).optional(), tasks: z.array(levelFormTaskInput).min(1).max(50)
     }).passthrough()).min(1).max(20)
   }).passthrough()).length(4)
@@ -153,13 +153,13 @@ const levelFormUpdateInput = z.object({
   const codes = new Set(value.sections.map((section) => section.code));
   if (codes.size !== 4) context.addIssue({ code: "custom", path: ["sections"], message: "Each level form must contain four distinct sections" });
   value.sections.forEach((section, sectionIndex) => section.groups.forEach((group, groupIndex) => group.tasks.forEach((task, taskIndex) => {
-    if (task.responseType === "single_choice" && (!task.options?.length || !task.correctAnswer || !task.options.some((option) => option.value === task.correctAnswer))) {
+    if (task.responseType === "single_choice" && task.correctAnswer && (!task.options?.length || !task.options.some((option) => option.value === task.correctAnswer))) {
       context.addIssue({ code: "custom", path: ["sections", sectionIndex, "groups", groupIndex, "tasks", taskIndex], message: "Choice tasks require options and a matching answer" });
     }
   })));
 });
 
-const DEFAULT_LEVEL_FORM_PROMPT = `Create a complete Workplace English CEFR promotion test for the requested target level. Return exactly four sections: listening with 5 multiple-choice questions, reading with 5 multiple-choice questions, writing with 1 task, and speaking with 1 task. Use realistic workplace situations, unambiguous answer keys, level-appropriate language, and follow the required JSON schema exactly.`;
+const DEFAULT_LEVEL_FORM_PROMPT = `Create a complete 75-minute, 100-point Workplace English CEFR promotion test for the requested target level. Return exactly four sections with the placement structure: Listening 20 multiple-choice questions for 20 points, Reading 40 multiple-choice questions for 40 points, Writing 2 tasks for 20 points, and Speaking 4 tasks for 20 points. The content must be new and target-level appropriate, never copied from placement or another level. Use realistic workplace situations, unambiguous answer keys, and the required JSON schema exactly.`;
 
 export function registerAssessmentRoutes(app: FastifyInstance, pool: Pool, aiRunner?: AiTaskRunner, aiRunnerFactory?: (actorId: string) => Promise<AiTaskRunner | undefined>, edgeTtsRunner?: EdgeTtsRunner): void {
   const repositories = createRepositories(pool);
@@ -539,6 +539,16 @@ export function registerAssessmentRoutes(app: FastifyInstance, pool: Pool, aiRun
     return draft ? reply.code(201).send(draft) : reply.code(409).send({ code: "LEVEL_FORM_NOT_COPYABLE" });
   });
 
+  app.post("/api/v1/assessment-level-forms/:targetLevel/manual-draft", { preHandler: levelFormOperators }, async (request, reply) => {
+    const params = levelFormParam.safeParse(request.params);
+    if (!params.success) return reply.code(400).send({ code: "INVALID_TARGET_LEVEL" });
+    const form = await repositories.assessments.createLevelFormDraft(
+      request.e4sSession!.user.id,
+      params.data.targetLevel,
+      manualLevelFormBlueprint(params.data.targetLevel)
+    );
+    return reply.code(201).send({ ...form, publishedAt: null });
+  });
   app.post("/api/v1/assessment-level-forms/:targetLevel/generate", {
     preHandler: levelFormOperators, config: { rateLimit: { max: 4, timeWindow: "1 minute" } }
   }, async (request, reply) => {
@@ -550,7 +560,7 @@ export function registerAssessmentRoutes(app: FastifyInstance, pool: Pool, aiRun
     const task = await repositories.aiRuns.activeTaskPrompt(actorId, "level_form_generation");
     try {
       const result = await runner.runTask("level_form_generation", {
-        targetLevel: params.data.targetLevel, context: "workplace_english", listeningQuestions: 5, readingQuestions: 5
+        targetLevel: params.data.targetLevel, context: "workplace_english", listeningQuestions: 20, readingQuestions: 40
       }, { systemPrompt: task?.prompt ?? DEFAULT_LEVEL_FORM_PROMPT });
       const output = levelFormOutputSchema.safeParse(result.output);
       if (!output.success) return reply.code(502).send({ code: "AI_OUTPUT_INVALID" });
@@ -1131,25 +1141,46 @@ function assessmentErrorCode(error: unknown, fallback: string): string {
   return error instanceof Error && /^[A-Z0-9_]+$/.test(error.message) ? error.message : fallback;
 }
 
+function manualLevelFormBlueprint(targetLevel: "A2" | "B1" | "B2" | "C1"): StoredAssessmentDefinition {
+  const choices = () => ["A", "B", "C", "D"].map((value) => ({ value, label: "" }));
+  const choiceTasks = (prefix: "L" | "R", count: number) => Array.from({ length: count }, (_, index) => ({
+    key: `${prefix}${index + 1}`, prompt: "", responseType: "single_choice" as const, maxScore: 1, options: choices()
+  }));
+  return {
+    key: `level-up-${targetLevel.toLowerCase()}`, kind: "level-up", title: `Đề thi lên mức ${targetLevel} — bản soạn tay`, version: 1,
+    totalMinutes: 75, totalScore: 100, targetLevel,
+    sections: [
+      { code: "listening", title: "Nghe", durationMinutes: 15, maxScore: 20, instructions: ["Nghe tối đa 2 lần và chọn đáp án đúng."], groups: [{ key: "L", title: "Workplace listening", instruction: "", maxPlays: 2, stimulus: { type: "audio_script", lines: [{ speaker: "Narrator", text: "" }] }, tasks: choiceTasks("L", 20) }] },
+      { code: "reading", title: "Đọc", durationMinutes: 25, maxScore: 40, instructions: ["Đọc và chọn đáp án đúng."], groups: [{ key: "R", title: "Workplace reading", instruction: "", stimulus: { type: "passage", text: "" }, tasks: choiceTasks("R", 40) }] },
+      { code: "writing", title: "Viết", durationMinutes: 20, maxScore: 20, instructions: ["Hoàn thành cả hai nhiệm vụ viết."], groups: [{ key: "W", title: "Writing", instruction: "", tasks: [
+        { key: "W1", prompt: "", responseType: "long_text" as const, maxScore: 7, minWords: 50, maxWords: 80 },
+        { key: "W2", prompt: "", responseType: "long_text" as const, maxScore: 13, minWords: 120, maxWords: 150 }
+      ] }] },
+      { code: "speaking", title: "Nói", durationMinutes: 15, maxScore: 20, instructions: ["Hoàn thành bốn nhiệm vụ nói ở mức đích."], groups: Array.from({ length: 4 }, (_, index) => ({ key: `S${index + 1}`, title: `Speaking ${index + 1}`, instruction: "", tasks: [{ key: `S${index + 1}`, prompt: "", responseType: "speaking_evidence" as const, maxScore: 5 }] })) }
+    ]
+  };
+}
 function levelFormBlueprint(targetLevel: "A2" | "B1" | "B2" | "C1", output: LevelFormTaskOutput): StoredAssessmentDefinition {
   const options = ["A", "B", "C", "D"] as const;
-  const tasks = (prefix: string, questions: LevelFormTaskOutput["listening"]["questions"]) => questions.map((question, index) => ({
-    key: `${prefix}${index + 1}`, prompt: question.prompt, responseType: "single_choice" as const, maxScore: 5,
+  const choiceTasks = (prefix: string, questions: LevelFormTaskOutput["listening"]["questions"], maxScore: number) => questions.map((question, index) => ({
+    key: `${prefix}${index + 1}`, prompt: question.prompt, responseType: "single_choice" as const, maxScore,
     options: question.options.map((label, optionIndex) => ({ value: options[optionIndex]!, label })),
     correctAnswer: options[question.correctIndex]!
   }));
   return {
     key: `level-up-${targetLevel.toLowerCase()}`, kind: "level-up", title: output.title,
-    version: 1, totalMinutes: 38, totalScore: 100, targetLevel,
+    version: 1, totalMinutes: 75, totalScore: 100, targetLevel,
     sections: [
-      { code: "listening", title: "Nghe", durationMinutes: 8, maxScore: 25, instructions: ["Nghe tối đa 2 lần và chọn đáp án đúng."], groups: [{ key: "L", title: "Workplace listening", instruction: "Nghe đoạn hội thoại và trả lời 5 câu.", maxPlays: 2, stimulus: { type: "audio_script", lines: [{ speaker: "Speaker", text: output.listening.script }] }, tasks: tasks("L", output.listening.questions) }] },
-      { code: "reading", title: "Đọc", durationMinutes: 13, maxScore: 25, instructions: ["Đọc và chọn đáp án đúng."], groups: [{ key: "R", title: "Workplace reading", instruction: "Đọc đoạn văn và trả lời 5 câu.", stimulus: { type: "passage", text: output.reading.passage }, tasks: tasks("R", output.reading.questions) }] },
-      { code: "writing", title: "Viết", durationMinutes: 10, maxScore: 25, instructions: ["Viết 80–120 từ."], groups: [{ key: "W", title: "Writing", instruction: "Hoàn thành một task.", tasks: [{ key: "W1", prompt: output.writingPrompt, responseType: "long_text", maxScore: 25, minWords: 80, maxWords: 120 }] }] },
-      { code: "speaking", title: "Nói", durationMinutes: 7, maxScore: 25, instructions: ["Nộp bằng chứng nói ở mức đích."], groups: [{ key: "S", title: "Speaking", instruction: "Hoàn thành tình huống nói.", tasks: [{ key: "S1", prompt: output.speakingPrompt, responseType: "speaking_evidence", maxScore: 25 }] }] }
+      { code: "listening", title: "Nghe", durationMinutes: 15, maxScore: 20, instructions: ["Nghe tối đa 2 lần và chọn đáp án đúng."], groups: [{ key: "L", title: "Workplace listening", instruction: "Nghe đoạn hội thoại và trả lời 20 câu.", maxPlays: 2, stimulus: { type: "audio_script", lines: [{ speaker: "Speaker", text: output.listening.script }] }, tasks: choiceTasks("L", output.listening.questions, 1) }] },
+      { code: "reading", title: "Đọc", durationMinutes: 25, maxScore: 40, instructions: ["Đọc và chọn đáp án đúng."], groups: [{ key: "R", title: "Workplace reading", instruction: "Đọc đoạn văn và trả lời 40 câu.", stimulus: { type: "passage", text: output.reading.passage }, tasks: choiceTasks("R", output.reading.questions, 1) }] },
+      { code: "writing", title: "Viết", durationMinutes: 20, maxScore: 20, instructions: ["Hoàn thành cả hai nhiệm vụ viết."], groups: [{ key: "W", title: "Writing", instruction: "Hoàn thành hai nhiệm vụ viết.", tasks: [
+        { key: "W1", prompt: output.writingPrompts[0]!, responseType: "long_text", maxScore: 7, minWords: 50, maxWords: 80 },
+        { key: "W2", prompt: output.writingPrompts[1]!, responseType: "long_text", maxScore: 13, minWords: 120, maxWords: 150 }
+      ] }] },
+      { code: "speaking", title: "Nói", durationMinutes: 15, maxScore: 20, instructions: ["Hoàn thành bốn nhiệm vụ nói ở mức đích."], groups: output.speakingPrompts.map((prompt, index) => ({ key: `S${index + 1}`, title: `Speaking ${index + 1}`, instruction: "Hoàn thành nhiệm vụ nói.", tasks: [{ key: `S${index + 1}`, prompt, responseType: "speaking_evidence" as const, maxScore: 5 }] })) }
     ]
   };
 }
-
 function normalizeKind(kind: "placement" | "levelup" | "level-up" | "monthly" | "final" | "pass-course" | "passcourse"): AssessmentKind {
   if (kind === "levelup") return "level-up";
   if (kind === "passcourse") return "pass-course";

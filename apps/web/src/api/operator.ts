@@ -45,6 +45,7 @@ export interface OperatorApiClient {
   getAssessmentFormPreviews(kind: "placement" | "level_up" | "final" | "pass_course"): Promise<AssessmentFormPreviewCollectionView>;
   getAssessmentLevelForm(versionId: string): Promise<AssessmentLevelFormDetailView>;
   generateAssessmentLevelForm(targetLevel: Exclude<CefrLevel, "A1">): Promise<AssessmentLevelFormView>;
+  createManualAssessmentLevelForm(targetLevel: Exclude<CefrLevel, "A1">): Promise<AssessmentLevelFormView>;
   updateAssessmentLevelForm(versionId: string, input: AssessmentLevelFormUpdateInput): Promise<AssessmentLevelFormDetailView>;
   copyAssessmentLevelFormToDraft(versionId: string): Promise<AssessmentLevelFormDetailView>;
   publishAssessmentLevelForm(versionId: string): Promise<AssessmentLevelFormView>;
@@ -142,6 +143,7 @@ export const operatorApiClient: OperatorApiClient = {
   getAssessmentFormPreviews: (kind) => request(`/api/v1/assessment-form-previews/${encodeURIComponent(kind)}`),
   getAssessmentLevelForm: (versionId) => request(`/api/v1/assessment-level-forms/${encodeURIComponent(versionId)}`),
   generateAssessmentLevelForm: (targetLevel) => request(`/api/v1/assessment-level-forms/${encodeURIComponent(targetLevel)}/generate`, { method: "POST", body: "{}" }),
+  createManualAssessmentLevelForm: (targetLevel) => request(`/api/v1/assessment-level-forms/${encodeURIComponent(targetLevel)}/manual-draft`, { method: "POST", body: "{}" }),
   updateAssessmentLevelForm: (versionId, input) => request(`/api/v1/assessment-level-forms/${encodeURIComponent(versionId)}`, { method: "PUT", body: JSON.stringify(input) }),
   copyAssessmentLevelFormToDraft: (versionId) => request(`/api/v1/assessment-level-forms/${encodeURIComponent(versionId)}/draft`, { method: "POST", body: "{}" }),
   publishAssessmentLevelForm: (versionId) => request(`/api/v1/assessment-level-forms/${encodeURIComponent(versionId)}/publication`, { method: "POST", body: "{}" }),

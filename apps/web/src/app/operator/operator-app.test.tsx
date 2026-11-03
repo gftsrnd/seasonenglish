@@ -165,6 +165,16 @@ describe("Operator app rebuild", () => {
     expect(screen.getByRole("heading", { name: "B1" })).toBeInTheDocument();
   });
 
+  it("opens a real manual-authoring action for an empty target level", async () => {
+    const user = userEvent.setup();
+    const onCreateManual = vi.fn();
+    render(<OperatorLevelForms embedded view={{ aiConnected: true, generatingTarget: null, targets: [{ target: "A2", forms: [] }] } as any} actions={{ onBack: vi.fn(), onOpenSettings: vi.fn(), onGenerate: vi.fn(), onCreateManual, onView: vi.fn(), onApprove: vi.fn(), onDelete: vi.fn() }} />);
+
+    expect(screen.getByText(/4 kỹ năng, 75 phút, 100 điểm/)).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Soạn tay" }));
+    expect(onCreateManual).toHaveBeenCalledWith("A2");
+  });
+
   it("lets Operator edit a draft before approving and publishing it", async () => {
     const user = userEvent.setup();
     const onEdit = vi.fn();

@@ -1417,44 +1417,48 @@ const assessmentChoiceSchema = z.object({
   correctIndex: z.number().int().min(0).max(3)
 });
 
+/**
+ * A level-up test follows the placement assessment shape. It is generated
+ * for a target CEFR level, not seeded as a reusable fixed form.
+ */
 export const levelFormInputSchema = z.object({
   targetLevel: z.enum(["A2", "B1", "B2", "C1"]),
-  context: z.literal("workplace_english"), listeningQuestions: z.literal(5), readingQuestions: z.literal(5)
+  context: z.literal("workplace_english"), listeningQuestions: z.literal(20), readingQuestions: z.literal(40)
 });
 
 export const levelFormOutputSchema = z.object({
   title: z.string().trim().min(1).max(200),
-  listening: z.object({ script: z.string().trim().min(80).max(4_000), questions: z.array(assessmentChoiceSchema).length(5) }),
-  reading: z.object({ passage: z.string().trim().min(80).max(4_000), questions: z.array(assessmentChoiceSchema).length(5) }),
-  writingPrompt: z.string().trim().min(20).max(1_000),
-  speakingPrompt: z.string().trim().min(20).max(1_000)
+  listening: z.object({ script: z.string().trim().min(160).max(12_000), questions: z.array(assessmentChoiceSchema).length(20) }),
+  reading: z.object({ passage: z.string().trim().min(160).max(12_000), questions: z.array(assessmentChoiceSchema).length(40) }),
+  writingPrompts: z.array(z.string().trim().min(20).max(1_000)).length(2),
+  speakingPrompts: z.array(z.string().trim().min(20).max(1_000)).length(4)
 });
 
 export type LevelFormTaskOutput = z.infer<typeof levelFormOutputSchema>;
 
 export const levelFormOutputJsonSchema = {
   type: "object", additionalProperties: false,
-  required: ["title", "listening", "reading", "writingPrompt", "speakingPrompt"],
+  required: ["title", "listening", "reading", "writingPrompts", "speakingPrompts"],
   properties: {
     title: { type: "string" },
-    listening: sectionSchema("script"), reading: sectionSchema("passage"),
-    writingPrompt: { type: "string" }, speakingPrompt: { type: "string" }
+    listening: sectionSchema("script", 20), reading: sectionSchema("passage", 40),
+    writingPrompts: { type: "array", minItems: 2, maxItems: 2, items: { type: "string" } },
+    speakingPrompts: { type: "array", minItems: 4, maxItems: 4, items: { type: "string" } }
   }
 } satisfies Record<string, unknown>;
 
-function sectionSchema(textKey: "script" | "passage") {
+function sectionSchema(textKey: "script" | "passage", questionCount: number) {
   return {
     type: "object", additionalProperties: false, required: [textKey, "questions"],
     properties: {
       [textKey]: { type: "string" },
-      questions: { type: "array", minItems: 5, maxItems: 5, items: {
+      questions: { type: "array", minItems: questionCount, maxItems: questionCount, items: {
         type: "object", additionalProperties: false, required: ["prompt", "options", "correctIndex"],
         properties: { prompt: { type: "string" }, options: { type: "array", minItems: 4, maxItems: 4, items: { type: "string" } }, correctIndex: { type: "integer", minimum: 0, maximum: 3 } }
       } }
     }
   };
 }
-
 const cefrSuggestionLevelSchema = z.enum(["A1", "A2", "B1", "B2", "C1"]);
 const weeklyLessonBlueprintPlanSchema = z.object({
   A1: z.array(z.string().trim().min(1).max(500)).length(5),

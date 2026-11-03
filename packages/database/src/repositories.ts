@@ -4246,6 +4246,38 @@ function sectionTaskCount(blueprint: StoredAssessmentDefinition, code: Assessmen
     ?.groups.reduce((total, group) => total + group.tasks.length, 0) ?? 0;
 }
 
+/** The only publishable level-up shape is the placement-format assessment. */
+function hasCanonicalLevelFormStructure(blueprint: StoredAssessmentDefinition): boolean {
+  const expected: Record<AssessmentSectionCode, { duration: number; score: number; tasks: number }> = {
+    listening: { duration: 15, score: 20, tasks: 20 },
+    reading: { duration: 25, score: 40, tasks: 40 },
+    writing: { duration: 20, score: 20, tasks: 2 },
+    speaking: { duration: 15, score: 20, tasks: 4 }
+  };
+  if (blueprint.totalMinutes !== 75 || blueprint.totalScore !== 100 || blueprint.sections.length !== 4) return false;
+  return (Object.entries(expected) as Array<[AssessmentSectionCode, typeof expected[AssessmentSectionCode]]>).every(([code, requirement]) => {
+    const section = blueprint.sections.find((item) => item.code === code);
+    return Boolean(section && section.durationMinutes === requirement.duration && section.maxScore === requirement.score && sectionTaskCount(blueprint, code) === requirement.tasks);
+  });
+}
+
+/** A manually-created frame is a real draft, but it must not be publishable
+ * until every learner-facing field has been supplied. */
+function hasCompleteLevelFormContent(blueprint: StoredAssessmentDefinition): boolean {
+  return blueprint.sections.every((section) => section.groups.every((group) => {
+    if (group.stimulus?.type === "audio_script" && (!group.stimulus.lines?.length || !group.stimulus.lines.every((line) => line.speaker.trim() && line.text.trim()))) return false;
+    if (group.stimulus?.type === "passage" && !group.stimulus.text?.trim()) return false;
+    return group.tasks.every((task) => {
+      if (!task.prompt.trim()) return false;
+      if (task.responseType !== "single_choice") return true;
+      const options = task.options ?? [];
+      return options.length === 4
+        && options.every((option) => option.value.trim() && option.label.trim())
+        && Boolean(task.correctAnswer && options.some((option) => option.value === task.correctAnswer));
+    });
+  }));
+}
+
 function assessmentTaskMap(blueprint: StoredAssessmentDefinition): Map<string, unknown> {
   return new Map(blueprint.sections.flatMap((section) => section.groups.flatMap((group) =>
     group.tasks.map((task) => [task.key, task] as const)
@@ -6257,6 +6289,7 @@ class AssessmentRepository {
       [reviewerId]
     );
     return result.rows.flatMap((row) => {
+      if (!hasCanonicalLevelFormStructure(row.blueprint)) return [];
       const targetLevel = row.blueprint.targetLevel;
       if (!targetLevel || targetLevel === "A1") return [];
       const sectionCount = (code: AssessmentSectionCode) => row.blueprint.sections
@@ -6303,6 +6336,7 @@ class AssessmentRepository {
       [reviewerId, targetLevel]
     );
     return result.rows.flatMap((row) => {
+      if (!hasCanonicalLevelFormStructure(row.blueprint)) return [];
       const blueprintTarget = row.target_level ?? row.blueprint.targetLevel;
       if (!blueprintTarget || blueprintTarget === "A1") return [];
       const sectionCount = (code: AssessmentSectionCode) => row.blueprint.sections
@@ -6366,7 +6400,7 @@ class AssessmentRepository {
       publishedAt: version.publishedAt?.toISOString() ?? null
     }));
     const warnings: AssessmentLevelFormDetailView["warnings"] = [];
-    const expectedCounts: Record<AssessmentSectionCode, number> = { listening: 5, reading: 5, writing: 1, speaking: 1 };
+    const expectedCounts: Record<AssessmentSectionCode, number> = { listening: 20, reading: 40, writing: 2, speaking: 4 };
     const present = new Set(row.blueprint.sections.map((section) => section.code));
     for (const code of ["listening", "reading", "writing", "speaking"] as const) {
       const count = sectionTaskCount(row.blueprint, code);
@@ -6550,7 +6584,10 @@ class AssessmentRepository {
       );
       const definitionId = target.rows[0]?.definition_id;
       if (!definitionId) { await client.query("rollback"); return null; }
-      const listening = target.rows[0]!.blueprint.sections.find((section) => section.code === "listening");
+      const blueprint = target.rows[0]!.blueprint;
+      if (!hasCanonicalLevelFormStructure(blueprint)) throw new Error("LEVEL_FORM_STRUCTURE_INVALID");
+      if (!hasCompleteLevelFormContent(blueprint)) throw new Error("LEVEL_FORM_CONTENT_INCOMPLETE");
+      const listening = blueprint.sections.find((section) => section.code === "listening");
       const missingAudio = !listening || listening.groups.some((group) => group.stimulus?.type !== "audio_script" || !group.stimulus.audioSrc?.trim());
       if (missingAudio) throw new Error("LEVEL_FORM_AUDIO_REQUIRED");
       await client.query("update assessment_versions set status = 'retired' where definition_id = $1 and status = 'published'", [definitionId]);

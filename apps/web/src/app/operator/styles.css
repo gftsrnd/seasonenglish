@@ -3870,3 +3870,6 @@ body > .operator-modal-scope .operator-vocabulary-entry-audio-grid { display: gr
   .operator-level-form-dialog-actions { align-self: stretch; justify-content: flex-end; }
   .operator-level-audio { grid-template-columns: 1fr; }
 }
+
+.operator-level-stimulus-editor { display: grid; gap: 6px; padding: 12px 16px; border-bottom: 1px solid var(--line); background: var(--surface-2); color: var(--muted); font-size: .78rem; font-weight: 800; }
+.operator-level-stimulus-editor textarea { width: 100%; min-height: 108px; box-sizing: border-box; color: var(--text); font: inherit; font-weight: 400; }
