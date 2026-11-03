@@ -9,8 +9,7 @@ try {
   await client.connect();
   const result = await client.query(
     `update assessment_versions version
-       set blueprint = $1::jsonb,
-           updated_at = now()
+       set blueprint = $1::jsonb
       from assessment_definitions definition
      where version.definition_id = definition.id
        and definition.assessment_key = 'pass-course-form-a'`,
