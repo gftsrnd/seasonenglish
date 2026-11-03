@@ -56,13 +56,19 @@ export function OperatorMonths({ month, todayMonth, overview, cefr, busy, readOn
   const framework = overview.frameworks.find((item) => item.cefr === cefr);
   const calendar = useMemo(() => buildMonthlyCalendar(month), [month]);
   const [brief, setBrief] = useState<MonthlyBriefInput>(emptyBrief);
-  const [resourceCounts, setResourceCounts] = useState(() => toResourceCounts(recommendedMonthlyResourceCriteria(month, cefr)));
   const [resourcePanel, setResourcePanel] = useState<ResourceGroup | null>(null);
   const [generationConfirmation, setGenerationConfirmation] = useState<number>();
   const briefLocked = overview.brief?.status === "approved";
   const monthChoices = [shiftMonth(todayMonth, -1), todayMonth, shiftMonth(todayMonth, 1)];
   const previousMonth = month === monthChoices[0];
   const canEdit = !readOnly && !previousMonth;
+  const proposedResourceCounts = toResourceCounts(recommendedMonthlyResourceCriteria(month, cefr));
+  const resourceCounts = framework?.resources ? {
+    core: framework.resources.coreTerms.length,
+    expanded: framework.resources.supportTerms.length,
+    grammar: framework.resources.grammarTopics.length,
+    sounds: framework.resources.sounds.length
+  } : proposedResourceCounts;
   const resources = [
     { key: "core" as const, label: "Từ cốt lõi", count: framework?.resources?.coreTerms.length ?? 0, description: "Từ và cụm từ trọng tâm" },
     { key: "expanded" as const, label: "Từ mở rộng", count: framework?.resources?.supportTerms.length ?? 0, description: "Từ bổ trợ theo từng bài" },
@@ -77,19 +83,6 @@ export function OperatorMonths({ month, todayMonth, overview, cefr, busy, readOn
       communicationGoal: overview.brief.communicationGoal
     } : emptyBrief());
   }, [overview.brief]);
-  useEffect(() => {
-    if (framework?.resources) {
-      setResourceCounts({
-        core: framework.resources.coreTerms.length,
-        expanded: framework.resources.supportTerms.length,
-        grammar: framework.resources.grammarTopics.length,
-        sounds: framework.resources.sounds.length
-      });
-      return;
-    }
-    setResourceCounts(toResourceCounts(recommendedMonthlyResourceCriteria(month, cefr)));
-  }, [month, cefr, framework]);
-
   const showUnavailable = (message: string) => toast.show({ message, tone: "danger" });
   const generateFramework = async () => {
     if (!canEdit) return showUnavailable("Tháng trước chỉ dùng để xem.");
@@ -128,12 +121,6 @@ export function OperatorMonths({ month, todayMonth, overview, cefr, busy, readOn
     }
   };
   const selectLevel = (level: CefrLevel) => {
-    // Update the creation criteria synchronously. Waiting for the overview
-    // reload left the first "Sinh tài nguyên" click using the prior level's
-    // counts, especially when that level already had a framework.
-    if (!overview.frameworks.some((item) => item.cefr === level)) {
-      setResourceCounts(toResourceCounts(recommendedMonthlyResourceCriteria(month, level)));
-    }
     actions.onSelectLevel(level);
   };
   const saveBrief = async () => {
@@ -147,11 +134,21 @@ export function OperatorMonths({ month, todayMonth, overview, cefr, busy, readOn
     try { await actions.onApproveBrief(month); toast.show({ message: "Đã chốt chủ đề tháng.", tone: "ok" }); }
     catch { showUnavailable("Không chốt được chủ đề tháng. Hãy thử lại."); }
   };
+  const approveFramework = async () => {
+    if (!canEdit) return showUnavailable("Tháng trước chỉ dùng để xem.");
+    if (!framework) return showUnavailable("Hãy sinh tài nguyên tháng trước khi duyệt.");
+    try {
+      await actions.onApproveFramework(framework.id);
+      toast.show({ message: "Đã duyệt tài nguyên tháng.", tone: "ok" });
+    } catch {
+      showUnavailable("Không duyệt được tài nguyên tháng. Hãy thử lại.");
+    }
+  };
   return <main className="operator-months-page">
     <header className="operator-months-header"><p className="eyebrow">Operator</p><h1>Bài học</h1><p>Thiết kế chủ đề, tài nguyên và lịch học theo tháng.</p></header>
     {error && <div className="monthly-error" role="alert">{error}</div>}
     <section className="monthly-month-card card">
-      <div><span className="eyebrow">Chu kỳ</span><h2>Tháng học</h2></div>
+      <div><span className="eyebrow">Chu kỳ</span><h2>Tháng</h2></div>
       <div className="monthly-month-tabs" role="tablist">
         {monthChoices.map((choice) => <button key={choice} type="button" role="tab" aria-selected={choice === month} className={choice === month ? "selected" : ""} onClick={() => actions.onSelectMonth(choice)}>
           {monthLabel(choice)}{choice === monthChoices[0] && <small>Chỉ xem</small>}
@@ -177,14 +174,18 @@ export function OperatorMonths({ month, todayMonth, overview, cefr, busy, readOn
       <section className="monthly-resources card">
         <div className="monthly-section-title"><div><span className="eyebrow">{cefr}</span><h2>Tài nguyên tháng</h2></div><span className={`monthly-status ${framework?.status ?? "missing"}`}>{frameworkStatus(framework?.status)}</span></div>
         <p className="small muted">AI chuẩn bị một bộ tài nguyên thống nhất cho cả tháng.</p>
-        {!framework?.resources ? <div className="monthly-resource-inputs">
-          <label>Từ cốt lõi<input type="number" min="0" value={resourceCounts.core} disabled={!canEdit} onChange={(event) => setResourceCounts({ ...resourceCounts, core: Number(event.target.value) })} /></label>
-          <label>Từ mở rộng<input type="number" min="0" value={resourceCounts.expanded} disabled={!canEdit} onChange={(event) => setResourceCounts({ ...resourceCounts, expanded: Number(event.target.value) })} /></label>
-          <label>Điểm ngữ pháp<input type="number" min="1" value={resourceCounts.grammar} disabled={!canEdit} onChange={(event) => setResourceCounts({ ...resourceCounts, grammar: Number(event.target.value) })} /></label>
-          <label>Âm phát âm<input type="number" min="1" value={resourceCounts.sounds} disabled={!canEdit} onChange={(event) => setResourceCounts({ ...resourceCounts, sounds: Number(event.target.value) })} /></label>
+        {!framework?.resources ? <div className="monthly-resource-proposal" aria-label="Số lượng đề xuất theo lịch học">
+          <span className="eyebrow">Số lượng đề xuất theo lịch học</span>
+          <dl>
+            <div><dt>Từ cốt lõi</dt><dd>{resourceCounts.core}</dd></div>
+            <div><dt>Từ mở rộng</dt><dd>{resourceCounts.expanded}</dd></div>
+            <div><dt>Chủ điểm ngữ pháp</dt><dd>{resourceCounts.grammar}</dd></div>
+            <div><dt>Mục tiêu phát âm</dt><dd>{resourceCounts.sounds}</dd></div>
+          </dl>
         </div> : <div className="monthly-resource-cards">{resources.map((item) => <button key={item.key} type="button" onClick={() => setResourcePanel(item.key)}><b>{item.count}</b><strong>{item.label}</strong><span>{item.description}</span></button>)}</div>}
         <div className="monthly-actions monthly-resource-actions">
-          <button type="button" className="btn btn-primary" disabled={busy} onClick={() => void generateFramework()}>{framework?.resources ? "Sinh lại" : "Sinh tài nguyên"}</button>
+          {framework?.status !== "approved" && <button type="button" className="btn btn-primary" disabled={busy} onClick={() => void generateFramework()}>{framework?.resources ? "Sinh lại tài nguyên" : "Sinh tài nguyên"}</button>}
+          {framework?.status === "draft" && <button type="button" className="btn" disabled={busy} onClick={() => void approveFramework()}>Duyệt tài nguyên</button>}
         </div>
       </section>
       <section className="monthly-calendar-section card">
@@ -199,7 +200,9 @@ export function OperatorMonths({ month, todayMonth, overview, cefr, busy, readOn
             if (!cell.lessonNumber) return <article key={cell.date} role="gridcell" className="monthly-day-cell weekend"><b>{cell.dateLabel}</b><strong>Nghỉ</strong></article>;
             const kind = lesson?.kind === "review" ? "review" : "lesson";
             const draft = lesson?.status === "draft";
-            return <article key={cell.date} role="gridcell" aria-label={`${cell.dateLabel}, ${lesson?.kind === "review" ? "Ôn tập" : `Bài ${cell.lessonNumber}`}`} className={`monthly-day-cell ${kind} ${lesson?.status === "approved" ? "approved" : ""}`}><b>{cell.dateLabel}</b><strong>{lesson?.kind === "review" ? "Ôn tập" : `Bài ${cell.lessonNumber}`}</strong><div>{lesson?.status === "approved" ? <button type="button" className="btn-sm monthly-view-day" disabled={busy} onClick={() => framework && actions.onViewDay?.(framework.id, lesson.lessonNumber)}>Xem</button> : <><button type="button" className="btn-sm btn-primary" disabled={busy} onClick={() => setGenerationConfirmation(cell.lessonNumber!)}>Sinh</button><button type="button" className="btn-sm" disabled={busy} onClick={() => openManualEditor(cell.lessonNumber!)}>Soạn tay</button>{draft && <button type="button" className="btn-sm" disabled={busy} onClick={() => framework && void actions.onApproveDay(framework.id, cell.lessonNumber!)}>Duyệt</button>}</>}</div></article>;
+            const isReview = lesson?.kind === "review";
+            const dayLabel = isReview ? "bài ôn" : `bài ${cell.lessonNumber}`;
+            return <article key={cell.date} role="gridcell" aria-label={`${cell.dateLabel}, ${isReview ? "Ôn tập" : `Bài ${cell.lessonNumber}`}`} className={`monthly-day-cell ${kind} ${lesson?.status === "approved" ? "approved" : ""}`}><b>{cell.dateLabel}</b><strong>{isReview ? "Ôn tập" : `Bài ${cell.lessonNumber}`}</strong><div>{lesson?.status === "approved" ? <button type="button" aria-label={`Xem ${dayLabel}`} className="btn-sm monthly-view-day" disabled={busy} onClick={() => framework && actions.onViewDay?.(framework.id, lesson.lessonNumber)}>Xem</button> : isReview ? <button type="button" aria-label="Sinh bài ôn" className="btn-sm btn-primary" disabled={busy} onClick={() => setGenerationConfirmation(cell.lessonNumber!)}>Sinh bài ôn</button> : <><button type="button" aria-label={`Sinh ${dayLabel}`} className="btn-sm btn-primary" disabled={busy} onClick={() => setGenerationConfirmation(cell.lessonNumber!)}>Sinh</button><button type="button" aria-label={`Soạn tay ${dayLabel}`} className="btn-sm" disabled={busy} onClick={() => openManualEditor(cell.lessonNumber!)}>Soạn tay</button>{draft && <button type="button" aria-label={`Duyệt ${dayLabel}`} className="btn-sm" disabled={busy} onClick={() => framework && void actions.onApproveDay(framework.id, cell.lessonNumber!)}>Duyệt</button>}</>}</div></article>;
           })}
         </div>
       </section>

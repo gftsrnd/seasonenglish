@@ -135,13 +135,14 @@ describe("app shell navigation and logout", () => {
     expect(screen.getByText(/Người vận hành/)).toBeInTheDocument();
   });
 
-  it("shows the standardized Bài tuần and Bài kiểm tra Operator navigation", () => {
+  it("shows the recap-approved Operator navigation groups", () => {
     render(<ExperienceProvider><MemoryRouter initialEntries={["/op/tests"]}><AppShell session={session("operator")} onLogout={() => undefined}><div /></AppShell></MemoryRouter></ExperienceProvider>);
 
     const navigation = screen.getByRole("navigation", { name: "Điều hướng người vận hành" });
-    expect(within(navigation).getByRole("link", { name: "Bài tuần" })).toHaveAttribute("href", "/op/review");
-    expect(within(navigation).getByRole("link", { name: "Bài kiểm tra" })).toHaveAttribute("href", "/op/tests");
-    expect(within(navigation).getByRole("link", { name: "Bài kiểm tra" })).toHaveAttribute("aria-current", "page");
+    expect(within(navigation).getByRole("link", { name: "Sinh bài" })).toHaveAttribute("href", "/op/months");
+    expect(within(navigation).getByRole("link", { name: "Chấm & Kháng nghị" })).toHaveAttribute("href", "/op/review");
+    expect(within(navigation).getByRole("link", { name: "Kết quả bài thi" })).toHaveAttribute("href", "/op/tests");
+    expect(within(navigation).getByRole("link", { name: "Kết quả bài thi" })).toHaveAttribute("aria-current", "page");
     expect(within(navigation).queryByRole("link", { name: "Đọc mẫu" })).not.toBeInTheDocument();
     expect(within(navigation).queryByRole("link", { name: "Đề lên mức" })).not.toBeInTheDocument();
   });
