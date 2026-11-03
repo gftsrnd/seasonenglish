@@ -4405,7 +4405,6 @@ class AssessmentRepository {
     } : null;
   }
 
-  /** Pass Course may start only for an explicitly C1-ready learner. */
   /**
    * Resolve an assessment attempt against the exact published version that
    * created it. A monthly final is keyed by month and CEFR, so looking up only
@@ -4440,6 +4439,8 @@ class AssessmentRepository {
       blueprint: row.blueprint
     } : null;
   }
+
+  /** Pass Course may start only for an explicitly C1-ready learner. */
   async passCourseEligibility(learnerId: string): Promise<boolean> {
     const result = await this.pool.query<{ eligible: boolean }>(
       `select exists(
