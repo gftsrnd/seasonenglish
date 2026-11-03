@@ -227,7 +227,10 @@ export function OperatorMonths({ month, todayMonth, overview, cefr, busy, readOn
             // The persisted lesson is the DaySpec projection. Its date, number, and kind
             // drive the calendar after resources exist; do not infer review slots from weekdays.
             const scheduledLessonNumber = lesson?.lessonNumber ?? cell.lessonNumber;
-            if (isExam) return <article key={cell.date} role="gridcell" className="monthly-day-cell monthly-final"><b>{cell.dateLabel}</b><strong>Bài thi</strong><button type="button" className="btn-sm" disabled={busy} onClick={() => void generateMonthlyFinal()}>Sinh đề thi</button></article>;
+            if (isExam) {
+              const examDayOpen = overview.systemDate === calendar.examDate;
+              return <article key={cell.date} role="gridcell" className="monthly-day-cell monthly-final"><b>{cell.dateLabel}</b><strong>Bài thi</strong><button type="button" className="btn-sm" disabled={busy || !examDayOpen} title={examDayOpen ? "Sinh bản nháp đề thi tháng" : `Mở vào ngày thi ${cell.dateLabel}`} onClick={() => void generateMonthlyFinal()}>{examDayOpen ? "Sinh đề thi" : "Chờ ngày thi"}</button></article>;
+            }
             if (!scheduledLessonNumber) return <article key={cell.date} role="gridcell" className="monthly-day-cell weekend"><b>{cell.dateLabel}</b><strong>Nghỉ</strong></article>;
             const scheduledKind = lesson?.kind ?? monthlyDayKind(scheduledLessonNumber, calendar.lessonCount);
             const kind = scheduledKind === "review" ? "review" : "lesson";
@@ -362,5 +365,4 @@ function formatCalendarDay(date: Date) {
 function toResourceCounts(criteria: Pick<MonthlyResourceCriteria, "vocabularyCount" | "expandedVocabularyCount" | "grammarTopicCount" | "pronunciationSoundCount">) {
   return { core: criteria.vocabularyCount, expanded: criteria.expandedVocabularyCount, grammar: criteria.grammarTopicCount, sounds: criteria.pronunciationSoundCount };
 }
-
 
