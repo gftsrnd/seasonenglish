@@ -25,6 +25,8 @@ export interface OperatorMonthsActions {
   onViewDay?(id: string, dayNumber: number): void;
   onSaveDay(id: string, dayNumber: number, lesson: MonthlyDayInput): Promise<MonthlyQualityReport>;
   onGenerateDay(id: string, dayNumber: number): Promise<{ lesson: MonthlyDayInput; report: MonthlyQualityReport }>;
+  /** Friday reviews use their own endpoint so the server can validate the weekly scope. */
+  onGenerateReview?(id: string, dayNumber: number): Promise<{ lesson: MonthlyDayInput; report: MonthlyQualityReport }>;
   onAcknowledge(id: string, dayNumber: number, findingKeys: string[]): Promise<void> | void;
   onApproveDay(id: string, dayNumber: number): Promise<void> | void;
   onCreateCorrection(id: string, dayNumber: number, reason: string): Promise<string>;
@@ -58,11 +60,12 @@ export function OperatorMonths({ month, todayMonth, overview, cefr, busy, readOn
   const calendar = useMemo(() => buildMonthlyCalendar(month), [month]);
   const [brief, setBrief] = useState<MonthlyBriefInput>(emptyBrief);
   const [resourcePanel, setResourcePanel] = useState<ResourceGroup | null>(null);
-  const [generationConfirmation, setGenerationConfirmation] = useState<number>();
+  const [generationConfirmation, setGenerationConfirmation] = useState<{ dayNumber: number; kind: "new" | "review" }>();
+  const [reopenRequest, setReopenRequest] = useState<{ dayNumber: number; label: string }>();
   const briefLocked = overview.brief?.status === "approved";
-  const monthChoices = [shiftMonth(todayMonth, -1), todayMonth, shiftMonth(todayMonth, 1)];
+  const monthChoices = [overview.monthWindow.previous, overview.monthWindow.current, overview.monthWindow.next];
   const previousMonth = month === monthChoices[0];
-  const canEdit = !readOnly && !previousMonth;
+  const canEdit = !readOnly && overview.monthWindow.writable && !previousMonth;
   const proposedResourceCounts = toResourceCounts(recommendedMonthlyResourceCriteria(month, cefr));
   const resourceCounts = framework?.resources ? {
     core: framework.resources.coreTerms.length,
@@ -95,14 +98,31 @@ export function OperatorMonths({ month, todayMonth, overview, cefr, busy, readOn
       showUnavailable("Không sinh được tài nguyên tháng. Hãy thử lại.");
     }
   };
-  const generateDay = async (dayNumber: number) => {
+  const generateDay = async (dayNumber: number, kind: "new" | "review") => {
     if (!canEdit) return showUnavailable("Tháng trước chỉ dùng để xem.");
     if (!framework || framework.status !== "approved") return showUnavailable("Hãy chốt tài nguyên tháng trước khi sinh bài học.");
     try {
-      await actions.onGenerateDay(framework.id, dayNumber);
-      toast.show({ message: `Đã sinh bài học ngày ${dayNumber}.`, tone: "ok" });
+      if (kind === "review") {
+        if (!actions.onGenerateReview) return showUnavailable("Luồng sinh bài ôn chưa sẵn sàng.");
+        await actions.onGenerateReview(framework.id, dayNumber);
+        toast.show({ message: "Đã sinh bản nháp bài ôn. Hãy duyệt trước khi học viên học.", tone: "ok" });
+      } else {
+        await actions.onGenerateDay(framework.id, dayNumber);
+        toast.show({ message: `Đã sinh bài học ngày ${dayNumber}.`, tone: "ok" });
+      }
     } catch {
       showUnavailable("Không sinh được bài học. Hãy thử lại.");
+    }
+  };
+  const requestReopen = async (reason: string) => {
+    if (!framework || !reopenRequest) return;
+    if (reason.trim().length < 5) return showUnavailable("Hãy nêu lý do mở lại nội dung.");
+    try {
+      await actions.onCreateCorrection(framework.id, reopenRequest.dayNumber, reason.trim());
+      setReopenRequest(undefined);
+      toast.show({ message: "Đã gửi yêu cầu mở lại tới Manager.", tone: "ok" });
+    } catch {
+      showUnavailable("Không gửi được yêu cầu mở lại. Hãy thử lại.");
     }
   };
   const openManualEditor = (dayNumber: number) => {
@@ -210,7 +230,7 @@ export function OperatorMonths({ month, todayMonth, overview, cefr, busy, readOn
             const draft = lesson?.status === "draft";
             const isReview = lesson?.kind === "review";
             const dayLabel = isReview ? "bài ôn" : `bài ${cell.lessonNumber}`;
-            return <article key={cell.date} role="gridcell" aria-label={`${cell.dateLabel}, ${isReview ? "Ôn tập" : `Bài ${cell.lessonNumber}`}`} className={`monthly-day-cell ${kind} ${lesson?.status === "approved" ? "approved" : ""}`}><b>{cell.dateLabel}</b><strong>{isReview ? "Ôn tập" : `Bài ${cell.lessonNumber}`}</strong><div>{lesson?.status === "approved" ? <button type="button" aria-label={`Xem ${dayLabel}`} className="btn-sm monthly-view-day" disabled={busy} onClick={() => framework && actions.onViewDay?.(framework.id, lesson.lessonNumber)}>Xem</button> : isReview ? <button type="button" aria-label="Sinh bài ôn" className="btn-sm btn-primary" disabled={busy} onClick={() => setGenerationConfirmation(cell.lessonNumber!)}>Sinh bài ôn</button> : <><button type="button" aria-label={`Sinh ${dayLabel}`} className="btn-sm btn-primary" disabled={busy} onClick={() => setGenerationConfirmation(cell.lessonNumber!)}>Sinh</button><button type="button" aria-label={`Soạn tay ${dayLabel}`} className="btn-sm" disabled={busy} onClick={() => openManualEditor(cell.lessonNumber!)}>Soạn tay</button>{draft && <button type="button" aria-label={`Duyệt ${dayLabel}`} className="btn-sm" disabled={busy} onClick={() => framework && void actions.onApproveDay(framework.id, cell.lessonNumber!)}>Duyệt</button>}</>}</div></article>;
+            return <article key={cell.date} role="gridcell" aria-label={`${cell.dateLabel}, ${isReview ? "Ôn tập" : `Bài ${cell.lessonNumber}`}`} className={`monthly-day-cell ${kind} ${lesson?.status === "approved" ? "approved" : ""}`}><b>{cell.dateLabel}</b><strong>{isReview ? "Ôn tập" : `Bài ${cell.lessonNumber}`}</strong><div>{lesson?.status === "approved" ? <><button type="button" aria-label={`Xem ${dayLabel}`} className="btn-sm monthly-view-day" disabled={busy} onClick={() => framework && actions.onViewDay?.(framework.id, lesson.lessonNumber)}>Xem</button><button type="button" aria-label={`Yêu cầu mở lại ${dayLabel}`} className="btn-sm monthly-reopen-day" disabled={busy} onClick={() => setReopenRequest({ dayNumber: lesson.lessonNumber, label: dayLabel })}>Mở lại</button></> : draft ? <><button type="button" aria-label={`Soạn tay ${dayLabel}`} className="btn-sm" disabled={busy} onClick={() => openManualEditor(cell.lessonNumber!)}>Soạn tay</button><button type="button" aria-label={`Duyệt ${dayLabel}`} className="btn-sm" disabled={busy} onClick={() => framework && void actions.onApproveDay(framework.id, cell.lessonNumber!)}>Duyệt</button></> : <><button type="button" aria-label={isReview ? "Sinh bài ôn" : `Sinh ${dayLabel}`} className="btn-sm btn-primary" disabled={busy} onClick={() => setGenerationConfirmation({ dayNumber: cell.lessonNumber!, kind: isReview ? "review" : "new" })}>{isReview ? "Sinh bài ôn" : "Sinh"}</button><button type="button" aria-label={`Soạn tay ${dayLabel}`} className="btn-sm" disabled={busy} onClick={() => openManualEditor(cell.lessonNumber!)}>Soạn tay</button></>}</div></article>;
           })}
         </div>
       </section>
@@ -222,7 +242,8 @@ export function OperatorMonths({ month, todayMonth, overview, cefr, busy, readOn
         {resourcePanel === "sounds" && <div className="monthly-resource-panel-grid">{framework.resources.sounds.map((sound) => <article key={sound.id}><h3>{sound.label} <span>{sound.ipa}</span></h3><p>{sound.examples.map((example) => example.word).join(", ")}</p></article>)}</div>}
       </section>}
     </div>
-    {generationConfirmation && framework?.resources && <MonthlyGenerationConfirmation dayNumber={generationConfirmation} framework={framework} onCancel={() => setGenerationConfirmation(undefined)} onConfirm={() => { const dayNumber = generationConfirmation; setGenerationConfirmation(undefined); void generateDay(dayNumber); }} />}
+    {generationConfirmation && framework?.resources && <MonthlyGenerationConfirmation dayNumber={generationConfirmation.dayNumber} kind={generationConfirmation.kind} framework={framework} onCancel={() => setGenerationConfirmation(undefined)} onConfirm={() => { const generation = generationConfirmation; setGenerationConfirmation(undefined); void generateDay(generation.dayNumber, generation.kind); }} />}
+    {reopenRequest && <MonthlyReopenRequest label={reopenRequest.label} onCancel={() => setReopenRequest(undefined)} onSubmit={requestReopen} />}
   </main>;
 }
 
@@ -235,12 +256,18 @@ export function MonthlyLessonPreview({ date, cefr, lesson, onClose }: { date: st
   return <LearnerLesson view={view} actions={actions} />;
 }
 
-function MonthlyGenerationConfirmation({ dayNumber, framework, onCancel, onConfirm }: { dayNumber: number; framework: MonthlyOperatorOverviewView["frameworks"][number]; onCancel(): void; onConfirm(): void }) {
+function MonthlyGenerationConfirmation({ dayNumber, kind, framework, onCancel, onConfirm }: { dayNumber: number; kind: "new" | "review"; framework: MonthlyOperatorOverviewView["frameworks"][number]; onCancel(): void; onConfirm(): void }) {
   const resources = framework.resources!;
   const terms = [...resources.coreTerms, ...resources.supportTerms].filter((term) => term.dayNumber === dayNumber);
   const grammar = resources.grammarTopics.filter((_, index) => Math.min(resources.grammarTopics.length - 1, Math.floor((dayNumber - 1) * resources.grammarTopics.length / Math.max(framework.lessons.length || 20, 1))) === index);
   const sounds = resources.sounds.filter((_, index) => (dayNumber - 1) % resources.sounds.length === index);
-  return <div className="monthly-lesson-preview-backdrop" role="presentation"><section className="monthly-generation-confirmation card" role="dialog" aria-modal="true" aria-label={`Tài nguyên cho bài ${dayNumber}`}><span className="eyebrow">Tài nguyên đã chốt</span><h2>Sinh bài ngày {dayNumber}?</h2><p className="small muted">Bài sẽ dùng đúng tài nguyên của ngày này.</p><dl><div><dt>Từ vựng</dt><dd>{terms.map((term) => term.word).join(" · ") || "Chưa gán"}</dd></div><div><dt>Ngữ pháp</dt><dd>{grammar.map((item) => item.title).join(" · ") || "Chưa gán"}</dd></div><div><dt>Phát âm</dt><dd>{sounds.map((item) => item.label).join(" · ") || "Chưa gán"}</dd></div></dl><footer><button type="button" className="btn" onClick={onCancel}>Quay lại</button><button type="button" className="btn btn-primary" onClick={onConfirm}>Sinh bài</button></footer></section></div>;
+  const isReview = kind === "review";
+  return <div className="monthly-lesson-preview-backdrop" role="presentation"><section className="monthly-generation-confirmation card" role="dialog" aria-modal="true" aria-label={isReview ? "Tài nguyên cho bài ôn" : `Tài nguyên cho bài ${dayNumber}`}><span className="eyebrow">Tài nguyên đã chốt</span><h2>{isReview ? "Sinh bài ôn?" : `Sinh bài ngày ${dayNumber}?`}</h2><p className="small muted">{isReview ? "Bài ôn dùng toàn bộ tài nguyên và bài ngày của tuần này." : "Bài sẽ dùng đúng tài nguyên của ngày này."}</p><dl><div><dt>Từ vựng</dt><dd>{terms.map((term) => term.word).join(" · ") || "Chưa gán"}</dd></div><div><dt>Ngữ pháp</dt><dd>{grammar.map((item) => item.title).join(" · ") || "Chưa gán"}</dd></div><div><dt>Phát âm</dt><dd>{sounds.map((item) => item.label).join(" · ") || "Chưa gán"}</dd></div></dl><footer><button type="button" className="btn" onClick={onCancel}>Quay lại</button><button type="button" className="btn btn-primary" onClick={onConfirm}>{isReview ? "Sinh bài ôn" : "Sinh bài"}</button></footer></section></div>;
+}
+
+function MonthlyReopenRequest({ label, onCancel, onSubmit }: { label: string; onCancel(): void; onSubmit(reason: string): void }) {
+  const [reason, setReason] = useState("");
+  return <div className="monthly-lesson-preview-backdrop" role="presentation"><section className="monthly-generation-confirmation card" role="dialog" aria-modal="true" aria-label={`Yêu cầu mở lại ${label}`}><span className="eyebrow">Nội dung đã khóa</span><h2>Yêu cầu mở lại {label}</h2><p className="small muted">Manager sẽ duyệt hoặc từ chối yêu cầu. Học viên đã hoàn thành vẫn giữ kết quả cũ.</p><label className="monthly-reopen-reason">Lý do yêu cầu mở lại<textarea aria-label="Lý do yêu cầu mở lại" value={reason} onChange={(event) => setReason(event.target.value)} /></label><footer><button type="button" className="btn" onClick={onCancel}>Quay lại</button><button type="button" className="btn btn-primary" onClick={() => onSubmit(reason)}>Gửi yêu cầu Manager</button></footer></section></div>;
 }
 
 function VocabularyPanel({ items }: { items: Array<{ id: string; word: string; meaning: string; ipa?: string }> }) {

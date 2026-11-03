@@ -183,20 +183,30 @@ function MonthsRoute({ client, readOnly, preview }: { client: OperatorApiClient;
   const toast = useToast();
   const navigate = useNavigate();
   const paths = useOperatorRoutePaths();
-  const currentDate = new Date();
-  const todayMonth = `${currentDate.getFullYear()}-${String(currentDate.getMonth() + 1).padStart(2, "0")}`;
-  const [month, setMonth] = useState(todayMonth);
+  const browserDate = new Date();
+  const browserMonth = `${browserDate.getFullYear()}-${String(browserDate.getMonth() + 1).padStart(2, "0")}`;
+  const [month, setMonth] = useState(browserMonth);
   const [cefr, setCefr] = useState<CefrLevel>("A1");
   const [overview, setOverview] = useState<import("@e4s/contracts").MonthlyOperatorOverviewView>();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string>();
-  const [editor, setEditor] = useState<{ frameworkId: string; dayNumber: number }>();
+  const [editor, setEditor] = useState<{ frameworkId: string; dayNumber: number; initial?: { title?: string; parts?: Array<{ code?: string; title?: string; content?: Record<string, unknown> }> } }>();
+  const systemMonthInitialized = useRef(false);
   const load = async () => {
     setError(undefined);
     try { setOverview(await client.getContentMonth(month)); }
     catch (reason) { setError(message(reason)); }
   };
-  useEffect(() => { setOverview(undefined); void client.getContentMonth(month).then(setOverview).catch((reason) => setError(message(reason))); }, [client, month]);
+  useEffect(() => {
+    setOverview(undefined);
+    void client.getContentMonth(month).then((next) => {
+      setOverview(next);
+      if (!systemMonthInitialized.current) {
+        systemMonthInitialized.current = true;
+        if (next.monthWindow.current !== month) setMonth(next.monthWindow.current);
+      }
+    }).catch((reason) => setError(message(reason)));
+  }, [client, month]);
   const run = async <T,>(action: () => Promise<T>, success?: string): Promise<T | undefined> => {
     setBusy(true); setError(undefined);
     try { const result = await action(); await load(); if (success) toast.show({ message: success, tone: "ok" }); return result; }
@@ -212,8 +222,8 @@ function MonthsRoute({ client, readOnly, preview }: { client: OperatorApiClient;
   }
   return <><OperatorMonths
     month={month}
-    todayMonth={todayMonth}
-    overview={overview ?? { brief: null, frameworks: [] }}
+    todayMonth={overview?.monthWindow.current ?? browserMonth}
+    overview={overview ?? { systemDate: new Date().toISOString().slice(0, 10), monthWindow: { previous: month, current: month, next: month, writable: false }, brief: null, frameworks: [] }}
     cefr={cefr}
     busy={busy}
     readOnly={readOnly}
@@ -236,7 +246,10 @@ function MonthsRoute({ client, readOnly, preview }: { client: OperatorApiClient;
       },
       onApproveFramework: async (id) => { await run(() => client.approveContentMonthFramework(id), "Đã chốt tài nguyên tháng."); },
       onGenerateMonthlyFinal: async (id) => { await run(() => client.generateMonthlyFinal(id), "Đã sinh bản nháp đề tháng."); },
-      onComposeDay: (frameworkId, dayNumber) => setEditor({ frameworkId, dayNumber }),
+      onComposeDay: (frameworkId, dayNumber) => {
+        const initial = overview?.frameworks.find((item) => item.id === frameworkId)?.lessons.find((item) => item.lessonNumber === dayNumber)?.content;
+        setEditor(initial ? { frameworkId, dayNumber, initial } : { frameworkId, dayNumber });
+      },
       onViewDay: (frameworkId, dayNumber) => navigate(`${paths.months}/lesson/${frameworkId}/${dayNumber}`),
       onSaveDay: async (id, dayNumber, lesson) => {
         const result = await run(() => client.saveContentMonthDay(id, dayNumber, lesson), `Đã lưu bản nháp bài ${dayNumber}.`);
@@ -246,6 +259,11 @@ function MonthsRoute({ client, readOnly, preview }: { client: OperatorApiClient;
       onGenerateDay: async (id, dayNumber) => {
         const result = await run(() => client.generateContentMonthDay(id, dayNumber), `Đã sinh bản nháp bài ${dayNumber}. Hãy duyệt trước khi học viên học.`);
         if (!result) throw new Error("AI không sinh được bài ngày đạt chuẩn.");
+        return result;
+      },
+      onGenerateReview: async (id, dayNumber) => {
+        const result = await run(() => client.generateContentMonthReview(id, dayNumber), "Đã sinh bản nháp bài ôn. Hãy duyệt trước khi học viên học.");
+        if (!result) throw new Error("AI không sinh được bài ôn đạt chuẩn.");
         return result;
       },
       onAcknowledge: async (id, dayNumber, findingKeys) => { await run(() => client.acknowledgeContentMonthQuality(id, dayNumber, findingKeys)); },
@@ -263,7 +281,7 @@ function MonthsRoute({ client, readOnly, preview }: { client: OperatorApiClient;
       onAcknowledgeCorrection: async (correctionId, findingKeys) => { await run(() => client.acknowledgeContentMonthCorrection(correctionId, findingKeys)); },
       onApproveCorrection: async (correctionId) => { await run(() => client.approveContentMonthCorrection(correctionId)); }
     }}
-  />{!readOnly && editor && <LessonFormEditor weekNumber={0} cefr={cefr} initial={emptyLesson(editor.dayNumber - 1)} onSave={async (lesson) => {
+  />{!readOnly && editor && <LessonFormEditor weekNumber={0} cefr={cefr} initial={editor.initial?.parts?.length ? { dayNumber: editor.dayNumber - 1, title: editor.initial.title || `Bài ${editor.dayNumber}`, durationMinutes: 10, parts: editor.initial.parts.map((part) => ({ code: (part.code || "instruction") as import("@e4s/contracts").LessonPartCode, title: part.title || part.code || "Nội dung", content: part.content || {} })) } : emptyLesson(editor.dayNumber - 1)} onSave={async (lesson) => {
     const result = await run(() => client.saveContentMonthDay(editor.frameworkId, editor.dayNumber, { title: lesson.title, parts: lesson.parts }), `Đã lưu bản nháp bài ${editor.dayNumber}.`);
     if (result) setEditor(undefined);
   }} headingOverride={`Soạn bài ngày ${String(editor.dayNumber).padStart(2, "0")}/${month.slice(5, 7)} · ${cefr}`} onCancel={() => setEditor(undefined)} uploadMedia={client.uploadContentMedia} busy={busy} />}</>;
@@ -438,6 +456,11 @@ function DashboardRoute({ client, readOnly }: { client: OperatorApiClient; readO
       const pendingAssessment = data.pendingAssessments.find(item => item.attemptId === id);
       if (pendingAssessment?.kind === "final") {
         void modal.prompt({ title: "Duyệt bài thi tháng", message: "Quyết định này sẽ đồng thời xử lý kháng nghị đang chờ của học viên.", label: "Lý do", confirmLabel: "Duyệt bài thi" })
+          .then(reason => { if (reason?.trim()) refresh(client.decideAssessment(id, { status: "approved", reason: reason.trim() })); });
+        return;
+      }
+      if (pendingAssessment?.kind === "pass-course") {
+        void modal.prompt({ title: "Cấp chứng chỉ Pass Course", message: "Chỉ cấp khi tổng điểm từ 85/100. Sau khi duyệt, tài khoản học viên sẽ được khóa và chứng chỉ được lưu vào lịch sử.", label: "Lý do cấp chứng chỉ", confirmLabel: "Cấp chứng chỉ" })
           .then(reason => { if (reason?.trim()) refresh(client.decideAssessment(id, { status: "approved", reason: reason.trim() })); });
         return;
       }
