@@ -46,13 +46,30 @@ const lessonInput = z.object({
 });
 const qualityAcknowledgementInput = z.object({ findingKeys: z.array(z.string().min(1)).max(2) });
 const correctionInput = z.object({ reason: z.string().trim().min(5).max(1000) });
+const reopenDecisionInput = z.object({ reason: z.string().trim().min(5).max(1000) });
 
 /** Monthly routes deliberately live outside routes.ts: monthly contracts are not weeks. */
 export function registerMonthlyContentRoutes(app: FastifyInstance, pool: Pool, aiRunner?: AiTaskRunner, aiRunnerFactory?: (actorId: string) => Promise<AiTaskRunner | undefined>): void {
   const repositories = createRepositories(pool);
   const operator = createRoleGuard(pool, ["operator"]);
   const contentOperator = createRoleGuard(pool, ["operator"]);
+  const manager = createRoleGuard(pool, ["manager"]);
 
+  app.get("/api/v1/manager/reopen-requests", { preHandler: manager }, async (request) => {
+    return { requests: await repositories.monthlyContent.listReopenRequests(request.e4sSession!.user.id) };
+  });
+
+  app.post("/api/v1/manager/reopen-requests/:correctionId/approve", { preHandler: manager }, async (request) => {
+    const { correctionId } = correctionParams.parse(request.params);
+    const input = reopenDecisionInput.parse(request.body);
+    return repositories.monthlyContent.decideReopenRequest(request.e4sSession!.user.id, correctionId, "approved", input.reason);
+  });
+
+  app.post("/api/v1/manager/reopen-requests/:correctionId/reject", { preHandler: manager }, async (request) => {
+    const { correctionId } = correctionParams.parse(request.params);
+    const input = reopenDecisionInput.parse(request.body);
+    return repositories.monthlyContent.decideReopenRequest(request.e4sSession!.user.id, correctionId, "rejected", input.reason);
+  });
   app.get("/api/v1/content/months/:month", { preHandler: operator }, async (request) => {
     const input = params.parse(request.params);
     return repositories.monthlyContent.getOverview(request.e4sSession!.user.id, input.month);
@@ -183,6 +200,25 @@ export function registerMonthlyContentRoutes(app: FastifyInstance, pool: Pool, a
     return report;
   });
 
+  app.post("/api/v1/content/month-frameworks/:id/reviews/:dayNumber/generate", { preHandler: contentOperator }, async (request, reply) => {
+    const { id, dayNumber } = dayParams.parse(request.params);
+    const actorId = request.e4sSession!.user.id;
+    const runner = await aiRunnerFactory?.(actorId) ?? aiRunner;
+    if (!runner) return reply.code(503).send({ code: "AI_UNAVAILABLE" });
+    const [contract, task] = await Promise.all([
+      repositories.monthlyContent.getFrameworkContract(actorId, id),
+      repositories.aiRuns.activeTaskPrompt(actorId, "monthly_lessons")
+    ]);
+    const day = contract.daySpecs.find((candidate) => candidate.lessonNumber === dayNumber);
+    if (!day || day.kind !== "review") return reply.code(409).send({ code: "NOT_A_FRIDAY_REVIEW" });
+    if (!task) return reply.code(503).send({ code: "AI_PROMPT_NOT_READY" });
+    const result = await generateMonthlyDayWithAi(contract, dayNumber, runner, task.prompt);
+    if (result.status !== "ready" || !result.lesson) {
+      return reply.code(422).send({ code: "MONTHLY_GENERATION_QUALITY_FAILED", report: result.report, attempts: result.attempts });
+    }
+    await repositories.monthlyContent.saveMonthlyDayDraft(actorId, id, dayNumber, result.lesson, result.report);
+    return result;
+  });
   app.post("/api/v1/content/month-frameworks/:id/days/:dayNumber/generate", { preHandler: contentOperator }, async (request, reply) => {
     const { id, dayNumber } = dayParams.parse(request.params);
     const actorId = request.e4sSession!.user.id;
@@ -218,7 +254,7 @@ export function registerMonthlyContentRoutes(app: FastifyInstance, pool: Pool, a
     const { id, dayNumber } = dayParams.parse(request.params);
     const input = correctionInput.parse(request.body);
     const correctionId = await repositories.monthlyContent.createMonthlyCorrection(request.e4sSession!.user.id, id, dayNumber, input.reason);
-    return { id: correctionId, status: "authorized" as const };
+    return { id: correctionId, status: "requested" as const };
   });
 
   app.put("/api/v1/content/month-frameworks/:id/days/:dayNumber/corrections/:correctionId", { preHandler: contentOperator }, async (request) => {

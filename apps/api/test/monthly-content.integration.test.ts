@@ -77,6 +77,15 @@ describe("monthly content API", () => {
     const correction = await app.inject({ method: "POST", url: `/api/v1/content/month-frameworks/${frameworkId}/days/1/corrections`, headers: { cookie }, payload: { reason: "Fix the approved example" } });
     expect(correction.statusCode, correction.body).toBe(200);
     const correctionId = correction.json<{ id: string }>().id;
+    expect(correction.json()).toMatchObject({ status: "requested" });
+    const prematureEdit = await app.inject({ method: "PUT", url: `/api/v1/content/month-frameworks/${frameworkId}/days/1/corrections/${correctionId}`, headers: { cookie }, payload: lessonFor(curriculum, 1) });
+    expect(prematureEdit.statusCode).toBe(500);
+    const reopenQueue = await app.inject({ method: "GET", url: "/api/v1/manager/reopen-requests", headers: { cookie: managerCookie } });
+    expect(reopenQueue.statusCode, reopenQueue.body).toBe(200);
+    expect(reopenQueue.json()).toMatchObject({ requests: [{ id: correctionId, target: "daily_lesson", status: "pending" }] });
+    const managerApproval = await app.inject({ method: "POST", url: `/api/v1/manager/reopen-requests/${correctionId}/approve`, headers: { cookie: managerCookie }, payload: { reason: "Cần cập nhật ví dụ đã phát hành." } });
+    expect(managerApproval.statusCode, managerApproval.body).toBe(200);
+    expect(managerApproval.json()).toMatchObject({ id: correctionId, status: "approved", decisionReason: "Cần cập nhật ví dụ đã phát hành." });
     const correctionDraft = await app.inject({ method: "PUT", url: `/api/v1/content/month-frameworks/${frameworkId}/days/1/corrections/${correctionId}`, headers: { cookie }, payload: lessonFor(curriculum, 1) });
     expect(correctionDraft.statusCode, correctionDraft.body).toBe(200);
     expect(correctionDraft.json()).toMatchObject({ severe: [], light: [] });

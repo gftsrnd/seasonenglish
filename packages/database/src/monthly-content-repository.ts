@@ -46,6 +46,18 @@ interface FrameworkRow {
   curriculum_contract: MonthlyCurriculumContract;
   quality_acknowledgement: MonthFrameworkView["quality"]["acknowledged"] | null;
 }
+interface ReopenRequestRow {
+  id: string;
+  target: "daily_lesson" | "weekly_review";
+  target_id: string;
+  requested_by: string;
+  reason: string;
+  status: "requested" | "authorized" | "published" | "rejected";
+  decision_reason: string | null;
+  created_at: Date;
+  decided_at: Date | null;
+}
+
 interface MonthLessonRow {
   lesson_number: number;
   lesson_date: string;
@@ -78,7 +90,7 @@ export class MonthlyContentRepository {
 
   async saveBrief(actorId: string, input: SaveMonthlyBriefInput): Promise<SharedMonthBriefView> {
     const actor = await this.requireContentOperator(actorId);
-    await this.requireWritableMonth(input.month);
+    await this.requireWritableMonth(actor.organization_id, input.month);
     const calendar = buildMonthlyCalendar(input.month);
     const current = await this.database.query<BriefRow>(
       `select id, month, theme_title, theme_brief, theme_context, communication_goal, brief_version, brief_status
@@ -125,7 +137,7 @@ export class MonthlyContentRepository {
 
   async approveBrief(actorId: string, month: string): Promise<void> {
     const actor = await this.requireContentOperator(actorId);
-    await this.requireWritableMonth(month);
+    await this.requireWritableMonth(actor.organization_id, month);
     const result = await this.database.query<{ id: string }>(
       `update program_months set brief_status = 'approved', updated_at = now()
        where organization_id = $1 and month = $2 and brief_status = 'draft' and theme_title <> ''
@@ -139,7 +151,7 @@ export class MonthlyContentRepository {
 
   async saveFramework(actorId: string, contract: MonthlyCurriculumContract): Promise<Pick<MonthFrameworkView, "id" | "cefr" | "version" | "status" | "scopeHash">> {
     const actor = await this.requireContentOperator(actorId);
-    await this.requireWritableMonth(contract.month);
+    await this.requireWritableMonth(actor.organization_id, contract.month);
     const validationErrors = validateMonthlyCurriculum(contract);
     if (validationErrors.length) throw new Error(`Invalid monthly curriculum: ${validationErrors.join("; ")}`);
     const brief = await this.database.query<BriefRow>(
@@ -199,7 +211,7 @@ export class MonthlyContentRepository {
     const actor = await this.requireContentOperator(actorId);
     const frameworkMonth = await this.monthForFramework(frameworkId, actor.organization_id);
     if (!frameworkMonth) throw new Error("Monthly framework was not found");
-    await this.requireWritableMonth(frameworkMonth);
+    await this.requireWritableMonth(actor.organization_id, frameworkMonth);
     const result = await this.database.query<{ id: string }>(
       `update month_frameworks mf
        set status = 'approved', approved_by = $2, approved_at = now(), updated_at = now()
@@ -228,7 +240,7 @@ export class MonthlyContentRepository {
     );
     const row = framework.rows[0];
     if (!row) throw new Error("Monthly framework was not found");
-    await this.requireWritableMonth(row.curriculum_contract.month);
+    await this.requireWritableMonth(actor.organization_id, row.curriculum_contract.month);
     if (row.status !== "approved") throw new Error("Monthly resources must be locked before authoring a day");
     const spec = row.curriculum_contract.daySpecs.find((day) => day.lessonNumber === dayNumber);
     if (!spec) throw new Error("Monthly day is not in the locked DaySpec");
@@ -239,6 +251,7 @@ export class MonthlyContentRepository {
     );
     const monthLesson = cell.rows[0];
     if (!monthLesson) throw new Error("Monthly DaySpec was not materialized");
+    if (monthLesson.status === "approved") throw new Error("Approved monthly day is locked; request a Manager reopen first");
 
     const set = await this.database.query<{ id: string }>(
       `insert into lesson_sets (id, program_week_id, month_framework_id, cefr)
@@ -283,7 +296,7 @@ export class MonthlyContentRepository {
     const actor = await this.requireContentOperator(actorId);
     const frameworkMonth = await this.monthForFramework(frameworkId, actor.organization_id);
     if (!frameworkMonth) throw new Error("Monthly framework was not found");
-    await this.requireWritableMonth(frameworkMonth);
+    await this.requireWritableMonth(actor.organization_id, frameworkMonth);
     const result = await this.database.query<MonthLessonRow & { id: string }>(
       `select ml.id, ml.lesson_number, ml.lesson_date::text, ml.status, ml.scope_hash, ml.quality_report, ml.quality_acknowledgement,
               (select count(*) from month_lesson_corrections mlc where mlc.month_lesson_id = ml.id)::text as correction_count
@@ -315,7 +328,7 @@ export class MonthlyContentRepository {
     const actor = await this.requireContentOperator(actorId);
     const frameworkMonth = await this.monthForFramework(frameworkId, actor.organization_id);
     if (!frameworkMonth) throw new Error("Monthly framework was not found");
-    await this.requireWritableMonth(frameworkMonth);
+    await this.requireWritableMonth(actor.organization_id, frameworkMonth);
     const result = await this.database.query<MonthLessonRow & { id: string; lesson_id: string | null }>(
       `select ml.id, ml.lesson_id, ml.lesson_number, ml.lesson_date::text, ml.status, ml.scope_hash, ml.quality_report, ml.quality_acknowledgement,
               (select count(*) from month_lesson_corrections mlc where mlc.month_lesson_id = ml.id)::text as correction_count
@@ -361,11 +374,11 @@ export class MonthlyContentRepository {
     const correctionId = randomUUID();
     await this.database.query(
       `insert into month_lesson_corrections
-         (id, month_lesson_id, original_lesson_version_id, requested_by, authorized_by, reason, status, authorized_at)
-       values ($1, $2, $3, $4, $4, $5, 'authorized', now())`,
+         (id, month_lesson_id, original_lesson_version_id, requested_by, reason, status)
+       values ($1, $2, $3, $4, $5, 'requested')`,
       [correctionId, day.id, day.version_id, actorId, reason.trim()]
     );
-    await this.audit(actor, "monthly.correction_authorized", correctionId, { frameworkId, dayNumber, reason: reason.trim(), originalLessonId: day.lesson_id });
+    await this.audit(actor, "monthly.correction_requested", correctionId, { frameworkId, dayNumber, reason: reason.trim(), originalLessonId: day.lesson_id });
     return correctionId;
   }
 
@@ -429,8 +442,10 @@ export class MonthlyContentRepository {
     const result = await this.database.query<{
       id: string; month_lesson_id: string; correction_lesson_version_id: string | null; status: string;
       quality_report: MonthlyQualityReportInput; quality_acknowledgement: OperatorAcknowledgementView | null;
+      target: "daily_lesson" | "weekly_review";
     }>(
-      `select mlc.id, mlc.month_lesson_id, mlc.correction_lesson_version_id, mlc.status, mlc.quality_report, mlc.quality_acknowledgement
+      `select mlc.id, mlc.month_lesson_id, mlc.correction_lesson_version_id, mlc.status, mlc.quality_report, mlc.quality_acknowledgement,
+              case when (mf.curriculum_contract->'daySpecs' @> jsonb_build_array(jsonb_build_object('lessonNumber', ml.lesson_number, 'kind', 'review'))) then 'weekly_review' else 'daily_lesson' end as target
        from month_lesson_corrections mlc join month_lessons ml on ml.id = mlc.month_lesson_id
        join month_frameworks mf on mf.id = ml.framework_id join program_months pm on pm.id = mf.program_month_id
        where mlc.id = $1 and pm.organization_id = $2`,
@@ -449,8 +464,56 @@ export class MonthlyContentRepository {
     await this.database.query("update month_lesson_corrections set status = 'published', published_at = now() where id = $1", [correctionId]);
     await this.database.query("update month_lessons set lesson_id = $2, updated_at = now() where id = $1", [correction.month_lesson_id, lessonId]);
     await this.audit(actor, "monthly.correction_published", correctionId, { monthLessonId: correction.month_lesson_id, lessonId });
+    await this.notifyAffectedLearners(actor.organization_id, correction.target, "Nội dung bài học đã được cập nhật. Kết quả đã hoàn thành của bạn vẫn được giữ nguyên.");
   }
 
+  async listReopenRequests(managerId: string): Promise<Array<{
+    id: string; target: "daily_lesson" | "weekly_review"; targetId: string; requestedBy: string; reason: string;
+    status: "pending" | "approved" | "rejected"; decisionReason: string | null; createdAt: string; decidedAt: string | null;
+  }>> {
+    const manager = await this.requireManager(managerId);
+    const result = await this.database.query<ReopenRequestRow>(
+      `select mlc.id,
+              case when (mf.curriculum_contract->'daySpecs' @> jsonb_build_array(jsonb_build_object('lessonNumber', ml.lesson_number, 'kind', 'review'))) then 'weekly_review' else 'daily_lesson' end as target,
+              ml.id as target_id, mlc.requested_by, mlc.reason, mlc.status, mlc.decision_reason, mlc.created_at, mlc.decided_at
+       from month_lesson_corrections mlc
+       join month_lessons ml on ml.id = mlc.month_lesson_id
+       join month_frameworks mf on mf.id = ml.framework_id
+       join program_months pm on pm.id = mf.program_month_id
+       where pm.organization_id = $1 and mlc.status in ('requested', 'authorized', 'rejected')
+       order by mlc.created_at desc`, [manager.organization_id]
+    );
+    return result.rows.map((row) => ({
+      id: row.id, target: row.target, targetId: row.target_id, requestedBy: row.requested_by, reason: row.reason,
+      status: row.status === "requested" ? "pending" : row.status === "authorized" ? "approved" : "rejected",
+      decisionReason: row.decision_reason, createdAt: row.created_at.toISOString(), decidedAt: row.decided_at?.toISOString() ?? null
+    }));
+  }
+
+  async decideReopenRequest(managerId: string, correctionId: string, decision: "approved" | "rejected", reason: string): Promise<{
+    id: string; target: "daily_lesson" | "weekly_review"; targetId: string; requestedBy: string; reason: string;
+    status: "approved" | "rejected"; decisionReason: string; createdAt: string; decidedAt: string;
+  }> {
+    const manager = await this.requireManager(managerId);
+    const result = await this.database.query<ReopenRequestRow>(
+      `update month_lesson_corrections mlc set status = $3::text, authorized_by = case when $3 = 'authorized' then $2::uuid else null end,
+          authorized_at = case when $3 = 'authorized' then now() else null end, decided_by = $2::uuid, decided_at = now(), decision_reason = $4
+       from month_lessons ml join month_frameworks mf on mf.id = ml.framework_id join program_months pm on pm.id = mf.program_month_id
+       where mlc.id = $1 and mlc.month_lesson_id = ml.id and pm.organization_id = $5 and mlc.status = 'requested'
+       returning mlc.id,
+                 case when (mf.curriculum_contract->'daySpecs' @> jsonb_build_array(jsonb_build_object('lessonNumber', ml.lesson_number, 'kind', 'review'))) then 'weekly_review' else 'daily_lesson' end as target,
+                 ml.id as target_id, mlc.requested_by, mlc.reason, mlc.status, mlc.decision_reason, mlc.created_at, mlc.decided_at`,
+      [correctionId, managerId, decision === "approved" ? "authorized" : "rejected", reason.trim(), manager.organization_id]
+    );
+    const row = result.rows[0];
+    if (!row) throw new Error("Pending reopen request was not found");
+    await this.audit(manager, `monthly.reopen_${decision}`, correctionId, { target: row.target, targetId: row.target_id, reason: reason.trim() });
+    if (decision === "approved") {
+      await this.notifyAffectedLearners(manager.organization_id, row.target, "Nội dung bài học đã được mở lại để cập nhật. Kết quả đã hoàn thành của bạn vẫn được giữ nguyên.");
+    }
+    return { id: row.id, target: row.target, targetId: row.target_id, requestedBy: row.requested_by, reason: row.reason,
+      status: decision, decisionReason: row.decision_reason ?? reason.trim(), createdAt: row.created_at.toISOString(), decidedAt: row.decided_at!.toISOString() };
+  }
   async getOverview(actorId: string, month: string): Promise<MonthlyOperatorOverviewView> {
     const actor = await this.requireOperator(actorId);
     const briefResult = await this.database.query<BriefRow>(
@@ -521,6 +584,23 @@ export class MonthlyContentRepository {
     }));
   }
 
+  private async notifyAffectedLearners(organizationId: string, target: "daily_lesson" | "weekly_review", message: string): Promise<void> {
+    const learners = await this.database.query<{ id: string }>("select id from users where organization_id = $1 and role = 'learner' and status = 'active'", [organizationId]);
+    for (const learner of learners.rows) {
+      await this.database.query(
+        `insert into reminders (id, learner_id, reason, message, status)
+         values ($1, $2, $3, $4, 'sent')`,
+        [randomUUID(), learner.id, target === "weekly_review" ? "weekly_review_reopened" : "daily_lesson_reopened", message]
+      );
+    }
+  }
+
+  private async requireManager(actorId: string): Promise<ActorRow> {
+    const actor = await this.database.query<ActorRow>("select organization_id, role from users where id = $1 and status = 'active'", [actorId]);
+    const row = actor.rows[0];
+    if (!row || row.role !== "manager") throw new Error("Monthly reopen decisions require an active Manager");
+    return row;
+  }
   private async requireOperator(actorId: string): Promise<ActorRow> {
     const actor = await this.database.query<ActorRow>(
       "select organization_id, role from users where id = $1 and status = 'active'",
@@ -537,11 +617,11 @@ export class MonthlyContentRepository {
     return actor;
   }
 
-  private async requireWritableMonth(month: string): Promise<void> {
+  private async requireWritableMonth(organizationId: string, month: string): Promise<void> {
     const result = await this.database.query<{ writable: boolean }>(
-      `select ($1 = to_char(current_date, 'YYYY-MM')
-               or $1 = to_char((current_date + interval '1 month')::date, 'YYYY-MM')) as writable`,
-      [month]
+      `select ($2 = to_char(organization_system_date($1), 'YYYY-MM')
+               or $2 = to_char((organization_system_date($1) + interval '1 month')::date, 'YYYY-MM')) as writable`,
+      [organizationId, month]
     );
     if (!result.rows[0]?.writable) throw new Error("Monthly content is read-only outside the current and next month");
   }
