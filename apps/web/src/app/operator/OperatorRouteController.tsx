@@ -2,6 +2,8 @@ import { createContext, useContext, useEffect, useMemo, useRef, useState, useSyn
 import { useLocation, useNavigate } from "react-router";
 import "./styles.css";
 import type {
+  AssessmentFormPreviewView,
+  AssessmentDefinitionView,
   AssessmentLevelFormSlotView,
   AssessmentLevelFormDetailView,
   AssessmentReviewChallengeView,
@@ -32,6 +34,7 @@ import { OperatorWeeks } from "./Weeks.js";
 import { MonthlyLessonPreview, OperatorMonths } from "./Months.js";
 import { Badge, OperationsReadOnlyContext, OperatorPage, PageTitle } from "./primitives.js";
 import { ModalProvider, useModal } from "../shared/ModalProvider.js";
+import { AssessmentDefinitionPreview } from "../shared/AssessmentDefinitionPreview.js";
 import { useToast } from "../shared/design-system.js";
 import type { AudioEvidence } from "../shared/media/audio-evidence.js";
 import { adaptAssessmentOverview, adaptLevelForms, adaptLessonMatrix, adaptLessonSet, adaptPrompts, adaptReview, adaptWeeks } from "./adapters.js";
@@ -595,6 +598,72 @@ function OperatorChallengeEvidence({ detail }: { detail: AssessmentReviewChallen
 type TestResultsTab = "placement" | "monthly" | "promotion" | "exit";
 type AssessmentResultKind = "placement" | "level_up" | "final" | "pass_course";
 
+const resultPreviewKind: Record<TestResultsTab, AssessmentResultKind> = {
+  placement: "placement",
+  monthly: "final",
+  promotion: "level_up",
+  exit: "pass_course"
+};
+
+function assessmentPreviewDefinition(form: AssessmentFormPreviewView): AssessmentDefinitionView {
+  return {
+    key: form.versionId,
+    kind: form.kind === "level_up" ? "level-up" : form.kind === "pass_course" ? "pass-course" : form.kind,
+    title: form.title,
+    version: form.version,
+    totalMinutes: form.totalMinutes,
+    totalScore: form.totalScore,
+    sections: form.sections.map(section => ({
+      ...section,
+      groups: section.groups.map(group => ({
+        ...group,
+        tasks: group.tasks.map(({ correctAnswer: _correctAnswer, ...task }) => task)
+      }))
+    }))
+  };
+}
+
+function AssessmentPreviewControl({
+  client,
+  kind,
+  readOnly,
+  onEditMonthly
+}: {
+  client: OperatorApiClient;
+  kind: AssessmentResultKind;
+  readOnly: boolean;
+  onEditMonthly: () => void;
+}) {
+  const [forms, setForms] = useState<AssessmentFormPreviewView[]>();
+  const [error, setError] = useState<string>();
+  useEffect(() => {
+    let alive = true;
+    setForms(undefined);
+    setError(undefined);
+    void client.getAssessmentFormPreviews(kind)
+      .then(result => { if (alive) setForms(result.forms); })
+      .catch(reason => { if (alive) setError(message(reason)); });
+    return () => { alive = false; };
+  }, [client, kind]);
+
+  if (error) return <Status tone="error">Không tải được nội dung đề thi: {error}</Status>;
+  if (!forms) return <Status>Đang tải nội dung đề thi…</Status>;
+  if (!forms.length) {
+    const emptyMessage = kind === "final"
+      ? "Chưa có bài thi tháng từ khung tài nguyên đã duyệt. Operator cần sinh đề trong Bài học trước."
+      : "Chưa có phiên bản đề đã lưu để xem.";
+    return <section className="card" aria-label="Chưa có nội dung đề thi"><h2>{kind === "final" ? "Bài thi tháng" : "Chưa có đề"}</h2><p className="small muted">{emptyMessage}</p></section>;
+  }
+  return <div className="stack" aria-live="polite">{forms.map(form => <AssessmentDefinitionPreview
+    key={form.versionId}
+    definition={assessmentPreviewDefinition(form)}
+    status={form.status}
+    audioConfigured={form.audioConfigured}
+    readOnly={readOnly || !form.editable}
+    {...(!readOnly && form.editable && kind === "final" ? { onEdit: onEditMonthly } : {})}
+  />)}</div>;
+}
+
 function TestsRoute({ client, readOnly, initialTab }: { client: OperatorApiClient; readOnly: boolean; initialTab: "placement" | "promotion" }) {
   const [activeTab, setActiveTab] = useState<TestResultsTab>(initialTab);
   const navigate = useNavigate();
@@ -602,19 +671,15 @@ function TestsRoute({ client, readOnly, initialTab }: { client: OperatorApiClien
   const kinds: Record<TestResultsTab, AssessmentResultKind[]> = {
     placement: ["placement"], monthly: ["final"], promotion: ["level_up"], exit: ["pass_course"]
   };
-  const control = activeTab === "placement" ? <section className="card" aria-label="Điều khiển đề đầu vào"><h2>Đề đầu vào</h2><p className="small muted">Đề đầu vào là đề cố định. Chỉ xem kết quả từng học viên ở danh sách bên dưới.</p></section>
-    : activeTab === "monthly" ? <section className="card" aria-label="Điều khiển bài thi tháng"><h2>Bài thi tháng</h2><p className="small muted">Sinh từ tài nguyên tháng đã duyệt trong Bài học. Bản nháp được xem và sửa ở đó trước khi phát hành; sau phát hành, đề bị khóa.</p><button type="button" className="btn-sm" onClick={() => navigate(paths.months)}>Mở Bài học</button></section>
-      : activeTab === "promotion" ? <section aria-label="Điều khiển đề lên mức"><LevelFormsRoute client={client} readOnly={readOnly} embedded /></section>
-        : <section className="card" aria-label="Điều khiển đề đầu ra"><h2>Đề đầu ra</h2><p className="small muted">Pass Course – Form A là đề C1 cố định. Chỉ xem kết quả từng học viên ở danh sách bên dưới.</p></section>;
   return <OperatorPage title="Kết quả bài thi">
-    <PageTitle><h1>Kết quả bài thi</h1><p className="muted">Xem kết quả đầu vào, bài thi tháng, đề lên mức và đề đầu ra.</p></PageTitle>
+    <PageTitle><h1>Kết quả bài thi</h1><p className="muted">Xem đề và kết quả đầu vào, bài thi tháng, đề lên mức và đề đầu ra.</p></PageTitle>
     <div className="tabs operator-review-tabs" role="tablist" aria-label="Loại bài kiểm tra">
       <button type="button" role="tab" aria-selected={activeTab === "placement"} className={activeTab === "placement" ? "active" : ""} onClick={() => setActiveTab("placement")}>Đề đầu vào</button>
       <button type="button" role="tab" aria-selected={activeTab === "monthly"} className={activeTab === "monthly" ? "active" : ""} onClick={() => setActiveTab("monthly")}>Bài thi tháng</button>
       <button type="button" role="tab" aria-selected={activeTab === "promotion"} className={activeTab === "promotion" ? "active" : ""} onClick={() => setActiveTab("promotion")}>Đề lên mức</button>
       <button type="button" role="tab" aria-selected={activeTab === "exit"} className={activeTab === "exit" ? "active" : ""} onClick={() => setActiveTab("exit")}>Đề đầu ra</button>
     </div>
-    {control}
+    <AssessmentPreviewControl client={client} kind={resultPreviewKind[activeTab]} readOnly={readOnly} onEditMonthly={() => navigate(paths.months)} />
     <ReviewRoute client={client} readOnly={readOnly} canEditWeeklyPractice={false} assessmentOnly embedded assessmentKinds={kinds[activeTab]} />
   </OperatorPage>;
 }

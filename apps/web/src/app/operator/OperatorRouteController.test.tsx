@@ -117,25 +117,39 @@ describe("OperatorRouteController", () => {
       tabs: [{ key: "assessments", label: "Bài test", count: 1 }], submissions: [], coachSamples: [], microLessons: [], weeklyPractices: [], appeals: [], lessonAttempts: [],
       assessments: [{ id: "a1", learnerId: "u1", learnerName: "Lan", kind: "placement", title: "Bài đầu vào", submittedAt: "2026-10-21T08:00:00.000Z", totalScore: 72, status: "submitted" }]
     } as any;
-    const client = { getContentReview: vi.fn().mockResolvedValue(review), getAssessmentLevelForms: vi.fn().mockResolvedValue([]), getSystemCapabilities: vi.fn().mockResolvedValue({ ai: true }) };
+    const preview = (kind: "placement" | "level_up" | "final" | "pass_course") => ({ kind, forms: [{
+      definitionId: `${kind}-definition`, versionId: `${kind}-version`, kind,
+      title: kind === "placement" ? "Đề đầu vào thực" : kind === "final" ? "Bài thi tháng thực" : kind === "level_up" ? "Đề lên mức thực" : "Pass Course – Form A",
+      version: 1, status: "published" as const, publishedAt: "2026-11-01T00:00:00.000Z", targetLevel: kind === "level_up" ? "B1" : null,
+      totalMinutes: 90, totalScore: 100, audioConfigured: true, editable: false,
+      sections: ["listening", "reading", "writing", "speaking"].map((code, index) => ({
+        code, title: ["Nghe", "Đọc", "Viết", "Nói"][index]!, durationMinutes: 20, maxScore: 25, instructions: ["Hướng dẫn thật"],
+        groups: [{ key: `${code}-group`, title: `${code} group`, instruction: "Nội dung thật", stimulus: code === "listening" ? { type: "audio_script" as const, audioSrc: "/audio/real.mp3" } : undefined, tasks: [{ key: `${code}-1`, prompt: `${kind} actual ${code} prompt`, responseType: code === "speaking" ? "speaking_evidence" as const : code === "writing" ? "long_text" as const : "single_choice" as const, maxScore: 25 }] }]
+      }))
+    }] });
+    const client = { getContentReview: vi.fn().mockResolvedValue(review), getAssessmentFormPreviews: vi.fn().mockImplementation(async (kind) => preview(kind)), getAssessmentLevelForms: vi.fn().mockResolvedValue([]), getSystemCapabilities: vi.fn().mockResolvedValue({ ai: true }) };
     render(<MemoryRouter initialEntries={["/op/tests"]}><OperatorRouteController session={operator} client={client as any} /></MemoryRouter>);
 
     expect(await screen.findByRole("heading", { name: "Kết quả bài thi" })).toBeInTheDocument();
     const navigation = screen.getByRole("tablist", { name: "Loại bài kiểm tra" });
     expect(within(navigation).getAllByRole("tab").map(tab => tab.textContent)).toEqual(["Đề đầu vào", "Bài thi tháng", "Đề lên mức", "Đề đầu ra"]);
     expect(await screen.findByText("Lan")).toBeInTheDocument();
-    expect(screen.getByText("Đề đầu vào là đề cố định. Chỉ xem kết quả từng học viên ở danh sách bên dưới.")).toBeInTheDocument();
+    expect(await screen.findByText("placement actual listening prompt")).toBeInTheDocument();
 
     await user.click(within(navigation).getByRole("tab", { name: "Bài thi tháng" }));
     expect(within(navigation).getByRole("tab", { name: "Bài thi tháng" })).toHaveAttribute("aria-selected", "true");
-    expect(screen.getByRole("button", { name: "Mở Bài học" })).toBeInTheDocument();
+    expect(await screen.findByText("final actual listening prompt")).toBeInTheDocument();
     expect(screen.getByText("Chưa có bài test.")).toBeInTheDocument();
 
     await user.click(within(navigation).getByRole("tab", { name: "Đề lên mức" }));
     expect(within(navigation).getByRole("tab", { name: "Đề lên mức" })).toHaveAttribute("aria-selected", "true");
-    expect(await screen.findByText("Chưa có mức đích để hiển thị.")).toBeInTheDocument();
+    expect(await screen.findByText("level_up actual listening prompt")).toBeInTheDocument();
     expect(screen.getByText("Chưa có bài test.")).toBeInTheDocument();
     expect(screen.queryByRole("heading", { name: "Đề thi lên mức" })).not.toBeInTheDocument();
+
+    await user.click(within(navigation).getByRole("tab", { name: "Đề đầu ra" }));
+    expect(within(navigation).getByRole("tab", { name: "Đề đầu ra" })).toHaveAttribute("aria-selected", "true");
+    expect(await screen.findByText("pass_course actual listening prompt")).toBeInTheDocument();
   });
 
   it("loads the real week contract for /op/weeks and persists edited frames", async () => {
@@ -1242,3 +1256,4 @@ describe("OperatorRouteController", () => {
     expect(screen.queryByText(/\"script\":/)).not.toBeInTheDocument();
   });
 });
+

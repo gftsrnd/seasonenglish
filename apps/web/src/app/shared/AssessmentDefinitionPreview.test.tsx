@@ -1,0 +1,31 @@
+// @vitest-environment jsdom
+import "@testing-library/jest-dom/vitest";
+import { render, screen } from "@testing-library/react";
+import type { AssessmentDefinitionView } from "@e4s/contracts";
+import { describe, expect, it } from "vitest";
+import { AssessmentDefinitionPreview } from "./AssessmentDefinitionPreview.js";
+
+const definition: AssessmentDefinitionView = {
+  key: "placement-a", kind: "placement", title: "Workplace English CEFR Placement Test", version: 5,
+  totalMinutes: 75, totalScore: 100,
+  sections: [
+    { code: "listening", title: "Nghe", durationMinutes: 15, maxScore: 20, instructions: ["Nghe tối đa 2 lần."], groups: [{ key: "L1", title: "Listening", instruction: "Nghe và chọn đáp án.", maxPlays: 2, stimulus: { type: "audio_script", audioSrc: "/audio/listening.mp3", lines: [{ speaker: "A", text: "Hello" }] }, tasks: [{ key: "L1", prompt: "What happened?", responseType: "single_choice", maxScore: 1, options: [{ value: "A", label: "A meeting" }, { value: "B", label: "A call" }] }] }] },
+    { code: "reading", title: "Đọc", durationMinutes: 25, maxScore: 40, instructions: ["Đọc kỹ."], groups: [{ key: "R1", title: "Reading", instruction: "Đọc văn bản.", tasks: [{ key: "R1", prompt: "Choose.", responseType: "single_choice", maxScore: 1 }] }] },
+    { code: "writing", title: "Viết", durationMinutes: 20, maxScore: 20, instructions: ["Viết email."], groups: [{ key: "W1", title: "Writing", instruction: "Viết.", tasks: [{ key: "W1", prompt: "Write an email.", responseType: "long_text", maxScore: 20 }] }] },
+    { code: "speaking", title: "Nói", durationMinutes: 15, maxScore: 20, instructions: ["Ghi âm."], groups: [{ key: "S1", title: "Speaking", instruction: "Nói.", tasks: [{ key: "S1", prompt: "Introduce yourself.", responseType: "speaking_evidence", maxScore: 20 }] }] }
+  ]
+};
+
+describe("AssessmentDefinitionPreview", () => {
+  it("renders the persisted standard exam content, structure, and listening readiness", () => {
+    render(<AssessmentDefinitionPreview definition={definition} status="published" readOnly />);
+    expect(screen.getByRole("heading", { name: "Workplace English CEFR Placement Test" })).toBeInTheDocument();
+    expect(screen.getByLabelText("Tổng quan bài thi")).toHaveTextContent("75 phút");
+    expect(screen.getByLabelText("Tổng quan bài thi")).toHaveTextContent("100 điểm");
+    expect(screen.getByRole("table", { name: "Cấu trúc bài thi" })).toHaveTextContent("Nghe");
+    expect(screen.getByText("Audio phần nghe đã sẵn sàng")).toBeInTheDocument();
+    expect(screen.getByText("What happened?")).toBeInTheDocument();
+    expect(screen.getByText("Introduce yourself.")).toBeInTheDocument();
+    expect(screen.getByText("Chỉ xem")).toBeInTheDocument();
+  });
+});
