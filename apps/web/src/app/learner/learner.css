@@ -1735,3 +1735,10 @@ h1,h2,h3,h4,h1 b,h2 b,h3 b,h4 b{font-weight:600 !important}
 .monthly-eligibility-summary{gap:18px}.monthly-eligibility-metrics{gap:16px}.monthly-eligibility-metrics .stat{min-height:170px;padding:20px 14px;gap:12px}.monthly-eligibility-metrics .ring{width:82px;height:82px;font-size:.9rem}.monthly-eligibility-metrics .lbl{font-size:.9rem}
 .monthly-eligibility-rules{padding-top:16px;font-size:.9rem}.monthly-assessment-form-state{padding:18px 20px}
 @media(max-width:640px){.monthly-assessment-page{margin-left:auto!important;margin-right:auto!important}.monthly-assessment-landing{padding:20px;min-height:0}.monthly-eligibility-metrics{gap:10px}.monthly-eligibility-metrics .stat{min-height:unset;padding:14px}.monthly-eligibility-metrics .ring{width:66px;height:66px;font-size:.78rem}.monthly-eligibility-metrics .lbl{font-size:.78rem}}
+
+/* Use explicit rendered dimensions for the three monthly eligibility rings. */
+.monthly-assessment-page .monthly-eligibility-metrics .stat{min-height:218px;padding:24px 16px}
+.monthly-assessment-page .monthly-eligibility-metrics .ring{width:108px;height:108px;min-width:108px;min-height:108px;font-size:1rem;line-height:1.2}
+.monthly-assessment-page .monthly-eligibility-metrics .ring b{max-width:78px;line-height:1.18;text-align:center}
+.monthly-assessment-page .monthly-eligibility-metrics .lbl{font-size:.95rem;margin-top:4px}
+@media(max-width:640px){.monthly-assessment-page .monthly-eligibility-metrics .stat{min-height:unset;padding:14px}.monthly-assessment-page .monthly-eligibility-metrics .ring{width:76px;height:76px;min-width:76px;min-height:76px;font-size:.82rem}.monthly-assessment-page .monthly-eligibility-metrics .ring b{max-width:56px}.monthly-assessment-page .monthly-eligibility-metrics .lbl{font-size:.8rem;margin-top:0}}
