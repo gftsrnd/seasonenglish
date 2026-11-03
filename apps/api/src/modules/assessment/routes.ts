@@ -1048,11 +1048,7 @@ async function definitionForAttempt(
   repository: ReturnType<typeof createRepositories>["assessments"],
   attempt: AssessmentAttemptRecord
 ): Promise<PublishedAssessmentRecord | null> {
-  for (const kind of ["placement", "level-up", "final", "pass-course"] as const) {
-    const definition = await repository.findPublished(kind);
-    if (definition?.versionId === attempt.assessmentVersionId) return definition;
-  }
-  return null;
+  return repository.findPublishedByVersion(attempt.assessmentVersionId);
 }
 
 async function monthlyExamIsReady(

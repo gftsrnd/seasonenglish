@@ -4406,6 +4406,40 @@ class AssessmentRepository {
   }
 
   /** Pass Course may start only for an explicitly C1-ready learner. */
+  /**
+   * Resolve an assessment attempt against the exact published version that
+   * created it. A monthly final is keyed by month and CEFR, so looking up only
+   * the latest form of kind `final` can select another month's form.
+   */
+  async findPublishedByVersion(versionId: string): Promise<PublishedAssessmentRecord | null> {
+    const result = await this.pool.query<{
+      definition_id: string;
+      version_id: string;
+      assessment_key: string;
+      kind: "placement" | "level_up" | "final" | "pass_course";
+      title: string;
+      version: number;
+      blueprint: StoredAssessmentDefinition;
+    }>(
+      `select ad.id as definition_id, av.id as version_id, ad.assessment_key, ad.kind, ad.title,
+              av.version, av.blueprint
+       from assessment_versions av
+       join assessment_definitions ad on ad.id = av.definition_id
+       where av.id = $1 and av.status = 'published'
+       limit 1`,
+      [versionId]
+    );
+    const row = result.rows[0];
+    return row ? {
+      definitionId: row.definition_id,
+      versionId: row.version_id,
+      assessmentKey: row.assessment_key,
+      kind: row.kind,
+      title: row.title,
+      version: row.version,
+      blueprint: row.blueprint
+    } : null;
+  }
   async passCourseEligibility(learnerId: string): Promise<boolean> {
     const result = await this.pool.query<{ eligible: boolean }>(
       `select exists(
