@@ -826,12 +826,29 @@ function toFrameworkHeader(row: FrameworkRow): Omit<MonthFrameworkView, "lessons
       coreTerms: row.curriculum_contract.coreTerms,
       supportTerms: row.curriculum_contract.supportTerms,
       grammarTopics: row.curriculum_contract.grammarTopics,
-      sounds: row.curriculum_contract.sounds
+      sounds: row.curriculum_contract.sounds,
+      roadmap: monthlyResourceRoadmap(row.curriculum_contract)
     },
     quality
   };
 }
 
+function monthlyResourceRoadmap(contract: MonthlyCurriculumContract | MonthlyResourcePoolContract): NonNullable<NonNullable<MonthFrameworkView["resources"]>["roadmap"]> {
+  if (!("daySpecs" in contract)) return { allocated: false, grammarSteps: [], sounds: [] };
+  const grammarStepIds = contract.grammarTopics.flatMap((topic) => topic.steps.map((step) => step.id));
+  return {
+    allocated: true,
+    grammarSteps: grammarStepIds.map((stepId) => ({
+      stepId,
+      lessonNumbers: contract.daySpecs.filter((day) => (day.grammarStepIds ?? [day.grammarStepId]).includes(stepId)).map((day) => day.lessonNumber)
+    })),
+    sounds: contract.sounds.map((sound) => ({
+      soundId: sound.id,
+      lessonNumbers: contract.daySpecs.filter((day) => day.soundId === sound.id).map((day) => day.lessonNumber),
+      slots: contract.daySpecs.filter((day) => day.soundId === sound.id).flatMap((day) => day.pronunciationSlot ? [day.pronunciationSlot] : [])
+    }))
+  };
+}
 function dayKind(spec: MonthlyDaySpec | undefined): "new" | "review" {
   if (!spec) throw new Error("Stored monthly lesson has no curriculum day specification");
   return spec.kind;

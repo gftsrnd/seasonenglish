@@ -244,10 +244,10 @@ export function OperatorMonths({ month, todayMonth, overview, cefr, busy, readOn
       </section>
       {framework?.resources && resourcePanel && <section className="monthly-resource-panel card" role="dialog" aria-modal="false" aria-label="Tài nguyên tháng">
         <header><div><span className="eyebrow">Tài nguyên tháng</span><h2>{resources.find((item) => item.key === resourcePanel)?.label}</h2></div><button type="button" className="btn-sm" aria-label="Đóng tài nguyên" onClick={() => setResourcePanel(null)}>Đóng</button></header>
-        {resourcePanel === "core" && <VocabularyPanel items={framework.resources.coreTerms} />}
-        {resourcePanel === "expanded" && <VocabularyPanel items={framework.resources.supportTerms} />}
-        {resourcePanel === "grammar" && <div className="monthly-resource-panel-grid">{framework.resources.grammarTopics.map((topic) => <article key={topic.id}><h3>{topic.title}</h3>{topic.steps.map((step) => <p key={step.id}>{step.usage || step.focus}</p>)}</article>)}</div>}
-        {resourcePanel === "sounds" && <div className="monthly-resource-panel-grid">{framework.resources.sounds.map((sound) => <article key={sound.id}><h3>{sound.label} <span>{sound.ipa}</span></h3><p>{sound.examples.map((example) => example.word).join(", ")}</p></article>)}</div>}
+        {resourcePanel === "core" && <VocabularyPanel items={framework.resources.coreTerms} variant="core" />}
+        {resourcePanel === "expanded" && <VocabularyPanel items={framework.resources.supportTerms} variant="expanded" />}
+        {resourcePanel === "grammar" && <GrammarResourcePanel topics={framework.resources.grammarTopics} {...(framework.resources.roadmap ? { roadmap: framework.resources.roadmap } : {})} />}
+        {resourcePanel === "sounds" && <PronunciationResourcePanel sounds={framework.resources.sounds} {...(framework.resources.roadmap ? { roadmap: framework.resources.roadmap } : {})} />}
       </section>}
     </div>
     {generationConfirmation && framework?.resources && <MonthlyGenerationConfirmation dayNumber={generationConfirmation.dayNumber} kind={generationConfirmation.kind} framework={framework} onCancel={() => setGenerationConfirmation(undefined)} onConfirm={async () => { const generation = generationConfirmation; await generateDay(generation.dayNumber, generation.kind); setGenerationConfirmation(undefined); }} />}
@@ -333,8 +333,41 @@ function MonthlyReopenRequest({ label, onCancel, onSubmit }: { label: string; on
   return <div className="monthly-lesson-preview-backdrop" role="presentation"><section className="monthly-generation-confirmation card" role="dialog" aria-modal="true" aria-label={`Yêu cầu mở lại ${label}`}><span className="eyebrow">Nội dung đã khóa</span><h2>Yêu cầu mở lại {label}</h2><p className="small muted">Manager sẽ duyệt hoặc từ chối yêu cầu. Học viên đã hoàn thành vẫn giữ kết quả cũ.</p><label className="monthly-reopen-reason">Lý do yêu cầu mở lại<textarea aria-label="Lý do yêu cầu mở lại" value={reason} onChange={(event) => setReason(event.target.value)} /></label><footer><button type="button" className="btn" onClick={onCancel}>Quay lại</button><button type="button" className="btn btn-primary" onClick={() => onSubmit(reason)}>Gửi yêu cầu Manager</button></footer></section></div>;
 }
 
-function VocabularyPanel({ items }: { items: Array<{ id: string; word: string; meaning: string; ipa?: string }> }) {
-  return <ol className="monthly-resource-collection">{items.map((item, index) => <li key={item.id}><i>{index + 1}</i><b>{item.word}</b><span>{item.meaning}</span>{item.ipa && <em>{item.ipa}</em>}</li>)}</ol>;
+function GrammarResourcePanel({ topics, roadmap }: {
+  topics: NonNullable<MonthlyOperatorOverviewView["frameworks"][number]["resources"]>["grammarTopics"];
+  roadmap?: NonNullable<NonNullable<MonthlyOperatorOverviewView["frameworks"][number]["resources"]>["roadmap"]>;
+}) {
+  const daysFor = (stepId: string) => roadmap?.grammarSteps.find((item) => item.stepId === stepId)?.lessonNumbers ?? [];
+  return <div className="monthly-resource-roadmap" aria-label="Lộ trình ngữ pháp">
+    {topics.map((topic, topicIndex) => <article key={topic.id} className="monthly-roadmap-card"><header><span className="monthly-roadmap-code">G{String.fromCharCode(65 + topicIndex)}</span><div><h3>{topic.title}</h3><p>{roadmap?.allocated ? "Phân bổ ngày đã chốt" : "Lộ trình nội dung đang soạn — chưa phân bổ ngày"}</p></div></header><div className="monthly-roadmap-steps">{topic.steps.map((step, index) => <section key={step.id}><b>Bước {index + 1}: {step.focus}</b>{step.usage && <p>{step.usage}</p>}{step.formula && <code>{step.formula}</code>}{step.examples.length > 0 && <div className="monthly-resource-chips">{step.examples.map((example) => <span key={example}>{example}</span>)}</div>}{roadmap?.allocated && <p className="monthly-roadmap-days">Áp dụng: {formatLessonBlocks(daysFor(step.id))}</p>}</section>)}</div></article>)}
+  </div>;
+}
+
+function PronunciationResourcePanel({ sounds, roadmap }: {
+  sounds: NonNullable<MonthlyOperatorOverviewView["frameworks"][number]["resources"]>["sounds"];
+  roadmap?: NonNullable<NonNullable<MonthlyOperatorOverviewView["frameworks"][number]["resources"]>["roadmap"]>;
+}) {
+  const assignment = (soundId: string) => roadmap?.sounds.find((item) => item.soundId === soundId);
+  return <div className="monthly-resource-roadmap" aria-label="Lộ trình phát âm">
+    {sounds.map((sound, index) => { const allocated = assignment(sound.id); return <article key={sound.id} className="monthly-roadmap-card"><header><span className="monthly-roadmap-code">P{index + 1}</span><div><h3>{sound.label} <span>{sound.ipa}</span></h3><p>{roadmap?.allocated ? `Phân bổ đã chốt: ${formatLessonBlocks(allocated?.lessonNumbers ?? [])}` : "Mục tiêu phát âm đang soạn — chưa phân bổ ngày"}</p></div></header><div className="monthly-pronunciation-plan"><p><b>Âm mục tiêu:</b> {sound.ipa}</p>{roadmap?.allocated && <p><b>Nhịp luyện:</b> {(allocated?.slots ?? []).join(" · ") || "Theo lịch đã chốt"}</p>}<div className="monthly-resource-chips" aria-label={`Ví dụ âm ${sound.label}`}>{sound.examples.map((example) => <span key={example.id}>{example.word} <em>{example.ipa}</em></span>)}</div></div></article>; })}
+  </div>;
+}
+
+function formatLessonBlocks(lessonNumbers: number[]): string {
+  if (!lessonNumbers.length) return "Chưa có ngày áp dụng";
+  const blocks: string[] = [];
+  let first = lessonNumbers[0]!;
+  let previous = first;
+  for (const lesson of lessonNumbers.slice(1)) {
+    if (lesson === previous + 1) { previous = lesson; continue; }
+    blocks.push(first === previous ? `Bài ${first}` : `Bài ${first}–${previous}`);
+    first = previous = lesson;
+  }
+  blocks.push(first === previous ? `Bài ${first}` : `Bài ${first}–${previous}`);
+  return blocks.join(", ");
+}
+function VocabularyPanel({ items, variant }: { items: Array<{ id: string; word: string; meaning: string; ipa?: string }>; variant: "core" | "expanded" }) {
+  return <ol className={`monthly-resource-collection ${variant}`}>{items.map((item, index) => <li key={item.id}><i>{index + 1}</i><b>{item.word}</b><span>{item.meaning}</span>{item.ipa && <em>{item.ipa}</em>}</li>)}</ol>;
 }
 
 function calendarGrid(month: string, calendar: ReturnType<typeof buildMonthlyCalendar>) {

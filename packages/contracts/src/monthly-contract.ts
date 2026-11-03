@@ -61,6 +61,12 @@ export interface MonthFrameworkView {
     supportTerms: Array<{ id: string; word: string; meaning: string; type: string; source: "example" | "family" | "synonym" | "antonym" | "group" | "manual"; component: "expanded"; dayNumber?: number; relatedCoreTermId?: string }>;
     grammarTopics: Array<{ id: string; title: string; steps: Array<{ id: string; focus: string; formula: string; usage: string; examples: string[] }> }>;
     sounds: Array<{ id: string; ipa: string; label: string; examples: Array<{ id: string; word: string; ipa: string }> }>;
+    /** Draft pools expose no day allocation. Approved frameworks project saved DaySpecs here for review. */
+    roadmap?: {
+      allocated: boolean;
+      grammarSteps: Array<{ stepId: string; lessonNumbers: number[] }>;
+      sounds: Array<{ soundId: string; lessonNumbers: number[]; slots: string[] }>;
+    };
   };
   lessons: MonthLessonCellView[];
   quality: {
