@@ -87,7 +87,7 @@ describe("OperatorRouteController", () => {
     expect(updateAssessmentLevelForm.mock.calls[0]?.[1].sections[0].groups[0].tasks[0].prompt).toBe("Updated prompt");
   });
 
-  it("opens Bài tuần with exactly the five standardized tabs", async () => {
+  it("opens Chấm & Kháng nghị with the recap tab order", async () => {
     const review = {
       tabs: [
         { key: "submissions", label: "Bài nộp", count: 0, unreadCount: 0 },
@@ -104,14 +104,14 @@ describe("OperatorRouteController", () => {
 
     render(<MemoryRouter initialEntries={["/op/review"]}><OperatorRouteController session={operator} client={{ getContentReview: vi.fn().mockResolvedValue(review) } as any} /></MemoryRouter>);
 
-    const weeklyTab = await screen.findByRole("tab", { name: "Đề bài tuần (1)" });
-    expect(screen.getAllByRole("tab")[0]).toBe(weeklyTab);
-    expect(weeklyTab).toHaveAttribute("aria-selected", "true");
-    expect(screen.getAllByRole("tab").map(tab => tab.textContent)).toEqual(["Đề bài tuần (1)", "Bài đã nộp (0 chưa đọc)", "Phản hồi AI Coach (0)", "Kháng nghị (0)", "Lịch sử làm bài"]);
+    const seasonTab = await screen.findByRole("tab", { name: "Phản hồi Season (0)" });
+    expect(screen.getAllByRole("tab")[0]).toBe(seasonTab);
+    expect(seasonTab).toHaveAttribute("aria-selected", "true");
+    expect(screen.getAllByRole("tab").map(tab => tab.textContent)).toEqual(["Phản hồi Season (0)", "Kháng nghị (0)", "Cảnh báo bài tập"]);
     expect(screen.queryByRole("tab", { name: /Bài test/ })).not.toBeInTheDocument();
   });
 
-  it("switches Bài kiểm tra between placement reviews and level-form management", async () => {
+  it("switches Bài kiểm tra between recap result categories in the shared result shell", async () => {
     const user = userEvent.setup();
     const review = {
       tabs: [{ key: "assessments", label: "Bài test", count: 1 }], submissions: [], coachSamples: [], microLessons: [], weeklyPractices: [], appeals: [], lessonAttempts: [],
@@ -122,13 +122,17 @@ describe("OperatorRouteController", () => {
 
     expect(await screen.findByRole("heading", { name: "Bài kiểm tra" })).toBeInTheDocument();
     const navigation = screen.getByRole("tablist", { name: "Loại bài kiểm tra" });
-    expect(within(navigation).getAllByRole("tab").map(tab => tab.textContent)).toEqual(["Đề đầu vào", "Đề lên mức"]);
+    expect(within(navigation).getAllByRole("tab").map(tab => tab.textContent)).toEqual(["Đề đầu vào", "Bài thi tháng", "Đề lên mức", "Đề đầu ra"]);
     expect(await screen.findByText("Lan")).toBeInTheDocument();
+
+    await user.click(within(navigation).getByRole("tab", { name: "Bài thi tháng" }));
+    expect(within(navigation).getByRole("tab", { name: "Bài thi tháng" })).toHaveAttribute("aria-selected", "true");
+    expect(screen.getByText("Chưa có bài test.")).toBeInTheDocument();
 
     await user.click(within(navigation).getByRole("tab", { name: "Đề lên mức" }));
     expect(within(navigation).getByRole("tab", { name: "Đề lên mức" })).toHaveAttribute("aria-selected", "true");
+    expect(screen.getByText("Chưa có bài test.")).toBeInTheDocument();
     expect(screen.queryByRole("heading", { name: "Đề thi lên mức" })).not.toBeInTheDocument();
-    expect(client.getAssessmentLevelForms).toHaveBeenCalled();
   });
 
   it("loads the real week contract for /op/weeks and persists edited frames", async () => {

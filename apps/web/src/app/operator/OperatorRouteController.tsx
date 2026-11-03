@@ -592,17 +592,23 @@ function OperatorChallengeEvidence({ detail }: { detail: AssessmentReviewChallen
   </>;
 }
 
+type TestResultsTab = "placement" | "monthly" | "promotion" | "exit";
+type AssessmentResultKind = "placement" | "level_up" | "final" | "pass_course";
+
 function TestsRoute({ client, readOnly, initialTab }: { client: OperatorApiClient; readOnly: boolean; initialTab: "placement" | "promotion" }) {
-  const [activeTab, setActiveTab] = useState(initialTab);
+  const [activeTab, setActiveTab] = useState<TestResultsTab>(initialTab);
+  const kinds: Record<TestResultsTab, AssessmentResultKind[]> = {
+    placement: ["placement"], monthly: ["final"], promotion: ["level_up"], exit: ["pass_course"]
+  };
   return <OperatorPage title="Bài kiểm tra">
-    <PageTitle><h1>Bài kiểm tra</h1><p className="muted">Xem bài đầu vào và quản lý đề thi lên mức trong cùng một khu vực.</p></PageTitle>
+    <PageTitle><h1>Bài kiểm tra</h1><p className="muted">Xem kết quả đầu vào, bài thi tháng, đề lên mức và đề đầu ra.</p></PageTitle>
     <div className="tabs operator-review-tabs" role="tablist" aria-label="Loại bài kiểm tra">
       <button type="button" role="tab" aria-selected={activeTab === "placement"} className={activeTab === "placement" ? "active" : ""} onClick={() => setActiveTab("placement")}>Đề đầu vào</button>
+      <button type="button" role="tab" aria-selected={activeTab === "monthly"} className={activeTab === "monthly" ? "active" : ""} onClick={() => setActiveTab("monthly")}>Bài thi tháng</button>
       <button type="button" role="tab" aria-selected={activeTab === "promotion"} className={activeTab === "promotion" ? "active" : ""} onClick={() => setActiveTab("promotion")}>Đề lên mức</button>
+      <button type="button" role="tab" aria-selected={activeTab === "exit"} className={activeTab === "exit" ? "active" : ""} onClick={() => setActiveTab("exit")}>Đề đầu ra</button>
     </div>
-    {activeTab === "placement"
-      ? <ReviewRoute client={client} readOnly={readOnly} canEditWeeklyPractice={false} assessmentOnly embedded />
-      : <LevelFormsRoute client={client} readOnly={readOnly} embedded />}
+    <ReviewRoute client={client} readOnly={readOnly} canEditWeeklyPractice={false} assessmentOnly embedded assessmentKinds={kinds[activeTab]} />
   </OperatorPage>;
 }
 
@@ -936,10 +942,11 @@ function LessonSetRoute({ client, readOnly, week, cefr }: { client: OperatorApiC
   }} />{!readOnly && editor && <LessonFormEditor weekNumber={week} cefr={cefr} initial={editor} onSave={saveLesson} onCancel={() => setEditor(undefined)} uploadMedia={client.uploadContentMedia} busy={busy} />}</>;
 }
 
-function ReviewRoute({ client, readOnly, canEditWeeklyPractice, assessmentOnly = false, embedded = false }: { client: OperatorApiClient; readOnly: boolean; canEditWeeklyPractice: boolean; assessmentOnly?: boolean; embedded?: boolean }) {
+function ReviewRoute({ client, readOnly, canEditWeeklyPractice, assessmentOnly = false, embedded = false, assessmentKinds }: { client: OperatorApiClient; readOnly: boolean; canEditWeeklyPractice: boolean; assessmentOnly?: boolean; embedded?: boolean; assessmentKinds?: readonly AssessmentResultKind[] }) {
   const modal = useModal();
   const location = useLocation();
-  const initialTab = assessmentOnly ? "tests" : (location.state as { reviewTab?: ReviewTab } | null)?.reviewTab ?? "weekly";
+  const requestedTab = (location.state as { reviewTab?: ReviewTab } | null)?.reviewTab;
+  const initialTab: ReviewTab = assessmentOnly ? "tests" : requestedTab === "coach" || requestedTab === "appeals" || requestedTab === "attempts" ? requestedTab : "coach";
   const [tab, setTab] = useState<ReviewTab>(initialTab);
   const [data, setData] = useState<ContentReviewView>();
   const [error, setError] = useState<string>();
@@ -1028,7 +1035,9 @@ function ReviewRoute({ client, readOnly, canEditWeeklyPractice, assessmentOnly =
   const guardedManualGrade: OperatorReviewActions["onGradeManual"] = (id, input) => {
     if (!readOnly) refresh(client.gradeReviewedSubmission(id, input));
   };
-  return <><OperatorReview readOnly={readOnly} embedded={embedded} mode={assessmentOnly ? "assessment" : "weekly"} unavailable={missing} view={adaptReview(data, reviewToApi[tab], { aiConnected: capabilities?.ai ?? false })} actions={{
+  const adaptedReview = adaptReview(data, reviewToApi[tab], { aiConnected: capabilities?.ai ?? false });
+  const scopedReview = assessmentOnly && assessmentKinds ? { ...adaptedReview, tests: adaptedReview.tests.filter(item => assessmentKinds.includes(item.kind as AssessmentResultKind)) } : adaptedReview;
+  return <><OperatorReview readOnly={readOnly} embedded={embedded} mode={assessmentOnly ? "assessment" : "weekly"} unavailable={missing} view={scopedReview} actions={{
     onTabChange: setTab, onMarkSubmission: (id, checked) => { if (!readOnly) refresh(client.setContentReviewChecked("submission", id, checked)); }, onMarkCoachTurn: (id, checked) => { if (!readOnly) refresh(client.setContentReviewChecked("coach", id, checked)); }, onGradeAi: gradeAi, onGradeManual: guardedManualGrade, onDecideAppeal: decide, onViewTest: viewTest, ...(typeof client.confirmAssessmentAudioDeletion === "function" && typeof client.deleteAssessmentAudio === "function" && !readOnly ? { onDeleteAudio: deleteReviewedAudio } : {}),
     ...(canEditWeeklyPractice ? { onSaveWeeklyPractice: async input => {
       if (readOnly) return;

@@ -9,7 +9,7 @@ import { AudioEvidencePanel } from "../shared/media/AudioEvidencePanel.js";
 import { normalizeAudioEvidence, type AudioEvidence } from "../shared/media/audio-evidence.js";
 import { normalizeBlankPrompt } from "../learner/text.js";
 
-const TABS: Array<[ReviewTab, string]> = [["weekly", "Bài tháng"], ["subs", "Bài đã nộp"], ["coach", "Phản hồi AI Coach"], ["appeals", "Kháng nghị"], ["attempts", "Lịch sử làm bài"]];
+const TABS: Array<[ReviewTab, string]> = [["coach", "Phản hồi Season"], ["appeals", "Kháng nghị"], ["attempts", "Cảnh báo bài tập"]];
 const focusableSelector = "button:not(:disabled), input:not(:disabled), select:not(:disabled), textarea:not(:disabled), audio[controls], [href], [tabindex]:not([tabindex='-1'])";
 
 type PendingReviewAction = {
@@ -269,8 +269,8 @@ export function OperatorReview({ view, actions, readOnly = false, unavailable = 
     return view.tests.length ? <div className="card"><div className="table-wrap operator-action-table-wrap"><table className="operator-action-table"><thead><tr><th>Người học</th><th>Loại</th><th>Nộp</th><th>Tổng</th><th>Mức thô</th><th>AI</th><th aria-label="Thao tác" /></tr></thead><tbody>{view.tests.map(item => <tr key={item.id}><td data-label="Người học">{item.learnerName}</td><td data-label="Loại">{item.kind === "placement" ? "Đầu vào" : "Lên mức"}</td><td data-label="Nộp">{item.submittedAt || "—"}</td><td data-label="Tổng">{item.total ?? "—"}</td><td data-label="Mức thô">{item.rawLevel || "—"}</td><td data-label="AI">{item.aiSuggestedCefr || "—"}</td><td data-label="Thao tác"><Button small disabled={Boolean(blocked("viewTest"))} title={blocked("viewTest")} onClick={() => actions.onViewTest(item.id)}>Xem</Button></td></tr>)}</tbody></table></div></div> : <Empty>Chưa có bài test.</Empty>;
   };
 
-  const content = <>{!embedded && <PageTitle><h1>Bài tháng</h1><p className="muted">Theo dõi bài tháng, bài đã nộp, phản hồi AI Coach, kháng nghị và lịch sử làm bài.</p></PageTitle>}{actionError && <div className="banner danger" role="alert" style={{ marginBottom: 12 }}><div className="body small">{actionError.message}</div></div>}{mode === "weekly" && <div className="tabs operator-review-tabs" role="tablist" aria-label="Nhóm nội dung cần kiểm tra">{TABS.map(([key, label]) => <button type="button" role="tab" aria-selected={view.activeTab === key} className={view.activeTab === key ? "active" : ""} key={key} onClick={() => actions.onTabChange(key)}>{key === "attempts" ? label : `${label} (${key === "weekly" || key === "subs" ? 0 : view.counts[key] ?? 0}${key === "subs" ? " chưa đọc" : ""})`}</button>)}</div>}{body()}</>;
-  return embedded ? content : <OperatorPage title="Bài tháng">{content}</OperatorPage>;
+  const content = <>{!embedded && <PageTitle><h1>Chấm & Kháng nghị</h1><p className="muted">Kiểm tra phản hồi Season, xử lý kháng nghị và theo dõi cảnh báo bài tập.</p></PageTitle>}{actionError && <div className="banner danger" role="alert" style={{ marginBottom: 12 }}><div className="body small">{actionError.message}</div></div>}{mode === "weekly" && <div className="tabs operator-review-tabs" role="tablist" aria-label="Nhóm nội dung cần kiểm tra">{TABS.map(([key, label]) => <button type="button" role="tab" aria-selected={view.activeTab === key} className={view.activeTab === key ? "active" : ""} key={key} onClick={() => actions.onTabChange(key)}>{key === "attempts" ? label : `${label} (${key === "weekly" || key === "subs" ? 0 : view.counts[key] ?? 0}${key === "subs" ? " chưa đọc" : ""})`}</button>)}</div>}{body()}</>;
+  return embedded ? content : <OperatorPage title="Chấm & Kháng nghị">{content}</OperatorPage>;
 }
 
 export function OperatorReviewAssessmentDetail({ detail, onClose, onSaveManualScore, savingManualScore = false, onDeleteAudio }: { detail: ContentReviewAssessmentDetailView; onClose(): void; onSaveManualScore?: (input: ManualScoreInput) => void; savingManualScore?: boolean; onDeleteAudio?: (evidence: AudioEvidence) => void | Promise<void> }) {
