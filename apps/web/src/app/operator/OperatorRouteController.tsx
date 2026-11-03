@@ -700,7 +700,7 @@ function TestsRoute({ client, readOnly, initialTab }: { client: OperatorApiClien
       <button type="button" role="tab" aria-selected={activeTab === "promotion"} className={activeTab === "promotion" ? "active" : ""} onClick={() => setActiveTab("promotion")}>Đề lên mức</button>
       <button type="button" role="tab" aria-selected={activeTab === "exit"} className={activeTab === "exit" ? "active" : ""} onClick={() => setActiveTab("exit")}>Đề đầu ra</button>
     </div>
-    <AssessmentPreviewControl client={client} kind={resultPreviewKind[activeTab]} readOnly={readOnly} onEditMonthly={() => navigate(paths.months)} />
+    {activeTab === "promotion" ? <LevelFormsRoute client={client} readOnly={readOnly} embedded /> : <AssessmentPreviewControl client={client} kind={resultPreviewKind[activeTab]} readOnly={readOnly} onEditMonthly={() => navigate(paths.months)} />}
     <ReviewRoute client={client} readOnly={readOnly} canEditWeeklyPractice={false} assessmentOnly embedded assessmentKinds={kinds[activeTab]} />
   </OperatorPage>;
 }

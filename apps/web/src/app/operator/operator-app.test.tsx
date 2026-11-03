@@ -146,7 +146,7 @@ describe("Operator app rebuild", () => {
       { target: "B1", forms: [{ id: "f1", title: "B1 Promotion", status: "draft", short: true, createdAt: "14/10/2026", byName: "AI", listeningQuestions: 5, readingQuestions: 5, attempts: 0 }] },
       { target: "B2", forms: [{ id: "f2", title: "B2 Promotion", status: "approved", createdAt: "14/10/2026", byName: "Thư", listeningQuestions: 5, readingQuestions: 5, attempts: 3 }] }
     ] } as any} actions={{ onBack: vi.fn(), onOpenSettings: vi.fn(), onGenerate: vi.fn(), onView, onEdit: vi.fn(), onApprove: vi.fn(), onDelete: vi.fn() }} />);
-    expect(screen.getByText("Chưa có đề.")).toBeInTheDocument();
+    expect(screen.getByText(/Chưa có bản nháp/)).toBeInTheDocument();
     expect(screen.getByText("ngắn")).toBeInTheDocument();
     expect(screen.getAllByText("Đã duyệt").length).toBeGreaterThan(0);
     expect(screen.getAllByRole("button", { name: "Sinh đề bằng AI" })).toHaveLength(1);
@@ -212,7 +212,7 @@ describe("Operator app rebuild", () => {
     expect(screen.getByText("Bản nháp")).toBeInTheDocument();
     expect(screen.getAllByText("Đã duyệt").length).toBeGreaterThan(0);
     expect(screen.getByText("đang dùng")).toBeInTheDocument();
-    expect(screen.getByText("Chưa có đề.")).toBeInTheDocument();
+    expect(screen.getByText(/Chưa có bản nháp/)).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Đang sinh…" })).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Duyệt & phát hành" })).toBeDisabled();
     expect(screen.getAllByRole("button", { name: "Xem" })).toHaveLength(2);

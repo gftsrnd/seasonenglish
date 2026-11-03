@@ -27,7 +27,7 @@ export function OperatorLevelForms({ view, actions, readOnly = false, unavailabl
   const mutationBusy = view.mutationState === "loading";
   const loading = view.loading || view.loadState === "loading";
   const readOnlyReason = readOnly ? "Quản lý đang xem ở chế độ chỉ đọc" : undefined;
-  const pageTitle = <PageTitle actions={!view.aiConnected ? <span className="badge warn">AI tạm chưa sẵn sàng</span> : undefined}><h1>Đề thi lên mức</h1><p className="muted">Mỗi mức đích cần một đề ngắn được duyệt: 1 đoạn nghe (5 câu × 5đ), 1 bài đọc (5 câu × 5đ), viết 80–120 từ, 1 task nói – tất cả ở mức đích. Học viên đủ tín hiệu thi đề của mức kế tiếp, thời gian mỗi phần bằng nửa bài đầu vào.</p></PageTitle>;
+  const pageTitle = <PageTitle actions={!view.aiConnected ? <span className="badge warn">AI tạm chưa sẵn sàng</span> : undefined}><h1>Đề thi lên mức</h1><p className="muted">Mỗi mức đích có một khung soạn đề riêng. Nội dung sinh và nội dung soạn tay đều phải theo bốn kỹ năng của bài đầu vào, với độ khó ở mức đích; chỉ bản nháp mới sửa được trước khi phát hành.</p></PageTitle>;
 
   const content = <>{!embedded && pageTitle}
     <StandaloneReadOnlyBanner readOnly={readOnly} />
@@ -47,7 +47,7 @@ export function OperatorLevelForms({ view, actions, readOnly = false, unavailabl
           const deleteReason = blocked("delete") || readOnlyReason || (isApproved ? "Chỉ xoá được bản nháp" : undefined) || (form.attempts ? "Đề này đã có bài thi nên không xoá được" : undefined);
           const actionBusy = mutationBusy || generating || publishBusy || deleteBusy;
           return <div className="item operator-level-form-item" key={form.id}><div className="body"><div className="title">{form.title} <Badge tone={isApproved ? "ok" : ""}>{isApproved ? "Đã duyệt" : "Bản nháp"}</Badge>{form.short && <Badge tone="warn">ngắn</Badge>}{form.inUse && <Badge tone="primary">đang dùng</Badge>}</div><div className="xs muted">{form.createdAt} · {form.byName || "—"} · {form.listeningQuestions} câu nghe · {form.readingQuestions} câu đọc · {form.attempts} lượt thi</div></div><div className="row operator-level-form-actions"><Button small disabled={Boolean(blocked("view"))} onClick={() => actions.onView(form.id)}>Xem</Button><Button small disabled={!actions.onEdit || Boolean(readOnlyReason) || actionBusy || Boolean(blocked("edit"))} onClick={() => actions.onEdit?.(form.id, isApproved)}>{isApproved ? "Chỉnh sửa" : "Sửa"}</Button>{!isApproved && <Button small primary busy={publishBusy} disabled={Boolean(readOnlyReason) || actionBusy || Boolean(blocked("approve"))} onClick={() => actions.onApprove(form.id)}>{publishBusy ? "Đang phát hành…" : "Duyệt & phát hành"}</Button>}<Button small danger busy={deleteBusy} disabled={Boolean(deleteReason) || actionBusy} title={deleteReason} onClick={() => actions.onDelete(form.id)}>{deleteBusy ? "Đang xoá…" : "Xoá"}</Button></div></div>;
-        })}</div> : <p className="small muted operator-level-empty">Chưa có đề.</p>}
+        })}</div> : <p className="small muted operator-level-empty">Chưa có bản nháp. Sinh bằng AI để tạo nội dung theo mức đích, sau đó kiểm tra và soạn tay trước khi phát hành.</p>}
       </div>;
     })}
   </>;
