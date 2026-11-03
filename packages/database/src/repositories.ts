@@ -307,6 +307,7 @@ export interface ActiveMonthlyLearningContext {
   communicationGoal: string;
   cefr: CefrLevel;
   examDate: string;
+  systemDate: string;
 }
 
 export interface LearnerProfileRecord {
@@ -328,6 +329,9 @@ export interface LearnerLessonRecord {
   content: LessonContent & { durationMinutes?: number };
   progress: LessonProgressView;
   lock: LessonLockView | null;
+  monthlyKind?: "new" | "review";
+  lessonDate?: string;
+  systemDate?: string;
 }
 
 type LearnerLessonQueryRow = {
@@ -348,6 +352,9 @@ type LearnerLessonQueryRow = {
   progress_score: string | null;
   progress_evidence: Record<string, unknown> | null;
   progress_updated_at: Date | null;
+  monthly_kind?: "new" | "review";
+  lesson_date?: string;
+  system_date?: string;
 };
 
 export interface PublishedLessonSet {
@@ -796,9 +803,9 @@ class LearningRepository {
 
   async getActiveMonthlyContext(learnerId: string): Promise<ActiveMonthlyLearningContext | null> {
     const result = await this.pool.query<{
-      month: string; theme_title: string; theme_brief: string; communication_goal: string; cefr: CefrLevel; exam_date: string;
+      month: string; theme_title: string; theme_brief: string; communication_goal: string; cefr: CefrLevel; exam_date: string; system_date: string;
     }>(
-      `select pm.month, pm.theme_title, pm.theme_brief, pm.communication_goal, mf.cefr, pm.exam_date::text
+      `select pm.month, pm.theme_title, pm.theme_brief, pm.communication_goal, mf.cefr, pm.exam_date::text, organization_system_date(u.organization_id)::text as system_date
        from enrollments e
        join users u on u.id = e.learner_id and u.status = 'active'
        join program_months pm on pm.organization_id = u.organization_id and pm.month = to_char(organization_system_date(u.organization_id), 'YYYY-MM')
@@ -814,7 +821,8 @@ class LearningRepository {
       themeBrief: row.theme_brief,
       communicationGoal: row.communication_goal,
       cefr: row.cefr,
-      examDate: row.exam_date
+      examDate: row.exam_date,
+      systemDate: row.system_date
     } : null;
   }
 
@@ -1197,7 +1205,7 @@ class LearningRepository {
 
   async listMonthlyLessons(learnerId: string, month: string): Promise<LearnerLessonRecord[]> {
     const result = await this.pool.query<LearnerLessonQueryRow>(
-      `select l.id, l.title, ml.lesson_number as day_number, 0 as week_number, pm.theme_title as week_topic, mf.cefr, lv.content,
+      `select l.id, l.title, ml.lesson_number as day_number, 0 as week_number, pm.theme_title as week_topic, mf.cefr, lv.content, case when (mf.curriculum_contract->'daySpecs' @> jsonb_build_array(jsonb_build_object('lessonNumber', ml.lesson_number, 'kind', 'review'))) then 'review' else 'new' end as monthly_kind, ml.lesson_date::text as lesson_date, organization_system_date((select organization_id from users where id = e.learner_id))::text as system_date,
               (select count(*) from month_lessons count_ml where count_ml.framework_id = mf.id and count_ml.status = 'approved')::text as lesson_count,
               ml.lesson_date::text as opens_at, ml.lesson_date > organization_system_date((select organization_id from users where id = e.learner_id)) as opens_later,
               blocker.id as blocker_id, blocker.day_number as blocker_day_number, blocker.title as blocker_title,
@@ -1266,7 +1274,7 @@ class LearningRepository {
     let row = result.rows[0];
     if (!row) {
       const monthly = await this.pool.query<LearnerLessonQueryRow>(
-        `select l.id, l.title, ml.lesson_number as day_number, 0 as week_number, pm.theme_title as week_topic, mf.cefr, lv.content,
+        `select l.id, l.title, ml.lesson_number as day_number, 0 as week_number, pm.theme_title as week_topic, mf.cefr, lv.content, case when (mf.curriculum_contract->'daySpecs' @> jsonb_build_array(jsonb_build_object('lessonNumber', ml.lesson_number, 'kind', 'review'))) then 'review' else 'new' end as monthly_kind, ml.lesson_date::text as lesson_date, organization_system_date((select organization_id from users where id = e.learner_id))::text as system_date,
                 (select count(*) from month_lessons count_ml where count_ml.framework_id = mf.id and count_ml.status = 'approved')::text as lesson_count,
                 ml.lesson_date::text as opens_at, ml.lesson_date > organization_system_date((select organization_id from users where id = e.learner_id)) as opens_later,
                 blocker.id as blocker_id, blocker.day_number as blocker_day_number, blocker.title as blocker_title,
@@ -1737,12 +1745,16 @@ class LearningRepository {
              then date_trunc('month', organization_system_date((select organization_id from users where id = $1)))
              else date_trunc('week', organization_system_date((select organization_id from users where id = $1))) end
              and coalesce((ct.feedback->'evaluation'->>'countsTowardGoal')::boolean, coalesce((ct.feedback->>'relevant')::boolean, true)))::text as turns_this_week,
-           count(*) filter (where ct.speaker = 'learner' and ct.created_at >= now() - make_interval(days => $2)
+           count(*) filter (where ct.speaker = 'learner' and ct.created_at >= case when $3::boolean
+             then date_trunc('month', organization_system_date((select organization_id from users where id = $1)))
+             else now() - make_interval(days => $2) end
              and coalesce((ct.feedback->'evaluation'->>'countsTowardGoal')::boolean, coalesce((ct.feedback->>'relevant')::boolean, true)))::text as turns_14_days,
            avg(((case when jsonb_typeof(ct.feedback->'rubric'->'meaning') = 'object' then (ct.feedback->'rubric'->'meaning'->>'score')::numeric else (ct.feedback->'rubric'->>'meaning')::numeric end)
              + (case when jsonb_typeof(ct.feedback->'rubric'->'vocabulary') = 'object' then (ct.feedback->'rubric'->'vocabulary'->>'score')::numeric else (ct.feedback->'rubric'->>'vocabulary')::numeric end)
              + (case when jsonb_typeof(ct.feedback->'rubric'->'grammar') = 'object' then (ct.feedback->'rubric'->'grammar'->>'score')::numeric else (ct.feedback->'rubric'->>'grammar')::numeric end)) / 3) filter (
-             where ct.speaker = 'learner' and ct.created_at >= now() - make_interval(days => $2)
+             where ct.speaker = 'learner' and ct.created_at >= case when $3::boolean
+                 then date_trunc('month', organization_system_date((select organization_id from users where id = $1)))
+                 else now() - make_interval(days => $2) end
                and ct.feedback ? 'rubric'
                 and coalesce((ct.feedback->'evaluation'->>'countsTowardGoal')::boolean, coalesce((ct.feedback->>'relevant')::boolean, true))
            )::text as rubric_average
@@ -1776,10 +1788,13 @@ class LearningRepository {
                and av.blueprint->>'targetLevel' = $1) as levelup_available`,
         [nextCefr(row.cefr)]
       ),
-      this.pool.query<{ evidence: { evidence?: Record<string, { attempts?: number; score?: number }> } }>(
-        `select evidence from progress_records
-         where learner_id = $1 and updated_at >= now() - make_interval(days => $2)`, [learnerId, thresholds.days]
-      ),
+      monthlyContext ? this.pool.query<{ evidence: { evidence?: Record<string, { attempts?: number; score?: number }> } }>(
+        `select pr.evidence from progress_records pr
+         join month_lessons ml on ml.lesson_id = pr.lesson_id and ml.status = 'approved'
+         join month_frameworks mf on mf.id = ml.framework_id and mf.status = 'approved'
+         join program_months pm on pm.id = mf.program_month_id
+         where pr.learner_id = $1 and pm.month = $2 and mf.cefr = $3`, [learnerId, monthlyContext.month, monthlyContext.cefr]
+      ) : Promise.resolve({ rows: [] as Array<{ evidence: { evidence?: Record<string, { attempts?: number; score?: number }> } }> }),
       monthlyContext ? this.pool.query<{ status: string; total_score: string | null }>(
         `select aa.status, sum(s.score)::text as total_score
          from assessment_attempts aa
@@ -1813,7 +1828,7 @@ class LearningRepository {
       earned: badge.earned
     }));
     const coachSummary = coach.rows[0] ?? { turns_today: "0", turns_this_week: "0", turns_14_days: "0", rubric_average: null };
-    const latestPractice = practice.rows[0];
+
     const totalLessons = monthlyContext ? monthlyLessons.length : 0;
     const completedLessons = monthlyContext
       ? monthlyLessons.filter((lesson) => lesson.progress.status === 'completed').length
@@ -1832,9 +1847,9 @@ class LearningRepository {
       firstTryAccuracy,
       firstTryCorrect,
       firstTryTotal: firstTryParts.length,
-      weeklyPractice: Number(monthlyFinal.rows[0]?.total_score ?? latestPractice?.total ?? 0),
+      weeklyPractice: Number(monthlyFinal.rows[0]?.total_score ?? 0),
       coachRubric: Number(coachSummary.rubric_average ?? 0),
-      coachTurns: Number(coachSummary.turns_14_days),
+      coachTurns: Number(monthlyContext ? coachSummary.turns_this_week : coachSummary.turns_14_days),
       wrongRate,
       attemptedParts: firstTryParts.length,
       examAvailable: Boolean(availability.rows[0]?.levelup_available),
@@ -1857,7 +1872,9 @@ class LearningRepository {
           days: monthlyLessons.map((lesson) => ({
             lessonNumber: lesson.dayNumber,
             status: lesson.progress.status,
-            opensAt: lesson.lock?.opensAt ?? null
+            opensAt: lesson.lock?.opensAt ?? null,
+            ...(lesson.lessonDate ? { lessonDate: lesson.lessonDate } : {}),
+            ...(lesson.monthlyKind ? { kind: lesson.monthlyKind } : {})
           })),
           exam: (() => {
             const attempt = monthlyFinal.rows[0];
@@ -2120,14 +2137,14 @@ function buildLevelReadiness(input: {
   });
   const labels: Record<LevelReadinessMetric["key"], string> = {
     lessonCompletion: "Bài học hoàn thành", firstTryAccuracy: "Phần bài đúng ngay lần đầu",
-    weeklyPractice: "Bài đánh giá gần nhất", coachRubric: "Rubric khi luyện với Season",
+    weeklyPractice: "Bài thi tháng", coachRubric: "Rubric Season trong tháng",
     wrongRate: "Phần sai nhiều lần"
   };
   const displays: Record<LevelReadinessMetric["key"], string> = {
     lessonCompletion: `${input.completedLessons}/${input.totalLessons} bài`,
     firstTryAccuracy: `${input.firstTryCorrect}/${input.firstTryTotal} phần`,
     weeklyPractice: input.weeklyPractice || input.weeklyPractice === 0 ? `${input.weeklyPractice}/100` : "Chưa có bài được chấm",
-    coachRubric: `${round(input.coachRubric)}/5 · ${input.coachTurns} lượt`,
+    coachRubric: `${round(input.coachRubric)}/5 · ${input.coachTurns} lượt trong tháng`,
     wrongRate: `${round(input.wrongRate)}% · ${input.attemptedParts} phần`
   };
   const criteria: LevelReadinessMetric[] = calculated.criteria.map((criterion) => ({
@@ -2180,6 +2197,9 @@ function mapLessonRow(row: {
   progress_score: string | null;
   progress_evidence: Record<string, unknown> | null;
   progress_updated_at: Date | null;
+  monthly_kind?: "new" | "review";
+  lesson_date?: string;
+  system_date?: string;
 }): LearnerLessonRecord {
   return {
     id: row.id,
@@ -2195,7 +2215,8 @@ function mapLessonRow(row: {
       row.progress_evidence ?? {},
       row.progress_updated_at
     ),
-    lock: lessonLockFor(row)
+    lock: lessonLockFor(row),
+    ...(row.monthly_kind ? { monthlyKind: row.monthly_kind, lessonDate: row.lesson_date, systemDate: row.system_date } : {})
   };
 }
 

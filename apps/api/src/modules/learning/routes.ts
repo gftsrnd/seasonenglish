@@ -183,9 +183,15 @@ export function registerLearningRoutes(
       dayNumber: lesson.dayNumber,
       title: learnerLessonDisplayTitle(lesson),
       status: lesson.progress.status,
-      lock: lesson.lock
+      lock: lesson.lock,
+      ...(lesson.lessonDate ? { lessonDate: lesson.lessonDate } : {}),
+      ...(lesson.monthlyKind ? { kind: lesson.monthlyKind } : {})
     }));
     const completedLessons = summaries.filter((lesson) => lesson.status === "completed").length;
+    const reviewLessons = summaries.filter((lesson) => lesson.kind === "review");
+    const completedReviews = reviewLessons.filter((lesson) => lesson.status === "completed").length;
+    const totalReviews = reviewLessons.length;
+    const monthlyExamStatus = progress.monthlyProgress?.exam.status ?? "unpublished";
     const points = monthlyContext ? progress.points : 0;
     const inactiveDays = monthlyContext
       ? calculateInactiveDays(progress.activity.map((item) => item.occurredAt), `${monthlyContext.month}-01`)
@@ -200,15 +206,20 @@ export function registerLearningRoutes(
         themeTitle: monthlyContext.themeTitle,
         themeBrief: monthlyContext.themeBrief,
         communicationGoal: monthlyContext.communicationGoal,
-        examDate: monthlyContext.examDate
+        examDate: monthlyContext.examDate,
+        systemDate: monthlyContext.systemDate
       } : null,
       monthlyPreparation: !monthlyContext,
       monthlyExam: monthlyContext ? {
-        status: completedLessons < summaries.length ? "locked" as const : "ready" as const,
+        status: monthlyExamStatus,
         completedLessons,
         totalLessons: summaries.length,
         remainingLessons: Math.max(0, summaries.length - completedLessons),
-        requirement: completedLessons < summaries.length
+        requirement: monthlyExamStatus === "completed"
+          ? "Bạn đã hoàn thành bài thi tháng."
+          : monthlyExamStatus === "unpublished"
+            ? "Bài thi tháng đang chờ người vận hành phát hành."
+            : completedLessons < summaries.length
           ? `Hoàn thành ${summaries.length - completedLessons} bài còn lại để mở bài thi tháng.`
           : "Bạn đã hoàn thành điều kiện. Bài thi tháng đã sẵn sàng.",
         certificateEligible: monthlyContext.cefr === "C1"
@@ -225,13 +236,15 @@ export function registerLearningRoutes(
         totalLessons: summaries.length,
         studyDays: monthlyContext ? progress.studyDays : 0,
         streakDays: monthlyContext ? calculateCurrentStreak(progress.activity.map((item) => item.occurredAt)) : 0,
-        points
+        points,
+        completedReviews,
+        totalReviews,
+        monthlyExamStatus
       },
       ...(inactiveDays !== null && inactiveDays >= 2 ? { inactivityReminder: { inactiveDays } } : {}),
-      schedule: buildSchedule(
-        Number(progress.learner.profile.durationMinutes ?? 10),
-        progress.activity.map((item) => item.occurredAt)
-      ),
+      schedule: monthlyContext
+        ? buildMonthlySchedule(summaries, monthlyContext.systemDate, Number(progress.learner.profile.durationMinutes ?? 10))
+        : buildSchedule(Number(progress.learner.profile.durationMinutes ?? 10), []),
       coach: { turnsToday: monthlyContext ? progress.stats.coachTurnsToday ?? 0 : 0, turnsThisWeek: monthlyContext ? progress.stats.coachTurns : 0, targetTurns: 50, href: "/coach" },
       practice: {
         status: "locked",
@@ -838,6 +851,30 @@ function startOfUtcDay(value: Date): Date {
 
 function skipWeekendBackwards(value: Date): void {
   while (value.getUTCDay() === 0 || value.getUTCDay() === 6) value.setUTCDate(value.getUTCDate() - 1);
+}
+
+function buildMonthlySchedule(lessons: LearnerHomeView["lessons"], systemDate: string, lessonMinutes: number): LearnerHomeView["schedule"] {
+  const today = /^\d{4}-\d{2}-\d{2}$/.test(systemDate) ? systemDate : new Date().toISOString().slice(0, 10);
+  const current = new Date(`${today}T00:00:00Z`);
+  const monday = new Date(current);
+  monday.setUTCDate(current.getUTCDate() - ((current.getUTCDay() + 6) % 7));
+  const byDate = new Map(lessons.filter((lesson) => lesson.lessonDate).map((lesson) => [lesson.lessonDate!, lesson]));
+  const labels = ["T2", "T3", "T4", "T5", "T6"];
+  return {
+    daysPerWeek: 5,
+    lessonMinutes,
+    days: labels.map((label, index) => {
+      const date = new Date(monday);
+      date.setUTCDate(monday.getUTCDate() + index);
+      const key = date.toISOString().slice(0, 10);
+      const lesson = byDate.get(key);
+      const status = lesson?.status === "completed" ? "attended" as const
+        : lesson && key === today ? "today" as const
+          : lesson && key < today ? "missed" as const
+            : "upcoming" as const;
+      return { label, date: key, status };
+    })
+  };
 }
 
 function buildSchedule(lessonMinutes: number, occurredAt: string[]): LearnerHomeView["schedule"] {

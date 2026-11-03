@@ -233,6 +233,9 @@ export interface LessonSummary {
   status: LessonProgressView["status"];
   /** Server-derived access state; clients must not infer lesson locks. */
   lock?: LessonLockView | null;
+  /** Monthly calendar metadata; absent for retired weekly records. */
+  lessonDate?: string;
+  kind?: "new" | "review";
 }
 
 export interface WeekView {
@@ -249,10 +252,12 @@ export interface MonthView {
   themeBrief: string;
   communicationGoal: string;
   examDate: string;
+  /** Manager-controlled system date used for access and attendance. */
+  systemDate?: string;
 }
 
 export interface MonthlyExamView {
-  status: "locked" | "ready";
+  status: "unpublished" | "locked" | "ready" | "completed";
   completedLessons: number;
   totalLessons: number;
   remainingLessons: number;
@@ -285,6 +290,9 @@ export interface LearnerHomeView {
     studyDays: number;
     streakDays: number;
     points: number;
+    completedReviews?: number;
+    totalReviews?: number;
+    monthlyExamStatus?: "unpublished" | "locked" | "ready" | "completed";
   };
   /** Server-derived reminder shown only after at least two full inactive days. */
   inactivityReminder?: { inactiveDays: number };
@@ -377,6 +385,8 @@ export interface LearnerProgressView {
       lessonNumber: number;
       status: LessonProgressView["status"];
       opensAt: string | null;
+      lessonDate?: string;
+      kind?: "new" | "review";
     }>;
     exam: { status: "unpublished" | "locked" | "ready" | "completed"; totalScore: number | null };
   };
