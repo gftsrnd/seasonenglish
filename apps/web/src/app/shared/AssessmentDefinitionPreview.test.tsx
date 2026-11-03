@@ -13,7 +13,7 @@ const definition: AssessmentDefinitionView = {
     { code: "listening", title: "Nghe", durationMinutes: 15, maxScore: 20, instructions: ["Nghe tối đa 2 lần."], groups: [{ key: "L1", title: "Listening", instruction: "Nghe và chọn đáp án.", maxPlays: 2, stimulus: { type: "audio_script", audioSrc: "/audio/listening.mp3", lines: [{ speaker: "A", text: "Hello" }] }, tasks: [{ key: "L1", prompt: "What happened?", responseType: "single_choice", maxScore: 1, options: [{ value: "A", label: "A meeting" }, { value: "B", label: "A call" }] }] }] },
     { code: "reading", title: "Đọc", durationMinutes: 25, maxScore: 40, instructions: ["Đọc kỹ."], groups: [{ key: "R1", title: "Reading", instruction: "Đọc văn bản.", tasks: [{ key: "R1", prompt: "Choose.", responseType: "single_choice", maxScore: 1 }] }] },
     { code: "writing", title: "Viết", durationMinutes: 20, maxScore: 20, instructions: ["Viết email."], groups: [{ key: "W1", title: "Writing", instruction: "Viết.", tasks: [{ key: "W1", prompt: "Write an email.", responseType: "long_text", maxScore: 20 }] }] },
-    { code: "speaking", title: "Nói", durationMinutes: 15, maxScore: 20, instructions: ["Ghi âm."], groups: [{ key: "S1", title: "Speaking", instruction: "Nói.", tasks: [{ key: "S1", prompt: "Introduce yourself.", responseType: "speaking_evidence", maxScore: 20 }] }] }
+    { code: "speaking", title: "Nói", durationMinutes: 15, maxScore: 20, instructions: ["Ghi âm."], groups: [{ key: "S1", title: "Speaking", instruction: "Nói.", tasks: [{ key: "S1", prompt: "1. Introduce yourself.\n2. Describe your role.", responseType: "speaking_evidence", maxScore: 20 }] }] }
   ]
 };
 
@@ -38,6 +38,7 @@ describe("AssessmentDefinitionPreview", () => {
     expect(screen.getByRole("button", { name: /Nghe.*1 câu.*15 phút.*20 điểm/ })).toHaveAttribute("aria-expanded", "false");
     expect(screen.getByRole("button", { name: /Nói.*1 câu.*15 phút.*20 điểm/ })).toHaveAttribute("aria-expanded", "true");
     expect(screen.getByText("Introduce yourself.")).toBeInTheDocument();
+    expect(screen.getByText("Describe your role.")).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: /Nói.*1 câu.*15 phút.*20 điểm/ }));
     expect(screen.getByRole("button", { name: /Nói.*1 câu.*15 phút.*20 điểm/ })).toHaveAttribute("aria-expanded", "false");
     expect(screen.queryByText("Introduce yourself.")).not.toBeInTheDocument();

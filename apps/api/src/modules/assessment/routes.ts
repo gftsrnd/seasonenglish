@@ -40,6 +40,7 @@ import { z } from "zod";
 import type { EdgeTtsRunner } from "./edge-tts.js";
 import { buildMonthlyFinalDraft } from "./monthly-final-builder.js";
 import { createRoleGuard } from "../identity/policy.js";
+import { monthlyExamEligibility } from "../learning/routes.js";
 
 const kindParam = z.object({ kind: z.enum(["placement", "levelup", "level-up", "monthly", "final", "pass-course", "passcourse"]) });
 const formPreviewKindParam = z.object({ kind: z.enum(["placement", "level_up", "final", "pass_course"]) });
@@ -613,7 +614,7 @@ export function registerAssessmentRoutes(app: FastifyInstance, pool: Pool, aiRun
     const parsed = kindParam.safeParse(request.params);
     if (!parsed.success) return reply.code(400).send({ code: "INVALID_ASSESSMENT_KIND" });
     const kind = normalizeKind(parsed.data.kind);
-    if (kind === "final" && !await monthlyExamIsReady(repositories.learning, request.e4sSession!.user.id)) {
+    if (kind === "final" && !await monthlyExamIsReady(pool, request.e4sSession!.user.id)) {
       return reply.code(409).send({ code: "MONTHLY_EXAM_LOCKED" });
     }
     if (kind === "pass-course" && !await repositories.assessments.passCourseEligibility(request.e4sSession!.user.id)) {
@@ -712,7 +713,7 @@ export function registerAssessmentRoutes(app: FastifyInstance, pool: Pool, aiRun
       }
       definition = await repositories.assessments.findPublishedLevelUpForLearner(learnerId, progress.levelReadiness.targetLevel);
     } else if (kind === "final") {
-      if (!await monthlyExamIsReady(repositories.learning, learnerId)) {
+      if (!await monthlyExamIsReady(pool, learnerId)) {
         return reply.code(409).send({ code: "MONTHLY_EXAM_LOCKED" });
       }
       definition = await findPublishedMonthlyFinal(pool, learnerId);
@@ -980,6 +981,7 @@ async function assessmentFormPreviews(
   const fixedForm = kind === "placement" || kind === "pass_course";
   const result = await pool.query<{
     definition_id: string;
+    assessment_key: string;
     version_id: string;
     kind: AssessmentFormPreviewView["kind"];
     title: string;
@@ -988,7 +990,7 @@ async function assessmentFormPreviews(
     published_at: Date | null;
     blueprint: StoredAssessmentDefinition;
   }>(
-    `select ad.id as definition_id, av.id as version_id, ad.kind, ad.title,
+    `select ad.id as definition_id, ad.assessment_key, av.id as version_id, ad.kind, ad.title,
             av.version, av.status, av.published_at, av.blueprint
        from assessment_definitions ad
        join assessment_versions av on av.definition_id = ad.id
@@ -1003,9 +1005,19 @@ async function assessmentFormPreviews(
                av.version desc`,
     [actorId, kind]
   );
+  // The old seed supplied a short B1 form and a Pass Course blueprint copied
+  // from it. Neither is a valid form under the approved specifications. Keep
+  // them out of the Operator viewer until a generated level form or canonical
+  // fixed Form A has been persisted; presenting them would make the preview
+  // look valid while serving the wrong assessment.
+  const validRows = result.rows.filter((row) => {
+    if (kind === "level_up") return row.assessment_key !== "levelup-b1";
+    if (kind === "pass_course") return isCanonicalPassCourseForm(row.blueprint);
+    return true;
+  });
   return {
     kind,
-    forms: result.rows.map((row): AssessmentFormPreviewView => {
+    forms: validRows.map((row): AssessmentFormPreviewView => {
       const listeningGroups = row.blueprint.sections
         .filter((section) => section.code === "listening")
         .flatMap((section) => section.groups);
@@ -1032,6 +1044,12 @@ async function assessmentFormPreviews(
       };
     })
   };
+}
+
+function isCanonicalPassCourseForm(blueprint: StoredAssessmentDefinition) {
+  if (blueprint.key !== "pass-course-form-a" || blueprint.totalMinutes !== 90 || blueprint.totalScore !== 100) return false;
+  const count = (code: AssessmentSectionCode) => blueprint.sections.find((section) => section.code === code)?.groups.reduce((total, group) => total + group.tasks.length, 0) ?? 0;
+  return count("listening") === 15 && count("reading") === 40 && count("writing") === 2 && count("speaking") === 4;
 }
 
 async function updateMonthlyFinalDraft(
@@ -1145,14 +1163,9 @@ async function definitionForAttempt(
   return repository.findPublishedByVersion(attempt.assessmentVersionId);
 }
 
-async function monthlyExamIsReady(
-  learning: ReturnType<typeof createRepositories>["learning"],
-  learnerId: string
-): Promise<boolean> {
-  const context = await learning.getActiveMonthlyContext(learnerId);
-  if (!context) return false;
-  const lessons = await learning.listMonthlyLessons(learnerId, context.month);
-  return lessons.length > 0 && lessons.every((lesson) => lesson.progress.status === "completed");
+async function monthlyExamIsReady(pool: Pool, learnerId: string): Promise<boolean> {
+  const eligibility = await monthlyExamEligibility(pool, learnerId);
+  return Boolean(eligibility.accessEligible);
 }
 
 async function findPublishedMonthlyFinal(pool: Pool, learnerId: string): Promise<PublishedAssessmentRecord | null> {

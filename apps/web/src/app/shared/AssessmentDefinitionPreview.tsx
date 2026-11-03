@@ -69,7 +69,14 @@ function PreviewTask({ task, sectionCode }: { task: AssessmentFormPreviewView["s
     : sectionCode === "speaking"
       ? "Rubric: hoàn thành yêu cầu, ngữ pháp và từ vựng, mạch lạc, tương tác và văn phong công việc."
       : null;
-  return <li><p>{task.prompt}</p>{task.options?.length ? <ol type="A">{task.options.map(option => <li className={task.correctAnswer === option.value ? "assessment-definition-preview-correct-option" : ""} key={option.value}>{option.label}{task.correctAnswer === option.value ? <span>Đáp án đúng</span> : null}</li>)}</ol> : null}{task.minWords || task.maxWords ? <small>{task.minWords ? `Tối thiểu ${task.minWords} từ` : ""}{task.minWords && task.maxWords ? " · " : ""}{task.maxWords ? `tối đa ${task.maxWords} từ` : ""}</small> : null}{rubric ? <p className="assessment-definition-preview-task-rubric"><b>Đáp án &amp; chấm:</b> {rubric}{task.hint ? ` Bằng chứng mong đợi: ${task.hint}` : ""}</p> : null}</li>;
+  return <li><TaskPrompt prompt={task.prompt} />{task.options?.length ? <ol type="A">{task.options.map(option => <li className={task.correctAnswer === option.value ? "assessment-definition-preview-correct-option" : ""} key={option.value}>{option.label}{task.correctAnswer === option.value ? <span>Đáp án đúng</span> : null}</li>)}</ol> : null}{task.minWords || task.maxWords ? <small>{task.minWords ? `Tối thiểu ${task.minWords} từ` : ""}{task.minWords && task.maxWords ? " · " : ""}{task.maxWords ? `tối đa ${task.maxWords} từ` : ""}</small> : null}{rubric ? <p className="assessment-definition-preview-task-rubric"><b>Đáp án &amp; chấm:</b> {rubric}{task.hint ? ` Bằng chứng mong đợi: ${task.hint}` : ""}</p> : null}</li>;
+}
+
+function TaskPrompt({ prompt }: { prompt: string }) {
+  const parts = prompt.split(/\r?\n|(?=\s\d+\.\s)/).map(item => item.trim()).filter(Boolean);
+  const numbered = parts.length > 1 && parts.every(item => /^\d+\.\s/.test(item));
+  if (!numbered) return <p>{prompt}</p>;
+  return <ol className="assessment-definition-preview-prompt-lines">{parts.map((item, index) => <li key={index}>{item.replace(/^\d+\.\s*/, "")}</li>)}</ol>;
 }
 
 

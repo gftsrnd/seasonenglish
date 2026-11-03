@@ -646,7 +646,11 @@ function AssessmentPreviewControl({
   if (!forms.length) {
     const emptyMessage = kind === "final"
       ? "Chưa có bài thi tháng từ khung tài nguyên đã duyệt. Operator cần sinh đề trong Bài học trước."
-      : "Chưa có phiên bản đề đã lưu để xem.";
+      : kind === "level_up"
+        ? "Chưa có đề lên mức được sinh theo mức đích và duyệt để xem."
+        : kind === "pass_course"
+          ? "Chưa có Form A chuẩn đã lưu để xem. Form A chỉ hiển thị khi nội dung cố định đã được nạp đầy đủ."
+          : "Chưa có phiên bản đề đã lưu để xem.";
     return <section className="card" aria-label="Chưa có nội dung đề thi"><h2>{kind === "final" ? "Bài thi tháng" : "Chưa có đề"}</h2><p className="small muted">{emptyMessage}</p></section>;
   }
   return <>
