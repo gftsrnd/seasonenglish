@@ -173,7 +173,7 @@ export function OperatorMonths({ month, todayMonth, overview, cefr, busy, readOn
     catch { showUnavailable("Chỉ sinh đề thi vào đúng ngày thi hệ thống và khi tài nguyên đã duyệt."); }
   };
   return <main className="operator-months-page">
-    <header className="operator-months-header"><p className="eyebrow">Operator</p><h1>Bài học</h1><p>Thiết kế chủ đề, tài nguyên và lịch học theo tháng.</p></header>
+    <header className="operator-months-header"><h1>Bài học</h1><p>Thiết kế chủ đề, tài nguyên và lịch học theo tháng.</p></header>
     {error && <div className="monthly-error" role="alert">{error}</div>}
     <section className="monthly-month-card card">
       <h2 className="monthly-cycle-title">Chu kỳ tháng</h2>
