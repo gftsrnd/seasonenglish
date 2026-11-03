@@ -41,7 +41,7 @@ interface FrameworkRow {
   id: string;
   cefr: MonthFrameworkView["cefr"];
   version: number;
-  status: MonthFrameworkView["status"];
+  status: MonthFrameworkView["status"] | "retired";
   scope_hash: string;
   curriculum_contract: MonthlyCurriculumContract;
   quality_acknowledgement: MonthFrameworkView["quality"]["acknowledged"] | null;
@@ -106,6 +106,10 @@ export class MonthlyContentRepository {
     );
     const existing = current.rows[0];
     if (existing) {
+      const retired = await this.database.query<{ id: string }>(
+        `select id from month_frameworks where program_month_id = $1 and status = 'retired' limit 1`,
+        [existing.id]
+      );
       const approved = await this.database.query<{ id: string }>(
         `select mf.id
          from month_frameworks mf
@@ -113,10 +117,14 @@ export class MonthlyContentRepository {
          limit 1`,
         [existing.id]
       );
-      // In the current and next month, an operator may re-run the flow while
-      // preparing or testing it. Reset dependent monthly content so the new
-      // topic cannot be combined with an older approved resource set.
-      if (approved.rowCount) await this.database.query("delete from month_frameworks where program_month_id = $1", [existing.id]);
+      if (existing.brief_status === "approved" && !retired.rowCount) {
+        throw new Error("An approved monthly brief is locked until its framework is retired by a Manager.");
+      }
+      // A retired framework is immutable history. It has been explicitly
+      // removed from discovery, so a new brief can start a fresh framework.
+      if (approved.rowCount) {
+        throw new Error("Approved monthly resources are locked. A Manager must retire the invalid framework before this brief can change.");
+      }
       const version = existing.brief_version + 1;
       const result = await this.database.query<BriefRow>(
         `update program_months
@@ -173,10 +181,13 @@ export class MonthlyContentRepository {
 
     const existingResult = await this.database.query<FrameworkRow>(
       `select id, cefr, version, status, scope_hash, curriculum_contract, quality_acknowledgement
-       from month_frameworks where program_month_id = $1 and cefr = $2`,
+       from month_frameworks where program_month_id = $1 and cefr = $2 and status <> 'retired'`,
       [month.id, contract.cefr]
     );
     const existing = existingResult.rows[0];
+    if (existing?.status === "approved") {
+      throw new Error("An approved framework is immutable. A Manager must retire the invalid resources before a replacement is created.");
+    }
     const version = (existing?.version ?? 0) + 1;
     // The stored contract and framework row are one revision. Keeping their
     // versions aligned prevents a newly generated day from being rejected as
@@ -231,6 +242,34 @@ export class MonthlyContentRepository {
     await this.audit(actor, "monthly.framework_approved", frameworkId, {});
   }
 
+  /**
+   * Retirement is an audited Manager action for an invalid released resource
+   * set. It preserves the frozen contract and every published lesson version;
+   * the set simply stops being discoverable for future learning.
+   */
+  async retireFramework(managerId: string, frameworkId: string, reason: string): Promise<void> {
+    const manager = await this.requireManager(managerId);
+    const result = await this.database.query<{ id: string; month: string; cefr: string }>(
+      `update month_frameworks mf
+       set status = 'retired', updated_at = now()
+       from program_months pm
+       where mf.id = $1 and mf.program_month_id = pm.id and pm.organization_id = $2
+         and mf.status in ('draft', 'generating', 'approved', 'failed')
+       returning mf.id, pm.month, mf.cefr`,
+      [frameworkId, manager.organization_id]
+    );
+    const framework = result.rows[0];
+    if (!framework) throw new Error("Monthly framework was not found or is already retired");
+    await this.audit(manager, "monthly.framework_retired", framework.id, {
+      month: framework.month, cefr: framework.cefr, reason: reason.trim()
+    });
+    await this.notifyAffectedLearners(
+      manager.organization_id,
+      "daily_lesson",
+      "Tài nguyên tháng đã được rút khỏi phát hành để kiểm tra. Bài mới sẽ được thông báo khi phát hành lại."
+    );
+  }
+
   async saveMonthlyDayDraft(
     actorId: string,
     frameworkId: string,
@@ -258,7 +297,7 @@ export class MonthlyContentRepository {
     );
     const monthLesson = cell.rows[0];
     if (!monthLesson) throw new Error("Monthly DaySpec was not materialized");
-    if (monthLesson.status === "approved") throw new Error("Approved monthly day is locked; request a Manager reopen first");
+    if (monthLesson.status === "approved") throw new Error("Approved monthly day is immutable; request a Manager reopen first");
 
     const set = await this.database.query<{ id: string }>(
       `insert into lesson_sets (id, program_week_id, month_framework_id, cefr)
@@ -547,7 +586,7 @@ export class MonthlyContentRepository {
     if (!brief) return { systemDate: systemDate.system_date, monthWindow: overviewWindow, brief: null, frameworks: [] };
     const frameworkResult = await this.database.query<FrameworkRow>(
       `select id, cefr, version, status, scope_hash, curriculum_contract, quality_acknowledgement
-       from month_frameworks where program_month_id = $1 order by cefr`,
+       from month_frameworks where program_month_id = $1 and status <> 'retired' order by cefr`,
       [brief.id]
     );
     const frameworks = await Promise.all(frameworkResult.rows.map(async (framework) => ({
@@ -562,7 +601,7 @@ export class MonthlyContentRepository {
     const frameworkResult = await this.database.query<FrameworkRow>(
       `select mf.id, mf.cefr, mf.version, mf.status, mf.scope_hash, mf.curriculum_contract, mf.quality_acknowledgement
        from month_frameworks mf join program_months pm on pm.id = mf.program_month_id
-       where mf.id = $1 and pm.organization_id = $2`,
+       where mf.id = $1 and pm.organization_id = $2 and mf.status <> 'retired'`,
       [frameworkId, actor.organization_id]
     );
     const framework = frameworkResult.rows[0];
@@ -576,11 +615,11 @@ export class MonthlyContentRepository {
     const result = await this.database.query<FrameworkRow>(
       `select mf.id, mf.cefr, mf.version, mf.status, mf.scope_hash, mf.curriculum_contract, mf.quality_acknowledgement
        from month_frameworks mf join program_months pm on pm.id = mf.program_month_id
-       where mf.id = $1 and pm.organization_id = $2`,
+       where mf.id = $1 and pm.organization_id = $2 and mf.status <> 'retired'`,
       [frameworkId, actor.organization_id]
     );
     const framework = result.rows[0];
-    if (!framework) throw new Error("Monthly framework was not found");
+    if (!framework) throw new Error("Monthly framework was not found or has been retired");
     return framework.curriculum_contract;
   }
 
@@ -687,7 +726,9 @@ function toFrameworkHeader(row: FrameworkRow): Omit<MonthFrameworkView, "lessons
     id: row.id,
     cefr: row.cefr,
     version: row.version,
-    status: row.status,
+    // Every caller filters retired frameworks before producing a public view.
+    // `retired` exists only in persistence so frozen history can be retained.
+    status: row.status as MonthFrameworkView["status"],
     scopeHash: row.scope_hash,
     resources: {
       coreTerms: row.curriculum_contract.coreTerms,

@@ -2,7 +2,10 @@ import { chromium } from "playwright";
 import { mkdir } from "node:fs/promises";
 import { join } from "node:path";
 
-const webUrl = process.env.E4S_MONTHLY_E2E_WEB_URL ?? "http://127.0.0.1:4275";
+// This scenario creates and approves content.  It must never silently target
+// a developer's persistent local environment: that is how a term-0 fixture
+// was previously released into the local runtime.
+const webUrl = process.env.E4S_MONTHLY_E2E_WEB_URL;
 const month = process.env.E4S_MONTHLY_E2E_MONTH ?? "2026-11";
 const evidenceDir = process.env.E4S_MONTHLY_E2E_EVIDENCE_DIR ?? join(process.cwd(), ".artifacts", "monthly-learning-e2e");
 
@@ -93,6 +96,13 @@ async function dismissLearnerBlockingDialog(learnerPage) {
 }
 
 async function main() {
+  if (!webUrl) fail("E4S_MONTHLY_E2E_WEB_URL is required and must point to an isolated E2E stack.");
+  if (process.env.E4S_MONTHLY_E2E_ALLOW_MUTATION !== "true") {
+    fail("Set E4S_MONTHLY_E2E_ALLOW_MUTATION=true only for an isolated E2E stack; this scenario creates and publishes content.");
+  }
+  if (/^https?:\/\/(?:127\.0\.0\.1|localhost):4175\/?$/u.test(webUrl)) {
+    fail("Refusing to mutate the persistent local server on port 4175. Use an isolated E2E stack.");
+  }
   await mkdir(evidenceDir, { recursive: true });
   const browser = await chromium.launch({ headless: true });
   const operator = await browser.newPage();

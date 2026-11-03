@@ -8,6 +8,7 @@ import { createRoleGuard } from "../identity/policy.js";
 import { evaluateMonthlyLessonQuality } from "./monthly-quality.js";
 import { generateMonthlyDayWithAi, MONTHLY_DAY_COMPONENTS } from "./monthly-day-generation.js";
 import { buildMonthlyResourcesFromAiPlan, MonthlyResourceCriteriaError, MonthlyResourcePlanError } from "./monthly-resource-generation.js";
+import { safeGenerationDiagnosticIssues } from "./generation-errors.js";
 
 const params = z.object({ month: z.string().regex(/^\d{4}-(0[1-9]|1[0-2])$/u) });
 const frameworkParams = z.object({ id: z.uuid() });
@@ -46,6 +47,7 @@ const lessonInput = z.object({
 });
 const qualityAcknowledgementInput = z.object({ findingKeys: z.array(z.string().min(1)).max(2) });
 const correctionInput = z.object({ reason: z.string().trim().min(5).max(1000) });
+const retireFrameworkInput = z.object({ reason: z.string().trim().min(10).max(1000) });
 const reopenDecisionInput = z.object({ reason: z.string().trim().min(5).max(1000) });
 
 /** Monthly routes deliberately live outside routes.ts: monthly contracts are not weeks. */
@@ -69,6 +71,12 @@ export function registerMonthlyContentRoutes(app: FastifyInstance, pool: Pool, a
     const { correctionId } = correctionParams.parse(request.params);
     const input = reopenDecisionInput.parse(request.body);
     return repositories.monthlyContent.decideReopenRequest(request.e4sSession!.user.id, correctionId, "rejected", input.reason);
+  });
+  app.post("/api/v1/manager/month-frameworks/:id/retire", { preHandler: manager }, async (request, reply) => {
+    const { id } = frameworkParams.parse(request.params);
+    const { reason } = retireFrameworkInput.parse(request.body);
+    await repositories.monthlyContent.retireFramework(request.e4sSession!.user.id, id, reason);
+    return reply.code(204).send();
   });
   app.get("/api/v1/content/months/:month", { preHandler: operator }, async (request) => {
     const input = params.parse(request.params);
@@ -173,7 +181,7 @@ export function registerMonthlyContentRoutes(app: FastifyInstance, pool: Pool, a
         return reply.code(422).send({ code: "MONTHLY_RESOURCE_PLAN_INVALID", issues: error.errors });
       }
       if (error && typeof error === "object" && "code" in error && (error as { code?: unknown }).code === "AI_OUTPUT_INVALID") {
-        return reply.code(422).send({ code: "AI_OUTPUT_INVALID", details: (error as { details?: unknown }).details });
+        return reply.code(422).send({ code: "AI_OUTPUT_INVALID", issues: safeGenerationDiagnosticIssues(error) });
       }
       throw error;
     }
@@ -212,7 +220,15 @@ export function registerMonthlyContentRoutes(app: FastifyInstance, pool: Pool, a
     const day = contract.daySpecs.find((candidate) => candidate.lessonNumber === dayNumber);
     if (!day || day.kind !== "review") return reply.code(409).send({ code: "NOT_A_FRIDAY_REVIEW" });
     if (!task) return reply.code(503).send({ code: "AI_PROMPT_NOT_READY" });
-    const result = await generateMonthlyDayWithAi(contract, dayNumber, runner, task.prompt);
+    let result;
+    try {
+      result = await generateMonthlyDayWithAi(contract, dayNumber, runner, task.prompt);
+    } catch (error) {
+      if (error && typeof error === "object" && "code" in error && (error as { code?: unknown }).code === "AI_OUTPUT_INVALID") {
+        return reply.code(422).send({ code: "AI_OUTPUT_INVALID", issues: safeGenerationDiagnosticIssues(error) });
+      }
+      throw error;
+    }
     if (result.status !== "ready" || !result.lesson) {
       return reply.code(422).send({ code: "MONTHLY_GENERATION_QUALITY_FAILED", report: result.report, attempts: result.attempts });
     }
@@ -229,7 +245,15 @@ export function registerMonthlyContentRoutes(app: FastifyInstance, pool: Pool, a
       repositories.aiRuns.activeTaskPrompt(actorId, "monthly_lessons")
     ]);
     if (!task) return reply.code(503).send({ code: "AI_PROMPT_NOT_READY" });
-    const result = await generateMonthlyDayWithAi(contract, dayNumber, runner, task.prompt);
+    let result;
+    try {
+      result = await generateMonthlyDayWithAi(contract, dayNumber, runner, task.prompt);
+    } catch (error) {
+      if (error && typeof error === "object" && "code" in error && (error as { code?: unknown }).code === "AI_OUTPUT_INVALID") {
+        return reply.code(422).send({ code: "AI_OUTPUT_INVALID", issues: safeGenerationDiagnosticIssues(error) });
+      }
+      throw error;
+    }
     if (result.status !== "ready" || !result.lesson) {
       return reply.code(422).send({ code: "MONTHLY_GENERATION_QUALITY_FAILED", report: result.report, attempts: result.attempts });
     }

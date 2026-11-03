@@ -80,6 +80,7 @@ describe("monthly content persistence", () => {
 
     await expect(repository.saveMonthlyDayDraft(DEMO_IDS.operator, framework.id, 1, { title: "Replacement", parts: [] }, report)).rejects.toThrow(/immutable/i);
     const correctionId = await repository.createMonthlyCorrection(DEMO_IDS.operator, framework.id, 1, "Fix an approved example");
+    await repository.decideReopenRequest(DEMO_IDS.manager, correctionId, "approved", "The correction is required and learners will be notified.");
     await repository.saveMonthlyCorrection(DEMO_IDS.operator, correctionId, { title: "Corrected budget words", parts: [] }, { severe: [], light: [], contractVersion: framework.version });
     await repository.approveMonthlyCorrection(DEMO_IDS.operator, correctionId);
     const correction = await client.query<{ status: string; original_lesson_version_id: string; correction_lesson_version_id: string }>(
@@ -98,6 +99,41 @@ describe("monthly content persistence", () => {
 
     expect(lessons).toHaveLength(1);
     expect(lessons[0]).toMatchObject({ dayNumber: 1, weekNumber: 0, cefr: "A1", weekTopic: "Preparing a quarterly budget review" });
+  });
+
+  it("retires invalid released resources without deleting immutable lesson history, then permits a new draft", async () => {
+    const original = (await repository.getOverview(DEMO_IDS.operator, month)).frameworks[0]!;
+    await repository.retireFramework(DEMO_IDS.manager, original.id, "The released local fixture contains placeholder vocabulary and must not reach learners.");
+
+    const hidden = await repository.getOverview(DEMO_IDS.operator, month);
+    expect(hidden.frameworks).toEqual([]);
+    expect(await createRepositories(client as unknown as Pool).learning.listMonthlyLessons(DEMO_IDS.learner, month)).toEqual([]);
+
+    const immutableHistory = await client.query<{ status: string }>(
+      `select lsv.status from lesson_set_versions lsv
+       join lesson_sets ls on ls.id = lsv.lesson_set_id
+       where ls.month_framework_id = $1 and lsv.status = 'published'`,
+      [original.id]
+    );
+    expect(immutableHistory.rows.length).toBeGreaterThan(0);
+
+    const nextBrief = await repository.saveBrief(DEMO_IDS.operator, {
+      month,
+      title: "Preparing a quarterly budget review, revised",
+      brief: "Teams prepare and explain a quarterly budget review with verified resources.",
+      context: "Finance team planning meeting",
+      communicationGoal: "Explain costs and request approval"
+    });
+    expect(nextBrief).toMatchObject({ status: "draft", version: 2 });
+    await repository.approveBrief(DEMO_IDS.operator, month);
+    const replacement = await repository.saveFramework(DEMO_IDS.operator, {
+      ...buildContract(),
+      theme: { ...buildContract().theme, version: 2, title: nextBrief.title, brief: nextBrief.brief }
+    });
+    expect(replacement.id).not.toBe(original.id);
+
+    const audit = await client.query<{ action: string }>("select action from audit_events where entity_id = $1", [original.id]);
+    expect(audit.rows).toContainEqual({ action: "monthly.framework_retired" });
   });
 });
 
