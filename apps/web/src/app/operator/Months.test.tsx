@@ -109,9 +109,8 @@ describe("Operator monthly planner", () => {
     expect(onGenerateDay).not.toHaveBeenCalled();
   });
 
-  it("sends a locked day reopen request with the operator reason instead of exposing direct editing", async () => {
-    const user = userEvent.setup();
-    const onCreateCorrection = vi.fn().mockResolvedValue("correction-1");
+  it("keeps an approved day calendar cell limited to View", () => {
+    const onViewDay = vi.fn();
     const { container } = render(<ToastProvider><OperatorMonths
       month="2026-11"
       todayMonth="2026-11"
@@ -122,18 +121,13 @@ describe("Operator monthly planner", () => {
       }] }}
       cefr="A1"
       busy={false}
-      actions={{ onSelectMonth: vi.fn(), onSelectLevel: vi.fn(), onSuggestBrief: vi.fn(), onSaveBrief: vi.fn(), onApproveBrief: vi.fn(), onGenerateFramework: vi.fn(), onSaveFramework: vi.fn(), onApproveFramework: vi.fn(), onSaveDay: vi.fn(), onGenerateDay: vi.fn(), onAcknowledge: vi.fn(), onApproveDay: vi.fn(), onCreateCorrection, onSaveCorrection: vi.fn(), onAcknowledgeCorrection: vi.fn(), onApproveCorrection: vi.fn(), onViewDay: vi.fn() }}
+      actions={{ onSelectMonth: vi.fn(), onSelectLevel: vi.fn(), onSuggestBrief: vi.fn(), onSaveBrief: vi.fn(), onApproveBrief: vi.fn(), onGenerateFramework: vi.fn(), onSaveFramework: vi.fn(), onApproveFramework: vi.fn(), onSaveDay: vi.fn(), onGenerateDay: vi.fn(), onAcknowledge: vi.fn(), onApproveDay: vi.fn(), onCreateCorrection: vi.fn(), onSaveCorrection: vi.fn(), onAcknowledgeCorrection: vi.fn(), onApproveCorrection: vi.fn(), onViewDay }}
     /></ToastProvider>);
 
     const approvedCell = Array.from(container.querySelectorAll<HTMLElement>("[role='gridcell']")).find((cell) => cell.classList.contains("approved") && cell.getAttribute("aria-label") === "02, Bài 1")!;
     expect(within(approvedCell).queryByRole("button", { name: "Soạn tay bài 1" })).not.toBeInTheDocument();
-    await user.click(within(approvedCell).getByRole("button", { name: "Yêu cầu mở lại bài 1" }));
-    const reopenDialog = within(container).getByRole("dialog", { name: "Yêu cầu mở lại bài 1" });
-    await user.type(within(reopenDialog).getByLabelText("Lý do yêu cầu mở lại"), "Cần sửa ví dụ phát âm cho người học.");
-    await user.click(within(reopenDialog).getByRole("button", { name: "Gửi yêu cầu Manager" }));
-
-    await waitFor(() => expect(onCreateCorrection).toHaveBeenCalledWith("framework-a1", 1, "Cần sửa ví dụ phát âm cho người học."));
-    expect(await screen.findByText("Đã gửi yêu cầu mở lại tới Manager.")).toBeInTheDocument();
+    expect(within(approvedCell).getByRole("button", { name: "Xem bài 1" })).toBeInTheDocument();
+    expect(within(approvedCell).queryByRole("button", { name: "Yêu cầu mở lại bài 1" })).not.toBeInTheDocument();
   });
 
   it("calls the real monthly-final action from the final-day cell", async () => {

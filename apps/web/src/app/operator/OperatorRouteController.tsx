@@ -218,7 +218,10 @@ function MonthsRoute({ client, readOnly, preview }: { client: OperatorApiClient;
     const framework = overview.frameworks.find((item) => item.id === preview.frameworkId);
     const lesson = framework?.lessons.find((item) => item.lessonNumber === preview.dayNumber);
     if (!framework || !lesson) return <Status tone="error">Không tìm thấy bài học tháng.</Status>;
-    return <MonthlyLessonPreview date={lesson.lessonDate} cefr={framework.cefr} lesson={lesson} onClose={() => navigate(paths.months)} />;
+    return <MonthlyLessonPreview date={lesson.lessonDate} cefr={framework.cefr} lesson={lesson} onClose={() => navigate(paths.months)} onRequestReopen={async (reason) => {
+      const result = await run(() => client.createContentMonthCorrection(framework.id, lesson.lessonNumber, reason), "Đã gửi yêu cầu mở lại tới Manager.");
+      if (!result) throw new Error("Không gửi được yêu cầu mở lại.");
+    }} />;
   }
   return <><OperatorMonths
     month={month}
