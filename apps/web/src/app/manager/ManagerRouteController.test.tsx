@@ -169,10 +169,9 @@ describe("ManagerRouteController", () => {
   it("loads the real operations view for /mgr/ops", async () => {
     vi.spyOn(apiClient, "getManagerOperations").mockResolvedValue(operations);
     renderManager(<MemoryRouter initialEntries={["/mgr/ops"]}><ManagerRouteController role="manager" currentUserId="manager-1" /></MemoryRouter>);
-    await screen.findByText(/Tuần 1 · B1: chưa sinh/);
-    expect(screen.getByRole("heading", { name: "Hiệu suất vận hành" })).toBeInTheDocument();
+    expect(await screen.findByRole("note", { name: "Phạm vi của Quản lý" })).toBeInTheDocument();
     expect(apiClient.getManagerOperations).toHaveBeenCalledOnce();
-    expect(screen.getByRole("heading", { name: "Bộ bài cần xử lý" })).toBeInTheDocument();
+    expect(screen.getByRole("note", { name: "Phạm vi của Quản lý" })).toBeInTheDocument();
     expect(screen.queryByRole("heading", { name: /^Mã PIN/ })).not.toBeInTheDocument();
   });
 
@@ -190,27 +189,22 @@ describe("ManagerRouteController", () => {
     expect(save).not.toHaveBeenCalled();
   });
 
-  it("opens Manager operations in read-only mode with an explicit banner", async () => {
+  it("keeps the Manager operations summary scoped to account operations", async () => {
     vi.spyOn(apiClient, "getManagerOperations").mockResolvedValue(operations);
     renderManager(<MemoryRouter initialEntries={["/mgr/ops"]}><ManagerRouteController role="manager" currentUserId="manager-1" /></MemoryRouter>);
 
-    expect(await screen.findByRole("heading", { name: "Bộ bài cần xử lý" })).toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: "Hiệu suất vận hành" })).toBeInTheDocument();
-    expect(within(screen.getByRole("navigation", { name: "Điều hướng màn vận hành" })).getAllByRole("link").map(link => link.textContent)).toEqual(["Duyệt mức", "Chủ đề tuần", "Bài học", "Bài tuần", "Bài kiểm tra"]);
-    expect(screen.getAllByText(/chế độ chỉ đọc/i).length).toBeGreaterThan(0);
-    expect(screen.queryByRole("link", { name: "Prompt & rubric" })).not.toBeInTheDocument();
+    const scope = await screen.findByRole("note", { name: "Phạm vi của Quản lý" });
+    expect(scope).toHaveTextContent(/theo dõi vận hành tài khoản/i);
+    expect(screen.queryByRole("navigation", { name: "Điều hướng màn vận hành" })).not.toBeInTheDocument();
   });
 
-  it("keeps the Manager-only operations switcher on nested operations screens", async () => {
+  it("keeps Manager nested operations routes available in explicit read-only mode", async () => {
     vi.spyOn(operatorApiClient, "getContentWeeks").mockResolvedValue({ pilot: { startDate: "2026-10-05", weekCount: 1 }, weeks: [] });
     renderManager(<MemoryRouter initialEntries={["/mgr/ops/weeks"]}><ManagerRouteController role="manager" currentUserId="manager-1" /></MemoryRouter>);
 
     expect(await screen.findByRole("heading", { name: "Khung chủ đề tuần" })).toBeInTheDocument();
-    const navigation = screen.getByRole("navigation", { name: "Điều hướng màn vận hành" });
-    expect(navigation.parentElement).toHaveClass("manager-operations-context");
-    expect(within(navigation.parentElement!).getByRole("note", { name: "Chế độ chỉ đọc của Quản lý" })).toBeInTheDocument();
-    expect(within(navigation).getAllByRole("link").map(link => link.textContent)).toEqual(["Duyệt mức", "Chủ đề tuần", "Bài học", "Bài tuần", "Bài kiểm tra"]);
-    expect(within(navigation).getByRole("link", { name: "Chủ đề tuần" })).toHaveAttribute("aria-current", "page");
+    expect(screen.getByRole("note", { name: "Chế độ chỉ đọc của Quản lý" })).toBeInTheDocument();
+    expect(screen.queryByRole("navigation", { name: "Điều hướng màn vận hành" })).not.toBeInTheDocument();
   });
 
   it("opens the real learner quick-view and shows Manager operational queues", async () => {

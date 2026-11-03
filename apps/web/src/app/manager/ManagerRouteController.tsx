@@ -17,6 +17,7 @@ import { autoSeasonTheme } from "../games/season-visual.js";
 import { useTheme } from "../shared/ThemeProvider.js";
 import { useToast } from "../shared/design-system.js";
 import { ArchiveRestore, ChevronDown, Eye, EyeOff, ShieldCheck } from "lucide-react";
+import { OperationsRouteController } from "../operator/OperatorRouteController.js";
 
 export type ManagerRouteControllerProps = { role: "manager" | "operator"; currentUserId: string };
 
@@ -44,7 +45,8 @@ export function ManagerRouteController({ role, currentUserId }: ManagerRouteCont
   return <Routes>
     <Route path="/mgr" element={role === "manager" ? <ProgressRoute /> : <Navigate replace to="/op" />} />
     <Route path="/mgr/ops" element={role === "manager" ? <OperationsRoute /> : <Navigate replace to="/op" />} />
-    <Route path="/mgr/ops/*" element={<Navigate replace to={role === "manager" ? "/mgr/ops" : "/op"} />} />
+    <Route path="/mgr/ops/prompts" element={<Navigate replace to={role === "manager" ? "/settings/prompts" : "/op"} />} />
+    <Route path="/mgr/ops/*" element={role === "manager" ? <OperationsRouteController basePath="/mgr/ops" session={{ role: "manager", user: { id: currentUserId, displayName: "Quản lý", email: null }, permissions: [] }} /> : <Navigate replace to="/op" />} />
     <Route path="/mgr/reopen-requests" element={role === "manager" ? <ReopenRequestsRoute /> : <Navigate replace to="/op" />} />
     <Route path="/mgr/recovery" element={<Navigate replace to={role === "manager" ? "/settings" : "/op"} />} />
     <Route path="/mgr/reminders" element={role === "manager" ? <RemindersRoute /> : <Navigate replace to="/op" />} />
@@ -52,7 +54,7 @@ export function ManagerRouteController({ role, currentUserId }: ManagerRouteCont
     <Route path="/mgr/rewards" element={role === "manager" ? <ManagerRewards /> : <Navigate replace to="/op" />} />
     <Route path="/reward/preview" element={role === "manager" ? <ManagerRewardCertificate /> : <Navigate replace to="/op" />} />
     <Route path="/settings" element={<SettingsRoute role={role} currentUserId={currentUserId} />} />
-    <Route path="/settings/prompts" element={<Navigate replace to={role === "manager" ? "/settings" : "/op"} />} />
+    <Route path="/settings/prompts" element={role === "manager" ? <OperationsRouteController basePath="/mgr/ops" session={{ role: "manager", user: { id: currentUserId, displayName: "Quản lý", email: null }, permissions: [] }} /> : <Navigate replace to="/op" />} />
   </Routes>;
 }
 

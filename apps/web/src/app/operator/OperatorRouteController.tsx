@@ -42,6 +42,7 @@ export type OperatorApiClient = typeof apiClient;
 
 type OperatorRoutePaths = {
   root: string;
+  weeks: string;
   levelForms: string;
   months: string;
   lessons: string;
@@ -95,13 +96,14 @@ export const OperatorRouteController = OperationsRouteController;
 
 function OperatorRouteControllerContent({ session, client, paths }: { session: SessionView; client: OperatorApiClient; paths: OperatorRoutePaths }) {
   const location = useLocation();
-  if (session.role !== "operator") return <Status tone="error">Tài khoản này không có quyền mở khu vực học thuật.</Status>;
-  const readOnly = false;
+  if (session.role !== "operator" && session.role !== "manager") return <Status tone="error">Tài khoản này không có quyền mở khu vực học thuật.</Status>;
+  const readOnly = session.role === "manager";
   const props = { client, readOnly };
   const detail = location.pathname.match(new RegExp(`^${escapeRegExp(paths.lessons)}/(\\d+)/(A1|A2|B1|B2|C1)$`));
   const monthlyLesson = location.pathname.match(new RegExp(`^${escapeRegExp(paths.months)}/lesson/([^/]+)/(\\d+)$`));
   const content = detail ? <LessonSetRoute {...props} week={Number(detail[1])} cefr={detail[2] as Cefr} />
     : location.pathname === paths.root ? <DashboardRoute {...props} />
+      : location.pathname === paths.weeks ? <WeeksRoute {...props} />
       : location.pathname === paths.tests ? <TestsRoute {...props} initialTab="placement" />
         : location.pathname === paths.levelForms ? <TestsRoute {...props} initialTab="promotion" />
         : monthlyLesson ? <MonthsRoute {...props} preview={{ frameworkId: monthlyLesson[1]!, dayNumber: Number(monthlyLesson[2]) }} />
@@ -116,6 +118,7 @@ function OperatorRouteControllerContent({ session, client, paths }: { session: S
 function routePathsFor(basePath: "/op" | "/mgr/ops"): OperatorRoutePaths {
   return {
     root: basePath === "/op" ? basePath : `${basePath}/levels`,
+    weeks: `${basePath}/weeks`,
     levelForms: basePath === "/op" ? `${basePath}/levelforms` : `${basePath}/level-forms`,
     months: `${basePath}/months`,
     lessons: `${basePath}/lessons`,
