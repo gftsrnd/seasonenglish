@@ -1,4 +1,4 @@
-import { buildMonthlyCalendar, validateMonthlyCurriculum } from "@e4s/domain";
+import { buildMonthlyCalendar, planMonthlyResourcePool, validateMonthlyCurriculum } from "@e4s/domain";
 import type { MonthlyResourcePlanTaskOutput } from "@e4s/ai";
 import { describe, expect, it } from "vitest";
 import {
@@ -26,7 +26,6 @@ function planFor(): MonthlyResourcePlanTaskOutput {
   return {
     coreTerms: newLessonDays.flatMap((dayNumber, dayIndex) => Array.from({ length: 3 }, (_, itemIndex) => ({
       id: `core-${dayIndex + 1}-${itemIndex + 1}`,
-      dayNumber,
       word: `core ${dayIndex + 1} ${itemIndex + 1}`,
       meaning: `Từ cốt lõi ${dayIndex + 1}-${itemIndex + 1}`,
       type: "noun",
@@ -34,7 +33,6 @@ function planFor(): MonthlyResourcePlanTaskOutput {
     }))),
     expandedTerms: newLessonDays.flatMap((dayNumber, dayIndex) => Array.from({ length: 9 }, (_, itemIndex) => ({
       id: `expanded-${dayIndex + 1}-${itemIndex + 1}`,
-      dayNumber,
       word: `expanded ${dayIndex + 1} ${itemIndex + 1}`,
       meaning: `Từ mở rộng ${dayIndex + 1}-${itemIndex + 1}`,
       type: "noun",
@@ -42,15 +40,14 @@ function planFor(): MonthlyResourcePlanTaskOutput {
       relatesToCoreId: `core-${dayIndex + 1}-${(itemIndex % 3) + 1}`
     }))),
     grammarTopics: [
-      { id: "grammar-a", title: "Ngữ pháp A", formula: "S + V", usage: "Dùng trong giao tiếp cơ bản.", examples: ["I confirm the plan.", "We check the file.", "They send the note."], dayNumbers: [...newLessonDays.slice(0, 6), ...newLessonDays.slice(12).filter((_day, index) => index % 2 === 0)] },
-      { id: "grammar-b", title: "Ngữ pháp B", formula: "S + will + V", usage: "Dùng để nói về kế hoạch.", examples: ["I will call the client.", "We will review the file.", "They will share an update."], dayNumbers: [...newLessonDays.slice(6, 12), ...newLessonDays.slice(12).filter((_day, index) => index % 2 === 1)] }
+      { id: "grammar-a", title: "Ngữ pháp A", formula: "S + V", usage: "Dùng trong giao tiếp cơ bản.", examples: ["I confirm the plan.", "We check the file.", "They send the note."] },
+      { id: "grammar-b", title: "Ngữ pháp B", formula: "S + will + V", usage: "Dùng để nói về kế hoạch.", examples: ["I will call the client.", "We will review the file.", "They will share an update."] }
     ],
     pronunciationTargets: Array.from({ length: 4 }, (_, targetIndex) => ({
       id: `sound-${targetIndex + 1}`,
       ipa: ["/iː/", "/ɪ/", "/e/", "/æ/"][targetIndex]!,
       label: `Âm mục tiêu ${targetIndex + 1}`,
       explanation: "Luyện nhận biết và sử dụng âm trong câu.",
-      dayNumbers: newLessonDays.slice(targetIndex * 3, targetIndex * 3 + 3),
       words: Array.from({ length: 9 }, (_, wordIndex) => ({ word: `sound${targetIndex + 1}word${wordIndex + 1}`, ipa: "/s/" }))
     }))
   };
@@ -58,7 +55,8 @@ function planFor(): MonthlyResourcePlanTaskOutput {
 
 describe("monthly AI resource generation", () => {
   it("builds a two-grammar, four-pronunciation monthly contract from a valid AI plan", () => {
-    const contract = buildMonthlyResourcesFromAiPlan(month, "A1", theme, criteria, planFor());
+    const pool = buildMonthlyResourcesFromAiPlan(month, "A1", theme, criteria, planFor());
+    const contract = planMonthlyResourcePool(pool);
 
     expect(validateMonthlyCurriculum(contract)).toEqual([]);
     expect(contract.coreTerms).toHaveLength(vocabularyCount);

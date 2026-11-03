@@ -2,8 +2,11 @@ import { randomUUID } from "node:crypto";
 import {
   buildMonthlyCalendar,
   monthlyScopeHash,
+  monthlyResourcePoolHash,
   recommendedPendingBatch,
+  planMonthlyResourcePool,
   validateMonthlyCurriculum,
+  type MonthlyResourcePoolContract,
   type MonthlyCurriculumContract,
   type MonthlyDaySpec
 } from "@e4s/domain";
@@ -16,7 +19,7 @@ import type {
 } from "@e4s/contracts";
 import type { Client, Pool } from "pg";
 
-type Queryable = Pick<Pool, "query"> | Pick<Client, "query">;
+type Queryable = Pool | Client;
 
 export interface SaveMonthlyBriefInput {
   month: string;
@@ -43,7 +46,7 @@ interface FrameworkRow {
   version: number;
   status: MonthFrameworkView["status"] | "retired";
   scope_hash: string;
-  curriculum_contract: MonthlyCurriculumContract;
+  curriculum_contract: MonthlyCurriculumContract | MonthlyResourcePoolContract;
   quality_acknowledgement: MonthFrameworkView["quality"]["acknowledged"] | null;
 }
 interface ReopenRequestRow {
@@ -225,21 +228,107 @@ export class MonthlyContentRepository {
     return { id: frameworkId, cefr: contract.cefr, version, status: "draft", scopeHash };
   }
 
+  async saveResourceDraft(actorId: string, pool: MonthlyResourcePoolContract): Promise<Pick<MonthFrameworkView, "id" | "cefr" | "version" | "status" | "scopeHash">> {
+    const actor = await this.requireContentOperator(actorId);
+    await this.requireWritableMonth(actor.organization_id, pool.month);
+    // Validate the complete draft against the exact approval-time allocation
+    // rules, but persist only the unassigned pool.
+    planMonthlyResourcePool(pool);
+    const briefResult = await this.database.query<BriefRow>(
+      `select id, month, theme_title, theme_brief, theme_context, communication_goal, brief_version, brief_status
+       from program_months where organization_id = $1 and month = $2`, [actor.organization_id, pool.month]
+    );
+    const month = briefResult.rows[0];
+    if (!month || month.brief_status !== "approved") throw new Error("Monthly brief must be locked before resources are authored");
+    if (!sameBrief(month, pool)) throw new Error("Monthly resource pool must use the current shared brief version");
+    const pooledClient = "connect" in this.database;
+    const client = pooledClient ? await this.database.connect() : this.database;
+    let result: { frameworkId: string; version: number; scopeHash: string; replaced: boolean };
+    try {
+    await client.query("begin");
+    const existingResult = await client.query<FrameworkRow>(
+      `select id, cefr, version, status, scope_hash, curriculum_contract, quality_acknowledgement
+       from month_frameworks where program_month_id = $1 and cefr = $2 and status <> 'retired'`, [month.id, pool.cefr]
+    );
+    const existing = existingResult.rows[0];
+    if (existing?.status === "approved") throw new Error("An approved framework is immutable. A Manager must retire the invalid resources before a replacement is created.");
+    const version = (existing?.version ?? 0) + 1;
+    const versionedPool = { ...pool, version };
+    const scopeHash = monthlyResourcePoolHash(versionedPool);
+    const frameworkId = existing?.id ?? randomUUID();
+    if (existing) {
+      await client.query(
+        `update month_frameworks set version = $2, status = 'draft', curriculum_contract = $3::jsonb, scope_hash = $4,
+          quality_acknowledgement = null, source = 'ai', generation_error = null, approved_by = null, approved_at = null, updated_at = now()
+         where id = $1`, [frameworkId, version, JSON.stringify(versionedPool), scopeHash]
+      );
+      await client.query("delete from month_lessons where framework_id = $1", [frameworkId]);
+    } else {
+      await client.query(
+        `insert into month_frameworks (id, program_month_id, cefr, version, curriculum_contract, scope_hash, created_by, source)
+         values ($1, $2, $3, $4, $5::jsonb, $6, $7, 'ai')`,
+        [frameworkId, month.id, pool.cefr, version, JSON.stringify(versionedPool), scopeHash, actorId]
+      );
+    }
+    result = { frameworkId, version, scopeHash, replaced: Boolean(existing) };
+    await client.query("commit");
+    } catch (error) {
+      await client.query("rollback");
+      throw error;
+    } finally {
+      if (pooledClient) (client as import("pg").PoolClient).release();
+    }
+    await this.audit(actor, result.replaced ? "monthly.framework_replaced" : "monthly.framework_created", result.frameworkId, {
+      month: pool.month, cefr: pool.cefr, version: result.version, scopeHash: result.scopeHash, resourcePool: true
+    });
+    return { id: result.frameworkId, cefr: pool.cefr, version: result.version, status: "draft", scopeHash: result.scopeHash };
+  }
+
   async approveFramework(actorId: string, frameworkId: string): Promise<void> {
     const actor = await this.requireContentOperator(actorId);
     const frameworkMonth = await this.monthForFramework(frameworkId, actor.organization_id);
     if (!frameworkMonth) throw new Error("Monthly framework was not found");
     await this.requireWritableMonth(actor.organization_id, frameworkMonth);
-    const result = await this.database.query<{ id: string }>(
+    const pooledClient = "connect" in this.database;
+    const client = pooledClient ? await this.database.connect() : this.database;
+    try {
+      await client.query("begin");
+      const locked = await client.query<FrameworkRow>(
+        `select mf.id, mf.cefr, mf.version, mf.status, mf.scope_hash, mf.curriculum_contract, mf.quality_acknowledgement
+         from month_frameworks mf join program_months pm on pm.id = mf.program_month_id
+         where mf.id = $1 and pm.organization_id = $2 for update of mf`, [frameworkId, actor.organization_id]
+      );
+      const row = locked.rows[0];
+      if (!row || row.status !== "draft") throw new Error("Only a draft framework in this organization can be approved");
+      let contract: MonthlyCurriculumContract;
+      if ("daySpecs" in row.curriculum_contract) contract = row.curriculum_contract;
+      else {
+        contract = planMonthlyResourcePool(row.curriculum_contract);
+        const scopeHash = monthlyScopeHash(contract);
+        await client.query("update month_frameworks set curriculum_contract = $2::jsonb, scope_hash = $3, updated_at = now() where id = $1",
+          [frameworkId, JSON.stringify(contract), scopeHash]);
+        for (const day of contract.daySpecs) {
+          await client.query("insert into month_lessons (id, framework_id, lesson_number, lesson_date, scope_hash) values ($1, $2, $3, $4::date, $5)",
+            [randomUUID(), frameworkId, day.lessonNumber, day.date, scopeHash]);
+        }
+      }
+      const result = await client.query<{ id: string }>(
       `update month_frameworks mf
        set status = 'approved', approved_by = $2, approved_at = now(), updated_at = now()
        from program_months pm
        where mf.id = $1 and mf.program_month_id = pm.id and pm.organization_id = $3 and mf.status = 'draft'
        returning mf.id`,
       [frameworkId, actorId, actor.organization_id]
-    );
-    if (!result.rowCount) throw new Error("Only a draft framework in this organization can be approved");
-    await this.audit(actor, "monthly.framework_approved", frameworkId, {});
+      );
+      if (!result.rowCount) throw new Error("Only a draft framework in this organization can be approved");
+      await client.query("commit");
+      await this.audit(actor, "monthly.framework_approved", frameworkId, { allocated: true });
+    } catch (error) {
+      await client.query("rollback");
+      throw error;
+    } finally {
+      if (pooledClient) (client as import("pg").PoolClient).release();
+    }
   }
 
   /**
@@ -288,6 +377,7 @@ export class MonthlyContentRepository {
     if (!row) throw new Error("Monthly framework was not found");
     await this.requireWritableMonth(actor.organization_id, row.curriculum_contract.month);
     if (row.status !== "approved") throw new Error("Monthly resources must be locked before authoring a day");
+    if (!("daySpecs" in row.curriculum_contract)) throw new Error("Monthly resources must be allocated before authoring a day");
     const spec = row.curriculum_contract.daySpecs.find((day) => day.lessonNumber === dayNumber);
     if (!spec) throw new Error("Monthly day is not in the locked DaySpec");
     if (report.contractVersion !== row.version) throw new Error("Monthly quality report uses a stale contract version");
@@ -606,6 +696,7 @@ export class MonthlyContentRepository {
     );
     const framework = frameworkResult.rows[0];
     if (!framework) throw new Error("Monthly framework was not found");
+    if (!("daySpecs" in framework.curriculum_contract)) return [];
     const lessons = await this.lessonsForFramework(framework);
     return recommendedPendingBatch(framework.curriculum_contract.daySpecs, new Map(lessons.map((lesson) => [lesson.lessonNumber, lesson.status])));
   }
@@ -620,6 +711,7 @@ export class MonthlyContentRepository {
     );
     const framework = result.rows[0];
     if (!framework) throw new Error("Monthly framework was not found or has been retired");
+    if (!("daySpecs" in framework.curriculum_contract)) throw new Error("Monthly resource pool is still a draft and has no lesson allocation");
     return framework.curriculum_contract;
   }
 
@@ -631,7 +723,7 @@ export class MonthlyContentRepository {
        from month_lessons ml where ml.framework_id = $1 order by ml.lesson_number`,
       [framework.id]
     );
-    const specs = new Map(framework.curriculum_contract.daySpecs.map((spec) => [spec.lessonNumber, spec]));
+    const specs = new Map(("daySpecs" in framework.curriculum_contract ? framework.curriculum_contract.daySpecs : []).map((spec) => [spec.lessonNumber, spec]));
     return result.rows.map((lesson) => ({
       lessonNumber: lesson.lesson_number,
       lessonDate: lesson.lesson_date,
@@ -706,7 +798,7 @@ export class MonthlyContentRepository {
   }
 }
 
-function sameBrief(brief: BriefRow, contract: MonthlyCurriculumContract): boolean {
+function sameBrief(brief: BriefRow, contract: Pick<MonthlyCurriculumContract, "theme"> | Pick<MonthlyResourcePoolContract, "theme">): boolean {
   return brief.brief_version === contract.theme.version
     && brief.theme_title === contract.theme.title
     && brief.theme_brief === contract.theme.brief

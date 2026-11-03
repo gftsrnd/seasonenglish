@@ -85,9 +85,10 @@ export function evaluateMonthlyLessonQuality(
     if (hasNoLexicalRelation(item)) light.push({ severity: "light", code: "MONTHLY_SYNONYM_OR_ANTONYM_MISSING", message: `${word} is missing a synonym or antonym`, dayNumber, component: "vocabulary" });
   }
 
-  const grammarStep = contract.grammarTopics.flatMap((topic) => topic.steps).find((step) => step.id === day.grammarStepId);
+  const grammarIds = day.grammarStepIds ?? [day.grammarStepId];
+  const grammarSteps = grammarIds.map((id) => contract.grammarTopics.flatMap((topic) => topic.steps).find((step) => step.id === id)).filter((step): step is NonNullable<typeof step> => Boolean(step));
   const formula = asString(parts.get("grammar")?.content.formula);
-  if (!grammarStep || formula !== grammarStep.formula) severe.push(finding("MONTHLY_GRAMMAR_SCOPE_MISMATCH", "Grammar formula does not match the locked grammar step", dayNumber, "grammar"));
+  if (grammarSteps.length !== grammarIds.length || grammarSteps.some((step) => !formula.includes(step.formula))) severe.push(finding("MONTHLY_GRAMMAR_SCOPE_MISMATCH", "Grammar formula does not match every locked grammar step", dayNumber, "grammar"));
 
   const sound = contract.sounds.find((candidate) => candidate.id === day.soundId);
   const pronunciation = parts.get("pronunciation")?.content;

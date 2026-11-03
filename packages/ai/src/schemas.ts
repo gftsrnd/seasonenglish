@@ -620,13 +620,11 @@ export type MonthlyLessonDayTaskOutput = z.infer<typeof monthlyLessonDayOutputSc
 
 const monthlyResourceCoreTermSchema = z.object({
   id: z.string().trim().min(1).max(100),
-  dayNumber: z.number().int().positive(),
   word: z.string().trim().min(1).max(120), meaning: z.string().trim().min(1).max(300),
   type: z.string().trim().min(1).max(80), ipa: z.string().trim().min(1).max(120)
 }).strict();
 const monthlyResourceExpandedTermSchema = z.object({
   id: z.string().trim().min(1).max(100),
-  dayNumber: z.number().int().positive(),
   word: z.string().trim().min(1).max(160), meaning: z.string().trim().min(1).max(300),
   type: z.string().trim().min(1).max(80),
   relation: z.enum(["umbrella", "synonym", "antonym", "word_family", "collocation"]),
@@ -635,13 +633,11 @@ const monthlyResourceExpandedTermSchema = z.object({
 const monthlyResourceGrammarSchema = z.object({
   id: z.string().trim().min(1).max(100), title: z.string().trim().min(1).max(200),
   formula: z.string().trim().min(1).max(400), usage: z.string().trim().min(1).max(800),
-  examples: z.array(z.string().trim().min(1).max(500)).min(3).max(8),
-  dayNumbers: z.array(z.number().int().positive()).min(1).max(31)
+  examples: z.array(z.string().trim().min(1).max(500)).min(3).max(8)
 }).strict();
 const monthlyResourcePronunciationSchema = z.object({
   id: z.string().trim().min(1).max(100), ipa: z.string().trim().min(1).max(120),
   label: z.string().trim().min(1).max(200), explanation: z.string().trim().min(1).max(800),
-  dayNumbers: z.array(z.number().int().positive()).min(1).max(31),
   words: z.array(z.object({ word: z.string().trim().min(1).max(120), ipa: z.string().trim().min(1).max(120) }).strict()).min(9).max(40)
 }).strict();
 
@@ -649,16 +645,15 @@ const monthlyResourcePronunciationSchema = z.object({
 export const monthlyResourcePlanInputSchema = z.object({
   month: z.string().regex(/^\d{4}-(0[1-9]|1[0-2])$/), cefr: z.enum(["A1", "A2", "B1", "B2", "C1"]),
   theme: z.object({ title: z.string().trim().min(1), brief: z.string().trim().min(1), context: z.string().trim().min(1), communicationGoal: z.string().trim().min(1) }).strict(),
-  newLessonDays: z.array(z.number().int().positive()).min(1).max(31),
-  lessonDayNumbers: z.array(z.number().int().positive()).min(1).max(31),
-  targets: z.object({ vocabularyCount: z.number().int().positive(), expandedVocabularyCount: z.number().int().positive(), grammarTopicCount: z.number().int().positive(), pronunciationSoundCount: z.number().int().positive() }).strict()
+  newLessonCount: z.number().int().positive().max(31),
+  coreTermBatch: z.array(z.object({ id: z.string().min(1), word: z.string().min(1), meaning: z.string().min(1), type: z.string().min(1), ipa: z.string().min(1) }).strict()).max(120),
+  targets: z.object({ vocabularyCount: z.number().int().nonnegative(), expandedVocabularyCount: z.number().int().nonnegative(), grammarTopicCount: z.number().int().nonnegative(), pronunciationSoundCount: z.number().int().nonnegative() }).strict()
 }).strict();
 export const monthlyResourcePlanOutputSchema = z.object({
-  coreTerms: z.array(monthlyResourceCoreTermSchema).min(1).max(120),
-  expandedTerms: z.array(monthlyResourceExpandedTermSchema).min(1).max(600),
-  // The API assembles a monthly plan from vocabulary slices. The first slice
-  // supplies month-wide grammar and pronunciation; later slices leave these
-  // arrays empty, and the merged plan is checked against the fixed counts.
+  // Category phases leave all non-target arrays empty. The API validates each
+  // generated phase, then checks the fully merged month against fixed counts.
+  coreTerms: z.array(monthlyResourceCoreTermSchema).max(120),
+  expandedTerms: z.array(monthlyResourceExpandedTermSchema).max(600),
   grammarTopics: z.array(monthlyResourceGrammarSchema).max(2),
   pronunciationTargets: z.array(monthlyResourcePronunciationSchema).max(4)
 }).strict();
@@ -666,10 +661,10 @@ export type MonthlyResourcePlanTaskOutput = z.infer<typeof monthlyResourcePlanOu
 export const monthlyResourcePlanOutputJsonSchema = {
   type: "object", additionalProperties: false, required: ["coreTerms", "expandedTerms", "grammarTopics", "pronunciationTargets"],
   properties: {
-    coreTerms: { type: "array", items: { type: "object", additionalProperties: false, required: ["id", "dayNumber", "word", "meaning", "type", "ipa"], properties: { id: { type: "string" }, dayNumber: { type: "integer" }, word: { type: "string" }, meaning: { type: "string" }, type: { type: "string" }, ipa: { type: "string" } } } },
-    expandedTerms: { type: "array", items: { type: "object", additionalProperties: false, required: ["id", "dayNumber", "word", "meaning", "type", "relation", "relatesToCoreId"], properties: { id: { type: "string" }, dayNumber: { type: "integer" }, word: { type: "string" }, meaning: { type: "string" }, type: { type: "string" }, relation: { type: "string", enum: ["umbrella", "synonym", "antonym", "word_family", "collocation"] }, relatesToCoreId: { type: "string" } } } },
-    grammarTopics: { type: "array", maxItems: 2, items: { type: "object", additionalProperties: false, required: ["id", "title", "formula", "usage", "examples", "dayNumbers"], properties: { id: { type: "string" }, title: { type: "string" }, formula: { type: "string" }, usage: { type: "string" }, examples: { type: "array", minItems: 3, items: { type: "string" } }, dayNumbers: { type: "array", minItems: 1, items: { type: "integer" } } } } },
-    pronunciationTargets: { type: "array", maxItems: 4, items: { type: "object", additionalProperties: false, required: ["id", "ipa", "label", "explanation", "dayNumbers", "words"], properties: { id: { type: "string" }, ipa: { type: "string" }, label: { type: "string" }, explanation: { type: "string" }, dayNumbers: { type: "array", minItems: 1, items: { type: "integer" } }, words: { type: "array", minItems: 9, items: { type: "object", additionalProperties: false, required: ["word", "ipa"], properties: { word: { type: "string" }, ipa: { type: "string" } } } } } } }
+    coreTerms: { type: "array", items: { type: "object", additionalProperties: false, required: ["id", "word", "meaning", "type", "ipa"], properties: { id: { type: "string" }, word: { type: "string" }, meaning: { type: "string" }, type: { type: "string" }, ipa: { type: "string" } } } },
+    expandedTerms: { type: "array", items: { type: "object", additionalProperties: false, required: ["id", "word", "meaning", "type", "relation", "relatesToCoreId"], properties: { id: { type: "string" }, word: { type: "string" }, meaning: { type: "string" }, type: { type: "string" }, relation: { type: "string", enum: ["umbrella", "synonym", "antonym", "word_family", "collocation"] }, relatesToCoreId: { type: "string" } } } },
+    grammarTopics: { type: "array", maxItems: 2, items: { type: "object", additionalProperties: false, required: ["id", "title", "formula", "usage", "examples"], properties: { id: { type: "string" }, title: { type: "string" }, formula: { type: "string" }, usage: { type: "string" }, examples: { type: "array", minItems: 3, items: { type: "string" } } } } },
+    pronunciationTargets: { type: "array", maxItems: 4, items: { type: "object", additionalProperties: false, required: ["id", "ipa", "label", "explanation", "words"], properties: { id: { type: "string" }, ipa: { type: "string" }, label: { type: "string" }, explanation: { type: "string" }, words: { type: "array", minItems: 9, items: { type: "object", additionalProperties: false, required: ["word", "ipa"], properties: { word: { type: "string" }, ipa: { type: "string" } } } } } } }
   }
 } satisfies Record<string, unknown>;
 

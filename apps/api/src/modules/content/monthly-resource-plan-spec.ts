@@ -26,42 +26,40 @@ LEVEL DIFFERENTIATION
   communication. Do not merely substitute harder-looking words.
 
 VOCABULARY PLAN
-- Create exactly 3 distinct core items for every NEW lesson day.
-- Create exactly 9 expanded items for every NEW lesson day. Expanded items may repeat across the month only when the repeated entries stay at or below 20% of the total expanded set.
+- Create the requested number of distinct core items in the month-wide pool.
+- Create the requested number of expanded items in the month-wide pool. Expanded items may repeat across the month only when repeated entries stay at or below 20% of the total expanded set.
 - Every item must have a real English form, a natural Vietnamese meaning, part
   of speech, accurate IPA where requested, a concise authentic example, and
-  the new-lesson day number that introduces it.
+  with no calendar-day assignment; the Operator reviews the pool before approval.
 - Core terms must be unique after lowercasing and normalising spaces/
   punctuation; core terms must never appear as expanded terms.
 - Each expanded item must state one relation: umbrella, synonym, antonym,
   word_family, or collocation; and identify the related core term. The relation
   must be linguistically real. A word family must belong to its stated base;
   a synonym/antonym must be a true semantic relation in this context.
-- Balance each day around its three cores: use umbrella concepts, useful
-  collocations and appropriate relations. Do not repeat one generic support
-  phrase across days.
+- Balance support relations across the supplied core batch. Do not repeat one
+  generic support phrase across the month.
 
 GRAMMAR PLAN
-- Return exactly two genuine CEFR-appropriate grammar topics. Topic A covers new lessons 1–6, topic B covers new lessons 7–12, and later new lessons combine them. Each topic has
+- Return exactly two genuine CEFR-appropriate grammar topics. Topic A covers new lessons N1–N6, topic B covers N7–N12, and N13–N15 combine both. Each topic has
   a meaningful Vietnamese title, a precise formula, a concise Vietnamese use
-  explanation, at least three natural work-context examples, and explicit
-  assigned new-lesson day numbers. Do not use generic descriptions such as
+  explanation, at least three natural work-context examples, and no calendar
+  assignment. Do not use generic descriptions such as
   'Dùng để diễn đạt ý chính'.
 
 PRONUNCIATION PLAN
-- Return exactly four genuine pronunciation targets. Assign P1 to new lessons 1–3, P2 to 4–6, P3 to 7–9 and P4 to 10–12. Every pronunciation word must have no more than three syllables. Each has accurate IPA,
-  a meaningful Vietnamese label, assigned new-lesson day numbers, and a list
+- Return exactly four genuine pronunciation targets. The approval planner uses P1–P4 for N1–N12, then K1–K3 for N13–N15 and M1–M3 for N16–N18 where available. Every pronunciation word must have no more than three syllables. Each has accurate IPA,
+  a meaningful Vietnamese label, and a list
   of real words from this month's approved vocabulary or closely related,
   non-duplicate examples. Explain the actual sound contrast or stress pattern
   when relevant. Never return 'sound 1 word 1' or a fabricated transcription.
 
-ASSIGNMENT RULES
-- The caller supplies newLessonDays in chronological order. Each core and
-  expanded item must be assigned to exactly one of those day numbers.
-- Each grammar topic and pronunciation target must explicitly list the days
-  on which it is used. This is part of the monthly plan, not a later guess.
-- The daily lesson must expose its assigned core, expanded, grammar and sound
-  material before creating exercises.
+POOL RULES
+- The caller supplies newLessonCount and may provide a coreTermBatch. Never
+  output dayNumber or dayNumbers fields. Allocation happens only after explicit
+  Operator approval.
+- Expanded resources must reference an exact core ID from the supplied batch.
+- Daily lessons expose their approved resource assignments before exercises.
 `;
 
 export interface MonthlyResourcePlanRequest {
@@ -254,53 +252,37 @@ export const MONTHLY_RESOURCE_PLAN_QUALITY_EXAMPLE = {
 
 export function validateMonthlyResourcePlanShape(
   plan: {
-    coreTerms: Array<{ id: string; dayNumber: number; word: string }>;
-    expandedTerms: Array<{ dayNumber: number; word: string; relatesToCoreId: string }>;
-    grammarTopics: Array<{ dayNumbers: number[] }>;
-    pronunciationTargets: Array<{ dayNumbers: number[]; words: Array<{ word: string }> }>;
+    coreTerms: Array<{ id: string; word: string }>;
+    expandedTerms: Array<{ id: string; word: string; relatesToCoreId: string }>;
+    grammarTopics: Array<{ id: string }>;
+    pronunciationTargets: Array<{ id: string; words: Array<{ word: string }> }>;
   },
-  newLessonDays: readonly number[],
+  newLessonCount: number,
 ): string[] {
   const errors: string[] = [];
   const normalize = (value: string) => value.trim().toLocaleLowerCase("en").replace(/[\s\p{P}]+/gu, " ").trim();
   const core = plan.coreTerms.map((item) => normalize(item.word));
   const expanded = plan.expandedTerms.map((item) => normalize(item.word));
-  const expectedCore = newLessonDays.length * 3;
-  const expectedExpanded = newLessonDays.length * 9;
+  const expectedCore = newLessonCount * 3;
+  const expectedExpanded = newLessonCount * 9;
   if (core.length !== expectedCore) errors.push(`Expected ${expectedCore} core terms, got ${core.length}.`);
   if (expanded.length !== expectedExpanded) errors.push(`Expected ${expectedExpanded} expanded terms, got ${expanded.length}.`);
   if (new Set(core).size !== core.length) errors.push("Core resources contain duplicate terms.");
   if (expanded.some((word) => core.includes(word))) errors.push("A core term is repeated in expanded resources.");
   if (expanded.length - new Set(expanded).size > Math.floor(expanded.length * 0.2)) errors.push("Expanded resources repeat more than 20% of the monthly total.");
-  for (const dayNumber of newLessonDays) {
-    if (plan.coreTerms.filter((item) => item.dayNumber === dayNumber).length !== 3) errors.push(`Day ${dayNumber} does not have three core terms.`);
-    if (plan.expandedTerms.filter((item) => item.dayNumber === dayNumber).length !== 9) errors.push(`Day ${dayNumber} does not have nine expanded terms.`);
-    const coreIds = new Set(plan.coreTerms.filter((item) => item.dayNumber === dayNumber).map((item) => item.id));
-    if (plan.expandedTerms.some((item) => item.dayNumber === dayNumber && !coreIds.has(item.relatesToCoreId))) {
-      errors.push(`Expanded resources on day ${dayNumber} must relate to a core term from that day.`);
-    }
-  }
+  const coreIds = new Set(plan.coreTerms.map((item) => item.id));
+  if (coreIds.size !== plan.coreTerms.length) errors.push("Core resource IDs must be unique.");
+  if (new Set(plan.expandedTerms.map((item) => item.id)).size !== plan.expandedTerms.length) errors.push("Expanded resource IDs must be unique.");
+  if (plan.expandedTerms.some((item) => !coreIds.has(item.relatesToCoreId))) errors.push("Expanded resources must reference a core term in this month.");
   if (plan.grammarTopics.length !== 2) errors.push("Expected two grammar topics.");
-  const grammarAssignments = [
-    [...newLessonDays.slice(0, 6), ...newLessonDays.slice(12).filter((_day, index) => index % 2 === 0)],
-    [...newLessonDays.slice(6, 12), ...newLessonDays.slice(12).filter((_day, index) => index % 2 === 1)]
-  ];
-  for (const [index, topic] of plan.grammarTopics.entries()) {
-    if (!sameNumbers(topic.dayNumbers, grammarAssignments[index] ?? [])) errors.push(`Grammar topic ${index + 1} has an invalid lesson assignment.`);
-  }
   if (plan.pronunciationTargets.length !== 4) errors.push("Expected four pronunciation targets.");
   for (const [index, target] of plan.pronunciationTargets.entries()) {
-    if (!sameNumbers(target.dayNumbers, newLessonDays.slice(index * 3, index * 3 + 3))) errors.push(`Pronunciation target ${index + 1} must cover its consecutive three new lessons.`);
     if (target.words.length < 9) errors.push(`Pronunciation target ${index + 1} needs at least nine real words.`);
     if (target.words.some((word) => syllableCount(word.word) > 3)) errors.push(`Pronunciation target ${index + 1} contains a word with more than three syllables.`);
   }
   const pronunciationWords = plan.pronunciationTargets.flatMap((target) => target.words.map((word) => normalize(word.word)));
   if (new Set(pronunciationWords).size !== pronunciationWords.length) errors.push("Pronunciation examples repeat between targets.");
   return errors;
-}
-
-function sameNumbers(actual: readonly number[], expected: readonly number[]): boolean {
-  return actual.length === expected.length && actual.every((value, index) => value === expected[index]);
 }
 
 function syllableCount(word: string): number {

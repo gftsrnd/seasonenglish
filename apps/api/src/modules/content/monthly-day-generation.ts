@@ -13,7 +13,7 @@ export async function generateMonthlyDayWithAi(contract: MonthlyCurriculumContra
     contract,
     dayNumber,
     maxAttempts: 3,
-    generate: async ({ daySpec, coreTerms, grammarStep, sound, components, priorParts }) => {
+    generate: async ({ daySpec, coreTerms, grammarStep, grammarSteps, sound, components, priorParts }) => {
       const result = await runner.runTask("monthly_lesson_day", {
           month: contract.month,
           cefr: contract.cefr,
@@ -22,6 +22,7 @@ export async function generateMonthlyDayWithAi(contract: MonthlyCurriculumContra
           lockedScope: {
             coreTerms,
             grammarStep,
+            grammarSteps,
             sound,
             theme: contract.theme,
             supportTerms: contract.supportTerms.filter((term) => term.dayNumber === dayNumber)
@@ -48,6 +49,7 @@ export interface MonthlyDayGenerationInput {
   daySpec: MonthlyDaySpec;
   coreTerms: readonly CoreTerm[];
   grammarStep: GrammarStep;
+  grammarSteps: readonly GrammarStep[];
   sound: PronunciationSound;
   priorParts: readonly MonthlyLessonCandidate["parts"][number][];
 }
@@ -68,9 +70,10 @@ export async function generateMonthlyDay(input: {
 }): Promise<MonthlyDayGenerationResult> {
   const daySpec = input.contract.daySpecs.find((day) => day.lessonNumber === input.dayNumber);
   if (!daySpec) throw new Error(`Monthly DaySpec ${input.dayNumber} was not found`);
-  const grammarStep = input.contract.grammarTopics.flatMap((topic) => topic.steps).find((step) => step.id === daySpec.grammarStepId);
+  const grammarSteps = (daySpec.grammarStepIds ?? [daySpec.grammarStepId]).map((id) => input.contract.grammarTopics.flatMap((topic) => topic.steps).find((step) => step.id === id)).filter((step): step is GrammarStep => Boolean(step));
+  const grammarStep = grammarSteps[0];
   const sound = input.contract.sounds.find((candidate) => candidate.id === daySpec.soundId);
-  if (!grammarStep || !sound) throw new Error(`Monthly DaySpec ${input.dayNumber} has unresolved grammar or pronunciation scope`);
+  if (!grammarStep || grammarSteps.length !== (daySpec.grammarStepIds?.length ?? 1) || !sound) throw new Error(`Monthly DaySpec ${input.dayNumber} has unresolved grammar or pronunciation scope`);
   const coreTerms = (daySpec.kind === "new" ? daySpec.coreTermIds : daySpec.reviewTermIds).map((id) => input.contract.coreTerms.find((term) => term.id === id)).filter((term): term is CoreTerm => Boolean(term));
   const maxAttempts = input.maxAttempts ?? 3;
   const scopeHash = monthlyScopeHash(input.contract);
@@ -79,7 +82,7 @@ export async function generateMonthlyDay(input: {
   let requestedComponents: MonthlyDayComponent[] = [...MONTHLY_DAY_COMPONENTS];
   let report: MonthlyQualityReport = { severe: [], light: [], contractVersion: input.contract.version };
   for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
-    const generated = await input.generate({ contract: input.contract, dayNumber: input.dayNumber, components: requestedComponents, daySpec, coreTerms, grammarStep, sound, priorParts: parts });
+    const generated = await input.generate({ contract: input.contract, dayNumber: input.dayNumber, components: requestedComponents, daySpec, coreTerms, grammarStep, grammarSteps, sound, priorParts: parts });
     title = generated.title || title;
     parts = mergeParts(parts, generated.parts);
     const candidate = { title, parts };

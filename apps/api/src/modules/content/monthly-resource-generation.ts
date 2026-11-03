@@ -1,4 +1,4 @@
-import { buildMonthlyCalendar, buildMonthlyCurriculum, monthlyDayKind, type MonthlyCurriculumContract, type SharedMonthBrief } from "@e4s/domain";
+import { buildMonthlyCalendar, monthlyDayKind, type MonthlyResourcePoolContract, type SharedMonthBrief } from "@e4s/domain";
 import type { CefrLevel } from "@e4s/contracts";
 import type { MonthlyResourcePlanTaskOutput } from "@e4s/ai";
 import { validateMonthlyResourcePlanShape } from "./monthly-resource-plan-spec.js";
@@ -21,7 +21,7 @@ export function buildMonthlyResourcesFromAiPlan(
   theme: SharedMonthBrief,
   criteria: MonthlyResourceCriteria,
   plan: MonthlyResourcePlanTaskOutput
-): MonthlyCurriculumContract {
+): MonthlyResourcePoolContract {
   const calendar = buildMonthlyCalendar(month);
   const newLessonDays = calendar.effectiveDays.flatMap((_date, index) => monthlyDayKind(index + 1, calendar.lessonCount) === "new" ? [index + 1] : []);
   const requiredVocabularyCount = newLessonDays.length * 3;
@@ -29,23 +29,23 @@ export function buildMonthlyResourcesFromAiPlan(
   if (criteria.vocabularyCount !== requiredVocabularyCount) throw new MonthlyResourceCriteriaError("VOCABULARY_COUNT_MISMATCH", requiredVocabularyCount);
   if (criteria.expandedVocabularyCount !== requiredExpandedVocabularyCount) throw new MonthlyResourceCriteriaError("EXPANDED_VOCABULARY_COUNT_MISMATCH", requiredExpandedVocabularyCount);
 
-  const shapeErrors = validateMonthlyResourcePlanShape(plan, newLessonDays);
+  const shapeErrors = validateMonthlyResourcePlanShape(plan, newLessonDays.length);
   if (criteria.grammarTopicCount !== 2) shapeErrors.push("Monthly resources always require exactly two grammar topics.");
   if (criteria.pronunciationSoundCount !== 4) shapeErrors.push("Monthly resources always require exactly four pronunciation targets.");
   if (shapeErrors.length) throw new MonthlyResourcePlanError(shapeErrors);
 
+  const coreIdMap = new Map(plan.coreTerms.map((term, index) => [term.id, `${cefr.toLowerCase()}-core-${index + 1}`]));
   const coreTerms = [...plan.coreTerms]
-    .sort((a, b) => a.dayNumber - b.dayNumber || a.word.localeCompare(b.word))
-    .map(({ word, meaning, type, ipa }, index) => ({ id: `${cefr.toLowerCase()}-core-${index + 1}`, word, meaning, type, ipa }));
+    .map(({ id, word, meaning, type, ipa }, index) => ({ id: coreIdMap.get(id) ?? `${cefr.toLowerCase()}-core-${index + 1}`, word, meaning, type, ipa, source: "core_registry" as const, component: "core" as const }));
   const supportTerms = [...plan.expandedTerms]
-    .sort((a, b) => a.dayNumber - b.dayNumber || a.word.localeCompare(b.word))
     .map((term, index) => ({
       id: `${cefr.toLowerCase()}-expanded-${index + 1}`,
       word: term.word,
       meaning: term.meaning,
       type: term.type,
       source: relationSource(term.relation),
-      dayNumber: term.dayNumber
+      component: "expanded" as const,
+      relatedCoreTermId: coreIdMap.get(term.relatesToCoreId) ?? term.relatesToCoreId
     }));
   const grammarTopics = plan.grammarTopics.map((topic, index) => ({
     id: `${cefr.toLowerCase()}-grammar-${index + 1}`,
@@ -58,7 +58,7 @@ export function buildMonthlyResourcesFromAiPlan(
     label: `${target.label}: ${target.explanation}`,
     examples: target.words.map((word, index) => ({ id: `${cefr.toLowerCase()}-sound-${targetIndex + 1}-word-${index + 1}`, word: word.word, ipa: word.ipa }))
   }));
-  return buildMonthlyCurriculum({ month, cefr, theme, coreTerms, supportTerms, grammarTopics, sounds });
+  return { month, cefr, theme, coreTerms, supportTerms, grammarTopics, sounds, version: theme.version };
 }
 
 export class MonthlyResourcePlanError extends Error {

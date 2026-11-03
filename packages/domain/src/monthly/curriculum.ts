@@ -37,6 +37,20 @@ export interface SupportTerm {
   dayNumber: number;
 }
 
+/** Editable resources before an operator locks their monthly lesson allocation. */
+export type MonthlyResourcePoolCoreTerm = Omit<CoreTerm, "dayNumber">;
+export type MonthlyResourcePoolSupportTerm = Omit<SupportTerm, "dayNumber"> & { relatedCoreTermId: string };
+export interface MonthlyResourcePoolContract {
+  month: string;
+  cefr: CefrLevel;
+  theme: SharedMonthBrief;
+  coreTerms: MonthlyResourcePoolCoreTerm[];
+  supportTerms: MonthlyResourcePoolSupportTerm[];
+  grammarTopics: GrammarTopic[];
+  sounds: PronunciationSound[];
+  version: number;
+}
+
 type CoreTermInput = Omit<CoreTerm, "source" | "component" | "dayNumber">;
 type SupportTermInput = Omit<SupportTerm, "component">;
 
@@ -84,7 +98,9 @@ export interface MonthlyDaySpec {
   coreTermIds: string[];
   reviewTermIds: string[];
   grammarStepId: string;
+  grammarStepIds?: string[];
   soundId: string;
+  pronunciationSlot?: `P${1 | 2 | 3 | 4}` | `K${1 | 2 | 3}` | `M${1 | 2 | 3}`;
   pronunciationExampleIds: string[];
 }
 
@@ -194,20 +210,26 @@ export function buildMonthlyCurriculum(input: MonthlyCurriculumInput): MonthlyCu
     const lessonNumber = index + 1;
     const kind = monthlyDayKind(lessonNumber, calendar.lessonCount);
     if (kind === "new") newLessonOrdinal += 1;
+    if (newLessonOrdinal > 18) throw new RangeError("Monthly pronunciation plan supports at most 18 new lesson slots");
     const coreTermIds = kind === "new" ? input.coreTerms.slice(coreCursor, coreCursor + 3).map((term) => term.id) : [];
     coreCursor += coreTermIds.length;
     introduced.push(...coreTermIds);
     const reviewTermIds = kind === "review" ? chooseReviewTerms(introduced, reviewCursor) : [];
     if (kind === "review") reviewCursor += reviewTermIds.length;
     const assignmentOrdinal = Math.max(1, newLessonOrdinal);
-    const grammarIndex = assignmentOrdinal <= 6 ? 0 : assignmentOrdinal <= 12 ? 1 : (assignmentOrdinal - 13) % 2;
-    const topic = input.grammarTopics[grammarIndex]!;
-    const step = topic.steps[0]!;
+    const grammarIndexes = assignmentOrdinal <= 6 ? [0] : assignmentOrdinal <= 12 ? [1] : assignmentOrdinal <= 15 ? [0, 1] : [(assignmentOrdinal - 16) % 2];
+    const grammarSteps = grammarIndexes.map((grammarIndex) => input.grammarTopics[grammarIndex]!.steps[0]!);
+    const step = grammarSteps[0]!;
     const soundIndex = assignmentOrdinal <= 12 ? Math.floor((assignmentOrdinal - 1) / 3) : (assignmentOrdinal - 13) % 4;
     const sound = input.sounds[soundIndex]!;
+    const pronunciationSlot: NonNullable<MonthlyDaySpec["pronunciationSlot"]> = assignmentOrdinal <= 12
+      ? (["P1", "P2", "P3", "P4"] as const)[Math.ceil(assignmentOrdinal / 3) - 1]!
+      : assignmentOrdinal <= 15
+        ? (["K1", "K2", "K3"] as const)[assignmentOrdinal - 13]!
+        : (["M1", "M2", "M3"] as const)[assignmentOrdinal - 16]!;
     const exampleIds = sound.examples.slice(0, 3).map((example) => example.id);
     if (exampleIds.length !== 3) throw new RangeError(`Sound ${sound.id} needs three unused examples for lesson ${lessonNumber}`);
-    return { lessonNumber, date, kind, coreTermIds, reviewTermIds, grammarStepId: step.id, soundId: sound.id, pronunciationExampleIds: exampleIds };
+    return { lessonNumber, date, kind, coreTermIds, reviewTermIds, grammarStepId: step.id, grammarStepIds: grammarSteps.map((grammarStep) => grammarStep.id), soundId: sound.id, pronunciationSlot, pronunciationExampleIds: exampleIds };
   });
 
   const newLessonNumbers = calendar.effectiveDays.flatMap((_date, index) => monthlyDayKind(index + 1, calendar.lessonCount) === "new" ? [index + 1] : []);
@@ -219,6 +241,59 @@ export function buildMonthlyCurriculum(input: MonthlyCurriculumInput): MonthlyCu
   }));
   const supportTerms: SupportTerm[] = input.supportTerms.map((term) => ({ ...term, component: "expanded" }));
   return { ...input, coreTerms, supportTerms, version: input.theme.version, daySpecs };
+}
+
+/** Assigns an editable resource pool only when an operator explicitly approves it. */
+export function planMonthlyResourcePool(pool: MonthlyResourcePoolContract): MonthlyCurriculumContract {
+  const calendar = buildMonthlyCalendar(pool.month);
+  const newDays = calendar.effectiveDays.flatMap((_date, index) => monthlyDayKind(index + 1, calendar.lessonCount) === "new" ? [index + 1] : []);
+  const expectedCoreCount = newDays.length * 3;
+  const errors: string[] = [];
+  if (pool.coreTerms.length !== expectedCoreCount) errors.push(`Expected ${expectedCoreCount} core terms, got ${pool.coreTerms.length}.`);
+  if (pool.supportTerms.length !== expectedCoreCount * 3) errors.push(`Expected ${expectedCoreCount * 3} expanded terms, got ${pool.supportTerms.length}.`);
+  const normalizedCore = pool.coreTerms.map((term) => normalize(term.word));
+  if (duplicateOf(normalizedCore)) errors.push(`Duplicate core term: ${duplicateOf(normalizedCore)}.`);
+  if (duplicateOf(pool.coreTerms.map((term) => term.id))) errors.push("Core resource IDs must be unique.");
+  if (duplicateOf(pool.supportTerms.map((term) => term.id))) errors.push("Expanded resource IDs must be unique.");
+  const coreWords = new Set(normalizedCore);
+  for (const support of pool.supportTerms) {
+    if (!pool.coreTerms.some((core) => core.id === support.relatedCoreTermId)) errors.push(`Expanded term ${support.id} references an unknown core resource.`);
+    if (coreWords.has(normalize(support.word))) errors.push(`Expanded term ${support.id} duplicates a core term.`);
+  }
+  const supportCounts = new Map<string, number>();
+  for (const support of pool.supportTerms) supportCounts.set(support.relatedCoreTermId, (supportCounts.get(support.relatedCoreTermId) ?? 0) + 1);
+  for (const core of pool.coreTerms) {
+    if (supportCounts.get(core.id) !== 3) errors.push(`Core term ${core.id} must have exactly three related expanded terms.`);
+  }
+  if (expandedRepeatCount(pool.supportTerms.map((term) => normalize(term.word))) > Math.floor(pool.supportTerms.length * 0.2)) {
+    errors.push("Expanded resources repeat more than 20% of the monthly total.");
+  }
+  if (pool.grammarTopics.length !== 2) errors.push("Monthly curriculum needs exactly two grammar topics.");
+  if (pool.sounds.length !== 4) errors.push("Monthly curriculum needs exactly four pronunciation targets.");
+  if (errors.length) throw new RangeError(errors.join(" "));
+
+  const dayByCoreId = new Map<string, number>();
+  for (let index = 0; index < pool.coreTerms.length; index += 1) {
+    const dayNumber = newDays[Math.floor(index / 3)]!;
+    dayByCoreId.set(pool.coreTerms[index]!.id, dayNumber);
+  }
+  const plannedSupportTerms = pool.supportTerms.map((term) => ({
+    id: term.id,
+    word: term.word,
+    meaning: term.meaning,
+    type: term.type,
+    source: term.source,
+    dayNumber: dayByCoreId.get(term.relatedCoreTermId)!
+  }));
+  return buildMonthlyCurriculum({
+    month: pool.month,
+    cefr: pool.cefr,
+    theme: pool.theme,
+    coreTerms: pool.coreTerms.map(({ id, word, meaning, type, ipa }) => ({ id, word, meaning, type, ipa })),
+    supportTerms: plannedSupportTerms,
+    grammarTopics: pool.grammarTopics,
+    sounds: pool.sounds
+  });
 }
 
 export function validateMonthlyCurriculum(contract: MonthlyCurriculumContract): string[] {
@@ -260,7 +335,7 @@ export function validateMonthlyCurriculum(contract: MonthlyCurriculumContract): 
     if (day.lessonNumber !== index + 1 || day.date !== calendar.effectiveDays[index]) errors.push(`Lesson ${day.lessonNumber} does not match its calendar date`);
     const expectedKind = monthlyDayKind(day.lessonNumber, calendar.lessonCount);
     if (day.kind !== expectedKind) errors.push(`Lesson ${day.lessonNumber} must be ${expectedKind}`);
-    if (!grammarStepIds.has(day.grammarStepId)) errors.push(`Lesson ${day.lessonNumber} references an unlocked grammar step`);
+    if (!grammarStepIds.has(day.grammarStepId) || (day.grammarStepIds ?? [day.grammarStepId]).some((id) => !grammarStepIds.has(id))) errors.push(`Lesson ${day.lessonNumber} references an unlocked grammar step`);
     const sound = soundsById.get(day.soundId);
     if (!sound) errors.push(`Lesson ${day.lessonNumber} references an unlocked sound`);
     const soundExampleIds = new Set(sound?.examples.map((example) => example.id) ?? []);
@@ -277,7 +352,7 @@ export function validateMonthlyCurriculum(contract: MonthlyCurriculumContract): 
     if (day.pronunciationExampleIds.length !== 3) errors.push(`Lesson ${day.lessonNumber} needs three pronunciation examples`);
   }
   if (seenNew.size !== contract.coreTerms.length) errors.push("Every core term must be introduced exactly once");
-  const assignedGrammarSteps = new Set(contract.daySpecs.map((day) => day.grammarStepId));
+  const assignedGrammarSteps = new Set(contract.daySpecs.flatMap((day) => day.grammarStepIds ?? [day.grammarStepId]));
   for (const id of grammarStepIds) if (!assignedGrammarSteps.has(id)) errors.push(`Grammar step ${id} is not assigned to a lesson`);
   const assignedSounds = new Set(contract.daySpecs.map((day) => day.soundId));
   for (const id of soundsById.keys()) if (!assignedSounds.has(id)) errors.push(`Sound ${id} is not assigned to a lesson`);
@@ -296,6 +371,16 @@ export function monthlyScopeHash(contract: MonthlyCurriculumContract): string {
     hash = Math.imul(hash, 16777619);
   }
   return `monthly-${(hash >>> 0).toString(16)}`;
+}
+
+export function monthlyResourcePoolHash(pool: MonthlyResourcePoolContract): string {
+  const text = stableStringify({ version: pool.version, theme: pool.theme, coreTerms: pool.coreTerms, supportTerms: pool.supportTerms, grammarTopics: pool.grammarTopics, sounds: pool.sounds });
+  let hash = 2166136261;
+  for (let index = 0; index < text.length; index += 1) {
+    hash ^= text.charCodeAt(index);
+    hash = Math.imul(hash, 16777619);
+  }
+  return `monthly-pool-${(hash >>> 0).toString(16)}`;
 }
 
 /** Human-facing ordinal for a new lesson; review slots deliberately have none. */

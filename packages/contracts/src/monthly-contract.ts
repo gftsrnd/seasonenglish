@@ -57,8 +57,8 @@ export interface MonthFrameworkView {
   status: Exclude<MonthFrameworkStatus, "missing">;
   scopeHash: string;
   resources?: {
-    coreTerms: Array<{ id: string; word: string; meaning: string; type: string; ipa: string; source: "core_registry"; component: "core"; dayNumber: number }>;
-    supportTerms: Array<{ id: string; word: string; meaning: string; type: string; source: "example" | "family" | "synonym" | "antonym" | "group" | "manual"; component: "expanded"; dayNumber: number }>;
+    coreTerms: Array<{ id: string; word: string; meaning: string; type: string; ipa: string; source: "core_registry"; component: "core"; dayNumber?: number }>;
+    supportTerms: Array<{ id: string; word: string; meaning: string; type: string; source: "example" | "family" | "synonym" | "antonym" | "group" | "manual"; component: "expanded"; dayNumber?: number; relatedCoreTermId?: string }>;
     grammarTopics: Array<{ id: string; title: string; steps: Array<{ id: string; focus: string; formula: string; usage: string; examples: string[] }> }>;
     sounds: Array<{ id: string; ipa: string; label: string; examples: Array<{ id: string; word: string; ipa: string }> }>;
   };

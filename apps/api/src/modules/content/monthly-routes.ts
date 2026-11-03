@@ -29,7 +29,7 @@ const frameworkInput = z.object({
     coreTerms: z.array(coreTerm), supportTerms: z.array(supportTerm),
     grammarTopics: z.array(z.object({ id: z.string().min(1), title: z.string().min(1), steps: z.array(z.object({ id: z.string().min(1), focus: z.string(), formula: z.string().min(1), usage: z.string(), examples: z.array(z.string()) })).min(1) })),
     sounds: z.array(z.object({ id: z.string().min(1), ipa: z.string().min(1), label: z.string().min(1), examples: z.array(z.object({ id: z.string().min(1), word: z.string().min(1), ipa: z.string().min(1) })) })),
-    daySpecs: z.array(z.object({ lessonNumber: z.int().positive(), date: z.string().date(), kind: z.enum(["new", "review"]), coreTermIds: z.array(z.string()), reviewTermIds: z.array(z.string()), grammarStepId: z.string().min(1), soundId: z.string().min(1), pronunciationExampleIds: z.array(z.string()) }))
+    daySpecs: z.array(z.object({ lessonNumber: z.int().positive(), date: z.string().date(), kind: z.enum(["new", "review"]), coreTermIds: z.array(z.string()), reviewTermIds: z.array(z.string()), grammarStepId: z.string().min(1), grammarStepIds: z.array(z.string()).optional(), soundId: z.string().min(1), pronunciationSlot: z.string().optional(), pronunciationExampleIds: z.array(z.string()) }))
   })
 });
 const resourceCriteriaInput = z.object({
@@ -150,80 +150,103 @@ export function registerMonthlyContentRoutes(app: FastifyInstance, pool: Pool, a
       };
       const calendar = buildMonthlyCalendar(month.month);
       const newLessonDays = calendar.effectiveDays.flatMap((_date, index) => monthlyDayKind(index + 1, calendar.lessonCount) === "new" ? [index + 1] : []);
-      // One operator action produces one atomic plan for the entire month.
-      // Daily assignments are fields inside that plan; they are not separate
-      // generation requests or partial monthly resources.
-      const lessonDayNumbers = calendar.effectiveDays.map((_date, index) => index + 1);
-      const grammarAssignments = [
-        [...newLessonDays.slice(0, 6), ...newLessonDays.slice(12).filter((_day, index) => index % 2 === 0)],
-        [...newLessonDays.slice(6, 12), ...newLessonDays.slice(12).filter((_day, index) => index % 2 === 1)]
-      ];
-      const resourceBatches: Array<Awaited<ReturnType<AiTaskRunner["runTask"]>>["output"]> = [];
-      // Large months exceed provider output limits as one response. Generate
-      // one-day chronological vocabulary slices, while asking the first call for the
-      // same two month-wide grammar topics and four pronunciation targets.
-      // Nothing is persisted until the merged full plan passes the usual
-      // whole-month validation.
-      for (let offset = 0; offset < newLessonDays.length; offset += 1) {
-        const batchDays = newLessonDays.slice(offset, offset + 1);
-        const pronunciationAssignments = Array.from({ length: 4 }, (_unused, index) => newLessonDays.slice(index * 3, index * 3 + 3));
-        const batchIncludesMonthlyResources = offset === 0;
-        const batchPrompt = `${task.prompt}\n\nThis is one slice of a single complete monthly resource plan. Return vocabulary only for the new lesson days in this request (exactly three core and nine expanded terms per requested day). The lessonDayNumbers field lists the complete calendar; do not create vocabulary for days absent from newLessonDays. ${batchIncludesMonthlyResources ? `Return the complete two-topic monthly grammar plan and four-target monthly pronunciation plan. Use these exact month-wide grammar day assignments: topic A ${(grammarAssignments[0] ?? []).join(", ")}; topic B ${(grammarAssignments[1] ?? []).join(", ")}. Use these exact pronunciation day assignments: ${pronunciationAssignments.map((days, index) => `P${index + 1} ${days.join(", ")}`).join("; ")}.` : "The first slice already created the month-wide grammar and pronunciation resources. Return grammarTopics as an empty array and pronunciationTargets as an empty array in this vocabulary-only slice; do not regenerate either resource type."} Keep the vocabulary entries compact and correctly assigned.`;
-        let batch: z.infer<typeof monthlyResourcePlanOutputSchema> | undefined;
-        let sliceIssue = "";
+      // One operator action generates category-specific AI phases in memory.
+      // Nothing is persisted until the complete monthly contract validates.
+      const newLessonCount = newLessonDays.length;
+      const phaseInput = (coreTermBatch: Array<{ id: string; word: string; meaning: string; type: string; ipa: string }>, targets: { vocabularyCount: number; expandedVocabularyCount: number; grammarTopicCount: number; pronunciationSoundCount: number }) => ({
+        month: month.month,
+        cefr: criteria.cefr,
+        theme: { title: theme.title, brief: theme.brief, context: theme.context, communicationGoal: theme.communicationGoal },
+        newLessonCount,
+        coreTermBatch,
+        targets
+      });
+      const runPhase = async (phasePrompt: string, coreTermBatch: Array<{ id: string; word: string; meaning: string; type: string; ipa: string }>, targets: { vocabularyCount: number; expandedVocabularyCount: number; grammarTopicCount: number; pronunciationSoundCount: number }) => {
+        const generated = await runner.runTask("monthly_resource_generation", phaseInput(coreTermBatch, targets), {
+          systemPrompt: `${task.prompt}\n\n${phasePrompt}`,
+          maxOutputTokens: 6_000,
+          temperature: 0.15,
+          maxAttempts: 2
+        });
+        return monthlyResourcePlanOutputSchema.parse(generated.output);
+      };
+      const coreTerms: z.infer<typeof monthlyResourcePlanOutputSchema>["coreTerms"] = [];
+      const coreWords = new Set<string>();
+      for (let batchIndex = 0; batchIndex < newLessonCount; batchIndex += 1) {
+        let accepted: z.infer<typeof monthlyResourcePlanOutputSchema>["coreTerms"] | undefined;
+        let issue = "";
         for (let attempt = 0; attempt < 3; attempt += 1) {
-          const priorCoreWords = resourceBatches.flatMap((prior) => monthlyResourcePlanOutputSchema.parse(prior).coreTerms.map((term) => term.word));
-          const priorExpandedWords = resourceBatches.flatMap((prior) => monthlyResourcePlanOutputSchema.parse(prior).expandedTerms.map((term) => term.word));
-          const priorTermsPrompt = priorCoreWords.length || priorExpandedWords.length
-            ? `\n\nAvoid reusing any terms already assigned earlier in this month. Prior core terms: ${priorCoreWords.join("; ")}. Prior expanded terms: ${priorExpandedWords.join("; ")}.`
-            : "";
-          const generated = await runner.runTask("monthly_resource_generation", {
-            month: month.month,
-            cefr: criteria.cefr,
-            theme: { title: theme.title, brief: theme.brief, context: theme.context, communicationGoal: theme.communicationGoal },
-            newLessonDays: batchDays,
-            lessonDayNumbers,
-            targets: {
-              vocabularyCount: batchDays.length * 3,
-              expandedVocabularyCount: batchDays.length * 9,
-              grammarTopicCount: criteria.grammarTopicCount,
-              pronunciationSoundCount: criteria.pronunciationSoundCount
-            }
-          }, { systemPrompt: `${batchPrompt}${priorTermsPrompt}${sliceIssue ? `\n\nYour previous output for this same slice was rejected: ${sliceIssue}. Regenerate the complete output and meet every exact per-day count.` : ""}`, maxOutputTokens: 8_000, temperature: 0.15, maxAttempts: 2 });
-          const candidate = monthlyResourcePlanOutputSchema.parse(generated.output);
-          const coreOffDays = candidate.coreTerms.filter((term) => !batchDays.includes(term.dayNumber)).length;
-          const expandedOffDays = candidate.expandedTerms.filter((term) => !batchDays.includes(term.dayNumber)).length;
-          const priorCoreSet = new Set(priorCoreWords.map(normalizeMonthlyResourceWord));
-          const priorExpandedSet = new Set(priorExpandedWords.map(normalizeMonthlyResourceWord));
-          const candidateCoreWords = candidate.coreTerms.map((term) => normalizeMonthlyResourceWord(term.word));
-          const candidateExpandedWords = candidate.expandedTerms.map((term) => normalizeMonthlyResourceWord(term.word));
-          const knownCoreSet = new Set([...priorCoreSet, ...candidateCoreWords]);
-          const duplicateCores = candidateCoreWords.filter((word, index) => priorCoreSet.has(word) || candidateCoreWords.indexOf(word) !== index);
-          const duplicateExpanded = candidateExpandedWords.filter((word, index) => priorExpandedSet.has(word) || knownCoreSet.has(word) || candidateExpandedWords.indexOf(word) !== index);
-          const expectedGrammarTopics = batchIncludesMonthlyResources ? 2 : 0;
-          const expectedPronunciationTargets = batchIncludesMonthlyResources ? 4 : 0;
-          if (candidate.coreTerms.length === batchDays.length * 3 && candidate.expandedTerms.length === batchDays.length * 9 && coreOffDays === 0 && expandedOffDays === 0
-            && candidate.grammarTopics.length === expectedGrammarTopics && candidate.pronunciationTargets.length === expectedPronunciationTargets
-            && duplicateCores.length === 0 && duplicateExpanded.length === 0) {
-            batch = candidate;
+          const prompt = `PHASE 1 — CORE VOCABULARY ONLY. Return exactly three unique coreTerms and no other category: expandedTerms, grammarTopics and pronunciationTargets must be empty arrays. Match the level, month theme and practical communication goal. Use these already generated core terms as forbidden words: ${[...coreWords].join("; ") || "none"}. This is an unordered month pool; do not assign calendar days. ${issue ? `The previous response was rejected: ${issue}. Replace the named terms with different, authentic ${criteria.cefr} workplace English.` : ""}`;
+          const result = await runPhase(prompt, [], { vocabularyCount: 3, expandedVocabularyCount: 0, grammarTopicCount: 0, pronunciationSoundCount: 0 });
+          const candidate = result.coreTerms;
+          const words = candidate.map((term) => normalizeMonthlyResourceWord(term.word));
+          const duplicates = words.filter((word, index) => coreWords.has(word) || words.indexOf(word) !== index);
+          if (candidate.length === 3 && result.expandedTerms.length === 0 && result.grammarTopics.length === 0 && result.pronunciationTargets.length === 0 && duplicates.length === 0) {
+            accepted = candidate.map((term, index) => ({ ...term, id: `${criteria.cefr.toLowerCase()}-core-${batchIndex * 3 + index + 1}` }));
             break;
           }
-          sliceIssue = `days ${batchDays.join(", ")} require ${batchDays.length * 3} core and ${batchDays.length * 9} expanded terms; received ${candidate.coreTerms.length} core (${coreOffDays} assigned outside the slice) and ${candidate.expandedTerms.length} expanded (${expandedOffDays} outside the slice). This slice requires ${expectedGrammarTopics} grammar topics and ${expectedPronunciationTargets} pronunciation targets; received ${candidate.grammarTopics.length} and ${candidate.pronunciationTargets.length}. Duplicate core terms: ${duplicateCores.join(", ") || "none"}. Duplicate or core-overlapping expanded terms: ${duplicateExpanded.join(", ") || "none"}. Replace all conflicts with distinct authentic workplace-English terms.`;
+          issue = `batch ${batchIndex + 1} needs exactly 3 core terms only; received ${candidate.length}, with conflicts ${duplicates.join(", ") || "none"}`;
         }
-        if (!batch) throw new MonthlyResourcePlanError([`Vocabulary slice validation failed: ${sliceIssue}.`]);
-        resourceBatches.push(batch);
+        if (!accepted) throw new MonthlyResourcePlanError([`Core vocabulary generation failed: ${issue}.`]);
+        coreTerms.push(...accepted);
+        accepted.forEach((term) => coreWords.add(normalizeMonthlyResourceWord(term.word)));
       }
-      const firstBatch = monthlyResourcePlanOutputSchema.parse(resourceBatches[0]);
+
+      const expandedTerms: z.infer<typeof monthlyResourcePlanOutputSchema>["expandedTerms"] = [];
+      const expandedWords = new Set<string>();
+      const coreWordsList = coreTerms.map((term) => `${term.id}: ${term.word} (${term.meaning})`);
+      const maxExpandedRepeats = Math.floor(criteria.expandedVocabularyCount * 0.2);
+      for (let batchIndex = 0; batchIndex < newLessonCount; batchIndex += 1) {
+        const dayCoreTerms = coreTerms.slice(batchIndex * 3, batchIndex * 3 + 3);
+        const dayCoreIds = new Set(dayCoreTerms.map((term) => term.id));
+        let accepted: z.infer<typeof monthlyResourcePlanOutputSchema>["expandedTerms"] | undefined;
+        let issue = "";
+        for (let attempt = 0; attempt < 3; attempt += 1) {
+          const previousTerms = expandedTerms.map((term) => term.word);
+          const prompt = `PHASE 2 — EXPANDED VOCABULARY ONLY. Return exactly nine distinct expandedTerms and no other category: coreTerms, grammarTopics and pronunciationTargets must be empty arrays. This is an unordered month resource pool; do not assign calendar days. Each expanded term must be a real umbrella term, synonym, antonym, word-family form or natural collocation related to one of this group's core terms, and relatesToCoreId must exactly match one of these IDs: ${dayCoreTerms.map((term) => `${term.id}: ${term.word}`).join("; ")}. Complete finalized core vocabulary (all terms forbidden as expanded words): ${coreWordsList.join("; ")}. Previously generated expanded terms (all forbidden): ${previousTerms.join("; ") || "none"}. Keep terms authentic for ${criteria.cefr} and the approved theme. ${issue ? `The previous response was rejected: ${issue}. Replace only the named conflicting words with distinct authentic terms; previously generated terms remain forbidden, and every replacement must preserve a valid core relation.` : ""}`;
+          const result = await runPhase(prompt, dayCoreTerms, { vocabularyCount: 0, expandedVocabularyCount: 9, grammarTopicCount: 0, pronunciationSoundCount: 0 });
+          const candidate = result.expandedTerms;
+          const words = candidate.map((term) => normalizeMonthlyResourceWord(term.word));
+          const duplicates = words.filter((word, index) => coreWords.has(word) || words.indexOf(word) !== index || expandedWords.has(word));
+          const invalidRelations = candidate.filter((term) => !dayCoreIds.has(term.relatesToCoreId)).length;
+          const repeatCount = expandedTerms.length + candidate.length - new Set([...expandedWords, ...words]).size;
+          if (candidate.length === 9 && result.coreTerms.length === 0 && result.grammarTopics.length === 0 && result.pronunciationTargets.length === 0 && invalidRelations === 0 && duplicates.length === 0 && repeatCount <= maxExpandedRepeats) {
+            accepted = candidate.map((term, index) => ({ ...term, id: `${criteria.cefr.toLowerCase()}-expanded-${expandedTerms.length + index + 1}` }));
+            break;
+          }
+          issue = `batch ${batchIndex + 1} needs 9 unique expanded terms linked to its core IDs; received ${candidate.length}, with ${invalidRelations} invalid relations, conflicts ${duplicates.join(", ") || "none"}, repeat count ${repeatCount}/${maxExpandedRepeats}`;
+        }
+        if (!accepted) throw new MonthlyResourcePlanError([`Expanded vocabulary generation failed: ${issue}.`]);
+        expandedTerms.push(...accepted);
+        accepted.forEach((term) => expandedWords.add(normalizeMonthlyResourceWord(term.word)));
+      }
+
+      const monthlyVocabularyForPronunciation = [...coreTerms, ...expandedTerms].map((term) => `${term.word} (${term.meaning})`).join("; ");
+      const grammarResult = await runPhase(
+        `PHASE 3 — GRAMMAR ONLY. Return exactly two genuine grammarTopics and leave coreTerms, expandedTerms and pronunciationTargets empty. This is the reusable month pool; do not assign calendar days. Topic A will progress across new lessons N1–N6, topic B across N7–N12, and both topics are combined in N13–N15. Include precise formula, concise Vietnamese usage, and at least three authentic workplace examples per topic.`,
+        [],
+        { vocabularyCount: 0, expandedVocabularyCount: 0, grammarTopicCount: 2, pronunciationSoundCount: 0 }
+      );
+      if (grammarResult.coreTerms.length || grammarResult.expandedTerms.length || grammarResult.grammarTopics.length !== 2 || grammarResult.pronunciationTargets.length) {
+        throw new MonthlyResourcePlanError(["Grammar phase must return exactly two grammar topics and no vocabulary or pronunciation resources."]);
+      }
+      const pronunciationResult = await runPhase(
+        `PHASE 4 — PRONUNCIATION ONLY. Return exactly four pronunciationTargets and leave coreTerms, expandedTerms and grammarTopics empty. This is the reusable month pool; do not assign calendar days. Use P1–P4 as the first twelve new-lesson steps, then the approval planner reuses the sound set in K1–K3 (N13–N15) and M1–M3 (N16–N18) where those lessons exist. Every example must be unique and no more than three syllables. Prefer words from the finalized monthly vocabulary; it is: ${monthlyVocabularyForPronunciation}`,
+        [],
+        { vocabularyCount: 0, expandedVocabularyCount: 0, grammarTopicCount: 0, pronunciationSoundCount: 4 }
+      );
+      if (pronunciationResult.coreTerms.length || pronunciationResult.expandedTerms.length || pronunciationResult.grammarTopics.length || pronunciationResult.pronunciationTargets.length !== 4) {
+        throw new MonthlyResourcePlanError(["Pronunciation phase must return exactly four pronunciation targets and no vocabulary or grammar resources."]);
+      }
       const plan = monthlyResourcePlanOutputSchema.parse({
-        coreTerms: resourceBatches.flatMap((batch) => monthlyResourcePlanOutputSchema.parse(batch).coreTerms),
-        expandedTerms: resourceBatches.flatMap((batch) => monthlyResourcePlanOutputSchema.parse(batch).expandedTerms),
-        grammarTopics: firstBatch.grammarTopics,
-        pronunciationTargets: firstBatch.pronunciationTargets
+        coreTerms,
+        expandedTerms,
+        grammarTopics: grammarResult.grammarTopics,
+        pronunciationTargets: pronunciationResult.pronunciationTargets
       });
-      const contract = buildMonthlyResourcesFromAiPlan(month.month, criteria.cefr, theme, criteria, plan);
-      const framework = await repositories.monthlyContent.saveFramework(actorId, contract);
-      await repositories.monthlyContent.approveFramework(actorId, framework.id);
-      return { ...framework, status: "approved" as const };
+      const pool = buildMonthlyResourcesFromAiPlan(month.month, criteria.cefr, theme, criteria, plan);
+      const framework = await repositories.monthlyContent.saveResourceDraft(actorId, pool);
+      return framework;
     } catch (error) {
       if (error instanceof MonthlyResourceCriteriaError) {
         return reply.code(422).send({ code: error.code, requiredVocabularyCount: error.requiredVocabularyCount });
@@ -232,6 +255,10 @@ export function registerMonthlyContentRoutes(app: FastifyInstance, pool: Pool, a
         console.error("Monthly resource plan rejected", { issues: error.errors, month: month.month, cefr: criteria.cefr });
         request.log.warn({ issues: error.errors, month: month.month, cefr: criteria.cefr }, "Monthly resource plan rejected");
         return reply.code(422).send({ code: "MONTHLY_RESOURCE_PLAN_INVALID", issues: error.errors });
+      }
+      if (error instanceof RangeError) {
+        request.log.warn({ message: error.message, month: month.month, cefr: criteria.cefr }, "Monthly resource pool rejected");
+        return reply.code(422).send({ code: "MONTHLY_RESOURCE_PLAN_INVALID", issues: [error.message] });
       }
       if (error && typeof error === "object" && "code" in error && (error as { code?: unknown }).code === "AI_OUTPUT_INVALID") {
         return reply.code(422).send({ code: "AI_OUTPUT_INVALID", issues: safeGenerationDiagnosticIssues(error) });
