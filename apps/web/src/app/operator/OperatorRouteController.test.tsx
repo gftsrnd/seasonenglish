@@ -136,27 +136,35 @@ describe("OperatorRouteController", () => {
     expect(await screen.findByText("Lan")).toBeInTheDocument();
     expect(screen.queryByText("placement actual listening prompt")).not.toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Xem Đề đầu vào thực" }));
-    expect(await screen.findByRole("dialog", { name: "Xem đề Đề đầu vào thực" })).toHaveTextContent("placement actual listening prompt");
+    const placementDialog = await screen.findByRole("dialog", { name: "Xem đề Đề đầu vào thực" });
+    await user.click(within(placementDialog).getByRole("button", { name: /Nghe.*1 câu/ }));
+    expect(placementDialog).toHaveTextContent("placement actual listening prompt");
     await user.click(screen.getByRole("button", { name: "Đóng" }));
 
     await user.click(within(navigation).getByRole("tab", { name: "Bài thi tháng" }));
     expect(within(navigation).getByRole("tab", { name: "Bài thi tháng" })).toHaveAttribute("aria-selected", "true");
     await user.click(await screen.findByRole("button", { name: "Xem Bài thi tháng thực" }));
-    expect(await screen.findByRole("dialog", { name: "Xem đề Bài thi tháng thực" })).toHaveTextContent("final actual listening prompt");
+    const monthlyDialog = await screen.findByRole("dialog", { name: "Xem đề Bài thi tháng thực" });
+    await user.click(within(monthlyDialog).getByRole("button", { name: /Nghe.*1 câu/ }));
+    expect(monthlyDialog).toHaveTextContent("final actual listening prompt");
     await user.click(screen.getByRole("button", { name: "Đóng" }));
     expect(screen.getByText("Chưa có bài test.")).toBeInTheDocument();
 
     await user.click(within(navigation).getByRole("tab", { name: "Đề lên mức" }));
     expect(within(navigation).getByRole("tab", { name: "Đề lên mức" })).toHaveAttribute("aria-selected", "true");
     await user.click(await screen.findByRole("button", { name: "Xem Đề lên mức thực" }));
-    expect(await screen.findByRole("dialog", { name: "Xem đề Đề lên mức thực" })).toHaveTextContent("level_up actual listening prompt");
+    const levelDialog = await screen.findByRole("dialog", { name: "Xem đề Đề lên mức thực" });
+    await user.click(within(levelDialog).getByRole("button", { name: /Nghe.*1 câu/ }));
+    expect(levelDialog).toHaveTextContent("level_up actual listening prompt");
     await user.click(screen.getByRole("button", { name: "Đóng" }));
     expect(screen.getByText("Chưa có bài test.")).toBeInTheDocument();
 
     await user.click(within(navigation).getByRole("tab", { name: "Đề đầu ra" }));
     expect(within(navigation).getByRole("tab", { name: "Đề đầu ra" })).toHaveAttribute("aria-selected", "true");
     await user.click(await screen.findByRole("button", { name: "Xem Pass Course – Form A" }));
-    expect(await screen.findByRole("dialog", { name: "Xem đề Pass Course – Form A" })).toHaveTextContent("pass_course actual listening prompt");
+    const exitDialog = await screen.findByRole("dialog", { name: "Xem đề Pass Course – Form A" });
+    await user.click(within(exitDialog).getByRole("button", { name: /Nghe.*1 câu/ }));
+    expect(exitDialog).toHaveTextContent("pass_course actual listening prompt");
   });
 
   it("loads the real week contract for /op/weeks and persists edited frames", async () => {

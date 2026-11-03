@@ -605,7 +605,7 @@ const resultPreviewKind: Record<TestResultsTab, AssessmentResultKind> = {
   exit: "pass_course"
 };
 
-function assessmentPreviewDefinition(form: AssessmentFormPreviewView): AssessmentDefinitionView {
+function assessmentPreviewDefinition(form: AssessmentFormPreviewView): AssessmentDefinitionView & { sections: AssessmentFormPreviewView["sections"] } {
   return {
     key: form.versionId,
     kind: form.kind === "level_up" ? "level-up" : form.kind === "pass_course" ? "pass-course" : form.kind,
@@ -613,13 +613,7 @@ function assessmentPreviewDefinition(form: AssessmentFormPreviewView): Assessmen
     version: form.version,
     totalMinutes: form.totalMinutes,
     totalScore: form.totalScore,
-    sections: form.sections.map(section => ({
-      ...section,
-      groups: section.groups.map(group => ({
-        ...group,
-        tasks: group.tasks.map(({ correctAnswer: _correctAnswer, ...task }) => task)
-      }))
-    }))
+    sections: form.sections
   };
 }
 

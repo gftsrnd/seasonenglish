@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import "@testing-library/jest-dom/vitest";
 import { render, screen } from "@testing-library/react";
+import { userEvent } from "@testing-library/user-event";
 import type { AssessmentDefinitionView } from "@e4s/contracts";
 import { describe, expect, it } from "vitest";
 import { AssessmentDefinitionPreview } from "./AssessmentDefinitionPreview.js";
@@ -17,14 +18,25 @@ const definition: AssessmentDefinitionView = {
 };
 
 describe("AssessmentDefinitionPreview", () => {
-  it("renders the persisted standard exam content, structure, and listening readiness", () => {
+  it("renders one persisted section at a time from the vertical section list", async () => {
+    const user = userEvent.setup();
     render(<AssessmentDefinitionPreview definition={definition} status="published" readOnly />);
     expect(screen.getByRole("heading", { name: "Workplace English CEFR Placement Test" })).toBeInTheDocument();
     expect(screen.getByLabelText("Tổng quan bài thi")).toHaveTextContent("75 phút");
     expect(screen.getByLabelText("Tổng quan bài thi")).toHaveTextContent("100 điểm");
     expect(screen.getByRole("table", { name: "Cấu trúc bài thi" })).toHaveTextContent("Nghe");
-    expect(screen.getByText("Audio phần nghe đã sẵn sàng")).toBeInTheDocument();
+    expect(screen.queryByText("Nguồn audio đã sẵn sàng")).not.toBeInTheDocument();
+    expect(screen.queryByText("What happened?")).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Nghe.*1 câu.*15 phút.*20 điểm/ })).toHaveAttribute("aria-expanded", "false");
+    expect(screen.getByRole("button", { name: /Nói.*1 câu.*15 phút.*20 điểm/ })).toHaveAttribute("aria-expanded", "false");
+    await user.click(screen.getByRole("button", { name: /Nghe.*1 câu.*15 phút.*20 điểm/ }));
+    expect(screen.getByText("Nguồn audio đã sẵn sàng")).toBeInTheDocument();
     expect(screen.getByText("What happened?")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Nghe.*1 câu.*15 phút.*20 điểm/ })).toHaveAttribute("aria-expanded", "true");
+    expect(screen.queryByText("Introduce yourself.")).not.toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: /Nói.*1 câu.*15 phút.*20 điểm/ }));
+    expect(screen.getByRole("button", { name: /Nghe.*1 câu.*15 phút.*20 điểm/ })).toHaveAttribute("aria-expanded", "false");
+    expect(screen.getByRole("button", { name: /Nói.*1 câu.*15 phút.*20 điểm/ })).toHaveAttribute("aria-expanded", "true");
     expect(screen.getByText("Introduce yourself.")).toBeInTheDocument();
     expect(screen.getByText("Chỉ xem")).toBeInTheDocument();
   });
