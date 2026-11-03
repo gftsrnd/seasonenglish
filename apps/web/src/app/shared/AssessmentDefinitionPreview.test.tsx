@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import "@testing-library/jest-dom/vitest";
-import { render, screen } from "@testing-library/react";
+import { cleanup, render, screen } from "@testing-library/react";
 import { userEvent } from "@testing-library/user-event";
 import type { AssessmentDefinitionView } from "@e4s/contracts";
 import { describe, expect, it } from "vitest";
@@ -39,9 +39,28 @@ describe("AssessmentDefinitionPreview", () => {
     expect(screen.getByRole("button", { name: /Nói.*1 câu.*15 phút.*20 điểm/ })).toHaveAttribute("aria-expanded", "true");
     expect(screen.getByText("Introduce yourself.")).toBeInTheDocument();
     expect(screen.getByText("Describe your role.")).toBeInTheDocument();
+    expect(document.querySelectorAll(".assessment-definition-preview-speaking-task")).toHaveLength(1);
+    expect(document.querySelectorAll(".assessment-definition-preview-prompt-lines > li")).toHaveLength(2);
     await user.click(screen.getByRole("button", { name: /Nói.*1 câu.*15 phút.*20 điểm/ }));
     expect(screen.getByRole("button", { name: /Nói.*1 câu.*15 phút.*20 điểm/ })).toHaveAttribute("aria-expanded", "false");
     expect(screen.queryByText("Introduce yourself.")).not.toBeInTheDocument();
     expect(screen.getByText("Chỉ xem")).toBeInTheDocument();
   });
-});
+
+
+  it("splits canonical parenthetical speaking prompts into separate rows", async () => {
+    cleanup();
+    const user = userEvent.setup();
+    const passDefinition = structuredClone(definition);
+    passDefinition.sections[3]!.groups[0]!.tasks[0]!.prompt = "Complete all four parts: (1) Introduce yourself. (2) Describe your role. (3) Explain a recent challenge. (4) Ask one follow-up question.";
+    render(<AssessmentDefinitionPreview definition={passDefinition} status="published" readOnly />);
+    await user.click(screen.getByRole("button", { name: /Nói.*1 câu.*15 phút.*20 điểm/ }));
+    const rows = document.querySelectorAll(".assessment-definition-preview-prompt-lines > li");
+    expect(rows).toHaveLength(4);
+    expect(Array.from(rows).map(row => row.textContent)).toEqual([
+      "Introduce yourself.",
+      "Describe your role.",
+      "Explain a recent challenge.",
+      "Ask one follow-up question."
+    ]);
+  });});

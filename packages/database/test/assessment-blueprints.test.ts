@@ -183,7 +183,7 @@ describe("Pass Course Form A blueprint", () => {
     expect(listening.groups.map((group) => group.stimulus?.audioSrc)).toEqual([
       "/media/audio/pass-course-form-a-listening-a.wav", "/media/audio/pass-course-form-a-listening-b.wav", "/media/audio/pass-course-form-a-listening-c.wav"
     ]);
-    expect(listening.groups[0]?.tasks[0]).toMatchObject({ prompt: "Who is the message for?", correctAnswer: "B" });
+    expect(listening.groups[0]?.tasks[0]).toMatchObject({ prompt: "Who is the message for?", correctAnswer: "B", options: expect.arrayContaining([expect.objectContaining({ value: "B", label: "Helen" })]) });
     expect(listening.groups[2]?.tasks[2]).toMatchObject({ prompt: 'What risk of "over-softening" does she mention?', correctAnswer: "D" });
 
     const reading = section("reading");
