@@ -38,6 +38,9 @@ describe("AssessmentDefinitionPreview", () => {
     expect(screen.getByRole("button", { name: /Nghe.*1 câu.*15 phút.*20 điểm/ })).toHaveAttribute("aria-expanded", "false");
     expect(screen.getByRole("button", { name: /Nói.*1 câu.*15 phút.*20 điểm/ })).toHaveAttribute("aria-expanded", "true");
     expect(screen.getByText("Introduce yourself.")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: /Nói.*1 câu.*15 phút.*20 điểm/ }));
+    expect(screen.getByRole("button", { name: /Nói.*1 câu.*15 phút.*20 điểm/ })).toHaveAttribute("aria-expanded", "false");
+    expect(screen.queryByText("Introduce yourself.")).not.toBeInTheDocument();
     expect(screen.getByText("Chỉ xem")).toBeInTheDocument();
   });
 });

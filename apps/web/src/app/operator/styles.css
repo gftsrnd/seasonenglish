@@ -2601,7 +2601,7 @@ body:has(.app-operator) #modal > .dialog > .row {
 
 .operator-assessment-preview-dialog .assessment-definition-preview-section-trigger.active {
   position: sticky;
-  top: 78px;
+  top: 112px;
   z-index: 3;
   border-bottom: 1px solid #ded9d0;
   background: #e4eee0;
