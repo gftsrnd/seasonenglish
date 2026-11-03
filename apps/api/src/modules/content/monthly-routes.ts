@@ -242,21 +242,27 @@ export function registerMonthlyContentRoutes(app: FastifyInstance, pool: Pool, a
       const pronunciationSlots = ["P1 (N1–N3)", "P2 (N4–N6)", "P3 (N7–N9)", "P4 (N10–N12)"];
       for (let soundIndex = 0; soundIndex < 4; soundIndex += 1) {
         let acceptedTarget: z.infer<typeof monthlyResourcePlanOutputSchema>["pronunciationTargets"][number] | undefined;
+        let targetTemplate: z.infer<typeof monthlyResourcePlanOutputSchema>["pronunciationTargets"][number] | undefined;
+        const acceptedTargetWords: z.infer<typeof monthlyResourcePlanOutputSchema>["pronunciationTargets"][number]["words"] = [];
         let issue = "";
         for (let attempt = 0; attempt < 3; attempt += 1) {
-          const prompt = `PHASE 4 — ONE PRONUNCIATION TARGET ONLY. Return exactly one pronunciationTargets object and leave coreTerms, expandedTerms and grammarTopics empty. Generate the target for ${pronunciationSlots[soundIndex]}. This is an unassigned month pool; do not output calendar day fields. Return at least 18 ordered candidate example words so the application can select nine. Every candidate must be no more than three syllables and relevant to the target sound or stress pattern. Avoid all words already accepted for earlier targets: ${[...usedPronunciationWords].join("; ") || "none"}. Prefer authentic terms from this monthly vocabulary pool: ${monthlyVocabularyForPronunciation}. ${issue ? `The previous candidate set did not contain enough usable words. These named candidates were rejected: ${issue}. Do not repeat them; provide a fresh ordered set of at least 18 AI-generated examples for the same target.` : ""}`;
+          const forbiddenForTarget = new Set([...usedPronunciationWords, ...acceptedTargetWords.map((word) => normalizeMonthlyResourceWord(word.word))]);
+          const neededExamples = 9 - acceptedTargetWords.length;
+          const prompt = `PHASE 4 — ONE PRONUNCIATION TARGET ONLY. Return exactly one pronunciationTargets object and leave coreTerms, expandedTerms and grammarTopics empty. Generate the target for ${pronunciationSlots[soundIndex]}. This is an unassigned month pool; do not output calendar day fields. Return at least ${Math.max(18, neededExamples * 2)} ordered candidate example words so the application can select ${neededExamples}. Every candidate must be no more than three syllables and relevant to the target sound or stress pattern. Avoid all words already accepted for earlier targets: ${[...usedPronunciationWords].join("; ") || "none"}. For this same target, retain these already accepted examples and do not repeat them: ${acceptedTargetWords.map((word) => word.word).join("; ") || "none"}. Prefer authentic terms from this monthly vocabulary pool: ${monthlyVocabularyForPronunciation}. ${issue ? `The previous candidate set did not contain enough usable words. These named candidates were rejected: ${issue}. Do not repeat them; provide a fresh ordered set of AI-generated examples for the same target.` : ""}`;
           const result = await runPhase(prompt, coreTerms, { vocabularyCount: 0, expandedVocabularyCount: 0, grammarTopicCount: 0, pronunciationSoundCount: 1 });
           if (result.coreTerms.length || result.expandedTerms.length || result.grammarTopics.length || result.pronunciationTargets.length !== 1) {
             issue = "response must contain one pronunciation target only";
             continue;
           }
           const candidate = result.pronunciationTargets[0]!;
-          const selection = selectMonthlyPronunciationCandidates({ candidates: candidate.words, forbiddenWords: usedPronunciationWords, needed: 9 });
-          if (selection.selected.length === 9) {
-            acceptedTarget = { ...candidate, words: selection.selected };
+          targetTemplate ??= candidate;
+          const selection = selectMonthlyPronunciationCandidates({ candidates: candidate.words, forbiddenWords: forbiddenForTarget, needed: neededExamples });
+          acceptedTargetWords.push(...selection.selected);
+          if (acceptedTargetWords.length === 9) {
+            acceptedTarget = { ...targetTemplate, words: acceptedTargetWords };
             break;
           }
-          issue = selection.rejected.join("; ") || `only ${candidate.words.length} usable examples were returned`;
+          issue = selection.rejected.join("; ") || `only ${acceptedTargetWords.length} of 9 usable examples have been returned`;
         }
         if (!acceptedTarget) throw new MonthlyResourcePlanError([`Pronunciation generation failed for ${pronunciationSlots[soundIndex]}: ${issue}.`]);
         pronunciationTargets.push(acceptedTarget);
