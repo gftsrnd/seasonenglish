@@ -175,7 +175,7 @@ export function registerMonthlyContentRoutes(app: FastifyInstance, pool: Pool, a
       for (let batchIndex = 0; batchIndex < newLessonCount; batchIndex += 1) {
         let accepted: z.infer<typeof monthlyResourcePlanOutputSchema>["coreTerms"] | undefined;
         let issue = "";
-        for (let attempt = 0; attempt < 4; attempt += 1) {
+        for (let attempt = 0; attempt < 3; attempt += 1) {
           const prompt = `PHASE 1 — CORE VOCABULARY ONLY. Return exactly three unique coreTerms and no other category: expandedTerms, grammarTopics and pronunciationTargets must be empty arrays. Match the level, month theme and practical communication goal. Use these already generated core terms as forbidden words: ${[...coreWords].join("; ") || "none"}. This is an unordered month pool; do not assign calendar days. ${issue ? `The previous response was rejected: ${issue}. Replace the named terms with different, authentic ${criteria.cefr} workplace English.` : ""}`;
           const result = await runPhase(prompt, [], { vocabularyCount: 3, expandedVocabularyCount: 0, grammarTopicCount: 0, pronunciationSoundCount: 0 });
           const candidate = result.coreTerms;
@@ -196,27 +196,30 @@ export function registerMonthlyContentRoutes(app: FastifyInstance, pool: Pool, a
       const expandedWords = new Set<string>();
       const coreWordsList = coreTerms.map((term) => `${term.id}: ${term.word} (${term.meaning})`);
       const maxExpandedRepeats = Math.floor(criteria.expandedVocabularyCount * 0.2);
-      for (let batchIndex = 0; batchIndex < newLessonCount; batchIndex += 1) {
-        const dayCoreTerms = coreTerms.slice(batchIndex * 3, batchIndex * 3 + 3);
-        const dayCoreIds = new Set(dayCoreTerms.map((term) => term.id));
+      for (let coreIndex = 0; coreIndex < coreTerms.length; coreIndex += 1) {
+        const coreTerm = coreTerms[coreIndex]!;
+        const coreBatch = [coreTerm];
+        const dayCoreIds = new Set([coreTerm.id]);
         let accepted: z.infer<typeof monthlyResourcePlanOutputSchema>["expandedTerms"] | undefined;
         let issue = "";
-        for (let attempt = 0; attempt < 4; attempt += 1) {
+        for (let attempt = 0; attempt < 3; attempt += 1) {
           const previousTerms = expandedTerms.map((term) => term.word);
-          const prompt = `PHASE 2 — EXPANDED VOCABULARY ONLY. Return exactly nine distinct expandedTerms and no other category: coreTerms, grammarTopics and pronunciationTargets must be empty arrays. This is an unordered month resource pool; do not assign calendar days. Return exactly three support terms for each of the three supplied core IDs, with no core left without three and no core receiving more than three. Each support term must be a different lexical item from every core word; never repeat a core word as a support word. Each must be a real umbrella term, synonym, antonym, word-family form or natural collocation related to its core, and relatesToCoreId must exactly match one of these IDs: ${dayCoreTerms.map((term) => `${term.id}: ${term.word}`).join("; ")}. Complete finalized core vocabulary (all terms forbidden as expanded words): ${coreWordsList.join("; ")}. Previously generated expanded terms (all forbidden): ${previousTerms.join("; ") || "none"}. Keep terms authentic for ${criteria.cefr} and the approved theme. ${issue ? `The previous response was rejected: ${issue}. Replace only the named conflicting words with distinct authentic terms; previously generated terms remain forbidden, and every replacement must preserve a valid relation to one supplied core.` : ""}`;
-          const result = await runPhase(prompt, dayCoreTerms, { vocabularyCount: 0, expandedVocabularyCount: 9, grammarTopicCount: 0, pronunciationSoundCount: 0 });
+          const prompt = `PHASE 2 — SUPPORT TERMS FOR ONE CORE ONLY. Return exactly three distinct expandedTerms and no other category: coreTerms, grammarTopics and pronunciationTargets must be empty arrays. This is an unordered month resource pool; do not assign calendar days. Every support term must be a different lexical item from the core and must be a genuine umbrella term, synonym, antonym, word-family form or natural collocation related to this exact core: ${coreTerm.id}: ${coreTerm.word} (${coreTerm.meaning}). Every relatesToCoreId must equal ${coreTerm.id}. Never repeat any word from the complete finalized core vocabulary (forbidden): ${coreWordsList.join("; ")}. Never repeat any already generated support word from the month-wide collision ledger (forbidden): ${previousTerms.join("; ") || "none"}. Keep all terms authentic for ${criteria.cefr} and the approved theme. ${issue ? `The previous response was rejected for these collision words only: ${issue}. Return distinct authentic replacements for this core, and keep all ledger terms forbidden.` : ""}`;
+          const result = await runPhase(prompt, coreBatch, { vocabularyCount: 0, expandedVocabularyCount: 3, grammarTopicCount: 0, pronunciationSoundCount: 0 });
           const candidate = result.expandedTerms;
           const words = candidate.map((term) => normalizeMonthlyResourceWord(term.word));
           const duplicates = words.filter((word, index) => coreWords.has(word) || words.indexOf(word) !== index || expandedWords.has(word));
           const invalidRelations = candidate.filter((term) => !dayCoreIds.has(term.relatesToCoreId)).length;
           const repeatCount = expandedTerms.length + candidate.length - new Set([...expandedWords, ...words]).size;
-          if (candidate.length === 9 && result.coreTerms.length === 0 && result.grammarTopics.length === 0 && result.pronunciationTargets.length === 0 && invalidRelations === 0 && duplicates.length === 0 && repeatCount <= maxExpandedRepeats) {
+          if (candidate.length === 3 && result.coreTerms.length === 0 && result.grammarTopics.length === 0 && result.pronunciationTargets.length === 0 && invalidRelations === 0 && duplicates.length === 0 && repeatCount <= maxExpandedRepeats) {
             accepted = candidate.map((term, index) => ({ ...term, id: `${criteria.cefr.toLowerCase()}-expanded-${expandedTerms.length + index + 1}` }));
             break;
           }
-          issue = `batch ${batchIndex + 1} needs 9 unique expanded terms linked to its core IDs; received ${candidate.length}, with ${invalidRelations} invalid relations, conflicts ${duplicates.join(", ") || "none"}, repeat count ${repeatCount}/${maxExpandedRepeats}`;
+          issue = duplicates.length
+            ? [...new Set(duplicates)].join(", ")
+            : `invalid relation or count (received ${candidate.length}, invalid relations ${invalidRelations}, repeat count ${repeatCount}/${maxExpandedRepeats})`;
         }
-        if (!accepted) throw new MonthlyResourcePlanError([`Expanded vocabulary generation failed: ${issue}.`]);
+        if (!accepted) throw new MonthlyResourcePlanError([`Expanded vocabulary generation failed for core ${coreTerm.id}: ${issue}.`]);
         expandedTerms.push(...accepted);
         accepted.forEach((term) => expandedWords.add(normalizeMonthlyResourceWord(term.word)));
       }
