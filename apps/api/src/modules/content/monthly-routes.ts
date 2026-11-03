@@ -204,7 +204,7 @@ export function registerMonthlyContentRoutes(app: FastifyInstance, pool: Pool, a
         let issue = "";
         for (let attempt = 0; attempt < 3; attempt += 1) {
           const previousTerms = expandedTerms.map((term) => term.word);
-          const prompt = `PHASE 2 — SUPPORT TERMS FOR ONE CORE ONLY. Return exactly three distinct expandedTerms and no other category: coreTerms, grammarTopics and pronunciationTargets must be empty arrays. This is an unordered month resource pool; do not assign calendar days. Every support term must be a different lexical item from the core and must be a genuine umbrella term, synonym, antonym, word-family form or natural collocation related to this exact core: ${coreTerm.id}: ${coreTerm.word} (${coreTerm.meaning}). Every relatesToCoreId must equal ${coreTerm.id}. Never repeat any word from the complete finalized core vocabulary (forbidden): ${coreWordsList.join("; ")}. Support words may repeat across different cores only up to 20% of all support placements; the month-wide support ledger is: ${previousTerms.join("; ") || "none"}. Prefer distinct new terms while staying under that limit. Keep all terms authentic for ${criteria.cefr} and the approved theme. ${issue ? `The previous response was rejected for these collision words only: ${issue}. Replace only those words with distinct authentic terms, and keep every term linked to this core.` : ""}`;
+          const prompt = `PHASE 2 — SUPPORT TERMS FOR ONE CORE ONLY. Return exactly three distinct expandedTerms and no other category: coreTerms, grammarTopics and pronunciationTargets must be empty arrays. This is an unordered month resource pool; do not assign calendar days. Every support term must be a different lexical item from the core and must be a genuine umbrella term, synonym, antonym, word-family form or natural collocation related to this exact core: ${coreTerm.id}: ${coreTerm.word} (${coreTerm.meaning}). Every relatesToCoreId must equal ${coreTerm.id}. Never repeat any word from the complete finalized core vocabulary (forbidden): ${coreWordsList.join("; ")}. Support words may repeat across different cores only up to 20% of all support placements; the month-wide support ledger is: ${previousTerms.join("; ") || "none"}. Prefer distinct new terms while staying under that limit. Keep all terms authentic for ${criteria.cefr} and the approved theme. If a candidate collides with the normalized core/support ledger, return a DIFFERENT semantically related term, never the core word itself. ${issue ? `The previous response was rejected: ${issue}. Do not return the named words, their hyphenated/spaced variants, or inflections; replace only these collisions with distinct authentic terms that are semantically related to the current core.` : ""}`;
           const result = await runPhase(prompt, coreBatch, { vocabularyCount: 0, expandedVocabularyCount: 3, grammarTopicCount: 0, pronunciationSoundCount: 0 });
           const candidate = result.expandedTerms;
           const words = candidate.map((term) => normalizeMonthlyResourceWord(term.word));
@@ -216,9 +216,17 @@ export function registerMonthlyContentRoutes(app: FastifyInstance, pool: Pool, a
             break;
           }
           const repeatedBeyondBudget = repeatCount > maxExpandedRepeats ? words.filter((word) => expandedWords.has(word)) : [];
-          const collisionWords = [...new Set([...duplicates, ...repeatedBeyondBudget])];
-          issue = collisionWords.length
-            ? collisionWords.join(", ")
+          const rawCollisions = candidate.flatMap((term, index) => {
+            const normalized = words[index]!;
+            if (coreWords.has(normalized) || words.indexOf(normalized) !== index || repeatedBeyondBudget.includes(normalized)) {
+              return [`${term.word} -> ${normalized}`];
+            }
+            return [];
+          });
+          issue = duplicates.length
+            ? `core or within-response collisions (raw -> normalized): ${rawCollisions.join("; ")}`
+            : repeatedBeyondBudget.length
+              ? `support repeats over the 20% limit (raw -> normalized): ${rawCollisions.join("; ")}`
             : `invalid relation or count (received ${candidate.length}, invalid relations ${invalidRelations}, repeat count ${repeatCount}/${maxExpandedRepeats})`;
         }
         if (!accepted) throw new MonthlyResourcePlanError([`Expanded vocabulary generation failed for core ${coreTerm.id}: ${issue}.`]);
