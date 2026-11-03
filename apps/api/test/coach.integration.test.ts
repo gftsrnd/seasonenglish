@@ -77,13 +77,12 @@ describe("AI Coach API", () => {
     expect(response.statusCode, response.body).toBe(200);
     expect(aiRunnerFactory).toHaveBeenCalledWith(DEMO_IDS.learner);
     expect(response.json()).toMatchObject({
-      topic: "Introducing yourself & your job", cefr: "A2", persona: "informal", aiAvailable: true,
-      daily: { limit: 30 }, weekly: { target: 50 }
+      topic: "Monthly workplace practice", cefr: "A2", persona: "informal", aiAvailable: true,
+      daily: { limit: 30 }, monthly: { target: 100 }
     });
-    expect(response.json().vocabulary.length).toBeLessThanOrEqual(12);
-    expect(new Set(response.json().vocabulary.map((item: { word: string }) => item.word.toLocaleLowerCase())).size).toBe(response.json().vocabulary.length);
+    expect(response.json().vocabulary).toEqual([]);
     expect(response.json().messages.length).toBeGreaterThan(0);
-    expect(response.json().messages[0].text).toContain("practise a short introduction");
+    expect(response.json().messages[0].text).toContain("workplace conversation for this month");
     expect(response.json().messages[0].text).not.toContain("What do you do at work?");
 
     const forbidden = await app.inject({ method: "GET", url: "/api/v1/coach", headers: { cookie: operatorCookie } });
@@ -104,8 +103,18 @@ describe("AI Coach API", () => {
   });
 
   it("blocks every new message at the daily cap, including acknowledgement-only text", async () => {
-    await pool.query(`update organization_settings set configuration = configuration || '{"coachDailyLimit":0}'::jsonb`);
+    await pool.query(`update organization_settings set configuration = configuration || '{"coachDailyLimit":1}'::jsonb`);
     try {
+      const before = await app.inject({ method: "GET", url: "/api/v1/coach", headers: { cookie: learnerCookie } });
+      expect(before.statusCode, before.body).toBe(200);
+      await pool.query(
+        `insert into coach_turns (id, session_id, turn_number, speaker, content, feedback, created_at)
+         values ('10000000-0000-4000-8000-000000000029', $1,
+           (select coalesce(max(turn_number), 0) + 1 from coach_turns where session_id = $1),
+           'learner', '{"text":"I work in a product team."}'::jsonb,
+           '{"evaluation":{"countsTowardGoal":true}}'::jsonb, '2026-11-03T12:00:00Z'::timestamptz)`,
+        [before.json().sessionId]
+      );
       const capped = await app.inject({
         method: "POST", url: "/api/v1/coach/messages", headers: { cookie: learnerCookie },
         payload: { requestId: "10000000-0000-4000-8000-000000000030", message: "ok" }
@@ -123,10 +132,9 @@ describe("AI Coach API", () => {
 
   it("does not expose an endpoint for manually opening a secret word", async () => {
     const before = await app.inject({ method: "GET", url: "/api/v1/coach", headers: { cookie: learnerCookie } });
-    const word = before.json().vocabulary.find((item: { opened: boolean }) => !item.opened)?.word as string;
-    expect(word).toEqual(expect.any(String));
+    expect(before.json().vocabulary).toEqual([]);
     const response = await app.inject({
-      method: "POST", url: `/api/v1/coach/vocabulary/${encodeURIComponent(word)}/unlock`, headers: { cookie: learnerCookie }
+      method: "POST", url: "/api/v1/coach/vocabulary/deadline/unlock", headers: { cookie: learnerCookie }
     });
     expect(response.statusCode).toBe(404);
   });
@@ -170,7 +178,7 @@ describe("AI Coach API", () => {
     expect(cleared.json().messages).not.toEqual(expect.arrayContaining([expect.objectContaining({ text: "Could you review the agenda?" })]));
     expect(cleared.json().messages).not.toEqual(expect.arrayContaining([expect.objectContaining({ text: "Can you take a quick look at this slide?" })]));
     expect(cleared.json().messages[0]).toMatchObject({ id: "welcome", speaker: "coach" });
-    expect(cleared.json().messages[0].text).toContain("practise a short introduction");
+    expect(cleared.json().messages[0].text).toContain("workplace conversation for this month");
   });
 
   it("stores one validated AI turn and makes the request idempotent", async () => {
@@ -293,7 +301,7 @@ describe("AI Coach API", () => {
     expect(response.statusCode, response.body).toBe(200);
     expect(runTask).not.toHaveBeenCalled();
     expect(response.json().daily.used).toBe(before.json().daily.used);
-    expect(response.json().weekly.turns).toBe(before.json().weekly.turns);
+    expect(response.json().monthly.turns).toBe(before.json().monthly.turns);
     expect(response.json().vocabulary).toEqual(before.json().vocabulary);
     const progressAfter = await app.inject({ method: "GET", url: "/api/v1/learner/progress", headers: { cookie: learnerCookie } });
     expect(progressAfter.statusCode, progressAfter.body).toBe(200);
@@ -325,7 +333,7 @@ describe("AI Coach API", () => {
     expect(response.statusCode, response.body).toBe(200);
     expect(runTask).not.toHaveBeenCalled();
     expect(response.json().daily.used).toBe(before.json().daily.used);
-    expect(response.json().weekly.turns).toBe(before.json().weekly.turns);
+    expect(response.json().monthly.turns).toBe(before.json().monthly.turns);
     expect(response.json().messages).toEqual(expect.arrayContaining([
       expect.objectContaining({ speaker: "learner", text: "Maybe room.", classification: "insufficient" }),
       expect.objectContaining({
@@ -377,7 +385,7 @@ describe("AI Coach API", () => {
 
     expect(response.statusCode, response.body).toBe(200);
     expect(response.json().daily.used).toBe(before.json().daily.used);
-    expect(response.json().weekly.turns).toBe(before.json().weekly.turns);
+    expect(response.json().monthly.turns).toBe(before.json().monthly.turns);
     expect(response.json().vocabulary).toEqual(before.json().vocabulary);
     const feedback = [...response.json().messages].reverse()
       .find((message: { speaker: string; feedback?: unknown }) => message.speaker === "coach" && message.feedback)?.feedback;

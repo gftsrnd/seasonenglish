@@ -69,9 +69,8 @@ export interface CoachView {
   persona: CoachPersona;
   aiAvailable: boolean;
   daily: { used: number; limit: number };
-  weekly: { turns: number; target: number };
-  /** Monthly learning uses the same coach quota, scoped to the active month. */
-  period?: { kind: "week" | "month"; label: string; turns: number; target: number };
+  /** Valid Season turns in the organization system month. The required target is 100. */
+  monthly: { label: string; turns: number; target: number };
   messages: CoachMessageView[];
   vocabulary: CoachVocabularyView[];
 }

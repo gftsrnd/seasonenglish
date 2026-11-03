@@ -6851,19 +6851,15 @@ class CoachRepository {
   async currentForLearner(learnerId: string, aiAvailable: boolean): Promise<CoachView | null> {
     const monthlyContext = await new LearningRepository(this.pool).getActiveMonthlyContext(learnerId);
     const context = await this.pool.query<{
-      display_name: string; cefr: CefrLevel; topic: string; scenario: Record<string, unknown> | null;
-      session_id: string | null; coach_daily_limit: number; coach_monthly_target: number; system_month: string;
+      display_name: string; cefr: CefrLevel; scenario: Record<string, unknown> | null;
+      session_id: string | null; coach_daily_limit: number; system_month: string;
     }>(
-      `select u.display_name, e.cefr, pw.topic, cs.id as session_id, cs.scenario,
+      `select u.display_name, e.cefr, cs.id as session_id, cs.scenario,
               least(greatest(coalesce((os.configuration->>'coachDailyLimit')::int, 30), 1), 200) as coach_daily_limit,
-              least(greatest(coalesce((os.configuration->'levelUp'->>'coachTurns')::int, 6), 0), 100) as coach_monthly_target,
               to_char(organization_system_date(p.organization_id), 'YYYY-MM') as system_month
        from users u
        join enrollments e on e.learner_id = u.id
        join programs p on p.id = e.program_id and p.status = 'active'
-       join program_weeks pw on pw.program_id = p.id
-         and pw.week_number = coalesce(p.current_week_override,
-           greatest(1, least(p.week_count, ((organization_system_date(p.organization_id) - p.start_date) / 7) + 1)))
        left join lateral (
          select id, scenario from coach_sessions
          where learner_id = u.id and status = 'active'
@@ -6877,12 +6873,19 @@ class CoachRepository {
     );
     const row = context.rows[0];
     if (!row) return null;
-    const activeTopic = monthlyContext?.themeTitle ?? row.topic;
+    // A prior weekly session has no month marker. Retire it before serving the monthly model.
+    const activeTopic = monthlyContext?.themeTitle ?? "Monthly workplace practice";
     let sessionId = row.session_id;
     let scenario = row.scenario ?? {};
+    const sessionMonth = typeof scenario.month === "string" ? scenario.month : null;
+    if (sessionId && sessionMonth !== row.system_month) {
+      await this.pool.query("update coach_sessions set status = 'completed', completed_at = now() where id = $1", [sessionId]);
+      sessionId = null;
+      scenario = {};
+    }
     if (!sessionId) {
       sessionId = randomUUID();
-      scenario = { title: activeTopic, persona: "informal" };
+      scenario = { title: activeTopic, persona: "informal", month: row.system_month };
       await this.pool.query(
         `insert into coach_sessions (id, learner_id, scenario, status)
          values ($1, $2, $3::jsonb, 'active')`,
@@ -6897,36 +6900,18 @@ class CoachRepository {
         `select id, speaker, content, feedback, created_at from coach_turns
          where session_id = $1 order by turn_number, created_at`, [sessionId]
       ),
-      this.pool.query<{ daily_used: string; weekly_turns: string }>(
+      this.pool.query<{ daily_used: string; monthly_turns: string }>(
         `select
            count(*) filter (where ct.speaker = 'learner' and ct.created_at >= organization_system_date((select organization_id from users where id = $1))
              and coalesce((ct.feedback->'evaluation'->>'countsTowardGoal')::boolean,
                coalesce((ct.feedback->>'relevant')::boolean, true)))::text as daily_used,
            count(*) filter (where ct.speaker = 'learner' and ct.created_at >= date_trunc('month', organization_system_date((select organization_id from users where id = $1)))
              and coalesce((ct.feedback->'evaluation'->>'countsTowardGoal')::boolean,
-               coalesce((ct.feedback->>'relevant')::boolean, true)))::text as weekly_turns
+               coalesce((ct.feedback->>'relevant')::boolean, true)))::text as monthly_turns
          from coach_turns ct join coach_sessions cs on cs.id = ct.session_id
          where cs.learner_id = $1`, [learnerId]
       ),
-      this.pool.query<{ content: Record<string, unknown> }>(
-        `select lv.content
-         from enrollments e
-         join programs p on p.id = e.program_id and p.status = 'active'
-         join program_weeks pw on pw.program_id = p.id
-           and pw.week_number = coalesce(p.current_week_override,
-             greatest(1, least(p.week_count, ((organization_system_date(p.organization_id) - p.start_date) / 7) + 1)))
-         join lesson_sets ls on ls.program_week_id = pw.id and ls.cefr = e.cefr
-         join lesson_set_versions lsv on lsv.lesson_set_id = ls.id and lsv.status = 'published'
-         join lessons l on l.lesson_set_version_id = lsv.id
-         join lateral (
-           select content from lesson_versions
-           where lesson_id = l.id and status = 'published'
-           order by version desc limit 1
-         ) lv on true
-         where e.learner_id = $1
-           and p.start_date + ((pw.week_number - 1) * 7 + l.day_number - 1) <= organization_system_date(p.organization_id)
-         order by l.day_number`, [learnerId]
-      ),
+      Promise.resolve({ rows: [] as Array<{ content: Record<string, unknown> }> }),
       this.pool.query<{ word: string }>(
         "select word from learner_vocabulary_unlocks where learner_id = $1", [learnerId]
       )
@@ -7002,13 +6987,12 @@ class CoachRepository {
       vocabularyByWord.set(key, item);
     }
     const vocabulary = [...vocabularyByWord.values()].slice(0, 12);
-    const count = counters.rows[0] ?? { daily_used: "0", weekly_turns: "0" };
+    const count = counters.rows[0] ?? { daily_used: "0", monthly_turns: "0" };
     return {
       sessionId, topic: activeTopic, cefr: row.cefr,
       persona: scenario.persona === "formal" ? "formal" : "informal",
       aiAvailable, daily: { used: Number(count.daily_used), limit: row.coach_daily_limit },
-      weekly: { turns: Number(count.weekly_turns), target: row.coach_monthly_target },
-      period: { kind: "month" as const, label: `Tháng ${row.system_month}`, turns: Number(count.weekly_turns), target: row.coach_monthly_target },
+      monthly: { label: `Tháng ${row.system_month}`, turns: Number(count.monthly_turns), target: 100 },
       messages, vocabulary
     };
   }
@@ -7439,6 +7423,9 @@ class CoachRepository {
 
 function coachOpeningQuestion(firstName: string, topic: string): string {
   const normalized = topic.toLocaleLowerCase();
+  if (normalized.includes("monthly workplace practice")) {
+    return `Hi ${firstName}! Let's practise a workplace conversation for this month. Imagine you are checking in with a colleague. What would you say first?`;
+  }
   if (normalized.includes("feedback")) {
     return `Hi ${firstName}! Let's practise giving feedback. A colleague's report is clear, but one slide has too much text. What would you say?`;
   }

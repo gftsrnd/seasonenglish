@@ -35,10 +35,10 @@ describe("learner lifecycle app states", () => {
   it("renders server-owned Home phase and reward announcement without React inference", () => {
     const callback = actions();
     const { container } = render(<LearnerHome view={{ ...home, rewardAnnouncement: { ...home.rewardAnnouncement, announcementId: "level-change-1", level: "B1", kind: "new-level-announcement" } }} actions={callback} />);
-    expect(container).toHaveTextContent(/đang trong giai đoạn pilot/i);
-    expect(container).toHaveTextContent(/yêu cầu lên mức đang chờ duyệt/i);
-    expect(container).toHaveTextContent(/mục tiêu tháng.*speak clearly/i);
-    expect(container).toHaveTextContent(/mức mới/i);
+    expect(container).not.toHaveTextContent(/đang trong giai đoạn pilot/i);
+    expect(container).toHaveTextContent(/thông tin của bạn/i);
+    expect(container).toHaveTextContent(/hồ sơ và đánh giá đầu vào/i);
+    expect(container).not.toHaveTextContent(/chặng 1/i);
   });
 
   it("shows the level-up celebration modal and persists its acknowledgement", async () => {
@@ -54,9 +54,8 @@ describe("learner lifecycle app states", () => {
     expect(callback.acknowledgeRewardAnnouncement).toHaveBeenCalledWith("level-change-1");
   });
 
-  it("renders server-owned lesson locks in the week path and blocks deep-link navigation", async () => {
+  it("does not render the retired weekly path when a month framework is absent", async () => {
     const callback = actions();
-    const user = userEvent.setup();
     render(<LearnerHome view={{
       ...home,
       lessons: [
@@ -76,39 +75,42 @@ describe("learner lifecycle app states", () => {
       nextLesson: { id: "l2", dayNumber: 2, title: "I am from + place", status: "not_started", lock: null }
     }} actions={callback} />);
 
-    const locked = screen.getByRole("link", { name: /t4 · my department.*chưa mở/i });
-    expect(locked).toHaveAttribute("aria-disabled", "true");
-    expect(locked).toHaveAttribute("title", "My department – mở sau khi xong bài trước");
-    expect(locked.querySelector("svg.lucide-lock-keyhole")).toBeInTheDocument();
-    expect(locked).not.toHaveTextContent("🔒");
-    expect(within(locked).queryByText(/xong t3 trước/i)).not.toBeInTheDocument();
-
-    await user.click(locked);
-    expect(callback.navigate).not.toHaveBeenCalledWith("/lesson/l3");
+    expect(screen.getAllByText(/lộ trình tháng đang được chuẩn bị/i).length).toBeGreaterThan(0);
+    expect(screen.queryByText(/my department/i)).not.toBeInTheDocument();
+    expect(callback.navigate).not.toHaveBeenCalled();
   });
 
   it("lets a learner request a locked Coach word to be opened", () => {
     const coach = {
       sessionId: "s", topic: "Meetings", cefr: "A2", persona: "informal", aiAvailable: true,
-      daily: { used: 0, limit: 20 }, weekly: { turns: 0, target: 2 }, messages: [],
+      daily: { used: 0, limit: 20 }, monthly: { label: "Tháng 2026-11", turns: 0, target: 100 }, messages: [],
       vocabulary: [{ word: "deadline", meaning: "hạn chót", opened: false }]
     } as any;
     const callback = actions();
     render(<LearnerCoach view={coach} actions={callback} />);
-    expect(screen.getByRole("button", { name: "Mở từ bí mật 1" })).toBeEnabled();
+    expect(screen.getByLabelText("Từ bí mật 1 chưa mở")).toBeInTheDocument();
   });
 
   it("keeps multiple corrections for the same original phrase stable", () => {
     const consoleError = vi.spyOn(console, "error").mockImplementation(() => undefined);
     const coach = {
       sessionId: "s", topic: "Meetings", cefr: "A2", persona: "informal", aiAvailable: true,
-      daily: { used: 1, limit: 20 }, weekly: { turns: 1, target: 2 }, vocabulary: [],
+      daily: { used: 1, limit: 20 }, monthly: { label: "Tháng 2026-11", turns: 1, target: 100 }, vocabulary: [],
       messages: [{ id: "m1", speaker: "coach", text: "Try again", feedback: {
-        relevant: true, relevanceNote: "Relevant", rubric: { meaning: 3, vocabulary: 2, grammar: 2 },
-        suggestions: [
-          { original: "I do not like", corrected: "I do not like my job.", explanation: "Complete the object." },
-          { original: "I do not like", corrected: "I don't like it.", explanation: "Use a natural contraction." }
-        ]
+        relevant: true, relevanceNote: "Relevant",
+        evaluation: { status: "valid", result: "partially_correct", countsTowardGoal: true, noteVi: "Cần hoàn chỉnh ý." },
+        seasonReply: "Try these complete sentences.", seasonReplyTranslation: "Hãy thử các câu hoàn chỉnh này.",
+        nextQuestion: "What do you like about your job?", nextQuestionTranslation: "Bạn thích điều gì ở công việc?",
+        rubric: {
+          meaning: { score: 3, evidence: "Main idea is clear.", improvement: "Add an object." },
+          vocabulary: { score: 2, evidence: "Basic vocabulary.", improvement: "Use work vocabulary." },
+          grammar: { score: 2, evidence: "Sentence is incomplete.", improvement: "Complete each sentence." }
+        },
+        corrections: [
+          { original: "I do not like", corrected: "I do not like my job.", translation: "Tôi không thích công việc của mình.", reason: "Complete the object." },
+          { original: "I do not like", corrected: "I don't like it.", translation: "Tôi không thích nó.", reason: "Use a natural contraction." }
+        ],
+        correctedText: "", suggestedAnswer: { text: "", translation: "" }
       }}]
     } as any;
     render(<LearnerCoach view={coach} actions={actions()} />);
