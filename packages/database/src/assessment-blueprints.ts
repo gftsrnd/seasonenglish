@@ -1,3 +1,6 @@
+import { passCourseFormADefinition } from "./pass-course-form-a.js";
+export { passCourseFormADefinition } from "./pass-course-form-a.js";
+
 import type {
   AssessmentDefinitionView,
   AssessmentOption,
@@ -201,26 +204,6 @@ export const levelUpDefinition: StoredAssessmentDefinition = {
     { code: "writing", title: "Viết", durationMinutes: 10, maxScore: 25, instructions: ["Viết 80–120 từ theo tình huống công việc."], groups: [{ key: "LW", title: "Writing", instruction: "Hoàn thành một task.", tasks: [{ key: "LW1", prompt: "Viết email xác nhận một thay đổi lịch họp và đề xuất bước tiếp theo.", responseType: "long_text", maxScore: 25, minWords: 80, maxWords: 120 }] }] },
     { code: "speaking", title: "Nói", durationMinutes: 7, maxScore: 25, instructions: ["Hoàn thành một tình huống nói ở mức đích."], groups: [{ key: "LS", title: "Speaking", instruction: "Nộp bằng chứng nói.", tasks: [{ key: "LS1", prompt: "Giải thích cho đồng nghiệp một dự án bị trễ và thống nhất hành động tiếp theo.", responseType: "speaking_evidence", maxScore: 25 }] }] }
   ]
-};
-
-/**
- * The exit assessment is a fixed Form A.  Unlike a monthly final it is not
- * regenerated from a topic, so its blueprint is seeded and published once.
- */
-export const passCourseFormADefinition: StoredAssessmentDefinition = {
-  ...levelUpDefinition,
-  key: "pass-course-form-a",
-  kind: "pass-course",
-  title: "Pass Course – Form A",
-  version: 1,
-  totalMinutes: 90,
-  totalScore: 100,
-  targetLevel: "C1",
-  sections: levelUpDefinition.sections.map((section) => ({
-    ...section,
-    durationMinutes: ({ listening: 20, reading: 25, writing: 25, speaking: 20 } as const)[section.code],
-    maxScore: 25
-  }))
 };
 
 export function publicAssessmentDefinition(stored: StoredAssessmentDefinition): AssessmentDefinitionView {

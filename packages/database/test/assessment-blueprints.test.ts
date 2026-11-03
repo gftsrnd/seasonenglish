@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { levelUpDefinition, placementDefinition } from "../src/assessment-blueprints.js";
+import { passCourseFormADefinition, placementDefinition } from "../src/assessment-blueprints.js";
 
 const section = (code: string) => {
   const value = placementDefinition.sections.find((candidate) => candidate.code === code);
@@ -105,18 +105,6 @@ describe("placement assessment blueprint", () => {
     expect(partBTranscript.indexOf("please speak to Sarah before we send it.")).toBeLessThan(partBTranscript.indexOf("there may be some flexibility with the exact time."));
   });
 
-  it("keeps the separate level-up listening section at five equally weighted questions", () => {
-    const listening = levelUpDefinition.sections.find((candidate) => candidate.code === "listening")!;
-    const tasks = listening.groups.flatMap((group) => group.tasks);
-    expect(tasks).toHaveLength(5);
-    expect(tasks.reduce((sum, task) => sum + task.maxScore, 0)).toBe(listening.maxScore);
-  });
-
-  it("keeps the level-up assessment at exactly half the placement duration and 100 total points", () => {
-    expect(levelUpDefinition.totalMinutes).toBe(35);
-    expect(levelUpDefinition.sections.reduce((sum, item) => sum + item.durationMinutes, 0)).toBe(35);
-    expect(levelUpDefinition.sections.reduce((sum, item) => sum + item.maxScore, 0)).toBe(100);
-  });
 
   it("keeps the approved reading passages and non-committal refund answer", () => {
     const readingTasks = section("reading").groups.flatMap((group) => group.tasks);
@@ -170,5 +158,42 @@ describe("placement assessment blueprint", () => {
     expect(task3?.tasks[0]?.prompt.split("\n")).toHaveLength(4);
     task3?.tasks.forEach((task) => expect(task).not.toHaveProperty("interaction"));
     expect(speaking.instructions.join(" ")).toContain("không chấm phát âm");
+  });
+});
+
+
+describe("Pass Course Form A blueprint", () => {
+  const section = (code: string) => {
+    const value = passCourseFormADefinition.sections.find((candidate) => candidate.code === code);
+    if (!value) throw new Error(`Missing ${code} section`);
+    return value;
+  };
+
+  it("uses the canonical fixed 90-minute, 100-point, four-skill structure", () => {
+    expect(passCourseFormADefinition).toMatchObject({ key: "pass-course-form-a", kind: "pass-course", totalMinutes: 90, totalScore: 100, targetLevel: "C1" });
+    expect(passCourseFormADefinition.sections.map(({ code, durationMinutes, maxScore }) => [code, durationMinutes, maxScore])).toEqual([
+      ["listening", 15, 20], ["reading", 25, 40], ["writing", 20, 20], ["speaking", 15, 20]
+    ]);
+  });
+
+  it("persists Form A's separate listening, reading, writing and speaking content", () => {
+    const listening = section("listening");
+    expect(listening.groups.flatMap((group) => group.tasks)).toHaveLength(15);
+    expect(listening.groups.flatMap((group) => group.tasks).map((task) => task.maxScore)).toEqual([...Array(10).fill(1), ...Array(5).fill(2)]);
+    expect(listening.groups.map((group) => group.stimulus?.audioSrc)).toEqual([
+      "/media/audio/pass-course-form-a-listening-a.wav", "/media/audio/pass-course-form-a-listening-b.wav", "/media/audio/pass-course-form-a-listening-c.wav"
+    ]);
+    expect(listening.groups[0]?.tasks[0]).toMatchObject({ prompt: "Who is the message for?", correctAnswer: "B" });
+    expect(listening.groups[2]?.tasks[2]).toMatchObject({ prompt: 'What risk of "over-softening" does she mention?', correctAnswer: "D" });
+
+    const reading = section("reading");
+    expect(reading.groups.flatMap((group) => group.tasks)).toHaveLength(40);
+    expect(reading.groups.flatMap((group) => group.tasks).every((task) => task.maxScore === 1)).toBe(true);
+    expect(reading.groups[0]?.tasks[0]).toMatchObject({ prompt: "Linh ____ in the marketing team.", correctAnswer: "B" });
+    expect(reading.groups[3]?.tasks[9]).toMatchObject({ prompt: "What we need ____ a clear timeline, not more meetings.", correctAnswer: "B" });
+
+    expect(section("writing").groups.flatMap((group) => group.tasks).map((task) => task.maxScore)).toEqual([7, 13]);
+    expect(section("speaking").groups.flatMap((group) => group.tasks).map((task) => task.maxScore)).toEqual([5, 5, 5, 5]);
+    expect(section("speaking").groups[2]?.tasks[0]?.prompt).toContain("chuyển đổi hệ thống dữ liệu");
   });
 });
