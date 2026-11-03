@@ -8,6 +8,8 @@ import type {
   AssessmentLevelFormDetailView,
   AssessmentLevelFormDeleteView,
   AssessmentLevelFormUpdateInput,
+  AssessmentFormPreviewCollectionView,
+  AssessmentFormPreviewView,
   AssessmentReviewOverviewView,
   AssessmentReviewAttemptDetailView,
   AssessmentReviewChallengeView,
@@ -40,6 +42,7 @@ import { buildMonthlyFinalDraft } from "./monthly-final-builder.js";
 import { createRoleGuard } from "../identity/policy.js";
 
 const kindParam = z.object({ kind: z.enum(["placement", "levelup", "level-up", "monthly", "final", "pass-course", "passcourse"]) });
+const formPreviewKindParam = z.object({ kind: z.enum(["placement", "level_up", "final", "pass_course"]) });
 const attemptParam = z.object({ attemptId: z.uuid() });
 const responseParam = z.object({
   attemptId: z.uuid(),
@@ -214,6 +217,18 @@ export function registerAssessmentRoutes(app: FastifyInstance, pool: Pool, aiRun
     if (published.state === "missing") return reply.code(404).send({ code: "MONTHLY_FINAL_NOT_FOUND" });
     if (published.state === "invalid") return reply.code(409).send({ code: "MONTHLY_FINAL_NOT_PUBLISHABLE", issues: published.issues });
     return published.value;
+  });
+
+  /**
+   * One read-model for the Operator's assessment viewer.  This reads stored
+   * versions only: placement and Pass Course expose their fixed published
+   * definitions, while generated final/level-up forms expose their actual
+   * draft or published blueprints and lifecycle state.
+   */
+  app.get("/api/v1/assessment-form-previews/:kind", { preHandler: assessmentReaders }, async (request, reply): Promise<AssessmentFormPreviewCollectionView | void> => {
+    const params = formPreviewKindParam.safeParse(request.params);
+    if (!params.success) return reply.code(400).send({ code: "INVALID_ASSESSMENT_FORM_KIND" });
+    return assessmentFormPreviews(pool, request.e4sSession!.user.id, params.data.kind);
   });
 
   app.get("/api/v1/assessment-reviews/pending", { preHandler: assessmentReaders }, async (request) => {
@@ -955,6 +970,68 @@ async function createMonthlyFinalDraft(
     await client.query("rollback");
     throw error;
   } finally { client.release(); }
+}
+
+async function assessmentFormPreviews(
+  pool: Pool,
+  actorId: string,
+  kind: AssessmentFormPreviewView["kind"]
+): Promise<AssessmentFormPreviewCollectionView> {
+  const fixedForm = kind === "placement" || kind === "pass_course";
+  const result = await pool.query<{
+    definition_id: string;
+    version_id: string;
+    kind: AssessmentFormPreviewView["kind"];
+    title: string;
+    version: number;
+    status: "draft" | "published" | "retired";
+    published_at: Date | null;
+    blueprint: StoredAssessmentDefinition;
+  }>(
+    `select ad.id as definition_id, av.id as version_id, ad.kind, ad.title,
+            av.version, av.status, av.published_at, av.blueprint
+       from assessment_definitions ad
+       join assessment_versions av on av.definition_id = ad.id
+       join users actor on actor.id = $1 and actor.organization_id = ad.organization_id
+      where ad.kind = $2
+        -- The legacy generic monthly-final seed is not a month-scoped exam.
+        -- Only finals created from an approved month contract may appear here.
+        and ($2 <> 'final' or ad.assessment_key like 'monthly-final-%')
+        and ${fixedForm ? "av.status = 'published'" : "av.status in ('draft', 'published')"}
+      order by ad.assessment_key asc,
+               case av.status when 'draft' then 0 when 'published' then 1 else 2 end,
+               av.version desc`,
+    [actorId, kind]
+  );
+  return {
+    kind,
+    forms: result.rows.map((row): AssessmentFormPreviewView => {
+      const listeningGroups = row.blueprint.sections
+        .filter((section) => section.code === "listening")
+        .flatMap((section) => section.groups);
+      return {
+        definitionId: row.definition_id,
+        versionId: row.version_id,
+        kind: row.kind,
+        title: row.title,
+        version: row.version,
+        status: row.status,
+        publishedAt: row.published_at?.toISOString() ?? null,
+        targetLevel: row.blueprint.targetLevel ?? null,
+        totalMinutes: row.blueprint.totalMinutes,
+        totalScore: row.blueprint.totalScore,
+        audioConfigured: listeningGroups.length > 0 && listeningGroups.every((group) => group.stimulus?.type === "audio_script" && Boolean(group.stimulus.audioSrc?.trim())),
+        editable: row.status === "draft" && kind !== "placement" && kind !== "pass_course",
+        sections: row.blueprint.sections.map((section) => ({
+          ...section,
+          groups: section.groups.map((group) => ({
+            ...group,
+            tasks: group.tasks.map((task) => ({ ...task, correctAnswer: task.correctAnswer ?? null }))
+          }))
+        }))
+      };
+    })
+  };
 }
 
 async function updateMonthlyFinalDraft(

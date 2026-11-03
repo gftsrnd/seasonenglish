@@ -1,7 +1,7 @@
 import type {
   AssessmentDecisionInput, AssessmentDecisionView, AssessmentDeletionRequestView, AssessmentLevelChangeInput,
   AssessmentLevelChangeView, AssessmentLevelFormDeleteView, AssessmentLevelFormDetailView,
-  AssessmentLevelFormSlotView, AssessmentLevelFormUpdateInput, AssessmentLevelFormView, AssessmentMonthlyGoalView,
+  AssessmentLevelFormSlotView, AssessmentLevelFormUpdateInput, AssessmentLevelFormView, AssessmentMonthlyGoalView, AssessmentFormPreviewCollectionView,
   AssessmentReviewAttemptDetailView, AssessmentReviewChallengeView, AssessmentReviewLearnerView,
   AssessmentReviewOverviewView, CefrLevel, ContentLessonDraftInput, ContentLessonMatrixView,
   ContentLessonMutationResult, ContentLessonSetVersionView, ContentPromptKey, ContentPromptSettingsView,
@@ -42,6 +42,7 @@ export interface OperatorApiClient {
   decideAssessment(attemptId: string, input: AssessmentDecisionInput): Promise<AssessmentDecisionView>;
   resolveTopicReport(reportId: string): Promise<{ saved: boolean }>;
   getAssessmentLevelForms(): Promise<AssessmentLevelFormSlotView[]>;
+  getAssessmentFormPreviews(kind: "placement" | "level_up" | "final" | "pass_course"): Promise<AssessmentFormPreviewCollectionView>;
   getAssessmentLevelForm(versionId: string): Promise<AssessmentLevelFormDetailView>;
   generateAssessmentLevelForm(targetLevel: Exclude<CefrLevel, "A1">): Promise<AssessmentLevelFormView>;
   updateAssessmentLevelForm(versionId: string, input: AssessmentLevelFormUpdateInput): Promise<AssessmentLevelFormDetailView>;
@@ -138,6 +139,7 @@ export const operatorApiClient: OperatorApiClient = {
   decideAssessment: (attemptId, input) => request(`/api/v1/assessment-reviews/${encodeURIComponent(attemptId)}/decision`, { method: "POST", body: JSON.stringify(input) }),
   resolveTopicReport: (reportId) => request(`/api/v1/assessment-reviews/topic-reports/${encodeURIComponent(reportId)}/resolution`, { method: "POST", body: "{}" }),
   getAssessmentLevelForms: () => request("/api/v1/assessment-level-forms"),
+  getAssessmentFormPreviews: (kind) => request(`/api/v1/assessment-form-previews/${encodeURIComponent(kind)}`),
   getAssessmentLevelForm: (versionId) => request(`/api/v1/assessment-level-forms/${encodeURIComponent(versionId)}`),
   generateAssessmentLevelForm: (targetLevel) => request(`/api/v1/assessment-level-forms/${encodeURIComponent(targetLevel)}/generate`, { method: "POST", body: "{}" }),
   updateAssessmentLevelForm: (versionId, input) => request(`/api/v1/assessment-level-forms/${encodeURIComponent(versionId)}`, { method: "PUT", body: JSON.stringify(input) }),

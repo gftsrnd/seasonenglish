@@ -325,6 +325,36 @@ export interface AssessmentLevelFormDetailView extends AssessmentLevelFormView {
   deleteReason: string | null;
 }
 
+/**
+ * Operator-only, persisted form definition used by the shared assessment
+ * viewer.  It is intentionally based on the saved version blueprint rather
+ * than a browser-side template, so fixed forms and generated forms are shown
+ * with the exact same four-skill structure learners will receive.
+ */
+export interface AssessmentFormPreviewView {
+  definitionId: string;
+  versionId: string;
+  /** Database spelling is kept here so a category can be mapped without guessing. */
+  kind: "placement" | "level_up" | "final" | "pass_course";
+  title: string;
+  version: number;
+  status: "draft" | "published" | "retired";
+  publishedAt: string | null;
+  targetLevel: CefrLevel | null;
+  totalMinutes: number;
+  totalScore: number;
+  /** Audio is only reported configured when every listening source is present in the saved blueprint. */
+  audioConfigured: boolean;
+  /** Only a draft may be edited; fixed placement and exit forms are read-only. */
+  editable: boolean;
+  sections: AssessmentLevelFormDetailView["sections"];
+}
+
+export interface AssessmentFormPreviewCollectionView {
+  kind: AssessmentFormPreviewView["kind"];
+  forms: AssessmentFormPreviewView[];
+}
+
 export interface AssessmentLevelFormDeleteView {
   deleted: true;
   versionId: string;

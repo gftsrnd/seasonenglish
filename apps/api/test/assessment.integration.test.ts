@@ -74,6 +74,44 @@ describe("assessment API preserves the one-screen flow and server evidence", () 
     });
   });
 
+  it("returns persisted four-skill forms for the shared operator assessment viewer", async () => {
+    const placement = await app.inject({ method: "GET", url: "/api/v1/assessment-form-previews/placement", headers: { cookie: operatorCookie } });
+    expect(placement.statusCode, placement.body).toBe(200);
+    expect(placement.json()).toMatchObject({
+      kind: "placement",
+      forms: [expect.objectContaining({
+        kind: "placement", status: "published", editable: false, totalScore: 100,
+        sections: expect.arrayContaining([
+          expect.objectContaining({ code: "listening" }), expect.objectContaining({ code: "reading" }),
+          expect.objectContaining({ code: "writing" }), expect.objectContaining({ code: "speaking" })
+        ])
+      })]
+    });
+
+    const passCourse = await app.inject({ method: "GET", url: "/api/v1/assessment-form-previews/pass_course", headers: { cookie: operatorCookie } });
+    expect(passCourse.statusCode, passCourse.body).toBe(200);
+    expect(passCourse.json()).toMatchObject({
+      kind: "pass_course",
+      forms: [expect.objectContaining({ kind: "pass_course", status: "published", editable: false, totalMinutes: 90, totalScore: 100 })]
+    });
+
+    const level = await app.inject({ method: "GET", url: "/api/v1/assessment-form-previews/level_up", headers: { cookie: operatorCookie } });
+    expect(level.statusCode, level.body).toBe(200);
+    expect(level.json()).toMatchObject({
+      kind: "level_up",
+      forms: [expect.objectContaining({
+        kind: "level_up", targetLevel: "B1", totalScore: 100,
+        sections: expect.arrayContaining([
+          expect.objectContaining({ code: "listening" }), expect.objectContaining({ code: "reading" }),
+          expect.objectContaining({ code: "writing" }), expect.objectContaining({ code: "speaking" })
+        ])
+      })]
+    });
+
+    const learner = await app.inject({ method: "GET", url: "/api/v1/assessment-form-previews/placement", headers: { cookie } });
+    expect(learner.statusCode).toBe(403);
+  });
+
   it("keeps the monthly final locked until every monthly lesson is complete", async () => {
     const view = await app.inject({ method: "GET", url: "/api/v1/assessments/monthly", headers: { cookie } });
     expect(view.statusCode, view.body).toBe(409);

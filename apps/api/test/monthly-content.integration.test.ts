@@ -153,6 +153,18 @@ describe("monthly content API", () => {
     expect(savedFinal.statusCode, savedFinal.body).toBe(200);
     const publishedFinal = await app.inject({ method: "POST", url: `/api/v1/monthly-final-forms/${final.versionId}/publication`, headers: { cookie } });
     expect(publishedFinal.statusCode, publishedFinal.body).toBe(200);
+    const finalPreview = await app.inject({ method: "GET", url: "/api/v1/assessment-form-previews/final", headers: { cookie } });
+    expect(finalPreview.statusCode, finalPreview.body).toBe(200);
+    expect(finalPreview.json()).toMatchObject({
+      kind: "final",
+      forms: [expect.objectContaining({
+        versionId: final.versionId, status: "published", editable: false, audioConfigured: true,
+        sections: expect.arrayContaining([
+          expect.objectContaining({ code: "listening" }), expect.objectContaining({ code: "reading" }),
+          expect.objectContaining({ code: "writing" }), expect.objectContaining({ code: "speaking" })
+        ])
+      })]
+    });
     const regeneratedAfterPublication = await app.inject({ method: "POST", url: `/api/v1/month-frameworks/${frameworkId}/monthly-final`, headers: { cookie } });
     expect(regeneratedAfterPublication.statusCode, regeneratedAfterPublication.body).toBe(409);
     expect(regeneratedAfterPublication.json()).toMatchObject({ code: "MONTHLY_FINAL_ALREADY_PUBLISHED" });
