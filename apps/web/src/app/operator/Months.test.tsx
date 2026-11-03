@@ -92,6 +92,22 @@ describe("Operator monthly planner", () => {
     expect(within(reviewCell).getByRole("button", { name: "Soạn tay bài ôn" })).toBeInTheDocument();
   });
 
+  it("uses the saved review slot rather than a weekday convention", () => {
+    const { container } = render(<ToastProvider><OperatorMonths
+      month="2026-11" todayMonth="2026-11" cefr="A1" busy={false}
+      overview={{ systemDate: "2026-11-03", monthWindow: { previous: "2026-10", current: "2026-11", next: "2026-12", writable: true }, brief: { month: "2026-11", title: "Customer handover", brief: "Prepare a handover.", context: "Customer success", communicationGoal: "Explain risks", version: 1, status: "approved" }, frameworks: [{
+        id: "framework-a1", cefr: "A1", version: 1, status: "approved", scopeHash: "scope", quality: { severe: [], light: [] }, resources: { coreTerms: [], supportTerms: [], grammarTopics: [], sounds: [] }, lessons: [
+          { lessonNumber: 21, lessonDate: "2026-11-03", kind: "review", status: "pending", scopeHash: "scope", locked: false, correctionCount: 0, quality: { severe: [], light: [] } }
+        ]
+      }] }}
+      actions={{ onSelectMonth: vi.fn(), onSelectLevel: vi.fn(), onSuggestBrief: vi.fn(), onSaveBrief: vi.fn(), onApproveBrief: vi.fn(), onGenerateFramework: vi.fn(), onSaveFramework: vi.fn(), onApproveFramework: vi.fn(), onSaveDay: vi.fn(), onGenerateDay: vi.fn(), onGenerateReview: vi.fn(), onAcknowledge: vi.fn(), onApproveDay: vi.fn(), onCreateCorrection: vi.fn(), onSaveCorrection: vi.fn(), onAcknowledgeCorrection: vi.fn(), onApproveCorrection: vi.fn() }}
+    /></ToastProvider>);
+
+    const scheduledReview = container.querySelector<HTMLElement>("[role='gridcell'][aria-label='03, Ôn tập']");
+    expect(scheduledReview).toHaveClass("review");
+    expect(within(scheduledReview!).getByRole("button", { name: "Sinh" })).toBeInTheDocument();
+  });
+
   it("uses the dedicated scheduled review endpoint after the operator confirms generation", async () => {
     const user = userEvent.setup();
     const onGenerateReview = vi.fn().mockResolvedValue({ lesson: { title: "Ôn tập", parts: [] }, report: { severe: [], light: [], contractVersion: 1 } });
