@@ -1779,3 +1779,20 @@ h1,h2,h3,h4,h1 b,h2 b,h3 b,h4 b{font-weight:600 !important}
   .monthly-assessment-page .monthly-eligibility-metrics .ring>b{width:62px;height:62px;max-width:62px}
   .monthly-assessment-page .monthly-eligibility-metrics .metric-pending{min-height:76px;padding:7px 8px;font-size:.76rem}
 }
+
+/* Shared learner page rhythm: headings use the page gutter; content below steps in once. */
+.app-learner-page{
+  --learner-content-inset:16px;
+}
+.app-learner-page > .page-title{
+  width:100%;
+  margin-left:0!important;
+  margin-right:0!important;
+  padding-left:0;
+  padding-right:0;
+}
+.app-learner-page > :not(.page-title){
+  margin-left:var(--learner-content-inset);
+  margin-right:var(--learner-content-inset);
+  max-width:calc(100% - (var(--learner-content-inset) * 2));
+}
