@@ -148,7 +148,7 @@ export function generateWeeklyPracticeDraft(topic: string, cefr: Cefr, vocabular
   };
 }
 
-export function WeeklyPracticeEditor({ item, readOnly, onSave, compact = false }: { item: ReviewWeeklyPractice; readOnly: boolean; onSave: NonNullable<OperatorReviewActions["onSaveWeeklyPractice"]>; compact?: boolean }) {
+export function WeeklyPracticeEditor({ item, readOnly, onSave, compact = false, contextLabel, headingLabel }: { item: ReviewWeeklyPractice; readOnly: boolean; onSave: NonNullable<OperatorReviewActions["onSaveWeeklyPractice"]>; compact?: boolean; contextLabel?: string; headingLabel?: string }) {
   const [task, setTask] = useState(item.task);
   const [guidance, setGuidance] = useState(item.guidance);
   const [vocabulary, setVocabulary] = useState(item.requiredVocabulary.join(", "));
@@ -158,7 +158,7 @@ export function WeeklyPracticeEditor({ item, readOnly, onSave, compact = false }
   const lastSaveAttemptRef = useRef(0);
   const generationRef = useRef(0);
   const requiredVocabulary = [...new Set(vocabulary.split(/[\n,]+/u).map(value => value.trim()).filter(Boolean))];
-  const context = `Tuần ${item.week} · ${item.cefr}`;
+  const context = contextLabel ?? `Tuần ${item.week} · ${item.cefr}`;
   const generate = () => {
     const generated = generateWeeklyPracticeDraft(item.topic, item.cefr, requiredVocabulary, generationRef.current);
     generationRef.current += 1;
@@ -182,7 +182,7 @@ export function WeeklyPracticeEditor({ item, readOnly, onSave, compact = false }
     }
   };
   return <article className="card operator-weekly-practice-editor">
-    <div className={`operator-weekly-practice-header${compact ? " compact" : ""}`}>{compact ? null : <div className="operator-weekly-practice-heading"><b>Tuần {item.week} · {item.topic}</b><div className="operator-weekly-practice-meta"><LevelChip level={item.cefr} /><span>v{item.version}</span><span>{item.status === "approved" ? "Đã duyệt" : item.status === "review" ? "Chờ duyệt" : "Bản nháp"}</span></div></div>}<Button small aria-label={`Sinh bài cuối tuần · ${context}`} disabled={readOnly || saving} onClick={generate}>Sinh bài cuối tuần</Button></div>
+    <div className={`operator-weekly-practice-header${compact ? " compact" : ""}`}>{compact ? null : <div className="operator-weekly-practice-heading"><b>{headingLabel ?? `Tuần ${item.week} · ${item.topic}`}</b><div className="operator-weekly-practice-meta"><LevelChip level={item.cefr} /><span>v{item.version}</span><span>{item.status === "approved" ? "Đã duyệt" : item.status === "review" ? "Chờ duyệt" : "Bản nháp"}</span></div></div>}<Button small aria-label={`Sinh bài cuối tuần · ${context}`} disabled={readOnly || saving} onClick={generate}>Sinh bài cuối tuần</Button></div>
     <div className="operator-weekly-practice-fields"><label>Đề bài<textarea aria-label={`Đề bài · ${context}`} value={task} disabled={readOnly || saving} onChange={event => setTask(event.target.value)} /></label>
     <label>Hướng dẫn<textarea aria-label={`Hướng dẫn · ${context}`} value={guidance} disabled={readOnly || saving} onChange={event => setGuidance(event.target.value)} /></label>
     <label>Từ bắt buộc<input aria-label={`Từ bắt buộc · ${context}`} value={vocabulary} disabled={readOnly || saving} onChange={event => setVocabulary(event.target.value)} /></label></div>

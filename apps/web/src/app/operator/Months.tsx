@@ -2,7 +2,9 @@ import { useEffect, useMemo, useState } from "react";
 import type { AssessmentLevelFormUpdateInput, CefrLevel, MonthlyOperatorOverviewView, MonthlyQualityFindingView } from "@e4s/contracts";
 import { buildMonthlyCalendar, recommendedMonthlyResourceCriteria, type MonthlyCurriculumContract } from "@e4s/domain/monthly";
 import { useToast } from "../shared/design-system.js";
-import { LearnerLesson } from "../learner/Learning.js";
+import { OperatorLessonPreview } from "./adapters.js";
+import { WeeklyPracticeEditor } from "./Review.js";
+import type { ReviewWeeklyPractice } from "./types.js";
 import "./months.css";
 
 type MonthlyBriefInput = { title: string; brief: string; context: string; communicationGoal: string };
@@ -299,15 +301,14 @@ function MonthlyFinalEditor({ draft, onClose, onSave, onPublish, synthesize, upl
   </section></div>;
 }
 
-
 export function MonthlyLessonPreview({ date, cefr, lesson, onClose, onRequestReopen }: { date: string; cefr: CefrLevel; lesson: MonthlyOperatorOverviewView["frameworks"][number]["lessons"][number]; onClose(): void; onRequestReopen?(reason: string): Promise<void> }) {
   const [requestingReopen, setRequestingReopen] = useState(false);
   const parts = lesson.content?.parts ?? [];
-  const dateLabel = new Intl.DateTimeFormat("vi-VN", { day: "2-digit", month: "2-digit", timeZone: "UTC" }).format(new Date(`${date}T00:00:00Z`));
-  if (!parts.length) return <main className="app-learner-page"><button type="button" className="btn" onClick={onClose}>← Về lịch tháng</button>{onRequestReopen && <button type="button" className="btn" onClick={() => setRequestingReopen(true)}>Yêu cầu mở lại</button>}<p className="card muted">Nội dung bài đã duyệt chưa tải được.</p>{requestingReopen && <MonthlyReopenRequest label={`bài ${lesson.lessonNumber}`} onCancel={() => setRequestingReopen(false)} onSubmit={async (reason) => { await onRequestReopen?.(reason); setRequestingReopen(false); }} />}</main>;
-  const view = { lesson: { id: `monthly-${lesson.lessonNumber}`, title: lesson.content?.title || `Bài ${lesson.lessonNumber}`, dayNumber: lesson.lessonNumber, weekNumber: 0, weekTopic: `Ngày ${dateLabel}`, durationMinutes: 15, cefr, content: { parts: parts.map((part) => ({ code: part.code ?? "instruction", title: part.title ?? part.code ?? "Nội dung", content: part.content ?? {} })) }, progress: { status: "not_started", completedPartCodes: [], evidence: {} } }, lock: null } as never;
-  const actions = { navigate: (path: string) => { if (path === "/home") onClose(); }, speak: () => undefined, completeLessonStudy: async () => undefined, saveLessonProgress: async () => undefined, uploadAssessmentAudio: async () => "", recordAssessmentAudioPlay: async () => ({ playCount: 0, remaining: 0 }) } as never;
-  return <><div className="monthly-preview-actions"><button type="button" className="btn" onClick={onClose}>← Về lịch tháng</button>{onRequestReopen && <button type="button" className="btn" onClick={() => setRequestingReopen(true)}>Yêu cầu mở lại</button>}</div><LearnerLesson view={view} actions={actions} />{requestingReopen && <MonthlyReopenRequest label={`bài ${lesson.lessonNumber}`} onCancel={() => setRequestingReopen(false)} onSubmit={async (reason) => { await onRequestReopen?.(reason); setRequestingReopen(false); }} />}</>;
+  const dateLabel = `${date.slice(8, 10)}/${date.slice(5, 7)}`;
+  const title = lesson.kind === "review" ? "Ôn tập" : lesson.content?.title || `Bài ${lesson.lessonNumber}`;
+  const reviewParts = parts.map((part) => ({ code: part.code ?? "instruction", title: part.title ?? part.code ?? "Nội dung", content: part.content ?? {} }));
+  const reviewSeed: ReviewWeeklyPractice = { id: `month-${lesson.lessonNumber}`, week: 0, cefr, topic: title, status: "approved", version: 1, task: String(reviewParts.find((part) => part.code === "writing")?.content.prompt ?? reviewParts.find((part) => part.code === "instruction")?.content.text ?? ""), guidance: String(reviewParts.find((part) => part.code === "instruction")?.content.guidance ?? ""), requiredVocabulary: [] };
+  return <main className="operator-monthly-legacy-preview"><div className="monthly-preview-actions"><button type="button" className="btn" onClick={onClose}>← Về lịch tháng</button>{onRequestReopen && <button type="button" className="btn" onClick={() => setRequestingReopen(true)}>Yêu cầu mở lại</button>}</div><header className="card operator-monthly-legacy-heading"><span className="eyebrow">Bài đã duyệt</span><h1>{dateLabel} · {title}</h1><p className="small muted">{cefr} · Nội dung vận hành theo ngày</p></header>{lesson.kind === "review" && <WeeklyPracticeEditor item={reviewSeed} readOnly contextLabel={`Ôn tập ngày ${dateLabel}`} headingLabel={`Ngày ${dateLabel} · Ôn tập`} onSave={async () => undefined} />}{parts.length ? <section className="card operator-monthly-legacy-content"><OperatorLessonPreview cefr={cefr} lessonId={`monthly-${lesson.lessonNumber}`} parts={reviewParts as never} /></section> : <p className="card muted">Nội dung bài đã duyệt chưa tải được.</p>}{requestingReopen && <MonthlyReopenRequest label={lesson.kind === "review" ? "bài ôn" : `bài ${lesson.lessonNumber}`} onCancel={() => setRequestingReopen(false)} onSubmit={async (reason) => { await onRequestReopen?.(reason); setRequestingReopen(false); }} />}</main>;
 }
 
 function MonthlyGenerationConfirmation({ dayNumber, kind, framework, onCancel, onConfirm }: { dayNumber: number; kind: "new" | "review"; framework: MonthlyOperatorOverviewView["frameworks"][number]; onCancel(): void; onConfirm(): void }) {

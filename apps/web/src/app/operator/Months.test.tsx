@@ -7,17 +7,15 @@ import { MonthlyLessonPreview, OperatorMonths } from "./Months.js";
 import { ToastProvider } from "../shared/design-system.js";
 
 describe("Operator monthly planner", () => {
-  it("renders the approved daily route with the legacy operator lesson presentation", async () => {
-    const user = userEvent.setup();
-    const onSaveReview = vi.fn().mockResolvedValue(undefined);
-    render(<MonthlyLessonPreview date="2026-11-06" cefr="A2" onClose={vi.fn()} onSaveReview={onSaveReview} lesson={{ lessonNumber: 5, lessonDate: "2026-11-06", kind: "review", status: "approved", scopeHash: "scope", locked: true, correctionCount: 0, quality: { severe: [], light: [] }, content: { title: "Ôn tập", parts: [{ code: "instruction", title: "Hướng dẫn", content: { guidance: "Ôn lại các bài trong tuần." } }, { code: "writing", title: "Viết", content: { prompt: "Write a recap.", answer: "A recap." } }] } }} />);
+  it("renders an approved daily review with the legacy operator presentation and locked actions", () => {
+    render(<MonthlyLessonPreview date="2026-11-06" cefr="A2" onClose={vi.fn()} lesson={{ lessonNumber: 5, lessonDate: "2026-11-06", kind: "review", status: "approved", scopeHash: "scope", locked: true, correctionCount: 0, quality: { severe: [], light: [] }, content: { title: "Ôn tập", parts: [{ code: "instruction", title: "Hướng dẫn", content: { guidance: "Ôn lại các bài trong tuần." } }, { code: "writing", title: "Viết", content: { prompt: "Write a recap.", answer: "A recap." } }] } }} />);
 
     expect(screen.getByRole("heading", { name: /06\/11.*Ôn tập/ })).toBeInTheDocument();
     expect(screen.getByRole("tab", { name: /1\. Học/ })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /Sinh bài cuối tuần.*Ôn tập ngày 06\/11/ })).toBeInTheDocument();
-    await user.click(screen.getByRole("button", { name: /Lưu bản nháp.*Ôn tập ngày 06\/11/ }));
-    expect(onSaveReview).toHaveBeenCalled();
+    expect(screen.getByRole("button", { name: /Sinh bài cuối tuần.*Ôn tập ngày 06\/11/ })).toBeDisabled();
+    expect(screen.getByRole("button", { name: /Lưu bản nháp.*Ôn tập ngày 06\/11/ })).toBeDisabled();
   });
+
   it("shows the complete Monday-to-Sunday calendar for the selected month", () => {
     render(<ToastProvider><OperatorMonths
       month="2026-11"
