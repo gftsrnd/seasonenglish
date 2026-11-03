@@ -1799,3 +1799,28 @@ h1,h2,h3,h4,h1 b,h2 b,h3 b,h4 b{font-weight:600 !important}
   margin-left:0!important;
   margin-right:0!important;
 }
+
+/* Home uses one deliberate vertical rhythm for the heading, status blocks, actions, and profile. */
+.app-learner-page.home-page{
+  --home-stack-gap:20px;
+  --home-pair-gap:20px;
+}
+.app-learner-page.home-page > *{
+  margin-top:0!important;
+  margin-bottom:0!important;
+}
+.app-learner-page.home-page > * + *{
+  margin-top:var(--home-stack-gap)!important;
+}
+.app-learner-page.home-page > .page-title{
+  margin-bottom:0!important;
+}
+.app-learner-page.home-page > [data-home-block="activities"]{
+  column-gap:var(--home-pair-gap)!important;
+}
+@media(max-width:720px){
+  .app-learner-page.home-page{
+    --home-stack-gap:16px;
+    --home-pair-gap:12px;
+  }
+}
