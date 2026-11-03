@@ -77,12 +77,12 @@ describe("AI Coach API", () => {
     expect(response.statusCode, response.body).toBe(200);
     expect(aiRunnerFactory).toHaveBeenCalledWith(DEMO_IDS.learner);
     expect(response.json()).toMatchObject({
-      topic: "Monthly workplace practice", cefr: "A2", persona: "informal", aiAvailable: true,
+      topic: expect.stringMatching(/workplace check-in|planning a workday|helping a colleague|joining a meeting/), cefr: "A2", persona: "informal", aiAvailable: true,
       daily: { limit: 30 }, monthly: { target: 100 }
     });
     expect(response.json().vocabulary).toEqual([]);
     expect(response.json().messages.length).toBeGreaterThan(0);
-    expect(response.json().messages[0].text).toContain("workplace conversation for this month");
+    expect(response.json().messages[0].text).not.toContain("short introduction");
     expect(response.json().messages[0].text).not.toContain("What do you do at work?");
 
     const forbidden = await app.inject({ method: "GET", url: "/api/v1/coach", headers: { cookie: operatorCookie } });
@@ -178,7 +178,7 @@ describe("AI Coach API", () => {
     expect(cleared.json().messages).not.toEqual(expect.arrayContaining([expect.objectContaining({ text: "Could you review the agenda?" })]));
     expect(cleared.json().messages).not.toEqual(expect.arrayContaining([expect.objectContaining({ text: "Can you take a quick look at this slide?" })]));
     expect(cleared.json().messages[0]).toMatchObject({ id: "welcome", speaker: "coach" });
-    expect(cleared.json().messages[0].text).toContain("workplace conversation for this month");
+    expect(cleared.json().messages[0].text).not.toContain("short introduction");
   });
 
   it("stores one validated AI turn and makes the request idempotent", async () => {

@@ -6874,7 +6874,7 @@ class CoachRepository {
     const row = context.rows[0];
     if (!row) return null;
     // A prior weekly session has no month marker. Retire it before serving the monthly model.
-    const activeTopic = monthlyContext?.themeTitle ?? "Monthly workplace practice";
+    const activeTopic = monthlyContext?.themeTitle ?? randomMonthlyCoachTopic();
     let sessionId = row.session_id;
     let scenario = row.scenario ?? {};
     const sessionMonth = typeof scenario.month === "string" ? scenario.month : null;
@@ -7421,6 +7421,16 @@ class CoachRepository {
   }
 }
 
+const monthlyCoachFallbackTopics = [
+  "a workplace check-in",
+  "planning a workday",
+  "helping a colleague",
+  "joining a meeting"
+] as const;
+
+function randomMonthlyCoachTopic(): string {
+  return monthlyCoachFallbackTopics[Math.floor(Math.random() * monthlyCoachFallbackTopics.length)]!;
+}
 function coachOpeningQuestion(firstName: string, topic: string): string {
   const normalized = topic.toLocaleLowerCase();
   if (normalized.includes("monthly workplace practice")) {
