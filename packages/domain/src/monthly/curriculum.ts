@@ -115,17 +115,15 @@ export interface MonthlyResourceCriteriaDefaults {
 export function recommendedMonthlyResourceCriteria(month: string, cefr: CefrLevel): MonthlyResourceCriteriaDefaults {
   const calendar = buildMonthlyCalendar(month);
   const newLessonCount = calendar.effectiveDays.filter((date) => !isFriday(date)).length;
-  const levelIndex = ["A1", "A2", "B1", "B2", "C1"].indexOf(cefr);
-  const advancedOffset = Math.max(0, levelIndex - 1);
-  const weeklyBlocks = Math.max(1, Math.ceil(calendar.lessonCount / 5));
+  void cefr;
   return {
     vocabularyCount: newLessonCount * 3,
     // Every new lesson needs a usable relation set: three umbrella terms,
     // four synonyms/antonyms, and two word-family terms. These belong to the
     // lesson day, rather than being a thin add-on to an individual core word.
     expandedVocabularyCount: newLessonCount * 9,
-    grammarTopicCount: weeklyBlocks + advancedOffset,
-    pronunciationSoundCount: weeklyBlocks + Math.floor(advancedOffset / 2)
+    grammarTopicCount: 2,
+    pronunciationSoundCount: 4
   };
 }
 
@@ -179,33 +177,35 @@ export function buildMonthlyCurriculum(input: MonthlyCurriculumInput): MonthlyCu
   if (input.coreTerms.length !== expectedCoreCount) throw new RangeError(`Expected ${expectedCoreCount} core terms for ${input.month}`);
   const duplicateCore = duplicateOf(input.coreTerms.map((term) => normalize(term.word)));
   if (duplicateCore) throw new RangeError(`Duplicate core term: ${duplicateCore}`);
-  const duplicateSupport = duplicateOf(input.supportTerms.map((term) => normalize(term.word)));
-  if (duplicateSupport) throw new RangeError(`Duplicate support term: ${duplicateSupport}`);
+  if (expandedRepeatCount(input.supportTerms.map((term) => normalize(term.word))) > Math.floor(input.supportTerms.length * 0.2)) {
+    throw new RangeError("Expanded resources repeat more than 20% of the monthly total");
+  }
   if (input.supportTerms.some((term) => input.coreTerms.some((core) => normalize(core.word) === normalize(term.word)))) throw new RangeError("Support term duplicates a core term");
-  if (input.grammarTopics.length === 0) throw new RangeError("Monthly curriculum needs at least one grammar topic");
-  if (input.sounds.length === 0) throw new RangeError("Monthly curriculum needs at least one sound");
+  if (input.grammarTopics.length !== 2) throw new RangeError("Monthly curriculum needs exactly two grammar topics");
+  if (input.sounds.length !== 4) throw new RangeError("Monthly curriculum needs exactly four pronunciation targets");
   if (input.supportTerms.some((term) => !Number.isInteger(term.dayNumber) || term.dayNumber < 1 || term.dayNumber > calendar.lessonCount)) throw new RangeError("Every expanded term must belong to a valid monthly day");
   if (input.grammarTopics.some((topic) => topic.steps.length === 0)) throw new RangeError("Every grammar topic needs a concrete step");
 
-  const nextExample = input.sounds.map(() => 0);
   let coreCursor = 0;
   let reviewCursor = 0;
+  let newLessonOrdinal = 0;
   const introduced: string[] = [];
   const daySpecs = calendar.effectiveDays.map((date, index) => {
     const lessonNumber = index + 1;
     const kind = isFriday(date) ? "review" as const : "new" as const;
+    if (kind === "new") newLessonOrdinal += 1;
     const coreTermIds = kind === "new" ? input.coreTerms.slice(coreCursor, coreCursor + 3).map((term) => term.id) : [];
     coreCursor += coreTermIds.length;
     introduced.push(...coreTermIds);
     const reviewTermIds = kind === "review" ? chooseReviewTerms(introduced, reviewCursor) : [];
     if (kind === "review") reviewCursor += reviewTermIds.length;
-    const topic = input.grammarTopics[Math.min(input.grammarTopics.length - 1, Math.floor((index * input.grammarTopics.length) / calendar.lessonCount))]!;
-    const step = topic.steps[Math.min(topic.steps.length - 1, Math.floor(((index * input.grammarTopics.length) % calendar.lessonCount) * topic.steps.length / Math.max(1, Math.ceil(calendar.lessonCount / input.grammarTopics.length))))] ?? topic.steps.at(-1)!;
-    const soundIndex = index % input.sounds.length;
+    const assignmentOrdinal = Math.max(1, newLessonOrdinal);
+    const grammarIndex = assignmentOrdinal <= 6 ? 0 : assignmentOrdinal <= 12 ? 1 : (assignmentOrdinal - 13) % 2;
+    const topic = input.grammarTopics[grammarIndex]!;
+    const step = topic.steps[0]!;
+    const soundIndex = assignmentOrdinal <= 12 ? Math.floor((assignmentOrdinal - 1) / 3) : (assignmentOrdinal - 13) % 4;
     const sound = input.sounds[soundIndex]!;
-    const exampleStart = nextExample[soundIndex] ?? 0;
-    const exampleIds = sound.examples.slice(exampleStart, exampleStart + 3).map((example) => example.id);
-    nextExample[soundIndex] = exampleStart + exampleIds.length;
+    const exampleIds = sound.examples.slice(0, 3).map((example) => example.id);
     if (exampleIds.length !== 3) throw new RangeError(`Sound ${sound.id} needs three unused examples for lesson ${lessonNumber}`);
     return { lessonNumber, date, kind, coreTermIds, reviewTermIds, grammarStepId: step.id, soundId: sound.id, pronunciationExampleIds: exampleIds };
   });
@@ -226,14 +226,15 @@ export function validateMonthlyCurriculum(contract: MonthlyCurriculumContract): 
   const errors: string[] = [];
   const duplicateCore = duplicateOf(contract.coreTerms.map((term) => normalize(term.word)));
   if (duplicateCore) errors.push(`Duplicate core term: ${duplicateCore}`);
-  const duplicateSupport = duplicateOf(contract.supportTerms.map((term) => normalize(term.word)));
-  if (duplicateSupport) errors.push(`Duplicate expanded term: ${duplicateSupport}`);
+  if (expandedRepeatCount(contract.supportTerms.map((term) => normalize(term.word))) > Math.floor(contract.supportTerms.length * 0.2)) {
+    errors.push("Expanded resources repeat more than 20% of the monthly total");
+  }
   const coreWords = new Set(contract.coreTerms.map((term) => normalize(term.word)));
   for (const term of contract.supportTerms) {
     if (coreWords.has(normalize(term.word))) errors.push(`Expanded term ${term.id} duplicates a core term`);
   }
-  if (contract.grammarTopics.length === 0) errors.push("Monthly curriculum needs at least one grammar topic");
-  if (contract.sounds.length === 0) errors.push("Monthly curriculum needs at least one sound");
+  if (contract.grammarTopics.length !== 2) errors.push("Monthly curriculum needs exactly two grammar topics");
+  if (contract.sounds.length !== 4) errors.push("Monthly curriculum needs exactly four pronunciation targets");
   for (const topic of contract.grammarTopics) {
     if (!topic.title.trim() || topic.steps.length === 0 || topic.steps.some((step) => !step.focus.trim() || !step.formula.trim() || !step.usage.trim() || step.examples.length === 0 || step.examples.some((example) => !example.trim()))) {
       errors.push(`Grammar topic ${topic.id} needs a concrete form, use, step, and example`);
@@ -315,6 +316,10 @@ function duplicateOf(values: readonly string[]): string | null {
   return null;
 }
 
+function expandedRepeatCount(values: readonly string[]): number {
+  return values.length - new Set(values).size;
+}
+
 function normalize(value: string): string {
   return value.trim().toLocaleLowerCase("en-US");
 }
@@ -327,4 +332,3 @@ function stableStringify(value: unknown): string {
   }
   return JSON.stringify(value);
 }
-

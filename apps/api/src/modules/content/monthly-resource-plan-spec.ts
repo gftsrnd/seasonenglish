@@ -27,13 +27,12 @@ LEVEL DIFFERENTIATION
 
 VOCABULARY PLAN
 - Create exactly 3 distinct core items for every NEW lesson day.
-- Create exactly 9 distinct expanded items for every NEW lesson day.
+- Create exactly 9 expanded items for every NEW lesson day. Expanded items may repeat across the month only when the repeated entries stay at or below 20% of the total expanded set.
 - Every item must have a real English form, a natural Vietnamese meaning, part
   of speech, accurate IPA where requested, a concise authentic example, and
   the new-lesson day number that introduces it.
-- No duplicates after lowercasing and normalising spaces/punctuation: not
-  within core, expanded, grammar examples or pronunciation words; core terms
-  must also not appear as expanded terms.
+- Core terms must be unique after lowercasing and normalising spaces/
+  punctuation; core terms must never appear as expanded terms.
 - Each expanded item must state one relation: umbrella, synonym, antonym,
   word_family, or collocation; and identify the related core term. The relation
   must be linguistically real. A word family must belong to its stated base;
@@ -43,14 +42,14 @@ VOCABULARY PLAN
   phrase across days.
 
 GRAMMAR PLAN
-- Return exactly four genuine CEFR-appropriate grammar topics. Each topic has
+- Return exactly two genuine CEFR-appropriate grammar topics. Topic A covers new lessons 1–6, topic B covers new lessons 7–12, and later new lessons combine them. Each topic has
   a meaningful Vietnamese title, a precise formula, a concise Vietnamese use
   explanation, at least three natural work-context examples, and explicit
   assigned new-lesson day numbers. Do not use generic descriptions such as
   'Dùng để diễn đạt ý chính'.
 
 PRONUNCIATION PLAN
-- Return exactly four genuine pronunciation targets. Each has accurate IPA,
+- Return exactly four genuine pronunciation targets. Assign P1 to new lessons 1–3, P2 to 4–6, P3 to 7–9 and P4 to 10–12. Every pronunciation word must have no more than three syllables. Each has accurate IPA,
   a meaningful Vietnamese label, assigned new-lesson day numbers, and a list
   of real words from this month's approved vocabulary or closely related,
   non-duplicate examples. Explain the actual sound contrast or stress pattern
@@ -152,8 +151,8 @@ export const monthlyResourcePlanSchema = {
     },
     grammarTopics: {
       type: "array",
-      minItems: 4,
-      maxItems: 4,
+      minItems: 2,
+      maxItems: 2,
       items: {
         type: "object",
         additionalProperties: false,
@@ -192,7 +191,7 @@ export const monthlyResourcePlanSchema = {
           },
           words: {
             type: "array",
-            minItems: 4,
+            minItems: 9,
             items: {
               type: "object",
               required: ["word", "ipa", "meaning"],
@@ -255,50 +254,56 @@ export const MONTHLY_RESOURCE_PLAN_QUALITY_EXAMPLE = {
 
 export function validateMonthlyResourcePlanShape(
   plan: {
-    coreTerms: Array<{ dayNumber: number; word: string }>;
-    expandedTerms: Array<{
-      dayNumber: number;
-      word: string;
-      relatesToCoreId: string;
-    }>;
-    grammarTopics: unknown[];
-    pronunciationTargets: unknown[];
+    coreTerms: Array<{ id: string; dayNumber: number; word: string }>;
+    expandedTerms: Array<{ dayNumber: number; word: string; relatesToCoreId: string }>;
+    grammarTopics: Array<{ dayNumbers: number[] }>;
+    pronunciationTargets: Array<{ dayNumbers: number[]; words: Array<{ word: string }> }>;
   },
   newLessonDays: readonly number[],
 ): string[] {
   const errors: string[] = [];
-  const normalize = (value: string) =>
-    value.trim().toLocaleLowerCase("en").replace(/\\s+/g, " ");
+  const normalize = (value: string) => value.trim().toLocaleLowerCase("en").replace(/[\s\p{P}]+/gu, " ").trim();
   const core = plan.coreTerms.map((item) => normalize(item.word));
   const expanded = plan.expandedTerms.map((item) => normalize(item.word));
   const expectedCore = newLessonDays.length * 3;
   const expectedExpanded = newLessonDays.length * 9;
-  if (core.length !== expectedCore)
-    errors.push(`Expected ${expectedCore} core terms, got ${core.length}.`);
-  if (expanded.length !== expectedExpanded)
-    errors.push(
-      `Expected ${expectedExpanded} expanded terms, got ${expanded.length}.`,
-    );
-  if (new Set(core).size !== core.length)
-    errors.push("Core resources contain duplicate terms.");
-  if (new Set(expanded).size !== expanded.length)
-    errors.push("Expanded resources contain duplicate terms.");
-  if (expanded.some((word) => core.includes(word)))
-    errors.push("A core term is repeated in expanded resources.");
+  if (core.length !== expectedCore) errors.push(`Expected ${expectedCore} core terms, got ${core.length}.`);
+  if (expanded.length !== expectedExpanded) errors.push(`Expected ${expectedExpanded} expanded terms, got ${expanded.length}.`);
+  if (new Set(core).size !== core.length) errors.push("Core resources contain duplicate terms.");
+  if (expanded.some((word) => core.includes(word))) errors.push("A core term is repeated in expanded resources.");
+  if (expanded.length - new Set(expanded).size > Math.floor(expanded.length * 0.2)) errors.push("Expanded resources repeat more than 20% of the monthly total.");
   for (const dayNumber of newLessonDays) {
-    if (
-      plan.coreTerms.filter((item) => item.dayNumber === dayNumber).length !== 3
-    )
-      errors.push(`Day ${dayNumber} does not have three core terms.`);
-    if (
-      plan.expandedTerms.filter((item) => item.dayNumber === dayNumber)
-        .length !== 9
-    )
-      errors.push(`Day ${dayNumber} does not have nine expanded terms.`);
+    if (plan.coreTerms.filter((item) => item.dayNumber === dayNumber).length !== 3) errors.push(`Day ${dayNumber} does not have three core terms.`);
+    if (plan.expandedTerms.filter((item) => item.dayNumber === dayNumber).length !== 9) errors.push(`Day ${dayNumber} does not have nine expanded terms.`);
+    const coreIds = new Set(plan.coreTerms.filter((item) => item.dayNumber === dayNumber).map((item) => item.id));
+    if (plan.expandedTerms.some((item) => item.dayNumber === dayNumber && !coreIds.has(item.relatesToCoreId))) {
+      errors.push(`Expanded resources on day ${dayNumber} must relate to a core term from that day.`);
+    }
   }
-  if (plan.grammarTopics.length !== 4)
-    errors.push("Expected four grammar topics.");
-  if (plan.pronunciationTargets.length !== 4)
-    errors.push("Expected four pronunciation targets.");
+  if (plan.grammarTopics.length !== 2) errors.push("Expected two grammar topics.");
+  const grammarAssignments = [
+    [...newLessonDays.slice(0, 6), ...newLessonDays.slice(12).filter((_day, index) => index % 2 === 0)],
+    [...newLessonDays.slice(6, 12), ...newLessonDays.slice(12).filter((_day, index) => index % 2 === 1)]
+  ];
+  for (const [index, topic] of plan.grammarTopics.entries()) {
+    if (!sameNumbers(topic.dayNumbers, grammarAssignments[index] ?? [])) errors.push(`Grammar topic ${index + 1} has an invalid lesson assignment.`);
+  }
+  if (plan.pronunciationTargets.length !== 4) errors.push("Expected four pronunciation targets.");
+  for (const [index, target] of plan.pronunciationTargets.entries()) {
+    if (!sameNumbers(target.dayNumbers, newLessonDays.slice(index * 3, index * 3 + 3))) errors.push(`Pronunciation target ${index + 1} must cover its consecutive three new lessons.`);
+    if (target.words.length < 9) errors.push(`Pronunciation target ${index + 1} needs at least nine real words.`);
+    if (target.words.some((word) => syllableCount(word.word) > 3)) errors.push(`Pronunciation target ${index + 1} contains a word with more than three syllables.`);
+  }
+  const pronunciationWords = plan.pronunciationTargets.flatMap((target) => target.words.map((word) => normalize(word.word)));
+  if (new Set(pronunciationWords).size !== pronunciationWords.length) errors.push("Pronunciation examples repeat between targets.");
   return errors;
+}
+
+function sameNumbers(actual: readonly number[], expected: readonly number[]): boolean {
+  return actual.length === expected.length && actual.every((value, index) => value === expected[index]);
+}
+
+function syllableCount(word: string): number {
+  const parts = word.toLocaleLowerCase("en").match(/[aeiouy]+/gu) ?? [];
+  return Math.max(1, parts.length);
 }

@@ -230,8 +230,7 @@ function contract(cefr: CefrLevel = "A1") {
   return buildMonthlyCurriculum({
     month, cefr, theme: { version: 1, title: "Quarterly budget review", brief: "Prepare a quarterly budget review.", context: "Finance meeting", communicationGoal: "Explain a cost." },
     coreTerms: Array.from({ length: count }, (_, index) => ({ id: `term-${index}`, word: `term-${index}`, meaning: "nghĩa", type: "noun", ipa: "/tɜːm/" })),
-    supportTerms: [], grammarTopics: Array.from({ length: 4 }, (_, index) => ({ id: `g-${index}`, title: `Grammar ${index}`, steps: [{ id: `g-${index}-s`, focus: "focus", formula: "S + V", usage: "usage", examples: ["Example."] }] })),
+    supportTerms: [], grammarTopics: Array.from({ length: 2 }, (_, index) => ({ id: `g-${index}`, title: `Grammar ${index}`, steps: [{ id: `g-${index}-s`, focus: "focus", formula: "S + V", usage: "usage", examples: ["Example."] }] })),
     sounds: Array.from({ length: 4 }, (_, index) => ({ id: `s-${index}`, ipa: "/t/", label: "T", examples: Array.from({ length: Math.ceil(calendar.lessonCount / 4) * 3 }, (_, example) => ({ id: `s-${index}-${example}`, word: `sound-${index}-${example}`, ipa: "/t/" })) }))
   });
 }
-

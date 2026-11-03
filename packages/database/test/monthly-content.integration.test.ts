@@ -110,9 +110,8 @@ function buildContract() {
     theme: { version: 1, title: "Preparing a quarterly budget review", brief: "Teams prepare and explain a quarterly budget review.", context: "Finance team planning meeting", communicationGoal: "Explain costs and request approval" },
     coreTerms: Array.from({ length: newDays * 3 }, (_, index) => ({ id: `core-${index + 1}`, word: `term-${index + 1}`, meaning: `meaning ${index + 1}`, type: "noun", ipa: "/tɜːm/" })),
     supportTerms: [{ id: "support-1", word: "quarterly", meaning: "hàng quý", type: "adjective", source: "example", dayNumber: 1 }],
-    grammarTopics: Array.from({ length: 4 }, (_, index) => ({ id: `grammar-${index + 1}`, title: `Grammar ${index + 1}`, steps: [{ id: `grammar-${index + 1}-step-1`, focus: "focus", formula: "S + V", usage: "usage", examples: ["Example sentence."] }] })),
+    grammarTopics: Array.from({ length: 2 }, (_, index) => ({ id: `grammar-${index + 1}`, title: `Grammar ${index + 1}`, steps: [{ id: `grammar-${index + 1}-step-1`, focus: "focus", formula: "S + V", usage: "usage", examples: ["Example sentence."] }] })),
     sounds: Array.from({ length: 4 }, (_, index) => ({ id: `sound-${index + 1}`, ipa: "/t/", label: "T sound", examples: Array.from({ length: Math.ceil(calendar.lessonCount / 4) * 3 }, (_, exampleIndex) => ({ id: `sound-${index + 1}-example-${exampleIndex + 1}`, word: `soundword-${index + 1}-${exampleIndex + 1}`, ipa: "/t/" })) }))
   };
   return buildMonthlyCurriculum(input);
 }
-

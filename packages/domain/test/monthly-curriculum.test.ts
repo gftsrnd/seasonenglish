@@ -27,7 +27,7 @@ function inputFor(month = "2026-11"): MonthlyCurriculumInput {
     theme: { version: 1, title: "Preparing a budget review", brief: "Prepare a simple budget review at work.", context: "Office", communicationGoal: "State a cost and ask for an update." },
     coreTerms,
     supportTerms: [{ id: "support-1", word: "worksheet", meaning: "bảng tính", type: "noun", source: "example", dayNumber: 1 }],
-    grammarTopics: Array.from({ length: 4 }, (_, index) => ({
+    grammarTopics: Array.from({ length: 2 }, (_, index) => ({
       id: `grammar-${index + 1}`,
       title: `Grammar ${index + 1}`,
       steps: [{ id: `grammar-${index + 1}-step-1`, focus: `Focus ${index + 1}`, formula: "subject + verb", usage: "Use in a work sentence.", examples: ["I check the cost."] }]
@@ -83,10 +83,10 @@ describe("monthly curriculum contract", () => {
 
   it("proposes resource counts from effective learning days and CEFR", () => {
     expect(recommendedMonthlyResourceCriteria("2026-11", "A1")).toEqual({
-      vocabularyCount: 48, expandedVocabularyCount: 144, grammarTopicCount: 4, pronunciationSoundCount: 4
+      vocabularyCount: 48, expandedVocabularyCount: 144, grammarTopicCount: 2, pronunciationSoundCount: 4
     });
     expect(recommendedMonthlyResourceCriteria("2026-11", "C1")).toEqual({
-      vocabularyCount: 48, expandedVocabularyCount: 144, grammarTopicCount: 7, pronunciationSoundCount: 5
+      vocabularyCount: 48, expandedVocabularyCount: 144, grammarTopicCount: 2, pronunciationSoundCount: 4
     });
     expect(recommendedMonthlyResourceCriteria("2026-02", "B1").vocabularyCount).toBe(48);
   });
@@ -116,6 +116,41 @@ describe("monthly curriculum contract", () => {
     const overlap = structuredClone(buildMonthlyCurriculum(inputFor()));
     overlap.supportTerms[0]!.word = overlap.coreTerms[0]!.word;
     expect(validateMonthlyCurriculum(overlap)).toContain(`Expanded term ${overlap.supportTerms[0]!.id} duplicates a core term`);
+  });
+
+  it("assigns pronunciation targets in consecutive three-new-lesson blocks and combines the two grammar topics afterwards", () => {
+    const curriculum = buildMonthlyCurriculum(inputFor());
+    const newDays = curriculum.daySpecs.filter((day) => day.kind === "new");
+
+    expect(newDays.slice(0, 3).map((day) => day.soundId)).toEqual(["sound-1", "sound-1", "sound-1"]);
+    expect(newDays.slice(3, 6).map((day) => day.soundId)).toEqual(["sound-2", "sound-2", "sound-2"]);
+    expect(newDays.slice(6, 9).map((day) => day.soundId)).toEqual(["sound-3", "sound-3", "sound-3"]);
+    expect(newDays.slice(9, 12).map((day) => day.soundId)).toEqual(["sound-4", "sound-4", "sound-4"]);
+    expect(newDays.slice(0, 6).every((day) => day.grammarStepId === "grammar-1-step-1")).toBe(true);
+    expect(newDays.slice(6, 12).every((day) => day.grammarStepId === "grammar-2-step-1")).toBe(true);
+    expect(newDays.slice(12).map((day) => day.grammarStepId)).toEqual(["grammar-1-step-1", "grammar-2-step-1", "grammar-1-step-1", "grammar-2-step-1"]);
+  });
+
+  it("allows no more than twenty percent repeated expanded entries while keeping all core terms distinct", () => {
+    const input = inputFor();
+    input.supportTerms = Array.from({ length: 10 }, (_, index) => ({
+      id: `support-${index + 1}`,
+      word: `support-${index + 1}`,
+      meaning: `Từ mở rộng ${index + 1}`,
+      type: "noun",
+      source: "example" as const,
+      dayNumber: 1
+    }));
+    const curriculum = buildMonthlyCurriculum(input);
+    const allowed = structuredClone(curriculum);
+    allowed.supportTerms.push(...Array.from({ length: 2 }, (_, index) => ({
+      ...allowed.supportTerms[0]!, id: `repeat-${index}`
+    })));
+    expect(validateMonthlyCurriculum(allowed)).toEqual([]);
+
+    const excessive = structuredClone(allowed);
+    excessive.supportTerms.push({ ...excessive.supportTerms[0]!, id: "repeat-over-limit" });
+    expect(validateMonthlyCurriculum(excessive)).toContain("Expanded resources repeat more than 20% of the monthly total");
   });
 
   it("keeps support terms outside core and proposes the first ten pending days without replacing authored days", () => {
