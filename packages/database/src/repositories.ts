@@ -6515,12 +6515,17 @@ class AssessmentRepository {
       }
 
       if (attempt.kind === "pass_course" && input.status === "approved") {
-        const score = await client.query<{ total: string }>(
-          "select coalesce(sum(score), 0)::text as total from assessment_scores where attempt_id = $1",
+        const score = await client.query<{ total: string; scored_sections: string; valid_sections: string }>(
+          `select coalesce(sum(score), 0)::text as total,
+                  count(distinct section)::text as scored_sections,
+                  count(distinct section) filter (where section in ('listening', 'reading', 'writing', 'speaking') and score between 0 and 25)::text as valid_sections
+             from assessment_scores where attempt_id = $1`,
           [input.attemptId]
         );
         const total = Number(score.rows[0]?.total ?? 0);
-        if (attempt.current_level !== "C1" || attempt.pass_course_ready !== true || total < 85) {
+        const scoredSections = Number(score.rows[0]?.scored_sections ?? 0);
+        const validSections = Number(score.rows[0]?.valid_sections ?? 0);
+        if (attempt.current_level !== "C1" || attempt.pass_course_ready !== true || total < 85 || scoredSections !== 4 || validSections !== 4) {
           await client.query("rollback");
           return null;
         }
@@ -12036,6 +12041,17 @@ async function applyDueScheduledLevelChanges(pool: Pool, learnerId: string): Pro
         "update enrollments set cefr = $2, cefr_approved = true where learner_id = $1",
         [learnerId, change.to_cefr]
       );
+      // Reaching C1 through the real approved level-up lifecycle is the only
+      // production path that unlocks the fixed Pass Course Form A.
+      if (change.to_cefr === "C1") {
+        await client.query(
+          `insert into pass_course_readiness (learner_id, organization_id, cefr_ready, reset_at, reset_reason, updated_at)
+           values ($1, $2, true, null, null, now())
+           on conflict (learner_id) do update
+           set cefr_ready = true, reset_at = null, reset_reason = null, updated_at = now()`,
+          [learnerId, change.organization_id]
+        );
+      }
       await client.query(
         "update scheduled_level_changes set status = 'applied', applied_at = now() where id = $1 and status = 'scheduled'",
         [change.id]

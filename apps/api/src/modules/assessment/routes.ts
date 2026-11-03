@@ -33,7 +33,7 @@ import {
 import { calculateAutomaticSectionScore, monthlyFinalReleaseReadiness } from "@e4s/domain/assessment";
 import { randomUUID } from "node:crypto";
 import type { FastifyInstance } from "fastify";
-import type { Pool } from "pg";
+import type { Pool, PoolClient } from "pg";
 import { z } from "zod";
 import type { EdgeTtsRunner } from "./edge-tts.js";
 import { buildMonthlyFinalDraft } from "./monthly-final-builder.js";
@@ -971,6 +971,8 @@ async function publishMonthlyFinal(pool: Pool, actorId: string, versionId: strin
     const row = found.rows[0];
     if (!row) { await client.query("rollback"); return { state: "missing" }; }
     const issues = monthlyFinalReleaseReadiness(row.blueprint);
+    const hasPersistedAudio = await hasPersistedMonthlyAudio(client, actorId, row.blueprint);
+    if (!hasPersistedAudio) issues.push("LISTENING_AUDIO_SOURCE_MISSING");
     if (issues.length) { await client.query("rollback"); return { state: "invalid", issues }; }
     await client.query("update assessment_versions set status = 'retired' where definition_id = $1 and status = 'published'", [row.definition_id]);
     const published = await client.query<{ published_at: Date }>("update assessment_versions set status = 'published', published_at = now() where id = $1 returning published_at", [versionId]);
@@ -980,6 +982,37 @@ async function publishMonthlyFinal(pool: Pool, actorId: string, versionId: strin
     await client.query("rollback");
     throw error;
   } finally { client.release(); }
+}
+
+async function hasPersistedMonthlyAudio(
+  client: PoolClient, actorId: string, blueprint: StoredAssessmentDefinition
+): Promise<boolean> {
+  const listening = blueprint.sections.find((section) => section.code === "listening");
+  const stimulus = listening?.groups.flatMap((group) => group.stimulus?.type === "audio_script" ? [group.stimulus] : [])[0];
+  if (!stimulus?.audioSrc) return false;
+
+  let artifactKey: string | null = null;
+  try {
+    const url = new URL(stimulus.audioSrc, "http://e4s.local");
+    if (url.pathname !== "/api/v1/files/content-media/read") return false;
+    artifactKey = url.searchParams.get("artifactKey");
+  } catch {
+    return false;
+  }
+  if (!artifactKey?.startsWith("content-media/")) return false;
+
+  const persisted = await client.query(
+    `select 1
+     from files f
+     join users owner on owner.id = f.owner_user_id
+     join users operator on operator.id = $1
+     where f.purpose = 'content_media' and f.object_key = $2
+       and f.mime_type like 'audio/%'
+       and owner.organization_id = operator.organization_id
+     limit 1`,
+    [actorId, artifactKey]
+  );
+  return persisted.rowCount === 1;
 }
 
 function assessmentErrorCode(error: unknown, fallback: string): string {

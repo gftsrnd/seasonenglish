@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import type { CefrLevel, MonthlyOperatorOverviewView, MonthlyQualityFindingView } from "@e4s/contracts";
+import type { AssessmentLevelFormUpdateInput, CefrLevel, MonthlyOperatorOverviewView, MonthlyQualityFindingView } from "@e4s/contracts";
 import { buildMonthlyCalendar, recommendedMonthlyResourceCriteria, type MonthlyCurriculumContract } from "@e4s/domain/monthly";
 import { useToast } from "../shared/design-system.js";
 import { LearnerLesson } from "../learner/Learning.js";
@@ -10,6 +10,7 @@ type MonthlyDayInput = { title: string; parts: Array<{ code: string; title?: str
 type MonthlyQualityReport = { severe: MonthlyQualityFindingView[]; light: MonthlyQualityFindingView[]; contractVersion: number };
 type MonthlyResourceCriteria = { cefr: CefrLevel; vocabularyCount: number; expandedVocabularyCount: number; grammarTopicCount: number; pronunciationSoundCount: number };
 type ResourceGroup = "core" | "expanded" | "grammar" | "sounds";
+type MonthlyFinalDraft = { versionId: string; status: "draft"; blueprint: AssessmentLevelFormUpdateInput };
 
 export interface OperatorMonthsActions {
   onSelectMonth(month: string): void;
@@ -20,7 +21,11 @@ export interface OperatorMonthsActions {
   onGenerateFramework(month: string, criteria: MonthlyResourceCriteria): Promise<unknown> | void;
   onSaveFramework(month: string, contract: MonthlyCurriculumContract): Promise<void> | void;
   onApproveFramework(id: string): Promise<void> | void;
-  onGenerateMonthlyFinal?(id: string): Promise<unknown> | void;
+  onGenerateMonthlyFinal?(id: string): Promise<MonthlyFinalDraft> | void;
+  onSaveMonthlyFinal?(versionId: string, input: AssessmentLevelFormUpdateInput): Promise<unknown> | void;
+  onPublishMonthlyFinal?(versionId: string): Promise<unknown> | void;
+  onSynthesizeMonthlyFinalAudio?(input: { text: string; voice: string }): Promise<{ filename: string; mimeType: string; base64: string }>;
+  onUploadMonthlyFinalAudio?(file: Blob, filename: string): Promise<{ url: string }>;
   onComposeDay?(id: string, dayNumber: number): void;
   onViewDay?(id: string, dayNumber: number): void;
   onSaveDay(id: string, dayNumber: number, lesson: MonthlyDayInput): Promise<MonthlyQualityReport>;
@@ -61,6 +66,7 @@ export function OperatorMonths({ month, todayMonth, overview, cefr, busy, readOn
   const [brief, setBrief] = useState<MonthlyBriefInput>(emptyBrief);
   const [resourcePanel, setResourcePanel] = useState<ResourceGroup | null>(null);
   const [generationConfirmation, setGenerationConfirmation] = useState<{ dayNumber: number; kind: "new" | "review" }>();
+  const [monthlyFinal, setMonthlyFinal] = useState<MonthlyFinalDraft | null>(null);
   const briefLocked = overview.brief?.status === "approved";
   const monthChoices = [overview.monthWindow.previous, overview.monthWindow.current, overview.monthWindow.next];
   const previousMonth = month === monthChoices[0];
@@ -157,7 +163,11 @@ export function OperatorMonths({ month, todayMonth, overview, cefr, busy, readOn
     if (!canEdit) return showUnavailable("Tháng trước chỉ dùng để xem.");
     if (!framework || framework.status !== "approved") return showUnavailable("Hãy chốt tài nguyên tháng trước khi sinh đề thi.");
     if (!actions.onGenerateMonthlyFinal) return showUnavailable("Luồng đề thi tháng chưa sẵn sàng.");
-    try { await actions.onGenerateMonthlyFinal(framework.id); toast.show({ message: "Đã sinh bản nháp đề tháng. Thêm audio, xem lại và phát hành trước khi học viên vào thi.", tone: "ok" }); }
+    try {
+      const draft = await actions.onGenerateMonthlyFinal(framework.id);
+      if (draft?.blueprint) setMonthlyFinal(draft);
+      toast.show({ message: "Đã sinh bản nháp đề tháng. Thêm audio, xem lại và phát hành trước khi học viên vào thi.", tone: "ok" });
+    }
     catch { showUnavailable("Chỉ sinh đề thi vào đúng ngày thi hệ thống và khi tài nguyên đã duyệt."); }
   };
   return <main className="operator-months-page">
@@ -231,8 +241,64 @@ export function OperatorMonths({ month, todayMonth, overview, cefr, busy, readOn
       </section>}
     </div>
     {generationConfirmation && framework?.resources && <MonthlyGenerationConfirmation dayNumber={generationConfirmation.dayNumber} kind={generationConfirmation.kind} framework={framework} onCancel={() => setGenerationConfirmation(undefined)} onConfirm={() => { const generation = generationConfirmation; setGenerationConfirmation(undefined); void generateDay(generation.dayNumber, generation.kind); }} />}
+    {monthlyFinal && <MonthlyFinalEditor
+      draft={monthlyFinal}
+      onClose={() => setMonthlyFinal(null)}
+      {...(actions.onSaveMonthlyFinal ? { onSave: async (input: AssessmentLevelFormUpdateInput) => { await actions.onSaveMonthlyFinal!(monthlyFinal.versionId, input); setMonthlyFinal((current) => current ? { ...current, blueprint: input } : current); toast.show({ message: "Đã lưu bản nháp đề tháng.", tone: "ok" }); } } : {})}
+      {...(actions.onPublishMonthlyFinal ? { onPublish: async () => { await actions.onPublishMonthlyFinal!(monthlyFinal.versionId); toast.show({ message: "Đã phát hành đề tháng.", tone: "ok" }); setMonthlyFinal(null); } } : {})}
+      {...(actions.onSynthesizeMonthlyFinalAudio ? { synthesize: actions.onSynthesizeMonthlyFinalAudio } : {})}
+      {...(actions.onUploadMonthlyFinalAudio ? { uploadAudio: actions.onUploadMonthlyFinalAudio } : {})}
+    />}
   </main>;
 }
+
+function MonthlyFinalEditor({ draft, onClose, onSave, onPublish, synthesize, uploadAudio }: {
+  draft: MonthlyFinalDraft;
+  onClose(): void;
+  onSave?(input: AssessmentLevelFormUpdateInput): Promise<void>;
+  onPublish?(): Promise<void>;
+  synthesize?: (input: { text: string; voice: string }) => Promise<{ filename: string; mimeType: string; base64: string }>;
+  uploadAudio?: (file: Blob, filename: string) => Promise<{ url: string }>;
+}) {
+  const [input, setInput] = useState<AssessmentLevelFormUpdateInput>(() => structuredClone(draft.blueprint));
+  const [busy, setBusy] = useState<"save" | "publish" | "audio" | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  useEffect(() => { setInput(structuredClone(draft.blueprint)); setError(null); }, [draft]);
+  const listeningIndex = input.sections.findIndex((section) => section.code === "listening");
+  const listening = listeningIndex >= 0 ? input.sections[listeningIndex] : undefined;
+  const group = listening?.groups[0];
+  const script = group?.stimulus?.type === "audio_script" ? group.stimulus.lines?.map((line) => line.text).filter(Boolean).join("\n") ?? "" : "";
+  const audioSrc = group?.stimulus?.type === "audio_script" ? group.stimulus.audioSrc ?? "" : "";
+  const setAudio = (url: string) => setInput((current) => ({ ...current, sections: current.sections.map((section, index) => index !== listeningIndex ? section : ({ ...section, groups: section.groups.map((item, groupIndex) => groupIndex !== 0 ? item : ({ ...item, stimulus: item.stimulus?.type === "audio_script" ? { ...item.stimulus, audioSrc: url } : { type: "audio_script", audioSrc: url, lines: [{ speaker: "Narrator", text: item.instruction }] } })) })) }));
+  const persistAudio = async (file: Blob, filename: string) => {
+    if (!uploadAudio) throw new Error("UPLOAD_UNAVAILABLE");
+    const stored = await uploadAudio(file, filename);
+    if (!stored.url) throw new Error("AUDIO_UPLOAD_FAILED");
+    setAudio(stored.url);
+  };
+  const generateEdgeTts = async () => {
+    if (!synthesize || !script.trim()) { setError("Chưa có script nghe để tạo audio."); return; }
+    setBusy("audio"); setError(null);
+    try {
+      const generated = await synthesize({ text: script, voice: "en-US-AvaMultilingualNeural" });
+      const bytes = Uint8Array.from(atob(generated.base64), (character) => character.charCodeAt(0));
+      await persistAudio(new Blob([bytes], { type: generated.mimeType }), generated.filename);
+    } catch { setError("Không tạo hoặc lưu được audio Edge TTS trên máy chủ."); }
+    finally { setBusy(null); }
+  };
+  const upload = async (file: File | undefined) => {
+    if (!file) return;
+    setBusy("audio"); setError(null);
+    try { await persistAudio(file, file.name); } catch { setError("Không tải và lưu được file audio."); } finally { setBusy(null); }
+  };
+  const save = async () => { if (!onSave) return; setBusy("save"); setError(null); try { await onSave(input); } catch { setError("Không lưu được bản nháp đề tháng."); } finally { setBusy(null); } };
+  const publish = async () => { if (!onPublish) return; if (!audioSrc) { setError("Cần audio nghe đã lưu trước khi phát hành."); return; } setBusy("publish"); setError(null); try { await onPublish(); } catch { setError("Không phát hành được đề tháng. Kiểm tra lại script, audio và cấu trúc đề."); } finally { setBusy(null); } };
+  return <div className="modal-backdrop" role="presentation"><section className="dialog" role="dialog" aria-modal="true" aria-label="Bản nháp đề thi tháng"><header className="row between"><div><span className="eyebrow">Bài thi tháng</span><h2>{input.title}</h2><p className="small muted">30 phút · 100 điểm · Nghe, Đọc, Viết, Nói. Nội dung lấy từ tài nguyên tháng đã duyệt.</p></div><button type="button" className="btn" onClick={onClose}>Đóng</button></header>
+    <section className="card flat"><h3>Audio phần nghe</h3><p className="small muted">Script được sinh từ tài nguyên tháng. Chọn file đã chuẩn bị hoặc tạo Edge TTS rồi lưu vào kho audio trước khi phát hành.</p><pre className="monthly-final-script">{script || "Chưa có script nghe"}</pre>{audioSrc ? <audio controls preload="metadata" src={audioSrc}>Trình duyệt không hỗ trợ audio.</audio> : <p className="small muted">Chưa có audio đã lưu.</p>}<div className="row" style={{ flexWrap: "wrap", gap: 8 }}><label className="btn">Tải file audio<input hidden type="file" accept="audio/*" aria-label="Tải file audio đề tháng" disabled={busy === "audio"} onChange={(event) => void upload(event.target.files?.[0])} /></label><button type="button" className="btn" disabled={busy === "audio" || !synthesize || !uploadAudio || !script.trim()} onClick={() => void generateEdgeTts()}>{busy === "audio" ? "Đang tạo audio…" : "Sinh audio Edge TTS"}</button></div></section>
+    <section className="card flat"><h3>Kiểm tra trước phát hành</h3><ul className="small"><li>Audio nghe: {audioSrc ? "đã lưu, có thể nghe thử" : "chưa có"}</li><li>Cấu trúc: {input.sections.length} kỹ năng, 100 điểm.</li></ul></section>{error && <p role="alert" className="monthly-error">{error}</p>}<footer className="row" style={{ justifyContent: "flex-end", gap: 8 }}><button type="button" className="btn" disabled={busy !== null || !onSave} onClick={() => void save()}>{busy === "save" ? "Đang lưu…" : "Lưu bản nháp"}</button><button type="button" className="btn btn-primary" disabled={busy !== null || !onPublish || !audioSrc} onClick={() => void publish()}>{busy === "publish" ? "Đang phát hành…" : "Duyệt & phát hành"}</button></footer>
+  </section></div>;
+}
+
 
 export function MonthlyLessonPreview({ date, cefr, lesson, onClose, onRequestReopen }: { date: string; cefr: CefrLevel; lesson: MonthlyOperatorOverviewView["frameworks"][number]["lessons"][number]; onClose(): void; onRequestReopen?(reason: string): Promise<void> }) {
   const [requestingReopen, setRequestingReopen] = useState(false);

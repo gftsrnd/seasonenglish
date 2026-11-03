@@ -70,7 +70,10 @@ export interface OperatorApiClient {
   saveContentMonthFramework(month: string, contract: MonthlyCurriculumContract): Promise<{ id: string; cefr: CefrLevel; version: number; status: "draft"; scopeHash: string }>;
   generateContentMonthResources(month: string, criteria: { cefr: CefrLevel; vocabularyCount: number; expandedVocabularyCount: number; grammarTopicCount: number; pronunciationSoundCount: number }): Promise<{ id: string; cefr: CefrLevel; version: number; status: "draft"; scopeHash: string }>;
   approveContentMonthFramework(id: string): Promise<void>;
-  generateMonthlyFinal(id: string): Promise<{ versionId: string; status: "draft" }>;
+  generateMonthlyFinal(id: string): Promise<{ versionId: string; status: "draft"; blueprint: AssessmentLevelFormUpdateInput }>;
+  updateMonthlyFinal(versionId: string, input: AssessmentLevelFormUpdateInput): Promise<{ versionId: string; status: "draft"; blueprint: AssessmentLevelFormUpdateInput }>;
+  publishMonthlyFinal(versionId: string): Promise<{ versionId: string; publishedAt: string }>;
+  synthesizeAssessmentEdgeTts(input: { text: string; voice: string }): Promise<{ filename: string; mimeType: string; base64: string }>;
   saveContentMonthDay(id: string, dayNumber: number, lesson: { title: string; parts: Array<{ code: string; title?: string; content: Record<string, unknown> }> }): Promise<{ severe: Array<{ severity: "severe" | "light"; code: string; message: string; dayNumber?: number; component?: string }>; light: Array<{ severity: "severe" | "light"; code: string; message: string; dayNumber?: number; component?: string }>; contractVersion: number }>;
   generateContentMonthDay(id: string, dayNumber: number): Promise<{ lesson: { title: string; parts: Array<{ code: string; title?: string; content: Record<string, unknown> }> }; report: { severe: Array<{ severity: "severe" | "light"; code: string; message: string; dayNumber?: number; component?: string }>; light: Array<{ severity: "severe" | "light"; code: string; message: string; dayNumber?: number; component?: string }>; contractVersion: number } }>;
   generateContentMonthReview(id: string, dayNumber: number): Promise<{ lesson: { title: string; parts: Array<{ code: string; title?: string; content: Record<string, unknown> }> }; report: { severe: Array<{ severity: "severe" | "light"; code: string; message: string; dayNumber?: number; component?: string }>; light: Array<{ severity: "severe" | "light"; code: string; message: string; dayNumber?: number; component?: string }>; contractVersion: number } }>;
@@ -164,6 +167,9 @@ export const operatorApiClient: OperatorApiClient = {
   generateContentMonthResources: (month, criteria) => request(`/api/v1/content/months/${encodeURIComponent(month)}/resources/generate`, { method: "POST", body: JSON.stringify(criteria) }),
   approveContentMonthFramework: async (id) => { await request(`/api/v1/content/month-frameworks/${encodeURIComponent(id)}/approve`, { method: "POST", body: "{}" }); },
   generateMonthlyFinal: (id) => request(`/api/v1/month-frameworks/${encodeURIComponent(id)}/monthly-final`, { method: "POST", body: "{}" }),
+  updateMonthlyFinal: (versionId, input) => request(`/api/v1/monthly-final-forms/${encodeURIComponent(versionId)}`, { method: "PUT", body: JSON.stringify(input) }),
+  publishMonthlyFinal: (versionId) => request(`/api/v1/monthly-final-forms/${encodeURIComponent(versionId)}/publication`, { method: "POST", body: "{}" }),
+  synthesizeAssessmentEdgeTts: (input) => request("/api/v1/assessment-audio/edge-tts", { method: "POST", body: JSON.stringify(input) }),
   saveContentMonthDay: (id, dayNumber, lesson) => request(`/api/v1/content/month-frameworks/${encodeURIComponent(id)}/days/${dayNumber}`, { method: "PUT", body: JSON.stringify(lesson) }),
   generateContentMonthDay: (id, dayNumber) => request(`/api/v1/content/month-frameworks/${encodeURIComponent(id)}/days/${dayNumber}/generate`, { method: "POST", body: "{}" }),
   generateContentMonthReview: (id, dayNumber) => request(`/api/v1/content/month-frameworks/${encodeURIComponent(id)}/reviews/${dayNumber}/generate`, { method: "POST", body: "{}" }),

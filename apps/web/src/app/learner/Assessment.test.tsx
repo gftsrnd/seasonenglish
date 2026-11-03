@@ -134,6 +134,19 @@ async function finishSubmitCountdown() {
 }
 
 describe("assessment HCI states", () => {
+  it("labels Pass Course Form A and its pending result without falling back to placement copy", () => {
+    const pending = makeView({
+      definition: { key: "pass-course-form-a", kind: "pass-course", title: "Pass Course – Form A", version: 1, totalMinutes: 90, totalScore: 100, sections: structuredClone(sections) },
+      screenState: "pending",
+      attempt: { ...makeView().attempt!, status: "pending_review", currentSection: null }
+    });
+    render(<LearnerAssessment view={pending} actions={makeActions()} />);
+    expect(screen.getByRole("heading", { name: "Pass Course – Form A" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Pass Course đang chờ xét" })).toBeInTheDocument();
+    expect(screen.getByText(/72 giờ/i)).toBeInTheDocument();
+    expect(screen.queryByText(/Test đầu vào đã được nộp/i)).not.toBeInTheDocument();
+  });
+
   it("keeps background music suspended when an in-progress assessment advances from Listening to Reading", () => {
     const listening = makeView();
     const { rerender } = render(<ExperienceProvider musicAllowed={false}><LearnerAssessment view={listening} actions={makeActions()} /></ExperienceProvider>);

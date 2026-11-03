@@ -248,7 +248,18 @@ function MonthsRoute({ client, readOnly, preview }: { client: OperatorApiClient;
         return result;
       },
       onApproveFramework: async (id) => { await run(() => client.approveContentMonthFramework(id), "Đã chốt tài nguyên tháng."); },
-      onGenerateMonthlyFinal: async (id) => { await run(() => client.generateMonthlyFinal(id), "Đã sinh bản nháp đề tháng."); },
+      onGenerateMonthlyFinal: async (id) => {
+        const result = await run(() => client.generateMonthlyFinal(id), "Đã sinh bản nháp đề tháng.");
+        if (!result || !("blueprint" in result)) throw new Error("Không tải được bản nháp đề tháng.");
+        return result;
+      },
+      onSaveMonthlyFinal: async (versionId, input) => { await run(() => client.updateMonthlyFinal(versionId, input)); },
+      onPublishMonthlyFinal: async (versionId) => { await run(() => client.publishMonthlyFinal(versionId)); },
+      onSynthesizeMonthlyFinalAudio: (input) => client.synthesizeAssessmentEdgeTts(input),
+      onUploadMonthlyFinalAudio: async (file, filename) => {
+        const uploaded = await client.uploadContentMedia("audio", file, filename);
+        return { url: uploaded.url };
+      },
       onComposeDay: (frameworkId, dayNumber) => {
         const initial = overview?.frameworks.find((item) => item.id === frameworkId)?.lessons.find((item) => item.lessonNumber === dayNumber)?.content;
         setEditor(initial ? { frameworkId, dayNumber, initial } : { frameworkId, dayNumber });

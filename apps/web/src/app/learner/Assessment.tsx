@@ -616,6 +616,7 @@ async function openMicrophoneStream(): Promise<MediaStream> {
 function assessmentHeading(view: AssessmentView) {
   if (view.definition.kind === "placement") return "Test đầu vào";
   if (view.definition.kind === "final") return "Bài thi tháng";
+  if (view.definition.kind === "pass-course") return "Pass Course – Form A";
   const targetLevel = assessmentTargetLevel(view);
   return targetLevel ? `Bài thi lên mức ${targetLevel}` : "Bài thi lên mức";
 }
@@ -631,6 +632,11 @@ function assessmentPendingCopy(view: AssessmentView): { title: string; detail: s
   if (view.definition.kind === "final") {
     if (status === "approved") return { title: "Bài thi tháng đã được duyệt", detail: "Kết quả đã được xác nhận. Nếu bạn học ở mức C1, chứng chỉ sẽ được xét theo kết quả bài thi tháng." };
     return { title: "Bài thi tháng đang chờ chấm", detail: "Đã nộp bài. Bạn có thể gửi kháng nghị khi kết quả được trả về." };
+  }
+  if (view.definition.kind === "pass-course") {
+    if (status === "approved") return { title: "Pass Course đã được duyệt", detail: "Operator đã cấp chứng chỉ Form A. Tài khoản học sẽ được đóng sau khi lịch sử chứng chỉ được ghi nhận." };
+    if (status === "needs_retry") return { title: "Pass Course chưa đạt", detail: "Trạng thái sẵn sàng C1 đã được đặt lại. Bạn có 72 giờ từ lúc có kết quả để gửi kháng nghị nếu cần." };
+    return { title: "Pass Course đang chờ xét", detail: "Operator đang đối chiếu bốn kỹ năng và tổng điểm. Bạn có 72 giờ để kháng nghị sau khi có kết quả." };
   }
   if (status === "approved") return { title: "Test đầu vào đã được duyệt", detail: "Mức học sẽ được mở theo hồ sơ của bạn ngay khi hệ thống cập nhật." };
   return { title: "Test đầu vào đã được nộp", detail: "Vận hành sẽ xem lại kết quả trước khi duyệt mức. Bạn không cần làm lại bài trong lúc chờ." };

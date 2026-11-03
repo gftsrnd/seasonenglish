@@ -3,10 +3,21 @@ import { render, screen, waitFor, within } from "@testing-library/react";
 import "@testing-library/jest-dom/vitest";
 import { userEvent } from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
-import { OperatorMonths } from "./Months.js";
+import { MonthlyLessonPreview, OperatorMonths } from "./Months.js";
 import { ToastProvider } from "../shared/design-system.js";
 
 describe("Operator monthly planner", () => {
+  it("renders the approved daily route with the legacy operator lesson presentation", async () => {
+    const user = userEvent.setup();
+    const onSaveReview = vi.fn().mockResolvedValue(undefined);
+    render(<MonthlyLessonPreview date="2026-11-06" cefr="A2" onClose={vi.fn()} onSaveReview={onSaveReview} lesson={{ lessonNumber: 5, lessonDate: "2026-11-06", kind: "review", status: "approved", scopeHash: "scope", locked: true, correctionCount: 0, quality: { severe: [], light: [] }, content: { title: "Ôn tập", parts: [{ code: "instruction", title: "Hướng dẫn", content: { guidance: "Ôn lại các bài trong tuần." } }, { code: "writing", title: "Viết", content: { prompt: "Write a recap.", answer: "A recap." } }] } }} />);
+
+    expect(screen.getByRole("heading", { name: /06\/11.*Ôn tập/ })).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: /1\. Học/ })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Sinh bài cuối tuần.*Ôn tập ngày 06\/11/ })).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: /Lưu bản nháp.*Ôn tập ngày 06\/11/ }));
+    expect(onSaveReview).toHaveBeenCalled();
+  });
   it("shows the complete Monday-to-Sunday calendar for the selected month", () => {
     render(<ToastProvider><OperatorMonths
       month="2026-11"
@@ -132,7 +143,16 @@ describe("Operator monthly planner", () => {
 
   it("calls the real monthly-final action from the final-day cell", async () => {
     const user = userEvent.setup();
-    const onGenerateMonthlyFinal = vi.fn().mockResolvedValue({ versionId: "final-v1", status: "draft" });
+    const blueprint = {
+      title: "Đề thi tháng 11",
+      sections: [
+        { code: "listening", title: "Nghe", durationMinutes: 8, maxScore: 25, instructions: ["Nghe"], groups: [{ key: "L", title: "Listening", instruction: "Nghe script", stimulus: { type: "audio_script", lines: [{ speaker: "A", text: "Monthly listening script." }] }, tasks: [] }] },
+        { code: "reading", title: "Đọc", durationMinutes: 8, maxScore: 25, instructions: [], groups: [] },
+        { code: "writing", title: "Viết", durationMinutes: 7, maxScore: 25, instructions: [], groups: [] },
+        { code: "speaking", title: "Nói", durationMinutes: 7, maxScore: 25, instructions: [], groups: [] }
+      ]
+    } as never;
+    const onGenerateMonthlyFinal = vi.fn().mockResolvedValue({ versionId: "final-v1", status: "draft", blueprint });
     render(<ToastProvider><OperatorMonths month="2026-11" todayMonth="2026-11" cefr="A1" busy={false}
       overview={{ systemDate: "2026-11-03", monthWindow: { previous: "2026-10", current: "2026-11", next: "2026-12", writable: true }, brief: { month: "2026-11", title: "Handover", brief: "Prepare handover", context: "CS", communicationGoal: "Explain", version: 1, status: "approved" }, frameworks: [{
         id: "framework-a1", cefr: "A1", version: 1, status: "approved", scopeHash: "scope", lessons: [], quality: { severe: [], light: [] }, resources: { coreTerms: [], supportTerms: [], grammarTopics: [], sounds: [] }
@@ -142,5 +162,8 @@ describe("Operator monthly planner", () => {
     const finalButtons = screen.getAllByRole("button", { name: "Sinh đề thi" });
     await user.click(finalButtons[finalButtons.length - 1]!);
     expect(onGenerateMonthlyFinal).toHaveBeenCalledWith("framework-a1");
+    expect(await screen.findByRole("dialog", { name: "Bản nháp đề thi tháng" })).toBeInTheDocument();
+    expect(screen.getByText("Monthly listening script.")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Duyệt & phát hành" })).toBeDisabled();
   });
 });

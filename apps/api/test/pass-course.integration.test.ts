@@ -117,4 +117,24 @@ describe("Pass Course Form A lifecycle", () => {
     expect(resolved.statusCode, resolved.body).toBe(200);
     expect(resolved.json()).toMatchObject({ status: "rejected" });
   });
+
+  it("does not issue a Pass Course certificate until all four skills have persisted scores", async () => {
+    const id = "00000000-0000-4000-8000-000000000125";
+    await pool.query(`insert into users (id, organization_id, role, display_name, email) values ($1, $2, 'learner', 'Incomplete score learner', 'pass.incomplete@e4s.local')`, [id, DEMO_IDS.organization]);
+    await pool.query("insert into user_credentials (user_id, credential_hash) values ($1, $2)", [id, await createPinHash("654324")]);
+    await pool.query(`insert into enrollments (id, program_id, learner_id, cefr, cefr_approved) values ('00000000-0000-4000-8000-000000000126', $1, $2, 'C1', true)`, [DEMO_IDS.program, id]);
+    await pool.query(`insert into pass_course_readiness (learner_id, organization_id, cefr_ready) values ($1, $2, true)`, [id, DEMO_IDS.organization]);
+    const login = await app.inject({ method: "POST", url: "/api/auth/learner/login", payload: { email: "pass.incomplete@e4s.local", pin: "654324" } });
+    const cookie = String(login.headers["set-cookie"]).split(";")[0] ?? "";
+    const started = await app.inject({ method: "POST", url: "/api/v1/assessments/pass-course/start", headers: { cookie }, payload: {} });
+    const attemptId = started.json().attempt.id as string;
+    await pool.query("update assessment_attempts set status = 'pending_review', current_section = null, submitted_at = now() where id = $1", [attemptId]);
+    for (const [section, score] of [["listening", 25], ["reading", 25], ["writing", 25]]) {
+      await pool.query(`insert into assessment_scores (id, attempt_id, section, score, criteria, source) values (gen_random_uuid(), $1, $2, $3, '{}'::jsonb, 'human')`, [attemptId, section, score]);
+    }
+    const decision = await app.inject({ method: "POST", url: `/api/v1/assessment-reviews/${attemptId}/decision`, headers: { cookie: operatorCookie }, payload: { status: "approved", reason: "Thiếu điểm nói." } });
+    expect(decision.statusCode).toBe(409);
+    const certificate = await pool.query("select 1 from pass_course_certificates where learner_id = $1", [id]);
+    expect(certificate.rowCount).toBe(0);
+  });
 });
