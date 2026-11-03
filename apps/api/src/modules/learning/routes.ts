@@ -7,7 +7,8 @@ import type {
   LessonPartAttemptEvidenceInput,
   LessonVocabularyContent,
   LessonView,
-  MicroLessonView
+  MicroLessonView,
+  MonthlyExamEligibilityView
 } from "@e4s/contracts";
 import { buildPronunciationAssets, microGradingOutputSchema, microLessonOutputSchema, type AiTaskRunner, type MicroLessonTaskOutput } from "@e4s/ai";
 import { createRepositories, type LearnerLessonRecord } from "@e4s/database";
@@ -163,12 +164,13 @@ export function registerLearningRoutes(
 
   app.get("/api/v1/learner/home", { preHandler: learnerOnly }, async (request, reply) => {
     const learnerId = request.e4sSession!.user.id;
-    const [profile, monthlyContext, progress, microLesson, runner] = await Promise.all([
+    const [profile, monthlyContext, progress, microLesson, runner, monthlyEligibility] = await Promise.all([
       repositories.learning.getProfile(learnerId),
       repositories.learning.getActiveMonthlyContext(learnerId),
       repositories.learning.getProgressDashboard(learnerId),
       repositories.learning.todayMicroLesson(learnerId),
-      runnerFor(learnerId)
+      runnerFor(learnerId),
+      monthlyExamEligibility(pool, learnerId)
     ]);
     if (!progress) return reply.code(404).send({ code: "LEARNER_NOT_FOUND" });
     const lifecycle = monthlyContext
@@ -210,6 +212,7 @@ export function registerLearningRoutes(
         systemDate: monthlyContext.systemDate
       } : null,
       monthlyPreparation: !monthlyContext,
+      monthlyEligibility,
       monthlyExam: monthlyContext ? {
         status: monthlyExamStatus,
         completedLessons,
@@ -555,7 +558,8 @@ export function registerLearningRoutes(
     const learnerId = request.e4sSession!.user.id;
     const [micro, runner] = await Promise.all([
       repositories.learning.findMicroLesson(learnerId, params.data.microLessonId),
-      runnerFor(learnerId)
+      runnerFor(learnerId),
+      monthlyExamEligibility(pool, learnerId)
     ]);
     return micro ? microLessonView(micro, Boolean(runner)) : reply.code(404).send({ code: "MICRO_LESSON_NOT_FOUND" });
   });
@@ -569,7 +573,8 @@ export function registerLearningRoutes(
       repositories.learning.microLessonForGrading(learnerId, params.data.microLessonId),
       repositories.learning.getProfile(learnerId),
       repositories.aiRuns.activeTaskPrompt(learnerId, "micro_grading"),
-      runnerFor(learnerId)
+      runnerFor(learnerId),
+      monthlyExamEligibility(pool, learnerId)
     ]);
     if (!micro) return reply.code(404).send({ code: "MICRO_LESSON_NOT_FOUND" });
     const policyGrade = gradeMicroAttempt({
@@ -640,7 +645,8 @@ export function registerLearningRoutes(
     const learnerId = request.e4sSession!.user.id;
     const [micro, runner] = await Promise.all([
       repositories.learning.completeMicroLesson(learnerId, params.data.microLessonId),
-      runnerFor(learnerId)
+      runnerFor(learnerId),
+      monthlyExamEligibility(pool, learnerId)
     ]);
     return micro ? microLessonView(micro, Boolean(runner)) : reply.code(409).send({ code: "MICRO_FEEDBACK_REQUIRED" });
   });
@@ -899,3 +905,38 @@ function buildSchedule(lessonMinutes: number, occurredAt: string[]): LearnerHome
     })
   };
 }
+
+
+type MonthlyEligibilityRow = { system_date: string; month: string; exam_date: string | null; attended_days: string; };
+
+/** This gate is independent from framework/form publication and only reads persisted facts. */
+async function monthlyExamEligibility(pool: Pool, learnerId: string): Promise<MonthlyExamEligibilityView> {
+  const result = await pool.query<MonthlyEligibilityRow>(
+    `with context as (
+       select u.organization_id, organization_system_date(u.organization_id)::date as system_date
+       from users u where u.id = $1 and u.role = 'learner'
+     ), dates as (
+       select system_date, to_char(system_date, 'YYYY-MM') as month,
+              coalesce((select pm.exam_date from program_months pm where pm.organization_id = context.organization_id and pm.month = to_char(context.system_date, 'YYYY-MM')),
+                (select max(d)::date from generate_series(date_trunc('month', context.system_date)::date, (date_trunc('month', context.system_date) + interval '1 month - 1 day')::date, interval '1 day') d where extract(isodow from d) <= 5)) as exam_date
+       from context
+     )
+     select dates.system_date::text, dates.month, dates.exam_date::text,
+            count(distinct (pr.completed_at at time zone 'Asia/Ho_Chi_Minh')::date)::text as attended_days
+     from dates left join progress_records pr on pr.learner_id = $1 and pr.status = 'completed'
+       and (pr.completed_at at time zone 'Asia/Ho_Chi_Minh')::date >= (dates.month || '-01')::date
+       and (pr.completed_at at time zone 'Asia/Ho_Chi_Minh')::date < dates.exam_date
+       and extract(isodow from (pr.completed_at at time zone 'Asia/Ho_Chi_Minh')::date) <= 5
+     group by dates.system_date, dates.month, dates.exam_date`, [learnerId]
+  );
+  const row = result.rows[0]; if (!row) throw new Error('LEARNER_MONTHLY_ELIGIBILITY_NOT_FOUND');
+  const systemDate = row.system_date; const examDate = row.exam_date ?? lastWeekdayOfMonth(systemDate.slice(0, 7));
+  const effectiveDates = weekdaysBeforeExam(systemDate.slice(0, 7), examDate); const elapsedDates = effectiveDates.filter((date) => date <= systemDate);
+  const attendedDays = Math.min(Number(row.attended_days) || 0, elapsedDates.length); const absenceDays = Math.max(0, elapsedDates.length - attendedDays); const maxAbsences = Math.floor(effectiveDates.length * 0.3);
+  return { month: row.month, systemDate, examDate, effectiveDays: effectiveDates.length, attendedDays, absenceDays, maxAbsences, attendanceEligible: absenceDays <= maxAbsences,
+    accessState: absenceDays > maxAbsences ? 'appeal_required' : systemDate >= examDate ? 'eligible' : 'tracking', opensAt: `${examDate}T00:00:00`, closesAt: null };
+}
+function weekdaysBeforeExam(month: string, examDate: string): string[] { const result: string[] = []; const start = new Date(`${month}-01T00:00:00Z`); const end = new Date(`${examDate}T00:00:00Z`); for (let current = new Date(start); current < end; current.setUTCDate(current.getUTCDate() + 1)) { const weekday = current.getUTCDay(); if (weekday >= 1 && weekday <= 5) result.push(current.toISOString().slice(0, 10)); } return result; }
+function lastWeekdayOfMonth(month: string): string { const [year, monthNumber] = month.split('-').map(Number); const current = new Date(Date.UTC(year!, monthNumber!, 0)); while (current.getUTCDay() === 0 || current.getUTCDay() === 6) current.setUTCDate(current.getUTCDate() - 1); return current.toISOString().slice(0, 10); }
+
+

@@ -263,15 +263,35 @@ export function LearnerMonthly({ view, actions }: { view: LearnerHomeView; actio
   const month = view.month;
   if (!month) return <div className="app-learner-page" style={{ width: "100%", maxWidth: 960, minWidth: 0, boxSizing: "border-box" }}>
     <PageTitle eyebrow="Bài tháng" title="Lộ trình tháng đang được chuẩn bị" detail="Người vận hành sẽ phát hành lịch học, bài ôn và bài thi theo tháng." />
-    <section className="card" aria-label="Trạng thái bài tháng"><h2>Chưa có bài tháng để vào</h2><p>Chưa có bộ tài nguyên và lịch học tháng đã duyệt cho trình độ <b>{view.learner.cefr ?? "hiện tại"}</b>, nên chưa thể hiển thị lịch, điều kiện vào bài hay đề thi.</p><p className="small muted">Hồ sơ và kết quả đầu vào của bạn vẫn được lưu độc lập với lộ trình tháng.</p><div className="row" style={{ flexWrap: "wrap" }}><AppLink className="btn btn-primary" href="/home" navigate={actions.navigate}>Về trang chủ</AppLink><AppLink className="btn" href="/profile" navigate={actions.navigate}>Xem hồ sơ và kết quả đầu vào</AppLink></div></section>
+    <section className="card" aria-label="Trạng thái bài tháng"><h2>Đề tháng chưa được phát hành</h2><p>Chưa có bộ tài nguyên và lịch học tháng đã duyệt cho trình độ <b>{view.learner.cefr ?? "hiện tại"}</b>. Cấu trúc đề, audio và nút bắt đầu sẽ xuất hiện sau khi Operator phát hành form.</p><p className="small muted">Hồ sơ và kết quả đầu vào của bạn vẫn được lưu độc lập với lộ trình tháng.</p><div className="row" style={{ flexWrap: "wrap" }}><AppLink className="btn btn-primary" href="/home" navigate={actions.navigate}>Về trang chủ</AppLink><AppLink className="btn" href="/profile" navigate={actions.navigate}>Xem hồ sơ và kết quả đầu vào</AppLink></div></section>{view.monthlyEligibility ? <MonthlyEligibilityCard eligibility={view.monthlyEligibility} /> : null}
   </div>;
   const exam = view.monthlyExam;
   return <div className="app-learner-page home-page" style={{ width: "100%", maxWidth: 960, minWidth: 0, boxSizing: "border-box" }}>
     <PageTitle eyebrow={`Tháng ${formatMonth(month.month)}`} title="Bài tháng" detail={month.themeTitle} />
     <section className="card" aria-label="Tổng quan bài tháng"><div className="eyebrow">Chủ đề tháng</div><h2 style={{ margin: "2px 0 6px" }}>{month.themeTitle}</h2><p style={{ margin: "0 0 6px" }}>{month.communicationGoal}</p><p className="small muted" style={{ margin: 0 }}>Ngày hệ thống: {formatLessonDate(month.systemDate ?? `${month.month}-01`)} · Ngày thi: {formatLessonDate(month.examDate)}</p></section>
+    {view.monthlyEligibility ? <MonthlyEligibilityCard eligibility={view.monthlyEligibility} /> : null}
     <MonthlyCalendar month={month} lessons={view.lessons} actions={actions} />
     {exam ? <MonthlyExamCard month={month} exam={exam} actions={actions} /> : <section className="card" style={{ marginTop: 16 }} aria-label="Bài thi tháng"><h3>Bài thi tháng</h3><p className="small muted">Đang đồng bộ trạng thái đề thi từ máy chủ.</p></section>}
   </div>;
+}
+function MonthlyEligibilityCard({ eligibility }: { eligibility: NonNullable<LearnerHomeView["monthlyEligibility"]> }) {
+  const remaining = Math.max(0, daysUntil(eligibility.systemDate, eligibility.examDate));
+  const state = eligibility.accessState === "appeal_required"
+    ? { label: "Cần kháng nghị", tone: "warn", copy: "Số ngày vắng đã vượt giới hạn. Gửi kháng nghị tới Manager; nếu không có quyết định trong 24 giờ, hệ thống tự mở quyền vào đề." }
+    : eligibility.accessState === "eligible"
+      ? { label: "Đủ điều kiện điểm danh", tone: "ok", copy: "Đã đến ngày thi. Quyền vào đề còn phụ thuộc form đề đã được Operator phát hành." }
+      : { label: "Đang theo dõi điểm danh", tone: "", copy: "Bạn vẫn đang trong giới hạn vắng và có thể tiếp tục tích lũy điểm danh đến ngày thi." };
+  return <section className="card" style={{ marginTop: 16 }} aria-label="Điều kiện vào bài thi tháng">
+    <div className="row between" style={{ gap: 12, alignItems: "flex-start" }}><div><div className="eyebrow">Điều kiện thi tháng</div><h2 style={{ margin: "2px 0 4px" }}>Điểm danh và thời gian vào đề</h2></div><span className={`badge ${state.tone}`}>{state.label}</span></div>
+    <div className="grid cols-3 profile-kpi-grid" style={{ marginTop: 12 }}><div className="card kpi"><span className="val">{eligibility.attendedDays}</span><span className="lbl">ngày đã điểm danh</span></div><div className="card kpi"><span className="val">{eligibility.absenceDays}/{eligibility.maxAbsences}</span><span className="lbl">ngày vắng / tối đa</span></div><div className="card kpi"><span className="val">{eligibility.effectiveDays}</span><span className="lbl">ngày học hiệu lực</span></div></div>
+    <p className="small" style={{ marginBottom: 6 }}><b>Ngày hệ thống:</b> {formatLessonDate(eligibility.systemDate)} · <b>Đề mở:</b> 00:00 {formatLessonDate(eligibility.examDate)}{remaining > 0 ? ` · còn ${remaining} ngày` : " · hôm nay"}.</p>
+    <p className="small muted" style={{ margin: 0 }}>{state.copy} Mỗi ngày lịch chỉ tính một lần điểm danh khi hoàn thành ít nhất một bài; học bù nhiều bài cùng ngày vẫn chỉ tính một lần. Ngày học hiệu lực là các ngày Thứ Hai–Thứ Sáu, không tính ngày thi. Đề tự khóa lúc 23:59 sau khi trừ thời lượng form đã phát hành và 5 phút.</p>
+  </section>;
+}
+
+function daysUntil(systemDate: string, examDate: string) {
+  const start = new Date(`${systemDate.slice(0, 10)}T00:00:00Z`).getTime(); const end = new Date(`${examDate.slice(0, 10)}T00:00:00Z`).getTime();
+  return Number.isFinite(start) && Number.isFinite(end) ? Math.max(0, Math.ceil((end - start) / 86_400_000)) : 0;
 }
 function Metric({ label, value, percent, color = "var(--olive)" }: { label: string; value: string; percent: number; color?: string }) {
   return <article className="stat"><div className="ring" style={{ "--p": percent, "--c": color } as CSSProperties}><b>{value}</b></div><span className="lbl">{label}</span></article>;
@@ -323,6 +343,7 @@ function ReadinessBar({ metric }: { metric: LearnerHomeView["levelReadiness"]["c
     <i className="readiness-target" data-testid="readiness-target" aria-hidden="true" style={{ left: `${targetPercent}%` }} />
   </div>;
 }
+
 
 
 

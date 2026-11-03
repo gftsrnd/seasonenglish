@@ -265,6 +265,26 @@ export interface MonthlyExamView {
   certificateEligible: boolean;
 }
 
+/** Attendance gate available before the Operator publishes a monthly form. */
+export interface MonthlyExamEligibilityView {
+  month: string;
+  systemDate: string;
+  examDate: string;
+  /** Weekdays that count for attendance; the exam day is excluded. */
+  effectiveDays: number;
+  /** Distinct calendar dates with at least one completed lesson. */
+  attendedDays: number;
+  /** Effective dates elapsed through the system date without attendance. */
+  absenceDays: number;
+  maxAbsences: number;
+  attendanceEligible: boolean;
+  /** The server-derived gate may be used only when the exam date opens. */
+  accessState: "tracking" | "eligible" | "appeal_required";
+  opensAt: string;
+  /** The exact close time needs the published form duration. */
+  closesAt: string | null;
+}
+
 export interface LearnerHomeView {
   onboardingRequired: boolean;
   learner: { displayName: string; cefr: CefrLevel | null };
@@ -274,6 +294,8 @@ export interface LearnerHomeView {
   month?: MonthView | null;
   /** No approved monthly framework exists for this learner's level yet. */
   monthlyPreparation?: boolean;
+  /** Attendance eligibility is available even before a framework or form is published. */
+  monthlyEligibility?: MonthlyExamEligibilityView;
   monthlyExam?: MonthlyExamView | null;
   lessons: LessonSummary[];
   nextLesson: LessonSummary | null;
@@ -392,6 +414,8 @@ export interface LearnerProgressView {
   };
   /** Suppress retired pilot/weekly progress while the next monthly framework is prepared. */
   monthlyPreparation?: boolean;
+  /** Attendance eligibility is available even before a framework or form is published. */
+  monthlyEligibility?: MonthlyExamEligibilityView;
   studyDays: number;
   activity: Array<{
     type: string;
@@ -425,3 +449,5 @@ export interface MicroLessonView {
   feedback?: { status: "waiting" | "ready" | "error"; message: string };
   completedAt?: string;
 }
+
+

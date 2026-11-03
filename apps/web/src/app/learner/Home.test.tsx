@@ -16,7 +16,7 @@ const lessons = [
 function view(overrides: Partial<LearnerHomeView> = {}): LearnerHomeView {
   return {
     onboardingRequired: false, learner: { displayName: "Học viên Demo", cefr: "A2" }, program: null, week: null, month,
-    monthlyPreparation: false, monthlyExam: { status: "locked", completedLessons: 1, totalLessons: 3, remainingLessons: 2, requirement: "Hoàn thành 2 bài còn lại để mở bài thi tháng.", certificateEligible: false },
+    monthlyPreparation: false, monthlyEligibility: { month: "2026-11", systemDate: "2026-11-03", examDate: "2026-11-30", effectiveDays: 20, attendedDays: 1, absenceDays: 1, maxAbsences: 6, attendanceEligible: true, accessState: "tracking", opensAt: "2026-11-30T00:00:00", closesAt: null }, monthlyExam: { status: "locked", completedLessons: 1, totalLessons: 3, remainingLessons: 2, requirement: "Hoàn thành 2 bài còn lại để mở bài thi tháng.", certificateEligible: false },
     lessons, nextLesson: lessons[1], metrics: { completedLessons: 1, totalLessons: 3, studyDays: 1, streakDays: 1, points: 0, completedReviews: 0, totalReviews: 1, monthlyExamStatus: "locked" },
     schedule: { daysPerWeek: 5, lessonMinutes: 10, days: [{ label: "T2", date: "2026-11-02", status: "attended" }, { label: "T3", date: "2026-11-03", status: "today" }, { label: "T4", date: "2026-11-04", status: "upcoming" }, { label: "T5", date: "2026-11-05", status: "upcoming" }, { label: "T6", date: "2026-11-06", status: "upcoming" }] },
     coach: { turnsToday: 0, turnsThisWeek: 2, targetTurns: 50, href: "/coach" }, practice: { status: "locked", detail: "Monthly review is scheduled.", href: "/practice" },
@@ -67,9 +67,15 @@ describe("monthly learner home", () => {
   it("keeps the monthly entry truthful before a framework exists", () => {
     render(<LearnerMonthly view={view({ month: null, monthlyPreparation: true, lessons: [], nextLesson: null, monthlyExam: null })} actions={actions} />);
     const pending = screen.getByRole("region", { name: "Trạng thái bài tháng" });
-    expect(pending).toHaveTextContent("Chưa có bài tháng để vào");
+    expect(pending).toHaveTextContent("Đề tháng chưa được phát hành");
     expect(within(pending).getByRole("link", { name: "Xem hồ sơ và kết quả đầu vào" })).toHaveAttribute("href", "/profile");
     expect(screen.queryByText("Chặng 1")).not.toBeInTheDocument();
+    const eligibility = screen.getByRole("region", { name: "Điều kiện vào bài thi tháng" });
+    expect(eligibility).toHaveTextContent("1/6");
+    expect(eligibility).toHaveTextContent("Mỗi ngày lịch chỉ tính một lần điểm danh");
   });});
+
+
+
 
 
