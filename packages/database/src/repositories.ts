@@ -6852,10 +6852,12 @@ class CoachRepository {
     const monthlyContext = await new LearningRepository(this.pool).getActiveMonthlyContext(learnerId);
     const context = await this.pool.query<{
       display_name: string; cefr: CefrLevel; topic: string; scenario: Record<string, unknown> | null;
-      session_id: string | null; coach_daily_limit: number;
+      session_id: string | null; coach_daily_limit: number; coach_monthly_target: number; system_month: string;
     }>(
       `select u.display_name, e.cefr, pw.topic, cs.id as session_id, cs.scenario,
-              least(greatest(coalesce((os.configuration->>'coachDailyLimit')::int, 30), 1), 200) as coach_daily_limit
+              least(greatest(coalesce((os.configuration->>'coachDailyLimit')::int, 30), 1), 200) as coach_daily_limit,
+              least(greatest(coalesce((os.configuration->'levelUp'->>'coachTurns')::int, 6), 0), 100) as coach_monthly_target,
+              to_char(organization_system_date(p.organization_id), 'YYYY-MM') as system_month
        from users u
        join enrollments e on e.learner_id = u.id
        join programs p on p.id = e.program_id and p.status = 'active'
@@ -6900,11 +6902,11 @@ class CoachRepository {
            count(*) filter (where ct.speaker = 'learner' and ct.created_at >= organization_system_date((select organization_id from users where id = $1))
              and coalesce((ct.feedback->'evaluation'->>'countsTowardGoal')::boolean,
                coalesce((ct.feedback->>'relevant')::boolean, true)))::text as daily_used,
-           count(*) filter (where ct.speaker = 'learner' and ct.created_at >= case when $2::boolean then date_trunc('month', organization_system_date((select organization_id from users where id = $1))) else date_trunc('week', organization_system_date((select organization_id from users where id = $1))) end
+           count(*) filter (where ct.speaker = 'learner' and ct.created_at >= date_trunc('month', organization_system_date((select organization_id from users where id = $1)))
              and coalesce((ct.feedback->'evaluation'->>'countsTowardGoal')::boolean,
                coalesce((ct.feedback->>'relevant')::boolean, true)))::text as weekly_turns
          from coach_turns ct join coach_sessions cs on cs.id = ct.session_id
-         where cs.learner_id = $1`, [learnerId, Boolean(monthlyContext)]
+         where cs.learner_id = $1`, [learnerId]
       ),
       this.pool.query<{ content: Record<string, unknown> }>(
         `select lv.content
@@ -7005,8 +7007,8 @@ class CoachRepository {
       sessionId, topic: activeTopic, cefr: row.cefr,
       persona: scenario.persona === "formal" ? "formal" : "informal",
       aiAvailable, daily: { used: Number(count.daily_used), limit: row.coach_daily_limit },
-      weekly: { turns: Number(count.weekly_turns), target: 50 },
-      ...(monthlyContext ? { period: { kind: "month" as const, label: `Tháng ${monthlyContext.month}`, turns: Number(count.weekly_turns), target: 50 } } : {}),
+      weekly: { turns: Number(count.weekly_turns), target: row.coach_monthly_target },
+      period: { kind: "month" as const, label: `Tháng ${row.system_month}`, turns: Number(count.weekly_turns), target: row.coach_monthly_target },
       messages, vocabulary
     };
   }

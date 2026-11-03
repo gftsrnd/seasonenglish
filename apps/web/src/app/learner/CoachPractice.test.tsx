@@ -26,7 +26,7 @@ const actions = () => ({
 
 const coach = {
   sessionId: "session-1", topic: "Meetings", cefr: "A2", persona: "informal", aiAvailable: true,
-  daily: { used: 0, limit: 30 }, weekly: { turns: 0, target: 50 }, messages: [], vocabulary: [],
+  daily: { used: 0, limit: 30 }, weekly: { turns: 0, target: 6 }, period: { kind: "month", label: "Tháng 2026-11", turns: 0, target: 6 }, messages: [], vocabulary: [],
   levelApproved: true
 } as any;
 
@@ -200,13 +200,13 @@ describe("app coach and weekly practice speech input", () => {
   it("matches the canonical Coach header, counters, cap state, and clear-chat confirmation", async () => {
     const callback = actions();
     const user = userEvent.setup();
-    const { rerender } = render(<LearnerCoach view={{ ...coach, weekly: { turns: 1, target: 50 } }} actions={callback} />);
+    const { rerender } = render(<LearnerCoach view={{ ...coach, weekly: { turns: 1, target: 6 }, period: { kind: "month", label: "Tháng 2026-11", turns: 1, target: 6 } }} actions={callback} />);
 
-    expect(screen.getByRole("heading", { name: "Season" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Luyện với Season" })).toBeInTheDocument();
     expect(screen.getByText("Meetings · A2")).toBeInTheDocument();
     expect(screen.getByText("Hôm nay 0/30 lượt")).toBeInTheDocument();
-    expect(screen.getByText("Tuần này 1 lượt · mục tiêu ≥50")).toBeInTheDocument();
-    expect(screen.getByText("Giới hạn chat hoạt động thế nào?")).toBeInTheDocument();
+    expect(screen.getByText("Tháng 2026-11: 1/6 lượt")).toBeInTheDocument();
+    expect(screen.getByText("Giới hạn chat và tiến độ tháng")).toBeInTheDocument();
     expect(document.querySelector(".coach-brand-icon")).toBeInTheDocument();
     expect(screen.getByTestId("season-mark")).toHaveClass("coach-season-mark");
     const personaSwitch = screen.getByRole("switch", { name: "Phong cách của Season" });
@@ -231,7 +231,7 @@ describe("app coach and weekly practice speech input", () => {
   it("keeps the chat-limit summary fixed while its explanation expands below", async () => {
     const user = userEvent.setup();
     render(<LearnerCoach view={coach} actions={actions()} />);
-    const summary = screen.getByText("Giới hạn chat hoạt động thế nào?");
+    const summary = screen.getByText("Giới hạn chat và tiến độ tháng");
     const details = summary.closest("details");
     expect(details).not.toHaveAttribute("open");
     await user.click(summary);

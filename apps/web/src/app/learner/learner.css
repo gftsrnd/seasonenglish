@@ -1751,3 +1751,6 @@ h1,h2,h3,h4,h1 b,h2 b,h3 b,h4 b{font-weight:600 !important}
 .monthly-assessment-page .monthly-eligibility-metrics .ring>b{width:68px;height:68px;max-width:68px;font-size:1.16rem;line-height:1.22}
 .monthly-assessment-page .monthly-eligibility-metrics .lbl{font-size:.9rem;margin:0;line-height:1.35}
 @media(max-width:640px){.monthly-assessment-page .monthly-assessment-landing{padding:20px}.monthly-assessment-page .monthly-eligibility-metrics .stat{min-height:unset}.monthly-assessment-page .monthly-eligibility-metrics .ring{width:76px;height:76px;min-width:76px;min-height:76px;font-size:1rem}.monthly-assessment-page .monthly-eligibility-metrics .ring>b{width:58px;height:58px;max-width:58px;font-size:1rem}}
+
+/* Keep the standalone Season title on the learner content edge, independent of the chat surface. */
+.coach-page > .page-title{width:100%;align-self:stretch;margin-inline:0;padding-inline:0;text-align:left}
