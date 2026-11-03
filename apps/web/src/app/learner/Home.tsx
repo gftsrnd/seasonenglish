@@ -291,28 +291,34 @@ export function LearnerMonthly({ view, actions }: { view: LearnerHomeView; actio
 function MonthlyEligibilitySummary({ eligibility }: { eligibility: NonNullable<LearnerHomeView["monthlyEligibility"]> }) {
   const remaining = Math.max(0, daysUntil(eligibility.systemDate, eligibility.examDate));
   const appealRequired = eligibility.accessState === "appeal_required";
-  const openToday = eligibility.accessState === "eligible";
+  const openToday = eligibility.accessEligible ?? eligibility.accessState === "eligible";
+  const missingLearningGate = eligibility.lessonsEligible === false || eligibility.seasonEligible === false || eligibility.frameworkApproved === false || eligibility.formPublished === false;
   const state = appealRequired
     ? { label: "Cần kháng nghị", tone: "warn", copy: "Số ngày vắng đã vượt giới hạn." }
     : openToday
       ? { label: "Đủ điều kiện", tone: "ok", copy: "Đã đến ngày thi." }
-      : { label: "Đang đủ điều kiện", tone: "ok", copy: remaining ? `Còn ${remaining} ngày đến giờ mở đề.` : "Chờ giờ mở đề." };
+      : missingLearningGate
+        ? { label: "Chưa đủ điều kiện", tone: "warn", copy: `Cần hoàn thành đủ bài hằng ngày + bài ôn tập, ${eligibility.seasonTurnsRequired ?? 100} lượt Season, framework duyệt và form phát hành.` }
+        : { label: "Đang theo dõi", tone: "ok", copy: remaining ? `Còn ${remaining} ngày đến giờ mở đề.` : "Chờ giờ mở đề." };
   return <div className="monthly-eligibility-summary" aria-label="Điều kiện vào bài thi tháng">
     <div className="monthly-eligibility-state"><span className={`badge ${state.tone}`}>{state.label}</span><span className="small muted">{state.copy}</span></div>
     <div className="monthly-eligibility-metrics">
-      <Metric label="Điểm danh" value={`${eligibility.attendedDays}/${eligibility.effectiveDays}`} percent={ratio(eligibility.attendedDays, eligibility.effectiveDays)} />
-      <Metric label="Vắng / tối đa" value={`${eligibility.absenceDays}/${eligibility.maxAbsences}`} percent={ratio(eligibility.absenceDays, Math.max(eligibility.maxAbsences, 1))} color={appealRequired ? "var(--danger)" : "var(--peach)"} />
+      <Metric label="Điểm danh" secondary={`Vắng ${eligibility.absenceDays}/${eligibility.maxAbsences} tối đa`} value={`${eligibility.attendedDays}/${eligibility.effectiveDays}`} percent={ratio(eligibility.attendedDays, eligibility.effectiveDays)} color={appealRequired ? "var(--danger)" : "var(--olive)"} />
+      {(eligibility.frameworkApproved === true && (eligibility.scheduledLessons ?? 0) > 0)
+        ? <Metric label="Hoàn thành lịch học" value={`${eligibility.completedLessons ?? 0}/${eligibility.scheduledLessons ?? 0}`} percent={ratio(eligibility.completedLessons ?? 0, eligibility.scheduledLessons ?? 0)} color="var(--primary)" />
+        : <Metric label="Hoàn thành lịch học" pending="Chờ chốt lịch học" percent={0} color="var(--primary)" />}
+      <Metric label="Season hợp lệ" value={`${eligibility.seasonTurns ?? 0}/${eligibility.seasonTurnsRequired ?? 100}`} percent={ratio(eligibility.seasonTurns ?? 0, eligibility.seasonTurnsRequired ?? 100)} color="var(--lav)" />
       <Metric label="Đếm ngược" value={remaining ? `${remaining} ngày` : "Hôm nay"} percent={ratio(Math.max(0, eligibility.effectiveDays - remaining), eligibility.effectiveDays)} color="var(--primary)" />
     </div>
-    <details className="monthly-eligibility-rules"><summary>Quy tắc điểm danh và giờ vào đề</summary><ul><li>Hoàn thành ít nhất một bài trong ngày để được tính một lần điểm danh.</li><li>Học bù nhiều bài cùng ngày vẫn chỉ tính một lần.</li><li>Ngày học hiệu lực là Thứ Hai–Thứ Sáu, không tính ngày thi; được vắng tối đa {eligibility.maxAbsences} ngày.</li><li>Đề mở lúc 00:00 ngày thi và tự khóa lúc 23:59, sau khi trừ thời lượng form đã phát hành và 5 phút.</li>{appealRequired ? <li>Gửi kháng nghị tới Manager; nếu chưa có quyết định sau 24 giờ, hệ thống tự mở quyền vào đề.</li> : null}</ul></details>
+    <details className="monthly-eligibility-rules"><summary>Quy tắc điểm danh và giờ vào đề</summary><ul><li>Hoàn thành đủ bài hằng ngày và bài ôn tập theo lịch tháng.</li><li>Hoàn thành ít nhất một bài trong ngày để được tính một lần điểm danh; học bù nhiều bài cùng ngày vẫn chỉ tính một lần.</li><li>Ngày học hiệu lực là Thứ Hai–Thứ Sáu, không tính ngày thi; được vắng tối đa {eligibility.maxAbsences} ngày.</li><li>Đạt ít nhất {eligibility.seasonTurnsRequired ?? 100} lượt hợp lệ với Season trong tháng.</li><li>Đề chỉ mở trong cửa sổ hệ thống khi framework đã duyệt và form đã phát hành.</li>{appealRequired ? <li>Gửi kháng nghị tới Manager để xử lý ngày vắng vượt giới hạn.</li> : null}</ul></details>
   </div>;
 }
 function daysUntil(systemDate: string, examDate: string) {
   const start = new Date(`${systemDate.slice(0, 10)}T00:00:00Z`).getTime(); const end = new Date(`${examDate.slice(0, 10)}T00:00:00Z`).getTime();
   return Number.isFinite(start) && Number.isFinite(end) ? Math.max(0, Math.ceil((end - start) / 86_400_000)) : 0;
 }
-function Metric({ label, value, percent, color = "var(--olive)" }: { label: string; value: string; percent: number; color?: string }) {
-  return <article className="stat"><div className="ring" style={{ "--p": percent, "--c": color } as CSSProperties}><b>{value}</b></div><span className="lbl">{label}</span></article>;
+function Metric({ label, secondary, value, pending, percent, color = "var(--olive)" }: { label: string; secondary?: string; value?: string; pending?: string; percent: number; color?: string }) {
+  return <article className={`stat${pending ? " is-pending" : ""}`}>{pending ? <div className="metric-pending" role="status">{pending}</div> : <div className="ring" style={{ "--p": percent, "--c": color } as CSSProperties}><b>{value}</b></div>}<span className="lbl">{label}{secondary ? <small className="metric-secondary">{secondary}</small> : null}</span></article>;
 }
 
 function ratio(value: number, total: number) { return total > 0 ? Math.max(0, Math.min(100, Math.round(value / total * 100))) : 0; }
@@ -334,13 +340,22 @@ function Readiness({ view, actions }: { view: LearnerHomeView; actions: LearnerC
   return <section className="card" style={{ marginTop: 12 }} data-home-block="readiness" aria-label={target ? view.levelReadiness.eligible ? `Sẵn sàng thi lên ${target}` : `Đường lên mức ${target}` : "Bạn đang ở mức cao nhất"}>
     <div className="row between" style={{ alignItems: "baseline" }}><h3>{title}</h3><span className="small muted" style={{ fontWeight: 800 }}>{view.month ? `Theo tháng ${formatMonth(view.month.month)}` : `${view.levelReadiness.windowDays} ngày gần nhất`}</span></div>
     {levelStatus ? <p className="small muted" style={{ margin: "4px 0 0" }}>{levelStatus}</p> : null}
-    {view.levelReadiness.criteria.map((metric) => <div className="readiness-metric" data-readiness-key={metric.key} key={metric.key}><div className="small readiness-heading"><span className="readiness-label">{metric.label}</span><span className="readiness-current">{readinessCurrent(metric)}</span></div><ReadinessBar metric={metric} /><div className="readiness-actual small muted">{metric.display}</div></div>)}
+    {view.levelReadiness.monthlyPolicy ? <MonthlyLevelPolicy policy={view.levelReadiness.monthlyPolicy} /> : view.levelReadiness.criteria.map((metric) => <div className="readiness-metric" data-readiness-key={metric.key} key={metric.key}><div className="small readiness-heading"><span className="readiness-label">{metric.label}</span><span className="readiness-current">{readinessCurrent(metric)}</span></div><ReadinessBar metric={metric} /><div className="readiness-actual small muted">{metric.display}</div></div>)}
     {view.levelUpPhase === "testing" && target ? <div className="card flat" style={{ marginTop: 12, background: "var(--mint)" }}><b>Bài thi lên mức {target} đang dang dở.</b><div className="small" style={{ margin: "4px 0 8px" }}>Tiếp tục từ phần đang làm; bài thi vẫn theo thứ tự 4 kỹ năng.</div><AppLink className="btn btn-primary" href="/test/level-up" navigate={actions.navigate}>Tiếp tục bài thi</AppLink></div> : null}
     {view.levelUpPhase === "challenge" && target ? <div className="card flat" style={{ marginTop: 12, background: "var(--mint)" }}><b>Bạn đã qua bài thi lên mức {target}.</b><div className="small" style={{ margin: "4px 0 8px" }}>Hoàn thành 6 lượt thử thách với Season để gửi yêu cầu duyệt mức.</div><AppLink className="btn btn-primary" href="/challenge" navigate={actions.navigate}>Mở thử thách</AppLink></div> : null}
     {(!view.levelUpPhase || view.levelUpPhase === "eligible") && view.levelReadiness.eligible && view.levelReadiness.examAvailable && target ? <div className="card flat" style={{ marginTop: 12, background: "var(--mint)" }}><b>Bạn đủ điều kiện thi lên mức {target}.</b><div className="small" style={{ margin: "4px 0 8px" }}>Đề ngắn (≈35 phút, 4 phần), rồi 6 lượt thử thách với Season. Chuẩn bị tai nghe và micro như bài đầu vào.</div><AppLink className="btn btn-primary" href="/test/level-up" navigate={actions.navigate}>Thi lên mức</AppLink></div> : null}
     {view.levelUpPhase === "eligible" && !view.levelReadiness.examAvailable && target ? <Notice tone="info">Bạn đã đủ điều kiện thi lên mức {target}; đề sẽ mở ngay khi được vận hành duyệt.</Notice> : null}
     <p className="xs muted" style={{ margin: "10px 0 0" }}>{target ? view.levelReadiness.eligible ? "Đủ cả 4 mục – được thi lên mức khi đề được duyệt." : "Đủ cả 4 mục để thi lên mức." : "Giữ nhịp học để duy trì mức C1."}</p>
   </section>;
+}
+
+function MonthlyLevelPolicy({ policy }: { policy: NonNullable<LearnerHomeView["levelReadiness"]["monthlyPolicy"]> }) {
+  const finalMet = policy.finalPasses >= policy.finalPassesRequired && (policy.finalAverage ?? 0) >= policy.finalAverageTarget && policy.latestFinalPassed;
+  const seasonMet = policy.seasonMonths >= policy.seasonMonthsRequired;
+  const monthsMet = policy.eligibleMonths >= policy.requiredMonths;
+  const absenceMet = policy.reasons.indexOf("LEVEL_UP_ABSENCE_CAP_EXCEEDED") === -1;
+  const item = (key: string, label: string, value: string, met: boolean) => <div className="readiness-metric" data-readiness-key={key} key={key}><div className="small readiness-heading"><span className="readiness-label">{label}</span><span className={`badge ${met ? "ok" : "warn"}`}>{met ? "Đạt" : "Chưa đạt"}</span></div><div className="readiness-actual small muted">{value}</div></div>;
+  return <div aria-label="Điều kiện Đường lên mức">{item("eligibleMonths", "6 tháng hợp lệ", `${policy.eligibleMonths}/${policy.requiredMonths} tháng`, monthsMet)}{item("monthlyFinals", "Kết quả bài thi tháng", `${policy.finalPasses}/${policy.finalPassesRequired} bài đạt · TB ${policy.finalAverage === null ? "–" : policy.finalAverage.toFixed(1)}/${policy.finalAverageTarget} · tháng gần nhất ${policy.latestFinalPassed ? "đạt" : "chưa đạt"}`, finalMet)}{item("seasonMonths", "Season đạt chỉ tiêu", `${policy.seasonMonths}/${policy.seasonMonthsRequired} tháng đủ 100 lượt hợp lệ`, seasonMet)}{item("absenceCap", "Giới hạn vắng theo level", `Tối đa ${policy.absenceCap}% trong từng tháng hợp lệ`, absenceMet)}</div>;
 }
 
 function readinessScale(key: LearnerHomeView["levelReadiness"]["criteria"][number]["key"]): number {

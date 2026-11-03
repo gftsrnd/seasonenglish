@@ -1752,5 +1752,27 @@ h1,h2,h3,h4,h1 b,h2 b,h3 b,h4 b{font-weight:600 !important}
 .monthly-assessment-page .monthly-eligibility-metrics .lbl{font-size:.9rem;margin:0;line-height:1.35}
 @media(max-width:640px){.monthly-assessment-page .monthly-assessment-landing{padding:20px}.monthly-assessment-page .monthly-eligibility-metrics .stat{min-height:unset}.monthly-assessment-page .monthly-eligibility-metrics .ring{width:76px;height:76px;min-width:76px;min-height:76px;font-size:1rem}.monthly-assessment-page .monthly-eligibility-metrics .ring>b{width:58px;height:58px;max-width:58px;font-size:1rem}}
 
-/* Keep the standalone Season title on the learner content edge, independent of the chat surface. */
-.coach-page > .page-title{width:100%;align-self:stretch;margin-inline:0;padding-inline:0;text-align:left}
+/* Keep the standalone Season title on the learner content gutter. */
+.coach-page > .page-title{width:auto;align-self:stretch;margin-inline:0;padding-inline:0;text-align:left}
+
+/* Five monthly gates: compact, equal cards with a centered 3+2 arrangement. */
+.monthly-assessment-page .monthly-eligibility-metrics{grid-template-columns:repeat(6,minmax(0,1fr));gap:10px;align-items:stretch}
+.monthly-assessment-page .monthly-eligibility-metrics .stat{grid-column:span 2;min-height:128px;padding:11px 8px;gap:7px;border-radius:12px}
+.monthly-assessment-page .monthly-eligibility-metrics .stat:nth-child(4){grid-column:2 / span 2}
+.monthly-assessment-page .monthly-eligibility-metrics .stat:nth-child(5){grid-column:4 / span 2}
+.monthly-assessment-page .monthly-eligibility-metrics .ring{width:64px;height:64px;min-width:64px;min-height:64px;font-size:.88rem;line-height:1.15}
+.monthly-assessment-page .monthly-eligibility-metrics .ring>b{width:52px;height:52px;max-width:52px;font-size:.88rem;line-height:1.15}
+.monthly-assessment-page .monthly-eligibility-metrics .lbl{font-size:.78rem;line-height:1.25}
+.monthly-assessment-page .monthly-eligibility-metrics{grid-template-columns:repeat(2,minmax(0,1fr))}
+.monthly-assessment-page .monthly-eligibility-metrics .stat,.monthly-assessment-page .monthly-eligibility-metrics .stat:nth-child(4),.monthly-assessment-page .monthly-eligibility-metrics .stat:nth-child(5){grid-column:auto}
+.monthly-assessment-page .monthly-eligibility-metrics .metric-secondary{display:block;margin-top:2px;font-size:.7rem;line-height:1.15;color:var(--muted);white-space:nowrap}
+.monthly-assessment-page .monthly-eligibility-metrics .stat.is-pending{gap:8px;color:var(--muted)}
+.monthly-assessment-page .monthly-eligibility-metrics .metric-pending{display:grid;place-items:center;min-height:64px;padding:8px 10px;border:1px dashed var(--line);border-radius:10px;font-size:.8rem;line-height:1.25;text-align:center}
+@media(max-width:640px){
+  .coach-page > .page-title{width:auto;margin-inline:0}
+  .monthly-assessment-page .monthly-eligibility-metrics{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .monthly-assessment-page .monthly-eligibility-metrics .stat,.monthly-assessment-page .monthly-eligibility-metrics .stat:nth-child(4),.monthly-assessment-page .monthly-eligibility-metrics .stat:nth-child(5){grid-column:auto;min-height:120px;padding:10px 7px}
+  .monthly-assessment-page .monthly-eligibility-metrics .ring{width:58px;height:58px;min-width:58px;min-height:58px}
+  .monthly-assessment-page .monthly-eligibility-metrics .ring>b{width:48px;height:48px;max-width:48px}
+  .monthly-assessment-page .monthly-eligibility-metrics .metric-pending{min-height:58px;padding:7px 8px;font-size:.76rem}
+}
