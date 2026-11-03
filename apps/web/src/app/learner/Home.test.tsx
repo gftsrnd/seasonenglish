@@ -58,21 +58,23 @@ describe("monthly learner home", () => {
 
   it("opens a dedicated monthly screen from the same approved month contract", () => {
     render(<LearnerMonthly view={view()} actions={actions} />);
-    expect(screen.getByRole("heading", { name: "Bài tháng" })).toBeInTheDocument();
-    expect(screen.getByRole("region", { name: "Tổng quan bài tháng" })).toHaveTextContent("Ngày hệ thống");
-    expect(screen.getByRole("grid", { name: "Lịch học tháng 11/2026" })).toBeInTheDocument();
-    expect(screen.getByRole("region", { name: "Bài thi tháng" })).toHaveTextContent("Hoàn thành 2 bài còn lại");
+    expect(screen.getByRole("heading", { name: "Bài thi tháng" })).toBeInTheDocument();
+    const landing = screen.getByRole("region", { name: "Bài thi tháng" });
+    expect(landing).toHaveTextContent("Ngày hệ thống");
+    expect(landing).toHaveTextContent("Điểm danh");
+    expect(landing).toHaveTextContent("Form đề đang được chuẩn bị");
+    expect(screen.queryByRole("grid", { name: "Lịch học tháng 11/2026" })).not.toBeInTheDocument();
   });
 
   it("keeps the monthly entry truthful before a framework exists", () => {
     render(<LearnerMonthly view={view({ month: null, monthlyPreparation: true, lessons: [], nextLesson: null, monthlyExam: null })} actions={actions} />);
-    const pending = screen.getByRole("region", { name: "Trạng thái bài tháng" });
-    expect(pending).toHaveTextContent("Đề tháng chưa được phát hành");
-    expect(within(pending).getByRole("link", { name: "Xem hồ sơ và kết quả đầu vào" })).toHaveAttribute("href", "/profile");
+    const pending = screen.getByRole("region", { name: "Bài thi tháng" });
+    expect(pending).toHaveTextContent("Đề chưa phát hành");
+    expect(pending).toHaveTextContent("Form đề đang được chuẩn bị");
     expect(screen.queryByText("Chặng 1")).not.toBeInTheDocument();
-    const eligibility = screen.getByRole("region", { name: "Điều kiện vào bài thi tháng" });
+    const eligibility = screen.getByLabelText("Điều kiện vào bài thi tháng");
     expect(eligibility).toHaveTextContent("1/6");
-    expect(eligibility).toHaveTextContent("Mỗi ngày lịch chỉ tính một lần điểm danh");
+    expect(eligibility).toHaveTextContent("Hoàn thành ít nhất một bài trong ngày");
   });});
 
 
