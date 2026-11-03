@@ -48,6 +48,30 @@ describe("monthly content API", () => {
     expect(managerWrite.statusCode, managerWrite.body).toBe(403);
   });
 
+  it("exposes the Manager-controlled system date and its three-month window to the Operator overview", async () => {
+    const settings = await app.inject({ method: "GET", url: "/api/v1/manager/settings", headers: { cookie: managerCookie } });
+    expect(settings.statusCode, settings.body).toBe(200);
+    const saved = await app.inject({
+      method: "PUT", url: "/api/v1/manager/settings", headers: { cookie: managerCookie },
+      payload: { ...(settings.json() as Record<string, unknown>), simulatedSystemDate: "2026-11-14" }
+    });
+    expect(saved.statusCode, saved.body).toBe(200);
+
+    const overview = await app.inject({ method: "GET", url: "/api/v1/content/months/2026-11", headers: { cookie } });
+    expect(overview.statusCode, overview.body).toBe(200);
+    expect(overview.json()).toMatchObject({
+      systemDate: "2026-11-14",
+      monthWindow: { previous: "2026-10", current: "2026-11", next: "2026-12", writable: true }
+    });
+
+    const previous = await app.inject({ method: "GET", url: "/api/v1/content/months/2026-10", headers: { cookie } });
+    expect(previous.statusCode, previous.body).toBe(200);
+    expect(previous.json()).toMatchObject({
+      systemDate: "2026-11-14",
+      monthWindow: { previous: "2026-10", current: "2026-11", next: "2026-12", writable: false }
+    });
+  });
+
   it("keeps one shared brief and locks a submitted framework through the Operator API", async () => {
     const curriculum = contract();
     const brief = await app.inject({

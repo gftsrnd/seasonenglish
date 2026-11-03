@@ -71,6 +71,20 @@ export interface MonthFrameworkView {
 }
 
 export interface MonthlyOperatorOverviewView {
+  /**
+   * The Manager-controlled test date.  Operator month selection and every
+   * date-sensitive permission must be derived from this value, never from the
+   * browser clock or the legacy pilot cycle.
+   */
+  systemDate: string;
+  /** The fixed previous/current/next month selector derived from systemDate. */
+  monthWindow: {
+    previous: string;
+    current: string;
+    next: string;
+    /** Only the current and next system months may be authored. */
+    writable: boolean;
+  };
   brief: SharedMonthBriefView | null;
   frameworks: MonthFrameworkView[];
 }

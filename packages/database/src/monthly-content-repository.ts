@@ -69,6 +69,13 @@ interface MonthLessonRow {
   content?: { title?: string; parts?: Array<{ code?: string; title?: string; content?: Record<string, unknown> }> };
 }
 
+interface SystemDateWindowRow {
+  system_date: string;
+  previous_month: string;
+  current_month: string;
+  next_month: string;
+}
+
 export interface MonthlyLessonDraftInput {
   title: string;
   parts: Array<{ code: string; title?: string | undefined; content: Record<string, unknown> }>;
@@ -516,13 +523,28 @@ export class MonthlyContentRepository {
   }
   async getOverview(actorId: string, month: string): Promise<MonthlyOperatorOverviewView> {
     const actor = await this.requireOperator(actorId);
+    const systemDateResult = await this.database.query<SystemDateWindowRow>(
+      `select organization_system_date($1)::text as system_date,
+              to_char((organization_system_date($1) - interval '1 month')::date, 'YYYY-MM') as previous_month,
+              to_char(organization_system_date($1), 'YYYY-MM') as current_month,
+              to_char((organization_system_date($1) + interval '1 month')::date, 'YYYY-MM') as next_month`,
+      [actor.organization_id]
+    );
+    const systemDate = systemDateResult.rows[0];
+    if (!systemDate) throw new Error("Organization system date was not found");
+    const overviewWindow = {
+      previous: systemDate.previous_month,
+      current: systemDate.current_month,
+      next: systemDate.next_month,
+      writable: month === systemDate.current_month || month === systemDate.next_month
+    };
     const briefResult = await this.database.query<BriefRow>(
       `select id, month, theme_title, theme_brief, theme_context, communication_goal, brief_version, brief_status
        from program_months where organization_id = $1 and month = $2`,
       [actor.organization_id, month]
     );
     const brief = briefResult.rows[0];
-    if (!brief) return { brief: null, frameworks: [] };
+    if (!brief) return { systemDate: systemDate.system_date, monthWindow: overviewWindow, brief: null, frameworks: [] };
     const frameworkResult = await this.database.query<FrameworkRow>(
       `select id, cefr, version, status, scope_hash, curriculum_contract, quality_acknowledgement
        from month_frameworks where program_month_id = $1 order by cefr`,
@@ -532,7 +554,7 @@ export class MonthlyContentRepository {
       ...toFrameworkHeader(framework),
       lessons: await this.lessonsForFramework(framework, brief.id)
     })));
-    return { brief: toBriefView(brief), frameworks };
+    return { systemDate: systemDate.system_date, monthWindow: overviewWindow, brief: toBriefView(brief), frameworks };
   }
 
   async recommendedBatch(actorId: string, frameworkId: string): Promise<number[]> {
