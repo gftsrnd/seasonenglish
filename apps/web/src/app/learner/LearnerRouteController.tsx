@@ -519,6 +519,9 @@ function loadError(route: ResolvedLearnerRoute["name"]) {
 }
 
 export function learnerLoadError(route: ResolvedLearnerRoute["name"], reason: unknown): string {
+  if ((route === "game" || route === "games") && reason instanceof ApiError && reason.code === "MINIGAME_LOCKED_DURING_ASSESSMENT") {
+    return "Mini game tạm khóa khi bạn đang làm bài kiểm tra. Hãy nộp bài hoặc kết thúc bài kiểm tra rồi quay lại.";
+  }
   if (route === "assessment" && reason instanceof ApiError && reason.code === "PLACEMENT_ATTEMPT_RESTART_REQUIRED") {
     const details = reason.details && typeof reason.details === "object" && !Array.isArray(reason.details)
       ? reason.details as Record<string, unknown>
