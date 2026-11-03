@@ -176,7 +176,7 @@ export function OperatorMonths({ month, todayMonth, overview, cefr, busy, readOn
     <header className="operator-months-header"><p className="eyebrow">Operator</p><h1>Bài học</h1><p>Thiết kế chủ đề, tài nguyên và lịch học theo tháng.</p></header>
     {error && <div className="monthly-error" role="alert">{error}</div>}
     <section className="monthly-month-card card">
-      <div><span className="eyebrow">Chu kỳ</span><h2>Tháng</h2></div>
+      <h2 className="monthly-cycle-title">Chu kỳ tháng</h2>
       <div className="monthly-month-tabs" role="tablist">
         {monthChoices.map((choice) => <button key={choice} type="button" role="tab" aria-selected={choice === month} className={choice === month ? "selected" : ""} onClick={() => actions.onSelectMonth(choice)}>
           {monthLabel(choice)}{choice === monthChoices[0] && <small>Chỉ xem</small>}

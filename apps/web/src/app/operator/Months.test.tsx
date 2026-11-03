@@ -30,6 +30,8 @@ describe("Operator monthly planner", () => {
       }}
     /></ToastProvider>);
 
+    expect(screen.getByRole("heading", { name: "Chu kỳ tháng" })).toBeInTheDocument();
+    expect(screen.queryByText("Chu kỳ")).not.toBeInTheDocument();
     expect(screen.getByRole("grid", { name: "Lịch tháng 11/2026" })).toBeInTheDocument();
     expect(screen.getAllByRole("gridcell")).toHaveLength(42);
     expect(screen.getAllByRole("columnheader")).toHaveLength(7);
