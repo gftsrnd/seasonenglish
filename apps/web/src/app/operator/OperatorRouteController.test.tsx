@@ -6,6 +6,7 @@ import { MemoryRouter } from "react-router";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { ContentLessonMatrixView, ContentLessonSetVersionView, ContentReviewAssessmentDetailView, ContentReviewView, SessionView } from "@e4s/contracts";
 import { ApiError } from "../../api/runtime.js";
+import { ToastProvider } from "../shared/design-system.js";
 import { OperatorRouteController } from "./OperatorRouteController.js";
 
 afterEach(cleanup);
@@ -27,6 +28,23 @@ const lessonSet = (status: ContentLessonSetVersionView["status"]): ContentLesson
 });
 
 describe("OperatorRouteController", () => {
+  it("keeps page scroll position while loading a different month-resource level", async () => {
+    const user = userEvent.setup();
+    const overview = { systemDate: "2026-11-03", monthWindow: { previous: "2026-10", current: "2026-11", next: "2026-12", writable: true }, brief: null, frameworks: [] };
+    const client = { getContentMonth: vi.fn().mockResolvedValue(overview), getContentMonthResourceCheckpoint: vi.fn().mockResolvedValue(undefined) };
+    let scrollY = 0;
+    Object.defineProperty(window, "scrollY", { configurable: true, get: () => scrollY });
+    vi.spyOn(window, "scrollTo").mockImplementation((_x, y) => { scrollY = Number(y); });
+    render(<ToastProvider><MemoryRouter initialEntries={["/op/months"]}><OperatorRouteController session={operator} client={client as any} /></MemoryRouter></ToastProvider>);
+
+    await screen.findByRole("heading", { name: "Tài nguyên tháng" });
+    scrollY = 420;
+    await user.click(screen.getByRole("tab", { name: "A2" }));
+    await waitFor(() => expect(client.getContentMonthResourceCheckpoint).toHaveBeenLastCalledWith(expect.any(String), "A2"));
+    await waitFor(() => expect(scrollY).toBe(420));
+    expect(window.scrollTo).toHaveBeenCalledWith(0, 420);
+  });
+
   it("uses the sidebar without repeating an operational navigation bar on Operator screens", async () => {
     const client = { getContentWeeks: vi.fn().mockResolvedValue({ pilot: { startDate: "2026-10-05", weekCount: 1 }, weeks: [] }) };
     render(<MemoryRouter initialEntries={["/op/weeks"]}><OperatorRouteController session={operator} client={client as any} /></MemoryRouter>);

@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useMemo, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
+import { createContext, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
 import { useLocation, useNavigate } from "react-router";
 import "./styles.css";
 import type {
@@ -196,6 +196,17 @@ function MonthsRoute({ client, readOnly, preview }: { client: OperatorApiClient;
   const [error, setError] = useState<string>();
   const [editor, setEditor] = useState<{ frameworkId: string; dayNumber: number; initial?: { title?: string; parts?: Array<{ code?: string; title?: string; content?: Record<string, unknown> }> } }>();
   const systemMonthInitialized = useRef(false);
+  const pendingScrollRestore = useRef<number | null>(null);
+  const selectMonth = (nextMonth: string) => {
+    if (nextMonth === month) return;
+    pendingScrollRestore.current = window.scrollY;
+    setMonth(nextMonth);
+  };
+  const selectLevel = (nextLevel: CefrLevel) => {
+    if (nextLevel === cefr) return;
+    pendingScrollRestore.current = window.scrollY;
+    setCefr(nextLevel);
+  };
   const loadResourceCheckpoint = () => typeof client.getContentMonthResourceCheckpoint === "function"
     ? client.getContentMonthResourceCheckpoint(month, cefr).catch(() => undefined)
     : Promise.resolve(undefined);
@@ -225,6 +236,11 @@ function MonthsRoute({ client, readOnly, preview }: { client: OperatorApiClient;
       }
     }).catch((reason) => setError(message(reason)));
   }, [client, month, cefr]);
+  useLayoutEffect(() => {
+    if (pendingScrollRestore.current === null || (!overview && !error)) return;
+    window.scrollTo(0, pendingScrollRestore.current);
+    pendingScrollRestore.current = null;
+  }, [overview, error]);
   const run = async <T,>(action: () => Promise<T>, success?: string): Promise<T | undefined> => {
     setBusy(true); setError(undefined);
     try { const result = await action(); await load(); if (success) toast.show({ message: success, tone: "ok" }); return result; }
@@ -251,8 +267,8 @@ function MonthsRoute({ client, readOnly, preview }: { client: OperatorApiClient;
     readOnly={readOnly}
     {...(error ? { error } : {})}
     actions={{
-      onSelectMonth: setMonth,
-      onSelectLevel: setCefr,
+      onSelectMonth: selectMonth,
+      onSelectLevel: selectLevel,
       onSuggestBrief: async (selectedMonth) => {
         const result = await run(() => client.suggestContentMonthBrief(selectedMonth), "Đã tạo gợi ý AI cho chủ đề tháng.");
         if (!result) throw new Error("Không tạo được gợi ý AI cho chủ đề tháng.");
