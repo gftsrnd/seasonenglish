@@ -188,8 +188,8 @@ export function OperatorLevelFormDetail({ detail, readOnly = false, editing = fa
           {audioSrc ? <audio controls preload="metadata" src={audioSrc}>Trình duyệt không hỗ trợ audio.</audio> : null}
           {editing && !readOnly ? <div className="operator-level-audio-actions">
             <button type="button" className="btn-sm" disabled={audioBusy || !synthesizeEdgeTts || !uploadAudio || !script.trim()} title={!synthesizeEdgeTts ? "Edge TTS chưa được cấu hình trên máy chủ." : !script.trim() ? "Cần có kịch bản nghe trước khi tạo audio." : undefined} onClick={() => void generateGroupEdgeTts(sectionIndex, groupIndex, group.key, script)}>{audioBusy ? "Đang tạo…" : "Sinh audio Edge TTS"}</button>
-            <button type="button" className="btn-sm" disabled title="Chưa có AI/provider audio được cấu hình cho hệ thống này.">AI/provider audio</button>
             {uploadAudio ? <label className="btn-sm" aria-busy={audioBusy || undefined}>{audioBusy ? "Đang tải…" : audioSrc ? "Thay file audio" : "Tải file audio"}<input hidden type="file" accept="audio/*" aria-label={`${audioSrc ? "Thay" : "Tải"} audio cho ${group.title}`} disabled={audioBusy} onChange={(event) => void uploadGroupAudio(sectionIndex, groupIndex, group.key, event.target.files?.[0])} /></label> : null}
+            <span className="operator-level-audio-unavailable" role="status" title="Chưa có AI/provider audio được cấu hình cho hệ thống này.">AI/provider audio chưa khả dụng</span>
           </div> : null}
           {audioError ? <p className="small form-error" role="alert">{audioError}</p> : null}
         </div> : null}

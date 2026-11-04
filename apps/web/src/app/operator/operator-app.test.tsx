@@ -777,6 +777,8 @@ describe("Operator app rebuild", () => {
     expect(screen.getByRole("list", { name: "Câu hỏi phần Nghe" })).toBeInTheDocument();
     expect(screen.getByText("Câu 1")).toBeInTheDocument();
     expect(screen.getByText("Đáp án B")).toBeInTheDocument();
+    await user.click(listeningSummary!);
+    expect(listeningSummary?.closest("details")).not.toHaveAttribute("open");
   });
 
   it("summarizes level-form draft validation by action instead of exposing raw warning codes", () => {
@@ -848,6 +850,8 @@ describe("Operator app rebuild", () => {
     } as any} onClose={vi.fn()} />);
 
     await user.click(screen.getByText("Nghe"));
+    expect(screen.getByText("AI/provider audio chưa khả dụng")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "AI/provider audio" })).not.toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Sinh audio Edge TTS" }));
     await waitFor(() => expect(synthesizeEdgeTts).toHaveBeenCalledWith({ text: "Narrator: The meeting starts at nine.", voice: "en-US-AvaMultilingualNeural" }));
     await waitFor(() => expect(uploadAudio).toHaveBeenCalledWith(expect.any(Blob), "level-a2.mp3"));

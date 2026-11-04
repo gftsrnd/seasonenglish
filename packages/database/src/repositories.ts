@@ -6611,6 +6611,7 @@ class AssessmentRepository {
         "insert into assessment_definitions (id, organization_id, assessment_key, kind, title) values ($1, $2, $3, 'level_up', $4)",
         [definitionId, organizationId, key, blueprint.title]
       );
+      else await client.query("update assessment_definitions set title = $2 where id = $1", [definitionId, blueprint.title]);
       await client.query("update assessment_versions set status = 'retired' where definition_id = $1 and status = 'draft'", [definitionId]);
       const next = await client.query<{ version: number }>("select coalesce(max(version), 0) + 1 as version from assessment_versions where definition_id = $1", [definitionId]);
       versionId = randomUUID();

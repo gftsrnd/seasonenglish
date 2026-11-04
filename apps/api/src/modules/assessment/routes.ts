@@ -565,8 +565,8 @@ export function registerAssessmentRoutes(app: FastifyInstance, pool: Pool, aiRun
       // output ceiling. Generate three independently schema-checked slices,
       // then validate their assembled canonical form before persistence.
       const [listening, reading, production] = await Promise.all([
-        runner.runTask("level_form_listening_generation", input, { systemPrompt: `${task?.prompt ?? DEFAULT_LEVEL_FORM_PROMPT}\nGenerate only the title, listening script, and exactly 20 listening questions.`, maxOutputTokens: 7_000 }),
-        runner.runTask("level_form_reading_generation", input, { systemPrompt: `${task?.prompt ?? DEFAULT_LEVEL_FORM_PROMPT}\nGenerate only the reading passage and exactly 40 reading questions. Keep every prompt and option concise.`, maxOutputTokens: 12_000 }),
+        runner.runTask("level_form_listening_generation", input, { systemPrompt: `${task?.prompt ?? DEFAULT_LEVEL_FORM_PROMPT}\nGenerate only the title, listening script, and exactly 20 listening questions. The script must contain exactly five clearly labelled parts (Part 1 through Part 5), with four questions for each part in the same order.`, maxOutputTokens: 7_000 }),
+        runner.runTask("level_form_reading_generation", input, { systemPrompt: `${task?.prompt ?? DEFAULT_LEVEL_FORM_PROMPT}\nGenerate only the reading passage and exactly 40 reading questions. Keep every prompt and option concise; questions 1–10, 11–20, 21–30 and 31–40 must each form a distinct workplace-reading part.`, maxOutputTokens: 12_000 }),
         runner.runTask("level_form_production_generation", input, { systemPrompt: `${task?.prompt ?? DEFAULT_LEVEL_FORM_PROMPT}\nGenerate only exactly two writing prompts and four speaking prompts.`, maxOutputTokens: 2_000 })
       ]);
       const completedReading = await completeLevelFormReading(runner, params.data.targetLevel, reading.output as { passage: string; questions: LevelFormTaskOutput["reading"]["questions"][number][] });
@@ -589,12 +589,6 @@ export function registerAssessmentRoutes(app: FastifyInstance, pool: Pool, aiRun
       return reply.code(201).send({ ...form, publishedAt: null });
     } catch (error) {
       request.log.warn({ error }, "Level form generation failed");
-      const diagnostic = error as { code?: unknown; message?: unknown; details?: unknown };
-      console.warn("[level-form-generation]", JSON.stringify({
-        code: diagnostic.code,
-        message: diagnostic.message,
-        details: diagnostic.details
-      }));
       return reply.code(502).send({ code: "LEVEL_FORM_GENERATION_FAILED" });
     }
   });
@@ -1203,19 +1197,43 @@ function levelFormBlueprint(targetLevel: "A2" | "B1" | "B2" | "C1", output: Leve
     options: question.options.map((label, optionIndex) => ({ value: options[optionIndex]!, label })),
     correctAnswer: options[question.correctIndex]!
   }));
+  const listeningParts = splitLevelFormListeningParts(output.listening.script);
   return {
-    key: `level-up-${targetLevel.toLowerCase()}`, kind: "level-up", title: output.title,
+    key: `level-up-${targetLevel.toLowerCase()}`, kind: "level-up", title: `Đề thi lên mức ${targetLevel}`,
     version: 1, totalMinutes: 75, totalScore: 100, targetLevel,
     sections: [
-      { code: "listening", title: "Nghe", durationMinutes: 15, maxScore: 20, instructions: ["Nghe tối đa 2 lần và chọn đáp án đúng."], groups: [{ key: "L", title: "Workplace listening", instruction: "Nghe đoạn hội thoại và trả lời 20 câu.", maxPlays: 2, stimulus: { type: "audio_script", lines: [{ speaker: "Speaker", text: output.listening.script }] }, tasks: choiceTasks("L", output.listening.questions, 1) }] },
-      { code: "reading", title: "Đọc", durationMinutes: 25, maxScore: 40, instructions: ["Đọc và chọn đáp án đúng."], groups: [{ key: "R", title: "Workplace reading", instruction: "Đọc đoạn văn và trả lời 40 câu.", stimulus: { type: "passage", text: output.reading.passage }, tasks: choiceTasks("R", output.reading.questions, 1) }] },
-      { code: "writing", title: "Viết", durationMinutes: 20, maxScore: 20, instructions: ["Hoàn thành cả hai nhiệm vụ viết."], groups: [{ key: "W", title: "Writing", instruction: "Hoàn thành hai nhiệm vụ viết.", tasks: [
-        { key: "W1", prompt: output.writingPrompts[0]!, responseType: "long_text", maxScore: 7, minWords: 50, maxWords: 80 },
-        { key: "W2", prompt: output.writingPrompts[1]!, responseType: "long_text", maxScore: 13, minWords: 120, maxWords: 150 }
-      ] }] },
+      { code: "listening", title: "Nghe", durationMinutes: 15, maxScore: 20, instructions: ["Nghe tối đa 2 lần và chọn đáp án đúng."], groups: listeningParts.map((part, index) => ({ key: `L${index + 1}`, title: `Part ${String.fromCharCode(65 + index)} – ${part.title}`, instruction: `Nghe phần ${String.fromCharCode(65 + index)} và trả lời câu ${index * 4 + 1}–${index * 4 + 4}.`, maxPlays: 2, stimulus: { type: "audio_script", lines: [{ speaker: "Narrator", text: part.script }] }, tasks: choiceTasks(`L${index + 1}_`, output.listening.questions.slice(index * 4, index * 4 + 4), 1) })) },
+      { code: "reading", title: "Đọc", durationMinutes: 25, maxScore: 40, instructions: ["Đọc và chọn đáp án đúng."], groups: Array.from({ length: 4 }, (_, index) => ({ key: `R${index + 1}`, title: `Part ${String.fromCharCode(65 + index)} – Questions ${index * 10 + 1}–${index * 10 + 10}`, instruction: "Đọc và chọn một đáp án đúng nhất.", ...(index === 0 ? { stimulus: { type: "passage" as const, text: output.reading.passage } } : {}), tasks: choiceTasks(`R${index + 1}_`, output.reading.questions.slice(index * 10, index * 10 + 10), 1) })) },
+      { code: "writing", title: "Viết", durationMinutes: 20, maxScore: 20, instructions: ["Hoàn thành cả hai nhiệm vụ viết."], groups: [
+        { key: "W1", title: "Task 1 – Phản hồi nhanh", instruction: "Hoàn thành nhiệm vụ viết thứ nhất.", tasks: [{ key: "W1", prompt: output.writingPrompts[0]!, responseType: "long_text", maxScore: 7, minWords: 50, maxWords: 80 }] },
+        { key: "W2", title: "Task 2 – Email / đề xuất", instruction: "Hoàn thành nhiệm vụ viết thứ hai.", tasks: [{ key: "W2", prompt: output.writingPrompts[1]!, responseType: "long_text", maxScore: 13, minWords: 120, maxWords: 150 }] }
+      ] },
       { code: "speaking", title: "Nói", durationMinutes: 15, maxScore: 20, instructions: ["Hoàn thành bốn nhiệm vụ nói ở mức đích."], groups: output.speakingPrompts.map((prompt, index) => ({ key: `S${index + 1}`, title: `Speaking ${index + 1}`, instruction: "Hoàn thành nhiệm vụ nói.", tasks: [{ key: `S${index + 1}`, prompt, responseType: "speaking_evidence" as const, maxScore: 5 }] })) }
     ]
   };
+}
+
+function splitLevelFormListeningParts(script: string): Array<{ title: string; script: string }> {
+  const matches = [...script.matchAll(/(?:^|\n)\s*Part\s+([1-5])\s*[.:–-]?\s*/gi)];
+  if (matches.length === 5 && matches.every((match, index) => Number(match[1]) === index + 1)) {
+    const intro = script.slice(0, matches[0]!.index).trim();
+    return matches.map((match, index) => {
+      const nextOffset = matches[index + 1]?.index ?? script.length;
+      const body = script.slice((match.index ?? 0) + match[0].length, nextOffset).trim();
+      const firstLine = body.split(/\r?\n/).map((line) => line.trim()).find(Boolean);
+      const firstSentence = body.match(/^(.{1,90}?[.!?])(?:\s|$)/)?.[1]?.trim();
+      return {
+        title: firstLine && firstLine.length <= 90 && !/:\s/.test(firstLine)
+          ? firstLine
+          : firstSentence && !/:\s/.test(firstSentence) ? firstSentence : `Listening ${index + 1}`,
+        script: [index === 0 ? intro : "", body].filter(Boolean).join("\n\n")
+      };
+    });
+  }
+  return Array.from({ length: 5 }, (_, index) => ({
+    title: `Listening ${index + 1}`,
+    script: index === 0 ? script : `Audio script for Part ${index + 1} is required.`
+  }));
 }
 function normalizeKind(kind: "placement" | "levelup" | "level-up" | "monthly" | "final" | "pass-course" | "passcourse"): AssessmentKind {
   if (kind === "levelup") return "level-up";
