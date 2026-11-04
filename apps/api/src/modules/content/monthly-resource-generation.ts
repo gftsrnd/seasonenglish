@@ -95,6 +95,20 @@ export function selectMonthlyPronunciationCandidates(input: {
   return { selected, rejected };
 }
 
+export function buildMonthlyPronunciationDistinctnessConstraint(
+  previousTargets: readonly Pick<MonthlyResourcePlanTaskOutput["pronunciationTargets"][number], "ipa" | "label" | "explanation">[],
+  retryIssue = ""
+): string {
+  const exclusions = previousTargets.map((target) => `${target.ipa} (${target.label}; ${target.explanation})`);
+  const banned = exclusions.length
+    ? `HARD BANS: this target must not return ${previousTargets.map((target) => target.ipa).join(", ")}. These targets are already accepted and cannot be reused or paraphrased: ${exclusions.join("; ")}. Choose a different phoneme or stress pattern, with a clearly different sound category; avoid near-neighbor contrasts of a sound already selected.`
+    : "This is the first roadmap target; choose a genuine target that can coexist with three other distinct pronunciation targets.";
+  const retry = retryIssue
+    ? `The previous response was rejected: ${retryIssue}. Treat that IPA and target description as forbidden too; return a different phoneme or stress pattern.`
+    : "";
+  return `${banned} ${retry}`.trim();
+}
+
 function normalizeMonthlyResourceWord(value: string): string {
   return value.trim().toLocaleLowerCase("en").replace(/[\s\p{P}]+/gu, " ").trim();
 }

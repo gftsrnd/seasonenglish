@@ -5,6 +5,7 @@ import {
   buildMonthlyResourcesFromAiPlan,
   MonthlyResourceCriteriaError,
   MonthlyResourcePlanError,
+  buildMonthlyPronunciationDistinctnessConstraint,
   selectMonthlyPronunciationCandidates,
   selectMonthlySupportCandidates
 } from "./monthly-resource-generation.js";
@@ -161,6 +162,18 @@ describe("monthly AI resource generation", () => {
       "agenda -> agenda (duplicates a pronunciation example already used)",
       "professional -> professional (has 4 syllables)"
     ]);
+  });
+
+  it("makes every previously accepted IPA and target an explicit retry exclusion", () => {
+    const constraint = buildMonthlyPronunciationDistinctnessConstraint([
+      { ipa: "/iː/", label: "long ee vowel", explanation: "A long close front vowel." }
+    ], "The prior candidate /ɪ/ was rejected as too close to the accepted /iː/ target.");
+
+    expect(constraint).toContain("HARD BANS");
+    expect(constraint).toContain("/iː/ (long ee vowel;");
+    expect(constraint).toContain("must not return /iː/");
+    expect(constraint).toContain("The prior candidate /ɪ/ was rejected");
+    expect(constraint).toContain("Choose a different phoneme or stress pattern");
   });
 
   it("builds a two-grammar, four-pronunciation monthly contract from a valid AI plan", () => {
