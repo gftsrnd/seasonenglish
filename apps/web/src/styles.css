@@ -96,7 +96,7 @@ b, strong { font-weight: 500; }
 
 .primary-task, .learner-page section, .form-section, .lesson-surface { border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface); box-shadow: none; padding: 18px; }
 .learner-page > section + section, .learner-page > section + [data-home-block], .learner-page > [data-home-block] + section, .learner-page > [data-home-block] + [data-home-block] { margin-top: 10px; }
-.primary-task { display: grid; gap: 4px; border-left: 4px solid var(--primary-dark); }
+.primary-task { display: grid; gap: 4px; }
 .primary-task h2 { margin: 0; font-size: 1.25rem; }
 .task-detail { margin: 2px 0 8px; color: #504a42; }
 .primary-task .button { width: 100%; }
@@ -138,7 +138,7 @@ button:disabled { cursor: not-allowed; opacity: .48; }
 .activity-link { min-height: 78px; display: grid; grid-template-columns: 34px 1fr; gap: 2px 10px; align-content: center; border-radius: 12px; background: #fff; padding: 12px; }
 .activity-link small { grid-column: 2; color: var(--muted); font-size: 11px; }
 .activity-link--disabled { color: var(--muted); background: var(--surface-subtle); }
-.micro-card { display: flex; align-items: center; justify-content: space-between; gap: 16px; border-left: 4px solid var(--season-gold, #d7a84a) !important; }
+.micro-card { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
 .micro-card h2, .micro-card p { margin: 0; }
 .micro-card > div { display: grid; gap: 6px; }
 .reward-simulator { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
@@ -176,8 +176,8 @@ button:disabled { cursor: not-allowed; opacity: .48; }
 .coach-message--learner { align-self: flex-end; border: 1px solid #f2d8ba; border-radius: 20px 20px 6px 20px; background: #fff0dc; }
 .coach-message--coach { align-self: flex-start; }
 .coach-thinking { display: flex; align-items: center; gap: 8px; color: var(--muted); }
-.coach-feedback { align-self: flex-start; width: min(510px, 88%); border-left: 4px solid var(--primary); border-radius: 11px; background: #fff; padding: 11px 13px; font-size: 11px; }
-.coach-feedback.is-off-topic { border-left-color: #c75b4e; background: #fff0ed; }
+.coach-feedback { align-self: flex-start; width: min(510px, 88%); border: 1px solid var(--line); border-radius: 11px; background: #fff; padding: 11px 13px; font-size: 11px; }
+.coach-feedback.is-off-topic { border-color: #c75b4e; background: #fff0ed; }
 .coach-feedback-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 9px; }
 .coach-feedback-heading > div { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 5px; }
 .coach-feedback-heading span { border-radius: 999px; background: #edf0df; padding: 3px 7px; font-size: 9px; }
@@ -376,7 +376,7 @@ dd { margin: 0; font-weight: 650; }
 .assessment-group-heading { display: flex; justify-content: space-between; gap: 14px; align-items: flex-start; }
 .assessment-group-heading h3, .assessment-group-heading p { margin: 0; }
 .assessment-group-heading p { margin-top: 3px; color: var(--muted); font-size: 11px; }
-.assessment-stimulus { margin-top: 10px; border-left: 4px solid var(--primary); background: #fff; padding: 12px; white-space: pre-wrap; }
+.assessment-stimulus { margin-top: 10px; border: 1px solid var(--line); border-radius: 10px; background: #fff; padding: 12px; white-space: pre-wrap; }
 .assessment-tasks { display: grid; gap: 12px; margin-top: 12px; }
 .assessment-task { display: grid; gap: 7px; border: 0; border-top: 1px solid var(--line); padding: 12px 0 0; }
 .assessment-task legend { margin-bottom: 4px; font-weight: 700; }
@@ -524,7 +524,7 @@ dd { margin: 0; font-weight: 650; }
 .operator-heading--stack { display: block; max-width: 900px; }
 .operator-warning { display: inline-flex; border-radius: 6px; background: #fff6c8; padding: 4px 7px; color: #655522; font-size: 10px; }
 .operator-readonly { border-radius: 9px; background: #fff; padding: 9px 12px; color: #5d574e; font-size: 11px; }
-.manager-operator-preview { width: min(1056px, calc(100% - 64px)); margin: 28px auto -16px; padding: 12px 14px; border: 0; border-left: 4px solid var(--lav); border-radius: 12px; background: var(--surface-3); box-shadow: inset 0 0 0 1px var(--line); color: var(--text); font-size: .875rem; }
+.manager-operator-preview { width: min(1056px, calc(100% - 64px)); margin: 28px auto -16px; padding: 12px 14px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface-3); box-shadow: none; color: var(--text); font-size: .875rem; }
 .manager-operator-preview > div { line-height: 1.45; }
 .manager-operator-preview nav { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
 .manager-operator-preview .button-link { background: var(--surface); color: var(--text); }

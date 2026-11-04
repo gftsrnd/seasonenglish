@@ -579,9 +579,9 @@ label.field > span{font-size:.8rem;color:var(--muted)}
 .msg.user{background:var(--primary-soft);box-shadow:inset 0 0 0 1px var(--primary-line);border-radius:14px 14px 4px 14px}
 .msg.ai{background:var(--surface);box-shadow:inset 0 0 0 1px var(--line);border-radius:14px 14px 14px 4px}
 .msg.ai .chip,.msg.user .chip{background:var(--surface);color:var(--text)}
-.correction{border-radius:14px;background:var(--surface);box-shadow:inset 0 0 0 1px var(--line);border-left:4px solid var(--primary)}
+.correction{border-radius:14px;background:var(--surface);box-shadow:inset 0 0 0 1px var(--line)}
 .bubble{border-radius:12px;box-shadow:inset 0 0 0 1px var(--line);font-size:1rem;font-weight:400;padding:12px 16px}
-.hero{background:var(--surface) !important;color:var(--text) !important;border:1px solid var(--line);border-left:4px solid var(--primary);border-radius:var(--radius);padding:18px 20px}
+.hero{background:var(--surface) !important;color:var(--text) !important;border:1px solid var(--line);border-radius:var(--radius);padding:18px 20px}
 .hero .eyebrow{color:var(--muted);opacity:1}
 .hero h2{font-size:1.25rem}
 .hero .btn,.hero button:not(.btn-ghost){background:var(--primary);color:var(--text)}
@@ -611,7 +611,7 @@ label.field > span{font-size:.8rem;color:var(--muted)}
 .banner{border-radius:12px;padding:12px 14px}
 .banner.warn{background:var(--warn-soft);box-shadow:inset 0 0 0 1px var(--warn-line)}
 .banner.danger{box-shadow:inset 0 0 0 1px var(--danger-line)}
-.banner.info{background:var(--surface-3);box-shadow:inset 0 0 0 1px var(--line);border-left:4px solid var(--lav)}
+.banner.info{background:var(--surface-3);box-shadow:inset 0 0 0 1px var(--line)}
 .banner.ok{background:var(--ok-tint);box-shadow:inset 0 0 0 1px var(--ok-line)}
 .banner .bao{display:none}
 .bao-row .bao{display:none}

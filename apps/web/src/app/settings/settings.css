@@ -398,10 +398,6 @@
   min-width: max-content;
 }
 
-.settings-page .banner.info {
-  border-left: 4px solid var(--lav);
-}
-
 .settings-page .banner.danger {
   border-color: var(--danger-line);
 }
