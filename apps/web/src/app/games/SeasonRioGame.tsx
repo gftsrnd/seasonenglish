@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import type { GameAnswerInput } from "@e4s/contracts";
 import { seasonRioRoundPlan } from "@e4s/domain/engagement";
 import { ArrowLeft, ArrowRight, ArrowUp, Gift, Heart, Target, Timer, Trophy } from "lucide-react";
@@ -38,6 +38,7 @@ export function SeasonRioGame({ words: source, onFinish, attemptSeed = 0 }: { wo
   const [notice, setNotice] = useState("Chạy tới hộp quà đầu tiên.");
   const [busy, setBusy] = useState(false);
   const [ending, setEnding] = useState<"dinosaur" | "expired" | null>(null);
+  const [motion, setMotion] = useState<"left" | "right" | null>(null);
   const { play } = useExperience();
   const keys = useRef<Record<string, boolean>>({});
   const velocityY = useRef(0);
@@ -73,8 +74,14 @@ export function SeasonRioGame({ words: source, onFinish, attemptSeed = 0 }: { wo
       const key = event.key.length === 1 ? event.key.toLowerCase() : event.key;
       if (["ArrowLeft", "ArrowRight", "ArrowUp", "a", "d", "w", " "].includes(key)) event.preventDefault();
       keys.current[key] = true;
+      if (key === "ArrowLeft" || key === "a") setMotion("left");
+      if (key === "ArrowRight" || key === "d") setMotion("right");
     };
-    const up = (event: KeyboardEvent) => { const key = event.key.length === 1 ? event.key.toLowerCase() : event.key; keys.current[key] = false; };
+    const up = (event: KeyboardEvent) => {
+      const key = event.key.length === 1 ? event.key.toLowerCase() : event.key;
+      keys.current[key] = false;
+      if (["ArrowLeft", "ArrowRight", "a", "d"].includes(key) && !keys.current.ArrowLeft && !keys.current.ArrowRight && !keys.current.a && !keys.current.d) setMotion(null);
+    };
     window.addEventListener("keydown", down); window.addEventListener("keyup", up);
     return () => { window.removeEventListener("keydown", down); window.removeEventListener("keyup", up); };
   }, [busy, quiz]);
@@ -162,11 +169,15 @@ export function SeasonRioGame({ words: source, onFinish, attemptSeed = 0 }: { wo
     if (nextLives <= 0) void finish(nextAnswers, "Hết 3 mạng — khủng long đã xuất hiện.");
   };
 
-  const hold = (key: string, pressed: boolean) => { keys.current[key] = pressed; };
-  const nudge = (direction: -1 | 1) => {
+  const hold = (key: string, pressed: boolean) => {
+    keys.current[key] = pressed;
+    if (key === "ArrowLeft" && pressed) setMotion("left");
+    if (key === "ArrowRight" && pressed) setMotion("right");
+    if (!pressed && ["ArrowLeft", "ArrowRight"].includes(key) && !keys.current.ArrowLeft && !keys.current.ArrowRight && !keys.current.a && !keys.current.d) setMotion(null);
+  };
+  const beginMove = (direction: -1 | 1) => {
     if (busy || quiz) return;
     hold(direction < 0 ? "ArrowLeft" : "ArrowRight", true);
-    setHeroX((value) => Math.max(18, Math.min(flagX + 40, value + direction * 8)));
   };
   const jump = () => { if (busy || quiz) return; hold("jump", true); if (velocityY.current === 0) velocityY.current = 11; };
   const trapQuizFocus = (event: React.KeyboardEvent<HTMLDivElement>) => {
@@ -180,12 +191,12 @@ export function SeasonRioGame({ words: source, onFinish, attemptSeed = 0 }: { wo
   };
   const cameraLimit = Math.max(0, worldWidth - 900);
   const camera = Math.min(cameraLimit, Math.max(0, heroX * .35, heroX - 760));
-  const isMoving = keys.current.ArrowLeft || keys.current.ArrowRight || keys.current.a || keys.current.d;
+  const isMoving = motion !== null;
   const heroPose = heroY > 0 ? "jump" : isMoving ? (Math.floor(heroX / 8) % 2 ? "run1" : "run2") : "idle";
   const noticeTone = notice.startsWith("🍄") || notice.startsWith("🏁") ? "is-success" : notice.startsWith("💔") || notice.startsWith("Hết 3") ? "is-error" : notice.startsWith("⏱") ? "is-warning" : "";
   return <div className="game-runner" aria-busy={busy || undefined}>
     <div className="game-hud"><h2>Season-rio</h2><span><Trophy size={16} aria-hidden="true" /><strong>{score}/{roundPlan.total}</strong></span><span><Gift size={16} aria-hidden="true" />Quà <strong>{gateStates.filter((gate) => gate !== "closed").length}/{roundPlan.gateCount}</strong></span><span><Target size={16} aria-hidden="true" />Boss <strong>{bossHealth > 0 ? bossHealth : "xong"}</strong>{bossHealth > 0 ? <><Timer size={14} aria-hidden="true" />{bossSeconds}s</> : null}</span><span className="game-lives" aria-label={`${lives} mạng còn lại`}>{[0, 1, 2].map((life) => <Heart className={life < lives ? "is-active" : "is-lost"} fill={life < lives ? "currentColor" : "none"} size={17} strokeWidth={2} aria-hidden="true" key={life} />)}</span></div>
-    <div ref={sceneRef} className="rio-scene" role="application" aria-label="Màn chơi Season-rio" tabIndex={0} onBlur={(event) => { if (!event.currentTarget.contains(event.relatedTarget as Node | null)) keys.current = {}; }}>
+    <div ref={sceneRef} className="rio-scene" role="application" aria-label="Màn chơi Season-rio" tabIndex={0} onKeyDown={(event) => { if (["ArrowLeft", "ArrowRight", "ArrowUp", " ", "a", "d", "w"].includes(event.key)) event.preventDefault(); }} onBlur={(event) => { if (!event.currentTarget.contains(event.relatedTarget as Node | null)) { keys.current = {}; setMotion(null); } }}>
       <div className="rio-viewport"><div className="rio-world" style={{ width: worldWidth, transform: `translateX(-${camera}px)` }}>
         <div className="rio-cloud rio-cloud--one" /><div className="rio-cloud rio-cloud--two" />
         {platforms.map((platform, index) => <div data-testid="rio-platform" className="rio-platform" style={{ left: platform.left, width: platform.width, height: platform.height }} key={`${platform.left}-${index}`} />)}
@@ -195,7 +206,7 @@ export function SeasonRioGame({ words: source, onFinish, attemptSeed = 0 }: { wo
         <div data-testid="season-rio-hero" className={`rio-hero ${heroY > 0 ? "is-jumping" : isMoving ? "is-running" : ""}`} style={{ left: heroX, bottom: 28 + heroY }}><SeasonHero pose={heroPose} /></div>
         <div className="rio-ground" />
       </div></div>
-       <div className="mario-controls" aria-label="Điều khiển Season-rio"><div><button type="button" aria-label="Sang trái" disabled={busy || Boolean(quiz)} onPointerDown={(event) => { event.preventDefault(); nudge(-1); }} onPointerUp={(event) => { event.preventDefault(); hold("ArrowLeft", false); }} onPointerCancel={() => hold("ArrowLeft", false)} onPointerLeave={() => hold("ArrowLeft", false)}><ArrowLeft className="game-control-icon" size={24} strokeWidth={2} aria-hidden="true" /></button><button type="button" aria-label="Sang phải" disabled={busy || Boolean(quiz)} onPointerDown={(event) => { event.preventDefault(); nudge(1); }} onPointerUp={(event) => { event.preventDefault(); hold("ArrowRight", false); }} onPointerCancel={() => hold("ArrowRight", false)} onPointerLeave={() => hold("ArrowRight", false)}><ArrowRight className="game-control-icon" size={24} strokeWidth={2} aria-hidden="true" /></button></div><button className="jump" type="button" aria-label="Lên" disabled={busy || Boolean(quiz)} onPointerDown={(event) => { event.preventDefault(); jump(); }} onPointerUp={(event) => { event.preventDefault(); hold("jump", false); }} onPointerCancel={() => hold("jump", false)} onPointerLeave={() => hold("jump", false)}><ArrowUp className="game-control-icon" size={24} strokeWidth={2} aria-hidden="true" /></button></div>
+       <div className="mario-controls" aria-label="Điều khiển Season-rio"><div><RioControl label="Sang trái" disabled={busy || Boolean(quiz)} icon={<ArrowLeft className="game-control-icon" size={24} strokeWidth={2} aria-hidden="true" />} onPress={() => beginMove(-1)} onRelease={() => hold("ArrowLeft", false)} focusScene={() => sceneRef.current?.focus({ preventScroll: true })} /><RioControl label="Sang phải" disabled={busy || Boolean(quiz)} icon={<ArrowRight className="game-control-icon" size={24} strokeWidth={2} aria-hidden="true" />} onPress={() => beginMove(1)} onRelease={() => hold("ArrowRight", false)} focusScene={() => sceneRef.current?.focus({ preventScroll: true })} /></div><RioControl className="jump" label="Lên" disabled={busy || Boolean(quiz)} icon={<ArrowUp className="game-control-icon" size={24} strokeWidth={2} aria-hidden="true" />} onPress={jump} onRelease={() => hold("jump", false)} focusScene={() => sceneRef.current?.focus({ preventScroll: true })} /></div>
       {quiz ? <div ref={quizDialogRef} className="rio-quiz" role="dialog" aria-modal="true" aria-label={quiz.phase === "gate" ? "Câu hỏi hộp quà" : "Câu hỏi Boss"} tabIndex={-1} onKeyDown={trapQuizFocus}><div><span className="eyebrow">{quiz.phase === "gate" ? `Hộp quà ${quiz.index + 1}/${roundPlan.gateCount} hỏi` : `${season.food.emoji} Boss hỏi · ${bossSeconds}s`}</span><h3>{quiz.word.vietnamese}</h3><p>{quiz.word.definition}</p><div>{choices(words, quiz.word, 4, attemptSeed ^ quiz.index).map((choice) => <button type="button" disabled={busy} key={choice.id} onClick={() => answerQuiz(choice)}>{choice.english}</button>)}</div></div></div> : null}
       {ending ? <div className="game-ending" role="status">{ending === "dinosaur" ? <DinoGameOverArt /> : <span>{season.food.emoji}</span>}<strong>{ending === "dinosaur" ? "Hết mạng!" : "Hết 10 giây!"}</strong><small>{ending === "dinosaur" ? "Khủng long đã bắt kịp bạn." : `${season.food.name} khổng lồ đã hỏng.`}</small></div> : null}
     </div>
@@ -203,4 +214,18 @@ export function SeasonRioGame({ words: source, onFinish, attemptSeed = 0 }: { wo
      {busy ? <span className="game-loading" role="status">Đang lưu kết quả…</span> : null}
      <p className={`game-notice ${noticeTone}`} aria-live="polite">{notice}</p>
   </div>;
+}
+
+function RioControl({ label, disabled, icon, onPress, onRelease, focusScene, className }: { label: string; disabled: boolean; icon: ReactNode; onPress: () => void; onRelease: () => void; focusScene: () => void; className?: string }) {
+  const release = (event: React.PointerEvent<HTMLButtonElement>) => {
+    event.preventDefault();
+    if (event.currentTarget.hasPointerCapture?.(event.pointerId)) event.currentTarget.releasePointerCapture?.(event.pointerId);
+    onRelease();
+  };
+  return <button className={className} type="button" aria-label={label} disabled={disabled} onPointerDown={(event) => {
+    event.preventDefault();
+    focusScene();
+    event.currentTarget.setPointerCapture?.(event.pointerId);
+    onPress();
+  }} onPointerUp={release} onPointerCancel={release} onLostPointerCapture={onRelease} onClick={(event) => event.preventDefault()}>{icon}</button>;
 }

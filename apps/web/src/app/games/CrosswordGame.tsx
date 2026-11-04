@@ -61,6 +61,17 @@ export function CrosswordGame({ words, onFinish, attemptSeed = 0 }: { words: Gam
     const entries = entriesAt(key);
     if (entries.some((entry) => entry.direction !== direction)) setDirection((value) => value === "across" ? "down" : "across");
   };
+  const selectCell = (key: string) => {
+    const entries = entriesAt(key);
+    if (!entries.length) return;
+    if (activeCell === key && entries.length > 1) {
+      toggleDirection(key);
+    } else {
+      setDirection(entries.find((entry) => entry.direction === direction)?.direction ?? entries[0]!.direction);
+    }
+    setActiveCell(key);
+    focusCell(key);
+  };
   const moveAlongActiveEntry = (key: string) => {
     const entry = entriesAt(key).find((candidate) => candidate.direction === direction) ?? entriesAt(key)[0];
     if (!entry) return;
@@ -165,16 +176,14 @@ export function CrosswordGame({ words, onFinish, attemptSeed = 0 }: { words: Gam
     <div className="game-hud"><h2>{crossword.placed.length} từ</h2><span>Gợi ý <strong>{hints}</strong></span><span>Kiểm tra <strong>{checks}</strong></span></div>
     <div className="crossword-scene">
       <p className="crossword-scroll-hint" role="note">Màn nhỏ: vuốt ngang để xem hết lưới.</p>
-      <div className="crossword-mode" role="status" aria-live="polite"><span>Đang đi <b>{direction === "across" ? "Ngang" : "Dọc"}</b></span><span>Ô hiện tại <b>{activeEntry?.number ?? "—"}</b></span><button type="button" className="btn-sm" onClick={() => activeCell && toggleDirection(activeCell)} disabled={!activeCell || entriesAt(activeCell).length < 2}>Đổi hướng</button></div>
+      <div className="crossword-mode" role="status" aria-live="polite"><span>Đang đi <b>{direction === "across" ? "Ngang" : "Dọc"}</b></span><span>Từ đang chọn <b>{activeEntry?.number ?? "—"}</b></span><button type="button" className="btn-sm" onClick={() => activeCell && toggleDirection(activeCell)} disabled={!activeCell || entriesAt(activeCell).length < 2}>Đổi hướng</button></div>
+      {activeEntry ? <p className="crossword-active-clue"><b>{activeEntry.number}. {activeEntry.direction === "across" ? "Ngang" : "Dọc"}</b> · {activeEntry.word.vietnamese}{activeEntry.word.definition ? ` — ${activeEntry.word.definition}` : ""} <small>({activeEntry.value.length} chữ)</small></p> : <p className="crossword-active-clue is-empty">Chọn một ô để xem gợi ý của từ đó.</p>}
       <div className="crossword-grid" role="grid" aria-label="Lưới ô chữ" aria-readonly="false" aria-rowcount={crossword.cells.length} aria-colcount={crossword.cells[0]?.length ?? 0} style={{ gridTemplateColumns: `repeat(${crossword.cells[0]?.length ?? 1}, minmax(28px, 38px))` }}>
         {crossword.cells.map((row, rowIndex) => <div role="row" aria-label={`Hàng ${rowIndex + 1}`} aria-rowindex={rowIndex + 1} key={`row-${rowIndex}`}>
           {row.map((wanted, columnIndex) => {
           const key = cellKey(rowIndex, columnIndex);
           if (!wanted) return <span className="crossword-block" aria-hidden="true" key={key} />;
-          return <label role="gridcell" aria-label={`Ô chữ hàng ${rowIndex + 1} cột ${columnIndex + 1}`} aria-colindex={columnIndex + 1} aria-current={activeCell === key ? "true" : undefined} className={`crossword-cell ${states[key] ?? ""} ${activeEntryCells.includes(key) ? "is-active-entry" : ""} ${activeCell === key ? "is-active" : ""}`} key={key} onClick={() => {
-            if (activeCell === key) toggleDirection(key);
-            setActiveCell(key);
-          }}>{crossword.numbers[key] ? <small>{crossword.numbers[key]}</small> : null}<input ref={(element) => { inputRefs.current[key] = element; }} aria-label={`Ô chữ hàng ${rowIndex + 1} cột ${columnIndex + 1}`} aria-describedby={cellClueIds(rowIndex, columnIndex) || undefined} maxLength={1} value={values[key] ?? ""} disabled={busy} onFocus={() => {
+          return <label role="gridcell" aria-label={`Ô chữ hàng ${rowIndex + 1} cột ${columnIndex + 1}`} aria-colindex={columnIndex + 1} aria-current={activeCell === key ? "true" : undefined} className={`crossword-cell ${states[key] ?? ""} ${activeEntryCells.includes(key) ? "is-active-entry" : ""} ${activeCell === key ? "is-active" : ""}`} key={key} onClick={() => selectCell(key)}>{crossword.numbers[key] ? <small>{crossword.numbers[key]}</small> : null}<input ref={(element) => { inputRefs.current[key] = element; }} aria-label={`Ô chữ hàng ${rowIndex + 1} cột ${columnIndex + 1}`} aria-describedby={cellClueIds(rowIndex, columnIndex) || undefined} maxLength={1} value={values[key] ?? ""} disabled={busy} onFocus={() => {
             const entries = entriesAt(key);
             if (entries.length === 1) setDirection(entries[0]!.direction);
             setActiveCell(key);

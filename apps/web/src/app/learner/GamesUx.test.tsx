@@ -8,7 +8,8 @@ import { SeasonCatchGame } from "../games/SeasonCatchGame.js";
 import { SeasonRioGame } from "../games/SeasonRioGame.js";
 import { TypingRaceGame } from "../games/TypingRaceGame.js";
 import { WordSortGame } from "../games/WordSortGame.js";
-import { LearnerGame, LearnerGames } from "./Games.js";
+import { prepareGameAttempt } from "../games/types.js";
+import { createGameAttemptSeed, LearnerGame, LearnerGames } from "./Games.js";
 import type { LearnerCallbacks } from "./contracts.js";
 
 afterEach(() => {
@@ -79,7 +80,7 @@ describe("learner game visual and interaction regressions", () => {
     expect(catchView.container.querySelector('.catch-prompt img[src^="data:image/svg+xml"]')).toBeInTheDocument();
     expect(catchView.container.querySelector('.falling-item img[src^="data:image/svg+xml"]')).toBeInTheDocument();
     expect(catchView.container.querySelector('.season-animal[src^="data:image/svg+xml"]')).toHaveAttribute("alt", "Sóc mùa thu");
-    expect(catchView.container.querySelector(".basket")).toHaveTextContent("🧺");
+    expect(catchView.container.querySelector(".basket .lucide-shopping-basket")).toBeInTheDocument();
     expect(catchView.container.querySelectorAll(".game-lives .lucide-heart")).toHaveLength(3);
     expect(catchView.container.querySelector(".game-lives")).not.toHaveTextContent(/[❤️🖤]/);
     expect(screen.getAllByTestId("falling-item")).toHaveLength(3);
@@ -99,7 +100,8 @@ describe("learner game visual and interaction regressions", () => {
 
     expect(screen.getByText("Hứng đúng vật phẩm, giữ 3 mạng.")).toBeInTheDocument();
     expect(screen.queryByText(/mang đúng từ: lá \(thu\)/i)).not.toBeInTheDocument();
-    expect(screen.getByText("So điểm với đồng nghiệp qua các game từ vựng. Mở từ B1.")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Chơi Season-rio" })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Chơi Đua gõ từ" })).toBeInTheDocument();
   });
 
   it("keeps games visible but disables rounds the active word set cannot build", () => {
@@ -208,6 +210,7 @@ describe("learner game visual and interaction regressions", () => {
     expect(container.querySelector(".typing-clue-copy")).toBeInTheDocument();
   });
 
+
   it("loads Typing race artwork through the game media resolver and keeps a fallback when unavailable", async () => {
     vi.stubGlobal("requestAnimationFrame", vi.fn(() => 1));
     vi.stubGlobal("cancelAnimationFrame", vi.fn());
@@ -287,21 +290,20 @@ describe("learner game visual and interaction regressions", () => {
     vi.spyOn(performance, "now").mockImplementation(() => now);
     render(<SeasonRioGame words={wordSet.words} onFinish={vi.fn()} />);
 
-    await act(async () => {
-      const right = screen.getByRole("button", { name: "Sang phải" });
-      for (let index = 0; index < 35; index += 1) {
-        fireEvent.pointerDown(right);
-        fireEvent.pointerUp(right);
-      }
-    });
-    await act(async () => {
-      for (let index = 0; index < 6; index += 1) {
+    const right = screen.getByRole("button", { name: "Sang phải" });
+    const hero = screen.getByTestId("season-rio-hero");
+    fireEvent.pointerDown(right, { pointerId: 4 });
+    expect(hero).toHaveClass("is-running");
+    for (let index = 0; index < 80 && !screen.queryByRole("dialog"); index += 1) {
+      await act(async () => {
         const callback = frames.shift();
-        if (!callback) break;
+        if (!callback) return;
         now += 17;
         callback(now);
-      }
-    });
+      });
+    }
+    fireEvent.pointerUp(right, { pointerId: 4 });
+    expect(Number.parseFloat((hero as HTMLElement).style.left)).toBeGreaterThan(40);
 
     const dialog = await screen.findByRole("dialog");
     const options = within(dialog).getAllByRole("button");
@@ -339,6 +341,25 @@ describe("learner game visual and interaction regressions", () => {
     fireEvent.keyDown(afterTyped, { key: "Backspace" });
     expect(next).toHaveValue("");
     expect(next).toHaveFocus();
+  });
+
+  it("switches a crossing cell between horizontal and vertical word entry", () => {
+    const { container } = render(<CrosswordGame words={wordSet.words} onFinish={vi.fn()} />);
+    const crossing = screen.getAllByRole("textbox").find((input) => (input.getAttribute("aria-describedby")?.match(/crossword-clue-/g)?.length ?? 0) > 1);
+    expect(crossing).toBeDefined();
+    fireEvent.click(crossing!);
+    expect(container.querySelector(".crossword-mode")).toHaveTextContent("Ngang");
+    fireEvent.click(crossing!);
+    expect(container.querySelector(".crossword-mode")).toHaveTextContent("Dọc");
+    fireEvent.change(crossing!, { target: { value: "a" } });
+    expect(document.activeElement).not.toBe(crossing);
+  });
+
+  it("starts every game session from a fresh shared attempt seed", () => {
+    const firstSeed = createGameAttemptSeed(() => .01);
+    const secondSeed = createGameAttemptSeed(() => .73);
+    expect(firstSeed).not.toBe(secondSeed);
+    expect(prepareGameAttempt(wordSet.words, firstSeed).map((word) => word.id)).not.toEqual(prepareGameAttempt(wordSet.words, secondSeed).map((word) => word.id));
   });
 
   it("uses the same SVG game identity in the outer title and tutorial", () => {
@@ -385,14 +406,14 @@ describe("learner game visual and interaction regressions", () => {
     expect(screen.getByTestId("catch-basket")).toHaveStyle({ left: "50%" });
   });
 
-  it("shows a recoverable error when weekly vocabulary cannot be loaded", async () => {
-    const useWeeklyGameSet = vi.fn().mockRejectedValue(new Error("network"));
-    render(<LearnerGames view={hubView} actions={{ ...actions, useWeeklyGameSet } as unknown as LearnerCallbacks} />);
+  it("shows a recoverable error when removing the active vocabulary set fails", async () => {
+    const deleteGameSet = vi.fn().mockRejectedValue(new Error("network"));
+    render(<LearnerGames view={hubView} actions={{ ...actions, deleteGameSet } as unknown as LearnerCallbacks} />);
 
-    fireEvent.click(screen.getByRole("button", { name: "Dùng từ vựng tuần này" }));
+    fireEvent.click(screen.getByRole("button", { name: "Xoá bộ này" }));
 
-    expect(await screen.findByRole("alert")).toHaveTextContent("Không tải được từ vựng tuần này. Vui lòng thử lại.");
-    expect(screen.getByRole("button", { name: "Dùng từ vựng tuần này" })).not.toBeDisabled();
+    expect(await screen.findByRole("alert")).toHaveTextContent("Không xoá được bộ từ. Vui lòng thử lại.");
+    expect(screen.getByRole("button", { name: "Xoá bộ này" })).not.toBeDisabled();
   });
 
   it("keeps natural-topic generation open before the learner has selected a word set", () => {

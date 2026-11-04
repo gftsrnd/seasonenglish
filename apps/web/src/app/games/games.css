@@ -46,6 +46,46 @@
   justify-self: start;
 }
 
+.game-result {
+  display: grid !important;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 18px !important;
+  width: min(680px, 100%);
+  margin-inline: auto !important;
+  min-height: 210px;
+  overflow: hidden;
+  background:
+    radial-gradient(circle at 8% 14%, color-mix(in srgb, var(--primary-soft) 80%, transparent), transparent 38%),
+    linear-gradient(145deg, var(--surface), var(--surface-2));
+  padding: clamp(24px, 5vw, 42px) !important;
+}
+
+.game-result__icon {
+  display: grid;
+  width: 72px;
+  height: 72px;
+  place-items: center;
+  border: 1px solid var(--primary-line);
+  border-radius: 24px;
+  background: var(--primary-soft);
+  color: var(--primary-strong, var(--olive-dark));
+  box-shadow: 0 12px 28px color-mix(in srgb, var(--primary) 18%, transparent);
+}
+
+.game-result__copy h2,
+.game-result > div h2 { margin: 3px 0 4px; }
+.game-result__copy p { margin: 0; color: var(--muted); }
+.game-result__score { display: grid; justify-items: center; gap: 2px; min-width: 126px; padding: 14px; border: 1px solid var(--primary-line); border-radius: 18px; background: color-mix(in srgb, var(--primary-soft) 56%, white); }
+.game-result__score strong { font-size: clamp(2rem, 5vw, 2.8rem); line-height: 1; color: var(--primary-strong, var(--olive-dark)); }
+.game-result__score span { color: var(--muted); font-size: .78rem; }
+.game-result__actions { grid-column: 2 / -1; display: flex; flex-wrap: wrap; gap: 10px; }
+.game-result.is-error { grid-template-columns: auto minmax(0, 1fr); border-color: var(--danger-line) !important; }
+.game-result.is-error .game-result__icon { border-color: var(--danger-line); background: var(--danger-soft); color: var(--danger); }
+.game-result.is-error .notice { grid-column: 1 / -1; }
+.game-result.is-error > button { grid-column: 2; justify-self: start; }
+.game-result__spinner { border: 3px solid var(--primary-line); border-top-color: var(--primary); border-radius: 50%; animation: game-spin .75s linear infinite; }
+
 .game-runner {
   display: grid;
   gap: 16px;
@@ -317,6 +357,22 @@
   padding: 5px 9px;
 }
 
+.crossword-active-clue {
+  width: min(640px, 100%);
+  margin: 0 auto;
+  border-inline-start: 3px solid var(--primary);
+  border-radius: 0 8px 8px 0;
+  background: color-mix(in srgb, var(--surface) 76%, transparent);
+  padding: 8px 10px;
+  color: var(--text);
+  font-size: .82rem;
+  line-height: 1.45;
+  text-align: center;
+}
+
+.crossword-active-clue small,
+.crossword-active-clue.is-empty { color: var(--muted); }
+
 .crossword-scroll-hint {
   display: none;
   margin: 0;
@@ -327,12 +383,17 @@
 
 .crossword-grid {
   display: grid;
-  width: 100%;
+  width: max-content;
   max-width: 100%;
   min-width: 0;
   overflow-x: auto;
-  margin: 0 auto;
+  margin: 4px auto 0;
   gap: 3px;
+  padding: 8px;
+  border: 1px solid color-mix(in srgb, var(--line) 78%, transparent);
+  border-radius: 14px;
+  background: color-mix(in srgb, var(--surface) 72%, transparent);
+  box-shadow: 0 10px 25px rgba(54, 73, 40, .05);
 }
 
 .crossword-grid > [role="row"] {
@@ -467,7 +528,8 @@
 .catch-arena {
   height: 440px;
   touch-action: none;
-  background: linear-gradient(#dff3ff 0 82%, #9bc154 82%);
+  background: linear-gradient(#dff3ff 0 78%, #9bc154 78%);
+  box-shadow: inset 0 0 0 4px rgba(255, 255, 255, .26);
 }
 
 .catch-prompt {
@@ -525,7 +587,7 @@
   width: 56px;
   height: 56px;
   object-fit: contain;
-  filter: drop-shadow(0 4px 3px rgba(0, 0, 0, .12));
+  filter: drop-shadow(0 6px 5px rgba(38, 60, 83, .2));
 }
 
 .falling-item b {
@@ -548,9 +610,16 @@
 
 .catch-hero .basket {
   z-index: 2;
-  margin-bottom: -9px;
-  font-size: 46px;
-  line-height: .8;
+  display: grid;
+  width: 52px;
+  height: 34px;
+  place-items: center;
+  margin-bottom: -7px;
+  border: 2px solid #6b4a2d;
+  border-radius: 9px 9px 14px 14px;
+  background: linear-gradient(#f7d493, #d7924e);
+  color: #6b4a2d;
+  box-shadow: 0 4px 0 rgba(93, 63, 35, .16);
 }
 
 .catch-hero .season-animal {
@@ -706,6 +775,7 @@
   height: 58px;
   transform: translateX(-50%);
   transition: left 30ms linear, bottom 30ms linear;
+  transform: translateX(-50%);
 }
 
 .rio-hero img {
@@ -717,6 +787,9 @@
 .rio-hero.is-jumping {
   filter: drop-shadow(0 8px 3px rgba(0, 0, 0, .12));
 }
+
+.rio-hero.is-running img { animation: rio-step .18s steps(2, end) infinite; }
+@keyframes rio-step { 50% { transform: translateY(-3px) rotate(-2deg); } }
 
 .rio-boss {
   position: absolute;
@@ -823,6 +896,8 @@
   font-weight: 600;
   box-shadow: 0 4px 14px rgba(46, 39, 31, .16);
   pointer-events: auto;
+  touch-action: none;
+  user-select: none;
 }
 
 .mario-controls .jump {
@@ -985,18 +1060,22 @@
   flex-wrap: wrap;
   justify-content: center;
   gap: 6px;
-  min-height: 44px;
+  min-height: 48px;
+  padding: 4px 10px;
+  border-radius: 14px;
+  background: color-mix(in srgb, var(--surface) 78%, transparent);
 }
 
 .typing-word span {
   display: grid;
   place-items: center;
-  width: 32px;
-  height: 40px;
+  width: 36px;
+  height: 44px;
   border-bottom: 3px solid var(--border);
   background: var(--surface);
   font-weight: 600;
 }
+
 
 .typing-word span.is-correct {
   border-color: var(--olive);
@@ -1057,6 +1136,9 @@
 }
 
 @media (max-width: 720px) {
+  .game-result { grid-template-columns: auto minmax(0, 1fr); min-height: 0; }
+  .game-result__score { grid-column: 1 / -1; justify-self: stretch; grid-template-columns: auto 1fr; align-items: center; text-align: left; }
+  .game-result__actions { grid-column: 1 / -1; }
   .game-board > .card,
   .game-runner {
     gap: 16px;
@@ -1118,6 +1200,7 @@
     min-width: 0;
     padding-inline: 3px;
   }
+
 }
 
 @media (max-width: 420px) {
@@ -1151,6 +1234,8 @@
   .typing-clue > div > strong {
     font-size: 1rem;
   }
+
+  .typing-word span { width: 31px; height: 40px; }
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -1171,6 +1256,9 @@
   .game-ending .dino .jaw {
     animation: none;
   }
+
+  .rio-hero.is-running img,
+  .game-result__spinner { animation: none; }
 }
 
 /* Games hub: keep the existing app order while making each responsive

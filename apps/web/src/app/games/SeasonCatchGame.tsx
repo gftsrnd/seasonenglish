@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { GameAnswerInput, GameEvidenceEventInput, GameWordSetView } from "@e4s/contracts";
-import { Heart } from "lucide-react";
+import { Heart, ShoppingBasket } from "lucide-react";
 import { choices, prepareGameAttempt, type FinishGame, type GameWord } from "./types.js";
 import { currentSeasonVisual, DinoGameOverArt, SeasonCatchItem, SeasonHero } from "./season-art.js";
 import { useExperience } from "../../features/experience/Experience.js";
@@ -137,11 +137,11 @@ export function SeasonCatchGame({ words: source, cefr, onFinish, attemptSeed = 0
   const noticeTone = notice.startsWith("✅") ? "is-success" : notice.startsWith("💔") ? "is-error" : "";
   return <div className="game-runner" aria-busy={busy || undefined}>
     <div className="game-hud"><h2>Lượt {Math.min(round + 1, words.length)}/{words.length}</h2><span>Điểm <strong>{score}</strong></span><span className="game-lives" aria-label={`${lives} mạng còn lại`}>{[0, 1, 2].map((life) => <Heart className={life < lives ? "is-active" : "is-lost"} fill={life < lives ? "currentColor" : "none"} size={17} strokeWidth={2} aria-hidden="true" key={life} />)}</span></div>
-    <div ref={sceneRef} className="catch-scene catch-arena" role="application" aria-label="Màn chơi Season catch" tabIndex={0} onBlur={() => { eventPending.current = false; pointerDown.current = false; }} onPointerMove={(event) => { if (!pointerDown.current && event.buttons === 0) return; event.preventDefault(); setFromPointer(event.clientX, event.currentTarget); }} onPointerDown={(event) => { event.preventDefault(); pointerDown.current = true; event.currentTarget.focus({ preventScroll: true }); setFromPointer(event.clientX, event.currentTarget); }} onPointerUp={() => { pointerDown.current = false; }} onPointerCancel={() => { pointerDown.current = false; }} onPointerLeave={() => { pointerDown.current = false; }}>
+    <div ref={sceneRef} className="catch-scene catch-arena" role="application" aria-label="Màn chơi Season catch" tabIndex={0} onBlur={() => { eventPending.current = false; pointerDown.current = false; }} onPointerMove={(event) => { if (!pointerDown.current && event.buttons === 0) return; event.preventDefault(); setFromPointer(event.clientX, event.currentTarget); }} onPointerDown={(event) => { event.preventDefault(); pointerDown.current = true; event.currentTarget.setPointerCapture?.(event.pointerId); event.currentTarget.focus({ preventScroll: true }); setFromPointer(event.clientX, event.currentTarget); }} onPointerUp={(event) => { pointerDown.current = false; if (event.currentTarget.hasPointerCapture?.(event.pointerId)) event.currentTarget.releasePointerCapture?.(event.pointerId); }} onPointerCancel={() => { pointerDown.current = false; }} onLostPointerCapture={() => { pointerDown.current = false; }}>
       <p className="catch-prompt"><SeasonCatchItem /><strong>{current.vietnamese}</strong><small>{current.definition}</small></p>
       <div className="catch-sky" aria-hidden="true"><span className="cloud cloud--one" /><span className="cloud cloud--two" /></div>
       {items.map((item) => <div data-testid="falling-item" className="falling-item" key={item.word.id} style={{ left: `${item.x}%`, top: `${item.y}%` }}><SeasonCatchItem /><b>{item.word.english}</b></div>)}
-      <div data-testid="catch-basket" className="catch-hero" style={{ left: `${basketX}%` }}><span className="basket" aria-hidden="true">🧺</span><SeasonHero className="season-animal" /></div>
+      <div data-testid="catch-basket" className="catch-hero" style={{ left: `${basketX}%` }}><span className="basket" role="img" aria-label="Rổ hứng"><ShoppingBasket className="game-control-icon" size={38} strokeWidth={1.8} aria-hidden="true" /></span><SeasonHero className="season-animal" /></div>
       <div className="catch-ground" />
       {gameOver ? <div className="game-ending" role="status"><DinoGameOverArt /><strong>Hết mạng!</strong><small>Khủng long đã xuất hiện.</small></div> : null}
     </div>
