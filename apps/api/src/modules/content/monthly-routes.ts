@@ -1,13 +1,14 @@
 import { buildMonthlyCalendar, buildMonthlyExamScope, monthlyDayKind, type MonthlyCurriculumContract } from "@e4s/domain";
 import { monthlyResourcePlanOutputSchema, monthlyTopicSuggestionOutputSchema, type AiTaskRunner } from "@e4s/ai";
 import { createRepositories } from "@e4s/database";
+import { randomUUID } from "node:crypto";
 import type { FastifyInstance } from "fastify";
 import type { Pool } from "pg";
 import { z } from "zod";
 import { createRoleGuard } from "../identity/policy.js";
 import { evaluateMonthlyLessonQuality } from "./monthly-quality.js";
 import { generateMonthlyDayWithAi, MONTHLY_DAY_COMPONENTS } from "./monthly-day-generation.js";
-import { buildMonthlyPronunciationDistinctnessConstraint, buildMonthlyResourcesFromAiPlan, isSingleHeadword, MonthlyResourceCriteriaError, MonthlyResourcePlanError, selectMonthlyPronunciationCandidates, selectMonthlySupportCandidates } from "./monthly-resource-generation.js";
+import { buildMonthlyPronunciationDistinctnessConstraint, buildMonthlyResourcesFromAiPlan, getMonthlyGrammarPhaseIssues, isSingleHeadword, MonthlyResourceCriteriaError, MonthlyResourcePlanError, runMonthlyGrammarPhaseWithRetry, selectMonthlyPronunciationCandidates, selectMonthlySupportCandidates } from "./monthly-resource-generation.js";
 import { safeGenerationDiagnosticIssues } from "./generation-errors.js";
 
 const params = z.object({ month: z.string().regex(/^\d{4}-(0[1-9]|1[0-2])$/u) });
@@ -41,6 +42,7 @@ const resourceCriteriaInput = z.object({
   grammarTopicCount: z.coerce.number().int().min(1).max(12),
   pronunciationSoundCount: z.coerce.number().int().min(1).max(12)
 });
+const resourceCheckpointQuery = z.object({ cefr: z.enum(["A1", "A2", "B1", "B2", "C1"]) });
 const lessonInput = z.object({
   title: z.string().trim().min(1).max(200),
   parts: z.array(z.object({ code: z.enum(MONTHLY_DAY_COMPONENTS), title: z.string().optional(), content: z.record(z.string(), z.unknown()) }))
@@ -127,6 +129,31 @@ export function registerMonthlyContentRoutes(app: FastifyInstance, pool: Pool, a
     return repositories.monthlyContent.saveFramework(request.e4sSession!.user.id, input.contract as MonthlyCurriculumContract);
   });
 
+  app.get("/api/v1/content/months/:month/resources/checkpoint", { preHandler: contentOperator }, async (request) => {
+    const month = params.parse(request.params);
+    const query = resourceCheckpointQuery.parse(request.query);
+    const checkpoint = await repositories.monthlyContent.getResourceGenerationCheckpoint(request.e4sSession!.user.id, month.month, query.cefr);
+    const calendar = buildMonthlyCalendar(month.month);
+    const newLessonCount = calendar.effectiveDays.filter((_date, index) => monthlyDayKind(index + 1, calendar.lessonCount) === "new").length;
+    const counts = { coreTerms: newLessonCount * 3, expandedTerms: newLessonCount * 9, grammarTopics: 2, pronunciationTargets: 4 };
+    const categories = Object.fromEntries(Object.entries(counts).map(([key, target]) => {
+      const value = checkpoint?.categories[key];
+      const count = Array.isArray(value) ? value.length : 0;
+      return [key, { state: count === target ? "complete" : "missing", count, target }];
+    }));
+    return {
+      state: checkpoint ? "draft_checkpoint" : "not_started",
+      draftOnly: true,
+      publishable: false,
+      retryOnlyMissing: true,
+      generationId: checkpoint?.generationId ?? null,
+      version: checkpoint?.version ?? null,
+      briefVersion: checkpoint?.briefVersion ?? null,
+      updatedAt: checkpoint?.updatedAt ?? null,
+      categories
+    };
+  });
+
   app.post("/api/v1/content/months/:month/resources/generate", { preHandler: contentOperator }, async (request, reply) => {
     const month = params.parse(request.params);
     const actorId = request.e4sSession!.user.id;
@@ -141,6 +168,22 @@ export function registerMonthlyContentRoutes(app: FastifyInstance, pool: Pool, a
     if (!brief || brief.status !== "approved") return reply.code(409).send({ code: "MONTHLY_TOPIC_NOT_APPROVED" });
     if (!task) return reply.code(503).send({ code: "AI_PROMPT_NOT_READY" });
     try {
+      const checkpointSchemaVersion = "monthly-resource-category-v1";
+      let checkpoint = await repositories.monthlyContent.getResourceGenerationCheckpoint(actorId, month.month, criteria.cefr);
+      const generationId = checkpoint?.generationId ?? randomUUID();
+      const readCheckpointCategory = <T>(key: string, schema: z.ZodType<T>): T | undefined => {
+        const source = checkpoint?.sourceLineage[key];
+        if (!source || typeof source !== "object" || !("schemaVersion" in source) || source.schemaVersion !== checkpointSchemaVersion) return undefined;
+        const parsed = schema.safeParse(checkpoint?.categories[key]);
+        return parsed.success ? parsed.data : undefined;
+      };
+      const saveCheckpointCategory = async (key: string, value: unknown) => {
+        checkpoint = await repositories.monthlyContent.saveResourceGenerationCheckpoint(actorId, {
+          month: month.month, cefr: criteria.cefr, briefVersion: brief.version, generationId,
+          categories: { [key]: value },
+          sourceLineage: { [key]: { schemaVersion: checkpointSchemaVersion, briefVersion: brief.version, promptKey: "monthly_resource_generation", status: "draft_checkpoint", generatedAt: new Date().toISOString() } }
+        });
+      };
       const theme = {
         version: brief.version,
         title: brief.title,
@@ -150,8 +193,9 @@ export function registerMonthlyContentRoutes(app: FastifyInstance, pool: Pool, a
       };
       const calendar = buildMonthlyCalendar(month.month);
       const newLessonDays = calendar.effectiveDays.flatMap((_date, index) => monthlyDayKind(index + 1, calendar.lessonCount) === "new" ? [index + 1] : []);
-      // One operator action generates category-specific AI phases in memory.
-      // Nothing is persisted until the complete monthly contract validates.
+      // Each completed resource category is checkpointed as an unpublished draft.
+      // Only saveResourceDraft creates the editable month framework after all
+      // categories pass whole-pool validation.
       const newLessonCount = newLessonDays.length;
       const phaseInput = (coreTermBatch: Array<{ id: string; word: string; meaning: string; type: string; ipa: string }>, targets: { vocabularyCount: number; expandedVocabularyCount: number; grammarTopicCount: number; pronunciationSoundCount: number }) => ({
         month: month.month,
@@ -170,9 +214,14 @@ export function registerMonthlyContentRoutes(app: FastifyInstance, pool: Pool, a
         });
         return monthlyResourcePlanOutputSchema.parse(generated.output);
       };
-      const coreTerms: z.infer<typeof monthlyResourcePlanOutputSchema>["coreTerms"] = [];
+      const coreTerms: z.infer<typeof monthlyResourcePlanOutputSchema>["coreTerms"] = readCheckpointCategory("coreTerms", monthlyResourcePlanOutputSchema.shape.coreTerms) ?? [];
       const coreWords = new Set<string>();
-      for (let batchIndex = 0; batchIndex < newLessonCount; batchIndex += 1) {
+      const cachedCoreValid = coreTerms.length === criteria.vocabularyCount
+        && coreTerms.every((term) => isSingleHeadword(term.word))
+        && new Set(coreTerms.map((term) => normalizeMonthlyResourceWord(term.word))).size === coreTerms.length;
+      if (!cachedCoreValid) coreTerms.length = 0;
+      for (const term of coreTerms) coreWords.add(normalizeMonthlyResourceWord(term.word));
+      for (let batchIndex = coreTerms.length / 3; batchIndex < newLessonCount; batchIndex += 1) {
         let accepted: z.infer<typeof monthlyResourcePlanOutputSchema>["coreTerms"] | undefined;
         let issue = "";
         for (let attempt = 0; attempt < 3; attempt += 1) {
@@ -192,12 +241,14 @@ export function registerMonthlyContentRoutes(app: FastifyInstance, pool: Pool, a
         coreTerms.push(...accepted);
         accepted.forEach((term) => coreWords.add(normalizeMonthlyResourceWord(term.word)));
       }
+      if (!cachedCoreValid) await saveCheckpointCategory("coreTerms", coreTerms);
 
-      const expandedTerms: z.infer<typeof monthlyResourcePlanOutputSchema>["expandedTerms"] = [];
+      const cachedExpanded = readCheckpointCategory("expandedTerms", monthlyResourcePlanOutputSchema.shape.expandedTerms) ?? [];
+      const expandedTerms: z.infer<typeof monthlyResourcePlanOutputSchema>["expandedTerms"] = cachedExpanded.length === criteria.expandedVocabularyCount ? cachedExpanded : [];
       const coreWordsList = coreTerms.map((term) => `${term.id}: ${term.word} (${term.meaning})`);
       const maxExpandedRepeats = Math.floor(criteria.expandedVocabularyCount * 0.2);
       const maxExpandedPhrases = Math.floor(criteria.expandedVocabularyCount * 0.25);
-      for (let coreIndex = 0; coreIndex < coreTerms.length; coreIndex += 1) {
+      for (let coreIndex = expandedTerms.length / 3; coreIndex < coreTerms.length; coreIndex += 1) {
         const coreTerm = coreTerms[coreIndex]!;
         const coreBatch = [coreTerm];
         const acceptedForCore: z.infer<typeof monthlyResourcePlanOutputSchema>["expandedTerms"] = [];
@@ -231,20 +282,26 @@ export function registerMonthlyContentRoutes(app: FastifyInstance, pool: Pool, a
         const accepted = acceptedForCore.map((term, index) => ({ ...term, id: `${criteria.cefr.toLowerCase()}-expanded-${expandedTerms.length + index + 1}` }));
         expandedTerms.push(...accepted);
       }
+      if (expandedTerms.length === criteria.expandedVocabularyCount && expandedTerms !== cachedExpanded) await saveCheckpointCategory("expandedTerms", expandedTerms);
 
       const monthlyVocabularyForPronunciation = [...coreTerms, ...expandedTerms].map((term) => `${term.word} (${term.meaning})`).join("; ");
-      const grammarResult = await runPhase(
-        `PHASE 3 — GRAMMAR ONLY. Return exactly two genuine grammarTopics and leave coreTerms, expandedTerms and pronunciationTargets empty. This is the reusable month pool; do not assign calendar days. Each grammar topic must have exactly three ordered progressive steps that build in complexity; use a distinct focus and teaching point at each step, with precise formula, concise Vietnamese usage, and three to six authentic workplace examples. Topic A steps are the progression for N1–N2, N3–N4, N5–N6. Topic B steps are the progression for N7–N8, N9–N10, N11–N12. N13–N15 combine the third step of both topics.`,
-        [],
-        { vocabularyCount: 0, expandedVocabularyCount: 0, grammarTopicCount: 2, pronunciationSoundCount: 0 }
-      );
-      if (grammarResult.coreTerms.length || grammarResult.expandedTerms.length || grammarResult.grammarTopics.length !== 2 || grammarResult.pronunciationTargets.length) {
-        throw new MonthlyResourcePlanError(["Grammar phase must return exactly two grammar topics and no vocabulary or pronunciation resources."]);
+      const cachedGrammarTopics = readCheckpointCategory("grammarTopics", monthlyResourcePlanOutputSchema.shape.grammarTopics) ?? [];
+      const cachedGrammarResult = { coreTerms: [], expandedTerms: [], grammarTopics: cachedGrammarTopics, pronunciationTargets: [] } as z.infer<typeof monthlyResourcePlanOutputSchema>;
+      let grammarResult = getMonthlyGrammarPhaseIssues(cachedGrammarResult).length === 0 ? cachedGrammarResult : undefined;
+      if (!grammarResult) {
+        grammarResult = await runMonthlyGrammarPhaseWithRetry((prompt) => runPhase(
+          prompt,
+          [],
+          { vocabularyCount: 0, expandedVocabularyCount: 0, grammarTopicCount: 2, pronunciationSoundCount: 0 }
+        ));
+        await saveCheckpointCategory("grammarTopics", grammarResult.grammarTopics);
       }
-      const pronunciationTargets: z.infer<typeof monthlyResourcePlanOutputSchema>["pronunciationTargets"] = [];
+      const cachedPronunciationTargets = readCheckpointCategory("pronunciationTargets", monthlyResourcePlanOutputSchema.shape.pronunciationTargets) ?? [];
+      const pronunciationTargets: z.infer<typeof monthlyResourcePlanOutputSchema>["pronunciationTargets"] = cachedPronunciationTargets.length === 4 ? cachedPronunciationTargets : [];
       const usedPronunciationWords = new Set<string>();
+      for (const target of pronunciationTargets) for (const word of target.words) usedPronunciationWords.add(normalizeMonthlyResourceWord(word.word));
       const pronunciationSlots = ["P1 (N1–N3)", "P2 (N4–N6)", "P3 (N7–N9)", "P4 (N10–N12)"];
-      for (let soundIndex = 0; soundIndex < 4; soundIndex += 1) {
+      for (let soundIndex = pronunciationTargets.length; soundIndex < 4; soundIndex += 1) {
         let acceptedTarget: z.infer<typeof monthlyResourcePlanOutputSchema>["pronunciationTargets"][number] | undefined;
         let targetTemplate: z.infer<typeof monthlyResourcePlanOutputSchema>["pronunciationTargets"][number] | undefined;
         const acceptedTargetWords: z.infer<typeof monthlyResourcePlanOutputSchema>["pronunciationTargets"][number]["words"] = [];
@@ -277,6 +334,7 @@ export function registerMonthlyContentRoutes(app: FastifyInstance, pool: Pool, a
         pronunciationTargets.push(acceptedTarget);
         for (const word of acceptedTarget.words) usedPronunciationWords.add(normalizeMonthlyResourceWord(word.word));
       }
+      if (pronunciationTargets.length === 4 && cachedPronunciationTargets.length !== 4) await saveCheckpointCategory("pronunciationTargets", pronunciationTargets);
       const plan = monthlyResourcePlanOutputSchema.parse({
         coreTerms,
         expandedTerms,

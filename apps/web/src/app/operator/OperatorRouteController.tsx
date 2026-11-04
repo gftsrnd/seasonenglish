@@ -191,25 +191,40 @@ function MonthsRoute({ client, readOnly, preview }: { client: OperatorApiClient;
   const [month, setMonth] = useState(browserMonth);
   const [cefr, setCefr] = useState<CefrLevel>("A1");
   const [overview, setOverview] = useState<import("@e4s/contracts").MonthlyOperatorOverviewView>();
+  const [resourceCheckpoint, setResourceCheckpoint] = useState<Awaited<ReturnType<OperatorApiClient["getContentMonthResourceCheckpoint"]>>>();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string>();
   const [editor, setEditor] = useState<{ frameworkId: string; dayNumber: number; initial?: { title?: string; parts?: Array<{ code?: string; title?: string; content?: Record<string, unknown> }> } }>();
   const systemMonthInitialized = useRef(false);
+  const loadResourceCheckpoint = () => typeof client.getContentMonthResourceCheckpoint === "function"
+    ? client.getContentMonthResourceCheckpoint(month, cefr).catch(() => undefined)
+    : Promise.resolve(undefined);
   const load = async () => {
     setError(undefined);
-    try { setOverview(await client.getContentMonth(month)); }
+    try {
+      const [next, checkpoint] = await Promise.all([
+        client.getContentMonth(month),
+        loadResourceCheckpoint()
+      ]);
+      setOverview(next);
+      setResourceCheckpoint(checkpoint);
+    }
     catch (reason) { setError(message(reason)); }
   };
   useEffect(() => {
     setOverview(undefined);
-    void client.getContentMonth(month).then((next) => {
+    void Promise.all([
+      client.getContentMonth(month),
+      loadResourceCheckpoint()
+    ]).then(([next, checkpoint]) => {
       setOverview(next);
+      setResourceCheckpoint(checkpoint);
       if (!systemMonthInitialized.current) {
         systemMonthInitialized.current = true;
         if (next.monthWindow.current !== month) setMonth(next.monthWindow.current);
       }
     }).catch((reason) => setError(message(reason)));
-  }, [client, month]);
+  }, [client, month, cefr]);
   const run = async <T,>(action: () => Promise<T>, success?: string): Promise<T | undefined> => {
     setBusy(true); setError(undefined);
     try { const result = await action(); await load(); if (success) toast.show({ message: success, tone: "ok" }); return result; }
@@ -231,6 +246,7 @@ function MonthsRoute({ client, readOnly, preview }: { client: OperatorApiClient;
     todayMonth={overview?.monthWindow.current ?? browserMonth}
     overview={overview ?? { systemDate: new Date().toISOString().slice(0, 10), monthWindow: { previous: month, current: month, next: month, writable: false }, brief: null, frameworks: [] }}
     cefr={cefr}
+    {...(resourceCheckpoint ? { resourceCheckpoint } : {})}
     busy={busy}
     readOnly={readOnly}
     {...(error ? { error } : {})}

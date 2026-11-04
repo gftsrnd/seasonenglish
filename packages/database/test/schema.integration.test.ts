@@ -15,7 +15,7 @@ const expectedTables = [
   "content_lesson_level_settings", "game_sets", "idempotency_keys", "jobs", "learner_profiles", "learner_vocabulary_unlocks", "level_up_challenge_results", "lesson_set_versions",
   "lesson_sets", "lesson_versions", "lessons", "lesson_part_appeals", "lesson_part_attempts", "media_assets", "micro_lessons", "notification_deliveries", "organization_settings", "organizations",
   "certificate_issuances", "level_up_retry_plans", "practice_appeals", "practice_submissions", "program_weeks", "programs", "progress_records", "scheduled_level_changes",
-  "manager_destructive_confirmations", "manager_maintenance_backups", "manager_pin_reports", "month_frameworks", "month_lesson_corrections", "month_lessons", "program_months", "prompt_versions", "provider_configurations", "reminders", "reward_events", "rubric_versions", "sessions",
+  "manager_destructive_confirmations", "manager_maintenance_backups", "manager_pin_reports", "month_frameworks", "monthly_resource_generation_checkpoints", "month_lesson_corrections", "month_lessons", "program_months", "prompt_versions", "provider_configurations", "reminders", "reward_events", "rubric_versions", "sessions",
   "surveys", "topic_reports", "topic_strikes", "user_credentials", "users"
 ].sort();
 

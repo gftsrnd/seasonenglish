@@ -24,6 +24,18 @@ export type AssessmentAudioReadView = AudioArtifactView & {
   questionKey?: string | null;
 };
 
+export type MonthlyResourceCheckpointView = {
+  state: "draft_checkpoint" | "not_started";
+  draftOnly: true;
+  publishable: false;
+  retryOnlyMissing: true;
+  generationId: string | null;
+  version: number | null;
+  briefVersion: number | null;
+  updatedAt: string | null;
+  categories: Record<"coreTerms" | "expandedTerms" | "grammarTopics" | "pronunciationTargets", { state: "complete" | "missing"; count: number; target: number }>;
+};
+
 export interface OperatorApiClient {
   getAssessmentReviewOverview(): Promise<AssessmentReviewOverviewView>;
   getAssessmentReviewLearner(learnerId: string): Promise<AssessmentReviewLearnerView>;
@@ -71,6 +83,7 @@ export interface OperatorApiClient {
   approveContentMonthBrief(month: string): Promise<void>;
   saveContentMonthFramework(month: string, contract: MonthlyCurriculumContract): Promise<{ id: string; cefr: CefrLevel; version: number; status: "draft"; scopeHash: string }>;
   generateContentMonthResources(month: string, criteria: { cefr: CefrLevel; vocabularyCount: number; expandedVocabularyCount: number; grammarTopicCount: number; pronunciationSoundCount: number }): Promise<{ id: string; cefr: CefrLevel; version: number; status: "draft"; scopeHash: string }>;
+  getContentMonthResourceCheckpoint(month: string, cefr: CefrLevel): Promise<MonthlyResourceCheckpointView>;
   approveContentMonthFramework(id: string): Promise<void>;
   generateMonthlyFinal(id: string): Promise<{ versionId: string; status: "draft"; blueprint: AssessmentLevelFormUpdateInput }>;
   updateMonthlyFinal(versionId: string, input: AssessmentLevelFormUpdateInput): Promise<{ versionId: string; status: "draft"; blueprint: AssessmentLevelFormUpdateInput }>;
@@ -169,6 +182,7 @@ export const operatorApiClient: OperatorApiClient = {
   approveContentMonthBrief: async (month) => { await request(`/api/v1/content/months/${encodeURIComponent(month)}/brief/approve`, { method: "POST", body: "{}" }); },
   saveContentMonthFramework: (month, contract) => request(`/api/v1/content/months/${encodeURIComponent(month)}/frameworks/generate`, { method: "POST", body: JSON.stringify({ contract }) }),
   generateContentMonthResources: (month, criteria) => request(`/api/v1/content/months/${encodeURIComponent(month)}/resources/generate`, { method: "POST", body: JSON.stringify(criteria) }),
+  getContentMonthResourceCheckpoint: (month, cefr) => request(`/api/v1/content/months/${encodeURIComponent(month)}/resources/checkpoint?cefr=${encodeURIComponent(cefr)}`),
   approveContentMonthFramework: async (id) => { await request(`/api/v1/content/month-frameworks/${encodeURIComponent(id)}/approve`, { method: "POST", body: "{}" }); },
   generateMonthlyFinal: (id) => request(`/api/v1/month-frameworks/${encodeURIComponent(id)}/monthly-final`, { method: "POST", body: "{}" }),
   updateMonthlyFinal: (versionId, input) => request(`/api/v1/monthly-final-forms/${encodeURIComponent(versionId)}`, { method: "PUT", body: JSON.stringify(input) }),

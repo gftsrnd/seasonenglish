@@ -157,6 +157,14 @@ export const monthFrameworks = pgTable("month_frameworks", {
   createdBy: uuid("created_by").references(() => users.id), createdAt: now(), updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow()
 }, (table) => [uniqueIndex("month_frameworks_program_month_cefr_unique").on(table.programMonthId, table.cefr)]);
 
+export const monthlyResourceGenerationCheckpoints = pgTable("monthly_resource_generation_checkpoints", {
+  id: uuid("id").primaryKey(), programMonthId: uuid("program_month_id").notNull().references(() => programMonths.id, { onDelete: "cascade" }),
+  cefr: text("cefr").notNull(), briefVersion: integer("brief_version").notNull(), generationId: uuid("generation_id").notNull(),
+  version: integer("version").notNull().default(1), categories: jsonb("categories").notNull().default(emptyObject),
+  sourceLineage: jsonb("source_lineage").notNull().default(emptyObject), createdBy: uuid("created_by").references(() => users.id),
+  createdAt: now(), updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow()
+}, (table) => [uniqueIndex("monthly_resource_generation_checkpoints_month_cefr_unique").on(table.programMonthId, table.cefr)]);
+
 export const promptVersions = pgTable("prompt_versions", {
   id: uuid("id").primaryKey(), organizationId: uuid("organization_id").notNull().references(() => organizations.id),
   taskKey: text("task_key").notNull(), version: integer("version").notNull(), content: text("content").notNull(),
@@ -513,6 +521,6 @@ export const databaseSchema = {
   gameResults, gameSets, idempotencyKeys, jobs, learnerProfiles, lessonSetVersions,
   lessonPartAppeals, lessonPartAttempts, lessonSets, lessonVersions, lessons, notificationDeliveries, organizations, organizationSettings, providerConfigurations,
   practiceSubmissions, learnerVocabularyUnlocks, levelUpChallengeResults, practiceAppeals, passCourseCertificates, passCourseReadiness,
-  monthFrameworks, monthLessonCorrections, monthLessons, programMonths, programWeeks, programs, progressRecords, promptVersions,
+  monthFrameworks, monthlyResourceGenerationCheckpoints, monthLessonCorrections, monthLessons, programMonths, programWeeks, programs, progressRecords, promptVersions,
   reminders, rewardEvents, rubricVersions, sessions, surveys, userCredentials, users, managerPinReports, managerDestructiveConfirmations, managerMaintenanceBackups
 };

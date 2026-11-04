@@ -109,6 +109,41 @@ export function buildMonthlyPronunciationDistinctnessConstraint(
   return `${banned} ${retry}`.trim();
 }
 
+export function getMonthlyGrammarPhaseIssues(result: MonthlyResourcePlanTaskOutput): string[] {
+  const issues: string[] = [];
+  if (result.coreTerms.length) issues.push(`coreTerms must be empty (received ${result.coreTerms.length})`);
+  if (result.expandedTerms.length) issues.push(`expandedTerms must be empty (received ${result.expandedTerms.length})`);
+  if (result.grammarTopics.length !== 2) issues.push(`grammarTopics must contain exactly 2 items (received ${result.grammarTopics.length})`);
+  if (result.pronunciationTargets.length) issues.push(`pronunciationTargets must be empty (received ${result.pronunciationTargets.length})`);
+  for (const [topicIndex, topic] of result.grammarTopics.entries()) {
+    if (topic.steps.length !== 3) issues.push(`grammarTopics[${topicIndex}] must contain exactly 3 progressive steps (received ${topic.steps.length})`);
+    if (new Set(topic.steps.map((step) => step.id)).size !== topic.steps.length) issues.push(`grammarTopics[${topicIndex}] repeats a step ID`);
+    if (new Set(topic.steps.map((step) => step.focus.trim().toLocaleLowerCase("en").replace(/[\s\p{P}]+/gu, " ").trim())).size !== topic.steps.length) {
+      issues.push(`grammarTopics[${topicIndex}] must have distinct step focus values`);
+    }
+  }
+  return issues;
+}
+
+export function buildMonthlyGrammarPhasePrompt(rejectedIssues: readonly string[] = []): string {
+  const repair = rejectedIssues.length
+    ? ` Previous response rejected: ${rejectedIssues.join("; ")}. Correct each listed issue in this response.`
+    : "";
+  return `PHASE 3 — GRAMMAR ONLY. Return exactly two grammarTopics; coreTerms, expandedTerms and pronunciationTargets must be empty arrays. Each grammar topic must have exactly three ordered progressive steps that build in complexity; use a distinct focus and teaching point at each step, with precise formula, concise Vietnamese usage, and three to six authentic workplace examples. Topic A steps are the progression for N1–N2, N3–N4, N5–N6. Topic B steps are the progression for N7–N8, N9–N10, N11–N12. N13–N15 combine the third step of both topics. Return JSON matching the schema only; do not include explanations or any other resource category.${repair}`;
+}
+
+export async function runMonthlyGrammarPhaseWithRetry(
+  generate: (prompt: string) => Promise<MonthlyResourcePlanTaskOutput>
+): Promise<MonthlyResourcePlanTaskOutput> {
+  let issues: string[] = [];
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    const result = await generate(buildMonthlyGrammarPhasePrompt(issues));
+    issues = getMonthlyGrammarPhaseIssues(result);
+    if (!issues.length) return result;
+  }
+  throw new MonthlyResourcePlanError([`Grammar phase failed after 3 attempts: ${issues.join("; ")}.`]);
+}
+
 function normalizeMonthlyResourceWord(value: string): string {
   return value.trim().toLocaleLowerCase("en").replace(/[\s\p{P}]+/gu, " ").trim();
 }

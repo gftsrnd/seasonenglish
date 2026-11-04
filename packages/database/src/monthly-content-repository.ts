@@ -79,6 +79,25 @@ interface SystemDateWindowRow {
   next_month: string;
 }
 
+export interface MonthlyResourceGenerationCheckpoint {
+  id: string;
+  generationId: string;
+  briefVersion: number;
+  version: number;
+  categories: Record<string, unknown>;
+  sourceLineage: Record<string, unknown>;
+  updatedAt: string;
+}
+
+export interface SaveMonthlyResourceGenerationCheckpointInput {
+  month: string;
+  cefr: MonthFrameworkView["cefr"];
+  briefVersion: number;
+  generationId: string;
+  categories: Record<string, unknown>;
+  sourceLineage: Record<string, unknown>;
+}
+
 export interface MonthlyLessonDraftInput {
   title: string;
   parts: Array<{ code: string; title?: string | undefined; content: Record<string, unknown> }>;
@@ -270,6 +289,7 @@ export class MonthlyContentRepository {
         [frameworkId, month.id, pool.cefr, version, JSON.stringify(versionedPool), scopeHash, actorId]
       );
     }
+    await client.query("delete from monthly_resource_generation_checkpoints where program_month_id = $1 and cefr = $2", [month.id, pool.cefr]);
     result = { frameworkId, version, scopeHash, replaced: Boolean(existing) };
     await client.query("commit");
     } catch (error) {
@@ -282,6 +302,74 @@ export class MonthlyContentRepository {
       month: pool.month, cefr: pool.cefr, version: result.version, scopeHash: result.scopeHash, resourcePool: true
     });
     return { id: result.frameworkId, cefr: pool.cefr, version: result.version, status: "draft", scopeHash: result.scopeHash };
+  }
+
+  async getResourceGenerationCheckpoint(actorId: string, month: string, cefr: MonthFrameworkView["cefr"]): Promise<MonthlyResourceGenerationCheckpoint | null> {
+    const actor = await this.requireContentOperator(actorId);
+    await this.requireWritableMonth(actor.organization_id, month);
+    const result = await this.database.query<{
+      id: string; generation_id: string; brief_version: number; version: number; categories: Record<string, unknown>;
+      source_lineage: Record<string, unknown>; updated_at: Date;
+    }>(
+      `select checkpoint.id, checkpoint.generation_id, checkpoint.brief_version, checkpoint.version,
+              checkpoint.categories, checkpoint.source_lineage, checkpoint.updated_at
+       from monthly_resource_generation_checkpoints checkpoint
+       join program_months pm on pm.id = checkpoint.program_month_id
+       where pm.organization_id = $1 and pm.month = $2 and checkpoint.cefr = $3
+         and pm.brief_status = 'approved' and pm.brief_version = checkpoint.brief_version`,
+      [actor.organization_id, month, cefr]
+    );
+    const row = result.rows[0];
+    return row ? {
+      id: row.id, generationId: row.generation_id, briefVersion: row.brief_version, version: row.version,
+      categories: row.categories, sourceLineage: row.source_lineage, updatedAt: row.updated_at.toISOString()
+    } : null;
+  }
+
+  async saveResourceGenerationCheckpoint(actorId: string, input: SaveMonthlyResourceGenerationCheckpointInput): Promise<MonthlyResourceGenerationCheckpoint> {
+    const actor = await this.requireContentOperator(actorId);
+    await this.requireWritableMonth(actor.organization_id, input.month);
+    const monthResult = await this.database.query<BriefRow & { id: string }>(
+      `select id, month, theme_title, theme_brief, theme_context, communication_goal, brief_version, brief_status
+       from program_months where organization_id = $1 and month = $2`, [actor.organization_id, input.month]
+    );
+    const month = monthResult.rows[0];
+    if (!month || month.brief_status !== "approved" || month.brief_version !== input.briefVersion) {
+      throw new Error("Monthly resource checkpoint requires the current approved brief version");
+    }
+    const approved = await this.database.query<{ id: string }>(
+      `select id from month_frameworks where program_month_id = $1 and cefr = $2 and status = 'approved' limit 1`, [month.id, input.cefr]
+    );
+    if (approved.rowCount) throw new Error("Approved monthly resources are immutable");
+    const insertedId = randomUUID();
+    const result = await this.database.query<{
+      id: string; generation_id: string; brief_version: number; version: number; categories: Record<string, unknown>;
+      source_lineage: Record<string, unknown>; updated_at: Date;
+    }>(
+      `insert into monthly_resource_generation_checkpoints
+         (id, program_month_id, cefr, brief_version, generation_id, version, categories, source_lineage, created_by)
+       values ($1, $2, $3, $4, $5, 1, $6::jsonb, $7::jsonb, $8)
+       on conflict (program_month_id, cefr) do update set
+         generation_id = excluded.generation_id,
+         brief_version = excluded.brief_version,
+         version = monthly_resource_generation_checkpoints.version + 1,
+         categories = case when monthly_resource_generation_checkpoints.generation_id = excluded.generation_id
+                              and monthly_resource_generation_checkpoints.brief_version = excluded.brief_version
+                           then monthly_resource_generation_checkpoints.categories || excluded.categories
+                           else excluded.categories end,
+         source_lineage = case when monthly_resource_generation_checkpoints.generation_id = excluded.generation_id
+                                  and monthly_resource_generation_checkpoints.brief_version = excluded.brief_version
+                               then monthly_resource_generation_checkpoints.source_lineage || excluded.source_lineage
+                               else excluded.source_lineage end,
+         updated_at = now()
+       returning id, generation_id, brief_version, version, categories, source_lineage, updated_at`,
+      [insertedId, month.id, input.cefr, input.briefVersion, input.generationId, JSON.stringify(input.categories), JSON.stringify(input.sourceLineage), actorId]
+    );
+    const row = result.rows[0]!;
+    return {
+      id: row.id, generationId: row.generation_id, briefVersion: row.brief_version, version: row.version,
+      categories: row.categories, sourceLineage: row.source_lineage, updatedAt: row.updated_at.toISOString()
+    };
   }
 
   async approveFramework(actorId: string, frameworkId: string): Promise<void> {

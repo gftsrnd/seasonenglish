@@ -17,7 +17,7 @@ describe("Operator monthly planner", () => {
   });
 
   it("shows the complete Monday-to-Sunday calendar for the selected month", () => {
-    render(<ToastProvider><OperatorMonths
+    const { container } = render(<ToastProvider><OperatorMonths
       month="2026-11"
       todayMonth="2026-11"
       overview={{ systemDate: "2026-11-03", monthWindow: { previous: "2026-10", current: "2026-11", next: "2026-12", writable: true }, brief: null, frameworks: [] }}
@@ -81,6 +81,27 @@ describe("Operator monthly planner", () => {
     expect(screen.getAllByText("Số lượng đề xuất theo lịch học").at(-1)).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Duyệt tài nguyên" }));
     expect(onApproveFramework).toHaveBeenCalledWith("framework-a1");
+  });
+
+  it("shows durable category checkpoints as unpublished and continues only missing groups", async () => {
+    const user = userEvent.setup();
+    const onGenerateFramework = vi.fn();
+    const { container } = render(<ToastProvider><OperatorMonths
+      month="2026-11" todayMonth="2026-11" cefr="A2" busy={false}
+      overview={{ systemDate: "2026-11-03", monthWindow: { previous: "2026-10", current: "2026-11", next: "2026-12", writable: true }, brief: { month: "2026-11", title: "Customer handover", brief: "Prepare a handover.", context: "Customer success", communicationGoal: "Explain risks", version: 1, status: "approved" }, frameworks: [] }}
+      resourceCheckpoint={{ state: "draft_checkpoint", draftOnly: true, publishable: false, retryOnlyMissing: true, generationId: "generation-1", version: 2, briefVersion: 1, updatedAt: "2026-11-04T00:00:00.000Z", categories: {
+        coreTerms: { state: "complete", count: 48, target: 48 }, expandedTerms: { state: "complete", count: 144, target: 144 }, grammarTopics: { state: "missing", count: 0, target: 2 }, pronunciationTargets: { state: "missing", count: 0, target: 4 }
+      } }}
+      actions={{ onSelectMonth: vi.fn(), onSelectLevel: vi.fn(), onSuggestBrief: vi.fn(), onSaveBrief: vi.fn(), onApproveBrief: vi.fn(), onGenerateFramework, onSaveFramework: vi.fn(), onApproveFramework: vi.fn(), onSaveDay: vi.fn(), onGenerateDay: vi.fn(), onAcknowledge: vi.fn(), onApproveDay: vi.fn(), onCreateCorrection: vi.fn(), onSaveCorrection: vi.fn(), onAcknowledgeCorrection: vi.fn(), onApproveCorrection: vi.fn() }}
+    /></ToastProvider>);
+
+    expect(screen.getByText("Bản nháp theo nhóm · chưa chốt")).toBeInTheDocument();
+    const checkpoint = screen.getByRole("status", { name: "Tiến độ tài nguyên nháp" });
+    expect(within(checkpoint).getByText("Từ cốt lõi").parentElement).toHaveTextContent("48/48");
+    expect(within(checkpoint).getByText("Ngữ pháp").parentElement).toHaveTextContent("0/2");
+    expect(within(container).queryByRole("button", { name: "Duyệt tài nguyên" })).not.toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Tiếp tục nhóm còn thiếu" }));
+    expect(onGenerateFramework).toHaveBeenCalledWith("2026-11", { cefr: "A2", vocabularyCount: 48, expandedVocabularyCount: 144, grammarTopicCount: 2, pronunciationSoundCount: 4 });
   });
 
   it("uses the compact Sinh action for a review and keeps approved daily lessons view-only", () => {

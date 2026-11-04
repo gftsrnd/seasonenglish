@@ -45,6 +45,42 @@ describe("monthly content persistence", () => {
     expect(await repository.recommendedBatch(DEMO_IDS.operator, framework.id)).toEqual([1, 2, 3, 4, 5, 6, 7, 8, 9, 10]);
   });
 
+  it("durably merges validated resource category checkpoints without creating a framework", async () => {
+    await repository.saveBrief(DEMO_IDS.operator, {
+      month,
+      title: "Preparing a quarterly budget review",
+      brief: "Teams prepare and explain a quarterly budget review.",
+      context: "Finance team planning meeting",
+      communicationGoal: "Explain costs and request approval"
+    }).catch(() => undefined);
+    const checkpointInput = {
+      month,
+      cefr: "A2" as const,
+      briefVersion: 1,
+      generationId: "f2910ee2-e2bc-49a9-a611-bbb5cafbdb62",
+      sourceLineage: { coreTerms: { schemaVersion: "monthly-resource-category-v1", promptKey: "monthly_resource_generation" } }
+    };
+    const first = await repository.saveResourceGenerationCheckpoint(DEMO_IDS.operator, {
+      ...checkpointInput,
+      categories: { coreTerms: [{ id: "a2-core-1", word: "budget" }] }
+    });
+    const second = await repository.saveResourceGenerationCheckpoint(DEMO_IDS.operator, {
+      ...checkpointInput,
+      categories: { expandedTerms: [{ id: "a2-expanded-1", word: "forecast", relatesToCoreId: "a2-core-1" }] },
+      sourceLineage: { expandedTerms: { schemaVersion: "monthly-resource-category-v1", promptKey: "monthly_resource_generation" } }
+    });
+
+    expect(second.id).toBe(first.id);
+    expect(second.version).toBe(2);
+    expect(second.categories).toEqual({
+      coreTerms: [{ id: "a2-core-1", word: "budget" }],
+      expandedTerms: [{ id: "a2-expanded-1", word: "forecast", relatesToCoreId: "a2-core-1" }]
+    });
+    expect(await repository.getResourceGenerationCheckpoint(DEMO_IDS.operator, month, "A2")).toMatchObject({ generationId: checkpointInput.generationId, version: 2 });
+    const framework = await client.query("select id from month_frameworks where cefr = 'A2'");
+    expect(framework.rows).toHaveLength(0);
+  });
+
   it("allows game sets to belong to a monthly learning cycle", async () => {
     const column = await client.query(
       "select column_name from information_schema.columns where table_schema = 'public' and table_name = 'game_sets' and column_name = 'program_month_id'"

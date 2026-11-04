@@ -5,6 +5,7 @@ import { useToast } from "../shared/design-system.js";
 import { OperatorLessonPreview } from "./adapters.js";
 import { WeeklyPracticeEditor } from "./Review.js";
 import type { ReviewWeeklyPractice } from "./types.js";
+import type { MonthlyResourceCheckpointView } from "../../api/operator.js";
 import { groupVocabularyForDisplay, isStandaloneWord } from "./resource-display.js";
 import "./months.css";
 
@@ -42,7 +43,7 @@ export interface OperatorMonthsActions {
   onAcknowledgeCorrection(correctionId: string, findingKeys: string[]): Promise<void> | void;
   onApproveCorrection(correctionId: string): Promise<void> | void;
 }
-export interface OperatorMonthsProps { month: string; todayMonth: string; overview: MonthlyOperatorOverviewView; cefr: CefrLevel; busy: boolean; readOnly?: boolean; error?: string; actions: OperatorMonthsActions; }
+export interface OperatorMonthsProps { month: string; todayMonth: string; overview: MonthlyOperatorOverviewView; cefr: CefrLevel; busy: boolean; readOnly?: boolean; error?: string; resourceCheckpoint?: MonthlyResourceCheckpointView; actions: OperatorMonthsActions; }
 
 const LEVELS: CefrLevel[] = ["A1", "A2", "B1", "B2", "C1"];
 const WEEKDAYS = ["T2", "T3", "T4", "T5", "T6", "T7", "CN"];
@@ -62,7 +63,7 @@ function frameworkStatus(status?: string) {
   return "Chưa tạo";
 }
 
-export function OperatorMonths({ month, todayMonth, overview, cefr, busy, readOnly = false, error, actions }: OperatorMonthsProps) {
+export function OperatorMonths({ month, todayMonth, overview, cefr, busy, readOnly = false, error, resourceCheckpoint, actions }: OperatorMonthsProps) {
   const toast = useToast();
   const framework = overview.frameworks.find((item) => item.cefr === cefr);
   const calendar = useMemo(() => buildMonthlyCalendar(month), [month]);
@@ -213,7 +214,17 @@ export function OperatorMonths({ month, todayMonth, overview, cefr, busy, readOn
           </dl>
         </div> : <div className="monthly-resource-cards">{resources.map((item) => <button key={item.key} type="button" onClick={() => setResourcePanel(item.key)}><b>{item.count}</b><strong>{item.label}</strong><span>{item.description}</span></button>)}</div>}
         <div className="monthly-actions monthly-resource-actions">
-          {framework?.status !== "approved" && <button type="button" className="btn btn-primary" disabled={busy} onClick={() => void generateFramework()}>{framework?.resources ? "Sinh lại tài nguyên" : "Sinh tài nguyên"}</button>}
+          {resourceCheckpoint?.state === "draft_checkpoint" && !framework?.resources && <div className="monthly-resource-checkpoint" role="status" aria-label="Tiến độ tài nguyên nháp">
+            <b>Bản nháp theo nhóm · chưa chốt</b>
+            <ul>{([
+              ["coreTerms", "Từ cốt lõi"], ["expandedTerms", "Từ mở rộng"], ["grammarTopics", "Ngữ pháp"], ["pronunciationTargets", "Phát âm"]
+            ] as const).map(([key, label]) => {
+              const category = resourceCheckpoint.categories[key];
+              return <li key={key}><span>{label}</span><strong>{category.count}/{category.target}</strong><em>{category.state === "complete" ? "Đã lưu nháp" : "Chưa sinh"}</em></li>;
+            })}</ul>
+            <small>Tiếp tục sẽ sinh các nhóm còn thiếu; nhóm đã lưu vẫn ở trạng thái nháp và chưa dùng cho học viên.</small>
+          </div>}
+          {framework?.status !== "approved" && <button type="button" className="btn btn-primary" disabled={busy} onClick={() => void generateFramework()}>{resourceCheckpoint?.state === "draft_checkpoint" && !framework?.resources ? "Tiếp tục nhóm còn thiếu" : framework?.resources ? "Sinh lại tài nguyên" : "Sinh tài nguyên"}</button>}
           {framework?.status === "draft" && <button type="button" className="btn" disabled={busy} onClick={() => void approveFramework()}>Duyệt tài nguyên</button>}
         </div>
       </section>

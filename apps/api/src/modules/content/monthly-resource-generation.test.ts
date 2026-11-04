@@ -3,6 +3,9 @@ import type { MonthlyResourcePlanTaskOutput } from "@e4s/ai";
 import { describe, expect, it } from "vitest";
 import {
   buildMonthlyResourcesFromAiPlan,
+  getMonthlyGrammarPhaseIssues,
+  buildMonthlyGrammarPhasePrompt,
+  runMonthlyGrammarPhaseWithRetry,
   MonthlyResourceCriteriaError,
   MonthlyResourcePlanError,
   buildMonthlyPronunciationDistinctnessConstraint,
@@ -174,6 +177,46 @@ describe("monthly AI resource generation", () => {
     expect(constraint).toContain("must not return /iː/");
     expect(constraint).toContain("The prior candidate /ɪ/ was rejected");
     expect(constraint).toContain("Choose a different phoneme or stress pattern");
+  });
+
+  it("diagnoses mixed or mis-sized grammar responses and carries exact repair requirements", () => {
+    const result = planFor();
+    result.coreTerms = [result.coreTerms[0]!];
+    result.grammarTopics = [result.grammarTopics[0]!];
+
+    const issues = getMonthlyGrammarPhaseIssues(result);
+    expect(issues).toContain("coreTerms must be empty (received 1)");
+    expect(issues).toContain("grammarTopics must contain exactly 2 items (received 1)");
+    expect(issues).toContain("expandedTerms must be empty (received 144)");
+    expect(issues).toContain("pronunciationTargets must be empty (received 4)");
+
+    const retryPrompt = buildMonthlyGrammarPhasePrompt(issues);
+    expect(retryPrompt).toContain("Return exactly two grammarTopics");
+    expect(retryPrompt).toContain("coreTerms, expandedTerms and pronunciationTargets must be empty arrays");
+    expect(retryPrompt).toContain("Previous response rejected");
+    expect(retryPrompt).toContain(issues.join("; "));
+  });
+
+  it("retries a mixed grammar response once with its concrete errors and accepts only a clean result", async () => {
+    const mixed = planFor();
+    mixed.coreTerms = [mixed.coreTerms[0]!];
+    mixed.grammarTopics = [mixed.grammarTopics[0]!];
+    const clean = planFor();
+    clean.coreTerms = [];
+    clean.expandedTerms = [];
+    clean.pronunciationTargets = [];
+    const prompts: string[] = [];
+    const sequence = [mixed, clean];
+
+    const result = await runMonthlyGrammarPhaseWithRetry(async (prompt) => {
+      prompts.push(prompt);
+      return sequence[prompts.length - 1]!;
+    });
+
+    expect(result).toBe(clean);
+    expect(prompts).toHaveLength(2);
+    expect(prompts[1]).toContain("coreTerms must be empty (received 1)");
+    expect(prompts[1]).toContain("grammarTopics must contain exactly 2 items (received 1)");
   });
 
   it("builds a two-grammar, four-pronunciation monthly contract from a valid AI plan", () => {
