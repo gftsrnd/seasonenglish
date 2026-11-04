@@ -35,6 +35,23 @@ export function selectMonthlyCoreCandidates(input: {
   return { selected, rejected };
 }
 
+export function buildMonthlyCoreCandidatesPrompt(input: {
+  cefr: string;
+  theme: string;
+  communicationGoal: string;
+  existingCoreWords: readonly string[];
+  batchNumber: number;
+  rejectedWords?: readonly string[];
+  previousIssue?: string;
+}): string {
+  const retry = input.rejectedWords?.length
+    ? ` RETRY FOR CORE BATCH ${input.batchNumber}: the immediately previous candidate set reused these exact forbidden tokens: ${input.rejectedWords.join(", ")}. Do not return any listed word, normalized variant, synonym or inflection. Replace them with six entirely different authentic standalone headwords.`
+    : input.previousIssue
+      ? ` Previous candidate set rejected: ${input.previousIssue}. Correct the issue and return six alternatives.`
+      : "";
+  return `PHASE 1 — ORDERED CORE CANDIDATES ONLY. Return exactly six ordered coreTerms candidates and no other category: expandedTerms, grammarTopics and pronunciationTargets must be empty arrays. Every candidate must be one standalone English lexical headword, never a multi-word compound phrase, slash alternative, or inflected variant of another selected core. All six candidates must be authentic, appropriate to CEFR ${input.cefr}, and useful for the approved month theme (${input.theme}) and practical communication goal (${input.communicationGoal}). The application will select the first three unique valid headwords. Use these already generated core terms as forbidden words: ${input.existingCoreWords.join("; ") || "none"}. If a candidate conflicts with a forbidden word or another candidate, replace it with a different standalone term; do not repeat the collision or a normalized variant. This is an unordered month pool; do not assign calendar days.${retry}`;
+}
+
 export function selectMonthlySupportCandidates(input: {
   candidates: MonthlyResourcePlanTaskOutput["expandedTerms"];
   coreId: string;

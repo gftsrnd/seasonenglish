@@ -8,7 +8,7 @@ import { z } from "zod";
 import { createRoleGuard } from "../identity/policy.js";
 import { evaluateMonthlyLessonQuality } from "./monthly-quality.js";
 import { generateMonthlyDayWithAi, MONTHLY_DAY_COMPONENTS } from "./monthly-day-generation.js";
-import { buildMonthlyPronunciationDistinctnessConstraint, buildMonthlyPronunciationSchemaRepairIssue, buildMonthlyResourcesFromAiPlan, getMonthlyGrammarPhaseIssues, getMonthlyPronunciationTargetIssue, isSingleHeadword, MonthlyResourceCriteriaError, MonthlyResourcePlanError, runMonthlyGrammarPhaseWithRetry, selectMonthlyCoreCandidates, selectMonthlyPronunciationCandidates, selectMonthlySupportCandidates } from "./monthly-resource-generation.js";
+import { buildMonthlyCoreCandidatesPrompt, buildMonthlyPronunciationDistinctnessConstraint, buildMonthlyPronunciationSchemaRepairIssue, buildMonthlyResourcesFromAiPlan, getMonthlyGrammarPhaseIssues, getMonthlyPronunciationTargetIssue, isSingleHeadword, MonthlyResourceCriteriaError, MonthlyResourcePlanError, runMonthlyGrammarPhaseWithRetry, selectMonthlyCoreCandidates, selectMonthlyPronunciationCandidates, selectMonthlySupportCandidates } from "./monthly-resource-generation.js";
 import { isValidMonthlyPronunciationIpaTarget } from "./monthly-resource-plan-spec.js";
 import { safeGenerationDiagnosticIssues } from "./generation-errors.js";
 
@@ -225,8 +225,17 @@ export function registerMonthlyContentRoutes(app: FastifyInstance, pool: Pool, a
       for (let batchIndex = coreTerms.length / 3; batchIndex < newLessonCount; batchIndex += 1) {
         let accepted: z.infer<typeof monthlyResourcePlanOutputSchema>["coreTerms"] | undefined;
         let issue = "";
+        let rejectedCoreWords: string[] = [];
         for (let attempt = 0; attempt < 3; attempt += 1) {
-          const prompt = `PHASE 1 — ORDERED CORE CANDIDATES ONLY. Return exactly six ordered coreTerms candidates and no other category: expandedTerms, grammarTopics and pronunciationTargets must be empty arrays. Every candidate must be one standalone English lexical headword, never a multi-word compound phrase, slash alternative, or inflected variant of another selected core. All six candidates must be authentic, appropriate to CEFR ${criteria.cefr}, and useful for the approved month theme and practical communication goal. The application will select the first three unique valid headwords. Use these already generated core terms as forbidden words: ${[...coreWords].join("; ") || "none"}. If a candidate conflicts with a forbidden word or another candidate, replace it with a different standalone term; do not repeat the collision or a normalized variant. This is an unordered month pool; do not assign calendar days. ${issue ? `The previous candidate set was rejected. Replace only the named invalid candidates with different, authentic ${criteria.cefr} workplace terms: ${issue}.` : ""}`;
+          const prompt = buildMonthlyCoreCandidatesPrompt({
+            cefr: criteria.cefr,
+            theme: theme.title,
+            communicationGoal: theme.communicationGoal,
+            existingCoreWords: [...coreWords],
+            batchNumber: batchIndex + 1,
+            rejectedWords: rejectedCoreWords,
+            previousIssue: issue
+          });
           const result = await runPhase(prompt, [], { vocabularyCount: 6, expandedVocabularyCount: 0, grammarTopicCount: 0, pronunciationSoundCount: 0 });
           const candidate = result.coreTerms;
           if (result.expandedTerms.length || result.grammarTopics.length || result.pronunciationTargets.length) {
@@ -239,6 +248,7 @@ export function registerMonthlyContentRoutes(app: FastifyInstance, pool: Pool, a
             break;
           }
           issue = `batch ${batchIndex + 1} needs exactly six candidates and at least three unique standalone headwords; received ${candidate.length}. Rejected candidates: ${selection.rejected.join("; ") || "fewer than three candidates passed selection"}`;
+          rejectedCoreWords = selection.rejected.map((rejected) => rejected.split(" -> ")[0] ?? "").filter(Boolean);
         }
         if (!accepted) throw new MonthlyResourcePlanError([`Core vocabulary generation failed: ${issue}.`]);
         coreTerms.push(...accepted);

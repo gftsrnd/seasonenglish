@@ -12,6 +12,7 @@ import {
   buildMonthlyPronunciationDistinctnessConstraint,
   buildMonthlyPronunciationSchemaRepairIssue,
   getMonthlyPronunciationTargetIssue,
+  buildMonthlyCoreCandidatesPrompt,
   selectMonthlyCoreCandidates,
   selectMonthlyPronunciationCandidates,
   selectMonthlySupportCandidates
@@ -101,6 +102,32 @@ describe("monthly AI resource generation", () => {
     expect(result.rejected).toContain("accomplish -> accomplish (duplicates an existing core term)");
     expect(result.rejected).toContain("review -> review (duplicates another candidate in this core batch)");
     expect(result.rejected).toContain("incremental improvement -> incremental improvement (must be one standalone lexical headword)");
+  });
+
+  it("repairs a six-word collision on a later core slice without relaxing uniqueness", () => {
+    const collisions = ["articulate", "ambiguous", "candid", "contingency", "scrutinise", "pragmatic"];
+    const existingCoreWords = new Set([...collisions, ...Array.from({ length: 18 }, (_, index) => `earlier${index}`)]);
+    const rejected = selectMonthlyCoreCandidates({
+      candidates: collisions.map((word, index) => ({ id: `candidate-${index}`, word, meaning: "", type: "noun", ipa: "/t/" })),
+      existingCoreWords,
+      needed: 3
+    });
+    expect(rejected.selected).toHaveLength(0);
+    expect(rejected.rejected).toHaveLength(6);
+
+    const retryPrompt = buildMonthlyCoreCandidatesPrompt({
+      cefr: "C1",
+      theme: "Project delivery",
+      communicationGoal: "Report risks and negotiate changes",
+      existingCoreWords: [...existingCoreWords],
+      batchNumber: 9,
+      rejectedWords: collisions,
+      previousIssue: "six candidates collided with existing core terms"
+    });
+    for (const word of collisions) expect(retryPrompt).toContain(word);
+    expect(retryPrompt).toContain("RETRY FOR CORE BATCH 9");
+    expect(retryPrompt).toContain("six entirely different authentic standalone headwords");
+    expect(retryPrompt).toContain("authentic, appropriate to CEFR C1");
   });
 
   it("selects the first three valid linked support terms from an ordered AI candidate set", () => {
