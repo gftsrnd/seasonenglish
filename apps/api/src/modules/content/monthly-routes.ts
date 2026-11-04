@@ -196,6 +196,7 @@ export function registerMonthlyContentRoutes(app: FastifyInstance, pool: Pool, a
       const expandedTerms: z.infer<typeof monthlyResourcePlanOutputSchema>["expandedTerms"] = [];
       const coreWordsList = coreTerms.map((term) => `${term.id}: ${term.word} (${term.meaning})`);
       const maxExpandedRepeats = Math.floor(criteria.expandedVocabularyCount * 0.2);
+      const maxExpandedPhrases = Math.floor(criteria.expandedVocabularyCount * 0.25);
       for (let coreIndex = 0; coreIndex < coreTerms.length; coreIndex += 1) {
         const coreTerm = coreTerms[coreIndex]!;
         const coreBatch = [coreTerm];
@@ -219,6 +220,7 @@ export function registerMonthlyContentRoutes(app: FastifyInstance, pool: Pool, a
             sameCoreRelations: new Set(acceptedForCore.map((term) => term.relation)),
             existingSupportWords: previousTerms,
             maxRepeatedPlacements: maxExpandedRepeats,
+            maxPhrasePlacements: maxExpandedPhrases,
             needed
           });
           acceptedForCore.push(...selection.selected);

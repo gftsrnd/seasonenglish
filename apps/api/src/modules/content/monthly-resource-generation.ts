@@ -18,6 +18,7 @@ export function selectMonthlySupportCandidates(input: {
   sameCoreRelations: ReadonlySet<MonthlyResourcePlanTaskOutput["expandedTerms"][number]["relation"]>;
   existingSupportWords: readonly string[];
   maxRepeatedPlacements: number;
+  maxPhrasePlacements: number;
   needed: number;
 }): { selected: MonthlyResourcePlanTaskOutput["expandedTerms"]; rejected: string[] } {
   const selected: MonthlyResourcePlanTaskOutput["expandedTerms"] = [];
@@ -29,6 +30,7 @@ export function selectMonthlySupportCandidates(input: {
     existingCounts.set(word, (existingCounts.get(word) ?? 0) + 1);
   }
   let repeatedPlacements = input.existingSupportWords.length - existingCounts.size;
+  let phrasePlacements = input.existingSupportWords.filter((word) => !isSingleHeadword(word)).length;
 
   for (const candidate of input.candidates) {
     const word = normalizeMonthlyResourceWord(candidate.word);
@@ -40,6 +42,7 @@ export function selectMonthlySupportCandidates(input: {
     else if (input.sameCoreWords.has(word)) reason = "duplicates a selected support term for this core";
     else if (input.sameCoreRelations.has(candidate.relation)) reason = `duplicates the ${candidate.relation} relation for this core`;
     else if (chosen.has(word)) reason = "duplicates another candidate in this core batch";
+    else if (!isSingleHeadword(candidate.word) && phrasePlacements + 1 > input.maxPhrasePlacements) reason = "exceeds the monthly phrase ceiling; standalone words are required";
     else {
       const nextRepeatCount = repeatedPlacements + (existingCounts.has(word) ? 1 : 0);
       if (nextRepeatCount > input.maxRepeatedPlacements) reason = "exceeds the 20% monthly support-repeat limit";
@@ -51,6 +54,7 @@ export function selectMonthlySupportCandidates(input: {
     }
     chosen.add(word);
     selected.push(candidate);
+    if (!isSingleHeadword(candidate.word)) phrasePlacements += 1;
     if (selected.length === input.needed) break;
   }
   return { selected, rejected };

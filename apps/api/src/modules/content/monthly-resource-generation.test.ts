@@ -73,11 +73,33 @@ describe("monthly AI resource generation", () => {
       sameCoreRelations: new Set(),
       existingSupportWords: [],
       maxRepeatedPlacements: 28,
+      maxPhrasePlacements: 36,
       needed: 3
     });
 
     expect(result.selected.map((term) => term.word)).toEqual(["annual report", "schedule", "update"]);
     expect(result.rejected).toHaveLength(2);
+  });
+
+  it("rejects a phrase once the monthly phrase budget is exhausted", () => {
+    const result = selectMonthlySupportCandidates({
+      candidates: [
+        { id: "x1", word: "annual report", meaning: "", type: "noun", relation: "collocation", relatesToCoreId: "core-a" },
+        { id: "x2", word: "schedule", meaning: "", type: "noun", relation: "synonym", relatesToCoreId: "core-a" },
+        { id: "x3", word: "update", meaning: "", type: "noun", relation: "word_family", relatesToCoreId: "core-a" }
+      ],
+      coreId: "core-a",
+      coreWords: new Set(["priority"]),
+      sameCoreWords: new Set(),
+      sameCoreRelations: new Set(),
+      existingSupportWords: ["client update"],
+      maxRepeatedPlacements: 28,
+      maxPhrasePlacements: 1,
+      needed: 2
+    });
+
+    expect(result.selected.map((term) => term.word)).toEqual(["schedule", "update"]);
+    expect(result.rejected).toContain("annual report -> annual report (exceeds the monthly phrase ceiling; standalone words are required)");
   });
 
   it("selects pronunciation examples without prior collisions or more than three syllables", () => {
