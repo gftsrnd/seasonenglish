@@ -5,6 +5,7 @@ import { useToast } from "../shared/design-system.js";
 import { OperatorLessonPreview } from "./adapters.js";
 import { WeeklyPracticeEditor } from "./Review.js";
 import type { ReviewWeeklyPractice } from "./types.js";
+import { groupVocabularyForDisplay, isStandaloneWord } from "./resource-display.js";
 import "./months.css";
 
 type MonthlyBriefInput = { title: string; brief: string; context: string; communicationGoal: string };
@@ -338,9 +339,9 @@ function GrammarResourcePanel({ topics, roadmap }: {
   roadmap?: NonNullable<NonNullable<MonthlyOperatorOverviewView["frameworks"][number]["resources"]>["roadmap"]>;
 }) {
   const daysFor = (stepId: string) => roadmap?.grammarSteps.find((item) => item.stepId === stepId)?.lessonNumbers ?? [];
-  return <div className="monthly-resource-roadmap" aria-label="Lộ trình ngữ pháp">
+  return <><div className="monthly-roadmap-intro"><b>2 chủ điểm · 3 bước tiến triển mỗi chủ điểm</b><span>Các bước đi từ nền tảng đến ứng dụng, không phải hai mục rời rạc.</span></div><div className="monthly-resource-roadmap" aria-label="Lộ trình ngữ pháp">
     {topics.map((topic, topicIndex) => <article key={topic.id} className="monthly-roadmap-card"><header><span className="monthly-roadmap-code">G{String.fromCharCode(65 + topicIndex)}</span><div><h3>{topic.title}</h3><p>{roadmap?.allocated ? "Phân bổ ngày đã chốt" : "Lộ trình nội dung đang soạn — chưa phân bổ ngày"}</p></div></header><div className="monthly-roadmap-steps">{topic.steps.map((step, index) => <section key={step.id}><b>Bước {index + 1} · {grammarPhaseLabel(topicIndex, index)}: {step.focus}</b>{step.usage && <p>{step.usage}</p>}{step.formula && <code>{step.formula}</code>}{step.examples.length > 0 && <div className="monthly-resource-chips">{step.examples.map((example) => <span key={example}>{example}</span>)}</div>}{roadmap?.allocated && <p className="monthly-roadmap-days">Áp dụng: {formatLessonBlocks(daysFor(step.id))}</p>}</section>)}</div></article>)}
-  </div>;
+  </div></>;
 }
 
 function PronunciationResourcePanel({ sounds, roadmap }: {
@@ -348,9 +349,9 @@ function PronunciationResourcePanel({ sounds, roadmap }: {
   roadmap?: NonNullable<NonNullable<MonthlyOperatorOverviewView["frameworks"][number]["resources"]>["roadmap"]>;
 }) {
   const assignment = (soundId: string) => roadmap?.sounds.find((item) => item.soundId === soundId);
-  return <div className="monthly-resource-roadmap" aria-label="Lộ trình phát âm">
+  return <><div className="monthly-roadmap-intro"><b>4 mục tiêu phát âm</b><span>Mỗi mục tiêu có âm trọng tâm và các từ ví dụ để thực hành.</span></div><div className="monthly-resource-roadmap" aria-label="Lộ trình phát âm">
     {sounds.map((sound, index) => { const allocated = assignment(sound.id); return <article key={sound.id} className="monthly-roadmap-card"><header><span className="monthly-roadmap-code">P{index + 1}</span><div><h3>{sound.label} <span>{sound.ipa}</span></h3><p>{roadmap?.allocated ? `Phân bổ đã chốt: ${formatLessonBlocks(allocated?.lessonNumbers ?? [])}` : "Mục tiêu phát âm đang soạn — chưa phân bổ ngày"}</p></div></header><div className="monthly-pronunciation-plan"><p><b>Âm mục tiêu:</b> {sound.ipa}</p>{roadmap?.allocated && <p><b>Nhịp luyện:</b> {(allocated?.slots ?? []).join(" · ") || "Theo lịch đã chốt"}</p>}<div className="monthly-resource-chips" aria-label={`Ví dụ âm ${sound.label}`}>{sound.examples.map((example) => <span key={example.id}>{example.word} <em>{example.ipa}</em></span>)}</div></div></article>; })}
-  </div>;
+  </div></>;
 }
 
 function grammarPhaseLabel(topicIndex: number, stepIndex: number): string {
@@ -372,7 +373,20 @@ function formatLessonBlocks(lessonNumbers: number[]): string {
   return blocks.join(", ");
 }
 function VocabularyPanel({ items, variant }: { items: Array<{ id: string; word: string; meaning: string; ipa?: string }>; variant: "core" | "expanded" }) {
-  return <ol className={`monthly-resource-collection ${variant}`}>{items.map((item, index) => <li key={item.id}><i>{index + 1}</i><b>{item.word}</b><span>{item.meaning}</span>{item.ipa && <em>{item.ipa}</em>}</li>)}</ol>;
+  const grouped = groupVocabularyForDisplay(items);
+  const visible = variant === "expanded" ? [...grouped.standalone, ...grouped.phrases] : items;
+  const phraseCount = grouped.phrases.length;
+  return <>
+    <section className="monthly-vocabulary-guidance" aria-label={variant === "core" ? "Quy tắc từ cốt lõi" : "Quy tắc từ mở rộng"}>
+      {variant === "core"
+        ? <><b>Headword đơn</b><span>Mỗi mục là một từ độc lập; dùng làm từ trọng tâm của tháng.</span></>
+        : <><b>{grouped.standalone.length} từ đơn ưu tiên</b><span>{phraseCount ? `${phraseCount} cụm bổ trợ tự nhiên được đặt sau từ đơn.` : "Không có cụm từ trong bộ này."}</span></>}
+    </section>
+    <ol className={`monthly-resource-collection ${variant}`}>{visible.map((item, index) => {
+      const standalone = isStandaloneWord(item.word);
+      return <li key={item.id} className={standalone ? "standalone" : "phrase"}><i>{index + 1}</i><b>{item.word}</b><small>{variant === "core" ? "Headword" : standalone ? "Từ đơn" : "Cụm bổ trợ"}</small><span>{item.meaning}</span>{item.ipa && <em>{item.ipa}</em>}</li>;
+    })}</ol>
+  </>;
 }
 
 function calendarGrid(month: string, calendar: ReturnType<typeof buildMonthlyCalendar>) {
