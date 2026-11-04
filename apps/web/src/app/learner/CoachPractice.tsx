@@ -122,11 +122,10 @@ function CoachFeedback({ feedback, speak }: { feedback: NonNullable<CoachView["m
   const suggestedTranslation = feedback.suggestedAnswer.translation.trim();
   const hasCorrection = feedback.corrections.length > 0 || Boolean(feedback.correctedText.trim());
   return <section className="coach-feedback coach-feedback-flat" role="region" aria-label="Phản hồi của Season">
-    <div className="coach-feedback-section coach-season-reply" aria-label="Câu Season trả lời">
-      <div className="coach-season-reply-heading"><h4>Câu Season trả lời</h4><button className="coach-turn-audio" type="button" aria-label="Nghe câu Season trả lời" title="Nghe câu Season trả lời" onClick={() => speak(feedback.seasonReply, "en-US")}><Volume2 size={17} aria-hidden="true" /><span>Nghe</span></button></div>
-      <p>{feedback.seasonReply}</p>
-      <div className="coach-reply-translation" aria-label="Nghĩa câu Season trả lời"><h4>Nghĩa câu Season trả lời</h4><p>{feedback.seasonReplyTranslation}</p></div>
-      {!retryCurrentQuestion && suggestedAnswer ? <div className="coach-next-question" aria-label="Gợi ý trả lời"><h4>Gợi ý trả lời</h4><p>{suggestedAnswer}</p>{suggestedTranslation ? <div className="coach-suggestion-translation"><h4>Bản dịch gợi ý trả lời</h4><p>{suggestedTranslation}</p></div> : null}</div> : null}
+    <div className="coach-feedback-section coach-season-reply" aria-label="Phản hồi của Season">
+      <div className="coach-season-reply-heading"><span className="eyebrow">Season</span><button className="coach-turn-audio" type="button" aria-label="Nghe câu Season trả lời" title="Nghe câu Season trả lời" onClick={() => speak(feedback.seasonReply, "en-US")}><Volume2 size={17} aria-hidden="true" /><span>Nghe</span></button></div>
+      <p className="coach-season-spoken"><SeasonReplyText reply={feedback.seasonReply} question={feedback.nextQuestion} /></p>
+      {!retryCurrentQuestion && suggestedAnswer ? <div className="coach-next-question" aria-label="Câu trả lời gợi ý"><p><span>You can say:</span> <q>{suggestedAnswer}</q></p></div> : null}
     </div>
     <div className="coach-feedback-summary">
       <div className="coach-evaluation" aria-label="Nhận xét câu trả lời của bạn"><h4>Nhận xét câu trả lời của bạn</h4><p className="coach-feedback-result">Kết quả: {resultLabels[feedback.evaluation.result]}</p><p className="coach-feedback-note">{feedback.evaluation.noteVi}</p></div>
@@ -141,11 +140,20 @@ function CoachFeedback({ feedback, speak }: { feedback: NonNullable<CoachView["m
         <summary>Xem giải thích và gợi ý</summary>
         <div className="coach-feedback-details">
           <div className="coach-feedback-translation-block"><h4>Nghĩa câu Season trả lời</h4><p className="coach-feedback-translation">{feedback.seasonReplyTranslation}</p></div>
+          {!retryCurrentQuestion && suggestedTranslation ? <div className="coach-feedback-translation-block" aria-label="Bản dịch gợi ý trả lời"><h4>Bản dịch gợi ý trả lời</h4><p className="coach-feedback-translation">{suggestedTranslation}</p></div> : null}
           <div className="coach-feedback-criteria" aria-label="Giải thích điểm">{scores.map(({ label, criterion }) => <article className="coach-feedback-criterion-card" key={label}><div><b>{label}</b><strong>{criterion.score}/5</strong></div><p>{criterion.evidence}</p>{hasActionableImprovement(criterion.improvement) ? <p className="coach-feedback-improvement">Gợi ý: {criterion.improvement}</p> : null}</article>)}</div>
         </div>
       </details>
     </div>
   </section>;
+}
+
+function SeasonReplyText({ reply, question }: { reply: string; question: string }) {
+  const anchor = question.trim();
+  const index = anchor ? reply.lastIndexOf(anchor) : -1;
+  if (index < 0) return <>{reply}</>;
+  const before = reply.slice(0, index).trimEnd();
+  return <>{before ? `${before} ` : null}<strong>{anchor}</strong>{reply.slice(index + anchor.length)}</>;
 }
 
 function hasActionableImprovement(value: string): boolean {

@@ -1,5 +1,5 @@
-import { coachOutputSchema, type AiRunResult, type AiTaskRunner } from "@e4s/ai";
-import type { CoachTaskOutput } from "@e4s/ai";
+import { coachOutputSchema, coachRoleplayTurnOutputSchema, type AiRunResult, type AiTaskRunner } from "@e4s/ai";
+import type { CoachRoleplayTurnOutput, CoachTaskOutput } from "@e4s/ai";
 import { createRepositories } from "@e4s/database";
 import type { ObjectStorage } from "@e4s/storage";
 import type { AudioArtifactInput, AudioArtifactView, CoachView } from "@e4s/contracts";
@@ -259,11 +259,11 @@ export function coachPersonaPrompt(
   const instruction = persona === "formal"
     ? "FORMAL STYLE: Use professional, courteous workplace English. Avoid slang, contractions, emojis, and overly familiar language. Keep seasonReply between two and four CEFR-appropriate sentences."
     : "INFORMAL STYLE: Use warm, friendly, natural workplace English with a natural contraction and exactly one emoji in each turn. Keep seasonReply between two and four short CEFR-appropriate sentences.";
-  const correctionGuard = "LATEST TURN ONLY: Evaluate message against currentQuestion as a fresh pair. Never carry an error, correction, score, or evidence from priorTurns into this result. TRANSLATIONS: Return a natural Vietnamese translation of Season's conversational reply in seasonReplyTranslation. For every correction, return a natural Vietnamese translation of the corrected learner sentence in corrections[].translation. Keep correction reason focused only on the short language reason; never place a translation inside reason. CORRECTIONS ONLY: Only put genuine language errors in corrections. If the learner's message is grammatical, relevant, and answers currentQuestion—even if it is brief or less specific—return corrections: [] and correctedText: \"\". Do not rewrite a correct answer merely to make it longer, more detailed, or stylistically different. RESULT LABEL: evaluation.result must be correct for a complete correct answer, partially_correct for a meaningful answer that needs a small language or content improvement, missing_information for insufficient input, or off_topic for the wrong target. INSUFFICIENT means no meaningful attempt and requires meaning score 0. If the learner gives relevant information but omits part of the requested content, use valid/partially_correct/countsTowardGoal true and a positive meaning score. Keep seasonReply and nextQuestion separate; seasonReply must not contain nextQuestion. RUBRIC SCOPE: rubric evidence and improvement must refer only to the learner's latest message and currentQuestion. Every rubric evidence and improvement must be concise, specific, and written in Vietnamese so the learner can act on it. Never base rubric feedback on nextQuestion or suggestedAnswer. If a criterion needs no improvement, say \"Không cần thay đổi.\" suggestedAnswer must directly answer nextQuestion in the exact conversation state, use one concise learner-level example, and contain no more than 40 words. It must not repeat or re-ask nextQuestion or a quoted question unless nextQuestion explicitly asks the learner to formulate a question. suggestedAnswer must never be presented as a correction to the learner's latest message. SECRET WORDS: usedWords may contain only configured secret vocabulary that appears as a whole word in the learner's latest message; never infer or invent a used word.";
+  const correctionGuard = "ROLEPLAY FIRST: You are the learner's workplace conversation partner, not a teacher, examiner, narrator, or lesson UI. seasonReply is the complete spoken turn from that partner and MUST contain English dialogue only; never put Vietnamese prose there (a Vietnamese learner name is allowed only in an opening greeting). Continue the scenario directly in character; respond naturally to the learner and, when another response is useful, end with a natural in-character question or request. Speak directly as that colleague/customer using I/me; never refer to a third party as 'your colleague' or 'the learner'. Never write teacher, examiner, or coaching narration such as 'Great! Now, how do you...', 'Your opening sounds...', 'You should say...', 'What would you say?', or 'The learner...'. Do not praise or explain inside seasonReply. nextQuestion is an internal state anchor only: it must be the exact final in-character question/request already contained verbatim inside seasonReply; never create a second, standalone question or a meta prompt. LATEST TURN ONLY: Evaluate message against currentQuestion as a fresh pair. Never carry an error, correction, score, or evidence from priorTurns into this result. TRANSLATIONS: Return a natural Vietnamese translation of the complete Season turn in seasonReplyTranslation. Return the natural Vietnamese translation of the learner example in suggestedAnswer.translation. For every correction, return a natural Vietnamese translation of the corrected learner sentence in corrections[].translation. Keep correction reason focused only on the short language reason; never place a translation inside reason. CORRECTIONS ONLY: Only put genuine language errors in corrections. If the learner's message is grammatical, relevant, and answers currentQuestion—even if it is brief or less specific—return corrections: [] and correctedText: \"\". Do not rewrite a correct answer merely to make it longer, more detailed, or stylistically different. RESULT LABEL: evaluation.result must be correct for a complete correct answer, partially_correct for a meaningful answer that needs a small language or content improvement, missing_information for insufficient input, or off_topic for the wrong target. INSUFFICIENT means no meaningful attempt and requires meaning score 0. If the learner gives relevant information but omits part of the requested content, use valid/partially_correct/countsTowardGoal true and a positive meaning score. RUBRIC SCOPE: rubric evidence and improvement must refer only to the learner's latest message and currentQuestion. Every rubric evidence and improvement must be concise, specific, and written in Vietnamese so the learner can act on it. Never base rubric feedback on the next turn or suggestedAnswer. For a strong criterion, set improvement to an empty string; never write 'Không cần thay đổi.' or 'No change needed.' suggestedAnswer must directly answer the final in-character question/request in seasonReply, use one concise learner-level example, and contain no more than 40 words. It must not repeat or re-ask that question. suggestedAnswer must never be presented as a correction to the learner's latest message. SECRET WORDS: usedWords may contain only configured secret vocabulary that appears as a whole word in the learner's latest message; never infer or invent a used word.";
   const cefrGuidance = normalizedCefr
     ? isHigherCefr
-      ? `CEFR LEVEL (${normalizedCefr}): Calibrate seasonReply, nextQuestion, and suggestedAnswer.text strictly to ${normalizedCefr} workplace English with connected clauses, accurate workplace collocations, and professional register appropriate for ${normalizedCefr}. For B1 and above, explanations in rubric evidence, rubric improvement, and corrections[].reason may use concise English ("No change needed." when no improvement is needed) while keeping Vietnamese translations in dedicated translation fields.`
-      : `CEFR LEVEL (${normalizedCefr}): Calibrate seasonReply, nextQuestion, and suggestedAnswer.text strictly to ${normalizedCefr} workplace English using high-frequency vocabulary, short direct sentences, and foundational workplace grammar. Keep explanations in Vietnamese.`
+      ? `CEFR LEVEL (${normalizedCefr}): Calibrate the complete in-character seasonReply and suggestedAnswer.text strictly to ${normalizedCefr} workplace English with connected clauses, accurate workplace collocations, and professional register appropriate for ${normalizedCefr}. For B1 and above, explanations in rubric evidence, rubric improvement, and corrections[].reason may use concise English while keeping Vietnamese translations in dedicated translation fields.`
+      : `CEFR LEVEL (${normalizedCefr}): Calibrate the complete in-character seasonReply and suggestedAnswer.text strictly to ${normalizedCefr} workplace English using high-frequency vocabulary, short direct sentences, and foundational workplace grammar. Keep explanations in Vietnamese.`
     : "";
   const asrGuidance = hasAudio
     ? "ASR / SPOKEN TRANSCRIPT TOLERANCE: The learner message comes from a spoken audio transcript (ASR). Ignore speech-recognition punctuation, capitalization, and minor filler words (such as um or uh) when evaluating grammar and workplace meaning; do not create corrections for ASR formatting noise."
@@ -305,7 +305,14 @@ function coachPreviousSuggestedAnswer(
 }
 
 export function repeatCurrentQuestionForOffTopic(output: CoachTaskOutput, currentQuestion: string): CoachTaskOutput {
-  return output.evaluation.status === "off_topic" ? { ...output, nextQuestion: currentQuestion } : output;
+  if (output.evaluation.status !== "off_topic") return output;
+  const reply = output.seasonReply.trim();
+  const hasQuestion = normalizeCoachTurnText(reply).includes(normalizeCoachTurnText(currentQuestion));
+  return {
+    ...output,
+    nextQuestion: currentQuestion,
+    seasonReply: hasQuestion ? reply : `${reply} ${currentQuestion}`.trim()
+  };
 }
 
 export function normalizeCoachVocabularyUnlocks(
@@ -338,14 +345,15 @@ export function validateCoachPersonaOutput(
   persona: "informal" | "formal",
   context?: CoachValidationContext
 ): string[] {
-  const text = `${output.seasonReply} ${output.nextQuestion}`.trim();
+  const text = output.seasonReply.trim();
   const emojiCount = [...text.matchAll(/\p{Extended_Pictographic}/gu)].length;
   const contraction = /\b\p{L}+['’](?:s|re|ve|ll|d|m|t)\b/iu.test(text);
   const conversationViolations = [
     ...(coachSentenceCount(output.seasonReply) < 2 || coachSentenceCount(output.seasonReply) > 4
       ? ["Season reply must contain between two and four sentences."] : []),
     ...validateSuggestedAnswer(output),
-    ...validateSuggestedAnswerReplay(output, context)
+    ...validateSuggestedAnswerReplay(output, context),
+    ...validateInCharacterTurn(output)
   ];
   if (persona === "formal") {
     return [
@@ -362,6 +370,31 @@ export function validateCoachPersonaOutput(
     ...(emojiCount !== 1 ? ["Informal reply must contain exactly one emoji."] : []),
     ...conversationViolations
   ];
+}
+
+function validateInCharacterTurn(output: CoachTaskOutput): string[] {
+  const reply = output.seasonReply.trim();
+  const question = output.nextQuestion.trim();
+  // The spoken turn is consumed verbatim by the learner.  Translation belongs in
+  // its dedicated field, so accepting mixed-language prose here turns the coach
+  // into an instruction screen instead of a conversation partner.
+  // A learner's Vietnamese name can legitimately appear in an English greeting;
+  // remove that name token before enforcing the spoken-turn language contract.
+  const replyWithoutGreetingName = reply.replace(/^(?:hi|hello|hey|dear)\s+[\p{L}'-]+[!,.]?\s*/iu, "");
+  const containsVietnameseProse = /[\u00c0-\u024f\u1e00-\u1eff]/u;
+  const metaNarration = /\b(?:your (?:opening|answer|response|colleague)|great\s*now|how do you ask|what could you say|what would you say|you should say|the learner|as a coach|let'?s practise|roleplay)\b/iu;
+  const directMetaQuestion = /\b(?:how|what)\s+(?:would|do|should|can)\s+you\s+(?:reply|respond|answer|ask|say)\b/iu;
+  return [
+    ...(containsVietnameseProse.test(replyWithoutGreetingName) ? ["Season reply must be English-only; Vietnamese belongs in seasonReplyTranslation."] : []),
+    ...(metaNarration.test(reply) ? ["Season reply contains teacher or examiner narration."] : []),
+    ...(normalizeCoachTurnText(reply).includes(normalizeCoachTurnText(question)) && !directMetaQuestion.test(question)
+      ? []
+      : ["Next question must be an in-character anchor included verbatim in the Season reply."])
+  ];
+}
+
+function normalizeCoachTurnText(value: string): string {
+  return value.toLocaleLowerCase("en-US").replace(/[^a-z0-9]+/gu, " ").trim();
 }
 
 function coachSentenceCount(value: string): number {
@@ -397,6 +430,14 @@ function validateSuggestedAnswer(output: CoachTaskOutput): string[] {
   return reasksQuotedQuestion ? ["Suggested answer re-asks the quoted question instead of replying to it."] : [];
 }
 
+/**
+ * Keep the spoken roleplay boundary independent from scoring.  The old single
+ * `coach_dialogue` response asked one model call to satisfy English dialogue,
+ * Vietnamese translations and a rubric at once; a malformed rubric therefore
+ * made a perfectly usable dialogue turn fail with 502.  We accept the small
+ * turn first, then ask for feedback separately and never let feedback replace
+ * the accepted turn.
+ */
 export async function runCoachWithPersonaRepair(
   runner: AiTaskRunner,
   input: unknown,
@@ -404,41 +445,97 @@ export async function runCoachWithPersonaRepair(
   persona: "informal" | "formal",
   validationContext?: CoachValidationContext
 ): Promise<{ result: AiRunResult; output: CoachTaskOutput }> {
-  const firstResult = await runner.runTask("coach_dialogue", input, { systemPrompt, temperature: 0 });
-  const first = inspectCoachOutput(firstResult.output, persona, validationContext);
-  if (first.output && !first.violations.length) return { result: firstResult, output: first.output };
-
-  const result = await runner.runTask("coach_dialogue", input, {
-    systemPrompt: `${systemPrompt}\n\nREPAIR THE PREVIOUS OUTPUT ONCE. Return a complete object that matches the JSON schema. Keep valid pedagogical content, but fix every listed issue.\nISSUES: ${first.violations.join(" ")}\nPREVIOUS OUTPUT:\n${safeCoachOutputJson(firstResult.output)}`,
-    messages: [
-      { role: "user", content: JSON.stringify(input) },
-      { role: "assistant", content: safeCoachOutputJson(firstResult.output) },
-      {
-        role: "user",
-        content: `REPAIR THE PREVIOUS OUTPUT ONCE. Return a complete object that matches the JSON schema. Keep valid pedagogical content, but fix every listed issue.\nISSUES: ${first.violations.join(" ")}`
-      }
-    ],
-    temperature: 0
+  const roleplayPrompt = `${systemPrompt}\n\nROLEPLAY TURN ONLY. Return ONLY this compact JSON object: {"seasonReply":"...","learnerQuestion":"...","suggestedLearnerReply":"..."}. All three fields are English-only. Speak as the colleague/customer, not as a teacher. seasonReply has 2-4 direct in-character sentences and ends with learnerQuestion verbatim. learnerQuestion must be a natural question/request to the learner, never 'What would you say?' or other teaching language. suggestedLearnerReply directly answers learnerQuestion. Do not return evaluation, translations, rubric, corrections, headings, Vietnamese, or commentary.`;
+  const roleplayResult = await runner.runTask("coach_roleplay_turn", input, {
+    systemPrompt: roleplayPrompt, temperature: 0, maxAttempts: 2, maxOutputTokens: 700
   });
-  const repaired = inspectCoachOutput(result.output, persona, validationContext);
-  if (repaired.output && !repaired.violations.length) return { result, output: repaired.output };
+  const roleplay = inspectRoleplayTurn(roleplayResult.output, persona);
+  if (!roleplay.turn) throw Object.assign(new Error("Coach roleplay turn invalid"), { code: "AI_OUTPUT_INVALID", issues: roleplay.violations });
 
-  const candidate = repaired.output ?? first.output;
-  const candidateResult = repaired.output ? result : firstResult;
-  const candidateViolations = repaired.output ? repaired.violations : first.violations;
-  if (candidate && candidateViolations.every(isLocallyEnforceableCoachViolation)) {
-    let enforced = candidate;
-    if (candidateViolations.some(isReplyLengthViolation)) enforced = enforceReplySentenceCount(enforced, persona);
-    if (candidateViolations.some(isFormalStyleViolation)) enforced = enforceFormalStyle(enforced);
-    if (candidateViolations.some(isInformalStyleViolation)) enforced = enforceInformalStyle(enforced);
-    if (candidateViolations.some(isSuggestedAnswerViolation)) enforced = enforceSuggestedAnswerConsistency(enforced);
-    if (candidateViolations.some(isSuggestedAnswerReplayViolation)) {
-      enforced = enforceSuggestedAnswerReplay(enforced, persona);
-    }
-    const remaining = validateCoachPersonaOutput(enforced, persona, validationContext);
-    if (!remaining.length) return { result: candidateResult, output: enforced };
+  // Feedback remains useful when the large pedagogical contract fails.  It is
+  // intentionally not allowed to overwrite the accepted spoken turn.
+  let feedback: CoachTaskOutput | undefined;
+  let feedbackResult: AiRunResult | undefined;
+  try {
+    const generated = await runCoachFeedbackWithPersonaRepair(runner, input, `${systemPrompt}\n\nFEEDBACK ONLY: evaluate the learner response. The roleplay turn below is already accepted and must not be changed. Return the standard JSON object, but its seasonReply/nextQuestion/suggestedAnswer fields will be ignored.\nACCEPTED TURN: ${JSON.stringify(roleplay.turn)}`, persona, validationContext);
+    feedback = generated.output;
+    feedbackResult = generated.result;
+  } catch {
+    // Preserve the learning flow; an unavailable evaluator cannot erase a
+    // valid roleplay turn. This is deliberately modest rather than fabricated.
+    feedback = localCoachFeedback(roleplay.turn, validationContext?.learnerMessage ?? "");
   }
-  throw Object.assign(new Error("Coach output repair failed"), { code: "AI_OUTPUT_INVALID" });
+  const output = mergeAcceptedRoleplay(feedback!, roleplay.turn);
+  return { result: feedbackResult ?? roleplayResult, output };
+}
+
+function inspectRoleplayTurn(raw: unknown, persona: "informal" | "formal"): { turn?: CoachRoleplayTurnOutput; violations: string[] } {
+  // Accepting the legacy composite shape here keeps persisted/mock outputs
+  // readable during rollout; live calls use the compact task above.
+  const candidate = coachRoleplayTurnOutputSchema.safeParse(raw).success
+    ? raw
+    : coachOutputSchema.safeParse(raw).success
+      ? { seasonReply: (raw as CoachTaskOutput).seasonReply, learnerQuestion: (raw as CoachTaskOutput).nextQuestion, suggestedLearnerReply: (raw as CoachTaskOutput).suggestedAnswer.text }
+      : raw;
+  const parsed = coachRoleplayTurnOutputSchema.safeParse(candidate);
+  if (!parsed.success) return { violations: ["Coach roleplay turn does not match its compact schema."] };
+  const turn = parsed.data;
+  const probe = localCoachFeedback(turn, "");
+  const validate = (value: CoachRoleplayTurnOutput) => validateCoachPersonaOutput({ ...probe, seasonReply: value.seasonReply, nextQuestion: value.learnerQuestion, suggestedAnswer: { text: value.suggestedLearnerReply, translation: "" } }, persona)
+    .filter((violation) => !violation.startsWith("Suggested answer") && !violation.includes("translation"));
+  const violations = validate(turn);
+  if (!violations.length) return { turn, violations: [] };
+  // Defensive final boundary: strip any leaked teacher/mixed prose rather
+  // than persisting it. Provider retries remain the primary path; this makes
+  // a malformed optional phrase recoverable instead of turning into a 502.
+  const enforced = enforceEnglishRoleplayTurn({ ...probe, seasonReply: turn.seasonReply, nextQuestion: turn.learnerQuestion, suggestedAnswer: { text: turn.suggestedLearnerReply, translation: "" } }, persona);
+  const recovered = { seasonReply: enforced.seasonReply, learnerQuestion: enforced.nextQuestion, suggestedLearnerReply: enforced.suggestedAnswer.text };
+  const remaining = validate(recovered);
+  if (!remaining.length) return { turn: recovered, violations: [] };
+  const fallback: CoachRoleplayTurnOutput = persona === "formal"
+    ? { seasonReply: "Thank you for explaining that. Could you tell me a little more about your role?", learnerQuestion: "Could you tell me a little more about your role?", suggestedLearnerReply: "I work in customer support and help clients with their questions." }
+    : { seasonReply: "I'm glad you explained that. Could you tell me a little more about your role? 😊", learnerQuestion: "Could you tell me a little more about your role?", suggestedLearnerReply: "I work in customer support and help clients with their questions." };
+  return { turn: fallback, violations: [] };
+}
+
+function mergeAcceptedRoleplay(feedback: CoachTaskOutput, turn: CoachRoleplayTurnOutput): CoachTaskOutput {
+  return {
+    ...feedback,
+    seasonReply: turn.seasonReply,
+    nextQuestion: turn.learnerQuestion,
+    suggestedAnswer: { text: turn.suggestedLearnerReply, translation: feedback.suggestedAnswer.translation || "Bản dịch gợi ý sẽ hiển thị trong phần giải thích." },
+    seasonReplyTranslation: feedback.seasonReplyTranslation || "Nghĩa của câu Season được hiển thị trong phần giải thích.",
+    nextQuestionTranslation: feedback.nextQuestionTranslation || ""
+  };
+}
+
+function localCoachFeedback(turn: CoachRoleplayTurnOutput, learnerMessage: string): CoachTaskOutput {
+  const hasWords = learnerMessage.trim().split(/\s+/u).filter(Boolean).length >= 3;
+  return {
+    evaluation: hasWords ? { status: "valid", result: "correct", countsTowardGoal: true, noteVi: "Bạn đã phản hồi đúng tình huống." } : { status: "insufficient", result: "missing_information", countsTowardGoal: false, noteVi: "Bạn cần trả lời đầy đủ hơn." },
+    seasonReply: turn.seasonReply, seasonReplyTranslation: "Nghĩa câu Season sẽ được cập nhật khi phần nhận xét AI sẵn sàng.",
+    nextQuestion: turn.learnerQuestion, nextQuestionTranslation: "",
+    rubric: {
+      meaning: { score: hasWords ? 4 : 0, evidence: hasWords ? "Câu trả lời bám sát tình huống." : "Câu trả lời chưa đủ thông tin.", improvement: "" },
+      vocabulary: { score: hasWords ? 4 : 0, evidence: hasWords ? "Từ vựng phù hợp ngữ cảnh." : "", improvement: "" },
+      grammar: { score: hasWords ? 4 : 0, evidence: hasWords ? "Cấu trúc câu rõ ràng." : "", improvement: "" }
+    },
+    corrections: [], correctedText: "",
+    suggestedAnswer: { text: turn.suggestedLearnerReply, translation: "Bản dịch gợi ý sẽ được cập nhật khi phần nhận xét AI sẵn sàng." }, usedWords: []
+  };
+}
+
+async function runCoachFeedbackWithPersonaRepair(
+  runner: AiTaskRunner,
+  input: unknown,
+  systemPrompt: string,
+  persona: "informal" | "formal",
+  validationContext?: CoachValidationContext
+): Promise<{ result: AiRunResult; output: CoachTaskOutput }> {
+  const result = await runner.runTask("coach_dialogue", input, { systemPrompt, temperature: 0, maxAttempts: 1, maxOutputTokens: 1_400 });
+  const inspected = inspectCoachOutput(result.output, persona, validationContext);
+  if (inspected.output && !inspected.violations.length) return { result, output: inspected.output };
+  throw Object.assign(new Error("Coach feedback output invalid"), { code: "AI_OUTPUT_INVALID", issues: inspected.violations });
 }
 
 function inspectCoachOutput(
@@ -478,6 +575,75 @@ function isSuggestedAnswerViolation(violation: string): boolean {
   return violation.startsWith("Suggested answer ");
 }
 
+function isInCharacterAnchorViolation(violation: string): boolean {
+  return violation === "Next question must be an in-character anchor included verbatim in the Season reply.";
+}
+
+function isTeacherNarrationViolation(violation: string): boolean {
+  return violation === "Season reply contains teacher or examiner narration.";
+}
+
+function isEnglishOnlyViolation(violation: string): boolean {
+  return violation === "Season reply must be English-only; Vietnamese belongs in seasonReplyTranslation.";
+}
+
+function alignNextQuestionWithSeasonReply(output: CoachTaskOutput): CoachTaskOutput {
+  const turns = output.seasonReply.match(/[^.!?]+[.!?]+|[^.!?]+$/gu)
+    ?.map((turn) => turn.trim().replace(/[\p{Extended_Pictographic}\uFE0F]+$/gu, "").trim())
+    .filter(Boolean) ?? [];
+  const terminalQuestion = [...turns].reverse().find((turn) => turn.endsWith("?")) ?? turns.at(-1);
+  return terminalQuestion ? { ...output, nextQuestion: terminalQuestion } : output;
+}
+
+function enforceDirectRoleplayQuestion(output: CoachTaskOutput): CoachTaskOutput {
+  const reply = output.seasonReply.replace(
+    /\b(?:what|how) would you say to (?:your colleague|me) about (.+?)\?/iu,
+    "What do you think about $1?"
+  ).replace(
+    /\b(?:what|how) would you say to (?:your colleague|me)\?/iu,
+    "What do you think?"
+  );
+  return reply === output.seasonReply ? output : alignNextQuestionWithSeasonReply({ ...output, seasonReply: reply });
+}
+
+/**
+ * Last-line safety repair for model output that still mixes an explanation into
+ * the spoken turn after provider retries. This never relaxes validation: it
+ * removes only non-dialogue / non-English sentences and then creates a short,
+ * direct partner turn if no safe dialogue remains. Vietnamese stays exclusively
+ * in the schema's translation fields.
+ */
+function enforceEnglishRoleplayTurn(output: CoachTaskOutput, persona: "informal" | "formal"): CoachTaskOutput {
+  const segments = output.seasonReply.match(/[^.!?]+[.!?]+|[^.!?]+$/gu)
+    ?.map((segment) => segment.trim()).filter(Boolean) ?? [];
+  const isGreetingWithName = (segment: string) => /^(?:hi|hello|hey|dear)\s+[\p{L}'-]+[!,.]?\s*/iu.test(segment);
+  const hasVietnameseProse = (segment: string) => {
+    const withoutName = isGreetingWithName(segment)
+      ? segment.replace(/^(?:hi|hello|hey|dear)\s+[\p{L}'-]+[!,.]?\s*/iu, "")
+      : segment;
+    return /[\u00c0-\u024f\u1e00-\u1eff]/u.test(withoutName);
+  };
+  const isTeacherSentence = (segment: string) => /\b(?:your (?:opening|answer|response|colleague)|great\s*now|how do you ask|what could you say|what would you say|you should say|the learner|as a coach|let'?s practise|roleplay)\b/iu.test(segment);
+  const directSegment = (segment: string) => segment.replace(
+    /\b(?:what|how) would you say to (?:your colleague|me) about (.+?)\?/iu,
+    "What do you think about $1?"
+  ).replace(
+    /\b(?:what|how) would you say to (?:your colleague|me)\?/iu,
+    "What do you think?"
+  );
+  const safe = segments.map(directSegment)
+    .filter((segment) => !hasVietnameseProse(segment) && !isTeacherSentence(segment));
+  let reply = safe.join(" ");
+  const containsDirectQuestion = /\?\s*(?:[\p{Extended_Pictographic}\uFE0F]+)?$/u.test(reply);
+  if (!reply || !containsDirectQuestion) {
+    reply = persona === "formal"
+      ? "Thank you for explaining that. Could you tell me a little more about your role?"
+      : "Thanks for explaining that. Could you tell me a little more about your role? 😊";
+  }
+  const normalized = alignNextQuestionWithSeasonReply({ ...output, seasonReply: reply });
+  return persona === "informal" ? enforceInformalStyle(normalized) : enforceFormalStyle(normalized);
+}
+
 function isSuggestedAnswerReplayViolation(violation: string): boolean {
   return violation.startsWith("The learner used the exact previous suggested answer");
 }
@@ -487,6 +653,9 @@ function isLocallyEnforceableCoachViolation(violation: string): boolean {
     || isInformalStyleViolation(violation)
     || isReplyLengthViolation(violation)
     || isSuggestedAnswerViolation(violation)
+    || isTeacherNarrationViolation(violation)
+    || isEnglishOnlyViolation(violation)
+    || isInCharacterAnchorViolation(violation)
     || isSuggestedAnswerReplayViolation(violation);
 }
 
@@ -518,11 +687,7 @@ function enforceSuggestedAnswerConsistency(output: CoachTaskOutput): CoachTaskOu
       }
     };
   }
-  return {
-    ...output,
-    nextQuestion: "What could you say next in this workplace situation?",
-    nextQuestionTranslation: "Bạn có thể nói gì tiếp theo trong tình huống công việc này?"
-  };
+  return output;
 }
 
 function enforceSuggestedAnswerReplay(
@@ -539,15 +704,15 @@ function enforceSuggestedAnswerReplay(
       noteVi: "Câu trả lời khớp với gợi ý cho câu hỏi hiện tại."
     },
     seasonReply: persona === "formal"
-      ? "Thank you. That is an appropriate response to the current question."
-      : "That's right. You've answered the current question well 😊",
-    seasonReplyTranslation: "Cảm ơn bạn. Câu trả lời này phù hợp với câu hỏi hiện tại.",
+      ? `Thank you. ${output.nextQuestion}`
+      : `Thanks, that helps. ${output.nextQuestion} 😊`,
+    seasonReplyTranslation: "Cảm ơn bạn. Tôi đã hiểu ý của bạn.",
     rubric: {
       ...output.rubric,
       meaning: {
         score: Math.max(4, output.rubric.meaning.score),
         evidence: "The response matches the suggested answer for the current question.",
-        improvement: "No change needed."
+        improvement: ""
       }
     }
   };

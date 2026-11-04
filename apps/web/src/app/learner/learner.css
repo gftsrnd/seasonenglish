@@ -1169,12 +1169,12 @@ h1,h2,h3,h4,h1 b,h2 b,h3 b,h4 b{font-weight:600 !important}
 .coach-page .coach-feedback-explanations{display:grid;gap:6px}
 .coach-page .coach-feedback-section{display:grid;gap:5px;padding:0;border:0;border-radius:0;background:transparent}
 .coach-page .coach-feedback-section h4,.coach-page .coach-feedback-section p{margin:0}
-.coach-page .coach-season-reply{gap:12px;padding-bottom:14px;border-bottom:1px solid var(--line);line-height:1.6}
+.coach-page .coach-season-reply{gap:14px;padding-bottom:18px;border-bottom:1px solid var(--line);line-height:1.65}
 .coach-page .coach-reply-translation{display:grid;gap:4px;padding:10px 12px;border-radius:12px;background:var(--surface-soft,#faf8f4)}
 .coach-page .coach-reply-translation h4,.coach-page .coach-reply-translation p{margin:0}
 .coach-page .coach-reply-translation h4{font-size:.8rem;color:var(--muted)}
 .coach-page .coach-reply-translation p{line-height:1.55;color:var(--muted)}
-.coach-page .coach-next-question{display:grid;gap:7px;margin-top:10px;padding-top:10px;border-top:1px solid color-mix(in srgb,var(--line) 72%,transparent)}
+.coach-page .coach-next-question{display:grid;gap:7px;margin-top:2px;padding-top:0;border:0}
 .coach-page .coach-suggestion-translation{display:grid;gap:3px;margin-top:6px;padding-top:9px;border-top:1px solid color-mix(in srgb,var(--line) 72%,transparent);color:var(--muted);line-height:1.55}
 .coach-page .coach-suggestion-translation h4,.coach-page .coach-suggestion-translation p{margin:0}
 .coach-page .coach-feedback-details{gap:14px}
@@ -1183,10 +1183,16 @@ h1,h2,h3,h4,h1 b,h2 b,h3 b,h4 b{font-weight:600 !important}
 .coach-page .coach-season-reply-heading h4{margin:0}
 .coach-page .coach-season-reply-heading .coach-turn-audio{flex:0 0 auto;margin:0}
 .coach-page .coach-season-next-question{padding:10px 12px;border:1px solid #edc999;border-radius:12px;background:#fff8ef}
-.coach-page .coach-next-question{padding:11px 13px;border:1px solid #edc999;border-radius:12px;background:#fff8ef;line-height:1.5}
+.coach-page .coach-season-spoken{font-size:1.03rem;line-height:1.72}
+.coach-page .coach-season-spoken strong{font-weight:800;color:var(--text)}
+.coach-page .coach-next-question{padding:12px 14px;border:1px solid #edc999;border-radius:12px;background:#fff8ef;line-height:1.6;font-size:1rem}
+.coach-page .coach-next-question span{font-weight:700;color:var(--brown)}
+.coach-page .coach-next-question q{font-weight:600}
 .coach-page .coach-next-question h4,.coach-page .coach-season-reply h4,.coach-page .coach-evaluation h4,.coach-page .coach-correction h4,.coach-page .coach-feedback-details h4{margin:0 0 4px;font-size:.82rem}
 .coach-page .coach-next-question p,.coach-page .coach-evaluation p,.coach-page .coach-correction p,.coach-page .coach-suggested-answer p{margin:0}
-.coach-page .coach-feedback-summary{grid-template-columns:1fr;align-items:start;gap:8px}
+.coach-page .coach-feedback-summary{grid-template-columns:1fr;align-items:start;gap:14px;padding-top:4px}
+.coach-page .coach-evaluation{display:grid;gap:9px}
+.coach-page .coach-feedback-result{margin:0;padding:4px 9px}
 .coach-page .coach-feedback-scores{grid-template-columns:repeat(3,minmax(0,1fr));border-block:1px solid var(--line);padding:7px 0}
 .coach-page .coach-feedback-score{justify-content:center;padding:0 10px}
 .coach-page .coach-feedback-score+.coach-feedback-score{border-top:0;border-left:1px solid var(--line)}

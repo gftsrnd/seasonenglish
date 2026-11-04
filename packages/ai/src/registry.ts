@@ -1,5 +1,5 @@
 import {
-  coachInputSchema, coachOutputJsonSchema, coachOutputSchema,
+  coachInputSchema, coachOutputJsonSchema, coachOutputSchema, coachRoleplayTurnOutputJsonSchema, coachRoleplayTurnOutputSchema,
   vocabularyInputSchema, vocabularyOutputJsonSchema, vocabularyOutputSchema,
   weeklyLessonsInputSchema, weeklyLessonsOutputJsonSchema, weeklyLessonsOutputSchema,
   weeklyLessonDayInputSchema, weeklyLessonDayOutputJsonSchema, weeklyLessonDayOutputSchema,
@@ -101,6 +101,10 @@ export const AI_TASKS = new AiTaskRegistry([
   { id: "level_form_listening_generation", promptKey: "level_form_generation", inputSchema: levelFormInputSchema, outputSchema: levelFormListeningOutputSchema, outputJsonSchema: levelFormListeningOutputJsonSchema },
   { id: "level_form_reading_generation", promptKey: "level_form_generation", inputSchema: levelFormInputSchema, outputSchema: levelFormReadingOutputSchema, outputJsonSchema: levelFormReadingOutputJsonSchema },
   { id: "level_form_production_generation", promptKey: "level_form_generation", inputSchema: levelFormInputSchema, outputSchema: levelFormProductionOutputSchema, outputJsonSchema: levelFormProductionOutputJsonSchema },
+  {
+    id: "coach_roleplay_turn", promptKey: "coach_dialogue", inputSchema: coachInputSchema,
+    outputSchema: coachRoleplayTurnOutputSchema, outputJsonSchema: coachRoleplayTurnOutputJsonSchema
+  },
   {
     id: "coach_dialogue", promptKey: "coach_dialogue", inputSchema: coachInputSchema,
     outputSchema: coachOutputSchema, outputJsonSchema: coachOutputJsonSchema,

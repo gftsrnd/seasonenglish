@@ -13,6 +13,30 @@ export const coachInputSchema = z.object({
   })).max(8)
 });
 
+/**
+ * The conversational turn deliberately has a tiny contract.  Feedback is
+ * generated independently so an invalid Vietnamese rubric cannot throw away
+ * a valid in-character English turn.
+ */
+export const coachRoleplayTurnOutputSchema = z.object({
+  seasonReply: z.string().trim().min(1).max(800),
+  learnerQuestion: z.string().trim().min(1).max(500),
+  suggestedLearnerReply: z.string().trim().min(1).max(500)
+});
+
+export const coachRoleplayTurnOutputJsonSchema = {
+  type: "object",
+  additionalProperties: false,
+  required: ["seasonReply", "learnerQuestion", "suggestedLearnerReply"],
+  properties: {
+    seasonReply: { type: "string", maxLength: 800 },
+    learnerQuestion: { type: "string", maxLength: 500 },
+    suggestedLearnerReply: { type: "string", maxLength: 500 }
+  }
+} satisfies Record<string, unknown>;
+
+export type CoachRoleplayTurnOutput = z.infer<typeof coachRoleplayTurnOutputSchema>;
+
 export const coachOutputSchema = z.object({
   evaluation: z.object({
     status: z.enum(["valid", "insufficient", "off_topic"]),
@@ -596,10 +620,11 @@ export const weeklyLessonDayOutputSchema = z.preprocess((value) => {
 }, weeklyLessonDayBaseOutputSchema);
 export type WeeklyLessonDayTaskOutput = z.infer<typeof weeklyLessonDayOutputSchema>;
 
-const monthlyLessonPartCodeSchema = z.enum([
+const monthlyLessonPartCodes = [
   "objective", "instruction", "vocabulary", "grammar", "pronunciation",
   "listening", "reading", "writing", "word_class", "word_use", "speaking"
-]);
+] as const;
+const monthlyLessonPartCodeSchema = z.enum(monthlyLessonPartCodes);
 
 /**
  * Monthly days have their own locked curriculum and may span more than five
@@ -613,7 +638,12 @@ export const monthlyLessonDayOutputSchema = z.object({
       code: monthlyLessonPartCodeSchema,
       title: z.string().trim().min(1).max(200).optional(),
       content: z.record(z.string(), z.unknown())
-    })).min(1).max(11)
+    })).length(11).superRefine((parts, context) => {
+      const codes = parts.map((part) => part.code);
+      if (new Set(codes).size !== monthlyLessonPartCodes.length || monthlyLessonPartCodes.some((code) => !codes.includes(code))) {
+        context.addIssue({ code: "custom", message: "Monthly lessons must contain all eleven unique components, including all six skill exercises." });
+      }
+    })
   })
 });
 export type MonthlyLessonDayTaskOutput = z.infer<typeof monthlyLessonDayOutputSchema>;
@@ -1400,7 +1430,7 @@ export const monthlyLessonDayOutputJsonSchema = {
       properties: {
         title: { type: "string" },
         parts: {
-          type: "array", minItems: 1, maxItems: 11,
+          type: "array", minItems: 11, maxItems: 11,
           items: {
             type: "object", additionalProperties: false, required: ["code", "content"],
             properties: {
