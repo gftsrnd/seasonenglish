@@ -5,6 +5,7 @@ import { ArrowLeft, ArrowRight, ArrowUp, Gift, Heart, Target, Timer, Trophy } fr
 import { choices, prepareGameAttempt, type FinishGame, type GameWord } from "./types.js";
 import { currentSeasonVisual, DinoGameOverArt, GiftArt, SeasonHero } from "./season-art.js";
 import { useExperience } from "../../features/experience/Experience.js";
+import { GameFeedback } from "./GameFeedback.js";
 
 type Quiz = { phase: "gate" | "boss"; index: number; word: GameWord };
 type GateState = "closed" | "correct" | "wrong";
@@ -46,6 +47,10 @@ export function SeasonRioGame({ words: source, onFinish, attemptSeed = 0 }: { wo
   const sceneRef = useRef<HTMLDivElement | null>(null);
   const quizDialogRef = useRef<HTMLDivElement | null>(null);
   const focusBeforeQuiz = useRef<HTMLElement | null>(null);
+  // A click can be delivered twice on touch/assistive-tech paths before React
+  // has painted `quiz: null`. Keep the answer transition explicitly atomic so
+  // Boss health and result-saving cannot advance twice or remount the scene.
+  const answeringQuiz = useRef(false);
   const state = useRef({ heroX, heroY, gateStates, quiz, lives, bossHealth, bossStarted, answers });
   state.current = { heroX, heroY, gateStates, quiz, lives, bossHealth, bossStarted, answers };
 
@@ -105,18 +110,48 @@ export function SeasonRioGame({ words: source, onFinish, attemptSeed = 0 }: { wo
         }
         if (nextY === 0 && velocityY.current < 0) velocityY.current = 0;
         nextX = Math.max(18, Math.min(flagX + 40, nextX));
-        const gateIndex = gatePositions.findIndex((position, index) => current.gateStates[index] === "closed" && nextX >= position - 48);
+        // Platforms are physical steps, not decoration. A runner on the ground
+        // cannot phase through their side; they have to jump and land on top.
+        const movingRight = nextX > current.heroX;
+        const movingLeft = nextX < current.heroX;
+        const blockingPlatform = platforms.find((platform) => {
+          const belowTop = nextY < platform.height - 6;
+          const entersFromLeft = movingRight && current.heroX + 24 <= platform.left && nextX + 24 > platform.left;
+          const entersFromRight = movingLeft && current.heroX - 24 >= platform.left + platform.width && nextX - 24 < platform.left + platform.width;
+          return belowTop && (entersFromLeft || entersFromRight);
+        });
+        if (blockingPlatform) {
+          nextX = movingRight ? blockingPlatform.left - 24 : blockingPlatform.left + blockingPlatform.width + 24;
+          setNotice("Bục gỗ chặn đường — nhảy lên để đi tiếp.");
+        }
+        // Leave a small collision margin so sub-pixel rAF motion cannot settle
+        // just before the gate threshold without opening its question.
+        const gateIndex = gatePositions.findIndex((position, index) => current.gateStates[index] === "closed" && nextX >= position - 52);
         if (gateIndex >= 0) {
-          nextX = gatePositions[gateIndex]! - 48;
+          nextX = gatePositions[gateIndex]! - 52;
           const gate = activeGateLayout[gateIndex]!;
           const word = roundPlan.gateWords[gateIndex];
-          if (word && nextY >= Math.max(0, gate.tier - 10)) { setQuiz({ phase: "gate", index: gateIndex, word }); setNotice(`Hộp quà ${gateIndex + 1}/${roundPlan.gateCount} đang chặn đường.`); }
+          if (word && nextY >= Math.max(0, gate.tier - 10)) {
+            const nextQuiz = { phase: "gate" as const, index: gateIndex, word };
+            // Stop the physics loop synchronously before React paints the
+            // overlay. Without this, rAF could repeatedly re-open the same
+            // gate during a browser frame and make the dialog flicker.
+            state.current = { ...current, quiz: nextQuiz };
+            setQuiz(nextQuiz);
+            setNotice(`Hộp quà ${gateIndex + 1}/${roundPlan.gateCount} đang chặn đường.`);
+          }
           else if (gate.tier > 0) setNotice(gate.tier === 60 ? "Đi lên bục để chạm hộp quà." : "Leo bậc thấp rồi lên bục cao để chạm hộp quà.");
         } else if (current.gateStates.every((gate) => gate !== "closed") && current.bossHealth > 0 && nextX >= bossX - 78) {
           nextX = bossX - 78;
           const bossIndex = roundPlan.bossQuestions - current.bossHealth;
           const word = roundPlan.bossWords[bossIndex % Math.max(1, roundPlan.bossWords.length)];
-          if (word) { setBossStarted(true); setQuiz({ phase: "boss", index: bossIndex, word }); setNotice(`Boss ${season.food.name}: trả lời đúng ${roundPlan.bossQuestions} câu trước khi hết 10 giây.`); }
+          if (word) {
+            const nextQuiz = { phase: "boss" as const, index: bossIndex, word };
+            state.current = { ...current, bossStarted: true, quiz: nextQuiz };
+            setBossStarted(true);
+            setQuiz(nextQuiz);
+            setNotice(`Boss ${season.food.name}: trả lời đúng ${roundPlan.bossQuestions} câu trước khi hết 10 giây.`);
+          }
         } else if (current.gateStates.every((gate) => gate !== "closed") && current.bossHealth <= 0 && nextX >= flagX - 30) {
           nextX = flagX - 30; void finish(current.answers, "🏁 Đã về đích!");
         }
@@ -132,7 +167,7 @@ export function SeasonRioGame({ words: source, onFinish, attemptSeed = 0 }: { wo
   useEffect(() => {
     if (!bossStarted || bossHealth <= 0 || busy) return;
     const timer = window.setInterval(() => setBossSeconds((value) => {
-      if (value <= 1) { window.clearInterval(timer); void finish(state.current.answers, `⏱ ${season.food.name} khổng lồ đã hỏng — hết giờ.`); return 0; }
+      if (value <= 1) { window.clearInterval(timer); void finish(state.current.answers, `Hết giờ · ${season.food.name} khổng lồ đã hỏng.`); return 0; }
       return value - 1;
     }), 1000);
     return () => window.clearInterval(timer);
@@ -145,12 +180,15 @@ export function SeasonRioGame({ words: source, onFinish, attemptSeed = 0 }: { wo
       return;
     }
     focusBeforeQuiz.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
-    const frame = window.requestAnimationFrame(() => quizDialogRef.current?.querySelector<HTMLButtonElement>("button")?.focus());
-    return () => window.cancelAnimationFrame(frame);
+    // Do not preselect an answer on open. Focus the dialog itself so a pointer
+    // user sees a neutral question, and keyboard navigation starts only once
+    // the learner explicitly tabs into the options.
+    quizDialogRef.current?.focus({ preventScroll: true });
   }, [quiz?.index, quiz?.phase]);
 
   const answerQuiz = (selected: GameWord) => {
-    if (!quiz || busy) return;
+    if (!quiz || busy || answeringQuiz.current) return;
+    answeringQuiz.current = true;
     const correct = selected.id === quiz.word.id;
     play(correct ? "success" : "error");
     const answer: GameAnswerInput = { wordId: quiz.word.id, answer: selected.english, attempts: 1, usedHint: false, combo: 1 };
@@ -160,12 +198,13 @@ export function SeasonRioGame({ words: source, onFinish, attemptSeed = 0 }: { wo
     else { nextLives -= 1; setLives(nextLives); }
     if (quiz.phase === "gate") {
       setGateStates((current) => current.map((value, index) => index === quiz.index ? (correct ? "correct" : "wrong") : value));
-      setNotice(correct ? "🍄 Đúng — cổng đã mở." : `💔 Sai — đáp án là “${quiz.word.english}”, cổng vẫn mở.`);
+      setNotice(correct ? "Đúng · Cổng đã mở." : `Chưa đúng · Đáp án là “${quiz.word.english}”, cổng vẫn mở.`);
     } else {
-      if (correct) { setBossHealth((value) => Math.max(0, value - 1)); setNotice(bossHealth <= 1 ? `😋 Đã ăn hết ${season.food.name} khổng lồ — chạy tới cờ!` : `${season.food.emoji} Đúng — Boss mất một miếng.`); }
-      else setNotice(`💔 Sai — đáp án là “${quiz.word.english}”.`);
+      if (correct) { setBossHealth((value) => Math.max(0, value - 1)); setNotice(bossHealth <= 1 ? `Hoàn tất · Đã vượt qua ${season.food.name} khổng lồ — chạy tới cờ.` : "Đúng · Boss mất một điểm."); }
+      else setNotice(`Chưa đúng · Đáp án là “${quiz.word.english}”.`);
     }
     setAnswers(nextAnswers); setQuiz(null);
+    window.requestAnimationFrame(() => { answeringQuiz.current = false; });
     if (nextLives <= 0) void finish(nextAnswers, "Hết 3 mạng — khủng long đã xuất hiện.");
   };
 
@@ -193,7 +232,7 @@ export function SeasonRioGame({ words: source, onFinish, attemptSeed = 0 }: { wo
   const camera = Math.min(cameraLimit, Math.max(0, heroX * .35, heroX - 760));
   const isMoving = motion !== null;
   const heroPose = heroY > 0 ? "jump" : isMoving ? (Math.floor(heroX / 8) % 2 ? "run1" : "run2") : "idle";
-  const noticeTone = notice.startsWith("🍄") || notice.startsWith("🏁") ? "is-success" : notice.startsWith("💔") || notice.startsWith("Hết 3") ? "is-error" : notice.startsWith("⏱") ? "is-warning" : "";
+  const noticeTone = notice.startsWith("Đúng") || notice.startsWith("Hoàn tất") || notice.startsWith("Về đích") ? "is-success" : notice.startsWith("Chưa") || notice.startsWith("Hết 3") ? "is-error" : notice.startsWith("Hết giờ") ? "is-warning" : "";
   return <div className="game-runner" aria-busy={busy || undefined}>
     <div className="game-hud"><h2>Season-rio</h2><span><Trophy size={16} aria-hidden="true" /><strong>{score}/{roundPlan.total}</strong></span><span><Gift size={16} aria-hidden="true" />Quà <strong>{gateStates.filter((gate) => gate !== "closed").length}/{roundPlan.gateCount}</strong></span><span><Target size={16} aria-hidden="true" />Boss <strong>{bossHealth > 0 ? bossHealth : "xong"}</strong>{bossHealth > 0 ? <><Timer size={14} aria-hidden="true" />{bossSeconds}s</> : null}</span><span className="game-lives" aria-label={`${lives} mạng còn lại`}>{[0, 1, 2].map((life) => <Heart className={life < lives ? "is-active" : "is-lost"} fill={life < lives ? "currentColor" : "none"} size={17} strokeWidth={2} aria-hidden="true" key={life} />)}</span></div>
     <div ref={sceneRef} className="rio-scene" role="application" aria-label="Màn chơi Season-rio" tabIndex={0} onKeyDown={(event) => { if (["ArrowLeft", "ArrowRight", "ArrowUp", " ", "a", "d", "w"].includes(event.key)) event.preventDefault(); }} onBlur={(event) => { if (!event.currentTarget.contains(event.relatedTarget as Node | null)) { keys.current = {}; setMotion(null); } }}>
@@ -212,7 +251,7 @@ export function SeasonRioGame({ words: source, onFinish, attemptSeed = 0 }: { wo
     </div>
     <p className="catch-help">← → di chuyển hoặc dùng nút. Chạm hộp/cột để trả lời; trả lời xong cổng mở, sai mất ❤️. Hộp trên bục cần leo lên trước. Cuối màn, chạm {season.food.emoji} rồi trả lời đúng 3 câu trong 10 giây; sau đó chạm cờ về đích.</p>
      {busy ? <span className="game-loading" role="status">Đang lưu kết quả…</span> : null}
-     <p className={`game-notice ${noticeTone}`} aria-live="polite">{notice}</p>
+     <GameFeedback message={notice} tone={noticeTone === "is-success" ? "success" : noticeTone === "is-error" ? "error" : noticeTone === "is-warning" ? "warning" : "info"} />
   </div>;
 }
 

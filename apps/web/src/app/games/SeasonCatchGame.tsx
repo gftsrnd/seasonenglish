@@ -4,6 +4,7 @@ import { Heart, ShoppingBasket } from "lucide-react";
 import { choices, prepareGameAttempt, type FinishGame, type GameWord } from "./types.js";
 import { currentSeasonVisual, DinoGameOverArt, SeasonCatchItem, SeasonHero } from "./season-art.js";
 import { useExperience } from "../../features/experience/Experience.js";
+import { GameFeedback } from "./GameFeedback.js";
 
 type FallingItem = { word: GameWord; x: number; y: number; speed: number };
 type CatchEvent = { kind: "caught"; item: FallingItem };
@@ -84,7 +85,7 @@ export function SeasonCatchGame({ words: source, cefr, onFinish, attemptSeed = 0
       const nextLives = lives - 1;
       setLives(nextLives);
       setEvents(nextEvents);
-      setNotice(`💔 “${event.item.word.english}” không khớp với gợi ý.`);
+      setNotice(`Chưa đúng · “${event.item.word.english}” không khớp với gợi ý.`);
       setEvent(null);
       eventPending.current = false;
       if (nextLives <= 0) {
@@ -97,8 +98,8 @@ export function SeasonCatchGame({ words: source, cefr, onFinish, attemptSeed = 0
     const answer: GameAnswerInput = { wordId: current.id, answer: correct ? current.english : "[wrong-catch]", attempts: 1, usedHint: false, combo: 1 };
     const nextAnswers = [...answers, answer];
     const nextLives = correct ? lives : lives - 1;
-    if (correct) { play("success"); setScore((value) => value + 1); setNotice(`✅ Đã hứng đúng “${current.english}”.`); }
-    else { play("error"); setLives(nextLives); setNotice(`💔 “${current.english}” đã rơi xuống đất.`); }
+    if (correct) { play("success"); setScore((value) => value + 1); setNotice(`Đúng · Đã hứng “${current.english}”.`); }
+    else { play("error"); setLives(nextLives); setNotice(`Chưa đúng · “${current.english}” đã rơi xuống đất.`); }
     setEvent(null);
     if (round >= words.length - 1 || nextLives <= 0) {
       setBusy(true);
@@ -111,6 +112,15 @@ export function SeasonCatchGame({ words: source, cefr, onFinish, attemptSeed = 0
     }
   }, [answers, busy, current, event, events, lives, onFinish, round, words.length]);
 
+  const moveBasket = (next: number) => {
+    const bounded = Math.max(5, Math.min(95, next));
+    // Collision runs on an interval rather than in React's render cycle. Keep
+    // its hitbox in sync immediately, so a last-moment real pointer/key move
+    // can catch the target instead of reading the previous frame's position.
+    basketRef.current = bounded;
+    setBasketX(bounded);
+  };
+
   useEffect(() => {
     const keydown = (event: KeyboardEvent) => {
       const scene = sceneRef.current;
@@ -119,8 +129,8 @@ export function SeasonCatchGame({ words: source, cefr, onFinish, attemptSeed = 0
         event.preventDefault();
         basketInteracted.current = true;
       }
-      if (event.key === "ArrowLeft") setBasketX((value) => Math.max(5, value - 5));
-      if (event.key === "ArrowRight") setBasketX((value) => Math.min(95, value + 5));
+      if (event.key === "ArrowLeft") moveBasket(basketRef.current - 5);
+      if (event.key === "ArrowRight") moveBasket(basketRef.current + 5);
     };
     window.addEventListener("keydown", keydown);
     return () => window.removeEventListener("keydown", keydown);
@@ -132,9 +142,9 @@ export function SeasonCatchGame({ words: source, cefr, onFinish, attemptSeed = 0
     const bounds = element.getBoundingClientRect();
     if (!bounds.width) return;
     basketInteracted.current = true;
-    setBasketX(Math.max(5, Math.min(95, ((clientX - bounds.left) / bounds.width) * 100)));
+    moveBasket(((clientX - bounds.left) / bounds.width) * 100);
   };
-  const noticeTone = notice.startsWith("✅") ? "is-success" : notice.startsWith("💔") ? "is-error" : "";
+  const noticeTone = notice.startsWith("Đúng") ? "is-success" : notice.startsWith("Chưa") ? "is-error" : "";
   return <div className="game-runner" aria-busy={busy || undefined}>
     <div className="game-hud"><h2>Lượt {Math.min(round + 1, words.length)}/{words.length}</h2><span>Điểm <strong>{score}</strong></span><span className="game-lives" aria-label={`${lives} mạng còn lại`}>{[0, 1, 2].map((life) => <Heart className={life < lives ? "is-active" : "is-lost"} fill={life < lives ? "currentColor" : "none"} size={17} strokeWidth={2} aria-hidden="true" key={life} />)}</span></div>
     <div ref={sceneRef} className="catch-scene catch-arena" role="application" aria-label="Màn chơi Season catch" tabIndex={0} onBlur={() => { eventPending.current = false; pointerDown.current = false; }} onPointerMove={(event) => { if (!pointerDown.current && event.buttons === 0) return; event.preventDefault(); setFromPointer(event.clientX, event.currentTarget); }} onPointerDown={(event) => { event.preventDefault(); pointerDown.current = true; event.currentTarget.setPointerCapture?.(event.pointerId); event.currentTarget.focus({ preventScroll: true }); setFromPointer(event.clientX, event.currentTarget); }} onPointerUp={(event) => { pointerDown.current = false; if (event.currentTarget.hasPointerCapture?.(event.pointerId)) event.currentTarget.releasePointerCapture?.(event.pointerId); }} onPointerCancel={() => { pointerDown.current = false; }} onLostPointerCapture={() => { pointerDown.current = false; }}>
@@ -147,6 +157,6 @@ export function SeasonCatchGame({ words: source, cefr, onFinish, attemptSeed = 0
     </div>
     <p className="catch-help">Đưa {season.heroName} và rổ tới dưới {season.catchItem.name} đúng bằng kéo/chạm hoặc phím ← →. Tốc độ {cefr} ×{speedByLevel[cefr]}.</p>
      {busy ? <span className="game-loading" role="status">Đang lưu kết quả…</span> : null}
-     <p className={`game-notice ${noticeTone}`} aria-live="polite">{notice}</p>
+     <GameFeedback message={notice} tone={noticeTone === "is-success" ? "success" : noticeTone === "is-error" ? "error" : "info"} />
   </div>;
 }

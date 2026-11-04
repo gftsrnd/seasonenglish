@@ -3,6 +3,7 @@ import type { GameAnswerInput } from "@e4s/contracts";
 import { Delete, Lightbulb } from "lucide-react";
 import { letters, prepareGameAttempt, seededShuffle, type FinishGame, type GameWord } from "./types.js";
 import { useExperience } from "../../features/experience/Experience.js";
+import { GameFeedback } from "./GameFeedback.js";
 
 export function ScrambleGame({ words: source, onFinish, attemptSeed = 0 }: { words: GameWord[]; onFinish: FinishGame; attemptSeed?: number }) {
   const words = useMemo(() => prepareGameAttempt(source.filter((word) => letters(word.english).length >= 3), attemptSeed).slice(0, 8), [attemptSeed, source]);
@@ -91,7 +92,7 @@ export function ScrambleGame({ words: source, onFinish, attemptSeed = 0 }: { wor
     if (correct) setPoints((value) => value + earned);
     if (!correct) setWrong((value) => value + 1);
     setRevealed(target);
-    setNotice(correct ? `✅ ${word.english} +${earned}` : `❌ Từ đúng: ${word.english}`);
+    setNotice(correct ? `Đúng · ${word.english} +${earned}` : `Chưa đúng · Từ đúng: ${word.english}`);
     scheduleNext(nextAnswers, correct ? 1_200 : 1_800);
   };
 
@@ -128,7 +129,7 @@ export function ScrambleGame({ words: source, onFinish, attemptSeed = 0 }: { wor
   });
 
   if (!word) return <p className="muted">Bộ từ chưa đủ từ phù hợp cho Word scramble.</p>;
-  const noticeTone = notice.startsWith("✅") ? "is-success" : notice.startsWith("❌") || notice.startsWith("Chưa") ? "is-error" : "";
+  const noticeTone = notice.startsWith("Đúng") ? "is-success" : notice.startsWith("Chưa") ? "is-error" : "";
   return <div className="game-runner" aria-busy={busy || undefined}>
     <div className="game-hud"><h2>Từ {index + 1}/{words.length}</h2><span>Điểm <strong>{points}</strong></span><span className={wrong ? "is-danger" : ""}>Sai {wrong}/2</span></div>
     <div ref={sceneRef} className={`scramble-scene ${notice.startsWith("Chưa") ? "is-shaking" : ""}`} tabIndex={0}>
@@ -137,7 +138,7 @@ export function ScrambleGame({ words: source, onFinish, attemptSeed = 0 }: { wor
       <div ref={bankRef} className="letter-bank" role="group" aria-label="Chữ cái bị xáo trộn">{tiles.map((tile, tileIndex) => <button type="button" aria-label={`Chữ ${tile.character} vị trí ${tileIndex + 1}`} className={picked.includes(tileIndex) ? "is-used" : ""} disabled={busy || locked || picked.includes(tileIndex)} key={`${tile.character}-${tileIndex}`} onClick={() => pick(tileIndex)}>{tile.character}</button>)}</div>
       <div className="mini-actions"><button type="button" disabled={busy || locked} onClick={backspace}><Delete className="game-control-icon" size={16} strokeWidth={2} aria-hidden="true" />Bỏ chữ cuối</button><button type="button" disabled={busy || locked} onClick={hint}><Lightbulb className="game-control-icon" size={16} strokeWidth={2} aria-hidden="true" />Gợi ý</button></div>
        {busy ? <span className="game-loading" role="status">Đang lưu kết quả…</span> : null}
-       <p className={`game-notice ${noticeTone}`} aria-live="polite">{notice}</p>
+       <GameFeedback message={notice} tone={noticeTone === "is-success" ? "success" : noticeTone === "is-error" ? "error" : "info"} />
     </div>
   </div>;
 }

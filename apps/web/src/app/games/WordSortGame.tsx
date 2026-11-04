@@ -3,6 +3,7 @@ import type { GameAnswerInput } from "@e4s/contracts";
 import { Volume2 } from "lucide-react";
 import { prepareGameAttempt, type FinishGame, type GameWord } from "./types.js";
 import { useExperience } from "../../features/experience/Experience.js";
+import { GameFeedback } from "./GameFeedback.js";
 
 const groups = [["noun", "Noun", "Danh từ"], ["verb", "Verb", "Động từ"], ["adjective", "Adjective", "Tính từ"], ["adverb", "Adverb", "Trạng từ"], ["preposition", "Preposition", "Giới từ"], ["phrase", "Phrase", "Cụm từ"]] as const;
 function groupFor(partOfSpeech: string) {
@@ -47,7 +48,7 @@ export function WordSortGame({ words: source, onFinish, attemptSeed = 0 }: { wor
     const nextStreak = correct ? streak + 1 : 0;
     const nextAnswers = [...answers, { wordId: word.id, answer: group, attempts: 1, usedHint: false, combo: Math.max(1, nextStreak) }];
     setSelected(group);
-    setNotice(correct ? `✅ ${word.english} = ${right}` : `❌ ${word.english} là ${right}.`);
+    setNotice(correct ? `Đúng · ${word.english} = ${right}` : `Chưa đúng · ${word.english} là ${right}.`);
     play(correct ? "success" : "error");
     if (correct) { setScore((value) => value + 1); setBest(Math.max(best, nextStreak)); }
     setStreak(nextStreak);
@@ -61,9 +62,9 @@ export function WordSortGame({ words: source, onFinish, attemptSeed = 0 }: { wor
     if (index >= words.length - 1) { setBusy(true); await onFinish({ answers: nextAnswers }); return; }
     setAnswers(nextAnswers); setIndex((value) => value + 1); setSelected(null); setNotice("");
   };
-  const noticeTone = notice.startsWith("✅") ? "is-success" : notice.startsWith("❌") ? "is-error" : "";
+  const noticeTone = notice.startsWith("Đúng") ? "is-success" : notice.startsWith("Chưa") ? "is-error" : "";
   return <div className="game-runner" aria-busy={busy || undefined}>
     <div className="game-hud"><h2>Từ {index + 1}/{words.length}</h2><span>Điểm <strong>{score}</strong></span><span>Chuỗi <strong>{streak}</strong></span></div>
-    <div className="sort-scene"><span className="eyebrow">Từ này thuộc từ loại nào?</span><div className="sort-word-line"><strong>{word.english}</strong><button type="button" className="sort-speak" aria-label={`Nghe ${word.english}`} onClick={() => speak(word.english)}><Volume2 className="game-control-icon" size={18} strokeWidth={2} aria-hidden="true" /></button></div><span>{word.vietnamese} · {word.definition}</span><div className="sort-bins" role="group" aria-label="Nhóm từ loại">{availableGroups.map(([key, label, vietnamese]) => <button type="button" aria-label={label} disabled={!!selected || busy} className={selected && key === right ? "is-correct" : selected === key ? "is-wrong" : ""} key={key} onClick={() => void pick(key)}><b>{label}</b><small>{vietnamese}</small></button>)}</div>{busy ? <span className="game-loading" role="status">Đang lưu kết quả…</span> : null}<p className={`game-notice ${noticeTone}`} aria-live="polite">{notice}</p></div>
+    <div className="sort-scene"><span className="eyebrow">Từ này thuộc từ loại nào?</span><div className="sort-word-line"><strong>{word.english}</strong><button type="button" className="sort-speak" aria-label={`Nghe ${word.english}`} onClick={() => speak(word.english)}><Volume2 className="game-control-icon" size={18} strokeWidth={2} aria-hidden="true" /></button></div><span>{word.vietnamese} · {word.definition}</span><div className="sort-bins" role="group" aria-label="Nhóm từ loại">{availableGroups.map(([key, label, vietnamese]) => <button type="button" aria-label={label} disabled={!!selected || busy} className={selected && key === right ? "is-correct" : selected === key ? "is-wrong" : ""} key={key} onClick={() => void pick(key)}><b>{label}</b><small>{vietnamese}</small></button>)}</div>{busy ? <span className="game-loading" role="status">Đang lưu kết quả…</span> : null}<GameFeedback message={notice} tone={noticeTone === "is-success" ? "success" : noticeTone === "is-error" ? "error" : "info"} /></div>
   </div>;
 }

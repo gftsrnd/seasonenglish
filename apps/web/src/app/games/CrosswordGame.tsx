@@ -3,6 +3,7 @@ import type { GameAnswerInput } from "@e4s/contracts";
 import { ArrowDown, ArrowRight } from "lucide-react";
 import { letters, prepareGameAttempt, type FinishGame, type GameWord } from "./types.js";
 import { useExperience } from "../../features/experience/Experience.js";
+import { GameFeedback } from "./GameFeedback.js";
 
 type Entry = { value: string; word: GameWord };
 type Direction = "across" | "down";
@@ -160,13 +161,13 @@ export function CrosswordGame({ words, onFinish, attemptSeed = 0 }: { words: Gam
     await onFinish({ answers, hintsUsed: hints });
   };
   const hint = () => {
-    const candidates: Array<[string, string]> = [];
-    crossword.cells.forEach((row, rowIndex) => row.forEach((wanted, columnIndex) => {
-      if (!wanted) return;
-      const key = cellKey(rowIndex, columnIndex);
-      if (values[key]?.toUpperCase() !== wanted) candidates.push([key, wanted]);
-    }));
-    const candidate = candidates[0];
+    // A hint belongs to the selected answer, not to an arbitrary cell elsewhere
+    // in the board. This is particularly important at intersections: the selected
+    // direction tells the learner which word is being helped.
+    const candidate = activeEntry?.value.split("").map((wanted, index) => {
+      const key = cellKey(activeEntry.row + (activeEntry.direction === "down" ? index : 0), activeEntry.column + (activeEntry.direction === "across" ? index : 0));
+      return values[key]?.toUpperCase() === wanted ? undefined : [key, wanted] as [string, string];
+    }).find((value): value is [string, string] => Boolean(value));
     if (!candidate) return;
     setValues((current) => ({ ...current, [candidate[0]]: candidate[1] }));
     setStates((current) => ({ ...current, [candidate[0]]: "ok" }));
@@ -207,21 +208,40 @@ export function CrosswordGame({ words, onFinish, attemptSeed = 0 }: { words: Gam
               clearCell(key);
               return;
             }
-          }} onChange={(event) => {
-            const value = event.target.value.replace(/[^a-z]/gi, "").slice(-1);
-            if (value) writeLetter(key, value);
-            else clearCell(key);
+            // Prevent native insertion. Letting the browser insert first and then
+            // moving focus caused the first key to be replayed in the next cell on
+            // some Chromium/IME paths.
+            if (/^[a-z]$/i.test(event.key) && !event.ctrlKey && !event.metaKey && !event.altKey) {
+              event.preventDefault();
+              event.stopPropagation();
+              writeLetter(key, event.key);
+            }
+          }} onPaste={(event) => {
+            event.preventDefault();
+            const letters = event.clipboardData.getData("text").replace(/[^a-z]/gi, "").toUpperCase().split("");
+            if (!letters.length) return;
+            let current = key;
+            letters.forEach((letter) => {
+              setValues((previous) => ({ ...previous, [current]: letter }));
+              const next = activeEntryCells[activeEntryCells.indexOf(current) + 1];
+              if (next) current = next;
+            });
+            setActiveCell(current);
+            window.requestAnimationFrame(() => focusCell(current));
+          }} onChange={() => {
+            // Input is controlled by keydown/paste above. Keeping this handler
+            // intentionally inert prevents a duplicate native onChange write.
           }} /></label>;
           })}
         </div>)}
       </div>
-      <div className="crossword-actions"><button className="btn-primary" type="button" onClick={() => void check()} disabled={busy}>Kiểm tra</button><button className="btn-sm" type="button" onClick={hint} disabled={busy}>Gợi ý 1 chữ</button><span>Mỗi gợi ý trừ 1 điểm.</span></div>
+      <div className="crossword-actions"><button className="btn-primary" type="button" onClick={() => void check()} disabled={busy}>Kiểm tra</button><button className="btn-sm" type="button" onClick={hint} disabled={busy || !activeEntry}>Gợi ý 1 chữ</button><span>{activeEntry ? `Gợi ý cho từ ${activeEntry.number} · trừ 1 điểm.` : "Chọn một từ trước khi dùng gợi ý."}</span></div>
       <div className="crossword-clues">
         <section className={activeEntry?.direction === "across" ? "is-active" : ""} role="region" aria-label="Gợi ý ngang"><h3>Ngang <ArrowRight className="game-control-icon" size={12} strokeWidth={2} aria-hidden="true" /></h3><ol>{clue("across").map((entry) => <li className={activeEntry?.word.id === entry.word.id ? "is-active" : ""} id={`crossword-clue-across-${entry.number}`} key={`${entry.number}-${entry.word.id}`}><b>{entry.number}.</b> {entry.word.vietnamese}{entry.word.definition ? <span className="muted"> · {entry.word.definition}</span> : null} <small>({entry.value.length})</small></li>)}</ol></section>
         <section className={activeEntry?.direction === "down" ? "is-active" : ""} role="region" aria-label="Gợi ý dọc"><h3>Dọc <ArrowDown className="game-control-icon" size={12} strokeWidth={2} aria-hidden="true" /></h3><ol>{clue("down").map((entry) => <li className={activeEntry?.word.id === entry.word.id ? "is-active" : ""} id={`crossword-clue-down-${entry.number}`} key={`${entry.number}-${entry.word.id}`}><b>{entry.number}.</b> {entry.word.vietnamese}{entry.word.definition ? <span className="muted"> · {entry.word.definition}</span> : null} <small>({entry.value.length})</small></li>)}</ol></section>
       </div>
       {busy ? <span className="game-loading" role="status">Đang lưu kết quả…</span> : null}
-      <p className={`game-notice ${noticeTone === "success" ? "is-success" : noticeTone === "error" ? "is-error" : ""}`} aria-live="polite">{notice}</p>
+      <GameFeedback message={notice} tone={noticeTone} />
     </div>
   </div>;
 }

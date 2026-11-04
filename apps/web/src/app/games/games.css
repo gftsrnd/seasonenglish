@@ -330,6 +330,14 @@
   overflow-x: visible;
   overscroll-behavior-inline: contain;
   scroll-padding-inline: 12px;
+  /* One cohesive playing surface: board, actions and both clue lists belong
+     together. The grid itself intentionally has no second white frame. */
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  /* Distinct from the page, without making the clue copy disappear. */
+  background: linear-gradient(145deg, #e9eee8, #d9e2de);
+  color: #20292a;
+  padding: clamp(16px, 2.4vw, 26px);
   text-align: left;
 }
 
@@ -340,16 +348,16 @@
   flex-wrap: wrap;
   gap: 8px 14px;
   min-height: 38px;
-  border: 1px solid var(--line);
+  border: 1px solid #c4d0c9;
   border-radius: 10px;
-  background: var(--surface);
+  background: rgba(255, 255, 255, .68);
   padding: 6px 10px;
-  color: var(--muted);
+  color: #40514d;
   font-size: .78rem;
 }
 
 .crossword-mode b {
-  color: var(--text);
+  color: #1f2b29;
 }
 
 .crossword-mode .btn-sm {
@@ -360,23 +368,23 @@
 .crossword-active-clue {
   width: min(640px, 100%);
   margin: 0 auto;
-  border-inline-start: 3px solid var(--primary);
-  border-radius: 0 8px 8px 0;
-  background: color-mix(in srgb, var(--surface) 76%, transparent);
+  border: 1px solid rgba(255, 255, 255, .2);
+  border-radius: 10px;
+  background: #f7f6f1;
   padding: 8px 10px;
-  color: var(--text);
+  color: #252d31;
   font-size: .82rem;
   line-height: 1.45;
   text-align: center;
 }
 
 .crossword-active-clue small,
-.crossword-active-clue.is-empty { color: var(--muted); }
+.crossword-active-clue.is-empty { color: #68716e; }
 
 .crossword-scroll-hint {
   display: none;
   margin: 0;
-  color: var(--muted);
+  color: #d5d9d5;
   font-size: .75rem;
   text-align: center;
 }
@@ -390,10 +398,10 @@
   margin: 4px auto 0;
   gap: 3px;
   padding: 8px;
-  border: 1px solid color-mix(in srgb, var(--line) 78%, transparent);
+  border: 0;
   border-radius: 14px;
-  background: color-mix(in srgb, var(--surface) 72%, transparent);
-  box-shadow: 0 10px 25px rgba(54, 73, 40, .05);
+  background: transparent;
+  box-shadow: none;
 }
 
 .crossword-grid > [role="row"] {
@@ -466,7 +474,7 @@
 .crossword-actions span {
   max-width: 100%;
   overflow-wrap: anywhere;
-  color: var(--muted);
+  color: #40514d;
   font-size: .75rem;
   text-align: center;
 }
@@ -480,12 +488,16 @@
 
 .crossword-clues section {
   min-width: 0;
+  border: 1px solid var(--line);
   border-radius: 10px;
-  padding: 8px;
+  background: var(--surface);
+  color: var(--text);
+  padding: 10px 12px;
 }
 
 .crossword-clues section.is-active {
-  background: var(--surface-3);
+  border-color: var(--primary-line);
+  background: color-mix(in srgb, var(--primary-soft) 42%, var(--surface));
 }
 
 .crossword-clues h3 {
@@ -612,14 +624,20 @@
   z-index: 2;
   display: grid;
   width: 52px;
-  height: 34px;
+  height: 44px;
   place-items: center;
-  margin-bottom: -7px;
-  border: 2px solid #6b4a2d;
-  border-radius: 9px 9px 14px 14px;
-  background: linear-gradient(#f7d493, #d7924e);
-  color: #6b4a2d;
-  box-shadow: 0 4px 0 rgba(93, 63, 35, .16);
+  margin-bottom: -12px;
+  /* The basket itself is the moving catcher; it is not a button-shaped
+     container decorated with a basket glyph. */
+  color: #a8642a;
+  filter: drop-shadow(0 5px 3px rgba(73, 48, 25, .24));
+}
+
+.catch-hero .basket svg {
+  width: 46px;
+  height: 46px;
+  fill: #f4c36d;
+  stroke: #8a4d1c;
 }
 
 .catch-hero .season-animal {
@@ -774,7 +792,9 @@
   width: 58px;
   height: 58px;
   transform: translateX(-50%);
-  transition: left 30ms linear, bottom 30ms linear;
+  /* rAF owns each position update. A CSS left/bottom transition keeps sliding
+     after a pointer release, which feels like a delayed teleport. */
+  transition: none;
   transform: translateX(-50%);
 }
 
@@ -1121,7 +1141,29 @@
   color: var(--muted);
   text-align: center;
   font-size: .82rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
 }
+
+.game-notice.game-feedback {
+  display: inline-flex;
+  width: auto;
+  max-width: 100%;
+  flex-direction: row;
+  flex-wrap: nowrap;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  text-align: left;
+}
+
+.game-notice.game-feedback > span {
+  min-width: 0;
+}
+
+.game-feedback-icon { flex: 0 0 auto; }
 
 .game-notice.is-success {
   color: var(--olive-dark);
@@ -1145,11 +1187,12 @@
   }
 
   .scramble-scene,
-  .crossword-scene,
   .sort-scene,
   .typing-scene {
     padding: 16px 12px;
   }
+
+  .crossword-scene { padding: 16px 12px; }
 
   .typing-scene {
     padding: 14px 12px;
