@@ -9,6 +9,7 @@ import { createRoleGuard } from "../identity/policy.js";
 import { evaluateMonthlyLessonQuality } from "./monthly-quality.js";
 import { generateMonthlyDayWithAi, MONTHLY_DAY_COMPONENTS } from "./monthly-day-generation.js";
 import { buildMonthlyPronunciationDistinctnessConstraint, buildMonthlyResourcesFromAiPlan, getMonthlyGrammarPhaseIssues, isSingleHeadword, MonthlyResourceCriteriaError, MonthlyResourcePlanError, runMonthlyGrammarPhaseWithRetry, selectMonthlyPronunciationCandidates, selectMonthlySupportCandidates } from "./monthly-resource-generation.js";
+import { isValidMonthlyPronunciationIpaTarget } from "./monthly-resource-plan-spec.js";
 import { safeGenerationDiagnosticIssues } from "./generation-errors.js";
 
 const params = z.object({ month: z.string().regex(/^\d{4}-(0[1-9]|1[0-2])$/u) });
@@ -297,7 +298,8 @@ export function registerMonthlyContentRoutes(app: FastifyInstance, pool: Pool, a
         await saveCheckpointCategory("grammarTopics", grammarResult.grammarTopics);
       }
       const cachedPronunciationTargets = readCheckpointCategory("pronunciationTargets", monthlyResourcePlanOutputSchema.shape.pronunciationTargets) ?? [];
-      const pronunciationTargets: z.infer<typeof monthlyResourcePlanOutputSchema>["pronunciationTargets"] = cachedPronunciationTargets.length === 4 ? cachedPronunciationTargets : [];
+      const cachedPronunciationTargetsValid = cachedPronunciationTargets.length === 4 && cachedPronunciationTargets.every((target) => isValidMonthlyPronunciationIpaTarget(target.ipa));
+      const pronunciationTargets: z.infer<typeof monthlyResourcePlanOutputSchema>["pronunciationTargets"] = cachedPronunciationTargetsValid ? cachedPronunciationTargets : [];
       const usedPronunciationWords = new Set<string>();
       for (const target of pronunciationTargets) for (const word of target.words) usedPronunciationWords.add(normalizeMonthlyResourceWord(word.word));
       const pronunciationSlots = ["P1 (N1–N3)", "P2 (N4–N6)", "P3 (N7–N9)", "P4 (N10–N12)"];
@@ -310,13 +312,17 @@ export function registerMonthlyContentRoutes(app: FastifyInstance, pool: Pool, a
           const forbiddenForTarget = new Set([...usedPronunciationWords, ...acceptedTargetWords.map((word) => normalizeMonthlyResourceWord(word.word))]);
           const neededExamples = 9 - acceptedTargetWords.length;
           const targetDistinctness = buildMonthlyPronunciationDistinctnessConstraint(pronunciationTargets, issue);
-          const prompt = `PHASE 4 — ONE PRONUNCIATION TARGET ONLY. Return exactly one genuine English pronunciationTargets object and leave coreTerms, expandedTerms and grammarTopics empty. Generate a real, precise phoneme or stress target for roadmap slot ${pronunciationSlots[soundIndex]}; its IPA, label and explanation must describe that target accurately. ${targetDistinctness} The roadmap requires four clearly distinct target categories across P1–P4; do not return a contrast-pair variant of an accepted target as a separate roadmap target. This is an unassigned month pool; do not output calendar day fields. Return at least ${Math.max(18, neededExamples * 2)} ordered candidate example words so the application can select ${neededExamples}. Every candidate must be a real word, no more than three syllables, and actually illustrate the target sound or stress pattern. Avoid all words already accepted for earlier targets: ${[...usedPronunciationWords].join("; ") || "none"}. For this same target, retain these already accepted examples and do not repeat them: ${acceptedTargetWords.map((word) => word.word).join("; ") || "none"}. Prefer authentic terms from this monthly vocabulary pool: ${monthlyVocabularyForPronunciation}. Use neutral workplace words; never invent cultural, historical or identity-based framing.`;
+          const prompt = `PHASE 4 — ONE PRONUNCIATION TARGET ONLY. Return exactly one genuine English pronunciationTargets object and leave coreTerms, expandedTerms and grammarTopics empty. Generate a real, precise phoneme or stress target for roadmap slot ${pronunciationSlots[soundIndex]}; its IPA, label and explanation must describe that target accurately. Format ipa as exactly one slash-delimited IPA form with no spaces, second transcription, label or prose (for example /ɪ/, /ˈiː/, or /ˈ/ when teaching primary stress itself). Never combine forms such as "/θ/ and /ð/" in the ipa field. ${targetDistinctness} The roadmap requires four clearly distinct target categories across P1–P4; do not return a contrast-pair variant of an accepted target as a separate roadmap target. This is an unassigned month pool; do not output calendar day fields. Return at least ${Math.max(18, neededExamples * 2)} ordered candidate example words so the application can select ${neededExamples}. Every candidate must be a real word, no more than three syllables, and actually illustrate the target sound or stress pattern. Avoid all words already accepted for earlier targets: ${[...usedPronunciationWords].join("; ") || "none"}. For this same target, retain these already accepted examples and do not repeat them: ${acceptedTargetWords.map((word) => word.word).join("; ") || "none"}. Prefer authentic terms from this monthly vocabulary pool: ${monthlyVocabularyForPronunciation}. Use neutral workplace words; never invent cultural, historical or identity-based framing.`;
           const result = await runPhase(prompt, coreTerms, { vocabularyCount: 0, expandedVocabularyCount: 0, grammarTopicCount: 0, pronunciationSoundCount: 1 });
           if (result.coreTerms.length || result.expandedTerms.length || result.grammarTopics.length || result.pronunciationTargets.length !== 1) {
             issue = "response must contain one pronunciation target only";
             continue;
           }
           const candidate = result.pronunciationTargets[0]!;
+          if (!isValidMonthlyPronunciationIpaTarget(candidate.ipa)) {
+            issue = `target IPA must be one slash-delimited IPA form with no spaces or prose; rejected "${candidate.ipa}"`;
+            continue;
+          }
           if (pronunciationTargets.some((target) => normalizeMonthlyResourceWord(target.ipa) === normalizeMonthlyResourceWord(candidate.ipa))) {
             issue = `target IPA ${candidate.ipa} duplicates an earlier pronunciation target`;
             continue;
@@ -334,7 +340,7 @@ export function registerMonthlyContentRoutes(app: FastifyInstance, pool: Pool, a
         pronunciationTargets.push(acceptedTarget);
         for (const word of acceptedTarget.words) usedPronunciationWords.add(normalizeMonthlyResourceWord(word.word));
       }
-      if (pronunciationTargets.length === 4 && cachedPronunciationTargets.length !== 4) await saveCheckpointCategory("pronunciationTargets", pronunciationTargets);
+      if (pronunciationTargets.length === 4 && !cachedPronunciationTargetsValid) await saveCheckpointCategory("pronunciationTargets", pronunciationTargets);
       const plan = monthlyResourcePlanOutputSchema.parse({
         coreTerms,
         expandedTerms,

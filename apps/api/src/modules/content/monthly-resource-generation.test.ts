@@ -1,6 +1,7 @@
 import { buildMonthlyCalendar, monthlyDayKind, planMonthlyResourcePool, validateMonthlyCurriculum } from "@e4s/domain";
 import type { MonthlyResourcePlanTaskOutput } from "@e4s/ai";
 import { describe, expect, it } from "vitest";
+import { isValidMonthlyPronunciationIpaTarget } from "./monthly-resource-plan-spec.js";
 import {
   buildMonthlyResourcesFromAiPlan,
   getMonthlyGrammarPhaseIssues,
@@ -310,6 +311,18 @@ describe("monthly AI resource generation", () => {
     const repeatedTarget = planFor();
     repeatedTarget.pronunciationTargets[1]!.ipa = repeatedTarget.pronunciationTargets[0]!.ipa;
     expect(planErrors(() => buildMonthlyResourcesFromAiPlan(month, "A1", theme, criteria, repeatedTarget))).toContain("Monthly resources need four distinct pronunciation targets.");
+  });
+
+  it("rejects the B1 combined prose IPA and accepts one exact IPA target", () => {
+    const malformedB1Ipa = "/ˈnaʊn/ /ˈvɜːrb/ pattern: primary stress on syllable 1";
+    expect(isValidMonthlyPronunciationIpaTarget("/ɪ/")).toBe(true);
+    expect(isValidMonthlyPronunciationIpaTarget("/ˈ/ ")).toBe(true);
+    expect(isValidMonthlyPronunciationIpaTarget(malformedB1Ipa)).toBe(false);
+    expect(isValidMonthlyPronunciationIpaTarget("/θ/ and /ð/")).toBe(false);
+
+    const invalidIpa = planFor();
+    invalidIpa.pronunciationTargets[1]!.ipa = malformedB1Ipa;
+    expect(planErrors(() => buildMonthlyResourcesFromAiPlan(month, "B1", theme, criteria, invalidIpa))).toContain("Pronunciation target 2 needs a valid IPA target.");
   });
 
   it("rejects AI pools that exceed one phrase per core or the global phrase ceiling", () => {

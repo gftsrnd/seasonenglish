@@ -309,7 +309,7 @@ export function validateMonthlyResourcePlanShape(
   if (plan.pronunciationTargets.length !== 4) errors.push("Expected four pronunciation targets.");
   if (new Set(plan.pronunciationTargets.map((target) => normalize(target.ipa))).size !== plan.pronunciationTargets.length) errors.push("Monthly resources need four distinct pronunciation targets.");
   for (const [index, target] of plan.pronunciationTargets.entries()) {
-    if (!/^\/.+\/$/u.test(target.ipa.trim())) errors.push(`Pronunciation target ${index + 1} needs a valid IPA target.`);
+    if (!isValidMonthlyPronunciationIpaTarget(target.ipa)) errors.push(`Pronunciation target ${index + 1} needs a valid IPA target.`);
     if (!target.label.trim() || !target.explanation.trim()) errors.push(`Pronunciation target ${index + 1} needs an authentic label and sound explanation.`);
     if (target.words.length < 9) errors.push(`Pronunciation target ${index + 1} needs at least nine real words.`);
     if (target.words.some((word) => syllableCount(word.word) > 3)) errors.push(`Pronunciation target ${index + 1} contains a word with more than three syllables.`);
@@ -317,6 +317,18 @@ export function validateMonthlyResourcePlanShape(
   const pronunciationWords = plan.pronunciationTargets.flatMap((target) => target.words.map((word) => normalize(word.word)));
   if (new Set(pronunciationWords).size !== pronunciationWords.length) errors.push("Pronunciation examples repeat between targets.");
   return errors;
+}
+
+/** Accept one slash-delimited IPA form, never a list of transcriptions or prose. */
+export function isValidMonthlyPronunciationIpaTarget(value: string): boolean {
+  const match = value.trim().match(/^\/([^/\s]+)\/$/u);
+  if (!match) return false;
+  const symbols = match[1]!;
+  if (!/^[a-z\u00e6\u00f8\u0153\u0250-\u02af\u02b0-\u02ff\u0300-\u036f\u1d00-\u1d7f.βθχ]+$/u.test(symbols)) return false;
+  // Reject likely prose labels made only of ASCII letters while allowing short
+  // consonant clusters and the IPA stress/length markers around real symbols.
+  const transcription = symbols.replace(/[ˈˌːˑ.]/gu, "");
+  return !/^[a-z]{4,}$/u.test(transcription);
 }
 
 function syllableCount(word: string): number {
