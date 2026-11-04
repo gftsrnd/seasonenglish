@@ -52,11 +52,19 @@
 @media(max-width:620px){.monthly-resource-panel{width:calc(100vw - 48px)}}
 .monthly-resource-actions{min-height:36px;align-items:center}
 .monthly-plan-open-button{width:100%;flex:1 1 100%;margin:0;padding:7px 9px;font-size:.72rem;line-height:1.2;white-space:nowrap;text-align:center}
-.monthly-day-cell{grid-template-rows:minmax(0,1fr) auto auto minmax(15px,1fr) 23px;gap:3px;padding:6px 7px 9px}
-.monthly-day-cell b{grid-row:2;align-self:center}
-.monthly-day-cell strong{grid-row:3;align-self:center;margin-top:4px}
-.monthly-day-cell>div{grid-row:5;align-self:end;justify-content:flex-start;gap:3px;margin:0;white-space:nowrap;width:100%;min-width:0;box-sizing:border-box}
+.monthly-calendar{grid-auto-rows:minmax(98px,auto)}
+.monthly-day-cell{height:auto;aspect-ratio:1/1;grid-template-rows:minmax(0,1fr) auto auto minmax(8px,1fr) 28px;gap:2px;padding:4px 5px}
+.monthly-day-cell b{grid-row:2;align-self:center;font-size:18px;line-height:1}
+.monthly-day-cell strong{grid-row:3;align-self:center;margin-top:6px;font-size:11px;line-height:1.35}
+.monthly-day-cell>div{grid-row:5;align-self:end;justify-content:flex-start;gap:2px;margin:0;white-space:nowrap;width:100%;min-width:0;box-sizing:border-box}
 .monthly-day-cell>.btn-sm{grid-row:5;align-self:end}
-.monthly-day-cell .btn-sm{flex:0 0 auto;width:auto;min-width:0;min-height:23px;padding:3px 2px;font-size:8.5px;line-height:1;white-space:nowrap;border-radius:6px}
-.monthly-day-cell .monthly-view-day{min-width:0}
+.monthly-day-cell .monthly-action-button{position:relative;display:inline-flex;flex:0 0 auto;align-items:center;justify-content:center;gap:2px;width:auto;min-width:36px;height:28px;min-height:28px;box-sizing:border-box;padding:0;border-radius:5px;font-size:8.5px;line-height:1;white-space:nowrap}
+.monthly-day-cell .monthly-action-button:before{position:absolute;inset-block:-4px;inset-inline:0;content:""}
+.monthly-day-cell .monthly-action-button svg{width:10px;height:10px;flex:0 0 10px;stroke-width:1.8}
+.monthly-day-cell .monthly-action-button span{display:inline-block}
+.monthly-day-cell .monthly-generate-action{min-width:36px}
+.monthly-day-cell .monthly-manual-action{width:auto;min-width:36px;flex-basis:auto}
+.monthly-day-cell .monthly-approve-action{width:auto;min-width:36px;flex-basis:auto}
+.monthly-day-cell .monthly-view-day{min-width:36px}
+.monthly-day-cell.monthly-final>.btn-sm{min-height:28px;border-radius:5px}
 
