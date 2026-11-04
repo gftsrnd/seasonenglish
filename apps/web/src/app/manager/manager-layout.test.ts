@@ -78,8 +78,9 @@ describe("Manager layout rhythm contract", () => {
     expect(css).toMatch(/\.settings-recovery__body\s*\{[^}]*box-sizing:\s*border-box[^}]*overflow:\s*hidden/s);
   });
 
-  it("uses orange as an accent instead of flooding the deletion review card", () => {
-    expect(css).toMatch(/\.manager-operational-card--delete\s*\{[^}]*border-left:\s*4px\s+solid\s+var\(--primary\)[^}]*background:\s*var\(--surface\)/s);
+  it("uses a full rounded semantic border instead of a coloured card rail for deletion review", () => {
+    expect(css).toMatch(/\.manager-operational-card--delete\s*\{[^}]*border:\s*1px\s+solid\s+var\(--primary-line\)[^}]*background:\s*var\(--surface\)/s);
+    expect(css).not.toMatch(/\.manager-operational-card--delete\s*\{[^}]*border-left:/s);
     expect(css).not.toMatch(/\.manager-operational-card--delete\s*\{[^}]*background:\s*var\(--butter\)/s);
   });
 

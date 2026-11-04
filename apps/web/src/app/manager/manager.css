@@ -364,7 +364,7 @@
 }
 
 .manager-operational-card--delete {
-  border-left: 4px solid var(--primary);
+  border: 1px solid var(--primary-line);
   background: var(--surface);
 }
 

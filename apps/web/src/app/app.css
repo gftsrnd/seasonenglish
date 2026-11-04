@@ -433,7 +433,7 @@ td input,td select{min-height:40px;padding:8px 12px}
 .report{background:var(--surface);border:0;border-radius:var(--radius);padding:28px;max-width:960px;margin:0 auto;overflow-x:auto}
 .report .rhead{display:flex;justify-content:space-between;gap:16px;align-items:flex-start;border-bottom:1px solid #E4E2DC;padding-bottom:14px;margin-bottom:16px}
 .report h2{font-size:1.6rem;margin:2px 0}
-.report h3{font-size:1.05rem;margin:22px 0 8px;padding-left:10px;border-left:4px solid var(--primary)}
+.report h3{font-size:1.05rem;margin:22px 0 8px}
 .report .meta{font-size:.85rem;text-align:right;line-height:1.5;color:var(--muted)}
 .report .summary{border:0;background:var(--surface-2);border-radius:16px;padding:14px 16px;line-height:1.5}
 .report table{width:100%;border-collapse:collapse;font-size:.9rem}
