@@ -35,6 +35,15 @@
 .monthly-day-cell>.btn-sm{grid-row:3}
 .monthly-day-cell .btn-sm{width:auto;min-width:0;min-height:19px;flex:1 1 auto;padding:2px 3px;font-size:9px;line-height:1;white-space:nowrap}
 .monthly-day-cell .monthly-manual-action{flex:0 0 24px;width:24px;padding:2px;font-size:12px}
+.monthly-plan-day{padding:0;overflow:hidden}
+.monthly-plan-day-summary{display:flex;align-items:center;justify-content:space-between;gap:10px;min-height:58px;padding:10px 12px;cursor:pointer;list-style:none}
+.monthly-plan-day-summary::-webkit-details-marker{display:none}
+.monthly-plan-day-summary h3{margin:2px 0 0;font-size:.9rem}
+.monthly-plan-day-open{flex:0 0 auto;padding:4px 8px;border:1px solid var(--line);border-radius:999px;color:var(--muted);font-size:10px;font-weight:700}
+.monthly-plan-day-body{padding:0 12px 10px;font-size:11px}
+.monthly-plan-day-body .monthly-plan-resource-groups{gap:5px;margin:5px 0}
+.monthly-plan-day-body .monthly-plan-resource-group{gap:2px;font-size:11px}
+.monthly-plan-day-body small{display:block;color:var(--muted);font-size:10px;line-height:1.4}
 @media(max-width:1320px){.monthly-workspace{grid-template-columns:minmax(0,1fr);gap:18px}.monthly-workspace>.monthly-calendar-section{grid-column:auto;width:100%;max-width:100%}.monthly-resource-panel{left:0;width:min(1180px,calc(100vw - 48px))}}
 @media(max-width:620px){.monthly-resource-panel{width:calc(100vw - 48px)}}
 

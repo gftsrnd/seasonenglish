@@ -260,17 +260,13 @@ export function OperatorMonths({ month, todayMonth, overview, cefr, busy, readOn
             {framework.resources.roadmap.days.map((day) => {
               const coreTerms = framework.resources!.coreTerms.filter((term) => day.kind === "new" ? day.coreTermIds.includes(term.id) : day.reviewTermIds.includes(term.id));
               const expandedTerms = framework.resources!.supportTerms.filter((term) => day.kind === "new" ? day.expandedTermIds.includes(term.id) : day.reviewExpandedTermIds.includes(term.id));
-              return <article key={day.lessonNumber} className="monthly-plan-day">
-                <header><div><span className="eyebrow">{day.kind === "review" ? "Ôn tập tuần" : `Bài mới ${monthlyNewLessonOrdinal(day.lessonNumber, calendar.lessonCount)}`}</span><h3>{day.date}</h3></div>{day.kind === "new" && <span className="monthly-plan-primary">Trọng tâm: {day.primarySkillFocus === "writing" ? "Viết" : "Nói"}</span>}</header>
-                {day.kind === "new" ? <>
+              return <details key={day.lessonNumber} className="monthly-plan-day">
+                <summary className="monthly-plan-day-summary"><div><span className="eyebrow">{day.kind === "review" ? "Ôn tập tuần" : `Bài mới ${monthlyNewLessonOrdinal(day.lessonNumber, calendar.lessonCount)}`}</span><h3>{day.date}</h3></div><span className="monthly-plan-day-open">Xem phân bổ</span></summary>
+                <div className="monthly-plan-day-body">
                   <div className="monthly-plan-resource-groups">{coreTerms.map((core) => <div key={core.id} className="monthly-plan-resource-group"><strong>{core.word}</strong><span>{expandedTerms.filter((term) => term.relatedCoreTermId === core.id).map((term) => term.word).join(" · ")}</span></div>)}</div>
-                  <p><b>Viết:</b> {day.writingFocus}</p><p><b>Nói:</b> {day.speakingFocus}</p>
-                </> : <>
-                  <p>{coreTerms.length} từ cốt lõi · {expandedTerms.length} từ mở rộng từ các bài mới kể từ lần ôn trước.</p>
-                  <details className="monthly-plan-review-groups"><summary>Xem nhóm ôn tập theo từ cốt lõi</summary><div className="monthly-plan-resource-groups">{coreTerms.map((core) => <div key={core.id} className="monthly-plan-resource-group"><strong>{core.word}</strong><span>{expandedTerms.filter((term) => term.relatedCoreTermId === core.id).map((term) => term.word).join(" · ")}</span></div>)}</div></details>
-                </>}
-                <small>Ngữ pháp: {day.grammarStepIds.join(" + ")} · Phát âm: {day.pronunciationSlot ?? "—"}</small>
-              </article>;
+                  <small>Ngữ pháp: {day.grammarStepIds.join(" + ")} · Phát âm: {day.pronunciationSlot ?? "—"}</small>
+                </div>
+              </details>;
             })}
           </div>
         </details>}
