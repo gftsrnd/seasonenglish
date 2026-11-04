@@ -104,6 +104,48 @@ describe("Operator monthly planner", () => {
     expect(onGenerateFramework).toHaveBeenCalledWith("2026-11", { cefr: "A2", vocabularyCount: 48, expandedVocabularyCount: 144, grammarTopicCount: 2, pronunciationSoundCount: 4 });
   });
 
+  it("presents four pronunciation targets in the fixed responsive grid", async () => {
+    const user = userEvent.setup();
+    const { container } = render(<ToastProvider><OperatorMonths
+      month="2026-11" todayMonth="2026-11" cefr="A2" busy={false}
+      overview={{ systemDate: "2026-11-03", monthWindow: { previous: "2026-10", current: "2026-11", next: "2026-12", writable: true }, brief: { month: "2026-11", title: "Customer handover", brief: "Prepare a handover.", context: "Customer success", communicationGoal: "Explain risks", version: 1, status: "approved" }, frameworks: [{
+        id: "framework-a2", cefr: "A2", version: 1, status: "draft", scopeHash: "scope", lessons: [], quality: { severe: [], light: [] }, resources: {
+          coreTerms: [], supportTerms: [], grammarTopics: [], sounds: ["i", "e", "æ", "ʌ"].map((ipa, index) => ({ id: `sound-${index + 1}`, label: `Âm ${index + 1}`, ipa: `/${ipa}/`, examples: [{ id: `word-${index + 1}`, word: `term${index + 1}`, ipa: `/${ipa}/` }] }))
+        }
+      }] }}
+      actions={{ onSelectMonth: vi.fn(), onSelectLevel: vi.fn(), onSuggestBrief: vi.fn(), onSaveBrief: vi.fn(), onApproveBrief: vi.fn(), onGenerateFramework: vi.fn(), onSaveFramework: vi.fn(), onApproveFramework: vi.fn(), onSaveDay: vi.fn(), onGenerateDay: vi.fn(), onAcknowledge: vi.fn(), onApproveDay: vi.fn(), onCreateCorrection: vi.fn(), onSaveCorrection: vi.fn(), onAcknowledgeCorrection: vi.fn(), onApproveCorrection: vi.fn() }}
+    /></ToastProvider>);
+
+    await user.click(within(container).getByRole("button", { name: /Phát âm/ }));
+    const panel = within(container).getByRole("dialog", { name: "Tài nguyên tháng" });
+    expect(panel.querySelector(".monthly-resource-pronunciation-grid")).toBeInTheDocument();
+    expect(panel.querySelectorAll(".monthly-pronunciation-card")).toHaveLength(4);
+    expect(within(panel).getByText("Luyện nhận diện và phát âm /i/")).toBeInTheDocument();
+  });
+
+  it("shows grammar as topic, step, learning goal, formula, and examples without N-slot codes", async () => {
+    const user = userEvent.setup();
+    const { container } = render(<ToastProvider><OperatorMonths
+      month="2026-11" todayMonth="2026-11" cefr="A2" busy={false}
+      overview={{ systemDate: "2026-11-03", monthWindow: { previous: "2026-10", current: "2026-11", next: "2026-12", writable: true }, brief: { month: "2026-11", title: "Customer handover", brief: "Prepare a handover.", context: "Customer success", communicationGoal: "Explain risks", version: 1, status: "approved" }, frameworks: [{
+        id: "framework-a2", cefr: "A2", version: 1, status: "draft", scopeHash: "scope", lessons: [], quality: { severe: [], light: [] }, resources: {
+          coreTerms: [], supportTerms: [], sounds: [], grammarTopics: [{ id: "grammar-a", title: "Past simple questions", steps: ["Form questions", "Ask for details", "Clarify a timeline"].map((focus, index) => ({ id: `step-${index + 1}`, focus, formula: "Did + subject + base verb?", usage: "Ask about a completed work event.", examples: [`Did you send update ${index + 1}?`] })) }]
+        }
+      }] }}
+      actions={{ onSelectMonth: vi.fn(), onSelectLevel: vi.fn(), onSuggestBrief: vi.fn(), onSaveBrief: vi.fn(), onApproveBrief: vi.fn(), onGenerateFramework: vi.fn(), onSaveFramework: vi.fn(), onApproveFramework: vi.fn(), onSaveDay: vi.fn(), onGenerateDay: vi.fn(), onAcknowledge: vi.fn(), onApproveDay: vi.fn(), onCreateCorrection: vi.fn(), onSaveCorrection: vi.fn(), onAcknowledgeCorrection: vi.fn(), onApproveCorrection: vi.fn() }}
+    /></ToastProvider>);
+
+    await user.click(within(container).getByRole("button", { name: /Ngữ pháp/ }));
+    const panel = within(container).getByRole("dialog", { name: "Tài nguyên tháng" });
+    expect(within(panel).getByRole("heading", { name: "Past simple questions" })).toBeInTheDocument();
+    expect(within(panel).getByText((_content, element) => element?.classList.contains("monthly-grammar-step-number") === true && element.textContent === "Bước 1")).toBeInTheDocument();
+    expect(within(panel).getByText("Form questions")).toBeInTheDocument();
+    expect(within(panel).getAllByText("Ghi chú cách dùng")).toHaveLength(3);
+    expect(within(panel).getAllByText("Did + subject + base verb?")).toHaveLength(3);
+    expect(within(panel).getByText("Did you send update 1?")).toBeInTheDocument();
+    expect(within(panel).queryByText(/N\d+–N\d+/u)).not.toBeInTheDocument();
+  });
+
   it("uses the compact Sinh action for a review and keeps approved daily lessons view-only", () => {
     const { container } = render(<ToastProvider><OperatorMonths
       month="2026-11"
