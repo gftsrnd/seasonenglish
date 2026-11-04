@@ -10,6 +10,7 @@ import {
   MonthlyResourceCriteriaError,
   MonthlyResourcePlanError,
   buildMonthlyPronunciationDistinctnessConstraint,
+  buildMonthlyPronunciationSchemaRepairIssue,
   selectMonthlyCoreCandidates,
   selectMonthlyPronunciationCandidates,
   selectMonthlySupportCandidates
@@ -345,6 +346,18 @@ describe("monthly AI resource generation", () => {
     const invalidIpa = planFor();
     invalidIpa.pronunciationTargets[1]!.ipa = malformedB1Ipa;
     expect(planErrors(() => buildMonthlyResourcesFromAiPlan(month, "B1", theme, criteria, invalidIpa))).toContain("Pronunciation target 2 needs a valid IPA target.");
+  });
+
+  it("repairs malformed pronunciation phase output with the observed field type and target count", () => {
+    const repair = buildMonthlyPronunciationSchemaRepairIssue([
+      { path: "pronunciationTargets", message: "Invalid input: expected array, received string" },
+      { path: "pronunciationTargets", message: "Too big: expected string to have <=4 characters" }
+    ]);
+
+    expect(repair).toContain("pronunciationTargets must be an array containing exactly one target object");
+    expect(repair).toContain("Invalid input: expected array, received string");
+    expect(repair).toContain("Too big: expected string to have <=4 characters");
+    expect(repair).toContain("keep coreTerms, expandedTerms and grammarTopics empty");
   });
 
   it("rejects AI pools that exceed one phrase per core or the global phrase ceiling", () => {

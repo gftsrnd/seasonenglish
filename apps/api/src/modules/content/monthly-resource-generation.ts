@@ -134,6 +134,15 @@ export function buildMonthlyPronunciationDistinctnessConstraint(
   return `${banned} ${retry}`.trim();
 }
 
+export function buildMonthlyPronunciationSchemaRepairIssue(issues: readonly Record<string, unknown>[]): string {
+  const details = issues.flatMap((issue) => {
+    const path = typeof issue.path === "string" ? issue.path : "output";
+    const message = typeof issue.message === "string" ? issue.message : "does not match the structured schema";
+    return [`${path}: ${message}`];
+  });
+  return `Structured output repair required. Previous response schema issues: ${details.join("; ") || "the response did not match the required shape"}. Return a complete corrected result. pronunciationTargets must be an array containing exactly one target object for this phase, not a string. Include at least 18 ordered example candidates; keep coreTerms, expandedTerms and grammarTopics empty. The target ipa must be one valid slash-delimited IPA form with no prose or multiple transcriptions.`;
+}
+
 export function getMonthlyGrammarPhaseIssues(result: MonthlyResourcePlanTaskOutput): string[] {
   const issues: string[] = [];
   if (result.coreTerms.length) issues.push(`coreTerms must be empty (received ${result.coreTerms.length})`);
