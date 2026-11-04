@@ -13,7 +13,7 @@ type MonthlyBriefInput = { title: string; brief: string; context: string; commun
 type MonthlyDayInput = { title: string; parts: Array<{ code: string; title?: string; content: Record<string, unknown> }> };
 type MonthlyQualityReport = { severe: MonthlyQualityFindingView[]; light: MonthlyQualityFindingView[]; contractVersion: number };
 type MonthlyResourceCriteria = { cefr: CefrLevel; vocabularyCount: number; expandedVocabularyCount: number; grammarTopicCount: number; pronunciationSoundCount: number };
-type ResourceGroup = "core" | "expanded" | "grammar" | "sounds";
+type ResourceGroup = "core" | "expanded" | "grammar" | "sounds" | "plan";
 type MonthlyFinalDraft = { versionId: string; status: "draft"; blueprint: AssessmentLevelFormUpdateInput };
 
 export interface OperatorMonthsActions {
@@ -213,6 +213,7 @@ export function OperatorMonths({ month, todayMonth, overview, cefr, busy, readOn
             <div><dt>Mục tiêu phát âm</dt><dd>{resourceCounts.sounds}</dd></div>
           </dl>
         </div> : <div className="monthly-resource-cards">{resources.map((item) => <button key={item.key} type="button" onClick={() => setResourcePanel(item.key)}><b>{item.count}</b><strong>{item.label}</strong><span>{item.description}</span></button>)}</div>}
+        {framework?.resources?.roadmap?.allocated && <button type="button" className="btn monthly-plan-open-button" onClick={() => setResourcePanel("plan")}>Phân bổ tài nguyên &amp; bài tập</button>}
         <div className="monthly-actions monthly-resource-actions">
           {resourceCheckpoint?.state === "draft_checkpoint" && !framework?.resources && <div className="monthly-resource-checkpoint" role="status" aria-label="Tiến độ tài nguyên nháp">
             <b>Bản nháp theo nhóm · chưa chốt</b>
@@ -253,30 +254,21 @@ export function OperatorMonths({ month, todayMonth, overview, cefr, busy, readOn
             return <article key={cell.date} role="gridcell" aria-label={`${cell.dateLabel}, ${isReview ? "Ôn tập" : `Bài ${newLessonOrdinal}`}`} className={`monthly-day-cell ${kind} ${lesson?.status === "approved" ? "approved" : ""}`}><b>{cell.dateLabel}</b><strong>{isReview ? "Ôn tập" : `Bài ${newLessonOrdinal}`}</strong><div>{lesson?.status === "approved" ? <><button type="button" aria-label={`Xem ${dayLabel}`} className="btn-sm monthly-view-day" disabled={busy} onClick={() => framework && actions.onViewDay?.(framework.id, lesson.lessonNumber)}>Xem</button></> : draft ? <><button type="button" aria-label={`Soạn tay ${dayLabel}`} title="Soạn tay" className="btn-sm monthly-manual-action" disabled={busy} onClick={() => openManualEditor(scheduledLessonNumber)}>✎</button><button type="button" aria-label={`Duyệt ${dayLabel}`} className="btn-sm" disabled={busy} onClick={() => framework && void actions.onApproveDay(framework.id, scheduledLessonNumber)}>Duyệt</button></> : <><button type="button" aria-label={isReview ? "Sinh" : `Sinh ${dayLabel}`} className="btn-sm btn-primary" disabled={busy} onClick={() => setGenerationConfirmation({ dayNumber: scheduledLessonNumber, kind: isReview ? "review" : "new" })}>{"Sinh"}</button><button type="button" aria-label={`Soạn tay ${dayLabel}`} title="Soạn tay" className="btn-sm monthly-manual-action" disabled={busy} onClick={() => openManualEditor(scheduledLessonNumber)}>✎</button></>}</div></article>;
           })}
         </div>
-        {framework?.resources?.roadmap?.allocated && <details className="monthly-plan-preview">
-          <summary>Phân bổ tài nguyên và trọng tâm kỹ năng</summary>
-          <p className="small muted">Kế hoạch đã chốt. Các mục dưới đây chỉ phân bổ tài nguyên và nhiệm vụ trọng tâm; nội dung bài học chưa được sinh.</p>
-          <div className="monthly-plan-days">
-            {framework.resources.roadmap.days.map((day) => {
-              const coreTerms = framework.resources!.coreTerms.filter((term) => day.kind === "new" ? day.coreTermIds.includes(term.id) : day.reviewTermIds.includes(term.id));
-              const expandedTerms = framework.resources!.supportTerms.filter((term) => day.kind === "new" ? day.expandedTermIds.includes(term.id) : day.reviewExpandedTermIds.includes(term.id));
-              return <details key={day.lessonNumber} className="monthly-plan-day">
-                <summary className="monthly-plan-day-summary"><div><span className="eyebrow">{day.kind === "review" ? "Ôn tập tuần" : `Bài mới ${monthlyNewLessonOrdinal(day.lessonNumber, calendar.lessonCount)}`}</span><h3>{day.date}</h3></div><span className="monthly-plan-day-open">Xem phân bổ</span></summary>
-                <div className="monthly-plan-day-body">
-                  <div className="monthly-plan-resource-groups">{coreTerms.map((core) => <div key={core.id} className="monthly-plan-resource-group"><strong>{core.word}</strong><span>{expandedTerms.filter((term) => term.relatedCoreTermId === core.id).map((term) => term.word).join(" · ")}</span></div>)}</div>
-                  <small>Ngữ pháp: {day.grammarStepIds.join(" + ")} · Phát âm: {day.pronunciationSlot ?? "—"}</small>
-                </div>
-              </details>;
-            })}
-          </div>
-        </details>}
       </section>
-      {framework?.resources && resourcePanel && <section className="monthly-resource-panel card" role="dialog" aria-modal="false" aria-label="Tài nguyên tháng">
-        <header><div><span className="eyebrow">Tài nguyên tháng</span><h2>{resources.find((item) => item.key === resourcePanel)?.label}</h2></div><button type="button" className="btn-sm" aria-label="Đóng tài nguyên" onClick={() => setResourcePanel(null)}>Đóng</button></header>
+      {framework?.resources && resourcePanel && <section className="monthly-resource-panel card" role="dialog" aria-modal="false" aria-label={resourcePanel === "plan" ? "Phân bổ tài nguyên và bài tập" : "Tài nguyên tháng"}>
+        <header><div><span className="eyebrow">Tài nguyên tháng</span><h2>{resourcePanel === "plan" ? "Phân bổ tài nguyên & bài tập" : resources.find((item) => item.key === resourcePanel)?.label}</h2></div><button type="button" className="btn-sm" aria-label="Đóng tài nguyên" onClick={() => setResourcePanel(null)}>Đóng</button></header>
         {resourcePanel === "core" && <VocabularyPanel items={framework.resources.coreTerms} variant="core" />}
         {resourcePanel === "expanded" && <VocabularyPanel items={framework.resources.supportTerms} variant="expanded" />}
         {resourcePanel === "grammar" && <GrammarResourcePanel topics={framework.resources.grammarTopics} {...(framework.resources.roadmap ? { roadmap: framework.resources.roadmap } : {})} />}
         {resourcePanel === "sounds" && <PronunciationResourcePanel sounds={framework.resources.sounds} {...(framework.resources.roadmap ? { roadmap: framework.resources.roadmap } : {})} />}
+        {resourcePanel === "plan" && framework.resources.roadmap?.allocated && <div className="monthly-plan-inspector" aria-label="Phân bổ tài nguyên và bài tập"><p className="small muted">Kế hoạch đã chốt. Đây là sơ đồ phân bổ; nội dung bài học chưa được sinh.</p><div className="monthly-plan-days">{framework.resources.roadmap.days.map((day) => {
+          const coreTerms = framework.resources!.coreTerms.filter((term) => day.kind === "new" ? day.coreTermIds.includes(term.id) : day.reviewTermIds.includes(term.id));
+          const expandedTerms = framework.resources!.supportTerms.filter((term) => day.kind === "new" ? day.expandedTermIds.includes(term.id) : day.reviewExpandedTermIds.includes(term.id));
+          return <details key={day.lessonNumber} className="monthly-plan-day">
+            <summary className="monthly-plan-day-summary"><div><span className="eyebrow">{day.kind === "review" ? "Ôn tập tuần" : `Bài mới ${monthlyNewLessonOrdinal(day.lessonNumber, calendar.lessonCount)}`}</span><h3>{day.date}</h3></div><span className="monthly-plan-day-open">Xem phân bổ</span></summary>
+            <div className="monthly-plan-day-body"><div className="monthly-plan-resource-groups">{coreTerms.map((core) => <div key={core.id} className="monthly-plan-resource-group"><strong>{core.word}</strong><span>{expandedTerms.filter((term) => term.relatedCoreTermId === core.id).map((term) => term.word).join(" · ")}</span></div>)}</div><small>Ngữ pháp: {day.grammarStepIds.join(" + ")} · Phát âm: {day.pronunciationSlot ?? "—"}</small></div>
+          </details>;
+        })}</div></div>}
       </section>}
     </div>
     {generationConfirmation && framework?.resources && <MonthlyGenerationConfirmation dayNumber={generationConfirmation.dayNumber} kind={generationConfirmation.kind} framework={framework} onCancel={() => setGenerationConfirmation(undefined)} onConfirm={async () => { const generation = generationConfirmation; await generateDay(generation.dayNumber, generation.kind); setGenerationConfirmation(undefined); }} />}

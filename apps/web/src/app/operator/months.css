@@ -44,6 +44,10 @@
 .monthly-plan-day-body .monthly-plan-resource-groups{gap:5px;margin:5px 0}
 .monthly-plan-day-body .monthly-plan-resource-group{gap:2px;font-size:11px}
 .monthly-plan-day-body small{display:block;color:var(--muted);font-size:10px;line-height:1.4}
+.monthly-plan-open-button{width:100%;margin:0 0 14px;padding:11px 12px;border:1px solid var(--line);border-radius:10px;background:var(--surface-3);color:var(--text);font-weight:750;text-align:left;cursor:pointer}
+.monthly-plan-open-button:hover{border-color:var(--primary);background:var(--surface)}
+.monthly-plan-inspector>.small{margin:0 0 12px}
+.monthly-plan-inspector .monthly-plan-days{grid-template-columns:repeat(2,minmax(0,1fr))}
 @media(max-width:1320px){.monthly-workspace{grid-template-columns:minmax(0,1fr);gap:18px}.monthly-workspace>.monthly-calendar-section{grid-column:auto;width:100%;max-width:100%}.monthly-resource-panel{left:0;width:min(1180px,calc(100vw - 48px))}}
 @media(max-width:620px){.monthly-resource-panel{width:calc(100vw - 48px)}}
 
