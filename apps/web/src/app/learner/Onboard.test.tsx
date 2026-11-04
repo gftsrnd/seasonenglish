@@ -140,6 +140,19 @@ describe("app onboard affordances", () => {
     expect(await screen.findByText(/đã lưu nháp/i)).toBeInTheDocument();
   });
 
+  it("returns from an untouched profile without attempting to save a draft", async () => {
+    const user = userEvent.setup();
+    const navigate = vi.fn();
+    const saveProfileDraft = vi.fn().mockRejectedValue(new Error("PROFILE_DRAFT_NOT_SAVED"));
+    render(<LearnerOnboard view={{ profile: { fullName: "Lan", email: "lan@example.com" }, mode: "edit" }} actions={{ ...actions, navigate, saveProfileDraft }} />);
+
+    await user.click(screen.getAllByRole("button", { name: "← Quay lại" })[0]!);
+
+    expect(navigate).toHaveBeenCalledWith("/profile");
+    expect(saveProfileDraft).not.toHaveBeenCalled();
+    expect(screen.queryByText("Không lưu được bản nháp")).not.toBeInTheDocument();
+  });
+
   it("keeps the learner on the form and reports an error when the server cannot save the draft", async () => {
     const user = userEvent.setup();
     const navigate = vi.fn();

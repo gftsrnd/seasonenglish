@@ -4,6 +4,7 @@ import type { LearnerAvatarData, RewardView, SurveyView } from "@e4s/contracts";
 import type { LearnerCallbacks, ProfileView } from "./contracts.js";
 import { ProductArt } from "../shared/media/ProductArt.js";
 import { ErrorText, Notice, PageTitle, Progress, AppLink } from "./ui.js";
+import { LevelReadinessCard } from "./LevelReadiness.js";
 
 const BADGE_ICONS: Record<string, string> = {
   first: "🐣", starter: "🐣", // media-scan: allow-avatar-reward -- deliberate badge symbol
@@ -57,6 +58,7 @@ export function LearnerSurvey({ view, actions }: { view: SurveyView; actions: Le
 
 export function LearnerProfile({ view, actions }: { view: ProfileView; actions: LearnerCallbacks }) {
   const [avatarOpen, setAvatarOpen] = useState(false);
+  const [profileOpen, setProfileOpen] = useState(false);
   const avatarReturnRef = useRef<HTMLButtonElement | null>(null);
   const openAvatar = (event: MouseEvent<HTMLButtonElement>) => {
     avatarReturnRef.current = event.currentTarget;
@@ -71,22 +73,28 @@ export function LearnerProfile({ view, actions }: { view: ProfileView; actions: 
   const level = view.learner.cefr;
   const goals = labels(view.learner.profile.goals, GOALS);
   const detail = level ? `Trình độ ${level} – ${CEFR_LABELS[level]}${goals ? ` · ${goals}.` : ""}` : "Chưa duyệt trình độ";
+  const readinessMonthLabel = formatReadinessMonth(view.monthlyProgress?.month);
   return <div className="app-learner-page profile-page" style={{ width: "100%", maxWidth: 960, minWidth: 0, boxSizing: "border-box", paddingBottom: "calc(88px + env(safe-area-inset-bottom))" }}>
     <PageTitle eyebrow="Tiến độ & hồ sơ" title={view.learner.displayName} detail={detail} aside={level ? <span className={`badge lvl lvl-${level}`}>{level}</span> : null} />
-    <section className="card" aria-label="Nhận diện người học">
+    <section className="card profile-identity-card" aria-label="Hồ sơ cá nhân">
       <div className="row" style={{ gap: 16, alignItems: "center", flexWrap: "wrap" }}>
         <button ref={avatarReturnRef} className="btn-ghost" type="button" aria-label="Đổi avatar" title="Đổi avatar" style={{ padding: 0, border: 0, background: "transparent" }} onClick={openAvatar}><Avatar avatar={view.learner.profile.avatar} name={view.learner.displayName} /></button>
-        <div style={{ flex: 1, minWidth: 200 }}><b style={{ fontFamily: "var(--font-display)", fontSize: "1.1rem" }}>Avatar của bạn</b><div className="small muted">{avatarDescription(view.learner.profile.avatar)}</div></div>
-        <div className="row" style={{ gap: 8 }}><button className="btn-primary" type="button" onClick={openAvatar}>Đổi avatar</button><AppLink className="btn" href="/onboard" navigate={actions.navigate}>Sửa hồ sơ</AppLink></div>
+        <div style={{ flex: 1, minWidth: 200 }}><div className="eyebrow">Hồ sơ cá nhân</div><b style={{ fontFamily: "var(--font-display)", fontSize: "1.1rem" }}>Avatar của bạn</b><div className="small muted">{avatarDescription(view.learner.profile.avatar)} · Thông tin công việc và nhu cầu học của bạn.</div></div>
+        <div className="row" style={{ gap: 8 }}><button className="btn-primary" type="button" onClick={openAvatar}>Đổi avatar</button><button className="btn" type="button" aria-expanded={profileOpen} onClick={() => setProfileOpen((value) => !value)}>{profileOpen ? "Đóng thông tin" : "Xem hồ sơ"}</button></div>
       </div>
+      {profileOpen ? <div className="profile-identity-details"><div className="stack profile-details" style={{ gap: 12, minWidth: 0 }}>{profileRows(view).filter(([, value]) => value).map(([label, value]) => <div className="row profile-detail-row" style={{ display: "grid", gridTemplateColumns: "minmax(104px, .38fr) minmax(0, 1fr)", gap: 12, alignItems: "start", minWidth: 0 }} key={label}><span className="xs muted profile-detail-label" style={{ minWidth: 0, fontWeight: 800 }}>{label}</span><span className="small profile-detail-value" style={{ minWidth: 0, overflowWrap: "anywhere" }}>{value}</span></div>)}</div><div className="row" style={{ marginTop: 12 }}><AppLink className="btn btn-sm" style={{ minHeight: 32 }} href="/onboard" navigate={actions.navigate}>Cập nhật hồ sơ</AppLink></div></div> : null}
     </section>
-    <ProfileCard view={view} actions={actions} />
     {level && !view.monthlyPreparation ? <SeasonCard view={view} actions={actions} /> : null}
-    {level && !view.monthlyPreparation ? <ReadinessCard view={view} actions={actions} /> : null}
     <ProgressOverview view={view} />
+    {level && !view.monthlyPreparation ? <LevelReadinessCard readiness={view.levelReadiness} navigate={actions.navigate} monthLabel={readinessMonthLabel} className="profile-readiness" /> : null}
     <section className="card profile-progress-section profile-assessment-section" aria-label="Kết quả đánh giá"><div className="profile-section-heading"><div><div className="eyebrow">Đánh giá năng lực</div><h2>Điểm đầu vào</h2></div><span className="small muted">Kết quả đánh giá ban đầu</span></div><div className="profile-assessment-grid"><AssessmentResult label="Điểm đầu vào" result={view.assessments.placement} /></div>{view.surveyAvailable && !view.monthlyProgress && !view.monthlyPreparation ? <div className="row profile-assessment-actions"><AppLink className="btn" href="/survey" navigate={actions.navigate}>Trả lời khảo sát cuối pilot</AppLink></div> : null}</section>
     {avatarOpen ? <AvatarDialog initial={view.learner.profile.avatar} name={view.learner.displayName} onClose={closeAvatar} onSave={async (avatar) => { await actions.saveAvatar(avatar); closeAvatar(); }} /> : null}
   </div>;
+}
+
+function formatReadinessMonth(month?: string | null) {
+  const match = /^(\d{4})-(\d{2})$/.exec(month ?? "");
+  return match ? `${match[2]}/${match[1]}` : undefined;
 }
 
 function ProgressOverview({ view }: { view: ProfileView }) {
@@ -116,14 +124,6 @@ function ProgressOverview({ view }: { view: ProfileView }) {
   </>;
 }
 
-function ProfileCard({ view, actions }: { view: ProfileView; actions: LearnerCallbacks }) {
-  const [open, setOpen] = useState(false);
-  return <section className="card soft" style={{ marginTop: 16, minWidth: 0 }} aria-label="Hồ sơ cá nhân">
-    <div className="row between" style={{ gap: 12, minWidth: 0 }}><div><b>Hồ sơ cá nhân</b><div className="xs muted">Thông tin công việc và nhu cầu học của bạn.</div></div><button className="btn btn-sm" type="button" aria-expanded={open} onClick={() => setOpen((value) => !value)}>{open ? "Đóng thông tin cá nhân" : "Chỉnh sửa thông tin cá nhân"}</button></div>
-    {open ? <><div className="stack profile-details" style={{ gap: 12, marginTop: 12, minWidth: 0 }}>{profileRows(view).filter(([, value]) => value).map(([label, value]) => <div className="row profile-detail-row" style={{ display: "grid", gridTemplateColumns: "minmax(104px, .38fr) minmax(0, 1fr)", gap: 12, alignItems: "start", minWidth: 0 }} key={label}><span className="xs muted profile-detail-label" style={{ minWidth: 0, fontWeight: 800 }}>{label}</span><span className="small profile-detail-value" style={{ minWidth: 0, overflowWrap: "anywhere" }}>{value}</span></div>)}</div><div className="row" style={{ marginTop: 12 }}><AppLink className="btn btn-sm" style={{ minHeight: 32 }} href="/onboard" navigate={actions.navigate}>Cập nhật hồ sơ</AppLink></div></> : null}
-  </section>;
-}
-
 function SeasonCard({ view, actions }: { view: ProfileView; actions: LearnerCallbacks }) {
   const next = view.season.next;
   const nextBadges = next ? view.badgeRoadmap.filter((badge) => badge.seasonLevel === next.level) : [];
@@ -141,48 +141,6 @@ function SeasonCard({ view, actions }: { view: ProfileView; actions: LearnerCall
 }
 
 function SeasonTrack({ met, title, value, current, target, note }: { met: boolean; title: string; value: string; current: number; target: number; note: string }) { return <div className="card flat" style={{ background: met ? "var(--mint)" : "var(--surface)" }}><div className="row between"><b className="small">{title}</b><span className={`badge ${met ? "ok" : "warn"}`}>{met ? <><Check className="status-icon" aria-hidden="true" /> Đạt</> : "Chưa đạt"}</span></div><div style={{ fontFamily: "var(--font-display)", fontWeight: 800, fontSize: "1.3rem", margin: "2px 0" }}>{value}</div><Progress value={current} max={target} label={title} /><div className="xs muted" style={{ marginTop: 4 }}>{note}</div></div>; }
-
-function ReadinessCard({ view, actions }: { view: ProfileView; actions: LearnerCallbacks }) {
-  const readiness = view.levelReadiness;
-  const target = readiness.targetLevel;
-  return <section className="card" style={{ marginTop: 16 }} aria-label={readiness.eligible && target ? `Sẵn sàng thi lên ${target}` : `Đường lên mức ${target ?? "tiếp theo"}`}>
-    <div className="row between" style={{ alignItems: "baseline" }}>
-      <h3>{target ? readiness.eligible ? `Sẵn sàng thi lên ${target}` : `Đường lên mức ${target}` : "Bạn đang ở mức cao nhất"}</h3>
-      <span className="small muted" style={{ fontWeight: 800 }}>{readiness.windowDays} ngày gần nhất</span>
-    </div>
-    {readiness.criteria.map((criterion) => <div className="readiness-metric" data-readiness-key={criterion.key} key={criterion.key}>
-      <div className="small readiness-heading">
-        <span className="readiness-label">{criterion.label}</span>
-        <span className="readiness-current">{profileReadinessCurrent(criterion)}</span>
-      </div>
-      <ProfileReadinessBar criterion={criterion} />
-      <div className="readiness-actual small muted">{criterion.display}</div>
-    </div>)}
-    {readiness.eligible && readiness.examAvailable && target ? <div className="card flat" style={{ marginTop: 16, background: "var(--mint)" }}><b>Bạn đủ điều kiện thi lên mức {target}.</b><div className="small" style={{ margin: "4px 0 8px" }}>Đề ngắn (≈35 phút, 4 phần), rồi 6 lượt thử thách với Season. Chuẩn bị tai nghe và micro như bài đầu vào.</div><AppLink className="btn btn-primary" href="/test/level-up" navigate={actions.navigate}>Thi lên mức</AppLink></div> : null}
-    <p className="xs muted" style={{ margin: "10px 0 0" }}>{target ? readiness.eligible ? "Đủ cả 4 mục – được thi lên mức khi đề được duyệt." : "Đủ cả 4 mục để thi lên mức." : "Giữ nhịp học để duy trì mức C1."}</p>
-  </section>;
-}
-
-type ProfileReadinessCriterion = ProfileView["levelReadiness"]["criteria"][number];
-
-function profileReadinessScale(key: ProfileReadinessCriterion["key"]) {
-  return key === "coachRubric" ? 5 : 100;
-}
-
-function profileReadinessCurrent(criterion: ProfileReadinessCriterion) {
-  return criterion.key === "coachRubric" ? `${criterion.current}/5` : `${criterion.current}%`;
-}
-
-function ProfileReadinessBar({ criterion }: { criterion: ProfileReadinessCriterion }) {
-  const max = profileReadinessScale(criterion.key);
-  const current = Math.max(0, Math.min(max, criterion.current));
-  const valuePercent = (current / max) * 100;
-  const targetPercent = Math.max(0, Math.min(100, (criterion.target / max) * 100));
-  return <div className="readiness-track" role="progressbar" aria-label={criterion.label} aria-valuemin={0} aria-valuemax={max} aria-valuenow={current}>
-    <i className="readiness-fill" style={{ width: `${valuePercent}%` }} />
-    <i className="readiness-target" data-testid="readiness-target" style={{ left: `${targetPercent}%` }} />
-  </div>;
-}
 
 function WeekDays({ days }: { days: ProfileView["weeks"][number]["days"] }) {
   const statuses = new Map(days?.map((day) => [day.label, day.status]) ?? []);

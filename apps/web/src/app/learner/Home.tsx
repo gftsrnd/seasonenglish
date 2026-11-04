@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState, type CSSProperties, type KeyboardEvent as ReactKeyboardEvent } from "react";
-import { BookOpen, Check, Circle, Clock3, LockKeyhole, MessageCircle, Play, Sprout } from "lucide-react";
+import { BookOpen, Clock3, LockKeyhole, MessageCircle, Play, Sprout } from "lucide-react";
 import type { LearnerHomeView, LearnerCallbacks } from "./contracts.js";
 import { Notice, PageTitle, Progress, AppLink } from "./ui.js";
+import { LevelReadinessCard } from "./LevelReadiness.js";
 
 export function LearnerHome({ view, actions }: { view: LearnerHomeView; actions: LearnerCallbacks }) {
   const [celebration, setCelebration] = useState(view.rewardAnnouncement?.kind === "new-level-announcement" || view.rewardAnnouncement?.kind === "top-level-redirect" ? view.rewardAnnouncement : null);
@@ -30,34 +31,32 @@ export function LearnerHome({ view, actions }: { view: LearnerHomeView; actions:
     <div className="bao-row" style={{ marginBottom: 16 }} aria-label="Lời chào của Season AI Coach"><div className="bubble home-today-heading" style={{ flex: 1 }}>Hôm nay học gì nào?</div></div>
     {view.inactivityReminder ? <Notice tone="warn"><b>Bạn đã nghỉ học {view.inactivityReminder.inactiveDays} ngày.</b> Học bù bài gần nhất để nối lại nhịp học nhé.</Notice> : null}
     {!view.aiAvailable && view.aiAvailable !== undefined ? <Notice tone="warn">AI chưa kết nối (chưa có API key). Bạn vẫn làm test và học bài đã duyệt; báo người vận hành để bật AI coach.</Notice> : null}
-    {view.notifications?.length ? <section className="card" aria-label="Thông báo mới" style={{ marginTop: 12 }}><div className="eyebrow">Thông báo</div><h3 style={{ margin: "2px 0 8px" }}>Nội dung học tập</h3><ul style={{ margin: 0, paddingLeft: 20 }}>{view.notifications.slice(0, 5).map((notification) => <li key={notification.id} className="small" style={{ marginBottom: 6 }}>{notification.message}</li>)}</ul></section> : null}
+    {view.notifications?.length ? <section className="card soft" aria-label="Thông báo mới" style={{ marginTop: 12 }}><div className="eyebrow">Thông báo</div><h3 style={{ margin: "2px 0 8px" }}>Nội dung học tập</h3><ul style={{ margin: 0, paddingLeft: 20 }}>{view.notifications.slice(0, 5).map((notification) => <li key={notification.id} className="small" style={{ marginBottom: 6 }}>{notification.message}</li>)}</ul></section> : null}
     <PrimaryLesson view={view} next={next} actions={actions} />
-    {!monthlyPreparation ? <section className="stats" data-home-block="metrics" aria-label="Tiến độ hiện tại">
+    {!monthlyPreparation ? <section className="stats monthly-home-metrics" data-home-block="metrics" aria-label="Tiến độ hiện tại">
       <Metric label="Bài tháng" value={`${view.metrics.completedLessons}/${view.metrics.totalLessons}`} percent={ratio(view.metrics.completedLessons, view.metrics.totalLessons)} />
       <Metric label="Bài ôn" value={`${view.metrics.completedReviews ?? 0}/${view.metrics.totalReviews ?? 0}`} percent={ratio(view.metrics.completedReviews ?? 0, view.metrics.totalReviews ?? 0)} color="var(--butter)" />
-      <Metric label="Điểm danh" value={String(view.schedule.days.filter((day) => day.status === "attended").length)} percent={ratio(view.schedule.days.filter((day) => day.status === "attended").length, view.schedule.days.filter((day) => day.status !== "upcoming").length)} color="var(--peach)" />
+      <Metric label="Điểm danh" secondary={view.monthlyEligibility ? `Vắng ${view.monthlyEligibility.absenceDays}/${view.monthlyEligibility.maxAbsences} tối đa` : undefined} value={view.monthlyEligibility ? `${view.monthlyEligibility.attendedDays}/${view.monthlyEligibility.effectiveDays}` : "–"} percent={view.monthlyEligibility ? ratio(view.monthlyEligibility.attendedDays, view.monthlyEligibility.effectiveDays) : 0} color="var(--peach)" />
       <MonthlyExamMetric status={view.metrics.monthlyExamStatus ?? view.monthlyExam?.status ?? "unpublished"} />
     </section> : null}
     {monthly && view.lessons.length ? <MonthlyCalendar month={monthly} lessons={view.lessons} actions={actions} /> : null}
-    {monthly && view.monthlyExam ? <MonthlyExamCard month={monthly} exam={view.monthlyExam} actions={actions} /> : null}
-    {monthly ? <section className="card" style={{ marginTop: 16 }} data-home-block="attendance" aria-label="Nhịp học tháng này"><div className="row between"><h3>Nhịp học tháng này</h3><strong>{view.schedule.days.filter((day) => day.status === "attended").length} buổi</strong></div><ol className="days home-week-axis" style={{ display: "grid", gridTemplateColumns: `repeat(${Math.max(view.schedule.days.length, 1)}, minmax(0, 1fr))`, gap: 12, alignItems: "start", margin: "12px 0 0", padding: 0, minWidth: 0, width: "100%" }}> {view.schedule.days.map((day) => <li className="day" data-status={day.status} key={day.date}><span>{day.label}</span><i className={day.status === "attended" ? "on" : day.status === "missed" ? "miss" : day.status}>{day.status === "attended" ? <Check className="status-icon" aria-label="Đã học" /> : day.status === "today" ? <Circle className="status-icon" aria-label="Hôm nay" fill="currentColor" /> : day.status === "missed" ? <span className="sr-only">Đã bỏ lỡ</span> : <Circle className="status-icon" aria-label="Chưa học" />}</i></li>)}</ol><p className="xs muted attendance-schedule-note">Lịch học tháng · 1 bài/ngày, ≥{view.schedule.lessonMinutes} phút. {view.monthlyGoal ?? ""}</p></section> : null}
+    {monthly ? <MonthlyRhythm lessons={view.lessons} scheduled={view.monthlyEligibility?.scheduledLessons} lessonMinutes={view.schedule.lessonMinutes} goal={view.monthlyGoal} /> : null}
     <section className="grid cols-2" style={{ marginTop: 16, alignItems: "stretch", gridAutoRows: "1fr", minWidth: 0 }} data-home-block="activities" aria-label="Hoạt động tháng">
       <AppLink className={`tile ${!monthlyPreparation && (view.coach.turnsToday ?? 0) > 0 ? "mint" : "peach"}`} style={{ height: "100%", minWidth: 0, boxSizing: "border-box" }} href="/coach" navigate={actions.navigate}><ActivityIcon /><span className="t">Season AI Coach</span><span className="s">{monthlyPreparation ? "Luyện theo trình độ đã được duyệt trong khi chờ bộ bài tháng." : (view.coach.turnsToday ?? 0) > 0 ? `Đã luyện hôm nay ✓ (${view.coach.turnsToday} lượt)` : `Đã luyện ${view.coach.turnsThisWeek} lượt trong tháng này`}</span></AppLink>
       <AppLink className="tile mint" style={{ height: "100%", minWidth: 0, boxSizing: "border-box" }} href="/monthly" navigate={actions.navigate}><BookOpen aria-hidden="true" /><span className="t">Bài tháng</span><span className="s">{monthlyPreparation ? "Xem trạng thái chuẩn bị lộ trình tháng." : "Xem lịch bài học, bài ôn và bài thi tháng."}</span></AppLink>
     </section>
-    {!monthlyPreparation ? <Readiness view={view} actions={actions} /> : null}
+    {!monthlyPreparation ? <LevelReadinessCard readiness={view.levelReadiness} phase={view.levelUpPhase} monthLabel={monthly ? formatMonth(monthly.month) : undefined} navigate={actions.navigate} className="home-readiness" /> : null}
+    {!monthlyPreparation && view.monthlyExam ? <MonthlyExamOverview exam={view.monthlyExam} month={monthly} navigate={actions.navigate} /> : null}
     <section className="card" style={{ marginTop: 12 }} aria-label="Hồ sơ và đánh giá đầu vào">
       <div className="row between" style={{ gap: 12, alignItems: "flex-start", flexWrap: "wrap" }}>
         <div><div className="eyebrow">Thông tin của bạn</div><h3 style={{ margin: "2px 0 4px" }}>Hồ sơ và đánh giá đầu vào</h3><p className="small muted" style={{ margin: 0 }}>Trình độ đã duyệt: <b>{view.learner.cefr}</b>. Kết quả đầu vào và hồ sơ vẫn xem được khi lộ trình tháng đang chuẩn bị.</p></div>
         <div className="row" style={{ flexWrap: "wrap" }}>
           <AppLink className="btn" href="/profile" navigate={actions.navigate}>Hồ sơ học tập</AppLink>
           <AppLink className="btn" href="/profile" navigate={actions.navigate}>Kết quả đầu vào</AppLink>
-          {!monthlyPreparation ? <AppLink className="btn" href="/profile" navigate={actions.navigate}>Phần thưởng</AppLink> : null}
           {!monthly && !monthlyPreparation ? <AppLink className="btn" href="/survey" navigate={actions.navigate}>Khảo sát cuối pilot</AppLink> : null}
         </div>
       </div>
     </section>
-    {!monthlyPreparation && view.reward ? <section className="card home-reward" style={{ marginTop: 16 }} data-home-block="reward" aria-label="Mùa học hiện tại"><div className="row between"><div><div className="eyebrow">Mùa học</div><h2>{view.reward.seasonName}</h2></div><strong>{view.reward.points} điểm</strong></div>{view.reward.nextPoints !== null ? <p className="small muted" style={{ marginBottom: 0 }}>Còn {Math.max(0, view.reward.nextPoints - view.reward.points)} điểm để mở cấp tiếp theo.</p> : <p className="small muted" style={{ marginBottom: 0 }}>Bạn đã đạt cấp cao nhất của chương trình.</p>}</section> : null}
     {celebration ? <LevelUpCelebration announcement={celebration} displayName={view.learner.displayName} onClose={async () => { if (celebration.announcementId) await actions.acknowledgeRewardAnnouncement?.(celebration.announcementId); setCelebration(null); }} /> : null}
     {assessmentCelebration ? <AssessmentCelebration /> : null}
   </div>;
@@ -171,6 +170,12 @@ function formatLessonDate(value: string) {
   return formatted.charAt(0).toLocaleUpperCase("vi-VN") + formatted.slice(1);
 }
 
+function formatShortDate(value: string) {
+  const date = new Date(`${value.slice(0, 10)}T00:00:00Z`);
+  if (!Number.isFinite(date.getTime())) return value;
+  return new Intl.DateTimeFormat("vi-VN", { day: "2-digit", month: "2-digit" }).format(date);
+}
+
 function formatMonth(value: string) {
   const match = /^(\d{4})-(\d{2})$/u.exec(value);
   return match ? `${match[2]}/${match[1]}` : value;
@@ -226,6 +231,28 @@ function MonthlyExamMetric({ status }: { status: NonNullable<LearnerHomeView["mo
   return <article className="stat" aria-label="Bài thi tháng"><div className="ring" style={{ "--p": complete || ready ? 100 : 0, "--c": complete ? "var(--olive)" : "var(--surface)" } as CSSProperties}><b>{complete ? "✓" : ready ? "Mở" : "Chờ"}</b></div><span className="lbl">Bài thi tháng · {label}</span></article>;
 }
 
+/** Uses the dated, approved month plan — never the generic weekday strip. */
+function MonthlyRhythm({ lessons, scheduled, lessonMinutes, goal }: { lessons: LearnerHomeView["lessons"]; scheduled?: number | undefined; lessonMinutes: number; goal?: string | null | undefined }) {
+  const sessions = lessons.filter((lesson) => lesson.lessonDate).sort((a, b) => a.lessonDate!.localeCompare(b.lessonDate!));
+  const total = scheduled ?? sessions.length;
+  return <section className="card soft" style={{ marginTop: 16, background: "var(--butter)" }} data-home-block="attendance" aria-label="Nhịp học tháng này">
+    <div className="row between" style={{ gap: 12, flexWrap: "wrap" }}><h3>Nhịp học tháng này</h3><strong>{total} buổi theo kế hoạch</strong></div>
+    <ol style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(118px, 1fr))", gap: 8, margin: "12px 0 0", padding: 0, listStyle: "none" }}>
+      {sessions.map((lesson) => <li key={lesson.id} className="card flat" style={{ padding: "8px 10px", background: "var(--surface)" }}><b>{lesson.kind === "review" ? "Ôn tập" : `Bài ${lesson.dayNumber}`}</b><span className="small muted" style={{ display: "block" }}>{formatShortDate(lesson.lessonDate!)}</span></li>)}
+    </ol>
+    {!sessions.length ? <p className="small muted" style={{ marginBottom: 0 }}>Đang chờ lịch có ngày học cụ thể.</p> : null}
+    <p className="xs muted attendance-schedule-note">Mỗi buổi ≥{lessonMinutes} phút. {goal ?? ""}</p>
+  </section>;
+}
+
+function MonthlyExamOverview({ exam, month, navigate }: { exam: NonNullable<LearnerHomeView["monthlyExam"]>; month: LearnerHomeView["month"] | null; navigate: LearnerCallbacks["navigate"] }) {
+  const label = monthlyExamLabel(exam.status);
+  return <section className="card" data-home-block="monthly-exam" aria-label="Bài thi tháng" style={{ marginTop: 0, marginBottom: 20, background: "var(--peach)" }}>
+    <div className="row between" style={{ gap: 12, alignItems: "flex-start", flexWrap: "wrap" }}><div><div className="eyebrow">Bài tháng</div><h3 style={{ margin: "2px 0 4px" }}>Bài thi tháng</h3><p className="small muted" style={{ margin: 0 }}>{exam.requirement}{month ? ` · Ngày thi ${formatLessonDate(month.examDate)}` : ""}</p></div><span className={`badge ${exam.status === "ready" || exam.status === "completed" ? "ok" : "warn"}`}>{label}</span></div>
+    <div className="row" style={{ marginTop: 12 }}><AppLink className="btn" href="/monthly" navigate={navigate}>Xem điều kiện và bài thi tháng</AppLink></div>
+  </section>;
+}
+
 function MonthlyCalendar({ month, lessons, actions }: { month: NonNullable<LearnerHomeView["month"]>; lessons: LearnerHomeView["lessons"]; actions: LearnerCallbacks }) {
   const [year, monthNumber] = month.month.split("-").map(Number);
   const first = new Date(Date.UTC(year!, (monthNumber ?? 1) - 1, 1));
@@ -248,11 +275,6 @@ function MonthlyCalendar({ month, lessons, actions }: { month: NonNullable<Learn
       })}
     </div>
   </section>;
-}
-
-function MonthlyExamCard({ month, exam, actions }: { month: NonNullable<LearnerHomeView["month"]>; exam: NonNullable<LearnerHomeView["monthlyExam"]>; actions: LearnerCallbacks }) {
-  const status = monthlyExamLabel(exam.status);
-  return <section className="card" style={{ marginTop: 16 }} data-home-block="monthly-exam" aria-label="Bài thi tháng"><div className="row between"><div><div className="eyebrow">{formatMonth(month.month)}</div><h3 style={{ margin: 0 }}>Bài thi tháng</h3></div><span className={`badge ${exam.status === "ready" || exam.status === "completed" ? "ok" : "warn"}`}>{status}</span></div><p className="small">Bạn đã hoàn thành <b>{exam.completedLessons}/{exam.totalLessons}</b> bài trong tháng.</p><p className="small muted">{exam.requirement}</p>{exam.certificateEligible ? <p className="small"><b>Chứng chỉ C1:</b> Hoàn thành bài thi tháng để được xét cấp chứng chỉ.</p> : null}{exam.status === "ready" ? <AppLink className="btn btn-primary" href="/test/monthly" navigate={actions.navigate}>Bắt đầu bài thi tháng</AppLink> : null}</section>;
 }
 
 function monthlyExamLabel(status: NonNullable<LearnerHomeView["monthlyExam"]>["status"]) {
@@ -317,64 +339,14 @@ function daysUntil(systemDate: string, examDate: string) {
   const start = new Date(`${systemDate.slice(0, 10)}T00:00:00Z`).getTime(); const end = new Date(`${examDate.slice(0, 10)}T00:00:00Z`).getTime();
   return Number.isFinite(start) && Number.isFinite(end) ? Math.max(0, Math.ceil((end - start) / 86_400_000)) : 0;
 }
-function Metric({ label, secondary, value, pending, percent, color = "var(--olive)" }: { label: string; secondary?: string; value?: string; pending?: string; percent: number; color?: string }) {
-  return <article className={`stat${pending ? " is-pending" : ""}`}>{pending ? <div className="metric-pending" role="status">{pending}</div> : <div className="ring" style={{ "--p": percent, "--c": color } as CSSProperties}><b>{value}</b></div>}<span className="lbl">{label}{secondary ? <small className="metric-secondary">{secondary}</small> : null}</span></article>;
+function Metric({ label, secondary, value, pending, percent, color = "var(--olive)" }: { label: string; secondary?: string | undefined; value?: string; pending?: string; percent: number; color?: string }) {
+  return <article className={`stat${pending ? " is-pending" : ""}`}>{pending ? <div className="metric-pending" role="status">{pending}</div> : <div className="ring" style={{ "--p": percent, "--c": color } as CSSProperties}><b>{value}</b></div>}<span className="lbl">{label}</span>{secondary ? <small className="metric-secondary" style={{ display: "block" }}>{secondary}</small> : null}</article>;
 }
 
 function ratio(value: number, total: number) { return total > 0 ? Math.max(0, Math.min(100, Math.round(value / total * 100))) : 0; }
 
 function pilotPhaseLabel(phase: LearnerHomeView["weekPhase"]) {
   return phase === "before_pilot" ? "Pilot sắp bắt đầu" : phase === "after_pilot" ? "Pilot đã kết thúc" : "Đang trong giai đoạn pilot";
-}
-
-function Readiness({ view, actions }: { view: LearnerHomeView; actions: LearnerCallbacks }) {
-  const levelStatus = view.levelUpPhase === "requested" ? "Yêu cầu lên mức đang chờ duyệt (người vận hành)."
-    : view.levelUpPhase === "approved" ? "Mức mới đã được duyệt và ghi nhận."
-      : view.levelUpPhase === "failed" ? "Chưa đạt thử thách; kế hoạch luyện lại đang sẵn sàng."
-        : view.levelUpPhase === "challenge" ? "Thử thách lên mức đang mở."
-          : view.levelUpPhase === "testing" ? "Bài kiểm tra lên mức đang diễn ra."
-            : view.levelUpPhase === "ungraded" ? "Bài kiểm tra lên mức đang chờ chấm."
-              : null;
-  const target = view.levelReadiness.targetLevel;
-  const title = target ? view.levelReadiness.eligible ? `Sẵn sàng thi lên ${target}` : `Đường lên mức ${target}` : "Bạn đang ở mức cao nhất";
-  return <section className="card" style={{ marginTop: 12 }} data-home-block="readiness" aria-label={target ? view.levelReadiness.eligible ? `Sẵn sàng thi lên ${target}` : `Đường lên mức ${target}` : "Bạn đang ở mức cao nhất"}>
-    <div className="row between" style={{ alignItems: "baseline" }}><h3>{title}</h3><span className="small muted" style={{ fontWeight: 800 }}>{view.month ? `Theo tháng ${formatMonth(view.month.month)}` : `${view.levelReadiness.windowDays} ngày gần nhất`}</span></div>
-    {levelStatus ? <p className="small muted" style={{ margin: "4px 0 0" }}>{levelStatus}</p> : null}
-    {view.levelReadiness.monthlyPolicy ? <MonthlyLevelPolicy policy={view.levelReadiness.monthlyPolicy} /> : view.levelReadiness.criteria.map((metric) => <div className="readiness-metric" data-readiness-key={metric.key} key={metric.key}><div className="small readiness-heading"><span className="readiness-label">{metric.label}</span><span className="readiness-current">{readinessCurrent(metric)}</span></div><ReadinessBar metric={metric} /><div className="readiness-actual small muted">{metric.display}</div></div>)}
-    {view.levelUpPhase === "testing" && target ? <div className="card flat" style={{ marginTop: 12, background: "var(--mint)" }}><b>Bài thi lên mức {target} đang dang dở.</b><div className="small" style={{ margin: "4px 0 8px" }}>Tiếp tục từ phần đang làm; bài thi vẫn theo thứ tự 4 kỹ năng.</div><AppLink className="btn btn-primary" href="/test/level-up" navigate={actions.navigate}>Tiếp tục bài thi</AppLink></div> : null}
-    {view.levelUpPhase === "challenge" && target ? <div className="card flat" style={{ marginTop: 12, background: "var(--mint)" }}><b>Bạn đã qua bài thi lên mức {target}.</b><div className="small" style={{ margin: "4px 0 8px" }}>Hoàn thành 6 lượt thử thách với Season để gửi yêu cầu duyệt mức.</div><AppLink className="btn btn-primary" href="/challenge" navigate={actions.navigate}>Mở thử thách</AppLink></div> : null}
-    {(!view.levelUpPhase || view.levelUpPhase === "eligible") && view.levelReadiness.eligible && view.levelReadiness.examAvailable && target ? <div className="card flat" style={{ marginTop: 12, background: "var(--mint)" }}><b>Bạn đủ điều kiện thi lên mức {target}.</b><div className="small" style={{ margin: "4px 0 8px" }}>Đề ngắn (≈35 phút, 4 phần), rồi 6 lượt thử thách với Season. Chuẩn bị tai nghe và micro như bài đầu vào.</div><AppLink className="btn btn-primary" href="/test/level-up" navigate={actions.navigate}>Thi lên mức</AppLink></div> : null}
-    {view.levelUpPhase === "eligible" && !view.levelReadiness.examAvailable && target ? <Notice tone="info">Bạn đã đủ điều kiện thi lên mức {target}; đề sẽ mở ngay khi được vận hành duyệt.</Notice> : null}
-    <p className="xs muted" style={{ margin: "10px 0 0" }}>{target ? view.levelReadiness.eligible ? "Đủ cả 4 mục – được thi lên mức khi đề được duyệt." : "Đủ cả 4 mục để thi lên mức." : "Giữ nhịp học để duy trì mức C1."}</p>
-  </section>;
-}
-
-function MonthlyLevelPolicy({ policy }: { policy: NonNullable<LearnerHomeView["levelReadiness"]["monthlyPolicy"]> }) {
-  const finalMet = policy.finalPasses >= policy.finalPassesRequired && (policy.finalAverage ?? 0) >= policy.finalAverageTarget && policy.latestFinalPassed;
-  const seasonMet = policy.seasonMonths >= policy.seasonMonthsRequired;
-  const monthsMet = policy.eligibleMonths >= policy.requiredMonths;
-  const absenceMet = policy.reasons.indexOf("LEVEL_UP_ABSENCE_CAP_EXCEEDED") === -1;
-  const item = (key: string, label: string, value: string, met: boolean) => <div className="readiness-metric" data-readiness-key={key} key={key}><div className="small readiness-heading"><span className="readiness-label">{label}</span><span className={`badge ${met ? "ok" : "warn"}`}>{met ? "Đạt" : "Chưa đạt"}</span></div><div className="readiness-actual small muted">{value}</div></div>;
-  return <div aria-label="Điều kiện Đường lên mức">{item("eligibleMonths", "6 tháng hợp lệ", `${policy.eligibleMonths}/${policy.requiredMonths} tháng`, monthsMet)}{item("monthlyFinals", "Kết quả bài thi tháng", `${policy.finalPasses}/${policy.finalPassesRequired} bài đạt · TB ${policy.finalAverage === null ? "–" : policy.finalAverage.toFixed(1)}/${policy.finalAverageTarget} · tháng gần nhất ${policy.latestFinalPassed ? "đạt" : "chưa đạt"}`, finalMet)}{item("seasonMonths", "Season đạt chỉ tiêu", `${policy.seasonMonths}/${policy.seasonMonthsRequired} tháng đủ 100 lượt hợp lệ`, seasonMet)}{item("absenceCap", "Giới hạn vắng theo level", `Tối đa ${policy.absenceCap}% trong từng tháng hợp lệ`, absenceMet)}</div>;
-}
-
-function readinessScale(key: LearnerHomeView["levelReadiness"]["criteria"][number]["key"]): number {
-  return key === "coachRubric" ? 5 : 100;
-}
-
-function readinessCurrent(metric: LearnerHomeView["levelReadiness"]["criteria"][number]): string {
-  return metric.key === "coachRubric" ? `${metric.current}/5` : `${metric.current}%`;
-}
-
-function ReadinessBar({ metric }: { metric: LearnerHomeView["levelReadiness"]["criteria"][number] }) {
-  const max = readinessScale(metric.key);
-  const current = Math.max(0, Math.min(max, metric.current));
-  const valuePercent = max ? current / max * 100 : 0;
-  const targetPercent = max ? Math.max(0, Math.min(100, metric.target / max * 100)) : 0;
-  return <div className="readiness-track" role="progressbar" aria-label={metric.label} aria-valuemin={0} aria-valuemax={max} aria-valuenow={current}>
-    <i className="readiness-fill" style={{ width: `${valuePercent}%` }} />
-    <i className="readiness-target" data-testid="readiness-target" aria-hidden="true" style={{ left: `${targetPercent}%` }} />
-  </div>;
 }
 
 

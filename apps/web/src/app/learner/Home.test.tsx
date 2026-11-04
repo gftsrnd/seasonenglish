@@ -33,7 +33,10 @@ describe("monthly learner home", () => {
     expect(screen.getByText("Điểm danh")).toBeInTheDocument();
     expect(screen.getByRole("grid", { name: "Lịch học tháng 11/2026" })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: /Bài thángXem lịch/ })).toHaveAttribute("href", "/monthly");
-    expect(screen.getAllByRole("region", { name: "Bài thi tháng" }).length).toBeGreaterThan(0);
+    expect(screen.getByRole("region", { name: "Bài thi tháng" })).toHaveTextContent("Hoàn thành 2 bài còn lại");
+    expect(screen.getByRole("region", { name: "Nhịp học tháng này" })).toHaveTextContent("Bài 1");
+    expect(screen.getByRole("region", { name: "Nhịp học tháng này" })).toHaveTextContent("02-11");
+    expect(screen.getByRole("region", { name: "Tiến độ hiện tại" })).toHaveTextContent("1/20");
     for (const retired of ["Chặng 1", "Chặng 2", "Bài tuần", "Khảo sát cuối pilot", "E4S Pilot"]) expect(screen.queryByText(retired)).not.toBeInTheDocument();
   });
 

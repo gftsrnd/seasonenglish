@@ -137,10 +137,10 @@ describe("app profile avatar dialog affordances", () => {
   it("keeps personal information collapsed until the learner asks to view it", async () => {
     render(<LearnerProfile view={view} actions={actions} />);
     expect(screen.queryByRole("heading", { name: "Tùy chọn cá nhân" })).not.toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Chỉnh sửa thông tin cá nhân" })).toHaveAttribute("aria-expanded", "false");
+    expect(screen.getByRole("button", { name: "Xem hồ sơ" })).toHaveAttribute("aria-expanded", "false");
     expect(screen.queryByText("Học viên Demo", { selector: ".profile-detail-value" })).not.toBeInTheDocument();
-    await userEvent.setup().click(screen.getByRole("button", { name: "Chỉnh sửa thông tin cá nhân" }));
-    expect(screen.getByRole("button", { name: "Đóng thông tin cá nhân" })).toHaveAttribute("aria-expanded", "true");
+    await userEvent.setup().click(screen.getByRole("button", { name: "Xem hồ sơ" }));
+    expect(screen.getByRole("button", { name: "Đóng thông tin" })).toHaveAttribute("aria-expanded", "true");
     expect(screen.getByText("Học viên Demo", { selector: ".profile-detail-value" })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Cập nhật hồ sơ" })).toHaveAttribute("href", "/onboard");
   });

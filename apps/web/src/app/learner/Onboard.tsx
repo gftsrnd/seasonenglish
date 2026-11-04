@@ -27,6 +27,7 @@ export function LearnerOnboard({ view, actions }: { view: OnboardView; actions: 
   const [pendingAction, setPendingAction] = useState<"save" | "draft" | null>(null);
   const { play } = useExperience();
   const formRef = useRef<HTMLFormElement>(null);
+  const initialProfileRef = useRef("");
   const errorId = "onboard-form-error";
   const busy = Boolean(view.saving || pendingAction);
   const set = <K extends keyof LearnerProfileData>(key: K, value: LearnerProfileData[K]) => setProfile((current) => ({ ...current, [key]: value }));
@@ -45,8 +46,25 @@ export function LearnerOnboard({ view, actions }: { view: OnboardView; actions: 
   const toggle = (key: "goals" | "habits" | "learningStyles", value: string) => { clearValidation(key); set(key, profile[key].includes(value) ? profile[key].filter((item) => item !== value) : [...profile[key], value]); };
   const focusInvalid = (target: ValidationTarget) => formRef.current?.querySelector<HTMLElement>(`[name="${target}"]`)?.focus();
   const normalizedProfile = () => ({ ...profile, email: profile.email.trim().toLowerCase() });
+  if (!initialProfileRef.current) initialProfileRef.current = profileFingerprint(normalizedProfile());
   const submit = async (event: FormEvent) => { event.preventDefault(); if (busy) return; const nextProfile = normalizedProfile(); const error = validate(nextProfile); if (error) { setLocalError(error); focusInvalid(error.target); return; } setLocalError(null); setActionError(""); setActionNotice(""); setPendingAction("save"); try { await actions.saveProfile(nextProfile); clearDraft(); } catch { setActionError("Không lưu được hồ sơ. Dữ liệu trên màn hình vẫn được giữ để bạn thử lại."); } finally { setPendingAction(null); } };
-  const saveDraftAndLeave = async (destination: string) => { if (busy) return; setLocalError(null); setActionError(""); setActionNotice(""); setPendingAction("draft"); try { const nextProfile = normalizedProfile(); window.localStorage.setItem(onboardDraftKey, JSON.stringify(nextProfile)); await actions.saveProfileDraft(nextProfile); setActionNotice("Đã lưu nháp."); window.setTimeout(() => actions.navigate(destination), 650); } catch { setActionError("Không lưu được bản nháp. Dữ liệu trên màn hình vẫn được giữ để bạn thử lại."); } finally { setPendingAction(null); } };
+  const saveDraftAndLeave = async (destination: string) => {
+    if (busy) return;
+    const nextProfile = normalizedProfile();
+    // Leaving an untouched form is navigation, not a save attempt. This avoids
+    // a misleading “cannot save profile” error when the learner changed nothing.
+    // Only an existing profile can safely leave without persisting a draft.
+    // First-time onboarding must still save its progress, even when the form is
+    // currently empty, so the learner can resume it later.
+    if (editing && profileFingerprint(nextProfile) === initialProfileRef.current) {
+      actions.navigate(destination);
+      return;
+    }
+    setLocalError(null); setActionError(""); setActionNotice(""); setPendingAction("draft");
+    try { window.localStorage.setItem(onboardDraftKey, JSON.stringify(nextProfile)); await actions.saveProfileDraft(nextProfile); setActionNotice("Đã lưu nháp."); window.setTimeout(() => actions.navigate(destination), 650); }
+    catch { setActionError("Không lưu được bản nháp. Dữ liệu trên màn hình vẫn được giữ để bạn thử lại."); }
+    finally { setPendingAction(null); }
+  };
   const back = editing ? "/profile" : "/home";
   const draft = () => void saveDraftAndLeave(back);
   const errorMessage = actionError || view.error;
@@ -62,6 +80,16 @@ export function LearnerOnboard({ view, actions }: { view: OnboardView; actions: 
       <div className="row onboard-actions" style={{ marginTop: 12, gap: 10, alignItems: "stretch", flexWrap: "wrap" }}><button className="btn btn-sm" type="button" onClick={() => saveDraftAndLeave(back)} disabled={busy} aria-busy={pendingAction === "draft" || undefined} title={busy ? "Đang lưu hồ sơ…" : undefined}>← Quay lại</button><button type="button" onClick={draft} disabled={busy} aria-busy={pendingAction === "draft" || undefined} title={busy ? "Đang lưu hồ sơ…" : undefined}>{pendingAction === "draft" ? "Đang lưu…" : "Lưu nháp"}</button><button className="btn-primary btn-lg" type="submit" disabled={busy} aria-busy={pendingAction === "save" || view.saving || undefined} style={{ flex: "1 1 280px", minWidth: 0 }}>{pendingAction === "save" || view.saving ? "Đang lưu…" : editing ? "Lưu hồ sơ" : "Lưu và làm test đầu vào →"}</button></div>{actionError ? <div className="banner danger onboard-save-notice" role="alert"><div className="body small">{actionError}</div></div> : null}{actionNotice ? <div className="banner ok onboard-save-notice" role="status" aria-live="polite"><div className="body small">{actionNotice}</div></div> : null}
     </form>
   </div>;
+}
+
+function profileFingerprint(profile: LearnerProfileData) {
+  return JSON.stringify({
+    ...profile,
+    goals: [...profile.goals].sort(),
+    habits: [...profile.habits].sort(),
+    learningStyles: [...profile.learningStyles].sort(),
+    certificates: [...(profile.certificates ?? [])].map((certificate) => ({ ...certificate })).sort((a, b) => a.type.localeCompare(b.type))
+  });
 }
 
 function readDraft(profile: Partial<LearnerProfileData>): Partial<LearnerProfileData> {
