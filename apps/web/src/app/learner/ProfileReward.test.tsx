@@ -44,9 +44,9 @@ describe("app profile avatar dialog affordances", () => {
 
     render(<LearnerProfile view={monthlyView} actions={actions} />);
 
-    expect(screen.getByRole("region", { name: "Tiến độ tháng" })).toHaveTextContent("Customer handover");
-    expect(screen.getByRole("list", { name: "Các bài học trong tháng" })).toHaveTextContent("Bài 1");
-    expect(screen.getByRole("article", { name: "Bài thi tháng" })).toHaveTextContent("Chưa phát hành");
+    expect(screen.queryByRole("region", { name: "Tiến độ tháng" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("list", { name: "Các bài học trong tháng" })).not.toBeInTheDocument();
+    expect(screen.getByRole("region", { name: "Kết quả đánh giá" })).toBeInTheDocument();
     expect(screen.queryByText(/Chặng 1/)).not.toBeInTheDocument();
   });
 
@@ -61,7 +61,6 @@ describe("app profile avatar dialog affordances", () => {
 
     render(<LearnerProfile view={preparing} actions={actions} />);
 
-    expect(screen.getByRole("region", { name: "Lộ trình tháng đang chuẩn bị" })).toHaveTextContent("hồ sơ và kết quả đầu vào của bạn vẫn giữ nguyên bên dưới");
     expect(screen.queryByText(/Chặng 1/)).not.toBeInTheDocument();
     expect(screen.queryByRole("region", { name: "Đường lên mức B2" })).not.toBeInTheDocument();
     expect(screen.queryByText("Mùa học")).not.toBeInTheDocument();
@@ -69,7 +68,7 @@ describe("app profile avatar dialog affordances", () => {
     expect(screen.getByRole("region", { name: "Điểm đầu vào" })).toHaveTextContent("Chưa có");
   });
 
-  it("uses the same compact readiness format as the home page", () => {
+  it("keeps level-up readiness off the Settings/Profile screen", () => {
     const readinessView = {
       ...view,
       levelReadiness: {
@@ -88,23 +87,7 @@ describe("app profile avatar dialog affordances", () => {
 
     render(<LearnerProfile view={readinessView} actions={actions} />);
 
-    const readiness = screen.getByRole("region", { name: "Đường lên mức B2" });
-    const lessons = readiness.querySelector<HTMLElement>('[data-readiness-key="lessonCompletion"]')!;
-    const firstTry = readiness.querySelector<HTMLElement>('[data-readiness-key="firstTryAccuracy"]')!;
-    const practice = readiness.querySelector<HTMLElement>('[data-readiness-key="weeklyPractice"]')!;
-    const coach = readiness.querySelector<HTMLElement>('[data-readiness-key="coachRubric"]')!;
-
-    expect(within(lessons).getByText("20%", { exact: true })).toHaveClass("readiness-current");
-    expect(within(lessons).getByText("1/5 bài", { exact: true })).toHaveClass("readiness-actual");
-    expect(within(lessons).getByRole("progressbar", { name: "Bài học hoàn thành" })).toHaveAttribute("aria-valuemax", "100");
-    expect(within(practice).getByText("86%", { exact: true })).toBeInTheDocument();
-    expect(within(coach).getByText("4.3/5", { exact: true })).toBeInTheDocument();
-    expect(within(lessons).getByTestId("readiness-target")).toHaveStyle({ left: "90%" });
-    expect(within(firstTry).getByTestId("readiness-target")).toHaveStyle({ left: "75%" });
-    expect(within(practice).getByTestId("readiness-target")).toHaveStyle({ left: "80%" });
-    expect(within(coach).getByRole("progressbar", { name: "Rubric khi luyện với Season" })).toHaveAttribute("aria-valuemax", "5");
-    expect(within(coach).getByTestId("readiness-target")).toHaveStyle({ left: "80%" });
-    expect(readiness.querySelector(".readiness-label svg")).not.toBeInTheDocument();
+    expect(screen.queryByRole("region", { name: "Đường lên mức B2" })).not.toBeInTheDocument();
   });
 
   it("presents the real assessment total and every skill on its own percentage row", () => {

@@ -33,11 +33,14 @@ export function LearnerHome({ view, actions }: { view: LearnerHomeView; actions:
     {!view.aiAvailable && view.aiAvailable !== undefined ? <Notice tone="warn">AI chưa kết nối (chưa có API key). Bạn vẫn làm test và học bài đã duyệt; báo người vận hành để bật AI coach.</Notice> : null}
     {view.notifications?.length ? <section className="card soft" aria-label="Thông báo mới" style={{ marginTop: 12 }}><div className="eyebrow">Thông báo</div><h3 style={{ margin: "2px 0 8px" }}>Nội dung học tập</h3><ul style={{ margin: 0, paddingLeft: 20 }}>{view.notifications.slice(0, 5).map((notification) => <li key={notification.id} className="small" style={{ marginBottom: 6 }}>{notification.message}</li>)}</ul></section> : null}
     <PrimaryLesson view={view} next={next} actions={actions} />
-    {!monthlyPreparation ? <section className="stats monthly-home-metrics" data-home-block="metrics" aria-label="Tiến độ hiện tại">
-      <Metric label="Bài tháng" value={`${view.metrics.completedLessons}/${view.metrics.totalLessons}`} percent={ratio(view.metrics.completedLessons, view.metrics.totalLessons)} />
-      <Metric label="Bài ôn" value={`${view.metrics.completedReviews ?? 0}/${view.metrics.totalReviews ?? 0}`} percent={ratio(view.metrics.completedReviews ?? 0, view.metrics.totalReviews ?? 0)} color="var(--butter)" />
-      <Metric label="Điểm danh" secondary={view.monthlyEligibility ? `Vắng ${view.monthlyEligibility.absenceDays}/${view.monthlyEligibility.maxAbsences} tối đa` : undefined} value={view.monthlyEligibility ? `${view.monthlyEligibility.attendedDays}/${view.monthlyEligibility.effectiveDays}` : "–"} percent={view.monthlyEligibility ? ratio(view.monthlyEligibility.attendedDays, view.monthlyEligibility.effectiveDays) : 0} color="var(--peach)" />
-      <MonthlyExamMetric status={view.metrics.monthlyExamStatus ?? view.monthlyExam?.status ?? "unpublished"} />
+    {!monthlyPreparation ? <section data-home-block="metrics" aria-label="Tiến độ tháng" style={{ marginTop: 16, padding: "16px 18px", borderRadius: 18, background: "var(--mint)", border: "1px solid var(--border)" }}>
+      <div className="row between" style={{ gap: 12, alignItems: "baseline", flexWrap: "wrap" }}><div><div className="eyebrow">Theo tháng</div><h2 style={{ margin: "2px 0 0" }}>Tiến độ học tập</h2></div><span className="small muted">Bài thi tháng nằm trong thẻ riêng bên dưới</span></div>
+      <div className="stats monthly-home-metrics" style={{ marginTop: 12 }}>
+        <Metric label="Bài theo lịch" value={`${view.metrics.completedLessons}/${view.metrics.totalLessons}`} percent={ratio(view.metrics.completedLessons, view.metrics.totalLessons)} />
+        <Metric label="Bài ôn" value={`${view.metrics.completedReviews ?? 0}/${view.metrics.totalReviews ?? 0}`} percent={ratio(view.metrics.completedReviews ?? 0, view.metrics.totalReviews ?? 0)} color="var(--primary)" />
+        <Metric label="Điểm danh" secondary={view.monthlyEligibility ? `Vắng ${view.monthlyEligibility.absenceDays}/${view.monthlyEligibility.maxAbsences} tối đa` : undefined} value={view.monthlyEligibility ? `${view.monthlyEligibility.attendedDays}/${view.monthlyEligibility.effectiveDays}` : "–"} percent={view.monthlyEligibility ? ratio(view.monthlyEligibility.attendedDays, view.monthlyEligibility.effectiveDays) : 0} color="var(--peach)" />
+        <MonthlyExamMetric status={view.metrics.monthlyExamStatus ?? view.monthlyExam?.status ?? "unpublished"} />
+      </div>
     </section> : null}
     {monthly && view.lessons.length ? <MonthlyCalendar month={monthly} lessons={view.lessons} actions={actions} /> : null}
     {monthly ? <MonthlyRhythm lessons={view.lessons} scheduled={view.monthlyEligibility?.scheduledLessons} lessonMinutes={view.schedule.lessonMinutes} goal={view.monthlyGoal} /> : null}
@@ -47,12 +50,11 @@ export function LearnerHome({ view, actions }: { view: LearnerHomeView; actions:
     </section>
     {!monthlyPreparation ? <LevelReadinessCard readiness={view.levelReadiness} phase={view.levelUpPhase} monthLabel={monthly ? formatMonth(monthly.month) : undefined} navigate={actions.navigate} className="home-readiness" /> : null}
     {!monthlyPreparation && view.monthlyExam ? <MonthlyExamOverview exam={view.monthlyExam} month={monthly} navigate={actions.navigate} /> : null}
-    <section className="card" style={{ marginTop: 12 }} aria-label="Hồ sơ và đánh giá đầu vào">
+    <section className="card" style={{ marginTop: 12, background: "var(--lav)" }} aria-label="Hồ sơ và đánh giá đầu vào">
       <div className="row between" style={{ gap: 12, alignItems: "flex-start", flexWrap: "wrap" }}>
         <div><div className="eyebrow">Thông tin của bạn</div><h3 style={{ margin: "2px 0 4px" }}>Hồ sơ và đánh giá đầu vào</h3><p className="small muted" style={{ margin: 0 }}>Trình độ đã duyệt: <b>{view.learner.cefr}</b>. Kết quả đầu vào và hồ sơ vẫn xem được khi lộ trình tháng đang chuẩn bị.</p></div>
         <div className="row" style={{ flexWrap: "wrap" }}>
-          <AppLink className="btn" href="/profile" navigate={actions.navigate}>Hồ sơ học tập</AppLink>
-          <AppLink className="btn" href="/profile" navigate={actions.navigate}>Kết quả đầu vào</AppLink>
+          <AppLink className="btn" href="/profile" navigate={actions.navigate}>Hồ sơ học tập & đầu vào</AppLink>
           {!monthly && !monthlyPreparation ? <AppLink className="btn" href="/survey" navigate={actions.navigate}>Khảo sát cuối pilot</AppLink> : null}
         </div>
       </div>
@@ -226,9 +228,8 @@ function readOnboardDraftAvailable() {
 
 function MonthlyExamMetric({ status }: { status: NonNullable<LearnerHomeView["monthlyExam"]>["status"] }) {
   const label = monthlyExamLabel(status);
-  const complete = status === "completed";
-  const ready = status === "ready";
-  return <article className="stat" aria-label="Bài thi tháng"><div className="ring" style={{ "--p": complete || ready ? 100 : 0, "--c": complete ? "var(--olive)" : "var(--surface)" } as CSSProperties}><b>{complete ? "✓" : ready ? "Mở" : "Chờ"}</b></div><span className="lbl">Bài thi tháng · {label}</span></article>;
+  const opened = status === "completed" || status === "ready";
+  return <article className="stat" aria-label="Bài thi tháng"><div className="ring" style={{ "--p": opened ? 100 : 0, "--c": opened ? "var(--olive)" : "var(--butter)" } as CSSProperties}><b>{status === "completed" ? "✓" : status === "ready" ? "Mở" : "Chờ"}</b></div><span className="lbl">Bài thi tháng</span><small className="metric-secondary">{label}</small></article>;
 }
 
 /** Uses the dated, approved month plan — never the generic weekday strip. */

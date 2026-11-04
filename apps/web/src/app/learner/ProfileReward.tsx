@@ -4,7 +4,6 @@ import type { LearnerAvatarData, RewardView, SurveyView } from "@e4s/contracts";
 import type { LearnerCallbacks, ProfileView } from "./contracts.js";
 import { ProductArt } from "../shared/media/ProductArt.js";
 import { ErrorText, Notice, PageTitle, Progress, AppLink } from "./ui.js";
-import { LevelReadinessCard } from "./LevelReadiness.js";
 
 const BADGE_ICONS: Record<string, string> = {
   first: "🐣", starter: "🐣", // media-scan: allow-avatar-reward -- deliberate badge symbol
@@ -73,10 +72,9 @@ export function LearnerProfile({ view, actions }: { view: ProfileView; actions: 
   const level = view.learner.cefr;
   const goals = labels(view.learner.profile.goals, GOALS);
   const detail = level ? `Trình độ ${level} – ${CEFR_LABELS[level]}${goals ? ` · ${goals}.` : ""}` : "Chưa duyệt trình độ";
-  const readinessMonthLabel = formatReadinessMonth(view.monthlyProgress?.month);
   return <div className="app-learner-page profile-page" style={{ width: "100%", maxWidth: 960, minWidth: 0, boxSizing: "border-box", paddingBottom: "calc(88px + env(safe-area-inset-bottom))" }}>
     <PageTitle eyebrow="Tiến độ & hồ sơ" title={view.learner.displayName} detail={detail} aside={level ? <span className={`badge lvl lvl-${level}`}>{level}</span> : null} />
-    <section className="card profile-identity-card" aria-label="Hồ sơ cá nhân">
+    <section className="card profile-identity-card" aria-label="Hồ sơ cá nhân" style={{ background: "var(--lav)" }}>
       <div className="row" style={{ gap: 16, alignItems: "center", flexWrap: "wrap" }}>
         <button ref={avatarReturnRef} className="btn-ghost" type="button" aria-label="Đổi avatar" title="Đổi avatar" style={{ padding: 0, border: 0, background: "transparent" }} onClick={openAvatar}><Avatar avatar={view.learner.profile.avatar} name={view.learner.displayName} /></button>
         <div style={{ flex: 1, minWidth: 200 }}><div className="eyebrow">Hồ sơ cá nhân</div><b style={{ fontFamily: "var(--font-display)", fontSize: "1.1rem" }}>Avatar của bạn</b><div className="small muted">{avatarDescription(view.learner.profile.avatar)} · Thông tin công việc và nhu cầu học của bạn.</div></div>
@@ -85,72 +83,31 @@ export function LearnerProfile({ view, actions }: { view: ProfileView; actions: 
       {profileOpen ? <div className="profile-identity-details"><div className="stack profile-details" style={{ gap: 12, minWidth: 0 }}>{profileRows(view).filter(([, value]) => value).map(([label, value]) => <div className="row profile-detail-row" style={{ display: "grid", gridTemplateColumns: "minmax(104px, .38fr) minmax(0, 1fr)", gap: 12, alignItems: "start", minWidth: 0 }} key={label}><span className="xs muted profile-detail-label" style={{ minWidth: 0, fontWeight: 800 }}>{label}</span><span className="small profile-detail-value" style={{ minWidth: 0, overflowWrap: "anywhere" }}>{value}</span></div>)}</div><div className="row" style={{ marginTop: 12 }}><AppLink className="btn btn-sm" style={{ minHeight: 32 }} href="/onboard" navigate={actions.navigate}>Cập nhật hồ sơ</AppLink></div></div> : null}
     </section>
     {level && !view.monthlyPreparation ? <SeasonCard view={view} actions={actions} /> : null}
-    <ProgressOverview view={view} />
-    {level && !view.monthlyPreparation ? <LevelReadinessCard readiness={view.levelReadiness} navigate={actions.navigate} monthLabel={readinessMonthLabel} className="profile-readiness" /> : null}
-    <section className="card profile-progress-section profile-assessment-section" aria-label="Kết quả đánh giá"><div className="profile-section-heading"><div><div className="eyebrow">Đánh giá năng lực</div><h2>Điểm đầu vào</h2></div><span className="small muted">Kết quả đánh giá ban đầu</span></div><div className="profile-assessment-grid"><AssessmentResult label="Điểm đầu vào" result={view.assessments.placement} /></div>{view.surveyAvailable && !view.monthlyProgress && !view.monthlyPreparation ? <div className="row profile-assessment-actions"><AppLink className="btn" href="/survey" navigate={actions.navigate}>Trả lời khảo sát cuối pilot</AppLink></div> : null}</section>
+    <section className="card profile-progress-section profile-assessment-section" aria-label="Kết quả đánh giá" style={{ background: "var(--mint)" }}><div className="profile-section-heading"><div><div className="eyebrow">Đánh giá năng lực</div><h2>Điểm đầu vào</h2></div><span className="small muted">Kết quả đánh giá ban đầu</span></div><div className="profile-assessment-grid"><AssessmentResult label="Điểm đầu vào" result={view.assessments.placement} /></div>{view.surveyAvailable && !view.monthlyProgress && !view.monthlyPreparation ? <div className="row profile-assessment-actions"><AppLink className="btn" href="/survey" navigate={actions.navigate}>Trả lời khảo sát cuối pilot</AppLink></div> : null}</section>
     {avatarOpen ? <AvatarDialog initial={view.learner.profile.avatar} name={view.learner.displayName} onClose={closeAvatar} onSave={async (avatar) => { await actions.saveAvatar(avatar); closeAvatar(); }} /> : null}
   </div>;
 }
 
-function formatReadinessMonth(month?: string | null) {
-  const match = /^(\d{4})-(\d{2})$/.exec(month ?? "");
-  return match ? `${match[2]}/${match[1]}` : undefined;
-}
-
-function ProgressOverview({ view }: { view: ProfileView }) {
-  const month = view.monthlyProgress;
-  if (view.monthlyPreparation) return <section className="profile-progress-section" aria-label="Lộ trình tháng đang chuẩn bị"><div className="profile-section-heading"><div><div className="eyebrow">Tổng quan học tập</div><h2>Lộ trình tháng đang được chuẩn bị</h2></div></div><div className="card"><p style={{ margin: 0 }}>Người vận hành đang chuẩn bị và duyệt bộ bài tháng theo trình độ của bạn. Các chỉ số bài học, Season và điều kiện thi sẽ bắt đầu từ dữ liệu tháng đã được phát hành; hồ sơ và kết quả đầu vào của bạn vẫn giữ nguyên bên dưới.</p></div></section>;
-  if (month) {
-    const monthLabel = new Intl.DateTimeFormat("vi-VN", { month: "long", year: "numeric" }).format(new Date(`${month.month}-01T00:00:00Z`));
-    const examCopy = month.exam.status === "completed"
-      ? `Đã hoàn thành${month.exam.totalScore === null ? "" : ` · ${month.exam.totalScore}/100`}`
-      : month.exam.status === "ready" ? "Đã đủ điều kiện"
-        : month.exam.status === "locked" ? "Đang làm bài" : "Chưa phát hành";
-    return <>
-      <section className="profile-progress-section" aria-label="Tổng quan tiến độ tháng">
-        <div className="profile-section-heading"><div><div className="eyebrow">Tổng quan học tập</div><h2>Nhịp học tháng {monthLabel}</h2></div><span className="small muted">Dữ liệu tháng hiện tại</span></div>
-        <div className="grid cols-3 profile-kpi-grid"><div className="card kpi"><span className="val">{month.completedLessons}/{month.totalLessons}</span><span className="lbl">bài tháng đã học</span></div><div className="card kpi"><span className="val">{view.stats.coachTurns}</span><span className="lbl">lượt Season trong tháng</span></div><div className="card kpi"><span className="val">{view.stats.studyDays}</span><span className="lbl">ngày có học trong tháng</span></div></div>
-      </section>
-      <section className="profile-progress-section profile-weeks-section" aria-label="Tiến độ tháng">
-        <div className="profile-section-heading"><div><div className="eyebrow">Lộ trình tháng</div><h2>{month.themeTitle}</h2></div><span className="small muted">{month.completedLessons}/{month.totalLessons} bài hoàn thành</span></div>
-        <article className="card profile-week-card"><div className="profile-month-days" role="list" aria-label="Các bài học trong tháng">{month.days.map((day) => <div role="listitem" className={`profile-month-day ${day.status}`} key={day.lessonNumber}><b>{String(day.lessonNumber).padStart(2, "0")}</b><span>Bài {day.lessonNumber}</span><i aria-label={day.status === "completed" ? "Đã hoàn thành" : day.status === "in_progress" ? "Đang học" : "Chưa học"}>{day.status === "completed" ? "✓" : day.status === "in_progress" ? "•" : "○"}</i></div>)}</div></article>
-        <article className="card profile-month-exam" aria-label="Bài thi tháng"><div><div className="eyebrow">Bài tháng</div><h3>Bài thi tháng</h3><p className="small muted">Ngày thi {new Intl.DateTimeFormat("vi-VN", { day: "2-digit", month: "2-digit", year: "numeric" }).format(new Date(`${month.examDate}T00:00:00Z`))}</p></div><span className={`badge ${month.exam.status === "completed" || month.exam.status === "ready" ? "ok" : "warn"}`}>{examCopy}</span></article>
-      </section>
-    </>;
-  }
-  return <>
-    <section className="profile-progress-section" aria-label="Tổng quan tiến độ"><div className="profile-section-heading"><div><div className="eyebrow">Tổng quan học tập</div><h2>Nhịp học hiện tại</h2></div><span className="small muted">Tóm tắt từ dữ liệu đã ghi nhận</span></div><div className="grid cols-3 profile-kpi-grid"><div className="card kpi"><span className="val">{view.stats.completedLessons}</span><span className="lbl">bài đã học</span></div><div className="card kpi"><span className="val">{view.stats.coachTurns}</span><span className="lbl">lượt luyện với Season</span></div><div className="card kpi"><span className="val">{view.stats.studyDays}</span><span className="lbl">ngày có học</span></div></div></section>
-    <section className="profile-progress-section profile-weeks-section" aria-label="Tiến độ lộ trình"><div className="profile-section-heading"><div><div className="eyebrow">Lộ trình học</div><h2>Tiến độ lộ trình</h2></div><span className="small muted">Theo dõi từng bài đã hoàn thành</span></div><div className="profile-week-grid">{view.weeks.map((week) => <article className="card profile-week-card" key={week.weekNumber}><div className="row between" style={{ gap: 12, alignItems: "flex-start" }}><h3>Chặng {week.weekNumber} <span className="small muted">{week.topic}</span></h3><span className="small muted" style={{ fontWeight: 800, whiteSpace: "nowrap" }}>{week.completedLessons}/{week.totalLessons || "–"} bài</span></div><WeekDays days={week.days} /></article>)}</div></section>
-  </>;
-}
-
 function SeasonCard({ view, actions }: { view: ProfileView; actions: LearnerCallbacks }) {
+  const [showAllBadges, setShowAllBadges] = useState(false);
   const next = view.season.next;
   const nextBadges = next ? view.badgeRoadmap.filter((badge) => badge.seasonLevel === next.level) : [];
   const missing = nextBadges.filter((badge) => !badge.earned);
   const pointsMet = !next || view.points >= next.pointsRequired;
   const badgesMet = !next || missing.length === 0;
-  return <section className="card profile-season-card" style={{ marginTop: 16 }} aria-label="Mùa học">
+  const visibleLevels = showAllBadges ? [1, 2, 3, 4] : Array.from(new Set([view.season.current.level, ...(next ? [next.level] : [])]));
+  return <section className="card profile-season-card" style={{ marginTop: 16, background: "var(--butter)" }} aria-label="Mùa học">
     <div className="row profile-season-heading" style={{ gap: 16, alignItems: "center" }}><SeasonFigure level={view.season.current.level} /><div className="profile-season-copy" style={{ flex: 1, minWidth: 200 }}><div className="eyebrow">Mùa học {view.season.current.level}/4</div><div className="small muted profile-season-current" style={{ fontWeight: 800 }}>Cấp hiện tại: {view.season.current.level}/4</div><div className="profile-season-title" style={{ fontFamily: "var(--font-display)", fontWeight: 800, fontSize: "1.5rem", lineHeight: 1.2 }}>{view.season.current.name}</div><div className="small profile-season-next" style={{ fontWeight: 700 }}>{next ? <>Lên <b>{next.name}</b> cần đủ điểm và huy hiệu của cấp đó.</> : "Cấp cao nhất – đủ điểm và đủ toàn bộ huy hiệu."}</div></div></div>
     {next ? <><div className="grid cols-2 profile-season-tracks" style={{ marginTop: 16 }}><SeasonTrack met={pointsMet} title="① Điểm" value={`★ ${view.points} / ${next.pointsRequired}`} current={view.points} target={next.pointsRequired} note={pointsMet ? "Đủ điểm cho cấp tiếp theo." : `Còn thiếu ${next.pointsRequired - view.points} điểm.`} /><SeasonTrack met={badgesMet} title="② Huy hiệu của cấp tiếp theo" value={`${view.season.earnedBadgeCount} / ${view.season.requiredBadgeCount}`} current={view.season.earnedBadgeCount} target={view.season.requiredBadgeCount} note={badgesMet ? "Đủ huy hiệu cho cấp tiếp theo." : `Còn thiếu: ${missing.map((badge) => badge.label).join(", ")}.`} /></div>{pointsMet !== badgesMet ? <Notice tone="warn">{pointsMet ? <div className="profile-season-warning"><b>Đủ điểm</b><span>Còn thiếu huy hiệu; điểm không thay thế huy hiệu.</span></div> : <div className="profile-season-warning"><b>Đủ huy hiệu</b><span>Còn thiếu điểm; huy hiệu không thay thế điểm.</span></div>}</Notice> : null}</> : null}
     <div className="row between profile-badges-heading" style={{ marginTop: 14 }}><h3 style={{ margin: 0 }}>Huy hiệu theo cấp</h3><span className="small muted" style={{ fontWeight: 800 }}>{view.badges.length}/{view.badgeRoadmap.length} huy hiệu · ★ {view.points} điểm</span></div>
-    <div className="profile-season-levels">{[1, 2, 3, 4].map((seasonLevel) => { const list = view.badgeRoadmap.filter((badge) => badge.seasonLevel === seasonLevel); const meta = SEASON_META[seasonLevel as keyof typeof SEASON_META]; const current = view.season.current.level === seasonLevel; const completed = view.season.current.level > seasonLevel; const nextLevel = view.season.current.level + 1 === seasonLevel; return <div className="profile-season-level" data-season-level={seasonLevel} key={seasonLevel}><div className="row profile-season-level-heading" style={{ gap: 8, marginBottom: list.length ? 6 : 0 }}><span className={`badge ${completed ? "ok" : nextLevel ? "warn" : current ? "primary" : ""}`}><span className="profile-season-emoji" role="img" aria-label={`Biểu tượng ${meta.name}`}>{meta.icon}</span> Cấp {seasonLevel} · {meta.name}</span><span className="xs muted" style={{ fontWeight: 800 }}>{meta.points} điểm{list.length ? ` + ${list.length} huy hiệu` : " · không yêu cầu huy hiệu"}{completed ? " · đã đạt" : nextLevel ? " · cấp tiếp theo" : current ? " · đang ở đây" : ""}</span></div>{list.length ? <div className="badges">{list.map((badge) => { const badgeIcon = BADGE_ICONS[badge.key] ?? "🏅"; return <article className={`bdg ${badge.earned ? "" : "off"}`} title={badge.description} key={badge.key}><span className="ic"><span className="profile-badge-emoji" role="img" aria-label={`Biểu tượng ${badge.label}`}>{badgeIcon}</span></span><b>{badge.label}</b><span>{badge.description}</span></article>; })}</div> : <p className="profile-season-empty xs muted">Cấp nền của lộ trình. Đủ điều kiện từ đây sẽ mở Cấp 2.</p>}</div>; })}</div>
+    <div id="profile-badge-levels" className="profile-season-levels">{visibleLevels.map((seasonLevel) => { const list = view.badgeRoadmap.filter((badge) => badge.seasonLevel === seasonLevel); const meta = SEASON_META[seasonLevel as keyof typeof SEASON_META]; const current = view.season.current.level === seasonLevel; const completed = view.season.current.level > seasonLevel; const nextLevel = view.season.current.level + 1 === seasonLevel; return <div className="profile-season-level" data-season-level={seasonLevel} key={seasonLevel}><div className="row profile-season-level-heading" style={{ gap: 8, marginBottom: list.length ? 6 : 0 }}><span className={`badge ${completed ? "ok" : nextLevel ? "warn" : current ? "primary" : ""}`}><span className="profile-season-emoji" role="img" aria-label={`Biểu tượng ${meta.name}`}>{meta.icon}</span> Cấp {seasonLevel} · {meta.name}</span><span className="xs muted" style={{ fontWeight: 800 }}>{meta.points} điểm{list.length ? ` + ${list.length} huy hiệu` : " · không yêu cầu huy hiệu"}{completed ? " · đã đạt" : nextLevel ? " · cấp tiếp theo" : current ? " · đang ở đây" : ""}</span></div>{list.length ? <div className="badges">{list.map((badge) => { const badgeIcon = BADGE_ICONS[badge.key] ?? "🏅"; return <article className={`bdg ${badge.earned ? "" : "off"}`} title={badge.description} key={badge.key}><span className="ic"><span className="profile-badge-emoji" role="img" aria-label={`Biểu tượng ${badge.label}`}>{badgeIcon}</span></span><b>{badge.label}</b><span>{badge.description}</span></article>; })}</div> : <p className="profile-season-empty xs muted">Cấp nền của lộ trình. Đủ điều kiện từ đây sẽ mở Cấp 2.</p>}</div>; })}</div>
+    <button type="button" className="btn btn-sm" style={{ marginTop: 12 }} aria-controls="profile-badge-levels" aria-expanded={showAllBadges} onClick={() => setShowAllBadges((value) => !value)}>{showAllBadges ? "Thu gọn huy hiệu" : "Xem tất cả huy hiệu"}</button>
     <div className="row" style={{ marginTop: 12 }}><AppLink className="btn btn-sm" style={{ minHeight: 32 }} href={next ? "/reward/preview" : "/reward/done"} navigate={actions.navigate}>{next ? "Xem trước màn hình khi đạt cấp cao nhất" : "Xem màn hình cấp cao nhất"}</AppLink></div>
     <details style={{ marginTop: 10 }}><summary className="small" style={{ fontWeight: 800, cursor: "pointer" }}>Cách tính điểm và lên cấp</summary><ul className="small" style={{ margin: "6px 0 0", paddingLeft: 20 }}><li>Hoàn thành 1 bài học: <b>+10</b></li><li>Mỗi phần Nghe/Đọc/Viết/Nói đúng: <b>+5 lần 1, giảm 1 điểm mỗi lần làm lại</b></li><li>1 lượt luyện với Season: <b>+2</b></li><li>Mở 1 ô từ bí mật: <b>+2</b></li><li>Hoàn thành bài thi tháng: <b>+15</b></li><li>Hoàn thành trọn lộ trình tháng: <b>+20</b></li><li>Lên cấp: đủ <b>điểm</b> và <b>mọi huy hiệu của cấp</b>; đi lần lượt, không nhảy cấp.</li></ul></details>
   </section>;
 }
 
 function SeasonTrack({ met, title, value, current, target, note }: { met: boolean; title: string; value: string; current: number; target: number; note: string }) { return <div className="card flat" style={{ background: met ? "var(--mint)" : "var(--surface)" }}><div className="row between"><b className="small">{title}</b><span className={`badge ${met ? "ok" : "warn"}`}>{met ? <><Check className="status-icon" aria-hidden="true" /> Đạt</> : "Chưa đạt"}</span></div><div style={{ fontFamily: "var(--font-display)", fontWeight: 800, fontSize: "1.3rem", margin: "2px 0" }}>{value}</div><Progress value={current} max={target} label={title} /><div className="xs muted" style={{ marginTop: 4 }}>{note}</div></div>; }
-
-function WeekDays({ days }: { days: ProfileView["weeks"][number]["days"] }) {
-  const statuses = new Map(days?.map((day) => [day.label, day.status]) ?? []);
-  const legacyDayLabels = ["T2", "T3", "T4", "T5", "T6"] as const;
-  return <div className="days profile-week-days">{(["Bài 1", "Bài 2", "Bài 3", "Bài 4", "Bài 5"] as const).map((label, index) => {
-    const status = statuses.get(legacyDayLabels[index]!) ?? "upcoming";
-    const description = status === "on_time" ? "đúng hạn" : status === "late" ? "trễ hạn" : "chưa đến hạn";
-    return <div className="day" key={label}><span>{label}</span><i className={status.replace("_", "-")} role="img" aria-label={`${label}: ${description}`} /></div>;
-  })}</div>;
-}
 
 function AssessmentResult({ label, result, action }: { label: string; result: ProfileView["assessments"]["placement"]; action?: ReactNode }) {
   const shortLabel = label === "Điểm đầu vào" ? "Đầu vào" : label;

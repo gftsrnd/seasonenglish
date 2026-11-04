@@ -36,7 +36,7 @@ describe("monthly learner home", () => {
     expect(screen.getByRole("region", { name: "Bài thi tháng" })).toHaveTextContent("Hoàn thành 2 bài còn lại");
     expect(screen.getByRole("region", { name: "Nhịp học tháng này" })).toHaveTextContent("Bài 1");
     expect(screen.getByRole("region", { name: "Nhịp học tháng này" })).toHaveTextContent("02-11");
-    expect(screen.getByRole("region", { name: "Tiến độ hiện tại" })).toHaveTextContent("1/20");
+    expect(screen.getByRole("region", { name: "Tiến độ tháng" })).toHaveTextContent("1/3");
     for (const retired of ["Chặng 1", "Chặng 2", "Bài tuần", "Khảo sát cuối pilot", "E4S Pilot"]) expect(screen.queryByText(retired)).not.toBeInTheDocument();
   });
 
@@ -55,8 +55,7 @@ describe("monthly learner home", () => {
     expect(document.querySelector('[data-home-block="readiness"]')).not.toBeInTheDocument();
     const learnerRecord = screen.getByRole("region", { name: "Hồ sơ và đánh giá đầu vào" });
     expect(learnerRecord).toHaveTextContent("Trình độ đã duyệt: A2");
-    expect(within(learnerRecord).getByRole("link", { name: "Hồ sơ học tập" })).toHaveAttribute("href", "/profile");
-    expect(within(learnerRecord).getByRole("link", { name: "Kết quả đầu vào" })).toHaveAttribute("href", "/profile");
+    expect(within(learnerRecord).getByRole("link", { name: "Hồ sơ học tập & đầu vào" })).toHaveAttribute("href", "/profile");
   });
 
   it("opens a dedicated monthly screen from the same approved month contract", () => {
