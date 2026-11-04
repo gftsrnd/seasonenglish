@@ -9,7 +9,7 @@ import { SeasonRioGame } from "../games/SeasonRioGame.js";
 import { TypingRaceGame } from "../games/TypingRaceGame.js";
 import { WordSortGame } from "../games/WordSortGame.js";
 import { prepareGameAttempt } from "../games/types.js";
-import { createGameAttemptSeed, LearnerGame, LearnerGames } from "./Games.js";
+import { createGameAttemptSeed, nextGameAttemptSeed, LearnerGame, LearnerGames } from "./Games.js";
 import type { LearnerCallbacks } from "./contracts.js";
 
 afterEach(() => {
@@ -89,7 +89,8 @@ describe("learner game visual and interaction regressions", () => {
     const rioView = render(<SeasonRioGame words={wordSet.words} onFinish={vi.fn()} />);
     expect(rioView.container.querySelector('.gift-gate > span img[src^="data:image/svg+xml"]')).toBeInTheDocument();
     expect(rioView.container.querySelector('.rio-boss > b')).toHaveTextContent("🌰");
-    expect(rioView.container.querySelector('.rio-flag')).toHaveTextContent("🚩");
+    expect(rioView.container.querySelector('.rio-flag')).toHaveAttribute("aria-label", "Cột mốc về đích");
+    expect(rioView.container.querySelector('.rio-flag img')).toHaveAttribute("src", "/media/games/flag.png");
     expect(rioView.container.querySelector('.rio-hero img[src^="data:image/svg+xml"]')).toHaveAttribute("alt", "Sóc mùa thu");
     expect(screen.getAllByTestId("gift-gate")).toHaveLength(3);
     expect(screen.getAllByTestId("gift-gate").map((gate) => gate.dataset.state)).toEqual(["closed", "closed", "closed"]);
@@ -229,14 +230,14 @@ describe("learner game visual and interaction regressions", () => {
     expect(resolveGameWordImage).toHaveBeenCalledWith("word-set-1", expect.any(String));
   });
 
-  it("does not replace unavailable Typing race artwork with an unrelated seasonal animal", async () => {
+  it("hides the Typing illustration rather than showing a broken or unrelated fallback", async () => {
     vi.stubGlobal("requestAnimationFrame", vi.fn(() => 1));
     vi.stubGlobal("cancelAnimationFrame", vi.fn());
     const resolveGameWordImage = vi.fn().mockResolvedValue({ status: "unavailable" });
     render(<TypingRaceGame words={[wordSet.words[0]!]} imageSetId="word-set-1" resolveImage={resolveGameWordImage} onFinish={vi.fn()} />);
 
-    expect(await screen.findByRole("img", { name: /Chưa có ảnh minh hoạ cho colleague/i })).toBeInTheDocument();
-    expect(document.querySelector('.typing-clue-image img[src*="/media/seasons/"]')).not.toBeInTheDocument();
+    expect(await screen.findByTestId("hidden-content-image")).toBeInTheDocument();
+    expect(screen.queryByRole("img", { name: /Minh hoạ colleague/i })).not.toBeInTheDocument();
   });
 
   it("ignores browser modifier shortcuts instead of typing into the answer", () => {
@@ -282,6 +283,31 @@ describe("learner game visual and interaction regressions", () => {
     expect(container.querySelectorAll('[data-testid="typing-character"]:not(:empty)')).toHaveLength(0);
   });
 
+  it("does not score or advance Typing race until the learner explicitly submits", () => {
+    vi.stubGlobal("requestAnimationFrame", vi.fn(() => 1));
+    vi.stubGlobal("cancelAnimationFrame", vi.fn());
+    const onFinish = vi.fn();
+    render(<TypingRaceGame words={[{ id: "role", english: "role", vietnamese: "vai trò", definition: "a job function", partOfSpeech: "noun" }]} onFinish={onFinish} />);
+    for (const key of "role") fireEvent.keyDown(window, { key });
+    expect(screen.getAllByTestId("typing-character").map((item) => item.textContent).join("")).toBe("ROLE");
+    expect(onFinish).not.toHaveBeenCalled();
+    fireEvent.keyDown(window, { key: "Enter" });
+    expect(onFinish).not.toHaveBeenCalled();
+  });
+
+  it("keeps one exit choice on a completed game result", async () => {
+    vi.stubGlobal("requestAnimationFrame", vi.fn(() => 1));
+    vi.stubGlobal("cancelAnimationFrame", vi.fn());
+    const oneWordSet = { ...wordSet, words: [{ id: "role", english: "role", vietnamese: "vai trò", definition: "a job function", partOfSpeech: "noun" }] };
+    render(<LearnerGame descriptor={descriptor("typing", [])} wordSet={oneWordSet} result={{ score: 10, maxScore: 10 }} actions={actions} />);
+    fireEvent.click(screen.getByRole("button", { name: "Bắt đầu chơi" }));
+    for (const key of "role") fireEvent.keyDown(window, { key });
+    fireEvent.keyDown(window, { key: "Enter" });
+    await screen.findByRole("heading", { name: "Điểm của bạn" });
+    expect(screen.getByRole("link", { name: "Chọn trò khác" })).toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "Thoát" })).not.toBeInTheDocument();
+  });
+
   it("keeps keyboard focus inside the open Season-rio quiz", async () => {
     let now = 0;
     const frames: FrameRequestCallback[] = [];
@@ -306,7 +332,15 @@ describe("learner game visual and interaction regressions", () => {
     expect(Number.parseFloat((hero as HTMLElement).style.left)).toBeGreaterThan(40);
 
     const dialog = await screen.findByRole("dialog");
+    await act(async () => {
+      const callback = frames.shift();
+      if (callback) callback(now + 17);
+    });
     const options = within(dialog).getAllByRole("button");
+    // Opening a gate must not imply a choice: the dialog receives focus, while
+    // every answer remains neutral until the learner explicitly navigates.
+    expect(dialog).toHaveFocus();
+    expect(options).not.toContain(document.activeElement);
     options[0]!.focus();
     fireEvent.keyDown(dialog, { key: "Tab", shiftKey: true });
     expect(options.at(-1)).toHaveFocus();
@@ -333,10 +367,9 @@ describe("learner game visual and interaction regressions", () => {
     const next = document.activeElement as HTMLInputElement;
     expect(next).not.toBe(vertical);
     fireEvent.keyDown(next, { key: "a" });
-    expect(next).toHaveFocus();
-    fireEvent.change(next, { target: { value: "a" } });
     const afterTyped = document.activeElement as HTMLInputElement;
     expect(next).toHaveValue("A");
+    expect(afterTyped).not.toBe(next);
     expect(afterTyped).toHaveValue("");
     fireEvent.keyDown(afterTyped, { key: "Backspace" });
     expect(next).toHaveValue("");
@@ -351,14 +384,29 @@ describe("learner game visual and interaction regressions", () => {
     expect(container.querySelector(".crossword-mode")).toHaveTextContent("Ngang");
     fireEvent.click(crossing!);
     expect(container.querySelector(".crossword-mode")).toHaveTextContent("Dọc");
-    fireEvent.change(crossing!, { target: { value: "a" } });
+    fireEvent.keyDown(crossing!, { key: "a" });
     expect(document.activeElement).not.toBe(crossing);
+  });
+
+  it("writes one physical crossword key once and gives a hint only for the selected word", () => {
+    const { container } = render(<CrosswordGame words={wordSet.words} onFinish={vi.fn()} />);
+    const crossing = screen.getAllByRole("textbox").find((input) => (input.getAttribute("aria-describedby")?.match(/crossword-clue-/g)?.length ?? 0) > 1)!;
+    fireEvent.click(crossing);
+    const activeClue = container.querySelector(".crossword-active-clue")?.textContent;
+    fireEvent.keyDown(crossing, { key: "a" });
+    expect(crossing).toHaveValue("A");
+    expect(screen.getAllByRole("textbox").filter((input) => (input as HTMLInputElement).value === "A")).toHaveLength(1);
+    expect(container.querySelector(".crossword-active-clue")).toHaveTextContent(activeClue ?? "");
+    expect(screen.getByRole("button", { name: "Gợi ý 1 chữ" })).toBeEnabled();
   });
 
   it("starts every game session from a fresh shared attempt seed", () => {
     const firstSeed = createGameAttemptSeed(() => .01);
-    const secondSeed = createGameAttemptSeed(() => .73);
+    const secondSeed = createGameAttemptSeed(() => .02);
     expect(firstSeed).not.toBe(secondSeed);
+    expect(createGameAttemptSeed(() => .999999)).toBeLessThanOrEqual(10_000);
+    expect(nextGameAttemptSeed(firstSeed)).toBe(firstSeed + 1);
+    expect(nextGameAttemptSeed(10_000)).toBe(0);
     expect(prepareGameAttempt(wordSet.words, firstSeed).map((word) => word.id)).not.toEqual(prepareGameAttempt(wordSet.words, secondSeed).map((word) => word.id));
   });
 
@@ -404,6 +452,16 @@ describe("learner game visual and interaction regressions", () => {
     fireEvent(outsideCatch, catchArrow);
     expect(catchArrow.defaultPrevented).toBe(false);
     expect(screen.getByTestId("catch-basket")).toHaveStyle({ left: "50%" });
+  });
+
+  it("moves the Season catch basket itself with the focused keyboard playfield", () => {
+    render(<SeasonCatchGame words={wordSet.words} cefr="A2" onFinish={vi.fn()} />);
+    const scene = screen.getByRole("application", { name: "Màn chơi Season catch" });
+    const basket = screen.getByTestId("catch-basket");
+    scene.focus();
+    fireEvent.keyDown(scene, { key: "ArrowRight" });
+    expect(basket).toHaveStyle({ left: "55%" });
+    expect(basket.querySelector(".basket svg")).toBeInTheDocument();
   });
 
   it("shows a recoverable error when removing the active vocabulary set fails", async () => {

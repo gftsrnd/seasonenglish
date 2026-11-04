@@ -837,14 +837,28 @@
 
 .rio-flag {
   position: absolute;
+  z-index: 2;
   bottom: 26px;
+  display: grid;
+  justify-items: center;
+  width: 68px;
   color: var(--muted);
-  font-size: 86px;
-  filter: grayscale(1);
+  font-size: .66rem;
+  font-weight: 700;
+  letter-spacing: .04em;
+  text-transform: uppercase;
+  filter: grayscale(1) opacity(.55);
+}
+
+.rio-flag img {
+  width: 52px;
+  height: 68px;
+  object-fit: contain;
+  object-position: bottom;
 }
 
 .rio-flag.is-ready {
-  color: inherit;
+  color: var(--olive-dark);
   filter: none;
 }
 

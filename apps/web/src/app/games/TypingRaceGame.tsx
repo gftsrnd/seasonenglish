@@ -1,9 +1,11 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { ContentImageView, GameAnswerInput, GameEvidenceEventInput } from "@e4s/contracts";
-import { CornerDownLeft, Delete, ImageOff, Volume2 } from "lucide-react";
+import { CornerDownLeft, Delete, Volume2 } from "lucide-react";
 import { normalize, prepareGameAttempt, type FinishGame, type GameWord } from "./types.js";
+import { typingMaximum } from "@e4s/domain/engagement";
 import { useExperience } from "../../features/experience/Experience.js";
 import { ContentImage } from "../shared/media/ContentImage.js";
+import { GameFeedback } from "./GameFeedback.js";
 
 const keyboardRows = ["qwertyuiop", "asdfghjkl", "zxcvbnm"];
 const timeFor = (word: string) => Math.max(4_000, word.replace(/\s/g, "").length * 900);
@@ -40,14 +42,14 @@ export function TypingRaceGame({ words: source, onFinish, attemptSeed = 0, image
     if (!correct && !timedOut) {
       play("error");
       setCombo(1);
-      setNotice(`❌ Chưa đúng — thử lại từ “${word.english}”.`);
+      setNotice(`Chưa đúng · Thử lại từ “${word.english}”.`);
       setTyped("");
       return;
     }
     const nextAnswers = [...answers, { wordId: word.id, answer, attempts: 1, usedHint: false, combo }];
     const nextEvents = timedOut ? [...events, { type: "timeout" as const, wordId: word.id, answer }] : events;
-    if (correct) { play("success"); setScore((value) => value + 10 * combo); setCombo((value) => Math.min(5, value + 1)); setNotice(`✅ ${word.english}`); }
-    else { play(timedOut ? "warning" : "error"); setCombo(1); setNotice(timedOut ? `⏱ Hết giờ — ${word.english}` : `❌ Đáp án đúng: ${word.english}`); }
+    if (correct) { play("success"); setScore((value) => value + 10 * combo); setCombo((value) => Math.min(5, value + 1)); setNotice(`Đúng · ${word.english}`); }
+    else { play(timedOut ? "warning" : "error"); setCombo(1); setNotice(timedOut ? `Hết giờ · ${word.english}` : `Chưa đúng · Đáp án đúng: ${word.english}`); }
     transitioning.current = true;
     setLocked(true);
     setAnswers(nextAnswers);
@@ -109,7 +111,7 @@ export function TypingRaceGame({ words: source, onFinish, attemptSeed = 0, image
     return () => window.removeEventListener("keydown", keydown);
   });
   if (!word) return <p className="muted">Bộ từ chưa đủ từ phù hợp cho Typing race.</p>;
-  const noticeTone = notice.startsWith("✅") ? "is-success" : notice.startsWith("❌") ? "is-error" : notice.startsWith("⏱") ? "is-warning" : "";
+  const noticeTone = notice.startsWith("Đúng") ? "is-success" : notice.startsWith("Chưa") ? "is-error" : notice.startsWith("Hết giờ") ? "is-warning" : "";
   const imageUrl = word.imageUrl?.trim() ?? "";
   const hasDirectImage = Boolean(imageUrl);
   const loadImage = async (): Promise<ContentImageView> => {
@@ -129,14 +131,14 @@ export function TypingRaceGame({ words: source, onFinish, attemptSeed = 0, image
     return { status: "unavailable" };
   };
   return <div className="game-runner" aria-busy={busy || undefined}>
-    <div className="game-hud"><h2>Từ {index + 1}/{words.length}</h2><span>Điểm <strong>{score}</strong></span><span>Combo ×{combo}</span></div>
+    <div className="game-hud"><h2>Từ {index + 1}/{words.length}</h2><span>Điểm <strong>{score}/{typingMaximum(words.length)}</strong></span><span>Combo ×{combo}</span></div>
     <div ref={sceneRef} className="typing-scene" role="application" aria-label="Màn chơi Đua gõ từ" tabIndex={0}>
-      <div className="typing-clue"><div className="typing-clue-image">{hasDirectImage || imageSetId && resolveImage ? <ContentImage term={word.english} load={loadImage} unavailable="placeholder" /> : <div className="game-image-placeholder" role="img" aria-label={`Chưa có ảnh minh hoạ cho ${word.english}`}><ImageOff className="game-control-icon" size={22} strokeWidth={1.8} aria-hidden="true" /></div>}</div><button type="button" className="typing-clue-speak" aria-label={`Nghe ${word.english}`} onClick={() => speak(word.english)}><Volume2 className="game-control-icon" size={18} strokeWidth={2} aria-hidden="true" /></button><div className="typing-clue-copy"><span className="eyebrow">Gợi ý</span><strong>{word.vietnamese}</strong><small>{word.definition} · {target.replace(/\s/g, "").length} chữ cái{target.includes(" ") ? ", có dấu cách" : ""}</small></div></div>
+      <div className="typing-clue">{hasDirectImage || imageSetId && resolveImage ? <div className="typing-clue-image"><ContentImage term={word.english} load={loadImage} unavailable="hide" /></div> : null}<button type="button" className="typing-clue-speak" aria-label={`Nghe ${word.english}`} onClick={() => speak(word.english)}><Volume2 className="game-control-icon" size={18} strokeWidth={2} aria-hidden="true" /></button><div className="typing-clue-copy"><span className="eyebrow">Gợi ý</span><strong>{word.vietnamese}</strong><small>{word.definition} · {target.replace(/\s/g, "").length} chữ cái{target.includes(" ") ? ", có dấu cách" : ""}</small></div></div>
       <div className="typing-timer" role="progressbar" aria-label="Thời gian còn lại" aria-valuemin={0} aria-valuemax={maximum} aria-valuenow={Math.round(remaining)}><i style={{ width: `${Math.max(0, Math.min(100, remaining / maximum * 100))}%` }} /></div>
       <div className="typing-word" aria-label="Từ đang gõ" aria-live="polite">{target.split("").map((character, characterIndex) => { const value = typed[characterIndex]; const state = value === undefined ? "" : value === character ? "is-correct" : "is-wrong"; return <span data-testid="typing-character" className={state} key={characterIndex}>{character === " " ? " " : value?.toUpperCase() ?? ""}</span>; })}</div>
       <div className="virtual-keyboard" role="group" aria-label="Bàn phím ảo">{keyboardRows.map((row) => <div className="keyboard-row" key={row}>{row.split("").map((letter) => <button type="button" disabled={busy || locked} key={letter} onClick={() => press(letter)}>{letter}</button>)}</div>)}<div className="keyboard-row keyboard-row--actions">{target.includes("-") ? <button type="button" aria-label="Dấu gạch nối" disabled={busy || locked} onClick={() => press("-")}>-</button> : null}{target.includes("'") ? <button type="button" aria-label="Dấu nháy đơn" disabled={busy || locked} onClick={() => press("'")}>′</button> : null}{target.includes(" ") ? <button type="button" data-key="space" disabled={busy || locked} onClick={() => press(" ")}>Dấu cách</button> : null}<button type="button" aria-label="Xoá ký tự cuối" disabled={busy || locked} onClick={() => press("backspace")}><Delete className="game-control-icon" size={16} strokeWidth={2} aria-hidden="true" /></button><button className="is-enter" type="button" aria-label="Nhập" disabled={busy || locked} onClick={() => press("enter")}><CornerDownLeft className="game-control-icon" size={16} strokeWidth={2} aria-hidden="true" /></button></div></div>
       {busy ? <span className="game-loading" role="status">Đang lưu kết quả…</span> : null}
-      <p className={`game-notice ${noticeTone}`} aria-live="polite">{notice}</p>
+      <GameFeedback message={notice} tone={noticeTone === "is-success" ? "success" : noticeTone === "is-error" ? "error" : noticeTone === "is-warning" ? "warning" : "info"} />
     </div>
   </div>;
 }

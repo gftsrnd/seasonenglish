@@ -241,7 +241,7 @@ export function SeasonRioGame({ words: source, onFinish, attemptSeed = 0 }: { wo
         {platforms.map((platform, index) => <div data-testid="rio-platform" className="rio-platform" style={{ left: platform.left, width: platform.width, height: platform.height }} key={`${platform.left}-${index}`} />)}
         {activeGateLayout.map((gate, index) => <div data-testid="gift-gate" data-state={gateStates[index] ?? "closed"} data-tier={gate.tier} className={`gift-gate ${(gateStates[index] ?? "closed") !== "closed" ? "is-open" : ""}`} style={{ left: gate.left, bottom: 28 + gate.tier }} key={gate.left}><i className="gate-beam" /><GiftArt state={gateStates[index] ?? "closed"} /><i className="gate-post" /></div>)}
         <div data-testid="season-rio-boss" className={`rio-boss ${bossHealth <= 0 ? "is-cleared" : ""}`} style={{ left: bossX }}><b>{bossHealth <= 0 ? "😋" : season.food.emoji}</b><span>{bossHealth <= 0 ? "Đã ăn xong" : `${season.food.name.toUpperCase()} KHỔNG LỒ · ${bossSeconds}s`}</span></div>
-        <div data-testid="season-rio-flag" className={`rio-flag ${gateStates.every((gate) => gate !== "closed") && bossHealth <= 0 ? "is-ready" : ""}`} style={{ left: flagX }}>🚩</div>
+        <div data-testid="season-rio-flag" className={`rio-flag ${gateStates.every((gate) => gate !== "closed") && bossHealth <= 0 ? "is-ready" : ""}`} style={{ left: flagX }} aria-label="Cột mốc về đích"><img src="/media/games/flag.png" alt="" /><span>Đích</span></div>
         <div data-testid="season-rio-hero" className={`rio-hero ${heroY > 0 ? "is-jumping" : isMoving ? "is-running" : ""}`} style={{ left: heroX, bottom: 28 + heroY }}><SeasonHero pose={heroPose} /></div>
         <div className="rio-ground" />
       </div></div>
