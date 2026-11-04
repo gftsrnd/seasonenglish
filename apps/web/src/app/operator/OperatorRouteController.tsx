@@ -761,7 +761,7 @@ function LevelFormsRoute({ client, readOnly, embedded = false }: { client: Opera
       else show(id, true);
     },
     onDelete: id => { if (readOnly || typeof client.deleteAssessmentLevelForm !== "function") return; void modal.confirm({ title: "Xoá bản nháp đề thi?", message: "Bản nháp này sẽ bị xoá khỏi danh sách đề lên mức.", confirmLabel: "Xoá bản nháp", tone: "danger" }).then(confirmed => { if (confirmed) refresh(client.deleteAssessmentLevelForm(id)); }); }
-  }} />{dialog && <OperatorLevelFormDetail detail={dialog.detail} editing={dialog.editing} readOnly={readOnly} uploadAudio={async (file, filename) => client.uploadContentMedia("audio", file, filename)} onClose={() => setDialog(undefined)} onSave={async input => {
+  }} />{dialog && <OperatorLevelFormDetail detail={dialog.detail} editing={dialog.editing} readOnly={readOnly} synthesizeEdgeTts={(input) => client.synthesizeAssessmentEdgeTts(input)} uploadAudio={async (file, filename) => client.uploadContentMedia("audio", file, filename)} onClose={() => setDialog(undefined)} onSave={async input => {
     if (readOnly) return;
     const updated = await client.updateAssessmentLevelForm(dialog.detail.versionId, input);
     setDialog({ detail: updated, editing: true });

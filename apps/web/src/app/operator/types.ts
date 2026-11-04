@@ -166,6 +166,8 @@ export interface LevelFormSummary {
   readingQuestions: number;
   attempts: number;
   inUse?: boolean;
+  publicationReady?: boolean;
+  publicationBlockerCount?: number;
 }
 
 export interface OperatorLevelFormsView {

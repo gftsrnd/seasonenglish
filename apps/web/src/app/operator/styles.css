@@ -3785,6 +3785,145 @@ body > .operator-modal-scope .operator-vocabulary-entry-audio-grid { display: gr
   min-width: 0;
 }
 
+/* Level-up authoring is the editable counterpart of the shared assessment
+   preview.  It intentionally uses the same dialog width, section rows and
+   quiet paper surfaces instead of nesting another card system inside it. */
+.operator-detail-modal > .operator-level-editor-dialog {
+  width: min(980px, calc(100vw - 32px));
+  max-width: 980px;
+  max-height: min(860px, calc(100dvh - 32px));
+  display: grid;
+  gap: 16px;
+  padding: 22px;
+  background: #fffdfa;
+}
+
+.operator-level-editor-dialog > h4 { margin: 4px 0 -4px; }
+
+.operator-level-validation {
+  display: grid;
+  gap: 10px;
+  padding: 14px 16px;
+  border: 1px solid #ead19a;
+  border-radius: 10px;
+  background: #fffaf0;
+}
+
+.operator-level-validation > header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.operator-level-validation ul { display: grid; gap: 7px; margin: 0; padding-left: 18px; }
+.operator-level-validation li { padding-left: 2px; }
+.operator-level-validation .badge { margin-right: 6px; }
+
+.operator-level-editor-dialog .operator-level-section-list { display: grid; gap: 10px; }
+.operator-level-editor-dialog .operator-level-section {
+  display: block;
+  padding: 0;
+  overflow: clip;
+  border: 1px solid #ded9d0;
+  border-radius: 10px;
+  background: #fffdfa;
+}
+
+.operator-level-editor-dialog .operator-level-section > summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  min-height: 58px;
+  padding: 12px 15px;
+  background: #f7f6f1;
+  border-radius: 9px 9px 0 0;
+  list-style: none;
+}
+
+.operator-level-editor-dialog .operator-level-section > summary::-webkit-details-marker { display: none; }
+.operator-level-editor-dialog .operator-level-section > summary::after { content: "⌄"; color: var(--muted); font-size: 1.2rem; }
+.operator-level-editor-dialog .operator-level-section[open] > summary {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  border-bottom: 1px solid #ded9d0;
+  background: #e4eee0;
+  color: #234c36;
+}
+.operator-level-editor-dialog .operator-level-section[open] > summary::after { transform: rotate(180deg); }
+
+.operator-level-editor-dialog .operator-level-instructions {
+  margin: 14px 16px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  background: #f7f6f1;
+}
+
+.operator-level-editor-dialog .operator-level-question-group {
+  margin: 0 16px;
+  padding: 0 !important;
+  overflow: visible;
+  border: 0;
+  border-top: 1px solid #e2ddd5;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+.operator-level-editor-dialog .operator-level-question-group:last-child { margin-bottom: 16px; }
+.operator-level-editor-dialog .operator-level-question-group > header { padding: 16px 0 10px; border: 0; }
+.operator-level-editor-dialog .operator-level-stimulus-editor {
+  display: grid;
+  gap: 8px;
+  margin: 0 0 14px;
+  padding: 13px;
+  border: 1px solid #ded9d0;
+  border-radius: 10px;
+  background: #f7f6f1;
+}
+.operator-level-editor-dialog .operator-level-stimulus-editor > span { font-size: .82rem; font-weight: 800; }
+.operator-level-editor-dialog .operator-level-stimulus-editor textarea { min-height: 120px; border-radius: 10px; }
+
+.operator-level-editor-dialog .operator-level-audio {
+  margin: 0 0 14px;
+  padding: 13px;
+  border: 1px solid #d6e1d0;
+  border-radius: 10px;
+  background: #f5f8f2;
+}
+
+.operator-level-editor-dialog .operator-level-question-list { border-top: 1px solid #e2ddd5; }
+.operator-level-editor-dialog .operator-level-question {
+  grid-template-columns: 72px minmax(0, 1fr);
+  gap: 14px;
+  padding: 16px 0;
+}
+
+.operator-level-editor-dialog .operator-level-option-editor { gap: 10px; margin-top: 12px; }
+.operator-level-editor-dialog .operator-level-option-editor > .operator-level-answer-editor {
+  grid-template-columns: 112px minmax(0, 220px);
+  padding-top: 10px;
+  border-top: 1px solid #e2ddd5;
+}
+
+.operator-level-editor-dialog .operator-level-question-content textarea,
+.operator-level-editor-dialog .operator-level-option-editor input,
+.operator-level-editor-dialog .operator-level-option-editor select { border-radius: 8px; }
+
+.operator-level-editor-dialog .operator-level-audio-actions { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.operator-level-editor-dialog .operator-level-audio-actions .btn-sm { cursor: pointer; }
+.operator-level-editor-dialog .operator-level-audio-actions label.btn-sm { display: inline-flex; align-items: center; }
+
+@media (max-width: 640px) {
+  .operator-detail-modal > .operator-level-editor-dialog { width: calc(100vw - 20px); padding: 16px; }
+  .operator-level-editor-dialog .operator-level-form-dialog-header { gap: 12px; }
+  .operator-level-editor-dialog .operator-level-question { grid-template-columns: 1fr; gap: 8px; }
+  .operator-level-editor-dialog .operator-level-question-number { display: flex; align-items: baseline; gap: 6px; }
+  .operator-level-editor-dialog .operator-level-option-editor > .operator-level-answer-editor { grid-template-columns: 1fr; }
+  .operator-level-editor-dialog .operator-level-audio-actions { align-items: stretch; }
+}
+
 .app-operator .operator-level-form-actions {
   justify-content: flex-end;
   gap: 8px;
@@ -3849,9 +3988,7 @@ body > .operator-modal-scope .operator-vocabulary-entry-audio-grid { display: gr
   height: 36px;
 }
 
-.operator-level-audio.missing-audio {
-  border-left: 4px solid var(--warn);
-}
+.operator-level-editor-dialog .operator-level-audio.missing-audio { border-color: #e6d39c; }
 
 .operator-level-audio label.btn-sm {
   cursor: pointer;

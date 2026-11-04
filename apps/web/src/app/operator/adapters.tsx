@@ -337,7 +337,7 @@ export function adaptLevelForms(slots: AssessmentLevelFormSlotView[], options: {
       const form = slot.draftForm ?? slot.publishedForm;
       return {
         target: slot.targetLevel as Exclude<Cefr, "A1">,
-        forms: form ? [{ id: form.versionId, title: form.title, status: form.status === "published" ? "approved" as const : "draft" as const, createdAt: form.publishedAt ? operatorDateTime(form.publishedAt) : `v${form.version}`, byName: form.status === "published" ? "Đã phát hành" : "Bản nháp", listeningQuestions: form.listeningTaskCount, readingQuestions: form.readingTaskCount, attempts: form.attemptCount, inUse: form.status === "published" }] : []
+        forms: form ? [{ id: form.versionId, title: form.title, status: form.status === "published" ? "approved" as const : "draft" as const, createdAt: form.publishedAt ? operatorDateTime(form.publishedAt) : `v${form.version}`, byName: form.status === "published" ? "Đã phát hành" : "Bản nháp", listeningQuestions: form.listeningTaskCount, readingQuestions: form.readingTaskCount, attempts: form.attemptCount, inUse: form.status === "published", ...(form.publicationReady === undefined ? {} : { publicationReady: form.publicationReady }), ...(form.publicationBlockerCount === undefined ? {} : { publicationBlockerCount: form.publicationBlockerCount }) }] : []
       };
     })
   };

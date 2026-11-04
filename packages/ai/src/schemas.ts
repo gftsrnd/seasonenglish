@@ -1440,29 +1440,85 @@ export const levelFormOutputSchema = z.object({
 
 export type LevelFormTaskOutput = z.infer<typeof levelFormOutputSchema>;
 
+// Provider intake only: the route immediately repairs a single known missing
+// reading item, then revalidates with the canonical 40-question schema above.
+export const levelFormPartialOutputSchema = levelFormOutputSchema.extend({
+  reading: z.object({ passage: z.string().trim().min(160).max(12_000), questions: z.array(assessmentChoiceSchema).min(35).max(40) })
+});
+export type LevelFormPartialTaskOutput = z.infer<typeof levelFormPartialOutputSchema>;
+
 export const levelFormOutputJsonSchema = {
   type: "object", additionalProperties: false,
   required: ["title", "listening", "reading", "writingPrompts", "speakingPrompts"],
   properties: {
     title: { type: "string" },
-    listening: sectionSchema("script", 20), reading: sectionSchema("passage", 40),
+    listening: sectionSchema("script", 20), reading: sectionSchema("passage", 35, 40),
     writingPrompts: { type: "array", minItems: 2, maxItems: 2, items: { type: "string" } },
     speakingPrompts: { type: "array", minItems: 4, maxItems: 4, items: { type: "string" } }
   }
 } satisfies Record<string, unknown>;
 
-function sectionSchema(textKey: "script" | "passage", questionCount: number) {
+function sectionSchema(textKey: "script" | "passage", minQuestionCount: number, maxQuestionCount = minQuestionCount) {
   return {
     type: "object", additionalProperties: false, required: [textKey, "questions"],
     properties: {
       [textKey]: { type: "string" },
-      questions: { type: "array", minItems: questionCount, maxItems: questionCount, items: {
+        questions: { type: "array", minItems: minQuestionCount, maxItems: maxQuestionCount, items: {
         type: "object", additionalProperties: false, required: ["prompt", "options", "correctIndex"],
         properties: { prompt: { type: "string" }, options: { type: "array", minItems: 4, maxItems: 4, items: { type: "string" } }, correctIndex: { type: "integer", minimum: 0, maximum: 3 } }
       } }
     }
   };
 }
+
+export const levelFormReadingRepairInputSchema = z.object({
+  targetLevel: z.enum(["A2", "B1", "B2", "C1"]),
+  passage: z.string().trim().min(160).max(12_000),
+  existingPrompts: z.array(z.string().trim().min(1).max(1_000)).min(35).max(39)
+});
+
+export const levelFormReadingRepairOutputSchema = z.object({ question: assessmentChoiceSchema });
+
+export const levelFormReadingRepairOutputJsonSchema = {
+  type: "object", additionalProperties: false, required: ["question"], properties: {
+    question: {
+      type: "object", additionalProperties: false, required: ["prompt", "options", "correctIndex"],
+      properties: {
+        prompt: { type: "string" },
+        options: { type: "array", minItems: 4, maxItems: 4, items: { type: "string" } },
+        correctIndex: { type: "integer", minimum: 0, maximum: 3 }
+      }
+    }
+  }
+} satisfies Record<string, unknown>;
+
+export const levelFormListeningOutputSchema = z.object({
+  title: z.string().trim().min(1).max(200),
+  script: z.string().trim().min(160).max(12_000),
+  // Provider occasionally supplies one spare item; the route trims it before
+  // canonical 20-question validation and persistence.
+  questions: z.array(assessmentChoiceSchema).min(20).max(21)
+});
+export const levelFormReadingOutputSchema = z.object({
+  passage: z.string().trim().min(160).max(12_000),
+  questions: z.array(assessmentChoiceSchema).min(35).max(40)
+});
+export const levelFormProductionOutputSchema = z.object({
+  writingPrompts: z.array(z.string().trim().min(20).max(1_000)).length(2),
+  speakingPrompts: z.array(z.string().trim().min(20).max(1_000)).length(4)
+});
+export const levelFormListeningOutputJsonSchema = {
+  type: "object", additionalProperties: false, required: ["title", "script", "questions"],
+  properties: { title: { type: "string" }, script: { type: "string" }, questions: sectionSchema("script", 20, 21).properties.questions }
+} satisfies Record<string, unknown>;
+export const levelFormReadingOutputJsonSchema = {
+  type: "object", additionalProperties: false, required: ["passage", "questions"],
+  properties: { passage: { type: "string" }, questions: sectionSchema("passage", 35, 40).properties.questions }
+} satisfies Record<string, unknown>;
+export const levelFormProductionOutputJsonSchema = {
+  type: "object", additionalProperties: false, required: ["writingPrompts", "speakingPrompts"],
+  properties: { writingPrompts: { type: "array", minItems: 2, maxItems: 2, items: { type: "string" } }, speakingPrompts: { type: "array", minItems: 4, maxItems: 4, items: { type: "string" } } }
+} satisfies Record<string, unknown>;
 const cefrSuggestionLevelSchema = z.enum(["A1", "A2", "B1", "B2", "C1"]);
 const weeklyLessonBlueprintPlanSchema = z.object({
   A1: z.array(z.string().trim().min(1).max(500)).length(5),

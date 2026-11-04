@@ -160,6 +160,7 @@ const levelFormUpdateInput = z.object({
 });
 
 const DEFAULT_LEVEL_FORM_PROMPT = `Create a complete 75-minute, 100-point Workplace English CEFR promotion test for the requested target level. Return exactly four sections with the placement structure: Listening 20 multiple-choice questions for 20 points, Reading 40 multiple-choice questions for 40 points, Writing 2 tasks for 20 points, and Speaking 4 tasks for 20 points. The content must be new and target-level appropriate, never copied from placement or another level. Use realistic workplace situations, unambiguous answer keys, and the required JSON schema exactly.`;
+const LEVEL_FORM_READING_REPAIR_PROMPT = `Generate exactly one new multiple-choice reading-comprehension question for the supplied passage. It must be appropriate for the target CEFR level, have four concise options, an unambiguous correctIndex, and must not duplicate any existing prompt. Return only the structured tool input.`;
 
 export function registerAssessmentRoutes(app: FastifyInstance, pool: Pool, aiRunner?: AiTaskRunner, aiRunnerFactory?: (actorId: string) => Promise<AiTaskRunner | undefined>, edgeTtsRunner?: EdgeTtsRunner): void {
   const repositories = createRepositories(pool);
@@ -559,23 +560,41 @@ export function registerAssessmentRoutes(app: FastifyInstance, pool: Pool, aiRun
     if (!runner) return reply.code(503).send({ code: "AI_UNAVAILABLE" });
     const task = await repositories.aiRuns.activeTaskPrompt(actorId, "level_form_generation");
     try {
-      const result = await runner.runTask("level_form_generation", {
-        targetLevel: params.data.targetLevel, context: "workplace_english", listeningQuestions: 20, readingQuestions: 40
-      }, { systemPrompt: task?.prompt ?? DEFAULT_LEVEL_FORM_PROMPT });
-      const output = levelFormOutputSchema.safeParse(result.output);
-      if (!output.success) return reply.code(502).send({ code: "AI_OUTPUT_INVALID" });
+      const input = { targetLevel: params.data.targetLevel, context: "workplace_english" as const, listeningQuestions: 20 as const, readingQuestions: 40 as const };
+      // One 60-question tool result regularly hits the provider's practical
+      // output ceiling. Generate three independently schema-checked slices,
+      // then validate their assembled canonical form before persistence.
+      const [listening, reading, production] = await Promise.all([
+        runner.runTask("level_form_listening_generation", input, { systemPrompt: `${task?.prompt ?? DEFAULT_LEVEL_FORM_PROMPT}\nGenerate only the title, listening script, and exactly 20 listening questions.`, maxOutputTokens: 7_000 }),
+        runner.runTask("level_form_reading_generation", input, { systemPrompt: `${task?.prompt ?? DEFAULT_LEVEL_FORM_PROMPT}\nGenerate only the reading passage and exactly 40 reading questions. Keep every prompt and option concise.`, maxOutputTokens: 12_000 }),
+        runner.runTask("level_form_production_generation", input, { systemPrompt: `${task?.prompt ?? DEFAULT_LEVEL_FORM_PROMPT}\nGenerate only exactly two writing prompts and four speaking prompts.`, maxOutputTokens: 2_000 })
+      ]);
+      const completedReading = await completeLevelFormReading(runner, params.data.targetLevel, reading.output as { passage: string; questions: LevelFormTaskOutput["reading"]["questions"][number][] });
+      const completeOutput = levelFormOutputSchema.parse({
+        title: (listening.output as { title: string }).title,
+        listening: { ...(listening.output as { script: string; questions: unknown[] }), questions: (listening.output as { questions: unknown[] }).questions.slice(0, 20) },
+        reading: completedReading,
+        writingPrompts: (production.output as { writingPrompts: string[] }).writingPrompts,
+        speakingPrompts: (production.output as { speakingPrompts: string[] }).speakingPrompts
+      });
       if (task) await repositories.aiRuns.recordSucceeded({
         userId: actorId,
         requestId: `level-form:${params.data.targetLevel}:${Date.now()}`,
         taskId: task.taskId,
         promptVersionId: task.promptVersionId,
-        output: output.data,
-        metadata: result.metadata
+        output: completeOutput,
+        metadata: listening.metadata
       });
-      const form = await repositories.assessments.createLevelFormDraft(actorId, params.data.targetLevel, levelFormBlueprint(params.data.targetLevel, output.data));
+      const form = await repositories.assessments.createLevelFormDraft(actorId, params.data.targetLevel, levelFormBlueprint(params.data.targetLevel, completeOutput));
       return reply.code(201).send({ ...form, publishedAt: null });
     } catch (error) {
       request.log.warn({ error }, "Level form generation failed");
+      const diagnostic = error as { code?: unknown; message?: unknown; details?: unknown };
+      console.warn("[level-form-generation]", JSON.stringify({
+        code: diagnostic.code,
+        message: diagnostic.message,
+        details: diagnostic.details
+      }));
       return reply.code(502).send({ code: "LEVEL_FORM_GENERATION_FAILED" });
     }
   });
@@ -1139,6 +1158,23 @@ async function hasPersistedMonthlyAudio(
 
 function assessmentErrorCode(error: unknown, fallback: string): string {
   return error instanceof Error && /^[A-Z0-9_]+$/.test(error.message) ? error.message : fallback;
+}
+
+async function completeLevelFormReading(
+  runner: AiTaskRunner,
+  targetLevel: "A2" | "B1" | "B2" | "C1",
+  reading: { passage: string; questions: LevelFormTaskOutput["reading"]["questions"][number][] }
+): Promise<{ passage: string; questions: LevelFormTaskOutput["reading"]["questions"][number][] }> {
+  const questions = [...reading.questions];
+  while (questions.length < 40) {
+    const repair = await runner.runTask("level_form_reading_repair", {
+      targetLevel, passage: reading.passage, existingPrompts: questions.map((question) => question.prompt)
+    }, { systemPrompt: LEVEL_FORM_READING_REPAIR_PROMPT, maxOutputTokens: 800, maxAttempts: 2 });
+    const question = (repair.output as { question: LevelFormTaskOutput["reading"]["questions"][number] }).question;
+    if (questions.some((item) => item.prompt.trim().toLocaleLowerCase() === question.prompt.trim().toLocaleLowerCase())) throw new Error("LEVEL_FORM_READING_REPAIR_DUPLICATE");
+    questions.push(question);
+  }
+  return { passage: reading.passage, questions };
 }
 
 function manualLevelFormBlueprint(targetLevel: "A2" | "B1" | "B2" | "C1"): StoredAssessmentDefinition {

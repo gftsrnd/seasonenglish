@@ -285,6 +285,9 @@ export interface AssessmentLevelFormView {
   readingTaskCount: number;
   attemptCount: number;
   status: "draft" | "published" | "retired";
+  /** Derived from the same publication gates the server enforces. */
+  publicationReady?: boolean;
+  publicationBlockerCount?: number;
 }
 
 export interface AssessmentLevelFormSlotView {
@@ -316,7 +319,7 @@ export interface AssessmentLevelFormDetailView extends AssessmentLevelFormView {
     }>;
   }>;
   warnings: Array<{
-    code: "missing_section" | "short_section" | "missing_answer_key" | "missing_audio" | "in_use";
+    code: "missing_section" | "short_section" | "missing_task_prompt" | "missing_answer_key" | "missing_audio" | "in_use";
     message: string;
     severity: "warning" | "error";
   }>;

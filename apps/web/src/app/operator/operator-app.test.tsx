@@ -275,6 +275,15 @@ describe("Operator app rebuild", () => {
     expect(view.targets[0]?.forms[0]?.id).toBe("draft-2");
   });
 
+  it("disables level-form publication from the list until server publication gates are complete", () => {
+    render(<OperatorLevelForms view={{ aiConnected: true, generatingTarget: null, targets: [{ target: "A2", forms: [{ id: "draft-a2", title: "Đề A2", status: "draft", createdAt: "v1", byName: "Bản nháp", listeningQuestions: 20, readingQuestions: 40, attempts: 0, publicationReady: false, publicationBlockerCount: 7 }] }] }} actions={{ onBack: vi.fn(), onOpenSettings: vi.fn(), onGenerate: vi.fn(), onView: vi.fn(), onApprove: vi.fn(), onDelete: vi.fn() }} />);
+
+    const publish = screen.getByRole("button", { name: "Duyệt & phát hành" });
+    expect(publish).toBeDisabled();
+    expect(publish).toHaveAttribute("aria-describedby", "level-form-publication-draft-a2");
+    expect(screen.getByText("Chờ hoàn thiện 7 mục trước khi phát hành.")).toBeInTheDocument();
+  });
+
   it("preserves week suggestions, five-day plans and confirm/reopen behavior", async () => {
     const user = userEvent.setup();
     const onConfirmSuggestion = vi.fn();
@@ -752,7 +761,8 @@ describe("Operator app rebuild", () => {
     expect(onClose).toHaveBeenCalledTimes(1);
   });
 
-  it("presents level-form questions as readable numbered cards", () => {
+  it("keeps level-form skill sections closed until the operator opens one", async () => {
+    const user = userEvent.setup();
     render(<OperatorLevelFormDetail detail={{
       definitionId: "definition-1", versionId: "version-1", title: "Đề B1", version: 1, publishedAt: null,
       listeningTaskCount: 1, readingTaskCount: 0, attemptCount: 0, status: "draft", targetLevel: "B1",
@@ -760,9 +770,35 @@ describe("Operator app rebuild", () => {
       warnings: [], versions: [], deletable: true, deleteReason: null
     } as any} onClose={vi.fn()} />);
 
+    const listeningSummary = screen.getByText("Nghe").closest("summary");
+    expect(listeningSummary?.closest("details")).not.toHaveAttribute("open");
+    await user.click(listeningSummary!);
+    expect(listeningSummary?.closest("details")).toHaveAttribute("open");
     expect(screen.getByRole("list", { name: "Câu hỏi phần Nghe" })).toBeInTheDocument();
     expect(screen.getByText("Câu 1")).toBeInTheDocument();
     expect(screen.getByText("Đáp án B")).toBeInTheDocument();
+  });
+
+  it("summarizes level-form draft validation by action instead of exposing raw warning codes", () => {
+    render(<OperatorLevelFormDetail detail={{
+      definitionId: "definition-1", versionId: "version-1", title: "Đề A2", version: 1, publishedAt: null,
+      listeningTaskCount: 20, readingTaskCount: 40, attemptCount: 0, status: "draft", targetLevel: "A2",
+      sections: [], warnings: [
+        { code: "missing_answer_key", message: "Phần Nghe: 20 câu chưa chọn đáp án.", severity: "error" },
+        { code: "missing_answer_key", message: "Phần Đọc: 40 câu chưa chọn đáp án.", severity: "error" },
+        { code: "missing_task_prompt", message: "Phần Viết: 2 câu chưa có đề bài. (W1, W2)", severity: "error" },
+        { code: "missing_task_prompt", message: "Phần Nói: 4 câu chưa có đề bài. (S1, S2, S3, S4)", severity: "error" },
+        { code: "missing_audio", message: "Phần Nghe chưa có audio.", severity: "error" }
+      ], versions: [], deletable: true, deleteReason: null
+    } as any} onClose={vi.fn()} />);
+
+    const validation = screen.getByRole("region", { name: "Cảnh báo kiểm tra đề" });
+    expect(validation).toHaveTextContent("Cần hoàn thiện trước khi phát hành");
+    expect(validation).toHaveTextContent("5 mục");
+    expect(within(validation).getAllByText("Đáp án")).toHaveLength(2);
+    expect(within(validation).getAllByText("Đề bài")).toHaveLength(2);
+    expect(within(validation).getByText("Audio")).toBeInTheDocument();
+    expect(validation).not.toHaveTextContent("missing_answer_key");
   });
 
   it("lets Operator edit prompts, choices and answer keys before saving a level form", async () => {
@@ -797,6 +833,26 @@ describe("Operator app rebuild", () => {
         correctAnswer: "A"
       })] })] })]
     }));
+  });
+
+  it("creates Edge TTS audio for a level-form listening script and stores it before saving", async () => {
+    const user = userEvent.setup();
+    const onSave = vi.fn();
+    const synthesizeEdgeTts = vi.fn().mockResolvedValue({ filename: "level-a2.mp3", mimeType: "audio/mpeg", base64: "YXVkaW8=" });
+    const uploadAudio = vi.fn().mockResolvedValue({ url: "/api/v1/files/content-media/read?artifactKey=level-a2.mp3" });
+    render(<OperatorLevelFormDetail editing synthesizeEdgeTts={synthesizeEdgeTts} uploadAudio={uploadAudio} onSave={onSave} detail={{
+      definitionId: "definition-1", versionId: "version-1", title: "Đề A2", version: 1, publishedAt: null,
+      listeningTaskCount: 1, readingTaskCount: 0, attemptCount: 0, status: "draft", targetLevel: "A2",
+      sections: [{ code: "listening", title: "Nghe", durationMinutes: 15, maxScore: 20, instructions: ["Nghe và chọn đáp án."], groups: [{ key: "L", title: "Thông báo", instruction: "Nghe một lần", stimulus: { type: "audio_script", lines: [{ speaker: "Narrator", text: "The meeting starts at nine." }] }, tasks: [{ key: "L1", prompt: "Where is the meeting?", responseType: "single_choice", maxScore: 5, options: [{ value: "A", label: "Room 1" }, { value: "B", label: "Room 2" }], correctAnswer: "B" }] }] }],
+      warnings: [], versions: [], deletable: true, deleteReason: null
+    } as any} onClose={vi.fn()} />);
+
+    await user.click(screen.getByText("Nghe"));
+    await user.click(screen.getByRole("button", { name: "Sinh audio Edge TTS" }));
+    await waitFor(() => expect(synthesizeEdgeTts).toHaveBeenCalledWith({ text: "Narrator: The meeting starts at nine.", voice: "en-US-AvaMultilingualNeural" }));
+    await waitFor(() => expect(uploadAudio).toHaveBeenCalledWith(expect.any(Blob), "level-a2.mp3"));
+    await user.click(screen.getByRole("button", { name: "Lưu bản nháp" }));
+    expect(onSave).toHaveBeenCalledWith(expect.objectContaining({ sections: [expect.objectContaining({ groups: [expect.objectContaining({ stimulus: expect.objectContaining({ audioSrc: "/api/v1/files/content-media/read?artifactKey=level-a2.mp3" }) })] })] }));
   });
 
   it("keeps only workflow-specific back links while preserving callback navigation", async () => {

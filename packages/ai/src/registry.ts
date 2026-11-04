@@ -23,7 +23,9 @@ import {
   weeklyLessonSpeakingRepairOutputJsonSchema, weeklyLessonSpeakingRepairOutputSchema,
   weeklyLessonLengthRepairInputSchema, weeklyLessonLengthRepairOutputJsonSchema, weeklyLessonLengthRepairOutputSchema,
   weeklyLessonSkillsReviewOutputJsonSchema, weeklyLessonSkillsReviewOutputSchema,
-  levelFormInputSchema, levelFormOutputJsonSchema, levelFormOutputSchema,
+  levelFormInputSchema, levelFormOutputJsonSchema, levelFormOutputSchema, levelFormPartialOutputSchema,
+  levelFormReadingRepairInputSchema, levelFormReadingRepairOutputJsonSchema, levelFormReadingRepairOutputSchema,
+  levelFormListeningOutputJsonSchema, levelFormListeningOutputSchema, levelFormReadingOutputJsonSchema, levelFormReadingOutputSchema, levelFormProductionOutputJsonSchema, levelFormProductionOutputSchema,
   weekSuggestionsInputSchema, weekSuggestionsOutputJsonSchema, weekSuggestionsOutputSchema,
   monthlyTopicSuggestionInputSchema, monthlyTopicSuggestionOutputJsonSchema, monthlyTopicSuggestionOutputSchema,
   monthlyResourcePlanInputSchema, monthlyResourcePlanOutputJsonSchema, monthlyResourcePlanOutputSchema,
@@ -90,8 +92,15 @@ export const AI_TASKS = new AiTaskRegistry([
   },
   {
     id: "level_form_generation", promptKey: "level_form_generation", inputSchema: levelFormInputSchema,
-    outputSchema: levelFormOutputSchema, outputJsonSchema: levelFormOutputJsonSchema
+    outputSchema: levelFormPartialOutputSchema, outputJsonSchema: levelFormOutputJsonSchema
   },
+  {
+    id: "level_form_reading_repair", promptKey: "level_form_generation", inputSchema: levelFormReadingRepairInputSchema,
+    outputSchema: levelFormReadingRepairOutputSchema, outputJsonSchema: levelFormReadingRepairOutputJsonSchema
+  },
+  { id: "level_form_listening_generation", promptKey: "level_form_generation", inputSchema: levelFormInputSchema, outputSchema: levelFormListeningOutputSchema, outputJsonSchema: levelFormListeningOutputJsonSchema },
+  { id: "level_form_reading_generation", promptKey: "level_form_generation", inputSchema: levelFormInputSchema, outputSchema: levelFormReadingOutputSchema, outputJsonSchema: levelFormReadingOutputJsonSchema },
+  { id: "level_form_production_generation", promptKey: "level_form_generation", inputSchema: levelFormInputSchema, outputSchema: levelFormProductionOutputSchema, outputJsonSchema: levelFormProductionOutputJsonSchema },
   {
     id: "coach_dialogue", promptKey: "coach_dialogue", inputSchema: coachInputSchema,
     outputSchema: coachOutputSchema, outputJsonSchema: coachOutputJsonSchema,
