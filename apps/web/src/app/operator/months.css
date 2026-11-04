@@ -52,9 +52,9 @@
 @media(max-width:620px){.monthly-resource-panel{width:calc(100vw - 48px)}}
 .monthly-resource-actions{min-height:36px;align-items:center}
 .monthly-plan-open-button{width:100%;flex:1 1 100%;margin:0;padding:7px 9px;font-size:.72rem;line-height:1.2;white-space:nowrap;text-align:center}
-.monthly-day-cell{grid-template-rows:minmax(0,1fr) auto auto minmax(15px,1fr) 23px;gap:3px;padding:9px 7px}
+.monthly-day-cell{grid-template-rows:minmax(0,1fr) auto auto minmax(15px,1fr) 23px;gap:3px;padding:6px 7px 9px}
 .monthly-day-cell b{grid-row:2;align-self:center}
-.monthly-day-cell strong{grid-row:3;align-self:center}
+.monthly-day-cell strong{grid-row:3;align-self:center;margin-top:4px}
 .monthly-day-cell>div{grid-row:5;align-self:end;justify-content:flex-start;gap:3px;margin:0;white-space:nowrap;width:100%;min-width:0;box-sizing:border-box}
 .monthly-day-cell>.btn-sm{grid-row:5;align-self:end}
 .monthly-day-cell .btn-sm{flex:0 0 auto;width:auto;min-width:0;min-height:23px;padding:3px 2px;font-size:8.5px;line-height:1;white-space:nowrap;border-radius:6px}
