@@ -10,6 +10,31 @@ export interface MonthlyResourceCriteria {
   pronunciationSoundCount: number;
 }
 
+export function selectMonthlyCoreCandidates(input: {
+  candidates: MonthlyResourcePlanTaskOutput["coreTerms"];
+  existingCoreWords: ReadonlySet<string>;
+  needed: number;
+}): { selected: MonthlyResourcePlanTaskOutput["coreTerms"]; rejected: string[] } {
+  const selected: MonthlyResourcePlanTaskOutput["coreTerms"] = [];
+  const rejected: string[] = [];
+  const chosen = new Set<string>();
+  for (const candidate of input.candidates) {
+    const word = normalizeMonthlyResourceWord(candidate.word);
+    let reason = "";
+    if (!isSingleHeadword(candidate.word)) reason = "must be one standalone lexical headword";
+    else if (input.existingCoreWords.has(word)) reason = "duplicates an existing core term";
+    else if (chosen.has(word)) reason = "duplicates another candidate in this core batch";
+    if (reason) {
+      rejected.push(`${candidate.word} -> ${word} (${reason})`);
+      continue;
+    }
+    chosen.add(word);
+    selected.push(candidate);
+    if (selected.length === input.needed) break;
+  }
+  return { selected, rejected };
+}
+
 export function selectMonthlySupportCandidates(input: {
   candidates: MonthlyResourcePlanTaskOutput["expandedTerms"];
   coreId: string;

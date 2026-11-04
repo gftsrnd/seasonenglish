@@ -10,6 +10,7 @@ import {
   MonthlyResourceCriteriaError,
   MonthlyResourcePlanError,
   buildMonthlyPronunciationDistinctnessConstraint,
+  selectMonthlyCoreCandidates,
   selectMonthlyPronunciationCandidates,
   selectMonthlySupportCandidates
 } from "./monthly-resource-generation.js";
@@ -79,6 +80,27 @@ function planErrors(action: () => unknown): string[] {
 }
 
 describe("monthly AI resource generation", () => {
+  it("selects three unique core headwords from ordered AI candidates and reports collisions", () => {
+    const result = selectMonthlyCoreCandidates({
+      candidates: [
+        { id: "c1", word: "accomplish", meaning: "", type: "verb", ipa: "/əˈkɑːmplɪʃ/" },
+        { id: "c2", word: "review", meaning: "", type: "noun", ipa: "/rɪˈvjuː/" },
+        { id: "c3", word: "review", meaning: "", type: "noun", ipa: "/rɪˈvjuː/" },
+        { id: "c4", word: "incremental improvement", meaning: "", type: "noun", ipa: "/ˌɪnkrəˈmentəl/" },
+        { id: "c5", word: "mitigate", meaning: "", type: "verb", ipa: "/ˈmɪtɪɡeɪt/" },
+        { id: "c6", word: "allocate", meaning: "", type: "verb", ipa: "/ˈæləkeɪt/" },
+        { id: "c7", word: "constraint", meaning: "", type: "noun", ipa: "/kənˈstreɪnt/" }
+      ],
+      existingCoreWords: new Set(["accomplish", "incremental", "tangible"]),
+      needed: 3
+    });
+
+    expect(result.selected.map((term) => term.word)).toEqual(["review", "mitigate", "allocate"]);
+    expect(result.rejected).toContain("accomplish -> accomplish (duplicates an existing core term)");
+    expect(result.rejected).toContain("review -> review (duplicates another candidate in this core batch)");
+    expect(result.rejected).toContain("incremental improvement -> incremental improvement (must be one standalone lexical headword)");
+  });
+
   it("selects the first three valid linked support terms from an ordered AI candidate set", () => {
     const candidates = [
       { id: "x1", word: "core phrase", meaning: "", type: "noun", relation: "synonym" as const, relatesToCoreId: "core-a" },
