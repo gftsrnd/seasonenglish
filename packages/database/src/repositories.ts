@@ -4278,6 +4278,23 @@ function hasCompleteLevelFormContent(blueprint: StoredAssessmentDefinition): boo
   }));
 }
 
+/** A compact count for list actions. Detail view exposes the exact grouped
+ * reasons; publication still applies the full content validation above. */
+function levelFormPublicationBlockerCount(blueprint: StoredAssessmentDefinition): number {
+  const expectedCounts: Record<AssessmentSectionCode, number> = { listening: 20, reading: 40, writing: 2, speaking: 4 };
+  let blockers = 0;
+  for (const code of ["listening", "reading", "writing", "speaking"] as const) {
+    const section = blueprint.sections.find((item) => item.code === code);
+    if (!section || sectionTaskCount(blueprint, code) < expectedCounts[code]) { blockers++; continue; }
+    const tasks = section.groups.flatMap((group) => group.tasks);
+    if (tasks.some((task) => !task.prompt.trim())) blockers++;
+    if (tasks.some((task) => task.responseType === "single_choice" && (!task.correctAnswer || !task.options?.some((option) => option.value === task.correctAnswer)))) blockers++;
+  }
+  const listening = blueprint.sections.find((section) => section.code === "listening");
+  blockers += listening?.groups.filter((group) => group.stimulus?.type !== "audio_script" || !group.stimulus.audioSrc?.trim()).length ?? 1;
+  return blockers;
+}
+
 function assessmentTaskMap(blueprint: StoredAssessmentDefinition): Map<string, unknown> {
   return new Map(blueprint.sections.flatMap((section) => section.groups.flatMap((group) =>
     group.tasks.map((task) => [task.key, task] as const)
@@ -6292,6 +6309,7 @@ class AssessmentRepository {
       if (!hasCanonicalLevelFormStructure(row.blueprint)) return [];
       const targetLevel = row.blueprint.targetLevel;
       if (!targetLevel || targetLevel === "A1") return [];
+      const publicationBlockerCount = levelFormPublicationBlockerCount(row.blueprint);
       const sectionCount = (code: AssessmentSectionCode) => row.blueprint.sections
         .find((section) => section.code === code)?.groups.reduce((total, group) => total + group.tasks.length, 0) ?? 0;
       return [{
@@ -6303,7 +6321,9 @@ class AssessmentRepository {
         publishedAt: row.published_at,
         listeningTaskCount: sectionCount("listening"),
         readingTaskCount: sectionCount("reading"),
-        attemptCount: Number(row.attempt_count)
+        attemptCount: Number(row.attempt_count),
+        publicationReady: publicationBlockerCount === 0,
+        publicationBlockerCount
         ,status: row.published_at ? "published" : "draft"
       }];
     });
@@ -6339,6 +6359,7 @@ class AssessmentRepository {
       if (!hasCanonicalLevelFormStructure(row.blueprint)) return [];
       const blueprintTarget = row.target_level ?? row.blueprint.targetLevel;
       if (!blueprintTarget || blueprintTarget === "A1") return [];
+      const publicationBlockerCount = levelFormPublicationBlockerCount(row.blueprint);
       const sectionCount = (code: AssessmentSectionCode) => row.blueprint.sections
         .find((section) => section.code === code)?.groups.reduce((total, group) => total + group.tasks.length, 0) ?? 0;
       return [{
@@ -6351,6 +6372,8 @@ class AssessmentRepository {
         listeningTaskCount: sectionCount("listening"),
         readingTaskCount: sectionCount("reading"),
         attemptCount: Number(row.attempt_count),
+        publicationReady: publicationBlockerCount === 0,
+        publicationBlockerCount,
         status: row.status
       }];
     });
@@ -6383,6 +6406,7 @@ class AssessmentRepository {
     const row = result.rows[0];
     const targetLevel = row?.target_level ?? row?.blueprint.targetLevel;
     if (!row || !targetLevel || targetLevel === "A1") return null;
+    const publicationBlockerCount = levelFormPublicationBlockerCount(row.blueprint);
     const summary = {
       definitionId: row.definition_id,
       versionId: row.version_id,
@@ -6393,7 +6417,9 @@ class AssessmentRepository {
       listeningTaskCount: sectionTaskCount(row.blueprint, "listening"),
       readingTaskCount: sectionTaskCount(row.blueprint, "reading"),
       attemptCount: Number(row.attempt_count),
-      status: row.status
+      status: row.status,
+      publicationReady: publicationBlockerCount === 0,
+      publicationBlockerCount
     } as const;
     const versions = (await this.listLevelFormVersions(reviewerId, targetLevel)).map((version) => ({
       ...version,
@@ -6407,8 +6433,32 @@ class AssessmentRepository {
       if (!present.has(code)) warnings.push({ code: "missing_section", message: `Thiếu phần ${code}.`, severity: "error" });
       else if (count < expectedCounts[code]) warnings.push({ code: "short_section", message: `Phần ${code} mới có ${count}/${expectedCounts[code]} câu.`, severity: "warning" });
     }
-    for (const section of row.blueprint.sections) for (const group of section.groups) for (const task of group.tasks) {
-      if (task.responseType === "single_choice" && !task.correctAnswer) warnings.push({ code: "missing_answer_key", message: `Câu ${task.key} chưa có đáp án.`, severity: "error" });
+    // A manually-created canonical form intentionally starts blank.  One raw
+    // warning for every choice task turns the operator's validation panel into
+    // a 60-row error wall before they can author the first question.  Keep the
+    // individual validation at publication time, but present the draft status
+    // as an actionable, section-level count.
+    for (const section of row.blueprint.sections) {
+      const missingPrompts = section.groups.flatMap((group) => group.tasks
+        .filter((task) => !task.prompt.trim())
+        .map((task) => task.key));
+      if (missingPrompts.length) {
+        warnings.push({
+          code: "missing_task_prompt",
+          message: `Phần ${section.title}: ${missingPrompts.length} câu chưa có đề bài.${missingPrompts.length <= 4 ? ` (${missingPrompts.join(", ")})` : ""}`,
+          severity: "error"
+        });
+      }
+      const missingAnswerKeys = section.groups.flatMap((group) => group.tasks
+        .filter((task) => task.responseType === "single_choice" && !task.correctAnswer)
+        .map((task) => task.key));
+      if (missingAnswerKeys.length) {
+        warnings.push({
+          code: "missing_answer_key",
+          message: `Phần ${section.title}: ${missingAnswerKeys.length} câu chưa chọn đáp án.${missingAnswerKeys.length <= 4 ? ` (${missingAnswerKeys.join(", ")})` : ""}`,
+          severity: "error"
+        });
+      }
     }
     const listening = row.blueprint.sections.find((section) => section.code === "listening");
     for (const group of listening?.groups ?? []) {
