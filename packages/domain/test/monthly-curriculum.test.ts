@@ -7,6 +7,8 @@ import {
   buildMonthlyExamScope,
   monthlyScopeHash,
   recommendedMonthlyResourceCriteria,
+  planMonthlyResourcePool,
+  backfillMonthlyCurriculumPlan,
   resolveMonthlyExamOutcome,
   recommendedPendingBatch,
   validateMonthlyCurriculum,
@@ -15,7 +17,7 @@ import {
 
 function inputFor(month = "2026-11"): MonthlyCurriculumInput {
   const calendar = buildMonthlyCalendar(month);
-  const newDays = calendar.effectiveDays.filter((_date, index) => monthlyDayKind(index + 1, calendar.lessonCount) === "new");
+  const newDays = calendar.effectiveDays.flatMap((_date, index) => monthlyDayKind(index + 1, calendar.lessonCount) === "new" ? [index + 1] : []);
   const coreTerms = Array.from({ length: newDays.length * 3 }, (_, index) => ({
     id: `core-${index + 1}`,
     word: `term${String.fromCharCode(97 + Math.floor(index / 26))}${String.fromCharCode(97 + index % 26)}`,
@@ -28,7 +30,18 @@ function inputFor(month = "2026-11"): MonthlyCurriculumInput {
     cefr: "A1",
     theme: { version: 1, title: "Preparing a budget review", brief: "Prepare a simple budget review at work.", context: "Office", communicationGoal: "State a cost and ask for an update." },
     coreTerms,
-    supportTerms: [{ id: "support-1", word: "worksheet", meaning: "bảng tính", type: "noun", source: "example", dayNumber: 1 }],
+    supportTerms: Array.from({ length: newDays.length * 9 }, (_, index) => {
+      const coreIndex = Math.floor(index / 3);
+      return {
+        id: `support-${index + 1}`,
+        word: `support${String.fromCharCode(97 + Math.floor(index / 26))}${String.fromCharCode(97 + index % 26)}`,
+        meaning: `Từ mở rộng ${index + 1}`,
+        type: "noun",
+        source: "example" as const,
+        dayNumber: newDays[Math.floor(coreIndex / 3)]!,
+        relatedCoreTermId: `core-${coreIndex + 1}`
+      };
+    }),
     grammarTopics: Array.from({ length: 2 }, (_, index) => ({
       id: `grammar-${index + 1}`,
       title: `Grammar ${index + 1}`,
@@ -43,14 +56,99 @@ function inputFor(month = "2026-11"): MonthlyCurriculumInput {
   };
 }
 
+function poolFor(): Parameters<typeof planMonthlyResourcePool>[0] {
+  const input = inputFor();
+  return {
+    month: input.month,
+    cefr: input.cefr,
+    theme: input.theme,
+    version: input.theme.version,
+    coreTerms: input.coreTerms.map((term) => ({ ...term, source: "core_registry" as const, component: "core" as const })),
+    supportTerms: Array.from({ length: 144 }, (_, index) => ({
+      id: `support-${index + 1}`,
+      word: `support${String.fromCharCode(97 + Math.floor(index / 26))}${String.fromCharCode(97 + index % 26)}`,
+      meaning: `Từ mở rộng ${index + 1}`,
+      type: "noun",
+      source: "example" as const,
+      component: "expanded" as const,
+      relatedCoreTermId: `core-${Math.floor(index / 3) + 1}`
+    })),
+    grammarTopics: input.grammarTopics,
+    sounds: input.sounds
+  };
+}
+
 describe("monthly curriculum contract", () => {
+  it("allocates linked resources, weekly reviews, and balanced explicit writing/speaking tasks on approval", () => {
+    const contract = planMonthlyResourcePool(poolFor());
+    const newDays = contract.daySpecs.filter((day) => day.kind === "new");
+    const reviewDays = contract.daySpecs.filter((day) => day.kind === "review");
+
+    expect(newDays).toHaveLength(16);
+    expect(newDays.filter((day) => day.primarySkillFocus === "writing")).toHaveLength(8);
+    expect(newDays.filter((day) => day.primarySkillFocus === "speaking")).toHaveLength(8);
+    expect(contract.grammarTopics).toHaveLength(2);
+    expect(contract.grammarTopics.every((topic) => topic.steps.length === 3)).toBe(true);
+    expect(contract.sounds.map((sound) => newDays.filter((day) => day.soundId === sound.id).length)).toEqual([4, 4, 4, 4]);
+    for (const day of newDays) {
+      expect(day.coreTermIds).toHaveLength(3);
+      expect(new Set(day.coreTermIds).size).toBe(3);
+      expect(day.expandedTermIds).toHaveLength(9);
+      expect(day.expandedTermIds.every((id) => contract.supportTerms.find((term) => term.id === id)?.relatedCoreTermId && day.coreTermIds.includes(contract.supportTerms.find((term) => term.id === id)!.relatedCoreTermId))).toBe(true);
+      expect(day.writingFocus).toContain("Write");
+      expect(day.speakingFocus).toMatch(/^(Say|Give)/u);
+    }
+    expect(reviewDays.map((day) => day.lessonNumber)).toEqual([5, 10, 15, 20]);
+    for (const day of reviewDays) {
+      expect(day.reviewTermIds).toHaveLength(12);
+      expect(day.reviewExpandedTermIds).toHaveLength(36);
+      expect(day.coreTermIds).toEqual([]);
+      expect(day.expandedTermIds).toEqual([]);
+    }
+  });
+
+  it("idempotently repairs a legacy approved plan only when resource IDs prove its links", () => {
+    const current = planMonthlyResourcePool(poolFor());
+    const legacy = structuredClone(current) as unknown as { cefr: string; coreTerms: Array<Record<string, unknown>>; supportTerms: Array<Record<string, unknown>>; daySpecs: Array<Record<string, unknown>> };
+    legacy.cefr = "A2";
+    const coreId = (id: unknown) => `a2-core-${String(id).replace("core-", "")}`;
+    const supportId = (id: unknown) => `a2-expanded-${String(id).replace("support-", "")}`;
+    legacy.coreTerms.forEach((term) => { term.id = coreId(term.id); });
+    for (const term of legacy.supportTerms) delete term.relatedCoreTermId;
+    legacy.supportTerms.forEach((term, index) => { term.id = `a2-expanded-${index + 1}`; });
+    for (const day of legacy.daySpecs) {
+      day.coreTermIds = (day.coreTermIds as string[]).map(coreId);
+      day.reviewTermIds = (day.reviewTermIds as string[]).map(coreId);
+      if (Array.isArray(day.expandedTermIds)) day.expandedTermIds = (day.expandedTermIds as string[]).map(supportId);
+      if (Array.isArray(day.reviewExpandedTermIds)) day.reviewExpandedTermIds = (day.reviewExpandedTermIds as string[]).map(supportId);
+      delete day.expandedTermIds;
+      delete day.reviewExpandedTermIds;
+      delete day.primarySkillFocus;
+      delete day.writingFocus;
+      delete day.speakingFocus;
+    }
+
+    const repaired = backfillMonthlyCurriculumPlan(legacy);
+    expect(repaired.supportTerms.every((term) => Boolean(term.relatedCoreTermId))).toBe(true);
+    expect(repaired.daySpecs.filter((day) => day.kind === "new").every((day) => day.expandedTermIds.length === 9 && day.writingFocus && day.speakingFocus)).toBe(true);
+    expect(repaired.coreTerms.map(({ word, meaning, type, ipa }) => ({ word, meaning, type, ipa }))).toEqual(current.coreTerms.map(({ word, meaning, type, ipa }) => ({ word, meaning, type, ipa })));
+    expect(repaired.supportTerms.map(({ word, meaning, type, source }) => ({ word, meaning, type, source }))).toEqual(current.supportTerms.map(({ word, meaning, type, source }) => ({ word, meaning, type, source })));
+    expect(repaired.grammarTopics).toEqual(current.grammarTopics);
+    expect(repaired.sounds).toEqual(current.sounds);
+    expect(backfillMonthlyCurriculumPlan(repaired)).toEqual(repaired);
+
+    const unsafe = structuredClone(legacy);
+    unsafe.supportTerms[0]!.id = "a2-expanded-99";
+    expect(() => backfillMonthlyCurriculumPlan(unsafe)).toThrow(/IDs do not prove/u);
+  });
+
   it("reserves the final weekday in November 2026 for the monthly exam, with 48 core terms and scheduled reviews", () => {
     const curriculum = buildMonthlyCurriculum(inputFor());
 
     expect(curriculum.daySpecs).toHaveLength(20);
     expect(curriculum.coreTerms).toHaveLength(48);
     expect(curriculum.coreTerms[0]).toMatchObject({ source: "core_registry", component: "core", dayNumber: 1 });
-    expect(curriculum.supportTerms[0]).toMatchObject({ type: "noun", source: "example", component: "expanded", dayNumber: 1 });
+    expect(curriculum.supportTerms[0]).toMatchObject({ type: "noun", source: "example", component: "expanded", dayNumber: 1, relatedCoreTermId: "core-1" });
     expect(curriculum.daySpecs.filter((day) => day.kind === "new")).toHaveLength(16);
     expect(curriculum.daySpecs.filter((day) => day.kind === "review")).toHaveLength(4);
     expect(curriculum.daySpecs.at(-1)?.date).toBe("2026-11-27");
@@ -60,7 +158,8 @@ describe("monthly curriculum contract", () => {
     expect(new Set(curriculum.daySpecs.filter((day) => day.kind === "new").flatMap((day) => day.coreTermIds)).size).toBe(48);
     for (const day of curriculum.daySpecs.filter((entry) => entry.kind === "review")) {
       expect(day.coreTermIds).toEqual([]);
-      expect(day.reviewTermIds).toHaveLength(3);
+      expect(day.reviewTermIds).toHaveLength(12);
+      expect(day.reviewExpandedTermIds).toHaveLength(36);
       const earlierNewTerms = curriculum.daySpecs
         .filter((candidate) => candidate.lessonNumber < day.lessonNumber && candidate.kind === "new")
         .flatMap((candidate) => candidate.coreTermIds);
@@ -147,23 +246,13 @@ describe("monthly curriculum contract", () => {
 
   it("allows no more than twenty percent repeated expanded entries while keeping all core terms distinct", () => {
     const input = inputFor();
-    input.supportTerms = Array.from({ length: 10 }, (_, index) => ({
-      id: `support-${index + 1}`,
-      word: `support${String.fromCharCode(97 + Math.floor(index / 26))}${String.fromCharCode(97 + index % 26)}`,
-      meaning: `Từ mở rộng ${index + 1}`,
-      type: "noun",
-      source: "example" as const,
-      dayNumber: 1
-    }));
     const curriculum = buildMonthlyCurriculum(input);
     const allowed = structuredClone(curriculum);
-    allowed.supportTerms.push(...Array.from({ length: 2 }, (_, index) => ({
-      ...allowed.supportTerms[0]!, id: `repeat-${index}`
-    })));
+    for (let index = 0; index < 28; index += 1) allowed.supportTerms[allowed.supportTerms.length - 1 - index]!.word = allowed.supportTerms[0]!.word;
     expect(validateMonthlyCurriculum(allowed)).toEqual([]);
 
     const excessive = structuredClone(allowed);
-    excessive.supportTerms.push({ ...excessive.supportTerms[0]!, id: "repeat-over-limit" });
+    excessive.supportTerms[excessive.supportTerms.length - 29]!.word = excessive.supportTerms[0]!.word;
     expect(validateMonthlyCurriculum(excessive)).toContain("Expanded resources repeat more than 20% of the monthly total");
   });
 
@@ -171,7 +260,7 @@ describe("monthly curriculum contract", () => {
     const curriculum = buildMonthlyCurriculum(inputFor());
     const statuses = new Map(curriculum.daySpecs.map((day) => [day.lessonNumber, day.lessonNumber === 2 ? "draft" : day.lessonNumber === 3 ? "approved" : "pending"] as const));
 
-    expect(curriculum.supportTerms.map((term) => term.id)).toEqual(["support-1"]);
+    expect(curriculum.supportTerms.map((term) => term.id)).toHaveLength(144);
     expect(recommendedPendingBatch(curriculum.daySpecs, statuses)).toEqual([1, 4, 5, 6, 7, 8, 9, 10, 11, 12]);
   });
 

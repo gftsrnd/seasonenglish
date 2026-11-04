@@ -1,4 +1,4 @@
-import { buildMonthlyCalendar, buildMonthlyCurriculum, type MonthlyCurriculumInput } from "@e4s/domain";
+import { buildMonthlyCalendar, buildMonthlyCurriculum, monthlyDayKind, type MonthlyCurriculumInput } from "@e4s/domain";
 import { Client, type Pool } from "pg";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { migrateDatabase, resetPublicSchema } from "../src/migrate.js";
@@ -175,13 +175,16 @@ describe("monthly content persistence", () => {
 
 function buildContract() {
   const calendar = buildMonthlyCalendar(month);
-  const newDays = calendar.effectiveDays.filter((date) => new Date(`${date}T00:00:00Z`).getUTCDay() !== 5).length;
+  const newDays = calendar.effectiveDays.flatMap((_date, index) => monthlyDayKind(index + 1, calendar.lessonCount) === "new" ? [index + 1] : []);
   const input: MonthlyCurriculumInput = {
     month,
     cefr: "A1",
     theme: { version: 1, title: "Preparing a quarterly budget review", brief: "Teams prepare and explain a quarterly budget review.", context: "Finance team planning meeting", communicationGoal: "Explain costs and request approval" },
-    coreTerms: Array.from({ length: newDays * 3 }, (_, index) => ({ id: `core-${index + 1}`, word: `term-${index + 1}`, meaning: `meaning ${index + 1}`, type: "noun", ipa: "/tɜːm/" })),
-    supportTerms: [{ id: "support-1", word: "quarterly", meaning: "hàng quý", type: "adjective", source: "example", dayNumber: 1 }],
+    coreTerms: Array.from({ length: newDays.length * 3 }, (_, index) => ({ id: `core-${index + 1}`, word: `term-${index + 1}`, meaning: `meaning ${index + 1}`, type: "noun", ipa: "/tɜːm/" })),
+    supportTerms: Array.from({ length: newDays.length * 9 }, (_, index) => {
+      const coreIndex = Math.floor(index / 3);
+      return { id: `support-${index + 1}`, word: `support${String.fromCharCode(97 + Math.floor(index / 26))}${String.fromCharCode(97 + index % 26)}`, meaning: `meaning ${index + 1}`, type: "noun", source: "example" as const, dayNumber: newDays[Math.floor(coreIndex / 3)]!, relatedCoreTermId: `core-${coreIndex + 1}` };
+    }),
     grammarTopics: Array.from({ length: 2 }, (_, index) => ({ id: `grammar-${index + 1}`, title: `Grammar ${index + 1}`, steps: [{ id: `grammar-${index + 1}-step-1`, focus: "focus", formula: "S + V", usage: "usage", examples: ["Example sentence."] }] })),
     sounds: Array.from({ length: 4 }, (_, index) => ({ id: `sound-${index + 1}`, ipa: "/t/", label: "T sound", examples: Array.from({ length: Math.ceil(calendar.lessonCount / 4) * 3 }, (_, exampleIndex) => ({ id: `sound-${index + 1}-example-${exampleIndex + 1}`, word: `soundword-${index + 1}-${exampleIndex + 1}`, ipa: "/t/" })) }))
   };

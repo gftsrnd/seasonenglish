@@ -66,6 +66,7 @@ export interface MonthFrameworkView {
       allocated: boolean;
       grammarSteps: Array<{ stepId: string; lessonNumbers: number[] }>;
       sounds: Array<{ soundId: string; lessonNumbers: number[]; slots: string[] }>;
+      days: MonthDayPlanView[];
     };
   };
   lessons: MonthLessonCellView[];
@@ -74,6 +75,23 @@ export interface MonthFrameworkView {
     light: MonthlyQualityFindingView[];
     acknowledged?: OperatorAcknowledgementView;
   };
+}
+
+export interface MonthDayPlanView {
+  lessonNumber: number;
+  date: string;
+  kind: "new" | "review";
+  coreTermIds: string[];
+  expandedTermIds: string[];
+  reviewTermIds: string[];
+  reviewExpandedTermIds: string[];
+  primarySkillFocus: "writing" | "speaking" | null;
+  writingFocus: string | null;
+  speakingFocus: string | null;
+  grammarStepIds: string[];
+  soundId: string;
+  pronunciationSlot?: string;
+  pronunciationExampleIds: string[];
 }
 
 export interface MonthlyOperatorOverviewView {

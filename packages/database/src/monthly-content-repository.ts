@@ -5,6 +5,7 @@ import {
   monthlyResourcePoolHash,
   recommendedPendingBatch,
   planMonthlyResourcePool,
+  backfillMonthlyCurriculumPlan,
   validateMonthlyCurriculum,
   type MonthlyResourcePoolContract,
   type MonthlyCurriculumContract,
@@ -17,7 +18,7 @@ import type {
   MonthlyQualityFindingView,
   OperatorAcknowledgementView
 } from "@e4s/contracts";
-import type { Client, Pool } from "pg";
+import type { Client, Pool, PoolClient } from "pg";
 
 type Queryable = Pool | Client;
 
@@ -416,6 +417,50 @@ export class MonthlyContentRepository {
       throw error;
     } finally {
       if (pooledClient) (client as import("pg").PoolClient).release();
+    }
+  }
+
+  /** Safe one-time repair for an approved plan migration; refuses any authored lesson content. */
+  async backfillApprovedFrameworkPlan(actorId: string, frameworkId: string, expectedMonth: string, expectedCefr: MonthFrameworkView["cefr"]): Promise<{ frameworkId: string; scopeHash: string; changed: boolean; daySpecs: number }> {
+    const actor = await this.requireContentOperator(actorId);
+    const pooledClient = "connect" in this.database;
+    const client = pooledClient ? await (this.database as Pool).connect() : this.database;
+    try {
+      await client.query("begin");
+      const result = await client.query<FrameworkRow & { month: string }>(
+        `select mf.id, mf.cefr, mf.version, mf.status, mf.scope_hash, mf.curriculum_contract, mf.quality_acknowledgement, pm.month
+         from month_frameworks mf join program_months pm on pm.id = mf.program_month_id
+         where mf.id = $1 and pm.organization_id = $2 for update of mf`, [frameworkId, actor.organization_id]
+      );
+      const row = result.rows[0];
+      if (!row || row.status !== "approved" || row.month !== expectedMonth || row.cefr !== expectedCefr) throw new Error("Approved framework does not match the explicitly requested month and CEFR");
+      const lessonRows = await client.query<{ authored: string }>(
+        `select count(*) filter (where ml.status <> 'pending' or ml.lesson_id is not null)::text as authored
+         from month_lessons ml where ml.framework_id = $1`, [frameworkId]
+      );
+      if (Number(lessonRows.rows[0]?.authored ?? "0") !== 0) throw new Error("Plan backfill refuses a framework with authored lesson content");
+      if (!("daySpecs" in row.curriculum_contract)) throw new Error("Approved framework has no allocated plan to repair");
+      const repaired = backfillMonthlyCurriculumPlan(row.curriculum_contract);
+      const validationErrors = validateMonthlyCurriculum(repaired);
+      if (validationErrors.length) throw new Error(`Backfilled monthly plan is invalid: ${validationErrors.join("; ")}`);
+      const scopeHash = monthlyScopeHash(repaired);
+      const changed = JSON.stringify(row.curriculum_contract) !== JSON.stringify(repaired) || row.scope_hash !== scopeHash;
+      if (changed) {
+        await client.query("update month_frameworks set curriculum_contract = $2::jsonb, scope_hash = $3, updated_at = now() where id = $1", [frameworkId, JSON.stringify(repaired), scopeHash]);
+        await client.query("update month_lessons set scope_hash = $2, updated_at = now() where framework_id = $1 and status = 'pending' and lesson_id is null", [frameworkId, scopeHash]);
+        await client.query(
+          `insert into audit_events (id, organization_id, action, entity_type, entity_id, payload, trace_id)
+           values ($1, $2, 'monthly.framework_plan_backfilled', 'monthly_framework', $3, $4::jsonb, $5)`,
+          [randomUUID(), actor.organization_id, frameworkId, JSON.stringify({ month: expectedMonth, cefr: expectedCefr, daySpecs: repaired.daySpecs.length, scopeHash }), randomUUID()]
+        );
+      }
+      await client.query("commit");
+      return { frameworkId, scopeHash, changed, daySpecs: repaired.daySpecs.length };
+    } catch (error) {
+      await client.query("rollback");
+      throw error;
+    } finally {
+      if (pooledClient) (client as PoolClient).release();
     }
   }
 
@@ -922,7 +967,7 @@ function toFrameworkHeader(row: FrameworkRow): Omit<MonthFrameworkView, "lessons
 }
 
 function monthlyResourceRoadmap(contract: MonthlyCurriculumContract | MonthlyResourcePoolContract): NonNullable<NonNullable<MonthFrameworkView["resources"]>["roadmap"]> {
-  if (!("daySpecs" in contract)) return { allocated: false, grammarSteps: [], sounds: [] };
+  if (!("daySpecs" in contract)) return { allocated: false, grammarSteps: [], sounds: [], days: [] };
   const grammarStepIds = contract.grammarTopics.flatMap((topic) => topic.steps.map((step) => step.id));
   return {
     allocated: true,
@@ -934,6 +979,22 @@ function monthlyResourceRoadmap(contract: MonthlyCurriculumContract | MonthlyRes
       soundId: sound.id,
       lessonNumbers: contract.daySpecs.filter((day) => day.soundId === sound.id).map((day) => day.lessonNumber),
       slots: contract.daySpecs.filter((day) => day.soundId === sound.id).flatMap((day) => day.pronunciationSlot ? [day.pronunciationSlot] : [])
+    })),
+    days: contract.daySpecs.map((day) => ({
+      lessonNumber: day.lessonNumber,
+      date: day.date,
+      kind: day.kind,
+      coreTermIds: day.coreTermIds,
+      expandedTermIds: day.expandedTermIds,
+      reviewTermIds: day.reviewTermIds,
+      reviewExpandedTermIds: day.reviewExpandedTermIds,
+      primarySkillFocus: day.primarySkillFocus,
+      writingFocus: day.writingFocus,
+      speakingFocus: day.speakingFocus,
+      grammarStepIds: day.grammarStepIds ?? [day.grammarStepId],
+      soundId: day.soundId,
+      ...(day.pronunciationSlot ? { pronunciationSlot: day.pronunciationSlot } : {}),
+      pronunciationExampleIds: day.pronunciationExampleIds
     }))
   };
 }

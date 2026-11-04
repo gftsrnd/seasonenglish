@@ -25,7 +25,7 @@ export async function generateMonthlyDayWithAi(contract: MonthlyCurriculumContra
             grammarSteps,
             sound,
             theme: contract.theme,
-            supportTerms: contract.supportTerms.filter((term) => term.dayNumber === dayNumber)
+            supportTerms: contract.supportTerms.filter((term) => (daySpec.kind === "new" ? daySpec.expandedTermIds : daySpec.reviewExpandedTermIds).includes(term.id))
           },
           priorParts
         }, {

@@ -83,6 +83,27 @@ describe("Operator monthly planner", () => {
     expect(onApproveFramework).toHaveBeenCalledWith("framework-a1");
   });
 
+  it("shows approved resource links and explicit writing/speaking tasks in the plan preview", async () => {
+    const user = userEvent.setup();
+    const coreTerms = ["budget", "cost", "forecast"].map((word, index) => ({ id: `core-${index + 1}`, word, meaning: word, type: "noun", ipa: "/b/", source: "core_registry" as const, component: "core" as const, dayNumber: 1 }));
+    const supportTerms = Array.from({ length: 9 }, (_, index) => ({ id: `support-${index + 1}`, word: `extra${index + 1}`, meaning: "meaning", type: "noun", source: "example" as const, component: "expanded" as const, dayNumber: 1, relatedCoreTermId: `core-${Math.floor(index / 3) + 1}` }));
+    render(<ToastProvider><OperatorMonths
+      month="2026-11" todayMonth="2026-11" cefr="A2" busy={false}
+      overview={{ systemDate: "2026-11-03", monthWindow: { previous: "2026-10", current: "2026-11", next: "2026-12", writable: true }, brief: null, frameworks: [{
+        id: "framework-a2", cefr: "A2", version: 1, status: "approved", scopeHash: "scope", lessons: [], quality: { severe: [], light: [] }, resources: {
+          coreTerms, supportTerms, grammarTopics: [], sounds: [], roadmap: { allocated: true, grammarSteps: [], sounds: [], days: [{ lessonNumber: 1, date: "2026-11-02", kind: "new", coreTermIds: coreTerms.map((term) => term.id), expandedTermIds: supportTerms.map((term) => term.id), reviewTermIds: [], reviewExpandedTermIds: [], primarySkillFocus: "writing", writingFocus: "Write a short budget note using today's core words.", speakingFocus: "Say a one-sentence update using a target sound.", grammarStepIds: ["grammar-step"], soundId: "sound-1", pronunciationSlot: "P1", pronunciationExampleIds: ["example-1", "example-2", "example-3"] }] }
+        }
+      }] }}
+      actions={{ onSelectMonth: vi.fn(), onSelectLevel: vi.fn(), onSuggestBrief: vi.fn(), onSaveBrief: vi.fn(), onApproveBrief: vi.fn(), onGenerateFramework: vi.fn(), onSaveFramework: vi.fn(), onApproveFramework: vi.fn(), onSaveDay: vi.fn(), onGenerateDay: vi.fn(), onAcknowledge: vi.fn(), onApproveDay: vi.fn(), onCreateCorrection: vi.fn(), onSaveCorrection: vi.fn(), onAcknowledgeCorrection: vi.fn(), onApproveCorrection: vi.fn() }}
+    /></ToastProvider>);
+
+    await user.click(screen.getByText("Phân bổ tài nguyên và trọng tâm kỹ năng"));
+    expect(screen.getByText("Write a short budget note using today's core words.")).toBeInTheDocument();
+    expect(screen.getByText("Say a one-sentence update using a target sound.")).toBeInTheDocument();
+    expect(screen.getByText("extra1 · extra2 · extra3")).toBeInTheDocument();
+    expect(screen.getByText("Trọng tâm: Viết")).toBeInTheDocument();
+  });
+
   it("shows durable category checkpoints as unpublished and continues only missing groups", async () => {
     const user = userEvent.setup();
     const onGenerateFramework = vi.fn();

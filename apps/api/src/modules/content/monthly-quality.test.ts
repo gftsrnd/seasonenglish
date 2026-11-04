@@ -67,12 +67,12 @@ function contract(): MonthlyCurriculumContract {
       { id: "core-3", word: "core-three", meaning: "ba", type: "noun", ipa: "/θriː/", source: "core_registry", component: "core", dayNumber: 1 },
       { id: "core-4", word: "core-four", meaning: "bốn", type: "noun", ipa: "/fɔːr/", source: "core_registry", component: "core", dayNumber: 3 }
     ],
-    supportTerms: [{ id: "support-1", word: "support-one", meaning: "hỗ trợ", type: "noun", source: "example", component: "expanded", dayNumber: 1 }],
+    supportTerms: [{ id: "support-1", word: "support-one", meaning: "hỗ trợ", type: "noun", source: "example", component: "expanded", dayNumber: 1, relatedCoreTermId: "core-1" }],
     grammarTopics: [{ id: "grammar-1", title: "Grammar", steps: [{ id: "grammar-step", focus: "focus", formula: "Core formula", usage: "usage", examples: ["Example."] }] }],
     sounds: [{ id: "sound-1", ipa: "/k/", label: "K", examples: [{ id: "sound-example-1", word: "cost", ipa: "/kɒst/" }, { id: "sound-example-2", word: "can", ipa: "/kæn/" }, { id: "sound-example-3", word: "key", ipa: "/kiː/" }] }],
     daySpecs: [
-      { lessonNumber: 1, date: "2026-11-02", kind: "new", coreTermIds: ["core-1", "core-2", "core-3"], reviewTermIds: [], grammarStepId: "grammar-step", soundId: "sound-1", pronunciationExampleIds: ["sound-example-1", "sound-example-2", "sound-example-3"] },
-      { lessonNumber: 2, date: "2026-11-06", kind: "review", coreTermIds: [], reviewTermIds: ["core-1", "core-2", "core-3"], grammarStepId: "grammar-step", soundId: "sound-1", pronunciationExampleIds: ["sound-example-1", "sound-example-2", "sound-example-3"] }
+      { lessonNumber: 1, date: "2026-11-02", kind: "new", coreTermIds: ["core-1", "core-2", "core-3"], expandedTermIds: ["support-1"], reviewTermIds: [], reviewExpandedTermIds: [], primarySkillFocus: "writing", writingFocus: "Write about cost.", speakingFocus: "Say a sentence about cost.", grammarStepId: "grammar-step", soundId: "sound-1", pronunciationExampleIds: ["sound-example-1", "sound-example-2", "sound-example-3"] },
+      { lessonNumber: 2, date: "2026-11-06", kind: "review", coreTermIds: [], expandedTermIds: [], reviewTermIds: ["core-1", "core-2", "core-3"], reviewExpandedTermIds: ["support-1"], primarySkillFocus: null, writingFocus: null, speakingFocus: null, grammarStepId: "grammar-step", soundId: "sound-1", pronunciationExampleIds: ["sound-example-1", "sound-example-2", "sound-example-3"] }
     ]
   };
 }

@@ -9,10 +9,10 @@ const contract = {
     { id: "c2", word: "confirm", meaning: "xác nhận", type: "verb", ipa: "/kənˈfɜːrm/", source: "core_registry" as const, component: "core" as const, dayNumber: 1 },
     { id: "c3", word: "deadline", meaning: "hạn chót", type: "noun", ipa: "/ˈdedlaɪn/", source: "core_registry" as const, component: "core" as const, dayNumber: 1 }
   ],
-  supportTerms: [{ id: "s1", word: "stakeholder", meaning: "bên liên quan", type: "noun", source: "family" as const, component: "expanded" as const, dayNumber: 1 }],
+  supportTerms: [{ id: "s1", word: "stakeholder", meaning: "bên liên quan", type: "noun", source: "family" as const, component: "expanded" as const, dayNumber: 1, relatedCoreTermId: "c1" }],
   grammarTopics: [{ id: "g1", title: "Present simple", steps: [{ id: "g1s", focus: "routine", formula: "S + V", usage: "routine", examples: ["I confirm the handover."] }] }, { id: "g2", title: "Requests", steps: [{ id: "g2s", focus: "request", formula: "Could + S", usage: "request", examples: ["Could you confirm?"] }] }],
   sounds: [{ id: "p1", ipa: "/æ/", label: "short a", examples: [{ id: "p1e", word: "plan", ipa: "/plæn/" }, { id: "p2e", word: "task", ipa: "/tɑːsk/" }, { id: "p3e", word: "status", ipa: "/ˈsteɪtəs/" }] }],
-  daySpecs: [{ lessonNumber: 1, date: "2026-11-02", kind: "new" as const, coreTermIds: ["c1", "c2", "c3"], reviewTermIds: [], grammarStepId: "g1s", soundId: "p1", pronunciationExampleIds: ["p1e", "p2e", "p3e"] }]
+  daySpecs: [{ lessonNumber: 1, date: "2026-11-02", kind: "new" as const, coreTermIds: ["c1", "c2", "c3"], expandedTermIds: ["s1"], reviewTermIds: [], reviewExpandedTermIds: [], primarySkillFocus: "writing" as const, writingFocus: "Write a handover note.", speakingFocus: "Say a short update.", grammarStepId: "g1s", soundId: "p1", pronunciationExampleIds: ["p1e", "p2e", "p3e"] }]
 };
 
 describe("monthly final builder", () => {
