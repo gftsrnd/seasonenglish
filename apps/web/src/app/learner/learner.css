@@ -1169,7 +1169,16 @@ h1,h2,h3,h4,h1 b,h2 b,h3 b,h4 b{font-weight:600 !important}
 .coach-page .coach-feedback-explanations{display:grid;gap:6px}
 .coach-page .coach-feedback-section{display:grid;gap:5px;padding:0;border:0;border-radius:0;background:transparent}
 .coach-page .coach-feedback-section h4,.coach-page .coach-feedback-section p{margin:0}
-.coach-page .coach-season-reply{gap:7px;padding-bottom:10px;border-bottom:1px solid var(--line);line-height:1.5}
+.coach-page .coach-season-reply{gap:12px;padding-bottom:14px;border-bottom:1px solid var(--line);line-height:1.6}
+.coach-page .coach-reply-translation{display:grid;gap:4px;padding:10px 12px;border-radius:12px;background:var(--surface-soft,#faf8f4)}
+.coach-page .coach-reply-translation h4,.coach-page .coach-reply-translation p{margin:0}
+.coach-page .coach-reply-translation h4{font-size:.8rem;color:var(--muted)}
+.coach-page .coach-reply-translation p{line-height:1.55;color:var(--muted)}
+.coach-page .coach-next-question{display:grid;gap:7px;margin-top:10px;padding-top:10px;border-top:1px solid color-mix(in srgb,var(--line) 72%,transparent)}
+.coach-page .coach-suggestion-translation{display:grid;gap:3px;margin-top:6px;padding-top:9px;border-top:1px solid color-mix(in srgb,var(--line) 72%,transparent);color:var(--muted);line-height:1.55}
+.coach-page .coach-suggestion-translation h4,.coach-page .coach-suggestion-translation p{margin:0}
+.coach-page .coach-feedback-details{gap:14px}
+.coach-page .coach-feedback-criteria{gap:10px}
 .coach-page .coach-season-reply-heading{display:flex;align-items:center;justify-content:space-between;gap:10px}
 .coach-page .coach-season-reply-heading h4{margin:0}
 .coach-page .coach-season-reply-heading .coach-turn-audio{flex:0 0 auto;margin:0}
