@@ -26,8 +26,8 @@ LEVEL DIFFERENTIATION
   communication. Do not merely substitute harder-looking words.
 
 VOCABULARY PLAN
-- Create the requested number of distinct core items in the month-wide pool.
-- Create the requested number of expanded items in the month-wide pool. Expanded items may repeat across the month only when repeated entries stay at or below 20% of the total expanded set.
+- Create the requested number of distinct core items in the month-wide pool. Each core item is one standalone English lexical headword.
+- Create the requested number of expanded items in the month-wide pool. Prefer standalone headwords: at least 75% of the pool must be single words. A natural two-to-four-word expression is allowed for no more than one support per core, and phrases may not exceed 25% of the pool. Expanded items may repeat across the month only when repeated entries stay at or below 20% of the total expanded set.
 - Every item must have a real English form, a natural Vietnamese meaning, part
   of speech, accurate IPA where requested, a concise authentic example, and
   with no calendar-day assignment; the Operator reviews the pool before approval.
@@ -37,22 +37,31 @@ VOCABULARY PLAN
   word_family, or collocation; and identify the related core term. The relation
   must be linguistically real. A word family must belong to its stated base;
   a synonym/antonym must be a true semantic relation in this context.
+- Avoid shallow workflow-style variants around the core. The three supports
+  must add distinct meaning or use, not small wording changes to one idea.
 - Balance support relations across the supplied core batch. Do not repeat one
   generic support phrase across the month.
 
 GRAMMAR PLAN
-- Return exactly two genuine CEFR-appropriate grammar topics. Topic A covers new lessons N1–N6, topic B covers N7–N12, and N13–N15 combine both. Each topic has
-  a meaningful Vietnamese title, a precise formula, a concise Vietnamese use
-  explanation, at least three natural work-context examples, and no calendar
-  assignment. Do not use generic descriptions such as
+- Return exactly two genuine CEFR-appropriate grammar topics, each with three
+  ordered progressive steps. Topic A steps progress over N1–N2, N3–N4 and
+  N5–N6; topic B steps progress over N7–N8, N9–N10 and N11–N12. N13–N15
+  combine both topics' third steps. Each step has a distinct focus, precise
+  formula, concise Vietnamese use explanation and at least three natural
+  work-context examples. Do not use generic descriptions such as
   'Dùng để diễn đạt ý chính'.
 
 PRONUNCIATION PLAN
-- Return exactly four genuine pronunciation targets. The approval planner uses P1–P4 for N1–N12, then K1–K3 for N13–N15 and M1–M3 for N16–N18 where available. Every pronunciation word must have no more than three syllables. Each has accurate IPA,
+- Return exactly four distinct, genuine English pronunciation targets with
+  accurate target IPA. The approval planner uses P1–P4 for N1–N12, then K1–K3 for
+  N13–N15 and M1–M3 for N16–N18 where available. Every pronunciation word
+  must have no more than three syllables and actually illustrate the target
+  sound or stress pattern. Each has accurate IPA,
   a meaningful Vietnamese label, and a list
   of real words from this month's approved vocabulary or closely related,
-  non-duplicate examples. Explain the actual sound contrast or stress pattern
-  when relevant. Never return 'sound 1 word 1' or a fabricated transcription.
+  non-duplicate examples. Explain the actual sound contrast or stress pattern.
+  Use neutral workplace words; never invent cultural, historical or identity-
+  based context. Never return 'sound 1 word 1' or a fabricated transcription.
 
 POOL RULES
 - The caller supplies newLessonCount and may provide a coreTermBatch. Never
@@ -257,8 +266,8 @@ export function validateMonthlyResourcePlanShape(
   plan: {
     coreTerms: Array<{ id: string; word: string }>;
     expandedTerms: Array<{ id: string; word: string; relation: "umbrella" | "synonym" | "antonym" | "word_family" | "collocation"; relatesToCoreId: string }>;
-    grammarTopics: Array<{ id: string; steps: Array<{ id: string }> }>;
-    pronunciationTargets: Array<{ id: string; words: Array<{ word: string }> }>;
+    grammarTopics: Array<{ id: string; steps: Array<{ id: string; focus: string }> }>;
+    pronunciationTargets: Array<{ id: string; ipa: string; label: string; explanation: string; words: Array<{ word: string }> }>;
   },
   newLessonCount: number,
 ): string[] {
@@ -293,8 +302,15 @@ export function validateMonthlyResourcePlanShape(
   }
   if (plan.grammarTopics.length !== 2) errors.push("Expected two grammar topics.");
   if (plan.grammarTopics.some((topic) => topic.steps.length !== 3)) errors.push("Every grammar topic needs exactly three ordered steps.");
+  for (const [index, topic] of plan.grammarTopics.entries()) {
+    if (new Set(topic.steps.map((step) => step.id)).size !== topic.steps.length) errors.push(`Grammar topic ${index + 1} repeats a step ID.`);
+    if (new Set(topic.steps.map((step) => normalize(step.focus))).size !== topic.steps.length) errors.push(`Grammar topic ${index + 1} needs a distinct focus for each progressive step.`);
+  }
   if (plan.pronunciationTargets.length !== 4) errors.push("Expected four pronunciation targets.");
+  if (new Set(plan.pronunciationTargets.map((target) => normalize(target.ipa))).size !== plan.pronunciationTargets.length) errors.push("Monthly resources need four distinct pronunciation targets.");
   for (const [index, target] of plan.pronunciationTargets.entries()) {
+    if (!/^\/.+\/$/u.test(target.ipa.trim())) errors.push(`Pronunciation target ${index + 1} needs a valid IPA target.`);
+    if (!target.label.trim() || !target.explanation.trim()) errors.push(`Pronunciation target ${index + 1} needs an authentic label and sound explanation.`);
     if (target.words.length < 9) errors.push(`Pronunciation target ${index + 1} needs at least nine real words.`);
     if (target.words.some((word) => syllableCount(word.word) > 3)) errors.push(`Pronunciation target ${index + 1} contains a word with more than three syllables.`);
   }

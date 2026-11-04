@@ -18,7 +18,7 @@ function inputFor(month = "2026-11"): MonthlyCurriculumInput {
   const newDays = calendar.effectiveDays.filter((_date, index) => monthlyDayKind(index + 1, calendar.lessonCount) === "new");
   const coreTerms = Array.from({ length: newDays.length * 3 }, (_, index) => ({
     id: `core-${index + 1}`,
-    word: `term-${index + 1}`,
+    word: `term${String.fromCharCode(97 + Math.floor(index / 26))}${String.fromCharCode(97 + index % 26)}`,
     meaning: `Nghĩa ${index + 1}`,
     type: "noun",
     ipa: "/tɜːm/"
@@ -149,7 +149,7 @@ describe("monthly curriculum contract", () => {
     const input = inputFor();
     input.supportTerms = Array.from({ length: 10 }, (_, index) => ({
       id: `support-${index + 1}`,
-      word: `support-${index + 1}`,
+      word: `support${String.fromCharCode(97 + Math.floor(index / 26))}${String.fromCharCode(97 + index % 26)}`,
       meaning: `Từ mở rộng ${index + 1}`,
       type: "noun",
       source: "example" as const,

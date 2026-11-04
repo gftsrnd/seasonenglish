@@ -191,8 +191,11 @@ export function buildMonthlyCurriculum(input: MonthlyCurriculumInput): MonthlyCu
   const newDays = calendar.effectiveDays.filter((_date, index) => monthlyDayKind(index + 1, calendar.lessonCount) === "new");
   const expectedCoreCount = newDays.length * 3;
   if (input.coreTerms.length !== expectedCoreCount) throw new RangeError(`Expected ${expectedCoreCount} core terms for ${input.month}`);
+  if (input.coreTerms.some((term) => !isSingleEnglishHeadword(term.word))) throw new RangeError("Every core resource must be one standalone English headword");
   const duplicateCore = duplicateOf(input.coreTerms.map((term) => normalize(term.word)));
   if (duplicateCore) throw new RangeError(`Duplicate core term: ${duplicateCore}`);
+  if (input.supportTerms.some((term) => !isSingleEnglishHeadword(term.word) && !isNaturalLengthEnglishPhrase(term.word))) throw new RangeError("Expanded resources must be English headwords or two-to-four-word expressions");
+  if (input.supportTerms.filter((term) => !isSingleEnglishHeadword(term.word)).length > Math.floor(input.supportTerms.length * 0.25)) throw new RangeError("Expanded expressions exceed the 25% monthly limit");
   if (expandedRepeatCount(input.supportTerms.map((term) => normalize(term.word))) > Math.floor(input.supportTerms.length * 0.2)) {
     throw new RangeError("Expanded resources repeat more than 20% of the monthly total");
   }
@@ -257,18 +260,25 @@ export function planMonthlyResourcePool(pool: MonthlyResourcePoolContract): Mont
   if (pool.coreTerms.length !== expectedCoreCount) errors.push(`Expected ${expectedCoreCount} core terms, got ${pool.coreTerms.length}.`);
   if (pool.supportTerms.length !== expectedCoreCount * 3) errors.push(`Expected ${expectedCoreCount * 3} expanded terms, got ${pool.supportTerms.length}.`);
   const normalizedCore = pool.coreTerms.map((term) => normalize(term.word));
+  if (pool.coreTerms.some((term) => !isSingleEnglishHeadword(term.word))) errors.push("Every core resource must be one standalone English headword.");
   if (duplicateOf(normalizedCore)) errors.push(`Duplicate core term: ${duplicateOf(normalizedCore)}.`);
   if (duplicateOf(pool.coreTerms.map((term) => term.id))) errors.push("Core resource IDs must be unique.");
   if (duplicateOf(pool.supportTerms.map((term) => term.id))) errors.push("Expanded resource IDs must be unique.");
   const coreWords = new Set(normalizedCore);
+  const phraseSupports = pool.supportTerms.filter((term) => !isSingleEnglishHeadword(term.word));
+  if (pool.supportTerms.some((term) => !isSingleEnglishHeadword(term.word) && !isNaturalLengthEnglishPhrase(term.word))) errors.push("Expanded resources must be English headwords or two-to-four-word expressions.");
+  if (phraseSupports.length > Math.floor(pool.supportTerms.length * 0.25)) errors.push("Expanded expressions exceed the 25% monthly limit.");
   for (const support of pool.supportTerms) {
     if (!pool.coreTerms.some((core) => core.id === support.relatedCoreTermId)) errors.push(`Expanded term ${support.id} references an unknown core resource.`);
     if (coreWords.has(normalize(support.word))) errors.push(`Expanded term ${support.id} duplicates a core term.`);
   }
   const supportCounts = new Map<string, number>();
+  const phraseCountByCore = new Map<string, number>();
   for (const support of pool.supportTerms) supportCounts.set(support.relatedCoreTermId, (supportCounts.get(support.relatedCoreTermId) ?? 0) + 1);
+  for (const support of phraseSupports) phraseCountByCore.set(support.relatedCoreTermId, (phraseCountByCore.get(support.relatedCoreTermId) ?? 0) + 1);
   for (const core of pool.coreTerms) {
     if (supportCounts.get(core.id) !== 3) errors.push(`Core term ${core.id} must have exactly three related expanded terms.`);
+    if ((phraseCountByCore.get(core.id) ?? 0) > 1) errors.push(`Core term ${core.id} may have at most one multi-word expanded expression.`);
   }
   if (expandedRepeatCount(pool.supportTerms.map((term) => normalize(term.word))) > Math.floor(pool.supportTerms.length * 0.2)) {
     errors.push("Expanded resources repeat more than 20% of the monthly total.");
@@ -306,6 +316,9 @@ export function validateMonthlyCurriculum(contract: MonthlyCurriculumContract): 
   const errors: string[] = [];
   const duplicateCore = duplicateOf(contract.coreTerms.map((term) => normalize(term.word)));
   if (duplicateCore) errors.push(`Duplicate core term: ${duplicateCore}`);
+  if (contract.coreTerms.some((term) => !isSingleEnglishHeadword(term.word))) errors.push("Every core resource must be one standalone English headword");
+  if (contract.supportTerms.some((term) => !isSingleEnglishHeadword(term.word) && !isNaturalLengthEnglishPhrase(term.word))) errors.push("Expanded resources must be English headwords or two-to-four-word expressions");
+  if (contract.supportTerms.filter((term) => !isSingleEnglishHeadword(term.word)).length > Math.floor(contract.supportTerms.length * 0.25)) errors.push("Expanded expressions exceed the 25% monthly limit");
   if (expandedRepeatCount(contract.supportTerms.map((term) => normalize(term.word))) > Math.floor(contract.supportTerms.length * 0.2)) {
     errors.push("Expanded resources repeat more than 20% of the monthly total");
   }
@@ -431,6 +444,15 @@ function expandedRepeatCount(values: readonly string[]): number {
 
 function normalize(value: string): string {
   return value.trim().toLocaleLowerCase("en-US");
+}
+
+function isSingleEnglishHeadword(value: string): boolean {
+  return /^\p{L}+(?:[-'’]\p{L}+)*$/u.test(value.trim());
+}
+
+function isNaturalLengthEnglishPhrase(value: string): boolean {
+  const words = value.trim().split(/\s+/u);
+  return words.length >= 2 && words.length <= 4 && words.every(isSingleEnglishHeadword);
 }
 
 function stableStringify(value: unknown): string {

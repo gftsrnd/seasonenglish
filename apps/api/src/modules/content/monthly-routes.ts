@@ -234,7 +234,7 @@ export function registerMonthlyContentRoutes(app: FastifyInstance, pool: Pool, a
 
       const monthlyVocabularyForPronunciation = [...coreTerms, ...expandedTerms].map((term) => `${term.word} (${term.meaning})`).join("; ");
       const grammarResult = await runPhase(
-        `PHASE 3 — GRAMMAR ONLY. Return exactly two genuine grammarTopics and leave coreTerms, expandedTerms and pronunciationTargets empty. This is the reusable month pool; do not assign calendar days. Each grammar topic must have exactly three ordered steps; every step needs focus, precise formula, concise Vietnamese usage, and three to six authentic workplace examples. Topic A steps are the progression for N1–N2, N3–N4, N5–N6. Topic B steps are the progression for N7–N8, N9–N10, N11–N12. N13–N15 combine the third step of both topics.`,
+        `PHASE 3 — GRAMMAR ONLY. Return exactly two genuine grammarTopics and leave coreTerms, expandedTerms and pronunciationTargets empty. This is the reusable month pool; do not assign calendar days. Each grammar topic must have exactly three ordered progressive steps that build in complexity; use a distinct focus and teaching point at each step, with precise formula, concise Vietnamese usage, and three to six authentic workplace examples. Topic A steps are the progression for N1–N2, N3–N4, N5–N6. Topic B steps are the progression for N7–N8, N9–N10, N11–N12. N13–N15 combine the third step of both topics.`,
         [],
         { vocabularyCount: 0, expandedVocabularyCount: 0, grammarTopicCount: 2, pronunciationSoundCount: 0 }
       );
@@ -252,13 +252,18 @@ export function registerMonthlyContentRoutes(app: FastifyInstance, pool: Pool, a
         for (let attempt = 0; attempt < 3; attempt += 1) {
           const forbiddenForTarget = new Set([...usedPronunciationWords, ...acceptedTargetWords.map((word) => normalizeMonthlyResourceWord(word.word))]);
           const neededExamples = 9 - acceptedTargetWords.length;
-          const prompt = `PHASE 4 — ONE PRONUNCIATION TARGET ONLY. Return exactly one pronunciationTargets object and leave coreTerms, expandedTerms and grammarTopics empty. Generate the target for ${pronunciationSlots[soundIndex]}. This is an unassigned month pool; do not output calendar day fields. Return at least ${Math.max(18, neededExamples * 2)} ordered candidate example words so the application can select ${neededExamples}. Every candidate must be no more than three syllables and relevant to the target sound or stress pattern. Avoid all words already accepted for earlier targets: ${[...usedPronunciationWords].join("; ") || "none"}. For this same target, retain these already accepted examples and do not repeat them: ${acceptedTargetWords.map((word) => word.word).join("; ") || "none"}. Prefer authentic terms from this monthly vocabulary pool: ${monthlyVocabularyForPronunciation}. ${issue ? `The previous candidate set did not contain enough usable words. These named candidates were rejected: ${issue}. Do not repeat them; provide a fresh ordered set of AI-generated examples for the same target.` : ""}`;
+          const previousSoundTargets = pronunciationTargets.map((target) => `${target.ipa} (${target.label})`);
+          const prompt = `PHASE 4 — ONE PRONUNCIATION TARGET ONLY. Return exactly one genuine English pronunciationTargets object and leave coreTerms, expandedTerms and grammarTopics empty. Generate a real, precise phoneme or stress target for ${pronunciationSlots[soundIndex]}; its IPA, label and explanation must describe that target accurately and be distinct from prior targets: ${previousSoundTargets.join("; ") || "none"}. This is an unassigned month pool; do not output calendar day fields. Return at least ${Math.max(18, neededExamples * 2)} ordered candidate example words so the application can select ${neededExamples}. Every candidate must be a real word, no more than three syllables, and actually illustrate the target sound or stress pattern. Avoid all words already accepted for earlier targets: ${[...usedPronunciationWords].join("; ") || "none"}. For this same target, retain these already accepted examples and do not repeat them: ${acceptedTargetWords.map((word) => word.word).join("; ") || "none"}. Prefer authentic terms from this monthly vocabulary pool: ${monthlyVocabularyForPronunciation}. Use neutral workplace words; never invent cultural, historical or identity-based framing. ${issue ? `The previous candidate set did not contain enough usable words. These named candidates were rejected: ${issue}. Do not repeat them; provide a fresh ordered set of AI-generated examples for the same target.` : ""}`;
           const result = await runPhase(prompt, coreTerms, { vocabularyCount: 0, expandedVocabularyCount: 0, grammarTopicCount: 0, pronunciationSoundCount: 1 });
           if (result.coreTerms.length || result.expandedTerms.length || result.grammarTopics.length || result.pronunciationTargets.length !== 1) {
             issue = "response must contain one pronunciation target only";
             continue;
           }
           const candidate = result.pronunciationTargets[0]!;
+          if (pronunciationTargets.some((target) => normalizeMonthlyResourceWord(target.ipa) === normalizeMonthlyResourceWord(candidate.ipa))) {
+            issue = `target IPA ${candidate.ipa} duplicates an earlier pronunciation target`;
+            continue;
+          }
           targetTemplate ??= candidate;
           const selection = selectMonthlyPronunciationCandidates({ candidates: candidate.words, forbiddenWords: forbiddenForTarget, needed: neededExamples });
           acceptedTargetWords.push(...selection.selected);
