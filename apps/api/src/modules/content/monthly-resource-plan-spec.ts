@@ -277,8 +277,8 @@ export function validateMonthlyResourcePlanShape(
   };
   if (new Set(core).size !== core.length) errors.push("Core resources contain duplicate terms.");
   if (plan.coreTerms.some((item) => !singleHeadword(item.word))) errors.push("Every core resource must be one standalone lexical headword.");
-  if (plan.expandedTerms.some((item) => item.relation !== "collocation" && !singleHeadword(item.word))) errors.push("Expanded umbrella, synonym, antonym and word-family resources must be standalone lexical headwords.");
-  if (plan.expandedTerms.some((item) => item.relation === "collocation" && !workplacePhrase(item.word))) errors.push("Expanded collocations must be natural two-to-four-word workplace phrases.");
+  if (plan.expandedTerms.some((item) => !singleHeadword(item.word) && !workplacePhrase(item.word))) errors.push("Expanded resources must be standalone lexical headwords or natural two-to-four-word workplace phrases.");
+  if (plan.expandedTerms.filter((item) => !singleHeadword(item.word)).length > Math.floor(plan.expandedTerms.length * 0.25)) errors.push("Expanded phrases exceed the 25% ceiling; standalone words must remain the clear majority.");
   if (expanded.some((word) => core.includes(word))) errors.push("A core term is repeated in expanded resources.");
   if (expanded.length - new Set(expanded).size > Math.floor(expanded.length * 0.2)) errors.push("Expanded resources repeat more than 20% of the monthly total.");
   const coreIds = new Set(plan.coreTerms.map((item) => item.id));
@@ -289,6 +289,7 @@ export function validateMonthlyResourcePlanShape(
     const supports = plan.expandedTerms.filter((item) => item.relatesToCoreId === coreId);
     if (supports.length !== 3) errors.push(`Core ${coreId} needs exactly three support resources.`);
     if (new Set(supports.map((item) => item.relation)).size !== supports.length) errors.push(`Core ${coreId} repeats a support relation.`);
+    if (supports.filter((item) => !singleHeadword(item.word)).length > 1) errors.push(`Core ${coreId} has more than one multi-word support item.`);
   }
   if (plan.grammarTopics.length !== 2) errors.push("Expected two grammar topics.");
   if (plan.grammarTopics.some((topic) => topic.steps.length !== 3)) errors.push("Every grammar topic needs exactly three ordered steps.");

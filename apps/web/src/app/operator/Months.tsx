@@ -82,7 +82,7 @@ export function OperatorMonths({ month, todayMonth, overview, cefr, busy, readOn
   } : proposedResourceCounts;
   const resources = [
     { key: "core" as const, label: "Từ cốt lõi", count: framework?.resources?.coreTerms.length ?? 0, description: "Headword trọng tâm" },
-    { key: "expanded" as const, label: "Từ mở rộng", count: framework?.resources?.supportTerms.length ?? 0, description: "Ba liên kết đa dạng mỗi headword" },
+    { key: "expanded" as const, label: "Từ mở rộng", count: framework?.resources?.supportTerms.length ?? 0, description: "Ưu tiên từ đơn; tối đa một cụm mỗi từ" },
     { key: "grammar" as const, label: "Ngữ pháp", count: framework?.resources?.grammarTopics.length ?? 0, description: "Điểm ngữ pháp cần dùng" },
     { key: "sounds" as const, label: "Phát âm", count: framework?.resources?.sounds.length ?? 0, description: "Âm và ví dụ thực hành" }
   ];

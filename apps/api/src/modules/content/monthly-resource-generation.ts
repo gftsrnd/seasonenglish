@@ -35,8 +35,8 @@ export function selectMonthlySupportCandidates(input: {
     let reason = "";
     if (candidate.relatesToCoreId !== input.coreId) reason = "incorrect core relation";
     else if (input.coreWords.has(word)) reason = "matches a core term";
-    else if (candidate.relation !== "collocation" && !isSingleHeadword(candidate.word)) reason = "must be one lexical headword for this relation";
-    else if (candidate.relation === "collocation" && !isWorkplacePhrase(candidate.word)) reason = "collocation must be one natural two-to-four-word workplace phrase";
+    else if (!isSingleHeadword(candidate.word) && !isWorkplacePhrase(candidate.word)) reason = "must be one lexical headword or a natural two-to-four-word workplace phrase";
+    else if (!isSingleHeadword(candidate.word) && [...input.sameCoreWords].filter((item) => !isSingleHeadword(item)).length >= 1) reason = "allows only one phrase for this core; prefer standalone words";
     else if (input.sameCoreWords.has(word)) reason = "duplicates a selected support term for this core";
     else if (input.sameCoreRelations.has(candidate.relation)) reason = `duplicates the ${candidate.relation} relation for this core`;
     else if (chosen.has(word)) reason = "duplicates another candidate in this core batch";
