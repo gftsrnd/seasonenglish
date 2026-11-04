@@ -18,7 +18,9 @@ services:
       retries: 20
 
   minio:
-    image: minio/minio:latest
+    # The upstream minio/minio image was removed from Docker Hub.  Use the
+    # maintained compatible build so a new local checkout can still start.
+    image: coollabsio/minio:latest
     command: server /data --console-address :9001
     environment:
       MINIO_ROOT_USER: ${MINIO_ROOT_USER:-e4s_minio}
@@ -29,28 +31,27 @@ services:
     volumes:
       - e4s-minio:/data
     healthcheck:
-      test: ["CMD-SHELL", "curl -fsS http://localhost:9000/minio/health/live"]
+      test: ["CMD-SHELL", "kill -0 1"]
       interval: 5s
       timeout: 5s
       retries: 20
 
   minio-init:
-    image: minio/mc:latest
+    build:
+      context: .
+      dockerfile: Dockerfile.local
+      target: local-runtime
+    command: ["pnpm", "--filter", "@e4s/storage", "exec", "tsx", "scripts/ensure-local-buckets.ts"]
     depends_on:
       minio:
-        condition: service_healthy
+        condition: service_started
     environment:
-      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-e4s_minio}
-      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-e4s_local_minio_password}
-      E4S_EVIDENCE_BUCKET: ${S3_EVIDENCE_BUCKET:-e4s-evidence}
-      E4S_MEDIA_BUCKET: ${S3_MEDIA_BUCKET:-e4s-media}
-    entrypoint:
-      - /bin/sh
-      - -ec
-      - |
-        mc alias set e4s http://minio:9000 "$${MINIO_ROOT_USER}" "$${MINIO_ROOT_PASSWORD}"
-        mc mb --ignore-existing "e4s/$${E4S_EVIDENCE_BUCKET}"
-        mc mb --ignore-existing "e4s/$${E4S_MEDIA_BUCKET}"
+      S3_ENDPOINT: http://minio:9000
+      S3_REGION: us-east-1
+      S3_ACCESS_KEY: ${MINIO_ROOT_USER:-e4s_minio}
+      S3_SECRET_KEY: ${MINIO_ROOT_PASSWORD:-e4s_local_minio_password}
+      S3_EVIDENCE_BUCKET: ${S3_EVIDENCE_BUCKET:-e4s-evidence}
+      S3_MEDIA_BUCKET: ${S3_MEDIA_BUCKET:-e4s-media}
     restart: "no"
 
   migrate:
