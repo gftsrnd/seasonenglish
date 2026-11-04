@@ -288,6 +288,11 @@ function MonthsRoute({ client, readOnly, preview }: { client: OperatorApiClient;
         if (!result || !("blueprint" in result)) throw new Error("Không tải được bản nháp đề tháng.");
         return result;
       },
+      onComposeMonthlyFinal: async (id) => {
+        const result = await run(() => client.composeMonthlyFinal(id), "Đã mở bản nháp soạn tay đề tháng.");
+        if (!result || !("blueprint" in result)) throw new Error("Không tải được bản nháp soạn tay đề tháng.");
+        return result;
+      },
       onSaveMonthlyFinal: async (versionId, input) => { await run(() => client.updateMonthlyFinal(versionId, input)); },
       onPublishMonthlyFinal: async (versionId) => { await run(() => client.publishMonthlyFinal(versionId)); },
       onSynthesizeMonthlyFinalAudio: (input) => client.synthesizeAssessmentEdgeTts(input),

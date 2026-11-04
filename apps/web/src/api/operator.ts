@@ -86,6 +86,7 @@ export interface OperatorApiClient {
   getContentMonthResourceCheckpoint(month: string, cefr: CefrLevel): Promise<MonthlyResourceCheckpointView>;
   approveContentMonthFramework(id: string): Promise<void>;
   generateMonthlyFinal(id: string): Promise<{ versionId: string; status: "draft"; blueprint: AssessmentLevelFormUpdateInput }>;
+  composeMonthlyFinal(id: string): Promise<{ versionId: string; status: "draft"; blueprint: AssessmentLevelFormUpdateInput }>;
   updateMonthlyFinal(versionId: string, input: AssessmentLevelFormUpdateInput): Promise<{ versionId: string; status: "draft"; blueprint: AssessmentLevelFormUpdateInput }>;
   publishMonthlyFinal(versionId: string): Promise<{ versionId: string; publishedAt: string }>;
   synthesizeAssessmentEdgeTts(input: { text: string; voice: string }): Promise<{ filename: string; mimeType: string; base64: string }>;
@@ -185,6 +186,7 @@ export const operatorApiClient: OperatorApiClient = {
   getContentMonthResourceCheckpoint: (month, cefr) => request(`/api/v1/content/months/${encodeURIComponent(month)}/resources/checkpoint?cefr=${encodeURIComponent(cefr)}`),
   approveContentMonthFramework: async (id) => { await request(`/api/v1/content/month-frameworks/${encodeURIComponent(id)}/approve`, { method: "POST", body: "{}" }); },
   generateMonthlyFinal: (id) => request(`/api/v1/month-frameworks/${encodeURIComponent(id)}/monthly-final`, { method: "POST", body: "{}" }),
+  composeMonthlyFinal: (id) => request(`/api/v1/month-frameworks/${encodeURIComponent(id)}/monthly-final/manual`, { method: "POST", body: "{}" }),
   updateMonthlyFinal: (versionId, input) => request(`/api/v1/monthly-final-forms/${encodeURIComponent(versionId)}`, { method: "PUT", body: JSON.stringify(input) }),
   publishMonthlyFinal: (versionId) => request(`/api/v1/monthly-final-forms/${encodeURIComponent(versionId)}/publication`, { method: "POST", body: "{}" }),
   synthesizeAssessmentEdgeTts: (input) => request("/api/v1/assessment-audio/edge-tts", { method: "POST", body: JSON.stringify(input) }),

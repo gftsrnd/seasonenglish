@@ -32,13 +32,25 @@ import {
   weeklyLessonDayOutputJsonSchema,
   weeklyLessonDayOutputSchema,
   weeklyLessonsOutputJsonSchema,
-  weeklyLessonsOutputSchema
+  weeklyLessonsOutputSchema,
+  monthlyLessonDayOutputSchema
 } from "../src/schemas.js";
 
 const legacyCodes = [
   "objective", "instruction", "vocabulary", "grammar", "pronunciation",
   "listening", "reading", "writing", "speaking"
 ];
+
+describe("monthly lesson output contract", () => {
+  const codes = ["objective", "instruction", "vocabulary", "grammar", "pronunciation", "listening", "reading", "writing", "word_class", "word_use", "speaking"];
+  const output = (parts: string[]) => ({ lesson: { title: "Monthly lesson", parts: parts.map((code) => ({ code, content: {} })) } });
+
+  it("accepts a requested repair subset but rejects duplicate part codes", () => {
+    expect(monthlyLessonDayOutputSchema.safeParse(output(codes)).success).toBe(true);
+    expect(monthlyLessonDayOutputSchema.safeParse(output(["speaking"])).success).toBe(true);
+    expect(monthlyLessonDayOutputSchema.safeParse(output([...codes.slice(0, -1), "word_use"])).success).toBe(false);
+  });
+});
 
 const enrichedCodes = [
   "objective", "instruction", "vocabulary", "grammar", "pronunciation",

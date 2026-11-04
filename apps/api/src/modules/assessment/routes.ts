@@ -33,6 +33,7 @@ import {
   type StoredAssessmentTask
 } from "@e4s/database";
 import { calculateAutomaticSectionScore, monthlyFinalReleaseReadiness } from "@e4s/domain/assessment";
+import { validateMonthlyCurriculum, type MonthlyCurriculumContract } from "@e4s/domain/monthly";
 import { randomUUID } from "node:crypto";
 import type { FastifyInstance } from "fastify";
 import type { Pool, PoolClient } from "pg";
@@ -197,7 +198,32 @@ export function registerAssessmentRoutes(app: FastifyInstance, pool: Pool, aiRun
     if (!row) return reply.code(404).send({ code: "MONTHLY_FINAL_FRAMEWORK_NOT_APPROVED" });
     if (row.today !== row.exam_date) return reply.code(409).send({ code: "MONTHLY_FINAL_NOT_ON_EXAM_DATE", examDate: row.exam_date, today: row.today });
     try {
-      const blueprint = buildMonthlyFinalDraft(row.curriculum_contract as Parameters<typeof buildMonthlyFinalDraft>[0]);
+      const contract = row.curriculum_contract as MonthlyCurriculumContract;
+      const issues = validateMonthlyCurriculum(contract);
+      if (issues.length) return reply.code(409).send({ code: "MONTHLY_FRAMEWORK_PLAN_INVALID", issues });
+      const blueprint = buildMonthlyFinalDraft(contract);
+      return reply.code(201).send(await createMonthlyFinalDraft(pool, actorId, row.organization_id, blueprint));
+    } catch (error) {
+      return reply.code(409).send({ code: assessmentErrorCode(error, "MONTHLY_FINAL_CREATE_FAILED") });
+    }
+  });
+
+  app.post("/api/v1/month-frameworks/:frameworkId/monthly-final/manual", { preHandler: monthlyFinalOperators }, async (request, reply) => {
+    const frameworkId = z.uuid().safeParse((request.params as { frameworkId?: string }).frameworkId);
+    if (!frameworkId.success) return reply.code(400).send({ code: "MONTHLY_FINAL_FRAMEWORK_INVALID" });
+    const actorId = request.e4sSession!.user.id;
+    const context = await pool.query<{ organization_id: string; curriculum_contract: unknown }>(
+      `select operator.organization_id, mf.curriculum_contract
+       from users operator join month_frameworks mf on mf.id = $2
+       join program_months pm on pm.id = mf.program_month_id and pm.organization_id = operator.organization_id
+       where operator.id = $1 and operator.role = 'operator' and mf.status = 'approved'`, [actorId, frameworkId.data]);
+    const row = context.rows[0];
+    if (!row) return reply.code(404).send({ code: "MONTHLY_FINAL_FRAMEWORK_NOT_APPROVED" });
+    try {
+      const contract = row.curriculum_contract as MonthlyCurriculumContract;
+      const issues = validateMonthlyCurriculum(contract);
+      if (issues.length) return reply.code(409).send({ code: "MONTHLY_FRAMEWORK_PLAN_INVALID", issues });
+      const blueprint = buildMonthlyFinalDraft(contract);
       return reply.code(201).send(await createMonthlyFinalDraft(pool, actorId, row.organization_id, blueprint));
     } catch (error) {
       return reply.code(409).send({ code: assessmentErrorCode(error, "MONTHLY_FINAL_CREATE_FAILED") });

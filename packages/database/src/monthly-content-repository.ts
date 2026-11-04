@@ -401,6 +401,8 @@ export class MonthlyContentRepository {
             [randomUUID(), frameworkId, day.lessonNumber, day.date, scopeHash]);
         }
       }
+      const planErrors = validateMonthlyCurriculum(contract);
+      if (planErrors.length) throw Object.assign(new Error("MONTHLY_RESOURCE_PLAN_INVALID"), { code: "MONTHLY_RESOURCE_PLAN_INVALID", issues: planErrors });
       const result = await client.query<{ id: string }>(
       `update month_frameworks mf
        set status = 'approved', approved_by = $2, approved_at = now(), updated_at = now()
@@ -845,6 +847,8 @@ export class MonthlyContentRepository {
     const framework = result.rows[0];
     if (!framework) throw new Error("Monthly framework was not found or has been retired");
     if (!("daySpecs" in framework.curriculum_contract)) throw new Error("Monthly resource pool is still a draft and has no lesson allocation");
+    const planErrors = validateMonthlyCurriculum(framework.curriculum_contract);
+    if (planErrors.length) throw Object.assign(new Error("MONTHLY_FRAMEWORK_PLAN_INVALID"), { code: "MONTHLY_FRAMEWORK_PLAN_INVALID", issues: planErrors });
     return framework.curriculum_contract;
   }
 
@@ -988,9 +992,7 @@ function monthlyResourceRoadmap(contract: MonthlyCurriculumContract | MonthlyRes
       expandedTermIds: day.expandedTermIds,
       reviewTermIds: day.reviewTermIds,
       reviewExpandedTermIds: day.reviewExpandedTermIds,
-      primarySkillFocus: day.primarySkillFocus,
-      writingFocus: day.writingFocus,
-      speakingFocus: day.speakingFocus,
+      skillExercises: day.skillExercises,
       grammarStepIds: day.grammarStepIds ?? [day.grammarStepId],
       soundId: day.soundId,
       ...(day.pronunciationSlot ? { pronunciationSlot: day.pronunciationSlot } : {}),

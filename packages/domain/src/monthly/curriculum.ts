@@ -32,10 +32,21 @@ export interface SupportTerm {
   word: string;
   meaning: string;
   type: string;
+  relation: MonthlySupportRelation;
   source: "example" | "family" | "synonym" | "antonym" | "group" | "manual";
   component: "expanded";
   dayNumber: number;
   relatedCoreTermId: string;
+}
+
+export const MONTHLY_SUPPORT_RELATIONS = ["umbrella", "synonym", "antonym", "word_family", "collocation"] as const;
+export type MonthlySupportRelation = (typeof MONTHLY_SUPPORT_RELATIONS)[number];
+export const MONTHLY_EXERCISE_CODES = ["listening", "reading", "writing", "word_class", "word_use", "speaking"] as const;
+export type MonthlyExerciseCode = (typeof MONTHLY_EXERCISE_CODES)[number];
+export interface MonthlySkillExercisePlan {
+  exerciseCode: MonthlyExerciseCode;
+  focus: string;
+  resourceIds: string[];
 }
 
 /** Editable resources before an operator locks their monthly lesson allocation. */
@@ -100,9 +111,7 @@ export interface MonthlyDaySpec {
   expandedTermIds: string[];
   reviewTermIds: string[];
   reviewExpandedTermIds: string[];
-  primarySkillFocus: "writing" | "speaking" | null;
-  writingFocus: string | null;
-  speakingFocus: string | null;
+  skillExercises: MonthlySkillExercisePlan[];
   grammarStepId: string;
   grammarStepIds?: string[];
   soundId: string;
@@ -140,10 +149,9 @@ export function recommendedMonthlyResourceCriteria(month: string, cefr: CefrLeve
   void cefr;
   return {
     vocabularyCount: newLessonCount * 3,
-    // Every new lesson needs a usable relation set: three umbrella terms,
-    // four synonyms/antonyms, and two word-family terms. These belong to the
-    // lesson day, rather than being a thin add-on to an individual core word.
-    expandedVocabularyCount: newLessonCount * 9,
+    // Every core headword has nine linked supports, so each new day with three
+    // core words receives 27 related resources.
+    expandedVocabularyCount: newLessonCount * 27,
     grammarTopicCount: 2,
     pronunciationSoundCount: 4
   };
@@ -200,6 +208,7 @@ export function buildMonthlyCurriculum(input: MonthlyCurriculumInput): MonthlyCu
   if (input.coreTerms.some((term) => !isSingleEnglishHeadword(term.word))) throw new RangeError("Every core resource must be one standalone English headword");
   const duplicateCore = duplicateOf(input.coreTerms.map((term) => normalize(term.word)));
   if (duplicateCore) throw new RangeError(`Duplicate core term: ${duplicateCore}`);
+  if (input.supportTerms.length !== expectedCoreCount * 9) throw new RangeError(`Expected ${expectedCoreCount * 9} expanded terms for ${input.month}`);
   if (input.supportTerms.some((term) => !isSingleEnglishHeadword(term.word) && !isNaturalLengthEnglishPhrase(term.word))) throw new RangeError("Expanded resources must be English headwords or two-to-four-word expressions");
   if (input.supportTerms.filter((term) => !isSingleEnglishHeadword(term.word)).length > Math.floor(input.supportTerms.length * 0.25)) throw new RangeError("Expanded expressions exceed the 25% monthly limit");
   if (expandedRepeatCount(input.supportTerms.map((term) => normalize(term.word))) > Math.floor(input.supportTerms.length * 0.2)) {
@@ -210,6 +219,11 @@ export function buildMonthlyCurriculum(input: MonthlyCurriculumInput): MonthlyCu
   if (input.sounds.length !== 4) throw new RangeError("Monthly curriculum needs exactly four pronunciation targets");
   if (input.supportTerms.some((term) => !Number.isInteger(term.dayNumber) || term.dayNumber < 1 || term.dayNumber > calendar.lessonCount)) throw new RangeError("Every expanded term must belong to a valid monthly day");
   if (input.grammarTopics.some((topic) => topic.steps.length !== 3)) throw new RangeError("Every grammar topic needs exactly three ordered steps");
+  for (const core of input.coreTerms) {
+    const related = input.supportTerms.filter((term) => term.relatedCoreTermId === core.id);
+    if (related.length !== 9 || !hasBalancedSupportRelations(related)) throw new RangeError(`Core term ${core.id} must distribute nine supports across all five relation groups`);
+    if (related.filter((term) => !isSingleEnglishHeadword(term.word)).length > 1) throw new RangeError(`Core term ${core.id} may have at most one multi-word expanded expression`);
+  }
 
   let newLessonOrdinal = 0;
   let pendingReviewCoreIds: string[] = [];
@@ -231,38 +245,15 @@ export function buildMonthlyCurriculum(input: MonthlyCurriculumInput): MonthlyCu
       pendingReviewExpandedIds.push(...expandedTermIds);
     }
     const assignmentOrdinal = Math.max(1, newLessonOrdinal);
-    const grammarSteps = assignmentOrdinal <= 6
-      ? [input.grammarTopics[0]!.steps[Math.min(2, Math.floor((assignmentOrdinal - 1) / 2))]!]
-      : assignmentOrdinal <= 12
-        ? [input.grammarTopics[1]!.steps[Math.min(2, Math.floor((assignmentOrdinal - 7) / 2))]!]
-        : assignmentOrdinal <= 15
-          ? [input.grammarTopics[0]!.steps[2]!, input.grammarTopics[1]!.steps[2]!]
-          : [input.grammarTopics[(assignmentOrdinal - 16) % 2]!.steps[2]!];
+    const grammarSteps = expectedGrammarSteps(assignmentOrdinal, input.grammarTopics);
     const step = grammarSteps[0]!;
-    const soundIndex = assignmentOrdinal <= 12 ? Math.floor((assignmentOrdinal - 1) / 3) : (assignmentOrdinal - 13) % 4;
+    const soundIndex = pronunciationSoundIndex(assignmentOrdinal);
     const sound = input.sounds[soundIndex]!;
-    const pronunciationSlot: NonNullable<MonthlyDaySpec["pronunciationSlot"]> = assignmentOrdinal <= 12
-      ? (["P1", "P2", "P3", "P4"] as const)[Math.ceil(assignmentOrdinal / 3) - 1]!
-      : assignmentOrdinal <= 15
-        ? (["K1", "K2", "K3"] as const)[assignmentOrdinal - 13]!
-        : (["M1", "M2", "M3"] as const)[assignmentOrdinal - 16]!;
+    const pronunciationSlot = pronunciationSlotFor(assignmentOrdinal);
     const exampleIds = sound.examples.slice(0, 3).map((example) => example.id);
     if (exampleIds.length !== 3) throw new RangeError(`Sound ${sound.id} needs three unused examples for lesson ${lessonNumber}`);
-    const primarySkillFocus: MonthlyDaySpec["primarySkillFocus"] = kind === "new" ? (newLessonOrdinal % 2 === 1 ? "writing" : "speaking") : null;
-    const grammarLabel = grammarSteps.map((grammarStep) => grammarStep.focus).join(" + ");
-    const coreWords = input.coreTerms.filter((term) => coreTermIds.includes(term.id)).map((term) => term.word).join(", ");
-    const expandedWords = input.supportTerms.filter((term) => coreTermIds.includes(term.relatedCoreTermId)).map((term) => term.word).join(", ");
-    const writingFocus = kind === "new"
-      ? primarySkillFocus === "writing"
-        ? `Write 3–4 sentences about “${input.theme.communicationGoal}” using today’s core terms (${coreWords}), at least two linked expanded terms (${expandedWords}), and the assigned grammar focus (${grammarLabel}).`
-        : `Write one short sentence using one of today’s core terms (${coreWords}), one linked expanded term (${expandedWords}), and the assigned grammar focus (${grammarLabel}).`
-      : null;
-    const speakingFocus = kind === "new"
-      ? primarySkillFocus === "speaking"
-        ? `Give a 30–45 second spoken update about “${input.theme.communicationGoal}” using today’s core terms (${coreWords}), at least two linked expanded terms (${expandedWords}), and the assigned grammar focus (${grammarLabel}).`
-        : `Say a 1–2 sentence update using one of today’s core terms (${coreWords}), one linked expanded term (${expandedWords}), and the assigned pronunciation target (${sound.label}).`
-      : null;
-    return { lessonNumber, date, kind, coreTermIds, expandedTermIds, reviewTermIds, reviewExpandedTermIds, primarySkillFocus, writingFocus, speakingFocus, grammarStepId: step.id, grammarStepIds: grammarSteps.map((grammarStep) => grammarStep.id), soundId: sound.id, pronunciationSlot, pronunciationExampleIds: exampleIds };
+    const skillExercises = buildMonthlySkillExercises(kind, kind === "new" ? coreTermIds : reviewTermIds, kind === "new" ? expandedTermIds : reviewExpandedTermIds);
+    return { lessonNumber, date, kind, coreTermIds, expandedTermIds, reviewTermIds, reviewExpandedTermIds, skillExercises, grammarStepId: step.id, grammarStepIds: grammarSteps.map((grammarStep) => grammarStep.id), soundId: sound.id, pronunciationSlot, pronunciationExampleIds: exampleIds };
   });
 
   const newLessonNumbers = calendar.effectiveDays.flatMap((_date, index) => monthlyDayKind(index + 1, calendar.lessonCount) === "new" ? [index + 1] : []);
@@ -283,7 +274,7 @@ export function planMonthlyResourcePool(pool: MonthlyResourcePoolContract): Mont
   const expectedCoreCount = newDays.length * 3;
   const errors: string[] = [];
   if (pool.coreTerms.length !== expectedCoreCount) errors.push(`Expected ${expectedCoreCount} core terms, got ${pool.coreTerms.length}.`);
-  if (pool.supportTerms.length !== expectedCoreCount * 3) errors.push(`Expected ${expectedCoreCount * 3} expanded terms, got ${pool.supportTerms.length}.`);
+  if (pool.supportTerms.length !== expectedCoreCount * 9) errors.push(`Expected ${expectedCoreCount * 9} expanded terms, got ${pool.supportTerms.length}.`);
   const normalizedCore = pool.coreTerms.map((term) => normalize(term.word));
   if (pool.coreTerms.some((term) => !isSingleEnglishHeadword(term.word))) errors.push("Every core resource must be one standalone English headword.");
   if (duplicateOf(normalizedCore)) errors.push(`Duplicate core term: ${duplicateOf(normalizedCore)}.`);
@@ -302,7 +293,9 @@ export function planMonthlyResourcePool(pool: MonthlyResourcePoolContract): Mont
   for (const support of pool.supportTerms) supportCounts.set(support.relatedCoreTermId, (supportCounts.get(support.relatedCoreTermId) ?? 0) + 1);
   for (const support of phraseSupports) phraseCountByCore.set(support.relatedCoreTermId, (phraseCountByCore.get(support.relatedCoreTermId) ?? 0) + 1);
   for (const core of pool.coreTerms) {
-    if (supportCounts.get(core.id) !== 3) errors.push(`Core term ${core.id} must have exactly three related expanded terms.`);
+    if (supportCounts.get(core.id) !== 9) errors.push(`Core term ${core.id} must have exactly nine related expanded terms.`);
+    const linkedTerms = pool.supportTerms.filter((term) => term.relatedCoreTermId === core.id);
+    if (linkedTerms.length === 9 && !hasBalancedSupportRelations(linkedTerms)) errors.push(`Core term ${core.id} must distribute nine supports across all five relation groups.`);
     if ((phraseCountByCore.get(core.id) ?? 0) > 1) errors.push(`Core term ${core.id} may have at most one multi-word expanded expression.`);
   }
   if (expandedRepeatCount(pool.supportTerms.map((term) => normalize(term.word))) > Math.floor(pool.supportTerms.length * 0.2)) {
@@ -322,6 +315,7 @@ export function planMonthlyResourcePool(pool: MonthlyResourcePoolContract): Mont
     word: term.word,
     meaning: term.meaning,
     type: term.type,
+    relation: term.relation,
     source: term.source,
     relatedCoreTermId: term.relatedCoreTermId,
     dayNumber: dayByCoreId.get(term.relatedCoreTermId)!
@@ -349,8 +343,8 @@ export function backfillMonthlyCurriculumPlan(source: unknown): MonthlyCurriculu
     daySpecs: Array<Partial<MonthlyDaySpec> & Pick<MonthlyDaySpec, "lessonNumber" | "date" | "kind" | "coreTermIds" | "reviewTermIds" | "grammarStepId" | "soundId" | "pronunciationExampleIds">>;
   };
   const complete = legacy.supportTerms.every((term) => Boolean(term.relatedCoreTermId))
-    && legacy.daySpecs.every((day) => Array.isArray(day.expandedTermIds) && Array.isArray(day.reviewExpandedTermIds)
-      && (day.kind === "review" || (day.primarySkillFocus === "writing" || day.primarySkillFocus === "speaking") && Boolean(day.writingFocus?.trim()) && Boolean(day.speakingFocus?.trim())));
+    && legacy.supportTerms.every((term) => Boolean(term.relation))
+    && legacy.daySpecs.every((day) => Array.isArray(day.expandedTermIds) && Array.isArray(day.reviewExpandedTermIds) && Array.isArray(day.skillExercises));
   if (complete) {
     const contract = source as MonthlyCurriculumContract;
     const errors = validateMonthlyCurriculum(contract);
@@ -361,8 +355,8 @@ export function backfillMonthlyCurriculumPlan(source: unknown): MonthlyCurriculu
   const calendar = buildMonthlyCalendar(legacy.month);
   const expectedCoreCount = calendar.effectiveDays
     .filter((_date, index) => monthlyDayKind(index + 1, calendar.lessonCount) === "new").length * 3;
-  if (legacy.coreTerms.length !== expectedCoreCount || legacy.supportTerms.length !== expectedCoreCount * 3) {
-    throw new RangeError("Legacy plan backfill requires complete monthly core and expanded pools");
+  if (legacy.coreTerms.length !== expectedCoreCount || legacy.supportTerms.length !== expectedCoreCount * 9) {
+    throw new RangeError("Legacy plan backfill requires a complete nine-supports-per-core pool; generate a corrected resource revision instead");
   }
   const cefrPrefix = legacy.cefr.toLocaleLowerCase("en");
   const coreById = new Map(legacy.coreTerms.map((term) => [term.id, term]));
@@ -370,13 +364,15 @@ export function backfillMonthlyCurriculumPlan(source: unknown): MonthlyCurriculu
     if (term.id !== `${cefrPrefix}-core-${index + 1}`) throw new RangeError("Core IDs do not prove the original ordered monthly allocation");
   }
   const supportsWithLinks = legacy.supportTerms.map((term, index) => {
-    const expectedCoreId = `${cefrPrefix}-core-${Math.floor(index / 3) + 1}`;
+    const expectedCoreId = `${cefrPrefix}-core-${Math.floor(index / 9) + 1}`;
     const supportOrdinal = Number(term.id.match(new RegExp(`^${cefrPrefix}-expanded-(\\d+)$`, "u"))?.[1]);
     if (supportOrdinal !== index + 1) throw new RangeError("Expanded IDs do not prove the original three-per-core order");
     if (term.relatedCoreTermId && term.relatedCoreTermId !== expectedCoreId) throw new RangeError(`Expanded term ${term.id} has an unexpected core link`);
     const linkedCore = coreById.get(term.relatedCoreTermId ?? expectedCoreId);
     if (!linkedCore || term.dayNumber !== linkedCore.dayNumber) throw new RangeError(`Expanded term ${term.id} is not on its linked core day`);
-    return { ...term, relatedCoreTermId: term.relatedCoreTermId ?? expectedCoreId };
+    const relation = term.relation ?? relationFromLegacySource(term.source);
+    if (!relation) throw new RangeError(`Expanded term ${term.id} has no recoverable semantic relation`);
+    return { ...term, relation, relatedCoreTermId: term.relatedCoreTermId ?? expectedCoreId };
   });
   const pool: MonthlyResourcePoolContract = {
     month: legacy.month,
@@ -384,7 +380,7 @@ export function backfillMonthlyCurriculumPlan(source: unknown): MonthlyCurriculu
     version: legacy.version,
     theme: legacy.theme,
     coreTerms: legacy.coreTerms.map(({ id, word, meaning, type, ipa, source, component }) => ({ id, word, meaning, type, ipa, source, component })),
-    supportTerms: supportsWithLinks.map(({ id, word, meaning, type, source, relatedCoreTermId }) => ({ id, word, meaning, type, source, component: "expanded", relatedCoreTermId })),
+    supportTerms: supportsWithLinks.map(({ id, word, meaning, type, relation, source, relatedCoreTermId }) => ({ id, word, meaning, type, relation, source, component: "expanded", relatedCoreTermId })),
     grammarTopics: legacy.grammarTopics,
     sounds: legacy.sounds
   };
@@ -394,6 +390,9 @@ export function backfillMonthlyCurriculumPlan(source: unknown): MonthlyCurriculu
 export function validateMonthlyCurriculum(contract: MonthlyCurriculumContract): string[] {
   const calendar = buildMonthlyCalendar(contract.month);
   const errors: string[] = [];
+  const expectedNewDays = calendar.effectiveDays.filter((_date, index) => monthlyDayKind(index + 1, calendar.lessonCount) === "new").length;
+  if (contract.coreTerms.length !== expectedNewDays * 3) errors.push(`Monthly plan needs exactly three core words for each of ${expectedNewDays} new lessons`);
+  if (contract.supportTerms.length !== contract.coreTerms.length * 9) errors.push("Monthly plan needs exactly nine linked expanded terms per core word");
   const duplicateCore = duplicateOf(contract.coreTerms.map((term) => normalize(term.word)));
   if (duplicateCore) errors.push(`Duplicate core term: ${duplicateCore}`);
   if (duplicateOf(contract.coreTerms.map((term) => term.id))) errors.push("Core resource IDs must be unique");
@@ -410,9 +409,17 @@ export function validateMonthlyCurriculum(contract: MonthlyCurriculumContract): 
   }
   if (contract.grammarTopics.length !== 2) errors.push("Monthly curriculum needs exactly two grammar topics");
   if (contract.sounds.length !== 4) errors.push("Monthly curriculum needs exactly four pronunciation targets");
+  if (duplicateOf(contract.grammarTopics.flatMap((topic) => topic.steps.map((step) => step.id)))) errors.push("Grammar step IDs must be unique");
   for (const topic of contract.grammarTopics) {
-    if (!topic.title.trim() || topic.steps.length === 0 || topic.steps.some((step) => !step.focus.trim() || !step.formula.trim() || !step.usage.trim() || step.examples.length === 0 || step.examples.some((example) => !example.trim()))) {
+    if (!topic.title.trim() || topic.steps.length !== 3 || duplicateOf(topic.steps.map((step) => step.focus.trim().toLocaleLowerCase("en-US"))) || topic.steps.some((step) => !step.focus.trim() || !step.formula.trim() || !step.usage.trim() || step.examples.length < 3 || step.examples.some((example) => !example.trim()))) {
       errors.push(`Grammar topic ${topic.id} needs a concrete form, use, step, and example`);
+    }
+  }
+  if (duplicateOf(contract.sounds.map((sound) => sound.id))) errors.push("Pronunciation target IDs must be unique");
+  if (duplicateOf(contract.sounds.map((sound) => sound.ipa.trim().toLocaleLowerCase("en-US")))) errors.push("Monthly resources need four distinct pronunciation targets");
+  for (const sound of contract.sounds) {
+    if (!sound.ipa.trim().startsWith("/") || !sound.ipa.trim().endsWith("/") || !sound.label.trim() || sound.examples.length < 3 || sound.examples.some((example) => !example.word.trim() || !example.ipa.trim())) {
+      errors.push(`Pronunciation target ${sound.id} needs a sound goal and at least three real examples`);
     }
   }
   const coreById = new Set(contract.coreTerms.map((term) => term.id));
@@ -425,8 +432,6 @@ export function validateMonthlyCurriculum(contract: MonthlyCurriculumContract): 
   const supportIdsByCore = new Map<string, string[]>();
   let pendingReviewCoreIds: string[] = [];
   let pendingReviewExpandedIds: string[] = [];
-  let writingPrimaryCount = 0;
-  let speakingPrimaryCount = 0;
   for (const term of contract.coreTerms) {
     coreByDay.set(term.dayNumber, [...(coreByDay.get(term.dayNumber) ?? []), term.id]);
     if (term.source !== "core_registry" || term.component !== "core") errors.push(`Core term ${term.id} has invalid source or component`);
@@ -441,13 +446,23 @@ export function validateMonthlyCurriculum(contract: MonthlyCurriculumContract): 
     supportIdsByCore.set(term.relatedCoreTermId, [...(supportIdsByCore.get(term.relatedCoreTermId) ?? []), term.id]);
   }
   for (const core of contract.coreTerms) {
-    if ((supportIdsByCore.get(core.id) ?? []).length !== 3) errors.push(`Core term ${core.id} needs exactly three linked expanded terms`);
+    const related = contract.supportTerms.filter((term) => term.relatedCoreTermId === core.id);
+    if ((supportIdsByCore.get(core.id) ?? []).length !== 9) errors.push(`Core term ${core.id} needs exactly nine linked expanded terms`);
+    if (related.length === 9 && !hasBalancedSupportRelations(related)) errors.push(`Core term ${core.id} must distribute nine supports across all five relation groups`);
+    if (related.filter((term) => !isSingleEnglishHeadword(term.word)).length > 1) errors.push(`Core term ${core.id} may have at most one multi-word expanded expression`);
   }
   if (contract.daySpecs.length !== calendar.lessonCount) errors.push("Day specification count does not match monthly calendar");
+  let newLessonOrdinal = 0;
   for (const [index, day] of contract.daySpecs.entries()) {
     if (day.lessonNumber !== index + 1 || day.date !== calendar.effectiveDays[index]) errors.push(`Lesson ${day.lessonNumber} does not match its calendar date`);
     const expectedKind = monthlyDayKind(day.lessonNumber, calendar.lessonCount);
     if (day.kind !== expectedKind) errors.push(`Lesson ${day.lessonNumber} must be ${expectedKind}`);
+    if (day.kind === "new") newLessonOrdinal += 1;
+    const roadmapOrdinal = Math.max(1, newLessonOrdinal);
+    const expectedGrammarIds = contract.grammarTopics.length === 2 ? expectedGrammarSteps(roadmapOrdinal, contract.grammarTopics).map((step) => step.id) : [];
+    if (JSON.stringify(day.grammarStepIds ?? [day.grammarStepId]) !== JSON.stringify(expectedGrammarIds) || day.grammarStepId !== expectedGrammarIds[0]) errors.push(`Lesson ${day.lessonNumber} does not follow the monthly grammar progression`);
+    const expectedSound = contract.sounds[pronunciationSoundIndex(roadmapOrdinal)];
+    if (day.soundId !== expectedSound?.id || day.pronunciationSlot !== pronunciationSlotFor(roadmapOrdinal)) errors.push(`Lesson ${day.lessonNumber} does not follow the pronunciation roadmap`);
     if (!grammarStepIds.has(day.grammarStepId) || (day.grammarStepIds ?? [day.grammarStepId]).some((id) => !grammarStepIds.has(id))) errors.push(`Lesson ${day.lessonNumber} references an unlocked grammar step`);
     const sound = soundsById.get(day.soundId);
     if (!sound) errors.push(`Lesson ${day.lessonNumber} references an unlocked sound`);
@@ -455,7 +470,7 @@ export function validateMonthlyCurriculum(contract: MonthlyCurriculumContract): 
     if (day.pronunciationExampleIds.some((id) => !soundExampleIds.has(id))) errors.push(`Lesson ${day.lessonNumber} references an unlocked sound example`);
     if (day.kind === "new" && day.coreTermIds.length !== 3) errors.push(`New lesson ${day.lessonNumber} needs three core terms`);
     if (day.kind === "new" && duplicateOf(day.coreTermIds)) errors.push(`New lesson ${day.lessonNumber} repeats a core term`);
-    if (day.kind === "new" && day.expandedTermIds.length !== 9) errors.push(`New lesson ${day.lessonNumber} needs nine linked expanded terms`);
+    if (day.kind === "new" && day.expandedTermIds.length !== 27) errors.push(`New lesson ${day.lessonNumber} needs 27 linked expanded terms`);
     if (day.kind === "new" && duplicateOf(day.expandedTermIds)) errors.push(`New lesson ${day.lessonNumber} repeats an expanded term`);
     if (day.kind === "review" && day.coreTermIds.length !== 0) errors.push(`Review lesson ${day.lessonNumber} cannot introduce core terms`);
     if (day.kind === "review" && day.expandedTermIds.length !== 0) errors.push(`Review lesson ${day.lessonNumber} cannot introduce expanded terms`);
@@ -463,12 +478,9 @@ export function validateMonthlyCurriculum(contract: MonthlyCurriculumContract): 
     if (day.kind === "new") {
       const expectedExpandedIds = day.coreTermIds.flatMap((id) => supportIdsByCore.get(id) ?? []);
       if (JSON.stringify([...day.expandedTermIds].sort()) !== JSON.stringify(expectedExpandedIds.sort())) errors.push(`New lesson ${day.lessonNumber} does not match its linked expanded term assignments`);
-      if (day.primarySkillFocus !== "writing" && day.primarySkillFocus !== "speaking") errors.push(`New lesson ${day.lessonNumber} needs a primary writing or speaking focus`);
-      if (!day.writingFocus?.trim() || !day.speakingFocus?.trim()) errors.push(`New lesson ${day.lessonNumber} needs explicit writing and speaking tasks`);
-      if (day.primarySkillFocus === "writing") writingPrimaryCount += 1;
-      if (day.primarySkillFocus === "speaking") speakingPrimaryCount += 1;
+      validateSkillExercises(day, [...day.coreTermIds, ...day.expandedTermIds], errors);
     } else {
-      if (day.primarySkillFocus !== null || day.writingFocus !== null || day.speakingFocus !== null) errors.push(`Review lesson ${day.lessonNumber} must reuse prior outputs and cannot add new writing or speaking tasks`);
+      validateSkillExercises(day, [...day.reviewTermIds, ...day.reviewExpandedTermIds], errors);
       if (JSON.stringify([...day.reviewTermIds].sort()) !== JSON.stringify([...pendingReviewCoreIds].sort())) errors.push(`Review lesson ${day.lessonNumber} must cover the core terms since the previous review`);
       if (JSON.stringify([...day.reviewExpandedTermIds].sort()) !== JSON.stringify([...pendingReviewExpandedIds].sort())) errors.push(`Review lesson ${day.lessonNumber} must cover the linked expanded terms since the previous review`);
       pendingReviewCoreIds = [];
@@ -485,7 +497,6 @@ export function validateMonthlyCurriculum(contract: MonthlyCurriculumContract): 
     for (const termId of day.reviewExpandedTermIds) if (!contract.supportTerms.some((term) => term.id === termId && seenNew.has(term.relatedCoreTermId))) errors.push(`Review expanded term ${termId} was not introduced before lesson ${day.lessonNumber}`);
     if (day.pronunciationExampleIds.length !== 3) errors.push(`Lesson ${day.lessonNumber} needs three pronunciation examples`);
   }
-  if (Math.abs(writingPrimaryCount - speakingPrimaryCount) > 1) errors.push("New lessons must balance writing and speaking primary focus within one lesson");
   if (seenNew.size !== contract.coreTerms.length) errors.push("Every core term must be introduced exactly once");
   const assignedGrammarSteps = new Set(contract.daySpecs.flatMap((day) => day.grammarStepIds ?? [day.grammarStepId]));
   for (const id of grammarStepIds) if (!assignedGrammarSteps.has(id)) errors.push(`Grammar step ${id} is not assigned to a lesson`);
@@ -541,6 +552,29 @@ export function monthlyDayKind(lessonNumber: number, lessonCount: number): "new"
   return "new";
 }
 
+function hasBalancedSupportRelations(terms: readonly Pick<SupportTerm, "relation">[]): boolean {
+  const counts = new Map<MonthlySupportRelation, number>();
+  for (const term of terms) counts.set(term.relation, (counts.get(term.relation) ?? 0) + 1);
+  return MONTHLY_SUPPORT_RELATIONS.every((relation) => (counts.get(relation) ?? 0) >= 1 && (counts.get(relation) ?? 0) <= 2);
+}
+
+function expectedGrammarSteps(ordinal: number, topics: readonly GrammarTopic[]): GrammarStep[] {
+  if (ordinal <= 6) return [topics[0]!.steps[Math.min(2, Math.floor((ordinal - 1) / 2))]!];
+  if (ordinal <= 12) return [topics[1]!.steps[Math.min(2, Math.floor((ordinal - 7) / 2))]!];
+  if (ordinal <= 16) return [topics[0]!.steps[2]!, topics[1]!.steps[2]!];
+  return [topics[(ordinal - 16) % 2]!.steps[2]!];
+}
+
+function pronunciationSoundIndex(ordinal: number): number {
+  return ordinal <= 12 ? Math.floor((ordinal - 1) / 3) : (ordinal - 13) % 4;
+}
+
+function pronunciationSlotFor(ordinal: number): NonNullable<MonthlyDaySpec["pronunciationSlot"]> {
+  if (ordinal <= 12) return (["P1", "P2", "P3", "P4"] as const)[Math.ceil(ordinal / 3) - 1]!;
+  if (ordinal <= 15) return (["K1", "K2", "K3"] as const)[ordinal - 13]!;
+  return (["M1", "M2", "M3"] as const)[ordinal - 16]!;
+}
+
 function duplicateOf(values: readonly string[]): string | null {
   const seen = new Set<string>();
   for (const value of values) {
@@ -552,6 +586,50 @@ function duplicateOf(values: readonly string[]): string | null {
 
 function expandedRepeatCount(values: readonly string[]): number {
   return values.length - new Set(values).size;
+}
+
+const MONTHLY_EXERCISE_FOCI: Record<MonthlyExerciseCode, { lesson: string; review: string }> = {
+  listening: { lesson: "Nghe và nhận diện thông tin gắn với tài nguyên ngày học.", review: "Nghe lại và nhận diện tài nguyên đã học trong tuần." },
+  reading: { lesson: "Đọc và tìm thông tin dùng các tài nguyên ngày học.", review: "Đọc lại và tìm thông tin trong nội dung tuần đã học." },
+  writing: { lesson: "Dùng tài nguyên ngày học trong một phản hồi viết ngắn.", review: "Ôn cách dùng tài nguyên tuần qua một phản hồi viết ngắn." },
+  word_class: { lesson: "Nhận diện từ loại của các từ cốt lõi ngày học.", review: "Ôn từ loại của các từ cốt lõi trong tuần." },
+  word_use: { lesson: "Chọn cách dùng phù hợp cho từ và nhóm từ đã học.", review: "Ôn cách dùng các từ và nhóm từ đã học trong tuần." },
+  speaking: { lesson: "Dùng tài nguyên ngày học trong phản hồi nói ngắn.", review: "Ôn tài nguyên tuần qua phản hồi nói ngắn." }
+};
+
+function buildMonthlySkillExercises(kind: "new" | "review", coreIds: string[], expandedIds: string[]): MonthlySkillExercisePlan[] {
+  const resourceIds = [...coreIds, ...expandedIds];
+  return MONTHLY_EXERCISE_CODES.map((exerciseCode) => ({
+    exerciseCode,
+    focus: MONTHLY_EXERCISE_FOCI[exerciseCode][kind === "new" ? "lesson" : "review"],
+    resourceIds: [...resourceIds]
+  }));
+}
+
+function validateSkillExercises(day: MonthlyDaySpec, expectedResourceIds: readonly string[], errors: string[]): void {
+  const exerciseCodes = day.skillExercises.map((item) => item.exerciseCode);
+  if (exerciseCodes.length !== MONTHLY_EXERCISE_CODES.length || duplicateOf(exerciseCodes)
+    || MONTHLY_EXERCISE_CODES.some((code) => !exerciseCodes.includes(code))) {
+    errors.push(`Lesson ${day.lessonNumber} needs exactly one plan item for each of the six skill exercise codes`);
+  }
+  const allowed = new Set(expectedResourceIds);
+  for (const exercise of day.skillExercises) {
+    if (!exercise.focus.trim()) errors.push(`Lesson ${day.lessonNumber} has an empty ${exercise.exerciseCode} exercise focus`);
+    if (!exercise.resourceIds.length || exercise.resourceIds.some((id) => !allowed.has(id))) {
+      errors.push(`Lesson ${day.lessonNumber} ${exercise.exerciseCode} exercise references resources outside its allocation`);
+    }
+  }
+}
+
+function relationFromLegacySource(source: SupportTerm["source"]): MonthlySupportRelation | undefined {
+  switch (source) {
+    case "example": return "collocation";
+    case "family": return "word_family";
+    case "synonym": return "synonym";
+    case "antonym": return "antonym";
+    case "group": return "umbrella";
+    case "manual": return undefined;
+  }
 }
 
 function normalize(value: string): string {

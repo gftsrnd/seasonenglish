@@ -37,15 +37,18 @@ VOCABULARY PLAN
   word_family, or collocation; and identify the related core term. The relation
   must be linguistically real. A word family must belong to its stated base;
   a synonym/antonym must be a true semantic relation in this context.
-- Avoid shallow workflow-style variants around the core. The three supports
-  must add distinct meaning or use, not small wording changes to one idea.
-- Balance support relations across the supplied core batch. Do not repeat one
-  generic support phrase across the month.
+- Every core headword needs exactly nine individually linked support items.
+  For each core, cover all five relation groups: genuine umbrella/hypernym,
+  synonym, antonym or contextual contrast, word family, and collocation. Use
+  one or two supports per group, with no group repeated more than twice. Keep
+  every relation linguistically real; do not force a false antonym.
+- Avoid shallow workflow-style variants around the core. The nine supports
+  must add distinct meanings or uses, not small wording changes to one idea.
 
 GRAMMAR PLAN
 - Return exactly two genuine CEFR-appropriate grammar topics, each with three
   ordered progressive steps. Topic A steps progress over N1–N2, N3–N4 and
-  N5–N6; topic B steps progress over N7–N8, N9–N10 and N11–N12. N13–N15
+  N5–N6; topic B steps progress over N7–N8, N9–N10 and N11–N12. N13–N16
   combine both topics' third steps. Each step has a distinct focus, precise
   formula, concise Vietnamese use explanation and at least three natural
   work-context examples. Do not use generic descriptions such as
@@ -67,9 +70,10 @@ POOL RULES
 - The caller supplies newLessonCount and may provide a coreTermBatch. Never
   output dayNumber or dayNumbers fields. Allocation happens only after explicit
   Operator approval.
-- For a support phase with one core in coreTermBatch, return six ordered
-  candidate expanded terms. The API selects the first three valid, linked
-  candidates after checking core overlap and the monthly repeat budget.
+  - For a support phase with one core in coreTermBatch, return 18 ordered
+  candidate expanded terms, including alternatives for all five relation
+  groups. The API selects nine valid, linked candidates after checking core
+  overlap, balanced relation coverage, phrase cap and repeat budget.
 - Expanded resources must reference an exact core ID from the supplied batch.
 - Daily lessons expose their approved resource assignments before exercises.
 `;
@@ -125,7 +129,7 @@ export const monthlyResourcePlanSchema = {
     expandedTerms: {
       type: "array",
       description:
-        "Exactly nine unique real relation items for every new lesson day.",
+        "Exactly nine unique real relation items for every core headword.",
       items: {
         type: "object",
         additionalProperties: false,
@@ -276,7 +280,7 @@ export function validateMonthlyResourcePlanShape(
   const core = plan.coreTerms.map((item) => normalize(item.word));
   const expanded = plan.expandedTerms.map((item) => normalize(item.word));
   const expectedCore = newLessonCount * 3;
-  const expectedExpanded = newLessonCount * 9;
+  const expectedExpanded = newLessonCount * 27;
   if (core.length !== expectedCore) errors.push(`Expected ${expectedCore} core terms, got ${core.length}.`);
   if (expanded.length !== expectedExpanded) errors.push(`Expected ${expectedExpanded} expanded terms, got ${expanded.length}.`);
   const singleHeadword = (value: string) => /^\p{L}+(?:[-'’]\p{L}+)*$/u.test(value.trim());
@@ -296,8 +300,13 @@ export function validateMonthlyResourcePlanShape(
   if (plan.expandedTerms.some((item) => !coreIds.has(item.relatesToCoreId))) errors.push("Expanded resources must reference a core term in this month.");
   for (const coreId of coreIds) {
     const supports = plan.expandedTerms.filter((item) => item.relatesToCoreId === coreId);
-    if (supports.length !== 3) errors.push(`Core ${coreId} needs exactly three support resources.`);
-    if (new Set(supports.map((item) => item.relation)).size !== supports.length) errors.push(`Core ${coreId} repeats a support relation.`);
+    if (supports.length !== 9) errors.push(`Core ${coreId} needs exactly nine support resources.`);
+    const relationCounts = new Map<string, number>();
+    for (const support of supports) relationCounts.set(support.relation, (relationCounts.get(support.relation) ?? 0) + 1);
+    const relationGroups = ["umbrella", "synonym", "antonym", "word_family", "collocation"] as const;
+    if (supports.length === 9 && relationGroups.some((relation) => (relationCounts.get(relation) ?? 0) < 1 || (relationCounts.get(relation) ?? 0) > 2)) {
+      errors.push(`Core ${coreId} must distribute nine supports across all five relation groups, with no group repeated more than twice.`);
+    }
     if (supports.filter((item) => !singleHeadword(item.word)).length > 1) errors.push(`Core ${coreId} has more than one multi-word support item.`);
   }
   if (plan.grammarTopics.length !== 2) errors.push("Expected two grammar topics.");

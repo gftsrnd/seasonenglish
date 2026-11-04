@@ -23,7 +23,7 @@ const calendar = buildMonthlyCalendar(month);
 const newLessonDays = calendar.effectiveDays
   .flatMap((_date, index) => monthlyDayKind(index + 1, calendar.lessonCount) === "new" ? [index + 1] : []);
 const vocabularyCount = newLessonDays.length * 3;
-const expandedVocabularyCount = newLessonDays.length * 9;
+const expandedVocabularyCount = newLessonDays.length * 27;
 const theme = {
   version: 1,
   title: "Customer handover",
@@ -35,7 +35,7 @@ const criteria = { vocabularyCount, expandedVocabularyCount, grammarTopicCount: 
 function criteriaFor(targetMonth: string) {
   const targetCalendar = buildMonthlyCalendar(targetMonth);
   const newCount = targetCalendar.effectiveDays.filter((_date, index) => monthlyDayKind(index + 1, targetCalendar.lessonCount) === "new").length;
-  return { vocabularyCount: newCount * 3, expandedVocabularyCount: newCount * 9, grammarTopicCount: 2, pronunciationSoundCount: 4 };
+  return { vocabularyCount: newCount * 3, expandedVocabularyCount: newCount * 27, grammarTopicCount: 2, pronunciationSoundCount: 4 };
 }
 
 function planFor(targetMonth = month): MonthlyResourcePlanTaskOutput {
@@ -50,13 +50,13 @@ function planFor(targetMonth = month): MonthlyResourcePlanTaskOutput {
       type: "noun",
       ipa: "/kɔːr/"
     }))),
-    expandedTerms: targetNewLessonDays.flatMap((_dayNumber, dayIndex) => Array.from({ length: 9 }, (_, itemIndex) => ({
+    expandedTerms: targetNewLessonDays.flatMap((_dayNumber, dayIndex) => Array.from({ length: 27 }, (_, itemIndex) => ({
       id: `expanded-${dayIndex + 1}-${itemIndex + 1}`,
-      word: `support${String.fromCharCode(97 + dayIndex)}${String.fromCharCode(97 + itemIndex)}`,
+      word: `support${String.fromCharCode(97 + dayIndex)}${String.fromCharCode(97 + Math.floor(itemIndex / 26))}${String.fromCharCode(97 + itemIndex % 26)}`,
       meaning: `Từ mở rộng ${dayIndex + 1}-${itemIndex + 1}`,
       type: "noun",
-      relation: (["umbrella", "synonym", "word_family"] as const)[itemIndex % 3]!,
-      relatesToCoreId: `core-${dayIndex + 1}-${Math.floor(itemIndex / 3) + 1}`
+      relation: (["umbrella", "synonym", "antonym", "word_family", "collocation", "umbrella", "synonym", "antonym", "word_family"] as const)[itemIndex % 9]!,
+      relatesToCoreId: `core-${dayIndex + 1}-${Math.floor(itemIndex / 9) + 1}`
     }))),
     grammarTopics: [
       { id: "grammar-a", title: "Ngữ pháp A", steps: [1, 2, 3].map((step) => ({ id: `a-${step}`, focus: `Nền tảng ${step}`, formula: "S + V", usage: "Dùng trong giao tiếp cơ bản.", examples: ["I confirm the plan.", "We check the file.", "They send the note."] })) },
@@ -83,6 +83,35 @@ function planErrors(action: () => unknown): string[] {
 }
 
 describe("monthly AI resource generation", () => {
+  it("selects nine linked resources across five relation groups with no group repeated more than twice", () => {
+    const relations = ["umbrella", "synonym", "antonym", "word_family", "collocation"] as const;
+    const relationOrder = ["umbrella", "umbrella", "umbrella", "umbrella", "umbrella", "umbrella", "synonym", "synonym", "synonym", "antonym", "antonym", "antonym", "word_family", "word_family", "word_family", "collocation", "collocation", "collocation"] as const;
+    const candidates = Array.from({ length: 18 }, (_, index) => ({
+      id: `support-${index + 1}`,
+      word: `term${String.fromCharCode(97 + index)}`,
+      meaning: "",
+      type: "noun",
+      relation: relationOrder[index]!,
+      relatesToCoreId: "core-a"
+    }));
+    const selection = selectMonthlySupportCandidates({
+      candidates,
+      coreId: "core-a",
+      coreWords: new Set(["priority"]),
+      sameCoreWords: new Set(),
+      sameCoreRelations: new Set(),
+      existingSupportWords: [],
+      maxRepeatedPlacements: 28,
+      maxPhrasePlacements: 36,
+      needed: 9
+    });
+    expect(selection.selected).toHaveLength(9);
+    const counts = new Map<string, number>();
+    for (const term of selection.selected) counts.set(term.relation, (counts.get(term.relation) ?? 0) + 1);
+    expect([...counts.keys()].sort()).toEqual([...relations].sort());
+    expect([...counts.values()].every((count) => count <= 2)).toBe(true);
+  });
+
   it("selects three unique core headwords from ordered AI candidates and reports collisions", () => {
     const result = selectMonthlyCoreCandidates({
       candidates: [
@@ -151,8 +180,8 @@ describe("monthly AI resource generation", () => {
       needed: 3
     });
 
-    expect(result.selected.map((term) => term.word)).toEqual(["annual report", "schedule", "update"]);
-    expect(result.rejected).toHaveLength(2);
+    expect(result.selected.map((term) => term.word)).toEqual(["update", "annual report", "schedule"]);
+    expect(result.rejected.some((item) => item.includes("core phrase -> core phrase"))).toBe(true);
   });
 
   it("rejects a phrase once the monthly phrase budget is exhausted", () => {
@@ -173,10 +202,10 @@ describe("monthly AI resource generation", () => {
     });
 
     expect(result.selected.map((term) => term.word)).toEqual(["schedule", "update"]);
-    expect(result.rejected).toContain("annual report -> annual report (exceeds the monthly phrase ceiling; standalone words are required)");
+    expect(result.selected.some((term) => term.word === "annual report")).toBe(false);
   });
 
-  it("selects at most one phrase and one support per relation for a core", () => {
+  it("selects at most one phrase per core while allowing the second distinct semantic item", () => {
     const result = selectMonthlySupportCandidates({
       candidates: [
         { id: "x1", word: "annual report", meaning: "", type: "noun", relation: "collocation", relatesToCoreId: "core-a" },
@@ -195,9 +224,8 @@ describe("monthly AI resource generation", () => {
       needed: 3
     });
 
-    expect(result.selected.map((term) => term.word)).toEqual(["annual report", "priority", "team"]);
-    expect(result.rejected).toContain("client update -> client update (allows only one phrase for this core; prefer standalone words)");
-    expect(result.rejected).toContain("schedule -> schedule (duplicates the synonym relation for this core)");
+    expect(result.selected.map((term) => term.word)).toEqual(["client update", "priority", "team"]);
+    expect(result.selected.filter((term) => term.word.includes(" "))).toHaveLength(1);
   });
 
   it("selects pronunciation examples without prior collisions or more than three syllables", () => {
@@ -252,7 +280,7 @@ describe("monthly AI resource generation", () => {
     const issues = getMonthlyGrammarPhaseIssues(result);
     expect(issues).toContain("coreTerms must be empty (received 1)");
     expect(issues).toContain("grammarTopics must contain exactly 2 items (received 1)");
-    expect(issues).toContain("expandedTerms must be empty (received 144)");
+    expect(issues).toContain("expandedTerms must be empty (received 432)");
     expect(issues).toContain("pronunciationTargets must be empty (received 4)");
 
     const retryPrompt = buildMonthlyGrammarPhasePrompt(issues);
@@ -321,7 +349,7 @@ describe("monthly AI resource generation", () => {
       for (const day of contract.daySpecs.filter((item) => item.kind === "new")) {
         expect(day.coreTermIds).toHaveLength(3);
         expect(contract.coreTerms.filter((term) => term.dayNumber === day.lessonNumber)).toHaveLength(3);
-        expect(contract.supportTerms.filter((term) => term.dayNumber === day.lessonNumber)).toHaveLength(9);
+        expect(contract.supportTerms.filter((term) => term.dayNumber === day.lessonNumber)).toHaveLength(27);
       }
       for (const day of contract.daySpecs.filter((item) => item.kind === "review")) {
         expect(day.coreTermIds).toEqual([]);
@@ -334,7 +362,7 @@ describe("monthly AI resource generation", () => {
     }
   });
 
-  it("rejects edited pools with more than one phrase per core or over 25% phrases", () => {
+  it("rejects more than one phrase per core while allowing the monthly phrase cap to remain a secondary ceiling", () => {
     const invalidCore = buildMonthlyResourcesFromAiPlan(month, "A1", theme, criteria, planFor());
     invalidCore.coreTerms[0]!.word = "workflow management";
     expect(() => planMonthlyResourcePool(invalidCore)).toThrow(/standalone English headword/u);
@@ -344,12 +372,12 @@ describe("monthly AI resource generation", () => {
     multipleForCore.supportTerms[1]!.word = "client update";
     expect(() => planMonthlyResourcePool(multipleForCore)).toThrow(/at most one multi-word expanded expression/u);
 
-    const monthlyPhraseOverflow = buildMonthlyResourcesFromAiPlan(month, "A1", theme, criteria, planFor());
+    const manyPhrasesWithinPerCoreLimit = buildMonthlyResourcesFromAiPlan(month, "A1", theme, criteria, planFor());
     for (let coreIndex = 0; coreIndex < 37; coreIndex += 1) {
       const suffix = `${String.fromCharCode(97 + Math.floor(coreIndex / 26))}${String.fromCharCode(97 + coreIndex % 26)}`;
-      monthlyPhraseOverflow.supportTerms[coreIndex * 3]!.word = `client task${suffix}`;
+      manyPhrasesWithinPerCoreLimit.supportTerms[coreIndex * 9]!.word = `client task${suffix}`;
     }
-    expect(() => planMonthlyResourcePool(monthlyPhraseOverflow)).toThrow(/25% monthly limit/u);
+    expect(() => planMonthlyResourcePool(manyPhrasesWithinPerCoreLimit)).not.toThrow();
   });
 
   it("rejects a plan that has anything other than two grammar topics", () => {
@@ -401,18 +429,18 @@ describe("monthly AI resource generation", () => {
     expect(repair).toContain("keep coreTerms, expandedTerms and grammarTopics empty");
   });
 
-  it("rejects AI pools that exceed one phrase per core or the global phrase ceiling", () => {
+  it("rejects AI pools that exceed one phrase per core", () => {
     const sameCorePhrases = planFor();
     sameCorePhrases.expandedTerms[0]!.word = "annual report";
     sameCorePhrases.expandedTerms[1]!.word = "client update";
     expect(planErrors(() => buildMonthlyResourcesFromAiPlan(month, "A1", theme, criteria, sameCorePhrases))).toContain("Core core-1-1 has more than one multi-word support item.");
 
-    const tooManyPhrases = planFor();
+    const manyPhrasesWithinPerCoreLimit = planFor();
     for (let coreIndex = 0; coreIndex < 37; coreIndex += 1) {
       const suffix = `${String.fromCharCode(97 + Math.floor(coreIndex / 26))}${String.fromCharCode(97 + coreIndex % 26)}`;
-      tooManyPhrases.expandedTerms[coreIndex * 3]!.word = `client task${suffix}`;
+      manyPhrasesWithinPerCoreLimit.expandedTerms[coreIndex * 9]!.word = `client task${suffix}`;
     }
-    expect(planErrors(() => buildMonthlyResourcesFromAiPlan(month, "A1", theme, criteria, tooManyPhrases))).toContain("Expanded phrases exceed the 25% ceiling; standalone words must remain the clear majority.");
+    expect(() => buildMonthlyResourcesFromAiPlan(month, "A1", theme, criteria, manyPhrasesWithinPerCoreLimit)).not.toThrow();
   });
 
   it("rejects pronunciation words longer than three syllables", () => {

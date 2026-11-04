@@ -2,7 +2,7 @@ import { buildMonthlyCalendar, buildMonthlyExamScope, monthlyDayKind, type Month
 import { monthlyResourcePlanOutputSchema, monthlyTopicSuggestionOutputSchema, type AiTaskRunner } from "@e4s/ai";
 import { createRepositories } from "@e4s/database";
 import { randomUUID } from "node:crypto";
-import type { FastifyInstance } from "fastify";
+import type { FastifyInstance, FastifyReply } from "fastify";
 import type { Pool } from "pg";
 import { z } from "zod";
 import { createRoleGuard } from "../identity/policy.js";
@@ -23,7 +23,7 @@ const briefInput = z.object({
   communicationGoal: z.string().trim().min(1).max(2_000)
 });
 const coreTerm = z.object({ id: z.string().min(1), word: z.string().min(1), meaning: z.string(), type: z.string().min(1), ipa: z.string().min(1), source: z.literal("core_registry"), component: z.literal("core"), dayNumber: z.int().positive() });
-const supportTerm = z.object({ id: z.string().min(1), word: z.string().min(1), meaning: z.string(), type: z.string().min(1), source: z.enum(["example", "family", "synonym", "antonym", "group", "manual"]), component: z.literal("expanded"), dayNumber: z.int().positive(), relatedCoreTermId: z.string().min(1) });
+const supportTerm = z.object({ id: z.string().min(1), word: z.string().min(1), meaning: z.string(), type: z.string().min(1), relation: z.enum(["umbrella", "synonym", "antonym", "word_family", "collocation"]), source: z.enum(["example", "family", "synonym", "antonym", "group", "manual"]), component: z.literal("expanded"), dayNumber: z.int().positive(), relatedCoreTermId: z.string().min(1) });
 const frameworkInput = z.object({
   contract: z.object({
     month: z.string().regex(/^\d{4}-(0[1-9]|1[0-2])$/u), cefr: z.enum(["A1", "A2", "B1", "B2", "C1"]), version: z.int().positive(),
@@ -31,7 +31,7 @@ const frameworkInput = z.object({
     coreTerms: z.array(coreTerm), supportTerms: z.array(supportTerm),
     grammarTopics: z.array(z.object({ id: z.string().min(1), title: z.string().min(1), steps: z.array(z.object({ id: z.string().min(1), focus: z.string(), formula: z.string().min(1), usage: z.string(), examples: z.array(z.string()) })).min(1) })),
     sounds: z.array(z.object({ id: z.string().min(1), ipa: z.string().min(1), label: z.string().min(1), examples: z.array(z.object({ id: z.string().min(1), word: z.string().min(1), ipa: z.string().min(1) })) })),
-    daySpecs: z.array(z.object({ lessonNumber: z.int().positive(), date: z.string().date(), kind: z.enum(["new", "review"]), coreTermIds: z.array(z.string()), expandedTermIds: z.array(z.string()), reviewTermIds: z.array(z.string()), reviewExpandedTermIds: z.array(z.string()), primarySkillFocus: z.enum(["writing", "speaking"]).nullable(), writingFocus: z.string().nullable(), speakingFocus: z.string().nullable(), grammarStepId: z.string().min(1), grammarStepIds: z.array(z.string()).optional(), soundId: z.string().min(1), pronunciationSlot: z.string().optional(), pronunciationExampleIds: z.array(z.string()) }))
+    daySpecs: z.array(z.object({ lessonNumber: z.int().positive(), date: z.string().date(), kind: z.enum(["new", "review"]), coreTermIds: z.array(z.string()), expandedTermIds: z.array(z.string()), reviewTermIds: z.array(z.string()), reviewExpandedTermIds: z.array(z.string()), skillExercises: z.array(z.object({ exerciseCode: z.enum(["listening", "reading", "writing", "word_class", "word_use", "speaking"]), focus: z.string().min(1), resourceIds: z.array(z.string()).min(1) })).length(6), grammarStepId: z.string().min(1), grammarStepIds: z.array(z.string()).optional(), soundId: z.string().min(1), pronunciationSlot: z.string().optional(), pronunciationExampleIds: z.array(z.string()) }))
   })
 });
 const resourceCriteriaInput = z.object({
@@ -136,7 +136,7 @@ export function registerMonthlyContentRoutes(app: FastifyInstance, pool: Pool, a
     const checkpoint = await repositories.monthlyContent.getResourceGenerationCheckpoint(request.e4sSession!.user.id, month.month, query.cefr);
     const calendar = buildMonthlyCalendar(month.month);
     const newLessonCount = calendar.effectiveDays.filter((_date, index) => monthlyDayKind(index + 1, calendar.lessonCount) === "new").length;
-    const counts = { coreTerms: newLessonCount * 3, expandedTerms: newLessonCount * 9, grammarTopics: 2, pronunciationTargets: 4 };
+      const counts = { coreTerms: newLessonCount * 3, expandedTerms: newLessonCount * 27, grammarTopics: 2, pronunciationTargets: 4 };
     const categories = Object.fromEntries(Object.entries(counts).map(([key, target]) => {
       const value = checkpoint?.categories[key];
       const count = Array.isArray(value) ? value.length : 0;
@@ -261,16 +261,17 @@ export function registerMonthlyContentRoutes(app: FastifyInstance, pool: Pool, a
       const coreWordsList = coreTerms.map((term) => `${term.id}: ${term.word} (${term.meaning})`);
       const maxExpandedRepeats = Math.floor(criteria.expandedVocabularyCount * 0.2);
       const maxExpandedPhrases = Math.floor(criteria.expandedVocabularyCount * 0.25);
-      for (let coreIndex = expandedTerms.length / 3; coreIndex < coreTerms.length; coreIndex += 1) {
+      for (let coreIndex = expandedTerms.length / 9; coreIndex < coreTerms.length; coreIndex += 1) {
         const coreTerm = coreTerms[coreIndex]!;
         const coreBatch = [coreTerm];
         const acceptedForCore: z.infer<typeof monthlyResourcePlanOutputSchema>["expandedTerms"] = [];
         let issue = "";
         for (let attempt = 0; attempt < 3; attempt += 1) {
           const previousTerms = [...expandedTerms.map((term) => term.word), ...acceptedForCore.map((term) => term.word)];
-          const needed = 3 - acceptedForCore.length;
-          const prompt = `PHASE 2 — ORDERED SUPPORT CANDIDATES FOR ONE CORE. Return exactly six candidate expandedTerms and no other category: coreTerms, grammarTopics and pronunciationTargets must be empty arrays. This is an unordered month resource pool; do not assign calendar days. For this exact core, return semantically distinct supports. Prefer standalone English words strongly: at least two of the three accepted supports for each core must be single lexical words, and single words must remain at least 75% of the whole month. One special natural two-to-four-word workplace phrase is allowed per core when it teaches a real expression; any relation may use it. Never make a family of shallow variants around the core (for example workflow management, streamline the workflow, workflow tool). Use each relation at most once for this core. Every relatesToCoreId must equal ${coreTerm.id}. Never return any word from the complete finalized core vocabulary (forbidden): ${coreWordsList.join("; ")}. Support words may repeat across different cores up to 20% of total placements. Month-wide support ledger (including already accepted candidates for this core): ${previousTerms.join("; ") || "none"}. Prefer candidates that are distinct from the ledger. Return a diverse ordered candidate list so the first three valid items satisfy the target, while remaining authentic for ${criteria.cefr} and the approved theme. ${issue ? `The prior candidate set had fewer than ${needed} valid items. These were the rejected candidates (raw -> normalized, with reason): ${issue}. Return a new set of six alternatives; do not repeat the listed invalid lexical forms or normalized variants.` : ""}`;
-          const result = await runPhase(prompt, coreBatch, { vocabularyCount: 0, expandedVocabularyCount: 6, grammarTopicCount: 0, pronunciationSoundCount: 0 });
+          const needed = 9 - acceptedForCore.length;
+          const acceptedRelations = new Set(acceptedForCore.map((term) => term.relation));
+          const prompt = `PHASE 2 — ORDERED SUPPORT CANDIDATES FOR ONE CORE. Return exactly 18 candidate expandedTerms and no other category: coreTerms, grammarTopics and pronunciationTargets must be empty arrays. This is an unordered month resource pool; do not assign calendar days. For this exact core, return nine semantically distinct supports. The selected nine must cover all five relation groups: umbrella/hypernym, synonym, antonym, word_family, and collocation. Use one or two items per group, never more than two; this gives a balanced semantic spread rather than nine items assigned to one repeated group. Each relation must be linguistically real in context. Do not invent an antonym; if there is no natural antonym, use a genuine contrasting concept. Avoid shallow workflow-style variants. At least eight of nine selected terms must be standalone English words; allow at most one natural two-to-four-word phrase per core and at most 25% phrases in the complete pool. Every relatesToCoreId must equal ${coreTerm.id}. Never return any word from the complete finalized core vocabulary (forbidden): ${coreWordsList.join("; ")}. Support words may repeat across different cores only while total repeated placements remain <=20%. Month-wide support ledger (including accepted candidates for this core): ${previousTerms.join("; ") || "none"}. Already covered relations for this core: ${[...acceptedRelations].join(", ") || "none"}. Return 18 ordered candidates so the application can select nine valid items with balanced coverage across all five groups. Keep candidates authentic for ${criteria.cefr} and the approved theme. ${issue ? `Previous candidates rejected or lacked required relations: ${issue}. Return a new set of 18 alternatives; do not repeat the named invalid lexical forms or normalized variants.` : ""}`;
+          const result = await runPhase(prompt, coreBatch, { vocabularyCount: 0, expandedVocabularyCount: 18, grammarTopicCount: 0, pronunciationSoundCount: 0 });
           const candidate = result.expandedTerms;
           if (result.coreTerms.length || result.grammarTopics.length || result.pronunciationTargets.length) {
             issue = "response included non-support categories";
@@ -282,16 +283,22 @@ export function registerMonthlyContentRoutes(app: FastifyInstance, pool: Pool, a
             coreWords,
             sameCoreWords: new Set(acceptedForCore.map((term) => normalizeMonthlyResourceWord(term.word))),
             sameCoreRelations: new Set(acceptedForCore.map((term) => term.relation)),
+            sameCoreRelationCounts: new Map([...new Set(acceptedForCore.map((term) => term.relation))].map((relation) => [relation, acceptedForCore.filter((term) => term.relation === relation).length])),
             existingSupportWords: previousTerms,
             maxRepeatedPlacements: maxExpandedRepeats,
             maxPhrasePlacements: maxExpandedPhrases,
             needed
           });
           acceptedForCore.push(...selection.selected);
-          if (acceptedForCore.length === 3) break;
-          issue = selection.rejected.join("; ") || `only ${candidate.length} candidates were returned; need six ordered candidates`;
+          const selectedRelations = new Set(acceptedForCore.map((term) => term.relation));
+          const missingRelations = (["umbrella", "synonym", "antonym", "word_family", "collocation"] as const).filter((relation) => !selectedRelations.has(relation));
+          if (acceptedForCore.length === 9 && missingRelations.length === 0) break;
+          if (acceptedForCore.length === 9) acceptedForCore.length = 0;
+          issue = missingRelations.length
+            ? `${selection.rejected.join("; ")} ${selection.rejected.length ? "; " : ""}missing required relations: ${missingRelations.join(", ")}`
+            : selection.rejected.join("; ") || `only ${acceptedForCore.length} valid supports were accepted; need nine`;
         }
-        if (acceptedForCore.length !== 3) throw new MonthlyResourcePlanError([`Expanded vocabulary generation failed for core ${coreTerm.id}: ${issue}.`]);
+        if (acceptedForCore.length !== 9) throw new MonthlyResourcePlanError([`Expanded vocabulary generation failed for core ${coreTerm.id}: ${issue}.`]);
         const accepted = acceptedForCore.map((term, index) => ({ ...term, id: `${criteria.cefr.toLowerCase()}-expanded-${expandedTerms.length + index + 1}` }));
         expandedTerms.push(...accepted);
       }
@@ -401,16 +408,20 @@ export function registerMonthlyContentRoutes(app: FastifyInstance, pool: Pool, a
     return reply.code(204).send();
   });
 
-  app.get("/api/v1/content/month-frameworks/:id/exam-scope", { preHandler: operator }, async (request) => {
+  app.get("/api/v1/content/month-frameworks/:id/exam-scope", { preHandler: operator }, async (request, reply) => {
     const input = frameworkParams.parse(request.params);
-    const contract = await repositories.monthlyContent.getFrameworkContract(request.e4sSession!.user.id, input.id);
+    let contract;
+    try { contract = await repositories.monthlyContent.getFrameworkContract(request.e4sSession!.user.id, input.id); }
+    catch (error) { const response = invalidMonthlyPlanReply(reply, error); if (response) return response; throw error; }
     return buildMonthlyExamScope(contract);
   });
 
-  app.put("/api/v1/content/month-frameworks/:id/days/:dayNumber", { preHandler: contentOperator }, async (request) => {
+  app.put("/api/v1/content/month-frameworks/:id/days/:dayNumber", { preHandler: contentOperator }, async (request, reply) => {
     const { id, dayNumber } = dayParams.parse(request.params);
     const input = lessonInput.parse(request.body);
-    const contract = await repositories.monthlyContent.getFrameworkContract(request.e4sSession!.user.id, id);
+    let contract;
+    try { contract = await repositories.monthlyContent.getFrameworkContract(request.e4sSession!.user.id, id); }
+    catch (error) { const response = invalidMonthlyPlanReply(reply, error); if (response) return response; throw error; }
     const report = evaluateMonthlyLessonQuality(contract, dayNumber, input);
     await repositories.monthlyContent.saveMonthlyDayDraft(request.e4sSession!.user.id, id, dayNumber, input, report);
     return report;
@@ -421,10 +432,14 @@ export function registerMonthlyContentRoutes(app: FastifyInstance, pool: Pool, a
     const actorId = request.e4sSession!.user.id;
     const runner = await aiRunnerFactory?.(actorId) ?? aiRunner;
     if (!runner) return reply.code(503).send({ code: "AI_UNAVAILABLE" });
-    const [contract, task] = await Promise.all([
-      repositories.monthlyContent.getFrameworkContract(actorId, id),
-      repositories.aiRuns.activeTaskPrompt(actorId, "monthly_lessons")
-    ]);
+    let contract;
+    let task;
+    try {
+      [contract, task] = await Promise.all([
+        repositories.monthlyContent.getFrameworkContract(actorId, id),
+        repositories.aiRuns.activeTaskPrompt(actorId, "monthly_lessons")
+      ]);
+    } catch (error) { const response = invalidMonthlyPlanReply(reply, error); if (response) return response; throw error; }
     const day = contract.daySpecs.find((candidate) => candidate.lessonNumber === dayNumber);
     if (!day || day.kind !== "review") return reply.code(409).send({ code: "NOT_A_FRIDAY_REVIEW" });
     if (!task) return reply.code(503).send({ code: "AI_PROMPT_NOT_READY" });
@@ -448,10 +463,14 @@ export function registerMonthlyContentRoutes(app: FastifyInstance, pool: Pool, a
     const actorId = request.e4sSession!.user.id;
     const runner = await aiRunnerFactory?.(actorId) ?? aiRunner;
     if (!runner) return reply.code(503).send({ code: "AI_UNAVAILABLE" });
-    const [contract, task] = await Promise.all([
-      repositories.monthlyContent.getFrameworkContract(actorId, id),
-      repositories.aiRuns.activeTaskPrompt(actorId, "monthly_lessons")
-    ]);
+    let contract;
+    let task;
+    try {
+      [contract, task] = await Promise.all([
+        repositories.monthlyContent.getFrameworkContract(actorId, id),
+        repositories.aiRuns.activeTaskPrompt(actorId, "monthly_lessons")
+      ]);
+    } catch (error) { const response = invalidMonthlyPlanReply(reply, error); if (response) return response; throw error; }
     if (!task) return reply.code(503).send({ code: "AI_PROMPT_NOT_READY" });
     let result;
     try {
@@ -489,11 +508,13 @@ export function registerMonthlyContentRoutes(app: FastifyInstance, pool: Pool, a
     return { id: correctionId, status: "requested" as const };
   });
 
-  app.put("/api/v1/content/month-frameworks/:id/days/:dayNumber/corrections/:correctionId", { preHandler: contentOperator }, async (request) => {
+  app.put("/api/v1/content/month-frameworks/:id/days/:dayNumber/corrections/:correctionId", { preHandler: contentOperator }, async (request, reply) => {
     const { id, dayNumber } = dayParams.parse(request.params);
     const { correctionId } = correctionParams.parse(request.params);
     const input = lessonInput.parse(request.body);
-    const contract = await repositories.monthlyContent.getFrameworkContract(request.e4sSession!.user.id, id);
+    let contract;
+    try { contract = await repositories.monthlyContent.getFrameworkContract(request.e4sSession!.user.id, id); }
+    catch (error) { const response = invalidMonthlyPlanReply(reply, error); if (response) return response; throw error; }
     const report = evaluateMonthlyLessonQuality(contract, dayNumber, input);
     await repositories.monthlyContent.saveMonthlyCorrection(request.e4sSession!.user.id, correctionId, input, report);
     return report;
@@ -515,4 +536,10 @@ export function registerMonthlyContentRoutes(app: FastifyInstance, pool: Pool, a
 
 function normalizeMonthlyResourceWord(value: string): string {
   return value.trim().toLocaleLowerCase("en").replace(/[\s\p{P}]+/gu, " ").trim();
+}
+
+function invalidMonthlyPlanReply(reply: FastifyReply, error: unknown): FastifyReply | undefined {
+  if (!error || typeof error !== "object" || !("code" in error) || error.code !== "MONTHLY_FRAMEWORK_PLAN_INVALID") return undefined;
+  const issues = "issues" in error && Array.isArray(error.issues) ? error.issues : [];
+  return reply.code(409).send({ code: "MONTHLY_FRAMEWORK_PLAN_INVALID", issues });
 }

@@ -638,10 +638,10 @@ export const monthlyLessonDayOutputSchema = z.object({
       code: monthlyLessonPartCodeSchema,
       title: z.string().trim().min(1).max(200).optional(),
       content: z.record(z.string(), z.unknown())
-    })).length(11).superRefine((parts, context) => {
+    })).min(1).max(11).superRefine((parts, context) => {
       const codes = parts.map((part) => part.code);
-      if (new Set(codes).size !== monthlyLessonPartCodes.length || monthlyLessonPartCodes.some((code) => !codes.includes(code))) {
-        context.addIssue({ code: "custom", message: "Monthly lessons must contain all eleven unique components, including all six skill exercises." });
+      if (new Set(codes).size !== codes.length) {
+        context.addIssue({ code: "custom", message: "Monthly lesson output may include only one part per requested component." });
       }
     })
   })
@@ -1430,7 +1430,7 @@ export const monthlyLessonDayOutputJsonSchema = {
       properties: {
         title: { type: "string" },
         parts: {
-          type: "array", minItems: 11, maxItems: 11,
+          type: "array", minItems: 1, maxItems: 11,
           items: {
             type: "object", additionalProperties: false, required: ["code", "content"],
             properties: {

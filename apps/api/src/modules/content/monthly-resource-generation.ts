@@ -1,4 +1,4 @@
-import { buildMonthlyCalendar, monthlyDayKind, type MonthlyResourcePoolContract, type SharedMonthBrief } from "@e4s/domain";
+import { buildMonthlyCalendar, monthlyDayKind, type MonthlyResourcePoolContract, type MonthlySupportRelation, type SharedMonthBrief } from "@e4s/domain";
 import type { CefrLevel } from "@e4s/contracts";
 import type { MonthlyResourcePlanTaskOutput } from "@e4s/ai";
 import { validateMonthlyResourcePlanShape } from "./monthly-resource-plan-spec.js";
@@ -58,6 +58,7 @@ export function selectMonthlySupportCandidates(input: {
   coreWords: ReadonlySet<string>;
   sameCoreWords: ReadonlySet<string>;
   sameCoreRelations: ReadonlySet<MonthlyResourcePlanTaskOutput["expandedTerms"][number]["relation"]>;
+  sameCoreRelationCounts?: ReadonlyMap<MonthlySupportRelation, number>;
   existingSupportWords: readonly string[];
   maxRepeatedPlacements: number;
   maxPhrasePlacements: number;
@@ -76,16 +77,27 @@ export function selectMonthlySupportCandidates(input: {
   let sameCorePhraseCount = [...input.sameCoreWords].filter((word) => !isSingleHeadword(word)).length;
   const sameCoreRelations = new Set(input.sameCoreRelations);
   const sameCoreWords = new Set(input.sameCoreWords);
+  const relationCounts = new Map<MonthlySupportRelation, number>(input.sameCoreRelationCounts ?? [...sameCoreRelations].map((relation) => [relation, 1] as const));
 
-  for (const candidate of input.candidates) {
+  const requiredRelations = ["umbrella", "synonym", "antonym", "word_family", "collocation"] as const;
+  const orderedCandidates = [
+    ...requiredRelations.flatMap((relation) => sameCoreRelations.has(relation) ? [] : [input.candidates.find((candidate) => candidate.relation === relation)]),
+    ...input.candidates
+  ].filter((candidate): candidate is MonthlyResourcePlanTaskOutput["expandedTerms"][number] => Boolean(candidate));
+  const attempted = new Set<string>();
+
+  for (const candidate of orderedCandidates) {
+    const candidateKey = `${candidate.id}\u0000${candidate.word}\u0000${candidate.relation}`;
+    if (attempted.has(candidateKey)) continue;
+    attempted.add(candidateKey);
     const word = normalizeMonthlyResourceWord(candidate.word);
     let reason = "";
     if (candidate.relatesToCoreId !== input.coreId) reason = "incorrect core relation";
+    else if ((relationCounts.get(candidate.relation) ?? 0) >= 2) reason = "exceeds the two-support limit for this semantic relation";
     else if (input.coreWords.has(word)) reason = "matches a core term";
     else if (!isSingleHeadword(candidate.word) && !isWorkplacePhrase(candidate.word)) reason = "must be one lexical headword or a natural two-to-four-word workplace phrase";
     else if (!isSingleHeadword(candidate.word) && sameCorePhraseCount >= 1) reason = "allows only one phrase for this core; prefer standalone words";
     else if (sameCoreWords.has(word)) reason = "duplicates a selected support term for this core";
-    else if (sameCoreRelations.has(candidate.relation)) reason = `duplicates the ${candidate.relation} relation for this core`;
     else if (chosen.has(word)) reason = "duplicates another candidate in this core batch";
     else if (!isSingleHeadword(candidate.word) && phrasePlacements + 1 > input.maxPhrasePlacements) reason = "exceeds the monthly phrase ceiling; standalone words are required";
     else {
@@ -101,11 +113,15 @@ export function selectMonthlySupportCandidates(input: {
     selected.push(candidate);
     sameCoreWords.add(word);
     sameCoreRelations.add(candidate.relation);
+    relationCounts.set(candidate.relation, (relationCounts.get(candidate.relation) ?? 0) + 1);
     if (!isSingleHeadword(candidate.word)) {
       phrasePlacements += 1;
       sameCorePhraseCount += 1;
     }
     if (selected.length === input.needed) break;
+  }
+  for (const relation of requiredRelations) {
+    if (!sameCoreRelations.has(relation)) rejected.push(`missing required ${relation} relation for this core`);
   }
   return { selected, rejected };
 }
@@ -202,7 +218,7 @@ export function buildMonthlyGrammarPhasePrompt(rejectedIssues: readonly string[]
   const repair = rejectedIssues.length
     ? ` Previous response rejected: ${rejectedIssues.join("; ")}. Correct each listed issue in this response.`
     : "";
-  return `PHASE 3 — GRAMMAR ONLY. Return exactly two grammarTopics; coreTerms, expandedTerms and pronunciationTargets must be empty arrays. Each grammar topic must have exactly three ordered progressive steps that build in complexity; use a distinct focus and teaching point at each step, with precise formula, concise Vietnamese usage, and three to six authentic workplace examples. Topic A steps are the progression for N1–N2, N3–N4, N5–N6. Topic B steps are the progression for N7–N8, N9–N10, N11–N12. N13–N15 combine the third step of both topics. Return JSON matching the schema only; do not include explanations or any other resource category.${repair}`;
+  return `PHASE 3 — GRAMMAR ONLY. Return exactly two grammarTopics; coreTerms, expandedTerms and pronunciationTargets must be empty arrays. Each grammar topic must have exactly three ordered progressive steps that build in complexity; use a distinct focus and teaching point at each step, with precise formula, concise Vietnamese usage, and three to six authentic workplace examples. Topic A steps are the progression for N1–N2, N3–N4, N5–N6. Topic B steps are the progression for N7–N8, N9–N10, N11–N12. N13–N16 combine the third step of both topics. Return JSON matching the schema only; do not include explanations or any other resource category.${repair}`;
 }
 
 export async function runMonthlyGrammarPhaseWithRetry(
@@ -249,7 +265,7 @@ export function buildMonthlyResourcesFromAiPlan(
   const calendar = buildMonthlyCalendar(month);
   const newLessonDays = calendar.effectiveDays.flatMap((_date, index) => monthlyDayKind(index + 1, calendar.lessonCount) === "new" ? [index + 1] : []);
   const requiredVocabularyCount = newLessonDays.length * 3;
-  const requiredExpandedVocabularyCount = newLessonDays.length * 9;
+  const requiredExpandedVocabularyCount = newLessonDays.length * 27;
   if (criteria.vocabularyCount !== requiredVocabularyCount) throw new MonthlyResourceCriteriaError("VOCABULARY_COUNT_MISMATCH", requiredVocabularyCount);
   if (criteria.expandedVocabularyCount !== requiredExpandedVocabularyCount) throw new MonthlyResourceCriteriaError("EXPANDED_VOCABULARY_COUNT_MISMATCH", requiredExpandedVocabularyCount);
 
@@ -267,6 +283,7 @@ export function buildMonthlyResourcesFromAiPlan(
       word: term.word,
       meaning: term.meaning,
       type: term.type,
+      relation: term.relation,
       source: relationSource(term.relation),
       component: "expanded" as const,
       relatedCoreTermId: coreIdMap.get(term.relatesToCoreId) ?? term.relatesToCoreId

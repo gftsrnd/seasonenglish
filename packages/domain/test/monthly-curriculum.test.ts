@@ -30,14 +30,16 @@ function inputFor(month = "2026-11"): MonthlyCurriculumInput {
     cefr: "A1",
     theme: { version: 1, title: "Preparing a budget review", brief: "Prepare a simple budget review at work.", context: "Office", communicationGoal: "State a cost and ask for an update." },
     coreTerms,
-    supportTerms: Array.from({ length: newDays.length * 9 }, (_, index) => {
-      const coreIndex = Math.floor(index / 3);
+    supportTerms: Array.from({ length: newDays.length * 27 }, (_, index) => {
+      const coreIndex = Math.floor(index / 9);
+      const relation = (["umbrella", "synonym", "antonym", "word_family", "umbrella", "synonym", "antonym", "word_family", "collocation"] as const)[index % 9]!;
       return {
         id: `support-${index + 1}`,
         word: `support${String.fromCharCode(97 + Math.floor(index / 26))}${String.fromCharCode(97 + index % 26)}`,
         meaning: `Từ mở rộng ${index + 1}`,
         type: "noun",
-        source: "example" as const,
+        relation,
+        source: (relation === "umbrella" ? "group" : relation === "word_family" ? "family" : relation === "collocation" ? "example" : relation) as "example" | "family" | "synonym" | "antonym" | "group",
         dayNumber: newDays[Math.floor(coreIndex / 3)]!,
         relatedCoreTermId: `core-${coreIndex + 1}`
       };
@@ -45,11 +47,11 @@ function inputFor(month = "2026-11"): MonthlyCurriculumInput {
     grammarTopics: Array.from({ length: 2 }, (_, index) => ({
       id: `grammar-${index + 1}`,
       title: `Grammar ${index + 1}`,
-      steps: [1, 2, 3].map((step) => ({ id: `grammar-${index + 1}-step-${step}`, focus: `Focus ${index + 1}.${step}`, formula: "subject + verb", usage: "Use in a work sentence.", examples: ["I check the cost."] }))
+      steps: [1, 2, 3].map((step) => ({ id: `grammar-${index + 1}-step-${step}`, focus: `Focus ${index + 1}.${step}`, formula: "subject + verb", usage: "Use in a work sentence.", examples: ["I check the cost.", "We review the budget.", "They confirm the forecast."] }))
     })),
     sounds: Array.from({ length: 4 }, (_, index) => ({
       id: `sound-${index + 1}`,
-      ipa: ["iː", "ɪ", "θ", "ʃ"][index]!,
+      ipa: ["/iː/", "/ɪ/", "/θ/", "/ʃ/"][index]!,
       label: `Sound ${index + 1}`,
       examples: Array.from({ length: Math.ceil(calendar.lessonCount / 4) * 3 }, (_, exampleIndex) => ({ id: `sound-${index + 1}-example-${exampleIndex + 1}`, word: `sound-${index + 1}-word-${exampleIndex + 1}`, ipa: "/x/" }))
     }))
@@ -64,14 +66,15 @@ function poolFor(): Parameters<typeof planMonthlyResourcePool>[0] {
     theme: input.theme,
     version: input.theme.version,
     coreTerms: input.coreTerms.map((term) => ({ ...term, source: "core_registry" as const, component: "core" as const })),
-    supportTerms: Array.from({ length: 144 }, (_, index) => ({
+    supportTerms: Array.from({ length: 432 }, (_, index) => ({
       id: `support-${index + 1}`,
       word: `support${String.fromCharCode(97 + Math.floor(index / 26))}${String.fromCharCode(97 + index % 26)}`,
       meaning: `Từ mở rộng ${index + 1}`,
       type: "noun",
-      source: "example" as const,
+      relation: (["umbrella", "synonym", "antonym", "word_family", "umbrella", "synonym", "antonym", "word_family", "collocation"] as const)[index % 9]!,
+      source: (["umbrella", "synonym", "antonym", "word_family", "umbrella", "synonym", "antonym", "word_family", "collocation"] as const)[index % 9] === "umbrella" ? "group" as const : (["umbrella", "synonym", "antonym", "word_family", "umbrella", "synonym", "antonym", "word_family", "collocation"] as const)[index % 9] === "word_family" ? "family" as const : (["umbrella", "synonym", "antonym", "word_family", "umbrella", "synonym", "antonym", "word_family", "collocation"] as const)[index % 9] === "collocation" ? "example" as const : (["umbrella", "synonym", "antonym", "word_family", "umbrella", "synonym", "antonym", "word_family", "collocation"] as const)[index % 9] as "synonym" | "antonym",
       component: "expanded" as const,
-      relatedCoreTermId: `core-${Math.floor(index / 3) + 1}`
+      relatedCoreTermId: `core-${Math.floor(index / 9) + 1}`
     })),
     grammarTopics: input.grammarTopics,
     sounds: input.sounds
@@ -79,31 +82,60 @@ function poolFor(): Parameters<typeof planMonthlyResourcePool>[0] {
 }
 
 describe("monthly curriculum contract", () => {
-  it("allocates linked resources, weekly reviews, and balanced explicit writing/speaking tasks on approval", () => {
+  it("rejects plans with unbalanced semantic coverage or incorrect grammar and pronunciation progression", () => {
+    const contract = planMonthlyResourcePool(poolFor());
+    const invalidRelations = structuredClone(contract);
+    const linkedSupports = invalidRelations.supportTerms.filter((term) => term.relatedCoreTermId === invalidRelations.coreTerms[0]!.id);
+    linkedSupports[8]!.relation = "umbrella";
+    expect(validateMonthlyCurriculum(invalidRelations).join(" ")).toContain("must distribute nine supports across all five relation groups");
+
+    const invalidGrammar = structuredClone(contract);
+    invalidGrammar.daySpecs[2]!.grammarStepIds = ["grammar-1-step-1"];
+    expect(validateMonthlyCurriculum(invalidGrammar).join(" ")).toContain("does not follow the monthly grammar progression");
+
+    const invalidSound = structuredClone(contract);
+    invalidSound.daySpecs[3]!.soundId = "grammar-1-step-1";
+    expect(validateMonthlyCurriculum(invalidSound).join(" ")).toContain("does not follow the pronunciation roadmap");
+  });
+
+  it("allocates nine linked supports per core, grammar progression, reviews, and six exercise slots on approval", () => {
     const contract = planMonthlyResourcePool(poolFor());
     const newDays = contract.daySpecs.filter((day) => day.kind === "new");
     const reviewDays = contract.daySpecs.filter((day) => day.kind === "review");
 
     expect(newDays).toHaveLength(16);
-    expect(newDays.filter((day) => day.primarySkillFocus === "writing")).toHaveLength(8);
-    expect(newDays.filter((day) => day.primarySkillFocus === "speaking")).toHaveLength(8);
+    const exerciseCodes = ["listening", "reading", "writing", "word_class", "word_use", "speaking"];
+    expect(newDays.every((day) => day.skillExercises.map((item) => item.exerciseCode).sort().join(",") === exerciseCodes.toSorted().join(","))).toBe(true);
     expect(contract.grammarTopics).toHaveLength(2);
     expect(contract.grammarTopics.every((topic) => topic.steps.length === 3)).toBe(true);
     expect(contract.sounds.map((sound) => newDays.filter((day) => day.soundId === sound.id).length)).toEqual([4, 4, 4, 4]);
+    expect(newDays[0]?.grammarStepIds).toEqual(["grammar-1-step-1"]);
+    expect(newDays[5]?.grammarStepIds).toEqual(["grammar-1-step-3"]);
+    expect(newDays[6]?.grammarStepIds).toEqual(["grammar-2-step-1"]);
+    expect(newDays[11]?.grammarStepIds).toEqual(["grammar-2-step-3"]);
+    expect(newDays[12]?.grammarStepIds).toEqual(["grammar-1-step-3", "grammar-2-step-3"]);
+    expect(newDays[15]?.grammarStepIds).toEqual(["grammar-1-step-3", "grammar-2-step-3"]);
     for (const day of newDays) {
       expect(day.coreTermIds).toHaveLength(3);
       expect(new Set(day.coreTermIds).size).toBe(3);
-      expect(day.expandedTermIds).toHaveLength(9);
+      expect(day.expandedTermIds).toHaveLength(27);
       expect(day.expandedTermIds.every((id) => contract.supportTerms.find((term) => term.id === id)?.relatedCoreTermId && day.coreTermIds.includes(contract.supportTerms.find((term) => term.id === id)!.relatedCoreTermId))).toBe(true);
-      expect(day.writingFocus).toContain("Write");
-      expect(day.speakingFocus).toMatch(/^(Say|Give)/u);
+      for (const coreId of day.coreTermIds) {
+        const linked = contract.supportTerms.filter((term) => term.relatedCoreTermId === coreId);
+        expect(linked).toHaveLength(9);
+        expect(new Set(linked.map((term) => term.relation))).toEqual(new Set(["umbrella", "synonym", "antonym", "word_family", "collocation"]));
+      }
+      expect(day.skillExercises).toHaveLength(6);
+      expect(day.skillExercises.every((exercise) => exercise.focus.length > 0 && exercise.resourceIds.length > 0 && exercise.resourceIds.every((id) => [...day.coreTermIds, ...day.expandedTermIds].includes(id)))).toBe(true);
     }
     expect(reviewDays.map((day) => day.lessonNumber)).toEqual([5, 10, 15, 20]);
     for (const day of reviewDays) {
       expect(day.reviewTermIds).toHaveLength(12);
-      expect(day.reviewExpandedTermIds).toHaveLength(36);
+      expect(day.reviewExpandedTermIds).toHaveLength(108);
       expect(day.coreTermIds).toEqual([]);
       expect(day.expandedTermIds).toEqual([]);
+      expect(day.skillExercises).toHaveLength(6);
+      expect(day.skillExercises.every((exercise) => exercise.resourceIds.every((id) => [...day.reviewTermIds, ...day.reviewExpandedTermIds].includes(id)))).toBe(true);
     }
   });
 
@@ -114,7 +146,7 @@ describe("monthly curriculum contract", () => {
     const coreId = (id: unknown) => `a2-core-${String(id).replace("core-", "")}`;
     const supportId = (id: unknown) => `a2-expanded-${String(id).replace("support-", "")}`;
     legacy.coreTerms.forEach((term) => { term.id = coreId(term.id); });
-    for (const term of legacy.supportTerms) delete term.relatedCoreTermId;
+    for (const term of legacy.supportTerms) { delete term.relatedCoreTermId; delete term.relation; }
     legacy.supportTerms.forEach((term, index) => { term.id = `a2-expanded-${index + 1}`; });
     for (const day of legacy.daySpecs) {
       day.coreTermIds = (day.coreTermIds as string[]).map(coreId);
@@ -130,9 +162,9 @@ describe("monthly curriculum contract", () => {
 
     const repaired = backfillMonthlyCurriculumPlan(legacy);
     expect(repaired.supportTerms.every((term) => Boolean(term.relatedCoreTermId))).toBe(true);
-    expect(repaired.daySpecs.filter((day) => day.kind === "new").every((day) => day.expandedTermIds.length === 9 && day.writingFocus && day.speakingFocus)).toBe(true);
+    expect(repaired.daySpecs.filter((day) => day.kind === "new").every((day) => day.expandedTermIds.length === 27 && day.skillExercises.length === 6)).toBe(true);
     expect(repaired.coreTerms.map(({ word, meaning, type, ipa }) => ({ word, meaning, type, ipa }))).toEqual(current.coreTerms.map(({ word, meaning, type, ipa }) => ({ word, meaning, type, ipa })));
-    expect(repaired.supportTerms.map(({ word, meaning, type, source }) => ({ word, meaning, type, source }))).toEqual(current.supportTerms.map(({ word, meaning, type, source }) => ({ word, meaning, type, source })));
+    expect(repaired.supportTerms.map(({ word, meaning, type, source, relation }) => ({ word, meaning, type, source, relation }))).toEqual(current.supportTerms.map(({ word, meaning, type, source, relation }) => ({ word, meaning, type, source, relation })));
     expect(repaired.grammarTopics).toEqual(current.grammarTopics);
     expect(repaired.sounds).toEqual(current.sounds);
     expect(backfillMonthlyCurriculumPlan(repaired)).toEqual(repaired);
@@ -140,6 +172,15 @@ describe("monthly curriculum contract", () => {
     const unsafe = structuredClone(legacy);
     unsafe.supportTerms[0]!.id = "a2-expanded-99";
     expect(() => backfillMonthlyCurriculumPlan(unsafe)).toThrow(/IDs do not prove/u);
+
+    const oldThreeSupportPool = structuredClone(legacy);
+    oldThreeSupportPool.supportTerms.splice(144);
+    for (const day of oldThreeSupportPool.daySpecs) {
+      delete day.expandedTermIds;
+      delete day.reviewExpandedTermIds;
+      delete day.skillExercises;
+    }
+    expect(() => backfillMonthlyCurriculumPlan(oldThreeSupportPool)).toThrow(/complete nine-supports-per-core pool/u);
   });
 
   it("reserves the final weekday in November 2026 for the monthly exam, with 48 core terms and scheduled reviews", () => {
@@ -148,7 +189,7 @@ describe("monthly curriculum contract", () => {
     expect(curriculum.daySpecs).toHaveLength(20);
     expect(curriculum.coreTerms).toHaveLength(48);
     expect(curriculum.coreTerms[0]).toMatchObject({ source: "core_registry", component: "core", dayNumber: 1 });
-    expect(curriculum.supportTerms[0]).toMatchObject({ type: "noun", source: "example", component: "expanded", dayNumber: 1, relatedCoreTermId: "core-1" });
+    expect(curriculum.supportTerms[0]).toMatchObject({ type: "noun", source: "group", component: "expanded", dayNumber: 1, relatedCoreTermId: "core-1", relation: "umbrella" });
     expect(curriculum.daySpecs.filter((day) => day.kind === "new")).toHaveLength(16);
     expect(curriculum.daySpecs.filter((day) => day.kind === "review")).toHaveLength(4);
     expect(curriculum.daySpecs.at(-1)?.date).toBe("2026-11-27");
@@ -159,7 +200,7 @@ describe("monthly curriculum contract", () => {
     for (const day of curriculum.daySpecs.filter((entry) => entry.kind === "review")) {
       expect(day.coreTermIds).toEqual([]);
       expect(day.reviewTermIds).toHaveLength(12);
-      expect(day.reviewExpandedTermIds).toHaveLength(36);
+      expect(day.reviewExpandedTermIds).toHaveLength(108);
       const earlierNewTerms = curriculum.daySpecs
         .filter((candidate) => candidate.lessonNumber < day.lessonNumber && candidate.kind === "new")
         .flatMap((candidate) => candidate.coreTermIds);
@@ -196,10 +237,10 @@ describe("monthly curriculum contract", () => {
 
   it("proposes resource counts from effective learning days and CEFR", () => {
     expect(recommendedMonthlyResourceCriteria("2026-11", "A1")).toEqual({
-      vocabularyCount: 48, expandedVocabularyCount: 144, grammarTopicCount: 2, pronunciationSoundCount: 4
+      vocabularyCount: 48, expandedVocabularyCount: 432, grammarTopicCount: 2, pronunciationSoundCount: 4
     });
     expect(recommendedMonthlyResourceCriteria("2026-11", "C1")).toEqual({
-      vocabularyCount: 48, expandedVocabularyCount: 144, grammarTopicCount: 2, pronunciationSoundCount: 4
+      vocabularyCount: 48, expandedVocabularyCount: 432, grammarTopicCount: 2, pronunciationSoundCount: 4
     });
     expect(recommendedMonthlyResourceCriteria("2026-02", "B1").vocabularyCount).toBe(48);
   });
@@ -248,11 +289,11 @@ describe("monthly curriculum contract", () => {
     const input = inputFor();
     const curriculum = buildMonthlyCurriculum(input);
     const allowed = structuredClone(curriculum);
-    for (let index = 0; index < 28; index += 1) allowed.supportTerms[allowed.supportTerms.length - 1 - index]!.word = allowed.supportTerms[0]!.word;
+    for (let index = 0; index < 86; index += 1) allowed.supportTerms[allowed.supportTerms.length - 1 - index]!.word = allowed.supportTerms[0]!.word;
     expect(validateMonthlyCurriculum(allowed)).toEqual([]);
 
     const excessive = structuredClone(allowed);
-    excessive.supportTerms[excessive.supportTerms.length - 29]!.word = excessive.supportTerms[0]!.word;
+    excessive.supportTerms[excessive.supportTerms.length - 87]!.word = excessive.supportTerms[0]!.word;
     expect(validateMonthlyCurriculum(excessive)).toContain("Expanded resources repeat more than 20% of the monthly total");
   });
 
@@ -260,7 +301,7 @@ describe("monthly curriculum contract", () => {
     const curriculum = buildMonthlyCurriculum(inputFor());
     const statuses = new Map(curriculum.daySpecs.map((day) => [day.lessonNumber, day.lessonNumber === 2 ? "draft" : day.lessonNumber === 3 ? "approved" : "pending"] as const));
 
-    expect(curriculum.supportTerms.map((term) => term.id)).toHaveLength(144);
+    expect(curriculum.supportTerms.map((term) => term.id)).toHaveLength(432);
     expect(recommendedPendingBatch(curriculum.daySpecs, statuses)).toEqual([1, 4, 5, 6, 7, 8, 9, 10, 11, 12]);
   });
 
