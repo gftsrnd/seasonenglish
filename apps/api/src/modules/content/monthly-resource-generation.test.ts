@@ -11,6 +11,7 @@ import {
   MonthlyResourcePlanError,
   buildMonthlyPronunciationDistinctnessConstraint,
   buildMonthlyPronunciationSchemaRepairIssue,
+  getMonthlyPronunciationTargetIssue,
   selectMonthlyCoreCandidates,
   selectMonthlyPronunciationCandidates,
   selectMonthlySupportCandidates
@@ -201,6 +202,19 @@ describe("monthly AI resource generation", () => {
     expect(constraint).toContain("must not return /iː/");
     expect(constraint).toContain("The prior candidate /ɪ/ was rejected");
     expect(constraint).toContain("Choose a different phoneme or stress pattern");
+  });
+
+  it("requires a phoneme after a primary-stress-only target was accepted", () => {
+    const previousTargets = [{ ipa: "/ˈ/", label: "primary stress", explanation: "Stress the first syllable." }];
+    const duplicateIssue = getMonthlyPronunciationTargetIssue({ ipa: "/ˈ/" }, previousTargets);
+    const constraint = buildMonthlyPronunciationDistinctnessConstraint(previousTargets, duplicateIssue);
+
+    expect(duplicateIssue).toBe("target IPA /ˈ/ duplicates an earlier pronunciation target");
+    expect(constraint).toContain("A stress-only marker target has already been accepted");
+    expect(constraint).toContain("must be a real consonant or vowel phoneme");
+    expect(constraint).toContain("do not return /ˈ/");
+    expect(getMonthlyPronunciationTargetIssue({ ipa: "/ˌ/" }, previousTargets)).toContain("second stress-only target");
+    expect(getMonthlyPronunciationTargetIssue({ ipa: "/t/" }, previousTargets)).toBeUndefined();
   });
 
   it("diagnoses mixed or mis-sized grammar responses and carries exact repair requirements", () => {

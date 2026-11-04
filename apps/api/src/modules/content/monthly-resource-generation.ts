@@ -128,10 +128,32 @@ export function buildMonthlyPronunciationDistinctnessConstraint(
   const banned = exclusions.length
     ? `HARD BANS: this target must not return ${previousTargets.map((target) => target.ipa).join(", ")}. These targets are already accepted and cannot be reused or paraphrased: ${exclusions.join("; ")}. Choose a different phoneme or stress pattern, with a clearly different sound category; avoid near-neighbor contrasts of a sound already selected.`
     : "This is the first roadmap target; choose a genuine target that can coexist with three other distinct pronunciation targets.";
+  const hasStressOnlyTarget = previousTargets.some((target) => target.ipa.trim() === "/ˈ/" || target.ipa.trim() === "/ˌ/");
+  const categoryConstraint = hasStressOnlyTarget
+    ? "A stress-only marker target has already been accepted. This target must be a real consonant or vowel phoneme, not another stress pattern; do not return /ˈ/, /ˌ/ or any other stress-only marker."
+    : "Use a real consonant or vowel phoneme unless a stress target is materially different from every accepted target.";
   const retry = retryIssue
-    ? `The previous response was rejected: ${retryIssue}. Treat that IPA and target description as forbidden too; return a different phoneme or stress pattern.`
+    ? `The previous response was rejected: ${retryIssue}. Treat that IPA and target description as forbidden too. Return a different valid IPA target; do not repeat the rejected target category.`
     : "";
-  return `${banned} ${retry}`.trim();
+  return `${banned} ${categoryConstraint} ${retry}`.trim();
+}
+
+export function getMonthlyPronunciationTargetIssue(
+  candidate: Pick<MonthlyResourcePlanTaskOutput["pronunciationTargets"][number], "ipa">,
+  previousTargets: readonly Pick<MonthlyResourcePlanTaskOutput["pronunciationTargets"][number], "ipa">[]
+): string | undefined {
+  const normalized = candidate.ipa.trim().toLocaleLowerCase("en");
+  const stressOnly = normalized === "/ˈ/" || normalized === "/ˌ/";
+  if (previousTargets.some((target) => target.ipa.trim().toLocaleLowerCase("en") === normalized)) {
+    return `target IPA ${candidate.ipa} duplicates an earlier pronunciation target`;
+  }
+  if (stressOnly && previousTargets.some((target) => {
+    const prior = target.ipa.trim().toLocaleLowerCase("en");
+    return prior === "/ˈ/" || prior === "/ˌ/";
+  })) {
+    return `target IPA ${candidate.ipa} is a second stress-only target; only one stress-pattern target is allowed across P1–P4`;
+  }
+  return undefined;
 }
 
 export function buildMonthlyPronunciationSchemaRepairIssue(issues: readonly Record<string, unknown>[]): string {

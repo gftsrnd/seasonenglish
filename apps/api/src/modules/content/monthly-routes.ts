@@ -8,7 +8,7 @@ import { z } from "zod";
 import { createRoleGuard } from "../identity/policy.js";
 import { evaluateMonthlyLessonQuality } from "./monthly-quality.js";
 import { generateMonthlyDayWithAi, MONTHLY_DAY_COMPONENTS } from "./monthly-day-generation.js";
-import { buildMonthlyPronunciationDistinctnessConstraint, buildMonthlyPronunciationSchemaRepairIssue, buildMonthlyResourcesFromAiPlan, getMonthlyGrammarPhaseIssues, isSingleHeadword, MonthlyResourceCriteriaError, MonthlyResourcePlanError, runMonthlyGrammarPhaseWithRetry, selectMonthlyCoreCandidates, selectMonthlyPronunciationCandidates, selectMonthlySupportCandidates } from "./monthly-resource-generation.js";
+import { buildMonthlyPronunciationDistinctnessConstraint, buildMonthlyPronunciationSchemaRepairIssue, buildMonthlyResourcesFromAiPlan, getMonthlyGrammarPhaseIssues, getMonthlyPronunciationTargetIssue, isSingleHeadword, MonthlyResourceCriteriaError, MonthlyResourcePlanError, runMonthlyGrammarPhaseWithRetry, selectMonthlyCoreCandidates, selectMonthlyPronunciationCandidates, selectMonthlySupportCandidates } from "./monthly-resource-generation.js";
 import { isValidMonthlyPronunciationIpaTarget } from "./monthly-resource-plan-spec.js";
 import { safeGenerationDiagnosticIssues } from "./generation-errors.js";
 
@@ -334,8 +334,9 @@ export function registerMonthlyContentRoutes(app: FastifyInstance, pool: Pool, a
             issue = `target IPA must be one slash-delimited IPA form with no spaces or prose; rejected "${candidate.ipa}"`;
             continue;
           }
-          if (pronunciationTargets.some((target) => normalizeMonthlyResourceWord(target.ipa) === normalizeMonthlyResourceWord(candidate.ipa))) {
-            issue = `target IPA ${candidate.ipa} duplicates an earlier pronunciation target`;
+          const targetIssue = getMonthlyPronunciationTargetIssue(candidate, pronunciationTargets);
+          if (targetIssue) {
+            issue = targetIssue;
             continue;
           }
           targetTemplate ??= candidate;
