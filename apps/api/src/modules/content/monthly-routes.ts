@@ -253,7 +253,9 @@ export function registerMonthlyContentRoutes(app: FastifyInstance, pool: Pool, a
           temperature: options.temperature ?? 0.15,
           maxAttempts: 2
         });
-        return parseMonthlyResourceAiOutput(generated.output);
+        const parsedDebug = parseMonthlyResourceAiOutput(generated.output); // DEBUG-PREFLIGHT (temporary)
+        console.error("DEBUG-PREFLIGHT", JSON.stringify({ cores: parsedDebug.coreTerms.map((t) => `${t.id}:${t.word}`), edges: parsedDebug.expandedTerms.map((t) => `${t.relatesToCoreId}>${t.relation}:${t.word}:${t.cefr ?? "-"}`), rawExpandedCount: Array.isArray((generated.output as { expandedTerms?: unknown[] })?.expandedTerms) ? (generated.output as { expandedTerms: unknown[] }).expandedTerms.length : null }));
+        return parsedDebug;
       };
       const coreTerms: z.infer<typeof monthlyResourcePlanOutputSchema>["coreTerms"] = readCheckpointCategory("coreTerms", monthlyResourcePlanOutputSchema.shape.coreTerms) ?? [];
       const coreWords = new Set<string>();
@@ -268,18 +270,23 @@ export function registerMonthlyContentRoutes(app: FastifyInstance, pool: Pool, a
         && new Set(coreTerms.map((term) => normalizeMonthlyResourceWord(term.word))).size === coreTerms.length;
       if (!cachedCoreValid) coreTerms.length = 0;
       for (const term of coreTerms) coreWords.add(normalizeMonthlyResourceWord(term.word));
+      const preflightSupportTarget = Math.min(MONTHLY_MAX_SUPPORTS_PER_CORE, Math.max(3, Math.floor(criteria.expandedVocabularyCount / (newLessonCount * 3))));
       for (let batchIndex = coreTerms.length / 3; batchIndex < newLessonCount; batchIndex += 1) {
         let accepted: z.infer<typeof monthlyResourcePlanOutputSchema>["coreTerms"] | undefined;
         let acceptedSupports: z.infer<typeof monthlyResourcePlanOutputSchema>["expandedTerms"] = [];
         let issue = "";
         let rejectedCoreWords: string[] = [];
-        for (let attempt = 0; attempt < 3; attempt += 1) {
+        // Cores accepted in an earlier attempt of this batch are kept; later
+        // attempts only need to fill the remaining slots.
+        const selectedCores: z.infer<typeof monthlyResourcePlanOutputSchema>["coreTerms"] = [];
+        const selectedSupportEdges: z.infer<typeof monthlyResourcePlanOutputSchema>["expandedTerms"] = [];
+        for (let attempt = 0; attempt < 4; attempt += 1) {
           const candidateCount = attempt === 0 ? 6 : 12;
           const prompt = buildMonthlyCoreCandidatesPrompt({
             cefr: criteria.cefr,
             theme: theme.title,
             communicationGoal: theme.communicationGoal,
-            existingCoreWords: [...coreWords, ...rejectedCoreWords],
+            existingCoreWords: [...coreWords, ...selectedCores.map((term) => term.word), ...rejectedCoreWords],
             batchNumber: batchIndex + 1,
             candidateCount,
             preflightRelations: true,
@@ -298,66 +305,107 @@ export function registerMonthlyContentRoutes(app: FastifyInstance, pool: Pool, a
             rejectedCoreWords = [...new Set([...rejectedCoreWords, ...result.coreTerms.map((term) => term.word)])];
             continue;
           }
-          const selectedCores: z.infer<typeof monthlyResourcePlanOutputSchema>["coreTerms"] = [];
-          const selectedSupportEdges: z.infer<typeof monthlyResourcePlanOutputSchema>["expandedTerms"] = [];
           const candidateFailures: string[] = [];
-          for (const candidate of result.coreTerms) {
-            const eligibleCore = selectMonthlyCoreCandidates({
-              candidates: [candidate],
-              existingCoreWords: new Set([...coreWords, ...selectedCores.map((term) => normalizeMonthlyResourceWord(term.word))]),
-              needed: 1
-            }).selected[0];
-            if (!eligibleCore) {
-              candidateFailures.push(`${candidate.word}: duplicate, mixed-sense, or overlapping core`);
-              continue;
-            }
+          const isInvalidAiOutput = (error: unknown) => Boolean(error && typeof error === "object" && "code" in error && (error as { code?: unknown }).code === "AI_OUTPUT_INVALID");
+          const candidateCoreForbidden = new Set([...coreWords, ...batchCoreWords]);
+          const auditCandidates = async (candidate: typeof result.coreTerms[number], edges: typeof result.expandedTerms) => {
+            const audited = await runner.runTask("monthly_resource_generation", phaseInput([candidate], { vocabularyCount: 0, expandedVocabularyCount: 0, grammarTopicCount: 0, pronunciationSoundCount: 0 }), {
+              systemPrompt: buildMonthlySupportRelationAuditPrompt({ core: candidate, candidates: edges }),
+              maxOutputTokens: 3_500,
+              temperature: 0,
+              maxAttempts: 2
+            });
+            return keepSemanticallyAuditedSupportCandidates(edges, parseMonthlyResourceAiOutput(audited.output).expandedTerms);
+          };
+          const selectSupportsFor = (candidate: typeof result.coreTerms[number], auditedEdges: typeof result.expandedTerms) => selectMonthlySupportCandidates({
+            candidates: auditedEdges,
+            coreId: candidate.id,
+            coreWord: candidate.word,
+            coreType: candidate.type,
+            coreWords: candidateCoreForbidden,
+            sameCoreWords: new Set(),
+            sameCoreRelations: new Set(),
+            existingSupportWords: [...preflightSupportTerms, ...selectedSupportEdges].map((term) => term.word),
+            maxRepeatedPlacements: maxExpandedRepeats,
+            maxPhrasePlacements: maxExpandedPhrases,
+            cefr: criteria.cefr,
+            // Keep every audited support up to the per-core target (<= 9, at
+            // most 3 per relation), not only the three required ones, so the
+            // enrichment phase only asks the AI for what is still missing.
+            needed: preflightSupportTarget
+          }).selected;
+          // AI work per candidate (audit, then relation-specific gap filling for
+          // any required relation still missing) is independent, so it runs
+          // concurrently. Selection stays sequential because it depends on the
+          // cores and supports already accepted (uniqueness, repeat ceiling).
+          const prepareCandidate = async (candidate: typeof result.coreTerms[number]) => {
             const candidateEdges = result.expandedTerms.filter((term) => term.relatesToCoreId === candidate.id);
-            const auditPrompt = buildMonthlySupportRelationAuditPrompt({ core: candidate, candidates: candidateEdges });
-            let auditedOutput: z.infer<typeof monthlyResourcePlanOutputSchema>;
-            try {
-              const audited = await runner.runTask("monthly_resource_generation", phaseInput([candidate], { vocabularyCount: 0, expandedVocabularyCount: 0, grammarTopicCount: 0, pronunciationSoundCount: 0 }), {
-                systemPrompt: auditPrompt,
-                maxOutputTokens: 3_500,
-                temperature: 0,
-                maxAttempts: 2
-              });
-              auditedOutput = parseMonthlyResourceAiOutput(audited.output);
-            } catch (error) {
-              if (error && typeof error === "object" && "code" in error && (error as { code?: unknown }).code === "AI_OUTPUT_INVALID") {
-                candidateFailures.push(`${candidate.word}: relation audit output was invalid`);
-                continue;
-              }
+            let auditedEdges: typeof result.expandedTerms;
+            try { auditedEdges = await auditCandidates(candidate, candidateEdges); }
+            catch (error) {
+              if (isInvalidAiOutput(error)) return { candidate, candidateEdges, auditedEdges: [] as typeof result.expandedTerms, failure: `${candidate.word}: relation audit output was invalid` };
               throw error;
             }
-            const auditedEdges = keepSemanticallyAuditedSupportCandidates(candidateEdges, auditedOutput.expandedTerms);
-            const candidateCoreForbidden = new Set([...coreWords, ...batchCoreWords]);
-            const selectedEdges = selectMonthlySupportCandidates({
-              candidates: auditedEdges,
-              coreId: candidate.id,
-              coreWord: candidate.word,
-              coreType: candidate.type,
-              coreWords: candidateCoreForbidden,
-              sameCoreWords: new Set(),
-              sameCoreRelations: new Set(),
-              existingSupportWords: [...preflightSupportTerms, ...selectedSupportEdges].map((term) => term.word),
-              maxRepeatedPlacements: maxExpandedRepeats,
-              maxPhrasePlacements: maxExpandedPhrases,
-              cefr: criteria.cefr,
-              needed: 3
-            }).selected;
-            const selectedRelations = new Set(selectedEdges.map((term) => term.relation));
-            if (selectedEdges.length !== 3 || !["umbrella", "synonym", "word_family"].every((relation) => selectedRelations.has(relation as typeof selectedEdges[number]["relation"]))) {
-              const relationSummary = (terms: typeof candidateEdges) => ["umbrella", "synonym", "word_family"].map((relation) => {
-                const words = terms.filter((term) => term.relation === relation).map((term) => term.word).slice(0, 3);
-                return `${relation}=${words.join("/") || "∅"}`;
-              }).join(", ");
-              candidateFailures.push(`${candidate.word}: generated [${relationSummary(candidateEdges)}], audit kept [${relationSummary(auditedEdges)}], selected [${relationSummary(selectedEdges)}]`);
-              continue;
+            const preliminary = selectSupportsFor(candidate, auditedEdges);
+            const missingRequired = (["umbrella", "synonym", "word_family"] as const).filter((relation) => !preliminary.some((term) => term.relation === relation));
+            const gapResults = await Promise.all(missingRequired.map(async (relation) => {
+              try {
+                const gapPrompt = buildMonthlySupportRelationCandidatePrompt({
+                  cefr: criteria.cefr,
+                  core: candidate,
+                  relation,
+                  theme: theme.title,
+                  forbiddenCoreWords: [...candidateCoreForbidden],
+                  existingSupportWords: [...preflightSupportTerms, ...selectedSupportEdges].map((term) => term.word),
+                  sameCoreSupportWords: auditedEdges.map((term) => term.word),
+                  rejectedCandidateWords: candidateEdges.filter((term) => term.relation === relation && !auditedEdges.includes(term)).map((term) => term.word),
+                  previousIssue: "",
+                  candidateCount: 8
+                });
+                const gapResult = await runPhase(gapPrompt, [candidate], { vocabularyCount: 0, expandedVocabularyCount: 8, grammarTopicCount: 0, pronunciationSoundCount: 0 }, { temperature: 0.35 });
+                const gapCandidates = keepExactMonthlySupportRelationCandidates(gapResult.expandedTerms, relation, candidate.id);
+                return gapCandidates.length ? await auditCandidates(candidate, gapCandidates) : [];
+              } catch (error) {
+                if (isInvalidAiOutput(error)) return [];
+                throw error;
+              }
+            }));
+            return { candidate, candidateEdges, auditedEdges: [...auditedEdges, ...gapResults.flat()], failure: "" };
+          };
+          const preliminaryEligible = result.coreTerms.filter((candidate) => {
+            const ok = selectMonthlyCoreCandidates({ candidates: [candidate], existingCoreWords: new Set([...coreWords, ...selectedCores.map((term) => normalizeMonthlyResourceWord(term.word))]), needed: 1 }).selected.length === 1;
+            if (!ok) candidateFailures.push(`${candidate.word}: duplicate, mixed-sense, or overlapping core`);
+            return ok;
+          });
+          const PREFLIGHT_CONCURRENCY = 4;
+          for (let start = 0; start < preliminaryEligible.length && selectedCores.length < 3; start += PREFLIGHT_CONCURRENCY) {
+            const prepared = await Promise.all(preliminaryEligible.slice(start, start + PREFLIGHT_CONCURRENCY).map(prepareCandidate));
+            for (const { candidate, candidateEdges, auditedEdges, failure } of prepared) {
+              if (selectedCores.length === 3) break;
+              if (failure) { candidateFailures.push(failure); continue; }
+              const eligibleCore = selectMonthlyCoreCandidates({
+                candidates: [candidate],
+                existingCoreWords: new Set([...coreWords, ...selectedCores.map((term) => normalizeMonthlyResourceWord(term.word))]),
+                needed: 1
+              }).selected[0];
+              if (!eligibleCore) {
+                candidateFailures.push(`${candidate.word}: duplicate, mixed-sense, or overlapping core`);
+                continue;
+              }
+              const selectedEdges = selectSupportsFor(candidate, auditedEdges);
+              const selectedRelations = new Set(selectedEdges.map((term) => term.relation));
+              if (selectedEdges.length < 3 || !["umbrella", "synonym", "word_family"].every((relation) => selectedRelations.has(relation as typeof selectedEdges[number]["relation"]))) {
+                const relationSummary = (terms: typeof candidateEdges) => ["umbrella", "synonym", "word_family"].map((relation) => {
+                  const words = terms.filter((term) => term.relation === relation).map((term) => term.word).slice(0, 3);
+                  return `${relation}=${words.join("/") || "∅"}`;
+                }).join(", ");
+                candidateFailures.push(`${candidate.word}: generated [${relationSummary(candidateEdges)}], audit kept [${relationSummary(auditedEdges)}], selected [${relationSummary(selectedEdges)}]`);
+                continue;
+              }
+              const finalId = `${criteria.cefr.toLowerCase()}-core-${batchIndex * 3 + selectedCores.length + 1}`;
+              selectedCores.push({ ...eligibleCore, id: finalId });
+              selectedSupportEdges.push(...selectedEdges.map((term) => ({ ...term, relatesToCoreId: finalId })));
             }
-            const finalId = `${criteria.cefr.toLowerCase()}-core-${batchIndex * 3 + selectedCores.length + 1}`;
-            selectedCores.push({ ...eligibleCore, id: finalId });
-            selectedSupportEdges.push(...selectedEdges.map((term) => ({ ...term, relatesToCoreId: finalId })));
-            if (selectedCores.length === 3) break;
           }
           if (selectedCores.length === 3) {
             accepted = selectedCores;
@@ -405,7 +453,11 @@ export function registerMonthlyContentRoutes(app: FastifyInstance, pool: Pool, a
           && MONTHLY_REQUIRED_SUPPORT_RELATIONS.every((relation) => relations.has(relation))
           && supports.some((term) => term.relation === "word_family" && isGenuineWordFamily(core.word, term.word));
       };
-      for (let coreIndex = coreTerms.findIndex((core, index) => !isCompleteCoreSupportSet(core, index)); coreIndex >= 0 && coreIndex < coreTerms.length; coreIndex += 1) {
+      // Enrichment per core is mostly independent AI work, so cores run
+      // concurrently in a small pool. Each core reads the shared pool as it
+      // stands; the repeat ceiling is re-enforced after all cores finish.
+      const firstIncompleteCore = coreTerms.findIndex((core, index) => !isCompleteCoreSupportSet(core, index));
+      const enrichCore = async (coreIndex: number) => {
         let coreTerm = coreTerms[coreIndex]!;
         const cachedTermsForCore = expandedTerms.filter((term) => term.relatesToCoreId === coreTerm.id);
         for (let index = expandedTerms.length - 1; index >= 0; index -= 1) {
@@ -647,6 +699,34 @@ export function registerMonthlyContentRoutes(app: FastifyInstance, pool: Pool, a
         if (!acceptedForCore) throw new MonthlyResourcePlanError([lastIssue]);
         const accepted = acceptedForCore.map((term, index) => ({ ...term, id: `${criteria.cefr.toLowerCase()}-expanded-${expandedTerms.length + index + 1}` }));
         expandedTerms.push(...accepted);
+        await saveCheckpointCategory("expandedTerms", expandedTerms);
+      };
+      if (firstIncompleteCore >= 0) {
+        const pendingCoreIndexes = coreTerms.map((_core, index) => index).filter((index) => index >= firstIncompleteCore);
+        const ENRICHMENT_CONCURRENCY = 6;
+        let nextPending = 0;
+        const worker = async () => {
+          while (nextPending < pendingCoreIndexes.length) {
+            const coreIndex = pendingCoreIndexes[nextPending]!;
+            nextPending += 1;
+            await enrichCore(coreIndex);
+          }
+        };
+        await Promise.all(Array.from({ length: Math.min(ENRICHMENT_CONCURRENCY, pendingCoreIndexes.length) }, worker));
+        // Concurrent cores can each pick the same optional word. Drop surplus
+        // optional repeats (never a core's only support of a required relation,
+        // never below three supports) until the 35% ceiling holds again.
+        const repeatedPlacements = () => expandedTerms.length - new Set(expandedTerms.map((term) => normalizeMonthlyResourceWord(term.word))).size;
+        for (let index = expandedTerms.length - 1; index >= 0 && repeatedPlacements() > maxExpandedRepeats; index -= 1) {
+          const term = expandedTerms[index]!;
+          const word = normalizeMonthlyResourceWord(term.word);
+          if (expandedTerms.filter((other) => normalizeMonthlyResourceWord(other.word) === word).length < 2) continue;
+          const sameCore = expandedTerms.filter((other) => other.relatesToCoreId === term.relatesToCoreId);
+          const sameRelation = sameCore.filter((other) => other.relation === term.relation);
+          const isRequired = (MONTHLY_REQUIRED_SUPPORT_RELATIONS as readonly string[]).includes(term.relation);
+          if (sameCore.length <= MONTHLY_MIN_SUPPORTS_PER_CORE || (isRequired && sameRelation.length < 2)) continue;
+          expandedTerms.splice(index, 1);
+        }
         await saveCheckpointCategory("expandedTerms", expandedTerms);
       }
 
