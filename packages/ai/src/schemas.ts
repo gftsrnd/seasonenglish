@@ -49,9 +49,9 @@ export const coachOutputSchema = z.object({
   nextQuestion: z.string().trim().min(1).max(500),
   nextQuestionTranslation: z.string().trim().min(1).max(700),
   rubric: z.object({
-    meaning: z.object({ score: z.number().int().min(0).max(5), evidence: z.string().trim().min(1).max(500), improvement: z.string().trim().min(1).max(500) }),
-    vocabulary: z.object({ score: z.number().int().min(0).max(5), evidence: z.string().trim().min(1).max(500), improvement: z.string().trim().min(1).max(500) }),
-    grammar: z.object({ score: z.number().int().min(0).max(5), evidence: z.string().trim().min(1).max(500), improvement: z.string().trim().min(1).max(500) })
+    meaning: z.object({ score: z.number().int().min(0).max(5), evidence: z.string().trim().min(1).max(500), improvement: z.string().trim().max(500) }),
+    vocabulary: z.object({ score: z.number().int().min(0).max(5), evidence: z.string().trim().min(1).max(500), improvement: z.string().trim().max(500) }),
+    grammar: z.object({ score: z.number().int().min(0).max(5), evidence: z.string().trim().min(1).max(500), improvement: z.string().trim().max(500) })
   }),
   corrections: z.array(z.object({
     original: z.string().trim().min(1).max(500),
@@ -690,7 +690,7 @@ export const monthlyResourcePlanOutputSchema = z.object({
   expandedTerms: z.array(monthlyResourceExpandedTermSchema).max(600),
   grammarTopics: z.array(monthlyResourceGrammarSchema).max(2),
   pronunciationTargets: z.array(monthlyResourcePronunciationSchema).max(4)
-}).strict();
+});
 export type MonthlyResourcePlanTaskOutput = z.infer<typeof monthlyResourcePlanOutputSchema>;
 export const monthlyResourcePlanOutputJsonSchema = {
   type: "object", additionalProperties: false, required: ["coreTerms", "expandedTerms", "grammarTopics", "pronunciationTargets"],

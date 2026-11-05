@@ -415,6 +415,32 @@ export interface ManagerSettingsView {
   readonly baseWebhookTemplate: string;
 }
 
+export type LearnerComplaintKind = "exam_eligibility" | "lesson_unlock" | "account_unlock" | "attendance" | "lesson_count" | "account";
+export type LearnerComplaintStatus = "pending" | "approved" | "rejected" | "auto_approved";
+export interface ManagerComplaintView {
+  readonly id: string;
+  readonly learnerId: string;
+  readonly learnerName: string;
+  readonly kind: LearnerComplaintKind;
+  readonly reason: string;
+  readonly relatedData: Record<string, unknown>;
+  readonly status: LearnerComplaintStatus;
+  readonly resolution: string | null;
+  readonly submittedAt: string;
+  readonly dueAt: string | null;
+  readonly resolvedAt: string | null;
+}
+export interface LearnerComplaintView {
+  readonly id: string;
+  readonly kind: LearnerComplaintKind;
+  readonly reason: string;
+  readonly status: LearnerComplaintStatus;
+  readonly resolution: string | null;
+  readonly submittedAt: string;
+  readonly dueAt: string | null;
+  readonly resolvedAt: string | null;
+}
+
 export type ManagerSettingsInput = Omit<ManagerSettingsView, "organizationName" | "pilotCycle" | "simulatedSystemDate"> & {
   readonly simulatedSystemDate?: string | undefined;
   /** Present only when the user explicitly saves the pilot-cycle section. */

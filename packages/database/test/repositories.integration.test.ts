@@ -370,6 +370,52 @@ describe("E4S repositories", () => {
     expect(legacy?.feedback?.suggestedAnswer).toEqual({ text: "", translation: "" });
   });
 
+  it("reserves the final daily Season slot atomically for concurrent requests", async () => {
+    const learnerId = randomUUID();
+    const sessionId = randomUUID();
+    const firstRequestId = randomUUID();
+    const secondRequestId = randomUUID();
+    const setting = await pool.query<{ configuration: Record<string, unknown> }>(
+      "select configuration from organization_settings where organization_id = $1",
+      [DEMO_IDS.organization]
+    );
+    const priorConfiguration = setting.rows[0]?.configuration ?? {};
+    await pool.query(
+      "update organization_settings set configuration = coalesce(configuration, '{}'::jsonb) || '{\"coachDailyLimit\":1}'::jsonb where organization_id = $1",
+      [DEMO_IDS.organization]
+    );
+    try {
+      await pool.query(
+        `insert into users (id, organization_id, role, display_name, status)
+         values ($1, $2, 'learner', 'Season Quota Race', 'active')`,
+        [learnerId, DEMO_IDS.organization]
+      );
+      await pool.query(
+        `insert into coach_sessions (id, learner_id, scenario, status)
+         values ($1, $2, '{"kind":"practice","title":"Quota race"}'::jsonb, 'active')`,
+        [sessionId, learnerId]
+      );
+
+      const outcomes = await Promise.all([
+        repositories.coach.reserveDailyTurn({ learnerId, sessionId, requestId: firstRequestId }),
+        repositories.coach.reserveDailyTurn({ learnerId, sessionId, requestId: secondRequestId })
+      ]);
+      expect(outcomes.filter((outcome) => outcome === "reserved")).toHaveLength(1);
+      expect(outcomes.filter((outcome) => outcome === "limit")).toHaveLength(1);
+
+      const winningRequestId = outcomes[0] === "reserved" ? firstRequestId : secondRequestId;
+      await repositories.coach.releaseDailyTurn(learnerId, winningRequestId);
+      await expect(repositories.coach.reserveDailyTurn({
+        learnerId, sessionId, requestId: randomUUID()
+      })).resolves.toBe("reserved");
+    } finally {
+      await pool.query("delete from users where id = $1", [learnerId]);
+      await pool.query("update organization_settings set configuration = $2::jsonb where organization_id = $1", [
+        DEMO_IDS.organization, JSON.stringify(priorConfiguration)
+      ]);
+    }
+  });
+
   it("leases a queued job once so concurrent workers cannot duplicate it", async () => {
     const id = randomUUID();
     await repositories.jobs.enqueue({
@@ -699,5 +745,36 @@ describe("E4S repositories", () => {
       await pool.query("delete from users where id = $1", [learnerId]);
       await pool.query("update organization_settings set configuration = $2::jsonb where organization_id = $1", [DEMO_IDS.organization, JSON.stringify(settings.rows[0]?.configuration ?? {})]);
     }
+  });
+
+  it("keeps the monthly topic, counters, and persisted opening while starting a fresh prompt after chat reset", async () => {
+    const first = await repositories.coach.currentForLearner(DEMO_IDS.learner, true);
+    expect(first).not.toBeNull();
+    const firstOpening = first!.messages[0]!;
+    expect(firstOpening.speaker).toBe("coach");
+    expect(firstOpening.text).toMatch(/^Hi .+\?/u);
+
+    const stored = await pool.query<{ scenario: { title?: string; month?: string; openingQuestion?: string } }>(
+      `select scenario from coach_sessions
+       where learner_id = $1 and status = 'active' and coalesce(scenario->>'kind', 'practice') = 'practice'
+       order by started_at desc limit 1`,
+      [DEMO_IDS.learner]
+    );
+    expect(stored.rows[0]?.scenario).toMatchObject({
+      title: first!.topic,
+      month: expect.any(String),
+      openingQuestion: firstOpening.text
+    });
+
+    await repositories.coach.archiveCurrent(DEMO_IDS.learner);
+    const restarted = await repositories.coach.currentForLearner(DEMO_IDS.learner, true);
+    expect(restarted?.topic).toBe(first!.topic);
+    expect(restarted?.messages[0]?.text).not.toBe(firstOpening.text);
+    expect(restarted?.monthly).toEqual(first!.monthly);
+    expect(restarted?.daily).toEqual(first!.daily);
+
+    const refreshed = await repositories.coach.currentForLearner(DEMO_IDS.learner, true);
+    expect(refreshed?.topic).toBe(first!.topic);
+    expect(refreshed?.messages[0]?.text).toBe(restarted?.messages[0]?.text);
   });
 });

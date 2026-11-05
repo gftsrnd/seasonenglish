@@ -85,17 +85,34 @@ export function evaluateMonthlyLessonQuality(
     if (hasNoLexicalRelation(item)) light.push({ severity: "light", code: "MONTHLY_SYNONYM_OR_ANTONYM_MISSING", message: `${word} is missing a synonym or antonym`, dayNumber, component: "vocabulary" });
   }
 
-  const grammarIds = day.grammarStepIds ?? [day.grammarStepId];
+  const grammarIds = day.kind === "review" ? day.reviewGrammarStepIds ?? [] : day.grammarStepIds ?? [day.grammarStepId];
   const grammarSteps = grammarIds.map((id) => contract.grammarTopics.flatMap((topic) => topic.steps).find((step) => step.id === id)).filter((step): step is NonNullable<typeof step> => Boolean(step));
   const formula = asString(parts.get("grammar")?.content.formula);
-  if (grammarSteps.length !== grammarIds.length || grammarSteps.some((step) => !formula.includes(step.formula))) severe.push(finding("MONTHLY_GRAMMAR_SCOPE_MISMATCH", "Grammar formula does not match every locked grammar step", dayNumber, "grammar"));
+  if (!grammarIds.length || grammarSteps.length !== grammarIds.length || grammarSteps.some((step) => !formula.includes(step.formula))) severe.push(finding("MONTHLY_GRAMMAR_SCOPE_MISMATCH", "Grammar formula does not match every locked grammar step", dayNumber, "grammar"));
 
-  const sound = contract.sounds.find((candidate) => candidate.id === day.soundId);
+  const soundIds = day.kind === "review" ? day.reviewSoundIds ?? [] : [day.soundId];
+  const exampleIds = day.kind === "review" ? day.reviewPronunciationExampleIds ?? [] : day.pronunciationExampleIds;
+  const sounds = soundIds.map((soundId) => contract.sounds.find((candidate) => candidate.id === soundId)).filter((sound): sound is NonNullable<typeof sound> => Boolean(sound));
+  const soundByExampleId = new Map(sounds.flatMap((sound) => sound.examples.map((example) => [example.id, { sound, example }] as const)));
+  const expectedExamples = exampleIds.map((id) => soundByExampleId.get(id)?.example);
+  const primarySound = sounds[0];
+  const primaryExamples = primarySound ? exampleIds.map((id) => soundByExampleId.get(id)).filter((entry): entry is NonNullable<typeof entry> => entry !== undefined && entry.sound.id === primarySound.id).map((entry) => entry.example) : [];
   const pronunciation = parts.get("pronunciation")?.content;
   const focus = asString(pronunciation?.focus);
   const words = items(pronunciation).map((item) => ({ word: asString(item.word), ipa: asString(item.ipa) }));
-  const expectedExamples = sound?.examples.filter((example) => day.pronunciationExampleIds.includes(example.id)) ?? [];
-  if (!sound || focus !== sound.ipa || words.length !== 3 || !samePronunciationExamples(words, expectedExamples)) {
+  const reviewTargets = Array.isArray(pronunciation?.reviewTargets) ? pronunciation.reviewTargets.filter(isRecord) : [];
+  const expectedReviewTargets = sounds.map((sound) => ({
+    soundId: sound.id,
+    focus: sound.ipa,
+    words: exampleIds.map((id) => soundByExampleId.get(id)).filter((entry): entry is NonNullable<typeof entry> => entry !== undefined && entry.sound.id === sound.id).map((entry) => entry.example)
+  }));
+  const reviewTargetsMatch = day.kind !== "review" || (reviewTargets.length === expectedReviewTargets.length && reviewTargets.every((target, index) => {
+    const expected = expectedReviewTargets[index];
+    if (!expected) return false;
+    const actualWords = items(target).map((item) => ({ word: asString(item.word), ipa: asString(item.ipa) }));
+    return target.soundId === expected.soundId && target.focus === expected.focus && actualWords.length === expected.words.length && samePronunciationExamples(actualWords, expected.words);
+  }));
+  if (!sounds.length || sounds.length !== soundIds.length || !exampleIds.length || expectedExamples.some((example) => !example) || !primarySound || focus !== primarySound.ipa || words.length !== primaryExamples.length || !samePronunciationExamples(words, primaryExamples) || !reviewTargetsMatch) {
     severe.push(finding("MONTHLY_SOUND_SCOPE_MISMATCH", "Pronunciation focus or examples do not match the locked day specification", dayNumber, "pronunciation"));
   }
   return { severe, light, contractVersion: contract.version };

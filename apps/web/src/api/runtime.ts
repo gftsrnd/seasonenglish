@@ -13,7 +13,7 @@ export class ApiError extends Error {
     public readonly status?: number,
     public readonly details?: unknown
   ) {
-    super(code);
+    super(code === "NETWORK_UNAVAILABLE" ? "Không thể kết nối tới E4S. Kiểm tra mạng rồi thử lại." : code);
     this.name = "ApiError";
   }
 }

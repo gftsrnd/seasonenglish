@@ -81,6 +81,15 @@ beforeEach(() => {
 });
 
 describe("App session shell", () => {
+  it("shows only the locked-account screen for a disabled learner session", async () => {
+    client.currentSession.mockResolvedValue({ ...learnerSession, accountStatus: "disabled" });
+    client.logout.mockResolvedValue(undefined);
+    render(<App>{() => <div>Normal learner routes</div>}</App>);
+    expect(await screen.findByRole("heading", { name: "Tài khoản đang bị khóa" })).toBeInTheDocument();
+    expect(screen.queryByText("Normal learner routes")).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Đăng xuất" })).toBeInTheDocument();
+  });
+
   it("maps every resolved season to a dedicated pattern asset", () => {
     expect(themePatternUrls).toEqual({
       spring: "/patterns/season-spring.png",

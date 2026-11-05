@@ -131,7 +131,7 @@ function AppContent({ children }: { children?: ((session: SessionView) => ReactN
     };
   }, [session, setTheme]);
   useEffect(() => {
-    if (session?.role !== "learner") { setProfileRecord(undefined); setLearnerCefr(undefined); setAvatarOpen(false); return; }
+    if (session?.role !== "learner" || session.accountStatus === "disabled") { setProfileRecord(undefined); setLearnerCefr(undefined); setAvatarOpen(false); return; }
     void import("../api/learner.js").then(({ learnerApiClient }) => {
       void learnerApiClient.getProfile().then(setProfileRecord).catch(() => setProfileRecord(undefined));
       void learnerApiClient.getProgress().then((progress) => setLearnerCefr(progress.learner.cefr ?? undefined)).catch(() => setLearnerCefr(undefined));
@@ -151,6 +151,13 @@ function AppContent({ children }: { children?: ((session: SessionView) => ReactN
       showToast({ message: "Không đăng xuất được. Vui lòng thử lại.", tone: "danger" });
     }
   };
+  if (session.role === "learner" && session.accountStatus === "disabled") {
+    return <main className="app-status-page"><section className="app-status-card" role="status" aria-labelledby="locked-account-title">
+      <h1 id="locked-account-title">Tài khoản đang bị khóa</h1>
+      <p>Tài khoản người học của bạn hiện không thể truy cập bài học. Vui lòng liên hệ Quản lý để được hỗ trợ.</p>
+      <button type="button" onClick={() => void logout()}>Đăng xuất</button>
+    </section></main>;
+  }
   const saveAvatar = async (avatar: LearnerAvatarData) => {
     if (session.role === "learner") {
       if (!profileRecord) return;

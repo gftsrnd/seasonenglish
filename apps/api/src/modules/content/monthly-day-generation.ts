@@ -9,11 +9,21 @@ export const MONTHLY_DAY_COMPONENTS = [
 export type MonthlyDayComponent = (typeof MONTHLY_DAY_COMPONENTS)[number];
 
 export async function generateMonthlyDayWithAi(contract: MonthlyCurriculumContract, dayNumber: number, runner: AiTaskRunner, systemPrompt: string): Promise<MonthlyDayGenerationResult> {
+  return generateMonthlyContentWithAi("new", contract, dayNumber, runner, systemPrompt);
+}
+
+/** Review generation has a separate entry point so ordinary-day callers cannot silently generate a review DaySpec. */
+export async function generateMonthlyReviewWithAi(contract: MonthlyCurriculumContract, dayNumber: number, runner: AiTaskRunner, systemPrompt: string): Promise<MonthlyDayGenerationResult> {
+  return generateMonthlyContentWithAi("review", contract, dayNumber, runner, systemPrompt);
+}
+
+async function generateMonthlyContentWithAi(kind: "new" | "review", contract: MonthlyCurriculumContract, dayNumber: number, runner: AiTaskRunner, systemPrompt: string): Promise<MonthlyDayGenerationResult> {
   const generated = await generateMonthlyDay({
     contract,
     dayNumber,
+    kind,
     maxAttempts: 3,
-    generate: async ({ daySpec, coreTerms, grammarStep, grammarSteps, sound, components, priorParts }) => {
+    generate: async ({ daySpec, coreTerms, grammarStep, grammarSteps, sound, sounds, pronunciationExamples, components, priorParts }) => {
       const result = await runner.runTask("monthly_lesson_day", {
           month: contract.month,
           cefr: contract.cefr,
@@ -24,12 +34,14 @@ export async function generateMonthlyDayWithAi(contract: MonthlyCurriculumContra
             grammarStep,
             grammarSteps,
             sound,
+            sounds,
+            pronunciationExamples,
             theme: contract.theme,
             supportTerms: contract.supportTerms.filter((term) => (daySpec.kind === "new" ? daySpec.expandedTermIds : daySpec.reviewExpandedTermIds).includes(term.id))
           },
           priorParts
         }, {
-          systemPrompt,
+          systemPrompt: kind === "review" ? `${systemPrompt}\n\nReview pronunciation output contract: Keep pronunciation.focus equal to the first locked review sound IPA and pronunciation.words equal to exactly that sound's three locked examples, so it remains compatible with the standard lesson format. Also include pronunciation.reviewTargets as an array in lockedScope.sounds order; each item must have { soundId, focus, words }, and words must contain every locked pronunciation example for that sound with its exact word and IPA. Include every allocated review sound and example exactly once. Do not use the review calendar day's ordinary sound/examples.` : systemPrompt,
           maxOutputTokens: 8_000,
           temperature: 0.2,
           maxAttempts: 1
@@ -51,6 +63,8 @@ export interface MonthlyDayGenerationInput {
   grammarStep: GrammarStep;
   grammarSteps: readonly GrammarStep[];
   sound: PronunciationSound;
+  sounds: readonly PronunciationSound[];
+  pronunciationExamples: readonly { id: string; word: string; ipa: string }[];
   priorParts: readonly MonthlyLessonCandidate["parts"][number][];
 }
 
@@ -65,15 +79,27 @@ export interface MonthlyDayGenerationResult {
 export async function generateMonthlyDay(input: {
   contract: MonthlyCurriculumContract;
   dayNumber: number;
+  /** Defaults to `new` for backwards-compatible ordinary generation. */
+  kind?: "new" | "review";
   generate: (input: MonthlyDayGenerationInput) => Promise<MonthlyLessonCandidate>;
   maxAttempts?: number;
 }): Promise<MonthlyDayGenerationResult> {
   const daySpec = input.contract.daySpecs.find((day) => day.lessonNumber === input.dayNumber);
   if (!daySpec) throw new Error(`Monthly DaySpec ${input.dayNumber} was not found`);
-  const grammarSteps = (daySpec.grammarStepIds ?? [daySpec.grammarStepId]).map((id) => input.contract.grammarTopics.flatMap((topic) => topic.steps).find((step) => step.id === id)).filter((step): step is GrammarStep => Boolean(step));
+  const kind = input.kind ?? "new";
+  if (daySpec.kind !== kind) throw new Error(kind === "new" ? "MONTHLY_DAY_KIND_MISMATCH: ordinary generation requires a new DaySpec" : "MONTHLY_DAY_KIND_MISMATCH: review generation requires a review DaySpec");
+  const grammarIds = kind === "review" ? daySpec.reviewGrammarStepIds ?? [] : daySpec.grammarStepIds ?? [daySpec.grammarStepId];
+  const soundIds = kind === "review" ? daySpec.reviewSoundIds ?? [] : [daySpec.soundId];
+  const pronunciationExampleIds = kind === "review" ? daySpec.reviewPronunciationExampleIds ?? [] : daySpec.pronunciationExampleIds;
+  const grammarSteps = grammarIds.map((id) => input.contract.grammarTopics.flatMap((topic) => topic.steps).find((step) => step.id === id)).filter((step): step is GrammarStep => Boolean(step));
   const grammarStep = grammarSteps[0];
-  const sound = input.contract.sounds.find((candidate) => candidate.id === daySpec.soundId);
-  if (!grammarStep || grammarSteps.length !== (daySpec.grammarStepIds?.length ?? 1) || !sound) throw new Error(`Monthly DaySpec ${input.dayNumber} has unresolved grammar or pronunciation scope`);
+  const sounds = soundIds.map((id) => input.contract.sounds.find((candidate) => candidate.id === id)).filter((sound): sound is PronunciationSound => Boolean(sound));
+  const examplesById = new Map(sounds.flatMap((candidate) => candidate.examples.map((example) => [example.id, example] as const)));
+  const pronunciationExamples = pronunciationExampleIds.map((id) => examplesById.get(id)).filter((example): example is NonNullable<typeof example> => Boolean(example));
+  if (!grammarStep || grammarSteps.length !== grammarIds.length || !sounds.length || sounds.length !== soundIds.length || !pronunciationExampleIds.length || pronunciationExamples.length !== pronunciationExampleIds.length) {
+    throw new Error(`Monthly DaySpec ${input.dayNumber} has unresolved grammar or pronunciation scope`);
+  }
+  const sound = sounds[0]!;
   const coreTerms = (daySpec.kind === "new" ? daySpec.coreTermIds : daySpec.reviewTermIds).map((id) => input.contract.coreTerms.find((term) => term.id === id)).filter((term): term is CoreTerm => Boolean(term));
   const maxAttempts = input.maxAttempts ?? 3;
   const scopeHash = monthlyScopeHash(input.contract);
@@ -82,7 +108,7 @@ export async function generateMonthlyDay(input: {
   let requestedComponents: MonthlyDayComponent[] = [...MONTHLY_DAY_COMPONENTS];
   let report: MonthlyQualityReport = { severe: [], light: [], contractVersion: input.contract.version };
   for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
-    const generated = await input.generate({ contract: input.contract, dayNumber: input.dayNumber, components: requestedComponents, daySpec, coreTerms, grammarStep, grammarSteps, sound, priorParts: parts });
+    const generated = await input.generate({ contract: input.contract, dayNumber: input.dayNumber, components: requestedComponents, daySpec, coreTerms, grammarStep, grammarSteps, sound, sounds, pronunciationExamples, priorParts: parts });
     title = generated.title || title;
     parts = mergeParts(parts, generated.parts);
     const candidate = { title, parts };

@@ -8,13 +8,15 @@ const audioRoots = {
   phoneme: "apps/web/public/media/audio/phonemes",
   word: "apps/web/public/media/audio/words"
 };
+const mouthFormRoot = "apps/web/public/media/ipa-mouth-form";
 
 export async function verifyPronunciationAssets(options = {}) {
   const repoRoot = resolve(options.repoRoot ?? fileURLToPath(new URL("..", import.meta.url)));
   const manifestPath = resolve(repoRoot, options.manifestPath ?? "apps/web/public/media/pronunciation-manifest.json");
-  const entries = await readManifest(manifestPath);
+  const { entries, mouthForms } = await readManifest(manifestPath);
   const errors = [];
   const declared = new Set();
+  const declaredMouthForms = new Set();
   const urls = new Set();
 
   for (const entry of entries) {
@@ -49,14 +51,42 @@ export async function verifyPronunciationAssets(options = {}) {
     }
   }
 
+  const mouthFormKeys = new Set();
+  for (const entry of mouthForms) {
+    const label = `mouthForm:${entry?.key ?? "unknown"}`;
+    if (typeof entry?.key !== "string" || !entry.key.trim()) errors.push(`${label}: missing IPA key`);
+    else if (mouthFormKeys.has(entry.key)) errors.push(`${label}: duplicate IPA key`);
+    else mouthFormKeys.add(entry.key);
+    if (typeof entry?.localPath !== "string" || !entry.localPath.startsWith(`${mouthFormRoot}/`) || extname(entry.localPath).toLowerCase() !== ".png") errors.push(`${label}: invalid localPath`);
+    if (typeof entry?.purpose !== "string" || !entry.purpose.trim()) errors.push(`${label}: missing purpose`);
+    if (!sha256Pattern.test(entry?.sha256 ?? "")) errors.push(`${label}: invalid sha256`);
+    if (typeof entry?.localPath !== "string") continue;
+    const absolutePath = resolve(repoRoot, entry.localPath);
+    if (!isInside(resolve(repoRoot, mouthFormRoot), absolutePath)) {
+      errors.push(`${label}: localPath escapes mouth-form root`);
+      continue;
+    }
+    declaredMouthForms.add(absolutePath);
+    try {
+      if (!(await stat(absolutePath)).isFile()) throw new Error("not a file");
+      const actual = createHash("sha256").update(await readFile(absolutePath)).digest("hex");
+      if (actual !== entry.sha256) errors.push(`${label}: SHA-256 mismatch`);
+    } catch {
+      errors.push(`${label}: missing file ${entry.localPath}`);
+    }
+  }
+
   for (const kind of Object.keys(audioRoots)) {
     const directory = resolve(repoRoot, audioRoots[kind]);
     for (const file of await listAudioFiles(directory)) {
       if (!declared.has(file)) errors.push(`Audio file not registered: ${relative(repoRoot, file).replaceAll(sep, "/")}`);
     }
   }
+  for (const file of await listPngFiles(resolve(repoRoot, mouthFormRoot))) {
+    if (!declaredMouthForms.has(file)) errors.push(`Mouth-form image not registered: ${relative(repoRoot, file).replaceAll(sep, "/")}`);
+  }
   if (errors.length) throw new Error(`Pronunciation asset verification failed:\n- ${errors.join("\n- ")}`);
-  return { entries: entries.length, files: declared.size };
+  return { entries: entries.length + mouthForms.length, files: declared.size + declaredMouthForms.size };
 }
 
 async function readManifest(manifestPath) {
@@ -66,8 +96,8 @@ async function readManifest(manifestPath) {
   } catch (error) {
     throw new Error(`Cannot read pronunciation asset manifest: ${error instanceof Error ? error.message : String(error)}`);
   }
-  if (!manifest || manifest.version !== 1 || !Array.isArray(manifest.phonemes) || !Array.isArray(manifest.words)) {
-    throw new Error("Pronunciation asset manifest must contain version 1 phonemes and words arrays");
+  if (!manifest || manifest.version !== 1 || !Array.isArray(manifest.phonemes) || !Array.isArray(manifest.words) || (manifest.mouthForms !== undefined && !Array.isArray(manifest.mouthForms))) {
+    throw new Error("Pronunciation asset manifest must contain version 1 phonemes, words, and optional mouthForms arrays");
   }
   const entries = [...manifest.phonemes, ...manifest.words];
   const keys = new Set();
@@ -76,7 +106,15 @@ async function readManifest(manifestPath) {
     if (keys.has(key)) throw new Error(`Duplicate pronunciation registry entry: ${key}`);
     keys.add(key);
   }
-  return entries;
+  const mouthForms = manifest.mouthForms ?? [];
+  const mouthFormKeys = new Set();
+  for (const entry of mouthForms) {
+    const key = entry?.key;
+    if (typeof key !== "string" || !key.trim()) continue;
+    if (mouthFormKeys.has(key)) throw new Error(`Duplicate IPA mouth-form registry entry: ${key}`);
+    mouthFormKeys.add(key);
+  }
+  return { entries, mouthForms };
 }
 
 async function listAudioFiles(directory) {
@@ -90,6 +128,21 @@ async function listAudioFiles(directory) {
     const absolutePath = resolve(directory, entry.name);
     if (entry.isDirectory()) files.push(...await listAudioFiles(absolutePath));
     else if (entry.isFile() && [".ogg", ".wav", ".mp3"].includes(extname(entry.name).toLowerCase())) files.push(absolutePath);
+  }
+  return files;
+}
+
+async function listPngFiles(directory) {
+  try {
+    if (!(await stat(directory)).isDirectory()) return [];
+  } catch {
+    return [];
+  }
+  const files = [];
+  for (const entry of await readdir(directory, { withFileTypes: true })) {
+    const absolutePath = resolve(directory, entry.name);
+    if (entry.isDirectory()) files.push(...await listPngFiles(absolutePath));
+    else if (entry.isFile() && extname(entry.name).toLowerCase() === ".png") files.push(absolutePath);
   }
   return files;
 }

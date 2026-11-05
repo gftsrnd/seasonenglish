@@ -1,0 +1,194 @@
+import type { CefrLevel } from "@e4s/contracts";
+
+export const MONTHLY_SEASON_TURN_TARGET = 100;
+export const DAILY_SEASON_TURN_LIMIT = 30;
+
+/** Scale the monthly Season target for learners approved after the month starts. */
+export function monthlySeasonTurnTarget(approvalDate: string, month: string, examDate: string): number {
+  const first = `${month}-01`;
+  const start = approvalDate > first ? approvalDate : first;
+  const totalDays = effectiveWeekdays(first, examDate);
+  const learnerDays = effectiveWeekdays(start, examDate);
+  return totalDays === 0 ? MONTHLY_SEASON_TURN_TARGET : Math.ceil(MONTHLY_SEASON_TURN_TARGET * learnerDays / totalDays);
+}
+
+function effectiveWeekdays(startDate: string, endExclusive: string): number {
+  const start = new Date(`${startDate}T00:00:00Z`);
+  const end = new Date(`${endExclusive}T00:00:00Z`);
+  let count = 0;
+  for (const date = new Date(start); date < end; date.setUTCDate(date.getUTCDate() + 1)) {
+    const weekday = date.getUTCDay();
+    if (weekday >= 1 && weekday <= 5) count++;
+  }
+  return count;
+}
+
+export interface MonthlyExamEligibilityInput {
+  systemDate: string;
+  examDate: string;
+  /** All effective weekdays in the month, excluding the exam date. */
+  effectiveDays: number;
+  /** Effective weekdays elapsed through the system date. */
+  elapsedEffectiveDays: number;
+  attendedDays: number;
+  scheduledLessons: number;
+  completedLessons: number;
+  seasonTurns: number;
+  attendanceOverride?: boolean;
+  frameworkApproved: boolean;
+  formPublished: boolean;
+}
+
+export interface MonthlyExamEligibility {
+  effectiveDays: number;
+  elapsedEffectiveDays: number;
+  attendedDays: number;
+  absenceDays: number;
+  maxAbsences: number;
+  attendanceEligible: boolean;
+  attendanceOverride: boolean;
+  scheduledLessons: number;
+  completedLessons: number;
+  lessonsEligible: boolean;
+  seasonTurns: number;
+  seasonTurnsRequired: number;
+  seasonEligible: boolean;
+  frameworkApproved: boolean;
+  formPublished: boolean;
+  windowOpen: boolean;
+  accessEligible: boolean;
+  reasons: string[];
+  /** Kept compatible with the existing learner contract. */
+  accessState: "tracking" | "eligible" | "appeal_required";
+}
+
+/**
+ * Evaluates exam access from persisted facts. Scoring and monthly final results
+ * are intentionally absent: access is a prerequisite and never a score.
+ */
+export function evaluateMonthlyExamEligibility(input: MonthlyExamEligibilityInput): MonthlyExamEligibility {
+  const effectiveDays = Math.max(0, Math.floor(input.effectiveDays));
+  const elapsedEffectiveDays = Math.max(0, Math.min(effectiveDays, Math.floor(input.elapsedEffectiveDays)));
+  const attendedDays = Math.max(0, Math.min(elapsedEffectiveDays, Math.floor(input.attendedDays)));
+  const absenceDays = Math.max(0, elapsedEffectiveDays - attendedDays);
+  const maxAbsences = Math.floor(effectiveDays * 0.3);
+  const attendanceOverride = input.attendanceOverride === true;
+  const attendanceEligible = absenceDays <= maxAbsences || attendanceOverride;
+  const scheduledLessons = Math.max(0, Math.floor(input.scheduledLessons));
+  const completedLessons = Math.max(0, Math.min(scheduledLessons, Math.floor(input.completedLessons)));
+  const lessonsEligible = scheduledLessons > 0 && completedLessons === scheduledLessons;
+  const seasonTurns = Math.max(0, Math.floor(input.seasonTurns));
+  const seasonEligible = seasonTurns >= MONTHLY_SEASON_TURN_TARGET;
+  // A published fixed final is available to every learner at the level on the
+  // exam date. Lesson completion and Season activity are readiness metrics,
+  // not access gates (CH-R33); attendance remains the learner access gate.
+  const windowOpen = input.systemDate === input.examDate;
+  const reasons: string[] = [];
+  if (!attendanceEligible) reasons.push("MONTHLY_ATTENDANCE_LIMIT_EXCEEDED");
+  if (!windowOpen) reasons.push("MONTHLY_EXAM_WINDOW_NOT_OPEN");
+  if (!input.formPublished) reasons.push("MONTHLY_FORM_NOT_PUBLISHED");
+  return {
+    effectiveDays,
+    elapsedEffectiveDays,
+    attendedDays,
+    absenceDays,
+    maxAbsences,
+    attendanceEligible,
+    attendanceOverride,
+    scheduledLessons,
+    completedLessons,
+    lessonsEligible,
+    seasonTurns,
+    seasonTurnsRequired: MONTHLY_SEASON_TURN_TARGET,
+    seasonEligible,
+    frameworkApproved: input.frameworkApproved,
+    formPublished: input.formPublished,
+    windowOpen,
+    accessEligible: reasons.length === 0,
+    reasons,
+    accessState: !attendanceEligible ? "appeal_required" : windowOpen && reasons.length === 0 ? "eligible" : "tracking"
+  };
+}
+
+export interface MonthlyLevelRecord {
+  month: string;
+  eligible: boolean;
+  finalScore: number | null;
+  finalPassed: boolean;
+  seasonTurns: number;
+  /** Newcomer-scaled target for a month that started mid-month. */
+  seasonTarget?: number;
+  absenceRate: number;
+  /** Exact counts allow the level-wide attendance cap to use a weighted rate. */
+  absenceDays?: number;
+  effectiveDays?: number;
+}
+
+export interface MonthlyLevelUpReadiness {
+  targetLevel: CefrLevel | null;
+  eligible: boolean;
+  requiredMonths: number;
+  eligibleMonths: number;
+  finalPasses: number;
+  finalPassesRequired: number;
+  finalAverage: number | null;
+  finalAverageTarget: number;
+  seasonMonths: number;
+  seasonMonthsRequired: number;
+  latestFinalPassed: boolean;
+  absenceCap: number;
+  absenceRate: number;
+  reasons: string[];
+}
+
+/** Evaluates the six eligible months used by the canonical level-up policy. */
+export function evaluateMonthlyLevelUpReadiness(input: {
+  currentLevel: CefrLevel | null;
+  months: readonly MonthlyLevelRecord[];
+}): MonthlyLevelUpReadiness {
+  const targetLevel = nextLevel(input.currentLevel);
+  if (!targetLevel) {
+    return {
+      targetLevel: null, eligible: false, requiredMonths: 6, eligibleMonths: 0,
+      finalPasses: 0, finalPassesRequired: 0, finalAverage: null, finalAverageTarget: 0,
+      seasonMonths: 0, seasonMonthsRequired: 0, latestFinalPassed: false, absenceCap: 0, absenceRate: 0,
+      reasons: ["HIGHEST_LEVEL_REACHED"]
+    };
+  }
+  const level = input.currentLevel!;
+  const finalPassesRequired = level === "A1" || level === "A2" ? 4 : 5;
+  const finalAverageTarget = level === "A1" || level === "A2" ? 70 : level === "B1" ? 72 : 75;
+  const absenceCap = level === "A1" || level === "A2" ? 25 : level === "B1" || level === "B2" ? 20 : 15;
+  const eligibleMonths = input.months.filter((month) => month.eligible).slice(-6);
+  const scores = eligibleMonths.map((month) => month.finalScore).filter((score): score is number => Number.isFinite(score));
+  const finalPasses = eligibleMonths.filter((month) => month.finalPassed).length;
+  const seasonMonths = eligibleMonths.filter((month) => month.seasonTurns >= (month.seasonTarget ?? MONTHLY_SEASON_TURN_TARGET)).length;
+  const finalAverage = scores.length === 6 ? scores.reduce((sum, score) => sum + score, 0) / 6 : null;
+  const latest = eligibleMonths[eligibleMonths.length - 1];
+  const latestFinalPassed = Boolean(latest?.finalPassed);
+  const effectiveDays = eligibleMonths.reduce((sum, month) => sum + Math.max(0, month.effectiveDays ?? 0), 0);
+  const absenceDays = eligibleMonths.reduce((sum, month) => sum + Math.max(0, month.absenceDays ?? 0), 0);
+  const absenceRate = effectiveDays > 0
+    ? absenceDays / effectiveDays * 100
+    : eligibleMonths.length ? Math.max(...eligibleMonths.map((month) => month.absenceRate)) : 100;
+  const reasons: string[] = [];
+  if (eligibleMonths.length < 6) reasons.push("LEVEL_UP_SIX_ELIGIBLE_MONTHS_REQUIRED");
+  if (finalPasses < finalPassesRequired) reasons.push("LEVEL_UP_MONTHLY_FINAL_PASSES_INSUFFICIENT");
+  if (finalAverage === null || finalAverage < finalAverageTarget) reasons.push("LEVEL_UP_MONTHLY_FINAL_AVERAGE_INSUFFICIENT");
+  if (!latestFinalPassed) reasons.push("LEVEL_UP_LATEST_MONTHLY_FINAL_MUST_PASS");
+  if (seasonMonths < finalPassesRequired) reasons.push("LEVEL_UP_SEASON_MONTHS_INSUFFICIENT");
+  if (absenceRate > absenceCap) reasons.push("LEVEL_UP_ABSENCE_CAP_EXCEEDED");
+  return {
+    targetLevel, eligible: reasons.length === 0, requiredMonths: 6, eligibleMonths: eligibleMonths.length,
+    finalPasses, finalPassesRequired, finalAverage, finalAverageTarget, seasonMonths,
+    seasonMonthsRequired: finalPassesRequired, latestFinalPassed, absenceCap, absenceRate, reasons
+  };
+}
+
+function nextLevel(level: CefrLevel | null): CefrLevel | null {
+  if (level === "A1") return "A2";
+  if (level === "A2") return "B1";
+  if (level === "B1") return "B2";
+  if (level === "B2") return "C1";
+  return null;
+}

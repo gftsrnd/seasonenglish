@@ -35,6 +35,8 @@ export interface CoachFeedbackView {
   /** Legacy compatibility for challenge/progress readers; prefer evaluation.status. */
   relevant: boolean;
   relevanceNote: string;
+  /** False means the roleplay was preserved, but the AI evaluator did not provide scores. */
+  feedbackStatus?: "complete" | "unavailable";
   evaluation: {
     status: "valid" | "insufficient" | "off_topic";
     result: "correct" | "partially_correct" | "missing_information" | "off_topic";
@@ -68,11 +70,16 @@ export interface CoachView {
   cefr: CefrLevel;
   persona: CoachPersona;
   aiAvailable: boolean;
+  chatAvailability?: { available: boolean; reason?: "weekend" | "monthly_exam_day" };
   daily: { used: number; limit: number };
   /** Valid Season turns in the organization system month. The required target is 100. */
   monthly: { label: string; turns: number; target: number };
   messages: CoachMessageView[];
   vocabulary: CoachVocabularyView[];
+  /** Vocabulary progress for the complete approved month, including lessons not yet completed. */
+  vocabularyProgress?: { opened: number; total: number };
+  /** Exact questions already used in this month's current topic, across chat resets. */
+  questionHistory?: string[];
 }
 
 export interface CoachMessageInput {

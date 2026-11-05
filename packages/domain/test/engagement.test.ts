@@ -5,6 +5,7 @@ import {
   prepareGameAttempt,
   seasonRioRoundPlan,
   scoreGameAttempt,
+  typingMaximum,
   weeklyPracticeAvailability
 } from "../src/engagement/index.js";
 
@@ -38,7 +39,7 @@ describe("engagement policy", () => {
       score: 2, maxScore: 6, correct: 1, total: 3
     });
     expect(scoreGameAttempt("typing", words, repeated.map((answer) => ({ ...answer, combo: 5 })))).toMatchObject({
-      score: 10, maxScore: 150, correct: 1, total: 3
+      score: 10, maxScore: 60, correct: 1, total: 3
     });
   });
 
@@ -51,7 +52,7 @@ describe("engagement policy", () => {
     }], [{ wordId: "w4", answer: "phrase" }])).toMatchObject({ score: 1, maxScore: 4, total: 4 });
     expect(scoreGameAttempt("typing", words, [
       { wordId: "w1", answer: "colleague", combo: 2 }, { wordId: "w2", answer: "prepare", combo: 5 }
-    ])).toMatchObject({ score: 30, maxScore: 150, total: 3 });
+    ])).toMatchObject({ score: 30, maxScore: 60, total: 3 });
     expect(scoreGameAttempt("eggs", words, [
       { wordId: "w1", answer: "colleague" }, { wordId: "w2", answer: "no" }
     ])).toMatchObject({ score: 1, maxScore: 3, total: 3 });
@@ -73,7 +74,27 @@ describe("engagement policy", () => {
     expect(scoreGameAttempt("eggs", fullSet, oneCorrect)).toMatchObject({ score: 1, maxScore: 10, correct: 1, total: 10 });
     expect(scoreGameAttempt("mario", fullSet, oneCorrect)).toMatchObject({ score: 1, maxScore: 11, correct: 1, total: 11 });
     expect(scoreGameAttempt("sort", fullSet, [{ wordId: "fixed-1", answer: "noun" }])).toMatchObject({ score: 1, maxScore: 12, correct: 1, total: 12 });
-    expect(scoreGameAttempt("typing", fullSet, [{ ...oneCorrect[0]!, combo: 1 }])).toMatchObject({ score: 10, maxScore: 500, correct: 1, total: 10 });
+    expect(scoreGameAttempt("typing", fullSet, [{ ...oneCorrect[0]!, combo: 1 }])).toMatchObject({ score: 10, maxScore: 400, correct: 1, total: 10 });
+  });
+
+  it("publishes reachable score ceilings for every game rule", () => {
+    const fullSet = Array.from({ length: 12 }, (_, index) => ({
+      id: `max-${index + 1}`,
+      english: `term${String.fromCharCode(97 + index)}`,
+      vietnamese: `từ ${index + 1}`,
+      partOfSpeech: index % 2 ? "verb" : "noun"
+    }));
+    expect(typingMaximum(1)).toBe(10);
+    expect(typingMaximum(8)).toBe(300);
+    expect(typingMaximum(10)).toBe(400);
+    const typingAnswers = fullSet.slice(0, 10).map((word) => ({ wordId: word.id, answer: word.english }));
+    const typing = scoreGameAttempt("typing", fullSet, typingAnswers);
+    expect(typing.score).toBe(typing.maxScore);
+    for (const game of ["scramble", "crossword", "eggs", "mario", "sort"] as const) {
+      const answers = fullSet.map((word) => ({ wordId: word.id, answer: game === "sort" ? (word.partOfSpeech === "noun" ? "noun" : "verb") : word.english, attempts: 1 }));
+      const result = scoreGameAttempt(game, fullSet, answers);
+      expect(result.score).toBe(result.maxScore);
+    }
   });
 
   it("scores the same shuffled round that the learner actually played", () => {

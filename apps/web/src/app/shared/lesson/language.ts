@@ -174,7 +174,7 @@ export const learnerLessonCopy: Record<LearnerLessonLanguage, LearnerLessonCopy>
       microphoneUnavailable: "Không dùng được micro – hãy tải file ghi âm lên."
     },
     notices: {
-      speakingGate: "Nghe đủ 3 từ mẫu phát âm ở bước Học để mở phần kiểm tra Nói.",
+      speakingGate: "Nghe đủ {count} từ mẫu phát âm ở bước Học để mở phần kiểm tra Nói.",
       uploadReady: "Đã tải file ghi âm lên. Bấm Kiểm tra Nói để nộp.",
       uploadBusy: "Đang tải file ghi âm…",
       savedAudioBusy: "Đang tải bản ghi âm đã lưu…",
@@ -247,7 +247,7 @@ export const learnerLessonCopy: Record<LearnerLessonLanguage, LearnerLessonCopy>
       microphoneUnavailable: "The microphone is unavailable. Upload a recording instead."
     },
     notices: {
-      speakingGate: "Listen to all three model pronunciation words in Study to unlock Speaking.",
+      speakingGate: "Listen to all {count} model pronunciation words in Study to unlock Speaking.",
       uploadReady: "Your recording is uploaded. Select Check speaking to submit it.",
       uploadBusy: "Uploading the recording…",
       savedAudioBusy: "Loading the saved recording…",

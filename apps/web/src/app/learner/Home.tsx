@@ -3,6 +3,7 @@ import { BookOpen, Clock3, LockKeyhole, MessageCircle, Play, Sprout } from "luci
 import type { LearnerHomeView, LearnerCallbacks } from "./contracts.js";
 import { Notice, PageTitle, Progress, AppLink } from "./ui.js";
 import { LevelReadinessCard } from "./LevelReadiness.js";
+import type { LearnerComplaintView } from "@e4s/contracts";
 
 export function LearnerHome({ view, actions }: { view: LearnerHomeView; actions: LearnerCallbacks }) {
   const [celebration, setCelebration] = useState(view.rewardAnnouncement?.kind === "new-level-announcement" || view.rewardAnnouncement?.kind === "top-level-redirect" ? view.rewardAnnouncement : null);
@@ -45,15 +46,15 @@ export function LearnerHome({ view, actions }: { view: LearnerHomeView; actions:
     {monthly && view.lessons.length ? <MonthlyCalendar month={monthly} lessons={view.lessons} actions={actions} /> : null}
     {monthly ? <MonthlyRhythm lessons={view.lessons} scheduled={view.monthlyEligibility?.scheduledLessons} lessonMinutes={view.schedule.lessonMinutes} goal={view.monthlyGoal} /> : null}
     <section className="grid cols-2" style={{ marginTop: 16, alignItems: "stretch", gridAutoRows: "1fr", minWidth: 0 }} data-home-block="activities" aria-label="Hoạt động tháng">
-      <AppLink className={`tile ${!monthlyPreparation && (view.coach.turnsToday ?? 0) > 0 ? "mint" : "peach"}`} style={{ height: "100%", minWidth: 0, boxSizing: "border-box" }} href="/coach" navigate={actions.navigate}><ActivityIcon /><span className="t">Season AI Coach</span><span className="s">{monthlyPreparation ? "Luyện theo trình độ đã được duyệt trong khi chờ bộ bài tháng." : (view.coach.turnsToday ?? 0) > 0 ? `Đã luyện hôm nay ✓ (${view.coach.turnsToday} lượt)` : `Đã luyện ${view.coach.turnsThisWeek} lượt trong tháng này`}</span></AppLink>
+      <AppLink className={`tile ${!monthlyPreparation && (view.coach.turnsToday ?? 0) > 0 ? "mint" : "peach"}`} style={{ height: "100%", minWidth: 0, boxSizing: "border-box" }} href="/coach" navigate={actions.navigate}><ActivityIcon /><span className="t">Season AI Coach</span><span className="s">{monthlyPreparation ? "Luyện theo trình độ đã được duyệt trong khi chờ bộ bài tháng." : `Lượt hợp lệ hôm nay ${view.coach.turnsToday ?? 0}/30`}</span></AppLink>
       <AppLink className="tile mint" style={{ height: "100%", minWidth: 0, boxSizing: "border-box" }} href="/monthly" navigate={actions.navigate}><BookOpen aria-hidden="true" /><span className="t">Bài tháng</span><span className="s">{monthlyPreparation ? "Xem trạng thái chuẩn bị lộ trình tháng." : "Xem lịch bài học, bài ôn và bài thi tháng."}</span></AppLink>
     </section>
     {!monthlyPreparation ? <LevelReadinessCard readiness={view.levelReadiness} phase={view.levelUpPhase} monthLabel={monthly ? formatMonth(monthly.month) : undefined} navigate={actions.navigate} className="home-readiness" /> : null}
     {!monthlyPreparation && view.monthlyExam ? <MonthlyExamOverview exam={view.monthlyExam} month={monthly} navigate={actions.navigate} /> : null}
-    <section className="card" style={{ marginTop: 12, background: "var(--lav)" }} aria-label="Hồ sơ và đánh giá đầu vào">
+    <section className="card learner-summary-card learner-summary-card--profile" style={{ marginTop: 12 }} aria-label="Hồ sơ và đánh giá đầu vào">
       <div className="row between" style={{ gap: 12, alignItems: "flex-start", flexWrap: "wrap" }}>
         <div><div className="eyebrow">Thông tin của bạn</div><h3 style={{ margin: "2px 0 4px" }}>Hồ sơ và đánh giá đầu vào</h3><p className="small muted" style={{ margin: 0 }}>Trình độ đã duyệt: <b>{view.learner.cefr}</b>. Kết quả đầu vào và hồ sơ vẫn xem được khi lộ trình tháng đang chuẩn bị.</p></div>
-        <div className="row" style={{ flexWrap: "wrap" }}>
+        <div className="row learner-summary-actions" style={{ flexWrap: "wrap" }}>
           <AppLink className="btn" href="/profile" navigate={actions.navigate}>Hồ sơ học tập & đầu vào</AppLink>
           {!monthly && !monthlyPreparation ? <AppLink className="btn" href="/survey" navigate={actions.navigate}>Khảo sát cuối pilot</AppLink> : null}
         </div>
@@ -247,10 +248,8 @@ function MonthlyRhythm({ lessons, scheduled, lessonMinutes, goal }: { lessons: L
 }
 
 function MonthlyExamOverview({ exam, month, navigate }: { exam: NonNullable<LearnerHomeView["monthlyExam"]>; month: LearnerHomeView["month"] | null; navigate: LearnerCallbacks["navigate"] }) {
-  const label = monthlyExamLabel(exam.status);
-  return <section className="card" data-home-block="monthly-exam" aria-label="Bài thi tháng" style={{ marginTop: 0, marginBottom: 20, background: "var(--peach)" }}>
-    <div className="row between" style={{ gap: 12, alignItems: "flex-start", flexWrap: "wrap" }}><div><div className="eyebrow">Bài tháng</div><h3 style={{ margin: "2px 0 4px" }}>Bài thi tháng</h3><p className="small muted" style={{ margin: 0 }}>{exam.requirement}{month ? ` · Ngày thi ${formatLessonDate(month.examDate)}` : ""}</p></div><span className={`badge ${exam.status === "ready" || exam.status === "completed" ? "ok" : "warn"}`}>{label}</span></div>
-    <div className="row" style={{ marginTop: 12 }}><AppLink className="btn" href="/monthly" navigate={navigate}>Xem điều kiện và bài thi tháng</AppLink></div>
+  return <section className="card learner-summary-card learner-summary-card--monthly" data-home-block="monthly-exam" aria-label="Bài thi tháng" style={{ marginTop: 0, marginBottom: 20 }}>
+    <div className="row between learner-summary-row" style={{ gap: 12, alignItems: "flex-start", flexWrap: "wrap" }}><div><div className="eyebrow">Bài tháng</div><h3 style={{ margin: "2px 0 4px" }}>Bài thi tháng</h3><p className="small muted" style={{ margin: 0 }}>{exam.requirement}{month ? ` · Ngày thi ${formatLessonDate(month.examDate)}` : ""}</p></div><div className="row learner-summary-actions"><AppLink className="btn" href="/monthly" navigate={navigate}>Xem điều kiện và bài thi tháng</AppLink></div></div>
   </section>;
 }
 
@@ -302,7 +301,7 @@ export function LearnerMonthly({ view, actions }: { view: LearnerHomeView; actio
         </div>
         <span className={`badge ${exam?.status === "ready" || exam?.status === "completed" ? "ok" : "warn"}`}>{publishState}</span>
       </header>
-      {eligibility ? <MonthlyEligibilitySummary eligibility={eligibility} /> : <p className="monthly-assessment-inline-note">Điều kiện điểm danh đang được tải từ hệ thống.</p>}
+      {eligibility ? <MonthlyEligibilitySummary eligibility={eligibility} actions={actions} /> : <p className="monthly-assessment-inline-note">Điều kiện điểm danh đang được tải từ hệ thống.</p>}
       <div className="monthly-assessment-form-state" aria-label="Trạng thái form đề">
         <div><b>{exam?.status === "ready" ? "Bạn có thể vào đề" : exam?.status === "completed" ? "Bạn đã hoàn thành bài thi tháng" : "Form đề đang được chuẩn bị"}</b><span>{exam?.status === "ready" ? "Kiểm tra lại tai nghe và micro trước khi bắt đầu." : exam?.status === "completed" ? "Kết quả được lưu trong hồ sơ của bạn." : "Cấu trúc, audio và nút vào đề sẽ chỉ hiện sau khi Operator phát hành form."}</span></div>
         {exam?.status === "ready" ? <AppLink className="btn btn-primary" href="/test/monthly" navigate={actions.navigate}>Vào bài thi</AppLink> : null}
@@ -311,17 +310,22 @@ export function LearnerMonthly({ view, actions }: { view: LearnerHomeView; actio
   </div>;
 }
 
-function MonthlyEligibilitySummary({ eligibility }: { eligibility: NonNullable<LearnerHomeView["monthlyEligibility"]> }) {
+function MonthlyEligibilitySummary({ eligibility, actions }: { eligibility: NonNullable<LearnerHomeView["monthlyEligibility"]>; actions: LearnerCallbacks }) {
+  const [complaints, setComplaints] = useState<LearnerComplaintView[]>([]);
+  const [complaintReason, setComplaintReason] = useState("");
+  const [complaintError, setComplaintError] = useState("");
+  const [submittingComplaint, setSubmittingComplaint] = useState(false);
+  useEffect(() => { void actions.getComplaints?.().then((result) => setComplaints(result.complaints)).catch(() => undefined); }, [actions.getComplaints]);
   const remaining = Math.max(0, daysUntil(eligibility.systemDate, eligibility.examDate));
   const appealRequired = eligibility.accessState === "appeal_required";
   const openToday = eligibility.accessEligible ?? eligibility.accessState === "eligible";
-  const missingLearningGate = eligibility.lessonsEligible === false || eligibility.seasonEligible === false || eligibility.frameworkApproved === false || eligibility.formPublished === false;
+  const missingLearningGate = eligibility.formPublished === false;
   const state = appealRequired
     ? { label: "Cần kháng nghị", tone: "warn", copy: "Số ngày vắng đã vượt giới hạn." }
     : openToday
       ? { label: "Đủ điều kiện", tone: "ok", copy: "Đã đến ngày thi." }
       : missingLearningGate
-        ? { label: "Chưa đủ điều kiện", tone: "warn", copy: `Cần hoàn thành đủ bài hằng ngày + bài ôn tập, ${eligibility.seasonTurnsRequired ?? 100} lượt Season, framework duyệt và form phát hành.` }
+        ? { label: "Chưa có đề", tone: "warn", copy: "Đề cố định sẽ mở sau khi được phát hành cho trình độ của bạn." }
         : { label: "Đang theo dõi", tone: "ok", copy: remaining ? `Còn ${remaining} ngày đến giờ mở đề.` : "Chờ giờ mở đề." };
   return <div className="monthly-eligibility-summary" aria-label="Điều kiện vào bài thi tháng">
     <div className="monthly-eligibility-state"><span className={`badge ${state.tone}`}>{state.label}</span><span className="small muted">{state.copy}</span></div>
@@ -333,7 +337,8 @@ function MonthlyEligibilitySummary({ eligibility }: { eligibility: NonNullable<L
       <Metric label="Season hợp lệ" value={`${eligibility.seasonTurns ?? 0}/${eligibility.seasonTurnsRequired ?? 100}`} percent={ratio(eligibility.seasonTurns ?? 0, eligibility.seasonTurnsRequired ?? 100)} color="var(--lav)" />
       <Metric label="Đếm ngược" value={remaining ? `${remaining} ngày` : "Hôm nay"} percent={ratio(Math.max(0, eligibility.effectiveDays - remaining), eligibility.effectiveDays)} color="var(--primary)" />
     </div>
-    <details className="monthly-eligibility-rules"><summary>Quy tắc điểm danh và giờ vào đề</summary><ul><li>Hoàn thành đủ bài hằng ngày và bài ôn tập theo lịch tháng.</li><li>Hoàn thành ít nhất một bài trong ngày để được tính một lần điểm danh; học bù nhiều bài cùng ngày vẫn chỉ tính một lần.</li><li>Ngày học hiệu lực là Thứ Hai–Thứ Sáu, không tính ngày thi; được vắng tối đa {eligibility.maxAbsences} ngày.</li><li>Đạt ít nhất {eligibility.seasonTurnsRequired ?? 100} lượt hợp lệ với Season trong tháng.</li><li>Đề chỉ mở trong cửa sổ hệ thống khi framework đã duyệt và form đã phát hành.</li>{appealRequired ? <li>Gửi kháng nghị tới Manager để xử lý ngày vắng vượt giới hạn.</li> : null}</ul></details>
+    <details className="monthly-eligibility-rules"><summary>Quy tắc điểm danh và giờ vào đề</summary><ul><li>Bài thi tháng cố định dành cho mọi học viên cùng trình độ, kể cả khi chưa hoàn thành hết bài học.</li><li>Hoàn thành ít nhất một bài trong ngày để được tính một lần điểm danh; học bù nhiều bài cùng ngày vẫn chỉ tính một lần.</li><li>Ngày học hiệu lực là Thứ Hai–Thứ Sáu, không tính ngày thi; được vắng tối đa {eligibility.maxAbsences} ngày.</li><li>Đề mở trong cửa sổ hệ thống sau khi form được phát hành; chỉ số bài học và Season dùng để theo dõi tiến độ.</li>{appealRequired ? <li>Gửi khiếu nại tới Quản lý để được xem xét điều kiện dự thi.</li> : null}</ul></details>
+    {appealRequired ? <section className="card monthly-complaint-form"><h3>Khiếu nại điều kiện dự thi</h3><p className="small muted">Quản lý sẽ phản hồi trong 24 giờ. Nếu chưa xử lý đúng hạn, đơn sẽ được tự duyệt.</p>{complaints.filter((item) => item.kind === "exam_eligibility").map((item) => <p className="small" key={item.id}>Đơn gần nhất: {item.status === "pending" ? "Đang chờ xử lý" : item.status === "auto_approved" || item.status === "approved" ? `Đã duyệt${item.resolution ? ` · ${item.resolution}` : ""}` : `Bị từ chối${item.resolution ? ` · ${item.resolution}` : ""}`}</p>)}{complaintError ? <p role="alert" className="small danger-text">{complaintError}</p> : null}<label>Lý do<textarea value={complaintReason} maxLength={2000} onChange={(event) => setComplaintReason(event.target.value)} /></label><button className="btn-sm btn-primary" type="button" disabled={submittingComplaint || !complaintReason.trim() || complaints.some((item) => item.kind === "exam_eligibility" && item.status === "pending")} onClick={() => { const submit = actions.submitComplaint; if (!submit) return; setSubmittingComplaint(true); setComplaintError(""); void submit("exam_eligibility", complaintReason.trim()).then(() => { setComplaintReason(""); return actions.getComplaints?.(); }).then((result) => { if (result) setComplaints(result.complaints); }).catch(() => setComplaintError("Không gửi được khiếu nại. Hãy thử lại sau.")).finally(() => setSubmittingComplaint(false)); }}>Gửi khiếu nại</button></section> : null}
   </div>;
 }
 function daysUntil(systemDate: string, examDate: string) {

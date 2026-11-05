@@ -4,13 +4,16 @@ import type {
   CoachPersona, CoachView, GameFinishInput, GameHubView, GameKey, GameResultView,
   LearnerHomeView, LearnerNotificationsView, LearnerProfileData, LearnerProfileView, LearnerProgressView, LessonPartAppealView,
   LessonPartAttemptEvidenceInput, LessonPartAttemptView, LessonPartCode, LessonProgressView, LessonView,
-  ContentImageView, LevelChallengeView, MicroLessonView, RewardView, SurveyView, WeeklyPracticeView, AudioArtifactInput
+  ContentImageView, LevelChallengeView, MicroLessonView, RewardView, SurveyView, WeeklyPracticeView, AudioArtifactInput,
+  LearnerComplaintKind, LearnerComplaintView
 } from "@e4s/contracts";
 import type { AudioArtifactView } from "@e4s/contracts";
 import { request, uploadMultipart } from "./runtime.js";
 import type { LearnerAudioEvidence } from "../app/learner/contracts.js";
 
 export interface LearnerApiClient {
+  getLearnerComplaints(): Promise<{ complaints: LearnerComplaintView[] }>;
+  submitLearnerComplaint(kind: LearnerComplaintKind, reason: string): Promise<{ complaint: LearnerComplaintView }>;
   getProfile(): Promise<LearnerProfileView>;
   saveProfile(profile: LearnerProfileData, version: number): Promise<LearnerProfileView>;
   saveProfileDraft(profile: LearnerProfileData, version: number): Promise<LearnerProfileView>;
@@ -63,6 +66,8 @@ export interface LearnerApiClient {
 }
 
 export const learnerApiClient: LearnerApiClient = {
+  getLearnerComplaints: () => request("/api/v1/learner/complaints"),
+  submitLearnerComplaint: (kind, reason) => request("/api/v1/learner/complaints", { method: "POST", body: JSON.stringify({ kind, reason }) }),
   getProfile: () => request("/api/v1/learner/profile"),
   saveProfile: (profile, version) => request("/api/v1/learner/profile", { method: "PUT", body: JSON.stringify({ ...profile, version }) }),
   saveProfileDraft: (profile, version) => request("/api/v1/learner/profile/draft", { method: "PUT", body: JSON.stringify({ ...profile, version }) }),

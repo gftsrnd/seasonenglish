@@ -700,6 +700,9 @@
 .app-operator .operator-lesson-preview .operator-pronunciation-tip { margin: 0; }
 .app-operator .operator-lesson-preview .operator-pronunciation-tip { border: 1px solid var(--primary-line); border-radius: 9px; background: var(--surface); padding: 10px 12px; }
 .app-operator .operator-lesson-preview .operator-pronunciation-words { display: flex; flex-wrap: wrap; column-gap: 20px; row-gap: 14px; }
+.app-operator .operator-lesson-preview .operator-pronunciation-review-targets { display: grid; gap: 12px; }
+.app-operator .operator-lesson-preview .operator-pronunciation-review-target { display: grid; gap: 6px; }
+.app-operator .operator-lesson-preview .operator-pronunciation-review-target > strong { font-size: .82rem; }
 .app-operator .operator-lesson-preview .operator-pronunciation-words button span { color: var(--muted); }
 .app-operator .operator-lesson-preview .operator-practice-transcript { margin: 0; color: var(--muted); font-style: italic; }
 .app-operator .operator-lesson-preview .operator-question { margin: 0; font-size: .9rem; }
@@ -3752,6 +3755,20 @@ body > .operator-modal-scope .operator-vocabulary-entry-audio-grid { display: gr
 .app-operator .operator-level-group-header h3,
 .operator-level-form-dialog-title h3 {
   margin: 0;
+}
+
+.operator-level-form-dialog-title input {
+  width: min(100%, 620px);
+  min-height: 42px;
+  box-sizing: border-box;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 8px 11px;
+  background: var(--surface-2);
+  color: var(--text);
+  font: inherit;
+  font-size: 1.2rem;
+  font-weight: 800;
 }
 
 .operator-level-kicker {

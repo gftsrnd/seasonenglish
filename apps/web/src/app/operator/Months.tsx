@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { BookOpen, Check, Pencil, WandSparkles } from "lucide-react";
+import { BookOpen, Check, Pencil, Sparkles } from "lucide-react";
 import type { AssessmentLevelFormUpdateInput, CefrLevel, MonthlyOperatorOverviewView, MonthlyQualityFindingView } from "@e4s/contracts";
 import { buildMonthlyCalendar, monthlyDayKind, monthlyNewLessonOrdinal, recommendedMonthlyResourceCriteria, type MonthlyCurriculumContract } from "@e4s/domain/monthly";
 import { useToast } from "../shared/design-system.js";
@@ -27,6 +27,7 @@ export interface OperatorMonthsActions {
   onSaveFramework(month: string, contract: MonthlyCurriculumContract): Promise<void> | void;
   onApproveFramework(id: string): Promise<void> | void;
   onGenerateMonthlyFinal?(id: string): Promise<MonthlyFinalDraft> | void;
+  onComposeMonthlyFinal?(id: string): Promise<MonthlyFinalDraft> | void;
   onSaveMonthlyFinal?(versionId: string, input: AssessmentLevelFormUpdateInput): Promise<unknown> | void;
   onPublishMonthlyFinal?(versionId: string): Promise<unknown> | void;
   onSynthesizeMonthlyFinalAudio?(input: { text: string; voice: string }): Promise<{ filename: string; mimeType: string; base64: string }>;
@@ -85,7 +86,7 @@ export function OperatorMonths({ month, todayMonth, overview, cefr, busy, readOn
   } : proposedResourceCounts;
   const resources = [
     { key: "core" as const, label: "Từ cốt lõi", count: framework?.resources?.coreTerms.length ?? 0, description: "Headword trọng tâm" },
-    { key: "expanded" as const, label: "Từ mở rộng", count: framework?.resources?.supportTerms.length ?? 0, description: "Ưu tiên từ đơn; tối đa một cụm mỗi từ" },
+    { key: "expanded" as const, label: "Từ mở rộng", count: framework?.resources?.supportTerms.length ?? 0, description: "6–9 từ/core; tối đa một cụm mỗi từ" },
     { key: "grammar" as const, label: "Ngữ pháp", count: framework?.resources?.grammarTopics.length ?? 0, description: "Điểm ngữ pháp cần dùng" },
     { key: "sounds" as const, label: "Phát âm", count: framework?.resources?.sounds.length ?? 0, description: "Âm và ví dụ thực hành" }
   ];
@@ -175,6 +176,18 @@ export function OperatorMonths({ month, todayMonth, overview, cefr, busy, readOn
     }
     catch { showUnavailable("Chỉ sinh đề thi vào đúng ngày thi hệ thống và khi tài nguyên đã duyệt."); }
   };
+  const composeMonthlyFinal = async () => {
+    if (!canEdit) return showUnavailable("Tháng trước chỉ dùng để xem.");
+    if (!framework || framework.status !== "approved") return showUnavailable("Hãy chốt tài nguyên tháng trước khi soạn đề thi.");
+    if (!actions.onComposeMonthlyFinal) return showUnavailable("Luồng soạn đề thi tháng chưa sẵn sàng.");
+    try {
+      const draft = await actions.onComposeMonthlyFinal(framework.id);
+      if (draft?.blueprint) setMonthlyFinal(draft);
+      toast.show({ message: "Đã mở bản nháp soạn tay đề thi tháng.", tone: "ok" });
+    } catch {
+      showUnavailable("Không mở được bản nháp soạn đề thi tháng.");
+    }
+  };
   return <main className="operator-months-page">
     <header className="operator-months-header"><h1>Bài học</h1><p>Thiết kế chủ đề, tài nguyên và lịch học theo tháng.</p></header>
     {error && <div className="monthly-error" role="alert">{error}</div>}
@@ -209,10 +222,11 @@ export function OperatorMonths({ month, todayMonth, overview, cefr, busy, readOn
           <span className="eyebrow">Số lượng đề xuất theo lịch học</span>
           <dl>
             <div><dt>Từ cốt lõi</dt><dd>{resourceCounts.core}</dd></div>
-            <div><dt>Từ mở rộng</dt><dd>{resourceCounts.expanded}</dd></div>
+            <div><dt>Từ mở rộng (tối đa)</dt><dd>{resourceCounts.expanded}</dd></div>
             <div><dt>Chủ điểm ngữ pháp</dt><dd>{resourceCounts.grammar}</dd></div>
             <div><dt>Mục tiêu phát âm</dt><dd>{resourceCounts.sounds}</dd></div>
           </dl>
+          <small>Mỗi từ cốt lõi có 6–9 từ mở rộng chất lượng; 9 là mức tối đa, không ép tạo trái nghĩa nếu không có từ tự nhiên.</small>
         </div> : <div className="monthly-resource-cards">{resources.map((item) => <button key={item.key} type="button" onClick={() => setResourcePanel(item.key)}><b>{item.count}</b><strong>{item.label}</strong><span>{item.description}</span></button>)}</div>}
         <div className="monthly-actions monthly-resource-actions">
           {resourceCheckpoint?.state === "draft_checkpoint" && !framework?.resources && <div className="monthly-resource-checkpoint" role="status" aria-label="Tiến độ tài nguyên nháp">
@@ -243,16 +257,16 @@ export function OperatorMonths({ month, todayMonth, overview, cefr, busy, readOn
             const scheduledLessonNumber = lesson?.lessonNumber ?? cell.lessonNumber;
             if (isExam) {
               const examDayOpen = overview.systemDate === calendar.examDate;
-              return <article key={cell.date} role="gridcell" className="monthly-day-cell monthly-final"><b>{cell.dateLabel}</b><strong>Bài thi</strong><button type="button" className="btn-sm" disabled={busy || !examDayOpen} title={examDayOpen ? "Sinh bản nháp đề thi tháng" : `Mở vào ngày thi ${cell.dateLabel}`} onClick={() => void generateMonthlyFinal()}>{examDayOpen ? "Sinh đề thi" : "Chờ ngày thi"}</button></article>;
+              return <article key={cell.date} role="gridcell" aria-label={`${cell.dateLabel}, Bài thi`} className="monthly-day-cell monthly-final"><b>{cell.dateLabel}</b><strong>Bài thi</strong><div className="monthly-day-actions monthly-final-actions" role="group" aria-label="Thao tác đề thi tháng"><button type="button" aria-label="Sinh đề thi tháng" title={examDayOpen ? "Sinh bản nháp đề thi tháng" : `Sinh đề thi vào ngày ${cell.dateLabel}`} className="monthly-day-action monthly-generate-action" disabled={busy || !examDayOpen || !framework || framework.status !== "approved"} onClick={() => void generateMonthlyFinal()}><Sparkles aria-hidden="true" /><span>AI</span></button><button type="button" aria-label="Soạn tay đề thi tháng" title="Soạn tay đề thi tháng" className="monthly-day-action monthly-manual-action" disabled={busy || !framework || framework.status !== "approved"} onClick={() => void composeMonthlyFinal()}><Pencil aria-hidden="true" /></button></div></article>;
             }
             if (!scheduledLessonNumber) return <article key={cell.date} role="gridcell" className="monthly-day-cell weekend"><b>{cell.dateLabel}</b><strong>Nghỉ</strong></article>;
-            const scheduledKind = lesson?.kind ?? monthlyDayKind(scheduledLessonNumber, calendar.lessonCount);
+            const scheduledKind = lesson?.kind ?? monthlyDayKind(scheduledLessonNumber, calendar);
             const kind = scheduledKind === "review" ? "review" : "lesson";
             const draft = lesson?.status === "draft";
             const isReview = scheduledKind === "review";
-            const newLessonOrdinal = isReview ? null : monthlyNewLessonOrdinal(scheduledLessonNumber, calendar.lessonCount);
+            const newLessonOrdinal = isReview ? null : monthlyNewLessonOrdinal(scheduledLessonNumber, calendar);
             const dayLabel = isReview ? "bài ôn" : `bài ${newLessonOrdinal}`;
-            return <article key={cell.date} role="gridcell" aria-label={`${cell.dateLabel}, ${isReview ? "Ôn tập" : `Bài ${newLessonOrdinal}`}`} className={`monthly-day-cell ${kind} ${lesson?.status === "approved" ? "approved" : ""}`}><b>{cell.dateLabel}</b><strong>{isReview ? "Ôn tập" : `Bài ${newLessonOrdinal}`}</strong><div>{lesson?.status === "approved" ? <button type="button" aria-label={`Xem ${dayLabel}`} className="btn-sm monthly-action-button monthly-view-day" disabled={busy} onClick={() => framework && actions.onViewDay?.(framework.id, lesson.lessonNumber)}><BookOpen aria-hidden="true" /><span>Xem</span></button> : draft ? <><button type="button" aria-label={`Soạn tay ${dayLabel}`} title="Soạn tay" className="btn-sm monthly-action-button monthly-manual-action" disabled={busy} onClick={() => openManualEditor(scheduledLessonNumber)}><Pencil aria-hidden="true" /><span>Soạn tay</span></button><button type="button" aria-label={`Duyệt ${dayLabel}`} className="btn-sm monthly-action-button monthly-approve-action" disabled={busy} onClick={() => framework && void actions.onApproveDay(framework.id, scheduledLessonNumber)}><Check aria-hidden="true" /><span>Duyệt</span></button></> : <><button type="button" aria-label={isReview ? "Sinh" : `Sinh ${dayLabel}`} className="btn-sm btn-primary monthly-action-button monthly-generate-action" disabled={busy} onClick={() => setGenerationConfirmation({ dayNumber: scheduledLessonNumber, kind: isReview ? "review" : "new" })}><WandSparkles aria-hidden="true" /><span>Sinh</span></button><button type="button" aria-label={`Soạn tay ${dayLabel}`} title="Soạn tay" className="btn-sm monthly-action-button monthly-manual-action" disabled={busy} onClick={() => openManualEditor(scheduledLessonNumber)}><Pencil aria-hidden="true" /><span>Soạn tay</span></button></>}</div></article>;
+            return <article key={cell.date} role="gridcell" aria-label={`${cell.dateLabel}, ${isReview ? "Ôn tập" : `Bài ${newLessonOrdinal}`}`} className={`monthly-day-cell ${kind} ${lesson?.status === "approved" ? "approved" : ""}`}><b>{cell.dateLabel}</b><strong>{isReview ? "Ôn tập" : `Bài ${newLessonOrdinal}`}</strong><div className="monthly-day-actions" role="group" aria-label={`Thao tác ${dayLabel}`}>{lesson?.status === "approved" ? <button type="button" aria-label={`Xem ${dayLabel}`} className="monthly-day-action monthly-view-day" disabled={busy} onClick={() => framework && actions.onViewDay?.(framework.id, lesson.lessonNumber)}><BookOpen aria-hidden="true" /><span>Xem</span></button> : draft ? <><button type="button" aria-label={`Soạn tay ${dayLabel}`} title="Soạn tay" className="monthly-day-action monthly-manual-action" disabled={busy} onClick={() => openManualEditor(scheduledLessonNumber)}><Pencil aria-hidden="true" /></button><button type="button" aria-label={`Duyệt ${dayLabel}`} className="monthly-day-action monthly-approve-action" disabled={busy} onClick={() => framework && void actions.onApproveDay(framework.id, scheduledLessonNumber)}><Check aria-hidden="true" /><span>Duyệt</span></button></> : <><button type="button" aria-label={isReview ? "Sinh" : `Sinh ${dayLabel}`} className="monthly-day-action monthly-generate-action" disabled={busy} onClick={() => setGenerationConfirmation({ dayNumber: scheduledLessonNumber, kind: isReview ? "review" : "new" })}><Sparkles aria-hidden="true" /><span>AI</span></button><button type="button" aria-label={`Soạn tay ${dayLabel}`} title="Soạn tay" className="monthly-day-action monthly-manual-action" disabled={busy} onClick={() => openManualEditor(scheduledLessonNumber)}><Pencil aria-hidden="true" /></button></>}</div></article>;
           })}
         </div>
       </section>
@@ -266,7 +280,7 @@ export function OperatorMonths({ month, todayMonth, overview, cefr, busy, readOn
           const coreTerms = framework.resources!.coreTerms.filter((term) => day.kind === "new" ? day.coreTermIds.includes(term.id) : day.reviewTermIds.includes(term.id));
           const expandedTerms = framework.resources!.supportTerms.filter((term) => day.kind === "new" ? day.expandedTermIds.includes(term.id) : day.reviewExpandedTermIds.includes(term.id));
           return <details key={day.lessonNumber} className="monthly-plan-day">
-            <summary className="monthly-plan-day-summary"><div><span className="eyebrow">{day.kind === "review" ? "Ôn tập tuần" : `Bài mới ${monthlyNewLessonOrdinal(day.lessonNumber, calendar.lessonCount)}`}</span><h3>{day.date}</h3></div><span className="monthly-plan-day-open">Xem phân bổ</span></summary>
+            <summary className="monthly-plan-day-summary"><div><span className="eyebrow">{day.kind === "review" ? "Ôn tập tuần" : `Bài mới ${monthlyNewLessonOrdinal(day.lessonNumber, calendar)}`}</span><h3>{day.date}</h3></div><span className="monthly-plan-day-open">Xem phân bổ</span></summary>
             <div className="monthly-plan-day-body"><div className="monthly-plan-resource-groups">{coreTerms.map((core) => <div key={core.id} className="monthly-plan-resource-group"><strong>{core.word}</strong><span>{expandedTerms.filter((term) => term.relatedCoreTermId === core.id).map((term) => term.word).join(" · ")}</span></div>)}</div><small>Ngữ pháp: {day.grammarStepIds.join(" + ")} · Phát âm: {day.pronunciationSlot ?? "—"}</small></div>
           </details>;
         })}</div></div>}
@@ -302,6 +316,26 @@ function MonthlyFinalEditor({ draft, onClose, onSave, onPublish, synthesize, upl
   const script = group?.stimulus?.type === "audio_script" ? group.stimulus.lines?.map((line) => line.text).filter(Boolean).join("\n") ?? "" : "";
   const audioSrc = group?.stimulus?.type === "audio_script" ? group.stimulus.audioSrc ?? "" : "";
   const setAudio = (url: string) => setInput((current) => ({ ...current, sections: current.sections.map((section, index) => index !== listeningIndex ? section : ({ ...section, groups: section.groups.map((item, groupIndex) => groupIndex !== 0 ? item : ({ ...item, stimulus: item.stimulus?.type === "audio_script" ? { ...item.stimulus, audioSrc: url } : { type: "audio_script", audioSrc: url, lines: [{ speaker: "Narrator", text: item.instruction }] } })) })) }));
+  const updateTask = (sectionIndex: number, groupIndex: number, taskIndex: number, update: Record<string, unknown>) => setInput((current) => ({
+    ...current,
+    sections: current.sections.map((section, nextSectionIndex) => nextSectionIndex !== sectionIndex ? section : ({
+      ...section,
+      groups: section.groups.map((item, nextGroupIndex) => nextGroupIndex !== groupIndex ? item : ({
+        ...item,
+        tasks: item.tasks.map((task, nextTaskIndex) => nextTaskIndex === taskIndex ? { ...task, ...update } : task)
+      }))
+    }))
+  }));
+  const updateStimulus = (sectionIndex: number, groupIndex: number, type: "audio_script" | "passage", value: string) => setInput((current) => ({
+    ...current,
+    sections: current.sections.map((section, nextSectionIndex) => nextSectionIndex !== sectionIndex ? section : ({
+      ...section,
+      groups: section.groups.map((item, nextGroupIndex) => nextGroupIndex !== groupIndex ? item : ({
+        ...item,
+        stimulus: type === "audio_script" ? { type, lines: [{ speaker: "Narrator", text: value }] } : { type, text: value }
+      }))
+    }))
+  }));
   const persistAudio = async (file: Blob, filename: string) => {
     if (!uploadAudio) throw new Error("UPLOAD_UNAVAILABLE");
     const stored = await uploadAudio(file, filename);
@@ -324,8 +358,9 @@ function MonthlyFinalEditor({ draft, onClose, onSave, onPublish, synthesize, upl
     try { await persistAudio(file, file.name); } catch { setError("Không tải và lưu được file audio."); } finally { setBusy(null); }
   };
   const save = async () => { if (!onSave) return; setBusy("save"); setError(null); try { await onSave(input); } catch { setError("Không lưu được bản nháp đề tháng."); } finally { setBusy(null); } };
-  const publish = async () => { if (!onPublish) return; if (!audioSrc) { setError("Cần audio nghe đã lưu trước khi phát hành."); return; } setBusy("publish"); setError(null); try { await onPublish(); } catch { setError("Không phát hành được đề tháng. Kiểm tra lại script, audio và cấu trúc đề."); } finally { setBusy(null); } };
-  return <div className="modal-backdrop" role="presentation"><section className="dialog" role="dialog" aria-modal="true" aria-label="Bản nháp đề thi tháng"><header className="row between"><div><span className="eyebrow">Bài thi tháng</span><h2>{input.title}</h2><p className="small muted">30 phút · 100 điểm · Nghe, Đọc, Viết, Nói. Nội dung lấy từ tài nguyên tháng đã duyệt.</p></div><button type="button" className="btn" onClick={onClose}>Đóng</button></header>
+  const publish = async () => { if (!onPublish) return; if (!audioSrc) { setError("Cần audio nghe đã lưu trước khi phát hành."); return; } setBusy("publish"); setError(null); try { if (onSave) await onSave(input); await onPublish(); } catch { setError("Không phát hành được đề tháng. Kiểm tra lại script, audio và cấu trúc đề."); } finally { setBusy(null); } };
+  return <div className="modal-backdrop operator-modal-scope operator-detail-modal" role="presentation"><section className="dialog wide operator-detail-dialog operator-assessment-preview-dialog operator-level-editor-dialog" role="dialog" aria-modal="true" aria-label="Bản nháp đề thi tháng"><header className="operator-level-form-dialog-header"><div className="operator-level-form-dialog-title"><span className="operator-level-kicker">Bài thi tháng · Bản nháp</span><input aria-label="Tiêu đề đề thi tháng" value={input.title} onChange={(event) => setInput((current) => ({ ...current, title: event.target.value }))} /><p className="small muted">30 phút · 100 điểm · Nghe, Đọc, Viết, Nói. Bản nháp tiếp tục chỉnh sửa được cho đến khi phát hành.</p></div><div className="row operator-level-form-dialog-actions"><button type="button" className="btn-sm" onClick={onClose}>Đóng</button></div></header>
+    <h4>Chi tiết 4 phần</h4><div className="list operator-level-section-list">{input.sections.map((section, sectionIndex) => <details className="item operator-level-section" key={section.code} open={section.code === "listening"}><summary><span><b>{section.title}</b><small>{section.groups.reduce((count, item) => count + item.tasks.length, 0)} câu · {section.durationMinutes} phút · {section.maxScore} điểm</small></span></summary><p className="small operator-level-instructions">{section.instructions.join(" · ")}</p>{section.groups.map((item, groupIndex) => { const scriptText = item.stimulus?.type === "audio_script" ? item.stimulus.lines?.map((line) => line.text).filter(Boolean).join("\n") ?? "" : ""; const passageText = item.stimulus?.type === "passage" ? item.stimulus.text : ""; return <section className="card flat operator-level-question-group" key={item.key}><header><b>{item.title}</b><p className="xs muted">{item.instruction}</p></header>{section.code === "listening" ? <label className="operator-level-stimulus-editor"><span>Kịch bản nghe</span><textarea aria-label={`Kịch bản nghe ${item.title}`} value={scriptText} onChange={(event) => updateStimulus(sectionIndex, groupIndex, "audio_script", event.target.value)} /></label> : null}{section.code === "reading" ? <label className="operator-level-stimulus-editor"><span>Đoạn đọc</span><textarea aria-label={`Đoạn đọc ${item.title}`} value={passageText} onChange={(event) => updateStimulus(sectionIndex, groupIndex, "passage", event.target.value)} /></label> : null}<div className="operator-level-question-list" role="list" aria-label={`Câu hỏi phần ${section.title}`}>{item.tasks.map((task, taskIndex) => <article className="operator-level-question" role="listitem" key={task.key}><div className="operator-level-question-number">Câu {taskIndex + 1}<span>{task.key}</span></div><div className="operator-level-question-content"><textarea aria-label={`Nội dung ${task.key}`} value={task.prompt} onChange={(event) => updateTask(sectionIndex, groupIndex, taskIndex, { prompt: event.target.value })} />{task.options?.length ? <div className="operator-level-option-editor">{task.options.map((option, optionIndex) => <label key={option.value}><span>{option.value}</span><input aria-label={`Lựa chọn ${option.value} của ${task.key}`} value={option.label} onChange={(event) => updateTask(sectionIndex, groupIndex, taskIndex, { options: task.options?.map((candidate, nextIndex) => nextIndex === optionIndex ? { ...candidate, label: event.target.value } : candidate) })} /></label>)}<label className="operator-level-answer-editor"><span>Đáp án đúng</span><select aria-label={`Đáp án đúng của ${task.key}`} value={task.correctAnswer ?? ""} onChange={(event) => updateTask(sectionIndex, groupIndex, taskIndex, { correctAnswer: event.target.value })}>{task.options.map((option) => <option value={option.value} key={option.value}>{option.value}</option>)}</select></label></div> : null}</div></article>)}</div></section>; })}</details>)}</div>
     <section className="card flat"><h3>Audio phần nghe</h3><p className="small muted">Script được sinh từ tài nguyên tháng. Chọn file đã chuẩn bị hoặc tạo Edge TTS rồi lưu vào kho audio trước khi phát hành.</p><pre className="monthly-final-script">{script || "Chưa có script nghe"}</pre>{audioSrc ? <audio controls preload="metadata" src={audioSrc}>Trình duyệt không hỗ trợ audio.</audio> : <p className="small muted">Chưa có audio đã lưu.</p>}<div className="row" style={{ flexWrap: "wrap", gap: 8 }}><label className="btn">Tải file audio<input hidden type="file" accept="audio/*" aria-label="Tải file audio đề tháng" disabled={busy === "audio"} onChange={(event) => void upload(event.target.files?.[0])} /></label><button type="button" className="btn" disabled={busy === "audio" || !synthesize || !uploadAudio || !script.trim()} onClick={() => void generateEdgeTts()}>{busy === "audio" ? "Đang tạo audio…" : "Sinh audio Edge TTS"}</button></div></section>
     <section className="card flat"><h3>Kiểm tra trước phát hành</h3><ul className="small"><li>Audio nghe: {audioSrc ? "đã lưu, có thể nghe thử" : "chưa có"}</li><li>Cấu trúc: {input.sections.length} kỹ năng, 100 điểm.</li></ul></section>{error && <p role="alert" className="monthly-error">{error}</p>}<footer className="row" style={{ justifyContent: "flex-end", gap: 8 }}><button type="button" className="btn" disabled={busy !== null || !onSave} onClick={() => void save()}>{busy === "save" ? "Đang lưu…" : "Lưu bản nháp"}</button><button type="button" className="btn btn-primary" disabled={busy !== null || !onPublish || !audioSrc} onClick={() => void publish()}>{busy === "publish" ? "Đang phát hành…" : "Duyệt & phát hành"}</button></footer>
   </section></div>;
@@ -343,11 +378,16 @@ export function MonthlyLessonPreview({ date, cefr, lesson, onClose, onRequestReo
 
 function MonthlyGenerationConfirmation({ dayNumber, kind, framework, onCancel, onConfirm }: { dayNumber: number; kind: "new" | "review"; framework: MonthlyOperatorOverviewView["frameworks"][number]; onCancel(): void; onConfirm(): void | Promise<void> }) {
   const resources = framework.resources!;
-  const terms = [...resources.coreTerms, ...resources.supportTerms].filter((term) => term.dayNumber === dayNumber);
-  const grammar = resources.grammarTopics.filter((_, index) => Math.min(resources.grammarTopics.length - 1, Math.floor((dayNumber - 1) * resources.grammarTopics.length / Math.max(framework.lessons.length || 20, 1))) === index);
-  const sounds = resources.sounds.filter((_, index) => (dayNumber - 1) % resources.sounds.length === index);
   const isReview = kind === "review";
-  return <div className="monthly-lesson-preview-backdrop" role="presentation"><section className="monthly-generation-confirmation card" role="dialog" aria-modal="true" aria-label={isReview ? "Tài nguyên cho bài ôn" : `Tài nguyên cho bài ${dayNumber}`}><span className="eyebrow">Tài nguyên đã chốt</span><h2>{isReview ? "Sinh bài ôn?" : `Sinh bài ngày ${dayNumber}?`}</h2><p className="small muted">{isReview ? "Bài ôn dùng toàn bộ tài nguyên và bài ngày của tuần này." : "Bài sẽ dùng đúng tài nguyên của ngày này."}</p><dl><div><dt>Từ vựng</dt><dd>{terms.map((term) => term.word).join(" · ") || "Chưa gán"}</dd></div><div><dt>Ngữ pháp</dt><dd>{grammar.map((item) => item.title).join(" · ") || "Chưa gán"}</dd></div><div><dt>Phát âm</dt><dd>{sounds.map((item) => item.label).join(" · ") || "Chưa gán"}</dd></div></dl><footer><button type="button" className="btn" onClick={onCancel}>Quay lại</button><button type="button" className="btn btn-primary" onClick={() => void onConfirm()}>{"Sinh"}</button></footer></section></div>;
+  const day = resources.roadmap?.days.find((item) => item.lessonNumber === dayNumber);
+  const coreIds = isReview ? day?.reviewTermIds ?? [] : day?.coreTermIds ?? [];
+  const expandedIds = isReview ? day?.reviewExpandedTermIds ?? [] : day?.expandedTermIds ?? [];
+  const terms = [...resources.coreTerms, ...resources.supportTerms].filter((term) => [...coreIds, ...expandedIds].includes(term.id));
+  const grammarIds = isReview ? day?.reviewGrammarStepIds ?? [] : day?.grammarStepIds ?? [];
+  const grammar = resources.grammarTopics.flatMap((topic) => topic.steps).filter((step) => grammarIds.includes(step.id));
+  const soundIds = isReview ? day?.reviewSoundIds ?? [] : day?.soundId ? [day.soundId] : [];
+  const sounds = resources.sounds.filter((sound) => soundIds.includes(sound.id));
+  return <div className="monthly-lesson-preview-backdrop" role="presentation"><section className="monthly-generation-confirmation card" role="dialog" aria-modal="true" aria-label={isReview ? "Tài nguyên cho bài ôn" : `Tài nguyên cho bài ${dayNumber}`}><span className="eyebrow">Tài nguyên đã chốt</span><h2>{isReview ? "Sinh bài ôn?" : `Sinh bài ngày ${dayNumber}?`}</h2><p className="small muted">{isReview ? "Bài ôn chỉ dùng các tài nguyên đã phân bổ cho phần ôn." : "Bài sẽ dùng đúng tài nguyên của ngày này."}</p><dl><div><dt>Từ vựng</dt><dd>{terms.map((term) => term.word).join(" · ") || "Chưa gán"}</dd></div><div><dt>Ngữ pháp</dt><dd>{grammar.map((step) => step.focus).join(" · ") || "Chưa gán"}</dd></div><div><dt>Phát âm</dt><dd>{sounds.map((sound) => `${sound.label} ${sound.ipa}`).join(" · ") || "Chưa gán"}</dd></div></dl><footer><button type="button" className="btn" onClick={onCancel}>Quay lại</button><button type="button" className="btn btn-primary" onClick={() => void onConfirm()}>Sinh</button></footer></section></div>;
 }
 
 function MonthlyReopenRequest({ label, onCancel, onSubmit }: { label: string; onCancel(): void; onSubmit(reason: string): void }) {

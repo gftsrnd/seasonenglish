@@ -8,11 +8,17 @@ import type {
   ManagerPurgeConfirmationView, ManagerReminderCopyView, ManagerReminderDismissView,
   ManagerReminderChannel, ManagerReminderSendView, ManagerRemindersView, ManagerReportView, ManagerSettingsInput, ManagerSettingsView, ManagerTrashView, ManagerPinReportsView,
   OperatorSettingsOverviewView, OrganisationExperienceInput, OrganisationExperienceView,
-  ManagerWebhookTestView, ProductPreferencesView, ReopenRequestView, SystemCapabilitiesView, WeeklyPracticeAssignmentView
+  ManagerWebhookTestView, ProductPreferencesView, ReopenRequestView, SystemCapabilitiesView, WeeklyPracticeAssignmentView,
+  LearnerComplaintKind, ManagerComplaintView
 } from "@e4s/contracts";
 import { request } from "./runtime.js";
 
 export interface ManagerApiClient {
+  getManagerComplaints(): Promise<{ complaints: ManagerComplaintView[] }>;
+  decideManagerComplaint(id: string, decision: "approved" | "rejected", resolution: string): Promise<{ complaint: Pick<ManagerComplaintView, "id" | "kind" | "status" | "resolution" | "resolvedAt"> }>;
+  getManagerHolidays(): Promise<{ holidays: Array<{ id: string; date: string; created_at: string; created_by_name: string | null }> }>;
+  addManagerHoliday(date: string): Promise<{ holiday: { id: string; date: string } }>;
+  removeManagerHoliday(id: string): Promise<{ deleted: true }>;
   getManagerReopenRequests(): Promise<{ requests: ReopenRequestView[] }>;
   decideManagerReopenRequest(requestId: string, decision: "approved" | "rejected", reason: string): Promise<ReopenRequestView>;
   getManagerProgress(): Promise<ManagerProgressView>;
@@ -66,6 +72,11 @@ export interface ManagerApiClient {
 }
 
 export const managerApiClient: ManagerApiClient = {
+  getManagerComplaints: () => request("/api/v1/manager/complaints"),
+  decideManagerComplaint: (id, decision, resolution) => request(`/api/v1/manager/complaints/${encodeURIComponent(id)}/decision`, { method: "POST", body: JSON.stringify({ decision, resolution }) }),
+  getManagerHolidays: () => request("/api/v1/manager/holidays"),
+  addManagerHoliday: (date) => request("/api/v1/manager/holidays", { method: "POST", body: JSON.stringify({ date }) }),
+  removeManagerHoliday: (id) => request(`/api/v1/manager/holidays/${encodeURIComponent(id)}`, { method: "DELETE" }),
   getManagerReopenRequests: () => request("/api/v1/manager/reopen-requests"),
   decideManagerReopenRequest: (requestId, decision, reason) => request(`/api/v1/manager/reopen-requests/${encodeURIComponent(requestId)}/${decision === "approved" ? "approve" : "reject"}`, { method: "POST", body: JSON.stringify({ reason }) }),
   getManagerProgress: () => request("/api/v1/manager/progress"),

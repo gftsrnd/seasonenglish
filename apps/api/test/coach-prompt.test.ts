@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { coachPersonaPrompt } from "../src/modules/coach/routes.js";
+import { coachInsufficientFollowUp, coachPersonaPrompt } from "../src/modules/coach/routes.js";
 import { prototypePromptDefaults } from "../../../packages/database/src/prototype-prompts.js";
 
 describe("Coach prompt safeguards", () => {
@@ -15,9 +15,43 @@ describe("Coach prompt safeguards", () => {
     expect(prompt).not.toContain("replyTranslation");
     expect(prompt).not.toContain("suggestions[].translation");
     expect(prompt).toContain("natural Vietnamese translation");
-    expect(prompt).toContain("suggestedAnswer must directly answer nextQuestion");
+    expect(prompt).toContain("suggestedAnswer must directly answer the final in-character question/request");
     expect(prompt).toContain("INSUFFICIENT means no meaningful attempt and requires meaning score 0");
+    expect(prompt).toContain("ROLEPLAY FIRST");
+    expect(prompt).toContain("Never write teacher, examiner, or coaching narration");
+    expect(prompt).toContain("natural in-character question or request");
+    expect(prompt).toContain("corrections[].reason must be one concise explanation of at most 12 words");
     expect(prompt).not.toContain("explanation must include a natural Vietnamese translation");
+  });
+
+  it("keeps insufficient-turn replies in character and avoids asking for an already stated role", () => {
+    const reply = coachInsufficientFollowUp(
+      "I am a project manager.",
+      "What is your role?",
+      "Handling Client Feedback Meetings",
+      "informal",
+      ["What is your role?", "Which project are you working on this week?"]
+    );
+
+    expect(reply.nextQuestion).toBe("What task is taking most of your time today?");
+    expect(reply.seasonReply).toContain("I'm glad you told me about your work.");
+    expect(reply.seasonReply).toContain(reply.nextQuestion);
+    expect(reply.seasonReply).not.toMatch(/write a complete English sentence|what is your role/i);
+    expect(reply.seasonReplyTranslation).toContain("Cảm ơn");
+  });
+
+  it("asks about an actual detail from a short learner reply and honors earlier questions", () => {
+    const reply = coachInsufficientFollowUp(
+      "I sent the report",
+      "What did you send to the client?",
+      "Handling Client Feedback Meetings",
+      "formal",
+      ["What did you send to the client?", "What is the next step for “report”?"]
+    );
+
+    expect(reply.nextQuestion).toBe("How does “report” affect the plan?");
+    expect(reply.seasonReply).toContain("“report”");
+    expect(reply.nextQuestion).not.toBe("What did you send to the client?");
   });
 
   it("keeps translations in dedicated fields in the canonical coach prompt", () => {

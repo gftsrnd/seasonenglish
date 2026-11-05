@@ -11,6 +11,8 @@ import type {
   GameHubView,
   LearnerAvatarData,
   LearnerHomeView as LearnerHomeContractView,
+  LearnerComplaintKind,
+  LearnerComplaintView,
   LearnerNotificationView,
   LearnerProfileData,
   LearnerProgressView,
@@ -126,6 +128,8 @@ export interface LearnerCallbacks {
   startAssessment: () => void | Promise<void>;
   saveAssessmentResponse: (section: AssessmentSectionCode, taskKey: string, input: SaveAssessmentResponseInput) => void | Promise<void>;
   completeAssessmentSection: (section: AssessmentSectionCode) => void | Promise<void>;
+  submitComplaint?: (kind: LearnerComplaintKind, reason: string) => Promise<void>;
+  getComplaints?: () => Promise<{ complaints: LearnerComplaintView[] }>;
   submitAssessment: () => void | Promise<void>;
   /** Records a visibility/focus event; the server remains authoritative for the count and status. */
   recordAssessmentViolation?: (attemptId: string, input: AssessmentViolationInput) => Promise<AssessmentRuntimeView>;

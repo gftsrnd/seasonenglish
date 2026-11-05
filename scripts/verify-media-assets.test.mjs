@@ -11,7 +11,7 @@ afterEach(async () => {
   await Promise.all(tempRoots.splice(0).map((path) => rm(path, { recursive: true, force: true })));
 });
 
-async function fixture({ entries, files = {} }) {
+async function fixture({ entries, files = {}, mouthForms }) {
   const root = await mkdtemp(join(tmpdir(), "e4s-media-"));
   tempRoots.push(root);
   const mediaRoot = join(root, "apps/web/public/media");
@@ -22,6 +22,9 @@ async function fixture({ entries, files = {} }) {
     await writeFile(absolutePath, content);
   }
   await writeFile(join(mediaRoot, "manifest.json"), JSON.stringify(entries));
+  if (mouthForms) {
+    await writeFile(join(mediaRoot, "pronunciation-manifest.json"), JSON.stringify({ version: 1, phonemes: [], words: [], mouthForms }));
+  }
   return root;
 }
 
@@ -62,6 +65,18 @@ describe("verified media manifest", () => {
   it("accepts a declared MP3 only with an auditable CC licence and digest", async () => {
     const root = await fixture({ entries: [audioEntry()], files: { "apps/web/public/media/audio/emerald-therapy.mp3": "audio" } });
     await expect(verifyMediaAssets({ repoRoot: root, requiredIds: ["music-emerald-therapy"] })).resolves.toEqual({ entries: 1, files: 1 });
+  });
+
+  it("counts declared IPA mouth-form PNGs from the pronunciation manifest", async () => {
+    const content = "mouth-form-image";
+    const localPath = "apps/web/public/media/ipa-mouth-form/f (file).png";
+    const root = await fixture({
+      entries: [entry()],
+      files: { "apps/web/public/media/mascot.png": "verified", [localPath]: content },
+      mouthForms: [{ key: "f", localPath, sha256: createHash("sha256").update(content).digest("hex"), purpose: "IPA mouth-form image for /f/" }]
+    });
+
+    await expect(verifyMediaAssets({ repoRoot: root, requiredIds: ["mascot"] })).resolves.toEqual({ entries: 2, files: 2 });
   });
 
   it.each([

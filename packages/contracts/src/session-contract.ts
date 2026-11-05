@@ -24,4 +24,5 @@ export interface SessionView {
   readonly user: SessionUserView;
   readonly role: AccountRole;
   readonly permissions: readonly Permission[];
+  readonly accountStatus?: "active" | "disabled";
 }

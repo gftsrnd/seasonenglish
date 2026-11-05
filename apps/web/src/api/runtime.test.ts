@@ -1,5 +1,13 @@
 import { describe, expect, it } from "vitest";
-import { apiUrl } from "./runtime.js";
+import { ApiError, apiUrl } from "./runtime.js";
+
+describe("ApiError presentation", () => {
+  it("keeps the network code for logic while exposing a friendly message to UI fallbacks", () => {
+    const error = new ApiError("NETWORK_UNAVAILABLE", "network");
+    expect(error.code).toBe("NETWORK_UNAVAILABLE");
+    expect(error.message).toBe("Không thể kết nối tới E4S. Kiểm tra mạng rồi thử lại.");
+  });
+});
 
 describe("apiUrl", () => {
   it("prefixes relative API paths for a separately hosted API", () => {

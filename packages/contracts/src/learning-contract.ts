@@ -278,11 +278,25 @@ export interface MonthlyExamEligibilityView {
   absenceDays: number;
   maxAbsences: number;
   attendanceEligible: boolean;
+  /** Attendance exception granted by an approved or automatically approved complaint. */
+  attendanceOverride?: boolean;
   /** The server-derived gate may be used only when the exam date opens. */
   accessState: "tracking" | "eligible" | "appeal_required";
   opensAt: string;
   /** The exact close time needs the published form duration. */
   closesAt: string | null;
+  /** Canonical access gates; optional while older clients roll out. */
+  scheduledLessons?: number;
+  completedLessons?: number;
+  lessonsEligible?: boolean;
+  seasonTurns?: number;
+  seasonTurnsRequired?: number;
+  seasonEligible?: boolean;
+  frameworkApproved?: boolean;
+  formPublished?: boolean;
+  windowOpen?: boolean;
+  accessEligible?: boolean;
+  reasons?: string[];
 }
 
 export interface LearnerHomeView {
@@ -354,6 +368,21 @@ export interface LevelReadinessView {
   eligible: boolean;
   examAvailable: boolean;
   criteria: LevelReadinessMetric[];
+  /** Six eligible monthly records used by the canonical level-up policy. */
+  monthlyPolicy?: {
+    requiredMonths: number;
+    eligibleMonths: number;
+    finalPasses: number;
+    finalPassesRequired: number;
+    finalAverage: number | null;
+    finalAverageTarget: number;
+    seasonMonths: number;
+    seasonMonthsRequired: number;
+    latestFinalPassed: boolean;
+    absenceCap: number;
+    absenceRate: number;
+    reasons: string[];
+  };
 }
 
 export interface SeasonLevelView {

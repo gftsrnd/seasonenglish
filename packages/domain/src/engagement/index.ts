@@ -68,7 +68,7 @@ export function scoreGameAttempt(
   let score = 0;
   let correct = 0;
   const total = gameRoundTotal(game, words, answers);
-  const maxScore = game === "scramble" ? total * 2 : game === "typing" ? total * 50 : total;
+  const maxScore = game === "scramble" ? total * 2 : game === "typing" ? typingMaximum(total) : total;
   const scoringWords = options.attemptSeed === undefined ? words : prepareGameAttempt(words, options.attemptSeed);
   const remainingByWord = scoreableWordOccurrences(game, scoringWords);
   let accepted = 0;
@@ -102,6 +102,12 @@ export function scoreGameAttempt(
   if (game === "crossword") score = Math.max(0, score - clamp(options.hintsUsed ?? 0, 0, maxScore));
 
   return { score: Math.min(score, maxScore), maxScore, correct: Math.min(correct, total), total };
+}
+
+/** Typing starts at x1 and increases by one per correct word, capped at x5. */
+export function typingMaximum(rounds: number) {
+  const total = Math.max(0, Math.trunc(rounds));
+  return Array.from({ length: total }, (_, index) => 10 * Math.min(5, index + 1)).reduce((sum, score) => sum + score, 0);
 }
 
 function scoreableWordOccurrences(game: GameKey, words: readonly GameWord[]): Map<string, number> {

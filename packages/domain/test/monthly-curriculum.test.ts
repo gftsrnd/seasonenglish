@@ -17,7 +17,7 @@ import {
 
 function inputFor(month = "2026-11"): MonthlyCurriculumInput {
   const calendar = buildMonthlyCalendar(month);
-  const newDays = calendar.effectiveDays.flatMap((_date, index) => monthlyDayKind(index + 1, calendar.lessonCount) === "new" ? [index + 1] : []);
+  const newDays = calendar.effectiveDays.flatMap((_date, index) => monthlyDayKind(index + 1, calendar) === "new" ? [index + 1] : []);
   const coreTerms = Array.from({ length: newDays.length * 3 }, (_, index) => ({
     id: `core-${index + 1}`,
     word: `term${String.fromCharCode(97 + Math.floor(index / 26))}${String.fromCharCode(97 + index % 26)}`,
@@ -86,8 +86,9 @@ describe("monthly curriculum contract", () => {
     const contract = planMonthlyResourcePool(poolFor());
     const invalidRelations = structuredClone(contract);
     const linkedSupports = invalidRelations.supportTerms.filter((term) => term.relatedCoreTermId === invalidRelations.coreTerms[0]!.id);
-    linkedSupports[8]!.relation = "umbrella";
-    expect(validateMonthlyCurriculum(invalidRelations).join(" ")).toContain("must distribute nine supports across all five relation groups");
+    linkedSupports[3]!.relation = "collocation";
+    linkedSupports[7]!.relation = "collocation";
+    expect(validateMonthlyCurriculum(invalidRelations).join(" ")).toContain("needs umbrella, synonym, and word-family supports");
 
     const invalidGrammar = structuredClone(contract);
     invalidGrammar.daySpecs[2]!.grammarStepIds = ["grammar-1-step-1"];
@@ -137,6 +138,24 @@ describe("monthly curriculum contract", () => {
       expect(day.skillExercises).toHaveLength(6);
       expect(day.skillExercises.every((exercise) => exercise.resourceIds.every((id) => [...day.reviewTermIds, ...day.reviewExpandedTermIds].includes(id)))).toBe(true);
     }
+  });
+
+  it("schedules weekly reviews on Fridays and leaves a month-start Friday as a non-gating carryover review", () => {
+    const november = buildMonthlyCalendar("2026-11");
+    const novemberReviews = november.effectiveDays.filter((_, index) => monthlyDayKind(index + 1, november) === "review");
+    expect(novemberReviews).toEqual(["2026-11-06", "2026-11-13", "2026-11-20", "2026-11-27"]);
+
+    const mayInput = inputFor("2026-05");
+    const may = buildMonthlyCurriculum(mayInput);
+    expect(may.daySpecs[0]).toMatchObject({
+      date: "2026-05-01",
+      kind: "review",
+      reviewFromPreviousMonth: true,
+      reviewGatesNextWeek: false,
+      reviewTermIds: [],
+      reviewExpandedTermIds: []
+    });
+    expect(may.daySpecs.find((day) => day.date === "2026-05-08")?.kind).toBe("review");
   });
 
   it("idempotently repairs a legacy approved plan only when resource IDs prove its links", () => {
@@ -209,16 +228,13 @@ describe("monthly curriculum contract", () => {
     expect(validateMonthlyCurriculum(curriculum)).toEqual([]);
   });
 
-  it("uses the fixed slot schedule for 20, 21, and 22 instructional slots", () => {
-    const reviewSlots = (count: number) => Array.from({ length: count }, (_, index) => index + 1).filter((slot) => monthlyDayKind(slot, count) === "review");
-    expect(reviewSlots(20)).toEqual([5, 10, 15, 20]);
-    expect(reviewSlots(21)).toEqual([5, 10, 15, 21]);
-    expect(reviewSlots(22)).toEqual([5, 10, 15, 22]);
-    expect(Array.from({ length: 20 }, (_, index) => index + 1).filter((slot) => monthlyDayKind(slot, 20) === "new")).toHaveLength(16);
-    expect(Array.from({ length: 21 }, (_, index) => index + 1).filter((slot) => monthlyDayKind(slot, 21) === "new")).toHaveLength(17);
-    expect(Array.from({ length: 22 }, (_, index) => index + 1).filter((slot) => monthlyDayKind(slot, 22) === "new")).toHaveLength(18);
-    expect(monthlyNewLessonOrdinal(6, 20)).toBe(5);
-    expect(monthlyNewLessonOrdinal(20, 20)).toBeNull();
+  it("uses calendar Fridays for weekly review slots and new lesson ordinals", () => {
+    const calendar = buildMonthlyCalendar("2026-11");
+    const reviewDates = calendar.effectiveDays.filter((_, index) => monthlyDayKind(index + 1, calendar) === "review");
+    expect(reviewDates).toEqual(["2026-11-06", "2026-11-13", "2026-11-20", "2026-11-27"]);
+    expect(calendar.effectiveDays.filter((_, index) => monthlyDayKind(index + 1, calendar) === "new")).toHaveLength(16);
+    expect(monthlyNewLessonOrdinal(6, calendar)).toBe(5);
+    expect(monthlyNewLessonOrdinal(20, calendar)).toBeNull();
   });
 
   it("uses the final weekday as the exam date and excludes it from daily lessons", () => {
@@ -285,16 +301,16 @@ describe("monthly curriculum contract", () => {
     expect(newDays.slice(12).map((day) => day.grammarStepId)).toEqual(["grammar-1-step-3", "grammar-1-step-3", "grammar-1-step-3", "grammar-1-step-3"]);
   });
 
-  it("allows no more than twenty percent repeated expanded entries while keeping all core terms distinct", () => {
+  it("allows no more than thirty-five percent repeated expanded entries while keeping all core terms distinct", () => {
     const input = inputFor();
     const curriculum = buildMonthlyCurriculum(input);
     const allowed = structuredClone(curriculum);
-    for (let index = 0; index < 86; index += 1) allowed.supportTerms[allowed.supportTerms.length - 1 - index]!.word = allowed.supportTerms[0]!.word;
+    for (let index = 0; index < 151; index += 1) allowed.supportTerms[allowed.supportTerms.length - 1 - index]!.word = allowed.supportTerms[0]!.word;
     expect(validateMonthlyCurriculum(allowed)).toEqual([]);
 
     const excessive = structuredClone(allowed);
-    excessive.supportTerms[excessive.supportTerms.length - 87]!.word = excessive.supportTerms[0]!.word;
-    expect(validateMonthlyCurriculum(excessive)).toContain("Expanded resources repeat more than 20% of the monthly total");
+    excessive.supportTerms[excessive.supportTerms.length - 152]!.word = excessive.supportTerms[0]!.word;
+    expect(validateMonthlyCurriculum(excessive)).toContain("Expanded resources repeat more than 35% of the monthly total");
   });
 
   it("keeps support terms outside core and proposes the first ten pending days without replacing authored days", () => {

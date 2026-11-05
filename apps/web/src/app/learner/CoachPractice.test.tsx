@@ -98,10 +98,13 @@ describe("app coach and weekly practice speech input", () => {
       id: "coach-sample-audio", speaker: "coach", text: feedbackWithSample.seasonReply, createdAt: "now", feedback: feedbackWithSample
     }] }} actions={callback} />);
 
-    const reply = screen.getByLabelText("Câu Season trả lời");
-    const heading = within(reply).getByRole("heading", { name: "Câu Season trả lời" });
-    const listen = within(reply).getByRole("button", { name: "Nghe câu Season trả lời" });
-    expect(heading.parentElement).toContainElement(listen);
+    const reply = document.querySelector<HTMLElement>(".coach-season-reply")!;
+    const message = reply.closest<HTMLElement>("article.msg.ai")!;
+    const listen = within(message).getByRole("button", { name: "Nghe câu Season trả lời" });
+    const replyHeader = message.querySelector<HTMLElement>(".coach-message-heading")!;
+    expect(reply.querySelector("h4")).toBeNull();
+    expect(within(replyHeader).getByText("Season")).toHaveClass("eyebrow");
+    expect(replyHeader).toContainElement(listen);
     await user.click(listen);
 
     expect(callback.speak).toHaveBeenCalledWith("Nice to hear you are happy with your job.", "en-US");
@@ -122,21 +125,21 @@ describe("app coach and weekly practice speech input", () => {
       id: "coach-sample-only", speaker: "coach", text: feedbackWithSample.seasonReply, createdAt: "now", feedback: feedbackWithSample
     }] }} actions={actions()} />);
 
-    const reply = screen.getByLabelText("Câu Season trả lời");
+    const reply = document.querySelector<HTMLElement>(".coach-season-reply")!;
     expect(reply).not.toHaveTextContent("What could you say next in this workplace situation?");
     expect(screen.queryByLabelText("Câu Season hỏi tiếp")).not.toBeInTheDocument();
     expect(screen.queryByRole("heading", { name: "Câu bạn nên nói tiếp" })).not.toBeInTheDocument();
-    const suggestion = within(reply).getByLabelText("Gợi ý trả lời");
+    const suggestion = within(reply).getByLabelText("Câu trả lời gợi ý");
     expect(suggestion).toHaveClass("coach-next-question");
     expect(suggestion).toHaveTextContent("First, I will check the budget report.");
     expect(suggestion).not.toHaveTextContent("What could you say next in this workplace situation?");
-    expect(within(suggestion).getByRole("heading", { name: "Bản dịch gợi ý trả lời" })).toBeInTheDocument();
-    expect(suggestion).toHaveTextContent("Đầu tiên, tôi sẽ kiểm tra báo cáo ngân sách.");
+    expect(suggestion).toHaveTextContent("You can say:");
+    expect(suggestion).not.toHaveTextContent("Đầu tiên, tôi sẽ kiểm tra báo cáo ngân sách.");
     const evaluation = screen.getByLabelText("Nhận xét câu trả lời của bạn");
     expect(suggestion.compareDocumentPosition(evaluation) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(screen.queryByRole("button", { name: "Nghe câu mẫu" })).not.toBeInTheDocument();
     const details = screen.getByText("Xem giải thích và gợi ý").closest("details");
-    expect(within(details!).queryByText("First, I will check the budget report.")).not.toBeInTheDocument();
+    expect(within(details!).getByText("Bản dịch gợi ý trả lời")).toBeInTheDocument();
   });
 
   it("normalizes Season audioArtifact responses without duplicating the visible transcript", () => {
@@ -257,12 +260,12 @@ describe("app coach and weekly practice speech input", () => {
     await waitFor(() => expect(callback.sendCoachMessage).toHaveBeenCalledWith("Send this"));
   });
 
-  it("renders concise Season feedback with a plain next question and readable details", () => {
+  it("renders the in-character question in bold and keeps corrections compact", () => {
     render(<LearnerCoach view={{ ...coach, messages: [{
       id: "coach-structured", speaker: "coach", text: "Thanks. Could you shorten the bullet points?", createdAt: "2026-10-22T00:00:00.000Z",
       feedback: {
         relevant: true, relevanceNote: "", evaluation: { status: "valid", result: "partially_correct", countsTowardGoal: true, noteVi: "Đúng trọng tâm." },
-        seasonReply: "Thanks for the clear answer.", seasonReplyTranslation: "Cảm ơn câu trả lời rõ ràng.",
+        seasonReply: "Thanks for the clear answer. Could you shorten the bullet points?", seasonReplyTranslation: "Cảm ơn câu trả lời rõ ràng. Bạn có thể rút ngắn các gạch đầu dòng không?",
         nextQuestion: "Could you shorten the bullet points?", nextQuestionTranslation: "Bạn có thể rút ngắn các gạch đầu dòng không?",
         rubric: {
           meaning: { score: 4, evidence: "The slide is clearly identified.", improvement: "Add the reason." },
@@ -279,32 +282,30 @@ describe("app coach and weekly practice speech input", () => {
     expect(feedback.querySelectorAll(".coach-feedback-score")).toHaveLength(3);
     expect(within(feedback).queryByRole("heading", { name: "Câu bạn nên nói tiếp" })).not.toBeInTheDocument();
     expect(within(feedback).queryByLabelText("Câu Season hỏi tiếp")).not.toBeInTheDocument();
-    const seasonHeading = within(feedback).getByRole("heading", { name: "Câu Season trả lời" });
-    const evaluationHeading = within(feedback).getByRole("heading", { name: "Nhận xét câu trả lời của bạn" });
+    const evaluationHeading = within(feedback).getByText("Nhận xét câu trả lời của bạn");
     const correctionHeading = within(feedback).getByRole("heading", { name: "Câu sửa" });
-    expect(seasonHeading.compareDocumentPosition(evaluationHeading) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-    const suggestionBox = within(feedback).getByLabelText("Gợi ý trả lời");
+    const seasonReply = feedback.querySelector<HTMLElement>(".coach-season-spoken")!;
+    expect(seasonReply.compareDocumentPosition(evaluationHeading) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    const suggestionBox = within(feedback).getByLabelText("Câu trả lời gợi ý");
     expect(suggestionBox).toHaveClass("coach-next-question");
     expect(suggestionBox.compareDocumentPosition(evaluationHeading) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(evaluationHeading.compareDocumentPosition(correctionHeading) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-    expect(within(feedback).getByLabelText("Câu Season trả lời")).toHaveTextContent("Thanks for the clear answer.");
-    expect(within(feedback).getByLabelText("Câu Season trả lời")).not.toHaveTextContent("Could you shorten the bullet points?");
+    expect(seasonReply).toHaveTextContent("Thanks for the clear answer.");
+    expect(within(seasonReply).getByText("Could you shorten the bullet points?").tagName).toBe("STRONG");
     expect(within(feedback).getByText("Kết quả: Đúng một phần")).toBeInTheDocument();
     expect(within(feedback).getByLabelText("Nhận xét câu trả lời của bạn")).not.toHaveTextContent("Thanks for the clear answer.");
     expect(within(feedback).queryByText("Ý nghĩa ba điểm")).not.toBeInTheDocument();
     const details = within(feedback).getByText("Xem giải thích và gợi ý").closest("details");
     expect(details).not.toHaveAttribute("open");
-    expect(feedback.querySelectorAll("details")).toHaveLength(1);
+    expect(feedback.querySelectorAll("details")).toHaveLength(2);
     expect(feedback.querySelectorAll(".coach-feedback-section")).toHaveLength(2);
     expect(feedback.querySelectorAll(".coach-feedback-criterion-card")).toHaveLength(3);
-    expect(within(feedback).getAllByText("Cảm ơn câu trả lời rõ ràng.")).toHaveLength(2);
-    expect(within(feedback).queryByText("Bạn có thể rút ngắn các gạch đầu dòng không?")).not.toBeInTheDocument();
+    expect(within(feedback).getByText(/Cảm ơn câu trả lời rõ ràng\./)).toHaveTextContent("Bạn có thể rút ngắn các gạch đầu dòng không?");
+    expect(within(feedback).queryByText("The slide has too much text.")).not.toBeInTheDocument();
     expect(within(feedback).getByText(/The slide is clearly identified\./)).toBeInTheDocument();
     expect(within(feedback).getByText(/Use has, not have\./)).toBeInTheDocument();
-    const reply = within(feedback).getByLabelText("Câu Season trả lời");
-    expect(within(reply).getByLabelText("Gợi ý trả lời")).toHaveTextContent("I can shorten the bullet points.");
-    expect(within(suggestionBox).getByRole("heading", { name: "Bản dịch gợi ý trả lời" })).toBeInTheDocument();
-    expect(suggestionBox).toHaveTextContent("Tôi có thể rút ngắn các gạch đầu dòng.");
+    expect(within(seasonReply).getByText("Thanks for the clear answer.")).toBeInTheDocument();
+    expect(suggestionBox).toHaveTextContent("I can shorten the bullet points.");
   });
 
   it("keeps the suggested-reply translation before feedback and removes empty high-score advice", () => {
@@ -324,10 +325,10 @@ describe("app coach and weekly practice speech input", () => {
     }] }} actions={actions()} />);
 
     const feedback = screen.getByRole("region", { name: "Phản hồi của Season" });
-    const suggestionTranslation = within(feedback).getByLabelText("Gợi ý trả lời").querySelector(".coach-suggestion-translation h4");
-    const evaluation = within(feedback).getByRole("heading", { name: "Nhận xét câu trả lời của bạn" });
-    expect(suggestionTranslation).toHaveTextContent("Bản dịch gợi ý trả lời");
-    expect(suggestionTranslation!.compareDocumentPosition(evaluation) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    const suggestionBox = within(feedback).getByLabelText("Câu trả lời gợi ý");
+    const evaluation = within(feedback).getByText("Nhận xét câu trả lời của bạn");
+    expect(suggestionBox).toHaveTextContent("You can say:");
+    expect(suggestionBox.compareDocumentPosition(evaluation) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(feedback).not.toHaveTextContent("Gợi ý: Không cần thay đổi.");
     expect(feedback).not.toHaveTextContent("Gợi ý: No change needed.");
   });
@@ -348,15 +349,15 @@ describe("app coach and weekly practice speech input", () => {
       }
     }] }} actions={actions()} />);
 
-    const reply = screen.getByLabelText("Câu Season trả lời");
-    const suggestion = within(reply).getByLabelText("Gợi ý trả lời");
+    const reply = document.querySelector<HTMLElement>(".coach-season-reply")!;
+    const suggestion = within(reply).getByLabelText("Câu trả lời gợi ý");
     expect(suggestion).toHaveClass("coach-next-question");
     expect(suggestion).toHaveTextContent("I can confirm the agenda before lunch.");
     expect(suggestion).not.toHaveTextContent("What could you say next?");
     expect(screen.queryByLabelText("Câu Season hỏi tiếp")).not.toBeInTheDocument();
     expect(reply).not.toHaveTextContent("What could you say next?");
-    expect(suggestion).toHaveTextContent("Bản dịch gợi ý trả lời");
-    expect(suggestion).toHaveTextContent("Tôi có thể xác nhận chương trình trước bữa trưa.");
+    expect(suggestion).not.toHaveTextContent("Bản dịch gợi ý trả lời");
+    expect(suggestion).toHaveTextContent("You can say:");
   });
 
   it("keeps Season's opening line at the start after conversation messages arrive", () => {
@@ -403,7 +404,7 @@ describe("app coach and weekly practice speech input", () => {
     expect(screen.queryByRole("button", { name: "Mở từ bí mật 1" })).not.toBeInTheDocument();
     expect(screen.getByText("chương trình họp")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Nghe từ deadline: hạn chót" })).toHaveClass("coach-word-chip");
-    await user.click(screen.getByRole("button", { name: "Nghe câu của Season" }));
+    await user.click(screen.getByRole("button", { name: "Nghe câu Season trả lời" }));
     expect(callback.speak).toHaveBeenCalledWith("What is on the agenda?", "en-US");
     expect(screen.getByRole("button", { name: "Nói" })).toHaveClass("coach-compose-icon");
     expect(screen.getByRole("button", { name: "Nói" })).toHaveAttribute("title", "Nói");
@@ -460,7 +461,7 @@ describe("app coach and weekly practice speech input", () => {
     expect(screen.queryByLabelText("Gợi ý trả lời")).not.toBeInTheDocument();
     expect(screen.queryByText("I will answer with a complete sentence.")).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Nghe câu mẫu" })).not.toBeInTheDocument();
-    const retry = screen.getByLabelText("Câu Season trả lời");
+    const retry = document.querySelector(".coach-season-reply")!;
     expect(retry).toHaveTextContent("Please write a complete English sentence.");
     const evaluation = screen.getByLabelText("Nhận xét câu trả lời của bạn");
     expect(retry.compareDocumentPosition(evaluation) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();

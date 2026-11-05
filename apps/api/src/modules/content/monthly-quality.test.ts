@@ -40,6 +40,28 @@ describe("monthly lesson quality", () => {
     ]));
   });
 
+  it("validates review grammar and pronunciation against review allocations, not the calendar day's new allocation", () => {
+    const review = contract();
+    review.grammarTopics[0]!.steps.push({ id: "review-grammar", focus: "review", formula: "Review formula", usage: "Review usage", examples: ["Review example."] });
+    review.sounds.push({ id: "review-sound", ipa: "/s/", label: "S", examples: [{ id: "review-1", word: "see", ipa: "/siː/" }, { id: "review-2", word: "soon", ipa: "/suːn/" }, { id: "review-3", word: "sales", ipa: "/seɪlz/" }] });
+    const spec = review.daySpecs[1]!;
+    spec.grammarStepIds = ["grammar-step"];
+    spec.soundId = "sound-1";
+    spec.pronunciationExampleIds = ["sound-example-1", "sound-example-2", "sound-example-3"];
+    spec.reviewGrammarStepIds = ["review-grammar"];
+    spec.reviewSoundIds = ["review-sound"];
+    spec.reviewPronunciationExampleIds = ["review-1", "review-2", "review-3"];
+    const candidate = lesson();
+    candidate.parts = candidate.parts.map((item) => item.code === "grammar" ? part(item.code, { formula: "Review formula" }) : item.code === "pronunciation" ? part(item.code, { focus: "/s/", words: [{ word: "see", ipa: "/siː/" }, { word: "soon", ipa: "/suːn/" }, { word: "sales", ipa: "/seɪlz/" }], reviewTargets: [{ soundId: "review-sound", focus: "/s/", words: [{ word: "see", ipa: "/siː/" }, { word: "soon", ipa: "/suːn/" }, { word: "sales", ipa: "/seɪlz/" }] }] }) : item);
+
+    expect(evaluateMonthlyLessonQuality(review, 2, candidate).severe).toEqual([]);
+    candidate.parts = candidate.parts.map((item) => item.code === "pronunciation" ? part(item.code, { ...item.content, reviewTargets: [] }) : item);
+    expect(evaluateMonthlyLessonQuality(review, 2, candidate).severe.map((item) => item.code)).toContain("MONTHLY_SOUND_SCOPE_MISMATCH");
+    candidate.parts = candidate.parts.map((item) => item.code === "pronunciation" ? part(item.code, { focus: "/s/", words: [{ word: "see", ipa: "/siː/" }, { word: "soon", ipa: "/suːn/" }, { word: "sales", ipa: "/seɪlz/" }], reviewTargets: [{ soundId: "review-sound", focus: "/s/", words: [{ word: "see", ipa: "/siː/" }, { word: "soon", ipa: "/suːn/" }, { word: "sales", ipa: "/seɪlz/" }] }] }) : item);
+    candidate.parts = candidate.parts.map((item) => item.code === "grammar" ? part(item.code, { formula: "Core formula" }) : item);
+    expect(evaluateMonthlyLessonQuality(review, 2, candidate).severe.map((item) => item.code)).toContain("MONTHLY_GRAMMAR_SCOPE_MISMATCH");
+  });
+
   it("marks malformed assessment shapes and missing listening content as severe", () => {
     const result = evaluateMonthlyLessonQuality(contract(), 1, lesson({
       parts: requiredCodes.map((code) => code === "listening"
@@ -72,7 +94,7 @@ function contract(): MonthlyCurriculumContract {
     sounds: [{ id: "sound-1", ipa: "/k/", label: "K", examples: [{ id: "sound-example-1", word: "cost", ipa: "/kɒst/" }, { id: "sound-example-2", word: "can", ipa: "/kæn/" }, { id: "sound-example-3", word: "key", ipa: "/kiː/" }] }],
     daySpecs: [
       { lessonNumber: 1, date: "2026-11-02", kind: "new", coreTermIds: ["core-1", "core-2", "core-3"], expandedTermIds: ["support-1"], reviewTermIds: [], reviewExpandedTermIds: [], skillExercises: exercises(["core-1", "core-2", "core-3", "support-1"]), grammarStepId: "grammar-step", soundId: "sound-1", pronunciationExampleIds: ["sound-example-1", "sound-example-2", "sound-example-3"] },
-      { lessonNumber: 2, date: "2026-11-06", kind: "review", coreTermIds: [], expandedTermIds: [], reviewTermIds: ["core-1", "core-2", "core-3"], reviewExpandedTermIds: ["support-1"], skillExercises: exercises(["core-1", "core-2", "core-3", "support-1"]), grammarStepId: "grammar-step", soundId: "sound-1", pronunciationExampleIds: ["sound-example-1", "sound-example-2", "sound-example-3"] }
+      { lessonNumber: 2, date: "2026-11-06", kind: "review", coreTermIds: [], expandedTermIds: [], reviewTermIds: ["core-1", "core-2", "core-3"], reviewExpandedTermIds: ["support-1"], reviewGrammarStepIds: ["grammar-step"], reviewSoundIds: ["sound-1"], reviewPronunciationExampleIds: ["sound-example-1", "sound-example-2", "sound-example-3"], skillExercises: exercises(["core-1", "core-2", "core-3", "support-1"]), grammarStepId: "grammar-step", soundId: "sound-1", pronunciationExampleIds: ["sound-example-1", "sound-example-2", "sound-example-3"] }
     ]
   };
 }

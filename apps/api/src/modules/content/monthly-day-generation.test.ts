@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { MonthlyCurriculumContract } from "@e4s/domain";
-import { generateMonthlyDay, generateMonthlyDayWithAi, monthlyCheckpointKey } from "./monthly-day-generation.js";
+import { generateMonthlyDay, generateMonthlyDayWithAi, generateMonthlyReviewWithAi, monthlyCheckpointKey } from "./monthly-day-generation.js";
 
 const components = ["objective", "instruction", "vocabulary", "grammar", "pronunciation", "listening", "reading", "writing", "word_class", "word_use", "speaking"];
 
@@ -68,20 +68,38 @@ describe("monthly day generation", () => {
 
   it("loads review support terms by explicit weekly IDs instead of the review calendar day", async () => {
     const reviewContract = contract();
-    reviewContract.daySpecs.push({ lessonNumber: 5, date: "2026-11-06", kind: "review", coreTermIds: [], expandedTermIds: [], reviewTermIds: ["budget", "cost", "forecast"], reviewExpandedTermIds: ["support-1", "support-2", "support-3"], skillExercises: monthlyExercises(["budget", "cost", "forecast", "support-1", "support-2", "support-3"]), grammarStepId: "step", soundId: "sound", pronunciationExampleIds: ["cost", "can", "key"] });
-    const runner = { runTask: async (_taskId: string, input: Record<string, any>) => {
+    reviewContract.grammarTopics[0]!.steps.push({ id: "step-2", focus: "another focus", formula: "There is + adjective", usage: "Describe another fact", examples: ["There is a report."] });
+    reviewContract.sounds.push({ id: "sound-2", ipa: "/s/", label: "S", examples: [{ id: "cost-2", word: "see", ipa: "/siː/" }, { id: "can-2", word: "soon", ipa: "/suːn/" }, { id: "key-2", word: "sales", ipa: "/seɪlz/" }] });
+    reviewContract.daySpecs.push({ lessonNumber: 5, date: "2026-11-06", kind: "review", coreTermIds: [], expandedTermIds: [], reviewTermIds: ["budget", "cost", "forecast"], reviewExpandedTermIds: ["support-1", "support-2", "support-3"], reviewGrammarStepIds: ["step", "step-2"], reviewSoundIds: ["sound", "sound-2"], reviewPronunciationExampleIds: ["cost", "can", "key", "cost-2", "can-2", "key-2"], skillExercises: monthlyExercises(["budget", "cost", "forecast", "support-1", "support-2", "support-3"]), grammarStepId: "step-2", grammarStepIds: ["step-2"], soundId: "sound-2", pronunciationExampleIds: ["cost-2", "can-2", "key-2"] });
+    const runner = { runTask: async (_taskId: string, input: Record<string, any>, options: Record<string, any>) => {
       expect(input.daySpec.kind).toBe("review");
       expect(input.lockedScope.supportTerms.map((term: { id: string }) => term.id)).toEqual(["support-1", "support-2", "support-3"]);
-      return { output: { lesson: { ...lessonCandidate(), title: "Budget review" } }, metadata: {} };
+      expect(input.lockedScope.grammarSteps.map((step: { id: string }) => step.id)).toEqual(["step", "step-2"]);
+      expect(input.lockedScope.sounds.map((sound: { id: string }) => sound.id)).toEqual(["sound", "sound-2"]);
+      expect(input.lockedScope.pronunciationExamples.map((example: { id: string }) => example.id)).toEqual(["cost", "can", "key", "cost-2", "can-2", "key-2"]);
+      expect(options.systemPrompt).toContain("pronunciation.reviewTargets");
+      return { output: { lesson: { ...reviewLessonCandidate(), title: "Budget review" } }, metadata: {} };
     } } as unknown as import("@e4s/ai").AiTaskRunner;
 
-    const result = await generateMonthlyDayWithAi(reviewContract, 5, runner, "Test monthly lesson prompt");
-    expect(result.status).toBe("ready");
+    await expect(generateMonthlyDayWithAi(reviewContract, 5, runner, "Test monthly lesson prompt")).rejects.toThrow("ordinary generation requires a new DaySpec");
+    const result = await generateMonthlyReviewWithAi(reviewContract, 5, runner, "Test monthly lesson prompt");
+    expect(result.status, JSON.stringify(result.report.severe)).toBe("ready");
   });
 });
 
 function lessonCandidate() {
   return { parts: components.map((code) => part(code)) };
+}
+
+function reviewLessonCandidate() {
+  return { parts: components.map((code) => code === "grammar"
+    ? { code, content: { formula: "The cost is + adjective; There is + adjective" } }
+    : code === "pronunciation"
+      ? { code, content: { focus: "/k/", words: [{ word: "cost", ipa: "/kɒst/" }, { word: "can", ipa: "/kæn/" }, { word: "key", ipa: "/kiː/" }], reviewTargets: [
+        { soundId: "sound", focus: "/k/", words: [{ word: "cost", ipa: "/kɒst/" }, { word: "can", ipa: "/kæn/" }, { word: "key", ipa: "/kiː/" }] },
+        { soundId: "sound-2", focus: "/s/", words: [{ word: "see", ipa: "/siː/" }, { word: "soon", ipa: "/suːn/" }, { word: "sales", ipa: "/seɪlz/" }] }
+      ] } }
+      : part(code)) };
 }
 
 function part(code: string) {

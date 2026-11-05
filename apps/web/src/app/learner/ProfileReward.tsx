@@ -74,7 +74,7 @@ export function LearnerProfile({ view, actions }: { view: ProfileView; actions: 
   const detail = level ? `Trình độ ${level} – ${CEFR_LABELS[level]}${goals ? ` · ${goals}.` : ""}` : "Chưa duyệt trình độ";
   return <div className="app-learner-page profile-page" style={{ width: "100%", maxWidth: 960, minWidth: 0, boxSizing: "border-box", paddingBottom: "calc(88px + env(safe-area-inset-bottom))" }}>
     <PageTitle eyebrow="Tiến độ & hồ sơ" title={view.learner.displayName} detail={detail} aside={level ? <span className={`badge lvl lvl-${level}`}>{level}</span> : null} />
-    <section className="card profile-identity-card" aria-label="Hồ sơ cá nhân" style={{ background: "var(--lav)" }}>
+    <section className="card learner-summary-card learner-summary-card--profile profile-identity-card" aria-label="Hồ sơ cá nhân">
       <div className="row" style={{ gap: 16, alignItems: "center", flexWrap: "wrap" }}>
         <button ref={avatarReturnRef} className="btn-ghost" type="button" aria-label="Đổi avatar" title="Đổi avatar" style={{ padding: 0, border: 0, background: "transparent" }} onClick={openAvatar}><Avatar avatar={view.learner.profile.avatar} name={view.learner.displayName} /></button>
         <div style={{ flex: 1, minWidth: 200 }}><div className="eyebrow">Hồ sơ cá nhân</div><b style={{ fontFamily: "var(--font-display)", fontSize: "1.1rem" }}>Avatar của bạn</b><div className="small muted">{avatarDescription(view.learner.profile.avatar)} · Thông tin công việc và nhu cầu học của bạn.</div></div>
@@ -222,9 +222,9 @@ const SELF_LEVELS: Record<string, string> = { unknown: "Không rõ", A1: "Mới 
 const ASSESSMENT_SKILLS = ["listening", "reading", "writing", "speaking"] as const;
 const SECTION_LABELS: Record<string, string> = { listening: "Nghe", reading: "Đọc", writing: "Viết", speaking: "Nói" };
 const AVATAR_ACC_LABELS: Record<string, string> = { none: "Chữ cái đầu", leaf: "Lá", sun: "Nắng", flower: "Hoa", cloud: "Mây", star: "Sao", drop: "Giọt mưa", snow: "Tuyết" };
-const AVATAR_COLOR_LABELS: Record<string, string> = { ink: "Mực", brown: "Nâu", olive: "Ô liu", taupe: "Xám nâu", orange: "Cam", rose: "Đỏ hồng" };
-const AVATAR_COLOR_HEX: Record<LearnerAvatarData["color"], string> = { ink: "#1E1E1E", brown: "#6E3B32", olive: "#4B6120", taupe: "#7A7064", orange: "#F28C28", rose: "#B4374B" };
-const AVATAR_BG = ["#FBB829", "#F6D3CB", "#E3DCFB", "#DCE8C8", "#FFF4D9", "#D6CCBF"] as const;
+const AVATAR_COLOR_LABELS: Record<string, string> = { ink: "Mực", brown: "Xanh dương đậm", olive: "Xanh ngọc", taupe: "Xanh ngọc đậm", orange: "Xanh dương", rose: "Xanh dương vừa" };
+const AVATAR_COLOR_HEX: Record<LearnerAvatarData["color"], string> = { ink: "#1E1E1E", brown: "#2C5A8C", olive: "#1F6B5E", taupe: "#195B51", orange: "#3F76B5", rose: "#356AA6" };
+const AVATAR_BG = ["#FFFFFF", "var(--primary-soft)", "var(--secondary-soft)", "color-mix(in srgb,var(--primary) 18%,white)", "color-mix(in srgb,var(--secondary) 18%,white)", "var(--surface-2)"] as const;
 function label(value: string | undefined, dictionary: Record<string, string>) { return value ? dictionary[value] ?? value : ""; }
 function labels(values: readonly string[] | undefined, dictionary: Record<string, string>) { return (values ?? []).map((value) => label(value, dictionary)).join(", "); }
 function avatarDescription(avatar: Partial<LearnerAvatarData> | undefined) { return avatar ? `${label(avatar.acc, AVATAR_ACC_LABELS)} · nét ${label(avatar.color, AVATAR_COLOR_LABELS).toLowerCase()}` : "Chưa chọn – đang hiện chữ cái đầu"; }

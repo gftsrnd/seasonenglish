@@ -1,7 +1,4 @@
-/* ===== "Sunny english" design system (from Downloads/Season English/DesignSystem.dc.html) =====
-   Nền giấy #EEEDEA, thẻ trắng bo 22, nút pill 999, ô nhập bo 16 không viền, vàng nắng #FBB829 làm màu chính,
-   ô liu = đúng, nâu = lỗi. Phẳng: không viền dày, không bóng đổ. Chữ Be Vietnam Pro.
-   Bản da "Chippi sticker" cũ còn ở style.sticker.css. Tên biến giữ nguyên để core.js (style="background:var(--butter)"…) vẫn chạy. */
+/* Shared E4S presentation tokens. Color accents use the same blue and teal palette across seasons. */
 /* ---- structural tokens: the same for every theme ---- */
 :root{
   color-scheme:light;
@@ -13,45 +10,19 @@
   --font:'Be Vietnam Pro',system-ui,-apple-system,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;
   --font-display:'Be Vietnam Pro',system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
 }
-/* ---- theme tokens: ONLY these change with the season / holiday (core.js sets <html data-theme="…">; the brand mark changes with it) ----
-   --primary: page background, main action, progress, today · --primary-ink / --bg-ink / --bg-muted: text ON the primary (dark for light themes, white for dark ones)
-   --secondary: second holiday colour (Tết gold, Christmas red) for accents · --primary-soft / --primary-line: selected / own chat bubble / active nav
-   --primary-glow: focus ring · --accent: stroke colour of the theme icon · --surface-2: inset backgrounds inside cards
-   --peach / --mint / --lav + --tile-*: the four decorative tints; --butter always equals --primary (core.js uses it inline) */
-:root,:root[data-theme="summer"]{ /* mùa hạ: nắng */
-  --primary:#FBB829; --primary-hover:#F3AD1E; --primary-ink:#1E1E1E; --bg-ink:#1E1E1E; --bg-muted:rgba(30,30,30,.62); --secondary:#F28C28; --accent:#F28C28;
-  --bg:color-mix(in srgb, var(--primary) 30%, white); --surface-2:#F1EFEA; --primary-soft:#FFF4D9; --primary-line:#F0D9A4; --primary-glow:rgba(251,184,41,.3);
-  --peach:#F6D3CB; --mint:#DCE8C8; --lav:#E3DCFB; --tile-1:#FBF1EE; --tile-2:#F1F5E8; --tile-3:#F2EFFA; --butter:var(--primary);
-}
-:root[data-theme="spring"]{ /* mùa xuân: xanh chồi non, hoa đào */
-  --primary:#9CCB5A; --primary-hover:#8DBF4C; --primary-ink:#1E1E1E; --bg-ink:#1E1E1E; --bg-muted:rgba(30,30,30,.62); --secondary:#E58BA6; --accent:#E58BA6;
-  --bg:color-mix(in srgb, var(--primary) 30%, white); --surface-2:#EFF2EA; --primary-soft:#EEF6E3; --primary-line:#D3E5B6; --primary-glow:rgba(156,203,90,.3);
-  --peach:#F9D9E0; --mint:#DCEBC8; --lav:#E3DCFB; --tile-1:#FCF0F3; --tile-2:#F1F6E8; --tile-3:#F2EFFA; --butter:var(--primary);
-}
-:root[data-theme="autumn"]{ /* mùa thu: hổ phách, lá khô */
-  --primary:#E9963E; --primary-hover:#DD8A33; --primary-ink:#1E1E1E; --bg-ink:#1E1E1E; --bg-muted:rgba(30,30,30,.62); --secondary:#B5532B; --accent:#B5532B;
-  --bg:color-mix(in srgb, var(--primary) 30%, white); --surface-2:#F2EDE6; --primary-soft:#FBEEDF; --primary-line:#F0D3B2; --primary-glow:rgba(233,150,62,.3);
-  --peach:#F6D3CB; --mint:#E3E2C4; --lav:#E6DDD3; --tile-1:#FBF1EE; --tile-2:#F4F3E8; --tile-3:#F4F0EB; --butter:var(--primary);
-}
-:root[data-theme="winter"]{ /* mùa đông: xanh lạnh đậm, chữ sáng */
-  --primary:#3F76B5; --primary-hover:#356AA6; --primary-ink:#FFFFFF; --bg-ink:#1E1E1E; --bg-muted:rgba(30,30,30,.62); --secondary:#CFE3F5; --accent:#2C5A8C;
-  --bg:color-mix(in srgb, var(--primary) 30%, white); --surface-2:#ECEFF3; --primary-soft:#E8F0F8; --primary-line:#C4D8EC; --primary-glow:rgba(63,118,181,.3);
-  --peach:#E9DEE8; --mint:#DCE8E4; --lav:#E3DCFB; --tile-1:#F5F0F4; --tile-2:#EEF4F2; --tile-3:#F2EFFA; --butter:var(--primary);
-}
-:root[data-theme="tet"]{ /* Tết: đỏ làm nền, vàng kim làm điểm nhấn, hoa mai */
-  --primary:#C8102E; --primary-hover:#B30E29; --primary-ink:#FFFFFF; --bg-ink:#1E1E1E; --bg-muted:rgba(30,30,30,.62); --secondary:#F2C14E; --accent:#F2C14E;
-  --bg:color-mix(in srgb, var(--primary) 30%, white); --surface-2:#F4EEE6; --primary-soft:#FBE4E1; --primary-line:#EFB9B3; --primary-glow:rgba(200,16,46,.28);
-  --peach:#FBE4E1; --mint:#F5EBC9; --lav:#F3DCDC; --tile-1:#FBE4E1; --tile-2:#FBF2D6; --tile-3:#FAEFEF; --butter:var(--primary);
-}
-:root[data-theme="midautumn"]{ /* Trung thu: đèn lồng cam */
-  --primary:#F4A261; --primary-hover:#EC9552; --primary-ink:#1E1E1E; --bg-ink:#1E1E1E; --bg-muted:rgba(30,30,30,.62); --secondary:#B23A48; --accent:#B23A48;
-  --bg:color-mix(in srgb, var(--primary) 30%, white); --surface-2:#F3EEE8; --primary-soft:#FDEBDD; --primary-line:#F4CDB0; --primary-glow:rgba(244,162,97,.3);
-  --peach:#F6D3CB; --mint:#E5E3C8; --lav:#E9DCEF; --tile-1:#FBF1EE; --tile-2:#F5F4E8; --tile-3:#F4EFF7; --butter:var(--primary);
-}
-:root[data-theme="christmas"]{ /* Giáng sinh – năm mới: xanh thông làm nền, đỏ làm điểm nhấn, chữ sáng */
-  --primary:#1F6B44; --primary-hover:#195B3A; --primary-ink:#FFFFFF; --bg-ink:#1E1E1E; --bg-muted:rgba(30,30,30,.62); --secondary:#C62828; --accent:#C62828;
-  --bg:color-mix(in srgb, var(--primary) 30%, white); --surface-2:#EDF1ED; --primary-soft:#E3EFE7; --primary-line:#B9D6C4; --primary-glow:rgba(31,107,68,.28);
-  --peach:#F6D3CB; --mint:#DCE8C8; --lav:#F6DADA; --tile-1:#FBE4E1; --tile-2:#EEF3E8; --tile-3:#FBE4E1; --butter:var(--primary);
+/* One calm palette across seasons: white, brand blue, and deep teal. */
+:root,:root[data-theme]{
+  --primary:#3F76B5; --primary-hover:#356AA6; --primary-dark:#2C5A8C; --primary-ink:#FFFFFF;
+  --secondary:#1F6B5E; --accent:var(--secondary); --bg-ink:#1E1E1E; --bg-muted:rgba(30,30,30,.62);
+  --bg:color-mix(in srgb,var(--primary) 30%,white); --surface-2:color-mix(in srgb,var(--primary) 5%,white); --surface-3:color-mix(in srgb,var(--primary) 4%,white);
+  --primary-soft:color-mix(in srgb,var(--primary) 10%,white); --primary-line:color-mix(in srgb,var(--primary) 28%,white); --primary-glow:rgba(63,118,181,.24);
+  --secondary-soft:color-mix(in srgb,var(--secondary) 10%,white); --secondary-line:color-mix(in srgb,var(--secondary) 28%,white);
+  --peach:var(--primary-soft); --mint:var(--secondary-soft); --lav:var(--primary-soft);
+  --tile-1:#FFFFFF; --tile-2:var(--secondary-soft); --tile-3:var(--primary-soft); --butter:var(--primary);
+  --olive:var(--secondary); --olive-dark:var(--secondary); --brown:var(--primary-dark);
+  --ok:var(--secondary); --ok-soft:var(--secondary-soft); --ok-line:var(--secondary-line); --ok-tint:var(--secondary-soft);
+  --warn:var(--primary-dark); --warn-soft:var(--primary-soft); --warn-line:var(--primary-line);
+  --danger:var(--primary-dark); --danger-soft:var(--primary-soft); --danger-line:var(--primary-line);
 }
 /* text on the primary colour: everything painted with --primary / --butter (inline too) uses --primary-ink */
 .btn-primary,.btn-sm.btn-primary,.hero .btn,.hero button:not(.btn-ghost),.role .go,.ltabs button.active,.badge.primary,.lvl-A1,.day i.today,.path a.today .node,.sc-slot.on,.tp-row button.lit,.arena-row .rank.top,.setup .st.cur .num,.mr-pad button.on,.mr-pad button:active,.word-card,[style*="background:var(--butter)"],[style*="background:var(--primary)"],[style*="background: var(--butter)"],[style*="background: var(--primary)"]{color:var(--primary-ink)}

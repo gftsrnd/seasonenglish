@@ -101,7 +101,8 @@ export function EntryScreen({ client, onAuthenticated }: { client: AuthClient; o
         resetForm("login"); setNotice("Đã cập nhật mã PIN. Bạn có thể đăng nhập bằng mã PIN mới.");
       }
     } catch (caught) {
-      const codeValue = caught instanceof Error ? caught.message : "";
+      const codeValue = caught && typeof caught === "object" && "code" in caught && typeof caught.code === "string"
+        ? caught.code : caught instanceof Error ? caught.message : "";
       setErrors(errorFor(mode, audience, codeValue));
     } finally { setBusy(false); }
   };
@@ -180,6 +181,8 @@ function validate(mode: Mode, audience: "learner" | "staff", values: { displayNa
 }
 
 function errorFor(mode: Mode, audience: "learner" | "staff", code: string): FieldErrors {
+  if (code === "NETWORK_UNAVAILABLE") return { credential: "Không thể kết nối tới E4S. Kiểm tra mạng rồi thử lại." };
+  if (code === "PIN_LOGIN_LOCKED") return { credential: "Bạn đã nhập sai mã PIN quá nhiều lần. Tài khoản tạm khóa trong 15 phút; hãy thử lại sau." };
   if (code === "LEARNER_REGISTRATION_EMAIL_EXISTS" || code === "LEARNER_REGISTRATION_EMAIL_DELETED") return { email: "Email này không khả dụng. Hãy dùng email khác." };
   if (code === "EMAIL_DELIVERY_FAILED" || code === "EMAIL_DELIVERY_UNAVAILABLE") return { email: "Chưa thể gửi mã xác minh. Vui lòng thử lại." };
   if (code === "INVALID_OR_EXPIRED_CODE") return { code: "Mã không đúng hoặc đã hết hạn." };

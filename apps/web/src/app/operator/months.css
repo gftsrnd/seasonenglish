@@ -34,7 +34,7 @@
 .monthly-day-cell>div{grid-row:3;width:100%;display:flex;align-items:center;gap:3px;white-space:nowrap}
 .monthly-day-cell>.btn-sm{grid-row:3}
 .monthly-day-cell .btn-sm{width:auto;min-width:0;min-height:19px;flex:1 1 auto;padding:2px 3px;font-size:9px;line-height:1;white-space:nowrap}
-.monthly-day-cell .monthly-manual-action{flex:0 0 24px;width:24px;padding:2px;font-size:12px}
+.monthly-day-cell .monthly-manual-action{flex:0 0 28px;width:28px;padding:0;font-size:12px}
 .monthly-plan-day{padding:0;overflow:hidden}
 .monthly-plan-day-summary{display:flex;align-items:center;justify-content:space-between;gap:10px;min-height:58px;padding:10px 12px;cursor:pointer;list-style:none}
 .monthly-plan-day-summary::-webkit-details-marker{display:none}
@@ -56,15 +56,16 @@
 .monthly-day-cell{height:auto;aspect-ratio:1/1;grid-template-rows:minmax(0,1fr) auto auto minmax(8px,1fr) 28px;gap:2px;padding:4px 5px}
 .monthly-day-cell b{grid-row:2;align-self:center;font-size:18px;line-height:1}
 .monthly-day-cell strong{grid-row:3;align-self:center;margin-top:6px;font-size:11px;line-height:1.35}
-.monthly-day-cell>div{grid-row:5;align-self:end;justify-content:flex-start;gap:2px;margin:0;white-space:nowrap;width:100%;min-width:0;box-sizing:border-box}
+.monthly-day-cell>div.monthly-day-actions{display:flex;grid-row:5;align-self:end;justify-self:start;align-items:center;gap:5px;height:28px;margin:0;white-space:nowrap;width:auto;min-width:0;box-sizing:border-box;overflow:visible;border:0;border-radius:0;background:transparent}
 .monthly-day-cell>.btn-sm{grid-row:5;align-self:end}
-.monthly-day-cell .monthly-action-button{position:relative;display:inline-flex;flex:0 0 auto;align-items:center;justify-content:center;gap:2px;width:auto;min-width:36px;height:28px;min-height:28px;box-sizing:border-box;padding:0;border-radius:5px;font-size:8.5px;line-height:1;white-space:nowrap}
-.monthly-day-cell .monthly-action-button:before{position:absolute;inset-block:-4px;inset-inline:0;content:""}
-.monthly-day-cell .monthly-action-button svg{width:10px;height:10px;flex:0 0 10px;stroke-width:1.8}
-.monthly-day-cell .monthly-action-button span{display:inline-block}
-.monthly-day-cell .monthly-generate-action{min-width:36px}
-.monthly-day-cell .monthly-manual-action{width:auto;min-width:36px;flex-basis:auto}
-.monthly-day-cell .monthly-approve-action{width:auto;min-width:36px;flex-basis:auto}
-.monthly-day-cell .monthly-view-day{min-width:36px}
+.monthly-day-cell .monthly-day-actions>button{position:relative;display:inline-flex;flex:0 0 auto;align-items:center;justify-content:center;gap:3px;width:auto;min-width:28px;height:28px;min-height:28px;box-sizing:border-box;padding:0 7px;border:1px solid var(--line);border-radius:999px;background:var(--surface-3);color:var(--text);font-size:9px;line-height:1;white-space:nowrap;cursor:pointer}
+.monthly-day-cell .monthly-day-actions>button.monthly-generate-action{flex-basis:54px;width:54px;padding:0 7px;border-color:#426faf;background:linear-gradient(135deg,#6654c0,#3c7ec2);box-shadow:0 1px 2px rgb(42 83 154 / .28);color:#fff;}
+.monthly-day-cell .monthly-day-actions>button.monthly-generate-action:hover:not(:disabled){filter:brightness(1.06)}
+.monthly-day-cell .monthly-day-actions>button.monthly-manual-action{padding:0;}
+.monthly-day-actions>button:before{position:absolute;inset-block:-4px;inset-inline:0;content:""}
+.monthly-day-actions>button:hover{background:var(--surface)}
+.monthly-day-actions>button:focus-visible{z-index:1;outline:2px solid var(--primary);outline-offset:-2px}
+.monthly-day-actions>button svg{width:15px;height:15px;flex:0 0 15px;stroke-width:1.9}
+.monthly-day-actions>button span{display:inline-block}
 .monthly-day-cell.monthly-final>.btn-sm{min-height:28px;border-radius:5px}
 

@@ -10,7 +10,6 @@ import type { StoredAssessmentDefinition, StoredAssessmentTask } from "@e4s/data
 export function buildMonthlyFinalDraft(contract: MonthlyCurriculumContract): StoredAssessmentDefinition {
   const scope = buildMonthlyExamScope(contract);
   const cores = contract.coreTerms;
-  const support = contract.supportTerms;
   const grammar = contract.grammarTopics.flatMap((topic) => topic.steps);
   const sounds = contract.sounds;
   if (cores.length < 3 || grammar.length < 2 || sounds.length < 1) {
@@ -18,7 +17,6 @@ export function buildMonthlyFinalDraft(contract: MonthlyCurriculumContract): Sto
   }
   const words = cores.slice(0, 6).map((term) => term.word);
   const core = (index: number) => cores[index % cores.length]!;
-  const supportTerm = (index: number) => support[index % Math.max(1, support.length)]?.word ?? core(index).word;
   const grammarStep = (index: number) => grammar[index % grammar.length]!;
   const sound = (index: number) => sounds[index % sounds.length]!;
   const optionSet = (answer: string, alternatives: string[]) => unique([answer, ...alternatives.filter((item) => item !== answer)]).slice(0, 4).map((label, index) => ({ value: "ABCD"[index]!, label }));
@@ -32,7 +30,7 @@ export function buildMonthlyFinalDraft(contract: MonthlyCurriculumContract): Sto
   });
   const listeningScript = [
     { speaker: "Team lead", text: `Please ${core(1).word} the ${core(0).word} before the ${core(2).word}.` },
-    { speaker: "Colleague", text: `I will use ${grammarStep(0).formula} and update each ${supportTerm(0)}.` }
+    { speaker: "Colleague", text: `I will use ${grammarStep(0).formula} to confirm the ${core(2).word}.` }
   ];
 
   return {
@@ -54,7 +52,7 @@ export function buildMonthlyFinalDraft(contract: MonthlyCurriculumContract): Sto
             task("ML1", `What must the colleague confirm?`, core(0).word, words),
             task("ML2", `What is the deadline item?`, core(2).word, words),
             task("ML3", `Which word names the action?`, core(1).word, words),
-            task("ML4", `Which support term is mentioned?`, supportTerm(0), [core(0).word, core(1).word, core(2).word]),
+            task("ML4", `Which core term is mentioned in the reply?`, core(2).word, words),
             task("ML5", `Which grammar pattern is used?`, grammarStep(0).formula, grammar.map((item) => item.formula))
           ]
         }]
@@ -70,7 +68,7 @@ export function buildMonthlyFinalDraft(contract: MonthlyCurriculumContract): Sto
             task("MR2", `Which action is required?`, core(1).word, words),
             task("MR3", `Which deadline word appears?`, core(2).word, words),
             task("MR4", `Choose the month grammar focus.`, grammarStep(1).focus, grammar.map((item) => item.focus)),
-            task("MR5", `Choose a related expansion.`, supportTerm(0), [core(0).word, core(1).word, core(2).word])
+            task("MR5", `Choose another core term from this month.`, core(2).word, words)
           ]
         }]
       },

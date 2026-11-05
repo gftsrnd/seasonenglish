@@ -5,6 +5,8 @@ import type { ManagerAccountView, ManagerAccountsView, ManagerDeleteRequestsView
 import { managerApiClient as apiClient } from "../../api/manager.js";
 import { providerTestLabel, SettingsPage, webhookTestLabel } from "../settings/index.js";
 import { ManagerOperations } from "./Operations.js";
+import { ManagerComplaints } from "./Complaints.js";
+import { ManagerHolidays } from "./Holidays.js";
 import { buildManagerProgressCsv, ManagerProgress } from "./Progress.js";
 import { ManagerRecovery } from "./Recovery.js";
 import { ManagerReminders } from "./Reminders.js";
@@ -46,6 +48,8 @@ export function ManagerRouteController({ role, currentUserId }: ManagerRouteCont
     <Route path="/mgr/ops" element={role === "manager" ? <OperationsRoute /> : <Navigate replace to="/op" />} />
     <Route path="/mgr/ops/*" element={<Navigate replace to={role === "manager" ? "/mgr/ops" : "/op"} />} />
     <Route path="/mgr/reopen-requests" element={role === "manager" ? <ReopenRequestsRoute /> : <Navigate replace to="/op" />} />
+    <Route path="/mgr/complaints" element={role === "manager" ? <ManagerComplaints /> : <Navigate replace to="/op" />} />
+    <Route path="/mgr/holidays" element={role === "manager" ? <ManagerHolidays /> : <Navigate replace to="/op" />} />
     <Route path="/mgr/recovery" element={<Navigate replace to={role === "manager" ? "/settings" : "/op"} />} />
     <Route path="/mgr/reminders" element={role === "manager" ? <RemindersRoute /> : <Navigate replace to="/op" />} />
     <Route path="/mgr/report" element={role === "manager" ? <ReportRoute currentUserId={currentUserId} /> : <Navigate replace to="/op" />} />

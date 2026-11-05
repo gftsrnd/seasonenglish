@@ -23,5 +23,6 @@ describe("monthly final builder", () => {
     expect(draft.sections.find(section => section.code === "writing")!.groups[0]!.tasks[0]!.prompt).toContain("handover");
     expect(draft.sections.find(section => section.code === "speaking")!.groups[0]!.tasks[0]!.prompt).toContain("/æ/");
     expect(draft.sections.find(section => section.code === "listening")!.groups[0]!.stimulus?.type).toBe("audio_script");
+    expect(JSON.stringify(draft)).not.toContain("stakeholder");
   });
 });

@@ -21,6 +21,7 @@ describe("manager progress and operations API", () => {
   const pool = new Pool({ connectionString: databaseUrl });
   const app = buildApi({ pool, allowDemoLogin: true, secureCookies: false, reminderEmailSender: { sendReminder: async () => ({ externalId: "test-email" }) } });
   let managerCookie = "";
+  let learnerCookie = "";
   let operatorCookie = "";
   let checkerCookie = "";
   let emptyManagerCookie = "";
@@ -64,6 +65,9 @@ describe("manager progress and operations API", () => {
     operatorCookie = await login("thu.ha.tran@e4s.local", "operator-pass");
     checkerCookie = await login("gia.huy.pham@e4s.local", "checker-pass");
     emptyManagerCookie = await login("empty-manager@e4s.local", "empty-manager-pass");
+    const learnerLogin = await app.inject({ method: "POST", url: "/api/auth/learner/login", payload: { email: "minh.anh.nguyen@e4s.local", pin: "123456" } });
+    expect(learnerLogin.statusCode, learnerLogin.body).toBe(200);
+    learnerCookie = String(learnerLogin.headers["set-cookie"]).split(";")[0] ?? "";
   }, 30_000);
 
   afterAll(async () => { await app.close(); await pool.end(); });
@@ -578,6 +582,29 @@ describe("manager progress and operations API", () => {
     expect(operatorWrite.statusCode, operatorWrite.body).toBe(200);
     const after = await app.inject({ method: "GET", url: "/api/v1/manager/settings", headers: { cookie: managerCookie } });
     expect(after.json()).toMatchObject({ simulatedSystemDate: "2026-11-14" });
+  });
+
+  it("keeps holiday and complaint actions tenant-scoped and requires a recorded decision", async () => {
+    const weekendHoliday = await app.inject({ method: "POST", url: "/api/v1/manager/holidays", headers: { cookie: managerCookie }, payload: { date: "2027-01-02" } });
+    expect(weekendHoliday.statusCode).toBe(400);
+    const holiday = await app.inject({ method: "POST", url: "/api/v1/manager/holidays", headers: { cookie: managerCookie }, payload: { date: "2027-01-01" } });
+    expect(holiday.statusCode, holiday.body).toBe(201);
+    const duplicateHoliday = await app.inject({ method: "POST", url: "/api/v1/manager/holidays", headers: { cookie: managerCookie }, payload: { date: "2027-01-01" } });
+    expect(duplicateHoliday.statusCode).toBe(409);
+    const operatorHolidayRead = await app.inject({ method: "GET", url: "/api/v1/manager/holidays", headers: { cookie: operatorCookie } });
+    expect(operatorHolidayRead.statusCode).toBe(403);
+
+    const complaint = await app.inject({ method: "POST", url: "/api/v1/learner/complaints", headers: { cookie: learnerCookie }, payload: { kind: "exam_eligibility", reason: "Một ngày điểm danh bị thiếu." } });
+    expect(complaint.statusCode, complaint.body).toBe(201);
+    const duplicateComplaint = await app.inject({ method: "POST", url: "/api/v1/learner/complaints", headers: { cookie: learnerCookie }, payload: { kind: "exam_eligibility", reason: "Gửi trùng đơn." } });
+    expect(duplicateComplaint.statusCode).toBe(409);
+    const complaintId = (complaint.json() as { complaint: { id: string } }).complaint.id;
+    const missingReason = await app.inject({ method: "POST", url: `/api/v1/manager/complaints/${complaintId}/decision`, headers: { cookie: managerCookie }, payload: { decision: "rejected", resolution: "" } });
+    expect(missingReason.statusCode).toBe(400);
+    const approved = await app.inject({ method: "POST", url: `/api/v1/manager/complaints/${complaintId}/decision`, headers: { cookie: managerCookie }, payload: { decision: "approved", resolution: "Đã sửa điểm danh." } });
+    expect(approved.statusCode, approved.body).toBe(200);
+    const ownComplaints = await app.inject({ method: "GET", url: "/api/v1/learner/complaints", headers: { cookie: learnerCookie } });
+    expect(ownComplaints.json()).toMatchObject({ complaints: [{ id: complaintId, status: "approved", resolution: "Đã sửa điểm danh." }] });
   });
 
 });

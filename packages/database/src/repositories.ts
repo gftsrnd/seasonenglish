@@ -1,6 +1,6 @@
 import { createCipheriv, createDecipheriv, createHash, randomBytes, randomUUID } from "node:crypto";
 import type { Pool, PoolClient } from "pg";
-import { buildLevelReadiness as calculateLevelReadiness, nextEffectiveMonday, passesLevelUpExam, createLevelRetryPlan, type LevelReadinessMetrics, type LevelReadinessThresholds } from "@e4s/domain/progression";
+import { buildLevelReadiness as calculateLevelReadiness, evaluateMonthlyLevelUpReadiness, nextEffectiveMonday, passesLevelUpExam, createLevelRetryPlan, monthlySeasonTurnTarget, type LevelReadinessMetrics, type LevelReadinessThresholds, type MonthlyLevelRecord } from "@e4s/domain/progression";
 import { evaluateGeneratedLessonQuality, validateGenerationFindingsForPublication, validateLessonPublication } from "@e4s/domain/content";
 import { lessonCompletionActivity } from "@e4s/domain/learning";
 import { generationFindingsFromPayload } from "./generation-findings.js";
@@ -279,6 +279,8 @@ export interface UserIdentity {
 
 export interface UserCredentialRecord extends UserIdentity {
   credentialHash: string;
+  failedPinAttempts: number;
+  pinLockedUntil: Date | null;
 }
 
 export interface ActiveSessionRecord extends UserIdentity {
@@ -619,10 +621,14 @@ class IdentityRepository {
       role: AccountRole;
       status: string;
       credential_hash: string;
+      failed_pin_attempts: number;
+      pin_locked_until: Date | null;
     }>(
-      `select u.id, u.display_name, u.email, u.avatar, u.role, u.status, c.credential_hash
+      `select u.id, u.display_name, u.email, u.avatar, u.role, u.status, c.credential_hash,
+              c.failed_pin_attempts, c.pin_locked_until
        from users u join user_credentials c on c.user_id = u.id
-       where lower(u.email) = lower($1) and u.status = 'active'
+       where lower(u.email) = lower($1)
+         and (u.status = 'active' or (u.role = 'learner' and u.status = 'disabled'))
        limit 1`,
       [email]
     );
@@ -635,9 +641,41 @@ class IdentityRepository {
           ...avatarField(row.avatar),
           role: row.role,
           status: row.status,
-          credentialHash: row.credential_hash
+          credentialHash: row.credential_hash,
+          failedPinAttempts: row.failed_pin_attempts,
+          pinLockedUntil: row.pin_locked_until
         }
       : null;
+  }
+
+  async recordFailedLearnerPin(userId: string): Promise<{ failedAttempts: number; lockedUntil: Date | null }> {
+    const result = await this.pool.query<{ failed_pin_attempts: number; pin_locked_until: Date | null }>(
+      `update user_credentials
+       set failed_pin_attempts = case when pin_locked_until is not null and pin_locked_until <= now() then 1 else failed_pin_attempts + 1 end,
+           pin_locked_until = case
+             when (case when pin_locked_until is not null and pin_locked_until <= now() then 1 else failed_pin_attempts + 1 end) >= 5
+               then now() + interval '15 minutes'
+             else null
+           end,
+           updated_at = now()
+       where user_id = $1 and (pin_locked_until is null or pin_locked_until <= now())
+       returning failed_pin_attempts, pin_locked_until`,
+      [userId]
+    );
+    const row = result.rows[0];
+    if (row) return { failedAttempts: row.failed_pin_attempts, lockedUntil: row.pin_locked_until };
+    const locked = await this.pool.query<{ failed_pin_attempts: number; pin_locked_until: Date | null }>(
+      "select failed_pin_attempts, pin_locked_until from user_credentials where user_id = $1",
+      [userId]
+    );
+    return { failedAttempts: locked.rows[0]?.failed_pin_attempts ?? 0, lockedUntil: locked.rows[0]?.pin_locked_until ?? null };
+  }
+
+  async resetLearnerPinFailures(userId: string): Promise<void> {
+    await this.pool.query(
+      "update user_credentials set failed_pin_attempts = 0, pin_locked_until = null, updated_at = now() where user_id = $1",
+      [userId]
+    );
   }
 
   async requestStaffPasswordHelp(email: string): Promise<void> {
@@ -709,6 +747,25 @@ class IdentityRepository {
           status: row.status
         }
       : null;
+  }
+
+  async findDisabledLearnerSession(tokenHash: string): Promise<ActiveSessionRecord | null> {
+    const result = await this.pool.query<{
+      session_id: string; expires_at: Date; id: string; display_name: string; email: string | null;
+      avatar: LearnerAvatarData | Record<string, never>; role: AccountRole; status: string;
+    }>(
+      `select s.id as session_id, s.expires_at, u.id, u.display_name, u.email, u.avatar, u.role, u.status
+       from sessions s join users u on u.id = s.user_id
+       where s.token_hash = $1 and s.revoked_at is null and s.expires_at > now()
+         and u.role = 'learner' and u.status = 'disabled'
+       limit 1`,
+      [tokenHash]
+    );
+    const row = result.rows[0];
+    return row ? {
+      sessionId: row.session_id, expiresAt: row.expires_at, id: row.id, displayName: row.display_name,
+      email: row.email, ...avatarField(row.avatar), role: row.role, status: row.status
+    } : null;
   }
 
   async updateAvatar(userId: string, avatar: LearnerAvatarData): Promise<UserIdentity> {
@@ -1222,6 +1279,12 @@ class LearningRepository {
          from month_lessons previous_ml join lessons previous_l on previous_l.id = previous_ml.lesson_id
          where previous_ml.framework_id = mf.id and previous_ml.status = 'approved' and previous_ml.lesson_number < ml.lesson_number
            and not exists (select 1 from progress_records previous_progress where previous_progress.learner_id = e.learner_id and previous_progress.lesson_id = previous_l.id and previous_progress.status = 'completed')
+           and not exists (
+             select 1 from organization_holidays holiday
+              where holiday.organization_id = pm.organization_id
+                and holiday.holiday_date = previous_ml.lesson_date
+                and not (mf.curriculum_contract->'daySpecs' @> jsonb_build_array(jsonb_build_object('lessonNumber', previous_ml.lesson_number, 'kind', 'review')))
+           )
          order by previous_ml.lesson_number limit 1
        ) blocker on true
        left join progress_records pr on pr.lesson_id = l.id and pr.learner_id = e.learner_id
@@ -1855,6 +1918,7 @@ class LearningRepository {
       examAvailable: Boolean(availability.rows[0]?.levelup_available),
       thresholds
     });
+    const monthlyPolicy = await this.monthlyLevelUpReadiness(learnerId, row.cefr);
     const badgeCounts = requiredBadgeCountsForNext(points, earnedBadgeKeys);
     const assessmentViews = buildAssessmentSnapshots(assessments.rows);
     return {
@@ -1903,7 +1967,26 @@ class LearningRepository {
         requiredBadgeCount: badgeCounts.required
       },
       badgeRoadmap: roadmap,
-      levelReadiness: readiness,
+      levelReadiness: {
+        ...readiness,
+        ...(monthlyPolicy ? { eligible: monthlyPolicy.eligible } : {}),
+        ...(monthlyPolicy ? {
+          monthlyPolicy: {
+            requiredMonths: monthlyPolicy.requiredMonths,
+            eligibleMonths: monthlyPolicy.eligibleMonths,
+            finalPasses: monthlyPolicy.finalPasses,
+            finalPassesRequired: monthlyPolicy.finalPassesRequired,
+            finalAverage: monthlyPolicy.finalAverage,
+            finalAverageTarget: monthlyPolicy.finalAverageTarget,
+            seasonMonths: monthlyPolicy.seasonMonths,
+            seasonMonthsRequired: monthlyPolicy.seasonMonthsRequired,
+            latestFinalPassed: monthlyPolicy.latestFinalPassed,
+            absenceCap: monthlyPolicy.absenceCap,
+            absenceRate: monthlyPolicy.absenceRate,
+            reasons: monthlyPolicy.reasons
+          }
+        } : {})
+      },
       stats: {
         completedLessons,
         coachTurns: monthlyContext ? Number(coachSummary.turns_this_week) : 0,
@@ -1912,6 +1995,105 @@ class LearningRepository {
       },
       assessments: assessmentViews
     };
+  }
+
+  private async monthlyLevelUpReadiness(learnerId: string, currentLevel: CefrLevel | null) {
+    const result = await this.pool.query<MonthlyLevelRecord & { level_start_date: string; exam_date: string }>(
+      `with identity as (
+         select u.organization_id, e.cefr, organization_system_date(u.organization_id)::date as system_date,
+                coalesce(
+                  (select max(change.effective_at)::date from scheduled_level_changes change
+                   where change.learner_id = u.id and change.to_cefr = e.cefr and change.status = 'applied'),
+                  (select max(decision.decided_at)::date
+                   from assessment_decisions decision
+                   join assessment_attempts attempt on attempt.id = decision.attempt_id
+                   join assessment_versions version on version.id = attempt.assessment_version_id
+                   join assessment_definitions definition on definition.id = version.definition_id
+                   where attempt.learner_id = u.id and definition.kind = 'placement'
+                     and decision.status = 'approved' and decision.approved_level = e.cefr),
+                  e.enrolled_at::date
+                ) as level_start_date
+         from users u left join enrollments e on e.learner_id = u.id
+         where u.id = $1 and u.role = 'learner'
+       ), months as (
+         select pm.id, pm.month, pm.exam_date, i.level_start_date, i.cefr, mf.id as framework_id,
+                (mf.status = 'approved') as framework_approved
+         from identity i join program_months pm on pm.organization_id = i.organization_id
+           and pm.month between to_char(i.level_start_date, 'YYYY-MM') and to_char(i.system_date, 'YYYY-MM')
+         left join month_frameworks mf on mf.program_month_id = pm.id and mf.cefr = i.cefr
+       ), lesson_facts as (
+         select m.*, count(ml.id) filter (where ml.status = 'approved')::int as scheduled_lessons,
+                count(ml.id) filter (where ml.status = 'approved' and pr.status = 'completed')::int as completed_lessons,
+                (select count(distinct attendance_date)::int from (
+                   select (pr2.completed_at at time zone 'Asia/Ho_Chi_Minh')::date as attendance_date
+                     from progress_records pr2 join month_lessons ml2 on ml2.lesson_id = pr2.lesson_id
+                    where pr2.learner_id = $1 and pr2.status = 'completed' and ml2.framework_id = m.framework_id
+                      and (pr2.completed_at at time zone 'Asia/Ho_Chi_Minh')::date >= (m.month || '-01')::date
+                      and (pr2.completed_at at time zone 'Asia/Ho_Chi_Minh')::date < m.exam_date
+                      and extract(isodow from (pr2.completed_at at time zone 'Asia/Ho_Chi_Minh')::date) <= 5
+                   union
+                   select holiday.holiday_date from organization_holidays holiday
+                    where holiday.organization_id = (select organization_id from identity)
+                      and holiday.holiday_date >= (m.month || '-01')::date and holiday.holiday_date < m.exam_date
+                 ) attendance) as attended_days,
+                (select count(*)::int from generate_series((m.month || '-01')::date, m.exam_date - 1, interval '1 day') d where extract(isodow from d) <= 5) as effective_days,
+                (select count(*)::int from coach_turns ct join coach_sessions cs on cs.id = ct.session_id
+                  where cs.learner_id = $1 and ct.speaker = 'learner'
+                    and ct.created_at >= (m.month || '-01')::date and ct.created_at < ((m.month || '-01')::date + interval '1 month')
+                    and (ct.created_at at time zone 'Asia/Ho_Chi_Minh')::date < m.exam_date
+                    and coalesce((ct.feedback->'evaluation'->>'countsTowardGoal')::boolean, coalesce((ct.feedback->>'relevant')::boolean, true))) as season_turns
+           from months m left join month_lessons ml on ml.framework_id = m.framework_id
+           left join lessons l on l.id = ml.lesson_id
+           left join progress_records pr on pr.lesson_id = l.id and pr.learner_id = $1
+          group by m.id, m.month, m.exam_date, m.level_start_date, m.cefr, m.framework_id, m.framework_approved
+       )
+       select lf.month, lf.level_start_date::text as level_start_date, lf.exam_date::text as exam_date,
+              ((coalesce(lf.effective_days - lf.attended_days, lf.effective_days) <= floor(lf.effective_days * 0.3)
+                or exists (select 1 from learner_complaints complaint where complaint.learner_id = $1
+                  and complaint.kind = 'exam_eligibility' and complaint.status in ('approved', 'auto_approved')
+                  and complaint.submitted_at >= (lf.month || '-01')::date and complaint.submitted_at < (lf.month || '-01')::date + interval '1 month'))
+                and exists (
+                  select 1 from assessment_attempts taken
+                  join assessment_versions taken_version on taken_version.id = taken.assessment_version_id
+                  join assessment_definitions taken_definition on taken_definition.id = taken_version.definition_id
+                  where taken.learner_id = $1 and taken_definition.kind = 'final'
+                    and taken_definition.assessment_key = ('monthly-final-' || lf.month || '-' || lower(lf.cefr))
+                    and taken.status in ('submitted', 'pending_review', 'approved', 'needs_retry')
+                )) as eligible,
+              final_result.final_score as "finalScore", coalesce(final_result.final_passed, false) as "finalPassed",
+              coalesce(lf.season_turns, 0) as "seasonTurns",
+              greatest(coalesce(lf.effective_days - lf.attended_days, lf.effective_days), 0) as "absenceDays",
+              lf.effective_days as "effectiveDays",
+              case when lf.effective_days > 0 then ((lf.effective_days - lf.attended_days)::numeric / lf.effective_days * 100)::double precision else 100 end as "absenceRate"
+       from lesson_facts lf
+       left join lateral (
+         select latest.final_score,
+                (latest.final_score >= 70 and latest.section_count = 4 and latest.minimum_section_score >= 15) as final_passed
+         from (
+           select aa.id, sum(s.score)::double precision as final_score,
+                  min(s.score)::double precision as minimum_section_score,
+                  count(distinct s.section) filter (where s.section in ('listening', 'reading', 'writing', 'speaking')) as section_count
+           from assessment_attempts aa
+         join assessment_versions av on av.id = aa.assessment_version_id
+         join assessment_definitions ad on ad.id = av.definition_id
+         join assessment_scores s on s.attempt_id = aa.id
+         where aa.learner_id = $1 and aa.status = 'approved' and ad.kind = 'final'
+           and ad.assessment_key = ('monthly-final-' || lf.month || '-' || lower(lf.cefr))
+           group by aa.id, aa.submitted_at
+           order by aa.submitted_at desc nulls last
+           limit 1
+         ) latest
+       ) final_result on true
+       order by lf.month`, [learnerId]
+    );
+    return evaluateMonthlyLevelUpReadiness({ currentLevel, months: result.rows.map((month) => ({
+      ...month,
+      seasonTarget: monthlySeasonTurnTarget(
+        month.level_start_date > `${month.month}-01` ? month.level_start_date : `${month.month}-01`,
+        month.month,
+        month.exam_date
+      )
+    })) });
   }
 
   async findMicroLesson(learnerId: string, microLessonId: string): Promise<MicroLessonView | null> {
@@ -6924,6 +7106,13 @@ function assessmentRuntimeFromState(state: {
   };
 }
 
+function lastWeekdayOfMonth(month: string): string {
+  const [year, monthNumber] = month.split("-").map(Number);
+  const date = new Date(Date.UTC(year!, monthNumber!, 0));
+  while (date.getUTCDay() === 0 || date.getUTCDay() === 6) date.setUTCDate(date.getUTCDate() - 1);
+  return date.toISOString().slice(0, 10);
+}
+
 class CoachRepository {
   constructor(private readonly pool: Pool) {}
 
@@ -6941,10 +7130,26 @@ class CoachRepository {
     const context = await this.pool.query<{
       display_name: string; cefr: CefrLevel; scenario: Record<string, unknown> | null;
       session_id: string | null; coach_daily_limit: number; system_month: string;
+      system_date: string; system_day_of_week: number; exam_date: string | null; level_approved_on: string;
     }>(
       `select u.display_name, e.cefr, cs.id as session_id, cs.scenario,
-              least(greatest(coalesce((os.configuration->>'coachDailyLimit')::int, 30), 1), 200) as coach_daily_limit,
-              to_char(organization_system_date(p.organization_id), 'YYYY-MM') as system_month
+              least(greatest(coalesce((os.configuration->>'coachDailyLimit')::int, 30), 1), 30) as coach_daily_limit,
+              to_char(organization_system_date(p.organization_id), 'YYYY-MM') as system_month,
+              organization_system_date(p.organization_id)::text as system_date,
+              extract(isodow from organization_system_date(p.organization_id))::int as system_day_of_week,
+              (select pm.exam_date::text from program_months pm
+               where pm.organization_id = p.organization_id
+                 and pm.month = to_char(organization_system_date(p.organization_id), 'YYYY-MM') limit 1) as exam_date,
+              coalesce((select to_char(max(change.effective_at)::date, 'YYYY-MM-DD')
+                from scheduled_level_changes change where change.learner_id = u.id
+                  and change.to_cefr = e.cefr and change.status = 'applied'),
+                (select to_char(max(decision.decided_at)::date, 'YYYY-MM-DD')
+                from assessment_decisions decision join assessment_attempts attempt on attempt.id = decision.attempt_id
+                join assessment_versions version on version.id = attempt.assessment_version_id
+                join assessment_definitions definition on definition.id = version.definition_id
+                where attempt.learner_id = u.id and definition.kind = 'placement'
+                  and decision.status = 'approved' and decision.approved_level = e.cefr),
+                to_char(e.enrolled_at::date, 'YYYY-MM-DD')) as level_approved_on
        from users u
        join enrollments e on e.learner_id = u.id
        join programs p on p.id = e.program_id and p.status = 'active'
@@ -6962,7 +7167,6 @@ class CoachRepository {
     const row = context.rows[0];
     if (!row) return null;
     // A prior weekly session has no month marker. Retire it before serving the monthly model.
-    const activeTopic = monthlyContext?.themeTitle ?? randomMonthlyCoachTopic();
     let sessionId = row.session_id;
     let scenario = row.scenario ?? {};
     const sessionMonth = typeof scenario.month === "string" ? scenario.month : null;
@@ -6971,16 +7175,66 @@ class CoachRepository {
       sessionId = null;
       scenario = {};
     }
+    const previousSession = await this.pool.query<{ scenario: Record<string, unknown> | null; last_question: string | null }>(
+      `select cs.scenario,
+              coalesce(cs.scenario->>'openingQuestion', latest_turn.feedback->>'nextQuestion') as last_question
+       from coach_sessions cs
+       left join lateral (
+         select ct.feedback from coach_turns ct
+         where ct.session_id = cs.id and ct.speaker = 'learner' and ct.feedback is not null
+         order by ct.turn_number desc limit 1
+       ) latest_turn on true
+       where cs.learner_id = $1 and cs.status <> 'active'
+         and coalesce(cs.scenario->>'kind', 'practice') = 'practice'
+         and cs.scenario->>'month' = $2
+       order by coalesce(cs.completed_at, cs.started_at) desc limit 1`,
+      [learnerId, row.system_month]
+    );
+    const previousScenario = previousSession.rows[0]?.scenario ?? {};
+    const activeTopic = monthlyContext?.themeTitle
+      ?? (typeof scenario.title === "string" ? scenario.title : null)
+      ?? (typeof previousScenario.title === "string" ? previousScenario.title : null)
+      ?? randomMonthlyCoachTopic();
+    const priorQuestionRows = await this.pool.query<{ question: string }>(
+      `select recent.question
+       from (
+         select cs.scenario->>'openingQuestion' as question, cs.started_at as created_at
+         from coach_sessions cs
+         where cs.learner_id = $1 and cs.scenario->>'month' = $2 and cs.scenario->>'title' = $3
+           and coalesce(cs.scenario->>'kind', 'practice') = 'practice'
+         union all
+         select ct.feedback->>'nextQuestion' as question, ct.created_at
+         from coach_turns ct join coach_sessions cs on cs.id = ct.session_id
+         where cs.learner_id = $1 and cs.scenario->>'month' = $2 and cs.scenario->>'title' = $3
+           and coalesce(cs.scenario->>'kind', 'practice') = 'practice'
+       ) recent
+       where nullif(btrim(recent.question), '') is not null
+       order by recent.created_at desc limit 100`,
+      [learnerId, row.system_month, activeTopic]
+    );
+    const priorQuestions = [...new Set(priorQuestionRows.rows.map((entry) => entry.question.trim()))];
+    const firstName = row.display_name.trim().split(/\s+/).at(-1) ?? row.display_name;
+    const openingQuestion = typeof scenario.openingQuestion === "string" && scenario.openingQuestion.trim()
+      ? scenario.openingQuestion
+      : coachOpeningQuestion(firstName, activeTopic, priorQuestions);
+    scenario = {
+      ...scenario,
+      title: activeTopic,
+      persona: scenario.persona === "formal" ? "formal" : "informal",
+      month: row.system_month,
+      openingQuestion
+    };
     if (!sessionId) {
       sessionId = randomUUID();
-      scenario = { title: activeTopic, persona: "informal", month: row.system_month };
       await this.pool.query(
         `insert into coach_sessions (id, learner_id, scenario, status)
          values ($1, $2, $3::jsonb, 'active')`,
         [sessionId, learnerId, JSON.stringify(scenario)]
       );
+    } else {
+      await this.pool.query("update coach_sessions set scenario = $2::jsonb where id = $1", [sessionId, JSON.stringify(scenario)]);
     }
-    let [turns, counters, vocabularyRows, unlockedRows] = await Promise.all([
+    let [turns, counters, vocabularyRows, vocabularyTotalRows, unlockedRows] = await Promise.all([
       this.pool.query<{
         id: string; speaker: string; content: Record<string, unknown>;
         feedback: Record<string, unknown> | null; created_at: Date;
@@ -7000,12 +7254,34 @@ class CoachRepository {
          where cs.learner_id = $1`, [learnerId]
       ),
       Promise.resolve({ rows: [] as Array<{ content: Record<string, unknown> }> }),
+      Promise.resolve({ rows: [] as Array<{ content: Record<string, unknown> }> }),
       this.pool.query<{ word: string }>(
-        "select word from learner_vocabulary_unlocks where learner_id = $1", [learnerId]
+        `select unlocks.word from learner_vocabulary_unlocks unlocks
+         join users u on u.id = unlocks.learner_id
+         where unlocks.learner_id = $1
+           and unlocks.unlocked_at >= date_trunc('month', organization_system_date(u.organization_id))`, [learnerId]
       )
     ]);
     if (monthlyContext) {
-      vocabularyRows = await this.pool.query<{ content: Record<string, unknown> }>(
+      [vocabularyRows, vocabularyTotalRows] = await Promise.all([
+      this.pool.query<{ content: Record<string, unknown> }>(
+        `select lv.content
+         from enrollments e
+         join users u on u.id = e.learner_id
+         join program_months pm on pm.organization_id = u.organization_id and pm.month = $2
+         join month_frameworks mf on mf.program_month_id = pm.id and mf.cefr = e.cefr and mf.status = 'approved'
+         join month_lessons ml on ml.framework_id = mf.id and ml.status = 'approved' and ml.lesson_id is not null
+         join lessons l on l.id = ml.lesson_id
+         join progress_records pr on pr.lesson_id = l.id and pr.learner_id = $1 and pr.status = 'completed'
+         join lateral (
+           select content from lesson_versions where lesson_id = l.id and status = 'published'
+           order by version desc limit 1
+         ) lv on true
+         where e.learner_id = $1 and ml.lesson_date <= organization_system_date(u.organization_id)
+         order by ml.lesson_number`,
+        [learnerId, monthlyContext.month]
+      ),
+      this.pool.query<{ content: Record<string, unknown> }>(
         `select lv.content
          from enrollments e
          join users u on u.id = e.learner_id
@@ -7017,10 +7293,11 @@ class CoachRepository {
            select content from lesson_versions where lesson_id = l.id and status = 'published'
            order by version desc limit 1
          ) lv on true
-         where e.learner_id = $1 and ml.lesson_date <= organization_system_date(u.organization_id)
+         where e.learner_id = $1
          order by ml.lesson_number`,
         [learnerId, monthlyContext.month]
-      );
+      )
+      ]);
     }
     const messages: CoachView["messages"] = [];
     const openedWords = new Set<string>(unlockedRows.rows.map((row) => row.word.toLowerCase()));
@@ -7029,7 +7306,11 @@ class CoachRepository {
       const audioArtifact = audioArtifactFromContent(turn.content);
       const feedback = coachFeedback(turn.feedback);
       const feedbackRecord = turn.feedback ?? {};
-      if (Array.isArray(feedbackRecord.usedWords)) {
+      if (feedbackRecord.evaluation && typeof feedbackRecord.evaluation === "object"
+        && !Array.isArray(feedbackRecord.evaluation)
+        && (feedbackRecord.evaluation as Record<string, unknown>).status === "valid"
+        && (feedbackRecord.evaluation as Record<string, unknown>).countsTowardGoal === true
+        && Array.isArray(feedbackRecord.usedWords)) {
         for (const word of feedbackRecord.usedWords) if (typeof word === "string") openedWords.add(word.toLowerCase());
       }
       const classification = coachTurnClassification(feedbackRecord);
@@ -7044,13 +7325,10 @@ class CoachRepository {
         createdAt: turn.created_at.toISOString(), ...(classification ? { classification } : {}), ...(feedback ? { feedback } : {})
       });
     }
-    if (!messages.some((message) => message.speaker === "coach")) {
-      const firstName = row.display_name.trim().split(/\s+/).at(-1) ?? row.display_name;
-      messages.unshift({
-        id: "welcome", speaker: "coach", text: coachOpeningQuestion(firstName, activeTopic),
-        createdAt: new Date(0).toISOString()
-      });
-    }
+    messages.unshift({
+      id: `${sessionId}:opening`, speaker: "coach", text: openingQuestion,
+      createdAt: new Date(0).toISOString()
+    });
     const vocabularyCandidates = vocabularyRows.rows.flatMap(({ content }) => {
       const parts = Array.isArray(content.parts) ? content.parts : [];
       const vocabularyPart = parts.find((part) =>
@@ -7074,15 +7352,109 @@ class CoachRepository {
       if (!key || vocabularyByWord.has(key)) continue;
       vocabularyByWord.set(key, item);
     }
-    const vocabulary = [...vocabularyByWord.values()].slice(0, 12);
+    const vocabulary = [...vocabularyByWord.values()];
+    const allMonthlyVocabulary = new Set(vocabularyTotalRows.rows.flatMap(({ content }) => {
+      const parts = Array.isArray(content.parts) ? content.parts : [];
+      const vocabularyPart = parts.find((part) =>
+        part && typeof part === "object" && !Array.isArray(part) && (part as Record<string, unknown>).code === "vocabulary"
+      ) as Record<string, unknown> | undefined;
+      const vocabularyContent = vocabularyPart?.content;
+      const items = vocabularyContent && typeof vocabularyContent === "object" && !Array.isArray(vocabularyContent)
+        && Array.isArray((vocabularyContent as Record<string, unknown>).items)
+        ? (vocabularyContent as Record<string, unknown>).items as unknown[] : [];
+      return items.flatMap((item) => {
+        if (!item || typeof item !== "object" || Array.isArray(item)) return [];
+        const word = typeof (item as Record<string, unknown>).word === "string"
+          ? (item as Record<string, unknown>).word as string : "";
+        return isPlausibleCoachVocabularyWord(word) ? [word.trim().replace(/\s+/g, " ").toLocaleLowerCase()] : [];
+      });
+    }));
+    const openedVocabularyCount = vocabulary.filter((item) => item.opened).length;
+    const questionHistory = [...new Set([
+      ...priorQuestions,
+      openingQuestion,
+      ...turns.rows.flatMap((turn) => {
+        const nextQuestion = typeof turn.feedback?.nextQuestion === "string" ? turn.feedback.nextQuestion.trim() : "";
+        return nextQuestion ? [nextQuestion] : [];
+      })
+    ])];
     const count = counters.rows[0] ?? { daily_used: "0", monthly_turns: "0" };
+    const chatAvailability: CoachView["chatAvailability"] = row.system_day_of_week > 5
+      ? { available: false, reason: "weekend" }
+      : row.exam_date === row.system_date ? { available: false, reason: "monthly_exam_day" } : { available: true };
     return {
       sessionId, topic: activeTopic, cefr: row.cefr,
       persona: scenario.persona === "formal" ? "formal" : "informal",
       aiAvailable, daily: { used: Number(count.daily_used), limit: row.coach_daily_limit },
-      monthly: { label: `Tháng ${row.system_month}`, turns: Number(count.monthly_turns), target: 100 },
-      messages, vocabulary
+      chatAvailability,
+      monthly: { label: `Tháng ${row.system_month}`, turns: Number(count.monthly_turns), target: monthlySeasonTurnTarget(row.level_approved_on, row.system_month, row.exam_date ?? lastWeekdayOfMonth(row.system_month)) },
+      messages, vocabulary,
+      questionHistory,
+      ...(monthlyContext ? { vocabularyProgress: { opened: openedVocabularyCount, total: allMonthlyVocabulary.size } } : {})
     };
+  }
+
+  async reserveDailyTurn(input: { learnerId: string; sessionId: string; requestId: string }): Promise<"reserved" | "limit" | "in_progress"> {
+    const client = await this.pool.connect();
+    try {
+      await client.query("begin");
+      await client.query("select id from users where id = $1 for update", [input.learnerId]);
+      const session = await client.query(
+        "select id from coach_sessions where id = $1 and learner_id = $2 and status = 'active' for update",
+        [input.sessionId, input.learnerId]
+      );
+      if (!session.rowCount) throw new Error("COACH_SESSION_NOT_FOUND");
+      const duplicate = await client.query(
+        "select 1 from coach_turn_reservations where learner_id = $1 and request_id = $2 and expires_at > now()",
+        [input.learnerId, input.requestId]
+      );
+      if (duplicate.rowCount) {
+        await client.query("rollback");
+        return "in_progress";
+      }
+      await client.query("delete from coach_turn_reservations where learner_id = $1 and expires_at <= now()", [input.learnerId]);
+      const cap = await client.query<{ daily_used: string; reserved: string; daily_limit: number }>(
+        `select
+           (select count(*) filter (where ct.speaker = 'learner'
+               and ct.created_at >= organization_system_date(u.organization_id)
+               and coalesce((ct.feedback->'evaluation'->>'countsTowardGoal')::boolean,
+                 coalesce((ct.feedback->>'relevant')::boolean, true)))::text
+            from coach_turns ct join coach_sessions cs on cs.id = ct.session_id
+            where cs.learner_id = u.id) as daily_used,
+           (select count(*)::text from coach_turn_reservations r
+            where r.learner_id = u.id
+              and r.reserved_at >= organization_system_date(u.organization_id)
+              and r.expires_at > now()) as reserved,
+           least(greatest(coalesce((os.configuration->>'coachDailyLimit')::int, 30), 1), 30) as daily_limit
+         from users u left join organization_settings os on os.organization_id = u.organization_id
+         where u.id = $1 group by u.id, os.configuration`,
+        [input.learnerId]
+      );
+      const capRow = cap.rows[0] ?? { daily_used: "0", reserved: "0", daily_limit: 30 };
+      if (Number(capRow.daily_used) + Number(capRow.reserved) >= capRow.daily_limit) {
+        await client.query("rollback");
+        return "limit";
+      }
+      await client.query(
+        `insert into coach_turn_reservations (learner_id, session_id, request_id)
+         values ($1, $2, $3)`,
+        [input.learnerId, input.sessionId, input.requestId]
+      );
+      await client.query("commit");
+      return "reserved";
+    } catch (error) {
+      await client.query("rollback");
+      throw error;
+    } finally {
+      client.release();
+    }
+  }
+
+  async releaseDailyTurn(learnerId: string, requestId: string): Promise<void> {
+    await this.pool.query(
+      "delete from coach_turn_reservations where learner_id = $1 and request_id = $2",
+      [learnerId, requestId]
+    );
   }
 
   async saveAiTurn(input: {
@@ -7094,6 +7466,7 @@ class CoachRepository {
     taskId: string;
     promptVersionId: string;
     output: {
+      feedbackStatus?: "unavailable";
       evaluation: { status: "valid" | "insufficient" | "off_topic"; result: "correct" | "partially_correct" | "missing_information" | "off_topic"; countsTowardGoal: boolean; noteVi: string };
       seasonReply: string; seasonReplyTranslation: string; nextQuestion: string; nextQuestionTranslation: string;
       rubric: {
@@ -7123,7 +7496,7 @@ class CoachRepository {
         `select count(*) filter (where ct.speaker = 'learner' and ct.created_at >= organization_system_date(u.organization_id)
             and coalesce((ct.feedback->'evaluation'->>'countsTowardGoal')::boolean,
               coalesce((ct.feedback->>'relevant')::boolean, true)))::text as daily_used,
-                least(greatest(coalesce((os.configuration->>'coachDailyLimit')::int, 30), 1), 200) as daily_limit
+                least(greatest(coalesce((os.configuration->>'coachDailyLimit')::int, 30), 1), 30) as daily_limit
          from users u
          left join organization_settings os on os.organization_id = u.organization_id
          left join coach_sessions cs on cs.learner_id = u.id
@@ -7164,6 +7537,7 @@ class CoachRepository {
           JSON.stringify({ text: input.message, requestId: input.requestId, ...(input.audio ? { audioArtifact: storedAudioArtifact(input.audio) } : {}) }),
           JSON.stringify({
             coachText: `${input.output.seasonReply} ${input.output.nextQuestion}`.trim(),
+            ...(input.output.feedbackStatus ? { feedbackStatus: input.output.feedbackStatus } : {}),
             evaluation: input.output.evaluation,
             seasonReply: input.output.seasonReply, seasonReplyTranslation: input.output.seasonReplyTranslation,
             nextQuestion: input.output.nextQuestion, nextQuestionTranslation: input.output.nextQuestionTranslation,
@@ -7172,6 +7546,16 @@ class CoachRepository {
             usedWords: input.output.usedWords, checked: false
           }), runId]
       );
+      if (input.output.evaluation.countsTowardGoal && input.output.usedWords.length) {
+        for (const word of new Set(input.output.usedWords.map((value) => value.trim()).filter(Boolean))) {
+          await client.query(
+            `insert into learner_vocabulary_unlocks (learner_id, word, unlocked_at)
+             values ($1, $2, now())
+             on conflict (learner_id, word) do update set unlocked_at = excluded.unlocked_at`,
+            [input.learnerId, word]
+          );
+        }
+      }
       if (input.audio) await linkAudioOnClient(client, {
         ownerUserId: input.learnerId, audio: input.audio, sourceFlow: "season", sourceEntityId: turnId
       });
@@ -7248,6 +7632,10 @@ class CoachRepository {
         }
       }
       await syncLearnerRewards(client, input.learnerId);
+      await client.query(
+        "delete from coach_turn_reservations where learner_id = $1 and request_id = $2",
+        [input.learnerId, input.requestId]
+      );
       await client.query("commit");
       return true;
     } catch (error) {
@@ -7263,6 +7651,11 @@ class CoachRepository {
     message: string;
     audio?: AudioArtifactInput;
     currentQuestion: string;
+    seasonReply: string;
+    seasonReplyTranslation: string;
+    nextQuestion: string;
+    nextQuestionTranslation: string;
+    reasonVi?: string;
   }): Promise<boolean> {
     const client = await this.pool.connect();
     try {
@@ -7284,8 +7677,6 @@ class CoachRepository {
         "select (coalesce(max(turn_number), 0) + 1)::text as number from coach_turns where session_id = $1",
         [input.sessionId]
       );
-      const seasonReply = "Please write a complete English sentence so I can understand your answer.";
-      const seasonReplyTranslation = "Hãy viết một câu tiếng Anh đầy đủ để Season hiểu câu trả lời của bạn.";
       const turnId = randomUUID();
       await client.query(
         `insert into coach_turns (id, session_id, turn_number, speaker, content, feedback)
@@ -7293,11 +7684,11 @@ class CoachRepository {
         [turnId, input.sessionId, Number(next.rows[0]?.number ?? 1),
           JSON.stringify({ text: input.message, requestId: input.requestId, ...(input.audio ? { audioArtifact: storedAudioArtifact(input.audio) } : {}) }),
           JSON.stringify({
-            coachText: seasonReply,
-            evaluation: { status: "insufficient", result: "missing_information", countsTowardGoal: false, noteVi: seasonReplyTranslation },
-            seasonReply, seasonReplyTranslation,
-            nextQuestion: input.currentQuestion,
-            nextQuestionTranslation: "Hãy trả lời lại câu hỏi trên bằng một câu đầy đủ.",
+            coachText: input.seasonReply,
+            evaluation: { status: "insufficient", result: "missing_information", countsTowardGoal: false, noteVi: input.reasonVi ?? input.seasonReplyTranslation },
+            seasonReply: input.seasonReply, seasonReplyTranslation: input.seasonReplyTranslation,
+            nextQuestion: input.nextQuestion,
+            nextQuestionTranslation: input.nextQuestionTranslation,
             rubric: {
               meaning: { score: 0, evidence: `“${input.message}” chưa đủ thông tin để trả lời câu hỏi.`, improvement: "Viết một câu có chủ ngữ và ý chính." },
               vocabulary: { score: 0, evidence: "Chưa đủ nội dung để đánh giá từ vựng.", improvement: "Dùng ít nhất một từ liên quan đến câu hỏi." },
@@ -7519,21 +7910,54 @@ const monthlyCoachFallbackTopics = [
 function randomMonthlyCoachTopic(): string {
   return monthlyCoachFallbackTopics[Math.floor(Math.random() * monthlyCoachFallbackTopics.length)]!;
 }
-function coachOpeningQuestion(firstName: string, topic: string): string {
+export function coachOpeningQuestion(firstName: string, topic: string, previousQuestions: readonly string[] | string = []): string {
   const normalized = topic.toLocaleLowerCase();
-  if (normalized.includes("monthly workplace practice")) {
-    return `Hi ${firstName}! Let's practise a workplace conversation for this month. Imagine you are checking in with a colleague. What would you say first?`;
-  }
+  let prompts: string[];
   if (normalized.includes("feedback")) {
-    return `Hi ${firstName}! Let's practise giving feedback. A colleague's report is clear, but one slide has too much text. What would you say?`;
+    prompts = [
+      `Hi ${firstName}! Let's practise "${topic}". A colleague's report is clear, but one slide has too much text. What feedback would you give?`,
+      `Hi ${firstName}! We're still working on "${topic}". A client has concerns about your latest update. What would you say to understand their feedback?`,
+      `Hi ${firstName}! Let's take another angle on "${topic}". A teammate asks you to review a draft before a client meeting. What would you check first?`,
+      `Hi ${firstName}! We're continuing "${topic}". A client asks for a clearer project timeline. How would you respond?`,
+      `Hi ${firstName}! Let's keep practising "${topic}". Your manager wants a short summary of client comments. What would you highlight?`
+    ];
+  } else if (normalized.includes("email") || normalized.includes("reschedul")) {
+    prompts = [
+      `Hi ${firstName}! Let's practise "${topic}". You need to move tomorrow's meeting to Friday. What would you write?`,
+      `Hi ${firstName}! We're still working on "${topic}". Your manager asks whether the meeting time still works. How would you ask to reschedule it?`,
+      `Hi ${firstName}! Let's take another angle on "${topic}". A client cannot attend the meeting you arranged. What would you email them?`,
+      `Hi ${firstName}! We're continuing "${topic}". The new meeting time conflicts with another call. How would you explain that?`,
+      `Hi ${firstName}! Let's keep practising "${topic}". You need to confirm Friday's meeting with the team. What would you write?`
+    ];
+  } else if (normalized.includes("introduc") || normalized.includes("your job")) {
+    prompts = [
+      `Hi ${firstName}! Let's practise "${topic}". Imagine you're meeting a new colleague. How would you introduce yourself and your role?`,
+      `Hi ${firstName}! We're still working on "${topic}". You're meeting a new teammate. How would you describe what you do?`,
+      `Hi ${firstName}! Let's take another angle on "${topic}". A client asks what your team does. How would you explain it?`,
+      `Hi ${firstName}! We're continuing "${topic}". A new colleague asks what you are working on this week. What would you tell them?`,
+      `Hi ${firstName}! Let's keep practising "${topic}". You're joining a project meeting for the first time. How would you introduce yourself?`
+    ];
+  } else if (normalized.includes("monthly workplace practice")) {
+    prompts = [
+      `Hi ${firstName}! Let's practise a workplace conversation for this month. Imagine you are checking in with a colleague. What would you say first?`,
+      `Hi ${firstName}! Let's practise a different workplace situation. A colleague asks for an update. What would you tell them?`,
+      `Hi ${firstName}! Let's try another workplace situation. A teammate needs help with a deadline. What would you ask them?`,
+      `Hi ${firstName}! Imagine you're meeting a client this week. What information would you share first?`,
+      `Hi ${firstName}! A colleague asks you to join a project meeting. What would you clarify before it starts?`
+    ];
+  } else {
+    prompts = [
+      `Hi ${firstName}! Let's practise "${topic}". Think of a real situation at work. What would you say first?`,
+      `Hi ${firstName}! We're still working on "${topic}". A colleague brings this up at work. How would you respond?`,
+      `Hi ${firstName}! Let's take another angle on "${topic}". A teammate asks for your view in a meeting. What would you tell them?`,
+      `Hi ${firstName}! We're continuing "${topic}". A client needs a quick update. What would you explain first?`,
+      `Hi ${firstName}! Let's keep practising "${topic}". A manager asks about the next step. What would you recommend?`
+    ];
   }
-  if (normalized.includes("email") || normalized.includes("reschedul")) {
-    return `Hi ${firstName}! Let's practise rescheduling a meeting. You need to move tomorrow's meeting to Friday. What would you write?`;
-  }
-  if (normalized.includes("introduc") || normalized.includes("your job")) {
-    return `Hi ${firstName}! Let's practise a short introduction. Imagine you're meeting a new colleague. How would you introduce yourself and your role?`;
-  }
-  return `Hi ${firstName}! Let's practise “${topic}”. Think of a real situation at work. What would you say first?`;
+  const normalize = (value: string) => value.normalize("NFKC").replace(/[“”]/gu, '"').replace(/\s+/gu, " ").trim().toLocaleLowerCase("en-US");
+  const priorValues = typeof previousQuestions === "string" ? [previousQuestions] : previousQuestions;
+  const prior = new Set(priorValues.map(normalize));
+  return prompts.find((prompt) => !prior.has(normalize(prompt))) ?? prompts[0]!;
 }
 
 function coachFeedback(value: Record<string, unknown> | null): CoachFeedbackView | null {
@@ -7555,12 +7979,21 @@ function coachFeedback(value: Record<string, unknown> | null): CoachFeedbackView
   });
   const evaluationSource = value.evaluation && typeof value.evaluation === "object" && !Array.isArray(value.evaluation)
     ? value.evaluation as Record<string, unknown> : null;
+  const legacyGenericFallback = evaluationSource?.noteVi === "Bạn đã phản hồi đúng tình huống."
+    && coachRubricCriterion(rubric.meaning).evidence === "Câu trả lời bám sát tình huống."
+    && coachRubricCriterion(rubric.vocabulary).evidence === "Từ vựng phù hợp ngữ cảnh."
+    && coachRubricCriterion(rubric.grammar).evidence === "Cấu trúc câu rõ ràng."
+    && coachRubricCriterion(rubric.meaning).score === 4
+    && coachRubricCriterion(rubric.vocabulary).score === 4
+    && coachRubricCriterion(rubric.grammar).score === 4
+    && !corrections.length;
+  const feedbackUnavailable = value.feedbackStatus === "unavailable" || legacyGenericFallback;
   const legacyRelevant = value.relevant !== false;
-  const status = evaluationSource?.status === "insufficient" || evaluationSource?.status === "off_topic"
+  const status = feedbackUnavailable ? "insufficient" : evaluationSource?.status === "insufficient" || evaluationSource?.status === "off_topic"
     ? evaluationSource.status : legacyRelevant ? "valid" : "off_topic";
-  const countsTowardGoal = typeof evaluationSource?.countsTowardGoal === "boolean"
+  const countsTowardGoal = feedbackUnavailable ? false : typeof evaluationSource?.countsTowardGoal === "boolean"
     ? evaluationSource.countsTowardGoal : status === "valid";
-  const result = evaluationSource?.result === "correct" || evaluationSource?.result === "partially_correct"
+  const result = feedbackUnavailable ? "missing_information" : evaluationSource?.result === "correct" || evaluationSource?.result === "partially_correct"
     || evaluationSource?.result === "missing_information" || evaluationSource?.result === "off_topic"
     ? evaluationSource.result
     : status === "off_topic" ? "off_topic" : status === "insufficient" ? "missing_information" : "partially_correct";
@@ -7570,11 +8003,14 @@ function coachFeedback(value: Record<string, unknown> | null): CoachFeedbackView
   return {
     relevant: status !== "off_topic",
     relevanceNote: typeof value.relevanceNote === "string" ? value.relevanceNote : "",
+    feedbackStatus: feedbackUnavailable ? "unavailable" : "complete",
     evaluation: {
       status,
       result,
       countsTowardGoal,
-      noteVi: typeof evaluationSource?.noteVi === "string"
+      noteVi: legacyGenericFallback
+        ? "Nhận xét AI chưa có cho lượt này; câu trả lời vẫn được lưu."
+        : typeof evaluationSource?.noteVi === "string"
         ? evaluationSource.noteVi : typeof value.relevanceNote === "string" ? value.relevanceNote : "Không có nhận xét chi tiết cho lượt chat cũ."
     },
     ...(classification ? { classification } : {}),

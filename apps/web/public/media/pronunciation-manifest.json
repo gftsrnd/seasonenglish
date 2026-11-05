@@ -442,5 +442,271 @@
       "sourceUrl": "https://commons.wikimedia.org/wiki/File:Near-close_near-back_rounded_vowel.ogg"
     }
   ],
-  "words": []
+  "words": [],
+  "mouthForms": [
+    {
+      "key": "iː",
+      "localPath": "apps/web/public/media/ipa-mouth-form/ii (team).png",
+      "sha256": "c3e9cc23dc10dd9235ab374c64471dfc868e8b2facce373c846ec4baa8e12a6a",
+      "purpose": "Fixed IPA mouth-form reference image for /iː/"
+    },
+    {
+      "key": "ɪ",
+      "localPath": "apps/web/public/media/ipa-mouth-form/i (list).png",
+      "sha256": "5c3f950533d321171b3eff5339a9af7a93e9104982656315b85fedcaf46b6ef0",
+      "purpose": "Fixed IPA mouth-form reference image for /ɪ/"
+    },
+    {
+      "key": "e",
+      "localPath": "apps/web/public/media/ipa-mouth-form/e (desk).png",
+      "sha256": "e049a11e214e7e8d310ff06768dbf2eb85f68650bd1295fdb65ae00677662748",
+      "purpose": "Fixed IPA mouth-form reference image for /e/"
+    },
+    {
+      "key": "eɪ",
+      "localPath": "apps/web/public/media/ipa-mouth-form/ei (wait).png",
+      "sha256": "fa1e3079eaceaa36394bbeefe6b6620cfcfc0b627954cf98d6616f94e183df8b",
+      "purpose": "Fixed IPA mouth-form reference image for /eɪ/"
+    },
+    {
+      "key": "æ",
+      "localPath": "apps/web/public/media/ipa-mouth-form/ae (plan).png",
+      "sha256": "bba2c195c975634c79ce72f58d9489e0aec5d6ccac7f72a659a7d9f5272fb877",
+      "purpose": "Fixed IPA mouth-form reference image for /æ/"
+    },
+    {
+      "key": "ə",
+      "localPath": "apps/web/public/media/ipa-mouth-form/schwa (agenda).png",
+      "sha256": "fadb74f5eaf6b63d71242a1e13b500408b917655490739714dc8e8ccf3e5edf8",
+      "purpose": "Fixed IPA mouth-form reference image for /ə/"
+    },
+    {
+      "key": "ʌ",
+      "localPath": "apps/web/public/media/ipa-mouth-form/uh (lunch).png",
+      "sha256": "a8726b7795a729ee57199272559d3c8ca41ed6d00c5726a58c3804b8f674f571",
+      "purpose": "Fixed IPA mouth-form reference image for /ʌ/"
+    },
+    {
+      "key": "ɜː",
+      "localPath": "apps/web/public/media/ipa-mouth-form/er (work).png",
+      "sha256": "a9940e363da799e1ca14461d25cef383ae5968d4a9a8dfdbb16f9ea3a57ddffe",
+      "purpose": "Fixed IPA mouth-form reference image for /ɜː/"
+    },
+    {
+      "key": "ɑː",
+      "localPath": "apps/web/public/media/ipa-mouth-form/aa (task).png",
+      "sha256": "39dd5d48754ea6a12fd5ee6947814eace70f934338afb26acb4beac2255c3db2",
+      "purpose": "Fixed IPA mouth-form reference image for /ɑː/"
+    },
+    {
+      "key": "ɒ",
+      "localPath": "apps/web/public/media/ipa-mouth-form/o (office).png",
+      "sha256": "25657109f1bd27468883fec179a37ef63ec37dc4bea32420a2fe46f0c9465d8e",
+      "purpose": "Fixed IPA mouth-form reference image for /ɒ/"
+    },
+    {
+      "key": "ɔː",
+      "localPath": "apps/web/public/media/ipa-mouth-form/oo (call).png",
+      "sha256": "f971a225efd168f02aed034f9eea3394e7d7e07001bc7c9e98cb1d3fc071ba9e",
+      "purpose": "Fixed IPA mouth-form reference image for /ɔː/"
+    },
+    {
+      "key": "ʊ",
+      "localPath": "apps/web/public/media/ipa-mouth-form/u (book).png",
+      "sha256": "0322866f342432ab08282f575bfbd158efaaee17c14559caa2ba4d9ed45a5e81",
+      "purpose": "Fixed IPA mouth-form reference image for /ʊ/"
+    },
+    {
+      "key": "uː",
+      "localPath": "apps/web/public/media/ipa-mouth-form/uu (room).png",
+      "sha256": "ee7d70efbcf9b63cf8ab61d027e895ac55a36e9a7c35c92baaec47ff6b1786d5",
+      "purpose": "Fixed IPA mouth-form reference image for /uː/"
+    },
+    {
+      "key": "aɪ",
+      "localPath": "apps/web/public/media/ipa-mouth-form/ai (time).png",
+      "sha256": "8627308eea9fb0232f9779290338d0e8573a3ee33ef806e3e9ac7310a9c8c3d5",
+      "purpose": "Fixed IPA mouth-form reference image for /aɪ/"
+    },
+    {
+      "key": "aʊ",
+      "localPath": "apps/web/public/media/ipa-mouth-form/au (now).png",
+      "sha256": "a63abd4b34ad8ec27b7d7366483228a6c04d606a07ee787ad1ab1df9fd30030b",
+      "purpose": "Fixed IPA mouth-form reference image for /aʊ/"
+    },
+    {
+      "key": "ɔɪ",
+      "localPath": "apps/web/public/media/ipa-mouth-form/oi (join).png",
+      "sha256": "d345bcc420827f36df3dec41d82a7dbf182a8abb7d1658cc237055608eef2cc2",
+      "purpose": "Fixed IPA mouth-form reference image for /ɔɪ/"
+    },
+    {
+      "key": "əʊ",
+      "localPath": "apps/web/public/media/ipa-mouth-form/eu (phone).png",
+      "sha256": "8ad7d29d9d20749013085e91b9beff16252fa70aa54c52dce53aca08639802f4",
+      "purpose": "Fixed IPA mouth-form reference image for /əʊ/"
+    },
+    {
+      "key": "ɪə",
+      "localPath": "apps/web/public/media/ipa-mouth-form/ie (clear).png",
+      "sha256": "4f387e7d2cb1d216b9aa68bda2f93c572ab38825dd1d5c8eb918d60dabaf2f56",
+      "purpose": "Fixed IPA mouth-form reference image for /ɪə/"
+    },
+    {
+      "key": "eə",
+      "localPath": "apps/web/public/media/ipa-mouth-form/ea (share).png",
+      "sha256": "7ab4e4054c4cebd6d9e16c4d998ad8d0da73a683471b6dc91ea0a3ae27776225",
+      "purpose": "Fixed IPA mouth-form reference image for /eə/"
+    },
+    {
+      "key": "ʊə",
+      "localPath": "apps/web/public/media/ipa-mouth-form/ua (tour).png",
+      "sha256": "b1f2b3f510ef2896e022c93bc2b3897b9dbd2d883b4d314164596da756e1e66a",
+      "purpose": "Fixed IPA mouth-form reference image for /ʊə/"
+    },
+    {
+      "key": "p",
+      "localPath": "apps/web/public/media/ipa-mouth-form/p (project).png",
+      "sha256": "f44a52d95f7d5072ea30e73d7f1c6df0a06d4fee998b272542514209330e0bca",
+      "purpose": "Fixed IPA mouth-form reference image for /p/"
+    },
+    {
+      "key": "b",
+      "localPath": "apps/web/public/media/ipa-mouth-form/b (budget).png",
+      "sha256": "bd336933aa924f69be622963f047cc8075d011bc9c6b9a4a81908f020774fba1",
+      "purpose": "Fixed IPA mouth-form reference image for /b/"
+    },
+    {
+      "key": "m",
+      "localPath": "apps/web/public/media/ipa-mouth-form/m (meeting).png",
+      "sha256": "8c48079d5a31f88ca746f5d9a2963d8df1c38d1e8e7eb73842a78a6fa52b5e0b",
+      "purpose": "Fixed IPA mouth-form reference image for /m/"
+    },
+    {
+      "key": "f",
+      "localPath": "apps/web/public/media/ipa-mouth-form/f (file).png",
+      "sha256": "15610aacb53304f25f5b00152c5668fd6c2cdf9d50a4f53d2462dec48149605f",
+      "purpose": "Fixed IPA mouth-form reference image for /f/"
+    },
+    {
+      "key": "v",
+      "localPath": "apps/web/public/media/ipa-mouth-form/v (review).png",
+      "sha256": "1a9c93627c0658d90d991717dc51d7f40318439d44aaeb4840cf73b5c31ba161",
+      "purpose": "Fixed IPA mouth-form reference image for /v/"
+    },
+    {
+      "key": "θ",
+      "localPath": "apps/web/public/media/ipa-mouth-form/th (thanks).png",
+      "sha256": "57c46ece2c4e4f2a4283df15bdc6491dee5594737cc6adba69319577881e7e93",
+      "purpose": "Fixed IPA mouth-form reference image for /θ/"
+    },
+    {
+      "key": "ð",
+      "localPath": "apps/web/public/media/ipa-mouth-form/dh (this).png",
+      "sha256": "39a2a5a97357911b73c59193613291023576023d5329d01a98697725331b5ae9",
+      "purpose": "Fixed IPA mouth-form reference image for /ð/"
+    },
+    {
+      "key": "t",
+      "localPath": "apps/web/public/media/ipa-mouth-form/t (task).png",
+      "sha256": "e619a8f61a1768608fe3aed669f4c3816674e6378409c72ad8aa953acb61f170",
+      "purpose": "Fixed IPA mouth-form reference image for /t/"
+    },
+    {
+      "key": "d",
+      "localPath": "apps/web/public/media/ipa-mouth-form/d (deadline).png",
+      "sha256": "37514c4dbcabbdb13e7cd4066db3f7b1e11631cf1f32850d04272f4042cf787a",
+      "purpose": "Fixed IPA mouth-form reference image for /d/"
+    },
+    {
+      "key": "s",
+      "localPath": "apps/web/public/media/ipa-mouth-form/s (sales).png",
+      "sha256": "5356efce4480f406553631b4ca0cc2de3272e6196dc7a2b73959a07bdc3c0021",
+      "purpose": "Fixed IPA mouth-form reference image for /s/"
+    },
+    {
+      "key": "z",
+      "localPath": "apps/web/public/media/ipa-mouth-form/z (zoom).png",
+      "sha256": "a4045a8c9e4807925fada0e76330c64266dbb515bb0fdf79d992aa7657fdf80c",
+      "purpose": "Fixed IPA mouth-form reference image for /z/"
+    },
+    {
+      "key": "n",
+      "localPath": "apps/web/public/media/ipa-mouth-form/n (name).png",
+      "sha256": "9ad6df9cda4934c094263634ff5f7fd8eb11b8aa28700f22880c981d9b096a02",
+      "purpose": "Fixed IPA mouth-form reference image for /n/"
+    },
+    {
+      "key": "l",
+      "localPath": "apps/web/public/media/ipa-mouth-form/l (lunch).png",
+      "sha256": "09d4c0b9e5462c1dcb29b75b235f85bc2f169225a2329319982863cc37c6ab7f",
+      "purpose": "Fixed IPA mouth-form reference image for /l/"
+    },
+    {
+      "key": "r",
+      "localPath": "apps/web/public/media/ipa-mouth-form/r (report).png",
+      "sha256": "e8fa708d81f3d039f752a258408ca785b2c3f2fddf3242c6ad6e0d81be3fe195",
+      "purpose": "Fixed IPA mouth-form reference image for /r/"
+    },
+    {
+      "key": "ʃ",
+      "localPath": "apps/web/public/media/ipa-mouth-form/sh (share).png",
+      "sha256": "cd12095b54263134078f8c3379bafbc284a442657424dba6bed311a644dfc23c",
+      "purpose": "Fixed IPA mouth-form reference image for /ʃ/"
+    },
+    {
+      "key": "ʒ",
+      "localPath": "apps/web/public/media/ipa-mouth-form/zh (decision).png",
+      "sha256": "c17faa59961b03c3717da7de023e7f42a2214d4798d8294d9de17c81d67d71d5",
+      "purpose": "Fixed IPA mouth-form reference image for /ʒ/"
+    },
+    {
+      "key": "tʃ",
+      "localPath": "apps/web/public/media/ipa-mouth-form/ch (check).png",
+      "sha256": "07adc7fa658dc385f597fc00760c050b66e6bf64bbc6cf76c6ea89cde07a429d",
+      "purpose": "Fixed IPA mouth-form reference image for /tʃ/"
+    },
+    {
+      "key": "dʒ",
+      "localPath": "apps/web/public/media/ipa-mouth-form/j (job).png",
+      "sha256": "7dc8d8f40755be4e28f2c7057909091c323c9b189d854e1f60821ad4ceed0c96",
+      "purpose": "Fixed IPA mouth-form reference image for /dʒ/"
+    },
+    {
+      "key": "k",
+      "localPath": "apps/web/public/media/ipa-mouth-form/k (client).png",
+      "sha256": "de51e31781c21bbf30e52e5fe9ac9ca0050c53b7e699266078969e5ca7df99e0",
+      "purpose": "Fixed IPA mouth-form reference image for /k/"
+    },
+    {
+      "key": "g",
+      "localPath": "apps/web/public/media/ipa-mouth-form/g (agree).png",
+      "sha256": "e684d496d60c684910484fe32f45350ddef698e3655c0c131fc44d67f7a79b8b",
+      "purpose": "Fixed IPA mouth-form reference image for /g/"
+    },
+    {
+      "key": "ŋ",
+      "localPath": "apps/web/public/media/ipa-mouth-form/ng (meeting).png",
+      "sha256": "c63fde39f0baaa390e9227b83dd4a43ac56ecc1d74aaa3b6e8a5312a7e7e95a9",
+      "purpose": "Fixed IPA mouth-form reference image for /ŋ/"
+    },
+    {
+      "key": "h",
+      "localPath": "apps/web/public/media/ipa-mouth-form/h (help).png",
+      "sha256": "5ab396fd780bbfc3b596f57c2d31eb52acbbd730f8352842fe453279cc9776dd",
+      "purpose": "Fixed IPA mouth-form reference image for /h/"
+    },
+    {
+      "key": "j",
+      "localPath": "apps/web/public/media/ipa-mouth-form/y (year).png",
+      "sha256": "ab57cb66b1081c599ad1aa8a4a8cff01fd5d4c8e1edd8bd42cf3aca409dd3765",
+      "purpose": "Fixed IPA mouth-form reference image for /j/"
+    },
+    {
+      "key": "w",
+      "localPath": "apps/web/public/media/ipa-mouth-form/w (work).png",
+      "sha256": "dce99ff27e60e6df704445f9cd71b2029202e7fc3a38c02343f890e5b264b196",
+      "purpose": "Fixed IPA mouth-form reference image for /w/"
+    }
+  ]
 }

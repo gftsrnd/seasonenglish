@@ -1,4 +1,5 @@
 import type { AssessmentSectionCode, CefrLevel } from "@e4s/contracts";
+export * from "./monthly-eligibility.js";
 
 export interface WeeklyPracticeValidationInput {
   cefr: CefrLevel;

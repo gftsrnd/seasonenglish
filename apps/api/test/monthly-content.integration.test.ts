@@ -104,6 +104,9 @@ describe("monthly content API", () => {
     const frameworkId = saved.json<{ id: string }>().id;
     const approved = await app.inject({ method: "POST", url: `/api/v1/content/month-frameworks/${frameworkId}/approve`, headers: { cookie } });
     expect(approved.statusCode, approved.body).toBe(204);
+    const manualFinal = await app.inject({ method: "POST", url: `/api/v1/month-frameworks/${frameworkId}/monthly-final/manual`, headers: { cookie } });
+    expect(manualFinal.statusCode, manualFinal.body).toBe(201);
+    const manualVersionId = manualFinal.json<{ versionId: string }>().versionId;
     const calendar = buildMonthlyCalendar("2026-11");
     const managerSettings = await app.inject({ method: "GET", url: "/api/v1/manager/settings", headers: { cookie: managerCookie } });
     expect(managerSettings.statusCode, managerSettings.body).toBe(200);
@@ -114,6 +117,7 @@ describe("monthly content API", () => {
     expect(setExamDay.statusCode, setExamDay.body).toBe(200);
     const finalDraft = await app.inject({ method: "POST", url: `/api/v1/month-frameworks/${frameworkId}/monthly-final`, headers: { cookie } });
     expect(finalDraft.statusCode, finalDraft.body).toBe(201);
+    expect(finalDraft.json<{ versionId: string }>().versionId).toBe(manualVersionId);
     const final = finalDraft.json() as {
       versionId: string;
       blueprint: {

@@ -21,6 +21,23 @@ function LessonWithExperience({ lesson }: { lesson: any }) {
 }
 
 describe("learner lesson study content", () => {
+  it("keeps the exact IPA mouth form closed until the right-side icon is opened", async () => {
+    const user = userEvent.setup();
+    const lesson = {
+      id: "lesson-mouth-form-opt-in", title: "Sound practice", dayNumber: 1, weekNumber: 1, weekTopic: "Work",
+      durationMinutes: 10, cefr: "A1",
+      content: { parts: [{ code: "pronunciation", title: "Phát âm", content: { focus: "/f/", words: [{ word: "fine", ipa: "/faɪn/" }] } }] },
+      progress: { status: "in_progress", completedPartCodes: ["pronunciation"], evidence: {} }
+    } as any;
+    render(<LearnerLesson view={{ lesson, lock: null }} actions={{ navigate: vi.fn(), speak: vi.fn(), saveLessonProgress: vi.fn() } as any} />);
+    const toggle = screen.getByRole("button", { name: "Xem khẩu hình âm /f/" });
+    expect(toggle).toHaveAttribute("aria-expanded", "false");
+    expect(screen.queryByRole("img", { name: /răng trên chạm nhẹ môi dưới/i })).not.toBeInTheDocument();
+    await user.click(toggle);
+    expect(toggle).toHaveAttribute("aria-expanded", "true");
+    expect(screen.getByRole("img", { name: /răng trên chạm nhẹ môi dưới/i })).toHaveAttribute("src", "/media/ipa-mouth-form/f%20(file).png");
+  });
+
   it("pauses background music for native lesson audio and resumes it after playback", () => {
     const stopMusic = vi.fn();
     const resumeMusic = vi.fn();
@@ -746,7 +763,7 @@ describe("learner lesson study content", () => {
     } as any;
     render(<LearnerLesson view={{ lesson: retryableLesson, lock: null }} actions={{ navigate: vi.fn(), speak: vi.fn(), saveLessonProgress: vi.fn() } as any} />);
 
-    expect(screen.getByRole("tab", { name: /2\. bài tập/i })).toBeDisabled();
+    expect(screen.queryByRole("button", { name: "Kiểm tra nói" })).not.toBeInTheDocument();
     expect(screen.getByRole("tab", { name: /2\. bài tập/i }).querySelector("svg.lucide-lock-keyhole")).toBeInTheDocument();
     expect(screen.queryByRole("radio", { name: "A" })).not.toBeInTheDocument();
   });
@@ -858,7 +875,7 @@ describe("learner lesson study content", () => {
 
     await user.click(screen.getByRole("tab", { name: /2\. bài tập/i }));
     expect(screen.getByText(/nghe đủ 3 từ mẫu phát âm/i)).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "Kiểm tra nói" })).not.toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: /2\. bài tập/i })).toBeDisabled();
 
     expect(screen.queryByRole("button", { name: "Nghe từ phát âm: I" })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Kiểm tra nói" })).not.toBeInTheDocument();
@@ -886,7 +903,7 @@ describe("learner lesson study content", () => {
 
     render(<LearnerLesson view={{ lesson, lock: null }} actions={{ navigate: vi.fn(), speak: vi.fn(), saveLessonProgress: vi.fn() } as any} />);
 
-    expect(screen.getByRole("tab", { name: /2\. bài tập/i })).toBeDisabled();
+    expect(screen.queryByRole("button", { name: "Kiểm tra nói" })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Kiểm tra nói" })).not.toBeInTheDocument();
   });
 
@@ -933,6 +950,38 @@ describe("learner lesson study content", () => {
     await user.click(screen.getByRole("tab", { name: /2\. bài tập/i }));
     expect(screen.getByRole("button", { name: "Ghi âm" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Kiểm tra nói" })).toBeDisabled();
+  });
+
+  it("renders and requires every allocated review pronunciation target before Speaking", async () => {
+    const user = userEvent.setup();
+    const statusCallbacks: Array<((status: "started" | "ended" | "cancelled" | "error" | "unsupported" | "no_voice") => void) | undefined> = [];
+    const lesson = {
+      id: "lesson-review-pronunciation-targets", title: "Weekly review", dayNumber: 5, weekNumber: 1, weekTopic: "Work",
+      durationMinutes: 10, cefr: "A2",
+      content: { parts: [
+        { code: "pronunciation", title: "Phát âm", content: {
+          focus: "/k/", words: [{ word: "cost", ipa: "/kɒst/" }, { word: "can", ipa: "/kæn/" }, { word: "key", ipa: "/kiː/" }],
+          reviewTargets: [
+            { soundId: "k", focus: "/k/", words: [{ word: "cost", ipa: "/kɒst/" }, { word: "can", ipa: "/kæn/" }, { word: "key", ipa: "/kiː/" }] },
+            { soundId: "s", focus: "/s/", words: [{ word: "see", ipa: "/siː/" }, { word: "soon", ipa: "/suːn/" }, { word: "sales", ipa: "/seɪlz/" }] }
+          ]
+        } },
+        { code: "speaking", title: "Nói", content: { instruction: "Nói một câu.", answer: "The sales plan is clear." } }
+      ] },
+      progress: { status: "in_progress", completedPartCodes: ["pronunciation"], evidence: {} }
+    } as any;
+    const speak = vi.fn((_text: string, _language?: string, options?: { onStatus?: (status: "started" | "ended" | "cancelled" | "error" | "unsupported" | "no_voice") => void }) => statusCallbacks.push(options?.onStatus));
+    render(<LearnerLesson view={{ lesson, lock: null }} actions={{ navigate: vi.fn(), speak, saveLessonProgress: vi.fn() } as any} />);
+
+    expect(screen.getByText("/k/")).toBeInTheDocument();
+    expect(screen.getByText("/s/")).toBeInTheDocument();
+    await user.click(screen.getByRole("tab", { name: /2\. bài tập/i }));
+    expect(screen.getByText(/nghe đủ 6 từ mẫu phát âm/i)).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Kiểm tra nói" })).not.toBeInTheDocument();
+    await user.click(screen.getByRole("tab", { name: /1\. học/i }));
+    for (const word of ["cost", "can", "key", "see", "soon", "sales"]) await user.click(screen.getByRole("button", { name: `Nghe từ phát âm: ${word}` }));
+    statusCallbacks.forEach((onStatus) => onStatus?.("ended"));
+    await waitFor(() => expect(screen.getByRole("tab", { name: /2\. bài tập/i })).toBeEnabled());
   });
 
   it("keeps server-recorded Speaking unlocked after a reload without pronunciation playback storage", async () => {

@@ -80,6 +80,8 @@ const nav: Record<ShellRole, readonly NavItem[]> = {
     { to: "/mgr", icon: icons.bars, label: "Tiến độ" },
     { to: "/mgr/ops", icon: icons.check, label: "Vận hành" },
     { to: "/mgr/reopen-requests", icon: icons.book, label: "Yêu cầu mở khóa" },
+    { to: "/mgr/complaints", icon: icons.search, label: "Khiếu nại" },
+    { to: "/mgr/holidays", icon: icons.cal, label: "Ngày nghỉ lễ" },
     { to: "/mgr/reminders", icon: icons.bell, label: "Nhắc học" },
     { to: "/mgr/report", icon: icons.doc, label: "Báo cáo" },
     { to: "/settings", icon: icons.cog, label: "Cài đặt" }

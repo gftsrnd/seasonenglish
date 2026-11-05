@@ -53,12 +53,12 @@
   gap: 18px !important;
   width: min(680px, 100%);
   margin-inline: auto !important;
-  min-height: 210px;
+  min-height: 0;
   overflow: hidden;
   background:
     radial-gradient(circle at 8% 14%, color-mix(in srgb, var(--primary-soft) 80%, transparent), transparent 38%),
     linear-gradient(145deg, var(--surface), var(--surface-2));
-  padding: clamp(24px, 5vw, 42px) !important;
+  padding: clamp(18px, 3vw, 26px) !important;
 }
 
 .game-result__icon {

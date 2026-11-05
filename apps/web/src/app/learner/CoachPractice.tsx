@@ -25,6 +25,8 @@ export function LearnerCoach({ view, actions }: { view: CoachView; actions: Lear
   const [audioEvidence, setAudioEvidence] = useState<AudioEvidence>();
   const [sendError, setSendError] = useState("");
   const [clearChatOpen, setClearChatOpen] = useState(false);
+  const [feedbackExpanded, setFeedbackExpanded] = useState(true);
+  const [explanationExpanded, setExplanationExpanded] = useState(false);
   const clearChatButtonRef = useRef<HTMLButtonElement>(null);
   const clearDialogTitleId = useId();
   const clearDialogDescriptionId = useId();
@@ -74,7 +76,10 @@ export function LearnerCoach({ view, actions }: { view: CoachView; actions: Lear
   };
   const persona = view.persona === "formal" ? "formal" : "informal";
   const vocabulary = uniqueCoachVocabulary(view.vocabulary);
+  const openedVocabularyCount = view.vocabularyProgress?.opened ?? vocabulary.filter((item) => item.opened).length;
+  const totalVocabularyCount = view.vocabularyProgress?.total ?? vocabulary.length;
   const capped = view.daily.used >= view.daily.limit;
+  const chatClosed = view.chatAvailability?.available === false;
   const period = view.monthly;
   const hasMonthlyTarget = period.target > 0;
   const coachError = sendError || view.error;
@@ -87,11 +92,12 @@ export function LearnerCoach({ view, actions }: { view: CoachView; actions: Lear
   <div className="card coach-surface">
     <div className="coach-header"><span className="coach-brand-icon" aria-hidden="true"><SeasonMark className="coach-season-mark" /></span><div className="row coach-actions"><button className={`coach-persona-toggle is-${persona}`} type="button" role="switch" aria-label="Phong cách của Season" aria-checked={persona === "formal"} disabled={view.thinking || sending} onClick={() => void actions.changeCoachPersona(persona === "informal" ? "formal" : "informal")}><span className={persona === "informal" ? "active" : ""}>Informal</span><span className={persona === "formal" ? "active" : ""}>Formal</span></button><button ref={clearChatButtonRef} className="btn-sm btn-danger" type="button" disabled={view.thinking || sending} title="Xoá đoạn chat này và bắt đầu hội thoại mới" onClick={() => setClearChatOpen(true)}>Xoá chat</button></div></div>
     {!view.aiAvailable ? <Notice tone="warn">AI chưa kết nối nên Season chưa trả lời. Báo người vận hành nhập API key trong Cài đặt.</Notice> : null}
-    <div className="coach-limit-row"><span className="row coach-counters"><span className={`badge ${capped ? "danger" : view.daily.used >= view.daily.limit * .8 ? "warn" : "primary"}`}>Hôm nay {view.daily.used}/{view.daily.limit} lượt</span><span className={`badge ${hasMonthlyTarget && period.turns >= period.target ? "ok" : ""}`}>{period.label}: {period.turns}{hasMonthlyTarget ? `/${period.target}` : ""} lượt{hasMonthlyTarget && period.turns >= period.target ? " ✓" : ""}</span></span><details className="xs coach-limit-details"><summary>Giới hạn chat và tiến độ tháng</summary><div className="muted coach-limit-copy coach-limit-copy--full coach-limit-copy--plain">1 lượt = 1 tin nhắn bạn gửi và Season trả lời kèm chấm điểm. Tối đa <b>{view.daily.limit} lượt/ngày</b>; bộ đếm về 0 lúc 0 giờ. Xoá chat không trả lại lượt. Tin nhắn lỗi mạng không tính lượt.{hasMonthlyTarget ? <> Điều kiện Season của lộ trình tháng: ít nhất <b>{period.target} lượt</b>.</> : " Tháng này không đặt chỉ tiêu lượt Season."}</div></details></div>
+    {chatClosed ? <Notice tone="warn">{view.chatAvailability?.reason === "monthly_exam_day" ? "Hôm nay là ngày thi tháng; Season tạm đóng." : "Season mở từ thứ Hai đến thứ Sáu."}</Notice> : null}
+    <div className="coach-limit-row"><span className="row coach-counters"><span className={`badge ${capped ? "danger" : view.daily.used >= view.daily.limit * .8 ? "warn" : "primary"}`}>Hôm nay {view.daily.used}/{view.daily.limit} lượt</span><span className={`badge ${hasMonthlyTarget && period.turns >= period.target ? "ok" : ""}`}>{period.label}: {period.turns}{hasMonthlyTarget ? `/${period.target}` : ""} lượt{hasMonthlyTarget && period.turns >= period.target ? " ✓" : ""}</span><span className="coach-feedback-toggles" aria-label="Tùy chỉnh phản hồi"><span className="coach-feedback-toggles-title">Tự mở:</span><button className="coach-feedback-toggle" type="button" role="switch" aria-label="Tự mở nhận xét" aria-checked={feedbackExpanded} onClick={() => setFeedbackExpanded((expanded) => !expanded)}><span>Nhận xét</span><span className="coach-feedback-switch-track" aria-hidden="true"><span /></span></button><button className="coach-feedback-toggle" type="button" role="switch" aria-label="Tự mở giải thích" aria-checked={explanationExpanded} onClick={() => setExplanationExpanded((expanded) => !expanded)}><span>Giải thích</span><span className="coach-feedback-switch-track" aria-hidden="true"><span /></span></button></span></span><details className="xs coach-limit-details"><summary>Giới hạn chat và tiến độ tháng</summary><div className="muted coach-limit-copy coach-limit-copy--full coach-limit-copy--plain">1 lượt = 1 tin nhắn bạn gửi và Season trả lời kèm chấm điểm. Tối đa <b>{view.daily.limit} lượt/ngày</b>; bộ đếm về 0 lúc 0 giờ. Xoá chat không trả lại lượt. Tin nhắn lỗi mạng không tính lượt.{hasMonthlyTarget ? <> Điều kiện Season của lộ trình tháng: ít nhất <b>{period.target} lượt</b>.</> : " Tháng này không đặt chỉ tiêu lượt Season."}</div></details></div>
     {capped ? <Notice tone="warn"><b>Đã dùng hết {view.daily.limit} lượt chat hôm nay.</b> Ô nhập mở lại ngày mai; bạn có thể ôn lại bài trong lộ trình hiện tại.</Notice> : null}
-    <section ref={chatRef} className="chat" aria-label="Cuộc trò chuyện với Season" aria-busy={view.thinking || sending || undefined} style={chatStyle}><article className="msg ai coach-opening-message"><div role="heading" aria-level={2} className="eyebrow">Season</div><p>Chào bạn! Hôm nay mình luyện một tình huống thật nhé.</p></article>{view.messages.map((item) => <article className={`msg ${item.speaker === "coach" ? "ai" : "user"}`} key={item.id}><div className="eyebrow">{item.speaker === "coach" ? "Season" : "Bạn"}</div>{item.feedback ? <CoachFeedback feedback={item.feedback} speak={actions.speak} /> : <p>{item.text}</p>}<ResponseAudio label="Bản ghi âm câu trả lời" value={item.audioArtifact} transcript={item.text} showTranscript={false} />{item.speaker === "coach" && !item.feedback ? <button className="coach-turn-audio" type="button" aria-label="Nghe câu của Season" title="Nghe câu của Season" onClick={() => actions.speak(coachSpeechText(item), "en-US")}><Volume2 size={17} aria-hidden="true" /><span>Nghe</span></button> : null}</article>)}{sending && pendingMessage ? <article className="msg user coach-message-pending" aria-label="Tin nhắn đang gửi"><div className="eyebrow">Bạn</div><p>{pendingMessage}</p><span className="xs muted">Đang gửi…</span></article> : null}{view.thinking ? <div className="msg ai" role="status">Season đang nghĩ…</div> : null}</section>{coachError ? <div className="coach-error-row"><ErrorText id="coach-error" message={coachError} /></div> : null}
-    {vocabulary.length ? <section className="card coach-vocabulary"><h2>Từ bí mật</h2><div className="row coach-word-list">{vocabulary.map((item, index) => item.opened ? <button className="word-card coach-word-chip is-opened" type="button" title={item.meaning} key={item.word.toLocaleLowerCase()} aria-label={`Nghe từ ${item.word}${item.meaning ? `: ${item.meaning}` : ""}`} onClick={() => actions.speak(item.word, "en-US")}><b>{item.word}</b></button> : <div className="word-card coach-word-chip is-locked" key={item.word.toLocaleLowerCase()} aria-label={`Từ bí mật ${index + 1} chưa mở`}><LockKeyhole className="status-icon" aria-hidden="true" /><span>{item.meaning || `Từ số ${index + 1}`}</span></div>)}</div></section> : null}
-    <form className="chat-compose" aria-busy={view.thinking || sending || undefined} onSubmit={send} style={composeStyle}><textarea ref={composerRef} rows={1} aria-label="Tin nhắn cho Season" aria-describedby={coachError ? "coach-error" : undefined} value={message} disabled={view.thinking || sending || !view.aiAvailable || capped} onChange={(event) => { setMessage(event.target.value); resizeCoachComposer(event.currentTarget); }} onKeyDown={(event) => { if (event.key === "Enter" && !event.shiftKey && !event.nativeEvent.isComposing) { event.preventDefault(); event.currentTarget.form?.requestSubmit(); } }} placeholder={view.thinking || sending ? "Season đang trả lời…" : view.cefr === "A1" || view.cefr === "A2" ? "Viết câu trả lời bằng tiếng Anh…" : "Type your reply in English…"} style={composeInputStyle} /><AudioCaptureControl label="Micro Season" value={audioEvidence} showMicrophone={speechRecognitionConstructor() !== null || (typeof navigator !== "undefined" && Boolean(navigator.mediaDevices?.getUserMedia) && typeof MediaRecorder !== "undefined")} transcript={message} disabled={view.thinking || sending || !view.aiAvailable || capped} uploadAudio={actions.uploadAssessmentAudio} getAudioReadUrl={actions.getAssessmentAudioReadUrl} onTranscript={setMessage} onAudioChange={setAudioEvidence} compactActions /><button className="btn-primary coach-compose-icon coach-send" type="submit" aria-label={view.thinking || sending ? "Đang gửi…" : "Gửi"} title={view.thinking || sending ? "Đang gửi…" : "Gửi"} disabled={view.thinking || sending || !view.aiAvailable || capped || (!message.trim() && !audioEvidence?.artifactKey)}><Send size={20} aria-hidden="true" /></button></form></div>
+    <section ref={chatRef} className="chat" aria-label="Cuộc trò chuyện với Season" aria-busy={view.thinking || sending || undefined} style={chatStyle}><article className="msg ai coach-opening-message"><div role="heading" aria-level={2} className="eyebrow">Season</div><p>Chào bạn! Hôm nay mình luyện một tình huống thật nhé.</p></article>{view.messages.map((item) => <article className={`msg ${item.speaker === "coach" ? "ai" : "user"}`} key={item.id}><div className="coach-message-heading"><div className="eyebrow">{item.speaker === "coach" ? "Season" : "Bạn"}</div>{item.speaker === "coach" ? <button className="coach-turn-audio" type="button" aria-label="Nghe câu Season trả lời" title="Nghe câu Season trả lời" onClick={() => actions.speak(item.feedback?.seasonReply ?? coachSpeechText(item), "en-US")}><Volume2 size={17} aria-hidden="true" /><span>Nghe</span></button> : null}</div>{item.feedback ? <CoachFeedback feedback={item.feedback} feedbackExpanded={feedbackExpanded} explanationExpanded={explanationExpanded} onFeedbackExpandedChange={setFeedbackExpanded} onExplanationExpandedChange={setExplanationExpanded} /> : <p>{item.text}</p>}<ResponseAudio label="Bản ghi âm câu trả lời" value={item.audioArtifact} transcript={item.text} showTranscript={false} /></article>)}{sending && pendingMessage ? <article className="msg user coach-message-pending" aria-label="Tin nhắn đang gửi"><div className="eyebrow">Bạn</div><p>{pendingMessage}</p><span className="xs muted">Đang gửi…</span></article> : null}{view.thinking ? <div className="msg ai" role="status">Season đang nghĩ…</div> : null}</section>{coachError ? <div className="coach-error-row"><ErrorText id="coach-error" message={coachError} /></div> : null}
+    {totalVocabularyCount ? <section className="card coach-vocabulary"><div className="row between"><h2>Từ bí mật</h2><span className="small muted" aria-live="polite">Đã mở {openedVocabularyCount}/{totalVocabularyCount} ô tháng này</span></div>{vocabulary.length ? <div className="row coach-word-list">{vocabulary.map((item, index) => item.opened ? <button className="word-card coach-word-chip is-opened" type="button" title={item.meaning} key={item.word.toLocaleLowerCase()} aria-label={`Nghe từ ${item.word}${item.meaning ? `: ${item.meaning}` : ""}`} onClick={() => actions.speak(item.word, "en-US")}><b>{item.word}</b></button> : <div className="word-card coach-word-chip is-locked" key={item.word.toLocaleLowerCase()} aria-label={`Từ bí mật ${index + 1} chưa mở`}><LockKeyhole className="status-icon" aria-hidden="true" /><span>{item.meaning || `Từ số ${index + 1}`}</span></div>)}</div> : <p className="small muted">Hoàn thành bài học để mở các ô từ vựng của tháng.</p>}</section> : null}
+    <form className="chat-compose" aria-busy={view.thinking || sending || undefined} onSubmit={send} style={composeStyle}><textarea ref={composerRef} rows={1} aria-label="Tin nhắn cho Season" aria-describedby={coachError ? "coach-error" : undefined} value={message} disabled={view.thinking || sending || !view.aiAvailable || capped || chatClosed} onChange={(event) => { setMessage(event.target.value); resizeCoachComposer(event.currentTarget); }} onKeyDown={(event) => { if (event.key === "Enter" && !event.shiftKey && !event.nativeEvent.isComposing) { event.preventDefault(); event.currentTarget.form?.requestSubmit(); } }} placeholder={view.thinking || sending ? "Season đang trả lời…" : view.cefr === "A1" || view.cefr === "A2" ? "Viết câu trả lời bằng tiếng Anh…" : "Type your reply in English…"} style={composeInputStyle} /><AudioCaptureControl label="Micro Season" value={audioEvidence} showMicrophone={speechRecognitionConstructor() !== null || (typeof navigator !== "undefined" && Boolean(navigator.mediaDevices?.getUserMedia) && typeof MediaRecorder !== "undefined")} transcript={message} disabled={view.thinking || sending || !view.aiAvailable || capped || chatClosed} uploadAudio={actions.uploadAssessmentAudio} getAudioReadUrl={actions.getAssessmentAudioReadUrl} onTranscript={setMessage} onAudioChange={setAudioEvidence} compactActions /><button className="btn-primary coach-compose-icon coach-send" type="submit" aria-label={view.thinking || sending ? "Đang gửi…" : "Gửi"} title={view.thinking || sending ? "Đang gửi…" : "Gửi"} disabled={view.thinking || sending || !view.aiAvailable || capped || chatClosed || (!message.trim() && !audioEvidence?.artifactKey)}><Send size={20} aria-hidden="true" /></button></form></div>
     <p className="xs muted">Mỗi lượt Season trả lời và chấm 3 tiêu chí (đúng ý · từ vựng · ngữ pháp), gợi ý tối đa 3 chỗ sửa.{hasMonthlyTarget ? <> Tiến độ điều kiện Season tháng này: <b>{period.turns}/{period.target} lượt</b>.</> : " Tháng này chưa đặt chỉ tiêu lượt Season."}</p>
     {clearChatOpen ? <ClearChatDialog titleId={clearDialogTitleId} descriptionId={clearDialogDescriptionId} onCancel={() => setClearChatOpen(false)} onConfirm={() => { setClearChatOpen(false); void actions.startNewCoachChat(); }} /> : null}
   </div>;
@@ -105,7 +111,13 @@ function resizeCoachComposer(element: HTMLTextAreaElement | null) {
   element.style.overflowY = element.scrollHeight > 132 ? "auto" : "hidden";
 }
 
-function CoachFeedback({ feedback, speak }: { feedback: NonNullable<CoachView["messages"][number]["feedback"]>; speak: LearnerCallbacks["speak"] }) {
+function CoachFeedback({ feedback, feedbackExpanded, explanationExpanded, onFeedbackExpandedChange, onExplanationExpandedChange }: {
+  feedback: NonNullable<CoachView["messages"][number]["feedback"]>;
+  feedbackExpanded: boolean;
+  explanationExpanded: boolean;
+  onFeedbackExpandedChange: (expanded: boolean) => void;
+  onExplanationExpandedChange: (expanded: boolean) => void;
+}) {
   const scores = [
     { label: "Ý nghĩa", criterion: feedback.rubric.meaning, Icon: MessageCircle },
     { label: "Từ vựng", criterion: feedback.rubric.vocabulary, Icon: BookOpen },
@@ -117,31 +129,42 @@ function CoachFeedback({ feedback, speak }: { feedback: NonNullable<CoachView["m
     missing_information: "Thiếu ý",
     off_topic: "Sai mục tiêu"
   } as const;
-  const retryCurrentQuestion = feedback.evaluation.status !== "valid";
+  const feedbackUnavailable = feedback.feedbackStatus === "unavailable";
+  const retryCurrentQuestion = !feedbackUnavailable && feedback.evaluation.status !== "valid";
   const suggestedAnswer = feedback.suggestedAnswer.text.trim();
   const suggestedTranslation = feedback.suggestedAnswer.translation.trim();
+  const seasonReplyTranslation = feedback.seasonReplyTranslation.trim();
   const hasCorrection = feedback.corrections.length > 0 || Boolean(feedback.correctedText.trim());
+  const correctedTextNormalized = normalizeCoachText(feedback.correctedText);
+  const correctedTextIsRedundant = feedback.corrections.length > 0 && feedback.corrections.every((item) => {
+    const corrected = normalizeCoachText(item.corrected);
+    return corrected && correctedTextNormalized.includes(corrected);
+  });
   return <section className="coach-feedback coach-feedback-flat" role="region" aria-label="Phản hồi của Season">
     <div className="coach-feedback-section coach-season-reply" aria-label="Phản hồi của Season">
-      <div className="coach-season-reply-heading"><span className="eyebrow">Season</span><button className="coach-turn-audio" type="button" aria-label="Nghe câu Season trả lời" title="Nghe câu Season trả lời" onClick={() => speak(feedback.seasonReply, "en-US")}><Volume2 size={17} aria-hidden="true" /><span>Nghe</span></button></div>
       <p className="coach-season-spoken"><SeasonReplyText reply={feedback.seasonReply} question={feedback.nextQuestion} /></p>
       {!retryCurrentQuestion && suggestedAnswer ? <div className="coach-next-question" aria-label="Câu trả lời gợi ý"><p><span>You can say:</span> <q>{suggestedAnswer}</q></p></div> : null}
     </div>
-    <div className="coach-feedback-summary">
-      <div className="coach-evaluation" aria-label="Nhận xét câu trả lời của bạn"><h4>Nhận xét câu trả lời của bạn</h4><p className="coach-feedback-result">Kết quả: {resultLabels[feedback.evaluation.result]}</p><p className="coach-feedback-note">{feedback.evaluation.noteVi}</p></div>
-      <div className="coach-feedback-scores" aria-label="Ba điểm đánh giá">{scores.map(({ label, criterion, Icon }) => <div className="coach-feedback-score" title={`${criterion.evidence} ${criterion.improvement}`} key={label}><Icon className="coach-feedback-score-icon" size={18} aria-hidden="true" /><span><b>{label}</b><strong aria-label={`${label}: ${criterion.score} trên 5 điểm`}>{criterion.score}/5</strong></span></div>)}</div>
+    <div className="coach-feedback-disclosures">
+      <details className="coach-feedback-disclosure" aria-label="Nhận xét câu trả lời của bạn" open={feedbackExpanded} onToggle={(event) => { if (event.currentTarget.open !== feedbackExpanded) onFeedbackExpandedChange(event.currentTarget.open); }}>
+        <summary>Nhận xét câu trả lời của bạn</summary>
+        <div className="coach-feedback-summary">
+          <div className="coach-evaluation">{feedbackUnavailable ? <p className="coach-feedback-note" role="status">{feedback.evaluation.noteVi}</p> : <><p className="coach-feedback-result">Kết quả: {resultLabels[feedback.evaluation.result]}</p><p className="coach-feedback-note">{feedback.evaluation.noteVi}</p></>}</div>
+          {!feedbackUnavailable ? <div className="coach-feedback-scores" aria-label="Ba điểm đánh giá">{scores.map(({ label, criterion, Icon }) => <div className="coach-feedback-score" title={`${criterion.evidence} ${criterion.improvement}`} key={label}><Icon className="coach-feedback-score-icon" size={18} aria-hidden="true" /><span><b>{label}</b><strong aria-label={`${label}: ${criterion.score} trên 5 điểm`}>{criterion.score}/5</strong></span></div>)}</div> : null}
+        </div>
+      </details>
     </div>
     {hasCorrection ? <div className="coach-feedback-section coach-correction" aria-label="Câu sửa">
-      <h4>Câu sửa</h4>{feedback.corrections.map((item, index) => <div key={`${item.corrected}-${index}`}><p><del>{item.original}</del> → <strong>{item.corrected}</strong></p><p>{item.reason}</p><p className="coach-feedback-translation">{item.translation}</p></div>)}
-      {feedback.correctedText ? <p><b>Câu hoàn chỉnh:</b> {feedback.correctedText}</p> : null}
+      <h4>Câu sửa</h4>{feedback.corrections.map((item, index) => <div className="coach-next-question coach-correction-card" key={`${item.corrected}-${index}`}><p><del>{item.original}</del> → <strong>{item.corrected}</strong></p><p className="coach-correction-reason">{compactCoachCorrectionReason(item.reason)}</p>{hasCoachTranslation(item.translation) ? <p className="coach-feedback-translation">{item.translation}</p> : null}</div>)}
+      {feedback.correctedText && !correctedTextIsRedundant ? <p><b>Câu hoàn chỉnh:</b> {feedback.correctedText}</p> : null}
     </div> : null}
     <div className="coach-feedback-disclosures">
-      <details className="coach-feedback-disclosure">
+      <details className="coach-feedback-disclosure" open={explanationExpanded} onToggle={(event) => { if (event.currentTarget.open !== explanationExpanded) onExplanationExpandedChange(event.currentTarget.open); }}>
         <summary>Xem giải thích và gợi ý</summary>
         <div className="coach-feedback-details">
-          <div className="coach-feedback-translation-block"><h4>Nghĩa câu Season trả lời</h4><p className="coach-feedback-translation">{feedback.seasonReplyTranslation}</p></div>
-          {!retryCurrentQuestion && suggestedTranslation ? <div className="coach-feedback-translation-block" aria-label="Bản dịch gợi ý trả lời"><h4>Bản dịch gợi ý trả lời</h4><p className="coach-feedback-translation">{suggestedTranslation}</p></div> : null}
-          <div className="coach-feedback-criteria" aria-label="Giải thích điểm">{scores.map(({ label, criterion }) => <article className="coach-feedback-criterion-card" key={label}><div><b>{label}</b><strong>{criterion.score}/5</strong></div><p>{criterion.evidence}</p>{hasActionableImprovement(criterion.improvement) ? <p className="coach-feedback-improvement">Gợi ý: {criterion.improvement}</p> : null}</article>)}</div>
+          {hasCoachTranslation(seasonReplyTranslation) ? <div className="coach-feedback-translation-block"><h4>Nghĩa câu Season trả lời</h4><p className="coach-feedback-translation">{seasonReplyTranslation}</p></div> : null}
+          {!retryCurrentQuestion && hasCoachTranslation(suggestedTranslation) ? <div className="coach-feedback-translation-block" aria-label="Bản dịch gợi ý trả lời"><h4>Bản dịch gợi ý trả lời</h4><p className="coach-feedback-translation">{suggestedTranslation}</p></div> : null}
+          {feedbackUnavailable ? <p className="coach-feedback-note" role="status">Chưa có điểm và gợi ý chi tiết cho lượt này.</p> : <div className="coach-feedback-criteria" aria-label="Giải thích điểm">{scores.map(({ label, criterion }) => <article className="coach-feedback-criterion-card" key={label}><div><b>{label}</b><strong>{criterion.score}/5</strong></div><p>{criterion.evidence}</p>{hasActionableImprovement(criterion.improvement) ? <p className="coach-feedback-improvement">Gợi ý: {criterion.improvement}</p> : null}</article>)}</div>}
         </div>
       </details>
     </div>
@@ -150,14 +173,40 @@ function CoachFeedback({ feedback, speak }: { feedback: NonNullable<CoachView["m
 
 function SeasonReplyText({ reply, question }: { reply: string; question: string }) {
   const anchor = question.trim();
-  const index = anchor ? reply.lastIndexOf(anchor) : -1;
-  if (index < 0) return <>{reply}</>;
-  const before = reply.slice(0, index).trimEnd();
-  return <>{before ? `${before} ` : null}<strong>{anchor}</strong>{reply.slice(index + anchor.length)}</>;
+  const exactIndex = anchor ? reply.lastIndexOf(anchor) : -1;
+  if (exactIndex >= 0) {
+    const before = reply.slice(0, exactIndex).trimEnd();
+    return <>{before ? `${before} ` : null}<strong>{reply.slice(exactIndex, exactIndex + anchor.length)}</strong>{reply.slice(exactIndex + anchor.length)}</>;
+  }
+  const questionMark = reply.lastIndexOf("?");
+  const requestMatch = questionMark < 0
+    ? [...reply.matchAll(/(?:please\s+)?(?:could|can|would|will|tell me|let me know|share|confirm)\b[^.!?]*[.!?]/giu)].at(-1)
+    : undefined;
+  const end = questionMark >= 0 ? questionMark + 1 : requestMatch?.index === undefined ? -1 : requestMatch.index + requestMatch[0].length;
+  if (end < 0) return <>{reply}</>;
+  const sentenceStart = Math.max(reply.lastIndexOf(".", end - 2), reply.lastIndexOf("!", end - 2), reply.lastIndexOf("?", end - 2)) + 1;
+  const start = requestMatch?.index ?? sentenceStart;
+  const before = reply.slice(0, start).trimEnd();
+  return <>{before ? `${before} ` : null}<strong>{reply.slice(start, end).trim()}</strong>{reply.slice(end)}</>;
+}
+
+function normalizeCoachText(value: string): string {
+  return value.normalize("NFKC").replace(/[“”]/gu, '"').replace(/\s+/gu, " ").trim().toLocaleLowerCase("en-US");
+}
+
+function compactCoachCorrectionReason(value: string): string {
+  const firstSentence = value.trim().split(/(?<=[.!?])\s+/u)[0] ?? value.trim();
+  const words = firstSentence.split(/\s+/u);
+  return words.length > 14 ? `${words.slice(0, 13).join(" ")}…` : firstSentence;
 }
 
 function hasActionableImprovement(value: string): boolean {
-  return !/^(?:không cần thay đổi\.?|no change needed\.?)$/iu.test(value.trim());
+  const normalized = value.trim();
+  return Boolean(normalized) && !/^(?:không cần thay đổi\.?|no change needed\.?)$/iu.test(normalized);
+}
+
+function hasCoachTranslation(value: string): boolean {
+  return Boolean(value.trim()) && !/(?:sẽ được cập nhật|sẽ hiển thị|được hiển thị trong phần giải thích)/iu.test(value);
 }
 
 function uniqueCoachVocabulary(items: CoachView["vocabulary"]): CoachView["vocabulary"] {

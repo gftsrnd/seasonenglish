@@ -27,23 +27,36 @@ LEVEL DIFFERENTIATION
 
 VOCABULARY PLAN
 - Create the requested number of distinct core items in the month-wide pool. Each core item is one standalone English lexical headword.
-- Create the requested number of expanded items in the month-wide pool. Prefer standalone headwords: at least 75% of the pool must be single words. A natural two-to-four-word expression is allowed for no more than one support per core, and phrases may not exceed 25% of the pool. Expanded items may repeat across the month only when repeated entries stay at or below 20% of the total expanded set.
+- In the completed month-wide pool, create six to nine expanded items per core, never exceeding the caller's requested maximum. Prefer standalone headwords: at least 75% of the pool must be single words. A natural two-to-four-word expression is allowed for no more than one support per core, and phrases may not exceed 25% of the pool. Expanded items may repeat across the month only when repeated entries stay at or below 25% of the total expanded set. During partial generation phases, follow the phase prompt's count and relation scope; do not try to complete the full pool in one response.
 - Every item must have a real English form, a natural Vietnamese meaning, part
   of speech, accurate IPA where requested, a concise authentic example, and
   with no calendar-day assignment; the Operator reviews the pool before approval.
 - Core terms must be unique after lowercasing and normalising spaces/
-  punctuation; core terms must never appear as expanded terms.
+  punctuation; core terms must never appear as expanded terms. Choose only
+  standalone, level-appropriate workplace headwords with a common, genuine
+  non-inflectional word family plus real synonym and umbrella relations.
+  Avoid interjections, greetings, inflected forms, and unproductive words
+  whose only related forms would be rare or fabricated.
 - Each expanded item must state one relation: umbrella, synonym, antonym,
   word_family, or collocation; and identify the related core term. The relation
-  must be linguistically real. A word family must belong to its stated base;
-  a synonym/antonym must be a true semantic relation in this context.
-- Every core headword needs exactly nine individually linked support items.
-  For each core, cover all five relation groups: genuine umbrella/hypernym,
-  synonym, antonym or contextual contrast, word family, and collocation. Use
-  one or two supports per group, with no group repeated more than twice. Keep
-  every relation linguistically real; do not force a false antonym.
-- Avoid shallow workflow-style variants around the core. The nine supports
-  must add distinct meanings or uses, not small wording changes to one idea.
+  must be linguistically real. Umbrella means a true broader category (X is a
+  kind of Y), not an associated topic or collocation. A synonym must be close
+  enough to replace the core in the stated sense; an antonym must express the
+  opposite sense. A word_family item must share the core's lexical root through
+  a real derivation (for example, manage → manager/management), not merely be
+  related in meaning, share a workplace topic, or be a plural/past-tense form.
+  Collocation means words naturally used together, not an umbrella or synonym.
+- Every core headword needs six to nine individually linked support items.
+  The minimum six must include a genuine umbrella/hypernym, synonym, and
+  word-family item. If a required relation is not accepted, keep the selected
+  core stable and try distinct support candidates; never replace a core merely
+  because one candidate or one audit attempt failed. Do not invent or mislabel
+  a support, and report an unresolved relation only after the retry limit.
+  Add useful collocations and a natural antonym or contextual
+  contrast when one exists; never invent an antonym. Do not force all five
+  relation groups when the language does not support them.
+- Avoid shallow workflow-style variants around the core. Every support must
+  add a distinct meaning or use, not a small wording change to one idea.
 
 GRAMMAR PLAN
 - Return exactly two genuine CEFR-appropriate grammar topics, each with three
@@ -63,6 +76,9 @@ PRONUNCIATION PLAN
   a meaningful Vietnamese label, and a list
   of real words from this month's approved vocabulary or closely related,
   non-duplicate examples. Explain the actual sound contrast or stress pattern.
+  A1–A2 targets must be foundational phonemes from the standard British
+  English 44-sound inventory. B1–C1 targets must be level-appropriate advanced
+  pronunciation phenomena, not beginner isolated-phoneme lessons.
   Use neutral workplace words; never invent cultural, historical or identity-
   based context. Never return 'sound 1 word 1' or a fabricated transcription.
 
@@ -70,13 +86,26 @@ POOL RULES
 - The caller supplies newLessonCount and may provide a coreTermBatch. Never
   output dayNumber or dayNumbers fields. Allocation happens only after explicit
   Operator approval.
-  - For a support phase with one core in coreTermBatch, return 18 ordered
-  candidate expanded terms, including alternatives for all five relation
-  groups. The API selects nine valid, linked candidates after checking core
-  overlap, balanced relation coverage, phrase cap and repeat budget.
+  - Follow the active phase prompt's requested candidate count and relation
+    scope. A single-relation support phase must return only that exact relation;
+    an optional-support phase may return several genuine relation types.
+    The API selects six to nine valid linked items and accepts six when the
+    required relation types are covered and further authentic relations are
+    not available.
 - Expanded resources must reference an exact core ID from the supplied batch.
 - Daily lessons expose their approved resource assignments before exercises.
 `;
+
+const A1_A2_ENGLISH_44_PHONEMES = new Set([
+  "/iː/", "/ɪ/", "/e/", "/æ/", "/ʌ/", "/ɑː/", "/ɒ/", "/ɔː/", "/ʊ/", "/uː/", "/ə/", "/ɜː/",
+  "/eɪ/", "/aɪ/", "/ɔɪ/", "/aʊ/", "/əʊ/", "/ɪə/", "/eə/", "/ʊə/",
+  "/p/", "/b/", "/t/", "/d/", "/k/", "/g/", "/f/", "/v/", "/θ/", "/ð/", "/s/", "/z/", "/ʃ/", "/ʒ/", "/tʃ/", "/dʒ/", "/m/", "/n/", "/ŋ/", "/h/", "/l/", "/r/", "/w/", "/j/"
+]);
+
+export function isPronunciationTargetAllowedForLevel(cefr: "A1" | "A2" | "B1" | "B2" | "C1", ipa: string): boolean {
+  const isFoundationalPhoneme = A1_A2_ENGLISH_44_PHONEMES.has(ipa.trim().toLocaleLowerCase("en-US"));
+  return cefr === "A1" || cefr === "A2" ? isFoundationalPhoneme : !isFoundationalPhoneme;
+}
 
 export interface MonthlyResourcePlanRequest {
   month: string;
@@ -129,7 +158,7 @@ export const monthlyResourcePlanSchema = {
     expandedTerms: {
       type: "array",
       description:
-        "Exactly nine unique real relation items for every core headword.",
+        "Six to nine unique real relation items for every core headword; umbrella, synonym, and word family are required, while antonyms are optional when natural.",
       items: {
         type: "object",
         additionalProperties: false,
@@ -274,15 +303,17 @@ export function validateMonthlyResourcePlanShape(
     pronunciationTargets: Array<{ id: string; ipa: string; label: string; explanation: string; words: Array<{ word: string }> }>;
   },
   newLessonCount: number,
+  cefr?: "A1" | "A2" | "B1" | "B2" | "C1",
 ): string[] {
   const errors: string[] = [];
   const normalize = (value: string) => value.trim().toLocaleLowerCase("en").replace(/[\s\p{P}]+/gu, " ").trim();
   const core = plan.coreTerms.map((item) => normalize(item.word));
   const expanded = plan.expandedTerms.map((item) => normalize(item.word));
   const expectedCore = newLessonCount * 3;
-  const expectedExpanded = newLessonCount * 27;
+  const minimumExpanded = newLessonCount * 3 * 6;
+  const maximumExpanded = newLessonCount * 27;
   if (core.length !== expectedCore) errors.push(`Expected ${expectedCore} core terms, got ${core.length}.`);
-  if (expanded.length !== expectedExpanded) errors.push(`Expected ${expectedExpanded} expanded terms, got ${expanded.length}.`);
+  if (expanded.length < minimumExpanded || expanded.length > maximumExpanded) errors.push(`Expected ${minimumExpanded}-${maximumExpanded} expanded terms, got ${expanded.length}.`);
   const singleHeadword = (value: string) => /^\p{L}+(?:[-'’]\p{L}+)*$/u.test(value.trim());
   const workplacePhrase = (value: string) => {
     const words = value.trim().split(/\s+/u);
@@ -293,19 +324,17 @@ export function validateMonthlyResourcePlanShape(
   if (plan.expandedTerms.some((item) => !singleHeadword(item.word) && !workplacePhrase(item.word))) errors.push("Expanded resources must be standalone lexical headwords or natural two-to-four-word workplace phrases.");
   if (plan.expandedTerms.filter((item) => !singleHeadword(item.word)).length > Math.floor(plan.expandedTerms.length * 0.25)) errors.push("Expanded phrases exceed the 25% ceiling; standalone words must remain the clear majority.");
   if (expanded.some((word) => core.includes(word))) errors.push("A core term is repeated in expanded resources.");
-  if (expanded.length - new Set(expanded).size > Math.floor(expanded.length * 0.2)) errors.push("Expanded resources repeat more than 20% of the monthly total.");
+  if (expanded.length - new Set(expanded).size > Math.floor(expanded.length * 0.25)) errors.push("Expanded resources repeat more than 25% of the monthly total.");
   const coreIds = new Set(plan.coreTerms.map((item) => item.id));
   if (coreIds.size !== plan.coreTerms.length) errors.push("Core resource IDs must be unique.");
   if (new Set(plan.expandedTerms.map((item) => item.id)).size !== plan.expandedTerms.length) errors.push("Expanded resource IDs must be unique.");
   if (plan.expandedTerms.some((item) => !coreIds.has(item.relatesToCoreId))) errors.push("Expanded resources must reference a core term in this month.");
   for (const coreId of coreIds) {
     const supports = plan.expandedTerms.filter((item) => item.relatesToCoreId === coreId);
-    if (supports.length !== 9) errors.push(`Core ${coreId} needs exactly nine support resources.`);
-    const relationCounts = new Map<string, number>();
-    for (const support of supports) relationCounts.set(support.relation, (relationCounts.get(support.relation) ?? 0) + 1);
-    const relationGroups = ["umbrella", "synonym", "antonym", "word_family", "collocation"] as const;
-    if (supports.length === 9 && relationGroups.some((relation) => (relationCounts.get(relation) ?? 0) < 1 || (relationCounts.get(relation) ?? 0) > 2)) {
-      errors.push(`Core ${coreId} must distribute nine supports across all five relation groups, with no group repeated more than twice.`);
+    if (supports.length < 6 || supports.length > 9) errors.push(`Core ${coreId} needs six to nine support resources.`);
+    const relationGroups = new Set(supports.map((support) => support.relation));
+    if (supports.length >= 6 && ["umbrella", "synonym", "word_family"].some((relation) => !relationGroups.has(relation as typeof supports[number]["relation"]))) {
+      errors.push(`Core ${coreId} needs umbrella, synonym, and word-family supports.`);
     }
     if (supports.filter((item) => !singleHeadword(item.word)).length > 1) errors.push(`Core ${coreId} has more than one multi-word support item.`);
   }
@@ -317,6 +346,9 @@ export function validateMonthlyResourcePlanShape(
   }
   if (plan.pronunciationTargets.length !== 4) errors.push("Expected four pronunciation targets.");
   if (new Set(plan.pronunciationTargets.map((target) => normalize(target.ipa))).size !== plan.pronunciationTargets.length) errors.push("Monthly resources need four distinct pronunciation targets.");
+  if (cefr && plan.pronunciationTargets.some((target) => !isPronunciationTargetAllowedForLevel(cefr, target.ipa))) {
+    errors.push("A1-A2 pronunciation targets must come from the specified British English 44-phoneme inventory.");
+  }
   for (const [index, target] of plan.pronunciationTargets.entries()) {
     if (!isValidMonthlyPronunciationIpaTarget(target.ipa)) errors.push(`Pronunciation target ${index + 1} needs a valid IPA target.`);
     if (!target.label.trim() || !target.explanation.trim()) errors.push(`Pronunciation target ${index + 1} needs an authentic label and sound explanation.`);

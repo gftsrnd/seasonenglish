@@ -6,6 +6,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { SessionView } from "@e4s/contracts";
 import type { AuthClient } from "../../features/auth/index.js";
 import { EntryScreen } from "./EntryScreen.js";
+import { ApiError } from "../../api/runtime.js";
 
 const learnerSession: SessionView = { user: { id: "learner-1", displayName: "Học viên Demo", email: "learner@e4s.local" }, role: "learner", permissions: ["learning:own"] };
 
@@ -25,6 +26,18 @@ function stubClient(): AuthClient {
 }
 
 describe("EntryScreen interaction", () => {
+  it("shows a friendly network error instead of the technical NETWORK_UNAVAILABLE code", async () => {
+    const user = userEvent.setup();
+    const client = stubClient();
+    client.learnerLogin = vi.fn().mockRejectedValue(new ApiError("NETWORK_UNAVAILABLE", "network"));
+    render(<EntryScreen client={client} onAuthenticated={vi.fn()} />);
+    await user.type(screen.getByLabelText("Email"), "learner@e4s.local");
+    await user.type(screen.getByLabelText("Mã PIN"), "123456");
+    await user.click(screen.getByRole("button", { name: "Đăng nhập người học" }));
+    expect(await screen.findByText("Không thể kết nối tới E4S. Kiểm tra mạng rồi thử lại.")).toBeInTheDocument();
+    expect(screen.queryByText("NETWORK_UNAVAILABLE")).not.toBeInTheDocument();
+  });
+
   it("shows learner PIN as six positions and sends the learner PIN contract", async () => {
     const user = userEvent.setup(); const client = stubClient();
     render(<EntryScreen client={client} onAuthenticated={vi.fn()} />);

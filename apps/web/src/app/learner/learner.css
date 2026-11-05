@@ -1,7 +1,4 @@
-/* ===== "Sunny english" design system (from Downloads/Season English/DesignSystem.dc.html) =====
-   Nền giấy #EEEDEA, thẻ trắng bo 22, nút pill 999, ô nhập bo 16 không viền, vàng nắng #FBB829 làm màu chính,
-   ô liu = đúng, nâu = lỗi. Phẳng: không viền dày, không bóng đổ. Chữ Be Vietnam Pro.
-   Bản da "Chippi sticker" cũ còn ở style.sticker.css. Tên biến giữ nguyên để core.js (style="background:var(--butter)"…) vẫn chạy. */
+/* Learner presentation tokens. Season themes share the same white, blue, and teal palette. */
 /* ---- structural tokens: the same for every theme ---- */
 :root{
   color-scheme:light;
@@ -13,45 +10,19 @@
   --font:'Be Vietnam Pro',system-ui,-apple-system,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;
   --font-display:'Be Vietnam Pro',system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
 }
-/* ---- theme tokens: ONLY these change with the season / holiday (core.js sets <html data-theme="…">; the brand mark changes with it) ----
-   --primary: page background, main action, progress, today · --primary-ink / --bg-ink / --bg-muted: text ON the primary (dark for light themes, white for dark ones)
-   --secondary: second holiday colour (Tết gold, Christmas red) for accents · --primary-soft / --primary-line: selected / own chat bubble / active nav
-   --primary-glow: focus ring · --accent: stroke colour of the theme icon · --surface-2: inset backgrounds inside cards
-   --peach / --mint / --lav + --tile-*: the four decorative tints; --butter always equals --primary (core.js uses it inline) */
-:root,:root[data-theme="summer"]{ /* mùa hạ: nắng */
-  --primary:#FBB829; --primary-hover:#F3AD1E; --primary-ink:#1E1E1E; --bg-ink:#1E1E1E; --bg-muted:rgba(30,30,30,.62); --secondary:#F28C28; --accent:#F28C28;
-  --bg:color-mix(in srgb, var(--primary) 30%, white); --surface-2:#F1EFEA; --primary-soft:#FFF4D9; --primary-line:#F0D9A4; --primary-glow:rgba(251,184,41,.3);
-  --peach:#F6D3CB; --mint:#DCE8C8; --lav:#E3DCFB; --tile-1:#FBF1EE; --tile-2:#F1F5E8; --tile-3:#F2EFFA; --butter:var(--primary);
-}
-:root[data-theme="spring"]{ /* mùa xuân: xanh chồi non, hoa đào */
-  --primary:#9CCB5A; --primary-hover:#8DBF4C; --primary-ink:#1E1E1E; --bg-ink:#1E1E1E; --bg-muted:rgba(30,30,30,.62); --secondary:#E58BA6; --accent:#E58BA6;
-  --bg:color-mix(in srgb, var(--primary) 30%, white); --surface-2:#EFF2EA; --primary-soft:#EEF6E3; --primary-line:#D3E5B6; --primary-glow:rgba(156,203,90,.3);
-  --peach:#F9D9E0; --mint:#DCEBC8; --lav:#E3DCFB; --tile-1:#FCF0F3; --tile-2:#F1F6E8; --tile-3:#F2EFFA; --butter:var(--primary);
-}
-:root[data-theme="autumn"]{ /* mùa thu: hổ phách, lá khô */
-  --primary:#E9963E; --primary-hover:#DD8A33; --primary-ink:#1E1E1E; --bg-ink:#1E1E1E; --bg-muted:rgba(30,30,30,.62); --secondary:#B5532B; --accent:#B5532B;
-  --bg:color-mix(in srgb, var(--primary) 30%, white); --surface-2:#F2EDE6; --primary-soft:#FBEEDF; --primary-line:#F0D3B2; --primary-glow:rgba(233,150,62,.3);
-  --peach:#F6D3CB; --mint:#E3E2C4; --lav:#E6DDD3; --tile-1:#FBF1EE; --tile-2:#F4F3E8; --tile-3:#F4F0EB; --butter:var(--primary);
-}
-:root[data-theme="winter"]{ /* mùa đông: xanh lạnh đậm, chữ sáng */
-  --primary:#3F76B5; --primary-hover:#356AA6; --primary-ink:#FFFFFF; --bg-ink:#1E1E1E; --bg-muted:rgba(30,30,30,.62); --secondary:#CFE3F5; --accent:#2C5A8C;
-  --bg:color-mix(in srgb, var(--primary) 30%, white); --surface-2:#ECEFF3; --primary-soft:#E8F0F8; --primary-line:#C4D8EC; --primary-glow:rgba(63,118,181,.3);
-  --peach:#E9DEE8; --mint:#DCE8E4; --lav:#E3DCFB; --tile-1:#F5F0F4; --tile-2:#EEF4F2; --tile-3:#F2EFFA; --butter:var(--primary);
-}
-:root[data-theme="tet"]{ /* Tết: đỏ làm nền, vàng kim làm điểm nhấn, hoa mai */
-  --primary:#C8102E; --primary-hover:#B30E29; --primary-ink:#FFFFFF; --bg-ink:#1E1E1E; --bg-muted:rgba(30,30,30,.62); --secondary:#F2C14E; --accent:#F2C14E;
-  --bg:color-mix(in srgb, var(--primary) 30%, white); --surface-2:#F4EEE6; --primary-soft:#FBE4E1; --primary-line:#EFB9B3; --primary-glow:rgba(200,16,46,.28);
-  --peach:#FBE4E1; --mint:#F5EBC9; --lav:#F3DCDC; --tile-1:#FBE4E1; --tile-2:#FBF2D6; --tile-3:#FAEFEF; --butter:var(--primary);
-}
-:root[data-theme="midautumn"]{ /* Trung thu: đèn lồng cam */
-  --primary:#F4A261; --primary-hover:#EC9552; --primary-ink:#1E1E1E; --bg-ink:#1E1E1E; --bg-muted:rgba(30,30,30,.62); --secondary:#B23A48; --accent:#B23A48;
-  --bg:color-mix(in srgb, var(--primary) 30%, white); --surface-2:#F3EEE8; --primary-soft:#FDEBDD; --primary-line:#F4CDB0; --primary-glow:rgba(244,162,97,.3);
-  --peach:#F6D3CB; --mint:#E5E3C8; --lav:#E9DCEF; --tile-1:#FBF1EE; --tile-2:#F5F4E8; --tile-3:#F4EFF7; --butter:var(--primary);
-}
-:root[data-theme="christmas"]{ /* Giáng sinh – năm mới: xanh thông làm nền, đỏ làm điểm nhấn, chữ sáng */
-  --primary:#1F6B44; --primary-hover:#195B3A; --primary-ink:#FFFFFF; --bg-ink:#1E1E1E; --bg-muted:rgba(30,30,30,.62); --secondary:#C62828; --accent:#C62828;
-  --bg:color-mix(in srgb, var(--primary) 30%, white); --surface-2:#EDF1ED; --primary-soft:#E3EFE7; --primary-line:#B9D6C4; --primary-glow:rgba(31,107,68,.28);
-  --peach:#F6D3CB; --mint:#DCE8C8; --lav:#F6DADA; --tile-1:#FBE4E1; --tile-2:#EEF3E8; --tile-3:#FBE4E1; --butter:var(--primary);
+/* One calm palette across seasons: white, brand blue, and deep teal. */
+:root,:root[data-theme]{
+  --primary:#3F76B5; --primary-hover:#356AA6; --primary-dark:#2C5A8C; --primary-ink:#FFFFFF;
+  --secondary:#1F6B5E; --accent:var(--secondary); --bg-ink:#1E1E1E; --bg-muted:rgba(30,30,30,.62);
+  --bg:color-mix(in srgb,var(--primary) 30%,white); --surface-2:color-mix(in srgb,var(--primary) 5%,white); --surface-3:color-mix(in srgb,var(--primary) 4%,white);
+  --primary-soft:color-mix(in srgb,var(--primary) 10%,white); --primary-line:color-mix(in srgb,var(--primary) 28%,white); --primary-glow:rgba(63,118,181,.24);
+  --secondary-soft:color-mix(in srgb,var(--secondary) 10%,white); --secondary-line:color-mix(in srgb,var(--secondary) 28%,white);
+  --peach:var(--primary-soft); --mint:var(--secondary-soft); --lav:var(--primary-soft);
+  --tile-1:#FFFFFF; --tile-2:var(--secondary-soft); --tile-3:var(--primary-soft); --butter:var(--primary);
+  --olive:var(--secondary); --olive-dark:var(--secondary); --brown:var(--primary-dark);
+  --ok:var(--secondary); --ok-soft:var(--secondary-soft); --ok-line:var(--secondary-line); --ok-tint:var(--secondary-soft);
+  --warn:var(--primary-dark); --warn-soft:var(--primary-soft); --warn-line:var(--primary-line);
+  --danger:var(--primary-dark); --danger-soft:var(--primary-soft); --danger-line:var(--primary-line);
 }
 /* text on the primary colour: everything painted with --primary / --butter (inline too) uses --primary-ink */
 .btn-primary,.btn-sm.btn-primary,.hero .btn,.hero button:not(.btn-ghost),.role .go,.ltabs button.active,.badge.primary,.lvl-A1,.day i.today,.path a.today .node,.sc-slot.on,.tp-row button.lit,.arena-row .rank.top,.setup .st.cur .num,.mr-pad button.on,.mr-pad button:active,.word-card,[style*="background:var(--butter)"],[style*="background:var(--primary)"],[style*="background: var(--butter)"],[style*="background: var(--primary)"]{color:var(--primary-ink)}
@@ -1118,6 +1089,14 @@ h1,h2,h3,h4,h1 b,h2 b,h3 b,h4 b{font-weight:600 !important}
 
 .coach-page .coach-header{display:grid;grid-template-columns:44px minmax(0,1fr);gap:10px;align-items:start;padding:16px}
 .coach-page .coach-header>.page-title{padding:0;margin:0}
+.coach-page .coach-feedback-toggles{display:inline-flex;align-items:center;flex-wrap:nowrap;flex:0 0 auto;gap:4px 6px;padding:0;border:0;color:var(--muted);font-size:.76rem;white-space:nowrap}
+.coach-page .coach-feedback-toggles-title{font-weight:650}
+.coach-page .coach-feedback-toggle{display:inline-flex;align-items:center;gap:6px;flex:0 0 auto;min-height:30px;padding:4px 8px;border:1px solid var(--line);border-radius:999px;background:var(--surface);color:var(--text);font:inherit;white-space:nowrap;cursor:pointer}
+.coach-page .coach-feedback-toggle[aria-checked="true"]{border-color:var(--secondary-line);background:var(--secondary-soft)}
+.coach-page .coach-feedback-switch-track{display:inline-flex;width:30px;height:18px;padding:2px;box-sizing:border-box;align-items:center;justify-content:flex-start;border-radius:999px;background:var(--primary-line);transition:background .16s ease}
+.coach-page .coach-feedback-toggle[aria-checked="true"] .coach-feedback-switch-track{background:var(--secondary)}
+.coach-page .coach-feedback-switch-track>span{width:14px;height:14px;border-radius:50%;background:#fff;box-shadow:0 1px 2px rgba(20,35,50,.24);transition:transform .16s ease}
+.coach-page .coach-feedback-toggle[aria-checked="true"] .coach-feedback-switch-track>span{transform:translateX(12px)}
 .coach-page .coach-brand-icon{width:44px;height:44px;border-radius:50%;display:grid;place-items:center;background:var(--primary-soft);color:var(--accent)}
 .coach-page .coach-brand-icon svg{width:23px;height:23px}
 .coach-page .coach-limit-row{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:8px 14px;align-items:center;padding:0 16px 10px}
@@ -1179,13 +1158,13 @@ h1,h2,h3,h4,h1 b,h2 b,h3 b,h4 b{font-weight:600 !important}
 .coach-page .coach-suggestion-translation h4,.coach-page .coach-suggestion-translation p{margin:0}
 .coach-page .coach-feedback-details{gap:14px}
 .coach-page .coach-feedback-criteria{gap:10px}
-.coach-page .coach-season-reply-heading{display:flex;align-items:center;justify-content:space-between;gap:10px}
-.coach-page .coach-season-reply-heading h4{margin:0}
-.coach-page .coach-season-reply-heading .coach-turn-audio{flex:0 0 auto;margin:0}
-.coach-page .coach-season-next-question{padding:10px 12px;border:1px solid #edc999;border-radius:12px;background:#fff8ef}
+.coach-page .coach-message-heading{display:flex;align-items:center;justify-content:space-between;gap:10px}
+.coach-page .coach-message-heading .eyebrow{margin:0}
+.coach-page .coach-message-heading .coach-turn-audio{flex:0 0 auto;margin:0}
+.coach-page .coach-season-next-question{padding:10px 12px;border:1px solid var(--primary-line);border-radius:12px;background:var(--primary-soft)}
 .coach-page .coach-season-spoken{font-size:1.03rem;line-height:1.72}
 .coach-page .coach-season-spoken strong{font-weight:800;color:var(--text)}
-.coach-page .coach-next-question{padding:12px 14px;border:1px solid #edc999;border-radius:12px;background:#fff8ef;line-height:1.6;font-size:1rem}
+.coach-page .coach-next-question{padding:12px 14px;border:1px solid var(--primary-line);border-radius:12px;background:var(--primary-soft);line-height:1.6;font-size:1rem}
 .coach-page .coach-next-question span{font-weight:700;color:var(--brown)}
 .coach-page .coach-next-question q{font-weight:600}
 .coach-page .coach-next-question h4,.coach-page .coach-season-reply h4,.coach-page .coach-evaluation h4,.coach-page .coach-correction h4,.coach-page .coach-feedback-details h4{margin:0 0 4px;font-size:.82rem}
@@ -1199,6 +1178,8 @@ h1,h2,h3,h4,h1 b,h2 b,h3 b,h4 b{font-weight:600 !important}
 .coach-page .coach-feedback-score>span{display:flex;width:auto;align-items:baseline;gap:6px}
 .coach-page .coach-correction{padding-top:1px}
 .coach-page .coach-correction>div{display:grid;gap:3px}
+.coach-page .coach-correction-card{gap:3px;padding:8px 10px;font-size:.92rem;line-height:1.45}
+.coach-page .coach-correction-card .coach-correction-reason{font-size:.8rem;color:var(--muted);line-height:1.35}
 .coach-page .coach-feedback-details h4{color:var(--text)}
 .coach-page .coach-feedback-details .coach-feedback-translation{margin:0}
 .coach-page .coach-suggested-answer{display:grid;gap:3px}
@@ -1642,6 +1623,8 @@ h1,h2,h3,h4,h1 b,h2 b,h3 b,h4 b{font-weight:600 !important}
 .lesson-page .lesson-pronunciation-summary{display:grid;gap:10px;border:0;border-radius:0;background:transparent!important;padding:0}
 .lesson-page .lesson-pronunciation-summary p{margin:0;line-height:1.45}
 .lesson-page .lesson-pronunciation-words{display:flex;flex-wrap:wrap;column-gap:20px;row-gap:14px;margin:0}
+.lesson-page .lesson-pronunciation-target-group{display:grid;gap:6px;min-width:0}
+.lesson-page .lesson-pronunciation-target-group>div{display:flex;flex-wrap:wrap;column-gap:12px;row-gap:8px}
 .lesson-page .lesson-pronunciation-word-chip{min-height:38px;border:1px solid #e5e0da!important;border-radius:8px!important;background:#faf9f7!important;padding:7px 11px!important}
 .lesson-page .vocabulary-card-phrase-list{flex-wrap:wrap!important;overflow:visible!important;overflow-y:visible!important}
 .lesson-page .vocabulary-card-phrase-list .vocabulary-card-sound{min-width:0;max-width:100%;white-space:normal;overflow-wrap:anywhere;word-break:break-word}
@@ -1651,32 +1634,32 @@ h1,h2,h3,h4,h1 b,h2 b,h3 b,h4 b{font-weight:600 !important}
 /* Season chat: one cohesive conversation surface with system controls. */
 .coach-page .coach-surface{border:1px solid #ded9d1;box-shadow:0 14px 36px rgb(55 43 31 / .09)}
 .coach-page .coach-header{align-items:center;border-bottom:1px solid #e8e3dc;background:linear-gradient(135deg,#fff 0%,#fbfaf7 100%)}
-.coach-page .coach-brand-icon{width:28px;height:28px;border-radius:0;background:transparent;color:#b75c22}
+.coach-page .coach-brand-icon{width:28px;height:28px;border-radius:0;background:transparent;color:var(--primary-dark)}
 .coach-page .coach-brand-icon svg{width:28px;height:28px}
 .coach-page .coach-actions{align-items:center;gap:10px}
 .coach-page .coach-persona-toggle{position:relative;display:grid;grid-template-columns:1fr 1fr;isolation:isolate;min-width:150px;height:34px;appearance:none;border:0!important;outline:0;border-radius:0;background:transparent!important;box-shadow:none!important;padding:0;color:#716a62;font:inherit;font-size:.8rem;cursor:pointer}
 .coach-page .coach-persona-toggle>span{z-index:1;display:grid;place-items:center;padding:0 11px;transition:color .18s ease}
-.coach-page .coach-persona-toggle>span.active{color:#944716;font-weight:700}
-.coach-page .coach-persona-toggle:focus-visible{box-shadow:0 0 0 3px rgb(233 151 62 / .28)}
+.coach-page .coach-persona-toggle>span.active{color:var(--primary-dark);font-weight:700}
+.coach-page .coach-persona-toggle:focus-visible{box-shadow:0 0 0 3px var(--primary-glow)}
 .coach-page .coach-message-pending{opacity:.78}
-.coach-page .coach-error-row{margin:8px 14px 0;padding:9px 12px;border:1px solid #efc6b8;border-radius:10px;background:#fff7f3}
+.coach-page .coach-error-row{margin:8px 14px 0;padding:9px 12px;border:1px solid var(--primary-line);border-radius:10px;background:var(--primary-soft)}
 .coach-page .coach-error-row .form-error{margin:0;font-size:.82rem;line-height:1.4}
 .coach-page .coach-limit-row{display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:center;gap:8px 12px;padding:16px 16px 8px;border-bottom:1px solid #e8e3dc;background:#fff}
-.coach-page .coach-counters{gap:7px;flex-wrap:wrap}
+.coach-page .coach-counters{gap:7px;flex-wrap:nowrap;min-width:0;overflow-x:auto;white-space:nowrap;scrollbar-width:thin}
 .coach-page .coach-limit-details{display:contents}
 .coach-page .coach-limit-details summary{grid-column:2;grid-row:1;align-self:center;width:max-content;margin:0;cursor:pointer;font-weight:650;line-height:1.25}
 .coach-page .coach-limit-copy--full{grid-column:1/-1;grid-row:2;width:100%;box-sizing:border-box;margin-top:0;border-radius:9px;background:#f5f4f1;padding:10px 12px;line-height:1.5}
 .coach-page .coach-limit-copy--full.coach-limit-copy--plain{width:100%;max-width:none;border-radius:0;background:transparent;padding:4px 0 2px;font-size:.78rem;line-height:1.45}
-.coach-page .coach-surface>.chat{min-height:210px;margin:12px 14px 0!important;border:1px solid #e9bd8b;border-radius:16px!important;background:linear-gradient(180deg,#faf9f6 0%,#f3f1ed 100%)!important;box-shadow:0 0 0 3px rgb(233 151 62 / .08),0 10px 24px rgb(64 48 33 / .06);padding:18px 20px!important}
+.coach-page .coach-surface>.chat{min-height:210px;margin:12px 14px 0!important;border:1px solid var(--primary-line);border-radius:16px!important;background:linear-gradient(180deg,#fff 0%,var(--surface-2) 100%)!important;box-shadow:0 0 0 3px var(--primary-glow),0 10px 24px rgba(30,30,30,.06);padding:18px 20px!important}
 .coach-page .chat .msg{box-shadow:0 4px 12px rgb(50 39 29 / .06)}
 .coach-page .chat .msg.ai{border:1px solid #e2ddd5;background:#fff}
-.coach-page .chat .msg.user{border:1px solid #e7b87f;background:#fff0dc}
-.coach-page .coach-vocabulary{margin-top:14px!important;border-top:1px solid #eee8df!important;border-bottom:1px solid #e8e3dc!important;background:#fff!important}
+.coach-page .chat .msg.user{border:1px solid var(--secondary-line);background:var(--secondary-soft)}
+.coach-page .coach-vocabulary{margin-top:14px!important;border-top:1px solid var(--primary-line)!important;border-bottom:1px solid var(--primary-line)!important;background:#fff!important}
 .coach-page .coach-vocabulary h2{color:#4c453e;font-size:.9rem;letter-spacing:.01em}
 .coach-page .coach-word-list{gap:8px}
 .coach-page .coach-surface .coach-word-chip{width:38px;height:38px;min-width:38px;min-height:38px;justify-content:center;border:1px solid #ddd8d0;border-radius:11px;background:#f5f4f1;padding:0;color:#746d65;box-shadow:none}
-.coach-page .coach-surface .coach-word-chip.is-locked:hover{border-color:#c78342;background:#fff5e8;color:#9f4c18;transform:translateY(-1px)}
-.coach-page .coach-surface .coach-word-chip.is-opened{width:auto;max-width:180px;padding:0 12px;border-color:#bdc991;background:#eef2df;color:#33451f}
+.coach-page .coach-surface .coach-word-chip.is-locked:hover{border-color:var(--primary-line);background:var(--primary-soft);color:var(--primary-dark);transform:translateY(-1px)}
+.coach-page .coach-surface .coach-word-chip.is-opened{width:auto;max-width:180px;padding:0 12px;border-color:var(--secondary-line);background:var(--secondary-soft);color:var(--secondary)}
 .coach-page .coach-surface .coach-word-chip.is-opened b{max-width:150px;overflow:hidden;text-overflow:ellipsis}
 .coach-page .coach-surface .coach-word-chip.is-locked{width:auto;max-width:240px;padding:0 12px;gap:7px;cursor:default}
 .coach-page .coach-surface .coach-word-chip span,.coach-page .coach-surface .coach-word-chip b{min-width:0;white-space:normal;overflow-wrap:anywhere;line-height:1.25}
@@ -1686,7 +1669,7 @@ h1,h2,h3,h4,h1 b,h2 b,h3 b,h4 b{font-weight:600 !important}
 .coach-page .chat-compose{gap:7px!important;margin:10px 14px 12px!important;padding-top:0!important;border-top:0!important}
 .coach-page .chat-compose textarea{height:42px!important;min-height:42px!important;max-height:42px!important;border-radius:14px;padding:10px 14px;overflow:hidden}
 .coach-page .coach-compose-icon{width:42px;height:42px;min-width:42px;min-height:42px;border-radius:13px}
-.coach-page .coach-send{border-radius:13px;background:#e9973e}
+.coach-page .coach-send{border-radius:13px;background:var(--primary)}
 .coach-page .audio-capture-control--compact{display:block;min-width:0;flex:0 1 auto}
 .coach-page .audio-capture-toolbar{display:flex;align-items:center;gap:7px;min-width:0;flex-wrap:nowrap}
 .coach-page .audio-capture-preview{display:flex;align-items:center;gap:3px;min-width:0;height:42px;padding:3px;border:1px solid var(--line);border-radius:13px;background:var(--surface)}
@@ -1816,6 +1799,12 @@ h1,h2,h3,h4,h1 b,h2 b,h3 b,h4 b{font-weight:600 !important}
 }
 
 /* Home uses one deliberate vertical rhythm for the heading, status blocks, actions, and profile. */
+.app-learner-page .learner-summary-card{
+  border:1px solid var(--primary-line);
+}
+.app-learner-page .learner-summary-card--profile{background:#fff}
+.app-learner-page .learner-summary-card--monthly{background:var(--primary-soft)}
+.app-learner-page .learner-summary-actions{gap:8px;align-items:center}
 .app-learner-page.home-page{
   --home-stack-gap:20px;
   --home-pair-gap:20px;
@@ -1839,3 +1828,4 @@ h1,h2,h3,h4,h1 b,h2 b,h3 b,h4 b{font-weight:600 !important}
     --home-pair-gap:12px;
   }
 }
+.lesson-pronunciation-heading{display:flex;align-items:center;justify-content:space-between;gap:12px}.lesson-pronunciation-mouth{position:relative;flex:0 0 auto}.lesson-pronunciation-mouth__toggle{display:grid;place-items:center;min-width:40px;min-height:40px;border-radius:999px;color:var(--primary)}.lesson-pronunciation-mouth__panel{position:absolute;z-index:5;right:0;top:calc(100% + 6px);width:min(280px,calc(100vw - 48px));padding:10px;border:1px solid var(--line);border-radius:12px;background:var(--surface);box-shadow:0 8px 28px rgba(0,0,0,.14)}.lesson-pronunciation-mouth__panel img{display:block;width:100%;height:auto}.lesson-pronunciation-mouth__panel p{margin:6px 2px 0;font-size:.82rem;line-height:1.4;color:var(--muted)}

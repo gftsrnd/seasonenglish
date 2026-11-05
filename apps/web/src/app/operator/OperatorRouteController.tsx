@@ -1204,6 +1204,7 @@ function PromptsRoute({ client, readOnly }: { client: OperatorApiClient; readOnl
 }
 
 const operatorErrorMessages: Record<string, string> = {
+  NETWORK_UNAVAILABLE: "Không thể kết nối tới E4S. Kiểm tra mạng rồi thử lại.",
   WEEK_SUGGESTION_FAILED: "Không thể tạo gợi ý tuần lúc này. Hãy bấm Gợi ý để thử lại; nếu vẫn lỗi, bạn có thể nhập chủ đề thủ công rồi lưu.",
   AI_UNAVAILABLE: "AI chưa được cấu hình trên máy chủ.",
   AI_PROMPT_NOT_READY: "Chưa có prompt AI đang hoạt động cho thao tác này.",

@@ -29,6 +29,8 @@ export async function verifyMediaAssets(options = {}) {
   }
   if (!Array.isArray(entries)) throw new Error("Media manifest phải là một JSON array.");
 
+  const mouthForms = await readMouthFormEntries(resolve(repoRoot, options.pronunciationManifestPath ?? "apps/web/public/media/pronunciation-manifest.json"));
+
   const ids = new Set();
   const paths = new Set();
   for (const [index, entry] of entries.entries()) {
@@ -74,6 +76,30 @@ export async function verifyMediaAssets(options = {}) {
     }
   }
 
+  for (const [index, entry] of mouthForms.entries()) {
+    const label = `mouthForm:${typeof entry?.key === "string" ? entry.key : index + 1}`;
+    if (typeof entry?.key !== "string" || !entry.key.trim()) errors.push(`${label}: thiếu IPA key.`);
+    if (typeof entry?.localPath !== "string" || !entry.localPath.startsWith("apps/web/public/media/ipa-mouth-form/") || extname(entry.localPath).toLowerCase() !== ".png") {
+      errors.push(`${label}: localPath khẩu hình IPA không hợp lệ.`);
+      continue;
+    }
+    if (paths.has(entry.localPath)) errors.push(`${label}: localPath bị trùng.`);
+    else paths.add(entry.localPath);
+    if (typeof entry?.purpose !== "string" || !entry.purpose.trim()) errors.push(`${label}: thiếu purpose.`);
+    if (typeof entry?.sha256 !== "string" || !sha256Pattern.test(entry.sha256)) errors.push(`${label}: sha256 phải gồm đúng 64 ký tự hex viết thường.`);
+    const absolutePath = resolve(repoRoot, entry.localPath);
+    if (!isInside(mediaRoot, absolutePath)) { errors.push(`${label}: localPath thoát khỏi media root.`); continue; }
+    try {
+      if (!(await stat(absolutePath)).isFile()) throw new Error("not a file");
+      if (sha256Pattern.test(entry.sha256 ?? "")) {
+        const actual = createHash("sha256").update(await readFile(absolutePath)).digest("hex");
+        if (actual !== entry.sha256) errors.push(`${label}: SHA-256 không khớp (thực tế ${actual}).`);
+      }
+    } catch {
+      errors.push(`${label}: thiếu file ${entry.localPath}.`);
+    }
+  }
+
   for (const requiredId of requiredIds) if (!ids.has(requiredId)) errors.push(`Manifest thiếu id bắt buộc: ${requiredId}.`);
 
   const declared = new Set([...paths].map((path) => path.replaceAll("/", sep)));
@@ -83,7 +109,20 @@ export async function verifyMediaAssets(options = {}) {
   }
 
   if (errors.length) throw new Error(`Media asset verification failed:\n- ${errors.join("\n- ")}`);
-  return { entries: entries.length, files: paths.size };
+  return { entries: entries.length + mouthForms.length, files: paths.size };
+}
+
+async function readMouthFormEntries(manifestPath) {
+  try {
+    const manifest = JSON.parse(await readFile(manifestPath, "utf8"));
+    if (!manifest || (manifest.mouthForms !== undefined && !Array.isArray(manifest.mouthForms))) {
+      throw new Error("Pronunciation manifest mouthForms must be an array.");
+    }
+    return manifest.mouthForms ?? [];
+  } catch (error) {
+    if (error?.code === "ENOENT") return [];
+    throw new Error(`Không đọc được pronunciation mouth-form manifest: ${error instanceof Error ? error.message : String(error)}`);
+  }
 }
 
 async function listRasterFiles(directory) {

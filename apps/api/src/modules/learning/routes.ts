@@ -13,6 +13,7 @@ import type {
 import { buildPronunciationAssets, microGradingOutputSchema, microLessonOutputSchema, type AiTaskRunner, type MicroLessonTaskOutput } from "@e4s/ai";
 import { createRepositories, type LearnerLessonRecord } from "@e4s/database";
 import { gradeLessonAnswer, validateGeneratedFeedback } from "@e4s/domain/content";
+import { evaluateMonthlyExamEligibility } from "@e4s/domain/progression";
 import { isLearnerProfileComplete, mergeLessonProgress } from "@e4s/domain/learning";
 import type { FastifyInstance } from "fastify";
 import type { Pool } from "pg";
@@ -193,7 +194,10 @@ export function registerLearningRoutes(
     const reviewLessons = summaries.filter((lesson) => lesson.kind === "review");
     const completedReviews = reviewLessons.filter((lesson) => lesson.status === "completed").length;
     const totalReviews = reviewLessons.length;
-    const monthlyExamStatus = progress.monthlyProgress?.exam.status ?? "unpublished";
+    const persistedMonthlyExamStatus = progress.monthlyProgress?.exam.status ?? "unpublished";
+    const monthlyExamStatus = persistedMonthlyExamStatus === "completed"
+      ? "completed" as const
+      : monthlyEligibility.accessEligible ? "ready" as const : persistedMonthlyExamStatus === "unpublished" ? "unpublished" as const : "locked" as const;
     const points = monthlyContext ? progress.points : 0;
     const inactiveDays = monthlyContext
       ? calculateInactiveDays(progress.activity.map((item) => item.occurredAt), `${monthlyContext.month}-01`)
@@ -222,6 +226,12 @@ export function registerLearningRoutes(
           ? "Bạn đã hoàn thành bài thi tháng."
           : monthlyExamStatus === "unpublished"
             ? "Bài thi tháng đang chờ người vận hành phát hành."
+            : !monthlyEligibility.lessonsEligible
+            ? `Hoàn thành đủ ${monthlyEligibility.scheduledLessons ?? summaries.length} bài học theo lịch tháng.`
+            : !monthlyEligibility.attendanceEligible
+            ? "Số ngày vắng đã vượt giới hạn tháng; cần Manager xử lý kháng nghị."
+            : !monthlyEligibility.seasonEligible
+            ? `Đạt đủ ${monthlyEligibility.seasonTurnsRequired ?? 100} lượt hợp lệ với Season trong tháng.`
             : completedLessons < summaries.length
           ? `Hoàn thành ${summaries.length - completedLessons} bài còn lại để mở bài thi tháng.`
           : "Bạn đã hoàn thành điều kiện. Bài thi tháng đã sẵn sàng.",
@@ -248,7 +258,7 @@ export function registerLearningRoutes(
       schedule: monthlyContext
         ? buildMonthlySchedule(summaries, monthlyContext.systemDate, Number(progress.learner.profile.durationMinutes ?? 10))
         : buildSchedule(Number(progress.learner.profile.durationMinutes ?? 10), []),
-      coach: { turnsToday: monthlyContext ? progress.stats.coachTurnsToday ?? 0 : 0, turnsThisWeek: monthlyContext ? progress.stats.coachTurns : 0, targetTurns: 50, href: "/coach" },
+      coach: { turnsToday: monthlyContext ? progress.stats.coachTurnsToday ?? 0 : 0, turnsThisWeek: monthlyContext ? progress.stats.coachTurns : 0, targetTurns: 30, href: "/coach" },
       practice: {
         status: "locked",
         detail: monthlyContext
@@ -274,9 +284,14 @@ export function registerLearningRoutes(
   app.get("/api/v1/learner/months/:month/exam", { preHandler: learnerOnly }, async (request, reply) => {
     const params = z.object({ month: z.string().regex(/^\d{4}-(0[1-9]|1[0-2])$/u) }).safeParse(request.params);
     if (!params.success) return reply.code(400).send({ code: "INVALID_MONTH" });
-    const context = await repositories.learning.getActiveMonthlyContext(request.e4sSession!.user.id);
+    const learnerId = request.e4sSession!.user.id;
+    const [context, eligibility] = await Promise.all([
+      repositories.learning.getActiveMonthlyContext(learnerId),
+      monthlyExamEligibility(pool, learnerId)
+    ]);
     if (!context || context.month !== params.data.month) return reply.code(404).send({ code: "MONTHLY_EXAM_NOT_AVAILABLE" });
-    const lessons = await repositories.learning.listMonthlyLessons(request.e4sSession!.user.id, context.month);
+    if (!eligibility.accessEligible) return reply.code(409).send({ code: "MONTHLY_EXAM_NOT_ELIGIBLE", eligibility });
+    const lessons = await repositories.learning.listMonthlyLessons(learnerId, context.month);
     const completedLessons = lessons.filter((lesson) => lesson.progress.status === "completed").length;
     const totalLessons = lessons.length;
     const remainingLessons = Math.max(0, totalLessons - completedLessons);
@@ -284,13 +299,15 @@ export function registerLearningRoutes(
       month: context.month,
       title: `Bài thi tháng · ${context.themeTitle}`,
       examDate: context.examDate,
-      status: remainingLessons ? "locked" as const : "ready" as const,
+      status: eligibility.accessEligible ? "ready" as const : "locked" as const,
       completedLessons,
       totalLessons,
       remainingLessons,
-      requirement: remainingLessons
-        ? `Hoàn thành ${remainingLessons} bài còn lại để mở bài thi tháng.`
-        : "Bạn đã hoàn thành điều kiện. Bài thi tháng đã sẵn sàng.",
+      requirement: eligibility.accessEligible
+        ? "Bài thi tháng cố định đã sẵn sàng cho trình độ của bạn."
+        : eligibility.accessState === "appeal_required"
+          ? "Số ngày vắng vượt giới hạn. Gửi khiếu nại cho Quản lý để được xem xét."
+          : "Bài thi tháng mở vào ngày thi sau khi form đã được phát hành.",
       certificateEligible: context.cefr === "C1"
     };
   });
@@ -907,34 +924,92 @@ function buildSchedule(lessonMinutes: number, occurredAt: string[]): LearnerHome
 }
 
 
-type MonthlyEligibilityRow = { system_date: string; month: string; exam_date: string | null; attended_days: string; };
+type MonthlyEligibilityRow = {
+  system_date: string;
+  month: string;
+  exam_date: string | null;
+  attended_days: string;
+  attendance_appeal_approved: boolean;
+  scheduled_lessons: string;
+  completed_lessons: string;
+  season_turns: string;
+  framework_approved: boolean;
+  form_published: boolean;
+};
 
 /** This gate is independent from framework/form publication and only reads persisted facts. */
-async function monthlyExamEligibility(pool: Pool, learnerId: string): Promise<MonthlyExamEligibilityView> {
+export async function monthlyExamEligibility(pool: Pool, learnerId: string): Promise<MonthlyExamEligibilityView> {
+  await pool.query(
+    `update learner_complaints set status = 'auto_approved', resolution = 'Tự duyệt do quá hạn', resolved_at = now()
+     where learner_id = $1 and kind = 'exam_eligibility' and status = 'pending' and due_at <= now()`,
+    [learnerId]
+  );
   const result = await pool.query<MonthlyEligibilityRow>(
-    `with context as (
-       select u.organization_id, organization_system_date(u.organization_id)::date as system_date
-       from users u where u.id = $1 and u.role = 'learner'
+    `with identity as (
+       select u.organization_id, organization_system_date(u.organization_id)::date as system_date,
+              e.cefr
+       from users u left join enrollments e on e.learner_id = u.id
+       where u.id = $1 and u.role = 'learner'
      ), dates as (
-       select system_date, to_char(system_date, 'YYYY-MM') as month,
-              coalesce((select pm.exam_date from program_months pm where pm.organization_id = context.organization_id and pm.month = to_char(context.system_date, 'YYYY-MM')),
-                (select max(d)::date from generate_series(date_trunc('month', context.system_date)::date, (date_trunc('month', context.system_date) + interval '1 month - 1 day')::date, interval '1 day') d where extract(isodow from d) <= 5)) as exam_date
-       from context
+       select i.*, to_char(i.system_date, 'YYYY-MM') as month,
+              coalesce(pm.exam_date, (select max(d)::date from generate_series(date_trunc('month', i.system_date)::date, (date_trunc('month', i.system_date) + interval '1 month - 1 day')::date, interval '1 day') d where extract(isodow from d) <= 5)) as exam_date,
+              mf.id as framework_id, (mf.status = 'approved') as framework_approved
+       from identity i left join program_months pm on pm.organization_id = i.organization_id and pm.month = to_char(i.system_date, 'YYYY-MM')
+       left join month_frameworks mf on mf.program_month_id = pm.id and mf.cefr = i.cefr
+     ), facts as (
+       select d.*,
+              (select count(*) from month_lessons ml where ml.framework_id = d.framework_id and ml.status = 'approved')::text as scheduled_lessons,
+              (select count(*) from month_lessons ml
+                 join lessons l on l.id = ml.lesson_id
+                 join progress_records pr on pr.lesson_id = l.id and pr.learner_id = $1 and pr.status = 'completed'
+               where ml.framework_id = d.framework_id and ml.status = 'approved')::text as completed_lessons,
+              (select count(*) from coach_turns ct join coach_sessions cs on cs.id = ct.session_id
+               where cs.learner_id = $1 and ct.speaker = 'learner'
+                 and ct.created_at >= date_trunc('month', d.system_date)
+                 and ct.created_at < date_trunc('month', d.system_date) + interval '1 month'
+                 and (ct.created_at at time zone 'Asia/Ho_Chi_Minh')::date < d.exam_date
+                 and coalesce((ct.feedback->'evaluation'->>'countsTowardGoal')::boolean, coalesce((ct.feedback->>'relevant')::boolean, true)))::text as season_turns,
+              exists(select 1 from assessment_definitions ad join assessment_versions av on av.definition_id = ad.id and av.status = 'published'
+                where ad.organization_id = d.organization_id and ad.kind = 'final'
+                  and ad.assessment_key = ('monthly-final-' || d.month || '-' || lower(d.cefr))) as form_published,
+              exists(select 1 from learner_complaints lc where lc.learner_id = $1 and lc.kind = 'exam_eligibility'
+                and lc.status in ('approved', 'auto_approved') and lc.submitted_at >= date_trunc('month', d.system_date)
+                and lc.submitted_at < date_trunc('month', d.system_date) + interval '1 month') as attendance_appeal_approved
+       from dates d
      )
-     select dates.system_date::text, dates.month, dates.exam_date::text,
-            count(distinct (pr.completed_at at time zone 'Asia/Ho_Chi_Minh')::date)::text as attended_days
-     from dates left join progress_records pr on pr.learner_id = $1 and pr.status = 'completed'
-       and (pr.completed_at at time zone 'Asia/Ho_Chi_Minh')::date >= (dates.month || '-01')::date
-       and (pr.completed_at at time zone 'Asia/Ho_Chi_Minh')::date < dates.exam_date
-       and extract(isodow from (pr.completed_at at time zone 'Asia/Ho_Chi_Minh')::date) <= 5
-     group by dates.system_date, dates.month, dates.exam_date`, [learnerId]
+     select f.system_date::text, f.month, f.exam_date::text,
+            (select count(distinct attendance_date)::text from (
+              select (pr.completed_at at time zone 'Asia/Ho_Chi_Minh')::date as attendance_date
+                from progress_records pr
+               where pr.learner_id = $1 and pr.status = 'completed'
+                 and (pr.completed_at at time zone 'Asia/Ho_Chi_Minh')::date >= (f.month || '-01')::date
+                 and (pr.completed_at at time zone 'Asia/Ho_Chi_Minh')::date < f.exam_date
+                 and extract(isodow from (pr.completed_at at time zone 'Asia/Ho_Chi_Minh')::date) <= 5
+              union
+              select oh.holiday_date as attendance_date
+                from organization_holidays oh
+               where oh.organization_id = f.organization_id
+                 and oh.holiday_date >= (f.month || '-01')::date
+                 and oh.holiday_date < f.exam_date
+                 and oh.holiday_date <= f.system_date
+            ) attendance) as attended_days,
+            max(f.scheduled_lessons)::text as scheduled_lessons, max(f.completed_lessons)::text as completed_lessons,
+            max(f.season_turns)::text as season_turns, bool_or(f.framework_approved) as framework_approved,
+            bool_or(f.form_published) as form_published, bool_or(f.attendance_appeal_approved) as attendance_appeal_approved
+     from facts f
+     group by f.system_date, f.month, f.exam_date, f.organization_id`, [learnerId]
   );
   const row = result.rows[0]; if (!row) throw new Error('LEARNER_MONTHLY_ELIGIBILITY_NOT_FOUND');
   const systemDate = row.system_date; const examDate = row.exam_date ?? lastWeekdayOfMonth(systemDate.slice(0, 7));
   const effectiveDates = weekdaysBeforeExam(systemDate.slice(0, 7), examDate); const elapsedDates = effectiveDates.filter((date) => date <= systemDate);
-  const attendedDays = Math.min(Number(row.attended_days) || 0, elapsedDates.length); const absenceDays = Math.max(0, elapsedDates.length - attendedDays); const maxAbsences = Math.floor(effectiveDates.length * 0.3);
-  return { month: row.month, systemDate, examDate, effectiveDays: effectiveDates.length, attendedDays, absenceDays, maxAbsences, attendanceEligible: absenceDays <= maxAbsences,
-    accessState: absenceDays > maxAbsences ? 'appeal_required' : systemDate >= examDate ? 'eligible' : 'tracking', opensAt: `${examDate}T00:00:00`, closesAt: null };
+  const eligibility = evaluateMonthlyExamEligibility({
+    systemDate, examDate, effectiveDays: effectiveDates.length, elapsedEffectiveDays: elapsedDates.length,
+    attendedDays: Number(row.attended_days) || 0, scheduledLessons: Number(row.scheduled_lessons) || 0,
+    completedLessons: Number(row.completed_lessons) || 0, seasonTurns: Number(row.season_turns) || 0,
+    attendanceOverride: Boolean(row.attendance_appeal_approved),
+    frameworkApproved: Boolean(row.framework_approved), formPublished: Boolean(row.form_published)
+  });
+  return { month: row.month, systemDate, examDate, ...eligibility, opensAt: `${examDate}T00:00:00`, closesAt: null };
 }
 function weekdaysBeforeExam(month: string, examDate: string): string[] { const result: string[] = []; const start = new Date(`${month}-01T00:00:00Z`); const end = new Date(`${examDate}T00:00:00Z`); for (let current = new Date(start); current < end; current.setUTCDate(current.getUTCDate() + 1)) { const weekday = current.getUTCDay(); if (weekday >= 1 && weekday <= 5) result.push(current.toISOString().slice(0, 10)); } return result; }
 function lastWeekdayOfMonth(month: string): string { const [year, monthNumber] = month.split('-').map(Number); const current = new Date(Date.UTC(year!, monthNumber!, 0)); while (current.getUTCDay() === 0 || current.getUTCDay() === 6) current.setUTCDate(current.getUTCDate() - 1); return current.toISOString().slice(0, 10); }

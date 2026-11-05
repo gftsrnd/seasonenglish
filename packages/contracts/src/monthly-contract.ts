@@ -58,7 +58,7 @@ export interface MonthFrameworkView {
   scopeHash: string;
   resources?: {
     coreTerms: Array<{ id: string; word: string; meaning: string; type: string; ipa: string; source: "core_registry"; component: "core"; dayNumber?: number }>;
-    supportTerms: Array<{ id: string; word: string; meaning: string; type: string; source: "example" | "family" | "synonym" | "antonym" | "group" | "manual"; component: "expanded"; dayNumber?: number; relatedCoreTermId?: string }>;
+    supportTerms: Array<{ id: string; word: string; meaning: string; type: string; relation: "umbrella" | "synonym" | "antonym" | "word_family" | "collocation"; source: "example" | "family" | "synonym" | "antonym" | "group" | "manual"; component: "expanded"; dayNumber?: number; relatedCoreTermId?: string }>;
     grammarTopics: Array<{ id: string; title: string; steps: Array<{ id: string; focus: string; formula: string; usage: string; examples: string[] }> }>;
     sounds: Array<{ id: string; ipa: string; label: string; examples: Array<{ id: string; word: string; ipa: string }> }>;
     /** Draft pools expose no day allocation. Approved frameworks project saved DaySpecs here for review. */
@@ -85,9 +85,14 @@ export interface MonthDayPlanView {
   expandedTermIds: string[];
   reviewTermIds: string[];
   reviewExpandedTermIds: string[];
-  primarySkillFocus: "writing" | "speaking" | null;
-  writingFocus: string | null;
-  speakingFocus: string | null;
+  reviewWeekKey?: string | null;
+  reviewFromPreviousMonth?: boolean;
+  reviewGatesNextWeek?: boolean;
+  reviewPrerequisiteLessonNumbers?: number[];
+  reviewGrammarStepIds?: string[];
+  reviewSoundIds?: string[];
+  reviewPronunciationExampleIds?: string[];
+  skillExercises: Array<{ exerciseCode: "listening" | "reading" | "writing" | "word_class" | "word_use" | "speaking"; focus: string; resourceIds: string[] }>;
   grammarStepIds: string[];
   soundId: string;
   pronunciationSlot?: string;

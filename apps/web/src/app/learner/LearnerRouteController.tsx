@@ -327,6 +327,11 @@ export function LearnerRouteController() {
 
   const callbacks: LearnerCallbacks = {
     navigate: (path) => navigate(path),
+    submitComplaint: async (kind, reason) => {
+      await apiClient.submitLearnerComplaint(kind, reason);
+      showLearnerToast("Đã gửi khiếu nại. Bạn có thể theo dõi phản hồi trong hồ sơ.", "ok");
+    },
+    getComplaints: () => apiClient.getLearnerComplaints(),
     saveProfileDraft,
     saveProfile: (profile) => saveProfileRecord(profile, true),
     startAssessment: async () => { if (route.name === "assessment") setContracts({ assessment: await apiClient.startAssessment(route.params.kind) }); },

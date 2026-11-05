@@ -59,17 +59,31 @@ export function registerIdentityRoutes(app: FastifyInstance, options: IdentityRo
       return reply.code(401).send({ code: "INVALID_CREDENTIALS" });
     }
     const credential = audience === "learner" ? (parsed.data as z.infer<typeof learnerLoginInput>).pin : (parsed.data as z.infer<typeof staffLoginInput>).password;
+    if (audience === "learner" && account.role === "learner" && account.pinLockedUntil && account.pinLockedUntil > new Date()) {
+      return reply.code(423).send({ code: "PIN_LOGIN_LOCKED", lockedUntil: account.pinLockedUntil.toISOString() });
+    }
     if (!(await verifyCredential(credential, account.credentialHash))) {
+      if (audience === "learner" && account.role === "learner" && account.status === "active") {
+        const lockout = await repositories.identity.recordFailedLearnerPin(account.id);
+        if (lockout.lockedUntil && lockout.lockedUntil > new Date()) {
+          return reply.code(423).send({ code: "PIN_LOGIN_LOCKED", lockedUntil: lockout.lockedUntil.toISOString() });
+        }
+      }
       return reply.code(401).send({ code: "INVALID_CREDENTIALS" });
     }
     if (!roleMatchesAudience(account.role, audience)) {
       return reply.code(403).send({ code: "WRONG_LOGIN_PATH" });
     }
+    if (audience === "learner" && account.role === "learner" && account.status === "active") {
+      await repositories.identity.resetLearnerPinFailures(account.id);
+    }
     return createSession(reply, repositories, account, options.secureCookies, sessionTtlMs);
   };
 
   const currentSession = async (request: FastifyRequest, reply: FastifyReply): Promise<SessionView | void> => {
-    const account = await resolveSession(request, repositories);
+    const token = request.cookies[COOKIE_NAME];
+    const account = await resolveSession(request, repositories)
+      ?? (token ? await repositories.identity.findDisabledLearnerSession(sessionTokenHash(token)) : null);
     if (!account) return reply.code(401).send({ code: "UNAUTHENTICATED" });
     return sessionView(account);
   };
@@ -301,6 +315,7 @@ export function sessionView(account: UserIdentity): SessionView {
   return {
     user: { id: account.id, displayName: account.displayName, email: account.email, ...(account.avatar ? { avatar: account.avatar } : {}) },
     role: account.role,
-    permissions: permissionsFor(account.role)
+    permissions: permissionsFor(account.role),
+    accountStatus: account.status === "disabled" ? "disabled" : "active"
   };
 }
