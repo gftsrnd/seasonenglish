@@ -1,8 +1,23 @@
 export const CONTENT_LIFECYCLE_STATUSES = ["draft", "approved", "locked", "reopen_requested", "reopened", "rejected"] as const;
 export type ContentLifecycleStatus = (typeof CONTENT_LIFECYCLE_STATUSES)[number];
 
-export type ReopenRequestTarget = "account" | "daily_lesson" | "weekly_review" | "monthly_exam";
+export type ReopenRequestTarget = "account" | "daily_lesson" | "weekly_review" | "monthly_exam" | "monthly_resources";
 export type ReopenRequestStatus = "pending" | "approved" | "rejected";
+
+/** Display details for a `monthly_resources` request (an approved month framework). */
+export interface MonthlyResourcesReopenDetailView {
+  readonly frameworkId: string;
+  readonly month: string;
+  readonly cefr: CefrLevel;
+  /** Framework version the Operator asked to reopen. */
+  readonly frameworkVersion: number;
+  /** Lesson rows currently allocated to the framework (all are removed on approval). */
+  readonly lessonCount: number;
+  /** Lessons that already have authored or approved content; the Manager is warned before approval. */
+  readonly lessonsWithContent: number;
+  /** Set after approval: how many lesson rows were removed. */
+  readonly removedLessonCount: number | null;
+}
 
 export interface ReopenRequestView {
   readonly id: string;
@@ -14,6 +29,8 @@ export interface ReopenRequestView {
   readonly decisionReason: string | null;
   readonly createdAt: string;
   readonly decidedAt: string | null;
+  /** Present only when target is `monthly_resources`. */
+  readonly monthlyResources?: MonthlyResourcesReopenDetailView;
 }
 
 export interface NotificationEventView {

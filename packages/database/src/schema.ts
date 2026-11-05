@@ -167,6 +167,18 @@ export const monthlyResourceGenerationCheckpoints = pgTable("monthly_resource_ge
   createdAt: now(), updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow()
 }, (table) => [uniqueIndex("monthly_resource_generation_checkpoints_month_cefr_unique").on(table.programMonthId, table.cefr)]);
 
+/** Operator request for a Manager to reopen approved monthly resources (0097). */
+export const monthFrameworkReopenRequests = pgTable("month_framework_reopen_requests", {
+  id: uuid("id").primaryKey(), frameworkId: uuid("framework_id").notNull().references(() => monthFrameworks.id, { onDelete: "cascade" }),
+  frameworkVersion: integer("framework_version").notNull(), requestedBy: uuid("requested_by").notNull().references(() => users.id),
+  reason: text("reason").notNull(), status: text("status").notNull().default("requested"),
+  decidedBy: uuid("decided_by").references(() => users.id), decidedAt: timestamp("decided_at", { withTimezone: true }),
+  decisionReason: text("decision_reason"), removedLessonCount: integer("removed_lesson_count"), createdAt: now()
+}, (table) => [
+  uniqueIndex("month_framework_reopen_requests_open_unique").on(table.frameworkId).where(sql`${table.status} = 'requested'`),
+  index("month_framework_reopen_requests_framework_index").on(table.frameworkId, table.createdAt)
+]);
+
 export const promptVersions = pgTable("prompt_versions", {
   id: uuid("id").primaryKey(), organizationId: uuid("organization_id").notNull().references(() => organizations.id),
   taskKey: text("task_key").notNull(), version: integer("version").notNull(), content: text("content").notNull(),
@@ -530,6 +542,6 @@ export const databaseSchema = {
   gameResults, gameSets, idempotencyKeys, jobs, learnerProfiles, lessonSetVersions,
   learnerReviewSessions, lessonPartAppeals, lessonPartAttempts, lessonSets, lessonVersions, lessons, notificationDeliveries, organizations, organizationSettings, providerConfigurations,
   practiceSubmissions, learnerVocabularyUnlocks, levelUpChallengeResults, practiceAppeals, passCourseCertificates, passCourseReadiness,
-  monthFrameworks, monthlyResourceGenerationCheckpoints, monthLessonCorrections, monthLessons, programMonths, programWeeks, programs, progressRecords, promptVersions,
+  monthFrameworks, monthFrameworkReopenRequests, monthlyResourceGenerationCheckpoints, monthLessonCorrections, monthLessons, programMonths, programWeeks, programs, progressRecords, promptVersions,
   reminders, rewardEvents, rubricVersions, sessions, surveys, userCredentials, users, managerPinReports, managerDestructiveConfirmations, managerMaintenanceBackups
 };

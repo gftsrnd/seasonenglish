@@ -69,3 +69,5 @@
 .monthly-day-actions>button span{display:inline-block}
 .monthly-day-cell.monthly-final>.btn-sm{min-height:28px;border-radius:5px}
 
+/* Monthly resources reopen request (Operator -> Manager). */
+.monthly-reopen-status{display:inline-flex;align-items:center;border-radius:8px;padding:6px 10px;font-size:13px;box-shadow:inset 0 0 0 1px var(--line)}.monthly-reopen-status.pending{background:var(--warn-soft)}.monthly-reopen-status.rejected{display:block;margin:10px 0 0;background:var(--danger-soft);color:var(--danger)}.monthly-reopen-status.approved{display:block;margin:10px 0 0;background:var(--ok-tint)}

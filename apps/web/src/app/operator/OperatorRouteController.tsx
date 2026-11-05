@@ -283,6 +283,10 @@ function MonthsRoute({ client, readOnly, preview }: { client: OperatorApiClient;
         return result;
       },
       onApproveFramework: async (id) => { await run(() => client.approveContentMonthFramework(id), "Đã chốt tài nguyên tháng."); },
+      onRequestResourcesReopen: async (id, reason) => {
+        const result = await run(() => client.requestContentMonthResourcesReopen(id, reason), "Đã gửi yêu cầu mở lại tài nguyên tới Quản lý.");
+        if (!result) throw new Error("Không gửi được yêu cầu mở lại tài nguyên tháng.");
+      },
       onGenerateMonthlyFinal: async (id) => {
         const result = await run(() => client.generateMonthlyFinal(id), "Đã sinh bản nháp đề tháng.");
         if (!result || !("blueprint" in result)) throw new Error("Không tải được bản nháp đề tháng.");

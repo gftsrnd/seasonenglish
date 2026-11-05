@@ -1,4 +1,4 @@
-import { allowedMonthlySupportLevels, buildMonthlyCalendar, monthlyDayKind, monthlySupportLevelBand, MONTHLY_MAX_SUPPORTS_PER_CORE, MONTHLY_MIN_SUPPORTS_PER_CORE, MONTHLY_REQUIRED_SUPPORT_RELATIONS, type MonthlyResourcePoolContract, type MonthlySupportRelation, type SharedMonthBrief } from "@e4s/domain";
+import { allowedMonthlySupportLevels, isMonthlySupportLevelAllowed, buildMonthlyCalendar, monthlyDayKind, monthlySupportLevelBand, MONTHLY_MAX_SUPPORTS_PER_CORE, MONTHLY_MIN_SUPPORTS_PER_CORE, MONTHLY_REQUIRED_SUPPORT_RELATIONS, type MonthlyResourcePoolContract, type MonthlySupportRelation, type SharedMonthBrief } from "@e4s/domain";
 import type { CefrLevel } from "@e4s/contracts";
 import { monthlyResourcePlanOutputSchema, type MonthlyResourcePlanTaskOutput } from "@e4s/ai";
 import { validateMonthlyResourcePlanShape } from "./monthly-resource-plan-spec.js";
@@ -11,7 +11,7 @@ import { validateMonthlyResourcePlanShape } from "./monthly-resource-plan-spec.j
 export function buildMonthlySupportLevelGuidance(cefr: string): string {
   const allowed = isCefrLevel(cefr) ? allowedMonthlySupportLevels(cefr) : [];
   const band = allowed.length ? allowed.join(", ") : `${cefr} or one adjacent CEFR level`;
-  return `Support words may be at CEFR ${band} (the month's level ${cefr} or one adjacent level). Set each expandedTerms item's cefr field to that support word's own CEFR level. Do not reject or omit a genuine relation only because the word is one level above or below ${cefr}; never use a word two or more levels away, and never force a relation that does not genuinely exist.`;
+  return `Support words may be at CEFR ${band} (the month's level ${cefr} or one adjacent level). Word-family items are the exception: they may be at any CEFR level, including higher levels, because the derived form must belong to the core word's family. Set each expandedTerms item's cefr field to that support word's own CEFR level. Do not reject or omit a genuine relation only because the word is one level above or below ${cefr}; never use a word two or more levels away, and never force a relation that does not genuinely exist.`;
 }
 
 function isCefrLevel(value: string): value is CefrLevel {
@@ -109,24 +109,34 @@ export function buildMonthlyCoreCandidatesPrompt(input: {
   previousIssue?: string;
   preflightRelations?: boolean;
   candidatePoolOnly?: boolean;
+  /** Month-wide generation: ask for this many options (2-3) per required relation instead of one edge each. */
+  relationOptionsPerRequired?: number;
+  /** Month-wide generation: the sub-area of the theme this parallel call covers. */
+  subArea?: string;
 }): string {
   const neededCount = input.neededCount ?? 3;
+  const relationOptions = input.relationOptionsPerRequired ? Math.max(2, Math.min(3, Math.round(input.relationOptionsPerRequired))) : 0;
   const candidateCount = input.candidateCount ?? 6;
   const categoryScope = input.candidatePoolOnly
     ? `Return exactly ${candidateCount} ordered coreTerms candidate lexemes only. expandedTerms, grammarTopics and pronunciationTargets must be empty arrays.`
+    : input.preflightRelations && relationOptions
+    ? `Return exactly ${candidateCount} ordered coreTerms candidates and only their mandatory expandedTerms preflight edges. For EVERY core candidate, return ${relationOptions === 2 ? "two" : "two to three"} distinct authentic options for EACH required relation: umbrella options, same-sense synonym options, and common word_family options, each linked using that candidate's exact coreTerms.id. An independent audit picks among the options, so offer genuine alternatives rather than one guess; when only one genuine option exists for a relation, return just that one and never pad. Do not return collocation or antonym edges, grammarTopics or pronunciationTargets.`
     : input.preflightRelations
     ? `Return exactly ${candidateCount} ordered coreTerms candidates and only their mandatory expandedTerms preflight edges. For EVERY core candidate, return exactly three authentic supports: one umbrella, one same-sense synonym, and one common word_family item, each linked using that candidate's exact coreTerms.id. Do not return grammarTopics or pronunciationTargets.`
     : `Return exactly ${candidateCount} ordered coreTerms candidates and no other category: expandedTerms, grammarTopics and pronunciationTargets must be empty arrays.`;
   const relationPreflight = input.preflightRelations
-    ? ` For every core candidate, silently verify that all three linked support edges are true for its exact meaning. Support edge IDs must be unique. Umbrella must be a genuine broader category, synonym a natural same-sense substitute, and word_family a common derivation from the same root. If a candidate cannot support all three, omit its core and all its edges, and replace it with another candidate so the requested number of cores is still returned. ${buildMonthlySupportLevelGuidance(input.cefr)}`
+    ? ` For every core candidate, silently verify that all three linked support edges are true for its exact meaning. Support edge IDs must be unique. Umbrella must be a genuine broader category or the group word the core belongs to (office -> workplace, email -> communication), synonym a natural same-sense substitute, and word_family a common derivation from the same root. If a candidate cannot support all three, omit its core and all its edges, and replace it with another candidate so the requested number of cores is still returned. ${buildMonthlySupportLevelGuidance(input.cefr)}`
     : "";
   const candidatePoolRules = input.candidatePoolOnly
     ? ` This is a shared candidate lexicon, not the final core list. Include a broad, varied set of standalone A1–C1-appropriate workplace words and useful support vocabulary; terms do not need to have an umbrella or synonym relation. Include precise one-sense glosses and accurate IPA. Mix nouns, verbs, adjectives, and adverbs; include useful derived forms and category words where natural. Do not include phrases, inflections, duplicates, or invented words.`
     : "";
+  const subArea = input.subArea
+    ? ` MONTH-WIDE PARALLEL REQUEST: other parallel requests cover the other parts of this theme, so draw every candidate from this sub-area only: ${input.subArea}. Never return two candidates that are synonyms of each other (for example start and begin, or finish and complete); keep only one of such a pair.`
+    : "";
   const retry = input.rejectedWords?.length || input.previousIssue
     ? ` RETRY FOR CORE BATCH ${input.batchNumber}: ${input.rejectedWords?.length ? `these headwords have already failed and are forbidden, including normalized variants, synonyms, and inflections: ${input.rejectedWords.join(", ")}. ` : ""}${input.previousIssue ? `The previous candidates failed because ${input.previousIssue}. ` : ""}Return ${candidateCount} entirely different authentic standalone headwords. Preserve every base requirement, especially a clear, common derivational word-family item.`
     : "";
-  return `PHASE 1 — ORDERED MONTH VOCABULARY CANDIDATES. ${categoryScope} Every candidate must be one standalone English lexical headword, never a multi-word compound phrase, slash alternative, interjection, greeting, discourse formula, or inflected variant of another selected candidate. Assign exactly one part of speech (noun, verb, adjective, or adverb) and one clear, common workplace sense; do not combine POS labels or give alternate meanings in the Vietnamese meaning field. Every candidate must have one short Vietnamese gloss for that chosen sense. Select only authentic level-appropriate English; a family form must be a distinct lexical item, not just a plural or tense form. Do not invent words or use semantic neighbors as family members. ${candidatePoolRules}${input.candidatePoolOnly ? "" : `Candidates intended for use as core words must have a common, useful derivational family (for example: manage → manager/management; help → helpful/helper; plan → planner/planning; update → updater; client → clientele). Avoid feedback and deadline as core headwords because neither has a clear, common derivational family for this plan. ${input.preflightRelations ? "Every core candidate must support a genuine umbrella category, a natural same-sense synonym, and a common derivational word-family item; verify all three for the exact meaning." : "Every core candidate must support a genuine umbrella category, a natural same-sense synonym, and a common derivational word-family item; silently identify all three for the exact meaning before returning that candidate."} Omit any proposed core whose only derivation is rare, an inflection, a compound, or changes to an unrelated sense.`} A1 uses very common concrete words; A2 uses useful routine office terms; B1+ can be more nuanced. All ${candidateCount} candidates must be appropriate to CEFR ${input.cefr}, and useful for the approved month theme (${input.theme}) and practical communication goal (${input.communicationGoal}). The application will select the first ${neededCount} unique valid headword${neededCount === 1 ? "" : "s"}. Use these already generated core and support terms as forbidden words: ${input.existingCoreWords.join("; ") || "none"}. If a candidate conflicts with a forbidden word or another candidate, replace it with a different standalone term; do not repeat the collision or a normalized variant. This is an unordered month pool; do not assign calendar days.${relationPreflight}${retry}`;
+  return `PHASE 1 — ORDERED MONTH VOCABULARY CANDIDATES. ${categoryScope} Every candidate must be one standalone English lexical headword, never a multi-word compound phrase, slash alternative, interjection, greeting, discourse formula, or inflected variant of another selected candidate. Assign exactly one part of speech (noun, verb, adjective, or adverb) and one clear, common workplace sense; do not combine POS labels or give alternate meanings in the Vietnamese meaning field. Every candidate must have one short Vietnamese gloss for that chosen sense. Select only authentic level-appropriate English; a family form must be a distinct lexical item, not just a plural or tense form. Do not invent words or use semantic neighbors as family members. ${candidatePoolRules}${input.candidatePoolOnly ? "" : `Candidates intended for use as core words must have a common, useful derivational family (for example: manage → manager/management; help → helpful/helper; plan → planner/planning; update → updater; client → clientele). Avoid feedback and deadline as core headwords because neither has a clear, common derivational family for this plan. ${input.preflightRelations ? "Every core candidate must support a genuine umbrella category, a natural same-sense synonym, and a common derivational word-family item; verify all three for the exact meaning." : "Every core candidate must support a genuine umbrella category, a natural same-sense synonym, and a common derivational word-family item; silently identify all three for the exact meaning before returning that candidate."} Omit any proposed core whose only derivation is rare, an inflection, a compound, or changes to an unrelated sense.`} A1 uses very common concrete words; A2 uses useful routine office terms; B1+ can be more nuanced. All ${candidateCount} candidates must be appropriate to CEFR ${input.cefr}, and useful for the approved month theme (${input.theme}) and practical communication goal (${input.communicationGoal}). The application will select the first ${neededCount} unique valid headword${neededCount === 1 ? "" : "s"}. Use these already generated core and support terms as forbidden words: ${input.existingCoreWords.join("; ") || "none"}. If a candidate conflicts with a forbidden word or another candidate, replace it with a different standalone term; do not repeat the collision or a normalized variant. This is an unordered month pool; do not assign calendar days.${relationPreflight}${subArea}${retry}`;
 }
 
 export function buildMonthlyCandidateRelationGraphPrompt(input: {
@@ -186,10 +196,13 @@ export function selectMonthlySupportCandidates(input: {
     let reason = "";
     if (candidate.relatesToCoreId !== input.coreId) reason = "incorrect core relation";
     else if ((relationCounts.get(candidate.relation) ?? 0) >= 3) reason = "exceeds the three-support limit for this semantic relation";
-    else if (input.cefr && monthlySupportLevelBand(input.cefr, candidate.cefr) === "out_of_range") reason = `CEFR ${candidate.cefr} is more than one level from ${input.cefr}`;
+    else if (input.cefr && !isMonthlySupportLevelAllowed(input.cefr, candidate)) reason = `CEFR ${candidate.cefr} is more than one level from ${input.cefr} (only word family may be higher)`;
     else if (input.coreWords.has(word)) reason = "matches a core term";
     else if (["umbrella", "synonym", "antonym"].includes(candidate.relation) && !hasCompatiblePartOfSpeech(input.coreType, candidate.type, candidate.relation)) reason = "part of speech does not match the core sense for this relation";
     else if (candidate.relation === "word_family" && !isGenuineWordFamily(input.coreWord, candidate.word)) reason = "does not share a genuine derivational root with the core headword";
+    else if (candidate.relation === "collocation" && !collocationContainsCoreWord(input.coreWord, candidate.word)) reason = "a collocation must be a phrase containing the core word or one of its word-family forms";
+    else if (isMonthlyInflectionalVariant(candidate.word, input.coreWord, { includeIng: candidate.relation !== "word_family" })
+      || [...sameCoreWords, ...chosen].some((other) => isMonthlyInflectionalVariant(candidate.word, other))) reason = "is only an inflected form (plural, -s, -ed or -ing) of the core or another support for this core";
     else if (!isSingleHeadword(candidate.word) && !isWorkplacePhrase(candidate.word)) reason = "must be one lexical headword or a natural two-to-four-word workplace phrase";
     else if (!isSingleHeadword(candidate.word) && sameCorePhraseCount >= 1) reason = "allows only one phrase for this core; prefer standalone words";
     else if (sameCoreWords.has(word)) reason = "duplicates a selected support term for this core";
@@ -280,7 +293,7 @@ export function buildMonthlySupportRelationAuditPrompt(input: {
       ? `Ask whether “Being ${input.core.word} is a kind of [candidate]” names a broader quality or property, rather than a synonym.`
       : `Ask whether “A ${input.core.word} is a kind of [candidate]” is true.`;
 
-  return `AUDIT ONLY — DO NOT GENERATE MONTHLY RESOURCES. Evaluate the exact candidates below against the core sense ${core}. This task has no minimum count, relation quota, or requirement to fill any slot. Do not generate, repair, rename, relabel, translate, or add candidates. Keep candidates when the existing relation is accurate in a common, natural use for this exact core sense. For context-sensitive synonyms, accept a normal substitution in at least one common sentence; do not require the words to be interchangeable in every context. Reject candidates that are only related by topic, differ in core sense, or are more than one CEFR level away from the month's level. Do not reject a genuine relation only because the word is one level above or below the month's level. Check each candidate's word, stated Vietnamese meaning, part of speech, and relation together. For umbrella, ${umbrellaTest} A related topic, result, example, tool, sibling item, or frequent phrase is not a broader category. For synonym, substitute the candidate in a natural sentence using the core's stated meaning; reject it if the meaning or register changes materially in that sentence. For word_family, require an established, common derivation from the same lexical root that is useful for this core sense; shared spelling or a mechanically possible suffix is not enough. For antonym, require a genuine opposite in this sense. For collocation, require a natural co-occurrence in this sense. Keep each accepted candidate's id, word, meaning, type, relation, relatesToCoreId, and cefr (when present) exactly unchanged. Return rejected candidates nowhere. Set coreTerms, grammarTopics, and pronunciationTargets to empty arrays. Candidates: ${JSON.stringify(input.candidates)}`;
+  return `AUDIT ONLY — DO NOT GENERATE MONTHLY RESOURCES. Evaluate the exact candidates below against the core sense ${core}. This task has no minimum count, relation quota, or requirement to fill any slot. Do not generate, repair, rename, relabel, translate, or add candidates. Keep candidates when the existing relation is accurate in a common, natural use for this exact core sense. For context-sensitive synonyms, accept a normal substitution in at least one common sentence; do not require the words to be interchangeable in every context. Reject candidates that are only related by topic, differ in core sense, or are more than one CEFR level away from the month's level. Do not reject a genuine relation only because the word is one level above or below the month's level. Check each candidate's word, stated Vietnamese meaning, part of speech, and relation together. For umbrella, ${umbrellaTest} Also accept a common group or category word that the core belongs to in everyday workplace use (the umbrella word of a word group, e.g. office -> workplace, email -> communication, invoice -> document, meeting -> event, Monday -> day), even when the strict 'kind of' sentence sounds loose. Still reject a peer at the same level (a meeting is not the umbrella of a call), a related topic, result, example, tool, synonym, or frequent phrase. For synonym, substitute the candidate in a natural sentence using the core's stated meaning; reject it if the meaning or register changes materially in that sentence. For word_family, require an established, common derivation from the same lexical root that is useful for this core sense; shared spelling or a mechanically possible suffix is not enough. For antonym, require a genuine opposite in this sense. For collocation, require a phrase that naturally co-occurs WITH the core word itself and contains the core word or one of its word-family forms (for example decide → make a decision, meet → attend a meeting); reject a word that is only topically related (review → feedback, meet → agenda). Keep each accepted candidate's id, word, meaning, type, relation, relatesToCoreId, and cefr (when present) exactly unchanged. Return rejected candidates nowhere. Set coreTerms, grammarTopics, and pronunciationTargets to empty arrays. Candidates: ${JSON.stringify(input.candidates)}`;
 }
 
 function monthlyVerbGerund(word: string): string {
@@ -308,8 +321,8 @@ export function buildMonthlySupportRelationCandidatePrompt(input: {
     umbrella: input.core.type.toLocaleLowerCase("en").includes("verb")
       ? "Return only a genuine broader noun category for the action in this exact verb sense (for example, writing is an activity). The candidate may be one noun or a natural two-to-four-word noun phrase if the phrase names the true broader category. The candidate must be broader than the verb; a synonym, topic, result, example, tool, or frequent phrase is not a hypernym. Do not return a same-level sibling action from the same workplace topic."
       : input.core.type.toLocaleLowerCase("en").includes("adjective")
-        ? "Return only a genuine broader noun category for this quality (for example, carefulness is a quality). The candidate may be one noun or a natural two-to-four-word noun phrase naming a broader quality. A synonym, same-level sibling, topic, example, result, tool, or frequent phrase is not a hypernym."
-        : "Return only a genuine broader class the noun belongs to (X is a kind of Y), with a compatible part of speech/sense. The candidate may be one noun or a natural two-to-four-word noun phrase when that names the broader category (for example, phone conversation for call). Choose a category above the core, not another same-level item from the same workplace topic. A meeting is a peer of a call, not its umbrella.",
+        ? "Return only a genuine broader noun category for this quality (for example, carefulness is a quality). The candidate may be one noun or a natural two-to-four-word noun phrase naming a broader quality. A synonym, same-level sibling, topic, example, result, tool, or frequent phrase is not a hypernym. A common group word the core belongs to in workplace use is also acceptable (e.g. writing -> communication)."
+        : "Return only a genuine broader class the noun belongs to (X is a kind of Y), with a compatible part of speech/sense. The candidate may be one noun or a natural two-to-four-word noun phrase when that names the broader category (for example, phone conversation for call). Choose a category above the core, not another same-level item from the same workplace topic. A meeting is a peer of a call, not its umbrella. A common group word the noun belongs to in workplace use is also acceptable (office -> workplace, invoice -> document).",
     synonym: "Return only a natural substitute for the exact stated sense, preserving part of speech, meaning, and register. Related words that merely share a topic are not synonyms.",
     word_family: "Return only an established, common derivational form from the same lexical root. Exclude inflections, plurals, tense forms, and semantic neighbors."
   }[input.relation];
@@ -333,7 +346,7 @@ export function buildMonthlyOptionalSupportPrompt(input: {
   candidateCount?: number;
 }): string {
   const candidateCount = input.candidateCount ?? 12;
-  return `PHASE 2 — REMAINING SUPPORT CANDIDATE BATCH FOR ONE CORE. For exact core ${input.core.word} (${input.core.meaning}; ${input.core.type}), CEFR ${input.cefr}, approved month theme ${input.theme}, generate up to ${candidateCount} distinct authentic expandedTerms candidates so the application can select up to ${input.requestedCount} additional valid supports. The separately audited umbrella, synonym, and word_family supports already exist; do not duplicate any support already attached to this same core. These additional items are optional enrichment: the three required relations already meet the per-core minimum, so return only genuine extra relations, and the per-core total must never exceed ${MONTHLY_MAX_SUPPORTS_PER_CORE}. ${buildMonthlySupportLevelGuidance(input.cefr)} Use any true relation that fits this exact sense, including additional umbrella, synonym, word_family, collocation, or antonym. Offer varied candidates across valid relations rather than repeating one relation; no relation may exceed three supports for this core. Prefer genuine antonyms when they exist, but antonyms are optional and must never be invented or forced. If fewer than ${input.requestedCount} authentic candidates exist, return only the valid ones; never pad or mislabel. Every relatesToCoreId must be ${input.core.id}. Return only candidate expandedTerms and empty arrays for coreTerms, grammarTopics, and pronunciationTargets. Do not repeat any core headword or normalized variant: ${input.forbiddenCoreWords.join("; ") || "none"}. Same-core supports already used: ${input.sameCoreSupportWords?.join("; ") || "none"}. Do not return previously rejected candidates: ${input.rejectedCandidateWords?.join("; ") || "none"}. Previous validation feedback: ${input.previousIssue || "none"}. Other-core terms may be reused when they are a genuine fit; the system enforces a 35% monthly repeat ceiling and will reject over-limit repeats. Other-core support terms available for valid reuse: ${input.existingSupportWords.join("; ") || "none"}.`;
+  return `PHASE 2 — REMAINING SUPPORT CANDIDATE BATCH FOR ONE CORE. For exact core ${input.core.word} (${input.core.meaning}; ${input.core.type}), CEFR ${input.cefr}, approved month theme ${input.theme}, generate up to ${candidateCount} distinct authentic expandedTerms candidates so the application can select up to ${input.requestedCount} additional valid supports. The separately audited umbrella, synonym, and word_family supports already exist; do not duplicate any support already attached to this same core. These additional items are optional enrichment: the three required relations already meet the per-core minimum, so return only genuine extra relations, and the per-core total must never exceed ${MONTHLY_MAX_SUPPORTS_PER_CORE}. ${buildMonthlySupportLevelGuidance(input.cefr)} Use any true relation that fits this exact sense, including additional umbrella, synonym, word_family, collocation, or antonym. A collocation must be a two-to-four-word phrase that naturally co-occurs WITH the core word and contains the core word or one of its word-family forms (decide → make a decision); a topically related word such as feedback for review or agenda for meet is not a collocation. Never return a plural, -s, -ed or -ing form of the core or of another support as a separate support. Offer varied candidates across valid relations rather than repeating one relation; no relation may exceed three supports for this core. Prefer genuine antonyms when they exist, but antonyms are optional and must never be invented or forced. If fewer than ${input.requestedCount} authentic candidates exist, return only the valid ones; never pad or mislabel. Every relatesToCoreId must be ${input.core.id}. Return only candidate expandedTerms and empty arrays for coreTerms, grammarTopics, and pronunciationTargets. Do not repeat any core headword or normalized variant: ${input.forbiddenCoreWords.join("; ") || "none"}. Same-core supports already used: ${input.sameCoreSupportWords?.join("; ") || "none"}. Do not return previously rejected candidates: ${input.rejectedCandidateWords?.join("; ") || "none"}. Previous validation feedback: ${input.previousIssue || "none"}. Other-core terms may be reused when they are a genuine fit; the system enforces a 35% monthly repeat ceiling and will reject over-limit repeats. Other-core support terms available for valid reuse: ${input.existingSupportWords.join("; ") || "none"}.`;
 }
 
 export function selectMonthlyPronunciationCandidates(input: {
@@ -509,7 +522,7 @@ const DERIVATIONAL_SUFFIX_RULES: ReadonlyArray<{ suffix: string; replacements: r
 
 const DERIVATIONAL_PREFIXES = ["un", "in", "im", "ir", "il", "dis", "non", "re", "mis", "over", "under", "pre", "post", "de"] as const;
 
-function wordFamilyBaseForms(value: string): Set<string> {
+export function wordFamilyBaseForms(value: string): Set<string> {
   const initial = normalizeMonthlyResourceWord(value).replace(/[-'’]/gu, "");
   const forms = new Set<string>([initial, ...(WORD_FAMILY_BASE_OVERRIDES[initial] ?? [])]);
   const queue = [...forms];
@@ -545,6 +558,94 @@ export function isGenuineWordFamily(coreWord: string, relatedWord: string): bool
   if (!core || !related || core === related) return false;
   const relatedForms = wordFamilyBaseForms(related);
   return [...wordFamilyBaseForms(core)].some((form) => form.length >= 3 && relatedForms.has(form));
+}
+
+function inflectionBaseForms(token: string, includeIng: boolean): Set<string> {
+  const word = token.replace(/[-'’]/gu, "");
+  const forms = new Set<string>([word]);
+  if (word.length < 4) return forms;
+  if (word.endsWith("ies")) forms.add(`${word.slice(0, -3)}y`);
+  if (/(?:ch|sh|x|z|ss|o)es$/u.test(word)) forms.add(word.slice(0, -2));
+  if (/[^su]s$/u.test(word)) forms.add(word.slice(0, -1));
+  if (word.endsWith("ied")) forms.add(`${word.slice(0, -3)}y`);
+  if (word.endsWith("ed")) {
+    forms.add(word.slice(0, -2));
+    forms.add(word.slice(0, -1));
+    if (/([^aeiou])\1ed$/u.test(word)) forms.add(word.slice(0, -3));
+  }
+  if (includeIng && word.endsWith("ing") && word.length >= 6) {
+    forms.add(word.slice(0, -3));
+    forms.add(`${word.slice(0, -3)}e`);
+    if (/([^aeiou])\1ing$/u.test(word)) forms.add(word.slice(0, -4));
+  }
+  return forms;
+}
+
+/**
+ * Quality rule C: true when one term is only an inflection (plural/-s, -ed or
+ * -ing) of the other, e.g. customer/customers. For phrases only the final
+ * token may differ. Identical terms are not variants (duplicates are a
+ * separate rule).
+ */
+export function isMonthlyInflectionalVariant(first: string, second: string, options: { includeIng?: boolean } = {}): boolean {
+  const includeIng = options.includeIng ?? true;
+  const a = normalizeMonthlyResourceWord(first).split(" ").filter(Boolean);
+  const b = normalizeMonthlyResourceWord(second).split(" ").filter(Boolean);
+  if (!a.length || a.length !== b.length || a.slice(0, -1).join(" ") !== b.slice(0, -1).join(" ")) return false;
+  const lastA = a.at(-1)!.replace(/[-'’]/gu, "");
+  const lastB = b.at(-1)!.replace(/[-'’]/gu, "");
+  if (lastA === lastB) return false;
+  return inflectionBaseForms(lastA, includeIng).has(lastB) || inflectionBaseForms(lastB, includeIng).has(lastA);
+}
+
+/**
+ * Quality rule A: a collocation support must be a phrase that contains the
+ * core word, an inflection of it, or one of its word-family forms as a whole
+ * word (decide → "make a decision"; review → "feedback" is rejected).
+ */
+export function collocationContainsCoreWord(coreWord: string, collocation: string): boolean {
+  const core = normalizeMonthlyResourceWord(coreWord).replace(/[-'’]/gu, "");
+  const tokens = normalizeMonthlyResourceWord(collocation).split(" ").map((token) => token.replace(/[-'’]/gu, "")).filter(Boolean);
+  if (!core || tokens.length < 2) return false;
+  const coreForms = wordFamilyBaseForms(core);
+  return tokens.some((token) => [...inflectionBaseForms(token, true)].some((base) => base === core
+    || (base.length >= 3 && [...wordFamilyBaseForms(base)].some((form) => form.length >= 3 && coreForms.has(form)))));
+}
+
+/**
+ * Cheap deterministic screen run before an AI relation audit, so obviously
+ * wrong word-family items and topic-only collocations never cost an audit call.
+ */
+export function prefilterMonthlySupportCandidatesForAudit(
+  core: { word: string },
+  candidates: readonly MonthlyResourcePlanTaskOutput["expandedTerms"][number][]
+): { kept: MonthlyResourcePlanTaskOutput["expandedTerms"]; rejected: string[] } {
+  const kept: MonthlyResourcePlanTaskOutput["expandedTerms"] = [];
+  const rejected: string[] = [];
+  for (const candidate of candidates) {
+    if (candidate.relation === "word_family" && !isGenuineWordFamily(core.word, candidate.word)) rejected.push(`${candidate.word} (not a genuine word family of ${core.word})`);
+    else if (candidate.relation === "collocation" && !collocationContainsCoreWord(core.word, candidate.word)) rejected.push(`${candidate.word} (collocation without ${core.word})`);
+    else kept.push(candidate);
+  }
+  return { kept, rejected };
+}
+
+/**
+ * Quality rule B: a core may not be a synonym of another accepted core, and its
+ * own synonyms may not include another accepted core word (start/begin).
+ * Returns the conflicting accepted core word, if any.
+ */
+export function findMonthlyCoreSynonymConflict(input: {
+  candidateWord: string;
+  candidateSynonyms: readonly string[];
+  acceptedCores: ReadonlyArray<{ word: string; synonyms: readonly string[] }>;
+}): string | undefined {
+  const same = (first: string, second: string) => normalizeMonthlyResourceWord(first) === normalizeMonthlyResourceWord(second) || isMonthlyInflectionalVariant(first, second);
+  for (const accepted of input.acceptedCores) {
+    if (accepted.synonyms.some((synonym) => same(synonym, input.candidateWord))) return accepted.word;
+    if (input.candidateSynonyms.some((synonym) => same(synonym, accepted.word))) return accepted.word;
+  }
+  return undefined;
 }
 
 export function isSingleHeadword(value: string): boolean {

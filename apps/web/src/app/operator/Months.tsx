@@ -26,6 +26,8 @@ export interface OperatorMonthsActions {
   onGenerateFramework(month: string, criteria: MonthlyResourceCriteria): Promise<unknown> | void;
   onSaveFramework(month: string, contract: MonthlyCurriculumContract): Promise<void> | void;
   onApproveFramework(id: string): Promise<void> | void;
+  /** Asks a Manager to reopen this level's approved monthly resources. */
+  onRequestResourcesReopen?(id: string, reason: string): Promise<void> | void;
   onGenerateMonthlyFinal?(id: string): Promise<MonthlyFinalDraftView> | void;
   onComposeMonthlyFinal?(id: string): Promise<MonthlyFinalDraftView> | void;
   /** Opens the current draft or published monthly final for review. */
@@ -75,6 +77,7 @@ export function OperatorMonths({ month, todayMonth, overview, cefr, busy, readOn
   const [resourcePanel, setResourcePanel] = useState<ResourceGroup | null>(null);
   const [generationConfirmation, setGenerationConfirmation] = useState<{ dayNumber: number; kind: "new" | "review" }>();
   const [monthlyFinal, setMonthlyFinal] = useState<MonthlyFinalDraftView | null>(null);
+  const [requestingResourcesReopen, setRequestingResourcesReopen] = useState(false);
   const briefLocked = overview.brief?.status === "approved";
   const monthChoices = [overview.monthWindow.previous, overview.monthWindow.current, overview.monthWindow.next];
   const previousMonth = month === monthChoices[0];
@@ -88,7 +91,7 @@ export function OperatorMonths({ month, todayMonth, overview, cefr, busy, readOn
   } : proposedResourceCounts;
   const resources = [
     { key: "core" as const, label: "Từ cốt lõi", count: framework?.resources?.coreTerms.length ?? 0, description: "Headword trọng tâm" },
-    { key: "expanded" as const, label: "Từ mở rộng", count: framework?.resources?.supportTerms.length ?? 0, description: "3–9 từ/core (bắt buộc: bao trùm, đồng nghĩa, cùng họ từ); tối đa một cụm mỗi từ" },
+    { key: "expanded" as const, label: "Từ mở rộng", count: framework?.resources?.supportTerms.length ?? 0, description: "3–9 từ mỗi từ cốt lõi" },
     { key: "grammar" as const, label: "Ngữ pháp", count: framework?.resources?.grammarTopics.length ?? 0, description: "Điểm ngữ pháp cần dùng" },
     { key: "sounds" as const, label: "Phát âm", count: framework?.resources?.sounds.length ?? 0, description: "Âm và ví dụ thực hành" }
   ];
@@ -167,6 +170,22 @@ export function OperatorMonths({ month, todayMonth, overview, cefr, busy, readOn
       showUnavailable("Không duyệt được tài nguyên tháng. Hãy thử lại.");
     }
   };
+  // Only the request made against the current framework version is relevant:
+  // an older approved/rejected request belongs to a previous resource revision.
+  const resourcesReopen = framework?.reopenRequest && framework.reopenRequest.frameworkVersion >= (framework.status === "approved" ? framework.version : framework.version - 1) ? framework.reopenRequest : null;
+  const resourcesReopenPending = framework?.status === "approved" && resourcesReopen?.status === "pending";
+  const requestResourcesReopen = async (reason: string) => {
+    if (!canEdit) return showUnavailable("Tháng trước chỉ dùng để xem.");
+    if (!framework || framework.status !== "approved") return showUnavailable("Chỉ tài nguyên đã chốt mới cần Quản lý mở lại.");
+    if (!actions.onRequestResourcesReopen) return showUnavailable("Luồng yêu cầu mở lại tài nguyên chưa sẵn sàng.");
+    if (reason.trim().length < 5) return showUnavailable("Hãy nhập lý do ít nhất 5 ký tự.");
+    try {
+      await actions.onRequestResourcesReopen(framework.id, reason.trim());
+      setRequestingResourcesReopen(false);
+    } catch {
+      showUnavailable("Không gửi được yêu cầu mở lại tài nguyên. Hãy thử lại.");
+    }
+  };
   const generateMonthlyFinal = async () => {
     if (!canEdit) return showUnavailable("Tháng trước chỉ dùng để xem.");
     if (!framework || framework.status !== "approved") return showUnavailable("Hãy chốt tài nguyên tháng trước khi sinh đề thi.");
@@ -236,7 +255,7 @@ export function OperatorMonths({ month, todayMonth, overview, cefr, busy, readOn
             <div><dt>Chủ điểm ngữ pháp</dt><dd>{resourceCounts.grammar}</dd></div>
             <div><dt>Mục tiêu phát âm</dt><dd>{resourceCounts.sounds}</dd></div>
           </dl>
-          <small>Mỗi từ cốt lõi có 3–9 từ mở rộng chất lượng (tối thiểu 1 bao trùm, 1 đồng nghĩa, 1 cùng họ từ; có thể ở level ±1); 9 là mức tối đa, không ép tạo trái nghĩa nếu không có từ tự nhiên.</small>
+          <small>Mỗi từ cốt lõi có 3–9 từ mở rộng, bắt buộc có từ bao trùm, đồng nghĩa và cùng họ từ.</small>
         </div> : <div className="monthly-resource-cards">{resources.map((item) => <button key={item.key} type="button" onClick={() => setResourcePanel(item.key)}><b>{item.count}</b><strong>{item.label}</strong><span>{item.description}</span></button>)}</div>}
         <div className="monthly-actions monthly-resource-actions">
           {resourceCheckpoint?.state === "draft_checkpoint" && !framework?.resources && <div className="monthly-resource-checkpoint" role="status" aria-label="Tiến độ tài nguyên nháp">
@@ -252,7 +271,12 @@ export function OperatorMonths({ month, todayMonth, overview, cefr, busy, readOn
           {framework?.status !== "approved" && <button type="button" className="btn btn-primary" disabled={busy} onClick={() => void generateFramework()}>{resourceCheckpoint?.state === "draft_checkpoint" && !framework?.resources ? "Tiếp tục nhóm còn thiếu" : framework?.resources ? "Sinh lại tài nguyên" : "Sinh tài nguyên"}</button>}
           {framework?.status === "draft" && <button type="button" className="btn" disabled={busy} onClick={() => void approveFramework()}>Duyệt tài nguyên</button>}
           {framework?.resources?.roadmap?.allocated && <button type="button" className="btn monthly-plan-open-button" onClick={() => setResourcePanel("plan")}>Phân bổ tài nguyên &amp; bài tập</button>}
+          {framework?.status === "approved" && (resourcesReopenPending
+            ? <span className="monthly-reopen-status pending" role="status">Đang chờ Quản lý duyệt</span>
+            : <button type="button" className="btn" disabled={busy || !canEdit} onClick={() => setRequestingResourcesReopen(true)}>Yêu cầu Quản lý mở lại</button>)}
         </div>
+        {framework?.status === "approved" && resourcesReopen?.status === "rejected" && <p className="monthly-reopen-status rejected small" role="note">Quản lý đã từ chối mở lại{resourcesReopen.decisionReason ? `: ${resourcesReopen.decisionReason}` : "."}</p>}
+        {framework?.status === "draft" && resourcesReopen?.status === "approved" && <p className="monthly-reopen-status approved small" role="note">Quản lý đã mở lại tài nguyên{resourcesReopen.decisionReason ? `: ${resourcesReopen.decisionReason}` : "."} Hãy rà soát rồi duyệt lại để phân bổ bài học.</p>}
       </section>
       <section className="monthly-calendar-section card">
         <div className="monthly-section-title"><div><span className="eyebrow">{cefr}</span><h2>Lịch học {monthLabel(month)}</h2></div><div className="monthly-calendar-legend"><span className="lesson">Học mới</span><span className="review">Ôn tập</span><span className="weekend">Nghỉ</span><span className="final">Bài thi tháng</span></div></div>
@@ -299,6 +323,7 @@ export function OperatorMonths({ month, todayMonth, overview, cefr, busy, readOn
         })}</div></div>}
       </section>}
     </div>
+    {requestingResourcesReopen && framework?.status === "approved" && <MonthlyReopenRequest label={`tài nguyên tháng ${cefr}`} onCancel={() => setRequestingResourcesReopen(false)} onSubmit={(reason) => void requestResourcesReopen(reason)} />}
     {generationConfirmation && framework?.resources && <MonthlyGenerationConfirmation dayNumber={generationConfirmation.dayNumber} kind={generationConfirmation.kind} framework={framework} onCancel={() => setGenerationConfirmation(undefined)} onConfirm={async () => { const generation = generationConfirmation; await generateDay(generation.dayNumber, generation.kind); setGenerationConfirmation(undefined); }} />}
     {monthlyFinal && <MonthlyFinalReview
       draft={monthlyFinal}

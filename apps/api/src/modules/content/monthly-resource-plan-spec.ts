@@ -1,4 +1,4 @@
-import { maxMonthlySupportRepeats, monthlySupportLevelBand, MONTHLY_MAX_SUPPORTS_PER_CORE, MONTHLY_MIN_SUPPORTS_PER_CORE, MONTHLY_REQUIRED_SUPPORT_RELATIONS } from "@e4s/domain";
+import { isMonthlySupportLevelAllowed, maxMonthlySupportRepeats, monthlySupportLevelBand, MONTHLY_MAX_SUPPORTS_PER_CORE, MONTHLY_MIN_SUPPORTS_PER_CORE, MONTHLY_REQUIRED_SUPPORT_RELATIONS } from "@e4s/domain";
 
 /**
  * Reusable contract for AI generation of monthly hard learning resources.
@@ -33,7 +33,8 @@ VOCABULARY PLAN
 - Support words may come from the month's CEFR level or one adjacent level
   (±1, A1..C1). Label each expanded item with its own CEFR level in the
   optional cefr field. Never reject a genuine relation only because the word is
-  one level above or below, never use a word two or more levels away, and never
+  one level above or below, never use a word two or more levels away (except
+  word-family items, which may be at any CEFR level), and never
   force a relation that does not genuinely exist. During partial generation phases, follow the phase prompt's count and relation scope; do not try to complete the full pool in one response.
 - Every item must have a real English form, a natural Vietnamese meaning, part
   of speech, accurate IPA where requested, a concise authentic example, and
@@ -196,7 +197,7 @@ export const monthlyResourcePlanSchema = {
           },
           relatesToCoreId: { type: "string" },
           example: { type: "string" },
-          cefr: { enum: ["A1", "A2", "B1", "B2", "C1"], description: "The support word's own CEFR level: the month's level or one adjacent level." },
+          cefr: { enum: ["A1", "A2", "B1", "B2", "C1"], description: "The support word's own CEFR level: the month's level or one adjacent level; word-family items may be any level." },
         },
       },
     },
@@ -335,7 +336,7 @@ export function validateMonthlyResourcePlanShape(
   if (expanded.length - new Set(expanded).size > maxMonthlySupportRepeats(expanded.length)) errors.push("Expanded resources repeat more than 35% of the monthly total.");
   if (cefr) {
     for (const item of plan.expandedTerms) {
-      if (monthlySupportLevelBand(cefr, item.cefr) === "out_of_range") errors.push(`Expanded resource ${item.id} is CEFR ${item.cefr}; supports must be within one level of ${cefr}.`);
+      if (!isMonthlySupportLevelAllowed(cefr, item)) errors.push(`Expanded resource ${item.id} is CEFR ${item.cefr}; supports other than word family must be within one level of ${cefr}.`);
     }
   }
   const coreIds = new Set(plan.coreTerms.map((item) => item.id));

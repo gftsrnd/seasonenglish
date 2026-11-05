@@ -104,6 +104,13 @@ describe("monthly curriculum contract", () => {
     expect(validateMonthlyCurriculum(invalidSound).join(" ")).toContain("does not follow the pronunciation roadmap");
   });
 
+  it("reports a plan stored before skillExercises existed instead of crashing", () => {
+    const legacy = structuredClone(planMonthlyResourcePool(poolFor())) as unknown as { daySpecs: Array<Record<string, unknown>> };
+    for (const day of legacy.daySpecs) delete day.skillExercises;
+    const errors = validateMonthlyCurriculum(legacy as unknown as Parameters<typeof validateMonthlyCurriculum>[0]);
+    expect(errors.join(" ")).toContain("has no skill exercise plan");
+  });
+
   it("allocates nine linked supports per core, grammar progression, reviews, and six exercise slots on approval", () => {
     const contract = planMonthlyResourcePool(poolFor());
     const newDays = contract.daySpecs.filter((day) => day.kind === "new");
@@ -398,10 +405,10 @@ describe("monthly curriculum contract", () => {
 
       const tooFar = threeSupportPool();
       tooFar.supportTerms[0] = { ...tooFar.supportTerms[0]!, cefr: "B1" };
-      expect(() => planMonthlyResourcePool(tooFar)).toThrow(/support-1 is CEFR B1; supports must be within one level of A1/u);
+      expect(() => planMonthlyResourcePool(tooFar)).toThrow(/support-1 is CEFR B1; supports other than word family must be within one level of A1/u);
       const tamperedContract = structuredClone(contract);
       tamperedContract.supportTerms[0]!.cefr = "B2";
-      expect(validateMonthlyCurriculum(tamperedContract)).toContain("Expanded term support-1 is CEFR B2; supports must be within one level of A1");
+      expect(validateMonthlyCurriculum(tamperedContract)).toContain("Expanded term support-1 is CEFR B2; supports other than word family must be within one level of A1");
     });
   });
 

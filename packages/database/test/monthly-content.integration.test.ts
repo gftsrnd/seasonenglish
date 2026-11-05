@@ -171,6 +171,64 @@ describe("monthly content persistence", () => {
     const audit = await client.query<{ action: string }>("select action from audit_events where entity_id = $1", [original.id]);
     expect(audit.rows).toContainEqual({ action: "monthly.framework_retired" });
   });
+
+  it("lets a Manager reopen approved monthly resources on an Operator request and the Operator re-approve them", async () => {
+    const draft = (await repository.getOverview(DEMO_IDS.operator, month)).frameworks[0]!;
+    await repository.approveFramework(DEMO_IDS.operator, draft.id);
+    const approved = (await repository.getOverview(DEMO_IDS.operator, month)).frameworks[0]!;
+    expect(approved).toMatchObject({ status: "approved", reopenRequest: null });
+    const lessonCount = approved.lessons.length;
+    expect(lessonCount).toBeGreaterThan(0);
+
+    // Only one open request per framework.
+    const first = await repository.requestFrameworkReopen(DEMO_IDS.operator, approved.id, "The allocation needs new skill exercises.");
+    expect(first).toMatchObject({ status: "pending", frameworkVersion: approved.version });
+    await expect(repository.requestFrameworkReopen(DEMO_IDS.operator, approved.id, "Second request")).rejects.toMatchObject({ statusCode: 409, code: "MONTHLY_RESOURCE_REOPEN_PENDING" });
+    expect((await repository.getOverview(DEMO_IDS.operator, month)).frameworks[0]?.reopenRequest).toMatchObject({ id: first.id, status: "pending" });
+
+    const queue = await repository.listReopenRequests(DEMO_IDS.manager);
+    expect(queue).toContainEqual(expect.objectContaining({
+      id: first.id, target: "monthly_resources", targetId: approved.id, status: "pending",
+      monthlyResources: expect.objectContaining({ month, cefr: "A1", frameworkVersion: approved.version, lessonCount, lessonsWithContent: 0, removedLessonCount: null })
+    }));
+    // Existing daily-lesson requests are still listed next to the new target.
+    expect(queue.some((request) => request.target === "daily_lesson")).toBe(true);
+    expect(await repository.isFrameworkReopenRequest(DEMO_IDS.manager, first.id)).toBe(true);
+    expect(await repository.isFrameworkReopenRequest(DEMO_IDS.manager, "00000000-0000-4000-8000-000000000000")).toBe(false);
+
+    // Rejection keeps the resources locked and allows a new request.
+    const rejected = await repository.decideFrameworkReopenRequest(DEMO_IDS.manager, first.id, "rejected", "Keep the current plan.");
+    expect(rejected).toMatchObject({ status: "rejected", decisionReason: "Keep the current plan." });
+    expect((await repository.getOverview(DEMO_IDS.operator, month)).frameworks[0]).toMatchObject({ status: "approved", version: approved.version });
+    await expect(repository.decideFrameworkReopenRequest(DEMO_IDS.manager, first.id, "approved", "Too late")).rejects.toMatchObject({ statusCode: 404 });
+
+    const second = await repository.requestFrameworkReopen(DEMO_IDS.operator, approved.id, "The allocation still needs skill exercises.");
+    const reopened = await repository.decideFrameworkReopenRequest(DEMO_IDS.manager, second.id, "approved", "Reopen to re-plan the month.");
+    expect(reopened).toMatchObject({ status: "approved", monthlyResources: expect.objectContaining({ removedLessonCount: lessonCount, lessonCount: 0 }) });
+
+    const stored = await client.query<{ status: string; version: number; approved_by: string | null; approved_at: Date | null; curriculum_contract: Record<string, unknown>; scope_hash: string }>(
+      "select status, version, approved_by, approved_at, curriculum_contract, scope_hash from month_frameworks where id = $1", [approved.id]
+    );
+    expect(stored.rows[0]).toMatchObject({ status: "draft", version: approved.version + 1, approved_by: null, approved_at: null });
+    expect(stored.rows[0]?.curriculum_contract).not.toHaveProperty("daySpecs");
+    expect(stored.rows[0]?.curriculum_contract).toMatchObject({ version: approved.version + 1 });
+    expect((stored.rows[0]?.curriculum_contract.coreTerms as unknown[]).length).toBe(approved.resources!.coreTerms.length);
+    expect((stored.rows[0]?.curriculum_contract.supportTerms as unknown[]).length).toBe(approved.resources!.supportTerms.length);
+    expect(stored.rows[0]?.scope_hash).toMatch(/^monthly-pool-/u);
+    const lessons = await client.query("select id from month_lessons where framework_id = $1", [approved.id]);
+    expect(lessons.rows).toHaveLength(0);
+    const audit = await client.query<{ action: string }>("select action from audit_events where entity_id = $1", [approved.id]);
+    expect(audit.rows).toEqual(expect.arrayContaining([
+      { action: "monthly.framework_reopen_requested" }, { action: "monthly.framework_reopen_rejected" }, { action: "monthly.framework_reopened" }
+    ]));
+
+    // The normal approval flow re-plans the pool and materializes fresh lesson rows.
+    await repository.approveFramework(DEMO_IDS.operator, approved.id);
+    const reapproved = (await repository.getOverview(DEMO_IDS.operator, month)).frameworks[0]!;
+    expect(reapproved).toMatchObject({ status: "approved", version: approved.version + 1, reopenRequest: expect.objectContaining({ id: second.id, status: "approved" }) });
+    expect(reapproved.lessons).toHaveLength(lessonCount);
+    expect(reapproved.lessons.every((lesson) => lesson.status === "pending")).toBe(true);
+  });
 });
 
 function buildContract() {

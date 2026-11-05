@@ -529,7 +529,7 @@ describe("monthly AI resource generation", () => {
   it("selects the first three valid linked support terms from an ordered AI candidate set", () => {
     const candidates = [
       { id: "x1", word: "core phrase", meaning: "", type: "noun", relation: "synonym" as const, relatesToCoreId: "core-a" },
-      { id: "x2", word: "annual report", meaning: "", type: "noun", relation: "collocation" as const, relatesToCoreId: "core-a" },
+      { id: "x2", word: "use a tool", meaning: "", type: "noun", relation: "collocation" as const, relatesToCoreId: "core-a" },
       { id: "x3", word: "schedule", meaning: "", type: "noun", relation: "synonym" as const, relatesToCoreId: "core-a" },
       { id: "x4", word: "schedule", meaning: "", type: "noun", relation: "synonym" as const, relatesToCoreId: "core-a" },
       { id: "x5", word: "useful", meaning: "", type: "adjective", relation: "word_family" as const, relatesToCoreId: "core-a" },
@@ -549,14 +549,14 @@ describe("monthly AI resource generation", () => {
       needed: 3
     });
 
-    expect(result.selected.map((term) => term.word)).toEqual(["useful", "annual report", "schedule"]);
+    expect(result.selected.map((term) => term.word)).toEqual(["useful", "use a tool", "schedule"]);
     expect(result.rejected.some((item) => item.includes("core phrase -> core phrase"))).toBe(true);
   });
 
   it("rejects a phrase once the monthly phrase budget is exhausted", () => {
     const result = selectMonthlySupportCandidates({
       candidates: [
-        { id: "x1", word: "annual report", meaning: "", type: "noun", relation: "collocation", relatesToCoreId: "core-a" },
+        { id: "x1", word: "use a tool", meaning: "", type: "noun", relation: "collocation", relatesToCoreId: "core-a" },
         { id: "x2", word: "schedule", meaning: "", type: "noun", relation: "synonym", relatesToCoreId: "core-a" },
         { id: "x3", word: "useful", meaning: "", type: "adjective", relation: "word_family", relatesToCoreId: "core-a" }
       ],
@@ -573,13 +573,13 @@ describe("monthly AI resource generation", () => {
     });
 
     expect(result.selected.map((term) => term.word)).toEqual(["schedule", "useful"]);
-    expect(result.selected.some((term) => term.word === "annual report")).toBe(false);
+    expect(result.selected.some((term) => term.word === "use a tool")).toBe(false);
   });
 
   it("selects at most one phrase per core while allowing the second distinct semantic item", () => {
     const result = selectMonthlySupportCandidates({
       candidates: [
-        { id: "x1", word: "annual report", meaning: "", type: "noun", relation: "collocation", relatesToCoreId: "core-a" },
+        { id: "x1", word: "ask for help", meaning: "", type: "noun", relation: "collocation", relatesToCoreId: "core-a" },
         { id: "x2", word: "activity", meaning: "", type: "noun", relation: "umbrella", relatesToCoreId: "core-a" },
         { id: "x3", word: "priority", meaning: "", type: "noun", relation: "synonym", relatesToCoreId: "core-a" },
         { id: "x4", word: "schedule", meaning: "", type: "noun", relation: "synonym", relatesToCoreId: "core-a" },
@@ -597,7 +597,7 @@ describe("monthly AI resource generation", () => {
       needed: 4
     });
 
-    expect(result.selected.map((term) => term.word)).toEqual(["activity", "priority", "helpful", "annual report"]);
+    expect(result.selected.map((term) => term.word)).toEqual(["activity", "priority", "helpful", "ask for help"]);
     expect(result.selected.filter((term) => term.word.includes(" "))).toHaveLength(1);
   });
 
@@ -945,7 +945,7 @@ describe("monthly support pool rules (VH-R33: 3-9 per core, 35% repeats, CEFR ±
 
     const tooFar = threeSupportPlan();
     tooFar.expandedTerms[0]!.cefr = "B1";
-    expect(planErrors(() => buildMonthlyResourcesFromAiPlan(month, "A1", theme, threeSupportCriteria, tooFar))).toContain("Expanded resource expanded-1-1 is CEFR B1; supports must be within one level of A1.");
+    expect(planErrors(() => buildMonthlyResourcesFromAiPlan(month, "A1", theme, threeSupportCriteria, tooFar))).toContain("Expanded resource expanded-1-1 is CEFR B1; supports other than word family must be within one level of A1.");
 
     // C1 has no level above it; B2 is its only adjacent level.
     const c1 = threeSupportPlan();

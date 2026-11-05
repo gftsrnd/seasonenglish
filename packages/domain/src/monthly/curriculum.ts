@@ -71,6 +71,15 @@ export function monthlySupportLevelBand(monthCefr: CefrLevel, supportCefr: CefrL
   if (!supportCefr || supportCefr === monthCefr) return "same";
   return allowedMonthlySupportLevels(monthCefr).includes(supportCefr) ? "adjacent" : "out_of_range";
 }
+
+/**
+ * Whether a support term's level is acceptable for the month. Word-family items
+ * may come from any CEFR level (a learner meets the derived form even when it is
+ * rarer); every other relation must stay within one level (VH-R33).
+ */
+export function isMonthlySupportLevelAllowed(monthCefr: CefrLevel, term: { relation?: string | undefined; cefr?: CefrLevel | undefined }): boolean {
+  return term.relation === "word_family" || monthlySupportLevelBand(monthCefr, term.cefr) !== "out_of_range";
+}
 export const MONTHLY_EXERCISE_CODES = ["listening", "reading", "writing", "word_class", "word_use", "speaking"] as const;
 export type MonthlyExerciseCode = (typeof MONTHLY_EXERCISE_CODES)[number];
 export interface MonthlySkillExercisePlan {
@@ -247,8 +256,8 @@ export function buildMonthlyCurriculum(input: MonthlyCurriculumInput): MonthlyCu
   const duplicateCore = duplicateOf(input.coreTerms.map((term) => normalize(term.word)));
   if (duplicateCore) throw new RangeError(`Duplicate core term: ${duplicateCore}`);
   if (input.supportTerms.length < expectedCoreCount * MONTHLY_MIN_SUPPORTS_PER_CORE || input.supportTerms.length > expectedCoreCount * MONTHLY_MAX_SUPPORTS_PER_CORE) throw new RangeError(`Expected ${expectedCoreCount * MONTHLY_MIN_SUPPORTS_PER_CORE}-${expectedCoreCount * MONTHLY_MAX_SUPPORTS_PER_CORE} expanded terms for ${input.month}`);
-  const outOfRangeSupport = input.supportTerms.find((term) => monthlySupportLevelBand(input.cefr, term.cefr) === "out_of_range");
-  if (outOfRangeSupport) throw new RangeError(`Expanded term ${outOfRangeSupport.id} is CEFR ${outOfRangeSupport.cefr}; supports must be within one level of ${input.cefr}`);
+  const outOfRangeSupport = input.supportTerms.find((term) => !isMonthlySupportLevelAllowed(input.cefr, term));
+  if (outOfRangeSupport) throw new RangeError(`Expanded term ${outOfRangeSupport.id} is CEFR ${outOfRangeSupport.cefr}; supports other than word family must be within one level of ${input.cefr}`);
   if (input.supportTerms.some((term) => !input.coreTerms.some((core) => core.id === term.relatedCoreTermId))) throw new RangeError("Every expanded term must link to a core term in this month");
   if (input.supportTerms.some((term) => !isSingleEnglishHeadword(term.word) && !isNaturalLengthEnglishPhrase(term.word))) throw new RangeError("Expanded resources must be English headwords or two-to-four-word expressions");
   if (input.supportTerms.filter((term) => !isSingleEnglishHeadword(term.word)).length > Math.floor(input.supportTerms.length * 0.25)) throw new RangeError("Expanded expressions exceed the 25% monthly limit");
@@ -349,7 +358,7 @@ export function planMonthlyResourcePool(pool: MonthlyResourcePoolContract): Mont
   for (const support of pool.supportTerms) {
     if (!pool.coreTerms.some((core) => core.id === support.relatedCoreTermId)) errors.push(`Expanded term ${support.id} references an unknown core resource.`);
     if (coreWords.has(normalize(support.word))) errors.push(`Expanded term ${support.id} duplicates a core term.`);
-    if (monthlySupportLevelBand(pool.cefr, support.cefr) === "out_of_range") errors.push(`Expanded term ${support.id} is CEFR ${support.cefr}; supports must be within one level of ${pool.cefr}.`);
+    if (!isMonthlySupportLevelAllowed(pool.cefr, support)) errors.push(`Expanded term ${support.id} is CEFR ${support.cefr}; supports other than word family must be within one level of ${pool.cefr}.`);
   }
   const supportCounts = new Map<string, number>();
   const phraseCountByCore = new Map<string, number>();
@@ -462,7 +471,7 @@ export function validateMonthlyCurriculum(contract: MonthlyCurriculumContract): 
   if (contract.coreTerms.length !== expectedNewDays * 3) errors.push(`Monthly plan needs exactly three core words for each of ${expectedNewDays} new lessons`);
   if (contract.supportTerms.length < contract.coreTerms.length * MONTHLY_MIN_SUPPORTS_PER_CORE || contract.supportTerms.length > contract.coreTerms.length * MONTHLY_MAX_SUPPORTS_PER_CORE) errors.push("Monthly plan needs 3-9 linked expanded terms per core word");
   for (const term of contract.supportTerms) {
-    if (monthlySupportLevelBand(contract.cefr, term.cefr) === "out_of_range") errors.push(`Expanded term ${term.id} is CEFR ${term.cefr}; supports must be within one level of ${contract.cefr}`);
+    if (!isMonthlySupportLevelAllowed(contract.cefr, term)) errors.push(`Expanded term ${term.id} is CEFR ${term.cefr}; supports other than word family must be within one level of ${contract.cefr}`);
   }
   const duplicateCore = duplicateOf(contract.coreTerms.map((term) => normalize(term.word)));
   if (duplicateCore) errors.push(`Duplicate core term: ${duplicateCore}`);
@@ -718,6 +727,12 @@ function buildMonthlySkillExercises(kind: "new" | "review", coreIds: string[], e
 }
 
 function validateSkillExercises(day: MonthlyDaySpec, expectedResourceIds: readonly string[], errors: string[]): void {
+  // Plans stored before the skillExercises DaySpec field have no array here.
+  // Report it instead of crashing so the caller can answer with a plan error.
+  if (!Array.isArray(day.skillExercises)) {
+    errors.push(`Lesson ${day.lessonNumber} has no skill exercise plan; the stored plan predates skill exercises and must be re-planned`);
+    return;
+  }
   const exerciseCodes = day.skillExercises.map((item) => item.exerciseCode);
   if (exerciseCodes.length !== MONTHLY_EXERCISE_CODES.length || duplicateOf(exerciseCodes)
     || MONTHLY_EXERCISE_CODES.some((code) => !exerciseCodes.includes(code))) {

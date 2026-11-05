@@ -1863,3 +1863,4 @@
     z-index: 20;
   }
 }
+.manager-reopen-warning{margin:6px 0;border-radius:8px;padding:6px 8px;background:var(--danger-soft);color:var(--danger)}

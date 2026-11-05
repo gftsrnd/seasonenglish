@@ -75,6 +75,19 @@ export interface MonthFrameworkView {
     light: MonthlyQualityFindingView[];
     acknowledged?: OperatorAcknowledgementView;
   };
+  /** Latest Operator request asking a Manager to reopen these approved resources; null when none exists. */
+  reopenRequest?: MonthFrameworkReopenRequestView | null;
+}
+
+export interface MonthFrameworkReopenRequestView {
+  id: string;
+  /** Framework version the request was made against. */
+  frameworkVersion: number;
+  reason: string;
+  status: "pending" | "approved" | "rejected";
+  decisionReason: string | null;
+  createdAt: string;
+  decidedAt: string | null;
 }
 
 export interface MonthDayPlanView {

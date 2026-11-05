@@ -76,7 +76,9 @@ function ReopenRequestsRoute() {
   };
   useEffect(() => { void load(); }, []);
   const decide = async (request: ReopenRequestView, decision: "approved" | "rejected") => {
-    const reason = await modal.prompt({ title: decision === "approved" ? "Duyệt mở khóa" : "Từ chối mở khóa", label: "Lý do gửi cho vận hành và học viên", confirmLabel: decision === "approved" ? "Duyệt mở khóa" : "Từ chối", tone: decision === "approved" ? "primary" : "danger" });
+    const resources = request.monthlyResources;
+    const warning = decision === "approved" && resources ? monthlyResourcesApprovalWarning(resources) : undefined;
+    const reason = await modal.prompt({ title: decision === "approved" ? "Duyệt mở khóa" : "Từ chối mở khóa", label: "Lý do gửi cho vận hành và học viên", ...(warning ? { message: warning } : {}), confirmLabel: decision === "approved" ? "Duyệt mở khóa" : "Từ chối", tone: decision === "approved" && !(resources && resources.lessonsWithContent > 0) ? "primary" : "danger" });
     if (!reason?.trim()) return;
     setBusy(request.id);
     try { await apiClient.decideManagerReopenRequest(request.id, decision, reason.trim()); await load(); }
@@ -86,7 +88,8 @@ function ReopenRequestsRoute() {
   const queues: Array<{ title: string; detail: string; targets: ReopenRequestView["target"][] }> = [
     { title: "Tài khoản học viên", detail: "Các yêu cầu mở lại quyền truy cập tài khoản học viên.", targets: ["account"] },
     { title: "Bài ngày và bài ôn", detail: "Các yêu cầu mở lại bài ngày hoặc bài ôn đã khóa.", targets: ["daily_lesson", "weekly_review"] },
-    { title: "Đề thi", detail: "Các yêu cầu mở lại đề thi đã phát hành. Đề đã có người bắt đầu làm không được mở lại.", targets: ["monthly_exam"] }
+    { title: "Đề thi", detail: "Các yêu cầu mở lại đề thi đã phát hành. Đề đã có người bắt đầu làm không được mở lại.", targets: ["monthly_exam"] },
+    { title: "Tài nguyên tháng", detail: "Các yêu cầu mở lại bộ tài nguyên tháng đã chốt. Khi duyệt, tài nguyên về bản nháp và lịch bài học của trình độ đó bị xoá để Vận hành duyệt lại.", targets: ["monthly_resources"] }
   ];
   if (!requests && !error) return <RouteState error="" title="Yêu cầu mở khóa" label="Đang tải yêu cầu mở khóa" />;
   return <div className="manager-page manager-reopen-requests-page">
@@ -97,10 +100,25 @@ function ReopenRequestsRoute() {
         const items = (requests ?? []).filter(request => queue.targets.includes(request.target));
         return <section className="card manager-reopen-requests-card" key={queue.title}><h2>{queue.title}</h2><p className="small muted">{queue.detail}</p>{items.length === 0
           ? <p className="small muted manager-reopen-requests-empty">Chưa có yêu cầu cần xử lý.</p>
-          : <div className="list">{items.map(request => <article className="item small" key={request.id}><b>{request.target === "weekly_review" ? "Bài ôn" : request.target === "daily_lesson" ? "Bài ngày" : request.target === "monthly_exam" ? "Đề thi" : "Tài khoản"}</b><p>{request.reason}</p><p className="xs muted">Trạng thái: {request.status === "pending" ? "Chờ xử lý" : request.status === "approved" ? "Đã duyệt" : "Đã từ chối"}</p>{request.status === "pending" ? <div className="row"><button type="button" className="btn-sm btn-primary" disabled={busy === request.id} onClick={() => void decide(request, "approved")}>Duyệt mở khóa</button><button type="button" className="btn-sm" disabled={busy === request.id} onClick={() => void decide(request, "rejected")}>Từ chối</button></div> : request.decisionReason ? <p className="xs muted">Lý do xử lý: {request.decisionReason}</p> : null}</article>)}</div>}</section>;
+          : <div className="list">{items.map(request => <article className="item small" key={request.id}><b>{reopenRequestLabel(request)}</b>{request.monthlyResources ? <p className="xs muted">Phiên bản tài nguyên v{request.monthlyResources.frameworkVersion}</p> : null}<p>{request.reason}</p>{request.status === "pending" && request.monthlyResources && request.monthlyResources.lessonsWithContent > 0 ? <p className="xs manager-reopen-warning" role="alert">Cảnh báo: {request.monthlyResources.lessonsWithContent} bài đã có nội dung sẽ bị xoá khỏi lịch khi duyệt mở lại.</p> : null}{request.status === "approved" && request.monthlyResources?.removedLessonCount != null ? <p className="xs muted">Đã xoá {request.monthlyResources.removedLessonCount} bài khỏi lịch.</p> : null}<p className="xs muted">Trạng thái: {request.status === "pending" ? "Chờ xử lý" : request.status === "approved" ? "Đã duyệt" : "Đã từ chối"}</p>{request.status === "pending" ? <div className="row"><button type="button" className="btn-sm btn-primary" disabled={busy === request.id} onClick={() => void decide(request, "approved")}>Duyệt mở khóa</button><button type="button" className="btn-sm" disabled={busy === request.id} onClick={() => void decide(request, "rejected")}>Từ chối</button></div> : request.decisionReason ? <p className="xs muted">Lý do xử lý: {request.decisionReason}</p> : null}</article>)}</div>}</section>;
       })}
     </div>
   </div>;
+}
+
+function reopenRequestLabel(request: ReopenRequestView): string {
+  if (request.monthlyResources) {
+    const [year, month] = request.monthlyResources.month.split("-");
+    return `Tài nguyên tháng ${month}/${year} · ${request.monthlyResources.cefr}`;
+  }
+  return request.target === "weekly_review" ? "Bài ôn" : request.target === "daily_lesson" ? "Bài ngày" : request.target === "monthly_exam" ? "Đề thi" : request.target === "monthly_resources" ? "Tài nguyên tháng" : "Tài khoản";
+}
+
+function monthlyResourcesApprovalWarning(resources: NonNullable<ReopenRequestView["monthlyResources"]>): string {
+  if (resources.lessonsWithContent > 0) {
+    return `Cảnh báo: ${resources.lessonsWithContent}/${resources.lessonCount} bài đã có nội dung (đã soạn hoặc đã duyệt). Duyệt mở lại sẽ xoá toàn bộ ${resources.lessonCount} bài khỏi lịch, kể cả các bài này. Tài nguyên được giữ nguyên và trở về bản nháp.`;
+  }
+  return `Duyệt mở lại sẽ đưa tài nguyên về bản nháp và xoá ${resources.lessonCount} bài chưa có nội dung khỏi lịch.`;
 }
 
 function ProgressRoute() {

@@ -8,7 +8,8 @@ import { z } from "zod";
 import { createRoleGuard } from "../identity/policy.js";
 import { evaluateMonthlyLessonQuality } from "./monthly-quality.js";
 import { generateMonthlyDayWithAi, generateMonthlyReviewWithAi, MONTHLY_DAY_COMPONENTS } from "./monthly-day-generation.js";
-import { buildMonthlyCoreCandidatesPrompt, buildMonthlyOptionalSupportPrompt, buildMonthlyPronunciationDistinctnessConstraint, buildMonthlyPronunciationSchemaRepairIssue, buildMonthlyResourcesFromAiPlan, buildMonthlySupportRelationAuditPrompt, buildMonthlySupportRelationCandidatePrompt, CURRENT_MONTHLY_RESOURCE_CHECKPOINT_SCHEMA_VERSIONS, doesMonthlyPronunciationExampleMatch, getMonthlyGrammarPhaseIssues, getMonthlyPronunciationTargetIssue, hasSingleCoreSense, isCurrentMonthlyResourceCheckpointCategory, isGenuineWordFamily, isSingleHeadword, keepExactMonthlySupportRelationCandidates, keepSemanticallyAuditedSupportCandidates, MonthlyResourceCriteriaError, MonthlyResourcePlanError, parseMonthlyResourceAiOutput, runMonthlyGrammarPhaseWithRetry, selectMonthlyCoreCandidates, selectMonthlyPronunciationCandidates, selectMonthlySupportCandidates } from "./monthly-resource-generation.js";
+import { buildMonthlyCoreCandidatesPrompt, buildMonthlyOptionalSupportPrompt, buildMonthlyPronunciationDistinctnessConstraint, buildMonthlyPronunciationSchemaRepairIssue, buildMonthlyResourcesFromAiPlan, buildMonthlySupportRelationAuditPrompt, buildMonthlySupportRelationCandidatePrompt, CURRENT_MONTHLY_RESOURCE_CHECKPOINT_SCHEMA_VERSIONS, doesMonthlyPronunciationExampleMatch, getMonthlyGrammarPhaseIssues, getMonthlyPronunciationTargetIssue, hasSingleCoreSense, isCurrentMonthlyResourceCheckpointCategory, collocationContainsCoreWord, isGenuineWordFamily, isMonthlyInflectionalVariant, isSingleHeadword, keepExactMonthlySupportRelationCandidates, keepSemanticallyAuditedSupportCandidates, MonthlyResourceCriteriaError, MonthlyResourcePlanError, parseMonthlyResourceAiOutput, prefilterMonthlySupportCandidatesForAudit, runMonthlyGrammarPhaseWithRetry, selectMonthlyCoreCandidates, selectMonthlyPronunciationCandidates, selectMonthlySupportCandidates } from "./monthly-resource-generation.js";
+import { MonthlyCorePhaseShortfallError, runMonthlyCorePhase } from "./monthly-core-phase.js";
 import { isPronunciationTargetAllowedForLevel, isValidMonthlyPronunciationIpaTarget } from "./monthly-resource-plan-spec.js";
 import { safeGenerationDiagnosticIssues } from "./generation-errors.js";
 
@@ -64,16 +65,32 @@ export function registerMonthlyContentRoutes(app: FastifyInstance, pool: Pool, a
     return { requests: await repositories.monthlyContent.listReopenRequests(request.e4sSession!.user.id) };
   });
 
+  // One decision endpoint pair for every monthly reopen request: a request id
+  // names either a lesson correction or a monthly-resources reopen request.
+  const decideReopen = async (managerId: string, requestId: string, decision: "approved" | "rejected", reason: string) => {
+    if (await repositories.monthlyContent.isFrameworkReopenRequest(managerId, requestId)) {
+      return repositories.monthlyContent.decideFrameworkReopenRequest(managerId, requestId, decision, reason);
+    }
+    return repositories.monthlyContent.decideReopenRequest(managerId, requestId, decision, reason);
+  };
+
   app.post("/api/v1/manager/reopen-requests/:correctionId/approve", { preHandler: manager }, async (request) => {
     const { correctionId } = correctionParams.parse(request.params);
     const input = reopenDecisionInput.parse(request.body);
-    return repositories.monthlyContent.decideReopenRequest(request.e4sSession!.user.id, correctionId, "approved", input.reason);
+    return decideReopen(request.e4sSession!.user.id, correctionId, "approved", input.reason);
   });
 
   app.post("/api/v1/manager/reopen-requests/:correctionId/reject", { preHandler: manager }, async (request) => {
     const { correctionId } = correctionParams.parse(request.params);
     const input = reopenDecisionInput.parse(request.body);
-    return repositories.monthlyContent.decideReopenRequest(request.e4sSession!.user.id, correctionId, "rejected", input.reason);
+    return decideReopen(request.e4sSession!.user.id, correctionId, "rejected", input.reason);
+  });
+
+  app.post("/api/v1/content/month-frameworks/:id/reopen-requests", { preHandler: contentOperator }, async (request, reply) => {
+    const { id } = frameworkParams.parse(request.params);
+    const input = correctionInput.parse(request.body);
+    const created = await repositories.monthlyContent.requestFrameworkReopen(request.e4sSession!.user.id, id, input.reason);
+    return reply.code(201).send(created);
   });
   app.post("/api/v1/manager/month-frameworks/:id/retire", { preHandler: manager }, async (request, reply) => {
     const { id } = frameworkParams.parse(request.params);
@@ -246,16 +263,23 @@ export function registerMonthlyContentRoutes(app: FastifyInstance, pool: Pool, a
         coreTermBatch,
         targets
       });
-      const runPhase = async (phasePrompt: string, coreTermBatch: Array<{ id: string; word: string; meaning: string; type: string; ipa: string }>, targets: { vocabularyCount: number; expandedVocabularyCount: number; grammarTopicCount: number; pronunciationSoundCount: number }, options: { temperature?: number } = {}) => {
+      const runPhase = async (phasePrompt: string, coreTermBatch: Array<{ id: string; word: string; meaning: string; type: string; ipa: string }>, targets: { vocabularyCount: number; expandedVocabularyCount: number; grammarTopicCount: number; pronunciationSoundCount: number }, options: { temperature?: number; maxOutputTokens?: number } = {}) => {
         const generated = await runner.runTask("monthly_resource_generation", phaseInput(coreTermBatch, targets), {
           systemPrompt: `${task.prompt}\n\n${phasePrompt}`,
-          maxOutputTokens: 6_000,
+          maxOutputTokens: options.maxOutputTokens ?? 6_000,
           temperature: options.temperature ?? 0.15,
           maxAttempts: 2
         });
-        const parsedDebug = parseMonthlyResourceAiOutput(generated.output); // DEBUG-PREFLIGHT (temporary)
-        console.error("DEBUG-PREFLIGHT", JSON.stringify({ cores: parsedDebug.coreTerms.map((t) => `${t.id}:${t.word}`), edges: parsedDebug.expandedTerms.map((t) => `${t.relatesToCoreId}>${t.relation}:${t.word}:${t.cefr ?? "-"}`), rawExpandedCount: Array.isArray((generated.output as { expandedTerms?: unknown[] })?.expandedTerms) ? (generated.output as { expandedTerms: unknown[] }).expandedTerms.length : null }));
-        return parsedDebug;
+        return parseMonthlyResourceAiOutput(generated.output);
+      };
+      const runSupportAudit = async (core: { id: string; word: string; meaning: string; type: string; ipa: string }, candidates: z.infer<typeof monthlyResourcePlanOutputSchema>["expandedTerms"]) => {
+        const audited = await runner.runTask("monthly_resource_generation", phaseInput([core], { vocabularyCount: 0, expandedVocabularyCount: 0, grammarTopicCount: 0, pronunciationSoundCount: 0 }), {
+          systemPrompt: buildMonthlySupportRelationAuditPrompt({ core, candidates }),
+          maxOutputTokens: 3_500,
+          temperature: 0,
+          maxAttempts: 2
+        });
+        return parseMonthlyResourceAiOutput(audited.output);
       };
       const coreTerms: z.infer<typeof monthlyResourcePlanOutputSchema>["coreTerms"] = readCheckpointCategory("coreTerms", monthlyResourcePlanOutputSchema.shape.coreTerms) ?? [];
       const coreWords = new Set<string>();
@@ -268,157 +292,47 @@ export function registerMonthlyContentRoutes(app: FastifyInstance, pool: Pool, a
         && coreTerms.every((term) => isSingleHeadword(term.word))
         && coreTerms.every((term) => hasSingleCoreSense(term.type, term.meaning))
         && new Set(coreTerms.map((term) => normalizeMonthlyResourceWord(term.word))).size === coreTerms.length;
+      // A shorter, otherwise valid core list is progress saved by an earlier run
+      // that ended short; the core phase continues from it instead of restarting.
+      const partialCores = !cachedCoreValid
+        && coreTerms.length > 0 && coreTerms.length < criteria.vocabularyCount
+        && coreTerms.every((term) => isSingleHeadword(term.word))
+        && new Set(coreTerms.map((term) => normalizeMonthlyResourceWord(term.word))).size === coreTerms.length
+        ? [...coreTerms]
+        : [];
+      const partialSupports = partialCores.length
+        ? (readCheckpointCategory("expandedTerms", monthlyResourcePlanOutputSchema.shape.expandedTerms) ?? []).filter((term) => partialCores.some((core) => core.id === term.relatesToCoreId))
+        : [];
       if (!cachedCoreValid) coreTerms.length = 0;
       for (const term of coreTerms) coreWords.add(normalizeMonthlyResourceWord(term.word));
       const preflightSupportTarget = Math.min(MONTHLY_MAX_SUPPORTS_PER_CORE, Math.max(3, Math.floor(criteria.expandedVocabularyCount / (newLessonCount * 3))));
-      for (let batchIndex = coreTerms.length / 3; batchIndex < newLessonCount; batchIndex += 1) {
-        let accepted: z.infer<typeof monthlyResourcePlanOutputSchema>["coreTerms"] | undefined;
-        let acceptedSupports: z.infer<typeof monthlyResourcePlanOutputSchema>["expandedTerms"] = [];
-        let issue = "";
-        let rejectedCoreWords: string[] = [];
-        // Cores accepted in an earlier attempt of this batch are kept; later
-        // attempts only need to fill the remaining slots.
-        const selectedCores: z.infer<typeof monthlyResourcePlanOutputSchema>["coreTerms"] = [];
-        const selectedSupportEdges: z.infer<typeof monthlyResourcePlanOutputSchema>["expandedTerms"] = [];
-        for (let attempt = 0; attempt < 4; attempt += 1) {
-          const candidateCount = attempt === 0 ? 6 : 12;
-          const prompt = buildMonthlyCoreCandidatesPrompt({
+      if (!cachedCoreValid) {
+        // Month-wide core selection: parallel generation, concurrent audit and
+        // gap-fill, then deterministic sequential selection (see monthly-core-phase.ts).
+        let corePhase: Awaited<ReturnType<typeof runMonthlyCorePhase>>;
+        try {
+          corePhase = await runMonthlyCorePhase({
             cefr: criteria.cefr,
-            theme: theme.title,
-            communicationGoal: theme.communicationGoal,
-            existingCoreWords: [...coreWords, ...selectedCores.map((term) => term.word), ...rejectedCoreWords],
-            batchNumber: batchIndex + 1,
-            candidateCount,
-            preflightRelations: true,
-            rejectedWords: rejectedCoreWords,
-            previousIssue: issue
-          });
-          const result = await runPhase(prompt, [], { vocabularyCount: candidateCount, expandedVocabularyCount: candidateCount * 3, grammarTopicCount: 0, pronunciationSoundCount: 0 });
-          if (result.grammarTopics.length || result.pronunciationTargets.length) {
-            issue = "core suitability batch included unrelated grammar or pronunciation categories";
-            continue;
-          }
-          const batchCoreWords = new Set(result.coreTerms.map((term) => normalizeMonthlyResourceWord(term.word)));
-          const batchIds = new Set(result.coreTerms.map((term) => term.id));
-          if (result.coreTerms.length !== candidateCount || batchIds.size !== result.coreTerms.length) {
-            issue = `core suitability batch needs ${candidateCount} candidates with unique IDs; received ${result.coreTerms.length}`;
-            rejectedCoreWords = [...new Set([...rejectedCoreWords, ...result.coreTerms.map((term) => term.word)])];
-            continue;
-          }
-          const candidateFailures: string[] = [];
-          const isInvalidAiOutput = (error: unknown) => Boolean(error && typeof error === "object" && "code" in error && (error as { code?: unknown }).code === "AI_OUTPUT_INVALID");
-          const candidateCoreForbidden = new Set([...coreWords, ...batchCoreWords]);
-          const auditCandidates = async (candidate: typeof result.coreTerms[number], edges: typeof result.expandedTerms) => {
-            const audited = await runner.runTask("monthly_resource_generation", phaseInput([candidate], { vocabularyCount: 0, expandedVocabularyCount: 0, grammarTopicCount: 0, pronunciationSoundCount: 0 }), {
-              systemPrompt: buildMonthlySupportRelationAuditPrompt({ core: candidate, candidates: edges }),
-              maxOutputTokens: 3_500,
-              temperature: 0,
-              maxAttempts: 2
-            });
-            return keepSemanticallyAuditedSupportCandidates(edges, parseMonthlyResourceAiOutput(audited.output).expandedTerms);
-          };
-          const selectSupportsFor = (candidate: typeof result.coreTerms[number], auditedEdges: typeof result.expandedTerms) => selectMonthlySupportCandidates({
-            candidates: auditedEdges,
-            coreId: candidate.id,
-            coreWord: candidate.word,
-            coreType: candidate.type,
-            coreWords: candidateCoreForbidden,
-            sameCoreWords: new Set(),
-            sameCoreRelations: new Set(),
-            existingSupportWords: [...preflightSupportTerms, ...selectedSupportEdges].map((term) => term.word),
+            theme: { title: theme.title, communicationGoal: theme.communicationGoal },
+            neededCount: criteria.vocabularyCount,
             maxRepeatedPlacements: maxExpandedRepeats,
             maxPhrasePlacements: maxExpandedPhrases,
-            cefr: criteria.cefr,
-            // Keep every audited support up to the per-core target (<= 9, at
-            // most 3 per relation), not only the three required ones, so the
-            // enrichment phase only asks the AI for what is still missing.
-            needed: preflightSupportTarget
-          }).selected;
-          // AI work per candidate (audit, then relation-specific gap filling for
-          // any required relation still missing) is independent, so it runs
-          // concurrently. Selection stays sequential because it depends on the
-          // cores and supports already accepted (uniqueness, repeat ceiling).
-          const prepareCandidate = async (candidate: typeof result.coreTerms[number]) => {
-            const candidateEdges = result.expandedTerms.filter((term) => term.relatesToCoreId === candidate.id);
-            let auditedEdges: typeof result.expandedTerms;
-            try { auditedEdges = await auditCandidates(candidate, candidateEdges); }
-            catch (error) {
-              if (isInvalidAiOutput(error)) return { candidate, candidateEdges, auditedEdges: [] as typeof result.expandedTerms, failure: `${candidate.word}: relation audit output was invalid` };
-              throw error;
-            }
-            const preliminary = selectSupportsFor(candidate, auditedEdges);
-            const missingRequired = (["umbrella", "synonym", "word_family"] as const).filter((relation) => !preliminary.some((term) => term.relation === relation));
-            const gapResults = await Promise.all(missingRequired.map(async (relation) => {
-              try {
-                const gapPrompt = buildMonthlySupportRelationCandidatePrompt({
-                  cefr: criteria.cefr,
-                  core: candidate,
-                  relation,
-                  theme: theme.title,
-                  forbiddenCoreWords: [...candidateCoreForbidden],
-                  existingSupportWords: [...preflightSupportTerms, ...selectedSupportEdges].map((term) => term.word),
-                  sameCoreSupportWords: auditedEdges.map((term) => term.word),
-                  rejectedCandidateWords: candidateEdges.filter((term) => term.relation === relation && !auditedEdges.includes(term)).map((term) => term.word),
-                  previousIssue: "",
-                  candidateCount: 8
-                });
-                const gapResult = await runPhase(gapPrompt, [candidate], { vocabularyCount: 0, expandedVocabularyCount: 8, grammarTopicCount: 0, pronunciationSoundCount: 0 }, { temperature: 0.35 });
-                const gapCandidates = keepExactMonthlySupportRelationCandidates(gapResult.expandedTerms, relation, candidate.id);
-                return gapCandidates.length ? await auditCandidates(candidate, gapCandidates) : [];
-              } catch (error) {
-                if (isInvalidAiOutput(error)) return [];
-                throw error;
-              }
-            }));
-            return { candidate, candidateEdges, auditedEdges: [...auditedEdges, ...gapResults.flat()], failure: "" };
-          };
-          const preliminaryEligible = result.coreTerms.filter((candidate) => {
-            const ok = selectMonthlyCoreCandidates({ candidates: [candidate], existingCoreWords: new Set([...coreWords, ...selectedCores.map((term) => normalizeMonthlyResourceWord(term.word))]), needed: 1 }).selected.length === 1;
-            if (!ok) candidateFailures.push(`${candidate.word}: duplicate, mixed-sense, or overlapping core`);
-            return ok;
+            supportTargetPerCore: preflightSupportTarget,
+            generate: runPhase,
+            audit: runSupportAudit,
+            ...(partialCores.length ? { initial: { coreTerms: partialCores, supportTerms: partialSupports } } : {})
           });
-          const PREFLIGHT_CONCURRENCY = 4;
-          for (let start = 0; start < preliminaryEligible.length && selectedCores.length < 3; start += PREFLIGHT_CONCURRENCY) {
-            const prepared = await Promise.all(preliminaryEligible.slice(start, start + PREFLIGHT_CONCURRENCY).map(prepareCandidate));
-            for (const { candidate, candidateEdges, auditedEdges, failure } of prepared) {
-              if (selectedCores.length === 3) break;
-              if (failure) { candidateFailures.push(failure); continue; }
-              const eligibleCore = selectMonthlyCoreCandidates({
-                candidates: [candidate],
-                existingCoreWords: new Set([...coreWords, ...selectedCores.map((term) => normalizeMonthlyResourceWord(term.word))]),
-                needed: 1
-              }).selected[0];
-              if (!eligibleCore) {
-                candidateFailures.push(`${candidate.word}: duplicate, mixed-sense, or overlapping core`);
-                continue;
-              }
-              const selectedEdges = selectSupportsFor(candidate, auditedEdges);
-              const selectedRelations = new Set(selectedEdges.map((term) => term.relation));
-              if (selectedEdges.length < 3 || !["umbrella", "synonym", "word_family"].every((relation) => selectedRelations.has(relation as typeof selectedEdges[number]["relation"]))) {
-                const relationSummary = (terms: typeof candidateEdges) => ["umbrella", "synonym", "word_family"].map((relation) => {
-                  const words = terms.filter((term) => term.relation === relation).map((term) => term.word).slice(0, 3);
-                  return `${relation}=${words.join("/") || "∅"}`;
-                }).join(", ");
-                candidateFailures.push(`${candidate.word}: generated [${relationSummary(candidateEdges)}], audit kept [${relationSummary(auditedEdges)}], selected [${relationSummary(selectedEdges)}]`);
-                continue;
-              }
-              const finalId = `${criteria.cefr.toLowerCase()}-core-${batchIndex * 3 + selectedCores.length + 1}`;
-              selectedCores.push({ ...eligibleCore, id: finalId });
-              selectedSupportEdges.push(...selectedEdges.map((term) => ({ ...term, relatesToCoreId: finalId })));
-            }
+        } catch (error) {
+          if (error instanceof MonthlyCorePhaseShortfallError && error.partial.coreTerms.length) {
+            await saveCheckpointCategory("coreTerms", error.partial.coreTerms);
+            await saveCheckpointCategory("expandedTerms", error.partial.supportTerms);
           }
-          if (selectedCores.length === 3) {
-            accepted = selectedCores;
-            acceptedSupports = selectedSupportEdges;
-            break;
-          }
-          issue = `batch ${batchIndex + 1} preflight found only ${selectedCores.length} of 3 usable core candidates. ${candidateFailures.join("; ") || "No candidate passed the required umbrella, synonym, and word-family checks."}`;
-          rejectedCoreWords = [...new Set([...rejectedCoreWords, ...result.coreTerms.map((term) => term.word)])];
+          throw error;
         }
-        if (!accepted) throw new MonthlyResourcePlanError([`Core vocabulary generation failed: ${issue}.`]);
-        coreTerms.push(...accepted);
-        accepted.forEach((term) => coreWords.add(normalizeMonthlyResourceWord(term.word)));
-        preflightSupportTerms.push(...acceptedSupports);
+        coreTerms.push(...corePhase.coreTerms);
+        corePhase.coreTerms.forEach((term) => coreWords.add(normalizeMonthlyResourceWord(term.word)));
+        preflightSupportTerms.push(...corePhase.supportTerms);
+        request.log.info({ month: month.month, cefr: criteria.cefr, phase: "core", cores: corePhase.coreTerms.length, preflightSupports: corePhase.supportTerms.length, ...corePhase.stats }, "Monthly resource core phase finished");
       }
       if (!cachedCoreValid) await saveCheckpointCategory("coreTerms", coreTerms);
       if (preflightSupportTerms.length) await saveCheckpointCategory("expandedTerms", preflightSupportTerms);
@@ -429,7 +343,11 @@ export function registerMonthlyContentRoutes(app: FastifyInstance, pool: Pool, a
       const cachedSupportsByCore = new Map(coreTerms.map((core) => [core.id, cachedExpanded.filter((term) => term.relatesToCoreId === core.id)]));
       const expandedTerms: z.infer<typeof monthlyResourcePlanOutputSchema>["expandedTerms"] = [];
       for (const core of coreTerms) {
-        const supports = cachedSupportsByCore.get(core.id) ?? [];
+        // Quality rules A and C also apply to resumed supports: drop topic-only
+        // collocations and inflection-only duplicates, then refill them below.
+        const supports = (cachedSupportsByCore.get(core.id) ?? []).filter((term, index, list) => (term.relation !== "collocation" || collocationContainsCoreWord(core.word, term.word))
+          && !isMonthlyInflectionalVariant(term.word, core.word, { includeIng: term.relation !== "word_family" })
+          && !list.slice(0, index).some((earlier) => isMonthlyInflectionalVariant(term.word, earlier.word)));
         const uniqueWords = new Set(supports.map((term) => normalizeMonthlyResourceWord(term.word)));
         const validPartialSupports = supports.length <= 9
           && uniqueWords.size === supports.length
@@ -457,6 +375,8 @@ export function registerMonthlyContentRoutes(app: FastifyInstance, pool: Pool, a
       // concurrently in a small pool. Each core reads the shared pool as it
       // stands; the repeat ceiling is re-enforced after all cores finish.
       const firstIncompleteCore = coreTerms.findIndex((core, index) => !isCompleteCoreSupportSet(core, index));
+      const enrichmentStartedAt = Date.now();
+      const enrichmentStats = { generationCalls: 0, gapFillCalls: 0, auditCalls: 0, auditsSkippedByPrefilter: 0 };
       const enrichCore = async (coreIndex: number) => {
         let coreTerm = coreTerms[coreIndex]!;
         const cachedTermsForCore = expandedTerms.filter((term) => term.relatesToCoreId === coreTerm.id);
@@ -495,16 +415,24 @@ export function registerMonthlyContentRoutes(app: FastifyInstance, pool: Pool, a
                 previousIssue: relationIssue,
                 candidateCount: 12
               });
+              enrichmentStats.gapFillCalls += 1;
               const result = await runPhase(prompt, [coreTerm], { vocabularyCount: 0, expandedVocabularyCount: 12, grammarTopicCount: 0, pronunciationSoundCount: 0 }, { temperature: 0.35 });
-              const relationCandidates = keepExactMonthlySupportRelationCandidates(result.expandedTerms, relation, coreTerm.id);
-              const mislabeledCandidates = result.expandedTerms.filter((term) => !relationCandidates.includes(term));
+              const exactRelationCandidates = keepExactMonthlySupportRelationCandidates(result.expandedTerms, relation, coreTerm.id);
+              // Cheap deterministic screen (word family, collocation) before paying for an audit.
+              const prefiltered = prefilterMonthlySupportCandidatesForAudit(coreTerm, exactRelationCandidates);
+              exactRelationCandidates.filter((term) => !prefiltered.kept.includes(term)).forEach((term) => rejectedCandidateWords.add(term.word));
+              const relationCandidates = prefiltered.kept;
+              const mislabeledCandidates = result.expandedTerms.filter((term) => !exactRelationCandidates.includes(term));
               mislabeledCandidates.forEach((term) => rejectedCandidateWords.add(term.word));
-              if (!relationCandidates.length && result.expandedTerms.length) {
+              if (!exactRelationCandidates.length && result.expandedTerms.length) {
                 relationIssue = `the model generated ${result.expandedTerms.length} support candidates, but none had exact relation ${relation} linked to ${coreTerm.id}; rejected labels: ${mislabeledCandidates.slice(0, 4).map((term) => `${term.word} (${term.relation} → ${term.relatesToCoreId})`).join(", ")}`;
                 continue;
               }
               if (!relationCandidates.length) {
-                relationIssue = `the model returned no candidates for relation ${relation}`;
+                if (exactRelationCandidates.length) enrichmentStats.auditsSkippedByPrefilter += 1;
+                relationIssue = exactRelationCandidates.length
+                  ? `every ${relation} candidate failed the deterministic check: ${prefiltered.rejected.slice(0, 4).join(", ")}`
+                  : `the model returned no candidates for relation ${relation}`;
                 continue;
               }
               if (result.coreTerms.length || result.grammarTopics.length || result.pronunciationTargets.length) {
@@ -513,6 +441,7 @@ export function registerMonthlyContentRoutes(app: FastifyInstance, pool: Pool, a
               const auditPrompt = buildMonthlySupportRelationAuditPrompt({ core: coreTerm, candidates: relationCandidates });
               let auditResult: z.infer<typeof monthlyResourcePlanOutputSchema>;
               try {
+                enrichmentStats.auditCalls += 1;
                 const audited = await runner.runTask("monthly_resource_generation", phaseInput([coreTerm], { vocabularyCount: 0, expandedVocabularyCount: 0, grammarTopicCount: 0, pronunciationSoundCount: 0 }), {
                   systemPrompt: auditPrompt,
                   maxOutputTokens: 3_500,
@@ -592,14 +521,24 @@ export function registerMonthlyContentRoutes(app: FastifyInstance, pool: Pool, a
                 previousIssue: optionalPreviousIssue,
                 candidateCount: 12
               });
+              enrichmentStats.generationCalls += 1;
               const result = await runPhase(optionalPrompt, [coreTerm], { vocabularyCount: 0, expandedVocabularyCount: optionalCount, grammarTopicCount: 0, pronunciationSoundCount: 0 });
               if (result.coreTerms.length || result.grammarTopics.length || result.pronunciationTargets.length) {
                 issue = "optional support generation returned non-support categories";
                 continue;
               }
-              const auditPrompt = buildMonthlySupportRelationAuditPrompt({ core: coreTerm, candidates: result.expandedTerms });
+              const optionalPrefiltered = prefilterMonthlySupportCandidatesForAudit(coreTerm, result.expandedTerms);
+              result.expandedTerms.filter((term) => !optionalPrefiltered.kept.includes(term)).forEach((term) => rejectedOptionalCandidates.add(term.word));
+              if (!optionalPrefiltered.kept.length) {
+                if (result.expandedTerms.length) enrichmentStats.auditsSkippedByPrefilter += 1;
+                issue = optionalPrefiltered.rejected.length ? `every optional candidate failed the deterministic check: ${optionalPrefiltered.rejected.slice(0, 4).join(", ")}` : "optional support generation returned no candidates";
+                optionalPreviousIssue = issue;
+                continue;
+              }
+              const auditPrompt = buildMonthlySupportRelationAuditPrompt({ core: coreTerm, candidates: optionalPrefiltered.kept });
               let auditResult: z.infer<typeof monthlyResourcePlanOutputSchema>;
               try {
+                enrichmentStats.auditCalls += 1;
                 const audited = await runner.runTask("monthly_resource_generation", phaseInput([coreTerm], { vocabularyCount: 0, expandedVocabularyCount: 0, grammarTopicCount: 0, pronunciationSoundCount: 0 }), {
                   systemPrompt: auditPrompt,
                   maxOutputTokens: 3_500,
@@ -620,7 +559,7 @@ export function registerMonthlyContentRoutes(app: FastifyInstance, pool: Pool, a
                 issue = "optional support audit returned non-support categories";
                 continue;
               }
-              const auditedCandidates = keepSemanticallyAuditedSupportCandidates(result.expandedTerms, auditResult.expandedTerms);
+              const auditedCandidates = keepSemanticallyAuditedSupportCandidates(optionalPrefiltered.kept, auditResult.expandedTerms);
               const selection = selectMonthlySupportCandidates({
                 candidates: auditedCandidates,
                 coreId: coreTerm.id,
@@ -680,6 +619,7 @@ export function registerMonthlyContentRoutes(app: FastifyInstance, pool: Pool, a
             rejectedWords: [coreTerm.word],
             previousIssue: `${lastIssue} Replace this core only with a distinct single-sense headword whose family form retains the exact meaning and whose umbrella and synonym have clear common examples.`
           });
+          enrichmentStats.generationCalls += 1;
           const replacementResult = await runPhase(replacementPrompt, [], { vocabularyCount: 12, expandedVocabularyCount: 0, grammarTopicCount: 0, pronunciationSoundCount: 0 });
           const replacementSelection = selectMonthlyCoreCandidates({ candidates: replacementResult.coreTerms, existingCoreWords: existingOtherCoreWords, needed: 1 });
           if (replacementResult.expandedTerms.length || replacementResult.grammarTopics.length || replacementResult.pronunciationTargets.length || replacementSelection.selected.length !== 1) {
@@ -729,6 +669,7 @@ export function registerMonthlyContentRoutes(app: FastifyInstance, pool: Pool, a
         }
         await saveCheckpointCategory("expandedTerms", expandedTerms);
       }
+      request.log.info({ month: month.month, cefr: criteria.cefr, phase: "enrichment", enrichedCores: firstIncompleteCore >= 0 ? coreTerms.length - firstIncompleteCore : 0, supports: expandedTerms.length, ...enrichmentStats, elapsedMs: Date.now() - enrichmentStartedAt }, "Monthly resource enrichment phase finished");
 
       const monthlyVocabularyForPronunciation = [...coreTerms, ...expandedTerms].map((term) => `${term.word} (${term.meaning})`).join("; ");
       const cachedGrammarTopics = readCheckpointCategory("grammarTopics", monthlyResourcePlanOutputSchema.shape.grammarTopics) ?? [];
@@ -842,7 +783,17 @@ export function registerMonthlyContentRoutes(app: FastifyInstance, pool: Pool, a
 
   app.post("/api/v1/content/month-frameworks/:id/approve", { preHandler: contentOperator }, async (request, reply) => {
     const input = frameworkParams.parse(request.params);
-    await repositories.monthlyContent.approveFramework(request.e4sSession!.user.id, input.id);
+    try { await repositories.monthlyContent.approveFramework(request.e4sSession!.user.id, input.id); }
+    catch (error) {
+      // A reopened pool that cannot be re-planned is an Operator-fixable
+      // resource problem (regenerate resources), not a server failure.
+      if (error && typeof error === "object" && "code" in error && error.code === "MONTHLY_RESOURCE_PLAN_INVALID") {
+        const issues = "issues" in error && Array.isArray(error.issues) ? error.issues : [];
+        return reply.code(409).send({ code: "MONTHLY_RESOURCE_PLAN_INVALID", issues });
+      }
+      if (error instanceof RangeError) return reply.code(409).send({ code: "MONTHLY_RESOURCE_PLAN_INVALID", issues: [error.message] });
+      throw error;
+    }
     return reply.code(204).send();
   });
 
