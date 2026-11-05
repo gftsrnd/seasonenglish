@@ -5,7 +5,7 @@ import type {
   LearnerHomeView, LearnerNotificationsView, LearnerProfileData, LearnerProfileView, LearnerProgressView, LessonPartAppealView,
   LessonPartAttemptEvidenceInput, LessonPartAttemptView, LessonPartCode, LessonProgressView, LessonView,
   ContentImageView, LevelChallengeView, MicroLessonView, RewardView, SurveyView, WeeklyPracticeView, AudioArtifactInput,
-  LearnerComplaintKind, LearnerComplaintView
+  LearnerComplaintKind, LearnerComplaintView, WeeklyReviewAnswerInput, WeeklyReviewAnswerResult, WeeklyReviewSessionView
 } from "@e4s/contracts";
 import type { AudioArtifactView } from "@e4s/contracts";
 import { request, uploadMultipart } from "./runtime.js";
@@ -29,6 +29,9 @@ export interface LearnerApiClient {
   saveLessonProgress(id: string, progress: LessonProgressView): Promise<LessonProgressView>;
   submitLessonPartAttempt(lessonId: string, partCode: LessonPartCode, requestId: string, evidence: LessonPartAttemptEvidenceInput): Promise<LessonPartAttemptView>;
   appealLessonPart(lessonId: string, partCode: LessonPartCode, reason: string): Promise<LessonPartAppealView>;
+  getWeeklyReviewSession(lessonId: string): Promise<WeeklyReviewSessionView>;
+  setWeeklyReviewWarmup(lessonId: string, status: "skipped" | "done"): Promise<WeeklyReviewSessionView>;
+  answerWeeklyReview(lessonId: string, input: WeeklyReviewAnswerInput): Promise<WeeklyReviewAnswerResult>;
   getMicroLesson(id: string): Promise<MicroLessonView>;
   generateMicroLesson(requestId: string, regenerate?: boolean): Promise<MicroLessonView>;
   submitMicroAttempt(id: string, answer: string): Promise<MicroLessonView>;
@@ -86,6 +89,9 @@ export const learnerApiClient: LearnerApiClient = {
   }),
   submitLessonPartAttempt: (lessonId, partCode, requestId, evidence) => request(`/api/v1/lessons/${encodeURIComponent(lessonId)}/parts/${encodeURIComponent(partCode)}/attempts`, { method: "POST", body: JSON.stringify({ requestId, evidence }) }),
   appealLessonPart: (lessonId, partCode, reason) => request(`/api/v1/lessons/${encodeURIComponent(lessonId)}/parts/${encodeURIComponent(partCode)}/appeals`, { method: "POST", body: JSON.stringify({ reason }) }),
+  getWeeklyReviewSession: (lessonId) => request(`/api/v1/lessons/${encodeURIComponent(lessonId)}/review-session`),
+  setWeeklyReviewWarmup: (lessonId, status) => request(`/api/v1/lessons/${encodeURIComponent(lessonId)}/review-session/warmup`, { method: "POST", body: JSON.stringify({ status }) }),
+  answerWeeklyReview: (lessonId, input) => request(`/api/v1/lessons/${encodeURIComponent(lessonId)}/review-session/answers`, { method: "POST", body: JSON.stringify(input) }),
   getMicroLesson: (id) => request(`/api/v1/micro-lessons/${encodeURIComponent(id)}`),
   generateMicroLesson: (requestId, regenerate = false) => request("/api/v1/micro-lessons", { method: "POST", body: JSON.stringify({ requestId, ...(regenerate ? { regenerate: true } : {}) }) }),
   submitMicroAttempt: (id, answer) => request(`/api/v1/micro-lessons/${encodeURIComponent(id)}/attempts`, { method: "POST", body: JSON.stringify({ answer }) }),

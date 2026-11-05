@@ -11,7 +11,7 @@ import type {
   MonthlyExamEligibilityView
 } from "@e4s/contracts";
 import { buildPronunciationAssets, microGradingOutputSchema, microLessonOutputSchema, type AiTaskRunner, type MicroLessonTaskOutput } from "@e4s/ai";
-import { createRepositories, type LearnerLessonRecord } from "@e4s/database";
+import { createRepositories, learnerMonthlyAttendanceDates, MONTH_LESSON_IS_REVIEW_SQL, type LearnerLessonRecord } from "@e4s/database";
 import { gradeLessonAnswer, validateGeneratedFeedback } from "@e4s/domain/content";
 import { evaluateMonthlyExamEligibility } from "@e4s/domain/progression";
 import { isLearnerProfileComplete, mergeLessonProgress } from "@e4s/domain/learning";
@@ -19,6 +19,7 @@ import type { FastifyInstance } from "fastify";
 import type { Pool } from "pg";
 import { z } from "zod";
 import { createRoleGuard } from "../identity/policy.js";
+import { registerWeeklyReviewRoutes } from "./weekly-review-routes.js";
 import type { ContentMediaService } from "../media/index.js";
 
 const partCode = z.enum([
@@ -103,6 +104,7 @@ export function registerLearningRoutes(
   const repositories = createRepositories(pool);
   const runnerFor = (actorId: string) => aiRunnerFactory ? aiRunnerFactory(actorId) : Promise.resolve(aiRunner);
   const learnerOnly = createRoleGuard(pool, ["learner"]);
+  registerWeeklyReviewRoutes(app, pool, learnerOnly);
 
   app.get("/api/v1/learner/profile", { preHandler: learnerOnly }, async (request, reply) => {
     const record = await repositories.learning.getProfile(request.e4sSession!.user.id);
@@ -190,7 +192,9 @@ export function registerLearningRoutes(
       ...(lesson.lessonDate ? { lessonDate: lesson.lessonDate } : {}),
       ...(lesson.monthlyKind ? { kind: lesson.monthlyKind } : {})
     }));
-    const completedLessons = summaries.filter((lesson) => lesson.status === "completed").length;
+    // Friday reviews are not lessons: they never count toward k/N lesson progress.
+    const dailyLessons = summaries.filter((lesson) => lesson.kind !== "review");
+    const completedLessons = dailyLessons.filter((lesson) => lesson.status === "completed").length;
     const reviewLessons = summaries.filter((lesson) => lesson.kind === "review");
     const completedReviews = reviewLessons.filter((lesson) => lesson.status === "completed").length;
     const totalReviews = reviewLessons.length;
@@ -220,20 +224,20 @@ export function registerLearningRoutes(
       monthlyExam: monthlyContext ? {
         status: monthlyExamStatus,
         completedLessons,
-        totalLessons: summaries.length,
-        remainingLessons: Math.max(0, summaries.length - completedLessons),
+        totalLessons: dailyLessons.length,
+        remainingLessons: Math.max(0, dailyLessons.length - completedLessons),
         requirement: monthlyExamStatus === "completed"
           ? "Bạn đã hoàn thành bài thi tháng."
           : monthlyExamStatus === "unpublished"
             ? "Bài thi tháng đang chờ người vận hành phát hành."
             : !monthlyEligibility.lessonsEligible
-            ? `Hoàn thành đủ ${monthlyEligibility.scheduledLessons ?? summaries.length} bài học theo lịch tháng.`
+            ? `Hoàn thành đủ ${monthlyEligibility.scheduledLessons ?? dailyLessons.length} bài học theo lịch tháng.`
             : !monthlyEligibility.attendanceEligible
             ? "Số ngày vắng đã vượt giới hạn tháng; cần Manager xử lý kháng nghị."
             : !monthlyEligibility.seasonEligible
             ? `Đạt đủ ${monthlyEligibility.seasonTurnsRequired ?? 100} lượt hợp lệ với Season trong tháng.`
-            : completedLessons < summaries.length
-          ? `Hoàn thành ${summaries.length - completedLessons} bài còn lại để mở bài thi tháng.`
+            : completedLessons < dailyLessons.length
+          ? `Hoàn thành ${dailyLessons.length - completedLessons} bài còn lại để mở bài thi tháng.`
           : "Bạn đã hoàn thành điều kiện. Bài thi tháng đã sẵn sàng.",
         certificateEligible: monthlyContext.cefr === "C1"
       } : null,
@@ -246,7 +250,7 @@ export function registerLearningRoutes(
       microGenerationAvailable: Boolean(runner),
       metrics: {
         completedLessons,
-        totalLessons: summaries.length,
+        totalLessons: dailyLessons.length,
         studyDays: monthlyContext ? progress.studyDays : 0,
         streakDays: monthlyContext ? calculateCurrentStreak(progress.activity.map((item) => item.occurredAt)) : 0,
         points,
@@ -262,7 +266,7 @@ export function registerLearningRoutes(
       practice: {
         status: "locked",
         detail: monthlyContext
-          ? `Mở khi hoàn thành đủ ${summaries.length} bài · hiện có ${completedLessons}/${summaries.length}.`
+          ? `Mở khi hoàn thành đủ ${dailyLessons.length} bài · hiện có ${completedLessons}/${dailyLessons.length}.`
           : "Mở khi bộ bài tháng đã được phát hành.",
         href: "/practice"
       },
@@ -291,7 +295,7 @@ export function registerLearningRoutes(
     ]);
     if (!context || context.month !== params.data.month) return reply.code(404).send({ code: "MONTHLY_EXAM_NOT_AVAILABLE" });
     if (!eligibility.accessEligible) return reply.code(409).send({ code: "MONTHLY_EXAM_NOT_ELIGIBLE", eligibility });
-    const lessons = await repositories.learning.listMonthlyLessons(learnerId, context.month);
+    const lessons = (await repositories.learning.listMonthlyLessons(learnerId, context.month)).filter((lesson) => lesson.monthlyKind !== "review");
     const completedLessons = lessons.filter((lesson) => lesson.progress.status === "completed").length;
     const totalLessons = lessons.length;
     const remainingLessons = Math.max(0, totalLessons - completedLessons);
@@ -369,6 +373,7 @@ export function registerLearningRoutes(
     const lesson = await repositories.learning.findLesson(learnerId, params.data.lessonId);
     if (!lesson) return reply.code(404).send({ code: "LESSON_NOT_FOUND" });
     if (lesson.lock) return reply.code(409).send({ code: "LESSON_LOCKED", lock: lesson.lock });
+    if (lesson.monthlyKind === "review" && body.data.markComplete) return reply.code(409).send({ code: "REVIEW_USES_WEEKLY_SESSION" });
     const required = lesson.content.parts
       .map((item) => item.code)
       .filter((code): code is LessonPartCode => practicePartCodes.includes(code as typeof practicePartCodes[number]));
@@ -446,6 +451,9 @@ export function registerLearningRoutes(
     const lesson = await repositories.learning.findLesson(learnerId, params.data.lessonId);
     if (!lesson) return reply.code(404).send({ code: "LESSON_PART_NOT_FOUND" });
     if (lesson.lock) return reply.code(409).send({ code: "LESSON_LOCKED", lock: lesson.lock });
+    // Review answers go through the review-until-correct session; they are never
+    // stored as daily attempts, so they cannot raise Operator exercise alerts.
+    if (lesson.monthlyKind === "review") return reply.code(409).send({ code: "REVIEW_USES_WEEKLY_SESSION" });
     const part = lesson.content.parts.find((candidate) => candidate.code === params.data.partCode);
     if (!part || !practicePartCodes.includes(part.code as typeof practicePartCodes[number])) {
       return reply.code(404).send({ code: "LESSON_PART_NOT_FOUND" });
@@ -810,7 +818,8 @@ export function learnerLessonView(lesson: LearnerLessonRecord): LessonView {
     cefr: lesson.cefr,
     content: { parts },
     progress: lesson.progress,
-    lock: lesson.lock
+    lock: lesson.lock,
+    ...(lesson.monthlyKind ? { kind: lesson.monthlyKind } : {})
   };
 }
 
@@ -958,11 +967,13 @@ export async function monthlyExamEligibility(pool: Pool, learnerId: string): Pro
        left join month_frameworks mf on mf.program_month_id = pm.id and mf.cefr = i.cefr
      ), facts as (
        select d.*,
-              (select count(*) from month_lessons ml where ml.framework_id = d.framework_id and ml.status = 'approved')::text as scheduled_lessons,
+              (select count(*) from month_lessons ml join month_frameworks mf on mf.id = ml.framework_id
+                where ml.framework_id = d.framework_id and ml.status = 'approved' and not ${MONTH_LESSON_IS_REVIEW_SQL})::text as scheduled_lessons,
               (select count(*) from month_lessons ml
+                 join month_frameworks mf on mf.id = ml.framework_id
                  join lessons l on l.id = ml.lesson_id
                  join progress_records pr on pr.lesson_id = l.id and pr.learner_id = $1 and pr.status = 'completed'
-               where ml.framework_id = d.framework_id and ml.status = 'approved')::text as completed_lessons,
+               where ml.framework_id = d.framework_id and ml.status = 'approved' and not ${MONTH_LESSON_IS_REVIEW_SQL})::text as completed_lessons,
               (select count(*) from coach_turns ct join coach_sessions cs on cs.id = ct.session_id
                where cs.learner_id = $1 and ct.speaker = 'learner'
                  and ct.created_at >= date_trunc('month', d.system_date)
@@ -978,21 +989,7 @@ export async function monthlyExamEligibility(pool: Pool, learnerId: string): Pro
        from dates d
      )
      select f.system_date::text, f.month, f.exam_date::text,
-            (select count(distinct attendance_date)::text from (
-              select (pr.completed_at at time zone 'Asia/Ho_Chi_Minh')::date as attendance_date
-                from progress_records pr
-               where pr.learner_id = $1 and pr.status = 'completed'
-                 and (pr.completed_at at time zone 'Asia/Ho_Chi_Minh')::date >= (f.month || '-01')::date
-                 and (pr.completed_at at time zone 'Asia/Ho_Chi_Minh')::date < f.exam_date
-                 and extract(isodow from (pr.completed_at at time zone 'Asia/Ho_Chi_Minh')::date) <= 5
-              union
-              select oh.holiday_date as attendance_date
-                from organization_holidays oh
-               where oh.organization_id = f.organization_id
-                 and oh.holiday_date >= (f.month || '-01')::date
-                 and oh.holiday_date < f.exam_date
-                 and oh.holiday_date <= f.system_date
-            ) attendance) as attended_days,
+            '0'::text as attended_days,
             max(f.scheduled_lessons)::text as scheduled_lessons, max(f.completed_lessons)::text as completed_lessons,
             max(f.season_turns)::text as season_turns, bool_or(f.framework_approved) as framework_approved,
             bool_or(f.form_published) as form_published, bool_or(f.attendance_appeal_approved) as attendance_appeal_approved
@@ -1000,6 +997,9 @@ export async function monthlyExamEligibility(pool: Pool, learnerId: string): Pro
      group by f.system_date, f.month, f.exam_date, f.organization_id`, [learnerId]
   );
   const row = result.rows[0]; if (!row) throw new Error('LEARNER_MONTHLY_ELIGIBILITY_NOT_FOUND');
+  // Attendance follows the domain rule (Friday only through the week's review;
+  // a late review credits its effective makeup day), not raw completion dates.
+  row.attended_days = String((await learnerMonthlyAttendanceDates(pool, learnerId, [row.month])).get(row.month)?.length ?? 0);
   const systemDate = row.system_date; const examDate = row.exam_date ?? lastWeekdayOfMonth(systemDate.slice(0, 7));
   const effectiveDates = weekdaysBeforeExam(systemDate.slice(0, 7), examDate); const elapsedDates = effectiveDates.filter((date) => date <= systemDate);
   const eligibility = evaluateMonthlyExamEligibility({

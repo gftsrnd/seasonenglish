@@ -434,6 +434,18 @@ export function LearnerRouteController() {
       setContracts((current) => current.lesson ? { lesson: { ...current.lesson, progress: result.progress } } : current);
       return result;
     },
+    getWeeklyReviewSession: async () => {
+      if (route.name !== "lesson") throw new Error("LESSON_ROUTE_NOT_ACTIVE");
+      return apiClient.getWeeklyReviewSession(route.params.id);
+    },
+    setWeeklyReviewWarmup: async (status) => {
+      if (route.name !== "lesson") throw new Error("LESSON_ROUTE_NOT_ACTIVE");
+      return apiClient.setWeeklyReviewWarmup(route.params.id, status);
+    },
+    answerWeeklyReview: async (input) => {
+      if (route.name !== "lesson") throw new Error("LESSON_ROUTE_NOT_ACTIVE");
+      return apiClient.answerWeeklyReview(route.params.id, input);
+    },
     resolveLessonVocabularyImage: async (itemIndex) => {
       if (route.name !== "lesson") throw new Error("LESSON_ROUTE_NOT_ACTIVE");
       return apiClient.resolveLessonVocabularyImage(route.params.id, itemIndex);

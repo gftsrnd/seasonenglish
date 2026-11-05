@@ -28,7 +28,10 @@ import type {
   RewardView,
   SaveAssessmentResponseInput,
   SurveyView,
-  WeeklyPracticeView
+  WeeklyPracticeView,
+  WeeklyReviewAnswerInput,
+  WeeklyReviewAnswerResult,
+  WeeklyReviewSessionView
 } from "@e4s/contracts";
 import type { AudioDeletionMetadata, AudioEvidence } from "../shared/media/audio-evidence.js";
 
@@ -144,6 +147,10 @@ export interface LearnerCallbacks {
   submitLessonPartAttempt?: (partCode: LessonPartCode, evidence: LessonPartAttemptEvidenceInput) => Promise<LessonPartAttemptView>;
   appealLessonPart?: (partCode: LessonPartCode, reason: string) => Promise<LessonPartAppealView>;
   resolveLessonVocabularyImage?: (itemIndex: number) => Promise<ContentImageView>;
+  /** Friday review session (resume, review-until-correct, optional warm-up). */
+  getWeeklyReviewSession?: () => Promise<WeeklyReviewSessionView>;
+  setWeeklyReviewWarmup?: (status: "skipped" | "done") => Promise<WeeklyReviewSessionView>;
+  answerWeeklyReview?: (input: WeeklyReviewAnswerInput) => Promise<WeeklyReviewAnswerResult>;
   submitMicroAnswer: (answer: string) => void | Promise<void>;
   completeMicroLesson: () => void | Promise<void>;
   regenerateMicroLesson: () => void | Promise<void>;

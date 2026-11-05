@@ -3,6 +3,7 @@ import type { Pool, PoolClient } from "pg";
 import { buildLevelReadiness as calculateLevelReadiness, evaluateMonthlyLevelUpReadiness, nextEffectiveMonday, passesLevelUpExam, createLevelRetryPlan, monthlySeasonTurnTarget, type LevelReadinessMetrics, type LevelReadinessThresholds, type MonthlyLevelRecord } from "@e4s/domain/progression";
 import { evaluateGeneratedLessonQuality, validateGenerationFindingsForPublication, validateLessonPublication } from "@e4s/domain/content";
 import { lessonCompletionActivity } from "@e4s/domain/learning";
+import { evaluateMonthlyLessonAccess, monthlyAttendanceDates, type MonthlyLessonAccess } from "@e4s/domain/monthly";
 import { generationFindingsFromPayload } from "./generation-findings.js";
 import { MonthlyContentRepository } from "./monthly-content-repository.js";
 import type {
@@ -1262,11 +1263,13 @@ class LearningRepository {
   }
 
   async listMonthlyLessons(learnerId: string, month: string): Promise<LearnerLessonRecord[]> {
-    const result = await this.pool.query<LearnerLessonQueryRow>(
-      `select l.id, l.title, ml.lesson_number as day_number, 0 as week_number, pm.theme_title as week_topic, mf.cefr, lv.content, case when (mf.curriculum_contract->'daySpecs' @> jsonb_build_array(jsonb_build_object('lessonNumber', ml.lesson_number, 'kind', 'review'))) then 'review' else 'new' end as monthly_kind, ml.lesson_date::text as lesson_date, organization_system_date((select organization_id from users where id = e.learner_id))::text as system_date,
+    const result = await this.pool.query<LearnerLessonQueryRow & { organization_id: string; review_gates_next_week: boolean | null; review_from_previous_month: boolean | null }>(
+      `select l.id, l.title, ml.lesson_number as day_number, 0 as week_number, pm.theme_title as week_topic, mf.cefr, lv.content, case when (mf.curriculum_contract->'daySpecs' @> jsonb_build_array(jsonb_build_object('lessonNumber', ml.lesson_number, 'kind', 'review'))) then 'review' else 'new' end as monthly_kind, ml.lesson_date::text as lesson_date, organization_system_date(pm.organization_id)::text as system_date,
               (select count(*) from month_lessons count_ml where count_ml.framework_id = mf.id and count_ml.status = 'approved')::text as lesson_count,
-              ml.lesson_date::text as opens_at, ml.lesson_date > organization_system_date((select organization_id from users where id = e.learner_id)) as opens_later,
-              blocker.id as blocker_id, blocker.day_number as blocker_day_number, blocker.title as blocker_title,
+              ml.lesson_date::text as opens_at, ml.lesson_date > organization_system_date(pm.organization_id) as opens_later,
+              null::uuid as blocker_id, null::int as blocker_day_number, null::text as blocker_title,
+              pm.organization_id, (day_spec.spec->>'reviewGatesNextWeek')::boolean as review_gates_next_week,
+              (day_spec.spec->>'reviewFromPreviousMonth')::boolean as review_from_previous_month,
               pr.status as progress_status, pr.score::text as progress_score, pr.evidence as progress_evidence, pr.updated_at as progress_updated_at
        from enrollments e
        join program_months pm on pm.organization_id = (select organization_id from users where id = e.learner_id) and pm.month = $2
@@ -1276,24 +1279,23 @@ class LearningRepository {
        join lesson_set_versions lsv on lsv.id = l.lesson_set_version_id and lsv.status = 'published'
        join lateral (select content from lesson_versions where lesson_id = l.id and status = 'published' order by version desc limit 1) lv on true
        left join lateral (
-         select previous_l.id, previous_ml.lesson_number as day_number, previous_l.title
-         from month_lessons previous_ml join lessons previous_l on previous_l.id = previous_ml.lesson_id
-         where previous_ml.framework_id = mf.id and previous_ml.status = 'approved' and previous_ml.lesson_number < ml.lesson_number
-           and not exists (select 1 from progress_records previous_progress where previous_progress.learner_id = e.learner_id and previous_progress.lesson_id = previous_l.id and previous_progress.status = 'completed')
-           and not exists (
-             select 1 from organization_holidays holiday
-              where holiday.organization_id = pm.organization_id
-                and holiday.holiday_date = previous_ml.lesson_date
-                and not (mf.curriculum_contract->'daySpecs' @> jsonb_build_array(jsonb_build_object('lessonNumber', previous_ml.lesson_number, 'kind', 'review')))
-           )
-         order by previous_ml.lesson_number limit 1
-       ) blocker on true
+         select spec from jsonb_array_elements(mf.curriculum_contract->'daySpecs') spec
+         where (spec->>'lessonNumber')::int = ml.lesson_number limit 1
+       ) day_spec on true
        left join progress_records pr on pr.lesson_id = l.id and pr.learner_id = e.learner_id
        where e.learner_id = $1
        order by ml.lesson_number`,
       [learnerId, month]
     );
-    return result.rows.map(mapLessonRow);
+    const first = result.rows[0];
+    if (!first) return [];
+    const holidays = await this.pool.query<{ holiday_date: string }>(
+      `select holiday_date::text as holiday_date from organization_holidays
+       where organization_id = $1 and to_char(holiday_date, 'YYYY-MM') = $2`,
+      [first.organization_id, month]
+    );
+    const records = result.rows.map(mapLessonRow);
+    return applyMonthlyLessonAccess(records, result.rows, month, first.system_date ?? `${month}-01`, holidays.rows.map((row) => row.holiday_date));
   }
 
   async findLesson(learnerId: string, lessonId: string): Promise<LearnerLessonRecord | null> {
@@ -1337,8 +1339,8 @@ class LearningRepository {
     );
     let row = result.rows[0];
     if (!row) {
-      const monthly = await this.pool.query<LearnerLessonQueryRow>(
-        `select l.id, l.title, ml.lesson_number as day_number, 0 as week_number, pm.theme_title as week_topic, mf.cefr, lv.content, case when (mf.curriculum_contract->'daySpecs' @> jsonb_build_array(jsonb_build_object('lessonNumber', ml.lesson_number, 'kind', 'review'))) then 'review' else 'new' end as monthly_kind, ml.lesson_date::text as lesson_date, organization_system_date((select organization_id from users where id = e.learner_id))::text as system_date,
+      const monthly = await this.pool.query<LearnerLessonQueryRow & { monthly_month: string }>(
+        `select pm.month as monthly_month, l.id, l.title, ml.lesson_number as day_number, 0 as week_number, pm.theme_title as week_topic, mf.cefr, lv.content, case when (mf.curriculum_contract->'daySpecs' @> jsonb_build_array(jsonb_build_object('lessonNumber', ml.lesson_number, 'kind', 'review'))) then 'review' else 'new' end as monthly_kind, ml.lesson_date::text as lesson_date, organization_system_date((select organization_id from users where id = e.learner_id))::text as system_date,
                 (select count(*) from month_lessons count_ml where count_ml.framework_id = mf.id and count_ml.status = 'approved')::text as lesson_count,
                 ml.lesson_date::text as opens_at, ml.lesson_date > organization_system_date((select organization_id from users where id = e.learner_id)) as opens_later,
                 blocker.id as blocker_id, blocker.day_number as blocker_day_number, blocker.title as blocker_title,
@@ -1365,7 +1367,13 @@ class LearningRepository {
       row = monthly.rows[0];
     }
     if (!row) return null;
-    const lesson = mapLessonRow(row);
+    let lesson = mapLessonRow(row);
+    const monthlyMonth = (row as { monthly_month?: string }).monthly_month;
+    if (monthlyMonth) {
+      // Monthly locks are computed over the whole month (review gate, holidays).
+      const monthLesson = (await this.listMonthlyLessons(learnerId, monthlyMonth)).find((candidate) => candidate.id === lesson.id);
+      if (monthLesson) lesson = { ...lesson, lock: monthLesson.lock };
+    }
     const appeals = await this.pool.query<{ part_code: LessonPartCode; status: "pending" | "accepted" | "rejected"; resolution: string | null }>(
       `select distinct on (part_code) part_code, status, resolution from lesson_part_appeals
        where learner_id = $1 and lesson_id = $2
@@ -1394,6 +1402,45 @@ class LearningRepository {
       };
     }
     return { ...lesson, progress: { ...lesson.progress, completedPartCodes, evidence } };
+  }
+
+  /** Stored Friday review state (resume point); null before the first visit. */
+  async getWeeklyReviewState(learnerId: string, lessonId: string): Promise<{ state: unknown; completedAt: string | null } | null> {
+    const result = await this.pool.query<{ state: unknown; completed_at: Date | null }>(
+      "select state, completed_at from learner_review_sessions where learner_id = $1 and lesson_id = $2",
+      [learnerId, lessonId]
+    );
+    const row = result.rows[0];
+    return row ? { state: row.state, completedAt: row.completed_at?.toISOString() ?? null } : null;
+  }
+
+  /**
+   * Persists review state after every answer. Completing the review completes
+   * its lesson record; the completion time drives attendance and the unlock
+   * gate. Review answers never touch lesson_part_attempts.
+   */
+  async saveWeeklyReviewState(input: { learnerId: string; lessonId: string; state: unknown; completed: boolean }): Promise<void> {
+    const saved = await this.pool.query<{ completed_at: Date | null }>(
+      `insert into learner_review_sessions (id, learner_id, lesson_id, state, completed_at, updated_at)
+       values ($1, $2, $3, $4::jsonb, case when $5 then now() else null end, now())
+       on conflict (learner_id, lesson_id) do update
+       set state = excluded.state,
+           completed_at = coalesce(learner_review_sessions.completed_at, excluded.completed_at),
+           updated_at = now()
+       returning completed_at`,
+      [randomUUID(), input.learnerId, input.lessonId, JSON.stringify(input.state), input.completed]
+    );
+    if (!input.completed || !saved.rows[0]?.completed_at) return;
+    const existing = await this.pool.query<{ status: string }>(
+      "select status from progress_records where learner_id = $1 and lesson_id = $2",
+      [input.learnerId, input.lessonId]
+    );
+    if (existing.rows[0]?.status === "completed") return;
+    await this.saveLessonProgress({
+      learnerId: input.learnerId,
+      lessonId: input.lessonId,
+      progress: { status: "completed", completedPartCodes: [], evidence: {} }
+    });
   }
 
   async saveLessonProgress(input: {
@@ -1857,7 +1904,7 @@ class LearningRepository {
          join month_lessons ml on ml.lesson_id = pr.lesson_id and ml.status = 'approved'
          join month_frameworks mf on mf.id = ml.framework_id and mf.status = 'approved'
          join program_months pm on pm.id = mf.program_month_id
-         where pr.learner_id = $1 and pm.month = $2 and mf.cefr = $3`, [learnerId, monthlyContext.month, monthlyContext.cefr]
+         where pr.learner_id = $1 and pm.month = $2 and mf.cefr = $3 and not ${MONTH_LESSON_IS_REVIEW_SQL}`, [learnerId, monthlyContext.month, monthlyContext.cefr]
       ) : Promise.resolve({ rows: [] as Array<{ evidence: { evidence?: Record<string, { attempts?: number; score?: number }> } }> }),
       monthlyContext ? this.pool.query<{ status: string; total_score: string | null }>(
         `select aa.status, sum(s.score)::text as total_score
@@ -1893,9 +1940,11 @@ class LearningRepository {
     }));
     const coachSummary = coach.rows[0] ?? { turns_today: "0", turns_this_week: "0", turns_14_days: "0", rubric_average: null };
 
-    const totalLessons = monthlyContext ? monthlyLessons.length : 0;
+    // Friday reviews are not lessons: excluded from k/N progress and the level-up path.
+    const dailyMonthlyLessons = monthlyLessons.filter((lesson) => lesson.monthlyKind !== "review");
+    const totalLessons = monthlyContext ? dailyMonthlyLessons.length : 0;
     const completedLessons = monthlyContext
-      ? monthlyLessons.filter((lesson) => lesson.progress.status === 'completed').length
+      ? dailyMonthlyLessons.filter((lesson) => lesson.progress.status === 'completed').length
       : 0;
     const lessonCompletion = totalLessons ? completedLessons / totalLessons * 100 : 0;
     const firstTryParts = firstTry.rows.flatMap((item) => Object.values(item.evidence.evidence ?? {}));
@@ -1999,6 +2048,13 @@ class LearningRepository {
   }
 
   private async monthlyLevelUpReadiness(learnerId: string, currentLevel: CefrLevel | null) {
+    const candidateMonths = await this.pool.query<{ month: string }>(
+      `select pm.month from users u join program_months pm on pm.organization_id = u.organization_id
+        where u.id = $1 and pm.month <= to_char(organization_system_date(u.organization_id), 'YYYY-MM')`,
+      [learnerId]
+    );
+    const attendance = await learnerMonthlyAttendanceDates(this.pool, learnerId, candidateMonths.rows.map((row) => row.month));
+    const attendedByMonth = Object.fromEntries([...attendance].map(([month, dates]) => [month, dates.length]));
     const result = await this.pool.query<MonthlyLevelRecord & { level_start_date: string; exam_date: string }>(
       `with identity as (
          select u.organization_id, e.cefr, organization_system_date(u.organization_id)::date as system_date,
@@ -2025,18 +2081,7 @@ class LearningRepository {
        ), lesson_facts as (
          select m.*, count(ml.id) filter (where ml.status = 'approved')::int as scheduled_lessons,
                 count(ml.id) filter (where ml.status = 'approved' and pr.status = 'completed')::int as completed_lessons,
-                (select count(distinct attendance_date)::int from (
-                   select (pr2.completed_at at time zone 'Asia/Ho_Chi_Minh')::date as attendance_date
-                     from progress_records pr2 join month_lessons ml2 on ml2.lesson_id = pr2.lesson_id
-                    where pr2.learner_id = $1 and pr2.status = 'completed' and ml2.framework_id = m.framework_id
-                      and (pr2.completed_at at time zone 'Asia/Ho_Chi_Minh')::date >= (m.month || '-01')::date
-                      and (pr2.completed_at at time zone 'Asia/Ho_Chi_Minh')::date < m.exam_date
-                      and extract(isodow from (pr2.completed_at at time zone 'Asia/Ho_Chi_Minh')::date) <= 5
-                   union
-                   select holiday.holiday_date from organization_holidays holiday
-                    where holiday.organization_id = (select organization_id from identity)
-                      and holiday.holiday_date >= (m.month || '-01')::date and holiday.holiday_date < m.exam_date
-                 ) attendance) as attended_days,
+                coalesce(($2::jsonb->>m.month)::int, 0) as attended_days,
                 (select count(*)::int from generate_series((m.month || '-01')::date, m.exam_date - 1, interval '1 day') d where extract(isodow from d) <= 5) as effective_days,
                 (select count(*)::int from coach_turns ct join coach_sessions cs on cs.id = ct.session_id
                   where cs.learner_id = $1 and ct.speaker = 'learner'
@@ -2085,7 +2130,7 @@ class LearningRepository {
            limit 1
          ) latest
        ) final_result on true
-       order by lf.month`, [learnerId]
+       order by lf.month`, [learnerId, JSON.stringify(attendedByMonth)]
     );
     return evaluateMonthlyLevelUpReadiness({ currentLevel, months: result.rows.map((month) => ({
       ...month,
@@ -2432,6 +2477,117 @@ function lessonLockFor(row: {
     };
   }
   return null;
+}
+
+/** SQL predicate: the month lesson `ml` of framework `mf` is a Friday review. */
+export const MONTH_LESSON_IS_REVIEW_SQL = "(mf.curriculum_contract->'daySpecs' @> jsonb_build_array(jsonb_build_object('lessonNumber', ml.lesson_number, 'kind', 'review')))";
+
+/**
+ * Attendance dates per month from persisted completions and holidays, using
+ * the domain rule (Friday counts only through a review; a late review credits
+ * its effective makeup day). Shared by exam eligibility and level-up records.
+ */
+export async function learnerMonthlyAttendanceDates(pool: Pool, learnerId: string, months: readonly string[]): Promise<Map<string, string[]>> {
+  const result = new Map<string, string[]>();
+  if (!months.length) return result;
+  const [completions, context] = await Promise.all([
+    pool.query<{ completed_date: string; kind: "new" | "review" }>(
+      `select ((pr.completed_at at time zone 'Asia/Ho_Chi_Minh')::date)::text as completed_date,
+              case when ml.id is not null and ${MONTH_LESSON_IS_REVIEW_SQL} then 'review' else 'new' end as kind
+         from progress_records pr
+         left join month_lessons ml on ml.lesson_id = pr.lesson_id
+         left join month_frameworks mf on mf.id = ml.framework_id
+        where pr.learner_id = $1 and pr.status = 'completed' and pr.completed_at is not null
+          and to_char((pr.completed_at at time zone 'Asia/Ho_Chi_Minh')::date, 'YYYY-MM') = any($2::text[])`,
+      [learnerId, months]
+    ),
+    pool.query<{ system_date: string; holidays: string[] | null; exam_dates: Record<string, string> | null }>(
+      `select organization_system_date(u.organization_id)::text as system_date,
+              (select array_agg(h.holiday_date::text) from organization_holidays h
+                where h.organization_id = u.organization_id and to_char(h.holiday_date, 'YYYY-MM') = any($2::text[])) as holidays,
+              (select jsonb_object_agg(pm.month, pm.exam_date::text) from program_months pm
+                where pm.organization_id = u.organization_id and pm.month = any($2::text[]) and pm.exam_date is not null) as exam_dates
+         from users u where u.id = $1`,
+      [learnerId, months]
+    )
+  ]);
+  const facts = context.rows[0];
+  for (const month of months) {
+    const examDate = facts?.exam_dates?.[month];
+    try {
+      result.set(month, monthlyAttendanceDates({
+        month,
+        ...(examDate ? { examDate } : {}),
+        ...(facts?.system_date ? { systemDate: facts.system_date } : {}),
+        completions: completions.rows
+          .filter((row) => row.completed_date.startsWith(month))
+          .map((row) => ({ completedDate: row.completed_date, kind: row.kind })),
+        holidays: (facts?.holidays ?? []).filter((date) => date.startsWith(month))
+      }));
+    } catch {
+      result.set(month, []);
+    }
+  }
+  return result;
+}
+
+/**
+ * Monthly lesson locks come from the domain gate (sequential order, holiday
+ * chains, Friday review gating the next Monday, calendar date). The SQL only
+ * supplies persisted facts.
+ */
+function applyMonthlyLessonAccess(
+  records: LearnerLessonRecord[],
+  rows: ReadonlyArray<{ id: string; day_number: number; lesson_date?: string; monthly_kind?: "new" | "review"; review_gates_next_week?: boolean | null; review_from_previous_month?: boolean | null }>,
+  month: string,
+  systemDate: string,
+  holidays: readonly string[]
+): LearnerLessonRecord[] {
+  let access: MonthlyLessonAccess[];
+  try {
+    access = evaluateMonthlyLessonAccess({
+      month,
+      systemDate,
+      holidays,
+      lessons: rows.map((row, index) => ({
+        lessonNumber: row.day_number,
+        date: row.lesson_date ?? "",
+        kind: row.monthly_kind ?? "new",
+        completed: records[index]?.progress.status === "completed",
+        ...(typeof row.review_gates_next_week === "boolean" ? { reviewGatesNextWeek: row.review_gates_next_week } : {}),
+        ...(typeof row.review_from_previous_month === "boolean" ? { reviewFromPreviousMonth: row.review_from_previous_month } : {})
+      }))
+    });
+  } catch {
+    return records;
+  }
+  const byNumber = new Map(records.map((record) => [record.dayNumber, record]));
+  const totalLessons = records.length;
+  return records.map((record) => {
+    const decision = access.find((item) => item.lessonNumber === record.dayNumber);
+    if (!decision || !decision.locked) return { ...record, lock: null };
+    if (decision.reason === "date") {
+      return { ...record, lock: { reason: "date", message: "Bạn đã xong các bài trước; hôm nay có thể luyện thêm với Season.", dayNumber: record.dayNumber, totalLessons, opensAt: decision.opensAt } };
+    }
+    const blocker = byNumber.get(decision.blockerLessonNumber);
+    const blockerView = blocker ? { id: blocker.id, dayNumber: blocker.dayNumber, title: blocker.title } : undefined;
+    if (decision.reason === "review") {
+      return { ...record, lock: {
+        reason: "review",
+        message: `Hoàn thành bài ôn tuần ${decision.reviewWeekNumber} để mở bài này.`,
+        dayNumber: record.dayNumber, totalLessons, reviewWeekNumber: decision.reviewWeekNumber,
+        ...(blockerView ? { blocker: blockerView } : {})
+      } };
+    }
+    return { ...record, lock: {
+      reason: "prior",
+      message: blocker
+        ? `Bạn chưa hoàn thành bài ${blocker.dayNumber}/${totalLessons} · ${blocker.title}. Các bài nối tiếp nhau nên không bỏ qua được: xong bài đó thì bài này tự mở.`
+        : "Bạn chưa hoàn thành bài trước. Xong bài đó thì bài này tự mở.",
+      dayNumber: record.dayNumber, totalLessons,
+      ...(blockerView ? { blocker: blockerView } : {})
+    } };
+  });
 }
 
 function lessonDayLabel(dayNumber: number): string {
@@ -10529,7 +10685,7 @@ class ManagerRepository {
               join month_lessons ml on ml.lesson_id = pr.lesson_id and ml.status = 'approved'
               join month_frameworks mf on mf.id = ml.framework_id and mf.status = 'approved'
               join program_months pm on pm.id = mf.program_month_id and pm.organization_id = $1
-              where pr.learner_id = u.id and pr.status = 'completed'
+              where pr.learner_id = u.id and pr.status = 'completed' and not ${MONTH_LESSON_IS_REVIEW_SQL}
                 and pm.month = to_char(organization_system_date(u.organization_id), 'YYYY-MM'))
             else (select count(*) from progress_records pr where pr.learner_id = u.id and pr.status = 'completed')
             end)::text as completed_lessons,
@@ -10540,7 +10696,7 @@ class ManagerRepository {
                join program_months pm on pm.id = mf.program_month_id and pm.organization_id = $1
                where pm.month = to_char(organization_system_date(u.organization_id), 'YYYY-MM')
                  and mf.cefr = (select e.cefr from enrollments e where e.learner_id = u.id order by e.enrolled_at desc limit 1)
-                 and ml.status = 'approved' and ml.lesson_id is not null), 0),
+                 and ml.status = 'approved' and ml.lesson_id is not null and not ${MONTH_LESSON_IS_REVIEW_SQL}), 0),
              (select count(*)
               from lessons l
               join lesson_set_versions lsv on lsv.id = l.lesson_set_version_id and lsv.status = 'published'

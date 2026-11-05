@@ -235,6 +235,13 @@ export const lessonPartAttempts = pgTable("lesson_part_attempts", {
   createdAt: now()
 });
 
+/** Friday weekly review state; no attempt count or score by design (0096). */
+export const learnerReviewSessions = pgTable("learner_review_sessions", {
+  id: uuid("id").primaryKey(), learnerId: uuid("learner_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  lessonId: uuid("lesson_id").notNull().references(() => lessons.id, { onDelete: "cascade" }), state: jsonb("state").notNull().default(emptyObject),
+  completedAt: timestamp("completed_at", { withTimezone: true }), createdAt: now(), updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow()
+}, (table) => [uniqueIndex("learner_review_sessions_learner_lesson_unique").on(table.learnerId, table.lessonId)]);
+
 export const lessonPartAppeals = pgTable("lesson_part_appeals", {
   id: uuid("id").primaryKey(), learnerId: uuid("learner_id").notNull().references(() => users.id, { onDelete: "cascade" }),
   lessonId: uuid("lesson_id").notNull().references(() => lessons.id, { onDelete: "cascade" }), partCode: text("part_code").notNull(),
@@ -521,7 +528,7 @@ export const databaseSchema = {
   assessmentDefinitions, assessmentResponses, assessmentScores, assessmentVersions,
   auditEvents, badges, coachSessions, coachTurns, duels, enrollments, files, mediaAssets,
   gameResults, gameSets, idempotencyKeys, jobs, learnerProfiles, lessonSetVersions,
-  lessonPartAppeals, lessonPartAttempts, lessonSets, lessonVersions, lessons, notificationDeliveries, organizations, organizationSettings, providerConfigurations,
+  learnerReviewSessions, lessonPartAppeals, lessonPartAttempts, lessonSets, lessonVersions, lessons, notificationDeliveries, organizations, organizationSettings, providerConfigurations,
   practiceSubmissions, learnerVocabularyUnlocks, levelUpChallengeResults, practiceAppeals, passCourseCertificates, passCourseReadiness,
   monthFrameworks, monthlyResourceGenerationCheckpoints, monthLessonCorrections, monthLessons, programMonths, programWeeks, programs, progressRecords, promptVersions,
   reminders, rewardEvents, rubricVersions, sessions, surveys, userCredentials, users, managerPinReports, managerDestructiveConfirmations, managerMaintenanceBackups
