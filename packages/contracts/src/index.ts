@@ -12,3 +12,4 @@ export * from "./monthly-contract.js";
 export * from "./notification-contract.js";
 export * from "./screen-contract.js";
 export * from "./session-contract.js";
+export * from "./weekly-review-contract.js";

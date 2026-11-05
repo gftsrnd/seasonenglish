@@ -152,12 +152,15 @@ export interface LessonVocabularyContent {
 }
 
 export interface LessonLockView {
-  reason: "prior" | "date";
+  /** "review": the previous week's Friday review gates this lesson. */
+  reason: "prior" | "date" | "review";
   message: string;
   dayNumber: number;
   totalLessons: number;
   blocker?: { id: string; dayNumber: number; title: string };
   opensAt?: string;
+  /** Calendar week of the gating Friday review (reason "review"). */
+  reviewWeekNumber?: number;
 }
 
 export type LessonPartOutcome =
@@ -224,6 +227,8 @@ export interface LessonView {
   progress: LessonProgressView;
   /** Server-derived access state; clients must not infer lesson locks. */
   lock?: LessonLockView | null;
+  /** Monthly calendar kind; "review" lessons use the weekly review session. */
+  kind?: "new" | "review";
 }
 
 export interface LessonSummary {

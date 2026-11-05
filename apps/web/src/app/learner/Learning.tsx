@@ -16,6 +16,7 @@ import { vocabularyPresentationBlocks } from "../shared/lesson/vocabulary-groups
 import { conciseGrammarExample, conciseLessonObjective, conciseSpeakingModel, learnerFacingObjective, learnerFacingObjectiveBody, learnerObjectiveLead } from "../shared/lesson/presentation.js";
 import { lessonInstructionSteps } from "../shared/lesson/instructions.js";
 import { PronunciationMouthForm } from "./PronunciationMouthForm.js";
+import { WeeklyReview } from "./WeeklyReview.js";
 import { learnerLessonCopy, learnerLessonLanguageForCefr, lessonGuidanceOrFallback, type LearnerLessonLanguage, type LearnerLessonCopy } from "../shared/lesson/language.js";
 import { lessonPartsForTab, lessonPracticeCodes, sharedLessonGrammarAvailable } from "../shared/lesson/structure.js";
 import { claimExclusiveAudio, playExclusiveMedia } from "../../features/experience/audio-precedence.js";
@@ -176,9 +177,17 @@ export function LearnerLesson({ view, actions }: { view: LessonView; actions: Le
     if (!complete) selectTab("study");
   }, [lesson.id, lesson.progress.completedPartCodes, lesson.progress.status]);
   if (view.lock) {
-    const prior = view.lock.reason === "prior";
+    const reviewGate = view.lock.reason === "review";
+    const prior = view.lock.reason === "prior" || reviewGate;
     const openDate = view.lock.opensAt ? formatLessonDate(view.lock.opensAt) : null;
-    return <div className="app-learner-page"><div className="card"><div className="row" style={{ gap: 12, alignItems: "flex-start" }}><div style={{ flex: 1 }}><div className="eyebrow" style={{ display: "inline-flex", alignItems: "center", gap: 6 }}><LockKeyhole size={16} aria-hidden="true" /> Bài {view.lesson.dayNumber}/{view.lock.totalLessons} · {prior ? "chưa mở" : "chưa đến ngày"}</div><h3>{prior ? "Học bù bài trước đã nhé" : openDate ? `Bài này mở vào ${openDate}` : "Bài này chưa mở"}</h3><p className="small">{view.lock.message}</p><div className="row">{prior && view.lock.blocker ? <AppLink className="btn btn-primary" href={`/lesson/${view.lock.blocker.id}`} navigate={actions.navigate}>Học bài {lessonDayLabel(view.lock.blocker.dayNumber)} ngay</AppLink> : <AppLink className="btn btn-primary" href="/coach" navigate={actions.navigate}>Luyện với Season</AppLink>}<AppLink className="btn" href="/home" navigate={actions.navigate}>← Về trang chủ</AppLink></div></div></div></div></div>;
+    const heading = reviewGate
+      ? `Hoàn thành ${reviewWeekLabel(view.lock.reviewWeekNumber)} để mở bài này`
+      : prior ? "Học bù bài trước đã nhé" : openDate ? `Bài này mở vào ${openDate}` : "Bài này chưa mở";
+    const blockerLabel = reviewGate ? `Làm ${reviewWeekLabel(view.lock.reviewWeekNumber)}` : view.lock.blocker ? `Học bài ${lessonDayLabel(view.lock.blocker.dayNumber)} ngay` : "";
+    return <div className="app-learner-page"><div className="card"><div className="row" style={{ gap: 12, alignItems: "flex-start" }}><div style={{ flex: 1 }}><div className="eyebrow" style={{ display: "inline-flex", alignItems: "center", gap: 6 }}><LockKeyhole size={16} aria-hidden="true" /> Bài {view.lesson.dayNumber}/{view.lock.totalLessons} · {prior ? "chưa mở" : "chưa đến ngày"}</div><h3>{heading}</h3><p className="small">{view.lock.message}</p><div className="row">{prior && view.lock.blocker ? <AppLink className="btn btn-primary" href={`/lesson/${view.lock.blocker.id}`} navigate={actions.navigate}>{blockerLabel}</AppLink> : <AppLink className="btn btn-primary" href="/coach" navigate={actions.navigate}>Luyện với Season</AppLink>}<AppLink className="btn" href="/home" navigate={actions.navigate}>← Về trang chủ</AppLink></div></div></div></div></div>;
+  }
+  if (lesson.kind === "review" && actions.getWeeklyReviewSession) {
+    return <WeeklyReview key={lesson.id} title={lesson.title} cefr={lesson.cefr} actions={actions} />;
   }
   const startAction = (action: string) => {
     if (busyActionRef.current) return false;
@@ -433,6 +442,10 @@ function partOutcomeLabel(status: PartEvidence["status"], copy: LearnerLessonCop
     case "correct": return copy.status.correct;
     default: return copy.status.unanswered;
   }
+}
+
+function reviewWeekLabel(weekNumber: number | undefined): string {
+  return weekNumber ? `bài ôn tuần ${weekNumber}` : "bài ôn tuần trước";
 }
 
 function lessonDayLabel(dayNumber: number): string {
