@@ -37,10 +37,40 @@ export interface SupportTerm {
   component: "expanded";
   dayNumber: number;
   relatedCoreTermId: string;
+  /**
+   * CEFR level of the support word itself (VH-R33). A support may come from the
+   * month's level or one adjacent level (±1, clamped to A1..C1). Optional so
+   * pools stored before this field existed keep validating unchanged.
+   */
+  cefr?: CefrLevel;
 }
 
 export const MONTHLY_SUPPORT_RELATIONS = ["umbrella", "synonym", "antonym", "word_family", "collocation"] as const;
 export type MonthlySupportRelation = (typeof MONTHLY_SUPPORT_RELATIONS)[number];
+/** Every core needs one genuine support for each of these relations; this is also the per-core minimum. */
+export const MONTHLY_REQUIRED_SUPPORT_RELATIONS = ["umbrella", "synonym", "word_family"] as const satisfies readonly MonthlySupportRelation[];
+export const MONTHLY_MIN_SUPPORTS_PER_CORE = MONTHLY_REQUIRED_SUPPORT_RELATIONS.length;
+export const MONTHLY_MAX_SUPPORTS_PER_CORE = 9;
+/** Repeated support placements (same normalized word on several cores) may not exceed this share of the month's supports. */
+export const MONTHLY_SUPPORT_REPEAT_CEILING = 0.35;
+const MONTHLY_CEFR_ORDER = ["A1", "A2", "B1", "B2", "C1"] as const satisfies readonly CefrLevel[];
+
+/** Largest number of repeated support placements allowed for a month with `supportCount` supports. */
+export function maxMonthlySupportRepeats(supportCount: number): number {
+  return Math.floor(supportCount * MONTHLY_SUPPORT_REPEAT_CEILING);
+}
+
+/** CEFR levels a support term may come from: the learner level and its neighbours (±1, clamped to A1..C1). */
+export function allowedMonthlySupportLevels(cefr: CefrLevel): CefrLevel[] {
+  const index = MONTHLY_CEFR_ORDER.indexOf(cefr);
+  return MONTHLY_CEFR_ORDER.filter((_level, levelIndex) => Math.abs(levelIndex - index) <= 1);
+}
+
+/** Classifies a support term's level against the month level; an absent level is treated as the same level. */
+export function monthlySupportLevelBand(monthCefr: CefrLevel, supportCefr: CefrLevel | undefined): "same" | "adjacent" | "out_of_range" {
+  if (!supportCefr || supportCefr === monthCefr) return "same";
+  return allowedMonthlySupportLevels(monthCefr).includes(supportCefr) ? "adjacent" : "out_of_range";
+}
 export const MONTHLY_EXERCISE_CODES = ["listening", "reading", "writing", "word_class", "word_use", "speaking"] as const;
 export type MonthlyExerciseCode = (typeof MONTHLY_EXERCISE_CODES)[number];
 export interface MonthlySkillExercisePlan {
@@ -156,9 +186,10 @@ export function recommendedMonthlyResourceCriteria(month: string, cefr: CefrLeve
   void cefr;
   return {
     vocabularyCount: newLessonCount * 3,
-    // Nine supports per core is the quality ceiling; generation may return six
-    // when additional authentic relations are unavailable.
-    expandedVocabularyCount: newLessonCount * 27,
+    // Nine supports per core is the quality ceiling and the generation target;
+    // generation may return as few as the three required relations (umbrella,
+    // synonym, word family) when no further authentic relation exists.
+    expandedVocabularyCount: newLessonCount * 3 * MONTHLY_MAX_SUPPORTS_PER_CORE,
     grammarTopicCount: 2,
     pronunciationSoundCount: 4
   };
@@ -215,11 +246,13 @@ export function buildMonthlyCurriculum(input: MonthlyCurriculumInput): MonthlyCu
   if (input.coreTerms.some((term) => !isSingleEnglishHeadword(term.word))) throw new RangeError("Every core resource must be one standalone English headword");
   const duplicateCore = duplicateOf(input.coreTerms.map((term) => normalize(term.word)));
   if (duplicateCore) throw new RangeError(`Duplicate core term: ${duplicateCore}`);
-  if (input.supportTerms.length < expectedCoreCount * 6 || input.supportTerms.length > expectedCoreCount * 9) throw new RangeError(`Expected ${expectedCoreCount * 6}-${expectedCoreCount * 9} expanded terms for ${input.month}`);
+  if (input.supportTerms.length < expectedCoreCount * MONTHLY_MIN_SUPPORTS_PER_CORE || input.supportTerms.length > expectedCoreCount * MONTHLY_MAX_SUPPORTS_PER_CORE) throw new RangeError(`Expected ${expectedCoreCount * MONTHLY_MIN_SUPPORTS_PER_CORE}-${expectedCoreCount * MONTHLY_MAX_SUPPORTS_PER_CORE} expanded terms for ${input.month}`);
+  const outOfRangeSupport = input.supportTerms.find((term) => monthlySupportLevelBand(input.cefr, term.cefr) === "out_of_range");
+  if (outOfRangeSupport) throw new RangeError(`Expanded term ${outOfRangeSupport.id} is CEFR ${outOfRangeSupport.cefr}; supports must be within one level of ${input.cefr}`);
   if (input.supportTerms.some((term) => !input.coreTerms.some((core) => core.id === term.relatedCoreTermId))) throw new RangeError("Every expanded term must link to a core term in this month");
   if (input.supportTerms.some((term) => !isSingleEnglishHeadword(term.word) && !isNaturalLengthEnglishPhrase(term.word))) throw new RangeError("Expanded resources must be English headwords or two-to-four-word expressions");
   if (input.supportTerms.filter((term) => !isSingleEnglishHeadword(term.word)).length > Math.floor(input.supportTerms.length * 0.25)) throw new RangeError("Expanded expressions exceed the 25% monthly limit");
-  if (expandedRepeatCount(input.supportTerms.map((term) => normalize(term.word))) > Math.floor(input.supportTerms.length * 0.35)) {
+  if (expandedRepeatCount(input.supportTerms.map((term) => normalize(term.word))) > maxMonthlySupportRepeats(input.supportTerms.length)) {
     throw new RangeError("Expanded resources repeat more than 35% of the monthly total");
   }
   if (input.supportTerms.some((term) => input.coreTerms.some((core) => normalize(core.word) === normalize(term.word)))) throw new RangeError("Support term duplicates a core term");
@@ -229,7 +262,7 @@ export function buildMonthlyCurriculum(input: MonthlyCurriculumInput): MonthlyCu
   if (input.grammarTopics.some((topic) => topic.steps.length !== 3)) throw new RangeError("Every grammar topic needs exactly three ordered steps");
   for (const core of input.coreTerms) {
     const related = input.supportTerms.filter((term) => term.relatedCoreTermId === core.id);
-    if (related.length < 6 || related.length > 9 || !hasRequiredSupportRelations(related)) throw new RangeError(`Core term ${core.id} needs 6-9 supports including umbrella, synonym, and word family`);
+    if (related.length < MONTHLY_MIN_SUPPORTS_PER_CORE || related.length > MONTHLY_MAX_SUPPORTS_PER_CORE || !hasRequiredSupportRelations(related)) throw new RangeError(`Core term ${core.id} needs 3-9 supports including umbrella, synonym, and word family`);
     if (related.filter((term) => !isSingleEnglishHeadword(term.word)).length > 1) throw new RangeError(`Core term ${core.id} may have at most one multi-word expanded expression`);
   }
 
@@ -303,7 +336,7 @@ export function planMonthlyResourcePool(pool: MonthlyResourcePoolContract): Mont
   const expectedCoreCount = newDays.length * 3;
   const errors: string[] = [];
   if (pool.coreTerms.length !== expectedCoreCount) errors.push(`Expected ${expectedCoreCount} core terms, got ${pool.coreTerms.length}.`);
-  if (pool.supportTerms.length < expectedCoreCount * 6 || pool.supportTerms.length > expectedCoreCount * 9) errors.push(`Expected ${expectedCoreCount * 6}-${expectedCoreCount * 9} expanded terms, got ${pool.supportTerms.length}.`);
+  if (pool.supportTerms.length < expectedCoreCount * MONTHLY_MIN_SUPPORTS_PER_CORE || pool.supportTerms.length > expectedCoreCount * MONTHLY_MAX_SUPPORTS_PER_CORE) errors.push(`Expected ${expectedCoreCount * MONTHLY_MIN_SUPPORTS_PER_CORE}-${expectedCoreCount * MONTHLY_MAX_SUPPORTS_PER_CORE} expanded terms, got ${pool.supportTerms.length}.`);
   const normalizedCore = pool.coreTerms.map((term) => normalize(term.word));
   if (pool.coreTerms.some((term) => !isSingleEnglishHeadword(term.word))) errors.push("Every core resource must be one standalone English headword.");
   if (duplicateOf(normalizedCore)) errors.push(`Duplicate core term: ${duplicateOf(normalizedCore)}.`);
@@ -316,18 +349,19 @@ export function planMonthlyResourcePool(pool: MonthlyResourcePoolContract): Mont
   for (const support of pool.supportTerms) {
     if (!pool.coreTerms.some((core) => core.id === support.relatedCoreTermId)) errors.push(`Expanded term ${support.id} references an unknown core resource.`);
     if (coreWords.has(normalize(support.word))) errors.push(`Expanded term ${support.id} duplicates a core term.`);
+    if (monthlySupportLevelBand(pool.cefr, support.cefr) === "out_of_range") errors.push(`Expanded term ${support.id} is CEFR ${support.cefr}; supports must be within one level of ${pool.cefr}.`);
   }
   const supportCounts = new Map<string, number>();
   const phraseCountByCore = new Map<string, number>();
   for (const support of pool.supportTerms) supportCounts.set(support.relatedCoreTermId, (supportCounts.get(support.relatedCoreTermId) ?? 0) + 1);
   for (const support of phraseSupports) phraseCountByCore.set(support.relatedCoreTermId, (phraseCountByCore.get(support.relatedCoreTermId) ?? 0) + 1);
   for (const core of pool.coreTerms) {
-    if ((supportCounts.get(core.id) ?? 0) < 6 || (supportCounts.get(core.id) ?? 0) > 9) errors.push(`Core term ${core.id} must have 6-9 related expanded terms.`);
+    if ((supportCounts.get(core.id) ?? 0) < MONTHLY_MIN_SUPPORTS_PER_CORE || (supportCounts.get(core.id) ?? 0) > MONTHLY_MAX_SUPPORTS_PER_CORE) errors.push(`Core term ${core.id} must have 3-9 related expanded terms.`);
     const linkedTerms = pool.supportTerms.filter((term) => term.relatedCoreTermId === core.id);
-    if (linkedTerms.length >= 6 && !hasRequiredSupportRelations(linkedTerms)) errors.push(`Core term ${core.id} needs umbrella, synonym, and word-family supports.`);
+    if (!hasRequiredSupportRelations(linkedTerms)) errors.push(`Core term ${core.id} needs umbrella, synonym, and word-family supports.`);
     if ((phraseCountByCore.get(core.id) ?? 0) > 1) errors.push(`Core term ${core.id} may have at most one multi-word expanded expression.`);
   }
-  if (expandedRepeatCount(pool.supportTerms.map((term) => normalize(term.word))) > Math.floor(pool.supportTerms.length * 0.35)) {
+  if (expandedRepeatCount(pool.supportTerms.map((term) => normalize(term.word))) > maxMonthlySupportRepeats(pool.supportTerms.length)) {
     errors.push("Expanded resources repeat more than 35% of the monthly total.");
   }
   if (pool.grammarTopics.length !== 2) errors.push("Monthly curriculum needs exactly two grammar topics.");
@@ -347,7 +381,8 @@ export function planMonthlyResourcePool(pool: MonthlyResourcePoolContract): Mont
     relation: term.relation,
     source: term.source,
     relatedCoreTermId: term.relatedCoreTermId,
-    dayNumber: dayByCoreId.get(term.relatedCoreTermId)!
+    dayNumber: dayByCoreId.get(term.relatedCoreTermId)!,
+    ...(term.cefr ? { cefr: term.cefr } : {})
   }));
   return buildMonthlyCurriculum({
     month: pool.month,
@@ -425,7 +460,10 @@ export function validateMonthlyCurriculum(contract: MonthlyCurriculumContract): 
     : legacyMonthlyDayKind(lessonNumber, calendar.lessonCount);
   const expectedNewDays = calendar.effectiveDays.filter((_date, index) => dayKindForContract(index + 1) === "new").length;
   if (contract.coreTerms.length !== expectedNewDays * 3) errors.push(`Monthly plan needs exactly three core words for each of ${expectedNewDays} new lessons`);
-  if (contract.supportTerms.length < contract.coreTerms.length * 6 || contract.supportTerms.length > contract.coreTerms.length * 9) errors.push("Monthly plan needs 6-9 linked expanded terms per core word");
+  if (contract.supportTerms.length < contract.coreTerms.length * MONTHLY_MIN_SUPPORTS_PER_CORE || contract.supportTerms.length > contract.coreTerms.length * MONTHLY_MAX_SUPPORTS_PER_CORE) errors.push("Monthly plan needs 3-9 linked expanded terms per core word");
+  for (const term of contract.supportTerms) {
+    if (monthlySupportLevelBand(contract.cefr, term.cefr) === "out_of_range") errors.push(`Expanded term ${term.id} is CEFR ${term.cefr}; supports must be within one level of ${contract.cefr}`);
+  }
   const duplicateCore = duplicateOf(contract.coreTerms.map((term) => normalize(term.word)));
   if (duplicateCore) errors.push(`Duplicate core term: ${duplicateCore}`);
   if (duplicateOf(contract.coreTerms.map((term) => term.id))) errors.push("Core resource IDs must be unique");
@@ -433,7 +471,7 @@ export function validateMonthlyCurriculum(contract: MonthlyCurriculumContract): 
   if (contract.coreTerms.some((term) => !isSingleEnglishHeadword(term.word))) errors.push("Every core resource must be one standalone English headword");
   if (contract.supportTerms.some((term) => !isSingleEnglishHeadword(term.word) && !isNaturalLengthEnglishPhrase(term.word))) errors.push("Expanded resources must be English headwords or two-to-four-word expressions");
   if (contract.supportTerms.filter((term) => !isSingleEnglishHeadword(term.word)).length > Math.floor(contract.supportTerms.length * 0.25)) errors.push("Expanded expressions exceed the 25% monthly limit");
-  if (expandedRepeatCount(contract.supportTerms.map((term) => normalize(term.word))) > Math.floor(contract.supportTerms.length * 0.35)) {
+  if (expandedRepeatCount(contract.supportTerms.map((term) => normalize(term.word))) > maxMonthlySupportRepeats(contract.supportTerms.length)) {
     errors.push("Expanded resources repeat more than 35% of the monthly total");
   }
   const coreWords = new Set(contract.coreTerms.map((term) => normalize(term.word)));
@@ -482,8 +520,8 @@ export function validateMonthlyCurriculum(contract: MonthlyCurriculumContract): 
   }
   for (const core of contract.coreTerms) {
     const related = contract.supportTerms.filter((term) => term.relatedCoreTermId === core.id);
-    if (related.length < 6 || related.length > 9) errors.push(`Core term ${core.id} needs 6-9 linked expanded terms`);
-    if (related.length >= 6 && !hasRequiredSupportRelations(related)) errors.push(`Core term ${core.id} needs umbrella, synonym, and word-family supports`);
+    if (related.length < MONTHLY_MIN_SUPPORTS_PER_CORE || related.length > MONTHLY_MAX_SUPPORTS_PER_CORE) errors.push(`Core term ${core.id} needs 3-9 linked expanded terms`);
+    if (!hasRequiredSupportRelations(related)) errors.push(`Core term ${core.id} needs umbrella, synonym, and word-family supports`);
     if (related.filter((term) => !isSingleEnglishHeadword(term.word)).length > 1) errors.push(`Core term ${core.id} may have at most one multi-word expanded expression`);
   }
   if (contract.daySpecs.length !== calendar.lessonCount) errors.push("Day specification count does not match monthly calendar");
@@ -534,7 +572,7 @@ export function validateMonthlyCurriculum(contract: MonthlyCurriculumContract): 
     if (day.pronunciationExampleIds.some((id) => !soundExampleIds.has(id))) errors.push(`Lesson ${day.lessonNumber} references an unlocked sound example`);
     if (day.kind === "new" && day.coreTermIds.length !== 3) errors.push(`New lesson ${day.lessonNumber} needs three core terms`);
     if (day.kind === "new" && duplicateOf(day.coreTermIds)) errors.push(`New lesson ${day.lessonNumber} repeats a core term`);
-    if (day.kind === "new" && (day.expandedTermIds.length < 18 || day.expandedTermIds.length > 27)) errors.push(`New lesson ${day.lessonNumber} needs 18-27 linked expanded terms`);
+    if (day.kind === "new" && (day.expandedTermIds.length < 3 * MONTHLY_MIN_SUPPORTS_PER_CORE || day.expandedTermIds.length > 3 * MONTHLY_MAX_SUPPORTS_PER_CORE)) errors.push(`New lesson ${day.lessonNumber} needs ${3 * MONTHLY_MIN_SUPPORTS_PER_CORE}-${3 * MONTHLY_MAX_SUPPORTS_PER_CORE} linked expanded terms`);
     if (day.kind === "new" && duplicateOf(day.expandedTermIds)) errors.push(`New lesson ${day.lessonNumber} repeats an expanded term`);
     if (day.kind === "review" && day.coreTermIds.length !== 0) errors.push(`Review lesson ${day.lessonNumber} cannot introduce core terms`);
     if (day.kind === "review" && day.expandedTermIds.length !== 0) errors.push(`Review lesson ${day.lessonNumber} cannot introduce expanded terms`);
@@ -628,7 +666,7 @@ function isFirstMonthFriday(date: string, calendar: MonthlyCalendar): boolean {
 
 function hasRequiredSupportRelations(terms: readonly Pick<SupportTerm, "relation">[]): boolean {
   const relations = new Set(terms.map((term) => term.relation));
-  return (["umbrella", "synonym", "word_family"] as const).every((relation) => relations.has(relation));
+  return MONTHLY_REQUIRED_SUPPORT_RELATIONS.every((relation) => relations.has(relation));
 }
 
 function expectedGrammarSteps(ordinal: number, topics: readonly GrammarTopic[]): GrammarStep[] {

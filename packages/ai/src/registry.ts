@@ -35,6 +35,12 @@ import {
   microGradingInputSchema, microGradingOutputJsonSchema, microGradingOutputSchema,
   weeklyPracticeInputSchema, weeklyPracticeOutputJsonSchema, weeklyPracticeOutputSchema
 } from "./schemas.js";
+import {
+  monthlyFinalGenerationInputSchema,
+  monthlyFinalProductiveOutputJsonSchema, monthlyFinalProductiveOutputSchema,
+  monthlyFinalReceptiveOutputJsonSchema, monthlyFinalReceptiveOutputSchema,
+  validateMonthlyFinalProductiveOutput, validateMonthlyFinalReceptiveOutput
+} from "./monthly-final-schemas.js";
 import { z } from "zod";
 import type { AiTaskDefinition } from "./types.js";
 import { standardLessonInstruction } from "./lesson-instruction.js";
@@ -100,6 +106,16 @@ export const AI_TASKS = new AiTaskRegistry([
   },
   { id: "level_form_listening_generation", promptKey: "level_form_generation", inputSchema: levelFormInputSchema, outputSchema: levelFormListeningOutputSchema, outputJsonSchema: levelFormListeningOutputJsonSchema },
   { id: "level_form_reading_generation", promptKey: "level_form_generation", inputSchema: levelFormInputSchema, outputSchema: levelFormReadingOutputSchema, outputJsonSchema: levelFormReadingOutputJsonSchema },
+  {
+    id: "monthly_final_receptive_generation", promptKey: "monthly_final_generation", inputSchema: monthlyFinalGenerationInputSchema,
+    outputSchema: monthlyFinalReceptiveOutputSchema, outputJsonSchema: monthlyFinalReceptiveOutputJsonSchema,
+    validateOutput: (output, input) => validateMonthlyFinalReceptiveOutput(monthlyFinalReceptiveOutputSchema.parse(output), monthlyFinalGenerationInputSchema.parse(input))
+  },
+  {
+    id: "monthly_final_productive_generation", promptKey: "monthly_final_generation", inputSchema: monthlyFinalGenerationInputSchema,
+    outputSchema: monthlyFinalProductiveOutputSchema, outputJsonSchema: monthlyFinalProductiveOutputJsonSchema,
+    validateOutput: (output, input) => validateMonthlyFinalProductiveOutput(monthlyFinalProductiveOutputSchema.parse(output), monthlyFinalGenerationInputSchema.parse(input))
+  },
   { id: "level_form_production_generation", promptKey: "level_form_generation", inputSchema: levelFormInputSchema, outputSchema: levelFormProductionOutputSchema, outputJsonSchema: levelFormProductionOutputJsonSchema },
   {
     id: "coach_roleplay_turn", promptKey: "coach_dialogue", inputSchema: coachInputSchema,

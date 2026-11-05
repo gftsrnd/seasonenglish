@@ -1,3 +1,5 @@
+import { maxMonthlySupportRepeats, monthlySupportLevelBand, MONTHLY_MAX_SUPPORTS_PER_CORE, MONTHLY_MIN_SUPPORTS_PER_CORE, MONTHLY_REQUIRED_SUPPORT_RELATIONS } from "@e4s/domain";
+
 /**
  * Reusable contract for AI generation of monthly hard learning resources.
  * This is intentionally a generation specification, not a fixed monthly corpus:
@@ -27,7 +29,12 @@ LEVEL DIFFERENTIATION
 
 VOCABULARY PLAN
 - Create the requested number of distinct core items in the month-wide pool. Each core item is one standalone English lexical headword.
-- In the completed month-wide pool, create six to nine expanded items per core, never exceeding the caller's requested maximum. Prefer standalone headwords: at least 75% of the pool must be single words. A natural two-to-four-word expression is allowed for no more than one support per core, and phrases may not exceed 25% of the pool. Expanded items may repeat across the month only when repeated entries stay at or below 25% of the total expanded set. During partial generation phases, follow the phase prompt's count and relation scope; do not try to complete the full pool in one response.
+- In the completed month-wide pool, create three to nine expanded items per core (the three required relations are the minimum; add further genuine relations up to nine), never exceeding the caller's requested maximum. Prefer standalone headwords: at least 75% of the pool must be single words. A natural two-to-four-word expression is allowed for no more than one support per core, and phrases may not exceed 25% of the pool. Expanded items may repeat across the month only when repeated entries stay at or below 35% of the total expanded set.
+- Support words may come from the month's CEFR level or one adjacent level
+  (±1, A1..C1). Label each expanded item with its own CEFR level in the
+  optional cefr field. Never reject a genuine relation only because the word is
+  one level above or below, never use a word two or more levels away, and never
+  force a relation that does not genuinely exist. During partial generation phases, follow the phase prompt's count and relation scope; do not try to complete the full pool in one response.
 - Every item must have a real English form, a natural Vietnamese meaning, part
   of speech, accurate IPA where requested, a concise authentic example, and
   with no calendar-day assignment; the Operator reviews the pool before approval.
@@ -46,9 +53,9 @@ VOCABULARY PLAN
   a real derivation (for example, manage → manager/management), not merely be
   related in meaning, share a workplace topic, or be a plural/past-tense form.
   Collocation means words naturally used together, not an umbrella or synonym.
-- Every core headword needs six to nine individually linked support items.
-  The minimum six must include a genuine umbrella/hypernym, synonym, and
-  word-family item. If a required relation is not accepted, keep the selected
+- Every core headword needs three to nine individually linked support items.
+  The minimum is one genuine umbrella/hypernym, one synonym, and one
+  word-family item; further supports are added only when genuine. If a required relation is not accepted, keep the selected
   core stable and try distinct support candidates; never replace a core merely
   because one candidate or one audit attempt failed. Do not invent or mislabel
   a support, and report an unresolved relation only after the retry limit.
@@ -89,7 +96,7 @@ POOL RULES
   - Follow the active phase prompt's requested candidate count and relation
     scope. A single-relation support phase must return only that exact relation;
     an optional-support phase may return several genuine relation types.
-    The API selects six to nine valid linked items and accepts six when the
+    The API selects three to nine valid linked items and accepts three when the
     required relation types are covered and further authentic relations are
     not available.
 - Expanded resources must reference an exact core ID from the supplied batch.
@@ -158,7 +165,7 @@ export const monthlyResourcePlanSchema = {
     expandedTerms: {
       type: "array",
       description:
-        "Six to nine unique real relation items for every core headword; umbrella, synonym, and word family are required, while antonyms are optional when natural.",
+        "Three to nine unique real relation items for every core headword; umbrella, synonym, and word family are required, while antonyms and other extra relations are optional when natural. Supports may be at the month's CEFR level or one adjacent level.",
       items: {
         type: "object",
         additionalProperties: false,
@@ -189,6 +196,7 @@ export const monthlyResourcePlanSchema = {
           },
           relatesToCoreId: { type: "string" },
           example: { type: "string" },
+          cefr: { enum: ["A1", "A2", "B1", "B2", "C1"], description: "The support word's own CEFR level: the month's level or one adjacent level." },
         },
       },
     },
@@ -298,7 +306,7 @@ export const MONTHLY_RESOURCE_PLAN_QUALITY_EXAMPLE = {
 export function validateMonthlyResourcePlanShape(
   plan: {
     coreTerms: Array<{ id: string; word: string }>;
-    expandedTerms: Array<{ id: string; word: string; relation: "umbrella" | "synonym" | "antonym" | "word_family" | "collocation"; relatesToCoreId: string }>;
+    expandedTerms: Array<{ id: string; word: string; relation: "umbrella" | "synonym" | "antonym" | "word_family" | "collocation"; relatesToCoreId: string; cefr?: "A1" | "A2" | "B1" | "B2" | "C1" | undefined }>;
     grammarTopics: Array<{ id: string; steps: Array<{ id: string; focus: string }> }>;
     pronunciationTargets: Array<{ id: string; ipa: string; label: string; explanation: string; words: Array<{ word: string }> }>;
   },
@@ -310,8 +318,8 @@ export function validateMonthlyResourcePlanShape(
   const core = plan.coreTerms.map((item) => normalize(item.word));
   const expanded = plan.expandedTerms.map((item) => normalize(item.word));
   const expectedCore = newLessonCount * 3;
-  const minimumExpanded = newLessonCount * 3 * 6;
-  const maximumExpanded = newLessonCount * 27;
+  const minimumExpanded = newLessonCount * 3 * MONTHLY_MIN_SUPPORTS_PER_CORE;
+  const maximumExpanded = newLessonCount * 3 * MONTHLY_MAX_SUPPORTS_PER_CORE;
   if (core.length !== expectedCore) errors.push(`Expected ${expectedCore} core terms, got ${core.length}.`);
   if (expanded.length < minimumExpanded || expanded.length > maximumExpanded) errors.push(`Expected ${minimumExpanded}-${maximumExpanded} expanded terms, got ${expanded.length}.`);
   const singleHeadword = (value: string) => /^\p{L}+(?:[-'’]\p{L}+)*$/u.test(value.trim());
@@ -324,16 +332,21 @@ export function validateMonthlyResourcePlanShape(
   if (plan.expandedTerms.some((item) => !singleHeadword(item.word) && !workplacePhrase(item.word))) errors.push("Expanded resources must be standalone lexical headwords or natural two-to-four-word workplace phrases.");
   if (plan.expandedTerms.filter((item) => !singleHeadword(item.word)).length > Math.floor(plan.expandedTerms.length * 0.25)) errors.push("Expanded phrases exceed the 25% ceiling; standalone words must remain the clear majority.");
   if (expanded.some((word) => core.includes(word))) errors.push("A core term is repeated in expanded resources.");
-  if (expanded.length - new Set(expanded).size > Math.floor(expanded.length * 0.25)) errors.push("Expanded resources repeat more than 25% of the monthly total.");
+  if (expanded.length - new Set(expanded).size > maxMonthlySupportRepeats(expanded.length)) errors.push("Expanded resources repeat more than 35% of the monthly total.");
+  if (cefr) {
+    for (const item of plan.expandedTerms) {
+      if (monthlySupportLevelBand(cefr, item.cefr) === "out_of_range") errors.push(`Expanded resource ${item.id} is CEFR ${item.cefr}; supports must be within one level of ${cefr}.`);
+    }
+  }
   const coreIds = new Set(plan.coreTerms.map((item) => item.id));
   if (coreIds.size !== plan.coreTerms.length) errors.push("Core resource IDs must be unique.");
   if (new Set(plan.expandedTerms.map((item) => item.id)).size !== plan.expandedTerms.length) errors.push("Expanded resource IDs must be unique.");
   if (plan.expandedTerms.some((item) => !coreIds.has(item.relatesToCoreId))) errors.push("Expanded resources must reference a core term in this month.");
   for (const coreId of coreIds) {
     const supports = plan.expandedTerms.filter((item) => item.relatesToCoreId === coreId);
-    if (supports.length < 6 || supports.length > 9) errors.push(`Core ${coreId} needs six to nine support resources.`);
+    if (supports.length < MONTHLY_MIN_SUPPORTS_PER_CORE || supports.length > MONTHLY_MAX_SUPPORTS_PER_CORE) errors.push(`Core ${coreId} needs three to nine support resources.`);
     const relationGroups = new Set(supports.map((support) => support.relation));
-    if (supports.length >= 6 && ["umbrella", "synonym", "word_family"].some((relation) => !relationGroups.has(relation as typeof supports[number]["relation"]))) {
+    if (MONTHLY_REQUIRED_SUPPORT_RELATIONS.some((relation) => !relationGroups.has(relation))) {
       errors.push(`Core ${coreId} needs umbrella, synonym, and word-family supports.`);
     }
     if (supports.filter((item) => !singleHeadword(item.word)).length > 1) errors.push(`Core ${coreId} has more than one multi-word support item.`);

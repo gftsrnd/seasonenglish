@@ -658,7 +658,10 @@ const monthlyResourceExpandedTermSchema = z.object({
   word: z.string().trim().min(1).max(160), meaning: z.string().trim().min(1).max(300),
   type: z.string().trim().min(1).max(80),
   relation: z.enum(["umbrella", "synonym", "antonym", "word_family", "collocation"]),
-  relatesToCoreId: z.string().trim().min(1).max(100)
+  relatesToCoreId: z.string().trim().min(1).max(100),
+  // VH-R33: the support word's own CEFR level (month level or ±1). Optional so
+  // older checkpoints validate; an unusable label is dropped, not fatal.
+  cefr: z.enum(["A1", "A2", "B1", "B2", "C1"]).optional().catch(undefined)
 }).strict();
 const monthlyResourceGrammarStepSchema = z.object({
   id: z.string().trim().min(1).max(100), focus: z.string().trim().min(1).max(200),
@@ -696,7 +699,7 @@ export const monthlyResourcePlanOutputJsonSchema = {
   type: "object", additionalProperties: false, required: ["coreTerms", "expandedTerms", "grammarTopics", "pronunciationTargets"],
   properties: {
     coreTerms: { type: "array", items: { type: "object", additionalProperties: false, required: ["id", "word", "meaning", "type", "ipa"], properties: { id: { type: "string" }, word: { type: "string" }, meaning: { type: "string" }, type: { type: "string" }, ipa: { type: "string" } } } },
-    expandedTerms: { type: "array", items: { type: "object", additionalProperties: false, required: ["id", "word", "meaning", "type", "relation", "relatesToCoreId"], properties: { id: { type: "string" }, word: { type: "string" }, meaning: { type: "string" }, type: { type: "string" }, relation: { type: "string", enum: ["umbrella", "synonym", "antonym", "word_family", "collocation"] }, relatesToCoreId: { type: "string" } } } },
+    expandedTerms: { type: "array", items: { type: "object", additionalProperties: false, required: ["id", "word", "meaning", "type", "relation", "relatesToCoreId"], properties: { id: { type: "string" }, word: { type: "string" }, meaning: { type: "string" }, type: { type: "string" }, relation: { type: "string", enum: ["umbrella", "synonym", "antonym", "word_family", "collocation"] }, relatesToCoreId: { type: "string" }, cefr: { type: "string", enum: ["A1", "A2", "B1", "B2", "C1"] } } } },
     grammarTopics: { type: "array", maxItems: 2, items: { type: "object", additionalProperties: false, required: ["id", "title", "steps"], properties: { id: { type: "string" }, title: { type: "string" }, steps: { type: "array", minItems: 3, maxItems: 3, items: { type: "object", additionalProperties: false, required: ["id", "focus", "formula", "usage", "examples"], properties: { id: { type: "string" }, focus: { type: "string" }, formula: { type: "string" }, usage: { type: "string" }, examples: { type: "array", minItems: 3, items: { type: "string" } } } } } } } },
     pronunciationTargets: { type: "array", maxItems: 4, items: { type: "object", additionalProperties: false, required: ["id", "ipa", "label", "explanation", "words"], properties: { id: { type: "string" }, ipa: { type: "string" }, label: { type: "string" }, explanation: { type: "string" }, words: { type: "array", minItems: 9, items: { type: "object", additionalProperties: false, required: ["word", "ipa"], properties: { word: { type: "string" }, ipa: { type: "string" } } } } } } }
   }

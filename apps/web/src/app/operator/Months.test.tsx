@@ -5,6 +5,7 @@ import { userEvent } from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 import { MonthlyLessonPreview, OperatorMonths } from "./Months.js";
 import { ToastProvider } from "../shared/design-system.js";
+import { monthlyFinalView } from "../../../test/support/monthly-final-view.js";
 
 describe("Operator monthly planner", () => {
   it("renders an approved daily review with the legacy operator presentation and locked actions", () => {
@@ -274,49 +275,68 @@ describe("Operator monthly planner", () => {
     expect(within(approvedCell).queryByRole("button", { name: "Yêu cầu mở lại bài 1" })).not.toBeInTheDocument();
   });
 
-  it("keeps exam generation closed before the exam date while leaving manual composition available", async () => {
+  const monthActions = (extra: Record<string, unknown>) => ({ onSelectMonth: vi.fn(), onSelectLevel: vi.fn(), onSuggestBrief: vi.fn(), onSaveBrief: vi.fn(), onApproveBrief: vi.fn(), onGenerateFramework: vi.fn(), onSaveFramework: vi.fn(), onApproveFramework: vi.fn(), onSaveDay: vi.fn(), onGenerateDay: vi.fn(), onAcknowledge: vi.fn(), onApproveDay: vi.fn(), onCreateCorrection: vi.fn(), onSaveCorrection: vi.fn(), onAcknowledgeCorrection: vi.fn(), onApproveCorrection: vi.fn(), ...extra });
+  const approvedFramework = { id: "framework-b1", cefr: "B1" as const, version: 2, status: "approved" as const, scopeHash: "monthly-abc", lessons: [], quality: { severe: [], light: [] }, resources: { coreTerms: [], supportTerms: [], grammarTopics: [], sounds: [] } };
+  const monthWindow = { previous: "2026-10", current: "2026-11", next: "2026-12", writable: true };
+
+  it("opens exam generation as soon as the plan is approved, well before the exam date", async () => {
     const user = userEvent.setup();
-    const onComposeMonthlyFinal = vi.fn().mockResolvedValue({ versionId: "final-draft", status: "draft", blueprint: { title: "Bài thi tháng", sections: [] } });
-    render(<ToastProvider><OperatorMonths month="2026-11" todayMonth="2026-11" cefr="A1" busy={false}
-      overview={{ systemDate: "2026-11-03", monthWindow: { previous: "2026-10", current: "2026-11", next: "2026-12", writable: true }, brief: null, frameworks: [{ id: "framework-a1", cefr: "A1", version: 1, status: "approved", scopeHash: "scope", lessons: [], quality: { severe: [], light: [] }, resources: { coreTerms: [], supportTerms: [], grammarTopics: [], sounds: [] } }] }}
-      actions={{ onSelectMonth: vi.fn(), onSelectLevel: vi.fn(), onSuggestBrief: vi.fn(), onSaveBrief: vi.fn(), onApproveBrief: vi.fn(), onGenerateFramework: vi.fn(), onSaveFramework: vi.fn(), onApproveFramework: vi.fn(), onComposeMonthlyFinal, onSaveDay: vi.fn(), onGenerateDay: vi.fn(), onAcknowledge: vi.fn(), onApproveDay: vi.fn(), onCreateCorrection: vi.fn(), onSaveCorrection: vi.fn(), onAcknowledgeCorrection: vi.fn(), onApproveCorrection: vi.fn() }}
+    const onGenerateMonthlyFinal = vi.fn().mockResolvedValue(monthlyFinalView());
+    const onComposeMonthlyFinal = vi.fn().mockResolvedValue(monthlyFinalView());
+    render(<ToastProvider><OperatorMonths month="2026-11" todayMonth="2026-11" cefr="B1" busy={false}
+      overview={{ systemDate: "2026-11-03", monthWindow, brief: null, frameworks: [approvedFramework] }}
+      actions={monthActions({ onGenerateMonthlyFinal, onComposeMonthlyFinal }) as never}
     /></ToastProvider>);
-    expect(screen.getAllByRole("button", { name: "Sinh đề thi tháng" }).at(-1)).toBeDisabled();
+    expect(screen.getAllByRole("button", { name: "Sinh đề thi tháng" }).at(-1)).toBeEnabled();
     await user.click(screen.getAllByRole("button", { name: "Soạn tay đề thi tháng" }).at(-1)!);
-    expect(onComposeMonthlyFinal).toHaveBeenCalledWith("framework-a1");
+    expect(onComposeMonthlyFinal).toHaveBeenCalledWith("framework-b1");
     expect((await screen.findAllByRole("dialog", { name: "Bản nháp đề thi tháng" })).length).toBeGreaterThan(0);
   });
-  it("calls the real monthly-final action from the final-day cell", async () => {
-    const user = userEvent.setup();
-    const blueprint = {
-      title: "Đề thi tháng 11",
-      sections: [
-        { code: "listening", title: "Nghe", durationMinutes: 8, maxScore: 25, instructions: ["Nghe"], groups: [{ key: "L", title: "Listening", instruction: "Nghe script", stimulus: { type: "audio_script", lines: [{ speaker: "A", text: "Monthly listening script." }] }, tasks: [{ key: "ML1", prompt: "What should the team confirm?", responseType: "single_choice", maxScore: 5, options: [{ value: "A", label: "The handover" }, { value: "B", label: "The invoice" }, { value: "C", label: "The meeting" }, { value: "D", label: "The task" }], correctAnswer: "A" }] }] },
-        { code: "reading", title: "Đọc", durationMinutes: 8, maxScore: 25, instructions: [], groups: [] },
-        { code: "writing", title: "Viết", durationMinutes: 7, maxScore: 25, instructions: [], groups: [] },
-        { code: "speaking", title: "Nói", durationMinutes: 7, maxScore: 25, instructions: [], groups: [] }
-      ]
-    } as never;
-    const onGenerateMonthlyFinal = vi.fn().mockResolvedValue({ versionId: "final-v1", status: "draft", blueprint });
-    const onSaveMonthlyFinal = vi.fn().mockResolvedValue(undefined);
-    render(<ToastProvider><OperatorMonths month="2026-11" todayMonth="2026-11" cefr="A1" busy={false}
-      overview={{ systemDate: "2026-11-30", monthWindow: { previous: "2026-10", current: "2026-11", next: "2026-12", writable: true }, brief: { month: "2026-11", title: "Handover", brief: "Prepare handover", context: "CS", communicationGoal: "Explain", version: 1, status: "approved" }, frameworks: [{
-        id: "framework-a1", cefr: "A1", version: 1, status: "approved", scopeHash: "scope", lessons: [], quality: { severe: [], light: [] }, resources: { coreTerms: [], supportTerms: [], grammarTopics: [], sounds: [] }
-      }] }}
-      actions={{ onSelectMonth: vi.fn(), onSelectLevel: vi.fn(), onSuggestBrief: vi.fn(), onSaveBrief: vi.fn(), onApproveBrief: vi.fn(), onGenerateFramework: vi.fn(), onSaveFramework: vi.fn(), onApproveFramework: vi.fn(), onGenerateMonthlyFinal, onSaveMonthlyFinal, onSaveDay: vi.fn(), onGenerateDay: vi.fn(), onAcknowledge: vi.fn(), onApproveDay: vi.fn(), onCreateCorrection: vi.fn(), onSaveCorrection: vi.fn(), onAcknowledgeCorrection: vi.fn(), onApproveCorrection: vi.fn() }}
+
+  it("keeps the exam AI button closed until the monthly plan is approved", () => {
+    render(<ToastProvider><OperatorMonths month="2026-11" todayMonth="2026-11" cefr="B1" busy={false}
+      overview={{ systemDate: "2026-11-03", monthWindow, brief: null, frameworks: [{ ...approvedFramework, status: "draft" }] }}
+      actions={monthActions({ onGenerateMonthlyFinal: vi.fn() }) as never}
     /></ToastProvider>);
-    const finalButtons = screen.getAllByRole("button", { name: "Sinh đề thi tháng" });
-    await user.click(finalButtons[finalButtons.length - 1]!);
-    expect(onGenerateMonthlyFinal).toHaveBeenCalledWith("framework-a1");
+    expect(screen.getAllByRole("button", { name: "Sinh đề thi tháng" }).at(-1)).toBeDisabled();
+  });
+
+  it("locks generation and manual composition from 00:00 of the exam date but still lets the Operator view the exam", async () => {
+    const user = userEvent.setup();
+    const onOpenMonthlyFinal = vi.fn().mockResolvedValue(monthlyFinalView({ editable: false }));
+    render(<ToastProvider><OperatorMonths month="2026-11" todayMonth="2026-11" cefr="B1" busy={false}
+      overview={{ systemDate: "2026-11-30", monthWindow, brief: null, frameworks: [approvedFramework] }}
+      actions={monthActions({ onGenerateMonthlyFinal: vi.fn(), onComposeMonthlyFinal: vi.fn(), onOpenMonthlyFinal }) as never}
+    /></ToastProvider>);
+    expect(screen.getAllByRole("button", { name: "Sinh đề thi tháng" }).at(-1)).toBeDisabled();
+    expect(screen.getAllByRole("button", { name: "Soạn tay đề thi tháng" }).at(-1)).toBeDisabled();
+    await user.click(screen.getAllByRole("button", { name: "Xem và duyệt đề thi tháng" }).at(-1)!);
+    expect(onOpenMonthlyFinal).toHaveBeenCalledWith("framework-b1");
+    expect((await screen.findAllByText(/Đã quá 00:00 ngày thi/u)).length).toBeGreaterThan(0);
+  });
+
+  it("generates with AI, reviews in the shared level editor and saves the edit with the review fields", async () => {
+    const user = userEvent.setup();
+    const onGenerateMonthlyFinal = vi.fn().mockResolvedValue(monthlyFinalView());
+    const onSaveMonthlyFinal = vi.fn().mockResolvedValue(monthlyFinalView());
+    render(<ToastProvider><OperatorMonths month="2026-11" todayMonth="2026-11" cefr="B1" busy={false}
+      overview={{ systemDate: "2026-11-20", monthWindow, brief: { month: "2026-11", title: "Updates", brief: "Project updates", context: "Office", communicationGoal: "Report", version: 1, status: "approved" }, frameworks: [approvedFramework] }}
+      actions={monthActions({ onGenerateMonthlyFinal, onSaveMonthlyFinal, onPublishMonthlyFinal: vi.fn() }) as never}
+    /></ToastProvider>);
+    await user.click(screen.getAllByRole("button", { name: "Sinh đề thi tháng" }).at(-1)!);
+    expect(onGenerateMonthlyFinal).toHaveBeenCalledWith("framework-b1");
     expect((await screen.findAllByRole("dialog", { name: "Bản nháp đề thi tháng" })).length).toBeGreaterThan(0);
-    expect(screen.getAllByText("Monthly listening script.").length).toBeGreaterThan(0);
+    expect(screen.getAllByTestId("monthly-final-status").at(-1)).toHaveTextContent("NEEDS_REVIEW");
     expect(screen.getAllByRole("button", { name: "Duyệt & phát hành" }).at(-1)).toBeDisabled();
-    const prompt = screen.getByRole("textbox", { name: "Nội dung ML1" });
+    const prompt = screen.getAllByRole("textbox", { name: "Nội dung L01" }).at(-1)!;
     await user.clear(prompt);
-    await user.type(prompt, "What must the team finish?");
+    await user.type(prompt, "What does Anna say is ready?");
     await user.click(screen.getAllByRole("button", { name: "Lưu bản nháp" }).at(-1)!);
-    expect(onSaveMonthlyFinal).toHaveBeenCalledWith("final-v1", expect.objectContaining({ sections: expect.arrayContaining([expect.objectContaining({ code: "listening", groups: expect.arrayContaining([expect.objectContaining({ tasks: expect.arrayContaining([expect.objectContaining({ key: "ML1", prompt: "What must the team finish?" })]) })]) })]) }));
-    expect(screen.getByRole("dialog", { name: "Bản nháp đề thi tháng" })).toBeInTheDocument();
+    expect(onSaveMonthlyFinal).toHaveBeenCalledWith("final-v1", expect.objectContaining({
+      review: expect.objectContaining({ audioReviewed: false, manualConfirmations: [] }),
+      sections: expect.arrayContaining([expect.objectContaining({ code: "listening", groups: expect.arrayContaining([expect.objectContaining({ tasks: expect.arrayContaining([expect.objectContaining({ key: "L01", prompt: "What does Anna say is ready?" })]) })]) })])
+    }));
+    expect(screen.getAllByRole("dialog", { name: "Bản nháp đề thi tháng" }).length).toBeGreaterThan(0);
   });
 
 });

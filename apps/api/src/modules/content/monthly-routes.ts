@@ -1,4 +1,4 @@
-import { buildMonthlyCalendar, buildMonthlyExamScope, monthlyDayKind, type MonthlyCurriculumContract } from "@e4s/domain";
+import { buildMonthlyCalendar, buildMonthlyExamScope, maxMonthlySupportRepeats, monthlyDayKind, MONTHLY_MAX_SUPPORTS_PER_CORE, MONTHLY_MIN_SUPPORTS_PER_CORE, MONTHLY_REQUIRED_SUPPORT_RELATIONS, type MonthlyCurriculumContract } from "@e4s/domain";
 import { monthlyResourcePlanOutputSchema, monthlyTopicSuggestionOutputSchema, type AiTaskRunner } from "@e4s/ai";
 import { createRepositories } from "@e4s/database";
 import { randomUUID } from "node:crypto";
@@ -23,7 +23,7 @@ const briefInput = z.object({
   communicationGoal: z.string().trim().min(1).max(2_000)
 });
 const coreTerm = z.object({ id: z.string().min(1), word: z.string().min(1), meaning: z.string(), type: z.string().min(1), ipa: z.string().min(1), source: z.literal("core_registry"), component: z.literal("core"), dayNumber: z.int().positive() });
-const supportTerm = z.object({ id: z.string().min(1), word: z.string().min(1), meaning: z.string(), type: z.string().min(1), relation: z.enum(["umbrella", "synonym", "antonym", "word_family", "collocation"]), source: z.enum(["example", "family", "synonym", "antonym", "group", "manual"]), component: z.literal("expanded"), dayNumber: z.int().positive(), relatedCoreTermId: z.string().min(1) });
+const supportTerm = z.object({ id: z.string().min(1), word: z.string().min(1), meaning: z.string(), type: z.string().min(1), relation: z.enum(["umbrella", "synonym", "antonym", "word_family", "collocation"]), source: z.enum(["example", "family", "synonym", "antonym", "group", "manual"]), component: z.literal("expanded"), dayNumber: z.int().positive(), relatedCoreTermId: z.string().min(1), cefr: z.enum(["A1", "A2", "B1", "B2", "C1"]).optional() });
 const frameworkInput = z.object({
   contract: z.object({
     month: z.string().regex(/^\d{4}-(0[1-9]|1[0-2])$/u), cefr: z.enum(["A1", "A2", "B1", "B2", "C1"]), version: z.int().positive(),
@@ -145,12 +145,12 @@ export function registerMonthlyContentRoutes(app: FastifyInstance, pool: Pool, a
       ? monthlyResourcePlanOutputSchema.shape.expandedTerms.safeParse(checkpoint?.categories.expandedTerms).data ?? []
       : [];
     const expandedPoolComplete = checkpointCoreTerms.length === counts.coreTerms
-      && checkpointExpandedTerms.length >= newLessonCount * 3 * 6
+      && checkpointExpandedTerms.length >= newLessonCount * 3 * MONTHLY_MIN_SUPPORTS_PER_CORE
       && checkpointExpandedTerms.length <= counts.expandedTerms
       && checkpointCoreTerms.every((core) => {
         const supports = checkpointExpandedTerms.filter((term) => term.relatesToCoreId === core.id);
         const relations = new Set(supports.map((term) => term.relation));
-        return supports.length >= 6 && supports.length <= 9 && ["umbrella", "synonym", "word_family"].every((relation) => relations.has(relation as typeof supports[number]["relation"]));
+        return supports.length >= MONTHLY_MIN_SUPPORTS_PER_CORE && supports.length <= MONTHLY_MAX_SUPPORTS_PER_CORE && MONTHLY_REQUIRED_SUPPORT_RELATIONS.every((relation) => relations.has(relation));
       });
     const categories = Object.fromEntries(Object.entries(counts).map(([key, target]) => {
       const categoryCurrent = isCurrentMonthlyResourceCheckpointCategory(key, checkpoint?.sourceLineage[key]);
@@ -188,8 +188,8 @@ export function registerMonthlyContentRoutes(app: FastifyInstance, pool: Pool, a
     const calendar = buildMonthlyCalendar(month.month);
     const newLessonCount = calendar.effectiveDays.filter((_date, index) => monthlyDayKind(index + 1, calendar) === "new").length;
     const requiredVocabularyCount = newLessonCount * 3;
-    const minimumExpandedVocabularyCount = newLessonCount * 3 * 6;
-    const maximumExpandedVocabularyCount = newLessonCount * 27;
+    const minimumExpandedVocabularyCount = newLessonCount * 3 * MONTHLY_MIN_SUPPORTS_PER_CORE;
+    const maximumExpandedVocabularyCount = newLessonCount * 3 * MONTHLY_MAX_SUPPORTS_PER_CORE;
     if (criteria.vocabularyCount !== requiredVocabularyCount) {
       return reply.code(422).send({ code: "VOCABULARY_COUNT_MISMATCH", requiredVocabularyCount });
     }
@@ -258,7 +258,9 @@ export function registerMonthlyContentRoutes(app: FastifyInstance, pool: Pool, a
       const coreTerms: z.infer<typeof monthlyResourcePlanOutputSchema>["coreTerms"] = readCheckpointCategory("coreTerms", monthlyResourcePlanOutputSchema.shape.coreTerms) ?? [];
       const coreWords = new Set<string>();
       const preflightSupportTerms: z.infer<typeof monthlyResourcePlanOutputSchema>["expandedTerms"] = [];
-      const maxExpandedRepeats = Math.floor(criteria.expandedVocabularyCount * 0.25);
+      // One repeated-support ceiling (35%) shared with the domain validator.
+      // The separate 25% multi-word phrase cap below is intentionally unchanged.
+      const maxExpandedRepeats = maxMonthlySupportRepeats(criteria.expandedVocabularyCount);
       const maxExpandedPhrases = Math.floor(criteria.expandedVocabularyCount * 0.25);
       const cachedCoreValid = coreTerms.length === criteria.vocabularyCount
         && coreTerms.every((term) => isSingleHeadword(term.word))
@@ -340,6 +342,7 @@ export function registerMonthlyContentRoutes(app: FastifyInstance, pool: Pool, a
               existingSupportWords: [...preflightSupportTerms, ...selectedSupportEdges].map((term) => term.word),
               maxRepeatedPlacements: maxExpandedRepeats,
               maxPhrasePlacements: maxExpandedPhrases,
+              cefr: criteria.cefr,
               needed: 3
             }).selected;
             const selectedRelations = new Set(selectedEdges.map((term) => term.relation));
@@ -388,22 +391,27 @@ export function registerMonthlyContentRoutes(app: FastifyInstance, pool: Pool, a
         if (validPartialSupports) expandedTerms.push(...supports);
       }
       if (expandedTerms.length !== cachedExpanded.length) await saveCheckpointCategory("expandedTerms", expandedTerms);
-      const isCompleteCoreSupportSet = (core: typeof coreTerms[number]) => {
+      const supportLimitFor = (coreIndex: number) => Math.min(
+        MONTHLY_MAX_SUPPORTS_PER_CORE,
+        Math.floor(criteria.expandedVocabularyCount / coreTerms.length) + (coreIndex < criteria.expandedVocabularyCount % coreTerms.length ? 1 : 0)
+      );
+      // A core is "complete" for resume purposes once it holds its requested
+      // support target. The hard floor is only the three required relations, so
+      // an incomplete core is enriched again but never fails for lacking extras.
+      const isCompleteCoreSupportSet = (core: typeof coreTerms[number], coreIndex: number) => {
         const supports = expandedTerms.filter((term) => term.relatesToCoreId === core.id);
         const relations = new Set(supports.map((term) => term.relation));
-        return supports.length >= 6 && supports.length <= 9
-          && ["umbrella", "synonym", "word_family"].every((relation) => relations.has(relation as typeof supports[number]["relation"]))
+        return supports.length >= Math.max(MONTHLY_MIN_SUPPORTS_PER_CORE, supportLimitFor(coreIndex)) && supports.length <= MONTHLY_MAX_SUPPORTS_PER_CORE
+          && MONTHLY_REQUIRED_SUPPORT_RELATIONS.every((relation) => relations.has(relation))
           && supports.some((term) => term.relation === "word_family" && isGenuineWordFamily(core.word, term.word));
       };
-      for (let coreIndex = coreTerms.findIndex((core) => !isCompleteCoreSupportSet(core)); coreIndex >= 0 && coreIndex < coreTerms.length; coreIndex += 1) {
+      for (let coreIndex = coreTerms.findIndex((core, index) => !isCompleteCoreSupportSet(core, index)); coreIndex >= 0 && coreIndex < coreTerms.length; coreIndex += 1) {
         let coreTerm = coreTerms[coreIndex]!;
         const cachedTermsForCore = expandedTerms.filter((term) => term.relatesToCoreId === coreTerm.id);
         for (let index = expandedTerms.length - 1; index >= 0; index -= 1) {
           if (expandedTerms[index]!.relatesToCoreId === coreTerm.id) expandedTerms.splice(index, 1);
         }
-        const baseSupportLimit = Math.floor(criteria.expandedVocabularyCount / coreTerms.length);
-        const extraSupportSlots = criteria.expandedVocabularyCount % coreTerms.length;
-        const supportLimitForCore = baseSupportLimit + (coreIndex < extraSupportSlots ? 1 : 0);
+        const supportLimitForCore = supportLimitFor(coreIndex);
         let acceptedForCore: z.infer<typeof monthlyResourcePlanOutputSchema>["expandedTerms"] | undefined;
         let lastIssue = "";
         let replacementAttempt = 0;
@@ -496,6 +504,7 @@ export function registerMonthlyContentRoutes(app: FastifyInstance, pool: Pool, a
                 existingSupportWords: previousTerms,
                 maxRepeatedPlacements: maxExpandedRepeats,
                 maxPhrasePlacements: maxExpandedPhrases,
+                cefr: criteria.cefr,
                 needed: 1
               });
               const chosen = selection.selected.find((term) => term.relation === relation);
@@ -572,6 +581,7 @@ export function registerMonthlyContentRoutes(app: FastifyInstance, pool: Pool, a
                 existingSupportWords: previousTerms,
                 maxRepeatedPlacements: maxExpandedRepeats,
                 maxPhrasePlacements: maxExpandedPhrases,
+                cefr: criteria.cefr,
                 needed: optionalCount
               });
               candidatesForCore.push(...selection.selected);
@@ -585,8 +595,10 @@ export function registerMonthlyContentRoutes(app: FastifyInstance, pool: Pool, a
             }
           }
           const finalRelations = new Set(candidatesForCore.map((term) => term.relation));
-          const coreHasMinimumRelations = ["umbrella", "synonym", "word_family"].every((relation) => finalRelations.has(relation as typeof candidatesForCore[number]["relation"]));
-          if (candidatesForCore.length >= 6 && coreHasMinimumRelations) {
+          const coreHasMinimumRelations = MONTHLY_REQUIRED_SUPPORT_RELATIONS.every((relation) => finalRelations.has(relation));
+          // Extra supports are attempted above but never forced: the three
+          // genuine required relations are the per-core minimum (VH-R33).
+          if (candidatesForCore.length >= MONTHLY_MIN_SUPPORTS_PER_CORE && coreHasMinimumRelations) {
             acceptedForCore = candidatesForCore;
             break;
           }

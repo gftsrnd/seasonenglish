@@ -12,6 +12,11 @@ import {
   resolveMonthlyExamOutcome,
   recommendedPendingBatch,
   validateMonthlyCurriculum,
+  allowedMonthlySupportLevels,
+  maxMonthlySupportRepeats,
+  monthlySupportLevelBand,
+  MONTHLY_MIN_SUPPORTS_PER_CORE,
+  MONTHLY_MAX_SUPPORTS_PER_CORE,
   type MonthlyCurriculumInput
 } from "../src/monthly/index.js";
 
@@ -311,6 +316,93 @@ describe("monthly curriculum contract", () => {
     const excessive = structuredClone(allowed);
     excessive.supportTerms[excessive.supportTerms.length - 152]!.word = excessive.supportTerms[0]!.word;
     expect(validateMonthlyCurriculum(excessive)).toContain("Expanded resources repeat more than 35% of the monthly total");
+  });
+
+  describe("VH-R33 support pool rules", () => {
+    /** One umbrella, one synonym and one word_family per core (positions 0, 1, 3 of the fixture relation cycle). */
+    function threeSupportPool(): Parameters<typeof planMonthlyResourcePool>[0] {
+      const pool = poolFor();
+      return { ...pool, supportTerms: pool.supportTerms.filter((_term, index) => [0, 1, 3].includes(index % 9)) };
+    }
+
+    it("uses three required relations as the per-core minimum and keeps nine as the maximum", () => {
+      expect(MONTHLY_MIN_SUPPORTS_PER_CORE).toBe(3);
+      expect(MONTHLY_MAX_SUPPORTS_PER_CORE).toBe(9);
+    });
+
+    it("accepts a pool with exactly three supports per core, one per required relation", () => {
+      const contract = planMonthlyResourcePool(threeSupportPool());
+      expect(contract.supportTerms).toHaveLength(48 * 3);
+      expect(validateMonthlyCurriculum(contract)).toEqual([]);
+      expect(contract.daySpecs.filter((day) => day.kind === "new").every((day) => day.expandedTermIds.length === 9)).toBe(true);
+    });
+
+    it("still accepts previously valid six-to-nine support pools", () => {
+      const pool = poolFor();
+      const sixPerCore = { ...pool, supportTerms: pool.supportTerms.filter((_term, index) => index % 9 < 6) };
+      expect(validateMonthlyCurriculum(planMonthlyResourcePool(sixPerCore))).toEqual([]);
+      expect(validateMonthlyCurriculum(planMonthlyResourcePool(pool))).toEqual([]);
+    });
+
+    it("rejects a core that misses a required relation or has fewer than three supports", () => {
+      const missingWordFamily = threeSupportPool();
+      missingWordFamily.supportTerms[2]!.relation = "antonym";
+      expect(() => planMonthlyResourcePool(missingWordFamily)).toThrow(/core-1 needs umbrella, synonym, and word-family supports/u);
+
+      const contract = planMonthlyResourcePool(threeSupportPool());
+      const invalid = structuredClone(contract);
+      invalid.supportTerms.find((term) => term.relatedCoreTermId === "core-2" && term.relation === "umbrella")!.relation = "collocation";
+      expect(validateMonthlyCurriculum(invalid)).toContain("Core term core-2 needs umbrella, synonym, and word-family supports");
+
+      const twoSupports = threeSupportPool();
+      twoSupports.supportTerms.splice(0, 1);
+      expect(() => planMonthlyResourcePool(twoSupports)).toThrow(/core-1 must have 3-9 related expanded terms/u);
+    });
+
+    it("accepts repeated supports at the 35% boundary and rejects one more", () => {
+      const total = 48 * 3;
+      const ceiling = maxMonthlySupportRepeats(total);
+      expect(ceiling).toBe(50);
+      const withRepeats = (repeats: number) => {
+        const pool = threeSupportPool();
+        for (let index = 3; index < 3 + repeats; index += 1) pool.supportTerms[index]!.word = pool.supportTerms[0]!.word;
+        return pool;
+      };
+      const atCeiling = planMonthlyResourcePool(withRepeats(ceiling));
+      expect(validateMonthlyCurriculum(atCeiling)).toEqual([]);
+      expect(() => planMonthlyResourcePool(withRepeats(ceiling + 1))).toThrow(/repeat more than 35% of the monthly total/u);
+      const overCeiling = structuredClone(atCeiling);
+      overCeiling.supportTerms[3 + ceiling]!.word = overCeiling.supportTerms[0]!.word;
+      expect(validateMonthlyCurriculum(overCeiling)).toContain("Expanded resources repeat more than 35% of the monthly total");
+    });
+
+    it("classifies support levels within one CEFR step, clamped at A1 and C1", () => {
+      expect(allowedMonthlySupportLevels("A1")).toEqual(["A1", "A2"]);
+      expect(allowedMonthlySupportLevels("B1")).toEqual(["A2", "B1", "B2"]);
+      expect(allowedMonthlySupportLevels("C1")).toEqual(["B2", "C1"]);
+      expect(monthlySupportLevelBand("B1", undefined)).toBe("same");
+      expect(monthlySupportLevelBand("B1", "B1")).toBe("same");
+      expect(monthlySupportLevelBand("B1", "A2")).toBe("adjacent");
+      expect(monthlySupportLevelBand("B1", "B2")).toBe("adjacent");
+      expect(monthlySupportLevelBand("B1", "C1")).toBe("out_of_range");
+      expect(monthlySupportLevelBand("A1", "B1")).toBe("out_of_range");
+    });
+
+    it("accepts and records an adjacent-level support and rejects one two levels away", () => {
+      const adjacent = threeSupportPool();
+      adjacent.supportTerms[0] = { ...adjacent.supportTerms[0]!, cefr: "A2" };
+      const contract = planMonthlyResourcePool(adjacent);
+      expect(contract.supportTerms[0]!.cefr).toBe("A2");
+      expect(contract.supportTerms[1]).not.toHaveProperty("cefr");
+      expect(validateMonthlyCurriculum(contract)).toEqual([]);
+
+      const tooFar = threeSupportPool();
+      tooFar.supportTerms[0] = { ...tooFar.supportTerms[0]!, cefr: "B1" };
+      expect(() => planMonthlyResourcePool(tooFar)).toThrow(/support-1 is CEFR B1; supports must be within one level of A1/u);
+      const tamperedContract = structuredClone(contract);
+      tamperedContract.supportTerms[0]!.cefr = "B2";
+      expect(validateMonthlyCurriculum(tamperedContract)).toContain("Expanded term support-1 is CEFR B2; supports must be within one level of A1");
+    });
   });
 
   it("keeps support terms outside core and proposes the first ten pending days without replacing authored days", () => {

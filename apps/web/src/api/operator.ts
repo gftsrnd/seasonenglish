@@ -12,7 +12,7 @@ import type {
   ManualAssessmentScoreInput,
   ContentWeekInput, ContentWeekSuggestionView, SystemCapabilitiesView, WeeklyPracticeAssignmentView
 } from "@e4s/contracts";
-import type { MonthlyOperatorOverviewView, SharedMonthBriefView } from "@e4s/contracts";
+import type { MonthlyFinalDraftView, MonthlyFinalUpdateInput, MonthlyOperatorOverviewView, SharedMonthBriefView } from "@e4s/contracts";
 import type { MonthlyCurriculumContract } from "@e4s/domain/monthly";
 import { request, uploadMultipart } from "./runtime.js";
 
@@ -85,9 +85,10 @@ export interface OperatorApiClient {
   generateContentMonthResources(month: string, criteria: { cefr: CefrLevel; vocabularyCount: number; expandedVocabularyCount: number; grammarTopicCount: number; pronunciationSoundCount: number }): Promise<{ id: string; cefr: CefrLevel; version: number; status: "draft"; scopeHash: string }>;
   getContentMonthResourceCheckpoint(month: string, cefr: CefrLevel): Promise<MonthlyResourceCheckpointView>;
   approveContentMonthFramework(id: string): Promise<void>;
-  generateMonthlyFinal(id: string): Promise<{ versionId: string; status: "draft"; blueprint: AssessmentLevelFormUpdateInput }>;
-  composeMonthlyFinal(id: string): Promise<{ versionId: string; status: "draft"; blueprint: AssessmentLevelFormUpdateInput }>;
-  updateMonthlyFinal(versionId: string, input: AssessmentLevelFormUpdateInput): Promise<{ versionId: string; status: "draft"; blueprint: AssessmentLevelFormUpdateInput }>;
+  getMonthlyFinal(id: string): Promise<MonthlyFinalDraftView>;
+  generateMonthlyFinal(id: string): Promise<MonthlyFinalDraftView>;
+  composeMonthlyFinal(id: string): Promise<MonthlyFinalDraftView>;
+  updateMonthlyFinal(versionId: string, input: MonthlyFinalUpdateInput): Promise<MonthlyFinalDraftView>;
   publishMonthlyFinal(versionId: string): Promise<{ versionId: string; publishedAt: string }>;
   synthesizeAssessmentEdgeTts(input: { text: string; voice: string }): Promise<{ filename: string; mimeType: string; base64: string }>;
   saveContentMonthDay(id: string, dayNumber: number, lesson: { title: string; parts: Array<{ code: string; title?: string; content: Record<string, unknown> }> }): Promise<{ severe: Array<{ severity: "severe" | "light"; code: string; message: string; dayNumber?: number; component?: string }>; light: Array<{ severity: "severe" | "light"; code: string; message: string; dayNumber?: number; component?: string }>; contractVersion: number }>;
@@ -185,6 +186,7 @@ export const operatorApiClient: OperatorApiClient = {
   generateContentMonthResources: (month, criteria) => request(`/api/v1/content/months/${encodeURIComponent(month)}/resources/generate`, { method: "POST", body: JSON.stringify(criteria) }),
   getContentMonthResourceCheckpoint: (month, cefr) => request(`/api/v1/content/months/${encodeURIComponent(month)}/resources/checkpoint?cefr=${encodeURIComponent(cefr)}`),
   approveContentMonthFramework: async (id) => { await request(`/api/v1/content/month-frameworks/${encodeURIComponent(id)}/approve`, { method: "POST", body: "{}" }); },
+  getMonthlyFinal: (id) => request(`/api/v1/month-frameworks/${encodeURIComponent(id)}/monthly-final`),
   generateMonthlyFinal: (id) => request(`/api/v1/month-frameworks/${encodeURIComponent(id)}/monthly-final`, { method: "POST", body: "{}" }),
   composeMonthlyFinal: (id) => request(`/api/v1/month-frameworks/${encodeURIComponent(id)}/monthly-final/manual`, { method: "POST", body: "{}" }),
   updateMonthlyFinal: (versionId, input) => request(`/api/v1/monthly-final-forms/${encodeURIComponent(versionId)}`, { method: "PUT", body: JSON.stringify(input) }),

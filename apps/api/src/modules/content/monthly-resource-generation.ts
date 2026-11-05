@@ -1,7 +1,22 @@
-import { buildMonthlyCalendar, monthlyDayKind, type MonthlyResourcePoolContract, type MonthlySupportRelation, type SharedMonthBrief } from "@e4s/domain";
+import { allowedMonthlySupportLevels, buildMonthlyCalendar, monthlyDayKind, monthlySupportLevelBand, MONTHLY_MAX_SUPPORTS_PER_CORE, MONTHLY_MIN_SUPPORTS_PER_CORE, MONTHLY_REQUIRED_SUPPORT_RELATIONS, type MonthlyResourcePoolContract, type MonthlySupportRelation, type SharedMonthBrief } from "@e4s/domain";
 import type { CefrLevel } from "@e4s/contracts";
 import { monthlyResourcePlanOutputSchema, type MonthlyResourcePlanTaskOutput } from "@e4s/ai";
 import { validateMonthlyResourcePlanShape } from "./monthly-resource-plan-spec.js";
+
+/**
+ * VH-R33: umbrella/synonym/antonym (and every other support) may come from the
+ * month's CEFR level or one adjacent level. Prompts ask the model to label each
+ * support with its own level so the band is recorded on the stored term.
+ */
+export function buildMonthlySupportLevelGuidance(cefr: string): string {
+  const allowed = isCefrLevel(cefr) ? allowedMonthlySupportLevels(cefr) : [];
+  const band = allowed.length ? allowed.join(", ") : `${cefr} or one adjacent CEFR level`;
+  return `Support words may be at CEFR ${band} (the month's level ${cefr} or one adjacent level). Set each expandedTerms item's cefr field to that support word's own CEFR level. Do not reject or omit a genuine relation only because the word is one level above or below ${cefr}; never use a word two or more levels away, and never force a relation that does not genuinely exist.`;
+}
+
+function isCefrLevel(value: string): value is CefrLevel {
+  return value === "A1" || value === "A2" || value === "B1" || value === "B2" || value === "C1";
+}
 
 export interface MonthlyResourceCriteria {
   vocabularyCount: number;
@@ -103,7 +118,7 @@ export function buildMonthlyCoreCandidatesPrompt(input: {
     ? `Return exactly ${candidateCount} ordered coreTerms candidates and only their mandatory expandedTerms preflight edges. For EVERY core candidate, return exactly three authentic supports: one umbrella, one same-sense synonym, and one common word_family item, each linked using that candidate's exact coreTerms.id. Do not return grammarTopics or pronunciationTargets.`
     : `Return exactly ${candidateCount} ordered coreTerms candidates and no other category: expandedTerms, grammarTopics and pronunciationTargets must be empty arrays.`;
   const relationPreflight = input.preflightRelations
-    ? ` For every core candidate, silently verify that all three linked support edges are true for its exact meaning. Support edge IDs must be unique. Umbrella must be a genuine broader category, synonym a natural same-sense substitute, and word_family a common derivation from the same root. If a candidate cannot support all three, omit its core and all its edges, and replace it with another candidate so the requested number of cores is still returned.`
+    ? ` For every core candidate, silently verify that all three linked support edges are true for its exact meaning. Support edge IDs must be unique. Umbrella must be a genuine broader category, synonym a natural same-sense substitute, and word_family a common derivation from the same root. If a candidate cannot support all three, omit its core and all its edges, and replace it with another candidate so the requested number of cores is still returned. ${buildMonthlySupportLevelGuidance(input.cefr)}`
     : "";
   const candidatePoolRules = input.candidatePoolOnly
     ? ` This is a shared candidate lexicon, not the final core list. Include a broad, varied set of standalone A1–C1-appropriate workplace words and useful support vocabulary; terms do not need to have an umbrella or synonym relation. Include precise one-sense glosses and accurate IPA. Mix nouns, verbs, adjectives, and adverbs; include useful derived forms and category words where natural. Do not include phrases, inflections, duplicates, or invented words.`
@@ -122,7 +137,7 @@ export function buildMonthlyCandidateRelationGraphPrompt(input: {
 }): string {
   const coreIds = new Set(input.coreCandidates.map((term) => term.id));
   const supportPool = input.candidatePool.filter((term) => !coreIds.has(term.id));
-  return `PHASE 2 — BUILD RELATION EDGES FROM THE SHARED CANDIDATE LEXICON. CEFR ${input.cefr}; approved theme ${input.theme}. coreTermBatch contains the only possible core candidates for this batch. Return coreTerms, grammarTopics, and pronunciationTargets as empty arrays. For each core candidate, select support words ONLY from the supplied candidatePool; do not invent or rewrite a word, gloss, or part of speech. Use each candidatePool item's word, meaning, and type exactly as provided. Identify up to three genuinely valid alternatives for each required relation (umbrella, synonym, word_family), each linked to the exact core ID. Also identify up to six additional genuine support relations (umbrella, synonym, word_family, collocation, antonym) for that same core, with preference for a true antonym when one exists. Do not force any relation. A support must fit the core's exact stated sense; an associated topic, example, tool, sibling, or inflection is not enough. A word-family item must be an established common derivation of the same root, not just similar spelling. Every edge must carry a unique id, relation and relatesToCoreId. Return several options per relation when multiple valid pool words exist so an independent audit can choose among them. Empty relation options are acceptable; never mislabel or pad. This month has a 25% repeated-support placement ceiling, so prefer distinct pool words unless reusing an exact valid relation for another core. Core candidates: ${JSON.stringify(input.coreCandidates)}. Candidate pool: ${JSON.stringify(supportPool)}.`;
+  return `PHASE 2 — BUILD RELATION EDGES FROM THE SHARED CANDIDATE LEXICON. CEFR ${input.cefr}; approved theme ${input.theme}. coreTermBatch contains the only possible core candidates for this batch. Return coreTerms, grammarTopics, and pronunciationTargets as empty arrays. For each core candidate, select support words ONLY from the supplied candidatePool; do not invent or rewrite a word, gloss, or part of speech. Use each candidatePool item's word, meaning, and type exactly as provided. Identify up to three genuinely valid alternatives for each required relation (umbrella, synonym, word_family), each linked to the exact core ID. Also identify up to six additional genuine support relations (umbrella, synonym, word_family, collocation, antonym) for that same core, with preference for a true antonym when one exists. Do not force any relation. A support must fit the core's exact stated sense; an associated topic, example, tool, sibling, or inflection is not enough. A word-family item must be an established common derivation of the same root, not just similar spelling. Every edge must carry a unique id, relation and relatesToCoreId. Return several options per relation when multiple valid pool words exist so an independent audit can choose among them. Empty relation options are acceptable; never mislabel or pad. ${buildMonthlySupportLevelGuidance(input.cefr)} This month has a 35% repeated-support placement ceiling, so prefer distinct pool words unless reusing an exact valid relation for another core. Core candidates: ${JSON.stringify(input.coreCandidates)}. Candidate pool: ${JSON.stringify(supportPool)}.`;
 }
 
 export function selectMonthlySupportCandidates(input: {
@@ -138,6 +153,8 @@ export function selectMonthlySupportCandidates(input: {
   maxRepeatedPlacements: number;
   maxPhrasePlacements: number;
   needed: number;
+  /** Month CEFR level; when given, a candidate labelled more than one level away is rejected. */
+  cefr?: CefrLevel;
 }): { selected: MonthlyResourcePlanTaskOutput["expandedTerms"]; rejected: string[] } {
   const selected: MonthlyResourcePlanTaskOutput["expandedTerms"] = [];
   const rejected: string[] = [];
@@ -154,7 +171,7 @@ export function selectMonthlySupportCandidates(input: {
   const sameCoreWords = new Set(input.sameCoreWords);
   const relationCounts = new Map<MonthlySupportRelation, number>(input.sameCoreRelationCounts ?? [...sameCoreRelations].map((relation) => [relation, 1] as const));
 
-  const requiredRelations = ["umbrella", "synonym", "word_family"] as const;
+  const requiredRelations = MONTHLY_REQUIRED_SUPPORT_RELATIONS;
   const orderedCandidates = [
     ...requiredRelations.flatMap((relation) => sameCoreRelations.has(relation) ? [] : [input.candidates.find((candidate) => candidate.relation === relation)]),
     ...input.candidates
@@ -169,6 +186,7 @@ export function selectMonthlySupportCandidates(input: {
     let reason = "";
     if (candidate.relatesToCoreId !== input.coreId) reason = "incorrect core relation";
     else if ((relationCounts.get(candidate.relation) ?? 0) >= 3) reason = "exceeds the three-support limit for this semantic relation";
+    else if (input.cefr && monthlySupportLevelBand(input.cefr, candidate.cefr) === "out_of_range") reason = `CEFR ${candidate.cefr} is more than one level from ${input.cefr}`;
     else if (input.coreWords.has(word)) reason = "matches a core term";
     else if (["umbrella", "synonym", "antonym"].includes(candidate.relation) && !hasCompatiblePartOfSpeech(input.coreType, candidate.type, candidate.relation)) reason = "part of speech does not match the core sense for this relation";
     else if (candidate.relation === "word_family" && !isGenuineWordFamily(input.coreWord, candidate.word)) reason = "does not share a genuine derivational root with the core headword";
@@ -179,7 +197,7 @@ export function selectMonthlySupportCandidates(input: {
     else if (!isSingleHeadword(candidate.word) && phrasePlacements + 1 > input.maxPhrasePlacements) reason = "exceeds the monthly phrase ceiling; standalone words are required";
     else {
       const nextRepeatCount = repeatedPlacements + (existingCounts.has(word) ? 1 : 0);
-      if (nextRepeatCount > input.maxRepeatedPlacements) reason = "exceeds the 25% monthly support-repeat limit";
+      if (nextRepeatCount > input.maxRepeatedPlacements) reason = "exceeds the 35% monthly support-repeat limit";
       else repeatedPlacements = nextRepeatCount;
     }
     if (reason) {
@@ -262,7 +280,7 @@ export function buildMonthlySupportRelationAuditPrompt(input: {
       ? `Ask whether “Being ${input.core.word} is a kind of [candidate]” names a broader quality or property, rather than a synonym.`
       : `Ask whether “A ${input.core.word} is a kind of [candidate]” is true.`;
 
-  return `AUDIT ONLY — DO NOT GENERATE MONTHLY RESOURCES. Evaluate the exact candidates below against the core sense ${core}. This task has no minimum count, relation quota, or requirement to fill any slot. Do not generate, repair, rename, relabel, translate, or add candidates. Keep candidates when the existing relation is accurate in a common, natural use for this exact core sense. For context-sensitive synonyms, accept a normal substitution in at least one common sentence; do not require the words to be interchangeable in every context. Reject candidates that are only related by topic, differ in core sense, or are unnatural for this CEFR level. Check each candidate's word, stated Vietnamese meaning, part of speech, and relation together. For umbrella, ${umbrellaTest} A related topic, result, example, tool, sibling item, or frequent phrase is not a broader category. For synonym, substitute the candidate in a natural sentence using the core's stated meaning; reject it if the meaning or register changes materially in that sentence. For word_family, require an established, common derivation from the same lexical root that is useful for this core sense; shared spelling or a mechanically possible suffix is not enough. For antonym, require a genuine opposite in this sense. For collocation, require a natural co-occurrence in this sense. Keep each accepted candidate's id, word, meaning, type, relation, and relatesToCoreId exactly unchanged. Return rejected candidates nowhere. Set coreTerms, grammarTopics, and pronunciationTargets to empty arrays. Candidates: ${JSON.stringify(input.candidates)}`;
+  return `AUDIT ONLY — DO NOT GENERATE MONTHLY RESOURCES. Evaluate the exact candidates below against the core sense ${core}. This task has no minimum count, relation quota, or requirement to fill any slot. Do not generate, repair, rename, relabel, translate, or add candidates. Keep candidates when the existing relation is accurate in a common, natural use for this exact core sense. For context-sensitive synonyms, accept a normal substitution in at least one common sentence; do not require the words to be interchangeable in every context. Reject candidates that are only related by topic, differ in core sense, or are more than one CEFR level away from the month's level. Do not reject a genuine relation only because the word is one level above or below the month's level. Check each candidate's word, stated Vietnamese meaning, part of speech, and relation together. For umbrella, ${umbrellaTest} A related topic, result, example, tool, sibling item, or frequent phrase is not a broader category. For synonym, substitute the candidate in a natural sentence using the core's stated meaning; reject it if the meaning or register changes materially in that sentence. For word_family, require an established, common derivation from the same lexical root that is useful for this core sense; shared spelling or a mechanically possible suffix is not enough. For antonym, require a genuine opposite in this sense. For collocation, require a natural co-occurrence in this sense. Keep each accepted candidate's id, word, meaning, type, relation, relatesToCoreId, and cefr (when present) exactly unchanged. Return rejected candidates nowhere. Set coreTerms, grammarTopics, and pronunciationTargets to empty arrays. Candidates: ${JSON.stringify(input.candidates)}`;
 }
 
 function monthlyVerbGerund(word: string): string {
@@ -299,7 +317,7 @@ export function buildMonthlySupportRelationCandidatePrompt(input: {
   const forbiddenList = forbiddenRelations.length > 1
     ? `${forbiddenRelations.slice(0, -1).join(", ")}, or ${forbiddenRelations.at(-1)}`
     : forbiddenRelations[0];
-  return `PHASE 2 — SINGLE RELATION CANDIDATES. This phase's count and exact-relation rules override any general prompt that requests a different candidate count or mixed relations; do not return 12 unless this phase explicitly requests 12. For exact core ${input.core.word} (${input.core.meaning}; ${input.core.type}), generate up to ${candidateCount} distinct candidates for relation exactly \`${input.relation}\` only. Aim for at least six genuinely plausible candidates when that many exist; this is a candidate batch, not a final pool, and an independent audit will filter it. Do not stop at one merely because the distinction requires thought, but never invent options to reach six. This is for CEFR ${input.cefr} and approved month theme ${input.theme}. ${relationGuidance} Label every returned expandedTerms item with relation \`${input.relation}\` and relatesToCoreId \`${input.core.id}\`. Do not produce ${forbiddenList} entries or any coreTerms, grammarTopics, or pronunciationTargets. If no genuine candidate exists, return an empty expandedTerms array; never invent, relabel, or pad. Never return any finalized core headword or its normalized variant: ${input.forbiddenCoreWords.join("; ") || "none"}. Do not duplicate a support term already attached to this same core: ${input.sameCoreSupportWords?.join("; ") || "none"}. Other ${input.relation} candidates already generated and rejected for this core: ${input.rejectedCandidateWords?.join("; ") || "none"}; return different candidates and normalized variants on this retry. Previous attempt feedback: ${input.previousIssue || "none"}. Before inventing new candidates, check whether any other-core support listed below is a genuine fit; reuse it for this core when the exact relation holds. The system allows up to a 25% monthly repeat ceiling, so do not reject a valid match merely because it was already used elsewhere. Other-core support words: ${input.existingSupportWords.join("; ") || "none"}. Return only authentic, level-appropriate lexical items and accurate Vietnamese meanings.`;
+  return `PHASE 2 — SINGLE RELATION CANDIDATES. This phase's count and exact-relation rules override any general prompt that requests a different candidate count or mixed relations; do not return 12 unless this phase explicitly requests 12. For exact core ${input.core.word} (${input.core.meaning}; ${input.core.type}), generate up to ${candidateCount} distinct candidates for relation exactly \`${input.relation}\` only. Aim for at least six genuinely plausible candidates when that many exist; this is a candidate batch, not a final pool, and an independent audit will filter it. Do not stop at one merely because the distinction requires thought, but never invent options to reach six. This is for CEFR ${input.cefr} and approved month theme ${input.theme}. ${buildMonthlySupportLevelGuidance(input.cefr)} ${relationGuidance} Label every returned expandedTerms item with relation \`${input.relation}\` and relatesToCoreId \`${input.core.id}\`. Do not produce ${forbiddenList} entries or any coreTerms, grammarTopics, or pronunciationTargets. If no genuine candidate exists, return an empty expandedTerms array; never invent, relabel, or pad. Never return any finalized core headword or its normalized variant: ${input.forbiddenCoreWords.join("; ") || "none"}. Do not duplicate a support term already attached to this same core: ${input.sameCoreSupportWords?.join("; ") || "none"}. Other ${input.relation} candidates already generated and rejected for this core: ${input.rejectedCandidateWords?.join("; ") || "none"}; return different candidates and normalized variants on this retry. Previous attempt feedback: ${input.previousIssue || "none"}. Before inventing new candidates, check whether any other-core support listed below is a genuine fit; reuse it for this core when the exact relation holds. The system allows up to a 35% monthly repeat ceiling, so do not reject a valid match merely because it was already used elsewhere. Other-core support words: ${input.existingSupportWords.join("; ") || "none"}. Return only authentic lexical items within the allowed CEFR band and accurate Vietnamese meanings.`;
 }
 
 export function buildMonthlyOptionalSupportPrompt(input: {
@@ -315,7 +333,7 @@ export function buildMonthlyOptionalSupportPrompt(input: {
   candidateCount?: number;
 }): string {
   const candidateCount = input.candidateCount ?? 12;
-  return `PHASE 2 — REMAINING SUPPORT CANDIDATE BATCH FOR ONE CORE. For exact core ${input.core.word} (${input.core.meaning}; ${input.core.type}), CEFR ${input.cefr}, approved month theme ${input.theme}, generate up to ${candidateCount} distinct authentic expandedTerms candidates so the application can select exactly ${input.requestedCount} additional valid supports. The separately audited umbrella, synonym, and word_family supports already exist; do not duplicate any support already attached to this same core. These selected items must bring the per-core total to at least six and never above nine. Use any true relation that fits this exact sense, including additional umbrella, synonym, word_family, collocation, or antonym. Offer varied candidates across valid relations rather than repeating one relation; no relation may exceed three supports for this core. Prefer genuine antonyms when they exist, but antonyms are optional and must never be invented or forced. If fewer than ${input.requestedCount} authentic candidates exist, return only the valid ones; never pad or mislabel. Every relatesToCoreId must be ${input.core.id}. Return only candidate expandedTerms and empty arrays for coreTerms, grammarTopics, and pronunciationTargets. Do not repeat any core headword or normalized variant: ${input.forbiddenCoreWords.join("; ") || "none"}. Same-core supports already used: ${input.sameCoreSupportWords?.join("; ") || "none"}. Do not return previously rejected candidates: ${input.rejectedCandidateWords?.join("; ") || "none"}. Previous validation feedback: ${input.previousIssue || "none"}. Other-core terms may be reused when they are a genuine fit; the system enforces a 25% monthly repeat ceiling and will reject over-limit repeats. Other-core support terms available for valid reuse: ${input.existingSupportWords.join("; ") || "none"}.`;
+  return `PHASE 2 — REMAINING SUPPORT CANDIDATE BATCH FOR ONE CORE. For exact core ${input.core.word} (${input.core.meaning}; ${input.core.type}), CEFR ${input.cefr}, approved month theme ${input.theme}, generate up to ${candidateCount} distinct authentic expandedTerms candidates so the application can select up to ${input.requestedCount} additional valid supports. The separately audited umbrella, synonym, and word_family supports already exist; do not duplicate any support already attached to this same core. These additional items are optional enrichment: the three required relations already meet the per-core minimum, so return only genuine extra relations, and the per-core total must never exceed ${MONTHLY_MAX_SUPPORTS_PER_CORE}. ${buildMonthlySupportLevelGuidance(input.cefr)} Use any true relation that fits this exact sense, including additional umbrella, synonym, word_family, collocation, or antonym. Offer varied candidates across valid relations rather than repeating one relation; no relation may exceed three supports for this core. Prefer genuine antonyms when they exist, but antonyms are optional and must never be invented or forced. If fewer than ${input.requestedCount} authentic candidates exist, return only the valid ones; never pad or mislabel. Every relatesToCoreId must be ${input.core.id}. Return only candidate expandedTerms and empty arrays for coreTerms, grammarTopics, and pronunciationTargets. Do not repeat any core headword or normalized variant: ${input.forbiddenCoreWords.join("; ") || "none"}. Same-core supports already used: ${input.sameCoreSupportWords?.join("; ") || "none"}. Do not return previously rejected candidates: ${input.rejectedCandidateWords?.join("; ") || "none"}. Previous validation feedback: ${input.previousIssue || "none"}. Other-core terms may be reused when they are a genuine fit; the system enforces a 35% monthly repeat ceiling and will reject over-limit repeats. Other-core support terms available for valid reuse: ${input.existingSupportWords.join("; ") || "none"}.`;
 }
 
 export function selectMonthlyPronunciationCandidates(input: {
@@ -557,8 +575,8 @@ export function buildMonthlyResourcesFromAiPlan(
   const calendar = buildMonthlyCalendar(month);
   const newLessonDays = calendar.effectiveDays.flatMap((_date, index) => monthlyDayKind(index + 1, calendar) === "new" ? [index + 1] : []);
   const requiredVocabularyCount = newLessonDays.length * 3;
-  const minimumExpandedVocabularyCount = newLessonDays.length * 3 * 6;
-  const maximumExpandedVocabularyCount = newLessonDays.length * 27;
+  const minimumExpandedVocabularyCount = newLessonDays.length * 3 * MONTHLY_MIN_SUPPORTS_PER_CORE;
+  const maximumExpandedVocabularyCount = newLessonDays.length * 3 * MONTHLY_MAX_SUPPORTS_PER_CORE;
   if (criteria.vocabularyCount !== requiredVocabularyCount) throw new MonthlyResourceCriteriaError("VOCABULARY_COUNT_MISMATCH", requiredVocabularyCount);
   if (criteria.expandedVocabularyCount < minimumExpandedVocabularyCount || criteria.expandedVocabularyCount > maximumExpandedVocabularyCount) throw new MonthlyResourceCriteriaError("EXPANDED_VOCABULARY_COUNT_MISMATCH", maximumExpandedVocabularyCount);
 
@@ -580,7 +598,8 @@ export function buildMonthlyResourcesFromAiPlan(
       relation: term.relation,
       source: relationSource(term.relation),
       component: "expanded" as const,
-      relatedCoreTermId: coreIdMap.get(term.relatesToCoreId) ?? term.relatesToCoreId
+      relatedCoreTermId: coreIdMap.get(term.relatesToCoreId) ?? term.relatesToCoreId,
+      ...(term.cefr ? { cefr: term.cefr } : {})
     }));
   const grammarTopics = plan.grammarTopics.map((topic, index) => ({
     id: `${cefr.toLowerCase()}-grammar-${index + 1}`,

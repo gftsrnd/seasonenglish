@@ -1,7 +1,7 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { Badge, Banner, Button, Empty, OperatorPage, PageTitle, StandaloneReadOnlyBanner } from "./primitives.js";
 import type { LevelFormActionKey, OperatorLevelFormsActions, OperatorLevelFormsView } from "./types.js";
-import type { AssessmentLevelFormDetailView, AssessmentLevelFormUpdateInput } from "@e4s/contracts";
+import type { AssessmentLevelFormDetailView, AssessmentLevelFormUpdateInput, CefrLevel } from "@e4s/contracts";
 import { operatorDateTime } from "./adapters.js";
 
 type LevelFormsUiView = OperatorLevelFormsView & {
@@ -55,15 +55,55 @@ export function OperatorLevelForms({ view, actions, readOnly = false, unavailabl
   return embedded ? content : <OperatorPage title="Đề thi lên mức">{content}</OperatorPage>;
 }
 
-export function OperatorLevelFormDetail({ detail, readOnly = false, editing = false, onClose, onSave, uploadAudio, synthesizeEdgeTts }: { detail: AssessmentLevelFormDetailView; readOnly?: boolean; editing?: boolean; onClose(): void; onSave?(input: AssessmentLevelFormUpdateInput): void | Promise<void>; uploadAudio?(file: Blob, filename: string): Promise<{ url: string }>; synthesizeEdgeTts?(input: { text: string; voice: string }): Promise<{ filename: string; mimeType: string; base64: string }> }) {
+/** The fields the shared assessment editor needs; level-up details and monthly finals both provide them. */
+export type LevelFormEditorDetail = Pick<AssessmentLevelFormDetailView, "title" | "status" | "sections" | "warnings" | "versions" | "deleteReason"> & { targetLevel?: CefrLevel };
+
+type LevelFormDetailProps = {
+  detail: LevelFormEditorDetail | AssessmentLevelFormDetailView;
+  readOnly?: boolean;
+  editing?: boolean;
+  onClose(): void;
+  onSave?(input: AssessmentLevelFormUpdateInput): void | Promise<void>;
+  uploadAudio?(file: Blob, filename: string): Promise<{ url: string }>;
+  synthesizeEdgeTts?(input: { text: string; voice: string }): Promise<{ filename: string; mimeType: string; base64: string }>;
+  /** Overrides "Đề lên mức {level}" for other assessment kinds (e.g. the monthly final). */
+  kicker?: string;
+  dialogLabel?: string;
+  /** Kind-specific review panels rendered above the four sections. */
+  children?: ReactNode;
+  /** Notified with every local edit so a wrapper can track unsaved changes. */
+  onDraftChange?(draft: AssessmentLevelFormUpdateInput): void;
+  /** Synthesise only the spoken text, not the "Speaker:" labels. */
+  speakTextOnly?: boolean;
+};
+
+/** "Speaker: text" lines back into script lines, so editing never doubles the speaker label. */
+export function parseScriptLines(value: string): Array<{ speaker: string; text: string }> {
+  const lines: Array<{ speaker: string; text: string }> = [];
+  for (const raw of value.split(/\r?\n/u)) {
+    const line = raw.trim();
+    if (!line) continue;
+    const labelled = line.match(/^([^:]{1,40}):\s+(.*)$/u);
+    const previous = lines[lines.length - 1];
+    if (labelled) lines.push({ speaker: labelled[1]!.trim(), text: labelled[2]!.trim() });
+    else if (previous) lines[lines.length - 1] = { ...previous, text: `${previous.text} ${line}` };
+    else lines.push({ speaker: "Narrator", text: line });
+  }
+  return lines.length ? lines : [{ speaker: "Narrator", text: "" }];
+}
+
+export function OperatorLevelFormDetail({ detail, readOnly = false, editing = false, onClose, onSave, uploadAudio, synthesizeEdgeTts, kicker, dialogLabel, children, onDraftChange, speakTextOnly = false }: LevelFormDetailProps) {
   const dialogRef = useRef<HTMLElement>(null);
   const closeRef = useRef(onClose);
+  const draftChangeRef = useRef(onDraftChange);
   const [draft, setDraft] = useState<AssessmentLevelFormUpdateInput>(() => ({ title: detail.title, sections: structuredClone(detail.sections) }));
   const [saving, setSaving] = useState(false);
   const [uploadingAudio, setUploadingAudio] = useState<string | null>(null);
   const [audioError, setAudioError] = useState<string | null>(null);
   closeRef.current = onClose;
+  draftChangeRef.current = onDraftChange;
   useEffect(() => setDraft({ title: detail.title, sections: structuredClone(detail.sections) }), [detail]);
+  useEffect(() => { draftChangeRef.current?.(draft); }, [draft]);
 
   const updatePrompt = (sectionIndex: number, groupIndex: number, taskIndex: number, prompt: string) => setDraft((current) => ({
     ...current,
@@ -106,7 +146,7 @@ export function OperatorLevelFormDetail({ detail, readOnly = false, editing = fa
         stimulus: type === "audio_script"
           ? {
               type,
-              lines: [{ speaker: "Narrator", text }],
+              lines: parseScriptLines(text),
               ...(group.stimulus?.type === "audio_script" && group.stimulus.audioSrc ? { audioSrc: group.stimulus.audioSrc } : {})
             }
           : { type, text }
@@ -177,7 +217,8 @@ export function OperatorLevelFormDetail({ detail, readOnly = false, editing = fa
     {section.groups.map((group, groupIndex) => {
       const audioSrc = group.stimulus?.type === "audio_script" ? group.stimulus.audioSrc?.trim() : undefined;
       const script = group.stimulus?.type === "audio_script" ? (group.stimulus.lines ?? []).map((line) => `${line.speaker}: ${line.text}`).join("\n") : "";
-      const passage = group.stimulus?.type === "passage" ? group.stimulus.text : "";
+      const spokenScript = speakTextOnly && group.stimulus?.type === "audio_script" ? (group.stimulus.lines ?? []).map((line) => line.text).join("\n") : script;
+      const passage= group.stimulus?.type === "passage" ? group.stimulus.text : "";
       const audioBusy = uploadingAudio === group.key;
       return <section className="card flat operator-level-question-group" key={group.key}>
         <header><b>{group.title}</b><p className="xs muted">{group.instruction}</p></header>
@@ -187,7 +228,7 @@ export function OperatorLevelFormDetail({ detail, readOnly = false, editing = fa
           <div><b>{audioSrc ? "Audio phần nghe" : "Chưa có audio nghe"}</b><span className="xs muted">{audioSrc ? "Học viên sẽ nghe đúng tệp này trong bài thi." : "Chọn một nguồn audio và lưu bản nháp trước khi duyệt đề."}</span></div>
           {audioSrc ? <audio controls preload="metadata" src={audioSrc}>Trình duyệt không hỗ trợ audio.</audio> : null}
           {editing && !readOnly ? <div className="operator-level-audio-actions">
-            <button type="button" className="btn-sm" disabled={audioBusy || !synthesizeEdgeTts || !uploadAudio || !script.trim()} title={!synthesizeEdgeTts ? "Edge TTS chưa được cấu hình trên máy chủ." : !script.trim() ? "Cần có kịch bản nghe trước khi tạo audio." : undefined} onClick={() => void generateGroupEdgeTts(sectionIndex, groupIndex, group.key, script)}>{audioBusy ? "Đang tạo…" : "Sinh audio Edge TTS"}</button>
+            <button type="button" className="btn-sm" disabled={audioBusy || !synthesizeEdgeTts || !uploadAudio || !script.trim()} title={!synthesizeEdgeTts ? "Edge TTS chưa được cấu hình trên máy chủ." : !script.trim() ? "Cần có kịch bản nghe trước khi tạo audio." : undefined} onClick={() => void generateGroupEdgeTts(sectionIndex, groupIndex, group.key, spokenScript)}>{audioBusy ? "Đang tạo…" : "Sinh audio Edge TTS"}</button>
             {uploadAudio ? <label className="btn-sm" aria-busy={audioBusy || undefined}>{audioBusy ? "Đang tải…" : audioSrc ? "Thay file audio" : "Tải file audio"}<input hidden type="file" accept="audio/*" aria-label={`${audioSrc ? "Thay" : "Tải"} audio cho ${group.title}`} disabled={audioBusy} onChange={(event) => void uploadGroupAudio(sectionIndex, groupIndex, group.key, event.target.files?.[0])} /></label> : null}
             <span className="operator-level-audio-unavailable" role="status" title="Chưa có AI/provider audio được cấu hình cho hệ thống này.">AI/provider audio chưa khả dụng</span>
           </div> : null}
@@ -202,10 +243,11 @@ export function OperatorLevelFormDetail({ detail, readOnly = false, editing = fa
     })}
   </details>;
 
-  return <div className="modal-backdrop operator-modal-scope operator-detail-modal" role="presentation"><section ref={dialogRef} className="dialog wide operator-detail-dialog operator-assessment-preview-dialog operator-level-editor-dialog" role="dialog" aria-modal="true" aria-label={`Chi tiết ${detail.title}`} tabIndex={-1}>
-    <div className="operator-level-form-dialog-header"><div className="operator-level-form-dialog-title"><span className="operator-level-kicker">Đề lên mức {detail.targetLevel}</span><h3>{detail.title}</h3><p className="small muted">{detail.status === "published" ? "Đã phát hành" : detail.status === "retired" ? "Đã lưu lịch sử" : "Bản nháp"}</p></div><div className="row operator-level-form-dialog-actions">{editing && !readOnly ? <button className="btn-sm btn-primary" type="button" disabled={saving} onClick={() => void save()}>{saving ? "Đang lưu…" : "Lưu bản nháp"}</button> : null}<button className="btn-sm" type="button" onClick={onClose}>Đóng</button></div></div>
+  return <div className="modal-backdrop operator-modal-scope operator-detail-modal" role="presentation"><section ref={dialogRef} className="dialog wide operator-detail-dialog operator-assessment-preview-dialog operator-level-editor-dialog" role="dialog" aria-modal="true" aria-label={dialogLabel ?? `Chi tiết ${detail.title}`} tabIndex={-1}>
+    <div className="operator-level-form-dialog-header"><div className="operator-level-form-dialog-title"><span className="operator-level-kicker">{kicker ?? `Đề lên mức ${detail.targetLevel ?? ""}`}</span><h3>{detail.title}</h3><p className="small muted">{detail.status === "published" ? "Đã phát hành" : detail.status === "retired" ? "Đã lưu lịch sử" : "Bản nháp"}</p></div><div className="row operator-level-form-dialog-actions">{editing && !readOnly ? <button className="btn-sm btn-primary" type="button" disabled={saving} onClick={() => void save()}>{saving ? "Đang lưu…" : "Lưu bản nháp"}</button> : null}<button className="btn-sm" type="button" onClick={onClose}>Đóng</button></div></div>
     {detail.deleteReason && <div className="banner warn"><div className="body small">Không thể xoá: {detail.deleteReason}</div></div>}
     {detail.warnings.length ? <section className="operator-level-validation" aria-label="Cảnh báo kiểm tra đề"><header><b>Cần hoàn thiện trước khi phát hành</b><span className="badge warn">{detail.warnings.length} mục</span></header><ul className="small">{detail.warnings.map((warning, index) => <li key={`${warning.code}-${index}`}><Badge tone={warning.severity === "error" ? "danger" : "warn"}>{warning.code === "missing_answer_key" ? "Đáp án" : warning.code === "missing_task_prompt" ? "Đề bài" : warning.code === "missing_audio" ? "Audio" : "Cấu trúc"}</Badge> {warning.message}</li>)}</ul></section> : <div className="banner ok"><div className="body small">Đề đủ cấu trúc hiện tại, chưa có cảnh báo.</div></div>}
+    {children}
     <h4>Chi tiết 4 phần</h4>
     <div className="list operator-level-section-list">{draft.sections.map(renderSection)}</div>
     <h4>Lịch sử phiên bản</h4>

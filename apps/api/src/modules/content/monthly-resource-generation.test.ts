@@ -1,7 +1,7 @@
-import { buildMonthlyCalendar, monthlyDayKind, planMonthlyResourcePool, validateMonthlyCurriculum } from "@e4s/domain";
+import { buildMonthlyCalendar, maxMonthlySupportRepeats, monthlyDayKind, planMonthlyResourcePool, validateMonthlyCurriculum } from "@e4s/domain";
 import type { MonthlyResourcePlanTaskOutput } from "@e4s/ai";
 import { describe, expect, it } from "vitest";
-import { isValidMonthlyPronunciationIpaTarget, MONTHLY_RESOURCE_PLAN_SYSTEM_PROMPT } from "./monthly-resource-plan-spec.js";
+import { isValidMonthlyPronunciationIpaTarget, MONTHLY_RESOURCE_PLAN_SYSTEM_PROMPT, validateMonthlyResourcePlanShape } from "./monthly-resource-plan-spec.js";
 import {
   buildMonthlyResourcesFromAiPlan,
   getMonthlyGrammarPhaseIssues,
@@ -183,7 +183,10 @@ describe("monthly AI resource generation", () => {
       expect(prompt).toContain("Other umbrella candidates already generated and rejected for this core: meeting");
       expect(prompt).toContain("same-level peer, not a broader category");
       expect(prompt).toContain("reuse it for this core when the exact relation holds");
-      expect(prompt).toContain("25% monthly repeat ceiling");
+      expect(prompt).toContain("35% monthly repeat ceiling");
+      expect(prompt).not.toContain("25% monthly repeat ceiling");
+      expect(prompt).toContain("Do not reject or omit a genuine relation only because the word is one level above or below");
+      expect(prompt).toContain("Set each expandedTerms item's cefr field");
       expect(prompt).toContain("same-level sibling");
     }
     expect(MONTHLY_RESOURCE_PLAN_SYSTEM_PROMPT).toContain("A single-relation support phase must return only that exact relation");
@@ -223,14 +226,17 @@ describe("monthly AI resource generation", () => {
       previousIssue: "these were not genuine additional supports"
     });
     expect(prompt).toContain("generate up to 12 distinct authentic expandedTerms candidates");
-    expect(prompt).toContain("select exactly 3 additional valid supports");
-    expect(prompt).toContain("selected items must bring the per-core total to at least six and never above nine");
+    expect(prompt).toContain("select up to 3 additional valid supports");
+    expect(prompt).toContain("the three required relations already meet the per-core minimum");
+    expect(prompt).toContain("the per-core total must never exceed 9");
+    expect(prompt).not.toContain("at least six");
+    expect(prompt).toContain("Support words may be at CEFR A1, A2");
     expect(prompt).toContain("antonyms are optional and must never be invented or forced");
     expect(prompt).toContain("Same-core supports already used: aid; helper");
     expect(prompt).toContain("Do not return previously rejected candidates: timetable; timebox");
     expect(prompt).toContain("Previous validation feedback: these were not genuine additional supports");
     expect(prompt).toContain("Other-core terms may be reused when they are a genuine fit");
-    expect(prompt).toContain("25% monthly repeat ceiling");
+    expect(prompt).toContain("35% monthly repeat ceiling");
   });
 
   it("selects the six valid mandatory and optional supports without requiring nine", () => {
@@ -822,5 +828,181 @@ describe("monthly AI resource generation", () => {
       ...criteria,
       vocabularyCount: vocabularyCount - 1
     }, planFor())).toThrow(MonthlyResourceCriteriaError);
+  });
+});
+
+/** Keeps only one umbrella, one synonym and one word_family support per core (the planFor relation cycle positions 0, 1, 3). */
+function threeSupportPlan(): MonthlyResourcePlanTaskOutput {
+  const plan = planFor();
+  plan.expandedTerms = plan.expandedTerms.filter((_term, index) => [0, 1, 3].includes(index % 9));
+  return plan;
+}
+const threeSupportCriteria = { ...criteria, expandedVocabularyCount: vocabularyCount * 3 };
+
+describe("monthly support pool rules (VH-R33: 3-9 per core, 35% repeats, CEFR ±1)", () => {
+  it("accepts a pool with exactly three supports per core, one per required relation", () => {
+    const plan = threeSupportPlan();
+    expect(plan.expandedTerms).toHaveLength(vocabularyCount * 3);
+    expect(validateMonthlyResourcePlanShape(plan, newLessonDays.length, "A1")).toEqual([]);
+
+    const pool = buildMonthlyResourcesFromAiPlan(month, "A1", theme, threeSupportCriteria, plan);
+    const contract = planMonthlyResourcePool(pool);
+    expect(validateMonthlyCurriculum(contract)).toEqual([]);
+    for (const core of contract.coreTerms) {
+      expect(contract.supportTerms.filter((term) => term.relatedCoreTermId === core.id).map((term) => term.relation).sort()).toEqual(["synonym", "umbrella", "word_family"]);
+    }
+  });
+
+  it("still accepts the previous six-to-nine support pools", () => {
+    const sixPerCore = planFor();
+    sixPerCore.expandedTerms = sixPerCore.expandedTerms.filter((_term, index) => index % 9 < 6);
+    const pool = buildMonthlyResourcesFromAiPlan(month, "A1", theme, { ...criteria, expandedVocabularyCount: vocabularyCount * 6 }, sixPerCore);
+    expect(validateMonthlyCurriculum(planMonthlyResourcePool(pool))).toEqual([]);
+    expect(validateMonthlyCurriculum(planMonthlyResourcePool(buildMonthlyResourcesFromAiPlan(month, "A1", theme, criteria, planFor())))).toEqual([]);
+  });
+
+  it("bounds the requested expanded count to three-to-nine supports per core", () => {
+    expect(() => buildMonthlyResourcesFromAiPlan(month, "A1", theme, threeSupportCriteria, threeSupportPlan())).not.toThrow();
+    expect(() => buildMonthlyResourcesFromAiPlan(month, "A1", theme, { ...criteria, expandedVocabularyCount: vocabularyCount * 3 - 1 }, threeSupportPlan())).toThrow(MonthlyResourceCriteriaError);
+    expect(() => buildMonthlyResourcesFromAiPlan(month, "A1", theme, { ...criteria, expandedVocabularyCount: vocabularyCount * 9 + 1 }, planFor())).toThrow(MonthlyResourceCriteriaError);
+  });
+
+  it("rejects a pool where a core misses a required relation, even with three supports", () => {
+    const plan = threeSupportPlan();
+    plan.expandedTerms[1]!.relation = "collocation"; // core-1-1 loses its synonym
+    expect(validateMonthlyResourcePlanShape(plan, newLessonDays.length)).toContain("Core core-1-1 needs umbrella, synonym, and word-family supports.");
+    expect(planErrors(() => buildMonthlyResourcesFromAiPlan(month, "A1", theme, threeSupportCriteria, plan))).toContain("Core core-1-1 needs umbrella, synonym, and word-family supports.");
+
+    const domainPool = buildMonthlyResourcesFromAiPlan(month, "A1", theme, threeSupportCriteria, threeSupportPlan());
+    domainPool.supportTerms[1]!.relation = "collocation";
+    expect(() => planMonthlyResourcePool(domainPool)).toThrow(/a1-core-1 needs umbrella, synonym, and word-family supports/u);
+
+    const twoSupports = threeSupportPlan();
+    twoSupports.expandedTerms.splice(1, 1);
+    expect(validateMonthlyResourcePlanShape(twoSupports, newLessonDays.length)).toContain("Core core-1-1 needs three to nine support resources.");
+  });
+
+  it("applies one 35% repeated-support ceiling at the boundary in the plan check and the domain", () => {
+    const total = vocabularyCount * 3;
+    const ceiling = maxMonthlySupportRepeats(total);
+    expect(ceiling).toBe(Math.floor(total * 0.35));
+    expect(ceiling).toBeGreaterThan(Math.floor(total * 0.25));
+    const repeated = (repeats: number) => {
+      const plan = threeSupportPlan();
+      // Reuse core 1's umbrella word on `repeats` supports of later cores.
+      for (let index = 3; index < 3 + repeats; index += 1) plan.expandedTerms[index]!.word = plan.expandedTerms[0]!.word;
+      return plan;
+    };
+
+    expect(validateMonthlyResourcePlanShape(repeated(ceiling), newLessonDays.length)).toEqual([]);
+    const atCeilingPool = buildMonthlyResourcesFromAiPlan(month, "A1", theme, threeSupportCriteria, repeated(ceiling));
+    expect(validateMonthlyCurriculum(planMonthlyResourcePool(atCeilingPool))).toEqual([]);
+
+    expect(validateMonthlyResourcePlanShape(repeated(ceiling + 1), newLessonDays.length)).toContain("Expanded resources repeat more than 35% of the monthly total.");
+    const overCeilingPool = structuredClone(atCeilingPool);
+    overCeilingPool.supportTerms[3 + ceiling]!.word = overCeilingPool.supportTerms[0]!.word;
+    expect(() => planMonthlyResourcePool(overCeilingPool)).toThrow(/repeat more than 35% of the monthly total/u);
+  });
+
+  it("applies the same 35% ceiling when the generator selects repeated supports", () => {
+    const expandedCount = 20;
+    const maxRepeatedPlacements = maxMonthlySupportRepeats(expandedCount);
+    expect(maxRepeatedPlacements).toBe(7);
+    // Six repeated placements already used: "alpha" appears seven times.
+    const existingSupportWords = [...Array.from({ length: 7 }, () => "alpha"), "beta", "gamma"];
+    const select = (existing: string[]) => selectMonthlySupportCandidates({
+      candidates: [{ id: "u", word: "beta", meaning: "", type: "noun", relation: "umbrella", relatesToCoreId: "core-x" }],
+      coreId: "core-x",
+      coreWord: "plan",
+      coreType: "noun",
+      coreWords: new Set(),
+      sameCoreWords: new Set(),
+      sameCoreRelations: new Set(),
+      existingSupportWords: existing,
+      maxRepeatedPlacements,
+      maxPhrasePlacements: 10,
+      needed: 1
+    });
+
+    expect(select(existingSupportWords).selected.map((term) => term.word)).toEqual(["beta"]);
+    const overLimit = select([...existingSupportWords, "alpha"]);
+    expect(overLimit.selected).toEqual([]);
+    expect(overLimit.rejected.join(" ")).toContain("exceeds the 35% monthly support-repeat limit");
+  });
+
+  it("accepts and records an adjacent-level support while rejecting one two levels away", () => {
+    const adjacent = threeSupportPlan();
+    adjacent.expandedTerms[0]!.cefr = "A2";
+    adjacent.expandedTerms[1]!.cefr = "A1";
+    expect(validateMonthlyResourcePlanShape(adjacent, newLessonDays.length, "A1")).toEqual([]);
+    const pool = buildMonthlyResourcesFromAiPlan(month, "A1", theme, threeSupportCriteria, adjacent);
+    expect(pool.supportTerms[0]!.cefr).toBe("A2");
+    expect(pool.supportTerms[1]!.cefr).toBe("A1");
+    expect(pool.supportTerms[2]).not.toHaveProperty("cefr");
+    const contract = planMonthlyResourcePool(pool);
+    expect(contract.supportTerms[0]!.cefr).toBe("A2");
+    expect(validateMonthlyCurriculum(contract)).toEqual([]);
+
+    const tooFar = threeSupportPlan();
+    tooFar.expandedTerms[0]!.cefr = "B1";
+    expect(planErrors(() => buildMonthlyResourcesFromAiPlan(month, "A1", theme, threeSupportCriteria, tooFar))).toContain("Expanded resource expanded-1-1 is CEFR B1; supports must be within one level of A1.");
+
+    // C1 has no level above it; B2 is its only adjacent level.
+    const c1 = threeSupportPlan();
+    c1.expandedTerms[0]!.cefr = "B2";
+    expect(validateMonthlyResourcePlanShape(c1, newLessonDays.length, "C1").filter((error) => error.includes("CEFR"))).toEqual([]);
+  });
+
+  it("lets generator selection keep adjacent-level candidates and drop out-of-band ones", () => {
+    const result = selectMonthlySupportCandidates({
+      candidates: [
+        { id: "s1", word: "speedy", meaning: "nhanh", type: "adjective", relation: "synonym", relatesToCoreId: "core-q", cefr: "C1" },
+        { id: "s2", word: "rapid", meaning: "nhanh", type: "adjective", relation: "synonym", relatesToCoreId: "core-q", cefr: "B1" }
+      ],
+      coreId: "core-q",
+      coreWord: "quick",
+      coreType: "adjective",
+      coreWords: new Set(),
+      sameCoreWords: new Set(),
+      sameCoreRelations: new Set(),
+      existingSupportWords: [],
+      maxRepeatedPlacements: 10,
+      maxPhrasePlacements: 10,
+      needed: 1,
+      cefr: "A2"
+    });
+    expect(result.selected.map((term) => [term.word, term.cefr])).toEqual([["rapid", "B1"]]);
+    expect(result.rejected.join(" ")).toContain("CEFR C1 is more than one level from A2");
+  });
+
+  it("keeps a valid support CEFR label from AI output and drops an unusable one", () => {
+    const parsed = parseMonthlyResourceAiOutput({
+      coreTerms: [],
+      expandedTerms: [
+        { id: "e1", word: "rapid", meaning: "nhanh", type: "adjective", relation: "synonym", relatesToCoreId: "core-q", cefr: "B1" },
+        { id: "e2", word: "fast", meaning: "nhanh", type: "adjective", relation: "synonym", relatesToCoreId: "core-q", cefr: null },
+        { id: "e3", word: "swift", meaning: "nhanh", type: "adjective", relation: "synonym", relatesToCoreId: "core-q" }
+      ],
+      grammarTopics: [],
+      pronunciationTargets: []
+    });
+    expect(parsed.expandedTerms.map((term) => term.cefr)).toEqual(["B1", undefined, undefined]);
+  });
+
+  it("asks every support prompt for adjacent-level labels instead of rejecting them", () => {
+    const core = { id: "core-q", word: "quick", meaning: "nhanh", type: "adjective" };
+    const prompts = [
+      buildMonthlyCoreCandidatesPrompt({ cefr: "B1", theme: "Work", communicationGoal: "Talk", existingCoreWords: [], batchNumber: 1, preflightRelations: true }),
+      buildMonthlySupportRelationCandidatePrompt({ cefr: "B1", core, relation: "synonym", theme: "Work", forbiddenCoreWords: [], existingSupportWords: [] }),
+      buildMonthlyOptionalSupportPrompt({ cefr: "B1", core, theme: "Work", requestedCount: 2, forbiddenCoreWords: [], existingSupportWords: [] })
+    ];
+    for (const prompt of prompts) {
+      expect(prompt).toContain("Support words may be at CEFR A2, B1, B2");
+      expect(prompt).toContain("Do not reject or omit a genuine relation only because the word is one level above or below B1");
+    }
+    expect(buildMonthlySupportRelationAuditPrompt({ core, candidates: [] })).toContain("Do not reject a genuine relation only because the word is one level above or below");
+    expect(MONTHLY_RESOURCE_PLAN_SYSTEM_PROMPT).toContain("three to nine expanded items per core");
+    expect(MONTHLY_RESOURCE_PLAN_SYSTEM_PROMPT).toContain("at or below 35% of the total expanded set");
+    expect(MONTHLY_RESOURCE_PLAN_SYSTEM_PROMPT).not.toMatch(/six to nine|minimum six/u);
   });
 });

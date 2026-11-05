@@ -6,7 +6,8 @@ import type {
   AssessmentOption,
   AssessmentSectionCode,
   AssessmentTaskView,
-  CefrLevel
+  CefrLevel,
+  MonthlyFinalExamMeta
 } from "@e4s/contracts";
 
 export interface StoredAssessmentTask extends AssessmentTaskView {
@@ -17,6 +18,8 @@ export interface StoredAssessmentDefinition extends Omit<AssessmentDefinitionVie
   targetLevel?: CefrLevel;
   /** Immutable monthly resource snapshot for a generated monthly final. */
   monthlyScope?: { month: string; cefr: CefrLevel; contractVersion: number; coreTermIds: string[]; grammarStepIds: string[]; soundIds: string[] };
+  /** Monthly final v2.0 Operator/grader package. Never part of the learner package. */
+  monthlyExam?: MonthlyFinalExamMeta;
   sections: Array<Omit<AssessmentDefinitionView["sections"][number], "groups"> & {
     groups: Array<Omit<AssessmentDefinitionView["sections"][number]["groups"][number], "tasks"> & {
       tasks: StoredAssessmentTask[];
@@ -207,16 +210,26 @@ export const levelUpDefinition: StoredAssessmentDefinition = {
 };
 
 export function publicAssessmentDefinition(stored: StoredAssessmentDefinition): AssessmentDefinitionView {
+  // Operator-only data (answer keys, grader package, plan snapshot) is removed
+  // here. For a monthly final v2.0 the listening script is part of the grader
+  // package too (GEN18): learners only receive the reviewed audio file.
+  const { monthlyExam, monthlyScope: _monthlyScope, ...definition } = stored;
+  const hideScript = Boolean(monthlyExam);
   return {
-    ...stored,
+    ...definition,
     sections: stored.sections.map((section) => ({
       ...section,
       groups: section.groups.map((group) => ({
         ...group,
+        ...(group.stimulus ? { stimulus: hideScript && group.stimulus.type === "audio_script" ? learnerAudioStimulus(group.stimulus) : group.stimulus } : {}),
         tasks: group.tasks.map(({ correctAnswer: _correctAnswer, ...task }) => task)
       }))
     }))
   };
+}
+
+function learnerAudioStimulus(stimulus: NonNullable<AssessmentDefinitionView["sections"][number]["groups"][number]["stimulus"]>) {
+  return { type: stimulus.type, ...(stimulus.audioSrc ? { audioSrc: stimulus.audioSrc } : {}) };
 }
 
 export function sectionByCode(definition: StoredAssessmentDefinition, code: AssessmentSectionCode) {

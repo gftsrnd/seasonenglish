@@ -293,8 +293,20 @@ function MonthsRoute({ client, readOnly, preview }: { client: OperatorApiClient;
         if (!result || !("blueprint" in result)) throw new Error("Không tải được bản nháp soạn tay đề tháng.");
         return result;
       },
-      onSaveMonthlyFinal: async (versionId, input) => { await run(() => client.updateMonthlyFinal(versionId, input)); },
-      onPublishMonthlyFinal: async (versionId) => { await run(() => client.publishMonthlyFinal(versionId)); },
+      onOpenMonthlyFinal: async (id) => {
+        const result = await run(() => client.getMonthlyFinal(id));
+        if (!result || !("blueprint" in result)) throw new Error("Không tải được đề thi tháng.");
+        return result;
+      },
+      onSaveMonthlyFinal: async (versionId, input) => {
+        const result = await run(() => client.updateMonthlyFinal(versionId, input));
+        if (!result) throw new Error("Không lưu được bản nháp đề tháng.");
+        return result;
+      },
+      onPublishMonthlyFinal: async (versionId) => {
+        const result = await run(() => client.publishMonthlyFinal(versionId), "Đã duyệt và phát hành đề tháng.");
+        if (!result) throw new Error("Không phát hành được đề tháng.");
+      },
       onSynthesizeMonthlyFinalAudio: (input) => client.synthesizeAssessmentEdgeTts(input),
       onUploadMonthlyFinalAudio: async (file, filename) => {
         const uploaded = await client.uploadContentMedia("audio", file, filename);
@@ -1226,7 +1238,18 @@ const operatorErrorMessages: Record<string, string> = {
   HTTP_429: "AI đang bị giới hạn số lượt gọi; hãy thử lại sau một chút.",
   HTTP_504: "Hệ thống vẫn đang hoàn tất bộ bài. Vui lòng chờ một chút rồi tải lại ma trận; không bấm Sinh lại.",
   CONTENT_WEEK_NOT_FOUND: "Không tìm thấy tuần cần sinh bài.",
-  CONTENT_LEVEL_NOT_ACTIVE: "Mức này đang không bật trong ma trận bài học."
+  CONTENT_LEVEL_NOT_ACTIVE: "Mức này đang không bật trong ma trận bài học.",
+  MONTHLY_FINAL_EXAM_DATE_LOCKED: "Đã quá 00:00 ngày thi: đề thi tháng bị khóa, không sinh, sửa hay duyệt được nữa.",
+  MONTHLY_FINAL_FRAMEWORK_NOT_APPROVED: "Hãy duyệt khung tháng trước khi sinh đề thi.",
+  MONTHLY_FINAL_ALREADY_PUBLISHED: "Đề thi tháng đã phát hành; không sinh lại được.",
+  MONTHLY_FINAL_NOT_FOUND: "Chưa có đề thi tháng cho trình độ này.",
+  MONTHLY_FINAL_NOT_READY: "Đề chưa ở trạng thái READY nên chưa duyệt được.",
+  MONTHLY_FINAL_AUDIO_NOT_REVIEWED: "Audio còn SCRIPT_ONLY: hãy nghe soát và tick trước khi phát hành.",
+  MONTHLY_FINAL_SCOPE_STALE: "Khung tháng đã thay đổi sau khi sinh đề; hãy sinh lại đề.",
+  MONTHLY_FINAL_STRUCTURE_LOCKED: "Không được thêm/bớt câu: cấu trúc đề v2.0 cố định theo khung.",
+  MONTHLY_FINAL_GRAMMAR_COMPONENT_INVALID: "Thành phần chính/phụ phải là 2 bước khác nhau đã dạy của chủ điểm.",
+  MONTHLY_FINAL_REGENERATE_REQUIRED: "Bản nháp cũ chưa theo cấu trúc v2.0; hãy sinh lại đề.",
+  MONTHLY_FINAL_GENERATION_FAILED: "AI chưa sinh được đề thi tháng. Hãy thử lại."
 };
 
 function message(reason: unknown) {
@@ -1234,6 +1257,9 @@ function message(reason: unknown) {
   const label = operatorErrorMessages[raw] ?? raw;
   const details = reason && typeof reason === "object" && "details" in reason ? (reason as { details?: unknown }).details : undefined;
   const issues = details && typeof details === "object" && "issues" in details ? (details as { issues?: unknown }).issues : undefined;
+  const missing = details && typeof details === "object" && "missing" in details ? (details as { missing?: unknown }).missing : undefined;
+  if (raw === "MONTHLY_FINAL_INPUT_ERROR" && Array.isArray(missing)) return `INPUT_ERROR: khung tháng thiếu ${missing.map(String).join(", ")}.`;
+  if (raw === "MONTHLY_FINAL_NOT_READY" && Array.isArray(issues)) return `Đề chưa READY. Còn: ${issues.map(String).join(", ")}.`;
   if (raw === "CONTENT_VALIDATION_FAILED" && Array.isArray(issues) && issues.length) {
     const summary = issues.slice(0, 2).map(issue => {
       if (typeof issue === "string") return issue;

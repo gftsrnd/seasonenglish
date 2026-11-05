@@ -131,6 +131,7 @@ const prototypeTaskPromptDefaults: Readonly<Record<string, string>> = {
   monthly_topic_suggestion: prototypePromptDefaults.monthlyTopic,
   monthly_resource_generation: prototypePromptDefaults.monthlyResources,
   monthly_lessons: prototypePromptDefaults.monthlyLessons,
+  monthly_final_generation: prototypePromptDefaults.monthlyFinal,
   micro_grading: prototypePromptDefaults.mgrade,
   coach_dialogue: prototypePromptDefaults.coach,
   weekly_practice_grading: prototypePromptDefaults.grade

@@ -32,14 +32,12 @@ import {
   type StoredAssessmentDefinition,
   type StoredAssessmentTask
 } from "@e4s/database";
-import { calculateAutomaticSectionScore, monthlyFinalReleaseReadiness } from "@e4s/domain/assessment";
-import { validateMonthlyCurriculum, type MonthlyCurriculumContract } from "@e4s/domain/monthly";
-import { randomUUID } from "node:crypto";
+import { calculateAutomaticSectionScore } from "@e4s/domain/assessment";
 import type { FastifyInstance } from "fastify";
-import type { Pool, PoolClient } from "pg";
+import type { Pool } from "pg";
 import { z } from "zod";
 import type { EdgeTtsRunner } from "./edge-tts.js";
-import { buildMonthlyFinalDraft } from "./monthly-final-builder.js";
+import { registerMonthlyFinalRoutes } from "./monthly-final-routes.js";
 import { createRoleGuard } from "../identity/policy.js";
 import { monthlyExamEligibility } from "../learning/routes.js";
 
@@ -185,67 +183,7 @@ export function registerAssessmentRoutes(app: FastifyInstance, pool: Pool, aiRun
     }
   });
 
-  app.post("/api/v1/month-frameworks/:frameworkId/monthly-final", { preHandler: monthlyFinalOperators }, async (request, reply) => {
-    const frameworkId = z.uuid().safeParse((request.params as { frameworkId?: string }).frameworkId);
-    if (!frameworkId.success) return reply.code(400).send({ code: "MONTHLY_FINAL_FRAMEWORK_INVALID" });
-    const actorId = request.e4sSession!.user.id;
-    const context = await pool.query<{ organization_id: string; month: string; exam_date: string; today: string; curriculum_contract: unknown }>(
-      `select operator.organization_id, pm.month, pm.exam_date::text, organization_system_date(operator.organization_id)::text as today, mf.curriculum_contract
-       from users operator join month_frameworks mf on mf.id = $2
-       join program_months pm on pm.id = mf.program_month_id and pm.organization_id = operator.organization_id
-       where operator.id = $1 and operator.role = 'operator' and mf.status = 'approved'`, [actorId, frameworkId.data]);
-    const row = context.rows[0];
-    if (!row) return reply.code(404).send({ code: "MONTHLY_FINAL_FRAMEWORK_NOT_APPROVED" });
-    if (row.today !== row.exam_date) return reply.code(409).send({ code: "MONTHLY_FINAL_NOT_ON_EXAM_DATE", examDate: row.exam_date, today: row.today });
-    try {
-      const contract = row.curriculum_contract as MonthlyCurriculumContract;
-      const issues = validateMonthlyCurriculum(contract);
-      if (issues.length) return reply.code(409).send({ code: "MONTHLY_FRAMEWORK_PLAN_INVALID", issues });
-      const blueprint = buildMonthlyFinalDraft(contract);
-      return reply.code(201).send(await createMonthlyFinalDraft(pool, actorId, row.organization_id, blueprint));
-    } catch (error) {
-      return reply.code(409).send({ code: assessmentErrorCode(error, "MONTHLY_FINAL_CREATE_FAILED") });
-    }
-  });
-
-  app.post("/api/v1/month-frameworks/:frameworkId/monthly-final/manual", { preHandler: monthlyFinalOperators }, async (request, reply) => {
-    const frameworkId = z.uuid().safeParse((request.params as { frameworkId?: string }).frameworkId);
-    if (!frameworkId.success) return reply.code(400).send({ code: "MONTHLY_FINAL_FRAMEWORK_INVALID" });
-    const actorId = request.e4sSession!.user.id;
-    const context = await pool.query<{ organization_id: string; curriculum_contract: unknown }>(
-      `select operator.organization_id, mf.curriculum_contract
-       from users operator join month_frameworks mf on mf.id = $2
-       join program_months pm on pm.id = mf.program_month_id and pm.organization_id = operator.organization_id
-       where operator.id = $1 and operator.role = 'operator' and mf.status = 'approved'`, [actorId, frameworkId.data]);
-    const row = context.rows[0];
-    if (!row) return reply.code(404).send({ code: "MONTHLY_FINAL_FRAMEWORK_NOT_APPROVED" });
-    try {
-      const contract = row.curriculum_contract as MonthlyCurriculumContract;
-      const issues = validateMonthlyCurriculum(contract);
-      if (issues.length) return reply.code(409).send({ code: "MONTHLY_FRAMEWORK_PLAN_INVALID", issues });
-      const blueprint = buildMonthlyFinalDraft(contract);
-      return reply.code(201).send(await createMonthlyFinalDraft(pool, actorId, row.organization_id, blueprint));
-    } catch (error) {
-      return reply.code(409).send({ code: assessmentErrorCode(error, "MONTHLY_FINAL_CREATE_FAILED") });
-    }
-  });
-
-  app.put("/api/v1/monthly-final-forms/:versionId", { preHandler: monthlyFinalOperators }, async (request, reply) => {
-    const versionId = z.uuid().safeParse((request.params as { versionId?: string }).versionId);
-    const body = levelFormUpdateInput.safeParse(request.body);
-    if (!versionId.success || !body.success) return reply.code(400).send({ code: "MONTHLY_FINAL_FORM_INVALID" });
-    const updated = await updateMonthlyFinalDraft(pool, request.e4sSession!.user.id, versionId.data, body.data);
-    return updated ?? reply.code(409).send({ code: "MONTHLY_FINAL_NOT_EDITABLE" });
-  });
-
-  app.post("/api/v1/monthly-final-forms/:versionId/publication", { preHandler: monthlyFinalOperators }, async (request, reply) => {
-    const versionId = z.uuid().safeParse((request.params as { versionId?: string }).versionId);
-    if (!versionId.success) return reply.code(400).send({ code: "MONTHLY_FINAL_VERSION_INVALID" });
-    const published = await publishMonthlyFinal(pool, request.e4sSession!.user.id, versionId.data);
-    if (published.state === "missing") return reply.code(404).send({ code: "MONTHLY_FINAL_NOT_FOUND" });
-    if (published.state === "invalid") return reply.code(409).send({ code: "MONTHLY_FINAL_NOT_PUBLISHABLE", issues: published.issues });
-    return published.value;
-  });
+  registerMonthlyFinalRoutes(app, pool, monthlyFinalOperators, runnerFor);
 
   /**
    * One read-model for the Operator's assessment viewer.  This reads stored
@@ -970,58 +908,6 @@ export function registerAssessmentRoutes(app: FastifyInstance, pool: Pool, aiRun
   });
 }
 
-async function createMonthlyFinalDraft(
-  pool: Pool, actorId: string, organizationId: string, blueprint: StoredAssessmentDefinition
-) {
-  const client = await pool.connect();
-  try {
-    await client.query("begin");
-    const existing = await client.query<{ id: string }>(
-      "select id from assessment_definitions where organization_id = $1 and assessment_key = $2 for update",
-      [organizationId, blueprint.key]
-    );
-    const definitionId = existing.rows[0]?.id ?? randomUUID();
-    if (existing.rowCount) {
-      const published = await client.query<{ id: string }>(
-        "select id from assessment_versions where definition_id = $1 and status = 'published' limit 1 for update",
-        [definitionId]
-      );
-      // A published monthly final is immutable. Its correction must go through
-      // the Manager reopen workflow instead of silently replacing learner-facing
-      // exam content from the calendar.
-      if (published.rowCount) throw new Error("MONTHLY_FINAL_ALREADY_PUBLISHED");
-      const draft = await client.query<{ id: string; version: number; blueprint: StoredAssessmentDefinition }>(
-        "select id, version, blueprint from assessment_versions where definition_id = $1 and status = 'draft' order by version desc limit 1 for update",
-        [definitionId]
-      );
-      // Re-open the same draft on a repeated click. Do not retire a reviewable
-      // operator draft just because the page was refreshed.
-      if (draft.rows[0]) {
-        await client.query("commit");
-        return { definitionId, versionId: draft.rows[0].id, version: draft.rows[0].version, status: "draft" as const, blueprint: draft.rows[0].blueprint };
-      }
-      await client.query("update assessment_definitions set title = $1 where id = $2", [blueprint.title, definitionId]);
-    } else {
-      await client.query(
-        "insert into assessment_definitions (id, organization_id, assessment_key, kind, title) values ($1, $2, $3, 'final', $4)",
-        [definitionId, organizationId, blueprint.key, blueprint.title]
-      );
-    }
-    const next = await client.query<{ version: number }>("select coalesce(max(version), 0) + 1 as version from assessment_versions where definition_id = $1", [definitionId]);
-    const versionId = randomUUID();
-    const version = next.rows[0]?.version ?? 1;
-    await client.query(
-      "insert into assessment_versions (id, definition_id, version, status, blueprint) values ($1, $2, $3, 'draft', $4::jsonb)",
-      [versionId, definitionId, version, JSON.stringify({ ...blueprint, version })]
-    );
-    await client.query("commit");
-    return { definitionId, versionId, version, status: "draft" as const, blueprint: { ...blueprint, version } };
-  } catch (error) {
-    await client.query("rollback");
-    throw error;
-  } finally { client.release(); }
-}
-
 async function assessmentFormPreviews(
   pool: Pool,
   actorId: string,
@@ -1099,81 +985,6 @@ function isCanonicalPassCourseForm(blueprint: StoredAssessmentDefinition) {
   if (blueprint.key !== "pass-course-form-a" || blueprint.totalMinutes !== 90 || blueprint.totalScore !== 100) return false;
   const count = (code: AssessmentSectionCode) => blueprint.sections.find((section) => section.code === code)?.groups.reduce((total, group) => total + group.tasks.length, 0) ?? 0;
   return count("listening") === 15 && count("reading") === 40 && count("writing") === 2 && count("speaking") === 4;
-}
-
-async function updateMonthlyFinalDraft(
-  pool: Pool, actorId: string, versionId: string, input: z.infer<typeof levelFormUpdateInput>
-) {
-  const result = await pool.query<{ definition_id: string; blueprint: StoredAssessmentDefinition }>(
-    `select av.definition_id, av.blueprint from assessment_versions av
-     join assessment_definitions ad on ad.id = av.definition_id and ad.kind = 'final'
-     join users operator on operator.id = $1 and operator.organization_id = ad.organization_id and operator.role = 'operator'
-     where av.id = $2 and av.status = 'draft'`, [actorId, versionId]);
-  const row = result.rows[0];
-  if (!row) return null;
-  // The immutable monthly scope is retained server-side regardless of posted form data.
-  const blueprint: StoredAssessmentDefinition = { ...row.blueprint, title: input.title, sections: input.sections as StoredAssessmentDefinition["sections"] };
-  await pool.query("update assessment_definitions set title = $1 where id = $2", [input.title, row.definition_id]);
-  await pool.query("update assessment_versions set blueprint = $1::jsonb where id = $2", [JSON.stringify(blueprint), versionId]);
-  return { versionId, status: "draft" as const, blueprint };
-}
-
-async function publishMonthlyFinal(pool: Pool, actorId: string, versionId: string): Promise<
-  { state: "missing" } | { state: "invalid"; issues: string[] } | { state: "published"; value: { versionId: string; publishedAt: string } }
-> {
-  const client = await pool.connect();
-  try {
-    await client.query("begin");
-    const found = await client.query<{ definition_id: string; blueprint: StoredAssessmentDefinition }>(
-      `select av.definition_id, av.blueprint from assessment_versions av
-       join assessment_definitions ad on ad.id = av.definition_id and ad.kind = 'final'
-       join users operator on operator.id = $1 and operator.organization_id = ad.organization_id and operator.role = 'operator'
-       where av.id = $2 and av.status = 'draft' for update`, [actorId, versionId]);
-    const row = found.rows[0];
-    if (!row) { await client.query("rollback"); return { state: "missing" }; }
-    const issues = monthlyFinalReleaseReadiness(row.blueprint);
-    const hasPersistedAudio = await hasPersistedMonthlyAudio(client, actorId, row.blueprint);
-    if (!hasPersistedAudio) issues.push("LISTENING_AUDIO_SOURCE_MISSING");
-    if (issues.length) { await client.query("rollback"); return { state: "invalid", issues }; }
-    await client.query("update assessment_versions set status = 'retired' where definition_id = $1 and status = 'published'", [row.definition_id]);
-    const published = await client.query<{ published_at: Date }>("update assessment_versions set status = 'published', published_at = now() where id = $1 returning published_at", [versionId]);
-    await client.query("commit");
-    return { state: "published", value: { versionId, publishedAt: published.rows[0]!.published_at.toISOString() } };
-  } catch (error) {
-    await client.query("rollback");
-    throw error;
-  } finally { client.release(); }
-}
-
-async function hasPersistedMonthlyAudio(
-  client: PoolClient, actorId: string, blueprint: StoredAssessmentDefinition
-): Promise<boolean> {
-  const listening = blueprint.sections.find((section) => section.code === "listening");
-  const stimulus = listening?.groups.flatMap((group) => group.stimulus?.type === "audio_script" ? [group.stimulus] : [])[0];
-  if (!stimulus?.audioSrc) return false;
-
-  let artifactKey: string | null = null;
-  try {
-    const url = new URL(stimulus.audioSrc, "http://e4s.local");
-    if (url.pathname !== "/api/v1/files/content-media/read") return false;
-    artifactKey = url.searchParams.get("artifactKey");
-  } catch {
-    return false;
-  }
-  if (!artifactKey?.startsWith("content-media/")) return false;
-
-  const persisted = await client.query(
-    `select 1
-     from files f
-     join users owner on owner.id = f.owner_user_id
-     join users operator on operator.id = $1
-     where f.purpose = 'content_media' and f.object_key = $2
-       and f.mime_type like 'audio/%'
-       and owner.organization_id = operator.organization_id
-     limit 1`,
-    [actorId, artifactKey]
-  );
-  return persisted.rowCount === 1;
 }
 
 function assessmentErrorCode(error: unknown, fallback: string): string {
