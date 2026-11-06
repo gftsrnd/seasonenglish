@@ -185,11 +185,12 @@ export async function runMonthlyCorePhase(input: {
       const baseSubArea = MONTHLY_CORE_SUB_AREAS[(round * callCount + callIndex) % MONTHLY_CORE_SUB_AREAS.length]!;
       // From round 2 the model tends to repeat words it already tried. Give each
       // call its own initial-letter group so the calls explore different parts of
-      // the lexicon, and from round 3 allow common general workplace words too.
+      // the lexicon. Every round stays on the approved theme and sub-area: a
+      // loosely related general word produced off-theme cores in real runs.
       const letters = MONTHLY_CORE_LETTER_GROUPS[(round * callCount + callIndex) % MONTHLY_CORE_LETTER_GROUPS.length]!;
       const subArea = round === 0
         ? baseSubArea
-        : `${baseSubArea}${round >= 2 ? " (or any common, practical workplace word a learner at this level needs, even if only loosely tied to the theme)" : ""}. Every candidate headword in this request must start with one of these letters: ${letters}`;
+        : `${baseSubArea}. Every candidate headword in this request must start with one of these letters: ${letters}, and must still belong to this sub-area of the approved theme; return fewer candidates rather than an off-theme word`;
       const prompt = buildMonthlyCoreCandidatesPrompt({
         cefr: input.cefr,
         theme: input.theme.title,
@@ -242,9 +243,14 @@ export async function runMonthlyCorePhase(input: {
 
     // Cheap deterministic core screen before any AI audit.
     const eligible = ordered.filter((entry) => {
-      const result = selectMonthlyCoreCandidates({ candidates: [entry.core], existingCoreWords: roundStartCoreWords, needed: 1 });
+      const result = selectMonthlyCoreCandidates({ candidates: [entry.core], existingCoreWords: roundStartCoreWords, needed: 1, cefr: input.cefr });
       if (result.selected.length !== 1) failures.push(`${entry.core.word}: ${result.rejected[0] ?? "duplicate, mixed-sense, or overlapping core"}`);
       return result.selected.length === 1;
+    }).map((entry) => {
+      // The core's own level label only serves the screen above; drop it so
+      // downstream inputs (gap-fill coreTermBatch) and stored cores keep their shape.
+      const { cefr: _coreLevel, ...core } = entry.core;
+      return { ...entry, core };
     });
 
     // 2. Audit + gap-fill per candidate, concurrently. Preparation stops being
@@ -310,7 +316,7 @@ export async function runMonthlyCorePhase(input: {
       const candidate = entry.core;
       if (failure) { failures.push(failure); continue; }
       const coreWords = acceptedCoreWords();
-      const eligibleCore = selectMonthlyCoreCandidates({ candidates: [candidate], existingCoreWords: coreWords, needed: 1 }).selected[0];
+      const eligibleCore = selectMonthlyCoreCandidates({ candidates: [candidate], existingCoreWords: coreWords, needed: 1, cefr: input.cefr }).selected[0];
       if (!eligibleCore) { failures.push(`${candidate.word}: duplicate, mixed-sense, or overlapping core`); continue; }
       const word = normalize(candidate.word);
       const supportOwner = accepted.find((other) => other.supports.some((term) => normalize(term.word) === word));

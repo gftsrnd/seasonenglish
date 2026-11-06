@@ -15,6 +15,9 @@ import {
   allowedMonthlySupportLevels,
   maxMonthlySupportRepeats,
   monthlySupportLevelBand,
+  isMonthlyCoreLevelAllowed,
+  isMonthlySupportLevelAllowed,
+  maxMonthlyWordFamilyLevel,
   MONTHLY_MIN_SUPPORTS_PER_CORE,
   MONTHLY_MAX_SUPPORTS_PER_CORE,
   type MonthlyCurriculumInput
@@ -395,6 +398,40 @@ describe("monthly curriculum contract", () => {
       expect(monthlySupportLevelBand("A1", "B1")).toBe("out_of_range");
     });
 
+    it("allows word family up to two levels above the month (clamped at C1) and any lower level", () => {
+      expect(maxMonthlyWordFamilyLevel("A1")).toBe("B1");
+      expect(maxMonthlyWordFamilyLevel("A2")).toBe("B2");
+      expect(maxMonthlyWordFamilyLevel("B1")).toBe("C1");
+      expect(maxMonthlyWordFamilyLevel("B2")).toBe("C1");
+      expect(maxMonthlyWordFamilyLevel("C1")).toBe("C1");
+      const family = (cefr?: "A1" | "A2" | "B1" | "B2" | "C1") => ({ relation: "word_family", cefr });
+      expect(isMonthlySupportLevelAllowed("A1", family("B1"))).toBe(true);
+      expect(isMonthlySupportLevelAllowed("A1", family("B2"))).toBe(false);
+      expect(isMonthlySupportLevelAllowed("A2", family("B2"))).toBe(true);
+      expect(isMonthlySupportLevelAllowed("A2", family("C1"))).toBe(false);
+      expect(isMonthlySupportLevelAllowed("B2", family("A1"))).toBe(true);
+      expect(isMonthlySupportLevelAllowed("A1", family(undefined))).toBe(true);
+      // Other relations stay within one level.
+      expect(isMonthlySupportLevelAllowed("A1", { relation: "synonym", cefr: "B1" })).toBe(false);
+    });
+
+    it("rejects a core level above the month and accepts the month level, lower levels and a missing label", () => {
+      expect(isMonthlyCoreLevelAllowed("A1", "A2")).toBe(false);
+      expect(isMonthlyCoreLevelAllowed("A1", "B2")).toBe(false);
+      expect(isMonthlyCoreLevelAllowed("A1", "A1")).toBe(true);
+      expect(isMonthlyCoreLevelAllowed("B1", "A2")).toBe(true);
+      expect(isMonthlyCoreLevelAllowed("B1", undefined)).toBe(true);
+    });
+
+    it("accepts a word-family support two levels above and rejects one three levels above", () => {
+      const pool = threeSupportPool();
+      const familyIndex = pool.supportTerms.findIndex((term) => term.relation === "word_family");
+      pool.supportTerms[familyIndex] = { ...pool.supportTerms[familyIndex]!, cefr: "B1" };
+      expect(validateMonthlyCurriculum(planMonthlyResourcePool(pool))).toEqual([]);
+      pool.supportTerms[familyIndex] = { ...pool.supportTerms[familyIndex]!, cefr: "B2" };
+      expect(() => planMonthlyResourcePool(pool)).toThrow(/is CEFR B2; supports must be within one level of A1; word family may be up to B1/u);
+    });
+
     it("accepts and records an adjacent-level support and rejects one two levels away", () => {
       const adjacent = threeSupportPool();
       adjacent.supportTerms[0] = { ...adjacent.supportTerms[0]!, cefr: "A2" };
@@ -405,10 +442,10 @@ describe("monthly curriculum contract", () => {
 
       const tooFar = threeSupportPool();
       tooFar.supportTerms[0] = { ...tooFar.supportTerms[0]!, cefr: "B1" };
-      expect(() => planMonthlyResourcePool(tooFar)).toThrow(/support-1 is CEFR B1; supports other than word family must be within one level of A1/u);
+      expect(() => planMonthlyResourcePool(tooFar)).toThrow(/support-1 is CEFR B1; supports must be within one level of A1; word family may be up to B1/u);
       const tamperedContract = structuredClone(contract);
       tamperedContract.supportTerms[0]!.cefr = "B2";
-      expect(validateMonthlyCurriculum(tamperedContract)).toContain("Expanded term support-1 is CEFR B2; supports other than word family must be within one level of A1");
+      expect(validateMonthlyCurriculum(tamperedContract)).toContain("Expanded term support-1 is CEFR B2; supports must be within one level of A1; word family may be up to B1");
     });
   });
 

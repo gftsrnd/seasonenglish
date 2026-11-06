@@ -651,7 +651,10 @@ export type MonthlyLessonDayTaskOutput = z.infer<typeof monthlyLessonDayOutputSc
 const monthlyResourceCoreTermSchema = z.object({
   id: z.string().trim().min(1).max(100),
   word: z.string().trim().min(1).max(120), meaning: z.string().trim().min(1).max(300),
-  type: z.string().trim().min(1).max(80), ipa: z.string().trim().min(1).max(120)
+  type: z.string().trim().min(1).max(80), ipa: z.string().trim().min(1).max(120),
+  // The core word's own CEFR level. Optional so stored plans validate; the API
+  // rejects a core candidate labelled above the month level.
+  cefr: z.enum(["A1", "A2", "B1", "B2", "C1"]).optional().catch(undefined)
 }).strict();
 const monthlyResourceExpandedTermSchema = z.object({
   id: z.string().trim().min(1).max(100),
@@ -698,7 +701,7 @@ export type MonthlyResourcePlanTaskOutput = z.infer<typeof monthlyResourcePlanOu
 export const monthlyResourcePlanOutputJsonSchema = {
   type: "object", additionalProperties: false, required: ["coreTerms", "expandedTerms", "grammarTopics", "pronunciationTargets"],
   properties: {
-    coreTerms: { type: "array", items: { type: "object", additionalProperties: false, required: ["id", "word", "meaning", "type", "ipa"], properties: { id: { type: "string" }, word: { type: "string" }, meaning: { type: "string" }, type: { type: "string" }, ipa: { type: "string" } } } },
+    coreTerms: { type: "array", items: { type: "object", additionalProperties: false, required: ["id", "word", "meaning", "type", "ipa"], properties: { id: { type: "string" }, word: { type: "string" }, meaning: { type: "string" }, type: { type: "string" }, ipa: { type: "string" }, cefr: { type: "string", enum: ["A1", "A2", "B1", "B2", "C1"] } } } },
     expandedTerms: { type: "array", items: { type: "object", additionalProperties: false, required: ["id", "word", "meaning", "type", "relation", "relatesToCoreId"], properties: { id: { type: "string" }, word: { type: "string" }, meaning: { type: "string" }, type: { type: "string" }, relation: { type: "string", enum: ["umbrella", "synonym", "antonym", "word_family", "collocation"] }, relatesToCoreId: { type: "string" }, cefr: { type: "string", enum: ["A1", "A2", "B1", "B2", "C1"] } } } },
     grammarTopics: { type: "array", maxItems: 2, items: { type: "object", additionalProperties: false, required: ["id", "title", "steps"], properties: { id: { type: "string" }, title: { type: "string" }, steps: { type: "array", minItems: 3, maxItems: 3, items: { type: "object", additionalProperties: false, required: ["id", "focus", "formula", "usage", "examples"], properties: { id: { type: "string" }, focus: { type: "string" }, formula: { type: "string" }, usage: { type: "string" }, examples: { type: "array", minItems: 3, items: { type: "string" } } } } } } } },
     pronunciationTargets: { type: "array", maxItems: 4, items: { type: "object", additionalProperties: false, required: ["id", "ipa", "label", "explanation", "words"], properties: { id: { type: "string" }, ipa: { type: "string" }, label: { type: "string" }, explanation: { type: "string" }, words: { type: "array", minItems: 9, items: { type: "object", additionalProperties: false, required: ["word", "ipa"], properties: { word: { type: "string" }, ipa: { type: "string" } } } } } } }

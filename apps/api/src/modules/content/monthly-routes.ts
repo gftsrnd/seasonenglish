@@ -1,4 +1,4 @@
-import { buildMonthlyCalendar, buildMonthlyExamScope, maxMonthlySupportRepeats, monthlyDayKind, MONTHLY_MAX_SUPPORTS_PER_CORE, MONTHLY_MIN_SUPPORTS_PER_CORE, MONTHLY_REQUIRED_SUPPORT_RELATIONS, type MonthlyCurriculumContract } from "@e4s/domain";
+import { buildMonthlyCalendar, buildMonthlyExamScope, maxMonthlyPhrasePlacements, maxMonthlySupportRepeats, monthlyDayKind, MONTHLY_MAX_SUPPORTS_PER_CORE, MONTHLY_MIN_SUPPORTS_PER_CORE, MONTHLY_REQUIRED_SUPPORT_RELATIONS, type MonthlyCurriculumContract } from "@e4s/domain";
 import { monthlyResourcePlanOutputSchema, monthlyTopicSuggestionOutputSchema, type AiTaskRunner } from "@e4s/ai";
 import { createRepositories } from "@e4s/database";
 import { randomUUID } from "node:crypto";
@@ -220,9 +220,24 @@ export function registerMonthlyContentRoutes(app: FastifyInstance, pool: Pool, a
       repositories.aiRuns.activeTaskPrompt(actorId, "monthly_resource_generation"),
       aiRunnerFactory ? aiRunnerFactory(actorId) : Promise.resolve(aiRunner)
     ]);
-    const runner = configuredRunner ?? aiRunner;
-    if (!runner) return reply.code(503).send({ code: "AI_UNAVAILABLE" });
+    const baseRunner = configuredRunner ?? aiRunner;
+    if (!baseRunner) return reply.code(503).send({ code: "AI_UNAVAILABLE" });
     if (!task) return reply.code(503).send({ code: "AI_PROMPT_NOT_READY" });
+    // Token usage for this whole generation request, logged once at the end.
+    const usageTotals = { calls: 0, inputTokens: 0, outputTokens: 0, cacheReadInputTokens: 0, cacheCreationInputTokens: 0, startedAt: Date.now() };
+    const runner = {
+      ...baseRunner,
+      runTask: async (...args: Parameters<AiTaskRunner["runTask"]>) => {
+        const result = await baseRunner.runTask(...args);
+        usageTotals.calls += 1;
+        usageTotals.inputTokens += result.metadata.usage?.inputTokens ?? 0;
+        usageTotals.outputTokens += result.metadata.usage?.outputTokens ?? 0;
+        usageTotals.cacheReadInputTokens += result.metadata.usage?.cacheReadInputTokens ?? 0;
+        usageTotals.cacheCreationInputTokens += result.metadata.usage?.cacheCreationInputTokens ?? 0;
+        return result;
+      }
+    } as AiTaskRunner;
+    const logUsage = (outcome: string) => console.info("[monthly-resource-usage]", JSON.stringify({ month: month.month, cefr: criteria.cefr, outcome, ...usageTotals, elapsedMs: Date.now() - usageTotals.startedAt }));
     try {
       let checkpoint = await repositories.monthlyContent.getResourceGenerationCheckpoint(actorId, month.month, criteria.cefr);
       const generationId = checkpoint?.generationId ?? randomUUID();
@@ -285,9 +300,9 @@ export function registerMonthlyContentRoutes(app: FastifyInstance, pool: Pool, a
       const coreWords = new Set<string>();
       const preflightSupportTerms: z.infer<typeof monthlyResourcePlanOutputSchema>["expandedTerms"] = [];
       // One repeated-support ceiling (35%) shared with the domain validator.
-      // The separate 25% multi-word phrase cap below is intentionally unchanged.
+      // Multi-word expressions may fill up to 35% of the pool (umbrella group phrases included).
       const maxExpandedRepeats = maxMonthlySupportRepeats(criteria.expandedVocabularyCount);
-      const maxExpandedPhrases = Math.floor(criteria.expandedVocabularyCount * 0.25);
+      const maxExpandedPhrases = maxMonthlyPhrasePlacements(criteria.expandedVocabularyCount);
       const cachedCoreValid = coreTerms.length === criteria.vocabularyCount
         && coreTerms.every((term) => isSingleHeadword(term.word))
         && coreTerms.every((term) => hasSingleCoreSense(term.type, term.meaning))
@@ -621,12 +636,14 @@ export function registerMonthlyContentRoutes(app: FastifyInstance, pool: Pool, a
           });
           enrichmentStats.generationCalls += 1;
           const replacementResult = await runPhase(replacementPrompt, [], { vocabularyCount: 12, expandedVocabularyCount: 0, grammarTopicCount: 0, pronunciationSoundCount: 0 });
-          const replacementSelection = selectMonthlyCoreCandidates({ candidates: replacementResult.coreTerms, existingCoreWords: existingOtherCoreWords, needed: 1 });
+          const replacementSelection = selectMonthlyCoreCandidates({ candidates: replacementResult.coreTerms, existingCoreWords: existingOtherCoreWords, needed: 1, cefr: criteria.cefr });
           if (replacementResult.expandedTerms.length || replacementResult.grammarTopics.length || replacementResult.pronunciationTargets.length || replacementSelection.selected.length !== 1) {
             lastIssue += " A single replacement core candidate also failed validation.";
             break;
           }
-          const replacement = { ...replacementSelection.selected[0]!, id: coreTerm.id };
+          // The level label only serves the screen above; stored cores keep their shape.
+          const { cefr: _replacementLevel, ...replacementCore } = replacementSelection.selected[0]!;
+          const replacement = { ...replacementCore, id: coreTerm.id };
           coreWords.delete(oldCoreWord);
           coreWords.add(normalizeMonthlyResourceWord(replacement.word));
           coreTerms[coreIndex] = replacement;
@@ -757,8 +774,10 @@ export function registerMonthlyContentRoutes(app: FastifyInstance, pool: Pool, a
       });
       const pool = buildMonthlyResourcesFromAiPlan(month.month, criteria.cefr, theme, criteria, plan);
       const framework = await repositories.monthlyContent.saveResourceDraft(actorId, pool);
+      logUsage("saved");
       return framework;
     } catch (error) {
+      logUsage(error && typeof error === "object" && "code" in error ? String((error as { code?: unknown }).code) : error instanceof Error ? error.name : "failed");
       if (error instanceof MonthlyResourceCriteriaError) {
         return reply.code(422).send({ code: error.code, requiredVocabularyCount: error.requiredVocabularyCount });
       }

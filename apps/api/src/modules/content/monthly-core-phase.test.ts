@@ -128,6 +128,14 @@ describe("month-wide core candidate prompt", () => {
     expect(prompt).toContain(`draw every candidate from this sub-area only: ${MONTHLY_CORE_SUB_AREAS[1]}`);
     expect(prompt).toContain("client");
   });
+
+  it("asks for each core's own level, keeps it at or below the month and on theme", () => {
+    const prompt = buildMonthlyCoreCandidatesPrompt({ cefr: "A1", theme: "Office communication", communicationGoal: "Send simple messages", existingCoreWords: [], batchNumber: 1, candidateCount: 8, neededCount: 8, preflightRelations: true, relationOptionsPerRequired: 3 });
+    expect(prompt).toContain("Every core word itself must be at CEFR A1 or below, never above it; set each coreTerms item's cefr field");
+    expect(prompt).toContain("never return a word that is off-theme or only loosely tied to it");
+    expect(prompt).not.toContain("update → updater");
+    expect(prompt).toContain("never a narrower kind of the core (computer -> laptop)");
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -241,6 +249,25 @@ describe("runMonthlyCorePhase (month-wide)", () => {
     expect(result.coreTerms.map((term) => term.word)).toEqual(["quaaax", "quabax", "quacax", "qubaax", "qubbax"]);
     expect(result.coreTerms.map((term) => term.id)).toEqual(["a1-core-1", "a1-core-2", "a1-core-3", "a1-core-4", "a1-core-5"]);
     expect(result.stats.rounds).toBe(2);
+  });
+
+  it("rejects a core labelled above the month level, strips the label, and keeps later rounds on theme", async () => {
+    const runner = fakeRunner(({ round, callIndex, count }) => Array.from({ length: count }, (_value, position) => {
+      const entry = candidateWithEdges(syntheticCore(`${letters(round)}${letters(callIndex)}${letters(position)}`), `ai-${position}`);
+      // Round 0: every candidate is labelled B2 (above A1) except one labelled A1.
+      if (round === 0) entry.core.cefr = callIndex === 0 && position === 0 ? "A1" : "B2";
+      return entry;
+    }));
+    const result = await runMonthlyCorePhase(phaseInput(runner, 3, { maxRounds: 4 }));
+    expect(result.coreTerms[0]!.word).toBe("quaaax");
+    expect(result.coreTerms.every((term) => !("cefr" in term))).toBe(true);
+    expect(result.coreTerms.map((term) => term.word)).not.toContain("quaabx");
+    const later = runner.generationCalls.filter((call) => call.prompt.includes("RETRY FOR CORE BATCH"));
+    expect(later.length).toBeGreaterThan(0);
+    for (const call of later) {
+      expect(call.prompt).toMatch(/must start with one of these letters: [a-z, ]+, and must still belong to this sub-area of the approved theme/u);
+      expect(call.prompt).not.toContain("even if only loosely tied to the theme");
+    }
   });
 
   it("does not accept two cores that are synonyms of each other (rule B)", async () => {

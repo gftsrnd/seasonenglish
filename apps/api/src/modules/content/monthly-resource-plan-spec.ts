@@ -1,4 +1,4 @@
-import { isMonthlySupportLevelAllowed, maxMonthlySupportRepeats, monthlySupportLevelBand, MONTHLY_MAX_SUPPORTS_PER_CORE, MONTHLY_MIN_SUPPORTS_PER_CORE, MONTHLY_REQUIRED_SUPPORT_RELATIONS } from "@e4s/domain";
+import { isMonthlySupportLevelAllowed, maxMonthlySupportRepeats, monthlySupportLevelRule, monthlySupportLevelBand, MONTHLY_MAX_SUPPORTS_PER_CORE, MONTHLY_MIN_SUPPORTS_PER_CORE, MONTHLY_REQUIRED_SUPPORT_RELATIONS } from "@e4s/domain";
 
 /**
  * Reusable contract for AI generation of monthly hard learning resources.
@@ -29,26 +29,35 @@ LEVEL DIFFERENTIATION
 
 VOCABULARY PLAN
 - Create the requested number of distinct core items in the month-wide pool. Each core item is one standalone English lexical headword.
-- In the completed month-wide pool, create three to nine expanded items per core (the three required relations are the minimum; add further genuine relations up to nine), never exceeding the caller's requested maximum. Prefer standalone headwords: at least 75% of the pool must be single words. A natural two-to-four-word expression is allowed for no more than one support per core, and phrases may not exceed 25% of the pool. Expanded items may repeat across the month only when repeated entries stay at or below 35% of the total expanded set.
+- In the completed month-wide pool, create three to nine expanded items per core (the three required relations are the minimum; add further genuine relations up to nine), never exceeding the caller's requested maximum. Prefer standalone headwords: at least 75% of the pool must be single words. A natural two-to-four-word expression is allowed for no more than one support per core (an umbrella group phrase such as office equipment does not count toward that one), and phrases may not exceed 35% of the pool. Expanded items may repeat across the month only when repeated entries stay at or below 35% of the total expanded set.
 - Support words may come from the month's CEFR level or one adjacent level
   (±1, A1..C1). Label each expanded item with its own CEFR level in the
   optional cefr field. Never reject a genuine relation only because the word is
-  one level above or below, never use a word two or more levels away (except
-  word-family items, which may be at any CEFR level), and never
-  force a relation that does not genuinely exist. During partial generation phases, follow the phase prompt's count and relation scope; do not try to complete the full pool in one response.
+  one level above or below, and never use a word two or more levels away.
+  Word-family items are the only exception: any level at or below the month
+  and at most two levels above it (A1 up to B1, A2 up to B2, B1 and above up
+  to C1), and only a common, frequently used derivation a learner actually
+  meets at work, never a rare agent or abstract noun (texter, checker, payer,
+  wrongness, busyness). Never force a relation that does not genuinely exist. During partial generation phases, follow the phase prompt's count and relation scope; do not try to complete the full pool in one response.
 - Every item must have a real English form, a natural Vietnamese meaning, part
   of speech, accurate IPA where requested, a concise authentic example, and
   with no calendar-day assignment; the Operator reviews the pool before approval.
 - Core terms must be unique after lowercasing and normalising spaces/
-  punctuation; core terms must never appear as expanded terms. Choose only
-  standalone, level-appropriate workplace headwords with a common, genuine
+  punctuation; core terms must never appear as expanded terms. Every core word
+  must be at the month's CEFR level or below, never above it, and directly on
+  the approved theme; label it with its own level in the optional cefr field.
+  Choose only standalone, level-appropriate workplace headwords with a common, genuine
   non-inflectional word family plus real synonym and umbrella relations.
   Avoid interjections, greetings, inflected forms, and unproductive words
   whose only related forms would be rare or fabricated.
 - Each expanded item must state one relation: umbrella, synonym, antonym,
   word_family, or collocation; and identify the related core term. The relation
   must be linguistically real. Umbrella means a true broader category (X is a
-  kind of Y), not an associated topic or collocation. A synonym must be close
+  kind of Y) or the group word the core belongs to (office -> workplace, email
+  -> communication, invoice -> document), not an associated topic or
+  collocation; never a narrower kind of the core (computer -> laptop), a
+  synonym (leader -> boss), a related thing or event (attend -> meeting, pay ->
+  salary), or an adjective or modifier (designer -> graphic). A synonym must be close
   enough to replace the core in the stated sense; an antonym must express the
   opposite sense. A word_family item must share the core's lexical root through
   a real derivation (for example, manage → manager/management), not merely be
@@ -160,6 +169,7 @@ export const monthlyResourcePlanSchema = {
           type: { type: "string" },
           ipa: { type: "string" },
           example: { type: "string" },
+          cefr: { enum: ["A1", "A2", "B1", "B2", "C1"], description: "The core word's own CEFR level: the month's level or below, never above." },
         },
       },
     },
@@ -197,7 +207,7 @@ export const monthlyResourcePlanSchema = {
           },
           relatesToCoreId: { type: "string" },
           example: { type: "string" },
-          cefr: { enum: ["A1", "A2", "B1", "B2", "C1"], description: "The support word's own CEFR level: the month's level or one adjacent level; word-family items may be any level." },
+          cefr: { enum: ["A1", "A2", "B1", "B2", "C1"], description: "The support word's own CEFR level: the month's level or one adjacent level; word-family items may be any lower level or up to two levels above the month." },
         },
       },
     },
@@ -331,12 +341,12 @@ export function validateMonthlyResourcePlanShape(
   if (new Set(core).size !== core.length) errors.push("Core resources contain duplicate terms.");
   if (plan.coreTerms.some((item) => !singleHeadword(item.word))) errors.push("Every core resource must be one standalone lexical headword.");
   if (plan.expandedTerms.some((item) => !singleHeadword(item.word) && !workplacePhrase(item.word))) errors.push("Expanded resources must be standalone lexical headwords or natural two-to-four-word workplace phrases.");
-  if (plan.expandedTerms.filter((item) => !singleHeadword(item.word)).length > Math.floor(plan.expandedTerms.length * 0.25)) errors.push("Expanded phrases exceed the 25% ceiling; standalone words must remain the clear majority.");
+  if (plan.expandedTerms.filter((item) => !singleHeadword(item.word)).length > Math.floor(plan.expandedTerms.length * 0.35)) errors.push("Expanded phrases exceed the 35% ceiling; standalone words must remain the clear majority.");
   if (expanded.some((word) => core.includes(word))) errors.push("A core term is repeated in expanded resources.");
   if (expanded.length - new Set(expanded).size > maxMonthlySupportRepeats(expanded.length)) errors.push("Expanded resources repeat more than 35% of the monthly total.");
   if (cefr) {
     for (const item of plan.expandedTerms) {
-      if (!isMonthlySupportLevelAllowed(cefr, item)) errors.push(`Expanded resource ${item.id} is CEFR ${item.cefr}; supports other than word family must be within one level of ${cefr}.`);
+      if (!isMonthlySupportLevelAllowed(cefr, item)) errors.push(`Expanded resource ${item.id} is CEFR ${item.cefr}; ${monthlySupportLevelRule(cefr)}.`);
     }
   }
   const coreIds = new Set(plan.coreTerms.map((item) => item.id));
@@ -350,7 +360,7 @@ export function validateMonthlyResourcePlanShape(
     if (MONTHLY_REQUIRED_SUPPORT_RELATIONS.some((relation) => !relationGroups.has(relation))) {
       errors.push(`Core ${coreId} needs umbrella, synonym, and word-family supports.`);
     }
-    if (supports.filter((item) => !singleHeadword(item.word)).length > 1) errors.push(`Core ${coreId} has more than one multi-word support item.`);
+    if (supports.filter((item) => item.relation !== "umbrella" && !singleHeadword(item.word)).length > 1) errors.push(`Core ${coreId} has more than one multi-word support item.`);
   }
   if (plan.grammarTopics.length !== 2) errors.push("Expected two grammar topics.");
   if (plan.grammarTopics.some((topic) => topic.steps.length !== 3)) errors.push("Every grammar topic needs exactly three ordered steps.");

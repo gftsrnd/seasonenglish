@@ -16,6 +16,7 @@ import {
   buildMonthlyOptionalSupportPrompt,
   buildMonthlySupportRelationAuditPrompt,
   buildMonthlySupportRelationCandidatePrompt,
+  buildMonthlySupportLevelGuidance,
   CURRENT_MONTHLY_RESOURCE_CHECKPOINT_SCHEMA_VERSIONS,
   hasSingleCoreSense,
   isCurrentMonthlyResourceCheckpointCategory,
@@ -390,6 +391,37 @@ describe("monthly AI resource generation", () => {
     expect(result.rejected).toContain("incremental improvement -> incremental improvement (must be one standalone lexical headword)");
   });
 
+  it("rejects a core candidate labelled above the month level and allows a missing or lower label", () => {
+    const result = selectMonthlyCoreCandidates({
+      candidates: [
+        { id: "c1", word: "vague", meaning: "mơ hồ", type: "adjective", ipa: "/veɪɡ/", cefr: "B2" },
+        { id: "c2", word: "editor", meaning: "biên tập viên", type: "noun", ipa: "/ˈedɪtər/", cefr: "A2" },
+        { id: "c3", word: "email", meaning: "thư điện tử", type: "noun", ipa: "/ˈiːmeɪl/", cefr: "A1" },
+        { id: "c4", word: "phone", meaning: "điện thoại", type: "noun", ipa: "/fəʊn/" }
+      ],
+      existingCoreWords: new Set(),
+      needed: 3,
+      cefr: "A1"
+    });
+    expect(result.selected.map((term) => term.word)).toEqual(["email", "phone"]);
+    expect(result.rejected).toContain("vague -> vague (CEFR B2 is above the month level A1)");
+    expect(result.rejected).toContain("editor -> editor (CEFR A2 is above the month level A1)");
+    // Without a month level the label is not checked (legacy callers).
+    expect(selectMonthlyCoreCandidates({ candidates: [{ id: "c1", word: "vague", meaning: "mơ hồ", type: "adjective", ipa: "/veɪɡ/", cefr: "B2" }], existingCoreWords: new Set(), needed: 1 }).selected).toHaveLength(1);
+  });
+
+  it("keeps a valid core CEFR label from AI output and drops an unusable one", () => {
+    const parsed = parseMonthlyResourceAiOutput({
+      coreTerms: [
+        { id: "c1", word: "email", meaning: "thư", type: "noun", ipa: "/x/", cefr: "A1" },
+        { id: "c2", word: "phone", meaning: "điện thoại", type: "noun", ipa: "/x/", cefr: "Z9" },
+        { id: "c3", word: "desk", meaning: "bàn", type: "noun", ipa: "/x/" }
+      ],
+      expandedTerms: [], grammarTopics: [], pronunciationTargets: []
+    });
+    expect(parsed.coreTerms.map((term) => term.cefr)).toEqual(["A1", undefined, undefined]);
+  });
+
   it("repairs a six-word collision on a later core slice without relaxing uniqueness", () => {
     const collisions = ["articulate", "ambiguous", "candid", "contingency", "scrutinise", "pragmatic"];
     const existingCoreWords = new Set([...collisions, ...Array.from({ length: 18 }, (_, index) => `earlier${index}`)]);
@@ -420,7 +452,8 @@ describe("monthly AI resource generation", () => {
     expect(retryPrompt).toContain("one clear, common workplace sense");
     expect(retryPrompt).toContain("silently identify all three for the exact meaning");
     expect(retryPrompt).toContain("a genuine umbrella category, a natural same-sense synonym, and a common derivational word-family item");
-    expect(retryPrompt).toContain("update → updater");
+    expect(retryPrompt).toContain("pay → payment");
+    expect(retryPrompt).not.toContain("update → updater");
   });
 
   it("preflights mandatory relations before a core candidate can be selected", () => {
@@ -741,8 +774,11 @@ describe("monthly AI resource generation", () => {
     expect(() => planMonthlyResourcePool(invalidCore)).toThrow(/standalone English headword/u);
 
     const multipleForCore = buildMonthlyResourcesFromAiPlan(month, "A1", theme, criteria, planFor());
-    multipleForCore.supportTerms[0]!.word = "annual report";
-    multipleForCore.supportTerms[1]!.word = "client update";
+    // Umbrella group phrases are exempt, so place both phrases on non-umbrella supports of one core.
+    const firstCoreId = multipleForCore.supportTerms[0]!.relatedCoreTermId;
+    const [phraseA, phraseB] = multipleForCore.supportTerms.filter((term) => term.relatedCoreTermId === firstCoreId && term.relation !== "umbrella");
+    phraseA!.word = "annual report";
+    phraseB!.word = "client update";
     expect(() => planMonthlyResourcePool(multipleForCore)).toThrow(/at most one multi-word expanded expression/u);
 
     const manyPhrasesWithinPerCoreLimit = buildMonthlyResourcesFromAiPlan(month, "A1", theme, criteria, planFor());
@@ -804,9 +840,21 @@ describe("monthly AI resource generation", () => {
 
   it("rejects AI pools that exceed one phrase per core", () => {
     const sameCorePhrases = planFor();
-    sameCorePhrases.expandedTerms[0]!.word = "annual report";
-    sameCorePhrases.expandedTerms[1]!.word = "client update";
+    const [firstNonUmbrella, secondNonUmbrella] = sameCorePhrases.expandedTerms
+      .map((term, index) => ({ term, index }))
+      .filter(({ term }) => term.relatesToCoreId === sameCorePhrases.expandedTerms[0]!.relatesToCoreId && term.relation !== "umbrella");
+    sameCorePhrases.expandedTerms[firstNonUmbrella!.index]!.word = "annual report";
+    sameCorePhrases.expandedTerms[secondNonUmbrella!.index]!.word = "client update";
     expect(planErrors(() => buildMonthlyResourcesFromAiPlan(month, "A1", theme, criteria, sameCorePhrases))).toContain("Core core-1-1 has more than one multi-word support item.");
+
+    // An umbrella group phrase does not count toward the one-phrase-per-core limit.
+    const umbrellaPhrase = planFor();
+    const coreId = umbrellaPhrase.expandedTerms[0]!.relatesToCoreId;
+    const umbrella = umbrellaPhrase.expandedTerms.find((term) => term.relatesToCoreId === coreId && term.relation === "umbrella")!;
+    const other = umbrellaPhrase.expandedTerms.find((term) => term.relatesToCoreId === coreId && term.relation !== "umbrella")!;
+    umbrella.word = "office equipment";
+    other.word = "client update";
+    expect(() => buildMonthlyResourcesFromAiPlan(month, "A1", theme, criteria, umbrellaPhrase)).not.toThrow();
 
     const manyPhrasesWithinPerCoreLimit = planFor();
     for (let coreIndex = 0; coreIndex < 37; coreIndex += 1) {
@@ -945,7 +993,7 @@ describe("monthly support pool rules (VH-R33: 3-9 per core, 35% repeats, CEFR ±
 
     const tooFar = threeSupportPlan();
     tooFar.expandedTerms[0]!.cefr = "B1";
-    expect(planErrors(() => buildMonthlyResourcesFromAiPlan(month, "A1", theme, threeSupportCriteria, tooFar))).toContain("Expanded resource expanded-1-1 is CEFR B1; supports other than word family must be within one level of A1.");
+    expect(planErrors(() => buildMonthlyResourcesFromAiPlan(month, "A1", theme, threeSupportCriteria, tooFar))).toContain("Expanded resource expanded-1-1 is CEFR B1; supports must be within one level of A1; word family may be up to B1.");
 
     // C1 has no level above it; B2 is its only adjacent level.
     const c1 = threeSupportPlan();
@@ -975,6 +1023,33 @@ describe("monthly support pool rules (VH-R33: 3-9 per core, 35% repeats, CEFR ±
     expect(result.rejected.join(" ")).toContain("CEFR C1 is more than one level from A2");
   });
 
+  it("allows a word-family support up to two levels above the month and rejects three", () => {
+    const family = (word: string, cefr: "A1" | "A2" | "B1" | "B2" | "C1") => ({ id: `f-${word}`, word, meaning: "quản lý", type: "noun", relation: "word_family" as const, relatesToCoreId: "core-m", cefr });
+    const result = selectMonthlySupportCandidates({
+      candidates: [family("managerial", "B2"), family("management", "B1"), family("manager", "A1")],
+      coreId: "core-m",
+      coreWord: "manage",
+      coreType: "verb",
+      coreWords: new Set(["manage"]),
+      sameCoreWords: new Set(),
+      sameCoreRelations: new Set(),
+      existingSupportWords: [],
+      maxRepeatedPlacements: 10,
+      maxPhrasePlacements: 10,
+      needed: 3,
+      cefr: "A1"
+    });
+    expect(result.selected.map((term) => term.word)).toEqual(["management", "manager"]);
+    expect(result.rejected.join(" ")).toContain("CEFR B2 is above B1, the highest word-family level for A1");
+
+    const plan = threeSupportPlan();
+    const familyIndex = plan.expandedTerms.findIndex((term) => term.relation === "word_family");
+    plan.expandedTerms[familyIndex]!.cefr = "B1";
+    expect(validateMonthlyResourcePlanShape(plan, newLessonDays.length, "A1").filter((error) => error.includes("CEFR"))).toEqual([]);
+    plan.expandedTerms[familyIndex]!.cefr = "B2";
+    expect(validateMonthlyResourcePlanShape(plan, newLessonDays.length, "A1")).toContain(`Expanded resource ${plan.expandedTerms[familyIndex]!.id} is CEFR B2; supports must be within one level of A1; word family may be up to B1.`);
+  });
+
   it("keeps a valid support CEFR label from AI output and drops an unusable one", () => {
     const parsed = parseMonthlyResourceAiOutput({
       coreTerms: [],
@@ -1001,6 +1076,27 @@ describe("monthly support pool rules (VH-R33: 3-9 per core, 35% repeats, CEFR ±
       expect(prompt).toContain("Do not reject or omit a genuine relation only because the word is one level above or below B1");
     }
     expect(buildMonthlySupportRelationAuditPrompt({ core, candidates: [] })).toContain("Do not reject a genuine relation only because the word is one level above or below");
+    for (const prompt of prompts) expect(prompt).toContain("at most two levels above it (up to C1)");
+    expect(buildMonthlySupportLevelGuidance("A1")).toContain("at most two levels above it (up to B1)");
+    expect(MONTHLY_RESOURCE_PLAN_SYSTEM_PROMPT).toContain("at most two levels above it (A1 up to B1");
+    expect(MONTHLY_RESOURCE_PLAN_SYSTEM_PROMPT).not.toContain("may be at any CEFR level");
+  });
+
+  it("tells the audit and gap-fill prompts which umbrella and word-family candidates to reject", () => {
+    const audit = buildMonthlySupportRelationAuditPrompt({ core: { word: "computer", meaning: "máy tính", type: "noun" }, candidates: [] });
+    expect(audit).toContain("Reject a candidate that is NARROWER than the core, i.e. a kind of the core (computer -> laptop");
+    expect(audit).toContain("a synonym or near-synonym (leader -> boss)");
+    expect(audit).toContain("(attend -> meeting, pay -> salary");
+    expect(audit).toContain("an adjective or modifier (designer -> graphic)");
+    expect(audit).toContain("office -> workplace, email -> communication, invoice -> document");
+    expect(audit).toContain("Reject rare or awkward agent nouns, abstract nouns and adverbs");
+    expect(audit).toContain("texter, repairer, repairable, checker, payer");
+    const core = { id: "core-p", word: "pay", meaning: "trả tiền", type: "verb" };
+    const umbrella = buildMonthlySupportRelationCandidatePrompt({ cefr: "A1", core, relation: "umbrella", theme: "Work", forbiddenCoreWords: [], existingSupportWords: [] });
+    expect(umbrella).toContain("Never return a narrower kind of the core (computer -> laptop), a synonym (leader -> boss)");
+    const family = buildMonthlySupportRelationCandidatePrompt({ cefr: "A1", core, relation: "word_family", theme: "Work", forbiddenCoreWords: [], existingSupportWords: [] });
+    expect(family).toContain("COMMON, frequently used derivational form");
+    expect(family).toContain("texter, repairer, checker, payer");
     expect(MONTHLY_RESOURCE_PLAN_SYSTEM_PROMPT).toContain("three to nine expanded items per core");
     expect(MONTHLY_RESOURCE_PLAN_SYSTEM_PROMPT).toContain("at or below 35% of the total expanded set");
     expect(MONTHLY_RESOURCE_PLAN_SYSTEM_PROMPT).not.toMatch(/six to nine|minimum six/u);
