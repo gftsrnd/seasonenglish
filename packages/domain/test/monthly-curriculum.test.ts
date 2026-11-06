@@ -20,6 +20,9 @@ import {
   maxMonthlyWordFamilyLevel,
   MONTHLY_MIN_SUPPORTS_PER_CORE,
   MONTHLY_MAX_SUPPORTS_PER_CORE,
+  hasRequiredMonthlySupportRelations,
+  monthlyCorePartOfSpeech,
+  requiredSupportRelationsFor,
   type MonthlyCurriculumInput
 } from "../src/monthly/index.js";
 
@@ -94,9 +97,10 @@ describe("monthly curriculum contract", () => {
     const contract = planMonthlyResourcePool(poolFor());
     const invalidRelations = structuredClone(contract);
     const linkedSupports = invalidRelations.supportTerms.filter((term) => term.relatedCoreTermId === invalidRelations.coreTerms[0]!.id);
-    linkedSupports[3]!.relation = "collocation";
-    linkedSupports[7]!.relation = "collocation";
-    expect(validateMonthlyCurriculum(invalidRelations).join(" ")).toContain("needs umbrella, synonym, and word-family supports");
+    // A noun core needs an umbrella and a synonym; drop both of its umbrellas.
+    linkedSupports[0]!.relation = "collocation";
+    linkedSupports[4]!.relation = "collocation";
+    expect(validateMonthlyCurriculum(invalidRelations).join(" ")).toContain("needs umbrella and synonym supports");
 
     const invalidGrammar = structuredClone(contract);
     invalidGrammar.daySpecs[2]!.grammarStepIds = ["grammar-1-step-1"];
@@ -335,9 +339,56 @@ describe("monthly curriculum contract", () => {
       return { ...pool, supportTerms: pool.supportTerms.filter((_term, index) => [0, 1, 3].includes(index % 9)) };
     }
 
-    it("uses three required relations as the per-core minimum and keeps nine as the maximum", () => {
+    it("keeps three supports as the per-core minimum and nine as the maximum", () => {
       expect(MONTHLY_MIN_SUPPORTS_PER_CORE).toBe(3);
       expect(MONTHLY_MAX_SUPPORTS_PER_CORE).toBe(9);
+    });
+
+    it("derives the required relations from the core's part of speech (WordNet model)", () => {
+      expect(requiredSupportRelationsFor("noun")).toEqual(["umbrella", "synonym"]);
+      expect(requiredSupportRelationsFor("verb")).toEqual(["synonym", "word_family"]);
+      expect(requiredSupportRelationsFor("adjective")).toEqual(["synonym", "word_family"]);
+      expect(requiredSupportRelationsFor("Adverb")).toEqual(["synonym", "word_family"]);
+      // An unknown or mixed label keeps the strict legacy trio.
+      expect(requiredSupportRelationsFor("noun/verb")).toEqual(["umbrella", "synonym", "word_family"]);
+      expect(requiredSupportRelationsFor("")).toEqual(["umbrella", "synonym", "word_family"]);
+      expect(monthlyCorePartOfSpeech("adj.")).toBe("adjective");
+      expect(monthlyCorePartOfSpeech("phrasal verb")).toBe("verb");
+
+      const relations = (...list: string[]) => list.map((relation) => ({ relation }));
+      expect(hasRequiredMonthlySupportRelations("noun", relations("umbrella", "synonym", "antonym"))).toBe(true);
+      expect(hasRequiredMonthlySupportRelations("noun", relations("synonym", "word_family", "antonym"))).toBe(false);
+      expect(hasRequiredMonthlySupportRelations("verb", relations("synonym", "word_family", "collocation"))).toBe(true);
+      expect(hasRequiredMonthlySupportRelations("verb", relations("umbrella", "synonym", "collocation"))).toBe(false);
+      expect(hasRequiredMonthlySupportRelations("adjective", relations("umbrella", "synonym", "antonym"))).toBe(false);
+    });
+
+    it("accepts a noun core without a word family and a verb core without an umbrella", () => {
+      const pool = threeSupportPool();
+      // core-1 (noun): umbrella, synonym, antonym — no word family.
+      pool.supportTerms[2]!.relation = "antonym";
+      // core-2 becomes a verb: synonym, word family, collocation — no umbrella.
+      pool.coreTerms[1]!.type = "verb";
+      pool.supportTerms[3]!.relation = "collocation";
+      const contract = planMonthlyResourcePool(pool);
+      expect(validateMonthlyCurriculum(contract)).toEqual([]);
+    });
+
+    it("rejects a verb core without a word family and a noun core without an umbrella", () => {
+      const verbWithoutFamily = threeSupportPool();
+      verbWithoutFamily.coreTerms[0]!.type = "verb";
+      verbWithoutFamily.supportTerms[2]!.relation = "antonym";
+      expect(() => planMonthlyResourcePool(verbWithoutFamily)).toThrow(/core-1 needs synonym and word-family supports/u);
+
+      const nounWithoutUmbrella = threeSupportPool();
+      nounWithoutUmbrella.supportTerms[0]!.relation = "antonym";
+      expect(() => planMonthlyResourcePool(nounWithoutUmbrella)).toThrow(/core-1 needs umbrella and synonym supports/u);
+
+      const contract = planMonthlyResourcePool(threeSupportPool());
+      const verbContract = structuredClone(contract);
+      verbContract.coreTerms.find((core) => core.id === "core-2")!.type = "verb";
+      verbContract.supportTerms.find((term) => term.relatedCoreTermId === "core-2" && term.relation === "word_family")!.relation = "collocation";
+      expect(validateMonthlyCurriculum(verbContract)).toContain("Core term core-2 needs synonym and word-family supports");
     });
 
     it("accepts a pool with exactly three supports per core, one per required relation", () => {
@@ -355,14 +406,20 @@ describe("monthly curriculum contract", () => {
     });
 
     it("rejects a core that misses a required relation or has fewer than three supports", () => {
-      const missingWordFamily = threeSupportPool();
-      missingWordFamily.supportTerms[2]!.relation = "antonym";
-      expect(() => planMonthlyResourcePool(missingWordFamily)).toThrow(/core-1 needs umbrella, synonym, and word-family supports/u);
+      const missingSynonym = threeSupportPool();
+      missingSynonym.supportTerms[1]!.relation = "antonym";
+      expect(() => planMonthlyResourcePool(missingSynonym)).toThrow(/core-1 needs umbrella and synonym supports/u);
 
       const contract = planMonthlyResourcePool(threeSupportPool());
       const invalid = structuredClone(contract);
       invalid.supportTerms.find((term) => term.relatedCoreTermId === "core-2" && term.relation === "umbrella")!.relation = "collocation";
-      expect(validateMonthlyCurriculum(invalid)).toContain("Core term core-2 needs umbrella, synonym, and word-family supports");
+      expect(validateMonthlyCurriculum(invalid)).toContain("Core term core-2 needs umbrella and synonym supports");
+
+      // A core whose part of speech cannot be read keeps the legacy trio.
+      const unknownType = threeSupportPool();
+      unknownType.coreTerms[0]!.type = "noun/verb";
+      unknownType.supportTerms[2]!.relation = "antonym";
+      expect(() => planMonthlyResourcePool(unknownType)).toThrow(/core-1 needs umbrella, synonym, and word-family supports/u);
 
       const twoSupports = threeSupportPool();
       twoSupports.supportTerms.splice(0, 1);

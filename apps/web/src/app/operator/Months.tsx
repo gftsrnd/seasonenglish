@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
-import { BookOpen, Check, Eye, Pencil, Sparkles } from "lucide-react";
-import type { CefrLevel, MonthlyFinalDraftView, MonthlyFinalUpdateInput, MonthlyOperatorOverviewView, MonthlyQualityFindingView } from "@e4s/contracts";
+import { BookOpen, Check, Eye, Pencil, Sparkles, Square } from "lucide-react";
+import type { CefrLevel, MonthlyResourceEditInput, MonthlyFinalDraftView, MonthlyFinalUpdateInput, MonthlyOperatorOverviewView, MonthlyQualityFindingView } from "@e4s/contracts";
 import { buildMonthlyCalendar, monthlyDayKind, monthlyNewLessonOrdinal, recommendedMonthlyResourceCriteria, type MonthlyCurriculumContract } from "@e4s/domain/monthly";
 import { useToast } from "../shared/design-system.js";
 import { OperatorLessonPreview } from "./adapters.js";
@@ -9,6 +9,7 @@ import type { ReviewWeeklyPractice } from "./types.js";
 import type { MonthlyResourceCheckpointView } from "../../api/operator.js";
 import { groupVocabularyForDisplay, isStandaloneWord } from "./resource-display.js";
 import { MonthlyFinalReview } from "./MonthlyFinalReview.js";
+import { MonthlyResourceEditor } from "./MonthlyResourceEditor.js";
 import "./months.css";
 
 type MonthlyBriefInput = { title: string; brief: string; context: string; communicationGoal: string };
@@ -26,6 +27,8 @@ export interface OperatorMonthsActions {
   onGenerateFramework(month: string, criteria: MonthlyResourceCriteria): Promise<unknown> | void;
   onSaveFramework(month: string, contract: MonthlyCurriculumContract): Promise<void> | void;
   onApproveFramework(id: string): Promise<void> | void;
+  /** Saves a hand-edited DRAFT resource pool (VH-R30/VH-R35); rejects with per-row `details.issues`. */
+  onSaveResources?(id: string, input: MonthlyResourceEditInput): Promise<void>;
   /** Asks a Manager to reopen this level's approved monthly resources. */
   onRequestResourcesReopen?(id: string, reason: string): Promise<void> | void;
   onGenerateMonthlyFinal?(id: string): Promise<MonthlyFinalDraftView> | void;
@@ -78,10 +81,14 @@ export function OperatorMonths({ month, todayMonth, overview, cefr, busy, readOn
   const [generationConfirmation, setGenerationConfirmation] = useState<{ dayNumber: number; kind: "new" | "review" }>();
   const [monthlyFinal, setMonthlyFinal] = useState<MonthlyFinalDraftView | null>(null);
   const [requestingResourcesReopen, setRequestingResourcesReopen] = useState(false);
+  const [editingResources, setEditingResources] = useState(false);
   const briefLocked = overview.brief?.status === "approved";
   const monthChoices = [overview.monthWindow.previous, overview.monthWindow.current, overview.monthWindow.next];
   const previousMonth = month === monthChoices[0];
   const canEdit = !readOnly && overview.monthWindow.writable && !previousMonth;
+  // Daily lessons can only be generated or composed from approved (locked) resources.
+  const resourcesApproved = framework?.status === "approved";
+  const lockedDayTitle = "Chốt tài nguyên tháng trước khi sinh bài";
   const proposedResourceCounts = toResourceCounts(recommendedMonthlyResourceCriteria(month, cefr));
   const resourceCounts = framework?.resources ? {
     core: framework.resources.coreTerms.length,
@@ -269,11 +276,13 @@ export function OperatorMonths({ month, todayMonth, overview, cefr, busy, readOn
             <small>Tiếp tục sẽ sinh các nhóm còn thiếu; nhóm đã lưu vẫn ở trạng thái nháp và chưa dùng cho học viên.</small>
           </div>}
           {framework?.status !== "approved" && <button type="button" className="btn btn-primary" disabled={busy} onClick={() => void generateFramework()}>{resourceCheckpoint?.state === "draft_checkpoint" && !framework?.resources ? "Tiếp tục nhóm còn thiếu" : framework?.resources ? "Sinh lại tài nguyên" : "Sinh tài nguyên"}</button>}
+          {framework?.status === "draft" && framework.resources && actions.onSaveResources && <button type="button" className="btn" disabled={busy || !canEdit} title={canEdit ? "Sửa tay tài nguyên nháp" : "Tháng này chỉ dùng để xem"} onClick={() => setEditingResources(true)}>Sửa tay</button>}
           {framework?.status === "draft" && <button type="button" className="btn" disabled={busy} onClick={() => void approveFramework()}>Duyệt tài nguyên</button>}
-          {framework?.resources?.roadmap?.allocated && <button type="button" className="btn monthly-plan-open-button" onClick={() => setResourcePanel("plan")}>Phân bổ tài nguyên &amp; bài tập</button>}
-          {framework?.status === "approved" && (resourcesReopenPending
-            ? <span className="monthly-reopen-status pending" role="status">Đang chờ Quản lý duyệt</span>
-            : <button type="button" className="btn" disabled={busy || !canEdit} onClick={() => setRequestingResourcesReopen(true)}>Yêu cầu Quản lý mở lại</button>)}
+          {(framework?.resources?.roadmap?.allocated || framework?.status === "approved") && <div className="monthly-plan-row">
+            {framework?.resources?.roadmap?.allocated && <button type="button" className="btn monthly-plan-open-button" onClick={() => setResourcePanel("plan")}>Phân bổ tài nguyên &amp; bài tập</button>}
+            {framework?.status === "approved" && <button type="button" className="monthly-reopen-icon-button" aria-label="Yêu cầu Quản lý mở lại" title={resourcesReopenPending ? "Đang chờ Quản lý duyệt" : "Yêu cầu Quản lý mở lại"} disabled={busy || !canEdit || resourcesReopenPending} onClick={() => setRequestingResourcesReopen(true)}><Square aria-hidden="true" /></button>}
+          </div>}
+          {resourcesReopenPending && <span className="monthly-reopen-status pending" role="status">Đang chờ Quản lý duyệt</span>}
         </div>
         {framework?.status === "approved" && resourcesReopen?.status === "rejected" && <p className="monthly-reopen-status rejected small" role="note">Quản lý đã từ chối mở lại{resourcesReopen.decisionReason ? `: ${resourcesReopen.decisionReason}` : "."}</p>}
         {framework?.status === "draft" && resourcesReopen?.status === "approved" && <p className="monthly-reopen-status approved small" role="note">Quản lý đã mở lại tài nguyên{resourcesReopen.decisionReason ? `: ${resourcesReopen.decisionReason}` : "."} Hãy rà soát rồi duyệt lại để phân bổ bài học.</p>}
@@ -303,7 +312,7 @@ export function OperatorMonths({ month, todayMonth, overview, cefr, busy, readOn
             const isReview = scheduledKind === "review";
             const newLessonOrdinal = isReview ? null : monthlyNewLessonOrdinal(scheduledLessonNumber, calendar);
             const dayLabel = isReview ? "bài ôn" : `bài ${newLessonOrdinal}`;
-            return <article key={cell.date} role="gridcell" aria-label={`${cell.dateLabel}, ${isReview ? "Ôn tập" : `Bài ${newLessonOrdinal}`}`} className={`monthly-day-cell ${kind} ${lesson?.status === "approved" ? "approved" : ""}`}><b>{cell.dateLabel}</b><strong>{isReview ? "Ôn tập" : `Bài ${newLessonOrdinal}`}</strong><div className="monthly-day-actions" role="group" aria-label={`Thao tác ${dayLabel}`}>{lesson?.status === "approved" ? <button type="button" aria-label={`Xem ${dayLabel}`} className="monthly-day-action monthly-view-day" disabled={busy} onClick={() => framework && actions.onViewDay?.(framework.id, lesson.lessonNumber)}><BookOpen aria-hidden="true" /><span>Xem</span></button> : draft ? <><button type="button" aria-label={`Soạn tay ${dayLabel}`} title="Soạn tay" className="monthly-day-action monthly-manual-action" disabled={busy} onClick={() => openManualEditor(scheduledLessonNumber)}><Pencil aria-hidden="true" /></button><button type="button" aria-label={`Duyệt ${dayLabel}`} className="monthly-day-action monthly-approve-action" disabled={busy} onClick={() => framework && void actions.onApproveDay(framework.id, scheduledLessonNumber)}><Check aria-hidden="true" /><span>Duyệt</span></button></> : <><button type="button" aria-label={isReview ? "Sinh" : `Sinh ${dayLabel}`} className="monthly-day-action monthly-generate-action" disabled={busy} onClick={() => setGenerationConfirmation({ dayNumber: scheduledLessonNumber, kind: isReview ? "review" : "new" })}><Sparkles aria-hidden="true" /><span>AI</span></button><button type="button" aria-label={`Soạn tay ${dayLabel}`} title="Soạn tay" className="monthly-day-action monthly-manual-action" disabled={busy} onClick={() => openManualEditor(scheduledLessonNumber)}><Pencil aria-hidden="true" /></button></>}</div></article>;
+            return <article key={cell.date} role="gridcell" aria-label={`${cell.dateLabel}, ${isReview ? "Ôn tập" : `Bài ${newLessonOrdinal}`}`} className={`monthly-day-cell ${kind} ${lesson?.status === "approved" ? "approved" : ""}`}><b>{cell.dateLabel}</b><strong>{isReview ? "Ôn tập" : `Bài ${newLessonOrdinal}`}</strong><div className="monthly-day-actions" role="group" aria-label={`Thao tác ${dayLabel}`}>{lesson?.status === "approved" ? <button type="button" aria-label={`Xem ${dayLabel}`} className="monthly-day-action monthly-view-day" disabled={busy} onClick={() => framework && actions.onViewDay?.(framework.id, lesson.lessonNumber)}><BookOpen aria-hidden="true" /><span>Xem</span></button> : draft ? <><button type="button" aria-label={`Soạn tay ${dayLabel}`} title={resourcesApproved ? "Soạn tay" : lockedDayTitle} className="monthly-day-action monthly-manual-action" disabled={busy || !resourcesApproved} onClick={() => openManualEditor(scheduledLessonNumber)}><Pencil aria-hidden="true" /></button><button type="button" aria-label={`Duyệt ${dayLabel}`} className="monthly-day-action monthly-approve-action" disabled={busy} onClick={() => framework && void actions.onApproveDay(framework.id, scheduledLessonNumber)}><Check aria-hidden="true" /><span>Duyệt</span></button></> : <><button type="button" aria-label={isReview ? "Sinh" : `Sinh ${dayLabel}`} {...(resourcesApproved ? {} : { title: lockedDayTitle })} className="monthly-day-action monthly-generate-action" disabled={busy || !resourcesApproved} onClick={() => setGenerationConfirmation({ dayNumber: scheduledLessonNumber, kind: isReview ? "review" : "new" })}><Sparkles aria-hidden="true" /><span>AI</span></button><button type="button" aria-label={`Soạn tay ${dayLabel}`} title={resourcesApproved ? "Soạn tay" : lockedDayTitle} className="monthly-day-action monthly-manual-action" disabled={busy || !resourcesApproved} onClick={() => openManualEditor(scheduledLessonNumber)}><Pencil aria-hidden="true" /></button></>}</div></article>;
           })}
         </div>
       </section>
@@ -323,6 +332,14 @@ export function OperatorMonths({ month, todayMonth, overview, cefr, busy, readOn
         })}</div></div>}
       </section>}
     </div>
+    {editingResources && framework?.status === "draft" && framework.resources && actions.onSaveResources && <MonthlyResourceEditor
+      cefr={cefr}
+      version={framework.version}
+      resources={framework.resources}
+      busy={busy}
+      onClose={() => setEditingResources(false)}
+      onSave={async (input) => { await actions.onSaveResources!(framework.id, input); setEditingResources(false); }}
+    />}
     {requestingResourcesReopen && framework?.status === "approved" && <MonthlyReopenRequest label={`tài nguyên tháng ${cefr}`} onCancel={() => setRequestingResourcesReopen(false)} onSubmit={(reason) => void requestResourcesReopen(reason)} />}
     {generationConfirmation && framework?.resources && <MonthlyGenerationConfirmation dayNumber={generationConfirmation.dayNumber} kind={generationConfirmation.kind} framework={framework} onCancel={() => setGenerationConfirmation(undefined)} onConfirm={async () => { const generation = generationConfirmation; await generateDay(generation.dayNumber, generation.kind); setGenerationConfirmation(undefined); }} />}
     {monthlyFinal && <MonthlyFinalReview

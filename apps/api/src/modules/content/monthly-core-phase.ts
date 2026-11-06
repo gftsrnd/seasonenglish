@@ -1,4 +1,4 @@
-import { MONTHLY_REQUIRED_SUPPORT_RELATIONS, type MonthlySupportRelation } from "@e4s/domain";
+import { MONTHLY_MIN_SUPPORTS_PER_CORE, MONTHLY_STRUCTURAL_SUPPORT_RELATIONS, hasRequiredMonthlySupportRelations, requiredSupportRelationsFor, type MonthlyStructuralSupportRelation } from "@e4s/domain";
 import type { CefrLevel } from "@e4s/contracts";
 import type { MonthlyResourcePlanTaskOutput } from "@e4s/ai";
 import {
@@ -15,7 +15,6 @@ import {
 
 type CoreTerm = MonthlyResourcePlanTaskOutput["coreTerms"][number];
 type SupportTerm = MonthlyResourcePlanTaskOutput["expandedTerms"][number];
-type RequiredRelation = (typeof MONTHLY_REQUIRED_SUPPORT_RELATIONS)[number];
 
 export interface MonthlyPhaseTargets {
   vocabularyCount: number;
@@ -76,8 +75,10 @@ export async function mapWithConcurrency<T, R>(items: readonly T[], limit: numbe
  * 1. A few parallel generation calls (each with its own sub-area and the full
  *    forbidden list) return ≈1.5× the needed candidates, each with 2–3
  *    options per required relation.
- * 2. Every candidate is pre-filtered, audited and (only for still-missing
- *    required relations) gap-filled concurrently under a concurrency limit.
+ * 2. Every candidate is pre-filtered, audited and (only for relations its part
+ *    of speech requires that are still missing: noun -> umbrella/synonym,
+ *    verb/adjective/adverb -> synonym/word family) gap-filled concurrently
+ *    under a concurrency limit.
  * 3. Cores are selected sequentially in deterministic candidate order
  *    (uniqueness, single sense, family overlap, synonym conflicts, required
  *    relations, 35% repeat ceiling, phrase cap).
@@ -105,6 +106,8 @@ export async function runMonthlyCorePhase(input: {
   gapFillCandidateCount?: number;
   /** Cores (with their kept supports) accepted by an earlier, unfinished run; selection continues after them. */
   initial?: { coreTerms: CoreTerm[]; supportTerms: SupportTerm[] };
+  /** Headwords that must not become cores again (e.g. cores dropped by enrichment); treated as already tried. */
+  avoidWords?: readonly string[];
   now?: () => number;
 }): Promise<{ coreTerms: CoreTerm[]; supportTerms: SupportTerm[]; stats: MonthlyCorePhaseStats }> {
   const now = input.now ?? (() => Date.now());
@@ -130,6 +133,7 @@ export async function runMonthlyCorePhase(input: {
     accepted.push({ core, supports, synonyms: supports.filter((term) => term.relation === "synonym").map((term) => term.word) });
     triedWords.add(normalize(core.word));
   }
+  for (const word of input.avoidWords ?? []) triedWords.add(normalize(word));
 
   const auditEdges = async (candidate: CoreTerm, edges: SupportTerm[]): Promise<SupportTerm[]> => {
     const { kept } = prefilterMonthlySupportCandidatesForAudit(candidate, edges);
@@ -266,8 +270,10 @@ export async function runMonthlyCorePhase(input: {
       }
       const preliminaryCoreWords = new Set([...roundStartCoreWords, normalize(candidate.word)]);
       const preliminary = selectSupportsFor(candidate, audited, preliminaryCoreWords, []).selected;
-      const missingRequired = MONTHLY_REQUIRED_SUPPORT_RELATIONS.filter((relation) => !preliminary.some((term) => term.relation === relation));
-      const gapResults = await Promise.all(missingRequired.map(async (relation: RequiredRelation) => {
+      // Gap-fill only what this part of speech requires; an optional relation
+      // (noun word family, verb/adjective umbrella) is never chased here.
+      const missingRequired = requiredSupportRelationsFor(candidate.type).filter((relation) => !preliminary.some((term) => term.relation === relation));
+      const gapResults = await Promise.all(missingRequired.map(async (relation: MonthlyStructuralSupportRelation) => {
         try {
           const prompt = buildMonthlySupportRelationCandidatePrompt({
             cefr: input.cefr,
@@ -325,10 +331,13 @@ export async function runMonthlyCorePhase(input: {
       const synonymConflict = findMonthlyCoreSynonymConflict({ candidateWord: candidate.word, candidateSynonyms: auditedSynonyms, acceptedCores: accepted.map((other) => ({ word: other.core.word, synonyms: other.synonyms })) });
       if (synonymConflict) { failures.push(`${candidate.word}: synonym of accepted core ${synonymConflict}`); continue; }
       const selection = selectSupportsFor(candidate, audited, new Set([...coreWords, word]), acceptedSupports().map((term) => term.word));
-      const relations = new Set<MonthlySupportRelation>(selection.selected.map((term) => term.relation));
-      if (selection.selected.length < 3 || !MONTHLY_REQUIRED_SUPPORT_RELATIONS.every((relation) => relations.has(relation))) {
-        const summary = (terms: readonly SupportTerm[]) => MONTHLY_REQUIRED_SUPPORT_RELATIONS.map((relation) => `${relation}=${terms.filter((term) => term.relation === relation).map((term) => term.word).slice(0, 3).join("/") || "∅"}`).join(", ");
-        failures.push(`${candidate.word}: generated [${summary(entry.edges)}], audit kept [${summary(audited)}], selected [${summary(selection.selected)}]`);
+      // A core is accepted once it holds the relations its part of speech
+      // requires. The 3-supports-per-core minimum is filled and enforced by the
+      // enrichment phase (antonym, collocation or extra relations), so a core
+      // with exactly its two required relations is not rejected here.
+      if (!hasRequiredMonthlySupportRelations(candidate.type, selection.selected)) {
+        const summary = (terms: readonly SupportTerm[]) => MONTHLY_STRUCTURAL_SUPPORT_RELATIONS.map((relation) => `${relation}=${terms.filter((term) => term.relation === relation).map((term) => term.word).slice(0, 3).join("/") || "∅"}`).join(", ");
+        failures.push(`${candidate.word} (${candidate.type}; needs ${requiredSupportRelationsFor(candidate.type).join("+")}): generated [${summary(entry.edges)}], audit kept [${summary(audited)}], selected [${summary(selection.selected)}]`);
         continue;
       }
       accepted.push({ core: eligibleCore, supports: selection.selected, synonyms: auditedSynonyms });

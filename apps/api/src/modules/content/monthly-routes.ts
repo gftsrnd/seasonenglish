@@ -1,4 +1,4 @@
-import { buildMonthlyCalendar, buildMonthlyExamScope, maxMonthlyPhrasePlacements, maxMonthlySupportRepeats, monthlyDayKind, MONTHLY_MAX_SUPPORTS_PER_CORE, MONTHLY_MIN_SUPPORTS_PER_CORE, MONTHLY_REQUIRED_SUPPORT_RELATIONS, type MonthlyCurriculumContract } from "@e4s/domain";
+import { buildMonthlyCalendar, buildMonthlyExamScope, maxMonthlyPhrasePlacements, maxMonthlySupportRepeats, monthlyDayKind, MONTHLY_MAX_SUPPORTS_PER_CORE, MONTHLY_MIN_SUPPORTS_PER_CORE, hasRequiredMonthlySupportRelations, requiredSupportRelationsFor, type MonthlyCurriculumContract } from "@e4s/domain";
 import { monthlyResourcePlanOutputSchema, monthlyTopicSuggestionOutputSchema, type AiTaskRunner } from "@e4s/ai";
 import { createRepositories } from "@e4s/database";
 import { randomUUID } from "node:crypto";
@@ -8,10 +8,12 @@ import { z } from "zod";
 import { createRoleGuard } from "../identity/policy.js";
 import { evaluateMonthlyLessonQuality } from "./monthly-quality.js";
 import { generateMonthlyDayWithAi, generateMonthlyReviewWithAi, MONTHLY_DAY_COMPONENTS } from "./monthly-day-generation.js";
-import { buildMonthlyCoreCandidatesPrompt, buildMonthlyOptionalSupportPrompt, buildMonthlyPronunciationDistinctnessConstraint, buildMonthlyPronunciationSchemaRepairIssue, buildMonthlyResourcesFromAiPlan, buildMonthlySupportRelationAuditPrompt, buildMonthlySupportRelationCandidatePrompt, CURRENT_MONTHLY_RESOURCE_CHECKPOINT_SCHEMA_VERSIONS, doesMonthlyPronunciationExampleMatch, getMonthlyGrammarPhaseIssues, getMonthlyPronunciationTargetIssue, hasSingleCoreSense, isCurrentMonthlyResourceCheckpointCategory, collocationContainsCoreWord, isGenuineWordFamily, isMonthlyInflectionalVariant, isSingleHeadword, keepExactMonthlySupportRelationCandidates, keepSemanticallyAuditedSupportCandidates, MonthlyResourceCriteriaError, MonthlyResourcePlanError, parseMonthlyResourceAiOutput, prefilterMonthlySupportCandidatesForAudit, runMonthlyGrammarPhaseWithRetry, selectMonthlyCoreCandidates, selectMonthlyPronunciationCandidates, selectMonthlySupportCandidates } from "./monthly-resource-generation.js";
+import { buildMonthlyOptionalSupportPrompt, buildMonthlyPronunciationDistinctnessConstraint, buildMonthlyPronunciationSchemaRepairIssue, buildMonthlyResourcesFromAiPlan, buildMonthlySupportRelationAuditPrompt, buildMonthlySupportRelationCandidatePrompt, CURRENT_MONTHLY_RESOURCE_CHECKPOINT_SCHEMA_VERSIONS, doesMonthlyPronunciationExampleMatch, getMonthlyGrammarPhaseIssues, getMonthlyPronunciationTargetIssue, hasSingleCoreSense, isCurrentMonthlyResourceCheckpointCategory, isGenuineWordFamily, isSingleHeadword, keepExactMonthlySupportRelationCandidates, keepSemanticallyAuditedSupportCandidates, MonthlyResourceCriteriaError, MonthlyResourcePlanError, parseMonthlyResourceAiOutput, prefilterMonthlySupportCandidatesForAudit, runMonthlyGrammarPhaseWithRetry, screenCachedMonthlyCoreSupports, selectMonthlyPronunciationCandidates, selectMonthlySupportCandidates } from "./monthly-resource-generation.js";
 import { MonthlyCorePhaseShortfallError, runMonthlyCorePhase } from "./monthly-core-phase.js";
+import { runMonthlyEnrichmentWithRefill, type MonthlyCoreEnrichmentOutcome } from "./monthly-enrichment-phase.js";
 import { isPronunciationTargetAllowedForLevel, isValidMonthlyPronunciationIpaTarget } from "./monthly-resource-plan-spec.js";
 import { safeGenerationDiagnosticIssues } from "./generation-errors.js";
+import { applyMonthlyResourceEdit, monthlyResourceEditInputSchema } from "./monthly-resource-manual-edit.js";
 
 const params = z.object({ month: z.string().regex(/^\d{4}-(0[1-9]|1[0-2])$/u) });
 const frameworkParams = z.object({ id: z.uuid() });
@@ -166,8 +168,7 @@ export function registerMonthlyContentRoutes(app: FastifyInstance, pool: Pool, a
       && checkpointExpandedTerms.length <= counts.expandedTerms
       && checkpointCoreTerms.every((core) => {
         const supports = checkpointExpandedTerms.filter((term) => term.relatesToCoreId === core.id);
-        const relations = new Set(supports.map((term) => term.relation));
-        return supports.length >= MONTHLY_MIN_SUPPORTS_PER_CORE && supports.length <= MONTHLY_MAX_SUPPORTS_PER_CORE && MONTHLY_REQUIRED_SUPPORT_RELATIONS.every((relation) => relations.has(relation));
+        return supports.length >= MONTHLY_MIN_SUPPORTS_PER_CORE && supports.length <= MONTHLY_MAX_SUPPORTS_PER_CORE && hasRequiredMonthlySupportRelations(core.type, supports);
       });
     const categories = Object.fromEntries(Object.entries(counts).map(([key, target]) => {
       const categoryCurrent = isCurrentMonthlyResourceCheckpointCategory(key, checkpoint?.sourceLineage[key]);
@@ -321,22 +322,25 @@ export function registerMonthlyContentRoutes(app: FastifyInstance, pool: Pool, a
       if (!cachedCoreValid) coreTerms.length = 0;
       for (const term of coreTerms) coreWords.add(normalizeMonthlyResourceWord(term.word));
       const preflightSupportTarget = Math.min(MONTHLY_MAX_SUPPORTS_PER_CORE, Math.max(3, Math.floor(criteria.expandedVocabularyCount / (newLessonCount * 3))));
+      // Month-wide core selection: parallel generation, concurrent audit and
+      // gap-fill, then deterministic sequential selection (see monthly-core-phase.ts).
+      // Also used by enrichment to refill the slots of dropped cores.
+      const runCorePhase = (initial?: { coreTerms: typeof coreTerms; supportTerms: typeof preflightSupportTerms }, avoidWords: readonly string[] = []) => runMonthlyCorePhase({
+        cefr: criteria.cefr,
+        theme: { title: theme.title, communicationGoal: theme.communicationGoal },
+        neededCount: criteria.vocabularyCount,
+        maxRepeatedPlacements: maxExpandedRepeats,
+        maxPhrasePlacements: maxExpandedPhrases,
+        supportTargetPerCore: preflightSupportTarget,
+        generate: runPhase,
+        audit: runSupportAudit,
+        ...(initial?.coreTerms.length ? { initial } : {}),
+        ...(avoidWords.length ? { avoidWords } : {})
+      });
       if (!cachedCoreValid) {
-        // Month-wide core selection: parallel generation, concurrent audit and
-        // gap-fill, then deterministic sequential selection (see monthly-core-phase.ts).
         let corePhase: Awaited<ReturnType<typeof runMonthlyCorePhase>>;
         try {
-          corePhase = await runMonthlyCorePhase({
-            cefr: criteria.cefr,
-            theme: { title: theme.title, communicationGoal: theme.communicationGoal },
-            neededCount: criteria.vocabularyCount,
-            maxRepeatedPlacements: maxExpandedRepeats,
-            maxPhrasePlacements: maxExpandedPhrases,
-            supportTargetPerCore: preflightSupportTarget,
-            generate: runPhase,
-            audit: runSupportAudit,
-            ...(partialCores.length ? { initial: { coreTerms: partialCores, supportTerms: partialSupports } } : {})
-          });
+          corePhase = await runCorePhase(partialCores.length ? { coreTerms: partialCores, supportTerms: partialSupports } : undefined);
         } catch (error) {
           if (error instanceof MonthlyCorePhaseShortfallError && error.partial.coreTerms.length) {
             await saveCheckpointCategory("coreTerms", error.partial.coreTerms);
@@ -359,17 +363,13 @@ export function registerMonthlyContentRoutes(app: FastifyInstance, pool: Pool, a
       const expandedTerms: z.infer<typeof monthlyResourcePlanOutputSchema>["expandedTerms"] = [];
       for (const core of coreTerms) {
         // Quality rules A and C also apply to resumed supports: drop topic-only
-        // collocations and inflection-only duplicates, then refill them below.
-        const supports = (cachedSupportsByCore.get(core.id) ?? []).filter((term, index, list) => (term.relation !== "collocation" || collocationContainsCoreWord(core.word, term.word))
-          && !isMonthlyInflectionalVariant(term.word, core.word, { includeIng: term.relation !== "word_family" })
-          && !list.slice(0, index).some((earlier) => isMonthlyInflectionalVariant(term.word, earlier.word)));
-        const uniqueWords = new Set(supports.map((term) => normalizeMonthlyResourceWord(term.word)));
-        const validPartialSupports = supports.length <= 9
-          && uniqueWords.size === supports.length
-          && supports.every((term) => term.relatesToCoreId === core.id
-            && !coreWords.has(normalizeMonthlyResourceWord(term.word))
-            && (term.relation !== "word_family" || isGenuineWordFamily(core.word, term.word)));
-        if (validPartialSupports) expandedTerms.push(...supports);
+        // collocations, inflection-only duplicates and inflection-only word-family
+        // items (smaller for small, sending for send), plus umbrellas that are
+        // generic placeholders or the wrong part of speech for the core (a verb's
+        // umbrella is now a verb), then refill them below. The screen uses only
+        // rules the core phase also applies, and drops offending supports one by
+        // one, so a support the core phase accepted is never lost here.
+        expandedTerms.push(...screenCachedMonthlyCoreSupports(core, cachedSupportsByCore.get(core.id) ?? [], coreWords));
       }
       if (expandedTerms.length !== cachedExpanded.length) await saveCheckpointCategory("expandedTerms", expandedTerms);
       const supportLimitFor = (coreIndex: number) => Math.min(
@@ -377,14 +377,15 @@ export function registerMonthlyContentRoutes(app: FastifyInstance, pool: Pool, a
         Math.floor(criteria.expandedVocabularyCount / coreTerms.length) + (coreIndex < criteria.expandedVocabularyCount % coreTerms.length ? 1 : 0)
       );
       // A core is "complete" for resume purposes once it holds its requested
-      // support target. The hard floor is only the three required relations, so
-      // an incomplete core is enriched again but never fails for lacking extras.
+      // support target. The hard floor is three supports covering the relations
+      // its part of speech requires, so an incomplete core is enriched again but
+      // never fails for lacking extras.
       const isCompleteCoreSupportSet = (core: typeof coreTerms[number], coreIndex: number) => {
         const supports = expandedTerms.filter((term) => term.relatesToCoreId === core.id);
-        const relations = new Set(supports.map((term) => term.relation));
+        const familyRequired = requiredSupportRelationsFor(core.type).includes("word_family");
         return supports.length >= Math.max(MONTHLY_MIN_SUPPORTS_PER_CORE, supportLimitFor(coreIndex)) && supports.length <= MONTHLY_MAX_SUPPORTS_PER_CORE
-          && MONTHLY_REQUIRED_SUPPORT_RELATIONS.every((relation) => relations.has(relation))
-          && supports.some((term) => term.relation === "word_family" && isGenuineWordFamily(core.word, term.word));
+          && hasRequiredMonthlySupportRelations(core.type, supports)
+          && (!familyRequired || supports.some((term) => term.relation === "word_family" && isGenuineWordFamily(core.word, term.word)));
       };
       // Enrichment per core is mostly independent AI work, so cores run
       // concurrently in a small pool. Each core reads the shared pool as it
@@ -392,8 +393,15 @@ export function registerMonthlyContentRoutes(app: FastifyInstance, pool: Pool, a
       const firstIncompleteCore = coreTerms.findIndex((core, index) => !isCompleteCoreSupportSet(core, index));
       const enrichmentStartedAt = Date.now();
       const enrichmentStats = { generationCalls: 0, gapFillCalls: 0, auditCalls: 0, auditsSkippedByPrefilter: 0 };
-      const enrichCore = async (coreIndex: number) => {
-        let coreTerm = coreTerms[coreIndex]!;
+      // Required relations were already found in the core phase, so enrichment
+      // only retries a missing one briefly; a core that still lacks one is
+      // dropped and its slot refilled by the core phase (see
+      // runMonthlyEnrichmentWithRefill) instead of failing the whole request.
+      const ENRICHMENT_SUPPORT_PASSES = 2;
+      const ENRICHMENT_REQUIRED_RELATION_ATTEMPTS = 2;
+      const isInvalidAiOutputError = (error: unknown) => Boolean(error && typeof error === "object" && "code" in error && ["AI_OUTPUT_INVALID", "AI_OUTPUT_TRUNCATED"].includes(String((error as { code?: unknown }).code)));
+      const enrichCore = async (coreIndex: number): Promise<MonthlyCoreEnrichmentOutcome> => {
+        const coreTerm = coreTerms[coreIndex]!;
         const cachedTermsForCore = expandedTerms.filter((term) => term.relatesToCoreId === coreTerm.id);
         for (let index = expandedTerms.length - 1; index >= 0; index -= 1) {
           if (expandedTerms[index]!.relatesToCoreId === coreTerm.id) expandedTerms.splice(index, 1);
@@ -401,14 +409,15 @@ export function registerMonthlyContentRoutes(app: FastifyInstance, pool: Pool, a
         const supportLimitForCore = supportLimitFor(coreIndex);
         let acceptedForCore: z.infer<typeof monthlyResourcePlanOutputSchema>["expandedTerms"] | undefined;
         let lastIssue = "";
-        let replacementAttempt = 0;
-        let candidatesForCore = [...cachedTermsForCore];
-        while (!acceptedForCore) {
-          const requiredRelations = ["umbrella", "synonym", "word_family"] as const;
+        const candidatesForCore = [...cachedTermsForCore];
+        {
+          // Required relations follow the core's part of speech (noun: umbrella +
+          // synonym; verb/adjective/adverb: synonym + word family).
+          const requiredRelations = requiredSupportRelationsFor(coreTerm.type);
           const rejectedCandidatesByRelation = new Map<(typeof requiredRelations)[number], Set<string>>();
           const rejectedOptionalCandidates = new Set<string>();
           let optionalPreviousIssue = "";
-          for (let supportPassAttempt = 0; supportPassAttempt < 5 && !acceptedForCore; supportPassAttempt += 1) {
+          for (let supportPassAttempt = 0; supportPassAttempt < ENRICHMENT_SUPPORT_PASSES && !acceptedForCore; supportPassAttempt += 1) {
           let issue = "";
           for (const relation of requiredRelations) {
             if (candidatesForCore.some((term) => term.relation === relation)) continue;
@@ -416,7 +425,7 @@ export function registerMonthlyContentRoutes(app: FastifyInstance, pool: Pool, a
             let relationIssue = "";
             const rejectedCandidateWords = rejectedCandidatesByRelation.get(relation) ?? new Set<string>();
             rejectedCandidatesByRelation.set(relation, rejectedCandidateWords);
-            for (let attempt = 0; attempt < 3 && !relationAccepted; attempt += 1) {
+            for (let attempt = 0; attempt < ENRICHMENT_REQUIRED_RELATION_ATTEMPTS && !relationAccepted; attempt += 1) {
               const previousTerms = [...expandedTerms.map((term) => term.word), ...candidatesForCore.map((term) => term.word)];
               const prompt = buildMonthlySupportRelationCandidatePrompt({
                 cefr: criteria.cefr,
@@ -431,7 +440,14 @@ export function registerMonthlyContentRoutes(app: FastifyInstance, pool: Pool, a
                 candidateCount: 12
               });
               enrichmentStats.gapFillCalls += 1;
-              const result = await runPhase(prompt, [coreTerm], { vocabularyCount: 0, expandedVocabularyCount: 12, grammarTopicCount: 0, pronunciationSoundCount: 0 }, { temperature: 0.35 });
+              let result: z.infer<typeof monthlyResourcePlanOutputSchema>;
+              try {
+                result = await runPhase(prompt, [coreTerm], { vocabularyCount: 0, expandedVocabularyCount: 12, grammarTopicCount: 0, pronunciationSoundCount: 0 }, { temperature: 0.35 });
+              } catch (error) {
+                if (!isInvalidAiOutputError(error)) throw error;
+                relationIssue = `the ${relation} candidate request returned invalid output`;
+                continue;
+              }
               const exactRelationCandidates = keepExactMonthlySupportRelationCandidates(result.expandedTerms, relation, coreTerm.id);
               // Cheap deterministic screen (word family, collocation) before paying for an audit.
               const prefiltered = prefilterMonthlySupportCandidatesForAudit(coreTerm, exactRelationCandidates);
@@ -465,7 +481,7 @@ export function registerMonthlyContentRoutes(app: FastifyInstance, pool: Pool, a
                 });
                 auditResult = parseMonthlyResourceAiOutput(audited.output);
               } catch (error) {
-                if (error && typeof error === "object" && "code" in error && (error as { code?: unknown }).code === "AI_OUTPUT_INVALID") {
+                if (isInvalidAiOutputError(error)) {
                   result.expandedTerms.forEach((term) => rejectedCandidateWords.add(term.word));
                   relationIssue = `the independent semantic audit did not return a valid ${relation} review`;
                   continue;
@@ -518,7 +534,8 @@ export function registerMonthlyContentRoutes(app: FastifyInstance, pool: Pool, a
 
           // Required semantic relations are requested and audited separately so
           // the model cannot satisfy one relation by returning a synonym-heavy pool.
-          // Optional terms are generated only after the three required slots pass.
+          // Optional terms (including the optional structural relation for this
+          // part of speech) are generated only after the required slots pass.
           if (requiredRelations.every((relation) => candidatesForCore.some((term) => term.relation === relation))) {
             for (let optionalAttempt = 0; optionalAttempt < 3 && candidatesForCore.length < supportLimitForCore && candidatesForCore.length < 9; optionalAttempt += 1) {
               const optionalCount = Math.min(supportLimitForCore - candidatesForCore.length, 9 - candidatesForCore.length);
@@ -537,7 +554,15 @@ export function registerMonthlyContentRoutes(app: FastifyInstance, pool: Pool, a
                 candidateCount: 12
               });
               enrichmentStats.generationCalls += 1;
-              const result = await runPhase(optionalPrompt, [coreTerm], { vocabularyCount: 0, expandedVocabularyCount: optionalCount, grammarTopicCount: 0, pronunciationSoundCount: 0 });
+              let result: z.infer<typeof monthlyResourcePlanOutputSchema>;
+              try {
+                result = await runPhase(optionalPrompt, [coreTerm], { vocabularyCount: 0, expandedVocabularyCount: optionalCount, grammarTopicCount: 0, pronunciationSoundCount: 0 });
+              } catch (error) {
+                if (!isInvalidAiOutputError(error)) throw error;
+                issue = "optional support generation returned invalid output";
+                optionalPreviousIssue = issue;
+                continue;
+              }
               if (result.coreTerms.length || result.grammarTopics.length || result.pronunciationTargets.length) {
                 issue = "optional support generation returned non-support categories";
                 continue;
@@ -562,7 +587,7 @@ export function registerMonthlyContentRoutes(app: FastifyInstance, pool: Pool, a
                 });
                 auditResult = parseMonthlyResourceAiOutput(audited.output);
               } catch (error) {
-                if (error && typeof error === "object" && "code" in error && (error as { code?: unknown }).code === "AI_OUTPUT_INVALID") {
+                if (isInvalidAiOutputError(error)) {
                   issue = "optional support audit did not return a valid review";
                   optionalPreviousIssue = issue;
                   result.expandedTerms.forEach((term) => rejectedOptionalCandidates.add(term.word));
@@ -600,10 +625,10 @@ export function registerMonthlyContentRoutes(app: FastifyInstance, pool: Pool, a
               optionalPreviousIssue = issue || "some candidates were rejected by semantic audit or support-pool constraints";
             }
           }
-          const finalRelations = new Set(candidatesForCore.map((term) => term.relation));
-          const coreHasMinimumRelations = MONTHLY_REQUIRED_SUPPORT_RELATIONS.every((relation) => finalRelations.has(relation));
-          // Extra supports are attempted above but never forced: the three
-          // genuine required relations are the per-core minimum (VH-R33).
+          const coreHasMinimumRelations = hasRequiredMonthlySupportRelations(coreTerm.type, candidatesForCore);
+          // Extra supports are attempted above but never forced: three supports
+          // covering the relations required for the core's part of speech are
+          // the per-core minimum (VH-R33).
           if (candidatesForCore.length >= MONTHLY_MIN_SUPPORTS_PER_CORE && coreHasMinimumRelations) {
             acceptedForCore = candidatesForCore;
             break;
@@ -611,65 +636,38 @@ export function registerMonthlyContentRoutes(app: FastifyInstance, pool: Pool, a
           lastIssue = `Expanded vocabulary generation failed for core ${coreTerm.id} (${coreTerm.word}): ${issue || "required relation coverage was incomplete"}.`;
           await saveCheckpointCategory("expandedTerms", [...expandedTerms, ...candidatesForCore]);
           }
-          if (acceptedForCore || replacementAttempt >= 1) break;
-
-          // A core is replaced only after five distinct support passes have
-          // exhausted candidates for its exact meaning. Keep this to one
-          // evidence-backed replacement so a weak candidate prompt cannot
-          // silently churn through a succession of core words.
-          const oldCoreWord = normalizeMonthlyResourceWord(coreTerm.word);
-          const existingOtherCoreWords = new Set([
-            ...coreTerms.filter((_term, index) => index !== coreIndex).map((term) => normalizeMonthlyResourceWord(term.word)),
-            oldCoreWord,
-            ...expandedTerms.map((term) => normalizeMonthlyResourceWord(term.word))
-          ]);
-          const replacementPrompt = buildMonthlyCoreCandidatesPrompt({
-            cefr: criteria.cefr,
-            theme: theme.title,
-            communicationGoal: theme.communicationGoal,
-            existingCoreWords: [...existingOtherCoreWords],
-            batchNumber: coreIndex + 1,
-            neededCount: 1,
-            candidateCount: 12,
-            rejectedWords: [coreTerm.word],
-            previousIssue: `${lastIssue} Replace this core only with a distinct single-sense headword whose family form retains the exact meaning and whose umbrella and synonym have clear common examples.`
-          });
-          enrichmentStats.generationCalls += 1;
-          const replacementResult = await runPhase(replacementPrompt, [], { vocabularyCount: 12, expandedVocabularyCount: 0, grammarTopicCount: 0, pronunciationSoundCount: 0 });
-          const replacementSelection = selectMonthlyCoreCandidates({ candidates: replacementResult.coreTerms, existingCoreWords: existingOtherCoreWords, needed: 1, cefr: criteria.cefr });
-          if (replacementResult.expandedTerms.length || replacementResult.grammarTopics.length || replacementResult.pronunciationTargets.length || replacementSelection.selected.length !== 1) {
-            lastIssue += " A single replacement core candidate also failed validation.";
-            break;
-          }
-          // The level label only serves the screen above; stored cores keep their shape.
-          const { cefr: _replacementLevel, ...replacementCore } = replacementSelection.selected[0]!;
-          const replacement = { ...replacementCore, id: coreTerm.id };
-          coreWords.delete(oldCoreWord);
-          coreWords.add(normalizeMonthlyResourceWord(replacement.word));
-          coreTerms[coreIndex] = replacement;
-          coreTerm = replacement;
-          candidatesForCore = [];
-          await saveCheckpointCategory("expandedTerms", expandedTerms);
-          await saveCheckpointCategory("coreTerms", coreTerms);
-          replacementAttempt += 1;
         }
-        if (!acceptedForCore) throw new MonthlyResourcePlanError([lastIssue]);
+        if (!acceptedForCore) return { ok: false, issue: lastIssue || `Expanded vocabulary generation failed for core ${coreTerm.id} (${coreTerm.word}): required relation coverage was incomplete.` };
         const accepted = acceptedForCore.map((term, index) => ({ ...term, id: `${criteria.cefr.toLowerCase()}-expanded-${expandedTerms.length + index + 1}` }));
         expandedTerms.push(...accepted);
         await saveCheckpointCategory("expandedTerms", expandedTerms);
+        return { ok: true };
       };
+      let enrichmentRefill: Awaited<ReturnType<typeof runMonthlyEnrichmentWithRefill>> | undefined;
       if (firstIncompleteCore >= 0) {
-        const pendingCoreIndexes = coreTerms.map((_core, index) => index).filter((index) => index >= firstIncompleteCore);
-        const ENRICHMENT_CONCURRENCY = 6;
-        let nextPending = 0;
-        const worker = async () => {
-          while (nextPending < pendingCoreIndexes.length) {
-            const coreIndex = pendingCoreIndexes[nextPending]!;
-            nextPending += 1;
-            await enrichCore(coreIndex);
-          }
-        };
-        await Promise.all(Array.from({ length: Math.min(ENRICHMENT_CONCURRENCY, pendingCoreIndexes.length) }, worker));
+        // Enrich concurrently; a core that cannot keep its required relations is
+        // dropped and its slot refilled by the core phase (bounded cycles). When
+        // cores are still missing, the accepted cores and supports are saved and
+        // a shortfall error asks the Operator to run generation again.
+        enrichmentRefill = await runMonthlyEnrichmentWithRefill({
+          cefr: criteria.cefr,
+          neededCount: criteria.vocabularyCount,
+          coreTerms,
+          expandedTerms,
+          firstPendingIndex: firstIncompleteCore,
+          enrichCore,
+          refill: (initial, avoidWords) => runCorePhase(initial, avoidWords),
+          save: async (state) => {
+            await saveCheckpointCategory("coreTerms", state.coreTerms);
+            await saveCheckpointCategory("expandedTerms", state.supportTerms);
+          },
+          onCoresChanged: () => {
+            coreWords.clear();
+            for (const term of coreTerms) coreWords.add(normalizeMonthlyResourceWord(term.word));
+          },
+          concurrency: 6,
+          maxRefillCycles: 3
+        });
         // Concurrent cores can each pick the same optional word. Drop surplus
         // optional repeats (never a core's only support of a required relation,
         // never below three supports) until the 35% ceiling holds again.
@@ -680,13 +678,14 @@ export function registerMonthlyContentRoutes(app: FastifyInstance, pool: Pool, a
           if (expandedTerms.filter((other) => normalizeMonthlyResourceWord(other.word) === word).length < 2) continue;
           const sameCore = expandedTerms.filter((other) => other.relatesToCoreId === term.relatesToCoreId);
           const sameRelation = sameCore.filter((other) => other.relation === term.relation);
-          const isRequired = (MONTHLY_REQUIRED_SUPPORT_RELATIONS as readonly string[]).includes(term.relation);
+          const termCore = coreTerms.find((core) => core.id === term.relatesToCoreId);
+          const isRequired = (requiredSupportRelationsFor(termCore?.type) as readonly string[]).includes(term.relation);
           if (sameCore.length <= MONTHLY_MIN_SUPPORTS_PER_CORE || (isRequired && sameRelation.length < 2)) continue;
           expandedTerms.splice(index, 1);
         }
         await saveCheckpointCategory("expandedTerms", expandedTerms);
       }
-      request.log.info({ month: month.month, cefr: criteria.cefr, phase: "enrichment", enrichedCores: firstIncompleteCore >= 0 ? coreTerms.length - firstIncompleteCore : 0, supports: expandedTerms.length, ...enrichmentStats, elapsedMs: Date.now() - enrichmentStartedAt }, "Monthly resource enrichment phase finished");
+      request.log.info({ month: month.month, cefr: criteria.cefr, phase: "enrichment", enrichedCores: firstIncompleteCore >= 0 ? coreTerms.length - firstIncompleteCore : 0, supports: expandedTerms.length, ...enrichmentStats, refillCycles: enrichmentRefill?.refillCycles ?? 0, refilledCores: enrichmentRefill?.refilledCores ?? 0, droppedCores: enrichmentRefill?.droppedCores ?? [], elapsedMs: Date.now() - enrichmentStartedAt }, "Monthly resource enrichment phase finished");
 
       const monthlyVocabularyForPronunciation = [...coreTerms, ...expandedTerms].map((term) => `${term.word} (${term.meaning})`).join("; ");
       const cachedGrammarTopics = readCheckpointCategory("grammarTopics", monthlyResourcePlanOutputSchema.shape.grammarTopics) ?? [];
@@ -814,6 +813,33 @@ export function registerMonthlyContentRoutes(app: FastifyInstance, pool: Pool, a
       throw error;
     }
     return reply.code(204).send();
+  });
+
+  // VH-R30/VH-R35: the Operator hand-edits a DRAFT resource pool. Approved
+  // resources stay locked; reopening them goes through a Manager request.
+  app.put("/api/v1/content/month-frameworks/:id/resources", { preHandler: contentOperator }, async (request, reply) => {
+    const { id } = frameworkParams.parse(request.params);
+    const actorId = request.e4sSession!.user.id;
+    const parsed = monthlyResourceEditInputSchema.safeParse(request.body);
+    if (!parsed.success) {
+      return reply.code(422).send({
+        code: "MONTHLY_RESOURCE_EDIT_INVALID",
+        issues: parsed.error.issues.map((issue) => ({ section: "pool", message: `${issue.path.join(".")}: ${issue.message}` }))
+      });
+    }
+    const draft = await repositories.monthlyContent.getResourceDraftForEdit(actorId, id);
+    if (!draft || draft.status === "retired") return reply.code(404).send({ code: "MONTHLY_FRAMEWORK_NOT_FOUND" });
+    if (draft.status !== "draft") return reply.code(409).send({ code: "MONTHLY_FRAMEWORK_IMMUTABLE" });
+    if (!draft.writable) return reply.code(409).send({ code: "MONTHLY_CONTENT_READ_ONLY" });
+    if (draft.version !== parsed.data.expectedVersion) return reply.code(409).send({ code: "MONTHLY_FRAMEWORK_VERSION_CONFLICT", currentVersion: draft.version });
+    const edited = applyMonthlyResourceEdit(draft.pool, parsed.data);
+    if (!edited.ok) return reply.code(422).send({ code: "MONTHLY_RESOURCE_EDIT_INVALID", issues: edited.issues });
+    try {
+      return await repositories.monthlyContent.saveEditedResourceDraft(actorId, id, parsed.data.expectedVersion, edited.pool);
+    } catch (error) {
+      if (error instanceof RangeError) return reply.code(422).send({ code: "MONTHLY_RESOURCE_EDIT_INVALID", issues: [{ section: "pool", message: error.message }] });
+      throw error;
+    }
   });
 
   app.get("/api/v1/content/month-frameworks/:id/exam-scope", { preHandler: operator }, async (request, reply) => {

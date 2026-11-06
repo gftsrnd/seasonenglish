@@ -47,10 +47,75 @@ export interface SupportTerm {
 
 export const MONTHLY_SUPPORT_RELATIONS = ["umbrella", "synonym", "antonym", "word_family", "collocation"] as const;
 export type MonthlySupportRelation = (typeof MONTHLY_SUPPORT_RELATIONS)[number];
-/** Every core needs one genuine support for each of these relations; this is also the per-core minimum. */
-export const MONTHLY_REQUIRED_SUPPORT_RELATIONS = ["umbrella", "synonym", "word_family"] as const satisfies readonly MonthlySupportRelation[];
-export const MONTHLY_MIN_SUPPORTS_PER_CORE = MONTHLY_REQUIRED_SUPPORT_RELATIONS.length;
+/**
+ * The three structural support relations. Which of them a core must have
+ * depends on its part of speech (see `requiredSupportRelationsFor`); a core
+ * whose part of speech cannot be read still needs all three.
+ */
+export const MONTHLY_STRUCTURAL_SUPPORT_RELATIONS = ["umbrella", "synonym", "word_family"] as const satisfies readonly MonthlySupportRelation[];
+export type MonthlyStructuralSupportRelation = (typeof MONTHLY_STRUCTURAL_SUPPORT_RELATIONS)[number];
+export type MonthlyCorePartOfSpeech = "noun" | "verb" | "adjective" | "adverb";
+
+/**
+ * Required support relations per core part of speech, following WordNet:
+ * nouns are organised by hypernymy (umbrella) and synonymy, so a noun needs an
+ * umbrella and a synonym and takes a word family only when a common one exists;
+ * verbs, adjectives and adverbs have no reliable noun-style hypernym, so they
+ * need a synonym and a word family and take an umbrella only when a genuine one exists.
+ */
+export const MONTHLY_REQUIRED_SUPPORT_RELATIONS_BY_POS: Readonly<Record<MonthlyCorePartOfSpeech, readonly MonthlyStructuralSupportRelation[]>> = {
+  noun: ["umbrella", "synonym"],
+  verb: ["synonym", "word_family"],
+  adjective: ["synonym", "word_family"],
+  adverb: ["synonym", "word_family"]
+};
+/** Every core needs at least this many supports, whatever its part of speech. */
+export const MONTHLY_MIN_SUPPORTS_PER_CORE = 3;
 export const MONTHLY_MAX_SUPPORTS_PER_CORE = 9;
+
+/**
+ * Reads a core's single part of speech from its `type` label ("noun", "Verb",
+ * "adj."). Returns undefined for an empty, unknown or mixed label ("noun/verb").
+ */
+export function monthlyCorePartOfSpeech(type: string | undefined): MonthlyCorePartOfSpeech | undefined {
+  const tokens = (type ?? "").toLocaleLowerCase("en").split(/[^a-z]+/u).filter(Boolean);
+  const found = new Set<MonthlyCorePartOfSpeech>();
+  for (const token of tokens) {
+    if (token === "noun" || token === "n") found.add("noun");
+    else if (token === "verb" || token === "v") found.add("verb");
+    else if (token === "adjective" || token === "adj") found.add("adjective");
+    else if (token === "adverb" || token === "adv") found.add("adverb");
+  }
+  return found.size === 1 ? [...found][0] : undefined;
+}
+
+/**
+ * Support relations a core of this part of speech must have (noun: umbrella +
+ * synonym; verb/adjective/adverb: synonym + word family). An unknown or mixed
+ * part of speech keeps the strict legacy set (umbrella, synonym, word family).
+ */
+export function requiredSupportRelationsFor(type: string | undefined): readonly MonthlyStructuralSupportRelation[] {
+  const pos = monthlyCorePartOfSpeech(type);
+  return pos ? MONTHLY_REQUIRED_SUPPORT_RELATIONS_BY_POS[pos] : MONTHLY_STRUCTURAL_SUPPORT_RELATIONS;
+}
+
+/** Structural relations that are optional for this part of speech but taken when a genuine one exists (noun: word family; verb/adjective/adverb: umbrella). */
+export function optionalStructuralSupportRelationsFor(type: string | undefined): readonly MonthlyStructuralSupportRelation[] {
+  const required = requiredSupportRelationsFor(type);
+  return MONTHLY_STRUCTURAL_SUPPORT_RELATIONS.filter((relation) => !required.includes(relation));
+}
+
+/** Whether `terms` cover every relation required for a core of this part of speech. */
+export function hasRequiredMonthlySupportRelations(coreType: string | undefined, terms: readonly { relation: string }[]): boolean {
+  const relations = new Set(terms.map((term) => term.relation));
+  return requiredSupportRelationsFor(coreType).every((relation) => relations.has(relation));
+}
+
+/** Human-readable list of the required relations ("umbrella and synonym"). */
+export function describeRequiredSupportRelations(coreType: string | undefined): string {
+  const labels = requiredSupportRelationsFor(coreType).map((relation) => relation === "word_family" ? "word-family" : relation);
+  return labels.length <= 2 ? labels.join(" and ") : `${labels.slice(0, -1).join(", ")}, and ${labels.at(-1)}`;
+}
 /** Repeated support placements (same normalized word on several cores) may not exceed this share of the month's supports. */
 export const MONTHLY_SUPPORT_REPEAT_CEILING = 0.35;
 const MONTHLY_CEFR_ORDER = ["A1", "A2", "B1", "B2", "C1"] as const satisfies readonly CefrLevel[];
@@ -227,8 +292,8 @@ export function recommendedMonthlyResourceCriteria(month: string, cefr: CefrLeve
   return {
     vocabularyCount: newLessonCount * 3,
     // Nine supports per core is the quality ceiling and the generation target;
-    // generation may return as few as the three required relations (umbrella,
-    // synonym, word family) when no further authentic relation exists.
+    // generation may return as few as three supports covering the relations
+    // required for the core's part of speech when no further authentic relation exists.
     expandedVocabularyCount: newLessonCount * 3 * MONTHLY_MAX_SUPPORTS_PER_CORE,
     grammarTopicCount: 2,
     pronunciationSoundCount: 4
@@ -302,7 +367,7 @@ export function buildMonthlyCurriculum(input: MonthlyCurriculumInput): MonthlyCu
   if (input.grammarTopics.some((topic) => topic.steps.length !== 3)) throw new RangeError("Every grammar topic needs exactly three ordered steps");
   for (const core of input.coreTerms) {
     const related = input.supportTerms.filter((term) => term.relatedCoreTermId === core.id);
-    if (related.length < MONTHLY_MIN_SUPPORTS_PER_CORE || related.length > MONTHLY_MAX_SUPPORTS_PER_CORE || !hasRequiredSupportRelations(related)) throw new RangeError(`Core term ${core.id} needs 3-9 supports including umbrella, synonym, and word family`);
+    if (related.length < MONTHLY_MIN_SUPPORTS_PER_CORE || related.length > MONTHLY_MAX_SUPPORTS_PER_CORE || !hasRequiredMonthlySupportRelations(core.type, related)) throw new RangeError(`Core term ${core.id} needs 3-9 supports including ${describeRequiredSupportRelations(core.type)}`);
     if (related.filter(countsTowardCorePhraseLimit).length > 1) throw new RangeError(`Core term ${core.id} may have at most one multi-word expanded expression`);
   }
 
@@ -398,7 +463,7 @@ export function planMonthlyResourcePool(pool: MonthlyResourcePoolContract): Mont
   for (const core of pool.coreTerms) {
     if ((supportCounts.get(core.id) ?? 0) < MONTHLY_MIN_SUPPORTS_PER_CORE || (supportCounts.get(core.id) ?? 0) > MONTHLY_MAX_SUPPORTS_PER_CORE) errors.push(`Core term ${core.id} must have 3-9 related expanded terms.`);
     const linkedTerms = pool.supportTerms.filter((term) => term.relatedCoreTermId === core.id);
-    if (!hasRequiredSupportRelations(linkedTerms)) errors.push(`Core term ${core.id} needs umbrella, synonym, and word-family supports.`);
+    if (!hasRequiredMonthlySupportRelations(core.type, linkedTerms)) errors.push(`Core term ${core.id} needs ${describeRequiredSupportRelations(core.type)} supports.`);
     if ((phraseCountByCore.get(core.id) ?? 0) > 1) errors.push(`Core term ${core.id} may have at most one multi-word expanded expression.`);
   }
   if (expandedRepeatCount(pool.supportTerms.map((term) => normalize(term.word))) > maxMonthlySupportRepeats(pool.supportTerms.length)) {
@@ -561,7 +626,7 @@ export function validateMonthlyCurriculum(contract: MonthlyCurriculumContract): 
   for (const core of contract.coreTerms) {
     const related = contract.supportTerms.filter((term) => term.relatedCoreTermId === core.id);
     if (related.length < MONTHLY_MIN_SUPPORTS_PER_CORE || related.length > MONTHLY_MAX_SUPPORTS_PER_CORE) errors.push(`Core term ${core.id} needs 3-9 linked expanded terms`);
-    if (!hasRequiredSupportRelations(related)) errors.push(`Core term ${core.id} needs umbrella, synonym, and word-family supports`);
+    if (!hasRequiredMonthlySupportRelations(core.type, related)) errors.push(`Core term ${core.id} needs ${describeRequiredSupportRelations(core.type)} supports`);
     if (related.filter(countsTowardCorePhraseLimit).length > 1) errors.push(`Core term ${core.id} may have at most one multi-word expanded expression`);
   }
   if (contract.daySpecs.length !== calendar.lessonCount) errors.push("Day specification count does not match monthly calendar");
@@ -702,11 +767,6 @@ function mondayOfWeek(date: string): string {
 function isFirstMonthFriday(date: string, calendar: MonthlyCalendar): boolean {
   const first = new Date(`${calendar.month}-01T12:00:00Z`);
   return date === calendar.effectiveDays[0] && first.getUTCDay() === 5;
-}
-
-function hasRequiredSupportRelations(terms: readonly Pick<SupportTerm, "relation">[]): boolean {
-  const relations = new Set(terms.map((term) => term.relation));
-  return MONTHLY_REQUIRED_SUPPORT_RELATIONS.every((relation) => relations.has(relation));
 }
 
 function expectedGrammarSteps(ordinal: number, topics: readonly GrammarTopic[]): GrammarStep[] {

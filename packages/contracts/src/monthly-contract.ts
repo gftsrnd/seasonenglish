@@ -79,6 +79,29 @@ export interface MonthFrameworkView {
   reopenRequest?: MonthFrameworkReopenRequestView | null;
 }
 
+/**
+ * Operator manual edit of a DRAFT monthly resource pool (VH-R30/VH-R35).
+ * Core count and core IDs are fixed; a core word is replaced by editing its row.
+ * New support terms and pronunciation examples carry client-generated unique IDs.
+ */
+export interface MonthlyResourceEditInput {
+  /** Framework version the editor was opened on; a stale version is rejected. */
+  expectedVersion: number;
+  coreTerms: Array<{ id: string; word: string; type: string; meaning: string; ipa: string }>;
+  supportTerms: Array<{ id: string; word: string; meaning: string; type: string; relation: "umbrella" | "synonym" | "antonym" | "word_family" | "collocation"; relatedCoreTermId: string; cefr?: CefrLevel | undefined }>;
+  grammarTopics: Array<{ id: string; title: string; steps: Array<{ id: string; focus: string; formula: string; usage: string; examples: string[] }> }>;
+  sounds: Array<{ id: string; ipa: string; label: string; examples: Array<{ id: string; word: string; ipa: string }> }>;
+}
+
+/** One validation problem in an edited pool, anchored to the row the UI shows it on. */
+export interface MonthlyResourceEditIssue {
+  section: "coreTerms" | "supportTerms" | "grammarTopics" | "sounds" | "pool";
+  /** Core/support term ID, grammar topic or step ID, sound or sound example ID; absent for pool-wide rules. */
+  rowId?: string;
+  field?: string;
+  message: string;
+}
+
 export interface MonthFrameworkReopenRequestView {
   id: string;
   /** Framework version the request was made against. */

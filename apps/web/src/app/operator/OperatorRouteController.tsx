@@ -283,6 +283,17 @@ function MonthsRoute({ client, readOnly, preview }: { client: OperatorApiClient;
         return result;
       },
       onApproveFramework: async (id) => { await run(() => client.approveContentMonthFramework(id), "Đã chốt tài nguyên tháng."); },
+      // The editor needs the API error (per-row issues), so this does not go through run().
+      ...(typeof client.saveContentMonthResources === "function" ? {
+        onSaveResources: async (id: string, input: import("@e4s/contracts").MonthlyResourceEditInput) => {
+          setBusy(true); setError(undefined);
+          try {
+            await client.saveContentMonthResources!(id, input);
+            await load();
+            toast.show({ message: "Đã lưu bản nháp tài nguyên tháng.", tone: "ok" });
+          } finally { setBusy(false); }
+        }
+      } : {}),
       onRequestResourcesReopen: async (id, reason) => {
         const result = await run(() => client.requestContentMonthResourcesReopen(id, reason), "Đã gửi yêu cầu mở lại tài nguyên tới Quản lý.");
         if (!result) throw new Error("Không gửi được yêu cầu mở lại tài nguyên tháng.");

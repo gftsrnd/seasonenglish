@@ -26,7 +26,8 @@ import {
   parseMonthlyResourceAiOutput,
   selectMonthlyCoreCandidates,
   selectMonthlyPronunciationCandidates,
-  selectMonthlySupportCandidates
+  selectMonthlySupportCandidates,
+  monthlySupportQualityIssue
 } from "./monthly-resource-generation.js";
 
 const month = "2026-11";
@@ -194,7 +195,7 @@ describe("monthly AI resource generation", () => {
     expect(MONTHLY_RESOURCE_PLAN_SYSTEM_PROMPT).not.toContain("return 12 ordered");
   });
 
-  it("frames verb umbrellas as broader action categories in both generation and audit prompts", () => {
+  it("frames umbrellas by part of speech (WordNet) in both generation and audit prompts", () => {
     const shared = {
       cefr: "A1",
       core: { id: "core-write", word: "write", meaning: "viết", type: "verb" },
@@ -207,11 +208,41 @@ describe("monthly AI resource generation", () => {
       core: shared.core,
       candidates: []
     });
-    expect(generationPrompt).toContain("a genuine broader noun category for the action in this exact verb sense");
-    expect(generationPrompt).toContain("writing is an activity");
-    expect(generationPrompt).toContain("natural two-to-four-word noun phrase");
-    expect(auditPrompt).toContain("writing is a kind of [candidate]");
-    expect(auditPrompt).not.toContain("writeing");
+    // Verb: troponym parent, a more general VERB.
+    expect(generationPrompt).toContain("Return only a more general VERB that this verb is a way of doing");
+    expect(generationPrompt).toContain("“To write is a way to [candidate]”");
+    expect(generationPrompt).toContain("email -> send, whisper -> speak, cancel -> stop, review -> check");
+    expect(generationPrompt).toContain("Never return a noun category (activity, communication");
+    expect(generationPrompt).toContain("The umbrella relation is optional for a verb");
+    expect(auditPrompt).toContain("“To write is a way to [candidate]”");
+    expect(auditPrompt).toContain("the candidate is a more general VERB");
+    expect(auditPrompt).not.toContain("is a kind of [candidate]");
+    expect(auditPrompt).not.toContain("office -> workplace");
+
+    // Adjective/adverb: the attribute noun it describes.
+    const adjective = { ...shared, core: { id: "core-small", word: "small", meaning: "nhỏ", type: "adjective" } };
+    const adjectiveGeneration = buildMonthlySupportRelationCandidatePrompt({ ...adjective, relation: "umbrella" });
+    expect(adjectiveGeneration).toContain("Return only the attribute NOUN this word describes: “small describes [candidate]”");
+    expect(adjectiveGeneration).toContain("small -> size, easy -> difficulty, happy -> mood, late -> time");
+    const adjectiveAudit = buildMonthlySupportRelationAuditPrompt({ core: adjective.core, candidates: [] });
+    expect(adjectiveAudit).toContain("“small describes [candidate]”");
+    expect(buildMonthlySupportRelationAuditPrompt({ core: { word: "late", meaning: "muộn", type: "adverb" }, candidates: [] })).toContain("“late describes [candidate]”");
+
+    // Noun: hypernym, group noun phrase allowed.
+    const noun = { ...shared, core: { id: "core-email", word: "email", meaning: "thư điện tử", type: "noun" } };
+    const nounGeneration = buildMonthlySupportRelationCandidatePrompt({ ...noun, relation: "umbrella" });
+    expect(nounGeneration).toContain("“A email is a kind of [candidate]”");
+    expect(nounGeneration).toContain("natural two-to-four-word noun phrase");
+    expect(nounGeneration).not.toContain("is optional");
+    expect(buildMonthlySupportRelationAuditPrompt({ core: noun.core, candidates: [] })).toContain("“A email is a kind of [candidate]”");
+
+    // Every umbrella prompt bans generic placeholders.
+    for (const prompt of [generationPrompt, auditPrompt, adjectiveGeneration, adjectiveAudit, nounGeneration]) {
+      expect(prompt).toContain("Never use a generic placeholder as an umbrella");
+    }
+    // A noun's word family is optional, a verb's is required.
+    expect(buildMonthlySupportRelationCandidatePrompt({ ...noun, relation: "word_family" })).toContain("The word_family relation is optional for a noun");
+    expect(buildMonthlySupportRelationCandidatePrompt({ ...shared, relation: "word_family" })).not.toContain("is optional");
   });
 
   it("requires the exact remaining support count while keeping antonyms optional", () => {
@@ -228,7 +259,13 @@ describe("monthly AI resource generation", () => {
     });
     expect(prompt).toContain("generate up to 12 distinct authentic expandedTerms candidates");
     expect(prompt).toContain("select up to 3 additional valid supports");
-    expect(prompt).toContain("the three required relations already meet the per-core minimum");
+    expect(prompt).toContain("The separately audited synonym and word-family supports required for this part of speech already exist");
+    expect(prompt).toContain("the core needs at least 3 supports in total");
+    expect(prompt).toContain("First check for a genuine umbrella support, which is optional for this part of speech");
+    expect(prompt).toContain("“To <core> is a way to <umbrella>”");
+    const nounPrompt = buildMonthlyOptionalSupportPrompt({ cefr: "A1", core: { id: "core-plan", word: "plan", meaning: "kế hoạch", type: "noun" }, theme: "At Work", requestedCount: 2, forbiddenCoreWords: [], existingSupportWords: [] });
+    expect(nounPrompt).toContain("The separately audited umbrella and synonym supports required for this part of speech already exist");
+    expect(nounPrompt).toContain("First check for a genuine word_family support");
     expect(prompt).toContain("the per-core total must never exceed 9");
     expect(prompt).not.toContain("at least six");
     expect(prompt).toContain("Support words may be at CEFR A1, A2");
@@ -242,7 +279,7 @@ describe("monthly AI resource generation", () => {
 
   it("selects the six valid mandatory and optional supports without requiring nine", () => {
     const candidates = [
-      ["umbrella", "property", "noun"], ["synonym", "fast", "adjective"], ["word_family", "quickly", "adverb"],
+      ["umbrella", "speed", "noun"], ["synonym", "fast", "adjective"], ["word_family", "quickly", "adverb"],
       ["word_family", "quickness", "noun"], ["antonym", "slow", "adjective"], ["synonym", "speedy", "adjective"]
     ] as const;
     const result = selectMonthlySupportCandidates({
@@ -259,8 +296,10 @@ describe("monthly AI resource generation", () => {
       needed: 9
     });
 
-    expect(result.selected).toHaveLength(6);
-    expect(result.selected.map((term) => term.relation)).toEqual(expect.arrayContaining(["umbrella", "synonym", "word_family"]));
+    // Adjective cores take no umbrella (quality rule 2), so 5 of the 6 are kept.
+    expect(result.selected).toHaveLength(5);
+    expect(result.selected.map((term) => term.relation)).toEqual(expect.arrayContaining(["synonym", "word_family"]));
+    expect(result.selected.some((term) => term.relation === "umbrella")).toBe(false);
     expect(result.rejected.some((issue) => issue.includes("missing required"))).toBe(false);
   });
 
@@ -450,8 +489,9 @@ describe("monthly AI resource generation", () => {
     expect(retryPrompt).toContain("Select only authentic level-appropriate English");
     expect(retryPrompt).toContain("Assign exactly one part of speech");
     expect(retryPrompt).toContain("one clear, common workplace sense");
-    expect(retryPrompt).toContain("silently identify all three for the exact meaning");
-    expect(retryPrompt).toContain("a genuine umbrella category, a natural same-sense synonym, and a common derivational word-family item");
+    expect(retryPrompt).toContain("silently identify them for the exact meaning");
+    expect(retryPrompt).toContain("a noun a genuine umbrella category and a natural same-sense synonym; a verb, adjective or adverb a natural same-sense synonym and a common derivational word-family item");
+    expect(retryPrompt).toContain("“To <core> is a way to <umbrella>”");
     expect(retryPrompt).toContain("pay → payment");
     expect(retryPrompt).not.toContain("update → updater");
   });
@@ -467,20 +507,31 @@ describe("monthly AI resource generation", () => {
       preflightRelations: true
     });
     expect(prompt).toContain("only their mandatory expandedTerms preflight edges");
-    expect(prompt).toContain("For EVERY core candidate, return exactly three authentic supports");
-    expect(prompt).toContain("one umbrella, one same-sense synonym, and one common word_family item");
+    expect(prompt).toContain("For EVERY core candidate, return three authentic supports covering the relations its part of speech requires");
+    expect(prompt).toContain("for a noun, one umbrella, one same-sense synonym, and one common word_family item when one exists");
+    expect(prompt).toContain("for a verb, adjective or adverb, one same-sense synonym, one common word_family item, and one genuine umbrella when one exists");
     expect(prompt).toContain("linked using that candidate's exact coreTerms.id");
-    expect(prompt).toContain("If a candidate cannot support all three, omit its core and all its edges");
+    expect(prompt).toContain("If a candidate cannot support the relations its part of speech requires, omit its core and all its edges");
+    expect(prompt).toContain("“To <core> is a way to <umbrella>”");
+    expect(prompt).toContain("“<core> describes <umbrella>”");
+    expect(prompt).toContain("never the comparative or superlative of an adjective (smaller, easier)");
   });
 
-  it("rejects core headwords without a clear derivational family", () => {
-    const result = selectMonthlyCoreCandidates({
+  it("rejects headwords without a clear derivational family only when their part of speech needs one", () => {
+    // A noun core needs no word family, so feedback and deadline are acceptable nouns.
+    const nouns = selectMonthlyCoreCandidates({
       candidates: ["feedback", "deadline", "date"].map((word) => ({ id: word, word, meaning: "", type: "noun", ipa: "/t/" })),
       existingCoreWords: new Set(),
       needed: 3
     });
-    expect(result.selected.map((term) => term.word)).toEqual(["date"]);
-    expect(result.rejected).toHaveLength(2);
+    expect(nouns.selected.map((term) => term.word)).toEqual(["feedback", "deadline", "date"]);
+    const verb = selectMonthlyCoreCandidates({
+      candidates: [{ id: "feedback", word: "feedback", meaning: "", type: "verb", ipa: "/t/" }],
+      existingCoreWords: new Set(),
+      needed: 1
+    });
+    expect(verb.selected).toHaveLength(0);
+    expect(verb.rejected[0]).toContain("does not have a clear, common derivational word family");
   });
 
   it("rejects multi-sense core entries that confuse relation audits", () => {
@@ -514,6 +565,8 @@ describe("monthly AI resource generation", () => {
     const generated = [
         { id: "x1", word: "document", meaning: "tài liệu", type: "noun", relation: "umbrella" as const, relatesToCoreId: "core-a" },
         { id: "x4", word: "activity", meaning: "", type: "noun", relation: "umbrella", relatesToCoreId: "core-a" },
+        { id: "x5", word: "communication", meaning: "", type: "noun", relation: "umbrella", relatesToCoreId: "core-a" },
+        { id: "x6", word: "communicate", meaning: "", type: "verb", relation: "umbrella", relatesToCoreId: "core-a" },
         { id: "x2", word: "write up", meaning: "", type: "verb", relation: "synonym", relatesToCoreId: "core-a" },
         { id: "x3", word: "writer", meaning: "", type: "noun", relation: "word_family", relatesToCoreId: "core-a" }
     ] as const;
@@ -531,16 +584,19 @@ describe("monthly AI resource generation", () => {
       maxPhrasePlacements: 36,
       needed: 3
     });
-    expect(result.selected.map((term) => term.word)).toEqual(expect.arrayContaining(["activity", "write up", "writer"]));
-    expect(result.selected).toHaveLength(3);
+    // A verb's umbrella is a more general verb; a noun category or a generic placeholder is rejected.
+    expect(result.selected.map((term) => term.word)).toEqual(["write up", "writer", "communicate"]);
     expect(candidates.map((term) => term.word)).not.toContain("document");
+    expect(result.rejected).toContain("activity -> activity (is a generic placeholder, not a genuine umbrella for this core)");
+    expect(result.rejected).toContain("communication -> communication (part of speech does not match the core sense for this relation)");
   });
 
-  it("accepts a true quality noun as the umbrella for an adjective core", () => {
+  it("keeps no umbrella for an adjective core, even a valid attribute noun", () => {
     const result = selectMonthlySupportCandidates({
       candidates: [
         { id: "x0", word: "cautious", meaning: "thận trọng", type: "adjective", relation: "umbrella", relatesToCoreId: "core-a" },
         { id: "x1", word: "property", meaning: "", type: "noun", relation: "umbrella", relatesToCoreId: "core-a" },
+        { id: "x4", word: "speed", meaning: "", type: "noun", relation: "umbrella", relatesToCoreId: "core-a" },
         { id: "x2", word: "fast", meaning: "", type: "adjective", relation: "synonym", relatesToCoreId: "core-a" },
         { id: "x3", word: "quickly", meaning: "", type: "adverb", relation: "word_family", relatesToCoreId: "core-a" }
       ],
@@ -555,8 +611,10 @@ describe("monthly AI resource generation", () => {
       maxPhrasePlacements: 36,
       needed: 3
     });
-    expect(result.selected.map((term) => term.word)).toEqual(["fast", "quickly", "property"]);
-    expect(result.rejected).toContain("cautious -> cautious (part of speech does not match the core sense for this relation)");
+    expect(result.selected.map((term) => term.word)).toEqual(["fast", "quickly"]);
+    expect(result.rejected).toContain("property -> property (is a generic placeholder, not a genuine umbrella for this core)");
+    expect(result.rejected).toContain("cautious -> cautious (adjective and adverb cores take no umbrella in this plan)");
+    expect(result.rejected).toContain("speed -> speed (adjective and adverb cores take no umbrella in this plan)");
   });
 
   it("selects the first three valid linked support terms from an ordered AI candidate set", () => {
@@ -613,7 +671,7 @@ describe("monthly AI resource generation", () => {
     const result = selectMonthlySupportCandidates({
       candidates: [
         { id: "x1", word: "ask for help", meaning: "", type: "noun", relation: "collocation", relatesToCoreId: "core-a" },
-        { id: "x2", word: "activity", meaning: "", type: "noun", relation: "umbrella", relatesToCoreId: "core-a" },
+        { id: "x2", word: "service", meaning: "", type: "noun", relation: "umbrella", relatesToCoreId: "core-a" },
         { id: "x3", word: "priority", meaning: "", type: "noun", relation: "synonym", relatesToCoreId: "core-a" },
         { id: "x4", word: "schedule", meaning: "", type: "noun", relation: "synonym", relatesToCoreId: "core-a" },
         { id: "x5", word: "helpful", meaning: "", type: "adjective", relation: "word_family", relatesToCoreId: "core-a" }
@@ -630,7 +688,7 @@ describe("monthly AI resource generation", () => {
       needed: 4
     });
 
-    expect(result.selected.map((term) => term.word)).toEqual(["activity", "priority", "helpful", "ask for help"]);
+    expect(result.selected.map((term) => term.word)).toEqual(["service", "priority", "helpful", "ask for help"]);
     expect(result.selected.filter((term) => term.word.includes(" "))).toHaveLength(1);
   });
 
@@ -918,12 +976,25 @@ describe("monthly support pool rules (VH-R33: 3-9 per core, 35% repeats, CEFR ±
   it("rejects a pool where a core misses a required relation, even with three supports", () => {
     const plan = threeSupportPlan();
     plan.expandedTerms[1]!.relation = "collocation"; // core-1-1 loses its synonym
-    expect(validateMonthlyResourcePlanShape(plan, newLessonDays.length)).toContain("Core core-1-1 needs umbrella, synonym, and word-family supports.");
-    expect(planErrors(() => buildMonthlyResourcesFromAiPlan(month, "A1", theme, threeSupportCriteria, plan))).toContain("Core core-1-1 needs umbrella, synonym, and word-family supports.");
+    expect(validateMonthlyResourcePlanShape(plan, newLessonDays.length)).toContain("Core core-1-1 needs umbrella and synonym supports.");
+    expect(planErrors(() => buildMonthlyResourcesFromAiPlan(month, "A1", theme, threeSupportCriteria, plan))).toContain("Core core-1-1 needs umbrella and synonym supports.");
 
     const domainPool = buildMonthlyResourcesFromAiPlan(month, "A1", theme, threeSupportCriteria, threeSupportPlan());
     domainPool.supportTerms[1]!.relation = "collocation";
-    expect(() => planMonthlyResourcePool(domainPool)).toThrow(/a1-core-1 needs umbrella, synonym, and word-family supports/u);
+    expect(() => planMonthlyResourcePool(domainPool)).toThrow(/a1-core-1 needs umbrella and synonym supports/u);
+
+    // Required relations follow the core's part of speech in the plan check too.
+    const nounWithoutFamily = threeSupportPlan();
+    nounWithoutFamily.expandedTerms[2]!.relation = "antonym"; // core-1-1 (noun) loses only its word family
+    expect(validateMonthlyResourcePlanShape(nounWithoutFamily, newLessonDays.length)).toEqual([]);
+    const verbWithoutUmbrella = threeSupportPlan();
+    verbWithoutUmbrella.coreTerms[0]!.type = "verb";
+    verbWithoutUmbrella.expandedTerms[0]!.relation = "collocation"; // core-1-1 (verb) loses only its umbrella
+    expect(validateMonthlyResourcePlanShape(verbWithoutUmbrella, newLessonDays.length)).toEqual([]);
+    const verbWithoutFamily = threeSupportPlan();
+    verbWithoutFamily.coreTerms[0]!.type = "verb";
+    verbWithoutFamily.expandedTerms[2]!.relation = "antonym";
+    expect(validateMonthlyResourcePlanShape(verbWithoutFamily, newLessonDays.length)).toContain("Core core-1-1 needs synonym and word-family supports.");
 
     const twoSupports = threeSupportPlan();
     twoSupports.expandedTerms.splice(1, 1);
@@ -1100,5 +1171,36 @@ describe("monthly support pool rules (VH-R33: 3-9 per core, 35% repeats, CEFR ±
     expect(MONTHLY_RESOURCE_PLAN_SYSTEM_PROMPT).toContain("three to nine expanded items per core");
     expect(MONTHLY_RESOURCE_PLAN_SYSTEM_PROMPT).toContain("at or below 35% of the total expanded set");
     expect(MONTHLY_RESOURCE_PLAN_SYSTEM_PROMPT).not.toMatch(/six to nine|minimum six/u);
+  });
+});
+
+describe("support quality rules (umbrella reuse, adjective umbrella, -ness, -ly, comparative antonym)", () => {
+  const noun = { word: "email", type: "noun", cefr: "A1" };
+  const adjective = { word: "small", type: "adjective", cefr: "A1" };
+
+  it("caps one umbrella word at two cores per month", () => {
+    expect(monthlySupportQualityIssue(noun, { word: "office equipment", relation: "umbrella" }, 1)).toBeUndefined();
+    expect(monthlySupportQualityIssue(noun, { word: "office equipment", relation: "umbrella" }, 2)).toMatch(/already used for 2 cores/u);
+  });
+
+  it("gives adjective cores no umbrella", () => {
+    expect(monthlySupportQualityIssue(adjective, { word: "size", relation: "umbrella" }, 0)).toMatch(/take no umbrella/u);
+  });
+
+  it("rejects uncommon -ness nouns for A1/A2 adjectives but keeps common ones", () => {
+    expect(monthlySupportQualityIssue(adjective, { word: "smallness", relation: "word_family" }, 0)).toMatch(/uncommon -ness/u);
+    expect(monthlySupportQualityIssue({ word: "happy", type: "adjective", cefr: "A1" }, { word: "happiness", relation: "word_family" }, 0)).toBeUndefined();
+    expect(monthlySupportQualityIssue({ word: "small", type: "adjective", cefr: "B2" }, { word: "smallness", relation: "word_family" }, 0)).toBeUndefined();
+  });
+
+  it("rejects rare -ly forms and keeps common ones", () => {
+    expect(monthlySupportQualityIssue({ word: "tired", type: "adjective", cefr: "A1" }, { word: "tiredly", relation: "word_family" }, 0)).toMatch(/rare or meaning-changing/u);
+    expect(monthlySupportQualityIssue({ word: "quick", type: "adjective", cefr: "A1" }, { word: "quickly", relation: "word_family" }, 0)).toBeUndefined();
+  });
+
+  it("never accepts a comparative or superlative as an antonym", () => {
+    expect(monthlySupportQualityIssue({ word: "good", type: "adjective", cefr: "A1" }, { word: "better", relation: "antonym" }, 0)).toMatch(/comparative/u);
+    expect(monthlySupportQualityIssue(adjective, { word: "smaller", relation: "antonym" }, 0)).toMatch(/comparative/u);
+    expect(monthlySupportQualityIssue(adjective, { word: "big", relation: "antonym" }, 0)).toBeUndefined();
   });
 });

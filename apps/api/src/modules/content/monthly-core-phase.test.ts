@@ -6,7 +6,10 @@ import {
   buildMonthlySupportRelationAuditPrompt,
   collocationContainsCoreWord,
   findMonthlyCoreSynonymConflict,
+  isGenericMonthlyUmbrella,
   isMonthlyInflectionalVariant,
+  MONTHLY_ING_WORD_FAMILY_NOUNS,
+  monthlyWordFamilyInflectionIssue,
   MonthlyResourcePlanError,
   prefilterMonthlySupportCandidatesForAudit,
   selectMonthlySupportCandidates
@@ -96,6 +99,117 @@ describe("quality rule C: no inflection-only supports", () => {
     const result = select("plan", [support("planning", "word_family"), support("planned", "word_family", "core-a", "adjective")], "verb");
     expect(result.selected.map((term) => term.word)).toEqual(["planning"]);
   });
+
+  it("rejects the comparative or superlative of an adjective core as word family", () => {
+    const adjective = (word: string) => ({ word, type: "adjective" });
+    for (const [core, form] of [["small", "smaller"], ["small", "smallest"], ["new", "newer"], ["easy", "easier"], ["easy", "easiest"], ["late", "later"], ["big", "bigger"]] as const) {
+      expect(monthlyWordFamilyInflectionIssue({ word: core, type: "adjective" }, adjective(form)), `${core} -> ${form}`).toContain("comparative or superlative");
+    }
+    expect(monthlyWordFamilyInflectionIssue({ word: "early", type: "adverb" }, { word: "earlier", type: "adverb" })).toContain("comparative or superlative");
+    // Genuine derivations stay, including an -er noun in its own right.
+    expect(monthlyWordFamilyInflectionIssue({ word: "small", type: "adjective" }, { word: "smallness", type: "noun" })).toBeUndefined();
+    expect(monthlyWordFamilyInflectionIssue({ word: "easy", type: "adjective" }, { word: "easily", type: "adverb" })).toBeUndefined();
+    expect(monthlyWordFamilyInflectionIssue({ word: "clean", type: "adjective" }, { word: "cleaner", type: "noun" })).toBeUndefined();
+    // The comparative rule is about adjective/adverb cores only.
+    expect(monthlyWordFamilyInflectionIssue({ word: "print", type: "verb" }, { word: "printer", type: "noun" })).toBeUndefined();
+
+    const result = select("small", [support("little", "synonym", "core-a", "adjective"), support("smaller", "word_family", "core-a", "adjective"), support("smallness", "word_family")], "adjective");
+    expect(result.selected.map((term) => term.word)).toEqual(["little", "smallness"]);
+    expect(result.rejected.join(" ")).toContain("smaller -> smaller (is only the comparative or superlative of the adjective core");
+  });
+
+  it("rejects the plain -ing, -s and -ed form of a verb core as word family, except established -ing nouns", () => {
+    const verb = (word: string) => ({ word, type: "verb" });
+    for (const [core, form] of [["send", "sending"], ["show", "showing"], ["order", "ordering"], ["make", "making"], ["stop", "stopping"]] as const) {
+      expect(monthlyWordFamilyInflectionIssue(verb(core), { word: form, type: "noun" }), `${core} -> ${form}`).toContain("-ing form of the verb core");
+    }
+    expect(monthlyWordFamilyInflectionIssue(verb("send"), { word: "sends", type: "verb" })).toContain("inflected form");
+    expect(monthlyWordFamilyInflectionIssue(verb("order"), { word: "ordered", type: "adjective" })).toContain("inflected form");
+    // The documented allow-list of established -ing nouns.
+    expect([...MONTHLY_ING_WORD_FAMILY_NOUNS]).toEqual(["meeting", "planning", "training", "building", "booking", "setting", "opening", "beginning", "feeling", "warning", "painting", "reading", "writing"]);
+    for (const [core, form] of [["meet", "meeting"], ["plan", "planning"], ["train", "training"], ["build", "building"], ["book", "booking"], ["begin", "beginning"], ["write", "writing"]] as const) {
+      expect(monthlyWordFamilyInflectionIssue(verb(core), { word: form, type: "noun" }), `${core} -> ${form}`).toBeUndefined();
+    }
+    // A derivation other than -ing stays; a noun core may take a lexicalised -ing noun.
+    expect(monthlyWordFamilyInflectionIssue(verb("send"), { word: "sender", type: "noun" })).toBeUndefined();
+    expect(monthlyWordFamilyInflectionIssue({ word: "invoice", type: "noun" }, { word: "invoicing", type: "noun" })).toBeUndefined();
+
+    const result = select("send", [support("dispatch", "synonym", "core-a", "verb"), support("sending", "word_family"), support("sender", "word_family")], "verb");
+    expect(result.selected.map((term) => term.word)).toEqual(["dispatch", "sender"]);
+    expect(result.rejected.join(" ")).toContain("sending -> sending (is only the -ing form of the verb core");
+    const meet = select("meet", [support("gather", "synonym", "core-a", "verb"), support("meeting", "word_family")], "verb");
+    expect(meet.selected.map((term) => term.word)).toEqual(["gather", "meeting"]);
+  });
+});
+
+describe("required support relations by the core's part of speech", () => {
+  const missing = (result: { rejected: string[] }) => result.rejected.filter((entry) => entry.startsWith("missing required"));
+
+  it("accepts a noun without a word family and a verb without an umbrella", () => {
+    const noun = select("invoice", [support("document", "umbrella"), support("bill", "synonym"), support("statement", "synonym")], "noun");
+    expect(noun.selected.map((term) => term.word)).toEqual(["document", "bill", "statement"]);
+    expect(missing(noun)).toEqual([]);
+    const verb = select("manage", [support("run", "synonym", "core-a", "verb"), support("manager", "word_family"), support("management", "word_family")], "verb");
+    expect(verb.selected.map((term) => term.word)).toEqual(["run", "manager", "management"]);
+    expect(missing(verb)).toEqual([]);
+  });
+
+  it("rejects a verb without a word family and a noun without an umbrella", () => {
+    const verb = select("manage", [support("run", "synonym", "core-a", "verb"), support("handle", "synonym", "core-a", "verb"), support("control", "umbrella", "core-a", "verb")], "verb");
+    expect(missing(verb)).toEqual(["missing required word_family relation for this core"]);
+    const noun = select("invoice", [support("bill", "synonym"), support("invoicing", "word_family"), support("statement", "synonym")], "noun");
+    expect(missing(noun)).toEqual(["missing required umbrella relation for this core"]);
+    const adjective = select("quick", [support("fast", "synonym", "core-a", "adjective"), support("speed", "umbrella")], "adjective");
+    expect(missing(adjective)).toEqual(["missing required word_family relation for this core"]);
+  });
+
+  it("still takes the optional structural relation first when a genuine one exists", () => {
+    const noun = select("plan", [support("schedule", "synonym"), support("proposal", "synonym"), support("planner", "word_family"), support("document", "umbrella")], "noun", 3);
+    expect(noun.selected.map((term) => term.word)).toEqual(["document", "schedule", "planner"]);
+  });
+});
+
+describe("umbrella deny-list", () => {
+  it("rejects generic placeholders deterministically, with work/job only denied for non-noun cores", () => {
+    for (const word of ["thing", "things", "stuff", "something", "item", "object", "matter", "action", "activity", "process", "situation", "status", "quality"]) {
+      expect(isGenericMonthlyUmbrella("noun", word), word).toBe(true);
+      expect(isGenericMonthlyUmbrella("verb", word), word).toBe(true);
+    }
+    expect(isGenericMonthlyUmbrella("verb", "work")).toBe(true);
+    expect(isGenericMonthlyUmbrella("adjective", "job")).toBe(true);
+    expect(isGenericMonthlyUmbrella("adjective", "property")).toBe(true);
+    expect(isGenericMonthlyUmbrella("noun", "work")).toBe(false);
+    expect(isGenericMonthlyUmbrella("noun", "event")).toBe(false);
+    expect(isGenericMonthlyUmbrella("noun", "office equipment")).toBe(false);
+
+    const verb = select("email", [support("work", "umbrella", "core-a", "verb"), support("communication", "umbrella"), support("send", "umbrella", "core-a", "verb")], "verb");
+    expect(verb.selected.map((term) => term.word)).toEqual(["send"]);
+    expect(verb.rejected.join(" ")).toContain("work -> work (is a generic placeholder");
+    expect(verb.rejected.join(" ")).toContain("communication -> communication (part of speech does not match");
+    const noun = select("email", [support("thing", "umbrella"), support("message", "umbrella")], "noun");
+    expect(noun.selected.map((term) => term.word)).toEqual(["message"]);
+    expect(select("task", [support("work", "umbrella")], "noun").selected.map((term) => term.word)).toEqual(["work"]);
+  });
+
+  it("pre-filters generic, wrong-POS umbrellas and inflection-only families before any audit", () => {
+    const { kept, rejected } = prefilterMonthlySupportCandidatesForAudit({ word: "small", type: "adjective" }, [
+      support("thing", "umbrella"),
+      support("quality", "umbrella"),
+      support("size", "umbrella"),
+      support("little", "umbrella", "core-a", "adjective"),
+      support("smaller", "word_family", "core-a", "adjective"),
+      support("smallness", "word_family")
+    ]);
+    expect(kept.map((term) => term.word)).toEqual(["size", "smallness"]);
+    expect(rejected).toEqual([
+      "thing (generic placeholder umbrella)",
+      "quality (generic placeholder umbrella)",
+      "little (umbrella part of speech does not fit a adjective core)",
+      "smaller (is only the comparative or superlative of the adjective core, not a word-family item)"
+    ]);
+    const verb = prefilterMonthlySupportCandidatesForAudit({ word: "send", type: "verb" }, [support("sending", "word_family"), support("sender", "word_family"), support("deliver", "umbrella", "core-a", "verb")]);
+    expect(verb.kept.map((term) => term.word)).toEqual(["sender", "deliver"]);
+  });
 });
 
 describe("quality rule B: no synonym pairs among cores", () => {
@@ -124,7 +238,9 @@ describe("word-family pre-filter before AI audit", () => {
 describe("month-wide core candidate prompt", () => {
   it("asks for 2-3 options per required relation and a sub-area", () => {
     const prompt = buildMonthlyCoreCandidatesPrompt({ cefr: "A1", theme: "Client meetings", communicationGoal: "Agree next steps", existingCoreWords: ["client"], batchNumber: 1, candidateCount: 12, neededCount: 12, preflightRelations: true, relationOptionsPerRequired: 3, subArea: MONTHLY_CORE_SUB_AREAS[1] });
-    expect(prompt).toContain("two to three distinct authentic options for EACH required relation");
+    expect(prompt).toContain("two to three distinct authentic options for EACH required relation of its part of speech");
+    expect(prompt).toContain("for a noun, umbrella options and same-sense synonym options (plus common word_family options when a common derivation exists)");
+    expect(prompt).toContain("for a verb, adjective or adverb, same-sense synonym options and common word_family options (plus umbrella options when a genuine umbrella exists)");
     expect(prompt).toContain(`draw every candidate from this sub-area only: ${MONTHLY_CORE_SUB_AREAS[1]}`);
     expect(prompt).toContain("client");
   });
@@ -151,11 +267,13 @@ const letters = (index: number) => {
 /** Synthetic headword with a family form that isGenuineWordFamily accepts (xxx → xxxness). */
 const syntheticCore = (key: string) => `qu${key}x`;
 
-function candidateWithEdges(word: string, id: string, options: { family?: string; synonym?: string; umbrella?: string } = {}) {
-  const core: CoreTerm = { id, word, meaning: `nghĩa ${word}`, type: "noun", ipa: "/x/" };
+function candidateWithEdges(word: string, id: string, options: { family?: string; synonym?: string; umbrella?: string; type?: "noun" | "verb" } = {}) {
+  const type = options.type ?? "noun";
+  const core: CoreTerm = { id, word, meaning: `nghĩa ${word}`, type, ipa: "/x/" };
   const edges: SupportTerm[] = [
-    support(options.umbrella ?? `umb${word}`, "umbrella", id),
-    support(options.synonym ?? `syn${word}`, "synonym", id),
+    // A verb's umbrella is a more general verb; a noun's is a broader noun.
+    support(options.umbrella ?? `umb${word}`, "umbrella", id, type),
+    support(options.synonym ?? `syn${word}`, "synonym", id, type),
     support(options.family ?? `${word}ness`, "word_family", id)
   ];
   return { core, edges };
@@ -210,9 +328,9 @@ describe("runMonthlyCorePhase (month-wide)", () => {
   it("generates in parallel, interleaves calls deterministically and assigns ordered core IDs", async () => {
     const runner = fakeRunner(({ callIndex, count }) => Array.from({ length: count }, (_value, position) => {
       const key = `${letters(callIndex)}${letters(position)}`;
-      // Call 0 / position 0 has a bogus word_family that the pre-filter drops
-      // and the gap-fill cannot repair.
-      return candidateWithEdges(syntheticCore(key), `ai-${position}`, callIndex === 0 && position === 0 ? { family: "unrelated" } : {});
+      // Call 0 / position 0 is a verb with a bogus word_family (required for a
+      // verb) that the pre-filter drops and the gap-fill cannot repair.
+      return candidateWithEdges(syntheticCore(key), `ai-${position}`, callIndex === 0 && position === 0 ? { family: "unrelated", type: "verb" } : {});
     }));
     const result = await runMonthlyCorePhase(phaseInput(runner, 6));
 
@@ -235,7 +353,7 @@ describe("runMonthlyCorePhase (month-wide)", () => {
       const key = `${letters(round)}${letters(callIndex)}${letters(position)}`;
       // Round 0: only the first position of each call is usable (3 of 9).
       const broken = round === 0 && position > 0;
-      return candidateWithEdges(syntheticCore(key), `ai-${position}`, broken ? { family: "nofamily" } : {});
+      return candidateWithEdges(syntheticCore(key), `ai-${position}`, broken ? { family: "nofamily", type: "verb" } : {});
     }));
     const result = await runMonthlyCorePhase(phaseInput(runner, 5));
 
@@ -272,10 +390,10 @@ describe("runMonthlyCorePhase (month-wide)", () => {
 
   it("does not accept two cores that are synonyms of each other (rule B)", async () => {
     const runner = fakeRunner(({ round, count }) => round > 0 ? [] : [
-      candidateWithEdges("start", "s", { umbrella: "action", synonym: "commence", family: "starter" }),
+      candidateWithEdges("start", "s", { umbrella: "moment", synonym: "commence", family: "starter" }),
       // begin is not a support of start, and would pass on its own via "initiate",
       // but its audited synonym "start" is already an accepted core.
-      (() => { const entry = candidateWithEdges("begin", "b", { umbrella: "process", synonym: "start", family: "beginner" }); entry.edges.push(support("initiate", "synonym", "b")); return entry; })(),
+      (() => { const entry = candidateWithEdges("begin", "b", { umbrella: "phase", synonym: "start", family: "beginner" }); entry.edges.push(support("initiate", "synonym", "b")); return entry; })(),
       ...Array.from({ length: count - 2 }, (_value, index) => candidateWithEdges(syntheticCore(letters(index)), `x${index}`))
     ]);
     const result = await runMonthlyCorePhase(phaseInput(runner, 3, { candidatesPerCall: 8, maxParallelCalls: 1 }));
@@ -284,9 +402,35 @@ describe("runMonthlyCorePhase (month-wide)", () => {
     expect(words).not.toContain("begin");
   });
 
+  it("gap-fills only the relations the core's part of speech requires", async () => {
+    const gapRelations: string[] = [];
+    const runner = fakeRunner(({ round }) => round > 0 ? [] : [
+      // Noun without a word family but with three supports: accepted, no gap-fill.
+      (() => { const entry = candidateWithEdges(syntheticCore("na"), "n1", { family: "unrelated" }); entry.edges.push(support("altquna", "synonym", "n1")); return entry; })(),
+      // Verb without an umbrella but with three supports: accepted, no gap-fill.
+      (() => { const entry = candidateWithEdges(syntheticCore("va"), "v1", { type: "verb", umbrella: "work" }); entry.edges.push(support("altquva", "synonym", "v1", "verb")); return entry; })(),
+      // Noun missing its umbrella: gap-fill umbrella only.
+      (() => { const entry = candidateWithEdges(syntheticCore("nb"), "n2", { umbrella: "thing" }); return entry; })(),
+      // Verb missing its word family: gap-fill word_family only.
+      (() => { const entry = candidateWithEdges(syntheticCore("vb"), "v2", { type: "verb", family: "unrelated" }); return entry; })()
+    ], (core, prompt) => {
+      const relation = /relation exactly `([a-z_]+)`/u.exec(prompt)?.[1] ?? "?";
+      gapRelations.push(`${core.word}:${relation}`);
+      if (relation === "umbrella") return [support("record", "umbrella", core.id)];
+      if (relation === "word_family") return [support(`${core.word}ness`, "word_family", core.id)];
+      return [];
+    });
+    const result = await runMonthlyCorePhase(phaseInput(runner, 4, { candidatesPerCall: 4, maxParallelCalls: 1, maxRounds: 1 }));
+    expect(result.coreTerms.map((term) => term.word)).toEqual(["qunax", "quvax", "qunbx", "quvbx"]);
+    expect(gapRelations.sort()).toEqual(["qunbx:umbrella", "quvbx:word_family"]);
+    const supportsOf = (index: number) => result.supportTerms.filter((term) => term.relatesToCoreId === result.coreTerms[index]!.id).map((term) => term.relation).sort();
+    expect(supportsOf(0)).toEqual(["synonym", "synonym", "umbrella"]);
+    expect(supportsOf(1)).toEqual(["synonym", "synonym", "word_family"]);
+  });
+
   it("fails with a clear plan error after the bounded rounds", async () => {
     let counter = 0;
-    const runner = fakeRunner(({ count }) => Array.from({ length: count }, (_value, position) => candidateWithEdges(syntheticCore(letters(counter++)), `ai-${position}`, { family: "nofamily" })));
+    const runner = fakeRunner(({ count }) => Array.from({ length: count }, (_value, position) => candidateWithEdges(syntheticCore(letters(counter++)), `ai-${position}`, { family: "nofamily", type: "verb" })));
     const error = await runMonthlyCorePhase(phaseInput(runner, 2, { maxRounds: 2 })).catch((caught: unknown) => caught);
     expect(error).toBeInstanceOf(MonthlyResourcePlanError);
     const message = (error as MonthlyResourcePlanError).errors.join(" ");
@@ -300,7 +444,7 @@ describe("runMonthlyCorePhase (month-wide)", () => {
     // The first two candidates are valid; every later one lacks a word family.
     const runner = fakeRunner(({ count }) => Array.from({ length: count }, (_value, position) => {
       produced += 1;
-      return candidateWithEdges(syntheticCore(letters(counter++)), `ai-${position}`, produced <= 2 ? {} : { family: "nofamily" });
+      return candidateWithEdges(syntheticCore(letters(counter++)), `ai-${position}`, produced <= 2 ? {} : { family: "nofamily", type: "verb" });
     }));
     const first = await runMonthlyCorePhase(phaseInput(runner, 3, { maxRounds: 1 })).catch((caught: unknown) => caught);
     expect(first).toBeInstanceOf(MonthlyCorePhaseShortfallError);

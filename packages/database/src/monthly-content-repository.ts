@@ -128,6 +128,16 @@ export interface SaveMonthlyResourceGenerationCheckpointInput {
   sourceLineage: Record<string, unknown>;
 }
 
+export interface MonthlyResourceDraftForEdit {
+  id: string;
+  month: string;
+  cefr: MonthFrameworkView["cefr"];
+  version: number;
+  status: MonthFrameworkView["status"] | "retired";
+  writable: boolean;
+  pool: MonthlyResourcePoolContract;
+}
+
 export interface MonthlyLessonDraftInput {
   title: string;
   parts: Array<{ code: string; title?: string | undefined; content: Record<string, unknown> }>;
@@ -332,6 +342,74 @@ export class MonthlyContentRepository {
       month: pool.month, cefr: pool.cefr, version: result.version, scopeHash: result.scopeHash, resourcePool: true
     });
     return { id: result.frameworkId, cefr: pool.cefr, version: result.version, status: "draft", scopeHash: result.scopeHash };
+  }
+
+  /**
+   * Loads one framework's resource pool for manual editing (VH-R30/VH-R35).
+   * Returns null when the framework is not in the Operator's organization.
+   */
+  async getResourceDraftForEdit(actorId: string, frameworkId: string): Promise<MonthlyResourceDraftForEdit | null> {
+    const actor = await this.requireContentOperator(actorId);
+    const result = await this.database.query<FrameworkRow & { month: string }>(
+      `select mf.id, mf.cefr, mf.version, mf.status, mf.scope_hash, mf.curriculum_contract, mf.quality_acknowledgement, pm.month
+       from month_frameworks mf join program_months pm on pm.id = mf.program_month_id
+       where mf.id = $1 and pm.organization_id = $2`, [frameworkId, actor.organization_id]
+    );
+    const row = result.rows[0];
+    if (!row) return null;
+    return {
+      id: row.id, month: row.month, cefr: row.cefr, version: row.version, status: row.status,
+      writable: await this.isWritableMonth(actor.organization_id, row.month),
+      pool: toMonthlyResourcePool(row.curriculum_contract, row.version)
+    };
+  }
+
+  /**
+   * Saves an Operator-edited resource pool over the current draft (VH-R30/VH-R35).
+   * Approved and retired frameworks stay locked; reopening goes through a Manager.
+   * The pool must already pass the approval-time allocation rules.
+   */
+  async saveEditedResourceDraft(actorId: string, frameworkId: string, expectedVersion: number, pool: MonthlyResourcePoolContract): Promise<Pick<MonthFrameworkView, "id" | "cefr" | "version" | "status" | "scopeHash">> {
+    const actor = await this.requireContentOperator(actorId);
+    planMonthlyResourcePool(pool);
+    const pooledClient = "connect" in this.database;
+    const client = pooledClient ? await (this.database as Pool).connect() : this.database;
+    let saved: { version: number; scopeHash: string; cefr: MonthFrameworkView["cefr"]; month: string };
+    try {
+      await client.query("begin");
+      const locked = await client.query<FrameworkRow & { month: string }>(
+        `select mf.id, mf.cefr, mf.version, mf.status, mf.scope_hash, mf.curriculum_contract, mf.quality_acknowledgement, pm.month
+         from month_frameworks mf join program_months pm on pm.id = mf.program_month_id
+         where mf.id = $1 and pm.organization_id = $2 for update of mf`, [frameworkId, actor.organization_id]
+      );
+      const row = locked.rows[0];
+      if (!row) throw httpError(404, "MONTHLY_FRAMEWORK_NOT_FOUND", "Monthly framework was not found");
+      if (row.status !== "draft") throw httpError(409, "MONTHLY_FRAMEWORK_IMMUTABLE", "Only draft monthly resources can be edited; ask a Manager to reopen approved resources");
+      if (!await this.isWritableMonth(actor.organization_id, row.month)) throw httpError(409, "MONTHLY_CONTENT_READ_ONLY", "Monthly content is read-only outside the current and next month");
+      if (row.version !== expectedVersion) throw httpError(409, "MONTHLY_FRAMEWORK_VERSION_CONFLICT", "Monthly resources changed since they were opened; reload and edit again");
+      if (pool.month !== row.month || pool.cefr !== row.cefr) throw httpError(409, "MONTH_CONTRACT_MISMATCH", "Edited resources belong to a different month or level");
+      const version = row.version + 1;
+      const versionedPool = { ...pool, version };
+      const scopeHash = monthlyResourcePoolHash(versionedPool);
+      await client.query(
+        `update month_frameworks set version = $2, status = 'draft', curriculum_contract = $3::jsonb, scope_hash = $4,
+           quality_acknowledgement = null, source = 'manual', generation_error = null, approved_by = null, approved_at = null, updated_at = now()
+         where id = $1`, [frameworkId, version, JSON.stringify(versionedPool), scopeHash]
+      );
+      // A draft never owns lesson slots; legacy allocated drafts lose theirs like a reopen does.
+      await client.query("delete from month_lessons where framework_id = $1", [frameworkId]);
+      saved = { version, scopeHash, cefr: row.cefr, month: row.month };
+      await client.query("commit");
+    } catch (error) {
+      await client.query("rollback");
+      throw error;
+    } finally {
+      if (pooledClient) (client as PoolClient).release();
+    }
+    await this.audit(actor, "monthly.framework_resources_edited", frameworkId, {
+      month: saved.month, cefr: saved.cefr, previousVersion: expectedVersion, version: saved.version, scopeHash: saved.scopeHash, resourcePool: true
+    });
+    return { id: frameworkId, cefr: saved.cefr, version: saved.version, status: "draft", scopeHash: saved.scopeHash };
   }
 
   async getResourceGenerationCheckpoint(actorId: string, month: string, cefr: MonthFrameworkView["cefr"]): Promise<MonthlyResourceGenerationCheckpoint | null> {

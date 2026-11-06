@@ -12,7 +12,7 @@ import type {
   ManualAssessmentScoreInput,
   ContentWeekInput, ContentWeekSuggestionView, SystemCapabilitiesView, WeeklyPracticeAssignmentView
 } from "@e4s/contracts";
-import type { MonthFrameworkReopenRequestView, MonthlyFinalDraftView, MonthlyFinalUpdateInput, MonthlyOperatorOverviewView, SharedMonthBriefView } from "@e4s/contracts";
+import type { MonthFrameworkReopenRequestView, MonthlyResourceEditInput, MonthlyFinalDraftView, MonthlyFinalUpdateInput, MonthlyOperatorOverviewView, SharedMonthBriefView } from "@e4s/contracts";
 import type { MonthlyCurriculumContract } from "@e4s/domain/monthly";
 import { request, uploadMultipart } from "./runtime.js";
 
@@ -87,6 +87,8 @@ export interface OperatorApiClient {
   approveContentMonthFramework(id: string): Promise<void>;
   /** Asks a Manager to reopen approved monthly resources (409 when a request is already pending). */
   requestContentMonthResourcesReopen(id: string, reason: string): Promise<MonthFrameworkReopenRequestView>;
+  /** Saves an Operator hand-edit of a DRAFT resource pool; 422 carries per-row `issues`. */
+  saveContentMonthResources?(id: string, input: MonthlyResourceEditInput): Promise<{ id: string; cefr: CefrLevel; version: number; status: "draft"; scopeHash: string }>;
   getMonthlyFinal(id: string): Promise<MonthlyFinalDraftView>;
   generateMonthlyFinal(id: string): Promise<MonthlyFinalDraftView>;
   composeMonthlyFinal(id: string): Promise<MonthlyFinalDraftView>;
@@ -189,6 +191,7 @@ export const operatorApiClient: OperatorApiClient = {
   getContentMonthResourceCheckpoint: (month, cefr) => request(`/api/v1/content/months/${encodeURIComponent(month)}/resources/checkpoint?cefr=${encodeURIComponent(cefr)}`),
   approveContentMonthFramework: async (id) => { await request(`/api/v1/content/month-frameworks/${encodeURIComponent(id)}/approve`, { method: "POST", body: "{}" }); },
   requestContentMonthResourcesReopen: (id, reason) => request(`/api/v1/content/month-frameworks/${encodeURIComponent(id)}/reopen-requests`, { method: "POST", body: JSON.stringify({ reason }) }),
+  saveContentMonthResources: (id, input) => request(`/api/v1/content/month-frameworks/${encodeURIComponent(id)}/resources`, { method: "PUT", body: JSON.stringify(input) }),
   getMonthlyFinal: (id) => request(`/api/v1/month-frameworks/${encodeURIComponent(id)}/monthly-final`),
   generateMonthlyFinal: (id) => request(`/api/v1/month-frameworks/${encodeURIComponent(id)}/monthly-final`, { method: "POST", body: "{}" }),
   composeMonthlyFinal: (id) => request(`/api/v1/month-frameworks/${encodeURIComponent(id)}/monthly-final/manual`, { method: "POST", body: "{}" }),

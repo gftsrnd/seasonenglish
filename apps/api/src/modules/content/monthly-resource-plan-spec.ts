@@ -1,4 +1,4 @@
-import { isMonthlySupportLevelAllowed, maxMonthlySupportRepeats, monthlySupportLevelRule, monthlySupportLevelBand, MONTHLY_MAX_SUPPORTS_PER_CORE, MONTHLY_MIN_SUPPORTS_PER_CORE, MONTHLY_REQUIRED_SUPPORT_RELATIONS } from "@e4s/domain";
+import { isMonthlySupportLevelAllowed, maxMonthlySupportRepeats, monthlySupportLevelRule, monthlySupportLevelBand, MONTHLY_MAX_SUPPORTS_PER_CORE, MONTHLY_MIN_SUPPORTS_PER_CORE, describeRequiredSupportRelations, hasRequiredMonthlySupportRelations } from "@e4s/domain";
 
 /**
  * Reusable contract for AI generation of monthly hard learning resources.
@@ -29,7 +29,7 @@ LEVEL DIFFERENTIATION
 
 VOCABULARY PLAN
 - Create the requested number of distinct core items in the month-wide pool. Each core item is one standalone English lexical headword.
-- In the completed month-wide pool, create three to nine expanded items per core (the three required relations are the minimum; add further genuine relations up to nine), never exceeding the caller's requested maximum. Prefer standalone headwords: at least 75% of the pool must be single words. A natural two-to-four-word expression is allowed for no more than one support per core (an umbrella group phrase such as office equipment does not count toward that one), and phrases may not exceed 35% of the pool. Expanded items may repeat across the month only when repeated entries stay at or below 35% of the total expanded set.
+- In the completed month-wide pool, create three to nine expanded items per core (at least three, covering the relations the core's part of speech requires; add further genuine relations up to nine), never exceeding the caller's requested maximum. Prefer standalone headwords: at least 75% of the pool must be single words. A natural two-to-four-word expression is allowed for no more than one support per core (an umbrella group phrase such as office equipment does not count toward that one), and phrases may not exceed 35% of the pool. Expanded items may repeat across the month only when repeated entries stay at or below 35% of the total expanded set.
 - Support words may come from the month's CEFR level or one adjacent level
   (±1, A1..C1). Label each expanded item with its own CEFR level in the
   optional cefr field. Never reject a genuine relation only because the word is
@@ -46,26 +46,43 @@ VOCABULARY PLAN
   punctuation; core terms must never appear as expanded terms. Every core word
   must be at the month's CEFR level or below, never above it, and directly on
   the approved theme; label it with its own level in the optional cefr field.
-  Choose only standalone, level-appropriate workplace headwords with a common, genuine
-  non-inflectional word family plus real synonym and umbrella relations.
+  Choose only standalone, level-appropriate workplace headwords that support
+  the relations their part of speech requires (below): a noun needs a real
+  umbrella and synonym; a verb, adjective or adverb needs a real synonym and a
+  common, genuine non-inflectional word family.
   Avoid interjections, greetings, inflected forms, and unproductive words
   whose only related forms would be rare or fabricated.
 - Each expanded item must state one relation: umbrella, synonym, antonym,
   word_family, or collocation; and identify the related core term. The relation
-  must be linguistically real. Umbrella means a true broader category (X is a
-  kind of Y) or the group word the core belongs to (office -> workplace, email
-  -> communication, invoice -> document), not an associated topic or
-  collocation; never a narrower kind of the core (computer -> laptop), a
-  synonym (leader -> boss), a related thing or event (attend -> meeting, pay ->
-  salary), or an adjective or modifier (designer -> graphic). A synonym must be close
+  must be linguistically real. The umbrella follows WordNet and depends on the
+  core's part of speech:
+  * noun: the hypernym, "A <core> is a kind of <umbrella>" (email -> message,
+    invoice -> document); a two-to-three-word group noun phrase is fine
+    (office equipment);
+  * verb: a more general VERB the core is a way of doing, "To <core> is a way
+    to <umbrella>" (email -> send, whisper -> speak, cancel -> stop, review ->
+    check);
+  * adjective/adverb: the attribute NOUN the word describes, "<core> describes
+    <umbrella>" (small -> size, easy -> difficulty, happy -> mood, late -> time).
+  An umbrella is never an associated topic or collocation, a narrower kind of
+  the core (computer -> laptop), a synonym (leader -> boss), a related thing or
+  event (attend -> meeting, pay -> salary), an adjective or modifier (designer
+  -> graphic), or a generic placeholder (thing, stuff, item, action, activity,
+  process, situation, status, quality, or work/job for a verb or adjective). A synonym must be close
   enough to replace the core in the stated sense; an antonym must express the
   opposite sense. A word_family item must share the core's lexical root through
   a real derivation (for example, manage → manager/management), not merely be
-  related in meaning, share a workplace topic, or be a plural/past-tense form.
+  related in meaning, share a workplace topic, or be a plural/past-tense form,
+  the comparative or superlative of an adjective (smaller, easier), or the
+  plain -ing form of a verb (sending); only established -ing nouns such as
+  meeting, planning or training count.
   Collocation means words naturally used together, not an umbrella or synonym.
 - Every core headword needs three to nine individually linked support items.
-  The minimum is one genuine umbrella/hypernym, one synonym, and one
-  word-family item; further supports are added only when genuine. If a required relation is not accepted, keep the selected
+  Required relations depend on the core's part of speech: a noun needs one
+  genuine umbrella/hypernym and one synonym (a word-family item is optional and
+  taken when a common one exists); a verb, adjective or adverb needs one
+  synonym and one word-family item (an umbrella is optional and taken when a
+  genuine one exists). Further supports are added only when genuine. If a required relation is not accepted, keep the selected
   core stable and try distinct support candidates; never replace a core merely
   because one candidate or one audit attempt failed. Do not invent or mislabel
   a support, and report an unresolved relation only after the retry limit.
@@ -107,7 +124,7 @@ POOL RULES
     scope. A single-relation support phase must return only that exact relation;
     an optional-support phase may return several genuine relation types.
     The API selects three to nine valid linked items and accepts three when the
-    required relation types are covered and further authentic relations are
+    relation types required for the core's part of speech are covered and further authentic relations are
     not available.
 - Expanded resources must reference an exact core ID from the supplied batch.
 - Daily lessons expose their approved resource assignments before exercises.
@@ -176,7 +193,7 @@ export const monthlyResourcePlanSchema = {
     expandedTerms: {
       type: "array",
       description:
-        "Three to nine unique real relation items for every core headword; umbrella, synonym, and word family are required, while antonyms and other extra relations are optional when natural. Supports may be at the month's CEFR level or one adjacent level.",
+        "Three to nine unique real relation items for every core headword. A noun core requires umbrella and synonym (word family optional); a verb, adjective or adverb core requires synonym and word family (umbrella optional); antonyms and other extra relations are optional when natural. Supports may be at the month's CEFR level or one adjacent level.",
       items: {
         type: "object",
         additionalProperties: false,
@@ -316,7 +333,7 @@ export const MONTHLY_RESOURCE_PLAN_QUALITY_EXAMPLE = {
 
 export function validateMonthlyResourcePlanShape(
   plan: {
-    coreTerms: Array<{ id: string; word: string }>;
+    coreTerms: Array<{ id: string; word: string; type?: string }>;
     expandedTerms: Array<{ id: string; word: string; relation: "umbrella" | "synonym" | "antonym" | "word_family" | "collocation"; relatesToCoreId: string; cefr?: "A1" | "A2" | "B1" | "B2" | "C1" | undefined }>;
     grammarTopics: Array<{ id: string; steps: Array<{ id: string; focus: string }> }>;
     pronunciationTargets: Array<{ id: string; ipa: string; label: string; explanation: string; words: Array<{ word: string }> }>;
@@ -353,12 +370,13 @@ export function validateMonthlyResourcePlanShape(
   if (coreIds.size !== plan.coreTerms.length) errors.push("Core resource IDs must be unique.");
   if (new Set(plan.expandedTerms.map((item) => item.id)).size !== plan.expandedTerms.length) errors.push("Expanded resource IDs must be unique.");
   if (plan.expandedTerms.some((item) => !coreIds.has(item.relatesToCoreId))) errors.push("Expanded resources must reference a core term in this month.");
+  const coreTypes = new Map(plan.coreTerms.map((item) => [item.id, item.type]));
   for (const coreId of coreIds) {
     const supports = plan.expandedTerms.filter((item) => item.relatesToCoreId === coreId);
     if (supports.length < MONTHLY_MIN_SUPPORTS_PER_CORE || supports.length > MONTHLY_MAX_SUPPORTS_PER_CORE) errors.push(`Core ${coreId} needs three to nine support resources.`);
-    const relationGroups = new Set(supports.map((support) => support.relation));
-    if (MONTHLY_REQUIRED_SUPPORT_RELATIONS.some((relation) => !relationGroups.has(relation))) {
-      errors.push(`Core ${coreId} needs umbrella, synonym, and word-family supports.`);
+    const coreType = coreTypes.get(coreId);
+    if (!hasRequiredMonthlySupportRelations(coreType, supports)) {
+      errors.push(`Core ${coreId} needs ${describeRequiredSupportRelations(coreType)} supports.`);
     }
     if (supports.filter((item) => item.relation !== "umbrella" && !singleHeadword(item.word)).length > 1) errors.push(`Core ${coreId} has more than one multi-word support item.`);
   }
