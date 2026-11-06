@@ -4030,3 +4030,12 @@ body > .operator-modal-scope .operator-vocabulary-entry-audio-grid { display: gr
 
 .operator-level-stimulus-editor { display: grid; gap: 6px; padding: 12px 16px; border-bottom: 1px solid var(--line); background: var(--surface-2); color: var(--muted); font-size: .78rem; font-weight: 800; }
 .operator-level-stimulus-editor textarea { width: 100%; min-height: 108px; box-sizing: border-box; color: var(--text); font: inherit; font-weight: 400; }
+
+/* Level-up forms embedded in "Kết quả bài thi": match the saved-versions card of the other exam tabs. */
+.app-operator .operator-level-forms-embedded .operator-level-group--embedded{display:grid;gap:8px;padding:0;margin:0;background:transparent;border:0;box-shadow:none}
+.app-operator .operator-level-forms-embedded .operator-level-group--embedded+.operator-level-group--embedded{margin-top:10px}
+.app-operator .operator-level-forms-embedded .operator-level-group-header{padding:0;margin:0;background:transparent;border:0}
+.app-operator .operator-level-forms-embedded .operator-level-group-header h3{display:inline;margin:0 0 0 6px;font-size:1rem}
+.app-operator .operator-level-forms-embedded .operator-level-group > .list{margin-top:0!important;padding:0;background:transparent;border:0}
+.app-operator .operator-level-forms-embedded .operator-level-form-item{border:1px solid #e2ddd5;border-radius:12px}
+.app-operator .operator-level-forms-embedded .operator-level-empty{margin:0;padding:12px 16px;border:1px dashed #e2ddd5;border-radius:12px;background:#fffdfa}

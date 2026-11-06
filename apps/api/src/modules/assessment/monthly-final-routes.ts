@@ -99,12 +99,38 @@ export function registerMonthlyFinalRoutes(
     if (!runner) return reply.code(503).send({ code: "AI_UNAVAILABLE" });
     const task = await repositories.aiRuns.activeTaskPrompt(actorId, "monthly_final_generation");
     if (!task) return reply.code(503).send({ code: "AI_PROMPT_NOT_READY" });
-    let receptive; let productive;
+    let receptive: { output: MonthlyFinalReceptiveOutput; metadata: Awaited<ReturnType<AiTaskRunner["runTask"]>>["metadata"] }; let productive;
+    // Reading questions for a set of target terms. Like the level-up reading
+    // repair, a slice that still fails validation after its retries is split in
+    // half and each half is requested on its own (at most two levels deep).
+    type ReadingTerm = (typeof input.targets.reading)[number];
+    const generateReading = async (terms: ReadingTerm[], depth: number): Promise<MonthlyFinalReceptiveOutput["reading"]> => {
+      const sliceInput = { ...input, targets: { ...input.targets, reading: terms } };
+      try {
+        const result = await runner.runTask("monthly_final_reading_generation", sliceInput, { systemPrompt: `${task.prompt}\nGenerate ONLY the reading part now: exactly one short reading question per reading target term (${terms.map((term) => term.id).join(", ")}), ${terms.length} question${terms.length === 1 ? "" : "s"} in total. Keep every prompt and option concise.`, maxOutputTokens: 8_000, maxAttempts: 2 });
+        return (result.output as Pick<MonthlyFinalReceptiveOutput, "reading">).reading;
+      } catch (error) {
+        const retryable = error && typeof error === "object" && ["AI_OUTPUT_INVALID", "AI_OUTPUT_TRUNCATED"].includes(String((error as { code?: unknown }).code));
+        if (!retryable || depth >= 2 || terms.length < 2) throw error;
+        const middle = Math.ceil(terms.length / 2);
+        const [first, second] = await Promise.all([generateReading(terms.slice(0, middle), depth + 1), generateReading(terms.slice(middle), depth + 1)]);
+        return { questions: [...first.questions, ...second.questions] };
+      }
+    };
     try {
-      [receptive, productive] = await Promise.all([
-        runner.runTask("monthly_final_receptive_generation", input, { systemPrompt: `${task.prompt}\nGenerate ONLY the receptive part now: Message A and Message B with their listening questions (one per listening target term), and the reading questions (one per reading target term).`, maxOutputTokens: 14_000, maxAttempts: 2 }),
+      // Same slicing as the level-up form: one call producing both listening
+      // and reading left the reading section empty, so they are separate calls,
+      // and reading questions still missing are requested again for those terms.
+      const [listening, reading, productiveResult] = await Promise.all([
+        runner.runTask("monthly_final_listening_generation", input, { systemPrompt: `${task.prompt}\nGenerate ONLY the listening part now: Message A and Message B, each with its script, gaSentence, gbSentence and its listening questions — exactly one question per listening target term (${input.targets.listening.map((term) => term.id).join(", ")}). Keep prompts and options concise.`, maxOutputTokens: 10_000, maxAttempts: 2 }),
+        generateReading(input.targets.reading, 0),
         runner.runTask("monthly_final_productive_generation", input, { systemPrompt: `${task.prompt}\nGenerate ONLY the productive part now: title, GA/GB main and secondary components, the Writing task, Speaking A read-aloud with its 8 positions, and Speaking B voice note, with sample answers.`, maxOutputTokens: 5_000, maxAttempts: 2 })
       ]);
+      receptive = {
+        output: { listening: (listening.output as Pick<MonthlyFinalReceptiveOutput, "listening">).listening, reading },
+        metadata: listening.metadata
+      };
+      productive = productiveResult;
     } catch (error) {
       if (error && typeof error === "object" && (error as { code?: unknown }).code === "AI_OUTPUT_INVALID") {
         return reply.code(422).send({ code: "AI_OUTPUT_INVALID", issues: safeGenerationDiagnosticIssues(error) });

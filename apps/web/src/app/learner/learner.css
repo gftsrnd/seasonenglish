@@ -1829,3 +1829,22 @@ h1,h2,h3,h4,h1 b,h2 b,h3 b,h4 b{font-weight:600 !important}
   }
 }
 .lesson-pronunciation-heading{display:flex;align-items:center;justify-content:space-between;gap:12px}.lesson-pronunciation-mouth{position:relative;flex:0 0 auto}.lesson-pronunciation-mouth__toggle{display:grid;place-items:center;min-width:40px;min-height:40px;border-radius:999px;color:var(--primary)}.lesson-pronunciation-mouth__panel{position:absolute;z-index:5;right:0;top:calc(100% + 6px);width:min(280px,calc(100vw - 48px));padding:10px;border:1px solid var(--line);border-radius:12px;background:var(--surface);box-shadow:0 8px 28px rgba(0,0,0,.14)}.lesson-pronunciation-mouth__panel img{display:block;width:100%;height:auto}.lesson-pronunciation-mouth__panel p{margin:6px 2px 0;font-size:.82rem;line-height:1.4;color:var(--muted)}
+
+/* Pronunciation: one block per sound, mouth picture opens inline below the examples. */
+.lesson-pronunciation-targets{display:grid;gap:4px;margin-top:6px}
+.lesson-pronunciation-target{display:grid;gap:10px;padding:10px 0}
+.lesson-pronunciation-target+.lesson-pronunciation-target{border-top:1px dashed var(--line)}
+.lesson-pronunciation-target-head{display:flex;align-items:center;justify-content:space-between;gap:12px}
+.lesson-pronunciation-target-head p{margin:0}
+.lesson-pronunciation-target .lesson-pronunciation-words{display:flex;flex-wrap:wrap;gap:8px 12px;margin:0}
+.lesson-pronunciation-target .lesson-pronunciation-mouth__toggle{display:grid;place-items:center;min-width:38px;min-height:38px;border-radius:999px;color:var(--primary)}
+.lesson-pronunciation-mouth__inline{width:min(100%,560px);box-sizing:border-box;padding:10px;border:1px solid var(--line);border-radius:12px;background:var(--surface)}
+.lesson-pronunciation-mouth__inline img{display:block;width:100%;height:auto}
+.lesson-pronunciation-mouth__inline p{margin:6px 2px 0;font-size:.85rem;line-height:1.4;color:var(--muted)}
+
+/* Review grammar: one block per step, separated like pronunciation sounds. */
+.lesson-grammar-steps{display:grid;gap:4px;margin-top:6px}
+.lesson-grammar-step{display:grid;gap:6px;padding:10px 0}
+.lesson-grammar-step+.lesson-grammar-step{border-top:1px dashed var(--line)}
+.lesson-grammar-step p{margin:0}
+.lesson-grammar-step .lesson-example-list{display:flex;flex-wrap:wrap;gap:8px 12px;margin-top:4px}

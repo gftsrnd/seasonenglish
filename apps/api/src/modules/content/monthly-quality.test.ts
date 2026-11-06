@@ -51,15 +51,25 @@ describe("monthly lesson quality", () => {
     spec.reviewGrammarStepIds = ["review-grammar"];
     spec.reviewSoundIds = ["review-sound"];
     spec.reviewPronunciationExampleIds = ["review-1", "review-2", "review-3"];
-    const candidate = lesson();
-    candidate.parts = candidate.parts.map((item) => item.code === "grammar" ? part(item.code, { formula: "Review formula" }) : item.code === "pronunciation" ? part(item.code, { focus: "/s/", words: [{ word: "see", ipa: "/siː/" }, { word: "soon", ipa: "/suːn/" }, { word: "sales", ipa: "/seɪlz/" }], reviewTargets: [{ soundId: "review-sound", focus: "/s/", words: [{ word: "see", ipa: "/siː/" }, { word: "soon", ipa: "/suːn/" }, { word: "sales", ipa: "/seɪlz/" }] }] }) : item);
+    const candidate = lesson({ parts: reviewParts() });
+    candidate.parts = candidate.parts.map((item) => item.code === "grammar" ? part(item.code, { ...item.content, formula: "Review formula" }) : item.code === "pronunciation" ? part(item.code, { focus: "/s/", words: [{ word: "see", ipa: "/siː/" }, { word: "soon", ipa: "/suːn/" }, { word: "sales", ipa: "/seɪlz/" }], reviewTargets: [{ soundId: "review-sound", focus: "/s/", words: [{ word: "see", ipa: "/siː/" }, { word: "soon", ipa: "/suːn/" }, { word: "sales", ipa: "/seɪlz/" }] }] }) : item);
 
     expect(evaluateMonthlyLessonQuality(review, 2, candidate).severe).toEqual([]);
     candidate.parts = candidate.parts.map((item) => item.code === "pronunciation" ? part(item.code, { ...item.content, reviewTargets: [] }) : item);
     expect(evaluateMonthlyLessonQuality(review, 2, candidate).severe.map((item) => item.code)).toContain("MONTHLY_SOUND_SCOPE_MISMATCH");
     candidate.parts = candidate.parts.map((item) => item.code === "pronunciation" ? part(item.code, { focus: "/s/", words: [{ word: "see", ipa: "/siː/" }, { word: "soon", ipa: "/suːn/" }, { word: "sales", ipa: "/seɪlz/" }], reviewTargets: [{ soundId: "review-sound", focus: "/s/", words: [{ word: "see", ipa: "/siː/" }, { word: "soon", ipa: "/suːn/" }, { word: "sales", ipa: "/seɪlz/" }] }] }) : item);
-    candidate.parts = candidate.parts.map((item) => item.code === "grammar" ? part(item.code, { formula: "Core formula" }) : item);
+    candidate.parts = candidate.parts.map((item) => item.code === "grammar" ? part(item.code, { ...item.content, formula: "Core formula" }) : item);
     expect(evaluateMonthlyLessonQuality(review, 2, candidate).severe.map((item) => item.code)).toContain("MONTHLY_GRAMMAR_SCOPE_MISMATCH");
+  });
+
+  it("requires the six Friday review sections with items, explanations and the spec counts", () => {
+    const valid = lesson({ parts: reviewParts() });
+    expect(evaluateMonthlyLessonQuality(contract(), 2, valid).severe).toEqual([]);
+    const dailyShape = lesson({ parts: reviewParts().map((item) => ["listening", "speaking"].includes(item.code) ? part(item.code, { prompt: "One question", options: ["a", "b", "c", "d"], answer: "a" }) : item) });
+    const codes = evaluateMonthlyLessonQuality(contract(), 2, dailyShape).severe.map((item) => item.code);
+    expect(codes).toEqual(expect.arrayContaining(["MONTHLY_REVIEW_COUNT", "MONTHLY_REVIEW_WORD_NOT_COVERED", "MONTHLY_REVIEW_MINIMAL_PAIRS", "MONTHLY_REVIEW_READ_ALOUD_MISSING", "MONTHLY_REVIEW_FREE_RESPONSE_MISSING"]));
+    const noExplanation = lesson({ parts: reviewParts().map((item) => item.code === "word_use" ? part(item.code, { items: (item.content.items as Array<Record<string, unknown>>).map(({ explanation: _drop, ...rest }) => rest) }) : item) });
+    expect(evaluateMonthlyLessonQuality(contract(), 2, noExplanation).severe.map((item) => item.code)).toContain("MONTHLY_REVIEW_EXPLANATION_MISSING");
   });
 
   it("marks malformed assessment shapes and missing listening content as severe", () => {
@@ -104,9 +114,9 @@ function lesson(overrides: { parts?: Array<{ code: string; content: Record<strin
     if (code === "objective") return part(code, { text: "Identify three budget words." });
     if (code === "instruction") return part(code, { steps: ["Read the example.", "Answer the question."] });
     if (code === "vocabulary") return part(code, { items: [
-      { word: "core-one", synonyms: [], antonyms: [] },
-      { word: "core-two", synonyms: ["second"], antonyms: [] },
-      { word: "core-three", synonyms: ["third"], antonyms: [] }
+      { word: "core-one", synonyms: [], antonyms: [], collocations: ["core-one plan", "a core-one", "core-one cost"] },
+      { word: "core-two", synonyms: ["second"], antonyms: [], collocations: ["core-two plan", "a core-two", "core-two cost"] },
+      { word: "core-three", synonyms: ["third"], antonyms: [], collocations: ["core-three plan", "a core-three", "core-three cost"] }
     ] });
     if (code === "grammar") return part(code, { formula: "Core formula" });
     if (code === "pronunciation") return part(code, { focus: "/k/", words: [{ word: "cost", ipa: "/kɒst/" }, { word: "can", ipa: "/kæn/" }, { word: "key", ipa: "/kiː/" }] });
@@ -121,6 +131,27 @@ function lesson(overrides: { parts?: Array<{ code: string; content: Record<strin
 }
 
 function part(code: string, content: Record<string, unknown> = {}) { return { code, content }; }
+
+/** A valid Friday review: study parts plus the six item sections (3 core words, 1 grammar step). */
+function reviewParts() {
+  const choice = (id: string, prompt: string, answer: string, others: string[]) => ({ id, prompt, options: [answer, ...others], answer, explanation: "Vì câu này đúng nghĩa.", variants: [{ id: `${id}-v1`, prompt: `${prompt} (again)`, options: [answer, ...others], answer, explanation: "Giải thích." }] });
+  const base = lesson().parts.filter((item) => ["objective", "instruction", "vocabulary", "grammar", "pronunciation"].includes(item.code));
+  return [
+    ...base,
+    part("listening", { items: ["core-one", "core-two", "core-three"].map((word, index) => ({ ...choice(`l${index}`, "Nghe và chọn nghĩa đúng", ["một", "hai", "ba"][index]!, ["bốn", "năm", "sáu"]), audioText: word })) }),
+    part("word_use", { items: [choice("u1", "Pick the synonym of core-two", "second", ["first", "third", "fourth"]), choice("u2", "The ____ is due.", "core-one", ["core-two", "core-three", "room"])] }),
+    part("word_class", { items: [choice("f1", "We ____ it yesterday.", "planned", ["plan", "plans", "planning"]), choice("f2", "Two ____ arrived.", "reports", ["report", "reporting", "reported"])] }),
+    part("reading", { passage: "The core-one is ready. The core-two is late. The core-three is new.", items: [choice("r1", "What is ready?", "core-one", ["core-two", "core-three", "room"]), choice("r2", "What is late?", "core-two", ["core-one", "core-three", "room"]), choice("r3", "What is new?", "core-three", ["core-one", "core-two", "room"])] }),
+    part("speaking", { items: [
+      { id: "s1", prompt: "Nghe và chọn từ", audioText: "cost", options: ["cost", "coast"], answer: "cost", explanation: "Âm /ɒ/." },
+      { id: "s2", prompt: "Nghe và chọn từ", audioText: "can", options: ["can", "cane"], answer: "can", explanation: "Âm /æ/." },
+      { id: "s3", prompt: "Đọc to câu sau", passage: "The key cost can change." },
+      { id: "s4", prompt: "Tell your manager about the plan.", requiredWords: ["core-one", "core-two", "core-three"], minRequiredWords: 2 }
+    ] })
+  ].map((item) => item.code === "grammar" ? part("grammar", { ...item.content, items: [choice("g1", "She ____ every day.", "works", ["work", "working", "worked"])] })
+    : item.code === "pronunciation" ? part("pronunciation", { ...item.content, reviewTargets: [{ soundId: "sound-1", focus: "/k/", words: [{ word: "cost", ipa: "/kɒst/" }, { word: "can", ipa: "/kæn/" }, { word: "key", ipa: "/kiː/" }] }] })
+      : item);
+}
 
 function exercises(resourceIds: string[]) {
   return ["listening", "reading", "writing", "word_class", "word_use", "speaking"].map((exerciseCode) => ({ exerciseCode: exerciseCode as "listening" | "reading" | "writing" | "word_class" | "word_use" | "speaking", focus: "Use assigned materials.", resourceIds }));

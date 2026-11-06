@@ -11,10 +11,9 @@ describe("Operator monthly planner", () => {
   it("renders an approved daily review with the legacy operator presentation and locked actions", () => {
     render(<MonthlyLessonPreview date="2026-11-06" cefr="A2" onClose={vi.fn()} lesson={{ lessonNumber: 5, lessonDate: "2026-11-06", kind: "review", status: "approved", scopeHash: "scope", locked: true, correctionCount: 0, quality: { severe: [], light: [] }, content: { title: "Ôn tập", parts: [{ code: "instruction", title: "Hướng dẫn", content: { guidance: "Ôn lại các bài trong tuần." } }, { code: "writing", title: "Viết", content: { prompt: "Write a recap.", answer: "A recap." } }, { code: "pronunciation", title: "Phát âm", content: { focus: "/k/", words: [{ word: "cost", ipa: "/kɒst/" }, { word: "can", ipa: "/kæn/" }, { word: "key", ipa: "/kiː/" }], reviewTargets: [{ soundId: "k", focus: "/k/", words: [{ word: "cost", ipa: "/kɒst/" }, { word: "can", ipa: "/kæn/" }, { word: "key", ipa: "/kiː/" }] }, { soundId: "s", focus: "/s/", words: [{ word: "see", ipa: "/siː/" }, { word: "soon", ipa: "/suːn/" }, { word: "sales", ipa: "/seɪlz/" }] }] } }] } }} />);
 
-    expect(screen.getByRole("heading", { name: /06\/11.*Ôn tập/ })).toBeInTheDocument();
-    expect(screen.getByRole("tab", { name: /1\. Học/ })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /Sinh bài cuối tuần.*Ôn tập ngày 06\/11/ })).toBeDisabled();
-    expect(screen.getByRole("button", { name: /Lưu bản nháp.*Ôn tập ngày 06\/11/ })).toBeDisabled();
+    expect(screen.getByRole("heading", { level: 1, name: /06\/11.*Ôn tập/ })).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: /1\. Ôn/ })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /Sinh bài cuối tuần/ })).not.toBeInTheDocument();
     expect(screen.getByText("/s/")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Nghe từ phát âm: sales" })).toBeInTheDocument();
   });
@@ -304,13 +303,15 @@ describe("Operator monthly planner", () => {
   it("locks generation and manual composition from 00:00 of the exam date but still lets the Operator view the exam", async () => {
     const user = userEvent.setup();
     const onOpenMonthlyFinal = vi.fn().mockResolvedValue(monthlyFinalView({ editable: false }));
+    const onPeekMonthlyFinal = vi.fn().mockResolvedValue(true);
     render(<ToastProvider><OperatorMonths month="2026-11" todayMonth="2026-11" cefr="B1" busy={false}
       overview={{ systemDate: "2026-11-30", monthWindow, brief: null, frameworks: [approvedFramework] }}
-      actions={monthActions({ onGenerateMonthlyFinal: vi.fn(), onComposeMonthlyFinal: vi.fn(), onOpenMonthlyFinal }) as never}
+      actions={monthActions({ onGenerateMonthlyFinal: vi.fn(), onComposeMonthlyFinal: vi.fn(), onOpenMonthlyFinal, onPeekMonthlyFinal }) as never}
     /></ToastProvider>);
     expect(screen.getAllByRole("button", { name: "Sinh đề thi tháng" }).at(-1)).toBeDisabled();
     expect(screen.getAllByRole("button", { name: "Soạn tay đề thi tháng" }).at(-1)).toBeDisabled();
-    await user.click(screen.getAllByRole("button", { name: "Xem và duyệt đề thi tháng" }).at(-1)!);
+    await user.click((await screen.findAllByRole("button", { name: "Xem đề thi tháng" })).at(-1)!);
+    expect(screen.getAllByRole("button", { name: "Sinh lại đề thi tháng" }).at(-1)).toBeDisabled();
     expect(onOpenMonthlyFinal).toHaveBeenCalledWith("framework-b1");
     expect((await screen.findAllByText(/Đã quá 00:00 ngày thi/u)).length).toBeGreaterThan(0);
   });
@@ -326,7 +327,7 @@ describe("Operator monthly planner", () => {
     await user.click(screen.getAllByRole("button", { name: "Sinh đề thi tháng" }).at(-1)!);
     expect(onGenerateMonthlyFinal).toHaveBeenCalledWith("framework-b1");
     expect((await screen.findAllByRole("dialog", { name: "Bản nháp đề thi tháng" })).length).toBeGreaterThan(0);
-    expect(screen.getAllByTestId("monthly-final-status").at(-1)).toHaveTextContent("NEEDS_REVIEW");
+    expect(screen.getAllByTestId("monthly-final-status").at(-1)).toHaveTextContent("Chờ rà soát");
     expect(screen.getAllByRole("button", { name: "Duyệt & phát hành" }).at(-1)).toBeDisabled();
     const prompt = screen.getAllByRole("textbox", { name: "Nội dung L01" }).at(-1)!;
     await user.clear(prompt);

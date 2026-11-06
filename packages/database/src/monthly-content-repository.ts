@@ -499,7 +499,8 @@ export class MonthlyContentRepository {
       let contract: MonthlyCurriculumContract;
       if ("daySpecs" in row.curriculum_contract) contract = row.curriculum_contract;
       else {
-        contract = planMonthlyResourcePool(row.curriculum_contract);
+        // Stamp the framework row version so quality reports saved later match it.
+        contract = { ...planMonthlyResourcePool(row.curriculum_contract), version: row.version };
         const scopeHash = monthlyScopeHash(contract);
         await client.query("update month_frameworks set curriculum_contract = $2::jsonb, scope_hash = $3, updated_at = now() where id = $1",
           [frameworkId, JSON.stringify(contract), scopeHash]);
@@ -622,7 +623,7 @@ export class MonthlyContentRepository {
     if (!("daySpecs" in row.curriculum_contract)) throw new Error("Monthly resources must be allocated before authoring a day");
     const spec = row.curriculum_contract.daySpecs.find((day) => day.lessonNumber === dayNumber);
     if (!spec) throw new Error("Monthly day is not in the locked DaySpec");
-    if (report.contractVersion !== row.version) throw new Error("Monthly quality report uses a stale contract version");
+    if (report.contractVersion !== row.curriculum_contract.version) throw new Error("Monthly quality report uses a stale contract version");
     const cell = await this.database.query<{ id: string; status: string }>(
       "select id, status from month_lessons where framework_id = $1 and lesson_number = $2",
       [frameworkId, dayNumber]
@@ -762,9 +763,9 @@ export class MonthlyContentRepository {
 
   async saveMonthlyCorrection(actorId: string, correctionId: string, lesson: MonthlyLessonDraftInput, report: MonthlyQualityReportInput): Promise<void> {
     const actor = await this.requireContentOperator(actorId);
-    const result = await this.database.query<{ correction_id: string; month_lesson_id: string; day_number: number; framework_id: string; cefr: MonthFrameworkView["cefr"]; month: string; status: string; version: number }>(
+    const result = await this.database.query<{ correction_id: string; month_lesson_id: string; day_number: number; framework_id: string; cefr: MonthFrameworkView["cefr"]; month: string; status: string; version: number; contract_version: number }>(
       `select mlc.id as correction_id, ml.id as month_lesson_id, ml.lesson_number as day_number, mf.id as framework_id,
-              mf.cefr, pm.month, mlc.status, mf.version
+              mf.cefr, pm.month, mlc.status, mf.version, (mf.curriculum_contract->>'version')::int as contract_version
        from month_lesson_corrections mlc join month_lessons ml on ml.id = mlc.month_lesson_id
        join month_frameworks mf on mf.id = ml.framework_id join program_months pm on pm.id = mf.program_month_id
        where mlc.id = $1 and pm.organization_id = $2`,
@@ -772,7 +773,7 @@ export class MonthlyContentRepository {
     );
     const row = result.rows[0];
     if (!row || row.status !== "authorized") throw new Error("Authorized monthly correction was not found");
-    if (report.contractVersion !== row.version) throw new Error("Monthly correction quality report uses a stale contract version");
+    if (report.contractVersion !== row.contract_version) throw new Error("Monthly correction quality report uses a stale contract version");
     const set = await this.database.query<{ id: string }>("select id from lesson_sets where month_framework_id = $1", [row.framework_id]);
     const lessonSetId = set.rows[0]?.id;
     if (!lessonSetId) throw new Error("Monthly lesson set was not found");

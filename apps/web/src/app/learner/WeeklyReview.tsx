@@ -1,8 +1,9 @@
 import { useEffect, useState } from "react";
-import { CheckCircle2, ChevronLeft, RotateCcw } from "lucide-react";
+import { CheckCircle2, ChevronLeft, RotateCcw, Volume2 } from "lucide-react";
 import type { CefrLevel, WeeklyReviewSessionView } from "@e4s/contracts";
 import type { LearnerCallbacks } from "./contracts.js";
 import { AppLink, ErrorText, Notice } from "./ui.js";
+import { AudioCaptureControl } from "./AudioCaptureControl.js";
 
 /**
  * Friday weekly review runner: optional flip-card warm-up, then the sections
@@ -13,6 +14,8 @@ export function WeeklyReview({ title, cefr, actions }: { title: string; cefr: Ce
   const english = !["A1", "A2"].includes(cefr);
   const [session, setSession] = useState<WeeklyReviewSessionView | null>(null);
   const [answer, setAnswer] = useState("");
+  /** Uploaded read-aloud recording (part 6b): recording the full sentence is enough to pass. */
+  const [recordedAudio, setRecordedAudio] = useState<string>();
   const [feedback, setFeedback] = useState<{ correct: boolean; text: string; willRetry: boolean } | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
@@ -38,13 +41,14 @@ export function WeeklyReview({ title, cefr, actions }: { title: string; cefr: Ce
     try { setSession(await actions.setWeeklyReviewWarmup(status)); } catch { setError(english ? "Could not save. Try again." : "Chưa lưu được. Thử lại nhé."); } finally { setBusy(false); }
   };
 
-  const submit = async (value: string) => {
+  const submit = async (value: string, artifactKey?: string) => {
     const question = session.currentQuestion;
-    if (busy || !question || !actions.answerWeeklyReview || !value.trim()) return;
+    if (busy || !question || !actions.answerWeeklyReview || (!value.trim() && !artifactKey)) return;
     setBusy(true);
     setError("");
     try {
-      const result = await actions.answerWeeklyReview({ sectionCode: question.sectionCode, itemId: question.itemId, answer: value });
+      const result = await actions.answerWeeklyReview({ sectionCode: question.sectionCode, itemId: question.itemId, ...(value.trim() ? { answer: value } : {}), ...(artifactKey ? { artifactKey } : {}) });
+      setRecordedAudio(undefined);
       setFeedback({ correct: result.correct, text: result.feedback, willRetry: result.willRetry });
       setSession(result.session);
       setAnswer("");
@@ -107,10 +111,17 @@ export function WeeklyReview({ title, cefr, actions }: { title: string; cefr: Ce
     </Notice> : null}
     {question ? <section className="card stack" aria-label={section?.title ?? question.sectionCode}>
       <div className="eyebrow">{section?.title}{question.retry ? <span className="badge" style={{ marginLeft: 8 }}><RotateCcw size={12} aria-hidden="true" /> {english ? "Try again" : "Làm lại"}</span> : null}</div>
-      {question.passage ? <blockquote className="small">{question.passage}</blockquote> : null}
+      {question.audioText ? <button type="button" className="btn weekly-review-listen" onClick={() => actions.speak(question.audioText!)}><Volume2 size={18} aria-hidden="true" /> {english ? "Listen" : "Nghe"}</button> : null}
+      {question.passage ? <blockquote className="small weekly-review-passage">{question.passage} <button type="button" className="btn-sm btn-ghost" aria-label={english ? "Listen to the text" : "Nghe đoạn này"} onClick={() => actions.speak(question.passage!)}><Volume2 size={14} aria-hidden="true" /></button></blockquote> : null}
       <p><strong>{question.prompt}</strong></p>
       {question.options?.length
         ? <div className="stack" role="group" aria-label={english ? "Answer options" : "Các lựa chọn"}>{question.options.map((option) => <button type="button" key={option} className="btn" disabled={busy} onClick={() => void submit(option)}>{option}</button>)}</div>
+        : question.acceptsAudio && question.passage && !question.options?.length && actions.uploadAssessmentAudio
+          ? <div className="stack weekly-review-read-aloud">
+            <p className="small">{english ? "Record yourself reading the sentence above. Recording the whole sentence is enough." : "Ghi âm khi bạn đọc to câu ở trên. Chỉ cần ghi âm đủ câu là qua."}</p>
+            <AudioCaptureControl label={english ? "Read-aloud recording" : "Ghi âm đọc to"} value={null} transcript={answer} disabled={busy} uploadAudio={actions.uploadAssessmentAudio} getAudioReadUrl={actions.getAssessmentAudioReadUrl} onTranscript={setAnswer} onAudioChange={(audio) => setRecordedAudio(audio?.artifactKey)} />
+            <button type="button" className="btn-primary" disabled={busy || !recordedAudio} onClick={() => void submit(answer, recordedAudio)}>{english ? "Submit recording" : "Nộp bản ghi âm"}</button>
+          </div>
         : <form className="stack" onSubmit={(event) => { event.preventDefault(); void submit(answer); }}>
           <label className="stack"><span className="small">{question.freeResponse ? (english ? "Write 1–2 sentences using at least two words from this week." : "Viết 1–2 câu, dùng ít nhất 2 từ của tuần.") : (english ? "Your answer" : "Câu trả lời")}</span>
             <textarea value={answer} rows={question.freeResponse ? 3 : 1} disabled={busy} onChange={(event) => setAnswer(event.target.value)} /></label>

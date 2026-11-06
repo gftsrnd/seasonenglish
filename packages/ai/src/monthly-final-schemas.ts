@@ -62,9 +62,47 @@ export const monthlyFinalReceptiveOutputSchema = z.object({
   reading: z.object({ questions: z.array(choiceQuestion).min(1).max(40) })
 });
 export type MonthlyFinalReceptiveOutput = z.infer<typeof monthlyFinalReceptiveOutputSchema>;
+/**
+ * Listening and reading are generated in separate calls: one call producing
+ * both left reading empty. The tool schemas the model sees are flat
+ * (`{ messages }`, `{ questions }`): with a single wrapper object Claude Haiku
+ * returned the whole slice as one JSON-encoded string. These schemas map the
+ * flat output back to `{ listening: { messages } }` / `{ reading: { questions } }`
+ * and still accept the wrapped (or stringified) shape.
+ */
+export const monthlyFinalListeningOutputSchema = z.preprocess(normalizeMonthlyFinalListeningOutput, monthlyFinalReceptiveOutputSchema.pick({ listening: true }));
+export type MonthlyFinalListeningOutput = z.infer<typeof monthlyFinalListeningOutputSchema>;
+export const monthlyFinalReadingOutputSchema = z.preprocess(normalizeMonthlyFinalReadingOutput, monthlyFinalReceptiveOutputSchema.pick({ reading: true }));
+export type MonthlyFinalReadingOutput = z.infer<typeof monthlyFinalReadingOutputSchema>;
+
+export function normalizeMonthlyFinalListeningOutput(value: unknown): unknown {
+  const output = decodeJson(value);
+  if (!isRecord(output)) return output;
+  const listening = "listening" in output ? decodeJson(output.listening) : output;
+  if (!isRecord(listening)) return { listening };
+  const messages = decodeJson(listening.messages);
+  return {
+    listening: {
+      messages: Array.isArray(messages)
+        ? messages.map((message) => {
+          const decoded = decodeJson(message);
+          return isRecord(decoded) ? { ...decoded, questions: decodeQuestions(decoded.questions) } : decoded;
+        })
+        : messages
+    }
+  };
+}
+
+export function normalizeMonthlyFinalReadingOutput(value: unknown): unknown {
+  const output = decodeJson(value);
+  if (!isRecord(output)) return output;
+  const reading = "reading" in output ? decodeJson(output.reading) : output;
+  if (!isRecord(reading)) return { reading };
+  return { reading: { questions: decodeQuestions(reading.questions) } };
+}
 
 const grammarEvidence = z.string().trim().min(1).max(400);
-export const monthlyFinalProductiveOutputSchema = z.object({
+const monthlyFinalProductiveBaseSchema = z.object({
   title: z.string().trim().min(1).max(200),
   grammarComponents: z.array(z.object({
     code: grammarCode,
@@ -90,7 +128,59 @@ export const monthlyFinalProductiveOutputSchema = z.object({
     evidence: z.object({ gaMain: grammarEvidence, gbMain: grammarEvidence })
   })
 });
+/**
+ * The productive tool schema is already flat (five top-level fields, no single
+ * wrapper), but any of those fields may still come back JSON-encoded; decode
+ * them (and an accidental `{ productive: {...} }` wrapper) before validation.
+ */
+export const monthlyFinalProductiveOutputSchema = z.preprocess(normalizeMonthlyFinalProductiveOutput, monthlyFinalProductiveBaseSchema);
 export type MonthlyFinalProductiveOutput = z.infer<typeof monthlyFinalProductiveOutputSchema>;
+
+export function normalizeMonthlyFinalProductiveOutput(value: unknown): unknown {
+  let output = decodeJson(value);
+  if (!isRecord(output)) return output;
+  if ("productive" in output && !("grammarComponents" in output)) output = decodeJson(output.productive);
+  if (!isRecord(output)) return output;
+  const grammarComponents = decodeJson(output.grammarComponents);
+  const speakingA = decodeJson(output.speakingA);
+  return {
+    ...output,
+    grammarComponents: Array.isArray(grammarComponents) ? grammarComponents.map(decodeJson) : grammarComponents,
+    writing: decodeProduction(output.writing),
+    speakingA: isRecord(speakingA) ? { ...speakingA, positions: decodeArrayOfObjects(speakingA.positions) } : speakingA,
+    speakingB: decodeProduction(output.speakingB)
+  };
+}
+
+function decodeProduction(value: unknown): unknown {
+  const production = decodeJson(value);
+  if (!isRecord(production)) return production;
+  return { ...production, requirements: decodeJson(production.requirements), evidence: decodeJson(production.evidence) };
+}
+
+function decodeQuestions(value: unknown): unknown {
+  const questions = decodeArrayOfObjects(value);
+  return Array.isArray(questions)
+    ? questions.map((question) => isRecord(question) ? { ...question, options: decodeJson(question.options) } : question)
+    : questions;
+}
+
+function decodeArrayOfObjects(value: unknown): unknown {
+  const array = decodeJson(value);
+  return Array.isArray(array) ? array.map(decodeJson) : array;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
+}
+
+/** Decode a JSON object/array the model returned as a string; anything else is returned unchanged. */
+function decodeJson(value: unknown): unknown {
+  if (typeof value !== "string") return value;
+  const text = value.trim().replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/, "");
+  if (!/^[[{]/u.test(text)) return value;
+  try { return JSON.parse(text) as unknown; } catch { return value; }
+}
 
 const stringArray = (min: number, max: number) => ({ type: "array", minItems: min, maxItems: max, items: { type: "string" } });
 const choiceJson = (withEvidence: boolean) => ({
@@ -120,6 +210,26 @@ export const monthlyFinalReceptiveOutputJsonSchema = {
       }
     },
     reading: { type: "object", additionalProperties: false, required: ["questions"], properties: { questions: { type: "array", minItems: 1, maxItems: 40, items: choiceJson(false) } } }
+  }
+} satisfies Record<string, unknown>;
+
+/** Flat tool schemas (no `listening` / `reading` wrapper object); the Zod schemas above map them back. */
+export const monthlyFinalListeningOutputJsonSchema = {
+  type: "object", additionalProperties: false, required: ["messages"],
+  properties: {
+    messages: {
+      ...monthlyFinalReceptiveOutputJsonSchema.properties.listening.properties.messages,
+      description: "Message A and Message B as a JSON array of objects, never a JSON-encoded string."
+    }
+  }
+} satisfies Record<string, unknown>;
+export const monthlyFinalReadingOutputJsonSchema = {
+  type: "object", additionalProperties: false, required: ["questions"],
+  properties: {
+    questions: {
+      ...monthlyFinalReceptiveOutputJsonSchema.properties.reading.properties.questions,
+      description: "One reading question per target term, as a JSON array of objects, never a JSON-encoded string."
+    }
   }
 } satisfies Record<string, unknown>;
 
@@ -172,6 +282,22 @@ export function validateMonthlyFinalReceptiveOutput(output: MonthlyFinalReceptiv
     if (!message.script.includes(message.gbSentence)) issues.push({ path: `listening.messages.${index}.gbSentence`, message: "gbSentence must be copied verbatim from the script." });
   }
   return issues;
+}
+
+export function validateMonthlyFinalListeningOutput(output: MonthlyFinalListeningOutput, input: MonthlyFinalGenerationInput): AiValidationIssue[] {
+  const issues: AiValidationIssue[] = [];
+  const labels = output.listening.messages.map((message) => message.label).sort().join("");
+  if (labels !== "AB") issues.push({ path: "listening.messages", message: "Return exactly Message A and Message B." });
+  issues.push(...exactTermSet("listening", output.listening.messages.flatMap((message) => message.questions.map((question) => question.termId)), input.targets.listening.map((term) => term.id)));
+  for (const [index, message] of output.listening.messages.entries()) {
+    if (!message.script.includes(message.gaSentence)) issues.push({ path: `listening.messages.${index}.gaSentence`, message: "gaSentence must be copied verbatim from the script." });
+    if (!message.script.includes(message.gbSentence)) issues.push({ path: `listening.messages.${index}.gbSentence`, message: "gbSentence must be copied verbatim from the script." });
+  }
+  return issues;
+}
+
+export function validateMonthlyFinalReadingOutput(output: MonthlyFinalReadingOutput, input: MonthlyFinalGenerationInput): AiValidationIssue[] {
+  return exactTermSet("reading", output.reading.questions.map((question) => question.termId), input.targets.reading.map((term) => term.id));
 }
 
 export function validateMonthlyFinalProductiveOutput(output: MonthlyFinalProductiveOutput, input: MonthlyFinalGenerationInput): AiValidationIssue[] {

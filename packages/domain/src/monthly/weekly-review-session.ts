@@ -231,6 +231,7 @@ function toVariant(raw: Record<string, unknown>, fallbackId: string, code: Weekl
     id: typeof raw.id === "string" && raw.id.trim() ? raw.id : fallbackId,
     prompt,
     ...(passage && passage !== prompt ? { passage } : {}),
+    ...(typeof raw.audioText === "string" && raw.audioText.trim() ? { audioText: raw.audioText.trim() } : {}),
     ...(options?.length ? { options } : {}),
     ...(answer === undefined ? {} : { answer }),
     ...(typeof raw.explanation === "string" && raw.explanation.trim() ? { explanation: raw.explanation } : {}),

@@ -112,3 +112,125 @@
 .monthly-resource-editor-examples{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:6px}
 .monthly-resource-editor-errors{margin:0;padding:6px 10px 6px 24px;border-radius:8px;background:var(--danger-soft);color:var(--danger);font-size:.76rem}
 @media(max-width:760px){.monthly-resource-editor-row.core,.monthly-resource-editor-row.support,.monthly-resource-editor-row.grammar{grid-template-columns:1fr 1fr}}
+
+/* Draft resource actions: generate + approve on row 1 (equal width), manual edit on row 2. */
+.monthly-resource-actions .monthly-resource-main-action{flex:1 1 0;min-width:0;text-align:center}
+.monthly-resource-actions .monthly-resource-edit-button{flex:1 1 100%;text-align:center}
+/* Reopen request: always a red square, same height as the plan button next to it. */
+.monthly-plan-row{align-items:center}
+.monthly-resource-actions .monthly-plan-row .monthly-reopen-icon-button{flex:0 0 34px;width:34px;height:34px;min-height:34px;border:1px solid #c62828!important;background:#d32f2f!important;color:#fff!important;box-shadow:none}
+.monthly-resource-actions .monthly-plan-row .monthly-reopen-icon-button:hover:not(:disabled){background:#b71c1c!important;border-color:#b71c1c!important}
+.monthly-resource-actions .monthly-plan-row .monthly-reopen-icon-button:disabled{opacity:.55;cursor:not-allowed}
+.monthly-resource-actions .monthly-plan-row .monthly-reopen-icon-button svg{width:13px;height:13px;fill:#fff;stroke:#fff}
+/* Collapsed core rows in the manual editor: word, part of speech, meaning and a clear expand cue. */
+.monthly-resource-editor-core>summary{list-style:none}
+.monthly-resource-editor-core>summary::-webkit-details-marker{display:none}
+.monthly-resource-editor-chevron{display:inline-block;width:12px;color:var(--muted);font-style:normal;transition:transform .15s}
+.monthly-resource-editor-core[open]>summary .monthly-resource-editor-chevron{transform:rotate(90deg)}
+.monthly-resource-editor-word{font-weight:700;color:var(--text)}
+.monthly-resource-editor-type{padding:1px 7px;border-radius:999px;background:var(--surface);border:1px solid var(--line);font-size:.72rem}
+.monthly-resource-editor-meaning{flex:1 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.monthly-resource-editor-count{flex:0 0 auto}
+.monthly-resource-editor-core>summary:hover{background:var(--surface)}
+/* Allocation view: collapsed day cards keep their own height (no stretching next to an open card) and show the day's core words. */
+.monthly-plan-inspector .monthly-plan-days{align-items:start}
+.monthly-plan-day-cores{margin:4px 0 0;font-size:12px;font-weight:600;color:var(--text);line-height:1.4}
+.monthly-plan-day-cores em{font-style:normal;font-weight:400;color:var(--muted)}
+/* Allocation view: expanded words grouped by relation with labels. */
+.monthly-plan-core-type{font-style:normal;font-weight:400;color:var(--muted);font-size:11px}
+.monthly-plan-relations{display:grid;gap:2px;margin:3px 0 0}
+.monthly-plan-relations>div{display:grid;grid-template-columns:96px minmax(0,1fr);gap:6px;font-size:12px}
+.monthly-plan-relations dt{color:var(--muted);font-weight:600}
+.monthly-plan-relations dd{margin:0;color:var(--text)}
+.monthly-day-cell .monthly-day-actions>button.monthly-generate-action.icon-only{flex-basis:28px;width:28px;padding:0}
+.monthly-final-issues h4{margin:0 0 8px}
+.monthly-final-issues.has-issues{border-color:#f0c9a8;background:#fff8f1}
+.monthly-final-issue-list,.monthly-final-confirm-list,.monthly-final-check-list{list-style:none;margin:0;padding:0;display:grid;gap:6px}
+.monthly-final-issue-list li{font-size:13px;line-height:1.45}
+.monthly-final-issue-list .badge{margin-right:4px}
+.monthly-final-issues h5{margin:14px 0 6px;font-size:13px}
+.monthly-final-confirm-list label{display:flex;gap:8px;align-items:flex-start;font-size:13px;line-height:1.4;cursor:pointer}
+.monthly-final-confirm-list input{margin-top:2px}
+.monthly-final-check-list li{padding:4px 0;border-bottom:1px dashed var(--line)}
+details.monthly-final-fold{margin-top:10px}
+details.monthly-final-fold>summary{cursor:pointer;display:flex;gap:8px;align-items:baseline;list-style:revert;padding:2px 0}
+details.monthly-final-fold[open]>summary{margin-bottom:8px}
+.monthly-final-grammar{display:grid;gap:12px;margin-top:12px;padding:14px 16px;border:1px solid var(--line);border-radius:12px;background:var(--surface)}
+.monthly-final-grammar>b{font-size:14px}
+.monthly-final-grammar-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px 16px;margin-bottom:6px}
+.monthly-final-grammar-grid label{display:grid;gap:6px;font-size:12.5px;color:var(--muted,#666);min-width:0}
+.monthly-final-grammar-grid select,.monthly-final-grammar-grid textarea,.monthly-final-grammar-grid input{width:100%;box-sizing:border-box;color:var(--text)}
+.monthly-final-grammar-grid textarea{min-height:88px}
+@media (max-width:720px){.monthly-final-grammar-grid{grid-template-columns:1fr}}
+/* Monthly lesson preview: legacy lesson layout inside the operator shell. */
+.operator-monthly-lesson .lesson-example-list{display:flex;flex-wrap:wrap;gap:10px 12px;margin-top:10px}
+.operator-monthly-lesson .lesson-example-card{margin:0}
+.operator-monthly-lesson .lesson-grammar-copy{display:grid;gap:6px}
+.operator-monthly-lesson .lesson-study-explanation{margin:0;color:var(--muted)}
+.operator-monthly-lesson .lesson-pronunciation-heading{display:flex;align-items:center;justify-content:space-between;gap:12px}
+.operator-monthly-lesson .lesson-pronunciation-summary{position:relative}
+.operator-monthly-lesson .lesson-pronunciation-mouth{position:relative;flex:0 0 auto;margin-left:auto}
+.operator-monthly-lesson .lesson-pronunciation-mouth__toggle{display:grid;place-items:center;min-width:36px;min-height:36px;border-radius:999px;color:var(--primary)}
+.operator-monthly-lesson .lesson-pronunciation-mouth__panel{position:absolute;z-index:5;right:0;top:calc(100% + 6px);width:min(320px,calc(100vw - 48px));max-width:min(320px,80vw);padding:10px;border:1px solid var(--line);border-radius:12px;background:var(--surface);box-shadow:0 8px 28px rgba(0,0,0,.14);overflow:hidden}
+.operator-monthly-lesson .lesson-pronunciation-mouth__panel img{display:block;width:100%;max-width:100%;height:auto}
+.operator-monthly-lesson .lesson-pronunciation-mouth__panel p{margin:6px 2px 0;font-size:.82rem;line-height:1.4;color:var(--muted)}
+.operator-monthly-lesson .lesson-pronunciation-words{display:flex;flex-wrap:wrap;column-gap:18px;row-gap:12px;margin-top:10px}
+.operator-monthly-lesson .lesson-pronunciation-target-group{display:grid;gap:8px;min-width:0}
+.operator-monthly-lesson .lesson-pronunciation-target-group>div{display:flex;flex-wrap:wrap;gap:8px 12px}
+.operator-monthly-lesson .lesson-pronunciation-word-chip{margin:0}
+/* Review days list the whole week's words: show them as a compact grid instead of one long column. */
+.operator-monthly-lesson .lesson-grammar-steps{display:grid;gap:4px;margin-top:6px}
+.operator-monthly-lesson .lesson-grammar-step{display:grid;gap:6px;padding:10px 0}
+.operator-monthly-lesson .lesson-grammar-step+.lesson-grammar-step{border-top:1px dashed var(--line)}
+.operator-monthly-lesson .lesson-grammar-step p{margin:0}
+.operator-monthly-lesson .lesson-grammar-step .lesson-example-list{display:flex;flex-wrap:wrap;gap:8px 12px;margin-top:4px}
+.operator-monthly-lesson .vocabulary-list--scroll{max-height:620px;overflow-y:auto;overscroll-behavior:contain;padding-right:6px;scroll-snap-type:y proximity}
+.operator-monthly-lesson .vocabulary-list--scroll>.vocabulary-card{scroll-snap-align:start}
+.operator-monthly-lesson .lesson-grammar-row+.lesson-grammar-row{margin-top:10px}
+
+/* Pronunciation blocks (copy of learner rules; operator does not load learner.css). */
+.operator-monthly-lesson .lesson-pronunciation-targets{display:grid;gap:4px;margin-top:6px}
+.operator-monthly-lesson .lesson-pronunciation-target{display:grid;gap:10px;padding:10px 0}
+.operator-monthly-lesson .lesson-pronunciation-target+.lesson-pronunciation-target{border-top:1px dashed var(--line)}
+.operator-monthly-lesson .lesson-pronunciation-target-head{display:flex;align-items:center;justify-content:space-between;gap:12px}
+.operator-monthly-lesson .lesson-pronunciation-target-head p{margin:0}
+.operator-monthly-lesson .lesson-pronunciation-target .lesson-pronunciation-words{display:flex;flex-wrap:wrap;gap:8px 12px;margin:0}
+.operator-monthly-lesson .lesson-pronunciation-target .lesson-pronunciation-mouth__toggle{display:grid;place-items:center;min-width:38px;min-height:38px;border-radius:999px;color:var(--primary)}
+.operator-monthly-lesson .lesson-pronunciation-mouth__inline{width:min(100%,560px);box-sizing:border-box;padding:10px;border:1px solid var(--line);border-radius:12px;background:var(--surface)}
+.operator-monthly-lesson .lesson-pronunciation-mouth__inline img{display:block;width:100%;height:auto}
+.operator-monthly-lesson .lesson-pronunciation-mouth__inline p{margin:6px 2px 0;font-size:.85rem;line-height:1.4;color:var(--muted)}
+details.monthly-resource-editor-section>summary{display:flex;align-items:baseline;gap:10px;cursor:pointer;list-style:revert;padding:6px 0}
+details.monthly-resource-editor-section>summary h3{display:inline;margin:0}
+details.monthly-resource-editor-section{border-bottom:1px solid var(--line);padding-bottom:6px}
+details.monthly-resource-editor-section[open]>summary{margin-bottom:8px}
+/* Friday review practice (operator view): six sections of items. */
+.monthly-review-practice{display:grid;gap:10px}
+.monthly-review-practice-summary{margin:0}
+.monthly-review-section{padding:10px 14px}
+.monthly-review-section>summary{display:flex;align-items:baseline;gap:10px;cursor:pointer;list-style:revert}
+.monthly-review-section>summary .badge{margin-left:auto}
+.monthly-review-items{display:grid;gap:10px;margin:10px 0 0;padding-left:22px}
+.monthly-review-item{padding:8px 0;border-top:1px dashed var(--line)}
+.monthly-review-item:first-child{border-top:0}
+.monthly-review-item-body{display:grid;gap:6px}
+.monthly-review-item-body p{margin:0}
+.monthly-review-prompt{font-weight:600}
+.monthly-review-audio{display:flex;align-items:center;gap:6px;color:var(--muted)}
+.monthly-review-passage{margin:8px 0;padding:10px 12px;border-left:3px solid var(--line);background:var(--surface);font-size:.9rem;line-height:1.5}
+.monthly-review-explanation{color:var(--muted)}
+.monthly-review-variant{margin-top:6px;padding-left:10px;border-left:2px solid var(--line)}
+.monthly-review-variant>summary{cursor:pointer;color:var(--muted)}
+.monthly-review-item .operator-answer-options{display:grid;gap:4px;margin:0;padding:0;list-style:none}
+.monthly-review-item .operator-answer-choice{display:flex;gap:8px;align-items:center;padding:5px 10px;border:1px solid var(--line);border-radius:8px;font-size:.9rem}
+.monthly-review-item .operator-answer-choice.is-answer{border-color:#2f8f6b;background:#eef8f2}
+.monthly-review-item .operator-answer-letter{font-weight:700}
+/* Review practice: 6 section blocks, each with its own scroll box. */
+.operator-monthly-lesson .monthly-review-nav{display:flex;flex-wrap:wrap;gap:8px;margin:2px 0}
+.operator-monthly-lesson .monthly-review-nav a{display:inline-flex;align-items:center;gap:6px;padding:6px 12px;border:1px solid var(--line);border-radius:999px;background:var(--surface);color:var(--text);font-size:.85rem;text-decoration:none}
+.operator-monthly-lesson .monthly-review-nav a b{display:inline-grid;place-items:center;width:20px;height:20px;border-radius:999px;background:var(--primary);color:#fff;font-size:.72rem}
+.operator-monthly-lesson .monthly-review-nav a span{color:var(--muted);font-size:.75rem}
+.operator-monthly-lesson .monthly-review-block{display:grid;gap:10px;scroll-margin-top:16px}
+.operator-monthly-lesson .monthly-review-block-header{display:flex;align-items:center;justify-content:space-between;gap:10px}
+.operator-monthly-lesson .monthly-review-block-header h2{margin:0;font-size:1rem}
+.operator-monthly-lesson .monthly-review-scroll{position:relative;display:grid;gap:10px;overflow-y:auto;overscroll-behavior:contain;padding-right:6px;scroll-snap-type:y proximity}
+.operator-monthly-lesson .monthly-review-scroll>.monthly-review-card{margin:0;scroll-snap-align:start}

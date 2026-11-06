@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { createAnthropicProvider } from "../src/providers/anthropic.js";
+import { NATIVE_JSON_FIELD_INSTRUCTION, createAnthropicProvider } from "../src/providers/anthropic.js";
 import { weeklyLessonsOutputJsonSchema } from "../src/schemas.js";
 
 describe("Anthropic provider", () => {
@@ -389,5 +389,26 @@ describe("Anthropic provider", () => {
       { role: "assistant", content: "{}" },
       { role: "user", content: "REPAIR REQUIRED: durationMinutes: Required" }
     ]);
+  });
+});
+
+describe("Anthropic provider native JSON field instruction", () => {
+  const systemTextFor = async (taskId: string) => {
+    const fetch = vi.fn().mockResolvedValue(new Response(JSON.stringify({
+      stop_reason: "tool_use", content: [{ type: "tool_use", input: { ok: true } }]
+    }), { status: 200 }));
+    const provider = createAnthropicProvider({ apiKey: "test-secret-key", model: "claude-haiku-5-5", fetch });
+    await provider.complete({ taskId, systemPrompt: "Do it.", input: {}, outputJsonSchema: { type: "object" }, signal: new AbortController().signal, traceId: "trace-json" });
+    const body = JSON.parse(String((fetch.mock.calls[0]?.[1] as RequestInit).body)) as { system: Array<{ text: string }> };
+    return body.system[0]!.text;
+  };
+
+  it.each(["monthly_lesson_day", "monthly_final_listening_generation", "monthly_final_reading_generation", "monthly_final_productive_generation"])("asks %s for real JSON values, not JSON-encoded strings", async (taskId) => {
+    expect(await systemTextFor(taskId)).toContain(NATIVE_JSON_FIELD_INSTRUCTION);
+  });
+
+  it("leaves other tasks' system text unchanged", async () => {
+    expect(await systemTextFor("weekly_lesson_day")).not.toContain(NATIVE_JSON_FIELD_INSTRUCTION);
+    expect(await systemTextFor("level_form_listening_generation")).not.toContain(NATIVE_JSON_FIELD_INSTRUCTION);
   });
 });

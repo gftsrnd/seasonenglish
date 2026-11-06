@@ -154,7 +154,8 @@ function gen02(context: Context): Result {
   const problems: string[] = [];
   let expected = exam.allocation;
   try { expected = monthlyFinalAllocation(contract.coreTerms.length, contract.cefr); } catch { problems.push("Không phân bổ được L/R/W/S cho N"); }
-  if (JSON.stringify(expected) !== JSON.stringify(exam.allocation)) problems.push(`Phân bổ lưu ${JSON.stringify(exam.allocation)} khác công thức`);
+  // Compare field by field: allocations reloaded from jsonb come back with reordered keys.
+  if ((["n", "l", "r", "w", "s"] as const).some((key) => expected[key] !== exam.allocation[key])) problems.push(`Phân bổ lưu ${JSON.stringify(exam.allocation)} khác công thức`);
   const listening = context.section("listening");
   const l = context.tasks("listening").length;
   const r = context.tasks("reading").length;

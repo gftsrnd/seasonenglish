@@ -14,15 +14,17 @@ describe("Monthly final review screen", () => {
     const dialog = screen.getByRole("dialog", { name: "Bản nháp đề thi tháng" });
     expect(within(dialog).getByText("Chi tiết 4 phần")).toBeInTheDocument();
     expect(within(dialog).getByRole("textbox", { name: "Nội dung L01" })).toBeInTheDocument();
-    expect(screen.getByTestId("monthly-final-status")).toHaveTextContent("NEEDS_REVIEW");
-    expect(screen.getByText("Audio SCRIPT_ONLY")).toBeInTheDocument();
-    const report = screen.getByRole("region", { name: "Báo cáo kiểm tra GEN" });
-    expect(within(report).getAllByRole("row")).toHaveLength(24);
-    expect(within(screen.getByTestId("gen-GEN01")).getByText("Đạt")).toBeInTheDocument();
-    expect(within(screen.getByTestId("gen-GEN05")).getByText("Cần rà soát")).toBeInTheDocument();
+    expect(screen.getByTestId("monthly-final-status")).toHaveTextContent("Chờ rà soát");
+    expect(screen.getByTestId("monthly-final-status")).toHaveAttribute("data-status", "NEEDS_REVIEW");
+    expect(screen.getByText("Chưa có audio")).toBeInTheDocument();
+    const report = screen.getByRole("region", { name: "Việc còn thiếu" });
+    expect(within(report).getByText("Còn thiếu 1 việc")).toBeInTheDocument();
+    expect(within(report).getByTestId("todo-audio")).toHaveTextContent("Chưa có audio");
+    expect(within(report).getByRole("checkbox", { name: "Đã nghe soát audio" })).toBeDisabled();
+    expect(within(report).getByText(/Xem toàn bộ 23 kiểm tra/u)).toBeInTheDocument();
     expect(within(screen.getByTestId("gen-GEN05")).getByRole("checkbox", { name: "Xác nhận đã rà GEN05" })).toBeEnabled();
-    expect(within(screen.getByTestId("gen-GEN13")).queryByRole("checkbox")).not.toBeInTheDocument();
-    const mapping = screen.getByRole("region", { name: "Bảng mapping mục từ" });
+    expect(screen.queryByTestId("gen-GEN13")).not.toBeInTheDocument();
+    const mapping = screen.getByRole("group", { name: "Bảng mapping mục từ" });
     expect(within(mapping).getAllByRole("row")).toHaveLength(5);
     expect(within(mapping).getByRole("row", { name: /V01 deadline.*L01 B/u })).toBeInTheDocument();
     expect(screen.getByRole("combobox", { name: "GA thành phần chính" })).toHaveValue("ga-1");
@@ -62,7 +64,7 @@ describe("Monthly final review screen", () => {
 
     const onPublish = vi.fn().mockResolvedValue(undefined);
     render(<MonthlyFinalReview draft={monthlyFinalView({ status: "READY", audio: true, reviewed: true })} onClose={vi.fn()} onSave={vi.fn()} onPublish={onPublish} />);
-    expect(screen.getByTestId("monthly-final-status")).toHaveTextContent("READY");
+    expect(screen.getByTestId("monthly-final-status")).toHaveTextContent("Sẵn sàng phát hành");
     await user.click(screen.getByRole("button", { name: "Duyệt & phát hành" }));
     expect(onPublish).toHaveBeenCalledTimes(1);
   });

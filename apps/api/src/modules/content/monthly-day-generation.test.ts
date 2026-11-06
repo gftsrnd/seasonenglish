@@ -78,6 +78,8 @@ describe("monthly day generation", () => {
       expect(input.lockedScope.sounds.map((sound: { id: string }) => sound.id)).toEqual(["sound", "sound-2"]);
       expect(input.lockedScope.pronunciationExamples.map((example: { id: string }) => example.id)).toEqual(["cost", "can", "key", "cost-2", "can-2", "key-2"]);
       expect(options.systemPrompt).toContain("pronunciation.reviewTargets");
+      expect(options.systemPrompt).toContain("Friday review exercise contract");
+      expect([10_000, 14_000]).toContain(options.maxOutputTokens);
       return { output: { lesson: { ...reviewLessonCandidate(), title: "Budget review" } }, metadata: {} };
     } } as unknown as import("@e4s/ai").AiTaskRunner;
 
@@ -92,8 +94,22 @@ function lessonCandidate() {
 }
 
 function reviewLessonCandidate() {
-  return { parts: components.map((code) => code === "grammar"
-    ? { code, content: { formula: "The cost is + adjective; There is + adjective" } }
+  const choice = (id: string, prompt: string, answer: string, others: string[]) => ({ id, prompt, options: [answer, ...others], answer, explanation: "Vì đúng nghĩa.", variants: [{ prompt: `${prompt}?`, options: [answer, ...others], answer, explanation: "Giải thích." }] });
+  const sections: Record<string, Record<string, unknown>> = {
+    listening: { items: [["budget", "ngân sách"], ["cost", "chi phí"], ["forecast", "dự báo"]].map(([word, meaning], index) => ({ ...choice(`l${index}`, "Nghe và chọn nghĩa đúng", meaning!, ["phòng", "ngày", "kế hoạch"]), audioText: word })) },
+    word_use: { items: [choice("u1", "Pick the synonym of cost", "expense", ["room", "date", "plan"]), choice("u2", "Our ____ is small.", "budget", ["cost", "forecast", "room"])] },
+    word_class: { items: [choice("f1", "We ____ sales every month.", "forecast", ["forecasts", "forecasting", "forecaster"]), choice("f2", "The ____ are high.", "costs", ["cost", "costing", "costed"])] },
+    reading: { passage: "Hi team, the budget for next month is small. The cost of travel is high, so the forecast shows a small profit.", items: [choice("r1", "What is small?", "The budget", ["The cost", "The team", "The trip"]), choice("r2", "What is high?", "The cost of travel", ["The budget", "The profit", "The team"]), choice("r3", "What does the forecast show?", "A small profit", ["A big loss", "No change", "A new team"])] },
+    speaking: { items: [
+      { prompt: "Nghe và chọn từ", audioText: "cost", options: ["cost", "coast"], answer: "cost", explanation: "Âm /ɒ/ ngắn." },
+      { prompt: "Nghe và chọn từ", audioText: "see", options: ["see", "she"], answer: "see", explanation: "Âm /s/." },
+      { prompt: "Đọc to câu sau", passage: "The key cost is in the sales plan." },
+      { prompt: "Tell your manager about next month.", requiredWords: ["budget", "cost", "forecast"], minRequiredWords: 2 }
+    ] }
+  };
+  return { parts: components.filter((code) => code !== "writing").map((code) => code === "grammar"
+    ? { code, content: { formula: "The cost is + adjective; There is + adjective", items: [choice("g1", "The cost ____ high.", "is", ["are", "be", "am"]), choice("g2", "There ____ a report.", "is", ["are", "be", "am"])] } }
+    : sections[code] ? { code, content: sections[code]! }
     : code === "pronunciation"
       ? { code, content: { focus: "/k/", words: [{ word: "cost", ipa: "/kɒst/" }, { word: "can", ipa: "/kæn/" }, { word: "key", ipa: "/kiː/" }], reviewTargets: [
         { soundId: "sound", focus: "/k/", words: [{ word: "cost", ipa: "/kɒst/" }, { word: "can", ipa: "/kæn/" }, { word: "key", ipa: "/kiː/" }] },
@@ -106,7 +122,7 @@ function part(code: string) {
   if (code === "objective") return { code, content: { text: "Identify three budget words." } };
   if (code === "instruction") return { code, content: { steps: ["Read the example.", "Answer the question."] } };
   if (code === "vocabulary") return { code, content: { items: [
-    { word: "budget", synonyms: ["plan"], antonyms: [] }, { word: "cost", synonyms: ["expense"], antonyms: [] }, { word: "forecast", synonyms: ["estimate"], antonyms: [] }
+    { word: "budget", synonyms: ["plan"], antonyms: [], collocations: ["a small budget", "budget plan", "set a budget"] }, { word: "cost", synonyms: ["expense"], antonyms: [], collocations: ["high cost", "cost of travel", "cut the cost"] }, { word: "forecast", synonyms: ["estimate"], antonyms: [], collocations: ["sales forecast", "a weather forecast", "forecast growth"] }
   ] } };
   if (code === "grammar") return { code, content: { formula: "The cost is + adjective" } };
   if (code === "pronunciation") return { code, content: { focus: "/k/", words: [{ word: "cost", ipa: "/kɒst/" }, { word: "can", ipa: "/kæn/" }, { word: "key", ipa: "/kiː/" }] } };

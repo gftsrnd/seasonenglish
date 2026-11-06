@@ -1,6 +1,10 @@
 import { describe, expect, it } from "vitest";
 import type { CefrLevel, MonthlyFinalGenCode } from "@e4s/contracts";
-import { monthlyFinalProductiveOutputSchema, monthlyFinalReceptiveOutputSchema, validateMonthlyFinalProductiveOutput, validateMonthlyFinalReceptiveOutput } from "@e4s/ai";
+import {
+  AI_TASKS, monthlyFinalListeningOutputJsonSchema, monthlyFinalListeningOutputSchema, monthlyFinalProductiveOutputJsonSchema, monthlyFinalProductiveOutputSchema,
+  monthlyFinalReadingOutputJsonSchema, monthlyFinalReadingOutputSchema, monthlyFinalReceptiveOutputSchema,
+  validateMonthlyFinalListeningOutput, validateMonthlyFinalProductiveOutput, validateMonthlyFinalReadingOutput, validateMonthlyFinalReceptiveOutput
+} from "@e4s/ai";
 import { publicAssessmentDefinition, type StoredAssessmentDefinition } from "@e4s/database";
 import {
   MonthlyFinalInputError, allocateMonthlyFinalTerms, assembleMonthlyFinalFromAi, buildManualMonthlyFinalDraft,
@@ -222,5 +226,78 @@ describe("monthly final AI output validation", () => {
     const sameStep = structuredClone(ai.productive);
     sameStep.grammarComponents[0]!.secondaryStepId = sameStep.grammarComponents[0]!.mainStepId;
     expect(validateMonthlyFinalProductiveOutput(sameStep, input)).not.toEqual([]);
+  });
+});
+
+describe("monthly final AI slices: flat tool schemas mapped back to the stored shape", () => {
+  const { input, ai } = generated();
+  const listening = ai.receptive.listening;
+  const reading = ai.receptive.reading;
+  const productive = ai.productive;
+
+  it("exposes flat listening/reading tool schemas (no single wrapper object)", () => {
+    expect(monthlyFinalListeningOutputJsonSchema.required).toEqual(["messages"]);
+    expect(Object.keys(monthlyFinalListeningOutputJsonSchema.properties)).toEqual(["messages"]);
+    expect(monthlyFinalReadingOutputJsonSchema.required).toEqual(["questions"]);
+    expect(Object.keys(monthlyFinalReadingOutputJsonSchema.properties)).toEqual(["questions"]);
+    expect(AI_TASKS.get("monthly_final_listening_generation").outputJsonSchema).toBe(monthlyFinalListeningOutputJsonSchema);
+    expect(AI_TASKS.get("monthly_final_reading_generation").outputJsonSchema).toBe(monthlyFinalReadingOutputJsonSchema);
+    expect(monthlyFinalProductiveOutputJsonSchema.required).toEqual(["title", "grammarComponents", "writing", "speakingA", "speakingB"]);
+  });
+
+  it.each([
+    ["flat", { messages: listening.messages }],
+    ["wrapped", { listening }],
+    ["wrapped as a JSON string", { listening: JSON.stringify(listening) }],
+    ["flat messages as a JSON string", { messages: JSON.stringify(listening.messages) }],
+    ["whole output as a JSON string", JSON.stringify({ messages: listening.messages })],
+    ["questions as JSON strings", { messages: listening.messages.map((message) => ({ ...message, questions: JSON.stringify(message.questions) })) }]
+  ])("listening accepts %s output", (_label, raw) => {
+    const parsed = monthlyFinalListeningOutputSchema.parse(raw);
+    expect(parsed).toEqual({ listening });
+    expect(validateMonthlyFinalListeningOutput(parsed, input)).toEqual([]);
+    expect(AI_TASKS.get("monthly_final_listening_generation").validateOutput?.(parsed, input)).toEqual([]);
+  });
+
+  it.each([
+    ["flat", { questions: reading.questions }],
+    ["wrapped", { reading }],
+    ["wrapped as a JSON string", { reading: JSON.stringify(reading) }],
+    ["flat questions as a JSON string", { questions: JSON.stringify(reading.questions) }],
+    ["whole output as a JSON string", JSON.stringify({ questions: reading.questions })]
+  ])("reading accepts %s output", (_label, raw) => {
+    const parsed = monthlyFinalReadingOutputSchema.parse(raw);
+    expect(parsed).toEqual({ reading });
+    expect(validateMonthlyFinalReadingOutput(parsed, input)).toEqual([]);
+    expect(AI_TASKS.get("monthly_final_reading_generation").validateOutput?.(parsed, input)).toEqual([]);
+  });
+
+  it.each([
+    ["flat", productive],
+    ["fields as JSON strings", { ...productive, grammarComponents: JSON.stringify(productive.grammarComponents), writing: JSON.stringify(productive.writing), speakingA: JSON.stringify(productive.speakingA), speakingB: JSON.stringify(productive.speakingB) }],
+    ["whole output as a JSON string", JSON.stringify(productive)],
+    ["wrapped", { productive }]
+  ])("productive accepts %s output", (_label, raw) => {
+    const parsed = monthlyFinalProductiveOutputSchema.parse(raw);
+    expect(parsed).toEqual(productive);
+    expect(validateMonthlyFinalProductiveOutput(parsed, input)).toEqual([]);
+  });
+
+  it("still rejects malformed or missing slices", () => {
+    expect(monthlyFinalListeningOutputSchema.safeParse({ messages: "[{\"label\":\"A\"," }).success).toBe(false);
+    expect(monthlyFinalListeningOutputSchema.safeParse({}).success).toBe(false);
+    expect(monthlyFinalReadingOutputSchema.safeParse({ questions: "not json" }).success).toBe(false);
+    expect(monthlyFinalProductiveOutputSchema.safeParse({ ...productive, writing: "{broken" }).success).toBe(false);
+  });
+
+  it("assembles the exam from flat slices exactly as from wrapped ones", () => {
+    const contract = monthlyFinalContract("B1");
+    const receptive = {
+      listening: monthlyFinalListeningOutputSchema.parse({ messages: listening.messages }).listening,
+      reading: monthlyFinalReadingOutputSchema.parse({ questions: reading.questions }).reading
+    };
+    const now = new Date("2026-11-20T03:00:00Z");
+    expect(assembleMonthlyFinalFromAi(contract, frameworkRef, receptive, monthlyFinalProductiveOutputSchema.parse(productive), now))
+      .toEqual(assembleMonthlyFinalFromAi(contract, frameworkRef, ai.receptive, ai.productive, now));
   });
 });

@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
+import { useEffect, useId, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { CheckCircle2, ChevronLeft, LockKeyhole, Mic, RotateCcw, Square, Upload, Volume2 } from "lucide-react";
 import type {
@@ -15,7 +15,7 @@ import { VocabularyCard as SharedVocabularyCard, type VocabularyRelationChip } f
 import { vocabularyPresentationBlocks } from "../shared/lesson/vocabulary-groups.js";
 import { conciseGrammarExample, conciseLessonObjective, conciseSpeakingModel, learnerFacingObjective, learnerFacingObjectiveBody, learnerObjectiveLead } from "../shared/lesson/presentation.js";
 import { lessonInstructionSteps } from "../shared/lesson/instructions.js";
-import { PronunciationMouthForm } from "./PronunciationMouthForm.js";
+import { PronunciationMouthPanel, PronunciationMouthToggle } from "./PronunciationMouthForm.js";
 import { WeeklyReview } from "./WeeklyReview.js";
 import { learnerLessonCopy, learnerLessonLanguageForCefr, lessonGuidanceOrFallback, type LearnerLessonLanguage, type LearnerLessonCopy } from "../shared/lesson/language.js";
 import { lessonPartsForTab, lessonPracticeCodes, sharedLessonGrammarAvailable } from "../shared/lesson/structure.js";
@@ -674,8 +674,11 @@ export function SharedLessonPartContent({
   speak,
   openVocabularyModal,
   resolveVocabularyImage,
-  onPronunciationListened
+  onPronunciationListened,
+  collapsibleVocabulary = false
 }: {
+  /** Review days list a whole week of words: day-lesson cards in a scroll box showing a few at a time. */
+  collapsibleVocabulary?: boolean;
   cefr: LessonView["lesson"]["cefr"];
   language: LearnerLessonLanguage;
   copy: LearnerLessonCopy;
@@ -710,9 +713,13 @@ export function SharedLessonPartContent({
     groups?: unknown;
   };
   const words = part.code === "vocabulary" ? (content.items ?? []) as LessonVocabularyItem[] : [];
-  const vocabularyBlocks = part.code === "vocabulary" ? vocabularyPresentationBlocks(words, content.groups) : [];
+  // Review days: plain day-lesson cards (no umbrella grouping) inside a scroll box.
+  const vocabularyBlocks = part.code !== "vocabulary" ? [] : collapsibleVocabulary ? words.map((item) => ({ kind: "item" as const, item })) : vocabularyPresentationBlocks(words, content.groups);
   const objectiveItems = part.code === "objective"
-    ? (content.items ?? []).flatMap((item) => "text" in item && typeof item.text === "string" && (grammarAvailable || !("type" in item) || item.type !== "language") ? [item.text] : [])
+    // Monthly AI lessons store objective items as plain strings; weekly lessons use { text, type }.
+    ? (content.items ?? []).flatMap((item: unknown) => typeof item === "string"
+      ? (item.trim() ? [item] : [])
+      : item && typeof item === "object" && "text" in item && typeof item.text === "string" && (grammarAvailable || !("type" in item) || (item as { type?: unknown }).type !== "language") ? [item.text] : [])
     : [];
   const steps = Array.isArray(content.steps)
     ? content.steps.filter((step): step is string => typeof step === "string" && Boolean(step.trim()))
@@ -728,19 +735,19 @@ export function SharedLessonPartContent({
   const speakingModel = conciseSpeakingModel(content.sample ?? content.answer ?? content.modelAnswer);
   return <>
     {part.code === "grammar" || part.code === "pronunciation" ? null : <div className="row between"><h2 className={part.code === "vocabulary" ? "lesson-vocabulary-heading" : undefined}>{part.code === "objective" ? copy.objectiveHeading : part.code === "instruction" ? copy.instructionHeading : part.code === "vocabulary" ? copy.vocabularyHeading : `${sectionNumber}. ${partHeading(part, language)}`}</h2></div>}
-    {part.code === "objective" && objectiveItems.length ? <><p className="lesson-objective-lead">{learnerObjectiveLead(cefr)}</p><ul className="lesson-objective-list" aria-label={copy.objectiveAria}>{objectiveItems.map((text, index) => <li key={`${index}-${text}`}>{learnerFacingObjectiveBody(text)}</li>)}</ul></> : content.text ? <p className={part.code === "objective" ? "lesson-objective-text" : part.code === "reading" ? "lesson-reading-passage" : undefined}>{part.code === "objective" ? learnerFacingObjective(conciseLessonObjective(content.text), cefr) : content.text}</p> : null}
+    {part.code === "objective" && objectiveItems.length ? <><p className="lesson-objective-lead">{learnerObjectiveLead(cefr)}</p><ul className="lesson-objective-list" aria-label={copy.objectiveAria}>{objectiveItems.map((text, index) => <li key={`${index}-${text}`}>{learnerFacingObjectiveBody(text)}</li>)}</ul></> : content.text && part.code !== "grammar" && part.code !== "pronunciation" ? <p className={part.code === "objective" ? "lesson-objective-text" : part.code === "reading" ? "lesson-reading-passage" : undefined}>{part.code === "objective" ? learnerFacingObjective(conciseLessonObjective(content.text), cefr) : content.text}</p> : null}
     {learnerPrompt && part.code !== "speaking" ? <p><LessonPromptText value={learnerPrompt} /></p> : null}
     {guidanceSteps.length ? <ul className="lesson-instruction-list" aria-label={copy.instructionAria}>{guidanceSteps.map((step, index) => <li key={`${index}-${step}`}>{step}</li>)}</ul> : null}
     {audioSource ? <LessonAudioControl source={audioSource} speak={speak} copy={copy} language={language} /> : null}
-    {part.code === "grammar" && content.formula ? <div className="lesson-study-block"><div className="lesson-study-panel-header"><h2>{copy.grammarHeading}</h2></div><div className="lesson-grammar-copy"><div className="lesson-grammar-formula-row"><p className="lesson-study-focus"><strong>{content.formula}</strong></p><LessonAudioAssetButton audioSrc={content.audioUrl} label={language === "en" ? "Listen to grammar example" : "Nghe mẫu ngữ pháp"} title={language === "en" ? "Listen to grammar structure" : "Nghe cấu trúc ngữ pháp"} className="lesson-grammar-audio-icon" speak={speak} /></div>{content.usage ? <p className="lesson-study-explanation">{grammarUsageCopy(content.usage, language)}</p> : null}</div>{grammarExamples.length ? <div className="lesson-example-list" aria-label={language === "en" ? "Grammar examples" : "Câu ví dụ ngữ pháp"}>{grammarExamples.map((example, index) => { const spoken = sanitizeGrammarSpeechText(conciseGrammarExample(example)); return <button className="btn-sm btn-ghost lesson-example-card vocabulary-card-sound" type="button" aria-label={`${language === "en" ? "Listen to example" : "Nghe câu ví dụ"}: ${spoken}`} onClick={() => playLessonText(spoken, content.exampleAudioUrls?.[index], speak)} key={example}><Volume2 size={14} aria-hidden="true" />{conciseGrammarExample(example)}</button>; })}</div> : null}</div> : null}
-    {part.code === "pronunciation" && content.focus ? <div className="lesson-study-block lesson-pronunciation-summary"><div className="lesson-study-panel-header lesson-pronunciation-heading"><h2>{copy.pronunciationHeading}</h2><PronunciationMouthForm target={targetSound} language={language} /></div><div className="lesson-grammar-formula-row"><p className="lesson-study-focus"><strong>{language === "en" ? `Sound ${targetSound}${pronunciationWords[0]?.word ? ` as in “${pronunciationWords[0].word}”` : ""}` : `Âm ${targetSound}${pronunciationWords[0]?.word ? ` như trong “${pronunciationWords[0].word}”` : ""}`}</strong></p></div>{content.instruction ? <p className="lesson-study-explanation">{pronunciationInstructionCopy(content.instruction, language)}</p> : null}</div> : null}
+    {part.code === "grammar" && readGrammarSteps(content).length >= 2 ? <div className="lesson-study-block"><div className="lesson-study-panel-header"><h2>{copy.grammarHeading}</h2></div><div className="lesson-grammar-steps">{readGrammarSteps(content).map((step, stepIndex) => <section className="lesson-grammar-step" key={`${stepIndex}-${step.formula}`}><p className="lesson-study-focus"><strong>{step.formula}</strong></p>{step.text ? <p className="lesson-study-explanation">{grammarUsageCopy(step.text, language)}</p> : null}{step.examples.length ? <div className="lesson-example-list" aria-label={language === "en" ? "Grammar examples" : "Câu ví dụ ngữ pháp"}>{step.examples.map((example) => { const spoken = sanitizeGrammarSpeechText(conciseGrammarExample(example)); return <button className="btn-sm btn-ghost lesson-example-card vocabulary-card-sound" type="button" aria-label={`${language === "en" ? "Listen to example" : "Nghe câu ví dụ"}: ${spoken}`} onClick={() => playLessonText(spoken, undefined, speak)} key={example}><Volume2 size={14} aria-hidden="true" />{conciseGrammarExample(example)}</button>; })}</div> : null}</section>)}</div></div> : part.code === "grammar" && content.formula ? <div className="lesson-study-block"><div className="lesson-study-panel-header"><h2>{copy.grammarHeading}</h2></div><div className="lesson-grammar-copy">{grammarRows(content.formula, content.usage || content.text, language).map((row, rowIndex) => <div className="lesson-grammar-row" key={`${rowIndex}-${row.formula}`}><div className="lesson-grammar-formula-row"><p className="lesson-study-focus"><strong>{row.formula}</strong></p>{rowIndex === 0 ? <LessonAudioAssetButton audioSrc={content.audioUrl} label={language === "en" ? "Listen to grammar example" : "Nghe mẫu ngữ pháp"} title={language === "en" ? "Listen to grammar structure" : "Nghe cấu trúc ngữ pháp"} className="lesson-grammar-audio-icon" speak={speak} /> : null}</div>{row.explanation ? <p className="lesson-study-explanation">{row.explanation}</p> : null}</div>)}</div>{grammarExamples.length ? <div className="lesson-example-list" aria-label={language === "en" ? "Grammar examples" : "Câu ví dụ ngữ pháp"}>{grammarExamples.map((example, index) => { const spoken = sanitizeGrammarSpeechText(conciseGrammarExample(example)); return <button className="btn-sm btn-ghost lesson-example-card vocabulary-card-sound" type="button" aria-label={`${language === "en" ? "Listen to example" : "Nghe câu ví dụ"}: ${spoken}`} onClick={() => playLessonText(spoken, content.exampleAudioUrls?.[index], speak)} key={example}><Volume2 size={14} aria-hidden="true" />{conciseGrammarExample(example)}</button>; })}</div> : null}</div> : null}
+    {part.code === "pronunciation" && content.focus ? <div className="lesson-study-block lesson-pronunciation-summary"><div className="lesson-study-panel-header lesson-pronunciation-heading"><h2>{copy.pronunciationHeading}</h2></div>{content.instruction ? <p className="lesson-study-explanation">{pronunciationInstructionCopy(content.instruction, language)}</p> : null}<div className="lesson-pronunciation-targets">{(pronunciationReviewTargets.length > 1 ? pronunciationReviewTargets : [{ focus: targetSound, words: pronunciationWords.slice(0, 3) }]).map((target, targetIndex) => <PronunciationTargetBlock key={`${target.focus}-${targetIndex}`} focus={target.focus} words={target.words} audioUrls={targetIndex === 0 ? pronunciationWordAudioUrls : []} language={language} speak={speak} onListened={onPronunciationListened} separateSymbol={pronunciationReviewTargets.length > 1} />)}</div></div> : null}
     {part.code === "speaking" && speakingModel ? <><p className="lesson-speaking-instruction"><strong>{copy.speakingInstructionLabel}</strong> <LessonPromptText value={content.instruction?.trim() || content.prompt?.trim() || (language === "en" ? "Follow the model sentence below and change one detail to fit your situation." : "Nói theo câu mẫu bên dưới và thay đổi một chi tiết cho phù hợp.")} /></p><div className={`card flat lesson-speaking-model${speakingModel.length <= 80 ? " lesson-speaking-model--inline" : ""}`}><strong>{speakingModel}</strong>{content.audioUrl ? <ExclusiveLessonAudio src={content.audioUrl} label={language === "en" ? "Listen to speaking model" : "Nghe audio mẫu phần Nói"} /> : null}</div></> : null}
-     {part.code === "pronunciation" && pronunciationWords.length ? pronunciationReviewTargets.length > 1 ? <div className="lesson-pronunciation-words" aria-label={language === "en" ? "Pronunciation practice words" : "Luyện từ phát âm"}>{pronunciationReviewTargets.map((target, targetIndex) => <section className="lesson-pronunciation-target-group" key={`${target.focus}-${targetIndex}`}><strong>{target.focus}</strong><div>{target.words.map((item, index) => <button className="btn-sm btn-ghost lesson-example-card vocabulary-card-sound lesson-pronunciation-word-chip" type="button" aria-label={language === "en" ? `Listen to pronunciation word: ${item.word}` : `Nghe từ phát âm: ${item.word}`} onClick={() => playLessonText(item.word, pronunciationWordAudioUrls[index], speak, () => { void onPronunciationListened?.(item.word); }, 0.65)} key={item.word}><Volume2 size={14} aria-hidden="true" /><strong>{item.word}</strong>{item.ipa ? ` ${item.ipa}` : ""}</button>)}</div></section>)}</div> : <div className="lesson-pronunciation-words" aria-label={language === "en" ? "Pronunciation practice words" : "Luyện từ phát âm"}>{pronunciationWords.slice(0, 3).map((item, index) => <button className="btn-sm btn-ghost lesson-example-card vocabulary-card-sound lesson-pronunciation-word-chip" type="button" aria-label={language === "en" ? `Listen to pronunciation word: ${item.word}` : `Nghe từ phát âm: ${item.word}`} onClick={() => playLessonText(item.word, pronunciationWordAudioUrls[index], speak, () => { void onPronunciationListened?.(item.word); }, 0.65)} key={item.word}><Volume2 size={14} aria-hidden="true" /><strong>{item.word}</strong>{item.ipa ? ` ${item.ipa}` : ""}</button>)}</div> : null}
-    {part.code === "vocabulary" ? <div className="vocabulary-list">{vocabularyBlocks.map((block) => block.kind === "group"
+
+    {part.code === "vocabulary" ? <div className={collapsibleVocabulary ? "vocabulary-list vocabulary-list--scroll" : "vocabulary-list"} {...(collapsibleVocabulary ? { tabIndex: 0, "aria-label": `${words.length} ${language === "en" ? "words" : "từ"}` } : {})}>{vocabularyBlocks.map((block) => block.kind === "group"
       ? <section className="lesson-vocabulary-group" key={`group-${block.umbrella.word}`}><h3 className="lesson-vocabulary-group-heading">{language === "en" ? "UMBRELLA WORD" : "TỪ BAO TRÙM"} {block.umbrella.word}</h3><div className="lesson-vocabulary-group-items">{block.items.map((item) => <VocabularyCard key={item.word} cefr={cefr} language={language} item={item} itemIndex={words.indexOf(item)} speak={speak} openModal={openVocabularyModal} resolveImage={resolveVocabularyImage} hideUmbrella />)}</div></section>
       : <VocabularyCard key={block.item.word} cefr={cefr} language={language} item={block.item} itemIndex={words.indexOf(block.item)} speak={speak} openModal={openVocabularyModal} resolveImage={resolveVocabularyImage} />
     )}</div> : null}
-    {part.code !== "vocabulary" && part.code !== "objective" ? (content.items as LessonVocabularyItem[] | undefined)?.map((item) => <article className="word-card" key={item.word}><h3>{item.word}</h3><span className="ipa">{item.pronunciation}</span><p>{item.meaning}</p>{item.examples?.map((example) => <small key={example}>{example}</small>)}</article>) : null}
+    {part.code !== "vocabulary" && part.code !== "objective" ? (content.items as LessonVocabularyItem[] | undefined)?.filter((item) => typeof item?.word === "string" && Boolean(item.word.trim())).map((item) => <article className="word-card" key={item.word}><h3>{item.word}</h3><span className="ipa">{item.pronunciation}</span><p>{item.meaning}</p>{item.examples?.map((example) => <small key={example}>{example}</small>)}</article>) : null}
     {content.examples?.length && part.code !== "grammar" ? <ul>{content.examples.map((example) => <li key={example}>{example}</li>)}</ul> : null}
   </>;
 }
@@ -777,6 +784,19 @@ function readPronunciationWords(value: unknown): Array<{ word: string; ipa?: str
   });
 }
 
+/** One sound: bold target with its mouth-form toggle on the right, example chips, then the picture below. */
+function PronunciationTargetBlock({ focus, words, audioUrls, language, speak, onListened, separateSymbol = false }: { separateSymbol?: boolean; focus: string; words: Array<{ word: string; ipa?: string }>; audioUrls: string[]; language: LearnerLessonLanguage; speak: (text: string) => void; onListened?: ((word: string) => void | Promise<void>) | undefined }) {
+  const [open, setOpen] = useState(false);
+  const panelId = useId();
+  const sound = pronunciationTarget(focus);
+  const firstWord = words[0]?.word;
+  return <section className="lesson-pronunciation-target">
+    <div className="lesson-pronunciation-target-head"><p className="lesson-study-focus"><strong>{separateSymbol ? <>{language === "en" ? "Sound " : "Âm "}<span className="lesson-pronunciation-symbol">{sound}</span>{firstWord ? (language === "en" ? ` as in “${firstWord}”` : ` như trong “${firstWord}”`) : ""}</> : language === "en" ? `Sound ${sound}${firstWord ? ` as in “${firstWord}”` : ""}` : `Âm ${sound}${firstWord ? ` như trong “${firstWord}”` : ""}`}</strong></p><PronunciationMouthToggle target={sound} open={open} onToggle={() => setOpen((value) => !value)} controlsId={panelId} language={language} /></div>
+    <div className="lesson-pronunciation-words" aria-label={language === "en" ? "Pronunciation practice words" : "Luyện từ phát âm"}>{words.map((item, index) => <button className="btn-sm btn-ghost lesson-example-card vocabulary-card-sound lesson-pronunciation-word-chip" type="button" aria-label={language === "en" ? `Listen to pronunciation word: ${item.word}` : `Nghe từ phát âm: ${item.word}`} onClick={() => playLessonText(item.word, audioUrls[index], speak, () => { void onListened?.(item.word); }, 0.65)} key={item.word}><Volume2 size={14} aria-hidden="true" /><strong>{item.word}</strong>{item.ipa ? ` ${item.ipa}` : ""}</button>)}</div>
+    {open ? <PronunciationMouthPanel target={sound} id={panelId} language={language} /> : null}
+  </section>;
+}
+
 function readPronunciationTargets(content: Record<string, unknown> | undefined): Array<{ focus: string; words: Array<{ word: string; ipa?: string }> }> {
   if (!content || !Array.isArray(content.reviewTargets)) return [];
   return content.reviewTargets.flatMap((target) => {
@@ -785,6 +805,35 @@ function readPronunciationTargets(content: Record<string, unknown> | undefined):
     const words = readPronunciationWords(record.words);
     return typeof record.focus === "string" && record.focus.trim() && words.length ? [{ focus: record.focus.trim(), words }] : [];
   });
+}
+
+/**
+ * A review day can carry several grammar steps in one formula (one per line).
+ * Each formula gets its own bold line with its own explanation underneath;
+ * the explanation is split by sentence or ";" when it matches the formula count.
+ */
+/** Review days store one entry per grammar step: { formula, text, examples }. */
+function readGrammarSteps(content: Record<string, unknown>): Array<{ formula: string; text: string; examples: string[] }> {
+  const steps = (content as { steps?: unknown }).steps;
+  if (!Array.isArray(steps)) return [];
+  return steps.flatMap((step) => {
+    if (!step || typeof step !== "object") return [];
+    const record = step as Record<string, unknown>;
+    const formula = typeof record.formula === "string" ? record.formula.trim() : "";
+    if (!formula) return [];
+    const text = typeof record.text === "string" ? record.text : typeof record.usage === "string" ? record.usage : "";
+    const examples = Array.isArray(record.examples) ? record.examples.filter((example): example is string => typeof example === "string" && Boolean(example.trim())).slice(0, 3) : [];
+    return [{ formula, text, examples }];
+  });
+}
+
+function grammarRows(formula: string, usage: string | undefined, language: LearnerLessonLanguage): Array<{ formula: string; explanation: string }> {
+  const formulas = formula.split(/\r?\n/u).map((line) => line.trim()).filter(Boolean);
+  if (formulas.length <= 1) return [{ formula: formula.trim(), explanation: usage?.trim() ? grammarUsageCopy(usage, language) : "" }];
+  const parts = (usage ?? "").split(/(?<=[.!?])\s+|;\s*/u).map((part) => part.trim().replace(/[.!?]+$/u, "")).filter(Boolean);
+  const sentence = (value: string) => value ? `${value.charAt(0).toLocaleUpperCase()}${value.slice(1)}.` : "";
+  if (parts.length === formulas.length) return formulas.map((line, index) => ({ formula: line, explanation: sentence(parts[index]!) }));
+  return formulas.map((line, index) => ({ formula: line, explanation: index === formulas.length - 1 ? (usage?.trim() ?? "") : "" }));
 }
 
 function grammarUsageCopy(value: string, language: LearnerLessonLanguage = "vi"): string {
@@ -797,6 +846,7 @@ function grammarUsageCopy(value: string, language: LearnerLessonLanguage = "vi")
     fallback
   );
   if (language === "en" || localized === fallback) return localized;
+  if (!/^Dùng\s+(?:khi|để)\s+/iu.test(localized)) return localized;
   const cleaned = localized.replace(/^Dùng\s+(?:khi|để)\s+/i, "");
   const firstSentence = cleaned.split(/(?<=[.!?])\s+|;\s*/u)[0]?.trim() || cleaned;
   const explanation = firstSentence.replace(/[.!?]+$/u, "");
@@ -956,7 +1006,7 @@ function SynonymsModal({ item, list, speak, language }: { item: LessonVocabulary
 function UmbrellaModal({ item, speak, language }: { item: LessonVocabularyItem; speak: (text: string) => void; language: LearnerLessonLanguage }) {
   const copy = learnerLessonCopy[language];
   if (!item.umbrella) return null;
-  const words = [{ ...item, current: true }, ...item.umbrella.siblings.map((word) => ({ ...word, current: false }))];
+  const words = [{ ...item, current: true }, ...(item.umbrella.siblings ?? []).map((word) => ({ ...word, current: false }))];
   return <div className="stack vocabulary-umbrella-content" style={{ gap: 12 }} aria-label={copy.vocabulary.umbrellaWord}><article className="card flat vocabulary-umbrella-summary" aria-label={`${copy.vocabulary.umbrellaWord}: ${item.umbrella.word}`}><div className="row between" style={{ gap: 12, alignItems: "flex-start" }}><div style={{ minWidth: 0 }}><div className="eyebrow">{copy.vocabulary.umbrellaWord}</div><h3>{item.umbrella.word}</h3><p>{item.umbrella.meaning}</p></div><button type="button" aria-label={`${copy.modal.listen} ${copy.vocabulary.umbrellaWord.toLocaleLowerCase()}: ${item.umbrella.word}`} style={listenButtonStyle} onClick={() => playVocabularyWord(speak, item.umbrella!.word, item.umbrella?.audioUrl)}><Volume2 size={14} aria-hidden="true" />{copy.modal.listen}</button></div></article><div><div className="small muted">{copy.vocabulary.currentAndRelated}</div><div className="vocabulary-relation-audio-list">{words.map((word) => <button className="vocabulary-relation-audio-item" type="button" aria-label={`${copy.modal.listen} ${language === "en" ? "related word" : "từ cùng nhóm"}: ${word.word}`} key={word.word} onClick={() => playVocabularyWord(speak, word.word, word.audioUrl)}><span><strong>{word.word}</strong>{word.current ? <small className="vocabulary-current-word">{language === "en" ? "lesson word" : "từ của bài"}</small> : null}{word.meaning ? <small>{word.meaning}</small> : null}</span><Volume2 size={16} aria-hidden="true" /></button>)}</div></div></div>;
 }
 

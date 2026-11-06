@@ -32,3 +32,24 @@ export function PronunciationMouthForm({ target, language = "vi" }: { target: st
     {open ? <div className="lesson-pronunciation-mouth__panel" id={panelId}><img src={`/media/ipa-mouth-form/${encodeURIComponent(form.image)}`} alt={description} /><p>{form.description}</p></div> : null}
   </div>;
 }
+
+/** Mouth-form data for a target sound, or null when no picture exists for it. */
+export function pronunciationMouthForm(target: string): { key: string; image: string; description: string } | null {
+  const key = target.trim().replace(/^\/+|\/+$/gu, "").toLocaleLowerCase();
+  const form = forms[key];
+  return form ? { key, ...form } : null;
+}
+
+/** Toggle only; the caller places {@link PronunciationMouthPanel} (e.g. below the example words). */
+export function PronunciationMouthToggle({ target, open, onToggle, controlsId, language = "vi" }: { target: string; open: boolean; onToggle(): void; controlsId: string; language?: "vi" | "en" }) {
+  const form = pronunciationMouthForm(target);
+  if (!form) return null;
+  return <button className="btn-sm btn-ghost lesson-pronunciation-mouth__toggle" type="button" aria-expanded={open} aria-controls={controlsId} aria-label={language === "en" ? `Show mouth position for /${form.key}/` : `Xem khẩu hình âm /${form.key}/`} title={language === "en" ? "Show mouth position" : "Xem khẩu hình"} onClick={onToggle}><Smile size={18} aria-hidden="true" /></button>;
+}
+
+export function PronunciationMouthPanel({ target, id, language = "vi" }: { target: string; id: string; language?: "vi" | "en" }) {
+  const form = pronunciationMouthForm(target);
+  if (!form) return null;
+  const description = language === "en" ? `Mouth position for /${form.key}/: ${form.description}` : `Khẩu hình cho âm /${form.key}/: ${form.description}`;
+  return <div className="lesson-pronunciation-mouth__inline" id={id}><img src={`/media/ipa-mouth-form/${encodeURIComponent(form.image)}`} alt={description} /><p>{form.description}</p></div>;
+}

@@ -631,7 +631,94 @@ const monthlyLessonPartCodeSchema = z.enum(monthlyLessonPartCodes);
  * days. Reusing the weekly schema silently forced a weekly day number and
  * weekly title rules before the monthly quality gate could run.
  */
-export const monthlyLessonDayOutputSchema = z.object({
+/**
+ * The tool schema the model sees is flat: `{ title, parts }`. Callers keep
+ * receiving `{ lesson: { title, parts } }`, so this preprocess wraps a flat
+ * output and still accepts the older wrapped shape. Models sometimes return
+ * the lesson, its parts or a part's content as a JSON-encoded string inside
+ * the tool input; those strings are decoded before validation instead of
+ * rejecting a valid lesson.
+ */
+const MONTHLY_LESSON_CONTENT_ALIASES: Record<string, Array<[target: string, aliases: string[]]>> = {
+  listening: [["script", ["transcript", "audioScript", "audio_script", "dialogue", "conversation", "listeningScript"]]],
+  reading: [["text", ["passage", "readingText", "reading_text", "article", "document", "body"]]],
+  writing: [["answer", ["modelAnswer", "sampleAnswer", "sample_answer", "correctAnswer", "sample", "example"]]],
+  speaking: [["sample", ["sampleAnswer", "sample_answer", "modelAnswer", "model_answer", "example", "exampleAnswer", "answer"]]]
+};
+
+function firstText(record: Record<string, unknown>, keys: string[]): string | undefined {
+  for (const key of keys) {
+    const value = record[key];
+    if (typeof value === "string" && value.trim()) return value;
+    if (Array.isArray(value) && value.length && value.every((line) => typeof line === "string")) return value.join("\n");
+  }
+  return undefined;
+}
+
+/** Maps near-miss key names onto the keys the publication quality gate reads. */
+export function normalizeMonthlyLessonPartContent(code: unknown, content: unknown): unknown {
+  if (!content || typeof content !== "object" || Array.isArray(content) || typeof code !== "string") return content;
+  const record = { ...(content as Record<string, unknown>) };
+  for (const [target, aliases] of MONTHLY_LESSON_CONTENT_ALIASES[code] ?? []) {
+    if (firstText(record, [target])) continue;
+    const found = firstText(record, aliases);
+    if (found) record[target] = found;
+  }
+  const options = record.options;
+  if (!firstText(record, ["answer"]) && Array.isArray(options) && typeof record.correctIndex === "number" && typeof options[record.correctIndex] === "string") {
+    record.answer = options[record.correctIndex];
+  }
+  return record;
+}
+
+/**
+ * Models sometimes split one section over two entries with the same code (e.g. a
+ * review section's items). Merge them: items arrays are concatenated, other
+ * fields keep the first value.
+ */
+function mergeDuplicateLessonParts(parts: unknown[]): unknown[] {
+  const merged: unknown[] = [];
+  const byCode = new Map<string, Record<string, unknown>>();
+  for (const part of parts) {
+    if (!part || typeof part !== "object" || Array.isArray(part) || typeof (part as Record<string, unknown>).code !== "string") { merged.push(part); continue; }
+    const record = part as Record<string, unknown>;
+    const existing = byCode.get(record.code as string);
+    if (!existing) { const copy = { ...record }; byCode.set(record.code as string, copy); merged.push(copy); continue; }
+    const before = existing.content && typeof existing.content === "object" ? existing.content as Record<string, unknown> : {};
+    const after = record.content && typeof record.content === "object" ? record.content as Record<string, unknown> : {};
+    const items = [...(Array.isArray(before.items) ? before.items : []), ...(Array.isArray(after.items) ? after.items : [])];
+    existing.content = { ...after, ...before, ...(items.length ? { items } : {}) };
+  }
+  return merged;
+}
+
+export function normalizeMonthlyLessonDayOutput(value: unknown): unknown {
+  const parsed = parseModelJson(value);
+  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return parsed;
+  const output = parsed as Record<string, unknown>;
+  const isFlat = !("lesson" in output) && ("parts" in output || "title" in output);
+  const lesson = isFlat ? output : parseModelJson(output.lesson);
+  const rest = isFlat ? {} : output;
+  if (!lesson || typeof lesson !== "object" || Array.isArray(lesson)) return { ...rest, lesson };
+  const lessonRecord = lesson as Record<string, unknown>;
+  const parts = parseModelJson(lessonRecord.parts);
+  return {
+    ...rest,
+    lesson: {
+      ...lessonRecord,
+      parts: Array.isArray(parts)
+        ? mergeDuplicateLessonParts(parts.map((part) => {
+          const decoded = parseModelJson(part);
+          if (!decoded || typeof decoded !== "object" || Array.isArray(decoded)) return decoded;
+          const record = decoded as Record<string, unknown>;
+          return { ...record, content: normalizeMonthlyLessonPartContent(record.code, parseModelJson(record.content)) };
+        }))
+        : parts
+    }
+  };
+}
+
+export const monthlyLessonDayOutputSchema = z.preprocess(normalizeMonthlyLessonDayOutput, z.object({
   lesson: z.object({
     title: z.string().trim().min(1).max(200),
     parts: z.array(z.object({
@@ -645,7 +732,7 @@ export const monthlyLessonDayOutputSchema = z.object({
       }
     })
   })
-});
+}));
 export type MonthlyLessonDayTaskOutput = z.infer<typeof monthlyLessonDayOutputSchema>;
 
 const monthlyResourceCoreTermSchema = z.object({
@@ -1056,11 +1143,39 @@ function fixedSlotValues(value: unknown, names: string[], omitNull = false): unk
 function parseModelJson(value: unknown): unknown {
   if (typeof value !== "string") return value;
   const text = value.trim().replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/, "");
+  if (!/^[[{]/u.test(text)) return value;
   try {
     return JSON.parse(text) as unknown;
   } catch {
-    return value;
+    // Models that hand back nested JSON as a string often leave raw newlines or
+    // tabs inside string literals, which JSON.parse rejects. Escape control
+    // characters that sit inside string literals and try once more.
+    try {
+      return JSON.parse(escapeControlCharactersInJsonStrings(text)) as unknown;
+    } catch {
+      return value;
+    }
   }
+}
+
+function escapeControlCharactersInJsonStrings(text: string): string {
+  let result = "";
+  let inString = false;
+  let escaped = false;
+  for (const character of text) {
+    if (inString) {
+      if (escaped) { escaped = false; result += character; continue; }
+      if (character === "\\") { escaped = true; result += character; continue; }
+      if (character === "\"") { inString = false; result += character; continue; }
+      const code = character.charCodeAt(0);
+      if (code < 0x20) { result += character === "\n" ? "\\n" : character === "\r" ? "\\r" : character === "\t" ? "\\t" : `\\u${code.toString(16).padStart(4, "0")}`; continue; }
+      result += character;
+      continue;
+    }
+    if (character === "\"") inString = true;
+    result += character;
+  }
+  return result;
 }
 
 function inferGrammarPatternFromExample(value: unknown): string | undefined {
@@ -1428,21 +1543,54 @@ export const weeklyLessonDayOutputJsonSchema = {
   $defs: weeklyLessonJsonDefinitions
 } satisfies Record<string, unknown>;
 
+/**
+ * Flat on purpose: with a single wrapper object (`{ lesson: {...} }`) Claude
+ * Haiku returned the whole lesson as one JSON-encoded string, which was often
+ * malformed. `monthlyLessonDayOutputSchema` maps this back to `{ lesson }`.
+ */
+/** Field names the publication quality gate reads for each part (packages/domain content validation). */
+export const MONTHLY_LESSON_PART_CONTENT_CONTRACT = [
+  "This component's fields as a JSON object (never a JSON-encoded string). Use exactly these keys per code:",
+  "objective { text, items }; instruction { text, steps };",
+  "vocabulary { items: [{ word, type, ipa, meaning, collocations, synonyms, antonyms }] } - collocations is exactly 3 short, natural English phrases that each contain the word (e.g. client: \"meet a client\", \"a new client\", \"client feedback\"); never empty;",
+  "grammar { formula, text, examples } - when lockedScope.grammarSteps has more than one step (review days), also return grammar.steps: [{ formula, text, examples }] with one entry per step in order, each with its own explanation and 1-2 examples;",
+  "pronunciation { focus: \"/IPA/\", words: [{ word, ipa }] x3 };",
+  "listening { script, prompt, options x4, answer } - script is the full spoken transcript, never empty;",
+  "reading { text, prompt, options x4, answer } - text is the reading passage, never empty;",
+  "writing { type, prompt, answer } - answer is the correct answer or model sentence, never empty;",
+  "word_class / word_use { prompt, options x4, answer };",
+  "speaking { prompt, sample } - sample is a model answer, never empty."
+].join(" ");
+
 export const monthlyLessonDayOutputJsonSchema = {
-  type: "object", additionalProperties: false, required: ["lesson"],
+  type: "object", additionalProperties: false, required: ["title", "parts"],
   properties: {
-    lesson: {
-      type: "object", additionalProperties: false, required: ["title", "parts"],
-      properties: {
-        title: { type: "string" },
-        parts: {
-          type: "array", minItems: 1, maxItems: 11,
-          items: {
-            type: "object", additionalProperties: false, required: ["code", "content"],
+    title: { type: "string", description: "Lesson title." },
+    parts: {
+      type: "array", minItems: 1, maxItems: 11,
+      description: "One entry per requested component, in the requested order. A JSON array of objects, never a JSON-encoded string.",
+      items: {
+        type: "object", additionalProperties: false, required: ["code", "content"],
+        properties: {
+          code: { type: "string", enum: [...monthlyLessonPartCodes] },
+          title: { type: "string" },
+          content: {
+            type: "object", additionalProperties: true,
+            description: MONTHLY_LESSON_PART_CONTENT_CONTRACT,
             properties: {
-              code: { type: "string", enum: ["objective", "instruction", "vocabulary", "grammar", "pronunciation", "listening", "reading", "writing", "word_class", "word_use", "speaking"] },
-              title: { type: "string" },
-              content: { type: "object", additionalProperties: true }
+              text: { type: "string", description: "objective/instruction text; for reading this is the reading passage (required for reading)." },
+              items: { type: "array", description: "objective items, or vocabulary items [{ word, type, ipa, meaning, collocations: exactly 3 short English phrases containing the word, synonyms, antonyms }] (vocabulary needs at least 3)." },
+              steps: { type: "array", items: { type: "string" }, description: "instruction steps." },
+              formula: { type: "string", description: "grammar formula or sentence pattern." },
+              examples: { type: "array", items: { type: "string" }, description: "grammar examples." },
+              focus: { type: "string", description: "pronunciation target sound written as /IPA/." },
+              words: { type: "array", description: "pronunciation: exactly 3 items [{ word, ipa }]." },
+              script: { type: "string", description: "listening: the full spoken transcript the app reads aloud (required for listening)." },
+              type: { type: "string", description: "writing task type: fill (one ___ gap), mcq, or sentence." },
+              prompt: { type: "string", description: "the learner question or task (required for listening, reading, writing, word_class, word_use, speaking)." },
+              options: { type: "array", items: { type: "string" }, description: "choice tasks: exactly 4 different English options." },
+              answer: { type: "string", description: "choice tasks: copied verbatim from options; writing: the correct answer or model sentence (required for writing)." },
+              sample: { type: "string", description: "speaking: a model answer the learner can study and be scored against (required for speaking)." }
             }
           }
         }

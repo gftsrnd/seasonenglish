@@ -52,6 +52,7 @@ export function buildWeeklyReviewSessionView(
       retry: head.retry,
       prompt: variant.prompt,
       ...(variant.passage ? { passage: variant.passage } : {}),
+      ...(variant.audioText ? { audioText: variant.audioText } : {}),
       ...(variant.options?.length ? { options: variant.options } : {}),
       freeResponse: variant.answer === undefined,
       acceptsAudio: Boolean(variant.acceptsAudio)
@@ -112,6 +113,10 @@ export function registerWeeklyReviewRoutes(app: FastifyInstance, pool: Pool, lea
     const learnerId = request.e4sSession!.user.id;
     const loaded = await load(learnerId, params.data.lessonId);
     if ("error" in loaded) return reply.code(loaded.error.status).send(loaded.error.body);
+    // A read-aloud recording only counts when it is this learner's uploaded audio.
+    if (body.data.artifactKey !== undefined && !(await repositories.files.ownedBy(learnerId, "assessment_audio", body.data.artifactKey))) {
+      return reply.code(400).send({ code: "REVIEW_AUDIO_NOT_OWNED" });
+    }
     const outcome = answerWeeklyReviewItem({
       state: loaded.state,
       sections: loaded.sections,

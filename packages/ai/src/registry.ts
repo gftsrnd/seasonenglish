@@ -39,6 +39,8 @@ import {
   monthlyFinalGenerationInputSchema,
   monthlyFinalProductiveOutputJsonSchema, monthlyFinalProductiveOutputSchema,
   monthlyFinalReceptiveOutputJsonSchema, monthlyFinalReceptiveOutputSchema,
+  monthlyFinalListeningOutputJsonSchema, monthlyFinalListeningOutputSchema, validateMonthlyFinalListeningOutput,
+  monthlyFinalReadingOutputJsonSchema, monthlyFinalReadingOutputSchema, validateMonthlyFinalReadingOutput,
   validateMonthlyFinalProductiveOutput, validateMonthlyFinalReceptiveOutput
 } from "./monthly-final-schemas.js";
 import { z } from "zod";
@@ -110,6 +112,17 @@ export const AI_TASKS = new AiTaskRegistry([
     id: "monthly_final_receptive_generation", promptKey: "monthly_final_generation", inputSchema: monthlyFinalGenerationInputSchema,
     outputSchema: monthlyFinalReceptiveOutputSchema, outputJsonSchema: monthlyFinalReceptiveOutputJsonSchema,
     validateOutput: (output, input) => validateMonthlyFinalReceptiveOutput(monthlyFinalReceptiveOutputSchema.parse(output), monthlyFinalGenerationInputSchema.parse(input))
+  },
+  // Same slicing as the level-up form: listening and reading are separate calls.
+  {
+    id: "monthly_final_listening_generation", promptKey: "monthly_final_generation", inputSchema: monthlyFinalGenerationInputSchema,
+    outputSchema: monthlyFinalListeningOutputSchema, outputJsonSchema: monthlyFinalListeningOutputJsonSchema,
+    validateOutput: (output, input) => validateMonthlyFinalListeningOutput(monthlyFinalListeningOutputSchema.parse(output), monthlyFinalGenerationInputSchema.parse(input))
+  },
+  {
+    id: "monthly_final_reading_generation", promptKey: "monthly_final_generation", inputSchema: monthlyFinalGenerationInputSchema,
+    outputSchema: monthlyFinalReadingOutputSchema, outputJsonSchema: monthlyFinalReadingOutputJsonSchema,
+    validateOutput: (output, input) => validateMonthlyFinalReadingOutput(monthlyFinalReadingOutputSchema.parse(output), monthlyFinalGenerationInputSchema.parse(input))
   },
   {
     id: "monthly_final_productive_generation", promptKey: "monthly_final_generation", inputSchema: monthlyFinalGenerationInputSchema,

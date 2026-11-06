@@ -1,5 +1,19 @@
 import { AiProviderError, type AiProvider, type AiProviderRequest, type AiProviderResponse } from "../types.js";
 
+/**
+ * Large monthly outputs where Claude Haiku was observed returning a whole
+ * object/array property as a JSON-encoded string inside the tool input.
+ * Other tasks keep their existing system text unchanged.
+ */
+const NATIVE_JSON_FIELD_TASKS = new Set([
+  "monthly_lesson_day",
+  "monthly_final_receptive_generation",
+  "monthly_final_listening_generation",
+  "monthly_final_reading_generation",
+  "monthly_final_productive_generation"
+]);
+export const NATIVE_JSON_FIELD_INSTRUCTION = "Fill every tool field with real JSON values (arrays and objects), never a JSON-encoded string.";
+
 export function createAnthropicProvider(options: {
   apiKey: string;
   model?: string;
@@ -20,7 +34,7 @@ export function createAnthropicProvider(options: {
       const stableSystemPrompt = hasMultiTurnMessages
         ? request.systemPrompt.replace(/\n\nREPAIR REQUIRED(?: FOR THIS COMPONENT ONLY)?:[\s\S]*$/u, "").trim()
         : request.systemPrompt;
-      const systemText = `${stableSystemPrompt}\nReturn only the structured tool input. Follow the tool schema exactly; do not add prose, markdown, legacy keys, or omit required nested fields.`;
+      const systemText = `${stableSystemPrompt}\nReturn only the structured tool input. Follow the tool schema exactly; do not add prose, markdown, legacy keys, or omit required nested fields.${NATIVE_JSON_FIELD_TASKS.has(request.taskId) ? `\n${NATIVE_JSON_FIELD_INSTRUCTION}` : ""}`;
       const messages = hasMultiTurnMessages
         ? request.messages
         : [{ role: "user" as const, content: JSON.stringify(request.input) }];

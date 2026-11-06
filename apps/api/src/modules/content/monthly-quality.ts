@@ -1,6 +1,7 @@
 import type { MonthlyCurriculumContract } from "@e4s/domain";
 import { validateLessonPublication } from "@e4s/domain";
 import type { LessonPart } from "@e4s/contracts";
+import { evaluateMonthlyReviewSections, MONTHLY_REVIEW_COMPONENTS, MONTHLY_REVIEW_SECTIONS } from "./monthly-review-quality.js";
 
 const REQUIRED_COMPONENTS = [
   "objective", "instruction", "vocabulary", "grammar", "pronunciation",
@@ -41,7 +42,8 @@ export function evaluateMonthlyLessonQuality(
   const severe: MonthlyQualityFinding[] = [];
   const light: MonthlyQualityFinding[] = [];
   const parts = new Map(lesson.parts.map((part) => [part.code, part]));
-  for (const code of REQUIRED_COMPONENTS) {
+  const review = day.kind === "review";
+  for (const code of review ? MONTHLY_REVIEW_COMPONENTS : REQUIRED_COMPONENTS) {
     if (!parts.has(code)) severe.push(finding("MONTHLY_COMPONENT_MISSING", `Missing required ${code} component`, dayNumber, code));
   }
 
@@ -52,6 +54,9 @@ export function evaluateMonthlyLessonQuality(
     parts: lesson.parts as unknown as LessonPart[]
   }], undefined, contract.cefr);
   for (const issue of contentValidation.issues) {
+    // Review exercises use `items` per section (checked below), not the single daily question shape.
+    // The daily part order also expects a writing part, which a review folds into speaking.
+    if (review && ((MONTHLY_REVIEW_SECTIONS as readonly string[]).includes(issue.code) || issue.code === "writing" || issue.code === "order")) continue;
     severe.push(finding("MONTHLY_CONTENT_INVALID", issue.message, dayNumber, issue.code));
   }
 
@@ -82,12 +87,18 @@ export function evaluateMonthlyLessonQuality(
   for (const item of vocabulary) {
     const word = asString(item.word);
     if (!word || !coreByWord.has(normalize(word))) continue;
+    // Each vocabulary card shows three common phrases ("Cụm từ thường dùng"), as in the weekly lessons.
+    const phrases = (Array.isArray(item.collocations) ? item.collocations : Array.isArray(item.examples) ? item.examples : []).filter((phrase) => typeof phrase === "string" && phrase.trim());
+    if (phrases.length < 3) severe.push(finding("MONTHLY_VOCABULARY_PHRASES_MISSING", `${word} needs 3 common phrases (collocations) containing the word; it has ${phrases.length}`, dayNumber, "vocabulary"));
     if (hasNoLexicalRelation(item)) light.push({ severity: "light", code: "MONTHLY_SYNONYM_OR_ANTONYM_MISSING", message: `${word} is missing a synonym or antonym`, dayNumber, component: "vocabulary" });
   }
 
   const grammarIds = day.kind === "review" ? day.reviewGrammarStepIds ?? [] : day.grammarStepIds ?? [day.grammarStepId];
   const grammarSteps = grammarIds.map((id) => contract.grammarTopics.flatMap((topic) => topic.steps).find((step) => step.id === id)).filter((step): step is NonNullable<typeof step> => Boolean(step));
-  const formula = asString(parts.get("grammar")?.content.formula);
+  // Review days may split the formula into grammar.steps (one block per step); accept either place.
+  const grammarContent = parts.get("grammar")?.content;
+  const stepFormulas = Array.isArray(grammarContent?.steps) ? grammarContent.steps.map((step) => step && typeof step === "object" ? asString((step as Record<string, unknown>).formula) : "") : [];
+  const formula = [asString(grammarContent?.formula), ...stepFormulas].join("\n");
   if (!grammarIds.length || grammarSteps.length !== grammarIds.length || grammarSteps.some((step) => !formula.includes(step.formula))) severe.push(finding("MONTHLY_GRAMMAR_SCOPE_MISMATCH", "Grammar formula does not match every locked grammar step", dayNumber, "grammar"));
 
   const soundIds = day.kind === "review" ? day.reviewSoundIds ?? [] : [day.soundId];
@@ -114,6 +125,11 @@ export function evaluateMonthlyLessonQuality(
   }));
   if (!sounds.length || sounds.length !== soundIds.length || !exampleIds.length || expectedExamples.some((example) => !example) || !primarySound || focus !== primarySound.ipa || words.length !== primaryExamples.length || !samePronunciationExamples(words, primaryExamples) || !reviewTargetsMatch) {
     severe.push(finding("MONTHLY_SOUND_SCOPE_MISMATCH", "Pronunciation focus or examples do not match the locked day specification", dayNumber, "pronunciation"));
+  }
+  if (review) {
+    const sections = evaluateMonthlyReviewSections(contract, day, dayNumber, parts);
+    severe.push(...sections.severe);
+    light.push(...sections.light);
   }
   return { severe, light, contractVersion: contract.version };
 }

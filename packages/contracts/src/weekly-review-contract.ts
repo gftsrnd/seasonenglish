@@ -24,6 +24,8 @@ export interface WeeklyReviewItemVariant {
   prompt: string;
   /** Shared passage or script (for reading/listening sections). */
   passage?: string;
+  /** Spoken by the app (listen-and-choose items); never shown as text. */
+  audioText?: string;
   options?: string[];
   /**
    * Answer key. Omitted for free responses, which pass when the response is
@@ -68,6 +70,8 @@ export interface WeeklyReviewQuestionView {
   retry: boolean;
   prompt: string;
   passage?: string;
+  /** Spoken by the app (listen-and-choose items); never shown as text. */
+  audioText?: string;
   options?: string[];
   freeResponse: boolean;
   acceptsAudio: boolean;

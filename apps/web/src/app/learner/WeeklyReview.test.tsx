@@ -34,6 +34,23 @@ const reviewLesson = {
 } as any;
 
 describe("weekly review runner", () => {
+  it("plays listen-and-choose words and records the read-aloud sentence instead of typing it", async () => {
+    const user = userEvent.setup();
+    const speak = vi.fn();
+    const listening = session({ currentSectionCode: "listening", currentQuestion: { sectionCode: "listening", itemId: "l1", variantId: "l1", retry: false, prompt: "Nghe và chọn nghĩa đúng", audioText: "deadline", options: ["hạn chót", "ngân sách"], freeResponse: false, acceptsAudio: false } });
+    const first = render(<LearnerLesson view={{ lesson: reviewLesson, lock: null }} actions={{ navigate: vi.fn(), speak, saveLessonProgress: vi.fn(), getWeeklyReviewSession: vi.fn().mockResolvedValue(listening) } as any} />);
+    await user.click(await screen.findByRole("button", { name: /Nghe/ }));
+    expect(speak).toHaveBeenCalledWith("deadline");
+    expect(screen.queryByText("deadline")).not.toBeInTheDocument();
+    first.unmount();
+
+    const readAloud = session({ currentSectionCode: "speaking", currentQuestion: { sectionCode: "speaking", itemId: "s3", variantId: "s3", retry: false, prompt: "Đọc to câu sau", passage: "The key cost can change.", freeResponse: true, acceptsAudio: true } });
+    render(<LearnerLesson view={{ lesson: reviewLesson, lock: null }} actions={{ navigate: vi.fn(), speak, saveLessonProgress: vi.fn(), getWeeklyReviewSession: vi.fn().mockResolvedValue(readAloud), uploadAssessmentAudio: vi.fn(), answerWeeklyReview: vi.fn() } as any} />);
+    expect(await screen.findByText(/Ghi âm khi bạn đọc to câu ở trên/)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Nộp bản ghi âm" })).toBeDisabled();
+    expect(screen.queryByRole("button", { name: "Kiểm tra" })).not.toBeInTheDocument();
+  });
+
   it("resumes at the first unfinished section and keeps finished sections marked", async () => {
     const getWeeklyReviewSession = vi.fn().mockResolvedValue(session());
     render(<LearnerLesson view={{ lesson: reviewLesson, lock: null }} actions={{ navigate: vi.fn(), speak: vi.fn(), saveLessonProgress: vi.fn(), getWeeklyReviewSession } as any} />);

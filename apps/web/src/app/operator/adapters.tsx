@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { lexicalRelationCoverageSatisfied, relationExemptionIsCredible } from "@e4s/domain/content";
 import { cancelExclusiveAudio, claimExclusiveAudio } from "../../features/experience/audio-precedence.js";
@@ -369,14 +369,14 @@ export function adaptLessonSet(source: ContentLessonSetVersionView, options: { a
   };
 }
 
-export function OperatorLessonPreview({ cefr, lessonId, parts, resolveVocabularyImage }: { cefr: string; lessonId: string; parts: ContentLessonSetVersionView["lessons"][number]["parts"]; resolveVocabularyImage?: ((lessonId: string, itemIndex: number) => Promise<ContentImageView>) | undefined }) {
+export function OperatorLessonPreview({ cefr, lessonId, parts, resolveVocabularyImage, studyTabLabel, collapsibleVocabulary = false, practiceContent }: { collapsibleVocabulary?: boolean; /** Replaces the practice tab body (Friday review sections). */ practiceContent?: ReactNode; cefr: string; lessonId: string; parts: ContentLessonSetVersionView["lessons"][number]["parts"]; resolveVocabularyImage?: ((lessonId: string, itemIndex: number) => Promise<ContentImageView>) | undefined; /** Monthly review days call the first tab "Ôn" instead of "Học". */ studyTabLabel?: string }) {
   const [tab, setTab] = useState<"study" | "practice">("study");
   const [vocabularyModal, setVocabularyModal] = useState<VocabularyModalState | null>(null);
   const language = learnerLessonLanguageForCefr(cefr);
   const copy = lessonCopyForCefr(cefr);
   const visible = lessonPartsForTab(parts, tab);
   const grammarAvailable = sharedLessonGrammarAvailable(parts);
-  return <div className="operator-lesson-preview lesson-page"><div className="lesson-surface"><div className="ltabs" role="tablist" aria-label={copy.tabsAria}><button type="button" className={tab === "study" ? "active" : ""} role="tab" aria-selected={tab === "study"} onClick={() => setTab("study")}>1. {copy.studyTab}</button><button type="button" className={tab === "practice" ? "active" : ""} role="tab" aria-selected={tab === "practice"} onClick={() => setTab("practice")}>2. {copy.practiceTab}</button></div><div className="lesson-parts" aria-label={tab === "study" ? copy.studyTab : copy.practiceTab}>{visible.map((part, index) => {
+  return <div className="operator-lesson-preview lesson-page"><div className="lesson-surface"><div className="ltabs" role="tablist" aria-label={copy.tabsAria}><button type="button" className={tab === "study" ? "active" : ""} role="tab" aria-selected={tab === "study"} onClick={() => setTab("study")}>1. {studyTabLabel ?? copy.studyTab}</button><button type="button" className={tab === "practice" ? "active" : ""} role="tab" aria-selected={tab === "practice"} onClick={() => setTab("practice")}>2. {copy.practiceTab}</button></div><div className="lesson-parts" aria-label={tab === "study" ? copy.studyTab : copy.practiceTab}>{tab === "practice" && practiceContent ? practiceContent : visible.map((part, index) => {
     const exerciseNumber = visible.slice(0, index).filter(candidate => candidate.code !== "instruction").length + 1;
     const content = part.code === "instruction" ? { ...part.content, steps: lessonInstructionSteps(parts, tab, language) } : part.content;
     const displayPart = { ...part, content };
@@ -392,12 +392,13 @@ export function OperatorLessonPreview({ cefr, lessonId, parts, resolveVocabulary
           part={displayPart}
           speak={operatorLessonSpeak}
           openVocabularyModal={setVocabularyModal}
+          collapsibleVocabulary={collapsibleVocabulary}
           resolveVocabularyImage={resolveVocabularyImage ? (itemIndex) => resolveVocabularyImage(lessonId, itemIndex) : undefined}
         />}</section>;
   })}</div></div>{vocabularyModal ? <SharedVocabularyModal state={vocabularyModal} speak={operatorLessonSpeak} language={language} close={() => setVocabularyModal(null)} /> : null}</div>;
 }
 
-type OperatorLessonPart = ContentLessonSetVersionView["lessons"][number]["parts"][number];
+export type OperatorLessonPart = ContentLessonSetVersionView["lessons"][number]["parts"][number];
 
 function operatorLessonAnswer(part: OperatorLessonPart): string {
   const rawAnswer = part.content.answer ?? part.content.modelAnswer ?? part.content.sample;
@@ -410,14 +411,14 @@ function OperatorCorrectAnswer({ answer }: { answer: string }) {
   return <div className="operator-correct-answer"><strong>Đáp án đúng:</strong><span>{answer}</span></div>;
 }
 
-function OperatorPracticeReview({ sectionNumber, part }: { sectionNumber: number; part: OperatorLessonPart }) {
+export function OperatorPracticeReview({ sectionNumber, part, headingText }: { sectionNumber: number; part: OperatorLessonPart; /** Replaces "N. Section · English" (e.g. "Câu 1" inside a review section block). */ headingText?: string }) {
   const content = asRecord(part.content) ?? {};
   const text = (...keys: string[]) => keys.map(key => content[key]).find(item => typeof item === "string" && item.trim()) as string | undefined;
   const strings = (key: string) => (asArray(content[key]) ?? []).filter((item): item is string => typeof item === "string" && Boolean(item.trim()));
   const answer = operatorLessonAnswer(part);
   const prompt = normalizeLessonBlankPrompt(text("prompt", "question")) || "—";
   const options = strings("options");
-  const heading = <div className="row between"><h2>{sectionNumber}. {operatorPartHeading(part.code, part.title)}</h2></div>;
+  const heading = <div className="row between"><h2>{headingText ?? `${sectionNumber}. ${operatorPartHeading(part.code, part.title)}`}</h2></div>;
   const choices = options.length ? <AnswerOptions options={options} answer={answer} /> : null;
   const answerSummary = <OperatorCorrectAnswer answer={answer} />;
 

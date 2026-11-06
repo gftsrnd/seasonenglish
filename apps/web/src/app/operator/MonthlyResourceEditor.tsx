@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Plus, Trash2 } from "lucide-react";
 import type { CefrLevel, MonthFrameworkView, MonthlyResourceEditInput, MonthlyResourceEditIssue } from "@e4s/contracts";
 
@@ -45,6 +45,17 @@ export function toMonthlyResourceEditInput(version: number, resources: Resources
 export function MonthlyResourceEditor({ cefr, version, resources, busy = false, onSave, onClose }: MonthlyResourceEditorProps) {
   const [draft, setDraft] = useState(() => toMonthlyResourceEditInput(version, resources));
   const [issues, setIssues] = useState<MonthlyResourceEditIssue[]>([]);
+  // Large sections start folded; a section with save issues opens so its rows are visible.
+  const [openSections, setOpenSections] = useState({ vocabulary: false, grammar: false, sounds: false });
+  const toggleSection = (key: "vocabulary" | "grammar" | "sounds", open: boolean) => setOpenSections((current) => current[key] === open ? current : { ...current, [key]: open });
+  useEffect(() => {
+    if (!issues.length) return;
+    setOpenSections((current) => ({
+      vocabulary: current.vocabulary || issues.some((issue) => issue.section === "coreTerms" || issue.section === "supportTerms"),
+      grammar: current.grammar || issues.some((issue) => issue.section === "grammarTopics"),
+      sounds: current.sounds || issues.some((issue) => issue.section === "sounds")
+    }));
+  }, [issues]);
   const [failure, setFailure] = useState<string>();
   const [saving, setSaving] = useState(false);
   const [openCores, setOpenCores] = useState<Set<string>>(() => new Set());
@@ -136,14 +147,14 @@ export function MonthlyResourceEditor({ cefr, version, resources, busy = false, 
       </header>
       {failure && <div className="monthly-error" role="alert">{failure}{generalIssues.length > 0 && <ul>{generalIssues.map((issue, index) => <li key={index}>{issue.message}</li>)}</ul>}</div>}
 
-      <section className="monthly-resource-editor-section" aria-label="Từ vựng">
-        <h3>Từ cốt lõi &amp; từ mở rộng</h3>
+      <details className="monthly-resource-editor-section" aria-label="Từ vựng" open={openSections.vocabulary} onToggle={(event) => toggleSection("vocabulary", event.currentTarget.open)}>
+        <summary><h3>Từ cốt lõi &amp; từ mở rộng</h3><span className="small muted">{draft.coreTerms.length} từ cốt lõi · {draft.supportTerms.length} từ mở rộng</span></summary>
         {draft.coreTerms.map((core, index) => {
           const supports = supportsByCore.get(core.id) ?? [];
           const problems = coreIssueCount(core.id);
           const open = openCores.has(core.id);
           return <details key={core.id} className={`monthly-resource-editor-core${problems ? " has-errors" : ""}`} open={open} onToggle={(event) => toggleCore(core.id, (event.currentTarget as HTMLDetailsElement).open)}>
-            <summary><b>{index + 1}.</b> <span>{core.word || "(trống)"}</span><small>{supports.length} từ mở rộng</small>{problems > 0 && <em>{problems} lỗi</em>}</summary>
+            <summary><i className="monthly-resource-editor-chevron" aria-hidden="true">▸</i><b>{index + 1}.</b> <span className="monthly-resource-editor-word">{core.word || "(trống)"}</span><small className="monthly-resource-editor-type">{core.type}</small><small className="monthly-resource-editor-meaning">{core.meaning}</small><small className="monthly-resource-editor-count">{supports.length} từ mở rộng</small>{problems > 0 && <em>{problems} lỗi</em>}</summary>
             <div className="monthly-resource-editor-row core">
               <label>Từ<input aria-label={`Từ cốt lõi ${index + 1}`} aria-invalid={invalid(core.id, "word")} value={core.word} disabled={disabled} onChange={(event) => updateCore(core.id, { word: event.target.value })} /></label>
               <label>Từ loại<select aria-label={`Từ loại ${index + 1}`} aria-invalid={invalid(core.id, "type")} value={core.type} disabled={disabled} onChange={(event) => updateCore(core.id, { type: event.target.value })}>
@@ -170,10 +181,10 @@ export function MonthlyResourceEditor({ cefr, version, resources, busy = false, 
             </div>}
           </details>;
         })}
-      </section>
+      </details>
 
-      <section className="monthly-resource-editor-section" aria-label="Ngữ pháp">
-        <h3>Ngữ pháp</h3>
+      <details className="monthly-resource-editor-section" aria-label="Ngữ pháp" open={openSections.grammar} onToggle={(event) => toggleSection("grammar", event.currentTarget.open)}>
+        <summary><h3>Ngữ pháp</h3><span className="small muted">{draft.grammarTopics.length} chủ điểm · {draft.grammarTopics.reduce((total, topic) => total + topic.steps.length, 0)} bước</span></summary>
         {draft.grammarTopics.map((topic, topicIndex) => <div key={topic.id} className="monthly-resource-editor-group">
           <label>Chủ điểm {topicIndex + 1}<input aria-label={`Tên chủ điểm ${topicIndex + 1}`} aria-invalid={invalid(topic.id, "title")} value={topic.title} disabled={disabled} onChange={(event) => updateTopic(topic.id, { title: event.target.value })} /></label>
           {rowErrors(topic.id)}
@@ -188,10 +199,10 @@ export function MonthlyResourceEditor({ cefr, version, resources, busy = false, 
             {rowErrors(step.id)}
           </div>)}
         </div>)}
-      </section>
+      </details>
 
-      <section className="monthly-resource-editor-section" aria-label="Phát âm">
-        <h3>Phát âm</h3>
+      <details className="monthly-resource-editor-section" aria-label="Phát âm" open={openSections.sounds} onToggle={(event) => toggleSection("sounds", event.currentTarget.open)}>
+        <summary><h3>Phát âm</h3><span className="small muted">{draft.sounds.length} âm · {draft.sounds.reduce((total, sound) => total + sound.examples.length, 0)} từ ví dụ</span></summary>
         {draft.sounds.map((sound, soundIndex) => <div key={sound.id} className="monthly-resource-editor-group">
           <div className="monthly-resource-editor-row sound">
             <label>IPA mục tiêu {soundIndex + 1}<input aria-label={`IPA mục tiêu ${soundIndex + 1}`} aria-invalid={invalid(sound.id, "ipa")} value={sound.ipa} disabled={disabled} onChange={(event) => updateSound(sound.id, { ipa: event.target.value })} /></label>
@@ -210,7 +221,7 @@ export function MonthlyResourceEditor({ cefr, version, resources, busy = false, 
           </div>
           <button type="button" className="btn btn-sm" disabled={disabled} onClick={() => addExample(sound.id)}><Plus aria-hidden="true" /> Thêm từ ví dụ</button>
         </div>)}
-      </section>
+      </details>
     </section>
   </div>;
 }
