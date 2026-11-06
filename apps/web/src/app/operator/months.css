@@ -234,3 +234,30 @@ details.monthly-resource-editor-section[open]>summary{margin-bottom:8px}
 .operator-monthly-lesson .monthly-review-block-header h2{margin:0;font-size:1rem}
 .operator-monthly-lesson .monthly-review-scroll{position:relative;display:grid;gap:10px;overflow-y:auto;overscroll-behavior:contain;padding-right:6px;scroll-snap-type:y proximity}
 .operator-monthly-lesson .monthly-review-scroll>.monthly-review-card{margin:0;scroll-snap-align:start}
+/* Core-word illustrations panel. */
+.monthly-illustrations{display:grid;gap:12px}
+.monthly-illustrations-summary{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}
+.monthly-illustrations-summary p{margin:0}
+.monthly-illustration-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:10px;margin:0;padding:0;list-style:none}
+.monthly-illustration-tile{display:grid;gap:6px;padding:8px;border:1px solid var(--line);border-radius:12px;background:var(--surface)}
+.monthly-illustration-tile.is-failed{border-color:#e3a0a0}
+.monthly-illustration-frame{display:grid;place-items:center;aspect-ratio:1;border-radius:8px;background:var(--surface-3,#f3f1ec);overflow:hidden}
+.monthly-illustration-frame img{width:100%;height:100%;object-fit:cover;image-rendering:pixelated}
+.monthly-illustration-meta{display:grid;gap:2px}
+.monthly-illustration-meta .badge{justify-self:start}
+.monthly-illustration-hint{display:grid;gap:6px}
+.monthly-illustration-hint input{width:100%;box-sizing:border-box}
+.monthly-illustration-actions{display:grid;grid-template-columns:1fr 1fr;gap:6px}
+.monthly-illustration-actions>.monthly-illustration-action:only-child{grid-column:1/-1}
+.monthly-illustration-action{display:inline-flex;align-items:center;justify-content:center;gap:4px;min-height:30px;padding:4px 6px;border:1px solid var(--line);border-radius:8px;background:var(--surface-3,#f3f1ec);color:var(--text);font-size:.78rem;font-weight:600;white-space:nowrap;cursor:pointer}
+.monthly-illustration-action:hover{background:var(--surface);border-color:var(--primary)}
+.monthly-illustration-action:focus-within,.monthly-illustration-action:focus-visible{outline:2px solid var(--primary);outline-offset:1px}
+/* Keep images and buttons inside each tile (global img/btn rules were widening them). */
+.monthly-illustration-grid{grid-template-columns:repeat(auto-fill,minmax(168px,1fr))}
+.monthly-illustration-tile{min-width:0;overflow:hidden}
+.monthly-illustration-frame{width:100%;box-sizing:border-box}
+.monthly-illustration-frame img{display:block;max-width:100%;width:100%;height:100%;object-fit:contain;image-rendering:auto}
+.monthly-illustration-meta{min-width:0}
+.monthly-illustration-meta b,.monthly-illustration-meta span{overflow-wrap:anywhere}
+.monthly-illustration-actions{grid-template-columns:repeat(2,minmax(0,1fr))}
+.monthly-illustration-action{min-width:0;overflow:hidden;text-overflow:ellipsis;font-size:.74rem;padding:4px}

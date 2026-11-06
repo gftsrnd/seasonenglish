@@ -75,3 +75,16 @@ describe("attachMonthlyExpandedTerms collocations", () => {
     expect(item!.examples).toEqual(["quick check", "quick reply", "quick update"]);
   });
 });
+
+describe("attachMonthlyExpandedTerms illustrations", () => {
+  it("uses the frozen core illustration and leaves words without one as text only", () => {
+    const [withImage, withoutImage] = attachMonthlyExpandedTerms(
+      [{ word: "client" }, { word: "report" }],
+      [{ id: "c", word: "client", imageUrl: "/api/v1/files/content-media/read?artifactKey=content-media%2Fx.png" }, { id: "r", word: "report" }],
+      []
+    );
+    expect(withImage).toMatchObject({ imageUrl: "/api/v1/files/content-media/read?artifactKey=content-media%2Fx.png", imageAttribution: { licence: "Nội dung nội bộ" } });
+    expect(withoutImage!.imageUrl).toBeUndefined();
+    expect(withoutImage!.imageAttribution).toBeUndefined();
+  });
+});

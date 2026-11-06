@@ -339,6 +339,12 @@ function MonthsRoute({ client, readOnly, preview }: { client: OperatorApiClient;
         if (!result || !("blueprint" in result)) throw new Error("Không tải được bản nháp soạn tay đề tháng.");
         return result;
       },
+      ...(client.getMonthlyIllustrations ? { onLoadIllustrations: (id: string) => client.getMonthlyIllustrations!(id) } : {}),
+      ...(client.generateMonthlyIllustrations ? { onGenerateIllustrations: (id: string, input: { words?: string[]; hint?: string }) => client.generateMonthlyIllustrations!(id, input) } : {}),
+      ...(client.setMonthlyIllustration ? { onUploadIllustration: async (id: string, word: string, file: File) => {
+        const uploaded = await client.uploadContentMedia("image", file, file.name);
+        return client.setMonthlyIllustration!(id, { word, artifactKey: uploaded.artifactKey });
+      } } : {}),
       onPeekMonthlyFinal: async (id) => { try { const draft = await client.getMonthlyFinal(id); return Boolean(draft && "blueprint" in draft); } catch { return false; } },
       onOpenMonthlyFinal: async (id) => {
         const result = await run(() => client.getMonthlyFinal(id));

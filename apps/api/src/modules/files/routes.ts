@@ -20,7 +20,7 @@ export function registerFileRoutes(app: FastifyInstance, pool: Pool, storage: Ob
       return reply.code(400).send({ code: "CONTENT_MEDIA_KEY_INVALID" });
     }
     const visible = await pool.query(
-      `select f.bucket
+      `select f.bucket, f.mime_type, f.size_bytes
        from files f
        join users owner on owner.id = f.owner_user_id
        join users viewer on viewer.id = $1
@@ -31,6 +31,30 @@ export function registerFileRoutes(app: FastifyInstance, pool: Pool, storage: Ob
     );
     const bucket = visible.rows[0]?.bucket as string | undefined;
     if (!bucket) return reply.code(404).send({ code: "CONTENT_MEDIA_NOT_FOUND" });
+    // Stream through the API: a presigned URL names the storage host as the API sees it
+    // (e.g. http://minio:9000 inside Docker), which a browser cannot reach.
+    if (storage.getObject) {
+      const mimeType = visible.rows[0]?.mime_type as string | null | undefined;
+      const sizeBytes = Number(visible.rows[0]?.size_bytes ?? 0);
+      const range = sizeBytes > 0 ? parseByteRange(request.headers.range, sizeBytes) : null;
+      if (range === "unsatisfiable") return reply.code(416).header("Accept-Ranges", "bytes").header("Content-Range", `bytes */${sizeBytes}`).send();
+      try {
+        const object = await storage.getObject({ bucket, objectKey: artifactKey, ...(range ? { range: range.header } : {}) });
+        const response = reply
+          .code(range ? 206 : 200)
+          // Object keys are unique per upload, so a cached copy never goes stale.
+          .header("Cache-Control", "private, max-age=86400")
+          .header("Accept-Ranges", object.acceptRanges || "bytes")
+          .type(mimeType || object.mimeType || "application/octet-stream");
+        const length = object.contentLength ?? range?.length ?? (sizeBytes || undefined);
+        if (length !== undefined) response.header("Content-Length", String(length));
+        if (range) response.header("Content-Range", object.contentRange || range.contentRange);
+        return response.send(object.body);
+      } catch (error) {
+        logStorageFailure(request, "getContentMedia", error);
+        return reply.code(isMissingObjectError(error) ? 404 : 503).send({ code: isMissingObjectError(error) ? "CONTENT_MEDIA_NOT_FOUND" : "CONTENT_MEDIA_READ_UNAVAILABLE" });
+      }
+    }
     if (!storage.presignGetObject) return reply.code(503).send({ code: "CONTENT_MEDIA_READ_UNAVAILABLE" });
     try {
       const signed = await storage.presignGetObject({ bucket, objectKey: artifactKey, expiresInSeconds: 300 });

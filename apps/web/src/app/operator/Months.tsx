@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Check, Eye, Pencil, Sparkles, Square } from "lucide-react";
 import type { CefrLevel, MonthlyResourceEditInput, MonthlyFinalDraftView, MonthlyFinalUpdateInput, MonthlyOperatorOverviewView, MonthlyQualityFindingView } from "@e4s/contracts";
 import { buildMonthlyCalendar, monthlyDayKind, monthlyNewLessonOrdinal, recommendedMonthlyResourceCriteria, withMonthlyExpandedTerms, withMonthlyGrammarSteps, type MonthlyCurriculumContract } from "@e4s/domain/monthly";
@@ -10,15 +10,21 @@ import { groupVocabularyForDisplay, isStandaloneWord } from "./resource-display.
 import { MonthlyFinalReview } from "./MonthlyFinalReview.js";
 import { MonthlyResourceEditor } from "./MonthlyResourceEditor.js";
 import { MonthlyReviewPractice } from "./MonthlyReviewPractice.js";
+import { MonthlyIllustrationPanel } from "./MonthlyIllustrationPanel.js";
+import type { MonthlyIllustrationsView } from "../../api/operator.js";
 import "./months.css";
 
 type MonthlyBriefInput = { title: string; brief: string; context: string; communicationGoal: string };
 type MonthlyDayInput = { title: string; parts: Array<{ code: string; title?: string; content: Record<string, unknown> }> };
 type MonthlyQualityReport = { severe: MonthlyQualityFindingView[]; light: MonthlyQualityFindingView[]; contractVersion: number };
 type MonthlyResourceCriteria = { cefr: CefrLevel; vocabularyCount: number; expandedVocabularyCount: number; grammarTopicCount: number; pronunciationSoundCount: number };
-type ResourceGroup = "core" | "expanded" | "grammar" | "sounds" | "plan";
+type ResourceGroup = "core" | "expanded" | "grammar" | "sounds" | "plan" | "images";
 
 export interface OperatorMonthsActions {
+  /** Core-word illustrations (draft: generate/upload; approved: frozen, read-only). */
+  onLoadIllustrations?(id: string): Promise<MonthlyIllustrationsView>;
+  onGenerateIllustrations?(id: string, input: { words?: string[]; hint?: string }): Promise<unknown>;
+  onUploadIllustration?(id: string, word: string, file: File): Promise<unknown>;
   onSelectMonth(month: string): void;
   onSelectLevel(level: CefrLevel): void;
   onSuggestBrief(month: string): Promise<MonthlyBriefInput>;
@@ -88,6 +94,8 @@ export function OperatorMonths({ month, todayMonth, overview, cefr, busy, readOn
   const [requestingResourcesReopen, setRequestingResourcesReopen] = useState(false);
   const [editingResources, setEditingResources] = useState(false);
   const [monthlyFinalExists, setMonthlyFinalExists] = useState(false);
+  const [illustrations, setIllustrations] = useState<MonthlyIllustrationsView | null>(null);
+  const autoStartedIllustrations = useRef<string | null>(null);
   const briefLocked = overview.brief?.status === "approved";
   const monthChoices = [overview.monthWindow.previous, overview.monthWindow.current, overview.monthWindow.next];
   const previousMonth = month === monthChoices[0];
@@ -106,7 +114,8 @@ export function OperatorMonths({ month, todayMonth, overview, cefr, busy, readOn
     { key: "core" as const, label: "Từ cốt lõi", count: framework?.resources?.coreTerms.length ?? 0, description: "Headword trọng tâm" },
     { key: "expanded" as const, label: "Từ mở rộng", count: framework?.resources?.supportTerms.length ?? 0, description: "3–9 từ mỗi từ cốt lõi" },
     { key: "grammar" as const, label: "Ngữ pháp", count: framework?.resources?.grammarTopics.length ?? 0, description: "Điểm ngữ pháp cần dùng" },
-    { key: "sounds" as const, label: "Phát âm", count: framework?.resources?.sounds.length ?? 0, description: "Âm và ví dụ thực hành" }
+    { key: "sounds" as const, label: "Phát âm", count: framework?.resources?.sounds.length ?? 0, description: "Âm và ví dụ thực hành" },
+    ...(illustrations ? [{ key: "images" as const, label: "Ảnh minh họa", count: illustrations.images.filter((image) => image.status === "ready").length, description: `/${illustrations.images.length} từ có ảnh` }] : [])
   ];
   const frameworkIdForExam = framework?.status === "approved" ? framework.id : undefined;
   useEffect(() => {
@@ -125,6 +134,41 @@ export function OperatorMonths({ month, todayMonth, overview, cefr, busy, readOn
     } : emptyBrief());
   }, [overview.brief]);
   const showUnavailable = (message: string) => toast.show({ message, tone: "danger" });
+  const illustrationFrameworkId = framework?.resources ? framework.id : undefined;
+  const illustrationKey = framework?.resources ? `${framework.id}:${framework.version}:${framework.status}` : undefined;
+  const loadIllustrations = async () => {
+    if (!illustrationFrameworkId || !actions.onLoadIllustrations) return null;
+    try { const next = await actions.onLoadIllustrations(illustrationFrameworkId); setIllustrations(next); return next; } catch { return null; }
+  };
+  useEffect(() => {
+    setIllustrations(null);
+    if (!illustrationKey) return;
+    void loadIllustrations();
+  }, [illustrationKey]);
+  const illustrationsWorking = Boolean(illustrations && (illustrations.running || illustrations.images.some((image) => image.status === "pending" || image.status === "generating")));
+  useEffect(() => {
+    if (!illustrationsWorking) return;
+    const timer = window.setInterval(() => void loadIllustrations(), 4_000);
+    return () => window.clearInterval(timer);
+  }, [illustrationsWorking, illustrationFrameworkId]);
+  // A fresh draft pool starts its illustrations automatically, once per framework version.
+  useEffect(() => {
+    if (!illustrations || !illustrationKey || !framework || framework.status !== "draft" || !canEdit || !actions.onGenerateIllustrations) return;
+    if (!illustrations.available || illustrations.running || autoStartedIllustrations.current === illustrationKey) return;
+    if (!illustrations.images.length || !illustrations.images.every((image) => image.status === "missing")) return;
+    autoStartedIllustrations.current = illustrationKey;
+    void actions.onGenerateIllustrations(framework.id, {}).then(() => loadIllustrations()).catch(() => undefined);
+  }, [illustrations, illustrationKey]);
+  const generateIllustrations = async (input: { words?: string[]; hint?: string }) => {
+    if (!framework || !actions.onGenerateIllustrations) return;
+    try { await actions.onGenerateIllustrations(framework.id, input); await loadIllustrations(); }
+    catch { showUnavailable("Không bắt đầu sinh ảnh được. Hãy thử lại."); }
+  };
+  const uploadIllustration = async (word: string, file: File) => {
+    if (!framework || !actions.onUploadIllustration) return;
+    try { await actions.onUploadIllustration(framework.id, word, file); await loadIllustrations(); toast.show({ message: `Đã thay ảnh cho “${word}”.`, tone: "ok" }); }
+    catch { showUnavailable("Không tải ảnh lên được."); }
+  };
   const generateFramework = async () => {
     if (!canEdit) return showUnavailable("Tháng trước chỉ dùng để xem.");
     if (!briefLocked) return showUnavailable("Hãy chốt chủ đề tháng trước khi sinh tài nguyên.");
@@ -184,6 +228,9 @@ export function OperatorMonths({ month, todayMonth, overview, cefr, busy, readOn
   const approveFramework = async () => {
     if (!canEdit) return showUnavailable("Tháng trước chỉ dùng để xem.");
     if (!framework) return showUnavailable("Hãy sinh tài nguyên tháng trước khi duyệt.");
+    const withoutImage = illustrations ? illustrations.images.filter((image) => image.status !== "ready").length : 0;
+    if (illustrationsWorking && !window.confirm("Ảnh minh họa vẫn đang sinh. Chốt bây giờ thì các ảnh chưa xong sẽ không được dùng. Vẫn chốt?")) return;
+    if (!illustrationsWorking && withoutImage && !window.confirm(`${withoutImage} từ chưa có ảnh minh họa; các từ này sẽ chỉ hiện chữ. Sau khi chốt không đổi được ảnh. Vẫn chốt?`)) return;
     try {
       await actions.onApproveFramework(framework.id);
       toast.show({ message: "Đã duyệt tài nguyên tháng.", tone: "ok" });
@@ -336,6 +383,7 @@ export function OperatorMonths({ month, todayMonth, overview, cefr, busy, readOn
         {resourcePanel === "core" && <VocabularyPanel items={framework.resources.coreTerms} variant="core" />}
         {resourcePanel === "expanded" && <VocabularyPanel items={framework.resources.supportTerms} variant="expanded" />}
         {resourcePanel === "grammar" && <GrammarResourcePanel topics={framework.resources.grammarTopics} {...(framework.resources.roadmap ? { roadmap: framework.resources.roadmap } : {})} />}
+        {resourcePanel === "images" && illustrations && <MonthlyIllustrationPanel view={illustrations} busy={busy || !canEdit} onGenerate={generateIllustrations} onUpload={uploadIllustration} />}
         {resourcePanel === "sounds" && <PronunciationResourcePanel sounds={framework.resources.sounds} {...(framework.resources.roadmap ? { roadmap: framework.resources.roadmap } : {})} />}
         {resourcePanel === "plan" && framework.resources.roadmap?.allocated && <div className="monthly-plan-inspector" aria-label="Phân bổ tài nguyên và bài tập"><p className="small muted">Kế hoạch đã chốt. Đây là sơ đồ phân bổ; nội dung bài học chưa được sinh.</p><div className="monthly-plan-days">{framework.resources.roadmap.days.map((day) => {
           const coreTerms = framework.resources!.coreTerms.filter((term) => day.kind === "new" ? day.coreTermIds.includes(term.id) : day.reviewTermIds.includes(term.id));

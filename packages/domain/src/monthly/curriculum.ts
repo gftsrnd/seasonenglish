@@ -25,6 +25,8 @@ export interface CoreTerm {
   source: "core_registry";
   component: "core";
   dayNumber: number;
+  /** AI or uploaded square illustration, frozen into the contract when resources are approved. */
+  imageUrl?: string;
 }
 
 export interface SupportTerm {

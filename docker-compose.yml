@@ -91,6 +91,11 @@ services:
       AI_PROVIDER: ${AI_PROVIDER:-anthropic}
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
       ANTHROPIC_MODEL: ${ANTHROPIC_MODEL:-claude-sonnet-4-5}
+      # Core-word illustrations (monthly resources). Leave the key empty to disable AI images.
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      OPENAI_IMAGE_MODEL: ${OPENAI_IMAGE_MODEL:-}
+      OPENAI_BASE_URL: ${OPENAI_BASE_URL:-}
+      IMAGE_GENERATION_CONCURRENCY: ${IMAGE_GENERATION_CONCURRENCY:-6}
       RESEND_API_KEY: ${RESEND_API_KEY:-}
       RESEND_FROM_EMAIL: ${RESEND_FROM_EMAIL:-E4S <no-reply@e4s.gfts.vn>}
       AUTH_OTP_SECRET: ${AUTH_OTP_SECRET:-local-only-change-me}

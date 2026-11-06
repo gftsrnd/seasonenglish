@@ -90,6 +90,10 @@ export interface OperatorApiClient {
   /** Saves an Operator hand-edit of a DRAFT resource pool; 422 carries per-row `issues`. */
   saveContentMonthResources?(id: string, input: MonthlyResourceEditInput): Promise<{ id: string; cefr: CefrLevel; version: number; status: "draft"; scopeHash: string }>;
   getMonthlyFinal(id: string): Promise<MonthlyFinalDraftView>;
+  /** Core-word illustrations of a monthly framework (generated while resources are a draft, frozen on approval). */
+  getMonthlyIllustrations?(id: string): Promise<MonthlyIllustrationsView>;
+  generateMonthlyIllustrations?(id: string, input?: { words?: string[]; hint?: string }): Promise<{ started: boolean; count: number }>;
+  setMonthlyIllustration?(id: string, input: { word: string; artifactKey: string }): Promise<{ images: MonthlyIllustrationView[] }>;
   generateMonthlyFinal(id: string): Promise<MonthlyFinalDraftView>;
   composeMonthlyFinal(id: string): Promise<MonthlyFinalDraftView>;
   updateMonthlyFinal(versionId: string, input: MonthlyFinalUpdateInput): Promise<MonthlyFinalDraftView>;
@@ -193,6 +197,9 @@ export const operatorApiClient: OperatorApiClient = {
   requestContentMonthResourcesReopen: (id, reason) => request(`/api/v1/content/month-frameworks/${encodeURIComponent(id)}/reopen-requests`, { method: "POST", body: JSON.stringify({ reason }) }),
   saveContentMonthResources: (id, input) => request(`/api/v1/content/month-frameworks/${encodeURIComponent(id)}/resources`, { method: "PUT", body: JSON.stringify(input) }),
   getMonthlyFinal: (id) => request(`/api/v1/month-frameworks/${encodeURIComponent(id)}/monthly-final`),
+  getMonthlyIllustrations: (id) => request(`/api/v1/content/month-frameworks/${encodeURIComponent(id)}/illustrations`),
+  generateMonthlyIllustrations: (id, input = {}) => request(`/api/v1/content/month-frameworks/${encodeURIComponent(id)}/illustrations/generate`, { method: "POST", body: JSON.stringify(input) }),
+  setMonthlyIllustration: (id, input) => request(`/api/v1/content/month-frameworks/${encodeURIComponent(id)}/illustrations`, { method: "PUT", body: JSON.stringify(input) }),
   generateMonthlyFinal: (id) => request(`/api/v1/month-frameworks/${encodeURIComponent(id)}/monthly-final`, { method: "POST", body: "{}" }),
   composeMonthlyFinal: (id) => request(`/api/v1/month-frameworks/${encodeURIComponent(id)}/monthly-final/manual`, { method: "POST", body: "{}" }),
   updateMonthlyFinal: (versionId, input) => request(`/api/v1/monthly-final-forms/${encodeURIComponent(versionId)}`, { method: "PUT", body: JSON.stringify(input) }),
@@ -226,3 +233,21 @@ export const operatorApiClient: OperatorApiClient = {
   getSystemCapabilities: () => request("/api/v1/system/capabilities"),
   uploadContentMedia: (kind, file, filename) => uploadMultipart(`/api/v1/files/content-media/${kind}`, file, filename)
 };
+
+export interface MonthlyIllustrationView {
+  coreTermId: string;
+  word: string;
+  meaning: string;
+  status: "missing" | "pending" | "generating" | "ready" | "failed";
+  source?: "ai" | "upload";
+  url?: string;
+  error?: string;
+  locked: boolean;
+}
+
+export interface MonthlyIllustrationsView {
+  images: MonthlyIllustrationView[];
+  running: boolean;
+  available: boolean;
+  model: string | null;
+}

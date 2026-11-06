@@ -499,8 +499,17 @@ export class MonthlyContentRepository {
       let contract: MonthlyCurriculumContract;
       if ("daySpecs" in row.curriculum_contract) contract = row.curriculum_contract;
       else {
+        // Freeze the ready illustrations into the core terms: images cannot change after approval.
+        const images = await client.query<{ word: string; artifact_key: string }>(
+          "select word, artifact_key from month_framework_images where framework_id = $1 and status = 'ready' and artifact_key is not null", [frameworkId]
+        );
+        const imageByWord = new Map(images.rows.map((image) => [image.word, monthlyIllustrationUrl(image.artifact_key)]));
+        const pool = { ...row.curriculum_contract, coreTerms: row.curriculum_contract.coreTerms.map((term) => {
+          const imageUrl = imageByWord.get(normalizeIllustrationWord(term.word));
+          return imageUrl ? { ...term, imageUrl } : term;
+        }) };
         // Stamp the framework row version so quality reports saved later match it.
-        contract = { ...planMonthlyResourcePool(row.curriculum_contract), version: row.version };
+        contract = { ...planMonthlyResourcePool(pool), version: row.version };
         const scopeHash = monthlyScopeHash(contract);
         await client.query("update month_frameworks set curriculum_contract = $2::jsonb, scope_hash = $3, updated_at = now() where id = $1",
           [frameworkId, JSON.stringify(contract), scopeHash]);
@@ -1176,6 +1185,70 @@ export class MonthlyContentRepository {
     if (!row || row.role !== "manager") throw new Error("Monthly reopen decisions require an active Manager");
     return row;
   }
+  /** Core words, theme and lock state needed to generate or edit illustrations (Operators only). */
+  async frameworkIllustrationContext(actorId: string, frameworkId: string): Promise<MonthlyIllustrationContext> {
+    const actor = await this.requireContentOperator(actorId);
+    const result = await this.database.query<FrameworkRow & { month: string }>(
+      `select mf.id, mf.cefr, mf.version, mf.status, mf.scope_hash, mf.curriculum_contract, mf.quality_acknowledgement, pm.month
+       from month_frameworks mf join program_months pm on pm.id = mf.program_month_id
+       where mf.id = $1 and pm.organization_id = $2`, [frameworkId, actor.organization_id]
+    );
+    const row = result.rows[0];
+    if (!row) throw new Error("Monthly framework was not found");
+    const contract = row.curriculum_contract;
+    return {
+      frameworkId, month: row.month, cefr: row.cefr, locked: row.status !== "draft",
+      theme: { title: contract.theme.title, context: contract.theme.context },
+      coreTerms: contract.coreTerms.map((term) => ({ id: term.id, word: term.word, meaning: term.meaning, type: term.type }))
+    };
+  }
+
+  /** One row per core word in plan order; words without a row are reported as missing. */
+  async listFrameworkIllustrations(actorId: string, frameworkId: string): Promise<MonthlyIllustrationView[]> {
+    const actor = await this.requireOperator(actorId);
+    const result = await this.database.query<FrameworkRow>(
+      `select mf.id, mf.cefr, mf.version, mf.status, mf.scope_hash, mf.curriculum_contract, mf.quality_acknowledgement
+       from month_frameworks mf join program_months pm on pm.id = mf.program_month_id
+       where mf.id = $1 and pm.organization_id = $2`, [frameworkId, actor.organization_id]
+    );
+    const row = result.rows[0];
+    if (!row) throw new Error("Monthly framework was not found");
+    const images = await this.database.query<{ word: string; status: "pending" | "generating" | "ready" | "failed"; source: "ai" | "upload"; artifact_key: string | null; error: string | null }>(
+      "select word, status, source, artifact_key, error from month_framework_images where framework_id = $1", [frameworkId]
+    );
+    const byWord = new Map(images.rows.map((image) => [image.word, image]));
+    const coreTerms = row.curriculum_contract.coreTerms as Array<{ id: string; word: string; meaning: string; imageUrl?: string }>;
+    return coreTerms.map((term) => {
+      const image = byWord.get(normalizeIllustrationWord(term.word));
+      // Approved contracts carry the frozen URL even if the working row changed.
+      const url = term.imageUrl ?? (image?.status === "ready" && image.artifact_key ? monthlyIllustrationUrl(image.artifact_key) : undefined);
+      return {
+        coreTermId: term.id, word: term.word, meaning: term.meaning,
+        status: url ? "ready" as const : image?.status ?? "missing" as const,
+        ...(image?.source ? { source: image.source } : {}),
+        ...(url ? { url } : {}),
+        ...(image?.error && !url ? { error: image.error } : {}),
+        locked: row.status !== "draft"
+      };
+    });
+  }
+
+  /** Status writes for the illustration job and manual uploads; ignored once the framework is no longer a draft. */
+  async saveFrameworkIllustration(input: { frameworkId: string; word: string; status: "pending" | "generating" | "ready" | "failed"; source?: "ai" | "upload"; artifactKey?: string | null; mimeType?: string | null; hint?: string | null; error?: string | null; actorId?: string }): Promise<boolean> {
+    const result = await this.database.query(
+      `insert into month_framework_images (framework_id, word, status, source, artifact_key, mime_type, prompt_hint, error, updated_by, updated_at)
+       select $1, $2, $3, $4, $5, $6, $7, $8, $9, now()
+       where exists (select 1 from month_frameworks where id = $1 and status = 'draft')
+       on conflict (framework_id, word) do update set status = excluded.status, source = excluded.source,
+         artifact_key = case when excluded.status = 'ready' then excluded.artifact_key else month_framework_images.artifact_key end,
+         mime_type = case when excluded.status = 'ready' then excluded.mime_type else month_framework_images.mime_type end,
+         prompt_hint = coalesce(excluded.prompt_hint, month_framework_images.prompt_hint),
+         error = excluded.error, updated_by = coalesce(excluded.updated_by, month_framework_images.updated_by), updated_at = now()`,
+      [input.frameworkId, normalizeIllustrationWord(input.word), input.status, input.source ?? "ai", input.artifactKey ?? null, input.mimeType ?? null, input.hint ?? null, input.error ?? null, input.actorId ?? null]
+    );
+    return (result.rowCount ?? 0) > 0;
+  }
+
   private async requireOperator(actorId: string): Promise<ActorRow> {
     const actor = await this.database.query<ActorRow>(
       "select organization_id, role from users where id = $1 and status = 'active'",
@@ -1346,4 +1419,32 @@ function dayKind(spec: MonthlyDaySpec | undefined): "new" | "review" {
 
 function qualityFindingKey(finding: MonthlyQualityFindingView): string {
   return `${finding.code}:${finding.dayNumber ?? 0}:${finding.component ?? ""}`;
+}
+
+export interface MonthlyIllustrationContext {
+  frameworkId: string;
+  month: string;
+  cefr: string;
+  locked: boolean;
+  theme: { title: string; context: string };
+  coreTerms: Array<{ id: string; word: string; meaning: string; type: string }>;
+}
+
+export interface MonthlyIllustrationView {
+  coreTermId: string;
+  word: string;
+  meaning: string;
+  status: "missing" | "pending" | "generating" | "ready" | "failed";
+  source?: "ai" | "upload";
+  url?: string;
+  error?: string;
+  locked: boolean;
+}
+
+export function normalizeIllustrationWord(word: string): string {
+  return word.trim().toLocaleLowerCase("en-US");
+}
+
+export function monthlyIllustrationUrl(artifactKey: string): string {
+  return `/api/v1/files/content-media/read?artifactKey=${encodeURIComponent(artifactKey)}`;
 }

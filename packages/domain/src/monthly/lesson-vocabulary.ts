@@ -5,7 +5,7 @@
  * lesson shows them deterministically instead of relying on the model to copy
  * them. AI output also uses plain strings for synonyms; cards need { word }.
  */
-export interface MonthlyVocabularyCore { id: string; word: string; meaning?: string; type?: string; ipa?: string }
+export interface MonthlyVocabularyCore { id: string; word: string; meaning?: string; type?: string; ipa?: string; imageUrl?: string }
 export interface MonthlyVocabularySupport { id: string; word: string; meaning?: string; type?: string; relation: string; relatedCoreTermId?: string }
 
 type Item = Record<string, unknown>;
@@ -80,6 +80,11 @@ function attachTerms(
     const umbrella = linked("umbrella")[0];
     if (umbrella && !(item.umbrella && typeof item.umbrella === "object")) item.umbrella = { word: umbrella.word, ...(umbrella.meaning ? { meaning: umbrella.meaning } : {}) };
     if (core) {
+      // The month's frozen illustration (AI or uploaded) replaces any searched photo.
+      if (core.imageUrl) {
+        item.imageUrl = core.imageUrl;
+        item.imageAttribution = { creator: "E4S (AI minh họa)", licence: "Nội dung nội bộ", licenceUrl: "", sourceUrl: core.imageUrl };
+      }
       if (!item.type && core.type) item.type = core.type;
       if (!item.pronunciation && (item.ipa || core.ipa)) item.pronunciation = item.ipa ?? core.ipa;
     }

@@ -921,8 +921,9 @@ function VocabularyCard({
   const lexicalDetails = item.lexicalDetails ?? [];
   const synonymDetail = lexicalDetails.find((detail) => detail.kind === "synonym");
   const loadImage = () => {
-    if (resolveImage) return resolveImage(itemIndex);
+    // A stored image (e.g. the month's frozen illustration) wins over searching for a photo.
     if (item.imageUrl?.trim() && item.imageAttribution) return Promise.resolve({ status: "available", imageUrl: item.imageUrl.trim(), alt: item.word, attribution: item.imageAttribution } as const);
+    if (resolveImage) return resolveImage(itemIndex);
     return Promise.resolve({ status: "unavailable" } as const);
   };
   const umbrellaWord = item.umbrella?.word?.trim() ?? "";
