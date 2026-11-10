@@ -31,12 +31,13 @@ function criterionTrack(metric: LevelReadinessMetric): Track {
 }
 
 function monthlyPolicyTracks(policy: NonNullable<LevelReadinessView["monthlyPolicy"]>): Track[] {
-  const absenceMet = !policy.reasons.includes("LEVEL_UP_ABSENCE_CAP_EXCEEDED");
+  const hasEligibleMonths = policy.eligibleMonths > 0;
+  const absenceMet = hasEligibleMonths && !policy.reasons.includes("LEVEL_UP_ABSENCE_CAP_EXCEEDED");
   return [
     { key: "eligibleMonths", label: "6 tháng hợp lệ", current: policy.eligibleMonths, target: policy.requiredMonths, max: policy.requiredMonths, display: `${policy.eligibleMonths}/${policy.requiredMonths} tháng`, currentLabel: `${policy.eligibleMonths}/${policy.requiredMonths}` },
-    { key: "monthlyFinals", label: "Kết quả bài thi tháng", current: Math.min(policy.finalPasses, policy.finalPassesRequired), target: policy.finalPassesRequired, max: policy.finalPassesRequired, display: `${policy.finalPasses}/${policy.finalPassesRequired} bài đạt · TB ${policy.finalAverage === null ? "–" : policy.finalAverage.toFixed(1)}/${policy.finalAverageTarget}${policy.latestFinalPassed ? " · bài gần nhất đạt" : " · bài gần nhất chưa đạt"}`, currentLabel: `${policy.finalPasses}/${policy.finalPassesRequired}` },
+    { key: "monthlyFinals", label: "Kết quả bài thi tháng", current: Math.min(policy.finalPasses, policy.finalPassesRequired), target: policy.finalPassesRequired, max: policy.finalPassesRequired, display: `${policy.finalPasses}/${policy.finalPassesRequired} bài đạt · TB ${policy.finalAverage === null ? "–" : policy.finalAverage.toFixed(1)}/${policy.finalAverageTarget}${hasEligibleMonths ? policy.latestFinalPassed ? " · bài gần nhất đạt" : " · bài gần nhất chưa đạt" : ""}`, currentLabel: `${policy.finalPasses}/${policy.finalPassesRequired}` },
     { key: "seasonMonths", label: "Season đạt chỉ tiêu", current: policy.seasonMonths, target: policy.seasonMonthsRequired, max: policy.seasonMonthsRequired, display: `${policy.seasonMonths}/${policy.seasonMonthsRequired} tháng đủ 100 lượt hợp lệ`, currentLabel: `${policy.seasonMonths}/${policy.seasonMonthsRequired}` },
-    { key: "absenceCap", label: "Chuyên cần cả level", current: absenceMet ? 1 : 0, target: 1, max: 1, display: `${policy.absenceRate.toFixed(1)}% vắng trên tổng ngày hiệu lực · tối đa ${policy.absenceCap}%`, currentLabel: absenceMet ? "Đạt" : "Chưa đạt" }
+    { key: "absenceCap", label: "Chuyên cần cả level", current: absenceMet ? 1 : 0, target: 1, max: 1, display: hasEligibleMonths ? `${policy.absenceRate.toFixed(1)}% vắng trên tổng ngày hiệu lực · tối đa ${policy.absenceCap}%` : `Tính từ tháng hợp lệ đầu tiên · tối đa ${policy.absenceCap}%`, currentLabel: hasEligibleMonths ? absenceMet ? "Đạt" : "Chưa đạt" : "Chưa có dữ liệu" }
   ];
 }
 

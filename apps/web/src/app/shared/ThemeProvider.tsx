@@ -1,4 +1,4 @@
-import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
+import { createContext, useCallback, useContext, useLayoutEffect, useMemo, useState, type ReactNode } from "react";
 import { resolveAutomaticTheme, useAutomaticTheme } from "../../features/experience/useAutomaticTheme.js";
 
 export const themePreferences = ["auto", "spring", "summer", "autumn", "winter", "tet", "midautumn", "christmas"] as const;
@@ -27,17 +27,47 @@ const fallbackTheme: ThemeApi = {
   clearThemePreview: () => undefined
 };
 const ThemeContext = createContext<ThemeApi>(fallbackTheme);
+export const organisationThemeStorageKey = "e4s:organisation-theme";
+
+function readOrganisationTheme(): ThemePreference | undefined {
+  try {
+    const cached = window.localStorage.getItem(organisationThemeStorageKey);
+    if (isThemePreference(cached)) return cached;
+  } catch {
+    // Browsers can restrict storage access.
+  }
+  return undefined;
+}
 
 export function useTheme(): ThemeApi { return useContext(ThemeContext); }
 
 export function ThemeProvider({ children }: { children: ReactNode }) {
-  const [theme, setTheme] = useState<ThemePreference>("auto");
+  const [organisationTheme, setOrganisationTheme] = useState(readOrganisationTheme);
   const [preview, setPreview] = useState<ThemePreference>();
+  const theme = organisationTheme ?? "auto";
   const resolvedTheme = useAutomaticTheme(preview ?? theme);
+  const hasTheme = organisationTheme !== undefined || preview !== undefined;
+  const setTheme = useCallback((nextTheme: ThemePreference) => {
+    if (!isThemePreference(nextTheme)) return;
+    setOrganisationTheme(nextTheme);
+    try {
+      window.localStorage.setItem(organisationThemeStorageKey, nextTheme);
+    } catch {
+      // The theme still applies for the current page.
+    }
+  }, []);
   const previewTheme = useCallback((nextTheme: ThemePreference) => setPreview(nextTheme), []);
   const clearThemePreview = useCallback(() => setPreview(undefined), []);
-  useEffect(() => { applyResolvedTheme(resolvedTheme); }, [resolvedTheme]);
-  const value = useMemo(() => ({ theme, resolvedTheme, setTheme, previewTheme, clearThemePreview }), [clearThemePreview, previewTheme, resolvedTheme, theme]);
+  useLayoutEffect(() => {
+    if (hasTheme) {
+      applyResolvedTheme(resolvedTheme);
+    } else {
+      delete document.documentElement.dataset.theme;
+      delete document.documentElement.dataset.themePattern;
+      document.documentElement.style.removeProperty("--season-pattern-image");
+    }
+  }, [hasTheme, resolvedTheme]);
+  const value = useMemo(() => ({ theme, resolvedTheme, setTheme, previewTheme, clearThemePreview }), [clearThemePreview, previewTheme, resolvedTheme, setTheme, theme]);
   return <ThemeContext.Provider value={value}>{children}</ThemeContext.Provider>;
 }
 

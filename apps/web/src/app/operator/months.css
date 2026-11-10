@@ -1,5 +1,5 @@
-.operator-months-page{width:100%;max-width:none;margin:0;padding:0;box-sizing:border-box;display:grid;gap:18px;color:var(--text)}.operator-months-header{padding:0}.operator-months-header h1,.monthly-section-title h2,.monthly-month-card h2{margin:3px 0}.operator-months-header h1{font-size:2rem;line-height:1.2}.operator-months-header p{margin:5px 0 0;color:var(--muted)}.eyebrow{color:var(--muted);font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase}
-.monthly-month-card,.monthly-topic-card,.monthly-resources,.monthly-calendar-section{padding:20px}.monthly-month-card{display:flex;align-items:center;justify-content:space-between;gap:20px;min-height:74px}.monthly-cycle-title{align-self:center;margin:0;font-size:1.35rem;line-height:1.2}.monthly-month-tabs{align-self:center;display:flex;gap:9px}.monthly-month-tabs button{display:grid;gap:2px;border:1px solid var(--line);border-radius:var(--radius);background:var(--surface);padding:9px 15px;cursor:pointer;text-align:left}.monthly-month-tabs button small{font-size:10px;color:var(--muted)}.monthly-month-tabs button.selected{border-color:var(--primary);background:var(--surface-3);color:var(--text);font-weight:700}
+.operator-months-page{width:100%;max-width:none;margin:0;padding:0;box-sizing:border-box;display:grid;grid-template-columns:minmax(0,1fr);gap:18px;color:var(--text)}.operator-months-header{padding:0}.operator-months-header h1,.monthly-section-title h2,.monthly-month-card h2{margin:3px 0}.operator-months-header h1{line-height:1.2}.operator-months-header p{margin:5px 0 0;color:var(--muted)}.eyebrow{color:var(--muted);font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase}
+.monthly-month-card,.monthly-topic-card,.monthly-resources,.monthly-calendar-section{padding:20px}.monthly-month-card{display:flex;align-items:center;justify-content:space-between;gap:20px;min-height:74px}.monthly-month-card h2.monthly-cycle-title{align-self:center;margin:0;font-size:1rem;line-height:1.2}.monthly-month-tabs{align-self:center;display:flex;gap:9px;min-width:0}.monthly-month-tabs button{display:grid;gap:2px;border:1px solid var(--line);border-radius:var(--radius);background:var(--surface);padding:9px 15px;cursor:pointer;text-align:left}.monthly-month-tabs button small{font-size:10px;color:var(--muted)}.monthly-month-tabs button.selected{border-color:var(--primary);background:var(--surface-3);color:var(--text);font-weight:700}
 .monthly-section-title{display:flex;justify-content:space-between;align-items:center;gap:14px;margin-bottom:14px}.monthly-version,.monthly-status{border-radius:8px;padding:4px 9px;background:var(--surface-3);box-shadow:inset 0 0 0 1px var(--line);font-size:12px;white-space:nowrap}.monthly-status.approved{background:var(--ok-tint)}.monthly-status.draft{background:var(--warn-soft)}.monthly-topic-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}.monthly-topic-grid label{display:grid;grid-template-rows:auto 74px;gap:6px;min-width:0;font-size:.85rem;font-weight:500}.monthly-topic-grid input,.monthly-topic-grid textarea{width:100%;height:74px;box-sizing:border-box;border:1px solid #d6d1c8;border-radius:10px;background:var(--surface);padding:10px 14px;color:var(--text);font:inherit;resize:none}.monthly-actions{display:flex;flex-wrap:wrap;gap:9px;margin-top:14px}
 .monthly-level-tabs{display:flex;justify-content:center;gap:10px;margin-top:18px}.monthly-level-tabs button{min-width:62px;border:1px solid var(--line);border-radius:var(--radius);background:var(--surface);padding:10px 14px;cursor:pointer;font-weight:700}.monthly-level-tabs button.selected{border-color:var(--primary);background:var(--surface-3);color:var(--text)}
 .monthly-workspace{display:grid;grid-template-columns:minmax(300px,1fr) minmax(888px,2fr);align-items:start;gap:18px}.monthly-workspace>section{box-sizing:border-box;display:flex;flex-direction:column}.small.muted{color:var(--muted)}.monthly-resource-cards,.monthly-resource-proposal dl{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;margin:18px 0}.monthly-resource-cards article{display:grid;grid-template-columns:auto 1fr;column-gap:9px;align-items:center;border:1px solid var(--line);border-radius:var(--radius);padding:12px;background:var(--surface-3)}.monthly-resource-cards b{grid-row:span 2;min-width:28px;color:var(--text);font-size:24px}.monthly-resource-cards strong{font-size:13px}.monthly-resource-cards span{color:var(--muted);font-size:11px}.monthly-resource-proposal{margin:18px 0}.monthly-resource-proposal dl{margin:8px 0 0}.monthly-resource-proposal dl div{display:grid;min-height:68px;align-content:center;justify-items:center;gap:5px;border:1px solid var(--line);border-radius:var(--radius);padding:10px 12px;background:var(--surface-3);text-align:center}.monthly-resource-proposal dt{max-width:9ch;font-size:.78rem;font-weight:700;line-height:1.2}.monthly-resource-proposal dd{margin:0;font-size:1.2rem;font-weight:800;line-height:1;white-space:nowrap;color:var(--primary)}.monthly-resource-actions{margin-top:auto;display:flex;flex-flow:row wrap;gap:10px}.monthly-resource-actions .btn{margin:0;padding:7px 8px;font-size:.74rem;white-space:nowrap}
@@ -56,11 +56,13 @@
 .monthly-day-cell{height:auto;aspect-ratio:1/1;grid-template-rows:minmax(0,1fr) auto auto minmax(8px,1fr) 28px;gap:2px;padding:4px 5px}
 .monthly-day-cell b{grid-row:2;align-self:center;font-size:18px;line-height:1}
 .monthly-day-cell strong{grid-row:3;align-self:center;margin-top:6px;font-size:11px;line-height:1.35}
-.monthly-day-cell>div.monthly-day-actions{display:flex;grid-row:5;align-self:end;justify-self:start;align-items:center;gap:5px;height:28px;margin:0;white-space:nowrap;width:auto;min-width:0;box-sizing:border-box;overflow:visible;border:0;border-radius:0;background:transparent}
+.monthly-day-cell>div.monthly-day-actions{display:flex;grid-row:5;align-self:end;justify-self:center;align-items:center;gap:5px;height:28px;margin:0;white-space:nowrap;width:auto;min-width:0;box-sizing:border-box;overflow:visible;border:0;border-radius:0;background:transparent}
 .monthly-day-cell>.btn-sm{grid-row:5;align-self:end}
 .monthly-day-cell .monthly-day-actions>button{position:relative;display:inline-flex;flex:0 0 auto;align-items:center;justify-content:center;gap:3px;width:auto;min-width:28px;height:28px;min-height:28px;box-sizing:border-box;padding:0 7px;border:1px solid var(--line);border-radius:999px;background:var(--surface-3);color:var(--text);font-size:9px;line-height:1;white-space:nowrap;cursor:pointer}
-.monthly-day-cell .monthly-day-actions>button.monthly-generate-action{flex-basis:54px;width:54px;padding:0 7px;border-color:#426faf;background:linear-gradient(135deg,#6654c0,#3c7ec2);box-shadow:0 1px 2px rgb(42 83 154 / .28);color:#fff;}
-.monthly-day-cell .monthly-day-actions>button.monthly-generate-action:hover:not(:disabled){filter:brightness(1.06)}
+.monthly-day-cell .monthly-day-actions>button.monthly-generate-action{flex-basis:54px;width:54px;padding:0 7px;border-color:var(--primary);background:var(--primary);color:var(--primary-ink);}
+.monthly-day-cell .monthly-day-actions>button.monthly-generate-action:hover:not(:disabled){border-color:var(--primary-hover);background:var(--primary-hover)}
+.monthly-day-cell .monthly-day-actions>button.monthly-generate-action.btn-danger{--primary:var(--danger);--primary-hover:var(--danger);--primary-soft:var(--danger-soft);--primary-dark:var(--danger);--primary-line:var(--danger-line);--primary-ink:#fff}
+.monthly-day-cell .monthly-day-actions>button.monthly-generate-action:disabled{border-color:var(--primary-line);background:var(--primary-soft);color:var(--primary-dark);opacity:1}
 .monthly-day-cell .monthly-day-actions>button.monthly-manual-action{padding:0;}
 .monthly-day-actions>button:before{position:absolute;inset-block:-4px;inset-inline:0;content:""}
 .monthly-day-actions>button:hover{background:var(--surface)}
@@ -113,8 +115,8 @@
 .monthly-resource-editor-errors{margin:0;padding:6px 10px 6px 24px;border-radius:8px;background:var(--danger-soft);color:var(--danger);font-size:.76rem}
 @media(max-width:760px){.monthly-resource-editor-row.core,.monthly-resource-editor-row.support,.monthly-resource-editor-row.grammar{grid-template-columns:1fr 1fr}}
 
-/* Draft resource actions: generate + approve on row 1 (equal width), manual edit on row 2. */
-.monthly-resource-actions .monthly-resource-main-action{flex:1 1 0;min-width:0;text-align:center}
+/* Let main actions wrap by their content width, including in narrow desktop cards. */
+.monthly-resource-actions .monthly-resource-main-action{flex:1 1 auto;min-width:0;max-width:100%;height:auto;white-space:normal;overflow-wrap:anywhere;text-align:center}
 .monthly-resource-actions .monthly-resource-edit-button{flex:1 1 100%;text-align:center}
 /* Reopen request: always a red square, same height as the plan button next to it. */
 .monthly-plan-row{align-items:center}
@@ -261,3 +263,187 @@ details.monthly-resource-editor-section[open]>summary{margin-bottom:8px}
 .monthly-illustration-meta b,.monthly-illustration-meta span{overflow-wrap:anywhere}
 .monthly-illustration-actions{grid-template-columns:repeat(2,minmax(0,1fr))}
 .monthly-illustration-action{min-width:0;overflow:hidden;text-overflow:ellipsis;font-size:.74rem;padding:4px}
+
+.monthly-calendar-legend > span { white-space: nowrap; }
+.monthly-calendar-legend > span::before { flex: none; }
+
+.monthly-calendar-section:has(.monthly-agenda-picker) .monthly-section-title {
+  display: grid;
+  justify-content: stretch;
+  gap: 6px;
+}
+
+.monthly-calendar-section:has(.monthly-agenda-picker) .monthly-calendar-legend { gap: 4px 12px; }
+
+.monthly-agenda-picker > b { text-align: center; white-space: nowrap; }
+.monthly-agenda-picker > button { flex: none; }
+
+/* Shared holiday color for the calendar and its legend; names remain available on hover. */
+.monthly-calendar-section { --monthly-holiday-background:#e2efe9; --monthly-holiday-border:#a5c5b7; }
+.monthly-calendar-legend .holiday::before { background:var(--monthly-holiday-background); border-color:var(--monthly-holiday-border); }
+.monthly-day-cell.holiday { background:var(--monthly-holiday-background); box-shadow:none; }
+
+.monthly-resource-main-action { display:inline-flex; align-items:center; justify-content:center; gap:8px; }
+.monthly-resource-progress { display:grid; gap:10px; margin:12px 0; padding:12px; border:1px solid var(--line); border-radius:10px; background:var(--surface-3); font-size:.8rem; }
+.monthly-resource-progress > b { display:flex; align-items:center; gap:8px; line-height:1.5; }
+.monthly-resource-progress ol { display:grid; gap:6px; margin:0; padding:0; list-style:none; }
+.monthly-resource-progress li { display:flex; justify-content:space-between; gap:8px; color:var(--muted); }
+.monthly-resource-progress li em { font-style:normal; font-size:.72rem; }
+.monthly-resource-progress li[data-state="running"],.monthly-resource-progress li[data-state="complete"] { color:var(--primary); font-weight:600; }
+.monthly-resource-progress-counts { display:flex; gap:6px 12px; flex-wrap:wrap; font-size:.74rem; color:var(--muted); }
+.monthly-resource-progress.failed > b,.monthly-resource-progress li[data-state="failed"] { color:var(--text); }
+
+.monthly-resource-main-action .spinner,.monthly-resource-progress .spinner { display:inline-block; flex:0 0 14px; width:14px; height:14px; margin:0; border-width:2px; }
+.monthly-resource-main-action .spinner { border-color:rgb(255 255 255 / .35); border-top-color:#fff; }
+
+.monthly-resource-column { display: grid; min-width: 0; gap: 12px; }
+.monthly-resource-column > .monthly-resources { display: flex; flex-direction: column; margin: 0; }
+.operator-months-page .monthly-publication { display: grid; gap: 8px; padding: 12px; margin: 0; }
+.monthly-publication h2 { margin: 0; font-size: 1rem; }
+.monthly-publication p { margin: 0; }
+.monthly-publication button { justify-self: start; }
+.monthly-publication .monthly-publication-link { display: flex; align-items: center; justify-content: space-between; gap: 8px; min-height: 24px; color: var(--muted); font-weight: 400; text-decoration: none; }
+.monthly-publication-link svg { flex: none; color: var(--primary-dark); }
+.monthly-publication-link:is(:hover, :focus-visible) span { color: var(--text); text-decoration: underline; }
+.monthly-month-short { display: none; }
+.monthly-brief-summary { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; }
+.monthly-brief-summary > b { min-width: 0; overflow-wrap: anywhere; }
+.monthly-brief-summary .btn-sm { min-height: 44px; }
+.monthly-brief-summary + #monthly-brief-fields:not([hidden]) { margin-top: 12px; }
+
+.monthly-agenda-picker { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 10px; }
+.monthly-agenda-picker .btn-sm { display: grid; place-items: center; min-width: 44px; min-height: 44px; padding: 0; }
+.operator-months-page .monthly-calendar.monthly-agenda {
+  width: 100%;
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-rows: none;
+  grid-auto-rows: auto;
+  gap: 6px;
+  border: 0;
+}
+.operator-months-page .monthly-agenda .monthly-day-cell {
+  width: 100%;
+  height: auto;
+  min-height: 52px;
+  aspect-ratio: auto;
+  grid-template: auto / 34px minmax(0, 1fr) auto;
+  align-content: center;
+  align-items: center;
+  justify-items: start;
+  gap: 8px;
+  padding: 6px 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  text-align: left;
+}
+.operator-months-page .monthly-agenda .monthly-day-cell b {
+  grid-area: 1 / 1;
+  display: grid;
+  gap: 3px;
+  text-align: center;
+  font-size: .95rem;
+}
+.monthly-agenda .monthly-day-cell b > span { font-size: .72rem; color: var(--muted); }
+.operator-months-page .monthly-agenda .monthly-day-cell strong {
+  grid-area: 1 / 2;
+  align-self: center;
+  margin: 0;
+  font-size: .86rem;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+.operator-months-page .monthly-agenda .monthly-day-cell > .monthly-day-actions {
+  grid-area: 1 / 3;
+  align-self: center;
+  justify-self: end;
+  height: auto;
+}
+.operator-months-page .monthly-agenda .monthly-day-actions > button {
+  min-height: 44px;
+  min-width: 44px;
+  height: 44px;
+  font-size: .78rem;
+}
+
+@media (max-width: 760px) {
+  .operator-months-page .monthly-month-card,
+  .operator-months-page .monthly-topic-card,
+  .operator-months-page .monthly-resources,
+  .operator-months-page .monthly-calendar-section {
+    padding: 12px;
+  }
+
+  .operator-months-page .monthly-month-card {
+    min-height: 0;
+    gap: 8px;
+  }
+
+  .operator-months-page .monthly-month-tabs {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    width: 100%;
+    overflow: visible;
+    gap: 6px;
+  }
+
+  .operator-months-page .monthly-month-tabs button {
+    min-width: 0;
+    min-height: 44px;
+    justify-items: center;
+    align-content: center;
+    padding: 4px;
+    text-align: center;
+    white-space: normal;
+  }
+
+  .operator-months-page .monthly-month-full { display: none; }
+  .operator-months-page .monthly-month-short { display: block; font-size: .88rem; }
+  .operator-months-page .monthly-topic-grid { gap: 8px; }
+  .operator-months-page .monthly-topic-grid label { grid-template-rows: auto 50px; gap: 4px; }
+  .operator-months-page .monthly-topic-grid input,
+  .operator-months-page .monthly-topic-grid textarea { height: 50px; padding: 6px 8px; }
+  .operator-months-page .monthly-resource-cards,
+  .operator-months-page .monthly-resource-proposal dl { grid-template-columns: repeat(2, minmax(0, 1fr)); margin-block: 8px; }
+  .operator-months-page .monthly-resource-cards button { min-height: 58px; padding: 6px; }
+}
+
+@media (max-width: 620px) {
+  .operator-months-page .monthly-calendar {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-template-rows: none;
+    grid-auto-rows: auto;
+    gap: 5px;
+    border: 0;
+  }
+
+  .operator-months-page .monthly-weekday,
+  .operator-months-page .monthly-day-cell.outside-month { display: none; }
+
+  .operator-months-page .monthly-day-cell {
+    aspect-ratio: auto;
+    grid-template: auto auto / auto minmax(0, 1fr);
+    align-content: start;
+    justify-items: start;
+    column-gap: 6px;
+    padding: 5px;
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    text-align: left;
+  }
+
+  .operator-months-page .monthly-day-cell b { grid-area: 1 / 1; font-size: .9rem; }
+  .operator-months-page .monthly-day-cell strong { grid-area: 1 / 2; margin: 0; font-size: .8rem; white-space: normal; }
+  .operator-months-page .monthly-day-cell > .monthly-day-actions {
+    grid-area: 2 / 1 / 3 / -1;
+    justify-self: center;
+    height: auto;
+    gap: 5px;
+  }
+
+  .operator-months-page .monthly-day-cell .monthly-day-actions > button {
+    min-height: 36px;
+    min-width: 36px;
+    height: 36px;
+    font-size: .75rem;
+  }
+}

@@ -13,6 +13,8 @@ export interface AiTaskDefinition<TInput = unknown, TOutput = unknown> {
   outputJsonSchema: Record<string, unknown>;
   normalizeOutput?: (rawOutput: unknown, input: TInput) => unknown;
   validateOutput?: (output: TOutput, input: TInput) => AiValidationIssue[];
+  /** Larger composite tasks can return complete repair feedback within a bounded budget. */
+  maxValidationIssues?: number;
 }
 
 export interface AiMessage {

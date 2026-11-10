@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useMediaQuery } from "./useMediaQuery.js";
 import type { AssessmentDefinitionView, AssessmentFormPreviewView, AssessmentSectionView, AssessmentStimulus } from "@e4s/contracts";
 
 export type AssessmentPreviewStatus = "draft" | "published" | "retired";
@@ -19,13 +20,16 @@ export function AssessmentDefinitionPreview({
 }) {
   const statusLabel = status === "published" ? "Đã phát hành" : status === "retired" ? "Đã lưu lịch sử" : "Bản nháp";
   const [selectedSectionCode, setSelectedSectionCode] = useState<string>();
-  return <section className="card assessment-definition-preview" aria-label={`Xem đề ${definition.title}`}>
+  const compact = useMediaQuery("(max-width: 960px)");
+  const rules = <div className="assessment-definition-preview-rules" aria-label="Điều kiện trước khi thi"><p><b>Thiết bị:</b> tai nghe/loa và micro được kiểm tra trước khi bắt đầu.</p><p><b>Âm thanh:</b> {audioConfigured === undefined ? "chưa có trạng thái cấu hình." : audioConfigured ? "đã cấu hình nguồn audio cho phần Nghe." : "chưa đủ nguồn audio cho phần Nghe."}</p><p><b>Quy trình:</b> làm theo thứ tự Nghe → Đọc → Viết → Nói; mỗi phần đã nộp sẽ khóa.</p></div>;
+
+  return <section className={`card assessment-definition-preview${compact ? " assessment-definition-preview-compact" : ""}`} aria-label={`Xem đề ${definition.title}`}>
     <header className="assessment-definition-preview-header">
-      <div>
+      {compact ? null : <div>
         <p className="xs muted">CẤU TRÚC ĐỀ THI</p>
         <h2>{definition.title}</h2>
         <p className="small muted">Phiên bản {definition.version} · {statusLabel}</p>
-      </div>
+      </div>}
       <div className="row">
         <span className="badge">{readOnly ? "Chỉ xem" : statusLabel}</span>
         {!readOnly && status === "draft" && onEdit ? <button className="btn-sm" type="button" onClick={onEdit}>Sửa đề</button> : null}
@@ -36,9 +40,12 @@ export function AssessmentDefinitionPreview({
       <span><b>{definition.totalMinutes}</b><small> phút</small></span>
       <span><b>{definition.totalScore}</b><small> điểm</small></span>
     </div>
-    <div className="table-wrap"><table aria-label="Cấu trúc bài thi"><thead><tr><th>Phần</th><th>Thời gian</th><th>Điểm</th><th>Nội dung</th></tr></thead><tbody>{definition.sections.map(section => <tr key={section.code}><td>{section.title}</td><td>{section.durationMinutes} phút</td><td><b>{section.maxScore}</b></td><td>{sectionSummary(section)}</td></tr>)}</tbody></table></div>
-    <div className="assessment-definition-preview-rules" aria-label="Điều kiện trước khi thi"><p><b>Thiết bị:</b> tai nghe/loa và micro được kiểm tra trước khi bắt đầu.</p><p><b>Âm thanh:</b> {audioConfigured === undefined ? "chưa có trạng thái cấu hình." : audioConfigured ? "đã cấu hình nguồn audio cho phần Nghe." : "chưa đủ nguồn audio cho phần Nghe."}</p><p><b>Quy trình:</b> làm theo thứ tự Nghe → Đọc → Viết → Nói; mỗi phần đã nộp sẽ khóa.</p></div>
+    {compact ? null : <>
+      <div className="table-wrap"><table aria-label="Cấu trúc bài thi"><thead><tr><th>Phần</th><th>Thời gian</th><th>Điểm</th><th>Nội dung</th></tr></thead><tbody>{definition.sections.map(section => <tr key={section.code}><td>{section.title}</td><td>{section.durationMinutes} phút</td><td><b>{section.maxScore}</b></td><td>{sectionSummary(section)}</td></tr>)}</tbody></table></div>
+      {rules}
+    </>}
     <div className="assessment-definition-preview-sections" aria-label="Phần bài thi">{definition.sections.map(section => <div className="assessment-definition-preview-section-row" key={section.code}><button className={`assessment-definition-preview-section-trigger ${selectedSectionCode === section.code ? "active" : ""}`} type="button" aria-expanded={selectedSectionCode === section.code} aria-controls={`assessment-preview-${section.code}`} onClick={() => setSelectedSectionCode(current => current === section.code ? undefined : section.code)}><span><b>{section.title}</b><small>{taskCount(section)} câu · {section.durationMinutes} phút · {section.maxScore} điểm</small></span><span aria-hidden="true">⌄</span></button>{selectedSectionCode === section.code ? <section className="assessment-definition-preview-section" id={`assessment-preview-${section.code}`} aria-label={`Chi tiết ${section.title}`}><div className="assessment-definition-preview-section-body"><p className="small muted">{section.instructions.join(" · ")}</p>{section.groups.map(group => <section className="card flat assessment-definition-preview-group" key={group.key}><h3>{group.title}</h3><p className="small muted">{group.instruction}</p>{section.code === "listening" ? <ListeningReadiness {...(group.stimulus ? { stimulus: group.stimulus } : {})} /> : null}<Stimulus {...(group.stimulus ? { stimulus: group.stimulus } : {})} />{section.code === "speaking" ? <div className="assessment-definition-preview-speaking-tasks">{group.tasks.map(task => <PreviewTask key={task.key} task={task} sectionCode={section.code} />)}</div> : <ol className="assessment-definition-preview-tasks">{group.tasks.map(task => <PreviewTask key={task.key} task={task} sectionCode={section.code} />)}</ol>}</section>)}</div></section> : null}</div>)}</div>
+    {compact ? <details className="assessment-preview-details"><summary>Thiết bị và quy trình</summary>{rules}</details> : null}
   </section>;
 }
 

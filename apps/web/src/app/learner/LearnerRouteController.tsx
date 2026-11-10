@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { useLocation, useNavigate } from "react-router";
+import { Navigate, useLocation, useNavigate } from "react-router";
 import type {
   AssessmentKind,
   AssessmentResponseView,
@@ -21,7 +21,9 @@ import "./learner.css";
 import type { LearnerAudioEvidence, LearnerAudioUpload, LearnerCallbacks } from "./contracts.js";
 import { normalizeAudioEvidence } from "../shared/media/audio-evidence.js";
 import type { LearnerContractBundle, LearnerUiState } from "./Router.js";
-import { LearnerController } from "./Router.js";
+import { LearnerController, normalizeLearnerPath } from "./Router.js";
+import { CourseCompletion } from "./CourseCompletion.js";
+import { LearnerRequestHistory } from "./LearnerRequestHistory.js";
 import { Empty, Notice, PageTitle, AppLink } from "./ui.js";
 
 type StaticRouteName = "home" | "monthly" | "onboard" | "coach" | "challenge" | "practice" | "survey" | "profile" | "games";
@@ -142,7 +144,17 @@ export function printLearnerReward() {
  * Full learner route integration. Mount once under the learner wildcard route;
  * it reads React Router location, fetches server contracts, and owns mutation refreshes.
  */
-export function LearnerRouteController() {
+export function LearnerRouteController({ courseCompleted = false }: { courseCompleted?: boolean } = {}) {
+  const { pathname, hash } = useLocation();
+  const path = normalizeLearnerPath(pathname);
+  if (path === "/profile" && hash === "#my-requests") return <Navigate replace to="/support?from=profile" />;
+  if (path === "/support") return <LearnerRequestHistory />;
+  if (path === "/survey/monthly") return <Navigate replace to="/support?type=feedback" />;
+  if (path === "/reward/course") return <CourseCompletion onPrint={printLearnerReward} />;
+  return <LearnerContent courseCompleted={courseCompleted} />;
+}
+
+function LearnerContent({ courseCompleted }: { courseCompleted: boolean }) {
   const location = useLocation();
   const navigate = useNavigate();
   const experience = useExperience();
@@ -327,11 +339,12 @@ export function LearnerRouteController() {
 
   const callbacks: LearnerCallbacks = {
     navigate: (path) => navigate(path),
-    submitComplaint: async (kind, reason) => {
-      await apiClient.submitLearnerComplaint(kind, reason);
-      showLearnerToast("Đã gửi khiếu nại. Bạn có thể theo dõi phản hồi trong hồ sơ.", "ok");
+    submitComplaint: async (kind, reason, ...evidence) => {
+      await apiClient.submitLearnerComplaint(kind, reason, ...evidence);
+      showLearnerToast("Đã gửi khiếu nại. Bạn có thể theo dõi phản hồi tại Hỗ trợ học tập.", "ok");
     },
     getComplaints: () => apiClient.getLearnerComplaints(),
+    getAppeals: () => apiClient.getLearnerAppeals(),
     saveProfileDraft,
     saveProfile: (profile) => saveProfileRecord(profile, true),
     startAssessment: async () => { if (route.name === "assessment") setContracts({ assessment: await apiClient.startAssessment(route.params.kind) }); },
@@ -401,11 +414,11 @@ export function LearnerRouteController() {
       setContracts((current) => current.assessment?.attempt ? { assessment: { ...current.assessment, attempt: { ...current.assessment.attempt, audioPlayCounts: { ...current.assessment.attempt.audioPlayCounts, [`${section}:${groupKey}`]: recorded.playCount } } } } : current);
       return recorded;
     },
-    createAssessmentAppeal: async (reason) => {
+    createAssessmentAppeal: async (reason, ...evidence) => {
       const attempt = contracts.assessment?.attempt;
       if (!attempt) throw new Error("ASSESSMENT_ATTEMPT_NOT_ACTIVE");
-      const appeal = await apiClient.createAssessmentAppeal(attempt.id, reason);
-      setContracts((current) => current.assessment ? { assessment: { ...current.assessment, appeal } } : current);
+      const appeal = await apiClient.createAssessmentAppeal(attempt.id, reason, ...evidence);
+      setContracts((current) => current.assessment ? { assessment: { ...current.assessment, appeal, appealTarget: null } } : current);
     },
     completeLessonStudy: async () => {
       if (route.name !== "lesson") throw new Error("LESSON_ROUTE_NOT_ACTIVE");
@@ -428,9 +441,9 @@ export function LearnerRouteController() {
       setContracts((current) => current.lesson ? { lesson: { ...current.lesson, progress: result.progress } } : current);
       return result;
     },
-    appealLessonPart: async (partCode, reason) => {
+    appealLessonPart: async (partCode, reason, ...evidence) => {
       if (route.name !== "lesson") throw new Error("LESSON_ROUTE_NOT_ACTIVE");
-      const result = await apiClient.appealLessonPart(route.params.id, partCode, reason);
+      const result = await apiClient.appealLessonPart(route.params.id, partCode, reason, ...evidence);
       setContracts((current) => current.lesson ? { lesson: { ...current.lesson, progress: result.progress } } : current);
       return result;
     },
@@ -489,7 +502,7 @@ export function LearnerRouteController() {
       const pending = practicePending.current?.text === text ? { ...practicePending.current, ...(inputAudio ? { audio: inputAudio } : {}) } : { text, requestId: crypto.randomUUID(), ...(inputAudio ? { audio: inputAudio } : {}) };
       practicePending.current = pending; const practice = await apiClient.submitWeeklyPractice(pending); practicePending.current = undefined; setContracts({ practice });
     },
-    appealWeeklyPractice: async (submissionId, reason) => setContracts({ practice: await apiClient.appealWeeklyPractice(submissionId, reason) }),
+    appealWeeklyPractice: async (submissionId, reason, ...evidence) => setContracts({ practice: await apiClient.appealWeeklyPractice(submissionId, reason, ...evidence) }),
     submitSurvey: async (answers) => setContracts({ survey: await apiClient.submitSurvey(answers) }),
     saveAvatar: async (avatar: LearnerAvatarData) => {
       if (!profileRecord || !contracts.profile) throw new Error("PROFILE_NOT_LOADED");
@@ -519,7 +532,7 @@ export function LearnerRouteController() {
   if (loading) return <div className="app-learner-page"><section className="card" aria-live="polite">{loadingLabel(route.name)}…</section></div>;
   if (error) return <LearnerLoadFailure route={route.name} message={error} onRetry={() => navigate(0)} navigate={navigate} />;
   if (route.name === "notFound") return <div className="app-learner-page"><PageTitle title="Không tìm thấy trang." /><button type="button" onClick={() => navigate("/home")}>Về trang chủ</button></div>;
-  return <LearnerController path={location.pathname} contracts={contracts} callbacks={callbacks} uiState={uiState} />;
+  return <LearnerController path={location.pathname} contracts={contracts} callbacks={callbacks} uiState={uiState} courseCompleted={courseCompleted} />;
 }
 
 function mergeResponse(responses: AssessmentResponseView[], response: AssessmentResponseView) {
@@ -550,6 +563,15 @@ export function learnerLoadError(route: ResolvedLearnerRoute["name"], reason: un
   if ((route === "game" || route === "games") && reason instanceof ApiError && reason.code === "MINIGAME_LOCKED_DURING_ASSESSMENT") {
     return "Mini game tạm khóa khi bạn đang làm bài kiểm tra. Hãy nộp bài hoặc kết thúc bài kiểm tra rồi quay lại.";
   }
+  if (route === "coach" && reason instanceof ApiError && reason.code === "COACH_LOCKED_DURING_ASSESSMENT") {
+    return "Season tạm khóa khi bạn đang làm bài kiểm tra. Hãy hoàn tất bài kiểm tra rồi quay lại.";
+  }
+  if (route === "assessment" && reason instanceof ApiError && reason.code === "ASSESSMENT_ACTIVE_ON_OTHER_DEVICE") {
+    return "Bài đang được làm trên thiết bị khác.";
+  }
+  if (route === "assessment" && reason instanceof ApiError && reason.code === "PLACEMENT_PROFILE_INCOMPLETE") {
+    return "Hãy lưu đủ các mục bắt buộc trong hồ sơ trước khi làm bài kiểm tra đầu vào.";
+  }
   if (route === "assessment" && reason instanceof ApiError && reason.code === "PLACEMENT_ATTEMPT_RESTART_REQUIRED") {
     const details = reason.details && typeof reason.details === "object" && !Array.isArray(reason.details)
       ? reason.details as Record<string, unknown>
@@ -571,7 +593,7 @@ function loadWaitState(route: ResolvedLearnerRoute["name"]) {
   };
   if (route === "game" || route === "games") return {
     title: "Mini game đang được chuẩn bị",
-    message: "Bạn cần đợi bộ từ Mini game được tạo từ bài học tuần. Hãy quay lại sau."
+    message: "Nếu chưa được xếp trình độ, hãy hoàn thành bài đầu vào. Nếu đã có trình độ, hãy thử tải lại."
   };
   return null;
 }

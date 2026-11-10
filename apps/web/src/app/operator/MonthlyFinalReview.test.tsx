@@ -3,6 +3,7 @@ import { cleanup, render, screen, waitFor, within } from "@testing-library/react
 import "@testing-library/jest-dom/vitest";
 import { userEvent } from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { ModalProvider } from "../shared/ModalProvider.js";
 import { MonthlyFinalReview } from "./MonthlyFinalReview.js";
 import { monthlyFinalView } from "../../../test/support/monthly-final-view.js";
 
@@ -10,7 +11,7 @@ afterEach(cleanup);
 
 describe("Monthly final review screen", () => {
   it("reuses the level editor and shows status, GEN report, mapping, GA/GB and pronunciation positions", () => {
-    render(<MonthlyFinalReview draft={monthlyFinalView()} onClose={vi.fn()} onSave={vi.fn()} onPublish={vi.fn()} />);
+    render(<ModalProvider><MonthlyFinalReview draft={monthlyFinalView()} onClose={vi.fn()} onSave={vi.fn()} onPublish={vi.fn()} /></ModalProvider>);
     const dialog = screen.getByRole("dialog", { name: "Bản nháp đề thi tháng" });
     expect(within(dialog).getByText("Chi tiết 4 phần")).toBeInTheDocument();
     expect(within(dialog).getByRole("textbox", { name: "Nội dung L01" })).toBeInTheDocument();
@@ -35,7 +36,7 @@ describe("Monthly final review screen", () => {
   it("saves edited GA/GB components, confirmations and item text with the four sections", async () => {
     const user = userEvent.setup();
     const onSave = vi.fn().mockResolvedValue(undefined);
-    render(<MonthlyFinalReview draft={monthlyFinalView()} onClose={vi.fn()} onSave={onSave} />);
+    render(<ModalProvider><MonthlyFinalReview draft={monthlyFinalView()} onClose={vi.fn()} onSave={onSave} /></ModalProvider>);
     await user.selectOptions(screen.getByRole("combobox", { name: "GA thành phần chính" }), "ga-3");
     await user.click(screen.getByRole("checkbox", { name: "Xác nhận đã rà GEN05" }));
     await user.clear(screen.getByRole("textbox", { name: "Nội dung R01" }));
@@ -51,26 +52,30 @@ describe("Monthly final review screen", () => {
 
   it("allows the 'đã nghe soát' tick only once audio is saved, and publishes only a READY, reviewed exam", async () => {
     const user = userEvent.setup();
-    const { unmount } = render(<MonthlyFinalReview draft={monthlyFinalView()} onClose={vi.fn()} onSave={vi.fn()} />);
+    const { unmount } = render(<ModalProvider><MonthlyFinalReview draft={monthlyFinalView()} onClose={vi.fn()} onSave={vi.fn()} /></ModalProvider>);
     expect(screen.getByRole("checkbox", { name: "Đã nghe soát audio" })).toBeDisabled();
     unmount();
 
     const onSave = vi.fn().mockResolvedValue(undefined);
-    const second = render(<MonthlyFinalReview draft={monthlyFinalView({ audio: true })} onClose={vi.fn()} onSave={onSave} />);
+    const second = render(<ModalProvider><MonthlyFinalReview draft={monthlyFinalView({ audio: true })} onClose={vi.fn()} onSave={onSave} /></ModalProvider>);
     await user.click(screen.getByRole("checkbox", { name: "Đã nghe soát audio" }));
     await user.click(screen.getByRole("button", { name: "Lưu bản nháp" }));
     await waitFor(() => expect(onSave.mock.calls[0]![0].review.audioReviewed).toBe(true));
     second.unmount();
 
     const onPublish = vi.fn().mockResolvedValue(undefined);
-    render(<MonthlyFinalReview draft={monthlyFinalView({ status: "READY", audio: true, reviewed: true })} onClose={vi.fn()} onSave={vi.fn()} onPublish={onPublish} />);
+    render(<ModalProvider><MonthlyFinalReview draft={monthlyFinalView({ status: "READY", audio: true, reviewed: true })} onClose={vi.fn()} onSave={vi.fn()} onPublish={onPublish} /></ModalProvider>);
     expect(screen.getByTestId("monthly-final-status")).toHaveTextContent("Sẵn sàng phát hành");
     await user.click(screen.getByRole("button", { name: "Duyệt & phát hành" }));
+    await user.keyboard("{Escape}");
+    expect(onPublish).not.toHaveBeenCalled();
+    await user.click(screen.getByRole("button", { name: "Duyệt & phát hành" }));
+    await user.click(within(screen.getByRole("dialog", { name: "Duyệt và phát hành đề tháng?" })).getByRole("button", { name: "Duyệt & phát hành" }));
     expect(onPublish).toHaveBeenCalledTimes(1);
   });
 
   it("is read-only after 00:00 of the exam date", () => {
-    render(<MonthlyFinalReview draft={monthlyFinalView({ editable: false, status: "READY", audio: true, reviewed: true })} onClose={vi.fn()} onSave={vi.fn()} onPublish={vi.fn()} />);
+    render(<ModalProvider><MonthlyFinalReview draft={monthlyFinalView({ editable: false, status: "READY", audio: true, reviewed: true })} onClose={vi.fn()} onSave={vi.fn()} onPublish={vi.fn()} /></ModalProvider>);
     expect(screen.getAllByText(/Đã quá 00:00 ngày thi/u).length).toBeGreaterThan(0);
     expect(screen.queryByRole("button", { name: "Lưu bản nháp" })).not.toBeInTheDocument();
     expect(screen.queryByRole("textbox", { name: "Nội dung L01" })).not.toBeInTheDocument();

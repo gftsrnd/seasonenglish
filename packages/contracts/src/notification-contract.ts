@@ -24,3 +24,32 @@ export interface LearnerNotificationView {
 export interface LearnerNotificationsView {
   readonly notifications: readonly LearnerNotificationView[];
 }
+
+export type InboxNotificationKind =
+  | "complaint_received" | "complaint_approved" | "complaint_rejected"
+  | "reopen_received" | "reopen_approved" | "reopen_rejected"
+  | "assessment_received" | "assessment_result" | "assessment_retry"
+  | "appeal_received" | "appeal_approved" | "appeal_rejected"
+  | "learning_reminder" | "security_report"
+  | "deletion_received" | "deletion_resolved" | "level_changed" | "credential_changed" | "account_reopened"
+  | "lesson_availability_changed" | "lesson_published" | "monthly_exam_published" | "level_exam_published"
+  | "topic_report_received" | "topic_report_resolved" | "duel_invited" | "duel_completed"
+  | "course_ready" | "certificate_issued" | "challenge_received" | "challenge_passed" | "challenge_retry"
+  | "monthly_exam_ready" | "level_exam_ready" | "monthly_survey_open";
+
+export interface InboxNotificationView {
+  readonly id: string;
+  readonly kind: InboxNotificationKind;
+  readonly context: string;
+  readonly relatedId?: string | null;
+  readonly createdAt: string;
+  readonly readAt: string | null;
+}
+
+export interface NotificationInboxView {
+  readonly items: readonly InboxNotificationView[];
+  readonly unreadCount: number;
+  readonly nextCursor: string | null;
+}
+
+export type InboxReadInput = { readonly ids: readonly string[] } | { readonly all: true };

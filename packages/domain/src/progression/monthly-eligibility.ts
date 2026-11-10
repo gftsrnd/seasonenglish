@@ -2,25 +2,46 @@ import type { CefrLevel } from "@e4s/contracts";
 
 export const MONTHLY_SEASON_TURN_TARGET = 100;
 export const DAILY_SEASON_TURN_LIMIT = 30;
+/** The 23:24 minute is the last minute in which a learner may enter. */
+export const MONTHLY_EXAM_ENTRY_CUTOFF = "23:25:00";
+
+export function monthlyExamEntryState(systemDate: string, examDate: string, localTime: string): "upcoming" | "open" | "closed" {
+  if (systemDate < examDate) return "upcoming";
+  return systemDate === examDate && localTime < MONTHLY_EXAM_ENTRY_CUTOFF ? "open" : "closed";
+}
 
 /** Scale the monthly Season target for learners approved after the month starts. */
 export function monthlySeasonTurnTarget(approvalDate: string, month: string, examDate: string): number {
-  const first = `${month}-01`;
-  const start = approvalDate > first ? approvalDate : first;
-  const totalDays = effectiveWeekdays(first, examDate);
-  const learnerDays = effectiveWeekdays(start, examDate);
-  return totalDays === 0 ? MONTHLY_SEASON_TURN_TARGET : Math.ceil(MONTHLY_SEASON_TURN_TARGET * learnerDays / totalDays);
+  return monthlyLearnerWindow(month, examDate, approvalDate).seasonTarget;
 }
 
-function effectiveWeekdays(startDate: string, endExclusive: string): number {
-  const start = new Date(`${startDate}T00:00:00Z`);
-  const end = new Date(`${endExclusive}T00:00:00Z`);
-  let count = 0;
-  for (const date = new Date(start); date < end; date.setUTCDate(date.getUTCDate() + 1)) {
+export function monthlyLearnerWindow(month: string, examDate: string, approvalDate: string) {
+  const end = new Date(`${examDate}T00:00:00Z`);
+  const dates: string[] = [];
+  for (const date = new Date(`${month}-01T00:00:00Z`); date < end; date.setUTCDate(date.getUTCDate() + 1)) {
     const weekday = date.getUTCDay();
-    if (weekday >= 1 && weekday <= 5) count++;
+    if (weekday >= 1 && weekday <= 5) dates.push(date.toISOString().slice(0, 10));
   }
-  return count;
+  const effectiveDates = dates.filter(date => date >= approvalDate);
+  const canStudy = dates.length > 0 && effectiveDates.length * 4 >= dates.length * 3;
+  const startDate = canStudy ? effectiveDates[0]! : new Date(Date.UTC(end.getUTCFullYear(), end.getUTCMonth() + 1, 1)).toISOString().slice(0, 10);
+  return {
+    canStudy, startDate, effectiveDates, effectiveDays: effectiveDates.length,
+    seasonTarget: dates.length ? Math.ceil(MONTHLY_SEASON_TURN_TARGET * effectiveDates.length / dates.length) : MONTHLY_SEASON_TURN_TARGET
+  };
+}
+
+export function consecutiveLearningAbsences(
+  effectiveDates: readonly string[], attendedDates: readonly string[], today: string, resetOn?: string
+): number {
+  const attended = new Set(attendedDates);
+  let missed = 0;
+  for (const date of effectiveDates) {
+    if (date >= today) break;
+    if (resetOn && date < resetOn) continue;
+    missed = attended.has(date) ? 0 : missed + 1;
+  }
+  return missed;
 }
 
 export interface MonthlyExamEligibilityInput {
@@ -28,13 +49,17 @@ export interface MonthlyExamEligibilityInput {
   examDate: string;
   /** All effective weekdays in the month, excluding the exam date. */
   effectiveDays: number;
-  /** Effective weekdays elapsed through the system date. */
+  /** Effective weekdays that have already ended. */
   elapsedEffectiveDays: number;
   attendedDays: number;
+  attendedElapsedDays?: number;
   scheduledLessons: number;
   completedLessons: number;
   seasonTurns: number;
+  seasonTarget?: number;
   attendanceOverride?: boolean;
+  windowOpen?: boolean;
+  learnerEligible?: boolean;
   frameworkApproved: boolean;
   formPublished: boolean;
 }
@@ -69,8 +94,9 @@ export interface MonthlyExamEligibility {
 export function evaluateMonthlyExamEligibility(input: MonthlyExamEligibilityInput): MonthlyExamEligibility {
   const effectiveDays = Math.max(0, Math.floor(input.effectiveDays));
   const elapsedEffectiveDays = Math.max(0, Math.min(effectiveDays, Math.floor(input.elapsedEffectiveDays)));
-  const attendedDays = Math.max(0, Math.min(elapsedEffectiveDays, Math.floor(input.attendedDays)));
-  const absenceDays = Math.max(0, elapsedEffectiveDays - attendedDays);
+  const attendedDays = Math.max(0, Math.min(effectiveDays, Math.floor(input.attendedDays)));
+  const attendedElapsedDays = Math.max(0, Math.min(elapsedEffectiveDays, Math.floor(input.attendedElapsedDays ?? attendedDays)));
+  const absenceDays = elapsedEffectiveDays - attendedElapsedDays;
   const maxAbsences = Math.floor(effectiveDays * 0.3);
   const attendanceOverride = input.attendanceOverride === true;
   const attendanceEligible = absenceDays <= maxAbsences || attendanceOverride;
@@ -78,15 +104,17 @@ export function evaluateMonthlyExamEligibility(input: MonthlyExamEligibilityInpu
   const completedLessons = Math.max(0, Math.min(scheduledLessons, Math.floor(input.completedLessons)));
   const lessonsEligible = scheduledLessons > 0 && completedLessons === scheduledLessons;
   const seasonTurns = Math.max(0, Math.floor(input.seasonTurns));
-  const seasonEligible = seasonTurns >= MONTHLY_SEASON_TURN_TARGET;
+  const seasonTarget = input.seasonTarget ?? MONTHLY_SEASON_TURN_TARGET;
+  const seasonEligible = seasonTurns >= seasonTarget;
   // A published fixed final is available to every learner at the level on the
   // exam date. Lesson completion and Season activity are readiness metrics,
   // not access gates (CH-R33); attendance remains the learner access gate.
-  const windowOpen = input.systemDate === input.examDate;
+  const windowOpen = input.windowOpen ?? input.systemDate === input.examDate;
   const reasons: string[] = [];
   if (!attendanceEligible) reasons.push("MONTHLY_ATTENDANCE_LIMIT_EXCEEDED");
   if (!windowOpen) reasons.push("MONTHLY_EXAM_WINDOW_NOT_OPEN");
   if (!input.formPublished) reasons.push("MONTHLY_FORM_NOT_PUBLISHED");
+  if (input.learnerEligible === false) reasons.push("MONTHLY_LEARNER_NOT_IN_COHORT");
   return {
     effectiveDays,
     elapsedEffectiveDays,
@@ -99,7 +127,7 @@ export function evaluateMonthlyExamEligibility(input: MonthlyExamEligibilityInpu
     completedLessons,
     lessonsEligible,
     seasonTurns,
-    seasonTurnsRequired: MONTHLY_SEASON_TURN_TARGET,
+    seasonTurnsRequired: seasonTarget,
     seasonEligible,
     frameworkApproved: input.frameworkApproved,
     formPublished: input.formPublished,

@@ -1,0 +1,73 @@
+.manager-base-editor { margin-top: 16px; display: grid; gap: 12px; }
+.manager-base-editor label { display: grid; gap: 6px; font-size: 14px; font-weight: 600; }
+.manager-base-editor input, .manager-base-editor textarea { width: 100%; min-width: 0; box-sizing: border-box; }
+.manager-base-editor .row { flex-wrap: wrap; }
+
+.manager-reminder-toolbar { margin-bottom: 12px; }
+.manager-reminder-toolbar .muted { display: block; }
+.manager-reminder-queue { display: grid; gap: 12px; }
+.manager-reminder-queue > .card { margin: 0; min-width: 0; }
+.manager-reminder-identity,
+.manager-reminder-history-heading {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 4px 8px;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.manager-reminder-recipient,
+.manager-reminder-confirm-dialog { overflow-wrap: anywhere; }
+.manager-reminder-card .manager-reminder-message {
+  margin: 12px 0;
+  padding: 10px 12px;
+  background: var(--surface-2);
+  font-size: inherit;
+}
+.manager-reminder-history h3,
+.manager-reminder-empty-state h3 { margin: 0 0 8px; }
+.manager-reminder-empty-state p { margin: 0; }
+.manager-reminder-history td { overflow-wrap: anywhere; }
+.manager-reminder-history-list { list-style: none; padding: 0; margin: 0; }
+.manager-reminder-history-list > li {
+  padding-block: 9px;
+  border-top: 1px solid var(--line);
+  overflow-wrap: anywhere;
+}
+.manager-reminder-history-heading { margin-bottom: 3px; }
+
+@media (max-width: 800px) {
+  .manager-reminder-queue { gap: 8px; }
+  .manager-reminder-queue > .manager-reminder-card { padding: 0; }
+  .manager-reminder-toggle {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 10px;
+    width: 100%;
+    min-height: 52px;
+    padding: 9px 12px;
+    border: 0;
+    border-radius: inherit;
+    background: transparent;
+    color: inherit;
+    text-align: start;
+  }
+  .manager-reminder-toggle-label {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    color: var(--primary-dark);
+    font-size: .85rem;
+  }
+  .manager-reminder-toggle[aria-expanded="true"] svg { transform: rotate(180deg); }
+  .manager-reminder-card > div:not([hidden]) { padding: 0 12px 12px; }
+  .manager-reminder-history-list > li:last-child { padding-bottom: 0; }
+  .manager-reminder-history-more { margin-top: 10px; min-height: 44px; }
+}
+
+@media (max-width: 480px) {
+  .manager-reminder-actions { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .manager-reminder-actions > .btn-sm { min-width: 0; min-height: 44px; padding-inline: 6px; white-space: normal; }
+  .manager-reminder-actions > .btn-sm:last-child { grid-column: 1 / -1; }
+}

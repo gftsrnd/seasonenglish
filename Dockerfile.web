@@ -16,6 +16,7 @@ COPY packages/test-support/package.json packages/test-support/package.json
 RUN pnpm install --frozen-lockfile
 
 COPY . .
+ARG VITE_E4S_STAFF_DIRECT_ENTRY=0
 RUN pnpm --filter @e4s/web build
 
 FROM nginx:1.27-alpine

@@ -33,6 +33,7 @@ export function createAiService(options: {
       }
     ): Promise<AiRunResult<TOutput>> {
       const task = options.registry.get(taskId);
+      const validationIssueLimit = Math.max(1,Math.min(64,task.maxValidationIssues ?? 8));
       const inputResult = task.inputSchema.safeParse(rawInput);
       if (!inputResult.success) throw new AiGatewayError("AI_INPUT_INVALID");
       const input = inputResult.data;
@@ -70,12 +71,12 @@ export function createAiService(options: {
           const outputResult = task.outputSchema.safeParse(normalizedOutput);
           if (!outputResult.success) {
             throw new AiGatewayError("AI_OUTPUT_INVALID", {
-              issues: outputResult.error.issues.slice(0, 8).map(issue => ({ path: issue.path.join("."), message: issue.message }))
+              issues: outputResult.error.issues.slice(0, validationIssueLimit).map(issue => ({ path: issue.path.join("."), message: issue.message }))
             });
           }
           const semanticIssues = task.validateOutput?.(outputResult.data, input) ?? [];
           if (semanticIssues.length) {
-            throw new AiGatewayError("AI_OUTPUT_INVALID", { issues: semanticIssues.slice(0, 8) });
+            throw new AiGatewayError("AI_OUTPUT_INVALID", { issues: semanticIssues.slice(0, validationIssueLimit) });
           }
           return {
             output: outputResult.data as TOutput,
@@ -97,7 +98,7 @@ export function createAiService(options: {
               });
             }
             const issues = Array.isArray(details?.issues)
-              ? details.issues.slice(0, 8).map((issue) => `${issue.path}: ${issue.message}`).join("; ")
+              ? details.issues.slice(0, validationIssueLimit).map((issue) => `${issue.path}: ${issue.message}`).join("; ")
               : "The previous structured output did not satisfy the schema.";
             const repairInstruction = `REPAIR REQUIRED: ${issues}\nReturn a complete corrected result; preserve valid fields and change every field identified above; never leave required strings empty.`;
             attemptMessages = invalidOutput

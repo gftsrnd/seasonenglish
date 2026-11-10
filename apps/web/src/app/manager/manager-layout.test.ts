@@ -54,7 +54,7 @@ describe("Manager layout rhythm contract", () => {
     for (let column = 1; column <= 6; column += 1) {
       expect(css).toMatch(new RegExp(`\\.manager-accounts-table__table th:nth-child\\(${column}\\)\\s*\\{\\s*width:`));
     }
-    expect(css).toMatch(/\.manager-account-actions\s*\{[^}]*flex-wrap:\s*wrap/s);
+    expect(css).toMatch(/\.manager-account-actions\s*\{[^}]*flex-wrap:\s*nowrap/s);
   });
 
   it("keeps the password reveal control fixed inside the input", () => {
@@ -65,6 +65,7 @@ describe("Manager layout rhythm contract", () => {
   it("merges the masked PIN and eye icon into one compact control", () => {
     expect(css).toMatch(/\.manager-account-pin\s*\{[^}]*display:\s*inline-flex[^}]*gap:\s*0[^}]*overflow:\s*hidden[^}]*border:\s*1px solid var\(--line\)/s);
     expect(css).toMatch(/\.manager-account-pin \.manager-password-toggle\s*\{[^}]*width:\s*34px[^}]*min-width:\s*34px[^}]*border-left:\s*1px solid var\(--line\)[^}]*background:\s*transparent/s);
+    expect(css).toMatch(/\.manager-account-pin code\s*\{[^}]*white-space:\s*nowrap/s);
     expect(css).not.toMatch(/\.manager-account-pin \.manager-password-toggle::after/);
   });
 
@@ -99,10 +100,9 @@ describe("Manager layout rhythm contract", () => {
     expect(css).toMatch(/\.manager-operational-row\s+\.title\s*\{[^}]*display:\s*flex[^}]*align-items:\s*center[^}]*gap:\s*6px/s);
   });
 
-  it("lets Manager and Settings use the canonical document scroll on mobile", () => {
-    expect(css).toMatch(/body:has\(> #root > \.topbar nav\[aria-label="Điều hướng quản lý"\]\)\s*\{[\s\S]*?overflow:\s*visible\s*!important/);
-    expect(css).toMatch(/body:has\(> #root > \.topbar nav\[aria-label="Điều hướng quản lý"\]\) > #root\s*\{[\s\S]*?display:\s*block\s*!important[\s\S]*?overflow:\s*visible\s*!important/);
-    expect(css).toMatch(/body:has\(> #root > \.topbar nav\[aria-label="Điều hướng quản lý"\]\) > #root > main\s*\{[\s\S]*?flex:\s*none\s*!important[\s\S]*?overflow:\s*visible\s*!important/);
-    expect(css).toMatch(/body:has\(> #root > \.topbar nav\[aria-label="Điều hướng quản lý"\]\) > #root > \.bottomnav\s*\{[\s\S]*?position:\s*fixed\s*!important/);
+  it("uses the shared viewport layout for Settings and document scroll for other Manager pages", () => {
+    const selector = 'body:has(> #root > .topbar nav[aria-label="Điều hướng quản lý"]):not(:has(.settings-page))';
+    expect(css).toContain(`${selector} > #root > main {`);
+    expect(css).toContain(`${selector} > #root > .bottomnav {`);
   });
 });

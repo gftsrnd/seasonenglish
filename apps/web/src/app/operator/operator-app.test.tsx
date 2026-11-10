@@ -1,4 +1,5 @@
 // @vitest-environment jsdom
+import { ApiError } from "../../api/runtime.js";
 import "@testing-library/jest-dom/vitest";
 import { cleanup, render, screen, waitFor, within } from "@testing-library/react";
 import { userEvent } from "@testing-library/user-event";
@@ -145,21 +146,21 @@ describe("Operator app rebuild", () => {
       { target: "A2", forms: [] },
       { target: "B1", forms: [{ id: "f1", title: "B1 Promotion", status: "draft", short: true, createdAt: "14/10/2026", byName: "AI", listeningQuestions: 5, readingQuestions: 5, attempts: 0 }] },
       { target: "B2", forms: [{ id: "f2", title: "B2 Promotion", status: "approved", createdAt: "14/10/2026", byName: "Thư", listeningQuestions: 5, readingQuestions: 5, attempts: 3 }] }
-    ] } as any} actions={{ onBack: vi.fn(), onOpenSettings: vi.fn(), onGenerate: vi.fn(), onView, onEdit: vi.fn(), onApprove: vi.fn(), onDelete: vi.fn() }} />);
+    ] } as any} actions={{ onBack: vi.fn(), onOpenSettings: vi.fn(), onGenerate: vi.fn(), onView, onEdit: vi.fn(), onDelete: vi.fn() }} />);
     expect(screen.getByText(/Chưa có bản nháp/)).toBeInTheDocument();
     expect(screen.getByText("ngắn")).toBeInTheDocument();
     expect(screen.getAllByText("Đã duyệt").length).toBeGreaterThan(0);
     expect(screen.getAllByRole("button", { name: "Sinh đề bằng AI" })).toHaveLength(1);
     screen.getAllByRole("button", { name: "Sinh đề bằng AI" }).forEach(button => expect(button).toBeDisabled());
-    expect(screen.getByRole("button", { name: "Duyệt & phát hành" })).toBeDisabled();
-    expect(screen.getByRole("button", { name: "Sửa" })).toBeDisabled();
+    expect(screen.queryByRole("button", { name: "Duyệt & phát hành" })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Sửa đề" })).toBeDisabled();
     expect(screen.getAllByRole("button", { name: "Xoá" })[0]).toBeDisabled();
     await user.click(screen.getAllByRole("button", { name: "Xem" })[0]!);
     expect(onView).toHaveBeenCalledWith("f1");
   });
 
   it("does not repeat the bold level-form title when the screen is embedded in Bài kiểm tra", () => {
-    render(<OperatorLevelForms embedded view={{ aiConnected: true, generatingTarget: null, targets: [{ target: "B1", forms: [] }] } as any} actions={{ onBack: vi.fn(), onOpenSettings: vi.fn(), onGenerate: vi.fn(), onView: vi.fn(), onApprove: vi.fn(), onDelete: vi.fn() }} />);
+    render(<OperatorLevelForms embedded view={{ aiConnected: true, generatingTarget: null, targets: [{ target: "B1", forms: [] }] } as any} actions={{ onBack: vi.fn(), onOpenSettings: vi.fn(), onGenerate: vi.fn(), onView: vi.fn(), onDelete: vi.fn() }} />);
 
     expect(screen.queryByRole("heading", { name: "Đề thi lên mức" })).not.toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "B1" })).toBeInTheDocument();
@@ -168,7 +169,7 @@ describe("Operator app rebuild", () => {
   it("opens a real manual-authoring action for an empty target level", async () => {
     const user = userEvent.setup();
     const onCreateManual = vi.fn();
-    render(<OperatorLevelForms embedded view={{ aiConnected: true, generatingTarget: null, targets: [{ target: "A2", forms: [] }] } as any} actions={{ onBack: vi.fn(), onOpenSettings: vi.fn(), onGenerate: vi.fn(), onCreateManual, onView: vi.fn(), onApprove: vi.fn(), onDelete: vi.fn() }} />);
+    render(<OperatorLevelForms embedded view={{ aiConnected: true, generatingTarget: null, targets: [{ target: "A2", forms: [] }] } as any} actions={{ onBack: vi.fn(), onOpenSettings: vi.fn(), onGenerate: vi.fn(), onCreateManual, onView: vi.fn(), onDelete: vi.fn() }} />);
 
     expect(screen.getByText(/4 kỹ năng, 75 phút, 100 điểm/)).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Soạn tay" }));
@@ -178,20 +179,17 @@ describe("Operator app rebuild", () => {
   it("lets Operator edit a draft before approving and publishing it", async () => {
     const user = userEvent.setup();
     const onEdit = vi.fn();
-    const onApprove = vi.fn();
-    render(<OperatorLevelForms view={{ aiConnected: true, generatingTarget: null, targets: [{ target: "B1", forms: [{ id: "draft-1", title: "Đề B1", status: "draft", createdAt: "14/10/2026", byName: "Operator", listeningQuestions: 5, readingQuestions: 5, attempts: 0 }] }] } as any} actions={{ onBack: vi.fn(), onOpenSettings: vi.fn(), onGenerate: vi.fn(), onView: vi.fn(), onEdit, onApprove, onDelete: vi.fn() }} />);
+    render(<OperatorLevelForms view={{ aiConnected: true, generatingTarget: null, targets: [{ target: "B1", forms: [{ id: "draft-1", title: "Đề B1", status: "draft", createdAt: "14/10/2026", byName: "Operator", listeningQuestions: 5, readingQuestions: 5, attempts: 0 }] }] } as any} actions={{ onBack: vi.fn(), onOpenSettings: vi.fn(), onGenerate: vi.fn(), onView: vi.fn(), onEdit, onDelete: vi.fn() }} />);
 
-    await user.click(screen.getByRole("button", { name: "Sửa" }));
+    await user.click(screen.getByRole("button", { name: "Sửa đề" }));
     expect(onEdit).toHaveBeenCalledWith("draft-1", false);
-    expect(screen.getByRole("button", { name: "Duyệt & phát hành" })).toBeInTheDocument();
-    await user.click(screen.getByRole("button", { name: "Duyệt & phát hành" }));
-    expect(onApprove).toHaveBeenCalledWith("draft-1");
+    expect(screen.queryByRole("button", { name: "Duyệt & phát hành" })).not.toBeInTheDocument();
   });
 
   it("offers an editable successor for a published level form", async () => {
     const user = userEvent.setup();
     const onEdit = vi.fn();
-    render(<OperatorLevelForms view={{ aiConnected: true, generatingTarget: null, targets: [{ target: "B1", forms: [{ id: "published-1", title: "Đề B1", status: "approved", createdAt: "14/10/2026", byName: "Operator", listeningQuestions: 5, readingQuestions: 5, attempts: 2 }] }] } as any} actions={{ onBack: vi.fn(), onOpenSettings: vi.fn(), onGenerate: vi.fn(), onView: vi.fn(), onEdit, onApprove: vi.fn(), onDelete: vi.fn() }} />);
+    render(<OperatorLevelForms view={{ aiConnected: true, generatingTarget: null, targets: [{ target: "B1", forms: [{ id: "published-1", title: "Đề B1", status: "approved", createdAt: "14/10/2026", byName: "Operator", listeningQuestions: 5, readingQuestions: 5, attempts: 2 }] }] } as any} actions={{ onBack: vi.fn(), onOpenSettings: vi.fn(), onGenerate: vi.fn(), onView: vi.fn(), onEdit, onDelete: vi.fn() }} />);
 
     await user.click(screen.getByRole("button", { name: "Chỉnh sửa" }));
     expect(onEdit).toHaveBeenCalledWith("published-1", true);
@@ -201,9 +199,8 @@ describe("Operator app rebuild", () => {
     const user = userEvent.setup();
     const onGenerate = vi.fn();
     const onView = vi.fn();
-    const onApprove = vi.fn();
     const onDelete = vi.fn();
-    const actions = { onBack: vi.fn(), onOpenSettings: vi.fn(), onGenerate, onView, onApprove, onDelete };
+    const actions = { onBack: vi.fn(), onOpenSettings: vi.fn(), onGenerate, onView, onDelete };
 
     render(<OperatorLevelForms view={{ aiConnected: true, generatingTarget: null, targets: [], loading: true } as any} actions={actions} />);
     expect(screen.getByRole("status", { name: /đang tải đề thi lên mức/i })).toBeInTheDocument();
@@ -224,7 +221,7 @@ describe("Operator app rebuild", () => {
     expect(screen.getByText("đang dùng")).toBeInTheDocument();
     expect(screen.getByText(/Chưa có bản nháp/)).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Đang sinh…" })).not.toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Duyệt & phát hành" })).toBeDisabled();
+    expect(screen.queryByRole("button", { name: "Duyệt & phát hành" })).not.toBeInTheDocument();
     expect(screen.getAllByRole("button", { name: "Xem" })).toHaveLength(2);
     expect(screen.getAllByRole("button", { name: "Xem" })[0]).not.toHaveAttribute("title");
     expect(screen.getAllByRole("button", { name: "Xoá" })[0]).toBeDisabled();
@@ -232,13 +229,12 @@ describe("Operator app rebuild", () => {
 
     cleanup();
     render(<OperatorLevelForms readOnly view={{ aiConnected: true, generatingTarget: null, targets: [{ target: "A2", forms: [{ id: "draft-2", title: "Bản nháp A2", status: "draft", createdAt: "14/10/2026", byName: "AI", listeningQuestions: 5, readingQuestions: 5, attempts: 0 }] }] } as any} actions={actions} />);
-    expect(screen.getByText(/màn hình đang ở chế độ chỉ đọc/i)).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Duyệt & phát hành" })).toBeDisabled();
+    expect(screen.queryByText(/màn hình đang ở chế độ chỉ đọc/i)).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Duyệt & phát hành" })).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Xoá" })).toBeDisabled();
     await user.click(screen.getByRole("button", { name: "Xem" }));
     expect(onView).toHaveBeenCalledWith("draft-2");
     expect(onGenerate).not.toHaveBeenCalled();
-    expect(onApprove).not.toHaveBeenCalled();
     expect(onDelete).not.toHaveBeenCalled();
   });
 
@@ -258,7 +254,7 @@ describe("Operator app rebuild", () => {
       draftForm: null
     }] as any, { aiConnected: true });
 
-    render(<OperatorLevelForms view={view} actions={{ onBack: vi.fn(), onOpenSettings: vi.fn(), onGenerate: vi.fn(), onView: vi.fn(), onApprove: vi.fn(), onDelete: vi.fn() }} />);
+    render(<OperatorLevelForms view={view} actions={{ onBack: vi.fn(), onOpenSettings: vi.fn(), onGenerate: vi.fn(), onView: vi.fn(), onDelete: vi.fn() }} />);
 
     expect(screen.getByText(/13\/10 \d{2}:\d{2} · Đã phát hành · 5 câu nghe/)).toBeInTheDocument();
     expect(screen.queryByText(/2026-10-13T10:59:45\.548Z/)).not.toBeInTheDocument();
@@ -275,12 +271,9 @@ describe("Operator app rebuild", () => {
     expect(view.targets[0]?.forms[0]?.id).toBe("draft-2");
   });
 
-  it("disables level-form publication from the list until server publication gates are complete", () => {
-    render(<OperatorLevelForms view={{ aiConnected: true, generatingTarget: null, targets: [{ target: "A2", forms: [{ id: "draft-a2", title: "Đề A2", status: "draft", createdAt: "v1", byName: "Bản nháp", listeningQuestions: 20, readingQuestions: 40, attempts: 0, publicationReady: false, publicationBlockerCount: 7 }] }] }} actions={{ onBack: vi.fn(), onOpenSettings: vi.fn(), onGenerate: vi.fn(), onView: vi.fn(), onApprove: vi.fn(), onDelete: vi.fn() }} />);
+  it("shows publication blockers on the draft card", () => {
+    render(<OperatorLevelForms view={{ aiConnected: true, generatingTarget: null, targets: [{ target: "A2", forms: [{ id: "draft-a2", title: "Đề A2", status: "draft", createdAt: "v1", byName: "Bản nháp", listeningQuestions: 20, readingQuestions: 40, attempts: 0, publicationReady: false, publicationBlockerCount: 7 }] }] }} actions={{ onBack: vi.fn(), onOpenSettings: vi.fn(), onGenerate: vi.fn(), onView: vi.fn(), onDelete: vi.fn() }} />);
 
-    const publish = screen.getByRole("button", { name: "Duyệt & phát hành" });
-    expect(publish).toBeDisabled();
-    expect(publish).toHaveAttribute("aria-describedby", "level-form-publication-draft-a2");
     expect(screen.getByText("Chờ hoàn thiện 7 mục trước khi phát hành.")).toBeInTheDocument();
   });
 
@@ -417,7 +410,7 @@ describe("Operator app rebuild", () => {
     expect(screen.queryByRole("link", { name: /Cài đặt/i })).not.toBeInTheDocument();
 
     cleanup();
-    render(<OperatorLevelForms view={{ aiConnected: false, generatingTarget: null, targets: [] } as any} actions={{ onBack: vi.fn(), onOpenSettings, onGenerate: vi.fn(), onView: vi.fn(), onApprove: vi.fn(), onDelete: vi.fn() }} />);
+    render(<OperatorLevelForms view={{ aiConnected: false, generatingTarget: null, targets: [] } as any} actions={{ onBack: vi.fn(), onOpenSettings, onGenerate: vi.fn(), onView: vi.fn(), onDelete: vi.fn() }} />);
     expect(screen.getByRole("note")).toHaveTextContent("AI hệ thống tạm chưa sẵn sàng");
     expect(screen.queryByText(/API key/i)).not.toBeInTheDocument();
     expect(screen.queryByRole("link", { name: /Cài đặt/i })).not.toBeInTheDocument();
@@ -426,7 +419,7 @@ describe("Operator app rebuild", () => {
 
   it("shows a server-owned AI fallback on level-form generation", () => {
     const onOpenSettings = vi.fn();
-    render(<OperatorLevelForms view={{ aiConnected: false, generatingTarget: null, targets: [{ target: "B1", forms: [] }] } as any} actions={{ onBack: vi.fn(), onOpenSettings, onGenerate: vi.fn(), onView: vi.fn(), onApprove: vi.fn(), onDelete: vi.fn() }} />);
+    render(<OperatorLevelForms view={{ aiConnected: false, generatingTarget: null, targets: [{ target: "B1", forms: [] }] } as any} actions={{ onBack: vi.fn(), onOpenSettings, onGenerate: vi.fn(), onView: vi.fn(), onDelete: vi.fn() }} />);
 
     expect(screen.getByRole("note")).toHaveTextContent("AI hệ thống tạm chưa sẵn sàng");
     expect(screen.queryByText(/API key/i)).not.toBeInTheDocument();
@@ -818,7 +811,7 @@ describe("Operator app rebuild", () => {
     expect(screen.getByText("Đề B1")).toBeInTheDocument();
     expect(screen.getByText("Chưa có audio nghe")).toBeInTheDocument();
     const audioFile = new File(["audio"], "b1.mp3", { type: "audio/mpeg" });
-    await user.upload(screen.getByLabelText("Thêm audio cho Thông báo"), audioFile);
+    await user.upload(screen.getByLabelText("Tải audio cho Thông báo"), audioFile);
     await waitFor(() => expect(uploadAudio).toHaveBeenCalledWith(audioFile, "b1.mp3"));
     await user.clear(screen.getByLabelText("Nội dung L1"));
     await user.type(screen.getByLabelText("Nội dung L1"), "Where will the meeting happen?");
@@ -840,7 +833,7 @@ describe("Operator app rebuild", () => {
   it("creates Edge TTS audio for a level-form listening script and stores it before saving", async () => {
     const user = userEvent.setup();
     const onSave = vi.fn();
-    const synthesizeEdgeTts = vi.fn().mockResolvedValue({ filename: "level-a2.mp3", mimeType: "audio/mpeg", base64: "YXVkaW8=" });
+    const synthesizeEdgeTts = vi.fn().mockRejectedValueOnce(new ApiError("EDGE_TTS_UNAVAILABLE", "http", 503)).mockResolvedValue({ filename: "level-a2.mp3", mimeType: "audio/mpeg", base64: "YXVkaW8=" });
     const uploadAudio = vi.fn().mockResolvedValue({ url: "/api/v1/files/content-media/read?artifactKey=level-a2.mp3" });
     render(<OperatorLevelFormDetail editing synthesizeEdgeTts={synthesizeEdgeTts} uploadAudio={uploadAudio} onSave={onSave} detail={{
       definitionId: "definition-1", versionId: "version-1", title: "Đề A2", version: 1, publishedAt: null,
@@ -850,8 +843,13 @@ describe("Operator app rebuild", () => {
     } as any} onClose={vi.fn()} />);
 
     await user.click(screen.getByText("Nghe"));
-    expect(screen.getByText("AI/provider audio chưa khả dụng")).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "AI/provider audio" })).not.toBeInTheDocument();
+    expect(screen.queryByText("AI/provider audio chưa khả dụng")).not.toBeInTheDocument();
+    const generate = screen.getByRole("button", { name: "Sinh audio Edge TTS" });
+    await user.click(generate);
+    const error = await screen.findByRole("alert");
+    expect(error).toHaveTextContent("Máy chủ chưa bật Edge TTS");
+    expect(error).toHaveClass("operator-level-audio-error");
+    expect(uploadAudio).not.toHaveBeenCalled();
     await user.click(screen.getByRole("button", { name: "Sinh audio Edge TTS" }));
     await waitFor(() => expect(synthesizeEdgeTts).toHaveBeenCalledWith({ text: "Narrator: The meeting starts at nine.", voice: "en-US-AvaMultilingualNeural" }));
     await waitFor(() => expect(uploadAudio).toHaveBeenCalledWith(expect.any(Blob), "level-a2.mp3"));
@@ -869,7 +867,7 @@ describe("Operator app rebuild", () => {
     expect(onBack).toHaveBeenCalledTimes(1);
 
     cleanup();
-    render(<OperatorLevelForms view={{ aiConnected: true, generatingTarget: null, targets: [] } as any} actions={{ onBack, onOpenSettings: vi.fn(), onGenerate: vi.fn(), onView: vi.fn(), onApprove: vi.fn(), onDelete: vi.fn() }} />);
+    render(<OperatorLevelForms view={{ aiConnected: true, generatingTarget: null, targets: [] } as any} actions={{ onBack, onOpenSettings: vi.fn(), onGenerate: vi.fn(), onView: vi.fn(), onDelete: vi.fn() }} />);
     expect(screen.queryByRole("link", { name: "← Duyệt trình độ" })).not.toBeInTheDocument();
     expect(onBack).toHaveBeenCalledTimes(1);
 

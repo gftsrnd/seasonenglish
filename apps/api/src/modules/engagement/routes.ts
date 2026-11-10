@@ -7,7 +7,9 @@ import { createRepositories } from "@e4s/database";
 import type { FastifyInstance } from "fastify";
 import type { Pool } from "pg";
 import { z } from "zod";
+import { requestEvidenceFields } from "../manager/request-evidence.js";
 import { createRoleGuard } from "../identity/policy.js";
+import { assessmentInProgress } from "../assessment/active-attempt.js";
 import type { ContentMediaService } from "../media/index.js";
 import type { ObjectStorage } from "@e4s/storage";
 
@@ -25,7 +27,7 @@ const resultInput = z.object({
   answers: z.array(answer).min(1).max(30), events: z.array(gameEvent).max(60).optional()
 });
 const practiceAppealParams = z.object({ submissionId: z.uuid() });
-const practiceAppealInput = z.object({ reason: z.string().trim().min(5).max(2_000) });
+const practiceAppealInput = z.object({ reason: z.string().trim().min(5).max(2_000), ...requestEvidenceFields });
 const audioArtifactInput = z.object({
   fileId: z.uuid().optional().nullable(), artifactKey: z.string().trim().min(1).max(512),
   signedUrl: z.string().max(4_096).optional().nullable(), expiresAt: z.string().max(100).optional().nullable(),
@@ -43,19 +45,6 @@ const GAME_DESCRIPTORS: ReadonlyArray<Omit<GameDescriptor, "best">> = [
   { key: "sort", icon: "🗂️", name: "Word sort", description: "Xếp từng từ vào đúng nhóm từ loại", goal: "Phân loại đúng càng nhiều từ càng tốt.", instructions: ["Mỗi lượt hiện một từ (kèm nghĩa) và các nhóm: Noun, Verb, Adjective, Adverb, Preposition, Phrase…", "Bấm vào nhóm bạn cho là đúng từ loại của từ đó.", "Đúng: +1 và chuỗi tăng; sai: app hiện nhóm đúng, chuỗi về 0.", "Mẹo: nhìn hậu tố (-tion → noun, -ly → adverb) và cách dùng trong cụm từ."], scoring: "+1 điểm mỗi từ đúng; chuỗi đúng liên tiếp dài nhất được ghi lại." },
   { key: "typing", icon: "⌨️", name: "Typing race", description: "Type đúng từ trước khi thanh thời gian cạn!", goal: "Gõ đúng 10 từ thật nhanh, giữ chuỗi combo càng dài càng nhiều điểm.", instructions: ["Mỗi từ có gợi ý: nghĩa tiếng Việt, định nghĩa tiếng Anh và hình minh hoạ (nếu có).", "Thanh thời gian chạy rất nhanh – gõ từ bằng bàn phím ảo (hoặc bàn phím thật) rồi bấm ↵; phím vừa gõ sáng lên.", "Đúng: +10 điểm × combo (combo tăng mỗi từ đúng liên tiếp, tối đa ×5). Sai hoặc hết giờ: combo về 1.", "Chữ đã gõ đúng hiện xanh, sai hiện đỏ – sửa ngay bằng ⌫."], scoring: "10 điểm × combo cho mỗi từ đúng; tối đa 10 từ." }
 ];
-
-/**
- * A game must never run alongside an assessment attempt.  This is intentionally
- * independent of the calendar: games remain available on study, holiday and
- * exam days until an attempt is actually started.
- */
-async function assessmentInProgress(pool: Pool, learnerId: string): Promise<boolean> {
-  const result = await pool.query<{ active: boolean }>(
-    "select exists(select 1 from assessment_attempts where learner_id = $1 and status = 'in_progress') as active",
-    [learnerId]
-  );
-  return Boolean(result.rows[0]?.active);
-}
 
 export function registerEngagementRoutes(
   app: FastifyInstance,
@@ -125,7 +114,7 @@ export function registerEngagementRoutes(
       const view = await repositories.engagement.appealWeeklyPractice({
         learnerId: request.e4sSession!.user.id,
         submissionId: params.data.submissionId,
-        reason: body.data.reason
+        ...body.data
       });
       return view ?? reply.code(409).send({ code: "PRACTICE_APPEAL_NOT_AVAILABLE" });
     } catch (error) {
@@ -405,7 +394,7 @@ function validateVocabularyTopic(topic: string): { message: string; strike: bool
   const normalized = topic.normalize("NFKC").trim();
   const letters = normalized.match(/\p{L}/gu)?.join("") ?? "";
   if (normalized.length > 70) return { message: "Chủ đề tối đa 70 ký tự.", strike: false };
-  if (normalized.split(/\s+/u).filter(Boolean).length > 7) return { message: "Chủ đề tối đa 7 từ.", strike: false };
+  if (normalized.split(/\s+/u).filter(Boolean).length > 3) return { message: "Nhập chủ đề từ 1 đến 3 từ tiếng Anh.", strike: false };
   if (letters.length < 2) return { message: "Chủ đề không có đủ từ có nghĩa.", strike: false };
   if (/[^\p{L}\p{N}\s&+,'’().\-/]/u.test(normalized)) return { message: "Chủ đề chứa ký tự không phù hợp.", strike: false };
   const protectedGroup = /\b(?:người đồng tính|người chuyển giới|người khuyết tật|dân tộc|tôn giáo|gay|lesbian|transgender|disabled people|ethnic group|religious group)\b/iu;
@@ -419,6 +408,7 @@ function validateVocabularyTopic(topic: string): { message: string; strike: bool
   }
   const blocked = /\b(?:porn|sex|nude|kill|murder|suicide|ma túy|thuốc phiện|khiêu dâm|giết người)\b/iu;
   if (blocked.test(normalized)) return { message: "Chủ đề không phù hợp với môi trường học tập.", strike: true };
+  if (/[^a-z]/iu.test(letters)) return { message: "Nhập chủ đề bằng tiếng Anh, ví dụ coffee shop.", strike: false };
   return null;
 }
 
@@ -444,7 +434,7 @@ async function gameHubView(repositories: ReturnType<typeof createRepositories>, 
   if (!hub) return null;
   const own = arena?.leaderboard.find((item) => item.learnerId === learnerId);
   return {
-    cefr: hub.cefr, aiAvailable, topicModeration: { state: "empty" } satisfies GameTopicModeration, wordSet: hub.wordSet,
+    cefr: hub.cefr, aiAvailable, topicModeration: { state: "empty" } satisfies GameTopicModeration, wordSet: hub.wordSet, learnedVocabularyAvailable: hub.learnedVocabularyAvailable,
     games: GAME_DESCRIPTORS.map((game) => ({ ...game, best: hub.best[game.key] ?? null })),
     arena: { eligible: arenaEligible(hub.cefr), requiredLevel: "B1" as const, points: own?.points ?? 0,
       pendingDuels: arena?.duels.filter((duel) => duel.state === "open" && !duel.scores[learnerId]).length ?? 0 }

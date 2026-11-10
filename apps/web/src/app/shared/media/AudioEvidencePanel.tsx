@@ -41,6 +41,6 @@ export function AudioEvidencePanel({
         void Promise.resolve(onDelete(normalized)).then(() => setConfirming(false)).catch(() => setDeleteError("Chưa xoá được bản ghi âm. Transcript và kết quả vẫn được giữ." )).finally(() => setDeleting(false));
       }}>{deleting ? "Đang xoá…" : "Xác nhận xoá bản ghi âm"}</button>
       <button className="btn-sm btn-ghost" type="button" disabled={deleting} onClick={() => setConfirming(false)}>Huỷ</button>
-    </div> : <button className="btn-sm btn-ghost" type="button" disabled={!eligible} onClick={() => setConfirming(true)}>Xoá bản ghi âm</button> : null}
+    </div> : <button className="btn-sm btn-danger" type="button" disabled={!eligible} onClick={() => setConfirming(true)}>Xoá bản ghi âm</button> : null}
   </section>;
 }

@@ -1,16 +1,17 @@
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import "./manager.css";
 import { Navigate, Route, Routes, useLocation } from "react-router";
-import type { ManagerAccountView, ManagerAccountsView, ManagerDeleteRequestsView, ManagerLearnerProfileView, ManagerMaintenanceAction, ManagerMaintenanceConfirmationInput, ManagerMaintenanceConfirmationView, ManagerOperationsView, ManagerPinReportsView, ManagerProgressView, ManagerProviderSettingsInput, ManagerProviderSettingsView, ManagerPurgeConfirmationView, ManagerRemindersView, ManagerReportView, ManagerSettingsInput, ManagerSettingsView, ManagerTrashView, OperatorSettingsOverviewView, OrganisationExperienceInput, OrganisationExperienceView, ProductPreferencesView, ReopenRequestView, SystemCapabilitiesView } from "@e4s/contracts";
+import type { ManagerAccountView, ManagerAccountsView, ManagerDeleteRequestsView, ManagerLearnerProfileView, ManagerMaintenanceAction, ManagerMaintenanceConfirmationInput, ManagerMaintenanceConfirmationView, ManagerOperationsView, ManagerPinReportsView, ManagerProgressView, ManagerProviderSettingsInput, ManagerProviderSettingsView, ManagerPurgeConfirmationView, ManagerRemindersView, ManagerSettingsInput, ManagerSettingsView, ManagerTrashView, OperatorSettingsOverviewView, OrganisationExperienceInput, OrganisationExperienceView, ProductPreferencesView, SystemCapabilitiesView } from "@e4s/contracts";
 import { managerApiClient as apiClient } from "../../api/manager.js";
-import { providerTestLabel, SettingsPage, webhookTestLabel } from "../settings/index.js";
+import { AccountStatusBadge, providerTestLabel, SettingsPage, webhookTestLabel } from "../settings/index.js";
 import { ManagerOperations } from "./Operations.js";
-import { ManagerComplaints } from "./Complaints.js";
+import { ManagerRequests } from "./Requests.js";
 import { ManagerHolidays } from "./Holidays.js";
-import { buildManagerProgressCsv, ManagerProgress } from "./Progress.js";
+import { ManagerProgress } from "./Progress.js";
+import { exportManagerMonthlyCsv, ManagerMonthlyReport, useManagerMonthlyOverview } from "./MonthlyOverview.js";
 import { ManagerRecovery } from "./Recovery.js";
 import { ManagerReminders } from "./Reminders.js";
-import { ManagerReport } from "./Report.js";
+import { ManagerMonthlySurveys } from "./MonthlySurveys.js";
 import { ManagerRewards } from "./Rewards.js";
 import { ManagerRewardCertificate } from "./RewardCertificate.js";
 import { downloadText, PageTitle } from "./shared.js";
@@ -20,9 +21,9 @@ import { useTheme } from "../shared/ThemeProvider.js";
 import { useToast } from "../shared/design-system.js";
 import { ArchiveRestore, ChevronDown, Eye, EyeOff, ShieldCheck } from "lucide-react";
 
-export type ManagerRouteControllerProps = { role: "manager" | "operator"; currentUserId: string };
+export type ManagerRouteControllerProps = { role: "manager" | "operator"; currentUserId: string; onSessionRevoked?: (() => void) | undefined };
 
-export function ManagerRouteController({ role, currentUserId }: ManagerRouteControllerProps) {
+export function ManagerRouteController({ role, currentUserId, onSessionRevoked }: ManagerRouteControllerProps) {
   const location = useLocation();
   useEffect(() => {
     if (window.innerWidth < 761 || window.innerWidth > 960) return;
@@ -30,7 +31,6 @@ export function ManagerRouteController({ role, currentUserId }: ManagerRouteCont
       const activeLink = document.querySelector<HTMLElement>('nav[aria-label="Điều hướng quản lý"] a.active');
       const nav = activeLink?.closest<HTMLElement>("nav");
       if (!activeLink || !nav) return;
-      activeLink.scrollIntoView({ block: "nearest", inline: "nearest" });
       const navRect = nav.getBoundingClientRect();
       const linkRect = activeLink.getBoundingClientRect();
       if (linkRect.left < navRect.left) nav.scrollLeft -= navRect.left - linkRect.left;
@@ -47,92 +47,41 @@ export function ManagerRouteController({ role, currentUserId }: ManagerRouteCont
     <Route path="/mgr" element={role === "manager" ? <ProgressRoute /> : <Navigate replace to="/op" />} />
     <Route path="/mgr/ops" element={role === "manager" ? <OperationsRoute /> : <Navigate replace to="/op" />} />
     <Route path="/mgr/ops/*" element={<Navigate replace to={role === "manager" ? "/mgr/ops" : "/op"} />} />
-    <Route path="/mgr/reopen-requests" element={role === "manager" ? <ReopenRequestsRoute /> : <Navigate replace to="/op" />} />
-    <Route path="/mgr/complaints" element={role === "manager" ? <ManagerComplaints /> : <Navigate replace to="/op" />} />
+    <Route path="/mgr/requests" element={role === "manager" ? <ManagerRequests /> : <Navigate replace to="/op" />} />
+    <Route path="/mgr/reopen-requests" element={<Navigate replace to={role === "manager" ? "/mgr/requests?kind=reopen" : "/op"} />} />
+    <Route path="/mgr/complaints" element={<Navigate replace to={role === "manager" ? "/mgr/requests?kind=complaint" : "/op"} />} />
     <Route path="/mgr/holidays" element={role === "manager" ? <ManagerHolidays /> : <Navigate replace to="/op" />} />
     <Route path="/mgr/recovery" element={<Navigate replace to={role === "manager" ? "/settings" : "/op"} />} />
     <Route path="/mgr/reminders" element={role === "manager" ? <RemindersRoute /> : <Navigate replace to="/op" />} />
-    <Route path="/mgr/report" element={role === "manager" ? <ReportRoute currentUserId={currentUserId} /> : <Navigate replace to="/op" />} />
+    <Route path="/mgr/report" element={role === "manager" ? <ReportRoute /> : <Navigate replace to="/op" />} />
+    <Route path="/mgr/surveys" element={role === "manager" ? <ManagerMonthlySurveys /> : <Navigate replace to="/op" />} />
     <Route path="/mgr/rewards" element={role === "manager" ? <ManagerRewards /> : <Navigate replace to="/op" />} />
     <Route path="/reward/preview" element={role === "manager" ? <ManagerRewardCertificate /> : <Navigate replace to="/op" />} />
-    <Route path="/settings" element={<SettingsRoute role={role} currentUserId={currentUserId} />} />
+    <Route path="/settings" element={<SettingsRoute role={role} currentUserId={currentUserId} onSessionRevoked={onSessionRevoked} />} />
     <Route path="/settings/prompts" element={<Navigate replace to={role === "manager" ? "/settings" : "/op"} />} />
   </Routes>;
 }
 
-function ReopenRequestsRoute() {
-  const modal = useModal();
-  const [requests, setRequests] = useState<ReopenRequestView[]>();
-  const [error, setError] = useState("");
-  const [busy, setBusy] = useState<string>();
-  const load = async () => {
-    try {
-      const view = await apiClient.getManagerReopenRequests();
-      setRequests(view.requests);
-      setError("");
-    } catch {
-      setError("Không tải được yêu cầu mở khóa.");
-    }
-  };
-  useEffect(() => { void load(); }, []);
-  const decide = async (request: ReopenRequestView, decision: "approved" | "rejected") => {
-    const resources = request.monthlyResources;
-    const warning = decision === "approved" && resources ? monthlyResourcesApprovalWarning(resources) : undefined;
-    const reason = await modal.prompt({ title: decision === "approved" ? "Duyệt mở khóa" : "Từ chối mở khóa", label: "Lý do gửi cho vận hành và học viên", ...(warning ? { message: warning } : {}), confirmLabel: decision === "approved" ? "Duyệt mở khóa" : "Từ chối", tone: decision === "approved" && !(resources && resources.lessonsWithContent > 0) ? "primary" : "danger" });
-    if (!reason?.trim()) return;
-    setBusy(request.id);
-    try { await apiClient.decideManagerReopenRequest(request.id, decision, reason.trim()); await load(); }
-    catch { setError("Không cập nhật được yêu cầu mở khóa."); }
-    finally { setBusy(undefined); }
-  };
-  const queues: Array<{ title: string; detail: string; targets: ReopenRequestView["target"][] }> = [
-    { title: "Tài khoản học viên", detail: "Các yêu cầu mở lại quyền truy cập tài khoản học viên.", targets: ["account"] },
-    { title: "Bài ngày và bài ôn", detail: "Các yêu cầu mở lại bài ngày hoặc bài ôn đã khóa.", targets: ["daily_lesson", "weekly_review"] },
-    { title: "Đề thi", detail: "Các yêu cầu mở lại đề thi đã phát hành. Đề đã có người bắt đầu làm không được mở lại.", targets: ["monthly_exam"] },
-    { title: "Tài nguyên tháng", detail: "Các yêu cầu mở lại bộ tài nguyên tháng đã chốt. Khi duyệt, tài nguyên về bản nháp và lịch bài học của trình độ đó bị xoá để Vận hành duyệt lại.", targets: ["monthly_resources"] }
-  ];
-  if (!requests && !error) return <RouteState error="" title="Yêu cầu mở khóa" label="Đang tải yêu cầu mở khóa" />;
-  return <div className="manager-page manager-reopen-requests-page">
-    <PageTitle><h1>Yêu cầu mở khóa</h1><p className="muted">Duyệt yêu cầu mở lại nội dung đã khóa và ghi nhận quyết định cho các bên liên quan.</p></PageTitle>
-    {error ? <div className="banner danger" role="alert"><div className="body small">{error}</div></div> : null}
-    <div className="manager-reopen-requests-grid">
-      {queues.map(queue => {
-        const items = (requests ?? []).filter(request => queue.targets.includes(request.target));
-        return <section className="card manager-reopen-requests-card" key={queue.title}><h2>{queue.title}</h2><p className="small muted">{queue.detail}</p>{items.length === 0
-          ? <p className="small muted manager-reopen-requests-empty">Chưa có yêu cầu cần xử lý.</p>
-          : <div className="list">{items.map(request => <article className="item small" key={request.id}><b>{reopenRequestLabel(request)}</b>{request.monthlyResources ? <p className="xs muted">Phiên bản tài nguyên v{request.monthlyResources.frameworkVersion}</p> : null}<p>{request.reason}</p>{request.status === "pending" && request.monthlyResources && request.monthlyResources.lessonsWithContent > 0 ? <p className="xs manager-reopen-warning" role="alert">Cảnh báo: {request.monthlyResources.lessonsWithContent} bài đã có nội dung sẽ bị xoá khỏi lịch khi duyệt mở lại.</p> : null}{request.status === "approved" && request.monthlyResources?.removedLessonCount != null ? <p className="xs muted">Đã xoá {request.monthlyResources.removedLessonCount} bài khỏi lịch.</p> : null}<p className="xs muted">Trạng thái: {request.status === "pending" ? "Chờ xử lý" : request.status === "approved" ? "Đã duyệt" : "Đã từ chối"}</p>{request.status === "pending" ? <div className="row"><button type="button" className="btn-sm btn-primary" disabled={busy === request.id} onClick={() => void decide(request, "approved")}>Duyệt mở khóa</button><button type="button" className="btn-sm" disabled={busy === request.id} onClick={() => void decide(request, "rejected")}>Từ chối</button></div> : request.decisionReason ? <p className="xs muted">Lý do xử lý: {request.decisionReason}</p> : null}</article>)}</div>}</section>;
-      })}
-    </div>
-  </div>;
-}
-
-function reopenRequestLabel(request: ReopenRequestView): string {
-  if (request.monthlyResources) {
-    const [year, month] = request.monthlyResources.month.split("-");
-    return `Tài nguyên tháng ${month}/${year} · ${request.monthlyResources.cefr}`;
-  }
-  return request.target === "weekly_review" ? "Bài ôn" : request.target === "daily_lesson" ? "Bài ngày" : request.target === "monthly_exam" ? "Đề thi" : request.target === "monthly_resources" ? "Tài nguyên tháng" : "Tài khoản";
-}
-
-function monthlyResourcesApprovalWarning(resources: NonNullable<ReopenRequestView["monthlyResources"]>): string {
-  if (resources.lessonsWithContent > 0) {
-    return `Cảnh báo: ${resources.lessonsWithContent}/${resources.lessonCount} bài đã có nội dung (đã soạn hoặc đã duyệt). Duyệt mở lại sẽ xoá toàn bộ ${resources.lessonCount} bài khỏi lịch, kể cả các bài này. Tài nguyên được giữ nguyên và trở về bản nháp.`;
-  }
-  return `Duyệt mở lại sẽ đưa tài nguyên về bản nháp và xoá ${resources.lessonCount} bài chưa có nội dung khỏi lịch.`;
-}
-
 function ProgressRoute() {
-  const [view, setView] = useState<ManagerProgressView>(); const [error, setError] = useState(""); const [notice, setNotice] = useState("");
+  const monthly = useManagerMonthlyOverview();
+  const [progress, setProgress] = useState<ManagerProgressView>();
+  const [loadFailed, setLoadFailed] = useState(false);
+  const [error, setError] = useState("");
+  const [notice, setNotice] = useState("");
   const [deleteRequests, setDeleteRequests] = useState<ManagerDeleteRequestsView>(); const [reminders, setReminders] = useState<ManagerRemindersView>(); const [profile, setProfile] = useState<ManagerLearnerProfileView>();
   const modal = useModal();
   const load = async () => {
-    const [progress, requests] = await Promise.all([apiClient.getManagerProgress(), apiClient.getManagerDeleteRequests()]);
-    setView(progress); setDeleteRequests(requests);
-    const queue = await apiClient.getManagerReminders().catch(() => undefined);
+    const [requests, queue] = await Promise.all([
+      apiClient.getManagerDeleteRequests().catch(() => undefined),
+      apiClient.getManagerReminders().catch(() => undefined)
+    ]);
+    if (requests) setDeleteRequests(requests);
     if (queue) setReminders(queue);
   };
-  useEffect(() => { void load().catch(() => setError("Không tải được tiến độ nhóm.")); }, []);
-  if (!view) return <RouteState error={error} title="Tiến độ nhóm" label="Đang tải tiến độ nhóm" />;
+  useEffect(() => {
+    void load();
+    void apiClient.getManagerProgress().then(setProgress, () => setLoadFailed(true));
+  }, []);
   const openOperationalItem = async (kind: "delete" | "trash", id: string) => {
     setError("");
     try {
@@ -149,24 +98,33 @@ function ProgressRoute() {
     ...(deleteRequests ? { deleteRequests: deleteRequests.requests.filter((item) => item.status === "pending").map((item) => ({ id: item.id, title: item.learnerName, detail: `${item.reason} · ${item.status}` })) } : {}),
     onOpenOperationalItem: openOperationalItem
   };
-  const deleteLearner = async (learnerId: string) => {
-    const learner = view.learners.find((item) => item.learnerId === learnerId);
-    if (!learner) return;
-    const confirmed = await modal.confirm({
-      title: "Xoá quyền truy cập học viên",
-      message: <>Xoá quyền truy cập của <b>{learner.learnerName}</b>? Dữ liệu học và audit vẫn được giữ để đối soát.</>,
-      confirmLabel: "Xoá học viên",
-      cancelLabel: "Huỷ",
-      tone: "danger"
-    });
-    if (!confirmed) return;
-    setError("");
-    try { await apiClient.updateManagerAccountStatus(learnerId, "deleted"); await load(); setNotice("Đã xoá quyền truy cập của học viên."); } catch { setError("Không xoá được tài khoản học viên."); }
-  };
-  return <>{notice ? <div className="banner ok"><div className="body small">{notice}</div></div> : null}<ManagerProgress view={view} {...(reminders ? { pendingReminderCount: reminders.candidates.length } : {})} onOpenLearnerProfile={openProfile} {...operationalProps} onDeleteLearner={deleteLearner} />{profile ? <LearnerProfileDialog view={profile} onClose={() => setProfile(undefined)} /> : null}{error ? <div className="banner danger" role="alert"><div className="body small">{error}</div></div> : null}</>;
+  return <>{notice ? <div className="banner ok"><div className="body small">{notice}</div></div> : null}{progress && monthly.view ? <ManagerProgress view={progress} monthly={monthly.view} pendingReminderCount={reminders?.candidates.length ?? 0} onOpenLearnerProfile={openProfile} {...operationalProps} /> : <RouteState error={loadFailed ? "Không tải được tiến độ nhóm." : monthly.error} title="Tiến độ nhóm" label="Đang tải tiến độ nhóm" />}{profile ? <LearnerProfileDialog view={profile} onClose={() => setProfile(undefined)} onRename={async (name) => {
+    const learnerId = profile.learner.id;
+    const { displayName } = await apiClient.renameManagerLearner(learnerId, name);
+    setProfile((current) => current?.learner.id === learnerId ? { ...current, learner: { ...current.learner, displayName } } : current);
+    setProgress((current) => current ? { ...current, learners: current.learners.map((learner) => learner.learnerId === learnerId ? { ...learner, learnerName: displayName } : learner) } : current);
+    monthly.rename(learnerId, displayName);
+    setNotice("Đã đổi tên hiển thị.");
+  }} /> : null}{error ? <div className="banner danger" role="alert"><div className="body small">{error}</div></div> : null}</>;
 }
 
-function LearnerProfileDialog({ view, onClose }: { view: ManagerLearnerProfileView; onClose: () => void }) {
+function LearnerProfileDialog({ view, onClose, onRename }: { view: ManagerLearnerProfileView; onClose: () => void; onRename: (name: string) => Promise<void> }) {
+  const [editing, setEditing] = useState(false);
+  const [displayName, setDisplayName] = useState(view.learner.displayName);
+  const [saving, setSaving] = useState(false);
+  const [nameError, setNameError] = useState("");
+  const saveName = async () => {
+    const name = displayName.trim();
+    if (name.length < 2 || name.length > 120) {
+      setNameError("Tên hiển thị phải có từ 2 đến 120 ký tự.");
+      return;
+    }
+    setSaving(true);
+    setNameError("");
+    try { await onRename(name); setEditing(false); }
+    catch { setNameError("Không đổi được tên hiển thị. Vui lòng thử lại."); }
+    finally { setSaving(false); }
+  };
   const dialogRef = useRef<HTMLElement>(null);
   const closeRef = useRef<HTMLButtonElement>(null);
   useDialog(true, dialogRef, onClose, closeRef);
@@ -190,7 +148,32 @@ function LearnerProfileDialog({ view, onClose }: { view: ManagerLearnerProfileVi
     ["Đã học", profile.experience ?? ""],
     ["Lo ngại / mong muốn", profile.concerns ?? ""]
   ].filter((row): row is [string, string] => Boolean(row[1]));
-  return <div className="modal-backdrop manager-modal-backdrop" role="presentation" onClick={(event) => { if (event.target === event.currentTarget) onClose(); }}><section ref={dialogRef} className="dialog manager-learner-profile-dialog" role="dialog" aria-modal="true" aria-label={`Hồ sơ ${view.learner.displayName}`} tabIndex={-1}><div className="row between manager-dialog-heading"><h3><span className="name">{view.learner.displayName}</span></h3><button ref={closeRef} className="btn-sm" type="button" onClick={onClose}>Đóng</button></div><div className="card soft manager-profile-card">{rows.length ? <><div className="manager-profile-title"><b>Hồ sơ cá nhân</b></div><div className="manager-profile-rows">{rows.map(([label, value]) => <div className="manager-profile-row" key={label}><span className="xs muted manager-profile-label">{label}</span><span className="small manager-profile-value">{value}</span></div>)}</div></> : <p className="small muted" style={{ margin: 0 }}>Chưa điền hồ sơ cá nhân.</p>}</div></section></div>;
+  return <div className="modal-backdrop manager-modal-backdrop" role="presentation" onClick={(event) => { if (event.target === event.currentTarget) onClose(); }}>
+    <section ref={dialogRef} className="dialog manager-learner-profile-dialog" role="dialog" aria-modal="true" aria-label={`Hồ sơ ${view.learner.displayName}`} tabIndex={-1}>
+      <div className="row between manager-dialog-heading">
+        <h3 className="name">{view.learner.displayName}</h3>
+        <button ref={closeRef} className="btn-sm" type="button" onClick={onClose}>Đóng</button>
+      </div>
+      {editing ? <form className="manager-rename-form" onSubmit={(event) => { event.preventDefault(); void saveName(); }}>
+        <label htmlFor="manager-learner-display-name">Tên hiển thị</label>
+        <input id="manager-learner-display-name" value={displayName} maxLength={120} onChange={(event) => setDisplayName(event.target.value)} disabled={saving} />
+        <div className="row">
+          <button className="btn btn-primary" type="submit" disabled={saving}>{saving ? "Đang lưu…" : "Lưu tên"}</button>
+          <button className="btn" type="button" disabled={saving} onClick={() => { setEditing(false); setNameError(""); }}>Huỷ</button>
+        </div>
+        {nameError ? <p role="alert">{nameError}</p> : null}
+      </form> : <button className="btn btn-sm manager-rename-button" type="button" onClick={() => { setDisplayName(view.learner.displayName); setEditing(true); }}>Đổi tên hiển thị</button>}
+      <section className="card soft manager-profile-card" aria-label="Kết quả đánh giá">
+        <div className="grid cols-2 manager-profile-assessments">
+          <div><b>Điểm đầu vào</b><p>{view.assessmentScores?.placement == null ? "Chưa có điểm" : `${view.assessmentScores.placement}/100`}</p></div>
+          <div><b>Điểm đầu ra · Pass Course</b><p>{view.assessmentScores?.passCourse == null ? "Chưa có điểm" : `${view.assessmentScores.passCourse}/100`}</p></div>
+        </div>
+      </section>
+      <div className="card soft manager-profile-card">
+        {rows.length ? <><div className="manager-profile-title"><b>Hồ sơ cá nhân</b></div><div className="manager-profile-rows">{rows.map(([label, value]) => <div className="manager-profile-row" key={label}><span className="xs muted manager-profile-label">{label}</span><span className="small manager-profile-value">{value}</span></div>)}</div></> : <p className="small muted" style={{ margin: 0 }}>Chưa điền hồ sơ cá nhân.</p>}
+      </div>
+    </section>
+  </div>;
 }
 
 const managerProfileOptions: Record<string, Record<string, string>> = {
@@ -258,7 +241,9 @@ function OperationsRoute() {
   useEffect(() => { void load().catch(() => setError("Không tải được hiệu suất vận hành.")); }, []);
   if (!view) return <RouteState error={error} title="Hiệu suất vận hành" label="Đang tải hiệu suất vận hành" />;
   const deleteRequestCounts = deleteRequests?.requests.reduce<Record<string, number>>((counts, request) => { counts[request.requestedBy] = (counts[request.requestedBy] ?? 0) + 1; return counts; }, {});
-  return <>{error ? <div className="banner danger" role="alert"><div className="body small">{error}</div></div> : null}<ManagerOperations view={view} {...(deleteRequestCounts ? { deleteRequestCounts } : {})} /></>;
+  return <>{error ? <div className="banner danger" role="alert"><div className="body small">{error}</div></div> : null}
+    <ManagerOperations view={view} {...(deleteRequestCounts ? { deleteRequestCounts } : {})} />
+  </>;
 }
 
 function RemindersRoute() {
@@ -270,7 +255,7 @@ function RemindersRoute() {
   const reminderError = (cause: unknown, fallback: string) => {
     const code = cause instanceof Error ? cause.message : "";
     if (code === "MANAGER_REMINDER_NOT_ELIGIBLE") return "Người học không còn đủ điều kiện nhắc. Danh sách đã được cập nhật; có thể họ vừa học lại hoặc đã được xử lý trong hôm nay.";
-    if (code === "BASE_WEBHOOK_NOT_CONFIGURED") return "Webhook Base.vn chưa được cấu hình. Hãy ghi nhận để gửi tay hoặc cập nhật trong Cài đặt.";
+    if (code === "MANAGER_REMINDER_BASE_WEBHOOK_MISSING" || code === "BASE_WEBHOOK_NOT_CONFIGURED") return "Người học chưa có kênh nhận Base.vn. Hãy chọn Cấu hình Base.vn trên thẻ của người học.";
     if (code === "BASE_WEBHOOK_TIMEOUT") return "Webhook Base.vn phản hồi quá chậm. Hãy thử lại hoặc gửi tay.";
     if (code === "BASE_WEBHOOK_NETWORK_ERROR") return "Không kết nối được webhook Base.vn. Kiểm tra mạng hoặc gửi tay.";
     return fallback;
@@ -280,22 +265,16 @@ function RemindersRoute() {
     if (cause instanceof Error && cause.message === "BASE_WEBHOOK_NOT_CONFIGURED") setContextNotice(message);
     else toast.show({ message, tone: "danger" });
   };
-  return <ManagerReminders view={view} sendingKey={sending} notice={contextNotice} noticeTone="danger" onSend={async (learnerId, channel) => { setSending(`${learnerId}:${channel}`); try { const result = await apiClient.sendManagerReminder(learnerId, crypto.randomUUID(), channel); await load(); setContextNotice(""); toast.show({ message: result.provider === "resend" ? "Đã gửi email và lưu vào lịch sử." : "Đã xếp hàng gửi Base.vn và lưu vào lịch sử.", tone: "ok" }); } catch (cause) { reportReminderError(cause, channel === "email" ? "Không gửi được email nhắc học." : "Không gửi được nhắc học qua Base.vn."); } finally { setSending(null); } }} onDismiss={async (learnerId) => { try { await apiClient.dismissManagerReminder(learnerId); await load(); setContextNotice(""); toast.show({ message: "Đã ghi nhận đã nhắc qua kênh khác.", tone: "ok" }); } catch (cause) { reportReminderError(cause, "Không ghi nhận được trạng thái đã nhắc qua kênh khác."); throw new Error("REMINDER_DISMISS_FAILED"); } }} onCopy={async (learnerId) => { try { await apiClient.copyManagerReminder(learnerId); await load(); setContextNotice(""); toast.show({ message: "Đã copy tin nhắn và ghi nhận vào lịch sử.", tone: "ok" }); } catch (cause) { reportReminderError(cause, "Không ghi nhận được việc copy tin nhắn."); } }} />;
+  return <ManagerReminders view={view} sendingKey={sending} notice={contextNotice} noticeTone="danger" onSaveBase={async (learnerId, input) => { await apiClient.saveManagerLearnerBaseNotification(learnerId, input); await load(); toast.show({ message: input.remove ? "Đã gỡ kênh nhận Base.vn của người học." : "Đã lưu kênh nhận Base.vn của người học. Chưa gửi thông báo.", tone: "ok" }); }} onSend={async (learnerId, channel) => { setSending(`${learnerId}:${channel}`); try { const result = await apiClient.sendManagerReminder(learnerId, crypto.randomUUID(), channel); await load(); setContextNotice(""); toast.show({ message: result.provider === "resend" ? "Đã gửi email và lưu vào lịch sử." : "Đã xếp hàng gửi Base.vn và lưu vào lịch sử.", tone: "ok" }); } catch (cause) { reportReminderError(cause, channel === "email" ? "Không gửi được email nhắc học." : "Không gửi được nhắc học qua Base.vn."); } finally { setSending(null); } }} onDismiss={async (learnerId) => { try { await apiClient.dismissManagerReminder(learnerId); await load(); setContextNotice(""); toast.show({ message: "Đã ghi nhận đã nhắc qua kênh khác.", tone: "ok" }); } catch (cause) { reportReminderError(cause, "Không ghi nhận được trạng thái đã nhắc qua kênh khác."); throw new Error("REMINDER_DISMISS_FAILED"); } }} onCopy={async (learnerId) => { try { await apiClient.copyManagerReminder(learnerId); await load(); setContextNotice(""); toast.show({ message: "Đã copy tin nhắn và ghi nhận vào lịch sử.", tone: "ok" }); } catch (cause) { reportReminderError(cause, "Không ghi nhận được việc copy tin nhắn."); } }} />;
 }
 
-function ReportRoute({ currentUserId }: { currentUserId: string }) {
-  const [view, setView] = useState<ManagerReportView>(); const [settings, setSettings] = useState<ManagerSettingsView>(); const [accounts, setAccounts] = useState<ManagerAccountsView>(); const [error, setError] = useState("");
-  useEffect(() => { void (async () => {
-    try {
-      const [[report, nextSettings], directory] = await Promise.all([Promise.all([apiClient.getManagerReport(), apiClient.getManagerSettings()]), apiClient.getManagerAccounts().catch(() => undefined)]);
-      setView(report); setSettings(nextSettings); setAccounts(directory);
-    } catch { setError("Không tải được báo cáo tổ chức."); }
-  })(); }, []);
-  const managerName = accounts?.accounts.find((account) => account.id === currentUserId)?.displayName;
-  return view && settings ? <ManagerReport view={view} courseTheme={settings.courseTheme} pilotStartDate={settings.pilotStartDate} {...(managerName ? { managerName } : {})} /> : <RouteState error={error} title="Báo cáo tổng kết" label="Đang tải báo cáo" />;
+function ReportRoute() {
+  const monthly = useManagerMonthlyOverview();
+  return <ManagerMonthlyReport {...monthly} />;
 }
 
-function SettingsRoute({ role, currentUserId }: ManagerRouteControllerProps) {
+function SettingsRoute({ role, currentUserId, onSessionRevoked }: ManagerRouteControllerProps) {
+  const modal = useModal();
   const { setTheme } = useTheme();
   const toast = useToast();
   const [manager, setManager] = useState<ManagerSettingsView>(); const [provider, setProvider] = useState<ManagerProviderSettingsView>(); const [operatorOverview, setOperatorOverview] = useState<OperatorSettingsOverviewView>(); const [product, setProduct] = useState<ProductPreferencesView>(); const [experience, setExperience] = useState<OrganisationExperienceView>(); const [capabilities, setCapabilities] = useState<SystemCapabilitiesView>(); const [accounts, setAccounts] = useState<ManagerAccountsView>(); const [pinReports, setPinReports] = useState<ManagerPinReportsView>(); const [loadError, setLoadError] = useState(""); const [maintenanceDialog, setMaintenanceDialog] = useState<{ action: ManagerMaintenanceAction; confirmation: ManagerMaintenanceConfirmationView }>(); const [maintenanceBusy, setMaintenanceBusy] = useState(false);
@@ -327,26 +306,79 @@ function SettingsRoute({ role, currentUserId }: ManagerRouteControllerProps) {
   if (!product || !experience || !capabilities || (providerClientAvailable && !provider) || (role === "manager" && (!manager || !accounts)) || (role === "operator" && !operatorOverview)) return <RouteState error={loadError} title="Cài đặt" label="Đang tải cài đặt" />;
   const saveAi = providerClientAvailable ? async (input: ManagerProviderSettingsInput) => { try { setProvider(await apiClient.saveManagerProviderSettings(input)); setCapabilities(await apiClient.getSystemCapabilities()); notify("Đã lưu cấu hình AI an toàn trên server."); } catch { notify("Không lưu được cấu hình AI.", "danger"); } } : undefined;
   const testAi = providerClientAvailable ? async (input: ManagerProviderSettingsInput) => { try { const result = await apiClient.testManagerProviderSettings(input); setProvider((current) => current ? { ...current, lastTest: result } : current); notify(result.status === "success" ? "Kết nối AI hoạt động. Hãy bấm Lưu kết nối AI để áp dụng." : providerTestLabel(result.code)); } catch { notify("Không kiểm tra được kết nối AI.", "danger"); } } : undefined;
-  const saveManager = async (input: ManagerSettingsInput) => { try { const saved = role === "manager" ? await apiClient.saveManagerSettings(input) : await apiClient.saveOperatorSettings(input); setManager(saved); if (role === "operator") setOperatorOverview(current => current ? { ...current, settings: saved, pilot: { startDate: saved.pilotStartDate, weeks: saved.pilotWeeks, weekOverride: saved.weekOverride, minMinutesPerDay: saved.minMinutesPerDay, courseTheme: saved.courseTheme, coachDailyLimit: saved.coachDailyLimit }, test: { timed: saved.testTimed, times: saved.testTimes, warnLimit: saved.testWarnLimit }, levelUp: saved.levelUp } : current); notify("Đã lưu cấu hình vận hành."); } catch { notify("Không lưu được cấu hình vận hành.", "danger"); } };
+  const saveManager = async (input: ManagerSettingsInput) => {
+    if (role === "manager" && manager) {
+      const aiDisabled = input.aiTestDisabled ?? false;
+      const aiChanged = aiDisabled !== (manager.aiTestDisabled ?? false);
+      const dateChanged = input.simulatedSystemDate && input.simulatedSystemDate !== manager.simulatedSystemDate;
+      if ((aiChanged || dateChanged) && !await modal.confirm({
+        title: "Áp dụng thay đổi cho toàn tổ chức?",
+        message: <>
+          {dateChanged ? <p>Ngày hệ thống thử sẽ chuyển sang <b>{input.simulatedSystemDate}</b>, ảnh hưởng lịch học, quyền vào bài và thông báo.</p> : null}
+          {aiChanged ? <p>{aiDisabled ? "Tắt AI để dùng chế độ dự phòng cho toàn tổ chức." : "Bật lại các tính năng AI cho toàn tổ chức."}</p> : null}
+        </>,
+        confirmLabel: "Áp dụng thay đổi",
+        countdownSeconds: 0
+      })) return;
+    }
+    try {
+      const saved = role === "manager" ? await apiClient.saveManagerSettings(input) : await apiClient.saveOperatorSettings(input);
+      setManager(saved);
+      if (role === "operator") setOperatorOverview(current => current ? {
+        ...current,
+        settings: saved,
+        pilot: { startDate: saved.pilotStartDate, weeks: saved.pilotWeeks, weekOverride: saved.weekOverride, minMinutesPerDay: saved.minMinutesPerDay, courseTheme: saved.courseTheme, coachDailyLimit: saved.coachDailyLimit },
+        test: { timed: saved.testTimed, times: saved.testTimes, warnLimit: saved.testWarnLimit },
+        levelUp: saved.levelUp
+      } : current);
+      notify("Đã lưu cấu hình vận hành.");
+    } catch { notify("Không lưu được cấu hình vận hành.", "danger"); }
+  };
   const saveProduct = async (input: ProductPreferencesView) => { try { const saved = await apiClient.saveProductPreferences(input); setProduct(saved); document.documentElement.dataset.theme = saved.theme === "auto" ? autoSeasonTheme() : saved.theme; notify("Đã lưu cấu hình sản phẩm."); } catch { notify("Không lưu được cấu hình sản phẩm.", "danger"); } };
   const saveExperience = async (input: OrganisationExperienceInput) => { try { const saved = await apiClient.saveOrganisationExperience(input); setExperience(saved); setTheme(saved.theme); notify("Đã lưu giao diện và nhạc nền cho toàn tổ chức."); } catch (error) { notify("Không lưu được trải nghiệm tổ chức.", "danger"); throw error; } };
   const requestMaintenance = async (action: ManagerMaintenanceAction) => { try { const confirmation = action === "seed_demo" ? await apiClient.requestManagerSeedConfirmation() : await apiClient.requestManagerWipeConfirmation(); setMaintenanceDialog({ action, confirmation }); } catch { notify("Thao tác chỉ khả dụng ở môi trường local-development có bật bảo trì an toàn.", "danger"); } };
   const confirmMaintenance = async (input: ManagerMaintenanceConfirmationInput) => { if (!maintenanceDialog) return; setMaintenanceBusy(true); try { const result = maintenanceDialog.action === "seed_demo" ? await apiClient.seedManagerData(input) : await apiClient.wipeManagerData(input); setMaintenanceDialog(undefined); notify(result.action === "seed_demo" ? "Đã nạp lại dữ liệu mẫu qua API local an toàn." : "Đã xoá dữ liệu tổ chức sau khi lưu bản sao server."); setManager(await apiClient.getManagerSettings()); setProduct(await apiClient.getProductPreferences()); if (role === "manager" && providerClientAvailable) setProvider(await apiClient.getManagerProviderSettings()); await loadAccounts(); } catch { notify("Không hoàn tất được thao tác dữ liệu. Token có thể đã hết hạn hoặc máy chủ đã tắt maintenance.", "danger"); } finally { setMaintenanceBusy(false); } };
   const managerActions = role === "manager" ? {
     onTestImage: async (input: ProductPreferencesView) => { try { const result = await apiClient.testManagerImage({ source: input.vocabImageSource }); if (result.status !== "available") { notify("Nguồn mở chưa trả về ảnh phù hợp cho từ thử."); return; } const attribution = [result.attribution?.creator, result.attribution?.licence].filter(Boolean).join(" · "); notify(`Đã tìm thấy ảnh từ ${result.provider ?? "nguồn mở"}${result.cached ? " (đã lưu trong cache)" : ""}${attribution ? ` · ${attribution}` : ""}.`); } catch { notify("Không kiểm tra được nguồn ảnh.", "danger"); } },
-    onClearImageCache: async () => { try { const result = await apiClient.clearManagerImageCache(); notify(`Đã xoá cache ảnh (${result.cleared} bộ từ).`); } catch { notify("Không xoá được cache ảnh.", "danger"); } },
+    onClearImageCache: async () => {
+      if (!await modal.confirm({
+        title: "Xoá cache ảnh?",
+        message: "Ảnh minh họa đã lưu trong bộ nhớ đệm của tổ chức sẽ bị xoá. E4S có thể tải lại ảnh khi cần.",
+        confirmLabel: "Xoá cache ảnh",
+        tone: "danger",
+        countdownSeconds: 0
+      })) return;
+      try {
+        const result = await apiClient.clearManagerImageCache();
+        notify(`Đã xoá cache ảnh (${result.cleared} bộ từ).`);
+      } catch { notify("Không xoá được cache ảnh.", "danger"); }
+    },
     onTestMusic: async (input: ManagerSettingsView["backgroundMusic"]) => { try { const result = await apiClient.testManagerMusic(input); notify(result.status === "valid" ? "Link nhạc YouTube hợp lệ." : "Link nhạc phải là video hoặc playlist YouTube.", result.status === "valid" ? "ok" : "danger"); } catch { notify("Không kiểm tra được link nhạc.", "danger"); } },
     onResetMusic: async () => { try { const backgroundMusic = await apiClient.resetManagerMusic(); setManager((current) => current ? { ...current, backgroundMusic } : current); notify("Đã đưa nhạc nền về mặc định."); } catch { notify("Không đặt lại được nhạc nền.", "danger"); } },
     onTestWebhook: async (url: string, template: string) => { try { const result = await apiClient.testManagerWebhook({ url, template }); notify(webhookTestLabel(result), result.status === "success" ? "ok" : "danger"); return result; } catch { notify("Không kiểm tra được webhook.", "danger"); throw new Error("WEBHOOK_TEST_FAILED"); } },
     onExportJson: async () => { try { const snapshot = await apiClient.exportManagerData(); downloadText("e4s-export.json", JSON.stringify(snapshot, null, 2), "application/json;charset=utf-8"); notify("Đã xuất bản sao cấu hình an toàn."); } catch { notify("Không xuất được dữ liệu.", "danger"); } },
-    onImportJson: async (file: File) => { try { const snapshot = JSON.parse(await file.text()) as unknown; await apiClient.importManagerData(snapshot); const next = await apiClient.getManagerSettings(); setManager(next); notify("Đã nhập cấu hình được cho phép."); } catch { notify("Tệp JSON không hợp lệ hoặc không thể nhập.", "danger"); } },
-    onExportCsv: async () => { try { const progress = await apiClient.getManagerProgress(); downloadText("e4s-tien-do.csv", `\ufeff${buildManagerProgressCsv(progress)}`, "text/csv;charset=utf-8"); notify("Đã xuất CSV tiến độ nhóm."); } catch { notify("Không xuất được CSV tiến độ.", "danger"); } }
+    onImportJson: async (file: File) => {
+      try {
+        const snapshot = JSON.parse(await file.text()) as unknown;
+        if (!await modal.confirm({
+          title: "Nhập cấu hình từ JSON?",
+          message: <>Tệp <b>{file.name}</b> sẽ ghi đè các mục cấu hình được phép nhập của tổ chức.</>,
+          confirmLabel: "Nhập cấu hình",
+          tone: "danger",
+          countdownSeconds: 0
+        })) return;
+        await apiClient.importManagerData(snapshot);
+        setManager(await apiClient.getManagerSettings());
+        notify("Đã nhập cấu hình được cho phép.");
+      } catch { notify("Tệp JSON không hợp lệ hoặc không thể nhập.", "danger"); }
+    },
+    onExportCsv: async () => { try { exportManagerMonthlyCsv(await apiClient.getManagerMonthlyOverview()); notify("Đã xuất CSV tiến độ tháng."); } catch { notify("Không xuất được CSV tiến độ.", "danger"); } }
   } : {};
   const maintenanceActions = role === "manager" && capabilities.maintenance === true ? { onSeedData: () => requestMaintenance("seed_demo"), onWipeData: () => requestMaintenance("wipe_data") } : {};
   const securityNotices = role === "manager" && pinReports ? <SecurityNotices reports={pinReports.reports} /> : null;
   return <>
     {loadError ? <div className="banner danger" role="alert"><div className="body small">{loadError}</div></div> : null}
-    <SettingsPage role={role} {...(manager ? { manager } : {})} {...(operatorOverview ? { operatorOverview } : {})} {...(provider ? { ai: provider } : {})} product={product} experience={experience} capabilities={capabilities} actions={{ onSaveManager: saveManager, onSaveProduct: saveProduct, onSaveExperience: saveExperience, ...(role === "operator" ? { onRequestPlacementTestChange: async (developerEmail: string, note: string) => { try { await apiClient.requestPlacementTestChange({ developerEmail, note }); notify("Đã gửi yêu cầu đổi đề đầu vào tới đội phát triển."); } catch { notify("Không gửi được yêu cầu đổi đề đầu vào.", "danger"); throw new Error("PLACEMENT_CHANGE_REQUEST_FAILED"); } }, onRequestFinalTestChange: async (developerEmail: string, note: string) => { try { await apiClient.requestFinalTestChange({ developerEmail, note }); notify("Đã gửi yêu cầu đổi đề đầu ra tới đội phát triển."); } catch { notify("Không gửi được yêu cầu đổi đề đầu ra.", "danger"); throw new Error("FINAL_CHANGE_REQUEST_FAILED"); } } } : {}), ...(saveAi ? { onSaveAi: saveAi } : {}), ...(testAi ? { onTestAi: testAi } : {}), ...managerActions, ...maintenanceActions }} {...(securityNotices ? { securityNotices } : {})} {...(accounts ? { accounts: <AccountsPanel view={accounts} currentUserId={currentUserId} reload={loadAccounts} notify={notify} /> } : {})} />
+    <SettingsPage role={role} {...(manager ? { manager } : {})} {...(operatorOverview ? { operatorOverview } : {})} {...(provider ? { ai: provider } : {})} product={product} experience={experience} capabilities={capabilities} actions={{ onSaveManager: saveManager, onSaveProduct: saveProduct, onSaveExperience: saveExperience, ...(role === "operator" ? { onRequestPlacementTestChange: async (developerEmail: string, note: string) => { try { await apiClient.requestPlacementTestChange({ developerEmail, note }); notify("Đã gửi yêu cầu đổi đề đầu vào tới đội phát triển."); } catch { notify("Không gửi được yêu cầu đổi đề đầu vào.", "danger"); throw new Error("PLACEMENT_CHANGE_REQUEST_FAILED"); } }, onRequestFinalTestChange: async (developerEmail: string, note: string) => { try { await apiClient.requestFinalTestChange({ developerEmail, note }); notify("Đã gửi yêu cầu đổi đề đầu ra tới đội phát triển."); } catch { notify("Không gửi được yêu cầu đổi đề đầu ra.", "danger"); throw new Error("FINAL_CHANGE_REQUEST_FAILED"); } } } : {}), ...(saveAi ? { onSaveAi: saveAi } : {}), ...(testAi ? { onTestAi: testAi } : {}), ...managerActions, ...maintenanceActions }} {...(securityNotices ? { securityNotices } : {})} {...(accounts ? { accounts: <AccountsPanel view={accounts} currentUserId={currentUserId} reload={loadAccounts} notify={notify} onSessionRevoked={onSessionRevoked} /> } : {})} />
     {maintenanceDialog ? <MaintenanceConfirmationDialog confirmation={maintenanceDialog.confirmation} busy={maintenanceBusy} onCancel={() => setMaintenanceDialog(undefined)} onConfirm={(phrase) => confirmMaintenance({ confirmationToken: maintenanceDialog.confirmation.token, confirmationPhrase: phrase })} /> : null}
   </>;
 }
@@ -388,13 +420,14 @@ function groupSecurityReports(reports: readonly SecurityReport[]): SecurityRepor
   }, []);
 }
 
-function AccountsPanel({ view, currentUserId, reload, notify }: { view: ManagerAccountsView; currentUserId: string; reload: () => Promise<void>; notify: (message: string, tone?: "ok" | "danger") => void }) {
+function AccountsPanel({ view, currentUserId, reload, notify, onSessionRevoked }: { onSessionRevoked?: (() => void) | undefined; view: ManagerAccountsView; currentUserId: string; reload: () => Promise<void>; notify: (message: string, tone?: "ok" | "danger") => void }) {
   const [busyId, setBusyId] = useState<string>(); const [creating, setCreating] = useState(false); const [showPassword, setShowPassword] = useState(false); const [newAccountRole, setNewAccountRole] = useState<ManagerAccountView["role"]>("learner");
+  const [createError, setCreateError] = useState<{ field: "displayName" | "email" | "password"; message: string }>();
   const [issuedPins, setIssuedPins] = useState<Record<string, string>>({}); const [visiblePins, setVisiblePins] = useState<Record<string, boolean>>({});
   const [trash, setTrash] = useState<ManagerTrashView>(); const [recoveryLoading, setRecoveryLoading] = useState(false); const [recoveryError, setRecoveryError] = useState(""); const [recoveryBusy, setRecoveryBusy] = useState(false);
   const [purgeDialog, setPurgeDialog] = useState<{ accountId: string; accountName: string; confirmation: ManagerPurgeConfirmationView }>(); const [purging, setPurging] = useState(false);
   const modal = useModal();
-  const run = async (id: string, action: () => Promise<unknown>, message: string) => { setBusyId(id); try { await action(); await reload(); notify(message); return true; } catch { notify("Không cập nhật được tài khoản. Kiểm tra quyền và dữ liệu nhập.", "danger"); return false; } finally { setBusyId(undefined); } };
+  const run = async (id: string, action: () => Promise<unknown>, message: string, refreshAccounts = true) => { setBusyId(id); try { await action(); if (refreshAccounts) await reload(); notify(message); return true; } catch { notify("Không cập nhật được tài khoản. Kiểm tra quyền và dữ liệu nhập.", "danger"); return false; } finally { setBusyId(undefined); } };
   const changeRole = async (account: ManagerAccountView, nextRole: ManagerAccountView["role"]) => {
     if (nextRole === account.role) return;
     const confirmed = await modal.confirm({ title: "Đổi vai trò tài khoản?", message: <>Tài khoản <b>{account.displayName}</b> sẽ chuyển từ <b>{accountRoleLabel(account.role)}</b> sang <b>{accountRoleLabel(nextRole)}</b>. Quyền truy cập thay đổi ngay sau khi lưu.</>, confirmLabel: "Đổi vai trò", cancelLabel: "Huỷ", tone: "primary", countdownSeconds: 0 });
@@ -408,10 +441,18 @@ function AccountsPanel({ view, currentUserId, reload, notify }: { view: ManagerA
   };
   const resetPassword = async (account: ManagerAccountView, revealAfterReset = false) => {
     const learner = account.role === "learner";
-    const password = await modal.prompt({ title: `${learner ? "PIN" : "Mật khẩu"} mới cho ${account.displayName}`, message: learner ? "PIN học viên phải đúng 6 chữ số." : "Mật khẩu phải có ít nhất 8 ký tự.", label: learner ? "PIN mới" : "Mật khẩu mới", placeholder: learner ? "Nhập 6 chữ số" : "Nhập mật khẩu mới", inputType: "password", confirmLabel: learner ? "Đặt lại PIN" : "Đặt lại mật khẩu", cancelLabel: "Huỷ" });
+    const password = await modal.prompt({ title: `${learner ? "PIN" : "Mật khẩu"} mới cho ${account.displayName}`, message: learner ? "PIN học viên phải đúng 6 chữ số." : "Mật khẩu phải có ít nhất 8 ký tự.", label: learner ? "PIN mới" : "Mật khẩu mới", placeholder: learner ? "Nhập 6 chữ số" : "Nhập mật khẩu mới", inputType: "password", confirmLabel: learner ? "Đặt lại PIN" : "Đặt lại mật khẩu", cancelLabel: "Huỷ", tone: "danger" });
     if (password) {
-      const saved = await run(account.id, () => apiClient.resetManagerAccountPassword(account.id, password), learner ? "Đã đặt lại PIN học viên." : "Đã đặt lại mật khẩu.");
-      if (saved) { setIssuedPins((current) => ({ ...current, [account.id]: password })); setVisiblePins((current) => ({ ...current, [account.id]: revealAfterReset })); }
+      const self = account.id === currentUserId;
+      const message = self ? "Đã đặt lại mật khẩu. Vui lòng đăng nhập lại bằng mục Nhân sự." : learner ? "Đã đặt lại PIN học viên." : "Đã đặt lại mật khẩu.";
+      const saved = await run(account.id, () => apiClient.resetManagerAccountPassword(account.id, password), message, !self);
+      if (!saved) return;
+      if (self) {
+        onSessionRevoked?.();
+        return;
+      }
+      setIssuedPins((current) => ({ ...current, [account.id]: password }));
+      setVisiblePins((current) => ({ ...current, [account.id]: revealAfterReset }));
     }
   };
   const revealCredential = async (account: ManagerAccountView) => {
@@ -457,9 +498,74 @@ function AccountsPanel({ view, currentUserId, reload, notify }: { view: ManagerA
     } catch { setRecoveryError("Không xoá vĩnh viễn được tài khoản. Token có thể đã hết hạn hoặc dữ liệu đang được tham chiếu."); }
     finally { setPurging(false); }
   };
-  const create = async (event: FormEvent<HTMLFormElement>) => { event.preventDefault(); const formElement = event.currentTarget; const form = new FormData(formElement); setCreating(true); try { await apiClient.createManagerAccount({ displayName: String(form.get("displayName") ?? ""), email: String(form.get("email") ?? ""), role: String(form.get("role") ?? "learner") as ManagerAccountView["role"], password: String(form.get("password") ?? "") }); await reload(); formElement.reset(); setShowPassword(false); notify("Đã tạo tài khoản."); } catch { notify("Không tạo được tài khoản. Email phải chưa tồn tại và mật khẩu có ít nhất 8 ký tự.", "danger"); } finally { setCreating(false); } };
-  return <section className="card manager-accounts-card"><div className="row between manager-accounts-heading"><h3>Người dùng</h3><span className="badge">{view.accounts.length} tài khoản</span></div><div className="table-wrap settings-action-table manager-accounts-table" data-manager-action-table><table className="manager-accounts-table__table"><thead><tr><th>Tên</th><th>Email</th><th>Vai trò</th><th>Trạng thái</th><th>PIN / Mật khẩu</th><th>Thao tác</th></tr></thead><tbody>{view.accounts.map((account) => { const self = account.id === currentUserId; const busy = busyId === account.id; const issuedPin = issuedPins[account.id]; const pinVisible = Boolean(visiblePins[account.id]); const credentialLabel = account.role === "learner" ? "PIN" : "mật khẩu"; return <tr key={account.id}><td><b>{account.displayName}</b>{self ? <span className="xs muted"> (bạn)</span> : null}</td><td>{account.email ?? "—"}</td><td><select className="manager-account-role" aria-label={`Vai trò ${account.displayName}`} title={self ? "Không thể đổi vai trò tài khoản đang đăng nhập" : undefined} aria-busy={busy || undefined} disabled={busy || self} value={account.role} onChange={(event) => void changeRole(account, event.target.value as ManagerAccountView["role"])}><option value="learner">Người học</option><option value="operator">Người vận hành</option><option value="manager">Quản lý</option></select></td><td><span className={`badge ${account.status === "active" ? "ok" : "warn"}`}>{accountStatusLabel(account.status)}</span></td><td><div className="manager-account-pin"><code>{issuedPin && pinVisible ? issuedPin : account.role === "learner" ? "••••••" : "••••••••"}</code><button className="manager-password-toggle" type="button" aria-label={pinVisible ? `Ẩn ${credentialLabel} của ${account.displayName}` : `Hiện ${credentialLabel} của ${account.displayName}`} aria-pressed={pinVisible} aria-busy={busy || undefined} disabled={busy} title={`Xem ${credentialLabel} hiện tại`} onClick={() => issuedPin ? setVisiblePins((current) => ({ ...current, [account.id]: !pinVisible })) : void revealCredential(account)}>{pinVisible ? <EyeOff aria-hidden="true" /> : <Eye aria-hidden="true" />}</button></div></td><td><div className="manager-account-actions" role="group" aria-label={`Thao tác tài khoản ${account.displayName}`}><button className="btn-sm" type="button" aria-busy={busy || undefined} title={self ? "Không thể khoá tài khoản đang đăng nhập" : undefined} disabled={busy || self} onClick={() => void toggleStatus(account)}>{account.status === "active" ? "Khoá" : "Mở"}</button><button className="btn-sm" type="button" aria-busy={busy || undefined} disabled={busy} onClick={() => void resetPassword(account)}>{account.role === "learner" ? "Đặt lại PIN" : "Đặt lại mật khẩu"}</button><button className="btn-sm btn-danger" type="button" title={self ? "Không thể xoá tài khoản đang đăng nhập" : undefined} disabled={busy || self} onClick={() => void deleteAccount(account)}>Xoá</button></div></td></tr>; })}</tbody></table></div>
-    <form className="card soft section manager-account-create" onSubmit={create}><h4 style={{ marginTop: 0 }}>Tạo tài khoản mới</h4><p className="small muted">Người học dùng PIN đúng 6 chữ số; người vận hành và quản lý dùng mật khẩu từ 8 ký tự.</p><div className="manager-account-create__grid"><label className="field"><span>Tên</span><input name="displayName" required /></label><label className="field"><span>Email</span><input name="email" type="email" required /></label><label className="field"><span>Vai trò</span><select className="manager-account-role" name="role" value={newAccountRole} onChange={(event) => setNewAccountRole(event.target.value as ManagerAccountView["role"])}><option value="learner">Người học</option><option value="operator">Người vận hành</option><option value="manager">Quản lý</option></select></label><label className="field manager-password-field"><span>{newAccountRole === "learner" ? "PIN ban đầu" : "Mật khẩu ban đầu"}</span><span className="manager-password-control"><input name="password" type={showPassword ? "text" : "password"} minLength={newAccountRole === "learner" ? 6 : 8} maxLength={newAccountRole === "learner" ? 6 : 128} pattern={newAccountRole === "learner" ? "[0-9]{6}" : undefined} required /><button className="manager-password-toggle" type="button" aria-label={showPassword ? `Ẩn ${newAccountRole === "learner" ? "PIN" : "mật khẩu"} ban đầu` : `Hiện ${newAccountRole === "learner" ? "PIN" : "mật khẩu"} ban đầu`} aria-pressed={showPassword} onClick={() => setShowPassword((visible) => !visible)}>{showPassword ? <EyeOff aria-hidden="true" /> : <Eye aria-hidden="true" />}</button></span></label></div><button className="btn-primary manager-account-create__submit" type="submit" disabled={creating}>{creating ? "Đang tạo…" : "+ Thêm người dùng"}</button></form>
+  const create = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    const formElement = event.currentTarget;
+    const form = new FormData(formElement);
+    const displayName = String(form.get("displayName") ?? "").trim();
+    const email = String(form.get("email") ?? "").trim();
+    const password = String(form.get("password") ?? "");
+    const role = newAccountRole;
+    const emailInput = formElement.elements.namedItem("email") as HTMLInputElement;
+    let error: typeof createError;
+    if (!displayName) error = { field: "displayName", message: "Nhập tên người dùng." };
+    else if (displayName.length < 2) error = { field: "displayName", message: "Tên người dùng phải có ít nhất 2 ký tự." };
+    else if (!email || emailInput.validity.typeMismatch) error = { field: "email", message: "Nhập email hợp lệ." };
+    else if (role === "learner" && !/^\d{6}$/.test(password)) error = { field: "password", message: "PIN học viên phải đúng 6 chữ số." };
+    else if (role !== "learner" && password.length < 8) error = { field: "password", message: "Mật khẩu phải có ít nhất 8 ký tự." };
+    setCreateError(error);
+    if (error) {
+      (formElement.elements.namedItem(error.field) as HTMLInputElement).focus();
+      return;
+    }
+
+    setCreating(true);
+    try {
+      await apiClient.createManagerAccount({ displayName, email, role, password });
+      await reload();
+      formElement.reset();
+      setShowPassword(false);
+      notify("Đã tạo tài khoản.");
+    } catch {
+      notify("Không tạo được tài khoản. Kiểm tra dữ liệu nhập và email đã được sử dụng hay chưa.", "danger");
+    } finally {
+      setCreating(false);
+    }
+  };
+  const createFieldFeedback = (field: NonNullable<typeof createError>["field"]) => createError?.field === field
+    ? { "aria-invalid": true, "aria-describedby": "manager-account-create-error" }
+    : {};
+  return <section className="card manager-accounts-card"><div className="row between manager-accounts-heading"><h3>Người dùng</h3><span className="badge">{view.accounts.length} tài khoản</span></div><div className="table-wrap settings-action-table manager-accounts-table" data-manager-action-table><table className="manager-accounts-table__table" role="table" aria-label="Người dùng"><thead><tr><th>Tên</th><th>Email</th><th>Vai trò</th><th>Trạng thái</th><th>PIN / Mật khẩu</th><th>Thao tác</th></tr></thead><tbody>{view.accounts.map((account) => { const self = account.id === currentUserId; const busy = busyId === account.id; const issuedPin = issuedPins[account.id]; const pinVisible = Boolean(visiblePins[account.id]); const credentialLabel = account.role === "learner" ? "PIN" : "mật khẩu"; return <tr key={account.id} role="row"><td role="cell"><b>{account.displayName}</b>{self ? <span className="xs muted"> (bạn)</span> : null}</td><td role="cell">{account.email ?? "—"}</td><td role="cell"><select className="manager-account-role" aria-label={`Vai trò ${account.displayName}`} title={self ? "Không thể đổi vai trò tài khoản đang đăng nhập" : undefined} aria-busy={busy || undefined} disabled={busy || self} value={account.role} onChange={(event) => void changeRole(account, event.target.value as ManagerAccountView["role"])}><option value="learner">Người học</option><option value="operator">Người vận hành</option><option value="manager">Quản lý</option></select></td><td role="cell"><AccountStatusBadge status={account.status} /></td><td role="cell"><div className="manager-account-pin">{issuedPin && pinVisible ? <input type="text" readOnly aria-label={`Giá trị ${credentialLabel} của ${account.displayName}`} value={issuedPin} onFocus={(event) => event.currentTarget.select()} /> : <code>••••••</code>}<button className="manager-password-toggle" type="button" aria-label={pinVisible ? `Ẩn ${credentialLabel} của ${account.displayName}` : `Hiện ${credentialLabel} của ${account.displayName}`} aria-pressed={pinVisible} aria-busy={busy || undefined} disabled={busy} title={`Xem ${credentialLabel} hiện tại`} onClick={() => issuedPin ? setVisiblePins((current) => ({ ...current, [account.id]: !pinVisible })) : void revealCredential(account)}>{pinVisible ? <EyeOff aria-hidden="true" /> : <Eye aria-hidden="true" />}</button></div></td><td role="cell"><div className="manager-account-actions" role="group" aria-label={`Thao tác tài khoản ${account.displayName}`}><button className={account.status === "active" ? "btn-sm btn-danger" : "btn-sm"} type="button" aria-busy={busy || undefined} title={self ? "Không thể khoá tài khoản đang đăng nhập" : undefined} disabled={busy || self} onClick={() => void toggleStatus(account)}>{account.status === "active" ? "Khoá" : "Mở"}</button><button className="btn-sm btn-danger" type="button" aria-busy={busy || undefined} disabled={busy} aria-label={`Đặt lại ${credentialLabel}`} title={`Đặt lại ${credentialLabel}`} onClick={() => void resetPassword(account)}>{account.role === "learner" ? "Đặt lại PIN" : "Đặt lại"}</button><button className="btn-sm btn-danger" type="button" title={self ? "Không thể xoá tài khoản đang đăng nhập" : undefined} disabled={busy || self} onClick={() => void deleteAccount(account)}>Xoá</button></div></td></tr>; })}</tbody></table></div>
+    <form className="card soft section manager-account-create" onSubmit={create} noValidate onChange={(event) => {
+      if (event.target instanceof HTMLInputElement && event.target.name === createError?.field) setCreateError(undefined);
+    }}>
+      <h4 style={{ marginTop: 0 }}>Tạo tài khoản mới</h4>
+      <p className="small muted">Người học dùng PIN đúng 6 chữ số; người vận hành và quản lý dùng mật khẩu từ 8 ký tự.</p>
+      <div className="manager-account-create__grid">
+        <label className="field"><span>Tên</span><input name="displayName" maxLength={120} required {...createFieldFeedback("displayName")} /></label>
+        <label className="field"><span>Email</span><input name="email" type="email" maxLength={254} required {...createFieldFeedback("email")} /></label>
+        <label className="field">
+          <span>Vai trò</span>
+          <select className="manager-account-role" name="role" value={newAccountRole} onChange={(event) => {
+            setNewAccountRole(event.target.value as ManagerAccountView["role"]);
+            if (createError?.field === "password") setCreateError(undefined);
+          }}>
+            <option value="learner">Người học</option>
+            <option value="operator">Người vận hành</option>
+            <option value="manager">Quản lý</option>
+          </select>
+        </label>
+        <label className="field manager-password-field">
+          <span>{newAccountRole === "learner" ? "PIN ban đầu" : "Mật khẩu ban đầu"}</span>
+          <span className="manager-password-control">
+            <input name="password" type={showPassword ? "text" : "password"} autoComplete="new-password" inputMode={newAccountRole === "learner" ? "numeric" : undefined} maxLength={newAccountRole === "learner" ? 6 : 128} required {...createFieldFeedback("password")} />
+            <button className="manager-password-toggle" type="button" aria-label={showPassword ? `Ẩn ${newAccountRole === "learner" ? "PIN" : "mật khẩu"} ban đầu` : `Hiện ${newAccountRole === "learner" ? "PIN" : "mật khẩu"} ban đầu`} aria-pressed={showPassword} onClick={() => setShowPassword((visible) => !visible)}>{showPassword ? <EyeOff aria-hidden="true" /> : <Eye aria-hidden="true" />}</button>
+          </span>
+        </label>
+      </div>
+      {createError ? <p className="small manager-account-create__error" id="manager-account-create-error" role="alert">{createError.message}</p> : null}
+      <button className="btn-primary manager-account-create__submit" type="submit" disabled={creating}>{creating ? "Đang tạo…" : "+ Thêm người dùng"}</button>
+    </form>
     <details className="settings-recovery" onToggle={(event) => { if (event.currentTarget.open && !trash && !recoveryLoading) void loadTrash(); }}><summary><span className="settings-recovery__title"><ArchiveRestore aria-hidden="true" />Khôi phục tài khoản</span><span className="settings-recovery__meta">{trash ? <span className="badge">{trash.accounts.length}</span> : <span className="small muted">Mở khi cần</span>}<ChevronDown className="settings-recovery__chevron" aria-hidden="true" /></span></summary><div className="settings-recovery__body">{recoveryError ? <div className="banner danger" role="alert"><div className="body small">{recoveryError}</div></div> : null}{trash ? <ManagerRecovery trashedAccounts={trash.accounts.map((item) => ({ id: item.id, name: item.displayName, deletedAt: item.deletedAt }))} onRestore={restore} onPurge={requestPurge} busy={recoveryBusy || purging} /> : recoveryLoading ? <ManagerRecovery trashedAccounts={[]} loading /> : <p className="small muted">Mở mục này để tải danh sách tài khoản đã xoá.</p>}</div></details>
     {purgeDialog ? <PurgeConfirmationDialog accountName={purgeDialog.accountName} confirmation={purgeDialog.confirmation} busy={purging} onCancel={() => setPurgeDialog(undefined)} onConfirm={confirmPurge} /> : null}
   </section>;
@@ -467,10 +573,6 @@ function AccountsPanel({ view, currentUserId, reload, notify }: { view: ManagerA
 
 function accountRoleLabel(role: ManagerAccountView["role"]) {
   return role === "manager" ? "Quản lý" : role === "operator" ? "Người vận hành" : "Người học";
-}
-
-function accountStatusLabel(status: ManagerAccountView["status"]) {
-  return status === "active" ? "Đang hoạt động" : status === "disabled" ? "Đã khoá" : "Đã xoá";
 }
 
 function RouteState({ error, title, label }: { error: string; title: string; label: string }) {

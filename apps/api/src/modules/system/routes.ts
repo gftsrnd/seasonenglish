@@ -25,6 +25,19 @@ export function registerSystemRoutes(
   const experienceEvents = createOrganisationExperienceEvents();
   app.get("/api/health", async () => ({ status: "ok" }));
 
+  app.get("/api/v1/organisation-experience/theme", async (_request, reply) => {
+    // The entry screen serves the same single active organisation as public registration.
+    const { rows } = await pool.query<{ theme: OrganisationExperienceView["theme"] }>(
+      `select coalesce(os.theme, 'auto') as theme
+       from organizations o
+       left join organization_settings os on os.organization_id = o.id
+       where exists (select 1 from programs p where p.organization_id = o.id and p.status = 'active')
+       limit 2`
+    );
+    reply.header("cache-control", "no-store");
+    return rows.length === 1 ? rows[0] : reply.code(404).send({ code: "ORGANISATION_EXPERIENCE_NOT_FOUND" });
+  });
+
   app.get("/api/v1/organisation-experience", { preHandler: authenticated }, async (request, reply): Promise<OrganisationExperienceView | void> => {
     const view = await repositories.manager.organisationExperience(request.e4sSession!.user.id);
     return view ?? reply.code(404).send({ code: "ORGANISATION_EXPERIENCE_NOT_FOUND" });

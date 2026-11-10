@@ -1,7 +1,7 @@
 import { Pool } from "pg";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { migrateDatabase, resetPublicSchema, seedDemo } from "@e4s/database";
-import { createCredentialHash } from "@e4s/domain/identity";
+import { createCredentialHash, createPinHash } from "@e4s/domain/identity";
 import { DEMO_IDS } from "@e4s/test-support";
 import { buildApi } from "../src/app.js";
 
@@ -53,6 +53,8 @@ describe("manager progress and operations API", () => {
           DEMO_IDS.checker, await createCredentialHash("checker-pass")
         ]
       );
+      await client.query(`insert into user_credentials (user_id, credential_hash) values ($1, $2)
+        on conflict (user_id) do update set credential_hash = excluded.credential_hash`, [DEMO_IDS.learner, await createPinHash("123456")]);
     } finally { client.release(); }
     await app.ready();
 
@@ -594,17 +596,131 @@ describe("manager progress and operations API", () => {
     const operatorHolidayRead = await app.inject({ method: "GET", url: "/api/v1/manager/holidays", headers: { cookie: operatorCookie } });
     expect(operatorHolidayRead.statusCode).toBe(403);
 
-    const complaint = await app.inject({ method: "POST", url: "/api/v1/learner/complaints", headers: { cookie: learnerCookie }, payload: { kind: "exam_eligibility", reason: "Một ngày điểm danh bị thiếu." } });
+    const screenshot = { mimeType: "image/png", base64: "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jf2sAAAAASUVORK5CYII=" };
+    const scope = "Điểm danh ngày 06/11";
+    const invalid = await app.inject({ method: "POST", url: "/api/v1/learner/complaints", headers: { cookie: learnerCookie },
+      payload: { kind: "exam_eligibility", reason: "Một ngày điểm danh bị thiếu.", screenshot: { ...screenshot, mimeType: "image/jpeg" } } });
+    expect(invalid.statusCode).toBe(400);
+    const complaint = await app.inject({ method: "POST", url: "/api/v1/learner/complaints", headers: { cookie: learnerCookie },
+      payload: { kind: "exam_eligibility", reason: "Một ngày điểm danh bị thiếu.", scope, screenshot } });
     expect(complaint.statusCode, complaint.body).toBe(201);
     const duplicateComplaint = await app.inject({ method: "POST", url: "/api/v1/learner/complaints", headers: { cookie: learnerCookie }, payload: { kind: "exam_eligibility", reason: "Gửi trùng đơn." } });
     expect(duplicateComplaint.statusCode).toBe(409);
     const complaintId = (complaint.json() as { complaint: { id: string } }).complaint.id;
+    const url = `/api/v1/request-evidence/complaint/${complaintId}`;
+    for (const cookie of [learnerCookie, managerCookie]) {
+      const proof = await app.inject({ method: "GET", url, headers: { cookie } });
+      expect(proof.statusCode).toBe(200);
+      expect(proof.headers["content-type"]).toBe("image/png");
+      expect(proof.headers["cache-control"]).toBe("private, no-store");
+      expect(proof.rawPayload.toString("base64")).toBe(screenshot.base64);
+    }
+    for (const cookie of [operatorCookie, emptyManagerCookie]) {
+      expect((await app.inject({ method: "GET", url, headers: { cookie } })).statusCode).toBe(404);
+    }
+    const inbox = await app.inject({ method: "GET", url: "/api/v1/manager/complaints", headers: { cookie: managerCookie } });
+    expect(inbox.json().complaints).toContainEqual(expect.objectContaining({ id: complaintId, scope, hasEvidence: true }));
+    expect(inbox.body).not.toContain(screenshot.base64);
     const missingReason = await app.inject({ method: "POST", url: `/api/v1/manager/complaints/${complaintId}/decision`, headers: { cookie: managerCookie }, payload: { decision: "rejected", resolution: "" } });
     expect(missingReason.statusCode).toBe(400);
     const approved = await app.inject({ method: "POST", url: `/api/v1/manager/complaints/${complaintId}/decision`, headers: { cookie: managerCookie }, payload: { decision: "approved", resolution: "Đã sửa điểm danh." } });
     expect(approved.statusCode, approved.body).toBe(200);
     const ownComplaints = await app.inject({ method: "GET", url: "/api/v1/learner/complaints", headers: { cookie: learnerCookie } });
-    expect(ownComplaints.json()).toMatchObject({ complaints: [{ id: complaintId, status: "approved", resolution: "Đã sửa điểm danh." }] });
+    expect(ownComplaints.json()).toMatchObject({ complaints: [{ id: complaintId, status: "approved", resolution: "Đã sửa điểm danh.", scope, hasEvidence: true }] });
+  });
+
+  it("uses frozen survey revisions and monthly scores for a historical filtered Manager view", async () => {
+    const month = "2025-01";
+    const rating = { kind: "rating", prompt: "Đánh giá", required: false };
+    const text = { kind: "text", prompt: "Góp ý", required: false };
+    const [unanswered, textOnly] = (await pool.query<{ id: string }>(
+      `insert into users (id, organization_id, role, display_name, email, created_at)
+       values (gen_random_uuid(), $1, 'learner', 'Chưa chấm điểm', 'unanswered-manager-test@example.com', '2025-01-01'),
+              (gen_random_uuid(), $1, 'learner', 'Phản hồi chữ', 'text-manager-test@example.com', '2025-01-01')
+       returning id`, [DEMO_IDS.organization]
+    )).rows;
+    for (const [revision, learnerId, questions, answers] of [
+      [1, DEMO_IDS.learner, [rating, rating], [{ questionIndex: 0, value: 4 }, { questionIndex: 1, value: 2 }]],
+      [2, unanswered!.id, [text, rating], [{ questionIndex: 0, value: "5" }]],
+      [3, textOnly!.id, [text], [{ questionIndex: 0, value: "5" }]]
+    ] as const) {
+      await pool.query(
+        `insert into monthly_survey_forms (organization_id, month, revision, title, questions, published_at)
+         values ($1, $2, $3, 'Khảo sát', $4::jsonb, '2025-01-31')`,
+        [DEMO_IDS.organization, month, revision, JSON.stringify(questions)]
+      );
+      await pool.query(
+        `insert into monthly_survey_submissions (organization_id, month, learner_id, revision, answers)
+         values ($1, $2, $3, $4, $5::jsonb)`,
+        [DEMO_IDS.organization, month, learnerId, revision, JSON.stringify(answers)]
+      );
+    }
+    const insertScores = async (kind: "final" | "pass_course" | "placement", key: string, scores: number[]) => {
+      const { rows: [attempt] } = await pool.query<{ id: string }>(
+        `with definition as (
+           insert into assessment_definitions (id, organization_id, assessment_key, kind, title)
+           values (gen_random_uuid(), $1, $2, $3, 'Manager score fixture') returning id
+         ), version as (
+           insert into assessment_versions (id, definition_id, version, status, blueprint)
+           select gen_random_uuid(), id, 1, 'published', '{}'::jsonb from definition returning id
+         )
+         insert into assessment_attempts (id, assessment_version_id, learner_id, status, started_at, submitted_at)
+         select gen_random_uuid(), id, $4, 'approved', '2025-01-31', '2025-01-31' from version
+         returning id`, [DEMO_IDS.organization, key, kind, DEMO_IDS.learner]
+      );
+      await pool.query(
+        `insert into assessment_scores (id, attempt_id, section, score, source)
+         select gen_random_uuid(), $1, section, score, 'human'
+         from unnest(array['listening', 'reading', 'writing', 'speaking'], $2::int[]) as item(section, score)`,
+        [attempt!.id, scores]
+      );
+    };
+    await insertScores("final", `monthly-final-${month}-a2`, [21, 22, 17, 18]);
+    await insertScores("pass_course", "manager-test-pass-course", [18, 37, 16, 16]);
+
+
+    const url = `/api/v1/manager/monthly-overview?month=${month}`;
+    const view = await app.inject({ method: "GET", url, headers: { cookie: managerCookie } });
+    expect(view.statusCode, view.body).toBe(200);
+    expect(view.json()).toMatchObject({
+      month, survey: { submissions: 3, ratingResponses: 2, withoutRatingQuestion: 1, unansweredRating: 1, average: 3 }
+    });
+    const filtered = await app.inject({ method: "GET", url: url + "&cefr=A2", headers: { cookie: managerCookie } });
+    expect(filtered.statusCode, filtered.body).toBe(200);
+    expect(filtered.json()).toMatchObject({
+      cefr: "A2", survey: { submissions: 1, ratingResponses: 2, average: 3 },
+      learners: [{ learnerId: DEMO_IDS.learner, exam: { status: "approved", scores: { listening: 21, reading: 22, writing: 17, speaking: 18 }, total: 78 } }]
+    });
+    expect(filtered.body).not.toMatch(/passCourse|placementScore|credential|pin/i);
+    const profile = await app.inject({ method: "GET", url: `/api/v1/manager/learners/${DEMO_IDS.learner}`, headers: { cookie: managerCookie } });
+    expect(profile.statusCode, profile.body).toBe(200);
+    expect(profile.json().assessmentScores).toEqual({ placement: 55, passCourse: 87 });
+    const current = await app.inject({ method: "GET", url: "/api/v1/manager/monthly-overview", headers: { cookie: managerCookie } });
+    expect(current.statusCode, current.body).toBe(200);
+    expect(current.json().survey).toEqual({ submissions: 0, ratingResponses: 0, withoutRatingQuestion: 0, unansweredRating: 0, average: null });
+    const outside = await app.inject({ method: "GET", url, headers: { cookie: emptyManagerCookie } });
+    expect(outside.statusCode, outside.body).toBe(200);
+    expect(outside.json()).toMatchObject({ survey: { submissions: 0 }, learners: [] });
+  });
+
+  it("renames a same-organisation learner with an audit record and keeps other roles and organisations out", async () => {
+    const url = (learnerId: string) => `/api/v1/manager/learners/${learnerId}/display-name`;
+    const rename = (cookie: string, learnerId: string, displayName: string) => app.inject({
+      method: "PATCH", url: url(learnerId), headers: { cookie }, payload: { displayName }
+    });
+    expect((await rename(learnerCookie, DEMO_IDS.learner, "Tên mới")).statusCode).toBe(403);
+    expect((await rename(operatorCookie, DEMO_IDS.learner, "Tên mới")).statusCode).toBe(403);
+    expect((await rename(managerCookie, outsideLearnerId, "Tên mới")).statusCode).toBe(404);
+    expect((await rename(managerCookie, DEMO_IDS.learner, " ")).statusCode).toBe(400);
+    const saved = await rename(managerCookie, DEMO_IDS.learner, "  Minh Anh Mới  ");
+    expect(saved.statusCode, saved.body).toBe(200);
+    expect(saved.json()).toEqual({ displayName: "Minh Anh Mới" });
+    expect((await rename(managerCookie, DEMO_IDS.learner, "Minh Anh Mới")).statusCode).toBe(200);
+    const audit = await pool.query(
+      `select actor_user_id, payload from audit_events where action = 'account.display_name.change' and entity_id = $1`,
+      [DEMO_IDS.learner]
+    );
+    expect(audit.rows).toEqual([{ actor_user_id: DEMO_IDS.manager, payload: { previousDisplayName: "Nguyễn Minh Anh", displayName: "Minh Anh Mới" } }]);
   });
 
 });

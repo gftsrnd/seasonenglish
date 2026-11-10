@@ -28,6 +28,7 @@ describe("monthly day generation", () => {
       generate: async (input) => {
         retry += 1;
         repairedCalls.push([...input.components]);
+        if (retry > 1) expect(input.repairFindings).toEqual(expect.arrayContaining([expect.objectContaining({ component: "speaking" })]));
         return retry === 1
           ? { title: "The cost is high", parts: input.components.filter((component) => component !== "speaking").map(part) }
           : { title: "The cost is high", parts: [part("speaking")] };
@@ -80,12 +81,47 @@ describe("monthly day generation", () => {
       expect(options.systemPrompt).toContain("pronunciation.reviewTargets");
       expect(options.systemPrompt).toContain("Friday review exercise contract");
       expect([10_000, 14_000]).toContain(options.maxOutputTokens);
-      return { output: { lesson: { ...reviewLessonCandidate(), title: "Budget review" } }, metadata: {} };
+      expect(input.reviewListeningChecklist.map((term: { audioText: string }) => term.audioText)).toEqual(["budget", "cost", "forecast"]);
+      const candidate = reviewLessonCandidate();
+      if (input.repairIssues.length) {
+        expect(input.repairIssues).toEqual(expect.arrayContaining([expect.objectContaining({ component: "listening", message: expect.stringContaining("forecast") })]));
+        expect(options.systemPrompt).toContain("REPAIR REQUIRED FOR REQUESTED COMPONENTS");
+        expect(options.systemPrompt).toContain("forecast");
+      } else if (input.components.includes("listening")) {
+        candidate.parts = candidate.parts.map(part => part.code === "listening" ? { ...part, content: { ...part.content, items: (part.content.items as unknown[]).slice(0, 2) } } : part);
+      }
+      return { output: { lesson: { ...candidate, title: "Budget review" } }, metadata: {} };
     } } as unknown as import("@e4s/ai").AiTaskRunner;
 
     await expect(generateMonthlyDayWithAi(reviewContract, 5, runner, "Test monthly lesson prompt")).rejects.toThrow("ordinary generation requires a new DaySpec");
     const result = await generateMonthlyReviewWithAi(reviewContract, 5, runner, "Test monthly lesson prompt");
     expect(result.status, JSON.stringify(result.report.severe)).toBe("ready");
+    expect(result.attempts).toBe(2);
+  });
+
+  it.each(["A1", "A2", "B1", "B2", "C1"] as const)("assembles a full v2 %s review from separate study and exercise calls", async (cefr) => {
+    const scope=contract();
+    scope.planSchemaVersion=2; scope.cefr=cefr;
+    for (const word of ["report","client","meeting","team","deadline","email","plan","step","update"]) scope.coreTerms.push({...scope.coreTerms[0]!,id:word,word});
+    const first=scope.sounds[0]!;
+    first.examples.push(...["cup","car","call","come","case","cake"].map(word=>({id:word,word,ipa:"/k/"})));
+    scope.grammarTopics[0]!.steps.push({id:"step-2",focus:"another focus",formula:"There is + adjective",usage:"Describe a fact",examples:["There is a report."]});
+    scope.sounds.push({id:"sound-2",ipa:"/s/",label:"S",examples:[{id:"see",word:"see",ipa:"/siː/"},{id:"soon",word:"soon",ipa:"/suːn/"},{id:"sales",word:"sales",ipa:"/seɪlz/"}]});
+    scope.daySpecs.push({...scope.daySpecs[0]!,lessonNumber:5,date:"2026-11-06",kind:"review",coreTermIds:[],expandedTermIds:[],reviewTermIds:scope.coreTerms.map(term=>term.id),reviewGrammarStepIds:["step","step-2"],reviewSoundIds:["sound","sound-2"],reviewPronunciationExampleIds:scope.sounds.flatMap(sound=>sound.examples.map(example=>example.id))});
+    const candidate=reviewLessonCandidate();
+    const choice=(word:string)=>({id:word,prompt:`Choose ${word}`,options:[word,"other","different","unrelated"],answer:word,explanation:"Vì đúng nghĩa.",audioText:word});
+    candidate.parts=candidate.parts.map(part=>part.code==="vocabulary" ? {code:part.code,content:{items:scope.coreTerms.map(term=>({word:term.word,collocations:[`our ${term.word}`,`the ${term.word}`,`a ${term.word}`]}))}} : part.code==="listening" ? {code:part.code,content:{items:scope.coreTerms.map(term=>choice(term.word))}} : part.code==="word_use" ? {code:part.code,content:{items:scope.coreTerms.slice(0,4).map(term=>choice(term.word))}} : part.code==="word_class" ? {code:part.code,content:{items:scope.coreTerms.slice(0,3).map(term=>choice(term.word))}} : part.code==="reading" ? {code:part.code,content:{...part.content,passage:`Our team discusses ${scope.coreTerms.map(term=>term.word).join(", ")}.`}} : part.code==="pronunciation" ? {code:part.code,content:{focus:first.ipa,words:first.examples.slice(0,3),reviewTargets:scope.sounds.map(sound=>({soundId:sound.id,focus:sound.ipa,words:sound.examples}))}} : part);
+    const calls:string[][]=[];
+    const runner={runTask:async (_task:string,input:Record<string,any>)=>{
+      calls.push(input.components);
+      return {output:{lesson:{title:"Weekly review",parts:candidate.parts.filter(part=>input.components.includes(part.code)).map(part=>part.code==="grammar" ? {code:part.code,content:input.components.includes("listening") ? {items:part.content.items} : {formula:part.content.formula}} : part)}},metadata:{}};
+    }} as unknown as import("@e4s/ai").AiTaskRunner;
+    const result=await generateMonthlyReviewWithAi(scope,5,runner,"Review prompt");
+    expect(result.status,JSON.stringify(result.report.severe)).toBe("ready");
+    expect(calls).toHaveLength(2);
+    const grammar=result.lesson!.parts.find(part=>part.code==="grammar")!;
+    expect(grammar.content.items).toHaveLength(2);
+    expect(grammar.content.steps).toHaveLength(2);
   });
 });
 

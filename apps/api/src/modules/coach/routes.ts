@@ -3,10 +3,11 @@ import type { CoachRoleplayTurnOutput, CoachTaskOutput } from "@e4s/ai";
 import { createRepositories } from "@e4s/database";
 import type { ObjectStorage } from "@e4s/storage";
 import type { AudioArtifactInput, AudioArtifactView, CoachView } from "@e4s/contracts";
-import type { FastifyInstance } from "fastify";
+import type { FastifyInstance, preHandlerHookHandler } from "fastify";
 import type { Pool } from "pg";
 import { z } from "zod";
 import { createRoleGuard } from "../identity/policy.js";
+import { assessmentInProgress } from "../assessment/active-attempt.js";
 
 const audioArtifactInput = z.object({
   fileId: z.uuid().optional().nullable(),
@@ -41,14 +42,20 @@ export function registerCoachRoutes(
   const learnerOnly = createRoleGuard(pool, ["learner"]);
   const runnerFor = (actorId: string) => aiRunnerFactory ? aiRunnerFactory(actorId) : Promise.resolve(aiRunner);
 
-  app.get("/api/v1/coach", { preHandler: learnerOnly }, async (request, reply) => {
+  const practiceAccess: preHandlerHookHandler[] = [learnerOnly, async (request, reply) => {
+    if (await assessmentInProgress(pool, request.e4sSession!.user.id)) {
+      return reply.code(409).send({ code: "COACH_LOCKED_DURING_ASSESSMENT" });
+    }
+  }];
+
+  app.get("/api/v1/coach", { preHandler: practiceAccess }, async (request, reply) => {
     const learnerId = request.e4sSession!.user.id;
     const view = await repositories.coach.currentForLearner(learnerId, Boolean(await runnerFor(learnerId)));
     return view ? withCoachAudio(view, learnerId, repositories, storage) : reply.code(404).send({ code: "COACH_CONTEXT_NOT_FOUND" });
   });
 
   app.post("/api/v1/coach/messages", {
-    preHandler: learnerOnly,
+    preHandler: practiceAccess,
     config: { rateLimit: { max: 20, timeWindow: "1 minute" } }
   }, async (request, reply) => {
     const parsed = messageInput.safeParse(request.body);
@@ -141,7 +148,7 @@ export function registerCoachRoutes(
     }
   });
 
-  app.put("/api/v1/coach/persona", { preHandler: learnerOnly }, async (request, reply) => {
+  app.put("/api/v1/coach/persona", { preHandler: practiceAccess }, async (request, reply) => {
     const parsed = personaInput.safeParse(request.body);
     if (!parsed.success) return reply.code(400).send({ code: "INVALID_COACH_PERSONA" });
     const learnerId = request.e4sSession!.user.id;
@@ -151,7 +158,7 @@ export function registerCoachRoutes(
     return withCoachAudio(await repositories.coach.currentForLearner(learnerId, aiAvailable), learnerId, repositories, storage);
   });
 
-  app.delete("/api/v1/coach/session", { preHandler: learnerOnly }, async (request) => {
+  app.delete("/api/v1/coach/session", { preHandler: practiceAccess }, async (request) => {
     const learnerId = request.e4sSession!.user.id;
     await repositories.coach.archiveCurrent(learnerId);
     return withCoachAudio(await repositories.coach.currentForLearner(learnerId, Boolean(await runnerFor(learnerId))), learnerId, repositories, storage);

@@ -1,3 +1,4 @@
+import type { RequestEvidenceView } from "./request-evidence-contract.js";
 import type { AssessmentKind, CefrLevel } from "./domain-contract.js";
 import type { LearnerProfileData } from "./learning-contract.js";
 export type AssessmentSectionCode = "listening" | "reading" | "writing" | "speaking";
@@ -153,11 +154,20 @@ export interface AssessmentView {
   attempt: AssessmentAttemptView | null;
   runtime?: AssessmentRuntimeView;
   appeal?: AssessmentAppealView | null;
+  appealTarget?: AssessmentAppealTargetView | null;
 }
 
-export interface AssessmentAppealView {
+export interface AssessmentAppealTargetView {
+  attemptId: string;
+  title: string;
+  availableUntil: string | null;
+  requiresProposedLevel?: boolean;
+}
+
+export interface AssessmentAppealView extends RequestEvidenceView {
   id: string;
   reason: string;
+  proposedLevel?: CefrLevel | null;
   status: "pending" | "accepted" | "rejected";
   resolution: string | null;
   createdAt: string;
@@ -337,6 +347,8 @@ export interface AssessmentLevelFormDetailView extends AssessmentLevelFormView {
 export interface AssessmentFormPreviewView {
   definitionId: string;
   versionId: string;
+  /** The approved month framework owning this monthly final, when available. */
+  monthlyFrameworkId?: string;
   /** Database spelling is kept here so a category can be mapped without guessing. */
   kind: "placement" | "level_up" | "final" | "pass_course";
   title: string;

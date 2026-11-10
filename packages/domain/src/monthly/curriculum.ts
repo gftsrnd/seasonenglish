@@ -1,4 +1,5 @@
-import type { CefrLevel } from "@e4s/contracts";
+import type { CefrLevel, MonthlyGrammarDayPlan, MonthlyPronunciationDayPlan } from "@e4s/contracts";
+import { dailyTeachingPlan } from "./daily-progression.js";
 
 export interface MonthlyCalendar {
   month: string;
@@ -209,6 +210,7 @@ export interface GrammarStep {
   formula: string;
   usage: string;
   examples: string[];
+  dailyObjectives?: string[] | undefined;
 }
 
 export interface GrammarTopic {
@@ -241,6 +243,10 @@ export interface MonthlyCurriculumInput {
 }
 
 export interface MonthlyDaySpec {
+  newLessonNumber?: number;
+  reviewWeekNumber?: number;
+  grammarPlan?: MonthlyGrammarDayPlan;
+  pronunciationPlan?: MonthlyPronunciationDayPlan;
   lessonNumber: number;
   date: string;
   kind: "new" | "review";
@@ -264,6 +270,7 @@ export interface MonthlyDaySpec {
 }
 
 export type MonthlyCurriculumContract = Omit<MonthlyCurriculumInput, "coreTerms" | "supportTerms"> & {
+  planSchemaVersion?: 2;
   coreTerms: CoreTerm[];
   supportTerms: SupportTerm[];
   version: number;
@@ -409,20 +416,21 @@ export function buildMonthlyCurriculum(input: MonthlyCurriculumInput): MonthlyCu
       pendingReviewExpandedIds.push(...expandedTermIds);
     }
     const assignmentOrdinal = Math.max(1, newLessonOrdinal);
-    const grammarSteps = expectedGrammarSteps(assignmentOrdinal, input.grammarTopics);
+    const teaching = dailyTeachingPlan(assignmentOrdinal, input.grammarTopics, input.sounds, input.cefr, input.coreTerms.filter(term => coreTermIds.includes(term.id)).map(term => term.word));
+    const grammarSteps = teaching.grammarPlan.milestoneIds.map(id => input.grammarTopics.flatMap(topic => topic.steps).find(step => step.id === id)!);
     const step = grammarSteps[0]!;
-    const soundIndex = pronunciationSoundIndex(assignmentOrdinal);
-    const sound = input.sounds[soundIndex]!;
+    const sound = input.sounds.find(sound => sound.id === teaching.pronunciationPlan.targetIds[0])!;
     const pronunciationSlot = pronunciationSlotFor(assignmentOrdinal);
-    const exampleIds = sound.examples.slice(0, 3).map((example) => example.id);
+    const exampleIds = teaching.pronunciationPlan.targetIds.length === 1 ? teaching.pronunciationPlan.exampleIds : sound.examples.slice(0, 3).map(example => example.id);
     if (kind === "new") {
       for (const grammarStep of grammarSteps) if (!pendingReviewGrammarStepIds.includes(grammarStep.id)) pendingReviewGrammarStepIds.push(grammarStep.id);
-      if (!pendingReviewSoundIds.includes(sound.id)) pendingReviewSoundIds.push(sound.id);
-      for (const exampleId of exampleIds) if (!pendingReviewPronunciationExampleIds.includes(exampleId)) pendingReviewPronunciationExampleIds.push(exampleId);
+      for (const soundId of teaching.pronunciationPlan.targetIds) if (!pendingReviewSoundIds.includes(soundId)) pendingReviewSoundIds.push(soundId);
+      for (const exampleId of teaching.pronunciationPlan.exampleIds) if (!pendingReviewPronunciationExampleIds.includes(exampleId)) pendingReviewPronunciationExampleIds.push(exampleId);
     }
     if (exampleIds.length !== 3) throw new RangeError(`Sound ${sound.id} needs three unused examples for lesson ${lessonNumber}`);
     const skillExercises = buildMonthlySkillExercises(kind, kind === "new" ? coreTermIds : reviewTermIds, kind === "new" ? expandedTermIds : reviewExpandedTermIds);
-    return { lessonNumber, date, kind, coreTermIds, expandedTermIds, reviewTermIds, reviewExpandedTermIds, reviewFromPreviousMonth, reviewGatesNextWeek, reviewWeekKey, reviewPrerequisiteLessonNumbers, reviewGrammarStepIds, reviewSoundIds, reviewPronunciationExampleIds, skillExercises, grammarStepId: step.id, grammarStepIds: grammarSteps.map((grammarStep) => grammarStep.id), soundId: sound.id, pronunciationSlot, pronunciationExampleIds: exampleIds };
+    const reviewWeekNumber = [...new Set(calendar.effectiveDays.slice(0, index + 1).map(mondayOfWeek))].length;
+    return { lessonNumber, date, kind, ...(kind === "new" ? { newLessonNumber: newLessonOrdinal, ...teaching } : { reviewWeekNumber }), coreTermIds, expandedTermIds, reviewTermIds, reviewExpandedTermIds, reviewFromPreviousMonth, reviewGatesNextWeek, reviewWeekKey, reviewPrerequisiteLessonNumbers, reviewGrammarStepIds, reviewSoundIds, reviewPronunciationExampleIds, skillExercises, grammarStepId: step.id, grammarStepIds: grammarSteps.map((grammarStep) => grammarStep.id), soundId: sound.id, pronunciationSlot, pronunciationExampleIds: exampleIds };
   });
 
   const newLessonNumbers = calendar.effectiveDays.flatMap((_date, index) => monthlyDayKind(index + 1, calendar) === "new" ? [index + 1] : []);
@@ -433,7 +441,7 @@ export function buildMonthlyCurriculum(input: MonthlyCurriculumInput): MonthlyCu
     dayNumber: newLessonNumbers[Math.floor(index / 3)]!
   }));
   const supportTerms: SupportTerm[] = input.supportTerms.map((term) => ({ ...term, component: "expanded" }));
-  return { ...input, coreTerms, supportTerms, version: input.theme.version, daySpecs };
+  return { ...input, coreTerms, supportTerms, version: input.theme.version, planSchemaVersion: 2, daySpecs };
 }
 
 /** Assigns an editable resource pool only when an operator explicitly approves it. */
@@ -495,7 +503,7 @@ export function planMonthlyResourcePool(pool: MonthlyResourcePoolContract): Mont
     month: pool.month,
     cefr: pool.cefr,
     theme: pool.theme,
-    coreTerms: pool.coreTerms.map(({ id, word, meaning, type, ipa }) => ({ id, word, meaning, type, ipa })),
+    coreTerms: pool.coreTerms.map(({ id, word, meaning, type, ipa, imageUrl }) => ({ id, word, meaning, type, ipa, ...(imageUrl ? { imageUrl } : {}) })),
     supportTerms: plannedSupportTerms,
     grammarTopics: pool.grammarTopics,
     sounds: pool.sounds
@@ -550,7 +558,7 @@ export function backfillMonthlyCurriculumPlan(source: unknown): MonthlyCurriculu
     cefr: legacy.cefr,
     version: legacy.version,
     theme: legacy.theme,
-    coreTerms: legacy.coreTerms.map(({ id, word, meaning, type, ipa, source, component }) => ({ id, word, meaning, type, ipa, source, component })),
+    coreTerms: legacy.coreTerms.map(({ id, word, meaning, type, ipa, source, component, imageUrl }) => ({ id, word, meaning, type, ipa, source, component, ...(imageUrl ? { imageUrl } : {}) })),
     supportTerms: supportsWithLinks.map(({ id, word, meaning, type, relation, source, relatedCoreTermId }) => ({ id, word, meaning, type, relation, source, component: "expanded", relatedCoreTermId })),
     grammarTopics: legacy.grammarTopics,
     sounds: legacy.sounds
@@ -648,10 +656,13 @@ export function validateMonthlyCurriculum(contract: MonthlyCurriculumContract): 
       return prior?.grammarStepIds ?? (prior ? [prior.grammarStepId] : []);
     }))];
     const expectedReviewSoundIds = [...new Set(expectedPrerequisites.flatMap((lessonNumber) => {
-      const soundId = contract.daySpecs[lessonNumber - 1]?.soundId;
-      return soundId ? [soundId] : [];
+      const prior = contract.daySpecs[lessonNumber - 1];
+      return prior?.pronunciationPlan?.targetIds ?? (prior?.soundId ? [prior.soundId] : []);
     }))];
-    const expectedReviewExampleIds = [...new Set(expectedPrerequisites.flatMap((lessonNumber) => contract.daySpecs[lessonNumber - 1]?.pronunciationExampleIds ?? []))];
+    const expectedReviewExampleIds = [...new Set(expectedPrerequisites.flatMap((lessonNumber) => {
+      const prior = contract.daySpecs[lessonNumber - 1];
+      return prior?.pronunciationPlan?.exampleIds ?? prior?.pronunciationExampleIds ?? [];
+    }))];
     const dayHasReviewMetadata = day.reviewWeekKey !== undefined || day.reviewFromPreviousMonth !== undefined
       || day.reviewGatesNextWeek !== undefined || day.reviewPrerequisiteLessonNumbers !== undefined
       || day.reviewGrammarStepIds !== undefined || day.reviewSoundIds !== undefined || day.reviewPronunciationExampleIds !== undefined;
@@ -668,10 +679,18 @@ export function validateMonthlyCurriculum(contract: MonthlyCurriculumContract): 
     }
     if (day.kind === "new") newLessonOrdinal += 1;
     const roadmapOrdinal = Math.max(1, newLessonOrdinal);
-    const expectedGrammarIds = contract.grammarTopics.length === 2 ? expectedGrammarSteps(roadmapOrdinal, contract.grammarTopics).map((step) => step.id) : [];
+    const planned = contract.planSchemaVersion === 2 && contract.grammarTopics.length === 2 && contract.sounds.length === 4
+      ? dailyTeachingPlan(roadmapOrdinal, contract.grammarTopics, contract.sounds, contract.cefr, contract.coreTerms.filter(core => day.coreTermIds.includes(core.id)).map(core => core.word)) : undefined;
+    const expectedGrammarIds = planned?.grammarPlan.milestoneIds ?? (contract.grammarTopics.length === 2 ? expectedGrammarSteps(roadmapOrdinal, contract.grammarTopics).map((step) => step.id) : []);
     if (JSON.stringify(day.grammarStepIds ?? [day.grammarStepId]) !== JSON.stringify(expectedGrammarIds) || day.grammarStepId !== expectedGrammarIds[0]) errors.push(`Lesson ${day.lessonNumber} does not follow the monthly grammar progression`);
-    const expectedSound = contract.sounds[pronunciationSoundIndex(roadmapOrdinal)];
+    const expectedSound = planned ? contract.sounds.find(sound => sound.id === planned.pronunciationPlan.targetIds[0]) : contract.sounds[pronunciationSoundIndex(roadmapOrdinal)];
     if (day.soundId !== expectedSound?.id || day.pronunciationSlot !== pronunciationSlotFor(roadmapOrdinal)) errors.push(`Lesson ${day.lessonNumber} does not follow the pronunciation roadmap`);
+    if (planned && day.kind === "new") {
+      if (day.newLessonNumber !== newLessonOrdinal || JSON.stringify(day.grammarPlan) !== JSON.stringify(planned.grammarPlan)) errors.push(`Lesson ${day.lessonNumber} has an invalid daily grammar progression`);
+      if (JSON.stringify(day.pronunciationPlan) !== JSON.stringify(planned.pronunciationPlan)) errors.push(`Lesson ${day.lessonNumber} has an invalid daily pronunciation progression`);
+      const examples = planned.pronunciationPlan.targetIds.length === 1 ? planned.pronunciationPlan.exampleIds : expectedSound?.examples.slice(0, 3).map(example => example.id);
+      if (JSON.stringify(day.pronunciationExampleIds) !== JSON.stringify(examples)) errors.push(`Lesson ${day.lessonNumber} repeats or skips its assigned pronunciation example set`);
+    }
     if (!grammarStepIds.has(day.grammarStepId) || (day.grammarStepIds ?? [day.grammarStepId]).some((id) => !grammarStepIds.has(id))) errors.push(`Lesson ${day.lessonNumber} references an unlocked grammar step`);
     const sound = soundsById.get(day.soundId);
     if (!sound) errors.push(`Lesson ${day.lessonNumber} references an unlocked sound`);
@@ -834,7 +853,7 @@ function validateSkillExercises(day: MonthlyDaySpec, expectedResourceIds: readon
   const allowed = new Set(expectedResourceIds);
   for (const exercise of day.skillExercises) {
     if (!exercise.focus.trim()) errors.push(`Lesson ${day.lessonNumber} has an empty ${exercise.exerciseCode} exercise focus`);
-    if (!exercise.resourceIds.length || exercise.resourceIds.some((id) => !allowed.has(id))) {
+    if ((!exercise.resourceIds.length && !(day.kind === "review" && day.reviewFromPreviousMonth && !expectedResourceIds.length)) || exercise.resourceIds.some((id) => !allowed.has(id))) {
       errors.push(`Lesson ${day.lessonNumber} ${exercise.exerciseCode} exercise references resources outside its allocation`);
     }
   }

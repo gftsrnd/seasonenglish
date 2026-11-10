@@ -772,46 +772,47 @@ export interface ReviewAdapterDetails {
   tests?: Record<string, { rawLevel?: Cefr; aiSuggestedCefr?: Cefr | null }>;
 }
 
+export function adaptReviewAppeal(item: ContentReviewView["appeals"][number]): ReviewAppeal {
+  const lessonPart = item.kind === "lesson_part";
+  const title = lessonPart
+    ? ["Bài học tháng", item.dayNumber == null ? null : `Bài ${item.dayNumber + 1}`, item.lessonTitle].filter(Boolean).join(" · ")
+    : item.kind === "assessment" ? item.lessonTitle || "Bài kiểm tra" : "Bài thực hành tuần";
+  return {
+    id: item.id, learnerName: item.learnerName, title, at: operatorDateTime(item.createdAt),
+    status: item.status, reason: item.reason, decidedSummary: item.resolution || null,
+    ...(item.overdue ? { overdue: true } : {}),
+    ...(item.proposedLevel ? { proposedLevel: item.proposedLevel } : {}),
+    scope: item.scope, hasEvidence: item.hasEvidence,
+    currentScore: item.currentScore,
+    ...(item.question ? { question: item.question } : {}),
+    ...(item.answer ? { answer: item.answer } : {}),
+    aiFeedback: item.aiFeedback ?? null,
+    ...(lessonPart ? {
+      kind: "part" as const,
+      ...(item.cefr ? { cefr: item.cefr as Cefr } : {}),
+      part: item.partCode ?? "Phần bài học",
+      attempts: item.attempts ?? 0,
+      ...(item.options?.length ? { options: item.options } : {}),
+      key: item.answerKey ?? null
+    } : item.kind === "weekly_practice" ? { kind: "sub" as const } : {})
+  };
+}
+
 export function adaptReview(source: ContentReviewView, activeTab: keyof typeof REVIEW_TAB_MAP, options: ReviewAdapterDetails = {}): OperatorReviewView {
   const counts = { subs: 0, coach: 0, weekly: 0, appeals: 0, attempts: 0, tests: 0 };
   source.tabs.forEach(tab => { const key = REVIEW_TAB_MAP[tab.key as keyof typeof REVIEW_TAB_MAP]; if (key) counts[key] = tab.unreadCount ?? tab.count; });
   counts.weekly = 0;
   counts.subs = 0;
-  counts.appeals = source.appeals.filter(item => item.kind === "lesson_part").length;
+  counts.appeals = source.appeals.length;
   return {
     activeTab: REVIEW_TAB_MAP[activeTab], counts, aiConnected: options.aiConnected,
     submissions: source.submissions.map(item => { const detail = options.submissions?.[item.id]; return { id: item.id, learnerName: item.learnerName, cefr: (item.cefr ?? detail?.cefr) as Cefr | undefined, week: item.weekNumber, type: item.type ?? detail?.type, submittedAt: operatorDateTime(item.submittedAt), operatorChecked: item.checked, task: item.task ?? detail?.task, guidance: item.guidance ?? detail?.guidance, requiredVocabulary: item.requiredVocabulary ?? detail?.requiredVocabulary, text: item.text, total: item.total, rubric: item.rubric.meaning == null || item.rubric.vocabulary == null || item.rubric.grammar == null ? null : { meaning: item.rubric.meaning, vocab: item.rubric.vocabulary, grammar: item.rubric.grammar }, ...(item.aiGraded === undefined ? {} : { aiGraded: item.aiGraded }), feedback: item.feedback, suggestions: item.suggestions.map(text => ({ original: "", corrected: text, explanation: "" })), ...(item.audioArtifact ? { audioArtifact: item.audioArtifact } : {}) }; }),
     coachTurns: source.coachSamples.map(item => { const detail = options.coach?.[item.id]; return { id: item.id, sessionId: detail?.sessionId ?? item.id, learnerName: item.learnerName, cefr: (item.cefr ?? detail?.cefr) as Cefr | undefined, week: item.weekNumber ?? detail?.week, at: operatorDateTime(item.createdAt), checked: item.checked, userText: item.learnerText, reply: item.coachText, rubric: item.scores.meaning == null || item.scores.vocabulary == null || item.scores.grammar == null ? null : { meaning: item.scores.meaning, vocab: item.scores.vocabulary, grammar: item.scores.grammar }, suggestions: item.suggestions.map(text => ({ original: "", corrected: text, explanation: "" })), ...(item.audioArtifact ? { audioArtifact: item.audioArtifact } : {}) }; }),
     weeklyPractices: (source.weeklyPractices ?? []).map(item => ({ id: item.versionId, week: item.weekNumber, cefr: item.cefr as Cefr, topic: item.topic, status: item.status === "published" ? "approved" : item.status === "review" ? "review" : "draft", version: item.version, task: item.task, guidance: item.guidance, requiredVocabulary: item.requiredVocabulary })),
-    appeals: source.appeals.filter(item => item.kind === "lesson_part").map(item => {
-      const lessonPart = item.kind === "lesson_part";
-      const title = lessonPart
-        ? ["Bài học tháng", item.dayNumber == null ? null : `Bài ${item.dayNumber + 1}`, item.lessonTitle].filter(Boolean).join(" · ")
-        : undefined;
-      return {
-        id: item.id,
-        learnerName: item.learnerName,
-        at: operatorDateTime(item.createdAt),
-        status: item.status,
-        reason: item.reason,
-        decidedSummary: item.resolution || null,
-        ...(lessonPart ? {
-          kind: "part" as const,
-          ...(item.cefr ? { cefr: item.cefr as Cefr } : {}),
-          title,
-          part: item.partCode ?? "Phần bài học",
-          attempts: item.attempts ?? 0,
-          ...(item.question ? { question: item.question } : {}),
-          ...(item.options?.length ? { options: item.options } : {}),
-          ...(item.answer ? { answer: item.answer } : {}),
-          key: item.answerKey ?? null,
-          aiFeedback: item.aiFeedback ?? null
-        } : item.kind === "weekly_practice" ? { kind: "sub" as const } : {}),
-        ...options.appeals?.[item.id]
-      };
-    }),
+    appeals: source.appeals.map(item => ({ ...adaptReviewAppeal(item), ...options.appeals?.[item.id] })),
+    ...(source.exerciseWarnings ? { exerciseWarnings: source.exerciseWarnings } : {}),
     attempts: source.lessonAttempts.map(item => ({ id: item.id, learnerId: item.learnerId, learnerName: item.learnerName, cefr: item.cefr as Cefr | undefined, lesson: `Bài học tháng · Bài ${item.dayNumber + 1} · ${item.lessonTitle}`, listening: String(item.attempts.listening ?? "chưa làm"), reading: String(item.attempts.reading ?? "chưa làm"), writing: String(item.attempts.writing ?? "chưa làm"), wordClass: String(item.attempts.word_class ?? "chưa làm"), wordUse: String(item.attempts.word_use ?? "chưa làm"), speaking: String(item.attempts.speaking ?? "chưa làm"), total: Object.values(item.attempts).reduce((sum, value) => sum + (value ?? 0), 0), ...(item.audioArtifact ? { audioArtifact: item.audioArtifact } : {}) })),
-    tests: source.assessments.map(item => ({ id: item.id, learnerName: item.learnerName, kind: item.kind, submittedAt: item.submittedAt ? operatorDateTime(item.submittedAt) : undefined, total: item.totalScore ?? undefined, ...options.tests?.[item.id] }))
+    tests: source.assessments.map(item => ({ id: item.id, learnerName: item.learnerName, kind: item.kind, status: item.status, submittedAt: item.submittedAt ? operatorDateTime(item.submittedAt) : undefined, total: item.totalScore ?? undefined, ...options.tests?.[item.id] }))
   };
 }
 

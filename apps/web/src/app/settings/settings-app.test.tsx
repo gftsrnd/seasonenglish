@@ -54,7 +54,7 @@ describe("new Settings app branch", () => {
   it("keeps Manager sections in app order", () => {
     const { container } = render(<SettingsPage role="manager" manager={manager} product={product} capabilities={capabilities} ai={{ provider: "openai", configured: true, baseUrl: "https://api.groq.com/openai/v1", model: "qwen/qwen3.8-27b", speechToTextModel: "whisper-large-v3-turbo" }} actions={actions()} accounts={<section><h3>Người dùng</h3></section>} />);
     expect([...container.querySelectorAll("h3")].map((node) => node.textContent)).toEqual([
-      "Prompt & rubric", "Kết nối AI", "Ngày hệ thống thử", "Học theo tháng", "Ảnh minh hoạ từ vựng", "Ngưỡng xét lên / hạ mức", "Giao diện theo mùa / lễ", "Nhạc nền của Season", "Nhắc học qua Base.vn (Base Message incoming webhook)", "Chính sách nhắc học và báo cáo", "Dữ liệu", "Người dùng"
+      "Prompt & rubric", "Kết nối AI", "Ngày hệ thống thử", "Học theo tháng", "Ảnh minh hoạ từ vựng", "Ngưỡng xét lên / hạ mức", "Giao diện theo mùa / lễ", "Nhạc nền của Season", "Chính sách nhắc học và báo cáo", "Dữ liệu", "Người dùng"
     ]);
     expect(screen.getByText(/Khoá nhà cung cấp được lưu an toàn ở server/)).toBeInTheDocument();
     expect(screen.getByText("Xuất JSON")).toBeInTheDocument();
@@ -135,8 +135,8 @@ describe("new Settings app branch", () => {
 
     expect(screen.getByText(/Ngày học cuối cùng là Bài thi tháng/)).toBeInTheDocument();
     expect(screen.getByText(/danh sách nhạc.*prototype.*cần mạng.*YouTube.*bật\/tắt/i)).toBeInTheDocument();
-    const webhook = screen.getByRole("heading", { name: "Nhắc học qua Base.vn (Base Message incoming webhook)" }).closest("section");
-    expect(webhook).toHaveTextContent(/base_content.*\{message\}.*\{name\}/i);
+    expect(screen.queryByRole("heading", { name: /Nhắc học qua Base.vn/ })).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("Webhook URL")).not.toBeInTheDocument();
   });
 
   it("wires provider test, settings save and data operations", async () => {
@@ -188,6 +188,26 @@ describe("new Settings app branch", () => {
     resolveImport();
     await waitFor(() => expect(importButton).not.toBeDisabled());
     expect(importButton).not.toHaveAttribute("aria-busy");
+  });
+
+  it("shows localized account states in the read-only staff directory", () => {
+    const overview: OperatorSettingsOverviewView = {
+      organizationName: "GFT Demo",
+      settings: manager,
+      pilot: { startDate: "2026-10-12", weeks: 2, weekOverride: 0, minMinutesPerDay: 15, courseTheme: manager.courseTheme, coachDailyLimit: 20 },
+      test: { timed: true, times: manager.testTimes, warnLimit: 3 },
+      levelUp: manager.levelUp,
+      accounts: [
+        { id: "locked", displayName: "Học viên A", email: "a@example.com", role: "learner", status: "disabled", createdAt: "2026-10-12T00:00:00.000Z" },
+        { id: "active", displayName: "Nhân sự B", email: "b@example.com", role: "operator", status: "active", createdAt: "2026-10-12T00:00:00.000Z" },
+      ]
+    };
+    const { container } = render(<SettingsPage role="operator" operatorOverview={overview} product={product} capabilities={capabilities} actions={actions()} />);
+
+    expect(screen.getByText("Đã khoá")).toHaveClass("account-status-locked");
+    expect(screen.getByText("Đang hoạt động")).toBeInTheDocument();
+    expect(screen.getByRole("cell", { name: "Người vận hành" })).toBeInTheDocument();
+    expect(container).not.toHaveTextContent(/\b(operator|disabled)\b/i);
   });
 
   it("lets Operator save organisation theme and music without exposing Manager-only controls", async () => {
@@ -329,12 +349,10 @@ describe("new Settings app branch", () => {
     expect(screen.getByText(message, { exact: false })).toBeInTheDocument();
   });
 
-  it("shows the latest webhook diagnostic with an action to take", async () => {
-    const callbacks = actions();
-    callbacks.onTestWebhook = vi.fn().mockResolvedValue({ status: "error", statusCode: null, code: "WEBHOOK_TEMPLATE_INVALID", testedAt: "2026-10-19T10:00:00.000Z" });
-    render(<SettingsPage role="manager" manager={manager} product={product} capabilities={capabilities} actions={callbacks} />);
-    await userEvent.setup().click(screen.getByRole("button", { name: "Gửi tin thử" }));
-    expect(await screen.findByText("Mẫu payload chưa phải JSON hợp lệ.")).toBeInTheDocument();
+  it("does not offer a global Base test or expose retired webhook secrets", () => {
+    render(<SettingsPage role="manager" manager={{ ...manager, baseWebhookUrl: "https://base.example.test/retired-secret" }} product={product} capabilities={capabilities} actions={actions()} />);
+    expect(screen.queryByRole("button", { name: "Gửi tin thử" })).not.toBeInTheDocument();
+    expect(screen.queryByDisplayValue("https://base.example.test/retired-secret")).not.toBeInTheDocument();
   });
 });
 

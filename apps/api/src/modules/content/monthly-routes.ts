@@ -1,6 +1,7 @@
-import { buildMonthlyCalendar, buildMonthlyExamScope, maxMonthlyPhrasePlacements, maxMonthlySupportRepeats, monthlyDayKind, MONTHLY_MAX_SUPPORTS_PER_CORE, MONTHLY_MIN_SUPPORTS_PER_CORE, hasRequiredMonthlySupportRelations, requiredSupportRelationsFor, type MonthlyCurriculumContract } from "@e4s/domain";
+import { buildMonthlyCalendar, buildMonthlyExamScope, maxMonthlyPhrasePlacements, maxMonthlySupportRepeats, monthlyDayKind, monthlyScopeHash, MONTHLY_MAX_SUPPORTS_PER_CORE, MONTHLY_MIN_SUPPORTS_PER_CORE, hasRequiredMonthlySupportRelations, requiredSupportRelationsFor, type MonthlyCurriculumContract } from "@e4s/domain";
 import { monthlyResourcePlanOutputSchema, monthlyTopicSuggestionOutputSchema, type AiTaskRunner } from "@e4s/ai";
 import { createRepositories } from "@e4s/database";
+import { MonthlyResourceProgressStore } from "./monthly-resource-progress.js";
 import { randomUUID } from "node:crypto";
 import type { FastifyInstance, FastifyReply } from "fastify";
 import type { Pool } from "pg";
@@ -13,7 +14,8 @@ import { MonthlyCorePhaseShortfallError, runMonthlyCorePhase } from "./monthly-c
 import { runMonthlyEnrichmentWithRefill, type MonthlyCoreEnrichmentOutcome } from "./monthly-enrichment-phase.js";
 import { isPronunciationTargetAllowedForLevel, isValidMonthlyPronunciationIpaTarget } from "./monthly-resource-plan-spec.js";
 import { safeGenerationDiagnosticIssues } from "./generation-errors.js";
-import { applyMonthlyResourceEdit, monthlyResourceEditInputSchema } from "./monthly-resource-manual-edit.js";
+import { monthlyGenerationFailure } from "./monthly-generation-errors.js";
+import { applyMonthlyResourceEdit, blankMonthlyResourcePool, monthlyResourceEditInputSchema } from "./monthly-resource-manual-edit.js";
 
 const params = z.object({ month: z.string().regex(/^\d{4}-(0[1-9]|1[0-2])$/u) });
 const frameworkParams = z.object({ id: z.uuid() });
@@ -29,12 +31,13 @@ const coreTerm = z.object({ id: z.string().min(1), word: z.string().min(1), mean
 const supportTerm = z.object({ id: z.string().min(1), word: z.string().min(1), meaning: z.string(), type: z.string().min(1), relation: z.enum(["umbrella", "synonym", "antonym", "word_family", "collocation"]), source: z.enum(["example", "family", "synonym", "antonym", "group", "manual"]), component: z.literal("expanded"), dayNumber: z.int().positive(), relatedCoreTermId: z.string().min(1), cefr: z.enum(["A1", "A2", "B1", "B2", "C1"]).optional() });
 const frameworkInput = z.object({
   contract: z.object({
+    planSchemaVersion: z.literal(2).optional(),
     month: z.string().regex(/^\d{4}-(0[1-9]|1[0-2])$/u), cefr: z.enum(["A1", "A2", "B1", "B2", "C1"]), version: z.int().positive(),
     theme: z.object({ version: z.int().positive(), title: z.string(), brief: z.string(), context: z.string(), communicationGoal: z.string() }),
     coreTerms: z.array(coreTerm), supportTerms: z.array(supportTerm),
-    grammarTopics: z.array(z.object({ id: z.string().min(1), title: z.string().min(1), steps: z.array(z.object({ id: z.string().min(1), focus: z.string(), formula: z.string().min(1), usage: z.string(), examples: z.array(z.string()) })).min(1) })),
+    grammarTopics: z.array(z.object({ id: z.string().min(1), title: z.string().min(1), steps: z.array(z.object({ id: z.string().min(1), focus: z.string(), formula: z.string().min(1), usage: z.string(), examples: z.array(z.string()), dailyObjectives: z.array(z.string()).length(2).optional() })).min(1) })),
     sounds: z.array(z.object({ id: z.string().min(1), ipa: z.string().min(1), label: z.string().min(1), examples: z.array(z.object({ id: z.string().min(1), word: z.string().min(1), ipa: z.string().min(1) })) })),
-    daySpecs: z.array(z.object({ lessonNumber: z.int().positive(), date: z.string().date(), kind: z.enum(["new", "review"]), coreTermIds: z.array(z.string()), expandedTermIds: z.array(z.string()), reviewTermIds: z.array(z.string()), reviewExpandedTermIds: z.array(z.string()), skillExercises: z.array(z.object({ exerciseCode: z.enum(["listening", "reading", "writing", "word_class", "word_use", "speaking"]), focus: z.string().min(1), resourceIds: z.array(z.string()).min(1) })).length(6), grammarStepId: z.string().min(1), grammarStepIds: z.array(z.string()).optional(), soundId: z.string().min(1), pronunciationSlot: z.string().optional(), pronunciationExampleIds: z.array(z.string()) }))
+    daySpecs: z.array(z.object({ lessonNumber: z.int().positive(), date: z.string().date(), kind: z.enum(["new", "review"]), coreTermIds: z.array(z.string()), expandedTermIds: z.array(z.string()), reviewTermIds: z.array(z.string()), reviewExpandedTermIds: z.array(z.string()), skillExercises: z.array(z.object({ exerciseCode: z.enum(["listening", "reading", "writing", "word_class", "word_use", "speaking"]), focus: z.string().min(1), resourceIds: z.array(z.string()).min(1) })).length(6), grammarStepId: z.string().min(1), grammarStepIds: z.array(z.string()).optional(), soundId: z.string().min(1), pronunciationSlot: z.string().optional(), pronunciationExampleIds: z.array(z.string()) }).passthrough())
   })
 });
 const resourceCriteriaInput = z.object({
@@ -59,12 +62,17 @@ const reopenDecisionInput = z.object({ reason: z.string().trim().min(5).max(1000
 /** Monthly routes deliberately live outside routes.ts: monthly contracts are not weeks. */
 export function registerMonthlyContentRoutes(app: FastifyInstance, pool: Pool, aiRunner?: AiTaskRunner, aiRunnerFactory?: (actorId: string) => Promise<AiTaskRunner | undefined>): void {
   const repositories = createRepositories(pool);
-  const operator = createRoleGuard(pool, ["operator"]);
+  const resourceProgress = new MonthlyResourceProgressStore();
+  const readers = createRoleGuard(pool, ["operator", "manager"]);
   const contentOperator = createRoleGuard(pool, ["operator"]);
   const manager = createRoleGuard(pool, ["manager"]);
 
   app.get("/api/v1/manager/reopen-requests", { preHandler: manager }, async (request) => {
     return { requests: await repositories.monthlyContent.listReopenRequests(request.e4sSession!.user.id) };
+  });
+  app.get("/api/v1/manager/content-retention-plan", { preHandler: manager }, async (request, reply) => {
+    reply.header("Cache-Control", "private, no-store");
+    return repositories.monthlyContent.planExpiredContentRetention(request.e4sSession!.user.id);
   });
 
   // One decision endpoint pair for every monthly reopen request: a request id
@@ -88,6 +96,11 @@ export function registerMonthlyContentRoutes(app: FastifyInstance, pool: Pool, a
     return decideReopen(request.e4sSession!.user.id, correctionId, "rejected", input.reason);
   });
 
+  app.get("/api/v1/content/reopen-requests", { preHandler: contentOperator }, async (request, reply) => {
+    reply.header("Cache-Control", "private, no-store");
+    return { requests: await repositories.monthlyContent.listOwnReopenRequests(request.e4sSession!.user.id) };
+  });
+
   app.post("/api/v1/content/month-frameworks/:id/reopen-requests", { preHandler: contentOperator }, async (request, reply) => {
     const { id } = frameworkParams.parse(request.params);
     const input = correctionInput.parse(request.body);
@@ -100,9 +113,21 @@ export function registerMonthlyContentRoutes(app: FastifyInstance, pool: Pool, a
     await repositories.monthlyContent.retireFramework(request.e4sSession!.user.id, id, reason);
     return reply.code(204).send();
   });
-  app.get("/api/v1/content/months/:month", { preHandler: operator }, async (request) => {
+  app.get("/api/v1/content/months", { preHandler: readers }, async (request) => {
+    return repositories.monthlyContent.getOverview(request.e4sSession!.user.id);
+  });
+  app.get("/api/v1/content/months/:month", { preHandler: readers }, async (request) => {
     const input = params.parse(request.params);
     return repositories.monthlyContent.getOverview(request.e4sSession!.user.id, input.month);
+  });
+  app.get("/api/v1/content/month-frameworks/:id/publication-preview", { preHandler: contentOperator }, async (request) => {
+    const { id } = frameworkParams.parse(request.params);
+    return repositories.monthlyContent.previewMonthPublication(request.e4sSession!.user.id, id);
+  });
+  app.post("/api/v1/content/month-frameworks/:id/publication", { preHandler: contentOperator }, async (request) => {
+    const { id } = frameworkParams.parse(request.params);
+    const { confirmedOn } = z.object({ confirmedOn: z.iso.date() }).parse(request.body);
+    return repositories.monthlyContent.publishMonth(request.e4sSession!.user.id, id, confirmedOn);
   });
 
   app.put("/api/v1/content/months/:month/brief", { preHandler: contentOperator }, async (request) => {
@@ -181,6 +206,7 @@ export function registerMonthlyContentRoutes(app: FastifyInstance, pool: Pool, a
       return [key, { state: categoryComplete ? "complete" : "missing", count, target }];
     }));
     return {
+      progress: resourceProgress.read(request.e4sSession!.user.id + ":" + month.month + ":" + query.cefr),
       state: checkpoint ? "draft_checkpoint" : "not_started",
       draftOnly: true,
       publishable: false,
@@ -198,6 +224,7 @@ export function registerMonthlyContentRoutes(app: FastifyInstance, pool: Pool, a
     const actorId = request.e4sSession!.user.id;
     const criteria = resourceCriteriaInput.parse(request.body);
     const overview = await repositories.monthlyContent.getOverview(actorId, month.month);
+    if (!overview.monthWindow.writable) return reply.code(409).send({ code: "MONTHLY_CONTENT_READ_ONLY" });
     const brief = overview.brief;
     if (!brief || brief.status !== "approved") return reply.code(409).send({ code: "MONTHLY_TOPIC_NOT_APPROVED" });
     if (overview.frameworks.some((framework) => framework.cefr === criteria.cefr && framework.status === "approved")) {
@@ -224,6 +251,9 @@ export function registerMonthlyContentRoutes(app: FastifyInstance, pool: Pool, a
     const baseRunner = configuredRunner ?? aiRunner;
     if (!baseRunner) return reply.code(503).send({ code: "AI_UNAVAILABLE" });
     if (!task) return reply.code(503).send({ code: "AI_PROMPT_NOT_READY" });
+    const progressKey = actorId + ":" + month.month + ":" + criteria.cefr;
+    const progressRun = resourceProgress.start(progressKey);
+    const updateProgress = (patch: Parameters<MonthlyResourceProgressStore["update"]>[2]) => resourceProgress.update(progressKey,progressRun.runId,patch);
     // Token usage for this whole generation request, logged once at the end.
     const usageTotals = { calls: 0, inputTokens: 0, outputTokens: 0, cacheReadInputTokens: 0, cacheCreationInputTokens: 0, startedAt: Date.now() };
     const runner = {
@@ -240,6 +270,7 @@ export function registerMonthlyContentRoutes(app: FastifyInstance, pool: Pool, a
     } as AiTaskRunner;
     const logUsage = (outcome: string) => console.info("[monthly-resource-usage]", JSON.stringify({ month: month.month, cefr: criteria.cefr, outcome, ...usageTotals, elapsedMs: Date.now() - usageTotals.startedAt }));
     try {
+      updateProgress({phase:"coreTerms"});
       let checkpoint = await repositories.monthlyContent.getResourceGenerationCheckpoint(actorId, month.month, criteria.cefr);
       const generationId = checkpoint?.generationId ?? randomUUID();
       const readCheckpointCategory = <T>(key: string, schema: z.ZodType<T>): T | undefined => {
@@ -249,6 +280,7 @@ export function registerMonthlyContentRoutes(app: FastifyInstance, pool: Pool, a
         return parsed.success ? parsed.data : undefined;
       };
       const saveCheckpointCategory = async (key: string, value: unknown) => {
+        if (Array.isArray(value)) updateProgress({counts:{[key]:value.length}});
         const schemaVersion = CURRENT_MONTHLY_RESOURCE_CHECKPOINT_SCHEMA_VERSIONS[key as keyof typeof CURRENT_MONTHLY_RESOURCE_CHECKPOINT_SCHEMA_VERSIONS];
         if (!schemaVersion) throw new Error(`Unknown monthly resource checkpoint category: ${key}`);
         checkpoint = await repositories.monthlyContent.saveResourceGenerationCheckpoint(actorId, {
@@ -356,6 +388,7 @@ export function registerMonthlyContentRoutes(app: FastifyInstance, pool: Pool, a
       if (!cachedCoreValid) await saveCheckpointCategory("coreTerms", coreTerms);
       if (preflightSupportTerms.length) await saveCheckpointCategory("expandedTerms", preflightSupportTerms);
 
+      updateProgress({phase:"expandedTerms",counts:{coreTerms:coreTerms.length}});
       const cachedExpandedBeforeCoreExclusion = readCheckpointCategory("expandedTerms", monthlyResourcePlanOutputSchema.shape.expandedTerms) ?? [];
       const cachedExpanded = cachedExpandedBeforeCoreExclusion.filter((term) => !coreWords.has(normalizeMonthlyResourceWord(term.word)));
       if (cachedExpanded.length !== cachedExpandedBeforeCoreExclusion.length) await saveCheckpointCategory("expandedTerms", cachedExpanded);
@@ -380,10 +413,14 @@ export function registerMonthlyContentRoutes(app: FastifyInstance, pool: Pool, a
       // support target. The hard floor is three supports covering the relations
       // its part of speech requires, so an incomplete core is enriched again but
       // never fails for lacking extras.
+      const cachedGrammarTopics = readCheckpointCategory("grammarTopics", monthlyResourcePlanOutputSchema.shape.grammarTopics) ?? [];
+      const cachedGrammarResult = { coreTerms: [], expandedTerms: [], grammarTopics: cachedGrammarTopics, pronunciationTargets: [] } as z.infer<typeof monthlyResourcePlanOutputSchema>;
+      const resumingAfterEnrichment = cachedCoreValid && getMonthlyGrammarPhaseIssues(cachedGrammarResult).length === 0;
       const isCompleteCoreSupportSet = (core: typeof coreTerms[number], coreIndex: number) => {
         const supports = expandedTerms.filter((term) => term.relatesToCoreId === core.id);
         const familyRequired = requiredSupportRelationsFor(core.type).includes("word_family");
-        return supports.length >= Math.max(MONTHLY_MIN_SUPPORTS_PER_CORE, supportLimitFor(coreIndex)) && supports.length <= MONTHLY_MAX_SUPPORTS_PER_CORE
+        const requiredCount = resumingAfterEnrichment ? MONTHLY_MIN_SUPPORTS_PER_CORE : supportLimitFor(coreIndex);
+        return supports.length >= Math.max(MONTHLY_MIN_SUPPORTS_PER_CORE, requiredCount) && supports.length <= MONTHLY_MAX_SUPPORTS_PER_CORE
           && hasRequiredMonthlySupportRelations(core.type, supports)
           && (!familyRequired || supports.some((term) => term.relation === "word_family" && isGenuineWordFamily(core.word, term.word)));
       };
@@ -688,8 +725,7 @@ export function registerMonthlyContentRoutes(app: FastifyInstance, pool: Pool, a
       request.log.info({ month: month.month, cefr: criteria.cefr, phase: "enrichment", enrichedCores: firstIncompleteCore >= 0 ? coreTerms.length - firstIncompleteCore : 0, supports: expandedTerms.length, ...enrichmentStats, refillCycles: enrichmentRefill?.refillCycles ?? 0, refilledCores: enrichmentRefill?.refilledCores ?? 0, droppedCores: enrichmentRefill?.droppedCores ?? [], elapsedMs: Date.now() - enrichmentStartedAt }, "Monthly resource enrichment phase finished");
 
       const monthlyVocabularyForPronunciation = [...coreTerms, ...expandedTerms].map((term) => `${term.word} (${term.meaning})`).join("; ");
-      const cachedGrammarTopics = readCheckpointCategory("grammarTopics", monthlyResourcePlanOutputSchema.shape.grammarTopics) ?? [];
-      const cachedGrammarResult = { coreTerms: [], expandedTerms: [], grammarTopics: cachedGrammarTopics, pronunciationTargets: [] } as z.infer<typeof monthlyResourcePlanOutputSchema>;
+      updateProgress({phase:"grammarTopics",counts:{coreTerms:coreTerms.length,expandedTerms:expandedTerms.length}});
       let grammarResult = getMonthlyGrammarPhaseIssues(cachedGrammarResult).length === 0 ? cachedGrammarResult : undefined;
       if (!grammarResult) {
         grammarResult = await runMonthlyGrammarPhaseWithRetry((prompt) => runPhase(
@@ -699,16 +735,20 @@ export function registerMonthlyContentRoutes(app: FastifyInstance, pool: Pool, a
         ));
         await saveCheckpointCategory("grammarTopics", grammarResult.grammarTopics);
       }
+      updateProgress({phase:"pronunciationTargets",counts:{grammarTopics:grammarResult.grammarTopics.length}});
       const cachedPronunciationTargets = readCheckpointCategory("pronunciationTargets", monthlyResourcePlanOutputSchema.shape.pronunciationTargets) ?? [];
-      const cachedPronunciationTargetsValid = cachedPronunciationTargets.length === 4 && cachedPronunciationTargets.every((target) => target.words.length >= pronunciationExampleCount && isValidMonthlyPronunciationIpaTarget(target.ipa) && isPronunciationTargetAllowedForLevel(criteria.cefr, target.ipa) && target.words.every((word) => doesMonthlyPronunciationExampleMatch(target.ipa, word.ipa)));
+      const cachedPronunciationTargetsValid = cachedPronunciationTargets.length <= 4 && cachedPronunciationTargets.every((target) => target.words.length >= pronunciationExampleCount && isValidMonthlyPronunciationIpaTarget(target.ipa) && isPronunciationTargetAllowedForLevel(criteria.cefr, target.ipa) && target.words.every((word) => doesMonthlyPronunciationExampleMatch(target.ipa, word.ipa)));
       const pronunciationTargets: z.infer<typeof monthlyResourcePlanOutputSchema>["pronunciationTargets"] = cachedPronunciationTargetsValid ? cachedPronunciationTargets : [];
       const usedPronunciationWords = new Set<string>();
       for (const target of pronunciationTargets) for (const word of target.words) usedPronunciationWords.add(normalizeMonthlyResourceWord(word.word));
       const pronunciationSlots = ["P1 (N1–N3)", "P2 (N4–N6)", "P3 (N7–N9)", "P4 (N10–N12)"];
-      const pronunciationLevelConstraint = criteria.cefr === "A1" || criteria.cefr === "A2"
+      const foundational = criteria.cefr === "A1" || criteria.cefr === "A2";
+      const pronunciationLevelConstraint = foundational
         ? "LEVEL TRACK: A1–A2 only. Choose a foundational English phoneme from the standard British English 44-sound inventory (monophthong, diphthong, or consonant). Do not use advanced connected-speech, intonation, or multi-syllable stress phenomena as the target."
         : "LEVEL TRACK: B1–C1 only. Choose an advanced pronunciation phenomenon appropriate to this level, such as final consonants or clusters, word/sentence stress, weak forms, linking, assimilation, rhythm, or intonation. Do not make this a beginner isolated-phoneme lesson from the 44-sound inventory.";
+      updateProgress({counts:{pronunciationTargets:pronunciationTargets.length}});
       for (let soundIndex = pronunciationTargets.length; soundIndex < 4; soundIndex += 1) {
+        updateProgress({current:soundIndex+1,total:4,counts:{pronunciationTargets:pronunciationTargets.length}});
         let acceptedTarget: z.infer<typeof monthlyResourcePlanOutputSchema>["pronunciationTargets"][number] | undefined;
         let targetTemplate: z.infer<typeof monthlyResourcePlanOutputSchema>["pronunciationTargets"][number] | undefined;
         const acceptedTargetWords: z.infer<typeof monthlyResourcePlanOutputSchema>["pronunciationTargets"][number]["words"] = [];
@@ -717,8 +757,8 @@ export function registerMonthlyContentRoutes(app: FastifyInstance, pool: Pool, a
           const forbiddenForTarget = new Set([...usedPronunciationWords, ...acceptedTargetWords.map((word) => normalizeMonthlyResourceWord(word.word))]);
           const requiredExampleCount = pronunciationExampleCount;
           const neededExamples = requiredExampleCount - acceptedTargetWords.length;
-          const targetDistinctness = buildMonthlyPronunciationDistinctnessConstraint(pronunciationTargets, issue);
-          const prompt = `PHASE 4 — ONE PRONUNCIATION TARGET ONLY. Return exactly one genuine English pronunciationTargets object and leave coreTerms, expandedTerms and grammarTopics empty. ${pronunciationLevelConstraint} Generate a real, precise target for roadmap slot ${pronunciationSlots[soundIndex]}; its IPA, label and explanation must describe that target accurately. Format ipa as exactly one slash-delimited IPA form with no spaces, second transcription, label or prose (for example /ɪ/, /ˈiː/, or /ˈ/ when teaching primary stress itself). Never combine forms such as "/θ/ and /ð/" in the ipa field. ${targetDistinctness} The roadmap requires four clearly distinct target categories across P1–P4; do not return a contrast-pair variant of an accepted target as a separate roadmap target. This is an unassigned month pool; do not output calendar day fields. Return at least ${Math.max(18, neededExamples * 2)} ordered candidate example words so the application can select ${neededExamples}. Every candidate must be a real word, no more than three syllables, and actually illustrate the target sound or stress pattern. Avoid all words already accepted for earlier targets: ${[...usedPronunciationWords].join("; ") || "none"}. For this same target, retain these already accepted examples and do not repeat them: ${acceptedTargetWords.map((word) => word.word).join("; ") || "none"}. Prefer authentic terms from this monthly vocabulary pool: ${monthlyVocabularyForPronunciation}. Use neutral workplace words; never invent cultural, historical or identity-based framing.`;
+          const targetDistinctness = buildMonthlyPronunciationDistinctnessConstraint(pronunciationTargets, issue, !foundational);
+          const prompt = `PHASE 4 — ONE PRONUNCIATION TARGET ONLY. Return exactly one genuine English pronunciationTargets object and leave coreTerms, expandedTerms and grammarTopics empty. ${pronunciationLevelConstraint} Generate a real, precise target for roadmap slot ${pronunciationSlots[soundIndex]}; its IPA, label and explanation must describe that target accurately. Format ipa as exactly one slash-delimited IPA form with no spaces, second transcription, label or prose (for example ${foundational ? "/ɪ/ or /θ/" : "/st/ for a consonant cluster or /ˈ/ for primary stress"}). Never combine forms such as "/θ/ and /ð/" in the ipa field. ${targetDistinctness} The roadmap requires four clearly distinct target categories across P1–P4; do not return a contrast-pair variant of an accepted target as a separate roadmap target. This is an unassigned month pool; do not output calendar day fields. Return at least ${Math.max(18, neededExamples * 2)} ordered candidate example words so the application can select ${neededExamples}. Every candidate must be a real word, no more than three syllables, and actually illustrate the target sound or stress pattern. Avoid all words already accepted for earlier targets: ${[...usedPronunciationWords].join("; ") || "none"}. For this same target, retain these already accepted examples and do not repeat them: ${acceptedTargetWords.map((word) => word.word).join("; ") || "none"}. Prefer authentic terms from this monthly vocabulary pool: ${monthlyVocabularyForPronunciation}. Use neutral workplace words; never invent cultural, historical or identity-based framing.`;
           let result: z.infer<typeof monthlyResourcePlanOutputSchema>;
           try {
             result = await runPhase(prompt, coreTerms, { vocabularyCount: 0, expandedVocabularyCount: 0, grammarTopicCount: 0, pronunciationSoundCount: 1 });
@@ -739,7 +779,9 @@ export function registerMonthlyContentRoutes(app: FastifyInstance, pool: Pool, a
             continue;
           }
           if (!isPronunciationTargetAllowedForLevel(criteria.cefr, candidate.ipa)) {
-            issue = `target IPA ${candidate.ipa} is outside the A1-A2 British English 44-phoneme inventory; return one of the permitted foundational phonemes`;
+            issue = foundational
+              ? `target IPA ${candidate.ipa} is outside the A1–A2 phoneme inventory; choose a foundational phoneme`
+              : `target IPA ${candidate.ipa} is an isolated phoneme; choose an advanced pattern such as a consonant cluster`;
             continue;
           }
           const targetIssue = getMonthlyPronunciationTargetIssue(candidate, pronunciationTargets);
@@ -759,12 +801,13 @@ export function registerMonthlyContentRoutes(app: FastifyInstance, pool: Pool, a
         if (!acceptedTarget) throw new MonthlyResourcePlanError([`Pronunciation generation failed for ${pronunciationSlots[soundIndex]}: ${issue}.`]);
         pronunciationTargets.push(acceptedTarget);
         for (const word of acceptedTarget.words) usedPronunciationWords.add(normalizeMonthlyResourceWord(word.word));
+        await saveCheckpointCategory("pronunciationTargets", pronunciationTargets);
       }
-      if (pronunciationTargets.length === 4 && !cachedPronunciationTargetsValid) await saveCheckpointCategory("pronunciationTargets", pronunciationTargets);
       const normalizedExpandedTerms = expandedTerms.map((term, index) => ({ ...term, id: `${criteria.cefr.toLocaleLowerCase("en-US")}-expanded-${index + 1}` }));
       if (normalizedExpandedTerms.some((term, index) => term.id !== expandedTerms[index]?.id)) {
         await saveCheckpointCategory("expandedTerms", normalizedExpandedTerms);
       }
+      updateProgress({phase:"saving",counts:{coreTerms:coreTerms.length,expandedTerms:normalizedExpandedTerms.length,grammarTopics:grammarResult.grammarTopics.length,pronunciationTargets:pronunciationTargets.length}});
       const plan = monthlyResourcePlanOutputSchema.parse({
         coreTerms,
         expandedTerms: normalizedExpandedTerms,
@@ -772,10 +815,13 @@ export function registerMonthlyContentRoutes(app: FastifyInstance, pool: Pool, a
         pronunciationTargets
       });
       const pool = buildMonthlyResourcesFromAiPlan(month.month, criteria.cefr, theme, criteria, plan);
+      updateProgress({phase:"saving",counts:{coreTerms:pool.coreTerms.length,expandedTerms:pool.supportTerms.length,grammarTopics:pool.grammarTopics.length,pronunciationTargets:pool.sounds.length}});
       const framework = await repositories.monthlyContent.saveResourceDraft(actorId, pool);
+      updateProgress({status:"completed"});
       logUsage("saved");
       return framework;
     } catch (error) {
+      updateProgress({status:"failed"});
       logUsage(error && typeof error === "object" && "code" in error ? String((error as { code?: unknown }).code) : error instanceof Error ? error.name : "failed");
       if (error instanceof MonthlyResourceCriteriaError) {
         return reply.code(422).send({ code: error.code, requiredVocabularyCount: error.requiredVocabularyCount });
@@ -797,6 +843,32 @@ export function registerMonthlyContentRoutes(app: FastifyInstance, pool: Pool, a
       }
       throw error;
     }
+  });
+
+  const manualResourcePool = async (actorId: string, month: string, cefr: z.infer<typeof resourceCheckpointQuery>["cefr"]) => {
+    const overview = await repositories.monthlyContent.getOverview(actorId, month);
+    if (!overview.monthWindow.writable) return { code: "MONTHLY_CONTENT_READ_ONLY" } as const;
+    if (overview.brief?.status !== "approved") return { code: "MONTHLY_TOPIC_NOT_APPROVED" } as const;
+    if (overview.frameworks.some(item => item.cefr === cefr)) return { code: "MONTHLY_FRAMEWORK_VERSION_CONFLICT" } as const;
+    return blankMonthlyResourcePool(overview.brief, cefr);
+  };
+  app.get("/api/v1/content/months/:month/resources/manual", { preHandler: contentOperator }, async (request, reply) => {
+    const { month } = params.parse(request.params);
+    const { cefr } = resourceCheckpointQuery.parse(request.query);
+    const pool = await manualResourcePool(request.e4sSession!.user.id, month, cefr);
+    return "code" in pool ? reply.code(409).send(pool) : pool;
+  });
+  app.put("/api/v1/content/months/:month/resources/manual", { preHandler: contentOperator }, async (request, reply) => {
+    const { month } = params.parse(request.params);
+    const { cefr } = resourceCheckpointQuery.parse(request.query);
+    const input = monthlyResourceEditInputSchema.parse(request.body);
+    const actorId = request.e4sSession!.user.id;
+    const pool = await manualResourcePool(actorId, month, cefr);
+    if ("code" in pool) return reply.code(409).send(pool);
+    if (input.expectedVersion !== pool.theme.version) return reply.code(409).send({ code: "MONTHLY_FRAMEWORK_VERSION_CONFLICT" });
+    const edited = applyMonthlyResourceEdit(pool, input);
+    if (!edited.ok) return reply.code(422).send({ code: "MONTHLY_RESOURCE_EDIT_INVALID", issues: edited.issues });
+    return repositories.monthlyContent.saveResourceDraft(actorId, edited.pool, "manual");
   });
 
   app.post("/api/v1/content/month-frameworks/:id/approve", { preHandler: contentOperator }, async (request, reply) => {
@@ -842,7 +914,7 @@ export function registerMonthlyContentRoutes(app: FastifyInstance, pool: Pool, a
     }
   });
 
-  app.get("/api/v1/content/month-frameworks/:id/exam-scope", { preHandler: operator }, async (request, reply) => {
+  app.get("/api/v1/content/month-frameworks/:id/exam-scope", { preHandler: readers }, async (request, reply) => {
     const input = frameworkParams.parse(request.params);
     let contract;
     try { contract = await repositories.monthlyContent.getFrameworkContract(request.e4sSession!.user.id, input.id); }
@@ -856,7 +928,8 @@ export function registerMonthlyContentRoutes(app: FastifyInstance, pool: Pool, a
     let contract;
     try { contract = await repositories.monthlyContent.getFrameworkContract(request.e4sSession!.user.id, id); }
     catch (error) { const response = invalidMonthlyPlanReply(reply, error); if (response) return response; throw error; }
-    const report = evaluateMonthlyLessonQuality(contract, dayNumber, input);
+    const teachingContract = contract.daySpecs.find(day => day.lessonNumber === dayNumber)?.reviewFromPreviousMonth ? await repositories.monthlyContent.getReviewTeachingContract(request.e4sSession!.user.id,id,dayNumber) : contract;
+    const report = evaluateMonthlyLessonQuality(teachingContract, dayNumber, input, await priorMonthlyGrammarExamples(pool, id, contract, dayNumber));
     await repositories.monthlyContent.saveMonthlyDayDraft(request.e4sSession!.user.id, id, dayNumber, input, report);
     return report;
   });
@@ -879,10 +952,15 @@ export function registerMonthlyContentRoutes(app: FastifyInstance, pool: Pool, a
     if (!task) return reply.code(503).send({ code: "AI_PROMPT_NOT_READY" });
     let result;
     try {
-      result = await generateMonthlyReviewWithAi(contract, dayNumber, runner, task.prompt);
+      const teachingContract = await repositories.monthlyContent.getReviewTeachingContract(actorId,id,dayNumber);
+      result = await generateMonthlyReviewWithAi(teachingContract, dayNumber, runner, task.prompt);
+      result.scopeHash = monthlyScopeHash(contract);
     } catch (error) {
-      if (error && typeof error === "object" && "code" in error && (error as { code?: unknown }).code === "AI_OUTPUT_INVALID") {
-        return reply.code(422).send({ code: "AI_OUTPUT_INVALID", issues: safeGenerationDiagnosticIssues(error) });
+      const response = invalidMonthlyPlanReply(reply,error); if (response) return response;
+      const failure = monthlyGenerationFailure(error);
+      if (failure) {
+        console.warn("[monthly-lesson-generation-failed]", JSON.stringify({ frameworkId: id, dayNumber, ...failure.body }));
+        return reply.code(failure.status).send(failure.body);
       }
       throw error;
     }
@@ -910,10 +988,12 @@ export function registerMonthlyContentRoutes(app: FastifyInstance, pool: Pool, a
     if (!task) return reply.code(503).send({ code: "AI_PROMPT_NOT_READY" });
     let result;
     try {
-      result = await generateMonthlyDayWithAi(contract, dayNumber, runner, task.prompt);
+      result = await generateMonthlyDayWithAi(contract, dayNumber, runner, task.prompt, await priorMonthlyGrammarExamples(pool, id, contract, dayNumber));
     } catch (error) {
-      if (error && typeof error === "object" && "code" in error && (error as { code?: unknown }).code === "AI_OUTPUT_INVALID") {
-        return reply.code(422).send({ code: "AI_OUTPUT_INVALID", issues: safeGenerationDiagnosticIssues(error) });
+      const failure = monthlyGenerationFailure(error);
+      if (failure) {
+        console.warn("[monthly-lesson-generation-failed]", JSON.stringify({ frameworkId: id, dayNumber, ...failure.body }));
+        return reply.code(failure.status).send(failure.body);
       }
       throw error;
     }
@@ -975,7 +1055,16 @@ function normalizeMonthlyResourceWord(value: string): string {
 }
 
 function invalidMonthlyPlanReply(reply: FastifyReply, error: unknown): FastifyReply | undefined {
+  if (error && typeof error === "object" && "code" in error && error.code === "MONTHLY_PREVIOUS_REVIEW_SCOPE_REQUIRED") return reply.code(409).send({code:error.code,message:"Cần tài nguyên đã chốt của tháng trước để tạo bài ôn chuyển tháng."});
   if (!error || typeof error !== "object" || !("code" in error) || error.code !== "MONTHLY_FRAMEWORK_PLAN_INVALID") return undefined;
   const issues = "issues" in error && Array.isArray(error.issues) ? error.issues : [];
   return reply.code(409).send({ code: "MONTHLY_FRAMEWORK_PLAN_INVALID", issues });
+}
+
+async function priorMonthlyGrammarExamples(pool: Pool, frameworkId: string, contract: MonthlyCurriculumContract, dayNumber: number): Promise<string[]> {
+  if (contract.planSchemaVersion !== 2) return [];
+  const earlier = contract.daySpecs.filter(day => day.kind === "new" && day.lessonNumber < dayNumber).map(day => day.lessonNumber);
+  if (!earlier.length) return [];
+  const result = await pool.query<{content: {parts?: Array<{code: string; content: {examples?: unknown}}>}}>(`select lv.content from month_lessons ml join lateral (select content from lesson_versions where lesson_id = ml.lesson_id order by version desc limit 1) lv on true where ml.framework_id = $1 and ml.scope_hash = $2 and ml.lesson_number = any($3::int[]) and ml.status in ('draft','approved')`, [frameworkId, (await pool.query<{scope_hash:string}>("select scope_hash from month_frameworks where id = $1",[frameworkId])).rows[0]?.scope_hash, earlier]);
+  return result.rows.flatMap(row => row.content.parts?.filter(part => part.code === "grammar").flatMap(part => Array.isArray(part.content.examples) ? part.content.examples.filter((value): value is string => typeof value === "string") : []) ?? []);
 }

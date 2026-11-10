@@ -9,8 +9,15 @@ const NATIVE_JSON_FIELD_TASKS = new Set([
   "monthly_lesson_day",
   "monthly_final_receptive_generation",
   "monthly_final_listening_generation",
+  "monthly_final_listening_message_generation",
   "monthly_final_reading_generation",
-  "monthly_final_productive_generation"
+  "monthly_final_productive_generation",
+  "monthly_final_read_aloud_repair",
+  "monthly_final_writing_sample_repair",
+  "monthly_final_writing_notes_repair",
+  "monthly_final_writing_block_repair",
+  "monthly_final_grammar_evidence_review",
+  "monthly_final_speaking_sample_repair"
 ]);
 export const NATIVE_JSON_FIELD_INSTRUCTION = "Fill every tool field with real JSON values (arrays and objects), never a JSON-encoded string.";
 

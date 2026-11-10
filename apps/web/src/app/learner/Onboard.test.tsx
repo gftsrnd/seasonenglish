@@ -4,6 +4,7 @@ import { cleanup, render, screen } from "@testing-library/react";
 import { userEvent } from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { LearnerOnboard } from "./Onboard.js";
+import { ThemeProvider, useTheme } from "../shared/ThemeProvider.js";
 import type { LearnerCallbacks } from "./contracts.js";
 
 afterEach(() => { cleanup(); window.localStorage.clear(); });
@@ -11,10 +12,19 @@ afterEach(() => { cleanup(); window.localStorage.clear(); });
 const actions = { navigate: vi.fn(), saveProfile: vi.fn(), saveProfileDraft: vi.fn() } as unknown as LearnerCallbacks;
 
 describe("app onboard affordances", () => {
-  it("uses the verified raster mascot without replacing it with the seasonal mark", () => {
-    const { container } = render(<LearnerOnboard view={{ profile: {}, mode: "new" }} actions={actions} />);
-    expect(container.querySelector("img[data-product-art='mascot']")).toHaveAttribute("src", "/media/mascot/season-bear.png");
-    expect(container.querySelector("[data-testid='season-mark']")).not.toBeInTheDocument();
+  it("changes the profile mascot with the current theme while keeping edits", async () => {
+    function ThemeControls() {
+      const { setTheme } = useTheme();
+      return <><button onClick={() => setTheme("winter")}>Đông</button><button onClick={() => setTheme("tet")}>Tết</button></>;
+    }
+    const { container } = render(<ThemeProvider><ThemeControls /><LearnerOnboard view={{ profile: {}, mode: "new" }} actions={actions} /></ThemeProvider>);
+    const user = userEvent.setup();
+    await user.click(screen.getByRole("button", { name: "Đông" }));
+    expect(container.querySelector(".learner-mascot--onboard")).toHaveAttribute("src", "/media/seasons/hero-penguin.png");
+    await user.type(screen.getByRole("textbox", { name: "Họ tên *" }), "Mai");
+    await user.click(screen.getByRole("button", { name: "Tết" }));
+    expect(container.querySelector(".learner-mascot--onboard")).toHaveAttribute("src", "/media/seasons/hero-swallow.png");
+    expect(screen.getByRole("textbox", { name: "Họ tên *" })).toHaveValue("Mai");
   });
 
   it("shows custom validation for required fields and focuses the first invalid control", async () => {
@@ -88,6 +98,27 @@ describe("app onboard affordances", () => {
     expect(screen.getByRole("textbox", { name: "Họ tên *" })).toHaveValue("Tài khoản mới");
     expect(screen.getByRole("textbox", { name: "Email *" })).toHaveValue("new@example.com");
     expect(screen.getByRole("textbox", { name: /điều bạn lo ngại/i })).toHaveValue("");
+  });
+
+  it("discards edits on remount before the learner saves a draft", async () => {
+    const user = userEvent.setup();
+    const view = { profile: { fullName: "Lan", email: "lan@example.com" }, mode: "new" } as const;
+    const { unmount } = render(<LearnerOnboard view={view} actions={actions} />);
+    await user.type(screen.getByPlaceholderText("VD: Sales, QA, Marketing"), "Design");
+    unmount();
+    render(<LearnerOnboard view={view} actions={actions} />);
+    expect(screen.getByPlaceholderText("VD: Sales, QA, Marketing")).toHaveValue("");
+  });
+
+  it("shows certificate fields only while the certificate is selected", async () => {
+    const user = userEvent.setup();
+    render(<LearnerOnboard view={{ profile: {}, mode: "new" }} actions={actions} />);
+    const checkbox = screen.getByRole("checkbox", { name: "IELTS" });
+    expect(screen.queryByRole("textbox", { name: "Kết quả IELTS" })).not.toBeInTheDocument();
+    await user.click(checkbox);
+    expect(screen.getByRole("textbox", { name: "Kết quả IELTS" })).toBeInTheDocument();
+    await user.click(checkbox);
+    expect(screen.queryByRole("textbox", { name: "Kết quả IELTS" })).not.toBeInTheDocument();
   });
 
   it("exposes profile choices as named groups and locks navigation while saving", () => {

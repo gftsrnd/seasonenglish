@@ -1,0 +1,45 @@
+.reward-page .reward-preview-note {
+  max-width: 860px;
+  margin: 0 auto 12px;
+  color: var(--text);
+  font-size: .85rem;
+}
+.reward-page .reward-actions {
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 12px auto;
+}
+.reward-page .reward-actions :is(button, a) { min-height: 44px; }
+.rw .badge-certificate-list {
+  list-style: none;
+  padding: 0;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+.badge-certificate-list .cert-badge { align-items: center; min-width: 0; text-align: start; }
+.badge-certificate-list .ck { flex: 0 0 auto; }
+@media screen and (max-width: 600px) {
+  .reward-page .cert-doc { padding: 20px 16px 16px; }
+  .reward-page .cert-head { align-items: center; gap: 6px; padding-bottom: 10px; }
+  .reward-page .cert-logo { width: 40px; height: 40px; }
+  .reward-page .cert-brand { gap: 6px; }
+  .reward-page .cert-brand .xs { font-size: .7rem; }
+  .reward-page .cert-no { font-size: .65rem; }
+  .reward-page .cert-body { padding: 14px 0 0; }
+  .reward-page .cert-title { font-size: 1.25rem; margin-bottom: 8px; }
+  .reward-page .cert-name { font-size: 1.25rem; }
+  .reward-page .cert-facts { margin-block: 12px; gap: 6px; }
+  .reward-page .cert-badge { padding: 4px 0; gap: 5px; font-size: .78rem; }
+  .reward-page .cert-sign {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 6px 12px;
+    margin-top: 14px;
+  }
+  .reward-page .cert-sign .line { width: 96px; height: 10px; }
+  .reward-page .cert-sign .cert-date { grid-row: 2; grid-column: 1 / -1; }
+  .reward-page .cert-foot { margin-top: 10px; }
+}
+@media print {
+  .rw .badge-certificate-list { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+}

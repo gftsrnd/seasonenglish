@@ -1,5 +1,5 @@
 import { AI_TASKS, createAiService, createAnthropicProvider } from "@e4s/ai";
-import { createMediaRepository, createRepositories } from "@e4s/database";
+import { autoApproveExpiredEligibilityComplaints, createMediaRepository, createRepositories } from "@e4s/database";
 import { createS3Storage, type ObjectStorage } from "@e4s/storage";
 import { Pool } from "pg";
 import { loadEnvFile } from "node:process";
@@ -69,18 +69,29 @@ const app = buildApi({
   otpSecret: process.env.AUTH_OTP_SECRET ?? "local-only-change-me",
   aiRunnerFactory
 });
-const runMonthlyMaintenanceSweep = () => Promise.all([
-  createRepositories(pool).manager.lockInactiveLearners(),
-  createRepositories(pool).manager.autoApproveExpiredAssessmentAppeals()
-]).catch((error) => {
+const reportMaintenanceError = (error: unknown) => {
   process.stderr.write(`[monthly-maintenance-sweep] ${error instanceof Error ? error.message : String(error)}\n`);
-});
-void runMonthlyMaintenanceSweep();
-const maintenanceSweep = setInterval(runMonthlyMaintenanceSweep, 6 * 60 * 60 * 1_000);
-maintenanceSweep.unref();
+};
+const lockLearners = () => createRepositories(pool).manager.lockInactiveLearners().catch(reportMaintenanceError);
+const approveComplaints = () => autoApproveExpiredEligibilityComplaints(pool).catch(reportMaintenanceError);
+const dayMs = 24 * 60 * 60 * 1_000;
+const untilVietnamMidnight = () => dayMs - (Date.now() + 7 * 60 * 60 * 1_000) % dayMs;
+let inactivitySweep: ReturnType<typeof setTimeout>;
+function scheduleInactivitySweep() {
+  inactivitySweep = setTimeout(() => {
+    void lockLearners();
+    scheduleInactivitySweep();
+  }, untilVietnamMidnight());
+  inactivitySweep.unref();
+}
+void lockLearners();
+void approveComplaints();
+scheduleInactivitySweep();
+const complaintSweep = setInterval(approveComplaints, 60 * 1_000);
+complaintSweep.unref();
 const port = Number(process.env.PORT ?? 3001);
 await app.listen({ host: process.env.HOST ?? "127.0.0.1", port });
-const stop = async () => { clearInterval(maintenanceSweep); await app.close(); await pool.end(); process.exit(0); };
+const stop = async () => { clearTimeout(inactivitySweep); clearInterval(complaintSweep); await app.close(); await pool.end(); process.exit(0); };
 process.on("SIGINT", () => void stop());
 process.on("SIGTERM", () => void stop());
 

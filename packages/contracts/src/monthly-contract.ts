@@ -1,5 +1,22 @@
 import type { CefrLevel } from "./domain-contract.js";
 
+export interface MonthlyGrammarDayPlan {
+  code: string;
+  objective: string;
+  mode: "recognize" | "apply" | "contrast" | "read_aloud" | "voice_note" | "personalize" | "shadow" | "mock";
+  milestoneIds: string[];
+  recallMilestoneIds: string[];
+}
+export interface MonthlyPronunciationDayPlan {
+  slot: string;
+  stage: "recognize" | "discriminate" | "sentence" | "contrast" | "read_aloud" | "voice_note" | "personalize" | "shadow" | "mock";
+  objective: string;
+  targetIds: string[];
+  exampleIds: string[];
+  exampleSet?: number;
+  requiredPositions?: Array<{ soundId: string; exampleId: string }>;
+}
+
 export const MONTH_BRIEF_STATUSES = ["missing", "draft", "approved"] as const;
 export type MonthBriefStatus = (typeof MONTH_BRIEF_STATUSES)[number];
 
@@ -56,11 +73,13 @@ export interface MonthFrameworkView {
   version: number;
   status: Exclude<MonthFrameworkStatus, "missing">;
   scopeHash: string;
+  publication?: { ready: boolean; publishedOn: string | null };
   resources?: {
     coreTerms: Array<{ id: string; word: string; meaning: string; type: string; ipa: string; source: "core_registry"; component: "core"; dayNumber?: number; /** Frozen illustration URL once resources are approved. */ imageUrl?: string }>;
     supportTerms: Array<{ id: string; word: string; meaning: string; type: string; relation: "umbrella" | "synonym" | "antonym" | "word_family" | "collocation"; source: "example" | "family" | "synonym" | "antonym" | "group" | "manual"; component: "expanded"; dayNumber?: number; relatedCoreTermId?: string; /** CEFR level of the support word (same as the framework level or ±1); absent on pools stored before VH-R33. */ cefr?: CefrLevel }>;
-    grammarTopics: Array<{ id: string; title: string; steps: Array<{ id: string; focus: string; formula: string; usage: string; examples: string[] }> }>;
+    grammarTopics: Array<{ id: string; title: string; steps: Array<{ id: string; focus: string; formula: string; usage: string; examples: string[]; dailyObjectives?: string[] | undefined }> }>;
     sounds: Array<{ id: string; ipa: string; label: string; examples: Array<{ id: string; word: string; ipa: string }> }>;
+    carryoverReviews?: Array<{ lessonNumber: number; day: MonthDayPlanView; coreTerms: NonNullable<MonthFrameworkView["resources"]>["coreTerms"]; supportTerms: NonNullable<MonthFrameworkView["resources"]>["supportTerms"]; grammarTopics: NonNullable<MonthFrameworkView["resources"]>["grammarTopics"]; sounds: NonNullable<MonthFrameworkView["resources"]>["sounds"] }>;
     /** Draft pools expose no day allocation. Approved frameworks project saved DaySpecs here for review. */
     roadmap?: {
       allocated: boolean;
@@ -79,6 +98,13 @@ export interface MonthFrameworkView {
   reopenRequest?: MonthFrameworkReopenRequestView | null;
 }
 
+export interface MonthlyPublicationPreviewView {
+  publishOn: string;
+  affectedLearners: number;
+  waitingNextMonth: number;
+  nextMonth: string;
+}
+
 /**
  * Operator manual edit of a DRAFT monthly resource pool (VH-R30/VH-R35).
  * Core count and core IDs are fixed; a core word is replaced by editing its row.
@@ -89,7 +115,7 @@ export interface MonthlyResourceEditInput {
   expectedVersion: number;
   coreTerms: Array<{ id: string; word: string; type: string; meaning: string; ipa: string }>;
   supportTerms: Array<{ id: string; word: string; meaning: string; type: string; relation: "umbrella" | "synonym" | "antonym" | "word_family" | "collocation"; relatedCoreTermId: string; cefr?: CefrLevel | undefined }>;
-  grammarTopics: Array<{ id: string; title: string; steps: Array<{ id: string; focus: string; formula: string; usage: string; examples: string[] }> }>;
+  grammarTopics: Array<{ id: string; title: string; steps: Array<{ id: string; focus: string; formula: string; usage: string; examples: string[]; dailyObjectives?: string[] | undefined }> }>;
   sounds: Array<{ id: string; ipa: string; label: string; examples: Array<{ id: string; word: string; ipa: string }> }>;
 }
 
@@ -114,6 +140,10 @@ export interface MonthFrameworkReopenRequestView {
 }
 
 export interface MonthDayPlanView {
+  newLessonNumber?: number;
+  reviewWeekNumber?: number;
+  grammarPlan?: MonthlyGrammarDayPlan;
+  pronunciationPlan?: MonthlyPronunciationDayPlan;
   lessonNumber: number;
   date: string;
   kind: "new" | "review";
@@ -136,6 +166,7 @@ export interface MonthDayPlanView {
 }
 
 export interface MonthlyOperatorOverviewView {
+  calendar?: Array<{ date: string; kind: "new" | "review" | "weekend" | "exam"; lessonNumber?: number; newLessonNumber?: number; reviewWeekNumber?: number; holiday?: { date: string; name: string; source: "national" | "organization"; sourceUrl?: string }; holidayExamConflict?: boolean }>;
   /**
    * The Manager-controlled test date.  Operator month selection and every
    * date-sensitive permission must be derived from this value, never from the
@@ -152,4 +183,16 @@ export interface MonthlyOperatorOverviewView {
   };
   brief: SharedMonthBriefView | null;
   frameworks: MonthFrameworkView[];
+}
+
+/** Observed status of the current resource-generation request; never an estimated percentage. */
+export interface MonthlyResourceGenerationProgress {
+  runId: string;
+  status: "running" | "completed" | "failed";
+  phase: "preparing" | "coreTerms" | "expandedTerms" | "grammarTopics" | "pronunciationTargets" | "saving";
+  counts: Partial<Record<"coreTerms" | "expandedTerms" | "grammarTopics" | "pronunciationTargets", number>>;
+  current?: number;
+  total?: number;
+  startedAt: string;
+  updatedAt: string;
 }

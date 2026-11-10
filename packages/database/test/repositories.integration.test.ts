@@ -15,8 +15,10 @@ describe("E4S repositories", () => {
   const client = new Client({ connectionString: databaseUrl });
   const pool = new Pool({ connectionString: databaseUrl });
   const repositories = createRepositories(pool);
+  const originalEncryptionKey = process.env.E4S_SETTINGS_ENCRYPTION_KEY;
 
   beforeAll(async () => {
+    process.env.E4S_SETTINGS_ENCRYPTION_KEY = Buffer.alloc(32, 7).toString("base64");
     await client.connect();
     await resetPublicSchema(client);
     await migrateDatabase(client);
@@ -24,6 +26,8 @@ describe("E4S repositories", () => {
   }, 30_000);
 
   afterAll(async () => {
+    if (originalEncryptionKey === undefined) delete process.env.E4S_SETTINGS_ENCRYPTION_KEY;
+    else process.env.E4S_SETTINGS_ENCRYPTION_KEY = originalEncryptionKey;
     await pool.end();
     await client.end();
   });
@@ -667,10 +671,7 @@ describe("E4S repositories", () => {
          values ($1, $2, 'learner', 'Dual Channel Learner', 'dual-channel@example.com', 'active', now() - interval '5 days')`,
         [learnerId, DEMO_IDS.organization]
       );
-      await pool.query(
-        "update organization_settings set configuration = configuration || $2::jsonb where organization_id = $1",
-        [DEMO_IDS.organization, JSON.stringify({ baseWebhookUrl: "https://base.example.test/reminders" })]
-      );
+      await repositories.manager.saveLearnerBaseNotification(DEMO_IDS.manager, learnerId, { webhookUrl: "https://base.example.test/reminders", webhookTemplate: '{"base_content":"{message}"}', destinationLabel: "Base riêng" });
 
       const email = await repositories.manager.queueReminder(DEMO_IDS.manager, learnerId, "email-request-1", "email");
       const base = await repositories.manager.queueReminder(DEMO_IDS.manager, learnerId, "base-request-1", "base");

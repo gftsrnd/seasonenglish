@@ -185,10 +185,9 @@ export interface OperatorLevelFormsActions {
   onCreateManual?(target: Cefr): void;
   onView(id: string): void;
   onEdit?(id: string, fromPublished?: boolean): void;
-  onApprove(id: string): void;
   onDelete(id: string): void;
 }
-export type LevelFormActionKey = "generate" | "view" | "edit" | "approve" | "delete";
+export type LevelFormActionKey = "generate" | "view" | "edit" | "delete";
 
 export interface WeekSuggestionOption {
   topic: string;
@@ -397,6 +396,10 @@ export interface ReviewCoachTurn {
 }
 
 export interface ReviewAppeal {
+  overdue?: boolean;
+  proposedLevel?: Cefr;
+  scope?: string | null | undefined;
+  hasEvidence?: boolean | undefined;
   id: string;
   learnerName: string;
   cefr?: Cefr | undefined;
@@ -405,6 +408,7 @@ export interface ReviewAppeal {
   at: string;
   kind?: "part" | "sub" | undefined;
   attempts?: number;
+  currentScore?: number | null;
   status: "pending" | "accepted" | "rejected";
   statusLabel?: string | undefined;
   question?: string | undefined;
@@ -436,6 +440,7 @@ export interface ReviewTest {
   id: string;
   learnerName: string;
   kind: "placement" | "level_up" | "final" | "pass_course";
+  status?: string;
   submittedAt?: string | undefined;
   total?: number | undefined;
   rawLevel?: Cefr | undefined;
@@ -450,6 +455,7 @@ export interface OperatorReviewView {
   weeklyPractices: ReviewWeeklyPractice[];
   appeals: ReviewAppeal[];
   attempts: ReviewAttempt[];
+  exerciseWarnings?: NonNullable<import("@e4s/contracts").ContentReviewView["exerciseWarnings"]>;
   tests: ReviewTest[];
   aiConnected?: boolean | undefined;
 }
@@ -462,6 +468,9 @@ export interface OperatorReviewActions {
   onGradeManual(id: string, input: { meaning: number; vocabulary: number; grammar: number; feedback: string }): void;
   onDecideAppeal(id: string, accepted: boolean): void;
   onViewTest(id: string): void;
+  onOpenExercise?(warning: NonNullable<OperatorReviewView["exerciseWarnings"]>[number]): void;
+  onCorrectExerciseWarning?(warning: NonNullable<OperatorReviewView["exerciseWarnings"]>[number]): void;
+  onDismissExerciseWarning?(id: string): void;
   onSaveWeeklyPractice?(input: ReviewWeeklyPracticeInput): void | Promise<void>;
   onDeleteAudio?(evidence: import("../shared/media/audio-evidence.js").AudioEvidence): void | Promise<void>;
 }

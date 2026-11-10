@@ -1,23 +1,19 @@
-import { useMemo, useRef, useState } from "react";
+import { useId, useMemo, useRef, useState } from "react";
 import { Link } from "react-router";
-import { Badge, PageTitle } from "./shared.js";
+import { ChevronRight, X } from "lucide-react";
+import { PageTitle } from "./shared.js";
+import type { BadgeRoadmapItem, SeasonLevelView } from "@e4s/contracts";
+import { SeasonFigure, SeasonProgressCard } from "../shared/SeasonProgressCard.js";
+import { rewardBadgeIcon } from "../shared/reward-badge-icons.js";
 import { useDialog } from "../shared/ModalProvider.js";
+import { rewardBadgeCatalog as badges } from "./reward-catalog.js";
+import "./rewards.css";
 
-const badges = [
-  ["first", "🐣", "Khởi động", "Hoàn thành bài học đầu tiên"], // media-scan: allow-avatar-reward -- deliberate badge symbol
-  ["week", "📅", "Tuần trọn vẹn", "Xong tất cả bài của một tuần"], // media-scan: allow-avatar-reward -- deliberate badge symbol
-  ["streak3", "🔥", "Chuỗi 3 ngày", "Học 3 ngày học liên tiếp (T2–T6)"], // media-scan: allow-avatar-reward -- deliberate badge symbol
-  ["streak7", "🌟", "Chuỗi 5 ngày", "Học 5 ngày học liên tiếp (T2–T6), không tính cuối tuần"], // media-scan: allow-avatar-reward -- deliberate badge symbol
-  ["sharp", "🎯", "Chuẩn ngay lần đầu", "Làm đúng cả 4 kỹ năng Nghe, Đọc, Viết, Nói của một bài ngay ở lần làm đầu tiên"], // media-scan: allow-avatar-reward -- deliberate badge symbol
-  ["words", "🔑", "Thợ mở khoá", "Mở 10 ô từ bí mật khi chat với Season"], // media-scan: allow-avatar-reward -- deliberate badge symbol
-  ["chat", "💬", "Bạn của Season", "10 lượt luyện với Season"], // media-scan: allow-avatar-reward -- deliberate badge symbol
-  ["friday", "✍️", "Đúng hẹn thứ Sáu", "Nộp bài thực hành tuần"] // media-scan: allow-avatar-reward -- deliberate badge symbol
-] as const;
-const levels = [
-  { name: "Mùa xuân – gieo hạt", icon: "🌱", min: 0, required: [] as readonly string[], color: "var(--mint)", size: 64 }, // media-scan: allow-avatar-reward -- deliberate reward symbol
-  { name: "Mùa hạ – đón nắng", icon: "☀️", min: 60, required: ["first", "streak3"], color: "var(--primary)", size: 76 }, // media-scan: allow-avatar-reward -- deliberate reward symbol
-  { name: "Mùa thu – gặt hái", icon: "🍂", min: 180, required: ["week", "friday", "chat"], color: "var(--peach)", size: 88 }, // media-scan: allow-avatar-reward -- deliberate reward symbol
-  { name: "Mùa đông – vững vàng", icon: "❄️", min: 360, required: ["streak7", "sharp", "words"], color: "var(--lav)", size: 100 } // media-scan: allow-avatar-reward -- deliberate reward symbol
+const levels: Array<SeasonLevelView & { required: readonly string[] }> = [
+  { key: "spring", level: 1, name: "Mùa xuân – gieo hạt", pointsRequired: 0, required: [] },
+  { key: "summer", level: 2, name: "Mùa hạ – đón nắng", pointsRequired: 60, required: ["first", "streak3"] },
+  { key: "autumn", level: 3, name: "Mùa thu – gặt hái", pointsRequired: 180, required: ["week", "friday", "chat"] },
+  { key: "winter", level: 4, name: "Mùa đông – vững vàng", pointsRequired: 360, required: ["streak7", "sharp", "words"] },
 ];
 const cases = [
   ["Mới bắt đầu", 0, []], ["Cấp 1 · đủ điểm, thiếu huy hiệu", 80, ["first"]], ["Cấp 1 · đủ huy hiệu, thiếu điểm", 40, ["first", "streak3"]],
@@ -26,39 +22,120 @@ const cases = [
 ] as const;
 
 export function ManagerRewards() {
-  const [points, setPoints] = useState(0); const [earned, setEarned] = useState<readonly string[]>([]); const [preview, setPreview] = useState<number | null>(null);
+  const [pointsInput, setPointsInput] = useState("0");
+  const [earned, setEarned] = useState<readonly string[]>([]);
+  const [revealedBadgeLevel, setRevealedBadgeLevel] = useState<number>();
+  const [preview, setPreview] = useState<number | null>(null);
+  const [customOpen, setCustomOpen] = useState(false);
+  const customId = useId();
   const previewCloseRef = useRef<HTMLButtonElement>(null);
   const previewTriggerRef = useRef<HTMLButtonElement>(null);
   const previewDialogRef = useRef<HTMLElement>(null);
+  const points = Number(pointsInput);
   const level = useMemo(() => rewardLevel(points, earned), [points, earned]);
-  const next = levels[level.index + 1];
+  const next = levels[level.index + 1] ?? null;
+  const badgeRoadmap: BadgeRoadmapItem[] = levels.flatMap(({ level: seasonLevel, required }) => {
+    if (seasonLevel === 1) return [];
+    return required.map((key) => {
+      const [, label, description] = badges.find(([id]) => id === key)!;
+      return { key, label, description, seasonLevel, earned: earned.includes(key) };
+    });
+  });
+  const season = {
+    current: level,
+    next,
+    earnedBadgeCount: next?.required.filter((key) => earned.includes(key)).length ?? 0,
+    requiredBadgeCount: next?.required.length ?? 0
+  };
   const previewLevel = preview === null ? undefined : levels[preview];
-  const previewNext = preview === null ? undefined : levels[preview + 1];
+  const selectedCase = cases.findIndex(([, casePoints, caseBadges]) => points === casePoints && equalSets(earned, caseBadges));
+  const certificatePath = level.level === 4 ? `/reward/preview?points=${points}` : "/reward/preview";
   const closePreview = () => {
     setPreview(null);
     queueMicrotask(() => previewTriggerRef.current?.focus());
   };
   useDialog(preview !== null, previewDialogRef, closePreview, previewCloseRef);
   return <div className="manager-page manager-rewards-page">
-    <PageTitle><Link to="/mgr" className="manager-page-back small">← Tiến độ nhóm</Link><h1>Giả lập phần thưởng</h1><p className="muted">Xem trước mọi trường hợp của mùa học mà học viên có thể gặp. Đây là bản giả lập: không đọc và không ghi dữ liệu của học viên nào.</p></PageTitle>
-    <section className="card manager-reward-controls"><h3 className="manager-reward-controls-title">Chọn nhanh một trường hợp</h3><div className="row manager-reward-case-group" role="group" aria-label="Chọn nhanh một trường hợp" style={{ gap: 8 }}>{cases.map(([label, casePoints, caseBadges]) => <button className={`btn-sm ${points === casePoints && equalSets(earned, caseBadges) ? "btn-primary" : ""}`} type="button" key={label} aria-pressed={points === casePoints && equalSets(earned, caseBadges)} onClick={() => { setPoints(casePoints); setEarned([...caseBadges]); }}>{label}</button>)}</div>
-      <div className="grid cols-2 manager-reward-config" style={{ marginTop: 14 }}><label className="field" htmlFor="reward-preview-points"><span>Số điểm giả lập (0–600)</span><input id="reward-preview-points" type="number" min="0" max="600" step="5" inputMode="numeric" value={points} onChange={(event) => setPoints(Math.max(0, Math.min(600, Math.round(Number(event.target.value) || 0))))} /></label><div className="field"><span id="reward-preview-badges-label">Huy hiệu đã có (bấm để bật/tắt)</span><div className="row manager-reward-badge-group" role="group" aria-labelledby="reward-preview-badges-label" style={{ gap: 8 }}>{badges.map(([id, icon, name, description]) => <button className={`btn-sm ${earned.includes(id) ? "btn-primary" : ""}`} type="button" key={id} title={description} aria-pressed={earned.includes(id)} onClick={() => setEarned((current) => current.includes(id) ? current.filter((item) => item !== id) : [...current, id])}>{icon} {name}</button>)}</div></div></div>
-      <div className="row manager-reward-result" role="status" aria-live="polite" style={{ marginTop: 4 }}><b>Kết quả: cấp {level.index + 1}/{levels.length} · {level.name}</b></div>
-    </section>
-    <h3 className="manager-reward-preview-title" style={{ margin: "16px 0 0" }}>Học viên sẽ thấy (Tiến độ & hồ sơ)</h3><section className="card manager-reward-preview-card"><div className="row" style={{ gap: 16, alignItems: "center" }}><GooseFigure level={level.index} /><div style={{ flex: 1, minWidth: 200 }}><div className="eyebrow">Mùa học {level.index + 1}/{levels.length}</div><h2 style={{ fontFamily: "var(--font-display)", fontWeight: 800, fontSize: "1.5rem", lineHeight: 1.2 }}>{level.name}</h2><p className="small" style={{ fontWeight: 700 }}>{next ? <>Lên <b>{next.name}</b> cần đủ <b>cả điểm và huy hiệu</b> của cấp đó.</> : "Cấp cao nhất – đủ điểm và toàn bộ huy hiệu."}</p></div></div>{next ? <NextLevelProgress points={points} earned={earned} next={next} /> : null}<div className="row between" style={{ marginTop: 14 }}><h3 style={{ margin: 0 }}>Huy hiệu theo cấp</h3><span className="small muted" style={{ fontWeight: 800 }}>{earned.length}/{badges.length} huy hiệu · ★ {points} điểm</span></div>{levels.slice(1).map((item, index) => <div key={item.name} style={{ marginTop: 12 }}><div className="row" style={{ gap: 8, marginBottom: 6 }}><Badge tone={level.index >= index + 1 ? "ok" : level.index === index ? "warn" : ""}>{item.icon} Cấp {index + 2} · {item.name}</Badge><span className="xs muted" style={{ fontWeight: 800 }}>{item.min} điểm + {item.required.length} huy hiệu{level.index >= index + 1 ? " · đã đạt" : level.index === index ? " · cấp tiếp theo" : ""}</span></div><div className="badges">{badges.filter(([id]) => item.required.includes(id)).map(([id, icon, name, description]) => <div className={`bdg ${earned.includes(id) ? "" : "off"}`} key={id} title={description}><span className="ic">{icon}</span><b>{name}</b><span>{description}</span></div>)}</div></div>)}<details style={{ marginTop: 10 }}><summary className="small" style={{ fontWeight: 800, cursor: "pointer" }}>Cách tính điểm và lên cấp</summary><ul className="small" style={{ margin: "6px 0 0", paddingLeft: 20 }}><li>Hoàn thành 1 bài học: <b>+10</b></li><li>Mỗi phần Nghe/Đọc/Viết/Nói làm đúng: <b>+5 nếu đúng lần 1, giảm 1 điểm mỗi lần làm lại</b></li><li>1 lượt luyện với Season: <b>+2</b></li><li>Mở 1 ô từ bí mật: <b>+2</b></li><li>Nộp bài tuần (thứ Sáu): <b>+15</b></li><li>Xong trọn bài của một tuần: <b>+20</b></li><li>Lên cấp: phải đủ <b>điểm của cấp</b> và <b>mọi huy hiệu của cấp</b>; các cấp đi lần lượt, không nhảy cấp.</li></ul></details></section>
-    <section className="card"><h3>4 mùa học</h3><div className="table-wrap manager-rewards-table" data-manager-action-table><table><thead><tr><th>Cấp</th><th>Hình</th><th>Điểm cần</th><th>Huy hiệu cần</th><th>Màn chúc mừng</th></tr></thead><tbody>{levels.map((item, index) => <tr key={item.name}><td><b>{index + 1}. {item.name}</b></td><td><GooseFigure level={index} /></td><td>{item.min}</td><td className="small">{item.required.length ? item.required.map((id) => { const badge = badges.find((entry) => entry[0] === id)!; return <div key={id}>{badge[1]} {badge[2]}</div>; }) : <span className="muted">không cần</span>}</td><td>{index === 0 ? <span className="muted">—</span> : index === levels.length - 1 ? <a className="btn btn-sm" href="/reward/preview">Xem màn cấp cao nhất</a> : <button className="btn-sm" type="button" onClick={(event) => { previewTriggerRef.current = event.currentTarget; setPreview(index); }}>Xem màn lên cấp</button>}</td></tr>)}</tbody></table></div></section>
-    {preview !== null && previewLevel ? <div className="modal-backdrop manager-modal-backdrop" role="presentation" onClick={(event) => { if (event.target === event.currentTarget) closePreview(); }}><section ref={previewDialogRef} className="dialog manager-reward-dialog" role="dialog" aria-modal="true" aria-label="Màn chúc mừng lên cấp" tabIndex={-1} style={{ textAlign: "center", padding: "20px 24px 24px" }}><div className="row between" style={{ alignItems: "flex-start", marginBottom: 6 }}><span className="ribbon">Giả lập</span><button ref={previewCloseRef} className="btn-sm btn-ghost" type="button" aria-label="Đóng màn chúc mừng" onClick={closePreview}>Đóng</button></div><div style={{ margin: "12px 0 10px" }}><GooseFigure level={preview} big /></div><div className="eyebrow">Lên cấp {preview + 1}/{levels.length}</div><h2 style={{ margin: "4px 0" }}>A đã thành {previewLevel.name}!</h2><p className="small" style={{ fontWeight: 700 }}>Bạn đã đủ <b>{previewLevel.min} điểm</b> và đủ huy hiệu của cấp này: {previewLevel.required.map((id) => { const badge = badges.find((item) => item[0] === id)!; return `${badge[1]} ${badge[2]}`; }).join(" · ")}.</p>{previewNext ? <p className="small muted">Cấp tiếp theo: <b>{previewNext.name}</b> – cần {previewNext.min} điểm và {previewNext.required.length} huy hiệu mới.</p> : null}<button className="btn-primary btn-lg" type="button" onClick={closePreview}>Tiếp tục</button></section></div> : null}
+    <PageTitle><Link to="/mgr" className="manager-page-back small">← Tiến độ nhóm</Link><h1>Giả lập phần thưởng</h1><p className="muted">Xem phần thưởng theo tình huống mẫu.</p></PageTitle>
+    <div className="manager-reward-workspace">
+      <section className="card manager-reward-controls" aria-label="Thiết lập giả lập">
+        <label className="field">
+          <span>Tình huống mẫu</span>
+          <select value={selectedCase} onChange={(event) => {
+            const scenario = cases[Number(event.target.value)];
+            if (scenario) {
+              setPointsInput(String(scenario[1]));
+              setEarned(scenario[2]);
+              setRevealedBadgeLevel(undefined);
+            }
+          }}>
+            {selectedCase < 0 && <option value={-1} disabled>Tùy chỉnh</option>}
+            {cases.map(([label], index) => <option key={label} value={index}>{label}</option>)}
+          </select>
+        </label>
+        <button className="btn btn-sm manager-reward-custom-toggle" type="button" aria-expanded={customOpen} aria-controls={customId}
+          onClick={() => setCustomOpen((open) => !open)}>
+          <ChevronRight size={16} aria-hidden="true" />Tùy chỉnh điểm và huy hiệu
+        </button>
+        <div className="manager-reward-custom" id={customId} hidden={!customOpen}>
+          <label className="field">
+            <span>Điểm giả lập (0–600)</span>
+            <input type="text" inputMode="numeric" placeholder="0" value={pointsInput}
+              onChange={(event) => {
+                const value = event.target.value;
+                if (/^[0-9]*$/.test(value)) setPointsInput(value === "" ? "" : String(Math.min(600, Number(value))));
+              }} />
+          </label>
+          <div className="manager-reward-badge-field">
+            <span className="small" id={`${customId}-badges`}>Huy hiệu đã có</span>
+            <div className="manager-reward-badge-group" role="group" aria-labelledby={`${customId}-badges`}>
+              {badges.map(([id, name, description]) => <button className="btn-sm"
+                type="button" key={id} title={description} aria-pressed={earned.includes(id)}
+                onClick={() => {
+                  setEarned((current) => current.includes(id) ? current.filter((item) => item !== id) : [...current, id]);
+                  setRevealedBadgeLevel(levels.find(({ required }) => required.includes(id))?.level);
+                }}>
+                <span className="manager-reward-badge-icon" aria-hidden="true">{rewardBadgeIcon(id)}</span><span>{name}</span>
+              </button>)}
+            </div>
+          </div>
+        </div>
+      </section>
+      <section className="card section manager-reward-result-pane" aria-label="Xem trước hồ sơ học viên">
+        <header className="row between manager-section-heading manager-reward-preview-heading">
+          <h2>Học viên sẽ thấy</h2>
+          <div className="manager-reward-preview-actions" role="group" aria-label="Xem thông báo lên cấp">
+            {[2, 3].map((tier) => <button className="btn-sm" type="button" key={tier} onClick={(event) => {
+              previewTriggerRef.current = event.currentTarget;
+              setPreview(tier - 1);
+            }}>Xem lên cấp {tier}</button>)}
+          </div>
+        </header>
+        <div className="reward-screen-reader" role="status">Cấp {level.level}/4 · {level.name}</div>
+        <SeasonProgressCard view={{ points, badgeCount: earned.length, season, badgeRoadmap }} revealedBadgeLevel={revealedBadgeLevel} certificateAction={
+          <Link className="btn btn-sm" to={certificatePath}>Xem trước chứng nhận</Link>
+        } />
+      </section>
+    </div>
+    {previewLevel && <div className="modal-backdrop manager-modal-backdrop" role="presentation" onClick={(event) => {
+      if (event.target === event.currentTarget) closePreview();
+    }}>
+      <section ref={previewDialogRef} className="dialog reward-celebration" role="dialog" aria-modal="true" aria-label="Màn chúc mừng lên cấp" tabIndex={-1}>
+        <div className="reward-celebration-header">
+          <span className="badge">Giả lập</span>
+          <button ref={previewCloseRef} className="btn btn-ghost" type="button" aria-label="Đóng màn chúc mừng" onClick={closePreview}><X size={18} aria-hidden="true" /></button>
+        </div>
+        <div className="reward-celebration-body">
+          <SeasonFigure level={previewLevel.level} />
+          <div className="eyebrow">Lên cấp {previewLevel.level}/4</div>
+          <h2>{previewLevel.name}</h2>
+          <p className="small">{previewLevel.pointsRequired} điểm · {previewLevel.required.length} huy hiệu</p>
+        </div>
+        <button className="btn-primary reward-celebration-action" type="button" onClick={closePreview}>Tiếp tục</button>
+      </section>
+    </div>}
   </div>;
 }
 
-function NextLevelProgress({ points, earned, next }: { points: number; earned: readonly string[]; next: (typeof levels)[number] }) {
-  const pointComplete = points >= next.min;
-  const earnedCount = next.required.filter((id) => earned.includes(id)).length;
-  const badgeComplete = earnedCount >= next.required.length;
-  const missing = next.required.filter((id) => !earned.includes(id)).map((id) => badges.find((badge) => badge[0] === id)!).map((badge) => `${badge[1]} ${badge[2]}`).join(", ");
-  return <><div className="grid cols-2 manager-reward-track-grid" style={{ marginTop: 12 }}><RewardTrack label="① Điểm" value={`★ ${points} / ${next.min}`} current={points} target={next.min} detail={pointComplete ? "Đã đủ điểm cho cấp tiếp theo." : `Còn thiếu ${next.min - points} điểm.`} /><RewardTrack label="② Huy hiệu của cấp tiếp theo" value={`${earnedCount} / ${next.required.length}`} current={earnedCount} target={next.required.length} detail={badgeComplete ? "Đã đủ huy hiệu cho cấp tiếp theo." : `Còn thiếu: ${missing}.`} /></div>{pointComplete !== badgeComplete ? <div className="banner warn" role="status" aria-live="polite" style={{ marginTop: 10, boxShadow: "none" }}><div className="body small">{pointComplete ? <><b>Đủ điểm nhưng chưa lên cấp</b> vì còn thiếu huy hiệu. Điểm không thay thế được huy hiệu.</> : <><b>Đủ huy hiệu nhưng chưa lên cấp</b> vì chưa đủ điểm. Huy hiệu không thay thế được điểm.</>}</div></div> : null}</>;
-}
-function RewardTrack({ label, value, current, target, detail }: { label: string; value: string; current: number; target: number; detail: string }) { const complete = current >= target; return <div className="card flat" style={{ background: complete ? "var(--mint)" : "var(--surface)" }}><div className="row between"><b className="small">{label}</b><Badge tone={complete ? "ok" : "warn"}>{complete ? "✓ Đạt" : "Chưa đạt"}</Badge></div><h2 style={{ fontFamily: "var(--font-display)", fontWeight: 800, fontSize: "1.3rem", margin: "2px 0" }}>{value}</h2><div className="progress thin" role="progressbar" aria-label={label} aria-valuemin={0} aria-valuemax={target} aria-valuenow={Math.min(current, target)}><i style={{ width: `${target ? Math.min(100, current / target * 100) : 100}%` }} /></div><div className="xs muted" style={{ marginTop: 4 }}>{detail}</div></div>; }
-function GooseFigure({ level, big = false }: { level: number; big?: boolean }) { const item = levels[level]!; const size = item.size + (big ? 40 : 0); return <span style={{ position: "relative", display: "inline-grid", placeItems: "center", width: size + 28, height: size + 28, borderRadius: "50%", background: item.color }}><span style={{ fontSize: Math.round(size * .55), lineHeight: 1 }}>{item.icon}</span></span>; }
-function rewardLevel(points: number, earned: readonly string[]) { let index = 0; while (index + 1 < levels.length) { const next = levels[index + 1]!; if (points < next.min || !next.required.every((id) => earned.includes(id))) break; index++; } return { ...levels[index]!, index }; }
+function rewardLevel(points: number, earned: readonly string[]) { let index = 0; while (index + 1 < levels.length) { const next = levels[index + 1]!; if (points < next.pointsRequired || !next.required.every((id) => earned.includes(id))) break; index++; } return { ...levels[index]!, index }; }
 function equalSets(left: readonly string[], right: readonly string[]) { return left.length === right.length && right.every((item) => left.includes(item)); }

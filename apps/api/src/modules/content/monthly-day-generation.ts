@@ -1,9 +1,26 @@
 import { monthlyScopeHash, withMonthlyExpandedTerms, withMonthlyGrammarSteps, type CoreTerm, type GrammarStep, type MonthlyCurriculumContract, type MonthlyDaySpec, type PronunciationSound } from "@e4s/domain";
 import { MONTHLY_LESSON_PART_CONTENT_CONTRACT, type AiTaskRunner } from "@e4s/ai";
-import { evaluateMonthlyLessonQuality, type MonthlyLessonCandidate, type MonthlyQualityReport } from "./monthly-quality.js";
+import { evaluateMonthlyLessonQuality, type MonthlyLessonCandidate, type MonthlyQualityReport, type MonthlyQualityFinding } from "./monthly-quality.js";
 import { MONTHLY_REVIEW_COMPONENTS, monthlyReviewTargets } from "./monthly-review-quality.js";
 
 const REVIEW_STUDY_COMPONENTS = ["objective", "instruction", "vocabulary", "grammar", "pronunciation"] as const;
+
+export function monthlyDailyTeachingContract(day: MonthlyDaySpec, cefr: string): string {
+  const language = cefr === "A1" || cefr === "A2" ? "Vietnamese" : "simple English";
+  return [
+    "DAILY TEACHING PLAN V2 overrides generic daily/review shape instructions for grammar and pronunciation only. Keep every other component's existing contract.",
+    `Teach day N${day.newLessonNumber}, grammar code ${day.grammarPlan?.code}, mode ${day.grammarPlan?.mode}, objective: ${day.grammarPlan?.objective}. A shared formula does not mean repeating the same teaching lesson. Explain the planned focus in ${language}.`,
+    "grammar: return {dailyCode, objective, formula, text, examples, items, steps?}. dailyCode and objective copy the locked daily plan. Write 3 natural NEW workplace examples using at least two of today's core words across them. The pool's examples are references; do not copy the entire reference example list into the lesson.",
+    "grammar.items: 3–5 distinct questions, each {id,prompt,options:[4 different strings],answer,explanation,milestoneId}. Use the day's practice mode. Explain why each answer is correct. Do not add unrelated grammar formulas.",
+    day.grammarPlan?.recallMilestoneIds.length ? `Include one recall question with milestoneId from ${day.grammarPlan.recallMilestoneIds.join(", ")} (previous topic A); the other questions teach the current topic.` : "",
+    `pronunciation: teach stage ${day.pronunciationPlan?.stage}, objective ${day.pronunciationPlan?.objective}. Return stage and objective matching the plan. This is a ${cefr} target: advanced stress/linking/intonation targets remain advanced features, not isolated beginner phoneme lessons.`,
+    "pronunciation.focus copies the first locked target. pronunciation.words contains exactly the three examples listed by daySpec.pronunciationExampleIds (the compact standard-format summary). Never substitute another three words from the pool.",
+    (day.pronunciationPlan?.targetIds.length ?? 0) > 1 ? "Also return pronunciation.reviewTargets: [{soundId,focus,words:[{word,ipa}]}], in dailyTeachingPlan.pronunciation.targetIds order, including exactly the assigned dailyTeachingPlan.pronunciation.exampleIds for each target. The UI and listening gates use this complete multi-target scope." : "",
+    day.pronunciationPlan?.requiredPositions ? "For the read-aloud/mock task also return pronunciation.passage and pronunciation.targetPositions: [{soundId,exampleId}], exactly the eight requiredPositions from the plan, two per target; the passage must actually contain those eight example words." : "",
+    day.pronunciationPlan?.stage === "personalize" ? "Use recorded learner error evidence when supplied. With no error evidence, explicitly present this as a diagnostic over the taught targets; do not invent personal mistakes." : "",
+    "The speaking task must apply the day's pronunciation stage and grammar objective, using at least two daily core words."
+  ].filter(Boolean).join("\n");
+}
 
 export const MONTHLY_DAY_COMPONENTS = [
   "objective", "instruction", "vocabulary", "grammar", "pronunciation",
@@ -11,8 +28,8 @@ export const MONTHLY_DAY_COMPONENTS = [
 ] as const;
 export type MonthlyDayComponent = (typeof MONTHLY_DAY_COMPONENTS)[number];
 
-export async function generateMonthlyDayWithAi(contract: MonthlyCurriculumContract, dayNumber: number, runner: AiTaskRunner, systemPrompt: string): Promise<MonthlyDayGenerationResult> {
-  return generateMonthlyContentWithAi("new", contract, dayNumber, runner, systemPrompt);
+export async function generateMonthlyDayWithAi(contract: MonthlyCurriculumContract, dayNumber: number, runner: AiTaskRunner, systemPrompt: string, priorGrammarExamples: readonly string[] = []): Promise<MonthlyDayGenerationResult> {
+  return generateMonthlyContentWithAi("new", contract, dayNumber, runner, systemPrompt, priorGrammarExamples);
 }
 
 /** Review generation has a separate entry point so ordinary-day callers cannot silently generate a review DaySpec. */
@@ -20,34 +37,44 @@ export async function generateMonthlyReviewWithAi(contract: MonthlyCurriculumCon
   return generateMonthlyContentWithAi("review", contract, dayNumber, runner, systemPrompt);
 }
 
-async function generateMonthlyContentWithAi(kind: "new" | "review", contract: MonthlyCurriculumContract, dayNumber: number, runner: AiTaskRunner, systemPrompt: string): Promise<MonthlyDayGenerationResult> {
+async function generateMonthlyContentWithAi(kind: "new" | "review", contract: MonthlyCurriculumContract, dayNumber: number, runner: AiTaskRunner, systemPrompt: string, priorGrammarExamples: readonly string[] = []): Promise<MonthlyDayGenerationResult> {
   const generated = await generateMonthlyDay({
     contract,
     dayNumber,
     kind,
+    priorGrammarExamples,
     maxAttempts: 3,
-    generate: async ({ daySpec, coreTerms, grammarStep, grammarSteps, sound, sounds, pronunciationExamples, components, priorParts }) => {
+    generate: async ({ daySpec, coreTerms, grammarStep, grammarSteps, sound, sounds, pronunciationExamples, components, priorParts, repairFindings }) => {
       const daySupportTerms = contract.supportTerms.filter((term) => (daySpec.kind === "new" ? daySpec.expandedTermIds : daySpec.reviewExpandedTermIds).includes(term.id));
       const basePrompt = kind === "review" ? `${systemPrompt}
 
 Part content field contract: ${MONTHLY_LESSON_PART_CONTENT_CONTRACT}
 
-Review pronunciation output contract: Keep pronunciation.focus equal to the first locked review sound IPA and pronunciation.words equal to exactly that sound's three locked examples, so it remains compatible with the standard lesson format. Also include pronunciation.reviewTargets as an array in lockedScope.sounds order; each item must have { soundId, focus, words }, and words must contain every locked pronunciation example for that sound with its exact word and IPA. Include every allocated review sound and example exactly once. Do not use the review calendar day's ordinary sound/examples.
+Review pronunciation output contract: Keep pronunciation.focus equal to the first locked review sound IPA and pronunciation.words equal to that sound's first three allocated examples (or all allocated examples when fewer than three), so it remains compatible with the standard lesson format. Also include pronunciation.reviewTargets as an array in lockedScope.sounds order; each item must have { soundId, focus, words }, and words must contain every locked pronunciation example for that sound with its exact word and IPA. Include every allocated review sound and example exactly once. Do not use the review calendar day's ordinary sound/examples.
 
 ${monthlyReviewExerciseContract(coreTerms.length, grammarSteps.length, contract.cefr)}` : `${systemPrompt}
 
 Part content field contract: ${MONTHLY_LESSON_PART_CONTENT_CONTRACT}`;
       const call = async (requested: readonly string[], note: string, maxOutputTokens: number) => {
-        const result = await runner.runTask("monthly_lesson_day", {
+        let result;
+        try { result = await runner.runTask("monthly_lesson_day", {
           month: contract.month,
           cefr: contract.cefr,
           daySpec,
           components: requested,
           lockedScope: { coreTerms, grammarStep, grammarSteps, sound, sounds, pronunciationExamples, theme: contract.theme, supportTerms: daySupportTerms },
-          priorParts
-        }, { systemPrompt: note ? `${basePrompt}
+          priorParts,
+          priorGrammarExamples,
+          repairIssues: repairFindings,
+          dailyTeachingPlan: { grammar: daySpec.grammarPlan, pronunciation: daySpec.pronunciationPlan },
+          ...(kind === "review" ? { reviewListeningChecklist: coreTerms.map(term => ({ audioText: term.word, meaning: term.meaning })) } : {})
+        }, { systemPrompt: `${note ? `${basePrompt}
 
-${note}` : basePrompt, maxOutputTokens, temperature: 0.2, maxAttempts: 1 });
+${note}` : basePrompt}${contract.planSchemaVersion === 2 && kind === "new" ? `\n${monthlyDailyTeachingContract(daySpec, contract.cefr)}` : ""}${repairFindings.length ? `\nREPAIR REQUIRED FOR REQUESTED COMPONENTS: ${repairFindings.map(finding => `${finding.component}: ${finding.message}`).join("; ")}. Correct every listed issue; do not repeat the same incomplete output. Preserve accepted components.` : ""}`, maxOutputTokens, temperature: 0.2, maxAttempts: 2 });
+        } catch (error) {
+          if (error && typeof error === "object") Object.assign(error, { monthlyComponents: [...requested] });
+          throw error;
+        }
         const lesson = (result.output as { lesson?: { title?: string; parts?: Array<{ code: string; title?: string; content: Record<string, unknown> }> } }).lesson;
         if (!lesson || !Array.isArray(lesson.parts)) throw new Error("Monthly lesson AI returned no lesson parts");
         return { title: lesson.title ?? "", parts: lesson.parts };
@@ -75,7 +102,9 @@ ${note}` : basePrompt, maxOutputTokens, temperature: 0.2, maxAttempts: 1 });
         rawParts = single.parts;
       }
       // The plan, not the model, decides each core word's expanded terms: attach them deterministically.
-      const enriched = withMonthlyGrammarSteps(withMonthlyExpandedTerms(rawParts, coreTerms, daySupportTerms), grammarSteps);
+      const vocabularyParts = withMonthlyExpandedTerms(rawParts, coreTerms, daySupportTerms);
+      const dailyParts = vocabularyParts.map(part => part.code === "grammar" && daySpec.grammarPlan ? { ...part, content: { ...part.content, milestoneIds: daySpec.grammarPlan.milestoneIds, recallMilestoneIds: daySpec.grammarPlan.recallMilestoneIds } } : part);
+      const enriched = contract.planSchemaVersion === 2 && kind === "new" ? dailyParts : withMonthlyGrammarSteps(vocabularyParts, grammarSteps);
       const parts = kind === "review" ? normalizeMonthlyReviewParts(enriched) : enriched;
       return { title, parts: parts.map((part) => ({ code: part.code, ...(part.title ? { title: part.title } : {}), content: part.content })) };
     }
@@ -142,6 +171,7 @@ export interface MonthlyDayGenerationInput {
   sounds: readonly PronunciationSound[];
   pronunciationExamples: readonly { id: string; word: string; ipa: string }[];
   priorParts: readonly MonthlyLessonCandidate["parts"][number][];
+  repairFindings: readonly MonthlyQualityFinding[];
 }
 
 export interface MonthlyDayGenerationResult {
@@ -159,14 +189,15 @@ export async function generateMonthlyDay(input: {
   kind?: "new" | "review";
   generate: (input: MonthlyDayGenerationInput) => Promise<MonthlyLessonCandidate>;
   maxAttempts?: number;
+  priorGrammarExamples?: readonly string[];
 }): Promise<MonthlyDayGenerationResult> {
   const daySpec = input.contract.daySpecs.find((day) => day.lessonNumber === input.dayNumber);
   if (!daySpec) throw new Error(`Monthly DaySpec ${input.dayNumber} was not found`);
   const kind = input.kind ?? "new";
   if (daySpec.kind !== kind) throw new Error(kind === "new" ? "MONTHLY_DAY_KIND_MISMATCH: ordinary generation requires a new DaySpec" : "MONTHLY_DAY_KIND_MISMATCH: review generation requires a review DaySpec");
   const grammarIds = kind === "review" ? daySpec.reviewGrammarStepIds ?? [] : daySpec.grammarStepIds ?? [daySpec.grammarStepId];
-  const soundIds = kind === "review" ? daySpec.reviewSoundIds ?? [] : [daySpec.soundId];
-  const pronunciationExampleIds = kind === "review" ? daySpec.reviewPronunciationExampleIds ?? [] : daySpec.pronunciationExampleIds;
+  const soundIds = kind === "review" ? daySpec.reviewSoundIds ?? [] : daySpec.pronunciationPlan?.targetIds ?? [daySpec.soundId];
+  const pronunciationExampleIds = kind === "review" ? daySpec.reviewPronunciationExampleIds ?? [] : [...new Set([...(daySpec.pronunciationPlan?.exampleIds ?? []), ...daySpec.pronunciationExampleIds])];
   const grammarSteps = grammarIds.map((id) => input.contract.grammarTopics.flatMap((topic) => topic.steps).find((step) => step.id === id)).filter((step): step is GrammarStep => Boolean(step));
   const grammarStep = grammarSteps[0];
   const sounds = soundIds.map((id) => input.contract.sounds.find((candidate) => candidate.id === id)).filter((sound): sound is PronunciationSound => Boolean(sound));
@@ -184,11 +215,11 @@ export async function generateMonthlyDay(input: {
   let requestedComponents: MonthlyDayComponent[] = daySpec.kind === "review" ? [...MONTHLY_REVIEW_COMPONENTS] : [...MONTHLY_DAY_COMPONENTS];
   let report: MonthlyQualityReport = { severe: [], light: [], contractVersion: input.contract.version };
   for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
-    const generated = await input.generate({ contract: input.contract, dayNumber: input.dayNumber, components: requestedComponents, daySpec, coreTerms, grammarStep, grammarSteps, sound, sounds, pronunciationExamples, priorParts: parts });
+    const generated = await input.generate({ contract: input.contract, dayNumber: input.dayNumber, components: requestedComponents, daySpec, coreTerms, grammarStep, grammarSteps, sound, sounds, pronunciationExamples, priorParts: parts, repairFindings: report.severe });
     title = generated.title || title;
     parts = mergeParts(parts, generated.parts);
     const candidate = { title, parts };
-    report = evaluateMonthlyLessonQuality(input.contract, input.dayNumber, candidate);
+    report = evaluateMonthlyLessonQuality(input.contract, input.dayNumber, candidate, input.priorGrammarExamples);
     if (report.severe.length === 0) return { status: "ready", lesson: candidate, report, scopeHash, attempts: attempt };
     requestedComponents = componentsToRepair(report, daySpec.kind === "review");
   }

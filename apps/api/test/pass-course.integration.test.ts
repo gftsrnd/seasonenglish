@@ -47,7 +47,7 @@ describe("Pass Course Form A lifecycle", () => {
 
   afterAll(async () => { await app.close(); await pool.end(); });
 
-  it("only exposes the fixed C1 Form A, then issues a persisted certificate and locks the account after operator approval at 85+", async () => {
+  it("issues an audited certificate below the score recommendation and keeps the account active", async () => {
     const definition = await app.inject({ method: "GET", url: "/api/v1/assessments/pass-course", headers: { cookie: learnerCookie } });
     expect(definition.statusCode, definition.body).toBe(200);
     expect(definition.json()).toMatchObject({ definition: { kind: "pass-course", title: "Pass Course – Form A", totalMinutes: 90, totalScore: 100 } });
@@ -57,7 +57,7 @@ describe("Pass Course Form A lifecycle", () => {
     expect(started.statusCode, started.body).toBe(201);
     const attemptId = started.json().attempt.id as string;
     await pool.query("update assessment_attempts set status = 'pending_review', current_section = null, submitted_at = now() where id = $1", [attemptId]);
-    for (const [section, score] of [["listening", 22], ["reading", 22], ["writing", 21], ["speaking", 20]]) {
+    for (const [section, score] of [["listening", 20], ["reading", 40], ["writing", 13.99], ["speaking", 11]]) {
       await pool.query(
         `insert into assessment_scores (id, attempt_id, section, score, criteria, source)
          values (gen_random_uuid(), $1, $2, $3, '{}'::jsonb, 'human')`,
@@ -80,21 +80,33 @@ describe("Pass Course Form A lifecycle", () => {
     const approved = await app.inject({ method: "POST", url: `/api/v1/assessment-reviews/${attemptId}/decision`, headers: { cookie: operatorCookie }, payload: { status: "approved", reason: "Đủ điều kiện cấp chứng nhận Form A." } });
     expect(approved.statusCode, approved.body).toBe(200);
     expect(approved.json()).toMatchObject({ status: "approved", approvedLevel: null });
+    const audit = await pool.query("select payload from audit_events where action = 'assessment.decision' and entity_id = $1", [attemptId]);
+    expect(audit.rows[0]?.payload).toMatchObject({ totalScore: 84.99, recommendedStatus: "needs_retry", reason: "Đủ điều kiện cấp chứng nhận Form A." });
     const persisted = await pool.query<{ status: string; certificate_number: string }>(
       `select learner.status, certificate.certificate_number
        from users learner join pass_course_certificates certificate on certificate.learner_id = learner.id
        where learner.id = $1`, [c1LearnerId]
     );
-    expect(persisted.rows[0]).toMatchObject({ status: "disabled" });
+    expect(persisted.rows[0]).toMatchObject({ status: "active" });
+    const session = await app.inject({ method: "GET", url: "/api/session", headers: { cookie: learnerCookie } });
+    expect(session.json()).toMatchObject({ courseCompleted: true });
+    const progress = await app.inject({ method: "GET", url: "/api/v1/learner/progress", headers: { cookie: learnerCookie } });
+    expect(progress.statusCode, progress.body).toBe(200);
     expect(persisted.rows[0]?.certificate_number).toMatch(/^E4S-C1-/);
+    const report = await app.inject({ method: "GET", url: "/api/v1/learner/course-completion", headers: { cookie: learnerCookie } });
+    expect(report.statusCode, report.body).toBe(200);
+    expect(report.json()).toMatchObject({
+      certificateNumber: persisted.rows[0]?.certificate_number,
+      scores: expect.arrayContaining([expect.objectContaining({ section: "reading", score: 40, maxScore: 40 })])
+    });
+    expect(report.body).not.toContain("correctAnswer");
+    expect((await app.inject({ method: "GET", url: "/api/v1/learner/course-completion", headers: { cookie: operatorCookie } })).statusCode).toBe(403);
   });
 
   it("refuses non-C1 or reset readiness, and enforces the 72-hour appeal deadline", async () => {
-    const blocked = await app.inject({ method: "GET", url: "/api/v1/assessments/pass-course", headers: { cookie: learnerCookie } });
-    expect(blocked.statusCode).toBe(401);
+    const blocked = await app.inject({ method: "POST", url: "/api/v1/assessments/pass-course/start", headers: { cookie: learnerCookie }, payload: {} });
+    expect(blocked.statusCode).toBe(409);
 
-    // A fresh C1 account demonstrates the readiness and appeal gates without
-    // relying on the disabled account created by the preceding approval.
     const id = "00000000-0000-4000-8000-000000000121";
     await pool.query(`insert into users (id, organization_id, role, display_name, email) values ($1, $2, 'learner', 'C1 Retry learner', 'pass.retry@e4s.local')`, [id, DEMO_IDS.organization]);
     await pool.query("insert into user_credentials (user_id, credential_hash) values ($1, $2)", [id, await createPinHash("654322")]);
@@ -109,7 +121,16 @@ describe("Pass Course Form A lifecycle", () => {
     const started = await app.inject({ method: "POST", url: "/api/v1/assessments/pass-course/start", headers: { cookie }, payload: {} });
     const attemptId = started.json().attempt.id as string;
     await pool.query("update assessment_attempts set status = 'needs_retry', submitted_at = now() - interval '73 hours' where id = $1", [attemptId]);
-    const expired = await app.inject({ method: "POST", url: `/api/v1/assessment-attempts/${attemptId}/appeals`, headers: { cookie }, payload: { reason: "Đề nghị kiểm tra lại điểm nói vì bản ghi đã được tải lên đầy đủ." } });
+    await pool.query("insert into assessment_decisions (id, attempt_id, status, decided_at) values (gen_random_uuid(), $1, 'retry', now() - interval '73 hours')", [attemptId]);
+    await pool.query(`insert into assessment_scores (id, attempt_id, section, score, source)
+      select gen_random_uuid(), $1, section, score, 'human'
+      from (values ('listening', 15), ('reading', 32), ('writing', 14), ('speaking', 15)) result(section, score)`, [attemptId]);
+    const failedProgress = await app.inject({ url: "/api/v1/learner/progress", headers: { cookie } });
+    expect(failedProgress.statusCode, failedProgress.body).toBe(200);
+    expect(failedProgress.json()).toMatchObject({ assessments: { passCourse: {
+      totalScore: 76, approvedLevel: null, sections: { listening: 15 }, sectionMaxScores: { listening: 20 }
+    } } });
+    const expired = await app.inject({ method: "POST", url: `/api/v1/assessment-attempts/${attemptId}/appeals`, headers: { cookie }, payload: { proposedLevel: "C1", reason: "Đề nghị kiểm tra lại điểm nói vì bản ghi đã được tải lên đầy đủ." } });
     expect(expired.statusCode).toBe(409);
     expect(expired.json()).toEqual({ code: "ASSESSMENT_APPEAL_NOT_AVAILABLE" });
 
@@ -122,9 +143,27 @@ describe("Pass Course Form A lifecycle", () => {
     const appealCookie = String(appealLogin.headers["set-cookie"]).split(";")[0] ?? "";
     const active = await app.inject({ method: "POST", url: "/api/v1/assessments/pass-course/start", headers: { cookie: appealCookie }, payload: {} });
     const activeAttemptId = active.json().attempt.id as string;
-    await pool.query("update assessment_attempts set status = 'needs_retry', submitted_at = now() where id = $1", [activeAttemptId]);
-    const appeal = await app.inject({ method: "POST", url: `/api/v1/assessment-attempts/${activeAttemptId}/appeals`, headers: { cookie: appealCookie }, payload: { reason: "Đề nghị kiểm tra lại điểm nói vì bản ghi đã được tải lên đầy đủ." } });
-    expect(appeal.statusCode, appeal.body).toBe(201);
+    await pool.query("update assessment_attempts set status = 'needs_retry', submitted_at = now() - interval '4 days' where id = $1", [activeAttemptId]);
+    await pool.query("insert into assessment_decisions (id, attempt_id, status, decided_at) values (gen_random_uuid(), $1, 'retry', now())", [activeAttemptId]);
+    const available = await app.inject({ method: "GET", url: "/api/v1/learner/appealable-assessments", headers: { cookie: appealCookie } });
+    expect(available.statusCode, available.body).toBe(200);
+    expect(available.json().results).toEqual([expect.objectContaining({ attemptId: activeAttemptId, availableUntil: expect.any(String) })]);
+    const screenshot = { mimeType: "image/png", base64: "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jf2sAAAAASUVORK5CYII=" };
+    const scope = "Nói, bài số 2";
+    const attempts = await Promise.all([1, 2].map(() => app.inject({ method: "POST", url: `/api/v1/assessment-attempts/${activeAttemptId}/appeals`, headers: { cookie: appealCookie },
+      payload: { proposedLevel: "C1", reason: "Đề nghị kiểm tra lại điểm nói vì bản ghi đã được tải lên đầy đủ.", scope, screenshot } })));
+    expect(attempts.map(result => result.statusCode).sort()).toEqual([201, 409]);
+    const appeal = attempts.find(result => result.statusCode === 201)!;
+    expect(appeal.json()).toMatchObject({ scope, hasEvidence: true, proposedLevel: "C1" });
+    const url = `/api/v1/request-evidence/assessment/${appeal.json().id}`;
+    const proof = await app.inject({ method: "GET", url, headers: { cookie: operatorCookie } });
+    expect(proof.statusCode).toBe(200);
+    expect(proof.rawPayload.toString("base64")).toBe(screenshot.base64);
+    expect((await app.inject({ method: "GET", url, headers: { cookie: learnerCookie } })).statusCode).toBe(404);
+    const queue = await app.inject({ method: "GET", url: `/api/v1/content/review/appeals?id=${appeal.json().id}`, headers: { cookie: operatorCookie } });
+    expect(queue.json()).toMatchObject({ appeals: [{ id: appeal.json().id, scope, hasEvidence: true }] });
+    expect(queue.body).not.toContain(screenshot.base64);
+    await pool.query("update appeals set expires_at = now() - interval '1 hour' where id = $1", [appeal.json().id]);
     const resolved = await app.inject({ method: "POST", url: `/api/v1/assessment-appeals/${appeal.json().id}/decision`, headers: { cookie: operatorCookie }, payload: { status: "rejected", resolution: "Đã đối chiếu bản ghi và giữ nguyên kết quả." } });
     expect(resolved.statusCode, resolved.body).toBe(200);
     expect(resolved.json()).toMatchObject({ status: "rejected" });

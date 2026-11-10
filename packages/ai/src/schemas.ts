@@ -756,7 +756,8 @@ const monthlyResourceExpandedTermSchema = z.object({
 const monthlyResourceGrammarStepSchema = z.object({
   id: z.string().trim().min(1).max(100), focus: z.string().trim().min(1).max(200),
   formula: z.string().trim().min(1).max(400), usage: z.string().trim().min(1).max(800),
-  examples: z.array(z.string().trim().min(1).max(500)).min(3).max(6)
+  examples: z.array(z.string().trim().min(1).max(500)).min(3).max(6),
+  dailyObjectives: z.array(z.string().trim().min(1).max(500)).length(2).optional()
 }).strict();
 const monthlyResourceGrammarSchema = z.object({
   id: z.string().trim().min(1).max(100), title: z.string().trim().min(1).max(200),
@@ -790,7 +791,7 @@ export const monthlyResourcePlanOutputJsonSchema = {
   properties: {
     coreTerms: { type: "array", items: { type: "object", additionalProperties: false, required: ["id", "word", "meaning", "type", "ipa"], properties: { id: { type: "string" }, word: { type: "string" }, meaning: { type: "string" }, type: { type: "string" }, ipa: { type: "string" }, cefr: { type: "string", enum: ["A1", "A2", "B1", "B2", "C1"] } } } },
     expandedTerms: { type: "array", items: { type: "object", additionalProperties: false, required: ["id", "word", "meaning", "type", "relation", "relatesToCoreId"], properties: { id: { type: "string" }, word: { type: "string" }, meaning: { type: "string" }, type: { type: "string" }, relation: { type: "string", enum: ["umbrella", "synonym", "antonym", "word_family", "collocation"] }, relatesToCoreId: { type: "string" }, cefr: { type: "string", enum: ["A1", "A2", "B1", "B2", "C1"] } } } },
-    grammarTopics: { type: "array", maxItems: 2, items: { type: "object", additionalProperties: false, required: ["id", "title", "steps"], properties: { id: { type: "string" }, title: { type: "string" }, steps: { type: "array", minItems: 3, maxItems: 3, items: { type: "object", additionalProperties: false, required: ["id", "focus", "formula", "usage", "examples"], properties: { id: { type: "string" }, focus: { type: "string" }, formula: { type: "string" }, usage: { type: "string" }, examples: { type: "array", minItems: 3, items: { type: "string" } } } } } } } },
+    grammarTopics: { type: "array", maxItems: 2, items: { type: "object", additionalProperties: false, required: ["id", "title", "steps"], properties: { id: { type: "string" }, title: { type: "string" }, steps: { type: "array", minItems: 3, maxItems: 3, items: { type: "object", additionalProperties: false, required: ["id", "focus", "formula", "usage", "examples", "dailyObjectives"], properties: { dailyObjectives: { type: "array", minItems: 2, maxItems: 2, items: { type: "string" } }, id: { type: "string" }, focus: { type: "string" }, formula: { type: "string" }, usage: { type: "string" }, examples: { type: "array", minItems: 3, items: { type: "string" } } } } } } } },
     pronunciationTargets: { type: "array", maxItems: 4, items: { type: "object", additionalProperties: false, required: ["id", "ipa", "label", "explanation", "words"], properties: { id: { type: "string" }, ipa: { type: "string" }, label: { type: "string" }, explanation: { type: "string" }, words: { type: "array", minItems: 9, items: { type: "object", additionalProperties: false, required: ["word", "ipa"], properties: { word: { type: "string" }, ipa: { type: "string" } } } } } } }
   }
 } satisfies Record<string, unknown>;
@@ -1553,7 +1554,7 @@ export const MONTHLY_LESSON_PART_CONTENT_CONTRACT = [
   "This component's fields as a JSON object (never a JSON-encoded string). Use exactly these keys per code:",
   "objective { text, items }; instruction { text, steps };",
   "vocabulary { items: [{ word, type, ipa, meaning, collocations, synonyms, antonyms }] } - collocations is exactly 3 short, natural English phrases that each contain the word (e.g. client: \"meet a client\", \"a new client\", \"client feedback\"); never empty;",
-  "grammar { formula, text, examples } - when lockedScope.grammarSteps has more than one step (review days), also return grammar.steps: [{ formula, text, examples }] with one entry per step in order, each with its own explanation and 1-2 examples;",
+  "grammar { formula, text, examples } - text is a concise usage note: 1-2 short sentences, at most 45 words, focused on the day's goal; do not repeat the formula or add a lecture. When lockedScope.grammarSteps has more than one step (review days), also return grammar.steps: [{ formula, text, examples }] with one entry per step in order, each with its own concise usage note and 1-2 examples;",
   "pronunciation { focus: \"/IPA/\", words: [{ word, ipa }] x3 };",
   "listening { script, prompt, options x4, answer } - script is the full spoken transcript, never empty;",
   "reading { text, prompt, options x4, answer } - text is the reading passage, never empty;",
@@ -1580,7 +1581,12 @@ export const monthlyLessonDayOutputJsonSchema = {
             properties: {
               text: { type: "string", description: "objective/instruction text; for reading this is the reading passage (required for reading)." },
               items: { type: "array", description: "objective items, or vocabulary items [{ word, type, ipa, meaning, collocations: exactly 3 short English phrases containing the word, synonyms, antonyms }] (vocabulary needs at least 3)." },
-              steps: { type: "array", items: { type: "string" }, description: "instruction steps." },
+              steps: { type: "array", items: { anyOf: [
+                { type: "string" },
+                { type: "object", required: ["formula", "text", "examples"], additionalProperties: false, properties: {
+                  formula: { type: "string" }, text: { type: "string" }, examples: { type: "array", items: { type: "string" } }
+                } }
+              ] }, description: "instruction: strings; grammar review: one {formula,text,examples} object per locked grammar step." },
               formula: { type: "string", description: "grammar formula or sentence pattern." },
               examples: { type: "array", items: { type: "string" }, description: "grammar examples." },
               focus: { type: "string", description: "pronunciation target sound written as /IPA/." },

@@ -1,3 +1,101 @@
+/* One seasonal palette drives page tints, actions and selection states. These
+   selectors outrank both role root-token blocks, including lazy learner.css.
+   Light palettes use dark button text; Tết uses its existing gold accent. */
+html:root[data-theme="spring"] { --primary: #9ccb5a; --primary-hover: #8dbf4c; --primary-dark: #4b6120; --primary-ink: #1e1e1e; }
+html:root[data-theme="summer"] { --primary: #fbb829; --primary-hover: #f3ad1e; --primary-dark: #7a5200; --primary-ink: #1e1e1e; }
+html:root[data-theme="autumn"] { --primary: #e9963e; --primary-hover: #dd8a33; --primary-dark: #6e3b32; --primary-ink: #1e1e1e; }
+html:root[data-theme="winter"] { --primary: #3f76b5; --primary-hover: #356aa6; --primary-dark: #2c5a8c; --primary-ink: #fff; }
+html:root[data-theme="tet"] { --primary: #f2c14e; --primary-hover: #e4b341; --primary-dark: #7a5200; --primary-ink: #1e1e1e; }
+html:root[data-theme="midautumn"] { --primary: #f4a261; --primary-hover: #ec9552; --primary-dark: #6e3b32; --primary-ink: #1e1e1e; }
+html:root[data-theme="christmas"] { --primary: #1f6b44; --primary-hover: #195b3a; --primary-dark: #195b3a; --primary-ink: #fff; }
+
+html:root[data-theme] {
+  --bg: color-mix(in srgb, var(--primary) 30%, white);
+  --secondary: var(--primary-dark);
+  --accent: var(--primary-dark);
+  --focus: var(--primary-dark);
+  --primary-glow: color-mix(in srgb, var(--primary) 24%, transparent);
+}
+
+/* Danger buttons use the same red in every seasonal palette. */
+:is(.btn-danger, .ds-button--danger) {
+  --danger: #b91c1c;
+  --danger-soft: #fff1f2;
+  --danger-line: #dc2626;
+  --brown: var(--danger);
+}
+
+/* Disabled primary actions keep readable labels on the seasonal soft tint. */
+html:root[data-theme] .btn-primary:disabled {
+  background: var(--primary-soft);
+  color: var(--primary-dark);
+  box-shadow: inset 0 0 0 1px var(--primary-line);
+  opacity: 1;
+}
+
+html:root[data-theme] :is(button, .btn, a, input, select, textarea):focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 3px;
+}
+
+/* Opt native single-choice controls into a themeable picker where supported.
+   Other browsers and forced-colors mode keep their native picker. */
+@supports (appearance: base-select) and selector(select::picker(select)) {
+  @media (forced-colors: none) {
+    html:root select:where(:not([multiple], [size])),
+    html:root select:where(:not([multiple], [size]))::picker(select) {
+      appearance: base-select;
+    }
+
+    html:root select:where(:not([multiple], [size])) {
+      background-image: none;
+    }
+
+    select::picker(select) {
+      box-sizing: border-box;
+      max-inline-size: calc(100vw - 16px);
+      max-block-size: min(360px, 55dvh);
+      margin-block: 4px;
+      overflow: auto;
+      overscroll-behavior: contain;
+      border: 1px solid var(--primary-line);
+      border-radius: 10px;
+      background: var(--surface);
+      color: var(--text);
+      box-shadow: 0 8px 24px rgb(30 30 30 / .16);
+    }
+
+    select:where(:not([multiple], [size])) option {
+      min-block-size: 40px;
+      padding: 8px 12px;
+      overflow-wrap: anywhere;
+    }
+
+    select:where(:not([multiple], [size])) option:disabled {
+      color: var(--muted);
+    }
+
+    select:where(:not([multiple], [size])) option:is(:hover, :focus-visible):enabled {
+      background: var(--primary-soft);
+      color: var(--text);
+    }
+
+    select:where(:not([multiple], [size])) option:checked:enabled {
+      background: var(--primary);
+      color: var(--primary-ink);
+    }
+
+    select:where(:not([multiple], [size])) option:focus-visible {
+      outline: 2px solid var(--primary-dark);
+      outline-offset: -2px;
+    }
+  }
+}
+
+:root:not([data-theme]) body {
+  background-color: var(--surface);
+}
+
 body::before {
   position: fixed;
   z-index: 0;
@@ -17,11 +115,19 @@ body > #root {
 }
 
 @media (prefers-reduced-transparency: reduce) {
-  body::before { display: none; }
+  :root:not([data-theme]) body {
+  background-color: var(--surface);
+}
+
+body::before { display: none; }
 }
 
 @media (forced-colors: active) {
-  body::before { display: none; }
+  :root:not([data-theme]) body {
+  background-color: var(--surface);
+}
+
+body::before { display: none; }
 }
 
 /* Coordinator integration guard: keep the shared shell readable at tablet widths.
@@ -85,3 +191,18 @@ body > #root {
     flex: 0 0 auto;
   }
 }
+
+.locked-account-actions { display: flex; flex-wrap: wrap; justify-content: center; gap: 10px; }
+.locked-account-form { display: grid; gap: 12px; margin-top: 16px; text-align: start; }
+.locked-account-form label { display: grid; gap: 6px; }
+.locked-account-form button { justify-self: end; }
+.locked-account-form p { margin: 0; }
+
+
+
+.pass-course-home-card, .operator-request-history { margin: 16px 0; }
+.pass-course-home-card .row, .operator-request-history .row { flex-wrap: wrap; gap: 8px 12px; }
+.request-history-scroll { max-height: min(420px, 55dvh); overflow: auto; overscroll-behavior-y: contain; margin: 10px 0; }
+.request-history-items { margin: 0; padding: 0; list-style: none; }
+.request-history-items li { padding: 10px 6px; border-bottom: 1px solid var(--line); overflow-wrap: anywhere; }
+.request-history-items li p { margin: 4px 0; }

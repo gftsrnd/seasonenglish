@@ -54,6 +54,18 @@ describe("organisation experience API", () => {
 
   afterAll(async () => { await app.close(); await pool.end(); });
 
+  it("returns only the active organisation's theme before sign-in", async () => {
+    const input = { theme: "christmas", backgroundMusic: { enabled: true, playlistId: "auto", customUrl: "", volume: 22 } };
+    const saved = await app.inject({ method: "PUT", url: "/api/v1/organisation-experience", headers: { cookie: operatorCookie }, payload: input });
+    expect(saved.statusCode).toBe(200);
+
+    const publicTheme = await app.inject({ method: "GET", url: "/api/v1/organisation-experience/theme" });
+    expect(publicTheme.statusCode).toBe(200);
+    expect(publicTheme.json()).toEqual({ theme: "christmas" });
+    const privateExperience = await app.inject({ method: "GET", url: "/api/v1/organisation-experience" });
+    expect(privateExperience.statusCode).toBe(401);
+  });
+
   it("lets every signed-in role read only its organisation experience", async () => {
     const input = {
       theme: "autumn",

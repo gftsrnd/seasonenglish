@@ -19,7 +19,8 @@
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
-    "@e4s/contracts": "workspace:*"
+    "@e4s/contracts": "workspace:*",
+    "vietnamese-lunar": "2.2.0"
   },
   "devDependencies": {
     "@types/node": "24.10.13"

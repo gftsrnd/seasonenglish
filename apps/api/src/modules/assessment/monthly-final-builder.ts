@@ -1,5 +1,6 @@
 import type { MonthlyFinalExamMeta, MonthlyFinalGrammarTarget, MonthlyFinalMappingRow, MonthlyFinalPronunciationTarget } from "@e4s/contracts";
 import type { MonthlyFinalGenerationInput, MonthlyFinalProductiveOutput, MonthlyFinalReceptiveOutput } from "@e4s/ai";
+import { ipaMatchesTaughtSound } from "@e4s/domain";
 import type { CoreTerm, GrammarStep, MonthlyCurriculumContract, PronunciationExample } from "@e4s/domain/monthly";
 import { buildMonthlyExamScope } from "@e4s/domain/monthly";
 import type { StoredAssessmentDefinition, StoredAssessmentTask } from "@e4s/database";
@@ -41,8 +42,8 @@ export function taughtGrammarSteps(contract: MonthlyCurriculumContract, topicInd
 export function taughtPronunciationExamples(contract: MonthlyCurriculumContract, soundIndex: number): PronunciationExample[] {
   const sound = contract.sounds[soundIndex];
   if (!sound) return [];
-  const taught = new Set(contract.daySpecs.filter((day) => day.kind === "new" && day.soundId === sound.id).flatMap((day) => day.pronunciationExampleIds));
-  return sound.examples.filter((example) => taught.has(example.id));
+  const taught = new Set(contract.daySpecs.filter((day) => day.kind === "new" && (day.pronunciationPlan?.targetIds ?? [day.soundId]).includes(sound.id)).flatMap((day) => day.pronunciationPlan?.exampleIds ?? day.pronunciationExampleIds));
+  return sound.examples.filter((example) => taught.has(example.id) && ipaMatchesTaughtSound(example.ipa, sound.ipa));
 }
 
 /** Section 10 "Đầu vào phải có": a missing target is an INPUT_ERROR, never invented. */

@@ -10,6 +10,7 @@ import { TypingRaceGame } from "../games/TypingRaceGame.js";
 import { WordSortGame } from "../games/WordSortGame.js";
 import { prepareGameAttempt } from "../games/types.js";
 import { createGameAttemptSeed, nextGameAttemptSeed, LearnerGame, LearnerGames } from "./Games.js";
+import { ModalProvider } from "../shared/ModalProvider.js";
 import type { LearnerCallbacks } from "./contracts.js";
 
 afterEach(() => {
@@ -97,7 +98,7 @@ describe("learner game visual and interaction regressions", () => {
   });
 
   it("keeps hub descriptions concise while preserving each game's core action", () => {
-    render(<LearnerGames view={hubView} actions={actions} />);
+    render(<LearnerGames view={hubView} actions={actions} />, { wrapper: ModalProvider });
 
     expect(screen.getByText("Hứng đúng vật phẩm, giữ 3 mạng.")).toBeInTheDocument();
     expect(screen.queryByText(/mang đúng từ: lá \(thu\)/i)).not.toBeInTheDocument();
@@ -114,7 +115,7 @@ describe("learner game visual and interaction regressions", () => {
         { id: "fly", english: "fly", vietnamese: "bay", definition: "move in air", partOfSpeech: "verb" }
       ]
     };
-    render(<LearnerGames view={{ ...hubView, wordSet: incompatibleWords }} actions={actions} />);
+    render(<LearnerGames view={{ ...hubView, wordSet: incompatibleWords }} actions={actions} />, { wrapper: ModalProvider });
 
     expect(screen.getByRole("button", { name: "Ô chữ chưa sẵn sàng" })).toBeDisabled();
     expect(screen.getByText("Cần ít nhất 3 từ có chữ cái chung.")).toBeInTheDocument();
@@ -466,16 +467,18 @@ describe("learner game visual and interaction regressions", () => {
 
   it("shows a recoverable error when removing the active vocabulary set fails", async () => {
     const deleteGameSet = vi.fn().mockRejectedValue(new Error("network"));
-    render(<LearnerGames view={hubView} actions={{ ...actions, deleteGameSet } as unknown as LearnerCallbacks} />);
+    render(<LearnerGames view={hubView} actions={{ ...actions, deleteGameSet } as unknown as LearnerCallbacks} />, { wrapper: ModalProvider });
 
     fireEvent.click(screen.getByRole("button", { name: "Xoá bộ này" }));
+    const dialog = await screen.findByRole("dialog", { name: "Xoá bộ từ đang dùng?" });
+    fireEvent.click(within(dialog).getByRole("button", { name: "Xoá bộ từ" }));
 
     expect(await screen.findByRole("alert")).toHaveTextContent("Không xoá được bộ từ. Vui lòng thử lại.");
     expect(screen.getByRole("button", { name: "Xoá bộ này" })).not.toBeDisabled();
   });
 
   it("keeps natural-topic generation open before the learner has selected a word set", () => {
-    render(<LearnerGames view={{ ...hubView, aiAvailable: true, wordSet: null }} actions={actions as unknown as LearnerCallbacks} />);
+    render(<LearnerGames view={{ ...hubView, aiAvailable: true, wordSet: null }} actions={actions as unknown as LearnerCallbacks} />, { wrapper: ModalProvider });
 
     const topic = screen.getByRole("textbox", { name: "Chủ đề bộ từ" });
     fireEvent.change(topic, { target: { value: "Coffee shop conversations" } });

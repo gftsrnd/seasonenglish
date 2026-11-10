@@ -40,10 +40,18 @@ import {
   monthlyFinalProductiveOutputJsonSchema, monthlyFinalProductiveOutputSchema,
   monthlyFinalReceptiveOutputJsonSchema, monthlyFinalReceptiveOutputSchema,
   monthlyFinalListeningOutputJsonSchema, monthlyFinalListeningOutputSchema, validateMonthlyFinalListeningOutput,
+  monthlyFinalListeningMessageInputSchema,monthlyFinalListeningMessageOutputSchema,monthlyFinalListeningMessageOutputJsonSchema,
+  monthlyFinalWritingNotesSchema, monthlyFinalWritingNotesJsonSchema, monthlyFinalWritingOpening, monthlyFinalSpeakingSampleRepairSchema,
   monthlyFinalReadingOutputJsonSchema, monthlyFinalReadingOutputSchema, validateMonthlyFinalReadingOutput,
   validateMonthlyFinalProductiveOutput, validateMonthlyFinalReceptiveOutput
 } from "./monthly-final-schemas.js";
 import { z } from "zod";
+import {monthlyFinalReadAloudInputSchema,monthlyFinalReadAloudOutputSchema,monthlyFinalReadAloudOutputJsonSchema,validateMonthlyFinalReadAloudOutput} from "./monthly-final-read-aloud.js";
+import {monthlyFinalSampleRepairInputSchema,monthlyFinalSpeakingSampleRepairJsonSchema,validateMonthlyFinalSampleRepair} from "./monthly-final-sample-repair.js";
+import {monthlyFinalWritingBlocksInputSchema,monthlyFinalWritingBlocksOutputSchema,monthlyFinalWritingBlocksJsonSchema,validateMonthlyFinalWritingBlocks} from "./monthly-final-writing-blocks.js";
+import {monthlyFinalWritingBlockInputSchema,monthlyFinalWritingBlockOutputSchema,monthlyFinalWritingBlockJsonSchema,validateMonthlyFinalWritingBlock} from "./monthly-final-writing-blocks.js";
+import {validateMonthlyFinalListeningBlocks} from "./monthly-final-listening-blocks.js";
+import {monthlyFinalGrammarReviewInputSchema,monthlyFinalGrammarReviewOutputSchema,monthlyFinalGrammarReviewJsonSchema,validateMonthlyFinalGrammarReview} from "./monthly-final-grammar-review.js";
 import type { AiTaskDefinition } from "./types.js";
 import { standardLessonInstruction } from "./lesson-instruction.js";
 
@@ -109,25 +117,68 @@ export const AI_TASKS = new AiTaskRegistry([
   { id: "level_form_listening_generation", promptKey: "level_form_generation", inputSchema: levelFormInputSchema, outputSchema: levelFormListeningOutputSchema, outputJsonSchema: levelFormListeningOutputJsonSchema },
   { id: "level_form_reading_generation", promptKey: "level_form_generation", inputSchema: levelFormInputSchema, outputSchema: levelFormReadingOutputSchema, outputJsonSchema: levelFormReadingOutputJsonSchema },
   {
-    id: "monthly_final_receptive_generation", promptKey: "monthly_final_generation", inputSchema: monthlyFinalGenerationInputSchema,
+    id: "monthly_final_receptive_generation", maxValidationIssues: 32, promptKey: "monthly_final_generation", inputSchema: monthlyFinalGenerationInputSchema,
     outputSchema: monthlyFinalReceptiveOutputSchema, outputJsonSchema: monthlyFinalReceptiveOutputJsonSchema,
     validateOutput: (output, input) => validateMonthlyFinalReceptiveOutput(monthlyFinalReceptiveOutputSchema.parse(output), monthlyFinalGenerationInputSchema.parse(input))
   },
   // Same slicing as the level-up form: listening and reading are separate calls.
   {
-    id: "monthly_final_listening_generation", promptKey: "monthly_final_generation", inputSchema: monthlyFinalGenerationInputSchema,
+    id: "monthly_final_listening_generation", maxValidationIssues: 32, promptKey: "monthly_final_generation", inputSchema: monthlyFinalGenerationInputSchema,
     outputSchema: monthlyFinalListeningOutputSchema, outputJsonSchema: monthlyFinalListeningOutputJsonSchema,
     validateOutput: (output, input) => validateMonthlyFinalListeningOutput(monthlyFinalListeningOutputSchema.parse(output), monthlyFinalGenerationInputSchema.parse(input))
   },
   {
-    id: "monthly_final_reading_generation", promptKey: "monthly_final_generation", inputSchema: monthlyFinalGenerationInputSchema,
+    id:"monthly_final_listening_message_generation",maxValidationIssues:32,promptKey:"monthly_final_generation",inputSchema:monthlyFinalListeningMessageInputSchema,
+    outputSchema:monthlyFinalListeningMessageOutputSchema,outputJsonSchema:monthlyFinalListeningMessageOutputJsonSchema,
+    validateOutput:(output,rawInput)=>{
+      const input=monthlyFinalListeningMessageInputSchema.parse(rawInput);
+      const message=monthlyFinalListeningMessageOutputSchema.parse(output);
+      return [...validateMonthlyFinalListeningBlocks(message,input),...validateMonthlyFinalListeningOutput({listening:{messages:[message]}},input,input.messageLabel)];
+    }
+  },
+  {
+    id: "monthly_final_reading_generation", maxValidationIssues: 32, promptKey: "monthly_final_generation", inputSchema: monthlyFinalGenerationInputSchema,
     outputSchema: monthlyFinalReadingOutputSchema, outputJsonSchema: monthlyFinalReadingOutputJsonSchema,
     validateOutput: (output, input) => validateMonthlyFinalReadingOutput(monthlyFinalReadingOutputSchema.parse(output), monthlyFinalGenerationInputSchema.parse(input))
   },
   {
-    id: "monthly_final_productive_generation", promptKey: "monthly_final_generation", inputSchema: monthlyFinalGenerationInputSchema,
+    id: "monthly_final_productive_generation", maxValidationIssues: 32, promptKey: "monthly_final_generation", inputSchema: monthlyFinalGenerationInputSchema,
     outputSchema: monthlyFinalProductiveOutputSchema, outputJsonSchema: monthlyFinalProductiveOutputJsonSchema,
     validateOutput: (output, input) => validateMonthlyFinalProductiveOutput(monthlyFinalProductiveOutputSchema.parse(output), monthlyFinalGenerationInputSchema.parse(input))
+  },
+  {
+    id:"monthly_final_read_aloud_repair",promptKey:"monthly_final_generation",maxValidationIssues:32,inputSchema:monthlyFinalReadAloudInputSchema,
+    outputSchema:monthlyFinalReadAloudOutputSchema,outputJsonSchema:monthlyFinalReadAloudOutputJsonSchema,
+    validateOutput:(output,input)=>validateMonthlyFinalReadAloudOutput(monthlyFinalReadAloudOutputSchema.parse(output),monthlyFinalReadAloudInputSchema.parse(input))
+  },
+  {
+    id:"monthly_final_writing_sample_repair",promptKey:"monthly_final_generation",maxValidationIssues:32,inputSchema:monthlyFinalWritingBlocksInputSchema,
+    outputSchema:monthlyFinalWritingBlocksOutputSchema,outputJsonSchema:monthlyFinalWritingBlocksJsonSchema,
+    validateOutput:(output,input)=>validateMonthlyFinalWritingBlocks(monthlyFinalWritingBlocksOutputSchema.parse(output),monthlyFinalWritingBlocksInputSchema.parse(input))
+  },
+  {
+    id: "monthly_final_writing_notes_repair", promptKey: "monthly_final_generation", inputSchema: monthlyFinalSampleRepairInputSchema,
+    outputSchema: monthlyFinalWritingNotesSchema, outputJsonSchema: monthlyFinalWritingNotesJsonSchema,
+    validateOutput(output) {
+      const {task} = monthlyFinalWritingNotesSchema.parse(output);
+      const extraHint = monthlyFinalWritingOpening(task) || /gợi ý câu mở đầu|câu mở đầu gợi ý|mở đầu bằng câu|suggested opening/iu.test(task);
+      return extraHint ? [{path:"task",message:"Leave out all opening hints and translations. The application appends the single English opening."}] : [];
+    }
+  },
+  {
+    id:"monthly_final_grammar_evidence_review",promptKey:"monthly_final_generation",inputSchema:monthlyFinalGrammarReviewInputSchema,
+    outputSchema:monthlyFinalGrammarReviewOutputSchema,outputJsonSchema:monthlyFinalGrammarReviewJsonSchema,
+    validateOutput:(output,input)=>validateMonthlyFinalGrammarReview(monthlyFinalGrammarReviewOutputSchema.parse(output),monthlyFinalGrammarReviewInputSchema.parse(input))
+  },
+  {
+    id:"monthly_final_writing_block_repair",promptKey:"monthly_final_generation",maxValidationIssues:32,inputSchema:monthlyFinalWritingBlockInputSchema,
+    outputSchema:monthlyFinalWritingBlockOutputSchema,outputJsonSchema:monthlyFinalWritingBlockJsonSchema,
+    validateOutput:(output,input)=>validateMonthlyFinalWritingBlock(monthlyFinalWritingBlockOutputSchema.parse(output),monthlyFinalWritingBlockInputSchema.parse(input))
+  },
+  {
+    id:"monthly_final_speaking_sample_repair",promptKey:"monthly_final_generation",maxValidationIssues:32,inputSchema:monthlyFinalSampleRepairInputSchema,
+    outputSchema:monthlyFinalSpeakingSampleRepairSchema,outputJsonSchema:monthlyFinalSpeakingSampleRepairJsonSchema,
+    validateOutput:(output,input)=>validateMonthlyFinalSampleRepair(monthlyFinalSpeakingSampleRepairSchema.parse(output),monthlyFinalSampleRepairInputSchema.parse(input))
   },
   { id: "level_form_production_generation", promptKey: "level_form_generation", inputSchema: levelFormInputSchema, outputSchema: levelFormProductionOutputSchema, outputJsonSchema: levelFormProductionOutputJsonSchema },
   {

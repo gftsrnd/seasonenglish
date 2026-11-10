@@ -1,5 +1,6 @@
 import type {
   CefrLevel,
+  LearnerAcademicAppealView,
   LearnerHomeView,
   LearnerProfileData,
   LearnerProfileView,
@@ -11,13 +12,14 @@ import type {
   MonthlyExamEligibilityView
 } from "@e4s/contracts";
 import { buildPronunciationAssets, microGradingOutputSchema, microLessonOutputSchema, type AiTaskRunner, type MicroLessonTaskOutput } from "@e4s/ai";
-import { createRepositories, learnerMonthlyAttendanceDates, MONTH_LESSON_IS_REVIEW_SQL, type LearnerLessonRecord } from "@e4s/database";
+import { autoApproveExpiredEligibilityComplaints, createRepositories, learnerConsecutiveLearningAbsences, learnerMonthlyAccess, learnerMonthlyAttendanceDates, MONTH_LESSON_IS_REVIEW_SQL, type LearnerLessonRecord } from "@e4s/database";
 import { gradeLessonAnswer, validateGeneratedFeedback } from "@e4s/domain/content";
-import { evaluateMonthlyExamEligibility } from "@e4s/domain/progression";
+import { evaluateMonthlyExamEligibility, MONTHLY_EXAM_ENTRY_CUTOFF, monthlyExamEntryState } from "@e4s/domain/progression";
 import { isLearnerProfileComplete, mergeLessonProgress } from "@e4s/domain/learning";
 import type { FastifyInstance } from "fastify";
 import type { Pool } from "pg";
 import { z } from "zod";
+import { requestEvidenceFields } from "../manager/request-evidence.js";
 import { createRoleGuard } from "../identity/policy.js";
 import { registerWeeklyReviewRoutes } from "./weekly-review-routes.js";
 import type { ContentMediaService } from "../media/index.js";
@@ -90,7 +92,7 @@ const lessonAttemptInput = z.object({
     context.addIssue({ code: "custom", path: ["evidence"], message: "Exercise evidence is required" });
   }
 });
-const lessonAppealInput = z.object({ reason: z.string().trim().min(5).max(2_000) });
+const lessonAppealInput = z.object({ reason: z.string().trim().min(5).max(2_000), exerciseVersionId: z.uuid().optional(), ...requestEvidenceFields });
 const monthlyGoalInput = z.object({ monthlyGoal: z.string().trim().min(1).max(2_000) });
 const rewardAnnouncementAcknowledgeInput = z.object({ announcementId: z.string().trim().min(1).max(200) });
 
@@ -167,18 +169,56 @@ export function registerLearningRoutes(
 
   app.get("/api/v1/learner/home", { preHandler: learnerOnly }, async (request, reply) => {
     const learnerId = request.e4sSession!.user.id;
-    const [profile, monthlyContext, progress, microLesson, runner, monthlyEligibility] = await Promise.all([
+    const [profile, monthlyContext, progress, microLesson, runner, monthlyEligibility, monthlyAccess, inactiveDays, coachTarget, monthlyAttempt] = await Promise.all([
       repositories.learning.getProfile(learnerId),
       repositories.learning.getActiveMonthlyContext(learnerId),
       repositories.learning.getProgressDashboard(learnerId),
       repositories.learning.todayMicroLesson(learnerId),
       runnerFor(learnerId),
-      monthlyExamEligibility(pool, learnerId)
+      monthlyExamEligibility(pool, learnerId),
+      learnerMonthlyAccess(pool, learnerId),
+      learnerConsecutiveLearningAbsences(pool, learnerId),
+      repositories.coach.dailyLimitForLearner(learnerId),
+      repositories.assessments.findMonthlyFinalAttempt(learnerId)
     ]);
     if (!progress) return reply.code(404).send({ code: "LEARNER_NOT_FOUND" });
-    const lifecycle = monthlyContext
+    const lifecycle = progress.learner.cefr
       ? await repositories.learning.learnerLifecycle(learnerId, progress.points, progress.levelReadiness.eligible)
       : null;
+    const targetLevel = progress.levelReadiness.targetLevel;
+    let passCourse: LearnerHomeView["passCourse"];
+    if (progress.learner.cefr === "C1") {
+      try {
+        await pool.query(`select notify_inbox(organization_id, 'learner', id, 'highest-level:C1', 'level_changed', 'highest:C1')
+          from users where id = $1 and not exists (
+            select 1 from inbox_notifications where recipient_id = $1 and kind = 'level_changed' and context = 'level:C1'
+          )`, [learnerId]);
+      } catch (error) {
+        request.log.warn({ err: error }, "Unable to sync highest level notification");
+      }
+      if (await repositories.assessments.passCourseEligibility(learnerId)) {
+        const exam = await repositories.assessments.findPublished("pass-course");
+        if (exam) {
+          const attempt = await repositories.assessments.findActiveAttempt(learnerId, exam.versionId);
+          passCourse = { status: attempt?.status === "in_progress" ? "in_progress"
+            : attempt?.status === "submitted" || attempt?.status === "pending_review" ? "pending_review" : "ready" };
+        }
+      }
+    }
+    if (progress.levelReadiness.eligible && targetLevel && (lifecycle?.levelUpPhase === "eligible" || lifecycle?.levelUpPhase === "failed")) {
+      try {
+        const context = await repositories.assessments.levelUpStartContext(learnerId);
+        if (!context.active && (!context.retryEligibleAt || context.retryEligibleAt.getTime() <= Date.now())) {
+          const exam = await repositories.assessments.findPublishedLevelUpForLearner(learnerId, targetLevel);
+          if (exam) {
+            await pool.query(`select notify_inbox(organization_id, 'learner', id, $2, 'level_exam_ready', $3)
+              from users where id = $1`, [learnerId, `level-ready:${exam.versionId}:${context.retryEligibleAt?.toISOString() ?? "first"}`, targetLevel]);
+          }
+        }
+      } catch (error) {
+        request.log.warn({ err: error }, "Unable to sync level exam notification");
+      }
+    }
     const onboardingRequired = !profile || !isLearnerProfileComplete(profile.profile);
     const lessons = monthlyContext
       ? await repositories.learning.listMonthlyLessons(learnerId, monthlyContext.month)
@@ -186,6 +226,8 @@ export function registerLearningRoutes(
     const summaries = lessons.map((lesson) => ({
       id: lesson.id,
       dayNumber: lesson.dayNumber,
+      ...(lesson.teachingLabel ? { teachingLabel: lesson.teachingLabel } : {}),
+      ...(lesson.newLessonNumber ? { newLessonNumber: lesson.newLessonNumber } : {}),
       title: learnerLessonDisplayTitle(lesson),
       status: lesson.progress.status,
       lock: lesson.lock,
@@ -198,16 +240,16 @@ export function registerLearningRoutes(
     const reviewLessons = summaries.filter((lesson) => lesson.kind === "review");
     const completedReviews = reviewLessons.filter((lesson) => lesson.status === "completed").length;
     const totalReviews = reviewLessons.length;
-    const persistedMonthlyExamStatus = progress.monthlyProgress?.exam.status ?? "unpublished";
-    const monthlyExamStatus = persistedMonthlyExamStatus === "completed"
+    const pastMonthlyAttempt = monthlyEligibility.month !== monthlyContext?.month && monthlyEligibility.formPublished && !monthlyAttempt
+      ? await repositories.assessments.findMonthlyFinalAttempt(learnerId, monthlyEligibility.month) : null;
+    const persistedMonthlyExamStatus = pastMonthlyAttempt ? "completed" : progress.monthlyProgress?.exam.status ?? "unpublished";
+    const monthlyExamStatus = monthlyAttempt ? "ready" as const : persistedMonthlyExamStatus === "completed"
       ? "completed" as const
       : monthlyEligibility.accessEligible ? "ready" as const : persistedMonthlyExamStatus === "unpublished" ? "unpublished" as const : "locked" as const;
     const points = monthlyContext ? progress.points : 0;
-    const inactiveDays = monthlyContext
-      ? calculateInactiveDays(progress.activity.map((item) => item.occurredAt), `${monthlyContext.month}-01`)
-      : null;
     const view: LearnerHomeView = {
       onboardingRequired,
+      onboardingDraftAvailable: Boolean(profile?.draftAvailable),
       learner: { displayName: progress.learner.displayName, cefr: (monthlyContext?.cefr ?? progress.learner.cefr ?? null) as CefrLevel | null },
       program: null,
       week: null,
@@ -217,29 +259,33 @@ export function registerLearningRoutes(
         themeBrief: monthlyContext.themeBrief,
         communicationGoal: monthlyContext.communicationGoal,
         examDate: monthlyContext.examDate,
-        systemDate: monthlyContext.systemDate
+        systemDate: monthlyContext.systemDate,
+        holidays: monthlyContext.holidays
       } : null,
       monthlyPreparation: !monthlyContext,
+      ...(monthlyAccess?.state === "waiting_next_month" ? { monthlyStartDate: monthlyAccess.startDate } : {}),
+      ...(monthlyAccess?.state === "missed_exam" ? { monthlyLessonsLocked: true } : {}),
       monthlyEligibility,
-      monthlyExam: monthlyContext ? {
+      monthlyExam: monthlyContext || monthlyEligibility.accessEligible || monthlyAttempt ? {
         status: monthlyExamStatus,
+        ...(monthlyAttempt ? { inProgress: true } : {}),
         completedLessons,
         totalLessons: dailyLessons.length,
         remainingLessons: Math.max(0, dailyLessons.length - completedLessons),
-        requirement: monthlyExamStatus === "completed"
+        requirement: monthlyAttempt
+          ? "Bạn có thể tiếp tục bài thi đang làm."
+          : monthlyExamStatus === "completed"
           ? "Bạn đã hoàn thành bài thi tháng."
           : monthlyExamStatus === "unpublished"
             ? "Bài thi tháng đang chờ người vận hành phát hành."
-            : !monthlyEligibility.lessonsEligible
-            ? `Hoàn thành đủ ${monthlyEligibility.scheduledLessons ?? dailyLessons.length} bài học theo lịch tháng.`
             : !monthlyEligibility.attendanceEligible
-            ? "Số ngày vắng đã vượt giới hạn tháng; cần Manager xử lý kháng nghị."
-            : !monthlyEligibility.seasonEligible
-            ? `Đạt đủ ${monthlyEligibility.seasonTurnsRequired ?? 100} lượt hợp lệ với Season trong tháng.`
-            : completedLessons < dailyLessons.length
-          ? `Hoàn thành ${dailyLessons.length - completedLessons} bài còn lại để mở bài thi tháng.`
-          : "Bạn đã hoàn thành điều kiện. Bài thi tháng đã sẵn sàng.",
-        certificateEligible: monthlyContext.cefr === "C1"
+            ? "Số ngày vắng đã vượt giới hạn tháng. Bạn có thể gửi khiếu nại đến Quản lý."
+            : monthlyEligibility.entryClosed
+              ? "Đã hết giờ vào thi."
+              : monthlyEligibility.accessEligible
+                ? "Bạn đủ điều kiện điểm danh. Bài thi tháng đã mở."
+                : "Bạn đủ điều kiện điểm danh. Xem lịch để biết giờ vào thi.",
+        certificateEligible: (monthlyContext?.cefr ?? progress.learner.cefr) === "C1"
       } : null,
       lessons: summaries,
       nextLesson: summaries.find((lesson) => lesson.status !== "completed") ?? null,
@@ -258,11 +304,11 @@ export function registerLearningRoutes(
         totalReviews,
         monthlyExamStatus
       },
-      ...(inactiveDays !== null && inactiveDays >= 2 ? { inactivityReminder: { inactiveDays } } : {}),
+      ...(inactiveDays >= 3 ? { inactivityReminder: { inactiveDays } } : {}),
       schedule: monthlyContext
         ? buildMonthlySchedule(summaries, monthlyContext.systemDate, Number(progress.learner.profile.durationMinutes ?? 10))
         : buildSchedule(Number(progress.learner.profile.durationMinutes ?? 10), []),
-      coach: { turnsToday: monthlyContext ? progress.stats.coachTurnsToday ?? 0 : 0, turnsThisWeek: monthlyContext ? progress.stats.coachTurns : 0, targetTurns: 30, href: "/coach" },
+      coach: { turnsToday: monthlyContext ? progress.stats.coachTurnsToday ?? 0 : 0, turnsThisWeek: monthlyContext ? progress.stats.coachTurns : 0, targetTurns: coachTarget, href: "/coach" },
       practice: {
         status: "locked",
         detail: monthlyContext
@@ -271,6 +317,7 @@ export function registerLearningRoutes(
         href: "/practice"
       },
       levelReadiness: progress.levelReadiness,
+      ...(passCourse ? { passCourse } : {}),
       ...(lifecycle ? {
         levelUpPhase: lifecycle.levelUpPhase,
         monthlyGoal: lifecycle.monthlyGoal,
@@ -278,6 +325,25 @@ export function registerLearningRoutes(
       } : {})
     };
     return view;
+  });
+
+  app.get("/api/v1/learner/appeals", { preHandler: learnerOnly }, async (request, reply) => {
+    reply.header("Cache-Control", "private, no-store");
+    const result = await pool.query<Omit<LearnerAcademicAppealView, "createdAt"> & { createdAt: Date }>(`
+      select p.id, 'lesson' as kind, l.title, p.reason, p.status, p.resolution, p.created_at as "createdAt",
+             p.request_scope as scope, p.screenshot is not null as "hasEvidence", p.part_code as "partCode"
+        from lesson_part_appeals p join lessons l on l.id = p.lesson_id where p.learner_id = $1
+      union all
+      select p.id, 'assessment', d.title, p.reason, p.status, p.resolution, p.created_at, p.request_scope, p.screenshot is not null, null
+        from appeals p join assessment_attempts a on a.id = p.attempt_id and a.learner_id = p.learner_id
+        join assessment_versions v on v.id = a.assessment_version_id
+        join assessment_definitions d on d.id = v.definition_id where p.learner_id = $1
+      union all
+      select p.id, 'practice', 'Bài thực hành', p.reason, p.status, p.resolution, p.created_at, p.request_scope, p.screenshot is not null, null
+        from practice_appeals p where p.learner_id = $1
+      order by "createdAt" desc
+    `, [request.e4sSession!.user.id]);
+    return { appeals: result.rows.map(item => ({ ...item, createdAt: item.createdAt.toISOString() })) };
   });
 
   app.get("/api/v1/learner/progress", { preHandler: learnerOnly }, async (request, reply) => {
@@ -325,6 +391,8 @@ export function registerLearningRoutes(
       lessons: lessons.map((lesson) => ({
         id: lesson.id,
         dayNumber: lesson.dayNumber,
+      ...(lesson.teachingLabel ? { teachingLabel: lesson.teachingLabel } : {}),
+      ...(lesson.newLessonNumber ? { newLessonNumber: lesson.newLessonNumber } : {}),
         title: learnerLessonDisplayTitle(lesson),
         status: lesson.progress.status,
         lock: lesson.lock
@@ -417,7 +485,7 @@ export function registerLearningRoutes(
     const lesson = await repositories.learning.findLesson(learnerId, params.data.lessonId);
     if (!lesson) return reply.code(404).send({ code: "LESSON_NOT_FOUND" });
     if (lesson.lock) return reply.code(409).send({ code: "LESSON_LOCKED", lock: lesson.lock });
-    const targetWords = pronunciationWordsForLesson(lesson).slice(0, 3);
+    const targetWords = pronunciationWordsForLesson(lesson);
     const match = targetWords.find((word) => word.toLocaleLowerCase() === body.data.word.toLocaleLowerCase());
     if (!match) return reply.code(422).send({ code: "PRONUNCIATION_WORD_NOT_ASSIGNED" });
     const listened = new Set(recordedPronunciationWords(lesson.progress.evidence.pronunciation?.answer));
@@ -465,7 +533,7 @@ export function registerLearningRoutes(
       return reply.code(409).send({ code: "LESSON_STUDY_INCOMPLETE" });
     }
     if (params.data.partCode === "speaking") {
-      const requiredWords = pronunciationWordsForLesson(lesson).slice(0, 3);
+      const requiredWords = pronunciationWordsForLesson(lesson);
       const listened = new Set(recordedPronunciationWords(lesson.progress.evidence.pronunciation?.answer).map((word) => word.toLocaleLowerCase()));
       if (requiredWords.some((word) => !listened.has(word.toLocaleLowerCase()))) {
         return reply.code(409).send({ code: "PRONUNCIATION_LISTENING_REQUIRED" });
@@ -502,10 +570,15 @@ export function registerLearningRoutes(
     if (!part || !practicePartCodes.includes(part.code as typeof practicePartCodes[number])) {
       return reply.code(404).send({ code: "LESSON_PART_NOT_FOUND" });
     }
+    if (body.data.exerciseVersionId && body.data.exerciseVersionId !== lesson.exerciseVersionId) {
+      return reply.code(409).send({ code: "LESSON_EXERCISE_CHANGED" });
+    }
+    const exerciseVersionId = lesson.exerciseVersionId;
     const existingAppeal = await repositories.learning.findLessonPartAppeal(
       learnerId,
       params.data.lessonId,
-      params.data.partCode
+      params.data.partCode,
+      exerciseVersionId
     );
     if (existingAppeal) return existingAppeal;
     const requiredStudy = lesson.content.parts
@@ -514,14 +587,12 @@ export function registerLearningRoutes(
     if (requiredStudy.some((code) => !lesson.progress.completedPartCodes.includes(code))) {
       return reply.code(409).send({ code: "LESSON_STUDY_INCOMPLETE" });
     }
-    if (!["wrong_exhausted", "appealed"].includes(lesson.progress.evidence[params.data.partCode]?.status ?? "")) {
-      return reply.code(409).send({ code: "LESSON_APPEAL_NOT_AVAILABLE" });
-    }
     const result = await repositories.learning.appealLessonPart({
       learnerId,
       lessonId: params.data.lessonId,
       partCode: params.data.partCode,
-      reason: body.data.reason
+      ...body.data,
+      exerciseVersionId
     });
     return result ?? reply.code(404).send({ code: "LESSON_PART_NOT_FOUND" });
   });
@@ -751,8 +822,10 @@ function profileView(record: {
   };
 }
 
-function pronunciationWordsForLesson(lesson: { content: { parts: Array<{ code: string; content: Record<string, unknown> }> } }): string[] {
-  const words = lesson.content.parts.find((part) => part.code === "pronunciation")?.content.words;
+export function pronunciationWordsForLesson(lesson: { content: { parts: Array<{ code: string; content: Record<string, unknown> }> } }): string[] {
+  const content = lesson.content.parts.find((part) => part.code === "pronunciation")?.content;
+  const targets = Array.isArray(content?.reviewTargets) ? content.reviewTargets.filter((target): target is Record<string, unknown> => !!target && typeof target === "object" && !Array.isArray(target)) : [];
+  const words = targets.length ? targets.flatMap(target => Array.isArray(target.words) ? target.words : []) : Array.isArray(content?.words) ? content.words.slice(0, 3) : [];
   if (!Array.isArray(words)) return [];
   return words.flatMap((entry) => {
     if (typeof entry === "string" && entry.trim()) return [entry.trim()];
@@ -810,8 +883,11 @@ export function learnerLessonView(lesson: LearnerLessonRecord): LessonView {
   });
   return {
     id: lesson.id,
+    ...(lesson.exerciseVersionId ? { exerciseVersionId: lesson.exerciseVersionId } : {}),
     title: learnerLessonDisplayTitle(lesson),
     dayNumber: lesson.dayNumber,
+      ...(lesson.teachingLabel ? { teachingLabel: lesson.teachingLabel } : {}),
+      ...(lesson.newLessonNumber ? { newLessonNumber: lesson.newLessonNumber } : {}),
     weekNumber: lesson.weekNumber,
     weekTopic: lesson.weekTopic,
     durationMinutes: lesson.content.durationMinutes ?? 10,
@@ -935,10 +1011,11 @@ function buildSchedule(lessonMinutes: number, occurredAt: string[]): LearnerHome
 
 type MonthlyEligibilityRow = {
   system_date: string;
+  local_time: string;
   month: string;
   exam_date: string | null;
-  attended_days: string;
   attendance_appeal_approved: boolean;
+  late_opened_at: Date | null;
   scheduled_lessons: string;
   completed_lessons: string;
   season_turns: string;
@@ -946,24 +1023,38 @@ type MonthlyEligibilityRow = {
   form_published: boolean;
 };
 
-/** This gate is independent from framework/form publication and only reads persisted facts. */
-export async function monthlyExamEligibility(pool: Pool, learnerId: string): Promise<MonthlyExamEligibilityView> {
-  await pool.query(
-    `update learner_complaints set status = 'auto_approved', resolution = 'Tự duyệt do quá hạn', resolved_at = now()
-     where learner_id = $1 and kind = 'exam_eligibility' and status = 'pending' and due_at <= now()`,
-    [learnerId]
-  );
+/** Lesson completion and Season are tracked separately from entry. */
+export async function monthlyExamEligibility(pool: Pool, learnerId: string, options: { includeLate?: boolean } = {}): Promise<MonthlyExamEligibilityView> {
+  await autoApproveExpiredEligibilityComplaints(pool, { learnerId });
   const result = await pool.query<MonthlyEligibilityRow>(
     `with identity as (
        select u.organization_id, organization_system_date(u.organization_id)::date as system_date,
               e.cefr
-       from users u left join enrollments e on e.learner_id = u.id
+       from users u
+       left join lateral (select e.cefr from enrollments e join programs p on p.id = e.program_id and p.status = 'active'
+         where e.learner_id = u.id and e.cefr_approved order by e.enrolled_at desc limit 1) e on true
        where u.id = $1 and u.role = 'learner'
+     ), grants as (
+       select complaint.resolved_at, pm.month, pm.exam_date,
+              coalesce(nullif(complaint.related_data->>'resolvedOn', '')::date, (complaint.resolved_at at time zone 'Asia/Ho_Chi_Minh')::date)
+                + (complaint.resolved_at at time zone 'Asia/Ho_Chi_Minh')::time as resolved_local
+       from identity i
+       join learner_complaints complaint on complaint.learner_id = $1 and complaint.kind = 'exam_eligibility'
+         and complaint.status in ('approved', 'auto_approved')
+         and coalesce(complaint.related_data->>'cefr', i.cefr) = i.cefr
+       join program_months pm on pm.organization_id = i.organization_id
+         and pm.month = coalesce(nullif(left(complaint.related_data->>'month', 7), ''), to_char(complaint.submitted_at at time zone 'Asia/Ho_Chi_Minh', 'YYYY-MM'))
+     ), late as (
+       select grants.month, grants.resolved_at from grants
+       where $2::boolean and grants.resolved_local >= grants.exam_date + $3::time
+         and grants.resolved_at <= now() and now() < grants.resolved_at + interval '24 hours'
+       order by grants.resolved_at desc limit 1
      ), dates as (
-       select i.*, to_char(i.system_date, 'YYYY-MM') as month,
+       select i.*, coalesce(late.month, to_char(i.system_date, 'YYYY-MM')) as month, late.resolved_at as late_opened_at,
               coalesce(pm.exam_date, (select max(d)::date from generate_series(date_trunc('month', i.system_date)::date, (date_trunc('month', i.system_date) + interval '1 month - 1 day')::date, interval '1 day') d where extract(isodow from d) <= 5)) as exam_date,
-              mf.id as framework_id, (mf.status = 'approved') as framework_approved
-       from identity i left join program_months pm on pm.organization_id = i.organization_id and pm.month = to_char(i.system_date, 'YYYY-MM')
+              mf.id as framework_id, (mf.status = 'approved' and mf.published_at is not null) as framework_approved
+       from identity i left join late on true
+       left join program_months pm on pm.organization_id = i.organization_id and pm.month = coalesce(late.month, to_char(i.system_date, 'YYYY-MM'))
        left join month_frameworks mf on mf.program_month_id = pm.id and mf.cefr = i.cefr
      ), facts as (
        select d.*,
@@ -976,42 +1067,49 @@ export async function monthlyExamEligibility(pool: Pool, learnerId: string): Pro
                where ml.framework_id = d.framework_id and ml.status = 'approved' and not ${MONTH_LESSON_IS_REVIEW_SQL})::text as completed_lessons,
               (select count(*) from coach_turns ct join coach_sessions cs on cs.id = ct.session_id
                where cs.learner_id = $1 and ct.speaker = 'learner'
-                 and ct.created_at >= date_trunc('month', d.system_date)
-                 and ct.created_at < date_trunc('month', d.system_date) + interval '1 month'
+                 and to_char(ct.created_at at time zone 'Asia/Ho_Chi_Minh', 'YYYY-MM') = d.month
                  and (ct.created_at at time zone 'Asia/Ho_Chi_Minh')::date < d.exam_date
                  and coalesce((ct.feedback->'evaluation'->>'countsTowardGoal')::boolean, coalesce((ct.feedback->>'relevant')::boolean, true)))::text as season_turns,
               exists(select 1 from assessment_definitions ad join assessment_versions av on av.definition_id = ad.id and av.status = 'published'
                 where ad.organization_id = d.organization_id and ad.kind = 'final'
                   and ad.assessment_key = ('monthly-final-' || d.month || '-' || lower(d.cefr))) as form_published,
-              exists(select 1 from learner_complaints lc where lc.learner_id = $1 and lc.kind = 'exam_eligibility'
-                and lc.status in ('approved', 'auto_approved') and lc.submitted_at >= date_trunc('month', d.system_date)
-                and lc.submitted_at < date_trunc('month', d.system_date) + interval '1 month') as attendance_appeal_approved
+              exists(select 1 from grants where grants.month = d.month) as attendance_appeal_approved
        from dates d
      )
-     select f.system_date::text, f.month, f.exam_date::text,
-            '0'::text as attended_days,
+     select f.system_date::text, f.month, f.exam_date::text, f.late_opened_at,
+            to_char(now() at time zone 'Asia/Ho_Chi_Minh', 'HH24:MI:SS') as local_time,
             max(f.scheduled_lessons)::text as scheduled_lessons, max(f.completed_lessons)::text as completed_lessons,
             max(f.season_turns)::text as season_turns, bool_or(f.framework_approved) as framework_approved,
             bool_or(f.form_published) as form_published, bool_or(f.attendance_appeal_approved) as attendance_appeal_approved
      from facts f
-     group by f.system_date, f.month, f.exam_date, f.organization_id`, [learnerId]
+     group by f.system_date, f.month, f.exam_date, f.late_opened_at`, [learnerId, options.includeLate !== false, MONTHLY_EXAM_ENTRY_CUTOFF]
   );
   const row = result.rows[0]; if (!row) throw new Error('LEARNER_MONTHLY_ELIGIBILITY_NOT_FOUND');
-  // Attendance follows the domain rule (Friday only through the week's review;
-  // a late review credits its effective makeup day), not raw completion dates.
-  row.attended_days = String((await learnerMonthlyAttendanceDates(pool, learnerId, [row.month])).get(row.month)?.length ?? 0);
-  const systemDate = row.system_date; const examDate = row.exam_date ?? lastWeekdayOfMonth(systemDate.slice(0, 7));
-  const effectiveDates = weekdaysBeforeExam(systemDate.slice(0, 7), examDate); const elapsedDates = effectiveDates.filter((date) => date <= systemDate);
+  const access = await learnerMonthlyAccess(pool, learnerId, row.month);
+  const systemDate = row.system_date;
+  const examDate = row.exam_date ?? access!.examDate;
+  const cohortEligible = access?.state === "active";
+  const effectiveDates = cohortEligible ? access.effectiveDates : [];
+  const elapsedDates = effectiveDates.filter(date => date < systemDate);
+  const recorded = cohortEligible && access.cefr
+    ? (await learnerMonthlyAttendanceDates(pool, learnerId, [row.month], { cefr: access.cefr })).get(row.month) ?? [] : [];
+  const attended = recorded.filter(date => effectiveDates.includes(date) && date <= systemDate);
+  const entryState = row.late_opened_at ? "open" : monthlyExamEntryState(systemDate, examDate, row.local_time);
   const eligibility = evaluateMonthlyExamEligibility({
     systemDate, examDate, effectiveDays: effectiveDates.length, elapsedEffectiveDays: elapsedDates.length,
-    attendedDays: Number(row.attended_days) || 0, scheduledLessons: Number(row.scheduled_lessons) || 0,
+    attendedDays: attended.length, attendedElapsedDays: attended.filter(date => date < systemDate).length,
+    scheduledLessons: Number(row.scheduled_lessons) || 0,
     completedLessons: Number(row.completed_lessons) || 0, seasonTurns: Number(row.season_turns) || 0,
     attendanceOverride: Boolean(row.attendance_appeal_approved),
-    frameworkApproved: Boolean(row.framework_approved), formPublished: Boolean(row.form_published)
+    frameworkApproved: Boolean(row.framework_approved), formPublished: Boolean(row.form_published),
+    seasonTarget: cohortEligible ? access.seasonTarget : 100, learnerEligible: cohortEligible,
+    windowOpen: entryState === "open"
   });
-  return { month: row.month, systemDate, examDate, ...eligibility, opensAt: `${examDate}T00:00:00`, closesAt: null };
+  return {
+    month: row.month, systemDate, examDate, ...eligibility, entryClosed: entryState === "closed",
+    opensAt: row.late_opened_at?.toISOString() ?? `${examDate}T00:00:00+07:00`,
+    closesAt: row.late_opened_at ? new Date(row.late_opened_at.getTime() + 24 * 60 * 60 * 1000).toISOString() : `${examDate}T${MONTHLY_EXAM_ENTRY_CUTOFF}+07:00`
+  };
 }
-function weekdaysBeforeExam(month: string, examDate: string): string[] { const result: string[] = []; const start = new Date(`${month}-01T00:00:00Z`); const end = new Date(`${examDate}T00:00:00Z`); for (let current = new Date(start); current < end; current.setUTCDate(current.getUTCDate() + 1)) { const weekday = current.getUTCDay(); if (weekday >= 1 && weekday <= 5) result.push(current.toISOString().slice(0, 10)); } return result; }
-function lastWeekdayOfMonth(month: string): string { const [year, monthNumber] = month.split('-').map(Number); const current = new Date(Date.UTC(year!, monthNumber!, 0)); while (current.getUTCDay() === 0 || current.getUTCDay() === 6) current.setUTCDate(current.getUTCDate() - 1); return current.toISOString().slice(0, 10); }
 
 

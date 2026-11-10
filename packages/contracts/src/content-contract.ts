@@ -1,3 +1,4 @@
+import type { RequestEvidenceView } from "./request-evidence-contract.js";
 export const CONTENT_LIFECYCLE_STATUSES = ["draft", "approved", "locked", "reopen_requested", "reopened", "rejected"] as const;
 export type ContentLifecycleStatus = (typeof CONTENT_LIFECYCLE_STATUSES)[number];
 
@@ -29,8 +30,10 @@ export interface ReopenRequestView {
   readonly decisionReason: string | null;
   readonly createdAt: string;
   readonly decidedAt: string | null;
+  readonly archivedAt?: string | null;
   /** Present only when target is `monthly_resources`. */
   readonly monthlyResources?: MonthlyResourcesReopenDetailView;
+  readonly lesson?: { readonly date: string; readonly cefr: CefrLevel; readonly number: number };
 }
 
 export interface NotificationEventView {
@@ -218,23 +221,33 @@ export interface ContentReviewView {
     id: string; learnerName: string; cefr: CefrLevel; topic: string; generatedAt: string;
     completed: boolean; theory: string; vocabulary: string[]; practice: string; answer: string | null;
   }>;
-  appeals: Array<{
+  appeals: Array<RequestEvidenceView & {
     id: string; learnerName: string; reason: string; status: "pending" | "accepted" | "rejected";
     createdAt: string; resolution: string;
+    overdue?: boolean;
+    proposedLevel?: CefrLevel;
     kind: "assessment" | "weekly_practice" | "lesson_part";
     submissionId: string | null;
+    attemptId?: string | null;
     currentScore: number | null;
     cefr?: CefrLevel | null;
     weekNumber?: number | null;
     dayNumber?: number | null;
     lessonTitle?: string | null;
     partCode?: string | null;
+    exerciseVersionId?: string | null;
     attempts?: number | null;
     answer?: string | null;
     aiFeedback?: string | null;
     question?: string | null;
     options?: string[];
     answerKey?: string | null;
+  }>;
+  exerciseWarnings?: Array<{
+    id: string; learnerName: string; cefr: CefrLevel; month: string; frameworkId: string;
+    lessonId: string; dayNumber: number; lessonTitle: string; partCode: string;
+    exerciseVersionId: string; question: string; options: string[]; answerKey: string | null;
+    answers: [string, string];
   }>;
   lessonAttempts: Array<{
     id: string; learnerId: string; learnerName: string; cefr: CefrLevel | null; weekNumber: number; dayNumber: number;
@@ -247,6 +260,11 @@ export interface ContentReviewView {
     id: string; learnerName: string; kind: "placement" | "level_up" | "final" | "pass_course";
     title: string; status: string; submittedAt: string | null; totalScore: number | null;
   }>;
+}
+
+export interface LessonExerciseCorrectionInput {
+  prompt: string;
+  correctAnswer?: string | undefined;
 }
 
 export interface ContentReviewAssessmentAnswerView extends AssessmentResponseView {

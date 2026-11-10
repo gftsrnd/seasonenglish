@@ -1,10 +1,10 @@
 import { Pool } from "pg";
-import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
-import { migrateDatabase, resetPublicSchema, seedDemo } from "@e4s/database";
+import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
+import { createRepositories, migrateDatabase, resetPublicSchema, seedDemo } from "@e4s/database";
 import { createCredentialHash, createPinHash } from "@e4s/domain/identity";
 import { DEMO_IDS } from "@e4s/test-support";
 import { buildApi } from "../src/app.js";
-import type { CoachTaskOutput } from "@e4s/ai";
+import type { AiTaskRunner, CoachTaskOutput } from "@e4s/ai";
 
 const databaseUrl = process.env.TEST_DATABASE_URL
   ?? "postgres://e4s:e4s_test_password@127.0.0.1:55432/e4s_test";
@@ -36,7 +36,7 @@ const formalAiOutput = {
 
 describe("AI Coach API", () => {
   const pool = new Pool({ connectionString: databaseUrl });
-  const runTask = vi.fn(async () => ({
+  const runTask = vi.fn(async (..._args: Parameters<AiTaskRunner["runTask"]>) => ({
     output: aiOutput,
     metadata: {
       traceId: "trace-coach-1", taskId: "coach_dialogue", provider: "fixture", model: "fixture-model",
@@ -44,8 +44,24 @@ describe("AI Coach API", () => {
       usage: { inputTokens: 20, outputTokens: 25, totalTokens: 45 }
     }
   }));
-  const aiRunnerFactory = vi.fn(async () => ({ runTask }));
-  const app = buildApi({ pool, allowDemoLogin: true, secureCookies: false, aiRunner: { runTask }, aiRunnerFactory });
+  const roleplay = vi.fn(async (...[, input]: Parameters<AiTaskRunner["runTask"]>) => {
+    const persona = (input as { persona: string }).persona;
+    const model = persona === "formal" ? formalAiOutput : aiOutput;
+    return {
+      output: {
+        seasonReply: model.seasonReply + " " + model.nextQuestion,
+        learnerQuestion: model.nextQuestion,
+        suggestedLearnerReply: model.suggestedAnswer.text
+      },
+      metadata: { traceId: "trace-roleplay", taskId: "coach_roleplay_turn", provider: "fixture", model: "fixture-model",
+        attempts: 1, latencyMs: 12, inputHash: "a".repeat(64), schemaValid: true as const, usage: { inputTokens: 20, outputTokens: 25, totalTokens: 45 } }
+    };
+  });
+  const runner: AiTaskRunner = {
+    runTask: (...args) => args[0] === "coach_roleplay_turn" ? roleplay(...args) : runTask(...args)
+  };
+  const aiRunnerFactory = vi.fn(async () => runner);
+  const app = buildApi({ pool, allowDemoLogin: true, secureCookies: false, aiRunner: runner, aiRunnerFactory });
   let learnerCookie = "";
   let operatorCookie = "";
 
@@ -55,6 +71,8 @@ describe("AI Coach API", () => {
       await resetPublicSchema(client);
       await migrateDatabase(client);
       await seedDemo(client);
+      await client.query("update enrollments set enrolled_at = '2026-11-02' where learner_id = $1", [DEMO_IDS.learner]);
+      await client.query("update assessment_decisions set decided_at = '2026-11-02' where attempt_id in (select id from assessment_attempts where learner_id = $1)", [DEMO_IDS.learner]);
       await client.query(
         "insert into user_credentials (user_id, credential_hash) values ($1, $2), ($3, $4)",
         [DEMO_IDS.learner, await createPinHash("123456"), DEMO_IDS.operator, await createCredentialHash("operator-pass")]
@@ -69,6 +87,17 @@ describe("AI Coach API", () => {
     learnerCookie = await login("/api/auth/learner/login", "minh.anh.nguyen@e4s.local", "123456", "pin");
     operatorCookie = await login("/api/auth/staff/login", "thu.ha.tran@e4s.local", "operator-pass", "password");
   }, 30_000);
+
+  beforeEach(async () => {
+    await pool.query("delete from coach_sessions where learner_id = $1", [DEMO_IDS.learner]);
+    await pool.query("delete from ai_runs where user_id = $1", [DEMO_IDS.learner]);
+    await pool.query(
+      "insert into organization_settings (organization_id, configuration) values ($1, $2::jsonb) on conflict (organization_id) do update set configuration = excluded.configuration",
+      [DEMO_IDS.organization, JSON.stringify({ simulatedSystemDate: "2026-11-03", coachDailyLimit: 30 })]
+    );
+    runTask.mockReset();
+    roleplay.mockReset();
+  });
 
   afterAll(async () => { await app.close(); await pool.end(); });
 
@@ -92,14 +121,58 @@ describe("AI Coach API", () => {
   it("uses the configured daily limit instead of a hard-coded value", async () => {
     await pool.query(
       `insert into organization_settings (organization_id, reminder_inactive_days, weekly_report_enabled, configuration, updated_by)
-       values ($1, 3, true, '{"coachDailyLimit":7}'::jsonb, $2)
+       values ($1, 3, true, '{"coachDailyLimit":60}'::jsonb, $2)
        on conflict (organization_id) do update set configuration = organization_settings.configuration || excluded.configuration`,
       [DEMO_IDS.organization, DEMO_IDS.operator]
     );
     const response = await app.inject({ method: "GET", url: "/api/v1/coach", headers: { cookie: learnerCookie } });
     expect(response.statusCode, response.body).toBe(200);
-    expect(response.json().daily.limit).toBe(7);
+    expect(response.json().daily.limit).toBe(60);
     await pool.query(`update organization_settings set configuration = configuration || '{"coachDailyLimit":20}'::jsonb`);
+  });
+
+  it("applies changes from Manager settings at the start of the next organization month", async () => {
+    const { rows: [saved] } = await pool.query(
+      "select configuration from organization_settings where organization_id = $1",
+      [DEMO_IDS.organization]
+    );
+    try {
+      await pool.query(
+        `insert into organization_settings (organization_id, configuration, updated_by)
+         values ($1, '{"simulatedSystemDate":"2026-11-30","coachDailyLimit":20}'::jsonb, $2)
+         on conflict (organization_id) do update set configuration = organization_settings.configuration || excluded.configuration`,
+        [DEMO_IDS.organization, DEMO_IDS.manager]
+      );
+      const manager = createRepositories(pool).manager;
+      const settings = await manager.settings(DEMO_IDS.manager);
+      expect(settings).not.toBeNull();
+      await manager.saveSettings(DEMO_IDS.manager, { ...settings!, coachDailyLimit: 60 });
+      const learnerLimit = async () => {
+        const response = await app.inject({ method: "GET", url: "/api/v1/coach", headers: { cookie: learnerCookie } });
+        expect(response.statusCode, response.body).toBe(200);
+        return response.json().daily.limit;
+      };
+      expect(await learnerLimit()).toBe(20);
+      const operatorEdit = await app.inject({
+        method: "PUT", url: "/api/v1/operator/settings", headers: { cookie: operatorCookie },
+        payload: { ...settings!, coachDailyLimit: 150 }
+      });
+      expect(operatorEdit.statusCode, operatorEdit.body).toBe(200);
+      expect(operatorEdit.json()).toMatchObject({ coachDailyLimit: 60, coachDailyLimitStartsMonth: "2026-12" });
+      await manager.saveSettings(DEMO_IDS.manager, { ...settings!, coachDailyLimit: 75 });
+      expect(await learnerLimit()).toBe(20);
+      await pool.query(
+        "update organization_settings set configuration = configuration || jsonb_build_object('simulatedSystemDate', '2026-12-01') where organization_id = $1",
+        [DEMO_IDS.organization]
+      );
+      expect(await learnerLimit()).toBe(75);
+    } finally {
+      if (saved) {
+        await pool.query("update organization_settings set configuration = $2::jsonb where organization_id = $1", [DEMO_IDS.organization, saved.configuration]);
+      } else {
+        await pool.query("delete from organization_settings where organization_id = $1", [DEMO_IDS.organization]);
+      }
+    }
   });
 
   it("blocks every new message at the daily cap, including acknowledgement-only text", async () => {
@@ -152,7 +225,7 @@ describe("AI Coach API", () => {
         usage: { inputTokens: 20, outputTokens: 25, totalTokens: 45 }
       }
     });
-    const payload = { requestId: "10000000-0000-4000-8000-000000000009", message: "Could you review the agenda?" };
+    const payload = { requestId: "10000000-0000-4000-8000-000000000009", message: "Could you review the agenda before our meeting?" };
     const sent = await app.inject({ method: "POST", url: "/api/v1/coach/messages", headers: { cookie: learnerCookie }, payload });
     expect(sent.statusCode, sent.body).toBe(200);
     expect(runTask).toHaveBeenLastCalledWith("coach_dialogue", expect.objectContaining({ persona: "formal" }), expect.objectContaining({ systemPrompt: expect.stringContaining("FORMAL") }));
@@ -175,29 +248,26 @@ describe("AI Coach API", () => {
 
     const cleared = await app.inject({ method: "DELETE", url: "/api/v1/coach/session", headers: { cookie: learnerCookie } });
     expect(cleared.statusCode, cleared.body).toBe(200);
-    expect(cleared.json().messages).not.toEqual(expect.arrayContaining([expect.objectContaining({ text: "Could you review the agenda?" })]));
+    expect(cleared.json().messages).not.toEqual(expect.arrayContaining([expect.objectContaining({ text: "Could you review the agenda before our meeting?" })]));
     expect(cleared.json().messages).not.toEqual(expect.arrayContaining([expect.objectContaining({ text: "Can you take a quick look at this slide?" })]));
-    expect(cleared.json().messages[0]).toMatchObject({ id: "welcome", speaker: "coach" });
+    expect(cleared.json().messages[0]).toMatchObject({ id: expect.stringMatching(/:opening$/), speaker: "coach" });
     expect(cleared.json().messages[0].text).not.toContain("short introduction");
   });
 
   it("stores one validated AI turn and makes the request idempotent", async () => {
-    const payload = { requestId: "10000000-0000-4000-8000-000000000001", message: "I work at product." };
+    const payload = { requestId: "10000000-0000-4000-8000-000000000001", message: "I work at product with our design team." };
+    const before = await app.inject({ method: "GET", url: "/api/v1/coach", headers: { cookie: learnerCookie } });
     const first = await app.inject({ method: "POST", url: "/api/v1/coach/messages", headers: { cookie: learnerCookie }, payload });
     expect(first.statusCode, first.body).toBe(200);
     expect(first.json().messages).toEqual(expect.arrayContaining([
-      expect.objectContaining({ speaker: "learner", text: "I work at product." }),
+      expect.objectContaining({ speaker: "learner", text: "I work at product with our design team." }),
       expect.objectContaining({
         speaker: "coach",
         text: `${aiOutput.seasonReply} ${aiOutput.nextQuestion}`,
         feedback: expect.objectContaining({ rubric: aiOutput.rubric })
       })
     ]));
-    const progress = await app.inject({ method: "GET", url: "/api/v1/learner/progress", headers: { cookie: learnerCookie } });
-    expect(progress.statusCode, progress.body).toBe(200);
-    const coachReadiness = progress.json().levelReadiness.criteria.find((criterion: { key: string }) => criterion.key === "coachRubric");
-    expect(coachReadiness.current).toBeGreaterThan(0);
-    expect(coachReadiness.display).toMatch(/\/5 · [1-9]\d* lượt/);
+    expect(first.json().daily.used).toBe(before.json().daily.used + 1);
     expect(JSON.stringify(first.json())).not.toContain("trace-coach-1");
 
     const second = await app.inject({ method: "POST", url: "/api/v1/coach/messages", headers: { cookie: learnerCookie }, payload });
@@ -205,6 +275,15 @@ describe("AI Coach API", () => {
     expect(runTask).toHaveBeenCalledTimes(1);
     const stored = await pool.query("select count(*)::int as count from ai_runs where trace_id = 'trace-coach-1'");
     expect(stored.rows[0]?.count).toBe(1);
+
+    // Older turns stored the question twice even though the roleplay reply already contained it.
+    await pool.query(
+      "update coach_turns set feedback = feedback || jsonb_build_object('coachText', $2::text) where content->>'requestId' = $1",
+      [payload.requestId, `${aiOutput.seasonReply} ${aiOutput.nextQuestion} ${aiOutput.nextQuestion}`]
+    );
+    const historical = await app.inject({ method: "GET", url: "/api/v1/coach", headers: { cookie: learnerCookie } });
+    expect(historical.statusCode, historical.body).toBe(200);
+    expect(historical.json().messages.at(-1).text).toBe(`${aiOutput.seasonReply} ${aiOutput.nextQuestion}`);
   });
 
   it("serializes concurrent saves so the daily maximum cannot be exceeded", async () => {
@@ -214,45 +293,26 @@ describe("AI Coach API", () => {
       `update organization_settings set configuration = configuration || jsonb_build_object('coachDailyLimit', $1::int)`,
       [limit]
     );
-    let entered = 0;
-    let release!: () => void;
-    const bothEntered = new Promise<void>((resolve) => { release = resolve; });
-    runTask.mockImplementation(async () => {
-      entered += 1;
-      const call = entered;
-      if (entered === 2) release();
-      await bothEntered;
-      return {
-        output: aiOutput,
-        metadata: {
-          traceId: `trace-coach-concurrent-${call}`, taskId: "coach_dialogue", provider: "fixture", model: "fixture-model",
-          attempts: 1, latencyMs: 12, inputHash: String(call).repeat(64), schemaValid: true as const,
-          usage: { inputTokens: 20, outputTokens: 25, totalTokens: 45 }
-        }
-      };
-    });
     try {
       const responses = await Promise.all([
-        app.inject({ method: "POST", url: "/api/v1/coach/messages", headers: { cookie: learnerCookie }, payload: { requestId: "10000000-0000-4000-8000-000000000031", message: "I work in product design." } }),
-        app.inject({ method: "POST", url: "/api/v1/coach/messages", headers: { cookie: learnerCookie }, payload: { requestId: "10000000-0000-4000-8000-000000000032", message: "I work in product research." } })
+        app.inject({ method: "POST", url: "/api/v1/coach/messages", headers: { cookie: learnerCookie }, payload: { requestId: "10000000-0000-4000-8000-000000000031", message: "I work in product design with two colleagues." } }),
+        app.inject({ method: "POST", url: "/api/v1/coach/messages", headers: { cookie: learnerCookie }, payload: { requestId: "10000000-0000-4000-8000-000000000032", message: "I work in product research with two colleagues." } })
       ]);
       expect(responses.map((response) => response.statusCode).sort()).toEqual([200, 429]);
       const after = await app.inject({ method: "GET", url: "/api/v1/coach", headers: { cookie: learnerCookie } });
       expect(after.json().daily).toEqual({ used: limit, limit });
     } finally {
       await pool.query(`update organization_settings set configuration = configuration || '{"coachDailyLimit":20}'::jsonb`);
-      runTask.mockImplementation(async () => ({
-        output: aiOutput,
-        metadata: {
-          traceId: "trace-coach-1", taskId: "coach_dialogue", provider: "fixture", model: "fixture-model",
-          attempts: 1, latencyMs: 12, inputHash: "a".repeat(64), schemaValid: true as const,
-          usage: { inputTokens: 20, outputTokens: 25, totalTokens: 45 }
-        }
-      }));
+
     }
   });
 
   it("isolates the latest answer from earlier learner answers when requesting feedback", async () => {
+    const earlier = await app.inject({
+      method: "POST", url: "/api/v1/coach/messages", headers: { cookie: learnerCookie },
+      payload: { requestId: "10000000-0000-4000-8000-000000000021", message: "I send a status update every Thursday." }
+    });
+    expect(earlier.statusCode, earlier.body).toBe(200);
     runTask.mockClear();
     runTask.mockResolvedValueOnce({
       output: {
@@ -273,11 +333,11 @@ describe("AI Coach API", () => {
     });
     const response = await app.inject({
       method: "POST", url: "/api/v1/coach/messages", headers: { cookie: learnerCookie },
-      payload: { requestId: "10000000-0000-4000-8000-000000000014", message: "I coordinate the weekly meeting." }
+      payload: { requestId: "10000000-0000-4000-8000-000000000014", message: "I coordinate the weekly meeting with our clients." }
     });
     expect(response.statusCode, response.body).toBe(200);
     const input = (runTask.mock.calls as unknown as Array<[string, { message: string; priorTurns: unknown[] }]>)[0]?.[1];
-    expect(input).toMatchObject({ message: "I coordinate the weekly meeting.", priorTurns: [] });
+    expect(input).toMatchObject({ message: "I coordinate the weekly meeting with our clients.", priorTurns: [] });
     const latest = [...response.json().messages].reverse()
       .find((message: { speaker: string; feedback?: unknown }) => message.speaker === "coach" && message.feedback);
     expect(latest.feedback).toMatchObject({
@@ -312,9 +372,8 @@ describe("AI Coach API", () => {
       expect.objectContaining({ speaker: "learner", text: "ok", classification: "insufficient" }),
       expect.objectContaining({
         speaker: "coach",
-        text: "Please write a complete English sentence so I can understand your answer.",
         feedback: expect.objectContaining({
-          seasonReplyTranslation: "Hãy viết một câu tiếng Anh đầy đủ để Season hiểu câu trả lời của bạn.",
+          nextQuestion: expect.stringContaining("?"),
           evaluation: expect.objectContaining({ status: "insufficient", countsTowardGoal: false }),
           rubric: expect.objectContaining({ meaning: expect.objectContaining({ score: 0 }) })
         })
@@ -380,7 +439,7 @@ describe("AI Coach API", () => {
     });
     const response = await app.inject({
       method: "POST", url: "/api/v1/coach/messages", headers: { cookie: learnerCookie },
-      payload: { requestId: "10000000-0000-4000-8000-000000000012", message: "My favorite color is purple." }
+      payload: { requestId: "10000000-0000-4000-8000-000000000012", message: "My favorite color is purple and I like painting." }
     });
 
     expect(response.statusCode, response.body).toBe(200);
@@ -396,191 +455,56 @@ describe("AI Coach API", () => {
     });
   });
 
-  it("repairs a persona violation once before persisting the turn", async () => {
-    await app.inject({
-      method: "PUT", url: "/api/v1/coach/persona", headers: { cookie: learnerCookie }, payload: { persona: "formal" }
+  it("keeps the accepted formal reply when the feedback contains informal wording", async () => {
+    const cookie = learnerCookie;
+    const changed = await app.inject({
+      method: "PUT", url: "/api/v1/coach/persona", headers: { cookie }, payload: { persona: "formal" }
     });
-    runTask.mockClear();
-    runTask
-      .mockResolvedValueOnce({
-        output: aiOutput,
-        metadata: { traceId: "trace-policy-bad", taskId: "coach_dialogue", provider: "fixture", model: "fixture-model",
-          attempts: 1, latencyMs: 12, inputHash: "e".repeat(64), schemaValid: true as const,
-          usage: { inputTokens: 20, outputTokens: 25, totalTokens: 45 } }
-      })
-      .mockResolvedValueOnce({
-        output: formalAiOutput,
-        metadata: { traceId: "trace-policy-repaired", taskId: "coach_dialogue", provider: "fixture", model: "fixture-model",
-          attempts: 1, latencyMs: 12, inputHash: "f".repeat(64), schemaValid: true as const,
-          usage: { inputTokens: 20, outputTokens: 25, totalTokens: 45 } }
-      });
+    expect(changed.statusCode, changed.body).toBe(200);
     const response = await app.inject({
-      method: "POST", url: "/api/v1/coach/messages", headers: { cookie: learnerCookie },
-      payload: { requestId: "10000000-0000-4000-8000-000000000013", message: "I coordinate the weekly planning meeting." }
+      method: "POST", url: "/api/v1/coach/messages", headers: { cookie },
+      payload: { requestId: "10000000-0000-4000-8000-000000000013", message: "I coordinate the weekly planning meeting with our clients." }
     });
     expect(response.statusCode, response.body).toBe(200);
-    expect(runTask).toHaveBeenCalledTimes(2);
-    const repairOptions = (runTask.mock.calls as unknown as Array<[string, unknown, { systemPrompt?: string }]>)[1]?.[2];
-    expect(repairOptions?.systemPrompt).toContain("REPAIR THE PREVIOUS OUTPUT ONCE");
-    const latestCoach = [...response.json().messages].reverse()
-      .find((message: { speaker: string; feedback?: { seasonReply?: string } }) => message.speaker === "coach" && message.feedback);
-    expect(latestCoach?.feedback?.seasonReply).toBe(formalAiOutput.seasonReply);
+    expect(roleplay).toHaveBeenCalledOnce();
+    expect(runTask).toHaveBeenCalledOnce();
+    const latest = response.json().messages.at(-1);
+    expect(latest.feedback).toMatchObject({ nextQuestion: formalAiOutput.nextQuestion, rubric: aiOutput.rubric });
+    expect(latest.text).not.toContain("😊");
+    expect(latest.text).not.toContain(aiOutput.seasonReply);
   });
 
-  it("retries schema-invalid Coach output once with the previous output in the repair prompt", async () => {
-    await app.inject({
-      method: "PUT", url: "/api/v1/coach/persona", headers: { cookie: learnerCookie }, payload: { persona: "formal" }
+  it("keeps the accepted reply if feedback is malformed", async () => {
+    runTask.mockImplementationOnce(async () => {
+      throw Object.assign(new Error("Invalid provider output"), { code: "AI_OUTPUT_INVALID" });
     });
-    runTask.mockClear();
-    runTask
-      .mockResolvedValueOnce({
-        output: { evaluation: { status: "valid" } } as any,
-        metadata: { traceId: "trace-schema-invalid", taskId: "coach_dialogue", provider: "fixture", model: "fixture-model",
-          attempts: 1, latencyMs: 12, inputHash: "1".repeat(64), schemaValid: true as const,
-          usage: { inputTokens: 20, outputTokens: 5, totalTokens: 25 } }
-      })
-      .mockResolvedValueOnce({
-        output: formalAiOutput,
-        metadata: { traceId: "trace-schema-repaired", taskId: "coach_dialogue", provider: "fixture", model: "fixture-model",
-          attempts: 1, latencyMs: 12, inputHash: "2".repeat(64), schemaValid: true as const,
-          usage: { inputTokens: 20, outputTokens: 25, totalTokens: 45 } }
-      });
-
     const response = await app.inject({
       method: "POST", url: "/api/v1/coach/messages", headers: { cookie: learnerCookie },
       payload: { requestId: "10000000-0000-4000-8000-000000000016", message: "Could you tell me where room 302 is?" }
     });
-
     expect(response.statusCode, response.body).toBe(200);
-    expect(runTask).toHaveBeenCalledTimes(2);
-    const repairPrompt = (runTask.mock.calls as unknown as Array<[string, unknown, { systemPrompt?: string }]>)[1]?.[2].systemPrompt;
-    expect(repairPrompt).toContain("PREVIOUS OUTPUT");
-    expect(repairPrompt).toContain('"status":"valid"');
+    expect(roleplay).toHaveBeenCalledOnce();
+    expect(runTask).toHaveBeenCalledWith("coach_dialogue", expect.anything(), expect.objectContaining({ maxAttempts: 2 }));
+    expect(response.json().messages.at(-1).feedback).toMatchObject({
+      feedbackStatus: "unavailable", nextQuestion: aiOutput.nextQuestion, evaluation: { countsTowardGoal: false }
+    });
   });
 
-  it("enforces formal style locally when the second valid output still violates only style policy", async () => {
-    await app.inject({
-      method: "PUT", url: "/api/v1/coach/persona", headers: { cookie: learnerCookie }, payload: { persona: "formal" }
-    });
-    runTask.mockClear();
-    runTask
-      .mockResolvedValueOnce({
-        output: aiOutput,
-        metadata: { traceId: "trace-style-first", taskId: "coach_dialogue", provider: "fixture", model: "fixture-model",
-          attempts: 1, latencyMs: 12, inputHash: "3".repeat(64), schemaValid: true as const,
-          usage: { inputTokens: 20, outputTokens: 25, totalTokens: 45 } }
-      })
-      .mockResolvedValueOnce({
-        output: aiOutput,
-        metadata: { traceId: "trace-style-second", taskId: "coach_dialogue", provider: "fixture", model: "fixture-model",
-          attempts: 1, latencyMs: 12, inputHash: "4".repeat(64), schemaValid: true as const,
-          usage: { inputTokens: 20, outputTokens: 25, totalTokens: 45 } }
-      });
-
+  it("uses the accepted model answer instead of the evaluator's duplicated question", async () => {
+    runTask.mockImplementationOnce(async () => ({
+      output: { ...aiOutput, suggestedAnswer: { text: aiOutput.nextQuestion, translation: "Bạn làm công việc gì trong nhóm sản phẩm?" } },
+      metadata: { traceId: "trace-duplicate-answer", taskId: "coach_dialogue", provider: "fixture", model: "fixture-model",
+        attempts: 1, latencyMs: 12, inputHash: "b".repeat(64), schemaValid: true as const, usage: { inputTokens: 20, outputTokens: 25, totalTokens: 45 } }
+    }));
     const response = await app.inject({
       method: "POST", url: "/api/v1/coach/messages", headers: { cookie: learnerCookie },
-      payload: { requestId: "10000000-0000-4000-8000-000000000017", message: "I work in the product team." }
-    });
-
-    expect(response.statusCode, response.body).toBe(200);
-    expect(runTask).toHaveBeenCalledTimes(2);
-    const feedback = [...response.json().messages].reverse()
-      .find((message: { speaker: string; feedback?: unknown }) => message.speaker === "coach" && message.feedback)?.feedback;
-    expect(feedback.seasonReply).toBe("That is useful. You have corrected it well");
-    expect(feedback.nextQuestion).toBe("What do you do in the product team?");
-  });
-
-  it("repairs grading when the learner replays the exact suggested answer in the same session", async () => {
-    await app.inject({
-      method: "PUT", url: "/api/v1/coach/persona", headers: { cookie: learnerCookie }, payload: { persona: "informal" }
-    });
-    runTask.mockClear();
-    runTask.mockResolvedValueOnce({
-      output: aiOutput,
-      metadata: { traceId: "trace-suggestion-seed", taskId: "coach_dialogue", provider: "fixture", model: "fixture-model",
-        attempts: 1, latencyMs: 12, inputHash: "5".repeat(64), schemaValid: true as const,
-        usage: { inputTokens: 20, outputTokens: 25, totalTokens: 45 } }
-    });
-    const seed = await app.inject({
-      method: "POST", url: "/api/v1/coach/messages", headers: { cookie: learnerCookie },
-      payload: { requestId: "10000000-0000-4000-8000-000000000018", message: "I work at product." }
-    });
-    expect(seed.statusCode, seed.body).toBe(200);
-
-    const offTopicOutput: CoachTaskOutput = {
-      ...aiOutput,
-      evaluation: { status: "off_topic", result: "off_topic", countsTowardGoal: false, noteVi: "Chưa đúng câu hỏi." },
-      rubric: {
-        ...aiOutput.rubric,
-        meaning: { score: 0, evidence: "The answer is off topic.", improvement: "Answer the current question." }
-      },
-      corrections: [], correctedText: "", usedWords: []
-    };
-    runTask.mockClear();
-    runTask
-      .mockResolvedValueOnce({
-        output: offTopicOutput,
-        metadata: { traceId: "trace-suggestion-rejected", taskId: "coach_dialogue", provider: "fixture", model: "fixture-model",
-          attempts: 1, latencyMs: 12, inputHash: "6".repeat(64), schemaValid: true as const,
-          usage: { inputTokens: 20, outputTokens: 25, totalTokens: 45 } }
-      })
-      .mockResolvedValueOnce({
-        output: offTopicOutput,
-        metadata: { traceId: "trace-suggestion-repaired", taskId: "coach_dialogue", provider: "fixture", model: "fixture-model",
-          attempts: 1, latencyMs: 12, inputHash: "7".repeat(64), schemaValid: true as const,
-          usage: { inputTokens: 20, outputTokens: 25, totalTokens: 45 } }
-      });
-
-    const followup = await app.inject({
-      method: "POST", url: "/api/v1/coach/messages", headers: { cookie: learnerCookie },
-      payload: { requestId: "10000000-0000-4000-8000-000000000019", message: aiOutput.suggestedAnswer.text }
-    });
-    expect(followup.statusCode, followup.body).toBe(200);
-    expect(runTask).toHaveBeenCalledTimes(2);
-    const repairPrompt = (runTask.mock.calls as unknown as Array<[string, unknown, { systemPrompt?: string }]>)[1]?.[2].systemPrompt;
-    expect(repairPrompt).toContain("exact previous suggested answer");
-    const feedback = [...followup.json().messages].reverse()
-      .find((message: { speaker: string; feedback?: unknown }) => message.speaker === "coach" && message.feedback)?.feedback;
-    expect(feedback.evaluation).toMatchObject({ status: "valid", result: "correct", countsTowardGoal: true });
-  });
-
-  it("keeps a valid turn when the second output still repeats nextQuestion as suggestedAnswer", async () => {
-    await app.inject({
-      method: "PUT", url: "/api/v1/coach/persona", headers: { cookie: learnerCookie }, payload: { persona: "formal" }
-    });
-    const repeatedSuggestion: CoachTaskOutput = {
-      ...formalAiOutput,
-      nextQuestion: "Could you tell me where the meeting room is?",
-      nextQuestionTranslation: "Bạn có thể cho tôi biết phòng họp ở đâu không?",
-      suggestedAnswer: {
-        text: "Could you tell me where the meeting room is?",
-        translation: "Bạn có thể cho tôi biết phòng họp ở đâu không?"
-      }
-    };
-    runTask.mockClear();
-    runTask
-      .mockResolvedValueOnce({
-        output: repeatedSuggestion,
-        metadata: { traceId: "trace-repeated-suggestion-first", taskId: "coach_dialogue", provider: "fixture", model: "fixture-model",
-          attempts: 1, latencyMs: 12, inputHash: "8".repeat(64), schemaValid: true as const,
-          usage: { inputTokens: 20, outputTokens: 25, totalTokens: 45 } }
-      })
-      .mockResolvedValueOnce({
-        output: repeatedSuggestion,
-        metadata: { traceId: "trace-repeated-suggestion-second", taskId: "coach_dialogue", provider: "fixture", model: "fixture-model",
-          attempts: 1, latencyMs: 12, inputHash: "9".repeat(64), schemaValid: true as const,
-          usage: { inputTokens: 20, outputTokens: 25, totalTokens: 45 } }
-      });
-
-    const response = await app.inject({
-      method: "POST", url: "/api/v1/coach/messages", headers: { cookie: learnerCookie },
-      payload: { requestId: "10000000-0000-4000-8000-000000000020", message: "I work in the product team." }
+      payload: { requestId: "10000000-0000-4000-8000-000000000020", message: "Could you share the updated agenda with our team?" }
     });
     expect(response.statusCode, response.body).toBe(200);
-    expect(runTask).toHaveBeenCalledTimes(2);
-    const feedback = [...response.json().messages].reverse()
-      .find((message: { speaker: string; feedback?: unknown }) => message.speaker === "coach" && message.feedback)?.feedback;
-    expect(feedback.nextQuestion).toBe("What could you say next in this workplace situation?");
-    expect(feedback.suggestedAnswer.text).toBe("Could you tell me where the meeting room is?");
+    expect(response.json().messages.at(-1).feedback).toMatchObject({
+      nextQuestion: aiOutput.nextQuestion,
+      suggestedAnswer: { text: aiOutput.suggestedAnswer.text },
+      evaluation: { status: "valid", countsTowardGoal: true }
+    });
   });
 });

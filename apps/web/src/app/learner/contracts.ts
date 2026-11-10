@@ -12,6 +12,8 @@ import type {
   LearnerAvatarData,
   LearnerHomeView as LearnerHomeContractView,
   LearnerComplaintKind,
+  RequestEvidenceInput,
+  LearnerAcademicAppealView,
   LearnerComplaintView,
   LearnerNotificationView,
   LearnerProfileData,
@@ -131,7 +133,8 @@ export interface LearnerCallbacks {
   startAssessment: () => void | Promise<void>;
   saveAssessmentResponse: (section: AssessmentSectionCode, taskKey: string, input: SaveAssessmentResponseInput) => void | Promise<void>;
   completeAssessmentSection: (section: AssessmentSectionCode) => void | Promise<void>;
-  submitComplaint?: (kind: LearnerComplaintKind, reason: string) => Promise<void>;
+  submitComplaint?: (kind: LearnerComplaintKind, reason: string, evidence?: RequestEvidenceInput) => Promise<void>;
+  getAppeals?: () => Promise<{ appeals: LearnerAcademicAppealView[] }>;
   getComplaints?: () => Promise<{ complaints: LearnerComplaintView[] }>;
   submitAssessment: () => void | Promise<void>;
   /** Records a visibility/focus event; the server remains authoritative for the count and status. */
@@ -139,13 +142,13 @@ export interface LearnerCallbacks {
   uploadAssessmentAudio: (file: Blob, filename: string) => Promise<string | LearnerAudioUpload>;
   getAssessmentAudioReadUrl?: (artifactKey: string) => Promise<{ url: string; expiresAt: string } & LearnerAudioEvidence>;
   recordAssessmentAudioPlay: (section: AssessmentSectionCode, groupKey: string) => Promise<{ playCount: number; remaining: number }>;
-  createAssessmentAppeal: (reason: string) => void | Promise<void>;
+  createAssessmentAppeal: (reason: string, evidence?: RequestEvidenceInput) => void | Promise<void>;
   completeLessonStudy: () => void | Promise<void>;
   /** Server-persisted playback acknowledgement for a required pronunciation model. */
   recordPronunciationListen?: (word: string) => void | Promise<void>;
   saveLessonProgress: (progress: LessonProgressView) => void | Promise<void>;
   submitLessonPartAttempt?: (partCode: LessonPartCode, evidence: LessonPartAttemptEvidenceInput) => Promise<LessonPartAttemptView>;
-  appealLessonPart?: (partCode: LessonPartCode, reason: string) => Promise<LessonPartAppealView>;
+  appealLessonPart?: (partCode: LessonPartCode, reason: string, evidence?: RequestEvidenceInput, exerciseVersionId?: string) => Promise<LessonPartAppealView>;
   resolveLessonVocabularyImage?: (itemIndex: number) => Promise<ContentImageView>;
   /** Friday review session (resume, review-until-correct, optional warm-up). */
   getWeeklyReviewSession?: () => Promise<WeeklyReviewSessionView>;
@@ -160,7 +163,7 @@ export interface LearnerCallbacks {
   startNewCoachChat: () => void | Promise<void>;
   sendChallengeMessage: (message: string) => void | Promise<void>;
   submitWeeklyPractice: (text: string, audio?: LearnerAudioEvidence) => void | Promise<void>;
-  appealWeeklyPractice?: (submissionId: string, reason: string) => void | Promise<void>;
+  appealWeeklyPractice?: (submissionId: string, reason: string, evidence?: RequestEvidenceInput) => void | Promise<void>;
   submitSurvey: (answers: { rating: number; comment: string; studyTime: "work" | "outside" | "both" }) => void | Promise<void>;
   saveAvatar: (avatar: LearnerAvatarData) => void | Promise<void>;
   printReward: () => void;

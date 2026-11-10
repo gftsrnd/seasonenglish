@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import "@testing-library/jest-dom/vitest";
-import { cleanup, render, screen, waitFor, within } from "@testing-library/react";
+import { act, cleanup, render, screen, waitFor, within } from "@testing-library/react";
 import { userEvent } from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { BrowserRouter, MemoryRouter } from "react-router";
@@ -23,6 +23,30 @@ const session = (role: SessionView["role"]): SessionView => ({
   role,
   permissions: role === "learner" ? ["learning:own"] : role === "operator" ? ["content:operate", "assessment:review", "prompt:manage"] : ["content:operate", "assessment:review", "prompt:manage", "report:read", "operations:read", "reminder:manage", "reward:preview", "account:manage", "role:manage", "organisation:manage", "settings:manage"]
 } as SessionView);
+
+it("only shows the scroll shortcut when content extends beyond the viewport", () => {
+  const edges: Element[] = [];
+  let notify!: (entries: { target: Element; isIntersecting: boolean }[]) => void;
+  vi.stubGlobal("IntersectionObserver", class {
+    constructor(callback: typeof notify) { notify = callback; }
+    observe = (edge: Element) => { edges.push(edge); };
+    disconnect = vi.fn();
+  });
+  try {
+    render(<ExperienceProvider><MemoryRouter><AppShell session={session("manager")} onLogout={vi.fn()}><div>Nội dung</div></AppShell></MemoryRouter></ExperienceProvider>);
+    expect(edges).toHaveLength(2);
+    expect(screen.queryByRole("button", { name: "Cuộn xuống cuối trang" })).not.toBeInTheDocument();
+    act(() => notify([{ target: edges[0]!, isIntersecting: true }, { target: edges[1]!, isIntersecting: false }]));
+    expect(screen.getByRole("button", { name: "Cuộn xuống cuối trang" })).toBeEnabled();
+    act(() => notify([{ target: edges[0]!, isIntersecting: false }, { target: edges[1]!, isIntersecting: true }]));
+    expect(screen.getByRole("button", { name: "Cuộn lên đầu trang" })).toBeEnabled();
+    act(() => notify([{ target: edges[0]!, isIntersecting: true }]));
+    expect(screen.queryByRole("button", { name: "Cuộn xuống cuối trang" })).not.toBeInTheDocument();
+  } finally {
+    cleanup();
+    vi.unstubAllGlobals();
+  }
+});
 
 describe("app audio controls", () => {
   it("renders Lucide icons without changing the audio button contract", () => {
@@ -140,7 +164,7 @@ describe("app shell navigation and logout", () => {
 
     const navigation = screen.getByRole("navigation", { name: "Điều hướng người vận hành" });
     expect(within(navigation).getByRole("link", { name: "Sinh bài" })).toHaveAttribute("href", "/op/months");
-    expect(within(navigation).getByRole("link", { name: "Chấm & Kháng nghị" })).toHaveAttribute("href", "/op/review");
+    expect(within(navigation).getByRole("link", { name: "Phản hồi & yêu cầu" })).toHaveAttribute("href", "/op/review");
     expect(within(navigation).getByRole("link", { name: "Kết quả bài thi" })).toHaveAttribute("href", "/op/tests");
     expect(within(navigation).getByRole("link", { name: "Kết quả bài thi" })).toHaveAttribute("aria-current", "page");
     expect(within(navigation).queryByRole("link", { name: "Đọc mẫu" })).not.toBeInTheDocument();
@@ -176,9 +200,24 @@ describe("app shell navigation and logout", () => {
   it("keeps the primary manager item active for the reward child route", () => {
     render(<ExperienceProvider><MemoryRouter initialEntries={["/mgr/rewards"]}><AppShell session={session("manager")} onLogout={() => undefined}><div /></AppShell></MemoryRouter></ExperienceProvider>);
 
-    const primary = within(screen.getByRole("navigation", { name: "Điều hướng trên thiết bị di động" })).getByRole("link", { name: "Tiến độ" });
+    const primary = within(screen.getByRole("navigation", { name: "Điều hướng trên thiết bị di động" })).getByRole("link", { name: "Theo dõi" });
     expect(primary).toHaveClass("active");
     expect(primary).toHaveAttribute("aria-current", "page");
+  });
+
+  it.each([
+    ["/mgr/reminders", "Theo dõi"], ["/mgr/report", "Theo dõi"],
+    ["/mgr/holidays", "Vận hành"], ["/mgr/complaints", "Yêu cầu"],
+    ["/mgr/reopen-requests", "Yêu cầu"], ["/mgr/requests", "Yêu cầu"], ["/settings", "Cài đặt"]
+  ])("keeps four Manager destinations and highlights the correct group on %s", (path, label) => {
+    render(<ExperienceProvider><MemoryRouter initialEntries={[path]}><AppShell session={session("manager")} onLogout={() => undefined}><div /></AppShell></MemoryRouter></ExperienceProvider>);
+    for (const name of ["Điều hướng quản lý", "Điều hướng trên thiết bị di động"]) {
+      const navigation = screen.getByRole("navigation", { name });
+      expect(within(navigation).getAllByRole("link").map(link => link.textContent)).toEqual(["Theo dõi", "Vận hành", "Yêu cầu", "Cài đặt"]);
+      expect(within(navigation).getByRole("link", { name: "Vận hành" })).toHaveAttribute("href", "/mgr/ops");
+      expect(within(navigation).getByRole("link", { name: label })).toHaveAttribute("aria-current", "page");
+      expect(within(navigation).getAllByRole("link").filter(link => link.getAttribute("aria-current") === "page")).toHaveLength(1);
+    }
   });
 
   it("locks logout while the session request is still pending and announces progress", async () => {

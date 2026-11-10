@@ -4,6 +4,7 @@ import { cleanup, render, screen, within } from "@testing-library/react";
 import { userEvent } from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { LearnerProfile, LearnerReward, LearnerSurvey } from "./ProfileReward.js";
+import { learnerApiClient } from "../../api/learner.js";
 import type { RewardView } from "@e4s/contracts";
 import type { LearnerCallbacks, ProfileView } from "./contracts.js";
 
@@ -27,6 +28,17 @@ const view = {
 } as unknown as ProfileView;
 
 describe("app profile avatar dialog affordances", () => {
+  it("shows an officially scored failed Pass Course beside placement", () => {
+    const failed = { ...view, assessments: {
+      placement: { totalScore: 62, approvedLevel: "B1" as const, sections: {} },
+      passCourse: { totalScore: 76, approvedLevel: null, sections: { listening: 15 }, sectionMaxScores: { listening: 20 } }
+    } };
+    render(<LearnerProfile view={failed} actions={actions} />);
+    expect(screen.getByRole("region", { name: "Điểm đầu vào" })).toHaveTextContent("62");
+    expect(screen.getByRole("region", { name: "Điểm đầu ra" })).toHaveTextContent("76");
+    expect(screen.getByRole("region", { name: "Điểm đầu ra" })).toHaveTextContent("15/20");
+  });
+
   it("uses the persisted monthly cycle instead of legacy weekly stages", () => {
     const monthlyView = {
       ...view,
@@ -50,7 +62,7 @@ describe("app profile avatar dialog affordances", () => {
     expect(screen.queryByText(/Chặng 1/)).not.toBeInTheDocument();
   });
 
-  it("does not render retired pilot metrics or level-up readiness while a monthly framework is being prepared", () => {
+  it("keeps the badge roadmap available while a monthly framework is being prepared", () => {
     const preparing = {
       ...view,
       monthlyPreparation: true,
@@ -63,7 +75,7 @@ describe("app profile avatar dialog affordances", () => {
 
     expect(screen.queryByText(/Chặng 1/)).not.toBeInTheDocument();
     expect(screen.queryByRole("region", { name: "Đường lên mức B2" })).not.toBeInTheDocument();
-    expect(screen.queryByText("Mùa học")).not.toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Huy hiệu theo cấp" })).toBeInTheDocument();
     expect(screen.getByRole("region", { name: "Kết quả đánh giá" })).toBeInTheDocument();
     expect(screen.getByRole("region", { name: "Điểm đầu vào" })).toHaveTextContent("Chưa có");
   });
@@ -117,6 +129,31 @@ describe("app profile avatar dialog affordances", () => {
     expect(within(assessment).queryByRole("link", { name: "Làm bài cuối kỳ" })).not.toBeInTheDocument();
   });
 
+  it("shows the exit assessment next to the placement assessment for a graduate", async () => {
+    const result = vi.spyOn(learnerApiClient, "getCourseCompletion").mockResolvedValue({
+      certificateNumber: "E4S-1", organizationName: "GFT", issuerName: null, displayName: "Học viên Demo", issuedAt: "2026-11-09T08:00:00Z",
+      scores: [
+        { section: "listening", score: 18, maxScore: 20 },
+        { section: "reading", score: 36, maxScore: 40 },
+        { section: "writing", score: 17, maxScore: 20 },
+        { section: "speaking", score: 17, maxScore: 20 }
+      ],
+      feedback: "Đạt bài thi đầu ra."
+    });
+    try {
+      render(<LearnerProfile view={view} actions={actions} courseCompleted />);
+      const assessment = within(screen.getByRole("region", { name: "Kết quả đánh giá" }));
+      expect(assessment.getByRole("region", { name: "Điểm đầu vào" })).toBeVisible();
+      const exit = within(assessment.getByRole("region", { name: "Điểm đầu ra" }));
+      expect(await exit.findByText("88")).toBeVisible();
+      await userEvent.click(exit.getByText("Chi tiết điểm đầu ra"));
+      expect(exit.getByText("36/40")).toBeVisible();
+      expect(exit.getByText("Đạt bài thi đầu ra.")).toBeVisible();
+    } finally {
+      result.mockRestore();
+    }
+  });
+
   it("keeps personal information collapsed until the learner asks to view it", async () => {
     render(<LearnerProfile view={view} actions={actions} />);
     expect(screen.queryByRole("heading", { name: "Tùy chọn cá nhân" })).not.toBeInTheDocument();
@@ -125,7 +162,12 @@ describe("app profile avatar dialog affordances", () => {
     await userEvent.setup().click(screen.getByRole("button", { name: "Xem hồ sơ" }));
     expect(screen.getByRole("button", { name: "Đóng thông tin" })).toHaveAttribute("aria-expanded", "true");
     expect(screen.getByText("Học viên Demo", { selector: ".profile-detail-value" })).toBeInTheDocument();
+    const preferences = screen.getByText("Thông tin học tập");
+    expect(screen.getByText("Informal · Thân thiện")).not.toBeVisible();
+    expect(screen.getByRole("link", { name: "Cập nhật hồ sơ" })).toBeVisible();
     expect(screen.getByRole("link", { name: "Cập nhật hồ sơ" })).toHaveAttribute("href", "/onboard");
+    await userEvent.click(preferences);
+    expect(screen.getByText("Informal · Thân thiện")).toBeVisible();
   });
 
   it("uses library icons for the selected avatar accessory", () => {

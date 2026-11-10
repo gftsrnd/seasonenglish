@@ -114,7 +114,7 @@ describe("lesson exercise evidence API", () => {
     expect(reward.rows[0]?.points).toBe(4);
   });
 
-  it("rejects one-word self-writing and sends valid self-writing to manual fallback without completing it", async () => {
+  it("rejects one-word self-writing and stores a valid response for review so the learner can continue", async () => {
     const lessonId = DEMO_IDS.lessons[1];
     await completeStudy(lessonId);
     const rejectedRequestId = "30000000-0000-4000-8000-000000000101";
@@ -136,23 +136,46 @@ describe("lesson exercise evidence API", () => {
     });
     expect(accepted.statusCode, accepted.body).toBe(200);
     expect(accepted.json()).toMatchObject({
-      lessonId, partCode: "writing", evidence: { answer: "Hello team", attempts: 1, status: "submitted", score: 0 }
+      lessonId, partCode: "writing", evidence: { answer: "Hello team", attempts: 1, status: "submitted" },
+      progress: { status: "in_progress" }
     });
-    expect(accepted.json().progress.completedPartCodes).not.toContain("writing");
+    expect(accepted.json().progress.completedPartCodes).toContain("writing");
   });
 
-  it("counts a persisted Speaking upload while keeping it in submitted review state", async () => {
+  it("unlocks Speaking after the assigned pronunciation audio is recorded and keeps the upload in review", async () => {
     const lessonId = DEMO_IDS.lessons[1];
     await completeStudy(lessonId);
-    const submitted = await app.inject({
+    const artifactKey = `assessment-audio/${DEMO_IDS.learner}/speaking.webm`;
+    await pool.query(
+      `insert into files (id, organization_id, owner_user_id, purpose, bucket, object_key, mime_type, size_bytes, sha256)
+       values (gen_random_uuid(), $1, $2, 'assessment_audio', 'e4s-evidence', $3, 'audio/webm', 42, $4)`,
+      [DEMO_IDS.organization, DEMO_IDS.learner, artifactKey, "e".repeat(64)]
+    );
+    const submitSpeaking = () => app.inject({
       method: "POST", url: `/api/v1/lessons/${lessonId}/parts/speaking/attempts`, headers: { cookie },
       payload: {
         requestId: "30000000-0000-4000-8000-000000000105",
-        evidence: { artifactKey: "assessment-audio/learner/speaking.webm" }
+        evidence: { artifactKey }
       }
     });
+    const blocked = await submitSpeaking();
+    expect(blocked.statusCode, blocked.body).toBe(409);
+    expect(blocked.json()).toEqual({ code: "PRONUNCIATION_LISTENING_REQUIRED" });
+
+    const listen = async (word: string) => {
+      const recorded = await app.inject({
+        method: "POST", url: `/api/v1/lessons/${lessonId}/pronunciation/listens`, headers: { cookie }, payload: { word }
+      });
+      expect(recorded.statusCode, recorded.body).toBe(200);
+    };
+    await listen("I");
+    await listen("nice");
+    expect((await submitSpeaking()).statusCode).toBe(409);
+    await listen("time");
+
+    const submitted = await submitSpeaking();
     expect(submitted.statusCode, submitted.body).toBe(200);
-    expect(submitted.json()).toMatchObject({ evidence: { status: "submitted", artifactKey: "assessment-audio/learner/speaking.webm" } });
+    expect(submitted.json()).toMatchObject({ evidence: { status: "submitted", artifactKey } });
     expect(submitted.json().progress.completedPartCodes).toContain("speaking");
 
     await pool.query(
@@ -164,6 +187,7 @@ describe("lesson exercise evidence API", () => {
     const reloaded = await app.inject({ method: "GET", url: `/api/v1/lessons/${lessonId}`, headers: { cookie } });
     expect(reloaded.statusCode, reloaded.body).toBe(200);
     expect(reloaded.json().progress.completedPartCodes).toContain("speaking");
+    expect(JSON.parse(reloaded.json().progress.evidence.pronunciation.answer)).toEqual(["I", "nice", "time"]);
   });
 
   it("records translation viewing without consuming an attempt or completing the part", async () => {
@@ -223,10 +247,13 @@ describe("lesson exercise evidence API", () => {
     await completeStudy(lessonId);
     const prematureAppeal = await app.inject({
       method: "POST", url: `/api/v1/lessons/${lessonId}/parts/word_class/appeals`, headers: { cookie },
-      payload: { reason: "Chỉ được kháng nghị sau khi đã hết hai lượt làm bài." }
+      payload: { reason: "Cần kiểm tra lại câu hỏi từ loại trước khi trả lời." }
     });
-    expect(prematureAppeal.statusCode, prematureAppeal.body).toBe(409);
-    expect(prematureAppeal.json()).toEqual({ code: "LESSON_APPEAL_NOT_AVAILABLE" });
+    expect(prematureAppeal.statusCode, prematureAppeal.body).toBe(200);
+    expect(prematureAppeal.json()).toMatchObject({ status: "pending" });
+    const afterEarlyAppeal = await app.inject({ method: "GET", url: `/api/v1/lessons/${lessonId}`, headers: { cookie } });
+    expect(afterEarlyAppeal.json().progress.completedPartCodes).not.toContain("word_class");
+    expect(afterEarlyAppeal.json().progress.evidence.word_class).toMatchObject({ appealStatus: "pending" });
     for (const [requestId, answer] of [
       ["30000000-0000-4000-8000-000000000003", "A"],
       ["30000000-0000-4000-8000-000000000004", "C"]

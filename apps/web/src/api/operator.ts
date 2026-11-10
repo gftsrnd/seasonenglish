@@ -12,7 +12,7 @@ import type {
   ManualAssessmentScoreInput,
   ContentWeekInput, ContentWeekSuggestionView, SystemCapabilitiesView, WeeklyPracticeAssignmentView
 } from "@e4s/contracts";
-import type { MonthFrameworkReopenRequestView, MonthlyResourceEditInput, MonthlyFinalDraftView, MonthlyFinalUpdateInput, MonthlyOperatorOverviewView, SharedMonthBriefView } from "@e4s/contracts";
+import type { ReopenRequestView, MonthFrameworkReopenRequestView, MonthlyResourceEditInput, MonthlyFinalDraftView, MonthlyFinalUpdateInput, MonthlyOperatorOverviewView, SharedMonthBriefView } from "@e4s/contracts";
 import type { MonthlyCurriculumContract } from "@e4s/domain/monthly";
 import { request, uploadMultipart } from "./runtime.js";
 
@@ -25,6 +25,7 @@ export type AssessmentAudioReadView = AudioArtifactView & {
 };
 
 export type MonthlyResourceCheckpointView = {
+  progress?: import("@e4s/contracts").MonthlyResourceGenerationProgress | null;
   state: "draft_checkpoint" | "not_started";
   draftOnly: true;
   publishable: false;
@@ -78,6 +79,11 @@ export interface OperatorApiClient {
   fillContentLessonPhrases(week: number, cefr: CefrLevel, expectedVersion?: number): Promise<ContentLessonMutationResult>;
   deleteContentLessonDraftSet(week: number, cefr: CefrLevel): Promise<{ deleted: true }>;
   getContentMonth(month: string): Promise<MonthlyOperatorOverviewView>;
+  getCurrentContentMonth?(): Promise<MonthlyOperatorOverviewView>;
+  previewContentMonthPublication?(id: string): Promise<import("@e4s/contracts").MonthlyPublicationPreviewView>;
+  publishContentMonth?(id: string, confirmedOn: string): Promise<{ publishedOn: string }>;
+  dismissExerciseWarning?(id: string): Promise<void>;
+  correctExerciseWarning?(id: string, exerciseVersionId: string, correction: import("@e4s/contracts").LessonExerciseCorrectionInput): Promise<void>;
   suggestContentMonthBrief(month: string): Promise<SharedMonthBriefView>;
   saveContentMonthBrief(month: string, input: { title: string; brief: string; context: string; communicationGoal: string }): Promise<SharedMonthBriefView>;
   approveContentMonthBrief(month: string): Promise<void>;
@@ -86,9 +92,13 @@ export interface OperatorApiClient {
   getContentMonthResourceCheckpoint(month: string, cefr: CefrLevel): Promise<MonthlyResourceCheckpointView>;
   approveContentMonthFramework(id: string): Promise<void>;
   /** Asks a Manager to reopen approved monthly resources (409 when a request is already pending). */
+  getOwnReopenRequests(): Promise<{ requests: ReopenRequestView[] }>;
+  getOwnDeletionRequests(): Promise<{ requests: AssessmentDeletionRequestView[] }>;
   requestContentMonthResourcesReopen(id: string, reason: string): Promise<MonthFrameworkReopenRequestView>;
   /** Saves an Operator hand-edit of a DRAFT resource pool; 422 carries per-row `issues`. */
   saveContentMonthResources?(id: string, input: MonthlyResourceEditInput): Promise<{ id: string; cefr: CefrLevel; version: number; status: "draft"; scopeHash: string }>;
+  getManualContentMonthResources?(month: string, cefr: CefrLevel): Promise<NonNullable<import("@e4s/contracts").MonthFrameworkView["resources"]> & { theme: { version: number } }>;
+  createManualContentMonthResources?(month: string, cefr: CefrLevel, input: MonthlyResourceEditInput): Promise<unknown>;
   getMonthlyFinal(id: string): Promise<MonthlyFinalDraftView>;
   /** Core-word illustrations of a monthly framework (generated while resources are a draft, frozen on approval). */
   getMonthlyIllustrations?(id: string): Promise<MonthlyIllustrationsView>;
@@ -126,12 +136,15 @@ export interface OperatorApiClient {
   publishContentLessonSet(versionId: string): Promise<ContentLessonSetVersionView>;
   retireContentLessonSet(versionId: string): Promise<ContentLessonSetVersionView>;
   getContentReview(): Promise<ContentReviewView>;
+  getContentReviewAppeals(input: { id: string } | { status: "all" | "pending" | "handled"; offset: number }): Promise<{ appeals: ContentReviewView["appeals"]; hasMore: boolean }>;
   getContentReviewAssessment(attemptId: string): Promise<ContentReviewAssessmentDetailView>;
   setContentReviewChecked(kind: "submission" | "coach", id: string, checked: boolean): Promise<{ checked: boolean }>;
   deleteReviewedMicroLesson(id: string): Promise<void>;
   gradeReviewedSubmission(id: string, input: { meaning: number; vocabulary: number; grammar: number; feedback: string }): Promise<{ saved: boolean }>;
   gradeReviewedSubmissionAi(id: string, requestId?: string): Promise<ContentReviewAiGradeJobView>;
-  decideReviewedAppeal(id: string, input: { status: "accepted" | "rejected"; resolution: string; newScore?: number }): Promise<{ saved: boolean }>;
+  deleteContentReviewAppeal(id: string): Promise<void>;
+  decideAssessmentAppeal(id: string, input: { status: "accepted" | "rejected"; resolution: string }): Promise<unknown>;
+  decideReviewedAppeal(id: string, input: { status: "accepted" | "rejected"; resolution: string; newScore?: number; exerciseCorrection?: import("@e4s/contracts").LessonExerciseCorrectionInput }): Promise<{ saved: boolean }>;
   getContentPrompts(): Promise<ContentPromptSettingsView>;
   saveContentPrompts(groups: Array<{ key: ContentPromptKey; content: string }>): Promise<ContentPromptSettingsView>;
   publishContentPrompt(key: ContentPromptKey, version: number): Promise<ContentPromptSettingsView["groups"][number]>;
@@ -194,8 +207,17 @@ export const operatorApiClient: OperatorApiClient = {
   generateContentMonthResources: (month, criteria) => request(`/api/v1/content/months/${encodeURIComponent(month)}/resources/generate`, { method: "POST", body: JSON.stringify(criteria) }),
   getContentMonthResourceCheckpoint: (month, cefr) => request(`/api/v1/content/months/${encodeURIComponent(month)}/resources/checkpoint?cefr=${encodeURIComponent(cefr)}`),
   approveContentMonthFramework: async (id) => { await request(`/api/v1/content/month-frameworks/${encodeURIComponent(id)}/approve`, { method: "POST", body: "{}" }); },
+  getOwnReopenRequests: () => request("/api/v1/content/reopen-requests"),
+  getOwnDeletionRequests: () => request("/api/v1/assessment-reviews/deletion-requests"),
   requestContentMonthResourcesReopen: (id, reason) => request(`/api/v1/content/month-frameworks/${encodeURIComponent(id)}/reopen-requests`, { method: "POST", body: JSON.stringify({ reason }) }),
   saveContentMonthResources: (id, input) => request(`/api/v1/content/month-frameworks/${encodeURIComponent(id)}/resources`, { method: "PUT", body: JSON.stringify(input) }),
+  getCurrentContentMonth: () => request("/api/v1/content/months"),
+  getManualContentMonthResources: (month, cefr) => request(`/api/v1/content/months/${encodeURIComponent(month)}/resources/manual?cefr=${encodeURIComponent(cefr)}`),
+  createManualContentMonthResources: (month, cefr, input) => request(`/api/v1/content/months/${encodeURIComponent(month)}/resources/manual?cefr=${encodeURIComponent(cefr)}`, { method: "PUT", body: JSON.stringify(input) }),
+  previewContentMonthPublication: (id) => request(`/api/v1/content/month-frameworks/${encodeURIComponent(id)}/publication-preview`),
+  publishContentMonth: (id, confirmedOn) => request(`/api/v1/content/month-frameworks/${encodeURIComponent(id)}/publication`, { method: "POST", body: JSON.stringify({ confirmedOn }) }),
+  dismissExerciseWarning: (id) => request(`/api/v1/content/review/exercise-warnings/${encodeURIComponent(id)}/no-issue`, { method: "POST", body: "{}" }),
+  correctExerciseWarning: (id, exerciseVersionId, correction) => request(`/api/v1/content/review/exercise-warnings/${encodeURIComponent(id)}/correction`, { method: "PUT", body: JSON.stringify({ exerciseVersionId, correction }) }),
   getMonthlyFinal: (id) => request(`/api/v1/month-frameworks/${encodeURIComponent(id)}/monthly-final`),
   getMonthlyIllustrations: (id) => request(`/api/v1/content/month-frameworks/${encodeURIComponent(id)}/illustrations`),
   generateMonthlyIllustrations: (id, input = {}) => request(`/api/v1/content/month-frameworks/${encodeURIComponent(id)}/illustrations/generate`, { method: "POST", body: JSON.stringify(input) }),
@@ -221,11 +243,19 @@ export const operatorApiClient: OperatorApiClient = {
   publishContentLessonSet: (versionId) => request(`/api/v1/content/lesson-set-versions/${encodeURIComponent(versionId)}/publication`, { method: "POST", body: "{}" }),
   retireContentLessonSet: (versionId) => request(`/api/v1/content/lesson-set-versions/${encodeURIComponent(versionId)}/retirement`, { method: "POST", body: "{}" }),
   getContentReview: () => request("/api/v1/content/review"),
+  getContentReviewAppeals: input => {
+    const query = "id" in input
+      ? new URLSearchParams({ id: input.id })
+      : new URLSearchParams({ status: input.status, offset: String(input.offset) });
+    return request(`/api/v1/content/review/appeals?${query}`);
+  },
   getContentReviewAssessment: (attemptId) => request(`/api/v1/content/review/assessments/${encodeURIComponent(attemptId)}`),
   setContentReviewChecked: (kind, id, checked) => request(`/api/v1/content/review/${kind}/${encodeURIComponent(id)}`, { method: "PATCH", body: JSON.stringify({ checked }) }),
   deleteReviewedMicroLesson: (id) => request(`/api/v1/content/review/micro/${encodeURIComponent(id)}`, { method: "DELETE" }),
   gradeReviewedSubmission: (id, input) => request(`/api/v1/content/review/submissions/${encodeURIComponent(id)}/manual-grade`, { method: "POST", body: JSON.stringify(input) }),
   gradeReviewedSubmissionAi: (id, requestId) => request(`/api/v1/content/review/submissions/${encodeURIComponent(id)}/ai-grade`, { method: "POST", body: JSON.stringify(requestId ? { requestId } : {}) }),
+  deleteContentReviewAppeal: id => request(`/api/v1/content/review/appeals/${encodeURIComponent(id)}`, { method: "DELETE" }),
+  decideAssessmentAppeal: (id, input) => request(`/api/v1/assessment-appeals/${encodeURIComponent(id)}/decision`, { method: "POST", body: JSON.stringify(input) }),
   decideReviewedAppeal: (id, input) => request(`/api/v1/content/review/appeals/${encodeURIComponent(id)}/decision`, { method: "POST", body: JSON.stringify(input) }),
   getContentPrompts: () => request("/api/v1/content/prompts"),
   saveContentPrompts: (groups) => request("/api/v1/content/prompts", { method: "PUT", body: JSON.stringify({ groups }) }),

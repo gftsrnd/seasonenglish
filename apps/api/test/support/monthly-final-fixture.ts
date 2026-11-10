@@ -78,8 +78,9 @@ export function fakeMonthlyFinalAiOutput(input: MonthlyFinalGenerationInput): { 
     })) }
   };
   const words = input.pronunciation.flatMap((target) => target.taughtExamples.slice(0, 2).map((example) => ({ code: target.code, exampleId: example.exampleId, word: example.word, target: `${target.ipa} at the end` })));
-  const writingSample = "Hi Anna, the draft is ready. I have to wait for the data. Could you extend the deadline? If HR sends it tonight, I will finish tomorrow. I wish I had it now.";
-  const speakingSample = "Hi Anna, the slides are ready. Could you send me your answer? If you agree, I will send the invitation.";
+  let writingSample = "Hi Anna, could you extend the deadline? I have to wait for data. If HR sends it, I will finish. I wish I had it now. I propose an update report with missing data for approval.";
+  while((writingSample.match(/\p{L}+(?:[-'’]\p{L}+)*/gu)??[]).length<profile.writing.minWords)writingSample+=" Please contact me tomorrow if you need more details.";
+  const speakingSample = "Hi Anna, the slides are ready. Could you send me your answer? If you agree, I will send the invitation. Please propose a suitable alternative and request confirmation.";
   const productive: MonthlyFinalProductiveOutput = {
     title: input.cefr === "A1" || input.cefr === "A2" ? "Bài thi tháng 11 – Cập nhật dự án" : "Monthly Test – Project updates",
     grammarComponents: input.grammar.map((topic) => ({
@@ -87,9 +88,9 @@ export function fakeMonthlyFinalAiOutput(input: MonthlyFinalGenerationInput): { 
       secondaryStepId: topic.taughtSteps[1]!.stepId, secondaryLabel: `${topic.code} variant component`, secondaryPatterns: [topic.taughtSteps[1]!.formula]
     })),
     writing: {
-      task: "Write a short message to your manager, Anna.", facts: "The weekly draft is ready. Two teams have not sent their numbers. You want one more day.",
+      task: input.cefr === "A1" ? 'Write a short message to your manager, Anna. Bắt đầu bằng câu gợi ý: "Hi Anna, could you extend the deadline?"' : "Write a short message to your manager, Anna.", facts: "The weekly draft is ready. Two teams have not sent their numbers. You want one more day.",
       requirements: ["Say what is ready and what is still open.", "Ask Anna for one more day.", "Explain your plan for tomorrow."], sample: writingSample,
-      evidence: { gaMain: "Could you extend the deadline?", gaSecondary: "I have to wait for the data.", gbMain: "If HR sends it tonight, I will finish tomorrow.", gbSecondary: "I wish I had it now." }
+      evidence: { gaMain: "Could you extend the deadline?", gaSecondary: "I have to wait for data.", gbMain: "If HR sends it, I will finish.", gbSecondary: "I wish I had it now." }
     },
     speakingA: { text: `Please read: ${words.map((item) => item.word).join(", ")}.`, positions: words },
     speakingB: {

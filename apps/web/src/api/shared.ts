@@ -8,7 +8,8 @@ export interface SharedApiClient extends AuthClient {
   logout(): Promise<void>;
   getProductPreferences(): Promise<ProductPreferencesView>;
   saveProductPreferences(input: ProductPreferencesView): Promise<ProductPreferencesView>;
-  getOrganisationExperience(): Promise<OrganisationExperienceView>;
+  getOrganisationExperience(signal?: AbortSignal): Promise<OrganisationExperienceView>;
+  getPublicOrganisationTheme(signal?: AbortSignal): Promise<Pick<OrganisationExperienceView, "theme">>;
 }
 
 export const sharedApiClient: SharedApiClient = {
@@ -24,5 +25,6 @@ export const sharedApiClient: SharedApiClient = {
   logout: () => request("/api/logout", { method: "POST", body: "{}" }),
   getProductPreferences: () => request("/api/v1/product-preferences"),
   saveProductPreferences: (input) => request("/api/v1/product-preferences", { method: "PUT", body: JSON.stringify(input) }),
-  getOrganisationExperience: () => request("/api/v1/organisation-experience")
+  getOrganisationExperience: (signal) => request("/api/v1/organisation-experience", { signal: signal ?? null }),
+  getPublicOrganisationTheme: (signal) => request("/api/v1/organisation-experience/theme", { signal: signal ?? null })
 };

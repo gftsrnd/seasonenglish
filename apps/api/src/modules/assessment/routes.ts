@@ -25,6 +25,7 @@ import type {
 import { assessmentGradingOutputSchema, levelFormOutputSchema, type AiTaskRunner, type LevelFormTaskOutput } from "@e4s/ai";
 import {
   createRepositories,
+  normalizeLevelFormQuestionPrompts,
   publicAssessmentDefinition,
   sectionByCode,
   type AssessmentAttemptRecord,
@@ -33,9 +34,11 @@ import {
   type StoredAssessmentTask
 } from "@e4s/database";
 import { calculateAutomaticSectionScore } from "@e4s/domain/assessment";
-import type { FastifyInstance } from "fastify";
+import { isLearnerProfileComplete } from "@e4s/domain/learning";
+import type { FastifyInstance, FastifyRequest } from "fastify";
 import type { Pool } from "pg";
 import { z } from "zod";
+import { requestEvidenceFields } from "../manager/request-evidence.js";
 import type { EdgeTtsRunner } from "./edge-tts.js";
 import { registerMonthlyFinalRoutes } from "./monthly-final-routes.js";
 import { createRoleGuard } from "../identity/policy.js";
@@ -72,7 +75,7 @@ const decisionInput = z.object({
     context.addIssue({ code: "custom", path: ["approvedLevel"], message: "approvedLevel is not allowed" });
   }
 });
-const appealInput = z.object({ reason: z.string().trim().min(10).max(2_000) });
+const appealInput = z.object({ reason: z.string().trim().min(10).max(2_000), proposedLevel: z.enum(["A1", "A2", "B1", "B2", "C1"]).optional(), ...requestEvidenceFields });
 const appealResolutionInput = z.object({ status: z.enum(["accepted", "rejected"]), resolution: z.string().trim().min(1).max(2_000) });
 const learnerReviewParam = z.object({ learnerId: z.uuid() });
 const reviewLevelInput = z.object({
@@ -159,13 +162,19 @@ const levelFormUpdateInput = z.object({
 });
 
 const DEFAULT_LEVEL_FORM_PROMPT = `Create a complete 75-minute, 100-point Workplace English CEFR promotion test for the requested target level. Return exactly four sections with the placement structure: Listening 20 multiple-choice questions for 20 points, Reading 40 multiple-choice questions for 40 points, Writing 2 tasks for 20 points, and Speaking 4 tasks for 20 points. The content must be new and target-level appropriate, never copied from placement or another level. Use realistic workplace situations, unambiguous answer keys, and the required JSON schema exactly.`;
-const LEVEL_FORM_READING_REPAIR_PROMPT = `Generate exactly one new multiple-choice reading-comprehension question for the supplied passage. It must be appropriate for the target CEFR level, have four concise options, an unambiguous correctIndex, and must not duplicate any existing prompt. Return only the structured tool input.`;
+const LEVEL_FORM_QUESTION_GUIDANCE = "Each question prompt must contain only the question text. Omit part labels such as Part 1: and question numbering.";
+const LEVEL_FORM_READING_REPAIR_PROMPT = `Generate exactly one new multiple-choice reading-comprehension question for the supplied passage. It must be appropriate for the target CEFR level, have four concise options, an unambiguous correctIndex, and must not duplicate any existing prompt. ${LEVEL_FORM_QUESTION_GUIDANCE} Return only the structured tool input.`;
 
 export function registerAssessmentRoutes(app: FastifyInstance, pool: Pool, aiRunner?: AiTaskRunner, aiRunnerFactory?: (actorId: string) => Promise<AiTaskRunner | undefined>, edgeTtsRunner?: EdgeTtsRunner): void {
   const repositories = createRepositories(pool);
   const runnerFor = (actorId: string) => aiRunnerFactory ? aiRunnerFactory(actorId) : Promise.resolve(aiRunner);
   const learnerOnly = createRoleGuard(pool, ["learner"]);
-  const assessmentReaders = createRoleGuard(pool, ["operator"]);
+  const sessionConflict = { code: "ASSESSMENT_ACTIVE_ON_OTHER_DEVICE", message: "Bài đang được làm trên thiết bị khác." };
+  const canUseAttempt = (request: FastifyRequest, attempt: AssessmentAttemptRecord) =>
+    attempt.status !== "in_progress" || repositories.assessments.claimAttemptSession(
+      request.e4sSession!.user.id, attempt.id, request.e4sSessionId!
+    );
+  const assessmentReaders = createRoleGuard(pool, ["operator", "manager"]);
   const assessmentReviewers = createRoleGuard(pool, ["operator"]);
   const assessmentOperators = createRoleGuard(pool, ["operator"]);
   const levelFormOperators = createRoleGuard(pool, ["operator"]);
@@ -439,6 +448,13 @@ export function registerAssessmentRoutes(app: FastifyInstance, pool: Pool, aiRun
     return view ?? reply.code(404).send({ code: "ASSESSMENT_LEARNER_NOT_FOUND" });
   });
 
+  app.get("/api/v1/assessment-reviews/deletion-requests", { preHandler: assessmentOperators }, async (request, reply) => {
+    const session = request.e4sSession!;
+    if (session.role !== "operator") return reply.code(403).send({ code: "FORBIDDEN" });
+    reply.header("Cache-Control", "private, no-store");
+    return { requests: await repositories.assessments.listOwnDeletionRequests(session.user.id) };
+  });
+
   app.post("/api/v1/assessment-reviews/learners/:learnerId/deletion-requests", { preHandler: assessmentOperators }, async (request, reply) => {
     const params = learnerReviewParam.safeParse(request.params);
     const body = deletionRequestInput.safeParse(request.body);
@@ -529,8 +545,8 @@ export function registerAssessmentRoutes(app: FastifyInstance, pool: Pool, aiRun
       // output ceiling. Generate three independently schema-checked slices,
       // then validate their assembled canonical form before persistence.
       const [listening, reading, production] = await Promise.all([
-        runner.runTask("level_form_listening_generation", input, { systemPrompt: `${task?.prompt ?? DEFAULT_LEVEL_FORM_PROMPT}\nGenerate only the title, listening script, and exactly 20 listening questions. The script must contain exactly five clearly labelled parts (Part 1 through Part 5), with four questions for each part in the same order.`, maxOutputTokens: 7_000 }),
-        runner.runTask("level_form_reading_generation", input, { systemPrompt: `${task?.prompt ?? DEFAULT_LEVEL_FORM_PROMPT}\nGenerate only the reading passage and exactly 40 reading questions. Keep every prompt and option concise; questions 1–10, 11–20, 21–30 and 31–40 must each form a distinct workplace-reading part.`, maxOutputTokens: 12_000 }),
+        runner.runTask("level_form_listening_generation", input, { systemPrompt: `${task?.prompt ?? DEFAULT_LEVEL_FORM_PROMPT}\nGenerate only the title, listening script, and exactly 20 listening questions. The script must contain exactly five clearly labelled parts (Part 1 through Part 5), with four questions for each part in the same order. ${LEVEL_FORM_QUESTION_GUIDANCE}`, maxOutputTokens: 7_000 }),
+        runner.runTask("level_form_reading_generation", input, { systemPrompt: `${task?.prompt ?? DEFAULT_LEVEL_FORM_PROMPT}\nGenerate only the reading passage and exactly 40 reading questions. Keep every prompt and option concise; questions 1–10, 11–20, 21–30 and 31–40 must each form a distinct workplace-reading part. ${LEVEL_FORM_QUESTION_GUIDANCE}`, maxOutputTokens: 12_000 }),
         runner.runTask("level_form_production_generation", input, { systemPrompt: `${task?.prompt ?? DEFAULT_LEVEL_FORM_PROMPT}\nGenerate only exactly two writing prompts and four speaking prompts.`, maxOutputTokens: 2_000 })
       ]);
       const completedReading = await completeLevelFormReading(runner, params.data.targetLevel, reading.output as { passage: string; questions: LevelFormTaskOutput["reading"]["questions"][number][] });
@@ -549,7 +565,8 @@ export function registerAssessmentRoutes(app: FastifyInstance, pool: Pool, aiRun
         output: completeOutput,
         metadata: listening.metadata
       });
-      const form = await repositories.assessments.createLevelFormDraft(actorId, params.data.targetLevel, levelFormBlueprint(params.data.targetLevel, completeOutput));
+      const blueprint = normalizeLevelFormQuestionPrompts(levelFormBlueprint(params.data.targetLevel, completeOutput));
+      const form = await repositories.assessments.createLevelFormDraft(actorId, params.data.targetLevel, blueprint);
       return reply.code(201).send({ ...form, publishedAt: null });
     } catch (error) {
       request.log.warn({ error }, "Level form generation failed");
@@ -601,33 +618,57 @@ export function registerAssessmentRoutes(app: FastifyInstance, pool: Pool, aiRun
     const parsed = kindParam.safeParse(request.params);
     if (!parsed.success) return reply.code(400).send({ code: "INVALID_ASSESSMENT_KIND" });
     const kind = normalizeKind(parsed.data.kind);
-    if (kind === "final" && !await monthlyExamIsReady(pool, request.e4sSession!.user.id)) {
-      return reply.code(409).send({ code: "MONTHLY_EXAM_LOCKED" });
-    }
     if (kind === "pass-course" && !await repositories.assessments.passCourseEligibility(request.e4sSession!.user.id)) {
       return reply.code(409).send({ code: "PASS_COURSE_C1_NOT_READY" });
     }
-    const definition = kind === "final"
-      ? await findPublishedMonthlyFinal(pool, request.e4sSession!.user.id)
-      : await repositories.assessments.findPublished(kind);
+    const learnerId = request.e4sSession!.user.id;
+    let activeAttempt = kind === "level-up" ? await repositories.assessments.findInProgressLevelUpAttempt(learnerId) : null;
+    let definition: PublishedAssessmentRecord | null;
+    if (kind === "final") {
+      activeAttempt = await repositories.assessments.findMonthlyFinalAttempt(learnerId);
+      if (!activeAttempt) {
+        const eligibility = await monthlyExamEligibility(pool, learnerId);
+        if (!eligibility.accessEligible) return reply.code(409).send(monthlyExamLocked(eligibility.entryClosed));
+        activeAttempt = await repositories.assessments.findMonthlyFinalAttempt(learnerId, eligibility.month);
+        definition = activeAttempt
+          ? await definitionForAttempt(repositories.assessments, activeAttempt)
+          : await findPublishedMonthlyFinal(pool, learnerId, eligibility.month);
+      } else {
+        definition = await definitionForAttempt(repositories.assessments, activeAttempt);
+      }
+    } else {
+      definition = activeAttempt
+        ? await definitionForAttempt(repositories.assessments, activeAttempt)
+        : await repositories.assessments.findPublished(kind);
+    }
     if (!definition) return reply.code(404).send({ code: "ASSESSMENT_NOT_PUBLISHED" });
     const resumed = kind === "placement"
-      ? await repositories.assessments.resumePlacementAttempt(request.e4sSession!.user.id, definition)
+      ? await repositories.assessments.resumePlacementAttempt(learnerId, definition, request.e4sSessionId)
       : null;
+    if (resumed?.state === "session_conflict") return reply.code(409).send(sessionConflict);
     if (resumed?.state === "restart_required") {
       return reply.code(409).send({
         code: "PLACEMENT_ATTEMPT_RESTART_REQUIRED",
         message: "Bài test cũ không thể chuyển an toàn sang phiên bản mới. Hãy bắt đầu lại để tránh trộn đề và điểm."
       });
     }
-    let attempt = resumed ? resumed.attempt : await repositories.assessments.findActiveAttempt(request.e4sSession!.user.id, definition.versionId);
+    let attempt = resumed ? resumed.attempt : activeAttempt ?? await repositories.assessments.findActiveAttempt(learnerId, definition.versionId);
+    if (!resumed && attempt && !await canUseAttempt(request, attempt)) return reply.code(409).send(sessionConflict);
     attempt = await advanceExpiredSections(repositories.assessments, request.e4sSession!.user.id, definition, attempt);
     const view = assessmentView(definition, attempt);
     if (!attempt) return view;
-    const appeal = await repositories.assessments.findAppeal(request.e4sSession!.user.id, attempt.id);
-    return { ...view, appeal: appeal ? {
+    const [appeal, [appealTarget]] = await Promise.all([
+      repositories.assessments.findAppeal(learnerId, attempt.id),
+      repositories.assessments.listAppealableResults(learnerId, attempt.id)
+    ]);
+    return { ...view, appealTarget: appealTarget ?? null, appeal: appeal ? {
       ...appeal, createdAt: appeal.createdAt.toISOString(), resolvedAt: appeal.resolvedAt?.toISOString() ?? null
     } : null };
+  });
+
+  app.get("/api/v1/learner/appealable-assessments", { preHandler: learnerOnly }, async (request, reply) => {
+    reply.header("Cache-Control", "private, no-store");
+    return { results: await repositories.assessments.listAppealableResults(request.e4sSession!.user.id) };
   });
 
   app.post("/api/v1/assessment-attempts/:attemptId/appeals", { preHandler: learnerOnly }, async (request, reply) => {
@@ -635,7 +676,7 @@ export function registerAssessmentRoutes(app: FastifyInstance, pool: Pool, aiRun
     const body = appealInput.safeParse(request.body);
     if (!params.success || !body.success) return reply.code(400).send({ code: "ASSESSMENT_APPEAL_INVALID" });
     const appeal = await repositories.assessments.createAppeal(
-      request.e4sSession!.user.id, params.data.attemptId, body.data.reason
+      request.e4sSession!.user.id, params.data.attemptId, body.data.reason, body.data
     );
     return appeal ? reply.code(201).send({
       ...appeal, createdAt: appeal.createdAt.toISOString(), resolvedAt: null
@@ -663,6 +704,7 @@ export function registerAssessmentRoutes(app: FastifyInstance, pool: Pool, aiRun
     const learnerId = request.e4sSession!.user.id;
     let attempt = await repositories.assessments.findAttempt(learnerId, params.data.attemptId);
     if (!attempt) return reply.code(409).send({ code: "ASSESSMENT_ATTEMPT_NOT_EDITABLE" });
+    if (!await canUseAttempt(request, attempt)) return reply.code(409).send(sessionConflict);
     const definition = await definitionForAttempt(repositories.assessments, attempt);
     if (!definition) return reply.code(404).send({ code: "ASSESSMENT_NOT_PUBLISHED" });
     attempt = await advanceExpiredSections(repositories.assessments, learnerId, definition, attempt);
@@ -688,6 +730,12 @@ export function registerAssessmentRoutes(app: FastifyInstance, pool: Pool, aiRun
     const learnerId = request.e4sSession!.user.id;
     let definition: PublishedAssessmentRecord | null;
     if (kind === "level-up") {
+      const active = await repositories.assessments.findInProgressLevelUpAttempt(learnerId);
+      if (active) {
+        if (!await canUseAttempt(request, active)) return reply.code(409).send(sessionConflict);
+        const published = await definitionForAttempt(repositories.assessments, active);
+        if (published) return reply.code(201).send(assessmentView(published, active));
+      }
       const context = await repositories.assessments.levelUpStartContext(learnerId);
       if (context.currentLevel === "C1") return reply.code(409).send({ code: "LEVEL_UP_TOP_LEVEL" });
       if (context.active) return reply.code(409).send({ code: "LEVEL_UP_ALREADY_ACTIVE" });
@@ -700,10 +748,21 @@ export function registerAssessmentRoutes(app: FastifyInstance, pool: Pool, aiRun
       }
       definition = await repositories.assessments.findPublishedLevelUpForLearner(learnerId, progress.levelReadiness.targetLevel);
     } else if (kind === "final") {
-      if (!await monthlyExamIsReady(pool, learnerId)) {
-        return reply.code(409).send({ code: "MONTHLY_EXAM_LOCKED" });
+      let active = await repositories.assessments.findMonthlyFinalAttempt(learnerId);
+      if (!active) {
+        const eligibility = await monthlyExamEligibility(pool, learnerId);
+        if (!eligibility.accessEligible) return reply.code(409).send(monthlyExamLocked(eligibility.entryClosed));
+        active = await repositories.assessments.findMonthlyFinalAttempt(learnerId, eligibility.month);
+        definition = await findPublishedMonthlyFinal(pool, learnerId, eligibility.month);
+      } else {
+        definition = await definitionForAttempt(repositories.assessments, active);
       }
-      definition = await findPublishedMonthlyFinal(pool, learnerId);
+      if (active) {
+        if (!await canUseAttempt(request, active)) return reply.code(409).send(sessionConflict);
+        const original = await definitionForAttempt(repositories.assessments, active);
+        if (!original) return reply.code(404).send({ code: "ASSESSMENT_NOT_PUBLISHED" });
+        return reply.code(201).send(assessmentView(original, active));
+      }
     } else if (kind === "pass-course") {
       if (!await repositories.assessments.passCourseEligibility(learnerId)) {
         return reply.code(409).send({ code: "PASS_COURSE_C1_NOT_READY" });
@@ -714,7 +773,8 @@ export function registerAssessmentRoutes(app: FastifyInstance, pool: Pool, aiRun
     }
     if (!definition) return reply.code(404).send({ code: "ASSESSMENT_NOT_PUBLISHED" });
     if (kind === "placement") {
-      const resumed = await repositories.assessments.resumePlacementAttempt(learnerId, definition);
+      const resumed = await repositories.assessments.resumePlacementAttempt(learnerId, definition, request.e4sSessionId);
+      if (resumed.state === "session_conflict") return reply.code(409).send(sessionConflict);
       if (resumed.state === "restart_required") {
         return reply.code(409).send({
           code: "PLACEMENT_ATTEMPT_RESTART_REQUIRED",
@@ -722,6 +782,10 @@ export function registerAssessmentRoutes(app: FastifyInstance, pool: Pool, aiRun
         });
       }
       if (resumed.attempt) return reply.code(201).send(assessmentView(definition, resumed.attempt));
+      const profile = await repositories.learning.getProfile(learnerId);
+      if (!profile || !isLearnerProfileComplete(profile.profile)) {
+        return reply.code(409).send({ code: "PLACEMENT_PROFILE_INCOMPLETE", message: "Hãy lưu đủ các mục bắt buộc trong hồ sơ trước khi làm bài kiểm tra đầu vào." });
+      }
     }
     const first = definition.blueprint.sections[0];
     if (!first) return reply.code(409).send({ code: "ASSESSMENT_BLUEPRINT_EMPTY" });
@@ -731,8 +795,10 @@ export function registerAssessmentRoutes(app: FastifyInstance, pool: Pool, aiRun
       assessmentVersionId: definition.versionId,
       firstSection: first.code,
       durationMinutes: first.durationMinutes,
-      violationLimit
+      violationLimit,
+      ownerSessionId: request.e4sSessionId!
     });
+    if (!await canUseAttempt(request, attempt)) return reply.code(409).send(sessionConflict);
     return reply.code(201).send(assessmentView(definition, attempt));
   });
 
@@ -745,6 +811,7 @@ export function registerAssessmentRoutes(app: FastifyInstance, pool: Pool, aiRun
     if (!attempt) {
       return reply.code(409).send({ code: "ASSESSMENT_ATTEMPT_NOT_EDITABLE" });
     }
+    if (!await canUseAttempt(request, attempt)) return reply.code(409).send(sessionConflict);
     const definition = await definitionForAttempt(repositories.assessments, attempt);
     if (!definition) return reply.code(404).send({ code: "ASSESSMENT_NOT_PUBLISHED" });
     attempt = await advanceExpiredSections(repositories.assessments, learnerId, definition, attempt);
@@ -791,6 +858,7 @@ export function registerAssessmentRoutes(app: FastifyInstance, pool: Pool, aiRun
     if (!attempt) {
       return reply.code(409).send({ code: "ASSESSMENT_ATTEMPT_NOT_EDITABLE" });
     }
+    if (!await canUseAttempt(request, attempt)) return reply.code(409).send(sessionConflict);
     const definition = await definitionForAttempt(repositories.assessments, attempt);
     if (!definition) return reply.code(404).send({ code: "ASSESSMENT_NOT_PUBLISHED" });
     attempt = await advanceExpiredSections(repositories.assessments, learnerId, definition, attempt);
@@ -821,6 +889,7 @@ export function registerAssessmentRoutes(app: FastifyInstance, pool: Pool, aiRun
     if (!attempt) {
       return reply.code(409).send({ code: "ASSESSMENT_ATTEMPT_NOT_EDITABLE" });
     }
+    if (!await canUseAttempt(request, attempt)) return reply.code(409).send(sessionConflict);
     const definition = await definitionForAttempt(repositories.assessments, attempt);
     if (!definition) return reply.code(404).send({ code: "ASSESSMENT_NOT_PUBLISHED" });
     // A stale browser may finish a section after the server has already
@@ -855,6 +924,7 @@ export function registerAssessmentRoutes(app: FastifyInstance, pool: Pool, aiRun
     if (!attempt) {
       return reply.code(409).send({ code: "ASSESSMENT_ATTEMPT_NOT_SUBMITTABLE" });
     }
+    if (!await canUseAttempt(request, attempt)) return reply.code(409).send(sessionConflict);
     const definition = await definitionForAttempt(repositories.assessments, attempt);
     if (!definition) return reply.code(404).send({ code: "ASSESSMENT_NOT_PUBLISHED" });
     attempt = await advanceExpiredSections(repositories.assessments, learnerId, definition, attempt);
@@ -924,16 +994,21 @@ async function assessmentFormPreviews(
     status: "draft" | "published" | "retired";
     published_at: Date | null;
     blueprint: StoredAssessmentDefinition;
+    system_month: string;
   }>(
     `select ad.id as definition_id, ad.assessment_key, av.id as version_id, ad.kind, ad.title,
-            av.version, av.status, av.published_at, av.blueprint
+            av.version, av.status, av.published_at, av.blueprint,
+            to_char(organization_system_date(actor.organization_id), 'YYYY-MM') as system_month
        from assessment_definitions ad
        join assessment_versions av on av.definition_id = ad.id
        join users actor on actor.id = $1 and actor.organization_id = ad.organization_id
       where ad.kind = $2
         -- The legacy generic monthly-final seed is not a month-scoped exam.
         -- Only finals created from an approved month contract may appear here.
-        and ($2 <> 'final' or ad.assessment_key like 'monthly-final-%')
+        and ($2 <> 'final' or (ad.assessment_key like 'monthly-final-%'
+          and substring(ad.assessment_key from 15 for 7) between
+            to_char(organization_system_date(actor.organization_id) - interval '1 month', 'YYYY-MM') and
+            to_char(organization_system_date(actor.organization_id) + interval '1 month', 'YYYY-MM')))
         and ${fixedForm ? "av.status = 'published'" : "av.status in ('draft', 'published')"}
       order by ad.assessment_key asc,
                case av.status when 'draft' then 0 when 'published' then 1 else 2 end,
@@ -953,12 +1028,14 @@ async function assessmentFormPreviews(
   return {
     kind,
     forms: validRows.map((row): AssessmentFormPreviewView => {
+      const monthlyFrameworkId = kind === "final" ? row.blueprint.monthlyExam?.framework?.id : undefined;
       const listeningGroups = row.blueprint.sections
         .filter((section) => section.code === "listening")
         .flatMap((section) => section.groups);
       return {
         definitionId: row.definition_id,
         versionId: row.version_id,
+        ...(monthlyFrameworkId ? { monthlyFrameworkId } : {}),
         kind: row.kind,
         title: row.title,
         version: row.version,
@@ -968,8 +1045,9 @@ async function assessmentFormPreviews(
         totalMinutes: row.blueprint.totalMinutes,
         totalScore: row.blueprint.totalScore,
         audioConfigured: listeningGroups.length > 0 && listeningGroups.every((group) => group.stimulus?.type === "audio_script" && Boolean(group.stimulus.audioSrc?.trim())),
-        editable: row.status === "draft" && kind !== "placement" && kind !== "pass_course",
-        sections: row.blueprint.sections.map((section) => ({
+        editable: row.status === "draft" && kind !== "placement" && kind !== "pass_course"
+          && (kind !== "final" || row.assessment_key.slice(14, 21) >= row.system_month),
+        sections: normalizeLevelFormQuestionPrompts(row.blueprint).sections.map((section) => ({
           ...section,
           groups: section.groups.map((group) => ({
             ...group,
@@ -1085,12 +1163,11 @@ async function definitionForAttempt(
   return repository.findPublishedByVersion(attempt.assessmentVersionId);
 }
 
-async function monthlyExamIsReady(pool: Pool, learnerId: string): Promise<boolean> {
-  const eligibility = await monthlyExamEligibility(pool, learnerId);
-  return Boolean(eligibility.accessEligible);
+function monthlyExamLocked(entryClosed?: boolean) {
+  return { code: entryClosed ? "MONTHLY_EXAM_ENTRY_CLOSED" : "MONTHLY_EXAM_LOCKED", ...(entryClosed ? { message: "Đã hết giờ vào thi." } : {}) };
 }
 
-async function findPublishedMonthlyFinal(pool: Pool, learnerId: string): Promise<PublishedAssessmentRecord | null> {
+async function findPublishedMonthlyFinal(pool: Pool, learnerId: string, month: string): Promise<PublishedAssessmentRecord | null> {
   const result = await pool.query<{
     definition_id: string; version_id: string; assessment_key: string; kind: "final"; title: string; version: number; blueprint: StoredAssessmentDefinition;
   }>(
@@ -1098,13 +1175,12 @@ async function findPublishedMonthlyFinal(pool: Pool, learnerId: string): Promise
      from users learner
      join enrollments enrollment on enrollment.learner_id = learner.id
      join program_months pm on pm.organization_id = learner.organization_id
-       and pm.month = to_char(organization_system_date(learner.organization_id), 'YYYY-MM')
-       and pm.exam_date = organization_system_date(learner.organization_id)
+       and pm.month = $2
      join assessment_definitions ad on ad.organization_id = learner.organization_id and ad.kind = 'final'
        and ad.assessment_key = ('monthly-final-' || pm.month || '-' || lower(enrollment.cefr))
      join assessment_versions av on av.definition_id = ad.id and av.status = 'published'
      where learner.id = $1 and enrollment.cefr_approved = true
-     order by enrollment.enrolled_at desc, av.published_at desc nulls last limit 1`, [learnerId]
+     order by enrollment.enrolled_at desc, av.published_at desc nulls last limit 1`, [learnerId, month]
   );
   const row = result.rows[0];
   return row ? { definitionId: row.definition_id, versionId: row.version_id, assessmentKey: row.assessment_key, kind: row.kind, title: row.title, version: row.version, blueprint: row.blueprint } : null;

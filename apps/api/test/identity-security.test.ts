@@ -3,17 +3,19 @@ import rateLimit from "@fastify/rate-limit";
 import Fastify from "fastify";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { Pool } from "pg";
-import { createPinHash } from "@e4s/domain/identity";
+import { createCredentialHash, createPinHash } from "@e4s/domain/identity";
 import { createRoleGuard } from "../src/modules/identity/policy.js";
+import type { IdentityEmailSender } from "../src/modules/identity/email.js";
 import { registerIdentityRoutes } from "../src/modules/identity/routes.js";
 
-type Account = { id: string; display_name: string; email: string; role: "learner"; status: "active" | "disabled"; credential_hash: string };
+type Account = { id: string; display_name: string; email: string; role: "learner" | "operator" | "manager"; status: "active" | "disabled"; credential_hash: string };
 
-function identityPool(account: Account) {
+function identityPool(account: Account, courseCompleted = false) {
   let failedPinAttempts = 0;
   let pinLockedUntil: Date | null = null;
   const sessions: Array<{ tokenHash: string; expiresAt: Date }> = [];
   const pool = {
+    connect: async () => ({ query: pool.query, release: () => {} }),
     query: vi.fn(async (sql: string, parameters: unknown[] = []) => {
       if (sql.includes("from users u join user_credentials c")) {
         const includeDisabled = sql.includes("'disabled'");
@@ -21,7 +23,9 @@ function identityPool(account: Account) {
         return { rowCount: accountIsEligible ? 1 : 0, rows: accountIsEligible ? [{ ...account, failed_pin_attempts: failedPinAttempts, pin_locked_until: pinLockedUntil }] : [] };
       }
       if (sql.includes("from users") && sql.includes("where lower(email) = lower($1)")) {
-        return { rowCount: 1, rows: [{ id: account.id, display_name: account.display_name, email: account.email, role: account.role, status: account.status }] };
+        const matches = String(parameters[0]).toLowerCase() === account.email;
+        const eligible = matches && (!sql.includes("for update") || (account.role === (parameters[1] ?? "operator") && account.status === "active"));
+        return { rowCount: eligible ? 1 : 0, rows: eligible ? [{ ...account, organization_id: "org-1" }] : [] };
       }
       if (sql.includes("set failed_pin_attempts") && sql.includes("returning")) {
         if (pinLockedUntil && pinLockedUntil > new Date()) return { rowCount: 0, rows: [] };
@@ -38,6 +42,7 @@ function identityPool(account: Account) {
         sessions.push({ tokenHash: String(parameters[2]), expiresAt: parameters[3] as Date });
         return { rowCount: 1, rows: [] };
       }
+      if (sql.includes("from pass_course_certificates")) return { rowCount: courseCompleted ? 1 : 0, rows: [] };
       if (sql.includes("from sessions s join users u")) {
         const session = sessions.find((item) => item.tokenHash === parameters[0] && item.expiresAt > new Date());
         const allowDisabled = sql.includes("status = 'disabled'");
@@ -50,11 +55,11 @@ function identityPool(account: Account) {
   return pool;
 }
 
-async function makeApp(pool: ReturnType<typeof identityPool>) {
+async function makeApp(pool: ReturnType<typeof identityPool>, emailSender?: IdentityEmailSender) {
   const app = Fastify({ logger: false });
   await app.register(cookie);
   await app.register(rateLimit, { global: false });
-  registerIdentityRoutes(app, { pool: pool as unknown as Pool, secureCookies: false, otpSecret: "test-secret" });
+  registerIdentityRoutes(app, { pool: pool as unknown as Pool, secureCookies: false, otpSecret: "test-secret", ...(emailSender ? { emailSender } : {}) });
   app.get("/__test/learner", { preHandler: createRoleGuard(pool as unknown as Pool, ["learner"]) }, async () => ({ ok: true }));
   await app.ready();
   return app;
@@ -117,4 +122,48 @@ describe("learner login protection", () => {
       expect(learnerApi.statusCode).toBe(401);
     } finally { await app.close(); }
   });
+});
+
+it("sends the learner's PIN reset code by email", async () => {
+  const email = "learner@example.test";
+  const pool = identityPool({ id: "learner-1", display_name: "Học viên Demo", email, role: "learner", status: "active", credential_hash: "" });
+  const sendOtp = vi.fn(async () => {});
+  const app = await makeApp(pool, { sendOtp });
+  try {
+    const response = await app.inject({ method: "POST", url: "/api/auth/learner/pin-reset/start", payload: { email } });
+    expect(response.statusCode).toBe(202);
+    expect(sendOtp).toHaveBeenCalledExactlyOnceWith({ to: email, code: expect.stringMatching(/^\d{6}$/), purpose: "pin_reset" });
+    expect(pool.query.mock.calls.some(([sql]) => sql.includes("insert into manager_pin_reports"))).toBe(false);
+  } finally { await app.close(); }
+});
+
+it.each(["manager", "operator"] as const)("signs in %s with only email and password", async (role) => {
+  const email = "staff@example.test";
+  const password = "Test-password-89";
+  const pool = identityPool({ id: "staff-1", display_name: "Nhân sự", email, role, status: "active", credential_hash: await createCredentialHash(password) });
+  const app = await makeApp(pool);
+  try {
+    const login = await app.inject({ method: "POST", url: "/api/auth/staff/login", payload: { email, password } });
+    expect(login.statusCode).toBe(200);
+    expect(login.json()).toMatchObject({ role });
+    expect(login.cookies.some(({ name }) => name === "e4s_session")).toBe(true);
+  } finally { await app.close(); }
+});
+
+it.each(["manager", "operator", "learner"] as const)("gives a generic recovery response for %s", async (role) => {
+  const email = "user@example.test";
+  const pool = identityPool({ id: "user-1", display_name: "Người dùng", email, role, status: "active", credential_hash: "" });
+  const sendOtp = vi.fn(async () => {});
+  const app = await makeApp(pool, { sendOtp });
+  try {
+    for (const address of [email, "unknown@example.test"]) {
+      const response = await app.inject({ method: "POST", url: "/api/auth/staff/password-help", payload: { email: address } });
+      expect(response.statusCode).toBe(202);
+      expect(response.json()).toEqual({ requested: true });
+      expect(response.cookies).toHaveLength(0);
+    }
+    const reports = pool.query.mock.calls.filter(([sql]) => sql.includes("insert into manager_pin_reports"));
+    expect(reports).toHaveLength(role === "learner" ? 0 : 1);
+    expect(sendOtp).not.toHaveBeenCalled();
+  } finally { await app.close(); }
 });

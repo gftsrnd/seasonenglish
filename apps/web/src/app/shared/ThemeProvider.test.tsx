@@ -26,7 +26,7 @@ describe("organisation theme state", () => {
     await user.click(screen.getByRole("button", { name: "preview" }));
     expect(screen.getByTestId("committed").textContent).toBe("spring");
     expect(screen.getByTestId("resolved").textContent).toBe("autumn");
-    expect(window.localStorage.getItem("e4s:theme")).toBeNull();
+    expect(window.localStorage.getItem("e4s:organisation-theme")).toBe("spring");
 
     await user.click(screen.getByRole("button", { name: "clear" }));
     expect(screen.getByTestId("resolved").textContent).toBe("spring");

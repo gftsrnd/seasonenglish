@@ -1,34 +1,13 @@
-import { createContext, useContext, type ButtonHTMLAttributes, type ReactNode } from "react";
-import { useInRouterContext } from "react-router";
+import type { ButtonHTMLAttributes, ReactNode } from "react";
+import { useManagerSectionHeader } from "../manager/shared.js";
 import type { Cefr, RubricScore, Suggestion } from "./types.js";
 
-export const OperationsReadOnlyContext = createContext(false);
-
-export function OperatorPage({ children, title, hideRouteBack = false }: { children: ReactNode; title: string; hideRouteBack?: boolean }) {
-  const inRouter = useInRouterContext();
-  if (!inRouter) {
-    return <div className="app-operator" aria-label={title}>{children}</div>;
-  }
-  return <OperatorPageWithNavigation title={title} hideRouteBack={hideRouteBack}>{children}</OperatorPageWithNavigation>;
-}
-
-function OperatorPageWithNavigation({ children, title }: { children: ReactNode; title: string; hideRouteBack: boolean }) {
-  const readOnly = useContext(OperationsReadOnlyContext);
-  return <div className="app-operator" aria-label={title}>
-    {readOnly ? <OperationsReadOnlyBanner /> : null}
-    {children}
-  </div>;
-}
-
-export function OperationsReadOnlyBanner() {
-  return <div className="banner info operator-read-only-banner" role="note" aria-label="Chế độ chỉ đọc của Quản lý"><div className="body small"><b>Màn hình đang ở chế độ chỉ đọc của Quản lý.</b> Các màn vận hành bên dưới chỉ để theo dõi; thao tác tạo, sửa, duyệt và lưu dữ liệu bị khóa.</div></div>;
-}
-
-export function StandaloneReadOnlyBanner({ readOnly }: { readOnly: boolean }) {
-  return readOnly && !useInRouterContext() ? <OperationsReadOnlyBanner /> : null;
+export function OperatorPage({ children, title }: { children: ReactNode; title: string; hideRouteBack?: boolean }) {
+  return <div className="app-operator" aria-label={title}>{children}</div>;
 }
 
 export function PageTitle({ children, actions }: { children: ReactNode; actions?: ReactNode }) {
+  if (useManagerSectionHeader()) return actions ? <div className="page-title">{actions}</div> : null;
   return <div className="page-title"><div>{children}</div>{actions}</div>;
 }
 

@@ -1,5 +1,35 @@
 import { describe, expect, it } from "vitest";
-import { evaluateMonthlyExamEligibility, evaluateMonthlyLevelUpReadiness, monthlySeasonTurnTarget } from "../src/progression/monthly-eligibility.js";
+import { consecutiveLearningAbsences, evaluateMonthlyExamEligibility, evaluateMonthlyLevelUpReadiness, monthlyExamEntryState, monthlyLearnerWindow, monthlySeasonTurnTarget } from "../src/progression/monthly-eligibility.js";
+
+it("allows starts through the 23:24 ICT minute and closes at 23:25", () => {
+  expect(monthlyExamEntryState("2026-11-29", "2026-11-30", "23:59:59")).toBe("upcoming");
+  expect(monthlyExamEntryState("2026-11-30", "2026-11-30", "00:00:00")).toBe("open");
+  expect(monthlyExamEntryState("2026-11-30", "2026-11-30", "23:24:59")).toBe("open");
+  expect(monthlyExamEntryState("2026-11-30", "2026-11-30", "23:25:00")).toBe("closed");
+  expect(monthlyExamEntryState("2026-12-01", "2026-11-30", "00:00:00")).toBe("closed");
+});
+
+it("prorates newcomers from their first effective day and defers below 75 percent", () => {
+  expect(monthlyLearnerWindow("2026-11", "2026-11-30", "2026-11-07")).toMatchObject({ effectiveDays: 15, canStudy: true, startDate: "2026-11-09", seasonTarget: 75 });
+  expect(monthlyLearnerWindow("2026-11", "2026-11-30", "2026-11-10")).toMatchObject({ effectiveDays: 14, canStudy: false, startDate: "2026-12-01" });
+  expect(monthlyLearnerWindow("2026-11", "2026-11-30", "2026-11-30")).toMatchObject({ effectiveDays: 0, canStudy: false });
+});
+
+it("counts only elapsed effective dates and resets the streak on attendance", () => {
+  const dates = ["2026-11-04", "2026-11-05", "2026-11-06", "2026-11-09", "2026-11-10", "2026-11-11"];
+  expect(consecutiveLearningAbsences(dates, [], "2026-11-11")).toBe(5);
+  expect(consecutiveLearningAbsences(dates, ["2026-11-09"], "2026-11-11")).toBe(1);
+  expect(consecutiveLearningAbsences(dates, [], "2026-11-11", "2026-11-10")).toBe(1);
+});
+
+it("shows attendance today without treating today as an elapsed absence", () => {
+  const result = evaluateMonthlyExamEligibility({
+    systemDate: "2026-11-12", examDate: "2026-11-30", effectiveDays: 15, elapsedEffectiveDays: 3,
+    attendedDays: 2, attendedElapsedDays: 1, scheduledLessons: 0, completedLessons: 0, seasonTurns: 74,
+    seasonTarget: 75, frameworkApproved: true, formPublished: true
+  });
+  expect(result).toMatchObject({ attendedDays: 2, absenceDays: 2, maxAbsences: 4, seasonTurnsRequired: 75, seasonEligible: false });
+});
 
 describe("canonical monthly eligibility", () => {
   it("allows the fixed level final despite incomplete lessons and Season activity", () => {

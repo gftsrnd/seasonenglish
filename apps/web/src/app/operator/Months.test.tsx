@@ -1,11 +1,16 @@
 // @vitest-environment jsdom
-import { render, screen, waitFor, within } from "@testing-library/react";
+import { render as renderUi, screen, waitFor, within, act, cleanup } from "@testing-library/react";
+import type { ReactElement } from "react";
+import { ModalProvider } from "../shared/ModalProvider.js";
 import "@testing-library/jest-dom/vitest";
 import { userEvent } from "@testing-library/user-event";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { MonthlyLessonPreview, OperatorMonths } from "./Months.js";
 import { ToastProvider } from "../shared/design-system.js";
 import { monthlyFinalView } from "../../../test/support/monthly-final-view.js";
+
+const render = (element: ReactElement) => renderUi(<ModalProvider>{element}</ModalProvider>);
+afterEach(() => { cleanup(); vi.restoreAllMocks(); });
 
 describe("Operator monthly planner", () => {
   it("renders an approved daily review with the legacy operator presentation and locked actions", () => {
@@ -80,8 +85,13 @@ describe("Operator monthly planner", () => {
     /></ToastProvider>);
 
     expect(screen.queryByRole("spinbutton")).not.toBeInTheDocument();
-    expect(screen.getAllByText("Số lượng đề xuất theo lịch học").at(-1)).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Duyệt tài nguyên" }));
+    const confirmation = screen.getByRole("dialog", { name: "Duyệt tài nguyên tháng?" });
+    expect(onApproveFramework).not.toHaveBeenCalled();
+    await user.click(within(confirmation).getByRole("button", { name: "Huỷ" }));
+    expect(onApproveFramework).not.toHaveBeenCalled();
+    await user.click(screen.getByRole("button", { name: "Duyệt tài nguyên" }));
+    await user.click(within(screen.getByRole("dialog", { name: "Duyệt tài nguyên tháng?" })).getByRole("button", { name: "Duyệt tài nguyên" }));
     expect(onApproveFramework).toHaveBeenCalledWith("framework-a1");
   });
 
@@ -101,7 +111,7 @@ describe("Operator monthly planner", () => {
 
     await user.click(screen.getByText("Phân bổ tài nguyên và trọng tâm kỹ năng"));
     expect(screen.getByText("extra1 · extra2 · extra3")).toBeInTheDocument();
-    expect(screen.getByText("Ngữ pháp: grammar-step · Phát âm: P1")).toBeInTheDocument();
+    expect(screen.getByText("Ngữ pháp: Chưa gán · Phát âm: Chưa gán")).toBeInTheDocument();
   });
 
   it("shows durable category checkpoints as unpublished and continues only missing groups", async () => {
@@ -277,6 +287,68 @@ describe("Operator monthly planner", () => {
   const monthActions = (extra: Record<string, unknown>) => ({ onSelectMonth: vi.fn(), onSelectLevel: vi.fn(), onSuggestBrief: vi.fn(), onSaveBrief: vi.fn(), onApproveBrief: vi.fn(), onGenerateFramework: vi.fn(), onSaveFramework: vi.fn(), onApproveFramework: vi.fn(), onSaveDay: vi.fn(), onGenerateDay: vi.fn(), onAcknowledge: vi.fn(), onApproveDay: vi.fn(), onCreateCorrection: vi.fn(), onSaveCorrection: vi.fn(), onAcknowledgeCorrection: vi.fn(), onApproveCorrection: vi.fn(), ...extra });
   const approvedFramework = { id: "framework-b1", cefr: "B1" as const, version: 2, status: "approved" as const, scopeHash: "monthly-abc", lessons: [], quality: { severe: [], light: [] }, resources: { coreTerms: [], supportTerms: [], grammarTopics: [], sounds: [] } };
   const monthWindow = { previous: "2026-10", current: "2026-11", next: "2026-12", writable: true };
+
+  it.each([
+    { ready: false, publishedOn: null, readOnly: false, detail: "Còn 20 bài cần duyệt" },
+    { ready: true, publishedOn: null, readOnly: false, detail: "Công bố tháng" },
+    { ready: true, publishedOn: null, readOnly: true, detail: "Sẵn sàng công bố" },
+    { ready: true, publishedOn: "2026-11-03", readOnly: false, detail: "Đã công bố 2026-11-03" }
+  ])("shows only the relevant publication detail or action ($detail)", ({ ready, publishedOn, readOnly, detail }) => {
+    render(<ToastProvider><OperatorMonths month="2026-11" todayMonth="2026-11" cefr="B1" busy={false} readOnly={readOnly}
+      overview={{ systemDate: "2026-11-03", monthWindow, brief: { month: "2026-11", title: "Updates", brief: "Project updates", context: "Office", communicationGoal: "Report", version: 1, status: "approved" }, frameworks: [{ ...approvedFramework, publication: { ready, publishedOn } }] }}
+      actions={monthActions({ onPreviewPublication: vi.fn(), onPublishMonth: vi.fn() }) as never} /></ToastProvider>);
+    expect(screen.queryByRole("note", { name: "Chế độ chỉ đọc của Quản lý" })).not.toBeInTheDocument();
+    const card = within(screen.getByRole("region", { name: "Tiến độ công bố B1" }));
+    expect(card.getByText(detail, { exact: true })).toBeInTheDocument();
+    expect(card.queryByText(/Bài ngày|Bài ôn|Đề thi|Chờ công bố/)).not.toBeInTheDocument();
+    if (!ready) expect(card.getByRole("link")).toHaveAttribute("href", "#monthly-day-1");
+    if (ready && !readOnly && !publishedOn) expect(card.getByRole("button", { name: "Công bố tháng" })).toBeEnabled();
+    else expect(card.queryByRole("button")).not.toBeInTheDocument();
+  });
+
+  it.each(["new", "review"] as const)("shows a spinner and blocks duplicate %s generation until the request settles", async (kind) => {
+    const user = userEvent.setup();
+    let finish!: (value: any) => void;
+    const generate = vi.fn(() => new Promise<any>(resolve => { finish = resolve; }));
+    render(<ToastProvider><OperatorMonths month="2026-11" todayMonth="2026-11" cefr="B1" busy={false}
+      overview={{ systemDate: "2026-11-03", monthWindow, brief: null, frameworks: [approvedFramework] }}
+      actions={monthActions({ onGenerateDay: generate, onGenerateReview: generate }) as never} /></ToastProvider>);
+    await user.click(screen.getAllByRole("button", { name: kind === "review" ? "Sinh" : "Sinh bài 1" })[0]!);
+    const dialog = screen.getByRole("dialog");
+    await user.click(within(dialog).getByRole("button", { name: "Sinh" }));
+    const pending = within(dialog).getByRole("button", { name: "Đang sinh bài" });
+    expect(pending).toBeDisabled();
+    expect(pending).toHaveAttribute("aria-busy", "true");
+    expect(within(pending).getByRole("status")).toHaveClass("spinner");
+    await user.click(pending);
+    expect(generate).toHaveBeenCalledTimes(1);
+    await act(async () => finish({ lesson: { title: "Bài", parts: [] }, report: { severe: [], light: [], contractVersion: 2 } }));
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+  });
+
+  it("confirms exam regeneration inside the app and shows progress on the exam button", async () => {
+    const user = userEvent.setup();
+    const browserConfirm = vi.spyOn(window, "confirm");
+    let finish!: (value: any) => void;
+    const generate = vi.fn(() => new Promise<any>(resolve => { finish = resolve; }));
+    render(<ToastProvider><OperatorMonths month="2026-11" todayMonth="2026-11" cefr="B1" busy={false}
+      overview={{ systemDate: "2026-11-03", monthWindow, brief: null, frameworks: [approvedFramework] }}
+      actions={monthActions({ onGenerateMonthlyFinal: generate, onOpenMonthlyFinal: vi.fn(), onPeekMonthlyFinal: vi.fn().mockResolvedValue(true) }) as never} /></ToastProvider>);
+    const button = await screen.findByRole("button", { name: "Sinh lại đề thi tháng" });
+    await user.click(button);
+    const dialog = screen.getByRole("dialog", { name: "Sinh lại đề thi tháng?" });
+    expect(generate).not.toHaveBeenCalled();
+    await user.click(within(dialog).getByRole("button", { name: "Quay lại" }));
+    expect(generate).not.toHaveBeenCalled();
+    await user.click(button);
+    await user.click(within(screen.getByRole("dialog", { name: "Sinh lại đề thi tháng?" })).getByRole("button", { name: "Sinh lại" }));
+    await waitFor(() => expect(button).toBeDisabled());
+    expect(button).toHaveAttribute("aria-busy", "true");
+    expect(within(button).getByRole("status", { name: "Đang sinh đề thi tháng" })).toHaveClass("spinner");
+    expect(browserConfirm).not.toHaveBeenCalled();
+    await act(async () => finish(monthlyFinalView()));
+    browserConfirm.mockRestore();
+  });
 
   it("opens exam generation as soon as the plan is approved, well before the exam date", async () => {
     const user = userEvent.setup();

@@ -308,7 +308,14 @@ export function ExperienceProvider({ children, musicAllowed = true, musicConfig 
   }, [musicOn, startMusic, stopMusic]);
 
   useEffect(() => {
-    const beginAudio = () => {
+    const beginAudio = (event: PointerEvent | KeyboardEvent) => {
+      if ("repeat" in event && event.repeat) {
+        if (event.key === "Enter" && event.target instanceof Element
+          && event.target.closest('button, a[href], input:is([type="button"], [type="submit"], [type="reset"], [type="image"])')) {
+          event.preventDefault();
+        }
+        return;
+      }
       if (musicOn) startMusic();
       play("click");
     };

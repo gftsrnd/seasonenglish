@@ -18,6 +18,7 @@ export interface PromptOptions {
   confirmLabel?: string;
   cancelLabel?: string;
   inputType?: "text" | "password" | "number";
+  multiline?: { minLength: number; maxLength: number };
   tone?: "primary" | "danger";
 }
 
@@ -52,10 +53,11 @@ export function useDialog(open: boolean, dialogRef: RefObject<HTMLElement | null
   useEffect(() => {
     if (!open) return undefined;
     const previouslyFocused = document.activeElement instanceof HTMLElement ? document.activeElement : null;
-    returnFocus.current = previouslyFocused;
+    returnFocus.current ??= previouslyFocused;
     const bodyAlreadyLocked = document.body.classList.contains("app-modal-open");
     document.body.classList.add("app-modal-open");
     const onKeyDown = (event: KeyboardEvent) => {
+      if (document.querySelector("#modal > [role='dialog']")) return;
       if (event.key === "Escape") {
         event.preventDefault();
         onCloseRef.current();
@@ -267,10 +269,14 @@ function ModalRoot({ children }: { children: ReactNode }) {
         </> : <>
           <h3 id={dialogTitleId}>{modal.title}</h3>
           {modal.message ? <div id={dialogDescriptionId} className="small">{modal.message}</div> : null}
-          {modal.kind === "prompt" ? <label className="field"><span>{modal.label}</span><input data-modal-initial-focus aria-label={modal.label} type={modal.inputType ?? "text"} placeholder={modal.placeholder ?? ""} value={promptValue} onChange={(event) => setPromptValue(event.target.value)} /></label> : null}
+          {modal.kind === "prompt" ? <label className="field app-modal-prompt-field"><span>{modal.label}</span>
+            {modal.multiline
+              ? <textarea data-modal-initial-focus aria-label={modal.label} rows={3} minLength={modal.multiline.minLength} maxLength={modal.multiline.maxLength} required value={promptValue} onChange={event => setPromptValue(event.target.value)} />
+              : <input data-modal-initial-focus aria-label={modal.label} type={modal.inputType ?? "text"} placeholder={modal.placeholder ?? ""} value={promptValue} onChange={event => setPromptValue(event.target.value)} />}
+          </label> : null}
           <div className="row app-modal-actions" style={{ justifyContent: "flex-end" }}>
             <button data-action="modal-cancel" type="button" onClick={cancel}>{modal.cancelLabel ?? "Huỷ"}</button>
-            <button className={modal.tone === "danger" ? "btn-danger" : "btn-primary"} type="submit">{modal.kind === "confirm" ? confirmLabel : modal.confirmLabel ?? "Xác nhận"}</button>
+            <button className={modal.tone === "danger" ? "btn-danger" : "btn-primary"} type="submit" disabled={modal.kind === "prompt" && modal.multiline && promptValue.trim().length < modal.multiline.minLength}>{modal.kind === "confirm" ? confirmLabel : modal.confirmLabel ?? "Xác nhận"}</button>
           </div>
         </>}
       </form>

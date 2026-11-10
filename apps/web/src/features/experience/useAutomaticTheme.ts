@@ -12,16 +12,13 @@ export function millisecondsUntilNextLocalDay(at: Date): number {
 }
 
 export function useAutomaticTheme(configuredTheme: ConfiguredTheme): ResolvedSeasonTheme {
-  const [resolvedTheme, setResolvedTheme] = useState<ResolvedSeasonTheme>(() => configuredTheme === "auto" ? resolveAutomaticTheme(new Date()) : configuredTheme);
+  const [automaticTheme, setAutomaticTheme] = useState(() => resolveAutomaticTheme(new Date()));
 
   useEffect(() => {
-    if (configuredTheme !== "auto") {
-      setResolvedTheme(configuredTheme);
-      return;
-    }
+    if (configuredTheme !== "auto") return;
 
     let timer: ReturnType<typeof setTimeout> | undefined;
-    const refresh = () => setResolvedTheme(resolveAutomaticTheme(new Date()));
+    const refresh = () => setAutomaticTheme(resolveAutomaticTheme(new Date()));
     const scheduleNextDay = () => {
       if (timer) clearTimeout(timer);
       timer = setTimeout(() => {
@@ -44,5 +41,5 @@ export function useAutomaticTheme(configuredTheme: ConfiguredTheme): ResolvedSea
     };
   }, [configuredTheme]);
 
-  return resolvedTheme;
+  return configuredTheme === "auto" ? automaticTheme : configuredTheme;
 }

@@ -1084,7 +1084,7 @@ describe("learner lesson study content", () => {
     } as any;
     render(<LearnerLesson view={{ lesson, lock: null }} actions={{ navigate: vi.fn(), speak: vi.fn(), saveLessonProgress: vi.fn(), appealLessonPart } as any} />);
     await user.click(screen.getByRole("tab", { name: /2\. Bài tập/i }));
-    await user.click(screen.getByRole("button", { name: "Gửi kháng nghị" }));
+    await user.click(screen.getByRole("button", { name: "Báo lỗi phần này" }));
 
     const reason = screen.getByRole("textbox", { name: "Lý do kháng nghị phần Viết" });
     const submit = screen.getByRole("button", { name: "Xác nhận gửi kháng nghị" });

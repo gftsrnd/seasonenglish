@@ -62,6 +62,25 @@ const reminderSendInput = z.object({
   requestId: z.string().min(1).max(128),
   channel: z.enum(["email", "base"])
 });
+const learnerBaseNotificationInput = z.object({
+  webhookUrl: z.string().trim().max(1000).default(""),
+  webhookTemplate: z.string().max(4000).default('{"base_content":"{message}"}'),
+  destinationLabel: z.string().trim().max(120).default(""),
+  remove: z.boolean().default(false)
+}).superRefine((input, context) => {
+  if (input.remove) return;
+  if (!input.destinationLabel) context.addIssue({ code: "custom", path: ["destinationLabel"], message: "Destination label is required" });
+  if (input.webhookUrl) {
+    try {
+      const url = new URL(input.webhookUrl);
+      if (url.protocol !== "https:" || url.username || url.password || !url.hostname.includes(".") || /^(localhost|127\.|0\.|10\.|192\.168\.|169\.254\.|172\.(1[6-9]|2\d|3[01])\.)/i.test(url.hostname) || /\.(localhost|local)$/i.test(url.hostname)) throw new Error();
+    } catch { context.addIssue({ code: "custom", path: ["webhookUrl"], message: "Use a public HTTPS incoming webhook URL" }); }
+  }
+  try {
+    const payload: unknown = JSON.parse(input.webhookTemplate);
+    if (!payload || typeof payload !== "object" || Array.isArray(payload) || !("base_content" in payload) || typeof payload.base_content !== "string" || !payload.base_content.includes("{message}")) throw new Error();
+  } catch { context.addIssue({ code: "custom", path: ["webhookTemplate"], message: "Payload must contain base_content with {message}" }); }
+});
 const requestIdParams = z.object({ requestId: z.uuid() });
 const reportIdParams = z.object({ reportId: z.uuid() });
 const managerMusicTestInput = z.object({ enabled: z.boolean(), url: z.string().max(1000), volume: z.number().int().min(0).max(100) });
@@ -86,6 +105,17 @@ export function registerManagerRoutes(app: FastifyInstance, pool: Pool, options:
       })
     : undefined);
 
+  app.get("/api/v1/manager/monthly-overview", { preHandler: managerOnly }, async (request, reply) => {
+    const filters = z.strictObject({
+      month: z.string().regex(/^(?:19|20|21)\d{2}-(?:0[1-9]|1[0-2])$/).optional(),
+      cefr: z.enum(["A1", "A2", "B1", "B2", "C1"]).optional()
+    }).safeParse(request.query);
+    if (!filters.success) return reply.code(400).send({ code: "MANAGER_MONTHLY_FILTER_INVALID" });
+    const { month, cefr } = filters.data;
+    const view = await repositories.manager.monthlyOverview(request.e4sSession!.user.id, { ...(month ? { month } : {}), ...(cefr ? { cefr } : {}) });
+    return view ?? reply.code(404).send({ code: "MANAGER_ORGANIZATION_NOT_FOUND" });
+  });
+
   app.get("/api/v1/manager/progress", { preHandler: managerOnly }, async (request, reply) => {
     const view = await repositories.manager.progress(request.e4sSession!.user.id);
     return view ?? reply.code(404).send({ code: "MANAGER_ORGANIZATION_NOT_FOUND" });
@@ -101,6 +131,14 @@ export function registerManagerRoutes(app: FastifyInstance, pool: Pool, options:
     if (!params.success) return reply.code(400).send({ code: "MANAGER_LEARNER_ID_INVALID" });
     const view = await repositories.manager.learnerProfile(request.e4sSession!.user.id, params.data.learnerId);
     return view ?? reply.code(404).send({ code: "MANAGER_LEARNER_NOT_FOUND" });
+  });
+
+  app.patch("/api/v1/manager/learners/:learnerId/display-name", { preHandler: managerOnly }, async (request, reply) => {
+    const params = learnerIdParams.safeParse(request.params);
+    const input = z.strictObject({ displayName: z.string().trim().min(2).max(120) }).safeParse(request.body);
+    if (!params.success || !input.success) return reply.code(400).send({ code: "MANAGER_LEARNER_NAME_INVALID" });
+    const displayName = await repositories.manager.changeLearnerDisplayName(request.e4sSession!.user.id, params.data.learnerId, input.data.displayName);
+    return displayName === null ? reply.code(404).send({ code: "MANAGER_LEARNER_NOT_FOUND" }) : { displayName };
   });
 
   app.post<{ Params: { learnerId: string } }>("/api/v1/manager/learners/:learnerId/weekly-practice", { preHandler: managerOnly }, async (request, reply) => {
@@ -518,6 +556,20 @@ export function registerManagerRoutes(app: FastifyInstance, pool: Pool, options:
   app.get("/api/v1/manager/reminders", { preHandler: managerOnly }, async (request, reply) => {
     const view = await repositories.manager.reminders(request.e4sSession!.user.id);
     return view ? { ...view, emailConfigured: Boolean(reminderEmailSender) } : reply.code(404).send({ code: "MANAGER_ORGANIZATION_NOT_FOUND" });
+  });
+
+  app.put<{ Params: { learnerId: string } }>("/api/v1/manager/learners/:learnerId/notifications/base", { preHandler: managerOnly }, async (request, reply) => {
+    const params = learnerIdParams.safeParse(request.params);
+    const input = learnerBaseNotificationInput.safeParse(request.body);
+    if (!params.success || !input.success) return reply.code(400).send({ code: "MANAGER_BASE_NOTIFICATION_INVALID" });
+    try {
+      const view = await repositories.manager.saveLearnerBaseNotification(request.e4sSession!.user.id, params.data.learnerId, input.data);
+      return view ?? reply.code(404).send({ code: "MANAGER_LEARNER_NOT_FOUND" });
+    } catch (error) {
+      if (error instanceof Error && error.message === "MANAGER_REMINDER_BASE_WEBHOOK_MISSING") return reply.code(422).send({ code: error.message });
+      if (error instanceof Error && error.message.startsWith("PROVIDER_SETTINGS_ENCRYPTION_KEY_")) return reply.code(503).send({ code: "MANAGER_BASE_NOTIFICATION_STORAGE_UNAVAILABLE" });
+      throw error;
+    }
   });
 
   app.post<{ Params: { learnerId: string }; Body: { requestId?: unknown; channel?: unknown } }>(

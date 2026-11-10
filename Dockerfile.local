@@ -20,3 +20,11 @@ RUN pnpm build
 
 FROM build AS local-runtime
 ENV NODE_ENV=production
+
+FROM local-runtime AS local-api
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends python3-venv \
+    && python3 -m venv /opt/e4s-edge-tts \
+    && /opt/e4s-edge-tts/bin/pip install --no-cache-dir edge-tts==7.3.1 \
+    && rm -rf /var/lib/apt/lists/*
+ENV PATH="/opt/e4s-edge-tts/bin:${PATH}"

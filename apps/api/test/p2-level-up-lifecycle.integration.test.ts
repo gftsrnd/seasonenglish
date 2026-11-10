@@ -3,7 +3,6 @@ import { Pool } from "pg";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { createRepositories, migrateDatabase, resetPublicSchema, seedDemo } from "@e4s/database";
 import { createCredentialHash, createPinHash } from "@e4s/domain/identity";
-import { nextEffectiveMonday } from "@e4s/domain/progression";
 import { DEMO_IDS } from "@e4s/test-support";
 import { buildApi } from "../src/app.js";
 
@@ -16,7 +15,6 @@ describe("P2 level-up lifecycle", () => {
   const app = buildApi({ pool, allowDemoLogin: true, secureCookies: false });
   let learnerCookie = "";
   let operatorCookie = "";
-  let passedAttemptId = "";
 
   beforeAll(async () => {
     const client = await pool.connect();
@@ -133,7 +131,6 @@ describe("P2 level-up lifecycle", () => {
     });
     expect(started.statusCode, started.body).toBe(201);
     const attemptId = started.json().attempt.id as string;
-    passedAttemptId = attemptId;
 
     const tooEarly = await app.inject({ method: "GET", url: "/api/v1/challenge", headers: { cookie: learnerCookie } });
     expect(tooEarly.statusCode).toBe(404);
@@ -197,8 +194,35 @@ describe("P2 level-up lifecycle", () => {
     expect(challengeRewards.rows[0]?.count).toBe(0);
   });
 
-  it("schedules an approved level for next Monday and applies it only when due", async () => {
-    const expectedMonday = nextEffectiveMonday(new Date(), "Asia/Ho_Chi_Minh");
+  it("applies an approved level in the decision transaction", async () => {
+    const passedAttemptId = randomUUID();
+    const challengeSessionId = randomUUID();
+    const definitionId = randomUUID();
+    const versionId = randomUUID();
+    await pool.query(
+      `insert into assessment_definitions (id, organization_id, assessment_key, kind, title)
+       values ($1, $2, 'level-up-b1-immediate-fixture', 'level_up', 'B1')`, [definitionId, DEMO_IDS.organization]
+    );
+    await pool.query(
+      `insert into assessment_versions (id, definition_id, version, status, blueprint)
+       values ($1, $2, 1, 'published', '{"targetLevel":"B1"}')`, [versionId, definitionId]
+    );
+    await pool.query("update enrollments set cefr = 'A2' where learner_id = $1", [DEMO_IDS.learner]);
+    await pool.query(
+      `insert into assessment_attempts (id, assessment_version_id, learner_id, status, submitted_at)
+       values ($1, $2, $3, 'pending_review', now())`,
+      [passedAttemptId, versionId, DEMO_IDS.learner]
+    );
+    await pool.query(
+      "insert into coach_sessions (id, learner_id, scenario, status, completed_at) values ($1, $2, '{}', 'completed', now())",
+      [challengeSessionId, DEMO_IDS.learner]
+    );
+    await pool.query(
+      `insert into level_up_challenge_results (id, assessment_attempt_id, session_id, learner_id, completed_turns, average, off_topic, passed)
+       values (gen_random_uuid(), $1, $2, $3, 6, 4, 1, true)`,
+      [passedAttemptId, challengeSessionId, DEMO_IDS.learner]
+    );
+    const requestedAt = Date.now();
     const approved = await app.inject({
       method: "POST", url: `/api/v1/assessment-reviews/${passedAttemptId}/decision`,
       headers: { cookie: operatorCookie },
@@ -206,33 +230,22 @@ describe("P2 level-up lifecycle", () => {
     });
     expect(approved.statusCode, approved.body).toBe(200);
 
-    const beforeMonday = await pool.query<{ cefr: string }>("select cefr from enrollments where learner_id = $1", [DEMO_IDS.learner]);
-    expect(beforeMonday.rows[0]?.cefr).toBe("A2");
-    const scheduled = await pool.query<{
-      from_cefr: string; to_cefr: string; effective_at: Date; status: string; approved_by: string; reason: string; evidence: Record<string, unknown>;
-    }>("select from_cefr, to_cefr, effective_at, status, approved_by, reason, evidence from scheduled_level_changes where assessment_attempt_id = $1", [passedAttemptId]);
-    expect(scheduled.rows[0]).toMatchObject({
-      from_cefr: "A2", to_cefr: "B1", status: "scheduled", approved_by: DEMO_IDS.operator,
+    const enrollment = await pool.query<{ cefr: string }>("select cefr from enrollments where learner_id = $1", [DEMO_IDS.learner]);
+    expect(enrollment.rows[0]?.cefr).toBe("B1");
+    const applied = await pool.query<{
+      from_cefr: string; to_cefr: string; effective_at: Date; applied_at: Date; status: string;
+      approved_by: string; reason: string; evidence: Record<string, unknown>;
+    }>("select from_cefr, to_cefr, effective_at, applied_at, status, approved_by, reason, evidence from scheduled_level_changes where assessment_attempt_id = $1", [passedAttemptId]);
+    expect(applied.rows[0]).toMatchObject({
+      from_cefr: "A2", to_cefr: "B1", status: "applied", approved_by: DEMO_IDS.operator,
       reason: "Đủ điểm thi và đạt thử thách 6 lượt.",
       evidence: { challenge: { completedTurns: 6, passed: true } }
     });
-    expect(scheduled.rows[0]?.effective_at.toISOString()).toBe(expectedMonday);
-
-    const blockedWhileScheduled = await app.inject({
-      method: "POST", url: "/api/v1/assessments/level-up/start",
-      headers: { cookie: learnerCookie }, payload: {}
-    });
-    expect(blockedWhileScheduled.statusCode, blockedWhileScheduled.body).toBe(409);
-    expect(blockedWhileScheduled.json()).toEqual({ code: "LEVEL_UP_ALREADY_ACTIVE" });
-
-    await pool.query("update scheduled_level_changes set effective_at = now() - interval '1 minute' where assessment_attempt_id = $1", [passedAttemptId]);
+    expect(applied.rows[0]?.effective_at.getTime()).toBeGreaterThanOrEqual(requestedAt);
+    expect(applied.rows[0]?.applied_at).toEqual(applied.rows[0]?.effective_at);
     const progress = await app.inject({ method: "GET", url: "/api/v1/learner/progress", headers: { cookie: learnerCookie } });
     expect(progress.statusCode, progress.body).toBe(200);
-    const afterMonday = await pool.query<{ cefr: string }>("select cefr from enrollments where learner_id = $1", [DEMO_IDS.learner]);
-    expect(afterMonday.rows[0]?.cefr).toBe("B1");
-    const applied = await pool.query<{ status: string; applied_at: Date | null }>("select status, applied_at from scheduled_level_changes where assessment_attempt_id = $1", [passedAttemptId]);
-    expect(applied.rows[0]?.status).toBe("applied");
-    expect(applied.rows[0]?.applied_at).toBeInstanceOf(Date);
+    expect(progress.json()).toMatchObject({ learner: { cefr: "B1" } });
   });
 
   it("persists a 14-day retry with weak-skill evidence when the exam fails", async () => {
@@ -351,4 +364,70 @@ describe("P2 level-up lifecycle", () => {
     );
     expect(stored.rows[0]).toEqual({ status: "reviewed", total: "62", source: "human" });
   });
+  it("resets a returning A1 learner's road to A2 and describes the downgrade neutrally", async () => {
+    const previousMonth = await pool.query<{ month: string; exam_date: string }>(
+      `select to_char(date_trunc('month', organization_system_date($1)) - interval '1 day', 'YYYY-MM') as month,
+              to_char(date_trunc('month', organization_system_date($1)) - interval '1 day', 'YYYY-MM-DD') as exam_date`,
+      [DEMO_IDS.organization]
+    );
+    const past = previousMonth.rows[0]!;
+    const definitionId = randomUUID();
+    const versionId = randomUUID();
+    const attemptId = randomUUID();
+    await pool.query("update enrollments set cefr = 'A1', enrolled_at = now() - interval '1 year' where learner_id = $1", [DEMO_IDS.learner]);
+    await pool.query(
+      `insert into program_months (id, organization_id, month, exam_date, lesson_count, brief_status)
+       values (gen_random_uuid(), $1, $2, $3::date, 1, 'approved')`,
+      [DEMO_IDS.organization, past.month, past.exam_date]
+    );
+    await pool.query(
+      `insert into program_months (id, organization_id, month, exam_date, lesson_count, brief_status)
+       select gen_random_uuid(), $1, to_char(system_date, 'YYYY-MM'),
+              (date_trunc('month', system_date) + interval '1 month - 1 day')::date, 1, 'approved'
+       from organization_system_date($1) system_date`, [DEMO_IDS.organization]
+    );
+    await pool.query(
+      `insert into assessment_definitions (id, organization_id, assessment_key, kind, title)
+       values ($1, $2, $3, 'final', 'Fixture A1')`, [definitionId, DEMO_IDS.organization, `monthly-final-${past.month}-a1`]
+    );
+    await pool.query(
+      `insert into assessment_versions (id, definition_id, version, status, blueprint)
+       values ($1, $2, 1, 'published', '{}')`, [versionId, definitionId]
+    );
+    await pool.query(
+      `insert into assessment_attempts (id, assessment_version_id, learner_id, status, started_at, submitted_at)
+       values ($1, $2, $3, 'approved', $4::date + interval '8 hours', $4::date + interval '9 hours')`,
+      [attemptId, versionId, DEMO_IDS.learner, past.exam_date]
+    );
+    await pool.query(
+      `insert into assessment_scores (id, attempt_id, section, score, source)
+       select gen_random_uuid(), $1, section, 20, 'human' from unnest(array['listening', 'reading', 'writing', 'speaking']) section`, [attemptId]
+    );
+    await pool.query(
+      `insert into learner_complaints (organization_id, learner_id, kind, reason, status, submitted_at, due_at)
+       values ($1, $2, 'exam_eligibility', 'Đủ điều kiện dự thi', 'approved', $3::date + interval '1 hour', $3::date + interval '2 hours')`,
+      [DEMO_IDS.organization, DEMO_IDS.learner, past.exam_date]
+    );
+    const home = () => app.inject({ method: "GET", url: "/api/v1/learner/home", headers: { cookie: learnerCookie } });
+    const changeLevel = (targetLevel: "A1" | "A2") => app.inject({
+      method: "PATCH", url: `/api/v1/assessment-reviews/learners/${DEMO_IDS.learner}/level`,
+      headers: { cookie: operatorCookie },
+      payload: { mode: "direct", targetLevel, reason: "Điều chỉnh trình độ kiểm thử", evidence: "Kết quả học và bài thi đã kiểm tra" }
+    });
+    const before = await home();
+    expect(before.statusCode, before.body).toBe(200);
+    expect(before.json().levelReadiness).toMatchObject({ targetLevel: "A2", monthlyPolicy: { eligibleMonths: 1, finalPasses: 1 } });
+    const up = await changeLevel("A2");
+    expect(up.statusCode, up.body).toBe(200);
+    const down = await changeLevel("A1");
+    expect(down.statusCode, down.body).toBe(200);
+    const after = await home();
+    expect(after.statusCode, after.body).toBe(200);
+    expect(after.json()).toMatchObject({
+      learner: { cefr: "A1" },
+      levelReadiness: { targetLevel: "A2", monthlyPolicy: { eligibleMonths: 0, finalPasses: 0, seasonMonths: 0 } },
+      rewardAnnouncement: { kind: "level-adjustment", level: "A1" }
+    });
+  });
+
 });

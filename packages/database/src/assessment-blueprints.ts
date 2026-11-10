@@ -209,15 +209,42 @@ export const levelUpDefinition: StoredAssessmentDefinition = {
   ]
 };
 
+export function normalizeLevelFormQuestionPrompts(stored: StoredAssessmentDefinition): StoredAssessmentDefinition {
+  if (stored.kind !== "level-up") return stored;
+  return {
+    ...stored,
+    sections: stored.sections.map((section) => {
+      const groupPattern = section.code === "listening" ? /^L([1-5])$/ : section.code === "reading" ? /^R([1-4])$/ : null;
+      if (!groupPattern) return section;
+      return {
+        ...section,
+        groups: section.groups.map((group) => {
+          const part = group.key.match(groupPattern)?.[1];
+          if (!part) return group;
+          const letter = String.fromCharCode(64 + Number(part));
+          const label = new RegExp(`^\\s*Part\\s+(?:${part}|${letter})\\s*:\\s*`, "i");
+          return {
+            ...group,
+            tasks: group.tasks.map((task) => {
+              const prompt = task.prompt.replace(label, "");
+              return prompt.trim() && prompt !== task.prompt ? { ...task, prompt } : task;
+            })
+          };
+        })
+      };
+    })
+  };
+}
+
 export function publicAssessmentDefinition(stored: StoredAssessmentDefinition): AssessmentDefinitionView {
   // Operator-only data (answer keys, grader package, plan snapshot) is removed
   // here. For a monthly final v2.0 the listening script is part of the grader
   // package too (GEN18): learners only receive the reviewed audio file.
-  const { monthlyExam, monthlyScope: _monthlyScope, ...definition } = stored;
+  const { monthlyExam, monthlyScope: _monthlyScope, ...definition } = normalizeLevelFormQuestionPrompts(stored);
   const hideScript = Boolean(monthlyExam);
   return {
     ...definition,
-    sections: stored.sections.map((section) => ({
+    sections: definition.sections.map((section) => ({
       ...section,
       groups: section.groups.map((group) => ({
         ...group,

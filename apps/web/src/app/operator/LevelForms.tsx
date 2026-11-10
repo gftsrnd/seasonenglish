@@ -1,15 +1,16 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
-import { Badge, Banner, Button, Empty, OperatorPage, PageTitle, StandaloneReadOnlyBanner } from "./primitives.js";
+import { Badge, Banner, Button, Empty, OperatorPage, PageTitle } from "./primitives.js";
 import type { LevelFormActionKey, OperatorLevelFormsActions, OperatorLevelFormsView } from "./types.js";
 import type { AssessmentLevelFormDetailView, AssessmentLevelFormUpdateInput, CefrLevel } from "@e4s/contracts";
 import { operatorDateTime } from "./adapters.js";
+import { ApiError } from "../../api/runtime.js";
+import { ScrollJumpButton, useScrollJump } from "../shared/ScrollJump.js";
 
 type LevelFormsUiView = OperatorLevelFormsView & {
   loading?: boolean;
   loadState?: "idle" | "loading" | "success" | "error";
   mutationState?: "idle" | "loading";
   mutationMessage?: string | null;
-  publishingId?: string | null;
   deletingId?: string | null;
 };
 
@@ -30,7 +31,6 @@ export function OperatorLevelForms({ view, actions, readOnly = false, unavailabl
   const pageTitle = <PageTitle actions={!view.aiConnected ? <span className="badge warn">AI tạm chưa sẵn sàng</span> : undefined}><h1>Đề thi lên mức</h1><p className="muted">Mỗi mức đích có một khung soạn đề riêng. Nội dung sinh và nội dung soạn tay đều phải theo bốn kỹ năng của bài đầu vào, với độ khó ở mức đích; chỉ bản nháp mới sửa được trước khi phát hành.</p></PageTitle>;
 
   const content = <>{!embedded && pageTitle}
-    <StandaloneReadOnlyBanner readOnly={readOnly} />
     {!view.aiConnected && <Banner tone="warn"><span className="small"><b>AI hệ thống tạm chưa sẵn sàng.</b> Chưa thể sinh đề mới; các đề đã có vẫn có thể xem. Nếu trạng thái kéo dài, hãy báo quản trị hệ thống.</span></Banner>}
     {view.generateError && <div className="banner warn" role="alert"><div className="body small">{view.generateError}</div></div>}
     {view.mutationMessage && <div className="small muted" aria-live="polite">{mutationBusy && <span className="spinner" aria-hidden="true" />} {view.mutationMessage}</div>}
@@ -42,12 +42,18 @@ export function OperatorLevelForms({ view, actions, readOnly = false, unavailabl
       return <div className={embedded ? "operator-level-group operator-level-group--embedded" : "card operator-level-group"} key={group.target}><div className="row between operator-card-header operator-level-group-header"><div><span className="operator-level-kicker">Mức đích</span><h3>{group.target}</h3></div>{hasForm ? <Badge tone={approved ? "ok" : "warn"}>{approved ? "Đã duyệt" : "Đang chỉnh sửa"}</Badge> : <div className="row operator-level-form-actions"><Badge tone="warn">Chưa có đề</Badge><Button small disabled={Boolean(readOnlyReason) || generating || mutationBusy || !actions.onCreateManual} title={readOnlyReason} onClick={() => actions.onCreateManual?.(group.target)}>Soạn tay</Button><Button small primary busy={groupGenerating} disabled={Boolean(generateBlocked) || generating || mutationBusy} title={generateBlocked || (generating ? "Đang sinh đề" : undefined)} onClick={() => actions.onGenerate(group.target)}>{groupGenerating ? "Đang sinh…" : "Sinh đề bằng AI"}</Button></div>}</div>
         {group.forms.length ? <div className="list" style={{ marginTop: 8 }}>{group.forms.map(form => {
           const isApproved = form.status === "approved";
-          const publishBusy = view.publishingId === form.id;
           const deleteBusy = view.deletingId === form.id;
           const deleteReason = blocked("delete") || readOnlyReason || (isApproved ? "Chỉ xoá được bản nháp" : undefined) || (form.attempts ? "Đề này đã có bài thi nên không xoá được" : undefined);
-          const actionBusy = mutationBusy || generating || publishBusy || deleteBusy;
+          const actionBusy = mutationBusy || generating || deleteBusy;
           const publicationBlocked = form.publicationReady === false;
-          return <div className={`item operator-level-form-item${embedded ? " operator-assessment-form-row" : ""}`} key={form.id}><div className="body"><div className="title">{form.title} <Badge tone={isApproved ? "ok" : ""}>{isApproved ? "Đã duyệt" : "Bản nháp"}</Badge>{form.short && <Badge tone="warn">ngắn</Badge>}{form.inUse && <Badge tone="primary">đang dùng</Badge>}</div><div className="xs muted">{form.createdAt} · {form.byName || "—"} · {form.listeningQuestions} câu nghe · {form.readingQuestions} câu đọc · {form.attempts} lượt thi</div>{publicationBlocked ? <div id={`level-form-publication-${form.id}`} className="xs muted">Chờ hoàn thiện {form.publicationBlockerCount ?? "các"} mục trước khi phát hành.</div> : null}</div><div className="row operator-level-form-actions"><Button small disabled={Boolean(blocked("view"))} onClick={() => actions.onView(form.id)}>Xem</Button><Button small disabled={!actions.onEdit || Boolean(readOnlyReason) || actionBusy || Boolean(blocked("edit"))} onClick={() => actions.onEdit?.(form.id, isApproved)}>{isApproved ? "Chỉnh sửa" : "Sửa"}</Button>{!isApproved && <Button small primary busy={publishBusy} disabled={Boolean(readOnlyReason) || actionBusy || Boolean(blocked("approve")) || publicationBlocked} aria-describedby={publicationBlocked ? `level-form-publication-${form.id}` : undefined} onClick={() => actions.onApprove(form.id)}>{publishBusy ? "Đang phát hành…" : "Duyệt & phát hành"}</Button>}<Button small danger busy={deleteBusy} disabled={Boolean(deleteReason) || actionBusy} title={deleteReason} onClick={() => actions.onDelete(form.id)}>{deleteBusy ? "Đang xoá…" : "Xoá"}</Button></div></div>;
+          return <div className={`item operator-level-form-item${embedded ? " operator-assessment-form-row" : ""}`} key={form.id}>
+            <div className="body"><div className="title">{form.title} <Badge tone={isApproved ? "ok" : ""}>{isApproved ? "Đã duyệt" : "Bản nháp"}</Badge>{form.short && <Badge tone="warn">ngắn</Badge>}{form.inUse && <Badge tone="primary">đang dùng</Badge>}</div><div className="xs muted">{form.createdAt} · {form.byName || "—"} · {form.listeningQuestions} câu nghe · {form.readingQuestions} câu đọc · {form.attempts} lượt thi</div>{publicationBlocked ? <div className="xs muted">Chờ hoàn thiện {form.publicationBlockerCount ?? "các"} mục trước khi phát hành.</div> : null}</div>
+            <div className="row operator-level-form-actions">
+              <Button small disabled={Boolean(blocked("view"))} onClick={() => actions.onView(form.id)}>Xem</Button>
+              <Button small disabled={!actions.onEdit || Boolean(readOnlyReason) || actionBusy || Boolean(blocked("edit"))} onClick={() => actions.onEdit?.(form.id, isApproved)}>{isApproved ? "Chỉnh sửa" : "Sửa đề"}</Button>
+              <Button small danger busy={deleteBusy} disabled={Boolean(deleteReason) || actionBusy} title={deleteReason} onClick={() => actions.onDelete(form.id)}>{deleteBusy ? "Đang xoá…" : "Xoá"}</Button>
+            </div>
+          </div>;
         })}</div> : <p className="small muted operator-level-empty">Chưa có bản nháp. Soạn tay hoặc sinh bằng AI để tạo đề theo cấu trúc 4 kỹ năng, 75 phút, 100 điểm; chỉ bản nháp hoàn chỉnh mới phát hành được.</p>}
       </div>;
     })}
@@ -68,6 +74,9 @@ type LevelFormDetailProps = {
   editing?: boolean;
   onClose(): void;
   onSave?(input: AssessmentLevelFormUpdateInput): void | Promise<void>;
+  onPublish?(): Promise<void>;
+  publicationReady?: boolean;
+  onConfirmDiscard?(): Promise<boolean>;
   uploadAudio?(file: Blob, filename: string): Promise<{ url: string }>;
   synthesizeEdgeTts?(input: { text: string; voice: string }): Promise<{ filename: string; mimeType: string; base64: string }>;
   /** Overrides "Đề lên mức {level}" for other assessment kinds (e.g. the monthly final). */
@@ -98,15 +107,29 @@ export function parseScriptLines(value: string): Array<{ speaker: string; text: 
   return lines.length ? lines : [{ speaker: "Narrator", text: "" }];
 }
 
-export function OperatorLevelFormDetail({ detail, readOnly = false, editing = false, onClose, onSave, uploadAudio, synthesizeEdgeTts, kicker, dialogLabel, children, onDraftChange, speakTextOnly = false, hideValidation = false }: LevelFormDetailProps) {
+export function OperatorLevelFormDetail({ detail, readOnly = false, editing = false, onClose, onSave, onPublish, publicationReady, onConfirmDiscard, uploadAudio, synthesizeEdgeTts, kicker, dialogLabel, children, onDraftChange, speakTextOnly = false, hideValidation = false }: LevelFormDetailProps) {
   const dialogRef = useRef<HTMLElement>(null);
-  const closeRef = useRef(onClose);
+  const scroll = useScrollJump(true);
+  const closeRef = useRef<() => void>(onClose);
+  const interactionLocked = useRef(false);
   const draftChangeRef = useRef(onDraftChange);
   const [draft, setDraft] = useState<AssessmentLevelFormUpdateInput>(() => ({ title: detail.title, sections: structuredClone(detail.sections) }));
   const [saving, setSaving] = useState(false);
-  const [uploadingAudio, setUploadingAudio] = useState<string | null>(null);
-  const [audioError, setAudioError] = useState<string | null>(null);
-  closeRef.current = onClose;
+  const [audioJob, setAudioJob] = useState<{ groupKey: string; kind: "upload" | "generate" } | null>(null);
+  const [audioError, setAudioError] = useState<{ groupKey: string; message: string } | null>(null);
+  const [publishing, setPublishing] = useState(false);
+  const [actionError, setActionError] = useState<string>();
+  const dirty = Boolean(onConfirmDiscard || onPublish) && (draft.title !== detail.title || JSON.stringify(draft.sections) !== JSON.stringify(detail.sections));
+  const close = async () => {
+    if (interactionLocked.current || saving || audioJob) return;
+    if (dirty && onConfirmDiscard) {
+      interactionLocked.current = true;
+      try { if (!await onConfirmDiscard()) return; }
+      finally { interactionLocked.current = false; }
+    }
+    onClose();
+  };
+  closeRef.current = () => { void close(); };
   draftChangeRef.current = onDraftChange;
   useEffect(() => setDraft({ title: detail.title, sections: structuredClone(detail.sections) }), [detail]);
   useEffect(() => { draftChangeRef.current?.(draft); }, [draft]);
@@ -160,27 +183,49 @@ export function OperatorLevelFormDetail({ detail, readOnly = false, editing = fa
     }))
   }));
   const uploadGroupAudio = async (sectionIndex: number, groupIndex: number, groupKey: string, file?: File) => {
-    if (!file || !uploadAudio) return;
-    setUploadingAudio(groupKey); setAudioError(null);
+    if (!file || !uploadAudio || audioJob) return;
+    setAudioJob({ groupKey, kind: "upload" }); setAudioError(null);
     try { const uploaded = await uploadAudio(file, file.name); updateGroupAudio(sectionIndex, groupIndex, uploaded.url); }
-    catch { setAudioError("Không tải và lưu được file audio."); }
-    finally { setUploadingAudio(null); }
+    catch { setAudioError({ groupKey, message: "Không tải và lưu được file audio. Hãy thử lại." }); }
+    finally { setAudioJob(null); }
   };
   const generateGroupEdgeTts = async (sectionIndex: number, groupIndex: number, groupKey: string, script: string) => {
-    if (!synthesizeEdgeTts || !uploadAudio || !script.trim()) { setAudioError("Cần có kịch bản nghe và cấu hình Edge TTS để tạo audio."); return; }
-    setUploadingAudio(groupKey); setAudioError(null);
+    if (!synthesizeEdgeTts || !uploadAudio || !script.trim() || audioJob) return;
+    setAudioJob({ groupKey, kind: "generate" }); setAudioError(null);
     try {
       const generated = await synthesizeEdgeTts({ text: script, voice: "en-US-AvaMultilingualNeural" });
       const bytes = Uint8Array.from(atob(generated.base64), (character) => character.charCodeAt(0));
       const uploaded = await uploadAudio(new Blob([bytes], { type: generated.mimeType }), generated.filename);
       updateGroupAudio(sectionIndex, groupIndex, uploaded.url);
-    } catch { setAudioError("Không tạo hoặc lưu được audio Edge TTS trên máy chủ."); }
-    finally { setUploadingAudio(null); }
+    } catch (error) {
+      const code = error instanceof ApiError ? error.code : "";
+      const message = code === "EDGE_TTS_UNAVAILABLE"
+        ? "Máy chủ chưa bật Edge TTS. Bạn có thể tải file audio có sẵn."
+        : code.startsWith("CONTENT_MEDIA_")
+          ? "Đã tạo audio nhưng chưa lưu được vào kho. Hãy thử lại."
+          : "Edge TTS chưa tạo được audio. Hãy thử lại hoặc tải file có sẵn.";
+      setAudioError({ groupKey, message });
+    }
+    finally { setAudioJob(null); }
   };
   const save = async () => {
     if (!onSave || readOnly || !editing || saving) return;
     setSaving(true);
-    try { await onSave(draft); } finally { setSaving(false); }
+    setActionError(undefined);
+    try { await onSave(draft); }
+    catch { setActionError("Không lưu được bản nháp đề lên mức. Hãy thử lại."); }
+    finally { setSaving(false); }
+  };
+  const publishBlocker = dirty ? "Lưu các thay đổi trước khi phát hành."
+    : publicationReady !== true ? "Cần hoàn thiện đề trước khi phát hành." : undefined;
+  const publish = async () => {
+    if (!onPublish || readOnly || !editing || publishBlocker || saving || audioJob || interactionLocked.current) return;
+    interactionLocked.current = true;
+    setPublishing(true);
+    setActionError(undefined);
+    try { await onPublish(); }
+    catch { setActionError("Không phát hành được đề lên mức. Hãy kiểm tra lại bản nháp."); }
+    finally { interactionLocked.current = false; setPublishing(false); }
   };
 
   useEffect(() => {
@@ -190,6 +235,7 @@ export function OperatorLevelFormDetail({ detail, readOnly = false, editing = fa
     const focusable = () => Array.from(dialog.querySelectorAll<HTMLElement>("button:not(:disabled), [href], summary, [tabindex]:not([tabindex='-1'])")).filter(element => !element.hidden);
     (focusable()[0] ?? dialog).focus();
     const onKeyDown = (event: KeyboardEvent) => {
+      if (interactionLocked.current || document.querySelector("#modal > [role='dialog']")) return;
       if (event.key === "Escape") {
         event.preventDefault();
         closeRef.current();
@@ -217,7 +263,7 @@ export function OperatorLevelFormDetail({ detail, readOnly = false, editing = fa
     };
   }, []);
 
-  const renderSection = (section: AssessmentLevelFormUpdateInput["sections"][number], sectionIndex: number) => <details className="item operator-level-section" key={section.code}>
+  const renderSection = (section: AssessmentLevelFormUpdateInput["sections"][number], sectionIndex: number) => <details className="operator-level-section" key={section.code}>
     <summary><span><b>{section.title}</b><small>{section.groups.reduce((count, group) => count + group.tasks.length, 0)} câu · {section.durationMinutes} phút · {section.maxScore} điểm</small></span></summary>
     <p className="small operator-level-instructions">{section.instructions.join(" · ")}</p>
     {section.groups.map((group, groupIndex) => {
@@ -225,7 +271,7 @@ export function OperatorLevelFormDetail({ detail, readOnly = false, editing = fa
       const script = group.stimulus?.type === "audio_script" ? (group.stimulus.lines ?? []).map((line) => `${line.speaker}: ${line.text}`).join("\n") : "";
       const spokenScript = speakTextOnly && group.stimulus?.type === "audio_script" ? (group.stimulus.lines ?? []).map((line) => line.text).join("\n") : script;
       const passage= group.stimulus?.type === "passage" ? group.stimulus.text : "";
-      const audioBusy = uploadingAudio === group.key;
+      const audioBusy = audioJob?.groupKey === group.key;
       return <section className="card flat operator-level-question-group" key={group.key}>
         <header><b>{group.title}</b><p className="xs muted">{group.instruction}</p></header>
         {editing && !readOnly && section.code === "listening" ? <label className="operator-level-stimulus-editor"><span>Kịch bản nghe</span><textarea aria-label={`Kịch bản nghe ${group.title}`} value={script} onChange={(event) => updateGroupStimulusText(sectionIndex, groupIndex, "audio_script", event.target.value)} /></label> : null}
@@ -234,11 +280,10 @@ export function OperatorLevelFormDetail({ detail, readOnly = false, editing = fa
           <div><b>{audioSrc ? "Audio phần nghe" : "Chưa có audio nghe"}</b><span className="xs muted">{audioSrc ? "Học viên sẽ nghe đúng tệp này trong bài thi." : "Chọn một nguồn audio và lưu bản nháp trước khi duyệt đề."}</span></div>
           {audioSrc ? <audio controls preload="metadata" src={audioSrc}>Trình duyệt không hỗ trợ audio.</audio> : null}
           {editing && !readOnly ? <div className="operator-level-audio-actions">
-            <button type="button" className="btn-sm" disabled={audioBusy || !synthesizeEdgeTts || !uploadAudio || !script.trim()} title={!synthesizeEdgeTts ? "Edge TTS chưa được cấu hình trên máy chủ." : !script.trim() ? "Cần có kịch bản nghe trước khi tạo audio." : undefined} onClick={() => void generateGroupEdgeTts(sectionIndex, groupIndex, group.key, spokenScript)}>{audioBusy ? "Đang tạo…" : "Sinh audio Edge TTS"}</button>
-            {uploadAudio ? <label className="btn-sm" aria-busy={audioBusy || undefined}>{audioBusy ? "Đang tải…" : audioSrc ? "Thay file audio" : "Tải file audio"}<input hidden type="file" accept="audio/*" aria-label={`${audioSrc ? "Thay" : "Tải"} audio cho ${group.title}`} disabled={audioBusy} onChange={(event) => void uploadGroupAudio(sectionIndex, groupIndex, group.key, event.target.files?.[0])} /></label> : null}
-            <span className="operator-level-audio-unavailable" role="status" title="Chưa có AI/provider audio được cấu hình cho hệ thống này.">AI/provider audio chưa khả dụng</span>
+            <button type="button" className="btn-sm" aria-busy={audioBusy && audioJob.kind === "generate" || undefined} disabled={Boolean(audioJob) || !synthesizeEdgeTts || !uploadAudio || !script.trim()} title={!synthesizeEdgeTts ? "Edge TTS chưa được cấu hình trên máy chủ." : !script.trim() ? "Cần có kịch bản nghe trước khi tạo audio." : undefined} onClick={() => void generateGroupEdgeTts(sectionIndex, groupIndex, group.key, spokenScript)}>{audioBusy && audioJob.kind === "generate" ? "Đang tạo…" : "Sinh audio Edge TTS"}</button>
+            {uploadAudio ? <label className="btn-sm" aria-busy={audioBusy && audioJob.kind === "upload" || undefined}>{audioBusy && audioJob.kind === "upload" ? "Đang tải…" : audioSrc ? "Thay file audio" : "Tải file audio"}<input hidden type="file" accept="audio/*" aria-label={`${audioSrc ? "Thay" : "Tải"} audio cho ${group.title}`} disabled={Boolean(audioJob)} onChange={(event) => void uploadGroupAudio(sectionIndex, groupIndex, group.key, event.target.files?.[0])} /></label> : null}
           </div> : null}
-          {audioError ? <p className="small form-error" role="alert">{audioError}</p> : null}
+          {audioError?.groupKey === group.key ? <p className="small form-error operator-level-audio-error" role="alert">{audioError.message}</p> : null}
         </div> : null}
         <div className="operator-level-question-list" role="list" aria-label={`Câu hỏi phần ${section.title}`}>{group.tasks.map((task, taskIndex) => <article className="operator-level-question" role="listitem" key={task.key}>
           <div className="operator-level-question-number">Câu {taskIndex + 1}<span>{task.key}</span></div>
@@ -250,15 +295,46 @@ export function OperatorLevelFormDetail({ detail, readOnly = false, editing = fa
   </details>;
 
   return <div className="modal-backdrop operator-modal-scope operator-detail-modal" role="presentation"><section ref={dialogRef} className="dialog wide operator-detail-dialog operator-assessment-preview-dialog operator-level-editor-dialog" role="dialog" aria-modal="true" aria-label={dialogLabel ?? `Chi tiết ${detail.title}`} tabIndex={-1}>
-    <div className="operator-level-form-dialog-header"><div className="operator-level-form-dialog-title"><span className="operator-level-kicker">{kicker ?? `Đề lên mức ${detail.targetLevel ?? ""}`}</span><h3>{detail.title}</h3><p className="small muted">{detail.status === "published" ? "Đã phát hành" : detail.status === "retired" ? "Đã lưu lịch sử" : "Bản nháp"}</p></div><div className="row operator-level-form-dialog-actions">{editing && !readOnly ? <button className="btn-sm btn-primary" type="button" disabled={saving} onClick={() => void save()}>{saving ? "Đang lưu…" : "Lưu bản nháp"}</button> : null}<button className="btn-sm" type="button" onClick={onClose}>Đóng</button></div></div>
-    {detail.deleteReason && <div className="banner warn"><div className="body small">Không thể xoá: {detail.deleteReason}</div></div>}
-    {hideValidation ? null : detail.warnings.length ? <section className="operator-level-validation" aria-label="Cảnh báo kiểm tra đề"><header><b>Cần hoàn thiện trước khi phát hành</b><span className="badge warn">{detail.warnings.length} mục</span></header><ul className="small">{detail.warnings.map((warning, index) => <li key={`${warning.code}-${index}`}><Badge tone={warning.severity === "error" ? "danger" : "warn"}>{warning.code === "missing_answer_key" ? "Đáp án" : warning.code === "missing_task_prompt" ? "Đề bài" : warning.code === "missing_audio" ? "Audio" : "Cấu trúc"}</Badge> {warning.message}</li>)}</ul></section> : <div className="banner ok"><div className="body small">Đề đủ cấu trúc hiện tại, chưa có cảnh báo.</div></div>}
-    {children}
-    <h4>Chi tiết 4 phần</h4>
-    <div className="list operator-level-section-list">{draft.sections.map(renderSection)}</div>
-    <h4>Lịch sử phiên bản</h4>
-    {detail.versions.length ? <div className="table-wrap"><table><thead><tr><th>Phiên bản</th><th>Trạng thái</th><th>Số lượt thi</th><th>Phát hành</th></tr></thead><tbody>{detail.versions.map(version => <tr key={version.versionId}><td>v{version.version}</td><td>{version.status}</td><td>{version.attemptCount}</td><td>{operatorDateTime(version.publishedAt)}</td></tr>)}</tbody></table></div> : <p className="small muted">Chưa có phiên bản khác.</p>}
+    <div className="operator-level-form-dialog-header">
+      <div className="operator-level-form-dialog-title"><span className="operator-level-kicker">{kicker ?? `Đề lên mức ${detail.targetLevel ?? ""}`}</span><h3>{detail.title}</h3><p className="small muted">{detail.status === "published" ? "Đã phát hành" : detail.status === "retired" ? "Đã lưu lịch sử" : "Bản nháp"}</p></div>
+      <div className="row operator-level-form-dialog-actions">
+        {editing && !readOnly ? <button className="btn-sm btn-primary" type="button" disabled={saving || publishing || Boolean(audioJob)} onClick={() => void save()}>{saving ? "Đang lưu…" : "Lưu bản nháp"}</button> : null}
+        <button className="btn-sm" type="button" disabled={saving || publishing || Boolean(audioJob)} onClick={() => void close()}>Đóng</button>
+      </div>
+    </div>
+    <div className="operator-level-form-dialog-body">
+      <div ref={scroll.start} className="app-scroll-edge" aria-hidden="true" />
+      <div className="operator-level-form-dialog-content">
+        {editing && !readOnly && onPublish ? <section className="card flat operator-level-publication" aria-label="Trạng thái đề lên mức">
+          <header className="row between">
+            <div><b>Trạng thái đề</b> <Badge tone={publishBlocker ? "warn" : "ok"}>{dirty ? "Có thay đổi chưa lưu" : publicationReady ? "Sẵn sàng phát hành" : "Cần hoàn thiện"}</Badge></div>
+            <button className="btn btn-primary" type="button" disabled={saving || publishing || Boolean(audioJob) || Boolean(publishBlocker)} title={publishBlocker} onClick={() => void publish()}>{publishing ? "Đang phát hành…" : "Duyệt & phát hành"}</button>
+          </header>
+          {publishBlocker ? <p className="small muted">{publishBlocker}</p> : null}
+        </section> : null}
+        {actionError ? <p className="small form-error" role="alert">{actionError}</p> : null}
+        {detail.deleteReason && <div className="banner warn"><div className="body small">Không thể xoá: {detail.deleteReason}</div></div>}
+        {hideValidation ? null : detail.warnings.length ? <LevelFormWarnings warnings={detail.warnings} /> : onPublish ? null : <div className="banner ok"><div className="body small">Đề đủ cấu trúc hiện tại, chưa có cảnh báo.</div></div>}
+        {children}
+        <h4>Chi tiết 4 phần</h4>
+        <div className="list operator-level-section-list">{draft.sections.map(renderSection)}</div>
+        <LevelFormVersionHistory versions={detail.versions} />
+      </div>
+      <div ref={scroll.end} className="app-scroll-edge" aria-hidden="true" />
+      {scroll.visible && <ScrollJumpButton atTop={scroll.atTop} onClick={scroll.jump} inExam />}
+    </div>
   </section></div>;
+}
+
+function LevelFormWarnings({ warnings }: { warnings: LevelFormEditorDetail["warnings"] }) {
+  return <section className="operator-level-validation" aria-label="Cảnh báo kiểm tra đề"><header><b>Cần hoàn thiện trước khi phát hành</b><span className="badge warn">{warnings.length} mục</span></header><ul className="small">{warnings.map((warning, index) => <li key={`${warning.code}-${index}`}><Badge tone={warning.severity === "error" ? "danger" : "warn"}>{warning.code === "missing_answer_key" ? "Đáp án" : warning.code === "missing_task_prompt" ? "Đề bài" : warning.code === "missing_audio" ? "Audio" : "Cấu trúc"}</Badge> {warning.message}</li>)}</ul></section>;
+}
+
+function LevelFormVersionHistory({ versions }: { versions: LevelFormEditorDetail["versions"] }) {
+  return <>
+    <h4>Lịch sử phiên bản</h4>
+    {versions.length ? <div className="table-wrap"><table aria-label="Lịch sử phiên bản"><thead><tr><th>Phiên bản</th><th>Trạng thái</th><th>Số lượt thi</th><th>Phát hành</th></tr></thead><tbody>{versions.map(version => <tr key={version.versionId}><td>v{version.version}</td><td>{version.status}</td><td>{version.attemptCount}</td><td>{operatorDateTime(version.publishedAt)}</td></tr>)}</tbody></table></div> : <p className="small muted">Chưa có phiên bản khác.</p>}
+  </>;
 }
 
 

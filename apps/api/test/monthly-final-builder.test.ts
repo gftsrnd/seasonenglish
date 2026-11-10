@@ -61,7 +61,7 @@ describe("monthly final v2.0 allocation", () => {
     const input = buildMonthlyFinalGenerationInput(contract, frameworkRef);
     expect(input.allocation).toEqual({ n: 48, l: 17, r: 23, w: 5, s: 3 });
     expect(JSON.stringify(input.targets)).not.toContain("support-");
-    expect(input.pronunciation.map((item) => item.taughtExamples.length)).toEqual([3, 3, 3, 3]);
+    expect(input.pronunciation.map((item) => item.taughtExamples.length)).toEqual([9, 9, 9, 9]);
     expect(input.grammar.map((topic) => topic.taughtSteps.length)).toEqual([3, 3]);
   });
 
@@ -72,6 +72,17 @@ describe("monthly final v2.0 allocation", () => {
     expect(() => buildMonthlyFinalGenerationInput(broken, frameworkRef)).toThrow(MonthlyFinalInputError);
     const noMeaning = { ...contract, coreTerms: contract.coreTerms.map((term, index) => index === 4 ? { ...term, meaning: "" } : term) };
     expect(monthlyFinalInputErrors(noMeaning)).toEqual(["coreTerms[V05].meaning"]);
+  });
+
+  it("excludes taught examples whose recorded IPA lacks the target sound", () => {
+    const contract = monthlyFinalContract("A1");
+    const sound = contract.sounds[0]!;
+    sound.ipa = "/ɜː/";
+    sound.examples[0] = { ...sound.examples[0]!, word: "learn", ipa: "/lɜːn/" };
+    sound.examples[1] = { ...sound.examples[1]!, word: "work", ipa: "/wɜːk/" };
+    sound.examples[2] = { ...sound.examples[2]!, word: "project", ipa: "/ˈprɒdʒekt/" };
+    const input = buildMonthlyFinalGenerationInput(contract, frameworkRef);
+    expect(input.pronunciation[0]!.taughtExamples.map(example => example.word)).toEqual(["learn", "work"]);
   });
 });
 
@@ -120,6 +131,19 @@ describe("monthly final v2.0 assembly and GEN checks", () => {
     const afterEdit = withEvaluation(applyMonthlyFinalUpdate(reviewed, edited, "operator-1", new Date()), contract);
     expect(afterEdit.monthlyExam!.audio.status).toBe("SCRIPT_ONLY");
     expect(afterEdit.monthlyExam!.status).toBe("NEEDS_REVIEW");
+  });
+  it("blocks reordered pronunciation word lists and A1 passages above eighteen words",()=>{
+    const {blueprint,contract}=generated("A1");
+    const evaluate=(draft:StoredAssessmentDefinition)=>({failed:evaluateMonthlyFinal(draft,contract).checks.filter(item=>item.status==="fail").map(item=>item.code)});
+    expect(evaluate(mutate(blueprint,draft=>{draft.sections[3]!.groups[0]!.tasks[0]!.prompt=draft.monthlyExam!.pronunciation.flatMap(target=>target.positions.map(position=>position.word)).reverse().join(", ");})).failed).toContain("GEN11");
+    expect(evaluate(mutate(blueprint,draft=>{draft.sections[3]!.groups[0]!.tasks[0]!.prompt="Our team will read the report and check the plan before we meet the client again on Monday morning.";})).failed).toContain("GEN22");
+  });
+  it("checks actual Writing model length and required A1 starter support at the final gate",()=>{
+    const {blueprint,contract}=generated("A1");
+    const tooLong=mutate(blueprint,draft=>{draft.monthlyExam!.grader.writingSample+=" Please contact me tomorrow for further details about the client and the next meeting.";});
+    expect(evaluateMonthlyFinal(tooLong,contract).checks.find(check=>check.code==="GEN22")?.status).toBe("fail");
+    const noStarter=mutate(blueprint,draft=>{draft.sections[2]!.groups[0]!.tasks[0]!.prompt="Write a message to Anna.";});
+    expect(evaluateMonthlyFinal(noStarter,contract).checks.find(check=>check.code==="GEN22")?.status).toBe("fail");
   });
 
   it("keeps key, script, samples and grammar names out of the learner package (GEN18, GEN23)", () => {

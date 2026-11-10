@@ -73,10 +73,11 @@ services:
     build:
       context: .
       dockerfile: Dockerfile.local
-      target: local-runtime
+      target: local-api
     command: ["pnpm", "exec", "tsx", "apps/api/src/server.ts"]
     environment:
       HOST: 0.0.0.0
+      E4S_ENABLE_EDGE_TTS: ${E4S_ENABLE_EDGE_TTS:-true}
       PORT: 3001
       DATABASE_URL: postgres://e4s:${POSTGRES_PASSWORD:-e4s_local_password}@postgres:5432/e4s
       E4S_SETTINGS_ENCRYPTION_KEY: ${E4S_SETTINGS_ENCRYPTION_KEY:?E4S_SETTINGS_ENCRYPTION_KEY is required}
@@ -125,6 +126,7 @@ services:
     command: ["pnpm", "exec", "tsx", "apps/worker/src/server.ts"]
     environment:
       DATABASE_URL: postgres://e4s:${POSTGRES_PASSWORD:-e4s_local_password}@postgres:5432/e4s
+      E4S_SETTINGS_ENCRYPTION_KEY: ${E4S_SETTINGS_ENCRYPTION_KEY:?E4S_SETTINGS_ENCRYPTION_KEY is required}
       WORKER_POLL_MS: 1000
       WORKER_LEASE_SECONDS: 60
       S3_ENDPOINT: http://minio:9000

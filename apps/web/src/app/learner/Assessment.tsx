@@ -2,10 +2,13 @@ import { useCallback, useEffect, useRef, useState, type KeyboardEvent as ReactKe
 import { Ban, CheckCircle2, Clock3, Headphones, Mic, Sprout, Volume2 } from "lucide-react";
 import type { AssessmentResponseView, AssessmentSectionCode, AssessmentTaskView, SaveAssessmentResponseInput } from "@e4s/contracts";
 import type { AssessmentView, LearnerCallbacks } from "./contracts.js";
+import { AssessmentAppealForm } from "./AssessmentAppealForm.js";
 import { AssessmentRecorder, AssessmentRuntime, type AssessmentRuntimeState } from "./AssessmentRuntime.js";
-import { Button, ErrorText, Modal, Notice, PageTitle, Progress, AppLink, Toast } from "./ui.js";
+import { Button, ErrorText, Modal, Notice, PageTitle, Progress, AppLink } from "./ui.js";
 import { useExperience } from "../../features/experience/Experience.js";
 import { cancelExclusiveAudio } from "../../features/experience/audio-precedence.js";
+import { ApiError } from "../../api/runtime.js";
+import { useMediaQuery } from "../shared/useMediaQuery.js";
 
 const sectionOrder: AssessmentSectionCode[] = ["listening", "reading", "writing", "speaking"];
 const soundCheckText = "Đây là câu kiểm tra âm thanh. Nếu bạn nghe rõ câu này, tai nghe của bạn đã sẵn sàng.";
@@ -13,6 +16,7 @@ const writingDraftSaveDelayMs = 500;
 
 export function LearnerAssessment({ view, actions }: { view: AssessmentView; actions: LearnerCallbacks }) {
   const experience = useExperience();
+  const compact = useMediaQuery("(max-width: 960px)");
   const holdMusicRef = useRef(experience.holdMusic);
   const [local, setLocal] = useState<Record<string, string>>(() => Object.fromEntries((view.attempt?.responses ?? []).map((item) => [item.taskKey, item.value])));
   const [busy, setBusy] = useState(false);
@@ -108,37 +112,94 @@ export function LearnerAssessment({ view, actions }: { view: AssessmentView; act
     setLocalError(undefined);
     try {
       await actions.startAssessment();
-    } catch {
-      setLocalError("Không thể bắt đầu bài test lúc này. Hãy kiểm tra kết nối rồi thử lại.");
+    } catch (error) {
+      setLocalError(error instanceof ApiError && error.code === "ASSESSMENT_ACTIVE_ON_OTHER_DEVICE"
+        ? "Bài đang được làm trên thiết bị khác."
+        : "Không thể bắt đầu bài test lúc này. Hãy kiểm tra kết nối rồi thử lại.");
     } finally {
       setStarting(false);
     }
   };
 
-  if (view.screenState === "preparation" || !view.attempt) return <div className="app-learner-page test-page">
-    <PageTitle title={assessmentHeading(view)} aside={<AppLink className="btn btn-sm" href="/home" navigate={actions.navigate}>Về trang chủ</AppLink>} />
-    <section className="card">
-      <h2>{definition.title}</h2>
-      <div className="table-wrap"><table className="assessment-structure-table" aria-label="Cấu trúc bài test" style={{ width: "100%", tableLayout: "fixed" }}><colgroup><col style={{ width: "13%" }} /><col style={{ width: "18%" }} /><col style={{ width: "12%" }} /><col style={{ width: "57%" }} /></colgroup><thead><tr><th>Phần</th><th>Thời gian</th><th>Điểm</th><th>Nội dung</th></tr></thead><tbody>{definition.sections.map((section) => <tr key={section.code}><td>{sectionTableTitle(section.code)}</td><td>{view.timed === false ? "—" : `${section.durationMinutes} phút`}</td><td><b>{section.maxScore}</b></td><td>{sectionSummary(section.code)}</td></tr>)}</tbody></table></div>
-      {definition.kind === "pass-course" ? <Notice><b>Form A cố định · C1.</b> Bài thi 90 phút, 100 điểm và bốn kỹ năng. Tổng từ <b>85/100</b> được Operator xét cấp chứng chỉ; kết quả thấp hơn sẽ đặt lại trạng thái sẵn sàng C1. Bạn có <b>72 giờ</b> để kháng nghị sau khi có kết quả.</Notice> : definition.kind === "level-up" && targetLevel ? <Notice>Đề ngắn ở mức <b>{targetLevel}</b>. Đạt khi tổng ≥70/100 và mỗi kỹ năng ≥50%; sau đó hoàn thành <b>6 lượt thử thách với Season</b> để gửi yêu cầu duyệt. Nếu chưa đạt, bạn có thể thử lại sau <b>14 ngày</b>.</Notice> : targetLevel ? <Notice>Đề ngắn ở mức <b>{targetLevel}</b>. Đạt khi tổng ≥70/100 và mỗi kỹ năng ≥50%.</Notice> : null}
-      <h3>Quy định làm bài – đọc trước khi bắt đầu</h3>
-      <div className="grid cols-3 assessment-rules"><Rule title="Bắt buộc" icon={<CheckCircle2 size={17} aria-hidden="true" />} tone="var(--mint)" lines={["Làm một mạch theo thứ tự Nghe → Đọc → Viết → Nói.", "Chuẩn bị tai nghe/loa và micro; ở lại trang đến khi nộp.", "Phần Nói: ghi âm trực tiếp hoặc tải file."]} /><Rule title="Không được phép" icon={<Ban size={17} aria-hidden="true" />} tone="var(--peach)" lines={["Không mở tab/cửa sổ khác, không dịch/AI, không quay lại phần đã nộp.", "Mỗi đoạn nghe chỉ được phát tối đa 2 lần."]} /><Rule title="Lưu ý" icon={<Clock3 size={17} aria-hidden="true" />} tone="var(--butter)" lines={[`Câu trả lời được tự động lưu; đồng hồ ${view.timed === false ? "không giới hạn" : "chạy liên tục, kể cả khi bạn thoát ra và không thể tạm dừng"}.`, view.timed === false ? "Không tính giờ, nhưng nộp phần nào là khoá phần đó." : "Hết giờ tự chuyển phần; rời màn hình sẽ hiện cảnh báo để bạn quay lại.", "Vượt quá 3 cảnh báo sẽ tự động nộp bài."]} /></div>
-      {definition.kind === "placement" ? <article className="card flat assessment-why" aria-label="Vì sao cần bài test"><div className="assessment-why-line"><Sprout size={18} aria-hidden="true" /><b>Vì sao cần bước này?</b><span>Bài test chọn mức vừa sức; hãy làm đúng khả năng, không cần ôn trước.</span></div></article> : null}
-      <div className="row prep" role="group" aria-label="Cần chuẩn bị: tai nghe hoặc loa, và micro, kể cả mic trên tai nghe"><button type="button" aria-label="Thử tai nghe" data-equipment="sound" className={`prep-device ${equipment.sound === "Đã phát xong ✓" ? "is-ready" : ""}`} title="Tai nghe hoặc loa" onClick={checkSound}><Headphones size={18} aria-hidden="true" /> Tai nghe</button><button type="button" aria-label="Thử micro" data-equipment="microphone" className={`prep-device ${equipment.microphone === "Micro sẵn sàng ✓" ? "is-ready" : ""}`} title="Micro trên máy hoặc mic tai nghe" disabled={checkingMicrophone} onClick={() => void checkMicrophoneForTest()}><Mic size={18} aria-hidden="true" /> Micro</button><div className="stack prep-checks"><div className="row prep-check"><button className="btn-sm" type="button" onClick={checkSound}>Nghe thử</button><span className="xs muted" role="status" aria-label="Trạng thái âm thanh" aria-live="polite">{equipment.sound}</span></div><div className="row prep-check"><button className="btn-sm" type="button" disabled={checkingMicrophone} onClick={() => void checkMicrophoneForTest()}>Kiểm tra micro</button><span className="xs muted" role="status" aria-label="Trạng thái micro" aria-live="polite">{equipment.microphone}</span></div>{checkingMicrophone || microphoneSamples.length > 0 ? <MicrophoneWaveform samples={microphoneSamples} active={checkingMicrophone} /> : null}</div></div>
-      <ScoreScale />
-      {microphoneCheck === "denied" ? <p className="small form-error" role="alert">{microphoneMessage ?? "Chưa truy cập được micro. Hãy cấp quyền rồi thử lại."}</p> : null}
-      <ErrorText id="assessment-start-error" message={localError} />
-      <div className="row assessment-start-actions"><AppLink className="btn" href={definition.kind === "placement" ? "/onboard" : "/home"} navigate={actions.navigate}>← {definition.kind === "placement" ? "Quay lại hồ sơ" : "Quay lại"}</AppLink><button className="btn-primary assessment-start-button assessment-start-primary" type="button" aria-label={view.attempt ? "Tiếp tục bài đang làm" : "Bắt đầu phần Nghe"} aria-describedby={localError ? "assessment-start-error" : undefined} aria-busy={starting || undefined} disabled={starting || checkingMicrophone} onClick={() => setStartConfirmOpen(true)}>{starting ? <><span className="spinner" aria-hidden="true" /> Đang bắt đầu…</> : view.attempt ? "Tiếp tục bài đang làm" : "Bắt đầu phần Nghe"}</button></div>
-      {startConfirmOpen ? <Modal
-        className="assessment-start-dialog"
-        title={view.attempt ? "Tiếp tục bài test?" : "Bắt đầu bài test?"}
-        onClose={() => setStartConfirmOpen(false)}
-        actions={<><Button onClick={() => setStartConfirmOpen(false)}>Hủy</Button><Button variant="primary" onClick={() => void start()}>Tôi đã sẵn sàng, bắt đầu</Button></>}
-      >
-        <p className="assessment-start-copy"><b className="assessment-start-keyword">Câu trả lời được tự động lưu</b>, nhưng bài thi <b className="assessment-start-keyword">không thể tạm dừng</b>. <b className="assessment-start-keyword">Đồng hồ chạy liên tục</b>, tối đa <b className="assessment-start-keyword">{definition.totalMinutes} phút</b>. Hãy chắc là bạn có đủ thời gian và đã thử tai nghe, micro trước khi bắt đầu.</p>
-      </Modal> : null}
-    </section>
-  </div>;
+  if (view.screenState === "preparation" || !view.attempt) {
+    const timed = view.timed !== false;
+    const examNote = definition.kind === "pass-course" ? <Notice><b>Form A cố định · C1.</b> Bài thi 90 phút, 100 điểm và bốn kỹ năng. Người vận hành xét cấp chứng chỉ khi tổng điểm đạt từ <b>85/100</b>. Kết quả thấp hơn sẽ đặt lại trạng thái sẵn sàng C1. Bạn có <b>72 giờ</b> để kháng nghị sau khi có kết quả.</Notice> : definition.kind === "level-up" && targetLevel ? <Notice>Đề ngắn ở mức <b>{targetLevel}</b>. Đạt khi tổng ≥70/100 và mỗi kỹ năng ≥50%; sau đó hoàn thành <b>6 lượt thử thách với Season</b> để gửi yêu cầu duyệt. Nếu chưa đạt, bạn có thể thử lại sau <b>14 ngày</b>.</Notice> : targetLevel ? <Notice>Đề ngắn ở mức <b>{targetLevel}</b>. Đạt khi tổng ≥70/100 và mỗi kỹ năng ≥50%.</Notice> : null;
+    const rules = <div className="grid cols-3 assessment-rules">
+      <Rule title="Bắt buộc" icon={<CheckCircle2 size={17} aria-hidden="true" />} tone="required" lines={compact
+        ? ["Làm lần lượt. Ở lại trang đến khi nộp.", "Phần Nói: ghi âm hoặc tải tệp âm thanh."]
+        : ["Làm một mạch theo thứ tự Nghe → Đọc → Viết → Nói.", "Chuẩn bị tai nghe/loa và micro; ở lại trang đến khi nộp.", "Phần Nói: ghi âm trực tiếp hoặc tải file."]} />
+      <Rule title="Không được phép" icon={<Ban size={17} aria-hidden="true" />} tone="restricted" lines={compact
+        ? ["Không đổi tab/cửa sổ, dùng công cụ dịch hay AI.", "Phần đã nộp sẽ khóa. Mỗi đoạn nghe tối đa 2 lượt."]
+        : ["Không mở tab/cửa sổ khác, không dịch/AI, không quay lại phần đã nộp.", "Mỗi đoạn nghe chỉ được phát tối đa 2 lần."]} />
+      <Rule title="Lưu ý" icon={<Clock3 size={17} aria-hidden="true" />} tone="notice" lines={compact
+        ? ["Bài làm tự lưu. Rời màn hình sẽ có cảnh báo.", timed ? "Đồng hồ chạy cả khi thoát. Hết giờ tự chuyển phần." : "Bài thi không tính giờ.", "Quá 3 cảnh báo, bài tự nộp."]
+        : [`Câu trả lời được tự động lưu; đồng hồ ${timed ? "chạy liên tục, kể cả khi bạn thoát ra và không thể tạm dừng" : "không giới hạn"}.`,
+          timed ? "Hết giờ tự chuyển phần; rời màn hình sẽ hiện cảnh báo để bạn quay lại." : "Không tính giờ, nhưng nộp phần nào là khoá phần đó.", "Vượt quá 3 cảnh báo sẽ tự động nộp bài."]} />
+    </div>;
+    const why = definition.kind === "placement" ? <article className="card flat assessment-why" aria-label="Vì sao cần bài test"><div className="assessment-why-line"><Sprout size={18} aria-hidden="true" /><b>Vì sao cần bước này?</b></div><p>{compact ? "Bài đầu vào giúp chọn mức phù hợp. Bạn không cần ôn trước." : "Bài test chọn mức vừa sức; hãy làm đúng khả năng, không cần ôn trước."}</p></article> : null;
+    const equipmentChecks = <div className={`row prep${compact ? " prep-compact" : ""}`} role="group" aria-label="Cần chuẩn bị: tai nghe hoặc loa, và micro, kể cả mic trên tai nghe"><button type="button" aria-label="Thử tai nghe" data-equipment="sound" className={`prep-device ${equipment.sound === "Đã phát xong ✓" ? "is-ready" : ""}`} title="Tai nghe hoặc loa" onClick={checkSound}><Headphones size={18} aria-hidden="true" /> {compact ? "Nghe thử" : "Tai nghe"}</button><button type="button" aria-label="Thử micro" data-equipment="microphone" className={`prep-device ${equipment.microphone === "Micro sẵn sàng ✓" ? "is-ready" : ""}`} title="Micro trên máy hoặc mic tai nghe" disabled={checkingMicrophone} onClick={() => void checkMicrophoneForTest()}><Mic size={18} aria-hidden="true" /> {compact ? "Thử micro" : "Micro"}</button><div className="stack prep-checks"><div className="row prep-check">{compact ? null : <button className="btn-sm" type="button" onClick={checkSound}>Nghe thử</button>}<span className="xs muted" role="status" aria-label="Trạng thái âm thanh" aria-live="polite">{equipment.sound}</span></div><div className="row prep-check">{compact ? null : <button className="btn-sm" type="button" disabled={checkingMicrophone} onClick={() => void checkMicrophoneForTest()}>Kiểm tra micro</button>}<span className="xs muted" role="status" aria-label="Trạng thái micro" aria-live="polite">{equipment.microphone}</span></div>{checkingMicrophone || microphoneSamples.length > 0 ? <MicrophoneWaveform samples={microphoneSamples} active={checkingMicrophone} /> : null}</div></div>;
+    const deviceError = microphoneCheck === "denied"
+      ? <p className="small form-error" role="alert">{microphoneMessage ?? "Chưa truy cập được micro. Hãy cấp quyền rồi thử lại."}</p>
+      : null;
+
+    const backLink = <AppLink className="btn" href={definition.kind === "placement" ? "/onboard" : "/home"} navigate={actions.navigate}>← {definition.kind === "placement" ? "Quay lại hồ sơ" : "Quay lại"}</AppLink>;
+    const startButton = <button className="btn-primary assessment-start-button assessment-start-primary" type="button" aria-label={view.attempt ? "Tiếp tục bài đang làm" : "Bắt đầu phần Nghe"} aria-describedby={localError ? "assessment-start-error" : undefined} aria-busy={starting || undefined} disabled={starting || checkingMicrophone} onClick={() => setStartConfirmOpen(true)}>{starting ? <><span className="spinner" aria-hidden="true" /> Đang bắt đầu…</> : view.attempt ? "Tiếp tục bài đang làm" : "Bắt đầu phần Nghe"}</button>;
+
+    return <div className="app-learner-page test-page">
+      <PageTitle title={assessmentHeading(view)} aside={compact ? undefined : <AppLink className="btn btn-sm" href="/home" navigate={actions.navigate}>Về trang chủ</AppLink>} />
+      <section className={compact ? "card assessment-prep-compact" : "card"}>
+        {compact ? <>
+          {definition.kind !== "placement" ? <h2>{definition.title}</h2> : null}
+          <p className="assessment-prep-overview">{definition.sections.length} kỹ năng · {timed ? `${definition.totalMinutes} phút` : "Không tính giờ"} · {definition.totalScore} điểm</p>
+          <div className="assessment-device-checks">
+            <h3>Thử tai nghe/loa và micro</h3>
+            {equipmentChecks}
+            {deviceError}
+          </div>
+          {why}
+          <section className="assessment-prep-details" aria-label="Cấu trúc và quy định">
+            <h3>Cấu trúc bài thi</h3>
+            <table className="assessment-prep-sections" aria-label="Cấu trúc bài test">
+              <thead><tr><th scope="col">Phần</th><th scope="col">Câu</th>{timed ? <th scope="col">Phút</th> : null}<th scope="col">Điểm</th></tr></thead>
+              <tbody>{definition.sections.map(section => <tr key={section.code}>
+                <th scope="row">{sectionTableTitle(section.code)}</th>
+                <td>{section.groups.reduce((count, group) => count + group.tasks.length, 0)}</td>
+                {timed ? <td>{section.durationMinutes}</td> : null}
+                <td>{section.maxScore}</td>
+              </tr>)}</tbody>
+            </table>
+            {definition.sections.some(section => section.code === "reading" && /ngữ pháp|từ vựng/i.test(section.title))
+              ? <p className="assessment-prep-reading small muted">Phần Đọc gồm ngữ pháp và từ vựng.</p>
+              : null}
+            {examNote}
+            <h3>Quy định làm bài</h3>
+            {rules}
+            {definition.kind === "placement" ? <ScoreScale compact /> : null}
+          </section>
+        </> : <>
+          <h2>{definition.title}</h2>
+          <div className="table-wrap"><table className="assessment-structure-table" aria-label="Cấu trúc bài test" style={{ width: "100%", tableLayout: "fixed" }}><colgroup><col style={{ width: "13%" }} /><col style={{ width: "18%" }} /><col style={{ width: "12%" }} /><col style={{ width: "57%" }} /></colgroup><thead><tr><th>Phần</th><th>Thời gian</th><th>Điểm</th><th>Nội dung</th></tr></thead><tbody>{definition.sections.map((section) => <tr key={section.code}><td>{sectionTableTitle(section.code)}</td><td>{view.timed === false ? "—" : `${section.durationMinutes} phút`}</td><td><b>{section.maxScore}</b></td><td>{sectionSummary(section.code)}</td></tr>)}</tbody></table></div>
+          {examNote}
+          <h3>Quy định làm bài – đọc trước khi bắt đầu</h3>
+          {rules}
+          {why}
+          {equipmentChecks}
+          <ScoreScale />
+          {deviceError}
+        </>}
+        <ErrorText id="assessment-start-error" message={localError} />
+        <div className="row assessment-start-actions">{compact ? startButton : backLink}{compact ? backLink : startButton}</div>
+        {startConfirmOpen ? <Modal
+          className="assessment-start-dialog"
+          title={view.attempt ? "Tiếp tục bài test?" : "Bắt đầu bài test?"}
+          onClose={() => setStartConfirmOpen(false)}
+          actions={<><Button onClick={() => setStartConfirmOpen(false)}>Hủy</Button><Button variant="primary" onClick={() => void start()}>Tôi đã sẵn sàng, bắt đầu</Button></>}
+        >
+          <p className="assessment-start-copy"><b className="assessment-start-keyword">Câu trả lời được tự động lưu</b>, nhưng bài thi <b className="assessment-start-keyword">không thể tạm dừng</b>. <b className="assessment-start-keyword">Đồng hồ chạy liên tục</b>, tối đa <b className="assessment-start-keyword">{definition.totalMinutes} phút</b>. Hãy chắc là bạn có đủ thời gian và đã thử tai nghe, micro trước khi bắt đầu.</p>
+        </Modal> : null}
+      </section>
+    </div>;
+  }
 
   if (view.screenState === "pending" || view.screenState === "submitting" || view.attempt.status !== "in_progress") {
     const submitting = view.screenState === "submitting";
@@ -151,6 +212,9 @@ export function LearnerAssessment({ view, actions }: { view: AssessmentView; act
         {!submitting && view.attempt.totalScore != null ? <AssessmentResult attempt={view.attempt} /> : null}
         <ErrorText message={view.submitError ?? localError} />
       </section>
+      {!submitting && (view.appeal || view.appealTarget) ? <section className="card"><h2>Kháng nghị bài thi</h2>
+        <AssessmentAppealForm target={view.appealTarget} appeal={view.appeal} submit={actions.createAssessmentAppeal} />
+      </section> : null}
     </div>;
   }
 
@@ -213,15 +277,15 @@ export function LearnerAssessment({ view, actions }: { view: AssessmentView; act
     catch { setLocalError("Không thể nộp phần này lúc này. Hãy kiểm tra kết nối rồi thử lại."); }
     finally { setBusy(false); }
   };
-  return <AssessmentRuntime view={view} actions={actions}>{(runtime) => <>
+  return <AssessmentRuntime view={view} actions={actions} submitError={view.submitError ?? localError}>{(runtime) => <>
     <ActiveAssessment
     view={view} actions={actions} section={section} sectionIndex={sectionIndex} runtime={runtime} local={local} busy={busy} savingCount={savingCount} audioBusyCount={audioBusyCount}
-    error={view.submitError ?? localError} onSave={(task, input) => void save(task, input)} onComplete={() => void complete()} onAudioBusyChange={onAudioBusyChange}
+    onSave={(task, input) => void save(task, input)} onComplete={() => void complete()} onAudioBusyChange={onAudioBusyChange}
     />
   </>}</AssessmentRuntime>;
 }
 
-function ActiveAssessment({ view, actions, section, sectionIndex, runtime, local, busy, savingCount, audioBusyCount, error, onSave, onComplete, onAudioBusyChange }: {
+function ActiveAssessment({ view, actions, section, sectionIndex, runtime, local, busy, savingCount, audioBusyCount, onSave, onComplete, onAudioBusyChange }: {
   view: AssessmentView;
   actions: LearnerCallbacks;
   section: AssessmentView["definition"]["sections"][number];
@@ -231,7 +295,6 @@ function ActiveAssessment({ view, actions, section, sectionIndex, runtime, local
   busy: boolean;
   savingCount: number;
   audioBusyCount: number;
-  error: string | undefined;
   onSave: (task: AssessmentTaskView, input: SaveAssessmentResponseInput) => void;
   onComplete: () => void;
   onAudioBusyChange: (taskKey: string, busy: boolean) => void;
@@ -322,9 +385,6 @@ function ActiveAssessment({ view, actions, section, sectionIndex, runtime, local
       </div>
     </section>
   </div>
-  {runtime.warning === "five_minutes" ? <Toast tone="warn"><Clock3 size={17} aria-hidden="true" /> Còn 5 phút. Hãy kiểm tra lại câu trả lời trước khi nộp.</Toast> : null}
-  {runtime.warning === "one_minute" ? <Toast tone="warn"><Clock3 size={17} aria-hidden="true" /> Còn 1 phút! Hết giờ hệ thống sẽ tự chuyển phần.</Toast> : null}
-  {error ? <Toast tone="danger">{error}</Toast> : null}
   {submitConfirm ? <SubmitConfirm final={section.code === "speaking"} section={section.title} warningTitle={section.code === "writing" ? "Chưa đủ số từ." : section.code === "speaking" ? "Chưa có nội dung trả lời." : "Chưa trả lời hết."} {...(completionWarning ? { warning: completionWarning } : {})} onCancel={() => setSubmitConfirm(false)} onAccept={() => { cancelExclusiveAudio("speech"); setSubmitConfirm(false); setSubmitCountdown(5); }} /> : null}
   {submitCountdown !== null ? <SubmitCountdown final={section.code === "speaking"} count={submitCountdown} onStop={() => setSubmitCountdown(null)} /> : null}
   </>;
@@ -360,7 +420,7 @@ function SubmitCountdown({ final, count, onStop }: { final: boolean; count: numb
   </div></div>;
 }
 
-function Rule({ title, icon, tone, lines }: { title: string; icon: ReactNode; tone: string; lines: string[] }) { return <article className="card flat assessment-rule" style={{ background: tone }}><div className="eyebrow" style={{ color: "var(--text)", marginBottom: 6, display: "flex", alignItems: "center", gap: 6 }}>{icon}<span>{title}</span></div><ul className="small assessment-rule-list">{lines.map((line) => <li key={line}>{line}</li>)}</ul></article>; }
+function Rule({ title, icon, tone, lines }: { title: string; icon: ReactNode; tone: "required" | "restricted" | "notice"; lines: string[] }) { return <article className={`card flat assessment-rule assessment-rule--${tone}`}><div className="eyebrow assessment-rule-title">{icon}<span>{title}</span></div><ul className="small assessment-rule-list">{lines.map((line) => <li key={line}>{line}</li>)}</ul></article>; }
 
 function MicrophoneWaveform({ samples, active }: { samples: number[]; active: boolean }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -410,8 +470,13 @@ function sectionTableTitle(code: AssessmentSectionCode) {
   return ({ listening: "Nghe", reading: "Đọc", writing: "Viết", speaking: "Nói" } as const)[code];
 }
 
-function ScoreScale() {
-  return <p className="assessment-score-line" role="note">Thang điểm /100: A1 0–24 · A2 25–44 · B1 45–64 · B2 65–84 · C1 85–100.</p>;
+function ScoreScale({ compact = false }: { compact?: boolean }) {
+  const bands = [["A1", "0–24"], ["A2", "25–44"], ["B1", "45–64"], ["B2", "65–84"], ["C1", "85–100"]] as const;
+  if (compact) return <div className="assessment-score-bands" role="note" aria-label="Thang điểm trên 100">
+    <b>Thang điểm /100</b>
+    <ul>{bands.map(([level, range]) => <li key={level}><b>{level}</b><small>{range}</small></li>)}</ul>
+  </div>;
+  return <p className="assessment-score-line" role="note">Thang điểm /100: {bands.map(([level, range]) => level + " " + range).join(" · ")}.</p>;
 }
 
 function soundCheckStatus(status: string) {
@@ -634,9 +699,9 @@ function assessmentPendingCopy(view: AssessmentView): { title: string; detail: s
     return { title: "Bài thi tháng đang chờ chấm", detail: "Đã nộp bài. Bạn có thể gửi kháng nghị khi kết quả được trả về." };
   }
   if (view.definition.kind === "pass-course") {
-    if (status === "approved") return { title: "Pass Course đã được duyệt", detail: "Operator đã cấp chứng chỉ Form A. Tài khoản học sẽ được đóng sau khi lịch sử chứng chỉ được ghi nhận." };
+    if (status === "approved") return { title: "Pass Course đã được duyệt", detail: "Bạn có thể xem chứng nhận trong hồ sơ và tiếp tục học." };
     if (status === "needs_retry") return { title: "Pass Course chưa đạt", detail: "Trạng thái sẵn sàng C1 đã được đặt lại. Bạn có 72 giờ từ lúc có kết quả để gửi kháng nghị nếu cần." };
-    return { title: "Pass Course đang chờ xét", detail: "Operator đang đối chiếu bốn kỹ năng và tổng điểm. Bạn có 72 giờ để kháng nghị sau khi có kết quả." };
+    return { title: "Pass Course đang chờ xét", detail: "Vận hành đang đối chiếu bốn kỹ năng và tổng điểm. Bạn có 72 giờ để kháng nghị sau khi có kết quả." };
   }
   if (status === "approved") return { title: "Test đầu vào đã được duyệt", detail: "Mức học sẽ được mở theo hồ sơ của bạn ngay khi hệ thống cập nhật." };
   return { title: "Test đầu vào đã được nộp", detail: "Vận hành sẽ xem lại kết quả trước khi duyệt mức. Bạn không cần làm lại bài trong lúc chờ." };

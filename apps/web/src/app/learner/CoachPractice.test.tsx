@@ -205,8 +205,8 @@ describe("app coach and weekly practice speech input", () => {
 
     expect(screen.getByRole("heading", { name: "Luyện với Season" })).toBeInTheDocument();
     expect(screen.getByText("Tháng 2026-11 · A2")).toBeInTheDocument();
-    expect(screen.getByText("Hôm nay 0/30 lượt")).toBeInTheDocument();
-    expect(screen.getByText("Tháng 2026-11: 1/100 lượt")).toBeInTheDocument();
+    expect(screen.getByText("Hôm nay 0/30")).toBeInTheDocument();
+    expect(screen.getByText("Tháng 1/100")).toBeInTheDocument();
     expect(screen.getByText("Giới hạn chat và tiến độ tháng")).toBeInTheDocument();
     expect(document.querySelector(".coach-brand-icon")).toBeInTheDocument();
     expect(screen.getByTestId("season-mark")).toHaveClass("coach-season-mark");
@@ -280,6 +280,9 @@ describe("app coach and weekly practice speech input", () => {
     const feedback = screen.getByRole("region", { name: "Phản hồi của Season" });
     expect(feedback.querySelector(".coach-feedback-summary")).not.toBeNull();
     expect(feedback.querySelectorAll(".coach-feedback-score")).toHaveLength(3);
+    expect(within(feedback).getByLabelText("Tổng điểm: 3,5 trên 5")).toBeInTheDocument();
+    expect(within(feedback).getByLabelText("Ý nghĩa: 1,5 trên 2 điểm")).toBeInTheDocument();
+    expect(within(feedback).getByLabelText("Từ vựng: 1 trên 1,5 điểm")).toBeInTheDocument();
     expect(within(feedback).queryByRole("heading", { name: "Câu bạn nên nói tiếp" })).not.toBeInTheDocument();
     expect(within(feedback).queryByLabelText("Câu Season hỏi tiếp")).not.toBeInTheDocument();
     const evaluationHeading = within(feedback).getByText("Nhận xét câu trả lời của bạn");

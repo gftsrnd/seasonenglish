@@ -71,8 +71,8 @@ function planFor(targetMonth = month): MonthlyResourcePlanTaskOutput {
       relatesToCoreId: `core-${dayIndex + 1}-${Math.floor(itemIndex / 9) + 1}`
     }))),
     grammarTopics: [
-      { id: "grammar-a", title: "Ngữ pháp A", steps: [1, 2, 3].map((step) => ({ id: `a-${step}`, focus: `Nền tảng ${step}`, formula: "S + V", usage: "Dùng trong giao tiếp cơ bản.", examples: ["I confirm the plan.", "We check the file.", "They send the note."] })) },
-      { id: "grammar-b", title: "Ngữ pháp B", steps: [1, 2, 3].map((step) => ({ id: `b-${step}`, focus: `Mở rộng ${step}`, formula: "S + will + V", usage: "Dùng để nói về kế hoạch.", examples: ["I will call the client.", "We will review the file.", "They will share an update."] })) }
+      { id: "grammar-a", title: "Ngữ pháp A", steps: [1, 2, 3].map((step) => ({ id: `a-${step}`, focus: `Nền tảng ${step}`, dailyObjectives: [`Nhận diện cách dùng A bước ${step}`, `Vận dụng trong phản hồi A bước ${step}`], formula: "S + V", usage: "Dùng trong giao tiếp cơ bản.", examples: ["I confirm the plan.", "We check the file.", "They send the note."] })) },
+      { id: "grammar-b", title: "Ngữ pháp B", steps: [1, 2, 3].map((step) => ({ id: `b-${step}`, focus: `Mở rộng ${step}`, dailyObjectives: [`Nhận diện cách dùng B bước ${step}`, `Vận dụng trong phản hồi B bước ${step}`], formula: "S + will + V", usage: "Dùng để nói về kế hoạch.", examples: ["I will call the client.", "We will review the file.", "They will share an update."] })) }
     ],
     pronunciationTargets: Array.from({ length: 4 }, (_, targetIndex) => ({
       id: `sound-${targetIndex + 1}`,
@@ -734,6 +734,14 @@ describe("monthly AI resource generation", () => {
     expect(constraint).toContain("do not return /ˈ/");
     expect(getMonthlyPronunciationTargetIssue({ ipa: "/ˌ/" }, previousTargets)).toContain("second stress-only target");
     expect(getMonthlyPronunciationTargetIssue({ ipa: "/t/" }, previousTargets)).toBeUndefined();
+  });
+
+  it("keeps advanced pronunciation on the advanced track after a stress target", () => {
+    const previous = [{ ipa: "/ˈ/", label: "primary stress", explanation: "Stress the first syllable." }];
+    const prompt = buildMonthlyPronunciationDistinctnessConstraint(previous, "Rejected isolated /θ/.", true);
+    expect(prompt).toContain("consonant cluster");
+    expect(prompt).toContain("do not return /ˈ/, /ˌ/");
+    expect(prompt).not.toContain("must be a real consonant or vowel phoneme");
   });
 
   it("diagnoses mixed or mis-sized grammar responses and carries exact repair requirements", () => {

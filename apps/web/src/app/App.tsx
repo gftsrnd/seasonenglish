@@ -15,10 +15,13 @@ import { useToast } from "./shared/design-system.js";
 import { ThemeProvider, useTheme } from "./shared/ThemeProvider.js";
 import { RoleRoutes } from "./RoleRoutes.js";
 import { AvatarDialog } from "./learner/ProfileReward.js";
+import { LockedLearnerSupport } from "./shared/LockedLearnerSupport.js";
 import "./app-layout.css";
 import { cancelAllExclusiveAudio } from "../features/experience/audio-precedence.js";
 
 const authChangeStorageKey = "e4s:auth:changed";
+const staffEntryStorageKey = "e4s:manager-entry";
+const separateStaffEntry = import.meta.env.VITE_E4S_STAFF_DIRECT_ENTRY === "1";
 
 /**
  * New E4S presentation root. It intentionally owns authentication and the
@@ -32,7 +35,15 @@ function AppContent({ children }: { children?: ((session: SessionView) => ReactN
   const { resolvedTheme, setTheme } = useTheme();
   const { show: showToast } = useToast();
   const [session, setSession] = useState<SessionView | null | undefined>(undefined);
+  const [staffEntryPath] = useState(() => separateStaffEntry && document.querySelector('meta[name="e4s-entry"][content="staff"]')
+    ? normalizePathname(window.location.pathname).replace(/\/forgot-password$/, "")
+    : null);
+  const [staffReturnPath] = useState(() => staffEntryPath ?? window.sessionStorage.getItem(staffEntryStorageKey));
+  useEffect(() => {
+    if (staffEntryPath) window.sessionStorage.setItem(staffEntryStorageKey, staffEntryPath);
+  }, [staffEntryPath]);
   const [routeReady, setRouteReady] = useState(false);
+  const [themeReadyFor, setThemeReadyFor] = useState<string | null>();
   const [bootstrapError, setBootstrapError] = useState(false);
   const [bootstrapAttempt, setBootstrapAttempt] = useState(0);
   const [profileRecord, setProfileRecord] = useState<LearnerProfileView>();
@@ -64,7 +75,7 @@ function AppContent({ children }: { children?: ((session: SessionView) => ReactN
       // bootstrap. Otherwise a session can briefly open a different role's
       // fallback (or an empty page) instead of its own home screen. The
       // resolver preserves routes that already belong to the active role.
-      if (nextSession) applySessionEntryRoute(nextSession);
+      if (nextSession) applySessionEntryRoute(nextSession, staffEntryPath);
       setSession(nextSession);
       setRouteReady(true);
     }).catch((caught: unknown) => {
@@ -81,32 +92,40 @@ function AppContent({ children }: { children?: ((session: SessionView) => ReactN
       setBootstrapError(true);
     });
     return () => { live = false; };
-  }, [bootstrapAttempt]);
+  }, [bootstrapAttempt, staffEntryPath]);
   useEffect(() => {
-    if (!session) return;
+    if (session === undefined) return;
     let live = true;
     let loading = false;
+    const themeOwner = session?.user.id ?? null;
     const syncOrganisationExperience = async () => {
       if (loading) return;
       loading = true;
       try {
-        const experience = await sharedApiClient.getOrganisationExperience();
-        if (!live) return;
-        setTheme(experience.theme);
-        setMusicAllowed(experience.backgroundMusic.enabled);
-        setMusicConfig(experience.backgroundMusic);
+        const signal = AbortSignal.timeout(4000);
+        if (session && session.accountStatus !== "disabled") {
+          const experience = await sharedApiClient.getOrganisationExperience(signal);
+          if (!live) return;
+          setTheme(experience.theme);
+          setMusicAllowed(experience.backgroundMusic.enabled);
+          setMusicConfig(experience.backgroundMusic);
+        } else {
+          const { theme } = await sharedApiClient.getPublicOrganisationTheme(signal);
+          if (live) setTheme(theme);
+        }
       } catch {
         // A transient sync failure must not replace the last usable theme or
         // the device's personal audio preferences.
       } finally {
         loading = false;
+        if (live) setThemeReadyFor(themeOwner);
       }
     };
     const syncWhenActive = () => {
       if (document.visibilityState !== "hidden") void syncOrganisationExperience();
     };
     void syncOrganisationExperience();
-    const stream = typeof EventSource === "undefined" ? undefined : new EventSource(apiUrl("/api/v1/organisation-experience/events"), { withCredentials: true });
+    const stream = !session || session.accountStatus === "disabled" || typeof EventSource === "undefined" ? undefined : new EventSource(apiUrl("/api/v1/organisation-experience/events"), { withCredentials: true });
     const applyPushedExperience = (event: Event) => {
       try {
         const experience = JSON.parse((event as MessageEvent<string>).data) as { theme: Parameters<typeof setTheme>[0]; backgroundMusic: OrganisationBackgroundMusicView };
@@ -121,12 +140,14 @@ function AppContent({ children }: { children?: ((session: SessionView) => ReactN
     stream?.addEventListener("experience", applyPushedExperience);
     const interval = window.setInterval(syncWhenActive, 30_000);
     window.addEventListener("focus", syncWhenActive);
+    window.addEventListener("online", syncWhenActive);
     document.addEventListener("visibilitychange", syncWhenActive);
     return () => {
       live = false;
       stream?.close();
       window.clearInterval(interval);
       window.removeEventListener("focus", syncWhenActive);
+      window.removeEventListener("online", syncWhenActive);
       document.removeEventListener("visibilitychange", syncWhenActive);
     };
   }, [session, setTheme]);
@@ -138,26 +159,34 @@ function AppContent({ children }: { children?: ((session: SessionView) => ReactN
     });
   }, [session]);
   if (bootstrapError) return <AppStatus tone="error" onRetry={() => { setBootstrapError(false); setSession(undefined); setRouteReady(false); setBootstrapAttempt((attempt) => attempt + 1); }}>E4S hiện chưa thể kết nối. Kiểm tra mạng hoặc máy chủ rồi thử lại.</AppStatus>;
-  if (session === undefined || (session && !routeReady)) return <AppStatus>Đang mở E4S…</AppStatus>;
-  if (!session) return <ExperienceProvider musicAllowed={musicAllowed} musicConfig={musicConfig} musicTheme={resolvedTheme}><EntryScreen client={sharedApiClient} onAuthenticated={(nextSession) => { applySessionEntryRoute(nextSession); announceAuthChange(); setRouteReady(true); setSession(nextSession); }} /></ExperienceProvider>;
+  if (session === undefined || !routeReady || themeReadyFor !== (session?.user.id ?? null)) return <AppStatus>Đang mở E4S…</AppStatus>;
+  if (!session) return <ExperienceProvider musicAllowed={musicAllowed} musicConfig={musicConfig} musicTheme={resolvedTheme}><EntryScreen client={sharedApiClient} staffEntryPath={staffEntryPath} separateStaffEntry={separateStaffEntry} onAuthenticated={(nextSession) => { applySessionEntryRoute(nextSession, staffEntryPath); announceAuthChange(); setRouteReady(true); setSession(nextSession); }} /></ExperienceProvider>;
   if (!isSupportedSessionRole(session.role)) return <AppStatus>Không thể mở tài khoản này. Vui lòng đăng nhập lại.</AppStatus>;
+  const clearSession = () => {
+    announceAuthChange();
+    if (session.role !== "learner" && separateStaffEntry && staffReturnPath && /^(?:\/[a-z0-9-]+)+$/.test(staffReturnPath)) {
+      window.location.replace(staffReturnPath);
+      return;
+    }
+    setRouteReady(true);
+    setSession(null);
+  };
   const logout = async () => {
     try {
       await sharedApiClient.logout();
-      announceAuthChange();
-      setRouteReady(true);
-      setSession(null);
+      clearSession();
     } catch {
       showToast({ message: "Không đăng xuất được. Vui lòng thử lại.", tone: "danger" });
     }
   };
   if (session.role === "learner" && session.accountStatus === "disabled") {
-    return <main className="app-status-page"><section className="app-status-card" role="status" aria-labelledby="locked-account-title">
+    return <main className="app-status-page"><section className="app-status-card" aria-labelledby="locked-account-title">
       <h1 id="locked-account-title">Tài khoản đang bị khóa</h1>
-      <p>Tài khoản người học của bạn hiện không thể truy cập bài học. Vui lòng liên hệ Quản lý để được hỗ trợ.</p>
-      <button type="button" onClick={() => void logout()}>Đăng xuất</button>
+      <p>Tài khoản của bạn đang tạm dừng. Bạn có thể gửi yêu cầu để Quản lý xem xét mở khóa.</p>
+      <LockedLearnerSupport key={session.user.id} onLogout={() => void logout()} />
     </section></main>;
   }
+
   const saveAvatar = async (avatar: LearnerAvatarData) => {
     if (session.role === "learner") {
       if (!profileRecord) return;
@@ -172,7 +201,7 @@ function AppContent({ children }: { children?: ((session: SessionView) => ReactN
   const avatar = session.role === "learner" ? profileRecord?.profile.avatar : session.user.avatar;
   const avatarReady = session.role !== "learner" || Boolean(profileRecord);
   const learnerProfileComplete = session.role !== "learner" || profileRecord?.completed === true;
-  return <ExperienceProvider musicAllowed={musicAllowed} musicConfig={musicConfig} musicTheme={resolvedTheme}><BrowserRouter><RouteAudioStopper /><ModalProvider><AppShell session={session} avatar={avatar} onboardingComplete={learnerProfileComplete} learnerHomeOnly={session.role === "learner" && learnerCefr === undefined} {...(learnerCefr ? { learnerCefr } : {})} onAvatarClick={avatarReady ? () => setAvatarOpen(true) : undefined} onLogout={logout}>{sandboxMode ? <div role="status" data-sandbox-mode="true" className="banner info">Chế độ thử (sandbox): dữ liệu hồ sơ chỉ lưu trong trình duyệt này.</div> : null}{children ? children(session) : <RoleRoutes session={session} />}</AppShell>{avatarOpen && avatarReady ? <AvatarDialog initial={avatar} onClose={() => setAvatarOpen(false)} onSave={(nextAvatar) => void saveAvatar(nextAvatar)} /> : null}</ModalProvider></BrowserRouter></ExperienceProvider>;
+  return <ExperienceProvider musicAllowed={musicAllowed} musicConfig={musicConfig} musicTheme={resolvedTheme}><BrowserRouter><RouteAudioStopper /><ModalProvider><AppShell session={session} avatar={avatar} onboardingComplete={learnerProfileComplete} learnerHomeOnly={session.role === "learner" && learnerCefr === undefined} {...(learnerCefr ? { learnerCefr } : {})} onAvatarClick={avatarReady ? () => setAvatarOpen(true) : undefined} onLogout={logout}>{sandboxMode ? <div role="status" data-sandbox-mode="true" className="banner info">Chế độ thử (sandbox): dữ liệu hồ sơ chỉ lưu trong trình duyệt này.</div> : null}{children ? children(session) : <RoleRoutes session={session} onSessionRevoked={clearSession} />}</AppShell>{avatarOpen && avatarReady ? <AvatarDialog initial={avatar} onClose={() => setAvatarOpen(false)} onSave={(nextAvatar) => void saveAvatar(nextAvatar)} /> : null}</ModalProvider></BrowserRouter></ExperienceProvider>;
 }
 
 export function RouteAudioStopper() {
@@ -228,15 +257,17 @@ export function resolveSessionEntryPath(role: SessionView["role"], pathname: str
   if (role === "learner") {
     return isLearnerPath(current) || current === "/reward/preview" ? current : "/home";
   }
+  const isPublicEntry = ["/", "/login", "/register", "/forgot-pin"].includes(current);
   if (role === "operator") {
-    return current === "/" || current === "/register" || current === "/home" || isLearnerPath(current) || isManagerPath(current) ? "/op" : current;
+    return isPublicEntry || current === "/home" || isLearnerPath(current) || isManagerPath(current) ? "/op" : current;
   }
-  return current === "/" || current === "/register" || current === "/home" || isLearnerPath(current) ? "/mgr" : current;
+  return isPublicEntry || current === "/home" || isLearnerPath(current) ? "/mgr" : current;
 }
 
-function applySessionEntryRoute(nextSession: SessionView): void {
+function applySessionEntryRoute(nextSession: SessionView, staffEntryPath: string | null): void {
   const current = normalizePathname(window.location.pathname);
-  const target = resolveSessionEntryPath(nextSession.role, current);
+  const isStaffEntry = staffEntryPath && (current === staffEntryPath || current === staffEntryPath + "/forgot-password");
+  const target = resolveSessionEntryPath(nextSession.role, isStaffEntry ? "/" : current);
   if (target !== current) window.history.replaceState(window.history.state, "", `${target}${window.location.search}${window.location.hash}`);
 }
 
@@ -254,7 +285,7 @@ function isManagerPath(pathname: string): boolean {
 }
 
 function isLearnerPath(pathname: string): boolean {
-  return ["/home", "/onboard", "/coach", "/monthly", "/challenge", "/practice", "/survey", "/profile", "/games", "/lesson", "/test"].some((route) => isRouteOrChild(pathname, route)) || isRouteOrChild(pathname, "/reward/done");
+  return ["/home", "/onboard", "/coach", "/monthly", "/challenge", "/practice", "/survey", "/support", "/profile", "/games", "/lesson", "/test"].some((route) => isRouteOrChild(pathname, route)) || isRouteOrChild(pathname, "/reward/done") || pathname === "/reward/course";
 }
 
 function isRouteOrChild(pathname: string, route: string): boolean {

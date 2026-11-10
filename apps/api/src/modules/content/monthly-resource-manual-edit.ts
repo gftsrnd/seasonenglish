@@ -1,11 +1,13 @@
 import {
   countsTowardCorePhraseLimit,
+  buildMonthlyCalendar,
   describeRequiredSupportRelations,
   hasRequiredMonthlySupportRelations,
   isMonthlySupportLevelAllowed,
   maxMonthlyPhrasePlacements,
   maxMonthlySupportRepeats,
   monthlySupportLevelRule,
+  monthlyDayKind,
   MONTHLY_MAX_SUPPORTS_PER_CORE,
   MONTHLY_MIN_SUPPORTS_PER_CORE,
   planMonthlyResourcePool,
@@ -13,7 +15,7 @@ import {
   validateMonthlyCurriculum,
   type MonthlyResourcePoolContract
 } from "@e4s/domain";
-import type { MonthlyResourceEditInput, MonthlyResourceEditIssue } from "@e4s/contracts";
+import type { CefrLevel, MonthlyResourceEditInput, MonthlyResourceEditIssue, SharedMonthBriefView } from "@e4s/contracts";
 import { z } from "zod";
 import { isPronunciationTargetAllowedForLevel, isValidMonthlyPronunciationIpaTarget } from "./monthly-resource-plan-spec.js";
 
@@ -43,7 +45,7 @@ export const monthlyResourceEditInputSchema = z.object({
   })).max(120 * MONTHLY_MAX_SUPPORTS_PER_CORE),
   grammarTopics: z.array(z.object({
     id: resourceId, title: text(200),
-    steps: z.array(z.object({ id: resourceId, focus: text(300), formula: text(300), usage: text(1_000), examples: z.array(text(300)).max(20) })).max(10)
+    steps: z.array(z.object({ id: resourceId, focus: text(300), formula: text(300), usage: text(1_000), examples: z.array(text(300)).max(20), dailyObjectives: z.array(text(500)).length(2).optional() })).max(10)
   })).max(10),
   sounds: z.array(z.object({
     id: resourceId, ipa: text(40), label: text(200),
@@ -58,6 +60,26 @@ export type MonthlyResourceEditResult =
 const MIN_GRAMMAR_EXAMPLES = 3;
 const MIN_PRONUNCIATION_EXAMPLES = 9;
 const MAX_PRONUNCIATION_SYLLABLES = 3;
+
+export function blankMonthlyResourcePool(brief: SharedMonthBriefView, level: CefrLevel): MonthlyResourcePoolContract {
+  const calendar = buildMonthlyCalendar(brief.month);
+  const count = calendar.effectiveDays.filter((_, index) => monthlyDayKind(index + 1, calendar) === "new").length * 3;
+  return {
+    month: brief.month, cefr: level, version: 1,
+    theme: { version: brief.version, title: brief.title, brief: brief.brief, context: brief.context, communicationGoal: brief.communicationGoal },
+    coreTerms: Array.from({ length: count }, (_, index) => ({
+      id: `core-${index + 1}`, word: "", meaning: "", type: "", ipa: "", source: "core_registry", component: "core"
+    })),
+    supportTerms: [],
+    grammarTopics: Array.from({ length: 2 }, (_, index) => ({
+      id: `grammar-${index + 1}`, title: "",
+      steps: Array.from({ length: 3 }, (_, step) => ({
+        id: `grammar-${index + 1}-${step + 1}`, focus: "", formula: "", usage: "", examples: []
+      }))
+    })),
+    sounds: Array.from({ length: 4 }, (_, index) => ({ id: `sound-${index + 1}`, ipa: "", label: "", examples: [] }))
+  };
+}
 
 /** Applies an Operator edit to a stored draft pool and validates the result. */
 export function applyMonthlyResourceEdit(existing: MonthlyResourcePoolContract, input: MonthlyResourceEditInput): MonthlyResourceEditResult {
@@ -229,7 +251,7 @@ export function applyMonthlyResourceEdit(existing: MonthlyResourcePoolContract, 
     grammarTopics: input.grammarTopics.map((topic) => ({
       id: topic.id,
       title: topic.title.trim(),
-      steps: topic.steps.map((step) => ({ id: step.id, focus: step.focus.trim(), formula: step.formula.trim(), usage: step.usage.trim(), examples: step.examples.map((example) => example.trim()) }))
+      steps: topic.steps.map((step) => ({ id: step.id, focus: step.focus.trim(), formula: step.formula.trim(), usage: step.usage.trim(), examples: step.examples.map((example) => example.trim()), ...(step.dailyObjectives ? { dailyObjectives: step.dailyObjectives.map(value => value.trim()) } : {}) }))
     })),
     sounds: input.sounds.map((sound) => ({
       id: sound.id,

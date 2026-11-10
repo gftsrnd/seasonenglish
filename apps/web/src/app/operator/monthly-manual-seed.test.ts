@@ -36,6 +36,18 @@ const framework = {
 } as never;
 
 describe("monthlyManualSeed", () => {
+  it("seeds the assigned second pronunciation set and leaves new daily examples for the author", () => {
+    const next = structuredClone(framework) as any;
+    const sound = next.resources.sounds[0];
+    sound.examples.push(...[4,5,6].map(i => ({id:"e"+i,word:"practice"+i,ipa:"/ɪ/"})));
+    const day = next.resources.roadmap.days[0];
+    day.grammarPlan = {code:"A2",objective:"Apply the form in a workplace reply",milestoneIds:["ga-1"],recallMilestoneIds:[]};
+    day.pronunciationExampleIds = ["e4","e5","e6"];
+    day.pronunciationPlan = {stage:"discriminate",objective:"Distinguish the target in words",targetIds:["p1"],exampleIds:["e4","e5","e6"]};
+    const result = monthlyManualSeed(next,1)!;
+    expect(result.parts.find(part => part.code === "grammar")!.content).toMatchObject({dailyCode:"A2",examples:[],items:[]});
+    expect(result.parts.find(part => part.code === "pronunciation")!.content).toMatchObject({stage:"discriminate",words:[{word:"practice4"},{word:"practice5"},{word:"practice6"}]});
+  });
   it("prefills a new day with its core words, linked expanded words, grammar and sound", () => {
     const seed = monthlyManualSeed(framework, 1)!;
     expect(seed).toMatchObject({ kind: "new", date: "2026-11-02", title: "Lesson 1: client" });

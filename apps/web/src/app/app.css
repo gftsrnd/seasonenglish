@@ -1,4 +1,4 @@
-/* Shared E4S presentation tokens. Color accents use the same blue and teal palette across seasons. */
+/* Shared E4S presentation tokens. Seasonal overrides live in app-layout.css. */
 /* ---- structural tokens: the same for every theme ---- */
 :root{
   color-scheme:light;
@@ -10,7 +10,7 @@
   --font:'Be Vietnam Pro',system-ui,-apple-system,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;
   --font-display:'Be Vietnam Pro',system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
 }
-/* One calm palette across seasons: white, brand blue, and deep teal. */
+/* Default palette before ThemeProvider resolves the current season. */
 :root,:root[data-theme]{
   --primary:#3F76B5; --primary-hover:#356AA6; --primary-dark:#2C5A8C; --primary-ink:#FFFFFF;
   --secondary:#1F6B5E; --accent:var(--secondary); --bg-ink:#1E1E1E; --bg-muted:rgba(30,30,30,.62);
@@ -38,7 +38,6 @@ main a{color:inherit;text-decoration-color:currentColor}
 .card .muted,.card small,.card .eyebrow,.panel .muted,.panel small,.panel .eyebrow,.dialog .muted,.dialog small,.dialog .eyebrow,.report .muted,.report small,.report .eyebrow,.item .muted,.item small,.opt .muted,.opt small,.tile .muted,.tile small,.hero .muted,.hero small,.hero .eyebrow,.welcome .muted,.welcome small,.welcome .eyebrow,.msg .muted,.msg small,.usercard .muted,.usercard small,.role .muted,.role small,.banner .muted,.banner small,.stat .muted,.stat small,.party .muted,.party small,.party .eyebrow,.cert .muted,.cert small,.cert .eyebrow,.cheat .muted,.cheat small,.correction .muted,.bubble .muted,.bdg .muted,.bdg small,.setup .st .muted,.setup .st small,.arena-row .muted,.arena-row small,.topbar .muted,.topbar small,.chat .muted,.chat small{color:var(--muted)}
 .card a,.panel a,.dialog a,.item a,.opt a,.hero a,.banner a,.report a,.welcome a,.msg a,.correction a{text-decoration-color:var(--accent)}
 .card .eyebrow,.panel .eyebrow,.dialog .eyebrow,.hero .eyebrow,.welcome .eyebrow,.party .eyebrow,.cert .eyebrow{color:var(--muted)}
-.hero{border-left-color:var(--secondary) !important}
 .day i.today{box-shadow:0 0 0 2px var(--surface),0 0 0 3.5px var(--secondary)}
 .report h3{border-left-color:var(--secondary)}
 .bottomnav{background:var(--surface)}
@@ -80,11 +79,13 @@ pre{background:var(--surface-2);padding:.75rem;border-radius:12px;overflow:auto;
 @media (max-width:760px){
   .topbar{padding:0 16px;padding-top:env(safe-area-inset-top, 0px);height:calc(56px + env(safe-area-inset-top, 0px))}
   .topbar nav{display:none}
+  main{padding-bottom:calc(108px + env(safe-area-inset-bottom, 0px)) !important}
+}
+@media (max-width:960px){
   .bottomnav{display:flex;position:fixed;bottom:0;left:0;right:0;background:var(--surface);border-top:1px solid #E4E2DC;z-index:20;padding:6px 8px calc(6px + env(safe-area-inset-bottom, 0px))}
   .bottomnav a{flex:1;text-align:center;text-decoration:none;color:#8C8880;font-size:.7rem;font-weight:400;padding:6px 2px;border-radius:12px;display:flex;flex-direction:column;align-items:center;gap:3px}
   .bottomnav a .ico{font-size:1.2rem;line-height:1}
   .bottomnav a.active{color:var(--text);font-weight:600;background:transparent}
-  main{padding-bottom:calc(108px + env(safe-area-inset-bottom, 0px)) !important}
 }
 main{max-width:1040px;margin:0 auto;padding:20px 20px 48px}
 .grid{display:grid;gap:12px}
@@ -128,8 +129,8 @@ button:disabled{opacity:.5;cursor:not-allowed}
 .btn-x,button[data-action="modal-close"]:not(.btn-primary),button[data-action="modal-cancel"],button[data-action="logout"]{background:var(--surface-2);box-shadow:none;color:var(--text)}
 .btn-x:hover,button[data-action="modal-close"]:not(.btn-primary):hover,button[data-action="modal-cancel"]:hover,button[data-action="logout"]:hover{background:var(--beige)}
 .btn-x::before,button[data-action="modal-close"]:not(.btn-primary)::before,button[data-action="modal-cancel"]::before,button[data-action="logout"]::before{content:"✕";font-weight:600;margin-right:4px}
-.card.soft .btn-sm,.card.soft button:not(.btn-primary):not(.btn-ok):not(.btn-danger):not(.btn-ghost){background:var(--surface)}
-.card.soft .btn-sm:hover,.card.soft button:not(.btn-primary):not(.btn-ok):not(.btn-danger):not(.btn-ghost):hover{background:#E4E2DC}
+.card.soft .btn-sm:not(.btn-primary):not(.btn-ok):not(.btn-danger):not(.btn-ghost),.card.soft button:not(.btn-primary):not(.btn-ok):not(.btn-danger):not(.btn-ghost){background:var(--surface)}
+.card.soft .btn-sm:not(.btn-primary):not(.btn-ok):not(.btn-danger):not(.btn-ghost):hover,.card.soft button:not(.btn-primary):not(.btn-ok):not(.btn-danger):not(.btn-ghost):hover{background:#E4E2DC}
 input,select,textarea{font:inherit;font-size:.95rem;color:var(--text);background:var(--surface-2);border:0;border-radius:var(--radius-sm);padding:13px 16px;width:100%;min-height:50px}
 input[type="checkbox"],input[type="radio"]{min-height:0;width:18px;height:18px;padding:0;accent-color:var(--primary)}
 input[type="file"]{padding:10px 14px}
@@ -155,7 +156,7 @@ details summary{cursor:pointer;font-weight:500}
 .badge.primary{background:var(--primary);color:var(--primary-ink);font-weight:500}
 .badge.lvl,.lvl{font-weight:500;letter-spacing:.02em}
 .badge.lvl{font-size:.78rem}
-.lvl-A1{background:var(--primary) !important;color:var(--text) !important}
+.lvl-A1{background:var(--primary) !important;color:var(--primary-ink) !important}
 .lvl-A2{background:var(--peach) !important;color:var(--text) !important}
 .lvl-B1{background:var(--mint) !important;color:var(--text) !important}
 .lvl-B2{background:var(--lav) !important;color:var(--text) !important}
@@ -519,7 +520,7 @@ button:hover,.btn:hover{background:var(--surface-3)}
 .btn-x:hover,button[data-action="modal-close"]:not(.btn-primary):hover,button[data-action="modal-cancel"]:hover,button[data-action="logout"]:hover{background:var(--surface-3)}
 button[style*="background: var(--primary)"]:hover,button[style*="background:var(--primary)"]:hover{background:var(--primary-hover)!important;color:var(--primary-ink)!important}
 .btn-x::before,button[data-action="modal-close"]:not(.btn-primary)::before,button[data-action="modal-cancel"]::before,button[data-action="logout"]::before{content:none}
-.card.soft .btn-sm,.card.soft button:not(.btn-primary):not(.btn-ok):not(.btn-danger):not(.btn-ghost){background:var(--surface)}
+.card.soft .btn-sm:not(.btn-primary):not(.btn-ok):not(.btn-danger):not(.btn-ghost),.card.soft button:not(.btn-primary):not(.btn-ok):not(.btn-danger):not(.btn-ghost){background:var(--surface)}
 input,select,textarea{background:var(--surface);border:1px solid #D6D1C8;border-radius:10px;min-height:42px;padding:10px 14px;font-size:.92rem}
 input:focus,select:focus,textarea:focus{border-color:var(--primary);box-shadow:0 0 0 3px var(--primary-glow)}
 .card.soft input,.card.soft select,.card.soft textarea,.item input,.item select,.item textarea{background:var(--surface)}
@@ -555,7 +556,7 @@ label.field > span{font-size:.8rem;color:var(--muted)}
 .hero{background:var(--surface) !important;color:var(--text) !important;border:1px solid var(--line);border-radius:var(--radius);padding:18px 20px}
 .hero .eyebrow{color:var(--muted);opacity:1}
 .hero h2{font-size:1.25rem}
-.hero .btn,.hero button:not(.btn-ghost){background:var(--primary);color:var(--text)}
+.hero .btn,.hero button:not(.btn-ghost){background:var(--primary);color:var(--primary-ink)}
 .hero .btn:hover,.hero button:not(.btn-ghost):hover{background:var(--primary-hover)}
 .tile{border-radius:12px;box-shadow:inset 0 0 0 1px var(--line);padding:14px 16px}
 .tile.peach{background:var(--tile-1)}.tile.butter{background:var(--primary-soft)}.tile.mint{background:var(--tile-2)}.tile.lav{background:var(--tile-3)}

@@ -1,3 +1,4 @@
+import { RequestEvidenceFields, requestEvidenceArgs, type RequestEvidenceDraft } from "../shared/RequestEvidence.js";
 import { useEffect, useId, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { CheckCircle2, ChevronLeft, LockKeyhole, Mic, RotateCcw, Square, Upload, Volume2 } from "lucide-react";
@@ -10,7 +11,7 @@ import type {
   PartEvidence
 } from "@e4s/contracts";
 import type { LearnerCallbacks, LessonView } from "./contracts.js";
-import { ErrorText, Notice, PageTitle, AppLink } from "./ui.js";
+import { ErrorText, Notice, PageTitle, AppLink, learnerLessonLabel } from "./ui.js";
 import { VocabularyCard as SharedVocabularyCard, type VocabularyRelationChip } from "../shared/lesson/VocabularyCard.js";
 import { vocabularyPresentationBlocks } from "../shared/lesson/vocabulary-groups.js";
 import { conciseGrammarExample, conciseLessonObjective, conciseSpeakingModel, learnerFacingObjective, learnerFacingObjectiveBody, learnerObjectiveLead } from "../shared/lesson/presentation.js";
@@ -130,6 +131,7 @@ export function LearnerLesson({ view, actions }: { view: LessonView; actions: Le
   const [completedLocally, setCompletedLocally] = useState(false);
   const [pronunciationListened, setPronunciationListened] = useState<Set<string>>(() => new Set([...readPronunciationListened(lesson.id), ...readRecordedPronunciationWords(lesson.progress.evidence.pronunciation?.answer)]));
   const [vocabularyModal, setVocabularyModal] = useState<VocabularyModalState | null>(null);
+  const [appealEvidence, setAppealEvidence] = useState<RequestEvidenceDraft>({});
   const [appealPart, setAppealPart] = useState<LessonPartCode | null>(null);
   const [appealReasons, setAppealReasons] = useState<Partial<Record<LessonPartCode, string>>>({});
   const selectTab = (next: LessonTab) => {
@@ -237,10 +239,13 @@ export function LearnerLesson({ view, actions }: { view: LessonView; actions: Le
     }
   };
   const appeal = async (partCode: LessonPartCode, reason: string) => {
-    if (!actions.appealLessonPart || busyActionRef.current || !startAction(`appeal:${partCode}`)) return;
+    if (!actions.appealLessonPart || appealEvidence.blocked || busyActionRef.current || !startAction(`appeal:${partCode}`)) return;
     setError("");
     try {
-      const result = await actions.appealLessonPart(partCode, reason.trim());
+      const evidenceArgs = requestEvidenceArgs(appealEvidence);
+      const result = lesson.exerciseVersionId
+        ? await actions.appealLessonPart(partCode, reason.trim(), evidenceArgs[0], lesson.exerciseVersionId)
+        : await actions.appealLessonPart(partCode, reason.trim(), ...evidenceArgs);
       setLocalProgress(result.progress);
       setAppealPart(null);
     } catch {
@@ -283,7 +288,7 @@ export function LearnerLesson({ view, actions }: { view: LessonView; actions: Le
   const visible = lessonPartsForTab(lesson.content.parts, tab);
   const evidence = localProgress.evidence;
   const pronunciationReviewTargets = readPronunciationTargets(lesson.content.parts.find((part) => part.code === "pronunciation")?.content);
-  const requiredPronunciationWords = pronunciationReviewTargets.length > 1
+  const requiredPronunciationWords = pronunciationReviewTargets.length > 0
     ? pronunciationReviewTargets.flatMap((target) => target.words).map((item) => item.word)
     : readPronunciationWords(lesson.content.parts.find((part) => part.code === "pronunciation")?.content.words).slice(0, 3).map((item) => item.word);
   const speakingAlreadyRecorded = partIsDone(
@@ -301,7 +306,7 @@ export function LearnerLesson({ view, actions }: { view: LessonView; actions: Le
     <div className="lesson-heading">
       <AppLink className="lesson-back" href="/home" navigate={actions.navigate} ariaLabel="Về trang chủ" title="Về trang chủ" style={{ minWidth: 32, minHeight: 32 }}><ChevronLeft size={22} aria-hidden="true" /></AppLink>
       <PageTitle
-        title={`Bài ${lesson.dayNumber} · ${lesson.weekTopic}`}
+        title={`${learnerLessonLabel(lesson)} · ${lesson.weekTopic}`}
         detail={grammarAvailable ? <span className="badge lesson-structure-chip"><span>{language === "en" ? "Structure" : "Cấu trúc"}</span><span data-lesson-structure>{lesson.title}</span></span> : undefined}
         aside={<span className={`badge${completed ? " ok" : ""}`}>{completed ? (language === "en" ? "Completed" : "Đã hoàn thành") : lesson.progress.status === "in_progress" ? (language === "en" ? "In progress" : "Đang học") : (language === "en" ? "Not started" : "Chưa học")}</span>}
       />
@@ -326,11 +331,14 @@ export function LearnerLesson({ view, actions }: { view: LessonView; actions: Le
             {part.code === "speaking" && !speakingUnlocked ? <Notice tone="info">{copy.notices.speakingGate.replace("{count}", String(requiredPronunciationWords.length))}</Notice> : part.code === "speaking" ? <section className="stack lesson-speaking-answer" aria-label={copy.answerLabel}><strong>{copy.answerLabel}</strong><SpeakingEvidenceControls language={language} copy={copy} artifactKey={mediaArtifacts[part.code]} onUploaded={(artifactKey) => setMediaArtifacts((current) => ({ ...current, [part.code]: artifactKey }))} uploadAudio={actions.uploadAssessmentAudio} getAudioReadUrl={actions.getAssessmentAudioReadUrl} />{partEvidence?.answer?.trim() ? <section className="stack lesson-speaking-transcript" aria-label={language === "en" ? "Automatic Speaking transcript" : "Bản chép tự động phần Nói"}><strong>{language === "en" ? "Automatic transcript" : "Bản chép tự động"}</strong><output>{partEvidence.answer.trim()}</output></section> : null}</section> : <LessonAnswerControl language={language} copy={copy} part={part} value={answers[part.code] ?? ""} evidence={partEvidence} disabled={done || Boolean(busyAction)} onChange={(value) => setAnswers((current) => ({ ...current, [part.code]: value }))} />}
             {isSelfWritingPart(part) ? <small>{language === "en" ? "Write at least two words." : "Tự viết tối thiểu 2 từ."}</small> : null}
             {part.code !== "speaking" || speakingUnlocked ? <button className="btn-primary" type="button" aria-busy={busyAction === part.code || undefined} disabled={done || Boolean(busyAction) || !hasLessonAnswer(part, answers[part.code], mediaArtifacts[part.code])} style={{ alignSelf: "flex-start", minHeight: 44 }} onClick={() => void save(part)}>{busyAction === part.code ? copy.buttons.checking : done ? copy.buttons.completed : part.code === "speaking" ? (language === "en" ? "Check speaking" : "Kiểm tra nói") : copy.buttons.submit}</button> : null}
-            {partEvidence?.status === "wrong_exhausted" || partEvidence?.status === "wrong_retry" ? <div className="row" style={{ flexWrap: "wrap", gap: 8 }}><button className="btn-sm btn-ghost" type="button" disabled={Boolean(busyAction) || partEvidence.translationViewed} onClick={() => void save(part, { answer: answers[part.code] ?? "", translated: true })}>{partEvidence.translationViewed ? copy.status.translated : (language === "en" ? "View translation" : "Xem bản dịch")}</button>{partEvidence.status === "wrong_exhausted" && actions.appealLessonPart ? <button className="btn-sm btn-ghost" type="button" aria-busy={busyAction === `appeal:${part.code}` || undefined} disabled={Boolean(busyAction)} onClick={() => setAppealPart(part.code)}>{busyAction === `appeal:${part.code}` ? copy.buttons.checking : (language === "en" ? "Appeal" : "Gửi kháng nghị")}</button> : null}</div> : null}
-            {appealPart === part.code ? <section className="stack lesson-appeal-form" aria-label={`${language === "en" ? "Appeal" : "Kháng nghị"} ${part.title}`}>
+            {partEvidence?.status === "wrong_exhausted" || partEvidence?.status === "wrong_retry" ? <button className="btn-sm btn-ghost" type="button" disabled={Boolean(busyAction) || partEvidence.translationViewed} onClick={() => void save(part, { answer: answers[part.code] ?? "", translated: true })}>{partEvidence.translationViewed ? copy.status.translated : (language === "en" ? "View translation" : "Xem bản dịch")}</button> : null}
+            {actions.appealLessonPart && studyComplete && !partEvidence?.appealStatus && partEvidence?.status !== "appealed" ? <button className="btn-sm" type="button" aria-expanded={appealPart === part.code} disabled={Boolean(busyAction)} onClick={() => { setAppealPart(part.code); setAppealEvidence({}); }}>{language === "en" ? "Report an issue" : lesson.exerciseVersionId ? "Báo lỗi câu này" : "Báo lỗi phần này"}</button> : null}
+            {partEvidence?.appealStatus || partEvidence?.status === "appealed" ? <AppLink className="btn btn-sm" href="/support?tab=appeals" navigate={actions.navigate}>{language === "en" ? "Learning support" : "Hỗ trợ học tập"}</AppLink> : null}
+            {appealPart === part.code ? <section key={part.code} className="stack lesson-appeal-form" aria-label={`${language === "en" ? "Appeal" : "Kháng nghị"} ${part.title}`}>
+              <RequestEvidenceFields value={appealEvidence} onChange={setAppealEvidence} label={language === "en" ? "Question or detail to review" : "Câu hoặc nội dung cần xem lại"} disabled={Boolean(busyAction)} english={language === "en"} />
               <label>{language === "en" ? `Appeal reason for ${part.title}` : `Lý do kháng nghị phần ${part.title}`}<textarea aria-label={language === "en" ? `Appeal reason for ${part.title}` : `Lý do kháng nghị phần ${part.title}`} value={appealReasons[part.code] ?? ""} onChange={(event) => setAppealReasons((current) => ({ ...current, [part.code]: event.target.value }))} /></label>
               <small>{language === "en" ? "Write at least five characters so the reviewer can understand what to check." : "Nhập ít nhất 5 ký tự để người duyệt hiểu điều cần xem lại."}</small>
-              <div className="row"><button className="btn-sm btn-primary" type="button" disabled={Boolean(busyAction) || (appealReasons[part.code]?.trim().length ?? 0) < 5} onClick={() => void appeal(part.code, appealReasons[part.code] ?? "")}>{copy.buttons.sendAppeal}</button><button className="btn-sm btn-ghost" type="button" disabled={Boolean(busyAction)} onClick={() => setAppealPart(null)}>{copy.buttons.cancel}</button></div>
+              <div className="row"><button className="btn-sm btn-primary" type="button" disabled={Boolean(busyAction) || appealEvidence.blocked || (appealReasons[part.code]?.trim().length ?? 0) < 5} onClick={() => void appeal(part.code, appealReasons[part.code] ?? "")}>{copy.buttons.sendAppeal}</button><button className="btn-sm btn-ghost" type="button" disabled={Boolean(busyAction)} onClick={() => setAppealPart(null)}>{copy.buttons.cancel}</button></div>
             </section> : null}
             {partEvidence?.feedback ? <Notice tone={partEvidence.status === "correct" ? "ok" : partEvidence.status === "appealed" || partEvidence.status === "submitted" ? "info" : "warn"}>{partEvidence.feedback}</Notice> : null}
             {partEvidence?.status === "wrong_retry" && safeLessonHint(part.content) ? <Notice tone="info">{copy.hintLabel}: {safeLessonHint(part.content)}</Notice> : null}
@@ -739,8 +747,9 @@ export function SharedLessonPartContent({
     {learnerPrompt && part.code !== "speaking" ? <p><LessonPromptText value={learnerPrompt} /></p> : null}
     {guidanceSteps.length ? <ul className="lesson-instruction-list" aria-label={copy.instructionAria}>{guidanceSteps.map((step, index) => <li key={`${index}-${step}`}>{step}</li>)}</ul> : null}
     {audioSource ? <LessonAudioControl source={audioSource} speak={speak} copy={copy} language={language} /> : null}
-    {part.code === "grammar" && readGrammarSteps(content).length >= 2 ? <div className="lesson-study-block"><div className="lesson-study-panel-header"><h2>{copy.grammarHeading}</h2></div><div className="lesson-grammar-steps">{readGrammarSteps(content).map((step, stepIndex) => <section className="lesson-grammar-step" key={`${stepIndex}-${step.formula}`}><p className="lesson-study-focus"><strong>{step.formula}</strong></p>{step.text ? <p className="lesson-study-explanation">{grammarUsageCopy(step.text, language)}</p> : null}{step.examples.length ? <div className="lesson-example-list" aria-label={language === "en" ? "Grammar examples" : "Câu ví dụ ngữ pháp"}>{step.examples.map((example) => { const spoken = sanitizeGrammarSpeechText(conciseGrammarExample(example)); return <button className="btn-sm btn-ghost lesson-example-card vocabulary-card-sound" type="button" aria-label={`${language === "en" ? "Listen to example" : "Nghe câu ví dụ"}: ${spoken}`} onClick={() => playLessonText(spoken, undefined, speak)} key={example}><Volume2 size={14} aria-hidden="true" />{conciseGrammarExample(example)}</button>; })}</div> : null}</section>)}</div></div> : part.code === "grammar" && content.formula ? <div className="lesson-study-block"><div className="lesson-study-panel-header"><h2>{copy.grammarHeading}</h2></div><div className="lesson-grammar-copy">{grammarRows(content.formula, content.usage || content.text, language).map((row, rowIndex) => <div className="lesson-grammar-row" key={`${rowIndex}-${row.formula}`}><div className="lesson-grammar-formula-row"><p className="lesson-study-focus"><strong>{row.formula}</strong></p>{rowIndex === 0 ? <LessonAudioAssetButton audioSrc={content.audioUrl} label={language === "en" ? "Listen to grammar example" : "Nghe mẫu ngữ pháp"} title={language === "en" ? "Listen to grammar structure" : "Nghe cấu trúc ngữ pháp"} className="lesson-grammar-audio-icon" speak={speak} /> : null}</div>{row.explanation ? <p className="lesson-study-explanation">{row.explanation}</p> : null}</div>)}</div>{grammarExamples.length ? <div className="lesson-example-list" aria-label={language === "en" ? "Grammar examples" : "Câu ví dụ ngữ pháp"}>{grammarExamples.map((example, index) => { const spoken = sanitizeGrammarSpeechText(conciseGrammarExample(example)); return <button className="btn-sm btn-ghost lesson-example-card vocabulary-card-sound" type="button" aria-label={`${language === "en" ? "Listen to example" : "Nghe câu ví dụ"}: ${spoken}`} onClick={() => playLessonText(spoken, content.exampleAudioUrls?.[index], speak)} key={example}><Volume2 size={14} aria-hidden="true" />{conciseGrammarExample(example)}</button>; })}</div> : null}</div> : null}
-    {part.code === "pronunciation" && content.focus ? <div className="lesson-study-block lesson-pronunciation-summary"><div className="lesson-study-panel-header lesson-pronunciation-heading"><h2>{copy.pronunciationHeading}</h2></div>{content.instruction ? <p className="lesson-study-explanation">{pronunciationInstructionCopy(content.instruction, language)}</p> : null}<div className="lesson-pronunciation-targets">{(pronunciationReviewTargets.length > 1 ? pronunciationReviewTargets : [{ focus: targetSound, words: pronunciationWords.slice(0, 3) }]).map((target, targetIndex) => <PronunciationTargetBlock key={`${target.focus}-${targetIndex}`} focus={target.focus} words={target.words} audioUrls={targetIndex === 0 ? pronunciationWordAudioUrls : []} language={language} speak={speak} onListened={onPronunciationListened} separateSymbol={pronunciationReviewTargets.length > 1} />)}</div></div> : null}
+    {part.code === "grammar" && readGrammarSteps(content).length >= 2 ? <div className="lesson-study-block"><div className="lesson-study-panel-header"><h2>{copy.grammarHeading}</h2></div><div className="lesson-grammar-steps">{readGrammarSteps(content).map((step, stepIndex) => <section className="lesson-grammar-step" key={`${stepIndex}-${step.formula}`}><p className="lesson-study-focus"><strong>{step.formula}</strong></p>{stepIndex === 0 && typeof part.content.objective === "string" ? <p className="lesson-study-explanation">{part.content.objective}</p> : null}{step.text ? <GrammarExplanation value={grammarUsageCopy(step.text, language)} language={language} /> : null}{step.examples.length ? <div className="lesson-example-list" aria-label={language === "en" ? "Grammar examples" : "Câu ví dụ ngữ pháp"}>{step.examples.map((example) => { const spoken = sanitizeGrammarSpeechText(conciseGrammarExample(example)); return <button className="btn-sm btn-ghost lesson-example-card vocabulary-card-sound" type="button" aria-label={`${language === "en" ? "Listen to example" : "Nghe câu ví dụ"}: ${spoken}`} onClick={() => playLessonText(spoken, undefined, speak)} key={example}><Volume2 size={14} aria-hidden="true" />{conciseGrammarExample(example)}</button>; })}</div> : null}</section>)}</div></div> : part.code === "grammar" && content.formula ? <div className="lesson-study-block"><div className="lesson-study-panel-header"><h2>{copy.grammarHeading}</h2></div><div className="lesson-grammar-copy">{grammarRows(content.formula, content.usage || content.text, language).map((row, rowIndex) => <div className="lesson-grammar-row" key={`${rowIndex}-${row.formula}`}><div className="lesson-grammar-formula-row"><p className="lesson-study-focus"><strong>{row.formula}</strong></p>{rowIndex === 0 ? <LessonAudioAssetButton audioSrc={content.audioUrl} label={language === "en" ? "Listen to grammar example" : "Nghe mẫu ngữ pháp"} title={language === "en" ? "Listen to grammar structure" : "Nghe cấu trúc ngữ pháp"} className="lesson-grammar-audio-icon" speak={speak} /> : null}</div>{rowIndex === 0 && typeof part.content.objective === "string" ? <p className="lesson-study-explanation">{part.content.objective}</p> : null}{row.explanation ? <GrammarExplanation value={row.explanation} language={language} /> : null}</div>)}</div>{grammarExamples.length ? <div className="lesson-example-list" aria-label={language === "en" ? "Grammar examples" : "Câu ví dụ ngữ pháp"}>{grammarExamples.map((example, index) => { const spoken = sanitizeGrammarSpeechText(conciseGrammarExample(example)); return <button className="btn-sm btn-ghost lesson-example-card vocabulary-card-sound" type="button" aria-label={`${language === "en" ? "Listen to example" : "Nghe câu ví dụ"}: ${spoken}`} onClick={() => playLessonText(spoken, content.exampleAudioUrls?.[index], speak)} key={example}><Volume2 size={14} aria-hidden="true" />{conciseGrammarExample(example)}</button>; })}</div> : null}</div> : null}
+    {part.code === "pronunciation" && content.focus ? <div className="lesson-study-block lesson-pronunciation-summary"><div className="lesson-study-panel-header lesson-pronunciation-heading"><h2>{copy.pronunciationHeading}</h2></div><div className="lesson-pronunciation-targets">{(pronunciationReviewTargets.length > 0 ? pronunciationReviewTargets : [{ focus: targetSound, words: pronunciationWords.slice(0, 3) }]).map((target, targetIndex) => <PronunciationTargetBlock key={`${target.focus}-${targetIndex}`} focus={target.focus} words={target.words} audioUrls={targetIndex === 0 ? pronunciationWordAudioUrls : []} language={language} speak={speak} onListened={onPronunciationListened} separateSymbol={pronunciationReviewTargets.length > 0} guidance={targetIndex === 0 ? [typeof part.content.objective === "string" ? part.content.objective : "", content.instruction ? pronunciationInstructionCopy(content.instruction, language) : ""].filter(Boolean).join(" ") : undefined} />)}</div></div> : null}
+    {part.code === "pronunciation" && typeof part.content.passage === "string" && part.content.passage ? <div className="card flat"><p>{part.content.passage}</p><button type="button" className="btn-sm" onClick={() => speak(part.content.passage as string)}>{language === "en" ? "Listen to passage" : "Nghe đoạn mẫu"}</button></div> : null}
     {part.code === "speaking" && speakingModel ? <><p className="lesson-speaking-instruction"><strong>{copy.speakingInstructionLabel}</strong> <LessonPromptText value={content.instruction?.trim() || content.prompt?.trim() || (language === "en" ? "Follow the model sentence below and change one detail to fit your situation." : "Nói theo câu mẫu bên dưới và thay đổi một chi tiết cho phù hợp.")} /></p><div className={`card flat lesson-speaking-model${speakingModel.length <= 80 ? " lesson-speaking-model--inline" : ""}`}><strong>{speakingModel}</strong>{content.audioUrl ? <ExclusiveLessonAudio src={content.audioUrl} label={language === "en" ? "Listen to speaking model" : "Nghe audio mẫu phần Nói"} /> : null}</div></> : null}
 
     {part.code === "vocabulary" ? <div className={collapsibleVocabulary ? "vocabulary-list vocabulary-list--scroll" : "vocabulary-list"} {...(collapsibleVocabulary ? { tabIndex: 0, "aria-label": `${words.length} ${language === "en" ? "words" : "từ"}` } : {})}>{vocabularyBlocks.map((block) => block.kind === "group"
@@ -785,13 +794,14 @@ function readPronunciationWords(value: unknown): Array<{ word: string; ipa?: str
 }
 
 /** One sound: bold target with its mouth-form toggle on the right, example chips, then the picture below. */
-function PronunciationTargetBlock({ focus, words, audioUrls, language, speak, onListened, separateSymbol = false }: { separateSymbol?: boolean; focus: string; words: Array<{ word: string; ipa?: string }>; audioUrls: string[]; language: LearnerLessonLanguage; speak: (text: string) => void; onListened?: ((word: string) => void | Promise<void>) | undefined }) {
+function PronunciationTargetBlock({ focus, words, audioUrls, language, speak, onListened, separateSymbol = false, guidance }: { guidance?: string | undefined; separateSymbol?: boolean; focus: string; words: Array<{ word: string; ipa?: string }>; audioUrls: string[]; language: LearnerLessonLanguage; speak: (text: string) => void; onListened?: ((word: string) => void | Promise<void>) | undefined }) {
   const [open, setOpen] = useState(false);
   const panelId = useId();
   const sound = pronunciationTarget(focus);
   const firstWord = words[0]?.word;
   return <section className="lesson-pronunciation-target">
     <div className="lesson-pronunciation-target-head"><p className="lesson-study-focus"><strong>{separateSymbol ? <>{language === "en" ? "Sound " : "Âm "}<span className="lesson-pronunciation-symbol">{sound}</span>{firstWord ? (language === "en" ? ` as in “${firstWord}”` : ` như trong “${firstWord}”`) : ""}</> : language === "en" ? `Sound ${sound}${firstWord ? ` as in “${firstWord}”` : ""}` : `Âm ${sound}${firstWord ? ` như trong “${firstWord}”` : ""}`}</strong></p><PronunciationMouthToggle target={sound} open={open} onToggle={() => setOpen((value) => !value)} controlsId={panelId} language={language} /></div>
+    {guidance ? <p className="lesson-study-explanation">{guidance}</p> : null}
     <div className="lesson-pronunciation-words" aria-label={language === "en" ? "Pronunciation practice words" : "Luyện từ phát âm"}>{words.map((item, index) => <button className="btn-sm btn-ghost lesson-example-card vocabulary-card-sound lesson-pronunciation-word-chip" type="button" aria-label={language === "en" ? `Listen to pronunciation word: ${item.word}` : `Nghe từ phát âm: ${item.word}`} onClick={() => playLessonText(item.word, audioUrls[index], speak, () => { void onListened?.(item.word); }, 0.65)} key={item.word}><Volume2 size={14} aria-hidden="true" /><strong>{item.word}</strong>{item.ipa ? ` ${item.ipa}` : ""}</button>)}</div>
     {open ? <PronunciationMouthPanel target={sound} id={panelId} language={language} /> : null}
   </section>;
@@ -836,6 +846,16 @@ function grammarRows(formula: string, usage: string | undefined, language: Learn
   return formulas.map((line, index) => ({ formula: line, explanation: index === formulas.length - 1 ? (usage?.trim() ?? "") : "" }));
 }
 
+/** Keep existing authored detail available without making Study a wall of text. */
+function GrammarExplanation({ value, language }: { value: string; language: LearnerLessonLanguage }) {
+  const text = value.trim();
+  if (text.length <= 240) return <p className="lesson-study-explanation">{text}</p>;
+  const firstSentence = text.match(/^.*?[.!?](?:\s|$)/u)?.[0]?.trim() ?? "";
+  const preview = firstSentence.length <= 240 ? firstSentence : "";
+  const detail = preview ? text.slice(preview.length).trim() : text;
+  return <>{preview ? <p className="lesson-study-explanation">{preview}</p> : null}{detail ? <details className="lesson-grammar-detail"><summary>{language === "en" ? "More about this structure" : "Cách dùng chi tiết"}</summary><p className="lesson-study-explanation">{detail}</p></details> : null}</>;
+}
+
 function grammarUsageCopy(value: string, language: LearnerLessonLanguage = "vi"): string {
   const fallback = language === "en"
     ? "Use this structure to express the lesson's target meaning."
@@ -848,8 +868,7 @@ function grammarUsageCopy(value: string, language: LearnerLessonLanguage = "vi")
   if (language === "en" || localized === fallback) return localized;
   if (!/^Dùng\s+(?:khi|để)\s+/iu.test(localized)) return localized;
   const cleaned = localized.replace(/^Dùng\s+(?:khi|để)\s+/i, "");
-  const firstSentence = cleaned.split(/(?<=[.!?])\s+|;\s*/u)[0]?.trim() || cleaned;
-  const explanation = firstSentence.replace(/[.!?]+$/u, "");
+  const explanation = cleaned.replace(/[.!?]+$/u, "");
   return explanation ? `Dùng để ${explanation.charAt(0).toLocaleLowerCase()}${explanation.slice(1)}.` : value.trim();
 }
 

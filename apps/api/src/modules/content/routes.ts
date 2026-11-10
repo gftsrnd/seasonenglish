@@ -125,10 +125,15 @@ const manualGradeInput = z.object({
   feedback: z.string().trim().min(1).max(2_000)
 });
 const aiGradeInput = z.object({ requestId: z.string().trim().min(1).max(160).optional() });
+const exerciseCorrectionInput = z.object({
+  prompt: z.string().trim().min(1).max(4_000),
+  correctAnswer: z.string().trim().min(1).max(2_000).optional()
+});
 const appealDecisionInput = z.object({
   status: z.enum(["accepted", "rejected"]),
   resolution: z.string().trim().min(1).max(2_000),
-  newScore: z.number().int().min(0).max(100).optional()
+  newScore: z.number().int().min(0).max(100).optional(),
+  exerciseCorrection: exerciseCorrectionInput.optional()
 });
 const promptKeys = [
   "system_rules", "assessment_scoring", "weekly_lessons", "week_suggestions",
@@ -263,7 +268,7 @@ export function registerContentRoutes(
     const quality = evaluateGeneratedLessonQuality({ cefr: input.cefr, lessons, findings: repaired.findings });
     return quality.ready ? { repaired, lessons } : null;
   };
-  const readers = createRoleGuard(pool, ["operator"]);
+  const readers = createRoleGuard(pool, ["operator", "manager"]);
   const operators = createRoleGuard(pool, ["operator"]);
   const authors = createRoleGuard(pool, ["operator"]);
   const weeklyPracticeAuthors = createRoleGuard(pool, ["operator"]);
@@ -1425,6 +1430,37 @@ export function registerContentRoutes(
     return overview ?? reply.code(404).send({ code: "CONTENT_REVIEW_NOT_FOUND" });
   });
 
+  app.post("/api/v1/content/review/exercise-warnings/:id/no-issue", { preHandler: operators }, async (request, reply) => {
+    const { id } = z.object({ id: z.uuid() }).parse(request.params);
+    const dismissed = await repositories.content.dismissExerciseWarning(request.e4sSession!.user.id, id);
+    return dismissed ? reply.code(204).send() : reply.code(404).send({ code: "EXERCISE_WARNING_NOT_FOUND" });
+  });
+  app.put("/api/v1/content/review/exercise-warnings/:id/correction", { preHandler: operators }, async (request, reply) => {
+    const { id } = z.object({ id: z.uuid() }).parse(request.params);
+    const { exerciseVersionId, correction } = z.object({ exerciseVersionId: z.uuid(), correction: exerciseCorrectionInput }).parse(request.body);
+    try {
+      const corrected = await repositories.content.resolveExerciseWarning(request.e4sSession!.user.id, id, exerciseVersionId, correction);
+      return corrected ? reply.code(204).send() : reply.code(404).send({ code: "EXERCISE_WARNING_NOT_FOUND" });
+    } catch (error) {
+      if (error instanceof Error && ["LESSON_EXERCISE_CORRECTION_REQUIRED", "LESSON_EXERCISE_CHANGED", "LESSON_EXERCISE_ANSWER_NOT_AN_OPTION"].includes(error.message)) {
+        return reply.code(409).send({ code: error.message });
+      }
+      throw error;
+    }
+  });
+
+  app.get("/api/v1/content/review/appeals", { preHandler: readers }, async (request, reply) => {
+    const query = z.object({
+      id: z.uuid().optional(),
+      status: z.enum(["all", "pending", "handled"]).optional(),
+      offset: z.coerce.number().int().min(0).max(1_000_000).default(0)
+    }).safeParse(request.query);
+    if (!query.success) return reply.code(400).send({ code: "INVALID_REVIEW_APPEAL_FILTER" });
+    reply.header("Cache-Control", "private, no-store");
+    const appeals = await repositories.content.reviewAppeals(request.e4sSession!.user.id, query.data);
+    return appeals ?? reply.code(404).send({ code: "CONTENT_REVIEW_NOT_FOUND" });
+  });
+
   app.get("/api/v1/content/review/assessments/:attemptId", { preHandler: readers }, async (request, reply): Promise<ContentReviewAssessmentDetailView | void> => {
     const params = z.object({ attemptId: z.uuid() }).safeParse(request.params);
     if (!params.success) return reply.code(400).send({ code: "INVALID_REVIEW_ASSESSMENT" });
@@ -1607,12 +1643,15 @@ export function registerContentRoutes(
     if (!params.success || !body.success) return reply.code(400).send({ code: "INVALID_APPEAL_DECISION" });
     try {
       const saved = await repositories.content.resolveAppeal(
-        request.e4sSession!.user.id, params.data.id, body.data.status, body.data.resolution, body.data.newScore
+        request.e4sSession!.user.id, params.data.id, body.data.status, body.data.resolution, body.data.newScore, body.data.exerciseCorrection
       );
       return saved ? { saved: true } : reply.code(409).send({ code: "APPEAL_NOT_PENDING" });
     } catch (error) {
       if (error instanceof Error && error.message === "PRACTICE_APPEAL_SCORE_REQUIRED") {
         return reply.code(400).send({ code: "PRACTICE_APPEAL_SCORE_REQUIRED" });
+      }
+      if (error instanceof Error && ["LESSON_EXERCISE_CORRECTION_REQUIRED", "LESSON_EXERCISE_CHANGED", "LESSON_EXERCISE_ANSWER_NOT_AN_OPTION"].includes(error.message)) {
+        return reply.code(409).send({ code: error.message });
       }
       throw error;
     }

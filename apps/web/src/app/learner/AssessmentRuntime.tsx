@@ -23,6 +23,7 @@ export interface AssessmentRuntimeState {
 interface AssessmentRuntimeProps {
   view: AssessmentView;
   actions: LearnerCallbacks;
+  submitError?: string | undefined;
   children: (state: AssessmentRuntimeState) => ReactNode;
 }
 
@@ -41,7 +42,7 @@ let filePickerGraceUntil = 0;
  * and the final decision are always taken from the runtime snapshot returned by
  * the API; the local clock is only a display between server snapshots.
  */
-export function AssessmentRuntime({ view, actions, children }: AssessmentRuntimeProps) {
+export function AssessmentRuntime({ view, actions, submitError, children }: AssessmentRuntimeProps) {
   const { play } = useExperience();
   const attempt = view.attempt;
   const serverRuntime = view.runtime ?? attempt?.runtime;
@@ -161,7 +162,7 @@ export function AssessmentRuntime({ view, actions, children }: AssessmentRuntime
     if (!attempt || !section || serverRuntime?.status !== "in_progress") return;
     const now = Date.now();
     const previous = lastViolation.current;
-    if (previous?.reason === reason && now - previous.at < 1_000) return;
+    if (reason !== "copy" && reason !== "paste" && previous?.reason === reason && now - previous.at < 1_000) return;
     lastViolation.current = { reason, at: now };
     const input = { requestId: requestId(), reason, occurredAt: new Date(now).toISOString() };
     play("warning", { force: true });
@@ -262,9 +263,16 @@ export function AssessmentRuntime({ view, actions, children }: AssessmentRuntime
     void reportViolation(reason);
   };
 
+  const errorNotice = runtimeError ? <Toast tone="danger" actions={autoSubmitFailed || failedViolationReason ? <button className="btn-sm" type="button" onClick={retryRuntimeError}>Thử lại</button> : null}>{runtimeError}</Toast> : null;
+
   return <>
     {children(runtimeState)}
-    {runtimeError ? <Toast tone="danger">{runtimeError}{autoSubmitFailed || failedViolationReason ? <button className="btn-sm" type="button" onClick={retryRuntimeError}>Thử lại</button> : null}</Toast> : null}
+    {runtimeState.warning || submitError || errorNotice ? <div className="assessment-toast-viewport">
+      {runtimeState.warning === "five_minutes" ? <Toast tone="warn"><Clock3 size={17} aria-hidden="true" /> Còn 5 phút. Hãy kiểm tra lại câu trả lời trước khi nộp.</Toast> : null}
+      {runtimeState.warning === "one_minute" ? <Toast tone="warn"><Clock3 size={17} aria-hidden="true" /> Còn 1 phút! Hết giờ hệ thống sẽ tự chuyển phần.</Toast> : null}
+      {submitError ? <Toast tone="danger">{submitError}</Toast> : null}
+      {errorNotice}
+    </div> : null}
     {violationDialog ? <div className="modal-backdrop" role="presentation"><div ref={runtimeDialogRef} className="dialog assessment-violation-dialog" role="dialog" aria-modal="true" aria-labelledby="assessment-violation-title" aria-describedby="assessment-violation-description" tabIndex={-1} onKeyDown={trapDialogFocus}>
       <h2 id="assessment-violation-title"><TriangleAlert size={22} aria-hidden="true" /><span>Cảnh báo {violationDialog.count}/{violationDialog.limit}</span></h2>
       <p id="assessment-violation-description">{violationReasonText(violationDialog.reason)} Trong lúc thi, <strong>không được mở tab, cửa sổ khác hoặc sao chép nội dung</strong>.</p>

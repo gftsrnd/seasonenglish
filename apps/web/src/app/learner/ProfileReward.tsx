@@ -1,26 +1,12 @@
 import { useEffect, useRef, useState, type FormEvent, type KeyboardEvent as ReactKeyboardEvent, type MouseEvent, type ReactNode } from "react";
-import { Check, Cloud, Droplets, Flower2, Leaf, Snowflake, Star, Sun, type LucideIcon } from "lucide-react";
+import { Cloud, Droplets, Flower2, Leaf, Snowflake, Star, Sun, type LucideIcon } from "lucide-react";
 import type { LearnerAvatarData, RewardView, SurveyView } from "@e4s/contracts";
 import type { LearnerCallbacks, ProfileView } from "./contracts.js";
 import { ProductArt } from "../shared/media/ProductArt.js";
-import { ErrorText, Notice, PageTitle, Progress, AppLink } from "./ui.js";
-
-const BADGE_ICONS: Record<string, string> = {
-  first: "🐣", starter: "🐣", // media-scan: allow-avatar-reward -- deliberate badge symbol
-  week: "📅", week_complete: "📅", // media-scan: allow-avatar-reward -- deliberate badge symbol
-  streak3: "🔥", // media-scan: allow-avatar-reward -- deliberate badge symbol
-  streak7: "🌟", streak5: "🌟", // media-scan: allow-avatar-reward -- deliberate badge symbol
-  sharp: "🎯", first_try: "🎯", // media-scan: allow-avatar-reward -- deliberate badge symbol
-  words: "🔑", wordsmith: "🔑", // media-scan: allow-avatar-reward -- deliberate badge symbol
-  chat: "💬", coach_friend: "💬", // media-scan: allow-avatar-reward -- deliberate badge symbol
-  friday: "✍️" // media-scan: allow-avatar-reward -- deliberate badge symbol
-};
-const SEASON_META = {
-  1: { icon: "🌱", name: "Mùa xuân – gieo hạt", points: 0 }, // media-scan: allow-avatar-reward -- deliberate reward symbol
-  2: { icon: "☀️", name: "Mùa hạ – đón nắng", points: 60 }, // media-scan: allow-avatar-reward -- deliberate reward symbol
-  3: { icon: "🍂", name: "Mùa thu – gặt hái", points: 180 }, // media-scan: allow-avatar-reward -- deliberate reward symbol
-  4: { icon: "❄️", name: "Mùa đông – vững vàng", points: 360 } // media-scan: allow-avatar-reward -- deliberate reward symbol
-} as const;
+import { ErrorText, Notice, PageTitle, AppLink, LearnerSupportCard } from "./ui.js";
+import { BadgeCertificate, CertificateActions } from "./CertificateDocument.js";
+import { CourseAssessmentResult } from "./CourseCompletion.js";
+import { SeasonProgressCard } from "../shared/SeasonProgressCard.js";
 
 export function LearnerSurvey({ view, actions }: { view: SurveyView; actions: LearnerCallbacks }) {
   const [rating, setRating] = useState<number | null>(view.answers?.rating ?? null);
@@ -55,7 +41,7 @@ export function LearnerSurvey({ view, actions }: { view: SurveyView; actions: Le
   </div>;
 }
 
-export function LearnerProfile({ view, actions }: { view: ProfileView; actions: LearnerCallbacks }) {
+export function LearnerProfile({ view, actions, courseCompleted = false }: { view: ProfileView; actions: LearnerCallbacks; courseCompleted?: boolean }) {
   const [avatarOpen, setAvatarOpen] = useState(false);
   const [profileOpen, setProfileOpen] = useState(false);
   const avatarReturnRef = useRef<HTMLButtonElement | null>(null);
@@ -68,7 +54,7 @@ export function LearnerProfile({ view, actions }: { view: ProfileView; actions: 
     setAvatarOpen(false);
     returnTarget?.focus();
   };
-  if (view.profileMissing) return <div className="app-learner-page" style={{ width: "100%", maxWidth: 960, minWidth: 0, boxSizing: "border-box", paddingBottom: "calc(88px + env(safe-area-inset-bottom))" }}><PageTitle title="Tiến độ & hồ sơ" /><Notice tone="warn">Bạn chưa hoàn thành hồ sơ cá nhân.</Notice><AppLink className="btn btn-primary" href="/onboard" navigate={actions.navigate}>Điền hồ sơ</AppLink></div>;
+  if (view.profileMissing) return <div className="app-learner-page" style={{ width: "100%", maxWidth: 960, minWidth: 0, boxSizing: "border-box", paddingBottom: "calc(88px + env(safe-area-inset-bottom))" }}><PageTitle title="Tiến độ & hồ sơ" /><Notice tone="warn">Bạn chưa hoàn thành hồ sơ cá nhân.</Notice><AppLink className="btn btn-primary" href="/onboard" navigate={actions.navigate}>Điền hồ sơ</AppLink><LearnerSupportCard from="profile" navigate={actions.navigate} /></div>;
   const level = view.learner.cefr;
   const goals = labels(view.learner.profile.goals, GOALS);
   const detail = level ? `Trình độ ${level} – ${CEFR_LABELS[level]}${goals ? ` · ${goals}.` : ""}` : "Chưa duyệt trình độ";
@@ -80,34 +66,40 @@ export function LearnerProfile({ view, actions }: { view: ProfileView; actions: 
         <div style={{ flex: 1, minWidth: 200 }}><div className="eyebrow">Hồ sơ cá nhân</div><b style={{ fontFamily: "var(--font-display)", fontSize: "1.1rem" }}>Avatar của bạn</b><div className="small muted">{avatarDescription(view.learner.profile.avatar)} · Thông tin công việc và nhu cầu học của bạn.</div></div>
         <div className="row" style={{ gap: 8 }}><button className="btn-primary" type="button" onClick={openAvatar}>Đổi avatar</button><button className="btn" type="button" aria-expanded={profileOpen} onClick={() => setProfileOpen((value) => !value)}>{profileOpen ? "Đóng thông tin" : "Xem hồ sơ"}</button></div>
       </div>
-      {profileOpen ? <div className="profile-identity-details"><div className="stack profile-details" style={{ gap: 12, minWidth: 0 }}>{profileRows(view).filter(([, value]) => value).map(([label, value]) => <div className="row profile-detail-row" style={{ display: "grid", gridTemplateColumns: "minmax(104px, .38fr) minmax(0, 1fr)", gap: 12, alignItems: "start", minWidth: 0 }} key={label}><span className="xs muted profile-detail-label" style={{ minWidth: 0, fontWeight: 800 }}>{label}</span><span className="small profile-detail-value" style={{ minWidth: 0, overflowWrap: "anywhere" }}>{value}</span></div>)}</div><div className="row" style={{ marginTop: 12 }}><AppLink className="btn btn-sm" style={{ minHeight: 32 }} href="/onboard" navigate={actions.navigate}>Cập nhật hồ sơ</AppLink></div></div> : null}
+      {profileOpen ? <ProfileDetails view={view} navigate={actions.navigate} /> : null}
     </section>
-    {level && !view.monthlyPreparation ? <SeasonCard view={view} actions={actions} /> : null}
-    <section className="card profile-progress-section profile-assessment-section" aria-label="Kết quả đánh giá" style={{ background: "var(--mint)" }}><div className="profile-section-heading"><div><div className="eyebrow">Đánh giá năng lực</div><h2>Điểm đầu vào</h2></div><span className="small muted">Kết quả đánh giá ban đầu</span></div><div className="profile-assessment-grid"><AssessmentResult label="Điểm đầu vào" result={view.assessments.placement} /></div>{view.surveyAvailable && !view.monthlyProgress && !view.monthlyPreparation ? <div className="row profile-assessment-actions"><AppLink className="btn" href="/survey" navigate={actions.navigate}>Trả lời khảo sát cuối pilot</AppLink></div> : null}</section>
+    <LearnerSupportCard from="profile" navigate={actions.navigate} />
+    {courseCompleted ? <section className="card profile-progress-section"><div className="profile-completion-heading"><div><div className="eyebrow">Pass Course</div><h2>Đã hoàn thành khóa E4S</h2></div><AppLink className="btn" href="/reward/course" navigate={actions.navigate}>Xem chứng nhận</AppLink></div></section> : null}
+    {level ? <SeasonProgressCard view={{ ...view, badgeCount: view.badges.length }} certificateAction={
+      <AppLink className="btn btn-sm" href={view.season.next ? "/reward/preview" : "/reward/done"} navigate={actions.navigate}>
+        {view.season.next ? "Xem trước chứng nhận" : "Xem chứng nhận huy hiệu"}
+      </AppLink>
+    } /> : null}
+    <section className="card profile-progress-section profile-assessment-section" aria-label="Kết quả đánh giá" style={{ background: "var(--mint)" }}><div className="profile-section-heading"><div><div className="eyebrow">Đánh giá năng lực</div><h2>Kết quả đánh giá</h2></div></div><div className={`profile-assessment-grid${courseCompleted || view.assessments.passCourse ? " grid cols-2" : ""}`}><AssessmentResult label="Điểm đầu vào" result={view.assessments.placement} />{courseCompleted ? <CourseAssessmentResult /> : view.assessments.passCourse ? <AssessmentResult label="Điểm đầu ra" result={view.assessments.passCourse} /> : null}</div>{view.surveyAvailable && !view.monthlyProgress && !view.monthlyPreparation ? <div className="row profile-assessment-actions"><AppLink className="btn" href="/survey" navigate={actions.navigate}>Trả lời khảo sát cuối pilot</AppLink></div> : null}</section>
     {avatarOpen ? <AvatarDialog initial={view.learner.profile.avatar} name={view.learner.displayName} onClose={closeAvatar} onSave={async (avatar) => { await actions.saveAvatar(avatar); closeAvatar(); }} /> : null}
   </div>;
 }
 
-function SeasonCard({ view, actions }: { view: ProfileView; actions: LearnerCallbacks }) {
-  const [showAllBadges, setShowAllBadges] = useState(false);
-  const next = view.season.next;
-  const nextBadges = next ? view.badgeRoadmap.filter((badge) => badge.seasonLevel === next.level) : [];
-  const missing = nextBadges.filter((badge) => !badge.earned);
-  const pointsMet = !next || view.points >= next.pointsRequired;
-  const badgesMet = !next || missing.length === 0;
-  const visibleLevels = showAllBadges ? [1, 2, 3, 4] : Array.from(new Set([view.season.current.level, ...(next ? [next.level] : [])]));
-  return <section className="card profile-season-card" style={{ marginTop: 16, background: "var(--butter)" }} aria-label="Mùa học">
-    <div className="row profile-season-heading" style={{ gap: 16, alignItems: "center" }}><SeasonFigure level={view.season.current.level} /><div className="profile-season-copy" style={{ flex: 1, minWidth: 200 }}><div className="eyebrow">Mùa học {view.season.current.level}/4</div><div className="small muted profile-season-current" style={{ fontWeight: 800 }}>Cấp hiện tại: {view.season.current.level}/4</div><div className="profile-season-title" style={{ fontFamily: "var(--font-display)", fontWeight: 800, fontSize: "1.5rem", lineHeight: 1.2 }}>{view.season.current.name}</div><div className="small profile-season-next" style={{ fontWeight: 700 }}>{next ? <>Lên <b>{next.name}</b> cần đủ điểm và huy hiệu của cấp đó.</> : "Cấp cao nhất – đủ điểm và đủ toàn bộ huy hiệu."}</div></div></div>
-    {next ? <><div className="grid cols-2 profile-season-tracks" style={{ marginTop: 16 }}><SeasonTrack met={pointsMet} title="① Điểm" value={`★ ${view.points} / ${next.pointsRequired}`} current={view.points} target={next.pointsRequired} note={pointsMet ? "Đủ điểm cho cấp tiếp theo." : `Còn thiếu ${next.pointsRequired - view.points} điểm.`} /><SeasonTrack met={badgesMet} title="② Huy hiệu của cấp tiếp theo" value={`${view.season.earnedBadgeCount} / ${view.season.requiredBadgeCount}`} current={view.season.earnedBadgeCount} target={view.season.requiredBadgeCount} note={badgesMet ? "Đủ huy hiệu cho cấp tiếp theo." : `Còn thiếu: ${missing.map((badge) => badge.label).join(", ")}.`} /></div>{pointsMet !== badgesMet ? <Notice tone="warn">{pointsMet ? <div className="profile-season-warning"><b>Đủ điểm</b><span>Còn thiếu huy hiệu; điểm không thay thế huy hiệu.</span></div> : <div className="profile-season-warning"><b>Đủ huy hiệu</b><span>Còn thiếu điểm; huy hiệu không thay thế điểm.</span></div>}</Notice> : null}</> : null}
-    <div className="row between profile-badges-heading" style={{ marginTop: 14 }}><h3 style={{ margin: 0 }}>Huy hiệu theo cấp</h3><span className="small muted" style={{ fontWeight: 800 }}>{view.badges.length}/{view.badgeRoadmap.length} huy hiệu · ★ {view.points} điểm</span></div>
-    <div id="profile-badge-levels" className="profile-season-levels">{visibleLevels.map((seasonLevel) => { const list = view.badgeRoadmap.filter((badge) => badge.seasonLevel === seasonLevel); const meta = SEASON_META[seasonLevel as keyof typeof SEASON_META]; const current = view.season.current.level === seasonLevel; const completed = view.season.current.level > seasonLevel; const nextLevel = view.season.current.level + 1 === seasonLevel; return <div className="profile-season-level" data-season-level={seasonLevel} key={seasonLevel}><div className="row profile-season-level-heading" style={{ gap: 8, marginBottom: list.length ? 6 : 0 }}><span className={`badge ${completed ? "ok" : nextLevel ? "warn" : current ? "primary" : ""}`}><span className="profile-season-emoji" role="img" aria-label={`Biểu tượng ${meta.name}`}>{meta.icon}</span> Cấp {seasonLevel} · {meta.name}</span><span className="xs muted" style={{ fontWeight: 800 }}>{meta.points} điểm{list.length ? ` + ${list.length} huy hiệu` : " · không yêu cầu huy hiệu"}{completed ? " · đã đạt" : nextLevel ? " · cấp tiếp theo" : current ? " · đang ở đây" : ""}</span></div>{list.length ? <div className="badges">{list.map((badge) => { const badgeIcon = BADGE_ICONS[badge.key] ?? "🏅"; return <article className={`bdg ${badge.earned ? "" : "off"}`} title={badge.description} key={badge.key}><span className="ic"><span className="profile-badge-emoji" role="img" aria-label={`Biểu tượng ${badge.label}`}>{badgeIcon}</span></span><b>{badge.label}</b><span>{badge.description}</span></article>; })}</div> : <p className="profile-season-empty xs muted">Cấp nền của lộ trình. Đủ điều kiện từ đây sẽ mở Cấp 2.</p>}</div>; })}</div>
-    <button type="button" className="btn btn-sm" style={{ marginTop: 12 }} aria-controls="profile-badge-levels" aria-expanded={showAllBadges} onClick={() => setShowAllBadges((value) => !value)}>{showAllBadges ? "Thu gọn huy hiệu" : "Xem tất cả huy hiệu"}</button>
-    <div className="row" style={{ marginTop: 12 }}><AppLink className="btn btn-sm" style={{ minHeight: 32 }} href={next ? "/reward/preview" : "/reward/done"} navigate={actions.navigate}>{next ? "Xem trước màn hình khi đạt cấp cao nhất" : "Xem màn hình cấp cao nhất"}</AppLink></div>
-    <details style={{ marginTop: 10 }}><summary className="small" style={{ fontWeight: 800, cursor: "pointer" }}>Cách tính điểm và lên cấp</summary><ul className="small" style={{ margin: "6px 0 0", paddingLeft: 20 }}><li>Hoàn thành 1 bài học: <b>+10</b></li><li>Mỗi phần Nghe/Đọc/Viết/Nói đúng: <b>+5 lần 1, giảm 1 điểm mỗi lần làm lại</b></li><li>1 lượt luyện với Season: <b>+2</b></li><li>Mở 1 ô từ bí mật: <b>+2</b></li><li>Hoàn thành bài thi tháng: <b>+15</b></li><li>Hoàn thành trọn lộ trình tháng: <b>+20</b></li><li>Lên cấp: đủ <b>điểm</b> và <b>mọi huy hiệu của cấp</b>; đi lần lượt, không nhảy cấp.</li></ul></details>
-  </section>;
+function ProfileDetails({ view, navigate }: { view: ProfileView; navigate: LearnerCallbacks["navigate"] }) {
+  const { basics, preferences } = profileRows(view);
+  return <div className="profile-identity-details">
+    <ProfileDetailsList rows={basics} />
+    {preferences.length > 0 && <details className="profile-preferences">
+      <summary>Thông tin học tập</summary>
+      <ProfileDetailsList rows={preferences} />
+    </details>}
+    <AppLink className="btn btn-sm profile-edit-link" href="/onboard" navigate={navigate}>Cập nhật hồ sơ</AppLink>
+  </div>;
 }
 
-function SeasonTrack({ met, title, value, current, target, note }: { met: boolean; title: string; value: string; current: number; target: number; note: string }) { return <div className="card flat" style={{ background: met ? "var(--mint)" : "var(--surface)" }}><div className="row between"><b className="small">{title}</b><span className={`badge ${met ? "ok" : "warn"}`}>{met ? <><Check className="status-icon" aria-hidden="true" /> Đạt</> : "Chưa đạt"}</span></div><div style={{ fontFamily: "var(--font-display)", fontWeight: 800, fontSize: "1.3rem", margin: "2px 0" }}>{value}</div><Progress value={current} max={target} label={title} /><div className="xs muted" style={{ marginTop: 4 }}>{note}</div></div>; }
+function ProfileDetailsList({ rows }: { rows: Array<[string, string]> }) {
+  return <dl className="profile-details">
+    {rows.map(([label, value]) => <div className="profile-detail-row" key={label}>
+      <dt className="small muted profile-detail-label">{label}</dt>
+      <dd className="small profile-detail-value">{value}</dd>
+    </div>)}
+  </dl>;
+}
 
 function AssessmentResult({ label, result, action }: { label: string; result: ProfileView["assessments"]["placement"]; action?: ReactNode }) {
   const shortLabel = label === "Điểm đầu vào" ? "Đầu vào" : label;
@@ -120,24 +112,15 @@ function AssessmentResult({ label, result, action }: { label: string; result: Pr
     <div className="eyebrow">{shortLabel}{result.approvedLevel ? ` · ${result.approvedLevel}` : ""}</div>
     <strong className="profile-assessment-total">{result.totalScore}</strong>
     <div className="profile-assessment-skills">{ASSESSMENT_SKILLS.map((section) => {
-      const score = Math.max(0, Math.min(100, result.sections[section] ?? 0));
-      return <div className="profile-assessment-skill" key={section}><span>{SECTION_LABELS[section]}</span><i aria-hidden="true"><b style={{ width: `${score}%` }} /></i><small>{score}%</small></div>;
+      const score = result.sections[section] ?? 0;
+      const max = result.sectionMaxScores?.[section];
+      const percent = Math.max(0, Math.min(100, max ? score / max * 100 : score));
+      return <div className="profile-assessment-skill" key={section}><span>{SECTION_LABELS[section]}</span><i aria-hidden="true"><b style={{ width: `${percent}%` }} /></i><small>{max ? `${score}/${max}` : `${percent}%`}</small></div>;
     })}</div>
   </div>;
 }
 function Avatar({ avatar, name, size = 88 }: { avatar: Partial<LearnerAvatarData> | undefined; name: string; size?: number }) { const acc = avatar?.acc ?? "none"; const color = avatar?.color ?? "olive"; const bg = avatar?.bg ?? 0; return <span className="app-avatar" style={{ width: size, height: size, minWidth: size, minHeight: size, boxSizing: "border-box", background: AVATAR_BG[bg], color: AVATAR_COLOR_HEX[color] }} aria-label={`Avatar của ${name}`}>{acc !== "none" ? <AvatarMark acc={acc} size={Math.round(size * .58)} /> : name.split(/\s+/).slice(-2).map((word) => word[0]).join("").toUpperCase()}</span>; }
 export function AvatarMark({ acc, size = 32 }: { acc: Exclude<LearnerAvatarData["acc"], "none">; size?: number }) { const icons: Record<typeof acc, LucideIcon> = { leaf: Leaf, sun: Sun, flower: Flower2, cloud: Cloud, star: Star, drop: Droplets, snow: Snowflake }; const Icon = icons[acc]; return <Icon size={size} strokeWidth={1.7} aria-hidden="true" />; }
-function SeasonFigure({ level }: { level: number }) {
-  const season = [
-    { name: "Mùa xuân", icon: "🌱", color: "var(--mint)", size: 64 }, // media-scan: allow-avatar-reward -- deliberate reward symbol
-    { name: "Mùa hạ", icon: "☀️", color: "var(--primary)", size: 76 }, // media-scan: allow-avatar-reward -- deliberate reward symbol
-    { name: "Mùa thu", icon: "🍂", color: "var(--peach)", size: 88 }, // media-scan: allow-avatar-reward -- deliberate reward symbol
-    { name: "Mùa đông", icon: "❄️", color: "var(--lav)", size: 100 } // media-scan: allow-avatar-reward -- deliberate reward symbol
-  ][Math.max(0, Math.min(3, level - 1))]!;
-  const outerSize = season.size + 28;
-  return <span role="img" aria-label={season.name} style={{ position: "relative", display: "inline-grid", placeItems: "center", flexShrink: 0, width: outerSize, height: outerSize, borderRadius: "50%", background: season.color }}><span className="profile-season-figure-emoji" aria-hidden="true">{season.icon}</span></span>;
-}
-
 export function AvatarDialog({ initial, name = "Avatar xem trước", onClose, onSave }: { initial: Partial<LearnerAvatarData> | undefined; name?: string; onClose: () => void; onSave: (avatar: LearnerAvatarData) => void | Promise<void> }) {
   const [avatar, setAvatar] = useState<LearnerAvatarData>({ acc: initial?.acc ?? "leaf", color: initial?.color ?? "olive", bg: initial?.bg ?? 0 });
   const [saving, setSaving] = useState(false);
@@ -186,16 +169,18 @@ export function AvatarDialog({ initial, name = "Avatar xem trước", onClose, o
     <div className="row" style={{ justifyContent: "flex-end", gap: 8, marginTop: 16, flexWrap: "wrap" }}><button ref={closeRef} type="button" disabled={saving} onClick={onClose}>Huỷ</button><button className="btn-primary" type="button" disabled={saving} aria-busy={saving || undefined} onClick={() => void save()}>{saving ? "Đang lưu…" : "Lưu avatar"}</button></div>
   </section></div>;
 }
-function profileRows(view: ProfileView): Array<[string, string]> {
+function profileRows(view: ProfileView) {
   const p = view.learner.profile;
   const level = view.learner.cefr;
   const explanation = p.explanationLanguage === "vi" ? "Tiếng Việt" : p.explanationLanguage === "en" ? "Tiếng Anh" : level ? `${level === "A1" || level === "A2" ? "Tiếng Việt" : "Tiếng Anh"} (tự động theo mức ${level})` : "Tự động theo trình độ";
-  return [
+  const basics: Array<[string, string]> = [
     ["Họ và tên", p.fullName ?? view.learner.displayName],
     ["Công việc", [p.position, p.department].filter(Boolean).join(" · ")],
     ["Email", p.email ?? ""],
-    ["Base", p.contact ?? ""],
-    ["Dùng tiếng Anh để", labels(p.goals, GOALS)],
+    ["Base", p.contact ?? ""]
+  ];
+  const preferences: Array<[string, string]> = [
+    ["Mục tiêu", labels(p.goals, GOALS)],
     ["Mức độ dùng ở công ty", label(p.environmentUse, ENVIRONMENT_USE)],
     ["Dùng trong gia đình", label(p.familyUse, FAMILY_USE)],
     ["Thói quen ngoài việc", labels(p.habits, HABITS)],
@@ -209,6 +194,10 @@ function profileRows(view: ProfileView): Array<[string, string]> {
     ["Đã học", p.experience ?? ""],
     ["Lo ngại / mong muốn", p.concerns ?? ""]
   ];
+  return {
+    basics: basics.filter(([, value]) => value),
+    preferences: preferences.filter(([, value]) => value)
+  };
 }
 
 const CEFR_LABELS = { A1: "Mới bắt đầu", A2: "Sơ cấp", B1: "Trung cấp", B2: "Khá", C1: "Tốt" } as const;
@@ -231,26 +220,13 @@ function avatarDescription(avatar: Partial<LearnerAvatarData> | undefined) { ret
 
 export function LearnerReward({ view, actions }: { view: RewardView; actions: LearnerCallbacks }) {
   const preview = view.mode === "preview";
-  const badges = preview ? view.badges.map((badge) => ({ ...badge, earned: true })) : view.badges;
-  const completedAt = new Date(view.completedAt);
   const backHref = preview ? "/profile" : "/home";
   return <div className="app-learner-page reward-page rw">
-    {preview ? <div className="banner info no-print" style={{ marginBottom: 12 }}><div className="body small"><b>Bản xem trước.</b> Chứng nhận mở khi đủ {view.requiredBadgeCount}/{view.requiredBadgeCount} huy hiệu; điểm dưới đây là giả lập, không ghi vào dữ liệu. Hiện có {view.earnedBadgeCount}/{view.requiredBadgeCount} huy hiệu.</div></div> : null}
-    <section className="cert-doc" aria-label="Chứng nhận hoàn thành">
-      <header className="cert-head"><div className="row" style={{ gap: 14, alignItems: "center" }}><img className="cert-logo" src="/gft-logo.png" alt={view.organizationName} /><div><div className="cert-org">Season English</div><div className="xs muted">{view.organizationName} · Chương trình tiếng Anh nội bộ</div></div></div><div className="cert-no xs muted">Số: {view.certificateNumber}</div></header>
-      <div className="cert-body">
-        <div className="eyebrow" style={{ letterSpacing: ".18em" }}>Chứng nhận hoàn thành</div>
-        <h1 className="cert-title">Certificate of Completion</h1>
-        <p className="cert-line">Chứng nhận</p>
-        <div className="cert-name">{view.learnerName}</div>
-        <p className="cert-line">đã hoàn thành {view.requiredBadgeCount} huy hiệu của chương trình Season English, đạt cấp <b>{view.season.name} – {view.season.description}</b> với <b>{view.displayPoints} điểm</b> ở trình độ <b>{view.cefrLabel}</b>.</p>
-        <div className="cert-facts"><div><span className="xs muted">Ngày hoàn thành</span><b>{completedAt.toLocaleDateString("vi-VN")}</b></div><div><span className="xs muted">Huy hiệu</span><b>{badges.filter((badge) => badge.earned).length}/{view.requiredBadgeCount}</b></div><div><span className="xs muted">Điểm tích luỹ</span><b>{view.displayPoints}</b></div><div><span className="xs muted">Cấp độ</span><b>{view.season.name}</b></div></div>
-        <div className="cert-badges">{badges.map((badge) => <div className="cert-badge" key={badge.key}><span className="ck">{badge.earned ? "✓" : "○"}</span><div><b>{badge.label}</b><div className="xs muted">{badge.description}</div></div></div>)}</div>
-      </div>
-      <div className="cert-sign"><div><div className="line" /><div className="small">Vận hành</div><div className="xs muted">{view.operatorName}</div></div><div className="cert-date xs muted">{view.organizationName}, ngày {completedAt.getDate()} tháng {completedAt.getMonth() + 1} năm {completedAt.getFullYear()}</div><div><div className="line" /><div className="small">Quản lý</div><div className="xs muted">{view.managerName}</div></div></div>
-      <div className="cert-foot xs muted">Chứng nhận tự động từ dữ liệu Season English; có giá trị nội bộ. {preview ? "BẢN XEM TRƯỚC" : ""}</div>
-    </section>
-    <div className="row no-print reward-actions" style={{ marginTop: 12, justifyContent: "center" }}>{preview ? <span className="xs muted">Nút in / lưu chỉ mở khi đạt cấp cao nhất thật.</span> : <button className="btn" type="button" disabled={!view.printable} onClick={actions.printReward}>In / lưu chứng nhận (PDF, 1 trang A4 ngang)</button>}<AppLink className="btn btn-primary" href={backHref} navigate={actions.navigate}>{preview ? "← Quay lại" : "Tiếp tục học"}</AppLink></div>
+    {preview && <p className="reward-preview-note no-print" role="note">
+      <b>Bản xem trước</b> · Bạn đã đạt {view.earnedBadgeCount}/{view.requiredBadgeCount} huy hiệu.
+    </p>}
+    <BadgeCertificate view={view} preview={preview} />
+    <CertificateActions>{preview ? <span className="xs muted">Nút in / lưu chỉ mở khi đạt cấp cao nhất thật.</span> : <button className="btn" type="button" disabled={!view.printable} onClick={actions.printReward}>In / lưu chứng nhận (PDF, 1 trang A4 ngang)</button>}<AppLink className="btn btn-primary" href={backHref} navigate={actions.navigate}>{preview ? "← Quay lại" : "Tiếp tục học"}</AppLink></CertificateActions>
   </div>;
 }
 

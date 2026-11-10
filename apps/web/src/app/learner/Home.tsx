@@ -1,15 +1,17 @@
+import { RequestEvidenceFields, requestEvidenceArgs, type RequestEvidenceDraft } from "../shared/RequestEvidence.js";
 import { useEffect, useRef, useState, type CSSProperties, type KeyboardEvent as ReactKeyboardEvent } from "react";
 import { BookOpen, Clock3, LockKeyhole, MessageCircle, Play, Sprout } from "lucide-react";
 import type { LearnerHomeView, LearnerCallbacks } from "./contracts.js";
-import { Notice, PageTitle, Progress, AppLink } from "./ui.js";
+import { Notice, PageTitle, Progress, AppLink, LearnerSupportCard, learnerLessonLabel } from "./ui.js";
+import { buildMonthlyTeachingCalendar } from "@e4s/domain/monthly";
 import { LevelReadinessCard } from "./LevelReadiness.js";
 import type { LearnerComplaintView } from "@e4s/contracts";
 
-export function LearnerHome({ view, actions }: { view: LearnerHomeView; actions: LearnerCallbacks }) {
-  const [celebration, setCelebration] = useState(view.rewardAnnouncement?.kind === "new-level-announcement" || view.rewardAnnouncement?.kind === "top-level-redirect" ? view.rewardAnnouncement : null);
+export function LearnerHome({ view, actions, courseCompleted = false }: { view: LearnerHomeView; actions: LearnerCallbacks; courseCompleted?: boolean }) {
+  const [celebration, setCelebration] = useState(view.rewardAnnouncement && view.rewardAnnouncement.kind !== "normal" ? view.rewardAnnouncement : null);
   const [assessmentCelebration, setAssessmentCelebration] = useState(false);
   useEffect(() => {
-    setCelebration(view.rewardAnnouncement?.kind === "new-level-announcement" || view.rewardAnnouncement?.kind === "top-level-redirect" ? view.rewardAnnouncement : null);
+    setCelebration(view.rewardAnnouncement && view.rewardAnnouncement.kind !== "normal" ? view.rewardAnnouncement : null);
   }, [view.rewardAnnouncement?.announcementId, view.rewardAnnouncement?.kind]);
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -30,10 +32,20 @@ export function LearnerHome({ view, actions }: { view: LearnerHomeView; actions:
   return <div className="app-learner-page home-page" style={{ width: "100%", maxWidth: 960, minWidth: 0, boxSizing: "border-box" }}>
     <PageTitle eyebrow={monthly ? `Tháng ${formatMonth(monthly.month)} · ${monthly.themeTitle}` : "Lộ trình tháng đang được chuẩn bị"} title={`Chào ${view.learner.displayName}!`} aside={<span className={`badge lvl lvl-${view.learner.cefr}`}>Trình độ {view.learner.cefr}</span>} />
     <div className="bao-row" style={{ marginBottom: 16 }} aria-label="Lời chào của Season AI Coach"><div className="bubble home-today-heading" style={{ flex: 1 }}>Hôm nay học gì nào?</div></div>
-    {view.inactivityReminder ? <Notice tone="warn"><b>Bạn đã nghỉ học {view.inactivityReminder.inactiveDays} ngày.</b> Học bù bài gần nhất để nối lại nhịp học nhé.</Notice> : null}
+    {view.inactivityReminder ? <Notice tone="warn"><b>Bạn đã vắng {view.inactivityReminder.inactiveDays} ngày học liên tiếp.</b> Vắng thêm {Math.max(1, 5 - view.inactivityReminder.inactiveDays)} ngày học liên tiếp sẽ bị khóa tài khoản.</Notice> : null}
     {!view.aiAvailable && view.aiAvailable !== undefined ? <Notice tone="warn">AI chưa kết nối (chưa có API key). Bạn vẫn làm test và học bài đã duyệt; báo người vận hành để bật AI coach.</Notice> : null}
     {view.notifications?.length ? <section className="card soft" aria-label="Thông báo mới" style={{ marginTop: 12 }}><div className="eyebrow">Thông báo</div><h3 style={{ margin: "2px 0 8px" }}>Nội dung học tập</h3><ul style={{ margin: 0, paddingLeft: 20 }}>{view.notifications.slice(0, 5).map((notification) => <li key={notification.id} className="small" style={{ marginBottom: 6 }}>{notification.message}</li>)}</ul></section> : null}
     <PrimaryLesson view={view} next={next} actions={actions} />
+    {view.learner.cefr === "C1" && !courseCompleted ? <section className="card learner-summary-card pass-course-home-card" aria-label="Bài thi đầu ra">
+      <div className="row between">
+        <div><h3>Bài thi đầu ra · Pass Course</h3><p className="small muted">{view.passCourse?.status === "pending_review"
+          ? "Bạn đã nộp bài. Vận hành đang chấm kết quả."
+          : view.passCourse?.status === "in_progress" ? "Bài thi của bạn đang dang dở."
+            : view.passCourse ? "Bạn đủ điều kiện thi. Chuẩn bị tai nghe và micro trước khi bắt đầu."
+              : "Bạn đã đạt C1. Bài thi đầu ra mở khi bạn hoàn thành các điều kiện của khóa học."}</p></div>
+        {view.passCourse ? <AppLink className="btn btn-primary" href="/test/pass-course" navigate={actions.navigate}>{view.passCourse.status === "in_progress" ? "Tiếp tục bài thi" : view.passCourse.status === "pending_review" ? "Xem trạng thái bài thi" : "Thi Pass Course"}</AppLink> : null}
+      </div>
+    </section> : null}
     {!monthlyPreparation ? <section data-home-block="metrics" aria-label="Tiến độ tháng" style={{ marginTop: 16, padding: "16px 18px", borderRadius: 18, background: "var(--mint)", border: "1px solid var(--border)" }}>
       <div className="row between" style={{ gap: 12, alignItems: "baseline", flexWrap: "wrap" }}><div><div className="eyebrow">Theo tháng</div><h2 style={{ margin: "2px 0 0" }}>Tiến độ học tập</h2></div><span className="small muted">Bài thi tháng nằm trong thẻ riêng bên dưới</span></div>
       <div className="stats monthly-home-metrics" style={{ marginTop: 12 }}>
@@ -43,14 +55,13 @@ export function LearnerHome({ view, actions }: { view: LearnerHomeView; actions:
         <MonthlyExamMetric status={view.metrics.monthlyExamStatus ?? view.monthlyExam?.status ?? "unpublished"} />
       </div>
     </section> : null}
-    {monthly && view.lessons.length ? <MonthlyCalendar month={monthly} lessons={view.lessons} actions={actions} /> : null}
-    {monthly ? <MonthlyRhythm lessons={view.lessons} scheduled={view.monthlyEligibility?.scheduledLessons} lessonMinutes={view.schedule.lessonMinutes} goal={view.monthlyGoal} /> : null}
+    {monthly ? <MonthlyCalendar month={monthly} lessons={view.lessons} actions={actions} /> : null}
     <section className="grid cols-2" style={{ marginTop: 16, alignItems: "stretch", gridAutoRows: "1fr", minWidth: 0 }} data-home-block="activities" aria-label="Hoạt động tháng">
-      <AppLink className={`tile ${!monthlyPreparation && (view.coach.turnsToday ?? 0) > 0 ? "mint" : "peach"}`} style={{ height: "100%", minWidth: 0, boxSizing: "border-box" }} href="/coach" navigate={actions.navigate}><ActivityIcon /><span className="t">Season AI Coach</span><span className="s">{monthlyPreparation ? "Luyện theo trình độ đã được duyệt trong khi chờ bộ bài tháng." : `Lượt hợp lệ hôm nay ${view.coach.turnsToday ?? 0}/30`}</span></AppLink>
+      <AppLink className={`tile ${!monthlyPreparation && (view.coach.turnsToday ?? 0) > 0 ? "mint" : "peach"}`} style={{ height: "100%", minWidth: 0, boxSizing: "border-box" }} href="/coach" navigate={actions.navigate}><ActivityIcon /><span className="t">Season AI Coach</span><span className="s">{monthlyPreparation ? "Luyện theo trình độ đã được duyệt trong khi chờ bộ bài tháng." : `Lượt hợp lệ hôm nay ${view.coach.turnsToday ?? 0}/${view.coach.targetTurns}`}</span></AppLink>
       <AppLink className="tile mint" style={{ height: "100%", minWidth: 0, boxSizing: "border-box" }} href="/monthly" navigate={actions.navigate}><BookOpen aria-hidden="true" /><span className="t">Bài tháng</span><span className="s">{monthlyPreparation ? "Xem trạng thái chuẩn bị lộ trình tháng." : "Xem lịch bài học, bài ôn và bài thi tháng."}</span></AppLink>
     </section>
-    {!monthlyPreparation ? <LevelReadinessCard readiness={view.levelReadiness} phase={view.levelUpPhase} monthLabel={monthly ? formatMonth(monthly.month) : undefined} navigate={actions.navigate} className="home-readiness" /> : null}
-    {!monthlyPreparation && view.monthlyExam ? <MonthlyExamOverview exam={view.monthlyExam} month={monthly} navigate={actions.navigate} /> : null}
+    {!monthlyPreparation && view.learner.cefr !== "C1" ? <LevelReadinessCard readiness={view.levelReadiness} phase={view.levelUpPhase} monthLabel={monthly ? formatMonth(monthly.month) : undefined} navigate={actions.navigate} className="home-readiness" /> : null}
+    {view.monthlyExam ? <MonthlyExamOverview exam={view.monthlyExam} month={!view.monthlyEligibility || view.monthlyEligibility.month === monthly?.month ? monthly : null} navigate={actions.navigate} /> : null}
     <section className="card learner-summary-card learner-summary-card--profile" style={{ marginTop: 12 }} aria-label="Hồ sơ và đánh giá đầu vào">
       <div className="row between" style={{ gap: 12, alignItems: "flex-start", flexWrap: "wrap" }}>
         <div><div className="eyebrow">Thông tin của bạn</div><h3 style={{ margin: "2px 0 4px" }}>Hồ sơ và đánh giá đầu vào</h3><p className="small muted" style={{ margin: 0 }}>Trình độ đã duyệt: <b>{view.learner.cefr}</b>. Kết quả đầu vào và hồ sơ vẫn xem được khi lộ trình tháng đang chuẩn bị.</p></div>
@@ -87,6 +98,7 @@ function LevelUpCelebration({
   const previousFocusRef = useRef<HTMLElement | null>(null);
   const genuine = announcement.source !== "simulated";
   const isTopLevel = announcement.kind === "top-level-redirect";
+  const adjusted = announcement.kind === "level-adjustment";
   useEffect(() => {
     previousFocusRef.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
     closeRef.current?.focus();
@@ -116,10 +128,10 @@ function LevelUpCelebration({
     }
   };
   return <div className="modal-backdrop" role="presentation">
-    <section className="dialog wide" role="dialog" aria-modal="true" aria-label="Chúc mừng lên mức" data-testid="modal.level-up-celebration" data-modal="level-up-celebration" tabIndex={-1} onKeyDown={handleDialogKeyDown}>
+    <section className="dialog wide" role="dialog" aria-modal="true" aria-label={adjusted ? "Thông báo cập nhật trình độ" : "Chúc mừng lên mức"} data-testid="modal.level-up-celebration" data-modal="level-up-celebration" tabIndex={-1} onKeyDown={handleDialogKeyDown}>
       <div className="row between"><span className={`badge ${genuine ? "ok" : ""}`}>{genuine ? "Thông báo thật" : "Mô phỏng"}</span><button ref={closeRef} type="button" aria-label="Đóng" onClick={() => void onClose()}>Đóng</button></div>
-      <div className="card flat" style={{ marginTop: 12, textAlign: "center" }}><div className="eyebrow">{announcement.seasonName}</div><Sprout className="celebration-icon" aria-hidden="true" /><h2>{isTopLevel ? "Bạn đã đạt mức cao nhất" : `Chúc mừng ${displayName}!`}</h2>{announcement.level ? <p className="badge lvl">Mức {announcement.level}</p> : null}</div>
-      <p>{isTopLevel ? "Bạn đã hoàn thành chặng CEFR cao nhất trong lộ trình hiện tại." : "Bạn vừa mở một cột mốc mới trong hành trình học tiếng Anh."}</p>
+      <div className="card flat" style={{ marginTop: 12, textAlign: "center" }}><div className="eyebrow">{announcement.seasonName}</div>{adjusted ? null : <Sprout className="celebration-icon" aria-hidden="true" />}<h2>{adjusted ? "Trình độ đã được cập nhật" : isTopLevel ? "Bạn đã đạt mức cao nhất" : `Chúc mừng ${displayName}!`}</h2>{announcement.level ? <p className="badge lvl">Mức {announcement.level}</p> : null}</div>
+      <p>{adjusted ? "Bài học và điều kiện thi lên mức áp dụng theo trình độ hiện tại của bạn." : isTopLevel ? "Bạn đã hoàn thành chặng CEFR cao nhất trong lộ trình hiện tại." : "Bạn vừa mở một cột mốc mới trong hành trình học tiếng Anh."}</p>
       <Notice tone="info"><b>Quy tắc công nhận:</b> {announcement.rule ?? (isTopLevel ? "Mức cao nhất được giữ lại trong hồ sơ của bạn." : "Mức mới chỉ hiển thị sau khi người vận hành duyệt bằng chứng học tập.")}</Notice>
       <div className="row" style={{ justifyContent: "flex-end", marginTop: 16 }}><button type="button" onClick={() => void onClose()}>Đóng</button><button className="btn-primary" type="button" onClick={() => void onClose()}>Tiếp tục học</button></div>
     </section>
@@ -128,6 +140,8 @@ function LevelUpCelebration({
 
 function PrimaryLesson({ view, next, actions }: { view: LearnerHomeView; next: LearnerHomeView["nextLesson"]; actions: LearnerCallbacks }) {
   const monthly = view.month ?? null;
+  if (view.monthlyStartDate) return <section className="card" data-home-block="primary"><h2>Bạn sẽ bắt đầu học từ ngày {view.monthlyStartDate.slice(8)}/{view.monthlyStartDate.slice(5, 7)}</h2><p>Bạn có thể luyện với Season và chơi mini game trong lúc chờ.</p></section>;
+  if (view.monthlyLessonsLocked) return <section className="card" data-home-block="primary"><h2>Bài học tháng này bị khóa</h2><p>Bạn đã bỏ lỡ bài thi tháng trước. Hãy gửi lý do để Quản lý xem xét mở lại bài học.</p><AppLink className="btn btn-primary" href="/support?type=complaints&kind=lesson_unlock" navigate={actions.navigate}>Gửi đơn xin mở</AppLink></section>;
   if (!monthly) return <section className="card" data-home-block="primary"><h2>Lộ trình tháng đang được chuẩn bị</h2><p>Người vận hành đang chuẩn bị và duyệt bộ bài tháng cho mức {view.learner.cefr ?? "—"}. Bạn có thể luyện với Season trong lúc chờ.</p></section>;
   const period = `Tháng ${formatMonth(monthly.month)}`;
   if (!next && !view.lessons.length) return <section className="card" data-home-block="primary"><h2>{period}: {monthly.themeTitle}</h2><p>Bộ bài tháng đang được chuẩn bị và duyệt. Quay lại sau nhé.</p></section>;
@@ -140,7 +154,7 @@ function PrimaryLesson({ view, next, actions }: { view: LearnerHomeView; next: L
     return <section className="hero" style={{ background: "var(--mint)", color: "var(--text)" }} data-home-block="primary"><div className="eyebrow">{period}</div><h2>{dateLocked ? next.lock.opensAt ? `Bài này mở vào ${formatLessonDate(next.lock.opensAt)}` : "Bài này chưa mở" : reviewGate ? `Hoàn thành ${reviewLabel} để mở bài này` : "Học bù bài trước đã nhé"}</h2><p>{dateLocked ? "Chưa đến ngày học nên chưa có nút học bài này." : reviewGate ? "Bài đầu tuần mới chỉ mở khi đã xong bài ôn của tuần trước." : "Hoàn thành bài trước để mở bài này."}</p>{!dateLocked && blocker ? <AppLink className="btn btn-primary" href={`/lesson/${blocker.id}`} navigate={actions.navigate}>{reviewGate ? `Làm ${reviewLabel}` : `Học bài ${monthly ? blocker.dayNumber : `T${blocker.dayNumber + 1}`} ngay`}</AppLink> : null}</section>;
   }
   const catchUp = isCatchUp(view, next);
-  return <section className={`hero home-primary-lesson${catchUp ? " home-primary-lesson--catch-up" : ""}`} data-home-block="primary"><div><div className="eyebrow">{catchUp ? "Bài học bù" : "Bài hôm nay"} · Bài {next.dayNumber} · {period}</div><h2>{catchUp ? "Học bù bài trước đã nhé" : next.title}</h2>{catchUp ? <p style={{ margin: 0 }}>Hoàn thành bài {next.dayNumber}: {next.title}</p> : <div style={{ fontWeight: 700 }}>{monthly.themeTitle}</div>}</div><div className="row" style={{ gap: 14, fontWeight: 800, fontSize: ".9rem" }}><span className="row" style={{ gap: 6 }}><ClockIcon /> {view.schedule.lessonMinutes} phút</span><span>Bài {next.dayNumber}/{view.lessons.length}</span></div><AppLink className="btn btn-primary btn-lg btn-block" href={`/lesson/${next.id}`} navigate={actions.navigate}>{catchUp ? `Học bài ${next.dayNumber} ngay` : "Học ngay"}</AppLink></section>;
+  return <section className={`hero home-primary-lesson${catchUp ? " home-primary-lesson--catch-up" : ""}`} data-home-block="primary"><div><div className="eyebrow">{catchUp ? "Bài học bù" : "Bài hôm nay"} · {learnerLessonLabel(next)} · {period}</div><h2>{catchUp ? "Học bù bài trước đã nhé" : next.title}</h2>{catchUp ? <p style={{ margin: 0 }}>Hoàn thành bài {next.dayNumber}: {next.title}</p> : <div style={{ fontWeight: 700 }}>{monthly.themeTitle}</div>}</div><div className="row" style={{ gap: 14, fontWeight: 800, fontSize: ".9rem" }}><span className="row" style={{ gap: 6 }}><ClockIcon /> {view.schedule.lessonMinutes} phút</span><span>{view.metrics.completedLessons}/{view.metrics.totalLessons} bài đã học</span></div><AppLink className="btn btn-primary btn-lg btn-block" href={`/lesson/${next.id}`} navigate={actions.navigate}>{catchUp ? `Học bài ${next.dayNumber} ngay` : "Học ngay"}</AppLink></section>;
 }
 
 function lessonTimingLabel(view: LearnerHomeView, lesson: LearnerHomeView["lessons"][number]) {
@@ -176,12 +190,6 @@ function formatLessonDate(value: string) {
   return formatted.charAt(0).toLocaleUpperCase("vi-VN") + formatted.slice(1);
 }
 
-function formatShortDate(value: string) {
-  const date = new Date(`${value.slice(0, 10)}T00:00:00Z`);
-  if (!Number.isFinite(date.getTime())) return value;
-  return new Intl.DateTimeFormat("vi-VN", { day: "2-digit", month: "2-digit" }).format(date);
-}
-
 function formatMonth(value: string) {
   const match = /^(\d{4})-(\d{2})$/u.exec(value);
   return match ? `${match[2]}/${match[1]}` : value;
@@ -189,12 +197,6 @@ function formatMonth(value: string) {
 
 
 function OnboardingHome({ view, actions }: { view: LearnerHomeView; actions: LearnerCallbacks }) {
-  const [hasOnboardDraft, setHasOnboardDraft] = useState(() => readOnboardDraftAvailable());
-  useEffect(() => {
-    const syncDraftState = () => setHasOnboardDraft(readOnboardDraftAvailable());
-    window.addEventListener("storage", syncDraftState);
-    return () => window.removeEventListener("storage", syncDraftState);
-  }, []);
   const stage = view.approvalPending ? 3 : view.placementDraft || (!view.onboardingRequired && view.learner.cefr === null) ? 2 : 1;
   const steps = [
     ["Hồ sơ cá nhân", "Vì sao cần? Bài học sẽ sát với công việc và cách bạn muốn học."],
@@ -216,18 +218,10 @@ function OnboardingHome({ view, actions }: { view: LearnerHomeView; actions: Lea
       <div style={{ flex: 1, minWidth: 0 }}>
         <div className="row between" style={{ alignItems: "flex-start", gap: 8 }}><h3>{title}</h3><span className={`badge ${done ? "ok" : current ? "primary" : ""}`}>{badge}</span></div>
         <p>{detail}</p>
-        {step === 1 && done ? <AppLink className="btn btn-sm" href="/onboard" navigate={actions.navigate}>← Xem / sửa hồ sơ</AppLink> : current && step < 3 ? <><AppLink className="btn btn-primary" href={step === 1 ? "/onboard" : "/test/placement"} navigate={actions.navigate}>{step === 1 ? hasOnboardDraft ? "Tiếp tục phần đã lưu" : "Điền hồ sơ (~2 phút)" : view.placementDraft ? "Tiếp tục bài test" : "Bắt đầu test (tối đa 75 phút)"}</AppLink>{step === 2 && !view.placementDraft ? <div className="onboarding-test-note" role="note"><Clock3 size={16} aria-hidden="true" /><span><b>4 phần</b><span>Nghe · Đọc · Viết · Nói</span></span><span className="onboarding-test-note-separator" aria-hidden="true">·</span><span>Tai nghe + micro</span></div> : null}</> : null}
+        {step === 1 && done ? <AppLink className="btn btn-sm" href="/onboard" navigate={actions.navigate}>← Xem / sửa hồ sơ</AppLink> : current && step < 3 ? <><AppLink className="btn btn-primary" href={step === 1 ? "/onboard" : "/test/placement"} navigate={actions.navigate}>{step === 1 ? view.onboardingDraftAvailable ? "Tiếp tục phần đã lưu" : "Điền hồ sơ (~2 phút)" : view.placementDraft ? "Tiếp tục bài test" : "Bắt đầu test (tối đa 75 phút)"}</AppLink>{step === 2 && !view.placementDraft ? <div className="onboarding-test-note" role="note"><Clock3 size={16} aria-hidden="true" /><span><b>4 phần</b><span>Nghe · Đọc · Viết · Nói</span></span><span className="onboarding-test-note-separator" aria-hidden="true">·</span><span>Tai nghe + micro</span></div> : null}</> : null}
       </div>
     </div>;
-  })}</section></div>;
-}
-
-function readOnboardDraftAvailable() {
-  try {
-    return Boolean(window.localStorage.getItem("e4s:learner-onboard-draft"));
-  } catch {
-    return false;
-  }
+  })}</section><LearnerSupportCard from="home" navigate={actions.navigate} /></div>;
 }
 
 function MonthlyExamMetric({ status }: { status: NonNullable<LearnerHomeView["monthlyExam"]>["status"] }) {
@@ -236,49 +230,65 @@ function MonthlyExamMetric({ status }: { status: NonNullable<LearnerHomeView["mo
   return <article className="stat" aria-label="Bài thi tháng"><div className="ring" style={{ "--p": opened ? 100 : 0, "--c": opened ? "var(--olive)" : "var(--butter)" } as CSSProperties}><b>{status === "completed" ? "✓" : status === "ready" ? "Mở" : "Chờ"}</b></div><span className="lbl">Bài thi tháng</span><small className="metric-secondary">{label}</small></article>;
 }
 
-/** Uses the dated, approved month plan — never the generic weekday strip. */
-function MonthlyRhythm({ lessons, scheduled, lessonMinutes, goal }: { lessons: LearnerHomeView["lessons"]; scheduled?: number | undefined; lessonMinutes: number; goal?: string | null | undefined }) {
-  const sessions = lessons.filter((lesson) => lesson.lessonDate).sort((a, b) => a.lessonDate!.localeCompare(b.lessonDate!));
-  const total = scheduled ?? sessions.length;
-  return <section className="card soft" style={{ marginTop: 16, background: "var(--butter)" }} data-home-block="attendance" aria-label="Nhịp học tháng này">
-    <div className="row between" style={{ gap: 12, flexWrap: "wrap" }}><h3>Nhịp học tháng này</h3><strong>{total} buổi theo kế hoạch</strong></div>
-    <ol style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(118px, 1fr))", gap: 8, margin: "12px 0 0", padding: 0, listStyle: "none" }}>
-      {sessions.map((lesson) => <li key={lesson.id} className="card flat" style={{ padding: "8px 10px", background: "var(--surface)" }}><b>{lesson.kind === "review" ? "Ôn tập" : `Bài ${lesson.dayNumber}`}</b><span className="small muted" style={{ display: "block" }}>{formatShortDate(lesson.lessonDate!)}</span></li>)}
-    </ol>
-    {!sessions.length ? <p className="small muted" style={{ marginBottom: 0 }}>Đang chờ lịch có ngày học cụ thể.</p> : null}
-    <p className="xs muted attendance-schedule-note">Mỗi buổi ≥{lessonMinutes} phút. {goal ?? ""}</p>
-  </section>;
-}
-
 function MonthlyExamOverview({ exam, month, navigate }: { exam: NonNullable<LearnerHomeView["monthlyExam"]>; month: LearnerHomeView["month"] | null; navigate: LearnerCallbacks["navigate"] }) {
   return <section className="card learner-summary-card learner-summary-card--monthly" data-home-block="monthly-exam" aria-label="Bài thi tháng" style={{ marginTop: 0, marginBottom: 20 }}>
     <div className="row between learner-summary-row" style={{ gap: 12, alignItems: "flex-start", flexWrap: "wrap" }}><div><div className="eyebrow">Bài tháng</div><h3 style={{ margin: "2px 0 4px" }}>Bài thi tháng</h3><p className="small muted" style={{ margin: 0 }}>{exam.requirement}{month ? ` · Ngày thi ${formatLessonDate(month.examDate)}` : ""}</p></div><div className="row learner-summary-actions"><AppLink className="btn" href="/monthly" navigate={navigate}>Xem điều kiện và bài thi tháng</AppLink></div></div>
   </section>;
 }
 
+const monthlyCalendarKinds = {
+  lesson: "Bài học",
+  review: "Ôn tập",
+  rest: "Ngày nghỉ",
+  holiday: "Ngày lễ",
+  exam: "Bài thi tháng"
+} as const;
+
 function MonthlyCalendar({ month, lessons, actions }: { month: NonNullable<LearnerHomeView["month"]>; lessons: LearnerHomeView["lessons"]; actions: LearnerCallbacks }) {
-  const [year, monthNumber] = month.month.split("-").map(Number);
-  const first = new Date(Date.UTC(year!, (monthNumber ?? 1) - 1, 1));
-  const daysInMonth = new Date(Date.UTC(year!, monthNumber!, 0)).getUTCDate();
+  const days = buildMonthlyTeachingCalendar(month.month, month.holidays);
+  const first = new Date(`${month.month}-01T00:00:00Z`);
   const offset = (first.getUTCDay() + 6) % 7;
-  const byDate = new Map(lessons.filter((lesson) => lesson.lessonDate).map((lesson) => [lesson.lessonDate!, lesson]));
-  const cells = Array.from({ length: offset + daysInMonth }, (_, index) => index < offset ? null : index - offset + 1);
-  return <section className="card" style={{ marginTop: 16, minWidth: 0, boxSizing: "border-box" }} data-home-block="month-path" aria-labelledby="month-path-title">
+  const trailing = (7 - (offset + days.length) % 7) % 7;
+  const gridDays = [...Array<null>(offset).fill(null), ...days, ...Array<null>(trailing).fill(null)];
+  const byDate = new Map(lessons.filter(lesson => lesson.lessonDate).map(lesson => [lesson.lessonDate!, lesson]));
+  return <section className="card learner-month-calendar-card" data-home-block="month-path" aria-labelledby="month-path-title">
     <div className="row between"><h3 id="month-path-title">Lịch học tháng {formatMonth(month.month)}</h3><span className="small muted">{month.themeTitle}</span></div>
-    <div className="monthly-learner-calendar" role="grid" aria-label={`Lịch học tháng ${formatMonth(month.month)}`}>
-      {["T2", "T3", "T4", "T5", "T6", "T7", "CN"].map((label) => <b className="monthly-learner-calendar-heading" role="columnheader" key={label}>{label}</b>)}
-      {cells.map((day, index) => {
-        if (day === null) return <span className="monthly-learner-calendar-blank" aria-hidden="true" key={`blank-${index}`} />;
-        const date = `${year}-${String(monthNumber).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
-        const lesson = byDate.get(date);
-        if (!lesson) return <span className="monthly-learner-calendar-day" role="gridcell" key={date}><b>{String(day).padStart(2, "0")}</b></span>;
-        const locked = Boolean(lesson.lock);
-        const status = lesson.status === "completed" ? "done" : locked ? "locked" : lesson.status === "in_progress" ? "today" : "open";
-        return <div className={`monthly-learner-calendar-day ${status}`} role="gridcell" key={date}><b>{String(day).padStart(2, "0")}</b><AppLink href={`/lesson/${lesson.id}`} navigate={actions.navigate} disabled={locked} className="monthly-learner-calendar-link" title={locked ? lesson.lock?.message : lesson.title}>{lesson.kind === "review" ? "Ôn tập" : `Bài ${lesson.dayNumber}`}</AppLink></div>;
-      })}
+    <ul className="monthly-learner-calendar-legend" aria-label="Chú thích lịch">
+      {Object.entries(monthlyCalendarKinds).map(([kind, label]) => <li className={kind} key={kind}>{label}</li>)}
+    </ul>
+    <div className="monthly-learner-calendar-scroll">
+      <div className="monthly-learner-calendar" role="grid" aria-label={`Lịch học tháng ${formatMonth(month.month)}`}>
+        {["T2", "T3", "T4", "T5", "T6", "T7", "CN"].map(label => <b className="monthly-learner-calendar-heading" role="columnheader" key={label}>{label}</b>)}
+        {gridDays.map((day, index) => {
+          if (!day) {
+            const date = new Date(first.getTime() + (index - offset) * 86_400_000).toISOString().slice(0, 10);
+            return <div className="monthly-learner-calendar-day outside-month" role="gridcell" aria-label={date} key={date}><time dateTime={date}>{date.slice(-2)}</time></div>;
+          }
+          const lesson = byDate.get(day.date);
+          const exam = day.date === month.examDate;
+          const holiday = day.holiday?.name;
+          const rest = !lesson && (day.kind === "weekend" || day.date > month.examDate);
+          const review = (lesson?.kind ?? day.kind) === "review";
+          const kind = exam ? "exam" : holiday ? "holiday" : rest ? "rest" : review ? "review" : "lesson";
+          const activity = lesson ? learnerLessonLabel(lesson) : review ? "Ôn tập" : "Bài học";
+          const status = lesson?.status === "completed" ? "Đã học" : lesson?.lock ? "Chưa mở" : lesson?.status === "in_progress" ? "Đang học" : lesson ? "Có thể học" : "Chưa có bài";
+          return <div className={`monthly-learner-calendar-day ${kind}`} role="gridcell" aria-label={day.date} aria-current={day.date === month.systemDate ? "date" : undefined} key={day.date}>
+            <time dateTime={day.date}>{day.date.slice(-2)}</time>
+            {exam ? <AppLink href="/monthly" navigate={actions.navigate} className="monthly-learner-calendar-link">Bài thi tháng</AppLink>
+              : !lesson && (rest || holiday) ? <span className="monthly-learner-calendar-label" title={holiday}>{holiday ? "Nghỉ lễ" : "Nghỉ"}</span>
+                : <>
+                  {lesson && !lesson.lock ? <AppLink href={`/lesson/${lesson.id}`} navigate={actions.navigate} className="monthly-learner-calendar-link" title={lesson.title}>{activity}</AppLink>
+                    : <span className="monthly-learner-calendar-label" title={lesson?.lock?.message}>{activity}</span>}
+                  <small>{status}</small>
+                  {holiday ? <small title={holiday}>Ngày nghỉ</small> : null}
+                </>}
+          </div>;
+        })}
+      </div>
     </div>
   </section>;
 }
+
 
 function monthlyExamLabel(status: NonNullable<LearnerHomeView["monthlyExam"]>["status"]) {
   return status === "completed" ? "Đã hoàn thành" : status === "ready" ? "Đã mở" : status === "unpublished" ? "Chờ phát hành" : "Chưa mở";
@@ -288,10 +298,10 @@ export function LearnerMonthly({ view, actions }: { view: LearnerHomeView; actio
   const month = view.month;
   const eligibility = view.monthlyEligibility;
   const exam = view.monthlyExam;
-  const monthLabel = month?.month ?? eligibility?.month;
-  const examDate = month?.examDate ?? eligibility?.examDate;
+  const monthLabel = eligibility?.month ?? month?.month;
+  const examDate = eligibility?.examDate ?? month?.examDate;
   const systemDate = month?.systemDate ?? eligibility?.systemDate;
-  const publishState = exam?.status === "ready" ? "Đề đã phát hành" : exam?.status === "completed" ? "Đã hoàn thành" : "Đề chưa phát hành";
+  const publishState = exam?.inProgress ? "Đang làm bài" : exam?.status === "completed" ? "Đã hoàn thành" : eligibility?.entryClosed ? "Đã hết giờ vào thi" : exam?.status === "ready" || eligibility?.formPublished ? "Đề đã phát hành" : "Đề chưa phát hành";
 
   return <div className="app-learner-page monthly-assessment-page" style={{ width: "100%", maxWidth: 960, minWidth: 0, boxSizing: "border-box" }}>
     <PageTitle eyebrow={monthLabel ? `Tháng ${formatMonth(monthLabel)}` : "Bài tháng"} title="Bài thi tháng" detail={month ? month.themeTitle : "Theo dõi điều kiện và thời điểm vào đề của tháng hiện tại."} />
@@ -306,8 +316,8 @@ export function LearnerMonthly({ view, actions }: { view: LearnerHomeView; actio
       </header>
       {eligibility ? <MonthlyEligibilitySummary eligibility={eligibility} actions={actions} /> : <p className="monthly-assessment-inline-note">Điều kiện điểm danh đang được tải từ hệ thống.</p>}
       <div className="monthly-assessment-form-state" aria-label="Trạng thái form đề">
-        <div><b>{exam?.status === "ready" ? "Bạn có thể vào đề" : exam?.status === "completed" ? "Bạn đã hoàn thành bài thi tháng" : "Form đề đang được chuẩn bị"}</b><span>{exam?.status === "ready" ? "Kiểm tra lại tai nghe và micro trước khi bắt đầu." : exam?.status === "completed" ? "Kết quả được lưu trong hồ sơ của bạn." : "Cấu trúc, audio và nút vào đề sẽ chỉ hiện sau khi Operator phát hành form."}</span></div>
-        {exam?.status === "ready" ? <AppLink className="btn btn-primary" href="/test/monthly" navigate={actions.navigate}>Vào bài thi</AppLink> : null}
+        <div><b>{exam?.inProgress ? "Tiếp tục bài thi đang làm" : exam?.status === "ready" ? "Bạn có thể vào đề" : exam?.status === "completed" ? "Bạn đã hoàn thành bài thi tháng" : !eligibility?.formPublished && !eligibility?.entryClosed ? "Form đề đang được chuẩn bị" : publishState}</b><span>{exam?.inProgress ? "Mở lại bài thi từ vị trí đã lưu." : exam?.status === "ready" ? "Kiểm tra lại tai nghe và micro trước khi bắt đầu." : exam?.status === "completed" ? "Kết quả được lưu trong hồ sơ của bạn." : exam?.requirement ?? "Theo dõi lịch thi và điều kiện điểm danh ở trên."}</span></div>
+        {exam?.status === "ready" ? <AppLink className="btn btn-primary" href="/test/monthly" navigate={actions.navigate}>{exam.inProgress ? "Tiếp tục bài thi" : "Vào bài thi"}</AppLink> : null}
       </div>
     </section>
   </div>;
@@ -316,6 +326,8 @@ export function LearnerMonthly({ view, actions }: { view: LearnerHomeView; actio
 function MonthlyEligibilitySummary({ eligibility, actions }: { eligibility: NonNullable<LearnerHomeView["monthlyEligibility"]>; actions: LearnerCallbacks }) {
   const [complaints, setComplaints] = useState<LearnerComplaintView[]>([]);
   const [complaintReason, setComplaintReason] = useState("");
+  const [complaintEvidence, setComplaintEvidence] = useState<RequestEvidenceDraft>({});
+  const [complaintRevision, setComplaintRevision] = useState(0);
   const [complaintError, setComplaintError] = useState("");
   const [submittingComplaint, setSubmittingComplaint] = useState(false);
   useEffect(() => { void actions.getComplaints?.().then((result) => setComplaints(result.complaints)).catch(() => undefined); }, [actions.getComplaints]);
@@ -341,7 +353,7 @@ function MonthlyEligibilitySummary({ eligibility, actions }: { eligibility: NonN
       <Metric label="Đếm ngược" value={remaining ? `${remaining} ngày` : "Hôm nay"} percent={ratio(Math.max(0, eligibility.effectiveDays - remaining), eligibility.effectiveDays)} color="var(--primary)" />
     </div>
     <details className="monthly-eligibility-rules"><summary>Quy tắc điểm danh và giờ vào đề</summary><ul><li>Bài thi tháng cố định dành cho mọi học viên cùng trình độ, kể cả khi chưa hoàn thành hết bài học.</li><li>Hoàn thành ít nhất một bài trong ngày để được tính một lần điểm danh; học bù nhiều bài cùng ngày vẫn chỉ tính một lần.</li><li>Ngày học hiệu lực là Thứ Hai–Thứ Sáu, không tính ngày thi; được vắng tối đa {eligibility.maxAbsences} ngày.</li><li>Đề mở trong cửa sổ hệ thống sau khi form được phát hành; chỉ số bài học và Season dùng để theo dõi tiến độ.</li>{appealRequired ? <li>Gửi khiếu nại tới Quản lý để được xem xét điều kiện dự thi.</li> : null}</ul></details>
-    {appealRequired ? <section className="card monthly-complaint-form"><h3>Khiếu nại điều kiện dự thi</h3><p className="small muted">Quản lý sẽ phản hồi trong 24 giờ. Nếu chưa xử lý đúng hạn, đơn sẽ được tự duyệt.</p>{complaints.filter((item) => item.kind === "exam_eligibility").map((item) => <p className="small" key={item.id}>Đơn gần nhất: {item.status === "pending" ? "Đang chờ xử lý" : item.status === "auto_approved" || item.status === "approved" ? `Đã duyệt${item.resolution ? ` · ${item.resolution}` : ""}` : `Bị từ chối${item.resolution ? ` · ${item.resolution}` : ""}`}</p>)}{complaintError ? <p role="alert" className="small danger-text">{complaintError}</p> : null}<label>Lý do<textarea value={complaintReason} maxLength={2000} onChange={(event) => setComplaintReason(event.target.value)} /></label><button className="btn-sm btn-primary" type="button" disabled={submittingComplaint || !complaintReason.trim() || complaints.some((item) => item.kind === "exam_eligibility" && item.status === "pending")} onClick={() => { const submit = actions.submitComplaint; if (!submit) return; setSubmittingComplaint(true); setComplaintError(""); void submit("exam_eligibility", complaintReason.trim()).then(() => { setComplaintReason(""); return actions.getComplaints?.(); }).then((result) => { if (result) setComplaints(result.complaints); }).catch(() => setComplaintError("Không gửi được khiếu nại. Hãy thử lại sau.")).finally(() => setSubmittingComplaint(false)); }}>Gửi khiếu nại</button></section> : null}
+    {appealRequired ? <section className="card monthly-complaint-form"><h3>Khiếu nại điều kiện dự thi</h3><p className="small muted">Quản lý sẽ phản hồi trong 24 giờ. Nếu chưa xử lý đúng hạn, đơn sẽ được tự duyệt.</p>{complaints.filter((item) => item.kind === "exam_eligibility").map((item) => <p className="small" key={item.id}>Đơn gần nhất: {item.status === "pending" ? "Đang chờ xử lý" : item.status === "auto_approved" || item.status === "approved" ? `Đã duyệt${item.resolution ? ` · ${item.resolution}` : ""}` : `Bị từ chối${item.resolution ? ` · ${item.resolution}` : ""}`}</p>)}{complaintError ? <p role="alert" className="small danger-text">{complaintError}</p> : null}<RequestEvidenceFields key={complaintRevision} value={complaintEvidence} onChange={setComplaintEvidence} label="Ngày hoặc mục cần kiểm tra" placeholder="Ví dụ: Điểm danh ngày 06/11" disabled={submittingComplaint} /><label>Lý do<textarea value={complaintReason} maxLength={2000} onChange={(event) => setComplaintReason(event.target.value)} /></label><button className="btn-sm btn-primary" type="button" disabled={submittingComplaint || complaintEvidence.blocked || complaintReason.trim().length < 5 || complaints.some((item) => item.kind === "exam_eligibility" && item.status === "pending")} onClick={() => { const submit = actions.submitComplaint; if (!submit) return; setSubmittingComplaint(true); setComplaintError(""); void submit("exam_eligibility", complaintReason.trim(), ...requestEvidenceArgs(complaintEvidence)).then(() => { setComplaintReason(""); setComplaintEvidence({}); setComplaintRevision(value => value + 1); return actions.getComplaints?.(); }).then((result) => { if (result) setComplaints(result.complaints); }).catch(() => setComplaintError("Không gửi được khiếu nại. Hãy thử lại sau.")).finally(() => setSubmittingComplaint(false)); }}>Gửi khiếu nại</button></section> : null}
   </div>;
 }
 function daysUntil(systemDate: string, examDate: string) {

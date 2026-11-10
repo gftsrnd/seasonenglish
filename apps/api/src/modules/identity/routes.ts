@@ -1,6 +1,6 @@
 import { createHmac, createHash, randomBytes, randomInt, randomUUID, timingSafeEqual } from "node:crypto";
-import type { AccountRole, LearnerAvatarData, SessionView } from "@e4s/contracts";
-import { createRepositories, type DatabaseRepositories, type UserCredentialRecord, type UserIdentity } from "@e4s/database";
+import type { AccountRole, CourseCompletionView, LearnerAvatarData, SessionView } from "@e4s/contracts";
+import { createRepositories, type ActiveSessionRecord, type DatabaseRepositories, type PublishedAssessmentRecord, type UserIdentity } from "@e4s/database";
 import { createPinHash, issueSessionToken, permissionsFor, sessionTokenHash, verifyCredential } from "@e4s/domain/identity";
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import type { Pool } from "pg";
@@ -43,8 +43,13 @@ export function registerIdentityRoutes(app: FastifyInstance, options: IdentityRo
   const repositories = createRepositories(options.pool);
   const sessionTtlMs = options.sessionTtlMs ?? 7 * 24 * 60 * 60 * 1_000;
 
+  const withCourseCompletion = async (session: SessionView): Promise<SessionView> => {
+    if (session.role !== "learner" || session.accountStatus === "disabled") return session;
+    const certificate = await options.pool.query("select 1 from pass_course_certificates where learner_id = $1 limit 1", [session.user.id]);
+    return certificate.rowCount ? { ...session, courseCompleted: true } : session;
+  };
+
   const login = async (
-    request: FastifyRequest,
     reply: FastifyReply,
     audience: "learner" | "staff",
     rawInput: unknown
@@ -77,15 +82,13 @@ export function registerIdentityRoutes(app: FastifyInstance, options: IdentityRo
     if (audience === "learner" && account.role === "learner" && account.status === "active") {
       await repositories.identity.resetLearnerPinFailures(account.id);
     }
-    return createSession(reply, repositories, account, options.secureCookies, sessionTtlMs);
+    return withCourseCompletion(await createSession(reply, repositories, account, options.secureCookies, sessionTtlMs));
   };
 
   const currentSession = async (request: FastifyRequest, reply: FastifyReply): Promise<SessionView | void> => {
-    const token = request.cookies[COOKIE_NAME];
-    const account = await resolveSession(request, repositories)
-      ?? (token ? await repositories.identity.findDisabledLearnerSession(sessionTokenHash(token)) : null);
+    const account = await resolveSession(request, repositories, { allowDisabledLearner: true });
     if (!account) return reply.code(401).send({ code: "UNAUTHENTICATED" });
-    return sessionView(account);
+    return withCourseCompletion(sessionView(account));
   };
 
   const logout = async (request: FastifyRequest, reply: FastifyReply): Promise<void> => {
@@ -97,14 +100,19 @@ export function registerIdentityRoutes(app: FastifyInstance, options: IdentityRo
 
   const loginRateLimit = { config: { rateLimit: { max: 10, timeWindow: "1 minute" } } };
 
-  app.post("/api/auth/learner/login", loginRateLimit, (request, reply) => login(request, reply, "learner", request.body));
-  app.post("/api/auth/staff/login", loginRateLimit, (request, reply) => login(request, reply, "staff", request.body));
-  app.post("/api/auth/staff/password-help", { config: { rateLimit: { max: 5, timeWindow: "5 minutes" } } }, async (request, reply) => {
+  const passwordHelpRateLimit = { config: { rateLimit: { max: 5, timeWindow: "5 minutes" } } };
+  const requestPasswordHelp = async (request: FastifyRequest, reply: FastifyReply) => {
     const parsed = staffPasswordHelpInput.safeParse(request.body);
     if (!parsed.success) return reply.code(400).send({ code: "INVALID_EMAIL" });
-    await repositories.identity.requestStaffPasswordHelp(parsed.data.email);
+    const account = await repositories.identity.findUserByEmail(parsed.data.email);
+    const credential = account?.role === "manager" ? "manager-password" : "password";
+    await repositories.identity.requestStaffPasswordHelp(parsed.data.email, credential);
     return reply.code(202).send({ requested: true });
-  });
+  };
+
+  app.post("/api/auth/learner/login", loginRateLimit, (request, reply) => login(reply, "learner", request.body));
+  app.post("/api/auth/staff/login", loginRateLimit, (request, reply) => login(reply, "staff", request.body));
+  app.post("/api/auth/staff/password-help", passwordHelpRateLimit, requestPasswordHelp);
   app.post("/api/auth/learner/register", { config: { rateLimit: { max: 5, timeWindow: "1 minute" } } }, async (request, reply) => {
     const parsed = learnerRegistrationInput.safeParse(request.body);
     if (!parsed.success) return reply.code(400).send({ code: "INVALID_LEARNER_REGISTRATION" });
@@ -127,9 +135,10 @@ export function registerIdentityRoutes(app: FastifyInstance, options: IdentityRo
   app.post("/api/auth/learner/pin-reset/start", { config: { rateLimit: { max: 5, timeWindow: "5 minutes" } } }, async (request, reply) => {
     const parsed = pinResetStartInput.safeParse(request.body);
     if (!parsed.success) return reply.code(400).send({ code: "INVALID_EMAIL" });
-    if (!options.emailSender) return reply.code(503).send({ code: "EMAIL_DELIVERY_UNAVAILABLE" });
+    const emailSender = options.emailSender;
+    if (!emailSender) return reply.code(503).send({ code: "EMAIL_DELIVERY_UNAVAILABLE" });
     const account = await repositories.identity.findUserByEmail(parsed.data.email);
-    const eligible = account?.role === "learner" && account.status === "active";
+    const eligible = Boolean(emailSender) && account?.role === "learner" && account.status === "active";
     const challengeId = randomUUID();
     const code = otpCode();
     const expiresAt = new Date(Date.now() + 10 * 60_000);
@@ -138,9 +147,9 @@ export function registerIdentityRoutes(app: FastifyInstance, options: IdentityRo
        values ($1, 'pin_reset', lower($2), $3, $4, $5)`,
       [challengeId, parsed.data.email, eligible ? account.id : null, otpHash(options.otpSecret, challengeId, parsed.data.email, code), expiresAt]
     );
-    if (eligible) {
+    if (eligible && emailSender) {
       try {
-        await options.emailSender.sendOtp({ to: parsed.data.email.toLowerCase(), code, purpose: "pin_reset" });
+        await emailSender.sendOtp({ to: parsed.data.email.toLowerCase(), code, purpose: "pin_reset" });
       } catch (error) {
         console.error("[identity-email] PIN reset delivery failed", identityEmailDeliveryFailure(error));
         await options.pool.query("delete from auth_challenges where id = $1", [challengeId]);
@@ -148,7 +157,7 @@ export function registerIdentityRoutes(app: FastifyInstance, options: IdentityRo
       }
     } else {
       console.info("[identity-email] PIN reset email not sent", {
-        reason: account === null ? "account_not_found" : account.role !== "learner" ? "not_a_learner" : "account_not_active",
+        reason: account === null ? "account_not_found" : account.role !== "learner" ? "not_a_learner" : account.status !== "active" ? "account_not_active" : "delivery_unavailable",
         challengeId
       });
     }
@@ -210,9 +219,58 @@ export function registerIdentityRoutes(app: FastifyInstance, options: IdentityRo
     if (!parsed.success) return reply.code(400).send({ code: "INVALID_LOGIN_INPUT" });
     if (parsed.data.audience === "learner" && !parsed.data.pin) return reply.code(400).send({ code: "INVALID_LOGIN_INPUT" });
     if (parsed.data.audience === "staff" && !parsed.data.password) return reply.code(400).send({ code: "INVALID_LOGIN_INPUT" });
-    return login(request, reply, parsed.data.audience, parsed.data);
+    return login(reply, parsed.data.audience, parsed.data);
   });
   app.get("/api/v1/me", currentSession);
+  app.get("/api/v1/learner/course-completion", async (request, reply) => {
+    reply.header("Cache-Control", "private, no-store");
+    const learner = await resolveSession(request, repositories);
+    if (!learner) return reply.code(401).send({ code: "UNAUTHENTICATED" });
+    if (learner.role !== "learner") return reply.code(403).send({ code: "FORBIDDEN" });
+    const certificate = await options.pool.query<{
+      certificate_number: string; issued_at: Date; organization_name: string; issuer_name: string | null; attempt_id: string; blueprint: PublishedAssessmentRecord["blueprint"]; feedback: string | null;
+    }>(`
+      select c.certificate_number, c.issued_at, c.attempt_id, v.blueprint, d.reason as feedback,
+             o.name as organization_name, issuer.display_name as issuer_name
+      from pass_course_certificates c
+      join organizations o on o.id = c.organization_id
+      left join users issuer on issuer.id = c.issued_by and issuer.organization_id = o.id
+      join assessment_attempts a on a.id = c.attempt_id and a.learner_id = c.learner_id
+      join assessment_versions v on v.id = a.assessment_version_id
+      left join assessment_decisions d on d.attempt_id = a.id
+      where c.learner_id = $1 order by c.issued_at desc limit 1
+    `, [learner.id]);
+    const issued = certificate.rows[0];
+    if (!issued) return reply.code(404).send({ code: "COURSE_COMPLETION_NOT_FOUND" });
+    const [attempt, appeal, [appealTarget]] = await Promise.all([
+      repositories.assessments.findAttempt(learner.id, issued.attempt_id),
+      repositories.assessments.findAppeal(learner.id, issued.attempt_id),
+      repositories.assessments.listAppealableResults(learner.id, issued.attempt_id)
+    ]);
+    const answers = new Map(attempt?.responses.map(item => [item.taskKey, item.value]));
+    const sections = issued.blueprint.sections ?? [];
+    return {
+      certificateNumber: issued.certificate_number,
+      organizationName: issued.organization_name,
+      issuerName: issued.issuer_name,
+      displayName: learner.displayName,
+      issuedAt: issued.issued_at.toISOString(),
+      scores: sections.map(section => ({
+        section: section.code, score: attempt?.scores[section.code] ?? null, maxScore: section.maxScore
+      })),
+      objectiveResults: sections.flatMap(section => {
+        const outcomes = (section.groups ?? []).flatMap(group => group.tasks).filter(task => task.correctAnswer)
+          .map(task => {
+            const answer = answers.get(task.key);
+            return !answer ? "unanswered" as const : answer === task.correctAnswer ? "correct" as const : "incorrect" as const;
+          });
+        return outcomes.length ? [{ section: section.code, outcomes }] : [];
+      }),
+      feedback: issued.feedback,
+      appealTarget: appealTarget ?? null,
+      appeal: appeal ? { ...appeal, createdAt: appeal.createdAt.toISOString(), resolvedAt: appeal.resolvedAt?.toISOString() ?? null } : null
+    } satisfies CourseCompletionView;
+  });
   app.patch("/api/v1/me/avatar", async (request, reply) => {
     const account = await resolveSession(request, repositories);
     if (!account) return reply.code(401).send({ code: "UNAUTHENTICATED" });
@@ -306,9 +364,16 @@ async function createSession(
   return sessionView(account);
 }
 
-export async function resolveSession(request: FastifyRequest, repositories: DatabaseRepositories): Promise<UserIdentity | null> {
+export async function resolveSession(
+  request: FastifyRequest,
+  repositories: DatabaseRepositories,
+  options?: { allowDisabledLearner?: boolean }
+): Promise<ActiveSessionRecord | null> {
   const token = request.cookies[COOKIE_NAME];
-  return token ? repositories.identity.findActiveSession(sessionTokenHash(token)) : null;
+  if (!token) return null;
+  const hash = sessionTokenHash(token);
+  const active = await repositories.identity.findActiveSession(hash);
+  return active ?? (options?.allowDisabledLearner ? repositories.identity.findDisabledLearnerSession(hash) : null);
 }
 
 export function sessionView(account: UserIdentity): SessionView {

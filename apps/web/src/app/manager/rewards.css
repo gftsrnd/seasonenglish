@@ -1,0 +1,103 @@
+.manager-reward-workspace {
+  display: grid;
+  align-items: start;
+  gap: 14px;
+}
+.manager-reward-workspace > * { min-width: 0; }
+.manager-reward-controls > .field,
+.manager-reward-custom > .field { display: grid; gap: 5px; margin: 0; }
+.manager-reward-controls :is(input, select) { width: 100%; min-width: 0; }
+.manager-reward-controls {
+  display: grid;
+  gap: 8px 18px;
+}
+.manager-reward-custom-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  justify-self: start;
+  min-height: 44px;
+}
+.manager-reward-custom-toggle[aria-expanded="true"] svg { transform: rotate(90deg); }
+.manager-reward-custom {
+  min-width: 0;
+  grid-column: 1 / -1;
+  margin-top: 4px;
+  padding-top: 12px;
+  border-top: 1px solid var(--line);
+}
+.manager-reward-custom:not([hidden]) { display: grid; align-items: start; gap: 12px 18px; }
+.manager-reward-badge-field { display: grid; min-width: 0; gap: 5px; }
+.manager-reward-custom > .field > span,
+.manager-reward-badge-field > span {
+  margin: 0;
+  color: var(--muted);
+  font-size: .85rem;
+  font-weight: 600;
+  line-height: 1.3;
+}
+.manager-reward-custom .manager-reward-badge-group {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px;
+}
+.manager-reward-custom .manager-reward-badge-group > button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  min-height: 44px;
+  min-width: 0;
+  padding-inline: 8px;
+  white-space: normal;
+}
+.manager-reward-badge-icon {
+  flex: 0 0 auto;
+  font: 1.3rem/1 "Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", sans-serif;
+}
+.manager-reward-custom .manager-reward-badge-group > button[aria-pressed="true"] {
+  background: #f8efd7;
+  color: #3e3020;
+  box-shadow: inset 0 0 0 1px #a17b38;
+}
+.manager-reward-workspace > .card { margin: 0; }
+.manager-reward-preview-heading { gap: 4px 12px; }
+.manager-reward-preview-heading h2 { margin: 0; font-size: 1.1rem; }
+.manager-reward-preview-actions { display: flex; gap: 6px; flex-wrap: wrap; }
+.manager-reward-preview-actions > button { min-height: 44px; padding-inline: 10px; }
+.reward-screen-reader {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+.manager-modal-backdrop .reward-celebration {
+  width: min(100%, 400px);
+  padding: 14px 18px 18px;
+  text-align: center;
+}
+.reward-celebration-header { display: flex; justify-content: space-between; align-items: center; }
+.reward-celebration-header > button { min-width: 44px; min-height: 44px; }
+.reward-celebration-body { display: grid; justify-items: center; gap: 6px; }
+.reward-celebration-body .profile-season-figure { max-width: 68px; max-height: 68px; margin-bottom: 4px; }
+.reward-celebration-body .profile-season-figure-emoji {
+  font: 2rem/1 "Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", sans-serif;
+}
+.reward-celebration-body h2 { margin: 0; font-size: 1.2rem; }
+.reward-celebration-body p { margin: 0; }
+.reward-celebration-action { margin-top: 14px; min-height: 44px; }
+
+@media (min-width: 721px) {
+  .manager-reward-controls {
+    grid-template-columns: minmax(0, 420px) minmax(0, 1fr);
+    align-items: end;
+  }
+  .manager-reward-controls > .field { grid-column: 1; grid-row: 1; min-width: 0; }
+  .manager-reward-custom-toggle { grid-column: 2; grid-row: 1; max-width: 100%; white-space: normal; }
+  .manager-reward-custom { grid-template-columns: minmax(142px, 1fr) minmax(0, 3fr); }
+  .manager-reward-custom .manager-reward-badge-group {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+}

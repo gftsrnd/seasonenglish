@@ -21,17 +21,63 @@
 }
 .settings-toast-danger { border-color: #e9b7ae; background: #fff0ed; }
 
+/* Keep the desktop grid while compact settings reveal forms inline. */
+.settings-panel,
+.settings-panel-content { display: contents; }
+.settings-panel-content[hidden] { display: none; }
+
+.settings-page[data-settings-role][data-compact] { row-gap: 0; }
+.settings-page[data-compact] .settings-panel {
+  display: block;
+  min-width: 0;
+  border: 1px solid var(--line);
+  background: var(--surface);
+}
+.settings-page[data-compact] .settings-panel + .settings-panel { border-top: 0; }
+.settings-page[data-compact] .page-title + .settings-panel {
+  border-start-start-radius: 10px;
+  border-start-end-radius: 10px;
+}
+.settings-page[data-compact] .settings-panel:last-child {
+  border-end-start-radius: 10px;
+  border-end-end-radius: 10px;
+}
+
+.settings-panel-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  width: 100%;
+  min-height: 44px;
+  padding: 8px 14px;
+  border: 0;
+  border-radius: inherit;
+  background: transparent;
+  text-align: left;
+  color: var(--text);
+  scroll-margin-block-start: 12px;
+}
+.settings-panel-toggle:hover,
+.settings-panel-toggle[aria-expanded="true"] { background: var(--surface-3); }
+.settings-panel-toggle svg { flex: none; color: var(--primary); }
+.settings-panel-toggle[aria-expanded="true"] svg { transform: rotate(180deg); }
+.settings-page[data-compact] .settings-panel-content > .card {
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+}
 .settings-page > .page-title {
   margin-bottom: 12px;
 }
 
-.settings-page > .card,
-.settings-page > .banner {
+.settings-panel-content > .card,
+.settings-panel-content > .banner {
   min-width: 0;
   margin: 0;
 }
 
-.settings-page > .card {
+.settings-panel-content > .card {
   display: grid;
   align-content: start;
   gap: 16px;
@@ -40,15 +86,11 @@
   padding: 18px;
 }
 
-.settings-page > .card + .card {
-  margin-top: 0;
-}
-
-.settings-page > .card h3 {
+.settings-panel-content > .card h3 {
   margin: 0;
 }
 
-.settings-page > .card > p.small.muted {
+.settings-panel-content > .card > p.small.muted {
   max-width: 78ch;
   margin: 0;
   line-height: 1.55;
@@ -494,7 +536,7 @@
 }
 
 @media (max-width: 760px) {
-  .settings-page > .card {
+  .settings-panel-content > .card {
     padding: 18px;
   }
 
@@ -537,25 +579,25 @@
 
 /* Settings uses the same visual hierarchy for Manager and Operator while
    leaving each role's available controls untouched. */
-.settings-page > .card {
+.settings-panel-content > .card {
   background: var(--surface);
   box-shadow: 0 1px 0 rgb(30 30 30 / .03);
 }
 
-.settings-page > .card > h3:first-child {
+.settings-panel-content > .card > h3:first-child {
   line-height: 1.35;
 }
 
-.settings-page > .card > h3:first-child + p,
-.settings-page > .card > h3:first-child + .banner {
+.settings-panel-content > .card > h3:first-child + p,
+.settings-panel-content > .card > h3:first-child + .banner {
   /* The card grid already supplies the section rhythm.  A negative margin
      makes the heading and its description visually merge on narrow screens. */
   margin-top: 0;
 }
 
-.settings-page > .card > .banner,
-.settings-page > .card > .card,
-.settings-page > .card > details {
+.settings-panel-content > .card > .banner,
+.settings-panel-content > .card > .card,
+.settings-panel-content > .card > details {
   border-color: var(--line);
   background: var(--surface-3);
 }
@@ -590,6 +632,55 @@
   background: var(--surface-2);
 }
 
+
+.settings-operator-accounts { container: operator-accounts / inline-size; }
+.settings-operator-accounts .settings-account-label { display: none; }
+
+@container operator-accounts (max-width: 760px) {
+  .settings-operator-accounts__table table,
+  .settings-operator-accounts__table tbody { display: block; }
+
+  .settings-operator-accounts__table thead {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+  }
+
+  .settings-operator-accounts__table tbody tr {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(2.5rem, .5fr) minmax(0, 1.35fr);
+    grid-template-areas:
+      "name name status"
+      "email email email"
+      "role level score";
+    align-items: baseline;
+    gap: 4px 12px;
+    padding: 10px 12px;
+    border-bottom: 1px solid var(--line);
+  }
+
+  .settings-operator-accounts__table tbody tr:last-child { border-bottom: 0; }
+
+  .settings-operator-accounts__table tbody tr > td {
+    min-width: 0;
+    border: 0;
+    padding: 0;
+    overflow-wrap: normal;
+  }
+
+  .settings-operator-accounts__table .settings-account-name { grid-area: name; font-weight: 600; }
+  .settings-operator-accounts__table .settings-account-email { grid-area: email; overflow-wrap: anywhere; color: var(--muted); }
+  .settings-operator-accounts__table .settings-account-role { grid-area: role; }
+  .settings-operator-accounts__table .settings-account-level { grid-area: level; }
+  .settings-operator-accounts__table .settings-account-score { grid-area: score; }
+  .settings-operator-accounts__table .settings-account-status { grid-area: status; justify-self: end; }
+  .settings-operator-accounts__table :is(.settings-account-email, .settings-account-role, .settings-account-level, .settings-account-score) { font-size: .86rem; }
+  .settings-operator-accounts .settings-account-label { display: block; color: var(--muted); font-size: .78rem; }
+  .settings-operator-accounts__table tr:not([data-account-role="learner"]) :is(.settings-account-level, .settings-account-score) { display: none; }
+}
+
 .settings-test-change-request {
   display: grid;
   gap: 10px;
@@ -615,14 +706,14 @@
     margin-bottom: 6px;
   }
 
-  .settings-page > .card {
+  .settings-panel-content > .card {
     gap: 14px;
     padding: 16px;
   }
 }
 
 @media (max-width: 520px) {
-  .settings-page > .card {
+  .settings-panel-content > .card {
     padding: 18px;
   }
 
@@ -649,7 +740,7 @@
     gap: 6px;
   }
 
-  .settings-action-table td:last-child .btn-sm {
+  .settings-action-table td:last-child > .row > .btn-sm {
     width: 100%;
   }
 
@@ -668,4 +759,92 @@
   .settings-page[data-settings-role="manager"] {
     padding-bottom: calc(24px + env(safe-area-inset-bottom, 0px));
   }
+}
+.badge.account-status-locked {
+  background: #fce8e6;
+  color: #a12622;
+  box-shadow: inset 0 0 0 1px #edc0bc;
+}
+
+.settings-ai-provider { display: contents; }
+
+.settings-page[data-compact] .settings-panel[data-expanded] {
+  margin-block: 6px;
+  border-radius: 10px;
+}
+.settings-page[data-compact] .settings-panel[data-expanded] + .settings-panel {
+  border-top: 1px solid var(--line);
+}
+.settings-page[data-compact] .settings-panel[data-expanded] .settings-panel-toggle {
+  border-radius: 9px 9px 0 0;
+  box-shadow: inset 0 -1px var(--line);
+}
+.settings-page[data-compact] .settings-panel-toggle:focus-visible {
+  outline-offset: -3px;
+  box-shadow: none;
+}
+.settings-page[data-compact] .settings-panel-content > .card {
+  gap: 12px;
+  padding: 14px;
+}
+.settings-page[data-compact] .settings-panel-content > .card > p.small.muted {
+  line-height: 1.45;
+}
+.settings-page[data-compact] .settings-panel-content > .card > h3:first-child,
+.settings-page[data-compact] :is(.manager-security-notices__title, .manager-accounts-heading) > h3 {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+}
+.settings-page[data-compact] .manager-accounts-heading { margin: 0; }
+.settings-page[data-compact] .settings-ai-provider {
+  display: grid;
+  gap: 12px;
+}
+.settings-page[data-compact] .settings-ai-base-url { grid-column: 1 / -1; }
+.settings-page[data-compact] :is(.settings-monthly-fields, .settings-level-fields) {
+  align-items: end;
+}
+.settings-page[data-compact] .settings-theme-picker { margin: 0; }
+.settings-page[data-compact] .settings-theme-choice { min-height: 44px; }
+
+@media (360px <= width <= 1180px) {
+  .settings-page[data-compact] .settings-ai-provider:has(.settings-ai-base-url) {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .settings-page[data-compact] .settings-monthly-fields {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 760px) {
+  .settings-page[data-compact] .settings-panel-toggle { scroll-margin-block-start: 64px; }
+  .settings-page[data-compact] .settings-level-fields {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .settings-page[data-compact] .settings-ai-fallback-control {
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 10px;
+    padding: 12px;
+  }
+  .settings-page[data-compact] .settings-ai-fallback-copy { grid-column: 1 / -1; }
+  .settings-page[data-compact] .settings-switch { min-height: 44px; }
+  .settings-page[data-compact] .settings-switch__track { flex: 0 0 46px; }
+  .settings-page[data-compact] .settings-switch__state { min-width: 0; }
+}
+
+@media (max-width: 460px) {
+  .settings-page[data-compact] .settings-theme-picker {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 6px;
+  }
+  .settings-page[data-compact] .settings-theme-choice {
+    gap: 5px;
+    padding: 6px;
+    font-size: .86rem;
+  }
+  .settings-page[data-compact] .settings-theme-mark { width: 14px; flex-basis: 14px; }
 }

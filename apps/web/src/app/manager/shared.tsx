@@ -1,4 +1,34 @@
-import type { ReactNode } from "react";
+import { createContext, useContext, useState, type ReactNode } from "react";
+import { createPortal } from "react-dom";
+import { useLocation } from "react-router";
+import { ManagerSectionNavigation } from "./ManagerSectionNavigation.js";
+import { managerNavigationPath, managerSectionForPath, operatorReadOnlyTabs } from "./navigation.js";
+
+const ManagerSectionDescription = createContext<HTMLDivElement | null | undefined>(undefined);
+
+export function useManagerSectionHeader() {
+  return useContext(ManagerSectionDescription) !== undefined;
+}
+
+export function ManagerSectionLayout({ children }: { children: ReactNode }) {
+  const pathname = managerNavigationPath(useLocation().pathname);
+  const section = managerSectionForPath(pathname);
+  const item = section?.items.find(entry => entry.to === pathname);
+  const [description, setDescription] = useState<HTMLDivElement | null>(null);
+  if (!item) return <>{children}</>;
+  const hasOwnDescription = "description" in item;
+  return <ManagerSectionDescription.Provider value={hasOwnDescription ? null : description}>
+    <header className="page-title manager-page-title manager-section-title no-print" data-section={section?.id}>
+      <div className="manager-page-title__content">
+        <h1>{"title" in item ? item.title : item.label}</h1>
+        {hasOwnDescription ? <div className="manager-section-description"><p className="muted">{item.description}</p></div>
+          : <div ref={setDescription} className="manager-section-description" />}
+      </div>
+      <ManagerSectionNavigation readOnly={operatorReadOnlyTabs.some((tab) => tab.to === pathname)} />
+    </header>
+    {children}
+  </ManagerSectionDescription.Provider>;
+}
 
 export type OperationalRequest = { id: string; title: string; detail: string };
 export type TrashedAccount = { id: string; name: string; deletedAt: string };
@@ -54,8 +84,18 @@ function actionTitle({ readOnly, busy }: Pick<ManagerOperationalProps, "readOnly
   return undefined;
 }
 
-export function PageTitle({ children, actions }: { children: ReactNode; actions?: ReactNode }) {
-  return <header className="page-title manager-page-title"><div className="manager-page-title__content">{children}</div>{actions ? <div className="row manager-page-title__actions">{actions}</div> : null}</header>;
+export function PageTitle({ children, description, actions }: { children: ReactNode; description?: ReactNode; actions?: ReactNode }) {
+  const sectionDescription = useContext(ManagerSectionDescription);
+  const actionRow = actions ? <div className="row manager-page-title__actions">{actions}</div> : null;
+  if (sectionDescription !== undefined) return <>
+    {sectionDescription && description ? createPortal(description, sectionDescription) : null}
+    {actionRow ? <header className="page-title manager-page-title">{actionRow}</header> : null}
+  </>;
+  return <header className="page-title manager-page-title">
+    <div className="manager-page-title__content">{children}{description}</div>
+    <ManagerSectionNavigation />
+    {actionRow}
+  </header>;
 }
 
 export function Badge({ children, tone = "" }: { children: ReactNode; tone?: "" | "ok" | "warn" | "danger" | "primary" }) {

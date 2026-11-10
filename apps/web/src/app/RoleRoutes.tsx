@@ -2,15 +2,17 @@ import { Component, lazy, Suspense, type ErrorInfo, type ReactNode } from "react
 import { Link, Navigate, useLocation } from "react-router";
 import { CircleHelp, LockKeyhole } from "lucide-react";
 import type { SessionView } from "@e4s/contracts";
+import { ManagerSectionLayout } from "./manager/shared.js";
 
 const LearnerRouteController = lazy(() => import("./learner/LearnerRouteController.js").then(({ LearnerRouteController }) => ({ default: LearnerRouteController })));
 const ManagerRouteController = lazy(() => import("./manager/ManagerRouteController.js").then(({ ManagerRouteController }) => ({ default: ManagerRouteController })));
 const OperatorRouteController = lazy(() => import("./operator/OperatorRouteController.js").then(({ OperatorRouteController }) => ({ default: OperatorRouteController })));
 
-const managerRoutes = ["/mgr", "/mgr/ops", "/mgr/reopen-requests", "/mgr/complaints", "/mgr/holidays", "/mgr/recovery", "/mgr/reminders", "/mgr/report", "/mgr/rewards"] as const;
-const operatorRoutes = ["/op", "/op/levelforms", "/op/months", "/op/review", "/op/tests"] as const;
+const managerRoutes = ["/mgr", "/mgr/ops", "/mgr/requests", "/mgr/reopen-requests", "/mgr/complaints", "/mgr/holidays", "/mgr/recovery", "/mgr/reminders", "/mgr/report", "/mgr/surveys", "/mgr/rewards"] as const;
+const operatorRoutes = ["/op", "/op/levelforms", "/op/months", "/op/review", "/op/requests", "/op/tests"] as const;
+const managerContentRoutes = ["/mgr/ops/levels", "/mgr/ops/months", "/mgr/ops/review", "/mgr/ops/tests", "/mgr/ops/level-forms"] as const;
 
-export function RoleRoutes({ session }: { session: SessionView }) {
+export function RoleRoutes({ session, onSessionRevoked }: { session: SessionView; onSessionRevoked?: (() => void) | undefined }) {
   const location = useLocation();
   const pathname = normalizePathname(location.pathname);
   const role: unknown = session.role;
@@ -25,16 +27,20 @@ export function RoleRoutes({ session }: { session: SessionView }) {
     if (operatorRoute) return <AccessFallback home="/home" message="Tài khoản này không có quyền mở khu vực vận hành." />;
     if (managerArea || settingsArea || (rewardPreviewRoute && pathname !== "/reward/preview")) return <AccessFallback home="/home" message="Tài khoản này không có quyền mở khu vực quản lý." />;
     if (pathname === "/") return <Navigate replace to="/home" />;
-    return <RoleRouteLoadingBoundary label={loadingLabel(pathname)}><LearnerRouteController /></RoleRouteLoadingBoundary>;
+    return <RoleRouteLoadingBoundary label={loadingLabel(pathname)}><LearnerRouteController courseCompleted={session.courseCompleted === true} /></RoleRouteLoadingBoundary>;
   }
   if (pathname === "/op/prompts") return <AccessFallback home="/op" message="Tài khoản này không có quyền mở cấu hình Prompt & rubric." />;
   if (pathname === "/mgr/ops/prompts" || pathname === "/settings/prompts") return <AccessFallback home={role === "operator" ? "/op" : "/mgr/ops"} message="Tài khoản này không có quyền mở cấu hình Prompt & rubric." />;
   if (pathname === "/" || pathname === "/home") return <Navigate replace to={role === "operator" ? "/op" : "/mgr"} />;
   if (role === "operator" && isRouteOrChild(pathname, "/op/lessons")) return <Navigate replace to="/op/months" />;
   if (role === "operator" && (managerArea || rewardPreviewRoute || (settingsArea && pathname !== "/settings"))) return <AccessFallback home="/op" message="Tài khoản này không có quyền mở khu vực quản lý." />;
-  if (role === "manager" && (operatorRoute || isRouteOrChild(pathname, "/mgr/ops/"))) return <Navigate replace to="/mgr/ops" />;
-  if (pathname === "/settings" || managerRoute || (role === "manager" && pathname === "/reward/preview")) {
-    return <RoleRouteLoadingBoundary label={loadingLabel(pathname)}><ManagerRouteController role={role} currentUserId={session.user.id} /></RoleRouteLoadingBoundary>;
+  const managerContentRoute = role === "manager" && managerContentRoutes.some((route) => pathname === route || (route === "/mgr/ops/months" && /^\/mgr\/ops\/months\/lesson\/[^/]+\/\d+$/u.test(pathname)));
+  if (role === "manager" && !managerContentRoute && (operatorRoute || pathname.startsWith("/mgr/ops/"))) return <Navigate replace to="/mgr/ops" />;
+  if (managerContentRoute || pathname === "/settings" || managerRoute || (role === "manager" && pathname === "/reward/preview")) {
+    return <ManagerSectionLayout><RoleRouteLoadingBoundary label={loadingLabel(pathname)}>
+      {managerContentRoute ? <OperatorRouteController session={session} basePath="/mgr/ops" />
+        : <ManagerRouteController role={role} currentUserId={session.user.id} onSessionRevoked={onSessionRevoked} />}
+    </RoleRouteLoadingBoundary></ManagerSectionLayout>;
   }
   if (operatorRoute) {
     if (!isKnownOperatorRoute(pathname)) return <OperatorRouteNotFound />;
@@ -107,10 +113,12 @@ function loadingLabel(pathname: string): string {
   if (pathname === "/mgr") return "Đang tải tiến độ nhóm";
   if (pathname === "/mgr/ops") return "Đang tải hiệu suất vận hành";
   if (pathname === "/mgr/reminders") return "Đang tải danh sách nhắc học";
-  if (pathname === "/mgr/complaints") return "Đang tải danh sách khiếu nại";
+  if (pathname === "/mgr/requests" || pathname === "/mgr/reopen-requests" || pathname === "/mgr/complaints") return "Đang tải danh sách yêu cầu";
   if (pathname === "/mgr/holidays") return "Đang tải lịch nghỉ lễ";
   if (pathname === "/mgr/recovery") return "Đang tải danh sách khôi phục";
   if (pathname === "/mgr/report") return "Đang tải báo cáo";
+  if (pathname === "/mgr/surveys" || pathname === "/survey/monthly") return "Đang tải khảo sát tháng";
+  if (pathname === "/op/requests" || pathname === "/support") return "Đang tải yêu cầu";
   if (pathname === "/op") return "Đang tải duyệt trình độ";
   return "Đang tải trang";
 }

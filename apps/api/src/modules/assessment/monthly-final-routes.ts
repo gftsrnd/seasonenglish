@@ -7,12 +7,15 @@ import type { FastifyInstance, preHandlerHookHandler } from "fastify";
 import type { Pool, PoolClient } from "pg";
 import { randomUUID } from "node:crypto";
 import { z } from "zod";
+import { createRoleGuard } from "../identity/policy.js";
 import {
   MonthlyFinalInputError, assembleMonthlyFinalFromAi, buildManualMonthlyFinalDraft, buildMonthlyFinalGenerationInput,
   withEvaluation, type MonthlyFinalFrameworkRef
 } from "./monthly-final-builder.js";
 import { MONTHLY_FINAL_MANUAL_RULES } from "./monthly-final-checks.js";
 import { safeGenerationDiagnosticIssues } from "../content/generation-errors.js";
+import {generateMonthlyFinalProductive} from "./monthly-final-productive-generation.js";
+import {generateMonthlyFinalListening} from "./monthly-final-listening-generation.js";
 
 const frameworkParam = z.object({ frameworkId: z.uuid() });
 const versionParam = z.object({ versionId: z.uuid() });
@@ -66,12 +69,13 @@ export function registerMonthlyFinalRoutes(
   app: FastifyInstance, pool: Pool, guard: preHandlerHookHandler, runnerFor: (actorId: string) => Promise<AiTaskRunner | undefined>
 ): void {
   const repositories = createRepositories(pool);
+  const readers = createRoleGuard(pool, ["operator", "manager"]);
 
-  app.get("/api/v1/month-frameworks/:frameworkId/monthly-final", { preHandler: guard }, async (request, reply) => {
+  app.get("/api/v1/month-frameworks/:frameworkId/monthly-final", { preHandler: readers }, async (request, reply) => {
     const params = frameworkParam.safeParse(request.params);
     if (!params.success) return reply.code(400).send({ code: "MONTHLY_FINAL_FRAMEWORK_INVALID" });
     const actorId = request.e4sSession!.user.id;
-    const context = await frameworkContext(pool, actorId, params.data.frameworkId, false);
+    const context = await frameworkContext(pool, actorId, params.data.frameworkId, false, true);
     if (!context) return reply.code(404).send({ code: "MONTHLY_FINAL_FRAMEWORK_NOT_FOUND" });
     const current = await currentMonthlyFinal(pool, context);
     return current ?? reply.code(404).send({ code: "MONTHLY_FINAL_NOT_FOUND" });
@@ -107,11 +111,51 @@ export function registerMonthlyFinalRoutes(
     const generateReading = async (terms: ReadingTerm[], depth: number): Promise<MonthlyFinalReceptiveOutput["reading"]> => {
       const sliceInput = { ...input, targets: { ...input.targets, reading: terms } };
       try {
-        const result = await runner.runTask("monthly_final_reading_generation", sliceInput, { systemPrompt: `${task.prompt}\nGenerate ONLY the reading part now: exactly one short reading question per reading target term (${terms.map((term) => term.id).join(", ")}), ${terms.length} question${terms.length === 1 ? "" : "s"} in total. Keep every prompt and option concise.`, maxOutputTokens: 8_000, maxAttempts: 2 });
+        const balancedTerms = terms.filter((_, index) => index % 2 === 0).map(term => term.id);
+        const systemPrompt = [
+          task.prompt,
+          `Generate only Reading, one question for each of these ${terms.length} terms: ${terms.map(term => term.id).join(", ")}.`,
+          "Use fresh, short context sentences within levelProfile.readingItem.maxWords. Do not copy any taught grammar example.",
+          "Test the supplied meaning. All three options should use the same grammatical shape and different meanings, with exactly one correct interpretation. Do not use conjugations or plurals of the same word as distractors.",
+          "If you use a blank, each option must fit the blank without repeating other words in the prompt. For meaning paraphrases, put the target word in the context sentence and omit the blank.",
+          `For these specific IDs, at least one distractor must be as long as the correct option in characters: ${balancedTerms.join(", ")}.`,
+          "Keep the right meaning compact. Give the distractors a comparable amount of detail. For example, use 'get more details', 'wait until next week', and 'ask about the price' rather than a long explanation and two short labels.",
+          "Explain the answer by meaning in context. Before returning, compare the option lengths for the listed IDs and fix any uniquely longest correct option."
+        ].join("\n");
+        const result = await runner.runTask("monthly_final_reading_generation", sliceInput, {
+          systemPrompt,
+          maxOutputTokens: 8_000,
+          maxAttempts: 2
+        });
         return (result.output as Pick<MonthlyFinalReceptiveOutput, "reading">).reading;
       } catch (error) {
         const retryable = error && typeof error === "object" && ["AI_OUTPUT_INVALID", "AI_OUTPUT_TRUNCATED"].includes(String((error as { code?: unknown }).code));
-        if (!retryable || depth >= 2 || terms.length < 2) throw error;
+        if (!retryable) throw error;
+        const diagnostic = (error as {details?: {invalidOutput?: string;issues?: {path: string;message: string}[]}}).details;
+        const lengthIssue = diagnostic?.issues?.find(issue =>
+          issue.path === "reading.questions" && issue.message.includes("uniquely longest"));
+        if (lengthIssue && typeof diagnostic?.invalidOutput === "string") {
+          try {
+            const repaired = await runner.runTask("monthly_final_reading_generation", sliceInput, {
+              systemPrompt: [
+                "Repair only the Reading answer options in the supplied draft. Preserve the term IDs, prompts, correct meanings and answer positions.",
+                "For every listed term, shorten the correct phrase or give a plausible wrong phrase comparable detail. All three choices must fit the same grammatical slot or use parallel meaning phrases. Never add empty padding or make two choices correct.",
+                "Compare character lengths. At least half of the correct choices must be tied with or shorter than another choice. Return the complete Reading result."
+              ].join("\n"),
+              messages: [
+                {role:"user",content:JSON.stringify(sliceInput)},
+                {role:"assistant",content:diagnostic.invalidOutput},
+                {role:"user",content:lengthIssue.message}
+              ],
+              maxOutputTokens:8000,maxAttempts:2
+            });
+            return (repaired.output as Pick<MonthlyFinalReceptiveOutput, "reading">).reading;
+          } catch (repairError) {
+            if (!repairError || typeof repairError !== "object" || !("code" in repairError) || repairError.code !== "AI_OUTPUT_INVALID") throw repairError;
+            error = repairError;
+          }
+        }
+        if (depth >= 2 || terms.length < 2) throw error;
         const middle = Math.ceil(terms.length / 2);
         const [first, second] = await Promise.all([generateReading(terms.slice(0, middle), depth + 1), generateReading(terms.slice(middle), depth + 1)]);
         return { questions: [...first.questions, ...second.questions] };
@@ -122,9 +166,9 @@ export function registerMonthlyFinalRoutes(
       // and reading left the reading section empty, so they are separate calls,
       // and reading questions still missing are requested again for those terms.
       const [listening, reading, productiveResult] = await Promise.all([
-        runner.runTask("monthly_final_listening_generation", input, { systemPrompt: `${task.prompt}\nGenerate ONLY the listening part now: Message A and Message B, each with its script, gaSentence, gbSentence and its listening questions — exactly one question per listening target term (${input.targets.listening.map((term) => term.id).join(", ")}). Keep prompts and options concise.`, maxOutputTokens: 10_000, maxAttempts: 2 }),
+        generateMonthlyFinalListening(runner,input,task.prompt),
         generateReading(input.targets.reading, 0),
-        runner.runTask("monthly_final_productive_generation", input, { systemPrompt: `${task.prompt}\nGenerate ONLY the productive part now: title, GA/GB main and secondary components, the Writing task, Speaking A read-aloud with its 8 positions, and Speaking B voice note, with sample answers.`, maxOutputTokens: 5_000, maxAttempts: 2 })
+        generateMonthlyFinalProductive(runner, input, `${task.prompt}\nGenerate ONLY the productive part now: title, GA/GB main and secondary components, the Writing task, Speaking A read-aloud with its 8 positions, and Speaking B voice note, with sample answers. First choose two different taught words per P1–P4, then write a natural passage containing ALL eight selected words within levelProfile.speakingA.maxWords. Check every selected word is present in the passage. Grammar evidence fields are exact quotes from the actual corresponding sample, without commentary or instructions to add a sentence later. Writing and Speaking B samples must use all their own assigned target words naturally. Keep Writing sample within the levelProfile writing word range. Write learner facts as short notes in the instruction language. Paraphrase those notes in the model answers. The learner task and facts must not copy taught grammar examples.`)
       ]);
       receptive = {
         output: { listening: (listening.output as Pick<MonthlyFinalReceptiveOutput, "listening">).listening, reading },
@@ -133,12 +177,24 @@ export function registerMonthlyFinalRoutes(
       productive = productiveResult;
     } catch (error) {
       if (error && typeof error === "object" && (error as { code?: unknown }).code === "AI_OUTPUT_INVALID") {
-        return reply.code(422).send({ code: "AI_OUTPUT_INVALID", issues: safeGenerationDiagnosticIssues(error) });
+        const issues=safeGenerationDiagnosticIssues(error);
+        await repositories.aiRuns.recordFailed({userId:actorId,requestId:`monthly-final:${context.framework.id}:${Date.now()}`,taskId:task.taskId,promptVersionId:task.promptVersionId,errorCode:"AI_OUTPUT_INVALID",diagnostic:{issues,invalidOutput:(error as {details?:{invalidOutput?:string}}).details?.invalidOutput}});
+        return reply.code(422).send({ code: "AI_OUTPUT_INVALID", issues });
       }
       request.log.warn({ error }, "Monthly final generation failed");
       return reply.code(502).send({ code: "MONTHLY_FINAL_GENERATION_FAILED" });
     }
     const blueprint = assembleMonthlyFinalFromAi(context.contract, context.framework, receptive.output as MonthlyFinalReceptiveOutput, productive.output as MonthlyFinalProductiveOutput);
+    const failures = blueprint.monthlyExam!.checks.filter(check=>check.status === "fail");
+    if (failures.length) {
+      // Never retire/replace a usable draft with an AI result that fails a
+      // check the program can already prove. Keep the rejected attempt only as diagnostics.
+      await repositories.aiRuns.recordFailed({
+        userId: actorId, requestId: `monthly-final:${context.framework.id}:${Date.now()}`, taskId: task.taskId, promptVersionId: task.promptVersionId,
+        errorCode: "MONTHLY_FINAL_GENERATION_QUALITY_FAILED", diagnostic: { checks: failures, receptive: receptive.output, productive: productive.output }, metadata: receptive.metadata
+      });
+      return reply.code(422).send({code:"MONTHLY_FINAL_GENERATION_QUALITY_FAILED",report:{checks:failures}});
+    }
     await repositories.aiRuns.recordSucceeded({
       userId: actorId, requestId: `monthly-final:${context.framework.id}:${Date.now()}`, taskId: task.taskId, promptVersionId: task.promptVersionId,
       output: { receptive: receptive.output, productive: productive.output }, metadata: receptive.metadata
@@ -318,13 +374,16 @@ export function applyMonthlyFinalUpdate(stored: StoredAssessmentDefinition, inpu
 
 type Queryable = Pool | PoolClient;
 
-async function frameworkContext(db: Queryable, actorId: string, frameworkId: string, requireApproved: boolean): Promise<FrameworkContext | null> {
+async function frameworkContext(db: Queryable, actorId: string, frameworkId: string, requireApproved: boolean, readOnly = false): Promise<FrameworkContext | null> {
   const result = await db.query<{ organization_id: string; month: string; exam_date: string; today: string; status: string; version: number; scope_hash: string; curriculum_contract: unknown }>(
     `select operator.organization_id, pm.month, pm.exam_date::text, organization_system_date(operator.organization_id)::text as today,
             mf.status, mf.version, mf.scope_hash, mf.curriculum_contract
      from users operator join month_frameworks mf on mf.id = $2
      join program_months pm on pm.id = mf.program_month_id and pm.organization_id = operator.organization_id
-     where operator.id = $1 and operator.role = 'operator'${requireApproved ? " and mf.status = 'approved'" : ""}`, [actorId, frameworkId]);
+     where operator.id = $1 and operator.status = 'active' and (operator.role = 'operator' or ($3 and operator.role = 'manager'))
+       and mf.status <> 'retired'${requireApproved ? " and mf.status = 'approved'" : ""}
+       and pm.month between to_char(organization_system_date(operator.organization_id) - case when $3 then interval '1 month' else interval '0 months' end, 'YYYY-MM')
+                        and to_char(organization_system_date(operator.organization_id) + interval '1 month', 'YYYY-MM')`, [actorId, frameworkId, readOnly]);
   const row = result.rows[0];
   if (!row) return null;
   const contract = row.curriculum_contract as MonthlyCurriculumContract;

@@ -1,12 +1,16 @@
 import { randomUUID } from "node:crypto";
 import {
+  carryoverReviewContract,
   buildMonthlyCalendar,
+  buildMonthlyTeachingCalendar,
+  monthlyNewLessonOrdinal,
   monthlyScopeHash,
   monthlyResourcePoolHash,
   recommendedPendingBatch,
   planMonthlyResourcePool,
   backfillMonthlyCurriculumPlan,
   validateMonthlyCurriculum,
+  validateMonthlyGrammarObjectives,
   type MonthlyResourcePoolContract,
   type MonthlyResourcePoolCoreTerm,
   type MonthlyResourcePoolSupportTerm,
@@ -14,6 +18,8 @@ import {
   type MonthlyDaySpec
 } from "@e4s/domain";
 import type {
+  CefrLevel,
+  MonthlyPublicationPreviewView,
   MonthlyOperatorOverviewView,
   MonthFrameworkView,
   SharedMonthBriefView,
@@ -22,7 +28,9 @@ import type {
   OperatorAcknowledgementView,
   ReopenRequestView
 } from "@e4s/contracts";
+import { monthlyLearnerWindow } from "@e4s/domain/progression";
 import type { Client, Pool, PoolClient } from "pg";
+import { FROZEN_MONTHLY_ILLUSTRATIONS_SQL, withFrozenMonthlyIllustrations, type FrozenMonthlyIllustration } from "./monthly-illustration-projection.js";
 
 type Queryable = Pool | Client;
 
@@ -53,6 +61,9 @@ interface FrameworkRow {
   scope_hash: string;
   curriculum_contract: MonthlyCurriculumContract | MonthlyResourcePoolContract;
   quality_acknowledgement: MonthFrameworkView["quality"]["acknowledged"] | null;
+  frozen_illustrations?: FrozenMonthlyIllustration[];
+  published_on?: string | null;
+  publication_ready?: boolean;
 }
 interface ReopenRequestRow {
   id: string;
@@ -64,6 +75,7 @@ interface ReopenRequestRow {
   decision_reason: string | null;
   created_at: Date;
   decided_at: Date | null;
+  archived_at?: Date | null;
 }
 
 interface FrameworkReopenRequestRow {
@@ -80,6 +92,7 @@ interface FrameworkReopenRequestRow {
 }
 
 interface FrameworkReopenListRow extends FrameworkReopenRequestRow {
+  archived_at?: Date | null;
   month: string;
   cefr: MonthFrameworkView["cefr"];
   lesson_count: string;
@@ -287,7 +300,7 @@ export class MonthlyContentRepository {
     return { id: frameworkId, cefr: contract.cefr, version, status: "draft", scopeHash };
   }
 
-  async saveResourceDraft(actorId: string, pool: MonthlyResourcePoolContract): Promise<Pick<MonthFrameworkView, "id" | "cefr" | "version" | "status" | "scopeHash">> {
+  async saveResourceDraft(actorId: string, pool: MonthlyResourcePoolContract, source: "ai" | "manual" = "ai"): Promise<Pick<MonthFrameworkView, "id" | "cefr" | "version" | "status" | "scopeHash">> {
     const actor = await this.requireContentOperator(actorId);
     await this.requireWritableMonth(actor.organization_id, pool.month);
     // Validate the complete draft against the exact approval-time allocation
@@ -305,11 +318,17 @@ export class MonthlyContentRepository {
     let result: { frameworkId: string; version: number; scopeHash: string; replaced: boolean };
     try {
     await client.query("begin");
+    const lockedBrief = await client.query(
+      "select 1 from program_months where id = $1 and brief_version = $2 and brief_status = 'approved' for update",
+      [month.id, month.brief_version]
+    );
+    if (!lockedBrief.rowCount) throw httpError(409, "MONTHLY_BRIEF_VERSION_CONFLICT", "Chủ đề tháng đã thay đổi.");
     const existingResult = await client.query<FrameworkRow>(
       `select id, cefr, version, status, scope_hash, curriculum_contract, quality_acknowledgement
-       from month_frameworks where program_month_id = $1 and cefr = $2 and status <> 'retired'`, [month.id, pool.cefr]
+       from month_frameworks where program_month_id = $1 and cefr = $2 and status <> 'retired' for update`, [month.id, pool.cefr]
     );
     const existing = existingResult.rows[0];
+    if (existing && source === "manual") throw httpError(409, "MONTHLY_FRAMEWORK_VERSION_CONFLICT", "Đã có bản nháp. Hãy mở bản nháp để tiếp tục soạn.");
     if (existing?.status === "approved") throw new Error("An approved framework is immutable. A Manager must retire the invalid resources before a replacement is created.");
     const version = (existing?.version ?? 0) + 1;
     const versionedPool = { ...pool, version };
@@ -325,11 +344,11 @@ export class MonthlyContentRepository {
     } else {
       await client.query(
         `insert into month_frameworks (id, program_month_id, cefr, version, curriculum_contract, scope_hash, created_by, source)
-         values ($1, $2, $3, $4, $5::jsonb, $6, $7, 'ai')`,
-        [frameworkId, month.id, pool.cefr, version, JSON.stringify(versionedPool), scopeHash, actorId]
+         values ($1, $2, $3, $4, $5::jsonb, $6, $7, $8)`,
+        [frameworkId, month.id, pool.cefr, version, JSON.stringify(versionedPool), scopeHash, actorId, source]
       );
     }
-    await client.query("delete from monthly_resource_generation_checkpoints where program_month_id = $1 and cefr = $2", [month.id, pool.cefr]);
+    if (source === "ai") await client.query("delete from monthly_resource_generation_checkpoints where program_month_id = $1 and cefr = $2", [month.id, pool.cefr]);
     result = { frameworkId, version, scopeHash, replaced: Boolean(existing) };
     await client.query("commit");
     } catch (error) {
@@ -518,7 +537,7 @@ export class MonthlyContentRepository {
             [randomUUID(), frameworkId, day.lessonNumber, day.date, scopeHash]);
         }
       }
-      const planErrors = validateMonthlyCurriculum(contract);
+      const planErrors = [...validateMonthlyCurriculum(contract), ...(contract.planSchemaVersion === 2 ? validateMonthlyGrammarObjectives(contract.grammarTopics) : [])];
       if (planErrors.length) throw Object.assign(new Error("MONTHLY_RESOURCE_PLAN_INVALID"), { code: "MONTHLY_RESOURCE_PLAN_INVALID", issues: planErrors });
       const result = await client.query<{ id: string }>(
       `update month_frameworks mf
@@ -725,17 +744,17 @@ export class MonthlyContentRepository {
       [frameworkId, dayNumber, actor.organization_id]
     );
     const day = result.rows[0];
-    if (!day || !day.lesson_id) throw new Error("Monthly day draft was not found");
-    if (day.status !== "draft" || day.quality_report.severe.length) throw new Error("Severe findings or failed quality block monthly day approval");
+    if (!day || !day.lesson_id) throw httpError(404, "MONTHLY_DAY_DRAFT_NOT_FOUND", "Không tìm thấy bản nháp bài học.");
+    if (day.status !== "draft" || day.quality_report.severe.length) throw httpError(409, "MONTHLY_DAY_QUALITY_BLOCKED", "Bài chưa thể duyệt. Hãy mở bản nháp và sửa các mục chất lượng trước khi duyệt lại.");
     const count = await this.database.query<{ light_count: string }>(
       `select coalesce(sum(jsonb_array_length(ml.quality_report->'light')), 0)::text as light_count
        from month_lessons ml where ml.framework_id = $1`,
       [frameworkId]
     );
-    if (Number(count.rows[0]?.light_count ?? 0) > 2) throw new Error("Monthly framework exceeds the two-light-finding limit");
+    if (Number(count.rows[0]?.light_count ?? 0) > 2) throw httpError(409, "MONTHLY_DAY_QUALITY_BLOCKED", "Khung tháng có quá hai cảnh báo. Hãy sửa bớt cảnh báo trước khi duyệt bài.");
     const expectedKeys = day.quality_report.light.map(qualityFindingKey);
     const acknowledged = new Set(day.quality_acknowledgement?.findingCodes ?? []);
-    if (expectedKeys.some((key) => !acknowledged.has(key))) throw new Error("Operator must acknowledge every light finding before approval");
+    if (expectedKeys.some((key) => !acknowledged.has(key))) throw httpError(409, "MONTHLY_DAY_QUALITY_ACK_REQUIRED", "Hãy kiểm tra và xác nhận từng cảnh báo trước khi duyệt.");
     await this.database.query("update lesson_versions set status = 'published' where lesson_id in (select id from lessons where id = $1) and status = 'draft'", [day.lesson_id]);
     await this.database.query("update lesson_set_versions set status = 'published', published_at = now() where id = (select lesson_set_version_id from lessons where id = $1)", [day.lesson_id]);
     await this.database.query(
@@ -857,23 +876,35 @@ export class MonthlyContentRepository {
 
   async listReopenRequests(managerId: string): Promise<ReopenRequestView[]> {
     const manager = await this.requireManager(managerId);
-    const result = await this.database.query<ReopenRequestRow>(
-      `select mlc.id,
+    return this.listOrganizationReopenRequests(manager.organization_id);
+  }
+
+  async listOwnReopenRequests(actorId: string): Promise<ReopenRequestView[]> {
+    const actor = await this.requireContentOperator(actorId);
+    return this.listOrganizationReopenRequests(actor.organization_id, actorId);
+  }
+
+  private async listOrganizationReopenRequests(organizationId: string, requestedBy: string | null = null): Promise<ReopenRequestView[]> {
+    const result = await this.database.query<ReopenRequestRow & { lesson_date: string; cefr: CefrLevel; lesson_number: number }>(
+      `select mlc.id, ml.lesson_date::text as lesson_date, mf.cefr, ml.lesson_number,
               case when (mf.curriculum_contract->'daySpecs' @> jsonb_build_array(jsonb_build_object('lessonNumber', ml.lesson_number, 'kind', 'review'))) then 'weekly_review' else 'daily_lesson' end as target,
-              ml.id as target_id, mlc.requested_by, mlc.reason, mlc.status, mlc.decision_reason, mlc.created_at, mlc.decided_at
+              ml.id as target_id, mlc.requested_by, mlc.reason, mlc.status, mlc.decision_reason, mlc.created_at, mlc.decided_at, mlc.archived_at
        from month_lesson_corrections mlc
        join month_lessons ml on ml.id = mlc.month_lesson_id
        join month_frameworks mf on mf.id = ml.framework_id
        join program_months pm on pm.id = mf.program_month_id
-       where pm.organization_id = $1 and mlc.status in ('requested', 'authorized', 'rejected')
-       order by mlc.created_at desc`, [manager.organization_id]
+       where pm.organization_id = $1
+         and (($2::uuid is null and mlc.staff_deleted_at is null) or mlc.requested_by = $2)
+       order by mlc.created_at desc`, [organizationId, requestedBy]
     );
     const lessonRequests: ReopenRequestView[] = result.rows.map((row) => ({
       id: row.id, target: row.target, targetId: row.target_id, requestedBy: row.requested_by, reason: row.reason,
-      status: row.status === "requested" ? "pending" : row.status === "authorized" ? "approved" : "rejected",
-      decisionReason: row.decision_reason, createdAt: row.created_at.toISOString(), decidedAt: row.decided_at?.toISOString() ?? null
+      status: row.status === "requested" ? "pending" : row.status === "rejected" ? "rejected" : "approved",
+      decisionReason: row.decision_reason, createdAt: row.created_at.toISOString(), decidedAt: row.decided_at?.toISOString() ?? null,
+      archivedAt: row.archived_at?.toISOString() ?? null,
+      lesson: { date: row.lesson_date, cefr: row.cefr, number: row.lesson_number }
     }));
-    const frameworkRequests = await this.listFrameworkReopenRequests(manager.organization_id);
+    const frameworkRequests = await this.listFrameworkReopenRequests(organizationId, requestedBy);
     return [...lessonRequests, ...frameworkRequests].sort((left, right) => right.createdAt.localeCompare(left.createdAt));
   }
 
@@ -893,7 +924,7 @@ export class MonthlyContentRepository {
       [correctionId, managerId, decision === "approved" ? "authorized" : "rejected", reason.trim(), manager.organization_id]
     );
     const row = result.rows[0];
-    if (!row) throw new Error("Pending reopen request was not found");
+    if (!row) throw httpError(409, "REOPEN_REQUEST_NOT_PENDING", "Yêu cầu mở lại đã được xử lý hoặc không còn hiệu lực.");
     await this.audit(manager, `monthly.reopen_${decision}`, correctionId, { target: row.target, targetId: row.target_id, reason: reason.trim() });
     if (decision === "approved") {
       await this.notifyAffectedLearners(manager.organization_id, row.target, "Nội dung bài học đã được mở lại để cập nhật. Kết quả đã hoàn thành của bạn vẫn được giữ nguyên.");
@@ -973,7 +1004,8 @@ export class MonthlyContentRepository {
          where r.id = $1 and pm.organization_id = $2 for update of r`, [requestId, manager.organization_id]
       );
       const request = locked.rows[0];
-      if (!request || request.status !== "requested") throw httpError(404, "REOPEN_REQUEST_NOT_FOUND", "Pending reopen request was not found");
+      if (!request) throw httpError(404, "REOPEN_REQUEST_NOT_FOUND", "Không tìm thấy yêu cầu mở lại.");
+      if (request.status !== "requested") throw httpError(409, "REOPEN_REQUEST_NOT_PENDING", "Yêu cầu mở lại đã được xử lý hoặc không còn hiệu lực.");
       let removedLessonCount: number | null = null;
       let reopened: Record<string, unknown> = {};
       if (decision === "approved") {
@@ -1003,7 +1035,8 @@ export class MonthlyContentRepository {
         await client.query(
           `update month_frameworks
            set status = 'draft', version = $2, curriculum_contract = $3::jsonb, scope_hash = $4,
-               quality_acknowledgement = null, approved_by = null, approved_at = null, updated_at = now()
+               quality_acknowledgement = null, approved_by = null, approved_at = null,
+               published_at = null, published_on = null, updated_at = now()
            where id = $1`, [framework.id, version, JSON.stringify(pool), scopeHash]
         );
         await client.query("delete from month_lessons where framework_id = $1", [framework.id]);
@@ -1052,17 +1085,18 @@ export class MonthlyContentRepository {
     return row;
   }
 
-  private async listFrameworkReopenRequests(organizationId: string): Promise<ReopenRequestView[]> {
+  private async listFrameworkReopenRequests(organizationId: string, requestedBy: string | null): Promise<ReopenRequestView[]> {
     const result = await this.database.query<FrameworkReopenListRow>(
       `select r.id, r.framework_id, r.framework_version, r.requested_by, r.reason, r.status, r.decision_reason, r.removed_lesson_count,
-              r.created_at, r.decided_at, pm.month, mf.cefr,
+              r.created_at, r.decided_at, r.archived_at, pm.month, mf.cefr,
               (select count(*) from month_lessons ml where ml.framework_id = mf.id)::text as lesson_count,
               (select count(*) from month_lessons ml where ml.framework_id = mf.id and (ml.status <> 'pending' or ml.lesson_id is not null))::text as lessons_with_content
        from month_framework_reopen_requests r
        join month_frameworks mf on mf.id = r.framework_id
        join program_months pm on pm.id = mf.program_month_id
        where pm.organization_id = $1
-       order by r.created_at desc`, [organizationId]
+         and (($2::uuid is null and r.staff_deleted_at is null) or r.requested_by = $2)
+       order by r.created_at desc`, [organizationId, requestedBy]
     );
     return result.rows.map(toFrameworkReopenRequestView);
   }
@@ -1077,7 +1111,107 @@ export class MonthlyContentRepository {
     return new Map(result.rows.map((row) => [row.framework_id, toFrameworkReopenView(row)]));
   }
 
-  async getOverview(actorId: string, month: string): Promise<MonthlyOperatorOverviewView> {
+  async previewMonthPublication(actorId: string, frameworkId: string): Promise<MonthlyPublicationPreviewView> {
+    const actor = await this.requireContentOperator(actorId);
+    const result = await this.database.query<{ month: string; exam_date: string; today: string; next_month: string; affected: number }>(
+      `select pm.month, pm.exam_date::text, organization_system_date(pm.organization_id)::text as today,
+              to_char((pm.month || '-01')::date + interval '1 month', 'YYYY-MM') as next_month,
+              (select count(distinct e.learner_id)::int from enrollments e
+               join programs p on p.id = e.program_id and p.status = 'active'
+               join users learner on learner.id = e.learner_id and learner.status = 'active'
+               where learner.organization_id = pm.organization_id and learner.role = 'learner'
+                 and p.organization_id = pm.organization_id and e.cefr_approved and e.cefr = mf.cefr) as affected
+       from month_frameworks mf join program_months pm on pm.id = mf.program_month_id
+       where mf.id = $1 and pm.organization_id = $2 and mf.status <> 'retired'`,
+      [frameworkId, actor.organization_id]
+    );
+    const row = result.rows[0];
+    if (!row) throw httpError(404, "MONTHLY_FRAMEWORK_NOT_FOUND", "Không tìm thấy khung tháng.");
+    await this.requireWritableMonth(actor.organization_id, row.month);
+    const late = row.today > `${row.month}-01`;
+    const affectedLearners = late ? row.affected : 0;
+    const waitingNextMonth = late && !monthlyLearnerWindow(row.month, row.exam_date, row.today).canStudy ? affectedLearners : 0;
+    return { publishOn: row.today, affectedLearners, waitingNextMonth, nextMonth: row.next_month };
+  }
+
+  async planExpiredContentRetention(managerId: string) {
+    const manager = await this.requireManager(managerId);
+    const { rows } = await this.database.query<{
+      month: string; frameworks: number; lessons: number; exam_versions: number;
+      pending_lesson_appeals: number; pending_exam_appeals: number;
+    }>(
+      `select pm.month,
+              (select count(*)::int from month_frameworks mf where mf.program_month_id = pm.id) as frameworks,
+              (select count(*)::int from month_lessons ml join month_frameworks mf on mf.id = ml.framework_id
+               where mf.program_month_id = pm.id) as lessons,
+              (select count(*)::int from assessment_versions av join assessment_definitions ad on ad.id = av.definition_id
+               where ad.organization_id = pm.organization_id and ad.kind = 'final'
+                 and ad.assessment_key ~ ('^monthly-final-' || pm.month || '-(a1|a2|b1|b2|c1)$')) as exam_versions,
+              (select count(*)::int from lesson_part_appeals a join lessons l on l.id = a.lesson_id
+               join lesson_set_versions lsv on lsv.id = l.lesson_set_version_id
+               join lesson_sets ls on ls.id = lsv.lesson_set_id
+               join month_frameworks mf on mf.id = ls.month_framework_id
+               where mf.program_month_id = pm.id and a.status = 'pending') as pending_lesson_appeals,
+              (select count(*)::int from appeals a join assessment_attempts aa on aa.id = a.attempt_id
+               join assessment_versions av on av.id = aa.assessment_version_id join assessment_definitions ad on ad.id = av.definition_id
+               where ad.organization_id = pm.organization_id and ad.kind = 'final'
+                 and ad.assessment_key ~ ('^monthly-final-' || pm.month || '-(a1|a2|b1|b2|c1)$')
+                 and a.status = 'pending') as pending_exam_appeals
+       from program_months pm where pm.organization_id = $1
+         and pm.month < to_char(organization_system_date(pm.organization_id) - interval '1 month', 'YYYY-MM')
+       order by pm.month`,
+      [manager.organization_id]
+    );
+    return { months: rows.map(row => ({
+      month: row.month, frameworks: row.frameworks, lessons: row.lessons, examVersions: row.exam_versions,
+      pendingLessonAppeals: row.pending_lesson_appeals, pendingExamAppeals: row.pending_exam_appeals
+    })) };
+  }
+
+  async publishMonth(actorId: string, frameworkId: string, confirmedOn?: string): Promise<{ publishedOn: string }> {
+    const actor = await this.requireContentOperator(actorId);
+    const pooledClient = "connect" in this.database;
+    const client = pooledClient ? await this.database.connect() : this.database;
+    try {
+      await client.query("begin");
+      const result = await client.query<{ month: string; cefr: CefrLevel; today: string; published_on: string | null }>(
+        `select pm.month, mf.cefr, organization_system_date(pm.organization_id)::text as today, mf.published_on::text
+         from month_frameworks mf join program_months pm on pm.id = mf.program_month_id
+         where mf.id = $1 and pm.organization_id = $2 and mf.status <> 'retired' for update of mf`,
+        [frameworkId, actor.organization_id]
+      );
+      const row = result.rows[0];
+      if (!row) throw httpError(404, "MONTHLY_FRAMEWORK_NOT_FOUND", "Không tìm thấy khung tháng.");
+      if (row.published_on) {
+        await client.query("commit");
+        return { publishedOn: row.published_on };
+      }
+      if (confirmedOn && confirmedOn !== row.today) throw httpError(409, "MONTHLY_PUBLICATION_DATE_CHANGED", "Ngày hệ thống đã đổi. Hãy kiểm tra lại ảnh hưởng trước khi công bố.");
+      const published = await client.query(
+        `update month_frameworks mf set published_at = now(), published_on = $2::date, updated_at = now()
+         from program_months pm
+         where mf.id = $1 and pm.id = mf.program_month_id
+           and pm.month between to_char($2::date, 'YYYY-MM') and to_char($2::date + interval '1 month', 'YYYY-MM')
+           and monthly_framework_ready_for_publication(mf.id)`,
+        [frameworkId, row.today]
+      );
+      if (!published.rowCount) throw httpError(409, "MONTHLY_PUBLICATION_INCOMPLETE", "Chỉ công bố tháng đang soạn khi đã duyệt tài nguyên, tất cả bài ngày và bài ôn.");
+      await client.query(
+        `insert into audit_events (id, organization_id, actor_user_id, action, entity_type, entity_id, payload, trace_id)
+         values ($1, $2, $3, 'monthly.framework_published', 'monthly_framework', $4, $5::jsonb, $6)`,
+        [randomUUID(), actor.organization_id, actorId, frameworkId, JSON.stringify({ month: row.month, cefr: row.cefr, publishedOn: row.today }), randomUUID()]
+      );
+      await client.query("commit");
+      return { publishedOn: row.today };
+    } catch (error) {
+      await client.query("rollback");
+      throw error;
+    } finally {
+      if (pooledClient) (client as PoolClient).release();
+    }
+  }
+
+  async getOverview(actorId: string, requestedMonth?: string): Promise<MonthlyOperatorOverviewView> {
     const actor = await this.requireOperator(actorId);
     const systemDateResult = await this.database.query<SystemDateWindowRow>(
       `select organization_system_date($1)::text as system_date,
@@ -1088,6 +1222,10 @@ export class MonthlyContentRepository {
     );
     const systemDate = systemDateResult.rows[0];
     if (!systemDate) throw new Error("Organization system date was not found");
+    const month = requestedMonth ?? systemDate.current_month;
+    if (month < systemDate.previous_month || month > systemDate.next_month) {
+      throw httpError(404, "MONTHLY_CONTENT_OUTSIDE_WINDOW", "Tháng nằm ngoài cửa sổ nội dung ba tháng.");
+    }
     const overviewWindow = {
       previous: systemDate.previous_month,
       current: systemDate.current_month,
@@ -1100,19 +1238,30 @@ export class MonthlyContentRepository {
       [actor.organization_id, month]
     );
     const brief = briefResult.rows[0];
-    if (!brief) return { systemDate: systemDate.system_date, monthWindow: overviewWindow, brief: null, frameworks: [] };
+    const holidays = await this.database.query<{ date: string }>("select holiday_date::text as date from organization_holidays where organization_id = $1 and to_char(holiday_date, 'YYYY-MM') = $2", [actor.organization_id, month]);
+    const calendar = buildMonthlyTeachingCalendar(month, holidays.rows);
+    if (!brief) return { systemDate: systemDate.system_date, monthWindow: overviewWindow, calendar, brief: null, frameworks: [] };
     const frameworkResult = await this.database.query<FrameworkRow>(
-      `select id, cefr, version, status, scope_hash, curriculum_contract, quality_acknowledgement
-       from month_frameworks where program_month_id = $1 and status <> 'retired' order by cefr`,
+      `select mf.id, mf.cefr, mf.version, mf.status, mf.scope_hash, mf.curriculum_contract, mf.quality_acknowledgement,
+              ${FROZEN_MONTHLY_ILLUSTRATIONS_SQL} as frozen_illustrations,
+              mf.published_on::text, monthly_framework_ready_for_publication(mf.id) as publication_ready
+       from month_frameworks mf where mf.program_month_id = $1 and mf.status <> 'retired' order by mf.cefr`,
       [brief.id]
     );
     const reopenRequests = await this.latestFrameworkReopenRequests(frameworkResult.rows.map((framework) => framework.id));
-    const frameworks = await Promise.all(frameworkResult.rows.map(async (framework) => ({
-      ...toFrameworkHeader(framework),
-      lessons: await this.lessonsForFramework(framework, brief.id),
-      reopenRequest: reopenRequests.get(framework.id) ?? null
-    })));
-    return { systemDate: systemDate.system_date, monthWindow: overviewWindow, brief: toBriefView(brief), frameworks };
+    const frameworks = await Promise.all(frameworkResult.rows.map(async (framework) => {
+      const view: MonthFrameworkView = {...toFrameworkHeader(framework), lessons:await this.lessonsForFramework(framework,brief.id),reopenRequest:reopenRequests.get(framework.id) ?? null,
+        publication: { ready: Boolean(framework.publication_ready), publishedOn: framework.published_on ?? null } };
+      if (view.resources && "daySpecs" in framework.curriculum_contract) for (const day of framework.curriculum_contract.daySpecs.filter(day => day.reviewFromPreviousMonth)) {
+        try {
+          const scope = await this.getReviewTeachingContract(actorId,framework.id,day.lessonNumber);
+          const planned = monthlyResourceRoadmap(scope).days[0];
+          if (planned) (view.resources.carryoverReviews ??= []).push({lessonNumber:day.lessonNumber,day:planned,coreTerms:scope.coreTerms,supportTerms:scope.supportTerms,grammarTopics:scope.grammarTopics,sounds:scope.sounds});
+        } catch (error) { if (!(error && typeof error === "object" && "code" in error && error.code === "MONTHLY_PREVIOUS_REVIEW_SCOPE_REQUIRED")) throw error; }
+      }
+      return view;
+    }));
+    return { systemDate: systemDate.system_date, monthWindow: overviewWindow, calendar, brief: toBriefView(brief), frameworks };
   }
 
   async recommendedBatch(actorId: string, frameworkId: string): Promise<number[]> {
@@ -1130,8 +1279,20 @@ export class MonthlyContentRepository {
     return recommendedPendingBatch(framework.curriculum_contract.daySpecs, new Map(lessons.map((lesson) => [lesson.lessonNumber, lesson.status])));
   }
 
+  async getReviewTeachingContract(actorId: string, frameworkId: string, lessonNumber: number): Promise<MonthlyCurriculumContract> {
+    const current = await this.getFrameworkContract(actorId,frameworkId);
+    const day = current.daySpecs.find(day => day.lessonNumber === lessonNumber);
+    if (!day?.reviewFromPreviousMonth) return current;
+    const source = await this.database.query<{curriculum_contract:MonthlyCurriculumContract}>(
+      "select previous.curriculum_contract from month_frameworks own join program_months current_pm on current_pm.id = own.program_month_id join program_months previous_pm on previous_pm.organization_id = current_pm.organization_id and previous_pm.month = to_char((current_pm.month || '-01')::date - interval '1 month','YYYY-MM') join month_frameworks previous on previous.program_month_id = previous_pm.id and previous.cefr = own.cefr and previous.status = 'approved' where own.id = $1",[frameworkId]);
+    if (!source.rows[0]?.curriculum_contract.daySpecs) throw Object.assign(new Error("Previous month review resources are not ready"),{code:"MONTHLY_PREVIOUS_REVIEW_SCOPE_REQUIRED"});
+    try { return carryoverReviewContract(current,source.rows[0].curriculum_contract,lessonNumber); }
+    catch (cause) { throw Object.assign(new Error("Previous month review scope is incomplete",{cause}),{code:"MONTHLY_PREVIOUS_REVIEW_SCOPE_REQUIRED"}); }
+  }
+
   async getFrameworkContract(actorId: string, frameworkId: string): Promise<MonthlyCurriculumContract> {
     const actor = await this.requireOperator(actorId);
+    await this.requireReadableFramework(actor.organization_id, frameworkId);
     const result = await this.database.query<FrameworkRow>(
       `select mf.id, mf.cefr, mf.version, mf.status, mf.scope_hash, mf.curriculum_contract, mf.quality_acknowledgement
        from month_frameworks mf join program_months pm on pm.id = mf.program_month_id
@@ -1206,6 +1367,7 @@ export class MonthlyContentRepository {
   /** One row per core word in plan order; words without a row are reported as missing. */
   async listFrameworkIllustrations(actorId: string, frameworkId: string): Promise<MonthlyIllustrationView[]> {
     const actor = await this.requireOperator(actorId);
+    await this.requireReadableFramework(actor.organization_id, frameworkId);
     const result = await this.database.query<FrameworkRow>(
       `select mf.id, mf.cefr, mf.version, mf.status, mf.scope_hash, mf.curriculum_contract, mf.quality_acknowledgement
        from month_frameworks mf join program_months pm on pm.id = mf.program_month_id
@@ -1283,6 +1445,17 @@ export class MonthlyContentRepository {
     if (!result.rows[0]?.writable) throw new Error("Monthly content is read-only outside the current and next month");
   }
 
+  private async requireReadableFramework(organizationId: string, frameworkId: string): Promise<void> {
+    const result = await this.database.query(
+      `select 1 from month_frameworks mf join program_months pm on pm.id = mf.program_month_id
+       where mf.id = $1 and pm.organization_id = $2 and mf.status <> 'retired'
+         and pm.month between to_char(organization_system_date(pm.organization_id) - interval '1 month', 'YYYY-MM')
+                          and to_char(organization_system_date(pm.organization_id) + interval '1 month', 'YYYY-MM')`,
+      [frameworkId, organizationId]
+    );
+    if (!result.rowCount) throw httpError(404, "MONTHLY_FRAMEWORK_NOT_FOUND", "Không tìm thấy khung trong cửa sổ nội dung ba tháng.");
+  }
+
   private async monthForFramework(frameworkId: string, organizationId: string): Promise<string | null> {
     const result = await this.database.query<{ month: string }>(
       `select pm.month from month_frameworks mf
@@ -1318,6 +1491,7 @@ function toFrameworkReopenRequestView(row: FrameworkReopenListRow): ReopenReques
     id: row.id, target: "monthly_resources", targetId: row.framework_id, requestedBy: row.requested_by, reason: row.reason,
     status: reopenStatus(row.status), decisionReason: row.decision_reason,
     createdAt: row.created_at.toISOString(), decidedAt: row.decided_at?.toISOString() ?? null,
+    archivedAt: row.archived_at?.toISOString() ?? null,
     monthlyResources: {
       frameworkId: row.framework_id, month: row.month, cefr: row.cefr, frameworkVersion: row.framework_version,
       lessonCount: Number(row.lesson_count), lessonsWithContent: Number(row.lessons_with_content),
@@ -1365,7 +1539,7 @@ function toFrameworkHeader(row: FrameworkRow): Omit<MonthFrameworkView, "lessons
     status: row.status as MonthFrameworkView["status"],
     scopeHash: row.scope_hash,
     resources: {
-      coreTerms: row.curriculum_contract.coreTerms,
+      coreTerms: withFrozenMonthlyIllustrations(row.curriculum_contract.coreTerms, row.frozen_illustrations),
       supportTerms: row.curriculum_contract.supportTerms,
       grammarTopics: row.curriculum_contract.grammarTopics,
       sounds: row.curriculum_contract.sounds,
@@ -1382,15 +1556,15 @@ function monthlyResourceRoadmap(contract: MonthlyCurriculumContract | MonthlyRes
     allocated: true,
     grammarSteps: grammarStepIds.map((stepId) => ({
       stepId,
-      lessonNumbers: contract.daySpecs.filter((day) => (day.grammarStepIds ?? [day.grammarStepId]).includes(stepId)).map((day) => day.lessonNumber)
+      lessonNumbers: contract.daySpecs.filter((day) => day.kind === "new" && (day.grammarStepIds ?? [day.grammarStepId]).includes(stepId)).map((day) => day.newLessonNumber ?? (monthlyNewLessonOrdinal(day.lessonNumber, buildMonthlyCalendar(contract.month)) ?? day.lessonNumber))
     })),
     sounds: contract.sounds.map((sound) => ({
       soundId: sound.id,
-      lessonNumbers: contract.daySpecs.filter((day) => day.soundId === sound.id).map((day) => day.lessonNumber),
+      lessonNumbers: contract.daySpecs.filter((day) => day.kind === "new" && (day.pronunciationPlan?.targetIds.includes(sound.id) ?? day.soundId === sound.id)).map((day) => day.newLessonNumber ?? (monthlyNewLessonOrdinal(day.lessonNumber, buildMonthlyCalendar(contract.month)) ?? day.lessonNumber)),
       slots: contract.daySpecs.filter((day) => day.soundId === sound.id).flatMap((day) => day.pronunciationSlot ? [day.pronunciationSlot] : [])
     })),
     days: contract.daySpecs.map((day) => ({
-      lessonNumber: day.lessonNumber,
+      lessonNumber: day.lessonNumber, ...(day.newLessonNumber ? { newLessonNumber: day.newLessonNumber } : {}), ...(day.reviewWeekNumber ? { reviewWeekNumber: day.reviewWeekNumber } : {}), ...(day.grammarPlan ? { grammarPlan: day.grammarPlan } : {}), ...(day.pronunciationPlan ? { pronunciationPlan: day.pronunciationPlan } : {}),
       date: day.date,
       kind: day.kind,
       coreTermIds: day.coreTermIds,

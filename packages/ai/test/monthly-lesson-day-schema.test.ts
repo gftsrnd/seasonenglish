@@ -5,6 +5,13 @@ import { monthlyLessonDayOutputJsonSchema, monthlyLessonDayOutputSchema } from "
 const lesson = { title: "Day 1", parts: [{ code: "objective", content: { text: "Say hello to a client" } }] };
 
 describe("monthly lesson day output schema", () => {
+  it("allows the grammar-step objects required by a multi-step review as well as instruction strings", () => {
+    const steps = [{ formula: "Subject + V", text: "Use this for routines.", examples: ["We meet every week."] }];
+    const fixture = { title:"Weekly review", parts:[{code:"instruction",content:{steps:["Read and answer."]}},{code:"grammar",content:{steps}}] };
+    expect(monthlyLessonDayOutputSchema.parse(fixture).lesson.parts[1]?.content.steps).toEqual(steps);
+    const schema = monthlyLessonDayOutputJsonSchema.properties.parts.items.properties.content.properties.steps.items.anyOf;
+    expect(schema).toEqual(expect.arrayContaining([expect.objectContaining({type:"object",required:["formula","text","examples"]}),{type:"string"}]));
+  });
   it("exposes a flat tool schema with no single wrapper object", () => {
     expect(monthlyLessonDayOutputJsonSchema.required).toEqual(["title", "parts"]);
     expect(Object.keys(monthlyLessonDayOutputJsonSchema.properties)).toEqual(["title", "parts"]);

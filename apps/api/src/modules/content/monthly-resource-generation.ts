@@ -102,7 +102,7 @@ const CURRENT_MONTHLY_RESOURCE_BASE_SCHEMA_VERSION = "monthly-resource-category-
 export const CURRENT_MONTHLY_RESOURCE_CHECKPOINT_SCHEMA_VERSIONS = {
   coreTerms: "monthly-resource-category-v19-core-relation-preflight",
   expandedTerms: "monthly-resource-category-v32-preflight-support-graph-and-partial-checkpoints",
-  grammarTopics: CURRENT_MONTHLY_RESOURCE_BASE_SCHEMA_VERSION,
+  grammarTopics: "monthly-resource-grammar-v2-six-daily-objectives",
   pronunciationTargets: CURRENT_MONTHLY_RESOURCE_BASE_SCHEMA_VERSION
 } as const;
 
@@ -470,16 +470,21 @@ export function doesMonthlyPronunciationExampleMatch(targetIpa: string, exampleI
 
 export function buildMonthlyPronunciationDistinctnessConstraint(
   previousTargets: readonly Pick<MonthlyResourcePlanTaskOutput["pronunciationTargets"][number], "ipa" | "label" | "explanation">[],
-  retryIssue = ""
+  retryIssue = "",
+  advanced = false
 ): string {
   const exclusions = previousTargets.map((target) => `${target.ipa} (${target.label}; ${target.explanation})`);
   const banned = exclusions.length
     ? `HARD BANS: this target must not return ${previousTargets.map((target) => target.ipa).join(", ")}. These targets are already accepted and cannot be reused or paraphrased: ${exclusions.join("; ")}. Choose a different phoneme or stress pattern, with a clearly different sound category; avoid near-neighbor contrasts of a sound already selected.`
     : "This is the first roadmap target; choose a genuine target that can coexist with three other distinct pronunciation targets.";
   const hasStressOnlyTarget = previousTargets.some((target) => target.ipa.trim() === "/ˈ/" || target.ipa.trim() === "/ˌ/");
-  const categoryConstraint = hasStressOnlyTarget
-    ? "A stress-only marker target has already been accepted. This target must be a real consonant or vowel phoneme, not another stress pattern; do not return /ˈ/, /ˌ/ or any other stress-only marker."
-    : "Use a real consonant or vowel phoneme unless a stress target is materially different from every accepted target.";
+  const categoryConstraint = advanced
+    ? hasStressOnlyTarget
+      ? "A stress-only marker target has already been accepted. Choose a different advanced phenomenon, such as a final consonant cluster /st/, /nd/ or /kt/; do not return /ˈ/, /ˌ/ or any isolated phoneme."
+      : "Choose an advanced phenomenon with a transcribable pattern, such as a final consonant cluster /st/ or a stress marker /ˈ/. Do not use an isolated phoneme."
+    : hasStressOnlyTarget
+      ? "A stress-only marker target has already been accepted. This target must be a real consonant or vowel phoneme, not another stress pattern; do not return /ˈ/, /ˌ/ or any other stress-only marker."
+      : "Use a real consonant or vowel phoneme unless a stress target is materially different from every accepted target.";
   const retry = retryIssue
     ? `The previous response was rejected: ${retryIssue}. Treat that IPA and target description as forbidden too. Return a different valid IPA target; do not repeat the rejected target category.`
     : "";
@@ -525,6 +530,9 @@ export function getMonthlyGrammarPhaseIssues(result: MonthlyResourcePlanTaskOutp
     if (new Set(topic.steps.map((step) => step.focus.trim().toLocaleLowerCase("en").replace(/[\s\p{P}]+/gu, " ").trim())).size !== topic.steps.length) {
       issues.push(`grammarTopics[${topicIndex}] must have distinct step focus values`);
     }
+    const objectives = topic.steps.flatMap(step => step.dailyObjectives ?? []);
+    if (objectives.length !== 6 || objectives.some(value => value.trim().length < 10)) issues.push(`grammarTopics[${topicIndex}] needs two explicit dailyObjectives per step (six in total)`);
+    if (new Set(objectives.map(value => value.toLocaleLowerCase("en").replace(/[\s\p{P}]+/gu, " ").trim())).size !== objectives.length) issues.push(`grammarTopics[${topicIndex}] repeats a daily teaching objective`);
   }
   return issues;
 }
@@ -533,7 +541,7 @@ export function buildMonthlyGrammarPhasePrompt(rejectedIssues: readonly string[]
   const repair = rejectedIssues.length
     ? ` Previous response rejected: ${rejectedIssues.join("; ")}. Correct each listed issue in this response.`
     : "";
-  return `PHASE 3 — GRAMMAR ONLY. Return exactly two grammarTopics; coreTerms, expandedTerms and pronunciationTargets must be empty arrays. Each grammar topic must have exactly three ordered progressive steps that build in complexity; use a distinct focus and teaching point at each step, with precise formula, concise Vietnamese usage, and three to six authentic workplace examples. Topic A steps are the progression for N1–N2, N3–N4, N5–N6. Topic B steps are the progression for N7–N8, N9–N10, N11–N12. N13–N16 combine the third step of both topics. Return JSON matching the schema only; do not include explanations or any other resource category.${repair}`;
+  return `PHASE 3 — GRAMMAR ONLY. Return exactly two grammarTopics; coreTerms, expandedTerms and pronunciationTargets must be empty arrays. Each grammar topic must have exactly three ordered progressive steps that build in complexity; use a distinct focus and teaching point at each step, with precise formula, usage in Vietnamese for A1/A2 or simple English for B1/C1, and three to six authentic workplace reference examples. Each step also has dailyObjectives: exactly two distinct objectives, first recognition/explanation and then contextual application, at the supplied CEFR. Together they define A1–A6 or B1–B6; never copy one objective twice. Topic A steps are the progression for N1–N2, N3–N4, N5–N6. Topic B steps are the progression for N7–N8, N9–N10, N11–N12. N13–N15 combine the third step of both topics through contrast, read-aloud and voice note. N16–N18 are optional personalization, shadowing and speaking mock, without new grammar topics. Return JSON matching the schema only; do not include explanations or any other resource category.${repair}`;
 }
 
 export async function runMonthlyGrammarPhaseWithRetry(
@@ -924,7 +932,8 @@ export function buildMonthlyResourcesFromAiPlan(
       focus: step.focus,
       formula: step.formula,
       usage: step.usage,
-      examples: step.examples
+      examples: step.examples,
+      ...(step.dailyObjectives ? { dailyObjectives: step.dailyObjectives } : {})
     }))
   }));
   const sounds = plan.pronunciationTargets.map((target, targetIndex) => ({

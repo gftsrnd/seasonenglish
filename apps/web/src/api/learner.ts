@@ -1,19 +1,22 @@
 import type {
-  AssessmentAppealView, AssessmentKind, AssessmentMonthlyGoalView, AssessmentResponseView,
+  AssessmentAppealTargetView, AssessmentAppealView, AssessmentKind, AssessmentMonthlyGoalView, AssessmentResponseView,
   AssessmentRuntimeView, AssessmentSectionCode, AssessmentView, AssessmentViolationInput, CoachMessageInput,
   CoachPersona, CoachView, GameFinishInput, GameHubView, GameKey, GameResultView,
   LearnerHomeView, LearnerNotificationsView, LearnerProfileData, LearnerProfileView, LearnerProgressView, LessonPartAppealView,
   LessonPartAttemptEvidenceInput, LessonPartAttemptView, LessonPartCode, LessonProgressView, LessonView,
-  ContentImageView, LevelChallengeView, MicroLessonView, RewardView, SurveyView, WeeklyPracticeView, AudioArtifactInput,
-  LearnerComplaintKind, LearnerComplaintView, WeeklyReviewAnswerInput, WeeklyReviewAnswerResult, WeeklyReviewSessionView
+  ContentImageView, CourseCompletionView, LevelChallengeView, MicroLessonView, RewardView, SurveyView, WeeklyPracticeView, AudioArtifactInput,
+  RequestEvidenceInput, LearnerAcademicAppealView, LearnerComplaintKind, LearnerComplaintView, WeeklyReviewAnswerInput, WeeklyReviewAnswerResult, WeeklyReviewSessionView
 } from "@e4s/contracts";
 import type { AudioArtifactView } from "@e4s/contracts";
 import { request, uploadMultipart } from "./runtime.js";
 import type { LearnerAudioEvidence } from "../app/learner/contracts.js";
 
 export interface LearnerApiClient {
+  getCourseCompletion(): Promise<CourseCompletionView>;
+  getAppealableAssessments(): Promise<{ results: AssessmentAppealTargetView[] }>;
+  getLearnerAppeals(): Promise<{ appeals: LearnerAcademicAppealView[] }>;
   getLearnerComplaints(): Promise<{ complaints: LearnerComplaintView[] }>;
-  submitLearnerComplaint(kind: LearnerComplaintKind, reason: string): Promise<{ complaint: LearnerComplaintView }>;
+  submitLearnerComplaint(kind: LearnerComplaintKind, reason: string, evidence?: RequestEvidenceInput): Promise<{ complaint: LearnerComplaintView }>;
   getProfile(): Promise<LearnerProfileView>;
   saveProfile(profile: LearnerProfileData, version: number): Promise<LearnerProfileView>;
   saveProfileDraft(profile: LearnerProfileData, version: number): Promise<LearnerProfileView>;
@@ -28,7 +31,7 @@ export interface LearnerApiClient {
   recordPronunciationListen(id: string, word: string): Promise<LessonProgressView>;
   saveLessonProgress(id: string, progress: LessonProgressView): Promise<LessonProgressView>;
   submitLessonPartAttempt(lessonId: string, partCode: LessonPartCode, requestId: string, evidence: LessonPartAttemptEvidenceInput): Promise<LessonPartAttemptView>;
-  appealLessonPart(lessonId: string, partCode: LessonPartCode, reason: string): Promise<LessonPartAppealView>;
+  appealLessonPart(lessonId: string, partCode: LessonPartCode, reason: string, evidence?: RequestEvidenceInput, exerciseVersionId?: string): Promise<LessonPartAppealView>;
   getWeeklyReviewSession(lessonId: string): Promise<WeeklyReviewSessionView>;
   setWeeklyReviewWarmup(lessonId: string, status: "skipped" | "done"): Promise<WeeklyReviewSessionView>;
   answerWeeklyReview(lessonId: string, input: WeeklyReviewAnswerInput): Promise<WeeklyReviewAnswerResult>;
@@ -44,7 +47,7 @@ export interface LearnerApiClient {
   sendLevelChallengeMessage(input: CoachMessageInput): Promise<LevelChallengeView>;
   getWeeklyPractice(): Promise<WeeklyPracticeView>;
   submitWeeklyPractice(input: { requestId: string; text: string; audio?: AudioArtifactInput }): Promise<WeeklyPracticeView>;
-  appealWeeklyPractice(submissionId: string, reason: string): Promise<WeeklyPracticeView>;
+  appealWeeklyPractice(submissionId: string, reason: string, evidence?: RequestEvidenceInput): Promise<WeeklyPracticeView>;
   getGames(): Promise<GameHubView>;
   generateGameWordSet(input: { requestId: string; topic: string }): Promise<GameHubView>;
   useWeeklyGameWordSet(): Promise<GameHubView>;
@@ -65,12 +68,15 @@ export interface LearnerApiClient {
   recordAssessmentAudioPlay(attemptId: string, section: AssessmentSectionCode, groupKey: string): Promise<{ playCount: number; remaining: number }>;
   recordAssessmentViolation(attemptId: string, input: AssessmentViolationInput): Promise<AssessmentRuntimeView>;
   submitAssessment(attemptId: string): Promise<AssessmentView>;
-  createAssessmentAppeal(attemptId: string, reason: string): Promise<AssessmentAppealView>;
+  createAssessmentAppeal(attemptId: string, reason: string, evidence?: RequestEvidenceInput): Promise<AssessmentAppealView>;
 }
 
 export const learnerApiClient: LearnerApiClient = {
+  getCourseCompletion: () => request("/api/v1/learner/course-completion"),
+  getAppealableAssessments: () => request("/api/v1/learner/appealable-assessments"),
+  getLearnerAppeals: () => request("/api/v1/learner/appeals"),
   getLearnerComplaints: () => request("/api/v1/learner/complaints"),
-  submitLearnerComplaint: (kind, reason) => request("/api/v1/learner/complaints", { method: "POST", body: JSON.stringify({ kind, reason }) }),
+  submitLearnerComplaint: (kind, reason, evidence) => request("/api/v1/learner/complaints", { method: "POST", body: JSON.stringify({ kind, reason, ...evidence }) }),
   getProfile: () => request("/api/v1/learner/profile"),
   saveProfile: (profile, version) => request("/api/v1/learner/profile", { method: "PUT", body: JSON.stringify({ ...profile, version }) }),
   saveProfileDraft: (profile, version) => request("/api/v1/learner/profile/draft", { method: "PUT", body: JSON.stringify({ ...profile, version }) }),
@@ -88,7 +94,7 @@ export const learnerApiClient: LearnerApiClient = {
     body: JSON.stringify({ completedPartCodes: progress.completedPartCodes, evidence: progress.evidence, markComplete: progress.status === "completed", ...(progress.score === undefined ? {} : { score: progress.score }) })
   }),
   submitLessonPartAttempt: (lessonId, partCode, requestId, evidence) => request(`/api/v1/lessons/${encodeURIComponent(lessonId)}/parts/${encodeURIComponent(partCode)}/attempts`, { method: "POST", body: JSON.stringify({ requestId, evidence }) }),
-  appealLessonPart: (lessonId, partCode, reason) => request(`/api/v1/lessons/${encodeURIComponent(lessonId)}/parts/${encodeURIComponent(partCode)}/appeals`, { method: "POST", body: JSON.stringify({ reason }) }),
+  appealLessonPart: (lessonId, partCode, reason, evidence, exerciseVersionId) => request(`/api/v1/lessons/${encodeURIComponent(lessonId)}/parts/${encodeURIComponent(partCode)}/appeals`, { method: "POST", body: JSON.stringify({ reason, ...evidence, exerciseVersionId }) }),
   getWeeklyReviewSession: (lessonId) => request(`/api/v1/lessons/${encodeURIComponent(lessonId)}/review-session`),
   setWeeklyReviewWarmup: (lessonId, status) => request(`/api/v1/lessons/${encodeURIComponent(lessonId)}/review-session/warmup`, { method: "POST", body: JSON.stringify({ status }) }),
   answerWeeklyReview: (lessonId, input) => request(`/api/v1/lessons/${encodeURIComponent(lessonId)}/review-session/answers`, { method: "POST", body: JSON.stringify(input) }),
@@ -104,7 +110,7 @@ export const learnerApiClient: LearnerApiClient = {
   sendLevelChallengeMessage: (input) => request("/api/v1/challenge/messages", { method: "POST", body: JSON.stringify(input) }),
   getWeeklyPractice: () => request("/api/v1/engagement/practice"),
   submitWeeklyPractice: (input) => request("/api/v1/engagement/practice/submit", { method: "POST", body: JSON.stringify(input) }),
-  appealWeeklyPractice: (submissionId, reason) => request(`/api/v1/engagement/practice/${encodeURIComponent(submissionId)}/appeals`, { method: "POST", body: JSON.stringify({ reason }) }),
+  appealWeeklyPractice: (submissionId, reason, evidence) => request(`/api/v1/engagement/practice/${encodeURIComponent(submissionId)}/appeals`, { method: "POST", body: JSON.stringify({ reason, ...evidence }) }),
   getGames: () => request("/api/v1/engagement/games"),
   generateGameWordSet: (input) => request("/api/v1/engagement/games/word-set", { method: "POST", body: JSON.stringify(input) }),
   useWeeklyGameWordSet: () => request("/api/v1/engagement/games/word-set/weekly", { method: "POST", body: "{}" }),
@@ -123,5 +129,5 @@ export const learnerApiClient: LearnerApiClient = {
   recordAssessmentAudioPlay: (attemptId, section, groupKey) => request(`/api/v1/assessment-attempts/${encodeURIComponent(attemptId)}/sections/${encodeURIComponent(section)}/groups/${encodeURIComponent(groupKey)}/audio-play`, { method: "POST", body: "{}" }),
   recordAssessmentViolation: (attemptId, input) => request(`/api/v1/assessment-attempts/${encodeURIComponent(attemptId)}/violations`, { method: "POST", body: JSON.stringify(input) }),
   submitAssessment: (attemptId) => request(`/api/v1/assessment-attempts/${encodeURIComponent(attemptId)}/submit`, { method: "POST", body: "{}" }),
-  createAssessmentAppeal: (attemptId, reason) => request(`/api/v1/assessment-attempts/${encodeURIComponent(attemptId)}/appeals`, { method: "POST", body: JSON.stringify({ reason }) })
+  createAssessmentAppeal: (attemptId, reason, evidence) => request(`/api/v1/assessment-attempts/${encodeURIComponent(attemptId)}/appeals`, { method: "POST", body: JSON.stringify({ reason, ...evidence }) })
 };

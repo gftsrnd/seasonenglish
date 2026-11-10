@@ -825,6 +825,17 @@ describe("assessment HCI states", () => {
     expect(recordAssessmentViolation).toHaveBeenCalledTimes(1);
   });
 
+  it("puts exam timing and submission notices in the same stack", () => {
+    render(<AssessmentRuntime view={makeView()} actions={makeActions()} submitError="Không thể nộp bài.">
+      {state => <span>{state.formattedTime}</span>}
+    </AssessmentRuntime>);
+
+    const warning = screen.getByText(/Còn 5 phút/u).closest(".assessment-toast");
+    const error = screen.getByRole("alert");
+    expect(warning?.parentElement).toHaveClass("assessment-toast-viewport");
+    expect(error.parentElement).toBe(warning?.parentElement);
+  });
+
   it("uses a clock icon for automatic submission", async () => {
     const runtime = makeRuntime({ status: "submitted", autoSubmitted: true, submitReason: "timeout", remainingSeconds: 0 });
     render(<AssessmentRuntime view={makeView({ runtime, attempt: { ...makeView().attempt!, status: "submitted", runtime } })} actions={makeActions()}>{(state) => <span>{state.formattedTime}</span>}</AssessmentRuntime>);

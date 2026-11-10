@@ -26,6 +26,31 @@ function stubClient(): AuthClient {
 }
 
 describe("EntryScreen interaction", () => {
+  it("opens the learner PIN recovery form directly and follows browser history", async () => {
+    window.history.replaceState({}, "", "/forgot-pin");
+    const user = userEvent.setup();
+    render(<EntryScreen client={stubClient()} onAuthenticated={vi.fn()} />);
+    expect(screen.getByRole("heading", { name: "Quên mã PIN" })).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Quay lại đăng nhập" }));
+    expect(window.location.pathname).toBe("/");
+    window.history.back();
+    expect(await screen.findByRole("heading", { name: "Quên mã PIN" })).toBeInTheDocument();
+  });
+
+  it("opens staff password recovery directly and returns to staff login", async () => {
+    const path = "/private-staff-entry";
+    window.history.replaceState({}, "", path + "/forgot-password");
+    const user = userEvent.setup();
+    const client = stubClient();
+    render(<EntryScreen client={client} staffEntryPath={path} separateStaffEntry onAuthenticated={vi.fn()} />);
+    expect(screen.getByRole("heading", { name: "Quên mật khẩu nhân sự" })).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Quay lại đăng nhập" }));
+    expect(window.location.pathname).toBe(path);
+    expect(screen.queryByText("Về đăng nhập chung")).not.toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Quên mật khẩu?" }));
+    expect(window.location.pathname).toBe(path + "/forgot-password");
+  });
+
   it("shows a friendly network error instead of the technical NETWORK_UNAVAILABLE code", async () => {
     const user = userEvent.setup();
     const client = stubClient();
@@ -204,6 +229,7 @@ describe("EntryScreen interaction", () => {
     await user.type(screen.getByLabelText("Mã PIN mới"), "789012"); await user.type(screen.getByLabelText("Nhập lại mã PIN"), "789012");
     await user.click(screen.getByRole("button", { name: "Lưu mã PIN mới" }));
     expect(client.completeLearnerPinReset).toHaveBeenCalledWith({ resetToken: "reset-token", pin: "789012" });
+    expect(window.location.pathname).toBe("/");
     expect(screen.getByText(/Đã cập nhật mã PIN/)).toBeInTheDocument();
   });
 
@@ -217,6 +243,22 @@ describe("EntryScreen interaction", () => {
     await user.type(screen.getByLabelText("Email"), "operator@e4s.local");
     await user.click(screen.getByRole("button", { name: "Thông báo cho Quản lý" }));
     expect(client.requestStaffPasswordHelp).toHaveBeenCalledWith({ email: "operator@e4s.local" });
-    expect(screen.getByText("Nếu email thuộc tài khoản người vận hành, yêu cầu đã được gửi tới Quản lý.")).toBeInTheDocument();
+    expect(screen.getByText("Đã nhận yêu cầu. Nếu email thuộc tài khoản nhân sự, Quản lý sẽ nhận được yêu cầu đặt lại mật khẩu.")).toBeInTheDocument();
+  });
+  it("signs in directly with email and password for staff and keeps the public form on PIN", async () => {
+    const user = userEvent.setup();
+    const client = stubClient();
+    const onAuthenticated = vi.fn();
+    const { unmount } = render(<EntryScreen client={client} staffEntryPath="/private-staff-entry" separateStaffEntry onAuthenticated={onAuthenticated} />);
+    expect(screen.queryByLabelText("Mã PIN", { exact: true })).not.toBeInTheDocument();
+    await user.type(screen.getByLabelText("Email"), "operator@e4s.local");
+    await user.type(screen.getByLabelText("Mật khẩu", { exact: true }), "Staff-password-123");
+    await user.click(screen.getByRole("button", { name: /^Đăng nhập$/ }));
+    expect(client.staffLogin).toHaveBeenCalledWith({ email: "operator@e4s.local", password: "Staff-password-123" });
+    expect(onAuthenticated).toHaveBeenCalled();
+    unmount();
+    render(<EntryScreen client={client} separateStaffEntry onAuthenticated={onAuthenticated} />);
+    expect(screen.getByLabelText("Mã PIN", { exact: true })).toBeInTheDocument();
+    expect(screen.queryByRole("tab", { name: "Nhân sự" })).not.toBeInTheDocument();
   });
 });

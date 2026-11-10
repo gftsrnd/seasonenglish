@@ -281,7 +281,7 @@ export function AudioCaptureControl({
       {audio && !busy ? <span className="audio-capture-preview">
         {audio.signedUrl ? <audio ref={previewRef} preload="metadata" src={audio.signedUrl} aria-label="Bản ghi âm đang chờ gửi" /> : null}
         <button className="btn-sm btn-ghost audio-capture-replay" type="button" aria-label="Nghe lại bản ghi âm" title="Nghe lại" disabled={!audio.signedUrl} onClick={replayAudio}><Play size={15} fill="currentColor" aria-hidden="true" /><span>Nghe lại</span></button>
-        <button className="btn-sm btn-ghost audio-capture-remove" type="button" aria-label="Xóa bản ghi âm" title="Xóa bản ghi âm" onClick={clearAudio}><Trash2 size={15} aria-hidden="true" /></button>
+        <button className="btn-sm btn-danger audio-capture-remove" type="button" aria-label="Xóa bản ghi âm" title="Xóa bản ghi âm" onClick={clearAudio}><Trash2 size={15} aria-hidden="true" /></button>
       </span> : null}
       {error ? <button className="audio-capture-status audio-capture-status--error" type="button" role="alert" title={error} onClick={() => setError("")}>{error}</button> : null}
     </div>

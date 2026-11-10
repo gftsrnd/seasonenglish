@@ -29,13 +29,13 @@ export function LearnerRouter({ screen, callbacks }: { screen: LearnerScreen; ca
 
 export interface LearnerContractBundle { home?: LearnerHomeView; onboard?: LearnerProfileView | null; assessment?: AssessmentView; lesson?: LessonView; coach?: CoachView; challenge?: LevelChallengeView; practice?: WeeklyPracticeView; survey?: SurveyView; profile?: LearnerProgressView; reward?: RewardView; games?: GameHubView; }
 export interface LearnerUiState { aiAvailable?: boolean; onboard?: { mode?: "new" | "edit"; draftAvailable?: boolean; saving?: boolean; error?: string }; home?: { weekPhase?: "before_pilot" | "in_pilot" | "after_pilot"; approvalPending?: boolean; placementDraft?: boolean; reward?: { points: number; nextPoints: number | null; seasonName: string } }; assessment?: { timed?: boolean; warningLimit?: number; targetLevel?: string | null; microphoneSupported?: boolean; submitError?: string }; lessonLock?: LessonLockView | null; coach?: { levelApproved?: boolean; thinking?: boolean; error?: string }; challenge?: { resume?: boolean; error?: string }; practice?: { appeal?: { status: "pending" | "accepted" | "rejected"; resolution?: string } | null }; profile?: { profileMissing?: boolean; surveyAvailable?: boolean }; gameResult?: { score: number; maxScore: number } | null; }
-export interface LearnerControllerProps { path: string; contracts: LearnerContractBundle; callbacks: LearnerCallbacks; uiState?: LearnerUiState; }
+export interface LearnerControllerProps { path: string; contracts: LearnerContractBundle; callbacks: LearnerCallbacks; uiState?: LearnerUiState; courseCompleted?: boolean; }
 
-export function LearnerController({ path, contracts, callbacks, uiState = {} }: LearnerControllerProps) {
+export function LearnerController({ path, contracts, callbacks, uiState = {}, courseCompleted = false }: LearnerControllerProps) {
   const cleanPath = normalizeLearnerPath(path);
   const parts = cleanPath === "/" ? [] : cleanPath.slice(1).split("/").map(decodeSegment);
   const missing = (message: string, href = "/home", label = "Về trang chủ") => <Missing route={cleanPath} message={message} href={href} label={label} actions={callbacks} />;
-  if (cleanPath === "/" || (parts[0] === "home" && parts.length === 1)) return contracts.home ? <LearnerHome view={{ ...contracts.home, ...(uiState.home ?? {}), ...(uiState.aiAvailable === undefined ? {} : { aiAvailable: uiState.aiAvailable }) }} actions={callbacks} /> : missing("Trang chủ chưa có dữ liệu.");
+  if (cleanPath === "/" || (parts[0] === "home" && parts.length === 1)) return contracts.home ? <LearnerHome view={{ ...contracts.home, ...(uiState.home ?? {}), ...(uiState.aiAvailable === undefined ? {} : { aiAvailable: uiState.aiAvailable }) }} actions={callbacks} courseCompleted={courseCompleted} /> : missing("Trang chủ chưa có dữ liệu.");
   if (parts[0] === "monthly" && parts.length === 1) return contracts.home ? <LearnerMonthly view={{ ...contracts.home, ...(uiState.home ?? {}), ...(uiState.aiAvailable === undefined ? {} : { aiAvailable: uiState.aiAvailable }) }} actions={callbacks} /> : missing("Bài tháng chưa có dữ liệu.");
   if (parts[0] === "onboard" && parts.length === 1) {
     if (contracts.onboard === undefined) return missing("Hồ sơ chưa sẵn sàng.");
@@ -49,7 +49,7 @@ export function LearnerController({ path, contracts, callbacks, uiState = {} }: 
   if (parts[0] === "challenge" && parts.length === 1) return contracts.challenge ? <LearnerChallenge view={{ ...contracts.challenge, ...(uiState.challenge ?? {}) }} actions={callbacks} /> : missing("Thử thách lên mức chưa mở.");
   if (parts[0] === "practice" && parts.length === 1) return contracts.practice ? <LearnerPractice view={{ ...contracts.practice, ...(uiState.aiAvailable === undefined ? {} : { aiAvailable: uiState.aiAvailable }) }} actions={callbacks} /> : missing("Bài thực hành tuần chưa sẵn sàng.");
   if (parts[0] === "survey" && parts.length === 1) return contracts.survey ? <LearnerSurvey view={contracts.survey} actions={callbacks} /> : missing("Khảo sát chưa sẵn sàng.");
-  if (parts[0] === "profile" && parts.length === 1) return contracts.profile ? <LearnerProfile view={{ ...contracts.profile, ...(uiState.profile ?? {}) }} actions={callbacks} /> : missing("Tiến độ chưa sẵn sàng.");
+  if (parts[0] === "profile" && parts.length === 1) return contracts.profile ? <LearnerProfile view={{ ...contracts.profile, ...(uiState.profile ?? {}) }} actions={callbacks} courseCompleted={courseCompleted} /> : missing("Tiến độ chưa sẵn sàng.");
   if (parts[0] === "reward" && parts.length === 2 && (parts[1] === "preview" || parts[1] === "done")) return contracts.reward ? <LearnerReward view={contracts.reward} actions={callbacks} /> : missing("Chứng nhận chưa sẵn sàng.");
   if (parts[0] === "games" && parts.length === 1) return contracts.games ? <LearnerGames view={contracts.games} actions={callbacks} /> : <MiniGameLocked actions={callbacks} />;
   if (parts[0] === "games" && parts.length === 2) {

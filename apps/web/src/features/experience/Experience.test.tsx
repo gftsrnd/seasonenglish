@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import "@testing-library/jest-dom/vitest";
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { userEvent } from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ExperienceProvider, useExperience } from "./Experience.js";
@@ -53,6 +53,43 @@ function ForcedWarningProbe() {
   const { play, toggleEffects } = useExperience();
   return <><button type="button" onClick={toggleEffects}>Tắt hiệu ứng</button><button type="button" onClick={() => play("warning", { force: true })}>Cảnh báo bắt buộc</button></>;
 }
+
+it("plays the original click across seasons and ignores repeated keydown events", () => {
+  const start = vi.fn();
+  const pitch = vi.fn();
+  vi.stubGlobal("AudioContext", class {
+    state = "running";
+    currentTime = 0;
+    destination = {};
+    createOscillator = () => ({
+      frequency: { setValueAtTime: pitch, exponentialRampToValueAtTime: vi.fn() },
+      connect: vi.fn(() => ({ connect: vi.fn() })),
+      start,
+      stop: vi.fn()
+    });
+    createGain = () => ({
+      gain: { setValueAtTime: vi.fn(), exponentialRampToValueAtTime: vi.fn() }
+    });
+  });
+  const control = <><button type="button">Nhấn thử</button><textarea aria-label="Nhập văn bản" /></>;
+  const { rerender } = render(<ExperienceProvider musicAllowed={false} musicTheme="spring">{control}</ExperienceProvider>);
+  const button = screen.getByRole("button", { name: "Nhấn thử" });
+
+  fireEvent.keyDown(button, { key: "Enter" });
+  expect(fireEvent.keyDown(button, { key: "Enter", repeat: true })).toBe(false);
+  expect(fireEvent.keyDown(button, { key: "Enter", repeat: true })).toBe(false);
+  fireEvent.keyUp(button, { key: "Enter" });
+  expect(start).toHaveBeenCalledOnce();
+  expect(fireEvent.keyDown(screen.getByRole("textbox"), { key: "Enter", repeat: true })).toBe(true);
+  expect(pitch).toHaveBeenNthCalledWith(1, 420, 0);
+
+  rerender(<ExperienceProvider musicAllowed={false} musicTheme="winter">{control}</ExperienceProvider>);
+  fireEvent.pointerDown(button);
+  fireEvent.pointerUp(button);
+  fireEvent.click(button);
+  expect(start).toHaveBeenCalledTimes(2);
+  expect(pitch).toHaveBeenNthCalledWith(2, 420, 0);
+});
 
 describe("experience speech voice selection", () => {
   it("plays the packaged double beep for a forced exam warning even when effects are off", async () => {

@@ -1,4 +1,13 @@
+import { ChevronRight } from "lucide-react";
 import { useEffect, useId, useRef, type AnchorHTMLAttributes, type ButtonHTMLAttributes, type CSSProperties, type HTMLAttributes, type KeyboardEvent, type MouseEvent, type ReactNode } from "react";
+
+export function learnerLessonLabel(lesson: { dayNumber: number; newLessonNumber?: number; teachingLabel?: string; kind?: "new" | "review" }) {
+  if (lesson.kind === "review" || /^Ôn (tuần|tập)/u.test(lesson.teachingLabel ?? "")) {
+    return /^Ôn tuần \d+$/u.test(lesson.teachingLabel ?? "") ? lesson.teachingLabel! : "Ôn tập";
+  }
+  const legacyOrdinal = /^(?:N|Bài )(\d+)/u.exec(lesson.teachingLabel ?? "")?.[1];
+  return `Bài ${lesson.newLessonNumber ?? legacyOrdinal ?? lesson.dayNumber}`;
+}
 
 type AppLinkProps = Omit<AnchorHTMLAttributes<HTMLAnchorElement>, "href" | "onClick"> & {
   href: string;
@@ -23,6 +32,13 @@ export function AppLink({ href, navigate, children, className, ariaLabel, title,
   };
   const targetStyle: CSSProperties = { display: "inline-flex", alignItems: "center", minHeight: 44, minWidth: 44, ...style };
   return <a {...rest} href={href} className={className} aria-label={ariaLabel} title={title} aria-disabled={disabled || undefined} tabIndex={disabled ? -1 : undefined} style={targetStyle} onClick={follow} onKeyDown={handleKeyDown}>{children}</a>;
+}
+
+export function LearnerSupportCard({ from, navigate }: { from: "home" | "profile"; navigate: AppLinkProps["navigate"] }) {
+  return <AppLink className="card learner-support-entry" href={`/support?from=${from}`} navigate={navigate} ariaLabel="Hỗ trợ học tập" style={{ display: "flex" }}>
+    <div><h2>Hỗ trợ học tập</h2><p className="small muted">Gửi khiếu nại, kháng nghị, trả lời khảo sát và xem phản hồi.</p></div>
+    <ChevronRight size={20} aria-hidden="true" />
+  </AppLink>;
 }
 
 export type AppButtonProps = ButtonHTMLAttributes<HTMLButtonElement> & {

@@ -1,0 +1,103 @@
+import {expect,it} from "vitest";
+import type {AiTaskRunner} from "@e4s/ai";
+import {buildMonthlyFinalGenerationInput} from "../src/modules/assessment/monthly-final-builder.js";
+import {generateMonthlyFinalProductive} from "../src/modules/assessment/monthly-final-productive-generation.js";
+import {monthlyFinalContract,frameworkRef,fakeMonthlyFinalAiOutput} from "./support/monthly-final-fixture.js";
+
+it("repairs only an overlong read-aloud after the full productive response exhausted its retries",async()=>{
+  const input=buildMonthlyFinalGenerationInput(monthlyFinalContract("B1"),frameworkRef);
+  const candidate=fakeMonthlyFinalAiOutput(input).productive;
+  candidate.speakingA.text+=" Please check the design before the meeting starts.".repeat(3);
+  const calls:string[]=[];
+  const text="Our client will attend to the tasks and desks. Hold the old list and check the cost.";
+  const runner={runTask:async(taskId:string,raw:Record<string,unknown>)=>{
+    if(taskId==="monthly_final_grammar_evidence_review")return {output:{items:(raw.items as any[]).map(item=>({key:item.key,matches:true,reason:"Matches selected component."}))},metadata:{}};
+    calls.push(taskId);
+    if(calls.length===1)throw Object.assign(new Error("AI_OUTPUT_INVALID"),{code:"AI_OUTPUT_INVALID",details:{invalidOutput:JSON.stringify(candidate)}});
+    const start=(raw.pools as any[])[0].code==="P1"?0:2;
+    expect(raw.pools).toEqual(input.pronunciation.slice(start,start+2).map(p=>({code:p.code,focus:p.ipa,examples:p.taughtExamples})));expect(raw.maxWords).toBe(start===0?14:15);
+    return {output:{candidates:[start===0?"Our client will attend to the tasks and desks.":"Hold the old list and check the cost."]},metadata:{}};
+  }} as unknown as AiTaskRunner;
+  const result=await generateMonthlyFinalProductive(runner,input,"Generate exam");
+  expect(calls).toEqual(["monthly_final_productive_generation","monthly_final_read_aloud_repair","monthly_final_read_aloud_repair"]);
+  expect(result.output).toEqual({...candidate,speakingA:{text,positions:candidate.speakingA.positions.map(p=>({...p,target:`${input.pronunciation.find(pool=>pool.code===p.code)!.ipa} in ${p.word}`}))}});
+});
+
+it("does not recover invalid grammar selection",async()=>{
+  for(const corrupt of [(v:any)=>{v.grammarComponents[0].mainStepId="invented";}]){
+    const input=buildMonthlyFinalGenerationInput(monthlyFinalContract("B1"),frameworkRef),candidate=fakeMonthlyFinalAiOutput(input).productive;
+    candidate.speakingA.text+=" More words before the meeting starts.".repeat(3);corrupt(candidate);
+    let calls=0;const error=Object.assign(new Error("AI_OUTPUT_INVALID"),{code:"AI_OUTPUT_INVALID",details:{invalidOutput:JSON.stringify(candidate)}});
+    const runner={runTask:async()=>{calls++;throw error;}} as unknown as AiTaskRunner;
+    await expect(generateMonthlyFinalProductive(runner,input,"Generate exam")).rejects.toBe(error);expect(calls).toBe(1);
+  }
+});
+it("repairs failed samples independently while preserving accepted tasks, facts and grammar",async()=>{
+  const input=buildMonthlyFinalGenerationInput(monthlyFinalContract("B1"),frameworkRef);input.levelProfile.writing={minWords:0,maxWords:400};
+  const good=fakeMonthlyFinalAiOutput(input).productive,candidate=structuredClone(good);
+  candidate.speakingA.text+=" Please check the design before the meeting starts.".repeat(3);
+  candidate.writing.sample="A completely unrelated answer with none of the assigned vocabulary.";
+  candidate.speakingB.sample="Another completely unrelated answer with none of the required terms.";
+  const calls:string[]=[];const text="Our client will attend to the tasks and desks. Hold the old list and check the cost.";
+  const blocks={gaMain:"Could you extend and update the deadline?",gaSecondary:"We have to send the report for approval.",gbMain:"If HR sends the data tonight, I will finish tomorrow.",gbSecondary:"If we had the missing figures, we would finish."};
+  const runner={runTask:async(taskId:string,raw:any)=>{
+    if(taskId==="monthly_final_grammar_evidence_review")return {output:{items:raw.items.map((item:any)=>({key:item.key,matches:true,reason:"Matches selected component."}))},metadata:{}};
+    calls.push(taskId);if(calls.length===1)throw Object.assign(new Error("AI_OUTPUT_INVALID"),{code:"AI_OUTPUT_INVALID",details:{invalidOutput:JSON.stringify(candidate)}});
+    if(taskId==="monthly_final_read_aloud_repair")return {output:{candidates:[raw.pools[0].code==="P1"?"Our client will attend to the tasks and desks.":"Hold the old list and check the cost."]},metadata:{}};
+    if(taskId==="monthly_final_writing_block_repair")return {output:{candidates:[blocks[raw.key as keyof typeof blocks]]},metadata:{}};
+    const section=taskId==="monthly_final_writing_sample_repair" ? good.writing : good.speakingB;
+    expect(raw.targets.map((term:any)=>term.word)).toEqual(input.targets[raw.kind==="writing" ? "writing" : "speaking"].map(term=>term.word));
+    return {output:{sample:section.sample,evidence:section.evidence},metadata:{}};
+  }} as unknown as AiTaskRunner;
+  const result=await generateMonthlyFinalProductive(runner,input,"Generate exam");
+  expect(calls.filter(id=>id==="monthly_final_read_aloud_repair")).toHaveLength(2);expect(calls.filter(id=>id==="monthly_final_writing_block_repair")).toHaveLength(4);expect(calls.filter(id=>id==="monthly_final_speaking_sample_repair")).toHaveLength(1);
+  expect(result.output).toEqual({...good,writing:{...good.writing,sample:Object.values(blocks).join(" "),evidence:blocks},speakingA:{text,positions:good.speakingA.positions.map(p=>({...p,target:`${input.pronunciation.find(pool=>pool.code===p.code)!.ipa} in ${p.word}`}))}});
+});
+it("selects complete candidate combinations using each role's own taught grammar and target words",async()=>{
+ const input=buildMonthlyFinalGenerationInput(monthlyFinalContract("B1"),frameworkRef);input.levelProfile.writing={minWords:0,maxWords:400};
+ const candidate=fakeMonthlyFinalAiOutput(input).productive;candidate.writing.sample="An unrelated answer.";
+ const blocks={gaMain:"Could you extend and update the deadline?",gaSecondary:"We have to send the report for approval.",gbMain:"If HR sends the data tonight, I will finish tomorrow.",gbSecondary:"If we had the missing figures, we would finish."};
+ const keys:string[]=[];
+ const runner={runTask:async(taskId:string,raw:any)=>{
+  if(taskId==="monthly_final_grammar_evidence_review")return {output:{items:raw.items.map((item:any)=>({key:item.key,matches:true,reason:"Matches."}))},metadata:{}};
+  if(taskId==="monthly_final_productive_generation")throw Object.assign(new Error("invalid"),{code:"AI_OUTPUT_INVALID",details:{invalidOutput:JSON.stringify(candidate)}});
+  expect(taskId).toBe("monthly_final_writing_block_repair");keys.push(raw.key);
+  const index=["gaMain","gaSecondary","gbMain","gbSecondary"].indexOf(raw.key);
+  expect(raw.targets.map((term:any)=>term.word)).toEqual(input.targets.writing.filter((_,target)=>target%4===index).map(term=>term.word));
+  expect(raw.grammar.stepId).toBe(index===0?candidate.grammarComponents[0]!.mainStepId:index===1?candidate.grammarComponents[0]!.secondaryStepId:index===2?candidate.grammarComponents[1]!.mainStepId:candidate.grammarComponents[1]!.secondaryStepId);
+  return {output:{candidates:["An irrelevant complete sentence.",blocks[raw.key as keyof typeof blocks]]},metadata:{}};
+ }} as unknown as AiTaskRunner;
+ const result=await generateMonthlyFinalProductive(runner,input,"Generate exam");
+ expect(keys).toEqual(["gaMain","gaSecondary","gbMain","gbSecondary"]);
+ expect((result.output as any).writing.evidence).toEqual(blocks);expect((result.output as any).speakingA).toEqual(candidate.speakingA);
+});it("repairs semantically wrong evidence and rechecks without changing the accepted tasks",async()=>{
+ const input=buildMonthlyFinalGenerationInput(monthlyFinalContract("B1"),frameworkRef);input.levelProfile.writing={minWords:0,maxWords:400};
+ const candidate=fakeMonthlyFinalAiOutput(input).productive;let reviews=0,repairs=0;
+ const blocks={gaMain:"Could you extend and update the deadline?",gaSecondary:"We have to send the report for approval.",gbMain:"If HR sends the data tonight, I will finish tomorrow.",gbSecondary:"If we had the missing figures, we would finish."};
+ candidate.writing={...candidate.writing,sample:Object.values(blocks).join(" "),evidence:blocks};
+ const runner={runTask:async(taskId:string,raw:any)=>{
+  if(taskId==="monthly_final_productive_generation")return {output:candidate,metadata:{}};
+  if(taskId==="monthly_final_grammar_evidence_review"){reviews++;return {output:{items:raw.items.map((item:any)=>({key:item.key,matches:reviews>1||item.key!=="writing.gaMain",reason:"Wrong taught grammar component."}))},metadata:{}};}
+  expect(taskId).toBe("monthly_final_writing_block_repair");repairs++;return {output:{candidates:[blocks[raw.key as keyof typeof blocks]]},metadata:{}};
+ }} as unknown as AiTaskRunner;
+ const result=await generateMonthlyFinalProductive(runner,input,"Generate exam");
+ expect(reviews).toBe(16);expect(repairs).toBe(4);
+ expect((result.output as any).writing.task).toBe(candidate.writing.task);expect((result.output as any).speakingB).toEqual(candidate.speakingB);
+ expect((result.output as any).writing.evidence).toEqual(blocks);
+});
+it("uses three sentence groups for C1 and checks the complete composed passage",async()=>{
+ const input=buildMonthlyFinalGenerationInput(monthlyFinalContract("C1"),frameworkRef),candidate=fakeMonthlyFinalAiOutput(input).productive;
+ candidate.speakingA.text+=" Please check all the documents carefully before tomorrow's meeting.".repeat(4);
+ const groups:string[][]=[];
+ const runner={runTask:async(taskId:string,raw:any)=>{
+  if(taskId==="monthly_final_grammar_evidence_review")return {output:{items:raw.items.map((item:any)=>({key:item.key,matches:true,reason:"Matches."}))},metadata:{}};
+  if(taskId==="monthly_final_productive_generation")throw Object.assign(new Error("invalid"),{code:"AI_OUTPUT_INVALID",details:{invalidOutput:JSON.stringify(candidate)}});
+  groups.push(raw.pools.map((pool:any)=>pool.code));
+  const text=raw.pools[0].code==="P1"?"Our client will attend to the tasks and desks.":raw.pools[0].code==="P3"?"Please check the list and the cost before our meeting.":"Hold the old report until we meet tomorrow.";
+  return {output:{candidates:[text]},metadata:{}};
+ }} as unknown as AiTaskRunner;
+ const result=await generateMonthlyFinalProductive(runner,input,"Generate exam");
+ expect(groups).toEqual([["P1","P2"],["P3"],["P4"]]);
+ expect((result.output as any).speakingA.text.split(/(?<=[.!?])\s/u)).toHaveLength(3);
+ expect((result.output as any).speakingA.positions).toHaveLength(8);
+});

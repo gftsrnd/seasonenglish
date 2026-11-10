@@ -1,5 +1,70 @@
 /* Manager-only responsive affordances. Keep the route order, copy and data model intact. */
 
+.manager-holiday-form {
+  display: flex;
+  align-items: end;
+  gap: 10px;
+}
+
+.manager-holiday-form > label {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+  flex: 0 1 220px;
+}
+
+.manager-holiday-form input { min-width: 0; }
+.manager-holiday-form > button { flex: none; }
+
+.manager-holiday-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.manager-holiday-header h2 { margin: 0; }
+.manager-holiday-header select { width: auto; min-width: 0; max-width: 56%; }
+.manager-holiday-calendar > p { margin: 8px 0 0; }
+.manager-holidays-page :is(button, select, input[type="date"]) { min-height: 44px; }
+
+.manager-holiday-list {
+  list-style: none;
+  margin: 10px 0 0;
+  padding: 0 4px 0 0;
+  max-height: min(44dvh, 24rem);
+  overflow-y: auto;
+  overscroll-behavior-y: contain;
+  scrollbar-width: thin;
+  scrollbar-gutter: stable;
+}
+
+@media (max-width: 540px) {
+  .manager-holiday-list { max-height: 34dvh; }
+}
+
+.manager-holiday-list > li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 8px 0;
+  border-top: 1px solid var(--line);
+}
+
+.manager-holiday-list button { flex: none; }
+.manager-holiday-list time { white-space: nowrap; }
+
+.manager-holiday-description {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
 .manager-page,
 .manager-page-title {
   min-width: 0;
@@ -27,9 +92,8 @@
   flex-wrap: wrap;
 }
 
-.manager-page > .page-title .manager-page-title__content {
-  flex: 1 1 100%;
-}
+.manager-page > .page-title .manager-page-title__content { flex: 1 1 100%; }
+.manager-page-title > .request-tabs { flex: 0 0 100%; margin: 0; }
 
 .manager-page > .page-title .manager-page-title__actions {
   flex: 1 1 100%;
@@ -422,72 +486,6 @@
   line-height: 1.5;
 }
 
-.manager-reward-controls-title {
-  margin-bottom: 12px !important;
-  line-height: 1.35;
-}
-
-.manager-reward-case-group,
-.manager-reward-badge-group {
-  row-gap: 8px !important;
-  line-height: 1.4;
-}
-
-.manager-reward-badge-group {
-  row-gap: 6px !important;
-}
-
-/* These compact simulator controls follow the app's 32px visual
-   rhythm. The surrounding cards and primary actions retain their larger
-   touch targets; keeping only these dense option chips compact prevents the
-   390px viewport from pushing the next field beneath the fixed nav. */
-.manager-reward-case-group > .btn-sm,
-.manager-reward-badge-group > .btn-sm {
-  min-height: 32px;
-  padding: 0 12px;
-  font-size: .82rem;
-}
-
-.manager-reward-config {
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  align-items: start;
-  column-gap: 14px !important;
-  row-gap: 12px !important;
-  margin-top: 14px !important;
-}
-
-.manager-reward-config > .field {
-  display: flex;
-  min-width: 0;
-  flex-direction: column;
-  align-items: stretch;
-  gap: 6px;
-  margin: 0;
-}
-
-.manager-reward-config > .field > span {
-  display: block;
-  min-height: 1.2em;
-}
-
-.manager-reward-config > .field > input {
-  width: 100%;
-}
-
-.manager-reward-badge-group {
-  width: 100%;
-  min-width: 0;
-  align-content: flex-start;
-  align-items: flex-start;
-  justify-content: flex-start;
-}
-
-@media (max-width: 520px) {
-  .manager-reward-config {
-    grid-template-columns: 1fr;
-  }
-}
-
 /* Evidence-backed hierarchy pass: give Manager data surfaces clear section
    headers, deliberate table overflow, and a readable profile dialog. */
 .manager-section-heading {
@@ -496,6 +494,10 @@
   gap: 8px 16px;
   margin-bottom: 14px;
 }
+
+.manager-progress-card-header,
+.manager-progress-card-header .row { align-items: center; flex-wrap: wrap; }
+.manager-progress-card-header h3 { margin: 0; }
 
 .manager-section-heading > h3 {
   margin: 0;
@@ -506,8 +508,7 @@
   padding: 18px;
 }
 
-.manager-progress-table,
-.manager-rewards-table {
+.manager-progress-table {
   width: 100%;
   max-width: 100%;
   overflow-x: auto;
@@ -517,27 +518,21 @@
   padding-bottom: 4px;
 }
 
+.manager-progress-card { container: manager-progress / inline-size; }
+
 .manager-progress-table table {
-  min-width: 1040px;
+  width: 100%;
+  min-width: 0;
 }
 
 .manager-progress-table th,
 .manager-progress-table td {
   vertical-align: middle;
-  white-space: nowrap;
-  line-height: 1.45;
-}
-
-.manager-rewards-table th,
-.manager-rewards-table td {
-  vertical-align: top;
-  line-height: 1.45;
-}
-
-.manager-progress-table .badge,
-.manager-rewards-table .badge {
   white-space: normal;
+  line-height: 1.45;
 }
+
+.manager-progress-table :is(.manager-progress-level .badge, .week-dots) { white-space: nowrap; }
 
 .manager-readiness-card > .manager-section-heading,
 .manager-operators-section > .manager-section-heading {
@@ -609,6 +604,8 @@
   gap: 2px;
 }
 
+.manager-operator-output { display: contents; }
+
 .manager-operator-toggle {
   color: var(--muted);
   font-size: 12px;
@@ -649,10 +646,6 @@
 .manager-metric-group .table-wrap {
   margin-bottom: 10px;
   background: var(--surface);
-}
-
-.manager-rewards-table table {
-  min-width: 720px;
 }
 
 .manager-learner-profile-dialog {
@@ -714,12 +707,6 @@
   font-weight: 600;
 }
 
-@media (min-width: 761px) {
-  .manager-rewards-table table {
-    min-width: 0;
-  }
-}
-
 @media (max-width: 520px) {
   .manager-table-card,
   .manager-learner-profile-dialog {
@@ -738,729 +725,6 @@
     grid-template-columns: minmax(0, 1fr);
     gap: 3px;
   }
-}
-
-.manager-reward-result {
-  margin-top: 6px !important;
-  line-height: 1.4;
-}
-
-.manager-reward-preview-title {
-  margin: 18px 0 12px !important;
-  line-height: 1.35;
-}
-
-.manager-reward-preview-card {
-  margin-top: 0;
-}
-
-.manager-reward-track-grid {
-  align-items: stretch;
-  grid-auto-rows: 1fr;
-}
-
-.manager-reward-track-grid > .card.flat {
-  height: 100%;
-  margin-top: 0 !important;
-}
-
-.manager-page .page-title > div,
-.manager-page-title > div,
-.manager-page .card,
-.manager-page .banner,
-.manager-page section,
-.manager-page article {
-  min-width: 0;
-}
-
-.manager-page .page-title > .row {
-  max-width: 100%;
-  row-gap: 8px;
-}
-
-.manager-page .section > h3,
-.manager-page .manager-section-card > h3 {
-  margin-top: 0;
-}
-
-.manager-feedback {
-  margin-bottom: 12px;
-}
-
-.manager-page > .banner + .card,
-.manager-page > .banner + section.card {
-  margin-top: 16px;
-}
-
-.manager-route-state {
-  display: grid;
-  gap: 12px;
-}
-
-.manager-operational-row > .body {
-  overflow-wrap: anywhere;
-}
-
-.manager-operational-row .title {
-  display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 6px;
-}
-
-.manager-operational-actions {
-  flex: 0 0 auto;
-  max-width: 100%;
-}
-
-.manager-operational-actions .btn-sm {
-  min-height: 44px;
-}
-
-.manager-accounts-card,
-.manager-account-create,
-.manager-account-create__grid,
-.manager-account-create__grid > .field,
-.manager-password-control,
-.settings-recovery,
-.settings-recovery__body,
-.settings-recovery__body > * {
-  min-width: 0;
-  max-width: 100%;
-}
-
-.manager-account-create {
-  overflow: hidden;
-}
-
-.manager-account-create__grid {
-  display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  align-items: end;
-  gap: 14px;
-}
-
-.manager-account-create__grid > .field {
-  margin: 0;
-}
-
-.manager-account-create__submit {
-  width: max-content;
-  max-width: 100%;
-  margin-top: 18px;
-}
-
-.manager-password-control {
-  position: relative;
-  display: block;
-  height: 44px;
-}
-
-.manager-password-control > input {
-  width: 100%;
-  box-sizing: border-box;
-  padding-right: 48px;
-}
-
-.settings-page[data-settings-role="manager"] .manager-password-toggle {
-  position: absolute;
-  inset-block: 5px;
-  right: 6px;
-  display: inline-grid;
-  width: 34px;
-  min-width: 34px;
-  height: auto;
-  min-height: 0;
-  place-items: center;
-  border: 0;
-  border-radius: 8px;
-  background: transparent;
-  color: var(--muted);
-  padding: 0;
-  transform: none;
-  box-shadow: none;
-}
-
-.manager-password-toggle:hover {
-  background: var(--surface-2);
-  color: var(--text);
-}
-
-.manager-password-toggle:focus-visible {
-  outline: 2px solid var(--primary);
-  outline-offset: 1px;
-}
-
-.manager-password-toggle svg {
-  width: 18px;
-  height: 18px;
-}
-
-.manager-purge-dialog__actions {
-  display: flex;
-  align-items: center;
-  justify-content: flex-end;
-  flex-wrap: wrap;
-  gap: 16px;
-  margin-top: 16px;
-  padding-top: 16px;
-  border-top: 1px solid var(--line);
-}
-
-.manager-account-role {
-  appearance: none;
-  border-color: var(--line);
-  background-color: var(--surface);
-  background-image: linear-gradient(45deg, transparent 50%, var(--muted) 50%), linear-gradient(135deg, var(--muted) 50%, transparent 50%);
-  background-position: calc(100% - 16px) 50%, calc(100% - 11px) 50%;
-  background-size: 5px 5px, 5px 5px;
-  background-repeat: no-repeat;
-  padding-right: 32px;
-}
-
-.manager-account-role:focus-visible {
-  border-color: var(--primary);
-  outline: 0;
-  box-shadow: 0 0 0 3px var(--primary-glow);
-}
-
-.manager-account-actions {
-  display: flex;
-  min-width: 0;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 8px;
-  white-space: normal;
-}
-
-.manager-account-actions > .btn-sm {
-  flex: 0 0 auto;
-}
-
-.settings-action-table th,
-.settings-action-table td {
-  vertical-align: middle;
-  line-height: 1.35;
-}
-
-.settings-action-table th,
-.settings-action-table td {
-  padding-block: 12px;
-}
-
-.settings-action-table td:nth-child(3),
-.settings-action-table td:nth-child(4),
-.settings-action-table td:last-child {
-  white-space: nowrap;
-}
-
-.settings-action-table td .badge {
-  display: inline-flex;
-  align-items: center;
-  min-height: 28px;
-  line-height: 1.2;
-  white-space: nowrap;
-}
-
-.settings-action-table td select,
-.settings-action-table td .btn-sm,
-.settings-action-table td > .row {
-  line-height: 1.2;
-}
-
-.settings-action-table td select,
-.settings-action-table td .btn-sm {
-  min-height: 44px;
-  display: inline-flex;
-  align-items: center;
-}
-
-.settings-action-table td:last-child > .row {
-  align-items: center;
-  flex-wrap: nowrap;
-  min-height: 44px;
-  white-space: nowrap;
-}
-
-.manager-accounts-table {
-  width: 100%;
-  max-width: 100%;
-  max-height: 560px;
-  overflow-y: auto;
-  scrollbar-gutter: stable;
-}
-
-.settings-action-table .manager-accounts-table__table {
-  width: 100%;
-  min-width: 960px;
-  table-layout: fixed;
-}
-
-.manager-accounts-table__table th:nth-child(1) { width: 15%; }
-.manager-accounts-table__table th:nth-child(2) { width: 19%; }
-.manager-accounts-table__table th:nth-child(3) { width: 13%; }
-.manager-accounts-table__table th:nth-child(4) { width: 14%; }
-.manager-accounts-table__table th:nth-child(5) { width: 14%; }
-.manager-accounts-table__table th:nth-child(6) { width: 25%; }
-
-.manager-accounts-table__table thead th {
-  position: sticky;
-  top: 0;
-  z-index: 3;
-  background: var(--surface);
-  box-shadow: 0 1px 0 var(--line);
-}
-
-.manager-accounts-table__table th,
-.manager-accounts-table__table td {
-  padding-inline: 10px;
-}
-
-.manager-accounts-table__table td:first-child,
-.manager-accounts-table__table td:nth-child(2) {
-  overflow-wrap: anywhere;
-}
-
-.manager-accounts-heading {
-  align-items: center;
-  gap: 12px;
-  margin-bottom: 12px;
-}
-
-.manager-accounts-heading > h3 {
-  margin: 0;
-}
-
-.manager-accounts-pagination {
-  display: flex;
-  min-width: 0;
-  align-items: center;
-  justify-content: space-between;
-  flex-wrap: wrap;
-  gap: 10px 14px;
-  padding-top: 12px;
-}
-
-.manager-accounts-pagination > .row {
-  gap: 8px;
-}
-
-.settings-recovery {
-  box-sizing: border-box;
-  width: 100%;
-  overflow: clip;
-}
-
-.settings-recovery__body,
-.settings-recovery__body .manager-recovery-inline,
-.settings-recovery__body .manager-operational-card,
-.settings-recovery__body .manager-operational-row {
-  width: 100%;
-  max-width: 100%;
-}
-
-.settings-recovery__body .manager-operational-row {
-  overflow-wrap: anywhere;
-}
-
-.settings-recovery__body .manager-operational-card,
-.settings-recovery__body .manager-operational-row,
-.settings-recovery__body .manager-operational-actions {
-  box-sizing: border-box;
-  min-width: 0;
-}
-
-.settings-recovery__body .manager-operational-actions {
-  flex-wrap: wrap;
-}
-
-@media (max-width: 600px) {
-  .manager-security-notices__heading {
-    align-items: flex-start;
-    flex-wrap: wrap;
-  }
-
-  .manager-security-notices__total {
-    margin-left: 50px;
-  }
-
-  .manager-security-notice {
-    align-items: flex-start;
-    flex-direction: column;
-  }
-}
-
-@media (max-width: 1000px) {
-  .manager-account-create__grid {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-}
-
-@media (max-width: 600px) {
-  .manager-account-create__grid {
-    grid-template-columns: minmax(0, 1fr);
-  }
-
-  .manager-account-create__submit {
-    width: 100%;
-  }
-}
-
-.manager-inline-status {
-  min-height: 1.2em;
-}
-
-.manager-page .table-wrap {
-  max-width: 100%;
-  overflow-x: auto;
-  overscroll-behavior-inline: contain;
-  scrollbar-width: thin;
-  padding-bottom: 4px;
-}
-
-.manager-page .report,
-.manager-page .rhead,
-.manager-page .report > * {
-  min-width: 0;
-}
-
-.manager-page .rhead,
-.manager-page .report > * {
-  max-width: 100%;
-}
-
-.manager-report-page .report {
-  overflow: hidden;
-}
-
-.manager-report-page .report > h3 {
-  margin: 24px 0 10px;
-  line-height: 1.35;
-}
-
-.manager-report-page .report > .summary + h3 {
-  margin-top: 20px;
-}
-
-.manager-report-page .report .grid {
-  gap: 16px;
-}
-
-.manager-report-page .manager-report-scale {
-  align-items: stretch;
-}
-
-.manager-report-page .manager-report-level-distribution {
-  display: flex;
-  min-width: 0;
-  flex-direction: column;
-}
-
-.manager-report-page .manager-report-level-distribution > .barrow {
-  min-height: 36px;
-}
-
-.manager-report-page .manager-report-level-distribution > .barrow[data-empty="true"] {
-  opacity: .58;
-}
-
-.manager-report-page .manager-report-activity-table {
-  align-self: stretch;
-}
-
-.manager-report-page .manager-next-actions {
-  display: grid;
-  gap: 10px;
-  margin: 0;
-  padding: 0;
-  list-style: none;
-}
-
-.manager-report-page .manager-next-action {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  align-items: start;
-  gap: 12px;
-  margin: 0;
-  border: 1px solid var(--line);
-  border-radius: 10px;
-  background: var(--surface-2);
-  padding: 12px 14px;
-  line-height: 1.45;
-}
-
-.manager-report-page .manager-next-action-copy {
-  display: grid;
-  gap: 3px;
-  min-width: 0;
-}
-
-.manager-report-page .manager-next-action-names {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-  margin-top: 8px;
-}
-
-.manager-report-page .manager-next-action-names > span {
-  max-width: 100%;
-  border-radius: 7px;
-  background: var(--surface);
-  padding: 3px 8px;
-  overflow-wrap: anywhere;
-  font-size: .8rem;
-}
-
-.manager-report-page .meta,
-.manager-report-page .report td,
-.manager-report-page .report th {
-  overflow-wrap: anywhere;
-}
-
-.manager-report-page .manager-report-learner-status .badge {
-  white-space: normal;
-  line-height: 1.35;
-}
-
-@media print {
-  .manager-report-page .manager-page-title,
-  .manager-report-page .manager-page-title__actions {
-    display: none !important;
-  }
-
-  .manager-report-page .report {
-    width: 100%;
-    max-width: none;
-    overflow: visible !important;
-    border: 0;
-    box-shadow: none;
-    padding: 0;
-  }
-
-  .manager-report-page .table-wrap,
-  .manager-report-page .manager-report-learner-table-wrap {
-    max-width: none;
-    overflow: visible !important;
-    padding-bottom: 0;
-  }
-
-  .manager-report-page .manager-report-learner-table {
-    width: 100%;
-    table-layout: fixed;
-    font-size: 8.5pt;
-  }
-
-  .manager-report-page .manager-report-learner-table th,
-  .manager-report-page .manager-report-learner-table td {
-    padding: 6px 5px;
-    white-space: normal;
-    word-break: normal;
-    overflow-wrap: anywhere;
-  }
-
-  .manager-report-page .manager-report-learner-table th:first-child { width: 14%; }
-  .manager-report-page .manager-report-learner-table th:nth-child(2) { width: 6%; }
-  .manager-report-page .manager-report-learner-table th:nth-child(3) { width: 9%; }
-  .manager-report-page .manager-report-learner-table th:nth-child(4) { width: 7%; }
-  .manager-report-page .manager-report-learner-table th:nth-child(5) { width: 8%; }
-  .manager-report-page .manager-report-learner-table th:nth-child(6) { width: 11%; }
-  .manager-report-page .manager-report-learner-table th:nth-child(7) { width: 9%; }
-  .manager-report-page .manager-report-learner-table th:nth-child(8) { width: 13%; }
-  .manager-report-page .manager-report-learner-table th:nth-child(9) { width: 18%; }
-
-  .manager-report-page .manager-report-learner-table tr {
-    break-inside: avoid;
-  }
-}
-
-.manager-reminder-actions {
-  min-width: 0;
-  gap: 10px;
-  padding-top: 2px;
-  flex-wrap: wrap !important;
-}
-
-.manager-reminder-card {
-  display: grid;
-  gap: 14px;
-}
-
-.manager-reminder-toolbar {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 16px;
-  margin: 16px 0;
-  padding: 14px 16px;
-  border: 1px solid var(--line);
-  border-radius: 14px;
-  background: var(--surface);
-}
-
-.manager-reminder-toolbar > div {
-  display: grid;
-  gap: 3px;
-}
-
-.manager-reminder-confirm-dialog {
-  display: grid;
-  gap: 14px;
-}
-
-.manager-reminder-confirm-dialog > h2,
-.manager-reminder-confirm-dialog > p {
-  margin: 0;
-}
-
-.manager-reminder-confirm-actions {
-  justify-content: flex-end;
-}
-
-.manager-reminder-message {
-  margin: 0;
-  white-space: pre-wrap;
-}
-
-.manager-reminder-actions .btn-sm {
-  min-height: 44px;
-}
-
-.manager-action-table th:last-child,
-.manager-action-table td:last-child {
-  position: sticky;
-  right: 0;
-  z-index: 2;
-  background: var(--surface);
-  box-shadow: -8px 0 14px -12px rgba(30, 30, 30, .45);
-}
-
-.manager-action-table td:last-child {
-  vertical-align: middle;
-  white-space: nowrap;
-}
-
-.manager-action-table th:last-child {
-  z-index: 3;
-}
-
-.manager-action-table td:last-child > .row {
-  min-width: 122px;
-  align-items: center;
-  flex-wrap: nowrap;
-  row-gap: 0;
-}
-
-.manager-action-table td:last-child,
-.manager-action-table td:last-child > .row,
-.manager-action-table td:last-child .btn-sm {
-  vertical-align: middle;
-}
-
-.manager-action-table td:last-child .btn-sm {
-  min-width: 54px;
-  min-height: 44px;
-}
-
-.manager-progress-table th,
-.manager-progress-table td {
-  padding-inline: 9px;
-}
-
-.manager-progress-table td:first-child {
-  min-width: 92px;
-}
-
-.manager-progress-table td:last-child {
-  min-width: 130px;
-}
-
-.manager-progress-table table,
-.manager-rewards-table table {
-  min-width: max-content;
-}
-
-/* At desktop width the canonical rewards table keeps the action column in
-   view.  Let the five columns share the available card width; mobile keeps
-   the intrinsic width above so its table remains horizontally scrollable. */
-@media (min-width: 761px) {
-  .manager-rewards-table table {
-    width: 100%;
-    min-width: 0;
-    table-layout: fixed;
-  }
-
-  /* Keep the badge and action columns readable instead of letting the
-     browser compress them around the illustration column. */
-  .manager-rewards-table th:nth-child(1),
-  .manager-rewards-table td:nth-child(1) {
-    width: 24%;
-  }
-
-  .manager-rewards-table th:nth-child(2),
-  .manager-rewards-table td:nth-child(2) {
-    width: 18%;
-  }
-
-  .manager-rewards-table th:nth-child(3),
-  .manager-rewards-table td:nth-child(3) {
-    width: 11%;
-  }
-
-  .manager-rewards-table th:nth-child(4),
-  .manager-rewards-table td:nth-child(4) {
-    width: 27%;
-  }
-
-  .manager-rewards-table th:nth-child(5),
-  .manager-rewards-table td:nth-child(5) {
-    width: 20%;
-  }
-
-  .manager-rewards-table td:nth-child(4) {
-    overflow-wrap: anywhere;
-    line-height: 1.35;
-  }
-
-  .manager-rewards-table th:last-child,
-  .manager-rewards-table td:last-child {
-    min-width: 124px;
-  }
-
-  .manager-rewards-table td:last-child .btn,
-  .manager-rewards-table td:last-child .btn-sm {
-    max-width: 100%;
-    white-space: normal;
-    text-align: center;
-  }
-}
-
-.manager-extra-reward {
-  margin-top: 12px;
-}
-
-.manager-extra-reward .eyebrow {
-  margin-bottom: 4px;
-}
-
-.manager-extra-reward p {
-  margin: 0;
-}
-
-.manager-rewards-page h2 {
-  font-size: 1.2rem !important;
-  line-height: 1.25 !important;
-}
-
-.manager-rewards-page .manager-reward-preview-card > .row:first-child {
-  gap: 14px !important;
-}
-
-.manager-rewards-page .manager-reward-preview-card > .row:first-child > div:last-child {
-  min-width: 0 !important;
-}
-
-.manager-rewards-page .manager-reward-preview-title {
-  font-size: 1rem;
 }
 
 .manager-modal-backdrop {
@@ -1540,6 +804,184 @@
 .settings-page[data-settings-role="manager"] .manager-account-pin .manager-password-toggle:hover {
   border-color: var(--primary);
   background: var(--primary-soft);
+}
+
+
+.manager-accounts-card { container: manager-accounts / inline-size; }
+.manager-accounts-heading { align-items: center; margin-bottom: 12px; }
+
+.manager-accounts-table {
+  width: 100%;
+  max-width: 100%;
+  max-height: 560px;
+  overflow-y: auto;
+  scrollbar-gutter: stable;
+}
+
+.settings-action-table .manager-accounts-table__table {
+  width: 100%;
+  min-width: 960px;
+  table-layout: fixed;
+}
+
+.manager-accounts-table__table th:nth-child(1) { width: 14%; }
+.manager-accounts-table__table th:nth-child(2) { width: 19%; }
+.manager-accounts-table__table th:nth-child(3) { width: 15%; }
+.manager-accounts-table__table th:nth-child(4) { width: 13%; }
+.manager-accounts-table__table th:nth-child(5) { width: 14%; }
+.manager-accounts-table__table th:nth-child(6) { width: 25%; }
+
+.manager-accounts-table__table thead th {
+  position: sticky;
+  top: 0;
+  z-index: 3;
+  background: var(--surface);
+  box-shadow: 0 1px 0 var(--line);
+}
+
+.manager-accounts-table__table :is(th, td) {
+  padding-inline: 10px;
+  vertical-align: middle;
+}
+
+.manager-accounts-table__table :is(td:first-child, td:nth-child(2)) { overflow-wrap: anywhere; }
+.manager-accounts-table__table td:nth-child(3) select {
+  width: 100%;
+  padding-inline: 6px;
+  font-size: .875rem;
+  white-space: nowrap;
+}
+
+.manager-account-actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: nowrap;
+  gap: 6px;
+}
+
+.manager-account-create__grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  align-items: end;
+  gap: 14px;
+}
+
+.manager-account-create__grid > .field { min-width: 0; margin: 0; }
+
+.manager-account-create__submit {
+  width: max-content;
+  max-width: 100%;
+  margin-top: 18px;
+}
+
+.manager-password-control { position: relative; display: block; }
+.settings-page .field > .manager-password-control { margin-bottom: 0; }
+
+.manager-password-control > input {
+  width: 100%;
+  box-sizing: border-box;
+  padding-right: 48px;
+}
+
+.settings-page[data-settings-role="manager"] .manager-password-toggle {
+  position: absolute;
+  inset-block: 5px;
+  right: 6px;
+  display: inline-grid;
+  width: 34px;
+  min-width: 34px;
+  height: auto;
+  min-height: 0;
+  place-items: center;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--muted);
+  box-shadow: none;
+}
+
+.manager-password-toggle svg { width: 18px; height: 18px; }
+
+
+@container manager-accounts (max-width: 975px) {
+  .settings-page .manager-accounts-table { overflow-x: hidden; }
+  .settings-action-table .manager-accounts-table__table,
+  .manager-accounts-table__table tbody { display: block; min-width: 0; }
+
+  .manager-accounts-table__table thead {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+  }
+
+  .manager-accounts-table__table tbody tr {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 6px 10px;
+    align-items: center;
+    padding: 10px 8px;
+    border-bottom: 1px solid var(--line);
+  }
+
+  .manager-accounts-table__table tbody tr > td {
+    display: block;
+    min-width: 0;
+    padding: 0;
+    border: 0;
+    white-space: normal;
+  }
+
+  .manager-accounts-table__table tbody tr:hover > td { background: transparent; }
+  .manager-accounts-table__table tbody tr:hover { background: var(--surface-3); }
+
+  .manager-accounts-table__table td:nth-child(2) {
+    grid-column: 1 / -1;
+    color: var(--muted);
+    font-size: .85rem;
+  }
+
+  .manager-accounts-table__table td:nth-child(3) select {
+    width: min(100%, 180px);
+    padding-inline: 8px;
+  }
+
+  .manager-accounts-table__table td:nth-child(4) { grid-area: 1 / 2; }
+
+  .manager-accounts-table__table td:last-child { grid-column: 1 / -1; }
+  .manager-accounts-table__table .manager-account-actions { min-width: 0; flex-wrap: nowrap; }
+  .settings-page .manager-account-actions > .btn-sm {
+    width: auto;
+    min-height: 44px;
+    padding-inline: 8px;
+    white-space: nowrap;
+  }
+}
+
+@container manager-accounts (max-width: 559px) {
+  .manager-accounts-table__table .manager-account-actions > .btn-sm { flex: 1 1 0; }
+}
+
+@container manager-accounts (560px <= width <= 975px) {
+  .manager-accounts-table__table tbody tr {
+    grid-template-columns: minmax(0, 1fr) minmax(132px, .6fr) auto;
+  }
+
+  .manager-accounts-table__table td:nth-child(2) { grid-area: 2 / 1; }
+  .manager-accounts-table__table td:nth-child(3) { grid-area: 1 / 2; }
+  .manager-accounts-table__table td:nth-child(4) { grid-area: 1 / 3; }
+  .manager-accounts-table__table td:nth-child(5) { grid-area: 2 / 2; }
+  .manager-accounts-table__table td:last-child { grid-area: 2 / 3; }
+}
+
+
+@container manager-accounts (max-width: 639px) {
+  .manager-account-create__grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+
+@container manager-accounts (max-width: 390px) {
+  .manager-account-create__grid { grid-template-columns: minmax(0, 1fr); }
 }
 
 /* Compact print rhythm keeps the report on two balanced A4 pages for the
@@ -1693,40 +1135,45 @@
 
 .manager-reminder-recipient b { color: var(--text); font-weight: 600; }
 
-.manager-reopen-requests-grid {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 16px;
-}
-
-.manager-reopen-requests-card {
+.manager-requests-card {
   min-width: 0;
 }
 
-.manager-reopen-requests-card h2 {
-  margin: 0 0 8px;
-  font-size: 1.1rem;
+.manager-requests-filters {
+  margin-bottom: 14px;
 }
 
-.manager-reopen-requests-card p {
-  margin: 0;
+.manager-requests-filters label {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
 }
 
-.manager-reopen-requests-empty {
-  margin-top: 18px !important;
-  border-top: 1px solid var(--line);
-  padding-top: 12px;
+.manager-progress-page .manager-progress-table,
+.manager-progress-page .manager-progress-list {
+  max-height: min(440px, 60dvh);
+  overflow: auto;
+  overscroll-behavior-y: contain;
+  scrollbar-width: thin;
 }
 
-@media (max-width: 840px) {
-  .manager-reopen-requests-grid { grid-template-columns: 1fr; }
+.manager-progress-table thead th {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  background: var(--surface);
 }
 
+.manager-requests-pagination {
+  justify-content: flex-end;
+  margin-top: 12px;
+}
 .manager-account-pin {
   display: inline-flex;
   align-items: center;
   gap: 0;
-  min-width: 88px;
+  min-width: 0;
+  max-width: 100%;
   height: 34px;
   overflow: hidden;
   border: 1px solid var(--line);
@@ -1742,10 +1189,46 @@
   border-radius: 0;
   background: transparent;
   text-align: center;
+  white-space: nowrap;
+  overflow-x: auto;
   letter-spacing: .12em;
 }
 
+.manager-account-pin:has(input) { width: 100%; }
+
+.settings-page .manager-account-pin input {
+  flex: 1 1 0;
+  width: 0;
+  min-width: 0;
+  min-height: 0;
+  height: 100%;
+  padding: 0 7px;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  font-family: monospace;
+  font-size: .85rem;
+}
+
 .manager-account-pin .manager-password-toggle { position: static; flex: 0 0 auto; }
+
+.settings-page[data-compact] .manager-account-pin {
+  height: 44px;
+}
+.settings-page[data-compact][data-settings-role="manager"] .manager-account-pin .manager-password-toggle {
+  width: 44px;
+  min-width: 44px;
+  height: 42px;
+}
+.settings-page[data-compact] .manager-account-create {
+  display: block;
+  margin: 0;
+}
+@container manager-accounts (350px <= width <= 639px) {
+  .settings-page[data-compact] .manager-account-create__grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
 
 /* Settings is rendered by the shared settings component, but this selector
    is Manager-only and restores the app's single title inset and card
@@ -1767,13 +1250,6 @@
 
   .manager-page-title__actions > * {
     flex: 1 1 auto;
-  }
-
-  /* Report actions follow the canonical compact wrap: natural button widths
-     keep the third action on the next line instead of stretching every action
-     edge-to-edge. */
-  .manager-report-page .manager-page-title__actions > * {
-    flex: 0 0 auto;
   }
 
   .manager-operational-row {
@@ -1804,19 +1280,6 @@
     min-width: 136px;
   }
 
-  .manager-reminder-actions {
-    display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-
-  .manager-reminder-actions .btn-sm {
-    width: 100%;
-    min-width: 0;
-  }
-
-  .manager-reminder-actions .btn-sm:last-child {
-    grid-column: 1 / -1;
-  }
 
   .manager-modal-backdrop {
     padding-inline: 12px;
@@ -1827,34 +1290,28 @@
   }
 }
 
-/* The shared mobile shell uses an internal main scroller for learner and
-   operator screens. Manager screens follow the canonical app instead:
-   the document owns the long scroll and the five-item nav stays fixed. Scope
-   this correction to the Manager navigation so operator mobile keeps its
-   existing shell and route structure. */
-@media (max-width: 760px) {
-  body:has(> #root > .topbar nav[aria-label="Điều hướng quản lý"]) {
-    /* shared.css deliberately locks the generic mobile shell with !important;
-       Manager follows the canonical document-scroll layout, so this scoped
-       override must win for every long Manager/Settings screen. */
+/* Other Manager pages use document scrolling. Settings shares the viewport
+   layout and inner scroller with Operator Settings. */
+@media (max-width: 960px) {
+  body:has(> #root > .topbar nav[aria-label="Điều hướng quản lý"]):not(:has(.settings-page)) {
     overflow: visible !important;
   }
 
-  body:has(> #root > .topbar nav[aria-label="Điều hướng quản lý"]) > #root {
+  body:has(> #root > .topbar nav[aria-label="Điều hướng quản lý"]):not(:has(.settings-page)) > #root {
     display: block !important;
     height: auto !important;
     min-height: 100dvh !important;
     overflow: visible !important;
   }
 
-  body:has(> #root > .topbar nav[aria-label="Điều hướng quản lý"]) > #root > main {
+  body:has(> #root > .topbar nav[aria-label="Điều hướng quản lý"]):not(:has(.settings-page)) > #root > main {
     flex: none !important;
     min-height: auto !important;
     overflow: visible !important;
     padding-bottom: calc(116px + env(safe-area-inset-bottom, 0px)) !important;
   }
 
-  body:has(> #root > .topbar nav[aria-label="Điều hướng quản lý"]) > #root > .bottomnav {
+  body:has(> #root > .topbar nav[aria-label="Điều hướng quản lý"]):not(:has(.settings-page)) > #root > .bottomnav {
     position: fixed !important;
     left: 0 !important;
     right: 0 !important;
@@ -1864,3 +1321,440 @@
   }
 }
 .manager-reopen-warning{margin:6px 0;border-radius:8px;padding:6px 8px;background:var(--danger-soft);color:var(--danger)}
+
+.manager-progress-compact-label,
+.manager-progress-compact-details {
+  display: none;
+}
+
+
+/* Use the space inside the card. The desktop sidebar can leave a narrow card
+   even when the viewport is wider than a tablet. */
+@container manager-progress (max-width: 999px) {
+  .manager-progress-page .manager-progress-table {
+    overflow-x: hidden;
+    overscroll-behavior-y: contain;
+  }
+
+  .manager-progress-table :is(table, tbody) { display: block; }
+
+  .manager-progress-table thead {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+  }
+
+  .manager-progress-table .manager-progress-record {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr) auto auto auto auto;
+    grid-template-areas: "level name status rhythm lessons profile" "details details details details details details";
+    align-items: center;
+    gap: 2px 12px;
+    padding: 8px;
+    border-bottom: 1px solid var(--line);
+  }
+
+  .manager-progress-table .manager-progress-record > td {
+    position: static;
+    min-width: 0;
+    padding: 0;
+    border: 0;
+    white-space: normal;
+    background: transparent;
+    box-shadow: none;
+  }
+
+  .manager-progress-table .manager-progress-record:hover { background: var(--surface-2); }
+  .manager-progress-name { grid-area: name; overflow-wrap: anywhere; }
+  .manager-progress-level { grid-area: level; }
+  .manager-progress-status { grid-area: status; }
+  .manager-progress-rhythm { grid-area: rhythm; }
+  .manager-progress-lessons { grid-area: lessons; }
+  .manager-progress-profile { grid-area: profile; justify-self: end; }
+  .manager-progress-table .manager-progress-profile .manager-row-actions { min-width: 0; }
+  .manager-progress-table .manager-progress-profile button { min-height: 44px; }
+  .manager-progress-table .manager-progress-desktop-detail { display: none; }
+  .manager-progress-table .manager-progress-compact-details { display: block; grid-area: details; }
+
+  .manager-progress-compact-label {
+    display: inline;
+    color: var(--muted);
+    font-size: .8rem;
+  }
+
+  .manager-progress-compact-details summary {
+    width: fit-content;
+    min-height: 36px;
+    padding-block: 8px;
+    color: var(--primary-dark);
+    cursor: pointer;
+  }
+}
+
+@container manager-progress (581px <= width <= 999px) {
+  .manager-progress-compact-details .manager-detail-metrics {
+    grid-template-columns: repeat(4, minmax(0, 1fr)) minmax(0, 1.55fr);
+  }
+}
+
+@container manager-progress (max-width: 580px) {
+  .manager-progress-table .manager-progress-record {
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    grid-template-areas: "level name profile" "status status status" "rhythm rhythm lessons" "details details details";
+    column-gap: 8px;
+  }
+
+  .manager-progress-compact-details .manager-detail-metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .manager-progress-compact-details .manager-detail-metrics > :last-child { grid-column: 1 / -1; }
+}
+
+.manager-detail-metrics {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 108px), 1fr));
+  gap: 6px;
+  margin: 0 0 6px;
+  font-size: .85rem;
+}
+
+.manager-detail-metrics > div {
+  min-width: 0;
+  padding: 6px 9px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface);
+  overflow-wrap: anywhere;
+}
+
+.manager-detail-metrics dt { color: var(--muted); }
+.manager-detail-metrics dd { margin: 2px 0 0; font-weight: 600; }
+
+.manager-next-action-copy { display: grid; gap: 3px; }
+.manager-next-action-names { display: flex; flex-wrap: wrap; gap: 4px 8px; }
+
+@media (max-width: 600px) {
+  .manager-progress-page .manager-kpi-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 6px;
+  }
+
+  .manager-progress-page .manager-kpi-grid > .kpi {
+    min-width: 0;
+    gap: 3px;
+    padding: 9px 6px;
+  }
+
+  .manager-progress-page .manager-kpi-grid .val { font-size: clamp(1.1rem, 5vw, 1.45rem); }
+  .manager-progress-page .manager-kpi-grid .kpi b { font-size: .75rem; }
+  .manager-progress-page .manager-kpi-grid .kpi .xs { font-size: .66rem; }
+}
+
+/* Month filters and results inside the printable report. */
+@media screen {
+  .manager-monthly-report .report {
+    width: 100%;
+    max-width: none;
+    margin: 0;
+    padding: clamp(14px, 3vw, 28px);
+  }
+}
+
+.manager-monthly-report .rhead {
+  align-items: center;
+}
+
+.manager-monthly-report-title {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.manager-monthly-report .rhead .meta {
+  text-align: left;
+}
+
+.manager-monthly-report-actions {
+  flex: none;
+  max-width: 100%;
+}
+
+.manager-report-action-compact { display: none; }
+
+.manager-monthly-export-status:empty { margin: 0; }
+
+.manager-monthly-report .summary .eyebrow {
+  color: inherit;
+}
+
+.manager-monthly-metrics th:nth-child(3) {
+  width: 24%;
+}
+
+.manager-monthly-metric-value {
+  font-family: var(--font-display);
+  font-size: 1.15em;
+}
+
+.manager-monthly-report :is(.manager-monthly-metrics, .manager-monthly-table) .badge {
+  white-space: normal;
+}
+
+.manager-monthly-filters {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: end;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.manager-monthly-filters label,
+.manager-rename-form {
+  display: grid;
+  gap: 6px;
+}
+
+.manager-rename-form,
+.manager-rename-button {
+  margin-bottom: 12px;
+}
+
+.manager-profile-assessments {
+  margin: 0;
+}
+
+.manager-profile-assessments p {
+  margin: 4px 0 0;
+}
+
+.manager-monthly-table {
+  width: 100%;
+  table-layout: fixed;
+  border-collapse: collapse;
+}
+
+.manager-monthly-table :is(th, td) {
+  min-width: 0;
+  vertical-align: top;
+  overflow-wrap: anywhere;
+  white-space: normal;
+  padding: 10px 8px;
+}
+
+.manager-monthly-table th:first-child {
+  width: 23%;
+}
+
+.manager-monthly-table th:nth-child(5) {
+  width: 20%;
+}
+
+.manager-monthly-identity > .row {
+  flex-wrap: wrap;
+}
+
+.manager-monthly-identity > .xs {
+  display: block;
+}
+
+.manager-monthly-skill-scores {
+  display: flex;
+  gap: 4px 8px;
+  flex-wrap: wrap;
+}
+
+.manager-monthly-cell-label {
+  display: none;
+}
+
+@media screen and (max-width: 760px) {
+  .manager-monthly-report .rhead {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .manager-monthly-report-actions {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    width: 100%;
+    gap: 6px;
+  }
+
+  .manager-monthly-report-actions .btn {
+    min-width: 0;
+    min-height: 44px;
+    padding-inline: 6px;
+    justify-content: center;
+    white-space: nowrap;
+  }
+
+  .manager-report-action-full { display: none; }
+  .manager-report-action-compact { display: inline; }
+
+  .manager-monthly-filters > label,
+  .manager-monthly-filters :is(input, select) {
+    min-width: 0;
+    max-width: 100%;
+  }
+
+  .manager-monthly-metrics,
+  .manager-monthly-metrics tbody {
+    display: block;
+  }
+
+  .manager-monthly-metrics thead {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+  }
+
+  .manager-monthly-metrics tbody tr {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto auto;
+    align-items: center;
+    gap: 0 8px;
+    padding: 8px 0;
+  }
+
+  .manager-monthly-metrics tbody tr + tr {
+    border-top: 1px solid var(--line);
+  }
+
+  .manager-monthly-metrics tbody td {
+    display: block;
+    padding: 3px 4px;
+    border: 0;
+  }
+
+  .manager-monthly-metrics td:first-child {
+    grid-column: 1 / -1;
+  }
+
+  .manager-monthly-metrics td:nth-child(3) {
+    grid-column: 1 / -1;
+    grid-row: 3;
+  }
+  .manager-monthly-metrics td:nth-child(3):not(:has(.progress)) { display: none; }
+  .manager-monthly-metrics td:nth-child(4) { color: var(--muted); }
+  .manager-monthly-metrics td:nth-child(4) .manager-monthly-cell-label { display: inline; margin-right: 4px; }
+  .manager-monthly-metrics td:last-child { text-align: right; }
+}
+
+@media print {
+  .manager-monthly-table tr {
+    break-inside: avoid;
+  }
+}
+
+
+.manager-monthly-learner-list { display: none; }
+.manager-report-more-learners { margin-top: 8px; min-height: 44px; }
+@media screen and (max-width: 960px) {
+  .manager-report-activity-heading {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 8px;
+    margin-top: 16px;
+  }
+  .manager-report-activity-heading h3 { margin: 0; }
+  .manager-report-activity-heading button { min-height: 44px; flex: none; }
+  .manager-monthly-report .manager-report-scale[data-collapsed="true"] { display: none; }
+  .manager-report-learner-table-wrap { display: none; }
+  .manager-monthly-learner-list {
+    display: block;
+    padding: 0;
+    margin: 0;
+    list-style: none;
+    font-size: .88rem;
+  }
+
+  .manager-monthly-learner-list > li { border-bottom: 1px solid var(--line); }
+  .manager-monthly-learner-list summary {
+    display: grid;
+    grid-template-columns: 12px minmax(0, 1fr);
+    align-items: center;
+    gap: 8px;
+    min-height: 44px;
+    padding: 8px 4px;
+    overflow-wrap: anywhere;
+    cursor: pointer;
+  }
+
+  .manager-monthly-learner-list summary::before {
+    content: "";
+    flex: none;
+    width: 6px;
+    height: 6px;
+    margin-inline-end: 2px;
+    border-block-start: 1px solid currentColor;
+    border-inline-end: 1px solid currentColor;
+    transform: rotate(45deg);
+  }
+
+  .manager-monthly-learner-list details[open] summary::before { transform: rotate(135deg); }
+  .manager-monthly-learner-summary,
+  .manager-monthly-learner-name { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; }
+  .manager-monthly-learner-name { gap: 4px 6px; }
+  .manager-monthly-learner-detail { padding: 0 8px 10px; overflow-wrap: anywhere; }
+  .manager-monthly-learner-detail .row { flex-wrap: wrap; gap: 4px 8px; }
+  .manager-monthly-learner-detail .manager-detail-metrics { margin-top: 8px; }
+}
+
+
+@media (max-width: 1180px) {
+  .manager-operations-page .manager-operations-context { display: none; }
+  .manager-operators-section > .manager-section-heading { flex-direction: row; align-items: center; }
+  .manager-operator-list { overflow: visible; margin-top: 10px; }
+
+  .manager-operator-key-metrics {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 6px;
+    margin: 0 0 8px;
+    text-align: center;
+  }
+  .manager-operator-key-metrics > div {
+    border-radius: 8px;
+    background: var(--surface-3);
+    padding: 8px 4px;
+  }
+  .manager-operator-key-metrics dt { color: var(--muted); font-size: .8125rem; }
+  .manager-operator-key-metrics dd { margin: 0; font-weight: 700; }
+  .manager-operator-breakdown > summary {
+    min-height: 44px;
+    padding: 11px 8px;
+    border-top: 1px solid var(--line);
+    font-weight: 600;
+    cursor: pointer;
+  }
+  .manager-operator-breakdown .manager-operator-grid { margin-top: 4px; }
+  .manager-operator-week-table { width: 100%; table-layout: fixed; }
+  .manager-operator-week-table :is(th, td) { padding: 6px 4px; white-space: normal; }
+  .manager-operator-week-table :is(th, td):first-child { width: 38%; }
+  .manager-operator-week-table :is(th, td):not(:first-child) { text-align: center; }
+  .manager-operator-summary {
+    grid-template-columns: 12px minmax(0, 1fr) auto;
+    min-width: 0;
+    gap: 5px 8px;
+  }
+
+  .manager-operator-name { display: block; overflow-wrap: anywhere; }
+  .manager-operator-quality { grid-column: 3; grid-row: 1; }
+  .manager-operator-output {
+    display: flex;
+    flex-wrap: wrap;
+    column-gap: 12px;
+    grid-column: 2 / -1;
+    grid-row: 2;
+    font-size: .875rem;
+    color: var(--muted);
+  }
+  .manager-operator-summary :is(.manager-operator-name .xs, .manager-operator-activity, .manager-operator-toggle) { display: none; }
+}
+
+@media (max-width: 680px) {
+  .manager-operator-detail { padding: 8px; }
+  .manager-operator-detail .grid.manager-operator-grid { grid-template-columns: minmax(0, 1fr); gap: 8px; }
+}

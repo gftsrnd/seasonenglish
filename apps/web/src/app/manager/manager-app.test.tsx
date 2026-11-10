@@ -166,12 +166,12 @@ describe("new Manager app branch", () => {
     render(<ManagerReminders view={reminders} onSend={send} onDismiss={dismiss} onCopy={copy} />);
     expect(screen.getByText(/Email được gửi riêng/)).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Gửi email" })).toBeEnabled();
-    expect(screen.queryByRole("button", { name: "Gửi Base.vn" })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Gửi Base.vn" })).toBeDisabled();
     expect(screen.getByText("Email")).toBeInTheDocument();
-    expect(screen.getByText("bỏ 5 ngày")).toBeInTheDocument();
+    expect(screen.getByText("Vắng 5 ngày")).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "Lịch sử nhắc" })).toBeInTheDocument();
     expect(screen.getByText(/14[-/]10/)).toBeInTheDocument();
-    expect(screen.getAllByRole("columnheader").map((header) => header.textContent)).toEqual(["Ngày", "Người học", "Email nhận", "Kênh", "Bỏ", "Kết quả"]);
+    expect(screen.getAllByRole("columnheader").map((header) => header.textContent)).toEqual(["Ngày", "Người học", "Nơi nhận", "Kênh", "Bỏ", "Kết quả"]);
     await userEvent.setup().click(screen.getByRole("button", { name: "Đã nhắc qua kênh khác" }));
     expect(dismiss).toHaveBeenCalledWith("learner-3");
     expect(screen.queryByRole("status")).not.toBeInTheDocument();
@@ -197,7 +197,7 @@ describe("new Manager app branch", () => {
     await user.click(within(firstActions).getByRole("button", { name: "Gửi email" }));
     await user.click(within(screen.getByRole("dialog", { name: "Xác nhận gửi email" })).getByRole("button", { name: "Xác nhận gửi email" }));
     expect(send).toHaveBeenNthCalledWith(1, "learner-1", "email");
-    expect(within(firstActions).queryByRole("button", { name: "Gửi Base.vn" })).not.toBeInTheDocument();
+    expect(within(firstActions).getByRole("button", { name: "Gửi Base.vn" })).toBeDisabled();
   });
 
   it("renders all five report sections from real report fields", () => {
@@ -242,7 +242,8 @@ describe("new Manager app branch", () => {
     };
     render(<ManagerReport view={report} />);
 
-    await userEvent.setup().click(screen.getByRole("button", { name: "Copy bản chữ" }));
+    const user = userEvent.setup();
+    await user.click(screen.getByRole("button", { name: "Copy bản chữ" }));
 
     await vi.waitFor(() => expect(screen.getByRole("status", { name: "Trạng thái xuất báo cáo" })).toHaveTextContent("Đã sao chép báo cáo."));
     const exported = buildManagerReportText(report);
@@ -257,30 +258,54 @@ describe("new Manager app branch", () => {
 
   it("keeps the nine reward cases and changes simulation state", async () => {
     renderRewards();
-    const quickCases = screen.getByRole("group", { name: "Chọn nhanh một trường hợp" });
-    expect(within(quickCases).getAllByRole("button")).toHaveLength(9);
-    await userEvent.setup().click(within(quickCases).getByRole("button", { name: "Cấp cao nhất" }));
-    expect(screen.getByText("Kết quả: cấp 4/4 · Mùa đông – vững vàng")).toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: "4 mùa học" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "🐣 Khởi động" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "📅 Tuần trọn vẹn" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "🌟 Chuỗi 5 ngày" })).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "🌱 Bước đầu" })).not.toBeInTheDocument();
-    await userEvent.setup().click(within(quickCases).getByRole("button", { name: "Có huy hiệu cấp cao nhưng thiếu cấp dưới" }));
-    expect(screen.getByText("Kết quả: cấp 1/4 · Mùa xuân – gieo hạt")).toBeInTheDocument();
+    const user = userEvent.setup();
+    const cases = screen.getByRole("combobox", { name: "Tình huống mẫu" });
+    expect(within(cases).getAllByRole("option")).toHaveLength(9);
+    await user.selectOptions(cases, "Cấp cao nhất");
+    expect(screen.getByRole("status")).toHaveTextContent("Cấp 4/4 · Mùa đông – vững vàng");
+    expect(screen.getByRole("link", { name: "Xem trước chứng nhận" })).toHaveAttribute("href", "/reward/preview?points=420");
+    const custom = screen.getByRole("button", { name: "Tùy chỉnh điểm và huy hiệu" });
+    expect(custom).toHaveAttribute("aria-expanded", "false");
+    await user.click(custom);
+    expect(custom).toHaveAttribute("aria-expanded", "true");
+    expect(screen.getByRole("button", { name: "Khởi động" })).toHaveAttribute("aria-pressed", "true");
+    await user.selectOptions(cases, "Có huy hiệu cấp cao nhưng thiếu cấp dưới");
+    expect(screen.getByRole("status")).toHaveTextContent("Cấp 1/4 · Mùa xuân – gieo hạt");
+  });
+
+  it("edits reward points without a leading zero and reveals the badge group being changed", async () => {
+    renderRewards();
+    const user = userEvent.setup();
+    await user.click(screen.getByRole("button", { name: "Tùy chỉnh điểm và huy hiệu" }));
+    const points = screen.getByLabelText("Điểm giả lập (0–600)");
+    await user.clear(points);
+    expect(points).toHaveValue("");
+    await user.type(points, "006");
+    expect(points).toHaveValue("6");
+    const preview = screen.getByRole("region", { name: "Xem trước hồ sơ học viên" });
+    expect(within(preview).getByText("6 / 60")).toBeVisible();
+
+    const badge = screen.getByRole("button", { name: "Thợ mở khoá" });
+    expect(within(preview).queryByText("Thợ mở khoá")).not.toBeInTheDocument();
+    await user.click(badge);
+    const card = within(preview).getByText("Thợ mở khoá").closest("article")!;
+    expect(within(card).getByRole("img", { name: "Đã đạt" })).toBeVisible();
+    expect(within(preview).getByRole("button", { name: "Xem tất cả huy hiệu" })).toHaveAttribute("aria-expanded", "false");
+    await user.click(badge);
+    expect(within(card).getByRole("img", { name: "Chưa đạt" })).toBeVisible();
   });
 
   it("exposes reward promotion previews as dismissible modal dialogs", async () => {
     const user = userEvent.setup();
     renderRewards();
-    const trigger = screen.getAllByRole("button", { name: "Xem màn lên cấp" })[0]!;
+    const trigger = screen.getByRole("button", { name: "Xem lên cấp 2" });
     await user.click(trigger);
 
     const dialog = screen.getByRole("dialog", { name: "Màn chúc mừng lên cấp" });
     expect(dialog).toHaveAttribute("aria-modal", "true");
     expect(document.body).toHaveClass("app-modal-open");
-    expect(dialog).toHaveTextContent("Bạn đã đủ 60 điểm");
-    expect(dialog).toHaveTextContent("Cấp tiếp theo: Mùa thu – gặt hái");
+    expect(dialog).toHaveTextContent("60 điểm · 2 huy hiệu");
+    expect(within(dialog).getByRole("heading", { name: "Mùa hạ – đón nắng" })).toBeVisible();
     expect(within(dialog).getByRole("button", { name: "Đóng màn chúc mừng" })).toHaveFocus();
     await user.keyboard("{Escape}");
     expect(screen.queryByRole("dialog", { name: "Màn chúc mừng lên cấp" })).not.toBeInTheDocument();
@@ -294,9 +319,13 @@ describe("new Manager app branch", () => {
     expect(trigger).toHaveFocus();
   });
 
-  it("keeps the reward table in its own horizontal scroll flow", () => {
+  it("keeps milestone previews beside the learner preview", () => {
     renderRewards();
-    expect(document.querySelector("[data-manager-action-table]")).not.toHaveClass("manager-action-table");
+    const preview = screen.getByRole("region", { name: "Xem trước hồ sơ học viên" });
+    const actions = within(preview).getByRole("group", { name: "Xem thông báo lên cấp" });
+    expect(within(actions).getByRole("button", { name: "Xem lên cấp 2" })).toBeVisible();
+    expect(within(actions).getByRole("button", { name: "Xem lên cấp 3" })).toBeVisible();
+    expect(within(preview).getByRole("link", { name: "Xem trước chứng nhận" })).toBeVisible();
   });
 
   it("keeps Manager title and operational cards on stable spacing hooks", () => {

@@ -245,6 +245,12 @@ function ipaContainsPronunciationFocus(ipa: string, focus: string): boolean {
   return Boolean(normalizedIpa && normalizedFocus && normalizedIpa.includes(normalizedFocus));
 }
 
+/** Check recorded IPA for a single supported sound. Other pronunciation features use their taught examples. */
+export function ipaMatchesTaughtSound(ipa: string, focus: string): boolean {
+  const symbol = focus.match(/\/([^/]+)\//u)?.[1]?.trim() ?? focus.trim();
+  return !supportedPronunciationFocus.has(symbol) || ipaContainsPronunciationFocus(ipa, symbol);
+}
+
 function isEnglishOnlyLevel(cefr: string | undefined): boolean {
   return cefr === "B1" || cefr === "B2" || cefr === "C1";
 }

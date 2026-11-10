@@ -3,6 +3,7 @@ import "@testing-library/jest-dom/vitest";
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { userEvent } from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { ModalProvider } from "../shared/ModalProvider.js";
 import { emptyLesson, LessonFormEditor } from "./LessonFormEditor.js";
 
 afterEach(cleanup);
@@ -11,8 +12,7 @@ describe("operator granular lesson editor", () => {
   it("matches the app field groups and requires a deliberate force-save for incomplete lessons", async () => {
     const user = userEvent.setup();
     const onSave = vi.fn();
-    vi.spyOn(window, "confirm").mockReturnValue(true);
-    render(<LessonFormEditor weekNumber={2} cefr="A2" initial={emptyLesson(1)} onSave={onSave} onCancel={() => undefined} />);
+    render(<ModalProvider><LessonFormEditor weekNumber={2} cefr="A2" initial={emptyLesson(1)} onSave={onSave} onCancel={() => undefined} /></ModalProvider>);
     const editorDialog = screen.getByRole("dialog", { name: "Soạn bài T2 · Tuần 2 · A2" });
     expect(editorDialog).toHaveClass("dialog");
     expect(editorDialog.parentElement).toHaveClass("modal-backdrop");
@@ -33,6 +33,11 @@ describe("operator granular lesson editor", () => {
     expect(onSave).not.toHaveBeenCalled();
     expect(screen.getByRole("alert")).toHaveTextContent("mục cần bổ sung");
     await user.click(screen.getByRole("button", { name: "Lưu dù còn thiếu" }));
+    await user.keyboard("{Escape}");
+    expect(onSave).not.toHaveBeenCalled();
+    expect(editorDialog).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Lưu dù còn thiếu" }));
+    await user.click(screen.getByRole("button", { name: "Lưu tạm" }));
     expect(onSave).toHaveBeenCalledWith(expect.objectContaining({ dayNumber: 1, title: "Emails and rescheduling", parts: expect.any(Array) }));
   });
 
@@ -40,7 +45,7 @@ describe("operator granular lesson editor", () => {
     const user = userEvent.setup();
     const onSave = vi.fn();
     const onCancel = vi.fn();
-    render(<LessonFormEditor weekNumber={2} cefr="A2" initial={emptyLesson(1)} onSave={onSave} onCancel={onCancel} />);
+    render(<ModalProvider><LessonFormEditor weekNumber={2} cefr="A2" initial={emptyLesson(1)} onSave={onSave} onCancel={onCancel} /></ModalProvider>);
 
     const dialog = screen.getByRole("dialog", { name: "Soạn bài T2 · Tuần 2 · A2" });
     const close = screen.getByRole("button", { name: "Đóng" });
@@ -57,7 +62,7 @@ describe("operator granular lesson editor", () => {
     expect(onCancel).toHaveBeenCalledTimes(2);
 
     cleanup();
-    render(<LessonFormEditor weekNumber={2} cefr="A2" initial={emptyLesson(1)} onSave={onSave} onCancel={onCancel} busy />);
+    render(<ModalProvider><LessonFormEditor weekNumber={2} cefr="A2" initial={emptyLesson(1)} onSave={onSave} onCancel={onCancel} busy /></ModalProvider>);
     const pendingDialog = screen.getByRole("dialog", { name: "Soạn bài T2 · Tuần 2 · A2" });
     expect(pendingDialog).toHaveAttribute("aria-busy", "true");
     expect(screen.getByLabelText("Tiêu đề bài")).toBeDisabled();
@@ -69,8 +74,7 @@ describe("operator granular lesson editor", () => {
   it("persists the speaking requirement separately from the model sentence", async () => {
     const user = userEvent.setup();
     const onSave = vi.fn().mockResolvedValue(undefined);
-    vi.spyOn(window, "confirm").mockReturnValue(true);
-    render(<LessonFormEditor weekNumber={1} cefr="A2" initial={emptyLesson(1)} onSave={onSave} onCancel={() => undefined} />);
+    render(<ModalProvider><LessonFormEditor weekNumber={1} cefr="A2" initial={emptyLesson(1)} onSave={onSave} onCancel={() => undefined} /></ModalProvider>);
 
     await user.clear(screen.getByLabelText("Tiêu đề bài"));
     await user.type(screen.getByLabelText("Tiêu đề bài"), "Giving feedback");
@@ -79,6 +83,7 @@ describe("operator granular lesson editor", () => {
     await user.type(screen.getByLabelText("Câu mẫu học viên phải nói"), "Your report is good.");
     await user.click(screen.getByRole("button", { name: "Kiểm tra & lưu" }));
     await user.click(screen.getByRole("button", { name: "Lưu dù còn thiếu" }));
+    await user.click(screen.getByRole("button", { name: "Lưu tạm" }));
 
     const saved = onSave.mock.calls[0]?.[0];
     expect(saved.parts.find((part: { code: string }) => part.code === "speaking")?.content).toEqual(expect.objectContaining({
@@ -90,13 +95,13 @@ describe("operator granular lesson editor", () => {
   it("stores no-suitable grammar as unavailable instead of forcing invented content", async () => {
     const user = userEvent.setup();
     const onSave = vi.fn().mockResolvedValue(undefined);
-    vi.spyOn(window, "confirm").mockReturnValue(true);
-    render(<LessonFormEditor weekNumber={1} cefr="A2" initial={emptyLesson(1)} onSave={onSave} onCancel={() => undefined} />);
+    render(<ModalProvider><LessonFormEditor weekNumber={1} cefr="A2" initial={emptyLesson(1)} onSave={onSave} onCancel={() => undefined} /></ModalProvider>);
 
     await user.click(screen.getByRole("checkbox", { name: "Bài này không có nội dung ngữ pháp phù hợp" }));
     expect(screen.queryByLabelText("Ngữ pháp")).not.toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Kiểm tra & lưu" }));
     await user.click(screen.getByRole("button", { name: "Lưu dù còn thiếu" }));
+    await user.click(screen.getByRole("button", { name: "Lưu tạm" }));
 
     const saved = onSave.mock.calls[0]?.[0];
     expect(saved.parts.find((part: { code: string }) => part.code === "grammar")?.content).toEqual(expect.objectContaining({
@@ -109,8 +114,7 @@ describe("operator granular lesson editor", () => {
   it("keeps relationship data and shows separate audio uploads for expanded words", async () => {
     const user = userEvent.setup();
     const onSave = vi.fn().mockResolvedValue(undefined);
-    vi.spyOn(window, "confirm").mockReturnValue(true);
-    render(<LessonFormEditor weekNumber={1} cefr="A2" initial={emptyLesson(1)} onSave={onSave} onCancel={() => undefined} />);
+    render(<ModalProvider><LessonFormEditor weekNumber={1} cefr="A2" initial={emptyLesson(1)} onSave={onSave} onCancel={() => undefined} /></ModalProvider>);
 
     await user.click(screen.getByText("Mở rộng từ 1"));
     await user.type(screen.getByLabelText("Word family từ 1"), "colleague | noun | đồng nghiệp; collegial | adjective | mang tính đồng nghiệp");
@@ -125,6 +129,7 @@ describe("operator granular lesson editor", () => {
     expect(screen.getByLabelText("Audio từ bao trùm: people at work URL")).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Kiểm tra & lưu" }));
     await user.click(screen.getByRole("button", { name: "Lưu dù còn thiếu" }));
+    await user.click(screen.getByRole("button", { name: "Lưu tạm" }));
 
     const saved = onSave.mock.calls[0]?.[0];
     const vocabulary = saved.parts.find((part: { code: string }) => part.code === "vocabulary")?.content.items[0];
@@ -138,7 +143,7 @@ describe("operator granular lesson editor", () => {
     }));
 
     cleanup();
-    render(<LessonFormEditor weekNumber={1} cefr="A2" initial={saved} onSave={vi.fn()} onCancel={() => undefined} />);
+    render(<ModalProvider><LessonFormEditor weekNumber={1} cefr="A2" initial={saved} onSave={vi.fn()} onCancel={() => undefined} /></ModalProvider>);
     expect(screen.getByLabelText("Word family từ 1")).toHaveValue("colleague | noun | đồng nghiệp; collegial | adjective | mang tính đồng nghiệp");
     expect(screen.getByLabelText("Từ đồng nghĩa từ 1")).toHaveValue("coworker | A2 | phổ biến; associate | B1 | trang trọng");
     expect(screen.getByLabelText("Từ trái nghĩa từ 1")).toHaveValue("competitor | B1 | đối thủ");
@@ -147,7 +152,7 @@ describe("operator granular lesson editor", () => {
   });
 
   it("uses clear styled media actions instead of a raw file chooser", () => {
-    render(<LessonFormEditor weekNumber={1} cefr="A2" initial={emptyLesson(1)} onSave={vi.fn()} onCancel={() => undefined} uploadMedia={vi.fn()} />);
+    render(<ModalProvider><LessonFormEditor weekNumber={1} cefr="A2" initial={emptyLesson(1)} onSave={vi.fn()} onCancel={() => undefined} uploadMedia={vi.fn()} /></ModalProvider>);
     expect(screen.getAllByText("Chọn audio").length).toBeGreaterThan(0);
     expect(screen.getAllByText("Chọn ảnh")).toHaveLength(3);
     expect(screen.queryByText("Tải file")).not.toBeInTheDocument();
@@ -156,7 +161,6 @@ describe("operator granular lesson editor", () => {
   it("opens AI-generated lessons in the same complete manual editor and preserves structured fields", async () => {
     const user = userEvent.setup();
     const onSave = vi.fn().mockResolvedValue(undefined);
-    vi.spyOn(window, "confirm").mockReturnValue(true);
     const generated = emptyLesson(1);
     generated.title = "Handling a delayed order";
     generated.parts = generated.parts.map(part => {
@@ -170,7 +174,7 @@ describe("operator granular lesson editor", () => {
       return part;
     });
 
-    render(<LessonFormEditor weekNumber={1} cefr="B1" initial={generated} onSave={onSave} onCancel={() => undefined} />);
+    render(<ModalProvider><LessonFormEditor weekNumber={1} cefr="B1" initial={generated} onSave={onSave} onCancel={() => undefined} /></ModalProvider>);
 
     expect(screen.getByRole("dialog", { name: "Sửa bài T2 · Tuần 1 · B1" })).toBeInTheDocument();
     expect(screen.getByLabelText("Mục tiêu bài học")).toHaveValue("SWBAT explain one delivery delay.\nSWBAT use due to in one sentence.");
@@ -184,6 +188,7 @@ describe("operator granular lesson editor", () => {
     fireEvent.change(screen.getByLabelText("Từ loại – Câu hỏi"), { target: { value: "Which word is an adjective?" } });
     await user.click(screen.getByRole("button", { name: "Kiểm tra & lưu" }));
     await user.click(screen.getByRole("button", { name: "Lưu dù còn thiếu" }));
+    await user.click(screen.getByRole("button", { name: "Lưu tạm" }));
 
     const saved = onSave.mock.calls[0]?.[0];
     const byCode = (code: string) => saved.parts.find((part: { code: string }) => part.code === code)?.content;
@@ -202,8 +207,7 @@ describe("operator granular lesson editor", () => {
     const uploadMedia = vi.fn(async (kind: "audio" | "image", _file: Blob, filename: string) => ({
       url: `/api/v1/files/content-media/read?artifactKey=${kind}-${filename}`
     }));
-    vi.spyOn(window, "confirm").mockReturnValue(true);
-    const { container } = render(<LessonFormEditor weekNumber={1} cefr="A2" initial={emptyLesson(1)} onSave={onSave} onCancel={() => undefined} uploadMedia={uploadMedia} />);
+    const { container } = render(<ModalProvider><LessonFormEditor weekNumber={1} cefr="A2" initial={emptyLesson(1)} onSave={onSave} onCancel={() => undefined} uploadMedia={uploadMedia} /></ModalProvider>);
 
     const image = new File(["image"], "colleague.png", { type: "image/png" });
     const listening = new File(["voice"], "listening.wav", { type: "audio/wav" });
@@ -215,6 +219,7 @@ describe("operator granular lesson editor", () => {
 
     await user.click(screen.getByRole("button", { name: "Kiểm tra & lưu" }));
     await user.click(screen.getByRole("button", { name: "Lưu dù còn thiếu" }));
+    await user.click(screen.getByRole("button", { name: "Lưu tạm" }));
     const saved = onSave.mock.calls[0]?.[0];
     expect(saved.parts.find((part: { code: string }) => part.code === "vocabulary")?.content.items[0]).toEqual(expect.objectContaining({ imageUrl: expect.stringContaining("image-colleague.png") }));
     expect(saved.parts.find((part: { code: string }) => part.code === "pronunciation")?.content.audioUrl).toBe("");
@@ -222,7 +227,7 @@ describe("operator granular lesson editor", () => {
     expect(saved.parts.find((part: { code: string }) => part.code === "speaking")?.content.audioUrl).toBe("");
 
     cleanup();
-    render(<LessonFormEditor weekNumber={1} cefr="A2" initial={saved} onSave={vi.fn()} onCancel={() => undefined} uploadMedia={uploadMedia} />);
+    render(<ModalProvider><LessonFormEditor weekNumber={1} cefr="A2" initial={saved} onSave={vi.fn()} onCancel={() => undefined} uploadMedia={uploadMedia} /></ModalProvider>);
     expect((screen.getByLabelText("Ảnh minh họa từ 1 URL") as HTMLInputElement).value).toContain("image-colleague.png");
     expect(screen.queryByLabelText("Audio mẫu phát âm URL")).not.toBeInTheDocument();
     expect((screen.getByLabelText("File audio phần Nghe URL") as HTMLInputElement).value).toContain("audio-listening.wav");
@@ -232,8 +237,7 @@ describe("operator granular lesson editor", () => {
   it("offers and persists a separate audio file for every vocabulary phrase and relation", async () => {
     const user = userEvent.setup();
     const onSave = vi.fn().mockResolvedValue(undefined);
-    vi.spyOn(window, "confirm").mockReturnValue(true);
-    render(<LessonFormEditor weekNumber={1} cefr="A1" initial={emptyLesson(1)} onSave={onSave} onCancel={() => undefined} uploadMedia={vi.fn()} />);
+    render(<ModalProvider><LessonFormEditor weekNumber={1} cefr="A1" initial={emptyLesson(1)} onSave={onSave} onCancel={() => undefined} uploadMedia={vi.fn()} /></ModalProvider>);
 
     fireEvent.change(screen.getByLabelText("Cụm từ 1"), { target: { value: "every day; one day; day shift" } });
     fireEvent.change(screen.getByLabelText("Word family từ 1"), { target: { value: "daily | adjective | hằng ngày" } });
@@ -256,6 +260,7 @@ describe("operator granular lesson editor", () => {
 
     await user.click(screen.getByRole("button", { name: "Kiểm tra & lưu" }));
     await user.click(screen.getByRole("button", { name: "Lưu dù còn thiếu" }));
+    await user.click(screen.getByRole("button", { name: "Lưu tạm" }));
     const item = onSave.mock.calls[0]?.[0].parts.find((part: { code: string }) => part.code === "vocabulary")?.content.items[0];
     expect(item.collocationAudioUrls).toEqual(["/audio/every-day.mp3", "/audio/one-day.mp3", "/audio/day-shift.mp3"]);
     expect(item.family[0].audioUrl).toBe("/audio/daily.mp3");
@@ -268,8 +273,7 @@ describe("operator granular lesson editor", () => {
   it("offers word and sentence audio without any target-phoneme audio control", async () => {
     const user = userEvent.setup();
     const onSave = vi.fn().mockResolvedValue(undefined);
-    vi.spyOn(window, "confirm").mockReturnValue(true);
-    render(<LessonFormEditor weekNumber={1} cefr="A2" initial={emptyLesson(1)} onSave={onSave} onCancel={() => undefined} />);
+    render(<ModalProvider><LessonFormEditor weekNumber={1} cefr="A2" initial={emptyLesson(1)} onSave={onSave} onCancel={() => undefined} /></ModalProvider>);
 
     expect(screen.queryByLabelText("Audio mục tiêu bài học URL")).not.toBeInTheDocument();
     expect(screen.queryByLabelText("Audio hướng dẫn làm bài URL")).not.toBeInTheDocument();
@@ -300,6 +304,7 @@ describe("operator granular lesson editor", () => {
 
     await user.click(screen.getByRole("button", { name: "Kiểm tra & lưu" }));
     await user.click(screen.getByRole("button", { name: "Lưu dù còn thiếu" }));
+    await user.click(screen.getByRole("button", { name: "Lưu tạm" }));
 
     const saved = onSave.mock.calls[0]?.[0];
     const byCode = (code: string) => saved.parts.find((part: { code: string }) => part.code === code)?.content;
@@ -323,18 +328,18 @@ describe("operator granular lesson editor", () => {
   it("drops legacy target-phoneme audio when saving while keeping IPA words", async () => {
     const user = userEvent.setup();
     const onSave = vi.fn().mockResolvedValue(undefined);
-    vi.spyOn(window, "confirm").mockReturnValue(true);
     const initial = emptyLesson(1);
     initial.parts = initial.parts.map(part => part.code === "pronunciation"
       ? { ...part, content: { focus: "/eɪ/", words: ["safe", "day", "take"], phonemeAudioUrl: "/audio/ay.mp3" } }
       : part
     );
 
-    render(<LessonFormEditor weekNumber={1} cefr="A2" initial={initial} onSave={onSave} onCancel={() => undefined} uploadMedia={vi.fn()} />);
+    render(<ModalProvider><LessonFormEditor weekNumber={1} cefr="A2" initial={initial} onSave={onSave} onCancel={() => undefined} uploadMedia={vi.fn()} /></ModalProvider>);
     expect(screen.queryByLabelText("Audio âm mục tiêu URL")).not.toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: "Kiểm tra & lưu" }));
     await user.click(screen.getByRole("button", { name: "Lưu dù còn thiếu" }));
+    await user.click(screen.getByRole("button", { name: "Lưu tạm" }));
 
     const pronunciation = onSave.mock.calls[0]?.[0].parts.find((part: { code: string }) => part.code === "pronunciation")?.content;
     expect(pronunciation).toEqual(expect.objectContaining({ focus: "/eɪ/", words: ["safe", "day", "take"], audioUrl: "" }));

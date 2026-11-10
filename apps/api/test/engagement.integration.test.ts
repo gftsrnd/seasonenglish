@@ -61,22 +61,30 @@ describe("practice, games, arena, rewards and survey API", () => {
 
   afterAll(async () => { await app.close(); await pool.end(); });
 
-  async function restoreWeeklyGameSet() {
+  const monthlySetId = "10000000-0000-4000-8000-000000000091";
+  const monthId = "10000000-0000-4000-8000-000000000092";
+  const frameworkId = "10000000-0000-4000-8000-000000000093";
+
+  async function clearMonthlyGameSet() {
+    await pool.query("update game_sets set status = 'retired' where game_key = 'monthly_vocabulary' and learner_id = $1", [DEMO_IDS.learner]);
+  }
+
+  async function restoreMonthlyGameSet() {
+    await clearMonthlyGameSet();
     await pool.query(
-      "delete from game_sets where program_week_id = $1 and learner_id = $2",
-      [DEMO_IDS.week, DEMO_IDS.learner]
-    );
-    await pool.query(
-      `insert into game_sets (id, program_week_id, game_key, status, payload)
-       values ($1, $2, 'weekly_vocabulary', 'published', $3::jsonb)
+      `insert into game_sets (id, learner_id, game_key, status, payload)
+       values ($1, $2, 'monthly_vocabulary', 'published',
+               $3::jsonb || jsonb_build_object('month', to_char(organization_system_date($4), 'YYYY-MM')))
        on conflict (id) do update set status = 'published', payload = excluded.payload`,
-      [DEMO_IDS.gameSet, DEMO_IDS.week, JSON.stringify({
-        topic: "Tuần 1: Introducing yourself & your job",
+      [monthlySetId, DEMO_IDS.learner, JSON.stringify({
+        topic: "Monthly practice",
+        cefr: "A2",
+        source: "ai",
         words: Array.from({ length: 15 }, (_, index) => ({
           id: `weekly-${index + 1}`, english: `term${index + 1}`, vietnamese: `từ ${index + 1}`,
           definition: `definition ${index + 1}`, partOfSpeech: "noun"
         }))
-      })]
+      }), DEMO_IDS.organization]
     );
   }
 
@@ -374,24 +382,41 @@ describe("practice, games, arena, rewards and survey API", () => {
     expect(manual.json()).toMatchObject({ code: "PRACTICE_APPEAL_NOT_AVAILABLE" });
   });
 
-  it("opens Mini game from a published lesson week without a game set", async () => {
-    await pool.query("delete from game_sets where program_week_id = $1", [DEMO_IDS.week]);
+  it("opens Mini game with keyword input even if the month has no lessons", async () => {
+    await clearMonthlyGameSet();
     try {
       const emptyHub = await app.inject({ method: "GET", url: "/api/v1/engagement/games", headers: { cookie } });
       expect(emptyHub.statusCode, emptyHub.body).toBe(200);
-      expect(emptyHub.json()).toMatchObject({ cefr: "A2", wordSet: null });
+      expect(emptyHub.json()).toMatchObject({ cefr: "A2", wordSet: null, learnedVocabularyAvailable: false });
       expect(emptyHub.json().games).toHaveLength(6);
     } finally {
-      await restoreWeeklyGameSet();
+      await restoreMonthlyGameSet();
     }
   });
 
-  it("builds the weekly game set from vocabulary in lessons the learner has started", async () => {
-    await pool.query("delete from game_sets where program_week_id = $1", [DEMO_IDS.week]);
-    await pool.query("delete from progress_records where learner_id = $1", [DEMO_IDS.learner]);
+  it("builds the game set from completed vocabulary in the current month", async () => {
+    await clearMonthlyGameSet();
+    await pool.query(
+      `insert into program_months (id, organization_id, month, exam_date, lesson_count, brief_status)
+       select $1, $2, to_char(system_date, 'YYYY-MM'), (date_trunc('month', system_date) + interval '1 month - 1 day')::date, 2, 'approved'
+       from organization_system_date($2) system_date`, [monthId, DEMO_IDS.organization]
+    );
+    await pool.query(
+      `insert into month_frameworks (id, program_month_id, cefr, status, curriculum_contract, published_at, published_on)
+       select $1, id, 'A2', 'approved', '{"daySpecs":[{"lessonNumber":1,"kind":"new"},{"lessonNumber":2,"kind":"new"}]}',
+              now(), (month || '-01')::date from program_months where id = $2`,
+      [frameworkId, monthId]
+    );
+    await pool.query(
+      `insert into month_lessons (id, framework_id, lesson_number, lesson_date, lesson_id, scope_hash, status)
+       values (gen_random_uuid(), $1, 1, organization_system_date($2), $3, '', 'approved'),
+              (gen_random_uuid(), $1, 2, organization_system_date($2) + 1, $4, '', 'approved')`,
+      [frameworkId, DEMO_IDS.organization, DEMO_IDS.lessons[0], DEMO_IDS.lessons[1]]
+    );
     await pool.query(
       `insert into progress_records (id, learner_id, lesson_id, status, score, evidence, started_at)
-       values (gen_random_uuid(), $1, $2, 'in_progress', 0, '{}'::jsonb, now())`,
+       values (gen_random_uuid(), $1, $2, 'in_progress', 0, '{"completedPartCodes":["vocabulary"]}'::jsonb, now())
+       on conflict (learner_id, lesson_id) do update set status = excluded.status, evidence = excluded.evidence`,
       [DEMO_IDS.learner, DEMO_IDS.lessons[0]]
     );
     try {
@@ -403,7 +428,7 @@ describe("practice, games, arena, rewards and survey API", () => {
       expect(selected.json()).toMatchObject({
         cefr: "A2",
         wordSet: {
-          source: "weekly",
+          source: "monthly",
           words: expect.arrayContaining([
             expect.objectContaining({ english: "colleague", vietnamese: "đồng nghiệp", partOfSpeech: "noun" })
           ])
@@ -411,13 +436,13 @@ describe("practice, games, arena, rewards and survey API", () => {
       });
       expect(selected.json().wordSet.words).toHaveLength(3);
     } finally {
-      await restoreWeeklyGameSet();
+      await pool.query("delete from program_months where id = $1", [monthId]);
+      await restoreMonthlyGameSet();
     }
   });
 
-  it("returns an explicit empty state when the learner has not started any lesson vocabulary", async () => {
-    await pool.query("delete from game_sets where program_week_id = $1", [DEMO_IDS.week]);
-    await pool.query("delete from progress_records where learner_id = $1", [DEMO_IDS.learner]);
+  it("returns an explicit empty state when the learner has not finished any monthly vocabulary", async () => {
+    await clearMonthlyGameSet();
     try {
       const selected = await app.inject({
         method: "POST", url: "/api/v1/engagement/games/word-set/weekly", headers: { cookie }, payload: {}
@@ -426,12 +451,21 @@ describe("practice, games, arena, rewards and survey API", () => {
       expect(selected.statusCode, selected.body).toBe(409);
       expect(selected.json()).toEqual({ code: "LEARNED_VOCABULARY_NOT_FOUND" });
     } finally {
-      await restoreWeeklyGameSet();
+      await restoreMonthlyGameSet();
     }
   });
 
+  it("rejects a topic longer than three words before generating a game set", async () => {
+    const rejected = await app.inject({
+      method: "POST", url: "/api/v1/engagement/games/word-set", headers: { cookie },
+      payload: { requestId: "10000000-0000-4000-8000-000000000089", topic: "Coffee shop conversation practice" }
+    });
+    expect(rejected.statusCode).toBe(422);
+    expect(rejected.json()).toMatchObject({ code: "VOCABULARY_TOPIC_REJECTED", moderation: { state: "invalid" } });
+  });
+
   it("bootstraps a safe natural topic without a pre-created game set", async () => {
-    await pool.query("delete from game_sets where program_week_id = $1", [DEMO_IDS.week]);
+    await clearMonthlyGameSet();
     try {
       const generated = await app.inject({
         method: "POST", url: "/api/v1/engagement/games/word-set", headers: { cookie },
@@ -444,7 +478,7 @@ describe("practice, games, arena, rewards and survey API", () => {
         topicModeration: { state: "success" }
       });
     } finally {
-      await restoreWeeklyGameSet();
+      await restoreMonthlyGameSet();
     }
   });
 
@@ -544,7 +578,7 @@ describe("practice, games, arena, rewards and survey API", () => {
          (id, game_set_id, learner_id, game_key, score, max_score, request_key, details)
        values (gen_random_uuid(), $1, $2, 'eggs', 1, 2, gen_random_uuid()::text,
                '{"correct":1,"total":2}'::jsonb)`,
-      [DEMO_IDS.gameSet, DEMO_IDS.learner]
+      [monthlySetId, DEMO_IDS.learner]
     );
 
     const hub = await app.inject({ method: "GET", url: "/api/v1/engagement/games", headers: { cookie } });
@@ -594,8 +628,8 @@ describe("practice, games, arena, rewards and survey API", () => {
     expect(duplicate.json()).toMatchObject({ id: completed.json().id, score: 1, correct: 1 });
   });
 
-  it("creates and removes a private AI vocabulary set without changing the weekly set", async () => {
-    await restoreWeeklyGameSet();
+  it("creates and removes a private AI vocabulary set without falling back to weekly vocabulary", async () => {
+    await restoreMonthlyGameSet();
     const generated = await app.inject({
       method: "POST", url: "/api/v1/engagement/games/word-set", headers: { cookie },
       payload: { requestId: "10000000-0000-4000-8000-000000000020", topic: "Sprint planning" }
@@ -622,7 +656,7 @@ describe("practice, games, arena, rewards and survey API", () => {
 
     const removed = await app.inject({ method: "DELETE", url: "/api/v1/engagement/games/word-set", headers: { cookie } });
     expect(removed.statusCode, removed.body).toBe(200);
-    expect(removed.json()).toMatchObject({ wordSet: { topic: "Tuần 1: Introducing yourself & your job" } });
+    expect(removed.json()).toMatchObject({ wordSet: null });
   });
 
   it("retires the Arena and Duel endpoints", async () => {

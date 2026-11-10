@@ -31,11 +31,9 @@ describe("desktop shell layout", () => {
 });
 
 describe("entry shell layout", () => {
-  it("does not inherit the authenticated desktop sidebar geometry", () => {
-    expect(sharedCss).toMatch(/\.topbar\.app-entry-topbar\s*\{[\s\S]*?position:\s*static\s*!important/);
-    expect(sharedCss).toMatch(/main\.app-entry-main\s*\{[\s\S]*?margin-left:\s*0/);
-    expect(sharedCss).toMatch(/main\.app-entry-main\s*\{[\s\S]*?margin:\s*0\s+auto/);
-    expect(sharedCss).toMatch(/main\.app-entry-main\s*\{[\s\S]*?padding-bottom:\s*48px\s*!important/);
+  it("centers the entry card with room to scroll when the form grows", () => {
+    expect(sharedCss).toMatch(/main\.app-entry-main\s*\{[^}]*align-items:\s*safe center[^}]*justify-items:\s*center[^}]*min-height:\s*100dvh/);
+    expect(sharedCss).toMatch(/\.app-entry-content\s*\{[^}]*display:\s*grid/);
   });
 
   it("keeps transparent login links readable in seasonal themes", () => {
@@ -45,19 +43,9 @@ describe("entry shell layout", () => {
 });
 
 describe("tablet shell navigation", () => {
-  it("clips the horizontal nav lane without deleting inactive destinations", () => {
-    expect(coordinatorCss).toMatch(/\.topbar > nav\s*\{[\s\S]*?overflow:\s*hidden/);
-    expect(coordinatorCss).toMatch(/\.topbar > nav a\s*\{[\s\S]*?flex:\s*0 0 auto/);
-    expect(coordinatorCss).not.toMatch(/\.topbar > nav a:not\(\.active\)\s*\{[\s\S]*?display:\s*none/);
-  });
-
-  it("keeps the shared tablet nav lane scrollable when the header is crowded", () => {
-    expect(sharedCss).toMatch(/@media \(min-width: 761px\) and \(max-width: 960px\)[\s\S]*?\.topbar\s+nav\s*\{[\s\S]*?overflow-x:\s*auto/);
-  });
-
-  it("lets the tablet nav consume the lane instead of leaving an auto-margin gap", () => {
-    expect(sharedCss).toMatch(/@media \(min-width: 761px\) and \(max-width: 960px\)[\s\S]*?\.topbar\s*>\s*nav\s*\{[\s\S]*?flex:\s*1 1 0[;\s][\s\S]*?max-width:\s*none[;\s][\s\S]*?overflow-x:\s*auto/);
-    expect(sharedCss).toMatch(/@media \(min-width: 761px\) and \(max-width: 960px\)[\s\S]*?\.topbar\s*>\s*\.userchip\s*\{[\s\S]*?margin-left:\s*0/);
+  it("uses the bottom navigation instead of a clipped header lane", () => {
+    expect(sharedCss).toMatch(/\.app-shell-topbar\s*>\s*nav\s*\{\s*display:\s*none/);
+    expect(sharedCss).toMatch(/#root\s*>\s*\.bottomnav\s*>\s*a\s*\{[^}]*flex:\s*1 1 0/);
   });
 });
 

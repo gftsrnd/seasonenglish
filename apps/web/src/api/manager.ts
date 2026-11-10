@@ -3,10 +3,10 @@ import type {
   ManagerDataImportView, ManagerDeleteRequestsView, ManagerImageTestView, ManagerLearnerProfileView,
   ManagerMaintenanceConfirmationInput, ManagerMaintenanceConfirmationView, ManagerMaintenanceResultView,
   ManagerMusicTestView, ManagerOperationsView,
-  ManagerProgressView, ManagerProviderSettingsInput, ManagerProviderSettingsTestInput,
+  ManagerMonthlyFilter, ManagerMonthlyOverviewView, ManagerProgressView, ManagerProviderSettingsInput, ManagerProviderSettingsTestInput,
   ManagerProviderSettingsView, ManagerProviderTestView, ManagerPurgeConfirmationInput,
   ManagerPurgeConfirmationView, ManagerReminderCopyView, ManagerReminderDismissView,
-  ManagerReminderChannel, ManagerReminderSendView, ManagerRemindersView, ManagerReportView, ManagerSettingsInput, ManagerSettingsView, ManagerTrashView, ManagerPinReportsView,
+  ManagerBaseNotificationInput, ManagerBaseNotificationView, ManagerReminderChannel, ManagerReminderSendView, ManagerRemindersView, ManagerReportView, ManagerSettingsInput, ManagerSettingsView, ManagerTrashView, ManagerPinReportsView,
   OperatorSettingsOverviewView, OrganisationExperienceInput, OrganisationExperienceView,
   ManagerWebhookTestView, ProductPreferencesView, ReopenRequestView, SystemCapabilitiesView, WeeklyPracticeAssignmentView,
   LearnerComplaintKind, ManagerComplaintView
@@ -15,14 +15,18 @@ import { request } from "./runtime.js";
 
 export interface ManagerApiClient {
   getManagerComplaints(): Promise<{ complaints: ManagerComplaintView[] }>;
+  deleteManagerRequest(kind: "complaint" | "reopen", id: string): Promise<void>;
+  setManagerRequestArchived(kind: "complaint" | "reopen", id: string, archived: boolean): Promise<void>;
   decideManagerComplaint(id: string, decision: "approved" | "rejected", resolution: string): Promise<{ complaint: Pick<ManagerComplaintView, "id" | "kind" | "status" | "resolution" | "resolvedAt"> }>;
-  getManagerHolidays(): Promise<{ holidays: Array<{ id: string; date: string; created_at: string; created_by_name: string | null }> }>;
+  getManagerHolidays(): Promise<{ holidays: Array<{ id: string; date: string; created_at: string; created_by_name: string | null; source?: "national" | "organization"; name?: string; sourceUrl?: string }> }>;
   addManagerHoliday(date: string): Promise<{ holiday: { id: string; date: string } }>;
   removeManagerHoliday(id: string): Promise<{ deleted: true }>;
   getManagerReopenRequests(): Promise<{ requests: ReopenRequestView[] }>;
   decideManagerReopenRequest(requestId: string, decision: "approved" | "rejected", reason: string): Promise<ReopenRequestView>;
   getManagerProgress(): Promise<ManagerProgressView>;
+  getManagerMonthlyOverview(filter?: ManagerMonthlyFilter): Promise<ManagerMonthlyOverviewView>;
   getManagerLearnerProfile(learnerId: string): Promise<ManagerLearnerProfileView>;
+  renameManagerLearner(learnerId: string, displayName: string): Promise<{ displayName: string }>;
   assignManagerWeeklyPractice(learnerId: string): Promise<WeeklyPracticeAssignmentView>;
   getManagerOperations(): Promise<ManagerOperationsView>;
   getManagerDeleteRequests(): Promise<ManagerDeleteRequestsView>;
@@ -54,6 +58,7 @@ export interface ManagerApiClient {
   getManagerAccountPin(accountId: string): Promise<ManagerAccountPinView>;
   getManagerAccountCredential(accountId: string): Promise<ManagerAccountCredentialView>;
   getManagerReminders(): Promise<ManagerRemindersView>;
+  saveManagerLearnerBaseNotification(learnerId: string, input: ManagerBaseNotificationInput): Promise<ManagerBaseNotificationView>;
   sendManagerReminder(learnerId: string, requestId: string, channel: ManagerReminderChannel): Promise<ManagerReminderSendView>;
   dismissManagerReminder(learnerId: string): Promise<ManagerReminderDismissView>;
   copyManagerReminder(learnerId: string): Promise<ManagerReminderCopyView>;
@@ -73,6 +78,8 @@ export interface ManagerApiClient {
 
 export const managerApiClient: ManagerApiClient = {
   getManagerComplaints: () => request("/api/v1/manager/complaints"),
+  deleteManagerRequest: (kind, id) => request(`/api/v1/manager/request-history/${kind}/${encodeURIComponent(id)}`, { method: "DELETE" }),
+  setManagerRequestArchived: (kind, id, archived) => request(`/api/v1/manager/request-history/${kind}/${encodeURIComponent(id)}`, { method: "PATCH", body: JSON.stringify({ archived }) }),
   decideManagerComplaint: (id, decision, resolution) => request(`/api/v1/manager/complaints/${encodeURIComponent(id)}/decision`, { method: "POST", body: JSON.stringify({ decision, resolution }) }),
   getManagerHolidays: () => request("/api/v1/manager/holidays"),
   addManagerHoliday: (date) => request("/api/v1/manager/holidays", { method: "POST", body: JSON.stringify({ date }) }),
@@ -80,7 +87,14 @@ export const managerApiClient: ManagerApiClient = {
   getManagerReopenRequests: () => request("/api/v1/manager/reopen-requests"),
   decideManagerReopenRequest: (requestId, decision, reason) => request(`/api/v1/manager/reopen-requests/${encodeURIComponent(requestId)}/${decision === "approved" ? "approve" : "reject"}`, { method: "POST", body: JSON.stringify({ reason }) }),
   getManagerProgress: () => request("/api/v1/manager/progress"),
+  getManagerMonthlyOverview: (filter = {}) => {
+    const query = new URLSearchParams();
+    if (filter.month) query.set("month", filter.month);
+    if (filter.cefr) query.set("cefr", filter.cefr);
+    return request(`/api/v1/manager/monthly-overview${query.size ? `?${query}` : ""}`);
+  },
   getManagerLearnerProfile: (learnerId) => request(`/api/v1/manager/learners/${encodeURIComponent(learnerId)}`),
+  renameManagerLearner: (learnerId, displayName) => request(`/api/v1/manager/learners/${encodeURIComponent(learnerId)}/display-name`, { method: "PATCH", body: JSON.stringify({ displayName }) }),
   assignManagerWeeklyPractice: (learnerId) => request(`/api/v1/manager/learners/${encodeURIComponent(learnerId)}/weekly-practice`, { method: "POST", body: "{}" }),
   getManagerOperations: () => request("/api/v1/manager/operations"),
   getManagerDeleteRequests: () => request("/api/v1/manager/delete-requests"),
@@ -112,6 +126,7 @@ export const managerApiClient: ManagerApiClient = {
   getManagerAccountPin: (accountId) => request(`/api/v1/manager/accounts/${encodeURIComponent(accountId)}/pin`),
   getManagerAccountCredential: (accountId) => request(`/api/v1/manager/accounts/${encodeURIComponent(accountId)}/credential`),
   getManagerReminders: () => request("/api/v1/manager/reminders"),
+  saveManagerLearnerBaseNotification: (learnerId, input) => request(`/api/v1/manager/learners/${encodeURIComponent(learnerId)}/notifications/base`, { method: "PUT", body: JSON.stringify(input) }),
   sendManagerReminder: (learnerId, requestId, channel) => request(`/api/v1/manager/reminders/${encodeURIComponent(learnerId)}`, { method: "POST", body: JSON.stringify({ requestId, channel }) }),
   dismissManagerReminder: (learnerId) => request(`/api/v1/manager/reminders/${encodeURIComponent(learnerId)}/dismiss`, { method: "POST", body: "{}" }),
   copyManagerReminder: (learnerId) => request(`/api/v1/manager/reminders/${encodeURIComponent(learnerId)}/copy`, { method: "POST", body: "{}" }),

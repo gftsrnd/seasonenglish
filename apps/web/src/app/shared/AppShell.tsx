@@ -1,6 +1,6 @@
 import { useEffect, useId, useRef, useState, type ReactNode } from "react";
 import { Link, useLocation } from "react-router";
-import { Bell, BookOpen, CalendarDays, ChartColumn, Check, FileText, Gamepad2, GraduationCap, House, LogOut, MessageSquare, Music2, Pencil, Search, Settings, UserRound, Volume2 } from "lucide-react";
+import { BookOpen, CalendarDays, ChartColumn, Check, Ellipsis, FileText, Gamepad2, GraduationCap, House, LogOut, MessageSquare, Music2, Pencil, Search, Settings, UserRound, Volume2 } from "lucide-react";
 import type { AccountRole, CefrLevel, SessionView } from "@e4s/contracts";
 import { SeasonMark } from "./SeasonMark.js";
 import { AvatarMark } from "../learner/ProfileReward.js";
@@ -9,12 +9,18 @@ import { cancelAllExclusiveAudio } from "../../features/experience/audio-precede
 import "./shared.css";
 import { hasAssessmentLogoutGuard, requestAssessmentLogout } from "./assessment-logout-guard.js";
 import { useDialog } from "./ModalProvider.js";
+import { managerSectionForPath } from "../manager/navigation.js";
+import { NotificationBell } from "./NotificationBell.js";
+import { organisationThemeStorageKey } from "./ThemeProvider.js";
+import { ScrollJumpButton, useScrollJump } from "./ScrollJump.js";
+import { useMediaQuery } from "./useMediaQuery.js";
 
 export { SeasonMark } from "./SeasonMark.js";
 
 type ShellRole = Extract<AccountRole, "learner" | "operator" | "manager">;
 
 type NavItem = {
+  mobileLabel?: string;
   readonly to: string;
   readonly label: string;
   readonly icon: ReactNode;
@@ -57,33 +63,28 @@ const icons = {
   search: <Search {...navIconProps} />,
   cog: <Settings {...navIconProps} />,
   bars: <ChartColumn {...navIconProps} />,
-  bell: <Bell {...navIconProps} />,
   doc: <FileText {...navIconProps} />
 } as const;
 
 const nav: Record<ShellRole, readonly NavItem[]> = {
   learner: [
     { to: "/home", icon: icons.home, label: "Trang chủ" },
-    { to: "/coach", icon: icons.chat, label: "Luyện với Season" },
+    { to: "/coach", icon: icons.chat, label: "Luyện với Season", mobileLabel: "Season" },
     { to: "/monthly", icon: icons.cal, label: "Bài tháng" },
     { to: "/games", icon: icons.game, label: "Mini game" },
-    { to: "/profile", icon: icons.user, label: "Tiến độ & hồ sơ" }
+    { to: "/profile", icon: icons.user, label: "Tiến độ & hồ sơ", mobileLabel: "Hồ sơ" }
   ],
   operator: [
     { to: "/op", icon: icons.check, label: "Duyệt mức" },
     { to: "/op/months", icon: icons.book, label: "Sinh bài" },
-    { to: "/op/review", icon: icons.search, label: "Chấm & Kháng nghị" },
-    { to: "/op/tests", icon: icons.doc, label: "Kết quả bài thi" },
+    { to: "/op/review", icon: icons.search, label: "Phản hồi & yêu cầu", mobileLabel: "Phản hồi" },
+    { to: "/op/tests", icon: icons.doc, label: "Kết quả bài thi", mobileLabel: "Bài thi" },
     { to: "/settings", icon: icons.cog, label: "Cài đặt" }
   ],
   manager: [
-    { to: "/mgr", icon: icons.bars, label: "Tiến độ" },
+    { to: "/mgr", icon: icons.bars, label: "Theo dõi" },
     { to: "/mgr/ops", icon: icons.check, label: "Vận hành" },
-    { to: "/mgr/reopen-requests", icon: icons.book, label: "Yêu cầu mở khóa" },
-    { to: "/mgr/complaints", icon: icons.search, label: "Khiếu nại" },
-    { to: "/mgr/holidays", icon: icons.cal, label: "Ngày nghỉ lễ" },
-    { to: "/mgr/reminders", icon: icons.bell, label: "Nhắc học" },
-    { to: "/mgr/report", icon: icons.doc, label: "Báo cáo" },
+    { to: "/mgr/requests", icon: icons.book, label: "Yêu cầu" },
     { to: "/settings", icon: icons.cog, label: "Cài đặt" }
   ]
 };
@@ -106,6 +107,19 @@ export function AppShell({ session, children, onLogout, onAvatarClick, organisat
   const [logoutError, setLogoutError] = useState("");
   const [logoutConfirmOpen, setLogoutConfirmOpen] = useState(false);
   const logoutTimer = useRef<number | undefined>(undefined);
+  const scroll = useScrollJump();
+  const compact = useMediaQuery("(max-width: 960px)");
+  const accountPanelId = useId();
+  const accountPanel = useRef<HTMLDivElement>(null);
+  const bottomNav = useRef<HTMLElement>(null);
+  const [bottomNavHeight, setBottomNavHeight] = useState(0);
+  useEffect(() => {
+    const nav = bottomNav.current;
+    if (!nav || typeof ResizeObserver === "undefined") return;
+    const observer = new ResizeObserver(() => setBottomNavHeight(nav.getBoundingClientRect().height));
+    observer.observe(nav);
+    return () => observer.disconnect();
+  }, []);
   useEffect(() => () => {
     if (logoutTimer.current !== undefined) window.clearTimeout(logoutTimer.current);
     cancelAllExclusiveAudio();
@@ -114,17 +128,19 @@ export function AppShell({ session, children, onLogout, onAvatarClick, organisat
   const matchesPath = (path: string, to: string) => path === to || path.startsWith(`${to}/`);
   const active = (to: string) => {
     if (to === "/home") return location.pathname === "/home" || location.pathname.startsWith("/lesson") || location.pathname.startsWith("/test");
+    if (to === "/profile" && (location.pathname === "/support" || location.pathname === "/survey/monthly")) return true;
+    if (role === "operator" && to === "/op/review" && location.pathname === "/op/requests") return true;
     if (role === "operator" && to === "/op") {
       return location.pathname === "/op" || (location.pathname.startsWith("/op/") && !items.some((item) => item.to !== "/op" && matchesPath(location.pathname, item.to)));
     }
-    if (role === "manager" && to === "/mgr") {
-      return location.pathname === "/mgr" || (location.pathname.startsWith("/mgr/") && !items.some((item) => item.to !== "/mgr" && matchesPath(location.pathname, item.to)));
+    if (role === "manager") {
+      return to === "/settings" ? matchesPath(location.pathname, to) : managerSectionForPath(location.pathname)?.to === to;
     }
     if (to === "/op" || to === "/mgr") return location.pathname === to;
     if (to === "/mgr/ops") return location.pathname.startsWith(to);
     return location.pathname.startsWith(to);
   };
-  const links = (mobile = false) => items.map((item) => <Link className={active(item.to) ? "active" : ""} key={item.to} to={item.to} aria-current={active(item.to) ? "page" : undefined}>{mobile ? <span className="ico">{item.icon}</span> : null}{item.label}</Link>);
+  const links = (mobile = false) => items.map((item) => <Link className={active(item.to) ? "active" : ""} key={item.to} to={item.to} aria-label={mobile && item.mobileLabel ? item.label : undefined} aria-current={active(item.to) ? "page" : undefined}>{mobile ? <span className="ico">{item.icon}</span> : null}{mobile ? item.mobileLabel ?? item.label : item.label}</Link>);
   const completeLogout = () => {
     cancelAllExclusiveAudio();
     clearSharedDeviceState();
@@ -152,30 +168,50 @@ export function AppShell({ session, children, onLogout, onAvatarClick, organisat
   };
   const logout = () => {
     if (logoutPending) return;
+    accountPanel.current?.hidePopover?.();
     if (hasAssessmentLogoutGuard()) {
       setLogoutConfirmOpen(true);
       return;
     }
     beginLogout();
   };
+  const avatarControl = <button className="btn-ghost" type="button" aria-label="Đổi avatar" title="Đổi avatar" disabled={!onAvatarClick} onClick={() => { accountPanel.current?.hidePopover?.(); onAvatarClick?.(); }} style={{ padding: 0, border: 0, background: "transparent" }}><AccountAvatar name={session.user.displayName} avatar={avatar} size={32} /></button>;
+  const accountIdentity = <span className="small account-identity"><b className="account-name">{session.user.displayName}</b>{role === "learner" ? <span className="muted account-role" aria-label="Vai trò: Người học"><GraduationCap size={15} strokeWidth={2} aria-hidden="true" /> Người học</span> : <span className="muted">· {roleNames[role]}</span>}{role === "learner" && learnerCefr ? <span className={`badge account-level-badge lvl-${learnerCefr}`}>{learnerCefr}</span> : null}</span>;
+  const logoutControl = <button className="btn-sm btn-ghost" type="button" data-action="logout" onClick={logout} disabled={logoutPending} title={logoutPending ? "Đang đăng xuất…" : "Đăng xuất khỏi tài khoản này"} aria-label={logoutPending ? "Đang đăng xuất…" : "Đăng xuất khỏi tài khoản này"}>{logoutPending ? <span className="logout-label">Đang đăng xuất…</span> : <><LogOut size={16} strokeWidth={2} aria-hidden="true" /><span className="logout-label">Đăng xuất</span></>}</button>;
+  const logoutFeedback = <><span role="status" aria-label="Trạng thái đăng xuất" aria-live="polite" style={visuallyHiddenStyle}>{logoutPending ? "Đang đăng xuất…" : ""}</span>{logoutError ? <span role="alert" className="shell-logout-error">{logoutError}</span> : null}</>;
+
   return <>
-    <header className="topbar">
+    <header className="topbar app-shell-topbar">
       <Link className="brand" style={{ color: "inherit", textDecoration: "none" }} to={role === "learner" ? "/home" : role === "operator" ? "/op" : "/mgr"}>
         <span className="avatar" style={{ width: 34, height: 34, background: "var(--primary-soft)", display: "inline-grid", placeItems: "center", flexShrink: 0 }}><SeasonMark className="app-brand-mark" /></span>
         <span>Season English <span className="muted" style={{ fontWeight: 400, fontSize: ".85rem" }}>· {organisationName}</span></span>
       </Link>
       <nav aria-label={role === "learner" ? "Điều hướng người học" : role === "operator" ? "Điều hướng người vận hành" : "Điều hướng quản lý"}>{links()}</nav>
-      <div className="userchip" aria-busy={logoutPending || undefined}>
-        <AudioControls />
-        <button className="btn-ghost" type="button" aria-label="Đổi avatar" title="Đổi avatar" disabled={!onAvatarClick} onClick={onAvatarClick} style={{ padding: 0, border: 0, background: "transparent" }}><AccountAvatar name={session.user.displayName} avatar={avatar} size={32} /></button>
-        <span className="small account-identity"><b className="account-name">{session.user.displayName}</b>{role === "learner" ? <span className="muted account-role" aria-label="Vai trò: Người học"><GraduationCap size={15} strokeWidth={2} aria-hidden="true" /> Người học</span> : <span className="muted">· {roleNames[role]}</span>}{role === "learner" && learnerCefr ? <span className={`badge account-level-badge lvl-${learnerCefr}`}>{learnerCefr}</span> : null}</span>
-        <button className="btn-sm btn-ghost" type="button" data-action="logout" onClick={logout} disabled={logoutPending} title={logoutPending ? "Đang đăng xuất…" : "Đăng xuất khỏi tài khoản này"} aria-label={logoutPending ? "Đang đăng xuất…" : "Đăng xuất khỏi tài khoản này"}>{logoutPending ? <span className="logout-label">Đang đăng xuất…</span> : <><LogOut size={16} strokeWidth={2} aria-hidden="true" /><span className="logout-label">Đăng xuất</span></>}</button>
-        <span role="status" aria-label="Trạng thái đăng xuất" aria-live="polite" style={visuallyHiddenStyle}>{logoutPending ? "Đang đăng xuất…" : ""}</span>
-        {logoutError ? <span role="alert" className="shell-logout-error">{logoutError}</span> : null}
-      </div>
+      {compact ? <div className="shell-compact-controls" aria-busy={logoutPending || undefined}>
+        <div className="audio-ctl"><NotificationBell key={`${session.user.id}:${role}`} /></div>
+        <button className="btn-ghost shell-account-trigger" type="button" aria-label="Tài khoản và âm thanh" popoverTarget={accountPanelId}><Ellipsis size={22} aria-hidden="true" /></button>
+        <div ref={accountPanel} id={accountPanelId} className="shell-account-panel" popover="auto">
+          <div className="shell-account-info">{avatarControl}{accountIdentity}</div>
+          <AudioControls />
+          {logoutControl}
+        </div>
+        {logoutFeedback}
+      </div> : <div className="userchip" aria-busy={logoutPending || undefined}>
+        <AudioControls notification={<NotificationBell key={`${session.user.id}:${role}`} />} />
+        {avatarControl}
+        {accountIdentity}
+        {logoutControl}
+        {logoutFeedback}
+      </div>}
     </header>
-    <main>{children}</main>
-    <nav className="bottomnav" aria-label="Điều hướng trên thiết bị di động">{links(true)}</nav>
+    <main className="app-content">
+      <div ref={scroll.start} className="app-scroll-edge" aria-hidden="true" />
+      {children}
+      <div ref={scroll.end} className="app-scroll-edge" aria-hidden="true" />
+    </main>
+    {scroll.visible && <ScrollJumpButton atTop={scroll.atTop} onClick={scroll.jump}
+      style={compact ? { insetBlockEnd: (bottomNavHeight || 64) + 12 } : undefined} />}
+    <nav ref={bottomNav} className="bottomnav" data-role={role} aria-label="Điều hướng trên thiết bị di động">{links(true)}</nav>
     <div id="toast" />
     <div id="saved" aria-live="polite">✓ Đã lưu</div>
     <AssessmentLogoutDialog open={logoutConfirmOpen} onCancel={() => setLogoutConfirmOpen(false)} onConfirm={() => { setLogoutConfirmOpen(false); beginLogout(); }} />
@@ -203,7 +239,7 @@ function AssessmentLogoutDialog({ open, onCancel, onConfirm }: { open: boolean; 
 }
 
 function clearSharedDeviceState() {
-  const devicePreferences = new Set(["e4s:effects", "e4s:music"]);
+  const devicePreferences = new Set(["e4s:effects", "e4s:music", organisationThemeStorageKey]);
   for (const storage of [window.localStorage, window.sessionStorage]) {
     try {
       for (let index = storage.length - 1; index >= 0; index -= 1) {
@@ -217,12 +253,13 @@ function clearSharedDeviceState() {
   document.body.classList.remove("app-modal-open");
 }
 
-export function AudioControls() {
+export function AudioControls({ notification }: { notification?: ReactNode } = {}) {
   const { effectsOn: sfx, musicOn: bgm, musicAllowed, toggleEffects, toggleMusic } = useExperience();
   const [feedback, setFeedback] = useState("");
-  return <span className="audio-ctl row" style={{ gap: 4, flexWrap: "nowrap" }} role="group" aria-label="Âm thanh">
+  return <span className="audio-ctl row" style={{ gap: 4, flexWrap: "nowrap" }} role="group" aria-label={notification ? "Âm thanh và thông báo" : "Âm thanh"}>
     <button className={`btn-sm btn-ghost ${sfx ? "on" : ""}`} type="button" onClick={() => { toggleEffects(); setFeedback(`Đã ${sfx ? "tắt" : "bật"} hiệu ứng âm thanh.`); }} title={`Hiệu ứng âm thanh: ${sfx ? "bật" : "tắt"}`} aria-label={`Hiệu ứng âm thanh: ${sfx ? "bật" : "tắt"}`} aria-pressed={sfx}><Volume2 {...audioIconProps} /></button>
     <button className={`btn-sm btn-ghost ${bgm ? "on" : ""}`} type="button" onClick={() => { toggleMusic(); setFeedback(`Đã ${bgm ? "tắt" : "bật"} nhạc nền.`); }} disabled={!musicAllowed} title={!musicAllowed ? "Nhạc nền đã bị tắt bởi quản lý" : `Nhạc nền: ${bgm ? "bật" : "tắt"}`} aria-label={`Nhạc nền: ${bgm ? "bật" : "tắt"}`} aria-pressed={bgm}><Music2 {...audioIconProps} /></button>
+    {notification}
     <span role="status" aria-label="Phản hồi âm thanh" aria-live="polite" style={visuallyHiddenStyle}>{feedback}</span>
   </span>;
 }

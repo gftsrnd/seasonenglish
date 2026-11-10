@@ -1,11 +1,12 @@
 import { useEffect, useRef, useState, type ButtonHTMLAttributes, type CSSProperties, type ReactNode } from "react";
 import type { ManagerProviderSettingsInput, ManagerProviderSettingsView, ManagerSettingsInput, ManagerSettingsView, ManagerWebhookTestView, OperatorSettingsOverviewView, OrganisationExperienceInput, OrganisationExperienceView, ProductPreferencesView, SystemCapabilitiesView } from "@e4s/contracts";
-import { Flower2, Gift, Leaf, MoonStar, Snowflake, Sparkles, Star, Sun } from "lucide-react";
+import { ChevronDown, Flower2, Gift, Leaf, MoonStar, Snowflake, Sparkles, Star, Sun } from "lucide-react";
 import { autoSeasonTheme } from "../games/season-visual.js";
 import { MUSIC_PRESETS } from "../../features/experience/music-presets.js";
 import { resolveBackgroundMusic } from "../../features/experience/music-selection.js";
 import { createMusicPlayer, type MusicPlayer } from "../../features/experience/music-player.js";
 import { useTheme } from "../shared/ThemeProvider.js";
+import { useMediaQuery } from "../shared/useMediaQuery.js";
 
 export type AiConfigurationView = ManagerProviderSettingsView;
 export type AiConfigurationInput = ManagerProviderSettingsInput;
@@ -73,7 +74,11 @@ export type SettingsProps = {
   securityNotices?: ReactNode;
 };
 
+type SettingsPanel = { id: string; label: string; content: ReactNode };
+
 export function SettingsPage({ role, manager, product, experience, capabilities, ai, operatorOverview, actions, accounts, securityNotices }: SettingsProps) {
+  const compact = useMediaQuery("(max-width: 1180px)");
+  const [openPanels, setOpenPanels] = useState<Readonly<Record<string, boolean>>>({});
   const [aiDraft, setAiDraft] = useState<AiConfigurationInput | null>(ai ? { provider: ai.provider, baseUrl: ai.baseUrl, model: ai.model, speechToTextModel: ai.speechToTextModel } : null);
   const [managerDraft, setManagerDraft] = useState(manager ?? operatorOverview?.settings);
   const [productDraft, setProductDraft] = useState(() => normalizeProductPreferences(product));
@@ -90,35 +95,67 @@ export function SettingsPage({ role, manager, product, experience, capabilities,
       throw error;
     }
   } : undefined;
-  return <div className="settings-page" data-settings-role={role}>
+  const themePanel: SettingsPanel = { id: "theme", label: "Giao diện theo mùa / lễ", content: <ThemeSection value={experienceDraft} onChange={setExperienceDraft} {...(saveExperienceDraft ? { onSave: saveExperienceDraft } : actions.onSaveProduct ? { onSave: () => actions.onSaveProduct!({ ...productDraft, theme: experienceDraft.theme }) } : {})} /> };
+  const musicPanel: SettingsPanel = { id: "music", label: "Nhạc nền của Season", content: <MusicSection value={experienceDraft} onChange={setExperienceDraft} {...(saveExperienceDraft ? { onSave: saveExperienceDraft } : {})} /> };
+  const learningPanel: SettingsPanel = { id: "monthly", label: "Học theo tháng", content: managerDraft && <MonthlyLearningSection value={managerDraft} onChange={setManagerDraft} coachLimitReadOnly={role === "operator"} {...(actions.onSaveManager ? { onSave: () => actions.onSaveManager!(toInput(managerDraft)) } : {})} /> };
+  const levelPanel: SettingsPanel = { id: "levels", label: "Ngưỡng xét lên / hạ mức", content: managerDraft && <LevelSection value={managerDraft} onChange={setManagerDraft} {...(actions.onSaveManager ? { onSave: () => actions.onSaveManager!(toInput(managerDraft)) } : {})} /> };
+  const panels: SettingsPanel[] = role === "manager" ? [
+    { id: "security", label: "Thông báo bảo mật", content: securityNotices },
+    { id: "prompts", label: "Prompt & rubric", content: <section className="card" aria-label="Cấu hình Prompt & rubric"><h3>Prompt & rubric</h3><p className="small muted">Quản lý hướng dẫn AI và rubric chấm trong khu vực Cài đặt, tách khỏi các thao tác vận hành hằng ngày.</p><a className="btn" href="/settings/prompts">Mở Prompt & rubric</a></section> },
+    { id: "ai", label: "Kết nối AI", content: aiDraft && ai ? <AiSection draft={aiDraft} configured={ai.configured} lastTest={ai.lastTest} capabilities={capabilities} onChange={setAiDraft} aiTestDisabled={managerDraft?.aiTestDisabled ?? false} onAiTestDisabledChange={(aiTestDisabled) => setManagerDraft((current) => current ? { ...current, aiTestDisabled } : current)} {...(actions.onSaveAi ? { onSave: () => actions.onSaveAi!(aiDraft) } : {})} {...(actions.onTestAi ? { onTest: () => actions.onTestAi!(aiDraft) } : {})} {...(actions.onSaveManager && managerDraft ? { onSaveAiTestMode: () => actions.onSaveManager!(toInput(managerDraft)) } : {})} /> : <UnavailableAiSection capabilities={capabilities} role={role} /> },
+    ...(managerDraft ? [
+      { id: "test-date", label: "Ngày hệ thống thử", content: <SystemTestDateSection value={managerDraft} onChange={setManagerDraft} {...(actions.onSaveManager ? { onSave: () => actions.onSaveManager!(toInput(managerDraft)) } : {})} /> },
+      learningPanel,
+      { id: "images", label: "Ảnh minh hoạ từ vựng", content: <ImageSection value={productDraft} onChange={setProductDraft} {...(actions.onSaveProduct ? { onSave: () => actions.onSaveProduct!(productDraft) } : {})} {...(actions.onTestImage ? { onTest: () => actions.onTestImage!(productDraft) } : {})} {...(actions.onClearImageCache ? { onClear: actions.onClearImageCache } : {})} /> },
+      levelPanel,
+      themePanel,
+      musicPanel,
+      { id: "policy", label: "Nhắc học và báo cáo", content: <PolicySection value={managerDraft} onChange={setManagerDraft} {...(actions.onSaveManager ? { onSave: () => actions.onSaveManager!(toInput(managerDraft)) } : {})} /> },
+      { id: "data", label: "Dữ liệu", content: <DataSection actions={actions} capabilities={capabilities} /> },
+      { id: "accounts", label: "Người dùng", content: accounts }
+    ] satisfies SettingsPanel[] : [])
+  ] : [
+    themePanel,
+    musicPanel,
+    ...(operatorOverview && managerDraft ? [
+      learningPanel,
+      levelPanel,
+      { id: "exam-requests", label: "Yêu cầu đổi đề", content: <AssessmentTestChangeRequests
+        {...(actions.onRequestPlacementTestChange ? { onPlacementSend: actions.onRequestPlacementTestChange } : {})}
+        {...(actions.onRequestFinalTestChange ? { onFinalSend: actions.onRequestFinalTestChange } : {})}
+      /> },
+      { id: "accounts", label: "Người dùng", content: <OperatorAccountsSection overview={operatorOverview} /> }
+    ] satisfies SettingsPanel[] : [])
+  ];
+  const availablePanels = panels.filter(panel => panel.content);
+
+  return <div className="settings-page" data-settings-role={role} data-compact={compact || undefined}>
     <div className="page-title"><h1>Cài đặt</h1></div>
-    {securityNotices}
-    {role === "manager" ? <section className="card" aria-label="Cấu hình Prompt & rubric"><h3>Prompt & rubric</h3><p className="small muted">Quản lý hướng dẫn AI và rubric chấm trong khu vực Cài đặt, tách khỏi các thao tác vận hành hằng ngày.</p><a className="btn" href="/settings/prompts">Mở Prompt & rubric</a></section> : null}
-    {role === "manager" ? aiDraft && ai ? <AiSection draft={aiDraft} configured={ai.configured} lastTest={ai.lastTest} capabilities={capabilities} onChange={setAiDraft} aiTestDisabled={managerDraft?.aiTestDisabled ?? false} onAiTestDisabledChange={(aiTestDisabled) => setManagerDraft((current) => current ? { ...current, aiTestDisabled } : current)} {...(actions.onSaveAi ? { onSave: () => actions.onSaveAi!(aiDraft) } : {})} {...(actions.onTestAi ? { onTest: () => actions.onTestAi!(aiDraft) } : {})} {...(actions.onSaveManager && managerDraft ? { onSaveAiTestMode: () => actions.onSaveManager!(toInput(managerDraft)) } : {})} /> : <UnavailableAiSection capabilities={capabilities} role={role} /> : null}
-    {role === "manager" && managerDraft ? <>
-      <SystemTestDateSection value={managerDraft} onChange={setManagerDraft} {...(actions.onSaveManager ? { onSave: () => actions.onSaveManager!(toInput(managerDraft)) } : {})} />
-      <MonthlyLearningSection value={managerDraft} onChange={setManagerDraft} {...(actions.onSaveManager ? { onSave: () => actions.onSaveManager!(toInput(managerDraft)) } : {})} />
-      <ImageSection value={productDraft} onChange={setProductDraft} {...(actions.onSaveProduct ? { onSave: () => actions.onSaveProduct!(productDraft) } : {})} {...(actions.onTestImage ? { onTest: () => actions.onTestImage!(productDraft) } : {})} {...(actions.onClearImageCache ? { onClear: actions.onClearImageCache } : {})} />
-      <LevelSection value={managerDraft} onChange={setManagerDraft} {...(actions.onSaveManager ? { onSave: () => actions.onSaveManager!(toInput(managerDraft)) } : {})} />
-      <ThemeSection value={experienceDraft} onChange={setExperienceDraft} {...(saveExperienceDraft ? { onSave: saveExperienceDraft } : actions.onSaveProduct ? { onSave: () => actions.onSaveProduct!({ ...productDraft, theme: experienceDraft.theme }) } : {})} />
-      <MusicSection value={experienceDraft} onChange={setExperienceDraft} {...(saveExperienceDraft ? { onSave: saveExperienceDraft } : {})} />
-      <WebhookSection value={managerDraft} onChange={setManagerDraft} {...(actions.onSaveManager ? { onSave: () => actions.onSaveManager!(toInput(managerDraft)) } : {})} {...(actions.onTestWebhook ? { onTest: actions.onTestWebhook } : {})} />
-      <PolicySection value={managerDraft} onChange={setManagerDraft} {...(actions.onSaveManager ? { onSave: () => actions.onSaveManager!(toInput(managerDraft)) } : {})} />
-      <DataSection actions={actions} capabilities={capabilities} />
-      {accounts}
-    </> : <>
-      <ThemeSection value={experienceDraft} onChange={setExperienceDraft} {...(saveExperienceDraft ? { onSave: saveExperienceDraft } : {})} />
-      <MusicSection value={experienceDraft} onChange={setExperienceDraft} {...(saveExperienceDraft ? { onSave: saveExperienceDraft } : {})} />
-      {operatorOverview && managerDraft ? <>
-        <MonthlyLearningSection value={managerDraft} onChange={setManagerDraft} {...(actions.onSaveManager ? { onSave: () => actions.onSaveManager!(toInput(managerDraft)) } : {})} />
-        <LevelSection value={managerDraft} onChange={setManagerDraft} {...(actions.onSaveManager ? { onSave: () => actions.onSaveManager!(toInput(managerDraft)) } : {})} />
-        <AssessmentTestChangeRequests
-          {...(actions.onRequestPlacementTestChange ? { onPlacementSend: actions.onRequestPlacementTestChange } : {})}
-          {...(actions.onRequestFinalTestChange ? { onFinalSend: actions.onRequestFinalTestChange } : {})}
-        />
-        <OperatorAccountsSection overview={operatorOverview} />
-      </> : null}
-    </>}
+    {availablePanels.map(panel => {
+      const expanded = openPanels[panel.id] ?? (panel.id === (role === "manager" ? "security" : "theme"));
+      const contentId = `setting-${panel.id}`;
+      return <div className="settings-panel" key={panel.id} data-expanded={compact && expanded || undefined}>
+        {compact && <button className="settings-panel-toggle" type="button" aria-expanded={expanded} aria-controls={contentId}
+          onClick={(event) => {
+            const button = event.currentTarget;
+            setOpenPanels(current => ({ ...current, [panel.id]: !expanded }));
+            if (!expanded && button.getBoundingClientRect().bottom > window.innerHeight * 0.65) {
+              window.requestAnimationFrame(() => {
+                const behavior = window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "instant" : "smooth";
+                const main = button.closest("main");
+                if (main && getComputedStyle(main).overflowY === "auto") {
+                  main.scrollTo({ top: main.scrollTop + button.getBoundingClientRect().top - main.getBoundingClientRect().top - 12, behavior });
+                } else {
+                  button.scrollIntoView({ block: "start", behavior });
+                }
+              });
+            }
+          }}>
+          {panel.label}<ChevronDown size={16} aria-hidden="true" />
+        </button>}
+        <div id={contentId} className="settings-panel-content" hidden={compact && !expanded}>{panel.content}</div>
+      </div>;
+    })}
   </div>;
 }
 
@@ -132,7 +169,7 @@ function SystemTestDateSection({ value, onChange, onSave }: ManagerSectionProps)
 }
 
 function AssessmentTestChangeRequests({ onPlacementSend, onFinalSend }: { onPlacementSend?: (developerEmail: string, note: string) => void | Promise<void>; onFinalSend?: (developerEmail: string, note: string) => void | Promise<void> }) {
-  return <section className="card"><h3>Yêu cầu đổi đề</h3><p className="small muted">Operator không sửa trực tiếp thời lượng hoặc cấu trúc đề. Gửi yêu cầu có ghi nhận tới đội phát triển.</p><div className="grid cols-2"><TestChangeRequestForm title="Yêu cầu đổi đề đầu vào" description="Mô tả nội dung cần đổi trong đề đầu vào." buttonLabel="Gửi yêu cầu đổi đề đầu vào" {...(onPlacementSend ? { onSend: onPlacementSend } : {})} /><TestChangeRequestForm title="Yêu cầu đổi đề đầu ra" description="Mô tả nội dung cần đổi trong bài thi tháng hoặc đề C1." buttonLabel="Gửi yêu cầu đổi đề đầu ra" {...(onFinalSend ? { onSend: onFinalSend } : {})} /></div></section>;
+  return <section className="card"><h3>Yêu cầu đổi đề</h3><p className="small muted">Người vận hành không có quyền sửa trực tiếp thời lượng hoặc cấu trúc đề. Yêu cầu gửi tới đội phát triển sẽ được ghi nhận.</p><div className="grid cols-2"><TestChangeRequestForm title="Yêu cầu đổi đề đầu vào" description="Mô tả nội dung cần đổi trong đề đầu vào." buttonLabel="Gửi yêu cầu đổi đề đầu vào" {...(onPlacementSend ? { onSend: onPlacementSend } : {})} /><TestChangeRequestForm title="Yêu cầu đổi đề đầu ra" description="Mô tả nội dung cần đổi trong bài thi tháng hoặc đề C1." buttonLabel="Gửi yêu cầu đổi đề đầu ra" {...(onFinalSend ? { onSend: onFinalSend } : {})} /></div></section>;
 }
 
 function TestChangeRequestForm({ title, description, buttonLabel, onSend }: { title: string; description: string; buttonLabel: string; onSend?: (developerEmail: string, note: string) => void | Promise<void> }) {
@@ -151,7 +188,30 @@ function TestChangeRequestForm({ title, description, buttonLabel, onSend }: { ti
 
 function OperatorAccountsSection({ overview }: { overview: OperatorSettingsOverviewView }) {
   const roleLabel = (role: string) => role === "learner" ? "Người học" : role === "operator" ? "Người vận hành" : "Quản lý";
-  return <section className="card settings-operator-accounts"><h3>Người dùng</h3><p className="small muted">Danh sách tài khoản trong tổ chức. Operator được chỉnh cấu hình vận hành nhưng không được thêm, xoá hoặc đổi thông tin học viên.</p><div className="table-wrap settings-operator-accounts__table"><table><thead><tr><th>Tên</th><th>Email</th><th>Vai trò</th><th>Mức</th><th>Điểm đầu vào</th><th>Trạng thái</th></tr></thead><tbody>{overview.accounts.map(account => <tr key={account.id}><td>{account.displayName}</td><td>{account.email || "—"}</td><td>{roleLabel(account.role)}</td><td>{account.role === "learner" ? account.cefr ?? "—" : "—"}</td><td>{account.role !== "learner" ? "—" : account.placementScore == null ? "Chưa có bài test" : `${account.placementScore}/100`}</td><td>{account.status === "active" ? "Đang hoạt động" : account.status}</td></tr>)}</tbody></table></div></section>;
+  return <section className="card settings-operator-accounts">
+    <h3>Người dùng</h3>
+    <p className="small muted">Danh sách tài khoản trong tổ chức. Người vận hành được chỉnh cấu hình vận hành nhưng không được thêm, xoá hoặc đổi thông tin học viên.</p>
+    <div className="table-wrap settings-operator-accounts__table">
+      <table role="table" aria-label="Người dùng">
+        <thead><tr><th scope="col">Tên</th><th scope="col">Email</th><th scope="col">Vai trò</th><th scope="col">Mức</th><th scope="col">Điểm đầu vào</th><th scope="col">Trạng thái</th></tr></thead>
+        <tbody role="rowgroup">{overview.accounts.map(account => <tr role="row" key={account.id} data-account-role={account.role}>
+          <td role="cell" className="settings-account-name">{account.displayName}</td>
+          <td role="cell" className="settings-account-email">{account.email || "—"}</td>
+          <td role="cell" className="settings-account-role">{roleLabel(account.role)}</td>
+          <td role="cell" className="settings-account-level"><span className="settings-account-label" aria-hidden="true">Mức</span>{account.role === "learner" ? account.cefr ?? "—" : "—"}</td>
+          <td role="cell" className="settings-account-score"><span className="settings-account-label" aria-hidden="true">Điểm đầu vào</span>{account.role !== "learner" ? "—" : account.placementScore == null ? "Chưa có bài test" : `${account.placementScore}/100`}</td>
+          <td role="cell" className="settings-account-status"><AccountStatusBadge status={account.status} /></td>
+        </tr>)}</tbody>
+      </table>
+    </div>
+  </section>;
+}
+
+export function AccountStatusBadge({ status }: { status: string }) {
+  if (status === "active") return <span className="badge ok">Đang hoạt động</span>;
+  if (status === "disabled") return <span className="badge account-status-locked">Đã khoá</span>;
+  if (status === "deleted") return <span className="badge warn">Đã xoá</span>;
+  return <span className="badge warn">Không rõ</span>;
 }
 
 function UnavailableAiSection({ capabilities, role }: { capabilities: SystemCapabilitiesView; role: "manager" | "operator" }) { return <section className="card"><h3>Kết nối AI</h3><div className="banner info"><div className="body small">{role === "operator" ? <>Chỉ xem trạng thái kết nối AI ({capabilities.ai ? "đang hoạt động" : "chưa hoạt động"}). Nhà cung cấp, model và khoá do Quản lý quản trị; khoá không hiển thị trên trình duyệt.</> : <>API chỉ trả trạng thái AI {capabilities.ai ? "đang hoạt động" : "chưa hoạt động"}; chưa có endpoint lưu hoặc kiểm tra cấu hình. Điều khiển được tắt để tránh tạo cấu hình giả.</>}</div></div>{role === "operator" ? <span className={`badge ${capabilities.ai ? "ok" : "warn"}`}>{capabilities.ai ? "đang hoạt động" : "chưa sẵn sàng"}</span> : <div className="row"><button className="btn-primary" type="button" disabled>Lưu kết nối AI</button><button type="button" disabled>Kiểm tra kết nối</button></div>}</section>; }
@@ -161,9 +221,9 @@ function AiSection({ draft, configured, lastTest, capabilities, aiTestDisabled, 
   const connectionLabel = configured && capabilities.ai ? "đã kết nối" : lastTest?.status === "success" ? "đã kiểm tra · chưa lưu" : "chưa sẵn sàng";
   const changeProvider = (provider: AiConfigurationInput["provider"]) => onChange({ ...draft, provider, ...aiProviderDefaults[provider], credential: undefined });
   return <section className="card"><h3>Kết nối AI</h3><p className="small muted">Khoá nhà cung cấp được lưu an toàn ở server; trình duyệt chỉ gửi giá trị mới khi bạn chủ động thay đổi.</p>
-    <label className="field"><span>Nhà cung cấp</span><select value={draft.provider} onChange={(event) => changeProvider(event.target.value as AiConfigurationInput["provider"])}><option value="claude">Claude (Anthropic)</option><option value="gemini">Google Gemini</option><option value="openai">OpenAI-compatible</option></select></label>
+    <div className="settings-ai-provider"><label className="field"><span>Nhà cung cấp</span><select value={draft.provider} onChange={(event) => changeProvider(event.target.value as AiConfigurationInput["provider"])}><option value="claude">Claude (Anthropic)</option><option value="gemini">Google Gemini</option><option value="openai">OpenAI-compatible</option></select></label>
     {draft.provider === "openai" ? <label className="field"><span>Preset OpenAI-compatible</span><select value={openAiPreset} onChange={(event) => { const preset = event.target.value as OpenAiBaseUrlPreset; onChange({ ...draft, baseUrl: preset === "custom" ? "" : openAiBaseUrlPresets[preset] }); }}><option value="groq">Groq</option><option value="openrouter">OpenRouter</option><option value="cerebras">Cerebras</option><option value="ollama">Ollama (local)</option><option value="custom">Tuỳ chỉnh</option></select></label> : null}
-    {draft.provider === "openai" ? <label className="field"><span>Base URL</span><input value={draft.baseUrl} onChange={(event) => onChange({ ...draft, baseUrl: event.target.value })} placeholder="https://api.groq.com/openai/v1" /></label> : null}
+    {draft.provider === "openai" ? <label className="field settings-ai-base-url"><span>Base URL</span><input value={draft.baseUrl} onChange={(event) => onChange({ ...draft, baseUrl: event.target.value })} placeholder="https://api.groq.com/openai/v1" /></label> : null}</div>
     <div className="grid cols-2"><label className="field"><span>API key mới (để trống = giữ key đang lưu)</span><input type="password" autoComplete="new-password" value={draft.credential ?? ""} onChange={(event) => onChange(withCredential(draft, event.target.value))} /></label><label className="field"><span>Tên model</span><input value={draft.model} onChange={(event) => onChange({ ...draft, model: event.target.value })} /></label></div>
     {draft.provider === "openai" ? <label className="field"><span>Model chép lời file ghi âm</span><input value={draft.speechToTextModel} onChange={(event) => onChange({ ...draft, speechToTextModel: event.target.value })} /></label> : null}
     <div className="row"><AsyncButton className="btn-primary" action={onSave} disabled={!onSave} busyLabel="Đang lưu…">Lưu kết nối AI</AsyncButton><AsyncButton action={onTest} disabled={!onTest} busyLabel="Đang kiểm tra…" aria-label="Kiểm tra kết nối AI">Kiểm tra kết nối</AsyncButton><span className={`badge ${configured && capabilities.ai ? "ok" : "warn"}`}>{connectionLabel}</span><span className="small muted" role="status" aria-live="polite">{lastTestLabel(lastTest)}</span></div>
@@ -171,15 +231,18 @@ function AiSection({ draft, configured, lastTest, capabilities, aiTestDisabled, 
   </section>;
 }
 
-function MonthlyLearningSection({ value, onChange, onSave }: ManagerSectionProps) {
+function MonthlyLearningSection({ value, onChange, onSave, coachLimitReadOnly = false }: ManagerSectionProps & { coachLimitReadOnly?: boolean }) {
   return <section className="card"><h3>Học theo tháng</h3>
     <p className="small muted">Bài học được mở theo lịch tháng từ Thứ Hai đến Thứ Sáu. Ngày học cuối cùng là Bài thi tháng; thời lượng và cấu trúc đề được quản lý trong mục Bài kiểm tra.</p>
-    <div className="grid cols-2"><NumberField label="Khuyến nghị học tối thiểu (phút/ngày)" value={value.minMinutesPerDay} min={5} max={60} onChange={(minMinutesPerDay) => onChange({ ...value, minMinutesPerDay })} /><NumberField label="Giới hạn chat với Season (1–200 lượt/ngày cho mỗi học viên)" value={value.coachDailyLimit} min={1} max={200} onChange={(coachDailyLimit) => onChange({ ...value, coachDailyLimit })} /></div>
+    <div className="grid cols-2 settings-monthly-fields"><NumberField label="Khuyến nghị học tối thiểu (phút/ngày)" value={value.minMinutesPerDay} min={5} max={60} onChange={(minMinutesPerDay) => onChange({ ...value, minMinutesPerDay })} /><NumberField label="Giới hạn chat với Season (1–200 lượt/ngày cho mỗi học viên)" value={value.coachDailyLimit} min={1} max={200} disabled={coachLimitReadOnly} onChange={(coachDailyLimit) => onChange({ ...value, coachDailyLimit })} /></div>
+    <p className="small muted">{coachLimitReadOnly ? "Quản lý thiết lập giới hạn Season."
+      : "Giới hạn Season mới áp dụng từ ngày 1 của tháng kế tiếp."}
+      {value.coachDailyLimitStartsMonth ? ` Hạn mức đã lưu có hiệu lực từ 01/${value.coachDailyLimitStartsMonth.slice(5)}/${value.coachDailyLimitStartsMonth.slice(0, 4)}.` : ""}</p>
     <Save label="Lưu thiết lập học theo tháng" onSave={onSave} />
   </section>;
 }
 
-function ImageSection({ value, onChange, onSave, onTest, onClear, readOnly = false }: { value: ProductPreferencesView; onChange: (value: ProductPreferencesView) => void; onSave?: () => void | Promise<void>; onTest?: () => void | Promise<void>; onClear?: () => void | Promise<void>; readOnly?: boolean }) { return <section className="card"><h3>Ảnh minh hoạ từ vựng</h3><p className="small muted">Tự động tìm ảnh có giấy phép mở từ Wikipedia, Wikimedia Commons và Openverse. Ảnh được lưu vào kho E4S kèm thông tin tác giả và giấy phép.</p><Field label="Nguồn ảnh"><select value={normalizeImageSource(value.vocabImageSource)} disabled={readOnly} onChange={(event) => onChange({ ...value, vocabImageSource: event.target.value as ProductPreferencesView["vocabImageSource"] })}><option value="wikimedia">Tự động từ nguồn mở</option><option value="disabled">Tắt ảnh minh hoạ</option></select></Field>{readOnly ? null : <div className="row"><Save label="Lưu nguồn ảnh" onSave={onSave} /><AsyncButton action={onTest} disabled={!onTest || value.vocabImageSource === "disabled"} busyLabel="Đang thử…" title={!onTest ? "Chưa có endpoint kiểm tra ảnh" : undefined}>Thử ảnh cho &quot;notebook&quot;</AsyncButton><AsyncButton className="btn-ghost" action={onClear} disabled={!onClear} busyLabel="Đang xoá…" title={!onClear ? "Chưa có endpoint xoá cache ảnh" : undefined}>Xoá cache ảnh</AsyncButton></div>}</section>; }
+function ImageSection({ value, onChange, onSave, onTest, onClear, readOnly = false }: { value: ProductPreferencesView; onChange: (value: ProductPreferencesView) => void; onSave?: () => void | Promise<void>; onTest?: () => void | Promise<void>; onClear?: () => void | Promise<void>; readOnly?: boolean }) { return <section className="card"><h3>Ảnh minh hoạ từ vựng</h3><p className="small muted">Tự động tìm ảnh có giấy phép mở từ Wikipedia, Wikimedia Commons và Openverse. Ảnh được lưu vào kho E4S kèm thông tin tác giả và giấy phép.</p><Field label="Nguồn ảnh"><select value={normalizeImageSource(value.vocabImageSource)} disabled={readOnly} onChange={(event) => onChange({ ...value, vocabImageSource: event.target.value as ProductPreferencesView["vocabImageSource"] })}><option value="wikimedia">Tự động từ nguồn mở</option><option value="disabled">Tắt ảnh minh hoạ</option></select></Field>{readOnly ? null : <div className="row"><Save label="Lưu nguồn ảnh" onSave={onSave} /><AsyncButton action={onTest} disabled={!onTest || value.vocabImageSource === "disabled"} busyLabel="Đang thử…" title={!onTest ? "Chưa có endpoint kiểm tra ảnh" : undefined}>Thử ảnh cho &quot;notebook&quot;</AsyncButton><AsyncButton className="btn-danger" action={onClear} disabled={!onClear} busyLabel="Đang xoá…" title={!onClear ? "Chưa có endpoint xoá cache ảnh" : undefined}>Xoá cache ảnh</AsyncButton></div>}</section>; }
 
 function normalizeImageSource(source: ProductPreferencesView["vocabImageSource"]): "wikimedia" | "disabled" {
   return source === "disabled" ? "disabled" : "wikimedia";
@@ -201,7 +264,7 @@ function legacyExperience(product: ProductPreferencesView, settings?: ManagerSet
   };
 }
 
-function LevelSection({ value, onChange, onSave }: ManagerSectionProps) { const labels: Record<keyof ManagerSettingsView["levelUp"], string> = { days: "Số ngày xét", lessons: "Bài học hoàn thành ≥ (%)", firstTry: "Đúng ngay lần đầu ≥ (%)", submission: "Bài thực hành gần nhất ≥ (/100)", coach: "Rubric Season trung bình ≥ (/5)", coachTurns: "Số lượt chat tối thiểu", wrong: "Hạ mức: tỉ lệ sai > (%)", minParts: "Hạ mức: số phần tối thiểu/tháng" }; return <section className="card"><h3>Ngưỡng xét lên / hạ mức</h3><p className="small muted">Xét trong số ngày gần nhất: đủ 4 ngưỡng đầu = &quot;Sẵn sàng thi lên level&quot; (trừ C1). Khi kết quả chưa đạt ngưỡng trong nhiều lần xét liên tiếp, hệ thống gợi ý xem xét hạ mức (trừ A1).</p><div className="grid cols-4">{(Object.keys(labels) as (keyof ManagerSettingsView["levelUp"])[]).map((key) => <NumberField key={key} label={labels[key]} value={value.levelUp[key]} min={key === "coach" ? 0 : 1} max={key === "coach" ? 5 : key === "days" ? 60 : 100} step={key === "coach" ? 0.5 : 1} onChange={(next) => onChange({ ...value, levelUp: { ...value.levelUp, [key]: next } })} />)}</div><Save label="Lưu ngưỡng" onSave={onSave} /></section>; }
+function LevelSection({ value, onChange, onSave }: ManagerSectionProps) { const labels: Record<keyof ManagerSettingsView["levelUp"], string> = { days: "Số ngày xét", lessons: "Bài học hoàn thành ≥ (%)", firstTry: "Đúng ngay lần đầu ≥ (%)", submission: "Bài thực hành gần nhất ≥ (/100)", coach: "Rubric Season trung bình ≥ (/5)", coachTurns: "Số lượt chat tối thiểu", wrong: "Hạ mức: tỉ lệ sai > (%)", minParts: "Hạ mức: số phần tối thiểu/tháng" }; return <section className="card"><h3>Ngưỡng xét lên / hạ mức</h3><p className="small muted">Xét trong số ngày gần nhất: đủ 4 ngưỡng đầu = &quot;Sẵn sàng thi lên level&quot; (trừ C1). Khi kết quả chưa đạt ngưỡng trong nhiều lần xét liên tiếp, hệ thống gợi ý xem xét hạ mức (trừ A1).</p><div className="grid cols-4 settings-level-fields">{(Object.keys(labels) as (keyof ManagerSettingsView["levelUp"])[]).map((key) => <NumberField key={key} label={labels[key]} value={value.levelUp[key]} min={key === "coach" ? 0 : 1} max={key === "coach" ? 5 : key === "days" ? 60 : 100} step={key === "coach" ? 0.5 : 1} onChange={(next) => onChange({ ...value, levelUp: { ...value.levelUp, [key]: next } })} />)}</div><Save label="Lưu ngưỡng" onSave={onSave} /></section>; }
 
 function ThemeSection({ value, onChange, onSave, readOnly = false }: { value: OrganisationExperienceView; onChange: (value: OrganisationExperienceView) => void; onSave?: () => void | Promise<void>; readOnly?: boolean }) {
   const { previewTheme, clearThemePreview } = useTheme();
@@ -271,15 +334,9 @@ function MusicSection({ value, onChange, onSave }: { value: OrganisationExperien
   </section>;
 }
 
-function WebhookSection({ value, onChange, onSave, onTest }: ManagerSectionProps & { onTest?: SettingsActions["onTestWebhook"] }) {
-  const [lastTest, setLastTest] = useState<ManagerWebhookTestView>();
-  const test = onTest ? async () => { setLastTest(await onTest(value.baseWebhookUrl, value.baseWebhookTemplate)); } : undefined;
-  return <section className="card"><h3>Nhắc học qua Base.vn (Base Message incoming webhook)</h3><p className="small muted">Dán URL incoming webhook của Base Message. Payload dùng <code>base_content</code>; hỗ trợ <code>{"{message}"}</code> và <code>{"{name}"}</code>. Việc kiểm tra được thực hiện ở server và không hiển thị URL, payload hoặc phản hồi thô.</p><Field label="Webhook URL"><input value={value.baseWebhookUrl} onChange={(event) => onChange({ ...value, baseWebhookUrl: event.target.value })} /></Field><Field label="Mẫu payload (JSON)"><textarea value={value.baseWebhookTemplate} onChange={(event) => onChange({ ...value, baseWebhookTemplate: event.target.value })} /></Field><div className="row"><Save label="Lưu webhook" onSave={onSave} /><AsyncButton action={test} disabled={!test} busyLabel="Đang gửi…" title={!test ? "Chưa có endpoint gửi webhook thử" : undefined}>Gửi tin thử</AsyncButton>{lastTest ? <span className="small muted" role="status" aria-live="polite">{webhookTestLabel(lastTest)}</span> : null}</div></section>;
-}
-
 function PolicySection({ value, onChange, onSave }: ManagerSectionProps) { return <section className="card"><h3>Chính sách nhắc học và báo cáo</h3><NumberField label="Số ngày không hoạt động trước khi nhắc" value={value.reminderInactiveDays} min={1} max={30} onChange={(reminderInactiveDays) => onChange({ ...value, reminderInactiveDays })} /><label className="check"><input type="checkbox" checked={value.weeklyReportEnabled} onChange={(event) => onChange({ ...value, weeklyReportEnabled: event.target.checked })} /> Bật báo cáo tháng</label><Save label="Lưu chính sách" onSave={onSave} /></section>; }
 
-function DataSection({ actions, capabilities }: { actions: Partial<SettingsActions>; capabilities: SystemCapabilitiesView }) { const reason = "Chưa có endpoint hệ thống cho thao tác này"; return <section className="card"><h3>Dữ liệu</h3><p className="small muted">Sao lưu, chuyển dữ liệu hoặc nạp dữ liệu kiểm thử qua API hệ thống. Trạng thái: API ✓ · Database ✓ · AI {capabilities.ai ? "✓" : "—"} · Object storage {capabilities.objectStorage ? "✓" : "—"}.</p><div className="row"><AsyncButton action={actions.onExportJson} disabled={!actions.onExportJson} busyLabel="Đang xuất…" title={!actions.onExportJson ? reason : undefined}>Xuất JSON</AsyncButton><ImportJsonButton action={actions.onImportJson} disabled={!actions.onImportJson} reason={reason} /><AsyncButton action={actions.onExportCsv} disabled={!actions.onExportCsv} busyLabel="Đang xuất…" title={!actions.onExportCsv ? reason : undefined}>Xuất CSV tiến độ</AsyncButton>{actions.onSeedData ? <AsyncButton action={actions.onSeedData} busyLabel="Đang chuẩn bị…">Nạp dữ liệu mẫu</AsyncButton> : null}{actions.onWipeData ? <AsyncButton className="btn-danger" action={actions.onWipeData} busyLabel="Đang chuẩn bị…">Xoá toàn bộ</AsyncButton> : null}</div></section>; }
+function DataSection({ actions, capabilities }: { actions: Partial<SettingsActions>; capabilities: SystemCapabilitiesView }) { const reason = "Chưa có endpoint hệ thống cho thao tác này"; return <section className="card"><h3>Dữ liệu</h3><p className="small muted">Sao lưu, chuyển dữ liệu hoặc nạp dữ liệu kiểm thử qua API hệ thống. Trạng thái: API ✓ · Database ✓ · AI {capabilities.ai ? "✓" : "—"} · Object storage {capabilities.objectStorage ? "✓" : "—"}.</p><div className="row"><AsyncButton action={actions.onExportJson} disabled={!actions.onExportJson} busyLabel="Đang xuất…" title={!actions.onExportJson ? reason : undefined}>Xuất JSON</AsyncButton><ImportJsonButton action={actions.onImportJson} disabled={!actions.onImportJson} reason={reason} /><AsyncButton action={actions.onExportCsv} disabled={!actions.onExportCsv} busyLabel="Đang xuất…" title={!actions.onExportCsv ? reason : undefined}>Xuất CSV tiến độ</AsyncButton>{actions.onSeedData ? <AsyncButton className="btn-danger" action={actions.onSeedData} busyLabel="Đang chuẩn bị…">Nạp dữ liệu mẫu</AsyncButton> : null}{actions.onWipeData ? <AsyncButton className="btn-danger" action={actions.onWipeData} busyLabel="Đang chuẩn bị…">Xoá toàn bộ</AsyncButton> : null}</div></section>; }
 
 function ImportJsonButton({ action, disabled, reason }: { action: SettingsActions["onImportJson"] | undefined; disabled: boolean; reason: string }) {
   const fileInput = useRef<HTMLInputElement>(null);
@@ -290,14 +347,14 @@ function ImportJsonButton({ action, disabled, reason }: { action: SettingsAction
     try { await action(file); } finally { setBusy(false); }
   };
   return <>
-    <button type="button" disabled={Boolean(disabled || busy)} aria-busy={busy ? "true" : undefined} aria-controls="settings-import-json" title={disabled ? reason : undefined} onClick={() => fileInput.current?.click()}>Nhập JSON</button>
+    <button className="btn-danger" type="button" disabled={Boolean(disabled || busy)} aria-busy={busy ? "true" : undefined} aria-controls="settings-import-json" title={disabled ? reason : undefined} onClick={() => fileInput.current?.click()}>Nhập JSON</button>
     <input id="settings-import-json" ref={fileInput} type="file" accept="application/json,.json" hidden onChange={(event) => { const file = event.target.files?.[0]; if (file) void importFile(file); event.target.value = ""; }} />
   </>;
 }
 
 type ManagerSectionProps = { value: ManagerSettingsView; onChange: (value: ManagerSettingsView) => void; onSave?: () => void | Promise<void> };
 function Field({ label, children }: { label: string; children: ReactNode }) { return <label className="field"><span>{label}</span>{children}</label>; }
-function NumberField({ label, value, min, max, step = 1, onChange }: { label: string; value: number; min: number; max: number; step?: number; onChange: (value: number) => void }) { return <Field label={label}><input type="number" value={value} min={min} max={max} step={step} onChange={(event) => onChange(Number(event.target.value))} /></Field>; }
+function NumberField({ label, value, min, max, step = 1, disabled, onChange }: { label: string; value: number; min: number; max: number; step?: number; disabled?: boolean; onChange: (value: number) => void }) { return <Field label={label}><input type="number" value={value} min={min} max={max} step={step} disabled={disabled} onChange={(event) => onChange(Number(event.target.value))} /></Field>; }
 function Save({ label, onSave, disabled = false, disabledTitle }: { label: string; onSave: (() => void | Promise<void>) | undefined; disabled?: boolean; disabledTitle?: string }) { return <AsyncButton className="btn-primary" action={onSave} disabled={disabled || !onSave} aria-label={label} title={disabledTitle ?? (!onSave ? "Chưa có endpoint lưu cấu hình" : undefined)} busyLabel="Đang lưu…">Lưu</AsyncButton>; }
 type AsyncButtonProps = Omit<ButtonHTMLAttributes<HTMLButtonElement>, "children" | "onClick"> & { action: (() => void | Promise<void>) | undefined; busyLabel?: ReactNode; children: ReactNode };
 function AsyncButton({ action, busyLabel = "Đang xử lý…", children, disabled, type = "button", ...props }: AsyncButtonProps) {
@@ -309,7 +366,7 @@ function AsyncButton({ action, busyLabel = "Đang xử lý…", children, disabl
   };
   return <button {...props} type={type} disabled={Boolean(disabled || !action || busy)} aria-busy={busy ? "true" : undefined} onClick={() => void run()}>{busy ? <><span className="spinner" aria-hidden="true" /> {busyLabel}</> : children}</button>;
 }
-function toInput(value: ManagerSettingsView): ManagerSettingsInput { const { organizationName: _organizationName, pilotCycle: _pilotCycle, ...input } = value; return input; }
+function toInput(value: ManagerSettingsView): ManagerSettingsInput { const { organizationName: _organizationName, pilotCycle: _pilotCycle, coachDailyLimitStartsMonth: _coachDailyLimitStartsMonth, ...input } = value; return input; }
 function withCredential(value: AiConfigurationInput, credential: string): AiConfigurationInput { const { credential: _oldCredential, ...rest } = value; return credential ? { ...rest, credential } : rest; }
 function lastTestLabel(test: ManagerProviderSettingsView["lastTest"]): string {
   if (!test || test.status === "never") return "Chưa kiểm tra kết nối";

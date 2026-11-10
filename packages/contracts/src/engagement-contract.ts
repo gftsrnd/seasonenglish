@@ -106,7 +106,7 @@ export interface GameWordSetView {
   id: string;
   topic: string;
   cefr: CefrLevel;
-  source: "weekly" | "custom";
+  source: "monthly" | "weekly" | "custom";
   words: GameWordView[];
   /** Custom AI sets contain eight off-topic options for multiple-choice game rounds. */
   distractors?: GameWordView[];
@@ -117,6 +117,7 @@ export interface GameHubView {
   aiAvailable?: boolean;
   topicModeration?: GameTopicModeration;
   wordSet: GameWordSetView | null;
+  learnedVocabularyAvailable?: boolean;
   games: GameDescriptor[];
   arena: { eligible: boolean; requiredLevel: "B1"; points: number; pendingDuels: number };
 }

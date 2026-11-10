@@ -5,6 +5,32 @@ import { evaluateMonthlyLessonQuality } from "./monthly-quality.js";
 const requiredCodes = ["objective", "instruction", "vocabulary", "grammar", "pronunciation", "listening", "reading", "writing", "word_class", "word_use", "speaking"];
 
 describe("monthly lesson quality", () => {
+  it("supports a v2 combined review whose first target has only two assigned examples", () => {
+    const plan = contract(); plan.planSchemaVersion = 2;
+    const day = plan.daySpecs[1]!;
+    day.reviewSoundIds = ["sound-1"];
+    day.reviewPronunciationExampleIds = ["sound-example-1","sound-example-2"];
+    const candidate = lesson({parts:reviewParts()});
+    const pron = candidate.parts.find(part => part.code === "pronunciation")!.content;
+    pron.words = (pron.words as unknown[]).slice(0,2);
+    pron.reviewTargets = [{soundId:"sound-1",focus:"/k/",words:pron.words}];
+    expect(evaluateMonthlyLessonQuality(plan,2,candidate).severe).toEqual([]);
+  });
+  it("enforces daily objectives, contextual examples and the grammar practice contract in v2", () => {
+    const plan = contract(); plan.planSchemaVersion = 2;
+    const day = plan.daySpecs[0]!;
+    day.newLessonNumber = 1;
+    day.grammarPlan = {code:"A1",objective:"Identify facts in a workplace update",mode:"recognize",milestoneIds:["grammar-step"],recallMilestoneIds:[]};
+    day.pronunciationPlan = {slot:"P1",stage:"recognize",objective:"Identify and repeat the target",targetIds:["sound-1"],exampleIds:day.pronunciationExampleIds,exampleSet:1};
+    const candidate = lesson();
+    const grammar = candidate.parts.find(part => part.code === "grammar")!.content;
+    Object.assign(grammar, {dailyCode:"A1",objective:day.grammarPlan.objective,examples:["We use core-one in our report.","She sends core-two today.","They review the plan every week."],items:[1,2,3].map(i => ({id:"q"+i,prompt:"Choose the form " + i,options:["send","sends","sending","sent"],answer:"send",explanation:"The plural subject uses the base form.",milestoneId:"grammar-step"}))});
+    Object.assign(candidate.parts.find(part => part.code === "pronunciation")!.content, {stage:"recognize",objective:day.pronunciationPlan.objective});
+    expect(evaluateMonthlyLessonQuality(plan,1,candidate).severe).toEqual([]);
+    expect(evaluateMonthlyLessonQuality(plan,1,candidate,["We use core-one in our report."]).severe.map(row => row.code)).toContain("MONTHLY_DAILY_GRAMMAR_REPEATED");
+    grammar.objective = "Another objective"; grammar.items = [];
+    expect(evaluateMonthlyLessonQuality(plan,1,candidate).severe.map(row => row.code)).toEqual(expect.arrayContaining(["MONTHLY_DAILY_GRAMMAR_OBJECTIVE","MONTHLY_DAILY_GRAMMAR_PRACTICE"]));
+  });
   it("marks missing learner components and scope drift as severe", () => {
     const report = evaluateMonthlyLessonQuality(contract(), 1, lesson({
       parts: requiredCodes.filter((code) => code !== "speaking").map((code) => part(code))

@@ -1,4 +1,5 @@
 import type { AccountRole } from "./domain-contract.js";
+import type { AssessmentAppealTargetView, AssessmentAppealView, AssessmentSectionCode } from "./assessment-contract.js";
 import type { LearnerAvatarData } from "./learning-contract.js";
 
 export const ROLE_PERMISSIONS = {
@@ -25,4 +26,18 @@ export interface SessionView {
   readonly role: AccountRole;
   readonly permissions: readonly Permission[];
   readonly accountStatus?: "active" | "disabled";
+  readonly courseCompleted?: boolean;
+}
+
+export interface CourseCompletionView {
+  readonly certificateNumber: string;
+  readonly organizationName: string;
+  readonly issuerName: string | null;
+  readonly displayName: string;
+  readonly issuedAt: string;
+  readonly scores: readonly { section: AssessmentSectionCode; score: number | null; maxScore: number }[];
+  readonly objectiveResults?: readonly { section: AssessmentSectionCode; outcomes: readonly ("correct" | "incorrect" | "unanswered")[] }[];
+  readonly feedback: string | null;
+  readonly appeal?: AssessmentAppealView | null;
+  readonly appealTarget?: AssessmentAppealTargetView | null;
 }

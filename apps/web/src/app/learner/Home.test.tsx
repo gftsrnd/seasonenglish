@@ -26,6 +26,16 @@ function view(overrides: Partial<LearnerHomeView> = {}): LearnerHomeView {
 }
 
 describe("monthly learner home", () => {
+  it("offers the Pass Course entry only when the server says it is ready", () => {
+    const learner = { displayName: "Học viên C1", cefr: "C1" as const };
+    const { rerender } = render(<LearnerHome view={view({ learner })} actions={actions} />);
+    expect(screen.queryByRole("link", { name: "Thi Pass Course" })).not.toBeInTheDocument();
+    rerender(<LearnerHome view={view({ learner, passCourse: { status: "ready" } })} actions={actions} />);
+    expect(screen.getByRole("link", { name: "Thi Pass Course" })).toHaveAttribute("href", "/test/pass-course");
+    rerender(<LearnerHome view={view({ learner, passCourse: { status: "ready" } })} actions={actions} courseCompleted />);
+    expect(screen.queryByRole("region", { name: "Bài thi đầu ra" })).not.toBeInTheDocument();
+  });
+
   it("renders monthly counters, calendar, monthly exam, and no retired weekly/pilot UI", () => {
     render(<LearnerHome view={view()} actions={actions} />);
     expect(screen.getAllByText("Bài tháng").length).toBeGreaterThan(0);
@@ -34,8 +44,25 @@ describe("monthly learner home", () => {
     expect(screen.getByRole("grid", { name: "Lịch học tháng 11/2026" })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: /Bài thángXem lịch/ })).toHaveAttribute("href", "/monthly");
     expect(screen.getByRole("region", { name: "Bài thi tháng" })).toHaveTextContent("Hoàn thành 2 bài còn lại");
-    expect(screen.getByRole("region", { name: "Nhịp học tháng này" })).toHaveTextContent("Bài 1");
-    expect(screen.getByRole("region", { name: "Nhịp học tháng này" })).toHaveTextContent("02-11");
+    expect(screen.queryByRole("region", { name: "Nhịp học tháng này" })).not.toBeInTheDocument();
+    const calendar = screen.getByRole("grid", { name: "Lịch học tháng 11/2026" });
+    expect(within(calendar).getByRole("gridcell", { name: "2026-10-26" })).toHaveClass("outside-month");
+    const lastPreviousDay = within(calendar).getByRole("gridcell", { name: "2026-10-31" });
+    expect(lastPreviousDay).toHaveTextContent("31");
+    expect(within(lastPreviousDay).queryByRole("link")).not.toBeInTheDocument();
+    expect(within(calendar).getByRole("gridcell", { name: "2026-12-06" })).toHaveClass("outside-month");
+    expect(within(calendar).getAllByRole("gridcell")).toHaveLength(42);
+    expect(within(calendar).getByRole("gridcell", { name: "2026-11-02" })).toHaveClass("lesson");
+    expect(within(calendar).getByRole("gridcell", { name: "2026-11-02" })).toHaveTextContent("Đã học");
+    expect(within(calendar).getByRole("gridcell", { name: "2026-11-04" })).toHaveTextContent("Chưa có bài");
+    expect(within(calendar).getByRole("gridcell", { name: "2026-11-06" })).toHaveClass("review");
+    expect(within(calendar).getByRole("gridcell", { name: "2026-11-06" })).toHaveTextContent("Ôn tập");
+    expect(within(calendar).getByRole("gridcell", { name: "2026-11-06" })).toHaveTextContent("Chưa mở");
+    expect(within(calendar).getByRole("gridcell", { name: "2026-11-08" })).toHaveClass("rest");
+    expect(within(calendar).getByRole("gridcell", { name: "2026-11-08" })).toHaveTextContent("Nghỉ");
+    expect(within(calendar).getByRole("gridcell", { name: "2026-11-24" })).toHaveClass("holiday");
+    expect(within(calendar).getByRole("gridcell", { name: "2026-11-30" })).toHaveClass("exam");
+    expect(within(calendar).getByRole("gridcell", { name: "2026-11-30" })).toHaveTextContent("Bài thi tháng");
     expect(screen.getByRole("region", { name: "Tiến độ tháng" })).toHaveTextContent("1/3");
     for (const retired of ["Chặng 1", "Chặng 2", "Bài tuần", "Khảo sát cuối pilot", "E4S Pilot"]) expect(screen.queryByText(retired)).not.toBeInTheDocument();
   });
@@ -69,9 +96,9 @@ describe("monthly learner home", () => {
   });
 
   it("shows only today's Season quota on the home card", () => {
-    render(<LearnerHome view={view({ coach: { turnsToday: 7, turnsThisWeek: 22, targetTurns: 30, href: "/coach" } })} actions={actions} />);
+    render(<LearnerHome view={view({ coach: { turnsToday: 7, turnsThisWeek: 22, targetTurns: 60, href: "/coach" } })} actions={actions} />);
     const card = screen.getByRole("link", { name: /Season AI Coach/i });
-    expect(card).toHaveTextContent("Lượt hợp lệ hôm nay 7/30");
+    expect(card).toHaveTextContent("Lượt hợp lệ hôm nay 7/60");
     expect(card).not.toHaveTextContent("22");
   });
 

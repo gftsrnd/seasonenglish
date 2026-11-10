@@ -135,8 +135,16 @@
   justify-content: center;
 }
 
-/* Keep the fixed mobile navigation from obscuring transient feedback. */
-@media (max-width: 760px) {
+@media (max-width: 420px) {
+  .bottomnav[data-role="learner"] a {
+    min-width: 0;
+    font-size: .64rem;
+    white-space: nowrap;
+  }
+}
+
+/* Compact shells dedicate a row to navigation. */
+@media (max-width: 960px) {
   html,
   body,
   main {
@@ -173,6 +181,10 @@
     overflow: hidden !important;
   }
 
+  body:has(nav.bottomnav):has(.settings-page) > #root {
+    overflow: clip !important;
+  }
+
   body:has(nav.bottomnav) > #root > .topbar {
     flex: 0 0 auto;
   }
@@ -183,13 +195,34 @@
     width: 100%;
     overflow-x: hidden !important;
     overflow-y: auto !important;
-    padding-bottom: 24px !important;
+    padding: 12px 12px 16px !important;
+    scroll-padding-bottom: 16px;
+  }
+
+  body:has(nav.bottomnav):has(.settings-page) > #root > .app-scroll-jump {
+    position: absolute;
+  }
+
+  /* Keep the jump button below the checklist and calendar actions. */
+  body:has(nav.bottomnav):has(.assessment-prep-compact) > #root > .app-scroll-jump,
+  body:has(nav.bottomnav[data-role="operator"]):has(.operator-months-page) > #root > .app-scroll-jump {
+    position: static;
+    flex: none;
+    margin: 2px max(12px, env(safe-area-inset-right, 0px)) 4px auto;
+  }
+
+  body:has(nav.bottomnav):has(.assessment-prep-compact):has([role="dialog"][aria-modal="true"]) > #root > .app-scroll-jump,
+  body:has(nav.bottomnav[data-role="operator"]):has(.operator-months-page):has([role="dialog"][aria-modal="true"]) > #root > .app-scroll-jump {
+    display: grid;
+    visibility: hidden;
   }
 
   body:has(nav.bottomnav) > #root > .bottomnav {
+    display: flex;
     position: static !important;
     flex: 0 0 auto !important;
     width: 100% !important;
+    padding-block: 4px calc(4px + env(safe-area-inset-bottom, 0px));
   }
 
   #toast {
@@ -276,22 +309,73 @@
   .app-status-retry { width: 100%; }
 }
 
-section.welcome.app-entry {
+main.app-entry-main {
+  box-sizing: border-box;
+  display: grid;
+  align-items: safe center;
+  justify-items: center;
   width: 100%;
-  max-width: 1120px;
-  margin-inline: auto;
-  align-items: stretch;
-  gap: 32px;
+  min-height: 100dvh;
+  max-width: none;
+  margin: 0;
+  padding: 16px !important;
 }
 
-section.welcome.app-entry > .body {
-  position: relative;
-  display: flex;
-  flex: 1 1 0;
-  flex-direction: column;
-  justify-content: center;
-  min-height: 390px;
+.app-entry {
+  width: min(100%, 1000px);
+  min-width: 0;
+  background: var(--surface);
+  color: var(--text);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
 }
+
+.app-entry-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 12px 20px;
+  border-bottom: 1px solid var(--line);
+}
+
+.app-entry-brand {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  margin: 0;
+  font-size: 1rem;
+}
+
+.app-entry-brand .avatar {
+  flex: none;
+  width: 34px;
+  height: 34px;
+  color: var(--primary-dark);
+  background: var(--primary-soft);
+}
+
+.app-entry-organisation { font-size: .85rem; font-weight: 400; white-space: nowrap; }
+.app-entry-header > .audio-ctl { flex: none; }
+.app-entry-header > .audio-ctl > button {
+  display: grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  min-height: 40px;
+  padding: 0;
+}
+.app-entry-content {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 430px);
+  align-items: center;
+  gap: 24px;
+  padding: 20px;
+}
+
+.app-entry-intro h2 { margin: 4px 0 8px; font-size: 1.45rem; }
+.app-entry-intro p { margin: 0; }
 
 .entry-hero-art { position: relative; height: 78px; margin-bottom: 0; }
 .entry-hero-leaf { position: absolute; color: var(--primary); }
@@ -310,24 +394,22 @@ section.welcome.app-entry > .body {
 .entry-benefit-pill { display: inline-flex; align-items: center; gap: 8px; min-height: 38px; padding: 7px 13px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface-2); color: var(--text); font-size: .82rem; line-height: 1.2; white-space: nowrap; }
 .entry-benefit-pill svg { flex: 0 0 auto; color: var(--text); }
 
-section.welcome.app-entry .app-entry-card {
-  flex: 0 1 430px;
-  max-width: 470px;
+.app-entry .app-entry-card {
   min-width: 0;
-  align-self: center;
+  margin: 0;
   padding: 20px;
 }
 
-section.welcome.app-entry .password-control {
+.app-entry .password-control {
   position: relative;
   display: block;
 }
 
-section.welcome.app-entry .password-control input {
+.app-entry .password-control input {
   padding-right: 48px;
 }
 
-section.welcome.app-entry .password-toggle {
+.app-entry .password-toggle {
   position: absolute;
   top: 50%;
   right: 8px;
@@ -341,21 +423,23 @@ section.welcome.app-entry .password-toggle {
   transform: translateY(-50%);
 }
 
-section.welcome.app-entry .password-toggle:hover:not(:disabled) {
+.app-entry .password-toggle:hover:not(:disabled) {
   background: var(--surface-3);
 }
 
-section.welcome.app-entry .app-entry-card .tabs {
+.app-entry-form-heading + .tabs { margin-top: 10px; }
+
+.app-entry .app-entry-card .tabs {
   gap: 6px;
   margin-bottom: var(--hci-space-group, 16px);
 }
 
-section.welcome.app-entry .app-entry-card form.stack.section {
+.app-entry .app-entry-card form.stack.section {
   gap: var(--hci-space-control, 10px);
   margin-top: var(--hci-space-group, 16px);
 }
 
-section.welcome.app-entry .app-entry-secondary-actions {
+.app-entry .app-entry-secondary-actions {
   display: flex;
   align-items: center;
   justify-content: center;
@@ -363,7 +447,7 @@ section.welcome.app-entry .app-entry-secondary-actions {
   margin-top: 2px;
 }
 
-section.welcome.app-entry .app-entry-link {
+.app-entry .app-entry-link {
   min-height: 30px;
   padding: 4px 2px;
   border: 0;
@@ -374,7 +458,7 @@ section.welcome.app-entry .app-entry-link {
   font-size: .88rem;
 }
 
-section.welcome.app-entry .app-entry-link:hover:not(:disabled) {
+.app-entry .app-entry-link:hover:not(:disabled) {
   background: transparent;
   color: var(--primary-dark);
   text-decoration: underline;
@@ -383,21 +467,27 @@ section.welcome.app-entry .app-entry-link:hover:not(:disabled) {
 
 .app-entry-secondary-separator { color: var(--muted); }
 
-section.welcome.app-entry .app-entry-card .field {
-  gap: 6px;
+.app-entry .app-entry-card .field {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
 }
 
-section.welcome.app-entry .app-field-error {
+.app-entry .app-entry-card .field > span {
+  margin-bottom: 0;
+}
+
+.app-entry .app-field-error {
   color: var(--danger, #9f2f24);
   font-size: .8rem;
   line-height: 1.35;
 }
 
-section.welcome.app-entry .app-shared-device-note {
+.app-entry .app-shared-device-note {
   text-align: center;
 }
 
-section.welcome.app-entry .app-shared-device-note summary {
+.app-entry .app-shared-device-note summary {
   width: fit-content;
   margin-inline: auto;
   cursor: pointer;
@@ -405,33 +495,41 @@ section.welcome.app-entry .app-shared-device-note summary {
   font-size: .8rem;
 }
 
-section.welcome.app-entry .app-shared-device-note p { margin: 6px 0 0; }
+.app-entry .app-shared-device-note p { margin: 6px 0 0; }
 
-section.welcome.app-entry .app-pin-input {
+.app-entry .app-pin-input {
   position: relative;
-  display: block;
+  display: grid;
+  width: 100%;
+  --pin-gap: clamp(4px, 1.4vw, 8px);
+  grid-template-columns: repeat(6, minmax(0, 44px)) 44px;
+  column-gap: var(--pin-gap);
+  justify-content: space-between;
+  align-items: center;
 }
 
-section.welcome.app-entry .app-pin-input > input {
+.app-entry .app-pin-input > input {
   position: absolute;
   inset: 0 auto 0 0;
   z-index: 2;
-  width: calc(100% - 50px);
+  width: calc(100% - 44px - var(--pin-gap));
   height: 100%;
   opacity: 0;
   cursor: text;
 }
 
-section.welcome.app-entry .app-pin-cells {
+.app-entry .app-pin-cells {
+  grid-column: span 6;
   display: grid;
-  grid-template-columns: repeat(6, minmax(38px, 1fr));
-  gap: 8px;
-  margin-right: 50px;
+  grid-template-columns: subgrid;
 }
 
-section.welcome.app-entry .app-pin-cells > span {
+.app-entry .app-pin-cells > span {
   display: grid;
-  min-height: 46px;
+  box-sizing: border-box;
+  aspect-ratio: 1;
+  min-height: 0;
+  line-height: 1;
   place-items: center;
   border: 1px solid var(--line);
   border-radius: 10px;
@@ -440,86 +538,29 @@ section.welcome.app-entry .app-pin-cells > span {
   font-size: 1.3rem;
 }
 
-section.welcome.app-entry .app-pin-input:focus-within .app-pin-cells > span {
+.app-entry .app-pin-input:focus-within .app-pin-cells > span {
   border-color: var(--primary);
   box-shadow: 0 0 0 2px color-mix(in srgb, var(--primary) 18%, transparent);
 }
 
-section.welcome.app-entry .app-pin-toggle {
-  position: absolute;
-  z-index: 3;
-  top: 4px;
-  right: 0;
-  width: 42px;
-  min-width: 42px;
-  min-height: 38px;
+.app-entry .app-pin-toggle {
+  width: 44px;
+  height: 44px;
+  min-width: 44px;
+  min-height: 44px;
   padding: 0;
   border: 1px solid var(--line);
   background: var(--surface);
 }
 
-section.welcome.app-entry .app-register-heading {
+.app-entry .app-entry-form-heading {
   display: grid;
   gap: 4px;
 }
 
-section.welcome.app-entry .app-register-heading h2,
-section.welcome.app-entry .app-register-heading p {
+.app-entry .app-entry-form-heading h2,
+.app-entry .app-entry-form-heading p {
   margin: 0;
-}
-
-/* Entry is rendered before authentication, but it reuses the same topbar
-   markup as the authenticated shell. Keep the unauthenticated header in the
-   normal document flow so the desktop sidebar rules cannot shift the form. */
-.topbar.app-entry-topbar { position: static !important; z-index: auto; }
-
-main.app-entry-main {
-  margin-left: 0;
-}
-
-@media (min-width: 961px) {
-  .topbar.app-entry-topbar {
-    position: static !important;
-    top: 0;
-    left: auto;
-    right: auto;
-    bottom: auto;
-    width: auto;
-    height: 60px;
-    flex-direction: row;
-    align-items: center;
-    gap: 12px;
-    padding: 0 20px;
-    border-right: 0;
-    border-bottom: 1px solid #E4E2DC;
-  }
-
-  .topbar.app-entry-topbar .brand {
-    padding: 0;
-  }
-
-  .topbar.app-entry-topbar .userchip {
-    margin: 0 0 0 auto;
-    padding-top: 0;
-    border-top: 0;
-    flex-wrap: nowrap;
-  }
-
-  main.app-entry-main {
-    box-sizing: border-box;
-    width: 100%;
-    max-width: 1040px;
-    margin: 0 auto;
-    padding: 20px 20px 48px;
-  }
-}
-
-@media (max-width: 760px) {
-  /* The global mobile shell reserves space for its fixed bottom navigation;
-     entry has no bottom navigation, so keep its document rhythm compact. */
-  main.app-entry-main {
-    padding-bottom: 48px !important;
-  }
 }
 
 input:disabled,
@@ -534,13 +575,76 @@ body.app-modal-open {
   overflow: hidden;
 }
 
+body :is(.ds-toast-viewport, #toast, .assessment-toast-viewport, .operator-toast) {
+  inset-inline: 50% auto;
+  bottom: calc(24px + env(safe-area-inset-bottom, 0px));
+  transform: translateX(-50%);
+}
+
+@media (max-width: 960px) {
+  body:has(.bottomnav) :is(.ds-toast-viewport, #toast, .assessment-toast-viewport, .operator-toast) {
+    bottom: calc(84px + env(safe-area-inset-bottom, 0px));
+  }
+}
+
+/* Leave the top half of older messages visible behind the newest toast. */
+body :is(.ds-toast-viewport, .assessment-toast-viewport) {
+  gap: 0;
+  isolation: isolate;
+}
+
+:is(.ds-toast-viewport, .assessment-toast-viewport) > * {
+  position: relative;
+}
+
+:is(.ds-toast-viewport, .assessment-toast-viewport) > * + * {
+  margin-block-start: -28px;
+}
+
+:is(.ds-toast-viewport, .assessment-toast-viewport) > :focus-within {
+  z-index: 1;
+}
+
+:is(.ds-toast--info, #toast .toast:not(.ok,.warn,.err), .assessment-toast-info, .operator-toast-info) {
+  background: #fff;
+  border-color: #d6d3d1;
+  color: #292524;
+}
+
+:is(.ds-toast--ok, #toast .toast.ok, .assessment-toast-ok, .operator-toast-success) {
+  background: #ecfdf5;
+  border-color: #a7d9ba;
+  color: #166534;
+}
+
+:is(.ds-toast--warn, #toast .toast.warn, .assessment-toast-warn, .operator-toast-warn) {
+  background: #fffbeb;
+  border-color: #f5ce79;
+  color: #78350f;
+}
+
+:is(.ds-toast--danger, #toast .toast.err, .assessment-toast-danger, .operator-toast-danger) {
+  background: #fff1f2;
+  border-color: #f0aba9;
+  color: #b91c1c;
+}
+
 #modal {
+  z-index: 130;
   overscroll-behavior: contain;
   overflow-y: auto;
 }
 
 #modal .dialog {
   position: relative;
+}
+
+/* Shared confirmations must retain their size even when a page's general
+   surface rules reset .dialog to max-width: 100%. */
+#modal > .dialog {
+  width: min(560px, 100%);
+  max-width: 560px;
+  min-width: 0;
 }
 
 #modal .dialog > h3:first-of-type {
@@ -550,6 +654,10 @@ body.app-modal-open {
 #modal .app-modal-actions {
   gap: 12px;
   margin-top: 4px;
+}
+
+#modal .app-modal-prompt-field + .app-modal-actions {
+  margin-top: 16px;
 }
 
 .app-modal-close {
@@ -584,77 +692,13 @@ body.app-modal-open {
   margin-top: 20px;
 }
 
-/* Keep the tablet shell aligned with the compact app controls. */
-@media (min-width: 761px) and (max-width: 960px) {
-  /* At tablet width the full five-item staff nav competes with audio, avatar
-     and account controls. Keep the active destination discoverable and give
-     the controls a stable, non-overlapping lane. */
-  .topbar {
-    gap: 8px;
-    padding-inline: 12px;
-  }
-
-  .topbar .brand {
-    flex: 0 1 210px;
-    min-width: 200px !important;
-    max-width: 210px;
-    overflow: hidden;
-  }
-
-  .topbar nav {
-    flex: 1 1 0;
-    min-width: 92px;
-    max-width: none;
-    margin-left: 0;
-    overflow-x: auto;
-    overflow-y: hidden;
-    scrollbar-width: thin;
-  }
-
-  .topbar nav a {
-    display: inline-flex;
-    flex: 0 0 auto;
-    min-width: 0;
-    overflow: hidden;
-    text-overflow: ellipsis;
-  }
-
-  .topbar nav a.active {
-    display: inline-flex;
-    max-width: none;
-  }
-
-  .topbar .userchip {
-    flex: 0 1 auto;
-    max-width: 330px;
-    gap: 4px;
-  }
-
-  .topbar .userchip > .small {
-    max-width: 122px;
-    white-space: nowrap;
-  }
-
-  .topbar .audio-ctl {
-    gap: 4px !important;
-  }
-
-  .topbar .audio-ctl button {
-    width: 34px;
-    min-width: 34px;
-    min-height: 32px;
-    flex: 0 0 34px;
-  }
-
-  .topbar .userchip > .btn-ghost[aria-label="Đổi avatar"] {
-    width: 44px;
-    min-width: 44px;
-    min-height: 44px;
-    flex: 0 0 44px;
-  }
-
-  .topbar .userchip > [data-action="logout"] {
-    min-height: 32px;
+@media screen and (min-width: 961px) {
+  .app-content {
+    --sidebar-width: 232px;
+    --content-max-width: 1120px;
+    max-width: var(--content-max-width);
+    margin-inline-start: max(var(--sidebar-width), calc((100% + var(--sidebar-width) - var(--content-max-width)) / 2));
+    margin-inline-end: auto;
   }
 }
 
@@ -713,24 +757,6 @@ body.app-modal-open {
     padding-inline: 10px;
   }
 
-  section.welcome.app-entry {
-    flex-direction: column;
-    gap: 20px;
-  }
-
-  .entry-benefit-row { align-items: stretch; }
-  .entry-benefit-pill { white-space: normal; }
-
-  section.welcome.app-entry .app-entry-card {
-    flex-basis: auto;
-    max-width: none;
-    width: 100%;
-  }
-
-  section.welcome.app-entry .app-entry-card > .row.between {
-    flex-wrap: wrap;
-  }
-
   #modal {
     padding: 12px;
   }
@@ -778,18 +804,160 @@ body.app-modal-open {
   }
 }
 
-/* At tablet width, coordinator.css caps the nav at 150px and leaves the
-   account lane's auto margin to consume the remaining header space. Let the
-   shared shell use that space for a horizontally scrollable nav instead. */
-@media (min-width: 761px) and (max-width: 960px) {
-  .topbar.topbar > nav {
-    flex: 1 1 0;
-    max-width: none;
-    overflow-x: auto;
-    overflow-y: hidden;
+.app-scroll-edge {
+  block-size: 1px;
+  flex: none;
+  pointer-events: none;
+}
+
+.app-scroll-jump.app-scroll-jump {
+  position: fixed;
+  z-index: 21;
+  inset-inline-end: max(16px, env(safe-area-inset-right, 0px));
+  inset-block-end: 16px;
+  display: grid;
+  place-items: center;
+  inline-size: 44px;
+  block-size: 44px;
+  padding: 0;
+  border: 1px solid var(--primary-line);
+  border-radius: 50%;
+  background: var(--primary-soft);
+  color: var(--primary-dark);
+  box-shadow: 0 2px 10px rgb(0 0 0 / .14);
+}
+
+.exam-scroll-jump-dock {
+  position: sticky;
+  inset-block-end: 12px;
+  block-size: 56px;
+  z-index: 6;
+}
+
+.exam-scroll-jump-dock > .app-scroll-jump.app-scroll-jump--exam {
+  position: absolute;
+  inset-block-end: 0;
+  inset-inline-end: 4px;
+  border-radius: 50%;
+}
+
+body:has([role="dialog"][aria-modal="true"]) > #root > .app-scroll-jump {
+  display: none;
+}
+
+.app-scroll-jump svg { transition: transform 180ms ease; }
+.app-scroll-jump[data-direction="up"] svg { transform: rotate(180deg); }
+
+@media (max-width: 960px) {
+  body:has(nav.bottomnav) > #root > .app-shell-topbar {
+    gap: 8px;
+    height: calc(54px + env(safe-area-inset-top, 0px));
+    padding: env(safe-area-inset-top, 0px) 12px 0;
+    overflow: visible;
   }
 
-  .topbar.topbar > .userchip {
-    margin-left: 0;
+  body:has(nav.bottomnav) > #root > .app-shell-topbar > nav { display: none; }
+  body:has(nav.bottomnav) > #root > .app-shell-topbar > .brand {
+    flex: 0 1 auto;
+    min-width: 0 !important;
+    font-size: .95rem;
+    gap: 8px;
   }
+
+  .app-shell-topbar > .brand > span:last-child { overflow: visible; }
+  .app-shell-topbar > .brand > span:last-child > .muted { display: none; }
+  .shell-compact-controls { display: flex; align-items: center; gap: 4px; margin-inline-start: auto; }
+  .shell-compact-controls > .audio-ctl > .inbox-trigger,
+  .shell-compact-controls > .shell-account-trigger {
+    display: grid;
+    place-items: center;
+    width: 44px;
+    min-width: 44px;
+    min-height: 44px;
+    padding: 0;
+  }
+
+  .shell-account-panel {
+    position: fixed;
+    inset: calc(60px + env(safe-area-inset-top, 0px)) 12px auto auto;
+    width: min(260px, calc(100vw - 24px));
+    margin: 0;
+    padding: 12px;
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    background: var(--surface);
+    color: var(--text);
+    box-shadow: 0 8px 22px rgb(0 0 0 / .15);
+  }
+
+  .shell-account-panel:popover-open { display: grid; gap: 10px; }
+  .shell-account-info { display: flex; align-items: center; gap: 8px; }
+  .shell-account-info .account-identity { flex-wrap: wrap; }
+  .shell-account-info .account-name { white-space: normal; overflow-wrap: anywhere; }
+  .shell-account-info .account-role { display: inline-flex; }
+  .shell-account-panel button { min-height: 44px; }
+  .shell-account-panel [data-action="logout"] { display: flex; align-items: center; gap: 8px; }
+  .shell-account-panel .logout-label { display: inline; }
+  #root > .bottomnav > a { flex: 1 1 0; min-width: 0; line-height: 1.2; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .app-scroll-jump svg { transition: none; }
+}
+
+
+@media (max-width: 960px) {
+  .app-entry { position: relative; isolation: isolate; width: min(100%, 450px); }
+  .app-entry-intro { display: contents; }
+  .app-entry-intro > :not(.entry-hero-art) { display: none; }
+  .app-entry-intro .entry-hero-art {
+    position: absolute;
+    inset: 0 0 auto;
+    height: 60px;
+    border-radius: var(--radius) var(--radius) 0 0;
+    overflow: clip;
+    pointer-events: none;
+    z-index: -1;
+    opacity: .24;
+  }
+  .entry-hero-leaf-main { top: -18px; left: 3%; }
+  .entry-hero-leaf-small { top: 34px; left: 23%; }
+  .entry-hero-leaf-wide { top: 7px; left: 48%; }
+  .entry-hero-leaf-light { top: 36px; left: 67%; }
+  .entry-hero-leaf-tiny { top: 3px; left: 87%; }
+  .app-entry-header { padding: 10px 14px; }
+  .app-entry-content { grid-template-columns: minmax(0, 1fr); padding: 12px 14px 16px; }
+  .app-entry .app-entry-card { padding: 0; border: 0; box-shadow: none; background: transparent; }
+  .app-entry .app-entry-card .tabs { margin-bottom: 10px; }
+  .app-entry .app-entry-card form.stack.section { margin-top: 10px; gap: 8px; }
+  .app-entry .app-entry-card .field { gap: 6px; }
+  .app-entry .app-entry-secondary-actions { gap: 4px 8px; flex-wrap: wrap; }
+  .app-entry .app-entry-link { min-width: 0; white-space: normal; line-height: 1.3; }
+  .app-entry .app-field-error { overflow-wrap: anywhere; }
+}
+
+
+@media (max-width: 360px) {
+  .app-entry-brand {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr);
+    gap: 0 6px;
+    line-height: 1.2;
+  }
+
+  .app-entry-brand .avatar { grid-row: span 2; width: 28px; height: 28px; }
+  .app-entry-organisation { grid-column: 2; font-size: .78rem; }
+  .app-entry-organisation > span { display: none; }
+}
+
+@media (min-width: 640px) and (max-width: 960px) and (max-height: 560px) {
+  .app-entry { width: min(100%, 700px); }
+  .app-entry .app-entry-card form[role="tabpanel"] {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    align-items: start;
+    gap: 10px 14px;
+  }
+
+  .app-entry form[role="tabpanel"] > :not(.field) { grid-column: 1 / -1; }
 }

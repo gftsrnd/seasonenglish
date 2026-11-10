@@ -3,6 +3,7 @@ import type {
   AssessmentLevelFormUpdateInput, MonthlyFinalCheckView, MonthlyFinalDraftView, MonthlyFinalExamStatus,
   MonthlyFinalGenCode, MonthlyFinalUpdateInput
 } from "@e4s/contracts";
+import { useModal } from "../shared/ModalProvider.js";
 import { OperatorLevelFormDetail, type LevelFormEditorDetail } from "./LevelForms.js";
 
 const STATUS_COPY: Record<MonthlyFinalExamStatus, { label: string; tone: string; description: string }> = {
@@ -55,6 +56,7 @@ export interface MonthlyFinalReviewProps {
  * grader samples and the "đã nghe soát" audio tick that publishing requires.
  */
 export function MonthlyFinalReview({ draft, readOnly = false, onClose, onSave, onPublish, synthesize, uploadAudio }: MonthlyFinalReviewProps) {
+  const modal = useModal();
   const exam = draft.exam;
   const editable = draft.editable && !readOnly && Boolean(exam);
   const savedSections = useMemo(() => JSON.stringify(draft.blueprint.sections), [draft]);
@@ -124,7 +126,8 @@ export function MonthlyFinalReview({ draft, readOnly = false, onClose, onSave, o
     }
   };
   const publish = async () => {
-    if (!onPublish) return;
+    if (!onPublish || publishing || publishBlocker) return;
+    if (!await modal.confirm({ title: "Duyệt và phát hành đề tháng?", message: "Phiên bản này sẽ dùng cho các lượt thi tháng mới.", confirmLabel: "Duyệt & phát hành" })) return;
     setPublishing(true); setError(null);
     try { await onPublish(); } catch { setError("Không phát hành được đề tháng. Kiểm tra trạng thái READY và audio đã nghe soát."); } finally { setPublishing(false); }
   };

@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import { Pool } from "pg";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { migrateDatabase, resetPublicSchema, seedDemo } from "@e4s/database";
@@ -147,5 +148,34 @@ describe("Operator learner/test operations", () => {
       headers: { cookie: learnerCookie }, payload: { monthlyGoal: "Không được phép" }
     });
     expect(learnerWrite.statusCode).toBe(403);
+  });
+
+  it("lists only the Operator's own deletion requests and includes the Manager decision", async () => {
+    const peerRequestId = randomUUID();
+    await pool.query(
+      `insert into audit_events (id, organization_id, actor_user_id, action, entity_type, entity_id, payload, trace_id)
+       values ($1, $2, $3, 'learner.deletion_requested', 'user', $4, '{"status":"rejected","reason":"Private peer request"}', $5)`,
+      [peerRequestId, DEMO_IDS.organization, DEMO_IDS.manager, DEMO_IDS.learner, randomUUID()]
+    );
+    const created = await app.inject({
+      method: "POST", url: `/api/v1/assessment-reviews/learners/${DEMO_IDS.learner}/deletion-requests`,
+      headers: { cookie: operatorCookie }, payload: { reason: "Tài khoản học viên đăng ký nhầm." }
+    });
+    expect(created.statusCode, created.body).toBe(201);
+    const { id } = created.json();
+    const decision = await app.inject({
+      method: "POST", url: `/api/v1/manager/delete-requests/${id}/decision`, headers: { cookie: managerCookie },
+      payload: { status: "approved", note: "Đã xác minh tài khoản trùng." }
+    });
+    expect(decision.statusCode, decision.body).toBe(200);
+    const read = (cookie: string) => app.inject({ method: "GET", url: "/api/v1/assessment-reviews/deletion-requests", headers: { cookie } });
+    const own = await read(operatorCookie);
+    expect(own.statusCode, own.body).toBe(200);
+    expect(own.json().requests).toContainEqual(expect.objectContaining({
+      id, learnerId: DEMO_IDS.learner, status: "approved", note: "Đã xác minh tài khoản trùng.", decidedAt: expect.any(String)
+    }));
+    expect(own.json().requests.map((item: { id: string }) => item.id)).not.toContain(peerRequestId);
+    expect((await read(learnerCookie)).statusCode).toBe(403);
+    expect((await read(managerCookie)).statusCode).toBe(403);
   });
 });

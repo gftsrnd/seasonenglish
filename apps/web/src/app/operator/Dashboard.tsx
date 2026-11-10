@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useMediaQuery } from "../shared/useMediaQuery.js";
 import type { AssessmentReviewLearnerView } from "@e4s/contracts";
 import { Badge, Button, LevelChip, OperatorPage, PageTitle } from "./primitives.js";
 import type { Cefr, DashboardActionKey, LevelSignalPerson, OperatorDashboardActions, OperatorDashboardView } from "./types.js";
@@ -13,6 +14,7 @@ const cefrLabels: Record<Cefr, string> = {
 
 export function OperatorDashboard({ view, actions, readOnly = false, unavailable = {} }: { view: OperatorDashboardView; actions: OperatorDashboardActions; readOnly?: boolean; unavailable?: Partial<Record<DashboardActionKey, string>> }) {
   const [selected, setSelected] = useState<Record<string, Cefr>>(() => Object.fromEntries(view.pending.filter(item => item.suggestedLevel).map(item => [item.id, item.suggestedLevel!]))) ;
+  const compact = useMediaQuery("(max-width: 960px)");
   const inProgress = view.inProgress ?? [];
   const retry = view.retry ?? [];
   const blocked = (key: DashboardActionKey) => unavailable[key];
@@ -23,6 +25,9 @@ export function OperatorDashboard({ view, actions, readOnly = false, unavailable
     {kind === "weak" && <Button small danger disabled={readOnly || Boolean(blocked("demote"))} onClick={() => actions.onDemote(person.id)}>Hạ mức</Button>}
     {kind !== "flow" && <Button small disabled={readOnly || Boolean(blocked("changeLevel"))} onClick={() => actions.onChangeLevel(person.id)}>Đổi level</Button>}
   </div>;
+
+  const approvedProfile = (item: OperatorDashboardView["approved"][number]) => <Button small disabled={Boolean(blocked("viewProfile"))} onClick={() => actions.onViewProfile(item.id)}>Hồ sơ</Button>;
+  const approvedActions = (item: OperatorDashboardView["approved"][number]) => <><Button small disabled={readOnly || Boolean(blocked("changeLevel"))} onClick={() => actions.onChangeLevel(item.id)}>Đổi level</Button><Button small disabled={readOnly || Boolean(blocked("editGoal"))} onClick={() => actions.onEditGoal(item.id)}>Mục tiêu</Button>{item.testId && <Button small disabled={Boolean(blocked("viewTest"))} onClick={() => actions.onViewTest(item.testId!)}>Bài test</Button>}</>;
 
   return <OperatorPage title="Duyệt trình độ">
     {view.deletionRequests}{view.trash}
@@ -43,14 +48,40 @@ export function OperatorDashboard({ view, actions, readOnly = false, unavailable
       <button className="operator-profile-disclosure" type="button" aria-expanded={profileOpen} disabled={Boolean(blocked("viewProfile"))} onClick={() => { if (actions.onTogglePendingProfile) actions.onTogglePendingProfile(item.id); else actions.onViewProfile(item.id); }}>{profileOpen ? "▼" : "▶"} Hồ sơ: {profileDetail ? profileSummary || "—" : profileSummary || "Chưa điền hồ sơ cá nhân."}</button>
       {profileOpen && profileDetail && <OperatorInlineProfile detail={profileDetail} />}{!item.rationale && <p className="xs muted" style={{ margin: "6px 0 0" }}>Không có nhận xét AI. Xem bài làm để quyết định.</p>}
       <div className="row" style={{ marginTop: 12 }}>{item.kind === "placement" && <select aria-label={`Mức duyệt cho ${item.name}`} style={{ width: "auto" }} value={selected[item.id] ?? ""} onChange={event => setSelected(value => ({ ...value, [item.id]: event.target.value as Cefr }))} disabled={readOnly}><option value="" disabled>Chọn mức</option>{item.levels.map(level => <option value={level} key={level}>{level} – {cefrLabels[level]}</option>)}</select>}
-        <Button primary disabled={readOnly || (item.kind === "placement" && !selected[item.id]) || Boolean(blocked("approvePlacement"))} onClick={() => item.kind === "placement" ? selected[item.id] && actions.onApprovePlacement(item.id, selected[item.id]!) : actions.onApprovePlacement(item.id)}>{item.kind === "final" ? "Duyệt bài thi tháng" : item.kind === "pass-course" ? "Cấp chứng chỉ & khóa tài khoản" : "Duyệt mức"}</Button><Button disabled={Boolean(blocked("viewTest"))} onClick={() => actions.onViewTest(item.id)}>Xem bài làm</Button>{item.canRescore !== false && <Button title={blocked("rescore") ?? "Chấm lại toàn bộ bài test bằng AI"} disabled={readOnly || Boolean(blocked("rescore")) || item.rescoreBusy} aria-busy={item.rescoreBusy || undefined} onClick={() => actions.onRescore(item.id)}>{item.rescoreBusy ? "Đang chấm lại…" : "Chấm lại bằng AI"}</Button>}<Button small danger={!item.deletionPending} disabled={readOnly || Boolean(blocked("deleteLearner")) || item.deletionPending} onClick={() => actions.onDeleteLearner(item.id)} style={{ marginLeft: "auto" }}>{item.deletionPending ? "Chờ Quản lý duyệt xoá" : "Xoá học viên"}</Button></div>
+        <Button primary disabled={readOnly || (item.kind === "placement" && !selected[item.id]) || Boolean(blocked("approvePlacement"))} onClick={() => item.kind === "placement" ? selected[item.id] && actions.onApprovePlacement(item.id, selected[item.id]!) : actions.onApprovePlacement(item.id)}>{item.kind === "final" ? "Duyệt bài thi tháng" : item.kind === "pass-course" ? "Cấp chứng chỉ & khóa tài khoản" : "Duyệt mức"}</Button><Button disabled={Boolean(blocked("viewTest"))} onClick={() => actions.onViewTest(item.id)}>Xem bài làm</Button>{item.canRescore !== false && <Button danger title={blocked("rescore") ?? "Chấm lại toàn bộ bài test bằng AI"} disabled={readOnly || Boolean(blocked("rescore")) || item.rescoreBusy} aria-busy={item.rescoreBusy || undefined} onClick={() => actions.onRescore(item.id)}>{item.rescoreBusy ? "Đang chấm lại…" : "Chấm lại bằng AI"}</Button>}<Button small danger={!item.deletionPending} disabled={readOnly || Boolean(blocked("deleteLearner")) || item.deletionPending} onClick={() => actions.onDeleteLearner(item.id)} style={{ marginLeft: "auto" }}>{item.deletionPending ? "Chờ Quản lý duyệt xoá" : "Xoá học viên"}</Button></div>
       </div>
     </details>;
     })}</div> : <div className="card"><p className="muted" style={{ margin: 0 }}>Không có ai chờ duyệt.</p></div>}</section>
 
       <section className="section"><h3>Tín hiệu đổi mức <span className="small muted">({view.windowDays ?? 14} ngày gần nhất · <a className="link-button" href="/settings" onClick={event => { event.preventDefault(); actions.onOpenSettings(); }}>ngưỡng</a> · <a className="link-button" href="/op/levelforms" onClick={event => { event.preventDefault(); actions.onOpenLevelForms(); }}>đề thi lên mức</a>)</span></h3><div className="grid cols-2"><div className="card" style={{ background: "var(--mint)" }}><h4 style={{ margin: "0 0 6px" }}>Sẵn sàng thi lên level ({view.ready.length})</h4>{view.ready.length ? <div className="list">{view.ready.map(item => signalItem(item, "ready"))}</div> : <p className="small muted" style={{ margin: 0 }}>Chưa có ai đủ cả 4 tín hiệu.</p>}</div><div className="card" style={{ background: "var(--peach)" }}><h4 style={{ margin: "0 0 6px" }}>Nên xem xét hạ mức ({view.weak.length})</h4>{view.weak.length ? <div className="list">{view.weak.map(item => signalItem(item, "weak"))}</div> : <p className="small muted" style={{ margin: 0 }}>Không ai sai quá ngưỡng hai tuần liền.</p>}</div></div>{view.levelRequests.length > 0 && <div className="card" style={{ marginTop: 12, background: "var(--primary-soft)" }}><h4 style={{ margin: "0 0 8px" }}>Yêu cầu lên mức chờ duyệt ({view.levelRequests.length})</h4>{view.levelRequests.map(request => <div className="item" key={request.id}><div className="body"><div className="title">{request.learnerName} {request.from ? <LevelChip level={request.from} /> : <Badge>mức hiện tại: —</Badge>} → {request.to ? <LevelChip level={request.to} /> : <Badge>mức đích: —</Badge>} <span className="xs muted">gửi {request.sentAt}</span></div><div className="small">Bài thi: <b>{request.testSummary || "—"}</b> · Thử thách Season: {request.challengeSummary || "—"}</div></div><div className="row" style={{ gap: 6 }}>{request.testId && <Button small disabled={Boolean(blocked("viewTest"))} onClick={() => actions.onViewTest(request.testId!)}>Bài thi</Button>}{request.challengeId && <Button small disabled={Boolean(blocked("viewChallenge"))} onClick={() => actions.onViewChallenge(request.challengeId!)}>Thử thách</Button>}<Button small primary disabled={readOnly || !request.to || Boolean(blocked("decideLevelRequest"))} onClick={() => actions.onApproveLevelRequest(request.id)}>Duyệt lên mức</Button><Button small danger disabled={readOnly || Boolean(blocked("decideLevelRequest"))} onClick={() => actions.onRejectLevelRequest(request.id)}>Từ chối</Button></div></div>)}</div>}{view.inFlow.length > 0 && <div className="card" style={{ marginTop: 12 }}><h4 style={{ margin: "0 0 6px" }}>Đang trong luồng lên mức ({view.inFlow.length})</h4><div className="list">{view.inFlow.map(item => signalItem(item, "flow"))}</div></div>}</section>
 
-      <section className="section operator-approved-panel"><h3>Đã duyệt ({view.approved.length})</h3><div className="table-wrap operator-action-table-wrap"><table className="operator-action-table"><thead><tr><th>Người học</th><th>Mức</th><th>Điểm đầu vào</th><th>Mục tiêu tháng</th><th aria-label="Thao tác" /></tr></thead><tbody>{view.approved.length ? view.approved.map(item => <tr key={item.id} data-testid={`approved-${item.id}`}><td data-label="Người học">{item.name}<br /><span className="xs muted">{item.profileSummary}</span></td><td data-label="Mức"><LevelChip level={item.cefr} /> {item.pendingLevel && <Badge tone="warn">chờ → {item.pendingLevel}</Badge>}</td><td data-label="Điểm đầu vào">{item.placementScore == null ? "—" : `${item.placementScore}/100`}</td><td className="small" data-label="Mục tiêu tháng">{item.monthlyGoal || "—"}</td><td data-label="Thao tác"><div className="operator-approved-actions"><Button small disabled={readOnly || Boolean(blocked("changeLevel"))} onClick={() => actions.onChangeLevel(item.id)}>Đổi level</Button><Button small disabled={readOnly || Boolean(blocked("editGoal"))} onClick={() => actions.onEditGoal(item.id)}>Mục tiêu</Button>{item.testId && <Button small disabled={Boolean(blocked("viewTest"))} onClick={() => actions.onViewTest(item.testId!)}>Bài test</Button>}<Button small disabled={Boolean(blocked("viewProfile"))} onClick={() => actions.onViewProfile(item.id)}>Hồ sơ</Button></div></td></tr>) : <tr><td colSpan={5} className="muted">Chưa có.</td></tr>}</tbody></table></div></section>
+    <section className="section operator-approved-panel">
+      <h3>Đã duyệt ({view.approved.length})</h3>
+      {compact ? (view.approved.length ? <ul className="operator-approved-list" aria-label="Học viên đã duyệt">
+        {view.approved.map((item) => <li key={item.id} className="card operator-approved-record" data-testid={`approved-${item.id}`}>
+          <div className="operator-approved-record-header">
+            <div>
+              <b>{item.name}</b>
+              <div className="operator-approved-record-meta">
+                <LevelChip level={item.cefr} />
+                {item.pendingLevel && <Badge tone="warn">chờ → {item.pendingLevel}</Badge>}
+                <span className="small muted">{item.placementScore == null ? "Chưa có điểm đầu vào" : `Đầu vào ${item.placementScore}/100`}</span>
+              </div>
+            </div>
+            {approvedProfile(item)}
+          </div>
+          <details>
+            <summary>Mục tiêu và thao tác</summary>
+            <div className="operator-approved-record-detail">
+              {item.profileSummary ? <p className="small muted">{item.profileSummary}</p> : null}
+              <p className="small"><b>Mục tiêu tháng</b> {item.monthlyGoal || "Chưa đặt mục tiêu."}</p>
+              <div className="operator-approved-record-actions">{approvedActions(item)}</div>
+            </div>
+          </details>
+        </li>)}
+      </ul> : <div className="card"><p className="muted">Chưa có.</p></div>)
+      : <div className="table-wrap operator-action-table-wrap"><table className="operator-action-table"><thead><tr><th>Người học</th><th>Mức</th><th>Điểm đầu vào</th><th>Mục tiêu tháng</th><th aria-label="Thao tác" /></tr></thead><tbody>{view.approved.length ? view.approved.map(item => <tr key={item.id} data-testid={`approved-${item.id}`}><td data-label="Người học">{item.name}<br /><span className="xs muted">{item.profileSummary}</span></td><td data-label="Mức"><LevelChip level={item.cefr} /> {item.pendingLevel && <Badge tone="warn">chờ → {item.pendingLevel}</Badge>}</td><td data-label="Điểm đầu vào">{item.placementScore == null ? "—" : `${item.placementScore}/100`}</td><td className="small" data-label="Mục tiêu tháng">{item.monthlyGoal || "—"}</td><td data-label="Thao tác"><div className="operator-approved-actions">{approvedActions(item)}{approvedProfile(item)}</div></td></tr>) : <tr><td colSpan={5} className="muted">Chưa có.</td></tr>}</tbody></table></div>}
+    </section>
 
     {inProgress.length > 0 && <section className="section"><h3>Đang làm test ({inProgress.length})</h3><div className="list operator-bounded-list">{inProgress.map(item => <div className="item" key={item.id}><div className="body"><div className="title">{item.name}</div><div className="xs muted">Đã bắt đầu bài test · {item.profileSummary || "Chưa điền hồ sơ"}</div></div><Button small disabled={Boolean(blocked("viewProfile"))} onClick={() => actions.onViewProfile(item.id)}>Hồ sơ</Button></div>)}</div></section>}
 

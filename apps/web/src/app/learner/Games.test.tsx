@@ -9,6 +9,8 @@ import { WordSortGame } from "../games/WordSortGame.js";
 import { SeasonCatchGame } from "../games/SeasonCatchGame.js";
 import { SeasonRioGame } from "../games/SeasonRioGame.js";
 import { TypingRaceGame } from "../games/TypingRaceGame.js";
+import { ModalProvider } from "../shared/ModalProvider.js";
+import type { ReactElement } from "react";
 import type { LearnerCallbacks } from "./contracts.js";
 
 afterEach(() => {
@@ -40,9 +42,29 @@ const playableView: GameHubView = {
   }
 };
 
+function renderGames(game: ReactElement) {
+  return render(game, { wrapper: ModalProvider });
+}
+
 describe("app games affordances", () => {
+  it("keeps the active word set when the learner cancels deletion or replacement", async () => {
+    renderGames(<LearnerGames view={{ ...view, aiAvailable: true, learnedVocabularyAvailable: true, wordSet: { ...view.wordSet!, source: "custom" } }} actions={actions} />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Xoá bộ này" }));
+    const removal = await screen.findByRole("dialog", { name: "Xoá bộ từ đang dùng?" });
+    expect(actions.deleteGameSet).not.toHaveBeenCalled();
+    fireEvent.click(within(removal).getByRole("button", { name: "Huỷ" }));
+    expect(actions.deleteGameSet).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByRole("button", { name: "Dùng từ đã học trong tháng" }));
+    const replacement = await screen.findByRole("dialog", { name: "Thay bộ từ đang dùng?" });
+    expect(actions.useWeeklyGameSet).not.toHaveBeenCalled();
+    fireEvent.click(within(replacement).getByRole("button", { name: "Huỷ" }));
+    expect(actions.useWeeklyGameSet).not.toHaveBeenCalled();
+    expect(screen.getByRole("heading", { name: /Bộ từ: Tuần 1/i })).toBeInTheDocument();
+  });
   it("separates the three game setup sections into responsive cards", () => {
-    render(<LearnerGames view={view} actions={actions} />);
+    renderGames(<LearnerGames view={view} actions={actions} />);
 
     const page = screen.getByRole("heading", { name: "Game từ vựng" }).closest(".games-page");
     expect(page).toHaveClass("games-page");
@@ -59,19 +81,19 @@ describe("app games affordances", () => {
   });
 
   it("confirms that the active set uses learned vocabulary from the current learning path", () => {
-    render(<LearnerGames view={view} actions={actions} />);
+    renderGames(<LearnerGames view={view} actions={actions} />);
 
     expect(screen.getByText("Đang dùng bộ từ đã học trong lộ trình hiện tại.")).toBeInTheDocument();
     expect(screen.queryByText("Nhập một chủ đề để tạo bộ từ.")).not.toBeInTheDocument();
   });
 
   it("disables topic entry when AI generation is unavailable", () => {
-    render(<LearnerGames view={view} actions={actions} />);
+    renderGames(<LearnerGames view={view} actions={actions} />);
 
     const topic = screen.getByRole("textbox", { name: "Chủ đề bộ từ" });
     expect(topic).toBeDisabled();
     expect(topic).toHaveAttribute("aria-describedby", "game-topic-help");
-    expect(screen.getByText(/Chưa có API key để tạo bộ từ mới/i)).toHaveAttribute("id", "game-topic-help");
+    expect(screen.getByText(/Tạo bộ từ theo chủ đề đang tạm thời không khả dụng/i)).toHaveAttribute("id", "game-topic-help");
     expect(screen.getByRole("button", { name: "Tạo bộ từ" })).toBeDisabled();
   });
 
@@ -80,7 +102,7 @@ describe("app games affordances", () => {
     const generateGameSet = vi.fn(() => new Promise<void>((resolve) => { resolveGeneration = resolve; }));
     const loadingActions = { ...actions, generateGameSet } as unknown as LearnerCallbacks;
 
-    render(<LearnerGames view={{ ...view, aiAvailable: true }} actions={loadingActions} />);
+    renderGames(<LearnerGames view={{ ...view, wordSet: null, aiAvailable: true }} actions={loadingActions} />);
     fireEvent.change(screen.getByRole("textbox", { name: "Chủ đề bộ từ" }), { target: { value: "coffee shop" } });
     fireEvent.submit(screen.getByRole("textbox", { name: "Chủ đề bộ từ" }).closest("form")!);
 
@@ -95,7 +117,7 @@ describe("app games affordances", () => {
     const generateGameSet = vi.fn().mockRejectedValue(new Error("VOCABULARY_TOPIC_REJECTED"));
     const errorActions = { ...actions, generateGameSet } as unknown as LearnerCallbacks;
 
-    render(<LearnerGames view={{ ...view, aiAvailable: true }} actions={errorActions} />);
+    renderGames(<LearnerGames view={{ ...view, wordSet: null, aiAvailable: true }} actions={errorActions} />);
     fireEvent.change(screen.getByRole("textbox", { name: "Chủ đề bộ từ" }), { target: { value: "nonsense" } });
     fireEvent.submit(screen.getByRole("textbox", { name: "Chủ đề bộ từ" }).closest("form")!);
 
@@ -111,7 +133,7 @@ describe("app games affordances", () => {
       }
     };
 
-    render(<LearnerGames view={weeklyView} actions={actions} />);
+    renderGames(<LearnerGames view={weeklyView} actions={actions} />);
 
     const word = screen.getByRole("button", { name: /colleague.*đồng nghiệp/i });
     expect(word).toHaveClass("word-chip");
@@ -132,7 +154,7 @@ describe("app games affordances", () => {
       ]
     };
 
-    render(<LearnerGames view={gameView} actions={actions} />);
+    renderGames(<LearnerGames view={gameView} actions={actions} />);
 
     const labels = { scramble: "Xếp chữ", crossword: "Ô chữ", eggs: "Season catch", mario: "Season-rio", sort: "Phân loại từ", typing: "Đua gõ từ" } as const;
     for (const [key, label] of Object.entries(labels)) expect(screen.getByRole("link", { name: `Chơi ${label}` })).toHaveAttribute("href", `/games/${key}`);
@@ -140,13 +162,13 @@ describe("app games affordances", () => {
   });
 
   it("does not restore the arena for B1 learners", () => {
-    render(<LearnerGames view={{ ...view, cefr: "B1", arena: { ...view.arena, eligible: true, points: 12 } }} actions={actions} />);
+    renderGames(<LearnerGames view={{ ...view, cefr: "B1", arena: { ...view.arena, eligible: true, points: 12 } }} actions={actions} />);
 
     expect(screen.queryByText("Đấu trường nội bộ")).not.toBeInTheDocument();
   });
 
   it("uses consistent Lucide icons for the six game tiles without rendering raw tile glyphs", () => {
-    render(<LearnerGames view={playableView} actions={actions} />);
+    renderGames(<LearnerGames view={playableView} actions={actions} />);
 
     const icons = [
       ["Xếp chữ", "lucide-shuffle"],

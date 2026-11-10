@@ -1,6 +1,7 @@
 import type { MonthlyFinalCheckStatus, MonthlyFinalCheckView, MonthlyFinalExamMeta, MonthlyFinalExamStatus, MonthlyFinalGenCode } from "@e4s/contracts";
 import type { MonthlyCurriculumContract } from "@e4s/domain/monthly";
 import { publicAssessmentDefinition, type StoredAssessmentDefinition, type StoredAssessmentTask } from "@e4s/database";
+import {monthlyFinalContainsTerm as containsTerm,monthlyFinalWordCount as wordCount,monthlyFinalIsWordList,monthlyFinalWritingOpening} from "@e4s/ai";
 import {
   MONTHLY_FINAL_LEVEL_PROFILES, MONTHLY_FINAL_OPTION_COUNT, MONTHLY_FINAL_SECTION_MINUTES, MONTHLY_FINAL_SECTION_SCORE,
   MONTHLY_FINAL_SPEAKING_A_SCORE, MONTHLY_FINAL_SPEAKING_B_SCORE, MONTHLY_FINAL_TOTAL_MINUTES, MONTHLY_FINAL_TOTAL_SCORE,
@@ -74,7 +75,7 @@ export function evaluateMonthlyFinal(blueprint: StoredAssessmentDefinition, cont
     }
     const problems = precheck[code] ?? [];
     if (problems.length) return { code, title: TITLES[code], mode: "manual", ...fail(problems) };
-    if (confirmed.has(code)) return { code, title: TITLES[code], mode: "manual", status: "pass", detail: "Operator đã rà soát và xác nhận." };
+    if (confirmed.has(code)) return { code, title: TITLES[code], mode: "manual", status: "pass", detail: "Người vận hành đã rà soát và xác nhận." };
     return { code, title: TITLES[code], mode: "manual", status: "needs_review", detail: manualHint(code) };
   });
   return { checks, status: statusFromChecks(checks) };
@@ -258,6 +259,7 @@ function gen11(context: Context): Result {
     if (target.positions.length === 2 && words.size !== 2) problems.push(`${target.code}: 2 vị trí phải là 2 từ khác nhau`);
   }
   if (total !== 8) problems.push(`Có ${total} vị trí phát âm, cần 8`);
+  if(monthlyFinalIsWordList(text,context.exam.pronunciation.flatMap(target=>target.positions.map(position=>position.word))))problems.push("Bài đọc thành tiếng phải là câu tự nhiên, không phải danh sách từ");
   return verdict(problems, "8 vị trí, 2 cho mỗi P1–P4, đều lấy từ bộ từ ví dụ đã học và có trong bài đọc.");
 }
 
@@ -332,6 +334,10 @@ function gen17(context: Context): Result {
 /** Every string a learner receives (GEN18, GEN22, GEN23 inspect the real learner package). */
 export function learnerPackageStrings(blueprint: StoredAssessmentDefinition): string[] {
   const learner = publicAssessmentDefinition(blueprint);
+  return learnerStrings(learner);
+}
+
+function learnerStrings(learner: ReturnType<typeof publicAssessmentDefinition>, writingPrompt?: string): string[] {
   const strings: string[] = [learner.title];
   for (const section of learner.sections) {
     strings.push(section.title, ...section.instructions);
@@ -340,7 +346,7 @@ export function learnerPackageStrings(blueprint: StoredAssessmentDefinition): st
       if (group.stimulus?.text) strings.push(group.stimulus.text);
       for (const line of group.stimulus?.lines ?? []) strings.push(line.text);
       for (const row of group.stimulus?.rows ?? []) strings.push(...row);
-      for (const task of group.tasks) strings.push(task.prompt, ...(task.title ? [task.title] : []), ...(task.hint ? [task.hint] : []), ...(task.options ?? []).map((option) => option.label));
+      for (const task of group.tasks) strings.push(section.code === "writing" && task.key === "W" && writingPrompt !== undefined ? writingPrompt : task.prompt, ...(task.title ? [task.title] : []), ...(task.hint ? [task.hint] : []), ...(task.options ?? []).map((option) => option.label));
     }
   }
   return strings.filter((value) => value.trim());
@@ -356,12 +362,30 @@ function gen18(context: Context): Result {
   const text = normalizeText(learnerPackageStrings(context.blueprint).join("\n"));
   const secrets = [
     ...[...context.scriptByGroup.values()].flatMap((script) => sentences(script)),
-    ...sentences(context.exam.grader.writingSample), ...sentences(context.exam.grader.speakingSample),
+    ...sentences(context.exam.grader.speakingSample),
     ...Object.values(context.exam.grader.items).flatMap((item) => [item.explanation, item.evidence ?? ""])
-  ].map(normalizeText).filter((value) => value.length >= 25);
+  ].map(value=>normalizeText(value).replace(/[.!?]+$/u,"")).filter((value) => value.length >= 25);
   const leaked = secrets.filter((secret) => text.includes(secret));
-  if (leaked.length) problems.push(`Gói học viên chứa ${leaked.length} câu từ script/bài mẫu/lời giải`);
+  // A1 explicitly includes an opening-sentence cue. Exempt just that quoted
+  // occurrence in W when comparing its own sample, never scripts or other fields.
+  const writingPrompt=context.taskByKey.get("W")?.task.prompt ?? "";
+  const allowedPrompt=context.contract.cefr === "A1" ? withoutMarkedWritingStarter(writingPrompt,context.exam.grader.writingSample) : writingPrompt;
+  const writingText=normalizeText(learnerStrings(learner,allowedPrompt).join("\n"));
+  const writingLeaks=sentences(context.exam.grader.writingSample).map(value=>normalizeText(value).replace(/[.!?]+$/u,"")).filter(secret=>secret.length>=25 && writingText.includes(secret));
+  if (leaked.length || writingLeaks.length) problems.push(`Gói học viên chứa ${leaked.length+writingLeaks.length} câu từ script/bài mẫu/lời giải`);
   return verdict(problems, "Gói học viên chỉ có hướng dẫn, câu hỏi, dữ kiện và audio; key, script, bài mẫu nằm trong gói người chấm.");
+}
+
+function withoutMarkedWritingStarter(prompt:string,sample:string):string {
+  const marker=/(?:bắt đầu[^:\n"“'‘]{0,100}bằng câu(?: gợi ý)?|câu mở đầu gợi ý|(?:start|begin)[^:\n"“'‘]{0,60}with(?: the suggested (?:opening|sentence))?)\s*:?\s*["“'‘]([^\n]{1,400}?[.!?])\s*["”'’]/iu;
+  return prompt.replace(marker,(whole:string,quote:string)=>{
+    const starter=normalizeText(quote),answer=normalizeText(sample);
+    // The cue must be the beginning of a longer answer, not a later sentence
+    // relabelled as a hint or the complete private answer.
+    const sentenceBody=quote.replace(/\b(?:Mr|Mrs|Ms|Dr|Prof)\./giu,"");
+    if(!starter || !answer.startsWith(starter) || wordCount(sample)-wordCount(quote)<5 || !/[.!?]$/u.test(sentenceBody.trim()) || sentences(sentenceBody).length!==1) return whole;
+    return whole.replace(quote,"");
+  });
 }
 
 function gen19(context: Context): Result {
@@ -373,7 +397,7 @@ function gen20(context: Context): Result {
   const groups = context.section("listening")?.groups ?? [];
   const missing = groups.filter((group) => group.stimulus?.type !== "audio_script" || !group.stimulus.audioSrc?.trim()).map((group) => group.title);
   if (missing.length) return { status: "needs_review", detail: `SCRIPT_ONLY · chưa có audio cho ${missing.join(", ")}.` };
-  if (context.exam.audio.status !== "REVIEWED") return { status: "needs_review", detail: "SCRIPT_ONLY · đã có audio, chờ Operator nghe soát và tick." };
+  if (context.exam.audio.status !== "REVIEWED") return { status: "needs_review", detail: "Đã có audio. Chờ Người vận hành nghe kiểm tra và xác nhận." };
   return pass(`Audio đã nghe soát${context.exam.audio.reviewedAt ? ` lúc ${context.exam.audio.reviewedAt}` : ""}.`);
 }
 
@@ -405,8 +429,11 @@ function gen22(context: Context): Result {
   if (longReading.length) problems.push(`Câu đọc dài hơn ${profile.readingItem.maxWords} từ: ${longReading.slice(0, 5).join(", ")}`);
   const writing = context.tasks("writing")[0];
   if (writing && (writing.minWords !== profile.writing.minWords || writing.maxWords !== profile.writing.maxWords)) problems.push(`Writing phải ${profile.writing.minWords}–${profile.writing.maxWords} từ`);
+  if(contract.cefr==="A1"&&writing&&!monthlyFinalWritingOpening(writing.prompt))problems.push("A1: đề Writing cần câu mở đầu gợi ý được đánh dấu rõ");
+  const writingSampleWords=wordCount(context.exam.grader.writingSample);
+  if(writingSampleWords<profile.writing.minWords||writingSampleWords>profile.writing.maxWords)problems.push(`Bài Writing mẫu ${writingSampleWords} từ, cần ${profile.writing.minWords}–${profile.writing.maxWords}`);
   const readAloud = wordCount(context.taskByKey.get("SA")?.task.prompt ?? "");
-  if (readAloud > Math.ceil(profile.speakingA.maxWords * 1.1)) problems.push(`Bài đọc thành tiếng ${readAloud} từ, tối đa ${profile.speakingA.maxWords}`);
+  if (readAloud > profile.speakingA.maxWords) problems.push(`Bài đọc thành tiếng ${readAloud} từ, tối đa ${profile.speakingA.maxWords}`);
   if (!context.taskByKey.get("SA")?.task.prompt.trim()) problems.push("Chưa có bài đọc thành tiếng");
   return verdict(problems, `Ngôn ngữ hướng dẫn ${profile.instructionLanguage === "vi" ? "tiếng Việt" : "tiếng Anh"}; độ dài ngữ liệu đúng hồ sơ ${contract.cefr}.`);
 }
@@ -430,24 +457,6 @@ function gen23(context: Context): Result {
   return verdict(problems, "Yêu cầu viết theo chức năng giao tiếp; không lộ tên chủ điểm, công thức hay mẫu câu.");
 }
 
-function containsTerm(text: string, term: string): boolean {
-  const haystack = text.toLocaleLowerCase("en-US");
-  const needle = term.trim().toLocaleLowerCase("en-US");
-  if (!needle) return false;
-  if (/\s/u.test(needle)) return haystack.includes(needle);
-  const tokens = new Set(haystack.match(/\p{L}+(?:[-'’]\p{L}+)*/gu) ?? []);
-  return inflections(needle).some((form) => tokens.has(form));
-}
-
-function inflections(word: string): string[] {
-  const stem = word.replace(/e$/u, "");
-  const last = word.at(-1) ?? "";
-  return [
-    word, `${word}s`, `${word}es`, `${word}d`, `${word}ed`, `${word}ing`, `${stem}ing`, `${stem}ed`,
-    `${word}${last}ed`, `${word}${last}ing`, word.replace(/y$/u, "ies"), word.replace(/y$/u, "ied"), `${word}'s`
-  ];
-}
-
 function wordRegex(word: string): RegExp {
   return new RegExp(`(^|[^\\p{L}])${word.replace(/[.*+?^${}()|[\]\\]/gu, "\\$&")}([^\\p{L}]|$)`, "iu");
 }
@@ -463,10 +472,6 @@ function includesNormalized(haystack: string, needle: string): boolean {
 
 function sentences(text: string): string[] {
   return text.split(/(?<=[.!?])\s+/u).map((item) => item.trim()).filter(Boolean);
-}
-
-function wordCount(text: string): number {
-  return (text.match(/\p{L}+(?:[-'’]\p{L}+)*|\d+(?:[.,:]\d+)*/gu) ?? []).length;
 }
 
 function round(value: number): number {

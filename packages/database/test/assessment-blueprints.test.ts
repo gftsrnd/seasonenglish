@@ -1,5 +1,29 @@
 import { describe, expect, it } from "vitest";
-import { passCourseFormADefinition, placementDefinition } from "../src/assessment-blueprints.js";
+import { passCourseFormADefinition, placementDefinition, publicAssessmentDefinition } from "../src/assessment-blueprints.js";
+
+it("shows each level-up question without the label already carried by its group", () => {
+  const levelUp = { ...structuredClone(placementDefinition), kind: "level-up" as const };
+  const group = levelUp.sections[0]!.groups[2]!;
+  group.key = "L3";
+  group.tasks[0]!.prompt = "Part 3: Where is the kitchen?";
+  group.tasks[1]!.prompt = "Part C: What should staff do before lunch?";
+  group.tasks[2]!.prompt = "Part 2: What changed in the instructions?";
+  group.tasks[3]!.prompt = "What does the notice say about Part 3?";
+
+  const view = publicAssessmentDefinition(levelUp);
+  const publicGroup = view.sections[0]!.groups[2]!;
+  expect(publicGroup.title).toBe(group.title);
+  expect(publicGroup.tasks.slice(0, 4).map((task) => task.prompt)).toEqual([
+    "Where is the kitchen?",
+    "What should staff do before lunch?",
+    "Part 2: What changed in the instructions?",
+    "What does the notice say about Part 3?"
+  ]);
+  expect(publicGroup.tasks[0]).not.toHaveProperty("correctAnswer");
+  expect(group.tasks[0]!.prompt).toBe("Part 3: Where is the kitchen?");
+  expect(publicAssessmentDefinition({ ...levelUp, kind: "placement" }).sections[0]!.groups[2]!.tasks[0]!.prompt)
+    .toBe("Part 3: Where is the kitchen?");
+});
 
 const section = (code: string) => {
   const value = placementDefinition.sections.find((candidate) => candidate.code === code);

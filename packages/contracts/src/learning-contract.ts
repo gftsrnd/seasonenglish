@@ -1,3 +1,4 @@
+import type { RequestEvidenceView } from "./request-evidence-contract.js";
 import type { CefrLevel } from "./domain-contract.js";
 import type { ContentImageAttribution } from "./media-contract.js";
 
@@ -18,7 +19,7 @@ export type PilotPhase = "before_pilot" | "in_pilot" | "after_pilot";
 export type LevelUpPhase = "none" | "eligible" | "testing" | "ungraded" | "challenge" | "requested" | "approved" | "failed";
 
 export interface RewardAnnouncementView {
-  kind: "normal" | "new-level-announcement" | "top-level-redirect";
+  kind: "normal" | "new-level-announcement" | "level-adjustment" | "top-level-redirect";
   points: number;
   nextPoints: number | null;
   seasonName: string;
@@ -173,6 +174,8 @@ export type LessonPartOutcome =
   | "appealed";
 
 export interface PartEvidence {
+  firstTryCorrect?: boolean;
+  appealStatus?: "pending" | "accepted" | "rejected";
   attempts: number;
   /** Set by the lesson-attempt endpoint; React must not infer this state. */
   status?: LessonPartOutcome;
@@ -216,6 +219,10 @@ export interface LessonProgressView {
 }
 
 export interface LessonView {
+  exerciseVersionId?: string;
+  /** Authoritative monthly teaching label, independent of the calendar row ID. */
+  teachingLabel?: string;
+  newLessonNumber?: number;
   id: string;
   title: string;
   dayNumber: number;
@@ -232,6 +239,8 @@ export interface LessonView {
 }
 
 export interface LessonSummary {
+  teachingLabel?: string;
+  newLessonNumber?: number;
   id: string;
   dayNumber: number;
   title: string;
@@ -259,6 +268,7 @@ export interface MonthView {
   examDate: string;
   /** Manager-controlled system date used for access and attendance. */
   systemDate?: string;
+  holidays?: readonly { date: string; name: string }[];
 }
 
 export interface MonthlyExamView {
@@ -268,6 +278,7 @@ export interface MonthlyExamView {
   remainingLessons: number;
   requirement: string;
   certificateEligible: boolean;
+  inProgress?: boolean;
 }
 
 /** Attendance gate available before the Operator publishes a monthly form. */
@@ -279,7 +290,7 @@ export interface MonthlyExamEligibilityView {
   effectiveDays: number;
   /** Distinct calendar dates with at least one completed lesson. */
   attendedDays: number;
-  /** Effective dates elapsed through the system date without attendance. */
+  /** Effective dates that have ended without attendance. */
   absenceDays: number;
   maxAbsences: number;
   attendanceEligible: boolean;
@@ -288,8 +299,9 @@ export interface MonthlyExamEligibilityView {
   /** The server-derived gate may be used only when the exam date opens. */
   accessState: "tracking" | "eligible" | "appeal_required";
   opensAt: string;
-  /** The exact close time needs the published form duration. */
+  /** The last entry boundary for the regular or complaint window. */
   closesAt: string | null;
+  entryClosed?: boolean;
   /** Canonical access gates; optional while older clients roll out. */
   scheduledLessons?: number;
   completedLessons?: number;
@@ -304,8 +316,20 @@ export interface MonthlyExamEligibilityView {
   reasons?: string[];
 }
 
+export interface LearnerAcademicAppealView extends RequestEvidenceView {
+  readonly partCode?: LessonPartCode | null;
+  readonly id: string;
+  readonly kind: "lesson" | "assessment" | "practice";
+  readonly title: string;
+  readonly reason: string;
+  readonly status: "pending" | "accepted" | "rejected";
+  readonly resolution: string | null;
+  readonly createdAt: string;
+}
+
 export interface LearnerHomeView {
   onboardingRequired: boolean;
+  onboardingDraftAvailable?: boolean;
   learner: { displayName: string; cefr: CefrLevel | null };
   program: { name: string; weekCount: number; cycleNumber?: number } | null;
   week: WeekView | null;
@@ -313,9 +337,12 @@ export interface LearnerHomeView {
   month?: MonthView | null;
   /** No approved monthly framework exists for this learner's level yet. */
   monthlyPreparation?: boolean;
+  monthlyStartDate?: string;
+  monthlyLessonsLocked?: boolean;
   /** Attendance eligibility is available even before a framework or form is published. */
   monthlyEligibility?: MonthlyExamEligibilityView;
   monthlyExam?: MonthlyExamView | null;
+  passCourse?: { status: "ready" | "in_progress" | "pending_review" };
   lessons: LessonSummary[];
   nextLesson: LessonSummary | null;
   microLesson?: {
@@ -335,7 +362,7 @@ export interface LearnerHomeView {
     totalReviews?: number;
     monthlyExamStatus?: "unpublished" | "locked" | "ready" | "completed";
   };
-  /** Server-derived reminder shown only after at least two full inactive days. */
+  /** Server-derived reminder after at least three consecutive absences. */
   inactivityReminder?: { inactiveDays: number };
   schedule: {
     daysPerWeek: number;
@@ -409,6 +436,7 @@ export interface AssessmentSnapshot {
   totalScore: number;
   approvedLevel: CefrLevel | null;
   sections: Partial<Record<"listening" | "reading" | "writing" | "speaking", number>>;
+  sectionMaxScores?: AssessmentSnapshot["sections"];
 }
 
 export interface LearnerProgressView {
@@ -466,7 +494,7 @@ export interface LearnerProgressView {
   badgeRoadmap: BadgeRoadmapItem[];
   levelReadiness: LevelReadinessView;
   stats: { completedLessons: number; coachTurns: number; coachTurnsToday?: number; studyDays: number };
-  assessments: { placement: AssessmentSnapshot | null };
+  assessments: { placement: AssessmentSnapshot | null; passCourse?: AssessmentSnapshot };
 }
 
 export interface MicroLessonView {

@@ -1,0 +1,7 @@
+import { useState } from "react";
+export function DailyGrammarPractice({ value, language }: { value: unknown; language: "vi" | "en" }) {
+  const [answers, setAnswers] = useState<Record<number,string>>({});
+  const rows = Array.isArray(value) ? value.filter((raw): raw is Record<string,unknown> => !!raw && typeof raw === "object" && typeof raw.prompt === "string" && Array.isArray(raw.options) && typeof raw.answer === "string") : [];
+  if (!rows.length) return null;
+  return <section className="lesson-daily-grammar-practice" aria-label={language === "en" ? "Grammar practice" : "Luyện ngữ pháp"}><h3>{language === "en" ? "Practise today's grammar" : "Luyện ngữ pháp hôm nay"}</h3>{rows.map((row,index) => <fieldset className="card flat" key={String(row.id ?? index)}><legend>{index + 1}. {String(row.prompt)}</legend><div className="row" style={{flexWrap:"wrap",gap:8}}>{(row.options as unknown[]).filter((option): option is string => typeof option === "string").map((option,i) => <button type="button" className="btn" aria-pressed={answers[index] === option} key={i} onClick={() => setAnswers(current => ({...current,[index]:option}))}>{option}</button>)}</div>{answers[index] ? <p role="status">{answers[index] === row.answer ? (language === "en" ? "Correct. " : "Đúng. ") : (language === "en" ? "Try again. " : "Thử lại nhé. ")}{String(row.explanation ?? "")}</p> : null}</fieldset>)}</section>;
+}

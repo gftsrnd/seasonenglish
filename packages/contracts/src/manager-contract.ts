@@ -1,7 +1,57 @@
+import type { RequestEvidenceView } from "./request-evidence-contract.js";
 import type { AccountRole, CefrLevel } from "./domain-contract.js";
 import type { AssessmentDeletionRequestView } from "./assessment-contract.js";
 import type { LearnerProfileData } from "./learning-contract.js";
 import type { ContentImageAttribution } from "./media-contract.js";
+
+export interface ManagerMonthlyFilter {
+  readonly month?: string;
+  readonly cefr?: CefrLevel;
+}
+
+export interface ManagerMonthlyLearnerView {
+  readonly learnerId: string;
+  readonly learnerName: string;
+  readonly email: string | null;
+  readonly cefr: CefrLevel | null;
+  readonly state: "active" | "locked" | "unplaced" | "placement_in_progress" | "placement_pending" | "placement_retry" | "waiting_content" | "waiting_next_month" | "missed_exam" | "graduated";
+  readonly lastActivityAt: string | null;
+  readonly attendedDays: number;
+  readonly elapsedDays: number;
+  readonly absenceDays: number;
+  readonly maxAbsences: number;
+  readonly consecutiveAbsences: number;
+  readonly lessons: { readonly completed: number; readonly scheduled: number };
+  readonly reviews: { readonly completed: number; readonly scheduled: number };
+  readonly season: { readonly turns: number; readonly target: number };
+  readonly exam: {
+    readonly status: "unpublished" | "not_started" | "in_progress" | "submitted" | "pending_review" | "approved" | "needs_retry";
+    readonly scores: Readonly<Record<"listening" | "reading" | "writing" | "speaking", number | null>>;
+    readonly total: number | null;
+  };
+  readonly levelCriteria: readonly [boolean, boolean, boolean, boolean] | null;
+  readonly complaintCount: number;
+  readonly attendanceEligible: boolean;
+  readonly onTrack: boolean;
+  readonly completedToDate: boolean;
+  readonly atRisk: boolean;
+}
+
+export interface ManagerMonthlyOverviewView {
+  readonly organizationName: string;
+  readonly month: string;
+  readonly currentMonth: string;
+  readonly cefr: CefrLevel | null;
+  readonly generatedAt: string;
+  readonly survey: {
+    readonly submissions: number;
+    readonly ratingResponses: number;
+    readonly withoutRatingQuestion: number;
+    readonly unansweredRating: number;
+    readonly average: number | null;
+  };
+  readonly learners: readonly ManagerMonthlyLearnerView[];
+}
 
 export interface ManagerProgressView {
   readonly organizationName: string;
@@ -161,6 +211,20 @@ export interface OperatorSettingsOverviewView {
   readonly accounts: readonly ManagerAccountView[];
 }
 
+export interface ManagerBaseNotificationView {
+  readonly configured: boolean;
+  readonly destinationLabel: string;
+  readonly webhookTemplate: string;
+}
+
+export interface ManagerBaseNotificationInput {
+  /** Blank preserves the existing secret. Only remove explicitly disables the channel. */
+  readonly webhookUrl: string;
+  readonly webhookTemplate: string;
+  readonly destinationLabel: string;
+  readonly remove?: boolean;
+}
+
 export interface ManagerReminderCandidateView {
   readonly learnerId: string;
   readonly learnerName: string;
@@ -168,6 +232,7 @@ export interface ManagerReminderCandidateView {
   readonly cefr: CefrLevel | null;
   readonly lastActivityAt: string | null;
   readonly missedDays?: number;
+  readonly baseNotification?: ManagerBaseNotificationView;
 }
 
 export interface ManagerReminderHistoryView {
@@ -228,6 +293,7 @@ export interface ManagerLearnerProfileView {
     readonly currentLevel: CefrLevel | null;
   };
   readonly profile: Partial<LearnerProfileData>;
+  readonly assessmentScores?: { readonly placement: number | null; readonly passCourse: number | null };
   readonly metrics: {
     readonly completedLessons: number;
     readonly totalLessons: number;
@@ -403,6 +469,7 @@ export interface ManagerSettingsView {
   readonly minMinutesPerDay: number;
   readonly courseTheme: string;
   readonly coachDailyLimit: number;
+  readonly coachDailyLimitStartsMonth?: string;
   readonly testTimed: boolean;
   readonly testTimes: { readonly listening: number; readonly reading: number; readonly writing: number; readonly speaking: number };
   readonly testWarnLimit: number;
@@ -417,7 +484,7 @@ export interface ManagerSettingsView {
 
 export type LearnerComplaintKind = "exam_eligibility" | "lesson_unlock" | "account_unlock" | "attendance" | "lesson_count" | "account";
 export type LearnerComplaintStatus = "pending" | "approved" | "rejected" | "auto_approved";
-export interface ManagerComplaintView {
+export interface ManagerComplaintView extends RequestEvidenceView {
   readonly id: string;
   readonly learnerId: string;
   readonly learnerName: string;
@@ -429,8 +496,9 @@ export interface ManagerComplaintView {
   readonly submittedAt: string;
   readonly dueAt: string | null;
   readonly resolvedAt: string | null;
+  readonly archivedAt?: string | null;
 }
-export interface LearnerComplaintView {
+export interface LearnerComplaintView extends RequestEvidenceView {
   readonly id: string;
   readonly kind: LearnerComplaintKind;
   readonly reason: string;
@@ -441,7 +509,7 @@ export interface LearnerComplaintView {
   readonly resolvedAt: string | null;
 }
 
-export type ManagerSettingsInput = Omit<ManagerSettingsView, "organizationName" | "pilotCycle" | "simulatedSystemDate"> & {
+export type ManagerSettingsInput = Omit<ManagerSettingsView, "organizationName" | "pilotCycle" | "simulatedSystemDate" | "coachDailyLimitStartsMonth"> & {
   readonly simulatedSystemDate?: string | undefined;
   /** Present only when the user explicitly saves the pilot-cycle section. */
   readonly pilotCycleAction?: "save";

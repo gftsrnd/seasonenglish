@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import { Pool } from "pg";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { migrateDatabase, resetPublicSchema, seedDemo } from "@e4s/database";
@@ -160,6 +161,44 @@ describe("Operator review detail and AI grade API", () => {
     expect(stored.rows[0]?.status).toBe("accepted");
   });
 
+  it("loads handled and focused appeals independently of the pending queue", async () => {
+    const historicalId = randomUUID();
+    await pool.query(
+      `insert into appeals (id, attempt_id, learner_id, reason, status, resolution, created_at)
+       values ($1, $2, $3, 'Kháng nghị cũ', 'accepted', 'Đã xử lý kháng nghị cũ.', now() - interval '1 year')`,
+      [historicalId, DEMO_IDS.placementAttempt, DEMO_IDS.learner]
+    );
+    await pool.query(
+      `insert into appeals (id, attempt_id, learner_id, reason, status)
+       select gen_random_uuid(), $1, $2, 'Kháng nghị gần đây', 'rejected' from generate_series(1, 21)`,
+      [DEMO_IDS.placementAttempt, DEMO_IDS.learner]
+    );
+    const read = (query: string, cookie = operatorCookie) => app.inject({
+      method: "GET", url: `/api/v1/content/review/appeals?${query}`, headers: { cookie }
+    });
+    const pending = await read("status=pending");
+    expect(pending.statusCode, pending.body).toBe(200);
+    expect(pending.json()).toMatchObject({ appeals: expect.arrayContaining([expect.objectContaining({ id: appealId, status: "pending" })]), hasMore: false });
+    const all = await read("status=all");
+    expect(all.statusCode, all.body).toBe(200);
+    const { appeals, hasMore } = all.json();
+    expect(appeals).toHaveLength(20);
+    expect(appeals[0]).toMatchObject({ id: appealId, status: "pending" });
+    expect(appeals.some((appeal: { status: string }) => appeal.status === "rejected")).toBe(true);
+    expect(hasMore).toBe(true);
+    expect((await read("")).json()).toEqual(pending.json());
+    const handled = await read("status=handled");
+    expect(handled.statusCode, handled.body).toBe(200);
+    expect(handled.json().hasMore).toBe(true);
+    expect(handled.json().appeals).toHaveLength(20);
+    const lastPage = await read("status=handled&offset=20");
+    expect(lastPage.json()).toMatchObject({ appeals: expect.arrayContaining([expect.objectContaining({ id: historicalId })]), hasMore: false });
+    const focused = await read(`id=${historicalId}`);
+    expect(focused.json()).toMatchObject({ appeals: [{ id: historicalId, resolution: "Đã xử lý kháng nghị cũ." }] });
+    expect((await read("id=invalid")).statusCode).toBe(400);
+    expect((await read("status=pending", learnerCookie)).statusCode).toBe(403);
+  });
+
   it("runs an idempotent AI grade and leaves manual grading authoritative", async () => {
     const request = {
       method: "POST" as const,
@@ -192,4 +231,21 @@ describe("Operator review detail and AI grade API", () => {
     expect(stored.rows[0]?.score).toMatchObject({ total: 60, rubric: { meaning: 3, vocabulary: 3, grammar: 3 } });
     expect(stored.rows[0]?.feedback).toMatchObject({ source: "human", message: "Đã duyệt thủ công." });
   });
+
+  it("allows the Operator to remove a handled appeal while preserving the learner decision", async () => {
+    const remove = (id: string, cookie: string) => app.inject({
+      method: "DELETE", url: `/api/v1/content/review/appeals/${id}`, headers: { cookie }
+    });
+    expect((await remove(appealId, operatorCookie)).statusCode).toBe(409);
+    expect((await remove(lessonPartAppealId, managerCookie)).statusCode).toBe(403);
+    expect((await remove(lessonPartAppealId, operatorCookie)).statusCode).toBe(204);
+    const queue = await app.inject({
+      method: "GET", url: `/api/v1/content/review/appeals?id=${lessonPartAppealId}`, headers: { cookie: operatorCookie }
+    });
+    expect(queue.json().appeals).toEqual([]);
+    const history = await app.inject({ method: "GET", url: "/api/v1/learner/appeals", headers: { cookie: learnerCookie } });
+    expect(history.statusCode).toBe(200);
+    expect(history.json().appeals).toContainEqual(expect.objectContaining({ id: lessonPartAppealId, status: "accepted" }));
+  });
+
 });

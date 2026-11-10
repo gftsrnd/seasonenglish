@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import "@testing-library/jest-dom/vitest";
-import { act, cleanup, render, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, render, screen, waitFor, within } from "@testing-library/react";
 import { userEvent } from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -14,6 +14,7 @@ const client = vi.hoisted(() => ({
   completeLearnerPinReset: vi.fn(),
   getProductPreferences: vi.fn(),
   getOrganisationExperience: vi.fn(),
+  getPublicOrganisationTheme: vi.fn(),
   getProfile: vi.fn(),
   logout: vi.fn()
 }));
@@ -22,7 +23,13 @@ const learnerClient = vi.hoisted(() => ({
   getProfile: vi.fn(),
   getProgress: vi.fn(),
   getAssessment: vi.fn(),
-  saveProfile: vi.fn()
+  saveProfile: vi.fn(),
+  getLearnerComplaints: vi.fn(),
+  getLearnerAppeals: vi.fn(),
+  getAppealableAssessments: vi.fn(),
+  createAssessmentAppeal: vi.fn(),
+  getCourseCompletion: vi.fn(),
+  submitLearnerComplaint: vi.fn()
 }));
 
 const managerClient = vi.hoisted(() => ({
@@ -62,7 +69,9 @@ afterEach(() => {
 });
 
 beforeEach(() => {
+  window.localStorage.clear();
   window.history.replaceState({}, "", "/home");
+  client.getPublicOrganisationTheme.mockResolvedValue({ theme: "winter" });
   client.currentSession.mockResolvedValue(learnerSession);
   client.getProductPreferences.mockResolvedValue({ theme: "summer", vocabImageSource: "wikimedia" });
   client.getOrganisationExperience.mockResolvedValue({ theme: "winter", backgroundMusic: { enabled: false, playlistId: "auto", customUrl: "", volume: 18 } });
@@ -76,6 +85,7 @@ beforeEach(() => {
     completed: true,
     version: 1
   });
+  learnerClient.getLearnerComplaints.mockResolvedValue({ complaints: [] });
   learnerClient.getAssessment.mockResolvedValue({ attempt: { status: "approved" } });
   learnerClient.getProgress.mockResolvedValue({ learner: { id: "learner-1", displayName: "Nguyễn Minh Anh", cefr: "A2", profile: {} }, points: 0, badges: [], weeks: [] });
 });
@@ -88,6 +98,68 @@ describe("App session shell", () => {
     expect(await screen.findByRole("heading", { name: "Tài khoản đang bị khóa" })).toBeInTheDocument();
     expect(screen.queryByText("Normal learner routes")).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Đăng xuất" })).toBeInTheDocument();
+  });
+
+  it("lets a locked learner contact the manager from the lock screen", async () => {
+    client.currentSession.mockResolvedValue({ ...learnerSession, accountStatus: "disabled" });
+    learnerClient.getLearnerComplaints.mockResolvedValue({ complaints: [] });
+    learnerClient.submitLearnerComplaint.mockResolvedValue({ complaint: { kind: "account_unlock", status: "pending" } });
+    const user = userEvent.setup();
+    render(<App />);
+    const contact = await screen.findByRole("button", { name: "Liên hệ Quản lý" });
+    await waitFor(() => expect(contact).toBeEnabled());
+    await user.click(contact);
+    await user.type(screen.getByRole("textbox", { name: "Lý do yêu cầu mở khóa" }), "Nhờ xem lại việc khóa tài khoản.");
+    await user.click(screen.getByRole("button", { name: "Gửi yêu cầu" }));
+    expect(learnerClient.submitLearnerComplaint).toHaveBeenCalledWith("account_unlock", "Nhờ xem lại việc khóa tài khoản.");
+    expect(await screen.findByText("Yêu cầu mở khóa đang chờ Quản lý xử lý.")).toBeInTheDocument();
+  });
+  it("shows a certificate without exam grades for a completed learner account", async () => {
+    client.currentSession.mockResolvedValue({ ...learnerSession, courseCompleted: true });
+    window.history.replaceState({}, "", "/reward/course");
+    learnerClient.getCourseCompletion.mockResolvedValue({
+      certificateNumber: "E4S-C1-123", organizationName: "GFT Demo", issuerName: "Vận hành Demo", displayName: "Nguyễn Minh Anh", issuedAt: "2026-11-09T08:00:00Z",
+      scores: [{ section: "listening", score: 20, maxScore: 20 }, { section: "reading", score: 40, maxScore: 40 }, { section: "writing", score: 18, maxScore: 20 }, { section: "speaking", score: 17, maxScore: 20 }], feedback: "Đạt C1."
+    });
+    render(<App />);
+    expect(await screen.findByText("E4S-C1-123")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "In / lưu PDF" })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Tiếp tục học" })).toHaveAttribute("href", "/home");
+    expect(screen.getByRole("img", { name: "GFT Demo" })).toBeVisible();
+    expect(screen.getByText("Vận hành Demo")).toBeVisible();
+    expect(screen.queryByText("95/100")).not.toBeInTheDocument();
+    expect(screen.queryByText("Kết quả bài thi")).not.toBeInTheDocument();
+    expect(screen.queryByText("Đạt C1.")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Liên hệ Quản lý" })).not.toBeInTheDocument();
+  });
+
+  it("opens the old support link before placement and submits a historical assessment appeal", async () => {
+    window.history.replaceState({}, "", "/profile#my-requests");
+    learnerClient.getProfile.mockResolvedValue({ profile: {}, completed: false, version: 1 });
+    learnerClient.getProgress.mockResolvedValue({ learner: { id: "learner-1", cefr: null } });
+    learnerClient.getLearnerComplaints.mockResolvedValue({ complaints: [] });
+    learnerClient.getLearnerAppeals.mockResolvedValue({ appeals: [] });
+    learnerClient.getAppealableAssessments.mockResolvedValue({ results: [{ attemptId: "exam-1", title: "Bài thi đầu vào", availableUntil: null }] });
+    learnerClient.createAssessmentAppeal.mockImplementation(async () => {
+      learnerClient.getAppealableAssessments.mockResolvedValue({ results: [] });
+      learnerClient.getLearnerAppeals.mockResolvedValue({ appeals: [{ id: "appeal-1", kind: "assessment", title: "Bài thi đầu vào", reason: "Nhờ kiểm tra lại điểm phần nghe.", status: "pending", createdAt: "2026-11-09T08:00:00Z" }] });
+    });
+    const user = userEvent.setup();
+    render(<App />);
+    expect(await screen.findByRole("heading", { name: "Hỗ trợ học tập" })).toBeInTheDocument();
+    expect(window.location.pathname).toBe("/support");
+    const sections = screen.getByRole("navigation", { name: "Các mục hỗ trợ học tập" });
+    await user.click(within(sections).getByRole("link", { name: "Khiếu nại" }));
+    await user.click(await screen.findByRole("button", { name: "Gửi khiếu nại" }));
+    expect(screen.getByLabelText("Lý do khiếu nại")).toBeVisible();
+    await user.click(within(sections).getByRole("link", { name: "Kháng nghị" }));
+    await user.click(await screen.findByRole("button", { name: "Gửi kháng nghị" }));
+    expect(within(sections).getByRole("link", { name: "Kháng nghị" })).toHaveAttribute("aria-current", "page");
+    await user.type(screen.getByLabelText("Lý do kháng nghị"), "Nhờ kiểm tra lại điểm phần nghe.");
+    await user.click(screen.getByRole("button", { name: "Gửi cho Vận hành" }));
+    expect(learnerClient.createAssessmentAppeal).toHaveBeenCalledWith("exam-1", "Nhờ kiểm tra lại điểm phần nghe.");
+    expect(await screen.findByText("Chờ xử lý")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Về Tiến độ & hồ sơ" })).toHaveAttribute("href", "/profile");
   });
 
   it("maps every resolved season to a dedicated pattern asset", () => {
@@ -151,7 +223,7 @@ describe("App session shell", () => {
     render(<App>{() => <h1>Trang học</h1>}</App>);
 
     expect(await screen.findAllByRole("link", { name: "Luyện với Season" })).toHaveLength(2);
-    expect(screen.getAllByRole("link", { name: "Bài tuần" })).toHaveLength(2);
+    expect(screen.getAllByRole("link", { name: "Bài tháng" })).toHaveLength(2);
   });
 
   it("keeps learning destinations hidden until the learner has an approved CEFR level", async () => {
@@ -166,7 +238,7 @@ describe("App session shell", () => {
     expect(await screen.findByRole("heading", { name: "Cửa vào người học" })).toBeInTheDocument();
     await waitFor(() => expect(learnerClient.getProgress).toHaveBeenCalled());
     expect(screen.queryByRole("link", { name: "Luyện với Season" })).not.toBeInTheDocument();
-    expect(screen.queryByRole("link", { name: "Bài tuần" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "Bài tháng" })).not.toBeInTheDocument();
     expect(screen.queryByRole("link", { name: "Mini game" })).not.toBeInTheDocument();
     expect(screen.queryByRole("link", { name: "Tiến độ & hồ sơ" })).not.toBeInTheDocument();
   });
@@ -245,13 +317,33 @@ describe("App session shell", () => {
     expect(await screen.findByRole("textbox", { name: "Email" })).toBeInTheDocument();
   });
 
-  it("uses the current seasonal theme on login when no organisation theme has been loaded", async () => {
+  it("loads the organisation theme before the first login screen on a new browser", async () => {
     client.currentSession.mockResolvedValueOnce(null);
+    let finishTheme!: (result: { theme: "christmas" }) => void;
+    client.getPublicOrganisationTheme.mockReturnValueOnce(new Promise((resolve) => { finishTheme = resolve; }));
     render(<App />);
 
+    await waitFor(() => expect(client.getPublicOrganisationTheme).toHaveBeenCalledOnce());
+    expect(screen.queryByRole("textbox", { name: "Email" })).not.toBeInTheDocument();
+    expect(document.documentElement.dataset.theme).toBeUndefined();
+    await act(async () => finishTheme({ theme: "christmas" }));
     expect(await screen.findByRole("textbox", { name: "Email" })).toBeInTheDocument();
-    await waitFor(() => expect(document.documentElement.dataset.theme).toBe(resolveAutomaticTheme(new Date())));
+    expect(document.documentElement.dataset.theme).toBe("christmas");
+    expect(document.documentElement.style.getPropertyValue("--season-pattern-image")).toContain("season-christmas.png");
     expect(client.getOrganisationExperience).not.toHaveBeenCalled();
+  });
+
+  it("restores the organisation theme on a reload while offline", async () => {
+    client.currentSession.mockResolvedValueOnce(null).mockRejectedValueOnce(new Error("offline"));
+    client.getPublicOrganisationTheme.mockResolvedValueOnce({ theme: "christmas" });
+    const first = render(<App />);
+    expect(await screen.findByRole("textbox", { name: "Email" })).toBeInTheDocument();
+    first.unmount();
+
+    render(<App />);
+    expect(await screen.findByRole("heading", { name: "Chưa thể mở E4S" })).toBeInTheDocument();
+    expect(document.documentElement.dataset.theme).toBe("christmas");
+    expect(document.documentElement.style.getPropertyValue("--season-pattern-image")).toContain("season-christmas.png");
   });
 
   it("uses the current seasonal theme when the organisation explicitly selects auto", async () => {

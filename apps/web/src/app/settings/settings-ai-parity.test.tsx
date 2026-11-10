@@ -116,7 +116,7 @@ describe("Manager AI provider settings", () => {
     render(<App />);
 
     expect(await screen.findByRole("heading", { name: "Giao diện theo mùa / lễ" })).toBeInTheDocument();
-    await user.selectOptions(screen.getByLabelText("Chủ đề giao diện (áp dụng ngay khi chọn)"), "winter");
+    await user.click(screen.getByRole("radio", { name: "Mùa đông" }));
 
     expect(document.documentElement.dataset.theme).toBe("winter");
     expect(document.documentElement.dataset.themePattern).toBe("winter");
@@ -129,7 +129,7 @@ describe("Manager AI provider settings", () => {
     render(<App />);
 
     expect(await screen.findByRole("heading", { name: "Giao diện theo mùa / lễ" })).toBeInTheDocument();
-    await user.selectOptions(screen.getByLabelText("Chủ đề giao diện (áp dụng ngay khi chọn)"), "winter");
+    await user.click(screen.getByRole("radio", { name: "Mùa đông" }));
     await user.click(screen.getByRole("button", { name: "Lưu giao diện" }));
 
     expect(client.saveOrganisationExperience).toHaveBeenCalledWith({ theme: "winter", backgroundMusic: { enabled: true, playlistId: "auto", customUrl: "", volume: 22 } });
@@ -153,7 +153,7 @@ describe("Manager AI provider settings", () => {
     expect(await screen.findByRole("button", { name: "Nhạc nền: tắt" })).toBeDisabled();
   });
 
-  it("wires Manager media, music, webhook and export actions to the server", async () => {
+  it("wires Manager media, music and export actions without global Base controls", async () => {
     const user = userEvent.setup();
     window.history.pushState({}, "", "/settings");
     render(<App />);
@@ -162,13 +162,13 @@ describe("Manager AI provider settings", () => {
     await user.click(screen.getByRole("button", { name: /Thử ảnh/ }));
     await user.click(screen.getByRole("button", { name: "Xoá cache ảnh" }));
     await user.click(screen.getByRole("button", { name: "Lưu nhạc nền" }));
-    await user.click(screen.getByRole("button", { name: "Gửi tin thử" }));
+    expect(screen.queryByRole("button", { name: "Gửi tin thử" })).not.toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Xuất JSON" }));
 
     expect(client.testManagerImage).toHaveBeenCalledWith({ source: "wikimedia" });
     expect(client.clearManagerImageCache).toHaveBeenCalledOnce();
     expect(client.saveOrganisationExperience).toHaveBeenCalledWith({ theme: "auto", backgroundMusic: { enabled: true, playlistId: "auto", customUrl: "", volume: 22 } });
-    expect(client.testManagerWebhook).toHaveBeenCalledWith({ url: "", template: "{\"base_content\":\"{message}\"}" });
+    expect(client.testManagerWebhook).not.toHaveBeenCalled();
     expect(client.exportManagerData).toHaveBeenCalledOnce();
   });
 

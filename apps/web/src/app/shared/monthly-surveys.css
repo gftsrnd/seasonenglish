@@ -1,0 +1,214 @@
+.monthly-surveys-page {
+  display: grid;
+  gap: 16px;
+  width: 100%;
+  min-width: 0;
+}
+
+.monthly-survey-stack,
+.monthly-survey-field,
+.monthly-survey-answers {
+  display: grid;
+  gap: 12px;
+  min-width: 0;
+}
+
+.monthly-survey-stack h2,
+.monthly-survey-stack h3,
+.monthly-survey-stack p,
+.monthly-survey-answers,
+.monthly-survey-answers dd {
+  margin: 0;
+}
+
+.monthly-survey-field {
+  gap: 6px;
+}
+
+.monthly-survey-field > span,
+.monthly-survey-rating legend,
+.monthly-survey-answers dt {
+  font-weight: 700;
+}
+
+.monthly-survey-field input:not([type=checkbox]),
+.monthly-survey-field textarea,
+.monthly-survey-field select {
+  width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+}
+
+.monthly-survey-field textarea {
+  resize: vertical;
+}
+
+.monthly-survey-fieldset,
+.monthly-survey-rating {
+  min-inline-size: 0;
+  border: 0;
+  margin: 0;
+  padding: 0;
+}
+
+.monthly-survey-rating legend {
+  margin-bottom: 8px;
+}
+
+.monthly-survey-rating label {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-width: 42px;
+  min-height: 42px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 0 6px;
+  cursor: pointer;
+}
+
+.monthly-survey-rating .row { flex-wrap: wrap; gap: 8px; }
+
+.monthly-survey-rating label {
+  position: relative;
+  background: var(--surface);
+}
+
+.monthly-survey-rating label:has(:checked) {
+  background: var(--primary-soft);
+  border-color: var(--primary);
+  color: var(--text);
+  font-weight: 700;
+}
+
+.monthly-survey-rating label:has(:focus-visible) {
+  outline: 2px solid var(--primary);
+  outline-offset: 3px;
+}
+
+.monthly-survey-rating input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+  margin: 0;
+}
+
+.monthly-survey-details,
+.monthly-survey-question {
+  min-width: 0;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 12px;
+  overflow-wrap: anywhere;
+}
+
+.monthly-survey-details > summary {
+  cursor: pointer;
+  padding: 6px 0;
+}
+
+.monthly-survey-details > summary > span {
+  display: block;
+  padding-inline-start: 17px;
+}
+
+.monthly-survey-details[open] > :not(summary) {
+  margin-top: 12px;
+}
+
+.monthly-survey-answers dd {
+  white-space: pre-wrap;
+}
+
+.monthly-survey-month-filter {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: end;
+  gap: 12px;
+}
+
+.monthly-survey-month-filter .monthly-survey-field {
+  flex: 1 1 160px;
+  max-width: 240px;
+}
+
+.monthly-survey-question legend {
+  padding: 0 5px;
+  font-weight: 700;
+}
+
+.monthly-survey-option {
+  display: flex;
+  gap: 8px;
+  align-items: end;
+}
+
+.monthly-survey-option .monthly-survey-field {
+  flex: 1;
+}
+
+.monthly-survey-error {
+  color: var(--danger-ink, var(--ink));
+}
+
+.monthly-survey-results-list {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  padding-inline-start: 22px;
+  overflow-wrap: anywhere;
+}
+
+
+.monthly-survey-heading,
+.monthly-survey-actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.monthly-survey-heading { justify-content: space-between; }
+
+.monthly-survey-form .monthly-survey-fieldset,
+.monthly-survey-editor {
+  border-top: 1px solid var(--line);
+  padding-top: 14px;
+}
+
+.monthly-survey-editor .monthly-survey-question { background: var(--surface-2); }
+
+.monthly-survey-history {
+  max-height: min(440px, 56dvh);
+  overflow: auto;
+}
+
+.monthly-survey-history > .monthly-survey-details {
+  padding: 0 4px;
+  border: 0;
+  border-top: 1px solid var(--line);
+  border-radius: 0;
+}
+
+.monthly-survey-history .monthly-survey-details > summary {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+  min-height: 44px;
+  list-style: none;
+}
+
+.monthly-survey-history summary::-webkit-details-marker { display: none; }
+.monthly-survey-history .monthly-survey-details > summary > span { padding: 0; }
+.monthly-survey-history summary small { display: block; margin-top: 2px; }
+.monthly-survey-history summary svg { flex-shrink: 0; }
+.monthly-survey-history details[open] summary svg { transform: rotate(180deg); }
+.monthly-survey-history .monthly-survey-answers { padding-bottom: 12px; }
+
+@media (max-width: 420px) {
+  .monthly-survey-rating .row { gap: 5px; }
+  .monthly-survey-rating label { min-width: 40px; }
+}

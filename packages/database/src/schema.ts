@@ -156,6 +156,7 @@ export const monthFrameworks = pgTable("month_frameworks", {
   qualityAcknowledgement: jsonb("quality_acknowledgement"), source: text("source").notNull().default("manual"),
   generationJobId: uuid("generation_job_id").references(() => jobs.id), generationError: text("generation_error"),
   approvedBy: uuid("approved_by").references(() => users.id), approvedAt: timestamp("approved_at", { withTimezone: true }),
+  publishedAt: timestamp("published_at", { withTimezone: true }), publishedOn: date("published_on"),
   createdBy: uuid("created_by").references(() => users.id), createdAt: now(), updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow()
 }, (table) => [uniqueIndex("month_frameworks_program_month_cefr_unique").on(table.programMonthId, table.cefr)]);
 
@@ -257,6 +258,7 @@ export const learnerReviewSessions = pgTable("learner_review_sessions", {
 export const lessonPartAppeals = pgTable("lesson_part_appeals", {
   id: uuid("id").primaryKey(), learnerId: uuid("learner_id").notNull().references(() => users.id, { onDelete: "cascade" }),
   lessonId: uuid("lesson_id").notNull().references(() => lessons.id, { onDelete: "cascade" }), partCode: text("part_code").notNull(),
+  exerciseVersionId: uuid("exercise_version_id").references(() => lessonVersions.id),
   reason: text("reason").notNull(), status: text("status").notNull().default("pending"), resolution: text("resolution"),
   resolvedBy: uuid("resolved_by").references(() => users.id), createdAt: now(),
   resolvedAt: timestamp("resolved_at", { withTimezone: true })
@@ -283,6 +285,7 @@ export const assessmentVersions = pgTable("assessment_versions", {
 export const assessmentAttempts = pgTable("assessment_attempts", {
   id: uuid("id").primaryKey(), assessmentVersionId: uuid("assessment_version_id").notNull().references(() => assessmentVersions.id),
   learnerId: uuid("learner_id").notNull().references(() => users.id), status: text("status").notNull().default("in_progress"),
+  ownerSessionId: uuid("owner_session_id").references(() => sessions.id, { onDelete: "set null" }),
   currentSection: text("current_section"), timingState: jsonb("timing_state").notNull().default(emptyObject),
   integrityEvents: jsonb("integrity_events").notNull().default(emptyArray), startedAt: now(),
   violationCount: integer("violation_count").notNull().default(0), violationLimit: integer("violation_limit").notNull().default(3),

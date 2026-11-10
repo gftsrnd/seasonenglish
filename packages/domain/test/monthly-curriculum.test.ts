@@ -8,6 +8,7 @@ import {
   monthlyScopeHash,
   recommendedMonthlyResourceCriteria,
   planMonthlyResourcePool,
+  withMonthlyExpandedTerms,
   backfillMonthlyCurriculumPlan,
   resolveMonthlyExamOutcome,
   recommendedPendingBatch,
@@ -93,6 +94,23 @@ function poolFor(): Parameters<typeof planMonthlyResourcePool>[0] {
 }
 
 describe("monthly curriculum contract", () => {
+  it.each(["A1", "A2", "B1", "B2", "C1"] as const)("carries frozen illustrations from the %s pool into daily and review vocabulary", (cefr) => {
+    const pool = poolFor();
+    pool.cefr = cefr;
+    const imageUrl = "/api/v1/files/content-media/read?artifactKey=content-media%2Fclient.png";
+    pool.coreTerms[0]!.imageUrl = imageUrl;
+    const contract = planMonthlyResourcePool(pool);
+    expect(contract.coreTerms[0]!.imageUrl).toBe(imageUrl);
+    for (const kind of ["new", "review"] as const) {
+      const day = contract.daySpecs.find(day => (kind === "new" ? day.coreTermIds : day.reviewTermIds).includes(pool.coreTerms[0]!.id))!;
+      expect(day.kind).toBe(kind);
+      const ids = kind === "new" ? day.coreTermIds : day.reviewTermIds;
+      const cores = contract.coreTerms.filter(core => ids.includes(core.id));
+      const [part] = withMonthlyExpandedTerms([{ code: "vocabulary", content: { items: [{ word: pool.coreTerms[0]!.word }] } }], cores, []);
+      expect(part!.content.items[0]).toMatchObject({ imageUrl, imageAttribution: { licence: "Nội dung nội bộ" } });
+    }
+  });
+
   it("rejects plans with unbalanced semantic coverage or incorrect grammar and pronunciation progression", () => {
     const contract = planMonthlyResourcePool(poolFor());
     const invalidRelations = structuredClone(contract);
@@ -128,7 +146,8 @@ describe("monthly curriculum contract", () => {
     expect(newDays.every((day) => day.skillExercises.map((item) => item.exerciseCode).sort().join(",") === exerciseCodes.toSorted().join(","))).toBe(true);
     expect(contract.grammarTopics).toHaveLength(2);
     expect(contract.grammarTopics.every((topic) => topic.steps.length === 3)).toBe(true);
-    expect(contract.sounds.map((sound) => newDays.filter((day) => day.soundId === sound.id).length)).toEqual([4, 4, 4, 4]);
+    expect(contract.sounds.map((sound) => newDays.slice(0, 12).filter((day) => day.soundId === sound.id).length)).toEqual([3, 3, 3, 3]);
+    expect(newDays.slice(12).every(day => day.pronunciationPlan?.targetIds.length === 4)).toBe(true);
     expect(newDays[0]?.grammarStepIds).toEqual(["grammar-1-step-1"]);
     expect(newDays[5]?.grammarStepIds).toEqual(["grammar-1-step-3"]);
     expect(newDays[6]?.grammarStepIds).toEqual(["grammar-2-step-1"]);
