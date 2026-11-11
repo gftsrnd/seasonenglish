@@ -29,6 +29,18 @@ Mốc tổng hợp ngày 11/11/2026. Một dòng là một màn hoặc một lu�
 
 Các ca ưu tiên tiếp theo gồm lịch B1 bị trùng số bài, ô nhập ngày nghỉ bị cắt năm ở 320 px và form soạn tay B1 với kế hoạch cũ. Sau đó mở các ca chưa rà và bổ sung bằng chứng cho các trạng thái còn thiếu trong từng dòng. Ảnh và log dẫn tới `.artifacts` nằm trên máy kiểm thử. Xem [cách chạy kiểm thử đa trình duyệt](../scripts/browser-smoke/README.md) để kiểm màn đăng nhập trên Chrome, Edge, Firefox và WebKit.
 
+### Tài khoản QA và màn thử
+
+Danh sách tài khoản và thông tin đăng nhập nằm trong hai tệp cục bộ dưới `%LOCALAPPDATA%\E4S`: `Tai khoan Learner QA E4S - 2026-11-09.md` và `Tai khoan demo E4S - 2026-11-09.md`. Xem mục **Mở nhanh các ca thi và yêu cầu** để biết cách đưa tài khoản về đúng trạng thái. Tệp QA ghi cổng 4316 cho đợt chuẩn bị ban đầu. Tại mốc bàn giao, 4175, 4296 và 4298 trả lời HTTP, còn 4316 chưa có tiến trình lắng nghe. Kiểm tra dữ liệu QA trên bản đang mở trước khi kết luận một màn bị thiếu.
+
+| Ca thử | Tài khoản trong danh sách QA | Màn cần mở |
+| --- | --- | --- |
+| Hồ sơ mới, đầu vào, tài khoản khóa | `qa-onboarding`, `qa-placement`, `qa-locked` | `/home`, `/onboard`, `/test/placement`. Tài khoản khóa mở màn khóa sau khi đăng nhập. |
+| Bài đang học, ô chữ, các trình độ A1–C1 | `qa-lesson-resume`, `qa-learned-game`, `qa-level-a1` đến `qa-level-c1` | `/home` → Tiếp tục bài, `/games`, `/monthly`, `/coach`, `/profile`. |
+| Thi tháng, lên mức, đầu ra và chứng nhận | `qa-monthly-ready`, `qa-level-ready`, `qa-pass-ready`, `qa-pass-completed` | `/monthly` → Vào bài thi, `/test/level-up`, `/test/pass-course`, `/profile` → Xem chứng nhận. |
+| Kháng nghị và theo dõi xử lý | `qa-learning-appeal`, `qa-monthly-appeal`, tài khoản Vận hành và Quản lý trong tệp QA | `/support`, `/op/review`, `/op/requests`, `/mgr/requests`. |
+| Vận hành và Quản lý | Tài khoản nhân sự trong tệp QA | Đăng nhập tại `/season-english/staff`. Vận hành mở `/op`, `/op/months`, `/op/review`, `/op/tests`, `/settings`. Quản lý mở `/mgr`, `/mgr/ops`, `/mgr/holidays`, `/mgr/report`, `/mgr/surveys`, `/settings`. |
+
 ### Kiểm thử khi bàn giao
 
 - `pnpm typecheck` và `pnpm build` đạt. Bộ kiểm đăng nhập trên bản 4175 đạt 12/12 ca ở 390, 768 và 1440 px. Kết quả WebKit là từ Playwright trên Windows.
